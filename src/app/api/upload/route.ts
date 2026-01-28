@@ -57,10 +57,10 @@ export async function POST(req: Request) {
       (publicData as any)?.publicUrl || `${baseUrl}/storage/v1/object/public/user-photos/${path}`;
 
     // requests 테이블에 레코드 추가 (간단한 구조)
+    // created_at은 Supabase에서 자동 생성됨
     const insertPayload: Record<string, any> = {
       user_id,
       status: "pending",
-      created_at: new Date().toISOString(),
     };
     if (side === "front") insertPayload.front_url = publicURL;
     else insertPayload.side_url = publicURL;
