@@ -639,7 +639,7 @@ export default function Home() {
                 description: "과긴장된 근육을 먼저 이완시킵니다.",
                 gradient: "from-red-500/20 to-red-500/5",
                 icon: "🔴",
-                bgImage: "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=800&q=80",
+                bgImage: "https://images.unsplash.com/photo-1598632640487-6ea4a4e8b6f0?w=800&q=80",
               },
               {
                 label: "02",
@@ -685,9 +685,9 @@ export default function Home() {
                     backgroundPosition: 'center',
                   }}
                 >
-                  {/* 반투명 오버레이 */}
+                  {/* 더 진한 오버레이로 텍스트 가독성 향상 */}
                   {!isLocked && (
-                    <div className={`absolute inset-0 bg-gradient-to-br ${step.gradient} opacity-90`} />
+                    <div className={`absolute inset-0 bg-gradient-to-br ${step.gradient} opacity-95`} />
                   )}
 
                   {isLocked && (
@@ -702,15 +702,15 @@ export default function Home() {
                   <div className={`relative z-10 ${isLocked ? "blur-sm opacity-40" : ""}`}>
                     <div className="mb-4 flex items-center justify-between">
                       <span className="text-3xl">{step.icon}</span>
-                      <span className="text-xs font-bold text-slate-500">{step.label}</span>
+                      <span className="text-xs font-bold text-slate-400">{step.label}</span>
                     </div>
-                    <h3 className="mb-2 text-xl font-bold text-slate-100">
+                    <h3 className="mb-2 text-xl font-bold text-white drop-shadow-lg">
                       {step.title}
                     </h3>
-                    <p className="mb-3 text-sm font-medium text-[#f97316]">
+                    <p className="mb-3 text-sm font-bold text-[#f97316] drop-shadow-lg">
                       {step.subtitle}
                     </p>
-                    <p className="text-xs leading-relaxed text-slate-300">
+                    <p className="text-xs leading-relaxed text-white drop-shadow-md">
                       {step.description}
                     </p>
                   </div>
