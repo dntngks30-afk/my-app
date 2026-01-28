@@ -1,0 +1,6 @@
+node_modules/
+.next/
+out/
+build/
+.git/
+public/ (사진이 많다면 추가)

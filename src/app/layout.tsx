@@ -12,6 +12,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://posturelab.com";
+
 export const metadata: Metadata = {
   title: "사진 2장으로 끝내는 맞춤 체형 교정 | NASM 전문가 솔루션",
   description: "거북목, 라운드숄더 고민이신가요? NASM-CES 전문가가 사진 2장으로 당신만을 위한 4단계 교정 운동 루틴을 24시간 내에 보내드립니다.",
@@ -39,9 +41,7 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: process.env.NEXT_PUBLIC_BASE_URL 
-    ? new URL(process.env.NEXT_PUBLIC_BASE_URL)
-    : new URL("https://posturelab.com"),
+  metadataBase: new URL(baseUrl),
   alternates: {
     canonical: "/",
   },

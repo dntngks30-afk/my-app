@@ -356,6 +356,8 @@ export default function Home() {
     setIsGuideOpen(false);
   };
 
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://posturelab.com";
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#0f172a] px-4 py-8 text-slate-100">
       {/* Toss Payments SDK 로드 */}
@@ -374,9 +376,9 @@ export default function Home() {
             "@type": "ProfessionalService",
             "name": "포스처랩",
             "description": "NASM-CES 전문가의 맞춤 체형 교정 솔루션",
-            "url": process.env.NEXT_PUBLIC_BASE_URL || "https://posturelab.com",
-            "logo": `${process.env.NEXT_PUBLIC_BASE_URL || "https://posturelab.com"}/logo.png`,
-            "image": `${process.env.NEXT_PUBLIC_BASE_URL || "https://posturelab.com"}/og-image.jpg`,
+            "url": baseUrl,
+            "logo": `${baseUrl}/logo.png`,
+            "image": `${baseUrl}/og-image.jpg`,
             "priceRange": "₩19,000 - ₩150,000",
             "address": {
               "@type": "PostalAddress",
