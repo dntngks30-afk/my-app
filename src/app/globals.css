@@ -38,3 +38,15 @@ body {
 .scan-line {
   animation: scan-line 1.6s linear infinite;
 }
+
+/* 펼치기/접기 애니메이션 */
+@keyframes slideDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

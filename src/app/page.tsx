@@ -224,6 +224,10 @@ export default function Home() {
   // 로그인 상태 확인
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   
+  // 섹션 펼치기/접기 상태
+  const [showProcess, setShowProcess] = useState(false);
+  const [showCorrectionSystem, setShowCorrectionSystem] = useState(false);
+  
   useEffect(() => {
     // 현재 로그인한 사용자 확인
     const checkUser = async () => {
@@ -616,73 +620,111 @@ export default function Home() {
           </aside>
         </div>
 
-        {/* 서비스 진행 방식 섹션 */}
-        <div className="relative z-10 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 p-8 sm:p-10">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-slate-100 sm:text-4xl">
-              이렇게 진행됩니다
-            </h2>
-            <p className="mt-3 text-sm text-slate-400">
-              간편한 4단계 프로세스로 당신만의 솔루션을 받아보세요
-            </p>
-          </div>
-
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              {
-                step: "01",
-                icon: "📸",
-                title: "정적 평가",
-                description: "정면/측면 사진 2장만 업로드하면 끝",
-                color: "from-blue-500/20 to-blue-500/5",
-                borderColor: "border-blue-500/30",
-              },
-              {
-                step: "02",
-                icon: "👨‍⚕️",
-                title: "전문가 분석",
-                description: "NASM 인증 전문가가 직접 체형 분석",
-                color: "from-purple-500/20 to-purple-500/5",
-                borderColor: "border-purple-500/30",
-              },
-              {
-                step: "03",
-                icon: "⚡",
-                title: "솔루션 생성",
-                description: "당신에게 딱 맞는 4단계 교정 프로그램 제작",
-                color: "from-orange-500/20 to-orange-500/5",
-                borderColor: "border-orange-500/30",
-              },
-              {
-                step: "04",
-                icon: "📄",
-                title: "PDF 전달",
-                description: "24시간 내 이메일로 상세 리포트 발송",
-                color: "from-green-500/20 to-green-500/5",
-                borderColor: "border-green-500/30",
-              },
-            ].map((item) => (
-              <div
-                key={item.step}
-                className={`relative rounded-xl border ${item.borderColor} bg-gradient-to-br ${item.color} p-6 transition hover:scale-105`}
-              >
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-3xl">{item.icon}</span>
-                  <span className="text-xs font-bold text-slate-500">{item.step}</span>
-                </div>
-                <h3 className="mb-2 text-lg font-bold text-slate-100">
-                  {item.title}
-                </h3>
-                <p className="text-xs leading-relaxed text-slate-300">
-                  {item.description}
-                </p>
-              </div>
-            ))}
-          </div>
+        {/* 더 알아보기 버튼들 */}
+        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:justify-center">
+          <button
+            onClick={() => setShowProcess(!showProcess)}
+            className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900/80 px-6 py-3 text-sm font-medium text-slate-200 transition hover:border-[#f97316] hover:bg-slate-800"
+          >
+            <span>📋</span>
+            <span>{showProcess ? "진행 방식 접기" : "진행 방식 보기"}</span>
+            <svg
+              className={`h-4 w-4 transition-transform ${showProcess ? "rotate-180" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          <button
+            onClick={() => setShowCorrectionSystem(!showCorrectionSystem)}
+            className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900/80 px-6 py-3 text-sm font-medium text-slate-200 transition hover:border-[#f97316] hover:bg-slate-800"
+          >
+            <span>🎯</span>
+            <span>{showCorrectionSystem ? "교정 시스템 접기" : "교정 시스템 보기"}</span>
+            <svg
+              className={`h-4 w-4 transition-transform ${showCorrectionSystem ? "rotate-180" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
         </div>
 
-        {/* 4단계 교정운동 프로세스 섹션입니다. */}
-        <div className="relative z-10 space-y-8 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 p-8 sm:p-10">
+        {/* 서비스 진행 방식 섹션 (펼치기/접기) */}
+        {showProcess && (
+          <div className="relative z-10 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 p-8 sm:p-10 animate-[slideDown_0.3s_ease-out]">
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-bold text-slate-100 sm:text-4xl">
+                이렇게 진행됩니다
+              </h2>
+              <p className="mt-3 text-sm text-slate-400">
+                간편한 4단계 프로세스로 당신만의 솔루션을 받아보세요
+              </p>
+            </div>
+
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                {
+                  step: "01",
+                  icon: "📸",
+                  title: "정적 평가",
+                  description: "정면/측면 사진 2장만 업로드하면 끝",
+                  color: "from-blue-500/20 to-blue-500/5",
+                  borderColor: "border-blue-500/30",
+                },
+                {
+                  step: "02",
+                  icon: "👨‍⚕️",
+                  title: "전문가 분석",
+                  description: "NASM 인증 전문가가 직접 체형 분석",
+                  color: "from-purple-500/20 to-purple-500/5",
+                  borderColor: "border-purple-500/30",
+                },
+                {
+                  step: "03",
+                  icon: "⚡",
+                  title: "솔루션 생성",
+                  description: "당신에게 딱 맞는 4단계 교정 프로그램 제작",
+                  color: "from-orange-500/20 to-orange-500/5",
+                  borderColor: "border-orange-500/30",
+                },
+                {
+                  step: "04",
+                  icon: "📄",
+                  title: "PDF 전달",
+                  description: "24시간 내 이메일로 상세 리포트 발송",
+                  color: "from-green-500/20 to-green-500/5",
+                  borderColor: "border-green-500/30",
+                },
+              ].map((item) => (
+                <div
+                  key={item.step}
+                  className={`relative rounded-xl border ${item.borderColor} bg-gradient-to-br ${item.color} p-6 transition hover:scale-105`}
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-3xl">{item.icon}</span>
+                    <span className="text-xs font-bold text-slate-500">{item.step}</span>
+                  </div>
+                  <h3 className="mb-2 text-lg font-bold text-slate-100">
+                    {item.title}
+                  </h3>
+                  <p className="text-xs leading-relaxed text-slate-300">
+                    {item.description}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 4단계 교정운동 프로세스 섹션 (펼치기/접기) */}
+        {showCorrectionSystem && (
+          <div className="relative z-10 space-y-8 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 p-8 sm:p-10 animate-[slideDown_0.3s_ease-out]">
           <div className="text-center">
             <h2 className="text-3xl font-bold text-slate-100 sm:text-4xl">
               과학적 4단계 교정 시스템
@@ -798,32 +840,9 @@ export default function Home() {
             })}
           </div>
 
-          {/* 결제 유도 배너 */}
-          {!isPaid && (
-            <div className="relative overflow-hidden rounded-2xl border border-[#f97316]/30 bg-gradient-to-r from-[#f97316]/10 via-slate-900/80 to-slate-900/80 p-6">
-              <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:justify-between sm:text-left">
-                <div className="space-y-1">
-                  <p className="text-lg font-bold text-slate-100">
-                    완전한 교정을 원하신다면?
-                  </p>
-                  <p className="text-sm text-slate-300">
-                    3·4단계까지 완료해야 효과가 지속됩니다
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handlePayment}
-                  className="inline-flex items-center gap-2 rounded-full bg-[#f97316] px-6 py-3 font-bold text-slate-950 shadow-[0_0_30px_rgba(249,115,22,0.4)] transition hover:bg-[#fb923c] hover:shadow-[0_0_40px_rgba(249,115,22,0.6)] hover:scale-105"
-                >
-                  <span>₩19,900</span>
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </button>
-              </div>
             </div>
           )}
-        </div>
+        )}
 
         {/* 서비스 티어 소개 섹션 */}
         <div className="relative z-10 space-y-12 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 p-8 sm:p-12">
