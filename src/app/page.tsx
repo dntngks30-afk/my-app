@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import Script from "next/script";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 // 업로드할 사진의 방향(정면/측면)을 구분하기 위한 타입입니다.
@@ -52,6 +53,10 @@ const formatPeopleCount = (count: number) =>
   count.toLocaleString("ko-KR", { maximumFractionDigits: 0 });
 
 export default function Home() {
+  // URL에서 tier와 price 쿼리 파라미터를 읽기 위한 훅
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
   // 현재 서비스에 신청한 사람 수를 상태로 관리합니다.
   const [peopleCount, setPeopleCount] = useState<number>(1245);
 
@@ -70,6 +75,18 @@ export default function Home() {
       notes: "정면과 측면 사진을 업로드하면, 전문가용 교정 알고리즘이 순서대로 분석을 시작합니다.",
     },
   });
+
+  // URL 쿼리 파라미터에서 tier와 price를 읽어서 자동으로 결제 실행
+  useEffect(() => {
+    const tier = searchParams?.get("tier");
+    const price = searchParams?.get("price");
+    
+    if (tier && price) {
+      // 결제 페이지로 자동으로 이동하지 않고, 사용자가 버튼을 클릭할 때까지 대기
+      // 필요시 자동 결제 로직 추가 가능
+      console.log(`Selected tier: ${tier}, price: ${price}`);
+    }
+  }, [searchParams]);
 
   // 파일 업로드(input type="file")가 발생했을 때 호출되는 핸들러입니다.
   const handleFileChange =
@@ -249,8 +266,8 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Toss Payments 결제 처리 함수
-  const handlePayment = async () => {
+  // Toss Payments 결제 처리 함수 (티어별 가격 지원)
+  const handlePayment = async (tier: string = "basic", customAmount?: number) => {
     // Toss Payments SDK가 로드되었는지 확인
     // @ts-ignore - Toss SDK는 전역으로 로드됨
     if (typeof window.TossPayments === "undefined") {
@@ -265,18 +282,32 @@ export default function Home() {
       return;
     }
 
-    // 고유한 주문 ID 생성
-    const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    // 결제 금액 (19,900원)
-    const amount = 19900;
+    // 티어별 금액 및 상품명 설정
+    let amount: number;
+    let orderName: string;
+
+    if (customAmount) {
+      amount = customAmount;
+      orderName = tier === "basic" ? "베이직 플랜" :
+                  tier === "premium" ? "프리미엄 플랜" :
+                  tier === "vip" ? "VIP 플랜" : "교정운동 솔루션";
+    } else {
+      // 기본값 (베이직)
+      amount = 19900;
+      orderName = "베이직 플랜 - 맞춤 교정 리포트";
+    }
+
+    // 고유한 주문 ID 생성 (티어 정보 포함)
+    const orderId = `order_${tier}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // 가장 최근 업로드한 요청 ID를 저장 (결제 성공 후 연결용)
-    // 실제로는 서버에서 관리하는 것이 좋지만, 데모 용도로 로컬스토리지 사용
     const recentRequestId = session.photos.length > 0 ? session.id : null;
     if (recentRequestId) {
       localStorage.setItem("pending_request_id", recentRequestId);
     }
+    
+    // 선택한 티어 정보도 저장
+    localStorage.setItem("selected_tier", tier);
 
     try {
       // @ts-ignore - Toss SDK 타입 정의 없음
@@ -286,7 +317,7 @@ export default function Home() {
       await tossPayments.requestPayment("카드", {
         amount,
         orderId,
-        orderName: "1:1 맞춤 교정 리포트 + 영상 가이드",
+        orderName,
         customerName: user?.email?.split("@")[0] || "고객",
         successUrl: `${window.location.origin}/payments/success`,
         failUrl: `${window.location.origin}/payments/fail`,
@@ -715,6 +746,128 @@ export default function Home() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* 서비스 티어 소개 섹션 */}
+        <div className="relative z-10 space-y-12 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 p-8 sm:p-12">
+          <div className="text-center">
+            <h2 className="mb-4 text-3xl font-bold text-slate-100 sm:text-4xl">
+              나에게 맞는 플랜을 선택하세요
+            </h2>
+            <p className="text-slate-300">
+              단순한 분석부터 전문가 1:1 관리까지
+            </p>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-3">
+            {/* 베이직 */}
+            <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-6 transition hover:border-slate-600 hover:shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
+              <div className="mb-4">
+                <h3 className="mb-2 text-xl font-bold text-slate-100">베이직</h3>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-bold text-[#f97316]">₩19,900</span>
+                  <span className="text-sm text-slate-500">1회</span>
+                </div>
+              </div>
+              <ul className="mb-6 space-y-2 text-sm text-slate-300">
+                <li className="flex items-start gap-2">
+                  <span className="text-[#f97316]">✓</span>
+                  <span>정적자세 평가</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#f97316]">✓</span>
+                  <span>맞춤 교정 루틴 PDF</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#f97316]">✓</span>
+                  <span>가이드 영상 링크</span>
+                </li>
+              </ul>
+              <Link
+                href="/pricing"
+                className="block w-full rounded-full bg-slate-800 py-3 text-center font-semibold text-slate-100 transition hover:bg-slate-700"
+              >
+                자세히 보기
+              </Link>
+            </div>
+
+            {/* 프리미엄 */}
+            <div className="relative rounded-xl border-2 border-[#f97316] bg-gradient-to-br from-slate-900 to-slate-800 p-6 shadow-[0_20px_60px_rgba(249,115,22,0.3)]">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[#f97316] px-4 py-1 text-xs font-bold text-slate-950">
+                POPULAR
+              </div>
+              <div className="mb-4">
+                <h3 className="mb-2 text-xl font-bold text-slate-100">프리미엄</h3>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-bold text-[#f97316]">₩150,000</span>
+                  <span className="text-sm text-slate-500">/ 월</span>
+                </div>
+              </div>
+              <ul className="mb-6 space-y-2 text-sm text-slate-300">
+                <li className="flex items-start gap-2">
+                  <span className="text-[#f97316]">✓</span>
+                  <span>베이직 + 1:1 전담 코칭</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#f97316]">✓</span>
+                  <span>카톡/텔레그램 관리</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#f97316]">✓</span>
+                  <span>주간 루틴 점검</span>
+                </li>
+              </ul>
+              <Link
+                href="/pricing"
+                className="block w-full rounded-full bg-[#f97316] py-3 text-center font-bold text-slate-950 shadow-[0_0_20px_rgba(249,115,22,0.5)] transition hover:bg-[#fb923c]"
+              >
+                자세히 보기
+              </Link>
+            </div>
+
+            {/* VIP */}
+            <div className="rounded-xl border border-amber-500/50 bg-gradient-to-br from-slate-900 via-amber-950/20 to-slate-900 p-6 transition hover:border-amber-500 hover:shadow-[0_10px_40px_rgba(245,158,11,0.3)]">
+              <div className="mb-4">
+                <h3 className="mb-2 text-xl font-bold text-amber-400">VIP</h3>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-bold text-amber-400">₩400,000</span>
+                  <span className="text-sm text-slate-500">/ 월</span>
+                </div>
+              </div>
+              <ul className="mb-6 space-y-2 text-sm text-slate-300">
+                <li className="flex items-start gap-2">
+                  <span className="text-amber-500">✓</span>
+                  <span>프리미엄 + 화상 코칭</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-amber-500">✓</span>
+                  <span>월 4회 실시간 세션</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-amber-500">✓</span>
+                  <span>맞춤 영양 플랜</span>
+                </li>
+              </ul>
+              <Link
+                href="/pricing"
+                className="block w-full rounded-full bg-gradient-to-r from-amber-500 to-amber-600 py-3 text-center font-bold text-slate-950 transition hover:from-amber-400 hover:to-amber-500"
+              >
+                자세히 보기
+              </Link>
+            </div>
+          </div>
+
+          <div className="text-center">
+            <Link
+              href="/pricing"
+              className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200"
+            >
+              <span>전체 플랜 비교하기</span>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
         </div>
 
         {/* 최종 CTA 영역 */}
