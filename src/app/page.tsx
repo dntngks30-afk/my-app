@@ -755,8 +755,8 @@ export default function Home() {
               {
                 label: "01",
                 title: "억제",
-                subtitle: "긴장 풀기",
-                description: "과긴장된 근육을 먼저 이완시킵니다.",
+                subtitle: "Inhibit",
+                description: "과활성 근육의 신경 활동을 감소시켜 근긴장도를 정상화합니다.",
                 gradient: "from-red-500/20 to-red-500/5",
                 icon: "🔴",
                 bgImage: "https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800&q=80",
@@ -764,8 +764,8 @@ export default function Home() {
               {
                 label: "02",
                 title: "신장",
-                subtitle: "라인 늘리기",
-                description: "짧아진 근육을 안전하게 늘립니다.",
+                subtitle: "Lengthen",
+                description: "단축된 근섬유를 최적 길이로 회복시켜 관절가동범위를 확보합니다.",
                 gradient: "from-orange-500/20 to-orange-500/5",
                 icon: "🟠",
                 bgImage: "https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=800&q=80",
@@ -825,13 +825,13 @@ export default function Home() {
                       <span className="text-3xl">{step.icon}</span>
                       <span className="text-xs font-bold text-slate-400">{step.label}</span>
                     </div>
-                    <h3 className="mb-2 text-xl font-bold text-white drop-shadow-lg">
+                    <h3 className="mb-2 text-2xl font-bold text-black drop-shadow-[0_2px_4px_rgba(255,255,255,0.3)]">
                       {step.title}
                     </h3>
-                    <p className="mb-3 text-sm font-bold text-[#f97316] drop-shadow-lg">
+                    <p className="mb-4 text-sm font-semibold text-[#f97316] drop-shadow-lg">
                       {step.subtitle}
                     </p>
-                    <p className="text-xs leading-relaxed text-white drop-shadow-md">
+                    <p className="text-sm leading-relaxed text-black font-medium drop-shadow-[0_1px_2px_rgba(255,255,255,0.2)]">
                       {step.description}
                     </p>
                   </div>
