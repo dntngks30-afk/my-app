@@ -628,6 +628,10 @@ export default function Home() {
               <span className="font-bold text-[#fbbf24]">활성화</span> →{" "}
               <span className="font-bold text-[#fde047]">통합</span>
             </p>
+            <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#f97316]/20 px-4 py-2 text-sm font-medium text-[#f97316]">
+              <span>📄</span>
+              <span>결제 시 4단계 맞춤 교정 솔루션 PDF 제공</span>
+            </div>
           </div>
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -669,7 +673,8 @@ export default function Home() {
                 bgImage: "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800&q=80",
               },
             ].map((step, index) => {
-              const isLocked = !isPaid && index >= 2;
+              // 모든 단계 잠금 해제
+              const isLocked = false;
 
               return (
                 <div
