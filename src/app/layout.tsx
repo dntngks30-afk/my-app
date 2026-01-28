@@ -39,7 +39,9 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || "https://posturelab.com"),
+  metadataBase: process.env.NEXT_PUBLIC_BASE_URL 
+    ? new URL(process.env.NEXT_PUBLIC_BASE_URL)
+    : new URL("https://posturelab.com"),
   alternates: {
     canonical: "/",
   },
