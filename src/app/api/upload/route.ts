@@ -1,26 +1,27 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// (주의) Service role 키 대신 anon 키를 사용하도록 변경했습니다.
-// 이미 Storage 정책에서 anon에 INSERT 권한을 부여하셨으므로 서버에서 NEXT_PUBLIC_SUPABASE_ANON_KEY로 동작합니다.
-const supabase = createClient(
-  process.env.SUPABASE_URL || "",
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-);
+// Supabase 클라이언트를 모듈 로드 시점에 생성하지 않고 요청 시점에 생성합니다.
+// 빌드 단계에서 env가 없더라도 모듈 로드가 실패하지 않도록 합니다.
+function getSupabaseClient() {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const key =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    "";
+  return createClient(url, key);
+}
 
 export async function POST(req: Request) {
   try {
     // 빠른 로그: env 존재 여부 출력 (키 값 자체는 노출하지 않음)
     console.log("api/upload called", {
-      has_url: !!process.env.SUPABASE_URL,
-      has_service_role: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      has_url: !!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL),
+      has_key: !!(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY),
     });
-    // 빠른 환경변수 검증 -> 빈 값이면 명확한 에러 반환
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return NextResponse.json(
-        { error: "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set" },
-        { status: 500 }
-      );
+    // 환경변수가 충분하지 않으면 명확한 에러 반환
+    if (!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL)) {
+      return NextResponse.json({ error: "SUPABASE_URL is not set" }, { status: 500 });
     }
     const form = await req.formData();
     const file = form.get("file") as File | null;
@@ -39,8 +40,8 @@ export async function POST(req: Request) {
     const path = `${safeName}`;
 
     // user-photos 버킷에 업로드
-    const { data: uploadData, error: uploadErr } = await supabase.storage
-      .from("user-photos")
+    const { data: uploadData, error: uploadErr } = await getSupabaseClient()
+      .storage.from("user-photos")
       .upload(path, buffer, { contentType: file.type });
 
     if (uploadErr) {
@@ -49,10 +50,11 @@ export async function POST(req: Request) {
     }
 
     // public URL 얻기 (버킷이 public으로 설정되어 있어야 바로 접근 가능)
-    const { data: publicData } = supabase.storage.from("user-photos").getPublicUrl(path);
+    const { data: publicData } = getSupabaseClient().storage.from("user-photos").getPublicUrl(path);
     console.log("storage.getPublicUrl:", publicData);
+    const baseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
     const publicURL =
-      (publicData as any)?.publicUrl || `${process.env.SUPABASE_URL}/storage/v1/object/public/user-photos/${path}`;
+      (publicData as any)?.publicUrl || `${baseUrl}/storage/v1/object/public/user-photos/${path}`;
 
     // requests 테이블에 레코드 추가 (간단한 구조)
     const insertPayload: Record<string, any> = {
@@ -63,7 +65,7 @@ export async function POST(req: Request) {
     if (side === "front") insertPayload.front_url = publicURL;
     else insertPayload.side_url = publicURL;
 
-    const { error: insertErr } = await supabase.from("requests").insert(insertPayload);
+    const { error: insertErr } = await getSupabaseClient().from("requests").insert(insertPayload);
     if (insertErr) {
       console.error("insert error into requests:", insertErr);
       return NextResponse.json({ error: insertErr.message }, { status: 500 });

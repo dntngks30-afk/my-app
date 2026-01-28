@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// 서버 사이드에서 Supabase service role 키를 사용합니다.
-const supabase = createClient(
-  process.env.SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
-);
+function getSupabaseClient() {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+  return createClient(url, key);
+}
 
 export async function GET() {
   try {
     // requests 테이블에서 최신순으로 요청 목록을 가져옵니다.
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseClient()
       .from("requests")
       .select("id, user_id, front_url, side_url, status, created_at")
       .order("created_at", { ascending: false });

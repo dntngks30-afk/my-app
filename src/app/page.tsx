@@ -5,9 +5,13 @@
 // - 억제-신장-활성화-통합 4단계 교정운동 프로세스 소개
 // - 실시간처럼 보이는 신청 인원 수 표시
 // - 모바일 우선 반응형 레이아웃
+// - Toss Payments 결제 연동
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import Script from "next/script";
+import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 
 // 업로드할 사진의 방향(정면/측면)을 구분하기 위한 타입입니다.
 type UploadSide = "front" | "side";
@@ -216,6 +220,88 @@ export default function Home() {
   const [pendingSide, setPendingSide] = useState<UploadSide | null>(null);
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
 
+  // 로그인 상태 확인
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+  
+  useEffect(() => {
+    // 현재 로그인한 사용자 확인
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setUser({ id: session.user.id, email: session.user.email || undefined });
+        // 로컬스토리지에 사용자 ID 저장 (결제 시 사용)
+        localStorage.setItem("user_id", session.user.id);
+      }
+    };
+    checkUser();
+
+    // 인증 상태 변경 감지
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        setUser({ id: session.user.id, email: session.user.email || undefined });
+        localStorage.setItem("user_id", session.user.id);
+      } else {
+        setUser(null);
+        localStorage.removeItem("user_id");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Toss Payments 결제 처리 함수
+  const handlePayment = async () => {
+    // Toss Payments SDK가 로드되었는지 확인
+    // @ts-ignore - Toss SDK는 전역으로 로드됨
+    if (typeof window.TossPayments === "undefined") {
+      alert("결제 시스템을 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
+      return;
+    }
+
+    // Toss 클라이언트 키 가져오기
+    const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || "";
+    if (!clientKey) {
+      alert("결제 설정이 완료되지 않았습니다. 관리자에게 문의해주세요.");
+      return;
+    }
+
+    // 고유한 주문 ID 생성
+    const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // 결제 금액 (19,900원)
+    const amount = 19900;
+    
+    // 가장 최근 업로드한 요청 ID를 저장 (결제 성공 후 연결용)
+    // 실제로는 서버에서 관리하는 것이 좋지만, 데모 용도로 로컬스토리지 사용
+    const recentRequestId = session.photos.length > 0 ? session.id : null;
+    if (recentRequestId) {
+      localStorage.setItem("pending_request_id", recentRequestId);
+    }
+
+    try {
+      // @ts-ignore - Toss SDK 타입 정의 없음
+      const tossPayments = window.TossPayments(clientKey);
+      
+      // 결제 요청
+      await tossPayments.requestPayment("카드", {
+        amount,
+        orderId,
+        orderName: "1:1 맞춤 교정 리포트 + 영상 가이드",
+        customerName: user?.email?.split("@")[0] || "고객",
+        successUrl: `${window.location.origin}/payments/success`,
+        failUrl: `${window.location.origin}/payments/fail`,
+      });
+    } catch (error: any) {
+      // 사용자가 결제를 취소한 경우
+      if (error.code === "USER_CANCEL") {
+        console.log("사용자가 결제를 취소했습니다.");
+      } else {
+        console.error("결제 오류:", error);
+        alert("결제 중 오류가 발생했습니다: " + (error.message || "알 수 없는 오류"));
+      }
+    }
+  };
+
   // 실제 파일 선택창을 열기 위한 input 참조입니다.
   const frontInputRef = useRef<HTMLInputElement | null>(null);
   const sideInputRef = useRef<HTMLInputElement | null>(null);
@@ -245,8 +331,52 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#0f172a] px-4 py-8 text-slate-100">
+      {/* Toss Payments SDK 로드 */}
+      <Script
+        src="https://js.tosspayments.com/v1/payment"
+        strategy="lazyOnload"
+      />
+      
       {/* 전체를 감싸는 카드 레이아웃입니다. 모바일에서는 세로, 큰 화면에서는 좌우 분할 구조로 보입니다. */}
       <section className="relative flex w-full max-w-5xl flex-col gap-12 overflow-hidden rounded-3xl border border-slate-700/80 bg-slate-900/80 p-6 shadow-[0_25px_80px_rgba(0,0,0,0.6)] sm:p-10">
+        {/* 상단 네비게이션: 로그인/회원가입 또는 사용자 정보 */}
+        <nav className="absolute right-4 top-4 z-20 flex items-center gap-3 sm:right-6 sm:top-6">
+          {user ? (
+            <>
+              <span className="text-xs text-slate-400">{user.email}</span>
+              <Link
+                href="/my-report"
+                className="text-xs text-slate-300 hover:text-white"
+              >
+                내 리포트
+              </Link>
+              <button
+                onClick={async () => {
+                  await supabase.auth.signOut();
+                  setUser(null);
+                }}
+                className="rounded-full border border-slate-600 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800"
+              >
+                로그아웃
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="text-xs text-slate-300 hover:text-white"
+              >
+                로그인
+              </Link>
+              <Link
+                href="/signup"
+                className="rounded-full bg-[#f97316] px-3 py-1 text-xs font-medium text-slate-950"
+              >
+                회원가입
+              </Link>
+            </>
+          )}
+        </nav>
         {/* 상단 영역: 좌측 소개 + 우측 업로드 & 상태 박스 */}
         <div className="relative z-10 flex flex-col gap-10 md:flex-row md:items-start">
           {/* 왼쪽 영역: 서비스 설명 + 실시간 신청 인원 */}
@@ -574,10 +704,10 @@ export default function Home() {
               </p>
               <button
                 type="button"
-                onClick={() => setIsPaid(true)}
+                onClick={handlePayment}
                 className="inline-flex h-10 items-center justify-center rounded-full bg-[#f97316] px-5 text-xs font-semibold text-slate-950 shadow-[0_0_24px_rgba(249,115,22,0.5)] transition hover:bg-[#fb923c] hover:shadow-[0_0_32px_rgba(249,115,22,0.6)] sm:text-sm"
               >
-                3·4단계 활성화+통합 루틴 확인하기
+                3·4단계 활성화+통합 루틴 확인하기 (₩19,900)
               </button>
             </div>
           )}
@@ -600,9 +730,10 @@ export default function Home() {
 
           <button
             type="button"
+            onClick={handlePayment}
             className="mt-2 inline-flex h-11 items-center justify-center rounded-full bg-[#f97316] px-6 text-xs font-semibold text-slate-950 shadow-[0_0_30px_rgba(249,115,22,0.4)] transition hover:bg-[#fb923c] hover:shadow-[0_0_40px_rgba(249,115,22,0.6)] active:scale-[0.98] sm:mt-0 sm:text-sm"
           >
-            나의 맞춤 교정 리포트+영상 가이드 구매하기 ($19.99)
+            나의 맞춤 교정 리포트+영상 가이드 구매하기 (₩19,900)
           </button>
         </div>
 
