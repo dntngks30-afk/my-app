@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
-);
+// Supabase 클라이언트를 모듈 로드 시점에 생성하지 않고 요청 시점에 생성합니다.
+// 이렇게 하면 빌드 단계에서 process.env 값이 없어도 에러가 발생하지 않습니다.
+function getSupabaseClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? "";
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    "";
+
+  return createClient(url, key);
+}
 
 // 미리 저장된 NASM-CES 4단계 데이터 템플릿
 const NASM_CES_TEMPLATE = {
@@ -25,7 +32,7 @@ export async function POST(req: Request) {
     }
 
     // 요청 정보 조회
-    const { data: reqRow, error: selectErr } = await supabase
+    const { data: reqRow, error: selectErr } = await getSupabaseClient()
       .from("requests")
       .select("*")
       .eq("id", requestId)
@@ -36,7 +43,7 @@ export async function POST(req: Request) {
     }
 
     // 1) requests 테이블 상태 업데이트
-    const { error: updateErr } = await supabase
+    const { error: updateErr } = await getSupabaseClient()
       .from("requests")
       .update({
         status: "completed",
@@ -57,7 +64,7 @@ export async function POST(req: Request) {
       created_at: new Date().toISOString(),
     };
 
-    const { error: insertErr } = await supabase.from("solutions").insert(insertPayload);
+    const { error: insertErr } = await getSupabaseClient().from("solutions").insert(insertPayload);
     if (insertErr) {
       return NextResponse.json({ error: insertErr.message }, { status: 500 });
     }
@@ -67,4 +74,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }
 }
+// 빌드 타임에 환경 변수가 없어도 에러를 내지 않게 만드는 코드
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder';
+
+// 만약 기존에 아래와 같은 줄이 있다면 위 변수를 사용하도록 수정하세요
+// const supabase = createClient(supabaseUrl, supabaseKey);
 
