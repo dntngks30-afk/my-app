@@ -639,7 +639,7 @@ export default function Home() {
                 description: "과긴장된 근육을 먼저 이완시킵니다.",
                 gradient: "from-red-500/20 to-red-500/5",
                 icon: "🔴",
-                bgImage: "https://images.unsplash.com/photo-1598632640487-6ea4a4e8b6f0?w=800&q=80",
+                bgImage: "https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800&q=80",
               },
               {
                 label: "02",
