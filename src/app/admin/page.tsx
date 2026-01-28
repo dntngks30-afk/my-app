@@ -5,7 +5,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { generateCorrectionPDF, downloadPDF, DiagnosisData } from "@/lib/pdfGenerator";
+
+// 진단 데이터 타입
+interface DiagnosisData {
+  forwardHead: 'none' | 'mild' | 'moderate' | 'severe';
+  roundedShoulder: 'none' | 'mild' | 'moderate' | 'severe';
+  anteriorHumerus: 'none' | 'mild' | 'moderate' | 'severe';
+  anteriorPelvicTilt: 'none' | 'mild' | 'moderate' | 'severe';
+  posteriorPelvicTilt: 'none' | 'mild' | 'moderate' | 'severe';
+}
 
 // 요청 데이터 타입
 type RequestRow = {
@@ -101,7 +109,7 @@ export default function AdminPage() {
     fetchRequests();
   }, [isAuthorized]);
 
-  // PDF 자동 생성 및 다운로드
+  // HTML 리포트 페이지 열기 (한글 완벽 지원)
   const handleGeneratePDF = async () => {
     if (!selected) {
       alert("요청을 선택해주세요.");
@@ -115,24 +123,15 @@ export default function AdminPage() {
       return;
     }
 
-    setPdfGenerating(true);
-
     try {
-      // PDF 자동 생성
-      const pdfBlob = await generateCorrectionPDF(
-        diagnosis,
-        selected.front_url,
-        selected.side_url,
-        selected.user_email || '고객님'
-      );
-
-      // PDF 다운로드
-      const fileName = `correction-report-${selected.user_id}-${Date.now()}.pdf`;
-      downloadPDF(pdfBlob, fileName);
-
-      alert("PDF가 생성되었습니다! 다운로드를 확인해주세요.");
-
-      // 상태 업데이트 (옵션)
+      // 진단 데이터를 URL 파라미터로 전달
+      const diagnosisJson = encodeURIComponent(JSON.stringify(diagnosis));
+      const reportUrl = `/report-preview/${selected.id}?diagnosis=${diagnosisJson}`;
+      
+      // 새 탭에서 리포트 열기
+      window.open(reportUrl, '_blank');
+      
+      // 상태 업데이트
       await supabase
         .from("requests")
         .update({ status: "completed" })
@@ -146,10 +145,8 @@ export default function AdminPage() {
       setRows(data || []);
 
     } catch (error) {
-      console.error("PDF 생성 실패:", error);
-      alert("PDF 생성 중 오류가 발생했습니다.");
-    } finally {
-      setPdfGenerating(false);
+      console.error("리포트 생성 실패:", error);
+      alert("리포트 생성 중 오류가 발생했습니다.");
     }
   };
 
@@ -383,17 +380,16 @@ VALUES (
                   </div>
                 </div>
 
-                {/* PDF 생성 버튼 */}
+                {/* 리포트 생성 버튼 */}
                 <button
                   onClick={handleGeneratePDF}
-                  disabled={pdfGenerating}
-                  className="w-full rounded-lg bg-[#f97316] px-6 py-3 font-bold text-white shadow-lg transition hover:bg-[#fb923c] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full rounded-lg bg-[#f97316] px-6 py-3 font-bold text-white shadow-lg transition hover:bg-[#fb923c]"
                 >
-                  {pdfGenerating ? "PDF 생성 중..." : "🎯 PDF 자동 생성"}
+                  🎯 리포트 생성 (한글 지원)
                 </button>
 
                 <p className="text-center text-xs text-slate-500">
-                  선택한 진단에 맞는 4단계 교정운동이 자동으로 포함됩니다
+                  새 탭에서 리포트가 열립니다. 브라우저 인쇄 기능으로 PDF 저장 가능
                 </p>
               </div>
             )}
