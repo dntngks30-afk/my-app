@@ -1,0 +1,13 @@
+# *
+User-agent: *
+Allow: /
+
+# Disallow admin and API routes
+Disallow: /admin
+Disallow: /api/
+
+# Sitemap
+Sitemap: https://posturelab.com/sitemap.xml
+
+# Host
+Host: https://posturelab.com

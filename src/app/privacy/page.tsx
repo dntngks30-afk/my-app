@@ -194,7 +194,12 @@ export default function PrivacyPage() {
                 <strong>전자적 파일 형태</strong>: 복구 및 재생이 불가능한 방법으로 영구 삭제
               </li>
               <li>
-                <strong>체형 사진</strong>: 리포트 제공 완료 후 30일 이내 자동 삭제
+                <strong className="text-green-400">체형 사진 (중요)</strong>: 분석 완료 후 24시간 이내 자동 파기
+                <ul className="mt-2 list-circle pl-5 text-slate-400">
+                  <li>업로드된 체형 사진은 분석 목적으로만 사용됩니다</li>
+                  <li>리포트 생성이 완료되면 24시간 이내에 서버에서 영구 삭제됩니다</li>
+                  <li>삭제 후에는 복구가 불가능합니다</li>
+                </ul>
               </li>
             </ul>
           </section>
@@ -204,12 +209,31 @@ export default function PrivacyPage() {
             <h2 className="text-lg font-semibold text-slate-100">제7조 (개인정보의 안전성 확보 조치)</h2>
             <p>회사는 개인정보의 안전성 확보를 위해 다음과 같은 조치를 취하고 있습니다:</p>
             <ul className="list-disc space-y-2 pl-5">
-              <li>비밀번호 암호화 저장</li>
-              <li>개인정보 접근 권한 제한</li>
-              <li>SSL/TLS 암호화 통신 적용</li>
-              <li>보안 프로그램 설치 및 주기적 점검</li>
-              <li>개인정보 취급 직원 최소화 및 교육</li>
+              <li><strong>비밀번호 암호화 저장</strong>: 모든 비밀번호는 단방향 암호화되어 저장됩니다</li>
+              <li><strong>개인정보 접근 권한 제한</strong>: 개인정보 처리 권한을 최소 인원으로 제한</li>
+              <li><strong>SSL/TLS 암호화 통신</strong>: 모든 데이터 전송 시 암호화 프로토콜 적용</li>
+              <li><strong>사진 암호화 저장</strong>: 업로드된 체형 사진은 암호화되어 저장되며, 분석 후 24시간 이내 자동 삭제</li>
+              <li><strong>보안 프로그램 설치 및 점검</strong>: 주기적인 보안 시스템 점검 및 업데이트</li>
+              <li><strong>개인정보 취급 직원 교육</strong>: 직원 최소화 및 정기적인 보안 교육 실시</li>
             </ul>
+            
+            <div className="mt-4 rounded-lg border border-green-500/30 bg-green-500/10 p-4">
+              <div className="flex items-start gap-3">
+                <svg className="mt-0.5 h-6 w-6 flex-shrink-0 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <div>
+                  <h3 className="mb-2 font-semibold text-green-400">체형 사진 보안 관리 프로세스</h3>
+                  <ul className="space-y-1 text-xs text-slate-300">
+                    <li>1. 업로드 시: SSL/TLS 암호화 전송</li>
+                    <li>2. 저장 시: 서버 측 암호화 적용 (AES-256)</li>
+                    <li>3. 분석 중: 권한을 가진 시스템과 전문가만 접근 가능</li>
+                    <li>4. 분석 후: 24시간 이내 자동 영구 삭제</li>
+                    <li>5. 백업 시스템에서도 동시 삭제하여 복구 불가능</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </section>
 
           {/* 제8조 */}
