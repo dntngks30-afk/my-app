@@ -56,19 +56,75 @@ export async function POST(req: Request) {
     const publicURL =
       (publicData as any)?.publicUrl || `${baseUrl}/storage/v1/object/public/user-photos/${path}`;
 
-    // requests 테이블에 레코드 추가 (간단한 구조)
-    // created_at은 Supabase에서 자동 생성됨
-    const insertPayload: Record<string, any> = {
-      user_id,
-      status: "pending",
-    };
-    if (side === "front") insertPayload.front_url = publicURL;
-    else insertPayload.side_url = publicURL;
+    // requests 테이블에 레코드 추가/업데이트
+    // 같은 user_id의 최근 요청을 찾아서 업데이트하거나, 없으면 새로 생성
+    const supabaseClient = getSupabaseClient();
+    
+    // 최근 24시간 이내의 같은 사용자 요청 찾기
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: existingRequests, error: findErr } = await supabaseClient
+      .from("requests")
+      .select("*")
+      .eq("user_id", user_id)
+      .gte("created_at", oneDayAgo)
+      .order("created_at", { ascending: false })
+      .limit(1);
 
-    const { error: insertErr } = await getSupabaseClient().from("requests").insert(insertPayload);
-    if (insertErr) {
-      console.error("insert error into requests:", insertErr);
-      return NextResponse.json({ error: insertErr.message }, { status: 500 });
+    if (findErr) {
+      console.error("find error:", findErr);
+    }
+
+    let finalRequestId = null;
+
+    if (existingRequests && existingRequests.length > 0) {
+      // 기존 요청이 있으면 업데이트
+      const existingRequest = existingRequests[0];
+      const updatePayload: Record<string, any> = {};
+      
+      if (side === "front") {
+        updatePayload.front_url = publicURL;
+      } else {
+        updatePayload.side_url = publicURL;
+      }
+
+      const { error: updateErr } = await supabaseClient
+        .from("requests")
+        .update(updatePayload)
+        .eq("id", existingRequest.id);
+
+      if (updateErr) {
+        console.error("update error:", updateErr);
+        return NextResponse.json({ error: updateErr.message }, { status: 500 });
+      }
+      
+      finalRequestId = existingRequest.id;
+      console.log(`✅ 기존 요청 업데이트: ${existingRequest.id} (${side})`);
+    } else {
+      // 새 요청 생성
+      const insertPayload: Record<string, any> = {
+        user_id,
+        status: "pending",
+      };
+      
+      if (side === "front") {
+        insertPayload.front_url = publicURL;
+      } else {
+        insertPayload.side_url = publicURL;
+      }
+
+      const { data: insertData, error: insertErr } = await supabaseClient
+        .from("requests")
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      if (insertErr) {
+        console.error("insert error into requests:", insertErr);
+        return NextResponse.json({ error: insertErr.message }, { status: 500 });
+      }
+      
+      finalRequestId = insertData?.id;
+      console.log(`✅ 새 요청 생성: ${finalRequestId} (${side})`);
     }
 
     return NextResponse.json({ ok: true, url: publicURL });
