@@ -87,6 +87,9 @@ export default function AdminPage() {
           return;
         }
 
+        console.log('📋 불러온 요청 수:', data?.length);
+        console.log('📸 첫 번째 요청 데이터:', data?.[0]);
+        
         setRows(data || []);
       } catch (err) {
         console.error("요청 불러오기 에러:", err);
@@ -210,8 +213,32 @@ export default function AdminPage() {
                         : "border-slate-700 bg-slate-800 hover:border-slate-600"
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
+                    <div className="flex items-start gap-3">
+                      {/* 썸네일 */}
+                      <div className="flex gap-2 flex-shrink-0">
+                        {row.front_url && (
+                          <img 
+                            src={row.front_url} 
+                            alt="정면" 
+                            className="w-12 h-16 object-cover rounded border border-slate-600"
+                          />
+                        )}
+                        {row.side_url && (
+                          <img 
+                            src={row.side_url} 
+                            alt="측면" 
+                            className="w-12 h-16 object-cover rounded border border-slate-600"
+                          />
+                        )}
+                        {!row.front_url && !row.side_url && (
+                          <div className="w-12 h-16 flex items-center justify-center bg-slate-700 rounded border border-slate-600">
+                            <span className="text-xs text-slate-500">📷</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* 정보 */}
+                      <div className="flex-1 min-w-0">
                         <p className="font-medium text-slate-100">
                           요청 ID: {row.id.slice(0, 8)}
                         </p>
@@ -223,14 +250,18 @@ export default function AdminPage() {
                             {new Date(row.created_at).toLocaleString('ko-KR')}
                           </p>
                         )}
-                      </div>
-                      <div className="flex gap-2">
-                        {row.front_url && (
-                          <span className="text-xs text-green-400">📷 정면</span>
-                        )}
-                        {row.side_url && (
-                          <span className="text-xs text-green-400">📷 측면</span>
-                        )}
+                        <div className="mt-2 flex gap-2">
+                          {row.front_url && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-green-500/20 px-2 py-0.5 text-xs text-green-400">
+                              ✓ 정면
+                            </span>
+                          )}
+                          {row.side_url && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-green-500/20 px-2 py-0.5 text-xs text-green-400">
+                              ✓ 측면
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -250,28 +281,45 @@ export default function AdminPage() {
                 {/* 사진 미리보기 */}
                 <div>
                   <h3 className="mb-3 text-lg font-bold text-slate-100">업로드된 사진</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    {selected.front_url && (
-                      <div>
-                        <p className="mb-2 text-sm text-slate-400">정면</p>
-                        <img
-                          src={selected.front_url}
-                          alt="정면"
-                          className="w-full rounded-lg border border-slate-700"
-                        />
-                      </div>
-                    )}
-                    {selected.side_url && (
-                      <div>
-                        <p className="mb-2 text-sm text-slate-400">측면</p>
-                        <img
-                          src={selected.side_url}
-                          alt="측면"
-                          className="w-full rounded-lg border border-slate-700"
-                        />
-                      </div>
-                    )}
-                  </div>
+                  {!selected.front_url && !selected.side_url ? (
+                    <div className="rounded-lg border border-slate-700 bg-slate-800 p-8 text-center">
+                      <p className="text-slate-400">📷 업로드된 사진이 없습니다</p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        사용자 ID: {selected.user_id}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4">
+                      {selected.front_url && (
+                        <div>
+                          <p className="mb-2 text-sm text-slate-400">정면</p>
+                          <img
+                            src={selected.front_url}
+                            alt="정면"
+                            className="w-full rounded-lg border border-slate-700"
+                            onError={(e) => {
+                              console.error('정면 사진 로드 실패:', selected.front_url);
+                              e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="300"%3E%3Crect width="200" height="300" fill="%23334155"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" fill="%23cbd5e1" font-size="14"%3E이미지 로드 실패%3C/text%3E%3C/svg%3E';
+                            }}
+                          />
+                        </div>
+                      )}
+                      {selected.side_url && (
+                        <div>
+                          <p className="mb-2 text-sm text-slate-400">측면</p>
+                          <img
+                            src={selected.side_url}
+                            alt="측면"
+                            className="w-full rounded-lg border border-slate-700"
+                            onError={(e) => {
+                              console.error('측면 사진 로드 실패:', selected.side_url);
+                              e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="300"%3E%3Crect width="200" height="300" fill="%23334155"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" fill="%23cbd5e1" font-size="14"%3E이미지 로드 실패%3C/text%3E%3C/svg%3E';
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* 진단 체크박스 */}
