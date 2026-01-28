@@ -8,14 +8,11 @@
 // - Toss Payments 결제 연동
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent, Suspense } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import Script from "next/script";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-
-// useSearchParams를 사용하므로 동적 페이지로 설정
-export const dynamic = 'force-dynamic';
 
 // 업로드할 사진의 방향(정면/측면)을 구분하기 위한 타입입니다.
 type UploadSide = "front" | "side";
@@ -56,10 +53,6 @@ const formatPeopleCount = (count: number) =>
   count.toLocaleString("ko-KR", { maximumFractionDigits: 0 });
 
 export default function Home() {
-  // URL에서 tier와 price 쿼리 파라미터를 읽기 위한 훅
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  
   // 현재 서비스에 신청한 사람 수를 상태로 관리합니다.
   const [peopleCount, setPeopleCount] = useState<number>(1245);
 
@@ -78,18 +71,6 @@ export default function Home() {
       notes: "정면과 측면 사진을 업로드하면, 전문가용 교정 알고리즘이 순서대로 분석을 시작합니다.",
     },
   });
-
-  // URL 쿼리 파라미터에서 tier와 price를 읽어서 자동으로 결제 실행
-  useEffect(() => {
-    const tier = searchParams?.get("tier");
-    const price = searchParams?.get("price");
-    
-    if (tier && price) {
-      // 결제 페이지로 자동으로 이동하지 않고, 사용자가 버튼을 클릭할 때까지 대기
-      // 필요시 자동 결제 로직 추가 가능
-      console.log(`Selected tier: ${tier}, price: ${price}`);
-    }
-  }, [searchParams]);
 
   // 파일 업로드(input type="file")가 발생했을 때 호출되는 핸들러입니다.
   const handleFileChange =
