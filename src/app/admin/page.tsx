@@ -1,11 +1,11 @@
-// 관리자 대시보드 페이지입니다.
-// 로그인 + role='admin' 권한이 있어야만 접근할 수 있습니다.
-// 체형 분석 요청을 확인하고, 상세 리포트를 작성할 수 있습니다.
+// 관리자 대시보드 페이지 - 자동 PDF 생성 시스템
+// 체크박스만 선택하면 전문적인 교정운동 PDF가 자동 생성됩니다.
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { generateCorrectionPDF, downloadPDF, DiagnosisData } from "@/lib/pdfGenerator";
 
 // 요청 데이터 타입
 type RequestRow = {
@@ -15,30 +15,7 @@ type RequestRow = {
   side_url?: string;
   status?: string;
   created_at?: string;
-};
-
-// 리포트 폼 데이터 타입
-interface ReportForm {
-  diagnoses: Record<string, boolean>;
-  inhibitContent: string;
-  lengthenContent: string;
-  activateContent: string;
-  integrateContent: string;
-  expertNotes: string;
-}
-
-// 초기 리포트 폼 상태
-const initialReportForm: ReportForm = {
-  diagnoses: {
-    turtle: false,    // 거북목
-    rounded: false,   // 라운드숄더
-    lordosis: false,  // 요추전만
-  },
-  inhibitContent: "",
-  lengthenContent: "",
-  activateContent: "",
-  integrateContent: "",
-  expertNotes: "",
+  user_email?: string;
 };
 
 export default function AdminPage() {
@@ -53,17 +30,22 @@ export default function AdminPage() {
   const [selected, setSelected] = useState<RequestRow | null>(null);
   const [loading, setLoading] = useState(false);
   
-  // 리포트 폼 상태
-  const [reportForm, setReportForm] = useState<ReportForm>(initialReportForm);
+  // 진단 체크박스 상태
+  const [diagnosis, setDiagnosis] = useState<DiagnosisData>({
+    forwardHead: 'none',
+    roundedShoulder: 'none',
+    anteriorHumerus: 'none',
+    anteriorPelvicTilt: 'none',
+    posteriorPelvicTilt: 'none',
+  });
   
-  // 이메일 발송 체크박스
-  const [sendEmail, setSendEmail] = useState(true);
+  // PDF 생성 로딩 상태
+  const [pdfGenerating, setPdfGenerating] = useState(false);
 
-  // 권한 체크: 로그인 + role='admin' 검증
+  // 권한 체크
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // 현재 세션 확인
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError || !session) {
@@ -71,7 +53,6 @@ export default function AdminPage() {
           return;
         }
 
-        // users 테이블에서 role 확인
         const { data: userProfile, error: profileError } = await supabase
           .from("users")
           .select("role")
@@ -102,122 +83,98 @@ export default function AdminPage() {
     checkAuth();
   }, [router]);
 
-  // 요청 목록 가져오기
-  const fetchRequests = async () => {
-    setLoading(true);
-    const res = await fetch("/api/admin/requests");
-    const json = await res.json();
-    setRows(json.data || []);
-    setLoading(false);
-  };
-
-  // 인증 성공 후 요청 목록 로드
+  // 요청 목록 불러오기
   useEffect(() => {
-    if (isAuthorized) {
-      fetchRequests();
-    }
+    if (!isAuthorized) return;
+
+    const fetchRequests = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("requests")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.error("요청 목록 조회 실패:", error);
+          return;
+        }
+
+        setRows(data || []);
+      } catch (err) {
+        console.error("요청 불러오기 에러:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRequests();
   }, [isAuthorized]);
 
-  // 요청 상세 열기
-  const openDetail = (row: RequestRow) => {
-    setSelected(row);
-    setReportForm(initialReportForm); // 폼 초기화
-  };
-
-  // 진단 체크박스 토글
-  const toggleDiagnosis = (key: string) => {
-    setReportForm((prev) => ({
-      ...prev,
-      diagnoses: { ...prev.diagnoses, [key]: !prev.diagnoses[key] },
-    }));
-  };
-
-  // 리포트 작성 내용 변경
-  const updateReportContent = (field: keyof ReportForm, value: string) => {
-    setReportForm((prev) => ({ ...prev, [field]: value }));
-  };
-
-  // 리포트 확정 및 저장
-  const submitReport = async () => {
-    if (!selected) return;
-
-    // 최소 하나의 진단은 선택해야 함
-    const selectedDiagnoses = Object.entries(reportForm.diagnoses)
-      .filter(([, v]) => v)
-      .map(([k]) => k === "turtle" ? "거북목" : k === "rounded" ? "라운드숄더" : "요추전만");
-
-    if (selectedDiagnoses.length === 0) {
-      alert("최소 하나의 진단을 선택해주세요.");
+  // PDF 자동 생성 및 다운로드
+  const handleGeneratePDF = async () => {
+    if (!selected) {
+      alert("요청을 선택해주세요.");
       return;
     }
 
-    setLoading(true);
+    // 진단 항목이 하나라도 선택되었는지 확인
+    const hasAnyDiagnosis = Object.values(diagnosis).some(v => v !== 'none');
+    if (!hasAnyDiagnosis) {
+      alert("최소 하나의 진단 항목을 선택해주세요.");
+      return;
+    }
+
+    setPdfGenerating(true);
 
     try {
-      // 1. 리포트 저장
-      const reportRes = await fetch("/api/admin/report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          requestId: selected.id,
-          userId: selected.user_id,
-          diagnoses: selectedDiagnoses,
-          inhibitContent: reportForm.inhibitContent,
-          lengthenContent: reportForm.lengthenContent,
-          activateContent: reportForm.activateContent,
-          integrateContent: reportForm.integrateContent,
-          expertNotes: reportForm.expertNotes,
-        }),
-      });
+      // PDF 자동 생성
+      const pdfBlob = await generateCorrectionPDF(
+        diagnosis,
+        selected.front_url,
+        selected.side_url,
+        selected.user_email || '고객님'
+      );
 
-      const reportData = await reportRes.json();
+      // PDF 다운로드
+      const fileName = `correction-report-${selected.user_id}-${Date.now()}.pdf`;
+      downloadPDF(pdfBlob, fileName);
 
-      if (!reportRes.ok) {
-        throw new Error(reportData.error || "리포트 저장 실패");
-      }
+      alert("PDF가 생성되었습니다! 다운로드를 확인해주세요.");
 
-      // 2. 이메일 발송 (체크된 경우)
-      if (sendEmail && selected.user_id) {
-        try {
-          await fetch("/api/send-report", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              userId: selected.user_id,
-              requestId: selected.id,
-              diagnoses: selectedDiagnoses,
-            }),
-          });
-        } catch (emailErr) {
-          console.error("이메일 발송 에러:", emailErr);
-          // 이메일 실패해도 계속 진행
-        }
-      }
+      // 상태 업데이트 (옵션)
+      await supabase
+        .from("requests")
+        .update({ status: "completed" })
+        .eq("id", selected.id);
 
-      alert("리포트가 성공적으로 저장되었습니다.");
-      await fetchRequests();
-      setSelected(null);
-    } catch (err) {
-      alert("에러: " + (err as Error).message);
+      // 목록 새로고침
+      const { data } = await supabase
+        .from("requests")
+        .select("*")
+        .order("created_at", { ascending: false });
+      setRows(data || []);
+
+    } catch (error) {
+      console.error("PDF 생성 실패:", error);
+      alert("PDF 생성 중 오류가 발생했습니다.");
     } finally {
-      setLoading(false);
+      setPdfGenerating(false);
     }
   };
 
-  // 로그아웃 처리
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
+  // 진단 변경 핸들러
+  const handleDiagnosisChange = (
+    key: keyof DiagnosisData,
+    value: 'none' | 'mild' | 'moderate' | 'severe'
+  ) => {
+    setDiagnosis(prev => ({ ...prev, [key]: value }));
   };
 
-  // 인증 로딩 중 화면
   if (authLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0f172a]">
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-[#f97316] border-t-transparent" />
-          <p className="text-slate-400">권한 확인 중...</p>
-        </div>
+      <div className="flex min-h-screen items-center justify-center bg-slate-950">
+        <p className="text-slate-300">권한 확인 중...</p>
       </div>
     );
   }
@@ -227,248 +184,206 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0f172a] p-6 text-slate-100">
-      <div className="mx-auto max-w-7xl space-y-6">
+    <div className="min-h-screen bg-slate-950 p-6">
+      <div className="mx-auto max-w-7xl">
         {/* 헤더 */}
-        <header className="flex items-center justify-between">
-          <h1 className="text-2xl font-extrabold">관리자 대시보드</h1>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={fetchRequests}
-              className="rounded bg-[#f97316] px-4 py-2 font-medium text-slate-950"
-            >
-              새로고침
-            </button>
-            <button
-              onClick={handleLogout}
-              className="rounded border border-slate-600 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
-            >
-              로그아웃
-            </button>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-100">관리자 대시보드</h1>
+            <p className="mt-2 text-sm text-slate-400">
+              체크박스만 선택하면 자동으로 전문 PDF가 생성됩니다
+            </p>
           </div>
-        </header>
+          <button
+            onClick={() => router.push("/")}
+            className="rounded-lg bg-slate-800 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700"
+          >
+            메인으로
+          </button>
+        </div>
 
-        {/* 요청 목록 */}
-        <section className="rounded-xl bg-slate-900/80 p-4">
-          <h2 className="mb-3 text-lg font-semibold">요청 목록 (최신순)</h2>
-          {loading && <p className="text-sm text-slate-400">로딩 중...</p>}
-          {!loading && rows.length === 0 && (
-            <p className="text-sm text-slate-500">아직 요청이 없습니다.</p>
-          )}
-          <ul className="space-y-2">
-            {rows.map((r) => (
-              <li
-                key={r.id}
-                className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 transition ${
-                  selected?.id === r.id
-                    ? "border-[#f97316] bg-slate-800/80"
-                    : "border-slate-700/60 hover:bg-slate-800/60"
-                }`}
-                onClick={() => openDetail(r)}
-              >
-                <div>
-                  <div className="text-sm font-medium">요청 ID: {r.id.slice(0, 8)}...</div>
-                  <div className="text-xs text-slate-400">사용자: {r.user_id || "익명"}</div>
-                  <div className="mt-1">
-                    <span className={`inline-block rounded px-2 py-0.5 text-xs ${
-                      r.status === "completed" ? "bg-green-500/20 text-green-400" :
-                      r.status === "paid" ? "bg-blue-500/20 text-blue-400" :
-                      "bg-slate-500/20 text-slate-400"
-                    }`}>
-                      {r.status === "completed" ? "완료" :
-                       r.status === "paid" ? "결제완료 (분석 대기)" :
-                       r.status === "pending" ? "대기중" : r.status || "대기중"}
-                    </span>
-                  </div>
-                </div>
-                <div className="text-xs text-slate-400">
-                  {r.created_at ? new Date(r.created_at).toLocaleString("ko-KR") : ""}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* 선택된 요청 상세 + 리포트 작성 */}
-        {selected && (
-          <section className="rounded-xl bg-slate-900/80 p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">리포트 작성</h2>
-              <button
-                onClick={() => setSelected(null)}
-                className="text-sm text-slate-400 hover:text-white"
-              >
-                ✕ 닫기
-              </button>
-            </div>
-
-            <div className="grid gap-6 lg:grid-cols-3">
-              {/* 왼쪽: 사진 영역 */}
-              <div className="space-y-4 lg:col-span-1">
-                <div className="rounded-lg bg-slate-800 p-3 text-center">
-                  <p className="mb-2 text-sm font-medium">정면 사진</p>
-                  {selected.front_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={selected.front_url}
-                      alt="front"
-                      className="mx-auto max-h-64 w-auto rounded"
-                    />
-                  ) : (
-                    <div className="flex h-40 items-center justify-center rounded bg-slate-700/50 text-slate-500">
-                      사진 없음
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* 왼쪽: 요청 목록 */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
+            <h2 className="mb-4 text-xl font-bold text-slate-100">요청 목록</h2>
+            
+            {loading ? (
+              <p className="text-slate-400">로딩 중...</p>
+            ) : rows.length === 0 ? (
+              <p className="text-slate-400">요청이 없습니다.</p>
+            ) : (
+              <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                {rows.map((row) => (
+                  <div
+                    key={row.id}
+                    onClick={() => setSelected(row)}
+                    className={`cursor-pointer rounded-lg border p-4 transition ${
+                      selected?.id === row.id
+                        ? "border-[#f97316] bg-[#f97316]/10"
+                        : "border-slate-700 bg-slate-800 hover:border-slate-600"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-slate-100">
+                          요청 ID: {row.id.slice(0, 8)}
+                        </p>
+                        <p className="text-sm text-slate-400">
+                          사용자: {row.user_id.slice(0, 8)}
+                        </p>
+                        {row.created_at && (
+                          <p className="text-xs text-slate-500">
+                            {new Date(row.created_at).toLocaleString('ko-KR')}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        {row.front_url && (
+                          <span className="text-xs text-green-400">📷 정면</span>
+                        )}
+                        {row.side_url && (
+                          <span className="text-xs text-green-400">📷 측면</span>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
-
-                <div className="rounded-lg bg-slate-800 p-3 text-center">
-                  <p className="mb-2 text-sm font-medium">측면 사진</p>
-                  {selected.side_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={selected.side_url}
-                      alt="side"
-                      className="mx-auto max-h-64 w-auto rounded"
-                    />
-                  ) : (
-                    <div className="flex h-40 items-center justify-center rounded bg-slate-700/50 text-slate-500">
-                      사진 없음
-                    </div>
-                  )}
-                </div>
-
-                {/* 진단 체크 */}
-                <div className="rounded-lg border border-slate-700/60 bg-slate-800/50 p-4">
-                  <p className="mb-3 font-medium">진단 체크</p>
-                  {[
-                    { key: "turtle", label: "거북목 (Forward Head)" },
-                    { key: "rounded", label: "라운드숄더 (Rounded Shoulder)" },
-                    { key: "lordosis", label: "요추전만 (Lumbar Lordosis)" },
-                  ].map(({ key, label }) => (
-                    <label key={key} className="mt-2 flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={reportForm.diagnoses[key]}
-                        onChange={() => toggleDiagnosis(key)}
-                        className="h-5 w-5 rounded border-slate-600 bg-slate-700 text-[#f97316]"
-                      />
-                      <span className="text-sm">{label}</span>
-                    </label>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
+            )}
+          </div>
 
-              {/* 오른쪽: 리포트 내용 작성 */}
-              <div className="space-y-4 lg:col-span-2">
-                {/* 4단계 교정 루틴 입력 */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {/* 억제 운동 */}
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">
-                      <span className="mr-2 rounded bg-red-500/20 px-2 py-0.5 text-xs text-red-400">01</span>
-                      억제 운동
-                    </label>
-                    <textarea
-                      value={reportForm.inhibitContent}
-                      onChange={(e) => updateReportContent("inhibitContent", e.target.value)}
-                      placeholder="과긴장된 근육을 이완하는 운동을 작성하세요..."
-                      rows={4}
-                      className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-[#f97316] focus:outline-none"
-                    />
-                  </div>
-
-                  {/* 신장 운동 */}
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">
-                      <span className="mr-2 rounded bg-yellow-500/20 px-2 py-0.5 text-xs text-yellow-400">02</span>
-                      신장 운동
-                    </label>
-                    <textarea
-                      value={reportForm.lengthenContent}
-                      onChange={(e) => updateReportContent("lengthenContent", e.target.value)}
-                      placeholder="짧아진 근육을 늘리는 스트레칭을 작성하세요..."
-                      rows={4}
-                      className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-[#f97316] focus:outline-none"
-                    />
-                  </div>
-
-                  {/* 활성화 운동 */}
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">
-                      <span className="mr-2 rounded bg-green-500/20 px-2 py-0.5 text-xs text-green-400">03</span>
-                      활성화 운동
-                    </label>
-                    <textarea
-                      value={reportForm.activateContent}
-                      onChange={(e) => updateReportContent("activateContent", e.target.value)}
-                      placeholder="약화된 근육을 활성화하는 운동을 작성하세요..."
-                      rows={4}
-                      className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-[#f97316] focus:outline-none"
-                    />
-                  </div>
-
-                  {/* 통합 운동 */}
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">
-                      <span className="mr-2 rounded bg-blue-500/20 px-2 py-0.5 text-xs text-blue-400">04</span>
-                      통합 운동
-                    </label>
-                    <textarea
-                      value={reportForm.integrateContent}
-                      onChange={(e) => updateReportContent("integrateContent", e.target.value)}
-                      placeholder="실제 자세에 적용하는 통합 운동을 작성하세요..."
-                      rows={4}
-                      className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-[#f97316] focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                {/* 전문가 소견 */}
+          {/* 오른쪽: 진단 및 PDF 생성 */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
+            {!selected ? (
+              <div className="flex h-full items-center justify-center">
+                <p className="text-slate-400">왼쪽에서 요청을 선택해주세요</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* 사진 미리보기 */}
                 <div>
-                  <label className="mb-1 block text-sm font-medium">전문가 소견</label>
-                  <textarea
-                    value={reportForm.expertNotes}
-                    onChange={(e) => updateReportContent("expertNotes", e.target.value)}
-                    placeholder="추가적인 조언이나 주의사항을 작성하세요..."
-                    rows={3}
-                    className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-[#f97316] focus:outline-none"
-                  />
-                </div>
-
-                {/* 이메일 발송 옵션 + 제출 버튼 */}
-                <div className="flex flex-col gap-4 border-t border-slate-700/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={sendEmail}
-                      onChange={(e) => setSendEmail(e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-600 bg-slate-700 text-[#f97316]"
-                    />
-                    <span className="text-sm text-slate-300">
-                      리포트 작성 완료 시 사용자에게 이메일 알림 발송
-                    </span>
-                  </label>
-
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setSelected(null)}
-                      className="rounded-lg border border-slate-600 px-6 py-2 text-sm text-slate-300 hover:bg-slate-800"
-                    >
-                      취소
-                    </button>
-                    <button
-                      onClick={submitReport}
-                      disabled={loading}
-                      className="rounded-lg bg-[#f97316] px-6 py-2 font-semibold text-slate-950 shadow-[0_0_20px_rgba(249,115,22,0.4)] transition hover:bg-[#fb923c] disabled:opacity-50"
-                    >
-                      {loading ? "저장 중..." : "리포트 확정 및 저장"}
-                    </button>
+                  <h3 className="mb-3 text-lg font-bold text-slate-100">업로드된 사진</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    {selected.front_url && (
+                      <div>
+                        <p className="mb-2 text-sm text-slate-400">정면</p>
+                        <img
+                          src={selected.front_url}
+                          alt="정면"
+                          className="w-full rounded-lg border border-slate-700"
+                        />
+                      </div>
+                    )}
+                    {selected.side_url && (
+                      <div>
+                        <p className="mb-2 text-sm text-slate-400">측면</p>
+                        <img
+                          src={selected.side_url}
+                          alt="측면"
+                          className="w-full rounded-lg border border-slate-700"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
+
+                {/* 진단 체크박스 */}
+                <div>
+                  <h3 className="mb-4 text-lg font-bold text-slate-100">진단 선택</h3>
+                  
+                  <div className="space-y-4">
+                    {/* 거북목 */}
+                    <DiagnosisCheckbox
+                      label="거북목 (Forward Head)"
+                      value={diagnosis.forwardHead}
+                      onChange={(v) => handleDiagnosisChange('forwardHead', v)}
+                    />
+                    
+                    {/* 라운드숄더 */}
+                    <DiagnosisCheckbox
+                      label="라운드숄더 (Rounded Shoulder)"
+                      value={diagnosis.roundedShoulder}
+                      onChange={(v) => handleDiagnosisChange('roundedShoulder', v)}
+                    />
+                    
+                    {/* 상완골 전방활주 */}
+                    <DiagnosisCheckbox
+                      label="상완골 전방활주 (Anterior Humerus)"
+                      value={diagnosis.anteriorHumerus}
+                      onChange={(v) => handleDiagnosisChange('anteriorHumerus', v)}
+                    />
+                    
+                    {/* 골반 전방경사 */}
+                    <DiagnosisCheckbox
+                      label="골반 전방경사 (Anterior Pelvic Tilt)"
+                      value={diagnosis.anteriorPelvicTilt}
+                      onChange={(v) => handleDiagnosisChange('anteriorPelvicTilt', v)}
+                    />
+                    
+                    {/* 골반 후방경사 */}
+                    <DiagnosisCheckbox
+                      label="골반 후방경사 (Posterior Pelvic Tilt)"
+                      value={diagnosis.posteriorPelvicTilt}
+                      onChange={(v) => handleDiagnosisChange('posteriorPelvicTilt', v)}
+                    />
+                  </div>
+                </div>
+
+                {/* PDF 생성 버튼 */}
+                <button
+                  onClick={handleGeneratePDF}
+                  disabled={pdfGenerating}
+                  className="w-full rounded-lg bg-[#f97316] px-6 py-3 font-bold text-white shadow-lg transition hover:bg-[#fb923c] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {pdfGenerating ? "PDF 생성 중..." : "🎯 PDF 자동 생성"}
+                </button>
+
+                <p className="text-center text-xs text-slate-500">
+                  선택한 진단에 맞는 4단계 교정운동이 자동으로 포함됩니다
+                </p>
               </div>
-            </div>
-          </section>
-        )}
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 진단 체크박스 컴포넌트
+function DiagnosisCheckbox({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: 'none' | 'mild' | 'moderate' | 'severe';
+  onChange: (value: 'none' | 'mild' | 'moderate' | 'severe') => void;
+}) {
+  const options = [
+    { value: 'none', label: '정상', color: 'bg-slate-700' },
+    { value: 'mild', label: '경미', color: 'bg-yellow-600' },
+    { value: 'moderate', label: '중등도', color: 'bg-orange-600' },
+    { value: 'severe', label: '심함', color: 'bg-red-600' },
+  ] as const;
+
+  return (
+    <div className="rounded-lg border border-slate-700 bg-slate-800 p-4">
+      <p className="mb-3 font-medium text-slate-200">{label}</p>
+      <div className="flex gap-2">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            onClick={() => onChange(option.value)}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
+              value === option.value
+                ? `${option.color} text-white shadow-lg`
+                : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
       </div>
     </div>
   );
