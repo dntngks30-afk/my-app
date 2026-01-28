@@ -1,0 +1,132 @@
+═══════════════════════════════════════════════════════════
+  관리자 계정 설정 가이드 (2단계)
+═══════════════════════════════════════════════════════════
+
+🎯 1단계: users 테이블 생성
+───────────────────────────────────────────────────────────
+
+1. Supabase 대시보드 접속
+   → https://supabase.com/dashboard
+   → 프로젝트 선택
+
+2. SQL Editor 열기
+   → 좌측 메뉴에서 "SQL Editor" 클릭
+   → "New query" 클릭
+
+3. 아래 SQL 복사해서 붙여넣기:
+
+────────────────────────────────────────────────────────────
+-- users 테이블 생성
+CREATE TABLE IF NOT EXISTS public.users (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT,
+  role TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS 활성화
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+-- 정책 생성
+CREATE POLICY "Users can read own data"
+  ON public.users FOR SELECT
+  USING (auth.uid() = id);
+
+CREATE POLICY "Admins can read all data"
+  ON public.users FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+-- 자동 사용자 추가 트리거
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.users (id, email, role)
+  VALUES (NEW.id, NEW.email, 'user');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user();
+
+-- 기존 사용자 마이그레이션
+INSERT INTO public.users (id, email, role)
+SELECT id, email, 'user' as role
+FROM auth.users
+WHERE id NOT IN (SELECT id FROM public.users)
+ON CONFLICT (id) DO NOTHING;
+────────────────────────────────────────────────────────────
+
+4. "Run" 버튼 클릭 (또는 Ctrl+Enter)
+5. 성공 메시지 확인
+
+
+🔐 2단계: 본인 계정을 admin으로 설정
+───────────────────────────────────────────────────────────
+
+1. 같은 SQL Editor에서 새 쿼리 생성
+
+2. 본인 이메일로 admin 설정:
+
+────────────────────────────────────────────────────────────
+UPDATE public.users 
+SET role = 'admin' 
+WHERE email = '본인_이메일@example.com';
+────────────────────────────────────────────────────────────
+   
+   ⚠️ '본인_이메일@example.com' 부분을 
+      실제 가입한 이메일로 변경하세요!
+
+3. "Run" 버튼 클릭
+
+4. 확인:
+────────────────────────────────────────────────────────────
+SELECT * FROM public.users WHERE role = 'admin';
+────────────────────────────────────────────────────────────
+
+
+✅ 3단계: 웹사이트에서 테스트
+───────────────────────────────────────────────────────────
+
+1. 웹사이트 접속
+2. 로그아웃 (이미 로그인되어 있다면)
+3. 다시 로그인 (admin으로 설정한 이메일로)
+4. /admin 페이지 접속
+5. 요청 목록과 PDF 생성 화면이 보이면 성공! 🎉
+
+
+📋 확인 사항
+───────────────────────────────────────────────────────────
+✓ users 테이블이 생성되었는가?
+✓ 본인 계정의 role이 'admin'으로 변경되었는가?
+✓ 웹사이트에서 재로그인했는가?
+✓ /admin 페이지에 접근 가능한가?
+
+
+🔧 문제 해결
+───────────────────────────────────────────────────────────
+
+Q: "relation public.users does not exist" 오류
+A: 1단계 SQL을 다시 실행하세요
+
+Q: "관리자 권한이 없습니다" 알림
+A: 2단계에서 이메일을 정확히 입력했는지 확인
+   → SELECT * FROM users WHERE email = '본인이메일';
+   → role 컬럼이 'admin'인지 확인
+
+Q: 여전히 안 됨
+A: 로그아웃 후 재로그인 필수!
+
+
+═══════════════════════════════════════════════════════════
+문제가 계속되면 Supabase Dashboard의 Table Editor에서
+users 테이블을 직접 확인해보세요!
+═══════════════════════════════════════════════════════════
