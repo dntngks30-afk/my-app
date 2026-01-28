@@ -1,0 +1,10 @@
+ # 우리 앱의 개발 규칙
+ - 프론트엔드: Next.js (App Router), Tailwind CSS, Shadcn/UI
+ - 백엔드/DB: Supabase (인증 및 데이터 저장)
+ - 디자인: 현대적이고 깔끔한 다크모드 기반
+ - 모든 코드는 초보자도 이해하기 쉽게 주석을 달아줘.
+# 우리 앱의 개발 규칙
+- 프론트엔드: Next.js (App Router), Tailwind CSS, Shadcn/UI
+- 백엔드/DB: Supabase (인증 및 데이터 저장)
+- 디자인: 현대적이고 깔끔한 다크모드 기반
+- 모든 코드는 초보자도 이해하기 쉽게 주석을 달아줘.
