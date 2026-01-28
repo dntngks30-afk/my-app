@@ -4,8 +4,12 @@
 
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Suspense } from "react";
 
-export default function PaymentFailPage() {
+// 동적 페이지로 설정 (빌드 시 prerender 하지 않음)
+export const dynamic = 'force-dynamic';
+
+function PaymentFailContent() {
   const searchParams = useSearchParams();
   
   // URL에서 에러 정보 추출
@@ -79,5 +83,20 @@ export default function PaymentFailPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function PaymentFailPage() {
+  return (
+    <Suspense fallback={
+      <main className="flex min-h-screen items-center justify-center bg-[#0f172a] px-4">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-[#f97316] border-t-transparent" />
+          <p className="text-lg font-medium text-slate-100">로딩 중...</p>
+        </div>
+      </main>
+    }>
+      <PaymentFailContent />
+    </Suspense>
   );
 }

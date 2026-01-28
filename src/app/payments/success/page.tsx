@@ -3,11 +3,14 @@
 // URL 파라미터로 전달된 정보로 서버에서 결제 승인을 완료합니다.
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
-export default function PaymentSuccessPage() {
+// 동적 페이지로 설정 (빌드 시 prerender 하지 않음)
+export const dynamic = 'force-dynamic';
+
+function PaymentSuccessContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   
@@ -158,5 +161,21 @@ export default function PaymentSuccessPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function PaymentSuccessPage() {
+  return (
+    <Suspense fallback={
+      <main className="flex min-h-screen items-center justify-center bg-[#0f172a] px-4">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-[#f97316] border-t-transparent" />
+          <p className="text-lg font-medium text-slate-100">결제 처리 중...</p>
+          <p className="mt-2 text-sm text-slate-400">잠시만 기다려주세요.</p>
+        </div>
+      </main>
+    }>
+      <PaymentSuccessContent />
+    </Suspense>
   );
 }
