@@ -388,120 +388,119 @@ export default function Home() {
             </div>
 
             {/* 메인 제목과 설명 문구입니다. */}
-            <header className="space-y-4">
-              <h1 className="text-3xl font-semibold leading-relaxed sm:text-4xl md:text-5xl">
-                너무 많은 정보 속에서
+            <header className="space-y-6">
+              <h1 className="text-4xl font-bold leading-tight sm:text-5xl md:text-6xl lg:text-7xl">
+                사진 2장으로
                 <br />
-                나에게 맞는 올바른 솔루션을 찾습니까?
-                <br />
-                저희가 도와드리겠습니다.
+                <span className="bg-gradient-to-r from-[#f97316] to-[#fb923c] bg-clip-text text-transparent">
+                  내 몸만의 솔루션
+                </span>
               </h1>
-              <p className="text-sm leading-relaxed text-slate-300 sm:text-base">
-                사진을 업로드하고{" "}
-                <span className="font-semibold text-slate-100">
-                  내 몸에 맞는 1:1 교정 솔루션
+              <p className="text-lg leading-relaxed text-slate-200 sm:text-xl md:text-2xl">
+                거북목? 라운드숄더?
+                <br />
+                <span className="font-bold text-white">
+                  24시간 내 맞춤 교정 운동
                 </span>
                 을 받아보세요.
-                <br />
-                NASM 기반 교정운동 로직으로, 불필요한 정보 대신{" "}
-                <span className="font-semibold text-slate-100">
-                  나에게 필요한 동작만
-                </span>{" "}
-                정리해 드립니다.
               </p>
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2 rounded-full bg-[#f97316]/10 px-4 py-2 text-sm text-slate-200">
+                  <svg className="h-5 w-5 text-[#f97316]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  NASM 기반
+                </div>
+                <div className="flex items-center gap-2 rounded-full bg-[#f97316]/10 px-4 py-2 text-sm text-slate-200">
+                  <svg className="h-5 w-5 text-[#f97316]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  24시간 이내 전달
+                </div>
+                <div className="flex items-center gap-2 rounded-full bg-[#f97316]/10 px-4 py-2 text-sm text-slate-200">
+                  <svg className="h-5 w-5 text-[#f97316]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  1:1 맞춤 처방
+                </div>
+              </div>
             </header>
 
             {/* 실시간 신청 인원 수 표시 영역입니다. */}
-            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 sm:text-sm">
-              <div className="inline-flex items-center gap-2 rounded-full bg-slate-900/90 px-3 py-1">
+            <div className="flex items-center gap-2 text-sm sm:text-base">
+              <div className="flex items-center gap-2 rounded-lg border border-[#f97316]/30 bg-[#f97316]/5 px-4 py-2">
                 <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#f97316] opacity-75" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-[#f97316]" />
                 </span>
-                <span>
-                  현재{" "}
-                  <span className="font-semibold text-slate-100">
-                    {formatPeopleCount(peopleCount)}명
-                  </span>{" "}
-                  이(가) 교정 리포트를 준비 중이에요.
+                <span className="font-semibold text-slate-100">
+                  {formatPeopleCount(peopleCount)}명
                 </span>
+                <span className="text-slate-300">분석 진행 중</span>
               </div>
-              <span className="text-[11px] text-slate-500 sm:text-xs">
-                * 5초마다 살짝 변하는 수치는 실제 이용 패턴을 기반으로 한
-                추정치입니다.
-              </span>
             </div>
           </div>
 
           {/* 오른쪽 영역: 사진 업로드 드롭존 + 분석 상태 박스 */}
           <aside className="flex flex-1 justify-center md:justify-end">
-            <div className="w-full max-w-sm space-y-5 rounded-2xl border border-slate-700/80 bg-slate-900/90 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.8)]">
-              <h2 className="text-sm font-semibold text-slate-100 sm:text-base">
-                1단계 · 내 체형 데이터 업로드
-              </h2>
-              <p className="text-[11px] leading-relaxed text-slate-300 sm:text-xs">
-                얼굴은 노출되지 않게 목 아래만 촬영해 주세요. 업로드된 사진은
-                암호화되어 안전하게 분석에만 사용됩니다.
-              </p>
-
-              {/* 관상면/시상면 예시를 보여주는 미니멀한 시각 가이드 영역입니다. */}
-              <div className="space-y-3">
-                <p className="text-[11px] font-medium text-slate-300 sm:text-xs">
-                  촬영 각도 예시
-                </p>
-                <div className="grid grid-cols-2 gap-3 text-center text-xs sm:text-sm">
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-medium text-slate-200 sm:text-xs">
-                      관상면(정면)
-                    </p>
-                    <div className="flex h-24 items-center justify-center rounded-xl bg-slate-800 text-sm font-semibold text-slate-100">
-                      정면 예시
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-medium text-slate-200 sm:text-xs">
-                      시상면(측면)
-                    </p>
-                    <div className="flex h-24 items-center justify-center rounded-xl bg-slate-800 text-sm font-semibold text-slate-100">
-                      측면 예시
-                    </div>
-                  </div>
+            <div className="w-full max-w-sm space-y-5 rounded-2xl border border-[#f97316]/20 bg-gradient-to-br from-slate-900 to-slate-800/90 p-6 shadow-[0_20px_60px_rgba(249,115,22,0.2)]">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f97316]/20">
+                  <span className="text-xl">📸</span>
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-100 sm:text-lg">
+                    사진 2장 업로드
+                  </h2>
+                  <p className="text-xs text-slate-400">정면 + 측면</p>
                 </div>
               </div>
 
-              {/* 드롭존 스타일 업로드 영역입니다. (실제 드래그&드롭이 아니라 스타일 중심) */}
-              <div className="grid gap-3 sm:grid-cols-2">
-                {/* 정면 사진 업로드: 클릭 시 촬영 가이드 모달을 먼저 띄웁니다. */}
+
+              {/* 드롭존 스타일 업로드 영역입니다. */}
+              <div className="space-y-3">
+                {/* 정면 사진 업로드 */}
                 <button
                   type="button"
                   onClick={() => openGuideForSide("front")}
-                  className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-700 bg-slate-900/40 px-3 py-4 text-center text-xs text-slate-300 transition hover:border-[#f97316] hover:bg-slate-900/70"
+                  className="group relative w-full overflow-hidden rounded-xl border-2 border-dashed border-slate-700 bg-slate-950/50 p-6 text-center transition hover:border-[#f97316] hover:bg-slate-950"
                 >
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-950 text-lg">
-                    📷
-                  </span>
-                  <span className="font-medium text-slate-100">
-                    정면 사진 업로드
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    몸 전체가 나오도록, 편안하게 정면 응시
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f97316]/10 group-hover:bg-[#f97316]/20">
+                        <span className="text-2xl">📷</span>
+                      </div>
+                      <div className="text-left">
+                        <p className="font-semibold text-slate-100">정면 사진</p>
+                        <p className="text-xs text-slate-400">몸 전체 정면</p>
+                      </div>
+                    </div>
+                    <svg className="h-6 w-6 text-slate-600 group-hover:text-[#f97316]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </div>
                 </button>
 
-                {/* 측면 사진 업로드: 클릭 시 촬영 가이드 모달을 먼저 띄웁니다. */}
+                {/* 측면 사진 업로드 */}
                 <button
                   type="button"
                   onClick={() => openGuideForSide("side")}
-                  className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-700 bg-slate-900/40 px-3 py-4 text-center text-xs text-slate-300 transition hover:border-[#f97316] hover:bg-slate-900/70"
+                  className="group relative w-full overflow-hidden rounded-xl border-2 border-dashed border-slate-700 bg-slate-950/50 p-6 text-center transition hover:border-[#f97316] hover:bg-slate-950"
                 >
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-950 text-lg">
-                    🎯
-                  </span>
-                  <span className="font-medium text-slate-100">
-                    측면 사진 업로드
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    옆으로 서서 정면 응시, 팔은 자연스럽게
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f97316]/10 group-hover:bg-[#f97316]/20">
+                        <span className="text-2xl">📐</span>
+                      </div>
+                      <div className="text-left">
+                        <p className="font-semibold text-slate-100">측면 사진</p>
+                        <p className="text-xs text-slate-400">옆모습 전체</p>
+                      </div>
+                    </div>
+                    <svg className="h-6 w-6 text-slate-600 group-hover:text-[#f97316]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </div>
                 </button>
 
                 {/* 실제 파일 업로드 input은 숨겨두고, 모달에서 확인 후에만 열어 줍니다. */}
@@ -524,70 +523,77 @@ export default function Home() {
               </div>
 
               {/* 업로드된 파일 정보 및 분석 상태 요약 영역입니다. */}
-              <div className="space-y-2 rounded-xl bg-slate-950/70 p-3 text-[11px] text-slate-300 sm:text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-slate-100">
-                    현재 분석 상태
-                  </span>
-                  <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] capitalize text-slate-400">
-                    {session.status.stage.replaceAll("_", " ")}
+              <div className="space-y-3 rounded-xl border border-slate-700/50 bg-slate-950/50 p-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-[#f97316]" />
+                  <span className="text-sm font-semibold text-slate-100">
+                    분석 상태
                   </span>
                 </div>
 
-                <p className="text-[11px] leading-relaxed text-slate-400 sm:text-xs">
+                <p className="text-xs leading-relaxed text-slate-300">
                   {session.status.notes}
                 </p>
 
-                {/* 업로드된 사진 목록이 있을 때만 보여줍니다. */}
+                {/* 업로드된 사진 목록 */}
                 {session.photos.length > 0 && (
-                  <div className="mt-2 space-y-1">
+                  <div className="space-y-2">
                     {session.photos.map((photo) => (
                       <div
                         key={photo.id}
-                        className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/60 px-2 py-1.5"
+                        className="flex items-center gap-3 rounded-lg bg-[#f97316]/5 p-3"
                       >
-                        <span className="text-[11px] text-slate-200">
-                          {photo.side === "front" ? "정면" : "측면"} ·{" "}
-                          {photo.fileName}
-                        </span>
-                        <span className="text-[10px] text-slate-500">
-                          {photo.uploadedAt}
-                        </span>
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f97316]/20">
+                          <svg className="h-4 w-4 text-[#f97316]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs font-medium text-slate-100">
+                            {photo.side === "front" ? "정면" : "측면"} 사진
+                          </p>
+                          <p className="text-[10px] text-slate-500">{photo.uploadedAt}</p>
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {/* AI 분석 중일 때 보여주는 스캐닝 로딩 애니메이션 영역입니다. */}
+                {/* AI 분석 중 */}
                 {session.status.stage === "analyzing" && (
-                  <div className="mt-3 overflow-hidden rounded-xl border border-slate-700 bg-slate-900/90 p-3">
-                    <div className="relative h-20 overflow-hidden rounded-lg bg-slate-950">
-                      {/* 스캐닝 라인 효과 */}
-                      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#f97316]/15 to-transparent" />
-                      <div className="scan-line absolute inset-x-0 -top-full h-1/2 bg-gradient-to-b from-transparent via-[#f97316]/40 to-transparent" />
-                      <div className="absolute inset-0 border border-dashed border-slate-700/80" />
+                  <div className="overflow-hidden rounded-xl border border-[#f97316]/30 bg-gradient-to-br from-[#f97316]/10 to-transparent p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#f97316] border-t-transparent" />
+                      <div>
+                        <p className="text-sm font-semibold text-slate-100">
+                          AI 분석 중...
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          약 10초 소요
+                        </p>
+                      </div>
                     </div>
-                    <p className="mt-2 text-[11px] font-medium text-slate-100 sm:text-xs">
-                      AI가 관절 포인트와 신체 정렬을 정밀 분석 중입니다...
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-400 sm:text-xs">
-                      약 10초 정도 소요되며, 분석이 완료되면 자동으로 결과 안내가
-                      나타납니다.
-                    </p>
                   </div>
                 )}
 
-                {/* 분석 완료 후에 보여주는 안내 메시지입니다. */}
+                {/* 분석 완료 */}
                 {session.status.stage === "completed" && (
-                  <div className="mt-3 rounded-xl border border-slate-700 bg-slate-900/90 p-3 text-[11px] text-slate-200 sm:text-xs">
-                    <p className="font-semibold text-slate-100">
-                      분석이 완료되었습니다! 전문가 최종 검토 후 24시간 내에 맞춤
-                      리포트가 전송됩니다.
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-400 sm:text-xs">
-                      알림을 통해 리포트 링크와 함께 교정 루틴 영상 가이드를
-                      받아보실 수 있습니다.
-                    </p>
+                  <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500/20">
+                        <svg className="h-5 w-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-green-400">
+                          분석 완료!
+                        </p>
+                        <p className="mt-1 text-xs text-slate-300">
+                          전문가 검토 후 24시간 내 리포트 전송
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -596,145 +602,142 @@ export default function Home() {
         </div>
 
         {/* 4단계 교정운동 프로세스 섹션입니다. */}
-        <div className="relative z-10 space-y-6 rounded-2xl border border-slate-700/80 bg-slate-900/80 p-6 sm:p-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-2xl font-extrabold tracking-tight text-slate-100 sm:text-3xl">
-                억제 · 신장 · 활성화 · 통합
-              </h2>
-              <p className="mt-2 text-xs leading-relaxed text-slate-300 sm:text-sm">
-                업로드한 체형 데이터를 바탕으로, 근육의{" "}
-                <span className="font-semibold text-slate-100">
-                  억제 → 신장 → 활성화 → 통합
-                </span>{" "}
-                순서로 교정 루틴을 설계합니다.
-              </p>
-            </div>
+        <div className="relative z-10 space-y-8 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 p-8 sm:p-10">
+          <div className="text-center">
+            <h2 className="text-3xl font-bold text-slate-100 sm:text-4xl">
+              과학적 4단계 교정 시스템
+            </h2>
+            <p className="mt-3 text-sm text-slate-300 sm:text-base">
+              <span className="font-bold text-[#f97316]">억제</span> →{" "}
+              <span className="font-bold text-[#fb923c]">신장</span> →{" "}
+              <span className="font-bold text-[#fbbf24]">활성화</span> →{" "}
+              <span className="font-bold text-[#fde047]">통합</span>
+            </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {[
               {
                 label: "01",
                 title: "억제",
-                subtitle: "과도하게 긴장된 근육 완화",
-                description:
-                  "거북목과 말린 어깨를 만드는 과긴장 부위를 먼저 풀어 줍니다.",
+                subtitle: "긴장 풀기",
+                description: "과긴장된 근육을 먼저 이완시킵니다.",
+                gradient: "from-red-500/20 to-red-500/5",
+                icon: "🔴",
               },
               {
                 label: "02",
                 title: "신장",
-                subtitle: "굳어 있는 라인 늘리기",
-                description:
-                  "짧아진 가슴·목 앞 근육을 안전하게 늘려 중립 정렬을 준비합니다.",
+                subtitle: "라인 늘리기",
+                description: "짧아진 근육을 안전하게 늘립니다.",
+                gradient: "from-orange-500/20 to-orange-500/5",
+                icon: "🟠",
               },
               {
                 label: "03",
                 title: "활성화",
-                subtitle: "잠든 안정근 깨우기",
-                description:
-                  "깊은 목 굴곡근, 견갑골 주변 안정근을 깨워 바른 자세를 유지할 힘을 만듭니다.",
+                subtitle: "힘 기르기",
+                description: "약해진 근육을 깨워 강화합니다.",
+                gradient: "from-yellow-500/20 to-yellow-500/5",
+                icon: "🟡",
               },
               {
                 label: "04",
                 title: "통합",
-                subtitle: "실제 자세에 연결",
-                description:
-                  "앉은 자세·서 있는 자세 속에서 교정된 패턴을 반복 학습시킵니다.",
+                subtitle: "일상 적용",
+                description: "실제 자세에서 유지하도록 훈련합니다.",
+                gradient: "from-green-500/20 to-green-500/5",
+                icon: "🟢",
               },
             ].map((step, index) => {
-              // 0,1 단계는 항상 열려 있는 무료 구간, 2,3 단계는 isPaid가 false면 잠금 처리합니다.
               const isLocked = !isPaid && index >= 2;
 
               return (
                 <div
                   key={step.title}
-                  className="relative flex h-full flex-col justify-between gap-3 rounded-2xl border border-slate-700 bg-slate-900/70 p-4"
+                  className={`relative overflow-hidden rounded-2xl border p-6 transition hover:scale-105 ${
+                    isLocked 
+                      ? "border-slate-700/50 bg-slate-900/50" 
+                      : `border-slate-600/50 bg-gradient-to-br ${step.gradient}`
+                  }`}
                 >
-                  {/* 잠금 상태일 때 상단에 작은 잠금 아이콘과 안내 문구를 보여줍니다. */}
                   {isLocked && (
-                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-2xl bg-slate-950/75">
-                      <div className="flex items-center gap-2 text-xs font-medium text-slate-200 sm:text-sm">
-                        <span className="text-base">🔒</span>
-                        <span>유료 구간 · 활성화 · 통합 루틴</span>
-                      </div>
-                      <p className="px-4 text-[11px] text-slate-400 sm:text-xs">
-                        결제를 완료하면 3, 4단계의 세부 교정 루틴과 영상 가이드를
-                        확인할 수 있습니다.
+                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-2xl bg-slate-950/90 backdrop-blur-sm">
+                      <span className="text-2xl">🔒</span>
+                      <p className="text-xs font-medium text-slate-300">
+                        유료 구간
                       </p>
                     </div>
                   )}
 
-                  <div
-                    className={`space-y-2 ${
-                      isLocked ? "blur-sm opacity-60" : ""
-                    }`}
-                  >
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f97316]">
-                      {step.label}
-                    </p>
-                    <p className="text-lg font-extrabold text-slate-100 sm:text-xl">
+                  <div className={isLocked ? "blur-sm opacity-40" : ""}>
+                    <div className="mb-4 flex items-center justify-between">
+                      <span className="text-3xl">{step.icon}</span>
+                      <span className="text-xs font-bold text-slate-500">{step.label}</span>
+                    </div>
+                    <h3 className="mb-2 text-xl font-bold text-slate-100">
                       {step.title}
-                    </p>
-                    <p className="text-xs font-medium text-slate-200 sm:text-sm">
+                    </h3>
+                    <p className="mb-3 text-sm font-medium text-[#f97316]">
                       {step.subtitle}
                     </p>
+                    <p className="text-xs leading-relaxed text-slate-300">
+                      {step.description}
+                    </p>
                   </div>
-                  <p
-                    className={`text-xs leading-relaxed text-slate-300 sm:text-sm ${
-                      isLocked ? "blur-sm opacity-60" : ""
-                    }`}
-                  >
-                    {step.description}
-                  </p>
                 </div>
               );
             })}
           </div>
 
-          {/* 무료 구간(1,2단계)과 유료 구간(3,4단계)을 나누는 결제 유도 배너입니다. */}
+          {/* 결제 유도 배너 */}
           {!isPaid && (
-            <div className="mt-6 flex flex-col items-center justify-between gap-3 rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-4 text-center sm:flex-row sm:text-left">
-              <p className="text-xs leading-relaxed text-slate-200 sm:text-sm">
-                이 교정 효과를 평생 내 것으로 만들려면{" "}
-                <span className="font-semibold text-slate-100">
-                  3단계 활성화 · 4단계 통합 루틴
-                </span>
-                을 함께 따라가는 것이 중요합니다.
-              </p>
-              <button
-                type="button"
-                onClick={handlePayment}
-                className="inline-flex h-10 items-center justify-center rounded-full bg-[#f97316] px-5 text-xs font-semibold text-slate-950 shadow-[0_0_24px_rgba(249,115,22,0.5)] transition hover:bg-[#fb923c] hover:shadow-[0_0_32px_rgba(249,115,22,0.6)] sm:text-sm"
-              >
-                3·4단계 활성화+통합 루틴 확인하기 (₩19,900)
-              </button>
+            <div className="relative overflow-hidden rounded-2xl border border-[#f97316]/30 bg-gradient-to-r from-[#f97316]/10 via-slate-900/80 to-slate-900/80 p-6">
+              <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:justify-between sm:text-left">
+                <div className="space-y-1">
+                  <p className="text-lg font-bold text-slate-100">
+                    완전한 교정을 원하신다면?
+                  </p>
+                  <p className="text-sm text-slate-300">
+                    3·4단계까지 완료해야 효과가 지속됩니다
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handlePayment}
+                  className="inline-flex items-center gap-2 rounded-full bg-[#f97316] px-6 py-3 font-bold text-slate-950 shadow-[0_0_30px_rgba(249,115,22,0.4)] transition hover:bg-[#fb923c] hover:shadow-[0_0_40px_rgba(249,115,22,0.6)] hover:scale-105"
+                >
+                  <span>₩19,900</span>
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </button>
+              </div>
             </div>
           )}
         </div>
 
-        {/* 결제 CTA 영역입니다. */}
-        <div className="relative z-10 flex flex-col items-center gap-4 rounded-2xl border border-slate-700/80 bg-slate-900/80 px-4 py-5 text-center sm:flex-row sm:justify-between sm:text-left">
-          <div className="space-y-1">
-            <p className="text-sm font-semibold text-slate-100 sm:text-base">
-              나의 맞춤 교정 리포트 + 영상 가이드
-            </p>
-            <p className="text-[11px] text-slate-300 sm:text-xs">
-              업로드한 사진과 분석 결과를 바탕으로,{" "}
-              <span className="font-medium text-slate-100">
-                집·회사 어디서든 따라 할 수 있는 1:1 교정 루틴
-              </span>
-              을 제공합니다.
-            </p>
-          </div>
-
+        {/* 최종 CTA 영역 */}
+        <div className="relative z-10 overflow-hidden rounded-2xl border border-[#f97316]/50 bg-gradient-to-br from-[#f97316]/20 via-slate-900/90 to-slate-900/90 p-8 text-center shadow-[0_20px_60px_rgba(249,115,22,0.3)]">
+          <h2 className="mb-3 text-2xl font-bold text-slate-100 sm:text-3xl">
+            지금 바로 시작하세요
+          </h2>
+          <p className="mb-6 text-sm text-slate-300 sm:text-base">
+            사진 2장으로 전문가가 분석한 맞춤 교정 루틴을 받아보세요
+          </p>
           <button
             type="button"
             onClick={handlePayment}
-            className="mt-2 inline-flex h-11 items-center justify-center rounded-full bg-[#f97316] px-6 text-xs font-semibold text-slate-950 shadow-[0_0_30px_rgba(249,115,22,0.4)] transition hover:bg-[#fb923c] hover:shadow-[0_0_40px_rgba(249,115,22,0.6)] active:scale-[0.98] sm:mt-0 sm:text-sm"
+            className="group inline-flex items-center gap-3 rounded-full bg-[#f97316] px-8 py-4 text-lg font-bold text-slate-950 shadow-[0_0_40px_rgba(249,115,22,0.5)] transition hover:bg-[#fb923c] hover:shadow-[0_0_60px_rgba(249,115,22,0.7)] hover:scale-105"
           >
-            나의 맞춤 교정 리포트+영상 가이드 구매하기 (₩19,900)
+            <span>₩19,900로 시작하기</span>
+            <svg className="h-6 w-6 transition group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
           </button>
+          <p className="mt-4 text-xs text-slate-500">
+            24시간 내 전문가 리포트 전달 · 환불 보장
+          </p>
         </div>
 
         {/* 사진 촬영 가이드 모달입니다. 업로드 전에 올바른 자세를 안내해 줍니다. */}
