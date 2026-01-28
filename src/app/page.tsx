@@ -8,11 +8,14 @@
 // - Toss Payments 결제 연동
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, Suspense } from "react";
 import Script from "next/script";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+
+// useSearchParams를 사용하므로 동적 페이지로 설정
+export const dynamic = 'force-dynamic';
 
 // 업로드할 사진의 방향(정면/측면)을 구분하기 위한 타입입니다.
 type UploadSide = "front" | "side";
