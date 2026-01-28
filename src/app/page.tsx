@@ -839,9 +839,7 @@ export default function Home() {
               );
             })}
           </div>
-
-            </div>
-          )}
+          </div>
         )}
 
         {/* 서비스 티어 소개 섹션 */}
