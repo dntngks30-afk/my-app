@@ -148,6 +148,94 @@ const diagnosisNames = {
   posteriorPelvicTilt: '골반 후방경사',
 };
 
+// 불균형 상태 상세 설명 (NASM-CES 기반)
+const diagnosisExplanations = {
+  forwardHead: {
+    title: '거북목 (Forward Head Posture)',
+    description: '머리가 신체 중심선보다 앞으로 이동한 상태입니다.',
+    causes: [
+      '장시간 스마트폰/컴퓨터 사용',
+      '잘못된 수면 자세',
+      '운전 등 특정 자세의 반복',
+    ],
+    effects: [
+      '경추 과신전으로 인한 목 통증',
+      '상부승모근 과긴장',
+      '어깨 및 상부 등 통증',
+      '두통과 턱관절 문제 유발 가능',
+    ],
+    mechanism: '머리 무게(약 5kg)가 앞으로 나갈수록 경추에 가해지는 부하가 기하급수적으로 증가합니다. 머리가 2.5cm 앞으로 나갈 때마다 경추 부담이 약 4.5kg씩 증가합니다.',
+  },
+  roundedShoulder: {
+    title: '라운드숄더 (Rounded Shoulder)',
+    description: '어깨가 앞쪽으로 말린 상태로, 견갑골의 외전 및 전방경사가 특징입니다.',
+    causes: [
+      '가슴 근육의 과긴장',
+      '상부 등 근육의 약화',
+      '장시간 구부정한 자세',
+      '부적절한 근력 운동',
+    ],
+    effects: [
+      '호흡 기능 저하',
+      '어깨 충돌 증후군 위험',
+      '견갑골 주변 통증',
+      '팔 들어올리기 제한',
+    ],
+    mechanism: '대흉근과 소흉근의 단축으로 견갑골이 외전되고 전방으로 기울어집니다. 동시에 하부승모근과 전거근의 약화로 견갑골 안정성이 감소합니다.',
+  },
+  anteriorHumerus: {
+    title: '상완골 전방활주 (Anterior Humeral Glide)',
+    description: '상완골두가 관절와 내에서 정상 위치보다 앞쪽으로 이동한 상태입니다.',
+    causes: [
+      '회전근개 후면 약화',
+      '대흉근의 과긴장',
+      '부적절한 운동 패턴',
+      '라운드숄더와 동반',
+    ],
+    effects: [
+      '어깨 충돌 증후군',
+      '회전근개 손상 위험',
+      '어깨 통증 및 불안정성',
+      '팔 동작 시 소리 발생',
+    ],
+    mechanism: '회전근개 근육(특히 극하근, 소원근)의 약화로 상완골두를 후방에서 안정화시키지 못하여 앞쪽으로 밀려나게 됩니다.',
+  },
+  anteriorPelvicTilt: {
+    title: '골반 전방경사 (Anterior Pelvic Tilt)',
+    description: '골반이 앞쪽으로 기울어진 상태로, 요추 전만이 과도하게 증가합니다.',
+    causes: [
+      '고관절굴곡근(장요근) 단축',
+      '복부 근육 약화',
+      '둔근 약화',
+      '장시간 앉아있는 생활',
+    ],
+    effects: [
+      '만성 요통',
+      '햄스트링 긴장',
+      '고관절 통증',
+      '복부 돌출',
+    ],
+    mechanism: '고관절굴곡근과 요추 기립근의 과긴장이 골반을 전방으로 당기고, 약화된 복근과 둔근이 이를 저항하지 못하여 골반이 앞으로 기울어집니다.',
+  },
+  posteriorPelvicTilt: {
+    title: '골반 후방경사 (Posterior Pelvic Tilt)',
+    description: '골반이 뒤쪽으로 기울어진 상태로, 요추 전만이 감소하거나 소실됩니다.',
+    causes: [
+      '햄스트링 과긴장',
+      '고관절굴곡근 약화',
+      '잘못된 자세 습관',
+      '복직근 과긴장',
+    ],
+    effects: [
+      '요추 평평증',
+      '디스크 압력 증가',
+      '고관절 움직임 제한',
+      '앉을 때 불편함',
+    ],
+    mechanism: '햄스트링과 복직근의 과긴장이 골반을 후방으로 당기고, 요추 신전근의 약화로 자연스러운 요추 전만 곡선이 상실됩니다.',
+  },
+};
+
 /**
  * PDF 자동 생성 함수
  * @param diagnosis 진단 데이터
@@ -225,7 +313,7 @@ export async function generateCorrectionPDF(
     }
   }
   
-  // ===== 2. 진단 결과 페이지 =====
+  // ===== 2. 진단 결과 요약 페이지 =====
   doc.addPage();
   yPos = 20;
   
@@ -238,8 +326,10 @@ export async function generateCorrectionPDF(
   doc.setTextColor(0, 0, 0);
   
   // 진단 항목 표시
+  let diagnosisCount = 0;
   Object.entries(diagnosis).forEach(([key, severity]) => {
     if (severity !== 'none') {
+      diagnosisCount++;
       const name = diagnosisNames[key as keyof typeof diagnosisNames];
       const level = severityText[severity];
       
@@ -250,7 +340,7 @@ export async function generateCorrectionPDF(
     }
   });
   
-  if (yPos === 35) {
+  if (diagnosisCount === 0) {
     doc.text('특이사항 없음 - 전반적으로 양호한 자세입니다.', 30, yPos);
   }
   
@@ -259,7 +349,95 @@ export async function generateCorrectionPDF(
   doc.setTextColor(100, 100, 100);
   doc.text('* NASM-CES 정적 자세 평가 기준 적용', 20, yPos);
   
-  // ===== 3. 4단계 교정운동 페이지 =====
+  // ===== 3. 불균형 상세 설명 페이지들 =====
+  Object.entries(diagnosis).forEach(([key, severity]) => {
+    if (severity !== 'none') {
+      const explanation = diagnosisExplanations[key as keyof typeof diagnosisExplanations];
+      if (!explanation) return;
+      
+      doc.addPage();
+      yPos = 20;
+      
+      // 제목
+      doc.setFontSize(18);
+      doc.setTextColor(249, 115, 22);
+      doc.text(explanation.title, 20, yPos);
+      yPos += 10;
+      
+      // 심각도 배지
+      doc.setFontSize(10);
+      doc.setFillColor(249, 115, 22);
+      doc.roundedRect(20, yPos, 30, 7, 2, 2, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.text(severityText[severity], 35, yPos + 5, { align: 'center' });
+      yPos += 15;
+      
+      // 설명
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      doc.text(explanation.description, 20, yPos, { maxWidth: pageWidth - 40 });
+      yPos += 12;
+      
+      // 발생 메커니즘
+      doc.setFontSize(12);
+      doc.setTextColor(249, 115, 22);
+      doc.text('불균형 메커니즘', 20, yPos);
+      yPos += 8;
+      
+      doc.setFontSize(10);
+      doc.setTextColor(60, 60, 60);
+      const mechanismLines = doc.splitTextToSize(explanation.mechanism, pageWidth - 45);
+      mechanismLines.forEach((line: string) => {
+        doc.text(line, 25, yPos);
+        yPos += 5;
+      });
+      yPos += 5;
+      
+      // 주요 원인
+      doc.setFontSize(12);
+      doc.setTextColor(249, 115, 22);
+      doc.text('주요 원인', 20, yPos);
+      yPos += 8;
+      
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+      explanation.causes.forEach((cause) => {
+        doc.setFillColor(249, 115, 22);
+        doc.circle(25, yPos - 1.5, 1.5, 'F');
+        doc.text(cause, 30, yPos);
+        yPos += 6;
+      });
+      yPos += 5;
+      
+      // 영향 및 증상
+      doc.setFontSize(12);
+      doc.setTextColor(249, 115, 22);
+      doc.text('영향 및 증상', 20, yPos);
+      yPos += 8;
+      
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+      explanation.effects.forEach((effect) => {
+        doc.setFillColor(220, 38, 38);
+        doc.circle(25, yPos - 1.5, 1.5, 'F');
+        doc.text(effect, 30, yPos);
+        yPos += 6;
+      });
+      yPos += 10;
+      
+      // NASM-CES 참고 노트
+      doc.setFillColor(249, 115, 22, 0.1);
+      doc.roundedRect(20, yPos, pageWidth - 40, 20, 3, 3, 'F');
+      doc.setFontSize(9);
+      doc.setTextColor(100, 100, 100);
+      doc.text('💡 NASM-CES 노트', 25, yPos + 5);
+      doc.setFontSize(8);
+      doc.text('이 불균형은 억제-신장-활성화-통합 4단계 교정 프로그램으로', 25, yPos + 10);
+      doc.text('체계적으로 개선할 수 있습니다. 다음 페이지를 참고하세요.', 25, yPos + 15);
+    }
+  });
+  
+  // ===== 4. 4단계 교정운동 페이지 =====
   const stages = [
     { title: '1단계: 억제 (Inhibit)', key: 'inhibit', color: [220, 38, 38] },
     { title: '2단계: 신장 (Lengthen)', key: 'lengthen', color: [249, 115, 22] },
@@ -348,7 +526,7 @@ export async function generateCorrectionPDF(
     }
   });
   
-  // ===== 5. 마무리 페이지 =====
+  // ===== 5. 운동 가이드 페이지 =====
   doc.addPage();
   yPos = 20;
   
