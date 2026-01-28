@@ -3,6 +3,26 @@
 
 import jsPDF from 'jspdf';
 
+/**
+ * 이미지 URL을 base64로 변환하는 헬퍼 함수
+ */
+async function urlToBase64(url: string): Promise<string> {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.error('이미지 로드 실패:', error);
+    throw error;
+  }
+}
+
 // 진단 항목 타입
 export interface DiagnosisData {
   // 거북목
@@ -181,18 +201,27 @@ export async function generateCorrectionPDF(
     const spacing = 10;
     
     try {
+      // 이미지를 base64로 변환 후 추가
       if (frontPhotoUrl) {
-        doc.addImage(frontPhotoUrl, 'JPEG', (pageWidth - photoWidth * 2 - spacing) / 2, yPos, photoWidth, photoHeight);
+        const frontBase64 = await urlToBase64(frontPhotoUrl);
+        doc.addImage(frontBase64, 'JPEG', (pageWidth - photoWidth * 2 - spacing) / 2, yPos, photoWidth, photoHeight);
         doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
         doc.text('정면', (pageWidth - photoWidth * 2 - spacing) / 2 + photoWidth / 2, yPos + photoHeight + 5, { align: 'center' });
       }
       if (sidePhotoUrl) {
-        doc.addImage(sidePhotoUrl, 'JPEG', (pageWidth + spacing) / 2, yPos, photoWidth, photoHeight);
+        const sideBase64 = await urlToBase64(sidePhotoUrl);
+        doc.addImage(sideBase64, 'JPEG', (pageWidth + spacing) / 2, yPos, photoWidth, photoHeight);
         doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
         doc.text('측면', (pageWidth + spacing) / 2 + photoWidth / 2, yPos + photoHeight + 5, { align: 'center' });
       }
     } catch (error) {
       console.error('사진 추가 실패:', error);
+      // 사진 추가 실패 시 텍스트로 표시
+      doc.setFontSize(10);
+      doc.setTextColor(255, 0, 0);
+      doc.text('(사진을 불러올 수 없습니다)', pageWidth / 2, yPos + 40, { align: 'center' });
     }
   }
   
