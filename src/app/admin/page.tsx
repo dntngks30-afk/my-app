@@ -55,14 +55,20 @@ export default function AdminPage() {
 
         // 관리자 이메일 리스트 (환경변수로 관리 가능)
         const adminEmails = [
-          process.env.NEXT_PUBLIC_ADMIN_EMAIL || '본인_이메일@example.com',
+          process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'dntngks30@gmail.com',
+          'dntngks30@gmail.com', // 하드코딩으로 추가
           // 필요시 여기에 추가 관리자 이메일 추가
         ];
 
         const userEmail = session.user.email;
         
+        console.log('현재 로그인 이메일:', userEmail);
+        console.log('관리자 이메일 목록:', adminEmails);
+        console.log('환경변수:', process.env.NEXT_PUBLIC_ADMIN_EMAIL);
+        
         if (!userEmail || !adminEmails.includes(userEmail)) {
-          alert("관리자 권한이 없습니다.");
+          console.error('권한 없음 - 이메일 불일치');
+          alert(`관리자 권한이 없습니다.\n로그인 이메일: ${userEmail}\n필요한 이메일: ${adminEmails.join(', ')}`);
           router.push("/");
           return;
         }
