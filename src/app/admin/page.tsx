@@ -53,19 +53,15 @@ export default function AdminPage() {
           return;
         }
 
-        const { data: userProfile, error: profileError } = await supabase
-          .from("users")
-          .select("role")
-          .eq("id", session.user.id)
-          .single();
+        // 관리자 이메일 리스트 (환경변수로 관리 가능)
+        const adminEmails = [
+          process.env.NEXT_PUBLIC_ADMIN_EMAIL || '본인_이메일@example.com',
+          // 필요시 여기에 추가 관리자 이메일 추가
+        ];
 
-        if (profileError || !userProfile) {
-          console.error("프로필 조회 실패:", profileError);
-          router.push("/");
-          return;
-        }
-
-        if (userProfile.role !== "admin") {
+        const userEmail = session.user.email;
+        
+        if (!userEmail || !adminEmails.includes(userEmail)) {
           alert("관리자 권한이 없습니다.");
           router.push("/");
           return;
