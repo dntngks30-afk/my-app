@@ -639,6 +639,7 @@ export default function Home() {
                 description: "과긴장된 근육을 먼저 이완시킵니다.",
                 gradient: "from-red-500/20 to-red-500/5",
                 icon: "🔴",
+                bgImage: "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=800&q=80",
               },
               {
                 label: "02",
@@ -647,6 +648,7 @@ export default function Home() {
                 description: "짧아진 근육을 안전하게 늘립니다.",
                 gradient: "from-orange-500/20 to-orange-500/5",
                 icon: "🟠",
+                bgImage: "https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=800&q=80",
               },
               {
                 label: "03",
@@ -655,6 +657,7 @@ export default function Home() {
                 description: "약해진 근육을 깨워 강화합니다.",
                 gradient: "from-yellow-500/20 to-yellow-500/5",
                 icon: "🟡",
+                bgImage: "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=800&q=80",
               },
               {
                 label: "04",
@@ -663,6 +666,7 @@ export default function Home() {
                 description: "실제 자세에서 유지하도록 훈련합니다.",
                 gradient: "from-green-500/20 to-green-500/5",
                 icon: "🟢",
+                bgImage: "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800&q=80",
               },
             ].map((step, index) => {
               const isLocked = !isPaid && index >= 2;
@@ -675,7 +679,17 @@ export default function Home() {
                       ? "border-slate-700/50 bg-slate-900/50" 
                       : `border-slate-600/50 bg-gradient-to-br ${step.gradient}`
                   }`}
+                  style={{
+                    backgroundImage: !isLocked ? `url(${step.bgImage})` : undefined,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  }}
                 >
+                  {/* 반투명 오버레이 */}
+                  {!isLocked && (
+                    <div className={`absolute inset-0 bg-gradient-to-br ${step.gradient} opacity-90`} />
+                  )}
+
                   {isLocked && (
                     <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-2xl bg-slate-950/90 backdrop-blur-sm">
                       <span className="text-2xl">🔒</span>
@@ -685,7 +699,7 @@ export default function Home() {
                     </div>
                   )}
 
-                  <div className={isLocked ? "blur-sm opacity-40" : ""}>
+                  <div className={`relative z-10 ${isLocked ? "blur-sm opacity-40" : ""}`}>
                     <div className="mb-4 flex items-center justify-between">
                       <span className="text-3xl">{step.icon}</span>
                       <span className="text-xs font-bold text-slate-500">{step.label}</span>
