@@ -200,7 +200,26 @@ export default function AdminPage() {
             {loading ? (
               <p className="text-slate-400">로딩 중...</p>
             ) : rows.length === 0 ? (
-              <p className="text-slate-400">요청이 없습니다.</p>
+              <div className="rounded-lg border border-slate-700 bg-slate-800 p-8 text-center">
+                <p className="text-lg text-slate-300">📭 요청이 없습니다</p>
+                <p className="mt-2 text-sm text-slate-400">
+                  메인 페이지에서 사진을 업로드해주세요.
+                </p>
+                <div className="mt-4 rounded-lg bg-slate-900 p-4 text-left text-xs text-slate-500">
+                  <p className="font-semibold text-slate-400 mb-2">테스트 데이터 추가하기:</p>
+                  <p>1. Supabase Dashboard → SQL Editor</p>
+                  <p>2. 다음 SQL 실행:</p>
+                  <pre className="mt-2 overflow-x-auto rounded bg-slate-950 p-2 text-green-400">
+{`INSERT INTO requests (user_id, front_url, side_url, status)
+VALUES (
+  'test-user',
+  'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400',
+  'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=400',
+  'pending'
+);`}
+                  </pre>
+                </div>
+              </div>
             ) : (
               <div className="space-y-3 max-h-[600px] overflow-y-auto">
                 {rows.map((row) => (

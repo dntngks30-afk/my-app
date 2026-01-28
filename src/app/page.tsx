@@ -116,9 +116,14 @@ export default function Home() {
         const fd = new FormData();
         fd.append("file", file);
         fd.append("side", side);
-        // 필요하면 user_id 추가: fd.append("user_id", userId)
+        // user_id 추가 (로그인한 사용자 또는 세션 ID)
+        const userId = user?.id || localStorage.getItem("user_id") || `anonymous-${Date.now()}`;
+        fd.append("user_id", userId);
+        
+        console.log('📤 업로드 시작:', { side, userId, fileName: file.name });
 
         const res = await fetch("/api/upload", { method: "POST", body: fd });
+        console.log('📥 업로드 응답:', res.status);
         const json = await res.json();
         if (!res.ok) {
           throw new Error(json.error || "upload failed");
