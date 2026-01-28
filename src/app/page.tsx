@@ -616,21 +616,95 @@ export default function Home() {
           </aside>
         </div>
 
+        {/* 서비스 진행 방식 섹션 */}
+        <div className="relative z-10 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 p-8 sm:p-10">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-bold text-slate-100 sm:text-4xl">
+              이렇게 진행됩니다
+            </h2>
+            <p className="mt-3 text-sm text-slate-400">
+              간편한 4단계 프로세스로 당신만의 솔루션을 받아보세요
+            </p>
+          </div>
+
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              {
+                step: "01",
+                icon: "📸",
+                title: "정적 평가",
+                description: "정면/측면 사진 2장만 업로드하면 끝",
+                color: "from-blue-500/20 to-blue-500/5",
+                borderColor: "border-blue-500/30",
+              },
+              {
+                step: "02",
+                icon: "👨‍⚕️",
+                title: "전문가 분석",
+                description: "NASM 인증 전문가가 직접 체형 분석",
+                color: "from-purple-500/20 to-purple-500/5",
+                borderColor: "border-purple-500/30",
+              },
+              {
+                step: "03",
+                icon: "⚡",
+                title: "솔루션 생성",
+                description: "당신에게 딱 맞는 4단계 교정 프로그램 제작",
+                color: "from-orange-500/20 to-orange-500/5",
+                borderColor: "border-orange-500/30",
+              },
+              {
+                step: "04",
+                icon: "📄",
+                title: "PDF 전달",
+                description: "24시간 내 이메일로 상세 리포트 발송",
+                color: "from-green-500/20 to-green-500/5",
+                borderColor: "border-green-500/30",
+              },
+            ].map((item) => (
+              <div
+                key={item.step}
+                className={`relative rounded-xl border ${item.borderColor} bg-gradient-to-br ${item.color} p-6 transition hover:scale-105`}
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-3xl">{item.icon}</span>
+                  <span className="text-xs font-bold text-slate-500">{item.step}</span>
+                </div>
+                <h3 className="mb-2 text-lg font-bold text-slate-100">
+                  {item.title}
+                </h3>
+                <p className="text-xs leading-relaxed text-slate-300">
+                  {item.description}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* 4단계 교정운동 프로세스 섹션입니다. */}
         <div className="relative z-10 space-y-8 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 p-8 sm:p-10">
           <div className="text-center">
             <h2 className="text-3xl font-bold text-slate-100 sm:text-4xl">
               과학적 4단계 교정 시스템
             </h2>
-            <p className="mt-3 text-sm text-slate-300 sm:text-base">
-              <span className="font-bold text-[#f97316]">억제</span> →{" "}
-              <span className="font-bold text-[#fb923c]">신장</span> →{" "}
-              <span className="font-bold text-[#fbbf24]">활성화</span> →{" "}
-              <span className="font-bold text-[#fde047]">통합</span>
+            <p className="mt-4 max-w-2xl mx-auto text-sm text-slate-300 leading-relaxed">
+              <span className="font-semibold text-slate-200">NASM-CES 교정운동 전문가 자격 기반</span>으로 설계된 체계적 프로그램입니다.<br />
+              근육의 불균형을 단계별로 해결하여 통증 없는 올바른 자세를 만듭니다.
             </p>
-            <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#f97316]/20 px-4 py-2 text-sm font-medium text-[#f97316]">
-              <span>📄</span>
-              <span>결제 시 4단계 맞춤 교정 솔루션 PDF 제공</span>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <div className="inline-flex items-center gap-2 rounded-full bg-slate-800/80 px-4 py-2 text-xs">
+                <span className="font-bold text-[#f97316]">억제</span>
+                <span className="text-slate-500">→</span>
+                <span className="font-bold text-[#fb923c]">신장</span>
+                <span className="text-slate-500">→</span>
+                <span className="font-bold text-[#fbbf24]">활성화</span>
+                <span className="text-slate-500">→</span>
+                <span className="font-bold text-[#fde047]">통합</span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-[#f97316]/20 px-4 py-2 text-sm font-medium text-[#f97316]">
+                <span>📄</span>
+                <span>맞춤 솔루션 PDF 제공</span>
+              </div>
             </div>
           </div>
 
