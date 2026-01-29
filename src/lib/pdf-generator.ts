@@ -1,3 +1,4 @@
+import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 import type { AnalysisResult } from '@/types/survey';
 import { POSTURE_TYPE_NAMES } from './survey-analyzer';
