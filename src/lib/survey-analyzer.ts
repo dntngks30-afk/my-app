@@ -23,9 +23,9 @@ export function analyzeSurveyResults(
   // 6. 참고용 플랜 제안
   const recommendedPlan = determineRecommendedPlan(overallSeverity, responses);
   
-  // 7. 사용자 목표 추출
-  const userGoal = responses['q14'] as string || 'posture';
-  const timeCommitment = responses['q15'] as string || 'moderate';
+  // 7. 사용자 목표 추출 (질문 번호가 15, 16으로 변경됨)
+  const userGoal = responses['q15'] as string || 'posture';
+  const timeCommitment = responses['q16'] as string || 'moderate';
   
   return {
     postureType,
@@ -87,18 +87,41 @@ function calculateAverage(scores: number[]): number {
 function determinePostureType(scores: PostureScores): PostureType {
   const { forwardHead, roundedShoulder, anteriorPelvicTilt, posteriorPelvicTilt } = scores;
   
+  // Pattern 1: 균형 잡힌 자세 경향
   if (Math.max(forwardHead, roundedShoulder, anteriorPelvicTilt, posteriorPelvicTilt) < 30) {
     return 'neutral';
   }
   
-  if (forwardHead >= 50 && roundedShoulder >= 50) {
+  // Pattern 4: 상체 전반적 균형 체크 필요
+  if (forwardHead > 50 && roundedShoulder > 50) {
     return 'upper_cross_syndrome';
   }
   
+  // Pattern 5: 골반 앞으로 기울 수 있는 경향
+  if (anteriorPelvicTilt > 60) {
+    return 'anterior_pelvic_tilt';
+  }
+  
+  // Pattern 6: 골반 뒤로 기울 수 있는 경향
+  if (posteriorPelvicTilt > 60) {
+    return 'posterior_pelvic_tilt';
+  }
+  
+  // Pattern 7: 전신 자세 균형 체크 필요
+  if (anteriorPelvicTilt > 40 && roundedShoulder > 40) {
+    return 'swayback';
+  }
+  
+  // Pattern 8: 허리-어깨 균형 체크 필요
+  if (posteriorPelvicTilt > 40 && roundedShoulder > 40) {
+    return 'flat_back';
+  }
+  
+  // Pattern 2 & 3: 단일 부위 경향
   const maxScore = Math.max(forwardHead, roundedShoulder, anteriorPelvicTilt, posteriorPelvicTilt);
   
-  if (maxScore === forwardHead) return 'forward_head';
-  if (maxScore === roundedShoulder) return 'rounded_shoulder';
+  if (maxScore === forwardHead && forwardHead > 50) return 'forward_head';
+  if (maxScore === roundedShoulder && roundedShoulder > 50) return 'rounded_shoulder';
   if (maxScore === anteriorPelvicTilt) return 'anterior_pelvic_tilt';
   if (maxScore === posteriorPelvicTilt) return 'posterior_pelvic_tilt';
   
@@ -205,60 +228,66 @@ function generateRecommendations(
   
   const sittingTime = responses['q11'];
   if (sittingTime === 'long' || sittingTime === 'very_long') {
-    recommendations.push('장시간 앉아있는 경우가 많으니, 50분마다 5분씩 일어나서 스트레칭하는 습관을 들이세요.');
+    recommendations.push('장시간 앉아있는 경우, 50분마다 5분씩 일어나서 스트레칭하는 것을 권장합니다.');
   }
   
   const workEnvironment = responses['q12'];
   if (workEnvironment === 'laptop' || workEnvironment === 'mobile') {
-    recommendations.push('노트북이나 스마트폰 사용 시 화면을 눈높이까지 올려서 사용하세요.');
+    recommendations.push('노트북이나 스마트폰 사용 시 화면을 눈높이까지 올리는 것이 도움될 수 있습니다.');
   }
   
   const exercise = responses['q13'];
   if (exercise === 'rarely' || exercise === 'never') {
-    recommendations.push('주 2-3회, 20-30분 정도의 가벼운 운동부터 시작하세요.');
+    recommendations.push('주 2-3회, 20-30분 정도의 가벼운 운동부터 시작해보는 것을 권장합니다.');
+  }
+  
+  const stretching = responses['q14'];
+  if (stretching === 'never' || stretching === 'sometimes') {
+    recommendations.push('일상에서 간단한 스트레칭을 자주 하는 것이 도움될 수 있습니다.');
   }
   
   return recommendations.slice(0, 5);
 }
 
+// 참고 가이드 (처방 아님, 일반적인 운동 정보)
 const POSTURE_TYPE_RECOMMENDATIONS: Record<PostureType, string[]> = {
   neutral: [
-    '현재 상태가 양호합니다! 이 상태를 유지하는 것이 중요합니다.',
-    '규칙적인 스트레칭으로 예방하세요.',
-    '올바른 자세 습관을 계속 유지하세요.'
+    '현재 상태가 좋은 편입니다. 이 상태를 유지하는 것을 권장합니다.',
+    '규칙적인 스트레칭으로 예방할 수 있습니다.',
+    '올바른 자세 습관을 계속 유지해보세요.'
   ],
   forward_head: [
-    '목 뒤쪽 근육을 강화하고, 가슴 근육을 이완하는 운동이 필요합니다.',
-    '턱 당기기 운동을 하루 3회, 10회씩 반복하세요.',
-    '모니터 높이를 눈높이에 맞추세요.'
+    '목 뒤쪽 근육 강화와 가슴 근육 이완 운동을 고려해보세요.',
+    '턱 당기기 운동을 하루 3회, 10회씩 시도해볼 수 있습니다.',
+    '모니터 높이를 눈높이에 맞추는 것이 도움될 수 있습니다.'
   ],
   rounded_shoulder: [
-    '가슴을 펴는 스트레칭과 등 근육 강화 운동이 필요합니다.',
-    '벽에 등을 대고 어깨를 뒤로 당기는 동작을 자주 하세요.',
-    '가슴 앞 근육(대흉근)을 충분히 이완하세요.'
+    '가슴 펴기 스트레칭과 등 근육 강화 운동을 고려해보세요.',
+    '벽에 등을 대고 어깨를 뒤로 당기는 동작을 시도해볼 수 있습니다.',
+    '가슴 앞 근육 이완이 도움될 수 있습니다.'
   ],
   upper_cross_syndrome: [
-    '목, 어깨, 등 전체의 근육 균형 회복이 필요합니다.',
-    '턱 당기기와 어깨 뒤로 당기기를 동시에 수행하세요.',
-    '체계적인 4단계 운동 프로그램을 추천합니다.'
+    '목, 어깨, 등 전체의 균형 운동을 고려해보세요.',
+    '턱 당기기와 어깨 뒤로 당기기를 함께 시도해볼 수 있습니다.',
+    '전문가의 체계적인 가이드를 권장합니다.'
   ],
   anterior_pelvic_tilt: [
-    '복부와 둔근 강화, 허리와 고관절 굴근 이완이 필요합니다.',
-    '플랭크와 데드버그 운동으로 코어를 강화하세요.',
-    '엉덩이 스트레칭을 꾸준히 하세요.'
+    '복부와 둔근 강화, 허리 스트레칭을 고려해보세요.',
+    '플랭크와 데드버그 운동을 시도해볼 수 있습니다.',
+    '엉덩이 스트레칭이 도움될 수 있습니다.'
   ],
   posterior_pelvic_tilt: [
-    '허리 신전근 강화와 햄스트링 이완이 필요합니다.',
-    '고양이-소 자세로 척추 움직임을 회복하세요.',
-    '허리의 자연스러운 곡선을 찾는 연습이 필요합니다.'
+    '허리 신전 운동과 햄스트링 이완을 고려해보세요.',
+    '고양이-소 자세로 척추 움직임 연습을 시도해볼 수 있습니다.',
+    '허리의 자연스러운 곡선을 찾는 연습을 해보세요.'
   ],
   swayback: [
-    '전신의 자세 정렬 조정이 필요합니다.',
-    '체계적인 평가와 맞춤 운동 프로그램을 권장합니다.'
+    '전신 자세 정렬 운동을 고려해보세요.',
+    '전문가의 맞춤 가이드를 권장합니다.'
   ],
   flat_back: [
-    '척추의 자연스러운 곡선을 회복하는 운동이 필요합니다.',
-    '골반 기울이기와 흉추 신전 운동을 하세요.'
+    '척추 곡선 회복 운동을 고려해보세요.',
+    '골반 기울이기와 흉추 신전 운동을 시도해볼 수 있습니다.'
   ]
 };
 
@@ -275,7 +304,7 @@ function determineRecommendedPlan(
     return 'standard';
   }
   
-  const timeCommitment = responses['q15'];
+  const timeCommitment = responses['q16'];
   if (timeCommitment === 'dedicated') {
     return 'standard';
   }
