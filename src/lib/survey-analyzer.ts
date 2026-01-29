@@ -1,26 +1,26 @@
 import { SURVEY_QUESTIONS } from '@/data/survey-questions';
 import type { AnalysisResult, PostureScores, PostureType, PrimaryIssue } from '@/types/survey';
 
-// 메인 분석 함수
+// 자가 체크 결과 정리 함수 (판단/진단 아님)
 export function analyzeSurveyResults(
   responses: Record<string, string | string[]>
 ): AnalysisResult {
-  // 1. 각 차원별 점수 계산
+  // 1. 각 차원별 경향성 계산 (참고용)
   const scores = calculateDimensionScores(responses);
   
-  // 2. 체형 유형 판단
+  // 2. 자가 체크 기반 체형 경향 파악
   const postureType = determinePostureType(scores);
   
-  // 3. 전체 심각도 평가
+  // 3. 전체 경향성 수준 (참고 정보)
   const overallSeverity = calculateOverallSeverity(scores);
   
-  // 4. 주요 문제점 추출
+  // 4. 사용자가 체크한 주요 경향 정리
   const primaryIssues = identifyPrimaryIssues(scores);
   
-  // 5. 맞춤 권장사항 생성
+  // 5. 참고 가이드 제안
   const recommendations = generateRecommendations(postureType, scores, responses);
   
-  // 6. 추천 플랜 결정
+  // 6. 참고용 플랜 제안
   const recommendedPlan = determineRecommendedPlan(overallSeverity, responses);
   
   // 7. 사용자 목표 추출
@@ -83,7 +83,7 @@ function calculateAverage(scores: number[]): number {
   return Math.min(100, Math.max(0, avg));
 }
 
-// 체형 유형 판단
+// 자가 체크 기반 체형 경향 파악 (판단 아님, 참고용)
 function determinePostureType(scores: PostureScores): PostureType {
   const { forwardHead, roundedShoulder, anteriorPelvicTilt, posteriorPelvicTilt } = scores;
   
@@ -105,7 +105,7 @@ function determinePostureType(scores: PostureScores): PostureType {
   return 'neutral';
 }
 
-// 전체 심각도 평가
+// 전체 경향성 수준 (참고 정보, 의학적 평가 아님)
 function calculateOverallSeverity(scores: PostureScores): 'mild' | 'moderate' | 'severe' {
   const values = Object.values(scores);
   const maxScore = Math.max(...values);
@@ -116,7 +116,7 @@ function calculateOverallSeverity(scores: PostureScores): 'mild' | 'moderate' | 
   return 'mild';
 }
 
-// 주요 문제점 식별
+// 사용자가 체크한 주요 경향 정리 (의학적 진단 아님)
 function identifyPrimaryIssues(scores: PostureScores): PrimaryIssue[] {
   const issues: Array<{ area: string; score: number; severity: 'mild' | 'moderate' | 'severe'; description: string }> = [];
   
@@ -168,26 +168,27 @@ function getSeverityLevel(score: number): 'mild' | 'moderate' | 'severe' {
   return 'mild';
 }
 
+// 자가 체크 기반 경향성 설명 (확정적 진단 아님, 참고용)
 const ISSUE_DESCRIPTIONS = {
   forward_head: {
-    mild: '고개가 약간 앞으로 나온 상태입니다. 목 주변 근육의 균형이 필요합니다.',
-    moderate: '고개가 눈에 띄게 앞으로 나온 상태입니다. 목과 어깨 근육의 긴장이 관찰됩니다.',
-    severe: '고개가 많이 앞으로 나온 상태입니다. 목, 어깨, 등 상부의 근육 불균형이 심화된 상태입니다.'
+    mild: '자가 체크 결과, 고개가 약간 앞으로 나올 수 있는 경향이 보입니다. 목 주변 근육의 균형 운동을 참고하세요.',
+    moderate: '자가 체크 결과, 고개가 앞으로 나올 가능성이 있습니다. 목과 어깨 주변 스트레칭을 고려해보세요.',
+    severe: '자가 체크 결과, 고개가 앞으로 나온 경향이 강하게 나타납니다. 전문가 상담을 권장합니다.'
   },
   rounded_shoulder: {
-    mild: '어깨가 약간 앞으로 말린 상태입니다. 가슴 근육이 짧아지고 있습니다.',
-    moderate: '어깨가 눈에 띄게 앞으로 말린 상태입니다. 가슴과 등 근육의 불균형이 관찰됩니다.',
-    severe: '어깨가 많이 앞으로 말린 상태입니다. 상체 전면과 후면의 근육 불균형이 심화되었습니다.'
+    mild: '자가 체크 결과, 어깨가 약간 앞으로 말릴 수 있는 경향이 보입니다. 가슴 스트레칭을 참고하세요.',
+    moderate: '자가 체크 결과, 어깨가 앞으로 말릴 가능성이 있습니다. 등 근육 강화를 고려해보세요.',
+    severe: '자가 체크 결과, 어깨가 앞으로 말린 경향이 강하게 나타납니다. 전문가 상담을 권장합니다.'
   },
   anterior_pelvic_tilt: {
-    mild: '골반이 약간 앞으로 기울어진 상태입니다. 허리 주변 근육의 균형이 필요합니다.',
-    moderate: '골반이 눈에 띄게 앞으로 기울어진 상태입니다. 복부와 엉덩이 근육의 약화가 관찰됩니다.',
-    severe: '골반이 많이 앞으로 기울어진 상태입니다. 허리 과긴장과 복부/둔근의 약화가 심화되었습니다.'
+    mild: '자가 체크 결과, 골반이 약간 앞으로 기울 수 있는 경향이 보입니다. 코어 운동을 참고하세요.',
+    moderate: '자가 체크 결과, 골반이 앞으로 기울 가능성이 있습니다. 복부 강화를 고려해보세요.',
+    severe: '자가 체크 결과, 골반이 앞으로 기운 경향이 강하게 나타납니다. 전문가 상담을 권장합니다.'
   },
   posterior_pelvic_tilt: {
-    mild: '골반이 약간 뒤로 기울어진 상태입니다. 허리의 자연스러운 곡선이 줄어들고 있습니다.',
-    moderate: '골반이 눈에 띄게 뒤로 기울어진 상태입니다. 허리가 평평해지고 있습니다.',
-    severe: '골반이 많이 뒤로 기울어진 상태입니다. 허리의 자연스러운 곡선이 거의 사라졌습니다.'
+    mild: '자가 체크 결과, 골반이 약간 뒤로 기울 수 있는 경향이 보입니다. 허리 신전 운동을 참고하세요.',
+    moderate: '자가 체크 결과, 골반이 뒤로 기울 가능성이 있습니다. 척추 가동성 운동을 고려해보세요.',
+    severe: '자가 체크 결과, 골반이 뒤로 기운 경향이 강하게 나타납니다. 전문가 상담을 권장합니다.'
   }
 };
 
@@ -282,14 +283,14 @@ function determineRecommendedPlan(
   return 'basic';
 }
 
-// 체형 유형 이름 (한글)
+// 자가 체크 기반 체형 경향 이름 (확정적 진단명 아님)
 export const POSTURE_TYPE_NAMES: Record<PostureType, string> = {
-  neutral: '양호한 자세',
-  forward_head: '거북목형 자세',
-  rounded_shoulder: '라운드숄더형 자세',
-  upper_cross_syndrome: '상부 교차 증후군',
-  anterior_pelvic_tilt: '골반 전방 경사형',
-  posterior_pelvic_tilt: '골반 후방 경사형',
-  swayback: '요추 만곡형',
-  flat_back: '평평한 등형'
+  neutral: '균형 잡힌 자세 경향',
+  forward_head: '고개 앞으로 나올 수 있는 경향',
+  rounded_shoulder: '어깨 앞으로 말릴 수 있는 경향',
+  upper_cross_syndrome: '상체 전반적 균형 체크 필요',
+  anterior_pelvic_tilt: '골반 앞으로 기울 수 있는 경향',
+  posterior_pelvic_tilt: '골반 뒤로 기울 수 있는 경향',
+  swayback: '전신 자세 체크 필요',
+  flat_back: '허리 곡선 체크 필요'
 };

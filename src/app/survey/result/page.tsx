@@ -56,9 +56,9 @@ export default function SurveyResultPage() {
       severe: 'bg-red-500/20 text-red-400 border-red-500/30'
     };
     const labels = {
-      mild: '경미한 상태',
-      moderate: '보통 상태',
-      severe: '개선 필요'
+      mild: '참고 수준 (경미)',
+      moderate: '참고 수준 (보통)',
+      severe: '전문가 상담 권장'
     };
     return (
       <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium ${styles[severity]}`}>
@@ -75,27 +75,27 @@ export default function SurveyResultPage() {
           <Link href="/" className="inline-block">
             <h1 className="text-2xl font-bold text-white">포스처랩</h1>
           </Link>
-          <p className="mt-2 text-sm text-slate-400">자세 분석 결과</p>
+          <p className="mt-2 text-sm text-slate-400">자가 체크 결과 (참고용)</p>
         </div>
         
         {/* 메인 결과 카드 */}
         <div className="mb-6 rounded-2xl border border-orange-500/50 bg-gradient-to-br from-orange-500/20 to-amber-500/20 p-6 shadow-2xl backdrop-blur-sm sm:p-8">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-2xl font-bold text-white sm:text-3xl">
-              🎯 분석 완료!
+              📋 자가 체크 완료
             </h2>
             {getSeverityBadge(analysis.overallSeverity)}
           </div>
           
           <div className="mb-4 rounded-xl bg-slate-900/50 p-4">
-            <p className="mb-2 text-sm text-slate-400">주요 체형 유형</p>
+            <p className="mb-2 text-sm text-slate-400">확인된 자세 경향 (참고용)</p>
             <p className="text-xl font-bold text-white sm:text-2xl">
               {POSTURE_TYPE_NAMES[analysis.postureType]}
             </p>
           </div>
           
           <p className="text-slate-300">
-            상세한 분석 리포트가 이메일로 발송되었습니다. (준비 중)
+            💡 아래 결과는 자가 체크 기반이며, 의학적 진단이 아닙니다.
           </p>
         </div>
         
@@ -155,13 +155,13 @@ export default function SurveyResultPage() {
         </div>
         
         <p className="mb-6 text-center text-xs text-slate-500">
-          * 0-30점: 양호 | 30-60점: 주의 필요 | 60-100점: 개선 필요
+          * 점수는 자가 체크 기반 참고 정보이며, 의학적 평가가 아닙니다.
         </p>
         
-        {/* 주요 발견사항 */}
+        {/* 확인된 경향 */}
         {analysis.primaryIssues.length > 0 && (
           <div className="mb-6 rounded-xl border border-slate-700 bg-slate-800/50 p-6">
-            <h3 className="mb-4 text-lg font-bold text-white">🔍 주요 발견사항</h3>
+            <h3 className="mb-4 text-lg font-bold text-white">🔍 확인된 자세 경향 (참고 정보)</h3>
             <div className="space-y-3">
               {analysis.primaryIssues.map((issue, index) => (
                 <div key={index} className="flex gap-3">
@@ -184,9 +184,9 @@ export default function SurveyResultPage() {
           </div>
         )}
         
-        {/* 맞춤 권장사항 */}
+        {/* 참고 가이드 */}
         <div className="mb-6 rounded-xl border border-slate-700 bg-slate-800/50 p-6">
-          <h3 className="mb-4 text-lg font-bold text-white">✨ 맞춤 권장사항</h3>
+          <h3 className="mb-4 text-lg font-bold text-white">💡 참고 가이드 (추천 운동)</h3>
           <ul className="space-y-2">
             {analysis.recommendations.map((rec, index) => (
               <li key={index} className="flex gap-3 text-slate-300">
@@ -195,30 +195,61 @@ export default function SurveyResultPage() {
               </li>
             ))}
           </ul>
+          <p className="mt-4 text-xs text-slate-500">
+            * 운동 효과는 개인차가 있으며, 통증이 있는 경우 의료 전문가와 상담하세요.
+          </p>
         </div>
         
-        {/* CTA */}
-        <div className="rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 p-6 text-center shadow-lg">
-          <h3 className="mb-2 text-xl font-bold text-white">
-            🎉 더 자세한 분석을 원하시나요?
+        {/* 문제 인식 강화 */}
+        <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-6">
+          <h3 className="mb-3 text-lg font-bold text-amber-300">
+            ⚠️ 지금 관리하지 않으면?
           </h3>
-          <p className="mb-4 text-sm text-white/90">
-            사진 2장 + 전문가 영상 피드백으로 정확한 개선 방향을 받아보세요!
+          <ul className="mb-4 space-y-2 text-sm text-slate-300">
+            <li className="flex gap-2">
+              <span className="text-amber-400">•</span>
+              <span>불편함이 점점 강해질 수 있습니다</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-amber-400">•</span>
+              <span>나쁜 자세 습관이 고착화될 수 있습니다</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-amber-400">•</span>
+              <span>혼자 하면 잘못된 운동으로 악화될 수 있습니다</span>
+            </li>
+          </ul>
+          <p className="mb-4 text-sm text-slate-400">
+            전문가의 피드백으로 올바른 방향을 찾고 싶다면?
           </p>
           <Link
             href="/pricing"
-            className="inline-block rounded-full bg-white px-8 py-3 font-bold text-orange-500 transition hover:bg-slate-100"
+            className="inline-block rounded-full border-2 border-amber-400 bg-transparent px-6 py-2 text-sm font-medium text-amber-300 transition hover:bg-amber-400/10"
           >
-            플랜 확인하기 →
+            전문가 가이드 서비스 알아보기
           </Link>
         </div>
         
-        {/* 면책 조항 */}
-        <div className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
-          <p className="text-xs text-red-300">
-            ⚠️ 본 결과는 운동 가이드 제공을 목적으로 하며, 의료 진단이 아닙니다.
-            통증, 질병, 부상이 있는 경우 반드시 의료 전문가와 상담하세요.
-          </p>
+        {/* 중요 안내 */}
+        <div className="mt-6 space-y-3">
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+            <p className="mb-2 text-sm font-bold text-red-300">
+              ⚠️ 필독: 본 결과의 한계
+            </p>
+            <ul className="space-y-1 text-xs text-red-200">
+              <li>• 본 결과는 자가 체크 기반이며, 의학적 진단이 아닙니다.</li>
+              <li>• AI나 전문가가 직접 판단한 것이 아닙니다.</li>
+              <li>• 실제 상태와 다를 수 있으며, 참고 정보로만 활용하세요.</li>
+              <li>• 통증, 질병, 부상이 있는 경우 반드시 의료기관을 방문하세요.</li>
+            </ul>
+          </div>
+          
+          <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4">
+            <p className="text-xs text-blue-200">
+              💡 더 정확한 평가를 원하시면 사진 2장으로 전문가의 피드백을 받아보세요.
+              (그래도 의학적 진단은 아닙니다)
+            </p>
+          </div>
         </div>
       </div>
     </div>

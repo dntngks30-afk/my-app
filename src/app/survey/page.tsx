@@ -87,7 +87,7 @@ export default function SurveyPage() {
           <Link href="/" className="inline-block">
             <h1 className="text-2xl font-bold text-white">포스처랩</h1>
           </Link>
-          <p className="mt-2 text-sm text-slate-400">자세 분석 설문 (약 3분 소요)</p>
+          <p className="mt-2 text-sm text-slate-400">자세 자가 체크 (약 3분, 참고용)</p>
         </div>
         
         {/* 진행 바 */}
@@ -236,9 +236,16 @@ export default function SurveyPage() {
         </div>
         
         {/* 하단 안내 */}
-        <div className="mt-6 text-center text-xs text-slate-500">
-          <p className="mb-2">본 설문은 운동 가이드 제공을 목적으로 하며, 의료 진단이 아닙니다.</p>
-          <p>통증이나 질병이 있는 경우 반드시 의료 전문가와 상담하세요.</p>
+        <div className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <p className="mb-2 text-center text-xs font-bold text-amber-300">
+            ⚠️ 중요: 본 체크의 목적과 한계
+          </p>
+          <ul className="space-y-1 text-xs text-slate-400">
+            <li>• 본 설문은 자가 인식을 돕기 위한 참고 도구입니다.</li>
+            <li>• AI나 전문가가 판단하는 것이 아닙니다.</li>
+            <li>• 결과는 의학적 진단이 아니며, 참고 정보로만 활용하세요.</li>
+            <li>• 통증이나 질병이 있다면 반드시 의료기관을 방문하세요.</li>
+          </ul>
         </div>
       </div>
     </div>
