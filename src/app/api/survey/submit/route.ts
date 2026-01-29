@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { supabase } from '@/lib/supabase';
 import { analyzeSurveyResults } from '@/lib/survey-analyzer';
-import { SurveyReportPDF } from '@/lib/pdf-generator';
+import { SurveyReportPDF } from '@/lib/pdf-generator.tsx';
 import { sendReportEmail } from '@/lib/email-sender';
 
 // 빌드 시 프리렌더링 방지
