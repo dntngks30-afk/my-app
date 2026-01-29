@@ -6,6 +6,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
+// 빌드 시 프리렌더링 방지 (Supabase 환경 변수 필요)
+export const dynamic = 'force-dynamic';
+
 // 진단 데이터 타입
 interface DiagnosisData {
   forwardHead: 'none' | 'mild' | 'moderate' | 'severe';

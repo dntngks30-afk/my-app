@@ -5,8 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 
 // 환경변수에서 Supabase URL과 키를 가져옵니다.
 // 빌드 시점에 값이 없어도 에러가 나지 않도록 기본값을 제공합니다.
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
 
 // 클라이언트(브라우저)에서 사용하는 Supabase 인스턴스입니다.
 // 주로 로그인, 회원가입, 사용자 데이터 조회 등에 사용됩니다.
