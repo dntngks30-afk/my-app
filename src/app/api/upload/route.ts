@@ -17,26 +17,41 @@ export const config = {
 // 빌드 단계에서 env가 없더라도 모듈 로드가 실패하지 않도록 합니다.
 function getSupabaseClient() {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  // 서버에서는 SERVICE_ROLE_KEY를 우선 사용 (모든 권한)
   const key =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     "";
+  
+  if (!url || !key) {
+    console.error("❌ Supabase 환경 변수가 설정되지 않았습니다:", { 
+      has_url: !!url, 
+      has_key: !!key 
+    });
+    throw new Error("Supabase 환경 변수가 설정되지 않았습니다.");
+  }
+  
   return createClient(url, key);
 }
 
 export async function POST(req: Request) {
   try {
     // 빠른 로그: env 존재 여부 출력 (키 값 자체는 노출하지 않음)
-    console.log("api/upload called", {
+    console.log("📤 api/upload called", {
       has_url: !!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL),
-      has_key: !!(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY),
+      has_service_key: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      has_anon_key: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       content_type: req.headers.get('content-type'),
       content_length: req.headers.get('content-length'),
     });
     
     // 환경변수가 충분하지 않으면 명확한 에러 반환
     if (!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL)) {
-      return NextResponse.json({ error: "SUPABASE_URL is not set" }, { status: 500 });
+      return NextResponse.json({ error: "Supabase URL이 설정되지 않았습니다." }, { status: 500 });
+    }
+    
+    if (!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)) {
+      return NextResponse.json({ error: "Supabase 키가 설정되지 않았습니다." }, { status: 500 });
     }
     
     // FormData 파싱 시도

@@ -20,6 +20,17 @@ export function getServerSupabase() {
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     "";
+  
+  if (!url || !key) {
+    console.error("❌ Supabase 환경 변수가 설정되지 않았습니다:", { 
+      has_url: !!url, 
+      has_key: !!key,
+      has_service_key: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      has_anon_key: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    });
+    throw new Error("Supabase 환경 변수가 설정되지 않았습니다.");
+  }
+  
   return createClient(url, key);
 }
 
