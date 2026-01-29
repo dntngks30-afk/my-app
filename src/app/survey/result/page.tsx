@@ -10,6 +10,11 @@ export default function SurveyResultPage() {
   const router = useRouter();
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   
   useEffect(() => {
     // localStorage에서 설문 응답 가져오기
@@ -199,6 +204,115 @@ export default function SurveyResultPage() {
             * 운동 효과는 개인차가 있으며, 통증이 있는 경우 의료 전문가와 상담하세요.
           </p>
         </div>
+        
+        {/* PDF 리포트 받기 */}
+        {!submitSuccess ? (
+          <div className="mb-6 rounded-xl border border-blue-500/50 bg-blue-500/10 p-6">
+            <h3 className="mb-3 text-lg font-bold text-blue-300">
+              📧 상세 리포트를 이메일로 받아보세요
+            </h3>
+            <p className="mb-4 text-sm text-slate-300">
+              5페이지 분량의 상세 리포트 PDF를 이메일로 보내드립니다. (무료)
+            </p>
+            
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setIsSubmitting(true);
+              setSubmitError('');
+              
+              try {
+                const responsesStr = localStorage.getItem('survey_responses');
+                if (!responsesStr) {
+                  throw new Error('설문 응답을 찾을 수 없습니다.');
+                }
+                
+                const responses = JSON.parse(responsesStr);
+                
+                const res = await fetch('/api/survey/submit', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    responses,
+                    email,
+                    name: name || '고객',
+                  }),
+                });
+                
+                const data = await res.json();
+                
+                if (!res.ok) {
+                  throw new Error(data.error || '제출에 실패했습니다.');
+                }
+                
+                setSubmitSuccess(true);
+              } catch (error) {
+                console.error('제출 에러:', error);
+                setSubmitError(error instanceof Error ? error.message : '제출에 실패했습니다.');
+              } finally {
+                setIsSubmitting(false);
+              }
+            }} className="space-y-3">
+              <div>
+                <label htmlFor="name" className="mb-1 block text-sm text-slate-300">
+                  이름 (선택)
+                </label>
+                <input
+                  type="text"
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="홍길동"
+                  className="w-full rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="email" className="mb-1 block text-sm text-slate-300">
+                  이메일 주소 <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="example@email.com"
+                  required
+                  className="w-full rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                />
+              </div>
+              
+              {submitError && (
+                <div className="rounded-lg bg-red-500/20 p-3 text-sm text-red-300">
+                  {submitError}
+                </div>
+              )}
+              
+              <button
+                type="submit"
+                disabled={isSubmitting || !email}
+                className="w-full rounded-lg bg-blue-500 px-6 py-3 font-bold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSubmitting ? '발송 중...' : 'PDF 리포트 받기'}
+              </button>
+              
+              <p className="text-xs text-slate-500">
+                * 스팸 메일함도 확인해주세요. 발송에는 최대 1-2분 소요될 수 있습니다.
+              </p>
+            </form>
+          </div>
+        ) : (
+          <div className="mb-6 rounded-xl border border-green-500/50 bg-green-500/10 p-6">
+            <h3 className="mb-3 text-lg font-bold text-green-300">
+              ✅ 리포트가 발송되었습니다!
+            </h3>
+            <p className="mb-2 text-sm text-slate-300">
+              <strong className="text-white">{email}</strong>로 상세 리포트 PDF를 발송했습니다.
+            </p>
+            <p className="text-xs text-slate-500">
+              이메일이 도착하지 않았다면 스팸 메일함을 확인해주세요.
+            </p>
+          </div>
+        )}
         
         {/* 문제 인식 강화 */}
         <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-6">
