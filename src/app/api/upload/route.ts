@@ -1,6 +1,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+// 빌드 시 프리렌더링 방지
+export const dynamic = 'force-dynamic';
+
+// Body size 제한 설정 (50MB)
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
+  },
+};
+
 // Supabase 클라이언트를 모듈 로드 시점에 생성하지 않고 요청 시점에 생성합니다.
 // 빌드 단계에서 env가 없더라도 모듈 로드가 실패하지 않도록 합니다.
 function getSupabaseClient() {
@@ -18,19 +30,56 @@ export async function POST(req: Request) {
     console.log("api/upload called", {
       has_url: !!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL),
       has_key: !!(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY),
+      content_type: req.headers.get('content-type'),
+      content_length: req.headers.get('content-length'),
     });
+    
     // 환경변수가 충분하지 않으면 명확한 에러 반환
     if (!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL)) {
       return NextResponse.json({ error: "SUPABASE_URL is not set" }, { status: 500 });
     }
-    const form = await req.formData();
+    
+    // FormData 파싱 시도
+    let form;
+    try {
+      form = await req.formData();
+    } catch (formError) {
+      console.error("FormData parsing error:", formError);
+      return NextResponse.json({ 
+        error: "파일 업로드 실패: 파일이 너무 크거나 형식이 잘못되었습니다.",
+        details: formError instanceof Error ? formError.message : String(formError)
+      }, { status: 400 });
+    }
     const file = form.get("file") as File | null;
     const side = (form.get("side") as string) || "front";
     const user_id = (form.get("user_id") as string) || null;
 
     if (!file) {
-      return NextResponse.json({ error: "file missing" }, { status: 400 });
+      return NextResponse.json({ error: "파일이 선택되지 않았습니다." }, { status: 400 });
     }
+    
+    // 파일 크기 검증 (최대 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      return NextResponse.json({ 
+        error: "파일 크기가 너무 큽니다. 최대 10MB까지 업로드 가능합니다.",
+        size: file.size 
+      }, { status: 400 });
+    }
+    
+    // 파일 타입 검증
+    if (!file.type.startsWith('image/')) {
+      return NextResponse.json({ 
+        error: "이미지 파일만 업로드 가능합니다.",
+        type: file.type 
+      }, { status: 400 });
+    }
+    
+    console.log("File info:", {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      side: side
+    });
 
     // 파일 데이터를 업로드 가능한 형태로 변환
     const arrayBuffer = await file.arrayBuffer();
