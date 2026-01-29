@@ -228,6 +228,20 @@ export default function Home() {
   
   // 샘플 리포트 미리보기 모달 상태
   const [isReportPreviewOpen, setIsReportPreviewOpen] = useState<boolean>(false);
+  
+  // 사전 동의 모달 상태
+  const [isConsentModalOpen, setIsConsentModalOpen] = useState<boolean>(false);
+  const [hasAgreed, setHasAgreed] = useState<boolean>(false);
+  
+  // 동의 항목 체크 상태 (5개)
+  const [consent1, setConsent1] = useState<boolean>(false);
+  const [consent2, setConsent2] = useState<boolean>(false);
+  const [consent3, setConsent3] = useState<boolean>(false);
+  const [consent4, setConsent4] = useState<boolean>(false);
+  const [consent5, setConsent5] = useState<boolean>(false);
+  
+  // 면책 배너 닫기 상태
+  const [isDisclaimerBannerVisible, setIsDisclaimerBannerVisible] = useState<boolean>(true);
 
   // 로그인 상태 확인
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
@@ -247,6 +261,12 @@ export default function Home() {
       }
     };
     checkUser();
+
+    // 사전 동의 상태 확인
+    const agreedBefore = localStorage.getItem("service_consent_agreed");
+    if (agreedBefore === "true") {
+      setHasAgreed(true);
+    }
 
     // 인증 상태 변경 감지
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -333,10 +353,39 @@ export default function Home() {
   const frontInputRef = useRef<HTMLInputElement | null>(null);
   const sideInputRef = useRef<HTMLInputElement | null>(null);
 
-  // 업로드 카드를 눌렀을 때: 파일 선택창 대신 촬영 가이드 모달을 먼저 띄웁니다.
+  // 업로드 카드를 눌렀을 때: 사전 동의를 확인한 후 가이드 모달을 띄웁니다.
   const openGuideForSide = (side: UploadSide) => {
+    // 사전 동의를 하지 않았다면 동의 모달을 먼저 띄움
+    if (!hasAgreed) {
+      setPendingSide(side);
+      setIsConsentModalOpen(true);
+      return;
+    }
+    
+    // 이미 동의했다면 가이드 모달로 진행
     setPendingSide(side);
     setIsGuideOpen(true);
+  };
+  
+  // 사전 동의 완료 처리
+  const handleConsentComplete = () => {
+    // 5개 항목 모두 체크했는지 확인
+    if (!consent1 || !consent2 || !consent3 || !consent4 || !consent5) {
+      alert("모든 항목에 동의해주셔야 서비스를 이용할 수 있습니다.");
+      return;
+    }
+    
+    setHasAgreed(true);
+    setIsConsentModalOpen(false);
+    
+    // 동의 상태를 localStorage에 저장 (다음에는 보지 않음)
+    localStorage.setItem("service_consent_agreed", "true");
+    localStorage.setItem("service_consent_date", new Date().toISOString());
+    
+    // 동의 후 가이드 모달 열기
+    if (pendingSide) {
+      setIsGuideOpen(true);
+    }
   };
 
   // 모달에서 "가이드를 확인했습니다" 버튼을 눌렀을 때 호출됩니다.
@@ -359,7 +408,34 @@ export default function Home() {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://posturelab.com";
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#0f172a] px-4 py-8 text-slate-100">
+    <main className="flex min-h-screen flex-col bg-[#0f172a] text-slate-100">
+      {/* 면책 배너 - 최상단 고정 */}
+      {isDisclaimerBannerVisible && (
+        <div className="sticky top-0 z-50 border-b border-amber-500/30 bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-red-500/20 backdrop-blur-sm">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <svg className="h-5 w-5 flex-shrink-0 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-xs text-slate-200 sm:text-sm">
+                <strong className="text-amber-300">ℹ️ 중요:</strong> 본 서비스는 의료행위가 아닙니다. 통증이나 질병이 있는 경우 전문 의료기관을 방문하세요.
+              </p>
+            </div>
+            <button
+              onClick={() => setIsDisclaimerBannerVisible(false)}
+              className="flex-shrink-0 rounded-full p-1 hover:bg-slate-800/50"
+              aria-label="배너 닫기"
+            >
+              <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 메인 컨텐츠 */}
+      <div className="flex min-h-screen items-center justify-center px-4 py-8">
       {/* Toss Payments SDK 로드 */}
       <Script
         src="https://js.tosspayments.com/v1/payment"
@@ -375,7 +451,7 @@ export default function Home() {
             "@context": "https://schema.org",
             "@type": "ProfessionalService",
             "name": "포스처랩",
-            "description": "NASM-CES 전문가의 맞춤 체형 교정 솔루션",
+            "description": "NASM-CES 전문가의 맞춤 자세 개선 운동 가이드",
             "url": baseUrl,
             "logo": `${baseUrl}/logo.png`,
             "image": `${baseUrl}/og-image.jpg`,
@@ -396,7 +472,7 @@ export default function Home() {
                 "name": "BASIC 플랜",
                 "price": "19000",
                 "priceCurrency": "KRW",
-                "description": "정적자세 평가 및 맞춤 교정 루틴 PDF 제공",
+                "description": "정적자세 평가 및 맞춤 운동 루틴 PDF 제공",
                 "availability": "https://schema.org/InStock"
               },
               {
@@ -416,21 +492,21 @@ export default function Home() {
                 "availability": "https://schema.org/InStock"
               }
             ],
-            "serviceType": "체형 교정 및 교정운동 전문 서비스",
+            "serviceType": "자세 개선 운동 가이드 전문 서비스",
             "areaServed": {
               "@type": "Country",
               "name": "대한민국"
             },
             "hasOfferCatalog": {
               "@type": "OfferCatalog",
-              "name": "체형 교정 서비스",
+              "name": "자세 개선 운동 서비스",
               "itemListElement": [
                 {
                   "@type": "Offer",
                   "itemOffered": {
                     "@type": "Service",
-                    "name": "체형 분석 및 교정 운동 처방",
-                    "description": "NASM-CES 전문가의 4단계 교정 시스템 (억제-신장-활성화-통합)"
+                    "name": "체형 분석 및 운동 가이드",
+                    "description": "NASM-CES 전문가의 4단계 운동 시스템 (억제-신장-활성화-통합)"
                   }
                 }
               ]
@@ -499,12 +575,12 @@ export default function Home() {
                 </span>
               </h1>
               <p className="text-lg leading-relaxed text-slate-200 sm:text-xl md:text-2xl">
-                거북목? 라운드숄더?
+                목과 어깨 자세가 불편하신가요?
                 <br />
                 <span className="font-bold text-white">
-                  24시간 내 맞춤 교정 운동
+                  24시간 내 맞춤 운동 가이드
                 </span>
-                을 받아보세요.
+                를 받아보세요.
               </p>
               <div className="flex flex-wrap items-center gap-4">
                 <div className="flex items-center gap-2 rounded-full bg-[#f97316]/10 px-4 py-2 text-sm text-slate-200">
@@ -523,7 +599,7 @@ export default function Home() {
                   <svg className="h-5 w-5 text-[#f97316]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
-                  1:1 맞춤 처방
+                  1:1 맞춤 가이드
                 </div>
               </div>
             </header>
@@ -746,7 +822,7 @@ export default function Home() {
             <div className="flex-1 space-y-4">
               <div>
                 <h3 className="mb-2 text-2xl font-bold text-slate-100">전문가 약력</h3>
-                <p className="text-sm text-slate-400">NASM 인증 교정운동 전문가</p>
+                <p className="text-sm text-slate-400">NASM 인증 운동 전문가</p>
               </div>
               <ul className="space-y-3 text-sm text-slate-300">
                 <li className="flex items-start gap-3">
@@ -759,19 +835,19 @@ export default function Home() {
                   <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#f97316]/20">
                     <span className="text-xs text-[#f97316]">✓</span>
                   </div>
-                  <span>5년 이상 체형 교정 및 재활 운동 지도 경력</span>
+                  <span>5년 이상 자세 개선 및 운동 지도 경력</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#f97316]/20">
                     <span className="text-xs text-[#f97316]">✓</span>
                   </div>
-                  <span>1,000명 이상의 체형 분석 및 교정 프로그램 설계</span>
+                  <span>1,000명 이상의 체형 분석 및 운동 프로그램 설계</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#f97316]/20">
                     <span className="text-xs text-[#f97316]">✓</span>
                   </div>
-                  <span>과학적 근거 기반의 맞춤형 교정운동 프로그램 전문</span>
+                  <span>과학적 근거 기반의 맞춤형 운동 프로그램 전문</span>
                 </li>
               </ul>
             </div>
@@ -863,7 +939,7 @@ export default function Home() {
                   step: "03",
                   icon: "⚡",
                   title: "솔루션 생성",
-                  description: "당신에게 딱 맞는 4단계 교정 프로그램 제작",
+                  description: "당신에게 딱 맞는 4단계 운동 프로그램 제작",
                   color: "from-orange-500/20 to-orange-500/5",
                   borderColor: "border-orange-500/30",
                 },
@@ -901,11 +977,11 @@ export default function Home() {
           <div className="relative z-10 space-y-8 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 p-8 sm:p-10 animate-[slideDown_0.3s_ease-out]">
           <div className="text-center">
             <h2 className="text-3xl font-bold text-slate-100 sm:text-4xl">
-              과학적 4단계 교정 시스템
+              과학적 4단계 운동 시스템
             </h2>
             <p className="mt-4 max-w-2xl mx-auto text-sm text-slate-300 leading-relaxed">
-              <span className="font-semibold text-slate-200">NASM-CES 교정운동 전문가 자격 기반</span>으로 설계된 체계적 프로그램입니다.<br />
-              근육의 불균형을 단계별로 해결하여 통증 없는 올바른 자세를 만듭니다.
+              <span className="font-semibold text-slate-200">NASM-CES 운동 전문가 자격 기반</span>으로 설계된 체계적 프로그램입니다.<br />
+              근육의 균형을 단계별로 개선하여 올바른 자세 유지를 지원합니다.
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <div className="inline-flex items-center gap-2 rounded-full bg-slate-800/80 px-4 py-2 text-xs">
@@ -1195,7 +1271,7 @@ export default function Home() {
             지금 바로 시작하세요
           </h2>
           <p className="mb-6 text-sm text-slate-300 sm:text-base">
-            사진 2장 + 영상 피드백으로 확실한 교정 효과를 경험하세요
+            사진 2장 + 영상 피드백으로 체계적인 자세 개선을 시작하세요
           </p>
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <button
@@ -1521,7 +1597,158 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        {/* 사전 동의 모달 */}
+        {isConsentModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border-2 border-red-500/50 bg-slate-950 p-6 shadow-[0_20px_80px_rgba(239,68,68,0.5)]"
+            >
+              {/* 헤더 */}
+              <header className="mb-6 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/20">
+                    <svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-xl font-bold text-red-400 sm:text-2xl">
+                      서비스 이용 전 필독 사항
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-300">
+                      다음 내용을 반드시 확인하고 동의해주세요
+                    </p>
+                  </div>
+                </div>
+              </header>
+
+              {/* 중요 안내 */}
+              <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 p-5">
+                <h3 className="mb-3 flex items-center gap-2 font-bold text-red-400">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  법적 고지사항
+                </h3>
+                <ul className="space-y-2 text-sm text-slate-300">
+                  <li>• 본 서비스는 <strong className="text-slate-100">의료행위가 아니며</strong>, 질병의 진단·치료·예방을 목적으로 하지 않습니다.</li>
+                  <li>• 제공되는 운동 가이드는 <strong className="text-slate-100">참고 자료</strong>이며, 의료 전문가의 진료를 대체할 수 없습니다.</li>
+                  <li>• 운동 효과는 개인의 신체 조건과 노력에 따라 다를 수 있습니다.</li>
+                </ul>
+              </div>
+
+              {/* 동의 체크박스 */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-slate-100">다음 사항에 모두 동의합니다:</h3>
+                
+                {/* 동의 항목 1 */}
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/50 p-4 transition hover:border-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={consent1}
+                    onChange={(e) => setConsent1(e.target.checked)}
+                    className="mt-1 h-5 w-5 flex-shrink-0 cursor-pointer rounded border-slate-600 bg-slate-800 text-[#f97316] focus:ring-2 focus:ring-[#f97316] focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-300">
+                    본 서비스는 <strong className="text-slate-100">의료행위가 아니며</strong>, 진단·치료 목적이 아님을 이해했습니다.
+                  </span>
+                </label>
+
+                {/* 동의 항목 2 */}
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/50 p-4 transition hover:border-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={consent2}
+                    onChange={(e) => setConsent2(e.target.checked)}
+                    className="mt-1 h-5 w-5 flex-shrink-0 cursor-pointer rounded border-slate-600 bg-slate-800 text-[#f97316] focus:ring-2 focus:ring-[#f97316] focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-300">
+                    <strong className="text-slate-100">통증, 질병, 부상이 있는 경우</strong> 의료 전문가와 먼저 상담해야 함을 이해했습니다.
+                  </span>
+                </label>
+
+                {/* 동의 항목 3 */}
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/50 p-4 transition hover:border-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={consent3}
+                    onChange={(e) => setConsent3(e.target.checked)}
+                    className="mt-1 h-5 w-5 flex-shrink-0 cursor-pointer rounded border-slate-600 bg-slate-800 text-[#f97316] focus:ring-2 focus:ring-[#f97316] focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-300">
+                    운동 중 발생하는 <strong className="text-slate-100">부상 및 건강 문제에 대한 책임은 이용자 본인에게 있음</strong>을 이해했습니다.
+                  </span>
+                </label>
+
+                {/* 동의 항목 4 */}
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/50 p-4 transition hover:border-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={consent4}
+                    onChange={(e) => setConsent4(e.target.checked)}
+                    className="mt-1 h-5 w-5 flex-shrink-0 cursor-pointer rounded border-slate-600 bg-slate-800 text-[#f97316] focus:ring-2 focus:ring-[#f97316] focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-300">
+                    제공된 운동 가이드는 <strong className="text-slate-100">참고 자료</strong>이며, 본인의 상태에 맞게 조절해야 함을 이해했습니다.
+                  </span>
+                </label>
+
+                {/* 동의 항목 5 */}
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/50 p-4 transition hover:border-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={consent5}
+                    onChange={(e) => setConsent5(e.target.checked)}
+                    className="mt-1 h-5 w-5 flex-shrink-0 cursor-pointer rounded border-slate-600 bg-slate-800 text-[#f97316] focus:ring-2 focus:ring-[#f97316] focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-300">
+                    본 서비스는 <strong className="text-slate-100">운동 효과를 보장하지 않으며</strong>, 개인차가 있을 수 있음을 이해했습니다.
+                  </span>
+                </label>
+              </div>
+
+              {/* 이용약관 링크 */}
+              <div className="mt-6 text-center text-xs text-slate-400">
+                자세한 내용은{" "}
+                <Link href="/terms" className="text-[#f97316] hover:underline" target="_blank">
+                  이용약관
+                </Link>
+                {" "}및{" "}
+                <Link href="/privacy" className="text-[#f97316] hover:underline" target="_blank">
+                  개인정보처리방침
+                </Link>
+                을 참조하세요.
+              </div>
+
+              {/* 버튼 */}
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsConsentModalOpen(false);
+                    setPendingSide(null);
+                  }}
+                  className="rounded-full border border-slate-700 px-6 py-3 text-sm font-medium text-slate-200 transition hover:border-slate-500 hover:bg-slate-900"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConsentComplete}
+                  className="rounded-full bg-gradient-to-r from-[#f97316] to-[#fb923c] px-8 py-3 text-sm font-bold text-white shadow-[0_0_20px_rgba(249,115,22,0.6)] transition hover:shadow-[0_0_30px_rgba(249,115,22,0.8)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!consent1 || !consent2 || !consent3 || !consent4 || !consent5}
+                >
+                  모두 동의하고 계속하기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
+      </div>
     </main>
   );
 }

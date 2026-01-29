@@ -23,7 +23,7 @@ export default function PricingPage() {
       <header className="border-b border-slate-800 bg-slate-950/50 backdrop-blur-sm">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
           <Link href="/" className="text-xl font-bold text-slate-100">
-            교정운동 솔루션
+            자세 개선 운동 가이드
           </Link>
           <Link
             href="/"
@@ -41,7 +41,7 @@ export default function PricingPage() {
             나에게 맞는 플랜을 선택하세요
           </h1>
           <p className="text-lg text-slate-300">
-            NASM-CES 기반 전문 교정운동 솔루션
+            NASM-CES 기반 전문 운동 가이드 서비스
           </p>
         </div>
 
@@ -81,7 +81,7 @@ export default function PricingPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
                 <span className="text-sm text-slate-300">
-                  불균형 진단 (거북목, 라운드숄더 등)
+                  자세 균형 평가 (목, 어깨, 골반 등)
                 </span>
               </div>
               <div className="flex items-start gap-3">
@@ -89,7 +89,7 @@ export default function PricingPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
                 <span className="text-sm text-slate-300">
-                  4단계 맞춤 솔루션 (억제-신장-활성화-통합)
+                  4단계 맞춤 운동 프로그램 (억제-신장-활성화-통합)
                 </span>
               </div>
               <div className="flex items-start gap-3">
@@ -348,7 +348,7 @@ export default function PricingPage() {
       {/* 푸터 */}
       <footer className="border-t border-slate-800 bg-slate-950/50 py-8">
         <div className="mx-auto max-w-7xl px-4 text-center text-sm text-slate-500">
-          <p>© 2026 교정운동 솔루션. All rights reserved.</p>
+          <p>© 2026 포스처랩. All rights reserved.</p>
           <div className="mt-2 flex justify-center gap-4">
             <Link href="/terms" className="hover:text-slate-300">
               이용약관
