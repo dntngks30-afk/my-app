@@ -19,7 +19,7 @@ export async function sendReportEmail({
 }: SendReportEmailParams) {
   try {
     const { data, error } = await resend.emails.send({
-      from: 'PostureLab <noreply@posturelab.com>', // 실제 도메인으로 변경 필요
+      from: 'PostureLab <onboarding@resend.dev>', // Resend 테스트 도메인
       to: [to],
       subject: `[PostureLab] ${userName}님의 자세 경향 체크 결과 (참고용)`,
       html: getEmailHTML(analysis, userName),
@@ -258,7 +258,7 @@ function getEmailHTML(analysis: AnalysisResult, userName: string): string {
 export async function sendTestEmail(to: string) {
   try {
     const { data, error } = await resend.emails.send({
-      from: 'PostureLab <noreply@posturelab.com>',
+      from: 'PostureLab <onboarding@resend.dev>',
       to: [to],
       subject: '[PostureLab] 테스트 이메일',
       html: `

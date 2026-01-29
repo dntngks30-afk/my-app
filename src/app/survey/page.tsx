@@ -71,10 +71,10 @@ export default function SurveyPage() {
   // 카테고리 이름
   const getCategoryName = (category: string) => {
     switch (category) {
-      case 'posture': return '자세 관찰';
-      case 'pain': return '불편함/통증';
+      case 'posture': return '자세 느낌';
+      case 'pain': return '불편한 느낌';
       case 'lifestyle': return '생활 습관';
-      case 'goal': return '목표';
+      case 'goal': return '운동 목표';
       default: return '설문';
     }
   };
@@ -87,7 +87,7 @@ export default function SurveyPage() {
           <Link href="/" className="inline-block">
             <h1 className="text-2xl font-bold text-white">포스처랩</h1>
           </Link>
-          <p className="mt-2 text-sm text-slate-400">자세 자가 체크 (약 3분, 참고용)</p>
+          <p className="mt-2 text-sm text-slate-400">자세 체크 설문 (약 3분, 자가 인식 기준)</p>
         </div>
         
         {/* 진행 바 */}
