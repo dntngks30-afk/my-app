@@ -77,6 +77,16 @@ export default function FreeSurveyResultPage() {
   ) => {
     if (!frontPhotoUrl && !sidePhotoUrl) return;
 
+    // 임시: 사진 분석 기능 비활성화 (OpenAI 크레딧 필요)
+    const ENABLE_PHOTO_ANALYSIS = false; // true로 변경하면 사진 분석 활성화
+    
+    if (!ENABLE_PHOTO_ANALYSIS) {
+      setPhotoAnalysisError(
+        'OpenAI 크레딧이 필요합니다. 현재는 설문 기반 분석만 제공됩니다.'
+      );
+      return;
+    }
+
     setPhotoAnalyzing(true);
     setPhotoAnalysisError(null);
 
@@ -104,11 +114,16 @@ export default function FreeSurveyResultPage() {
       }
     } catch (error) {
       console.error('사진 분석 에러:', error);
-      setPhotoAnalysisError(
-        error instanceof Error 
-          ? error.message 
-          : '사진 분석 중 오류가 발생했습니다'
-      );
+      const errorMessage = error instanceof Error ? error.message : '사진 분석 중 오류가 발생했습니다';
+      
+      // 429 에러 (할당량 초과) 특별 처리
+      if (errorMessage.includes('429') || errorMessage.includes('quota')) {
+        setPhotoAnalysisError(
+          'OpenAI API 할당량이 초과되었습니다. 크레딧을 충전한 후 다시 시도해주세요. 현재는 설문 기반 분석 결과를 확인하실 수 있습니다.'
+        );
+      } else {
+        setPhotoAnalysisError(errorMessage);
+      }
     } finally {
       setPhotoAnalyzing(false);
     }
@@ -169,10 +184,27 @@ export default function FreeSurveyResultPage() {
               <div className="rounded-xl border border-yellow-500/50 bg-yellow-500/10 p-6">
                 <div className="mb-2 flex items-center gap-2">
                   <span className="text-xl">⚠️</span>
-                  <h3 className="text-lg font-bold text-yellow-400">사진 분석을 진행할 수 없습니다</h3>
+                  <h3 className="text-lg font-bold text-yellow-400">사진 분석 일시 중단</h3>
                 </div>
-                <p className="text-sm text-slate-300">{photoAnalysisError}</p>
-                <p className="mt-3 text-xs text-slate-400">
+                <p className="text-sm text-slate-300 mb-3">{photoAnalysisError}</p>
+                
+                <div className="rounded-lg bg-slate-950/50 p-4 mt-4">
+                  <p className="text-sm font-semibold text-slate-200 mb-2">
+                    💡 사진 분석을 원하시나요?
+                  </p>
+                  <p className="text-xs text-slate-400 mb-3">
+                    BASIC 플랜으로 업그레이드하시면 전문가가 직접 사진을 분석하고 
+                    맞춤 운동 가이드를 제공합니다.
+                  </p>
+                  <a
+                    href="#basic-plan"
+                    className="inline-block rounded-lg bg-[#f97316] px-4 py-2 text-sm font-semibold text-white hover:bg-[#ea580c]"
+                  >
+                    BASIC 플랜 보기 ↓
+                  </a>
+                </div>
+                
+                <p className="mt-4 text-xs text-slate-400">
                   설문 기반 분석 결과는 아래에서 확인하실 수 있습니다.
                 </p>
               </div>
@@ -312,7 +344,7 @@ export default function FreeSurveyResultPage() {
         </div>
 
         {/* 업셀 섹션 - BASIC 플랜 */}
-        <div className="mb-8 space-y-6">
+        <div id="basic-plan" className="mb-8 space-y-6">
           <div className="text-center">
             <h3 className="text-2xl font-bold text-slate-100 mb-2">
               더 정확한 분석을 원하시나요?
