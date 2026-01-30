@@ -7,10 +7,37 @@ import { analyzeSurveyResults } from '@/lib/survey-analyzer';
 import { POSTURE_TYPE_NAMES } from '@/lib/survey-analyzer';
 import type { AnalysisResult } from '@/types/survey';
 
+interface PhotoAnalysisResult {
+  qualityCheck: {
+    canAnalyze: boolean;
+    passedChecks: number;
+    totalChecks: number;
+    issues: string[];
+  };
+  analysis: {
+    observations: Array<{
+      area: string;
+      finding: string;
+      visualEvidence: string;
+      functionalImpact: string;
+    }>;
+    summary: string;
+  };
+  recommendations: {
+    exercises: string[];
+    retakeSuggestions: string[];
+  };
+  disclaimer: string;
+}
+
 export default function FreeSurveyResultPage() {
   const router = useRouter();
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [photoAnalysis, setPhotoAnalysis] = useState<PhotoAnalysisResult | null>(null);
+  const [photoAnalyzing, setPhotoAnalyzing] = useState(false);
+  const [photoAnalysisError, setPhotoAnalysisError] = useState<string | null>(null);
   const [showSampleModal, setShowSampleModal] = useState(false);
+  const [hasPhotos, setHasPhotos] = useState(false);
 
   useEffect(() => {
     // localStorage에서 설문 응답 가져오기
@@ -26,11 +53,66 @@ export default function FreeSurveyResultPage() {
       const responses = JSON.parse(responsesStr);
       const result = analyzeSurveyResults(responses);
       setAnalysis(result);
+
+      // 사진 URL 확인
+      const frontPhotoUrl = localStorage.getItem('free_survey_front_photo');
+      const sidePhotoUrl = localStorage.getItem('free_survey_side_photo');
+
+      if (frontPhotoUrl || sidePhotoUrl) {
+        setHasPhotos(true);
+        // 사진 분석 시작
+        analyzePhotos(frontPhotoUrl, sidePhotoUrl, responses);
+      }
     } catch (error) {
       console.error('분석 오류:', error);
       router.push('/free-survey');
     }
   }, [router]);
+
+  // 사진 분석 함수
+  const analyzePhotos = async (
+    frontPhotoUrl: string | null,
+    sidePhotoUrl: string | null,
+    surveyResponses: Record<string, string | string[]>
+  ) => {
+    if (!frontPhotoUrl && !sidePhotoUrl) return;
+
+    setPhotoAnalyzing(true);
+    setPhotoAnalysisError(null);
+
+    try {
+      const response = await fetch('/api/analyze-photo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          frontPhotoUrl,
+          sidePhotoUrl,
+          surveyData: surveyResponses,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || '사진 분석 실패');
+      }
+
+      if (data.success && data.analysis) {
+        setPhotoAnalysis(data.analysis);
+      } else {
+        throw new Error('분석 결과를 받지 못했습니다');
+      }
+    } catch (error) {
+      console.error('사진 분석 에러:', error);
+      setPhotoAnalysisError(
+        error instanceof Error 
+          ? error.message 
+          : '사진 분석 중 오류가 발생했습니다'
+      );
+    } finally {
+      setPhotoAnalyzing(false);
+    }
+  };
 
   if (!analysis) {
     return (
@@ -65,10 +147,127 @@ export default function FreeSurveyResultPage() {
           </div>
         </div>
 
+        {/* 사진 분석 결과 (있는 경우) */}
+        {hasPhotos && (
+          <div className="mb-8 rounded-2xl border-2 border-blue-500 bg-gradient-to-br from-blue-500/10 to-slate-900 p-8">
+            <div className="mb-4 flex items-center gap-3">
+              <span className="text-3xl">📸</span>
+              <h2 className="text-3xl font-bold text-slate-100">사진 기반 체형 관찰</h2>
+            </div>
+
+            {photoAnalyzing && (
+              <div className="flex items-center gap-4 rounded-xl bg-slate-950/50 p-6">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+                <div>
+                  <p className="font-semibold text-slate-200">AI가 사진을 분석하고 있습니다...</p>
+                  <p className="text-sm text-slate-400">약 10-20초 소요됩니다</p>
+                </div>
+              </div>
+            )}
+
+            {photoAnalysisError && (
+              <div className="rounded-xl border border-yellow-500/50 bg-yellow-500/10 p-6">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="text-xl">⚠️</span>
+                  <h3 className="text-lg font-bold text-yellow-400">사진 분석을 진행할 수 없습니다</h3>
+                </div>
+                <p className="text-sm text-slate-300">{photoAnalysisError}</p>
+                <p className="mt-3 text-xs text-slate-400">
+                  설문 기반 분석 결과는 아래에서 확인하실 수 있습니다.
+                </p>
+              </div>
+            )}
+
+            {!photoAnalyzing && !photoAnalysisError && photoAnalysis && (
+              <div className="space-y-6">
+                {/* 사진 품질 체크 */}
+                <div className={`rounded-xl p-6 ${
+                  photoAnalysis.qualityCheck.canAnalyze
+                    ? 'border border-green-500/50 bg-green-500/10'
+                    : 'border border-yellow-500/50 bg-yellow-500/10'
+                }`}>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="text-xl">
+                      {photoAnalysis.qualityCheck.canAnalyze ? '✅' : '⚠️'}
+                    </span>
+                    <h3 className="text-lg font-bold text-slate-100">
+                      사진 품질 체크: {photoAnalysis.qualityCheck.passedChecks}/{photoAnalysis.qualityCheck.totalChecks}
+                    </h3>
+                  </div>
+                  {photoAnalysis.qualityCheck.issues.length > 0 && (
+                    <ul className="space-y-1 text-sm text-slate-300">
+                      {photoAnalysis.qualityCheck.issues.map((issue, index) => (
+                        <li key={index}>• {issue}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {/* 전체 요약 */}
+                {photoAnalysis.analysis.summary && (
+                  <div className="rounded-xl bg-slate-950/50 p-6">
+                    <h3 className="mb-3 text-lg font-bold text-slate-200">📋 전체 관찰 요약</h3>
+                    <p className="text-sm leading-relaxed text-slate-300">
+                      {photoAnalysis.analysis.summary}
+                    </p>
+                  </div>
+                )}
+
+                {/* 관찰 내용 */}
+                {photoAnalysis.analysis.observations.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-bold text-slate-200">🔍 상세 관찰 내용</h3>
+                    {photoAnalysis.analysis.observations.map((obs, index) => (
+                      <div key={index} className="rounded-xl border border-slate-700 bg-slate-950/50 p-5">
+                        <h4 className="mb-2 font-bold text-blue-400">[{obs.area}]</h4>
+                        <div className="mb-3 text-sm text-slate-300">
+                          <span className="font-semibold text-slate-400">관찰: </span>
+                          {obs.finding}
+                        </div>
+                        <div className="mb-3 text-sm text-slate-400">
+                          <span className="font-semibold">시각적 근거: </span>
+                          {obs.visualEvidence}
+                        </div>
+                        <div className="text-sm text-slate-400">
+                          <span className="font-semibold">가능성 있는 영향: </span>
+                          {obs.functionalImpact}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 추천 운동 방향 */}
+                {photoAnalysis.recommendations.exercises.length > 0 && (
+                  <div className="rounded-xl bg-blue-500/10 p-6">
+                    <h3 className="mb-3 text-lg font-bold text-slate-200">💪 추천 운동 방향</h3>
+                    <ul className="space-y-2">
+                      {photoAnalysis.recommendations.exercises.map((exercise, index) => (
+                        <li key={index} className="flex items-start gap-2 text-sm text-slate-300">
+                          <span className="text-blue-400">✓</span>
+                          <span>{exercise}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* 면책사항 */}
+                <div className="rounded-xl border border-red-500/50 bg-red-500/10 p-4">
+                  <p className="text-xs leading-relaxed text-slate-300">
+                    <span className="font-semibold text-red-400">⚠️ 중요: </span>
+                    {photoAnalysis.disclaimer}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 결과 요약 카드 */}
         <div className="mb-8 rounded-2xl border-2 border-[#f97316] bg-gradient-to-br from-[#f97316]/10 to-slate-900 p-8">
           <h2 className="mb-4 text-3xl font-bold text-slate-100">
-            나의 자세 경향
+            설문 기반 자세 경향
           </h2>
           <div className="mb-6 rounded-xl bg-slate-950/50 p-6">
             <div className="mb-2 text-sm text-slate-400">확인된 패턴</div>
