@@ -6,9 +6,9 @@ export const dynamic = 'force-dynamic';
 
 function getSupabaseClient() {
   // [핵심 2] 빌드 시점에 환경변수가 없어도 Supabase SDK가 화내지 않도록 
-  // 최소한 URL 형식을 갖춘 가짜 주소를 넣어줍니다.
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder";
+  // 최소한 URL 형식을 갖춘 더미 주소를 넣어줍니다.
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://example.supabase.co";
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4YW1wbGUiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYwOTQ1OTIwMCwiZXhwIjoxOTI1MDM1MjAwfQ.example";
 
   return createClient(url, key);
 }
