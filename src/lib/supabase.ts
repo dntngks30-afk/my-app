@@ -4,13 +4,17 @@
 import { createClient } from "@supabase/supabase-js";
 
 // 환경변수에서 Supabase URL과 키를 가져옵니다.
-// 빌드 시점에 값이 없어도 에러가 나지 않도록 기본값을 제공합니다.
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
+// Vercel 빌드 시 환경 변수가 없으면 빈 문자열 사용 (런타임에 체크)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
 // 클라이언트(브라우저)에서 사용하는 Supabase 인스턴스입니다.
 // 주로 로그인, 회원가입, 사용자 데이터 조회 등에 사용됩니다.
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// 빌드 시 환경 변수가 없으면 더미 값으로 초기화 (런타임에 실제 값 필요)
+export const supabase = createClient(
+  supabaseUrl || "https://example.supabase.co", 
+  supabaseAnonKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4YW1wbGUiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYwOTQ1OTIwMCwiZXhwIjoxOTI1MDM1MjAwfQ.example"
+);
 
 // 서버에서 사용하는 Supabase 클라이언트를 생성하는 함수입니다.
 // API 라우트에서 호출 시점에 생성하므로 빌드 타임 에러를 방지합니다.
