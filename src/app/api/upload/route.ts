@@ -4,14 +4,9 @@ import { createClient } from "@supabase/supabase-js";
 // 빌드 시 프리렌더링 방지
 export const dynamic = 'force-dynamic';
 
-// Body size 제한 설정 (50MB)
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '50mb',
-    },
-  },
-};
+// App Router에서는 route segment config로 설정
+export const maxDuration = 60; // 최대 실행 시간 (초)
+export const runtime = 'nodejs'; // Node.js 런타임 사용
 
 // Supabase 클라이언트를 모듈 로드 시점에 생성하지 않고 요청 시점에 생성합니다.
 // 빌드 단계에서 env가 없더라도 모듈 로드가 실패하지 않도록 합니다.
