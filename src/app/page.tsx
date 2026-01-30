@@ -361,35 +361,114 @@ export default function Home() {
           {/* 진행 방식 내용 */}
           {showProcess && (
             <div className="rounded-2xl border border-slate-700 bg-slate-900/50 p-8">
-              <h3 className="mb-6 text-2xl font-bold text-slate-100">진행 방식</h3>
-              <div className="space-y-4">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[#f97316] text-white font-bold">1</div>
-                  <div>
-                    <h4 className="font-semibold text-slate-100">사진 업로드</h4>
-                    <p className="text-sm text-slate-400">정면/측면 전신 사진 2장</p>
+              <h3 className="mb-6 text-2xl font-bold text-slate-100">서비스 진행 방식</h3>
+              <div className="grid gap-6 md:grid-cols-2">
+                {/* 1단계 */}
+                <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-6">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f97316] text-xl font-bold text-white">
+                      1
+                    </div>
+                    <h4 className="text-lg font-bold text-slate-100">사진 업로드</h4>
                   </div>
+                  <p className="mb-3 text-sm leading-relaxed text-slate-300">
+                    정면과 측면 전신 사진 각 1장씩 업로드합니다.
+                  </p>
+                  <ul className="space-y-2 text-xs text-slate-400">
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#f97316]">•</span>
+                      <span>밝은 곳에서 몸에 딱 맞는 옷 착용</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#f97316]">•</span>
+                      <span>머리부터 발끝까지 전신이 보이게</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#f97316]">•</span>
+                      <span>평소 자세 그대로 자연스럽게</span>
+                    </li>
+                  </ul>
                 </div>
-                <div className="flex items-start gap-4">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[#f97316] text-white font-bold">2</div>
-                  <div>
-                    <h4 className="font-semibold text-slate-100">간단한 설문</h4>
-                    <p className="text-sm text-slate-400">생활습관, 운동 경험 등</p>
+
+                {/* 2단계 */}
+                <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-6">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f97316] text-xl font-bold text-white">
+                      2
+                    </div>
+                    <h4 className="text-lg font-bold text-slate-100">간단한 설문</h4>
                   </div>
+                  <p className="mb-3 text-sm leading-relaxed text-slate-300">
+                    생활 습관과 운동 경험에 대한 간단한 질문에 답변합니다.
+                  </p>
+                  <ul className="space-y-2 text-xs text-slate-400">
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#f97316]">•</span>
+                      <span>불편한 부위 체크</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#f97316]">•</span>
+                      <span>일상 자세 습관</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#f97316]">•</span>
+                      <span>운동 경험 및 목표</span>
+                    </li>
+                  </ul>
                 </div>
-                <div className="flex items-start gap-4">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[#f97316] text-white font-bold">3</div>
-                  <div>
-                    <h4 className="font-semibold text-slate-100">전문가 분석</h4>
-                    <p className="text-sm text-slate-400">체형 경향 및 운동 방향 확인</p>
+
+                {/* 3단계 */}
+                <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-6">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f97316] text-xl font-bold text-white">
+                      3
+                    </div>
+                    <h4 className="text-lg font-bold text-slate-100">전문가 분석</h4>
                   </div>
+                  <p className="mb-3 text-sm leading-relaxed text-slate-300">
+                    NASM-CES 전문가가 사진과 설문을 종합 분석합니다.
+                  </p>
+                  <ul className="space-y-2 text-xs text-slate-400">
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#f97316]">•</span>
+                      <span>체형 경향 파악</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#f97316]">•</span>
+                      <span>우선 개선 부위 선정</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#f97316]">•</span>
+                      <span>맞춤 운동 전략 수립</span>
+                    </li>
+                  </ul>
                 </div>
-                <div className="flex items-start gap-4">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[#f97316] text-white font-bold">4</div>
-                  <div>
-                    <h4 className="font-semibold text-slate-100">맞춤 가이드 전달</h4>
-                    <p className="text-sm text-slate-400">24시간 내 PDF 리포트 발송</p>
+
+                {/* 4단계 */}
+                <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-6">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f97316] text-xl font-bold text-white">
+                      4
+                    </div>
+                    <h4 className="text-lg font-bold text-slate-100">가이드 전달</h4>
                   </div>
+                  <p className="mb-3 text-sm leading-relaxed text-slate-300">
+                    24시간 내 맞춤 운동 가이드 PDF를 이메일로 전달합니다.
+                  </p>
+                  <ul className="space-y-2 text-xs text-slate-400">
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#f97316]">•</span>
+                      <span>개인 맞춤 분석 리포트</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#f97316]">•</span>
+                      <span>추천 운동 루틴</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#f97316]">•</span>
+                      <span>주의사항 및 생활습관 가이드</span>
+                    </li>
+                  </ul>
                 </div>
               </div>
             </div>
@@ -399,35 +478,89 @@ export default function Home() {
           {showCorrectionSystem && (
             <div className="rounded-2xl border border-slate-700 bg-slate-900/50 p-8">
               <h3 className="mb-6 text-2xl font-bold text-slate-100">NASM 기반 4단계 교정 시스템</h3>
-              <div className="space-y-4">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-400 font-bold">1</div>
-                  <div>
-                    <h4 className="font-semibold text-slate-100">억제 (Inhibit)</h4>
-                    <p className="text-sm text-slate-400">과긴장 근육 이완</p>
+              <p className="mb-8 text-slate-300">
+                국제 공인 교정운동 전문가 자격(NASM-CES)에서 검증된 체계적 접근법입니다.
+              </p>
+              
+              <div className="grid gap-6 md:grid-cols-2">
+                {/* 1단계: 억제 */}
+                <div className="rounded-xl border border-slate-700 bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-6">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/20 text-xl font-bold text-blue-400">
+                      1
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-100">억제 (Inhibit)</h4>
+                      <p className="text-xs text-slate-400">과긴장 근육 이완</p>
+                    </div>
                   </div>
+                  <p className="text-sm leading-relaxed text-slate-300">
+                    과도하게 긴장되거나 뭉친 근육을 먼저 풀어줍니다.
+                    폼롤러, 마사지볼 등을 활용한 근막 이완 기법으로
+                    근육의 긴장도를 낮추고 정상적인 길이를 회복시킵니다.
+                  </p>
                 </div>
-                <div className="flex items-start gap-4">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-400 font-bold">2</div>
-                  <div>
-                    <h4 className="font-semibold text-slate-100">신장 (Lengthen)</h4>
-                    <p className="text-sm text-slate-400">단축 근육 스트레칭</p>
+
+                {/* 2단계: 신장 */}
+                <div className="rounded-xl border border-slate-700 bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-6">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-500/20 text-xl font-bold text-green-400">
+                      2
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-100">신장 (Lengthen)</h4>
+                      <p className="text-xs text-slate-400">단축 근육 스트레칭</p>
+                    </div>
                   </div>
+                  <p className="text-sm leading-relaxed text-slate-300">
+                    짧아진 근육을 안전하게 늘려줍니다.
+                    정적 스트레칭과 동적 스트레칭을 조합하여
+                    관절의 가동 범위를 회복하고 움직임의 질을 개선합니다.
+                  </p>
                 </div>
-                <div className="flex items-start gap-4">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-400 font-bold">3</div>
-                  <div>
-                    <h4 className="font-semibold text-slate-100">활성화 (Activate)</h4>
-                    <p className="text-sm text-slate-400">약화 근육 강화</p>
+
+                {/* 3단계: 활성화 */}
+                <div className="rounded-xl border border-slate-700 bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-6">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-yellow-500/20 text-xl font-bold text-yellow-400">
+                      3
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-100">활성화 (Activate)</h4>
+                      <p className="text-xs text-slate-400">약화 근육 강화</p>
+                    </div>
                   </div>
+                  <p className="text-sm leading-relaxed text-slate-300">
+                    제대로 사용하지 못했던 근육을 깨웁니다.
+                    안정화 근육과 자세 유지 근육을 활성화하여
+                    올바른 움직임 패턴의 기초를 만듭니다.
+                  </p>
                 </div>
-                <div className="flex items-start gap-4">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-400 font-bold">4</div>
-                  <div>
-                    <h4 className="font-semibold text-slate-100">통합 (Integrate)</h4>
-                    <p className="text-sm text-slate-400">일상 동작 적용</p>
+
+                {/* 4단계: 통합 */}
+                <div className="rounded-xl border border-slate-700 bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-6">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-500/20 text-xl font-bold text-purple-400">
+                      4
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-100">통합 (Integrate)</h4>
+                      <p className="text-xs text-slate-400">일상 동작 적용</p>
+                    </div>
                   </div>
+                  <p className="text-sm leading-relaxed text-slate-300">
+                    개선된 움직임을 실제 생활과 운동에 적용합니다.
+                    스쿼트, 런지 등 기능적 움직임 패턴을 통해
+                    일상에서 자연스럽게 올바른 자세를 유지하도록 합니다.
+                  </p>
                 </div>
+              </div>
+
+              <div className="mt-6 rounded-lg border border-[#f97316]/30 bg-[#f97316]/5 p-4">
+                <p className="text-center text-sm text-slate-300">
+                  💡 이 4단계 시스템은 국제 공인 NASM-CES 교정운동 전문가 자격에서
+                  검증된 과학적 접근법입니다.
+                </p>
               </div>
             </div>
           )}
