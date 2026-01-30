@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { supabase } from '@/lib/supabase';
 import { analyzeSurveyResults } from '@/lib/survey-analyzer';
-import { SurveyReportPDF } from '@/lib/pdf-generator.tsx';
+import { FreeReportPDF, getCTAMessage, CTAConfig } from '@/lib/free-report-pdf';
 import { sendReportEmail } from '@/lib/email-sender';
 
 // 빌드 시 프리렌더링 방지
@@ -44,12 +44,26 @@ export async function POST(request: NextRequest) {
       severity: analysis.overallSeverity,
     });
 
-    // 3. PDF 생성
-    console.log('📄 Generating PDF...');
+    // 3. PDF 생성 (FREE 버전 - 신뢰 확보 + 갈증 유발)
+    console.log('📄 Generating FREE PDF...');
+    
+    // CTA 설정 (무료 사용자용)
+    const ctaConfig: CTAConfig = {
+      analysisStatus: 'limited',
+      confidenceLevel: 'low',
+      hasPhotos: false,
+      photoQualityPassed: false,
+    };
+    
     const pdfBuffer = await renderToBuffer(
-      SurveyReportPDF({ analysis, userEmail: email })
+      FreeReportPDF({ 
+        analysis, 
+        ctaConfig,
+        userEmail: email,
+        userName: name,
+      })
     );
-    console.log('✅ PDF generated:', pdfBuffer.length, 'bytes');
+    console.log('✅ FREE PDF generated:', pdfBuffer.length, 'bytes');
 
     // 4. Supabase에 저장 (선택적 - 환경 변수 있을 때만)
     let assessmentId: string | null = null;
