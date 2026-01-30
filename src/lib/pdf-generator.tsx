@@ -3,6 +3,30 @@ import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/rendere
 import type { AnalysisResult } from '@/types/survey';
 import { POSTURE_TYPE_NAMES } from './survey-analyzer';
 
+// 사진 분석 결과 타입
+export interface PhotoAnalysisResult {
+  qualityCheck: {
+    canAnalyze: boolean;
+    passedChecks: number;
+    totalChecks: number;
+    issues: string[];
+  };
+  analysis: {
+    observations: Array<{
+      area: string;
+      finding: string;
+      visualEvidence: string;
+      functionalImpact: string;
+    }>;
+    summary: string;
+  };
+  recommendations: {
+    exercises: string[];
+    retakeSuggestions: string[];
+  };
+  disclaimer: string;
+}
+
 // 한글 폰트 등록 (Noto Sans KR - Google Fonts)
 // 프로덕션에서는 실제 폰트 파일 경로 필요
 // Font.register({
@@ -585,7 +609,305 @@ export function SurveyReportPDF({ analysis, userEmail }: { analysis: AnalysisRes
         </View>
 
         <View style={styles.footer}>
-          <Text>PostureLab © 2026 | 본 문서는 참고용이며 의료 진단을 대체할 수 없습니다.</Text>
+          <Text>PostureLab © 2026 | 본 문서는 참고용이며 의료 진단을을 대체할 수 없습니다.</Text>
+          <Text style={{ marginTop: 3 }}>생성일시: {new Date().toLocaleString('ko-KR')}</Text>
+        </View>
+      </Page>
+    </Document>
+  );
+}
+
+/**
+ * 사진 분석 기반 PDF 리포트
+ * 전문가의 시각적 평가 결과를 포함
+ */
+export function PhotoAnalysisReportPDF({ 
+  analysis, 
+  userEmail,
+  userName = '고객님',
+  photoUrls 
+}: { 
+  analysis: PhotoAnalysisResult; 
+  userEmail?: string;
+  userName?: string;
+  photoUrls?: { front?: string; side?: string };
+}) {
+  const canAnalyze = analysis.qualityCheck.canAnalyze;
+
+  return (
+    <Document>
+      {/* 페이지 1: 표지 & 품질 체크 */}
+      <Page size="A4" style={styles.page}>
+        <View style={styles.header}>
+          <Text style={styles.logo}>PostureLab Pro</Text>
+          <Text style={styles.subtitle}>사진 기반 체형 관찰 리포트 (전문가 평가)</Text>
+        </View>
+
+        <View style={{ marginTop: 60, marginBottom: 40 }}>
+          <Text style={{ fontSize: 28, fontWeight: 'bold', color: '#1E293B', marginBottom: 10 }}>
+            {userName}님의 체형 관찰 결과
+          </Text>
+          <Text style={{ fontSize: 12, color: '#64748B' }}>
+            사진 기반 시각적 평가 (참고 자료)
+          </Text>
+        </View>
+
+        {/* 사진 품질 체크 결과 */}
+        <View style={canAnalyze ? styles.successCard : styles.warningCard}>
+          <Text style={styles.sectionTitle}>
+            사진 품질 체크 결과
+          </Text>
+          <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#1E293B', marginTop: 10 }}>
+            {canAnalyze ? '✅ 분석 가능' : '⚠️ 분석 제한'}
+          </Text>
+          <Text style={{ fontSize: 10, color: '#475569', marginTop: 8 }}>
+            통과 항목: {analysis.qualityCheck.passedChecks} / {analysis.qualityCheck.totalChecks}
+          </Text>
+        </View>
+
+        {!canAnalyze && analysis.qualityCheck.issues.length > 0 && (
+          <View style={styles.warningCard}>
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#92400E', marginBottom: 8 }}>
+              📸 사진 개선이 필요한 부분
+            </Text>
+            {analysis.qualityCheck.issues.map((issue, index) => (
+              <View key={index} style={styles.listItem}>
+                <Text style={[styles.bullet, { color: '#92400E' }]}>•</Text>
+                <Text style={[styles.listText, { color: '#92400E' }]}>{issue}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {analysis.recommendations.retakeSuggestions.length > 0 && (
+          <View style={styles.card}>
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#334155', marginBottom: 8 }}>
+              💡 재촬영 가이드
+            </Text>
+            {analysis.recommendations.retakeSuggestions.map((suggestion, index) => (
+              <View key={index} style={styles.listItem}>
+                <Text style={styles.bullet}>•</Text>
+                <Text style={styles.listText}>{suggestion}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <View style={styles.dangerCard}>
+          <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#991B1B', marginBottom: 5 }}>
+            ⚠️ 중요 안내
+          </Text>
+          <Text style={{ fontSize: 8, color: '#991B1B', lineHeight: 1.5 }}>
+            본 분석은 사진 기반 시각적 평가이며, 의학적 진단이 아닙니다. 
+            실제 움직임, 생활 습관, 근력 상태에 따라 결과는 달라질 수 있습니다.
+          </Text>
+        </View>
+
+        <View style={styles.footer}>
+          <Text>PostureLab Pro | 사진 기반 체형 관찰 서비스</Text>
+          <Text style={{ marginTop: 3 }}>본 문서는 참고 목적이며, 의료 진단을 대체할 수 없습니다.</Text>
+        </View>
+      </Page>
+
+      {/* 페이지 2: 관찰 결과 (분석 가능한 경우만) */}
+      {canAnalyze && analysis.analysis.observations.length > 0 && (
+        <Page size="A4" style={styles.page}>
+          <View style={styles.header}>
+            <Text style={styles.logo}>PostureLab Pro</Text>
+            <Text style={styles.subtitle}>페이지 2/4</Text>
+          </View>
+
+          <Text style={styles.pageTitle}>체형 관찰 결과</Text>
+
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>전체 요약</Text>
+            <Text style={styles.text}>{analysis.analysis.summary}</Text>
+          </View>
+
+          {analysis.analysis.observations.map((obs, index) => (
+            <View key={index} style={styles.card}>
+              <Text style={styles.boldText}>[{obs.area}]</Text>
+              
+              <Text style={{ fontSize: 9, color: '#64748B', marginTop: 5, marginBottom: 3 }}>
+                관찰 내용
+              </Text>
+              <Text style={styles.text}>{obs.finding}</Text>
+              
+              <Text style={{ fontSize: 9, color: '#64748B', marginTop: 5, marginBottom: 3 }}>
+                시각적 근거
+              </Text>
+              <Text style={[styles.text, { fontSize: 9 }]}>{obs.visualEvidence}</Text>
+              
+              <Text style={{ fontSize: 9, color: '#64748B', marginTop: 5, marginBottom: 3 }}>
+                기능적 영향 (가능성)
+              </Text>
+              <Text style={[styles.text, { fontSize: 9 }]}>{obs.functionalImpact}</Text>
+            </View>
+          ))}
+
+          <View style={styles.footer}>
+            <Text>위 관찰 내용은 경향성이며, 실제 상태와 다를 수 있습니다.</Text>
+          </View>
+        </Page>
+      )}
+
+      {/* 페이지 3: 추천 운동 방향 */}
+      {canAnalyze && analysis.recommendations.exercises.length > 0 && (
+        <Page size="A4" style={styles.page}>
+          <View style={styles.header}>
+            <Text style={styles.logo}>PostureLab Pro</Text>
+            <Text style={styles.subtitle}>페이지 3/4</Text>
+          </View>
+
+          <Text style={styles.pageTitle}>추천 교정운동 방향</Text>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>고려해볼 수 있는 운동 (개념 수준)</Text>
+            <Text style={[styles.text, { marginBottom: 15 }]}>
+              아래는 일반적인 운동 방향입니다. 
+              구체적인 세트, 반복 수, 강도는 개인의 상태에 따라 전문가와 상의하세요.
+            </Text>
+            
+            {analysis.recommendations.exercises.map((exercise, index) => (
+              <View key={index} style={styles.listItem}>
+                <Text style={styles.bullet}>•</Text>
+                <Text style={styles.listText}>{exercise}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.warningCard}>
+            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#92400E', marginBottom: 5 }}>
+              ⚠️ 운동 시 주의사항
+            </Text>
+            <View style={styles.listItem}>
+              <Text style={[styles.bullet, { color: '#92400E' }]}>•</Text>
+              <Text style={[styles.listText, { color: '#92400E', fontSize: 9 }]}>
+                통증이 있는 경우 즉시 중단하고 전문가와 상담하세요.
+              </Text>
+            </View>
+            <View style={styles.listItem}>
+              <Text style={[styles.bullet, { color: '#92400E' }]}>•</Text>
+              <Text style={[styles.listText, { color: '#92400E', fontSize: 9 }]}>
+                정확한 자세가 중요합니다. 잘못된 자세는 오히려 해로울 수 있습니다.
+              </Text>
+            </View>
+            <View style={styles.listItem}>
+              <Text style={[styles.bullet, { color: '#92400E' }]}>•</Text>
+              <Text style={[styles.listText, { color: '#92400E', fontSize: 9 }]}>
+                본인의 페이스에 맞춰 무리하지 않고 진행하세요.
+              </Text>
+            </View>
+            <View style={styles.listItem}>
+              <Text style={[styles.bullet, { color: '#92400E' }]}>•</Text>
+              <Text style={[styles.listText, { color: '#92400E', fontSize: 9 }]}>
+                전문가의 지도 하에 운동하는 것이 가장 안전하고 효과적입니다.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.footer}>
+            <Text>운동 전 전문가와 상담하시는 것을 권장합니다.</Text>
+          </View>
+        </Page>
+      )}
+
+      {/* 페이지 4: 면책사항 및 다음 단계 */}
+      <Page size="A4" style={styles.page}>
+        <View style={styles.header}>
+          <Text style={styles.logo}>PostureLab Pro</Text>
+          <Text style={styles.subtitle}>페이지 4/4</Text>
+        </View>
+
+        <Text style={styles.pageTitle}>분석 한계 및 면책사항</Text>
+
+        <View style={styles.dangerCard}>
+          <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#991B1B', marginBottom: 8 }}>
+            ⚠️ 필독: 본 리포트의 한계
+          </Text>
+          
+          <Text style={[styles.text, { fontSize: 9, color: '#991B1B', marginBottom: 8 }]}>
+            {analysis.disclaimer}
+          </Text>
+          
+          <View style={styles.listItem}>
+            <Text style={[styles.bullet, { color: '#991B1B' }]}>•</Text>
+            <Text style={[styles.listText, { fontSize: 8, color: '#991B1B' }]}>
+              본 분석은 단일 사진을 기반으로 한 시각적 평가입니다.
+            </Text>
+          </View>
+          
+          <View style={styles.listItem}>
+            <Text style={[styles.bullet, { color: '#991B1B' }]}>•</Text>
+            <Text style={[styles.listText, { fontSize: 8, color: '#991B1B' }]}>
+              의학적 진단, 처방, 치료를 목적으로 하지 않으며, 이를 대체할 수 없습니다.
+            </Text>
+          </View>
+          
+          <View style={styles.listItem}>
+            <Text style={[styles.bullet, { color: '#991B1B' }]}>•</Text>
+            <Text style={[styles.listText, { fontSize: 8, color: '#991B1B' }]}>
+              실제 움직임, 생활 습관, 근력 상태는 평가되지 않았습니다.
+            </Text>
+          </View>
+          
+          <View style={styles.listItem}>
+            <Text style={[styles.bullet, { color: '#991B1B' }]}>•</Text>
+            <Text style={[styles.listText, { fontSize: 8, color: '#991B1B' }]}>
+              통증, 질병, 부상이 있는 경우 반드시 의료기관을 방문하세요.
+            </Text>
+          </View>
+          
+          <View style={styles.listItem}>
+            <Text style={[styles.bullet, { color: '#991B1B' }]}>•</Text>
+            <Text style={[styles.listText, { fontSize: 8, color: '#991B1B' }]}>
+              운동 중 발생하는 부상에 대한 책임은 사용자 본인에게 있습니다.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>다음 단계 안내</Text>
+          
+          <View style={styles.card}>
+            <Text style={styles.boldText}>전문가 영상 피드백 서비스</Text>
+            <Text style={styles.text}>
+              전문가가 직접 영상으로 상세한 피드백을 제공합니다.
+            </Text>
+          </View>
+          
+          <View style={styles.card}>
+            <Text style={styles.boldText}>지속적인 관리 프로그램</Text>
+            <Text style={styles.text}>
+              주간 영상 피드백과 월간 재평가를 통해 체계적으로 관리합니다.
+            </Text>
+          </View>
+          
+          <View style={styles.card}>
+            <Text style={styles.boldText}>1:1 화상 상담 (VIP)</Text>
+            <Text style={styles.text}>
+              실시간 Zoom 세션을 통해 직접 소통하며 가이드를 받습니다.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>문의</Text>
+          <Text style={styles.text}>
+            웹사이트: https://posturelab.com
+          </Text>
+          <Text style={styles.text}>
+            이메일: support@posturelab.com
+          </Text>
+          {userEmail && (
+            <Text style={[styles.text, { marginTop: 10 }]}>
+              본 리포트 발송 대상: {userEmail}
+            </Text>
+          )}
+        </View>
+
+        <View style={styles.footer}>
+          <Text>PostureLab Pro © 2026 | 본 문서는 참고용이며 의료 진단을 대체할 수 없습니다.</Text>
           <Text style={{ marginTop: 3 }}>생성일시: {new Date().toLocaleString('ko-KR')}</Text>
         </View>
       </Page>

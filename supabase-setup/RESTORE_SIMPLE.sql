@@ -131,23 +131,7 @@ CREATE POLICY "Users can read own solutions" ON public.solutions FOR SELECT USIN
 DROP POLICY IF EXISTS "Admins can manage all solutions" ON public.solutions;
 CREATE POLICY "Admins can manage all solutions" ON public.solutions FOR ALL USING (EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'));
 
--- 6. Storage Buckets
-INSERT INTO storage.buckets (id, name, public) VALUES ('user-photos', 'user-photos', true) ON CONFLICT (id) DO UPDATE SET public = true;
-INSERT INTO storage.buckets (id, name, public) VALUES ('assessments', 'assessments', true) ON CONFLICT (id) DO UPDATE SET public = true;
-
-DROP POLICY IF EXISTS "Anyone can upload to user-photos" ON storage.objects;
-CREATE POLICY "Anyone can upload to user-photos" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'user-photos');
-
-DROP POLICY IF EXISTS "Anyone can read user-photos" ON storage.objects;
-CREATE POLICY "Anyone can read user-photos" ON storage.objects FOR SELECT USING (bucket_id = 'user-photos');
-
-DROP POLICY IF EXISTS "Anyone can upload to assessments" ON storage.objects;
-CREATE POLICY "Anyone can upload to assessments" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'assessments');
-
-DROP POLICY IF EXISTS "Anyone can read assessments" ON storage.objects;
-CREATE POLICY "Anyone can read assessments" ON storage.objects FOR SELECT USING (bucket_id = 'assessments');
-
--- 7. Functions
+-- 6. Functions
 CREATE OR REPLACE FUNCTION delete_expired_assessments() RETURNS void AS $$
 BEGIN
   DELETE FROM public.assessments WHERE expires_at < NOW();

@@ -413,13 +413,42 @@ export default function FreeSurveyResultPage() {
           </div>
         </div>
 
-        {/* 하단 안내 */}
-        <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-6 text-center">
-          <p className="text-sm text-slate-400">
-            ⚠️ 이 결과는 자가 체크 기반이며, 참고 정보로만 활용하세요.
-            <br />
-            통증이나 질병이 있다면 의료기관을 방문해주세요.
-          </p>
+        {/* 신뢰 요소 */}
+        <div className="rounded-xl border border-slate-700 bg-gradient-to-br from-slate-900 to-slate-800 p-6">
+          <div className="mb-4 text-center">
+            <h3 className="text-lg font-bold text-slate-100">전문가 기반 분석 시스템</h3>
+          </div>
+          
+          <div className="mb-4 flex flex-wrap items-center justify-center gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🏆</span>
+              <span className="text-slate-300">NASM-CES 인증</span>
+            </div>
+            <div className="h-4 w-px bg-slate-700" />
+            <div className="flex items-center gap-2">
+              <span className="text-lg">👥</span>
+              <span className="text-slate-300">1,000명+ 분석</span>
+            </div>
+            <div className="h-4 w-px bg-slate-700" />
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🔒</span>
+              <span className="text-slate-300">개인정보 보호</span>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+            <div className="flex items-start gap-3">
+              <span className="text-xl">⚠️</span>
+              <div>
+                <h4 className="font-semibold text-red-400">중요 안내</h4>
+                <p className="mt-1 text-xs text-slate-300 leading-relaxed">
+                  본 서비스는 <strong>의료 행위가 아니며</strong>, 운동 가이드 목적으로만 제공됩니다.
+                  질병, 통증, 부상이 있는 경우 반드시 의료기관을 방문하세요.
+                  모든 분석 결과는 "경향" 또는 "가능성"을 나타내며, 의학적 진단을 대체할 수 없습니다.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* 홈으로 버튼 */}
