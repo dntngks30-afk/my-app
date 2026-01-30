@@ -667,8 +667,8 @@ export default function Home() {
                       1
                     </div>
                     <div>
-                      <h4 className="mb-1 font-semibold text-slate-100">간단한 설문</h4>
-                      <p className="text-sm text-slate-400">3분이면 충분해요</p>
+                      <h4 className="mb-1 font-semibold text-slate-100">사진 등록</h4>
+                      <p className="text-sm text-slate-400">정면/측면 사진 2장</p>
                     </div>
                   </div>
                   
@@ -678,19 +678,30 @@ export default function Home() {
                       2
                     </div>
                     <div>
+                      <h4 className="mb-1 font-semibold text-slate-100">간단한 설문</h4>
+                      <p className="text-sm text-slate-400">3분이면 충분해요</p>
+                    </div>
+                  </div>
+                  
+                  {/* Step 3 */}
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-green-500/20 text-lg font-bold text-green-400">
+                      3
+                    </div>
+                    <div>
                       <h4 className="mb-1 font-semibold text-slate-100">즉시 결과 확인</h4>
                       <p className="text-sm text-slate-400">기본 자세 경향 분석</p>
                     </div>
                   </div>
                   
-                  {/* Step 3 */}
+                  {/* Step 4: Upgrade */}
                   <div className="flex items-start gap-4">
                     <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[#f97316]/20 text-lg font-bold text-[#f97316]">
                       +
                     </div>
                     <div>
                       <h4 className="mb-1 font-semibold text-slate-100">원하면 업그레이드</h4>
-                      <p className="text-sm text-slate-400">사진 분석 + 상세 가이드</p>
+                      <p className="text-sm text-slate-400">상세 리포트 + 운동 가이드</p>
                     </div>
                   </div>
                 </div>
