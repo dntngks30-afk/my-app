@@ -6,7 +6,7 @@ import { DESCRIPTIONS } from '@/features/movement-test/copy/descriptions';
 
 import { useRouter } from 'next/navigation';
 import { ALL_QUESTIONS } from '@/features/movement-test/data/questions';
-import { calculateTestResult } from '@/lib/movement-test/scoring-logic';
+import { calculateTestResult } from '@/features/movement-test/utils/scoring';
 import { getSubTypeContent } from '@/features/movement-test/data/results/type-descriptions';
 import { getConfidenceCopy } from '@/features/movement-test/utils/getConfidenceCopy';
 import { createResultStory } from '@/features/movement-test/utils/getResultStory';
