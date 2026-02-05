@@ -1,0 +1,108 @@
+import type { Question } from '@/types/movement-test';
+
+export const questionsPartA: Question[] = [
+  {
+    id: 1,
+    type: 'multiple',
+    category: '자세',
+    question: '가만히 서 있을 때 가장 먼저 느껴지는 감각은?',
+    subTypeWeight: false,
+    options: [
+      { id: 'q1_a', text: '몸이 전체적으로 무겁고 굳어 있음', type: '담직', score: 3 },
+      { id: 'q1_b', text: '자세가 자꾸 바뀌고 불안함', type: '날림', score: 3 },
+      { id: 'q1_c', text: '특정 부위에 힘이 계속 들어감', type: '버팀', score: 3 },
+      { id: 'q1_d', text: '중심이 잘 안 잡히는 느낌', type: '흘림', score: 3 },
+    ],
+  },
+  {
+    id: 2,
+    type: 'multiple',
+    category: '운동선호',
+    question: '스트레칭 후 가장 자주 드는 느낌은?',
+    subTypeWeight: false,
+    options: [
+      { id: 'q2_a', text: '잠깐 좋아졌다가 금방 돌아옴', type: '담직', score: 3 },
+      { id: 'q2_b', text: '시원하지만 안정감은 없음', type: '날림', score: 3 },
+      { id: 'q2_c', text: '늘린 부위만 더 민감해짐', type: '버팀', score: 3 },
+      { id: 'q2_d', text: '시원한데 힘이 빠지는 느낌', type: '흘림', score: 3 },
+    ],
+  },
+  {
+    id: 3,
+    type: 'multiple',
+    category: '자세',
+    question: '깊게 숨 쉬라는 말을 들으면?',
+    subTypeWeight: true,
+    options: [
+      { id: 'q3_a', text: '어디로 숨을 넣어야 할지 모르겠다', type: '담직', score: 3, subTypeModifier: '호흡잠김' },
+      { id: 'q3_b', text: '숨은 쉬는데 몸이 같이 안 움직인다', type: '흘림', score: 3 },
+      { id: 'q3_c', text: '어깨나 가슴만 들썩인다', type: '버팀', score: 3, subTypeModifier: '목어깨과로' },
+      { id: 'q3_d', text: '숨은 잘 쉬는데 자세가 흐트러진다', type: '날림', score: 3 },
+    ],
+  },
+  {
+    id: 4,
+    type: 'multiple',
+    category: '운동선호',
+    question: '운동 전 몸 상태는 보통?',
+    subTypeWeight: false,
+    options: [
+      { id: 'q4_a', text: '이미 굳어 있음', type: '담직', score: 3 },
+      { id: 'q4_b', text: '가볍지만 불안정', type: '날림', score: 3 },
+      { id: 'q4_c', text: '한 부위가 뻐근함', type: '버팀', score: 3 },
+      { id: 'q4_d', text: '힘은 있는데 정리가 안 됨', type: '흘림', score: 3 },
+    ],
+  },
+  {
+    id: 5,
+    type: 'multiple',
+    category: '운동선호',
+    question: '운동을 시작하면 가장 먼저 나타나는 반응은?',
+    subTypeWeight: false,
+    options: [
+      { id: 'q5_a', text: '몸이 잘 안 풀린다', type: '담직', score: 3 },
+      { id: 'q5_b', text: '동작이 커지고 빨라진다', type: '날림', score: 3 },
+      { id: 'q5_c', text: '특정 부위에 힘이 몰린다', type: '버팀', score: 3 },
+      { id: 'q5_d', text: '동작이 흐트러진다', type: '흘림', score: 3 },
+    ],
+  },
+  {
+    id: 6,
+    type: 'multiple',
+    category: '통증불편',
+    question: '운동 후 다음 날 몸 상태는?',
+    subTypeWeight: false,
+    options: [
+      { id: 'q6_a', text: '전체적으로 묵직함', type: '담직', score: 3 },
+      { id: 'q6_b', text: '여기저기 쑤심', type: '날림', score: 3 },
+      { id: 'q6_c', text: '늘 같은 부위만 아픔', type: '버팀', score: 3 },
+      { id: 'q6_d', text: '힘이 빠진 느낌', type: '흘림', score: 3 },
+    ],
+  },
+  {
+    id: 7,
+    type: 'multiple',
+    category: '일상동작',
+    question: '장시간 앉아 있다 일어나면?',
+    subTypeWeight: false,
+    options: [
+      { id: 'q7_a', text: '몸이 잘 안 펴진다', type: '담직', score: 3 },
+      { id: 'q7_b', text: '휘청거린다', type: '날림', score: 3 },
+      { id: 'q7_c', text: '허리나 목이 먼저 아프다', type: '버팀', score: 3 },
+      { id: 'q7_d', text: '균형이 잘 안 잡힌다', type: '흘림', score: 3 },
+    ],
+  },
+  {
+    id: 8,
+    type: 'multiple',
+    category: '자세',
+    question: "본인이 느끼는 '내 몸 문제'는?",
+    subTypeWeight: false,
+    options: [
+      { id: 'q8_a', text: '뻣뻣함', type: '담직', score: 3 },
+      { id: 'q8_b', text: '불안정함', type: '날림', score: 3 },
+      { id: 'q8_c', text: '한 부위 통증', type: '버팀', score: 3 },
+      { id: 'q8_d', text: '효율 없음', type: '흘림', score: 3 },
+    ],
+  },
+];

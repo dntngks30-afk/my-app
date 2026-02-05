@@ -21,7 +21,7 @@ export default function SurveyResultPage() {
     const responsesStr = localStorage.getItem('survey_responses');
     
     if (!responsesStr) {
-      router.push('/survey');
+      router.push('/movement-test/survey');
       return;
     }
     
@@ -31,7 +31,7 @@ export default function SurveyResultPage() {
       setAnalysis(result);
     } catch (error) {
       console.error('분석 에러:', error);
-      router.push('/survey');
+      router.push('/movement-test/survey');
     } finally {
       setLoading(false);
     }
