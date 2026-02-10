@@ -1,6 +1,6 @@
 /**
  * 움직임 타입 테스트 시스템 - TypeScript 인터페이스 정의
- * 
+ *
  * 이 파일은 움직임 타입 테스트의 모든 데이터 구조를 정의합니다.
  * - 질문 및 선택지 타입
  * - 답변 및 결과 타입
@@ -24,7 +24,7 @@ export type QuestionType = 'multiple' | 'binary';
 /**
  * 질문 카테고리
  */
-export type QuestionCategory = 
+export type QuestionCategory =
   | '보행'
   | '자세'
   | '운동선호'
@@ -43,16 +43,16 @@ export type QuestionCategory =
 export interface Option {
   /** 선택지 고유 ID (예: 'q1_a', 'q1_b') */
   id: string;
-  
+
   /** 선택지 텍스트 */
   text: string;
-  
+
   /** 이 선택지가 부여하는 타입 */
   type: MovementType;
-  
+
   /** 점수 (1-5, 일반적으로 3) */
   score: number;
-  
+
   /** 서브타입 수정자 (선택적) */
   subTypeModifier?: string;
 }
@@ -63,25 +63,25 @@ export interface Option {
 export interface Question {
   /** 질문 고유 ID */
   id: number;
-  
+
   /** 질문 타입 */
   type: QuestionType;
-  
+
   /** 질문 텍스트 */
   question: string;
-  
+
   /** 질문 카테고리 */
   category: QuestionCategory;
-  
+
   /** 4지선다 선택지 (multiple 타입인 경우) */
   options?: Option[];
-  
+
   /** 서브타입 가중치 질문 여부 */
   subTypeWeight?: boolean;
-  
+
   /** 불균형 플래그 (binary 타입인 경우) */
   imbalanceFlag?: string;
-  
+
   /** 도움말 텍스트 (선택적) */
   helpText?: string;
 }
@@ -91,21 +91,31 @@ export interface Question {
 // ============================================
 
 /**
- * 4지선다 답변 인터페이스
+ * 4지선다 답변 인터페이스 (✅ 최대 2개 선택 지원)
+ *
+ * - selectedOptionIds: 선택 순서가 중요 (첫 번째=1순위, 두 번째=2순위)
+ * - selectedTypes: 선택된 옵션의 타입을 순서대로 저장
+ * - score: 가중치가 반영된 총점(1순위 100%, 2순위 50%)
+ *
+ * 주의:
+ * - UI에서 최대 2개까지만 선택되도록 제한하는 것을 권장
  */
 export interface MultipleAnswer {
   /** 질문 ID */
   questionId: number;
-  
-  /** 선택된 옵션 ID */
-  selectedOptionId: string;
-  
-  /** 선택된 타입 */
-  selectedType: MovementType;
-  
-  /** 획득 점수 */
+
+  /** ✅ 선택된 옵션 ID들 (순서 중요: [1순위, 2순위]) */
+  selectedOptionIds: string[];
+
+  /** ✅ 선택된 타입들 (selectedOptionIds와 동일한 순서) */
+  selectedTypes: MovementType[];
+
+  /**
+   * ✅ 획득 점수 (가중치 반영 총점)
+   * 예: 1순위 opt.score * 1.0 + 2순위 opt.score * 0.5
+   */
   score: number;
-  
+
   /** 답변 시간 */
   answeredAt: Date;
 }
@@ -116,13 +126,13 @@ export interface MultipleAnswer {
 export interface BinaryAnswer {
   /** 질문 ID */
   questionId: number;
-  
+
   /** 답변 (true: 예, false: 아니오) */
   answer: boolean;
-  
+
   /** 불균형 플래그 */
   imbalanceFlag?: string;
-  
+
   /** 답변 시간 */
   answeredAt: Date;
 }
@@ -177,22 +187,22 @@ export type SubType =
 export interface TestResult {
   /** 메인 타입 */
   mainType: MovementType;
-  
+
   /** 서브타입 */
   subType: SubType;
-  
+
   /** 타입별 점수 */
   typeScores: TypeScores;
-  
+
   /** 신뢰도 점수 (0-100) */
   confidence: number;
-  
+
   /** 테스트 완료 시간 */
   completedAt: Date | string;
-  
+
   /** 사용자 응답 배열 */
   answers: Answer[];
-  
+
   /** 총 소요 시간 (초) - 선택 사항 */
   totalDuration?: number;
 }
@@ -207,31 +217,31 @@ export interface TestResult {
 export interface Exercise {
   /** 운동 고유 ID */
   id: string;
-  
+
   /** 운동 이름 */
   name: string;
-  
+
   /** 운동 설명 */
   description: string;
-  
+
   /** 세트 수 (선택적) */
   sets?: string;
-  
+
   /** 반복 횟수 (선택적) */
   reps?: string;
-  
+
   /** 빈도 (예: '주 3회') (선택적) */
   frequency?: string;
-  
+
   /** 운동 카테고리 */
   category?: 'stretching' | 'strengthening' | 'mobility' | 'stability';
-  
+
   /** 우선순위 (1-5, 1이 가장 높음) */
   priority?: number;
-  
+
   /** 영상 링크 (선택적) */
   videoUrl?: string;
-  
+
   /** 이미지 URL (선택적) */
   imageUrl?: string;
 }
@@ -242,16 +252,16 @@ export interface Exercise {
 export interface ImbalanceInfo {
   /** 불균형 플래그 */
   flag: string;
-  
+
   /** 불균형 이름 */
   name: string;
-  
+
   /** 설명 */
   description: string;
-  
+
   /** 심각도 (low, medium, high) */
   severity: 'low' | 'medium' | 'high';
-  
+
   /** 관련 운동 ID 목록 */
   relatedExercises: string[];
 }
@@ -266,43 +276,43 @@ export interface ImbalanceInfo {
 export interface TypeDescription {
   /** 메인 타입 */
   mainType: MovementType;
-  
+
   /** 서브타입 */
   subType: SubType;
-  
+
   /** 타입 제목 (예: '안정적인 지지형') */
   title: string;
-  
+
   /** 부제목 (한 줄 요약) */
   subtitle: string;
-  
+
   /** 상세 설명 (2-3 문단) */
   description: string;
-  
+
   /** 주요 특징 목록 */
   characteristics: string[];
-  
+
   /** 강점 */
   strengths: string[];
-  
+
   /** 개선 필요 영역 */
   weaknesses: string[];
-  
+
   /** 추천 운동 목록 */
   recommendedExercises: Exercise[];
-  
+
   /** 피해야 할 운동/동작 */
   avoidExercises: string[];
-  
+
   /** 생활습관 조언 */
   lifestyleTips: string[];
-  
+
   /** 유명인 예시 (선택적) */
   celebrities?: string[];
-  
+
   /** 타입 색상 (hex) */
   color: string;
-  
+
   /** 타입 아이콘 이모지 */
   icon: string;
 }
@@ -317,25 +327,25 @@ export interface TypeDescription {
 export interface TestState {
   /** 현재 페이지 번호 (0부터 시작) */
   currentPage: number;
-  
+
   /** 전체 페이지 수 */
   totalPages: number;
-  
+
   /** 4지선다 답변 목록 */
   multipleAnswers: MultipleAnswer[];
-  
+
   /** 예/아니오 답변 목록 */
   binaryAnswers: BinaryAnswer[];
-  
+
   /** 테스트 결과 (완료 시) */
   result: TestResult | null;
-  
+
   /** 테스트 완료 여부 */
   isComplete: boolean;
-  
+
   /** 테스트 시작 시간 */
   startedAt: Date | null;
-  
+
   /** 현재 진행률 (0-100) */
   progress: number;
 }
@@ -346,10 +356,10 @@ export interface TestState {
 export interface PageValidation {
   /** 페이지 완료 여부 */
   isValid: boolean;
-  
+
   /** 미답변 질문 ID 목록 */
   unansweredQuestions: number[];
-  
+
   /** 오류 메시지 */
   errorMessage?: string;
 }
@@ -364,13 +374,13 @@ export interface PageValidation {
 export interface SavedProgress {
   /** 저장 버전 (마이그레이션용) */
   version: string;
-  
+
   /** 테스트 상태 */
   state: TestState;
-  
+
   /** 저장 시간 */
   savedAt: Date;
-  
+
   /** 만료 시간 (선택적) */
   expiresAt?: Date;
 }
@@ -383,7 +393,7 @@ export interface SavedProgress {
  * 답변 타입 가드: MultipleAnswer 확인
  */
 export function isMultipleAnswer(answer: Answer): answer is MultipleAnswer {
-  return 'selectedOptionId' in answer;
+  return 'selectedOptionIds' in answer;
 }
 
 /**
@@ -417,19 +427,19 @@ export function isBinaryQuestion(question: Question): question is Question & { i
 export interface TestConfig {
   /** 한 페이지당 질문 수 */
   questionsPerPage: number;
-  
+
   /** 4지선다 질문 수 */
   multipleQuestionCount: number;
-  
+
   /** 예/아니오 질문 수 */
   binaryQuestionCount: number;
-  
+
   /** localStorage 키 */
   storageKey: string;
-  
+
   /** 진행 상황 저장 간격 (ms) */
   autoSaveInterval: number;
-  
+
   /** 진행 상황 만료 시간 (일) */
   progressExpiryDays: number;
 }

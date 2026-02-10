@@ -1,85 +1,76 @@
-// Supabase 클라이언트 설정 파일입니다.
-// 클라이언트(브라우저)와 서버에서 각각 사용할 수 있는 인스턴스를 제공합니다.
+// Supabase 클라이언트 설정 파일
+// - 브라우저(클라): supabaseBrowser / supabase
+// - 서버(API/Admin): getServerSupabaseAdmin()
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-// 환경변수에서 Supabase URL과 키를 가져옵니다.
-// Vercel 빌드 시 환경 변수가 없으면 빈 문자열 사용 (런타임에 체크)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+// 브라우저용(anon) env
+const publicUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const publicAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
-// 클라이언트(브라우저)에서 사용하는 Supabase 인스턴스입니다.
-// 주로 로그인, 회원가입, 사용자 데이터 조회 등에 사용됩니다.
-// 빌드 시 환경 변수가 없으면 더미 값으로 초기화 (런타임에 실제 값 필요)
-export const supabase = createClient(
-  supabaseUrl || "https://example.supabase.co", 
-  supabaseAnonKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4YW1wbGUiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYwOTQ1OTIwMCwiZXhwIjoxOTI1MDM1MjAwfQ.example"
-);
+// 서버용(service role) env  (절대 NEXT_PUBLIC로 두면 안 됨)
+const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
-// 서버에서 사용하는 Supabase 클라이언트를 생성하는 함수입니다.
-// API 라우트에서 호출 시점에 생성하므로 빌드 타임 에러를 방지합니다.
-export function getServerSupabase() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    "";
-  
-  if (!url || !key) {
-    console.error("❌ Supabase 환경 변수가 설정되지 않았습니다:", { 
-      has_url: !!url, 
-      has_key: !!key,
-      has_service_key: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-      has_anon_key: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    });
-    throw new Error("Supabase 환경 변수가 설정되지 않았습니다.");
+// ------------------------------
+// 1) 브라우저/클라이언트용
+// ------------------------------
+// ⚠️ 빌드타임에 env가 비어있을 수 있어서, "더미 키"로 속이는 대신
+//    런타임에 실제 env가 없으면 에러를 내게 한다.
+//    (더미로 만들면 조용히 잘못된 동작을 함)
+declare global {
+  // eslint-disable-next-line no-var
+  var __supabaseBrowser__: SupabaseClient | undefined;
+}
+
+function createBrowserClient() {
+  if (!publicUrl || !publicAnon) {
+    // 브라우저에서 실제로 auth/query 시점에 바로 원인이 보이도록
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY");
   }
-  
-  return createClient(url, key);
+  return createClient(publicUrl, publicAnon, {
+    auth: { persistSession: true, autoRefreshToken: true },
+  });
 }
 
-// 데이터베이스 테이블 타입 정의 (TypeScript용)
-// 실제 Supabase 스키마와 일치하도록 필요에 따라 수정하세요.
-export type UserRole = "user" | "admin";
+// ✅ 너의 기존 코드들이 기대하는 export 이름
+export const supabaseBrowser: SupabaseClient =
+  typeof window === "undefined"
+    ? // SSR에서도 anon으로 생성 (단, env 없으면 throw)
+      createBrowserClient()
+    : (globalThis.__supabaseBrowser__ ?? createBrowserClient());
 
-export interface UserProfile {
-  id: string;
-  email: string;
-  role: UserRole;
-  created_at: string;
+if (typeof window !== "undefined") {
+  globalThis.__supabaseBrowser__ = supabaseBrowser;
 }
 
-export interface Request {
-  id: string;
-  user_id: string | null;
-  front_url: string | null;
-  side_url: string | null;
-  status: "pending" | "paid" | "analyzing" | "completed";
-  diagnoses: string[] | null;
-  created_at: string;
-  updated_at: string | null;
+// ✅ 기존에 import { supabase } 쓰던 코드 호환 유지
+export const supabase = supabaseBrowser;
+
+// ------------------------------
+// 2) 서버/API/Admin용 (service role)
+// ------------------------------
+export function getServerSupabaseAdmin(): SupabaseClient {
+  const url = publicUrl || process.env.SUPABASE_URL || "";
+  if (!url || !serviceRole) {
+    console.error("❌ Missing Supabase Server env", {
+      hasUrl: !!url,
+      hasServiceRole: !!serviceRole,
+      hasPublicUrl: !!publicUrl,
+      hasPublicAnon: !!publicAnon,
+    });
+    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY (server/admin)");
+  }
+
+  return createClient(url, serviceRole, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
 
-export interface Payment {
-  id: string;
-  user_id: string;
-  request_id: string;
-  amount: number;
-  order_id: string;
-  payment_key: string;
-  status: "pending" | "completed" | "failed" | "cancelled";
-  created_at: string;
-}
-
-export interface Solution {
-  id: string;
-  user_id: string;
-  request_id: string;
-  diagnoses: string[];
-  inhibit_content: string;
-  lengthen_content: string;
-  activate_content: string;
-  integrate_content: string;
-  expert_notes: string;
-  created_at: string;
+// ------------------------------
+// (옵션) 기존 코드 호환용: getServerSupabase()
+// ------------------------------
+// 네 프로젝트 어딘가에서 getServerSupabase()를 쓰고 있을 수도 있어서 유지
+export function getServerSupabase() {
+  // server/admin 의도면 service role, 아니면 anon fallback은 하지 않는 게 안전
+  return getServerSupabaseAdmin();
 }

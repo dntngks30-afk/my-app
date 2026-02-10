@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ignore snapshots/cursor
+_backup_*
+app__DISABLED__*
+.cursor/skills/
+

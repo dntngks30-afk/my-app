@@ -1,6 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { 
+  Geist, 
+  Geist_Mono, 
+  Noto_Sans_KR, 
+  IBM_Plex_Sans_KR, 
+  Gowun_Dodum,
+  Gothic_A1,
+  Nanum_Gothic,
+  Jua,
+  Do_Hyeon,
+  Nanum_Pen_Script
+} from "next/font/google";
 import "./globals.css";
+import { PresetProvider } from "@/components/PresetProvider";
+import FontSwitcher from "@/components/FontSwitcher";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -10,6 +23,56 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+const notoSansKR = Noto_Sans_KR({
+  variable: "--font-sans-noto",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const ibmPlexSansKR = IBM_Plex_Sans_KR({
+  variable: "--font-sans-ibm",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const gowunDodum = Gowun_Dodum({
+  variable: "--font-display-gowun",
+  subsets: ["latin"],
+  weight: ["400"],
+});
+
+// 본문 폰트 후보 (산스)
+const gothicA1 = Gothic_A1({
+  variable: "--font-sans-gothicA1",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const nanumGothic = Nanum_Gothic({
+  variable: "--font-sans-nanumGothic",
+  subsets: ["latin"],
+  weight: ["400", "700", "800"],
+});
+
+// 타이틀 폰트 후보 (디스플레이)
+const jua = Jua({
+  variable: "--font-display-jua",
+  subsets: ["latin"],
+  weight: ["400"],
+});
+
+const doHyeon = Do_Hyeon({
+  variable: "--font-display-dohyeon",
+  subsets: ["latin"],
+  weight: ["400"],
+});
+
+const nanumPenScript = Nanum_Pen_Script({
+  variable: "--font-display-nanumPen",
+  subsets: ["latin"],
+  weight: ["400"],
 });
 
 const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://posturelab.com";
@@ -91,16 +154,37 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko">
+    <html 
+      lang="ko"
+      className={`${geistSans.variable} ${geistMono.variable} ${notoSansKR.variable} ${ibmPlexSansKR.variable} ${gowunDodum.variable} ${gothicA1.variable} ${nanumGothic.variable} ${jua.variable} ${doHyeon.variable} ${nanumPenScript.variable}`}
+    >
       <head>
         <link rel="icon" href="/favicon.ico" />
         <meta name="theme-color" content="#0f172a" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
+        
+        {/* 카카오톡 SDK */}
+        <script 
+          src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.0/kakao.min.js"
+          integrity="sha384-l+xbElFSnPZ2rOaPrU//2FF5B4LB8FiX5q4fXYTlfcG4PGpMkE1vcL7kNXI6Cci0"
+          crossOrigin="anonymous"
+          async
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if (window.Kakao && !window.Kakao.isInitialized()) {
+                window.Kakao.init('${process.env.NEXT_PUBLIC_KAKAO_JS_KEY || 'YOUR_KAKAO_JS_KEY'}');
+              }
+            `
+          }}
+        />
       </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
+      <body className="antialiased">
+        <PresetProvider>
+          <FontSwitcher />
+          {children}
+        </PresetProvider>
       </body>
     </html>
   );
