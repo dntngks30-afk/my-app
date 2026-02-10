@@ -71,10 +71,10 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 2. 마지막 검사 조회
+    // 2. 마지막 검사(attempt) 조회
     const { data: lastTest } = await supabase
-      .from('movement_test_results')
-      .select('id, completed_at, is_retest')
+      .from('movement_test_attempts')
+      .select('id, completed_at')
       .eq('user_id', userId)
       .order('completed_at', { ascending: false })
       .limit(1)
@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { data: lastTest } = await supabase
-      .from('movement_test_results')
+      .from('movement_test_attempts')
       .select('id, completed_at')
       .eq('user_id', userId)
       .order('completed_at', { ascending: false })
