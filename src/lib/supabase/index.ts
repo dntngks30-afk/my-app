@@ -1,2 +1,3 @@
-export { supabaseBrowser } from './browser';
-export { getServerSupabaseAdmin } from './admin';
+import { getServerSupabaseAdmin } from '@/lib/supabase/admin';
+
+

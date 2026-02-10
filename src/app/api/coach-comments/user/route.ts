@@ -1,35 +1,23 @@
 /**
  * 사용자 코치 코멘트 목록 조회 API
- * 
- * GET /api/coach-comments/user/[userId]
- * 
- * 특정 사용자의 모든 코치 코멘트를 조회합니다.
+ *
+ * GET /api/coach-comments/user
+ *
+ * PR3: 서버가 세션으로 user_id 확정. userId 파라미터 제거.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { requireUser } from '@/lib/auth/server';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { userId: string } }
-) {
+export async function GET(_request: NextRequest) {
   try {
-    const { userId } = params;
+    const { supabase, user, response } = await requireUser();
+    if (response) return response; // 401
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: '사용자 ID가 필요합니다.' },
-        { status: 400 }
-      );
-    }
-
-    const supabase = getServerSupabaseAdmin();
-
-    // 사용자의 모든 코치 코멘트 조회 (최신순)
     const { data: comments, error } = await supabase
       .from('coach_comments')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -42,7 +30,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      comments: (comments || []).map((comment) => ({
+      comments: (comments || []).map((comment: any) => ({
         id: comment.id,
         userId: comment.user_id,
         originalResultId: comment.original_result_id,

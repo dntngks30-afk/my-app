@@ -1,23 +1,23 @@
-/**
- * Movement Test - 결과 저장 API
- * 
- * POST /api/movement-test/save-result
- * 
- * 테스트 결과를 DB에 저장하고 공유 가능한 share_id 반환
- */
-
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { requireUser } from '@/lib/auth/server';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const SCORING_VERSION = process.env.MOVEMENT_SCORING_VERSION ?? '1.0';
+
+const SHARE_ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function generateShareId(len = 8): string {
+  let id = '';
+  for (let i = 0; i < len; i++) {
+    id += SHARE_ID_CHARS[Math.floor(Math.random() * SHARE_ID_CHARS.length)];
+  }
+  return id;
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const { supabase, user, response } = await requireUser();
+    if (response) return response;
 
+    const body = await request.json();
     const {
       mainType,
       subType,
@@ -27,57 +27,68 @@ export async function POST(request: NextRequest) {
       imbalanceSeverity,
       biasMainType,
       completedAt,
-      durationSeconds
+      durationSeconds,
     } = body;
 
-    // 필수 필드 검증
     if (!mainType || !subType || confidence === undefined || !typeScores) {
-      return NextResponse.json(
-        { error: '필수 필드가 누락되었습니다.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '필수 필드가 누락되었습니다.' }, { status: 400 });
     }
 
-    // DB에 저장
-    const { data, error } = await supabase
-      .from('movement_test_results')
-      .insert({
-        main_type: mainType,
-        sub_type: subType,
-        confidence: confidence,
-        type_scores: typeScores,
-        imbalance_yes_count: imbalanceYesCount || 0,
-        imbalance_severity: imbalanceSeverity || 'none',
-        bias_main_type: biasMainType || null,
-        completed_at: completedAt || new Date().toISOString(),
-        duration_seconds: durationSeconds || null
-      })
-      .select('id, share_id')
-      .single();
+    let lastError: unknown = null;
 
-    if (error) {
-      console.error('Failed to save result:', error);
-      return NextResponse.json(
-        { error: '결과 저장에 실패했습니다.' },
-        { status: 500 }
-      );
+    for (let i = 0; i < 5; i++) {
+      const shareId = generateShareId(8);
+
+      const { data, error } = await supabase
+        .from('movement_test_attempts')
+        .insert({
+          user_id: user.id,
+          scoring_version: SCORING_VERSION,
+          share_id: shareId,
+          main_type: mainType,
+          sub_type: subType,
+          confidence: Number(confidence),
+          type_scores: typeScores,
+          imbalance_yes_count: imbalanceYesCount ?? 0,
+          imbalance_severity: imbalanceSeverity ?? null,
+          bias_main_type: biasMainType || null,
+          completed_at: completedAt || new Date().toISOString(),
+          duration_seconds: durationSeconds ?? null,
+        })
+        .select('id, share_id, scoring_version')
+        .single();
+
+      if (!error && data) {
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.nextUrl.origin;
+        const shareUrl = `${baseUrl}/movement-test/shared/${data.share_id}`;
+
+        return NextResponse.json({
+          success: true,
+          id: data.id,
+          shareId: data.share_id,
+          shareUrl,
+          scoringVersion: data.scoring_version,
+        });
+      }
+
+      lastError = error;
+      const msg = (error as any)?.message ?? '';
+      const code = (error as any)?.code ?? '';
+      const isUnique =
+        code === '23505' ||
+        msg.toLowerCase().includes('duplicate') ||
+        msg.toLowerCase().includes('unique');
+
+      if (!isUnique) {
+        console.error('Failed to save attempt:', error);
+        return NextResponse.json({ error: '결과 저장에 실패했습니다.' }, { status: 500 });
+      }
     }
 
-    // 공유 URL 생성
-    const shareUrl = `${process.env.NEXT_PUBLIC_BASE_URL || request.nextUrl.origin}/movement-test/shared/${data.share_id}`;
-
-    return NextResponse.json({
-      success: true,
-      id: data.id,
-      shareId: data.share_id,
-      shareUrl
-    });
-
+    console.error('Failed to save attempt after retries:', lastError);
+    return NextResponse.json({ error: '결과 저장에 실패했습니다.' }, { status: 500 });
   } catch (error) {
     console.error('Save result error:', error);
-    return NextResponse.json(
-      { error: '서버 오류가 발생했습니다.' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
 }

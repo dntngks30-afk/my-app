@@ -1,80 +1,42 @@
-/**
- * 사용자의 최신 운동 검사 결과 조회 API
- * 
- * GET /api/movement-test/get-latest-by-user
- * 
- * 인증된 사용자의 최신 운동 검사 결과를 조회합니다.
- */
-
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { requireUser } from '@/lib/auth/server';
 
-/**
- * 요청에서 사용자 ID 추출 (Supabase Auth 사용)
- */
-async function getCurrentUserId(req: NextRequest): Promise<string | null> {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  const supabase = getServerSupabaseAdmin();
-
+export async function GET(_req: NextRequest) {
   try {
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser(token);
+    const { supabase, user, response } = await requireUser();
+    if (response) return response;
 
-    if (error || !user) {
-      return null;
-    }
-
-    return user.id;
-  } catch (error) {
-    console.error('User authentication error:', error);
-    return null;
-  }
-}
-
-export async function GET(req: NextRequest) {
-  try {
-    // 사용자 인증 확인
-    const userId = await getCurrentUserId(req);
-    if (!userId) {
-      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-    }
-
-    const supabase = getServerSupabaseAdmin();
-
-    // 사용자의 최신 운동 검사 결과 조회
-    const { data: result, error } = await supabase
-      .from('movement_test_results')
-      .select('*')
-      .eq('user_id', userId)
+    const { data: attempt, error } = await supabase
+      .from('movement_test_attempts')
+      .select(
+        'id, share_id, scoring_version, main_type, sub_type, confidence, type_scores, imbalance_severity, completed_at'
+      )
+      .eq('user_id', user.id)
       .order('completed_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (error || !result) {
-      // 결과가 없으면 null 반환 (에러 아님)
-      return NextResponse.json({
-        success: true,
-        result: null,
-      });
+    if (error) {
+      console.error('get-latest-by-user error:', error);
+      return NextResponse.json({ error: '검사 결과 조회 중 오류가 발생했습니다.' }, { status: 500 });
+    }
+
+    if (!attempt) {
+      return NextResponse.json({ success: true, result: null });
     }
 
     return NextResponse.json({
       success: true,
       result: {
-        id: result.id,
-        mainType: result.main_type,
-        subType: result.sub_type,
-        confidence: result.confidence,
-        typeScores: result.type_scores,
-        imbalanceSeverity: result.imbalance_severity,
-        completedAt: result.completed_at,
+        id: attempt.id,
+        shareId: attempt.share_id,
+        scoringVersion: attempt.scoring_version,
+        mainType: attempt.main_type,
+        subType: attempt.sub_type,
+        confidence: attempt.confidence,
+        typeScores: attempt.type_scores,
+        imbalanceSeverity: attempt.imbalance_severity,
+        completedAt: attempt.completed_at,
       },
     });
   } catch (error) {
