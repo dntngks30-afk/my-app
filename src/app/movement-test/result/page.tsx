@@ -10,20 +10,40 @@ import { calculateTestResult } from '@/features/movement-test/utils/scoring';
 import { getSubTypeContent } from '@/features/movement-test/data/results/type-descriptions';
 import { getConfidenceCopy } from '@/features/movement-test/utils/getConfidenceCopy';
 import { createResultStory } from '@/features/movement-test/utils/getResultStory';
-import ShareButtons from '../components/ShareButtons';
 import type { Answer, SubTypeKey } from '@/types/movement-test';
 import { adjustConfidenceWithImbalance } from '@/features/movement-test/data/results/adjustConfidenceWithImbalance';
-
-
 
 // I3: 세션 키 통일 (SDD 준수)
 const SESSION_STORAGE_KEY = 'movementTestSession:v1';
 const LEGACY_STORAGE_KEY = 'movement-test-result'; // 호환성 유지
 
+async function shareTestLink() {
+  const url = `${window.location.origin}/`; // ✅ 테스트 시작 경로: /
+  const title = '무료 움직임 테스트';
+  const text = '나는 어떤 동물과 비슷할까?';
+
+  // 모바일: 네이티브 공유 시트 (카톡/인스타/메신저 등)
+  // @ts-ignore
+  if (navigator.share) {
+    // @ts-ignore
+    await navigator.share({ title, text, url });
+    return { usedNativeShare: true, url };
+  }
+
+  // 폴백: 링크 복사
+  await navigator.clipboard.writeText(url);
+  alert('테스트 링크 복사 완료! (원하는 SNS에 붙여넣기)');
+  return { usedNativeShare: false, url };
+}
+
 export default function ResultPage() {
   const router = useRouter();
   const [answers, setAnswers] = useState<Answer[] | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // ✅ 공유(PC 폴백 패널)
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState('');
 
   useEffect(() => {
     try {
@@ -168,7 +188,7 @@ export default function ResultPage() {
           <h1 className="text-2xl font-bold text-[var(--text)] mb-4">{DESCRIPTIONS.noResult}</h1>
           <p className="text-[var(--muted)] mb-8">테스트를 먼저 진행해주세요.</p>
           <button
-            onClick={() => router.push('/test')}
+            onClick={() => router.push('/')}
             className="px-6 py-3 rounded-xl bg-[var(--brand)] text-white font-semibold hover:bg-[#ea580c] transition-all duration-200"
           >
             테스트 하러 가기
@@ -212,7 +232,6 @@ export default function ResultPage() {
                                   : 'H_EFFICIENCY_LOW';
 
   const subTypeContent = getSubTypeContent(subTypeKey as SubTypeKey);
-  const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/movement-test/shared/...` : '';
 
   return (
     <div className="min-h-screen bg-[var(--bg)]">
@@ -220,7 +239,7 @@ export default function ResultPage() {
         <div className="max-w-4xl mx-auto">
           {/* 헤더 */}
           <div className="text-center mb-12">
-          <h1 className="text-2xl font-bold text-[var(--text)] mb-4">{TITLES.result}</h1>
+            <h1 className="text-2xl font-bold text-[var(--text)] mb-4">{TITLES.result}</h1>
           </div>
 
           {/* 섹션 1: 타입 선언 */}
@@ -312,11 +331,107 @@ export default function ResultPage() {
             <h3 className="text-2xl font-bold text-white mb-4">다시 테스트하기</h3>
             <p className="text-white/90 mb-6">몸 상태가 달라지면 결과도 달라질 수 있어요</p>
             <button
-              onClick={() => router.push('/test')}
+              onClick={() => router.push('/')}
               className="px-8 py-4 bg-white text-[var(--brand)] font-bold rounded-xl hover:bg-gray-50 transition-all duration-200"
             >
               다시 테스트하기
             </button>
+          </div>
+
+          {/* ✅ CTA: 테스트 공유하기 (맨 아래) */}
+          <div className="mt-6 bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 md:p-8 text-center shadow-sm">
+            <h3 className="text-xl font-semibold text-[var(--text)] mb-2">친구도 해보라고 던져!</h3>
+            <p className="text-[var(--muted)] mb-5">카톡 포함, 설치된 SNS/메신저 앱으로 바로 공유돼요</p>
+
+            <button
+              onClick={async () => {
+                try {
+                  const res = await shareTestLink();
+                  setShareUrl(res.url);
+                  if (!res.usedNativeShare) setShareOpen(true);
+                } catch {
+                  // 사용자가 공유 취소하는 경우 등은 무시
+                }
+              }}
+              className="px-8 py-4 bg-[var(--brand)] text-white font-bold rounded-xl hover:bg-[#ea580c] transition-all duration-200"
+            >
+              테스트 공유하기
+            </button>
+
+            <p className="mt-3 text-sm text-[var(--muted)]">내 결과는 스크린샷으로 저장하면 끝 👍</p>
+
+            {/* ✅ PC 폴백 패널 */}
+            {shareOpen && (
+              <div className="mt-6 text-left max-w-xl mx-auto">
+                <div className="bg-[var(--bg)] border border-[var(--border)] rounded-xl p-4">
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <p className="font-semibold text-[var(--text)]">공유 옵션</p>
+                    <button
+                      onClick={() => setShareOpen(false)}
+                      className="px-3 py-1 rounded-lg border border-[var(--border)] text-[var(--text)] hover:border-[var(--brand)]"
+                    >
+                      닫기
+                    </button>
+                  </div>
+
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      value={shareUrl}
+                      readOnly
+                      className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-white/5 text-[var(--text)]"
+                    />
+                    <button
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(shareUrl);
+                        alert('링크 복사 완료!');
+                      }}
+                      className="px-4 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--brand)] text-[var(--text)] font-semibold"
+                    >
+                      복사
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <a
+                      className="px-4 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--brand)] text-[var(--text)] font-semibold"
+                      href={`https://twitter.com/intent/tweet?text=${encodeURIComponent('무료 움직임 테스트 해봐!')}&url=${encodeURIComponent(shareUrl)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      X
+                    </a>
+                    <a
+                      className="px-4 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--brand)] text-[var(--text)] font-semibold"
+                      href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Facebook
+                    </a>
+                    <a
+                      className="px-4 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--brand)] text-[var(--text)] font-semibold"
+                      href={`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent('무료 움직임 테스트 해봐!')}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Telegram
+                    </a>
+                    <a
+                      className="px-4 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--brand)] text-[var(--text)] font-semibold"
+                      href={`https://wa.me/?text=${encodeURIComponent(`무료 움직임 테스트 해봐! ${shareUrl}`)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      WhatsApp
+                    </a>
+                  </div>
+
+                  <p className="mt-3 text-sm text-[var(--muted)]">
+                    PC에서는 앱 공유가 제한될 수 있어 링크 복사/버튼 공유로 제공돼요.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

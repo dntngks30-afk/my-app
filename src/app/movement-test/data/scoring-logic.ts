@@ -14,8 +14,9 @@ import type {
   SubType,
   TestResult,
   TypeScores as ImportedTypeScores
-} from '../../../types/movement-test';
-import { isMultipleAnswer, isBinaryAnswer } from '../../../types/movement-test';
+} from '@/types/movement-test';
+import { isMultipleAnswer, isBinaryAnswer } from '@/types/movement-test';
+
 
 // ============================================
 // 타입 정의

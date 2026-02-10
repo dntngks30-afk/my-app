@@ -6,8 +6,9 @@ import type {
     MovementType,
     SubType,
     TestResult,
-  } from '../../types/movement-test';
-  import { isMultipleAnswer, isMultipleQuestion } from '../../types/movement-test';
+  } from '@/types/movement-test';
+  import { isMultipleAnswer, isMultipleQuestion } from '@/types/movement-test';
+  
   
   const WEIGHTS = [1.0, 0.5] as const;
   

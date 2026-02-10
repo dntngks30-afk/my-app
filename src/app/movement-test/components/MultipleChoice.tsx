@@ -10,7 +10,8 @@
  * - 모바일 터치 최적화
  */
 
-import type { Option } from '../../../types/movement-test';
+import type { Option } from '@/types/movement-test';
+
 
 interface MultipleChoiceProps {
   /** 질문 ID */

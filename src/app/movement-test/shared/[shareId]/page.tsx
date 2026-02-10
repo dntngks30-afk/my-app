@@ -14,7 +14,8 @@ import { getSubTypeContent } from '../../data/type-descriptions';
 import { getConfidenceCopy } from '../../utils/getConfidenceCopy';
 import { createResultStory } from '../../utils/getResultStory';
 import ShareButtons from '../../components/ShareButtons';
-import type { SubTypeKey } from '../../../../types/movement-test';
+import type { SubTypeKey } from '@/types/movement-test';
+
 
 interface SharedResult {
   shareId: string;
