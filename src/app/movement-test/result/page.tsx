@@ -6,12 +6,14 @@ import { DESCRIPTIONS } from '@/features/movement-test/copy/descriptions';
 
 import { useRouter } from 'next/navigation';
 import { ALL_QUESTIONS } from '@/features/movement-test/data/questions';
-import { calculateTestResult } from '@/features/movement-test/utils/scoring';
+import {
+  calculateTestResult,
+  adjustConfidenceWithImbalance,
+} from "@/lib/movement-test/scoring";
 import { getSubTypeContent } from '@/features/movement-test/data/results/type-descriptions';
 import { getConfidenceCopy } from '@/features/movement-test/utils/getConfidenceCopy';
 import { createResultStory } from '@/features/movement-test/utils/getResultStory';
 import type { Answer, SubTypeKey } from '@/types/movement-test';
-import { adjustConfidenceWithImbalance } from '@/features/movement-test/data/results/adjustConfidenceWithImbalance';
 
 // I3: 세션 키 통일 (SDD 준수)
 const SESSION_STORAGE_KEY = 'movementTestSession:v1';
