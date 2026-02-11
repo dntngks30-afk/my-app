@@ -45,3 +45,6 @@ _backup_*
 app__DISABLED__*
 .cursor/skills/
 
+
+.recovery/
+
