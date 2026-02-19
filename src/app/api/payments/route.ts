@@ -2,14 +2,7 @@
 // 결제 성공 후 클라이언트에서 이 API를 호출하여 결제를 최종 승인합니다.
 
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-// Supabase 클라이언트 (서버용)
-function getSupabaseClient() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-  return createClient(url, key);
-}
+import { getServerSupabaseAdmin } from "@/lib/supabase";
 
 export async function POST(req: Request) {
   try {
@@ -54,7 +47,7 @@ export async function POST(req: Request) {
     }
 
     // 결제 성공 - DB에 기록
-    const supabase = getSupabaseClient();
+    const supabase = getServerSupabaseAdmin();
 
     // payments 테이블에 결제 기록 저장
     const { error: paymentError } = await supabase.from("payments").insert({

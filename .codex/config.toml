@@ -1,0 +1,25 @@
+﻿# Project Codex defaults (loaded when project is trusted)
+# Ref: approval_policy / sandbox_mode / web_search
+approval_policy = "on-request"
+sandbox_mode    = "read-only"
+web_search      = "cached"
+
+[profiles.architect]
+approval_policy = "on-request"
+sandbox_mode    = "read-only"
+
+[profiles.implementer_fe]
+approval_policy = "on-request"
+sandbox_mode    = "workspace-write"
+
+[profiles.implementer_be]
+approval_policy = "untrusted"
+sandbox_mode    = "workspace-write"
+
+[profiles.reviewer]
+approval_policy = "on-request"
+sandbox_mode    = "read-only"
+
+[profiles.qa]
+approval_policy = "on-request"
+sandbox_mode    = "workspace-write"

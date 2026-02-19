@@ -2,14 +2,7 @@
 // 관리자가 사용자의 체형 분석 결과를 작성하고 저장합니다.
 
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-// Supabase 클라이언트 (서버용)
-function getSupabaseClient() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-  return createClient(url, key);
-}
+import { getServerSupabaseAdmin } from "@/lib/supabase";
 
 export async function POST(req: Request) {
   try {
@@ -30,7 +23,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "requestId is required" }, { status: 400 });
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = getServerSupabaseAdmin();
 
     // solutions 테이블에 리포트 저장
     const { data: solution, error: insertError } = await supabase
@@ -88,7 +81,7 @@ export async function GET(req: Request) {
     const requestId = searchParams.get("requestId");
     const userId = searchParams.get("userId");
 
-    const supabase = getSupabaseClient();
+    const supabase = getServerSupabaseAdmin();
 
     let query = supabase
       .from("solutions")

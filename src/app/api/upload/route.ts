@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getServerSupabaseAdmin } from "@/lib/supabase";
 
 // 빌드 시 프리렌더링 방지
 export const dynamic = 'force-dynamic';
@@ -8,47 +8,10 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // 최대 실행 시간 (초)
 export const runtime = 'nodejs'; // Node.js 런타임 사용
 
-// Supabase 클라이언트를 모듈 로드 시점에 생성하지 않고 요청 시점에 생성합니다.
-// 빌드 단계에서 env가 없더라도 모듈 로드가 실패하지 않도록 합니다.
-function getSupabaseClient() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  // 서버에서는 SERVICE_ROLE_KEY를 우선 사용 (모든 권한)
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    "";
-  
-  if (!url || !key) {
-    console.error("❌ Supabase 환경 변수가 설정되지 않았습니다:", { 
-      has_url: !!url, 
-      has_key: !!key 
-    });
-    throw new Error("Supabase 환경 변수가 설정되지 않았습니다.");
-  }
-  
-  return createClient(url, key);
-}
-
 export async function POST(req: Request) {
   try {
-    // 빠른 로그: env 존재 여부 출력 (키 값 자체는 노출하지 않음)
-    console.log("📤 api/upload called", {
-      has_url: !!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL),
-      has_service_key: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-      has_anon_key: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      content_type: req.headers.get('content-type'),
-      content_length: req.headers.get('content-length'),
-    });
-    
-    // 환경변수가 충분하지 않으면 명확한 에러 반환
-    if (!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL)) {
-      return NextResponse.json({ error: "Supabase URL이 설정되지 않았습니다." }, { status: 500 });
-    }
-    
-    if (!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)) {
-      return NextResponse.json({ error: "Supabase 키가 설정되지 않았습니다." }, { status: 500 });
-    }
-    
+    const supabase = getServerSupabaseAdmin();
+
     // FormData 파싱 시도
     let form;
     try {
@@ -99,7 +62,7 @@ export async function POST(req: Request) {
     const path = `${safeName}`;
 
     // user-photos 버킷에 업로드
-    const { data: uploadData, error: uploadErr } = await getSupabaseClient()
+    const { data: uploadData, error: uploadErr } = await supabase
       .storage.from("user-photos")
       .upload(path, buffer, { contentType: file.type });
 
@@ -109,7 +72,7 @@ export async function POST(req: Request) {
     }
 
     // public URL 얻기 (버킷이 public으로 설정되어 있어야 바로 접근 가능)
-    const { data: publicData } = getSupabaseClient().storage.from("user-photos").getPublicUrl(path);
+    const { data: publicData } = supabase.storage.from("user-photos").getPublicUrl(path);
     console.log("storage.getPublicUrl:", publicData);
     const baseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
     const publicURL =
@@ -117,11 +80,10 @@ export async function POST(req: Request) {
 
     // requests 테이블에 레코드 추가/업데이트
     // 같은 user_id의 최근 요청을 찾아서 업데이트하거나, 없으면 새로 생성
-    const supabaseClient = getSupabaseClient();
     
     // 최근 24시간 이내의 같은 사용자 요청 찾기
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { data: existingRequests, error: findErr } = await supabaseClient
+    const { data: existingRequests, error: findErr } = await supabase
       .from("requests")
       .select("*")
       .eq("user_id", user_id)
@@ -146,7 +108,7 @@ export async function POST(req: Request) {
         updatePayload.side_url = publicURL;
       }
 
-      const { error: updateErr } = await supabaseClient
+      const { error: updateErr } = await supabase
         .from("requests")
         .update(updatePayload)
         .eq("id", existingRequest.id);
@@ -171,7 +133,7 @@ export async function POST(req: Request) {
         insertPayload.side_url = publicURL;
       }
 
-      const { data: insertData, error: insertErr } = await supabaseClient
+      const { data: insertData, error: insertErr } = await supabase
         .from("requests")
         .insert(insertPayload)
         .select()

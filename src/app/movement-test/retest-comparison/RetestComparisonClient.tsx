@@ -2,12 +2,11 @@
 
 /**
  * 재검사 결과 비교 페이지 (Client)
- *
- * ✅ useSearchParams() 사용 → page.tsx에서 Suspense로 감싸야 빌드 통과
+ * originalParam, retestParam: 서버에서 searchParams 전달
  */
 
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabaseBrowser as supabase } from '@/lib/supabase';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,9 +18,16 @@ import {
   type ComparisonReport,
 } from '@/lib/movement-test/result-comparison';
 
-export default function RetestComparisonClient() {
+interface RetestComparisonClientProps {
+  originalParam?: string | null;
+  retestParam?: string | null;
+}
+
+export default function RetestComparisonClient({
+  originalParam,
+  retestParam,
+}: RetestComparisonClientProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState<ComparisonReport | null>(null);
@@ -30,8 +36,8 @@ export default function RetestComparisonClient() {
   useEffect(() => {
     const loadComparison = async () => {
       try {
-        const originalTestId = searchParams.get('original');
-        const retestId = searchParams.get('retest');
+        const originalTestId = originalParam ?? null;
+        const retestId = retestParam ?? null;
 
         if (!originalTestId || !retestId) {
           setError('비교할 검사 결과가 없습니다.');
@@ -90,7 +96,7 @@ export default function RetestComparisonClient() {
     };
 
     loadComparison();
-  }, [router, searchParams]);
+  }, [router, originalParam, retestParam]);
 
   if (loading) {
     return (

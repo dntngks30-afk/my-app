@@ -1,442 +1,897 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { TITLES } from '@/features/movement-test/copy/titles';
-import { DESCRIPTIONS } from '@/features/movement-test/copy/descriptions';
-
+/**
+ * movement-test 결과 페이지 (PR3-4)
+ * v2 스코어링만 사용. localStorage KEY='movementTestSession:v2'만 읽음.
+ */
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ALL_QUESTIONS } from '@/features/movement-test/data/questions';
-import {
-  calculateTestResult,
-  adjustConfidenceWithImbalance,
-} from "@/lib/movement-test/scoring";
-import { getSubTypeContent } from '@/features/movement-test/data/results/type-descriptions';
-import { getConfidenceCopy } from '@/features/movement-test/utils/getConfidenceCopy';
-import { createResultStory } from '@/features/movement-test/utils/getResultStory';
-import type { Answer, SubTypeKey } from '@/types/movement-test';
+import { Nunito } from 'next/font/google';
+import { calculateScoresV2 } from '@/features/movement-test/v2';
+import type { AnimalAxis, ScoreResultV2 } from '@/features/movement-test/v2';
 
-// I3: 세션 키 통일 (SDD 준수)
-const SESSION_STORAGE_KEY = 'movementTestSession:v1';
-const LEGACY_STORAGE_KEY = 'movement-test-result'; // 호환성 유지
+const KEY = 'movementTestSession:v2';
 
-async function shareTestLink() {
-  const url = `${window.location.origin}/`; // ✅ 테스트 시작 경로: /
-  const title = '무료 움직임 테스트';
-  const text = '나는 어떤 동물과 비슷할까?';
+const cuteFont = Nunito({
+  subsets: ['latin'],
+  weight: ['400', '600'],
+});
 
-  // 모바일: 네이티브 공유 시트 (카톡/인스타/메신저 등)
-  // @ts-ignore
-  if (navigator.share) {
-    // @ts-ignore
-    await navigator.share({ title, text, url });
-    return { usedNativeShare: true, url };
+/** 축별 라벨(alt/보조경향 표시용) */
+const AXIS_LABELS: Record<AnimalAxis, string> = {
+  turtle: '상부 전방화',
+  hedgehog: '가슴 닫힘·등 굽음',
+  kangaroo: '허리 과부하',
+  penguin: '무릎·발목 불안정',
+  crab: '편측 의존·비대칭',
+  meerkat: '전신 긴장',
+};
+
+type ResultContentKey = AnimalAxis | 'armadillo' | 'sloth' | 'monkey';
+type ResultActionContent = {
+  doTodayTop1: string;
+  avoidTop1: string;
+  trySport: string;
+};
+
+const RESULT_CONTENT: Record<
+  ResultContentKey,
+  {
+    displayName: string;
+    cardTitle: string;
+    body: string;
+    image: string;
+    actions: ResultActionContent;
+  }
+> = {
+  turtle: {
+    displayName: '당신은 거북이형 입니다.',
+    cardTitle: '거북이형',
+    body: `머리와 목이 앞쪽으로 쏠리고,
+등이 둥글어지는 자세를 자주 취하는 경향이 있습니다.
+상체가 먼저 힘을 쓰는 방향으로 몸을 사용하는 패턴에 가깝습니다.
+
+거북이형은 근력이 부족해서라기보다
+상체가 먼저 힘을 쓰는 사용 습관에 가깝습니다.
+
+목·어깨 긴장을 줄이고,
+등이 중심을 잡도록 만드는 것이 균형 회복의 시작점입니다.`,
+    image: '/animals/turtle.png',
+    actions: {
+      doTodayTop1:
+        '핸드폰 볼 때, 화면을 눈높이로 올리고 턱을 아주 살짝만 당긴 채 10초만 버텨요.',
+      avoidTop1:
+        '고개를 앞으로 쭉 빼고 화면이나 노트북에 얼굴을 가까이 들이대는 습관은 피하세요.',
+      trySport:
+        '수영(배영)이나 로잉 머신처럼 “등을 길게 쓰는” 운동을 가볍게 해보세요.',
+    },
+  },
+  kangaroo: {
+    displayName: '당신은 캥거루형 입니다.',
+    cardTitle: '캥거루형',
+    body: `골반이 앞쪽으로 기울고,
+허리가 먼저 힘을 쓰는 방향으로 몸을 사용하는 패턴에 가깝습니다.
+
+캥거루형은 하체 근력이 약해서라기보다
+고관절보다 허리와 앞허벅지가 먼저 개입하는 사용 습관에 가깝습니다.
+
+동작을 시작할 때 허리가 먼저 꺾이거나,
+갈비뼈가 들리는 형태가 동반될 수 있습니다.
+
+둔근과 햄스트링이 중심을 잡도록 만들고,
+속도보다 정렬을 우선하는 것이 균형 회복의 시작점입니다.`,
+    image: '/animals/kangaroo.png',
+    actions: {
+      doTodayTop1:
+        '서 있을 때 숨을 “후—” 내쉬며 갈비뼈를 살짝 내리고, 엉덩이를 아주 조금 뒤로 보내 5번만 반복해요.',
+      avoidTop1:
+        '설거지·양치할 때 허리를 꺾고 배를 앞으로 내민 채 오래 서 있는 자세는 피하세요.',
+      trySport:
+        '파워워킹(보폭 크게)이나 자전거처럼 “엉덩이로 밀어내는” 움직임을 연습해보세요.',
+    },
+  },
+  hedgehog: {
+    displayName: '당신은 고슴도치형 입니다.',
+    cardTitle: '고슴도치형',
+    body: `가슴이 닫히고,
+등이 둥글게 굽는 방향으로 몸을 사용하는 패턴에 가깝습니다.
+
+고슴도치형은 목이 앞으로 빠지기보다는
+상체가 안쪽으로 말리며 공간이 좁아지는 형태에 가깝습니다.
+
+팔을 들어 올릴 때
+어깨 앞쪽이나 겨드랑이 주변이 먼저 당기거나,
+등이 잘 펴지지 않는 느낌이 나타날 수 있습니다.
+
+가슴을 열고,
+흉추가 부드럽게 펴지도록 만드는 것이
+균형 회복의 시작점입니다.`,
+    image: '/animals/hedgehog.png',
+    actions: {
+      doTodayTop1:
+        '문틀에 팔을 걸고 가슴만 앞으로 살짝 내밀어 20초, 2번만 해요.',
+      avoidTop1:
+        '추울 때나 긴장할 때 어깨를 안쪽으로 말고 팔을 몸에 붙인 채 구부정하게 걷는 습관은 피하세요.',
+      trySport:
+        '요가(가슴 여는 동작)나 초급 클라이밍처럼 “가슴을 열고 버티는” 운동이 잘 맞아요.',
+    },
+  },
+  meerkat: {
+    displayName: '당신은 미어캣형 입니다.',
+    cardTitle: '미어캣형',
+    body: `몸을 똑바로 세우려는 의식이 강해,
+상체를 위로 끌어올린 채 버티는 방향으로 사용하는 패턴에 가깝습니다.
+
+미어캣형은 자세가 나빠서라기보다
+갈비뼈와 허리가 먼저 긴장하며 정렬을 유지하려는 습관에 가깝습니다.
+
+겉보기엔 곧게 서 있지만
+갈비뼈가 들리거나 허리가 과하게 꺾이고,
+무릎이 잠긴 상태가 함께 나타날 수 있습니다.
+
+힘으로 버티기보다
+호흡으로 중심을 만들고,
+하체에서 지지가 올라오도록 만드는 것이 균형 회복의 시작점입니다.`,
+    image: '/animals/meerkat.png',
+    actions: {
+      doTodayTop1:
+        '숨을 길게 내쉬면서 갈비뼈가 내려가는 느낌을 5번만 느껴봐요. (허리에 힘 빼기!)',
+      avoidTop1:
+        '사진 찍을 때 일부러 가슴을 들고 허리를 꺾어서 “꼿꼿해 보이려” 버티는 자세는 피하세요.',
+      trySport:
+        '필라테스(호흡+중립)나 태극권/호흡 요가처럼 “힘으로 버티지 않는” 운동이 좋아요.',
+    },
+  },
+  penguin: {
+    displayName: '당신은 펭귄형 입니다.',
+    cardTitle: '펭귄형',
+    body: `하체는 비교적 단단한 편이지만,
+발목 가동 범위가 제한된 상태에서 움직이는 패턴에 가깝습니다.
+
+펭귄형은 근력이 부족해서라기보다
+발목이 충분히 접히지 않은 채 하체가 먼저 버티는 사용 습관에 가깝습니다.
+
+스쿼트를 깊게 내려갈 때 답답함이 있거나,
+보폭이 짧고 무게 중심이 뒤로 빠지는 느낌이 나타날 수 있습니다.
+
+발목 가동성을 회복하고,
+발바닥 지지를 다시 만드는 것이 균형 회복의 시작점입니다.`,
+    image: '/animals/penguin.png',
+    actions: {
+      doTodayTop1:
+        '벽에 손을 대고, 뒤꿈치를 붙인 채 무릎을 벽 쪽으로 10번만 살짝 톡톡 움직여요.',
+      avoidTop1:
+        '발끝을 바깥으로 벌리고 뒤꿈치에 기대서 서 있는 습관(무게가 뒤로 가는 자세)은 피하세요.',
+      trySport:
+        '가벼운 등산·트레킹이나 배드민턴처럼 “발목을 잘 쓰는” 운동이 도움이 돼요.',
+    },
+  },
+  crab: {
+    displayName: '당신은 게형 입니다.',
+    cardTitle: '게형',
+    body: `움직일 때 체중이 한쪽으로 더 실리거나,
+좌우 균형이 일정하지 않은 패턴에 가깝습니다.
+
+게형은 힘이 부족해서라기보다
+한쪽 다리가 먼저 개입하는 사용 습관에 가깝습니다.
+
+스쿼트나 런지에서
+골반이 좌우로 흔들리거나,
+한쪽 무릎 정렬이 쉽게 무너질 수 있습니다.
+
+한발 안정성을 회복하고,
+양쪽 하체가 균등하게 지지하도록 만드는 것이 균형 회복의 시작점입니다.`,
+    image: '/animals/crab.png',
+    actions: {
+      doTodayTop1:
+        '양치할 때 한발로 10초 서기! 좌/우 번갈아 하고, 흔들리면 벽을 살짝 짚어요.',
+      avoidTop1:
+        '항상 같은 다리에만 체중을 싣고 서 있는 습관(한쪽 다리로만 서기)은 피하세요.',
+      trySport:
+        '인라인/스케이트(초급)나 테니스 풋워크처럼 “좌우로 균형 잡는” 운동이 잘 맞아요.',
+    },
+  },
+  armadillo: {
+    displayName: '당신은 복합형 아르마딜로 입니다.',
+    cardTitle: '복합형 아르마딜로',
+    body: `상체와 골반이 함께 말리며,
+몸을 둥글게 보호하는 방향으로 사용하는 패턴에 가깝습니다.
+
+아르마딜로형은 한 부위로만 설명되기보다는,
+여러 부위가 동시에 긴장하며 하나의 보호 패턴을 만드는 형태에 가깝습니다.
+
+허리가 평평해지거나 골반이 말리고,
+엉덩이·햄스트링이 단단하게 굳는 느낌이 나타날 수 있습니다.
+
+먼저 과한 긴장을 부드럽게 풀고,
+가슴과 골반의 중립을 회복한 뒤
+몸이 자연스럽게 연결되도록 만드는 것이 균형 회복의 시작점입니다.`,
+    image: '/animals/armadillo.png',
+    actions: {
+      doTodayTop1:
+        '벽에 등을 기대고 어깨랑 엉덩이 힘을 “조금만” 빼서 20초 쉬어줘요.',
+      avoidTop1:
+        '불안하거나 긴장할 때 몸을 웅크리고 배·엉덩이에 힘을 꽉 주는 습관은 피하세요.',
+      trySport:
+        '편한 스트레칭 요가(릴리즈 위주)나 느린 산책처럼 “긴장을 푸는” 운동이 좋아요.',
+    },
+  },
+  sloth: {
+    displayName: '당신은 복합형 나무늘보 입니다.',
+    cardTitle: '복합형 나무늘보',
+    body: `몸이 전체적으로 느슨하게 유지되며,
+특정 부위가 강하게 개입하지 않는 패턴에 가깝습니다.
+
+나무늘보형은 한 부위의 뚜렷한 문제라기보다,
+지지 반응이 분산되어 중심이 흐릿해지는 형태에 가깝습니다.
+
+자세가 크게 무너지지는 않지만,
+움직임이 작고 힘이 흩어지며
+지속적인 안정감이 부족하게 느껴질 수 있습니다.
+
+강하게 조이기보다,
+기본 지지를 천천히 깨워가며 연결을 만드는 것이
+균형 회복의 시작점입니다.`,
+    image: '/animals/sloth.png',
+    actions: {
+      doTodayTop1:
+        '벽을 양손으로 10초만 밀면서, 발바닥이 바닥을 꾹 누르는 느낌을 찾아봐요.',
+      avoidTop1:
+        '의자에 반쯤 걸터앉아서 흐느적거리며 오래 앉아 있는 자세는 피하세요.',
+      trySport:
+        '수영(자유형/킥보드)이나 서핑·패들보드(초급)처럼 “몸통을 연결해서 쓰는” 운동이 잘 맞아요.',
+    },
+  },
+  monkey: {
+    displayName: '당신은 원숭이형(균형형) 입니다.',
+    cardTitle: '원숭이형(균형형)',
+    body: `현재 테스트 결과에서
+특정 움직임 패턴이 뚜렷하게 나타나지 않았습니다.
+
+한 가지 축으로 강하게 쏠리기보다는,
+전반적으로 비교적 균형이 유지되고 있는 상태에 가깝습니다.
+
+특정 부위의 과사용이나 반복적인 보상 패턴이
+뚜렷하게 관찰되지는 않습니다.
+
+다만 균형은 "완성"이 아니라
+지금의 정렬과 사용 습관이 비교적 안정적인 구간에 있다는 의미입니다.
+
+강한 교정보다는
+현재의 기본 정렬과 호흡 리듬을 유지하는 것이 중요합니다.
+
+과한 강도나 급격한 변화보다는
+일관된 움직임 습관이 균형을 오래 유지하는 데 도움이 됩니다.`,
+    image: '/animals/monkey.png',
+    actions: {
+      doTodayTop1:
+        '바닥에 바로 누워, 코로 4초 들이마시고 6초 내쉬는 복식호흡을 10회만 반복해보세요. "몸에 힘을 더하는 것"보다 "힘을 빼는 감각"을 먼저 확인하는 게 좋습니다.',
+      avoidTop1:
+        '운동 전, 준비 없이 바로 강한 강도부터 시작하는 습관은 피하세요. 균형이 좋은 상태일수록 급격한 자극은 오히려 리듬을 흐트러뜨릴 수 있습니다.',
+      trySport:
+        '요가 플로우·가벼운 수영·클라이밍처럼 전신을 고르게 쓰는 운동이 잘 맞습니다.',
+    },
+  },
+};
+
+const RESULT_TYPE_LABELS: Record<string, string> = {
+  MONKEY: '원숭이형(균형형)',
+  COMPOSITE_ARMADILLO: '복합형 아르마딜로',
+  COMPOSITE_SLOTH: '복합형 나무늘보',
+  BASIC: '기본형',
+};
+
+function getResultContentKey(
+  mainAnimal: AnimalAxis,
+  resultType: string
+): ResultContentKey | null {
+  if (resultType === 'MONKEY') return 'monkey';
+  if (resultType === 'COMPOSITE_ARMADILLO') return 'armadillo';
+  if (resultType === 'COMPOSITE_SLOTH') return 'sloth';
+  if (resultType === 'BASIC') return mainAnimal;
+  return null;
+}
+
+const RESULT_FALLBACK_EMOJIS: Record<ResultContentKey, string> = {
+  turtle: '🐢',
+  hedgehog: '🦔',
+  kangaroo: '🦘',
+  penguin: '🐧',
+  crab: '🦀',
+  meerkat: '🦫',
+  armadillo: '🦔',
+  sloth: '🦥',
+  monkey: '🐒',
+};
+
+interface SessionV2 {
+  version: string;
+  isCompleted: boolean;
+  startedAt?: string;
+  completedAt?: string;
+  profile?: Record<string, unknown>;
+  answersById: Record<string, 0 | 1 | 2 | 3 | 4>;
+  finalType?: AnimalAxis | 'armadillo' | 'sloth' | 'monkey';
+}
+
+/** 모바일 전용 Hero 카드 내 이미지 (onError 시 이모지 fallback) */
+function MobileHeroImage({
+  contentKey,
+}: {
+  contentKey: ResultContentKey | null;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const emoji = contentKey ? RESULT_FALLBACK_EMOJIS[contentKey] : '⚖️';
+  const imgSrc = contentKey ? RESULT_CONTENT[contentKey].image : '';
+
+  if (!contentKey) {
+    return (
+      <div className="w-72 h-72 flex items-center justify-center text-7xl bg-[var(--bg)] rounded-[var(--radius)] border border-[color:var(--border)]">
+        ⚖️
+      </div>
+    );
   }
 
-  // 폴백: 링크 복사
-  await navigator.clipboard.writeText(url);
-  alert('테스트 링크 복사 완료! (원하는 SNS에 붙여넣기)');
-  return { usedNativeShare: false, url };
+  if (imgError) {
+    return (
+      <div className="w-72 h-72 flex items-center justify-center text-7xl bg-[var(--bg)] rounded-[var(--radius)] border border-[color:var(--border)]">
+        {emoji}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={imgSrc}
+      alt={RESULT_CONTENT[contentKey].cardTitle}
+      className="w-72 h-72 object-contain rounded-[var(--radius)] border border-[color:var(--border)]"
+      onError={() => setImgError(true)}
+    />
+  );
 }
+
+function MainTypeImage({
+  contentKey,
+}: {
+  contentKey: ResultContentKey | null;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const emoji = contentKey ? RESULT_FALLBACK_EMOJIS[contentKey] : '⚖️';
+  const imgSrc = contentKey ? RESULT_CONTENT[contentKey].image : '';
+
+  if (!contentKey) {
+    return (
+      <div className="w-full max-w-[180px] sm:max-w-[200px] md:max-w-[220px] mx-auto aspect-square flex items-center justify-center text-6xl sm:text-7xl md:text-8xl bg-[var(--bg)] rounded-[var(--radius)] border border-[color:var(--border)]">
+        ⚖️
+      </div>
+    );
+  }
+
+  if (imgError) {
+    return (
+      <div className="w-full max-w-[180px] sm:max-w-[200px] md:max-w-[220px] mx-auto aspect-square flex items-center justify-center text-6xl sm:text-7xl md:text-8xl bg-[var(--bg)] rounded-[var(--radius)] border border-[color:var(--border)]">
+        {emoji}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={imgSrc}
+      alt={RESULT_CONTENT[contentKey].cardTitle}
+      className="w-full max-w-[180px] sm:max-w-[200px] md:max-w-[220px] mx-auto aspect-square object-contain rounded-[var(--radius)] border border-[color:var(--border)]"
+      onError={() => setImgError(true)}
+    />
+  );
+}
+
+function TypeActionCards({
+  actions,
+  cuteClassName,
+  cuteStyle,
+}: {
+  actions: ResultActionContent;
+  cuteClassName: string;
+  cuteStyle: { fontFamily: string };
+}) {
+  return (
+    <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <section className="rounded-[var(--radius)] bg-[var(--bg)] border border-[color:var(--border)] p-4">
+        <h3
+          className={`${cuteClassName} text-sm sm:text-base lg:text-lg font-semibold text-[var(--text)] mb-2`}
+          style={cuteStyle}
+        >
+          오늘 당장 실천할 움직임 Top1
+        </h3>
+        <ul
+          className={`${cuteClassName} text-sm sm:text-base text-[var(--muted)] leading-relaxed list-disc list-inside min-h-[24px]`}
+          style={cuteStyle}
+        >
+          {actions.doTodayTop1 ? <li>{actions.doTodayTop1}</li> : null}
+        </ul>
+      </section>
+      <section className="rounded-[var(--radius)] bg-[var(--bg)] border border-[color:var(--border)] p-4">
+        <h3
+          className={`${cuteClassName} text-sm sm:text-base lg:text-lg font-semibold text-[var(--text)] mb-2`}
+          style={cuteStyle}
+        >
+          피해야 할 움직임 Top1
+        </h3>
+        <ul
+          className={`${cuteClassName} text-sm sm:text-base text-[var(--muted)] leading-relaxed list-disc list-inside min-h-[24px]`}
+          style={cuteStyle}
+        >
+          {actions.avoidTop1 ? <li>{actions.avoidTop1}</li> : null}
+        </ul>
+      </section>
+      <section className="rounded-[var(--radius)] bg-[var(--bg)] border border-[color:var(--border)] p-4">
+        <h3
+          className={`${cuteClassName} text-sm sm:text-base lg:text-lg font-semibold text-[var(--text)] mb-2`}
+          style={cuteStyle}
+        >
+          시도해볼만한 운동/스포츠
+        </h3>
+        <ul
+          className={`${cuteClassName} text-sm sm:text-base text-[var(--muted)] leading-relaxed list-disc list-inside min-h-[24px]`}
+          style={cuteStyle}
+        >
+          {actions.trySport ? <li>{actions.trySport}</li> : null}
+        </ul>
+      </section>
+    </div>
+  );
+}
+
+function loadSession(): SessionV2 | null {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data?.version !== 'v2') return null;
+    return {
+      version: 'v2',
+      isCompleted: data.isCompleted ?? false,
+      startedAt: data.startedAt,
+      completedAt: data.completedAt,
+      profile: data.profile,
+      answersById: data.answersById ?? {},
+      finalType: data.finalType,
+    };
+  } catch {
+    return null;
+  }
+}
+
+const SHARE_TITLE = '무료 움직임 테스트';
+const SHARE_TEXT = '무료 움직임 테스트 해봐!';
 
 export default function ResultPage() {
   const router = useRouter();
-  const [answers, setAnswers] = useState<Answer[] | null>(null);
+  const [session, setSession] = useState<SessionV2 | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // ✅ 공유(PC 폴백 패널)
   const [shareOpen, setShareOpen] = useState(false);
-  const [shareUrl, setShareUrl] = useState('');
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      // 우선: 새로운 세션 키에서 읽기 (SDD 준수)
-      const sessionRaw = localStorage.getItem(SESSION_STORAGE_KEY);
-      if (sessionRaw) {
-        const sessionData = JSON.parse(sessionRaw);
-        if (sessionData.isCompleted && sessionData.answers) {
-          // Record<string, any> -> Answer[] 변환
-          const answersArray: Answer[] = Object.values(sessionData.answers).filter(
-            (a): a is Answer => a !== null && typeof a === 'object'
-          );
-          setAnswers(answersArray.length > 0 ? answersArray : null);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // 호환성: 기존 키에서 읽기
-      const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
-      if (legacyRaw) {
-        const legacyData = JSON.parse(legacyRaw);
-        setAnswers(legacyData.answers || null);
-        setLoading(false);
-        return;
-      }
-
-      setAnswers(null);
-    } catch {
-      setAnswers(null);
-    }
+    setSession(loadSession());
     setLoading(false);
   }, []);
 
-  const result = useMemo(() => {
-    if (!answers) return null;
-    return calculateTestResult(answers, ALL_QUESTIONS);
-  }, [answers]);
+  useEffect(() => {
+    if (!shareOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [shareOpen]);
 
-  const adjustedResult = useMemo(() => {
-    if (!result || !answers) return null;
-
-    const imbalanceAnswers = answers
-      .filter((a) => {
-        const q = ALL_QUESTIONS.find((qq) => qq.id === a.questionId);
-        return q && 'imbalanceFlag' in q && q.imbalanceFlag === true;
-      })
-      .map((a) => {
-        return 'answer' in a && a.answer === true;
-      });
-
-    const mainTypeCode =
-      result.mainType === '담직' ? 'D' : result.mainType === '날림' ? 'N' : result.mainType === '버팀' ? 'B' : 'H';
-
-    const adjustment = adjustConfidenceWithImbalance(result.confidence, mainTypeCode, imbalanceAnswers);
-
-    return {
-      ...result,
-      confidence: adjustment.finalConfidence,
-      imbalanceSeverity: adjustment.debug.severity,
-      biasMainType: adjustment.biasMainType,
+  useEffect(() => {
+    if (!shareOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShareOpen(false);
     };
-  }, [result, answers]);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [shareOpen]);
 
-  const story = useMemo(() => {
-    if (!adjustedResult) return null;
+  const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/` : '';
 
-    const subTypeKey =
-      adjustedResult.subType === '담직-상체고착형'
-        ? 'D_UPPER_LOCK'
-        : adjustedResult.subType === '담직-하체고착형'
-          ? 'D_LOWER_LOCK'
-          : adjustedResult.subType === '담직-호흡잠김형'
-            ? 'D_BREATH_LOCK'
-            : adjustedResult.subType === '담직-전신둔화형'
-              ? 'D_SYSTEM_SLOW'
-              : adjustedResult.subType === '날림-관절흐름형'
-                ? 'N_JOINT_FLOW'
-                : adjustedResult.subType === '날림-중심이탈형'
-                  ? 'N_CORE_DRIFT'
-                  : adjustedResult.subType === '날림-좌우불균형형'
-                    ? 'N_LR_IMBAL'
-                    : adjustedResult.subType === '날림-동작과속형'
-                      ? 'N_SPEED_OVER'
-                      : adjustedResult.subType === '버팀-허리의존형'
-                        ? 'B_LOWBACK_RELY'
-                        : adjustedResult.subType === '버팀-목어깨과로형'
-                          ? 'B_NECK_SHOULDER_OVER'
-                          : adjustedResult.subType === '버팀-무릎집중형'
-                            ? 'B_KNEE_FOCUS'
-                            : adjustedResult.subType === '버팀-단측지배형'
-                              ? 'B_SINGLE_DOM'
-                              : adjustedResult.subType === '흘림-힘누수형'
-                                ? 'H_POWER_LEAK'
-                                : adjustedResult.subType === '흘림-체인단절형'
-                                  ? 'H_CHAIN_BREAK'
-                                  : adjustedResult.subType === '흘림-비대칭전달형'
-                                    ? 'H_ASYM_TRANSFER'
-                                    : 'H_EFFICIENCY_LOW';
+  const copyLink = useCallback(async () => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setToast('링크 복사 완료!');
+      setTimeout(() => setToast(null), 2000);
+    } catch {
+      setToast('복사에 실패했어요.');
+      setTimeout(() => setToast(null), 2000);
+    }
+  }, [shareUrl]);
 
-    const subTypeContent = getSubTypeContent(subTypeKey as SubTypeKey);
-    const confidenceCopy = getConfidenceCopy(
-      adjustedResult.confidence,
-      adjustedResult.imbalanceSeverity,
-      adjustedResult.biasMainType
-    );
+  const handleNativeShare = useCallback(
+    async (fallbackMessage: string) => {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        try {
+          await navigator.share({
+            title: SHARE_TITLE,
+            text: SHARE_TEXT,
+            url: shareUrl,
+          });
+          setToast('공유 완료!');
+          setTimeout(() => setToast(null), 2000);
+        } catch (e) {
+          if ((e as Error).name !== 'AbortError') {
+            setToast('공유를 취소했어요.');
+            setTimeout(() => setToast(null), 2000);
+          }
+        }
+        return;
+      }
+      await copyLink();
+      setToast(fallbackMessage);
+      setTimeout(() => setToast(null), 3000);
+    },
+    [shareUrl, copyLink]
+  );
 
-    return createResultStory({
-      mainTypeName: adjustedResult.mainType,
-      subType: {
-        subTypeName: subTypeContent.subTypeName,
-        headline: subTypeContent.headline,
-        summary: subTypeContent.summary,
-      },
-      confidenceCopy: {
-        confidenceLabel: confidenceCopy.confidenceLabel,
-        confidence: adjustedResult.confidence,
-        body: confidenceCopy.body,
-        imbalanceNote: confidenceCopy.imbalanceNote,
-        typeBiasNote: confidenceCopy.typeBiasNote,
-      },
-      imbalanceSeverity: adjustedResult.imbalanceSeverity,
-    });
-  }, [adjustedResult]);
+  const openTwitter = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const u = `https://twitter.com/intent/tweet?text=${encodeURIComponent(SHARE_TEXT)}&url=${encodeURIComponent(shareUrl)}`;
+    window.open(u, '_blank', 'noopener,noreferrer');
+  }, [shareUrl]);
+
+  const scoreResult = useMemo((): ScoreResultV2 | null => {
+    if (!session?.isCompleted || !session.answersById) return null;
+    const answers = session.answersById as Record<string, 0 | 1 | 2 | 3 | 4>;
+    return calculateScoresV2(answers);
+  }, [session]);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--bg)] overflow-x-hidden flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-[var(--brand)] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-[var(--text)] text-lg">결과 불러오는 중...</p>
+          <div className="w-16 h-16 border-4 border-[var(--brand)] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-[var(--text)]">결과 불러오는 중...</p>
         </div>
       </div>
     );
   }
 
-  if (!result || !story || !adjustedResult) {
+  if (!session || !session.isCompleted || !scoreResult) {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto px-4">
-          <div className="text-6xl mb-4">😕</div>
-          <h1 className="text-2xl font-bold text-[var(--text)] mb-4">{DESCRIPTIONS.noResult}</h1>
-          <p className="text-[var(--muted)] mb-8">테스트를 먼저 진행해주세요.</p>
-          <button
-            onClick={() => router.push('/')}
-            className="px-6 py-3 rounded-xl bg-[var(--brand)] text-white font-semibold hover:bg-[#ea580c] transition-all duration-200"
-          >
-            테스트 하러 가기
-          </button>
-        </div>
+      <div className="min-h-screen bg-[var(--bg)] overflow-x-hidden">
+        <section className="py-10 sm:py-12 md:py-16">
+          <div className="container mx-auto px-4">
+            <div className="max-w-4xl mx-auto text-center">
+              <div
+                className="
+                  rounded-[var(--radius)]
+                  bg-[var(--surface)]
+                  border border-[color:var(--border)]
+                  shadow-[var(--shadow-0)]
+                  p-4 sm:p-6 md:p-8
+                  max-w-md mx-auto
+                "
+              >
+                <div className="text-4xl mb-4">😕</div>
+                <h1 className="text-lg sm:text-xl font-bold text-[var(--text)] mb-2 whitespace-normal break-keep">
+                  테스트를 먼저 진행해주세요
+                </h1>
+                <p className="text-sm sm:text-base text-[var(--muted)] mb-6 whitespace-normal break-keep">
+                  결과를 보려면 무료 움직임 테스트를 완료해주세요.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => router.push('/')}
+                  className="
+                    w-full sm:w-auto min-h-[44px]
+                    inline-flex items-center justify-center
+                    rounded-[var(--radius)]
+                    bg-[var(--brand)] text-white
+                    px-8 py-4 font-bold
+                    shadow-[var(--shadow-0)]
+                    transition-all duration-200
+                    hover:opacity-95
+                  "
+                >
+                  테스트 하러 가기
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     );
   }
 
-  const subTypeKey =
-    adjustedResult.subType === '담직-상체고착형'
-      ? 'D_UPPER_LOCK'
-      : adjustedResult.subType === '담직-하체고착형'
-        ? 'D_LOWER_LOCK'
-        : adjustedResult.subType === '담직-호흡잠김형'
-          ? 'D_BREATH_LOCK'
-          : adjustedResult.subType === '담직-전신둔화형'
-            ? 'D_SYSTEM_SLOW'
-            : adjustedResult.subType === '날림-관절흐름형'
-              ? 'N_JOINT_FLOW'
-              : adjustedResult.subType === '날림-중심이탈형'
-                ? 'N_CORE_DRIFT'
-                : adjustedResult.subType === '날림-좌우불균형형'
-                  ? 'N_LR_IMBAL'
-                  : adjustedResult.subType === '날림-동작과속형'
-                    ? 'N_SPEED_OVER'
-                    : adjustedResult.subType === '버팀-허리의존형'
-                      ? 'B_LOWBACK_RELY'
-                      : adjustedResult.subType === '버팀-목어깨과로형'
-                        ? 'B_NECK_SHOULDER_OVER'
-                        : adjustedResult.subType === '버팀-무릎집중형'
-                          ? 'B_KNEE_FOCUS'
-                          : adjustedResult.subType === '버팀-단측지배형'
-                            ? 'B_SINGLE_DOM'
-                            : adjustedResult.subType === '흘림-힘누수형'
-                              ? 'H_POWER_LEAK'
-                              : adjustedResult.subType === '흘림-체인단절형'
-                                ? 'H_CHAIN_BREAK'
-                                : adjustedResult.subType === '흘림-비대칭전달형'
-                                  ? 'H_ASYM_TRANSFER'
-                                  : 'H_EFFICIENCY_LOW';
-
-  const subTypeContent = getSubTypeContent(subTypeKey as SubTypeKey);
+  const mainAnimal = scoreResult.mainAnimal ?? scoreResult.baseType;
+  const resultType = scoreResult.resultType ?? 'BASIC';
+  const contentKey =
+    session?.finalType && session.finalType in RESULT_CONTENT
+      ? (session.finalType as ResultContentKey)
+      : getResultContentKey(mainAnimal, resultType);
+  const content = contentKey ? RESULT_CONTENT[contentKey] : null;
+  const mainHeroTitle = content
+    ? content.displayName
+    : (RESULT_TYPE_LABELS[resultType] ?? resultType);
+  const cardTitle = content
+    ? content.cardTitle
+    : (RESULT_TYPE_LABELS[resultType] ?? resultType);
+  const resultBody = content
+    ? content.body
+    : '6축 점수가 비교적 고르게 분포되어 있어, 현재 균형이 잘 잡혀 있는 편이에요.';
+  const resultActions = content ? content.actions : null;
+  const resultBodyParagraphs = resultBody.split('\n\n');
+  const cuteFontStyle = {
+    fontFamily:
+      `${cuteFont.style.fontFamily}, Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif`,
+  };
 
   return (
-    <div className="min-h-screen bg-[var(--bg)]">
-      <div className="container mx-auto px-4 py-16">
-        <div className="max-w-4xl mx-auto">
-          {/* 헤더 */}
-          <div className="text-center mb-12">
-            <h1 className="text-2xl font-bold text-[var(--text)] mb-4">{TITLES.result}</h1>
-          </div>
-
-          {/* 섹션 1: 타입 선언 */}
-          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 md:p-8 mb-6 shadow-sm">
-            <div className="text-center">
-              <p className="text-[var(--text)] text-lg mb-4 whitespace-pre-line">
-                {story.section1_typeDeclare.replace(/\*\*/g, '')}
+    <div className="min-h-screen bg-[var(--bg)] overflow-x-hidden">
+      <div className="container mx-auto px-4 py-12 sm:py-14 md:py-16">
+        <div className="max-w-4xl md:max-w-6xl mx-auto">
+          {/* 모바일 전용: Animal Hero 카드 */}
+          <section className="block sm:hidden mb-6">
+            <div className="text-center mb-4">
+              <p className="text-sm text-[var(--muted)] mb-1 whitespace-normal break-keep">
+                무료 움직임 테스트 결과
               </p>
-            </div>
-          </div>
-
-          {/* 섹션 2: 타입 핵심 설명 */}
-          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 md:p-8 mb-6 shadow-sm">
-            <h2 className="text-2xl font-bold text-[var(--text)] mb-6">이 타입은 어떤 특징이 있나요?</h2>
-            <div className="prose max-w-none">
-              <p className="text-[var(--text)] leading-relaxed whitespace-pre-line">
-                {story.section2_typeExplain.replace(/\*\*/g, '')}
-              </p>
-            </div>
-          </div>
-
-          {/* 섹션 3: Confidence 해석 */}
-          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 md:p-8 mb-6 shadow-sm">
-            <div className="prose max-w-none">
-              <p className="text-[var(--text)] leading-relaxed whitespace-pre-line">
-                {story.section3_confidence.replace(/\*\*/g, '')}
-              </p>
-            </div>
-          </div>
-
-          {/* 섹션 4: 불균형 보정 설명 */}
-          {story.section4_imbalance && (
-            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 md:p-8 mb-6 shadow-sm">
-              <div className="prose max-w-none">
-                <p className="text-[var(--text)] leading-relaxed whitespace-pre-line">
-                  {story.section4_imbalance.replace(/\*\*/g, '')}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* 주요 특징 */}
-          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 md:p-8 mb-6 shadow-sm">
-            <h2 className="text-2xl font-bold text-[var(--text)] mb-6">자주 보이는 특징</h2>
-            <ul className="space-y-3">
-              {subTypeContent.signs.map((sign: string, index: number) => (
-                <li key={index} className="flex items-start gap-3 text-[var(--text)]">
-                  <span className="text-[var(--brand)] mt-1">•</span>
-                  <span>{sign}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Quick Win */}
-          <div className="bg-[var(--brand-soft)] border border-[var(--brand)] rounded-xl p-6 md:p-8 mb-6 shadow-sm">
-            <h2 className="text-2xl font-bold text-[var(--text)] mb-4">💡 바로 체감되는 변화</h2>
-            <p className="text-[var(--text)] leading-relaxed text-lg">{subTypeContent.quickWin}</p>
-          </div>
-
-          {/* 다음 행동 */}
-          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 md:p-8 mb-6 shadow-sm">
-            <div className="prose max-w-none">
-              <p className="text-[var(--text)] leading-relaxed whitespace-pre-line">
-                {story.section5_nextAction.replace(/\*\*/g, '')}
-              </p>
-            </div>
-          </div>
-
-          {/* CTA: 심층분석 (정보형) - I4 */}
-          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 md:p-8 mb-6 shadow-sm">
-            <div className="text-center">
-              <h3 className="text-xl font-semibold text-[var(--text)] mb-3">더 자세한 분석이 필요하신가요?</h3>
-              <p className="text-[var(--muted)] mb-6 leading-relaxed">
-                사진/영상 업로드와 전문가 코멘트를 통해<br />
-                더 정확하고 맞춤형인 움직임 분석을 받아보세요
-              </p>
-              <button
-                onClick={() => router.push('/deep-analysis')}
-                className="px-6 py-3 bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--brand)] text-[var(--text)] font-medium rounded-xl transition-all duration-200"
+              <h1
+                className={`${cuteFont.className} text-xl sm:text-2xl lg:text-3xl font-semibold text-[var(--text)] whitespace-normal break-keep`}
+                style={cuteFontStyle}
               >
-                심층분석 알아보기
+                {mainHeroTitle}
+              </h1>
+            </div>
+            <div
+              className="
+                rounded-[var(--radius)]
+                bg-[var(--surface)]
+                border border-[color:var(--border)]
+                shadow-[var(--shadow-0)]
+                p-6
+                flex flex-col items-center text-center gap-3
+              "
+            >
+              <MobileHeroImage contentKey={contentKey} />
+              <h2 className="text-lg font-bold text-[var(--text)] whitespace-normal break-keep">
+                {cardTitle}
+              </h2>
+              <div className="space-y-4 lg:space-y-5 text-[var(--text)]">
+                {resultBodyParagraphs.map((paragraph, idx) => (
+                  <p
+                    key={idx}
+                    className={`${cuteFont.className} text-base sm:text-lg lg:text-xl whitespace-pre-line break-keep leading-relaxed lg:leading-8`}
+                    style={cuteFontStyle}
+                  >
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+              {resultActions && (
+                <TypeActionCards
+                  actions={resultActions}
+                  cuteClassName={cuteFont.className}
+                  cuteStyle={cuteFontStyle}
+                />
+              )}
+            </div>
+          </section>
+
+          {/* 데스크톱/태블릿 전용: 기존 UI */}
+          <div className="hidden sm:block">
+            {/* 결과 타이틀 + 메인 히어로 */}
+            <section className="mb-6 sm:mb-8">
+              <div className="text-center">
+                <p className="text-sm sm:text-base text-[var(--muted)] mb-2 whitespace-normal break-keep">
+                  무료 움직임 테스트 결과
+                </p>
+                <h1
+                  className={`${cuteFont.className} text-xl sm:text-2xl lg:text-3xl font-semibold text-[var(--text)] whitespace-normal break-keep`}
+                  style={cuteFontStyle}
+                >
+                  {mainHeroTitle}
+                </h1>
+              </div>
+            </section>
+
+          {/* 메인 타입 카드 (이미지 + 짧은 설명) */}
+          <section
+            className="
+                rounded-[var(--radius)]
+                bg-[var(--surface)]
+                border border-[color:var(--border)]
+                shadow-[var(--shadow-0)]
+                p-4 sm:p-6 md:p-8
+                mb-4 sm:mb-6
+                lg:max-w-3xl lg:mx-auto
+              "
+            >
+              <h2 className="text-xl font-bold text-[var(--text)] text-left lg:text-center mb-3 whitespace-normal break-keep">
+                {cardTitle}
+              </h2>
+              <MainTypeImage contentKey={contentKey} />
+              <div className="mt-3 space-y-4 lg:space-y-5 text-[var(--text)] text-left lg:text-center">
+                {resultBodyParagraphs.map((paragraph, idx) => (
+                  <p
+                    key={idx}
+                    className={`${cuteFont.className} text-base sm:text-lg lg:text-xl whitespace-pre-line break-keep leading-relaxed lg:leading-8 text-left lg:text-center`}
+                    style={cuteFontStyle}
+                  >
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+              {resultActions && (
+                <TypeActionCards
+                  actions={resultActions}
+                  cuteClassName={cuteFont.className}
+                  cuteStyle={cuteFontStyle}
+                />
+              )}
+              {scoreResult.subTendency && (
+                <p className="mt-4 text-sm text-[var(--muted)] whitespace-normal break-keep">
+                  보조 경향: {AXIS_LABELS[scoreResult.subTendency]}
+                </p>
+              )}
+            </section>
+          </div>
+
+          {/* 다시 테스트 */}
+          <section
+            className="
+              rounded-[var(--radius)]
+              bg-[var(--surface)]
+              border border-[color:var(--border)]
+              shadow-[var(--shadow-0)]
+              p-4 sm:p-6 md:p-8 text-center
+            "
+          >
+            <p className="text-xs sm:text-sm text-[var(--muted)] mb-4 whitespace-normal break-keep">
+              몸 상태가 달라지면 결과도 달라질 수 있어요
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center items-stretch sm:items-center">
+              <button
+                type="button"
+                onClick={() => router.push('/movement-test/feedback')}
+                className="
+                  w-full sm:w-auto min-h-[44px]
+                  inline-flex items-center justify-center
+                  rounded-[var(--radius)]
+                  bg-[var(--brand)] text-white
+                  px-8 py-4 font-bold
+                  shadow-[var(--shadow-0)]
+                  transition-all duration-200
+                  hover:opacity-95
+                "
+              >
+                테스트 평가하기
+              </button>
+              <button
+                type="button"
+                onClick={() => setShareOpen(true)}
+                className="
+                  w-full sm:w-auto min-h-[44px]
+                  inline-flex items-center justify-center
+                  rounded-[var(--radius)]
+                  bg-[var(--brand)] text-white
+                  px-8 py-4 font-bold
+                  shadow-[var(--shadow-0)]
+                  transition-all duration-200
+                  hover:opacity-95
+                "
+              >
+                테스트 공유하기
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push('/')}
+                className="
+                  w-full sm:w-auto min-h-[44px]
+                  inline-flex items-center justify-center
+                  rounded-[var(--radius)]
+                  bg-[var(--brand)] text-white
+                  px-8 py-4 font-bold
+                  shadow-[var(--shadow-0)]
+                  transition-all duration-200
+                  hover:opacity-95
+                "
+              >
+                다시 테스트하기
               </button>
             </div>
-          </div>
-
-          {/* CTA: 다시 테스트하기 */}
-          <div className="bg-[var(--brand)] rounded-xl p-6 md:p-8 text-center shadow-sm">
-            <h3 className="text-2xl font-bold text-white mb-4">다시 테스트하기</h3>
-            <p className="text-white/90 mb-6">몸 상태가 달라지면 결과도 달라질 수 있어요</p>
-            <button
-              onClick={() => router.push('/')}
-              className="px-8 py-4 bg-white text-[var(--brand)] font-bold rounded-xl hover:bg-gray-50 transition-all duration-200"
-            >
-              다시 테스트하기
-            </button>
-          </div>
-
-          {/* ✅ CTA: 테스트 공유하기 (맨 아래) */}
-          <div className="mt-6 bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 md:p-8 text-center shadow-sm">
-            <h3 className="text-xl font-semibold text-[var(--text)] mb-2">친구도 해보라고 던져!</h3>
-            <p className="text-[var(--muted)] mb-5">카톡 포함, 설치된 SNS/메신저 앱으로 바로 공유돼요</p>
-
-            <button
-              onClick={async () => {
-                try {
-                  const res = await shareTestLink();
-                  setShareUrl(res.url);
-                  if (!res.usedNativeShare) setShareOpen(true);
-                } catch {
-                  // 사용자가 공유 취소하는 경우 등은 무시
-                }
-              }}
-              className="px-8 py-4 bg-[var(--brand)] text-white font-bold rounded-xl hover:bg-[#ea580c] transition-all duration-200"
-            >
-              테스트 공유하기
-            </button>
-
-            <p className="mt-3 text-sm text-[var(--muted)]">내 결과는 스크린샷으로 저장하면 끝 👍</p>
-
-            {/* ✅ PC 폴백 패널 */}
-            {shareOpen && (
-              <div className="mt-6 text-left max-w-xl mx-auto">
-                <div className="bg-[var(--bg)] border border-[var(--border)] rounded-xl p-4">
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <p className="font-semibold text-[var(--text)]">공유 옵션</p>
-                    <button
-                      onClick={() => setShareOpen(false)}
-                      className="px-3 py-1 rounded-lg border border-[var(--border)] text-[var(--text)] hover:border-[var(--brand)]"
-                    >
-                      닫기
-                    </button>
-                  </div>
-
-                  <div className="flex gap-2 mb-3">
-                    <input
-                      value={shareUrl}
-                      readOnly
-                      className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-white/5 text-[var(--text)]"
-                    />
-                    <button
-                      onClick={async () => {
-                        await navigator.clipboard.writeText(shareUrl);
-                        alert('링크 복사 완료!');
-                      }}
-                      className="px-4 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--brand)] text-[var(--text)] font-semibold"
-                    >
-                      복사
-                    </button>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <a
-                      className="px-4 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--brand)] text-[var(--text)] font-semibold"
-                      href={`https://twitter.com/intent/tweet?text=${encodeURIComponent('무료 움직임 테스트 해봐!')}&url=${encodeURIComponent(shareUrl)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      X
-                    </a>
-                    <a
-                      className="px-4 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--brand)] text-[var(--text)] font-semibold"
-                      href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Facebook
-                    </a>
-                    <a
-                      className="px-4 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--brand)] text-[var(--text)] font-semibold"
-                      href={`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent('무료 움직임 테스트 해봐!')}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Telegram
-                    </a>
-                    <a
-                      className="px-4 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--brand)] text-[var(--text)] font-semibold"
-                      href={`https://wa.me/?text=${encodeURIComponent(`무료 움직임 테스트 해봐! ${shareUrl}`)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      WhatsApp
-                    </a>
-                  </div>
-
-                  <p className="mt-3 text-sm text-[var(--muted)]">
-                    PC에서는 앱 공유가 제한될 수 있어 링크 복사/버튼 공유로 제공돼요.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
+          </section>
         </div>
       </div>
+
+      {/* 공유 모달 */}
+      {shareOpen && (
+        <>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="닫기"
+            className="fixed inset-0 bg-black/40 z-40"
+            onClick={() => setShareOpen(false)}
+            onKeyDown={(e) => e.key === 'Enter' && setShareOpen(false)}
+          />
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+            aria-modal
+            aria-labelledby="share-title"
+          >
+            <div
+              className="pointer-events-auto w-full max-w-md overflow-x-hidden rounded-[var(--radius)] bg-[var(--surface)] border border-[color:var(--border)] shadow-[var(--shadow-0)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-end p-3 border-b border-[color:var(--border)]">
+                <button
+                  type="button"
+                  onClick={() => setShareOpen(false)}
+                  className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[var(--radius)] text-[var(--muted)] hover:text-[var(--text)]"
+                  aria-label="닫기"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="p-4 sm:p-6">
+                <h2 id="share-title" className="text-lg font-bold text-[var(--text)] mb-4 whitespace-normal break-keep">
+                  친구에게 테스트 공유하기
+                </h2>
+                <div className="flex flex-wrap gap-3 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => handleNativeShare('링크가 복사됐어요. 인스타 스토리/DM에 붙여넣어 공유하세요.')}
+                    className="flex-1 min-w-[120px] min-h-[44px] inline-flex items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--surface)] border-2 border-[color:var(--border)] text-[var(--text)] hover:border-[color:var(--brand)] transition-colors"
+                  >
+                    <span>📸</span>
+                    <span className="text-sm sm:text-base whitespace-nowrap">인스타그램</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleNativeShare('링크가 복사됐어요. 카카오톡에 붙여넣어 공유하세요.')}
+                    className="flex-1 min-w-[120px] min-h-[44px] inline-flex items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--surface)] border-2 border-[color:var(--border)] text-[var(--text)] hover:border-[color:var(--brand)] transition-colors"
+                  >
+                    <span>💬</span>
+                    <span className="text-sm sm:text-base whitespace-nowrap">카카오톡</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openTwitter}
+                    className="flex-1 min-w-[120px] min-h-[44px] inline-flex items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--surface)] border-2 border-[color:var(--border)] text-[var(--text)] hover:border-[color:var(--brand)] transition-colors"
+                  >
+                    <span>𝕏</span>
+                    <span className="text-sm sm:text-base whitespace-nowrap">트위터(X)</span>
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={shareUrl}
+                    className="flex-1 min-w-0 min-h-[44px] rounded-[var(--radius)] bg-[var(--bg)] border border-[color:var(--border)] px-3 py-2 text-sm text-[var(--text)] truncate"
+                    aria-label="공유 링크"
+                  />
+                  <button
+                    type="button"
+                    onClick={copyLink}
+                    className="shrink-0 min-h-[44px] px-4 rounded-[var(--radius)] bg-[var(--brand)] text-white font-semibold shadow-[var(--shadow-0)] hover:opacity-95 transition-opacity"
+                  >
+                    링크 복사
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 토스트 */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-3 rounded-[var(--radius)] bg-[var(--text)] text-[var(--bg)] text-sm font-medium shadow-lg whitespace-normal break-keep max-w-[90vw]">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

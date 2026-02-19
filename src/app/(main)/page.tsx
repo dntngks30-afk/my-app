@@ -2,20 +2,25 @@
 
 /**
  * 메인 페이지 (16Personalities 스타일)
- * 
- * Hero + 카드 4개 + 바로 아래 SurveyForm 렌더
+ *
+ * Hero + 카드 4개. 설문은 /movement-test/survey 직행.
  */
 
-import SurveyForm from '@/components/SurveyForm';
+import { useRouter } from 'next/navigation';
+
+/** 카드 4개 섹션 일시 숨김. true로 변경 시 즉시 복구 */
+const SHOW_HOME_CARDS = false;
 
 export default function LandingPage() {
+  const router = useRouter();
+
   return (
     <div className="min-h-screen bg-[var(--bg)]">
       {/* Hero 섹션 */}
       <section className="py-16 md:py-24">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto text-center">
-            <h1 
+            <h1
               className="text-4xl md:text-5xl font-bold text-[var(--text)] mb-4"
               style={{ fontFamily: 'var(--font-display)' }}
             >
@@ -24,12 +29,28 @@ export default function LandingPage() {
             <p className="text-lg md:text-xl text-[var(--muted)] mb-12">
               내 움직임 습관을 빠르게 확인하고 오늘 바로 고칠 루틴까지
             </p>
+            <button
+              type="button"
+              onClick={() => router.push('/movement-test/survey')}
+              className="
+                inline-flex items-center justify-center
+                rounded-[var(--radius)]
+                bg-[var(--brand)] text-white
+                px-8 py-4
+                font-bold
+                shadow-[var(--shadow-0)]
+                transition-all duration-200
+                hover:opacity-95
+              "
+            >
+              테스트 시작
+            </button>
           </div>
         </div>
       </section>
 
-     {/* 카드 4개 */}
-<section className="pb-12">
+      {SHOW_HOME_CARDS ? (
+        <section className="pb-12">
   <div className="container mx-auto px-4">
     {/* max-w-6xl → 7xl 로 넓혀서 데스크톱에서 더 시원하게 */}
     <div className="max-w-7xl mx-auto">
@@ -70,10 +91,7 @@ export default function LandingPage() {
     </div>
   </div>
 </section>
-
-
-      {/* 바로 아래 SurveyForm 렌더 */}
-      <SurveyForm />
+      ) : null}
 
       {/* 하단 고지 */}
       <section className="py-8">

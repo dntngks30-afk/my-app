@@ -10,9 +10,9 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { getSubTypeContent } from '../../data/type-descriptions';
-import { getConfidenceCopy } from '../../utils/getConfidenceCopy';
-import { createResultStory } from '../../utils/getResultStory';
+import { getSubTypeContent } from '@/features/movement-test/data/results/type-descriptions';
+import { getConfidenceCopy } from '@/features/movement-test/utils/getConfidenceCopy';
+import { createResultStory } from '@/features/movement-test/utils/getResultStory';
 import ShareButtons from '../../components/ShareButtons';
 import type { SubTypeKey } from '@/types/movement-test';
 

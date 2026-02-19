@@ -2,14 +2,7 @@
 // Resend를 사용하여 사용자에게 리포트 알림 이메일을 보냅니다.
 
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-// Supabase 클라이언트 (서버용)
-function getSupabaseClient() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-  return createClient(url, key);
-}
+import { getServerSupabaseAdmin } from "@/lib/supabase";
 
 export async function POST(req: Request) {
   try {
@@ -28,7 +21,7 @@ export async function POST(req: Request) {
     }
 
     // 사용자 이메일 조회
-    const supabase = getSupabaseClient();
+    const supabase = getServerSupabaseAdmin();
     const { data: userData, error: userError } = await supabase
       .from("users")
       .select("email")

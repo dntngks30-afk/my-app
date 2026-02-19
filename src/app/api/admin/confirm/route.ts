@@ -1,17 +1,8 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getServerSupabaseAdmin } from "@/lib/supabase";
 
 // [핵심 1] 빌드 시점에 이 파일을 미리 실행(정적 최적화)하지 않도록 강제합니다.
 export const dynamic = 'force-dynamic';
-
-function getSupabaseClient() {
-  // [핵심 2] 빌드 시점에 환경변수가 없어도 Supabase SDK가 화내지 않도록 
-  // 최소한 URL 형식을 갖춘 더미 주소를 넣어줍니다.
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://example.supabase.co";
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4YW1wbGUiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYwOTQ1OTIwMCwiZXhwIjoxOTI1MDM1MjAwfQ.example";
-
-  return createClient(url, key);
-}
 
 const NASM_CES_TEMPLATE = {
   steps: [
@@ -24,19 +15,13 @@ const NASM_CES_TEMPLATE = {
 
 export async function POST(req: Request) {
   try {
-    // [핵심 3] 실제 실행 시점에 환경 변수가 진짜로 없는지 한 번 더 체크합니다.
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      console.error("환경 변수 NEXT_PUBLIC_SUPABASE_URL 가 없습니다.");
-      return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
-    }
-
     const body = await req.json();
     const { requestId, diagnoses } = body;
     if (!requestId) {
       return NextResponse.json({ error: "requestId required" }, { status: 400 });
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = getServerSupabaseAdmin();
 
     // 요청 정보 조회
     const { data: reqRow, error: selectErr } = await supabase
