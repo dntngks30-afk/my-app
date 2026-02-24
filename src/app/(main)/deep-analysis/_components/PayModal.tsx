@@ -10,7 +10,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { supabaseBrowser } from '@/lib/supabase';
 
 const PRIMARY = '#2563EB';
 
@@ -31,12 +31,12 @@ export default function PayModal({ isOpen, onClose, returnUrl }: PayModalProps) 
     if (!isOpen) return;
     let cancelled = false;
     async function check() {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await supabaseBrowser.auth.getSession();
       if (!session || cancelled) {
         if (!cancelled) setIsPlanActive(false);
         return;
       }
-      const { data } = await supabase
+      const { data } = await supabaseBrowser
         .from('users')
         .select('plan_status')
         .eq('id', session.user.id)
@@ -57,9 +57,12 @@ export default function PayModal({ isOpen, onClose, returnUrl }: PayModalProps) 
     setIsLoading(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push(`/app/auth?next=${encodeURIComponent(returnUrl)}`);
+      const { data } = await supabaseBrowser.auth.getSession();
+      const token = data?.session?.access_token;
+      if (!token) {
+        const nextUrlWithPay1 = returnUrl;
+        router.push(`/app/auth?next=${encodeURIComponent(nextUrlWithPay1)}`);
+        setIsLoading(false);
         return;
       }
 
@@ -67,7 +70,7 @@ export default function PayModal({ isOpen, onClose, returnUrl }: PayModalProps) 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           productId: 'move-re-7d',
