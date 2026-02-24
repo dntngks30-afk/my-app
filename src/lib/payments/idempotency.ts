@@ -6,6 +6,7 @@
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 
 const PROVIDER_STRIPE = 'stripe';
+export const PROVIDER_TOSS = 'toss';
 
 /**
  * 이벤트가 이미 처리되었는지 확인

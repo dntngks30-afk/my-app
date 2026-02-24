@@ -1,7 +1,9 @@
 -- ================================================
--- payment_events 테이블 (Webhook 멱등성)
+-- payment_events 테이블 (결제 멱등성)
 -- ================================================
--- 같은 Stripe/결제 provider 이벤트가 2번 와도 1번만 처리되도록 event_id UNIQUE 제약 사용
+-- Stripe: event_id = Stripe event id (evt_xxx)
+-- Toss:   event_id = orderId
+-- 같은 provider+event_id가 2번 와도 1번만 처리되도록 UNIQUE 제약 사용
 -- Supabase Dashboard → SQL Editor에서 실행
 
 CREATE TABLE IF NOT EXISTS public.payment_events (
