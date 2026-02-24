@@ -1,124 +1,150 @@
 /**
- * 운동 일자 완료 처리 API
- * 
+ * 운동 일자 출석 처리 API (멱등)
+ *
  * POST /api/workout-routine/complete-day
- * 
- * Body: { routineId: string, dayNumber: number, notes?: string }
+ *
+ * Body: { routineId?: string }  (없으면 active 루틴 사용)
+ * - 오늘 일차(todayDay)를 routine_attendance에 기록
+ * - ON CONFLICT DO NOTHING (중복 호출 시 changed=false)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { computeTodayDay } from '@/lib/workout-routine/day';
 
-/**
- * 요청에서 사용자 ID 추출
- */
 async function getCurrentUserId(req: NextRequest): Promise<string | null> {
   const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
+  if (!authHeader?.startsWith('Bearer ')) return null;
 
-  const token = authHeader.substring(7);
+  const token = authHeader.slice(7);
   const supabase = getServerSupabaseAdmin();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser(token);
 
-  try {
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
-      return null;
-    }
-
-    return user.id;
-  } catch (error) {
-    console.error('User authentication error:', error);
-    return null;
-  }
+  if (error || !user) return null;
+  return user.id;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. 사용자 인증 확인
     const userId = await getCurrentUserId(req);
     if (!userId) {
       return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
     }
 
-    // 2. 요청 본문 파싱
-    const body = await req.json();
-    const { routineId, dayNumber, notes } = body;
+    let body: { routineId?: string } = {};
+    try {
+      body = await req.json();
+    } catch {
+      // empty body ok
+    }
 
-    if (!routineId || !dayNumber) {
+    const { routineId } = body;
+    const supabase = getServerSupabaseAdmin();
+
+    let routine: { id: string; started_at: string | null } | null = null;
+
+    if (routineId) {
+      const { data, error } = await supabase
+        .from('workout_routines')
+        .select('id, started_at')
+        .eq('id', routineId)
+        .eq('user_id', userId)
+        .single();
+
+      if (error || !data) {
+        return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
+      }
+      routine = data;
+    } else {
+      const { data } = await supabase
+        .from('workout_routines')
+        .select('id, started_at')
+        .eq('user_id', userId)
+        .not('started_at', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!data) {
+        return NextResponse.json(
+          { error: '시작된 루틴이 없습니다.' },
+          { status: 404 }
+        );
+      }
+      routine = data;
+    }
+
+    if (!routine) {
+      return NextResponse.json({ error: '루틴을 찾을 수 없습니다.' }, { status: 404 });
+    }
+
+    if (!routine.started_at) {
       return NextResponse.json(
-        { error: 'routineId와 dayNumber는 필수입니다.' },
-        { status: 400 }
+        { error: '루틴이 아직 시작되지 않았습니다.' },
+        { status: 409 }
       );
     }
 
-    const supabase = getServerSupabaseAdmin();
+    const dayNumber = computeTodayDay(routine.started_at);
 
-    // 3. 루틴 소유권 확인
-    const { data: routine, error: routineError } = await supabase
-      .from('workout_routines')
-      .select('id, user_id')
-      .eq('id', routineId)
-      .eq('user_id', userId)
-      .single();
+    const { data: inserted, error: insertError } = await supabase
+      .from('routine_attendance')
+      .upsert(
+        {
+          routine_id: routine.id,
+          day_number: dayNumber,
+          completed_at: new Date().toISOString(),
+        },
+        {
+          onConflict: 'routine_id,day_number',
+          ignoreDuplicates: true,
+        }
+      )
+      .select('id')
+      .maybeSingle();
 
-    if (routineError || !routine) {
-      return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
-    }
-
-    // 4. 일자 완료 처리
-    const { error: updateError } = await supabase
-      .from('workout_routine_days')
-      .update({
-        completed_at: new Date().toISOString(),
-        notes: notes || null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('routine_id', routineId)
-      .eq('day_number', dayNumber);
-
-    if (updateError) {
-      console.error('Day completion error:', updateError);
+    if (insertError) {
+      console.error('Attendance insert error:', insertError);
       return NextResponse.json(
-        { error: '완료 처리에 실패했습니다.' },
+        { error: '출석 처리에 실패했습니다.' },
         { status: 500 }
       );
     }
 
-    // 5. 모든 일자가 완료되었는지 확인
-    const { data: allDays } = await supabase
-      .from('workout_routine_days')
-      .select('completed_at')
-      .eq('routine_id', routineId);
+    const changed = !!inserted;
 
-    const allCompleted = allDays?.every((day) => day.completed_at !== null) || false;
+    const { data: allAttendance } = await supabase
+      .from('routine_attendance')
+      .select('day_number')
+      .eq('routine_id', routine.id);
+    const completedCount = allAttendance?.length ?? 0;
 
-    if (allCompleted) {
-      // 루틴 완료 처리
+    if (changed && completedCount >= 7) {
       await supabase
         .from('workout_routines')
         .update({
           status: 'completed',
           completed_at: new Date().toISOString(),
         })
-        .eq('id', routineId);
+        .eq('id', routine.id);
     }
 
     return NextResponse.json({
-      success: true,
-      allCompleted,
+      ok: true,
+      routineId: routine.id,
+      dayNumber,
+      changed,
+      allCompleted: completedCount >= 7,
     });
-  } catch (error) {
-    console.error('Day completion error:', error);
+  } catch (err) {
+    console.error('Complete-day error:', err);
     return NextResponse.json(
       {
-        error: '완료 처리에 실패했습니다.',
-        details: error instanceof Error ? error.message : String(error),
+        error: '처리 중 오류가 발생했습니다.',
+        details: err instanceof Error ? err.message : String(err),
       },
       { status: 500 }
     );

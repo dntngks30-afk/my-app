@@ -1,13 +1,16 @@
 /**
  * 운동 루틴 조회 API
- * 
+ *
  * GET /api/workout-routine/get?routineId=xxx
  * 또는
  * GET /api/workout-routine/get (현재 활성 루틴 조회)
+ *
+ * 응답에 todayDay, completedDays(routine_attendance), progress 포함
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { computeTodayDay } from '@/lib/workout-routine/day';
 
 /**
  * 요청에서 사용자 ID 추출
@@ -116,18 +119,34 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 4. 진행률 계산
-    const completedDays = routineDays?.filter((day) => day.completed_at !== null).length || 0;
-    const totalDays = routineDays?.length || 0;
-    const progress = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0;
+    // 4. 출석 기록 조회 (routine_attendance)
+    const { data: attendance } = await supabase
+      .from('routine_attendance')
+      .select('day_number')
+      .eq('routine_id', routine.id)
+      .order('day_number', { ascending: true });
 
-    // 5. 응답 반환
+    const completedDayNumbers = (attendance ?? []).map((a) => a.day_number);
+    const totalDays = 7;
+    const completedCount = completedDayNumbers.length;
+    const progressPercent =
+      totalDays > 0 ? Math.round((completedCount / totalDays) * 100) : 0;
+
+    const todayDay = routine.started_at
+      ? computeTodayDay(routine.started_at)
+      : null;
+
+    // 5. 응답 반환 (progress + todayDay + attendance)
     return NextResponse.json({
       success: true,
       routine: {
         ...routine,
-        progress,
-        completedDays,
+        started_at: routine.started_at,
+        todayDay,
+        completedDays: completedCount,
+        attendanceDayNumbers: completedDayNumbers,
+        progress: progressPercent,
+        progressDetail: { completed: completedCount, total: totalDays },
         totalDays,
       },
       days: routineDays || [],
