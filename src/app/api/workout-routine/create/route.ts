@@ -166,14 +166,14 @@ export async function POST(req: NextRequest) {
       enhancedRoutine = baseRoutine;
     }
 
-    // 9. DB에 루틴 저장
+    // 9. DB에 루틴 저장 (draft: Start 버튼으로 활성화)
     const { data: routine, error: routineError } = await supabase
       .from('workout_routines')
       .insert({
         user_id: userId,
         movement_test_result_id: testResultId,
-        status: 'active',
-        started_at: new Date().toISOString(),
+        status: 'draft',
+        started_at: null,
       })
       .select('id')
       .single();

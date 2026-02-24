@@ -60,8 +60,36 @@ export async function GET(req: NextRequest) {
     if (routineId) {
       routineQuery = routineQuery.eq('id', routineId);
     } else {
-      // 활성 루틴 조회
-      routineQuery = routineQuery.eq('status', 'active').order('created_at', { ascending: false }).limit(1);
+      const { data: active } = await supabase
+        .from('workout_routines')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (active) {
+        routineQuery = routineQuery.eq('id', active.id);
+      } else {
+        const { data: draft } = await supabase
+          .from('workout_routines')
+          .select('*')
+          .eq('user_id', userId)
+          .is('started_at', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (draft) {
+          routineQuery = routineQuery.eq('id', draft.id);
+        } else {
+          return NextResponse.json(
+            { error: '운동 루틴을 찾을 수 없습니다.' },
+            { status: 404 }
+          );
+        }
+      }
     }
 
     const { data: routine, error: routineError } = await routineQuery.single();
