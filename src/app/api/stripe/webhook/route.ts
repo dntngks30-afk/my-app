@@ -4,19 +4,40 @@
  * POST /api/stripe/webhook
  * 
  * Stripe에서 발생하는 이벤트를 처리합니다:
- * - checkout.session.completed: 결제 완료
+ * - checkout.session.completed: 결제 완료 (users.plan_status/plan_tier 활성화)
  * - customer.subscription.created: 구독 생성
  * - customer.subscription.updated: 구독 업데이트
  * - customer.subscription.deleted: 구독 취소
  * - invoice.payment_succeeded: 인보이스 결제 성공
  * - invoice.payment_failed: 인보이스 결제 실패
+ * 
+ * 멱등성: payment_events 테이블로 event_id 중복 처리 방지
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { verifyWebhookSignature, getStripeServerClient } from '@/lib/stripe';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { recordEventProcessed } from '@/lib/payments/idempotency';
 import Stripe from 'stripe';
+
+class WebhookMetadataError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WebhookMetadataError';
+  }
+}
+
+function validateCheckoutMetadata(session: Stripe.Checkout.Session): void {
+  const userId = session.metadata?.userId;
+  const planId = session.metadata?.planId;
+  if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+    throw new WebhookMetadataError('metadata.userId가 없거나 비정상입니다.');
+  }
+  if (!planId || typeof planId !== 'string') {
+    throw new WebhookMetadataError('metadata.planId가 없습니다.');
+  }
+}
 
 export const runtime = 'nodejs'; // Webhook은 Node.js 런타임 필요
 
@@ -60,7 +81,19 @@ export async function POST(req: NextRequest) {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
-        await handleCheckoutSessionCompleted(session, supabase, stripe);
+        try {
+          validateCheckoutMetadata(session);
+          const isNew = await recordEventProcessed(event.id, session.metadata!.userId);
+          if (!isNew) {
+            return NextResponse.json({ received: true }); // 이미 처리됨 (멱등)
+          }
+          await handleCheckoutSessionCompleted(session, supabase, stripe);
+        } catch (err) {
+          if (err instanceof WebhookMetadataError) {
+            return NextResponse.json({ error: err.message }, { status: 400 });
+          }
+          throw err;
+        }
         break;
       }
 
@@ -112,30 +145,24 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Checkout 세션 완료 처리
+ * Checkout 세션 완료 처리 (validateCheckoutMetadata 통과 후 호출)
  */
 async function handleCheckoutSessionCompleted(
   session: Stripe.Checkout.Session,
   supabase: ReturnType<typeof getServerSupabaseAdmin>,
   stripe: Stripe
 ) {
-  const userId = session.metadata?.userId;
-  const planId = session.metadata?.planId;
+  const userId = session.metadata!.userId;
+  const planId = session.metadata!.planId;
   const planTier = session.metadata?.planTier;
 
-  if (!userId || !planId) {
-    console.error('Checkout session metadata missing:', session.metadata);
-    return;
-  }
-
-  // 1. Payment 기록 업데이트
+  // 1. Payment 기록 업데이트 (paid_at 컬럼 없을 수 있음 → 제외)
   const { error: paymentError } = await supabase
     .from('payments')
     .update({
       status: 'completed',
       stripe_payment_intent_id: session.payment_intent as string,
       stripe_subscription_id: session.subscription as string | null,
-      paid_at: new Date().toISOString(),
     })
     .eq('order_id', `stripe_${session.id}`);
 
@@ -150,19 +177,29 @@ async function handleCheckoutSessionCompleted(
     );
     await handleSubscriptionCreated(subscription, supabase);
   } else {
-    // 3. 단건 결제인 경우 사용자 플랜 업데이트
+    // 3. 단건 결제: users.plan_status/plan_tier 활성화 (MVP)
+    // TODO: 7일권 만료(end_at)는 subscriptions/current_period_end로 다음 PR에서 확장
     const { data: plan } = await supabase
       .from('plans')
       .select('*')
       .eq('id', planId)
       .single();
 
-    if (plan) {
-      // Subscription 생성 (단건 결제도 subscription으로 관리)
-      const endDate = new Date();
-      endDate.setMonth(endDate.getMonth() + 1); // 1개월 후
+    const tier = (planTier && typeof planTier === 'string' ? planTier : plan?.tier) || 'basic';
 
-      const { error: subError } = await supabase.from('subscriptions').insert({
+    await supabase
+      .from('users')
+      .update({
+        plan_tier: tier,
+        plan_status: 'active',
+      })
+      .eq('id', userId);
+
+    if (plan) {
+      const endDate = new Date();
+      endDate.setMonth(endDate.getMonth() + 1);
+
+      await supabase.from('subscriptions').insert({
         user_id: userId,
         plan_id: planId,
         status: 'active',
@@ -170,20 +207,9 @@ async function handleCheckoutSessionCompleted(
         start_date: new Date().toISOString(),
         end_date: endDate.toISOString(),
         auto_renew: false,
+      }).then(({ error: subError }) => {
+        if (subError) console.error('Subscription creation error:', subError);
       });
-
-      if (subError) {
-        console.error('Subscription creation error:', subError);
-      }
-
-      // 사용자 플랜 업데이트
-      await supabase
-        .from('users')
-        .update({
-          plan_tier: planTier || plan.tier,
-          plan_status: 'active',
-        })
-        .eq('id', userId);
     }
   }
 }

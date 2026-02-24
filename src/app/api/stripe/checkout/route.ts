@@ -144,9 +144,9 @@ export async function POST(req: NextRequest) {
         .eq('id', userId);
     }
 
-    // 9. 기본 URL 설정
+    // 9. 기본 URL 설정 (Stripe 결제 → stripe-success)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const defaultSuccessUrl = `${baseUrl}/payments/success?session_id={CHECKOUT_SESSION_ID}`;
+    const defaultSuccessUrl = `${baseUrl}/payments/stripe-success?session_id={CHECKOUT_SESSION_ID}`;
     const defaultCancelUrl = `${baseUrl}/pricing`;
 
     // 10. Stripe Checkout 세션 생성
@@ -164,6 +164,7 @@ export async function POST(req: NextRequest) {
       cancel_url: cancelUrl || defaultCancelUrl,
       metadata: {
         userId,
+        productId: 'move-re-7d',
         planId: plan.id,
         planTier: plan.tier,
         planName: plan.name,
@@ -177,6 +178,7 @@ export async function POST(req: NextRequest) {
       sessionParams.subscription_data = {
         metadata: {
           userId,
+          productId: 'move-re-7d',
           planId: plan.id,
           planTier: plan.tier,
         },
