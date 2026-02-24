@@ -60,7 +60,7 @@ export default function AdminPage() {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError || !session) {
-          router.push("/login");
+          router.push("/app/auth?next=" + encodeURIComponent("/admin"));
           return;
         }
 
@@ -72,7 +72,7 @@ export default function AdminPage() {
         setIsAuthorized(true);
       } catch (err) {
         console.error("인증 체크 에러:", err);
-        router.push("/login");
+        router.push("/app/auth?next=" + encodeURIComponent("/admin"));
       } finally {
         setAuthLoading(false);
       }

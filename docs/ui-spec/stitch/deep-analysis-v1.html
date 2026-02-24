@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html class="light" lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>심층 분석 프로그램 안내 - PostureLab</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#2563EB",
+                        "background-light": "#F8FAFC",
+                        "background-dark": "#0F172A",
+                        "card-dark": "#1E293B",
+                        "navy-gradient-start": "#0F172A",
+                        "navy-gradient-end": "#1E1B4B",
+                    },
+                    fontFamily: {
+                        display: ["Pretendard", "sans-serif"],
+                        body: ["Pretendard", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "12px",
+                        '2xl': '24px',
+                    },
+                },
+            },
+        };
+    </script>
+<style>
+        body {
+            font-family: 'Pretendard', sans-serif;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gradient-bg {
+            background: radial-gradient(circle at top right, #1e3a8a 0%, #0f172a 60%);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<header class="sticky top-0 z-50 w-full border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md">
+<div class="max-w-screen-xl mx-auto px-6 h-16 flex items-center justify-between">
+<div class="flex items-center gap-8">
+<a class="text-xl font-bold tracking-tight text-primary" href="#">PostureLab</a>
+<nav class="hidden md:flex items-center gap-6 text-sm font-medium">
+<a class="text-slate-500 dark:text-slate-400 hover:text-primary transition-colors" href="#">움직임유형</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-primary transition-colors" href="#">움직임테스트</a>
+<a class="text-primary border-b-2 border-primary pb-5 mt-5" href="#">심층분석</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-primary transition-colors" href="#">아티클</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-primary transition-colors">로그인</button>
+<button class="bg-primary hover:bg-blue-700 text-white px-5 py-2 rounded-full text-sm font-semibold transition-all shadow-lg shadow-blue-500/20">회원가입</button>
+</div>
+</div>
+</header>
+<main class="relative overflow-hidden">
+<section class="relative pt-20 pb-32 px-6 gradient-bg dark:bg-none bg-slate-900 overflow-hidden">
+<div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-20">
+<div class="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-blue-500 rounded-full blur-[120px]"></div>
+<div class="absolute bottom-[-10%] left-[-5%] w-[400px] h-[400px] bg-indigo-600 rounded-full blur-[100px]"></div>
+</div>
+<div class="max-w-4xl mx-auto text-center relative z-10">
+<span class="inline-block px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-400 text-sm font-semibold mb-6">PREMIUM PROGRAM</span>
+<h1 class="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 tracking-tight leading-tight">
+                    심층 분석 프로그램
+                </h1>
+<p class="text-xl md:text-2xl text-slate-300 font-medium mb-4">
+                    7일 동안 움직임을 재설계합니다.
+                </p>
+<p class="text-lg text-slate-400 max-w-lg mx-auto leading-relaxed">
+                    단순 운동이 아닌, 분석 기반 리셋 프로그램으로<br/>당신의 숨은 가동성을 찾아보세요.
+                </p>
+</div>
+</section>
+<section class="max-w-screen-xl mx-auto px-6 -mt-16 relative z-20">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="bg-white dark:bg-card-dark p-8 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 flex flex-col items-center text-center transform hover:-translate-y-1 transition-transform">
+<div class="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-6">
+<span class="material-symbols-rounded text-primary text-4xl">accessibility_new</span>
+</div>
+<div class="text-primary text-xs font-bold mb-2 tracking-widest uppercase">Step 01</div>
+<h3 class="text-xl font-bold mb-3 dark:text-white">움직임 정밀 체크</h3>
+<p class="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">전문적인 바디 스캔 기술을 통해<br/>현재 신체 상태를 정밀 분석합니다.</p>
+</div>
+<div class="bg-white dark:bg-card-dark p-8 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 flex flex-col items-center text-center transform hover:-translate-y-1 transition-transform">
+<div class="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center mb-6">
+<span class="material-symbols-rounded text-indigo-500 text-4xl">play_circle</span>
+</div>
+<div class="text-indigo-500 text-xs font-bold mb-2 tracking-widest uppercase">Step 02</div>
+<h3 class="text-xl font-bold mb-3 dark:text-white">7일 맞춤 루틴</h3>
+<p class="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">분석 결과를 바탕으로 설계된<br/>나만을 위한 최적의 데일리 루틴.</p>
+</div>
+<div class="bg-white dark:bg-card-dark p-8 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 flex flex-col items-center text-center transform hover:-translate-y-1 transition-transform">
+<div class="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center mb-6">
+<span class="material-symbols-rounded text-emerald-500 text-4xl">insights</span>
+</div>
+<div class="text-emerald-500 text-xs font-bold mb-2 tracking-widest uppercase">Step 03</div>
+<h3 class="text-xl font-bold mb-3 dark:text-white">변화 리포트 제공</h3>
+<p class="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">7일 후 시각화된 변화 리포트로<br/>개선된 움직임을 직접 확인하세요.</p>
+</div>
+</div>
+</section>
+<section class="py-24 px-6 max-w-4xl mx-auto">
+<h2 class="text-2xl md:text-3xl font-bold mb-10 text-center dark:text-white">프로그램 상세 구성</h2>
+<div class="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-8 md:p-12 border border-slate-200 dark:border-slate-800">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+<div class="space-y-6">
+<div class="flex gap-4">
+<span class="material-symbols-rounded text-primary flex-shrink-0">check_circle</span>
+<div>
+<h4 class="font-bold mb-1 dark:text-white">하루 5~10분 루틴</h4>
+<p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">바쁜 일상 속에서도 부담 없이 실천할 수 있는 효율적인 코스</p>
+</div>
+</div>
+<div class="flex gap-4">
+<span class="material-symbols-rounded text-primary flex-shrink-0">check_circle</span>
+<div>
+<h4 class="font-bold mb-1 dark:text-white">통증/가동성 체크 기록</h4>
+<p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">매일의 신체 변화를 기록하고 변화 과정을 추적합니다.</p>
+</div>
+</div>
+</div>
+<div class="space-y-6">
+<div class="flex gap-4">
+<span class="material-symbols-rounded text-primary flex-shrink-0">check_circle</span>
+<div>
+<h4 class="font-bold mb-1 dark:text-white">전문 코치 코멘트</h4>
+<p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">데이터 기반의 정확한 피드백으로 올바른 방향을 제시합니다.</p>
+</div>
+</div>
+<div class="flex gap-4">
+<span class="material-symbols-rounded text-primary flex-shrink-0">check_circle</span>
+<div>
+<h4 class="font-bold mb-1 dark:text-white">평생 소장 리포트</h4>
+<p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">프로그램 종료 후에도 지속 가능한 관리법을 담은 리포트 제공</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="pb-32 px-6">
+<div class="max-w-md mx-auto text-center">
+<div class="mb-8 p-6 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800/30">
+<p class="text-slate-600 dark:text-slate-300 mb-1">지금 시작하면 7일 뒤 당신은</p>
+<p class="text-xl font-bold text-primary">더 가볍고 유연한 움직임</p>
+<p class="text-slate-600 dark:text-slate-300">을 가질 수 있습니다.</p>
+</div>
+<button class="w-full bg-primary hover:bg-blue-700 text-white py-5 rounded-2xl text-lg font-bold transition-all shadow-xl shadow-blue-500/30 active:scale-[0.98] flex items-center justify-center gap-2">
+                    7일 심층 분석 시작하기
+                    <span class="material-symbols-rounded">arrow_forward</span>
+</button>
+<p class="mt-4 text-sm text-slate-400 dark:text-slate-500">
+<span class="material-symbols-rounded text-xs align-middle">lock</span>
+                    로그인 후 결제가 진행됩니다.
+                </p>
+</div>
+</section>
+</main>
+<footer class="py-12 px-6 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80">
+<div class="max-w-screen-xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+<div class="text-slate-400 text-sm">
+                © 2024 PostureLab. All rights reserved.
+            </div>
+<div class="flex gap-8 text-sm text-slate-500 dark:text-slate-400">
+<a class="hover:text-primary" href="#">이용약관</a>
+<a class="hover:text-primary font-semibold" href="#">개인정보처리방침</a>
+<a class="hover:text-primary" href="#">고객센터</a>
+</div>
+</div>
+</footer>
+<script>
+        // Optional: Toggle dark mode for demo purposes if needed
+        // document.documentElement.classList.toggle('dark');
+    </script>
+
+</body></html>
