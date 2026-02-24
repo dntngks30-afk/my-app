@@ -2,16 +2,22 @@
 
 /**
  * 전역 헤더 컴포넌트
- * 
+ *
  * PostureLab 로고 + 로그인/회원가입 버튼
+ * 로그인/회원가입 → /app/auth (OAuth) 재사용, next로 복귀
  */
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 export default function Header() {
+  const pathname = usePathname();
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+
+  const authNext = encodeURIComponent(pathname || '/');
+  const authHref = `/app/auth?next=${authNext}`;
 
   useEffect(() => {
     // 로그인 상태 확인
@@ -56,13 +62,13 @@ export default function Header() {
         ) : (
           <>
             <Link
-              href="/login"
+              href={authHref}
               className="text-sm text-[var(--muted)] hover:text-[var(--text)] transition-colors"
             >
               로그인
             </Link>
             <Link
-              href="/signup"
+              href={authHref}
               className="rounded-full bg-[var(--brand)] px-4 py-2 text-sm font-medium text-white hover:bg-[#ea580c] transition-colors"
             >
               회원가입
