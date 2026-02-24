@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PostureLab - 7일 루틴 캘린더</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        "brand-blue": "#2563eb",
+                        "brand-light-blue": "#eff6ff",
+                        "background-gray": "#f8fafc",
+                        "text-dark": "#1e293b",
+                        "text-muted": "#64748b",
+                        "border-light": "#e2e8f0",
+                    },
+                    fontFamily: {
+                        "sans": ["Pretendard", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.75rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        @layer base {
+            body {
+                @apply font-sans bg-slate-100 text-text-dark antialiased;
+            }
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="flex min-h-screen w-full items-center justify-center p-4">
+<div class="relative flex h-[844px] w-full max-w-[390px] flex-col overflow-hidden rounded-[40px] border-[8px] border-slate-900 bg-white shadow-2xl">
+<header class="flex items-center justify-between px-6 py-4 bg-white border-b border-border-light">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-brand-blue text-2xl font-bold">architecture</span>
+<h1 class="text-lg font-extrabold tracking-tight text-text-dark">PostureLab</h1>
+</div>
+<button class="size-10 flex items-center justify-center rounded-full hover:bg-slate-50 transition-colors">
+<span class="material-symbols-outlined text-text-dark text-2xl">notifications</span>
+</button>
+</header>
+<main class="flex-1 overflow-y-auto hide-scrollbar pb-24 bg-background-gray">
+<section class="px-6 pt-6 pb-4">
+<div class="flex justify-between items-end mb-4">
+<div>
+<span class="text-[11px] font-bold text-brand-blue uppercase tracking-wider bg-brand-light-blue px-2.5 py-0.5 rounded-md">Week 1</span>
+<h2 class="text-2xl font-bold mt-1.5 text-text-dark">아기 거북이 탈출기</h2>
+</div>
+<div class="text-right">
+<span class="text-xs font-semibold text-brand-blue">성장률 40%</span>
+</div>
+</div>
+<div class="p-5 bg-white rounded-2xl border border-border-light shadow-sm">
+<div class="flex justify-between items-center mb-3">
+<span class="text-xs font-semibold text-text-muted">아기 거북이</span>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-brand-blue text-lg">trending_up</span>
+</div>
+<span class="text-xs font-semibold text-text-dark">어린이 거북이</span>
+</div>
+<div class="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
+<div class="h-full bg-brand-blue rounded-full w-[40%] transition-all duration-500"></div>
+</div>
+<p class="text-[11px] text-text-muted mt-3 text-center">다음 진화까지 출석 <span class="text-brand-blue font-bold">3일</span> 더 남았어요! ✨</p>
+</div>
+</section>
+<section class="py-2 bg-white border-y border-border-light">
+<div class="flex overflow-x-auto gap-4 px-6 py-4 hide-scrollbar">
+<div class="flex-shrink-0 flex flex-col items-center gap-2">
+<div class="size-12 rounded-full border-2 border-brand-blue flex items-center justify-center text-brand-blue bg-white">
+<span class="material-symbols-outlined text-xl font-bold">check</span>
+</div>
+<span class="text-[11px] font-bold text-brand-blue">DAY 1</span>
+</div>
+<div class="flex-shrink-0 flex flex-col items-center gap-2">
+<div class="size-12 rounded-full border-2 border-brand-blue flex items-center justify-center text-brand-blue bg-white">
+<span class="material-symbols-outlined text-xl font-bold">check</span>
+</div>
+<span class="text-[11px] font-bold text-brand-blue">DAY 2</span>
+</div>
+<div class="flex-shrink-0 flex flex-col items-center gap-2">
+<div class="size-12 rounded-full bg-brand-blue flex items-center justify-center text-white shadow-lg shadow-brand-blue/30 ring-4 ring-brand-blue/10">
+<span class="text-base font-bold">3</span>
+</div>
+<span class="text-[11px] font-bold text-text-dark">DAY 3</span>
+</div>
+<div class="flex-shrink-0 flex flex-col items-center gap-2">
+<div class="size-12 rounded-full border border-border-light bg-slate-50 flex items-center justify-center text-slate-300">
+<span class="material-symbols-outlined text-xl">lock</span>
+</div>
+<span class="text-[11px] font-medium text-slate-400">DAY 4</span>
+</div>
+<div class="flex-shrink-0 flex flex-col items-center gap-2">
+<div class="size-12 rounded-full border border-border-light bg-slate-50 flex items-center justify-center text-slate-300">
+<span class="material-symbols-outlined text-xl">lock</span>
+</div>
+<span class="text-[11px] font-medium text-slate-400">DAY 5</span>
+</div>
+<div class="flex-shrink-0 flex flex-col items-center gap-2">
+<div class="size-12 rounded-full border border-border-light bg-slate-50 flex items-center justify-center text-slate-300">
+<span class="material-symbols-outlined text-xl">lock</span>
+</div>
+<span class="text-[11px] font-medium text-slate-400">DAY 6</span>
+</div>
+<div class="flex-shrink-0 flex flex-col items-center gap-2">
+<div class="size-12 rounded-full border border-border-light bg-slate-50 flex items-center justify-center text-slate-300">
+<span class="material-symbols-outlined text-xl">lock</span>
+</div>
+<span class="text-[11px] font-medium text-slate-400">DAY 7</span>
+</div>
+</div>
+</section>
+<section class="px-6 py-6">
+<div class="bg-white rounded-2xl p-6 border border-border-light shadow-sm">
+<div class="flex items-center justify-between mb-6">
+<div class="flex items-center gap-2">
+<h3 class="text-lg font-bold text-text-dark">오늘의 루틴</h3>
+<span class="px-2 py-0.5 rounded bg-brand-light-blue text-brand-blue text-[11px] font-bold">Day 3</span>
+</div>
+<div class="flex items-center gap-1 text-brand-blue bg-brand-light-blue px-2.5 py-1 rounded-full">
+<span class="material-symbols-outlined text-sm font-bold">schedule</span>
+<span class="text-xs font-bold">12분</span>
+</div>
+</div>
+<div class="space-y-3">
+<div class="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-border-light transition-all cursor-pointer group">
+<div class="size-14 rounded-lg overflow-hidden flex-shrink-0 bg-slate-100">
+<img class="w-full h-full object-cover" data-alt="Person performing yoga stretch on mat" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAtmilYEi925j0v6KyiEgQxZmbxCTUdZJKFczrc0ghKfIfpxnoTH3FkjtXP1aCjNpX4fKyjGx75J3PvfBGNCZn22Pd-UPuXxKHH3jurtg1adeRDlmiqtF1ZsZvtE44MZFHe_2GhC57dYXxbEfkGmQ_v25NcSPAzC6EhuII7WLfY0U0ZErkdNAWT8KDWKYy_elq6jgfJrHU6poniclQh6Eb40cjKltBQUxLexsnBH1i7siirad4ZUfNV_gf7Fdbj0quMY1fWXMgZhJI"/>
+</div>
+<div class="flex-1">
+<h4 class="text-sm font-bold text-text-dark">거북목 스트레칭</h4>
+<p class="text-[11px] text-text-muted mt-0.5">후두하근 이완 • 3분</p>
+</div>
+<span class="material-symbols-outlined text-slate-300 group-hover:text-brand-blue transition-colors">play_circle</span>
+</div>
+<div class="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-border-light transition-all cursor-pointer group">
+<div class="size-14 rounded-lg overflow-hidden flex-shrink-0 bg-slate-100">
+<img class="w-full h-full object-cover" data-alt="Fitness equipment for back exercises" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCM-MYAneZwI0WCWwFRv0GRNIBv25bfBT66jM6dPZxw4RGb5zeZXUQ4dW-VZau2NfcoGqrHY_B6a356s8BKS1BG_KRWfWFUtAfBWgLC0ZIZfUPcb5kB29hlVPJzcJlFc26yiQwpq9-qRAcYz7sSGN-qcCyNg8rcFeIgSNv2Kh384H9GphvlZPH5GWzxfzSvFTaaDMMZgxJ7D9cunKQ2bsjNCbNJ8i5OceeMxS-NBgzg45RInmeFPgKdf3823sbF6JUed3dBmdLqSz0"/>
+</div>
+<div class="flex-1">
+<h4 class="text-sm font-bold text-text-dark">흉추 가동성 드릴</h4>
+<p class="text-[11px] text-text-muted mt-0.5">상체 회전 • 5분</p>
+</div>
+<span class="material-symbols-outlined text-slate-300 group-hover:text-brand-blue transition-colors">play_circle</span>
+</div>
+<div class="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-border-light transition-all cursor-pointer group">
+<div class="size-14 rounded-lg overflow-hidden flex-shrink-0 bg-slate-100">
+<img class="w-full h-full object-cover" data-alt="Athlete preparing for a workout" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAFo8vZvehFCqnhSPJnAy8TndyB22QSFIiKY3vH3lRnKa-AzjoB-mymi3Uw6oIzQGEI5ndrzB9SG9SrRzkRQybiQH8lO0s55maa5j4Bvt7HfmHMGkQg6Htcfi1PIBju4A87rvLo1j3JX8O94nnnNXKUGUBMTj97NdZ0lwIzcFntl6guUmA-BVlIs7V3fJcFaYg89Gf687rlWA_m5WKsO7lPFJA__uFSYLkI_FW6fN1tRLT9m6q4ffrqZPhRkDWRWhPq-i-VAfP4Nxo"/>
+</div>
+<div class="flex-1">
+<h4 class="text-sm font-bold text-text-dark">코어 안정화</h4>
+<p class="text-[11px] text-text-muted mt-0.5">버드독 버티기 • 4분</p>
+</div>
+<span class="material-symbols-outlined text-slate-300 group-hover:text-brand-blue transition-colors">play_circle</span>
+</div>
+</div>
+<button class="w-full mt-6 py-4 bg-brand-blue rounded-xl font-bold text-white shadow-lg shadow-brand-blue/20 hover:bg-blue-700 active:scale-[0.98] transition-all">
+                        루틴 시작하기
+                    </button>
+</div>
+</section>
+<section class="px-6 pb-4">
+<div class="bg-slate-900 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+<div class="flex flex-col">
+<span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">PROMOTION</span>
+<p class="text-sm font-semibold text-white mt-1 leading-tight">다음 주(Week 2) 해금 조건<br/><span class="text-brand-blue font-bold">5일 출석 시 50% 할인</span></p>
+</div>
+<div class="size-10 bg-white/10 rounded-xl flex items-center justify-center border border-white/10">
+<span class="material-symbols-outlined text-brand-blue">card_giftcard</span>
+</div>
+</div>
+</section>
+</main>
+<nav class="absolute bottom-0 left-0 right-0 bg-white border-t border-border-light px-8 py-3 flex justify-between items-center pb-8">
+<div class="flex flex-col items-center gap-1 text-slate-400 hover:text-brand-blue cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-[26px]">home</span>
+<span class="text-[10px] font-bold">홈</span>
+</div>
+<div class="flex flex-col items-center gap-1 text-brand-blue cursor-pointer">
+<span class="material-symbols-outlined text-[26px]" style="font-variation-settings: 'FILL' 1">calendar_month</span>
+<span class="text-[10px] font-bold">루틴</span>
+</div>
+<div class="flex flex-col items-center gap-1 text-slate-400 hover:text-brand-blue cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-[26px]">insights</span>
+<span class="text-[10px] font-bold">기록</span>
+</div>
+<div class="flex flex-col items-center gap-1 text-slate-400 hover:text-brand-blue cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-[26px]">person</span>
+<span class="text-[10px] font-bold">마이</span>
+</div>
+</nav>
+</div>
+
+</body></html>

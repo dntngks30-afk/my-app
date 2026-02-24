@@ -19,9 +19,11 @@ interface AuthCardProps {
   mode: 'login' | 'signup';
   /** searchParams.error — 서버에서 전달 (예: auth_failed) */
   errorParam?: string | null;
+  /** 로그인 성공 시 리다이렉트 경로 (미지정 시 /) */
+  redirectTo?: string;
 }
 
-export default function AuthCard({ mode, errorParam }: AuthCardProps) {
+export default function AuthCard({ mode, errorParam, redirectTo = '/' }: AuthCardProps) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -63,7 +65,7 @@ export default function AuthCard({ mode, errorParam }: AuthCardProps) {
           setError(err.message);
           return;
         }
-        router.replace('/');
+        router.replace(redirectTo);
       }
     } finally {
       setLoading(false);
@@ -85,7 +87,7 @@ export default function AuthCard({ mode, errorParam }: AuthCardProps) {
         <div className="mt-6 space-y-3 text-center">
           <p className="text-sm text-[var(--muted)]">
             이미 계정이 있으신가요?{' '}
-            <Link href="/login" className="text-[var(--brand)] underline-offset-4 hover:underline">
+            <Link href={`/app/auth?next=${encodeURIComponent(redirectTo || '/')}`} className="text-[var(--brand)] underline-offset-4 hover:underline">
               로그인
             </Link>
           </p>
@@ -182,7 +184,7 @@ export default function AuthCard({ mode, errorParam }: AuthCardProps) {
           ) : (
             <>
               이미 계정이 있으신가요?{' '}
-              <Link href="/login" className="text-[var(--brand)] underline-offset-4 hover:underline">
+              <Link href={`/app/auth?next=${encodeURIComponent(redirectTo || '/')}`} className="text-[var(--brand)] underline-offset-4 hover:underline">
                 로그인
               </Link>
             </>

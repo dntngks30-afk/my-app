@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { supabaseBrowser as supabase } from '@/lib/supabase';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,6 +28,8 @@ export default function RetestComparisonClient({
   retestParam,
 }: RetestComparisonClientProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState<ComparisonReport | null>(null);
@@ -51,7 +53,8 @@ export default function RetestComparisonClient({
         } = await supabase.auth.getSession();
 
         if (!session) {
-          router.push('/login');
+          const next = pathname + (searchParams.toString() ? '?' + searchParams.toString() : '');
+          router.push('/app/auth?next=' + encodeURIComponent(next || '/movement-test/retest-comparison'));
           return;
         }
 
