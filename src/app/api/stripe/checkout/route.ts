@@ -1,14 +1,22 @@
 /**
  * Stripe Checkout 세션 생성 API
- * 
+ *
  * POST /api/stripe/checkout
- * 
- * Body:
+ *
+ * Body (모달 호출 최소):
  * {
- *   planId: string,        // plans 테이블의 id
- *   successUrl?: string,    // 결제 성공 후 리다이렉트 URL (선택)
- *   cancelUrl?: string      // 결제 취소 후 리다이렉트 URL (선택)
+ *   productId: "move-re-7d",
+ *   next?: string           // 결제 완료 후 돌아갈 경로 (기본 /app)
  * }
+ * 또는 기존 호환:
+ * {
+ *   planId: string,
+ *   successUrl?: string,
+ *   cancelUrl?: string
+ * }
+ *
+ * Response: { success, url, sessionId, ... }
+ * - url: Stripe Checkout 리다이렉트 URL
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -58,44 +66,72 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. 요청 본문 파싱
+    // 2. 요청 본문 파싱 (productId 또는 planId)
     const body = await req.json();
-    const { planId, successUrl, cancelUrl } = body;
-
-    if (!planId) {
-      return NextResponse.json(
-        { error: 'planId는 필수입니다.' },
-        { status: 400 }
-      );
-    }
+    const { productId, planId: planIdFromBody, next, successUrl, cancelUrl } = body;
 
     // 3. Supabase 클라이언트 생성
     const supabase = getServerSupabaseAdmin();
 
+    let plan: { id: string; name: string; tier: string; price: number; billing_type: string; stripe_price_id: string | null; is_active: boolean } | null = null;
+
+    if (planIdFromBody) {
+      // 기존 호환: planId 직접 전달
+      const { data, error } = await supabase
+        .from('plans')
+        .select('*')
+        .eq('id', planIdFromBody)
+        .single();
+      if (error || !data) {
+        return NextResponse.json({ error: '플랜을 찾을 수 없습니다.' }, { status: 404 });
+      }
+      plan = data;
+    } else if (productId) {
+      // productId → env Price ID 매핑 (DB plans 미사용)
+      if (productId !== 'move-re-7d') {
+        return NextResponse.json(
+          { error: '지원하지 않는 상품입니다.' },
+          { status: 400 }
+        );
+      }
+      const priceId = process.env.STRIPE_PRICE_MOVE_RE_7D;
+      if (!priceId || typeof priceId !== 'string' || priceId.trim() === '') {
+        console.error('STRIPE_PRICE_MOVE_RE_7D 환경 변수가 설정되지 않았습니다.');
+        return NextResponse.json(
+          { error: '결제 설정이 누락되었습니다. 관리자에게 문의하세요.' },
+          { status: 500 }
+        );
+      }
+      plan = {
+        id: 'move-re-7d',
+        name: '7일 심층 분석',
+        tier: 'standard',
+        price: 19900,
+        billing_type: 'one_time',
+        stripe_price_id: priceId.trim(),
+        is_active: true,
+      };
+    } else {
+      return NextResponse.json(
+        { error: 'productId 또는 planId가 필요합니다.' },
+        { status: 400 }
+      );
+    }
+
+    if (!plan) {
+      return NextResponse.json({ error: '플랜을 찾을 수 없습니다.' }, { status: 500 });
+    }
+
     // 4. 사용자 정보 조회
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('id, email, plan_tier, plan_status')
+      .select('id, email, plan_tier, plan_status, stripe_customer_id')
       .eq('id', userId)
       .single();
 
     if (userError || !user) {
       return NextResponse.json(
         { error: '사용자를 찾을 수 없습니다.' },
-        { status: 404 }
-      );
-    }
-
-    // 5. 플랜 정보 조회
-    const { data: plan, error: planError } = await supabase
-      .from('plans')
-      .select('*')
-      .eq('id', planId)
-      .single();
-
-    if (planError || !plan) {
-      return NextResponse.json(
-        { error: '플랜을 찾을 수 없습니다.' },
         { status: 404 }
       );
     }
@@ -218,9 +254,11 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('Stripe Checkout creation error:', error);
+    const msg = error instanceof Error ? error.message : String(error);
+    const isConfigMissing = msg.includes('STRIPE_SECRET_KEY') || msg.includes('환경 변수');
     return NextResponse.json(
       {
-        error: '결제 세션 생성에 실패했습니다.',
+        error: isConfigMissing ? 'Stripe 구성이 누락되었습니다. 관리자에게 문의하세요.' : '결제 세션 생성에 실패했습니다.',
         details: getStripeErrorMessage(error),
       },
       { status: 500 }
