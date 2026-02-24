@@ -5,9 +5,9 @@
  * sessionIdParam: 서버에서 searchParams.session_id 전달
  */
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+import { supabaseBrowser } from '@/lib/supabase';
 
 interface PaymentInfo {
   sessionId: string;
@@ -26,6 +26,7 @@ export default function StripeSuccessClient({
   sessionIdParam,
 }: StripeSuccessClientProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [loading, setLoading] = useState(true);
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,26 +44,42 @@ export default function StripeSuccessClient({
       }
 
       try {
-        const res = await fetch(
-          `/api/stripe/verify-session?session_id=${sessionId}`,
-          { method: 'GET' }
-        );
+        const { data } = await supabaseBrowser.auth.getSession();
+        const authSession = data?.session;
+        const token = authSession?.access_token;
 
-        const data = await res.json();
-
-        if (!res.ok) {
-          setError(data.error || '결제 정보 확인에 실패했습니다.');
+        if (!token) {
+          const nextUrl = `${pathname || '/payments/stripe-success'}?session_id=${encodeURIComponent(sessionId)}`;
+          router.push(`/app/auth?next=${encodeURIComponent(nextUrl)}`);
           setLoading(false);
           return;
         }
 
-        setPaymentInfo(data);
+        const res = await fetch(
+          `/api/stripe/verify-session?session_id=${encodeURIComponent(sessionId)}`,
+          {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
 
-        if (data.isSubscription) {
+        const payload = await res.json();
+
+        if (!res.ok) {
+          console.error('verify-session failed', res.status, payload);
+          const code = payload?.code ? `[${payload.code}] ` : '';
+          setError(`${code}${payload?.error || '결제 정보 확인에 실패했습니다.'}`);
+          setLoading(false);
+          return;
+        }
+
+        setPaymentInfo(payload);
+
+        if (payload.isSubscription) {
           setRoutineCreating(true);
 
           try {
-            const { data: { session } } = await supabase.auth.getSession();
+            const session = authSession;
             if (!session) {
               console.warn('사용자 세션이 없어 루틴 생성을 건너뜁니다.');
               setRoutineCreating(false);
@@ -81,10 +98,7 @@ export default function StripeSuccessClient({
             if (testResultRes.ok) {
               const testResultData = await testResultRes.json();
 
-              if (
-                testResultData.success &&
-                testResultData.result
-              ) {
+              if (testResultData.success && testResultData.result) {
                 const routineRes = await fetch('/api/workout-routine/create', {
                   method: 'POST',
                   headers: {

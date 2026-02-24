@@ -1,224 +1,284 @@
 /**
  * Stripe Checkout 세션 생성 API
- * 
+ *
  * POST /api/stripe/checkout
- * 
- * Body:
- * {
- *   planId: string,        // plans 테이블의 id
- *   successUrl?: string,    // 결제 성공 후 리다이렉트 URL (선택)
- *   cancelUrl?: string      // 결제 취소 후 리다이렉트 URL (선택)
- * }
+ *
+ * Body (모달 호출 최소):
+ * { productId: "move-re-7d", next?: string }
+ * 또는 기존 호환:
+ * { planId: string, successUrl?: string, cancelUrl?: string }
+ *
+ * Response: { success, url, sessionId } | { success: false, code, error }
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getStripeServerClient, getOrCreateStripeCustomer } from '@/lib/stripe';
+import { getStripeServerClient, getOrCreateStripeCustomer, getStripeErrorMessage } from '@/lib/stripe';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
-import { getStripeErrorMessage } from '@/lib/stripe';
 
-/**
- * 요청에서 사용자 ID 추출 (Supabase Auth 사용)
- * TODO: 실제 인증 미들웨어로 교체 필요
- */
-async function getCurrentUserId(req: NextRequest): Promise<string | null> {
-  // Authorization 헤더에서 Bearer 토큰 추출
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  const supabase = getServerSupabaseAdmin();
-
-  try {
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
-      return null;
-    }
-
-    return user.id;
-  } catch (error) {
-    console.error('User authentication error:', error);
-    return null;
-  }
+function genRequestId(): string {
+  return `chk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export async function POST(req: NextRequest) {
+  const requestId = genRequestId();
+
   try {
-    // 1. 사용자 인증 확인
-    const userId = await getCurrentUserId(req);
-    if (!userId) {
+    // 1. Authorization header 파싱
+    const auth = req.headers.get('authorization') ?? '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    if (!token) {
+      console.error(`[${requestId}] code=UNAUTHORIZED Missing Bearer token`);
       return NextResponse.json(
-        { error: '인증이 필요합니다.' },
+        { success: false, code: 'UNAUTHORIZED', error: 'Missing Bearer token' },
         { status: 401 }
       );
     }
 
-    // 2. 요청 본문 파싱
-    const body = await req.json();
-    const { planId, successUrl, cancelUrl } = body;
-
-    if (!planId) {
+    // 2. 유저 검증 (Supabase Admin)
+    const supabaseAdmin = getServerSupabaseAdmin();
+    const { data: { user: authUser }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    if (authError || !authUser) {
+      console.error(`[${requestId}] code=UNAUTHORIZED Invalid session`, authError?.message);
       return NextResponse.json(
-        { error: 'planId는 필수입니다.' },
-        { status: 400 }
+        { success: false, code: 'UNAUTHORIZED', error: 'Invalid session' },
+        { status: 401 }
       );
     }
 
-    // 3. Supabase 클라이언트 생성
-    const supabase = getServerSupabaseAdmin();
+    const userId = authUser.id;
+    const userEmail = authUser.email ?? '';
 
-    // 4. 사용자 정보 조회
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id, email, plan_tier, plan_status')
-      .eq('id', userId)
-      .single();
-
-    if (userError || !user) {
+    // 3. Body 파싱
+    let body: Record<string, unknown> = {};
+    try {
+      body = await req.json();
+    } catch {
       return NextResponse.json(
-        { error: '사용자를 찾을 수 없습니다.' },
+        { success: false, code: 'INVALID_BODY', error: 'Invalid JSON body' },
+        { status: 400 }
+      );
+    }
+    const { productId, planId: planIdFromBody, next, successUrl, cancelUrl } = body;
+    const productIdStr = typeof productId === 'string' ? productId : '';
+    const planIdStr = typeof planIdFromBody === 'string' ? planIdFromBody : '';
+
+    // 4. productId flow (우선) - DB plans 미사용
+    if (productIdStr === 'move-re-7d') {
+      const priceId = process.env.STRIPE_PRICE_MOVE_RE_7D;
+      if (!priceId || typeof priceId !== 'string' || priceId.trim() === '') {
+        console.error(`[${requestId}] code=MISSING_ENV STRIPE_PRICE_MOVE_RE_7D is not set`);
+        return NextResponse.json(
+          {
+            success: false,
+            code: 'MISSING_ENV',
+            error: 'STRIPE_PRICE_MOVE_RE_7D is not set',
+          },
+          { status: 500 }
+        );
+      }
+
+      if (!userEmail) {
+        return NextResponse.json(
+          { success: false, code: 'NO_EMAIL', error: 'User email is required for checkout' },
+          { status: 400 }
+        );
+      }
+
+      try {
+        const stripe = getStripeServerClient();
+        const customer = await getOrCreateStripeCustomer(
+          userId,
+          userEmail,
+          { plan_tier: 'free' },
+          null
+        );
+
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        const defaultSuccessUrl = `${baseUrl}/payments/stripe-success?session_id={CHECKOUT_SESSION_ID}`;
+        const defaultCancelUrl = `${baseUrl}/pricing`;
+
+        const session = await stripe.checkout.sessions.create({
+          customer: customer.id,
+          payment_method_types: ['card'],
+          mode: 'payment',
+          line_items: [{ price: priceId.trim(), quantity: 1 }],
+          success_url: (typeof successUrl === 'string' ? successUrl : null) || defaultSuccessUrl,
+          cancel_url: (typeof cancelUrl === 'string' ? cancelUrl : null) || defaultCancelUrl,
+          metadata: { userId, productId: 'move-re-7d' },
+          customer_email: userEmail,
+          allow_promotion_codes: true,
+        });
+
+        return NextResponse.json({
+          success: true,
+          url: session.url,
+          sessionId: session.id,
+        });
+      } catch (stripeErr) {
+        const safeMsg = stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
+        console.error(`[${requestId}] code=STRIPE_ERROR`, safeMsg);
+        return NextResponse.json(
+          {
+            success: false,
+            code: 'STRIPE_ERROR',
+            error: getStripeErrorMessage(stripeErr),
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+    // 5. Unknown productId
+    if (productIdStr) {
+      console.error(`[${requestId}] code=UNKNOWN_PRODUCT productId=${productIdStr}`);
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'UNKNOWN_PRODUCT',
+          error: `Unknown productId: ${productIdStr}`,
+        },
         { status: 404 }
       );
     }
 
-    // 5. 플랜 정보 조회
-    const { data: plan, error: planError } = await supabase
+    // 6. Legacy planId flow
+    if (!planIdStr) {
+      return NextResponse.json(
+        { success: false, code: 'MISSING_PARAMS', error: 'productId or planId is required' },
+        { status: 400 }
+      );
+    }
+
+    const { data: plan, error: planError } = await supabaseAdmin
       .from('plans')
       .select('*')
-      .eq('id', planId)
+      .eq('id', planIdStr)
       .single();
 
     if (planError || !plan) {
+      console.error(`[${requestId}] code=LEGACY_PLAN_FLOW_FAILED planId=${planIdStr}`, planError?.message);
       return NextResponse.json(
-        { error: '플랜을 찾을 수 없습니다.' },
-        { status: 404 }
+        {
+          success: false,
+          code: 'LEGACY_PLAN_FLOW_FAILED',
+          error: 'Plan lookup failed',
+        },
+        { status: 500 }
       );
     }
 
-    if (!plan.is_active) {
+    // Legacy: users 테이블 조회 (email, stripe_customer_id)
+    const { data: dbUser, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id, email, plan_tier, plan_status, stripe_customer_id')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !dbUser) {
+      console.error(`[${requestId}] code=USER_RECORD_MISSING users table lookup failed`, userError?.message);
       return NextResponse.json(
-        { error: '비활성화된 플랜입니다.' },
+        {
+          success: false,
+          code: 'USER_RECORD_MISSING',
+          error: 'User record not found in database',
+        },
+        { status: 500 }
+      );
+    }
+
+    const email = dbUser.email ?? userEmail;
+    if (!email) {
+      return NextResponse.json(
+        { success: false, code: 'NO_EMAIL', error: 'User email is required' },
         { status: 400 }
       );
     }
 
-    // 6. Stripe Price ID 확인
-    if (!plan.stripe_price_id) {
+    if (!plan.is_active || !plan.stripe_price_id) {
       return NextResponse.json(
         {
-          error:
-            '이 플랜은 Stripe와 연동되지 않았습니다. 관리자에게 문의하세요.',
+          success: false,
+          code: 'PLAN_INVALID',
+          error: plan.stripe_price_id ? 'Plan is inactive' : 'Plan not linked to Stripe',
         },
         { status: 400 }
       );
     }
 
-    // 7. Stripe Customer 생성 또는 조회
-    if (!user.email) {
-      return NextResponse.json(
-        { error: '이메일이 등록되지 않은 사용자입니다.' },
-        { status: 400 }
-      );
-    }
-
-    const stripe = getStripeServerClient();
-    const customer = await getOrCreateStripeCustomer(
-      userId,
-      user.email,
-      {
-        plan_tier: user.plan_tier || 'free',
-      },
-      user.stripe_customer_id
-    );
-
-    // 8. Stripe Customer ID를 users 테이블에 저장 (없는 경우)
-    if (!user.stripe_customer_id && customer.id) {
-      await supabase
-        .from('users')
-        .update({ stripe_customer_id: customer.id })
-        .eq('id', userId);
-    }
-
-    // 9. 기본 URL 설정
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const defaultSuccessUrl = `${baseUrl}/payments/success?session_id={CHECKOUT_SESSION_ID}`;
-    const defaultCancelUrl = `${baseUrl}/pricing`;
-
-    // 10. Stripe Checkout 세션 생성
-    const sessionParams: any = {
-      customer: customer.id,
-      payment_method_types: ['card'],
-      mode: plan.billing_type === 'subscription' ? 'subscription' : 'payment',
-      line_items: [
-        {
-          price: plan.stripe_price_id,
-          quantity: 1,
-        },
-      ],
-      success_url: successUrl || defaultSuccessUrl,
-      cancel_url: cancelUrl || defaultCancelUrl,
-      metadata: {
+    try {
+      const stripe = getStripeServerClient();
+      const customer = await getOrCreateStripeCustomer(
         userId,
-        planId: plan.id,
-        planTier: plan.tier,
-        planName: plan.name,
-      },
-      customer_email: user.email,
-      allow_promotion_codes: true,
-    };
+        email,
+        { plan_tier: dbUser.plan_tier || 'free' },
+        dbUser.stripe_customer_id
+      );
 
-    // 구독 모드인 경우 subscription_data 추가
-    if (plan.billing_type === 'subscription') {
-      sessionParams.subscription_data = {
-        metadata: {
-          userId,
-          planId: plan.id,
-          planTier: plan.tier,
+      if (!dbUser.stripe_customer_id && customer.id) {
+        await supabaseAdmin
+          .from('users')
+          .update({ stripe_customer_id: customer.id })
+          .eq('id', userId);
+      }
+
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      const defaultSuccessUrl = `${baseUrl}/payments/stripe-success?session_id={CHECKOUT_SESSION_ID}`;
+      const defaultCancelUrl = `${baseUrl}/pricing`;
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customer.id,
+        payment_method_types: ['card'],
+        mode: plan.billing_type === 'subscription' ? 'subscription' : 'payment',
+        line_items: [{ price: plan.stripe_price_id, quantity: 1 }],
+        success_url: (typeof successUrl === 'string' ? successUrl : null) || defaultSuccessUrl,
+        cancel_url: (typeof cancelUrl === 'string' ? cancelUrl : null) || defaultCancelUrl,
+        metadata: { userId, productId: 'move-re-7d', planId: plan.id, planTier: plan.tier, planName: plan.name },
+        customer_email: email,
+        allow_promotion_codes: true,
+        ...(plan.billing_type === 'subscription'
+          ? {
+              subscription_data: { metadata: { userId, productId: 'move-re-7d', planId: plan.id, planTier: plan.tier } },
+            }
+          : {}),
+      });
+
+      await supabaseAdmin.from('payments').insert({
+        user_id: userId,
+        amount: plan.price,
+        order_id: `stripe_${session.id}`,
+        status: 'pending',
+        payment_provider: 'stripe',
+        stripe_payment_intent_id: session.payment_intent as string | null,
+        created_at: new Date().toISOString(),
+      });
+
+      return NextResponse.json({
+        success: true,
+        url: session.url,
+        sessionId: session.id,
+        plan: { id: plan.id, name: plan.name, tier: plan.tier, price: plan.price, billingType: plan.billing_type },
+      });
+    } catch (stripeErr) {
+      const safeMsg = stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
+      console.error(`[${requestId}] code=STRIPE_ERROR`, safeMsg);
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'STRIPE_ERROR',
+          error: getStripeErrorMessage(stripeErr),
         },
-      };
+        { status: 500 }
+      );
     }
-
-    const session = await stripe.checkout.sessions.create(sessionParams);
-
-    // 11. payments 테이블에 결제 기록 생성 (pending 상태)
-    const { error: paymentError } = await supabase.from('payments').insert({
-      user_id: userId,
-      amount: plan.price,
-      order_id: `stripe_${session.id}`,
-      status: 'pending',
-      payment_provider: 'stripe',
-      stripe_payment_intent_id: session.payment_intent as string | null,
-      created_at: new Date().toISOString(),
-    });
-
-    if (paymentError) {
-      console.error('Payment record creation error:', paymentError);
-      // 결제 세션은 생성되었으므로 에러를 반환하지 않고 계속 진행
-    }
-
-    // 12. 응답 반환
-    return NextResponse.json({
-      success: true,
-      sessionId: session.id,
-      url: session.url,
-      plan: {
-        id: plan.id,
-        name: plan.name,
-        tier: plan.tier,
-        price: plan.price,
-        billingType: plan.billing_type,
-      },
-    });
   } catch (error) {
-    console.error('Stripe Checkout creation error:', error);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[${requestId}] Unexpected error`, msg);
+    const isConfigMissing = msg.includes('STRIPE_SECRET_KEY') || msg.includes('환경 변수') || msg.includes('Missing');
     return NextResponse.json(
       {
-        error: '결제 세션 생성에 실패했습니다.',
+        success: false,
+        code: 'SERVER_ERROR',
+        error: isConfigMissing ? 'Stripe configuration is missing' : 'Checkout failed',
         details: getStripeErrorMessage(error),
       },
       { status: 500 }
