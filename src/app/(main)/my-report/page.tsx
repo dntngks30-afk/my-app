@@ -38,7 +38,7 @@ export default function MyReportPage() {
         const { data: { session } } = await supabase.auth.getSession();
 
         if (!session) {
-          router.push("/app/auth?next=" + encodeURIComponent("/my-report"));
+          router.push("/login");
           return;
         }
 
@@ -82,7 +82,7 @@ export default function MyReportPage() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push("/app/auth?next=" + encodeURIComponent("/my-report"));
+    router.push("/login");
   };
 
   if (loading) {

@@ -8,7 +8,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -27,7 +27,6 @@ interface CoachComment {
 
 export default function CoachCommentsPage() {
   const router = useRouter();
-  const pathname = usePathname();
   const [loading, setLoading] = useState(true);
   const [comments, setComments] = useState<CoachComment[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
@@ -41,7 +40,7 @@ export default function CoachCommentsPage() {
         } = await supabase.auth.getSession();
 
         if (!session) {
-          router.push('/app/auth?next=' + encodeURIComponent(pathname || '/my-routine/coach-comments'));
+          router.push('/login');
           return;
         }
 
