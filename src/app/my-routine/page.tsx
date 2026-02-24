@@ -38,7 +38,7 @@ interface RoutineDay {
 interface Routine {
   id: string;
   status: string;
-  started_at: string;
+  started_at: string | null;
   completed_at: string | null;
   progress: number;
   completedDays: number;
@@ -52,6 +52,7 @@ export default function MyRoutinePage() {
   const [days, setDays] = useState<RoutineDay[]>([]);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [completingDay, setCompletingDay] = useState<number | null>(null);
+  const [startingRoutine, setStartingRoutine] = useState(false);
 
   useEffect(() => {
     const loadRoutine = async () => {
@@ -104,6 +105,42 @@ export default function MyRoutinePage() {
 
     loadRoutine();
   }, [router]);
+
+  const handleStartRoutine = async () => {
+    if (!routine) return;
+    setStartingRoutine(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/app/auth?next=' + encodeURIComponent('/my-routine'));
+        return;
+      }
+      const res = await fetch('/api/workout-routine/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ routineId: routine.id }),
+      });
+      if (!res.ok) throw new Error('시작 처리 실패');
+      const data = await res.json();
+      setRoutine((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'active',
+              started_at: data.startedAt,
+            }
+          : null
+      );
+    } catch (error) {
+      console.error('시작 에러:', error);
+      alert('시작 처리에 실패했습니다.');
+    } finally {
+      setStartingRoutine(false);
+    }
+  };
 
   const handleCompleteDay = async (dayNumber: number) => {
     if (!routine) return;
@@ -244,7 +281,34 @@ export default function MyRoutinePage() {
     );
   }
 
+  const isDraft = routine.status === 'draft' || !routine.started_at;
   const currentDay = days.find((d) => d.day_number === selectedDay);
+
+  if (isDraft) {
+    return (
+      <div className="min-h-screen bg-[var(--bg)] px-4 py-8 md:py-16">
+        <div className="mx-auto max-w-2xl">
+          <h1 className="mb-2 text-3xl font-bold text-[var(--text)]">내 운동 루틴</h1>
+          <p className="mb-8 text-[var(--muted)]">7일 개인맞춤 운동 프로그램</p>
+          <Card className="text-center">
+            <CardHeader>
+              <CardTitle className="text-xl text-[var(--text)]">7일 루틴 시작하기</CardTitle>
+              <p className="text-[var(--muted)]">준비가 완료되었습니다. 시작 버튼을 눌러 운동을 시작하세요.</p>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onClick={handleStartRoutine}
+                disabled={startingRoutine}
+                className="bg-[var(--brand)] text-white"
+              >
+                {startingRoutine ? '처리 중...' : '시작하기'}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[var(--bg)] px-4 py-8 md:py-16">
