@@ -81,7 +81,10 @@ export default function PayModal({ isOpen, onClose, returnUrl }: PayModalProps) 
       const json = await checkoutRes.json();
 
       if (!checkoutRes.ok) {
-        setErrorMessage(json?.error || json?.message || '결제 세션 생성에 실패했습니다.');
+        const code = json?.code ?? '';
+        const errMsg = json?.error || json?.message || '결제 세션 생성에 실패했습니다.';
+        console.error('Checkout failed', { status: checkoutRes.status, code, error: errMsg });
+        setErrorMessage(errMsg);
         setIsLoading(false);
         return;
       }
