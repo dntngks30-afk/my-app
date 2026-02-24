@@ -43,9 +43,21 @@ export default function StripeSuccessClient({
       }
 
       try {
+        const { data: { session: authSession } } = await supabase.auth.getSession();
+        if (!authSession) {
+          setError('로그인이 필요합니다.');
+          setLoading(false);
+          return;
+        }
+
         const res = await fetch(
           `/api/stripe/verify-session?session_id=${sessionId}`,
-          { method: 'GET' }
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${authSession.access_token}`,
+            },
+          }
         );
 
         const data = await res.json();
@@ -62,7 +74,7 @@ export default function StripeSuccessClient({
           setRoutineCreating(true);
 
           try {
-            const { data: { session } } = await supabase.auth.getSession();
+            const session = authSession;
             if (!session) {
               console.warn('사용자 세션이 없어 루틴 생성을 건너뜁니다.');
               setRoutineCreating(false);

@@ -1,13 +1,35 @@
 // Toss Payments 결제 승인 API입니다.
 // 결제 성공 후 클라이언트에서 이 API를 호출하여 결제를 최종 승인합니다.
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSupabaseAdmin } from "@/lib/supabase";
 
-export async function POST(req: Request) {
+async function getAuthedUserId(req: NextRequest): Promise<string | null> {
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+
+  const token = authHeader.substring(7);
   try {
+    const { data: { user }, error } = await getServerSupabaseAdmin().auth.getUser(token);
+    if (error || !user) return null;
+    return user.id;
+  } catch {
+    return null;
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const authedUserId = await getAuthedUserId(req);
+    if (!authedUserId) {
+      return NextResponse.json(
+        { error: "인증이 필요합니다." },
+        { status: 401 }
+      );
+    }
+
     const body = await req.json();
-    const { paymentKey, orderId, amount, requestId, userId } = body;
+    const { paymentKey, orderId, amount, requestId } = body;
 
     // 필수 파라미터 검증
     if (!paymentKey || !orderId || !amount) {
@@ -49,9 +71,9 @@ export async function POST(req: Request) {
     // 결제 성공 - DB에 기록
     const supabase = getServerSupabaseAdmin();
 
-    // payments 테이블에 결제 기록 저장
+    // payments 테이블에 결제 기록 저장 (authedUserId를 신뢰)
     const { error: paymentError } = await supabase.from("payments").insert({
-      user_id: userId || null,
+      user_id: authedUserId,
       request_id: requestId || null,
       amount: amount,
       order_id: orderId,

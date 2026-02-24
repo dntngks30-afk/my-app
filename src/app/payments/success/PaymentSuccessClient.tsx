@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase';
 
 interface PaymentSuccessClientProps {
   paymentKeyParam?: string | null;
@@ -27,7 +28,6 @@ export default function PaymentSuccessClient({
       const amount = amountParam ?? null;
 
       const requestId = localStorage.getItem('pending_request_id');
-      const userId = localStorage.getItem('user_id');
 
       if (!paymentKey || !orderId || !amount) {
         setError('결제 정보가 올바르지 않습니다.');
@@ -36,15 +36,24 @@ export default function PaymentSuccessClient({
       }
 
       try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          setError('로그인이 필요합니다.');
+          setLoading(false);
+          return;
+        }
+
         const res = await fetch('/api/payments', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
           body: JSON.stringify({
             paymentKey,
             orderId,
             amount: Number(amount),
             requestId,
-            userId,
           }),
         });
 

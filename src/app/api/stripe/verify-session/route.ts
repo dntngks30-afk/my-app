@@ -4,6 +4,7 @@
  * GET /api/stripe/verify-session?session_id=xxx
  * 
  * Stripe Checkout 세션 ID로 결제 정보 확인
+ * Authorization: Bearer <supabase_access_token> 필수
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -11,8 +12,30 @@ import { getStripeServerClient } from '@/lib/stripe';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { getStripeErrorMessage } from '@/lib/stripe';
 
+async function getAuthedUserId(req: NextRequest): Promise<string | null> {
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader?.startsWith('Bearer ')) return null;
+
+  const token = authHeader.substring(7);
+  try {
+    const { data: { user }, error } = await getServerSupabaseAdmin().auth.getUser(token);
+    if (error || !user) return null;
+    return user.id;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
+    const authedUserId = await getAuthedUserId(req);
+    if (!authedUserId) {
+      return NextResponse.json(
+        { error: '인증이 필요합니다.' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const sessionId = searchParams.get('session_id');
 
@@ -50,6 +73,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         { error: '결제 정보가 불완전합니다.' },
         { status: 400 }
+      );
+    }
+
+    if (userId !== authedUserId) {
+      return NextResponse.json(
+        { error: '결제 세션의 소유자가 아닙니다.' },
+        { status: 403 }
       );
     }
 
