@@ -62,7 +62,7 @@ export default function MyRoutinePage() {
         } = await supabase.auth.getSession();
 
         if (!session) {
-          router.push('/app/auth?next=' + encodeURIComponent('/my-routine'));
+          router.push('/login');
           return;
         }
 
@@ -116,7 +116,7 @@ export default function MyRoutinePage() {
       } = await supabase.auth.getSession();
 
       if (!session) {
-        router.push('/app/auth?next=' + encodeURIComponent('/my-routine'));
+        router.push('/login');
         return;
       }
 
