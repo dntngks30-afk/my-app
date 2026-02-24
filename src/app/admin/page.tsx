@@ -9,6 +9,8 @@ import { supabase } from "@/lib/supabase";
 // 빌드 시 프리렌더링 방지 (Supabase 환경 변수 필요)
 export const dynamic = 'force-dynamic';
 
+type AdminTab = "requests" | "plan-override";
+
 // 진단 데이터 타입
 interface DiagnosisData {
   forwardHead: 'none' | 'mild' | 'moderate' | 'severe';
@@ -52,6 +54,19 @@ export default function AdminPage() {
   
   // PDF 생성 로딩 상태
   const [pdfGenerating, setPdfGenerating] = useState(false);
+
+  // 탭 및 플랜 권한 부여
+  const [activeTab, setActiveTab] = useState<AdminTab>("requests");
+  const [isPlanAdmin, setIsPlanAdmin] = useState<boolean | null>(null);
+  const [planOverrideLoading, setPlanOverrideLoading] = useState(false);
+  const [planOverrideMsg, setPlanOverrideMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [planForm, setPlanForm] = useState({
+    targetEmail: "",
+    targetUserId: "",
+    plan_status: "active" as string,
+    plan_tier: "" as string,
+    reason: "",
+  });
 
   // 권한 체크
   useEffect(() => {
@@ -111,6 +126,89 @@ export default function AdminPage() {
 
     fetchRequests();
   }, [isAuthorized]);
+
+  // 플랜 권한 부여: plan-override 탭 활성 시 admin 체크
+  useEffect(() => {
+    if (!isAuthorized || activeTab !== "plan-override") return;
+
+    const checkPlanAdmin = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setIsPlanAdmin(false);
+        return;
+      }
+      try {
+        const res = await fetch("/api/admin/check", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const { isAdmin: ok } = await res.json();
+        setIsPlanAdmin(!!ok);
+      } catch {
+        setIsPlanAdmin(false);
+      }
+    };
+
+    setIsPlanAdmin(null);
+    checkPlanAdmin();
+  }, [isAuthorized, activeTab]);
+
+  // 플랜 권한 부여 제출
+  const handlePlanOverrideSubmit = async () => {
+    if (!planForm.targetEmail?.trim() && !planForm.targetUserId?.trim()) {
+      setPlanOverrideMsg({ type: "error", text: "이메일 또는 사용자 ID를 입력하세요." });
+      return;
+    }
+    if (!planForm.reason?.trim()) {
+      setPlanOverrideMsg({ type: "error", text: "변경 사유를 입력하세요." });
+      return;
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      setPlanOverrideMsg({ type: "error", text: "로그인이 필요합니다." });
+      return;
+    }
+
+    setPlanOverrideLoading(true);
+    setPlanOverrideMsg(null);
+    try {
+      const body: Record<string, string> = {
+        plan_status: planForm.plan_status,
+        reason: planForm.reason.trim(),
+      };
+      if (planForm.targetEmail?.trim()) body.targetEmail = planForm.targetEmail.trim();
+      if (planForm.targetUserId?.trim()) body.targetUserId = planForm.targetUserId.trim();
+      if (planForm.plan_tier?.trim()) body.plan_tier = planForm.plan_tier.trim();
+
+      const res = await fetch("/api/admin/users/plan-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok) {
+        setPlanOverrideMsg({ type: "success", text: "권한이 부여되었습니다." });
+        setPlanForm((prev) => ({ ...prev, reason: "" }));
+      } else if (res.status === 403) {
+        setPlanOverrideMsg({ type: "error", text: "관리자 권한이 없습니다." });
+      } else if (res.status === 404) {
+        setPlanOverrideMsg({ type: "error", text: "대상 사용자를 찾을 수 없습니다." });
+      } else if (res.status === 400) {
+        setPlanOverrideMsg({ type: "error", text: data?.error || "잘못된 요청입니다." });
+      } else {
+        setPlanOverrideMsg({ type: "error", text: data?.error || data?.details || "오류가 발생했습니다." });
+      }
+    } catch (err) {
+      setPlanOverrideMsg({ type: "error", text: "네트워크 오류가 발생했습니다." });
+    } finally {
+      setPlanOverrideLoading(false);
+    }
+  };
 
   // HTML 리포트 페이지 열기 (한글 완벽 지원)
   const handleGeneratePDF = async () => {
@@ -192,6 +290,124 @@ export default function AdminPage() {
           </button>
         </div>
 
+        {/* 탭 메뉴 */}
+        <div className="mb-6 flex gap-2 border-b border-slate-800">
+          <button
+            onClick={() => setActiveTab("requests")}
+            className={`rounded-t-lg px-4 py-2 text-sm font-medium transition ${
+              activeTab === "requests"
+                ? "border border-b-0 border-slate-800 border-b-slate-950 bg-slate-900 text-slate-100"
+                : "text-slate-400 hover:bg-slate-900/50 hover:text-slate-300"
+            }`}
+          >
+            요청 목록
+          </button>
+          <button
+            onClick={() => setActiveTab("plan-override")}
+            className={`rounded-t-lg px-4 py-2 text-sm font-medium transition ${
+              activeTab === "plan-override"
+                ? "border border-b-0 border-slate-800 border-b-slate-950 bg-slate-900 text-slate-100"
+                : "text-slate-400 hover:bg-slate-900/50 hover:text-slate-300"
+            }`}
+          >
+            플랜 권한 부여
+          </button>
+        </div>
+
+        {activeTab === "plan-override" ? (
+          /* 플랜 권한 부여 섹션 */
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 max-w-2xl">
+            <h2 className="mb-6 text-xl font-bold text-slate-100">7일 루틴 권한 부여</h2>
+
+            {isPlanAdmin === null ? (
+              <p className="text-slate-400">권한 확인 중...</p>
+            ) : !isPlanAdmin ? (
+              <div className="rounded-lg border border-slate-700 bg-slate-800 p-6 text-center">
+                <p className="text-slate-300">관리자 권한이 없습니다.</p>
+                <p className="mt-2 text-sm text-slate-500">ADMIN_EMAIL_ALLOWLIST 또는 users.role=admin 사용자만 이용할 수 있습니다.</p>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">대상 이메일</label>
+                  <input
+                    type="email"
+                    placeholder="user@example.com"
+                    value={planForm.targetEmail}
+                    onChange={(e) => setPlanForm((p) => ({ ...p, targetEmail: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-400">사용자 ID (선택)</label>
+                  <input
+                    type="text"
+                    placeholder="선택: 이메일 대신 사용"
+                    value={planForm.targetUserId}
+                    onChange={(e) => setPlanForm((p) => ({ ...p, targetUserId: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">plan_status</label>
+                  <select
+                    value={planForm.plan_status}
+                    onChange={(e) => setPlanForm((p) => ({ ...p, plan_status: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100"
+                  >
+                    <option value="active">active (7일 루틴 권한 부여)</option>
+                    <option value="inactive">inactive</option>
+                    <option value="cancelled">cancelled</option>
+                    <option value="expired">expired</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-400">plan_tier (선택)</label>
+                  <select
+                    value={planForm.plan_tier}
+                    onChange={(e) => setPlanForm((p) => ({ ...p, plan_tier: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100"
+                  >
+                    <option value="">— 선택 안 함 —</option>
+                    <option value="free">free</option>
+                    <option value="standard">standard</option>
+                    <option value="basic">basic</option>
+                    <option value="premium">premium</option>
+                    <option value="vip">vip</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">변경 사유 (필수)</label>
+                  <textarea
+                    placeholder="변경 사유를 입력하세요"
+                    value={planForm.reason}
+                    onChange={(e) => setPlanForm((p) => ({ ...p, reason: e.target.value }))}
+                    rows={3}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500"
+                  />
+                </div>
+                {planOverrideMsg && (
+                  <div
+                    className={`rounded-lg px-3 py-2 text-sm ${
+                      planOverrideMsg.type === "success"
+                        ? "bg-green-500/20 text-green-400"
+                        : "bg-red-500/20 text-red-400"
+                    }`}
+                  >
+                    {planOverrideMsg.text}
+                  </div>
+                )}
+                <button
+                  onClick={handlePlanOverrideSubmit}
+                  disabled={planOverrideLoading}
+                  className="w-full rounded-lg bg-[#f97316] px-6 py-3 font-bold text-white transition hover:bg-[#fb923c] disabled:opacity-60"
+                >
+                  {planOverrideLoading ? "처리 중..." : "권한 부여"}
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
         <div className="grid gap-6 lg:grid-cols-2">
           {/* 왼쪽: 요청 목록 */}
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
@@ -398,6 +614,7 @@ VALUES (
             )}
           </div>
         </div>
+        )}
       </div>
     </div>
   );
