@@ -16,33 +16,6 @@ function sanitizeNext(next: string | null | undefined): string {
   return trimmed;
 }
 
-/** Supabase가 code를 해시(#)에 넣을 수 있음. 클라이언트에서 쿼리+해시 모두 파싱 */
-function getCodeFromClientUrl(): string | null {
-  if (typeof window === 'undefined') return null;
-  const params = new URLSearchParams(window.location.search);
-  let code = params.get('code');
-  if (code) return code;
-  const hash = window.location.hash?.substring(1);
-  if (hash) {
-    const hashParams = new URLSearchParams(hash);
-    code = hashParams.get('code');
-  }
-  return code;
-}
-
-function getNextFromClientUrl(): string | null {
-  if (typeof window === 'undefined') return null;
-  const params = new URLSearchParams(window.location.search);
-  let next = params.get('next');
-  if (next) return next;
-  const hash = window.location.hash?.substring(1);
-  if (hash) {
-    const hashParams = new URLSearchParams(hash);
-    next = hashParams.get('next');
-  }
-  return next;
-}
-
 export default function CallbackClient({ codeParam, nextParam }: CallbackClientProps) {
   const router = useRouter();
 
@@ -50,8 +23,8 @@ export default function CallbackClient({ codeParam, nextParam }: CallbackClientP
     let cancelled = false;
 
     async function run() {
-      const code = codeParam ?? getCodeFromClientUrl();
-      const next = sanitizeNext(nextParam ?? getNextFromClientUrl());
+      const code = codeParam ?? null;
+      const next = sanitizeNext(nextParam);
 
       if (!code) {
         router.replace('/app/auth?error=oauth');
@@ -63,7 +36,6 @@ export default function CallbackClient({ codeParam, nextParam }: CallbackClientP
       if (cancelled) return;
 
       if (error) {
-        console.error('OAuth exchange error:', error.message, error);
         router.replace('/app/auth?error=oauth');
         return;
       }

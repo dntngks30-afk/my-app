@@ -105,6 +105,7 @@ export async function POST(req: NextRequest) {
           success_url: (typeof successUrl === 'string' ? successUrl : null) || defaultSuccessUrl,
           cancel_url: (typeof cancelUrl === 'string' ? cancelUrl : null) || defaultCancelUrl,
           metadata: { userId, productId: 'move-re-7d' },
+          customer_email: userEmail,
           allow_promotion_codes: true,
         });
 
@@ -232,6 +233,7 @@ export async function POST(req: NextRequest) {
         success_url: (typeof successUrl === 'string' ? successUrl : null) || defaultSuccessUrl,
         cancel_url: (typeof cancelUrl === 'string' ? cancelUrl : null) || defaultCancelUrl,
         metadata: { userId, productId: 'move-re-7d', planId: plan.id, planTier: plan.tier, planName: plan.name },
+        customer_email: email,
         allow_promotion_codes: true,
         ...(plan.billing_type === 'subscription'
           ? {
