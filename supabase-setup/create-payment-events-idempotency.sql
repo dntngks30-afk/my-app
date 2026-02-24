@@ -11,9 +11,19 @@ CREATE TABLE IF NOT EXISTS public.payment_events (
   provider VARCHAR(50) NOT NULL,
   event_id VARCHAR(255) NOT NULL,
   user_id UUID,
+  payload JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(provider, event_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_payment_events_provider_event_id
   ON public.payment_events(provider, event_id);
+
+-- RLS: service_role만 INSERT 가능, 일반 사용자 접근 차단
+ALTER TABLE public.payment_events ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "service_role_insert" ON public.payment_events
+  FOR INSERT TO service_role WITH CHECK (true);
+
+CREATE POLICY "service_role_select" ON public.payment_events
+  FOR SELECT TO service_role USING (true);
