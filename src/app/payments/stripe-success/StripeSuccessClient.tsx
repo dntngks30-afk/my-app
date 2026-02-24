@@ -111,8 +111,12 @@ export default function StripeSuccessClient({
                 });
 
                 if (routineRes.ok) {
+                  const routineData = await routineRes.json();
                   setRoutineCreated(true);
-                  console.log('✅ 운동 루틴이 자동으로 생성되었습니다.');
+                  if (routineData.created) {
+                    console.log('✅ 운동 루틴이 자동으로 생성되었습니다.');
+                  }
+                  // created=false여도 routineId 있으면 정상 (멱등/중복 호출)
                 } else {
                   const errorData = await routineRes.json();
                   console.warn('⚠️ 루틴 생성 실패:', errorData.error);

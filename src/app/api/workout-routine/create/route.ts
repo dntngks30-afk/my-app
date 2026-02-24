@@ -96,6 +96,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
+    // 5b. 기존 루틴 확인 (멱등: 동일 user_id + testResultId당 1개)
+    const { data: existingRoutine } = await supabase
+      .from('workout_routines')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('movement_test_result_id', testResultId)
+      .maybeSingle();
+
+    if (existingRoutine) {
+      return NextResponse.json({
+        success: true,
+        routineId: existingRoutine.id,
+        created: false,
+      });
+    }
+
     // 6. 메인 타입 코드 변환
     const mainTypeMap: Record<string, MainTypeCode> = {
       담직: 'D',
@@ -162,12 +178,32 @@ export async function POST(req: NextRequest) {
       .select('id')
       .single();
 
-    if (routineError || !routine) {
+    if (routineError) {
+      // Race: 다른 요청이 먼저 생성했을 수 있음 (23505 = unique violation)
+      if (routineError.code === '23505') {
+        const { data: raced } = await supabase
+          .from('workout_routines')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('movement_test_result_id', testResultId)
+          .single();
+        if (raced) {
+          return NextResponse.json({
+            success: true,
+            routineId: raced.id,
+            created: false,
+          });
+        }
+      }
       console.error('Routine creation error:', routineError);
       return NextResponse.json(
         { error: '루틴 생성에 실패했습니다.' },
         { status: 500 }
       );
+    }
+
+    if (!routine) {
+      return NextResponse.json({ error: '루틴 생성에 실패했습니다.' }, { status: 500 });
     }
 
     const routineId = routine.id;
@@ -206,6 +242,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       routineId,
+      created: true,
       days: enhancedRoutine,
       summary: {
         totalDays: enhancedRoutine.length,
