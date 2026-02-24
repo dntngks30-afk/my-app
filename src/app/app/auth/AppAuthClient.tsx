@@ -20,16 +20,19 @@ export default function AppAuthClient({ next, errorParam }: AppAuthClientProps) 
   }, [errorParam]);
 
   const handleOAuth = async (provider: 'google' | 'kakao') => {
-    setOauthError(null);
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo },
-    });
-    if (error) {
-      setOauthError(error.message);
+    setOauthError(null)
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
+  
+    const options: any = { redirectTo }
+  
+    if (provider === 'kakao') {
+      // account_email 제거 (필요 최소)
+      options.scopes = 'profile_nickname profile_image'
     }
-  };
+  
+    const { error } = await supabase.auth.signInWithOAuth({ provider, options })
+    if (error) setOauthError(error.message)
+  }
 
   return (
     <div className="space-y-4">
