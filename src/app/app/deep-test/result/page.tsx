@@ -268,6 +268,30 @@ export default function DeepTestResultPage() {
             )}
           </div>
 
+          {/* PWA Install Hub (PR-A) */}
+          <section className="mt-8 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3">
+            <h2 className="text-sm font-semibold text-[var(--text)]">
+              앱으로 설치하기
+            </h2>
+            <p className="text-xs text-[var(--muted)] leading-relaxed">
+              설치하면 홈 화면에서 앱처럼 실행할 수 있어요. 알림·출석·루틴 흐름이 끊기지 않습니다.
+            </p>
+            <div className="flex gap-2">
+              <Link
+                href="/app/install?from=/app/deep-test/result"
+                className="flex-1 rounded-lg bg-[var(--brand)] py-3 text-center text-sm font-semibold text-white"
+              >
+                설치 방법 보기
+              </Link>
+              <button
+                type="button"
+                className="rounded-lg border border-[var(--border)] px-4 py-3 text-sm font-medium"
+              >
+                나중에 하기
+              </button>
+            </div>
+          </section>
+
           <div className="mt-8 flex flex-col gap-3">
             <Link
               href="/app/deep-test"
