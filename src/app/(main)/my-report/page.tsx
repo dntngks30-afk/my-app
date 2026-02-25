@@ -51,6 +51,7 @@ export default function MyReportPage() {
 
         // ✅ 내 리포트 조회: 서버 API(/api/my-report)로 조회 (Bearer 토큰)
         const reportRes = await fetch("/api/my-report", {
+          cache: "no-store",
           headers: {
             Authorization: `Bearer ${session.access_token}`,
           },
