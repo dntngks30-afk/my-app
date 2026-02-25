@@ -1,84 +1,218 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import PlayerHeader from '../../_components/PlayerHeader';
-import PlayerTimer from '../../_components/PlayerTimer';
-import BreathToggle from '../../_components/BreathToggle';
-import VideoFrame from '../../_components/VideoFrame';
-import CueChips from '../../_components/CueChips';
-import ProgressFooter from '../../_components/ProgressFooter';
+import TodayRoutineCard from '../../_components/TodayRoutineCard';
 import BottomNav from '../../_components/BottomNav';
 import { Button } from '@/components/ui/button';
-import { PLAYER_EXERCISES } from '../../_data/routine';
+import { supabase } from '@/lib/supabase';
+import { TODAY_ROUTINE } from '../../_data/home';
 
-type BreathMode = 'inhale' | 'exhale';
+function computeTodayDay(startedAt: string | Date, now: Date = new Date()): number {
+  const start = typeof startedAt === 'string' ? new Date(startedAt) : startedAt;
+  const ms = now.getTime() - start.getTime();
+  const day = Math.floor(ms / 86400000) + 1;
+  return Math.max(1, Math.min(7, day));
+}
+
+type RoutineState = {
+  id: string;
+  started_at: string | null;
+  progress?: number;
+  completedDays?: number;
+  totalDays?: number;
+};
+
+type DayState = { day_number: number; completed_at: string | null };
 
 export default function RoutinePlayerPage() {
   const router = useRouter();
-  const [moveIndex, setMoveIndex] = useState(0);
-  const [breathMode, setBreathMode] = useState<BreathMode>('exhale');
-  const [remainingSeconds, setRemainingSeconds] = useState(
-    PLAYER_EXERCISES[0]?.durationSeconds ?? 45
-  );
+  const [routine, setRoutine] = useState<RoutineState | null>(null);
+  const [days, setDays] = useState<DayState[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionPending, setActionPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const current = PLAYER_EXERCISES[moveIndex];
-  const total = PLAYER_EXERCISES.length;
-  const isLast = moveIndex >= total - 1;
-
-  const minutes = Math.floor(remainingSeconds / 60);
-  const seconds = remainingSeconds % 60;
-
-  const handleNext = () => {
-    if (isLast) {
-      router.push('/app/checkin');
-    } else {
-      setMoveIndex((i) => i + 1);
-      const next = PLAYER_EXERCISES[moveIndex + 1];
-      setRemainingSeconds(next?.durationSeconds ?? 45);
+  const fetchRoutine = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      router.replace('/app/auth?next=' + encodeURIComponent('/app/routine/player'));
+      return;
+    }
+    setError(null);
+    try {
+      const res = await fetch('/api/workout-routine/get', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRoutine(data.routine);
+        setDays(data.days ?? []);
+      } else if (res.status === 404) {
+        setRoutine(null);
+        setDays([]);
+      } else {
+        setError('루틴을 불러올 수 없습니다.');
+      }
+    } catch {
+      setError('루틴을 불러올 수 없습니다.');
+      setRoutine(null);
+      setDays([]);
+    } finally {
+      setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchRoutine();
+  }, [router]);
+
+  const handleStart = async () => {
+    if (!routine?.id || actionPending) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return;
+
+    setActionPending(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/workout-routine/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ routineId: routine.id }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        await fetchRoutine();
+      } else {
+        setError(data?.error ?? '시작 처리에 실패했습니다.');
+      }
+    } catch {
+      setError('시작 처리에 실패했습니다.');
+    } finally {
+      setActionPending(false);
+    }
+  };
+
+  const handleComplete = async () => {
+    if (!routine?.id || !routine.started_at || actionPending) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return;
+
+    const todayDay = computeTodayDay(routine.started_at);
+    setActionPending(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/workout-routine/complete-day', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          routineId: routine.id,
+          dayNumber: todayDay,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        await fetchRoutine();
+      } else {
+        setError(data?.error ?? '완료 처리에 실패했습니다.');
+      }
+    } catch {
+      setError('완료 처리에 실패했습니다.');
+    } finally {
+      setActionPending(false);
+    }
+  };
+
+  const notStarted = !routine || !routine.started_at;
+  const todayDay = routine?.started_at ? computeTodayDay(routine.started_at) : null;
+  const todayCompleted =
+    todayDay != null &&
+    days.some((d) => d.day_number === todayDay && d.completed_at != null);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[var(--bg)] flex items-center justify-center">
+        <p className="text-sm text-[var(--muted)]">로딩 중...</p>
+      </div>
+    );
+  }
+
+  if (!routine) {
+    return (
+      <div className="min-h-screen bg-[var(--bg)] pb-24">
+        <PlayerHeader />
+        <main className="container mx-auto px-4 py-6">
+          <p className="text-center text-[var(--muted)]">루틴이 없습니다.</p>
+          <Link
+            href="/app"
+            className="mt-4 block text-center text-sm text-[var(--brand)] underline"
+          >
+            홈으로
+          </Link>
+        </main>
+        <BottomNav />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[var(--bg)] pb-24">
       <PlayerHeader />
       <main className="container mx-auto px-4 py-6 space-y-6">
-        <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
-          EXERCISE {moveIndex + 1} OF {total}
-        </p>
-        <h2
-          className="text-xl font-semibold text-[var(--text)]"
-          style={{ fontFamily: 'var(--font-display)' }}
-        >
-          {current?.title ?? 'V1 90/90 벽 호흡'}
-        </h2>
+        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-0)]">
+          <h2
+            className="mb-2 text-lg font-semibold text-[var(--text)]"
+            style={{ fontFamily: 'var(--font-display)' }}
+          >
+            {notStarted ? '7일 루틴 시작하기' : `Day ${todayDay ?? 1}`}
+          </h2>
+          <p className="mb-6 text-sm text-[var(--muted)]">
+            {notStarted
+              ? '아래 버튼을 눌러 오늘부터 7일 루틴을 시작하세요.'
+              : '오늘의 운동을 완료하고 출석을 체크하세요.'}
+          </p>
 
-        <PlayerTimer minutes={minutes} seconds={seconds} />
+          <TodayRoutineCard
+            dayLabel={notStarted ? 'Day 1' : `Day ${todayDay ?? 1}`}
+            durationBadge={TODAY_ROUTINE.durationBadge}
+            exercises={TODAY_ROUTINE.exercises}
+          />
 
-        <BreathToggle value={breathMode} onChange={setBreathMode} />
+          {error && (
+            <p className="mt-4 text-sm text-red-500">{error}</p>
+          )}
 
-        <VideoFrame />
-
-        <CueChips chips={current?.cueChips ?? ['갈비뼈 아래로', '긴 날숨']} />
-
-        <div className="flex gap-2">
-          <Button variant="outline" className="flex-1 rounded-[var(--radius)]">
-            쉬운 버전
-          </Button>
-          <Button variant="outline" className="flex-1 rounded-[var(--radius)]">
-            어려운 버전
-          </Button>
-        </div>
-
-        <Button
-          onClick={handleNext}
-          className="w-full rounded-[var(--radius)] py-6 text-base font-semibold bg-[var(--brand)]"
-        >
-          다음 동작
-        </Button>
-
-        <div className="pt-4">
-          <ProgressFooter current={moveIndex + 1} total={total} />
+          {notStarted ? (
+            <Button
+              onClick={handleStart}
+              disabled={actionPending}
+              className="mt-6 w-full rounded-[var(--radius)] py-6 text-base font-semibold bg-[var(--brand)]"
+            >
+              {actionPending ? '처리 중...' : 'Start 7-day routine'}
+            </Button>
+          ) : (
+            <Button
+              onClick={handleComplete}
+              disabled={actionPending || todayCompleted}
+              className="mt-6 w-full rounded-[var(--radius)] py-6 text-base font-semibold bg-[var(--brand)]"
+            >
+              {actionPending
+                ? '처리 중...'
+                : todayCompleted
+                  ? 'Completed'
+                  : 'Complete today'}
+            </Button>
+          )}
         </div>
       </main>
       <BottomNav />
