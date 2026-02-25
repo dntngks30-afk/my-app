@@ -55,6 +55,7 @@ export default function DeepTestResultPage() {
   const [result, setResult] = useState<DeepResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [retryTrigger, setRetryTrigger] = useState(0);
+  const [isStandalone, setIsStandalone] = useState(false);
 
   const handleRetry = () => {
     setErrorMessage('');
@@ -116,6 +117,14 @@ export default function DeepTestResultPage() {
 
     load();
   }, [retryTrigger]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const standalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (navigator as { standalone?: boolean }).standalone === true;
+    setIsStandalone(standalone);
+  }, []);
 
   if (status === 'loading') {
     return (
@@ -265,6 +274,48 @@ export default function DeepTestResultPage() {
                 <p className="text-base text-[var(--text)]">{confidence}%</p>
               </div>
             )}
+          </div>
+
+          {/* PWA 설치 온보딩 섹션 */}
+          <div className="mt-8 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6">
+            <h2 className="text-lg font-bold text-[var(--text)]">
+              이제 7일 루틴을 앱처럼 받아볼 차례예요
+            </h2>
+            <p className="mt-2 text-sm text-[var(--muted)]">
+              홈 화면에 추가하면 출석/알림 흐름이 끊기지 않습니다
+            </p>
+            <ol className="mt-4 space-y-2 text-sm text-[var(--text)]">
+              <li className="flex items-center gap-2">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand)]/20 text-xs font-semibold text-[var(--brand)]">1</span>
+                앱으로 설치
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand)]/20 text-xs font-semibold text-[var(--brand)]">2</span>
+                앱 열기
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand)]/20 text-xs font-semibold text-[var(--brand)]">3</span>
+                7일 루틴 시작 + 출석
+              </li>
+            </ol>
+            <div className="mt-5">
+              {isStandalone ? (
+                <Link
+                  href="/app"
+                  className="block w-full rounded-lg bg-[var(--brand)] py-4 text-center text-base font-semibold text-white"
+                >
+                  설치 완료됨 · 7일 루틴 시작하기
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  className="block w-full rounded-lg bg-[var(--brand)] py-4 text-center text-base font-semibold text-white"
+                  onClick={() => {}}
+                >
+                  휴대폰에 앱으로 설치하기
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="mt-8 flex flex-col gap-3">
