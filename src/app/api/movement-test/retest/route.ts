@@ -3,75 +3,30 @@
  * 
  * GET /api/movement-test/retest - 재검사 가능 여부 확인
  * POST /api/movement-test/retest - 재검사 시작
+ * SSOT: plan_status='active'
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
-
-/**
- * 요청에서 사용자 ID 추출
- */
-async function getCurrentUserId(req: NextRequest): Promise<string | null> {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  const supabase = getServerSupabaseAdmin();
-
-  try {
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
-      return null;
-    }
-
-    return user.id;
-  } catch (error) {
-    console.error('User authentication error:', error);
-    return null;
-  }
-}
+import { requireActivePlan } from '@/lib/auth/requireActivePlan';
 
 /**
  * 재검사 가능 여부 확인 (GET)
  */
 export async function GET(req: NextRequest) {
   try {
-    const userId = await getCurrentUserId(req);
-    if (!userId) {
-      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-    }
-
-    const supabase = getServerSupabaseAdmin();
-
-    // 1. 사용자 구독 상태 확인
-    const { data: user } = await supabase
-      .from('users')
-      .select('plan_tier, plan_status')
-      .eq('id', userId)
-      .single();
-
-    if (!user) {
-      return NextResponse.json({ error: '사용자를 찾을 수 없습니다.' }, { status: 404 });
-    }
-
-    // 무료 사용자는 재검사 불가
-    if (user.plan_tier === 'free' || user.plan_status !== 'active') {
+    const auth = await requireActivePlan(req);
+    if (auth instanceof NextResponse) {
+      if (auth.status === 401) return auth;
       return NextResponse.json(
-        {
-          canRetest: false,
-          reason: '유료 플랜 사용자만 재검사를 받을 수 있습니다.',
-        },
+        { canRetest: false, reason: '유료 플랜 사용자만 재검사를 받을 수 있습니다.' },
         { status: 200 }
       );
     }
+    const userId = auth.userId;
+    const supabase = getServerSupabaseAdmin();
 
-    // 2. 마지막 검사(attempt) 조회
+    // 1. 마지막 검사(attempt) 조회
     const { data: lastTest } = await supabase
       .from('movement_test_attempts')
       .select('id, completed_at')
@@ -82,15 +37,12 @@ export async function GET(req: NextRequest) {
 
     if (!lastTest) {
       return NextResponse.json(
-        {
-          canRetest: false,
-          reason: '이전 검사 결과가 없습니다.',
-        },
+        { canRetest: false, reason: '이전 검사 결과가 없습니다.' },
         { status: 200 }
       );
     }
 
-    // 3. 마지막 검사일로부터 7일 경과 확인
+    // 2. 마지막 검사일로부터 7일 경과 확인
     const lastTestDate = new Date(lastTest.completed_at);
     const daysSinceLastTest = Math.floor(
       (new Date().getTime() - lastTestDate.getTime()) / (1000 * 60 * 60 * 24)
@@ -109,7 +61,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 4. 재검사 가능
+    // 3. 재검사 가능
     return NextResponse.json({
       canRetest: true,
       lastTestId: lastTest.id,
@@ -133,27 +85,12 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const userId = await getCurrentUserId(req);
-    if (!userId) {
-      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-    }
-
+    const auth = await requireActivePlan(req);
+    if (auth instanceof NextResponse) return auth;
+    const userId = auth.userId;
     const supabase = getServerSupabaseAdmin();
 
-    // 1. 재검사 가능 여부 확인 (GET 로직 재사용)
-    const { data: user } = await supabase
-      .from('users')
-      .select('plan_tier, plan_status')
-      .eq('id', userId)
-      .single();
-
-    if (!user || user.plan_tier === 'free' || user.plan_status !== 'active') {
-      return NextResponse.json(
-        { error: '유료 플랜 사용자만 재검사를 받을 수 있습니다.' },
-        { status: 403 }
-      );
-    }
-
+    // 1. 마지막 검사 조회
     const { data: lastTest } = await supabase
       .from('movement_test_attempts')
       .select('id, completed_at')

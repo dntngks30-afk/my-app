@@ -1,4 +1,4 @@
-﻿/**
+/**
  * GET /api/deep-test/get-latest
  * user_id 湲곗? scoring_version='deep_v1' 理쒖떊 row (?놁쑝硫?404)
  */
@@ -56,22 +56,28 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     console.error('get-latest error:', error);
-    return NextResponse.json(
-      { error: '寃곌낵瑜?遺덈윭?ㅻ뒗???ㅽ뙣?덉뒿?덈떎.' },
+    const r = NextResponse.json(
+      { error: '결과를 불러오는데 실패했습니다.' },
       { status: 500 }
     );
+    r.headers.set('Cache-Control', 'no-store');
+    return r;
   }
 
   if (!attempt) {
-    return NextResponse.json(
-      { error: '?꾩쭅 ?ы솕 ?뚯뒪??寃곌낵媛 ?놁뒿?덈떎.' },
+    const r = NextResponse.json(
+      { error: '심화 테스트 결과가 없습니다.' },
       { status: 404 }
     );
+    r.headers.set('Cache-Control', 'no-store');
+    return r;
   }
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     source: SOURCE,
     scoring_version: SCORING_VERSION,
     attempt: toAttemptPayload(attempt),
   });
+  res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  return res;
 }

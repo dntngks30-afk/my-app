@@ -5,8 +5,9 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
-function isActivePaid(planTier: string | null, planStatus: string | null): boolean {
-  return planStatus === 'active' && planTier !== 'free' && planTier != null;
+/** SSOT: plan_status='active' (관리자 수동 부여 호환) */
+function hasActivePlan(planStatus: string | null): boolean {
+  return planStatus === 'active';
 }
 
 function isPostPaymentReturn(pathname: string | null): boolean {
@@ -44,7 +45,7 @@ export default function PaymentsGate({ children }: PaymentsGateProps) {
 
         const { data: user, error: userError } = await supabase
           .from('users')
-          .select('plan_tier, plan_status')
+          .select('plan_status')
           .eq('id', session.user.id)
           .single();
 
@@ -55,7 +56,7 @@ export default function PaymentsGate({ children }: PaymentsGateProps) {
           return;
         }
 
-        if (isActivePaid(user.plan_tier, user.plan_status)) {
+        if (hasActivePlan(user.plan_status)) {
           setStatus('already-paid');
         } else {
           setStatus('allowed');

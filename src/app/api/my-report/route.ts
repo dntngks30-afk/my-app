@@ -17,12 +17,16 @@ export async function GET(req: NextRequest) {
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
     if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      const r = NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      r.headers.set("Cache-Control", "no-store");
+      return r;
     }
 
     const { data: userData, error: userErr } = await supabase.auth.getUser(token);
     if (userErr || !userData.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      const r = NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      r.headers.set("Cache-Control", "no-store");
+      return r;
     }
 
     const userId = userData.user.id;
@@ -35,12 +39,18 @@ export async function GET(req: NextRequest) {
 
     if (error) {
       console.error("my-report query error:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      const r = NextResponse.json({ error: error.message }, { status: 500 });
+      r.headers.set("Cache-Control", "no-store");
+      return r;
     }
 
-    return NextResponse.json({ data: data ?? [] });
+    const res = NextResponse.json({ data: data ?? [] });
+    res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    return res;
   } catch (err) {
     console.error("my-report error:", err);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    const r = NextResponse.json({ error: "Server error" }, { status: 500 });
+    r.headers.set("Cache-Control", "no-store");
+    return r;
   }
 }
