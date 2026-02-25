@@ -69,7 +69,7 @@ export default function PwaInstallModal({
 
   const showAndroidFallback = !isIOS && !isInAppBrowser && (promptFailed || !canPromptInstall);
   const showAndroidPrompt = !isIOS && !isInAppBrowser && canPromptInstall && !promptFailed;
-  const showIOS = isIOS;
+  const showIOS = true; // 모든 기기에서 iOS 가이드 이미지 노출
   const showInApp = isInAppBrowser;
 
   return (
