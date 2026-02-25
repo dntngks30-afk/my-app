@@ -22,26 +22,14 @@ import { recordEventProcessed } from '@/lib/payments/idempotency';
 import Stripe from 'stripe';
 
 /**
- * metadata.userId를 우선 사용하되, 없으면 session.customer로 users.stripe_customer_id 조회
+ * metadata.userId 필수 (fail-close). 없으면 null 반환 → plan_status 업데이트 금지
  */
-async function resolveUserId(
-  session: Stripe.Checkout.Session,
-  supabase: ReturnType<typeof getServerSupabaseAdmin>
-): Promise<string | null> {
+async function resolveUserId(session: Stripe.Checkout.Session): Promise<string | null> {
   const metaUserId = session.metadata?.userId;
   if (metaUserId && typeof metaUserId === 'string' && metaUserId.trim() !== '') {
     return metaUserId;
   }
-
-  const customerId = session.customer;
-  if (!customerId || typeof customerId !== 'string') return null;
-
-  const { data } = await supabase
-    .from('users')
-    .select('id')
-    .eq('stripe_customer_id', customerId)
-    .maybeSingle();
-  return data?.id ?? null;
+  return null;
 }
 
 export const runtime = 'nodejs'; // Webhook은 Node.js 런타임 필요
@@ -92,12 +80,9 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ received: true });
         }
 
-        const userId = await resolveUserId(session, supabase);
+        const userId = await resolveUserId(session);
         if (!userId) {
-          console.error('checkout.session.completed: userId 확인 불가 (metadata/customer 모두 매칭 실패)', {
-            sessionId: session.id,
-            customer: session.customer,
-          });
+          console.warn('webhook fail-close: session_id=%s reason=MISSING_METADATA_USER', session.id);
           return NextResponse.json({ received: true });
         }
 
