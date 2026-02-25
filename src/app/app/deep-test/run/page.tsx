@@ -1,7 +1,9 @@
 'use client';
 
 /**
- * Deep Test 진행 페이지 - 14문항 (number/single/multi)
+ * Deep Test 진행 페이지 - 3섹션 Stepper UX
+ * Section 1: 기본(5) / Section 2: 스쿼트(3) / Section 3: 벽천사+한발서기(6)
+ * - 버튼 클릭 시에만 save, autosave 없음
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -9,30 +11,64 @@ import { useRouter } from 'next/navigation';
 import AppTopBar from '../../_components/AppTopBar';
 import BottomNav from '../../_components/BottomNav';
 import { supabase } from '@/lib/supabase';
-import {
-  DEEP_V2_QUESTIONS,
-  DEEP_SECTIONS,
-  type DeepQuestion,
-} from '../_data/questions';
+import { DEEP_V2_QUESTIONS, type DeepQuestion } from '../_data/questions';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
 
 type Status = 'loading' | 'ready' | 'error' | 'auth' | 'paywall' | 'finalizing';
 
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(t);
-  }, [value, delay]);
-  return debouncedValue;
-}
+/** PR3: 3섹션 고정 (questions.ts 변경 없음) */
+const STEPPER_SECTIONS = [
+  {
+    id: 'basic',
+    title: '기본 정보',
+    questionIds: [
+      'deep_basic_age',
+      'deep_basic_gender',
+      'deep_basic_experience',
+      'deep_basic_workstyle',
+      'deep_basic_primary_discomfort',
+    ],
+  },
+  {
+    id: 'squat',
+    title: '스쿼트',
+    questionIds: [
+      'deep_squat_pain_intensity',
+      'deep_squat_pain_location',
+      'deep_squat_knee_alignment',
+    ],
+  },
+  {
+    id: 'wallangel_sls',
+    title: '벽천사 + 한발서기',
+    questionIds: [
+      'deep_wallangel_pain_intensity',
+      'deep_wallangel_pain_location',
+      'deep_wallangel_quality',
+      'deep_sls_pain_intensity',
+      'deep_sls_pain_location',
+      'deep_sls_quality',
+    ],
+  },
+] as const;
 
-function getQuestionsForSection(sectionId: string): DeepQuestion[] {
-  const section = DEEP_SECTIONS.find((s) => s.id === sectionId);
-  if (!section) return [];
-  return section.questionIds
+function getQuestionsForSection(questionIds: readonly string[]): DeepQuestion[] {
+  return questionIds
     .map((id) => DEEP_V2_QUESTIONS.find((q) => q.id === id))
     .filter((q): q is DeepQuestion => q != null);
+}
+
+function getSectionIndexFromAnswers(answers: Record<string, DeepAnswerValue>): number {
+  for (let i = STEPPER_SECTIONS.length - 1; i >= 0; i--) {
+    const ids = STEPPER_SECTIONS[i].questionIds;
+    if (ids.some((id) => {
+      const v = answers[id];
+      return v !== undefined && v !== null && v !== '';
+    })) {
+      return i;
+    }
+  }
+  return 0;
 }
 
 export default function DeepTestRunPage() {
@@ -43,8 +79,7 @@ export default function DeepTestRunPage() {
   const [answers, setAnswers] = useState<Record<string, DeepAnswerValue>>({});
   const [errorMessage, setErrorMessage] = useState('');
   const [saving, setSaving] = useState(false);
-
-  const debouncedAnswers = useDebounce(answers, 600);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const getToken = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -54,9 +89,10 @@ export default function DeepTestRunPage() {
   const saveAnswers = useCallback(
     async (payload: Record<string, DeepAnswerValue>) => {
       const token = await getToken();
-      if (!token || !attemptId) return false;
+      if (!token || !attemptId) return { ok: false as const, error: '인증이 필요합니다.' };
 
       setSaving(true);
+      setSaveError(null);
       try {
         const res = await fetch('/api/deep-test/save', {
           method: 'POST',
@@ -66,9 +102,9 @@ export default function DeepTestRunPage() {
           },
           body: JSON.stringify({ attemptId, patchAnswers: payload }),
         });
-        if (res.ok) return true;
-        if (res.status === 409) return true;
-        return false;
+        if (res.ok || res.status === 409) return { ok: true as const };
+        const err = await res.json().catch(() => ({}));
+        return { ok: false as const, error: err?.error || '저장에 실패했습니다.' };
       } finally {
         setSaving(false);
       }
@@ -114,8 +150,10 @@ export default function DeepTestRunPage() {
         const data = await res.json();
         const att = data?.attempt;
         if (att?.id) {
+          const loadedAnswers = (att.answers ?? {}) as Record<string, DeepAnswerValue>;
           setAttemptId(att.id);
-          setAnswers((att.answers ?? {}) as Record<string, DeepAnswerValue>);
+          setAnswers(loadedAnswers);
+          setSectionIndex(getSectionIndexFromAnswers(loadedAnswers));
         }
         setStatus('ready');
       } catch {
@@ -132,21 +170,11 @@ export default function DeepTestRunPage() {
     };
   }, [getToken]);
 
-  useEffect(() => {
-    if (
-      status !== 'ready' ||
-      !attemptId ||
-      Object.keys(debouncedAnswers).length === 0
-    )
-      return;
-    saveAnswers(debouncedAnswers);
-  }, [debouncedAnswers, status, attemptId, saveAnswers]);
-
-  const currentSection = DEEP_SECTIONS[sectionIndex];
+  const currentSection = STEPPER_SECTIONS[sectionIndex];
   const questions = currentSection
-    ? getQuestionsForSection(currentSection.id)
+    ? getQuestionsForSection(currentSection.questionIds)
     : [];
-  const isLastSection = sectionIndex >= DEEP_SECTIONS.length - 1;
+  const isLastSection = sectionIndex >= STEPPER_SECTIONS.length - 1;
 
   const handleAnswer = (qId: string, value: DeepAnswerValue) => {
     setAnswers((prev) => ({ ...prev, [qId]: value }));
@@ -176,22 +204,51 @@ export default function DeepTestRunPage() {
     }
   };
 
-  const allAnsweredInSection = questions.every((q) => {
-    const v = answers[q.id];
-    if (q.type === 'number') {
-      return typeof v === 'number' && !Number.isNaN(v);
+  /** Section 1만 나이(deep_basic_age) 필수, 나머지는 비어 있어도 진행 허용 */
+  const canProceedFromSection = (idx: number): boolean => {
+    if (idx === 0) {
+      const age = answers['deep_basic_age'];
+      return typeof age === 'number' && !Number.isNaN(age);
     }
-    if (q.type === 'single') {
-      return typeof v === 'string' && v.length > 0;
+    return true;
+  };
+
+  const ageWarning = sectionIndex === 0 && (typeof answers['deep_basic_age'] !== 'number' || Number.isNaN(answers['deep_basic_age'] as number));
+
+  function buildPatchForSection(idx: number): Record<string, DeepAnswerValue> {
+    const ids = STEPPER_SECTIONS[idx].questionIds;
+    const patch: Record<string, DeepAnswerValue> = {};
+    for (const id of ids) {
+      const v = answers[id];
+      if (v !== undefined && v !== null && v !== '') {
+        if (Array.isArray(v) && v.length === 0) continue;
+        patch[id] = v;
+      }
     }
-    if (q.type === 'multi') {
-      const arr = v as string[] | undefined;
-      return Array.isArray(arr) && arr.length > 0;
-    }
-    return false;
-  });
+    return patch;
+  }
+
+  const handlePrev = () => {
+    setSaveError(null);
+    setSectionIndex((i) => Math.max(0, i - 1));
+  };
 
   const handleNext = async () => {
+    if (sectionIndex === 0 && !canProceedFromSection(0)) {
+      setSaveError('나이는 꼭 입력해주세요.');
+      return;
+    }
+    setSaveError(null);
+
+    const patch = buildPatchForSection(sectionIndex);
+    if (Object.keys(patch).length > 0) {
+      const result = await saveAnswers(patch);
+      if (!result.ok) {
+        setSaveError(result.error ?? '저장에 실패했습니다.');
+        return;
+      }
+    }
+
     if (isLastSection) {
       setStatus('finalizing');
       const token = await getToken();
@@ -200,8 +257,6 @@ export default function DeepTestRunPage() {
         setErrorMessage('인증이 필요합니다.');
         return;
       }
-
-      await saveAnswers(answers);
 
       const res = await fetch('/api/deep-test/finalize', {
         method: 'POST',
@@ -214,8 +269,8 @@ export default function DeepTestRunPage() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        setErrorMessage(err?.error || '확정에 실패했습니다.');
-        setStatus('error');
+        setSaveError(err?.error || '확정에 실패했습니다.');
+        setStatus('ready');
         return;
       }
 
@@ -301,7 +356,7 @@ export default function DeepTestRunPage() {
       <AppTopBar />
       <main className="container mx-auto px-4 py-6">
         <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-2">
-          Step {sectionIndex + 1} / {DEEP_SECTIONS.length}
+          {sectionIndex + 1} / {STEPPER_SECTIONS.length}
         </p>
         <h2 className="text-lg font-semibold text-[var(--text)] mb-6">
           {currentSection?.title}
@@ -399,19 +454,37 @@ export default function DeepTestRunPage() {
           ))}
         </div>
 
-        <div className="mt-8 flex items-center justify-between">
-          {saving && (
+        {(saveError || ageWarning) && (
+          <p className="mt-4 text-sm text-amber-600 dark:text-amber-400">
+            {saveError || (ageWarning ? '나이는 꼭 입력해주세요.' : null)}
+          </p>
+        )}
+        <div className="mt-8 flex items-center justify-between gap-3">
+          {saving ? (
             <span className="text-xs text-[var(--muted)]">저장 중...</span>
+          ) : (
+            <span />
           )}
-          {!saving && <span />}
-          <button
-            type="button"
-            onClick={handleNext}
-            disabled={!allAnsweredInSection}
-            className="rounded-lg bg-[var(--brand)] px-6 py-3 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            {isLastSection ? '완료' : '다음'}
-          </button>
+          <div className="flex gap-3 ml-auto">
+            {sectionIndex > 0 && (
+              <button
+                type="button"
+                onClick={handlePrev}
+                disabled={saving}
+                className="rounded-lg border border-[var(--border)] px-6 py-3 text-sm font-semibold disabled:opacity-50"
+              >
+                이전
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={saving || (sectionIndex === 0 && !canProceedFromSection(0))}
+              className="rounded-lg bg-[var(--brand)] px-6 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {isLastSection ? '결과 보기' : '다음'}
+            </button>
+          </div>
         </div>
       </main>
       <BottomNav />
