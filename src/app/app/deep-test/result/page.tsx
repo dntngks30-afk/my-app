@@ -277,10 +277,8 @@ export default function DeepTestResultPage() {
             <h2 className="text-sm font-semibold text-[var(--text)]">
               앱으로 설치하기
             </h2>
-            <p className="text-xs text-[var(--muted)] leading-relaxed">
-              {isStandalone
-                ? '앱에서 실행 중이에요. 루틴을 시작해 보세요.'
-                : '설치하면 홈 화면에서 앱처럼 실행할 수 있어요. 알림·출석·루틴 흐름이 끊기지 않습니다.'}
+            <p className="text-xs text-[var(--muted)]">
+              {isStandalone ? '앱에서 실행 중' : '홈 화면에 설치하면 앱처럼 실행'}
             </p>
             <div className="flex flex-wrap gap-2">
               {canPromptInstall && (

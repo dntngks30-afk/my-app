@@ -1,10 +1,8 @@
 'use client';
 
 /**
- * PWA 설치 가이드 모달 (PR-B)
- * Android: promptInstall() 버튼, 실패 시 이미지 fallback
- * iOS: 공유→홈화면 안내 이미지
- * 인앱브라우저: Safari/Chrome에서 열기 안내 (강제 이동 없음)
+ * PWA 설치 가이드 모달 (PR-B + PR-PATCH)
+ * 모든 환경에서 4장 가이드 이미지 공통 노출. 환경별로 상단 안내/설치 버튼만 분기.
  */
 
 import { useEffect, useState } from 'react';
@@ -15,6 +13,29 @@ interface PwaInstallModalProps {
   onClose: () => void;
   context?: 'deepResult' | 'installPage';
 }
+
+const GUIDE_IMAGES = [
+  {
+    src: '/pwa/guide/ios-share-sheet-ko.png',
+    alt: 'iOS Safari 공유 → 홈 화면에 추가',
+    caption: 'iOS Safari: 공유 버튼(□↑) → "홈 화면에 추가" 선택',
+  },
+  {
+    src: '/pwa/guide/android-menu-install-ko.png',
+    alt: 'Android Chrome 메뉴에서 설치',
+    caption: 'Android Chrome: 주소창 메뉴(⋮) → 설치 항목 찾기',
+  },
+  {
+    src: '/pwa/guide/android-install-dialog-ko.png',
+    alt: 'Android 설치 확인 다이얼로그',
+    caption: 'Android: 설치 확인 다이얼로그에서 "설치" 선택',
+  },
+  {
+    src: '/pwa/guide/android-add-home-screen-ko.png',
+    alt: 'Android 홈 화면에 추가 완료',
+    caption: 'Android: 홈 화면에 추가 완료 화면',
+  },
+] as const;
 
 export default function PwaInstallModal({
   open,
@@ -67,9 +88,7 @@ export default function PwaInstallModal({
     }
   };
 
-  const showAndroidFallback = !isIOS && !isInAppBrowser && (promptFailed || !canPromptInstall);
   const showAndroidPrompt = !isIOS && !isInAppBrowser && canPromptInstall && !promptFailed;
-  const showIOS = true; // 모든 기기에서 iOS 가이드 이미지 노출
   const showInApp = isInAppBrowser;
 
   return (
@@ -79,8 +98,8 @@ export default function PwaInstallModal({
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="fixed left-[50%] top-[50%] z-50 w-full max-w-lg max-h-[90vh] translate-x-[-50%] translate-y-[-50%] overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-lg">
-        <div className="flex justify-between items-start mb-4">
+      <div className="fixed left-[50%] top-[50%] z-50 w-full max-w-lg max-h-[90vh] translate-x-[-50%] translate-y-[-50%] flex flex-col rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-lg">
+        <div className="flex justify-between items-start p-4 sm:p-6 shrink-0">
           <h2 className="text-lg font-semibold text-[var(--text)]">
             앱으로 설치하기
           </h2>
@@ -94,72 +113,58 @@ export default function PwaInstallModal({
           </button>
         </div>
 
-        {showInApp && (
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 pb-4">
+          {showInApp && (
+            <section className="mb-4">
+              <p className="text-sm text-[var(--muted)] leading-relaxed">
+                카카오톡, 인스타그램 등 앱 안에서 열린 브라우저에서는 설치가
+                제한됩니다. Safari 또는 Chrome에서 주소를 열어 설치해 주세요.
+              </p>
+            </section>
+          )}
+
+          {showAndroidPrompt && (
+            <section className="mb-4">
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                disabled={isPrompting}
+                className="w-full rounded-lg bg-[var(--brand)] py-4 text-center text-base font-semibold text-white disabled:opacity-70"
+              >
+                {isPrompting ? '처리 중...' : '설치하기'}
+              </button>
+            </section>
+          )}
+
           <section>
-            <p className="text-sm text-[var(--muted)] leading-relaxed">
-              카카오톡, 인스타그램 등 앱 안에서 열린 브라우저에서는 설치가
-              제한됩니다. 주소를 복사한 뒤 Safari 또는 Chrome에서 열어
-              설치해 주세요.
-            </p>
+            <h3 className="text-sm font-semibold text-[var(--text)] mb-3">
+              설치 가이드 이미지 (공통)
+            </h3>
+            <div className="space-y-5">
+              {GUIDE_IMAGES.map((item) => (
+                <div key={item.src} className="space-y-2">
+                  <img
+                    src={item.src}
+                    alt={item.alt}
+                    className="w-full max-w-md mx-auto rounded-lg border border-[var(--border)] object-contain"
+                    style={{ height: 'auto' }}
+                  />
+                  <p className="text-xs text-[var(--muted)] leading-relaxed">
+                    {item.caption}
+                  </p>
+                </div>
+              ))}
+            </div>
           </section>
-        )}
 
-        {showIOS && (
-          <section>
-            <p className="text-sm text-[var(--muted)] mb-3">
-              Safari에서 공유 버튼(□↑) → &quot;홈 화면에 추가&quot;를 선택하세요.
-            </p>
-            <img
-              src="/pwa/guide/ios-share-sheet-ko.png"
-              alt="iOS 홈 화면에 추가 방법"
-              className="w-full rounded-lg border border-[var(--border)]"
-            />
-          </section>
-        )}
-
-        {showAndroidPrompt && (
-          <section>
-            <button
-              type="button"
-              onClick={handleInstallClick}
-              disabled={isPrompting}
-              className="w-full rounded-lg bg-[var(--brand)] py-4 text-center text-base font-semibold text-white disabled:opacity-70"
-            >
-              {isPrompting ? '처리 중...' : '설치하기'}
-            </button>
-          </section>
-        )}
-
-        {showAndroidFallback && (
-          <section className="space-y-4">
-            <p className="text-sm text-[var(--muted)]">
-              Chrome 주소창 오른쪽 메뉴(⋮)에서 설치를 진행하세요.
-            </p>
-            <img
-              src="/pwa/guide/android-menu-install-ko.png"
-              alt="Android 메뉴에서 설치"
-              className="w-full rounded-lg border border-[var(--border)]"
-            />
-            <img
-              src="/pwa/guide/android-install-dialog-ko.png"
-              alt="Android 설치 대화상자"
-              className="w-full rounded-lg border border-[var(--border)]"
-            />
-            <img
-              src="/pwa/guide/android-add-home-screen-ko.png"
-              alt="Android 홈 화면에 추가"
-              className="w-full rounded-lg border border-[var(--border)]"
-            />
-          </section>
-        )}
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-4 w-full rounded-lg border border-[var(--border)] py-3 text-center text-sm font-medium"
-        >
-          닫기
-        </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-6 w-full rounded-lg border border-[var(--border)] py-3 text-center text-sm font-medium"
+          >
+            닫기
+          </button>
+        </div>
       </div>
     </>
   );

@@ -49,41 +49,13 @@ export default function InstallPage() {
               onClick={() => setModalOpen(true)}
               className="mt-4 w-full rounded-lg bg-[var(--brand)] py-4 text-center text-base font-semibold text-white"
             >
-              설치하기
+              설치 방법 보기
             </button>
           </div>
 
-          <div className="space-y-6 text-sm">
-            <section>
-              <h2 className="font-semibold text-[var(--text)] mb-2">
-                Android (Chrome)
-              </h2>
-              <p className="text-[var(--muted)] leading-relaxed">
-                Chrome 주소창 오른쪽 메뉴(⋮) → &quot;앱에 추가&quot; 또는
-                &quot;홈 화면에 추가&quot;를 선택하세요.
-              </p>
-            </section>
-
-            <section>
-              <h2 className="font-semibold text-[var(--text)] mb-2">
-                iOS (Safari)
-              </h2>
-              <p className="text-[var(--muted)] leading-relaxed">
-                Safari에서 공유 버튼(□↑) → &quot;홈 화면에 추가&quot;를 선택하세요.
-              </p>
-            </section>
-
-            <section>
-              <h2 className="font-semibold text-[var(--text)] mb-2">
-                인앱 브라우저 (카카오톡·인스타그램 등)
-              </h2>
-              <p className="text-[var(--muted)] leading-relaxed">
-                카카오톡, 인스타그램 등 앱 안에서 열린 브라우저에서는 설치가
-                제한될 수 있습니다. Safari 또는 Chrome으로 주소를 복사한 뒤
-                해당 브라우저에서 열어 설치해 주세요.
-              </p>
-            </section>
-          </div>
+          <p className="text-sm text-[var(--muted)]">
+            설치 방법은 상단 버튼으로 가이드 확인
+          </p>
 
           {/* 다음 행동 CTA (PR-C, 클릭 기반) */}
           <div className="pt-4 space-y-3">
