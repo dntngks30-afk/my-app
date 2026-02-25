@@ -3,11 +3,18 @@
  * POST /api/admin/users/plan-status
  * Authorization: Bearer <access_token> 필수
  * Body: { targetUserId?, targetEmail?, plan_status, plan_tier?, reason }
+ *
+ * 이메일 조회: 1) public.users (ilike 정규화) 2) 없으면 auth.admin.listUsers로 fallback
+ * public.users row 누락 시 auth에서 찾아 backfill 후 업데이트 (멱등)
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSupabaseAdmin } from "@/lib/supabase";
 import { isAdmin } from "@/lib/auth/admin";
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
 
 const VALID_PLAN_STATUS = [
   "active",
@@ -93,11 +100,96 @@ export async function POST(req: NextRequest) {
           ? planTierRaw.trim()
           : String(planTierRaw);
 
-    let targetQuery = supabase.from("users").select("id, email, plan_status, plan_tier");
+    let targetUser: { id: string; email: string | null; plan_status: string | null; plan_tier: string | null } | null = null;
+
     if (targetUserId && typeof targetUserId === "string") {
-      targetQuery = targetQuery.eq("id", targetUserId);
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, email, plan_status, plan_tier")
+        .eq("id", targetUserId.trim())
+        .maybeSingle();
+      if (!error && data) targetUser = data;
     } else if (targetEmail && typeof targetEmail === "string") {
-      targetQuery = targetQuery.eq("email", targetEmail.trim());
+      const normalizedEmail = normalizeEmail(targetEmail);
+      if (!normalizedEmail) {
+        return NextResponse.json(
+          { error: "targetEmail cannot be empty" },
+          { status: 400 }
+        );
+      }
+
+      // 1) public.users에서 ilike로 조회 (대소문자 무시)
+      const { data: pubUser } = await supabase
+        .from("users")
+        .select("id, email, plan_status, plan_tier")
+        .ilike("email", normalizedEmail)
+        .limit(1)
+        .maybeSingle();
+      if (pubUser) {
+        targetUser = pubUser;
+      } else {
+        // 2) auth.users fallback: listUsers pagination
+        const MAX_PAGES = 20;
+        const PER_PAGE = 500;
+        let authUser: { id: string; email?: string } | null = null;
+        for (let page = 1; page <= MAX_PAGES; page++) {
+          const { data: listData } = await supabase.auth.admin.listUsers({
+            page,
+            perPage: PER_PAGE,
+          });
+          const users = listData?.users ?? [];
+          const found = users.find(
+            (u) => u.email?.trim().toLowerCase() === normalizedEmail
+          );
+          if (found) {
+            authUser = { id: found.id, email: found.email ?? undefined };
+            break;
+          }
+          if (users.length < PER_PAGE) break;
+        }
+
+        if (!authUser) {
+          return NextResponse.json({ error: "TARGET_NOT_FOUND" }, { status: 404 });
+        }
+
+        // 3) public.users backfill (멱등)
+        const { error: upsertErr } = await supabase.from("users").upsert(
+          {
+            id: authUser.id,
+            email: normalizedEmail,
+            role: "user",
+          },
+          { onConflict: "id", ignoreDuplicates: true }
+        );
+        if (upsertErr) {
+          console.error("plan-status backfill error:", upsertErr);
+          return NextResponse.json(
+            { error: "BACKFILL_FAILED", details: upsertErr.message },
+            { status: 500 }
+          );
+        }
+
+        // backfill 수행 시 감사 로그 (best-effort, 실패해도 진행)
+        supabase.from("admin_actions").insert({
+          actor_user_id: actor.id,
+          actor_email: actor.email ?? "",
+          target_user_id: authUser.id,
+          target_email: normalizedEmail,
+          action: "backfill_public_user",
+          reason: `plan_status override lookup: email=${normalizedEmail}`,
+          before: {},
+          after: { backfill: true },
+        }).then(({ error }) => {
+          if (error) console.warn("admin_actions backfill log:", error.message);
+        });
+
+        const { data: afterFill } = await supabase
+          .from("users")
+          .select("id, email, plan_status, plan_tier")
+          .eq("id", authUser.id)
+          .single();
+        targetUser = afterFill;
+      }
     } else {
       return NextResponse.json(
         { error: "targetUserId or targetEmail is required" },
@@ -105,9 +197,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: targetUser, error: targetError } = await targetQuery.single();
-
-    if (targetError || !targetUser) {
+    if (!targetUser) {
       return NextResponse.json({ error: "TARGET_NOT_FOUND" }, { status: 404 });
     }
 
