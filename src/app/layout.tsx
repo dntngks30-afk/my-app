@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { 
   Geist, 
   Geist_Mono, 
@@ -79,7 +79,19 @@ const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://my-app-sigma-seven-
 const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
 const kakaoOgImageAbs = `${normalizedBaseUrl}/og/kakao2.jpg`;
 
+export const viewport: Viewport = {
+  themeColor: '#000000',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export const metadata: Metadata = {
+  appleWebApp: {
+    capable: true,
+    title: 'Move Re',
+    statusBarStyle: 'black-translucent',
+  },
   title: "사진 2장으로 끝내는 맞춤 자세 개선 | NASM 전문가 솔루션",
   description: "목과 어깨 자세가 불편하신가요? NASM-CES 전문가가 사진 2장으로 당신만을 위한 4단계 운동 루틴을 24시간 내에 보내드립니다.",
   keywords: [
@@ -163,9 +175,6 @@ export default function RootLayout({
     >
       <head>
         <link rel="icon" href="/favicon.ico" />
-        <meta name="theme-color" content="#0f172a" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
-        
         {/* 카카오톡 SDK */}
         <script 
           src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.0/kakao.min.js"
