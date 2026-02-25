@@ -21,6 +21,7 @@ export default function AppAuthClient({ next, errorParam }: AppAuthClientProps) 
 
   const handleOAuth = async (provider: 'google' | 'kakao') => {
     setOauthError(null);
+    // window.location.origin 기반 고정: 로컬/프로덕션 모두 콜백 도메인 일치 (env 미사용)
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
