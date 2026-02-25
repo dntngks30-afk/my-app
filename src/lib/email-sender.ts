@@ -199,7 +199,7 @@ function getEmailHTML(analysis: AnalysisResult, userName: string): string {
                 </tr>
               </table>
               <p style="margin: 15px 0 0 0; font-size: 12px; color: #64748B;">
-                (사진 기반 전문가 피드백 서비스, 단 이것도 의학적 진단은 아닙니다)
+                (사진 기반 전문가 피드백 서비스, 단 이것도 의학적 분석은 아닙니다)
               </p>
             </td>
           </tr>
@@ -215,7 +215,7 @@ function getEmailHTML(analysis: AnalysisResult, userName: string): string {
                     </p>
                     <ul style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.6; color: #991B1B;">
                       <li>본 결과는 자가 체크 기반이며, AI나 전문가가 직접 판단한 것이 아닙니다.</li>
-                      <li>의학적 진단이 아니므로 참고 정보로만 활용하세요.</li>
+                      <li>의학적 분석이 아니므로 참고 정보로만 활용하세요.</li>
                       <li>실제 상태와 다를 수 있습니다.</li>
                       <li>통증, 질병, 부상이 있는 경우 반드시 의료기관을 방문하세요.</li>
                     </ul>
@@ -237,7 +237,7 @@ function getEmailHTML(analysis: AnalysisResult, userName: string): string {
                 이메일: support@posturelab.com
               </p>
               <p style="margin: 0; font-size: 11px; color: #CBD5E1;">
-                본 메일은 운동 가이드 참고 목적이며, 의료 진단이 아닙니다.<br>
+                본 메일은 운동 가이드 참고 목적이며, 의료 분석이 아닙니다.<br>
                 © 2026 PostureLab. All rights reserved.
               </p>
             </td>

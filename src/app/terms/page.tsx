@@ -28,7 +28,7 @@ export default function TermsPage() {
             <div>
               <h3 className="mb-2 font-bold text-red-400">필독: 서비스 이용 전 반드시 확인하세요</h3>
               <ul className="space-y-1 text-sm text-slate-300">
-                <li>• 본 서비스는 의료행위가 아니며, 질병의 진단·치료·예방을 목적으로 하지 않습니다.</li>
+                <li>• 본 서비스는 의료행위가 아니며, 질병의 분석·개선·예방을 목적으로 하지 않습니다.</li>
                 <li>• 통증이나 질병이 있는 경우 반드시 전문 의료기관을 방문하시기 바랍니다.</li>
                 <li>• 제공되는 운동 가이드는 참고 자료이며, 의료 전문가의 진료를 대체할 수 없습니다.</li>
               </ul>
@@ -46,14 +46,14 @@ export default function TermsPage() {
                 본 서비스는 <span className="text-[#f97316]">운동 가이드 제공 및 운동 과정 관리</span>에 한정된 온라인 코칭 서비스입니다.
               </p>
               <p className="text-slate-300">
-                본 서비스는 <strong>의료행위가 아니며</strong>, 질병의 진단·치료·예방을 목적으로 하지 않습니다.
+                본 서비스는 <strong>의료행위가 아니며</strong>, 질병의 분석·개선·예방을 목적으로 하지 않습니다.
               </p>
             </div>
             
             <div className="mt-4">
               <h3 className="mb-2 font-semibold text-slate-200">회사가 제공하는 서비스:</h3>
               <ul className="list-disc space-y-2 pl-5">
-                <li>사진 기반 자세 평가 (Postural Assessment, 의학적 진단 제외)</li>
+                <li>사진 기반 자세 평가 (Postural Assessment, 의학적 분석 제외)</li>
                 <li>NASM 운동 체계에 기반한 운동 루틴 가이드</li>
                 <li>운동 수행 방법에 대한 영상 및 설명 자료</li>
                 <li>운동 진행 상황 기록 및 관리</li>
@@ -63,8 +63,8 @@ export default function TermsPage() {
             <div className="mt-4">
               <h3 className="mb-2 font-semibold text-red-400">⛔ 회사가 제공하지 않는 것:</h3>
               <ul className="list-disc space-y-2 pl-5 text-slate-300">
-                <li>의학적 진단 및 질병 치료</li>
-                <li>통증 원인 진단 및 치료 방법 제시</li>
+                <li>의학적 분석 및 질병 개선</li>
+                <li>통증 원인 분석 및 개선 방법 제시</li>
                 <li>의료기기를 사용한 검사 및 평가</li>
                 <li>특정 운동 효과 또는 신체 변화 보장</li>
                 <li>의료 전문가의 진료 대체</li>

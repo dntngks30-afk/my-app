@@ -104,10 +104,10 @@ export default function ReportPreviewPage() {
           </p>
         </div>
 
-        {/* 진단 결과 */}
+        {/* 분석 결과 */}
         <div className="mb-12">
           <h2 className="mb-6 border-b-2 border-[#f97316] pb-2 text-2xl font-bold text-[#f97316]">
-            진단 결과
+            분석 결과
           </h2>
           
           {reportData?.diagnosis && Object.entries(reportData.diagnosis).map(([key, severity]: [string, any]) => {

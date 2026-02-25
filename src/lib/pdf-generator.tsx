@@ -278,14 +278,14 @@ export function SurveyReportPDF({ analysis, userEmail }: { analysis: AnalysisRes
           </Text>
           <Text style={{ fontSize: 8, color: '#991B1B', lineHeight: 1.5 }}>
             본 결과는 자가 체크 기반이며, AI나 전문가가 직접 판단한 것이 아닙니다. 
-            의학적 진단이 아니므로 참고 정보로만 활용하세요. 
+            의학적 분석이 아니므로 참고 정보로만 활용하세요. 
             통증이나 질병이 있는 경우 반드시 의료기관을 방문하시기 바랍니다.
           </Text>
         </View>
 
         <View style={styles.footer}>
           <Text>PostureLab | 자세 경향 자가 체크 서비스 | https://posturelab.com</Text>
-          <Text style={{ marginTop: 3 }}>본 문서는 운동 가이드 참고 목적이며, 의료 진단이 아닙니다.</Text>
+          <Text style={{ marginTop: 3 }}>본 문서는 운동 가이드 참고 목적이며, 의료 분석이 아닙니다.</Text>
         </View>
       </Page>
 
@@ -328,7 +328,7 @@ export function SurveyReportPDF({ analysis, userEmail }: { analysis: AnalysisRes
         </View>
 
         <View style={styles.footer}>
-          <Text>본 결과는 참고용이며, 의학적 진단을 대체할 수 없습니다.</Text>
+          <Text>본 결과는 참고용이며, 의학적 분석을 대체할 수 없습니다.</Text>
         </View>
       </Page>
 
@@ -518,7 +518,7 @@ export function SurveyReportPDF({ analysis, userEmail }: { analysis: AnalysisRes
               측면/정면 사진 2장만 있으면, 전문가가 직접 영상으로 피드백을 드립니다.
             </Text>
             <Text style={{ fontSize: 9, color: '#F97316', marginTop: 5 }}>
-              (단, 이것도 의학적 진단은 아닙니다)
+              (단, 이것도 의학적 분석은 아닙니다)
             </Text>
           </View>
           
@@ -575,7 +575,7 @@ export function SurveyReportPDF({ analysis, userEmail }: { analysis: AnalysisRes
           <View style={styles.listItem}>
             <Text style={[styles.bullet, { color: '#991B1B' }]}>•</Text>
             <Text style={[styles.listText, { fontSize: 8, color: '#991B1B' }]}>
-              의학적 진단, 처방, 치료를 목적으로 하지 않으며, 이를 대체할 수 없습니다.
+              의학적 분석, 가이드, 개선을 목적으로 하지 않으며, 이를 대체할 수 없습니다.
             </Text>
           </View>
           
@@ -609,7 +609,7 @@ export function SurveyReportPDF({ analysis, userEmail }: { analysis: AnalysisRes
         </View>
 
         <View style={styles.footer}>
-          <Text>PostureLab © 2026 | 본 문서는 참고용이며 의료 진단을을 대체할 수 없습니다.</Text>
+          <Text>PostureLab © 2026 | 본 문서는 참고용이며 의료 분석을 대체할 수 없습니다.</Text>
           <Text style={{ marginTop: 3 }}>생성일시: {new Date().toLocaleString('ko-KR')}</Text>
         </View>
       </Page>
@@ -698,14 +698,14 @@ export function PhotoAnalysisReportPDF({
             ⚠️ 중요 안내
           </Text>
           <Text style={{ fontSize: 8, color: '#991B1B', lineHeight: 1.5 }}>
-            본 분석은 사진 기반 시각적 평가이며, 의학적 진단이 아닙니다. 
+            본 분석은 사진 기반 시각적 평가이며, 의학적 분석이 아닙니다. 
             실제 움직임, 생활 습관, 근력 상태에 따라 결과는 달라질 수 있습니다.
           </Text>
         </View>
 
         <View style={styles.footer}>
           <Text>PostureLab Pro | 사진 기반 체형 관찰 서비스</Text>
-          <Text style={{ marginTop: 3 }}>본 문서는 참고 목적이며, 의료 진단을 대체할 수 없습니다.</Text>
+          <Text style={{ marginTop: 3 }}>본 문서는 참고 목적이며, 의료 분석을 대체할 수 없습니다.</Text>
         </View>
       </Page>
 
@@ -840,7 +840,7 @@ export function PhotoAnalysisReportPDF({
           <View style={styles.listItem}>
             <Text style={[styles.bullet, { color: '#991B1B' }]}>•</Text>
             <Text style={[styles.listText, { fontSize: 8, color: '#991B1B' }]}>
-              의학적 진단, 처방, 치료를 목적으로 하지 않으며, 이를 대체할 수 없습니다.
+              의학적 분석, 가이드, 개선을 목적으로 하지 않으며, 이를 대체할 수 없습니다.
             </Text>
           </View>
           
@@ -907,7 +907,7 @@ export function PhotoAnalysisReportPDF({
         </View>
 
         <View style={styles.footer}>
-          <Text>PostureLab Pro © 2026 | 본 문서는 참고용이며 의료 진단을 대체할 수 없습니다.</Text>
+          <Text>PostureLab Pro © 2026 | 본 문서는 참고용이며 의료 분석을 대체할 수 없습니다.</Text>
           <Text style={{ marginTop: 3 }}>생성일시: {new Date().toLocaleString('ko-KR')}</Text>
         </View>
       </Page>

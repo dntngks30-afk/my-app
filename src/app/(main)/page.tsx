@@ -98,7 +98,7 @@ export default function LandingPage() {
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
             <p className="text-xs text-[var(--muted)]">
-              ⚠️ 의학적 진단이 아닌 습관/성향 체크입니다.
+              ⚠️ 의학적 분석이 아닌 습관/성향 체크입니다.
             </p>
           </div>
         </div>

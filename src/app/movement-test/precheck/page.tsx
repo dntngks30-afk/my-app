@@ -123,7 +123,7 @@ export default function PrecheckPage() {
             </h1>
 
             <p className="text-xs sm:text-sm text-[var(--muted)] leading-relaxed whitespace-normal break-keep mb-6">
-              본 테스트는 의학적 진단이 아닌, 움직임의 경향도를 체크하는 테스트입니다.
+              본 테스트는 의학적 분석이 아닌, 움직임의 경향도를 체크하는 테스트입니다.
             </p>
 
             <button

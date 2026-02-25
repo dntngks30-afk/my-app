@@ -243,7 +243,7 @@ export default function SurveyPage() {
           <ul className="space-y-1 text-xs text-slate-400">
             <li>• 본 설문은 자가 인식을 돕기 위한 참고 도구입니다.</li>
             <li>• AI나 전문가가 판단하는 것이 아닙니다.</li>
-            <li>• 결과는 의학적 진단이 아니며, 참고 정보로만 활용하세요.</li>
+            <li>• 결과는 의학적 분석이 아니며, 참고 정보로만 활용하세요.</li>
             <li>• 통증이나 질병이 있다면 반드시 의료기관을 방문하세요.</li>
           </ul>
         </div>

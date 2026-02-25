@@ -100,7 +100,7 @@ export default function SurveyResultPage() {
           </div>
           
           <p className="text-slate-300">
-            💡 아래 결과는 자가 체크 기반이며, 의학적 진단이 아닙니다.
+            💡 아래 결과는 자가 체크 기반이며, 의학적 분석이 아닙니다.
           </p>
         </div>
         
@@ -160,7 +160,7 @@ export default function SurveyResultPage() {
         </div>
         
         <p className="mb-6 text-center text-xs text-slate-500">
-          * 점수는 자가 체크 기반 참고 정보이며, 의학적 평가가 아닙니다.
+          * 점수는 자가 체크 기반 참고 정보이며, 의학적 분석이 아닙니다.
         </p>
         
         {/* 확인된 경향 */}
@@ -351,7 +351,7 @@ export default function SurveyResultPage() {
               ⚠️ 필독: 본 결과의 한계
             </p>
             <ul className="space-y-1 text-xs text-red-200">
-              <li>• 본 결과는 자가 체크 기반이며, 의학적 진단이 아닙니다.</li>
+              <li>• 본 결과는 자가 체크 기반이며, 의학적 분석이 아닙니다.</li>
               <li>• AI나 전문가가 직접 판단한 것이 아닙니다.</li>
               <li>• 실제 상태와 다를 수 있으며, 참고 정보로만 활용하세요.</li>
               <li>• 통증, 질병, 부상이 있는 경우 반드시 의료기관을 방문하세요.</li>
@@ -361,7 +361,7 @@ export default function SurveyResultPage() {
           <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4">
             <p className="text-xs text-blue-200">
               💡 더 정확한 평가를 원하시면 사진 2장으로 전문가의 피드백을 받아보세요.
-              (그래도 의학적 진단은 아닙니다)
+              (그래도 의학적 분석은 아닙니다)
             </p>
           </div>
         </div>

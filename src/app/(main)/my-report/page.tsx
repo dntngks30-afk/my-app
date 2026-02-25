@@ -259,7 +259,7 @@ export default function MyReportPage() {
             {selectedReport && (
               <div className="space-y-6">
                 <section className="rounded-2xl border border-slate-700/80 bg-slate-900/80 p-6">
-                  <h2 className="mb-4 text-lg font-semibold text-slate-100">체형 진단 결과</h2>
+                  <h2 className="mb-4 text-lg font-semibold text-slate-100">체형 분석 결과</h2>
                   <div className="flex flex-wrap gap-2">
                     {selectedReport.diagnoses?.length > 0 ? (
                       selectedReport.diagnoses.map((diagnosis, index) => (
@@ -271,7 +271,7 @@ export default function MyReportPage() {
                         </span>
                       ))
                     ) : (
-                      <p className="text-sm text-slate-400">진단 결과가 없습니다.</p>
+                      <p className="text-sm text-slate-400">분석 결과가 없습니다.</p>
                     )}
                   </div>
                 </section>

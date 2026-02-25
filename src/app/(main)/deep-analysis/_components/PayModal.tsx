@@ -10,7 +10,9 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabaseBrowser } from '@/lib/supabase';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const PRIMARY = '#2563EB';
 
@@ -26,6 +28,11 @@ export default function PayModal({ isOpen, onClose, returnUrl }: PayModalProps) 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPlanActive, setIsPlanActive] = useState<boolean | null>(null);
+  const [consentChecked, setConsentChecked] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) setConsentChecked(false);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -75,6 +82,7 @@ export default function PayModal({ isOpen, onClose, returnUrl }: PayModalProps) 
         body: JSON.stringify({
           productId: 'move-re-7d',
           next: '/app/deep-test',
+          consent: true,
         }),
       });
 
@@ -127,6 +135,20 @@ export default function PayModal({ isOpen, onClose, returnUrl }: PayModalProps) 
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
           결제 즉시 루틴이 시작됩니다.
         </p>
+        <label className="mt-4 flex items-start gap-3 cursor-pointer">
+          <Checkbox
+            checked={consentChecked}
+            onChange={(e) => setConsentChecked((e.target as HTMLInputElement).checked)}
+            className="mt-0.5 shrink-0"
+          />
+          <span className="text-sm text-slate-600 dark:text-slate-300">
+            본 서비스는 의료 행위가 아니며, 디지털 콘텐츠 특성상 결제 후 환불이 불가함에 동의합니다. (
+            <Link href="/terms" target="_blank" rel="noopener noreferrer" className="underline">
+              이용약관 및 환불 정책
+            </Link>
+            )
+          </span>
+        </label>
         <div className="mt-6 flex flex-col gap-3">
           {isPlanActive ? (
             <button
@@ -141,7 +163,7 @@ export default function PayModal({ isOpen, onClose, returnUrl }: PayModalProps) 
             <button
               type="button"
               onClick={handleCheckout}
-              disabled={isLoading || isPlanActive === null}
+              disabled={isLoading || isPlanActive === null || !consentChecked}
               className="w-full rounded-xl py-4 font-bold text-white transition disabled:opacity-50 hover:opacity-90"
               style={{ backgroundColor: PRIMARY }}
             >

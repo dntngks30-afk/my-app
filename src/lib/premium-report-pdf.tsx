@@ -683,7 +683,7 @@ export function PremiumReportPDF({
           
           <View style={{ marginTop: 40, marginBottom: 40 }}>
             <Text style={styles.coverUserName}>
-              {userProfile.name}님 맞춤 진단
+              {userProfile.name}님 맞춤 분석
             </Text>
             <Text style={styles.coverDate}>
               분석일: {currentDate}
@@ -813,7 +813,7 @@ export function PremiumReportPDF({
       </Page>
 
       {/* ============================================ */}
-      {/* 3️⃣ 핵심 문제 진단 (상세) */}
+      {/* 3️⃣ 핵심 문제 분석 (상세) */}
       {/* ============================================ */}
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
@@ -821,7 +821,7 @@ export function PremiumReportPDF({
           <Text style={styles.headerPage}>Problem Diagnosis</Text>
         </View>
 
-        <Text style={styles.sectionTitle}>핵심 문제 진단</Text>
+        <Text style={styles.sectionTitle}>핵심 문제 분석</Text>
         
         <Text style={styles.textLarge}>
           설문 분석 결과, {userProfile.name}님의 주요 체형 패턴은 
@@ -1220,14 +1220,14 @@ export function PremiumReportPDF({
             ⚠️ 중요 면책사항
           </Text>
           <Text style={styles.text}>
-            본 리포트는 의료 진단이 아니며, 설문 기반 데이터와 운동과학적 원리를 토대로 한 
+            본 리포트는 의료 분석이 아니며, 설문 기반 데이터와 운동과학적 원리를 토대로 한 
             컨디션 분석 및 가이드 자료입니다.
           </Text>
           <View style={{ marginTop: 10 }}>
             <View style={styles.listItem}>
               <Text style={styles.listBullet}>•</Text>
               <Text style={styles.listText}>
-                본 리포트의 내용은 의학적 진단, 처방, 치료를 대체할 수 없습니다.
+                본 리포트의 내용은 의학적 분석, 가이드, 개선을 대체할 수 없습니다.
               </Text>
             </View>
             <View style={styles.listItem}>

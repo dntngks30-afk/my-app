@@ -86,10 +86,10 @@ export async function POST(req: Request) {
                 전문가가 분석한 <strong>1:1 맞춤 교정 리포트</strong>가 준비되었습니다.
               </p>
               
-              <!-- 진단 결과 박스 -->
+              <!-- 분석 결과 박스 -->
               <div style="background-color: #334155; border-radius: 12px; padding: 20px; margin: 20px 0;">
                 <p style="color: #94a3b8; font-size: 12px; margin: 0 0 8px; text-transform: uppercase;">
-                  진단 결과
+                  분석 결과
                 </p>
                 <p style="color: #f97316; font-size: 18px; font-weight: 600; margin: 0;">
                   ${diagnosisList}
@@ -101,7 +101,7 @@ export async function POST(req: Request) {
               </p>
               
               <ul style="color: #cbd5e1; font-size: 14px; line-height: 1.8; margin: 0 0 20px; padding-left: 20px;">
-                <li>체형 분석 결과 및 진단</li>
+                <li>체형 분석 결과</li>
                 <li>4단계 교정 운동 루틴 (억제-신장-활성화-통합)</li>
                 <li>전문가 맞춤 조언</li>
               </ul>

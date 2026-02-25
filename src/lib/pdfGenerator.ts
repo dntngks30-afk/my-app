@@ -319,7 +319,7 @@ export async function generateCorrectionPDF(
   
   doc.setFontSize(20);
   doc.setTextColor(249, 115, 22);
-  doc.text('진단 결과', 20, yPos);
+  doc.text('분석 결과', 20, yPos);
   yPos += 15;
   
   doc.setFontSize(12);

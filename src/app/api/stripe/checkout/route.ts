@@ -74,9 +74,17 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const { productId, planId: planIdFromBody, next, successUrl, cancelUrl } = body;
+    const { productId, planId: planIdFromBody, next, successUrl, cancelUrl, consent } = body;
     const productIdStr = typeof productId === 'string' ? productId : '';
     const planIdStr = typeof planIdFromBody === 'string' ? planIdFromBody : '';
+
+    // 3.1 법적 동의 검증 (CS 방어선)
+    if (consent !== true) {
+      return NextResponse.json(
+        { success: false, code: 'CONSENT_REQUIRED', error: '필수 약관 동의가 누락되었습니다.' },
+        { status: 400 }
+      );
+    }
 
     // 4. productId flow (우선) - DB plans 미사용
     if (productIdStr === 'move-re-7d') {

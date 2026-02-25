@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
               <div style="background-color: #FEE2E2; padding: 15px; border-radius: 8px; margin: 20px 0;">
                 <p style="color: #991B1B; font-size: 14px; margin: 0;">
                   ⚠️ <strong>중요 안내:</strong> 본 결과는 사진 기반 시각적 평가이며, 
-                  의학적 진단이 아닙니다. 참고 자료로만 활용해주세요.
+                  의학적 분석이 아닙니다. 참고 자료로만 활용해주세요.
                 </p>
               </div>
               
@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
               
               <p style="color: #94A3B8; font-size: 12px;">
                 PostureLab | 체형 관찰 및 교정운동 가이드 서비스<br>
-                본 이메일은 참고용이며, 의료 진단을 대체할 수 없습니다.
+                본 이메일은 참고용이며, 의료 분석을 대체할 수 없습니다.
               </p>
             </div>
           `,

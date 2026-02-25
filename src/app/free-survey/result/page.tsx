@@ -444,7 +444,7 @@ export default function FreeSurveyResultPage() {
                 <p className="mt-1 text-xs text-slate-300 leading-relaxed">
                   본 서비스는 <strong>의료 행위가 아니며</strong>, 운동 가이드 목적으로만 제공됩니다.
                   질병, 통증, 부상이 있는 경우 반드시 의료기관을 방문하세요.
-                  모든 분석 결과는 "경향" 또는 "가능성"을 나타내며, 의학적 진단을 대체할 수 없습니다.
+                  모든 분석 결과는 "경향" 또는 "가능성"을 나타내며, 의학적 분석을 대체할 수 없습니다.
                 </p>
               </div>
             </div>

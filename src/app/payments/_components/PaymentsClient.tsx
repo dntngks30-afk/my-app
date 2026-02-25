@@ -6,7 +6,9 @@
  */
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const PRODUCT_TO_TIER: Record<string, string> = {
   'move-re-7d': 'standard',
@@ -20,6 +22,7 @@ interface PaymentsClientProps {
 export default function PaymentsClient({ product, next }: PaymentsClientProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [consentChecked, setConsentChecked] = useState(false);
 
   const handleCheckout = async () => {
     setError(null);
@@ -57,6 +60,7 @@ export default function PaymentsClient({ product, next }: PaymentsClientProps) {
           planId: planData.plan.id,
           successUrl,
           cancelUrl,
+          consent: true,
         }),
       });
 
@@ -93,10 +97,24 @@ export default function PaymentsClient({ product, next }: PaymentsClientProps) {
         <p className="mt-4 text-2xl font-semibold text-[var(--text)]">
           ₩19,900 / 7일
         </p>
+        <label className="mt-4 flex items-start gap-3 cursor-pointer">
+          <Checkbox
+            checked={consentChecked}
+            onChange={(e) => setConsentChecked((e.target as HTMLInputElement).checked)}
+            className="mt-0.5 shrink-0"
+          />
+          <span className="text-sm text-[var(--muted)]">
+            본 서비스는 의료 행위가 아니며, 디지털 콘텐츠 특성상 결제 후 환불이 불가함에 동의합니다. (
+            <Link href="/terms" target="_blank" rel="noopener noreferrer" className="underline text-[var(--brand)]">
+              이용약관 및 환불 정책
+            </Link>
+            )
+          </span>
+        </label>
         <button
           type="button"
           onClick={handleCheckout}
-          disabled={loading}
+          disabled={loading || !consentChecked}
           className="mt-6 w-full rounded-lg bg-[var(--brand)] px-4 py-3 font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
         >
           {loading ? '처리 중...' : '결제하고 시작하기'}
