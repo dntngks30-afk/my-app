@@ -30,6 +30,8 @@ export default function MyReportPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [requests, setRequests] = useState<RequestPartial[]>([]);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [deepStatus, setDeepStatus] = useState<'loading' | 'paywall' | 'not_started' | 'in_progress' | 'done'>('loading');
+  const [deepProgress, setDeepProgress] = useState<number>(0);
 
   useEffect(() => {
     const loadData = async () => {
@@ -69,6 +71,47 @@ export default function MyReportPage() {
 
         if (!requestError && requestData) {
           setRequests(requestData as RequestPartial[]);
+        }
+
+        // 심층분석 상태: DB 직접 조회 (plan_status + deep_test_attempts, get-latest API 미사용)
+        try {
+          const { data: userRow } = await supabase
+            .from("users")
+            .select("plan_status")
+            .eq("id", session.user.id)
+            .single();
+
+          const planStatus = userRow?.plan_status ?? "inactive";
+          if (planStatus !== "active") {
+            setDeepStatus("paywall");
+          } else {
+            const { data: attempt } = await supabase
+              .from("deep_test_attempts")
+              .select("status, answers")
+              .eq("user_id", session.user.id)
+              .eq("scoring_version", "deep_v2")
+              .order("updated_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (!attempt) {
+              setDeepStatus("not_started");
+            } else if (attempt.status === "final") {
+              setDeepStatus("done");
+            } else {
+              setDeepStatus("in_progress");
+              const answers = (attempt.answers ?? {}) as Record<string, unknown>;
+              const s1 = ["deep_basic_age", "deep_basic_gender", "deep_basic_experience", "deep_basic_workstyle", "deep_basic_primary_discomfort"];
+              const s2 = ["deep_squat_pain_intensity", "deep_squat_pain_location", "deep_squat_knee_alignment"];
+              const s3 = ["deep_wallangel_pain_intensity", "deep_wallangel_pain_location", "deep_wallangel_quality", "deep_sls_pain_intensity", "deep_sls_pain_location", "deep_sls_quality"];
+              const d1 = s1.some((id) => answers[id] !== undefined && answers[id] !== null && answers[id] !== "");
+              const d2 = s2.some((id) => answers[id] !== undefined && answers[id] !== null && answers[id] !== "");
+              const d3 = s3.some((id) => answers[id] !== undefined && answers[id] !== null && answers[id] !== "");
+              setDeepProgress([d1, d2, d3].filter(Boolean).length);
+            }
+          }
+        } catch {
+          setDeepStatus("paywall");
         }
       } catch (err) {
         console.error("데이터 로드 에러:", err);
@@ -121,6 +164,57 @@ export default function MyReportPage() {
             </button>
           </div>
         </header>
+
+        {/* 심층분석(Deep Test) CTA - active: 시작/이어하기/결과보기, non-active: 유료 플랜 알아보기 */}
+        {deepStatus !== "loading" && (
+          <section className="rounded-2xl border border-slate-700/80 bg-slate-900/80 p-6">
+            <h2 className="mb-3 text-lg font-semibold text-slate-100">심층분석</h2>
+            {deepStatus === "paywall" && (
+              <div>
+                <p className="text-sm text-slate-400">결제 완료 고객 전용 심층 테스트입니다.</p>
+                <Link
+                  href="/deep-analysis?pay=1"
+                  className="mt-3 inline-block rounded-lg bg-[#f97316] px-6 py-3 text-sm font-semibold text-slate-950"
+                >
+                  유료 플랜 알아보기
+                </Link>
+              </div>
+            )}
+            {deepStatus === "not_started" && (
+              <div>
+                <p className="text-sm text-slate-400">결제 완료 고객 전용 심층 테스트</p>
+                <Link
+                  href="/app/deep-test"
+                  className="mt-3 inline-block rounded-lg bg-[#f97316] px-6 py-3 text-sm font-semibold text-slate-950"
+                >
+                  심층분석 시작하기
+                </Link>
+              </div>
+            )}
+            {deepStatus === "in_progress" && (
+              <div>
+                <p className="text-sm text-slate-400">진행률 {deepProgress}/3 섹션</p>
+                <Link
+                  href="/app/deep-test?resume=1"
+                  className="mt-3 inline-block rounded-lg bg-[#f97316] px-6 py-3 text-sm font-semibold text-slate-950"
+                >
+                  심층분석 이어하기 ({deepProgress}/3)
+                </Link>
+              </div>
+            )}
+            {deepStatus === "done" && (
+              <div>
+                <p className="text-sm text-slate-400">결과 기반 7일 루틴 시작은 곧 제공됩니다.</p>
+                <Link
+                  href="/app/deep-test/result"
+                  className="mt-3 inline-block rounded-lg bg-[#f97316] px-6 py-3 text-sm font-semibold text-slate-950"
+                >
+                  심층분석 결과 보기
+                </Link>
+              </div>
+            )}
+          </section>
+        )}
 
         {reports.length === 0 && (
           <div className="rounded-2xl border border-slate-700/80 bg-slate-900/80 p-8 text-center">
