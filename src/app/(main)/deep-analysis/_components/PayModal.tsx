@@ -74,7 +74,7 @@ export default function PayModal({ isOpen, onClose, returnUrl }: PayModalProps) 
         },
         body: JSON.stringify({
           productId: 'move-re-7d',
-          next: '/app',
+          next: '/app/deep-test',
         }),
       });
 

@@ -3,11 +3,27 @@
 /**
  * Stripe 결제 성공 - 클라이언트 UI
  * sessionIdParam: 서버에서 searchParams.session_id 전달
+ * nextParam: success_url의 next (active 확정 후 자동 이동, 이탈 복귀용 CTA)
  */
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { supabaseBrowser } from '@/lib/supabase';
+
+/** 오픈 리다이렉트 방지 - 허용 prefix만 redirect에 사용 */
+const ALLOWED_NEXT_PREFIXES = [
+  '/app/deep-test',
+  '/app',
+  '/app/deep-test/run',
+  '/app/deep-test/result',
+  '/app/reports',
+];
+
+function isValidNextForRedirect(next: string | undefined | null): boolean {
+  if (!next || typeof next !== 'string') return false;
+  if (!next.startsWith('/') || next.includes('//')) return false;
+  return ALLOWED_NEXT_PREFIXES.some((p) => next === p || next.startsWith(`${p}/`));
+}
 
 interface PaymentInfo {
   sessionId: string;
@@ -20,10 +36,12 @@ interface PaymentInfo {
 
 interface StripeSuccessClientProps {
   sessionIdParam?: string | null;
+  nextParam?: string | null;
 }
 
 export default function StripeSuccessClient({
   sessionIdParam,
+  nextParam,
 }: StripeSuccessClientProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -74,6 +92,12 @@ export default function StripeSuccessClient({
         }
 
         setPaymentInfo(payload);
+
+        if (isValidNextForRedirect(nextParam ?? null)) {
+          router.replace(nextParam!);
+          setLoading(false);
+          return;
+        }
 
         if (payload.isSubscription) {
           setRoutineCreating(true);
@@ -140,7 +164,7 @@ export default function StripeSuccessClient({
     };
 
     verifyPaymentAndCreateRoutine();
-  }, [sessionIdParam]);
+  }, [sessionIdParam, nextParam]);
 
   if (loading) {
     return (
@@ -181,8 +205,14 @@ export default function StripeSuccessClient({
           <p className="text-sm text-[var(--muted)]">{error}</p>
           <div className="flex flex-col gap-3">
             <Link
-              href="/"
+              href="/my-report"
               className="inline-block rounded-lg bg-[var(--brand)] px-6 py-3 text-sm font-semibold text-white hover:opacity-90"
+            >
+              내 리포트
+            </Link>
+            <Link
+              href="/"
+              className="inline-block rounded-lg border border-[var(--border)] px-6 py-3 text-sm font-semibold"
             >
               메인으로 돌아가기
             </Link>
@@ -271,17 +301,26 @@ export default function StripeSuccessClient({
                 다음 단계
               </h2>
               <p className="text-sm text-[var(--muted)]">
-                {paymentInfo.isSubscription
-                  ? routineCreated
-                    ? '생성된 운동 루틴을 확인하고 시작하세요'
-                    : '운동 검사를 완료하고 맞춤 루틴을 받으세요'
-                  : '운동 검사를 완료하고 맞춤 루틴을 받으세요'}
+                {isValidNextForRedirect(nextParam ?? undefined)
+                  ? '심층분석을 시작하세요'
+                  : paymentInfo.isSubscription
+                    ? routineCreated
+                      ? '생성된 운동 루틴을 확인하고 시작하세요'
+                      : '운동 검사를 완료하고 맞춤 루틴을 받으세요'
+                    : '운동 검사를 완료하고 맞춤 루틴을 받으세요'}
               </p>
             </div>
           </div>
 
           <div className="mt-6 space-y-3">
-            {paymentInfo.isSubscription && routineCreated ? (
+            {isValidNextForRedirect(nextParam ?? undefined) ? (
+              <Link
+                href={nextParam!}
+                className="block w-full rounded-xl bg-[var(--brand)] py-4 text-center text-lg font-bold text-white hover:opacity-90"
+              >
+                심층분석 시작하기
+              </Link>
+            ) : paymentInfo.isSubscription && routineCreated ? (
               <Link
                 href="/my-routine"
                 className="block w-full rounded-xl bg-[var(--brand)] py-4 text-center text-lg font-bold text-white hover:opacity-90"
@@ -297,10 +336,10 @@ export default function StripeSuccessClient({
               </Link>
             )}
             <Link
-              href="/my-routine"
+              href="/my-report"
               className="block w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] py-3 text-center font-semibold text-[var(--text)] hover:bg-[var(--surface-2)]"
             >
-              내 루틴 보기
+              내 리포트
             </Link>
           </div>
         </div>
@@ -330,6 +369,13 @@ export default function StripeSuccessClient({
         </div>
 
         <div className="flex justify-center gap-4 text-sm">
+          <Link
+            href="/my-report"
+            className="text-[var(--muted)] hover:text-[var(--text)]"
+          >
+            내 리포트
+          </Link>
+          <span className="text-[var(--border)]">|</span>
           <Link
             href="/my-routine"
             className="text-[var(--muted)] hover:text-[var(--text)]"

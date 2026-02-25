@@ -19,6 +19,22 @@ function genRequestId(): string {
   return `chk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** 오픈 리다이렉트 방지: 허용 prefix만 success_url next로 사용 */
+const ALLOWED_NEXT_PREFIXES = [
+  '/app/deep-test',
+  '/app',
+  '/app/deep-test/run',
+  '/app/deep-test/result',
+  '/app/reports',
+] as const;
+
+function isValidNextPath(next: unknown): next is string {
+  if (typeof next !== 'string' || next.length === 0) return false;
+  if (!next.startsWith('/')) return false;
+  if (next.includes('//')) return false;
+  return ALLOWED_NEXT_PREFIXES.some((p) => next === p || next.startsWith(`${p}/`));
+}
+
 export async function POST(req: NextRequest) {
   const requestId = genRequestId();
 
@@ -94,7 +110,12 @@ export async function POST(req: NextRequest) {
         );
 
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-        const defaultSuccessUrl = `${baseUrl}/payments/stripe-success?session_id={CHECKOUT_SESSION_ID}`;
+        let successUrlFinal = `${baseUrl}/payments/stripe-success?session_id={CHECKOUT_SESSION_ID}`;
+        if (typeof successUrl === 'string' && successUrl) {
+          successUrlFinal = successUrl;
+        } else if (isValidNextPath(next)) {
+          successUrlFinal = `${baseUrl}/payments/stripe-success?session_id={CHECKOUT_SESSION_ID}&next=${encodeURIComponent(next)}`;
+        }
         const defaultCancelUrl = `${baseUrl}/pricing`;
 
         const session = await stripe.checkout.sessions.create({
@@ -102,7 +123,7 @@ export async function POST(req: NextRequest) {
           payment_method_types: ['card'],
           mode: 'payment',
           line_items: [{ price: priceId.trim(), quantity: 1 }],
-          success_url: (typeof successUrl === 'string' ? successUrl : null) || defaultSuccessUrl,
+          success_url: successUrlFinal,
           cancel_url: (typeof cancelUrl === 'string' ? cancelUrl : null) || defaultCancelUrl,
           metadata: { userId, productId: 'move-re-7d' },
           customer_email: userEmail,
