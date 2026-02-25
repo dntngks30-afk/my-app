@@ -74,6 +74,7 @@ export default function DeepTestResultPage() {
 
       try {
         const res = await fetch('/api/deep-test/get-latest', {
+          cache: 'no-store',
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
 
