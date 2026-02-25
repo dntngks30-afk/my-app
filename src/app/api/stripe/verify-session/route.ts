@@ -68,16 +68,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'NOT_PAID' }, { status: 409 });
     }
 
-    // STEP 5 — Ownership validation
+    // STEP 5 — Ownership validation (fail-close)
     const metaUserId = session.metadata?.userId;
     if (!metaUserId || typeof metaUserId !== 'string') {
+      console.warn('verify-session fail-close: session_id=%s reason=MISSING_METADATA_USER', sid);
       return NextResponse.json(
         { error: 'MISSING_METADATA_USER' },
-        { status: 500 }
+        { status: 400 }
       );
     }
 
     if (metaUserId !== user.id) {
+      console.warn('verify-session fail-close: session_id=%s reason=USER_MISMATCH', sid);
       return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
     }
 
