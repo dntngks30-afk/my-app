@@ -1,17 +1,19 @@
 'use client';
 
 /**
- * PWA 설치 안내 페이지 (PR-A: 허브/동선만)
- * 설치 prompt/모달/이미지 가이드는 PR-B에서
+ * PWA 설치 안내 페이지 (PR-A 허브 + PR-B 모달 연결)
  */
 
+import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AppTopBar from '../_components/AppTopBar';
+import PwaInstallModal from '@/components/pwa/PwaInstallModal';
 
 export default function InstallPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const from = searchParams.get('from') ?? '/app';
+  const [modalOpen, setModalOpen] = useState(false);
 
   const handleBack = () => {
     router.push(from);
@@ -29,6 +31,13 @@ export default function InstallPage() {
             <p className="text-sm text-[var(--muted)]">
               설치 후 홈 화면 아이콘으로 실행해 주세요.
             </p>
+            <button
+              type="button"
+              onClick={() => setModalOpen(true)}
+              className="mt-4 w-full rounded-lg bg-[var(--brand)] py-4 text-center text-base font-semibold text-white"
+            >
+              설치하기
+            </button>
           </div>
 
           <div className="space-y-6 text-sm">
@@ -74,6 +83,11 @@ export default function InstallPage() {
           </div>
         </div>
       </main>
+      <PwaInstallModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        context="installPage"
+      />
     </div>
   );
 }

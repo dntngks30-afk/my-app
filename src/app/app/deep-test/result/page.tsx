@@ -10,6 +10,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AppTopBar from '../../_components/AppTopBar';
 import BottomNav from '../../_components/BottomNav';
+import PwaInstallModal from '@/components/pwa/PwaInstallModal';
+import { usePwaInstall } from '@/lib/pwa/usePwaInstall';
 import { supabase } from '@/lib/supabase';
 
 const RESULT_TYPE_LABELS: Record<string, string> = {
@@ -268,7 +270,7 @@ export default function DeepTestResultPage() {
             )}
           </div>
 
-          {/* PWA Install Hub (PR-A) */}
+          {/* PWA Install Hub (PR-A + PR-B) */}
           <section className="mt-8 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3">
             <h2 className="text-sm font-semibold text-[var(--text)]">
               앱으로 설치하기
@@ -276,10 +278,19 @@ export default function DeepTestResultPage() {
             <p className="text-xs text-[var(--muted)] leading-relaxed">
               설치하면 홈 화면에서 앱처럼 실행할 수 있어요. 알림·출석·루틴 흐름이 끊기지 않습니다.
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              {canPromptInstall && (
+                <button
+                  type="button"
+                  onClick={() => setInstallModalOpen(true)}
+                  className="flex-1 min-w-[120px] rounded-lg bg-[var(--brand)] py-3 text-center text-sm font-semibold text-white"
+                >
+                  바로 설치하기
+                </button>
+              )}
               <Link
                 href="/app/install?from=/app/deep-test/result"
-                className="flex-1 rounded-lg bg-[var(--brand)] py-3 text-center text-sm font-semibold text-white"
+                className="flex-1 min-w-[120px] rounded-lg border border-[var(--border)] py-3 text-center text-sm font-semibold"
               >
                 설치 방법 보기
               </Link>
@@ -309,6 +320,11 @@ export default function DeepTestResultPage() {
         </div>
       </main>
       <BottomNav />
+      <PwaInstallModal
+        open={installModalOpen}
+        onClose={() => setInstallModalOpen(false)}
+        context="deepResult"
+      />
     </div>
   );
 }
