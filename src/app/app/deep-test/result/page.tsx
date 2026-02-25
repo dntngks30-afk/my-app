@@ -51,6 +51,8 @@ interface DeepResult {
 
 export default function DeepTestResultPage() {
   const router = useRouter();
+  const { canPromptInstall, isStandalone } = usePwaInstall();
+  const [installModalOpen, setInstallModalOpen] = useState(false);
   const [status, setStatus] = useState<
     'loading' | 'ready' | 'error' | 'auth' | 'paywall'
   >('loading');
@@ -276,7 +278,9 @@ export default function DeepTestResultPage() {
               앱으로 설치하기
             </h2>
             <p className="text-xs text-[var(--muted)] leading-relaxed">
-              설치하면 홈 화면에서 앱처럼 실행할 수 있어요. 알림·출석·루틴 흐름이 끊기지 않습니다.
+              {isStandalone
+                ? '앱에서 실행 중이에요. 루틴을 시작해 보세요.'
+                : '설치하면 홈 화면에서 앱처럼 실행할 수 있어요. 알림·출석·루틴 흐름이 끊기지 않습니다.'}
             </p>
             <div className="flex flex-wrap gap-2">
               {canPromptInstall && (
@@ -310,12 +314,26 @@ export default function DeepTestResultPage() {
             >
               다시 테스트
             </Link>
-            <Link
-              href="/app"
-              className="block w-full rounded-lg border border-[var(--border)] py-4 text-center text-base font-semibold"
-            >
-              홈으로
-            </Link>
+            {isStandalone ? (
+              <Link
+                href="/app"
+                className="block w-full rounded-lg border border-[var(--border)] py-4 text-center text-base font-semibold"
+              >
+                이제 앱에서 루틴을 시작해요
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/app"
+                  className="block w-full rounded-lg border border-[var(--border)] py-4 text-center text-base font-semibold"
+                >
+                  홈으로
+                </Link>
+                <p className="text-xs text-[var(--muted)] text-center">
+                  설치하면 알림·출석이 편해져요
+                </p>
+              </>
+            )}
           </div>
         </div>
       </main>
