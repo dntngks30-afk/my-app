@@ -33,7 +33,7 @@ export async function requireDeepAuth(
 
   const { data: dbUser } = await supabase
     .from('users')
-    .select('id, plan_tier, plan_status')
+    .select('id, plan_status')
     .eq('id', user.id)
     .single();
 
@@ -44,7 +44,8 @@ export async function requireDeepAuth(
     );
   }
 
-  if (dbUser.plan_tier === 'free' || dbUser.plan_status !== 'active') {
+  // 접근 기준: plan_status === 'active' (plan_tier는 차단 조건에서 제외, 관리자 수동 부여 호환)
+  if (dbUser.plan_status !== 'active') {
     return NextResponse.json(
       { error: '유료 플랜 사용자만 이용할 수 있습니다.' },
       { status: 403 }
