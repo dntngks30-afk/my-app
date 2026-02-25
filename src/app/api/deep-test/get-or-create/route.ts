@@ -1,6 +1,6 @@
-/**
+﻿/**
  * POST /api/deep-test/get-or-create
- * Idempotent: (user_id, scoring_version) 기준 upsert, 없으면 insert
+ * Idempotent: (user_id, scoring_version) 湲곗? upsert, ?놁쑝硫?insert
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -8,7 +8,7 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { requireDeepAuth } from '@/lib/deep-test/auth';
 
 const SOURCE = 'deep';
-const DEFAULT_VERSION = 'deep_v1';
+const DEFAULT_VERSION = 'deep_v2';
 
 function toAttemptPayload(row: {
   id: string;
@@ -46,9 +46,9 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const scoringVersion =
     body.scoringVersion ?? body.scoring_version ?? DEFAULT_VERSION;
-  if (scoringVersion !== 'deep_v1') {
+  if (scoringVersion !== 'deep_v1' && scoringVersion !== 'deep_v2') {
     return NextResponse.json(
-      { error: '지원하지 않는 scoring_version입니다.' },
+      { error: '吏?먰븯吏 ?딅뒗 scoring_version?낅땲??' },
       { status: 400 }
     );
   }
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     }
     console.error('get-or-create error:', error);
     return NextResponse.json(
-      { error: 'attempt 생성에 실패했습니다.' },
+      { error: 'attempt ?앹꽦???ㅽ뙣?덉뒿?덈떎.' },
       { status: 500 }
     );
   }

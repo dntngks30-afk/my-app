@@ -1,6 +1,6 @@
-/**
+﻿/**
  * POST /api/deep-test/save
- * draft만 업데이트 (answers merge), final 상태면 409
+ * draft留??낅뜲?댄듃 (answers merge), final ?곹깭硫?409
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -8,7 +8,18 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { requireDeepAuth } from '@/lib/deep-test/auth';
 
 const SOURCE = 'deep';
-const SCORING_VERSION = 'deep_v1';
+
+function sanitizePatchAnswers(patch: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (Array.isArray(v)) {
+      out[k] = v.filter((x): x is string => typeof x === 'string');
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
 
 function toAttemptPayload(row: {
   id: string;
@@ -48,7 +59,7 @@ export async function POST(req: NextRequest) {
 
   if (!attemptId || !patchAnswers || typeof patchAnswers !== 'object') {
     return NextResponse.json(
-      { error: 'attemptId와 patchAnswers가 필요합니다.' },
+      { error: 'attemptId? patchAnswers媛 ?꾩슂?⑸땲??' },
       { status: 400 }
     );
   }
@@ -64,20 +75,21 @@ export async function POST(req: NextRequest) {
 
   if (fetchError || !attempt) {
     return NextResponse.json(
-      { error: 'attempt를 찾을 수 없습니다.' },
+      { error: 'attempt瑜?李얠쓣 ???놁뒿?덈떎.' },
       { status: 404 }
     );
   }
 
   if (attempt.status !== 'draft') {
     return NextResponse.json(
-      { error: '이미 확정된 결과는 수정할 수 없습니다.' },
+      { error: '?대? ?뺤젙??寃곌낵???섏젙?????놁뒿?덈떎.' },
       { status: 409 }
     );
   }
 
   const currentAnswers = (attempt.answers ?? {}) as Record<string, unknown>;
-  const merged = { ...currentAnswers, ...patchAnswers };
+  const sanitized = sanitizePatchAnswers(patchAnswers);
+  const merged = { ...currentAnswers, ...sanitized };
 
   const { data: updated, error: updateError } = await supabase
     .from('deep_test_attempts')
@@ -94,14 +106,15 @@ export async function POST(req: NextRequest) {
   if (updateError) {
     console.error('save error:', updateError);
     return NextResponse.json(
-      { error: '저장에 실패했습니다.' },
+      { error: '??μ뿉 ?ㅽ뙣?덉뒿?덈떎.' },
       { status: 500 }
     );
   }
 
+  const row = updated!;
   return NextResponse.json({
     source: SOURCE,
-    scoring_version: SCORING_VERSION,
-    attempt: toAttemptPayload(updated),
+    scoring_version: row.scoring_version ?? 'deep_v2',
+    attempt: toAttemptPayload(row),
   });
 }

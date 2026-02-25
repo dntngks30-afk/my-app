@@ -1,16 +1,17 @@
-/**
+﻿/**
  * POST /api/deep-test/finalize
- * draft → final, 스코어 계산. 이미 final이면 멱등 반환
+ * draft ??final, ?ㅼ퐫??怨꾩궛. scoring_version蹂?怨꾩궛湲??ъ슜.
+ * ?대? final?대㈃ 硫깅벑 諛섑솚
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { requireDeepAuth } from '@/lib/deep-test/auth';
 import { calculateDeepV1 } from '@/lib/deep-test/scoring/deep_v1';
+import { calculateDeepV2 } from '@/lib/deep-test/scoring/deep_v2';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
 
 const SOURCE = 'deep';
-const SCORING_VERSION = 'deep_v1';
 
 function toAttemptPayload(row: {
   id: string;
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
 
   if (!attemptId) {
     return NextResponse.json(
-      { error: 'attemptId가 필요합니다.' },
+      { error: 'attemptId媛 ?꾩슂?⑸땲??' },
       { status: 400 }
     );
   }
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
 
   if (fetchError || !attempt) {
     return NextResponse.json(
-      { error: 'attempt를 찾을 수 없습니다.' },
+      { error: 'attempt瑜?李얠쓣 ???놁뒿?덈떎.' },
       { status: 404 }
     );
   }
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
   if (attempt.status === 'final') {
     return NextResponse.json({
       source: SOURCE,
-      scoring_version: SCORING_VERSION,
+      scoring_version: attempt.scoring_version,
       result: {
         scores: attempt.scores,
         result_type: attempt.result_type,
@@ -85,16 +86,61 @@ export async function POST(req: NextRequest) {
   }
 
   const answers = (attempt.answers ?? {}) as Record<string, DeepAnswerValue>;
-  const { scores, result_type, confidence } = calculateDeepV1(answers);
+  const scoringVersion = attempt.scoring_version ?? 'deep_v2';
 
   const now = new Date().toISOString();
+
+  if (scoringVersion === 'deep_v1') {
+    const { scores, result_type, confidence } = calculateDeepV1(answers);
+    const { data: updated, error: updateError } = await supabase
+      .from('deep_test_attempts')
+      .update({
+        status: 'final',
+        scores,
+        result_type,
+        confidence: Number(confidence),
+        finalized_at: now,
+        updated_at: now,
+      })
+      .eq('id', attemptId)
+      .eq('user_id', userId)
+      .eq('status', 'draft')
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('finalize error:', updateError);
+      return NextResponse.json(
+        { error: '?뺤젙 泥섎━???ㅽ뙣?덉뒿?덈떎.' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      source: SOURCE,
+      scoring_version: 'deep_v1',
+      result: { scores, result_type, confidence },
+      attempt: toAttemptPayload(updated!),
+    });
+  }
+
+  const v2Result = calculateDeepV2(answers);
+  const scoresPayload = {
+    objectiveScores: v2Result.objectiveScores,
+    finalScores: v2Result.finalScores,
+    primaryFocus: v2Result.primaryFocus,
+    secondaryFocus: v2Result.secondaryFocus,
+    answeredCount: v2Result.answeredCount,
+    totalCount: v2Result.totalCount,
+  };
+
   const { data: updated, error: updateError } = await supabase
     .from('deep_test_attempts')
     .update({
       status: 'final',
-      scores,
-      result_type,
-      confidence: Number(confidence),
+      scores: scoresPayload,
+      result_type: v2Result.result_type,
+      confidence: v2Result.confidence,
       finalized_at: now,
       updated_at: now,
     })
@@ -107,18 +153,23 @@ export async function POST(req: NextRequest) {
   if (updateError) {
     console.error('finalize error:', updateError);
     return NextResponse.json(
-      { error: '확정 처리에 실패했습니다.' },
+      { error: '?뺤젙 泥섎━???ㅽ뙣?덉뒿?덈떎.' },
       { status: 500 }
     );
   }
 
   return NextResponse.json({
     source: SOURCE,
-    scoring_version: SCORING_VERSION,
+    scoring_version: 'deep_v2',
     result: {
-      scores,
-      result_type,
-      confidence,
+      result_type: v2Result.result_type,
+      primaryFocus: v2Result.primaryFocus,
+      secondaryFocus: v2Result.secondaryFocus,
+      objectiveScores: v2Result.objectiveScores,
+      finalScores: v2Result.finalScores,
+      confidence: v2Result.confidence,
+      answeredCount: v2Result.answeredCount,
+      totalCount: v2Result.totalCount,
     },
     attempt: toAttemptPayload(updated!),
   });

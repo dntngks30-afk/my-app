@@ -1,6 +1,6 @@
-/**
+﻿/**
  * GET /api/deep-test/get-latest
- * user_id 기준 scoring_version='deep_v1' 최신 row (없으면 404)
+ * user_id 湲곗? scoring_version='deep_v1' 理쒖떊 row (?놁쑝硫?404)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -8,7 +8,7 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { requireDeepAuth } from '@/lib/deep-test/auth';
 
 const SOURCE = 'deep';
-const SCORING_VERSION = 'deep_v1';
+const SCORING_VERSION = 'deep_v2';
 
 function toAttemptPayload(row: {
   id: string;
@@ -57,14 +57,14 @@ export async function GET(req: NextRequest) {
   if (error) {
     console.error('get-latest error:', error);
     return NextResponse.json(
-      { error: '결과를 불러오는데 실패했습니다.' },
+      { error: '寃곌낵瑜?遺덈윭?ㅻ뒗???ㅽ뙣?덉뒿?덈떎.' },
       { status: 500 }
     );
   }
 
   if (!attempt) {
     return NextResponse.json(
-      { error: '아직 심화 테스트 결과가 없습니다.' },
+      { error: '?꾩쭅 ?ы솕 ?뚯뒪??寃곌낵媛 ?놁뒿?덈떎.' },
       { status: 404 }
     );
   }
