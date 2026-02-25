@@ -7,7 +7,7 @@ import StripeSuccessClient from './StripeSuccessClient';
 
 export const dynamic = 'force-dynamic';
 
-type SearchParams = Promise<{ session_id?: string }>;
+type SearchParams = Promise<{ session_id?: string; next?: string }>;
 
 export default async function StripeSuccessPage({
   searchParams,
@@ -31,7 +31,7 @@ export default async function StripeSuccessPage({
         </main>
       }
     >
-      <StripeSuccessClient sessionIdParam={params?.session_id} />
+      <StripeSuccessClient sessionIdParam={params?.session_id} nextParam={params?.next} />
     </Suspense>
   );
 }
