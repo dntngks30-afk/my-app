@@ -4,51 +4,22 @@
  * POST /api/workout-routine/create
  * 
  * 운동 검사 결과를 기반으로 7일간의 개인맞춤 운동 루틴을 생성합니다.
+ * SSOT: plan_status='active'
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { requireActivePlan } from '@/lib/auth/requireActivePlan';
 import { generateWorkoutRoutine, type RoutineGenerationOptions } from '@/lib/workout-routine/generator';
 import { enhanceRoutineWithAI, validateEnhancedRoutine, type UserProfile } from '@/lib/workout-routine/ai-enhancer';
 import type { MainTypeCode, SubTypeKey } from '@/types/movement-test';
 
-/**
- * 요청에서 사용자 ID 추출 (Supabase Auth 사용)
- * TODO: 실제 인증 미들웨어로 교체 필요
- */
-async function getCurrentUserId(req: NextRequest): Promise<string | null> {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  const supabase = getServerSupabaseAdmin();
-
-  try {
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
-      return null;
-    }
-
-    return user.id;
-  } catch (error) {
-    console.error('User authentication error:', error);
-    return null;
-  }
-}
-
 export async function POST(req: NextRequest) {
   try {
-    // 1. 사용자 인증 확인
-    const userId = await getCurrentUserId(req);
-    if (!userId) {
-      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-    }
+    // 1. 인증 + plan_status='active' 확인
+    const auth = await requireActivePlan(req);
+    if (auth instanceof NextResponse) return auth;
+    const userId = auth.userId;
 
     // 2. 요청 본문 파싱
     const body = await req.json();
@@ -61,26 +32,7 @@ export async function POST(req: NextRequest) {
     // 3. Supabase 클라이언트 생성
     const supabase = getServerSupabaseAdmin();
 
-    // 4. 사용자 구독 상태 확인 (유료 사용자만)
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id, plan_tier, plan_status')
-      .eq('id', userId)
-      .single();
-
-    if (userError || !user) {
-      return NextResponse.json({ error: '사용자를 찾을 수 없습니다.' }, { status: 404 });
-    }
-
-    // 무료 사용자는 루틴 생성 불가
-    if (user.plan_tier === 'free' || user.plan_status !== 'active') {
-      return NextResponse.json(
-        { error: '유료 플랜 사용자만 운동 루틴을 생성할 수 있습니다.' },
-        { status: 403 }
-      );
-    }
-
-    // 5. 운동 검사 결과 조회
+    // 4. 운동 검사 결과 조회
     const { data: testResult, error: testError } = await supabase
       .from('movement_test_results')
       .select('*')

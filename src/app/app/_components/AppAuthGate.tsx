@@ -46,7 +46,7 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
 
         const { data: user, error: userError } = await supabase
           .from('users')
-          .select('plan_tier, plan_status')
+          .select('plan_status')
           .eq('id', session.user.id)
           .single();
 
