@@ -1,221 +1,475 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import PlayerHeader from '../../_components/PlayerHeader';
-import TodayRoutineCard from '../../_components/TodayRoutineCard';
-import BottomNav from '../../_components/BottomNav';
-import { Button } from '@/components/ui/button';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowLeft, Play, Pause, Check } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { TODAY_ROUTINE } from '../../_data/home';
 
-function computeTodayDay(startedAt: string | Date, now: Date = new Date()): number {
-  const start = typeof startedAt === 'string' ? new Date(startedAt) : startedAt;
-  const ms = now.getTime() - start.getTime();
-  const day = Math.floor(ms / 86400000) + 1;
-  return Math.max(1, Math.min(7, day));
-}
-
-type RoutineState = {
+/** 세그먼트 shape (템플릿/DB 연결 확장용) */
+type Segment = {
   id: string;
-  started_at: string | null;
-  progress?: number;
-  completedDays?: number;
-  totalDays?: number;
+  title: string;
+  durationSec: number;
+  kind: 'work' | 'rest';
 };
 
-type DayState = { day_number: number; completed_at: string | null };
+/** 15분 = 900초: work 60s × 10 + rest 30s × 10 */
+const DEFAULT_SEGMENTS: Segment[] = (() => {
+  const out: Segment[] = [];
+  for (let i = 0; i < 10; i++) {
+    out.push({
+      id: `work-${i + 1}`,
+      title: `운동 ${i + 1}`,
+      durationSec: 60,
+      kind: 'work',
+    });
+    out.push({
+      id: `rest-${i + 1}`,
+      title: `휴식 ${i + 1}`,
+      durationSec: 30,
+      kind: 'rest',
+    });
+  }
+  return out;
+})();
+
+const TOTAL_DURATION_MS =
+  DEFAULT_SEGMENTS.reduce((acc, s) => acc + s.durationSec, 0) * 1000;
+
+type PlayerStatus = 'idle' | 'running' | 'paused' | 'done';
+
+function formatRemaining(ms: number): string {
+  const totalSec = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
 
 export default function RoutinePlayerPage() {
   const router = useRouter();
-  const [routine, setRoutine] = useState<RoutineState | null>(null);
-  const [days, setDays] = useState<DayState[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [actionPending, setActionPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const dayNumber = Math.max(
+    1,
+    Math.min(7, parseInt(searchParams.get('day') ?? '1', 10) || 1)
+  );
 
-  const fetchRoutine = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-      router.replace('/app/auth?next=' + encodeURIComponent('/app/routine/player'));
-      return;
-    }
-    setError(null);
+  const segments = DEFAULT_SEGMENTS;
+  const segmentCount = segments.length;
+
+  const [status, setStatus] = useState<PlayerStatus>('idle');
+  const [startedAtUtcMs, setStartedAtUtcMs] = useState<number | null>(null);
+  const [pausedAccumulatedMs, setPausedAccumulatedMs] = useState(0);
+  const [pauseStartedPerfMs, setPauseStartedPerfMs] = useState<number | null>(
+    null
+  );
+  const [serverNowUtcAtSyncMs, setServerNowUtcAtSyncMs] = useState<
+    number | null
+  >(null);
+  const [perfNowAtSyncMs, setPerfNowAtSyncMs] = useState<number | null>(null);
+  const [tick, setTick] = useState(0);
+
+  const completeRequestedRef = useRef(false);
+  const lastTransitionKeyRef = useRef<string>('');
+
+  const initSyncDone = useRef(false);
+  const statusLoading = useRef(false);
+
+  const fetchStatus = useCallback(async () => {
+    if (statusLoading.current) return;
+    statusLoading.current = true;
     try {
-      const res = await fetch('/api/workout-routine/get', {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) return null;
+      const res = await fetch('/api/routine-engine/status', {
         headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: 'no-store',
       });
-      if (res.ok) {
-        const data = await res.json();
-        setRoutine(data.routine);
-        setDays(data.days ?? []);
-      } else if (res.status === 404) {
-        setRoutine(null);
-        setDays([]);
-      } else {
-        setError('루틴을 불러올 수 없습니다.');
-      }
-    } catch {
-      setError('루틴을 불러올 수 없습니다.');
-      setRoutine(null);
-      setDays([]);
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json;
     } finally {
-      setLoading(false);
+      statusLoading.current = false;
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchRoutine();
-  }, [router]);
-
-  const handleStart = async () => {
-    if (!routine?.id || actionPending) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return;
-
-    setActionPending(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/workout-routine/start', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ routineId: routine.id }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        await fetchRoutine();
-      } else {
-        setError(data?.error ?? '시작 처리에 실패했습니다.');
+    if (initSyncDone.current) return;
+    initSyncDone.current = true;
+    console.log('[player] init', {
+      dayNumber,
+      segmentCount,
+      totalSec: TOTAL_DURATION_MS / 1000,
+    });
+    fetchStatus().then((data) => {
+      if (data?.server_now_utc) {
+        console.log('[player] init-sync', { server_now_utc: data.server_now_utc });
+        const ms = new Date(data.server_now_utc).getTime();
+        setServerNowUtcAtSyncMs(ms);
+        setPerfNowAtSyncMs(performance.now());
       }
-    } catch {
-      setError('시작 처리에 실패했습니다.');
-    } finally {
-      setActionPending(false);
-    }
-  };
+    });
+  }, [dayNumber, segmentCount, fetchStatus]);
 
-  const handleComplete = async () => {
-    if (!routine?.id || !routine.started_at || actionPending) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return;
-
-    const todayDay = computeTodayDay(routine.started_at);
-    setActionPending(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/workout-routine/complete-day', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          routineId: routine.id,
-          dayNumber: todayDay,
-        }),
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      console.warn('[player] visibility sync', { visible: true });
+      fetchStatus().then((data) => {
+        if (data?.server_now_utc) {
+          const newServerMs = new Date(data.server_now_utc).getTime();
+          const newPerfMs = performance.now();
+          if (serverNowUtcAtSyncMs !== null && status === 'running') {
+            const expectedElapsed =
+              newServerMs - (startedAtUtcMs ?? 0) - pausedAccumulatedMs;
+            const perfElapsed = newPerfMs - (perfNowAtSyncMs ?? newPerfMs);
+            const driftMs = Math.abs(
+              (newServerMs - serverNowUtcAtSyncMs) -
+                (newPerfMs - (perfNowAtSyncMs ?? newPerfMs))
+            );
+            if (driftMs > 500) {
+              console.warn('[player] drift corrected', { driftMs });
+            }
+          }
+          setServerNowUtcAtSyncMs(newServerMs);
+          setPerfNowAtSyncMs(newPerfMs);
+        }
       });
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [
+    fetchStatus,
+    serverNowUtcAtSyncMs,
+    perfNowAtSyncMs,
+    status,
+    startedAtUtcMs,
+    pausedAccumulatedMs,
+  ]);
 
-      const data = await res.json();
-      if (res.ok) {
-        await fetchRoutine();
-      } else {
-        setError(data?.error ?? '완료 처리에 실패했습니다.');
-      }
-    } catch {
-      setError('완료 처리에 실패했습니다.');
-    } finally {
-      setActionPending(false);
+  const elapsedMs = useMemo(() => {
+    if (status === 'idle' || startedAtUtcMs === null) return 0;
+    if (status === 'done') return TOTAL_DURATION_MS;
+    const serverElapsedAtSync = serverNowUtcAtSyncMs
+      ? serverNowUtcAtSyncMs - startedAtUtcMs
+      : 0;
+    const perfRef = perfNowAtSyncMs ?? performance.now();
+    if (status === 'paused') {
+      const perfDelta =
+        pauseStartedPerfMs !== null ? pauseStartedPerfMs - perfRef : 0;
+      return Math.max(
+        0,
+        serverElapsedAtSync + perfDelta - pausedAccumulatedMs
+      );
     }
-  };
-
-  const notStarted = !routine || !routine.started_at;
-  const todayDay = routine?.started_at ? computeTodayDay(routine.started_at) : null;
-  const todayCompleted =
-    todayDay != null &&
-    days.some((d) => d.day_number === todayDay && d.completed_at != null);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[var(--bg)] flex items-center justify-center">
-        <p className="text-sm text-[var(--muted)]">로딩 중...</p>
-      </div>
+    const perfDelta = performance.now() - perfRef;
+    return Math.max(
+      0,
+      serverElapsedAtSync + perfDelta - pausedAccumulatedMs
     );
-  }
+  }, [
+    status,
+    startedAtUtcMs,
+    pausedAccumulatedMs,
+    serverNowUtcAtSyncMs,
+    perfNowAtSyncMs,
+    pauseStartedPerfMs,
+    tick,
+  ]);
 
-  if (!routine) {
+  const totalRemainingMs = Math.max(0, TOTAL_DURATION_MS - elapsedMs);
+  const totalProgress =
+    TOTAL_DURATION_MS > 0
+      ? Math.min(1, elapsedMs / TOTAL_DURATION_MS)
+      : 0;
+
+  const { derivedIndex, segmentRemainingSec } = useMemo(() => {
+    let acc = 0;
+    for (let i = 0; i < segments.length; i++) {
+      const segEnd = acc + segments[i].durationSec * 1000;
+      if (elapsedMs < segEnd) {
+        const segmentElapsed = elapsedMs - acc;
+        const segmentTotal = segments[i].durationSec * 1000;
+        return {
+          derivedIndex: i,
+          segmentRemainingSec: Math.max(
+            0,
+            Math.ceil((segmentTotal - segmentElapsed) / 1000)
+          ),
+        };
+      }
+      acc = segEnd;
+    }
+    return {
+      derivedIndex: segments.length - 1,
+      segmentRemainingSec: 0,
+    };
+  }, [elapsedMs, segments]);
+
+  const currentSegment = segments[derivedIndex] ?? null;
+  const isLastSegment = derivedIndex === segments.length - 1;
+
+  useEffect(() => {
+    if (status !== 'running') return;
+    const id = setInterval(() => setTick((t) => t + 1), 400);
+    return () => clearInterval(id);
+  }, [status]);
+
+  useEffect(() => {
+    if (segmentRemainingSec > 0) return;
+    const key = `${derivedIndex}-${elapsedMs}`;
+    if (lastTransitionKeyRef.current === key) return;
+    lastTransitionKeyRef.current = key;
+
+    if (isLastSegment) {
+      setStatus('done');
+      if (completeRequestedRef.current) return;
+      completeRequestedRef.current = true;
+
+      const startedAtUtc =
+        startedAtUtcMs !== null ? new Date(startedAtUtcMs).toISOString() : '';
+      console.log('[player] complete request', { dayNumber, startedAtUtc });
+
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session?.access_token) {
+          console.warn('[player] complete fail', {
+            status: 401,
+            error: 'No session',
+          });
+          return;
+        }
+        fetch('/api/routine-engine/complete-session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            dayNumber,
+            startedAtUtc,
+          }),
+          cache: 'no-store',
+        })
+          .then((res) => {
+            if (res.ok) {
+              console.log('[player] complete success');
+            } else {
+              res.json().then((body) =>
+                console.warn('[player] complete fail', {
+                  status: res.status,
+                  error: body?.error ?? 'Unknown',
+                })
+              );
+            }
+          })
+          .catch((err) =>
+            console.warn('[player] complete fail', {
+              status: 0,
+              error: err?.message ?? String(err),
+            })
+          );
+      });
+    } else {
+      console.log('[player] transition', {
+        fromIndex: derivedIndex,
+        toIndex: derivedIndex + 1,
+      });
+    }
+  }, [
+    segmentRemainingSec,
+    derivedIndex,
+    isLastSegment,
+    startedAtUtcMs,
+    elapsedMs,
+    dayNumber,
+  ]);
+
+  const handlePlay = useCallback(() => {
+    console.log('[player] play');
+    fetchStatus().then((data) => {
+      if (!data?.server_now_utc) return;
+      const serverMs = new Date(data.server_now_utc).getTime();
+      console.log('[player] start-sync', {
+        startedAtUtc: data.server_now_utc,
+        server_now_utc: data.server_now_utc,
+      });
+      setStartedAtUtcMs(serverMs);
+      setServerNowUtcAtSyncMs(serverMs);
+      setPerfNowAtSyncMs(performance.now());
+      setStatus('running');
+    });
+  }, [fetchStatus]);
+
+  const handlePause = useCallback(() => {
+    console.log('[player] pause', { pausedAccumulatedMs });
+    setPauseStartedPerfMs(performance.now());
+    setStatus('paused');
+  }, [pausedAccumulatedMs]);
+
+  const handleResume = useCallback(() => {
+    const now = performance.now();
+    const pauseDur = pauseStartedPerfMs !== null ? now - pauseStartedPerfMs : 0;
+    const next = pausedAccumulatedMs + pauseDur;
+    console.log('[player] resume', { pausedAccumulatedMs: next });
+    setPausedAccumulatedMs(next);
+    setPauseStartedPerfMs(null);
+    setStatus('running');
+  }, [pausedAccumulatedMs, pauseStartedPerfMs]);
+
+  if (status === 'done') {
     return (
-      <div className="min-h-screen bg-[var(--bg)] pb-24">
-        <PlayerHeader />
-        <main className="container mx-auto px-4 py-6">
-          <p className="text-center text-[var(--muted)]">루틴이 없습니다.</p>
-          <Link
-            href="/app"
-            className="mt-4 block text-center text-sm text-[var(--brand)] underline"
-          >
-            홈으로
-          </Link>
-        </main>
-        <BottomNav />
+      <div className="min-h-screen bg-[#F8F6F0] flex flex-col items-center justify-center px-4">
+        <div className="text-center mb-8">
+          <div className="text-6xl mb-4">🎉</div>
+          <h1 className="text-2xl font-bold text-slate-800">완료!</h1>
+          <p className="text-slate-600 mt-2">오늘의 루틴을 마쳤어요.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => router.push('/app')}
+          className="min-h-[44px] px-8 py-4 rounded-full border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5"
+        >
+          홈으로
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] pb-24">
-      <PlayerHeader />
-      <main className="container mx-auto px-4 py-6 space-y-6">
-        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-0)]">
-          <h2
-            className="mb-2 text-lg font-semibold text-[var(--text)]"
-            style={{ fontFamily: 'var(--font-display)' }}
-          >
-            {notStarted ? '7일 루틴 시작하기' : `Day ${todayDay ?? 1}`}
-          </h2>
-          <p className="mb-6 text-sm text-[var(--muted)]">
-            {notStarted
-              ? '아래 버튼을 눌러 오늘부터 7일 루틴을 시작하세요.'
-              : '오늘의 운동을 완료하고 출석을 체크하세요.'}
+    <div className="min-h-screen bg-[#F8F6F0] pb-24">
+      <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b-2 border-slate-900 bg-[#F8F6F0] px-4 py-3">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="flex size-10 shrink-0 items-center justify-center rounded-full border-2 border-slate-900 bg-white shadow-[2px_2px_0_0_rgba(15,23,42,1)] transition hover:opacity-90"
+          aria-label="뒤로가기"
+        >
+          <ArrowLeft className="size-5 text-slate-800" strokeWidth={2.5} />
+        </button>
+        <div className="min-w-0 flex-1 text-center">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">
+            DAY {dayNumber}
           </p>
+          <h1 className="truncate text-lg font-bold text-slate-800">
+            15분 루틴
+          </h1>
+        </div>
+        <div className="w-10" />
+      </header>
 
-          <TodayRoutineCard
-            dayLabel={notStarted ? 'Day 1' : `Day ${todayDay ?? 1}`}
-            durationBadge={TODAY_ROUTINE.durationBadge}
-            exercises={TODAY_ROUTINE.exercises}
-          />
+      <main className="px-4 py-6">
+        <div className="relative mb-6 overflow-hidden rounded-2xl border-2 border-slate-900 bg-white shadow-[4px_4px_0_0_rgba(15,23,42,1)]">
+          <div className="h-2 w-full bg-stone-300">
+            <div
+              className="h-full bg-orange-400 transition-all duration-300"
+              style={{ width: `${totalProgress * 100}%` }}
+            />
+          </div>
+          <div className="p-4 flex items-center justify-between">
+            <span className="text-sm font-medium text-slate-600">
+              전체 남은 시간
+            </span>
+            <span className="text-xl font-bold text-slate-800 tabular-nums">
+              {formatRemaining(totalRemainingMs)}
+            </span>
+          </div>
 
-          {error && (
-            <p className="mt-4 text-sm text-red-500">{error}</p>
+          <div className="px-4 pb-6">
+            <div className="rounded-2xl border-2 border-slate-900 bg-slate-100 p-8 text-center shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
+              {currentSegment && (
+                <>
+                  <p className="text-sm font-semibold text-slate-600 mb-2">
+                    {currentSegment.title}
+                  </p>
+                  <p className="text-5xl font-bold text-slate-800 tabular-nums">
+                    {formatRemaining(segmentRemainingSec * 1000)}
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-3 justify-center">
+          {status === 'idle' && (
+            <button
+              type="button"
+              onClick={handlePlay}
+              className="min-h-[44px] px-8 py-3 rounded-full border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 flex items-center gap-2"
+            >
+              <Play className="size-5" fill="currentColor" strokeWidth={0} />
+              Play
+            </button>
           )}
-
-          {notStarted ? (
-            <Button
-              onClick={handleStart}
-              disabled={actionPending}
-              className="mt-6 w-full rounded-[var(--radius)] py-6 text-base font-semibold bg-[var(--brand)]"
+          {status === 'running' && (
+            <button
+              type="button"
+              onClick={handlePause}
+              className="min-h-[44px] px-8 py-3 rounded-full border-2 border-slate-900 bg-slate-200 font-bold text-slate-800 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 flex items-center gap-2"
             >
-              {actionPending ? '처리 중...' : 'Start 7-day routine'}
-            </Button>
-          ) : (
-            <Button
-              onClick={handleComplete}
-              disabled={actionPending || todayCompleted}
-              className="mt-6 w-full rounded-[var(--radius)] py-6 text-base font-semibold bg-[var(--brand)]"
+              <Pause className="size-5" fill="currentColor" strokeWidth={0} />
+              Pause
+            </button>
+          )}
+          {status === 'paused' && (
+            <button
+              type="button"
+              onClick={handleResume}
+              className="min-h-[44px] px-8 py-3 rounded-full border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 flex items-center gap-2"
             >
-              {actionPending
-                ? '처리 중...'
-                : todayCompleted
-                  ? 'Completed'
-                  : 'Complete today'}
-            </Button>
+              <Play className="size-5" fill="currentColor" strokeWidth={0} />
+              Resume
+            </button>
           )}
         </div>
+
+        <div className="mt-6">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-800 mb-2">
+            세그먼트
+          </h2>
+          <ul className="space-y-2">
+            {segments.map((seg, idx) => {
+              const done = idx < derivedIndex;
+              const active = idx === derivedIndex;
+              return (
+                <li
+                  key={seg.id}
+                  className={`flex items-center gap-3 rounded-xl border-2 p-3 ${
+                    active
+                      ? 'border-slate-900 bg-orange-50 shadow-[3px_3px_0_0_rgba(15,23,42,1)]'
+                      : done
+                        ? 'border-slate-300 bg-stone-100 opacity-60'
+                        : 'border-slate-300 bg-white'
+                  }`}
+                >
+                  {done && (
+                    <div className="flex size-6 items-center justify-center rounded-full bg-slate-700">
+                      <Check className="size-3.5 text-white" strokeWidth={3} />
+                    </div>
+                  )}
+                  <span
+                    className={`font-medium ${
+                      done ? 'text-slate-500 line-through' : 'text-slate-800'
+                    }`}
+                  >
+                    {seg.title}
+                  </span>
+                  <span className="ml-auto text-sm text-slate-600">
+                    {seg.durationSec}초
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </main>
-      <BottomNav />
     </div>
   );
 }
