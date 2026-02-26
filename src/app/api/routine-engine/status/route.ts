@@ -5,11 +5,21 @@
  *
  * 서버에서 24h/48h 듀얼 타이머를 평가하여 현재 상태를 반환합니다.
  * todayCompletedForDay: current_day에 대한 완료 기록 존재 여부
+ * lock_until_utc: last_activated_at + 24h (activate 기준)
+ * auto_advance_at_utc: last_activated_at + 48h
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAndUpdateRoutineStatus } from '@/lib/routine-engine';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+
+const MS_24H = 24 * 60 * 60 * 1000;
+const MS_48H = 48 * 60 * 60 * 1000;
+
+function maskUserId(userId: string): string {
+  if (!userId || userId.length < 6) return '******';
+  return `${userId.slice(0, 6)}...`;
+}
 
 async function getCurrentUserId(req: NextRequest): Promise<string | null> {
   const authHeader = req.headers.get('authorization');
@@ -38,6 +48,15 @@ export async function GET(req: NextRequest) {
     const result = await checkAndUpdateRoutineStatus(userId);
     const server_now_utc = new Date().toISOString();
 
+    const baseAtUtc = result.state.lastActivatedAt;
+    let lock_until_utc: string | null = null;
+    let auto_advance_at_utc: string | null = null;
+    if (baseAtUtc) {
+      const baseMs = new Date(baseAtUtc).getTime();
+      lock_until_utc = new Date(baseMs + MS_24H).toISOString();
+      auto_advance_at_utc = new Date(baseMs + MS_48H).toISOString();
+    }
+
     const supabase = getServerSupabaseAdmin();
     const { data: completionRow } = await supabase
       .from('routine_completions')
@@ -49,9 +68,13 @@ export async function GET(req: NextRequest) {
 
     const todayCompletedForDay = !!completionRow;
 
-    console.log('[routine-status] ok', {
-      computed_state: result.state.status,
-      todayCompletedForDay,
+    console.log('[ROUTINE_STATUS]', {
+      userId: maskUserId(userId),
+      nowUtc: server_now_utc,
+      baseAtUtc: baseAtUtc ?? null,
+      lockUntilUtc: lock_until_utc,
+      autoAdvanceAtUtc: auto_advance_at_utc,
+      status: result.state.status,
     });
 
     const res = NextResponse.json({
@@ -60,9 +83,11 @@ export async function GET(req: NextRequest) {
       changed: result.changed,
       server_now_utc,
       todayCompletedForDay,
+      lock_until_utc,
+      auto_advance_at_utc,
     });
 
-    res.headers.set('Cache-Control', 'no-store');
+    res.headers.set('Cache-Control', 'no-store, max-age=0');
     return res;
   } catch (err) {
     console.error('[routine-engine/status] error:', err);
