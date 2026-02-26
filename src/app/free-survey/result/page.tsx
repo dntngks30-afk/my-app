@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { analyzeSurveyResults } from '@/lib/survey-analyzer';
 import { POSTURE_TYPE_NAMES } from '@/lib/survey-analyzer';
 import type { AnalysisResult } from '@/types/survey';
+import { NeoButton, NeoCard, NeoPageLayout } from '@/components/neobrutalism';
 
 interface PhotoAnalysisResult {
   qualityCheck: {
@@ -131,10 +132,10 @@ export default function FreeSurveyResultPage() {
 
   if (!analysis) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="flex min-h-screen items-center justify-center bg-[#F8F6F0]">
         <div className="text-center">
-          <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-[#f97316] border-t-transparent mx-auto" />
-          <p className="text-slate-400">결과 분석 중...</p>
+          <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-orange-400 border-t-transparent mx-auto" />
+          <p className="text-slate-600">결과 분석 중...</p>
         </div>
       </div>
     );
@@ -146,32 +147,32 @@ export default function FreeSurveyResultPage() {
   };
 
   const getSeverityColor = (severity: 'mild' | 'moderate' | 'severe') => {
-    return severity === 'severe' ? 'text-red-400' : severity === 'moderate' ? 'text-yellow-400' : 'text-green-400';
+    return severity === 'severe' ? 'text-red-600' : severity === 'moderate' ? 'text-amber-600' : 'text-green-600';
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 px-4 py-8">
-      <div className="mx-auto max-w-4xl">
-        {/* 헤더 */}
-        <div className="mb-8 text-center">
-          <Link href="/" className="inline-block mb-4">
-            <h1 className="text-2xl font-bold text-white">포스처랩</h1>
-          </Link>
-          <div className="inline-block rounded-full border border-green-500/30 bg-green-500/10 px-4 py-1.5">
-            <span className="text-sm font-semibold text-green-400">✅ 무료 분석 완료</span>
-          </div>
+    <>
+    <NeoPageLayout maxWidth="lg">
+      {/* 헤더 */}
+      <div className="mb-8 text-center">
+        <Link href="/" className="inline-block mb-4">
+          <h1 className="text-2xl font-bold text-slate-800">포스처랩</h1>
+        </Link>
+        <div className="inline-block rounded-full border-2 border-slate-900 bg-orange-100 px-4 py-1.5 shadow-[2px_2px_0_0_rgba(15,23,42,1)]">
+          <span className="text-sm font-semibold text-orange-600">✅ 무료 분석 완료</span>
         </div>
+      </div>
 
-        {/* 사진 분석 결과 (있는 경우) */}
-        {hasPhotos && (
-          <div className="mb-8 rounded-2xl border-2 border-blue-500 bg-gradient-to-br from-blue-500/10 to-slate-900 p-8">
-            <div className="mb-4 flex items-center gap-3">
-              <span className="text-3xl">📸</span>
-              <h2 className="text-3xl font-bold text-slate-100">사진 기반 체형 관찰</h2>
-            </div>
+      {/* 사진 분석 결과 (있는 경우) */}
+      {hasPhotos && (
+        <NeoCard className="mb-8 p-8">
+          <div className="mb-4 flex items-center gap-3">
+            <span className="text-3xl">📸</span>
+            <h2 className="text-3xl font-bold text-slate-800">사진 기반 체형 관찰</h2>
+          </div>
 
-            {photoAnalyzing && (
-              <div className="flex items-center gap-4 rounded-xl bg-slate-950/50 p-6">
+          {photoAnalyzing && (
+            <div className="flex items-center gap-4 rounded-xl border-2 border-slate-900 bg-slate-100 p-6 shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
                 <div>
                   <p className="font-semibold text-slate-200">AI가 사진을 분석하고 있습니다...</p>
@@ -181,30 +182,30 @@ export default function FreeSurveyResultPage() {
             )}
 
             {photoAnalysisError && (
-              <div className="rounded-xl border border-yellow-500/50 bg-yellow-500/10 p-6">
+              <div className="rounded-xl border-2 border-slate-900 bg-amber-50 p-6 shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
                 <div className="mb-2 flex items-center gap-2">
                   <span className="text-xl">⚠️</span>
-                  <h3 className="text-lg font-bold text-yellow-400">사진 분석 일시 중단</h3>
+                  <h3 className="text-lg font-bold text-amber-700">사진 분석 일시 중단</h3>
                 </div>
-                <p className="text-sm text-slate-300 mb-3">{photoAnalysisError}</p>
-                
-                <div className="rounded-lg bg-slate-950/50 p-4 mt-4">
-                  <p className="text-sm font-semibold text-slate-200 mb-2">
+                <p className="text-sm text-slate-700 mb-3">{photoAnalysisError}</p>
+
+                <div className="rounded-lg border-2 border-slate-900 bg-white p-4 mt-4 shadow-[2px_2px_0_0_rgba(15,23,42,1)]">
+                  <p className="text-sm font-semibold text-slate-800 mb-2">
                     💡 사진 분석을 원하시나요?
                   </p>
-                  <p className="text-xs text-slate-400 mb-3">
-                    BASIC 플랜으로 업그레이드하시면 전문가가 직접 사진을 분석하고 
+                  <p className="text-xs text-slate-600 mb-3">
+                    BASIC 플랜으로 업그레이드하시면 전문가가 직접 사진을 분석하고
                     맞춤 운동 가이드를 제공합니다.
                   </p>
                   <a
                     href="#basic-plan"
-                    className="inline-block rounded-lg bg-[#f97316] px-4 py-2 text-sm font-semibold text-white hover:bg-[#ea580c]"
+                    className="inline-flex items-center justify-center font-bold rounded-2xl border-2 border-slate-900 bg-orange-400 px-4 py-2 text-sm text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)]"
                   >
                     BASIC 플랜 보기 ↓
                   </a>
                 </div>
-                
-                <p className="mt-4 text-xs text-slate-400">
+
+                <p className="mt-4 text-xs text-slate-600">
                   설문 기반 분석 결과는 아래에서 확인하실 수 있습니다.
                 </p>
               </div>
@@ -213,21 +214,21 @@ export default function FreeSurveyResultPage() {
             {!photoAnalyzing && !photoAnalysisError && photoAnalysis && (
               <div className="space-y-6">
                 {/* 사진 품질 체크 */}
-                <div className={`rounded-xl p-6 ${
+                <div className={`rounded-xl p-6 border-2 border-slate-900 shadow-[3px_3px_0_0_rgba(15,23,42,1)] ${
                   photoAnalysis.qualityCheck.canAnalyze
-                    ? 'border border-green-500/50 bg-green-500/10'
-                    : 'border border-yellow-500/50 bg-yellow-500/10'
+                    ? 'bg-green-50'
+                    : 'bg-amber-50'
                 }`}>
                   <div className="mb-3 flex items-center gap-2">
                     <span className="text-xl">
                       {photoAnalysis.qualityCheck.canAnalyze ? '✅' : '⚠️'}
                     </span>
-                    <h3 className="text-lg font-bold text-slate-100">
+                    <h3 className="text-lg font-bold text-slate-800">
                       사진 품질 체크: {photoAnalysis.qualityCheck.passedChecks}/{photoAnalysis.qualityCheck.totalChecks}
                     </h3>
                   </div>
                   {photoAnalysis.qualityCheck.issues.length > 0 && (
-                    <ul className="space-y-1 text-sm text-slate-300">
+                    <ul className="space-y-1 text-sm text-slate-700">
                       {photoAnalysis.qualityCheck.issues.map((issue, index) => (
                         <li key={index}>• {issue}</li>
                       ))}
@@ -237,9 +238,9 @@ export default function FreeSurveyResultPage() {
 
                 {/* 전체 요약 */}
                 {photoAnalysis.analysis.summary && (
-                  <div className="rounded-xl bg-slate-950/50 p-6">
-                    <h3 className="mb-3 text-lg font-bold text-slate-200">📋 전체 관찰 요약</h3>
-                    <p className="text-sm leading-relaxed text-slate-300">
+                  <div className="rounded-xl border-2 border-slate-900 bg-slate-100 p-6 shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
+                    <h3 className="mb-3 text-lg font-bold text-slate-800">📋 전체 관찰 요약</h3>
+                    <p className="text-sm leading-relaxed text-slate-700">
                       {photoAnalysis.analysis.summary}
                     </p>
                   </div>
@@ -248,19 +249,19 @@ export default function FreeSurveyResultPage() {
                 {/* 관찰 내용 */}
                 {photoAnalysis.analysis.observations.length > 0 && (
                   <div className="space-y-4">
-                    <h3 className="text-lg font-bold text-slate-200">🔍 상세 관찰 내용</h3>
+                    <h3 className="text-lg font-bold text-slate-800">🔍 상세 관찰 내용</h3>
                     {photoAnalysis.analysis.observations.map((obs, index) => (
-                      <div key={index} className="rounded-xl border border-slate-700 bg-slate-950/50 p-5">
-                        <h4 className="mb-2 font-bold text-blue-400">[{obs.area}]</h4>
-                        <div className="mb-3 text-sm text-slate-300">
-                          <span className="font-semibold text-slate-400">관찰: </span>
+                      <div key={index} className="rounded-xl border-2 border-slate-900 bg-white p-5 shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
+                        <h4 className="mb-2 font-bold text-orange-600">[{obs.area}]</h4>
+                        <div className="mb-3 text-sm text-slate-700">
+                          <span className="font-semibold text-slate-600">관찰: </span>
                           {obs.finding}
                         </div>
-                        <div className="mb-3 text-sm text-slate-400">
+                        <div className="mb-3 text-sm text-slate-600">
                           <span className="font-semibold">시각적 근거: </span>
                           {obs.visualEvidence}
                         </div>
-                        <div className="text-sm text-slate-400">
+                        <div className="text-sm text-slate-600">
                           <span className="font-semibold">가능성 있는 영향: </span>
                           {obs.functionalImpact}
                         </div>
@@ -271,12 +272,12 @@ export default function FreeSurveyResultPage() {
 
                 {/* 추천 운동 방향 */}
                 {photoAnalysis.recommendations.exercises.length > 0 && (
-                  <div className="rounded-xl bg-blue-500/10 p-6">
-                    <h3 className="mb-3 text-lg font-bold text-slate-200">💪 추천 운동 방향</h3>
+                  <div className="rounded-xl border-2 border-slate-900 bg-orange-50 p-6 shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
+                    <h3 className="mb-3 text-lg font-bold text-slate-800">💪 추천 운동 방향</h3>
                     <ul className="space-y-2">
                       {photoAnalysis.recommendations.exercises.map((exercise, index) => (
-                        <li key={index} className="flex items-start gap-2 text-sm text-slate-300">
-                          <span className="text-blue-400">✓</span>
+                        <li key={index} className="flex items-start gap-2 text-sm text-slate-700">
+                          <span className="text-orange-500">✓</span>
                           <span>{exercise}</span>
                         </li>
                       ))}
@@ -285,200 +286,197 @@ export default function FreeSurveyResultPage() {
                 )}
 
                 {/* 면책사항 */}
-                <div className="rounded-xl border border-red-500/50 bg-red-500/10 p-4">
-                  <p className="text-xs leading-relaxed text-slate-300">
-                    <span className="font-semibold text-red-400">⚠️ 중요: </span>
+                <div className="rounded-xl border-2 border-slate-900 bg-red-50 p-4 shadow-[2px_2px_0_0_rgba(15,23,42,1)]">
+                  <p className="text-xs leading-relaxed text-slate-700">
+                    <span className="font-semibold text-red-600">⚠️ 중요: </span>
                     {photoAnalysis.disclaimer}
                   </p>
                 </div>
               </div>
             )}
-          </div>
+        </NeoCard>
         )}
 
-        {/* 결과 요약 카드 */}
-        <div className="mb-8 rounded-2xl border-2 border-[#f97316] bg-gradient-to-br from-[#f97316]/10 to-slate-900 p-8">
-          <h2 className="mb-4 text-3xl font-bold text-slate-100">
-            설문 기반 자세 경향
-          </h2>
-          <div className="mb-6 rounded-xl bg-slate-950/50 p-6">
-            <div className="mb-2 text-sm text-slate-400">확인된 패턴</div>
-            <div className="text-2xl font-bold text-[#f97316]">
-              {POSTURE_TYPE_NAMES[analysis.postureType]}
+      {/* 결과 요약 카드 */}
+      <NeoCard className="mb-8 p-8">
+        <h2 className="mb-4 text-3xl font-bold text-slate-800">
+          설문 기반 자세 경향
+        </h2>
+        <div className="mb-6 rounded-xl border-2 border-slate-900 bg-slate-100 p-6 shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
+          <div className="mb-2 text-sm text-slate-600">확인된 패턴</div>
+          <div className="text-2xl font-bold text-orange-600">
+            {POSTURE_TYPE_NAMES[analysis.postureType]}
+          </div>
+          <div className="mt-3 text-sm">
+            <span className="text-slate-600">경향 수준: </span>
+            <span className={`font-semibold ${getSeverityColor(analysis.overallSeverity)}`}>
+              {getSeverityLabel(analysis.overallSeverity)}
+            </span>
+          </div>
+        </div>
+
+        {/* 부위별 점수 */}
+        <div className="space-y-3">
+          <h3 className="text-lg font-semibold text-slate-800">부위별 경향 점수</h3>
+
+          <div className="rounded-lg border-2 border-slate-900 bg-white p-4 shadow-[2px_2px_0_0_rgba(15,23,42,1)]">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-700">목/경추 부위</span>
+              <span className="text-xl font-bold text-orange-600">{Math.round(analysis.scores.forwardHead)}점</span>
             </div>
-            <div className="mt-3 text-sm">
-              <span className="text-slate-400">경향 수준: </span>
-              <span className={`font-semibold ${getSeverityColor(analysis.overallSeverity)}`}>
-                {getSeverityLabel(analysis.overallSeverity)}
+          </div>
+
+          <div className="rounded-lg border-2 border-slate-900 bg-white p-4 shadow-[2px_2px_0_0_rgba(15,23,42,1)]">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-700">어깨/흉추 부위</span>
+              <span className="text-xl font-bold text-orange-600">{Math.round(analysis.scores.roundedShoulder)}점</span>
+            </div>
+          </div>
+
+          <div className="rounded-lg border-2 border-slate-900 bg-white p-4 shadow-[2px_2px_0_0_rgba(15,23,42,1)]">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-700">골반/허리 부위</span>
+              <span className="text-xl font-bold text-orange-600">
+                {Math.round(Math.max(analysis.scores.anteriorPelvicTilt, analysis.scores.posteriorPelvicTilt))}점
               </span>
             </div>
           </div>
+        </div>
+      </NeoCard>
 
-          {/* 부위별 점수 */}
-          <div className="space-y-3">
-            <h3 className="text-lg font-semibold text-slate-200">부위별 경향 점수</h3>
-            
-            <div className="rounded-lg bg-slate-950/50 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-300">목/경추 부위</span>
-                <span className="text-xl font-bold text-[#f97316]">{Math.round(analysis.scores.forwardHead)}점</span>
-              </div>
-            </div>
-
-            <div className="rounded-lg bg-slate-950/50 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-300">어깨/흉추 부위</span>
-                <span className="text-xl font-bold text-[#f97316]">{Math.round(analysis.scores.roundedShoulder)}점</span>
-              </div>
-            </div>
-
-            <div className="rounded-lg bg-slate-950/50 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-300">골반/허리 부위</span>
-                <span className="text-xl font-bold text-[#f97316]">
-                  {Math.round(Math.max(analysis.scores.anteriorPelvicTilt, analysis.scores.posteriorPelvicTilt))}점
-                </span>
-              </div>
-            </div>
-          </div>
+      {/* 업셀 섹션 - BASIC 플랜 */}
+      <div id="basic-plan" className="mb-8 space-y-6">
+        <div className="text-center">
+          <h3 className="text-2xl font-bold text-slate-800 mb-2">
+            더 정확한 분석을 원하시나요?
+          </h3>
+          <p className="text-slate-600">
+            사진 기반 전문가 분석으로 맞춤 운동 가이드를 받아보세요
+          </p>
         </div>
 
-        {/* 업셀 섹션 - BASIC 플랜 */}
-        <div id="basic-plan" className="mb-8 space-y-6">
-          <div className="text-center">
-            <h3 className="text-2xl font-bold text-slate-100 mb-2">
-              더 정확한 분석을 원하시나요?
-            </h3>
-            <p className="text-slate-400">
-              사진 기반 전문가 분석으로 맞춤 운동 가이드를 받아보세요
-            </p>
-          </div>
-
-          {/* BASIC 플랜 카드 */}
-          <div className="rounded-2xl border-2 border-[#f97316] bg-gradient-to-br from-slate-900 to-slate-800 p-8">
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <div className="mb-2 inline-block rounded-full bg-[#f97316] px-4 py-1">
-                  <span className="text-sm font-bold text-white">BASIC 플랜</span>
-                </div>
-                <h4 className="text-3xl font-bold text-slate-100">₩19,000</h4>
+        {/* BASIC 플랜 카드 */}
+        <NeoCard className="p-8">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <div className="mb-2 inline-block rounded-full bg-orange-400 px-4 py-1 border-2 border-slate-900 shadow-[2px_2px_0_0_rgba(15,23,42,1)]">
+                <span className="text-sm font-bold text-white">BASIC 플랜</span>
               </div>
-              <div className="text-right">
-                <div className="text-2xl font-bold text-[#f97316]">+α</div>
-                <div className="text-xs text-slate-400">더 상세하게</div>
-              </div>
+              <h4 className="text-3xl font-bold text-slate-800">₩19,000</h4>
             </div>
-
-            <div className="mb-6 space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#f97316]/20 text-[#f97316]">✓</div>
-                <div>
-                  <div className="font-semibold text-slate-200">정면·측면 사진 분석</div>
-                  <div className="text-sm text-slate-400">NASM 전문가가 직접 확인</div>
-                </div>
-              </div>
-              
-              <div className="flex items-start gap-3">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#f97316]/20 text-[#f97316]">✓</div>
-                <div>
-                  <div className="font-semibold text-slate-200">맞춤 운동 루틴 PDF</div>
-                  <div className="text-sm text-slate-400">24시간 내 이메일 전송</div>
-                </div>
-              </div>
-              
-              <div className="flex items-start gap-3">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#f97316]/20 text-[#f97316]">✓</div>
-                <div>
-                  <div className="font-semibold text-slate-200">운동 가이드 영상 링크</div>
-                  <div className="text-sm text-slate-400">따라하기 쉬운 설명</div>
-                </div>
-              </div>
-            </div>
-
-            {/* 샘플 PDF 보기 버튼 */}
-            <button
-              onClick={() => setShowSampleModal(true)}
-              className="mb-4 w-full rounded-xl border-2 border-[#f97316]/50 bg-slate-950/50 py-3 text-center font-semibold text-[#f97316] transition hover:bg-slate-950"
-            >
-              📄 BASIC 플랜 PDF 샘플 보기
-            </button>
-
-            {/* 결제 버튼 */}
-            <Link
-              href="/pricing"
-              className="block w-full rounded-xl bg-gradient-to-r from-[#f97316] to-[#fb923c] py-4 text-center text-lg font-bold text-white shadow-lg transition hover:shadow-xl"
-            >
-              BASIC 플랜 결제하기
-            </Link>
-          </div>
-        </div>
-
-        {/* 신뢰 요소 */}
-        <div className="rounded-xl border border-slate-700 bg-gradient-to-br from-slate-900 to-slate-800 p-6">
-          <div className="mb-4 text-center">
-            <h3 className="text-lg font-bold text-slate-100">전문가 기반 분석 시스템</h3>
-          </div>
-          
-          <div className="mb-4 flex flex-wrap items-center justify-center gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">🏆</span>
-              <span className="text-slate-300">NASM-CES 인증</span>
-            </div>
-            <div className="h-4 w-px bg-slate-700" />
-            <div className="flex items-center gap-2">
-              <span className="text-lg">👥</span>
-              <span className="text-slate-300">1,000명+ 분석</span>
-            </div>
-            <div className="h-4 w-px bg-slate-700" />
-            <div className="flex items-center gap-2">
-              <span className="text-lg">🔒</span>
-              <span className="text-slate-300">개인정보 보호</span>
+            <div className="text-right">
+              <div className="text-2xl font-bold text-orange-600">+α</div>
+              <div className="text-xs text-slate-600">더 상세하게</div>
             </div>
           </div>
 
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+          <div className="mb-6 space-y-4">
             <div className="flex items-start gap-3">
-              <span className="text-xl">⚠️</span>
+              <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-900 bg-orange-100 text-orange-600">✓</div>
               <div>
-                <h4 className="font-semibold text-red-400">중요 안내</h4>
-                <p className="mt-1 text-xs text-slate-300 leading-relaxed">
-                  본 서비스는 <strong>의료 행위가 아니며</strong>, 운동 가이드 목적으로만 제공됩니다.
-                  질병, 통증, 부상이 있는 경우 반드시 의료기관을 방문하세요.
-                  모든 분석 결과는 "경향" 또는 "가능성"을 나타내며, 의학적 분석을 대체할 수 없습니다.
-                </p>
+                <div className="font-semibold text-slate-800">정면·측면 사진 분석</div>
+                <div className="text-sm text-slate-600">NASM 전문가가 직접 확인</div>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3">
+              <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-900 bg-orange-100 text-orange-600">✓</div>
+              <div>
+                <div className="font-semibold text-slate-800">맞춤 운동 루틴 PDF</div>
+                <div className="text-sm text-slate-600">24시간 내 이메일 전송</div>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3">
+              <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-900 bg-orange-100 text-orange-600">✓</div>
+              <div>
+                <div className="font-semibold text-slate-800">운동 가이드 영상 링크</div>
+                <div className="text-sm text-slate-600">따라하기 쉬운 설명</div>
               </div>
             </div>
           </div>
+
+          {/* 샘플 PDF 보기 버튼 */}
+          <NeoButton variant="secondary" className="mb-4 w-full" onClick={() => setShowSampleModal(true)}>
+            📄 BASIC 플랜 PDF 샘플 보기
+          </NeoButton>
+
+          {/* 결제 버튼 */}
+          <Link
+            href="/pricing"
+            className="block w-full rounded-2xl border-2 border-slate-900 bg-orange-400 py-4 text-center text-lg font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)]"
+          >
+            BASIC 플랜 결제하기
+          </Link>
+        </NeoCard>
+      </div>
+
+      {/* 신뢰 요소 */}
+      <NeoCard className="p-6">
+        <div className="mb-4 text-center">
+          <h3 className="text-lg font-bold text-slate-800">전문가 기반 분석 시스템</h3>
         </div>
 
-        {/* 홈으로 버튼 */}
-        <div className="mt-6 text-center">
-          <Link
-            href="/"
-            className="inline-block rounded-full border border-slate-700 px-6 py-2 text-sm text-slate-400 transition hover:bg-slate-800 hover:text-slate-200"
-          >
-            홈으로 돌아가기
-          </Link>
+        <div className="mb-4 flex flex-wrap items-center justify-center gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🏆</span>
+            <span className="text-slate-700">NASM-CES 인증</span>
+          </div>
+          <div className="h-4 w-px bg-slate-400" />
+          <div className="flex items-center gap-2">
+            <span className="text-lg">👥</span>
+            <span className="text-slate-700">1,000명+ 분석</span>
+          </div>
+          <div className="h-4 w-px bg-slate-400" />
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🔒</span>
+            <span className="text-slate-700">개인정보 보호</span>
+          </div>
         </div>
+
+        <div className="rounded-lg border-2 border-slate-900 bg-red-50 p-4 shadow-[2px_2px_0_0_rgba(15,23,42,1)]">
+          <div className="flex items-start gap-3">
+            <span className="text-xl">⚠️</span>
+            <div>
+              <h4 className="font-semibold text-red-600">중요 안내</h4>
+              <p className="mt-1 text-xs text-slate-700 leading-relaxed">
+                본 서비스는 <strong>의료 행위가 아니며</strong>, 운동 가이드 목적으로만 제공됩니다.
+                질병, 통증, 부상이 있는 경우 반드시 의료기관을 방문하세요.
+                모든 분석 결과는 "경향" 또는 "가능성"을 나타내며, 의학적 진단을 대체할 수 없습니다.
+              </p>
+            </div>
+          </div>
+        </div>
+      </NeoCard>
+
+      {/* 홈으로 버튼 */}
+      <div className="mt-6 text-center">
+        <Link
+          href="/"
+          className="inline-flex items-center justify-center rounded-2xl border-2 border-slate-900 bg-slate-200 px-6 py-2 font-bold text-slate-800 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:bg-slate-300/80 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)]"
+        >
+          홈으로 돌아가기
+        </Link>
       </div>
+    </NeoPageLayout>
 
       {/* 샘플 PDF 모달 */}
       {showSampleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
-          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl border-2 border-slate-900 bg-white p-6 shadow-[8px_8px_0_0_rgba(15,23,42,1)]">
             <div className="mb-6 flex items-center justify-between">
               <div>
-                <div className="mb-2 inline-block rounded-full bg-[#f97316] px-3 py-1">
+                <div className="mb-2 inline-block rounded-full bg-orange-400 px-3 py-1 border-2 border-slate-900 shadow-[2px_2px_0_0_rgba(15,23,42,1)]">
                   <span className="text-xs font-bold text-white">BASIC 플랜</span>
                 </div>
-                <h2 className="text-2xl font-bold text-slate-100">결제 시 받게 될 PDF 샘플</h2>
-                <p className="mt-2 text-sm text-slate-400">
+                <h2 className="text-2xl font-bold text-slate-800">결제 시 받게 될 PDF 샘플</h2>
+                <p className="mt-2 text-sm text-slate-600">
                   실제 리포트는 고객님의 사진과 설문을 기반으로 맞춤 제작됩니다
                 </p>
               </div>
               <button
                 onClick={() => setShowSampleModal(false)}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 text-slate-400 transition hover:bg-slate-900"
+                className="flex h-10 w-10 items-center justify-center rounded-2xl border-2 border-slate-900 bg-slate-200 font-bold shadow-[4px_4px_0_0_rgba(15,23,42,1)] hover:bg-slate-300 active:translate-x-0.5 active:translate-y-0.5"
               >
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -487,10 +485,10 @@ export default function FreeSurveyResultPage() {
             </div>
 
             {/* PDF 샘플 콘텐츠 */}
-            <div className="space-y-4 text-slate-300">
-              <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-6">
-                <h3 className="mb-3 text-lg font-bold text-[#f97316]">📋 포함 내용</h3>
-                <ul className="space-y-2 text-sm">
+            <div className="space-y-4">
+              <div className="rounded-xl border-2 border-slate-900 bg-slate-100 p-6 shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
+                <h3 className="mb-3 text-lg font-bold text-orange-600">📋 포함 내용</h3>
+                <ul className="space-y-2 text-sm text-slate-700">
                   <li>✓ 전문가 분석 코멘트</li>
                   <li>✓ 사진 기반 자세 평가</li>
                   <li>✓ 맞춤 운동 루틴 (4주 프로그램)</li>
@@ -499,23 +497,20 @@ export default function FreeSurveyResultPage() {
                 </ul>
               </div>
 
-              <div className="rounded-xl bg-slate-800/50 p-4 text-center">
-                <p className="text-sm text-slate-400">
+              <div className="rounded-xl border-2 border-slate-900 bg-orange-50 p-4 text-center shadow-[2px_2px_0_0_rgba(15,23,42,1)]">
+                <p className="text-sm text-slate-700">
                   💡 실제 PDF는 8~12페이지 분량으로 제공됩니다
                 </p>
               </div>
             </div>
 
             <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => setShowSampleModal(false)}
-                className="flex-1 rounded-xl border border-slate-700 py-3 text-slate-300 transition hover:bg-slate-800"
-              >
+              <NeoButton variant="secondary" className="flex-1" onClick={() => setShowSampleModal(false)}>
                 닫기
-              </button>
+              </NeoButton>
               <Link
                 href="/pricing"
-                className="flex-1 rounded-xl bg-gradient-to-r from-[#f97316] to-[#fb923c] py-3 text-center font-bold text-white transition hover:shadow-lg"
+                className="flex flex-1 items-center justify-center rounded-2xl border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)] py-3"
               >
                 지금 결제하기
               </Link>
@@ -523,6 +518,6 @@ export default function FreeSurveyResultPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

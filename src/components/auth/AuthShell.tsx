@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * AuthShell - Auth 페이지 공통 레이아웃 (MAIN UI 토큰 적용)
+ * AuthShell - Auth 페이지 공통 레이아웃 (네오브루탈리즘)
  * Props: badgeText, title, description, children
  */
-import { Badge } from '@/components/ui/badge';
+import { NeoCard, NeoPageLayout } from '@/components/neobrutalism';
 
 interface AuthShellProps {
   badgeText: string;
@@ -15,35 +15,25 @@ interface AuthShellProps {
 
 export default function AuthShell({ badgeText, title, description, children }: AuthShellProps) {
   return (
-    <div className="min-h-screen bg-[var(--bg)]">
-      <section className="py-16 md:py-24">
-        <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto">
-            <div className="text-center mb-8">
-              <Badge
-                variant="outline"
-                className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide mb-4"
-              >
-                {badgeText}
-              </Badge>
-              <h1
-                className="text-lg lg:text-xl font-semibold text-[var(--text)] mb-2"
-                style={{ fontFamily: 'var(--font-display)' }}
-              >
-                {title}
-              </h1>
-              <p className="text-sm lg:text-base leading-relaxed text-[var(--muted)]">
-                {description}
-              </p>
-            </div>
-            <div
-              className="rounded-[var(--radius)] bg-[var(--surface)] border border-[color:var(--border)] shadow-[var(--shadow-0)] w-full p-6 md:p-8"
-            >
-              {children}
-            </div>
+    <div className="min-h-screen bg-[#F8F6F0]">
+      <NeoPageLayout maxWidth="md">
+        <section className="py-12 md:py-16">
+          <div className="text-center mb-8">
+            <span className="inline-block px-4 py-1.5 rounded-full text-xs font-semibold text-orange-600 uppercase tracking-wide mb-4 border-2 border-slate-900 bg-orange-100 shadow-[2px_2px_0_0_rgba(15,23,42,1)]">
+              {badgeText}
+            </span>
+            <h1 className="text-lg lg:text-xl font-semibold text-slate-800 mb-2">
+              {title}
+            </h1>
+            <p className="text-sm lg:text-base leading-relaxed text-slate-600">
+              {description}
+            </p>
           </div>
-        </div>
-      </section>
+          <NeoCard className="w-full p-6 md:p-8">
+            {children}
+          </NeoCard>
+        </section>
+      </NeoPageLayout>
     </div>
   );
 }

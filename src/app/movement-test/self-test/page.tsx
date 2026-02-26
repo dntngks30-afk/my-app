@@ -8,6 +8,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
 import type { AnimalAxis, TestAnswerValue } from '@/features/movement-test/v2';
+import { NeoButton, NeoCard, NeoPageLayout } from '@/components/neobrutalism';
 
 const KEY = 'movementTestSession:v2';
 const SELF_IDS = ['self1', 'self2', 'self3'] as const;
@@ -229,54 +230,40 @@ export default function SelfTestPage() {
 
   if (!ready) {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex items-center justify-center">
-        <p className="text-[var(--muted)]">로딩 중...</p>
+      <div className="min-h-screen bg-[#F8F6F0] flex items-center justify-center">
+        <p className="text-slate-600">로딩 중...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] overflow-x-hidden">
-      <section className="py-10 sm:py-12 md:py-16">
-        <div className="container mx-auto px-4">
-          <div className="max-w-2xl mx-auto text-center">
-            <h1
-              className="text-2xl sm:text-3xl font-bold text-[var(--text)] mb-2"
-              style={{ fontFamily: 'var(--font-display)' }}
-            >
-              1분 자가테스트
-            </h1>
-            <p className="text-sm text-[var(--muted)] whitespace-normal break-keep">
-              아래 3가지만 따라 해보시고, 바로 아래 질문에 체크해주세요.
-            </p>
-          </div>
-        </div>
+    <NeoPageLayout maxWidth="md">
+      <section className="py-10 sm:py-12 md:py-16 text-center">
+        <h1
+          className="text-2xl sm:text-3xl font-bold text-slate-800 mb-2"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
+          1분 자가테스트
+        </h1>
+        <p className="text-sm text-slate-600 whitespace-normal break-keep">
+          아래 3가지만 따라 해보시고, 바로 아래 질문에 체크해주세요.
+        </p>
       </section>
 
       <section className="pb-10 sm:pb-12">
-        <div className="container mx-auto px-4">
-          <div className="max-w-2xl mx-auto">
-            <div
-              className="
-                rounded-[var(--radius)]
-                bg-[var(--surface)]
-                border border-[color:var(--border)]
-                shadow-[var(--shadow-0)]
-                p-4 sm:p-6 md:p-8
-              "
-            >
+        <NeoCard className="p-4 sm:p-6 md:p-8">
               <div className="space-y-8">
                 {SELF_TESTS.map((item) => (
                   <div key={item.id}>
-                    <h3 className="text-base font-semibold text-[var(--text)] mb-2">
+                    <h3 className="text-base font-semibold text-slate-800 mb-2">
                       {item.title}
                     </h3>
-                    <ul className="text-sm text-[var(--muted)] space-y-1 mb-4 list-disc list-inside whitespace-normal break-keep">
+                    <ul className="text-sm text-slate-600 space-y-1 mb-4 list-disc list-inside whitespace-normal break-keep">
                       {item.bullets.map((b, i) => (
                         <li key={i}>{b}</li>
                       ))}
                     </ul>
-                    <p className="text-sm sm:text-base text-[var(--text)] font-medium mb-2">
+                    <p className="text-sm sm:text-base text-slate-800 font-medium mb-2">
                       {item.question}
                     </p>
                     <div className="space-y-2">
@@ -290,11 +277,11 @@ export default function SelfTestPage() {
                             aria-pressed={selected}
                             className={`
                               w-full text-left min-h-[44px]
-                              rounded-[var(--radius)] border px-3 py-2
+                              rounded-2xl border-2 px-3 py-2
                               transition-colors
                               ${selected
-                                ? 'bg-[var(--brand)] text-white border-[color:var(--brand)]'
-                                : 'bg-[var(--surface)] text-[var(--text)] border-[color:var(--border)] hover:border-[color:var(--brand)]'}
+                                ? 'bg-orange-400 text-white border-slate-900 shadow-[2px_2px_0_0_rgba(15,23,42,1)]'
+                                : 'bg-white text-slate-800 border-slate-900 shadow-[2px_2px_0_0_rgba(15,23,42,1)] hover:border-orange-400'}
                             `}
                           >
                             <span className="text-sm sm:text-base whitespace-normal break-keep">
@@ -308,32 +295,19 @@ export default function SelfTestPage() {
                 ))}
               </div>
 
-              <div className="mt-8 text-center">
-                <button
-                  type="button"
-                  onClick={handleComplete}
-                  disabled={!allAnswered}
-                  className={`
-                    w-full min-h-[44px]
-                    inline-flex items-center justify-center
-                    rounded-[var(--radius)]
-                    px-8 py-4 font-bold
-                    shadow-[var(--shadow-0)]
-                    transition-all duration-200
-                    ${
-                      allAnswered
-                        ? 'bg-[var(--brand)] text-white hover:opacity-95'
-                        : 'bg-[var(--surface)] border border-[color:var(--border)] text-[var(--muted)] cursor-not-allowed'
-                    }
-                  `}
-                >
-                  최종 결과 보기
-                </button>
-              </div>
-            </div>
+          <div className="mt-8 text-center">
+            <NeoButton
+              variant={allAnswered ? 'orange' : 'secondary'}
+              fullWidth
+              className="min-h-[44px] px-8 py-4"
+              onClick={handleComplete}
+              disabled={!allAnswered}
+            >
+              최종 결과 보기
+            </NeoButton>
           </div>
-        </div>
+        </NeoCard>
       </section>
-    </div>
+    </NeoPageLayout>
   );
 }

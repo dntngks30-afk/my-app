@@ -15,6 +15,7 @@ import { getConfidenceCopy } from '@/features/movement-test/utils/getConfidenceC
 import { createResultStory } from '@/features/movement-test/utils/getResultStory';
 import ShareButtons from '../../components/ShareButtons';
 import type { SubTypeKey } from '@/types/movement-test';
+import { NeoButton, NeoCard, NeoPageLayout } from '@/components/neobrutalism';
 
 
 interface SharedResult {
@@ -119,10 +120,10 @@ export default function SharedResultPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-[#F8F6F0] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-[#f97316] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white text-lg">결과 불러오는 중...</p>
+          <div className="w-16 h-16 border-4 border-orange-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-800 text-lg">결과 불러오는 중...</p>
         </div>
       </div>
     );
@@ -130,23 +131,20 @@ export default function SharedResultPage() {
 
   if (error || !result || !story) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto px-4">
+      <NeoPageLayout maxWidth="md">
+        <div className="py-16 text-center">
           <div className="text-6xl mb-4">😕</div>
-          <h1 className="text-2xl font-bold text-white mb-4">
+          <h1 className="text-2xl font-bold text-slate-800 mb-4">
             결과를 찾을 수 없습니다
           </h1>
-          <p className="text-slate-400 mb-8">
+          <p className="text-slate-600 mb-8">
             {error || '공유 링크가 올바르지 않거나 만료되었습니다.'}
           </p>
-          <button
-            onClick={() => router.push('/')}
-            className="px-6 py-3 rounded-xl bg-[#f97316] text-white font-semibold hover:bg-[#ea580c] transition-all duration-200"
-          >
+          <NeoButton variant="orange" onClick={() => router.push('/')}>
             나도 테스트하기
-          </button>
+          </NeoButton>
         </div>
-      </div>
+      </NeoPageLayout>
     );
   }
 
@@ -154,110 +152,105 @@ export default function SharedResultPage() {
   const shareUrl = `${window.location.origin}/movement-test/shared/${shareId}`;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <div className="container mx-auto px-4 py-16">
-        <div className="max-w-4xl mx-auto">
-          {/* 공유 배지 */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#f97316]/20 border border-[#f97316] rounded-full text-[#f97316] text-sm font-semibold mb-4">
-              <span>🔗</span>
-              <span>공유된 결과</span>
-            </div>
-            <p className="text-slate-400 text-sm">
-              {result.viewCount}명이 이 결과를 확인했습니다
-            </p>
+    <NeoPageLayout maxWidth="lg">
+      <div className="py-16">
+        {/* 공유 배지 */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 border-2 border-slate-900 rounded-full text-orange-600 text-sm font-semibold mb-4 shadow-[2px_2px_0_0_rgba(15,23,42,1)]">
+            <span>🔗</span>
+            <span>공유된 결과</span>
           </div>
-
-          {/* 헤더 */}
-          <div className="text-center mb-12">
-            <h1 className="text-3xl md:text-4xl font-bold text-white mb-4">
-              움직임 타입 테스트 결과
-            </h1>
-          </div>
-
-          {/* 섹션 1: 타입 선언 */}
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-2xl p-8 mb-6 shadow-2xl">
-            <div className="text-center">
-              <p className="text-slate-300 text-lg mb-4 whitespace-pre-line">
-                {story.section1_typeDeclare}
-              </p>
-            </div>
-          </div>
-
-          {/* 섹션 2: 타입 핵심 설명 */}
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-2xl p-8 mb-6 shadow-2xl">
-            <h2 className="text-2xl font-bold text-white mb-6">
-              이 타입은 어떤 특징이 있나요?
-            </h2>
-            <div className="prose prose-invert max-w-none">
-              <p className="text-slate-300 leading-relaxed whitespace-pre-line">
-                {story.section2_typeExplain}
-              </p>
-            </div>
-          </div>
-
-          {/* 섹션 3: Confidence 해석 */}
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-2xl p-8 mb-6 shadow-2xl">
-            <div className="prose prose-invert max-w-none">
-              <p className="text-slate-300 leading-relaxed whitespace-pre-line">
-                {story.section3_confidence}
-              </p>
-            </div>
-          </div>
-
-          {/* 주요 특징 */}
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-2xl p-8 mb-6 shadow-2xl">
-            <h2 className="text-2xl font-bold text-white mb-6">
-              자주 보이는 특징
-            </h2>
-            <ul className="space-y-3">
-              {subTypeContent.signs.map((sign: string, index: number) => (
-                <li key={index} className="flex items-start gap-3 text-slate-300">
-                  <span className="text-[#f97316] mt-1">•</span>
-                  <span>{sign}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Quick Win */}
-          <div className="bg-gradient-to-r from-[#f97316]/20 to-[#ea580c]/20 border border-[#f97316] rounded-2xl p-8 mb-6 shadow-2xl">
-            <h2 className="text-2xl font-bold text-white mb-4">
-              💡 바로 체감되는 변화
-            </h2>
-            <p className="text-slate-200 leading-relaxed text-lg">
-              {subTypeContent.quickWin}
-            </p>
-          </div>
-
-          {/* 공유 버튼 */}
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-2xl p-8 mb-6 shadow-2xl">
-            <ShareButtons
-              shareUrl={shareUrl}
-              title="움직임 타입 테스트"
-              description={story.section2_typeExplain.split('\n')[0]}
-              mainType={result.mainType}
-              subType={result.subType}
-            />
-          </div>
-
-          {/* CTA: 나도 테스트하기 */}
-          <div className="bg-gradient-to-r from-[#f97316] to-[#ea580c] rounded-2xl p-8 text-center shadow-2xl">
-            <h3 className="text-2xl font-bold text-white mb-4">
-              나의 움직임 타입이 궁금하다면?
-            </h3>
-            <p className="text-white/90 mb-6">
-              10분이면 나의 움직임 패턴과 맞춤형 교정 가이드를 확인할 수 있어요
-            </p>
-            <button
-              onClick={() => router.push('/')}
-              className="px-8 py-4 bg-white text-[#f97316] font-bold rounded-xl hover:bg-slate-100 transition-all duration-200 transform hover:scale-105"
-            >
-              무료로 테스트하기
-            </button>
-          </div>
+          <p className="text-slate-600 text-sm">
+            {result.viewCount}명이 이 결과를 확인했습니다
+          </p>
         </div>
+
+        {/* 헤더 */}
+        <div className="text-center mb-12">
+          <h1 className="text-3xl md:text-4xl font-bold text-slate-800 mb-4">
+            움직임 타입 테스트 결과
+          </h1>
+        </div>
+
+        {/* 섹션 1: 타입 선언 */}
+        <NeoCard className="p-8 mb-6">
+          <div className="text-center">
+            <p className="text-slate-800 text-lg mb-4 whitespace-pre-line">
+              {story.section1_typeDeclare}
+            </p>
+          </div>
+        </NeoCard>
+
+        {/* 섹션 2: 타입 핵심 설명 */}
+        <NeoCard className="p-8 mb-6">
+          <h2 className="text-2xl font-bold text-slate-800 mb-6">
+            이 타입은 어떤 특징이 있나요?
+          </h2>
+          <p className="text-slate-600 leading-relaxed whitespace-pre-line">
+            {story.section2_typeExplain}
+          </p>
+        </NeoCard>
+
+        {/* 섹션 3: Confidence 해석 */}
+        <NeoCard className="p-8 mb-6">
+          <p className="text-slate-600 leading-relaxed whitespace-pre-line">
+            {story.section3_confidence}
+          </p>
+        </NeoCard>
+
+        {/* 주요 특징 */}
+        <NeoCard className="p-8 mb-6">
+          <h2 className="text-2xl font-bold text-slate-800 mb-6">
+            자주 보이는 특징
+          </h2>
+          <ul className="space-y-3">
+            {subTypeContent.signs.map((sign: string, index: number) => (
+              <li key={index} className="flex items-start gap-3 text-slate-600">
+                <span className="text-orange-500 mt-1">•</span>
+                <span>{sign}</span>
+              </li>
+            ))}
+          </ul>
+        </NeoCard>
+
+        {/* Quick Win */}
+        <div className="rounded-2xl border-2 border-slate-900 bg-orange-50 p-8 mb-6 shadow-[4px_4px_0_0_rgba(15,23,42,1)]">
+          <h2 className="text-2xl font-bold text-slate-800 mb-4">
+            💡 바로 체감되는 변화
+          </h2>
+          <p className="text-slate-700 leading-relaxed text-lg">
+            {subTypeContent.quickWin}
+          </p>
+        </div>
+
+        {/* 공유 버튼 */}
+        <NeoCard className="p-8 mb-6">
+          <ShareButtons
+            shareUrl={shareUrl}
+            title="움직임 타입 테스트"
+            description={story.section2_typeExplain.split('\n')[0]}
+            mainType={result.mainType}
+            subType={result.subType}
+          />
+        </NeoCard>
+
+        {/* CTA: 나도 테스트하기 */}
+        <NeoCard className="p-8 text-center bg-slate-800 border-slate-800">
+          <h3 className="text-2xl font-bold text-white mb-4">
+            나의 움직임 타입이 궁금하다면?
+          </h3>
+          <p className="text-slate-200 mb-6">
+            10분이면 나의 움직임 패턴과 맞춤형 교정 가이드를 확인할 수 있어요
+          </p>
+          <NeoButton
+            variant="primary"
+            className="px-8 py-4 bg-white text-slate-800"
+            onClick={() => router.push('/')}
+          >
+            무료로 테스트하기
+          </NeoButton>
+        </NeoCard>
       </div>
-    </div>
+    </NeoPageLayout>
   );
 }

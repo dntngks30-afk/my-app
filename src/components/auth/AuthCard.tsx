@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * AuthCard - 로그인/회원가입 폼 (MAIN UI 토큰 적용)
+ * AuthCard - 로그인/회원가입 폼 (네오브루탈리즘)
  * mode="login" | "signup"
  * signup: signInWithOtp → 메일 확인 UI
  * login: signInWithPassword → / 리다이렉트
@@ -11,9 +11,12 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import AuthShell from '@/components/auth/AuthShell';
+import { NeoButton } from '@/components/neobrutalism';
+
+const NEO_INPUT =
+  'rounded-2xl border-2 border-slate-900 bg-white h-11 px-3 shadow-[2px_2px_0_0_rgba(15,23,42,1)] focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-0 text-slate-800 placeholder:text-slate-400';
 
 interface AuthCardProps {
   mode: 'login' | 'signup';
@@ -81,18 +84,18 @@ export default function AuthCard({ mode, errorParam, redirectTo = '/' }: AuthCar
         title="메일 확인"
         description="이메일로 보내드린 링크를 클릭하여 가입을 완료하세요."
       >
-        <p className="text-sm text-[var(--muted)] mb-6">
+        <p className="text-sm text-slate-600 mb-6">
           해당 이메일 주소로 링크를 발송했습니다. 링크를 클릭하면 추가 정보 입력 단계로 이동합니다.
         </p>
         <div className="mt-6 space-y-3 text-center">
-          <p className="text-sm text-[var(--muted)]">
+          <p className="text-sm text-slate-600">
             이미 계정이 있으신가요?{' '}
-            <Link href={`/app/auth?next=${encodeURIComponent(redirectTo || '/')}`} className="text-[var(--brand)] underline-offset-4 hover:underline">
+            <Link href={`/app/auth?next=${encodeURIComponent(redirectTo || '/')}`} className="text-orange-600 font-semibold underline-offset-4 hover:underline">
               로그인
             </Link>
           </p>
           <p className="text-sm">
-            <Link href="/" className="text-[var(--muted)] underline-offset-4 hover:underline">
+            <Link href="/" className="text-slate-600 underline-offset-4 hover:underline">
               ← 메인으로 돌아가기
             </Link>
           </p>
@@ -113,12 +116,12 @@ export default function AuthCard({ mode, errorParam, redirectTo = '/' }: AuthCar
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
-          <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-2)] p-3">
-            <p className="text-sm text-[var(--warn-text)]">{error}</p>
+          <div className="rounded-2xl border-2 border-slate-900 bg-red-50 p-3 shadow-[2px_2px_0_0_rgba(15,23,42,1)]">
+            <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-[var(--text)] mb-1">
+          <label htmlFor="email" className="block text-sm font-medium text-slate-800 mb-1">
             이메일
           </label>
           <Input
@@ -128,13 +131,13 @@ export default function AuthCard({ mode, errorParam, redirectTo = '/' }: AuthCar
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="rounded-[var(--radius)] h-11"
+            className={NEO_INPUT}
           />
         </div>
 
         {isLogin && (
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-[var(--text)] mb-1">
+            <label htmlFor="password" className="block text-sm font-medium text-slate-800 mb-1">
               비밀번호
             </label>
             <Input
@@ -144,54 +147,55 @@ export default function AuthCard({ mode, errorParam, redirectTo = '/' }: AuthCar
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="rounded-[var(--radius)] h-11"
+              className={NEO_INPUT}
             />
           </div>
         )}
 
         {mode === 'signup' && (
-          <p className="text-xs text-[var(--muted)]">
+          <p className="text-xs text-slate-600">
             회원가입 시{' '}
-            <Link href="/terms" className="text-[var(--brand)] underline-offset-4 hover:underline">
+            <Link href="/terms" className="text-orange-600 font-semibold underline-offset-4 hover:underline">
               이용약관
             </Link>
             {' 및 '}
-            <Link href="/privacy" className="text-[var(--brand)] underline-offset-4 hover:underline">
+            <Link href="/privacy" className="text-orange-600 font-semibold underline-offset-4 hover:underline">
               개인정보처리방침
             </Link>
             에 동의하는 것으로 간주됩니다.
           </p>
         )}
 
-        <Button
+        <NeoButton
           type="submit"
+          variant="orange"
           disabled={loading}
-          className="w-full px-6 py-3 rounded-[var(--radius)] font-semibold bg-[var(--brand)] text-white hover:brightness-95"
+          className="w-full px-6 py-3"
         >
           {loading ? '처리 중...' : (isLogin ? '로그인' : '회원가입')}
-        </Button>
+        </NeoButton>
       </form>
 
       <div className="mt-6 space-y-3 text-center">
-        <p className="text-sm text-[var(--muted)]">
+        <p className="text-sm text-slate-600">
           {isLogin ? (
             <>
               계정이 없으신가요?{' '}
-              <Link href="/signup" className="text-[var(--brand)] underline-offset-4 hover:underline">
+              <Link href="/signup" className="text-orange-600 font-semibold underline-offset-4 hover:underline">
                 회원가입
               </Link>
             </>
           ) : (
             <>
               이미 계정이 있으신가요?{' '}
-              <Link href={`/app/auth?next=${encodeURIComponent(redirectTo || '/')}`} className="text-[var(--brand)] underline-offset-4 hover:underline">
+              <Link href={`/app/auth?next=${encodeURIComponent(redirectTo || '/')}`} className="text-orange-600 font-semibold underline-offset-4 hover:underline">
                 로그인
               </Link>
             </>
           )}
         </p>
         <p className="text-sm">
-          <Link href="/" className="text-[var(--muted)] underline-offset-4 hover:underline">
+          <Link href="/" className="text-slate-600 underline-offset-4 hover:underline">
             ← 메인으로 돌아가기
           </Link>
         </p>

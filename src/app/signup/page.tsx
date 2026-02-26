@@ -10,10 +10,10 @@ export default async function SignupPage({
 }) {
   const params = await searchParams;
   return (
-    <Suspense
+      <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center p-6">
-          <p className="text-sm text-[var(--muted)]">Loading...</p>
+        <div className="flex min-h-screen items-center justify-center p-6 bg-[#F8F6F0]">
+          <p className="text-sm text-slate-600">Loading...</p>
         </div>
       }
     >

@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { Nunito } from 'next/font/google';
 import { calculateScoresV2 } from '@/features/movement-test/v2';
 import type { AnimalAxis, ScoreResultV2 } from '@/features/movement-test/v2';
+import { NeoButton, NeoCard, NeoPageLayout } from '@/components/neobrutalism';
 
 const KEY = 'movementTestSession:v2';
 
@@ -326,7 +327,7 @@ function MobileHeroImage({
 
   if (!contentKey) {
     return (
-      <div className="w-72 h-72 flex items-center justify-center text-7xl bg-[var(--bg)] rounded-[var(--radius)] border border-[color:var(--border)]">
+      <div className="w-72 h-72 flex items-center justify-center text-7xl bg-slate-100 rounded-2xl border-2 border-slate-900 shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
         ⚖️
       </div>
     );
@@ -334,7 +335,7 @@ function MobileHeroImage({
 
   if (imgError) {
     return (
-      <div className="w-72 h-72 flex items-center justify-center text-7xl bg-[var(--bg)] rounded-[var(--radius)] border border-[color:var(--border)]">
+      <div className="w-72 h-72 flex items-center justify-center text-7xl bg-slate-100 rounded-2xl border-2 border-slate-900 shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
         {emoji}
       </div>
     );
@@ -344,7 +345,7 @@ function MobileHeroImage({
     <img
       src={imgSrc}
       alt={RESULT_CONTENT[contentKey].cardTitle}
-      className="w-72 h-72 object-contain rounded-[var(--radius)] border border-[color:var(--border)]"
+      className="w-72 h-72 object-contain rounded-2xl border-2 border-slate-900 shadow-[3px_3px_0_0_rgba(15,23,42,1)]"
       onError={() => setImgError(true)}
     />
   );
@@ -361,7 +362,7 @@ function MainTypeImage({
 
   if (!contentKey) {
     return (
-      <div className="w-full max-w-[180px] sm:max-w-[200px] md:max-w-[220px] mx-auto aspect-square flex items-center justify-center text-6xl sm:text-7xl md:text-8xl bg-[var(--bg)] rounded-[var(--radius)] border border-[color:var(--border)]">
+      <div className="w-full max-w-[180px] sm:max-w-[200px] md:max-w-[220px] mx-auto aspect-square flex items-center justify-center text-6xl sm:text-7xl md:text-8xl bg-slate-100 rounded-2xl border-2 border-slate-900 shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
         ⚖️
       </div>
     );
@@ -369,7 +370,7 @@ function MainTypeImage({
 
   if (imgError) {
     return (
-      <div className="w-full max-w-[180px] sm:max-w-[200px] md:max-w-[220px] mx-auto aspect-square flex items-center justify-center text-6xl sm:text-7xl md:text-8xl bg-[var(--bg)] rounded-[var(--radius)] border border-[color:var(--border)]">
+      <div className="w-full max-w-[180px] sm:max-w-[200px] md:max-w-[220px] mx-auto aspect-square flex items-center justify-center text-6xl sm:text-7xl md:text-8xl bg-slate-100 rounded-2xl border-2 border-slate-900 shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
         {emoji}
       </div>
     );
@@ -379,7 +380,7 @@ function MainTypeImage({
     <img
       src={imgSrc}
       alt={RESULT_CONTENT[contentKey].cardTitle}
-      className="w-full max-w-[180px] sm:max-w-[200px] md:max-w-[220px] mx-auto aspect-square object-contain rounded-[var(--radius)] border border-[color:var(--border)]"
+      className="w-full max-w-[180px] sm:max-w-[200px] md:max-w-[220px] mx-auto aspect-square object-contain rounded-2xl border-2 border-slate-900 shadow-[3px_3px_0_0_rgba(15,23,42,1)]"
       onError={() => setImgError(true)}
     />
   );
@@ -396,43 +397,43 @@ function TypeActionCards({
 }) {
   return (
     <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-3">
-      <section className="rounded-[var(--radius)] bg-[var(--bg)] border border-[color:var(--border)] p-4">
+      <section className="rounded-2xl border-2 border-slate-900 bg-slate-100 p-4 shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
         <h3
-          className={`${cuteClassName} text-sm sm:text-base lg:text-lg font-semibold text-[var(--text)] mb-2`}
+          className={`${cuteClassName} text-sm sm:text-base lg:text-lg font-semibold text-slate-800 mb-2`}
           style={cuteStyle}
         >
           오늘 당장 실천할 움직임 Top1
         </h3>
         <ul
-          className={`${cuteClassName} text-sm sm:text-base text-[var(--muted)] leading-relaxed list-disc list-inside min-h-[24px]`}
+          className={`${cuteClassName} text-sm sm:text-base text-slate-600 leading-relaxed list-disc list-inside min-h-[24px]`}
           style={cuteStyle}
         >
           {actions.doTodayTop1 ? <li>{actions.doTodayTop1}</li> : null}
         </ul>
       </section>
-      <section className="rounded-[var(--radius)] bg-[var(--bg)] border border-[color:var(--border)] p-4">
+      <section className="rounded-2xl border-2 border-slate-900 bg-slate-100 p-4 shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
         <h3
-          className={`${cuteClassName} text-sm sm:text-base lg:text-lg font-semibold text-[var(--text)] mb-2`}
+          className={`${cuteClassName} text-sm sm:text-base lg:text-lg font-semibold text-slate-800 mb-2`}
           style={cuteStyle}
         >
           피해야 할 움직임 Top1
         </h3>
         <ul
-          className={`${cuteClassName} text-sm sm:text-base text-[var(--muted)] leading-relaxed list-disc list-inside min-h-[24px]`}
+          className={`${cuteClassName} text-sm sm:text-base text-slate-600 leading-relaxed list-disc list-inside min-h-[24px]`}
           style={cuteStyle}
         >
           {actions.avoidTop1 ? <li>{actions.avoidTop1}</li> : null}
         </ul>
       </section>
-      <section className="rounded-[var(--radius)] bg-[var(--bg)] border border-[color:var(--border)] p-4">
+      <section className="rounded-2xl border-2 border-slate-900 bg-slate-100 p-4 shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
         <h3
-          className={`${cuteClassName} text-sm sm:text-base lg:text-lg font-semibold text-[var(--text)] mb-2`}
+          className={`${cuteClassName} text-sm sm:text-base lg:text-lg font-semibold text-slate-800 mb-2`}
           style={cuteStyle}
         >
           시도해볼만한 운동/스포츠
         </h3>
         <ul
-          className={`${cuteClassName} text-sm sm:text-base text-[var(--muted)] leading-relaxed list-disc list-inside min-h-[24px]`}
+          className={`${cuteClassName} text-sm sm:text-base text-slate-600 leading-relaxed list-disc list-inside min-h-[24px]`}
           style={cuteStyle}
         >
           {actions.trySport ? <li>{actions.trySport}</li> : null}
@@ -547,10 +548,10 @@ export default function ResultPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--bg)] overflow-x-hidden flex items-center justify-center">
+      <div className="min-h-screen bg-[#F8F6F0] overflow-x-hidden flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-[var(--brand)] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-[var(--text)]">결과 불러오는 중...</p>
+          <div className="w-16 h-16 border-4 border-orange-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-slate-800">결과 불러오는 중...</p>
         </div>
       </div>
     );
@@ -558,47 +559,23 @@ export default function ResultPage() {
 
   if (!session || !session.isCompleted || !scoreResult) {
     return (
-      <div className="min-h-screen bg-[var(--bg)] overflow-x-hidden">
-        <section className="py-10 sm:py-12 md:py-16">
-          <div className="container mx-auto px-4">
-            <div className="max-w-4xl mx-auto text-center">
-              <div
-                className="
-                  rounded-[var(--radius)]
-                  bg-[var(--surface)]
-                  border border-[color:var(--border)]
-                  shadow-[var(--shadow-0)]
-                  p-4 sm:p-6 md:p-8
-                  max-w-md mx-auto
-                "
-              >
-                <div className="text-4xl mb-4">😕</div>
-                <h1 className="text-lg sm:text-xl font-bold text-[var(--text)] mb-2 whitespace-normal break-keep">
-                  테스트를 먼저 진행해주세요
-                </h1>
-                <p className="text-sm sm:text-base text-[var(--muted)] mb-6 whitespace-normal break-keep">
-                  결과를 보려면 무료 움직임 테스트를 완료해주세요.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => router.push('/')}
-                  className="
-                    w-full sm:w-auto min-h-[44px]
-                    inline-flex items-center justify-center
-                    rounded-[var(--radius)]
-                    bg-[var(--brand)] text-white
-                    px-8 py-4 font-bold
-                    shadow-[var(--shadow-0)]
-                    transition-all duration-200
-                    hover:opacity-95
-                  "
-                >
-                  테스트 하러 가기
-                </button>
-              </div>
-            </div>
+      <div className="min-h-screen bg-[#F8F6F0] overflow-x-hidden">
+        <NeoPageLayout maxWidth="md">
+          <div className="text-center">
+            <NeoCard className="p-4 sm:p-6 md:p-8 max-w-md mx-auto">
+              <div className="text-4xl mb-4">😕</div>
+              <h1 className="text-lg sm:text-xl font-bold text-slate-800 mb-2 whitespace-normal break-keep">
+                테스트를 먼저 진행해주세요
+              </h1>
+              <p className="text-sm sm:text-base text-slate-600 mb-6 whitespace-normal break-keep">
+                결과를 보려면 무료 움직임 테스트를 완료해주세요.
+              </p>
+              <NeoButton variant="orange" onClick={() => router.push('/')} className="w-full sm:w-auto min-h-[44px] px-8 py-4">
+                테스트 하러 가기
+              </NeoButton>
+            </NeoCard>
           </div>
-        </section>
+        </NeoPageLayout>
       </div>
     );
   }
@@ -627,37 +604,27 @@ export default function ResultPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] overflow-x-hidden">
-      <div className="container mx-auto px-4 py-12 sm:py-14 md:py-16">
-        <div className="max-w-4xl md:max-w-6xl mx-auto">
-          {/* 모바일 전용: Animal Hero 카드 */}
-          <section className="block sm:hidden mb-6">
-            <div className="text-center mb-4">
-              <p className="text-sm text-[var(--muted)] mb-1 whitespace-normal break-keep">
-                무료 움직임 테스트 결과
-              </p>
-              <h1
-                className={`${cuteFont.className} text-xl sm:text-2xl lg:text-3xl font-semibold text-[var(--text)] whitespace-normal break-keep`}
-                style={cuteFontStyle}
-              >
-                {mainHeroTitle}
-              </h1>
-            </div>
-            <div
-              className="
-                rounded-[var(--radius)]
-                bg-[var(--surface)]
-                border border-[color:var(--border)]
-                shadow-[var(--shadow-0)]
-                p-6
-                flex flex-col items-center text-center gap-3
-              "
+    <div className="min-h-screen bg-[#F8F6F0] overflow-x-hidden">
+      <NeoPageLayout maxWidth="lg">
+        {/* 모바일 전용: Animal Hero 카드 */}
+        <section className="block sm:hidden mb-6">
+          <div className="text-center mb-4">
+            <p className="text-sm text-slate-600 mb-1 whitespace-normal break-keep">
+              무료 움직임 테스트 결과
+            </p>
+            <h1
+              className={`${cuteFont.className} text-xl sm:text-2xl lg:text-3xl font-semibold text-slate-800 whitespace-normal break-keep`}
+              style={cuteFontStyle}
             >
+              {mainHeroTitle}
+            </h1>
+          </div>
+          <NeoCard className="p-6 flex flex-col items-center text-center gap-3">
               <MobileHeroImage contentKey={contentKey} />
-              <h2 className="text-lg font-bold text-[var(--text)] whitespace-normal break-keep">
+              <h2 className="text-lg font-bold text-slate-800 whitespace-normal break-keep">
                 {cardTitle}
               </h2>
-              <div className="space-y-4 lg:space-y-5 text-[var(--text)]">
+              <div className="space-y-4 lg:space-y-5 text-slate-800">
                 {resultBodyParagraphs.map((paragraph, idx) => (
                   <p
                     key={idx}
@@ -675,19 +642,19 @@ export default function ResultPage() {
                   cuteStyle={cuteFontStyle}
                 />
               )}
-            </div>
-          </section>
+          </NeoCard>
+        </section>
 
-          {/* 데스크톱/태블릿 전용: 기존 UI */}
-          <div className="hidden sm:block">
+        {/* 데스크톱/태블릿 전용: 기존 UI */}
+        <div className="hidden sm:block">
             {/* 결과 타이틀 + 메인 히어로 */}
             <section className="mb-6 sm:mb-8">
               <div className="text-center">
-                <p className="text-sm sm:text-base text-[var(--muted)] mb-2 whitespace-normal break-keep">
+                <p className="text-sm sm:text-base text-slate-600 mb-2 whitespace-normal break-keep">
                   무료 움직임 테스트 결과
                 </p>
                 <h1
-                  className={`${cuteFont.className} text-xl sm:text-2xl lg:text-3xl font-semibold text-[var(--text)] whitespace-normal break-keep`}
+                  className={`${cuteFont.className} text-xl sm:text-2xl lg:text-3xl font-semibold text-slate-800 whitespace-normal break-keep`}
                   style={cuteFontStyle}
                 >
                   {mainHeroTitle}
@@ -696,22 +663,12 @@ export default function ResultPage() {
             </section>
 
           {/* 메인 타입 카드 (이미지 + 짧은 설명) */}
-          <section
-            className="
-                rounded-[var(--radius)]
-                bg-[var(--surface)]
-                border border-[color:var(--border)]
-                shadow-[var(--shadow-0)]
-                p-4 sm:p-6 md:p-8
-                mb-4 sm:mb-6
-                lg:max-w-3xl lg:mx-auto
-              "
-            >
-              <h2 className="text-xl font-bold text-[var(--text)] text-left lg:text-center mb-3 whitespace-normal break-keep">
+          <NeoCard className="p-4 sm:p-6 md:p-8 mb-4 sm:mb-6 lg:max-w-3xl lg:mx-auto">
+              <h2 className="text-xl font-bold text-slate-800 text-left lg:text-center mb-3 whitespace-normal break-keep">
                 {cardTitle}
               </h2>
               <MainTypeImage contentKey={contentKey} />
-              <div className="mt-3 space-y-4 lg:space-y-5 text-[var(--text)] text-left lg:text-center">
+              <div className="mt-3 space-y-4 lg:space-y-5 text-slate-800 text-left lg:text-center">
                 {resultBodyParagraphs.map((paragraph, idx) => (
                   <p
                     key={idx}
@@ -730,79 +687,31 @@ export default function ResultPage() {
                 />
               )}
               {scoreResult.subTendency && (
-                <p className="mt-4 text-sm text-[var(--muted)] whitespace-normal break-keep">
+                <p className="mt-4 text-sm text-slate-600 whitespace-normal break-keep">
                   보조 경향: {AXIS_LABELS[scoreResult.subTendency]}
                 </p>
               )}
-            </section>
-          </div>
+          </NeoCard>
+        </div>
 
-          {/* 다시 테스트 */}
-          <section
-            className="
-              rounded-[var(--radius)]
-              bg-[var(--surface)]
-              border border-[color:var(--border)]
-              shadow-[var(--shadow-0)]
-              p-4 sm:p-6 md:p-8 text-center
-            "
-          >
-            <p className="text-xs sm:text-sm text-[var(--muted)] mb-4 whitespace-normal break-keep">
+        {/* 다시 테스트 */}
+        <NeoCard className="p-4 sm:p-6 md:p-8 text-center">
+            <p className="text-xs sm:text-sm text-slate-600 mb-4 whitespace-normal break-keep">
               몸 상태가 달라지면 결과도 달라질 수 있어요
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center items-stretch sm:items-center">
-              <button
-                type="button"
-                onClick={() => router.push('/movement-test/feedback')}
-                className="
-                  w-full sm:w-auto min-h-[44px]
-                  inline-flex items-center justify-center
-                  rounded-[var(--radius)]
-                  bg-[var(--brand)] text-white
-                  px-8 py-4 font-bold
-                  shadow-[var(--shadow-0)]
-                  transition-all duration-200
-                  hover:opacity-95
-                "
-              >
+              <NeoButton variant="orange" onClick={() => router.push('/movement-test/feedback')} className="w-full sm:w-auto min-h-[44px] px-8 py-4">
                 테스트 평가하기
-              </button>
-              <button
-                type="button"
-                onClick={() => setShareOpen(true)}
-                className="
-                  w-full sm:w-auto min-h-[44px]
-                  inline-flex items-center justify-center
-                  rounded-[var(--radius)]
-                  bg-[var(--brand)] text-white
-                  px-8 py-4 font-bold
-                  shadow-[var(--shadow-0)]
-                  transition-all duration-200
-                  hover:opacity-95
-                "
-              >
+              </NeoButton>
+              <NeoButton variant="orange" onClick={() => setShareOpen(true)} className="w-full sm:w-auto min-h-[44px] px-8 py-4">
                 테스트 공유하기
-              </button>
-              <button
-                type="button"
-                onClick={() => router.push('/')}
-                className="
-                  w-full sm:w-auto min-h-[44px]
-                  inline-flex items-center justify-center
-                  rounded-[var(--radius)]
-                  bg-[var(--brand)] text-white
-                  px-8 py-4 font-bold
-                  shadow-[var(--shadow-0)]
-                  transition-all duration-200
-                  hover:opacity-95
-                "
-              >
+              </NeoButton>
+              <NeoButton variant="orange" onClick={() => router.push('/')} className="w-full sm:w-auto min-h-[44px] px-8 py-4">
                 다시 테스트하기
-              </button>
+              </NeoButton>
             </div>
-          </section>
-        </div>
-      </div>
+        </NeoCard>
+      </NeoPageLayout>
 
       {/* 공유 모달 */}
       {shareOpen && (
@@ -821,64 +730,48 @@ export default function ResultPage() {
             aria-labelledby="share-title"
           >
             <div
-              className="pointer-events-auto w-full max-w-md overflow-x-hidden rounded-[var(--radius)] bg-[var(--surface)] border border-[color:var(--border)] shadow-[var(--shadow-0)]"
+              className="pointer-events-auto w-full max-w-md overflow-x-hidden rounded-2xl border-2 border-slate-900 bg-white shadow-[8px_8px_0_0_rgba(15,23,42,1)]"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex justify-end p-3 border-b border-[color:var(--border)]">
+              <div className="flex justify-end p-3 border-b-2 border-slate-900">
                 <button
                   type="button"
                   onClick={() => setShareOpen(false)}
-                  className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[var(--radius)] text-[var(--muted)] hover:text-[var(--text)]"
+                  className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-2xl text-slate-600 hover:text-slate-800 font-bold"
                   aria-label="닫기"
                 >
                   ✕
                 </button>
               </div>
               <div className="p-4 sm:p-6">
-                <h2 id="share-title" className="text-lg font-bold text-[var(--text)] mb-4 whitespace-normal break-keep">
+                <h2 id="share-title" className="text-lg font-bold text-slate-800 mb-4 whitespace-normal break-keep">
                   친구에게 테스트 공유하기
                 </h2>
                 <div className="flex flex-wrap gap-3 mb-4">
-                  <button
-                    type="button"
-                    onClick={() => handleNativeShare('링크가 복사됐어요. 인스타 스토리/DM에 붙여넣어 공유하세요.')}
-                    className="flex-1 min-w-[120px] min-h-[44px] inline-flex items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--surface)] border-2 border-[color:var(--border)] text-[var(--text)] hover:border-[color:var(--brand)] transition-colors"
-                  >
+                  <NeoButton variant="secondary" onClick={() => handleNativeShare('링크가 복사됐어요. 인스타 스토리/DM에 붙여넣어 공유하세요.')} className="flex-1 min-w-[120px] min-h-[44px] gap-2">
                     <span>📸</span>
                     <span className="text-sm sm:text-base whitespace-nowrap">인스타그램</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleNativeShare('링크가 복사됐어요. 카카오톡에 붙여넣어 공유하세요.')}
-                    className="flex-1 min-w-[120px] min-h-[44px] inline-flex items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--surface)] border-2 border-[color:var(--border)] text-[var(--text)] hover:border-[color:var(--brand)] transition-colors"
-                  >
+                  </NeoButton>
+                  <NeoButton variant="secondary" onClick={() => handleNativeShare('링크가 복사됐어요. 카카오톡에 붙여넣어 공유하세요.')} className="flex-1 min-w-[120px] min-h-[44px] gap-2">
                     <span>💬</span>
                     <span className="text-sm sm:text-base whitespace-nowrap">카카오톡</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openTwitter}
-                    className="flex-1 min-w-[120px] min-h-[44px] inline-flex items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--surface)] border-2 border-[color:var(--border)] text-[var(--text)] hover:border-[color:var(--brand)] transition-colors"
-                  >
+                  </NeoButton>
+                  <NeoButton variant="secondary" onClick={openTwitter} className="flex-1 min-w-[120px] min-h-[44px] gap-2">
                     <span>𝕏</span>
                     <span className="text-sm sm:text-base whitespace-nowrap">트위터(X)</span>
-                  </button>
+                  </NeoButton>
                 </div>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     readOnly
                     value={shareUrl}
-                    className="flex-1 min-w-0 min-h-[44px] rounded-[var(--radius)] bg-[var(--bg)] border border-[color:var(--border)] px-3 py-2 text-sm text-[var(--text)] truncate"
+                    className="flex-1 min-w-0 min-h-[44px] rounded-2xl border-2 border-slate-900 bg-slate-100 px-3 py-2 text-sm text-slate-800 truncate shadow-[2px_2px_0_0_rgba(15,23,42,1)]"
                     aria-label="공유 링크"
                   />
-                  <button
-                    type="button"
-                    onClick={copyLink}
-                    className="shrink-0 min-h-[44px] px-4 rounded-[var(--radius)] bg-[var(--brand)] text-white font-semibold shadow-[var(--shadow-0)] hover:opacity-95 transition-opacity"
-                  >
+                  <NeoButton variant="orange" onClick={copyLink} className="shrink-0 min-h-[44px] px-4">
                     링크 복사
-                  </button>
+                  </NeoButton>
                 </div>
               </div>
             </div>
@@ -888,7 +781,7 @@ export default function ResultPage() {
 
       {/* 토스트 */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-3 rounded-[var(--radius)] bg-[var(--text)] text-[var(--bg)] text-sm font-medium shadow-lg whitespace-normal break-keep max-w-[90vw]">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-3 rounded-2xl border-2 border-slate-900 bg-slate-800 text-white text-sm font-medium shadow-[4px_4px_0_0_rgba(15,23,42,1)] whitespace-normal break-keep max-w-[90vw]">
           {toast}
         </div>
       )}

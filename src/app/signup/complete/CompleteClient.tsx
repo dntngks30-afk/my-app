@@ -4,8 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase';
 import AuthShell from '@/components/auth/AuthShell';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NeoButton } from '@/components/neobrutalism';
+
+const NEO_INPUT =
+  'rounded-2xl border-2 border-slate-900 bg-white h-11 px-3 shadow-[2px_2px_0_0_rgba(15,23,42,1)] focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-0 text-slate-800 placeholder:text-slate-400';
 
 interface CompleteClientProps {
   /** searchParams.code — OAuth code, 서버에서 전달 */
@@ -126,12 +129,12 @@ export default function CompleteClient({ codeParam }: CompleteClientProps) {
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
-          <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-2)] p-3">
-            <p className="text-sm text-[var(--warn-text)]">{error}</p>
+          <div className="rounded-2xl border-2 border-slate-900 bg-red-50 p-3 shadow-[2px_2px_0_0_rgba(15,23,42,1)]">
+            <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-[var(--text)] mb-1">
+          <label htmlFor="email" className="block text-sm font-medium text-slate-800 mb-1">
             이메일
           </label>
           <Input
@@ -140,12 +143,12 @@ export default function CompleteClient({ codeParam }: CompleteClientProps) {
             placeholder="example@email.com"
             value={email}
             disabled
-            className="rounded-[var(--radius)] h-11"
+            className={NEO_INPUT}
           />
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-[var(--text)] mb-1">
+          <label htmlFor="password" className="block text-sm font-medium text-slate-800 mb-1">
             비밀번호
           </label>
           <Input
@@ -154,12 +157,12 @@ export default function CompleteClient({ codeParam }: CompleteClientProps) {
             placeholder="비밀번호 (최소 6자)"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="rounded-[var(--radius)] h-11"
+            className={NEO_INPUT}
           />
         </div>
 
         <div>
-          <label htmlFor="birthdate" className="block text-sm font-medium text-[var(--text)] mb-1">
+          <label htmlFor="birthdate" className="block text-sm font-medium text-slate-800 mb-1">
             생년월일
           </label>
           <Input
@@ -167,17 +170,18 @@ export default function CompleteClient({ codeParam }: CompleteClientProps) {
             type="date"
             value={birthdate}
             onChange={(e) => setBirthdate(e.target.value)}
-            className="rounded-[var(--radius)] h-11"
+            className={NEO_INPUT}
           />
         </div>
 
-        <Button
+        <NeoButton
           type="submit"
+          variant="orange"
           disabled={submitting}
-          className="w-full px-6 py-3 rounded-[var(--radius)] font-semibold bg-[var(--brand)] text-white hover:brightness-95"
+          className="w-full px-6 py-3"
         >
           {submitting ? '처리 중...' : '가입 완료'}
-        </Button>
+        </NeoButton>
       </form>
     </AuthShell>
   );

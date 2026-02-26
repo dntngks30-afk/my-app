@@ -13,8 +13,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabaseBrowser } from '@/lib/supabase';
 import { Checkbox } from '@/components/ui/checkbox';
-
-const PRIMARY = '#2563EB';
+import { NeoButton } from '@/components/neobrutalism';
 
 interface PayModalProps {
   isOpen: boolean;
@@ -113,26 +112,23 @@ export default function PayModal({ isOpen, onClose, returnUrl }: PayModalProps) 
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backdropFilter: 'blur(4px)', backgroundColor: 'rgba(0,0,0,0.4)' }}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
       <div
-        className="relative w-full max-w-md rounded-2xl bg-white dark:bg-[#1E293B] p-6 shadow-2xl border border-slate-200 dark:border-slate-700"
+        className="relative w-full max-w-md rounded-2xl border-2 border-slate-900 bg-white p-6 shadow-[8px_8px_0_0_rgba(15,23,42,1)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+        <h2 className="text-xl font-bold text-slate-800">
           7일 심층 분석 프로그램
         </h2>
-        <ul className="mt-3 space-y-1 text-sm text-slate-600 dark:text-slate-300">
+        <ul className="mt-3 space-y-1 text-sm text-slate-700">
           <li>• 움직임 정밀 체크 → 7일 맞춤 루틴 → 변화 리포트</li>
           <li>• 하루 5~10분, 전문 코치 코멘트 포함</li>
           <li>• 결제 즉시 루틴 시작</li>
         </ul>
-        <p className="mt-4 text-2xl font-bold" style={{ color: PRIMARY }}>
+        <p className="mt-4 text-2xl font-bold text-orange-600">
           ₩19,900 / 7일
         </p>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        <p className="mt-1 text-xs text-slate-600">
           결제 즉시 루틴이 시작됩니다.
         </p>
         <label className="mt-4 flex items-start gap-3 cursor-pointer">
@@ -141,7 +137,7 @@ export default function PayModal({ isOpen, onClose, returnUrl }: PayModalProps) 
             onChange={(e) => setConsentChecked((e.target as HTMLInputElement).checked)}
             className="mt-0.5 shrink-0"
           />
-          <span className="text-sm text-slate-600 dark:text-slate-300">
+          <span className="text-sm text-slate-700">
             본 서비스는 의료 행위가 아니며, 디지털 콘텐츠 특성상 결제 후 환불이 불가함에 동의합니다. (
             <Link href="/terms" target="_blank" rel="noopener noreferrer" className="underline">
               이용약관 및 환불 정책
@@ -151,35 +147,36 @@ export default function PayModal({ isOpen, onClose, returnUrl }: PayModalProps) 
         </label>
         <div className="mt-6 flex flex-col gap-3">
           {isPlanActive ? (
-            <button
+            <NeoButton
               type="button"
+              variant="orange"
               onClick={handleGoToApp}
-              className="w-full rounded-xl py-4 font-bold text-white transition hover:opacity-90"
-              style={{ backgroundColor: PRIMARY }}
+              className="w-full py-4"
             >
               이미 활성화됨 / 앱으로 이동
-            </button>
+            </NeoButton>
           ) : (
-            <button
+            <NeoButton
               type="button"
+              variant="orange"
               onClick={handleCheckout}
               disabled={isLoading || isPlanActive === null || !consentChecked}
-              className="w-full rounded-xl py-4 font-bold text-white transition disabled:opacity-50 hover:opacity-90"
-              style={{ backgroundColor: PRIMARY }}
+              className="w-full py-4"
             >
               {isLoading ? '처리 중...' : isPlanActive === null ? '확인 중...' : '결제하고 시작하기'}
-            </button>
+            </NeoButton>
           )}
-          <button
+          <NeoButton
             type="button"
+            variant="secondary"
             onClick={onClose}
-            className="w-full rounded-xl border border-slate-300 dark:border-slate-600 py-3 font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition"
+            className="w-full py-3"
           >
             닫기
-          </button>
+          </NeoButton>
         </div>
         {errorMessage && (
-          <p className="mt-3 text-center text-sm text-red-600 dark:text-red-400">
+          <p className="mt-3 text-center text-sm text-red-600">
             {errorMessage}
           </p>
         )}

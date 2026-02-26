@@ -7,6 +7,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { calculateScoresV2 } from '@/features/movement-test/v2';
+import { NeoButton, NeoCard, NeoPageLayout } from '@/components/neobrutalism';
 
 const KEY = 'movementTestSession:v2';
 
@@ -39,12 +40,13 @@ const PRICE_OPTIONS = [
 
 const inputClass = `
   w-full min-h-[44px]
-  rounded-[var(--radius)]
-  bg-[var(--surface)]
-  border border-[color:var(--border)]
-  px-3 py-2 text-sm sm:text-base text-[var(--text)]
-  placeholder:text-[var(--muted)]
-  focus:outline-none focus:ring-2 focus:ring-[var(--brand)]
+  rounded-2xl
+  bg-white
+  border-2 border-slate-900
+  px-3 py-2 text-sm sm:text-base text-slate-800
+  placeholder:text-slate-400
+  shadow-[2px_2px_0_0_rgba(15,23,42,1)]
+  focus:outline-none focus:ring-2 focus:ring-orange-400
 `;
 
 interface SessionV2 {
@@ -173,43 +175,22 @@ export default function FeedbackPage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-[var(--bg)] overflow-x-hidden">
-        <div className="container mx-auto px-4 py-12 sm:py-14 md:py-16">
-          <div className="max-w-2xl mx-auto">
-            <div
-              className="
-                rounded-[var(--radius)]
-                bg-[var(--surface)]
-                border border-[color:var(--border)]
-                shadow-[var(--shadow-0)]
-                p-6 sm:p-8 text-center
-              "
-            >
-              <div className="text-4xl mb-4">🙌</div>
-              <h1 className="text-xl sm:text-2xl font-bold text-[var(--text)] mb-2 whitespace-normal break-keep">
-                소중한 의견 감사합니다!
-              </h1>
-              <p className="text-sm sm:text-base text-[var(--muted)] mb-6 whitespace-normal break-keep">
-                덕분에 다음 버전이 더 정확하고 편해질 수 있어요.
-              </p>
-              <button
-                type="button"
-                onClick={() => router.push('/')}
-                className="
-                  w-full sm:w-auto min-h-[44px]
-                  inline-flex items-center justify-center
-                  rounded-[var(--radius)]
-                  bg-[var(--brand)] text-white px-8 py-4 font-bold
-                  shadow-[var(--shadow-0)] transition-all duration-200
-                  hover:opacity-95
-                "
-              >
-                홈으로
-              </button>
-            </div>
-          </div>
+      <NeoPageLayout maxWidth="md">
+        <div className="py-12 sm:py-14 md:py-16">
+          <NeoCard className="p-6 sm:p-8 text-center">
+            <div className="text-4xl mb-4">🙌</div>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-800 mb-2 whitespace-normal break-keep">
+              소중한 의견 감사합니다!
+            </h1>
+            <p className="text-sm sm:text-base text-slate-600 mb-6 whitespace-normal break-keep">
+              덕분에 다음 버전이 더 정확하고 편해질 수 있어요.
+            </p>
+            <NeoButton variant="orange" className="w-full sm:w-auto min-h-[44px] px-8 py-4" onClick={() => router.push('/')}>
+              홈으로
+            </NeoButton>
+          </NeoCard>
         </div>
-      </div>
+      </NeoPageLayout>
     );
   }
 
@@ -219,12 +200,12 @@ export default function FeedbackPage() {
       type="button"
       onClick={onChange}
       className={`
-        w-full min-h-[44px] text-left px-4 py-3 rounded-[var(--radius)]
+        w-full min-h-[44px] text-left px-4 py-3 rounded-2xl
         border-2 transition-all
         ${
           selected
-            ? 'border-[color:var(--brand)] bg-[var(--brand)]/10 text-[var(--text)]'
-            : 'border-[color:var(--border)] bg-[var(--surface)] text-[var(--text)] hover:border-[color:var(--brand)]'
+            ? 'border-slate-900 bg-orange-100 text-slate-800 shadow-[4px_4px_0_0_rgba(15,23,42,1)]'
+            : 'border-slate-900 bg-white text-slate-800 shadow-[2px_2px_0_0_rgba(15,23,42,1)] hover:border-orange-400'
         }
       `}
     >
@@ -233,33 +214,23 @@ export default function FeedbackPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] overflow-x-hidden">
-      <div className="container mx-auto px-4 py-10 sm:py-12 md:py-16">
-        <div className="max-w-2xl mx-auto">
-          <section className="mb-8 text-center">
-            <h1
-              className="text-3xl sm:text-4xl md:text-5xl font-bold text-[var(--text)] mb-3"
-              style={{ fontFamily: 'var(--font-display)' }}
-            >
-              테스트 평가하기
-            </h1>
-            <p className="text-sm sm:text-base text-[var(--muted)] whitespace-normal break-keep">
-              짧은 설문만 완료해 주시면 다음 버전 개선에 큰 도움이 됩니다
-            </p>
-          </section>
+    <NeoPageLayout maxWidth="md">
+      <section className="mb-8 text-center py-10 sm:py-12 md:py-16">
+        <h1
+          className="text-3xl sm:text-4xl md:text-5xl font-bold text-slate-800 mb-3"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
+          테스트 평가하기
+        </h1>
+        <p className="text-sm sm:text-base text-slate-600 whitespace-normal break-keep">
+          짧은 설문만 완료해 주시면 다음 버전 개선에 큰 도움이 됩니다
+        </p>
+      </section>
 
-          <div
-            className="
-              rounded-[var(--radius)]
-              bg-[var(--surface)]
-              border border-[color:var(--border)]
-              shadow-[var(--shadow-0)]
-              p-4 sm:p-6 md:p-8
-            "
-          >
+      <NeoCard className="p-4 sm:p-6 md:p-8">
             {/* Q1 */}
             <div className="mb-8">
-              <label className="block text-sm sm:text-base font-semibold text-[var(--text)] mb-3">
+              <label className="block text-sm sm:text-base font-semibold text-slate-800 mb-3">
                 결과가 현재 상태와 어느 정도 잘 맞는다고 느끼셨나요?
               </label>
               <div className="space-y-2">
@@ -271,10 +242,10 @@ export default function FeedbackPage() {
 
             {/* Q2 */}
             <div className="mb-8">
-              <label className="block text-sm sm:text-base font-semibold text-[var(--text)] mb-3">
+              <label className="block text-sm sm:text-base font-semibold text-slate-800 mb-3">
                 조금 더 정확하게 확인할 수 있는 &apos;정밀 버전&apos;이 있다면 이용해보고 싶으신가요?
               </label>
-              <p className="text-xs text-[var(--muted)] mb-2">(예: 사진/영상 분석, 변화 추적 리포트 등)</p>
+              <p className="text-xs text-slate-500 mb-2">(예: 사진/영상 분석, 변화 추적 리포트 등)</p>
               <div className="space-y-2">
                 {WANTS_PRECISION_OPTIONS.map((o) =>
                   optionBtn(o.code, o.label, wantsPrecision === o.code, () => setWantsPrecision(o.code))
@@ -286,7 +257,7 @@ export default function FeedbackPage() {
             {showQ3Q4 && (
               <>
                 <div className="mb-8">
-                  <label className="block text-sm sm:text-base font-semibold text-[var(--text)] mb-3">
+                  <label className="block text-sm sm:text-base font-semibold text-slate-800 mb-3">
                     정밀 버전이 나온다면, 어떤 기능이 가장 끌리시나요?
                   </label>
                   <div className="space-y-2">
@@ -298,12 +269,12 @@ export default function FeedbackPage() {
                         type="button"
                         onClick={() => setPrecisionFeature('other')}
                         className={`
-                          w-full min-h-[44px] text-left px-4 py-3 rounded-[var(--radius)]
+                          w-full min-h-[44px] text-left px-4 py-3 rounded-2xl
                           border-2 transition-all
                           ${
                             precisionFeature === 'other'
-                              ? 'border-[color:var(--brand)] bg-[var(--brand)]/10'
-                              : 'border-[color:var(--border)] bg-[var(--surface)] hover:border-[color:var(--brand)]'
+                              ? 'border-slate-900 bg-orange-100 shadow-[2px_2px_0_0_rgba(15,23,42,1)]'
+                              : 'border-slate-900 bg-white shadow-[2px_2px_0_0_rgba(15,23,42,1)] hover:border-orange-400'
                           }
                         `}
                       >
@@ -324,7 +295,7 @@ export default function FeedbackPage() {
 
                 {/* Q4 */}
                 <div className="mb-8">
-                  <label className="block text-sm sm:text-base font-semibold text-[var(--text)] mb-3">
+                  <label className="block text-sm sm:text-base font-semibold text-slate-800 mb-3">
                     방금 선택하신 기능이라면, 어느 정도 가격까지는 괜찮다고 느끼실까요?
                   </label>
                   <div className="space-y-2">
@@ -336,12 +307,12 @@ export default function FeedbackPage() {
                         type="button"
                         onClick={() => setPriceRange('other')}
                         className={`
-                          w-full min-h-[44px] text-left px-4 py-3 rounded-[var(--radius)]
+                          w-full min-h-[44px] text-left px-4 py-3 rounded-2xl
                           border-2 transition-all
                           ${
                             priceRange === 'other'
-                              ? 'border-[color:var(--brand)] bg-[var(--brand)]/10'
-                              : 'border-[color:var(--border)] bg-[var(--surface)] hover:border-[color:var(--brand)]'
+                              ? 'border-slate-900 bg-orange-100 shadow-[2px_2px_0_0_rgba(15,23,42,1)]'
+                              : 'border-slate-900 bg-white shadow-[2px_2px_0_0_rgba(15,23,42,1)] hover:border-orange-400'
                           }
                         `}
                       >
@@ -363,29 +334,20 @@ export default function FeedbackPage() {
             )}
 
             {error && (
-              <p className="mb-4 text-sm text-[var(--muted)]">{error}</p>
+              <p className="mb-4 text-sm text-slate-600">{error}</p>
             )}
 
             <div className="text-center">
-              <button
-                type="button"
+              <NeoButton
+                variant="orange"
+                className="w-full sm:w-auto min-h-[44px] px-8 py-4"
                 onClick={handleSubmit}
                 disabled={submitting || !canSubmit}
-                className="
-                  w-full sm:w-auto min-h-[44px]
-                  inline-flex items-center justify-center
-                  rounded-[var(--radius)]
-                  bg-[var(--brand)] text-white px-8 py-4 font-bold
-                  shadow-[var(--shadow-0)] transition-all duration-200
-                  hover:opacity-95 disabled:opacity-60 disabled:cursor-not-allowed
-                "
               >
                 {submitting ? '전송 중...' : '의견 보내기'}
-              </button>
+              </NeoButton>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
+      </NeoCard>
+    </NeoPageLayout>
   );
 }
