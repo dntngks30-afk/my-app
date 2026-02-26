@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   SlidersHorizontal,
@@ -27,23 +27,55 @@ function getDayStatus(
 
 export default function ResetHomePage() {
   const router = useRouter();
-  const { state, countdown, loading, error } = useRoutineStatus();
+  const { state, countdown, loading, error, todayCompletedForDay } =
+    useRoutineStatus();
   const currentDay = state?.currentDay ?? 1;
   const isCompleted = state?.status === 'COMPLETED';
   const [isStarting, setIsStarting] = useState(false);
 
+  const renderState =
+    isCompleted
+      ? 'COMPLETED'
+      : todayCompletedForDay
+        ? 'TODAY_COMPLETED'
+        : state?.status === 'LOCKED'
+          ? 'LOCKED'
+          : state?.status === 'READY'
+            ? 'READY'
+            : 'ACTIVE';
+  useEffect(() => {
+    if (!loading && !error) {
+      console.log('[HOME_RENDER_STATE]', renderState);
+    }
+  }, [loading, error, renderState]);
+
   const handleStartClick = async (day: number) => {
+    console.log('[HOME_CTA_CLICK]', { day });
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      console.warn('[HOME_NO_SESSION]');
+      router.push(`/app/auth?next=${encodeURIComponent('/app/home')}`);
+      return;
+    }
+
     setIsStarting(true);
+    console.log('[HOME_ACTIVATE_START]');
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
       const res = await fetch('/api/routine-engine/activate', {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (res.ok) {
+        console.log('[HOME_ACTIVATE_SUCCESS]');
         router.push(`/app/routine/player?day=${day}`);
+      } else {
+        const body = await res.json().catch(() => ({}));
+        console.warn('[HOME_ACTIVATE_FAIL]', { message: body.error });
       }
+    } catch (err) {
+      console.warn('[HOME_ACTIVATE_FAIL]', {
+        message: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setIsStarting(false);
     }
@@ -118,6 +150,7 @@ export default function ResetHomePage() {
               status={state?.status ?? 'READY'}
               currentDay={currentDay}
               countdown={countdown}
+              todayCompletedForDay={todayCompletedForDay}
               onStartClick={handleStartClick}
               isStarting={isStarting}
             />
@@ -155,13 +188,51 @@ type MainCtaProps = {
   status: string;
   currentDay: number;
   countdown: string | null;
+  todayCompletedForDay: boolean;
   onStartClick: (day: number) => void;
   isStarting: boolean;
 };
 
-function MainCta({ status, currentDay, countdown, onStartClick, isStarting }: MainCtaProps) {
-  const isLocked = status === 'LOCKED';
+function MainCta({
+  status,
+  currentDay,
+  countdown,
+  todayCompletedForDay,
+  onStartClick,
+  isStarting,
+}: MainCtaProps) {
   const isCompleted = status === 'COMPLETED';
+  const isLocked = status === 'LOCKED';
+
+  if (isCompleted) {
+    return (
+      <div className="flex items-center gap-4 rounded-full border-2 border-slate-900 bg-slate-800 px-6 py-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)]">
+        <div className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-slate-600 bg-slate-700">
+          <Check className="size-6 text-white" strokeWidth={2.5} />
+        </div>
+        <span className="flex-1 text-left text-lg font-bold text-white">
+          7일 여정 완료 🎉
+        </span>
+      </div>
+    );
+  }
+
+  if (todayCompletedForDay) {
+    return (
+      <div
+        className="flex items-center gap-4 rounded-full border-2 border-slate-900 bg-slate-200 px-6 py-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)] cursor-not-allowed opacity-90"
+        role="status"
+        aria-label="오늘 완료"
+      >
+        <div className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-slate-600 bg-slate-500">
+          <Check className="size-6 text-white" strokeWidth={2.5} />
+        </div>
+        <span className="flex-1 text-left text-lg font-bold text-slate-700">
+          오늘 완료 ✅
+        </span>
+      </div>
+    );
+  }
 
   if (isLocked) {
     return (
@@ -176,19 +247,6 @@ function MainCta({ status, currentDay, countdown, onStartClick, isStarting }: Ma
         </div>
         <span className="flex-1 text-left text-lg font-bold text-slate-600">
           휴식 중... ⏳ {countdown ?? '00:00:00'} 후 오픈
-        </span>
-      </div>
-    );
-  }
-
-  if (isCompleted) {
-    return (
-      <div className="flex items-center gap-4 rounded-full border-2 border-slate-900 bg-slate-800 px-6 py-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)]">
-        <div className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-slate-600 bg-slate-700">
-          <Check className="size-6 text-white" strokeWidth={2.5} />
-        </div>
-        <span className="flex-1 text-left text-lg font-bold text-white">
-          7일 여정 완료 🎉
         </span>
       </div>
     );
