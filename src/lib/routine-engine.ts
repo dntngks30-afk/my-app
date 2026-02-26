@@ -153,18 +153,22 @@ export async function checkAndUpdateRoutineStatus(
     };
   }
 
-  // [48h 이상] 강제 개방: current_day +1 (최대 7), last_activated_at 갱신
-  const newDay = Math.min(row.current_day + 1, MAX_DAY);
-  const nowIso = getServerNow().toISOString();
+  // [48h 이상] 경과된 48h 사이클 수만큼 current_day 진행 (사용자 접속 여부와 무관하게 연속 적용)
+  const cycles = Math.floor(elapsed / MS_48H);
+  const newDay = Math.min(row.current_day + cycles, MAX_DAY);
+  const consumedMs = cycles * MS_48H;
+  const newLastActivatedAt = new Date(
+    new Date(row.last_activated_at as string).getTime() + consumedMs
+  ).toISOString();
   const nextStatus = newDay >= MAX_DAY ? 'COMPLETED' : 'READY';
 
   const { error: updateErr } = await supabase
     .from('user_routines')
     .update({
       current_day: newDay,
-      last_activated_at: nowIso,
+      last_activated_at: newLastActivatedAt,
       status: nextStatus,
-      updated_at: nowIso,
+      updated_at: getServerNow().toISOString(),
     })
     .eq('id', row.id);
 
@@ -180,7 +184,7 @@ export async function checkAndUpdateRoutineStatus(
     .single();
 
   return {
-    state: mapToState(updated ?? { ...row, current_day: newDay, status: nextStatus, last_activated_at: nowIso }),
+    state: mapToState(updated ?? { ...row, current_day: newDay, status: nextStatus, last_activated_at: newLastActivatedAt }),
     changed: true,
   };
 }
