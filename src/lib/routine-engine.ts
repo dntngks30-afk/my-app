@@ -122,12 +122,8 @@ export async function checkAndUpdateRoutineStatus(
     return { state: mapToState(row), changed: false };
   }
 
-  // ACTIVE 상태(운동 진행 중)면 elapsed와 무관하게 유지
-  if (row.status === 'ACTIVE') {
-    return { state: mapToState(row), changed: false };
-  }
-
   // [24h 미만] LOCKED (다음 일차 미개방)
+  // ACTIVE였던 경우에도 홈으로 돌아오면 LOCKED로 전환 (타이머 노출)
   if (elapsed < MS_24H) {
     const nextStatus = row.status !== 'LOCKED' ? 'LOCKED' : row.status;
     if (nextStatus !== row.status) {
