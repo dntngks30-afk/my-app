@@ -83,12 +83,16 @@ export default function DeepTestStartPage() {
     router.push('/app/deep-test/run');
   };
 
+  const nbCard = 'rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)]';
+  const nbBtnPrimary = 'rounded-full border-2 border-slate-900 bg-slate-800 px-6 py-3 text-sm font-bold text-white transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)]';
+  const nbBtnSecondary = 'rounded-full border-2 border-slate-900 bg-white px-6 py-3 text-sm font-bold text-slate-800 transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)]';
+
   if (status === 'loading') {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex flex-col">
+      <div className="min-h-screen bg-[#f8f6f0] flex flex-col">
         <AppTopBar />
         <main className="flex-1 flex items-center justify-center">
-          <p className="text-sm text-[var(--muted)]">확인 중...</p>
+          <p className="text-sm text-stone-500">확인 중...</p>
         </main>
       </div>
     );
@@ -96,16 +100,16 @@ export default function DeepTestStartPage() {
 
   if (status === 'auth') {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex flex-col">
+      <div className="min-h-screen bg-[#f8f6f0] flex flex-col">
         <AppTopBar />
         <main className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-          <h2 className="text-lg font-semibold text-[var(--text)]">로그인이 필요해요</h2>
-          <p className="text-sm text-[var(--muted)] text-center max-w-sm">
+          <h2 className="text-lg font-bold text-slate-800">로그인이 필요해요</h2>
+          <p className="text-sm text-stone-600 text-center max-w-sm">
             심화 테스트를 하려면 로그인해 주세요.
           </p>
           <Link
             href={`/app/auth?next=${encodeURIComponent('/app/deep-test')}`}
-            className="rounded-lg bg-[var(--brand)] px-6 py-3 text-center text-sm font-semibold text-white"
+            className={nbBtnPrimary}
           >
             로그인하기
           </Link>
@@ -116,16 +120,16 @@ export default function DeepTestStartPage() {
 
   if (status === 'paywall') {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex flex-col">
+      <div className="min-h-screen bg-[#f8f6f0] flex flex-col">
         <AppTopBar />
         <main className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-          <h2 className="text-lg font-semibold text-[var(--text)]">유료 권한이 필요해요</h2>
-          <p className="text-sm text-[var(--muted)] text-center max-w-sm">
+          <h2 className="text-lg font-bold text-slate-800">유료 권한이 필요해요</h2>
+          <p className="text-sm text-stone-600 text-center max-w-sm">
             심화 테스트는 유료 플랜 사용자만 이용할 수 있어요.
           </p>
           <Link
             href="/deep-analysis?pay=1"
-            className="rounded-lg bg-[var(--brand)] px-6 py-3 text-center text-sm font-semibold text-white"
+            className={nbBtnPrimary}
           >
             유료 플랜 알아보기
           </Link>
@@ -136,15 +140,15 @@ export default function DeepTestStartPage() {
 
   if (status === 'error') {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex flex-col">
+      <div className="min-h-screen bg-[#f8f6f0] flex flex-col">
         <AppTopBar />
         <main className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-          <h2 className="text-lg font-semibold text-[var(--text)]">문제가 생겼어요</h2>
-          <p className="text-sm text-[var(--muted)] text-center">{errorMessage}</p>
+          <h2 className="text-lg font-bold text-slate-800">문제가 생겼어요</h2>
+          <p className="text-sm text-stone-600 text-center">{errorMessage}</p>
           <button
             type="button"
             onClick={() => { setStatus('loading'); setErrorMessage(''); router.refresh(); }}
-            className="rounded-lg border border-[var(--border)] px-6 py-3 text-sm font-semibold"
+            className={nbBtnSecondary}
           >
             다시 시도
           </button>
@@ -154,25 +158,23 @@ export default function DeepTestStartPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] pb-20">
+    <div className="min-h-screen bg-[#f8f6f0] pb-20">
       <AppTopBar />
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-md mx-auto">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-0)]">
-            <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-2">
-              심화 테스트 (Deep)
-            </p>
-            <h1 className="text-xl font-bold text-[var(--text)] mb-2">
+          <div className={nbCard}>
+            <span className="text-sm font-semibold text-orange-500">심화 테스트 (Deep)</span>
+            <h1 className="mt-2 text-xl font-bold text-slate-800 mb-2">
               나의 움직임 패턴 심층 분석
             </h1>
-            <p className="text-sm text-[var(--muted)] mb-6">
+            <p className="text-sm text-stone-600 mb-6">
               14개 문항으로 더 정밀한 움직임 경향과 우선순위를 확인할 수 있어요.
             </p>
 
             <button
               type="button"
               onClick={handleStart}
-              className="w-full rounded-lg bg-[var(--brand)] py-4 text-base font-semibold text-white hover:opacity-95"
+              className="w-full rounded-full border-2 border-slate-900 bg-slate-800 py-4 text-base font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)]"
             >
               {hasAnswers ? '이어하기' : '시작하기'}
             </button>

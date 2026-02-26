@@ -66,6 +66,12 @@ export default function DeepTestResultPage() {
     setRetryTrigger((c) => c + 1);
   };
 
+  const nbCard = 'rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)]';
+  const nbBtnPrimary = 'rounded-full border-2 border-slate-900 bg-slate-800 px-6 py-3 text-sm font-bold text-white transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)]';
+  const nbBtnPrimaryBlock = 'block w-full rounded-full border-2 border-slate-900 bg-slate-800 py-4 text-center text-base font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)]';
+  const nbBtnSecondary = 'rounded-full border-2 border-slate-900 bg-white px-6 py-3 text-sm font-bold text-slate-800 transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)]';
+  const nbBtnSecondaryBlock = 'block w-full rounded-full border-2 border-slate-900 bg-white py-4 text-center text-base font-bold text-slate-800 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)]';
+
   useEffect(() => {
     let cancelled = false;
 
@@ -124,10 +130,10 @@ export default function DeepTestResultPage() {
 
   if (status === 'loading') {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex flex-col">
+      <div className="min-h-screen bg-[#f8f6f0] flex flex-col">
         <AppTopBar />
         <main className="flex-1 flex items-center justify-center">
-          <p className="text-sm text-[var(--muted)]">결과 불러오는 중...</p>
+          <p className="text-sm text-stone-500">결과 불러오는 중...</p>
         </main>
       </div>
     );
@@ -135,10 +141,10 @@ export default function DeepTestResultPage() {
 
   if (status === 'auth') {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex flex-col">
+      <div className="min-h-screen bg-[#f8f6f0] flex flex-col">
         <AppTopBar />
         <main className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-          <p className="text-sm text-[var(--muted)]">로그인이 필요합니다.</p>
+          <p className="text-sm text-stone-600">로그인이 필요합니다.</p>
           <button
             type="button"
             onClick={() =>
@@ -146,7 +152,7 @@ export default function DeepTestResultPage() {
                 `/app/auth?next=${encodeURIComponent('/app/deep-test/result')}`
               )
             }
-            className="rounded-lg bg-[var(--brand)] px-6 py-3 text-sm font-semibold text-white"
+            className={nbBtnPrimary}
           >
             로그인
           </button>
@@ -157,14 +163,14 @@ export default function DeepTestResultPage() {
 
   if (status === 'paywall') {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex flex-col">
+      <div className="min-h-screen bg-[#f8f6f0] flex flex-col">
         <AppTopBar />
         <main className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-          <p className="text-sm text-[var(--muted)]">유료 플랜이 필요합니다.</p>
+          <p className="text-sm text-stone-600">유료 플랜이 필요합니다.</p>
           <button
             type="button"
             onClick={() => router.push('/deep-analysis?pay=1')}
-            className="rounded-lg bg-[var(--brand)] px-6 py-3 text-sm font-semibold text-white"
+            className={nbBtnPrimary}
           >
             유료 플랜 알아보기
           </button>
@@ -175,22 +181,22 @@ export default function DeepTestResultPage() {
 
   if (status === 'error') {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex flex-col">
+      <div className="min-h-screen bg-[#f8f6f0] flex flex-col">
         <AppTopBar />
         <main className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-          <p className="text-sm text-[var(--muted)]">{errorMessage}</p>
+          <p className="text-sm text-stone-600">{errorMessage}</p>
           <div className="flex gap-3">
             <button
               type="button"
               onClick={() => router.push('/app/deep-test')}
-              className="rounded-lg border border-[var(--border)] px-6 py-3 text-sm font-semibold"
+              className={nbBtnSecondary}
             >
               심화 테스트 하기
             </button>
             <button
               type="button"
               onClick={handleRetry}
-              className="rounded-lg bg-[var(--brand)] px-6 py-3 text-sm font-semibold text-white"
+              className={nbBtnPrimary}
             >
               다시 시도
             </button>
@@ -212,40 +218,40 @@ export default function DeepTestResultPage() {
   const isStable = resultType === 'STABLE';
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] pb-20">
+    <div className="min-h-screen bg-[#f8f6f0] pb-20">
       <AppTopBar />
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-md mx-auto">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--brand)]/20 text-[var(--brand)] text-xs font-semibold mb-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-400/90 text-slate-900 text-xs font-bold mb-4">
             심화 결과 (Deep)
           </div>
 
-          <h1 className="text-xl font-bold text-[var(--text)] mb-2">
+          <h1 className="text-xl font-bold text-slate-800 mb-2">
             나의 움직임 경향
           </h1>
 
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 space-y-4">
+          <div className={`${nbCard} space-y-4`}>
             <div>
-              <p className="text-xs font-medium text-[var(--muted)]">
+              <p className="text-xs font-medium text-stone-500">
                 움직임 패턴 경향
               </p>
-              <p className="text-lg font-semibold text-[var(--text)]">
+              <p className="text-lg font-bold text-slate-800">
                 {RESULT_TYPE_LABELS[resultType] ?? resultType}
               </p>
             </div>
 
             {isStable && (
-              <p className="text-sm text-[var(--muted)]">
+              <p className="text-sm text-stone-600">
                 안정형입니다. 전신 균형 루틴을 권장해요.
               </p>
             )}
 
             {primaryFocus && primaryFocus !== 'NONE' && (
               <div>
-                <p className="text-xs font-medium text-[var(--muted)]">
+                <p className="text-xs font-medium text-stone-500">
                   우선순위 1
                 </p>
-                <p className="text-base font-medium text-[var(--text)]">
+                <p className="text-base font-semibold text-slate-800">
                   {FOCUS_LABELS[primaryFocus] ?? primaryFocus}
                 </p>
               </div>
@@ -253,10 +259,10 @@ export default function DeepTestResultPage() {
 
             {secondaryFocus && secondaryFocus !== 'NONE' && (
               <div>
-                <p className="text-xs font-medium text-[var(--muted)]">
+                <p className="text-xs font-medium text-stone-500">
                   우선순위 2
                 </p>
-                <p className="text-base font-medium text-[var(--text)]">
+                <p className="text-base font-semibold text-slate-800">
                   {FOCUS_LABELS[secondaryFocus] ?? secondaryFocus}
                 </p>
               </div>
@@ -264,20 +270,20 @@ export default function DeepTestResultPage() {
 
             {confidence != null && (
               <div>
-                <p className="text-xs font-medium text-[var(--muted)]">
+                <p className="text-xs font-medium text-stone-500">
                   응답 완성도
                 </p>
-                <p className="text-base text-[var(--text)]">{confidence}%</p>
+                <p className="text-base font-semibold text-slate-800">{confidence}%</p>
               </div>
             )}
           </div>
 
-          {/* PWA Install Hub (PR-A + PR-B) */}
-          <section className="mt-8 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3">
-            <h2 className="text-sm font-semibold text-[var(--text)]">
+          {/* PWA Install Hub */}
+          <section className={`mt-8 ${nbCard} space-y-3`}>
+            <h2 className="text-sm font-bold text-slate-800">
               앱으로 설치하기
             </h2>
-            <p className="text-xs text-[var(--muted)]">
+            <p className="text-xs text-stone-600">
               {isStandalone ? '앱에서 실행 중' : '홈 화면에 설치하면 앱처럼 실행'}
             </p>
             <div className="flex flex-wrap gap-2">
@@ -285,20 +291,20 @@ export default function DeepTestResultPage() {
                 <button
                   type="button"
                   onClick={() => setInstallModalOpen(true)}
-                  className="flex-1 min-w-[120px] rounded-lg bg-[var(--brand)] py-3 text-center text-sm font-semibold text-white"
+                  className="flex-1 min-w-[120px] rounded-full border-2 border-slate-900 bg-slate-800 py-3 text-center text-sm font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)]"
                 >
                   바로 설치하기
                 </button>
               )}
               <Link
                 href="/app/install?from=/app/deep-test/result"
-                className="flex-1 min-w-[120px] rounded-lg border border-[var(--border)] py-3 text-center text-sm font-semibold"
+                className="flex-1 min-w-[120px] rounded-full border-2 border-slate-900 bg-white py-3 text-center text-sm font-bold text-slate-800 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)]"
               >
                 설치 방법 보기
               </Link>
               <button
                 type="button"
-                className="rounded-lg border border-[var(--border)] px-4 py-3 text-sm font-medium"
+                className="rounded-full border-2 border-stone-300 bg-white px-4 py-3 text-sm font-medium text-slate-800"
               >
                 나중에 하기
               </button>
@@ -306,28 +312,19 @@ export default function DeepTestResultPage() {
           </section>
 
           <div className="mt-8 flex flex-col gap-3">
-            <Link
-              href="/app/deep-test"
-              className="block w-full rounded-lg bg-[var(--brand)] py-4 text-center text-base font-semibold text-white"
-            >
+            <Link href="/app/deep-test" className={nbBtnPrimaryBlock}>
               다시 테스트
             </Link>
             {isStandalone ? (
-              <Link
-                href="/app"
-                className="block w-full rounded-lg border border-[var(--border)] py-4 text-center text-base font-semibold"
-              >
+              <Link href="/app" className={nbBtnSecondaryBlock}>
                 이제 앱에서 루틴을 시작해요
               </Link>
             ) : (
               <>
-                <Link
-                  href="/app"
-                  className="block w-full rounded-lg border border-[var(--border)] py-4 text-center text-base font-semibold"
-                >
+                <Link href="/app" className={nbBtnSecondaryBlock}>
                   홈으로
                 </Link>
-                <p className="text-xs text-[var(--muted)] text-center">
+                <p className="text-xs text-stone-500 text-center">
                   설치하면 알림·출석이 편해져요
                 </p>
               </>
