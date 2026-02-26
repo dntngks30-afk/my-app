@@ -98,15 +98,15 @@ export default function PwaInstallModal({
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="fixed left-[50%] top-[50%] z-50 w-full max-w-lg max-h-[90vh] translate-x-[-50%] translate-y-[-50%] flex flex-col rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-lg">
+      <div className="fixed left-[50%] top-[50%] z-50 w-full max-w-lg max-h-[90vh] translate-x-[-50%] translate-y-[-50%] flex flex-col rounded-2xl border-2 border-slate-900 bg-white shadow-[8px_8px_0_0_rgba(15,23,42,1)]">
         <div className="flex justify-between items-start p-4 sm:p-6 shrink-0">
-          <h2 className="text-lg font-semibold text-[var(--text)]">
+          <h2 className="text-lg font-bold text-slate-800">
             앱으로 설치하기
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="text-[var(--muted)] hover:text-[var(--text)] text-xl leading-none"
+            className="text-stone-500 hover:text-slate-800 text-xl leading-none font-bold"
             aria-label="닫기"
           >
             ×
@@ -116,7 +116,7 @@ export default function PwaInstallModal({
         <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 pb-4">
           {showInApp && (
             <section className="mb-4">
-              <p className="text-sm text-[var(--muted)] leading-relaxed">
+              <p className="text-sm text-stone-600 leading-relaxed">
                 카카오톡, 인스타그램 등 앱 안에서 열린 브라우저에서는 설치가
                 제한됩니다. Safari 또는 Chrome에서 주소를 열어 설치해 주세요.
               </p>
@@ -129,7 +129,7 @@ export default function PwaInstallModal({
                 type="button"
                 onClick={handleInstallClick}
                 disabled={isPrompting}
-                className="w-full rounded-lg bg-[var(--brand)] py-4 text-center text-base font-semibold text-white disabled:opacity-70"
+                className="w-full rounded-full border-2 border-slate-900 bg-slate-800 py-4 text-center text-base font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)] disabled:opacity-70"
               >
                 {isPrompting ? '처리 중...' : '설치하기'}
               </button>
@@ -137,7 +137,7 @@ export default function PwaInstallModal({
           )}
 
           <section>
-            <h3 className="text-sm font-semibold text-[var(--text)] mb-3">
+            <h3 className="text-sm font-bold text-slate-800 mb-3">
               설치 가이드 이미지 (공통)
             </h3>
             <div className="space-y-5">
@@ -146,10 +146,10 @@ export default function PwaInstallModal({
                   <img
                     src={item.src}
                     alt={item.alt}
-                    className="w-full max-w-md mx-auto rounded-lg border border-[var(--border)] object-contain"
+                    className="w-full max-w-md mx-auto rounded-lg border-2 border-slate-900 object-contain"
                     style={{ height: 'auto' }}
                   />
-                  <p className="text-xs text-[var(--muted)] leading-relaxed">
+                  <p className="text-xs text-stone-600 leading-relaxed">
                     {item.caption}
                   </p>
                 </div>
@@ -160,7 +160,7 @@ export default function PwaInstallModal({
           <button
             type="button"
             onClick={onClose}
-            className="mt-6 w-full rounded-lg border border-[var(--border)] py-3 text-center text-sm font-medium"
+            className="mt-6 w-full rounded-full border-2 border-slate-900 bg-white py-3 text-center text-sm font-bold text-slate-800 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)]"
           >
             닫기
           </button>

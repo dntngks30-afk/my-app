@@ -280,12 +280,15 @@ export default function DeepTestRunPage() {
     }
   };
 
+  const nbBtnPrimary = 'rounded-full border-2 border-slate-900 bg-slate-800 px-6 py-3 text-sm font-bold text-white transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:translate-0';
+  const nbBtnSecondary = 'rounded-full border-2 border-slate-900 bg-white px-6 py-3 text-sm font-bold text-slate-800 transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)] disabled:opacity-50';
+
   if (status === 'loading' || status === 'finalizing') {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex flex-col">
+      <div className="min-h-screen bg-[#f8f6f0] flex flex-col">
         <AppTopBar />
         <main className="flex-1 flex items-center justify-center">
-          <p className="text-sm text-[var(--muted)]">
+          <p className="text-sm text-stone-500">
             {status === 'finalizing' ? '결과 계산 중...' : '불러오는 중...'}
           </p>
         </main>
@@ -295,10 +298,10 @@ export default function DeepTestRunPage() {
 
   if (status === 'auth') {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex flex-col">
+      <div className="min-h-screen bg-[#f8f6f0] flex flex-col">
         <AppTopBar />
         <main className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-          <p className="text-sm text-[var(--muted)]">로그인이 필요합니다.</p>
+          <p className="text-sm text-stone-600">로그인이 필요합니다.</p>
           <button
             type="button"
             onClick={() =>
@@ -306,7 +309,7 @@ export default function DeepTestRunPage() {
                 `/app/auth?next=${encodeURIComponent('/app/deep-test/run')}`
               )
             }
-            className="rounded-lg bg-[var(--brand)] px-6 py-3 text-sm font-semibold text-white"
+            className={nbBtnPrimary}
           >
             로그인
           </button>
@@ -317,14 +320,14 @@ export default function DeepTestRunPage() {
 
   if (status === 'paywall') {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex flex-col">
+      <div className="min-h-screen bg-[#f8f6f0] flex flex-col">
         <AppTopBar />
         <main className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-          <p className="text-sm text-[var(--muted)]">유료 플랜이 필요합니다.</p>
+          <p className="text-sm text-stone-600">유료 플랜이 필요합니다.</p>
           <button
             type="button"
             onClick={() => router.push('/deep-analysis?pay=1')}
-            className="rounded-lg bg-[var(--brand)] px-6 py-3 text-sm font-semibold text-white"
+            className={nbBtnPrimary}
           >
             유료 플랜 알아보기
           </button>
@@ -335,14 +338,14 @@ export default function DeepTestRunPage() {
 
   if (status === 'error') {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex flex-col">
+      <div className="min-h-screen bg-[#f8f6f0] flex flex-col">
         <AppTopBar />
         <main className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-          <p className="text-sm text-[var(--muted)]">{errorMessage}</p>
+          <p className="text-sm text-stone-600">{errorMessage}</p>
           <button
             type="button"
             onClick={() => router.push('/app/deep-test')}
-            className="rounded-lg border border-[var(--border)] px-6 py-3 text-sm font-semibold"
+            className={nbBtnSecondary}
           >
             다시 시도
           </button>
@@ -352,13 +355,13 @@ export default function DeepTestRunPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] pb-24">
+    <div className="min-h-screen bg-[#f8f6f0] pb-24">
       <AppTopBar />
       <main className="container mx-auto px-4 py-6">
-        <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-2">
+        <span className="text-sm font-semibold text-orange-500">
           {sectionIndex + 1} / {STEPPER_SECTIONS.length}
-        </p>
-        <h2 className="text-lg font-semibold text-[var(--text)] mb-6">
+        </span>
+        <h2 className="mt-2 text-lg font-bold text-slate-800 mb-6">
           {currentSection?.title}
         </h2>
 
@@ -366,12 +369,12 @@ export default function DeepTestRunPage() {
           {questions.map((q) => (
             <div
               key={q.id}
-              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4"
+              className="rounded-2xl border-2 border-slate-900 bg-white p-4 shadow-[4px_4px_0_0_rgba(15,23,42,1)]"
             >
               {q.helperText && (
-                <p className="text-xs text-[var(--muted)] mb-2">{q.helperText}</p>
+                <p className="text-xs text-stone-500 mb-2">{q.helperText}</p>
               )}
-              <p className="text-sm font-medium text-[var(--text)] mb-3">
+              <p className="text-sm font-semibold text-slate-800 mb-3">
                 {q.title}
               </p>
 
@@ -397,7 +400,7 @@ export default function DeepTestRunPage() {
                       handleAnswer(q.id, Number.isNaN(n) ? 0 : n);
                     }
                   }}
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[var(--text)]"
+                  className="w-full rounded-lg border-2 border-slate-900 bg-white px-4 py-3 text-slate-800"
                   placeholder="나이 입력"
                 />
               )}
@@ -409,10 +412,10 @@ export default function DeepTestRunPage() {
                       key={opt.value}
                       type="button"
                       onClick={() => handleAnswer(q.id, opt.value)}
-                      className={`rounded-lg border px-4 py-3 text-left text-sm transition-colors ${
+                      className={`rounded-full border-2 px-4 py-3 text-left text-sm font-medium transition ${
                         answers[q.id] === opt.value
-                          ? 'border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]'
-                          : 'border-[var(--border)] hover:bg-[var(--surface-2)]'
+                          ? 'border-slate-900 bg-slate-800 text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)]'
+                          : 'border-slate-900 bg-white text-slate-800 hover:bg-slate-100'
                       }`}
                     >
                       {opt.label}
@@ -423,7 +426,7 @@ export default function DeepTestRunPage() {
 
               {q.type === 'multi' && q.options && (
                 <>
-                  <p className="text-xs text-[var(--muted)] mb-2">
+                  <p className="text-xs text-stone-500 mb-2">
                     1~2개 권장
                   </p>
                   <div className="flex flex-col gap-2">
@@ -433,7 +436,7 @@ export default function DeepTestRunPage() {
                       return (
                         <label
                           key={opt.value}
-                          className="flex items-center gap-3 rounded-lg border border-[var(--border)] px-4 py-3 cursor-pointer hover:bg-[var(--surface-2)]"
+                          className="flex items-center gap-3 rounded-full border-2 border-slate-900 bg-white px-4 py-3 cursor-pointer hover:bg-slate-50 transition"
                         >
                           <input
                             type="checkbox"
@@ -441,9 +444,9 @@ export default function DeepTestRunPage() {
                             onChange={(e) =>
                               handleMultiChange(q.id, opt.value, e.target.checked)
                             }
-                            className="rounded border-[var(--border)]"
+                            className="rounded border-2 border-slate-900"
                           />
-                          <span className="text-sm">{opt.label}</span>
+                          <span className="text-sm font-medium text-slate-800">{opt.label}</span>
                         </label>
                       );
                     })}
@@ -455,13 +458,13 @@ export default function DeepTestRunPage() {
         </div>
 
         {(saveError || ageWarning) && (
-          <p className="mt-4 text-sm text-amber-600 dark:text-amber-400">
+          <p className="mt-4 text-sm text-amber-600 font-medium">
             {saveError || (ageWarning ? '나이는 꼭 입력해주세요.' : null)}
           </p>
         )}
         <div className="mt-8 flex items-center justify-between gap-3">
           {saving ? (
-            <span className="text-xs text-[var(--muted)]">저장 중...</span>
+            <span className="text-xs text-stone-500">저장 중...</span>
           ) : (
             <span />
           )}
@@ -471,7 +474,7 @@ export default function DeepTestRunPage() {
                 type="button"
                 onClick={handlePrev}
                 disabled={saving}
-                className="rounded-lg border border-[var(--border)] px-6 py-3 text-sm font-semibold disabled:opacity-50"
+                className={nbBtnSecondary}
               >
                 이전
               </button>
@@ -480,7 +483,7 @@ export default function DeepTestRunPage() {
               type="button"
               onClick={handleNext}
               disabled={saving || (sectionIndex === 0 && !canProceedFromSection(0))}
-              className="rounded-lg bg-[var(--brand)] px-6 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              className={nbBtnPrimary}
             >
               {isLastSection ? '결과 보기' : '다음'}
             </button>
