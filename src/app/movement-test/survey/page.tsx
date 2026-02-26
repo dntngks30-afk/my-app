@@ -11,6 +11,7 @@ import {
   ANSWER_CHOICES_V2,
   calculateScoresV2,
 } from '@/features/movement-test/v2';
+import { NeoButton, NeoCard, NeoPageLayout } from '@/components/neobrutalism';
 import type { AnimalAxis } from '@/features/movement-test/v2';
 import type { TestAnswerValue } from '@/features/movement-test/v2';
 
@@ -366,51 +367,36 @@ export default function MovementTestSurveyPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] overflow-x-hidden">
+    <NeoPageLayout maxWidth="lg">
       {/* Hero */}
-      <section className="py-10 sm:py-12 md:py-16">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl md:max-w-6xl mx-auto text-center">
-            <h1
-              className="text-3xl sm:text-4xl md:text-5xl font-bold text-[var(--text)] mb-2"
-              style={{ fontFamily: 'var(--font-display)' }}
-            >
-              무료 움직임 테스트
-            </h1>
-            <p className="text-sm sm:text-base text-[var(--muted)] whitespace-normal break-keep">
-              아래 문장에 얼마나 해당하는지 선택해주세요
-            </p>
-          </div>
-        </div>
+      <section className="py-10 sm:py-12 md:py-16 text-center">
+        <h1
+          className="text-3xl sm:text-4xl md:text-5xl font-bold text-slate-800 mb-2"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
+          무료 움직임 테스트
+        </h1>
+        <p className="text-sm sm:text-base text-slate-600 whitespace-normal break-keep">
+          아래 문장에 얼마나 해당하는지 선택해주세요
+        </p>
       </section>
 
       {/* 카드: 진행 + 질문 */}
       <section className="pb-10 sm:pb-12">
-        <div className="container mx-auto px-4">
-          <div className="max-w-2xl md:max-w-4xl mx-auto">
-            <div
-              className="
-                rounded-[var(--radius)]
-                bg-[var(--surface)]
-                border border-[color:var(--border)]
-                shadow-[var(--shadow-0)]
-                p-4 sm:p-6 md:p-8
-              "
-            >
-              <p className="text-[var(--muted)] text-xs sm:text-sm mb-4 md:mb-6">
-                STEP {step + 1} / 6
-              </p>
+        <NeoCard className="p-4 sm:p-6 md:p-8">
+          <p className="text-slate-600 text-xs sm:text-sm mb-4 md:mb-6">
+            STEP {step + 1} / 6
+          </p>
 
-              <div className="space-y-6 md:space-y-8 overflow-x-hidden">
-                {group.questions.map((q) => (
-                  <div key={q.id}>
-                    <p className="text-base sm:text-lg text-[var(--text)] font-medium mb-4 leading-relaxed whitespace-normal break-keep">
-                      {q.text}
-                    </p>
-                    <div className="flex flex-col items-center gap-2">
-                      {/* 모바일: 라벨을 스케일 위에 배치 */}
-                      <div
-                        className="flex items-center justify-between text-xs text-[var(--muted)] w-full md:hidden whitespace-normal break-keep"
+          <div className="space-y-6 md:space-y-8 overflow-x-hidden">
+            {group.questions.map((q) => (
+              <div key={q.id}>
+                <p className="text-base sm:text-lg text-slate-800 font-medium mb-4 leading-relaxed whitespace-normal break-keep">
+                  {q.text}
+                </p>
+                <div className="flex flex-col items-center gap-2">
+                  <div
+                    className="flex items-center justify-between text-xs text-slate-600 w-full md:hidden whitespace-normal break-keep"
                         aria-hidden
                       >
                         <span>전혀 아니다</span>
@@ -418,7 +404,7 @@ export default function MovementTestSurveyPage() {
                       </div>
                       {/* 스케일 행 */}
                       <div className="flex items-center gap-2 sm:gap-3 md:gap-4 w-full min-w-0">
-                        <span className="hidden md:block text-sm text-[var(--muted)] shrink-0 whitespace-normal break-keep">
+                        <span className="hidden md:block text-sm text-slate-600 shrink-0 whitespace-normal break-keep">
                           전혀 아니다
                         </span>
                         <div className="flex-1 flex items-center justify-center min-w-0">
@@ -450,13 +436,13 @@ export default function MovementTestSurveyPage() {
                                   className={`
                                     rounded-full transition-all shrink-0
                                     flex items-center justify-center
-                                    focus:outline-none focus:ring-2 focus:ring-[var(--brand)]
-                                    hover:border-[color:var(--brand)]
+                                    focus:outline-none focus:ring-2 focus:ring-orange-400
+                                    hover:border-orange-400
                                     ${sizeClass}
                                     ${
                                       selected
-                                        ? 'border-2 border-[color:var(--brand)] bg-[var(--brand)]'
-                                        : 'border-2 border-[color:var(--border)] ring-1 ring-[color:var(--border)] bg-transparent'
+                                        ? 'border-2 border-slate-900 bg-orange-400'
+                                        : 'border-2 border-slate-900 bg-white shadow-[2px_2px_0_0_rgba(15,23,42,1)]'
                                     }
                                   `}
                                 >
@@ -476,7 +462,7 @@ export default function MovementTestSurveyPage() {
                             })}
                           </div>
                         </div>
-                        <span className="hidden md:block text-sm text-[var(--muted)] shrink-0 whitespace-normal break-keep">
+                        <span className="hidden md:block text-sm text-slate-600 shrink-0 whitespace-normal break-keep">
                           거의 항상
                         </span>
                       </div>
@@ -485,32 +471,17 @@ export default function MovementTestSurveyPage() {
                 ))}
               </div>
 
-              <div className="mt-6 md:mt-8 text-center">
-                <button
-                  type="button"
-                  onClick={handleNext}
-                  disabled={!allAnswered}
-                  className={`
-                    w-full sm:w-auto
-                    min-h-[44px]
-                    inline-flex items-center justify-center
-                    rounded-[var(--radius)]
-                    px-8 py-4 font-bold
-                    shadow-[var(--shadow-0)]
-                    transition-all duration-200
-                    ${
-                      allAnswered
-                        ? 'bg-[var(--brand)] text-white hover:opacity-95'
-                        : 'bg-[var(--surface)] border border-[color:var(--border)] text-[var(--muted)] cursor-not-allowed'
-                    }
-                  `}
-                >
-                  {step >= GROUPS.length - 1 ? '결과 보기' : '다음'}
-                </button>
-              </div>
-            </div>
+          <div className="mt-6 md:mt-8 text-center">
+            <NeoButton
+              variant={allAnswered ? 'orange' : 'secondary'}
+              disabled={!allAnswered}
+              className="w-full sm:w-auto min-h-[44px] px-8 py-4"
+              onClick={handleNext}
+            >
+              {step >= GROUPS.length - 1 ? '결과 보기' : '다음'}
+            </NeoButton>
           </div>
-        </div>
+        </NeoCard>
       </section>
 
       {/* 자가테스트 안내 모달 */}
@@ -530,35 +501,27 @@ export default function MovementTestSurveyPage() {
             aria-labelledby="self-test-modal-title"
           >
             <div
-              className="w-full max-w-md mx-auto rounded-[var(--radius)] bg-[var(--surface)] border border-[color:var(--border)] shadow-[var(--shadow-0)] p-6"
+              className="w-full max-w-md mx-auto rounded-2xl border-2 border-slate-900 bg-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] p-6"
               onClick={(e) => e.stopPropagation()}
             >
-              <h2 id="self-test-modal-title" className="text-lg font-bold text-[var(--text)] mb-2 whitespace-normal break-keep">
+              <h2 id="self-test-modal-title" className="text-lg font-bold text-slate-800 mb-2 whitespace-normal break-keep">
                 더 정확한 분석을 위해 1분 자가테스트를 진행하시겠어요?
               </h2>
-              <p className="text-sm text-[var(--muted)] mb-6 whitespace-normal break-keep">
+              <p className="text-sm text-slate-600 mb-6 whitespace-normal break-keep">
                 간단한 3가지 체크로 결과의 신뢰도를 높일 수 있어요.
               </p>
               <div className="flex flex-col gap-3">
-                <button
-                  type="button"
-                  onClick={handleGoToSelfTest}
-                  className="w-full min-h-[44px] rounded-[var(--radius)] bg-[var(--brand)] text-white font-bold shadow-[var(--shadow-0)] hover:opacity-95 transition-opacity"
-                >
+                <NeoButton variant="orange" className="w-full min-h-[44px]" onClick={handleGoToSelfTest}>
                   자가테스트 하기
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSkipToResult}
-                  className="w-full min-h-[44px] rounded-[var(--radius)] border border-[color:var(--border)] bg-[var(--surface)] text-[var(--text)] font-medium hover:bg-[var(--surface-2)] transition-colors"
-                >
+                </NeoButton>
+                <NeoButton variant="secondary" className="w-full min-h-[44px]" onClick={handleSkipToResult}>
                   건너뛰기
-                </button>
+                </NeoButton>
               </div>
             </div>
           </div>
         </>
       )}
-    </div>
+    </NeoPageLayout>
   );
 }

@@ -54,6 +54,15 @@
   /* 레거시 호환 */
   --background: var(--bg);
   --foreground: var(--text);
+
+  /* 네오브루탈리즘 (PWA + free-test 통합) */
+  --nb-bg: #F8F6F0;
+  --nb-border-color: rgb(15, 23, 42);
+  --nb-shadow: 4px 4px 0 0 rgba(15, 23, 42, 1);
+  --nb-shadow-pressed: 2px 2px 0 0 rgba(15, 23, 42, 1);
+  --nb-orange: #FB923C;
+  --nb-orange-500: #f97316;
+  --nb-slate: #0F172A;
 }
 
 /* 폰트 프리셋 전환 (dataset 기반, html scope) */

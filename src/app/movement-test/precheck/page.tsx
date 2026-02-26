@@ -6,6 +6,7 @@
  */
 import { useRouter } from 'next/navigation';
 import { useState, useCallback, useEffect } from 'react';
+import { NeoButton, NeoCard, NeoPageLayout } from '@/components/neobrutalism';
 
 const KEY = 'movementTestSession:v2';
 
@@ -45,15 +46,15 @@ const EXP_OPTIONS = [
 
 const inputClass = `
   w-full min-h-[44px]
-  rounded-[var(--radius)]
-  bg-[var(--surface)]
-  border border-[color:var(--border)]
+  rounded-2xl
+  bg-white
+  border-2 border-slate-900
   px-3 py-2
-  text-sm sm:text-base text-[var(--text)]
-  placeholder:text-[var(--muted)]
-  shadow-[var(--shadow-0)]
+  text-sm sm:text-base text-slate-800
+  placeholder:text-slate-400
+  shadow-[2px_2px_0_0_rgba(15,23,42,1)]
   focus:outline-none
-  focus:ring-2 focus:ring-[var(--brand)]
+  focus:ring-2 focus:ring-orange-400
 `;
 
 export default function PrecheckPage() {
@@ -110,68 +111,42 @@ export default function PrecheckPage() {
   }, [profile, router]);
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] overflow-x-hidden">
+    <NeoPageLayout maxWidth="lg">
       {/* Hero/Header */}
-      <section className="py-10 sm:py-12 md:py-16">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto text-center">
-            <h1
-              className="text-3xl sm:text-4xl md:text-5xl font-bold text-[var(--text)] mb-3"
-              style={{ fontFamily: 'var(--font-display)' }}
-            >
-              무료 움직임 테스트
-            </h1>
+      <section className="py-10 sm:py-12 md:py-16 text-center">
+        <h1
+          className="text-3xl sm:text-4xl md:text-5xl font-bold text-slate-800 mb-3"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
+          무료 움직임 테스트
+        </h1>
 
-            <p className="text-xs sm:text-sm text-[var(--muted)] leading-relaxed whitespace-normal break-keep mb-6">
-              본 테스트는 의학적 분석이 아닌, 움직임의 경향도를 체크하는 테스트입니다.
-            </p>
+        <p className="text-xs sm:text-sm text-slate-600 leading-relaxed whitespace-normal break-keep mb-6">
+          본 테스트는 의학적 진단이 아닌, 움직임의 경향도를 체크하는 테스트입니다.
+        </p>
 
-            <button
-              type="button"
-              onClick={() => setGuideOpen(true)}
-              className="
-                inline-flex items-center justify-center
-                w-full sm:w-auto
-                min-h-[44px]
-                rounded-[var(--radius)]
-                bg-[var(--brand)] text-white
-                px-6 py-3 font-semibold
-                shadow-[var(--shadow-0)]
-                transition-all duration-200
-                hover:opacity-95
-                whitespace-normal break-keep
-              "
-            >
-              정확도를 높이기 위한 1분 자가 테스트 방법
-            </button>
+        <NeoButton
+          variant="orange"
+          className="w-full sm:w-auto min-h-[44px] px-6 py-3 whitespace-normal break-keep"
+          onClick={() => setGuideOpen(true)}
+        >
+          정확도를 높이기 위한 1분 자가 테스트 방법
+        </NeoButton>
 
-            <p className="mt-3 text-xs text-[var(--muted)]">
-              클릭하면 팝업으로 열려요.
-            </p>
-          </div>
-        </div>
+        <p className="mt-3 text-xs text-slate-500">클릭하면 팝업으로 열려요.</p>
       </section>
 
-      <div className="container mx-auto px-4 pb-10 sm:pb-12 md:pb-16">
-        <div className="max-w-2xl md:max-w-4xl mx-auto">
+      <div className="pb-10 sm:pb-12 md:pb-16 space-y-8">
           {/* 프로필 입력 메인 카드 */}
-          <section className="mb-8">
-            <div
-              className="
-                rounded-[var(--radius)]
-                bg-[var(--surface)]
-                border border-[color:var(--border)]
-                shadow-[var(--shadow-0)]
-                p-4 sm:p-6 md:p-8
-              "
-            >
-              <h2 className="text-lg sm:text-xl font-semibold text-[var(--text)] mb-4 sm:mb-6">
-                프로필 <span className="text-[var(--muted)] text-xs sm:text-sm font-normal">(선택)</span>
+          <section>
+            <NeoCard className="p-4 sm:p-6 md:p-8">
+              <h2 className="text-lg sm:text-xl font-semibold text-slate-800 mb-4 sm:mb-6">
+                프로필 <span className="text-slate-500 text-xs sm:text-sm font-normal">(선택)</span>
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs sm:text-sm md:text-base text-[var(--text)] font-semibold mb-1">
-                    나이 <span className="text-[var(--muted)] font-normal">(선택)</span>
+                  <label className="block text-xs sm:text-sm md:text-base text-slate-800 font-semibold mb-1">
+                    나이 <span className="text-slate-500 font-normal">(선택)</span>
                   </label>
                   <input
                     type="text"
@@ -183,8 +158,8 @@ export default function PrecheckPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs sm:text-sm md:text-base text-[var(--text)] font-semibold mb-1">
-                    성별 <span className="text-[var(--muted)] font-normal">(선택)</span>
+                  <label className="block text-xs sm:text-sm md:text-base text-slate-800 font-semibold mb-1">
+                    성별 <span className="text-slate-500 font-normal">(선택)</span>
                   </label>
                   <select
                     value={profile.gender}
@@ -197,8 +172,8 @@ export default function PrecheckPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs sm:text-sm md:text-base text-[var(--text)] font-semibold mb-1">
-                    키 (cm) <span className="text-[var(--muted)] font-normal">(선택)</span>
+                  <label className="block text-xs sm:text-sm md:text-base text-slate-800 font-semibold mb-1">
+                    키 (cm) <span className="text-slate-500 font-normal">(선택)</span>
                   </label>
                   <input
                     type="text"
@@ -210,8 +185,8 @@ export default function PrecheckPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs sm:text-sm md:text-base text-[var(--text)] font-semibold mb-1">
-                    체중 (kg) <span className="text-[var(--muted)] font-normal">(선택)</span>
+                  <label className="block text-xs sm:text-sm md:text-base text-slate-800 font-semibold mb-1">
+                    체중 (kg) <span className="text-slate-500 font-normal">(선택)</span>
                   </label>
                   <input
                     type="text"
@@ -223,14 +198,14 @@ export default function PrecheckPage() {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-xs sm:text-sm md:text-base text-[var(--text)] font-semibold mb-1">
-                    운동경험 <span className="text-[var(--muted)] font-normal">(선택)</span>
+                  <label className="block text-xs sm:text-sm md:text-base text-slate-800 font-semibold mb-1">
+                    운동경험 <span className="text-slate-500 font-normal">(선택)</span>
                   </label>
                   <div className="space-y-2">
                     {EXP_OPTIONS.map((o) => (
                       <label
                         key={o.value}
-                        className="flex items-center gap-3 min-h-[44px] p-3 rounded-[var(--radius)] border border-[color:var(--border)] bg-[var(--surface)] cursor-pointer hover:border-[color:var(--brand)]"
+                        className="flex items-center gap-3 min-h-[44px] p-3 rounded-2xl border-2 border-slate-900 bg-white cursor-pointer hover:border-orange-400 shadow-[2px_2px_0_0_rgba(15,23,42,1)]"
                       >
                         <input
                           type="radio"
@@ -243,12 +218,12 @@ export default function PrecheckPage() {
                               expLevel: String(o.value) as '0' | '1' | '2',
                             }))
                           }
-                          className="rounded-full border-[color:var(--border)] text-[var(--brand)] focus:ring-[var(--brand)]"
+                          className="rounded-full border-slate-900 text-orange-500 focus:ring-orange-400"
                         />
-                        <span className="text-sm sm:text-base text-[var(--text)] font-medium whitespace-normal break-keep">
+                        <span className="text-sm sm:text-base text-slate-800 font-medium whitespace-normal break-keep">
                           {o.label}
                         </span>
-                        <span className="text-xs sm:text-sm text-[var(--muted)] whitespace-normal break-keep">
+                        <span className="text-xs sm:text-sm text-slate-600 whitespace-normal break-keep">
                           {o.desc}
                         </span>
                       </label>
@@ -256,8 +231,8 @@ export default function PrecheckPage() {
                   </div>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-xs sm:text-sm md:text-base text-[var(--text)] font-semibold mb-1">
-                    MBTI <span className="text-[var(--muted)] font-normal">(선택)</span>
+                  <label className="block text-xs sm:text-sm md:text-base text-slate-800 font-semibold mb-1">
+                    MBTI <span className="text-slate-500 font-normal">(선택)</span>
                   </label>
                   <input
                     type="text"
@@ -271,30 +246,19 @@ export default function PrecheckPage() {
                   />
                 </div>
               </div>
-            </div>
+            </NeoCard>
           </section>
 
           {/* CTA */}
           <section className="text-center">
-            <button
-              type="button"
+            <NeoButton
+              variant="orange"
+              className="w-full sm:w-auto min-h-[44px] px-8 py-4 text-sm sm:text-base"
               onClick={handleNext}
-              className="
-                w-full sm:w-auto min-h-[44px]
-                inline-flex items-center justify-center
-                rounded-[var(--radius)]
-                bg-[var(--brand)] text-white
-                px-8 py-4
-                text-sm sm:text-base font-bold
-                shadow-[var(--shadow-0)]
-                transition-all duration-200
-                hover:opacity-95
-              "
             >
               다음
-            </button>
+            </NeoButton>
           </section>
-        </div>
       </div>
 
       {/* 모달 */}
@@ -314,60 +278,46 @@ export default function PrecheckPage() {
             aria-labelledby="modal-title"
           >
             <div
-              className="
-                pointer-events-auto
-                max-w-lg w-[92%] sm:w-full
-                max-h-[80vh] overflow-auto
-                rounded-[var(--radius)]
-                bg-[var(--surface)]
-                border border-[color:var(--border)]
-                shadow-[var(--shadow-0)]
-                relative
-              "
+              className="pointer-events-auto max-w-lg w-[92%] sm:w-full max-h-[80vh] overflow-auto rounded-2xl border-2 border-slate-900 bg-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] relative"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="sticky top-0 z-10 flex justify-end p-3 bg-[var(--surface)] border-b border-[color:var(--border)]">
+              <div className="sticky top-0 z-10 flex justify-end p-3 bg-white border-b-2 border-slate-900">
                 <button
                   type="button"
                   onClick={() => setGuideOpen(false)}
-                  className="
-                    min-w-[44px] min-h-[44px]
-                    flex items-center justify-center
-                    rounded-[var(--radius)]
-                    text-[var(--muted)] hover:text-[var(--text)]
-                  "
+                  className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-2xl text-slate-500 hover:text-slate-800"
                   aria-label="닫기"
                 >
                   ✕
                 </button>
               </div>
               <div className="p-4 sm:p-6">
-                <h2 id="modal-title" className="text-lg font-bold text-[var(--text)] mb-4 whitespace-normal break-keep">
+                <h2 id="modal-title" className="text-lg font-bold text-slate-800 mb-4 whitespace-normal break-keep">
                   정확도를 높이기 위한 1분 자가 테스트 방법
                 </h2>
                 <div className="space-y-4">
                   {MODAL_CHECKS.map((item) => (
                     <details
                       key={item.title}
-                      className="rounded-[var(--radius)] border border-[color:var(--border)] overflow-hidden"
+                      className="rounded-2xl border-2 border-slate-900 overflow-hidden bg-white shadow-[2px_2px_0_0_rgba(15,23,42,1)]"
                     >
-                      <summary className="flex items-center gap-2 p-3 cursor-pointer list-none bg-[var(--bg)] hover:bg-[var(--surface)]">
+                      <summary className="flex items-center gap-2 p-3 cursor-pointer list-none bg-[#F8F6F0] hover:bg-white">
                         <span className="text-xl">{item.icon}</span>
-                        <span className="font-semibold text-[var(--text)] whitespace-normal break-keep">
+                        <span className="font-semibold text-slate-800 whitespace-normal break-keep">
                           {item.title}
                         </span>
                       </summary>
                       <div className="p-3 pt-0 space-y-2">
-                        <p className="text-xs sm:text-sm font-medium text-[var(--text)]">따라하기:</p>
-                        <ul className="text-xs sm:text-sm text-[var(--muted)] list-disc list-inside space-y-0.5 whitespace-normal break-keep">
+                        <p className="text-xs sm:text-sm font-medium text-slate-800">따라하기:</p>
+                        <ul className="text-xs sm:text-sm text-slate-600 list-disc list-inside space-y-0.5 whitespace-normal break-keep">
                           {item.steps.map((s, i) => (
                             <li key={i}>{s}</li>
                           ))}
                         </ul>
-                        <p className="text-xs sm:text-sm font-medium text-[var(--text)] pt-1">
+                        <p className="text-xs sm:text-sm font-medium text-slate-800 pt-1">
                           체크 포인트:
                         </p>
-                        <ul className="text-xs sm:text-sm text-[var(--muted)] space-y-1 whitespace-normal break-keep">
+                        <ul className="text-xs sm:text-sm text-slate-600 space-y-1 whitespace-normal break-keep">
                           {item.checkPoints.map((c, i) => (
                             <li key={i} className="flex gap-2">
                               <span className="shrink-0">☐</span>
@@ -379,7 +329,7 @@ export default function PrecheckPage() {
                     </details>
                   ))}
                 </div>
-                <p className="mt-4 text-xs sm:text-sm text-[var(--muted)] text-center whitespace-normal break-keep">
+                <p className="mt-4 text-xs sm:text-sm text-slate-600 text-center whitespace-normal break-keep">
                   방금 느낀 감각을 기억한 채로 다음 설문을 진행해요.
                 </p>
               </div>
@@ -387,6 +337,6 @@ export default function PrecheckPage() {
           </div>
         </>
       )}
-    </div>
+    </NeoPageLayout>
   );
 }
