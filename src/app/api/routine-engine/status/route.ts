@@ -4,10 +4,12 @@
  * GET /api/routine-engine/status
  *
  * 서버에서 24h/48h 듀얼 타이머를 평가하여 현재 상태를 반환합니다.
+ * todayCompletedForDay: current_day에 대한 완료 기록 존재 여부
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAndUpdateRoutineStatus } from '@/lib/routine-engine';
+import { getServerSupabaseAdmin } from '@/lib/supabase';
 
 async function getCurrentUserId(req: NextRequest): Promise<string | null> {
   const authHeader = req.headers.get('authorization');
@@ -36,12 +38,32 @@ export async function GET(req: NextRequest) {
     const result = await checkAndUpdateRoutineStatus(userId);
     const server_now_utc = new Date().toISOString();
 
-    return NextResponse.json({
+    const supabase = getServerSupabaseAdmin();
+    const { data: completionRow } = await supabase
+      .from('routine_completions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('day_number', result.state.currentDay)
+      .limit(1)
+      .maybeSingle();
+
+    const todayCompletedForDay = !!completionRow;
+
+    console.log('[routine-status] ok', {
+      computed_state: result.state.status,
+      todayCompletedForDay,
+    });
+
+    const res = NextResponse.json({
       success: true,
       state: result.state,
       changed: result.changed,
       server_now_utc,
+      todayCompletedForDay,
     });
+
+    res.headers.set('Cache-Control', 'no-store');
+    return res;
   } catch (err) {
     console.error('[routine-engine/status] error:', err);
     return NextResponse.json(
