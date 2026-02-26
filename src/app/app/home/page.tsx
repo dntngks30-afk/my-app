@@ -1,6 +1,7 @@
 'use client';
 
-import Link from 'next/link';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   SlidersHorizontal,
   Check,
@@ -8,6 +9,7 @@ import {
   ArrowRight,
   AlertTriangle,
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { useRoutineStatus } from '@/features/routine/hooks/useRoutineStatus';
 
 const DAYS = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -24,9 +26,28 @@ function getDayStatus(
 }
 
 export default function ResetHomePage() {
+  const router = useRouter();
   const { state, countdown, loading, error } = useRoutineStatus();
   const currentDay = state?.currentDay ?? 1;
   const isCompleted = state?.status === 'COMPLETED';
+  const [isStarting, setIsStarting] = useState(false);
+
+  const handleStartClick = async (day: number) => {
+    setIsStarting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      const res = await fetch('/api/routine-engine/activate', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (res.ok) {
+        router.push(`/app/routine/player?day=${day}`);
+      }
+    } finally {
+      setIsStarting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#f8f6f0] pb-20">
@@ -97,6 +118,8 @@ export default function ResetHomePage() {
               status={state?.status ?? 'READY'}
               currentDay={currentDay}
               countdown={countdown}
+              onStartClick={handleStartClick}
+              isStarting={isStarting}
             />
           )}
           {!loading && !error && (
@@ -132,9 +155,11 @@ type MainCtaProps = {
   status: string;
   currentDay: number;
   countdown: string | null;
+  onStartClick: (day: number) => void;
+  isStarting: boolean;
 };
 
-function MainCta({ status, currentDay, countdown }: MainCtaProps) {
+function MainCta({ status, currentDay, countdown, onStartClick, isStarting }: MainCtaProps) {
   const isLocked = status === 'LOCKED';
   const isCompleted = status === 'COMPLETED';
 
@@ -170,20 +195,22 @@ function MainCta({ status, currentDay, countdown }: MainCtaProps) {
   }
 
   return (
-    <Link
-      href={`/app/routine/player?day=${currentDay}`}
-      className="flex items-center gap-4 rounded-full border-2 border-slate-900 bg-white px-6 py-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)]"
+    <button
+      type="button"
+      onClick={() => onStartClick(currentDay)}
+      disabled={isStarting}
+      className="flex w-full items-center gap-4 rounded-full border-2 border-slate-900 bg-white px-6 py-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)] disabled:cursor-not-allowed disabled:opacity-70"
     >
       <div className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-slate-800 bg-slate-800">
         <Play className="size-6 text-white" fill="currentColor" strokeWidth={0} />
       </div>
       <span className="flex-1 text-left text-lg font-bold text-slate-800">
-        Day {currentDay} 리셋 시작하기
+        {isStarting ? '루틴 준비 중...' : `Day ${currentDay} 리셋 시작하기`}
       </span>
       <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-400">
         <ArrowRight className="size-5 text-white" strokeWidth={2.5} />
       </div>
-    </Link>
+    </button>
   );
 }
 
