@@ -193,7 +193,11 @@ export async function generateDayPlan(
   routineId: string,
   dayNumber: number,
   dailyCondition: DailyCondition | null,
-  opts?: { forceRegenerate?: boolean; preloadedContext?: GenerateDayPlanPreloadedContext }
+  opts?: {
+    forceRegenerate?: boolean;
+    preloadedContext?: GenerateDayPlanPreloadedContext;
+    intensityScale?: number;
+  }
 ): Promise<GenerateDayPlanResult> {
   const supabase = getServerSupabaseAdmin();
 
@@ -280,7 +284,9 @@ export async function generateDayPlan(
   const deepResult = await loadDeepResultForUser(userId);
 
   const baseLevel = deepResult?.level ?? 1;
-  const level = getEffectiveLevel(baseLevel, dailyCondition);
+  const intensityScale = opts?.intensityScale ?? 1.0;
+  const scaledLevel = Math.max(1, Math.min(3, Math.round(baseLevel * intensityScale)));
+  const level = getEffectiveLevel(scaledLevel, dailyCondition);
   const focusTags = deepResult?.focus_tags ?? [];
   const avoidTags = [...(deepResult?.avoid_tags ?? []), ...getExtraConstraints(dailyCondition ?? undefined)];
 
@@ -379,6 +385,7 @@ export async function generateDayPlan(
       safety_mode: safetyMode,
       safety_reason: safetyReason,
       revision_no: nextRevisionNo,
+      intensity_scale: intensityScale,
     },
     { onConflict: 'routine_id,day_number' }
   );
