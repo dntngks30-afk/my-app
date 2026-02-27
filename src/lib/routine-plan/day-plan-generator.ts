@@ -74,6 +74,17 @@ const DAY_THEMES: ReadonlyArray<{
 
 const FALLBACK_IDS = ['M01', 'M28'];
 
+/** 재생성 트리거 사유 */
+export type RegenReason =
+  | 'user_request'
+  | 'pain_delta'
+  | 'condition_new'
+  | 'condition_null_to_value';
+
+const PAIN_DELTA_THRESHOLD = 3;
+const PAIN_SAFE_THRESHOLD = 5;
+const STIFFNESS_SAFE_THRESHOLD = 6;
+
 function computePlanHash(ids: string[]): string {
   const sorted = [...ids].sort();
   return sorted.join(',');
@@ -86,6 +97,25 @@ function getExtraConstraints(dailyCondition?: DailyCondition): string[] {
     return ['knee_load', 'wrist_load', 'shoulder_overhead'];
   }
   return [];
+}
+
+/** 안전모드: pain/stiffness 기준 level downshift */
+function getEffectiveLevel(
+  baseLevel: number,
+  dailyCondition?: DailyCondition | null
+): number {
+  const pain = dailyCondition?.pain_today ?? 0;
+  const stiffness = dailyCondition?.stiffness ?? 0;
+  if (pain >= PAIN_SAFE_THRESHOLD || stiffness >= STIFFNESS_SAFE_THRESHOLD) {
+    return Math.max(1, baseLevel - 1);
+  }
+  return baseLevel;
+}
+
+/** 안전모드: time_available <= 10 → 최대 2개 템플릿 */
+function getMaxTemplates(dailyCondition?: DailyCondition | null): number {
+  const time = dailyCondition?.time_available ?? 15;
+  return time <= 10 ? 2 : 3;
 }
 
 
@@ -121,12 +151,37 @@ export async function loadDeepResultForUser(
   };
 }
 
+export type GenerateDayPlanResult = {
+  plan: DayPlanRow;
+  regenerated: boolean;
+  regen_reason?: RegenReason;
+};
+
+function computeRegenReason(
+  opts: { forceRegenerate?: boolean },
+  existing: { data: { daily_condition_snapshot: unknown } | null },
+  dailyCondition: DailyCondition | null
+): RegenReason | undefined {
+  if (opts?.forceRegenerate) return 'user_request';
+  if (!existing.data) return 'condition_new';
+
+  const prev = existing.data.daily_condition_snapshot as DailyCondition | null;
+  const prevPain = prev?.pain_today ?? null;
+  const currPain = dailyCondition?.pain_today ?? null;
+
+  if (prev === null && dailyCondition !== null) return 'condition_null_to_value';
+  if (prevPain != null && currPain != null && Math.abs(currPain - prevPain) >= PAIN_DELTA_THRESHOLD) {
+    return 'pain_delta';
+  }
+  return undefined;
+}
+
 export async function generateDayPlan(
   routineId: string,
   dayNumber: number,
   dailyCondition: DailyCondition | null,
   opts?: { forceRegenerate?: boolean }
-): Promise<DayPlanRow> {
+): Promise<GenerateDayPlanResult> {
   const supabase = getServerSupabaseAdmin();
 
   const routine = await supabase
@@ -153,15 +208,16 @@ export async function generateDayPlan(
     if (!existing.data) return true;
 
     const prev = existing.data.daily_condition_snapshot as DailyCondition | null;
-    const prevPain = prev?.pain_today ?? 0;
-    const currPain = dailyCondition?.pain_today ?? 0;
-    if (Math.abs(currPain - prevPain) >= 3) return true;
+    const prevPain = prev?.pain_today ?? null;
+    const currPain = dailyCondition?.pain_today ?? null;
+    if (prev === null && dailyCondition !== null) return true;
+    if (prevPain != null && currPain != null && Math.abs(currPain - prevPain) >= PAIN_DELTA_THRESHOLD) return true;
 
     return false;
   };
 
   if (existing.data && !shouldRegenerate()) {
-    return {
+    const plan = {
       routine_id: existing.data.routine_id,
       day_number: existing.data.day_number,
       selected_template_ids: existing.data.selected_template_ids,
@@ -172,11 +228,15 @@ export async function generateDayPlan(
       daily_condition_snapshot: existing.data.daily_condition_snapshot,
       plan_hash: existing.data.plan_hash ?? '',
     } as DayPlanRow;
+    return { plan, regenerated: false };
   }
+
+  const regenReason = computeRegenReason(opts ?? {}, existing, dailyCondition);
 
   const deepResult = await loadDeepResultForUser(userId);
 
-  const level = deepResult?.level ?? 1;
+  const baseLevel = deepResult?.level ?? 1;
+  const level = getEffectiveLevel(baseLevel, dailyCondition);
   const focusTags = deepResult?.focus_tags ?? [];
   const avoidTags = [...(deepResult?.avoid_tags ?? []), ...getExtraConstraints(dailyCondition ?? undefined)];
 
@@ -184,7 +244,6 @@ export async function generateDayPlan(
 
   pool = applySafetyFilter(pool, avoidTags);
   pool = applyLevelFilter(pool, level);
-  // duration filter: exercise_templates.duration_sec default 300. time_available 5/10/15 min → 2~3 templates fit
 
   const theme = DAY_THEMES[dayNumber - 1];
   const themeTags = theme.primaryTags.length > 0
@@ -196,11 +255,12 @@ export async function generateDayPlan(
 
   let scored = scoreByFocusTags(pool, themeTags);
 
+  const maxTemplates = getMaxTemplates(dailyCondition);
   const selected: ExerciseTemplate[] = [];
   const usedTags = new Set<string>();
 
   for (const t of scored) {
-    if (selected.length >= 3) break;
+    if (selected.length >= maxTemplates) break;
 
     const tTags = new Set(t.focus_tags);
     const overlap = [...tTags].filter((tag) => usedTags.has(tag)).length;
@@ -249,6 +309,7 @@ export async function generateDayPlan(
   };
 
   const oldHash = existing.data?.plan_hash ?? null;
+  const auditReason = regenReason ?? 'daily_condition_change';
 
   await supabase.from('routine_day_plans').upsert(
     {
@@ -272,11 +333,11 @@ export async function generateDayPlan(
       day_number: dayNumber,
       old_plan_hash: oldHash,
       new_plan_hash: planHash,
-      reason: opts?.forceRegenerate ? 'user_request' : 'daily_condition_change',
+      reason: auditReason,
     });
   }
 
-  return planRow;
+  return { plan: planRow, regenerated: true, regen_reason: regenReason };
 }
 
 export async function getDayPlan(

@@ -49,13 +49,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
-    const plan = await generateDayPlan(
+    const result = await generateDayPlan(
       routineId,
       day,
       dailyCondition ?? null,
       { forceRegenerate: !!forceRegenerate }
     );
 
+    const { plan, regenerated, regen_reason } = result;
     const res = NextResponse.json({
       success: true,
       plan: {
@@ -68,6 +69,8 @@ export async function POST(req: NextRequest) {
         scoring_version: plan.scoring_version,
         created_at_utc: new Date().toISOString(),
       },
+      regenerated,
+      ...(regen_reason && { regen_reason }),
     });
     res.headers.set('Cache-Control', 'no-store, max-age=0');
     return res;
