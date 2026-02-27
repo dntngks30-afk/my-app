@@ -51,10 +51,13 @@ export async function GET(req: NextRequest) {
     const baseAtUtc = result.state.lastActivatedAt;
     let lock_until_utc: string | null = null;
     let auto_advance_at_utc: string | null = null;
+    let rest_recommended = false;
     if (baseAtUtc) {
       const baseMs = new Date(baseAtUtc).getTime();
+      const elapsed = Date.now() - baseMs;
       lock_until_utc = new Date(baseMs + MS_24H).toISOString();
       auto_advance_at_utc = new Date(baseMs + MS_48H).toISOString();
+      rest_recommended = elapsed < MS_24H;
     }
 
     const supabase = getServerSupabaseAdmin();
@@ -85,6 +88,7 @@ export async function GET(req: NextRequest) {
       todayCompletedForDay,
       lock_until_utc,
       auto_advance_at_utc,
+      rest_recommended,
     });
 
     res.headers.set('Cache-Control', 'no-store, max-age=0');

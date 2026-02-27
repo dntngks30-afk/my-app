@@ -9,7 +9,6 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 export type RoutineStatus = 'LOCKED' | 'READY' | 'ACTIVE' | 'COMPLETED';
 
 const MS_24H = 24 * 60 * 60 * 1000;
-const MS_48H = 48 * 60 * 60 * 1000;
 const MAX_DAY = 7;
 
 export interface RoutineState {
@@ -122,70 +121,22 @@ export async function checkAndUpdateRoutineStatus(
     return { state: mapToState(row), changed: false };
   }
 
-  // [24h 미만] LOCKED (다음 일차 미개방)
-  // ACTIVE였던 경우에도 홈으로 돌아오면 LOCKED로 전환 (타이머 노출)
+  // [24h 미만] 휴식 권장만 (서버 차단 없음). DB 업데이트하지 않음.
   if (elapsed < MS_24H) {
-    const nextStatus = row.status !== 'LOCKED' ? 'LOCKED' : row.status;
-    if (nextStatus !== row.status) {
-      await supabase
-        .from('user_routines')
-        .update({ status: 'LOCKED', updated_at: getServerNow().toISOString() })
-        .eq('id', row.id);
-    }
-    return {
-      state: mapToState({ ...row, status: 'LOCKED' }),
-      changed: nextStatus !== row.status,
-    };
+    return { state: mapToState(row), changed: false };
   }
 
-  // [24h ~ 48h] READY (수동 개방 가능)
-  if (elapsed < MS_48H) {
-    const nextStatus = row.status !== 'READY' ? 'READY' : row.status;
-    if (nextStatus !== row.status) {
-      await supabase
-        .from('user_routines')
-        .update({ status: 'READY', updated_at: getServerNow().toISOString() })
-        .eq('id', row.id);
-    }
-    return {
-      state: mapToState({ ...row, status: 'READY' }),
-      changed: nextStatus !== row.status,
-    };
+  // [24h 이상] READY (수동 개방 가능). 48h 자동 current_day 진행 제거됨.
+  const nextStatus = row.status !== 'READY' ? 'READY' : row.status;
+  if (nextStatus !== row.status) {
+    await supabase
+      .from('user_routines')
+      .update({ status: 'READY', updated_at: getServerNow().toISOString() })
+      .eq('id', row.id);
   }
-
-  // [48h 이상] 경과된 48h 사이클 수만큼 current_day 진행 (사용자 접속 여부와 무관하게 연속 적용)
-  const cycles = Math.floor(elapsed / MS_48H);
-  const newDay = Math.min(row.current_day + cycles, MAX_DAY);
-  const consumedMs = cycles * MS_48H;
-  const newLastActivatedAt = new Date(
-    new Date(row.last_activated_at as string).getTime() + consumedMs
-  ).toISOString();
-  const nextStatus = newDay >= MAX_DAY ? 'COMPLETED' : 'READY';
-
-  const { error: updateErr } = await supabase
-    .from('user_routines')
-    .update({
-      current_day: newDay,
-      last_activated_at: newLastActivatedAt,
-      status: nextStatus,
-      updated_at: getServerNow().toISOString(),
-    })
-    .eq('id', row.id);
-
-  if (updateErr) {
-    console.error('[routine-engine] 48h update error:', updateErr);
-    throw new Error('루틴 상태 갱신 실패');
-  }
-
-  const { data: updated } = await supabase
-    .from('user_routines')
-    .select()
-    .eq('id', row.id)
-    .single();
-
   return {
-    state: mapToState(updated ?? { ...row, current_day: newDay, status: nextStatus, last_activated_at: newLastActivatedAt }),
-    changed: true,
+    state: mapToState({ ...row, status: 'READY' }),
+    changed: nextStatus !== row.status,
   };
 }
 

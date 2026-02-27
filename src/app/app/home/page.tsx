@@ -29,7 +29,7 @@ function getDayStatus(
 
 export default function ResetHomePage() {
   const router = useRouter();
-  const { state, countdown, loading, error, todayCompletedForDay } =
+  const { state, countdown, restRecommended, loading, error, todayCompletedForDay } =
     useRoutineStatus();
   const currentDay = state?.currentDay ?? 1;
   const isCompleted = state?.status === 'COMPLETED';
@@ -41,8 +41,8 @@ export default function ResetHomePage() {
       ? 'COMPLETED'
       : todayCompletedForDay
         ? 'TODAY_COMPLETED'
-        : state?.status === 'LOCKED'
-          ? 'LOCKED'
+        : restRecommended
+          ? 'REST_RECOMMENDED'
           : state?.status === 'READY'
             ? 'READY'
             : 'ACTIVE';
@@ -223,6 +223,7 @@ export default function ResetHomePage() {
               status={state?.status ?? 'READY'}
               currentDay={currentDay}
               countdown={countdown}
+              restRecommended={restRecommended}
               todayCompletedForDay={todayCompletedForDay}
               onStartClick={handleStartClick}
               isStarting={isStarting}
@@ -263,6 +264,7 @@ type MainCtaProps = {
   status: string;
   currentDay: number;
   countdown: string | null;
+  restRecommended: boolean;
   todayCompletedForDay: boolean;
   onStartClick: (day: number) => void;
   isStarting: boolean;
@@ -272,12 +274,12 @@ function MainCta({
   status,
   currentDay,
   countdown,
+  restRecommended,
   todayCompletedForDay,
   onStartClick,
   isStarting,
 }: MainCtaProps) {
   const isCompleted = status === 'COMPLETED';
-  const isLocked = status === 'LOCKED';
 
   if (isCompleted) {
     return (
@@ -309,21 +311,29 @@ function MainCta({
     );
   }
 
-  if (isLocked) {
+  if (restRecommended) {
     return (
-      <div
-        className="flex items-center gap-4 rounded-full border-2 border-slate-900 bg-slate-200 px-6 py-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)] cursor-not-allowed opacity-90"
-        role="button"
-        tabIndex={-1}
-        aria-disabled
+      <button
+        type="button"
+        onClick={() => onStartClick(currentDay)}
+        disabled={isStarting}
+        className="flex w-full gap-4 rounded-full border-2 border-slate-900 bg-amber-50 px-6 py-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)] disabled:cursor-not-allowed disabled:opacity-70"
       >
-        <div className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-slate-600 bg-slate-500">
-          <Play className="size-6 text-white" fill="currentColor" strokeWidth={0} />
+        <div className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-amber-400 bg-amber-200">
+          <Play className="size-6 text-amber-800" fill="currentColor" strokeWidth={0} />
         </div>
-        <span className="flex-1 text-left text-lg font-bold text-slate-600">
-          휴식 중... ⏳ {countdown ?? '00:00:00'} 후 오픈
+        <span className="flex-1 text-left">
+          <span className="block text-lg font-bold text-slate-800">
+            Day {currentDay} 리셋 시작하기
+          </span>
+          <span className="block text-sm font-medium text-amber-700">
+            휴식 권장 ⏳ {countdown ?? '00:00:00'} 후 권장
+          </span>
         </span>
-      </div>
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-400">
+          <ArrowRight className="size-5 text-white" strokeWidth={2.5} />
+        </div>
+      </button>
     );
   }
 

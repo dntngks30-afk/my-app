@@ -30,6 +30,7 @@ function formatCountdownFromUtc(
 export interface UseRoutineStatusResult {
   state: RoutineState | null;
   countdown: string | null;
+  restRecommended: boolean;
   loading: boolean;
   error: string | null;
   todayCompletedForDay: boolean;
@@ -40,6 +41,7 @@ export interface UseRoutineStatusResult {
 export function useRoutineStatus(): UseRoutineStatusResult {
   const [state, setState] = useState<RoutineState | null>(null);
   const [countdown, setCountdown] = useState<string | null>(null);
+  const [restRecommended, setRestRecommended] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [todayCompletedForDay, setTodayCompletedForDay] = useState(false);
@@ -74,25 +76,22 @@ export function useRoutineStatus(): UseRoutineStatusResult {
       setTodayCompletedForDay(data.todayCompletedForDay === true);
       setServerNowUtc(data.server_now_utc ?? null);
       setLockUntilUtc(data.lock_until_utc ?? null);
+      setRestRecommended(data.rest_recommended === true);
       fetchTimeRef.current = Date.now();
 
-      if (s?.status === 'LOCKED') {
-        if (data.lock_until_utc && data.server_now_utc) {
-          setCountdown(
-            formatCountdownFromUtc(data.lock_until_utc, data.server_now_utc, 0)
-          );
-        } else if (s?.lastActivatedAt) {
-          const MS_24H = 24 * 60 * 60 * 1000;
-          const unlockAt = new Date(s.lastActivatedAt).getTime() + MS_24H;
-          const remainingMs = Math.max(0, unlockAt - Date.now());
-          const totalSeconds = Math.floor(remainingMs / 1000);
-          const h = Math.floor(totalSeconds / 3600);
-          const m = Math.floor((totalSeconds % 3600) / 60);
-          const sec = totalSeconds % 60;
-          setCountdown([h, m, sec].map((n) => String(n).padStart(2, '0')).join(':'));
-        } else {
-          setCountdown(null);
-        }
+      if (data.rest_recommended && s?.lastActivatedAt) {
+        const MS_24H = 24 * 60 * 60 * 1000;
+        const unlockAt = new Date(s.lastActivatedAt).getTime() + MS_24H;
+        const remainingMs = Math.max(0, unlockAt - Date.now());
+        const totalSeconds = Math.floor(remainingMs / 1000);
+        const h = Math.floor(totalSeconds / 3600);
+        const m = Math.floor((totalSeconds % 3600) / 60);
+        const sec = totalSeconds % 60;
+        setCountdown([h, m, sec].map((n) => String(n).padStart(2, '0')).join(':'));
+      } else if (data.rest_recommended && data.lock_until_utc && data.server_now_utc) {
+        setCountdown(
+          formatCountdownFromUtc(data.lock_until_utc, data.server_now_utc, 0)
+        );
       } else {
         setCountdown(null);
       }
@@ -108,6 +107,7 @@ export function useRoutineStatus(): UseRoutineStatusResult {
       setError(err instanceof Error ? err.message : String(err));
       setState(null);
       setCountdown(null);
+      setRestRecommended(false);
       setTodayCompletedForDay(false);
       setServerNowUtc(null);
       setLockUntilUtc(null);
@@ -164,6 +164,7 @@ export function useRoutineStatus(): UseRoutineStatusResult {
   return {
     state,
     countdown,
+    restRecommended,
     loading,
     error,
     todayCompletedForDay,
