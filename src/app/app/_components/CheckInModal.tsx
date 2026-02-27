@@ -21,6 +21,8 @@ type Props = {
   isSubmitting?: boolean;
   saveError?: string | null;
   saveSuccess?: boolean;
+  /** 운동 직후 컨텍스트 (postWorkout=1) */
+  isPostWorkout?: boolean;
 };
 
 export function CheckInModal({
@@ -31,6 +33,7 @@ export function CheckInModal({
   isSubmitting: isSubmittingProp,
   saveError = null,
   saveSuccess = false,
+  isPostWorkout = false,
 }: Props) {
   const [pain, setPain] = useState<number | null>(null);
   const [stiffness, setStiffness] = useState<number | null>(null);
@@ -67,7 +70,7 @@ export function CheckInModal({
       >
         <div className="flex items-center justify-between mb-4">
           <h2 id="checkin-title" className="text-lg font-bold text-slate-800">
-            오늘의 컨디션
+            {isPostWorkout ? '운동 직후 컨디션' : '오늘의 컨디션'}
           </h2>
           <button
             type="button"
@@ -80,7 +83,9 @@ export function CheckInModal({
         </div>
 
         <p className="text-sm text-slate-600 mb-4">
-          오늘의 상태를 간단히 알려주세요 (선택)
+          {isPostWorkout
+            ? '운동 직후 상태를 알려주세요. 다음 날 플랜 조정에 활용됩니다.'
+            : '오늘의 상태를 간단히 알려주세요 (선택)'}
         </p>
 
         {saveError && (

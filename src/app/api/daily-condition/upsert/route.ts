@@ -2,7 +2,8 @@
  * POST /api/daily-condition/upsert
  * 오늘(서버 UTC 기준) 컨디션 멱등 업서트
  * Bearer only, no-store
- * Body: { pain_today?, stiffness?, sleep?, time_available_min?, equipment_available? }
+ * Body: { pain_today?, stiffness?, sleep?, time_available_min?, equipment_available?, source? }
+ * source: 'post_workout' | 'checkin' | 'pre_start' (default: 'checkin')
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -34,6 +35,16 @@ function validateEquipment(v: unknown): string[] | null {
   if (v === null || v === undefined) return null;
   if (!Array.isArray(v)) return null;
   return v.filter((x): x is string => typeof x === 'string');
+}
+
+const VALID_SOURCE = ['post_workout', 'checkin', 'pre_start'] as const;
+
+function validateSource(v: unknown): (typeof VALID_SOURCE)[number] | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v !== 'string') return null;
+  return VALID_SOURCE.includes(v as (typeof VALID_SOURCE)[number])
+    ? (v as (typeof VALID_SOURCE)[number])
+    : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -90,6 +101,7 @@ export async function POST(req: NextRequest) {
     sleep: sleep ?? null,
     time_available_min: time_available_min ?? null,
     equipment_available: equipment_available ?? [],
+    source,
   };
 
   const supabase = getServerSupabaseAdmin();

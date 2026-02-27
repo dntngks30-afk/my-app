@@ -39,6 +39,7 @@ export default function CheckinPage() {
   const searchParams = useSearchParams();
   const nextUrl = searchParams.get('next');
   const postWorkout = searchParams.get('postWorkout') === '1';
+  const [isPostWorkoutContext, setIsPostWorkoutContext] = useState(false);
   const [report, setReport] = useState<WeeklyReport | null>(null);
   const [reportLoading, setReportLoading] = useState(true);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -139,6 +140,7 @@ export default function CheckinPage() {
         router.replace(cleanPath);
         if (cancelled) return;
         if (!condition) {
+          setIsPostWorkoutContext(true);
           setShowConditionModal(true);
           console.log('[CHECKIN_MODAL_AUTO_OPEN]', { source: 'postWorkout' });
         }
@@ -162,6 +164,10 @@ export default function CheckinPage() {
     if (!session?.access_token) return;
     setIsSubmitting(true);
     setSaveError(null);
+    const payload = {
+      ...values,
+      source: isPostWorkoutContext ? 'post_workout' : 'checkin',
+    };
     try {
       const res = await fetch('/api/daily-condition/upsert', {
         method: 'POST',
@@ -170,7 +176,7 @@ export default function CheckinPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -266,22 +272,19 @@ export default function CheckinPage() {
 
       {showConditionModal && (
         <CheckInModal
+          isPostWorkout={isPostWorkoutContext}
           submitLabel={nextUrl ? '저장 후 계속하기' : '저장'}
           isSubmitting={isSubmitting}
           onSubmit={handleConditionSubmit}
           onSkip={() => {
             setShowConditionModal(false);
             setSaveError(null);
-            if (postWorkout) {
-              router.replace('/app/checkin' + (nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ''));
-            }
+            setIsPostWorkoutContext(false);
           }}
           onClose={() => {
             setShowConditionModal(false);
             setSaveError(null);
-            if (postWorkout) {
-              router.replace('/app/checkin' + (nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ''));
-            }
+            setIsPostWorkoutContext(false);
           }}
           saveError={saveError}
           saveSuccess={saveSuccess}
