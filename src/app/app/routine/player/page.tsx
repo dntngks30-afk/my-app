@@ -176,6 +176,9 @@ export default function RoutinePlayerPage() {
   const [planLoading, setPlanLoading] = useState(true);
   const [planError, setPlanError] = useState<string | null>(null);
   const [planEmpty, setPlanEmpty] = useState(false);
+  const [planErrorText, setPlanErrorText] = useState<string | null>(null);
+  const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [planRetryCount, setPlanRetryCount] = useState(0);
   const authCheckedRef = useRef(false);
   const segmentCount = segments.length;
 
@@ -234,6 +237,7 @@ export default function RoutinePlayerPage() {
     }
     setPlanEmpty(false);
     setPlanError(null);
+    setPlanErrorText(null);
     autoGenerateAttemptedRef.current = false;
     let cancelled = false;
     const run = async () => {
@@ -270,17 +274,8 @@ export default function RoutinePlayerPage() {
             return;
           }
           autoGenerateAttemptedRef.current = true;
+          setGeneratingPlan(true);
           console.log('[PLAYER_AUTO_GENERATE_START]', { routineId, dayNumber });
-          const todayRes = await fetch('/api/daily-condition/today', opts);
-          const todayData = await todayRes.json().catch(() => ({}));
-          if (cancelled) return;
-          const condition = todayData?.condition ?? null;
-          if (!condition) {
-            console.log('[PLAYER_AUTO_GENERATE_SKIP]', { reason: 'no_condition' });
-            setPlanEmpty(true);
-            setPlanLoading(false);
-            return;
-          }
           const genRes = await fetch('/api/routine-plan/generate', {
             method: 'POST',
             cache: 'no-store',
@@ -292,11 +287,15 @@ export default function RoutinePlayerPage() {
           });
           if (cancelled) return;
           if (!genRes.ok) {
+            const genBody = await genRes.json().catch(() => ({}));
             console.warn('[PLAYER_AUTO_GENERATE_FAIL]', { status: genRes.status });
+            setPlanErrorText(genBody?.error ?? genBody?.details ?? '플랜 생성에 실패했습니다.');
             setPlanEmpty(true);
+            setGeneratingPlan(false);
             setPlanLoading(false);
             return;
           }
+          setGeneratingPlan(false);
           console.log('[PLAYER_AUTO_GENERATE_SUCCESS]');
           const planRes2 = await fetch(
             `/api/routine-plan/get?routineId=${encodeURIComponent(routineId)}&dayNumber=${dayNumber}`,
@@ -306,6 +305,7 @@ export default function RoutinePlayerPage() {
           if (cancelled) return;
           const plan2 = planData2?.plan;
           if (!plan2?.selected_template_ids?.length) {
+            setPlanErrorText('플랜 생성 후 조회에 실패했습니다.');
             setPlanEmpty(true);
             setPlanLoading(false);
             return;
@@ -453,7 +453,7 @@ export default function RoutinePlayerPage() {
     };
     run();
     return () => { cancelled = true; };
-  }, [routineId, dayNumber]);
+  }, [routineId, dayNumber, planRetryCount]);
 
   const TOTAL_DURATION_MS = useMemo(
     () => segments.reduce((acc, s) => acc + s.durationSec, 0) * 1000,
@@ -734,7 +734,9 @@ export default function RoutinePlayerPage() {
     return (
       <div className="min-h-screen bg-[#F8F6F0] flex flex-col items-center justify-center px-4">
         <div className="animate-pulse rounded-2xl bg-slate-200 h-32 w-full max-w-sm mb-4" />
-        <p className="text-slate-600">루틴을 불러오는 중...</p>
+        <p className="text-slate-600">
+          {generatingPlan ? '오늘 루틴을 준비 중이에요.' : '루틴을 불러오는 중...'}
+        </p>
       </div>
     );
   }
@@ -756,30 +758,43 @@ export default function RoutinePlayerPage() {
 
   if (planEmpty) {
     const playerUrl = `/app/routine/player?routineId=${encodeURIComponent(routineId)}&day=${dayNumber}`;
-    const checkinUrl = `/app/checkin?reason=need-today-checkin&next=${encodeURIComponent(playerUrl)}`;
+    const checkinUrl = `/app/checkin?postWorkout=0&next=${encodeURIComponent(playerUrl)}`;
+    const handleRetry = () => {
+      setPlanEmpty(false);
+      setPlanLoading(true);
+      setPlanErrorText(null);
+      setPlanRetryCount((c) => c + 1);
+    };
     return (
       <div className="min-h-screen bg-[#F8F6F0] flex flex-col items-center justify-center px-4">
         <div className="max-w-md w-full rounded-2xl border-2 border-slate-900 bg-white p-6 shadow-[4px_4px_0_0_rgba(15,23,42,1)]">
           <h2 className="text-lg font-bold text-slate-800 mb-2">
-            오늘 루틴 플랜이 아직 생성되지 않았어요.
+            {planErrorText ? '플랜 생성에 실패했어요.' : '플랜을 불러오지 못했어요.'}
           </h2>
           <p className="text-sm text-slate-600 mb-6">
-            오늘의 컨디션을 먼저 기록하면 맞춤 플랜을 만들 수 있어요.
+            {planErrorText ?? '다시 시도해 주세요.'}
           </p>
           <div className="flex flex-col gap-3">
             <button
               type="button"
-              onClick={() => router.push(checkinUrl)}
+              onClick={handleRetry}
               className="min-h-[44px] w-full px-6 py-3 rounded-full border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95"
             >
-              기록으로 이동
+              플랜 다시 생성하기
             </button>
             <button
               type="button"
-              onClick={() => window.location.reload()}
+              onClick={() => router.push(checkinUrl)}
               className="min-h-[44px] w-full px-6 py-3 rounded-full border-2 border-slate-900 bg-white font-bold text-slate-800 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95"
             >
-              다시 불러오기
+              컨디션 기록하기
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/app/routine')}
+              className="min-h-[44px] w-full px-6 py-3 rounded-full border-2 border-slate-300 bg-white font-bold text-slate-600 shadow-[2px_2px_0_0_rgba(15,23,42,0.3)] transition hover:opacity-95"
+            >
+              루틴 목록으로
             </button>
           </div>
         </div>

@@ -15,14 +15,6 @@ import BottomNav from '../_components/BottomNav';
 
 const DAYS = [1, 2, 3, 4, 5, 6, 7] as const;
 
-type TodayCondition = {
-  id: string;
-  pain_today: number | null;
-  stiffness: number | null;
-  sleep: number | null;
-  time_available_min: number | null;
-  equipment_available: string[];
-} | null;
 type DayStatus = 'done' | 'active' | 'upcoming';
 
 function getDayStatus(
@@ -42,6 +34,7 @@ export default function ResetHomePage() {
   const currentDay = state?.currentDay ?? 1;
   const isCompleted = state?.status === 'COMPLETED';
   const [isStarting, setIsStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   const renderState =
     isCompleted
@@ -61,16 +54,6 @@ export default function ResetHomePage() {
 
   const requestInFlightRef = useRef(false);
 
-  const toDailyCondition = (c: TodayCondition): Record<string, unknown> => {
-    return {
-      pain_today: c.pain_today ?? undefined,
-      stiffness: c.stiffness ?? undefined,
-      sleep: c.sleep ?? undefined,
-      time_available: c.time_available_min ?? 15,
-      equipment_available: c.equipment_available ?? [],
-    };
-  };
-
   const handleStartClick = async (day: number) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
@@ -82,6 +65,7 @@ export default function ResetHomePage() {
     if (requestInFlightRef.current) return;
     requestInFlightRef.current = true;
     setIsStarting(true);
+    setStartError(null);
 
     const opts: RequestInit = {
       cache: 'no-store' as RequestCache,
@@ -93,12 +77,14 @@ export default function ResetHomePage() {
       if (!routineRes.ok) {
         const body = await routineRes.json().catch(() => ({}));
         console.warn('[HOME_ROUTINE_FAIL]', { status: routineRes.status, error: body.error });
+        setStartError(body?.error ?? '루틴을 불러오지 못했습니다.');
         return;
       }
       const routineData = await routineRes.json();
       const routineId = routineData?.routine?.id;
       if (!routineId) {
         console.warn('[HOME_ROUTINE_FAIL]', { error: 'No routineId' });
+        setStartError('루틴을 찾을 수 없습니다.');
         return;
       }
 
@@ -112,6 +98,7 @@ export default function ResetHomePage() {
 
       if (!planGetRes.ok) {
         console.warn('[HOME_PLAN_GET_FAIL]', { status: planGetRes.status });
+        setStartError(planGetData?.error ?? '플랜 조회에 실패했습니다.');
         return;
       }
       if (plan) {
@@ -130,26 +117,7 @@ export default function ResetHomePage() {
       }
 
       console.log('[HOME_PLAN_GET_NOT_FOUND]', { routineId, day });
-      console.log('[HOME_DAILY_TODAY_GET_START]');
-      const todayRes = await fetch('/api/daily-condition/today', opts);
-      const todayData = await todayRes.json().catch(() => ({}));
-      const condition = todayData?.condition as TodayCondition;
-
-      if (!todayRes.ok) {
-        console.warn('[HOME_DAILY_TODAY_GET_FAIL]', { status: todayRes.status });
-        return;
-      }
-      if (!condition) {
-        console.warn('[HOME_NO_DAILY_CONDITION]', { dayNumber: day });
-        const next = encodeURIComponent(`/app/routine/player?routineId=${routineId}&day=${day}`);
-        console.log('[HOME_REDIRECT_TO_CHECKIN]', { next });
-        router.push(`/app/checkin?next=${next}&reason=need-today-checkin`);
-        return;
-      }
-      console.log('[HOME_DAILY_TODAY_GET_SUCCESS]');
-
       console.log('[HOME_PLAN_GENERATE_START]', { routineId, day });
-      const dc = toDailyCondition(condition);
       const genRes = await fetch('/api/routine-plan/generate', {
         method: 'POST',
         cache: 'no-store',
@@ -157,15 +125,12 @@ export default function ResetHomePage() {
           ...(opts.headers as Record<string, string>),
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          routineId,
-          dayNumber: day,
-          dailyCondition: dc,
-        }),
+        body: JSON.stringify({ routineId, dayNumber: day }),
       });
       if (!genRes.ok) {
         const body = await genRes.json().catch(() => ({}));
         console.warn('[HOME_PLAN_GENERATE_FAIL]', { status: genRes.status, error: body.error });
+        setStartError(body?.error ?? body?.details ?? '플랜 생성에 실패했습니다.');
         return;
       }
       console.log('[HOME_PLAN_GENERATE_SUCCESS]');
@@ -248,6 +213,30 @@ export default function ResetHomePage() {
 
         {/* 4. Main CTA (상태별 동적 렌더링) */}
         <section>
+          {startError && (
+            <div className="mb-4 rounded-2xl border-2 border-red-300 bg-red-50 p-4">
+              <p className="text-sm text-red-700 mb-3">{startError}</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStartError(null);
+                    handleStartClick(currentDay);
+                  }}
+                  className="rounded-full border-2 border-slate-900 bg-orange-400 px-4 py-2 text-sm font-bold text-white"
+                >
+                  다시 시도
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStartError(null)}
+                  className="text-sm font-medium text-red-700 underline"
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+          )}
           {loading ? (
             <CtaSkeleton />
           ) : error ? (
