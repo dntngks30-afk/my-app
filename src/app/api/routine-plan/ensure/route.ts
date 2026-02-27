@@ -168,7 +168,10 @@ export async function POST(req: NextRequest) {
     }
     const tSelectDaily = performance.now();
 
-    const result = await generateDayPlan(routineId, day, dailyCondition, { forceRegenerate: false });
+    const result = await generateDayPlan(routineId, day, dailyCondition, {
+      forceRegenerate: false,
+      preloadedContext: { userId: routine.user_id },
+    });
     const { plan } = result;
     const tGenerate = performance.now();
 

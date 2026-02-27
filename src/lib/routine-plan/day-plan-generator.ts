@@ -183,25 +183,34 @@ function computeRegenReason(
   return undefined;
 }
 
+/** Preloaded context from ensure to avoid duplicate DB round-trips */
+export interface GenerateDayPlanPreloadedContext {
+  userId: string;
+}
+
 export async function generateDayPlan(
   routineId: string,
   dayNumber: number,
   dailyCondition: DailyCondition | null,
-  opts?: { forceRegenerate?: boolean }
+  opts?: { forceRegenerate?: boolean; preloadedContext?: GenerateDayPlanPreloadedContext }
 ): Promise<GenerateDayPlanResult> {
   const supabase = getServerSupabaseAdmin();
 
-  const routine = await supabase
-    .from('workout_routines')
-    .select('id, user_id')
-    .eq('id', routineId)
-    .single();
+  let userId: string;
+  if (opts?.preloadedContext?.userId) {
+    userId = opts.preloadedContext.userId;
+  } else {
+    const routine = await supabase
+      .from('workout_routines')
+      .select('id, user_id')
+      .eq('id', routineId)
+      .single();
 
-  if (routine.error || !routine.data) {
-    throw new Error('Routine not found');
+    if (routine.error || !routine.data) {
+      throw new Error('Routine not found');
+    }
+    userId = routine.data.user_id;
   }
-
-  const userId = routine.data.user_id;
 
   const existing = await supabase
     .from('routine_day_plans')
