@@ -713,6 +713,15 @@ export default function RoutinePlayerPage() {
     setStatus('running');
   }, [pausedAccumulatedMs, pauseStartedPerfMs]);
 
+  const handleDaySelect = useCallback(
+    (targetDay: number) => {
+      if (status === 'running' || status === 'paused') return;
+      if (targetDay === dayNumber) return;
+      router.replace(`/app/routine/player?routineId=${encodeURIComponent(routineId)}&day=${targetDay}`);
+    },
+    [router, routineId, dayNumber, status]
+  );
+
   if (!routineId) {
     return (
       <div className="min-h-screen bg-[#F8F6F0] flex flex-col items-center justify-center px-4">
@@ -811,15 +820,6 @@ export default function RoutinePlayerPage() {
       </div>
     );
   }
-
-  const handleDaySelect = useCallback(
-    (targetDay: number) => {
-      if (status === 'running' || status === 'paused') return;
-      if (targetDay === dayNumber) return;
-      router.replace(`/app/routine/player?routineId=${encodeURIComponent(routineId)}&day=${targetDay}`);
-    },
-    [router, routineId, dayNumber, status]
-  );
 
   const DAYS = [1, 2, 3, 4, 5, 6, 7] as const;
 
