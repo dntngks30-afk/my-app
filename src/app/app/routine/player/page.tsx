@@ -297,13 +297,9 @@ export default function RoutinePlayerPage() {
           }
           setGeneratingPlan(false);
           console.log('[PLAYER_AUTO_GENERATE_SUCCESS]');
-          const planRes2 = await fetch(
-            `/api/routine-plan/get?routineId=${encodeURIComponent(routineId)}&dayNumber=${dayNumber}`,
-            opts
-          );
-          const planData2 = await planRes2.json().catch(() => ({}));
+          const genData = await genRes.json().catch(() => ({}));
           if (cancelled) return;
-          const plan2 = planData2?.plan;
+          const plan2 = genData?.plan;
           if (!plan2?.selected_template_ids?.length) {
             setPlanErrorText('플랜 생성 후 조회에 실패했습니다.');
             setPlanEmpty(true);
@@ -330,47 +326,40 @@ export default function RoutinePlayerPage() {
             }
           }
           setSegments(segs);
-          for (let i = 0; i < segs.length; i++) {
-            const s = segs[i];
-            if (s.kind !== 'work' || !s.templateId || cancelled) continue;
-            try {
-              const mRes = await fetch(
-                `/api/exercise-template/media?templateId=${encodeURIComponent(s.templateId)}`,
-                opts
-              );
-              const mData = await mRes.json().catch(() => ({}));
-              if (cancelled) return;
-              if (mRes.ok && mData?.media) {
-                setSegments((prev) =>
-                  prev.map((p) =>
-                    p.id === s.id
-                      ? {
-                          ...p,
-                          title: mData.templateName ?? p.title,
-                          templateName: mData.templateName,
-                          durationSec: mData.media?.durationSec ?? p.durationSec,
-                          mediaPayload: mData.media,
-                          mediaError: false,
-                        }
-                      : p
-                  )
+          const workSegsGen = segs.filter((s) => s.kind === 'work' && s.templateId);
+          const mediaResultsGen = await Promise.all(
+            workSegsGen.map(async (s) => {
+              if (cancelled) return { id: s.id, ok: false as const, mData: null };
+              try {
+                const mRes = await fetch(
+                  `/api/exercise-template/media?templateId=${encodeURIComponent(s.templateId)}`,
+                  opts
                 );
-              } else {
-                setSegments((prev) =>
-                  prev.map((p) =>
-                    p.id === s.id ? { ...p, mediaPayload: null, mediaError: true } : p
-                  )
-                );
+                const mData = await mRes.json().catch(() => ({}));
+                return { id: s.id, ok: mRes.ok && !!mData?.media, mData };
+              } catch {
+                return { id: s.id, ok: false as const, mData: null };
               }
-            } catch {
-              if (cancelled) return;
-              setSegments((prev) =>
-                prev.map((p) =>
-                  p.id === s.id ? { ...p, mediaPayload: null, mediaError: true } : p
-                )
-              );
-            }
-          }
+            })
+          );
+          if (cancelled) return;
+          setSegments((prev) =>
+            prev.map((p) => {
+              const r = mediaResultsGen.find((x) => x.id === p.id);
+              if (!r) return p;
+              if (r.ok && r.mData?.media) {
+                return {
+                  ...p,
+                  title: r.mData.templateName ?? p.title,
+                  templateName: r.mData.templateName,
+                  durationSec: r.mData.media?.durationSec ?? p.durationSec,
+                  mediaPayload: r.mData.media,
+                  mediaError: false,
+                };
+              }
+              return { ...p, mediaPayload: null, mediaError: true };
+            })
+          );
           setPlanLoading(false);
           return;
         }
@@ -397,52 +386,54 @@ export default function RoutinePlayerPage() {
         }
         setSegments(segs);
 
-        // media fetch for work segments
-        for (let i = 0; i < segs.length; i++) {
-          const s = segs[i];
-          if (s.kind !== 'work' || !s.templateId || cancelled) continue;
-          console.log('[PLAYER_MEDIA_FETCH_START]', { templateId: s.templateId });
-          try {
-            const mRes = await fetch(
-              `/api/exercise-template/media?templateId=${encodeURIComponent(s.templateId)}`,
-              opts
-            );
-            const mData = await mRes.json().catch(() => ({}));
-            if (cancelled) return;
-            if (mRes.ok && mData?.media) {
-              console.log('[PLAYER_MEDIA_FETCH_SUCCESS]', { templateId: s.templateId });
-              setSegments((prev) =>
-                prev.map((p) =>
-                  p.id === s.id
-                    ? {
-                        ...p,
-                        title: mData.templateName ?? p.title,
-                        templateName: mData.templateName,
-                        durationSec: mData.media?.durationSec ?? p.durationSec,
-                        mediaPayload: mData.media,
-                        mediaError: false,
-                      }
-                    : p
-                )
+        // media fetch for work segments (parallel)
+        const workSegs = segs.filter((s) => s.kind === 'work' && s.templateId);
+        workSegs.forEach((s) =>
+          console.log('[PLAYER_MEDIA_FETCH_START]', { templateId: s.templateId })
+        );
+        const mediaResults = await Promise.all(
+          workSegs.map(async (s) => {
+            if (cancelled) return { id: s.id, ok: false as const, mData: null, status: 0 };
+            try {
+              const mRes = await fetch(
+                `/api/exercise-template/media?templateId=${encodeURIComponent(s.templateId)}`,
+                opts
               );
-            } else {
-              console.warn('[PLAYER_MEDIA_FETCH_FAIL]', { templateId: s.templateId, status: mRes.status });
-              setSegments((prev) =>
-                prev.map((p) =>
-                  p.id === s.id ? { ...p, mediaPayload: null, mediaError: true } : p
-                )
-              );
+              const mData = await mRes.json().catch(() => ({}));
+              const ok = mRes.ok && !!mData?.media;
+              if (ok) {
+                console.log('[PLAYER_MEDIA_FETCH_SUCCESS]', { templateId: s.templateId });
+              } else {
+                console.warn('[PLAYER_MEDIA_FETCH_FAIL]', {
+                  templateId: s.templateId,
+                  status: mRes.status,
+                });
+              }
+              return { id: s.id, ok, mData, status: mRes.status };
+            } catch {
+              console.warn('[PLAYER_MEDIA_FETCH_FAIL]', { templateId: s.templateId });
+              return { id: s.id, ok: false as const, mData: null, status: 0 };
             }
-          } catch {
-            if (cancelled) return;
-            console.warn('[PLAYER_MEDIA_FETCH_FAIL]', { templateId: s.templateId });
-            setSegments((prev) =>
-              prev.map((p) =>
-                p.id === s.id ? { ...p, mediaPayload: null, mediaError: true } : p
-              )
-            );
-          }
-        }
+          })
+        );
+        if (cancelled) return;
+        setSegments((prev) =>
+          prev.map((p) => {
+            const r = mediaResults.find((x) => x.id === p.id);
+            if (!r) return p;
+            if (r.ok && r.mData?.media) {
+              return {
+                ...p,
+                title: r.mData.templateName ?? p.title,
+                templateName: r.mData.templateName,
+                durationSec: r.mData.media?.durationSec ?? p.durationSec,
+                mediaPayload: r.mData.media,
+                mediaError: false,
+              };
+            }
+            return { ...p, mediaPayload: null, mediaError: true };
+          })
+        );
       } catch (err) {
         if (cancelled) return;
         console.warn('[PLAYER_PLAN_FETCH_FAIL]', { message: String(err) });
@@ -824,11 +815,10 @@ export default function RoutinePlayerPage() {
   const handleDaySelect = useCallback(
     (targetDay: number) => {
       if (status === 'running' || status === 'paused') return;
-      if (targetDay > currentDay) return;
       if (targetDay === dayNumber) return;
       router.replace(`/app/routine/player?routineId=${encodeURIComponent(routineId)}&day=${targetDay}`);
     },
-    [router, routineId, dayNumber, currentDay, status]
+    [router, routineId, dayNumber, status]
   );
 
   const DAYS = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -861,17 +851,17 @@ export default function RoutinePlayerPage() {
             const isActive = d === currentDay;
             const isLocked = d > currentDay;
             const isSelected = d === dayNumber;
-            const canSelect = (isDone || isActive) && status !== 'running' && status !== 'paused';
+            const canSelect = status !== 'running' && status !== 'paused';
             return (
               <button
                 key={d}
                 type="button"
                 onClick={() => canSelect && handleDaySelect(d)}
                 disabled={!canSelect}
-                aria-label={isLocked ? `Day ${d} 잠금` : isSelected ? `Day ${d} 선택됨` : `Day ${d} 다시 보기`}
+                aria-label={isLocked ? `Day ${d} 미리보기 (24h 후 시작)` : isSelected ? `Day ${d} 선택됨` : `Day ${d} 다시 보기`}
                 className={`flex size-10 shrink-0 items-center justify-center rounded-full border-2 transition ${
                   isLocked
-                    ? 'border-stone-300 bg-white/60 text-stone-400 cursor-not-allowed'
+                    ? 'border-stone-400 bg-stone-100 text-stone-600 hover:bg-stone-200 cursor-pointer'
                     : isSelected
                       ? 'border-slate-900 bg-orange-400 text-white shadow-[2px_2px_0_0_rgba(15,23,42,1)]'
                       : isDone
@@ -925,16 +915,24 @@ export default function RoutinePlayerPage() {
           </div>
         </div>
 
-        <div className="flex gap-3 justify-center">
+        <div className="flex gap-3 justify-center items-center flex-wrap">
           {status === 'idle' && (
-            <button
-              type="button"
-              onClick={handlePlay}
-              className="min-h-[44px] px-8 py-3 rounded-full border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 flex items-center gap-2"
-            >
-              <Play className="size-5" fill="currentColor" strokeWidth={0} />
-              Play
-            </button>
+            <>
+              {dayNumber > currentDay ? (
+                <p className="text-sm text-stone-600">
+                  24시간 휴식 후 시작할 수 있어요
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handlePlay}
+                  className="min-h-[44px] px-8 py-3 rounded-full border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 flex items-center gap-2"
+                >
+                  <Play className="size-5" fill="currentColor" strokeWidth={0} />
+                  Play
+                </button>
+              )}
+            </>
           )}
           {status === 'running' && (
             <button

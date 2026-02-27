@@ -81,7 +81,7 @@ export default function RoutineHubPage() {
   }, []);
 
   const latest = routines[0];
-  const canContinue = latest && (latest.status === 'active' || latest.status === 'draft');
+  const canContinue = latest && (latest.status === 'active' || latest.status === 'draft' || latest.status === 'completed');
 
   const handleContinue = () => {
     if (!latest) return;
