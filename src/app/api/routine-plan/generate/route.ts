@@ -1,14 +1,20 @@
 /**
  * POST /api/routine-plan/generate
  *
- * Day Plan 생성 (멱등). routineId, dayNumber, dailyCondition.
+ * Day Plan 생성 (멱등). routineId, dayNumber 필수.
+ * 오늘 컨디션이 없으면 409. Body에 dailyCondition 있으면 사용, 없으면 DB에서 조회.
  * Bearer only, no-store.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { generateDayPlan } from '@/lib/routine-plan/day-plan-generator';
+import type { DailyCondition } from '@/lib/routine-plan/day-plan-generator';
 
 export const dynamic = 'force-dynamic';
+
+function getDayKeyUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 async function getCurrentUserId(req: NextRequest): Promise<string | null> {
   const authHeader = req.headers.get('authorization');
@@ -29,7 +35,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { routineId, dayNumber, dailyCondition, forceRegenerate } = body;
+    const { routineId, dayNumber, dailyCondition: bodyCondition, forceRegenerate } = body;
 
     if (!routineId || !dayNumber) {
       return NextResponse.json(
@@ -52,10 +58,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
+    let dailyCondition: DailyCondition | null = bodyCondition ?? null;
+    if (!dailyCondition) {
+      const dayKeyUtc = getDayKeyUtc();
+      const { data: row } = await supabase
+        .from('daily_conditions')
+        .select('pain_today, stiffness, sleep, time_available_min, equipment_available')
+        .eq('user_id', userId)
+        .eq('day_key_utc', dayKeyUtc)
+        .maybeSingle();
+
+      if (!row) {
+        return NextResponse.json(
+          { error: '오늘의 컨디션이 없습니다. 먼저 체크인을 입력해 주세요.' },
+          { status: 409 }
+        );
+      }
+      dailyCondition = {
+        pain_today: row.pain_today ?? undefined,
+        stiffness: row.stiffness ?? undefined,
+        sleep: row.sleep ?? undefined,
+        time_available: row.time_available_min ?? 15,
+        equipment_available: row.equipment_available ?? [],
+      };
+    }
+
     const result = await generateDayPlan(
       routineId,
       day,
-      dailyCondition ?? null,
+      dailyCondition,
       { forceRegenerate: !!forceRegenerate }
     );
 
@@ -70,6 +101,8 @@ export async function POST(req: NextRequest) {
         constraints_applied: plan.constraints_applied,
         generator_version: plan.generator_version,
         scoring_version: plan.scoring_version,
+        rule_version: plan.rule_version ?? 'rule_v1',
+        daily_condition_snapshot: dailyCondition ?? null,
         created_at_utc: new Date().toISOString(),
       },
       regenerated,

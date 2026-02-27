@@ -43,6 +43,8 @@ export default function CheckinPage() {
   const [reportLoading, setReportLoading] = useState(true);
   const [reportError, setReportError] = useState<string | null>(null);
   const [showConditionModal, setShowConditionModal] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const fetchReport = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -94,6 +96,19 @@ export default function CheckinPage() {
     }
   }, [report, reportLoading]);
 
+  /** 저장 성공 시 "저장 완료" 표시 후 next 또는 /app/routine으로 리다이렉트 */
+  useEffect(() => {
+    if (!saveSuccess) return;
+    const target = nextUrl || '/app/routine';
+    const t = setTimeout(() => {
+      setShowConditionModal(false);
+      setSaveSuccess(false);
+      router.replace(target);
+      fetchReport();
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [saveSuccess, nextUrl, router]);
+
   /** postWorkout=1일 때만: 오늘 컨디션 없으면 모달 자동 오픈, 있으면 스킵. URL에서 postWorkout 제거로 중복 방지 */
   useEffect(() => {
     if (!postWorkout) return;
@@ -144,6 +159,7 @@ export default function CheckinPage() {
   }) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) return;
+    setSaveError(null);
     console.log('[CHECKIN_SAVE_START]');
     const res = await fetch('/api/daily-condition/upsert', {
       method: 'POST',
@@ -154,21 +170,15 @@ export default function CheckinPage() {
       },
       body: JSON.stringify(values),
     });
+    const body = await res.json().catch(() => ({}));
     if (!res.ok) {
       console.log('[CHECKIN_SAVE_FAIL]', { status: res.status });
+      setSaveError(body?.error ?? body?.details ?? '저장에 실패했습니다.');
       return;
     }
     console.log('[CHECKIN_SAVE_SUCCESS]');
-    setShowConditionModal(false);
-    if (postWorkout) {
-      console.log('[CHECKIN_POSTWORKOUT_FINISH]');
-      const cleanPath = '/app/checkin' + (nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : '');
-      router.replace(cleanPath);
-    }
-    await fetchReport();
-    if (nextUrl) {
-      router.push(nextUrl);
-    }
+    setSaveError(null);
+    setSaveSuccess(true);
   };
 
   return (
@@ -255,16 +265,20 @@ export default function CheckinPage() {
           onSubmit={handleConditionSubmit}
           onSkip={() => {
             setShowConditionModal(false);
+            setSaveError(null);
             if (postWorkout) {
               router.replace('/app/checkin' + (nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ''));
             }
           }}
           onClose={() => {
             setShowConditionModal(false);
+            setSaveError(null);
             if (postWorkout) {
               router.replace('/app/checkin' + (nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ''));
             }
           }}
+          saveError={saveError}
+          saveSuccess={saveSuccess}
         />
       )}
 

@@ -193,6 +193,7 @@ export default function RoutinePlayerPage() {
 
   const completeRequestedRef = useRef(false);
   const lastTransitionKeyRef = useRef<string>('');
+  const autoGenerateAttemptedRef = useRef(false);
 
   const initSyncDone = useRef(false);
   const statusLoading = useRef(false);
@@ -233,6 +234,7 @@ export default function RoutinePlayerPage() {
     }
     setPlanEmpty(false);
     setPlanError(null);
+    autoGenerateAttemptedRef.current = false;
     let cancelled = false;
     const run = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -261,8 +263,114 @@ export default function RoutinePlayerPage() {
 
         const plan = data?.plan;
         if (!plan?.selected_template_ids?.length) {
-          console.log('[PLAYER_PLAN_FETCH_SUCCESS]', { plan: null });
-          setPlanEmpty(true);
+          if (autoGenerateAttemptedRef.current) {
+            console.log('[PLAYER_PLAN_FETCH_SUCCESS]', { plan: null, autoGenerate: 'already_tried' });
+            setPlanEmpty(true);
+            setPlanLoading(false);
+            return;
+          }
+          autoGenerateAttemptedRef.current = true;
+          console.log('[PLAYER_AUTO_GENERATE_START]', { routineId, dayNumber });
+          const todayRes = await fetch('/api/daily-condition/today', opts);
+          const todayData = await todayRes.json().catch(() => ({}));
+          if (cancelled) return;
+          const condition = todayData?.condition ?? null;
+          if (!condition) {
+            console.log('[PLAYER_AUTO_GENERATE_SKIP]', { reason: 'no_condition' });
+            setPlanEmpty(true);
+            setPlanLoading(false);
+            return;
+          }
+          const genRes = await fetch('/api/routine-plan/generate', {
+            method: 'POST',
+            cache: 'no-store',
+            headers: {
+              ...(opts.headers as Record<string, string>),
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ routineId, dayNumber }),
+          });
+          if (cancelled) return;
+          if (!genRes.ok) {
+            console.warn('[PLAYER_AUTO_GENERATE_FAIL]', { status: genRes.status });
+            setPlanEmpty(true);
+            setPlanLoading(false);
+            return;
+          }
+          console.log('[PLAYER_AUTO_GENERATE_SUCCESS]');
+          const planRes2 = await fetch(
+            `/api/routine-plan/get?routineId=${encodeURIComponent(routineId)}&dayNumber=${dayNumber}`,
+            opts
+          );
+          const planData2 = await planRes2.json().catch(() => ({}));
+          if (cancelled) return;
+          const plan2 = planData2?.plan;
+          if (!plan2?.selected_template_ids?.length) {
+            setPlanEmpty(true);
+            setPlanLoading(false);
+            return;
+          }
+          const ids = plan2.selected_template_ids as string[];
+          const segs: Segment[] = [];
+          for (let i = 0; i < ids.length; i++) {
+            segs.push({
+              id: `work-${ids[i]}-${i}`,
+              templateId: ids[i],
+              title: `운동 ${i + 1}`,
+              durationSec: 60,
+              kind: 'work',
+            });
+            if (i < ids.length - 1) {
+              segs.push({
+                id: `rest-${i + 1}`,
+                title: `휴식 ${i + 1}`,
+                durationSec: 30,
+                kind: 'rest',
+              });
+            }
+          }
+          setSegments(segs);
+          for (let i = 0; i < segs.length; i++) {
+            const s = segs[i];
+            if (s.kind !== 'work' || !s.templateId || cancelled) continue;
+            try {
+              const mRes = await fetch(
+                `/api/exercise-template/media?templateId=${encodeURIComponent(s.templateId)}`,
+                opts
+              );
+              const mData = await mRes.json().catch(() => ({}));
+              if (cancelled) return;
+              if (mRes.ok && mData?.media) {
+                setSegments((prev) =>
+                  prev.map((p) =>
+                    p.id === s.id
+                      ? {
+                          ...p,
+                          title: mData.templateName ?? p.title,
+                          templateName: mData.templateName,
+                          durationSec: mData.media?.durationSec ?? p.durationSec,
+                          mediaPayload: mData.media,
+                          mediaError: false,
+                        }
+                      : p
+                  )
+                );
+              } else {
+                setSegments((prev) =>
+                  prev.map((p) =>
+                    p.id === s.id ? { ...p, mediaPayload: null, mediaError: true } : p
+                  )
+                );
+              }
+            } catch {
+              if (cancelled) return;
+              setSegments((prev) =>
+                prev.map((p) =>
+                  p.id === s.id ? { ...p, mediaPayload: null, mediaError: true } : p
+                )
+              );
+            }
+          }
           setPlanLoading(false);
           return;
         }

@@ -17,9 +17,18 @@ type Props = {
   onClose: () => void;
   /** '시작하기' for plan flow, '저장' for record-only (checkin tab) */
   submitLabel?: string;
+  saveError?: string | null;
+  saveSuccess?: boolean;
 };
 
-export function CheckInModal({ onSubmit, onSkip, onClose, submitLabel = '시작하기' }: Props) {
+export function CheckInModal({
+  onSubmit,
+  onSkip,
+  onClose,
+  submitLabel = '시작하기',
+  saveError = null,
+  saveSuccess = false,
+}: Props) {
   const [pain, setPain] = useState<number | null>(null);
   const [stiffness, setStiffness] = useState<number | null>(null);
   const [sleep, setSleep] = useState<number | null>(null);
@@ -69,6 +78,15 @@ export function CheckInModal({ onSubmit, onSkip, onClose, submitLabel = '시작�
         <p className="text-sm text-slate-600 mb-4">
           오늘의 상태를 간단히 알려주세요 (선택)
         </p>
+
+        {saveError && (
+          <p className="text-sm text-red-600 mb-4" role="alert">
+            {saveError}
+          </p>
+        )}
+        {saveSuccess && (
+          <p className="text-sm font-semibold text-green-600 mb-4">저장 완료!</p>
+        )}
 
         <div className="space-y-4">
           <div>
@@ -156,10 +174,10 @@ export function CheckInModal({ onSubmit, onSkip, onClose, submitLabel = '시작�
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || saveSuccess}
             className="flex-1 rounded-full border-2 border-slate-900 bg-orange-400 py-3 text-sm font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] hover:opacity-95 disabled:opacity-70"
           >
-            {submitting ? '저장 중...' : submitLabel}
+            {submitting ? '저장 중…' : saveSuccess ? '저장 완료' : submitLabel}
           </button>
         </div>
       </div>
