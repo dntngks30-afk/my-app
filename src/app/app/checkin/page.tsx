@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { NeoCard, NeoButton } from '@/components/neobrutalism';
 import BottomNav from '../_components/BottomNav';
@@ -34,6 +35,9 @@ function formatDayLabel(dayKey: string): string {
 }
 
 export default function CheckinPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextUrl = searchParams.get('next');
   const [report, setReport] = useState<WeeklyReport | null>(null);
   const [reportLoading, setReportLoading] = useState(true);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -110,6 +114,9 @@ export default function CheckinPage() {
     if (!res.ok) return;
     setShowConditionModal(false);
     await fetchReport();
+    if (nextUrl) {
+      router.push(nextUrl);
+    }
   };
 
   return (
@@ -192,7 +199,7 @@ export default function CheckinPage() {
 
       {showConditionModal && (
         <CheckInModal
-          submitLabel="저장"
+          submitLabel={nextUrl ? '저장 후 계속하기' : '저장'}
           onSubmit={handleConditionSubmit}
           onSkip={() => setShowConditionModal(false)}
           onClose={() => setShowConditionModal(false)}

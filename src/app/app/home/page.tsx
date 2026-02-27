@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRoutineStatus } from '@/features/routine/hooks/useRoutineStatus';
-import { CheckInModal } from '../_components/CheckInModal';
 import BottomNav from '../_components/BottomNav';
 
 const DAYS = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -43,8 +42,6 @@ export default function ResetHomePage() {
   const currentDay = state?.currentDay ?? 1;
   const isCompleted = state?.status === 'COMPLETED';
   const [isStarting, setIsStarting] = useState(false);
-  const [showCheckInModal, setShowCheckInModal] = useState(false);
-  const [pendingStart, setPendingStart] = useState<{ routineId: string; day: number } | null>(null);
 
   const renderState =
     isCompleted
@@ -64,8 +61,7 @@ export default function ResetHomePage() {
 
   const requestInFlightRef = useRef(false);
 
-  const toDailyCondition = (c: TodayCondition): Record<string, unknown> | null => {
-    if (!c) return null;
+  const toDailyCondition = (c: TodayCondition): Record<string, unknown> => {
     return {
       pain_today: c.pain_today ?? undefined,
       stiffness: c.stiffness ?? undefined,
@@ -75,76 +71,7 @@ export default function ResetHomePage() {
     };
   };
 
-  const proceedWithPlan = async (
-    routineId: string,
-    day: number,
-    dailyCondition: TodayCondition
-  ) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return;
-
-    const opts: RequestInit = {
-      cache: 'no-store' as RequestCache,
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    };
-
-    console.log('[HOME_PLAN_GET_START]', { routineId, day });
-    const planGetRes = await fetch(
-      `/api/routine-plan/get?routineId=${encodeURIComponent(routineId)}&dayNumber=${day}`,
-      opts
-    );
-    const planGetData = await planGetRes.json().catch(() => ({}));
-    let plan = planGetData?.plan;
-
-    if (!planGetRes.ok) {
-      console.warn('[HOME_PLAN_GET_FAIL]', { status: planGetRes.status });
-      return;
-    }
-    if (!plan) {
-      console.log('[HOME_PLAN_GET_NOT_FOUND]', { routineId, day });
-      console.log('[HOME_PLAN_GENERATE_START]', { routineId, day });
-      const dc = toDailyCondition(dailyCondition) ?? { pain_today: null, time_available: 15 };
-      const genRes = await fetch('/api/routine-plan/generate', {
-        method: 'POST',
-        cache: 'no-store',
-        headers: {
-          ...(opts.headers as Record<string, string>),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          routineId,
-          dayNumber: day,
-          dailyCondition: dc,
-        }),
-      });
-      if (!genRes.ok) {
-        const body = await genRes.json().catch(() => ({}));
-        console.warn('[HOME_PLAN_GENERATE_FAIL]', { status: genRes.status, error: body.error });
-        return;
-      }
-      const genData = await genRes.json();
-      plan = genData?.plan;
-      console.log('[HOME_PLAN_GENERATE_SUCCESS]');
-    } else {
-      console.log('[HOME_PLAN_GET_SUCCESS]');
-    }
-
-    const activateRes = await fetch('/api/routine-engine/activate', {
-      method: 'POST',
-      ...opts,
-    });
-    if (!activateRes.ok) {
-      const body = await activateRes.json().catch(() => ({}));
-      console.warn('[HOME_ACTIVATE_FAIL]', { message: body.error });
-      return;
-    }
-    console.log('[HOME_ACTIVATE_SUCCESS]');
-
-    router.push(`/app/routine/player?routineId=${routineId}&day=${day}`);
-  };
-
   const handleStartClick = async (day: number) => {
-    console.log('[HOME_CTA_CLICK]', { day });
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
       console.warn('[HOME_NO_SESSION]');
@@ -175,17 +102,84 @@ export default function ResetHomePage() {
         return;
       }
 
+      console.log('[HOME_PLAN_GET_START]', { routineId, day });
+      const planGetRes = await fetch(
+        `/api/routine-plan/get?routineId=${encodeURIComponent(routineId)}&dayNumber=${day}`,
+        opts
+      );
+      const planGetData = await planGetRes.json().catch(() => ({}));
+      const plan = planGetData?.plan;
+
+      if (!planGetRes.ok) {
+        console.warn('[HOME_PLAN_GET_FAIL]', { status: planGetRes.status });
+        return;
+      }
+      if (plan) {
+        console.log('[HOME_PLAN_GET_SUCCESS]');
+        const activateRes = await fetch('/api/routine-engine/activate', {
+          method: 'POST',
+          ...opts,
+        });
+        if (!activateRes.ok) {
+          const body = await activateRes.json().catch(() => ({}));
+          console.warn('[HOME_ACTIVATE_FAIL]', { message: body.error });
+          return;
+        }
+        router.push(`/app/routine/player?routineId=${routineId}&day=${day}`);
+        return;
+      }
+
+      console.log('[HOME_PLAN_GET_NOT_FOUND]', { routineId, day });
+      console.log('[HOME_DAILY_TODAY_GET_START]');
       const todayRes = await fetch('/api/daily-condition/today', opts);
       const todayData = await todayRes.json().catch(() => ({}));
       const condition = todayData?.condition as TodayCondition;
 
-      if (!condition) {
-        setPendingStart({ routineId, day });
-        setShowCheckInModal(true);
+      if (!todayRes.ok) {
+        console.warn('[HOME_DAILY_TODAY_GET_FAIL]', { status: todayRes.status });
         return;
       }
+      if (!condition) {
+        console.warn('[HOME_NO_DAILY_CONDITION]', { dayNumber: day });
+        const next = encodeURIComponent(`/app/routine/player?routineId=${routineId}&day=${day}`);
+        console.log('[HOME_REDIRECT_TO_CHECKIN]', { next });
+        router.push(`/app/checkin?next=${next}&reason=need-today-checkin`);
+        return;
+      }
+      console.log('[HOME_DAILY_TODAY_GET_SUCCESS]');
 
-      await proceedWithPlan(routineId, day, condition);
+      console.log('[HOME_PLAN_GENERATE_START]', { routineId, day });
+      const dc = toDailyCondition(condition);
+      const genRes = await fetch('/api/routine-plan/generate', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          ...(opts.headers as Record<string, string>),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          routineId,
+          dayNumber: day,
+          dailyCondition: dc,
+        }),
+      });
+      if (!genRes.ok) {
+        const body = await genRes.json().catch(() => ({}));
+        console.warn('[HOME_PLAN_GENERATE_FAIL]', { status: genRes.status, error: body.error });
+        return;
+      }
+      console.log('[HOME_PLAN_GENERATE_SUCCESS]');
+
+      const activateRes = await fetch('/api/routine-engine/activate', {
+        method: 'POST',
+        ...opts,
+      });
+      if (!activateRes.ok) {
+        const body = await activateRes.json().catch(() => ({}));
+        console.warn('[HOME_ACTIVATE_FAIL]', { message: body.error });
+        return;
+      }
+      router.push(`/app/routine/player?routineId=${routineId}&day=${day}`);
     } catch (err) {
       console.warn('[HOME_PLAN_GENERATE_FAIL]', {
         message: err instanceof Error ? err.message : String(err),
@@ -194,50 +188,6 @@ export default function ResetHomePage() {
       requestInFlightRef.current = false;
       setIsStarting(false);
     }
-  };
-
-  const handleCheckInSubmit = async (values: {
-    pain_today?: number | null;
-    stiffness?: number | null;
-    sleep?: number | null;
-    time_available_min?: number | null;
-    equipment_available?: string[];
-  }) => {
-    if (!pendingStart) return;
-
-    const opts: RequestInit = {
-      method: 'POST',
-      cache: 'no-store' as RequestCache,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token ?? ''}`,
-      },
-      body: JSON.stringify(values),
-    };
-
-    const res = await fetch('/api/daily-condition/upsert', opts);
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      console.warn('[HOME_CHECKIN_UPSERT_FAIL]', data);
-      return;
-    }
-
-    setShowCheckInModal(false);
-    const condition = data?.condition as TodayCondition;
-    await proceedWithPlan(pendingStart.routineId, pendingStart.day, condition);
-    setPendingStart(null);
-    setIsStarting(false);
-    requestInFlightRef.current = false;
-  };
-
-  const handleCheckInSkip = () => {
-    if (!pendingStart) return;
-    setShowCheckInModal(false);
-    proceedWithPlan(pendingStart.routineId, pendingStart.day, null);
-    setPendingStart(null);
-    setIsStarting(false);
-    requestInFlightRef.current = false;
   };
 
   return (
@@ -340,18 +290,6 @@ export default function ResetHomePage() {
         </section>
       </main>
 
-      {showCheckInModal && (
-        <CheckInModal
-          onSubmit={handleCheckInSubmit}
-          onSkip={handleCheckInSkip}
-          onClose={() => {
-            setShowCheckInModal(false);
-            setPendingStart(null);
-            setIsStarting(false);
-            requestInFlightRef.current = false;
-          }}
-        />
-      )}
       <BottomNav />
     </div>
   );
