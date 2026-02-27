@@ -1,10 +1,12 @@
 /**
  * GET /api/routine-plan/get?routineId=&dayNumber=
  *
- * Day Plan 조회.
+ * Day Plan 조회. Bearer only, no-store.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic';
 import { getDayPlan } from '@/lib/routine-plan/day-plan-generator';
 
 async function getCurrentUserId(req: NextRequest): Promise<string | null> {

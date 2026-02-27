@@ -78,11 +78,14 @@ const FALLBACK_IDS = ['M01', 'M28'];
 export type RegenReason =
   | 'user_request'
   | 'pain_delta'
+  | 'pain_high'
   | 'condition_new'
-  | 'condition_null_to_value';
+  | 'condition_null_to_value'
+  | 'time_available_drop';
 
 const PAIN_DELTA_THRESHOLD = 3;
 const PAIN_SAFE_THRESHOLD = 5;
+const PAIN_TRIGGER_THRESHOLD = 7; // pain_today >= 7 → regeneration trigger
 const STIFFNESS_SAFE_THRESHOLD = 6;
 
 function computePlanHash(ids: string[]): string {
@@ -168,11 +171,14 @@ function computeRegenReason(
   const prev = existing.data.daily_condition_snapshot as DailyCondition | null;
   const prevPain = prev?.pain_today ?? null;
   const currPain = dailyCondition?.pain_today ?? null;
+  const prevTime = prev?.time_available ?? null;
+  const currTime = dailyCondition?.time_available ?? null;
 
   if (prev === null && dailyCondition !== null) return 'condition_null_to_value';
-  if (prevPain != null && currPain != null && Math.abs(currPain - prevPain) >= PAIN_DELTA_THRESHOLD) {
-    return 'pain_delta';
-  }
+  if (currPain != null && currPain >= PAIN_TRIGGER_THRESHOLD) return 'pain_high';
+  if (prevPain != null && currPain != null && Math.abs(currPain - prevPain) >= PAIN_DELTA_THRESHOLD) return 'pain_delta';
+  if (prevTime === 15 && currTime === 5) return 'time_available_drop';
+
   return undefined;
 }
 
@@ -203,15 +209,35 @@ export async function generateDayPlan(
     .eq('day_number', dayNumber)
     .maybeSingle();
 
+  const conditionsEqual = (a: DailyCondition | null, b: DailyCondition | null): boolean => {
+    const pa = a?.pain_today ?? null;
+    const pb = b?.pain_today ?? null;
+    const sa = a?.stiffness ?? null;
+    const sb = b?.stiffness ?? null;
+    const ta = a?.time_available ?? null;
+    const tb = b?.time_available ?? null;
+    return pa === pb && sa === sb && ta === tb;
+  };
+
   const shouldRegenerate = (): boolean => {
     if (opts?.forceRegenerate) return true;
     if (!existing.data) return true;
 
     const prev = existing.data.daily_condition_snapshot as DailyCondition | null;
+    const curr = dailyCondition;
+
+    if (conditionsEqual(prev, curr)) return false;
+
     const prevPain = prev?.pain_today ?? null;
-    const currPain = dailyCondition?.pain_today ?? null;
-    if (prev === null && dailyCondition !== null) return true;
-    if (prevPain != null && currPain != null && Math.abs(currPain - prevPain) >= PAIN_DELTA_THRESHOLD) return true;
+    const currPain = curr?.pain_today ?? null;
+    const prevTime = prev?.time_available ?? null;
+    const currTime = curr?.time_available ?? null;
+
+    if (currPain != null && currPain >= PAIN_TRIGGER_THRESHOLD) return true;
+    if (prevPain != null && currPain != null && currPain - prevPain >= PAIN_DELTA_THRESHOLD) return true;
+    if (prev === null && curr !== null) return true;
+    if (prevPain != null && currPain != null && prevPain - currPain >= PAIN_DELTA_THRESHOLD) return true;
+    if (prevTime === 15 && currTime === 5) return true;
 
     return false;
   };
@@ -310,6 +336,15 @@ export async function generateDayPlan(
 
   const oldHash = existing.data?.plan_hash ?? null;
   const auditReason = regenReason ?? 'daily_condition_change';
+  const prevRevisionNo = (existing.data as { revision_no?: number })?.revision_no ?? 0;
+  const nextRevisionNo = prevRevisionNo + 1;
+
+  const isSafetyTrigger =
+    regenReason === 'pain_high' ||
+    regenReason === 'pain_delta' ||
+    regenReason === 'time_available_drop';
+  const safetyMode = !!isSafetyTrigger;
+  const safetyReason = isSafetyTrigger ? auditReason : null;
 
   await supabase.from('routine_day_plans').upsert(
     {
@@ -323,17 +358,34 @@ export async function generateDayPlan(
       rule_version: RULE_VERSION,
       daily_condition_snapshot: dailyCondition ?? null,
       plan_hash: planHash,
+      safety_mode: safetyMode,
+      safety_reason: safetyReason,
+      revision_no: nextRevisionNo,
     },
     { onConflict: 'routine_id,day_number' }
   );
 
-  if (existing.data && (oldHash !== planHash)) {
+  const hasChange = !existing.data || oldHash !== planHash;
+  if (hasChange) {
+    await supabase.from('routine_day_plan_revisions').insert({
+      routine_id: routineId,
+      day_number: dayNumber,
+      revision_no: nextRevisionNo,
+      reason: auditReason,
+      old_hash: oldHash,
+      new_hash: planHash,
+      created_by: userId,
+    });
+  }
+  if (existing.data && oldHash !== planHash) {
     await supabase.from('routine_day_plan_audit').insert({
       routine_id: routineId,
       day_number: dayNumber,
       old_plan_hash: oldHash,
       new_plan_hash: planHash,
       reason: auditReason,
+      revision_no: nextRevisionNo,
+      created_by: userId,
     });
   }
 

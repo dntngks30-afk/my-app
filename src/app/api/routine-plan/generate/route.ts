@@ -2,10 +2,13 @@
  * POST /api/routine-plan/generate
  *
  * Day Plan 생성 (멱등). routineId, dayNumber, dailyCondition.
+ * Bearer only, no-store.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { generateDayPlan } from '@/lib/routine-plan/day-plan-generator';
+
+export const dynamic = 'force-dynamic';
 
 async function getCurrentUserId(req: NextRequest): Promise<string | null> {
   const authHeader = req.headers.get('authorization');
