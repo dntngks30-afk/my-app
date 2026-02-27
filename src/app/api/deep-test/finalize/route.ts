@@ -1,7 +1,8 @@
-﻿/**
+/**
  * POST /api/deep-test/finalize
- * draft ??final, ?ㅼ퐫??怨꾩궛. scoring_version蹂?怨꾩궛湲??ъ슜.
- * ?대? final?대㈃ 硫깅벑 諛섑솚
+ * draft → final 전환, 스코어 계산. scoring_version 따라 계산.
+ * final이면 그대로 반환.
+ * 성공 시 workout_routines 멱등 생성 (source=deep, source_id=attemptId)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -9,6 +10,7 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { requireDeepAuth } from '@/lib/deep-test/auth';
 import { calculateDeepV1 } from '@/lib/deep-test/scoring/deep_v1';
 import { calculateDeepV2 } from '@/lib/deep-test/scoring/deep_v2';
+import { ensureDeepWorkoutRoutine, maskId } from '@/lib/deep-test/ensure-deep-routine';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
 
 const SOURCE = 'deep';
@@ -73,6 +75,27 @@ export async function POST(req: NextRequest) {
   }
 
   if (attempt.status === 'final') {
+    let routineCreated = false;
+    try {
+      const { routineId, created } = await ensureDeepWorkoutRoutine(
+        supabase,
+        userId,
+        attemptId
+      );
+      routineCreated = created;
+      console.log('[DEEP_FINALIZE]', {
+        user: maskId(userId),
+        attemptId: maskId(attemptId),
+        routine: maskId(routineId),
+        created,
+      });
+    } catch (err) {
+      console.warn('[DEEP_FINALIZE_ROUTINE_FAIL]', {
+        user: maskId(userId),
+        attemptId: maskId(attemptId),
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     return NextResponse.json({
       source: SOURCE,
       scoring_version: attempt.scoring_version,
@@ -82,6 +105,7 @@ export async function POST(req: NextRequest) {
         confidence: attempt.confidence,
       },
       attempt: toAttemptPayload(attempt),
+      routineCreated,
     });
   }
 
@@ -116,11 +140,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    let routineCreated = false;
+    try {
+      const { routineId, created } = await ensureDeepWorkoutRoutine(
+        supabase,
+        userId,
+        attemptId
+      );
+      routineCreated = created;
+      console.log('[DEEP_FINALIZE]', {
+        user: maskId(userId),
+        attemptId: maskId(attemptId),
+        routine: maskId(routineId),
+        created,
+      });
+    } catch (err) {
+      console.warn('[DEEP_FINALIZE_ROUTINE_FAIL]', {
+        user: maskId(userId),
+        attemptId: maskId(attemptId),
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     return NextResponse.json({
       source: SOURCE,
       scoring_version: 'deep_v1',
       result: { scores, result_type, confidence },
       attempt: toAttemptPayload(updated!),
+      routineCreated,
     });
   }
 
@@ -158,6 +204,27 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  let routineCreated = false;
+  try {
+    const { routineId, created } = await ensureDeepWorkoutRoutine(
+      supabase,
+      userId,
+      attemptId
+    );
+    routineCreated = created;
+    console.log('[DEEP_FINALIZE]', {
+      user: maskId(userId),
+      attemptId: maskId(attemptId),
+      routine: maskId(routineId),
+      created,
+    });
+  } catch (err) {
+    console.warn('[DEEP_FINALIZE_ROUTINE_FAIL]', {
+      user: maskId(userId),
+      attemptId: maskId(attemptId),
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
   return NextResponse.json({
     source: SOURCE,
     scoring_version: 'deep_v2',
@@ -172,5 +239,6 @@ export async function POST(req: NextRequest) {
       totalCount: v2Result.totalCount,
     },
     attempt: toAttemptPayload(updated!),
+    routineCreated,
   });
 }
