@@ -2,7 +2,7 @@
  * POST /api/routine-plan/generate
  *
  * Day Plan 생성 (멱등). routineId, dayNumber 필수.
- * 오늘 컨디션이 없으면 409. Body에 dailyCondition 있으면 사용, 없으면 DB에서 조회.
+ * dailyCondition: body에 있으면 사용, 없으면 DB 조회, 없으면 서버 기본값 사용(2xx 보장).
  * Bearer only, no-store.
  */
 
@@ -58,6 +58,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
+    const DEFAULT_CONDITION: DailyCondition & { source?: string } = {
+      source: 'default',
+      time_available: 15,
+    };
+
     let dailyCondition: DailyCondition | null = bodyCondition ?? null;
     if (!dailyCondition) {
       const dayKeyUtc = getDayKeyUtc();
@@ -68,19 +73,17 @@ export async function POST(req: NextRequest) {
         .eq('day_key_utc', dayKeyUtc)
         .maybeSingle();
 
-      if (!row) {
-        return NextResponse.json(
-          { error: '오늘의 컨디션이 없습니다. 먼저 체크인을 입력해 주세요.' },
-          { status: 409 }
-        );
+      if (row) {
+        dailyCondition = {
+          pain_today: row.pain_today ?? undefined,
+          stiffness: row.stiffness ?? undefined,
+          sleep: row.sleep ?? undefined,
+          time_available: row.time_available_min ?? 15,
+          equipment_available: row.equipment_available ?? [],
+        };
+      } else {
+        dailyCondition = DEFAULT_CONDITION;
       }
-      dailyCondition = {
-        pain_today: row.pain_today ?? undefined,
-        stiffness: row.stiffness ?? undefined,
-        sleep: row.sleep ?? undefined,
-        time_available: row.time_available_min ?? 15,
-        equipment_available: row.equipment_available ?? [],
-      };
     }
 
     const result = await generateDayPlan(
