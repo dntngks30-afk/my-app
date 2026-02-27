@@ -85,6 +85,8 @@ const FALLBACK_SETS: readonly (readonly string[])[] = [
 
 const RECENT_USE_EXCLUSION_DAYS = 2;
 const MIN_POOL_AFTER_EXCLUSION = 2;
+const MIN_POOL_LEVEL1_RELAX = 4;
+const SAFE_LEVEL2_TAGS = ['full_body_reset', 'core_control', 'core_stability'];
 
 /** 재생성 트리거 사유 */
 export type RegenReason =
@@ -329,7 +331,23 @@ export async function generateDayPlan(
   let pool = await getAllExerciseTemplates({ scoringVersion: 'deep_v2' });
 
   pool = applySafetyFilter(pool, avoidTags);
-  pool = applyLevelFilter(pool, level);
+  let poolAfterLevel = applyLevelFilter(pool, level);
+  let levelRelaxUsed = false;
+  if (level === 1 && poolAfterLevel.length < MIN_POOL_LEVEL1_RELAX) {
+    const safeL2 = pool.filter(
+      (t) => t.level === 2 && t.avoid_tags.length === 0 &&
+        t.focus_tags.some((tag) => SAFE_LEVEL2_TAGS.includes(tag))
+    );
+    const seen = new Set(poolAfterLevel.map((t) => t.id));
+    for (const t of safeL2) {
+      if (!seen.has(t.id)) {
+        poolAfterLevel = [...poolAfterLevel, t];
+        seen.add(t.id);
+        levelRelaxUsed = true;
+      }
+    }
+  }
+  pool = poolAfterLevel;
 
   const theme = DAY_THEMES[dayNumber - 1];
   const baseTags = theme.primaryTags.length > 0
@@ -434,6 +452,7 @@ export async function generateDayPlan(
     if (excludedCount > 0) constraintsApplied.push(`excluded:${excludedCount}`);
     if (usePenalty) constraintsApplied.push('recentPenalty');
     if (fallbackUsed) constraintsApplied.push('fallbackUsed');
+    if (levelRelaxUsed) constraintsApplied.push('level1Relax');
   }
 
   const planHash = computePlanHash(selectedIds);
