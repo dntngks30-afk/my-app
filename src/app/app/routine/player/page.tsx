@@ -818,7 +818,7 @@ export default function RoutinePlayerPage() {
                 type="button"
                 onClick={() => canSelect && handleDaySelect(d)}
                 disabled={!canSelect}
-                aria-label={isLocked ? `Day ${d} 미리보기 (24h 후 시작)` : isSelected ? `Day ${d} 선택됨` : `Day ${d} 다시 보기`}
+                aria-label={isLocked ? `Day ${d} 진입 (휴식 권장)` : isSelected ? `Day ${d} 선택됨` : `Day ${d} 다시 보기`}
                 className={`flex size-10 shrink-0 items-center justify-center rounded-full border-2 transition ${
                   isLocked
                     ? 'border-stone-400 bg-stone-100 text-stone-600 hover:bg-stone-200 cursor-pointer'
@@ -875,23 +875,22 @@ export default function RoutinePlayerPage() {
           </div>
         </div>
 
-        <div className="flex gap-3 justify-center items-center flex-wrap">
+        <div className="flex gap-3 justify-center items-center flex-wrap flex-col">
           {status === 'idle' && (
             <>
-              {dayNumber > currentDay ? (
-                <p className="text-sm text-stone-600">
-                  24시간 휴식 후 시작할 수 있어요
+              {dayNumber > currentDay && (
+                <p className="text-sm text-amber-600">
+                  휴식 권장 · 24시간 후 진행을 권장해요
                 </p>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handlePlay}
-                  className="min-h-[44px] px-8 py-3 rounded-full border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 flex items-center gap-2"
-                >
-                  <Play className="size-5" fill="currentColor" strokeWidth={0} />
-                  Play
-                </button>
               )}
+              <button
+                type="button"
+                onClick={handlePlay}
+                className="min-h-[44px] px-8 py-3 rounded-full border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 flex items-center gap-2"
+              >
+                <Play className="size-5" fill="currentColor" strokeWidth={0} />
+                Play
+              </button>
             </>
           )}
           {status === 'running' && (

@@ -36,6 +36,38 @@ export default function ResetHomePage() {
   const isCompleted = state?.status === 'COMPLETED';
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [latestRoutineId, setLatestRoutineId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token || cancelled) return;
+      try {
+        const res = await fetch('/api/routine/list', {
+          cache: 'no-store' as RequestCache,
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (cancelled || !res.ok) return;
+        const data = await res.json();
+        const routines = data?.routines ?? [];
+        const first = routines[0];
+        if (first?.id) setLatestRoutineId(first.id);
+        else setLatestRoutineId(null);
+      } catch {
+        if (!cancelled) setLatestRoutineId(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleDayPillClick = (day: number) => {
+    if (latestRoutineId) {
+      router.push(`/app/routine/player?routineId=${encodeURIComponent(latestRoutineId)}&day=${day}`);
+    } else {
+      router.push('/app/routine');
+    }
+  };
 
   const renderState =
     isCompleted
@@ -138,6 +170,8 @@ export default function ResetHomePage() {
                   key={day}
                   day={day}
                   status={getDayStatus(day, currentDay, isCompleted)}
+                  restRecommended={day >= 2 && restRecommended}
+                  onClick={() => handleDayPillClick(day)}
                 />
               ))}
             </div>
@@ -365,39 +399,58 @@ function CtaSkeleton() {
   );
 }
 
-function DayPill({ day, status }: { day: number; status: DayStatus }) {
+function DayPill({
+  day,
+  status,
+  restRecommended,
+  onClick,
+}: {
+  day: number;
+  status: DayStatus;
+  restRecommended?: boolean;
+  onClick: () => void;
+}) {
   const dayStr = String(day).padStart(2, '0');
+  const isUpcoming = status === 'upcoming';
+  const showRestBadge = isUpcoming && restRecommended;
+
+  const baseClass = 'flex shrink-0 flex-col items-center gap-1 cursor-pointer transition hover:opacity-90 active:opacity-80';
 
   if (status === 'done') {
     return (
-      <div className="flex shrink-0 flex-col items-center gap-1">
+      <button type="button" onClick={onClick} className={baseClass} aria-label={`Day ${day} 보기`}>
         <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-slate-800">
           <Check className="size-6 text-white" strokeWidth={2.5} />
         </div>
         <span className="text-xs font-medium text-slate-800">DAY {day}</span>
-      </div>
+      </button>
     );
   }
 
   if (status === 'active') {
     return (
-      <div className="flex shrink-0 flex-col items-center gap-1">
+      <button type="button" onClick={onClick} className={baseClass} aria-label={`Day ${day} 진입`}>
         <div className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-slate-800 bg-white">
           <span className="text-xl font-bold text-slate-800">{dayStr}</span>
         </div>
         <span className="text-xs font-bold text-orange-500 underline decoration-orange-500 underline-offset-2">
           DAY {day}
         </span>
-      </div>
+      </button>
     );
   }
 
   return (
-    <div className="flex shrink-0 flex-col items-center gap-1">
+    <button type="button" onClick={onClick} className={baseClass} aria-label={`Day ${day} 진입`}>
       <div className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-stone-300 bg-white">
         <span className="text-xl font-bold text-stone-400">{dayStr}</span>
       </div>
-      <span className="text-xs font-medium text-stone-400">DAY {day}</span>
-    </div>
+      <span className="text-xs font-medium text-stone-400">
+        DAY {day}
+        {showRestBadge && (
+          <span className="ml-0.5 text-amber-600" title="휴식 권장"> · 휴식 권장</span>
+        )}
+      </span>
+    </button>
   );
 }
