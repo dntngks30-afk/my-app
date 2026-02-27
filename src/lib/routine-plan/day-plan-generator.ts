@@ -229,6 +229,13 @@ export async function generateDayPlan(
     return pa === pb && sa === sb && ta === tb;
   };
 
+  /**
+   * 다음 day plan 재생성 트리거 (설문 기반).
+   * - pain_today >= 7: 통증 급증 → softer plan
+   * - pain_delta >= 3: 통증 변화 → 조절
+   * - time_available 15→5: 시간 부족 → fewer templates
+   * - condition_null_to_value: 신규 설문 입력
+   */
   const shouldRegenerate = (): boolean => {
     if (opts?.forceRegenerate) return true;
     if (!existing.data) return true;

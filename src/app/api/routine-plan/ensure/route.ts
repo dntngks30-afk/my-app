@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { generateDayPlan, getDayPlan } from '@/lib/routine-plan/day-plan-generator';
+import { generateDayPlan } from '@/lib/routine-plan/day-plan-generator';
 import type { DailyCondition } from '@/lib/routine-plan/day-plan-generator';
 import { requireActivePlan } from '@/lib/auth/requireActivePlan';
 import { buildMediaPayload } from '@/lib/media/media-payload';
@@ -96,49 +96,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
-    const existingPlan = await getDayPlan(routineId, day);
-    const tSelectPlan = performance.now();
-    if (existingPlan && existingPlan.selected_template_ids?.length) {
-      const payload: Record<string, unknown> = {
-        success: true,
-        plan: toPlanResponse(existingPlan),
-        created: false,
-      };
-      if (includeMedia && existingPlan.selected_template_ids.length > 0) {
-        const templates = await getTemplatesForMediaByIds(existingPlan.selected_template_ids);
-        const templateMap = new Map(templates.map((t) => [t.id, t]));
-        const mediaPayloads = await Promise.all(
-          templates.map((t) =>
-            buildMediaPayload(t.media_ref, t.duration_sec ?? 300)
-          )
-        );
-        const mediaById = new Map(templates.map((t, i) => [t.id, mediaPayloads[i]]));
-        payload.segments_with_media = existingPlan.selected_template_ids.map((id, i) => {
-          const t = templateMap.get(id);
-          const media = mediaById.get(id);
-          return {
-            templateId: id,
-            templateName: t?.name ?? `운동 ${i + 1}`,
-            mediaPayload: media ?? {
-              kind: 'placeholder',
-              autoplayAllowed: false,
-              notes: ['영상 준비 중입니다.'],
-            },
-          };
-        });
-      }
-      if (debug) {
-        payload.timings = {
-          total_ms: Math.round(performance.now() - t0),
-          auth_ms: Math.round(tAuth - t0),
-          select_plan_ms: Math.round(tSelectPlan - tAuth),
-        };
-      }
-      const res = NextResponse.json(payload);
-      res.headers.set('Cache-Control', 'no-store, max-age=0');
-      return res;
-    }
-
     const DEFAULT_CONDITION: DailyCondition & { source?: string } = {
       source: 'default',
       time_available: 15,
@@ -172,7 +129,7 @@ export async function POST(req: NextRequest) {
       forceRegenerate: false,
       preloadedContext: { userId: routine.user_id },
     });
-    const { plan } = result;
+    const { plan, regenerated } = result;
     const tGenerate = performance.now();
 
     const payload: Record<string, unknown> = {
@@ -181,7 +138,7 @@ export async function POST(req: NextRequest) {
         ...plan,
         daily_condition_snapshot: dailyCondition ?? plan.daily_condition_snapshot,
       }),
-      created: true,
+      created: regenerated,
     };
     if (includeMedia && plan.selected_template_ids?.length) {
       const templates = await getTemplatesForMediaByIds(plan.selected_template_ids);
@@ -207,14 +164,13 @@ export async function POST(req: NextRequest) {
       });
     }
     if (debug) {
-      payload.timings = {
-        total_ms: Math.round(tGenerate - t0),
-        auth_ms: Math.round(tAuth - t0),
-        select_plan_ms: Math.round(tSelectPlan - tAuth),
-        select_daily_ms: Math.round(tSelectDaily - tSelectPlan),
-        generate_ms: Math.round(tGenerate - tSelectDaily),
-      };
-    }
+        payload.timings = {
+          total_ms: Math.round(tGenerate - t0),
+          auth_ms: Math.round(tAuth - t0),
+          select_daily_ms: Math.round(tSelectDaily - tAuth),
+          generate_ms: Math.round(tGenerate - tSelectDaily),
+        };
+      }
     const res = NextResponse.json(payload);
     res.headers.set('Cache-Control', 'no-store, max-age=0');
     return res;
