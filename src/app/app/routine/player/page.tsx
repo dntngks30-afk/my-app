@@ -178,6 +178,7 @@ export default function RoutinePlayerPage() {
   const [planEmpty, setPlanEmpty] = useState(false);
   const [planErrorText, setPlanErrorText] = useState<string | null>(null);
   const [planRetryCount, setPlanRetryCount] = useState(0);
+  const [ensureTimings, setEnsureTimings] = useState<Record<string, number> | null>(null);
   const authCheckedRef = useRef(false);
   const segmentCount = segments.length;
 
@@ -236,6 +237,7 @@ export default function RoutinePlayerPage() {
     setPlanEmpty(false);
     setPlanError(null);
     setPlanErrorText(null);
+    setEnsureTimings(null);
     let cancelled = false;
     const run = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -254,11 +256,16 @@ export default function RoutinePlayerPage() {
             ...(opts.headers as Record<string, string>),
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ routineId, dayNumber }),
+          body: JSON.stringify({
+            routineId,
+            dayNumber,
+            debug: searchParams.get('debug') === '1',
+          }),
         });
         const data = await ensureRes.json().catch(() => ({}));
 
         if (cancelled) return;
+        if (data?.timings) setEnsureTimings(data.timings as Record<string, number>);
         if (!ensureRes.ok) {
           setPlanError(data?.error ?? 'Day Plan 조회/생성 실패');
           setPlanLoading(false);
@@ -729,8 +736,15 @@ export default function RoutinePlayerPage() {
 
   const DAYS = [1, 2, 3, 4, 5, 6, 7] as const;
 
+  const showDebugTimings = searchParams.get('debug') === '1' && ensureTimings;
+
   return (
     <div className="min-h-screen bg-[#F8F6F0] pb-24">
+      {showDebugTimings && (
+        <div className="bg-slate-800 text-white text-xs px-3 py-1 font-mono truncate">
+          ensure {ensureTimings.total_ms}ms | {JSON.stringify(ensureTimings)}
+        </div>
+      )}
       <header className="sticky top-0 z-10 border-b-2 border-slate-900 bg-[#F8F6F0] px-4 py-3">
         <div className="flex items-center justify-between gap-4">
           <button

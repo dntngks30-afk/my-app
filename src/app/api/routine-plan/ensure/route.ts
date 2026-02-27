@@ -52,14 +52,17 @@ function toPlanResponse(plan: {
 }
 
 export async function POST(req: NextRequest) {
+  const t0 = performance.now();
   try {
     const userId = await getCurrentUserId(req);
+    const tAuth = performance.now();
     if (!userId) {
       return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
     }
 
     const body = await req.json().catch(() => ({}));
-    const { routineId, dayNumber } = body;
+    const { routineId, dayNumber, debug: debugFlag } = body;
+    const debug = debugFlag === true;
 
     if (!routineId || !dayNumber) {
       return NextResponse.json(
@@ -83,12 +86,21 @@ export async function POST(req: NextRequest) {
     }
 
     const existingPlan = await getDayPlan(routineId, day);
+    const tSelectPlan = performance.now();
     if (existingPlan && existingPlan.selected_template_ids?.length) {
-      const res = NextResponse.json({
+      const payload: Record<string, unknown> = {
         success: true,
         plan: toPlanResponse(existingPlan),
         created: false,
-      });
+      };
+      if (debug) {
+        payload.timings = {
+          total_ms: Math.round(tSelectPlan - t0),
+          auth_ms: Math.round(tAuth - t0),
+          select_plan_ms: Math.round(tSelectPlan - tAuth),
+        };
+      }
+      const res = NextResponse.json(payload);
       res.headers.set('Cache-Control', 'no-store, max-age=0');
       return res;
     }
@@ -120,18 +132,30 @@ export async function POST(req: NextRequest) {
         dailyCondition = DEFAULT_CONDITION;
       }
     }
+    const tSelectDaily = performance.now();
 
     const result = await generateDayPlan(routineId, day, dailyCondition, { forceRegenerate: false });
     const { plan } = result;
+    const tGenerate = performance.now();
 
-    const res = NextResponse.json({
+    const payload: Record<string, unknown> = {
       success: true,
       plan: toPlanResponse({
         ...plan,
         daily_condition_snapshot: dailyCondition ?? plan.daily_condition_snapshot,
       }),
       created: true,
-    });
+    };
+    if (debug) {
+      payload.timings = {
+        total_ms: Math.round(tGenerate - t0),
+        auth_ms: Math.round(tAuth - t0),
+        select_plan_ms: Math.round(tSelectPlan - tAuth),
+        select_daily_ms: Math.round(tSelectDaily - tSelectPlan),
+        generate_ms: Math.round(tGenerate - tSelectDaily),
+      };
+    }
+    const res = NextResponse.json(payload);
     res.headers.set('Cache-Control', 'no-store, max-age=0');
     return res;
   } catch (error) {
