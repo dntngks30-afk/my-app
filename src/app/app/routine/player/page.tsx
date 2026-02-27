@@ -175,6 +175,7 @@ export default function RoutinePlayerPage() {
   const [segments, setSegments] = useState<Segment[]>(FALLBACK_SEGMENTS);
   const [planLoading, setPlanLoading] = useState(true);
   const [planError, setPlanError] = useState<string | null>(null);
+  const [planEmpty, setPlanEmpty] = useState(false);
   const authCheckedRef = useRef(false);
   const segmentCount = segments.length;
 
@@ -230,6 +231,8 @@ export default function RoutinePlayerPage() {
       setPlanLoading(false);
       return;
     }
+    setPlanEmpty(false);
+    setPlanError(null);
     let cancelled = false;
     const run = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -259,7 +262,7 @@ export default function RoutinePlayerPage() {
         const plan = data?.plan;
         if (!plan?.selected_template_ids?.length) {
           console.log('[PLAYER_PLAN_FETCH_SUCCESS]', { plan: null });
-          setSegments(FALLBACK_SEGMENTS);
+          setPlanEmpty(true);
           setPlanLoading(false);
           return;
         }
@@ -639,6 +642,39 @@ export default function RoutinePlayerPage() {
         >
           홈으로
         </button>
+      </div>
+    );
+  }
+
+  if (planEmpty) {
+    const playerUrl = `/app/routine/player?routineId=${encodeURIComponent(routineId)}&day=${dayNumber}`;
+    const checkinUrl = `/app/checkin?reason=need-today-checkin&next=${encodeURIComponent(playerUrl)}`;
+    return (
+      <div className="min-h-screen bg-[#F8F6F0] flex flex-col items-center justify-center px-4">
+        <div className="max-w-md w-full rounded-2xl border-2 border-slate-900 bg-white p-6 shadow-[4px_4px_0_0_rgba(15,23,42,1)]">
+          <h2 className="text-lg font-bold text-slate-800 mb-2">
+            오늘 루틴 플랜이 아직 생성되지 않았어요.
+          </h2>
+          <p className="text-sm text-slate-600 mb-6">
+            오늘의 컨디션을 먼저 기록하면 맞춤 플랜을 만들 수 있어요.
+          </p>
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => router.push(checkinUrl)}
+              className="min-h-[44px] w-full px-6 py-3 rounded-full border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95"
+            >
+              기록으로 이동
+            </button>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="min-h-[44px] w-full px-6 py-3 rounded-full border-2 border-slate-900 bg-white font-bold text-slate-800 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95"
+            >
+              다시 불러오기
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

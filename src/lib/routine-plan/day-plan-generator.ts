@@ -53,6 +53,7 @@ export interface DayPlanRow {
   constraints_applied: string[];
   generator_version: string;
   scoring_version: string;
+  rule_version?: string;
   daily_condition_snapshot: DailyCondition | null;
   plan_hash: string;
 }
@@ -405,7 +406,8 @@ export async function getDayPlan(
     .eq('day_number', dayNumber)
     .maybeSingle();
 
-  if (error || !data) return null;
+  if (error) throw new Error(error.message);
+  if (!data) return null;
 
   return {
     routine_id: data.routine_id,
@@ -415,6 +417,7 @@ export async function getDayPlan(
     constraints_applied: data.constraints_applied ?? [],
     generator_version: data.generator_version,
     scoring_version: data.scoring_version,
+    rule_version: data.rule_version ?? RULE_VERSION,
     daily_condition_snapshot: data.daily_condition_snapshot,
     plan_hash: data.plan_hash ?? '',
   } as DayPlanRow;

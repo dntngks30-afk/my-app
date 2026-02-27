@@ -63,6 +63,8 @@ export async function GET(req: NextRequest) {
             constraints_applied: plan.constraints_applied,
             generator_version: plan.generator_version,
             scoring_version: plan.scoring_version,
+            rule_version: plan.rule_version ?? null,
+            daily_condition_snapshot: plan.daily_condition_snapshot ?? null,
           }
         : null,
     });
