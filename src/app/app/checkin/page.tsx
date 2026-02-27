@@ -38,6 +38,7 @@ export default function CheckinPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextUrl = searchParams.get('next');
+  const postWorkout = searchParams.get('postWorkout') === '1';
   const [report, setReport] = useState<WeeklyReport | null>(null);
   const [reportLoading, setReportLoading] = useState(true);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -93,6 +94,47 @@ export default function CheckinPage() {
     }
   }, [report, reportLoading]);
 
+  /** postWorkout=1일 때만: 오늘 컨디션 없으면 모달 자동 오픈, 있으면 스킵. URL에서 postWorkout 제거로 중복 방지 */
+  useEffect(() => {
+    if (!postWorkout) return;
+    let cancelled = false;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token || cancelled) return;
+      console.log('[CHECKIN_TODAY_FETCH_START]', { source: 'postWorkout' });
+      try {
+        const res = await fetch('/api/daily-condition/today', {
+          cache: 'no-store' as RequestCache,
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (cancelled) return;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          console.log('[CHECKIN_TODAY_FETCH_FAIL]', { status: res.status });
+          return;
+        }
+        const condition = data?.condition ?? null;
+        if (condition) {
+          console.log('[CHECKIN_TODAY_FETCH_SUCCESS]', { hasCondition: true });
+        } else {
+          console.log('[CHECKIN_TODAY_FETCH_EMPTY]');
+        }
+        const cleanPath = '/app/checkin' + (nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : '');
+        router.replace(cleanPath);
+        if (cancelled) return;
+        if (!condition) {
+          setShowConditionModal(true);
+          console.log('[CHECKIN_MODAL_AUTO_OPEN]', { source: 'postWorkout' });
+        }
+      } catch (e) {
+        if (cancelled) return;
+        console.log('[CHECKIN_TODAY_FETCH_FAIL]', { error: String(e) });
+        router.replace('/app/checkin' + (nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ''));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [postWorkout, nextUrl, router]);
+
   const handleConditionSubmit = async (values: {
     pain_today?: number | null;
     stiffness?: number | null;
@@ -102,6 +144,7 @@ export default function CheckinPage() {
   }) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) return;
+    console.log('[CHECKIN_SAVE_START]');
     const res = await fetch('/api/daily-condition/upsert', {
       method: 'POST',
       cache: 'no-store',
@@ -111,8 +154,17 @@ export default function CheckinPage() {
       },
       body: JSON.stringify(values),
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      console.log('[CHECKIN_SAVE_FAIL]', { status: res.status });
+      return;
+    }
+    console.log('[CHECKIN_SAVE_SUCCESS]');
     setShowConditionModal(false);
+    if (postWorkout) {
+      console.log('[CHECKIN_POSTWORKOUT_FINISH]');
+      const cleanPath = '/app/checkin' + (nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : '');
+      router.replace(cleanPath);
+    }
     await fetchReport();
     if (nextUrl) {
       router.push(nextUrl);
@@ -201,8 +253,18 @@ export default function CheckinPage() {
         <CheckInModal
           submitLabel={nextUrl ? '저장 후 계속하기' : '저장'}
           onSubmit={handleConditionSubmit}
-          onSkip={() => setShowConditionModal(false)}
-          onClose={() => setShowConditionModal(false)}
+          onSkip={() => {
+            setShowConditionModal(false);
+            if (postWorkout) {
+              router.replace('/app/checkin' + (nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ''));
+            }
+          }}
+          onClose={() => {
+            setShowConditionModal(false);
+            if (postWorkout) {
+              router.replace('/app/checkin' + (nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ''));
+            }
+          }}
         />
       )}
 

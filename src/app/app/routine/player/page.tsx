@@ -512,11 +512,11 @@ export default function RoutinePlayerPage() {
 
       const startedAtUtc =
         startedAtUtcMs !== null ? new Date(startedAtUtcMs).toISOString() : '';
-      console.log('[player] complete request', { dayNumber, startedAtUtc });
+      console.log('[PLAYER_COMPLETE_START]', { dayNumber, startedAtUtc });
 
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (!session?.access_token) {
-          console.warn('[player] complete fail', {
+          console.warn('[PLAYER_COMPLETE_FAIL]', {
             status: 401,
             error: 'No session',
           });
@@ -536,22 +536,25 @@ export default function RoutinePlayerPage() {
         })
           .then((res) => {
             if (res.ok) {
-              console.log('[player] complete success');
+              console.log('[PLAYER_COMPLETE_SUCCESS]');
+              const to = `/app/checkin?postWorkout=1&next=${encodeURIComponent('/app/checkin')}`;
+              console.log('[PLAYER_POSTWORKOUT_REDIRECT]', { to });
+              router.push(to);
             } else {
               res.json().then((body) =>
-                console.warn('[player] complete fail', {
+                console.warn('[PLAYER_COMPLETE_FAIL]', {
                   status: res.status,
                   error: body?.error ?? 'Unknown',
                 })
               );
             }
           })
-          .catch((err) =>
-            console.warn('[player] complete fail', {
+          .catch((err) => {
+            console.warn('[PLAYER_COMPLETE_FAIL]', {
               status: 0,
               error: err?.message ?? String(err),
-            })
-          );
+            });
+          });
       });
     } else {
       console.log('[player] transition', {
@@ -566,6 +569,7 @@ export default function RoutinePlayerPage() {
     startedAtUtcMs,
     elapsedMs,
     dayNumber,
+    router,
   ]);
 
   const handlePlay = useCallback(() => {
