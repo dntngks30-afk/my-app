@@ -8,7 +8,7 @@
  * @module routine-plan/day-plan-generator
  */
 
-import { calculateDeepV2 } from '@/lib/deep-test/scoring/deep_v2';
+import { calculateDeepV2, extendDeepV2 } from '@/lib/deep-test/scoring/deep_v2';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import {
@@ -145,13 +145,14 @@ export async function loadDeepResultForUser(
   }
 
   const v2 = calculateDeepV2(answers);
+  const extended = extendDeepV2(v2);
   return {
-    level: v2.level,
-    focus_tags: v2.focus_tags,
-    avoid_tags: v2.avoid_tags,
-    primaryFocus: v2.primaryFocus,
-    secondaryFocus: v2.secondaryFocus,
-    finalScores: v2.finalScores,
+    level: extended.level,
+    focus_tags: extended.focus_tags,
+    avoid_tags: extended.avoid_tags,
+    primaryFocus: extended.primaryFocus,
+    secondaryFocus: extended.secondaryFocus,
+    finalScores: extended.finalScores,
   };
 }
 

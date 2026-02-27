@@ -12,6 +12,8 @@ import type {
   DeepFinalScores,
   DeepPrimaryFocus,
   DeepSecondaryFocus,
+  DeepV2ExtendedResult,
+  DeepAlgorithmScores,
 } from '../types';
 
 export const SCORING_VERSION = 'deep_v2';
@@ -412,4 +414,78 @@ function computeSecondaryFocus(
   arr.sort((a, b) => b[1] - a[1]);
   if (arr[0][1] <= 0) return 'NONE';
   return axisToFocus(arr[0][0]);
+}
+
+/** DeepFocus → exercise_templates focus_tags 매핑 */
+const FOCUS_TO_TAGS: Record<string, string[]> = {
+  'NECK-SHOULDER': ['upper_trap_release', 'neck_mobility', 'thoracic_mobility'],
+  'LUMBO-PELVIS': ['hip_mobility', 'glute_activation', 'core_control'],
+  'UPPER-LIMB': ['shoulder_mobility', 'shoulder_stability'],
+  'LOWER-LIMB': ['lower_chain_stability', 'glute_medius', 'ankle_mobility'],
+  'FULL': ['core_control', 'full_body_reset'],
+};
+
+/** 축 점수 높을 때 추가할 avoid_tags */
+const AXIS_TO_AVOID: Record<AxisKey, string[]> = {
+  N: ['shoulder_overhead'],
+  L: ['lower_back_pain'],
+  U: ['wrist_load'],
+  Lo: ['knee_load', 'knee_ground_pain'],
+  D: [],
+};
+
+/**
+ * DeepV2Result → DeepV2ExtendedResult (level, focus_tags, avoid_tags)
+ * day-plan-generator가 소비하는 SSOT
+ */
+export function extendDeepV2(v2: DeepV2Result): DeepV2ExtendedResult {
+  const { result_type, primaryFocus, secondaryFocus, objectiveScores, finalScores, confidence } = v2;
+  const D = objectiveScores.D;
+
+  let level: number;
+  if (result_type === 'STABLE') {
+    level = 2;
+  } else if (result_type === 'DECONDITIONED') {
+    level = 1;
+  } else {
+    if (D >= 4) level = 1;
+    else if (D >= 2) level = 2;
+    else level = 3;
+  }
+  if (confidence < 0.5) level = Math.min(level, 1);
+  level = Math.max(1, Math.min(3, level));
+
+  const focus_tags: string[] = [];
+  const primaryTags = FOCUS_TO_TAGS[primaryFocus] ?? FOCUS_TO_TAGS['FULL'];
+  focus_tags.push(...primaryTags);
+  if (secondaryFocus && secondaryFocus !== 'NONE') {
+    const secTags = FOCUS_TO_TAGS[secondaryFocus] ?? [];
+    for (const t of secTags) {
+      if (!focus_tags.includes(t)) focus_tags.push(t);
+    }
+  }
+
+  const avoid_tags: string[] = [];
+  const axes: AxisKey[] = ['N', 'L', 'U', 'Lo'];
+  for (const a of axes) {
+    if (finalScores[a] >= 3) {
+      avoid_tags.push(...(AXIS_TO_AVOID[a] ?? []));
+    }
+  }
+
+  const algorithm_scores: DeepAlgorithmScores = {
+    upper_score: objectiveScores.N + objectiveScores.U,
+    lower_score: objectiveScores.L + objectiveScores.Lo,
+    core_score: Math.max(objectiveScores.N, objectiveScores.L),
+    balance_score: objectiveScores.D,
+    pain_risk: objectiveScores.D,
+  };
+
+  return {
+    ...v2,
+    level,
+    focus_tags,
+    avoid_tags: [...new Set(avoid_tags)],
+    algorithm_scores,
+  };
 }
