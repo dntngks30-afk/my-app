@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
@@ -14,10 +14,12 @@ function hasActivePlan(planStatus: string | null): boolean {
   return planStatus === 'active';
 }
 
+/** 탭 전환 시 동일 세션이면 재검증 스킵(users DB 조회 생략) */
 export default function AppAuthGate({ children }: AppAuthGateProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [status, setStatus] = useState<'loading' | 'auth' | 'denied' | 'paywall' | 'allowed'>('loading');
+  const lastAllowedUserIdRef = useRef<string | null>(null);
 
   const isAuthPage = pathname?.startsWith('/app/auth');
 
@@ -30,6 +32,7 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
         if (cancelled) return;
 
         if (error || !session) {
+          lastAllowedUserIdRef.current = null;
           setStatus('auth');
           if (!isAuthPage) {
             const next = encodeURIComponent(pathname || '/app/home');
@@ -38,8 +41,14 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
           return;
         }
 
+        const userId = session.user.id;
+        if (lastAllowedUserIdRef.current === userId && status === 'allowed') {
+          return;
+        }
+
         const email = session.user?.email ?? null;
         if (!isAllowlistEmpty() && !isAllowed(email)) {
+          lastAllowedUserIdRef.current = null;
           setStatus('denied');
           return;
         }
@@ -47,23 +56,29 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
         const { data: user, error: userError } = await supabase
           .from('users')
           .select('plan_status')
-          .eq('id', session.user.id)
+          .eq('id', userId)
           .single();
 
         if (cancelled) return;
 
         if (userError || !user) {
+          lastAllowedUserIdRef.current = null;
           setStatus('paywall');
           return;
         }
 
         if (hasActivePlan(user.plan_status)) {
+          lastAllowedUserIdRef.current = userId;
           setStatus('allowed');
         } else {
+          lastAllowedUserIdRef.current = null;
           setStatus('paywall');
         }
       } catch {
-        if (!cancelled) setStatus('auth');
+        if (!cancelled) {
+          lastAllowedUserIdRef.current = null;
+          setStatus('auth');
+        }
       }
     }
 

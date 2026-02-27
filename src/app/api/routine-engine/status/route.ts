@@ -10,6 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { checkAndUpdateRoutineStatus } from '@/lib/routine-engine';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 
@@ -19,23 +20,6 @@ const MS_48H = 48 * 60 * 60 * 1000;
 function maskUserId(userId: string): string {
   if (!userId || userId.length < 6) return '******';
   return `${userId.slice(0, 6)}...`;
-}
-
-async function getCurrentUserId(req: NextRequest): Promise<string | null> {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-
-  const token = authHeader.slice(7);
-  const { getServerSupabaseAdmin } = await import('@/lib/supabase');
-  const supabase = getServerSupabaseAdmin();
-
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser(token);
-
-  if (error || !user) return null;
-  return user.id;
 }
 
 export async function GET(req: NextRequest) {

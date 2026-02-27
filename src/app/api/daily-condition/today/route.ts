@@ -5,20 +5,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 
 function getDayKeyUtc(): string {
   return new Date().toISOString().slice(0, 10);
-}
-
-async function getCurrentUserId(req: NextRequest): Promise<string | null> {
-  const auth = req.headers.get('authorization');
-  if (!auth?.startsWith('Bearer ')) return null;
-
-  const token = auth.slice(7);
-  const supabase = getServerSupabaseAdmin();
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  return error || !user ? null : user.id;
 }
 
 export async function GET(req: NextRequest) {

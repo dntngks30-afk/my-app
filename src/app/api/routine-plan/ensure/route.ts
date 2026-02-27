@@ -7,9 +7,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
+import { requireActivePlan } from '@/lib/auth/requireActivePlan';
 import { generateDayPlan } from '@/lib/routine-plan/day-plan-generator';
 import type { DailyCondition } from '@/lib/routine-plan/day-plan-generator';
-import { requireActivePlan } from '@/lib/auth/requireActivePlan';
 import { buildMediaPayload } from '@/lib/media/media-payload';
 import { getTemplatesForMediaByIds } from '@/lib/workout-routine/exercise-templates-db';
 
@@ -17,17 +18,6 @@ export const dynamic = 'force-dynamic';
 
 function getDayKeyUtc(): string {
   return new Date().toISOString().slice(0, 10);
-}
-
-async function getCurrentUserId(req: NextRequest): Promise<string | null> {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-
-  const token = authHeader.slice(7);
-  const { getServerSupabaseAdmin } = await import('@/lib/supabase');
-  const supabase = getServerSupabaseAdmin();
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  return error || !user ? null : user.id;
 }
 
 function toPlanResponse(plan: {

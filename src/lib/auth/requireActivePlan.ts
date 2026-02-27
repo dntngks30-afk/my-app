@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { getCurrentUserId } from './getCurrentUserId';
 
 export interface ActivePlanContext {
   userId: string;
@@ -18,27 +19,16 @@ export interface ActivePlanContext {
 export async function requireActivePlan(
   req: NextRequest
 ): Promise<NextResponse | ActivePlanContext> {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
+  const userId = await getCurrentUserId(req);
+  if (!userId) {
     return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   }
 
-  const token = authHeader.substring(7);
   const supabase = getServerSupabaseAdmin();
-
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser(token);
-
-  if (error || !user) {
-    return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-  }
-
   const { data: dbUser } = await supabase
     .from('users')
     .select('plan_status')
-    .eq('id', user.id)
+    .eq('id', userId)
     .single();
 
   if (!dbUser) {
@@ -52,5 +42,5 @@ export async function requireActivePlan(
     );
   }
 
-  return { userId: user.id };
+  return { userId };
 }

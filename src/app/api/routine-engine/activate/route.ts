@@ -8,24 +8,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { activateRoutine } from '@/lib/routine-engine';
-
-async function getCurrentUserId(req: NextRequest): Promise<string | null> {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-
-  const token = authHeader.slice(7);
-  const supabase = getServerSupabaseAdmin();
-
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser(token);
-
-  if (error || !user) return null;
-  return user.id;
-}
 
 export async function POST(req: NextRequest) {
   try {

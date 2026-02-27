@@ -9,26 +9,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
-
-async function getCurrentUserId(req: NextRequest): Promise<string | null> {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-
-  const token = authHeader.slice(7);
-  const { getServerSupabaseAdmin } = await import('@/lib/supabase');
-  const supabase = getServerSupabaseAdmin();
-
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser(token);
-
-  if (error || !user) return null;
-  return user.id;
-}
 
 export async function POST(req: NextRequest) {
   try {
