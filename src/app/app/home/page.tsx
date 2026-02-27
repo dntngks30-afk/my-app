@@ -70,53 +70,26 @@ export default function ResetHomePage() {
 
     const opts: RequestInit = {
       cache: 'no-store' as RequestCache,
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
     };
 
     try {
-      const routineRes = await fetch('/api/workout-routine/get', opts);
-      if (!routineRes.ok) {
-        const body = await routineRes.json().catch(() => ({}));
-        console.warn('[HOME_ROUTINE_FAIL]', { status: routineRes.status, error: body.error });
-        setStartError(body?.error ?? '루틴을 불러오지 못했습니다.');
-        return;
-      }
-      const routineData = await routineRes.json();
-      const routineId = routineData?.routine?.id;
-      if (!routineId) {
-        console.warn('[HOME_ROUTINE_FAIL]', { error: 'No routineId' });
-        setStartError('루틴을 찾을 수 없습니다.');
-        return;
-      }
-
-      const ensureRes = await fetch('/api/routine-plan/ensure', {
-        method: 'POST',
-        cache: 'no-store',
-        headers: {
-          ...(opts.headers as Record<string, string>),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ routineId, dayNumber: day }),
-      });
-      const ensureData = await ensureRes.json().catch(() => ({}));
-      const plan = ensureData?.plan;
-
-      if (!ensureRes.ok) {
-        setStartError(ensureData?.error ?? '플랜 조회/생성에 실패했습니다.');
-        return;
-      }
-      if (!plan?.selected_template_ids?.length) {
-        setStartError(ensureData?.error ?? '플랜을 불러올 수 없습니다.');
-        return;
-      }
-
-      const activateRes = await fetch('/api/routine-engine/activate', {
+      const res = await fetch('/api/routine-engine/start-day', {
         method: 'POST',
         ...opts,
+        body: JSON.stringify({ dayNumber: day }),
       });
-      if (!activateRes.ok) {
-        const body = await activateRes.json().catch(() => ({}));
-        console.warn('[HOME_ACTIVATE_FAIL]', { message: body.error });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStartError(data?.error ?? '시작에 실패했습니다.');
+        return;
+      }
+      const routineId = data?.routineId;
+      if (!routineId) {
+        setStartError('루틴 정보를 받지 못했습니다.');
         return;
       }
       router.push(`/app/routine/player?routineId=${routineId}&day=${day}`);
