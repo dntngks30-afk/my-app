@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 // 빌드 시 프리렌더링 방지 (Supabase 환경 변수 필요)
@@ -312,6 +313,12 @@ export default function AdminPage() {
           >
             플랜 권한 부여
           </button>
+          <Link
+            href="/admin/templates"
+            className="rounded-t-lg px-4 py-2 text-sm font-medium text-slate-400 hover:bg-slate-900/50 hover:text-slate-300 transition"
+          >
+            템플릿 운영
+          </Link>
         </div>
 
         {activeTab === "plan-override" ? (
