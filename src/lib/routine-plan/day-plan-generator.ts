@@ -58,17 +58,17 @@ export interface DayPlanRow {
   plan_hash: string;
 }
 
-/** Theme tags per day (align with deep-v2-generator DAY_THEMES) */
+/** Theme tags per day (day-specific to avoid identical Day2/4/5 selection) */
 const DAY_THEMES: ReadonlyArray<{
   primaryTags: readonly string[];
   secondaryTags?: readonly string[];
   levelFilter?: number;
 }> = [
   { primaryTags: ['core_control', 'full_body_reset'], secondaryTags: ['core_stability'], levelFilter: 1 },
-  { primaryTags: [] },
+  { primaryTags: ['thoracic_mobility', 'shoulder_mobility'], secondaryTags: ['hip_mobility'] },
   { primaryTags: ['core_stability', 'core_control', 'global_core'], secondaryTags: ['lower_chain_stability', 'glute_medius'] },
-  { primaryTags: [] },
-  { primaryTags: [] },
+  { primaryTags: ['glute_activation', 'upper_back_activation'], secondaryTags: ['core_stability'] },
+  { primaryTags: ['lower_chain_stability', 'global_core'], secondaryTags: ['basic_balance'] },
   { primaryTags: ['full_body_reset', 'core_stability'], secondaryTags: ['lower_chain_stability'] },
   { primaryTags: ['full_body_reset', 'basic_balance'], levelFilter: 1 },
 ];
@@ -296,9 +296,10 @@ export async function generateDayPlan(
   pool = applyLevelFilter(pool, level);
 
   const theme = DAY_THEMES[dayNumber - 1];
-  const themeTags = theme.primaryTags.length > 0
+  const baseTags = theme.primaryTags.length > 0
     ? [...theme.primaryTags, ...(theme.secondaryTags ?? [])]
-    : [...focusTags];
+    : focusTags.length > 0 ? [...focusTags] : ['core_stability', 'core_control'];
+  const themeTags = focusTags.length > 0 ? [...new Set([...baseTags, ...focusTags])] : baseTags;
 
   const levelFilter = theme.levelFilter ?? level;
   pool = pool.filter((t) => t.level <= levelFilter);
