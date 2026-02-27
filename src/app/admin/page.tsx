@@ -10,7 +10,7 @@ import { supabase } from "@/lib/supabase";
 // 빌드 시 프리렌더링 방지 (Supabase 환경 변수 필요)
 export const dynamic = 'force-dynamic';
 
-type AdminTab = "requests" | "plan-override";
+type AdminTab = "requests" | "plan-override" | "backfill";
 
 // 진단 데이터 타입
 interface DiagnosisData {
@@ -68,6 +68,13 @@ export default function AdminPage() {
     plan_tier: "" as string,
     reason: "",
   });
+
+  // 백필
+  const [isBackfillAdmin, setIsBackfillAdmin] = useState<boolean | null>(null);
+  const [backfillLoading, setBackfillLoading] = useState(false);
+  const [backfillDryRun, setBackfillDryRun] = useState(true);
+  const [backfillLimit, setBackfillLimit] = useState(10);
+  const [backfillResult, setBackfillResult] = useState<Record<string, unknown> | null>(null);
 
   // 권한 체크
   useEffect(() => {
@@ -152,6 +159,64 @@ export default function AdminPage() {
     setIsPlanAdmin(null);
     checkPlanAdmin();
   }, [isAuthorized, activeTab]);
+
+  // 백필 탭: admin 체크
+  useEffect(() => {
+    if (!isAuthorized || activeTab !== "backfill") return;
+
+    const check = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setIsBackfillAdmin(false);
+        return;
+      }
+      try {
+        const res = await fetch("/api/admin/check", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const { isAdmin: ok } = await res.json();
+        setIsBackfillAdmin(!!ok);
+      } catch {
+        setIsBackfillAdmin(false);
+      }
+    };
+
+    setIsBackfillAdmin(null);
+    check();
+  }, [isAuthorized, activeTab]);
+
+  // 백필 실행
+  const handleBackfillRun = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      setBackfillResult({ error: "로그인이 필요합니다." });
+      return;
+    }
+
+    setBackfillLoading(true);
+    setBackfillResult(null);
+    try {
+      const res = await fetch("/api/admin/backfill/routine-plans", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          dryRun: backfillDryRun,
+          limit: backfillLimit,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setBackfillResult(data);
+    } catch (err) {
+      setBackfillResult({
+        error: err instanceof Error ? err.message : "네트워크 오류",
+      });
+    } finally {
+      setBackfillLoading(false);
+    }
+  };
 
   // 플랜 권한 부여 제출
   const handlePlanOverrideSubmit = async () => {
@@ -313,6 +378,16 @@ export default function AdminPage() {
           >
             플랜 권한 부여
           </button>
+          <button
+            onClick={() => setActiveTab("backfill")}
+            className={`rounded-t-lg px-4 py-2 text-sm font-medium transition ${
+              activeTab === "backfill"
+                ? "border border-b-0 border-slate-800 border-b-slate-950 bg-slate-900 text-slate-100"
+                : "text-slate-400 hover:bg-slate-900/50 hover:text-slate-300"
+            }`}
+          >
+            루틴 플랜 백필
+          </button>
           <Link
             href="/admin/templates"
             className="rounded-t-lg px-4 py-2 text-sm font-medium text-slate-400 hover:bg-slate-900/50 hover:text-slate-300 transition"
@@ -321,7 +396,64 @@ export default function AdminPage() {
           </Link>
         </div>
 
-        {activeTab === "plan-override" ? (
+        {activeTab === "backfill" ? (
+          /* 루틴 플랜 백필 섹션 */
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 max-w-2xl">
+            <h2 className="mb-4 text-xl font-bold text-slate-100">루틴 플랜 백필</h2>
+            <p className="mb-6 text-sm text-slate-400">
+              Deep 완료 유저의 미완료 Day 2~7 플랜을 새 규칙으로 생성합니다.
+            </p>
+
+            {isBackfillAdmin === null ? (
+              <p className="text-slate-400">권한 확인 중...</p>
+            ) : !isBackfillAdmin ? (
+              <div className="rounded-lg border border-slate-700 bg-slate-800 p-6 text-center">
+                <p className="text-slate-300">관리자 권한이 없습니다.</p>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="backfill-dryrun"
+                    checked={backfillDryRun}
+                    onChange={(e) => setBackfillDryRun(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-600 bg-slate-800"
+                  />
+                  <label htmlFor="backfill-dryrun" className="text-sm text-slate-300">
+                    미리보기 (dryRun) — DB에 저장하지 않고 결과만 확인
+                  </label>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">처리 인원 수 (limit)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    value={backfillLimit}
+                    onChange={(e) => setBackfillLimit(Math.min(200, Math.max(1, parseInt(e.target.value, 10) || 10)))}
+                    className="w-32 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100"
+                  />
+                  <p className="mt-1 text-xs text-slate-500">1~200 (기본 10)</p>
+                </div>
+                <button
+                  onClick={handleBackfillRun}
+                  disabled={backfillLoading}
+                  className="rounded-lg bg-[#f97316] px-6 py-3 font-bold text-white transition hover:bg-[#fb923c] disabled:opacity-60"
+                >
+                  {backfillLoading ? "처리 중..." : backfillDryRun ? "미리보기 실행" : "백필 실행"}
+                </button>
+                {backfillResult && (
+                  <div className="rounded-lg border border-slate-700 bg-slate-800 p-4 text-sm">
+                    <pre className="whitespace-pre-wrap break-all text-slate-300 font-mono">
+                      {JSON.stringify(backfillResult, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : activeTab === "plan-override" ? (
           /* 플랜 권한 부여 섹션 */
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 max-w-2xl">
             <h2 className="mb-6 text-xl font-bold text-slate-100">7일 루틴 권한 부여</h2>
