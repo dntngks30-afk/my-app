@@ -209,6 +209,13 @@ export default function RoutinePlayerPage() {
     });
   }, [router, routineId, dayNumber]);
 
+  /** routineId/day 없으면 루틴 허브로 리다이렉트 */
+  useEffect(() => {
+    if (!routineId) {
+      router.replace('/app/routine?reason=missing_params');
+    }
+  }, [routineId, router]);
+
   /** Day 전환 시 플레이어 상태 리셋 */
   useEffect(() => {
     setStatus('idle');
@@ -607,14 +614,7 @@ export default function RoutinePlayerPage() {
   if (!routineId) {
     return (
       <div className="min-h-screen bg-[#F8F6F0] flex flex-col items-center justify-center px-4">
-        <p className="text-slate-600 mb-4">루틴 정보가 없습니다.</p>
-        <button
-          type="button"
-          onClick={() => router.push('/app/home')}
-          className="min-h-[44px] px-8 py-4 rounded-full border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95"
-        >
-          홈으로
-        </button>
+        <p className="text-slate-600">루틴으로 이동 중...</p>
       </div>
     );
   }
