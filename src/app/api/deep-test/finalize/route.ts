@@ -11,7 +11,23 @@ import { requireDeepAuth } from '@/lib/deep-test/auth';
 import { calculateDeepV1 } from '@/lib/deep-test/scoring/deep_v1';
 import { calculateDeepV2 } from '@/lib/deep-test/scoring/deep_v2';
 import { ensureDeepWorkoutRoutine, maskId } from '@/lib/deep-test/ensure-deep-routine';
+import { generateDayPlan } from '@/lib/routine-plan/day-plan-generator';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
+
+async function seedDay1PlanIfRoutine(
+  routineId: string,
+  userId: string
+): Promise<void> {
+  try {
+    await generateDayPlan(routineId, 1, null, { preloadedContext: { userId } });
+    console.log('[DEEP_FINALIZE] day1 plan seeded', { routineId: maskId(routineId) });
+  } catch (err) {
+    console.warn('[DEEP_FINALIZE_DAY1_SEED_FAIL]', {
+      routineId: maskId(routineId),
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
 
 const SOURCE = 'deep';
 
@@ -89,6 +105,7 @@ export async function POST(req: NextRequest) {
         routine: maskId(routineId),
         created,
       });
+      if (routineId) await seedDay1PlanIfRoutine(routineId, userId);
     } catch (err) {
       console.warn('[DEEP_FINALIZE_ROUTINE_FAIL]', {
         user: maskId(userId),
@@ -154,6 +171,7 @@ export async function POST(req: NextRequest) {
         routine: maskId(routineId),
         created,
       });
+      if (routineId) await seedDay1PlanIfRoutine(routineId, userId);
     } catch (err) {
       console.warn('[DEEP_FINALIZE_ROUTINE_FAIL]', {
         user: maskId(userId),
@@ -218,6 +236,7 @@ export async function POST(req: NextRequest) {
       routine: maskId(routineId),
       created,
     });
+    if (routineId) await seedDay1PlanIfRoutine(routineId, userId);
   } catch (err) {
     console.warn('[DEEP_FINALIZE_ROUTINE_FAIL]', {
       user: maskId(userId),
