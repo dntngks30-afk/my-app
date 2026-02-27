@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Play, Pause, Check } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Check, Lock } from 'lucide-react';
 import Hls from 'hls.js';
 import { supabase } from '@/lib/supabase';
 
@@ -195,6 +195,7 @@ export default function RoutinePlayerPage() {
 
   const initSyncDone = useRef(false);
   const statusLoading = useRef(false);
+  const [currentDay, setCurrentDay] = useState(1);
 
   /** Auth 체크: token 없으면 /app/auth로 리다이렉트 */
   useEffect(() => {
@@ -207,6 +208,14 @@ export default function RoutinePlayerPage() {
       }
     });
   }, [router, routineId, dayNumber]);
+
+  /** Day 전환 시 플레이어 상태 리셋 */
+  useEffect(() => {
+    setStatus('idle');
+    setStartedAtUtcMs(null);
+    setPausedAccumulatedMs(0);
+    setPauseStartedPerfMs(null);
+  }, [dayNumber]);
 
   /** Day plan fetch + segments 빌드 */
   useEffect(() => {
@@ -368,8 +377,23 @@ export default function RoutinePlayerPage() {
         setServerNowUtcAtSyncMs(ms);
         setPerfNowAtSyncMs(performance.now());
       }
+      const cd = data?.state?.currentDay;
+      if (typeof cd === 'number' && cd >= 1 && cd <= 7) {
+        setCurrentDay(cd);
+      }
     });
   }, [dayNumber, segmentCount, fetchStatus]);
+
+  /** routineId 있을 때 currentDay 주기적 동기화 (Day pill용) */
+  useEffect(() => {
+    if (!routineId) return;
+    fetchStatus().then((data) => {
+      const cd = data?.state?.currentDay;
+      if (typeof cd === 'number' && cd >= 1 && cd <= 7) {
+        setCurrentDay(cd);
+      }
+    });
+  }, [routineId, fetchStatus]);
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -634,26 +658,69 @@ export default function RoutinePlayerPage() {
     );
   }
 
+  const handleDaySelect = useCallback(
+    (targetDay: number) => {
+      if (status === 'running' || status === 'paused') return;
+      if (targetDay > currentDay) return;
+      if (targetDay === dayNumber) return;
+      router.replace(`/app/routine/player?routineId=${encodeURIComponent(routineId)}&day=${targetDay}`);
+    },
+    [router, routineId, dayNumber, currentDay, status]
+  );
+
+  const DAYS = [1, 2, 3, 4, 5, 6, 7] as const;
+
   return (
     <div className="min-h-screen bg-[#F8F6F0] pb-24">
-      <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b-2 border-slate-900 bg-[#F8F6F0] px-4 py-3">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="flex size-10 shrink-0 items-center justify-center rounded-full border-2 border-slate-900 bg-white shadow-[2px_2px_0_0_rgba(15,23,42,1)] transition hover:opacity-90"
-          aria-label="뒤로가기"
-        >
-          <ArrowLeft className="size-5 text-slate-800" strokeWidth={2.5} />
-        </button>
-        <div className="min-w-0 flex-1 text-center">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">
-            DAY {dayNumber}
-          </p>
-          <h1 className="truncate text-lg font-bold text-slate-800">
-            15분 루틴
-          </h1>
+      <header className="sticky top-0 z-10 border-b-2 border-slate-900 bg-[#F8F6F0] px-4 py-3">
+        <div className="flex items-center justify-between gap-4">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="flex size-10 shrink-0 items-center justify-center rounded-full border-2 border-slate-900 bg-white shadow-[2px_2px_0_0_rgba(15,23,42,1)] transition hover:opacity-90"
+            aria-label="뒤로가기"
+          >
+            <ArrowLeft className="size-5 text-slate-800" strokeWidth={2.5} />
+          </button>
+          <div className="min-w-0 flex-1 text-center">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">
+              DAY {dayNumber}
+            </p>
+            <h1 className="truncate text-lg font-bold text-slate-800">
+              15분 루틴
+            </h1>
+          </div>
+          <div className="w-10" />
         </div>
-        <div className="w-10" />
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1 -mx-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          {DAYS.map((d) => {
+            const isDone = d < currentDay;
+            const isActive = d === currentDay;
+            const isLocked = d > currentDay;
+            const isSelected = d === dayNumber;
+            const canSelect = (isDone || isActive) && status !== 'running' && status !== 'paused';
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => canSelect && handleDaySelect(d)}
+                disabled={!canSelect}
+                aria-label={isLocked ? `Day ${d} 잠금` : isSelected ? `Day ${d} 선택됨` : `Day ${d} 다시 보기`}
+                className={`flex size-10 shrink-0 items-center justify-center rounded-full border-2 transition ${
+                  isLocked
+                    ? 'border-stone-300 bg-white/60 text-stone-400 cursor-not-allowed'
+                    : isSelected
+                      ? 'border-slate-900 bg-orange-400 text-white shadow-[2px_2px_0_0_rgba(15,23,42,1)]'
+                      : isDone
+                        ? 'border-slate-700 bg-slate-700 text-white hover:bg-slate-600'
+                        : 'border-slate-900 bg-white text-slate-800 hover:bg-slate-50'
+                }`}
+              >
+                {isLocked ? <Lock className="size-4" strokeWidth={2} /> : isDone ? <Check className="size-4" strokeWidth={2.5} /> : d}
+              </button>
+            );
+          })}
+        </div>
       </header>
 
       <main className="px-4 py-6">

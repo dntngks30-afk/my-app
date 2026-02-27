@@ -42,7 +42,7 @@ export default function BottomNav() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.access_token) {
-          router.push(`/app/auth?next=${encodeURIComponent('/app/home')}`);
+          router.push(`/app/auth?next=${encodeURIComponent('/app/routine/player')}`);
           return;
         }
         const res = await fetch('/api/workout-routine/get', {
@@ -51,23 +51,23 @@ export default function BottomNav() {
         });
         const data = await res.json().catch(() => ({}));
         const routineId = data?.routine?.id;
-        if (!routineId) {
-          console.log('[NAV_TAB_NAVIGATE_FAIL]', { reason: 'no_routine', fallback: '/app/home' });
-          router.push('/app/home');
-          return;
+        if (routineId) {
+          const statusRes = await fetch('/api/routine-engine/status', {
+            cache: 'no-store' as RequestCache,
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          });
+          const statusData = await statusRes.json().catch(() => ({}));
+          const day = statusData?.state?.currentDay ?? 1;
+          const target = `/app/routine/player?routineId=${encodeURIComponent(routineId)}&day=${day}`;
+          router.push(target);
+          console.log('[NAV_TAB_NAVIGATE_SUCCESS]', { target });
+        } else {
+          router.push('/app/routine/player');
+          console.log('[NAV_TAB_NAVIGATE]', { reason: 'no_routine', target: '/app/routine/player' });
         }
-        const statusRes = await fetch('/api/routine-engine/status', {
-          cache: 'no-store' as RequestCache,
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-        const statusData = await statusRes.json().catch(() => ({}));
-        const day = statusData?.state?.currentDay ?? 1;
-        const target = `/app/routine/player?routineId=${encodeURIComponent(routineId)}&day=${day}`;
-        router.push(target);
-        console.log('[NAV_TAB_NAVIGATE_SUCCESS]', { target });
       } catch (err) {
-        console.warn('[NAV_TAB_NAVIGATE_FAIL]', { error: String(err), fallback: '/app/home' });
-        router.push('/app/home');
+        console.warn('[NAV_TAB_NAVIGATE_FAIL]', { error: String(err), fallback: '/app/routine/player' });
+        router.push('/app/routine/player');
       } finally {
         navInFlightRef.current = false;
       }
