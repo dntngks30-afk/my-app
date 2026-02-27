@@ -15,9 +15,11 @@ type Props = {
   onSubmit: (values: CheckInValues) => Promise<void>;
   onSkip: () => void;
   onClose: () => void;
+  /** '시작하기' for plan flow, '저장' for record-only (checkin tab) */
+  submitLabel?: string;
 };
 
-export function CheckInModal({ onSubmit, onSkip, onClose }: Props) {
+export function CheckInModal({ onSubmit, onSkip, onClose, submitLabel = '시작하기' }: Props) {
   const [pain, setPain] = useState<number | null>(null);
   const [stiffness, setStiffness] = useState<number | null>(null);
   const [sleep, setSleep] = useState<number | null>(null);
@@ -157,7 +159,7 @@ export function CheckInModal({ onSubmit, onSkip, onClose }: Props) {
             disabled={submitting}
             className="flex-1 rounded-full border-2 border-slate-900 bg-orange-400 py-3 text-sm font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] hover:opacity-95 disabled:opacity-70"
           >
-            {submitting ? '저장 중...' : '시작하기'}
+            {submitting ? '저장 중...' : submitLabel}
           </button>
         </div>
       </div>
