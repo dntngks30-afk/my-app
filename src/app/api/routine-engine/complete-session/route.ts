@@ -38,6 +38,8 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
+    const routineId =
+      typeof body.routineId === 'string' && body.routineId ? body.routineId : null;
     const dayNumber = typeof body.dayNumber === 'number' ? body.dayNumber : null;
     const startedAtUtc =
       typeof body.startedAtUtc === 'string' ? body.startedAtUtc : null;
@@ -90,6 +92,23 @@ export async function POST(req: NextRequest) {
       console.log('[complete-session] idempotent_hit', { dayNumber });
     } else {
       console.log('[complete-session] ok', { dayNumber });
+    }
+
+    if (routineId) {
+      const { data: routine } = await supabase
+        .from('workout_routines')
+        .select('id')
+        .eq('id', routineId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (routine?.id) {
+        const nowIso = new Date().toISOString();
+        await supabase
+          .from('workout_routine_days')
+          .update({ completed_at: nowIso, updated_at: nowIso })
+          .eq('routine_id', routineId)
+          .eq('day_number', dayNumber);
+      }
     }
 
     const server_now_utc = new Date().toISOString();

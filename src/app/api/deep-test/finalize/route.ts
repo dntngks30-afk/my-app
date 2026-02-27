@@ -15,11 +15,16 @@ import { generateDayPlan } from '@/lib/routine-plan/day-plan-generator';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
 
 async function seedDay1PlanIfRoutine(
+  supabase: Awaited<ReturnType<typeof getServerSupabaseAdmin>>,
   routineId: string,
   userId: string
 ): Promise<void> {
   try {
     await generateDayPlan(routineId, 1, null, { preloadedContext: { userId } });
+    await supabase.from('workout_routine_days').upsert(
+      { routine_id: routineId, day_number: 1, exercises: [] },
+      { onConflict: 'routine_id,day_number', ignoreDuplicates: true }
+    );
     console.log('[DEEP_FINALIZE] day1 plan seeded', { routineId: maskId(routineId) });
   } catch (err) {
     console.warn('[DEEP_FINALIZE_DAY1_SEED_FAIL]', {
@@ -105,7 +110,7 @@ export async function POST(req: NextRequest) {
         routine: maskId(routineId),
         created,
       });
-      if (routineId) await seedDay1PlanIfRoutine(routineId, userId);
+      if (routineId) await seedDay1PlanIfRoutine(supabase, routineId, userId);
     } catch (err) {
       console.warn('[DEEP_FINALIZE_ROUTINE_FAIL]', {
         user: maskId(userId),
@@ -171,7 +176,7 @@ export async function POST(req: NextRequest) {
         routine: maskId(routineId),
         created,
       });
-      if (routineId) await seedDay1PlanIfRoutine(routineId, userId);
+      if (routineId) await seedDay1PlanIfRoutine(supabase, routineId, userId);
     } catch (err) {
       console.warn('[DEEP_FINALIZE_ROUTINE_FAIL]', {
         user: maskId(userId),

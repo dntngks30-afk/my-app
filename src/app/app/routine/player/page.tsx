@@ -594,6 +594,7 @@ export default function RoutinePlayerPage() {
             Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
+            routineId: routineId || undefined,
             dayNumber,
             startedAtUtc,
           }),
