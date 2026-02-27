@@ -625,7 +625,7 @@ export default function RoutinePlayerPage() {
         </div>
         <button
           type="button"
-          onClick={() => router.push('/app')}
+          onClick={() => router.push('/app/home')}
           className="min-h-[44px] px-8 py-4 rounded-full border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5"
         >
           홈으로

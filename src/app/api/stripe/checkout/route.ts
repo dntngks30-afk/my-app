@@ -22,7 +22,7 @@ function genRequestId(): string {
 /** 오픈 리다이렉트 방지: 허용 prefix만 success_url next로 사용 */
 const ALLOWED_NEXT_PREFIXES = [
   '/app/deep-test',
-  '/app',
+  '/app/home',
   '/app/deep-test/run',
   '/app/deep-test/result',
   '/app/reports',

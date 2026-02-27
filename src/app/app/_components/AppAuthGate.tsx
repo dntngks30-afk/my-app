@@ -32,7 +32,7 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
         if (error || !session) {
           setStatus('auth');
           if (!isAuthPage) {
-            const next = encodeURIComponent(pathname || '/app');
+            const next = encodeURIComponent(pathname || '/app/home');
             router.replace(`/app/auth?next=${next}`);
           }
           return;

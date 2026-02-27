@@ -55,7 +55,7 @@ export default function PayModal({ isOpen, onClose, returnUrl }: PayModalProps) 
   }, [isOpen]);
 
   const handleGoToApp = () => {
-    router.push('/app');
+    router.push('/app/home');
   };
 
   const handleCheckout = async () => {

@@ -12,6 +12,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useRoutineStatus } from '@/features/routine/hooks/useRoutineStatus';
 import { CheckInModal } from '../_components/CheckInModal';
+import BottomNav from '../_components/BottomNav';
 
 const DAYS = [1, 2, 3, 4, 5, 6, 7] as const;
 
@@ -351,6 +352,7 @@ export default function ResetHomePage() {
           }}
         />
       )}
+      <BottomNav />
     </div>
   );
 }

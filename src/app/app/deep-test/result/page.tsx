@@ -316,12 +316,12 @@ export default function DeepTestResultPage() {
               다시 테스트
             </Link>
             {isStandalone ? (
-              <Link href="/app" className={nbBtnSecondaryBlock}>
+              <Link href="/app/home" className={nbBtnSecondaryBlock}>
                 이제 앱에서 루틴을 시작해요
               </Link>
             ) : (
               <>
-                <Link href="/app" className={nbBtnSecondaryBlock}>
+                <Link href="/app/home" className={nbBtnSecondaryBlock}>
                   홈으로
                 </Link>
                 <p className="text-xs text-stone-500 text-center">

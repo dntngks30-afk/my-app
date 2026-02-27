@@ -10,7 +10,7 @@ export default async function PaymentsPage({
 }) {
   const params = await searchParams;
   const product = typeof params?.product === 'string' ? params.product : 'move-re-7d';
-  const next = typeof params?.next === 'string' ? params.next : '/app';
+  const next = typeof params?.next === 'string' ? params.next : '/app/home';
 
   return (
     <Suspense fallback={<div className="flex min-h-screen items-center justify-center p-6">로딩 중...</div>}>

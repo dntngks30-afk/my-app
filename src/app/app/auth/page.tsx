@@ -9,7 +9,7 @@ export default async function AppAuthPage({
   searchParams: SearchParams;
 }) {
   const params = await searchParams;
-  const next = typeof params?.next === 'string' ? params.next : '/app';
+  const next = typeof params?.next === 'string' ? params.next : '/app/home';
   return (
       <Suspense
       fallback={

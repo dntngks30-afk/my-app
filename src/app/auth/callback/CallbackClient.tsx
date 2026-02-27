@@ -10,9 +10,9 @@ interface CallbackClientProps {
 }
 
 function sanitizeNext(next: string | null | undefined): string {
-  if (!next || typeof next !== 'string') return '/app';
+  if (!next || typeof next !== 'string') return '/app/home';
   const trimmed = next.trim();
-  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return '/app';
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return '/app/home';
   return trimmed;
 }
 

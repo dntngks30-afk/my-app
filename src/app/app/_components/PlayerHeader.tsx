@@ -6,7 +6,7 @@ export default function PlayerHeader() {
   return (
     <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-[color:var(--border)] bg-[var(--surface)] px-4">
       <Link
-        href="/app"
+        href="/app/home"
         className="flex size-10 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]"
         aria-label="뒤로가기"
       >

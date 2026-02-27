@@ -14,7 +14,7 @@ import { usePwaInstall } from '@/lib/pwa/usePwaInstall';
 export default function InstallPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const from = searchParams.get('from') ?? '/app';
+  const from = searchParams.get('from') ?? '/app/home';
   const [modalOpen, setModalOpen] = useState(false);
   const { isStandalone } = usePwaInstall();
 

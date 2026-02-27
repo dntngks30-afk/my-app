@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'Move Re - 움직임 리셋 7일 맞춤 루틴',
     short_name: 'Move Re',
     description: '단 7일 만에 내 몸의 움직임을 리셋하는 맞춤형 체형 가이드',
-    start_url: '/app',
+    start_url: '/app/home',
     display: 'standalone',
     background_color: '#FFFFFF',
     theme_color: '#000000',

@@ -88,7 +88,7 @@ export default function PaymentsGate({ children }: PaymentsGateProps) {
       <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-[var(--bg)] px-4">
         <h2 className="text-lg font-semibold text-[var(--text)]">이미 이용 권한이 활성화되어 있어요</h2>
         <Link
-          href="/app"
+          href="/app/home"
           className="rounded-lg bg-[var(--brand)] px-6 py-3 text-center text-sm font-semibold text-white hover:opacity-90"
         >
           오늘 루틴으로
