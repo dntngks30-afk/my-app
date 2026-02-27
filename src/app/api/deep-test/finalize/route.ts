@@ -241,7 +241,7 @@ export async function POST(req: NextRequest) {
       routine: maskId(routineId),
       created,
     });
-    if (routineId) await seedDay1PlanIfRoutine(routineId, userId);
+    if (routineId) await seedDay1PlanIfRoutine(supabase, routineId, userId);
   } catch (err) {
     console.warn('[DEEP_FINALIZE_ROUTINE_FAIL]', {
       user: maskId(userId),
