@@ -11,28 +11,8 @@ import { requireDeepAuth } from '@/lib/deep-test/auth';
 import { calculateDeepV1 } from '@/lib/deep-test/scoring/deep_v1';
 import { calculateDeepV2 } from '@/lib/deep-test/scoring/deep_v2';
 import { ensureDeepWorkoutRoutine, maskId } from '@/lib/deep-test/ensure-deep-routine';
-import { generateDayPlan } from '@/lib/routine-plan/day-plan-generator';
+import { seedDay1PlanIfRoutine } from '@/lib/deep-test/seed-day1';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
-
-async function seedDay1PlanIfRoutine(
-  supabase: Awaited<ReturnType<typeof getServerSupabaseAdmin>>,
-  routineId: string,
-  userId: string
-): Promise<void> {
-  try {
-    await generateDayPlan(routineId, 1, null, { preloadedContext: { userId } });
-    await supabase.from('workout_routine_days').upsert(
-      { routine_id: routineId, day_number: 1, exercises: [] },
-      { onConflict: 'routine_id,day_number', ignoreDuplicates: true }
-    );
-    console.log('[DEEP_FINALIZE] day1 plan seeded', { routineId: maskId(routineId) });
-  } catch (err) {
-    console.warn('[DEEP_FINALIZE_DAY1_SEED_FAIL]', {
-      routineId: maskId(routineId),
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-}
 
 const SOURCE = 'deep';
 
