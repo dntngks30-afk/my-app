@@ -198,8 +198,16 @@ export default function RoutinePlayerPage() {
   const lastTransitionKeyRef = useRef<string>('');
 
   const initSyncDone = useRef(false);
+  const lastRoutineIdRef = useRef<string | null>(null);
   const statusLoading = useRef(false);
   const [currentDay, setCurrentDay] = useState(1);
+
+  useEffect(() => {
+    if (lastRoutineIdRef.current !== routineId) {
+      lastRoutineIdRef.current = routineId;
+      initSyncDone.current = false;
+    }
+  }, [routineId]);
 
   /** Auth 체크: token 없으면 /app/auth로 리다이렉트 */
   useEffect(() => {
@@ -427,8 +435,9 @@ export default function RoutinePlayerPage() {
     }
   }, []);
 
+  /** mount 시 status 1회만 호출 (init sync + currentDay) */
   useEffect(() => {
-    if (initSyncDone.current) return;
+    if (initSyncDone.current || !routineId) return;
     initSyncDone.current = true;
     console.log('[player] init', {
       dayNumber,
@@ -447,18 +456,7 @@ export default function RoutinePlayerPage() {
         setCurrentDay(cd);
       }
     });
-  }, [dayNumber, segmentCount, fetchStatus]);
-
-  /** routineId 있을 때 currentDay 주기적 동기화 (Day pill용) */
-  useEffect(() => {
-    if (!routineId) return;
-    fetchStatus().then((data) => {
-      const cd = data?.state?.currentDay;
-      if (typeof cd === 'number' && cd >= 1 && cd <= 7) {
-        setCurrentDay(cd);
-      }
-    });
-  }, [routineId, fetchStatus]);
+  }, [routineId, dayNumber, segmentCount, fetchStatus]);
 
   useEffect(() => {
     const handleVisibility = () => {
