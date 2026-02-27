@@ -9,6 +9,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateDayPlan, getDayPlan } from '@/lib/routine-plan/day-plan-generator';
 import type { DailyCondition } from '@/lib/routine-plan/day-plan-generator';
+import { requireActivePlan } from '@/lib/auth/requireActivePlan';
+import { buildMediaPayload } from '@/lib/media/media-payload';
+import { getTemplatesForMediaByIds } from '@/lib/workout-routine/exercise-templates-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,14 +57,8 @@ function toPlanResponse(plan: {
 export async function POST(req: NextRequest) {
   const t0 = performance.now();
   try {
-    const userId = await getCurrentUserId(req);
-    const tAuth = performance.now();
-    if (!userId) {
-      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-    }
-
     const body = await req.json().catch(() => ({}));
-    const { routineId, dayNumber, debug: debugFlag } = body;
+    const { routineId, dayNumber, debug: debugFlag, includeMedia } = body;
     const debug = debugFlag === true;
 
     if (!routineId || !dayNumber) {
@@ -70,6 +67,20 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    let userId: string;
+    if (includeMedia) {
+      const auth = await requireActivePlan(req);
+      if (auth instanceof NextResponse) return auth;
+      userId = auth.userId;
+    } else {
+      const uid = await getCurrentUserId(req);
+      if (!uid) {
+        return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+      }
+      userId = uid;
+    }
+    const tAuth = performance.now();
 
     const day = Math.max(1, Math.min(7, Math.floor(Number(dayNumber))));
 
@@ -93,9 +104,32 @@ export async function POST(req: NextRequest) {
         plan: toPlanResponse(existingPlan),
         created: false,
       };
+      if (includeMedia && existingPlan.selected_template_ids.length > 0) {
+        const templates = await getTemplatesForMediaByIds(existingPlan.selected_template_ids);
+        const templateMap = new Map(templates.map((t) => [t.id, t]));
+        const mediaPayloads = await Promise.all(
+          templates.map((t) =>
+            buildMediaPayload(t.media_ref, t.duration_sec ?? 300)
+          )
+        );
+        const mediaById = new Map(templates.map((t, i) => [t.id, mediaPayloads[i]]));
+        payload.segments_with_media = existingPlan.selected_template_ids.map((id, i) => {
+          const t = templateMap.get(id);
+          const media = mediaById.get(id);
+          return {
+            templateId: id,
+            templateName: t?.name ?? `운동 ${i + 1}`,
+            mediaPayload: media ?? {
+              kind: 'placeholder',
+              autoplayAllowed: false,
+              notes: ['영상 준비 중입니다.'],
+            },
+          };
+        });
+      }
       if (debug) {
         payload.timings = {
-          total_ms: Math.round(tSelectPlan - t0),
+          total_ms: Math.round(performance.now() - t0),
           auth_ms: Math.round(tAuth - t0),
           select_plan_ms: Math.round(tSelectPlan - tAuth),
         };
@@ -146,6 +180,29 @@ export async function POST(req: NextRequest) {
       }),
       created: true,
     };
+    if (includeMedia && plan.selected_template_ids?.length) {
+      const templates = await getTemplatesForMediaByIds(plan.selected_template_ids);
+      const templateMap = new Map(templates.map((t) => [t.id, t]));
+      const mediaPayloads = await Promise.all(
+        templates.map((t) =>
+          buildMediaPayload(t.media_ref, t.duration_sec ?? 300)
+        )
+      );
+      const mediaById = new Map(templates.map((t, i) => [t.id, mediaPayloads[i]]));
+      payload.segments_with_media = plan.selected_template_ids.map((id, i) => {
+        const t = templateMap.get(id);
+        const media = mediaById.get(id);
+        return {
+          templateId: id,
+          templateName: t?.name ?? `운동 ${i + 1}`,
+          mediaPayload: media ?? {
+            kind: 'placeholder',
+            autoplayAllowed: false,
+            notes: ['영상 준비 중입니다.'],
+          },
+        };
+      });
+    }
     if (debug) {
       payload.timings = {
         total_ms: Math.round(tGenerate - t0),

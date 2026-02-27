@@ -72,6 +72,34 @@ export async function getAllExerciseTemplates(
   return (data ?? []).map((row) => toExerciseTemplate(row as DbExerciseTemplate));
 }
 
+/** Minimal template row for media payload (id, name, media_ref, duration_sec) */
+export interface TemplateForMedia {
+  id: string;
+  name: string;
+  media_ref: unknown;
+  duration_sec?: number;
+}
+
+/**
+ * Fetch templates by ids for media payload (batch, minimal columns).
+ */
+export async function getTemplatesForMediaByIds(
+  ids: string[]
+): Promise<TemplateForMedia[]> {
+  if (ids.length === 0) return [];
+  const supabase = getServerSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('exercise_templates')
+    .select('id, name, media_ref, duration_sec')
+    .in('id', ids)
+    .eq('is_active', true);
+
+  if (error) {
+    throw new Error(`exercise_templates batch fetch failed: ${error.message}`);
+  }
+  return (data ?? []) as TemplateForMedia[];
+}
+
 /**
  * Fetch a single template by id.
  */

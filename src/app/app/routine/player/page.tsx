@@ -249,7 +249,10 @@ export default function RoutinePlayerPage() {
       };
 
       try {
-        const ensureRes = await fetch('/api/routine-plan/ensure', {
+        let ensureRes: Response;
+        let data: Record<string, unknown>;
+        const debugFlag = searchParams.get('debug') === '1';
+        ensureRes = await fetch('/api/routine-plan/ensure', {
           method: 'POST',
           cache: 'no-store',
           headers: {
@@ -259,15 +262,33 @@ export default function RoutinePlayerPage() {
           body: JSON.stringify({
             routineId,
             dayNumber,
-            debug: searchParams.get('debug') === '1',
+            debug: debugFlag,
+            includeMedia: true,
           }),
         });
-        const data = await ensureRes.json().catch(() => ({}));
+        data = await ensureRes.json().catch(() => ({})) as Record<string, unknown>;
+        if (ensureRes.status === 403 && cancelled === false) {
+          ensureRes = await fetch('/api/routine-plan/ensure', {
+            method: 'POST',
+            cache: 'no-store',
+            headers: {
+              ...(opts.headers as Record<string, string>),
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              routineId,
+              dayNumber,
+              debug: debugFlag,
+              includeMedia: false,
+            }),
+          });
+          data = await ensureRes.json().catch(() => ({})) as Record<string, unknown>;
+        }
 
         if (cancelled) return;
         if (data?.timings) setEnsureTimings(data.timings as Record<string, number>);
         if (!ensureRes.ok) {
-          setPlanError(data?.error ?? 'Day Plan 조회/생성 실패');
+          setPlanError((data?.error as string) ?? 'Day Plan 조회/생성 실패');
           setPlanLoading(false);
           return;
         }
@@ -280,75 +301,95 @@ export default function RoutinePlayerPage() {
           return;
         }
 
-        const ids = plan.selected_template_ids as string[];
-        const segs: Segment[] = [];
-        for (let i = 0; i < ids.length; i++) {
-          segs.push({
-            id: `work-${ids[i]}-${i}`,
-            templateId: ids[i],
-            title: `운동 ${i + 1}`,
-            durationSec: 60,
-            kind: 'work',
-          });
-          if (i < ids.length - 1) {
-            segs.push({
-              id: `rest-${i + 1}`,
-              title: `휴식 ${i + 1}`,
-              durationSec: 30,
-              kind: 'rest',
-            });
-          }
-        }
-        setSegments(segs);
+        const segmentsWithMedia = data?.segments_with_media as Array<{
+          templateId: string;
+          templateName: string;
+          mediaPayload?: MediaPayload | null;
+        }> | undefined;
 
-        // media fetch for work segments (parallel)
-        const workSegs = segs.filter((s) => s.kind === 'work' && s.templateId);
-        workSegs.forEach((s) =>
-          console.log('[PLAYER_MEDIA_FETCH_START]', { templateId: s.templateId })
-        );
-        const mediaResults = await Promise.all(
-          workSegs.map(async (s) => {
-            if (cancelled) return { id: s.id, ok: false as const, mData: null, status: 0 };
-            try {
-              const mRes = await fetch(
-                `/api/exercise-template/media?templateId=${encodeURIComponent(s.templateId)}`,
-                opts
-              );
-              const mData = await mRes.json().catch(() => ({}));
-              const ok = mRes.ok && !!mData?.media;
-              if (ok) {
-                console.log('[PLAYER_MEDIA_FETCH_SUCCESS]', { templateId: s.templateId });
-              } else {
-                console.warn('[PLAYER_MEDIA_FETCH_FAIL]', {
-                  templateId: s.templateId,
-                  status: mRes.status,
-                });
+        if (segmentsWithMedia?.length) {
+          const segs: Segment[] = [];
+          for (let i = 0; i < segmentsWithMedia.length; i++) {
+            const swm = segmentsWithMedia[i];
+            const durationSec = swm.mediaPayload?.durationSec ?? 60;
+            segs.push({
+              id: `work-${swm.templateId}-${i}`,
+              templateId: swm.templateId,
+              title: swm.templateName ?? `운동 ${i + 1}`,
+              durationSec,
+              kind: 'work',
+              mediaPayload: swm.mediaPayload ?? null,
+              mediaError: false,
+              templateName: swm.templateName,
+            });
+            if (i < segmentsWithMedia.length - 1) {
+              segs.push({
+                id: `rest-${i + 1}`,
+                title: `휴식 ${i + 1}`,
+                durationSec: 30,
+                kind: 'rest',
+              });
+            }
+          }
+          setSegments(segs);
+        } else {
+          const ids = plan.selected_template_ids as string[];
+          const segs: Segment[] = [];
+          for (let i = 0; i < ids.length; i++) {
+            segs.push({
+              id: `work-${ids[i]}-${i}`,
+              templateId: ids[i],
+              title: `운동 ${i + 1}`,
+              durationSec: 60,
+              kind: 'work',
+            });
+            if (i < ids.length - 1) {
+              segs.push({
+                id: `rest-${i + 1}`,
+                title: `휴식 ${i + 1}`,
+                durationSec: 30,
+                kind: 'rest',
+              });
+            }
+          }
+          setSegments(segs);
+
+          const workSegs = segs.filter((s) => s.kind === 'work' && s.templateId);
+          const mediaResults = await Promise.all(
+            workSegs.map(async (s) => {
+              if (cancelled) return { id: s.id, ok: false as const, mData: null, status: 0 };
+              try {
+                const mRes = await fetch(
+                  `/api/exercise-template/media?templateId=${encodeURIComponent(s.templateId!)}`,
+                  opts
+                );
+                const mData = await mRes.json().catch(() => ({}));
+                const ok = mRes.ok && !!mData?.media;
+                return { id: s.id, ok, mData, status: mRes.status };
+              } catch {
+                return { id: s.id, ok: false as const, mData: null, status: 0 };
               }
-              return { id: s.id, ok, mData, status: mRes.status };
-            } catch {
-              console.warn('[PLAYER_MEDIA_FETCH_FAIL]', { templateId: s.templateId });
-              return { id: s.id, ok: false as const, mData: null, status: 0 };
-            }
-          })
-        );
-        if (cancelled) return;
-        setSegments((prev) =>
-          prev.map((p) => {
-            const r = mediaResults.find((x) => x.id === p.id);
-            if (!r) return p;
-            if (r.ok && r.mData?.media) {
-              return {
-                ...p,
-                title: r.mData.templateName ?? p.title,
-                templateName: r.mData.templateName,
-                durationSec: r.mData.media?.durationSec ?? p.durationSec,
-                mediaPayload: r.mData.media,
-                mediaError: false,
-              };
-            }
-            return { ...p, mediaPayload: null, mediaError: true };
-          })
-        );
+            })
+          );
+          if (cancelled) return;
+          setSegments((prev) =>
+            prev.map((p) => {
+              const r = mediaResults.find((x) => x.id === p.id);
+              if (!r) return p;
+              if (r.ok && r.mData?.media) {
+                return {
+                  ...p,
+                  title: r.mData.templateName ?? p.title,
+                  templateName: r.mData.templateName,
+                  durationSec: r.mData.media?.durationSec ?? p.durationSec,
+                  mediaPayload: r.mData.media,
+                  mediaError: false,
+                };
+              }
+              return { ...p, mediaPayload: null, mediaError: true };
+            })
+          );
+        }
       } catch (err) {
         if (cancelled) return;
         console.warn('[PLAYER_PLAN_FETCH_FAIL]', { message: String(err) });
