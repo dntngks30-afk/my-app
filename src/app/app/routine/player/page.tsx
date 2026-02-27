@@ -9,20 +9,37 @@ import {
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Play, Pause, Check } from 'lucide-react';
+import Hls from 'hls.js';
 import { supabase } from '@/lib/supabase';
 
-/** 세그먼트 shape (템플릿/DB 연결 확장용) */
+/** media_payload shape (API response) */
+type MediaPayload = {
+  kind: 'embed' | 'hls' | 'placeholder';
+  provider?: string;
+  streamUrl?: string;
+  embedUrl?: string;
+  posterUrl?: string;
+  durationSec?: number;
+  autoplayAllowed: boolean;
+  notes?: string[];
+};
+
+/** 세그먼트 shape (템플릿/DB 연결) */
 type Segment = {
   id: string;
+  templateId?: string;
   title: string;
   durationSec: number;
   kind: 'work' | 'rest';
+  mediaPayload?: MediaPayload | null;
+  mediaError?: boolean;
+  templateName?: string;
 };
 
-/** 15분 = 900초: work 60s × 10 + rest 30s × 10 */
-const DEFAULT_SEGMENTS: Segment[] = (() => {
+/** plan 없는 경우 fallback 세그먼트 */
+const FALLBACK_SEGMENTS: Segment[] = (() => {
   const out: Segment[] = [];
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 3; i++) {
     out.push({
       id: `work-${i + 1}`,
       title: `운동 ${i + 1}`,
@@ -39,10 +56,105 @@ const DEFAULT_SEGMENTS: Segment[] = (() => {
   return out;
 })();
 
-const TOTAL_DURATION_MS =
-  DEFAULT_SEGMENTS.reduce((acc, s) => acc + s.durationSec, 0) * 1000;
-
 type PlayerStatus = 'idle' | 'running' | 'paused' | 'done';
+
+function MediaPlayer({
+  segment,
+  isActive,
+}: {
+  segment: Segment;
+  isActive: boolean;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const payload = segment.mediaPayload;
+    if (!video || !payload || segment.mediaError) return;
+
+    if (payload.kind === 'hls' && payload.streamUrl) {
+      if (Hls.isSupported()) {
+        const hls = new Hls();
+        hlsRef.current = hls;
+        hls.loadSource(payload.streamUrl);
+        hls.attachMedia(video);
+        return () => {
+          hls.destroy();
+          hlsRef.current = null;
+        };
+      }
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = payload.streamUrl;
+        return () => { video.src = ''; };
+      }
+    }
+  }, [segment.id, segment.mediaPayload?.streamUrl, segment.mediaError]);
+
+  if (segment.mediaError) {
+    return (
+      <div className="aspect-video w-full bg-slate-200 flex items-center justify-center p-6">
+        <p className="text-sm text-slate-600 text-center">
+          영상을 불러올 수 없습니다. 텍스트 가이드를 참고해 주세요.
+        </p>
+      </div>
+    );
+  }
+  if (!segment.mediaPayload) {
+    return (
+      <div className="aspect-video w-full bg-slate-200 flex items-center justify-center p-6">
+        <div className="animate-pulse h-20 w-24 rounded bg-slate-300" />
+      </div>
+    );
+  }
+
+  const p = segment.mediaPayload;
+  if (p.kind === 'placeholder') {
+    return (
+      <div className="aspect-video w-full bg-slate-200 flex items-center justify-center p-6">
+        <div className="text-center text-sm text-slate-600">
+          {(p.notes ?? ['영상 준비 중입니다.']).map((n, i) => (
+            <p key={i}>{n}</p>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (p.kind === 'hls' && p.streamUrl) {
+    return (
+      <div className="aspect-video w-full bg-black">
+        <video
+          ref={videoRef}
+          className="w-full h-full object-contain"
+          playsInline
+          muted={!isActive}
+          poster={p.posterUrl}
+          controls
+        />
+      </div>
+    );
+  }
+
+  if (p.kind === 'embed' && p.embedUrl) {
+    return (
+      <div className="aspect-video w-full bg-black">
+        <iframe
+          src={p.embedUrl}
+          className="w-full h-full"
+          allowFullScreen
+          title={segment.title}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="aspect-video w-full bg-slate-200 flex items-center justify-center p-6">
+      <p className="text-sm text-slate-600">미디어를 로드할 수 없습니다.</p>
+    </div>
+  );
+}
 
 function formatRemaining(ms: number): string {
   const totalSec = Math.max(0, Math.ceil(ms / 1000));
@@ -54,12 +166,16 @@ function formatRemaining(ms: number): string {
 export default function RoutinePlayerPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const routineId = searchParams.get('routineId') ?? '';
   const dayNumber = Math.max(
     1,
     Math.min(7, parseInt(searchParams.get('day') ?? '1', 10) || 1)
   );
 
-  const segments = DEFAULT_SEGMENTS;
+  const [segments, setSegments] = useState<Segment[]>(FALLBACK_SEGMENTS);
+  const [planLoading, setPlanLoading] = useState(true);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const authCheckedRef = useRef(false);
   const segmentCount = segments.length;
 
   const [status, setStatus] = useState<PlayerStatus>('idle');
@@ -79,6 +195,143 @@ export default function RoutinePlayerPage() {
 
   const initSyncDone = useRef(false);
   const statusLoading = useRef(false);
+
+  /** Auth 체크: token 없으면 /app/auth로 리다이렉트 */
+  useEffect(() => {
+    if (authCheckedRef.current) return;
+    authCheckedRef.current = true;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.access_token) {
+        const next = `/app/routine/player?routineId=${encodeURIComponent(routineId)}&day=${dayNumber}`;
+        router.replace(`/app/auth?next=${encodeURIComponent(next)}`);
+      }
+    });
+  }, [router, routineId, dayNumber]);
+
+  /** Day plan fetch + segments 빌드 */
+  useEffect(() => {
+    if (!routineId) {
+      setPlanLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token || cancelled) return;
+
+      const opts: RequestInit = {
+        cache: 'no-store' as RequestCache,
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      };
+
+      console.log('[PLAYER_PLAN_FETCH_START]', { routineId, dayNumber });
+      try {
+        const res = await fetch(
+          `/api/routine-plan/get?routineId=${encodeURIComponent(routineId)}&dayNumber=${dayNumber}`,
+          opts
+        );
+        const data = await res.json().catch(() => ({}));
+
+        if (cancelled) return;
+        if (!res.ok) {
+          console.warn('[PLAYER_PLAN_FETCH_FAIL]', { status: res.status });
+          setPlanError(data?.error ?? 'Day Plan 조회 실패');
+          setPlanLoading(false);
+          return;
+        }
+
+        const plan = data?.plan;
+        if (!plan?.selected_template_ids?.length) {
+          console.log('[PLAYER_PLAN_FETCH_SUCCESS]', { plan: null });
+          setSegments(FALLBACK_SEGMENTS);
+          setPlanLoading(false);
+          return;
+        }
+
+        console.log('[PLAYER_PLAN_FETCH_SUCCESS]');
+        const ids = plan.selected_template_ids as string[];
+        const segs: Segment[] = [];
+        for (let i = 0; i < ids.length; i++) {
+          segs.push({
+            id: `work-${ids[i]}-${i}`,
+            templateId: ids[i],
+            title: `운동 ${i + 1}`,
+            durationSec: 60,
+            kind: 'work',
+          });
+          if (i < ids.length - 1) {
+            segs.push({
+              id: `rest-${i + 1}`,
+              title: `휴식 ${i + 1}`,
+              durationSec: 30,
+              kind: 'rest',
+            });
+          }
+        }
+        setSegments(segs);
+
+        // media fetch for work segments
+        for (let i = 0; i < segs.length; i++) {
+          const s = segs[i];
+          if (s.kind !== 'work' || !s.templateId || cancelled) continue;
+          console.log('[PLAYER_MEDIA_FETCH_START]', { templateId: s.templateId });
+          try {
+            const mRes = await fetch(
+              `/api/exercise-template/media?templateId=${encodeURIComponent(s.templateId)}`,
+              opts
+            );
+            const mData = await mRes.json().catch(() => ({}));
+            if (cancelled) return;
+            if (mRes.ok && mData?.media) {
+              console.log('[PLAYER_MEDIA_FETCH_SUCCESS]', { templateId: s.templateId });
+              setSegments((prev) =>
+                prev.map((p) =>
+                  p.id === s.id
+                    ? {
+                        ...p,
+                        title: mData.templateName ?? p.title,
+                        templateName: mData.templateName,
+                        durationSec: mData.media?.durationSec ?? p.durationSec,
+                        mediaPayload: mData.media,
+                        mediaError: false,
+                      }
+                    : p
+                )
+              );
+            } else {
+              console.warn('[PLAYER_MEDIA_FETCH_FAIL]', { templateId: s.templateId, status: mRes.status });
+              setSegments((prev) =>
+                prev.map((p) =>
+                  p.id === s.id ? { ...p, mediaPayload: null, mediaError: true } : p
+                )
+              );
+            }
+          } catch {
+            if (cancelled) return;
+            console.warn('[PLAYER_MEDIA_FETCH_FAIL]', { templateId: s.templateId });
+            setSegments((prev) =>
+              prev.map((p) =>
+                p.id === s.id ? { ...p, mediaPayload: null, mediaError: true } : p
+              )
+            );
+          }
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.warn('[PLAYER_PLAN_FETCH_FAIL]', { message: String(err) });
+        setPlanError(err instanceof Error ? err.message : 'Day Plan 조회 실패');
+      } finally {
+        if (!cancelled) setPlanLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [routineId, dayNumber]);
+
+  const TOTAL_DURATION_MS = useMemo(
+    () => segments.reduce((acc, s) => acc + s.durationSec, 0) * 1000,
+    [segments]
+  );
 
   const fetchStatus = useCallback(async () => {
     if (statusLoading.current) return;
@@ -323,6 +576,45 @@ export default function RoutinePlayerPage() {
     setStatus('running');
   }, [pausedAccumulatedMs, pauseStartedPerfMs]);
 
+  if (!routineId) {
+    return (
+      <div className="min-h-screen bg-[#F8F6F0] flex flex-col items-center justify-center px-4">
+        <p className="text-slate-600 mb-4">루틴 정보가 없습니다.</p>
+        <button
+          type="button"
+          onClick={() => router.push('/app/home')}
+          className="min-h-[44px] px-8 py-4 rounded-full border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95"
+        >
+          홈으로
+        </button>
+      </div>
+    );
+  }
+
+  if (planLoading) {
+    return (
+      <div className="min-h-screen bg-[#F8F6F0] flex flex-col items-center justify-center px-4">
+        <div className="animate-pulse rounded-2xl bg-slate-200 h-32 w-full max-w-sm mb-4" />
+        <p className="text-slate-600">루틴을 불러오는 중...</p>
+      </div>
+    );
+  }
+
+  if (planError) {
+    return (
+      <div className="min-h-screen bg-[#F8F6F0] flex flex-col items-center justify-center px-4">
+        <p className="text-red-600 mb-4">{planError}</p>
+        <button
+          type="button"
+          onClick={() => router.push('/app/home')}
+          className="min-h-[44px] px-8 py-4 rounded-full border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95"
+        >
+          홈으로
+        </button>
+      </div>
+    );
+  }
+
   if (status === 'done') {
     return (
       <div className="min-h-screen bg-[#F8F6F0] flex flex-col items-center justify-center px-4">
@@ -382,13 +674,19 @@ export default function RoutinePlayerPage() {
           </div>
 
           <div className="px-4 pb-6">
-            <div className="rounded-2xl border-2 border-slate-900 bg-slate-100 p-8 text-center shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
+            <div className="rounded-2xl border-2 border-slate-900 bg-slate-100 overflow-hidden shadow-[3px_3px_0_0_rgba(15,23,42,1)]">
               {currentSegment && (
                 <>
-                  <p className="text-sm font-semibold text-slate-600 mb-2">
+                  <p className="text-sm font-semibold text-slate-600 mb-2 p-4 pb-0">
                     {currentSegment.title}
                   </p>
-                  <p className="text-5xl font-bold text-slate-800 tabular-nums">
+                  {currentSegment.kind === 'work' && (
+                    <MediaPlayer
+                      segment={currentSegment}
+                      isActive={status === 'running' || status === 'paused'}
+                    />
+                  )}
+                  <p className="text-5xl font-bold text-slate-800 tabular-nums p-4">
                     {formatRemaining(segmentRemainingSec * 1000)}
                   </p>
                 </>

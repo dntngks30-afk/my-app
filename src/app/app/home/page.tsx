@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   SlidersHorizontal,
@@ -49,6 +49,8 @@ export default function ResetHomePage() {
     }
   }, [loading, error, renderState]);
 
+  const requestInFlightRef = useRef(false);
+
   const handleStartClick = async (day: number) => {
     console.log('[HOME_CTA_CLICK]', { day });
     const { data: { session } } = await supabase.auth.getSession();
@@ -58,25 +60,89 @@ export default function ResetHomePage() {
       return;
     }
 
+    if (requestInFlightRef.current) return;
+    requestInFlightRef.current = true;
     setIsStarting(true);
-    console.log('[HOME_ACTIVATE_START]');
+
+    const token = session.access_token;
+    const headers = { Authorization: `Bearer ${token}` };
+    const opts: RequestInit = { cache: 'no-store' as RequestCache, headers };
+
     try {
-      const res = await fetch('/api/routine-engine/activate', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (res.ok) {
-        console.log('[HOME_ACTIVATE_SUCCESS]');
-        router.push(`/app/routine/player?day=${day}`);
-      } else {
-        const body = await res.json().catch(() => ({}));
-        console.warn('[HOME_ACTIVATE_FAIL]', { message: body.error });
+      // 1. Fetch workout routine for routineId
+      const routineRes = await fetch('/api/workout-routine/get', opts);
+      if (!routineRes.ok) {
+        const body = await routineRes.json().catch(() => ({}));
+        console.warn('[HOME_ROUTINE_FAIL]', { status: routineRes.status, error: body.error });
+        return;
       }
+      const routineData = await routineRes.json();
+      const routineId = routineData?.routine?.id;
+      if (!routineId) {
+        console.warn('[HOME_ROUTINE_FAIL]', { error: 'No routineId' });
+        return;
+      }
+
+      // 2. Get or create day plan (멱등)
+      console.log('[HOME_PLAN_GET_START]', { routineId, day });
+      const planGetRes = await fetch(
+        `/api/routine-plan/get?routineId=${encodeURIComponent(routineId)}&dayNumber=${day}`,
+        opts
+      );
+      const planGetData = await planGetRes.json().catch(() => ({}));
+      let plan = planGetData?.plan;
+
+      if (!planGetRes.ok) {
+        console.warn('[HOME_PLAN_GET_FAIL]', { status: planGetRes.status });
+        return;
+      }
+      if (!plan) {
+        console.log('[HOME_PLAN_GET_NOT_FOUND]', { routineId, day });
+        console.log('[HOME_PLAN_GENERATE_START]', { routineId, day });
+        const genRes = await fetch('/api/routine-plan/generate', {
+          method: 'POST',
+          cache: 'no-store',
+          headers: {
+            ...(opts.headers as Record<string, string>),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            routineId,
+            dayNumber: day,
+            dailyCondition: { pain_today: null, time_available: 15 },
+          }),
+        });
+        if (!genRes.ok) {
+          const body = await genRes.json().catch(() => ({}));
+          console.warn('[HOME_PLAN_GENERATE_FAIL]', { status: genRes.status, error: body.error });
+          return;
+        }
+        const genData = await genRes.json();
+        plan = genData?.plan;
+        console.log('[HOME_PLAN_GENERATE_SUCCESS]');
+      } else {
+        console.log('[HOME_PLAN_GET_SUCCESS]');
+      }
+
+      // 3. Activate routine (24/48 engine, unchanged)
+      const activateRes = await fetch('/api/routine-engine/activate', {
+        method: 'POST',
+        ...opts,
+      });
+      if (!activateRes.ok) {
+        const body = await activateRes.json().catch(() => ({}));
+        console.warn('[HOME_ACTIVATE_FAIL]', { message: body.error });
+        return;
+      }
+      console.log('[HOME_ACTIVATE_SUCCESS]');
+
+      router.push(`/app/routine/player?routineId=${routineId}&day=${day}`);
     } catch (err) {
-      console.warn('[HOME_ACTIVATE_FAIL]', {
+      console.warn('[HOME_PLAN_GENERATE_FAIL]', {
         message: err instanceof Error ? err.message : String(err),
       });
     } finally {
+      requestInFlightRef.current = false;
       setIsStarting(false);
     }
   };
