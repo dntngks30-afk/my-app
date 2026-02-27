@@ -75,6 +75,17 @@ const DAY_THEMES: ReadonlyArray<{
 
 const FALLBACK_IDS = ['M01', 'M28'];
 
+/** Fallback diversification: day-specific preferred ID order (no DB/seed change) */
+const FALLBACK_SETS: readonly (readonly string[])[] = [
+  ['M01', 'M28'],
+  ['M28', 'M02'],
+  ['M02', 'M01'],
+  ['M28', 'M01'],
+];
+
+const RECENT_USE_EXCLUSION_DAYS = 2;
+const MIN_POOL_AFTER_EXCLUSION = 2;
+
 /** 재생성 트리거 사유 */
 export type RegenReason =
   | 'user_request'
@@ -154,6 +165,31 @@ export async function loadDeepResultForUser(
     secondaryFocus: extended.secondaryFocus,
     finalScores: extended.finalScores,
   };
+}
+
+async function loadRecentUsedIds(
+  supabase: ReturnType<typeof import('@/lib/supabase').getServerSupabaseAdmin>,
+  routineId: string,
+  dayNumber: number
+): Promise<Set<string>> {
+  const fromDay = Math.max(1, dayNumber - RECENT_USE_EXCLUSION_DAYS);
+  const toDay = dayNumber - 1;
+  if (fromDay > toDay) return new Set();
+
+  const { data: rows, error } = await supabase
+    .from('routine_day_plans')
+    .select('selected_template_ids')
+    .eq('routine_id', routineId)
+    .gte('day_number', fromDay)
+    .lte('day_number', toDay);
+
+  if (error || !rows?.length) return new Set();
+  const ids = new Set<string>();
+  for (const row of rows) {
+    const arr = row?.selected_template_ids as string[] | null;
+    if (Array.isArray(arr)) arr.forEach((id) => ids.add(id));
+  }
+  return ids;
 }
 
 export type GenerateDayPlanResult = {
@@ -304,7 +340,31 @@ export async function generateDayPlan(
   const levelFilter = theme.levelFilter ?? level;
   pool = pool.filter((t) => t.level <= levelFilter);
 
-  let scored = scoreByFocusTags(pool, themeTags);
+  const recentUsedIds = await loadRecentUsedIds(supabase, routineId, dayNumber);
+  let poolForScoring = pool;
+  let excludedCount = 0;
+  let usePenalty = false;
+  if (recentUsedIds.size > 0) {
+    const poolExcluded = pool.filter((t) => !recentUsedIds.has(t.id));
+    if (poolExcluded.length >= MIN_POOL_AFTER_EXCLUSION) {
+      poolForScoring = poolExcluded;
+      excludedCount = pool.length - poolExcluded.length;
+    } else {
+      usePenalty = true;
+    }
+  }
+
+  let scored = scoreByFocusTags(poolForScoring, themeTags);
+  if (usePenalty && recentUsedIds.size > 0) {
+    const [notRecent, recent] = scored.reduce<[ExerciseTemplate[], ExerciseTemplate[]]>(
+      (acc, t) => {
+        acc[recentUsedIds.has(t.id) ? 1 : 0].push(t);
+        return acc;
+      },
+      [[], []]
+    );
+    scored = [...notRecent, ...recent];
+  }
 
   const maxTemplates = getMaxTemplates(dailyCondition);
   const selected: ExerciseTemplate[] = [];
@@ -321,9 +381,34 @@ export async function generateDayPlan(
     t.focus_tags.forEach((tag) => usedTags.add(tag));
   }
 
+  let fallbackUsed = false;
   if (selected.length < 2) {
-    const fallbacks = await getFallbackTemplates();
-    for (const fb of fallbacks) {
+    fallbackUsed = true;
+    const allFallbacks = await getFallbackTemplates();
+    const preferredSet = FALLBACK_SETS[dayNumber % FALLBACK_SETS.length];
+    const safePoolL1 = pool.filter((t) => t.level <= 1 && t.avoid_tags.length === 0);
+    const candidates: ExerciseTemplate[] = [];
+    const seen = new Set<string>();
+    for (const id of preferredSet) {
+      const t = allFallbacks.find((x) => x.id === id) ?? safePoolL1.find((x) => x.id === id);
+      if (t && !seen.has(t.id)) {
+        candidates.push(t);
+        seen.add(t.id);
+      }
+    }
+    for (const t of [...allFallbacks, ...safePoolL1]) {
+      if (!seen.has(t.id)) {
+        candidates.push(t);
+        seen.add(t.id);
+      }
+    }
+    for (const t of candidates) {
+      if (selected.length >= 2) break;
+      if (selected.some((s) => s.id === t.id)) continue;
+      if (recentUsedIds.has(t.id) && selected.length >= 1) continue;
+      selected.push(t);
+    }
+    for (const fb of allFallbacks) {
       if (selected.length >= 2) break;
       if (selected.some((s) => s.id === fb.id)) continue;
       selected.push(fb);
@@ -344,6 +429,12 @@ export async function generateDayPlan(
     ...avoidTags.map((a) => `avoid:${a}`),
     `level<=${level}`,
   ];
+  if (process.env.NODE_ENV !== 'production') {
+    if (recentUsedIds.size > 0) constraintsApplied.push(`recentUsed:${recentUsedIds.size}`);
+    if (excludedCount > 0) constraintsApplied.push(`excluded:${excludedCount}`);
+    if (usePenalty) constraintsApplied.push('recentPenalty');
+    if (fallbackUsed) constraintsApplied.push('fallbackUsed');
+  }
 
   const planHash = computePlanHash(selectedIds);
 
