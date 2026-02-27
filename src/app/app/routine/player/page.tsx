@@ -177,7 +177,6 @@ export default function RoutinePlayerPage() {
   const [planError, setPlanError] = useState<string | null>(null);
   const [planEmpty, setPlanEmpty] = useState(false);
   const [planErrorText, setPlanErrorText] = useState<string | null>(null);
-  const [generatingPlan, setGeneratingPlan] = useState(false);
   const [planRetryCount, setPlanRetryCount] = useState(0);
   const authCheckedRef = useRef(false);
   const segmentCount = segments.length;
@@ -196,7 +195,6 @@ export default function RoutinePlayerPage() {
 
   const completeRequestedRef = useRef(false);
   const lastTransitionKeyRef = useRef<string>('');
-  const autoGenerateAttemptedRef = useRef(false);
 
   const initSyncDone = useRef(false);
   const statusLoading = useRef(false);
@@ -238,7 +236,6 @@ export default function RoutinePlayerPage() {
     setPlanEmpty(false);
     setPlanError(null);
     setPlanErrorText(null);
-    autoGenerateAttemptedRef.current = false;
     let cancelled = false;
     const run = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -249,122 +246,33 @@ export default function RoutinePlayerPage() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       };
 
-      console.log('[PLAYER_PLAN_FETCH_START]', { routineId, dayNumber });
       try {
-        const res = await fetch(
-          `/api/routine-plan/get?routineId=${encodeURIComponent(routineId)}&dayNumber=${dayNumber}`,
-          opts
-        );
-        const data = await res.json().catch(() => ({}));
+        const ensureRes = await fetch('/api/routine-plan/ensure', {
+          method: 'POST',
+          cache: 'no-store',
+          headers: {
+            ...(opts.headers as Record<string, string>),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ routineId, dayNumber }),
+        });
+        const data = await ensureRes.json().catch(() => ({}));
 
         if (cancelled) return;
-        if (!res.ok) {
-          console.warn('[PLAYER_PLAN_FETCH_FAIL]', { status: res.status });
-          setPlanError(data?.error ?? 'Day Plan 조회 실패');
+        if (!ensureRes.ok) {
+          setPlanError(data?.error ?? 'Day Plan 조회/생성 실패');
           setPlanLoading(false);
           return;
         }
 
         const plan = data?.plan;
         if (!plan?.selected_template_ids?.length) {
-          if (autoGenerateAttemptedRef.current) {
-            console.log('[PLAYER_PLAN_FETCH_SUCCESS]', { plan: null, autoGenerate: 'already_tried' });
-            setPlanEmpty(true);
-            setPlanLoading(false);
-            return;
-          }
-          autoGenerateAttemptedRef.current = true;
-          setGeneratingPlan(true);
-          console.log('[PLAYER_AUTO_GENERATE_START]', { routineId, dayNumber });
-          const genRes = await fetch('/api/routine-plan/generate', {
-            method: 'POST',
-            cache: 'no-store',
-            headers: {
-              ...(opts.headers as Record<string, string>),
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ routineId, dayNumber }),
-          });
-          if (cancelled) return;
-          if (!genRes.ok) {
-            const genBody = await genRes.json().catch(() => ({}));
-            console.warn('[PLAYER_AUTO_GENERATE_FAIL]', { status: genRes.status });
-            setPlanErrorText(genBody?.error ?? genBody?.details ?? '플랜 생성에 실패했습니다.');
-            setPlanEmpty(true);
-            setGeneratingPlan(false);
-            setPlanLoading(false);
-            return;
-          }
-          setGeneratingPlan(false);
-          console.log('[PLAYER_AUTO_GENERATE_SUCCESS]');
-          const genData = await genRes.json().catch(() => ({}));
-          if (cancelled) return;
-          const plan2 = genData?.plan;
-          if (!plan2?.selected_template_ids?.length) {
-            setPlanErrorText('플랜 생성 후 조회에 실패했습니다.');
-            setPlanEmpty(true);
-            setPlanLoading(false);
-            return;
-          }
-          const ids = plan2.selected_template_ids as string[];
-          const segs: Segment[] = [];
-          for (let i = 0; i < ids.length; i++) {
-            segs.push({
-              id: `work-${ids[i]}-${i}`,
-              templateId: ids[i],
-              title: `운동 ${i + 1}`,
-              durationSec: 60,
-              kind: 'work',
-            });
-            if (i < ids.length - 1) {
-              segs.push({
-                id: `rest-${i + 1}`,
-                title: `휴식 ${i + 1}`,
-                durationSec: 30,
-                kind: 'rest',
-              });
-            }
-          }
-          setSegments(segs);
-          const workSegsGen = segs.filter((s) => s.kind === 'work' && s.templateId);
-          const mediaResultsGen = await Promise.all(
-            workSegsGen.map(async (s) => {
-              if (cancelled) return { id: s.id, ok: false as const, mData: null };
-              try {
-                const mRes = await fetch(
-                  `/api/exercise-template/media?templateId=${encodeURIComponent(s.templateId)}`,
-                  opts
-                );
-                const mData = await mRes.json().catch(() => ({}));
-                return { id: s.id, ok: mRes.ok && !!mData?.media, mData };
-              } catch {
-                return { id: s.id, ok: false as const, mData: null };
-              }
-            })
-          );
-          if (cancelled) return;
-          setSegments((prev) =>
-            prev.map((p) => {
-              const r = mediaResultsGen.find((x) => x.id === p.id);
-              if (!r) return p;
-              if (r.ok && r.mData?.media) {
-                return {
-                  ...p,
-                  title: r.mData.templateName ?? p.title,
-                  templateName: r.mData.templateName,
-                  durationSec: r.mData.media?.durationSec ?? p.durationSec,
-                  mediaPayload: r.mData.media,
-                  mediaError: false,
-                };
-              }
-              return { ...p, mediaPayload: null, mediaError: true };
-            })
-          );
+          setPlanErrorText(data?.error ?? '플랜을 불러올 수 없습니다.');
+          setPlanEmpty(true);
           setPlanLoading(false);
           return;
         }
 
-        console.log('[PLAYER_PLAN_FETCH_SUCCESS]');
         const ids = plan.selected_template_ids as string[];
         const segs: Segment[] = [];
         for (let i = 0; i < ids.length; i++) {
@@ -734,9 +642,7 @@ export default function RoutinePlayerPage() {
     return (
       <div className="min-h-screen bg-[#F8F6F0] flex flex-col items-center justify-center px-4">
         <div className="animate-pulse rounded-2xl bg-slate-200 h-32 w-full max-w-sm mb-4" />
-        <p className="text-slate-600">
-          {generatingPlan ? '오늘 루틴을 준비 중이에요.' : '루틴을 불러오는 중...'}
-        </p>
+        <p className="text-slate-600">루틴을 불러오는 중...</p>
       </div>
     );
   }

@@ -88,37 +88,7 @@ export default function ResetHomePage() {
         return;
       }
 
-      console.log('[HOME_PLAN_GET_START]', { routineId, day });
-      const planGetRes = await fetch(
-        `/api/routine-plan/get?routineId=${encodeURIComponent(routineId)}&dayNumber=${day}`,
-        opts
-      );
-      const planGetData = await planGetRes.json().catch(() => ({}));
-      const plan = planGetData?.plan;
-
-      if (!planGetRes.ok) {
-        console.warn('[HOME_PLAN_GET_FAIL]', { status: planGetRes.status });
-        setStartError(planGetData?.error ?? '플랜 조회에 실패했습니다.');
-        return;
-      }
-      if (plan) {
-        console.log('[HOME_PLAN_GET_SUCCESS]');
-        const activateRes = await fetch('/api/routine-engine/activate', {
-          method: 'POST',
-          ...opts,
-        });
-        if (!activateRes.ok) {
-          const body = await activateRes.json().catch(() => ({}));
-          console.warn('[HOME_ACTIVATE_FAIL]', { message: body.error });
-          return;
-        }
-        router.push(`/app/routine/player?routineId=${routineId}&day=${day}`);
-        return;
-      }
-
-      console.log('[HOME_PLAN_GET_NOT_FOUND]', { routineId, day });
-      console.log('[HOME_PLAN_GENERATE_START]', { routineId, day });
-      const genRes = await fetch('/api/routine-plan/generate', {
+      const ensureRes = await fetch('/api/routine-plan/ensure', {
         method: 'POST',
         cache: 'no-store',
         headers: {
@@ -127,13 +97,17 @@ export default function ResetHomePage() {
         },
         body: JSON.stringify({ routineId, dayNumber: day }),
       });
-      if (!genRes.ok) {
-        const body = await genRes.json().catch(() => ({}));
-        console.warn('[HOME_PLAN_GENERATE_FAIL]', { status: genRes.status, error: body.error });
-        setStartError(body?.error ?? body?.details ?? '플랜 생성에 실패했습니다.');
+      const ensureData = await ensureRes.json().catch(() => ({}));
+      const plan = ensureData?.plan;
+
+      if (!ensureRes.ok) {
+        setStartError(ensureData?.error ?? '플랜 조회/생성에 실패했습니다.');
         return;
       }
-      console.log('[HOME_PLAN_GENERATE_SUCCESS]');
+      if (!plan?.selected_template_ids?.length) {
+        setStartError(ensureData?.error ?? '플랜을 불러올 수 없습니다.');
+        return;
+      }
 
       const activateRes = await fetch('/api/routine-engine/activate', {
         method: 'POST',
@@ -146,9 +120,10 @@ export default function ResetHomePage() {
       }
       router.push(`/app/routine/player?routineId=${routineId}&day=${day}`);
     } catch (err) {
-      console.warn('[HOME_PLAN_GENERATE_FAIL]', {
+      console.warn('[HOME_START_FAIL]', {
         message: err instanceof Error ? err.message : String(err),
       });
+      setStartError(err instanceof Error ? err.message : '시작에 실패했습니다.');
     } finally {
       requestInFlightRef.current = false;
       setIsStarting(false);

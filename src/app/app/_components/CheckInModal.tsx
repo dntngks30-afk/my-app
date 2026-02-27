@@ -17,6 +17,8 @@ type Props = {
   onClose: () => void;
   /** '시작하기' for plan flow, '저장' for record-only (checkin tab) */
   submitLabel?: string;
+  /** 저장 중 로딩 상태 (버튼 disabled, 텍스트 변경) */
+  isSubmitting?: boolean;
   saveError?: string | null;
   saveSuccess?: boolean;
 };
@@ -26,6 +28,7 @@ export function CheckInModal({
   onSkip,
   onClose,
   submitLabel = '시작하기',
+  isSubmitting: isSubmittingProp,
   saveError = null,
   saveSuccess = false,
 }: Props) {
@@ -33,10 +36,11 @@ export function CheckInModal({
   const [stiffness, setStiffness] = useState<number | null>(null);
   const [sleep, setSleep] = useState<number | null>(null);
   const [timeAvailable, setTimeAvailable] = useState<number | null>(15);
-  const [submitting, setSubmitting] = useState(false);
+  const [submittingLocal, setSubmittingLocal] = useState(false);
+  const submitting = isSubmittingProp ?? submittingLocal;
 
   const handleSubmit = async () => {
-    setSubmitting(true);
+    setSubmittingLocal(true);
     try {
       await onSubmit({
         pain_today: pain === '' ? null : pain,
@@ -46,7 +50,7 @@ export function CheckInModal({
         equipment_available: [],
       });
     } finally {
-      setSubmitting(false);
+      setSubmittingLocal(false);
     }
   };
 

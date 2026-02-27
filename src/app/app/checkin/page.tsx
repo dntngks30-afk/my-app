@@ -45,6 +45,7 @@ export default function CheckinPage() {
   const [showConditionModal, setShowConditionModal] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchReport = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -159,26 +160,30 @@ export default function CheckinPage() {
   }) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) return;
+    setIsSubmitting(true);
     setSaveError(null);
-    console.log('[CHECKIN_SAVE_START]');
-    const res = await fetch('/api/daily-condition/upsert', {
-      method: 'POST',
-      cache: 'no-store',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify(values),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      console.log('[CHECKIN_SAVE_FAIL]', { status: res.status });
-      setSaveError(body?.error ?? body?.details ?? '저장에 실패했습니다.');
-      return;
+    try {
+      const res = await fetch('/api/daily-condition/upsert', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(values),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaveError(body?.error ?? body?.details ?? '저장에 실패했습니다.');
+        return;
+      }
+      setSaveError(null);
+      setSaveSuccess(true);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : '저장에 실패했습니다.');
+    } finally {
+      setIsSubmitting(false);
     }
-    console.log('[CHECKIN_SAVE_SUCCESS]');
-    setSaveError(null);
-    setSaveSuccess(true);
   };
 
   return (
@@ -262,6 +267,7 @@ export default function CheckinPage() {
       {showConditionModal && (
         <CheckInModal
           submitLabel={nextUrl ? '저장 후 계속하기' : '저장'}
+          isSubmitting={isSubmitting}
           onSubmit={handleConditionSubmit}
           onSkip={() => {
             setShowConditionModal(false);

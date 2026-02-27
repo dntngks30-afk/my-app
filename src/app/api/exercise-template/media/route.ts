@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
       templateName: template.name,
       media: payload,
     });
-    res.headers.set('Cache-Control', 'no-store, max-age=0');
+    res.headers.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
     return res;
   } catch (err) {
     console.error('[exercise-template/media]', err);
