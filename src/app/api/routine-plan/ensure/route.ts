@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const auth = await requireActivePlan(req);
+    const auth = await requireActivePlan(req, { recordTimings: isDebug });
     if (auth instanceof NextResponse) return auth;
     const userId = auth.userId;
     const tAuth = performance.now();
@@ -78,53 +78,93 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
-    const DEFAULT_CONDITION: DailyCondition & { source?: string } = {
-      source: 'default',
-      time_available: 15,
-    };
+    /** Fast-path: 기존 plan이 있으면 daily_conditions + generateDayPlan 스킵 */
+    const { data: existingPlan } = await supabase
+      .from('routine_day_plans')
+      .select('routine_id, day_number, selected_template_ids, reasons, constraints_applied, generator_version, scoring_version, rule_version, daily_condition_snapshot')
+      .eq('routine_id', routineId)
+      .eq('day_number', day)
+      .maybeSingle();
 
-    let dailyCondition: DailyCondition | null = body.dailyCondition ?? null;
-    if (!dailyCondition) {
-      const dayKeyUtc = getDayKeyUtc();
-      const { data: row } = await supabase
-        .from('daily_conditions')
-        .select('pain_today, stiffness, sleep, time_available_min, equipment_available')
-        .eq('user_id', userId)
-        .eq('day_key_utc', dayKeyUtc)
-        .maybeSingle();
-
-      if (row) {
-        const eq = row.equipment_available;
-        dailyCondition = {
-          pain_today: row.pain_today ?? undefined,
-          stiffness: row.stiffness ?? undefined,
-          sleep: row.sleep ?? undefined,
-          time_available: row.time_available_min ?? 15,
-          equipment_available: Array.isArray(eq) ? eq.filter((x): x is string => typeof x === 'string') : [],
-        };
-      } else {
-        dailyCondition = DEFAULT_CONDITION;
-      }
-    }
     const tSelectDaily = performance.now();
 
-    const result = await generateDayPlan(
-      routineId as string,
-      day,
-      dailyCondition,
-      {
-      forceRegenerate: false,
-      preloadedContext: { userId },
-    });
-    const { plan, regenerated } = result;
+    let plan: {
+      routine_id: string;
+      day_number: number;
+      selected_template_ids: string[];
+      reasons: string[];
+      constraints_applied: string[];
+      generator_version: string;
+      scoring_version: string;
+      rule_version?: string | null;
+      daily_condition_snapshot?: unknown;
+    };
+    let regenerated: boolean;
+
+    if (existingPlan) {
+      plan = {
+        routine_id: existingPlan.routine_id,
+        day_number: existingPlan.day_number,
+        selected_template_ids: existingPlan.selected_template_ids ?? [],
+        reasons: existingPlan.reasons ?? [],
+        constraints_applied: existingPlan.constraints_applied ?? [],
+        generator_version: existingPlan.generator_version ?? 'gen_v1',
+        scoring_version: existingPlan.scoring_version ?? 'deep_v2',
+        rule_version: existingPlan.rule_version ?? 'rule_v1',
+        daily_condition_snapshot: existingPlan.daily_condition_snapshot ?? null,
+      };
+      regenerated = false;
+    } else {
+      const DEFAULT_CONDITION: DailyCondition & { source?: string } = {
+        source: 'default',
+        time_available: 15,
+      };
+
+      let dailyCondition: DailyCondition | null = body.dailyCondition ?? null;
+      if (!dailyCondition) {
+        const dayKeyUtc = getDayKeyUtc();
+        const { data: row } = await supabase
+          .from('daily_conditions')
+          .select('pain_today, stiffness, sleep, time_available_min, equipment_available')
+          .eq('user_id', userId)
+          .eq('day_key_utc', dayKeyUtc)
+          .maybeSingle();
+
+        if (row) {
+          const eq = row.equipment_available;
+          dailyCondition = {
+            pain_today: row.pain_today ?? undefined,
+            stiffness: row.stiffness ?? undefined,
+            sleep: row.sleep ?? undefined,
+            time_available: row.time_available_min ?? 15,
+            equipment_available: Array.isArray(eq) ? eq.filter((x): x is string => typeof x === 'string') : [],
+          };
+        } else {
+          dailyCondition = DEFAULT_CONDITION;
+        }
+      }
+
+      const result = await generateDayPlan(
+        routineId as string,
+        day,
+        dailyCondition,
+        {
+          forceRegenerate: false,
+          preloadedContext: { userId },
+        }
+      );
+      plan = {
+        ...result.plan,
+        daily_condition_snapshot: dailyCondition ?? result.plan.daily_condition_snapshot,
+      };
+      regenerated = result.regenerated;
+    }
+
     const tGenerate = performance.now();
 
     const payload: Record<string, unknown> = {
       success: true,
-      plan: toPlanResponse({
-        ...plan,
-        daily_condition_snapshot: dailyCondition ?? plan.daily_condition_snapshot,
-      }),
+      plan: toPlanResponse(plan),
       created: regenerated,
     };
 
@@ -181,7 +221,7 @@ export async function POST(req: NextRequest) {
     }
     const tEnd = performance.now();
     if (isDebug) {
-      payload.timings = {
+      const timings: Record<string, number> = {
         t_auth: Math.round(tAuth - t0),
         t_select: Math.round(tSelectDaily - tAuth),
         t_generate: Math.round(tGenerate - tSelectDaily),
@@ -189,6 +229,11 @@ export async function POST(req: NextRequest) {
         t_media: Math.round(tMedia - tTemplatesFetch),
         t_total: Math.round(tEnd - t0),
       };
+      if (auth.timings) {
+        timings.t_auth_user = auth.timings.t_auth_user;
+        timings.t_auth_plan = auth.timings.t_auth_plan;
+      }
+      payload.timings = timings;
       if (process.env.NODE_ENV !== 'production') {
         console.log('[routine-plan/ensure] timings', payload.timings);
       }

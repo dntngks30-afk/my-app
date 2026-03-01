@@ -236,7 +236,7 @@ export default function RoutinePlayerPage() {
     setPauseStartedPerfMs(null);
   }, [dayNumber]);
 
-  /** Day plan fetch + segments 빌드 */
+  /** Day plan fetch + segments 빌드 (progressive media: 1차 placeholder → 2차 media) */
   useEffect(() => {
     if (!routineId) {
       setPlanLoading(false);
@@ -247,6 +247,37 @@ export default function RoutinePlayerPage() {
     setPlanErrorText(null);
     setEnsureTimings(null);
     let cancelled = false;
+    const debugFlag = searchParams.get('debug') === '1';
+
+    const buildSegmentsFromSwm = (
+      segmentsWithMedia: Array<{ templateId: string; templateName: string; mediaPayload?: MediaPayload | null }>
+    ): Segment[] => {
+      const segs: Segment[] = [];
+      for (let i = 0; i < segmentsWithMedia.length; i++) {
+        const swm = segmentsWithMedia[i];
+        const durationSec = swm.mediaPayload?.durationSec ?? 60;
+        segs.push({
+          id: `work-${swm.templateId}-${i}`,
+          templateId: swm.templateId,
+          title: swm.templateName ?? `운동 ${i + 1}`,
+          durationSec,
+          kind: 'work',
+          mediaPayload: swm.mediaPayload ?? null,
+          mediaError: false,
+          templateName: swm.templateName,
+        });
+        if (i < segmentsWithMedia.length - 1) {
+          segs.push({
+            id: `rest-${i + 1}`,
+            title: `휴식 ${i + 1}`,
+            durationSec: 30,
+            kind: 'rest',
+          });
+        }
+      }
+      return segs;
+    };
+
     const run = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token || cancelled) return;
@@ -256,11 +287,8 @@ export default function RoutinePlayerPage() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       };
 
-      try {
-        let ensureRes: Response;
-        let data: Record<string, unknown>;
-        const debugFlag = searchParams.get('debug') === '1';
-        ensureRes = await fetch('/api/routine-plan/ensure', {
+      const ensureFetch = (includeMedia: boolean) =>
+        fetch('/api/routine-plan/ensure', {
           method: 'POST',
           cache: 'no-store',
           headers: {
@@ -271,10 +299,13 @@ export default function RoutinePlayerPage() {
             routineId,
             dayNumber,
             debug: debugFlag,
-            includeMedia: true,
+            includeMedia,
           }),
         });
-        data = await ensureRes.json().catch(() => ({})) as Record<string, unknown>;
+
+      try {
+        const ensureRes = await ensureFetch(false);
+        const data = (await ensureRes.json().catch(() => ({}))) as Record<string, unknown>;
 
         if (cancelled) return;
         if (data?.timings) setEnsureTimings(data.timings as Record<string, number>);
@@ -286,7 +317,7 @@ export default function RoutinePlayerPage() {
 
         const plan = data?.plan;
         if (!plan?.selected_template_ids?.length) {
-          setPlanErrorText(data?.error ?? '플랜을 불러올 수 없습니다.');
+          setPlanErrorText((data?.error as string) ?? '플랜을 불러올 수 없습니다.');
           setPlanEmpty(true);
           setPlanLoading(false);
           return;
@@ -298,35 +329,10 @@ export default function RoutinePlayerPage() {
           mediaPayload?: MediaPayload | null;
         }> | undefined;
 
-        const ids = (plan.selected_template_ids as string[]) ?? [];
-        const useFallbackMediaFetch = debugFlag && !segmentsWithMedia?.length;
-
         if (segmentsWithMedia?.length) {
-          const segs: Segment[] = [];
-          for (let i = 0; i < segmentsWithMedia.length; i++) {
-            const swm = segmentsWithMedia[i];
-            const durationSec = swm.mediaPayload?.durationSec ?? 60;
-            segs.push({
-              id: `work-${swm.templateId}-${i}`,
-              templateId: swm.templateId,
-              title: swm.templateName ?? `운동 ${i + 1}`,
-              durationSec,
-              kind: 'work',
-              mediaPayload: swm.mediaPayload ?? null,
-              mediaError: false,
-              templateName: swm.templateName,
-            });
-            if (i < segmentsWithMedia.length - 1) {
-              segs.push({
-                id: `rest-${i + 1}`,
-                title: `휴식 ${i + 1}`,
-                durationSec: 30,
-                kind: 'rest',
-              });
-            }
-          }
-          setSegments(segs);
+          setSegments(buildSegmentsFromSwm(segmentsWithMedia));
         } else {
+          const ids = (plan.selected_template_ids as string[]) ?? [];
           const segs: Segment[] = [];
           for (let i = 0; i < ids.length; i++) {
             segs.push({
@@ -348,45 +354,27 @@ export default function RoutinePlayerPage() {
             }
           }
           setSegments(segs);
-
-          if (useFallbackMediaFetch) {
-            const workSegs = segs.filter((s) => s.kind === 'work' && s.templateId);
-            const mediaResults = await Promise.all(
-              workSegs.map(async (s) => {
-                if (cancelled) return { id: s.id, ok: false as const, mData: null, status: 0 };
-                try {
-                  const mRes = await fetch(
-                    `/api/exercise-template/media?templateId=${encodeURIComponent(s.templateId!)}`,
-                    opts
-                  );
-                  const mData = await mRes.json().catch(() => ({}));
-                  const ok = mRes.ok && !!mData?.media;
-                  return { id: s.id, ok, mData, status: mRes.status };
-                } catch {
-                  return { id: s.id, ok: false as const, mData: null, status: 0 };
-                }
-              })
-            );
-            if (cancelled) return;
-            setSegments((prev) =>
-              prev.map((p) => {
-                const r = mediaResults.find((x) => x.id === p.id);
-                if (!r) return p;
-                if (r.ok && r.mData?.media) {
-                  return {
-                    ...p,
-                    title: r.mData.templateName ?? p.title,
-                    templateName: r.mData.templateName,
-                    durationSec: r.mData.media?.durationSec ?? p.durationSec,
-                    mediaPayload: r.mData.media,
-                    mediaError: false,
-                  };
-                }
-                return { ...p, mediaPayload: null, mediaError: true };
-              })
-            );
-          }
         }
+
+        setPlanLoading(false);
+
+        ensureFetch(true)
+          .then((res) => res.json().catch(() => ({})))
+          .then((mediaData: Record<string, unknown>) => {
+            if (cancelled) return;
+            const swm = mediaData?.segments_with_media as Array<{
+              templateId: string;
+              templateName: string;
+              mediaPayload?: MediaPayload | null;
+            }> | undefined;
+            if (swm?.length) {
+              setSegments(buildSegmentsFromSwm(swm));
+            }
+          })
+          .catch((err) => {
+            if (cancelled) return;
+            if (debugFlag) console.warn('[player] media fetch failed', err);
+          });
       } catch (err) {
         if (cancelled) return;
         console.warn('[PLAYER_PLAN_FETCH_FAIL]', { message: String(err) });
