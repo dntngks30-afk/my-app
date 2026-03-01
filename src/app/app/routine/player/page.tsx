@@ -200,6 +200,7 @@ export default function RoutinePlayerPage() {
   const initSyncDone = useRef(false);
   const lastRoutineIdRef = useRef<string | null>(null);
   const statusLoading = useRef(false);
+  const mediaFetchInFlightRef = useRef<Set<string>>(new Set());
   const [currentDay, setCurrentDay] = useState(1);
 
   useEffect(() => {
@@ -287,8 +288,8 @@ export default function RoutinePlayerPage() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       };
 
-      const ensureFetch = (includeMedia: boolean) =>
-        fetch('/api/routine-plan/ensure', {
+      try {
+        const ensureRes = await fetch('/api/routine-plan/ensure', {
           method: 'POST',
           cache: 'no-store',
           headers: {
@@ -299,12 +300,9 @@ export default function RoutinePlayerPage() {
             routineId,
             dayNumber,
             debug: debugFlag,
-            includeMedia,
+            mediaMode: 'first',
           }),
         });
-
-      try {
-        const ensureRes = await ensureFetch(false);
         const data = (await ensureRes.json().catch(() => ({}))) as Record<string, unknown>;
 
         if (cancelled) return;
@@ -355,26 +353,6 @@ export default function RoutinePlayerPage() {
           }
           setSegments(segs);
         }
-
-        setPlanLoading(false);
-
-        ensureFetch(true)
-          .then((res) => res.json().catch(() => ({})))
-          .then((mediaData: Record<string, unknown>) => {
-            if (cancelled) return;
-            const swm = mediaData?.segments_with_media as Array<{
-              templateId: string;
-              templateName: string;
-              mediaPayload?: MediaPayload | null;
-            }> | undefined;
-            if (swm?.length) {
-              setSegments(buildSegmentsFromSwm(swm));
-            }
-          })
-          .catch((err) => {
-            if (cancelled) return;
-            if (debugFlag) console.warn('[player] media fetch failed', err);
-          });
       } catch (err) {
         if (cancelled) return;
         console.warn('[PLAYER_PLAN_FETCH_FAIL]', { message: String(err) });
@@ -532,6 +510,53 @@ export default function RoutinePlayerPage() {
 
   const currentSegment = segments[derivedIndex] ?? null;
   const isLastSegment = derivedIndex === segments.length - 1;
+
+  /** On-demand 미디어 서명: 현재 세그먼트가 placeholder일 때만 호출 */
+  useEffect(() => {
+    const seg = currentSegment;
+    if (!seg || seg.kind !== 'work' || !seg.templateId) return;
+    const needsMedia =
+      !seg.mediaPayload || seg.mediaPayload.kind === 'placeholder';
+    if (!needsMedia || mediaFetchInFlightRef.current.has(seg.templateId)) return;
+
+    mediaFetchInFlightRef.current.add(seg.templateId);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.access_token) {
+        mediaFetchInFlightRef.current.delete(seg.templateId);
+        return;
+      }
+      fetch('/api/media/sign', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ templateId: seg.templateId }),
+      })
+        .then((res) => res.json().catch(() => ({})))
+        .then((data: Record<string, unknown>) => {
+          mediaFetchInFlightRef.current.delete(seg.templateId);
+          const mediaById = data?.mediaById as Record<string, MediaPayload> | undefined;
+          const payload = mediaById?.[seg.templateId];
+          if (payload && payload.kind !== 'placeholder') {
+            setSegments((prev) =>
+              prev.map((p) =>
+                p.templateId === seg.templateId
+                  ? { ...p, mediaPayload: payload, mediaError: false }
+                  : p
+              )
+            );
+          }
+        })
+        .catch((err) => {
+          mediaFetchInFlightRef.current.delete(seg.templateId);
+          if (searchParams.get('debug') === '1') {
+            console.warn('[player] on-demand media failed', err);
+          }
+        });
+    });
+  }, [currentSegment?.id, currentSegment?.templateId, currentSegment?.mediaPayload?.kind, searchParams]);
 
   useEffect(() => {
     if (status !== 'running') return;

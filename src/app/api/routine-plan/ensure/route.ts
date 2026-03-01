@@ -49,8 +49,14 @@ export async function POST(req: NextRequest) {
   const debugFlag = body?.debug;
   const isDebug = debugFlag === true || debugFlag === 1 || debugFlag === '1';
   try {
-    const { routineId, dayNumber, includeMedia: includeMediaRaw } = body;
+    const { routineId, dayNumber, includeMedia: includeMediaRaw, mediaMode: mediaModeRaw } = body;
     const includeMedia = includeMediaRaw === true || includeMediaRaw === 1 || includeMediaRaw === '1';
+    const rawMode = mediaModeRaw === 'none' || mediaModeRaw === 'first' || mediaModeRaw === 'all'
+      ? mediaModeRaw
+      : includeMedia
+        ? 'all'
+        : 'first';
+    const mediaMode = rawMode as 'none' | 'first' | 'all';
 
     if (!routineId || !dayNumber) {
       return NextResponse.json(
@@ -173,10 +179,13 @@ export async function POST(req: NextRequest) {
     const ids = plan.selected_template_ids ?? [];
     let tTemplatesFetch = tGenerate;
     let tMedia = tGenerate;
+    const signIds =
+      mediaMode === 'all' ? ids
+      : mediaMode === 'first' ? ids.slice(0, 1)
+      : [];
+
     if (ids.length > 0) {
-      const templates = includeMedia
-        ? await getTemplatesForMediaByIds(ids)
-        : [];
+      const templates = await getTemplatesForMediaByIds(ids);
       tTemplatesFetch = performance.now();
       const templateMap = new Map(templates.map((t) => [t.id, t]));
       const placeholderMedia = {
@@ -185,35 +194,35 @@ export async function POST(req: NextRequest) {
         notes: ['영상 준비 중입니다.'],
       };
 
-      let mediaPayloads: Array<{ kind: string; autoplayAllowed: boolean; notes?: string[] }> = [];
-      if (includeMedia && templates.length > 0) {
+      const signTemplates = templates.filter((t) => signIds.includes(t.id));
+      let mediaById = new Map<string, { kind: string; autoplayAllowed: boolean; notes?: string[] }>();
+      if (signTemplates.length > 0) {
         const settled = await Promise.allSettled(
-          templates.map((t) =>
+          signTemplates.map((t) =>
             buildMediaPayload(t.media_ref, t.duration_sec ?? 300)
           )
         );
         tMedia = performance.now();
-        const payloads = settled.map((s) =>
-          s.status === 'fulfilled' ? s.value : placeholderMedia
-        );
-        mediaPayloads = payloads;
+        signTemplates.forEach((t, i) => {
+          const payload = settled[i]?.status === 'fulfilled'
+            ? (settled[i] as PromiseFulfilledResult<typeof placeholderMedia>).value
+            : placeholderMedia;
+          mediaById.set(t.id, payload);
+        });
         if (isDebug && settled.some((s) => s.status === 'rejected')) {
           const warnings: string[] = [];
           settled.forEach((s, i) => {
             if (s.status === 'rejected') {
-              warnings.push(`media_fail:${templates[i]?.id ?? i}`);
+              warnings.push(`media_fail:${signTemplates[i]?.id ?? i}`);
             }
           });
           payload.debug_warnings = warnings;
         }
       }
 
-      const mediaById = new Map(
-        templates.map((t, i) => [t.id, mediaPayloads[i] ?? placeholderMedia])
-      );
       payload.segments_with_media = ids.map((id, i) => {
         const t = templateMap.get(id);
-        const media = includeMedia ? mediaById.get(id) ?? placeholderMedia : placeholderMedia;
+        const media = mediaById.get(id) ?? placeholderMedia;
         return {
           templateId: id,
           templateName: t?.name ?? `운동 ${i + 1}`,
