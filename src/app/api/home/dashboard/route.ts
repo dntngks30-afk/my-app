@@ -12,6 +12,8 @@ import { checkAndUpdateRoutineStatus } from '@/lib/routine-engine';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const preferredRegion = ['icn1'];
 
 const MS_24H = 24 * 60 * 60 * 1000;
 
@@ -28,16 +30,17 @@ export async function GET(req: NextRequest) {
 
     const supabase = getServerSupabaseAdmin();
 
+    const tRoutinesStart = performance.now();
     const [statusResult, routinesRes] = await Promise.all([
       checkAndUpdateRoutineStatus(userId),
       supabase
         .from('workout_routines')
-        .select('id, created_at, status, started_at')
+        .select('id, created_at, started_at')
         .eq('user_id', userId)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .limit(1),
     ]);
-
-    const tQueries = performance.now();
+    const tRoutines = performance.now();
 
     const state = statusResult.state;
     const server_now_utc = new Date().toISOString();
@@ -51,6 +54,7 @@ export async function GET(req: NextRequest) {
       rest_recommended = elapsed < MS_24H;
     }
 
+    const tProgressStart = performance.now();
     const { data: completionRow } = await supabase
       .from('routine_completions')
       .select('id')
@@ -58,6 +62,7 @@ export async function GET(req: NextRequest) {
       .eq('day_number', state.currentDay)
       .limit(1)
       .maybeSingle();
+    const tProgress = performance.now();
 
     const todayCompletedForDay = !!completionRow;
 
@@ -87,7 +92,8 @@ export async function GET(req: NextRequest) {
     if (isDebug) {
       payload.timings = {
         t_auth: Math.round(tAuth - t0),
-        t_query_status: Math.round(tQueries - tAuth),
+        t_routines: Math.round(tRoutines - tRoutinesStart),
+        t_progress: Math.round(tProgress - tProgressStart),
         t_total: Math.round(tEnd - t0),
       };
       if (auth.timings) {
@@ -101,12 +107,21 @@ export async function GET(req: NextRequest) {
 
     const res = NextResponse.json(payload);
     res.headers.set('Cache-Control', 'no-store, max-age=0');
+    if (isDebug && payload.timings) {
+      const t = payload.timings as Record<string, number>;
+      const parts = [
+        `auth;dur=${t.t_auth ?? 0}`,
+        `routines;dur=${t.t_routines ?? 0}`,
+        `progress;dur=${t.t_progress ?? 0}`,
+        `total;dur=${t.t_total ?? 0}`,
+      ];
+      res.headers.set('Server-Timing', parts.join(', '));
+    }
     return res;
   } catch (err) {
     console.error('[home/dashboard]', err);
-    return NextResponse.json(
-      { error: '대시보드 조회에 실패했습니다.' },
-      { status: 500 }
-    );
+    const errPayload: Record<string, unknown> = { error: '대시보드 조회에 실패했습니다.' };
+    if (isDebug) errPayload.details = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(errPayload, { status: 500 });
   }
 }

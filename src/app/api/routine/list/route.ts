@@ -10,6 +10,10 @@ import { requireActivePlan } from '@/lib/auth/requireActivePlan';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const preferredRegion = ['icn1'];
+
+const ROUTINE_LIST_LIMIT = 20;
 
 export async function GET(req: NextRequest) {
   const t0 = performance.now();
@@ -24,29 +28,29 @@ export async function GET(req: NextRequest) {
 
     const supabase = getServerSupabaseAdmin();
 
+    const tRoutinesStart = performance.now();
     const [routinesRes, userRoutinesRes] = await Promise.all([
       supabase
         .from('workout_routines')
         .select('id, created_at, status, started_at')
         .eq('user_id', userId)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .limit(ROUTINE_LIST_LIMIT),
       supabase
         .from('user_routines')
         .select('current_day')
         .eq('user_id', userId)
         .maybeSingle(),
     ]);
-
-    const tQueries = performance.now();
+    const tRoutines = performance.now();
 
     const { data: routines, error: routineError } = routinesRes;
 
     if (routineError) {
       console.error('[routine/list]', routineError);
-      return NextResponse.json(
-        { error: '루틴 목록 조회 실패', details: routineError.message },
-        { status: 500 }
-      );
+      const errPayload: Record<string, unknown> = { error: '루틴 목록 조회 실패' };
+      if (isDebug) errPayload.details = routineError.message;
+      return NextResponse.json(errPayload, { status: 500 });
     }
 
     if (!routines?.length) {
@@ -55,7 +59,8 @@ export async function GET(req: NextRequest) {
       if (isDebug) {
         payload.timings = {
           t_auth: Math.round(tAuth - t0),
-          t_query_routines: Math.round(tQueries - tAuth),
+          t_routines: Math.round(tRoutines - tRoutinesStart),
+          t_attendance: 0,
           t_total: Math.round(tEnd - t0),
         };
         if (auth.timings) {
@@ -65,15 +70,26 @@ export async function GET(req: NextRequest) {
       }
       const res = NextResponse.json(payload);
       res.headers.set('Cache-Control', 'no-store, max-age=0');
+      if (isDebug && payload.timings) {
+        const t = payload.timings as Record<string, number>;
+        res.headers.set('Server-Timing', [
+          `auth;dur=${t.t_auth ?? 0}`,
+          `routines;dur=${t.t_routines ?? 0}`,
+          `attendance;dur=${t.t_attendance ?? 0}`,
+          `total;dur=${t.t_total ?? 0}`,
+        ].join(', '));
+      }
       return res;
     }
 
     const ids = routines.map((r) => r.id);
 
+    const tAttendanceStart = performance.now();
     const { data: daysRows, error: daysError } = await supabase
       .from('workout_routine_days')
       .select('routine_id, day_number, completed_at')
       .in('routine_id', ids as string[]);
+    const tAttendance = performance.now();
 
     if (daysError) {
       console.error('[routine/list] days', daysError);
@@ -122,7 +138,8 @@ export async function GET(req: NextRequest) {
     if (isDebug) {
       payload.timings = {
         t_auth: Math.round(tAuth - t0),
-        t_query_routines: Math.round(tQueries - tAuth),
+        t_routines: Math.round(tRoutines - tRoutinesStart),
+        t_attendance: Math.round(tAttendance - tAttendanceStart),
         t_total: Math.round(tEnd - t0),
       };
       if (auth.timings) {
@@ -136,15 +153,20 @@ export async function GET(req: NextRequest) {
 
     const res = NextResponse.json(payload);
     res.headers.set('Cache-Control', 'no-store, max-age=0');
+    if (isDebug && payload.timings) {
+      const t = payload.timings as Record<string, number>;
+      res.headers.set('Server-Timing', [
+        `auth;dur=${t.t_auth ?? 0}`,
+        `routines;dur=${t.t_routines ?? 0}`,
+        `attendance;dur=${t.t_attendance ?? 0}`,
+        `total;dur=${t.t_total ?? 0}`,
+      ].join(', '));
+    }
     return res;
   } catch (error) {
     console.error('[routine/list]', error);
-    return NextResponse.json(
-      {
-        error: '루틴 목록 조회 실패',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    );
+    const errPayload: Record<string, unknown> = { error: '루틴 목록 조회 실패' };
+    if (isDebug) errPayload.details = error instanceof Error ? error.message : String(error);
+    return NextResponse.json(errPayload, { status: 500 });
   }
 }

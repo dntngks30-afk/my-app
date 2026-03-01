@@ -4,16 +4,20 @@
  * Day Plan 조회 또는 생성 (멱등). 있으면 반환, 없으면 생성 후 반환.
  * plan/get + generate 워터폴을 1회 호출로 축소.
  * Bearer only, no-store. 유료 권한(plan_status='active') 필수.
+ * 핫패스(existingPlan): generateDayPlan 미로드.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireActivePlan } from '@/lib/auth/requireActivePlan';
-import { generateDayPlan, type GenerateDayPlanResult } from '@/lib/routine-plan/day-plan-generator';
+import type { GenerateDayPlanResult } from '@/lib/routine-plan/day-plan-generator';
 import type { DailyCondition } from '@/lib/routine-plan/day-plan-generator';
 import { buildMediaPayload } from '@/lib/media/media-payload';
 import { getTemplatesForMediaByIds } from '@/lib/workout-routine/exercise-templates-db';
+import { getServerSupabaseAdmin } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const preferredRegion = ['icn1'];
 
 function getDayKeyUtc(): string {
   return new Date().toISOString().slice(0, 10);
@@ -72,7 +76,6 @@ export async function POST(req: NextRequest) {
 
     const day = Math.max(1, Math.min(7, Math.floor(Number(dayNumber))));
 
-    const { getServerSupabaseAdmin } = await import('@/lib/supabase');
     const supabase = getServerSupabaseAdmin();
     const { data: routine } = await supabase
       .from('workout_routines')
@@ -122,6 +125,7 @@ export async function POST(req: NextRequest) {
       };
       regenerated = false;
     } else {
+      const { generateDayPlan } = await import('@/lib/routine-plan/day-plan-generator');
       const DEFAULT_CONDITION: DailyCondition & { source?: string } = {
         source: 'default',
         time_available: 15,
@@ -254,6 +258,17 @@ export async function POST(req: NextRequest) {
     }
     const res = NextResponse.json(payload);
     res.headers.set('Cache-Control', 'no-store, max-age=0');
+    if (isDebug && payload.timings) {
+      const t = payload.timings as Record<string, number>;
+      res.headers.set('Server-Timing', [
+        `auth;dur=${t.t_auth ?? 0}`,
+        `select;dur=${t.t_select ?? 0}`,
+        `generate;dur=${t.t_generate ?? 0}`,
+        `templates;dur=${t.t_templates_fetch ?? 0}`,
+        `media;dur=${t.t_media ?? 0}`,
+        `total;dur=${t.t_total ?? 0}`,
+      ].join(', '));
+    }
     return res;
   } catch (error) {
     console.error('[routine-plan/ensure]', error);
