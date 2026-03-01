@@ -3,6 +3,7 @@
  *
  * Bearer 인증 + plan_status 확인. 401/403 반환 또는 { userId } 반환.
  * getCurrentUserId(캐시) 재사용으로 동일 요청 내 getUser 중복 호출 방지.
+ * Supabase 클라이언트 1회 생성으로 재사용.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -28,14 +29,14 @@ export async function requireActivePlan(
   opts?: RequireActivePlanOptions
 ): Promise<NextResponse | ActivePlanContext> {
   const t0 = performance.now();
-  const userId = await getCurrentUserId(req);
+  const supabase = getServerSupabaseAdmin();
+  const userId = await getCurrentUserId(req, supabase);
   const tAuthUser = Math.round(performance.now() - t0);
 
   if (!userId) {
     return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   }
 
-  const supabase = getServerSupabaseAdmin();
   const { data: dbUser } = await supabase
     .from('users')
     .select('plan_status')

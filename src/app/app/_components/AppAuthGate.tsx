@@ -88,9 +88,16 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
 
   if (status === 'loading') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--bg)]">
-        <p className="text-sm text-[var(--muted)]">확인 중...</p>
-      </div>
+      <>
+        {children}
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg)]/90"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <p className="text-sm text-[var(--muted)]">확인 중...</p>
+        </div>
+      </>
     );
   }
 
