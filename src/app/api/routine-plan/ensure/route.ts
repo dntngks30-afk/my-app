@@ -3,11 +3,10 @@
  *
  * Day Plan 조회 또는 생성 (멱등). 있으면 반환, 없으면 생성 후 반환.
  * plan/get + generate 워터폴을 1회 호출로 축소.
- * Bearer only, no-store.
+ * Bearer only, no-store. 유료 권한(plan_status='active') 필수.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { requireActivePlan } from '@/lib/auth/requireActivePlan';
 import { generateDayPlan } from '@/lib/routine-plan/day-plan-generator';
 import type { DailyCondition } from '@/lib/routine-plan/day-plan-generator';
@@ -46,10 +45,12 @@ function toPlanResponse(plan: {
 
 export async function POST(req: NextRequest) {
   const t0 = performance.now();
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+  const debugFlag = body?.debug;
+  const isDebug = debugFlag === true || debugFlag === 1 || debugFlag === '1';
   try {
-    const body = await req.json().catch(() => ({}));
-    const { routineId, dayNumber, debug: debugFlag, includeMedia } = body;
-    const debug = debugFlag === true;
+    const { routineId, dayNumber, includeMedia: includeMediaRaw } = body;
+    const includeMedia = includeMediaRaw === true || includeMediaRaw === 1 || includeMediaRaw === '1';
 
     if (!routineId || !dayNumber) {
       return NextResponse.json(
@@ -58,18 +59,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let userId: string;
-    if (includeMedia) {
-      const auth = await requireActivePlan(req);
-      if (auth instanceof NextResponse) return auth;
-      userId = auth.userId;
-    } else {
-      const uid = await getCurrentUserId(req);
-      if (!uid) {
-        return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-      }
-      userId = uid;
-    }
+    const auth = await requireActivePlan(req);
+    if (auth instanceof NextResponse) return auth;
+    const userId = auth.userId;
     const tAuth = performance.now();
 
     const day = Math.max(1, Math.min(7, Math.floor(Number(dayNumber))));
@@ -102,12 +94,13 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       if (row) {
+        const eq = row.equipment_available;
         dailyCondition = {
           pain_today: row.pain_today ?? undefined,
           stiffness: row.stiffness ?? undefined,
           sleep: row.sleep ?? undefined,
           time_available: row.time_available_min ?? 15,
-          equipment_available: row.equipment_available ?? [],
+          equipment_available: Array.isArray(eq) ? eq.filter((x): x is string => typeof x === 'string') : [],
         };
       } else {
         dailyCondition = DEFAULT_CONDITION;
@@ -115,9 +108,13 @@ export async function POST(req: NextRequest) {
     }
     const tSelectDaily = performance.now();
 
-    const result = await generateDayPlan(routineId, day, dailyCondition, {
+    const result = await generateDayPlan(
+      routineId as string,
+      day,
+      dailyCondition,
+      {
       forceRegenerate: false,
-      preloadedContext: { userId: routine.user_id },
+      preloadedContext: { userId },
     });
     const { plan, regenerated } = result;
     const tGenerate = performance.now();
@@ -132,10 +129,13 @@ export async function POST(req: NextRequest) {
     };
 
     const ids = plan.selected_template_ids ?? [];
+    let tTemplatesFetch = tGenerate;
+    let tMedia = tGenerate;
     if (ids.length > 0) {
       const templates = includeMedia
         ? await getTemplatesForMediaByIds(ids)
         : [];
+      tTemplatesFetch = performance.now();
       const templateMap = new Map(templates.map((t) => [t.id, t]));
       const placeholderMedia = {
         kind: 'placeholder' as const,
@@ -150,21 +150,18 @@ export async function POST(req: NextRequest) {
             buildMediaPayload(t.media_ref, t.duration_sec ?? 300)
           )
         );
+        tMedia = performance.now();
         const payloads = settled.map((s) =>
           s.status === 'fulfilled' ? s.value : placeholderMedia
         );
         mediaPayloads = payloads;
-        if (debug && settled.some((s) => s.status === 'rejected')) {
-          const warnings = (payload.debug_warnings as string[]) ?? [];
-          warnings.push(
-            ...settled
-              .map((s, i) =>
-                s.status === 'rejected'
-                  ? `media_fail:${templates[i]?.id ?? i}`
-                  : null
-              )
-              .filter((x): x is string => x != null)
-          );
+        if (isDebug && settled.some((s) => s.status === 'rejected')) {
+          const warnings: string[] = [];
+          settled.forEach((s, i) => {
+            if (s.status === 'rejected') {
+              warnings.push(`media_fail:${templates[i]?.id ?? i}`);
+            }
+          });
           payload.debug_warnings = warnings;
         }
       }
@@ -182,25 +179,31 @@ export async function POST(req: NextRequest) {
         };
       });
     }
-    if (debug) {
+    const tEnd = performance.now();
+    if (isDebug) {
       payload.timings = {
-        total_ms: Math.round(tGenerate - t0),
-        auth_ms: Math.round(tAuth - t0),
-        select_daily_ms: Math.round(tSelectDaily - tAuth),
-        generate_ms: Math.round(tGenerate - tSelectDaily),
+        t_auth: Math.round(tAuth - t0),
+        t_select: Math.round(tSelectDaily - tAuth),
+        t_generate: Math.round(tGenerate - tSelectDaily),
+        t_templates_fetch: Math.round(tTemplatesFetch - tGenerate),
+        t_media: Math.round(tMedia - tTemplatesFetch),
+        t_total: Math.round(tEnd - t0),
       };
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[routine-plan/ensure] timings', payload.timings);
+      }
     }
     const res = NextResponse.json(payload);
     res.headers.set('Cache-Control', 'no-store, max-age=0');
     return res;
   } catch (error) {
     console.error('[routine-plan/ensure]', error);
-    return NextResponse.json(
-      {
-        error: 'Day Plan 조회/생성에 실패했습니다.',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    );
+    const payload: Record<string, unknown> = {
+      error: 'Day Plan 조회/생성에 실패했습니다.',
+    };
+    if (isDebug) {
+      payload.details = error instanceof Error ? error.message : String(error);
+    }
+    return NextResponse.json(payload, { status: 500 });
   }
 }

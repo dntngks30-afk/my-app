@@ -275,23 +275,6 @@ export default function RoutinePlayerPage() {
           }),
         });
         data = await ensureRes.json().catch(() => ({})) as Record<string, unknown>;
-        if (ensureRes.status === 403 && cancelled === false) {
-          ensureRes = await fetch('/api/routine-plan/ensure', {
-            method: 'POST',
-            cache: 'no-store',
-            headers: {
-              ...(opts.headers as Record<string, string>),
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              routineId,
-              dayNumber,
-              debug: debugFlag,
-              includeMedia: false,
-            }),
-          });
-          data = await ensureRes.json().catch(() => ({})) as Record<string, unknown>;
-        }
 
         if (cancelled) return;
         if (data?.timings) setEnsureTimings(data.timings as Record<string, number>);
@@ -788,7 +771,7 @@ export default function RoutinePlayerPage() {
     <div className="min-h-screen bg-[#F8F6F0] pb-24">
       {showDebugTimings && (
         <div className="bg-slate-800 text-white text-xs px-3 py-1 font-mono truncate">
-          ensure {ensureTimings.total_ms}ms | {JSON.stringify(ensureTimings)}
+          ensure {ensureTimings.t_total ?? ensureTimings.total_ms ?? 0}ms | {JSON.stringify(ensureTimings)}
         </div>
       )}
       <header className="sticky top-0 z-10 border-b-2 border-slate-900 bg-[#F8F6F0] px-4 py-3">
