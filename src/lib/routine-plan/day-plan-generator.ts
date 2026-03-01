@@ -198,6 +198,15 @@ export type GenerateDayPlanResult = {
   plan: DayPlanRow;
   regenerated: boolean;
   regen_reason?: RegenReason;
+  /** debug=1일 때만 포함 */
+  generator_timings?: {
+    t_ctx_deep: number;
+    t_ctx_recent: number;
+    t_templates: number;
+    t_rules: number;
+    t_db_write: number;
+    t_generate_total: number;
+  };
 };
 
 function computeRegenReason(
@@ -235,6 +244,7 @@ export async function generateDayPlan(
     forceRegenerate?: boolean;
     preloadedContext?: GenerateDayPlanPreloadedContext;
     intensityScale?: number;
+    debug?: boolean;
   }
 ): Promise<GenerateDayPlanResult> {
   const supabase = getServerSupabaseAdmin();
@@ -318,8 +328,32 @@ export async function generateDayPlan(
   }
 
   const regenReason = computeRegenReason(opts ?? {}, existing, dailyCondition);
+  const isDebug = opts?.debug === true;
+  const timings: Record<string, number> = {};
 
-  const deepResult = await loadDeepResultForUser(userId);
+  const genT0 = performance.now();
+
+  const [deepResult, recentUsedIds, poolRaw, allFallbacks] = await Promise.all([
+    (async () => {
+      const t0 = performance.now();
+      const r = await loadDeepResultForUser(userId);
+      if (isDebug) timings.t_ctx_deep = Math.round(performance.now() - t0);
+      return r;
+    })(),
+    (async () => {
+      const t0 = performance.now();
+      const r = await loadRecentUsedIds(supabase, routineId, dayNumber);
+      if (isDebug) timings.t_ctx_recent = Math.round(performance.now() - t0);
+      return r;
+    })(),
+    (async () => {
+      const t0 = performance.now();
+      const r = await getAllExerciseTemplates({ scoringVersion: 'deep_v2' });
+      if (isDebug) timings.t_templates = Math.round(performance.now() - t0);
+      return r;
+    })(),
+    getFallbackTemplates(),
+  ]);
 
   const baseLevel = deepResult?.level ?? 1;
   const intensityScale = opts?.intensityScale ?? 1.0;
@@ -328,9 +362,8 @@ export async function generateDayPlan(
   const focusTags = deepResult?.focus_tags ?? [];
   const avoidTags = [...(deepResult?.avoid_tags ?? []), ...getExtraConstraints(dailyCondition ?? undefined)];
 
-  let pool = await getAllExerciseTemplates({ scoringVersion: 'deep_v2' });
-
-  pool = applySafetyFilter(pool, avoidTags);
+  const tRules0 = performance.now();
+  let pool = applySafetyFilter(poolRaw, avoidTags);
   let poolAfterLevel = applyLevelFilter(pool, level);
   let levelRelaxUsed = false;
   if (level === 1 && poolAfterLevel.length < MIN_POOL_LEVEL1_RELAX) {
@@ -357,8 +390,6 @@ export async function generateDayPlan(
 
   const levelFilter = theme.levelFilter ?? level;
   pool = pool.filter((t) => t.level <= levelFilter);
-
-  const recentUsedIds = await loadRecentUsedIds(supabase, routineId, dayNumber);
   let poolForScoring = pool;
   let excludedCount = 0;
   let usePenalty = false;
@@ -402,7 +433,6 @@ export async function generateDayPlan(
   let fallbackUsed = false;
   if (selected.length < 2) {
     fallbackUsed = true;
-    const allFallbacks = await getFallbackTemplates();
     const preferredSet = FALLBACK_SETS[dayNumber % FALLBACK_SETS.length];
     const safePoolL1 = pool.filter((t) => t.level <= 1 && t.avoid_tags.length === 0);
     const candidates: ExerciseTemplate[] = [];
@@ -481,6 +511,7 @@ export async function generateDayPlan(
   const safetyMode = !!isSafetyTrigger;
   const safetyReason = isSafetyTrigger ? auditReason : null;
 
+  const tDbWrite0 = performance.now();
   await supabase.from('routine_day_plans').upsert(
     {
       routine_id: routineId,
@@ -525,7 +556,24 @@ export async function generateDayPlan(
     });
   }
 
-  return { plan: planRow, regenerated: true, regen_reason: regenReason };
+  if (isDebug) {
+    timings.t_rules = Math.round(tDbWrite0 - tRules0);
+    timings.t_db_write = Math.round(performance.now() - tDbWrite0);
+    timings.t_generate_total = Math.round(performance.now() - genT0);
+  }
+
+  const result: GenerateDayPlanResult = { plan: planRow, regenerated: true, regen_reason: regenReason };
+  if (isDebug && Object.keys(timings).length > 0) {
+    result.generator_timings = {
+      t_ctx_deep: timings.t_ctx_deep ?? 0,
+      t_ctx_recent: timings.t_ctx_recent ?? 0,
+      t_templates: timings.t_templates ?? 0,
+      t_rules: timings.t_rules ?? 0,
+      t_db_write: timings.t_db_write ?? 0,
+      t_generate_total: timings.t_generate_total ?? 0,
+    };
+  }
+  return result;
 }
 
 export async function getDayPlan(

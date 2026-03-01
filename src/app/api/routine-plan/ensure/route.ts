@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireActivePlan } from '@/lib/auth/requireActivePlan';
-import { generateDayPlan } from '@/lib/routine-plan/day-plan-generator';
+import { generateDayPlan, type GenerateDayPlanResult } from '@/lib/routine-plan/day-plan-generator';
 import type { DailyCondition } from '@/lib/routine-plan/day-plan-generator';
 import { buildMediaPayload } from '@/lib/media/media-payload';
 import { getTemplatesForMediaByIds } from '@/lib/workout-routine/exercise-templates-db';
@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
 
     const tSelectDaily = performance.now();
 
+    let generateResult: GenerateDayPlanResult | null = null;
     let plan: {
       routine_id: string;
       day_number: number;
@@ -144,20 +145,21 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const result = await generateDayPlan(
+      generateResult = await generateDayPlan(
         routineId as string,
         day,
         dailyCondition,
         {
           forceRegenerate: false,
           preloadedContext: { userId },
+          debug: isDebug,
         }
       );
       plan = {
-        ...result.plan,
-        daily_condition_snapshot: dailyCondition ?? result.plan.daily_condition_snapshot,
+        ...generateResult.plan,
+        daily_condition_snapshot: dailyCondition ?? generateResult.plan.daily_condition_snapshot,
       };
-      regenerated = result.regenerated;
+      regenerated = generateResult.regenerated;
     }
 
     const tGenerate = performance.now();
@@ -234,6 +236,9 @@ export async function POST(req: NextRequest) {
         timings.t_auth_plan = auth.timings.t_auth_plan;
       }
       payload.timings = timings;
+      if (generateResult?.generator_timings) {
+        payload.generator_subtimings = generateResult.generator_timings;
+      }
       if (process.env.NODE_ENV !== 'production') {
         console.log('[routine-plan/ensure] timings', payload.timings);
       }

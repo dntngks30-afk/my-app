@@ -3,6 +3,7 @@
  *
  * SSOT: exercise_templates table (Supabase)
  * Replaces static EXERCISE_TEMPLATES for 28→300 scaling.
+ * 공용 템플릿만 캐시(개인 데이터 없음). TTL 120초.
  *
  * @module workout-routine/exercise-templates-db
  */
@@ -10,21 +11,21 @@
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import type { ExerciseTemplate } from './exercise-templates';
 
-/** DB row shape */
+/** DB row shape (최소 컬럼) */
 interface DbExerciseTemplate {
   id: string;
   name: string;
   level: number;
   focus_tags: string[];
   contraindications: string[];
-  equipment?: string[];
-  duration_sec?: number;
   media_ref: string | null;
-  template_version: number;
-  scoring_version: string;
-  is_fallback: boolean;
-  is_active: boolean;
 }
+
+const TEMPLATE_CACHE_TTL_MS = 120_000; // 120초
+const FALLBACK_CACHE_TTL_MS = 120_000;
+
+let templateCache: { data: ExerciseTemplate[]; key: string; expiresAt: number } | null = null;
+let fallbackCache: { data: ExerciseTemplate[]; expiresAt: number } | null = null;
 
 function toExerciseTemplate(row: DbExerciseTemplate): ExerciseTemplate {
   return {
@@ -46,16 +47,21 @@ export interface ExerciseTemplatesFilter {
 
 /**
  * Fetch all active exercise templates from DB.
- * Used by routine engine and APIs.
+ * 최소 컬럼 select + module-level 캐시(TTL 120초, 공용 데이터만).
  */
 export async function getAllExerciseTemplates(
   opts?: { scoringVersion?: string }
 ): Promise<ExerciseTemplate[]> {
-  const supabase = getServerSupabaseAdmin();
+  const key = opts?.scoringVersion ?? 'default';
+  const now = Date.now();
+  if (templateCache && templateCache.key === key && templateCache.expiresAt > now) {
+    return templateCache.data;
+  }
 
+  const supabase = getServerSupabaseAdmin();
   let q = supabase
     .from('exercise_templates')
-    .select('id,name,level,focus_tags,contraindications,equipment,duration_sec,media_ref,template_version,scoring_version,is_fallback,is_active')
+    .select('id,name,level,focus_tags,contraindications,media_ref')
     .eq('is_active', true)
     .order('id');
 
@@ -69,7 +75,9 @@ export async function getAllExerciseTemplates(
     throw new Error(`exercise_templates fetch failed: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => toExerciseTemplate(row as DbExerciseTemplate));
+  const result = (data ?? []).map((row) => toExerciseTemplate(row as DbExerciseTemplate));
+  templateCache = { data: result, key, expiresAt: now + TEMPLATE_CACHE_TTL_MS };
+  return result;
 }
 
 /** Minimal template row for media payload (id, name, media_ref, duration_sec) */
@@ -153,13 +161,18 @@ export async function getFilteredExerciseTemplates(
 
 /**
  * Get fallback templates (M01, M28) for empty days.
+ * 캐시(TTL 120초) + 최소 컬럼.
  */
 export async function getFallbackTemplates(): Promise<ExerciseTemplate[]> {
-  const supabase = getServerSupabaseAdmin();
+  const now = Date.now();
+  if (fallbackCache && fallbackCache.expiresAt > now) {
+    return fallbackCache.data;
+  }
 
+  const supabase = getServerSupabaseAdmin();
   const { data, error } = await supabase
     .from('exercise_templates')
-    .select('id,name,level,focus_tags,contraindications,equipment,duration_sec,media_ref,template_version,scoring_version,is_fallback,is_active')
+    .select('id,name,level,focus_tags,contraindications,media_ref')
     .eq('is_active', true)
     .eq('is_fallback', true)
     .order('id');
@@ -168,5 +181,7 @@ export async function getFallbackTemplates(): Promise<ExerciseTemplate[]> {
     throw new Error(`exercise_templates fallbacks failed: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => toExerciseTemplate(row as DbExerciseTemplate));
+  const result = (data ?? []).map((row) => toExerciseTemplate(row as DbExerciseTemplate));
+  fallbackCache = { data: result, expiresAt: now + FALLBACK_CACHE_TTL_MS };
+  return result;
 }
