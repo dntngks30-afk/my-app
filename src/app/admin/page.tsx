@@ -72,7 +72,7 @@ export default function AdminPage() {
   // 백필
   const [isBackfillAdmin, setIsBackfillAdmin] = useState<boolean | null>(null);
   const [backfillLoading, setBackfillLoading] = useState(false);
-  const [backfillDryRun, setBackfillDryRun] = useState(true);
+  const [backfillDryRun, setBackfillDryRun] = useState(false);
   const [backfillLimit, setBackfillLimit] = useState(10);
   const [backfillResult, setBackfillResult] = useState<Record<string, unknown> | null>(null);
 
@@ -421,7 +421,7 @@ export default function AdminPage() {
                     className="h-4 w-4 rounded border-slate-600 bg-slate-800"
                   />
                   <label htmlFor="backfill-dryrun" className="text-sm text-slate-300">
-                    미리보기 (dryRun) — DB에 저장하지 않고 결과만 확인
+                    미리보기 (dryRun) — 체크 시 DB에 저장하지 않고 결과만 확인
                   </label>
                 </div>
                 <div>

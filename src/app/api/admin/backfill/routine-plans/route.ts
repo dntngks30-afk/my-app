@@ -197,11 +197,18 @@ export async function POST(req: NextRequest) {
             forceRegenerate: regenerateExisting && !!existingPlan,
             preloadedContext: { userId },
           });
-          await supabase.from('workout_routine_days').upsert(
+          generatedPlans += 1;
+          const { error: daysErr } = await supabase.from('workout_routine_days').upsert(
             { routine_id: routineId!, day_number: day, exercises: [] },
             { onConflict: 'routine_id,day_number', ignoreDuplicates: true }
           );
-          generatedPlans += 1;
+          if (daysErr) {
+            console.warn('[admin/backfill/routine-plans] workout_routine_days upsert skip', {
+              routine_id: routineId,
+              day_number: day,
+              error: daysErr.message,
+            });
+          }
         } catch (err) {
           errors.push({
             user_id: userId,
