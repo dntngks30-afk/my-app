@@ -7,6 +7,36 @@ import { supabase } from '@/lib/supabase';
 import { NeoCard, NeoButton } from '@/components/neobrutalism';
 import BottomNav from '../_components/BottomNav';
 
+function RoutineListSkeleton() {
+  return (
+    <>
+      <NeoCard className="p-5">
+        <div className="animate-pulse space-y-3">
+          <div className="h-4 w-3/4 rounded bg-stone-200" />
+          <div className="h-4 w-1/2 rounded bg-stone-200" />
+          <div className="h-10 w-full rounded-full bg-stone-200" />
+        </div>
+      </NeoCard>
+      <section>
+        <div className="h-4 w-24 rounded bg-stone-200 mb-3" />
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <NeoCard key={i} className="p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="h-4 w-3/4 animate-pulse rounded bg-stone-200" />
+                  <div className="h-3 w-1/2 animate-pulse rounded bg-stone-200" />
+                </div>
+                <div className="size-10 shrink-0 animate-pulse rounded-full bg-stone-200" />
+              </div>
+            </NeoCard>
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
 type RoutineItem = {
   id: string;
   created_at: string;
@@ -55,7 +85,8 @@ export default function RoutineHubPage() {
         return;
       }
       try {
-        const res = await fetch('/api/routine/list', {
+        const url = `/api/routine/list${searchParams.get('debug') === '1' ? '?debug=1' : ''}`;
+        const res = await fetch(url, {
           cache: 'no-store' as RequestCache,
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
@@ -78,7 +109,7 @@ export default function RoutineHubPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [searchParams]);
 
   const latest = routines[0];
   const canContinue = latest && (latest.status === 'active' || latest.status === 'draft' || latest.status === 'completed');
@@ -105,9 +136,7 @@ export default function RoutineHubPage() {
 
       <main className="px-4 space-y-6">
         {loading ? (
-          <NeoCard className="p-5">
-            <p className="text-sm text-slate-600">불러오는 중...</p>
-          </NeoCard>
+          <RoutineListSkeleton />
         ) : error ? (
           <NeoCard className="p-5">
             <p className="text-sm text-red-600">{error}</p>

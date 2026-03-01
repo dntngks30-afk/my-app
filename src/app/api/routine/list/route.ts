@@ -1,29 +1,45 @@
 /**
  * GET /api/routine/list
  * 내 루틴 목록 조회 (허브용)
- * Bearer only, no-store, user별 데이터 격리
+ * requireActivePlan. Bearer only, no-store.
+ * debug=1 시 timings.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
+import { requireActivePlan } from '@/lib/auth/requireActivePlan';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
+  const t0 = performance.now();
+  const { searchParams } = new URL(req.url);
+  const isDebug = searchParams.get('debug') === '1';
+
   try {
-    const userId = await getCurrentUserId(req);
-    if (!userId) {
-      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-    }
+    const auth = await requireActivePlan(req, { recordTimings: isDebug });
+    if (auth instanceof NextResponse) return auth;
+    const userId = auth.userId;
+    const tAuth = performance.now();
 
     const supabase = getServerSupabaseAdmin();
 
-    const { data: routines, error: routineError } = await supabase
-      .from('workout_routines')
-      .select('id, created_at, status, started_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+    const [routinesRes, userRoutinesRes] = await Promise.all([
+      supabase
+        .from('workout_routines')
+        .select('id, created_at, status, started_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('user_routines')
+        .select('current_day')
+        .eq('user_id', userId)
+        .maybeSingle(),
+    ]);
+
+    const tQueries = performance.now();
+
+    const { data: routines, error: routineError } = routinesRes;
 
     if (routineError) {
       console.error('[routine/list]', routineError);
@@ -34,10 +50,20 @@ export async function GET(req: NextRequest) {
     }
 
     if (!routines?.length) {
-      const res = NextResponse.json({
-        success: true,
-        routines: [],
-      });
+      const tEnd = performance.now();
+      const payload: Record<string, unknown> = { success: true, routines: [] };
+      if (isDebug) {
+        payload.timings = {
+          t_auth: Math.round(tAuth - t0),
+          t_query_routines: Math.round(tQueries - tAuth),
+          t_total: Math.round(tEnd - t0),
+        };
+        if (auth.timings) {
+          (payload.timings as Record<string, number>).t_auth_user = auth.timings.t_auth_user;
+          (payload.timings as Record<string, number>).t_auth_plan = auth.timings.t_auth_plan;
+        }
+      }
+      const res = NextResponse.json(payload);
       res.headers.set('Cache-Control', 'no-store, max-age=0');
       return res;
     }
@@ -47,7 +73,7 @@ export async function GET(req: NextRequest) {
     const { data: daysRows, error: daysError } = await supabase
       .from('workout_routine_days')
       .select('routine_id, day_number, completed_at')
-      .in('routine_id', ids);
+      .in('routine_id', ids as string[]);
 
     if (daysError) {
       console.error('[routine/list] days', daysError);
@@ -68,13 +94,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const { data: statusData } = await supabase
-      .from('user_routines')
-      .select('current_day')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    const currentDay = statusData?.current_day ?? 1;
+    const currentDay = (userRoutinesRes.data as { current_day?: number } | null)?.current_day ?? 1;
 
     const routinesOut = routines.map((r) => {
       const progress = daysByRoutine.get(r.id) ?? { completed: 0, lastCompletedDay: 0 };
@@ -93,11 +113,28 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    const res = NextResponse.json({
+    const tEnd = performance.now();
+    const payload: Record<string, unknown> = {
       success: true,
       routines: routinesOut,
       currentDay,
-    });
+    };
+    if (isDebug) {
+      payload.timings = {
+        t_auth: Math.round(tAuth - t0),
+        t_query_routines: Math.round(tQueries - tAuth),
+        t_total: Math.round(tEnd - t0),
+      };
+      if (auth.timings) {
+        (payload.timings as Record<string, number>).t_auth_user = auth.timings.t_auth_user;
+        (payload.timings as Record<string, number>).t_auth_plan = auth.timings.t_auth_plan;
+      }
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[routine/list] timings', payload.timings);
+      }
+    }
+
+    const res = NextResponse.json(payload);
     res.headers.set('Cache-Control', 'no-store, max-age=0');
     return res;
   } catch (error) {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   SlidersHorizontal,
   Check,
@@ -11,7 +11,6 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useRoutineStatus } from '@/features/routine/hooks/useRoutineStatus';
 import BottomNav from '../_components/BottomNav';
 
 const DAYS = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -28,15 +27,37 @@ function getDayStatus(
   return 'upcoming';
 }
 
+function formatCountdown(lockUntilUtc: string, serverNowUtc: string, clientElapsedMs: number): string {
+  const lockMs = new Date(lockUntilUtc).getTime();
+  const serverMs = new Date(serverNowUtc).getTime();
+  const remainingMs = Math.max(0, lockMs - (serverMs + clientElapsedMs));
+  const totalSeconds = Math.floor(remainingMs / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return [h, m, s].map((n) => String(n).padStart(2, '0')).join(':');
+}
+
 export default function ResetHomePage() {
   const router = useRouter();
-  const { state, countdown, restRecommended, loading, error, todayCompletedForDay } =
-    useRoutineStatus();
+  const searchParams = useSearchParams();
+  const debugFlag = searchParams.get('debug') === '1';
+
+  const [state, setState] = useState<{ currentDay: number; status: string } | null>(null);
+  const [countdown, setCountdown] = useState<string | null>(null);
+  const [restRecommended, setRestRecommended] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [todayCompletedForDay, setTodayCompletedForDay] = useState(false);
+  const [latestRoutineId, setLatestRoutineId] = useState<string | null>(null);
+  const [serverNowUtc, setServerNowUtc] = useState<string | null>(null);
+  const [lockUntilUtc, setLockUntilUtc] = useState<string | null>(null);
+  const fetchTimeRef = useRef(0);
+
   const currentDay = state?.currentDay ?? 1;
   const isCompleted = state?.status === 'COMPLETED';
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const [latestRoutineId, setLatestRoutineId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,22 +65,68 @@ export default function ResetHomePage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token || cancelled) return;
       try {
-        const res = await fetch('/api/routine/list', {
+        const url = `/api/home/dashboard${debugFlag ? '?debug=1' : ''}`;
+        const res = await fetch(url, {
           cache: 'no-store' as RequestCache,
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
-        if (cancelled || !res.ok) return;
+        if (cancelled) return;
         const data = await res.json();
-        const routines = data?.routines ?? [];
-        const first = routines[0];
-        if (first?.id) setLatestRoutineId(first.id);
-        else setLatestRoutineId(null);
-      } catch {
-        if (!cancelled) setLatestRoutineId(null);
+        if (!res.ok) {
+          setError(data?.error ?? '대시보드 조회 실패');
+          setLoading(false);
+          return;
+        }
+        const s = data.state;
+        setState(s ? { currentDay: s.currentDay, status: s.status } : null);
+        setTodayCompletedForDay(data.todayCompletedForDay === true);
+        setRestRecommended(data.rest_recommended === true);
+        setLatestRoutineId(data.routine?.latestRoutineId ?? null);
+        setServerNowUtc(data.server_now_utc ?? null);
+        setLockUntilUtc(data.lock_until_utc ?? null);
+        fetchTimeRef.current = Date.now();
+
+        if (data.rest_recommended && data.lock_until_utc && data.server_now_utc) {
+          setCountdown(formatCountdown(data.lock_until_utc, data.server_now_utc, 0));
+        } else if (data.rest_recommended && s?.lastActivatedAt) {
+          const MS_24H = 24 * 60 * 60 * 1000;
+          const unlockAt = new Date(s.lastActivatedAt).getTime() + MS_24H;
+          const remainingMs = Math.max(0, unlockAt - Date.now());
+          const totalSeconds = Math.floor(remainingMs / 1000);
+          const h = Math.floor(totalSeconds / 3600);
+          const m = Math.floor((totalSeconds % 3600) / 60);
+          const sec = totalSeconds % 60;
+          setCountdown([h, m, sec].map((n) => String(n).padStart(2, '0')).join(':'));
+        } else {
+          setCountdown(null);
+        }
+        setError(null);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : '대시보드 조회 실패');
+          setState(null);
+          setCountdown(null);
+          setRestRecommended(false);
+          setTodayCompletedForDay(false);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [debugFlag]);
+
+  useEffect(() => {
+    if (state?.status !== 'LOCKED') return;
+    if (!lockUntilUtc || !serverNowUtc) return;
+    const update = () => {
+      const clientElapsedMs = Date.now() - fetchTimeRef.current;
+      setCountdown(formatCountdown(lockUntilUtc, serverNowUtc, clientElapsedMs));
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [state?.status, lockUntilUtc, serverNowUtc]);
 
   const handleDayPillClick = (day: number) => {
     if (latestRoutineId) {
@@ -79,12 +146,6 @@ export default function ResetHomePage() {
           : state?.status === 'READY'
             ? 'READY'
             : 'ACTIVE';
-  useEffect(() => {
-    if (!loading && !error) {
-      console.log('[HOME_RENDER_STATE]', renderState);
-    }
-  }, [loading, error, renderState]);
-
   const requestInFlightRef = useRef(false);
 
   const handleStartClick = async (day: number) => {
