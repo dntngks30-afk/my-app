@@ -315,6 +315,9 @@ export default function RoutinePlayerPage() {
           mediaPayload?: MediaPayload | null;
         }> | undefined;
 
+        const ids = (plan.selected_template_ids as string[]) ?? [];
+        const useFallbackMediaFetch = debugFlag && !segmentsWithMedia?.length;
+
         if (segmentsWithMedia?.length) {
           const segs: Segment[] = [];
           for (let i = 0; i < segmentsWithMedia.length; i++) {
@@ -341,7 +344,6 @@ export default function RoutinePlayerPage() {
           }
           setSegments(segs);
         } else {
-          const ids = plan.selected_template_ids as string[];
           const segs: Segment[] = [];
           for (let i = 0; i < ids.length; i++) {
             segs.push({
@@ -350,6 +352,8 @@ export default function RoutinePlayerPage() {
               title: `운동 ${i + 1}`,
               durationSec: 60,
               kind: 'work',
+              mediaPayload: null,
+              mediaError: true,
             });
             if (i < ids.length - 1) {
               segs.push({
@@ -362,41 +366,43 @@ export default function RoutinePlayerPage() {
           }
           setSegments(segs);
 
-          const workSegs = segs.filter((s) => s.kind === 'work' && s.templateId);
-          const mediaResults = await Promise.all(
-            workSegs.map(async (s) => {
-              if (cancelled) return { id: s.id, ok: false as const, mData: null, status: 0 };
-              try {
-                const mRes = await fetch(
-                  `/api/exercise-template/media?templateId=${encodeURIComponent(s.templateId!)}`,
-                  opts
-                );
-                const mData = await mRes.json().catch(() => ({}));
-                const ok = mRes.ok && !!mData?.media;
-                return { id: s.id, ok, mData, status: mRes.status };
-              } catch {
-                return { id: s.id, ok: false as const, mData: null, status: 0 };
-              }
-            })
-          );
-          if (cancelled) return;
-          setSegments((prev) =>
-            prev.map((p) => {
-              const r = mediaResults.find((x) => x.id === p.id);
-              if (!r) return p;
-              if (r.ok && r.mData?.media) {
-                return {
-                  ...p,
-                  title: r.mData.templateName ?? p.title,
-                  templateName: r.mData.templateName,
-                  durationSec: r.mData.media?.durationSec ?? p.durationSec,
-                  mediaPayload: r.mData.media,
-                  mediaError: false,
-                };
-              }
-              return { ...p, mediaPayload: null, mediaError: true };
-            })
-          );
+          if (useFallbackMediaFetch) {
+            const workSegs = segs.filter((s) => s.kind === 'work' && s.templateId);
+            const mediaResults = await Promise.all(
+              workSegs.map(async (s) => {
+                if (cancelled) return { id: s.id, ok: false as const, mData: null, status: 0 };
+                try {
+                  const mRes = await fetch(
+                    `/api/exercise-template/media?templateId=${encodeURIComponent(s.templateId!)}`,
+                    opts
+                  );
+                  const mData = await mRes.json().catch(() => ({}));
+                  const ok = mRes.ok && !!mData?.media;
+                  return { id: s.id, ok, mData, status: mRes.status };
+                } catch {
+                  return { id: s.id, ok: false as const, mData: null, status: 0 };
+                }
+              })
+            );
+            if (cancelled) return;
+            setSegments((prev) =>
+              prev.map((p) => {
+                const r = mediaResults.find((x) => x.id === p.id);
+                if (!r) return p;
+                if (r.ok && r.mData?.media) {
+                  return {
+                    ...p,
+                    title: r.mData.templateName ?? p.title,
+                    templateName: r.mData.templateName,
+                    durationSec: r.mData.media?.durationSec ?? p.durationSec,
+                    mediaPayload: r.mData.media,
+                    mediaError: false,
+                  };
+                }
+                return { ...p, mediaPayload: null, mediaError: true };
+              })
+            );
+          }
         }
       } catch (err) {
         if (cancelled) return;

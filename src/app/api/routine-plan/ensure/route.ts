@@ -130,37 +130,66 @@ export async function POST(req: NextRequest) {
       }),
       created: regenerated,
     };
-    if (includeMedia && plan.selected_template_ids?.length) {
-      const templates = await getTemplatesForMediaByIds(plan.selected_template_ids);
+
+    const ids = plan.selected_template_ids ?? [];
+    if (ids.length > 0) {
+      const templates = includeMedia
+        ? await getTemplatesForMediaByIds(ids)
+        : [];
       const templateMap = new Map(templates.map((t) => [t.id, t]));
-      const mediaPayloads = await Promise.all(
-        templates.map((t) =>
-          buildMediaPayload(t.media_ref, t.duration_sec ?? 300)
-        )
+      const placeholderMedia = {
+        kind: 'placeholder' as const,
+        autoplayAllowed: false,
+        notes: ['영상 준비 중입니다.'],
+      };
+
+      let mediaPayloads: Array<{ kind: string; autoplayAllowed: boolean; notes?: string[] }> = [];
+      if (includeMedia && templates.length > 0) {
+        const settled = await Promise.allSettled(
+          templates.map((t) =>
+            buildMediaPayload(t.media_ref, t.duration_sec ?? 300)
+          )
+        );
+        const payloads = settled.map((s) =>
+          s.status === 'fulfilled' ? s.value : placeholderMedia
+        );
+        mediaPayloads = payloads;
+        if (debug && settled.some((s) => s.status === 'rejected')) {
+          const warnings = (payload.debug_warnings as string[]) ?? [];
+          warnings.push(
+            ...settled
+              .map((s, i) =>
+                s.status === 'rejected'
+                  ? `media_fail:${templates[i]?.id ?? i}`
+                  : null
+              )
+              .filter((x): x is string => x != null)
+          );
+          payload.debug_warnings = warnings;
+        }
+      }
+
+      const mediaById = new Map(
+        templates.map((t, i) => [t.id, mediaPayloads[i] ?? placeholderMedia])
       );
-      const mediaById = new Map(templates.map((t, i) => [t.id, mediaPayloads[i]]));
-      payload.segments_with_media = plan.selected_template_ids.map((id, i) => {
+      payload.segments_with_media = ids.map((id, i) => {
         const t = templateMap.get(id);
-        const media = mediaById.get(id);
+        const media = includeMedia ? mediaById.get(id) ?? placeholderMedia : placeholderMedia;
         return {
           templateId: id,
           templateName: t?.name ?? `운동 ${i + 1}`,
-          mediaPayload: media ?? {
-            kind: 'placeholder',
-            autoplayAllowed: false,
-            notes: ['영상 준비 중입니다.'],
-          },
+          mediaPayload: media,
         };
       });
     }
     if (debug) {
-        payload.timings = {
-          total_ms: Math.round(tGenerate - t0),
-          auth_ms: Math.round(tAuth - t0),
-          select_daily_ms: Math.round(tSelectDaily - tAuth),
-          generate_ms: Math.round(tGenerate - tSelectDaily),
-        };
-      }
+      payload.timings = {
+        total_ms: Math.round(tGenerate - t0),
+        auth_ms: Math.round(tAuth - t0),
+        select_daily_ms: Math.round(tSelectDaily - tAuth),
+        generate_ms: Math.round(tGenerate - tSelectDaily),
+      };
+    }
     const res = NextResponse.json(payload);
     res.headers.set('Cache-Control', 'no-store, max-age=0');
     return res;
