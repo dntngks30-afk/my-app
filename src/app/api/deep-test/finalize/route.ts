@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { requireDeepAuth } from '@/lib/deep-test/auth';
 import { calculateDeepV1 } from '@/lib/deep-test/scoring/deep_v1';
-import { calculateDeepV2 } from '@/lib/deep-test/scoring/deep_v2';
+import { calculateDeepV2, extendDeepV2 } from '@/lib/deep-test/scoring/deep_v2';
 import { ensureDeepWorkoutRoutine, maskId } from '@/lib/deep-test/ensure-deep-routine';
 import { seedDay1PlanIfRoutine } from '@/lib/deep-test/seed-day1';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
@@ -174,6 +174,7 @@ export async function POST(req: NextRequest) {
   }
 
   const v2Result = calculateDeepV2(answers);
+  const extended = extendDeepV2(v2Result);
   const scoresPayload = {
     objectiveScores: v2Result.objectiveScores,
     finalScores: v2Result.finalScores,
@@ -181,6 +182,7 @@ export async function POST(req: NextRequest) {
     secondaryFocus: v2Result.secondaryFocus,
     answeredCount: v2Result.answeredCount,
     totalCount: v2Result.totalCount,
+    derived: extended,
   };
 
   const { data: updated, error: updateError } = await supabase
@@ -188,8 +190,8 @@ export async function POST(req: NextRequest) {
     .update({
       status: 'final',
       scores: scoresPayload,
-      result_type: v2Result.result_type,
-      confidence: v2Result.confidence,
+      result_type: extended.result_type,
+      confidence: extended.confidence,
       finalized_at: now,
       updated_at: now,
     })
