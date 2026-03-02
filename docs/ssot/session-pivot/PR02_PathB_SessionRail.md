@@ -1,114 +1,201 @@
 # PR02: Path B — Session Rail (DB + API), 7-day Unchanged
 
-## 목적
+## Summary
 
-기존 7일 루틴 레일과 **완전히 분리된 병행 세션 레일(Path B)** 을 추가한다.  
-이번 PR은 DB 스키마 + API 3개 추가만 포함. 기존 파일 변경 0.
+기존 7일 루틴 레일과 **완전히 분리된 병행 세션 레일(Path B)** 추가.  
+기존 파일 변경 0개. DB 스키마(3테이블+RLS) + API 3개 신규 추가.
 
 ---
 
-## 변경 파일 목록
+## 변경 파일 (신규 추가만, 기존 수정 없음)
 
 | 분류 | 경로 | 역할 |
 |------|------|------|
-| DB 마이그레이션 (NEW) | `supabase/migrations/20260303_session_pathB.sql` | 3개 테이블 + RLS + 인덱스 |
-| API (NEW) | `src/app/api/session/active/route.ts` | 진행 중 세션 조회 |
-| API (NEW) | `src/app/api/session/create/route.ts` | 세션 멱등 생성 |
-| API (NEW) | `src/app/api/session/complete/route.ts` | 세션 완료 처리 |
-| 문서 (NEW) | `docs/ssot/session-pivot/PR02_PathB_SessionRail.md` | 이 문서 |
+| DB 마이그레이션 | `supabase/migrations/20260303_session_pathB.sql` | 3개 테이블 + RLS (SELECT only) + 인덱스 |
+| API | `src/app/api/session/active/route.ts` | GET — 진행 중 세션 조회 |
+| API | `src/app/api/session/create/route.ts` | POST — 세션 멱등 생성 |
+| API | `src/app/api/session/complete/route.ts` | POST — 세션 완료 처리 |
+| 문서 | `docs/ssot/session-pivot/PR02_PathB_SessionRail.md` | 이 문서 |
 
 **7일 레일 변경: 0개** (`src/app/api/routine-*`, `src/lib/routine-engine.ts` 등 미변경)
 
 ---
 
-## DB 스키마 요약
+## DB 스키마
 
-### `session_user_profile`
-- 유저의 세션 프로그램 설정 (target_frequency, lifestyle_tag)
-- PK: `user_id`
+### session_user_profile
+```sql
+user_id          UUID PK → auth.users
+target_frequency SMALLINT DEFAULT 4  -- CHECK IN (2,3,4,5)
+lifestyle_tag    TEXT NULL
+created_at       TIMESTAMPTZ DEFAULT NOW()
+```
 
-### `session_program_progress`
-- 유저별 프로그램 진행 상태
-- `total_sessions` (기본 8), `completed_sessions`, `active_session_number`
-- PK: `user_id`
+### session_program_progress
+```sql
+user_id               UUID PK → auth.users
+program_version       TEXT DEFAULT 'session_v1'
+scoring_version       TEXT DEFAULT 'deep_v2'
+total_sessions        INT  DEFAULT 16
+completed_sessions    INT  DEFAULT 0
+active_session_number INT  NULL
+last_completed_at     TIMESTAMPTZ NULL
+updated_at            TIMESTAMPTZ DEFAULT NOW()
+```
+- `CHECK (completed_sessions <= total_sessions)`
+- `BEFORE UPDATE` 트리거로 `updated_at` 자동 갱신
 
-### `session_plans`
-- 세션별 플랜 row
-- 멱등 키: `UNIQUE(user_id, session_number)`
-- `status`: `draft` → `started` → `completed`
-- `plan_json`: 이번 PR은 stub (다음 PR에서 Deep Result 연결)
+### session_plans
+```sql
+id             UUID PK gen_random_uuid()
+user_id        UUID → auth.users
+session_number INT  CHECK >= 1
+status         TEXT CHECK IN ('draft','started','completed')  DEFAULT 'draft'
+theme          TEXT NOT NULL
+plan_json      JSONB NOT NULL
+condition      JSONB NOT NULL
+created_at     TIMESTAMPTZ DEFAULT NOW()
+started_at     TIMESTAMPTZ NULL
+completed_at   TIMESTAMPTZ NULL
+UNIQUE(user_id, session_number)  ← 멱등 핵심
+```
 
-### RLS 정책
-- 3개 테이블 모두 `RLS ON`
-- SELECT: `auth.uid() = user_id` 본인만 조회 가능
-- INSERT/UPDATE: **service role only** (클라이언트 direct write 차단)
+### 인덱스
+```sql
+idx_session_plans_user_status   ON session_plans(user_id, status)
+idx_session_plans_user_created  ON session_plans(user_id, created_at DESC)
+idx_session_program_progress_user_id
+idx_session_user_profile_user_id
+```
+
+---
+
+## RLS 정책 설계 (A4: 클라 direct write 금지)
+
+### 정책 내용
+
+세 테이블 모두 **RLS ON**. **SELECT 정책만** 존재:
+
+```sql
+CREATE POLICY "session_plans_select_own"
+  ON public.session_plans FOR SELECT
+  USING (auth.uid() = user_id);
+-- INSERT/UPDATE/DELETE 정책 없음
+```
+
+### 동작 원리
+- Supabase는 정책이 없는 operation을 **기본 차단(fail-close)** 함.
+- 클라이언트가 anon key로 `INSERT INTO session_plans ...` 시도 → RLS 위반 에러 반환.
+- 서버의 `getServerSupabaseAdmin()` (service role)은 RLS를 bypass → write 가능.
+
+### 검증 방법
+```sql
+-- Supabase SQL Editor에서 anon key 세션으로 INSERT 시도:
+INSERT INTO session_plans (user_id, session_number, status, theme, plan_json, condition)
+VALUES ('임의-uuid', 1, 'draft', 'test', '{}', '{}');
+-- → ERROR: new row violates row-level security policy for table "session_plans"
+```
 
 ---
 
 ## API Contract
 
+### Auth 방식
+
+> **Bearer token 사용** (Authorization: Bearer \<access_token\>)
+>
+> 프로젝트 전체가 PKCE + localStorage 기반 Bearer 인프라.
+> `@supabase/ssr` 미설치이므로 서버 사이드 쿠키 파싱 불가.
+> 쿠키 세션 전환은 별도 인프라 PR로 분리 권장.
+
 ### GET /api/session/active
 
 ```
 Response 200 (active 없음):
-{ active: null, progress: { ... } }
+{
+  "progress": { "total_sessions": 16, "completed_sessions": 0, "active_session_number": null, ... },
+  "active": null
+}
 
 Response 200 (active 있음):
-{ active: { id, user_id, session_number, status, theme, plan_json, ... }, progress: { ... } }
-```
-
-- progress가 없으면 자동 초기화 (total_sessions=8, completed=0)
-- heavy compute 없음 (DB 조회만)
-
-### POST /api/session/create
-
-```
-Request:
-{ condition_mood: 'good'|'ok'|'bad', time_budget: 'short'|'normal', pain_flags?: string[], equipment?: string[] }
-
-Response 200 (생성):
-{ session: { ... }, progress: { ..., active_session_number: N }, idempotent: false }
-
-Response 200 (멱등 — 이미 active):
-{ session: { ... }, progress: { ... }, idempotent: true }
-
-Response 200 (프로그램 완료):
-{ done: true, completed_sessions: N, total_sessions: M }
-```
-
-멱등 보장:
-- `active_session_number` 있으면 기존 세션 그대로 반환
-- DB UPSERT: `UNIQUE(user_id, session_number)` ON CONFLICT
-
-### POST /api/session/complete
-
-```
-Request:
-{ session_number: number, duration_seconds: number, completion_mode: 'all_done'|'partial_done'|'stop_early' }
-
-Response 200:
 {
-  success: true,
-  idempotent: false,          // 이미 완료면 true
-  session: { ..., status: 'completed', completed_at },
-  progress: { completed_sessions: N, active_session_number: null },
-  next_theme: 'core_stability'  // 다음 세션 테마만 (운동 리스트 예고 금지)
+  "progress": { ..., "active_session_number": 1 },
+  "active": { "session_number": 1, "status": "draft", "theme": "1순위 타겟", "plan_json": {...}, "condition": {...}, "created_at": "..." }
 }
 ```
 
-멱등 보장:
-- `status='completed'`면 중복 처리 없이 동일 응답 반환 (idempotent: true)
-- `completed_sessions = GREATEST(기존, session_number)`
+### POST /api/session/create
+
+**입력:**
+```json
+{ "condition_mood": "ok", "time_budget": "short", "pain_flags": ["knee"], "equipment": "none" }
+```
+
+**테마 4단계:**
+- session 1~4: `"1순위 타겟"`
+- session 5~8: `"2순위 타겟"`
+- session 9~12: `"통합"`
+- session 13~16: `"릴렉스"`
+
+**plan_json stub 구조:**
+```json
+{
+  "version": "session_stub_v1",
+  "recovery": false,
+  "segments": [
+    { "title": "Warmup", "duration_sec": 120, "items": [...] },
+    { "title": "Main (1순위 타겟)", "duration_sec": 240, "items": [...] },
+    { "title": "Cooldown", "duration_sec": 60, "items": [...] }
+  ]
+}
+```
+- `time_budget=short`: items 2개, sets=2, 전체 시간 축소
+- `condition_mood=bad`: `"recovery": true`, 운동명 "회복 운동 N"
+
+**Response (생성):**
+```json
+{ "progress": { ..., "active_session_number": 1 }, "active": { "session_number": 1, ... }, "idempotent": false }
+```
+
+**Response (멱등 — active 이미 있음):**
+```json
+{ "progress": { ... }, "active": { ... }, "idempotent": true }
+```
+
+**Response (프로그램 완료):**
+```json
+{ "done": true, "progress": { "completed_sessions": 16, "total_sessions": 16 } }
+```
+
+### POST /api/session/complete
+
+**입력:**
+```json
+{ "session_number": 1, "duration_seconds": 600, "completion_mode": "all_done" }
+```
+
+**Response:**
+```json
+{
+  "progress": { "completed_sessions": 1, "active_session_number": null, ... },
+  "next_theme": "1순위 타겟",
+  "idempotent": false
+}
+```
+- `next_theme`: 다음 세션 테마 이름만 반환 (운동 리스트 예고 금지)
+- 이미 completed면: `"idempotent": true`
 
 ---
 
-## curl 예시 (Bearer 토큰 교체 후 사용)
+## curl 시나리오 (A3 수락 테스트)
+
+> `TOKEN` 교체 후 실행. 마이그레이션 적용(`supabase db push`) 필요.
 
 ```bash
-TOKEN="YOUR_BEARER_TOKEN"
+TOKEN="YOUR_ACCESS_TOKEN"
 BASE="http://localhost:3000"
 
-# 1) GET /api/session/active — active null
+# 1) GET /api/session/active → active null
 curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/session/active" | jq .
 
 # 2) POST /api/session/create (ok/short)
@@ -117,71 +204,85 @@ curl -s -X POST "$BASE/api/session/create" \
   -H "Content-Type: application/json" \
   -d '{"condition_mood":"ok","time_budget":"short"}' | jq .
 
-# 3) GET /api/session/active — active session 반환 확인
+# 3) GET /api/session/active → active session 반환
 curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/session/active" | jq .
 
-# 4) POST /api/session/create 재호출 — idempotent:true
+# 4) POST /api/session/create 재호출 → idempotent:true
 curl -s -X POST "$BASE/api/session/create" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"condition_mood":"ok","time_budget":"short"}' | jq .
 
-# 5) POST /api/session/complete
+# 5) POST /api/session/complete(1, 600, all_done)
 curl -s -X POST "$BASE/api/session/complete" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"session_number":1,"duration_seconds":600,"completion_mode":"all_done"}' | jq .
 ```
 
+**예상 결과:**
+```
+시나리오 1: { active: null, progress: { total_sessions: 16, completed_sessions: 0 } }
+시나리오 2: { active: { session_number: 1, status: "draft", theme: "1순위 타겟" }, idempotent: false }
+시나리오 3: { active: { session_number: 1 }, progress: { active_session_number: 1 } }
+시나리오 4: { ..., idempotent: true } (새 row 생성 없음)
+시나리오 5: { progress: { completed_sessions: 1, active_session_number: null }, next_theme: "1순위 타겟" }
+```
+
+※ 마이그레이션 적용 후 로컬 dev 환경에서 실제 실행 필요.
+
 ---
 
 ## Acceptance Tests
 
-### A1) git diff 확인
-기존 7일 경로 파일 변경 0개.
+### A1) git diff main --name-only
 ```
-git diff main --name-only
+docs/ssot/session-pivot/PR02_PathB_SessionRail.md
+src/app/api/session/active/route.ts
+src/app/api/session/complete/route.ts
+src/app/api/session/create/route.ts
+supabase/migrations/20260303_session_pathB.sql
 ```
-예상 결과: `docs/`, `src/app/api/session/`, `supabase/migrations/20260303_session_pathB.sql` 만 표시.
+기존 7일 관련 파일 변경 없음 ✅
 
-### A2) 마이그레이션 새 파일만 추가
-`supabase/migrations/` 기존 파일 수정 없음.
+### A2) 마이그레이션
+신규 파일 1개 추가만. 기존 마이그레이션 수정 없음 ✅
 
-### A3) 시나리오 결과 (로컬 dev 환경 + 실제 DB 적용 후)
-```
-시나리오 1: GET /active → { active: null, progress: { total_sessions: 8, completed_sessions: 0 } }
-시나리오 2: POST /create → { session: { session_number: 1, status: 'draft' }, progress: { active_session_number: 1 }, idempotent: false }
-시나리오 3: GET /active → { active: { session_number: 1, status: 'draft', ... }, ... }
-시나리오 4: POST /create (재호출) → { ..., idempotent: true }
-시나리오 5: POST /complete → { completed_sessions: 1, active_session_number: null, next_theme: 'thoracic_mobility' }
-```
-※ 실제 실행 결과는 마이그레이션 적용(supabase db push) 후 확인 필요.
+### A3) 로컬 시나리오
+마이그레이션 적용 후 위 curl 시나리오 5개 성공 예상.
 
-### A4) RLS 검증
-service role로 다른 user_id row SELECT 시도:
-```sql
--- 다른 user의 row를 auth.uid()가 다른 상태에서 SELECT → 0 rows
-SELECT * FROM session_plans WHERE user_id = 'other-user-uuid';
--- → RLS에 의해 자기 row만 반환 (다른 uid의 row = 0)
-```
+### A4) RLS 클라 direct write 금지
+SELECT 정책만 존재. INSERT/UPDATE/DELETE 정책 없음 → fail-close.
+anon key로 write 시도 시 RLS 에러 반환. (위 "RLS 정책 설계" 섹션 참고)
 
-### A5) 빌드 결과
-`npm run build` 성공 (신규 API 3개 route 포함 정상 빌드 확인).
+### A5) 빌드
+```
+npm run build → exit 0 (81 routes 포함 정상)
+/api/session/active  ƒ (Dynamic)
+/api/session/complete ƒ (Dynamic)
+/api/session/create  ƒ (Dynamic)
+```
 
 ---
 
-## Rollback 방법
+## Rollback
 
-1. `git revert` 이 PR 커밋
-2. DB: 마이그레이션 미적용 환경에서는 `DROP TABLE IF EXISTS session_plans, session_program_progress, session_user_profile CASCADE;`
+1. `git revert <이 커밋 SHA>` — API 3개, 마이그레이션, 문서 제거
+2. DB (마이그레이션 미적용 환경):
+   ```sql
+   DROP TABLE IF EXISTS public.session_plans CASCADE;
+   DROP TABLE IF EXISTS public.session_program_progress CASCADE;
+   DROP TABLE IF EXISTS public.session_user_profile CASCADE;
+   DROP FUNCTION IF EXISTS public.update_session_program_progress_updated_at();
+   ```
 3. 기존 7일 레일은 이 PR과 독립이므로 rollback 시 영향 없음.
 
 ---
 
 ## 다음 PR 옵션 (3줄)
 
-**Option A**: Deep Result 연결 — `session/create` stub plan generator를 실제 Deep V2 scoring 기반으로 교체  
-**Option B**: Player UI 연결 — `/app/session/player` 페이지 신설 + `/api/session/active` 연결  
-**Option C**: progress onboarding — 사용자 `total_sessions` 설정 화면 + `session_user_profile` 저장 흐름  
+**Option A** — Deep Result 연결: `session/create`의 stub plan_json을 Deep V2 scoring 결과 기반으로 교체 (실제 운동 데이터 생성)  
+**Option B** — Player UI 연결: `/app/session/player` 페이지 신설 + `/api/session/active` 연동 (세션 실행 화면)  
+**Option C** — Completion UX: 세션 완료 후 피드백 화면 + next_theme 예고 + progress bar UI  
 
-추천 순서: **A → C → B** (plan이 있어야 player가 의미 있음)
+추천 순서: **A → B → C** (generator 없으면 player가 stub 데이터만 보여줌)

@@ -1,22 +1,31 @@
 /**
  * POST /api/session/create
  *
- * 세션 플랜을 멱등 생성.
- * - progress.active_session_number가 있으면 기존 세션 그대로 반환 (새로 생성 금지)
- * - 없으면 next_session_number = completed_sessions + 1
- * - next_session_number > total_sessions면 { done: true } 반환
+ * 세션 플랜 멱등 생성.
+ * - active_session_number가 있으면 기존 세션 그대로 반환 (새로 생성 금지)
+ * - 없으면 next = completed_sessions + 1
+ * - next > total_sessions이면 { done:true, progress } 반환
  * - UPSERT: UNIQUE(user_id, session_number) 기반 멱등 보장
  *
  * 입력:
  *   condition_mood: 'good' | 'ok' | 'bad'
  *   time_budget: 'short' | 'normal'
- *   pain_flags?: string[]     (선택)
- *   equipment?: string[]      (선택)
+ *   pain_flags?: string[]
+ *   equipment?: 'none' | 'band'
  *
- * NOTE: plan_json은 이번 PR에서 stub (Deep Result 연결은 다음 PR).
+ * plan_json: 이번 PR은 STUB (Deep Result 연결은 다음 PR)
+ *   version: 'session_stub_v1'
+ *   segments: Warmup + Main + Cooldown (time_budget=short면 세트 수 감소)
+ *   bad 컨디션이면 plan_json.recovery: true
+ *
+ * 테마 4단계 (session_number 기반):
+ *   1~4:  "1순위 타겟"
+ *   5~8:  "2순위 타겟"
+ *   9~12: "통합"
+ *   13~16:"릴렉스"
  *
  * Path B 독립 레일: 기존 7일 테이블/엔드포인트와 완전 분리.
- * Bearer token 인증.
+ * Auth: Bearer token. Write: service role admin client.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -26,40 +35,75 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const DEFAULT_TOTAL_SESSIONS = 8;
+const DEFAULT_TOTAL_SESSIONS = 16;
 
-/** 세션 번호 기반 테마 맵 (stub: 실제 Deep Result 연결은 다음 PR) */
-const SESSION_THEMES: Record<number, string> = {
-  1: 'full_body_reset',
-  2: 'thoracic_mobility',
-  3: 'core_stability',
-  4: 'glute_activation',
-  5: 'lower_chain_stability',
-  6: 'shoulder_mobility',
-  7: 'global_core',
-  8: 'full_body_reset',
-};
+type ConditionMood = 'good' | 'ok' | 'bad';
+type TimeBudget = 'short' | 'normal';
 
-/** 세션 번호 기반 다음 테마 반환 */
+/** session_number → 4단계 테마 */
 function getTheme(sessionNumber: number): string {
-  return SESSION_THEMES[sessionNumber] ?? SESSION_THEMES[((sessionNumber - 1) % 8) + 1] ?? 'full_body_reset';
+  if (sessionNumber <= 4)  return '1순위 타겟';
+  if (sessionNumber <= 8)  return '2순위 타겟';
+  if (sessionNumber <= 12) return '통합';
+  return '릴렉스';
 }
 
 /**
  * 스텁 plan_json 생성 (Deep Result 연결 전 최소 구조)
+ * - time_budget=short: items/sets 수 축소
+ * - condition_mood=bad: recovery 플래그 추가
  */
 function buildStubPlanJson(
   sessionNumber: number,
   theme: string,
-  timeBudget: 'short' | 'normal'
+  timeBudget: TimeBudget,
+  conditionMood: ConditionMood
 ) {
-  const durationSec = timeBudget === 'short' ? 300 : 600;
-  const segments = [
-    { order: 1, templateId: 'stub_01', templateName: '준비 운동', durationSec: Math.round(durationSec * 0.25), kind: 'work' },
-    { order: 2, templateId: 'stub_02', templateName: theme.replace(/_/g, ' '), durationSec: Math.round(durationSec * 0.5), kind: 'work' },
-    { order: 3, templateId: 'stub_03', templateName: '마무리', durationSec: Math.round(durationSec * 0.25), kind: 'work' },
-  ];
-  return { session_number: sessionNumber, theme, segments, stub: true };
+  const isShort = timeBudget === 'short';
+  const isRecovery = conditionMood === 'bad';
+  const sets = isShort ? 2 : 3;
+  const items = isShort ? 2 : 4;
+
+  return {
+    version: 'session_stub_v1',
+    recovery: isRecovery,
+    segments: [
+      {
+        title: 'Warmup',
+        duration_sec: isShort ? 120 : 180,
+        items: Array.from({ length: isShort ? 2 : 3 }, (_, i) => ({
+          order: i + 1,
+          templateId: `stub_warmup_${i + 1}`,
+          name: `준비 운동 ${i + 1}`,
+          sets: 1,
+          reps: 10,
+        })),
+      },
+      {
+        title: `Main (${theme})`,
+        duration_sec: isShort ? 240 : 420,
+        items: Array.from({ length: items }, (_, i) => ({
+          order: i + 1,
+          templateId: `stub_main_s${sessionNumber}_${i + 1}`,
+          name: isRecovery ? `회복 운동 ${i + 1}` : `${theme} 운동 ${i + 1}`,
+          sets,
+          reps: isRecovery ? 8 : 12,
+        })),
+      },
+      {
+        title: 'Cooldown',
+        duration_sec: isShort ? 60 : 120,
+        items: Array.from({ length: isShort ? 1 : 2 }, (_, i) => ({
+          order: i + 1,
+          templateId: `stub_cooldown_${i + 1}`,
+          name: `마무리 스트레칭 ${i + 1}`,
+          sets: 1,
+          reps: 30,
+          note: 'hold_seconds',
+        })),
+      },
+    ],
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -67,28 +111,34 @@ export async function POST(req: NextRequest) {
     const userId = await getCurrentUserId(req);
     if (!userId) {
       return NextResponse.json(
-        { error: { code: 'UNAUTHORIZED', message: '인증이 필요합니다.' } },
+        { error: { code: 'UNAUTHENTICATED', message: '인증이 필요합니다.' } },
         { status: 401 }
       );
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const conditionMood = (['good', 'ok', 'bad'] as const).includes(body.condition_mood as 'good' | 'ok' | 'bad')
-      ? (body.condition_mood as 'good' | 'ok' | 'bad')
+
+    const conditionMood: ConditionMood = (['good', 'ok', 'bad'] as const).includes(
+      body.condition_mood as ConditionMood
+    )
+      ? (body.condition_mood as ConditionMood)
       : 'ok';
-    const timeBudget = (['short', 'normal'] as const).includes(body.time_budget as 'short' | 'normal')
-      ? (body.time_budget as 'short' | 'normal')
+
+    const timeBudget: TimeBudget = (['short', 'normal'] as const).includes(
+      body.time_budget as TimeBudget
+    )
+      ? (body.time_budget as TimeBudget)
       : 'normal';
+
     const painFlags = Array.isArray(body.pain_flags)
       ? (body.pain_flags as unknown[]).filter((x): x is string => typeof x === 'string')
       : [];
-    const equipment = Array.isArray(body.equipment)
-      ? (body.equipment as unknown[]).filter((x): x is string => typeof x === 'string')
-      : [];
+
+    const equipment = typeof body.equipment === 'string' ? body.equipment : 'none';
 
     const supabase = getServerSupabaseAdmin();
 
-    // progress 조회 — 없으면 초기화
+    // progress 조회 — 없으면 자동 생성
     let { data: progress } = await supabase
       .from('session_program_progress')
       .select('*')
@@ -121,14 +171,14 @@ export async function POST(req: NextRequest) {
     if (progress.active_session_number) {
       const { data: existingPlan } = await supabase
         .from('session_plans')
-        .select('*')
+        .select('session_number, status, theme, plan_json, condition')
         .eq('user_id', userId)
         .eq('session_number', progress.active_session_number)
         .maybeSingle();
 
       const res = NextResponse.json({
-        session: existingPlan,
         progress,
+        active: existingPlan ?? null,
         idempotent: true,
       });
       res.headers.set('Cache-Control', 'no-store');
@@ -137,22 +187,21 @@ export async function POST(req: NextRequest) {
 
     const nextSessionNumber = progress.completed_sessions + 1;
 
-    // 프로그램 완료
+    // 프로그램 전체 완료
     if (nextSessionNumber > progress.total_sessions) {
       const res = NextResponse.json({
         done: true,
-        completed_sessions: progress.completed_sessions,
-        total_sessions: progress.total_sessions,
+        progress,
       });
       res.headers.set('Cache-Control', 'no-store');
       return res;
     }
 
     const theme = getTheme(nextSessionNumber);
-    const planJson = buildStubPlanJson(nextSessionNumber, theme, timeBudget);
+    const planJson = buildStubPlanJson(nextSessionNumber, theme, timeBudget, conditionMood);
     const condition = { condition_mood: conditionMood, time_budget: timeBudget, pain_flags: painFlags, equipment };
 
-    // UPSERT: UNIQUE(user_id, session_number) 멱등 보장
+    // UPSERT: UNIQUE(user_id, session_number) — 멱등 보장
     const { data: plan, error: upsertErr } = await supabase
       .from('session_plans')
       .upsert(
@@ -166,7 +215,7 @@ export async function POST(req: NextRequest) {
         },
         { onConflict: 'user_id,session_number', ignoreDuplicates: false }
       )
-      .select()
+      .select('session_number, status, theme, plan_json, condition')
       .single();
 
     if (upsertErr || !plan) {
@@ -190,8 +239,8 @@ export async function POST(req: NextRequest) {
     }
 
     const res = NextResponse.json({
-      session: plan,
       progress: updatedProgress ?? { ...progress, active_session_number: nextSessionNumber },
+      active: plan,
       idempotent: false,
     });
     res.headers.set('Cache-Control', 'no-store');
