@@ -31,7 +31,15 @@ type EnsurePayload = {
   timings?: Record<string, number>;
   error?: string;
   segments_with_media?: unknown;
+  segments?: unknown;
   status?: Record<string, unknown>;
+};
+
+type EnsureSegment = {
+  templateId: string;
+  templateName?: string;
+  durationSec?: number;
+  kind?: 'work' | 'rest';
 };
 
 /** 세그먼트 shape (템플릿/DB 연결) */
@@ -315,6 +323,7 @@ export default function RoutinePlayerPage() {
             dayNumber,
             debug: debugFlag,
             mediaMode: 'none',
+            includeTemplates: 1,
             includeStatus: 1,
           }),
         });
@@ -342,9 +351,43 @@ export default function RoutinePlayerPage() {
           templateName: string;
           mediaPayload?: MediaPayload | null;
         }> | undefined;
+        const segmentsMeta = data?.segments as EnsureSegment[] | undefined;
 
         if (segmentsWithMedia?.length) {
           setSegments(buildSegmentsFromSwm(segmentsWithMedia));
+        } else if (segmentsMeta?.length) {
+          const segs: Segment[] = [];
+          for (let i = 0; i < segmentsMeta.length; i++) {
+            const sm = segmentsMeta[i];
+            if ((sm.kind ?? 'work') === 'rest') {
+              segs.push({
+                id: `rest-${i + 1}`,
+                title: sm.templateName ?? `휴식 ${i + 1}`,
+                durationSec: sm.durationSec ?? 30,
+                kind: 'rest',
+              });
+              continue;
+            }
+            segs.push({
+              id: `work-${sm.templateId}-${i}`,
+              templateId: sm.templateId,
+              title: sm.templateName ?? `운동 ${i + 1}`,
+              durationSec: sm.durationSec ?? 60,
+              kind: 'work',
+              mediaPayload: null,
+              mediaError: false,
+              templateName: sm.templateName,
+            });
+            if (i < segmentsMeta.length - 1) {
+              segs.push({
+                id: `rest-${i + 1}`,
+                title: `휴식 ${i + 1}`,
+                durationSec: 30,
+                kind: 'rest',
+              });
+            }
+          }
+          setSegments(segs);
         } else {
           const ids = plan.selected_template_ids ?? [];
           const segs: Segment[] = [];
@@ -356,7 +399,7 @@ export default function RoutinePlayerPage() {
               durationSec: 60,
               kind: 'work',
               mediaPayload: null,
-              mediaError: true,
+              mediaError: false,
             });
             if (i < ids.length - 1) {
               segs.push({
