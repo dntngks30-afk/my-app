@@ -8,7 +8,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { requireDeepAuth } from '@/lib/deep-test/auth';
-import { calculateDeepV1 } from '@/lib/deep-test/scoring/deep_v1';
 import { calculateDeepV2, extendDeepV2 } from '@/lib/deep-test/scoring/deep_v2';
 import { ensureDeepWorkoutRoutine, maskId } from '@/lib/deep-test/ensure-deep-routine';
 import { seedDay1PlanIfRoutine } from '@/lib/deep-test/seed-day1';
@@ -111,67 +110,16 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const answers = (attempt.answers ?? {}) as Record<string, DeepAnswerValue>;
   const scoringVersion = attempt.scoring_version ?? 'deep_v2';
-
-  const now = new Date().toISOString();
-
-  if (scoringVersion === 'deep_v1') {
-    const { scores, result_type, confidence } = calculateDeepV1(answers);
-    const { data: updated, error: updateError } = await supabase
-      .from('deep_test_attempts')
-      .update({
-        status: 'final',
-        scores,
-        result_type,
-        confidence: Number(confidence),
-        finalized_at: now,
-        updated_at: now,
-      })
-      .eq('id', attemptId)
-      .eq('user_id', userId)
-      .eq('status', 'draft')
-      .select()
-      .single();
-
-    if (updateError) {
-      console.error('finalize error:', updateError);
-      return NextResponse.json(
-        { error: '?뺤젙 泥섎━???ㅽ뙣?덉뒿?덈떎.' },
-        { status: 500 }
-      );
-    }
-
-    let routineCreated = false;
-    try {
-      const { routineId, created } = await ensureDeepWorkoutRoutine(
-        supabase,
-        userId,
-        attemptId
-      );
-      routineCreated = created;
-      console.log('[DEEP_FINALIZE]', {
-        user: maskId(userId),
-        attemptId: maskId(attemptId),
-        routine: maskId(routineId),
-        created,
-      });
-      if (routineId) await seedDay1PlanIfRoutine(supabase, routineId, userId);
-    } catch (err) {
-      console.warn('[DEEP_FINALIZE_ROUTINE_FAIL]', {
-        user: maskId(userId),
-        attemptId: maskId(attemptId),
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-    return NextResponse.json({
-      source: SOURCE,
-      scoring_version: 'deep_v1',
-      result: { scores, result_type, confidence },
-      attempt: toAttemptPayload(updated!),
-      routineCreated,
-    });
+  if (scoringVersion !== 'deep_v2') {
+    return NextResponse.json(
+      { error: 'deep_v1은 더 이상 지원되지 않습니다. deep_v2를 사용해 주세요.' },
+      { status: 410 }
+    );
   }
+
+  const answers = (attempt.answers ?? {}) as Record<string, DeepAnswerValue>;
+  const now = new Date().toISOString();
 
   const v2Result = calculateDeepV2(answers);
   const extended = extendDeepV2(v2Result);

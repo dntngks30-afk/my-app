@@ -1,4 +1,4 @@
-﻿/**
+/**
  * POST /api/deep-test/get-or-create
  * Idempotent: (user_id, scoring_version) 湲곗? upsert, ?놁쑝硫?insert
  */
@@ -46,9 +46,9 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const scoringVersion =
     body.scoringVersion ?? body.scoring_version ?? DEFAULT_VERSION;
-  if (scoringVersion !== 'deep_v1' && scoringVersion !== 'deep_v2') {
+  if (scoringVersion !== 'deep_v2') {
     return NextResponse.json(
-      { error: '吏?먰븯吏 ?딅뒗 scoring_version?낅땲??' },
+      { error: '지원하는 scoring_version은 deep_v2입니다.' },
       { status: 400 }
     );
   }
