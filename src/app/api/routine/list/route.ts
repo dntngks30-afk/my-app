@@ -57,9 +57,14 @@ export async function GET(req: NextRequest) {
       const tEnd = performance.now();
       const payload: Record<string, unknown> = { success: true, routines: [] };
       if (isDebug) {
+        const t_auth = Math.round(tAuth - t0);
+        const t_db = Math.round(tRoutines - tRoutinesStart);
+        const t_compute = Math.round(tEnd - tRoutines);
         payload.timings = {
-          t_auth: Math.round(tAuth - t0),
-          t_routines: Math.round(tRoutines - tRoutinesStart),
+          t_auth,
+          t_db,
+          t_compute,
+          t_routines: t_db,
           t_attendance: 0,
           t_total: Math.round(tEnd - t0),
         };
@@ -74,8 +79,8 @@ export async function GET(req: NextRequest) {
         const t = payload.timings as Record<string, number>;
         res.headers.set('Server-Timing', [
           `auth;dur=${t.t_auth ?? 0}`,
-          `routines;dur=${t.t_routines ?? 0}`,
-          `attendance;dur=${t.t_attendance ?? 0}`,
+          `db;dur=${t.t_db ?? 0}`,
+          `compute;dur=${t.t_compute ?? 0}`,
           `total;dur=${t.t_total ?? 0}`,
         ].join(', '));
       }
@@ -136,8 +141,13 @@ export async function GET(req: NextRequest) {
       currentDay,
     };
     if (isDebug) {
+      const t_auth = Math.round(tAuth - t0);
+      const t_db = Math.round(tAttendance - tRoutinesStart);
+      const t_compute = Math.round(tEnd - tAttendance);
       payload.timings = {
-        t_auth: Math.round(tAuth - t0),
+        t_auth,
+        t_db,
+        t_compute,
         t_routines: Math.round(tRoutines - tRoutinesStart),
         t_attendance: Math.round(tAttendance - tAttendanceStart),
         t_total: Math.round(tEnd - t0),
@@ -157,8 +167,8 @@ export async function GET(req: NextRequest) {
       const t = payload.timings as Record<string, number>;
       res.headers.set('Server-Timing', [
         `auth;dur=${t.t_auth ?? 0}`,
-        `routines;dur=${t.t_routines ?? 0}`,
-        `attendance;dur=${t.t_attendance ?? 0}`,
+        `db;dur=${t.t_db ?? 0}`,
+        `compute;dur=${t.t_compute ?? 0}`,
         `total;dur=${t.t_total ?? 0}`,
       ].join(', '));
     }

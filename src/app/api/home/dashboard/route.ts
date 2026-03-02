@@ -96,9 +96,14 @@ export async function GET(req: NextRequest) {
 
     const tEnd = performance.now();
     if (isDebug) {
+      const t_auth = Math.round(tAuth - t0);
+      const t_db = Math.round(tRoutines - tRoutinesStart);
+      const t_compute = Math.round(tEnd - tProgress);
       payload.timings = {
-        t_auth: Math.round(tAuth - t0),
-        t_routines_parallel: Math.round(tRoutines - tRoutinesStart),
+        t_auth,
+        t_db,
+        t_compute,
+        t_routines_parallel: t_db,
         t_total: Math.round(tEnd - t0),
       };
       if (auth.timings) {
@@ -116,7 +121,8 @@ export async function GET(req: NextRequest) {
       const t = payload.timings as Record<string, number>;
       const parts = [
         `auth;dur=${t.t_auth ?? 0}`,
-        `routines_parallel;dur=${t.t_routines_parallel ?? 0}`,
+        `db;dur=${t.t_db ?? 0}`,
+        `compute;dur=${t.t_compute ?? 0}`,
         `total;dur=${t.t_total ?? 0}`,
       ];
       res.headers.set('Server-Timing', parts.join(', '));

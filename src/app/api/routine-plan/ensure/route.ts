@@ -274,13 +274,23 @@ export async function POST(req: NextRequest) {
 
     const tEnd = performance.now();
     if (isDebug) {
+      const t_auth = Math.round(tAuth - t0);
+      const t_select = Math.round(tSelectDaily - tAuth);
+      const t_generate = Math.round(tGenerate - tSelectDaily);
+      const t_templates_fetch = Math.round(tTemplatesFetch - tGenerate);
+      const t_media = Math.round(tMedia - tTemplatesFetch);
+      const t_total = Math.round(tEnd - t0);
+      const t_db = t_select + t_templates_fetch;
+      const t_compute = t_generate + t_media;
       const timings: Record<string, number> = {
-        t_auth: Math.round(tAuth - t0),
-        t_select: Math.round(tSelectDaily - tAuth),
-        t_generate: Math.round(tGenerate - tSelectDaily),
-        t_templates_fetch: Math.round(tTemplatesFetch - tGenerate),
-        t_media: Math.round(tMedia - tTemplatesFetch),
-        t_total: Math.round(tEnd - t0),
+        t_auth,
+        t_db,
+        t_compute,
+        t_select,
+        t_generate,
+        t_templates_fetch,
+        t_media,
+        t_total,
       };
       if (auth.timings) {
         timings.t_auth_user = auth.timings.t_auth_user;
@@ -300,10 +310,8 @@ export async function POST(req: NextRequest) {
       const t = payload.timings as Record<string, number>;
       res.headers.set('Server-Timing', [
         `auth;dur=${t.t_auth ?? 0}`,
-        `select;dur=${t.t_select ?? 0}`,
-        `generate;dur=${t.t_generate ?? 0}`,
-        `templates;dur=${t.t_templates_fetch ?? 0}`,
-        `media;dur=${t.t_media ?? 0}`,
+        `db;dur=${t.t_db ?? 0}`,
+        `compute;dur=${t.t_compute ?? 0}`,
         `total;dur=${t.t_total ?? 0}`,
       ].join(', '));
     }

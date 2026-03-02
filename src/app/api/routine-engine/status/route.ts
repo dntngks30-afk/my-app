@@ -14,16 +14,40 @@ import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { computeRoutineStatusPayload } from '@/lib/routine-engine';
 
 export async function GET(req: NextRequest) {
+  const t0 = performance.now();
+  const { searchParams } = new URL(req.url);
+  const isDebug = searchParams.get('debug') === '1';
   try {
     const userId = await getCurrentUserId(req);
     if (!userId) {
       return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
     }
+    const tAuth = performance.now();
 
     const status = await computeRoutineStatusPayload(userId);
+    const tEnd = performance.now();
 
-    const res = NextResponse.json({ success: true, ...status });
+    const payload: Record<string, unknown> = { success: true, ...status };
+    if (isDebug) {
+      payload.timings = {
+        t_auth: Math.round(tAuth - t0),
+        t_db: Math.round(tEnd - tAuth),
+        t_compute: 0,
+        t_total: Math.round(tEnd - t0),
+      };
+    }
+
+    const res = NextResponse.json(payload);
     res.headers.set('Cache-Control', 'no-store, max-age=0');
+    if (isDebug) {
+      const t = payload.timings as Record<string, number>;
+      res.headers.set('Server-Timing', [
+        `auth;dur=${t.t_auth ?? 0}`,
+        `db;dur=${t.t_db ?? 0}`,
+        `compute;dur=${t.t_compute ?? 0}`,
+        `total;dur=${t.t_total ?? 0}`,
+      ].join(', '));
+    }
     return res;
   } catch (err) {
     console.error('[routine-engine/status] error:', err);
