@@ -24,6 +24,15 @@ type MediaPayload = {
   notes?: string[];
 };
 
+/** /api/.../ensure 응답 shape (plan만 최소 사용) */
+type EnsurePlan = { selected_template_ids?: string[] };
+type EnsurePayload = {
+  plan?: EnsurePlan;
+  timings?: Record<string, number>;
+  error?: string;
+  segments_with_media?: unknown;
+};
+
 /** 세그먼트 shape (템플릿/DB 연결) */
 type Segment = {
   id: string;
@@ -305,7 +314,7 @@ export default function RoutinePlayerPage() {
           }),
         });
         const _tResp = performance.now();
-        const data = (await ensureRes.json().catch(() => ({}))) as Record<string, unknown>;
+        const data = (await ensureRes.json().catch(() => ({}))) as EnsurePayload;
 
         if (cancelled) return;
         if (data?.timings) setEnsureTimings(data.timings as Record<string, number>);
@@ -332,7 +341,7 @@ export default function RoutinePlayerPage() {
         if (segmentsWithMedia?.length) {
           setSegments(buildSegmentsFromSwm(segmentsWithMedia));
         } else {
-          const ids = (plan.selected_template_ids as string[]) ?? [];
+          const ids = plan.selected_template_ids ?? [];
           const segs: Segment[] = [];
           for (let i = 0; i < ids.length; i++) {
             segs.push({
@@ -519,14 +528,15 @@ export default function RoutinePlayerPage() {
   useEffect(() => {
     const seg = currentSegment;
     if (!seg || seg.kind !== 'work' || !seg.templateId) return;
+    const tid = seg.templateId;
     const needsMedia =
       !seg.mediaPayload || seg.mediaPayload.kind === 'placeholder';
-    if (!needsMedia || mediaFetchInFlightRef.current.has(seg.templateId)) return;
+    if (!needsMedia || mediaFetchInFlightRef.current.has(tid)) return;
 
-    mediaFetchInFlightRef.current.add(seg.templateId);
+    mediaFetchInFlightRef.current.add(tid);
     getSessionSafe().then(({ session }) => {
       if (!session?.access_token) {
-        mediaFetchInFlightRef.current.delete(seg.templateId);
+        mediaFetchInFlightRef.current.delete(tid);
         return;
       }
       fetch('/api/media/sign', {
@@ -536,17 +546,17 @@ export default function RoutinePlayerPage() {
           Authorization: `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ templateId: seg.templateId }),
+        body: JSON.stringify({ templateId: tid }),
       })
         .then((res) => res.json().catch(() => ({})))
         .then((data: Record<string, unknown>) => {
-          mediaFetchInFlightRef.current.delete(seg.templateId);
+          mediaFetchInFlightRef.current.delete(tid);
           const mediaById = data?.mediaById as Record<string, MediaPayload> | undefined;
-          const payload = mediaById?.[seg.templateId];
+          const payload = mediaById?.[tid];
           if (payload && payload.kind !== 'placeholder') {
             setSegments((prev) =>
               prev.map((p) =>
-                p.templateId === seg.templateId
+                p.templateId === tid
                   ? { ...p, mediaPayload: payload, mediaError: false }
                   : p
               )
@@ -554,7 +564,7 @@ export default function RoutinePlayerPage() {
           }
         })
         .catch((err) => {
-          mediaFetchInFlightRef.current.delete(seg.templateId);
+          mediaFetchInFlightRef.current.delete(tid);
           if (searchParams.get('debug') === '1') {
             console.warn('[player] on-demand media failed', err);
           }
