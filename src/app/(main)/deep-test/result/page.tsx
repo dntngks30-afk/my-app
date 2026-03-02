@@ -1,6 +1,6 @@
 /**
  * Demo Deep Test - Result (NO LOGIN)
- * 404 unless DEMO_DEEP_TEST_ENABLED=1
+ * 404 unless NEXT_PUBLIC_DEMO_DEEP_TEST_ENABLED=1
  */
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +9,7 @@ import { notFound } from 'next/navigation';
 import DemoResultClient from './DemoResultClient';
 
 export default function DemoDeepTestResultPage() {
-  if (process.env.DEMO_DEEP_TEST_ENABLED !== '1') {
+  if (process.env.NEXT_PUBLIC_DEMO_DEEP_TEST_ENABLED !== '1') {
     notFound();
   }
 
