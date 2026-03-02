@@ -64,7 +64,6 @@ export const DEEP_V2_QUESTIONS: DeepQuestion[] = [
     id: 'deep_squat_pain_intensity',
     type: 'single',
     title: '동작 진행 시 불편함이 있으신가요?',
-    helperText: '맨몸 스쿼트 5회(통증 있으면 중단)',
     options: [
       { label: '없음', value: '없음' },
       { label: '약간(0~3)', value: '약간(0~3)' },
@@ -90,7 +89,7 @@ export const DEEP_V2_QUESTIONS: DeepQuestion[] = [
     type: 'single',
     title: '쪼그려 앉는 자세를 유지하기 어려우신가요?',
     options: [
-      { label: '무릎이 발 앞으로 잘 감', value: '무릎이 발 앞으로 잘 감' },
+      { label: '발바닥이 바닥에 잘 붙은 채로 편하게 내려가서 2–3초 유지 가능', value: '발바닥이 바닥에 잘 붙은 채로 편하게 내려가서 2–3초 유지 가능' },
       { label: '가끔 무릎이 안쪽·바깥쪽으로 흔들림', value: '가끔 무릎이 안쪽·바깥쪽으로 흔들림' },
       { label: '자주 크게 흔들림', value: '자주 크게 흔들림' },
     ],
@@ -99,7 +98,6 @@ export const DEEP_V2_QUESTIONS: DeepQuestion[] = [
     id: 'deep_wallangel_pain_intensity',
     type: 'single',
     title: '동작 진행 시 불편함이 있으신가요?',
-    helperText: "벽에 등을 대고 '벽천사(팔 올리기)' 5회. 허리 꺾임/통증 있으면 중단.",
     options: [
       { label: '없음', value: '없음' },
       { label: '약간(0~3)', value: '약간(0~3)' },
@@ -136,7 +134,6 @@ export const DEEP_V2_QUESTIONS: DeepQuestion[] = [
     id: 'deep_sls_pain_intensity',
     type: 'single',
     title: '동작 진행 시 불편함이 있으신가요?',
-    helperText: '한발서기 좌/우 10초(더 어려운 쪽 기준). 통증 있으면 중단.',
     options: [
       { label: '없음', value: '없음' },
       { label: '약간(0~3)', value: '약간(0~3)' },

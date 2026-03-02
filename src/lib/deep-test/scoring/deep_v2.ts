@@ -237,7 +237,7 @@ export function calculateDeepV2(
   const q6없음 = q6Int === 0;
   const q9없음 = q9Int === 0;
   const q12없음 = q12Int === 0;
-  const q8무릎잘감 = q8?.includes('무릎이 발 앞으로 잘 감') ?? false;
+  const q8무릎잘감 = q8?.includes('발바닥이 바닥에 잘 붙은 채로') ?? false;
   const q11문제없음 = q11?.includes('문제 없음') ?? false;
   const q14안정적 = q14?.includes('10초 안정적으로 가능') ?? false;
 
