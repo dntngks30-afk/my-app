@@ -12,7 +12,7 @@ import AppTopBar from '../../_components/AppTopBar';
 import BottomNav from '../../_components/BottomNav';
 import PwaInstallModal from '@/components/pwa/PwaInstallModal';
 import { usePwaInstall } from '@/lib/pwa/usePwaInstall';
-import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 
 const RESULT_TYPE_LABELS: Record<string, string> = {
   'NECK-SHOULDER': '목·어깨 경향',
@@ -76,7 +76,7 @@ export default function DeepTestResultPage() {
     let cancelled = false;
 
     async function load() {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { session } = await getSessionSafe();
       if (!session?.access_token) {
         if (!cancelled) setStatus('auth');
         return;

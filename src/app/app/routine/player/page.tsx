@@ -10,7 +10,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Play, Pause, Check, Lock } from 'lucide-react';
 import Hls from 'hls.js';
-import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 
 /** media_payload shape (API response) */
 type MediaPayload = {
@@ -214,7 +214,7 @@ export default function RoutinePlayerPage() {
   useEffect(() => {
     if (authCheckedRef.current) return;
     authCheckedRef.current = true;
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    getSessionSafe().then(({ session }) => {
       if (!session?.access_token) {
         const next = `/app/routine/player?routineId=${encodeURIComponent(routineId)}&day=${dayNumber}`;
         router.replace(`/app/auth?next=${encodeURIComponent(next)}`);
@@ -280,7 +280,8 @@ export default function RoutinePlayerPage() {
     };
 
     const run = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const _t0 = performance.now();
+      const { session } = await getSessionSafe();
       if (!session?.access_token || cancelled) return;
 
       const opts: RequestInit = {
@@ -303,6 +304,7 @@ export default function RoutinePlayerPage() {
             mediaMode: 'first',
           }),
         });
+        const _tResp = performance.now();
         const data = (await ensureRes.json().catch(() => ({}))) as Record<string, unknown>;
 
         if (cancelled) return;
@@ -353,6 +355,10 @@ export default function RoutinePlayerPage() {
           }
           setSegments(segs);
         }
+        if (process.env.NODE_ENV === 'development') {
+          const _tDone = performance.now();
+          console.log(`[PERF:player:day${dayNumber}]`, { ttfb: Math.round(_tResp - _t0), render: Math.round(_tDone - _tResp), server: (data?.timings as Record<string, number> | undefined)?.t_total });
+        }
       } catch (err) {
         if (cancelled) return;
         console.warn('[PLAYER_PLAN_FETCH_FAIL]', { message: String(err) });
@@ -374,9 +380,7 @@ export default function RoutinePlayerPage() {
     if (statusLoading.current) return;
     statusLoading.current = true;
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const { session } = await getSessionSafe();
       if (!session?.access_token) return null;
       const res = await fetch('/api/routine-engine/status', {
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -520,7 +524,7 @@ export default function RoutinePlayerPage() {
     if (!needsMedia || mediaFetchInFlightRef.current.has(seg.templateId)) return;
 
     mediaFetchInFlightRef.current.add(seg.templateId);
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    getSessionSafe().then(({ session }) => {
       if (!session?.access_token) {
         mediaFetchInFlightRef.current.delete(seg.templateId);
         return;
@@ -579,7 +583,7 @@ export default function RoutinePlayerPage() {
         startedAtUtcMs !== null ? new Date(startedAtUtcMs).toISOString() : '';
       console.log('[PLAYER_COMPLETE_START]', { dayNumber, startedAtUtc });
 
-      supabase.auth.getSession().then(({ data: { session } }) => {
+      getSessionSafe().then(({ session }) => {
         if (!session?.access_token) {
           console.warn('[PLAYER_COMPLETE_FAIL]', {
             status: 401,

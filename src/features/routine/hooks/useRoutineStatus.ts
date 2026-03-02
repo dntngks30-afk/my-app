@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 import type { RoutineState } from '@/lib/routine-engine';
 
 /**
@@ -50,7 +50,7 @@ export function useRoutineStatus(): UseRoutineStatusResult {
   const fetchTimeRef = useRef<number>(0);
 
   const fetchStatus = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { session } = await getSessionSafe();
     if (!session?.access_token) {
       setLoading(false);
       return;

@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 import { Checkbox } from '@/components/ui/checkbox';
 
 const PRODUCT_TO_TIER: Record<string, string> = {
@@ -29,7 +29,7 @@ export default function PaymentsClient({ product, next }: PaymentsClientProps) {
     setLoading(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { session } = await getSessionSafe();
       if (!session) {
         setError('로그인이 필요합니다.');
         setLoading(false);

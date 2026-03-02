@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { supabaseBrowser as supabase } from '@/lib/supabase';
+import { supabaseBrowser as supabase, getSessionSafe } from '@/lib/supabase';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -48,9 +48,7 @@ export default function RetestComparisonClient({
         }
 
         // 로그인 확인
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+        const { session } = await getSessionSafe();
 
         if (!session) {
           const next = pathname + (searchParams.toString() ? '?' + searchParams.toString() : '');

@@ -9,7 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { supabase, getSessionSafe } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,9 +36,7 @@ export default function CoachCommentsPage() {
     const loadComments = async () => {
       try {
         // 로그인 확인
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+        const { session } = await getSessionSafe();
 
         if (!session) {
           router.push('/app/auth?next=' + encodeURIComponent(pathname || '/my-routine/coach-comments'));

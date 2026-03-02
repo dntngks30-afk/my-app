@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { supabase, getSessionSafe } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -58,9 +58,7 @@ export default function MyRoutinePage() {
     const loadRoutine = async () => {
       try {
         // 로그인 확인
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+        const { session } = await getSessionSafe();
 
         if (!session) {
           router.push('/app/auth?next=' + encodeURIComponent('/my-routine'));
@@ -110,7 +108,7 @@ export default function MyRoutinePage() {
     if (!routine) return;
     setStartingRoutine(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { session } = await getSessionSafe();
       if (!session) {
         router.push('/app/auth?next=' + encodeURIComponent('/my-routine'));
         return;
@@ -148,9 +146,7 @@ export default function MyRoutinePage() {
     setCompletingDay(dayNumber);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const { session } = await getSessionSafe();
 
       if (!session) {
         router.push('/app/auth?next=' + encodeURIComponent('/my-routine'));

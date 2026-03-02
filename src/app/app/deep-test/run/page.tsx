@@ -10,7 +10,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import AppTopBar from '../../_components/AppTopBar';
 import BottomNav from '../../_components/BottomNav';
-import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 import { DEEP_V2_QUESTIONS, type DeepQuestion } from '../_data/questions';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
 
@@ -82,7 +82,7 @@ export default function DeepTestRunPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const getToken = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { session } = await getSessionSafe();
     return session?.access_token ?? null;
   }, []);
 

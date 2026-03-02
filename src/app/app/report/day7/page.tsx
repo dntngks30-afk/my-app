@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 import { Check } from 'lucide-react';
 import BottomNav from '../../_components/BottomNav';
 
@@ -44,7 +44,7 @@ export default function Day7ReportPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { session } = await getSessionSafe();
       if (!session?.access_token) {
         router.push('/app/auth?next=' + encodeURIComponent('/app/report/day7'));
         return;

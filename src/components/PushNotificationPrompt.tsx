@@ -17,7 +17,7 @@ import {
   sendSubscriptionToServer,
   isPushNotificationSupported,
 } from '@/lib/push-notifications/client';
-import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 
 export default function PushNotificationPrompt() {
   const [supported, setSupported] = useState(false);
@@ -37,9 +37,7 @@ export default function PushNotificationPrompt() {
 
     // 사용자 ID 가져오기
     const getUserId = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const { session } = await getSessionSafe();
       if (session) {
         setUserId(session.user.id);
       }

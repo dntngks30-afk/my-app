@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 
 interface PaymentSuccessClientProps {
   paymentKeyParam?: string | null;
@@ -36,7 +36,7 @@ export default function PaymentSuccessClient({
       }
 
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { session } = await getSessionSafe();
         if (!session) {
           setError('로그인이 필요합니다.');
           setLoading(false);

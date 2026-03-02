@@ -10,7 +10,7 @@ import {
   ArrowRight,
   AlertTriangle,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 import BottomNav from '../_components/BottomNav';
 
 const DAYS = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -62,7 +62,8 @@ export default function ResetHomePage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const _t0 = performance.now();
+      const { session } = await getSessionSafe();
       if (!session?.access_token || cancelled) return;
       try {
         const url = `/api/home/dashboard${debugFlag ? '?debug=1' : ''}`;
@@ -70,6 +71,7 @@ export default function ResetHomePage() {
           cache: 'no-store' as RequestCache,
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
+        const _tResp = performance.now();
         if (cancelled) return;
         const data = await res.json();
         if (!res.ok) {
@@ -101,6 +103,10 @@ export default function ResetHomePage() {
           setCountdown(null);
         }
         setError(null);
+        if (process.env.NODE_ENV === 'development') {
+          const _tDone = performance.now();
+          console.log('[PERF:home]', { ttfb: Math.round(_tResp - _t0), render: Math.round(_tDone - _tResp), server: data?.timings?.t_total });
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '대시보드 조회 실패');
@@ -149,7 +155,7 @@ export default function ResetHomePage() {
   const requestInFlightRef = useRef(false);
 
   const handleStartClick = async (day: number) => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { session } = await getSessionSafe();
     if (!session?.access_token) {
       console.warn('[HOME_NO_SESSION]');
       router.push(`/app/auth?next=${encodeURIComponent('/app/home')}`);

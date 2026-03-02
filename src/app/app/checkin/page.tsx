@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 import { NeoCard, NeoButton } from '@/components/neobrutalism';
 import BottomNav from '../_components/BottomNav';
 import { CheckInModal } from '../_components/CheckInModal';
@@ -49,7 +49,7 @@ export default function CheckinPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchReport = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { session } = await getSessionSafe();
     if (!session?.access_token) {
       setReportLoading(false);
       return;
@@ -81,7 +81,7 @@ export default function CheckinPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { session } = await getSessionSafe();
       if (!session?.access_token) {
         setReportLoading(false);
         return;
@@ -116,7 +116,7 @@ export default function CheckinPage() {
     if (!postWorkout) return;
     let cancelled = false;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { session } = await getSessionSafe();
       if (!session?.access_token || cancelled) return;
       console.log('[CHECKIN_TODAY_FETCH_START]', { source: 'postWorkout' });
       try {
@@ -160,7 +160,7 @@ export default function CheckinPage() {
     time_available_min?: number | null;
     equipment_available?: string[];
   }) => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { session } = await getSessionSafe();
     if (!session?.access_token) return;
     setIsSubmitting(true);
     setSaveError(null);

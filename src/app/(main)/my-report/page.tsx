@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { supabaseBrowser as supabase } from "@/lib/supabase";
+import { supabaseBrowser as supabase, getSessionSafe } from "@/lib/supabase";
 import type { Request as RequestType } from "@/lib/supabase-types";
 
 // Request 타입의 부분 집합 (쿼리에서 선택한 필드만)
@@ -37,7 +37,7 @@ export default function MyReportPage() {
     const loadData = async () => {
       try {
         // 로그인 확인
-        const { data: { session } } = await supabase.auth.getSession();
+        const { session } = await getSessionSafe();
 
         if (!session) {
           router.push("/app/auth?next=" + encodeURIComponent("/my-report"));

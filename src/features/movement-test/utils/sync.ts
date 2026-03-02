@@ -1,4 +1,4 @@
-import { supabaseBrowser as supabase } from "@/lib/supabase";
+import { supabaseBrowser as supabase, getSessionSafe } from "@/lib/supabase";
 
 export type DraftState = {
   version: 1;
@@ -9,8 +9,8 @@ export type DraftState = {
 
 export async function upsertDirtyAnswers(draft: DraftState) {
   // 로그인 세션 확인
-  const { data: sessionData } = await supabase.auth.getSession();
-  const userId = sessionData.session?.user.id;
+  const { session } = await getSessionSafe();
+  const userId = session?.user?.id;
   if (!userId) throw new Error("Not authenticated");
 
   const rows = draft.dirty

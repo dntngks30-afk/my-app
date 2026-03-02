@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+import { supabase, getSessionSafe } from '@/lib/supabase';
 
 /** SSOT: plan_status='active' (관리자 수동 부여 호환) */
 function hasActivePlan(planStatus: string | null): boolean {
@@ -28,7 +28,7 @@ export default function PaymentsGate({ children }: PaymentsGateProps) {
 
     async function check() {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const { session, error } = await getSessionSafe();
         if (cancelled) return;
 
         if (error || !session) {

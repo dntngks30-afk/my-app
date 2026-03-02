@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AppTopBar from '../_components/AppTopBar';
 import BottomNav from '../_components/BottomNav';
-import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 
 interface AttemptInfo {
   id: string;
@@ -28,7 +28,7 @@ export default function DeepTestStartPage() {
 
     async function load() {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { session } = await getSessionSafe();
         if (!session?.access_token) {
           if (!cancelled) setStatus('auth');
           return;

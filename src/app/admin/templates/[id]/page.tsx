@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Save, RotateCcw } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,7 +46,7 @@ export default function AdminTemplateDetailPage() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { session } = await getSessionSafe();
       if (!session) {
         router.push('/app/auth?next=' + encodeURIComponent(`/admin/templates/${id}`));
         return;
@@ -68,7 +68,7 @@ export default function AdminTemplateDetailPage() {
     const fetchDetail = async () => {
       setLoading(true);
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { session } = await getSessionSafe();
         if (!session?.access_token) return;
 
         const res = await fetch(`/api/admin/templates/${id}`, {
@@ -109,7 +109,7 @@ export default function AdminTemplateDetailPage() {
   }, [isAuthorized, isAdminUser, id]);
 
   const handleToggleStatus = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { session } = await getSessionSafe();
     if (!session?.access_token || !template) return;
 
     setSaving(true);
@@ -140,7 +140,7 @@ export default function AdminTemplateDetailPage() {
   };
 
   const handleSave = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { session } = await getSessionSafe();
     if (!session?.access_token) return;
 
     let mediaRef: unknown = null;
@@ -192,7 +192,7 @@ export default function AdminTemplateDetailPage() {
   };
 
   const handleValidate = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { session } = await getSessionSafe();
     if (!session?.access_token) return;
 
     let mediaRef: unknown = null;

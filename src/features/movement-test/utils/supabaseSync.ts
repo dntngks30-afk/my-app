@@ -1,6 +1,6 @@
 'use client';
 
-import { supabaseBrowser as supabase } from '@/lib/supabase';
+import { supabaseBrowser as supabase, getSessionSafe } from '@/lib/supabase';
 
 const SESSION_STORAGE_KEY = 'movementTestSession:v1';
 
@@ -106,10 +106,10 @@ async function upsertResponses(userId: string, rows: Array<{ question_id: string
  * - 실패하면 유지(다음 로그인/재시도 때 다시 올림)
  */
 export async function migrateLocalToServerOnLogin() {
-  const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+  const { session, error: sessionErr } = await getSessionSafe();
   if (sessionErr) throw sessionErr;
 
-  const user = sessionData.session?.user;
+  const user = session?.user;
   if (!user) return { skipped: true, migrated: 0, pulledFromServer: 0 };
 
   const userId = user.id;
@@ -211,8 +211,8 @@ export async function migrateLocalToServerOnLogin() {
  * - 결과 페이지에서 "저장됨" 버튼 같은 거에 연결 가능
  */
 export async function flushDirtyToServer() {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const user = sessionData.session?.user;
+  const { session } = await getSessionSafe();
+  const user = session?.user;
   if (!user) return { skipped: true, saved: 0 };
 
   const userId = user.id;

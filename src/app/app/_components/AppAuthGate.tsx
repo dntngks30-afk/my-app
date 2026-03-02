@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+import { supabase, getSessionSafe } from '@/lib/supabase';
 import { isAllowed, isAllowlistEmpty } from '@/lib/appAccess';
 
 interface AppAuthGateProps {
@@ -28,7 +28,7 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
 
     async function check() {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const { session, error } = await getSessionSafe();
         if (cancelled) return;
 
         if (error || !session) {

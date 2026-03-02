@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { supabase, getSessionSafe } from "@/lib/supabase";
 
 // 빌드 시 프리렌더링 방지 (Supabase 환경 변수 필요)
 export const dynamic = 'force-dynamic';
@@ -80,7 +80,7 @@ export default function AdminPage() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        const { session, error: sessionError } = await getSessionSafe();
         
         if (sessionError || !session) {
           router.push("/app/auth?next=" + encodeURIComponent("/admin"));
@@ -140,7 +140,7 @@ export default function AdminPage() {
     if (!isAuthorized || activeTab !== "plan-override") return;
 
     const checkPlanAdmin = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { session } = await getSessionSafe();
       if (!session?.access_token) {
         setIsPlanAdmin(false);
         return;
@@ -165,7 +165,7 @@ export default function AdminPage() {
     if (!isAuthorized || activeTab !== "backfill") return;
 
     const check = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { session } = await getSessionSafe();
       if (!session?.access_token) {
         setIsBackfillAdmin(false);
         return;
@@ -187,7 +187,7 @@ export default function AdminPage() {
 
   // 백필 실행
   const handleBackfillRun = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { session } = await getSessionSafe();
     if (!session?.access_token) {
       setBackfillResult({ error: "로그인이 필요합니다." });
       return;
@@ -229,7 +229,7 @@ export default function AdminPage() {
       return;
     }
 
-    const { data: { session } } = await supabase.auth.getSession();
+    const { session } = await getSessionSafe();
     if (!session?.access_token) {
       setPlanOverrideMsg({ type: "error", text: "로그인이 필요합니다." });
       return;

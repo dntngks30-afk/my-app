@@ -52,9 +52,38 @@ if (typeof window !== "undefined") {
 export const supabase = supabaseBrowser;
 
 // ------------------------------
-// 2) 서버/API/Admin용 (service role)
+// getSessionSafe: AbortError 시 재시도 + data?.session 방어
 // ------------------------------
+const GET_SESSION_SAFE_MAX_RETRIES = 3;
+
+export async function getSessionSafe(retries = 0): Promise<{
+  session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'];
+  error: Awaited<ReturnType<typeof supabase.auth.getSession>>['error'];
+}> {
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    return { session: data?.session ?? null, error };
+  } catch (e) {
+    if (
+      e instanceof Error &&
+      e.name === 'AbortError' &&
+      retries < GET_SESSION_SAFE_MAX_RETRIES
+    ) {
+      await new Promise((r) => setTimeout(r, 100));
+      return getSessionSafe(retries + 1);
+    }
+    throw e;
+  }
+}
+
+// ------------------------------
+// 2) 서버/API/Admin용 (service role) — lazy singleton
+// ------------------------------
+let _adminClient: SupabaseClient | null = null;
+
 export function getServerSupabaseAdmin(): SupabaseClient {
+  if (_adminClient) return _adminClient;
+
   const url = publicUrl || process.env.SUPABASE_URL || "";
   if (!url || !serviceRole) {
     console.error("❌ Missing Supabase Server env", {
@@ -66,9 +95,10 @@ export function getServerSupabaseAdmin(): SupabaseClient {
     throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY (server/admin)");
   }
 
-  return createClient(url, serviceRole, {
+  _adminClient = createClient(url, serviceRole, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+  return _adminClient;
 }
 
 // ------------------------------

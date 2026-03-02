@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Search } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,7 +35,7 @@ export default function AdminTemplatesPage() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { session } = await getSessionSafe();
       if (!session) {
         router.push('/app/auth?next=' + encodeURIComponent('/admin/templates'));
         return;
@@ -61,7 +61,7 @@ export default function AdminTemplatesPage() {
     const fetchList = async () => {
       setLoading(true);
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { session } = await getSessionSafe();
         if (!session?.access_token) return;
 
         const params = new URLSearchParams();

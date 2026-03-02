@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { PlayCircle, Play } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 import { NeoCard, NeoButton } from '@/components/neobrutalism';
 import BottomNav from '../_components/BottomNav';
 
@@ -79,7 +79,8 @@ export default function RoutineHubPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const _t0 = performance.now();
+      const { session } = await getSessionSafe();
       if (!session?.access_token) {
         setLoading(false);
         return;
@@ -90,6 +91,7 @@ export default function RoutineHubPage() {
           cache: 'no-store' as RequestCache,
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
+        const _tResp = performance.now();
         if (cancelled) return;
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -100,6 +102,10 @@ export default function RoutineHubPage() {
         const data = await res.json();
         setRoutines(data?.routines ?? []);
         setError(null);
+        if (process.env.NODE_ENV === 'development') {
+          const _tDone = performance.now();
+          console.log('[PERF:routine]', { ttfb: Math.round(_tResp - _t0), render: Math.round(_tDone - _tResp), server: data?.timings?.t_total });
+        }
       } catch (e) {
         if (!cancelled) {
           setError('조회 실패');

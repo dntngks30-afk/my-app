@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 import PayModal from './PayModal';
 import { NeoButton, NeoCard, NeoPageLayout } from '@/components/neobrutalism';
 
@@ -78,7 +78,7 @@ export default function DeepAnalysisClient() {
 
   useEffect(() => {
     const check = async () => {
-      await supabase.auth.getSession();
+      await getSessionSafe();
       setLoading(false);
     };
     check();
