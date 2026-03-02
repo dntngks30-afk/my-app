@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
     .select('*')
     .eq('user_id', userId)
     .eq('scoring_version', SCORING_VERSION)
+    .eq('status', 'final')
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();

@@ -43,6 +43,10 @@ interface DeepResult {
       finalScores?: Record<string, number>;
       primaryFocus?: string;
       secondaryFocus?: string;
+      derived?: {
+        focus_tags?: string[];
+        avoid_tags?: string[];
+      };
     };
     resultType?: string | null;
     confidence?: number | null;
@@ -54,7 +58,7 @@ export default function DeepTestResultPage() {
   const { canPromptInstall, isStandalone } = usePwaInstall();
   const [installModalOpen, setInstallModalOpen] = useState(false);
   const [status, setStatus] = useState<
-    'loading' | 'ready' | 'error' | 'auth' | 'paywall'
+    'loading' | 'ready' | 'empty' | 'error' | 'auth' | 'paywall'
   >('loading');
   const [result, setResult] = useState<DeepResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
@@ -99,8 +103,7 @@ export default function DeepTestResultPage() {
           return;
         }
         if (res.status === 404) {
-          setErrorMessage('아직 심화 테스트 결과가 없습니다.');
-          setStatus('error');
+          setStatus('empty');
           return;
         }
         if (!res.ok) {
@@ -179,29 +182,54 @@ export default function DeepTestResultPage() {
     );
   }
 
+  if (status === 'empty') {
+    return (
+      <div className="min-h-screen bg-[#f8f6f0] flex flex-col">
+        <AppTopBar />
+        <main className="flex-1 flex flex-col items-center justify-center gap-6 px-4">
+          <div className={`${nbCard} max-w-md w-full p-6 text-center space-y-4`}>
+            <p className="text-base text-stone-600">
+              아직 결과가 없어요. 심화 테스트를 완료하면 결과가 표시됩니다.
+            </p>
+            <div className="flex flex-col gap-3">
+              <Link href="/app/deep-test" className={nbBtnPrimaryBlock}>
+                심화 테스트 하러가기
+              </Link>
+              <Link href="/app/home" className={nbBtnSecondaryBlock}>
+                홈으로
+              </Link>
+            </div>
+          </div>
+        </main>
+        <BottomNav />
+      </div>
+    );
+  }
+
   if (status === 'error') {
     return (
       <div className="min-h-screen bg-[#f8f6f0] flex flex-col">
         <AppTopBar />
-        <main className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-          <p className="text-sm text-stone-600">{errorMessage}</p>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => router.push('/app/deep-test')}
-              className={nbBtnSecondary}
-            >
-              심화 테스트 하기
-            </button>
-            <button
-              type="button"
-              onClick={handleRetry}
-              className={nbBtnPrimary}
-            >
-              다시 시도
-            </button>
+        <main className="flex-1 flex flex-col items-center justify-center gap-6 px-4">
+          <div className={`${nbCard} max-w-md w-full p-6 text-center space-y-4`}>
+            <p className="text-base text-stone-600">
+              결과를 불러오지 못했어요.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={handleRetry}
+                className={nbBtnPrimaryBlock}
+              >
+                다시 시도
+              </button>
+              <Link href="/app/home" className={nbBtnSecondaryBlock}>
+                홈으로
+              </Link>
+            </div>
           </div>
         </main>
+        <BottomNav />
       </div>
     );
   }
@@ -211,6 +239,11 @@ export default function DeepTestResultPage() {
   const scores = att?.scores;
   const primaryFocus = scores?.primaryFocus;
   const secondaryFocus = scores?.secondaryFocus;
+  const objectiveScores = scores?.objectiveScores;
+  const finalScores = scores?.finalScores;
+  const derived = scores?.derived;
+  const focusTags = derived?.focus_tags ?? [];
+  const avoidTags = derived?.avoid_tags ?? [];
   const confidence = att?.confidence != null
     ? Math.round((att.confidence as number) * 100)
     : null;
@@ -274,6 +307,44 @@ export default function DeepTestResultPage() {
                   응답 완성도
                 </p>
                 <p className="text-base font-semibold text-slate-800">{confidence}%</p>
+              </div>
+            )}
+
+            {(objectiveScores || finalScores) && (
+              <div className="space-y-2 pt-2 border-t border-stone-200">
+                <p className="text-xs font-medium text-stone-500">스코어 (N,L,U,Lo,D)</p>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {objectiveScores && (
+                    <div>
+                      <p className="text-stone-500 text-xs">objectiveScores</p>
+                      <pre className="text-slate-800 font-mono text-xs bg-stone-50 p-2 rounded overflow-x-auto">
+                        {JSON.stringify(objectiveScores)}
+                      </pre>
+                    </div>
+                  )}
+                  {finalScores && (
+                    <div>
+                      <p className="text-stone-500 text-xs">finalScores</p>
+                      <pre className="text-slate-800 font-mono text-xs bg-stone-50 p-2 rounded overflow-x-auto">
+                        {JSON.stringify(finalScores)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {(focusTags.length > 0 || avoidTags.length > 0) && (
+              <div className="space-y-2 pt-2 border-t border-stone-200">
+                <p className="text-xs font-medium text-stone-500">focus_tags / avoid_tags</p>
+                <div className="space-y-1 text-sm">
+                  <p className="text-slate-800"><span className="text-stone-500">focus_tags:</span>{' '}
+                    <code className="font-mono text-xs bg-stone-50 px-1 rounded">{JSON.stringify(focusTags)}</code>
+                  </p>
+                  <p className="text-slate-800"><span className="text-stone-500">avoid_tags:</span>{' '}
+                    <code className="font-mono text-xs bg-stone-50 px-1 rounded">{JSON.stringify(avoidTags)}</code>
+                  </p>
+                </div>
               </div>
             )}
           </div>
