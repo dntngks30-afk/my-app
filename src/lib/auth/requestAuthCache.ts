@@ -6,6 +6,25 @@
 import type { NextRequest } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+/**
+ * JWT payload의 sub(userId) 클레임을 로컬 base64 디코드로 추출.
+ * 서버 검증 없이 userId만 선취득하기 위한 용도. 실제 인증은 getUser()가 담당.
+ * 디코드 실패 시 null 반환 (신뢰 없는 토큰 차단은 getUser()에서 수행).
+ */
+export function decodeJwtSub(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+    const decoded = JSON.parse(Buffer.from(padded, 'base64').toString('utf-8')) as Record<string, unknown>;
+    const sub = decoded.sub;
+    return typeof sub === 'string' && sub.length > 0 ? sub : null;
+  } catch {
+    return null;
+  }
+}
+
 type CacheEntry = {
   bearerToken: string | null;
   userIdPromise: Promise<string | null> | null;

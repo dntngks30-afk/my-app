@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     const supabase = getServerSupabaseAdmin();
 
     const tRoutinesStart = performance.now();
-    const [statusResult, routinesRes] = await Promise.all([
+    const [statusResult, routinesRes, completionResult] = await Promise.all([
       checkAndUpdateRoutineStatus(userId),
       supabase
         .from('workout_routines')
@@ -39,6 +39,21 @@ export async function GET(req: NextRequest) {
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(1),
+      (async () => {
+        const { data: ur } = await supabase
+          .from('user_routines')
+          .select('current_day')
+          .eq('user_id', userId)
+          .maybeSingle();
+        const day = ur?.current_day ?? 1;
+        return supabase
+          .from('routine_completions')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('day_number', day)
+          .limit(1)
+          .maybeSingle();
+      })(),
     ]);
     const tRoutines = performance.now();
 
@@ -53,18 +68,9 @@ export async function GET(req: NextRequest) {
       lock_until_utc = new Date(baseMs + MS_24H).toISOString();
       rest_recommended = elapsed < MS_24H;
     }
+    const tProgress = tRoutines;
 
-    const tProgressStart = performance.now();
-    const { data: completionRow } = await supabase
-      .from('routine_completions')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('day_number', state.currentDay)
-      .limit(1)
-      .maybeSingle();
-    const tProgress = performance.now();
-
-    const todayCompletedForDay = !!completionRow;
+    const todayCompletedForDay = !!completionResult?.data;
 
     const routines = routinesRes.data ?? [];
     const latestRoutineId = routines[0]?.id ?? null;
@@ -92,8 +98,7 @@ export async function GET(req: NextRequest) {
     if (isDebug) {
       payload.timings = {
         t_auth: Math.round(tAuth - t0),
-        t_routines: Math.round(tRoutines - tRoutinesStart),
-        t_progress: Math.round(tProgress - tProgressStart),
+        t_routines_parallel: Math.round(tRoutines - tRoutinesStart),
         t_total: Math.round(tEnd - t0),
       };
       if (auth.timings) {
@@ -111,8 +116,7 @@ export async function GET(req: NextRequest) {
       const t = payload.timings as Record<string, number>;
       const parts = [
         `auth;dur=${t.t_auth ?? 0}`,
-        `routines;dur=${t.t_routines ?? 0}`,
-        `progress;dur=${t.t_progress ?? 0}`,
+        `routines_parallel;dur=${t.t_routines_parallel ?? 0}`,
         `total;dur=${t.t_total ?? 0}`,
       ];
       res.headers.set('Server-Timing', parts.join(', '));

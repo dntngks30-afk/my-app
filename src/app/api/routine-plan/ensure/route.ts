@@ -11,7 +11,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireActivePlan } from '@/lib/auth/requireActivePlan';
 import type { GenerateDayPlanResult } from '@/lib/routine-plan/day-plan-generator';
 import type { DailyCondition } from '@/lib/routine-plan/day-plan-generator';
-import { buildMediaPayload } from '@/lib/media/media-payload';
 import { getTemplatesForMediaByIds } from '@/lib/workout-routine/exercise-templates-db';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 
@@ -77,23 +76,24 @@ export async function POST(req: NextRequest) {
     const day = Math.max(1, Math.min(7, Math.floor(Number(dayNumber))));
 
     const supabase = getServerSupabaseAdmin();
-    const { data: routine } = await supabase
-      .from('workout_routines')
-      .select('user_id')
-      .eq('id', routineId)
-      .single();
+
+    const [{ data: routine }, { data: existingPlan }] = await Promise.all([
+      supabase
+        .from('workout_routines')
+        .select('user_id')
+        .eq('id', routineId)
+        .single(),
+      supabase
+        .from('routine_day_plans')
+        .select('routine_id, day_number, selected_template_ids, reasons, constraints_applied, generator_version, scoring_version, rule_version, daily_condition_snapshot')
+        .eq('routine_id', routineId)
+        .eq('day_number', day)
+        .maybeSingle(),
+    ]);
 
     if (!routine || routine.user_id !== userId) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
-
-    /** Fast-path: 기존 plan이 있으면 daily_conditions + generateDayPlan 스킵 */
-    const { data: existingPlan } = await supabase
-      .from('routine_day_plans')
-      .select('routine_id, day_number, selected_template_ids, reasons, constraints_applied, generator_version, scoring_version, rule_version, daily_condition_snapshot')
-      .eq('routine_id', routineId)
-      .eq('day_number', day)
-      .maybeSingle();
 
     const tSelectDaily = performance.now();
 
@@ -201,15 +201,22 @@ export async function POST(req: NextRequest) {
       const signTemplates = templates.filter((t) => signIds.includes(t.id));
       let mediaById = new Map<string, { kind: string; autoplayAllowed: boolean; notes?: string[] }>();
       if (signTemplates.length > 0) {
-        const settled = await Promise.allSettled(
-          signTemplates.map((t) =>
-            buildMediaPayload(t.media_ref, t.duration_sec ?? 300)
-          )
-        );
+        let settled: PromiseSettledResult<{ kind: string; autoplayAllowed: boolean; notes?: string[] }>[];
+        try {
+          const { buildMediaPayload } = await import('@/lib/media/media-payload');
+          settled = await Promise.allSettled(
+            signTemplates.map((t) =>
+              buildMediaPayload(t.media_ref, t.duration_sec ?? 300)
+            )
+          );
+        } catch (importErr) {
+          if (isDebug) console.warn('[routine-plan/ensure] media-payload import failed', importErr);
+          settled = signTemplates.map(() => ({ status: 'rejected' as const, reason: 'import_failed' }));
+        }
         tMedia = performance.now();
         signTemplates.forEach((t, i) => {
           const payload = settled[i]?.status === 'fulfilled'
-            ? (settled[i] as PromiseFulfilledResult<typeof placeholderMedia>).value
+            ? (settled[i] as PromiseFulfilledResult<{ kind: string; autoplayAllowed: boolean; notes?: string[] }>).value
             : placeholderMedia;
           mediaById.set(t.id, payload);
         });

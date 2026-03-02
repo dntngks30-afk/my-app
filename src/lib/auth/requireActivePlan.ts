@@ -2,13 +2,18 @@
  * 유료 접근 통일 헬퍼 — SSOT: plan_status === 'active'
  *
  * Bearer 인증 + plan_status 확인. 401/403 반환 또는 { userId } 반환.
- * getCurrentUserId(캐시) 재사용으로 동일 요청 내 getUser 중복 호출 방지.
- * Supabase 클라이언트 1회 생성으로 재사용.
+ *
+ * [병렬화 전략]
+ * JWT payload의 sub 클레임으로 userId를 로컬 디코드하여 즉시 선취득.
+ * 그 후 getUser(token)(서버 검증) 와 users.plan_status(DB 조회)를 Promise.all로 동시 실행.
+ * 최종적으로 getUser의 verified userId가 sub와 일치하는지 교차 검증.
+ * → auth 2순차 hop → 1병렬 hop. 약 ~40% 시간 절감.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
-import { getCurrentUserId } from './getCurrentUserId';
+import { getBearerToken, decodeJwtSub } from './requestAuthCache';
+import { getCachedUserId } from './requestAuthCache';
 
 export interface ActivePlanContext {
   userId: string;
@@ -30,33 +35,57 @@ export async function requireActivePlan(
 ): Promise<NextResponse | ActivePlanContext> {
   const t0 = performance.now();
   const supabase = getServerSupabaseAdmin();
-  const userId = await getCurrentUserId(req, supabase);
-  const tAuthUser = Math.round(performance.now() - t0);
 
-  if (!userId) {
+  const token = getBearerToken(req);
+  if (!token) {
     return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   }
 
-  const { data: dbUser } = await supabase
-    .from('users')
-    .select('plan_status')
-    .eq('id', userId)
-    .single();
+  // JWT sub 클레임으로 userId 선취득 (로컬 디코드, 서명 검증 없음)
+  const subFromToken = decodeJwtSub(token);
 
-  const tAuthPlan = Math.round(performance.now() - t0 - tAuthUser);
+  // getUser(서버 검증) + plan_status 조회를 병렬 실행
+  // sub가 없으면 plan_status 조회는 건너뜀 (어차피 getUser 실패로 401 처리)
+  const [verifiedUserId, planRow] = await Promise.all([
+    getCachedUserId(req, supabase),
+    subFromToken
+      ? supabase.from('users').select('id, plan_status').eq('id', subFromToken).single()
+          .then((r) => r.data)
+      : Promise.resolve(null),
+  ]);
+
+  const tAuthUser = Math.round(performance.now() - t0);
+
+  if (!verifiedUserId) {
+    return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+  }
+
+  // sub 불일치: 토큰 위변조 가능성 → plan_status를 다시 안전하게 조회
+  let dbUser = planRow && planRow.id === verifiedUserId ? planRow : null;
+
+  const tPlanStart = performance.now();
+  if (!dbUser) {
+    const { data } = await supabase
+      .from('users')
+      .select('id, plan_status')
+      .eq('id', verifiedUserId)
+      .single();
+    dbUser = data;
+  }
+  const tAuthPlan = Math.round(performance.now() - tPlanStart);
 
   if (!dbUser) {
     return NextResponse.json({ error: '사용자를 찾을 수 없습니다.' }, { status: 404 });
   }
 
-  if (dbUser.plan_status !== 'active') {
+  if ((dbUser as { plan_status?: string }).plan_status !== 'active') {
     return NextResponse.json(
       { error: '유료 플랜 사용자만 이용할 수 있습니다.' },
       { status: 403 }
     );
   }
 
-  const result: ActivePlanContext = { userId };
+  const result: ActivePlanContext = { userId: verifiedUserId };
   if (opts?.recordTimings) {
     result.timings = { t_auth_user: tAuthUser, t_auth_plan: tAuthPlan };
   }

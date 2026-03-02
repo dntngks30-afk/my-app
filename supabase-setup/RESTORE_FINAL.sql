@@ -194,3 +194,8 @@ SELECT
   (SELECT COUNT(*) FROM public.payments) as payments,
   (SELECT COUNT(*) FROM public.assessments) as assessments,
   (SELECT COUNT(*) FROM public.solutions) as solutions;
+
+-- ====================================
+-- [권장] plan_status 우회 차단: protect-users-payment-columns.sql 실행
+-- create-subscription-tables.sql 적용 후 위 파일을 별도 실행하세요.
+-- ====================================

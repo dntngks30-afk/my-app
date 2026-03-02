@@ -56,7 +56,7 @@ export async function checkAndUpdateRoutineStatus(
   // 1. 기존 레코드 조회 또는 생성
   let { data: row, error } = await supabase
     .from('user_routines')
-    .select('*')
+    .select('id, user_id, current_day, status, last_activated_at, created_at, updated_at')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -104,7 +104,7 @@ export async function checkAndUpdateRoutineStatus(
     if (!updateErr) {
       const { data: updated } = await supabase
         .from('user_routines')
-        .select()
+        .select('id, user_id, current_day, status, last_activated_at, created_at, updated_at')
         .eq('id', row.id)
         .single();
       return {
