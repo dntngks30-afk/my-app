@@ -51,8 +51,9 @@ export async function POST(req: NextRequest) {
   const debugFlag = body?.debug;
   const isDebug = debugFlag === true || debugFlag === 1 || debugFlag === '1';
   try {
-    const { routineId, dayNumber, includeMedia: includeMediaRaw, mediaMode: mediaModeRaw } = body;
+    const { routineId, dayNumber, includeMedia: includeMediaRaw, mediaMode: mediaModeRaw, includeStatus: includeStatusRaw } = body;
     const includeMedia = includeMediaRaw === true || includeMediaRaw === 1 || includeMediaRaw === '1';
+    const includeStatus = includeStatusRaw === true || includeStatusRaw === 1 || includeStatusRaw === '1';
     const rawMode = mediaModeRaw === 'none' || mediaModeRaw === 'first' || mediaModeRaw === 'all'
       ? mediaModeRaw
       : includeMedia
@@ -239,6 +240,15 @@ export async function POST(req: NextRequest) {
         };
       });
     }
+    if (includeStatus) {
+      try {
+        const { computeRoutineStatusPayload } = await import('@/lib/routine-engine');
+        payload.status = await computeRoutineStatusPayload(userId);
+      } catch (statusErr) {
+        if (isDebug) console.warn('[routine-plan/ensure] status embed failed', statusErr);
+      }
+    }
+
     const tEnd = performance.now();
     if (isDebug) {
       const timings: Record<string, number> = {

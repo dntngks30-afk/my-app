@@ -31,6 +31,7 @@ type EnsurePayload = {
   timings?: Record<string, number>;
   error?: string;
   segments_with_media?: unknown;
+  status?: Record<string, unknown>;
 };
 
 /** 세그먼트 shape (템플릿/DB 연결) */
@@ -314,6 +315,7 @@ export default function RoutinePlayerPage() {
             dayNumber,
             debug: debugFlag,
             mediaMode: 'none',
+            includeStatus: 1,
           }),
         });
         const _tResp = performance.now();
@@ -366,6 +368,15 @@ export default function RoutinePlayerPage() {
             }
           }
           setSegments(segs);
+        }
+        const embeddedStatus = data?.status as Record<string, unknown> | undefined;
+        if (embeddedStatus?.server_now_utc) {
+          if (!initSyncDone.current) initSyncDone.current = true;
+          const ms = new Date(embeddedStatus.server_now_utc as string).getTime();
+          setServerNowUtcAtSyncMs(ms);
+          setPerfNowAtSyncMs(performance.now());
+          const cd = (embeddedStatus.state as Record<string, unknown> | undefined)?.currentDay;
+          if (typeof cd === 'number' && cd >= 1 && cd <= 7) setCurrentDay(cd);
         }
         if (process.env.NODE_ENV === 'development') {
           const _tDone = performance.now();
