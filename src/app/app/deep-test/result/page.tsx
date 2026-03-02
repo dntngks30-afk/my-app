@@ -13,24 +13,10 @@ import BottomNav from '../../_components/BottomNav';
 import PwaInstallModal from '@/components/pwa/PwaInstallModal';
 import { usePwaInstall } from '@/lib/pwa/usePwaInstall';
 import { getSessionSafe } from '@/lib/supabase';
-
-const RESULT_TYPE_LABELS: Record<string, string> = {
-  'NECK-SHOULDER': '목·어깨 경향',
-  'LUMBO-PELVIS': '허리·골반 경향',
-  'UPPER-LIMB': '상지 경향',
-  'LOWER-LIMB': '하지 경향',
-  DECONDITIONED: '전신 회복 우선',
-  STABLE: '안정형',
-};
-
-const FOCUS_LABELS: Record<string, string> = {
-  'NECK-SHOULDER': '목·어깨',
-  'LUMBO-PELVIS': '허리·골반',
-  'UPPER-LIMB': '손목·팔꿈치',
-  'LOWER-LIMB': '무릎·발목',
-  FULL: '전신 균형',
-  NONE: '없음',
-};
+import { getCopy } from '@/lib/deep-result/copy';
+import PatternBanner from './_components/PatternBanner';
+import ResultNarrative from './_components/ResultNarrative';
+import TagChips from './_components/TagChips';
 
 interface DeepResult {
   source: string;
@@ -235,119 +221,27 @@ export default function DeepTestResultPage() {
   }
 
   const att = result?.attempt;
-  const resultType = att?.resultType ?? '-';
-  const scores = att?.scores;
-  const primaryFocus = scores?.primaryFocus;
-  const secondaryFocus = scores?.secondaryFocus;
-  const objectiveScores = scores?.objectiveScores;
-  const finalScores = scores?.finalScores;
-  const derived = scores?.derived;
+  const resultType = att?.resultType ?? null;
+  const derived = att?.scores?.derived;
   const focusTags = derived?.focus_tags ?? [];
   const avoidTags = derived?.avoid_tags ?? [];
-  const confidence = att?.confidence != null
-    ? Math.round((att.confidence as number) * 100)
-    : null;
 
-  const isStable = resultType === 'STABLE';
+  const copy = getCopy(resultType);
 
   return (
     <div className="min-h-screen bg-[#f8f6f0] pb-20">
       <AppTopBar />
       <main className="container mx-auto px-4 py-8">
-        <div className="max-w-md mx-auto">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-400/90 text-slate-900 text-xs font-bold mb-4">
-            심화 결과 (Deep)
+        <div className="max-w-md mx-auto space-y-6">
+          <div>
+            <h1 className="text-xl font-bold text-slate-800 mb-2">
+              나의 움직임 경향
+            </h1>
           </div>
 
-          <h1 className="text-xl font-bold text-slate-800 mb-2">
-            나의 움직임 경향
-          </h1>
-
-          <div className={`${nbCard} space-y-4`}>
-            <div>
-              <p className="text-xs font-medium text-stone-500">
-                움직임 패턴 경향
-              </p>
-              <p className="text-lg font-bold text-slate-800">
-                {RESULT_TYPE_LABELS[resultType] ?? resultType}
-              </p>
-            </div>
-
-            {isStable && (
-              <p className="text-sm text-stone-600">
-                안정형입니다. 전신 균형 루틴을 권장해요.
-              </p>
-            )}
-
-            {primaryFocus && primaryFocus !== 'NONE' && (
-              <div>
-                <p className="text-xs font-medium text-stone-500">
-                  우선순위 1
-                </p>
-                <p className="text-base font-semibold text-slate-800">
-                  {FOCUS_LABELS[primaryFocus] ?? primaryFocus}
-                </p>
-              </div>
-            )}
-
-            {secondaryFocus && secondaryFocus !== 'NONE' && (
-              <div>
-                <p className="text-xs font-medium text-stone-500">
-                  우선순위 2
-                </p>
-                <p className="text-base font-semibold text-slate-800">
-                  {FOCUS_LABELS[secondaryFocus] ?? secondaryFocus}
-                </p>
-              </div>
-            )}
-
-            {confidence != null && (
-              <div>
-                <p className="text-xs font-medium text-stone-500">
-                  응답 완성도
-                </p>
-                <p className="text-base font-semibold text-slate-800">{confidence}%</p>
-              </div>
-            )}
-
-            {(objectiveScores || finalScores) && (
-              <div className="space-y-2 pt-2 border-t border-stone-200">
-                <p className="text-xs font-medium text-stone-500">스코어 (N,L,U,Lo,D)</p>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  {objectiveScores && (
-                    <div>
-                      <p className="text-stone-500 text-xs">objectiveScores</p>
-                      <pre className="text-slate-800 font-mono text-xs bg-stone-50 p-2 rounded overflow-x-auto">
-                        {JSON.stringify(objectiveScores)}
-                      </pre>
-                    </div>
-                  )}
-                  {finalScores && (
-                    <div>
-                      <p className="text-stone-500 text-xs">finalScores</p>
-                      <pre className="text-slate-800 font-mono text-xs bg-stone-50 p-2 rounded overflow-x-auto">
-                        {JSON.stringify(finalScores)}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {(focusTags.length > 0 || avoidTags.length > 0) && (
-              <div className="space-y-2 pt-2 border-t border-stone-200">
-                <p className="text-xs font-medium text-stone-500">focus_tags / avoid_tags</p>
-                <div className="space-y-1 text-sm">
-                  <p className="text-slate-800"><span className="text-stone-500">focus_tags:</span>{' '}
-                    <code className="font-mono text-xs bg-stone-50 px-1 rounded">{JSON.stringify(focusTags)}</code>
-                  </p>
-                  <p className="text-slate-800"><span className="text-stone-500">avoid_tags:</span>{' '}
-                    <code className="font-mono text-xs bg-stone-50 px-1 rounded">{JSON.stringify(avoidTags)}</code>
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
+          <PatternBanner copy={copy} />
+          <ResultNarrative copy={copy} />
+          <TagChips focusTags={focusTags} avoidTags={avoidTags} />
 
           {/* PWA Install Hub */}
           <section className={`mt-8 ${nbCard} space-y-3`}>
