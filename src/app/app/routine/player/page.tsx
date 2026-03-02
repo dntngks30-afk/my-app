@@ -678,9 +678,11 @@ export default function RoutinePlayerPage() {
     (targetDay: number) => {
       if (status === 'running' || status === 'paused') return;
       if (targetDay === dayNumber) return;
-      router.replace(`/app/routine/player?routineId=${encodeURIComponent(routineId)}&day=${targetDay}`);
+      const base = `/app/routine/player?routineId=${encodeURIComponent(routineId)}&day=${targetDay}`;
+      const url = searchParams.get('debug') === '1' ? `${base}&debug=1` : base;
+      router.replace(url);
     },
-    [router, routineId, dayNumber, status]
+    [router, routineId, dayNumber, status, searchParams]
   );
 
   if (!routineId) {
