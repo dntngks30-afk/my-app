@@ -251,15 +251,41 @@ export default function DeepTestResultPage() {
           </div>
 
           <PatternBanner copy={copy} />
-          <div className="space-y-4">
+
+          {/* 시각화 섹션: 모바일 세로 / 데스크탑 2열 */}
+          <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <RadarChart scores={radarScores} maxScore={10} size={240} />
             <ScoreCards scores={radarScores} maxScore={10} />
-          </div>
+          </section>
+
           <ResultNarrative copy={copy} />
           <TagChips focusTags={focusTags} avoidTags={avoidTags} />
 
+          {/* 다음 단계 카드 */}
+          <section className={`${nbCard} space-y-3`}>
+            <h2 className="text-sm font-bold text-slate-800">다음 단계</h2>
+            <ol className="list-decimal list-inside space-y-1 text-sm text-slate-700">
+              <li>루틴 탭에서 &apos;Start&apos;로 7일 여정을 시작</li>
+              <li>오늘 루틴 5~8분만 완료</li>
+              <li>체크인에서 컨디션 기록(선택)</li>
+            </ol>
+          </section>
+
+          {/* CTA 섹션 */}
+          <div className="flex flex-col gap-3">
+            <Link href="/app/routine" className={nbBtnPrimaryBlock}>
+              7일 맞춤 루틴 시작하기
+            </Link>
+            <Link href="/app/home" className={nbBtnSecondaryBlock}>
+              홈으로
+            </Link>
+            <Link href="/app/deep-test" className="block w-full rounded-full border-2 border-slate-300 bg-white py-3 text-center text-sm font-medium text-slate-600 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95">
+              심화 테스트 다시하기
+            </Link>
+          </div>
+
           {/* PWA Install Hub */}
-          <section className={`mt-8 ${nbCard} space-y-3`}>
+          <section className={`${nbCard} space-y-3`}>
             <h2 className="text-sm font-bold text-slate-800">
               앱으로 설치하기
             </h2>
@@ -290,26 +316,6 @@ export default function DeepTestResultPage() {
               </button>
             </div>
           </section>
-
-          <div className="mt-8 flex flex-col gap-3">
-            <Link href="/app/deep-test" className={nbBtnPrimaryBlock}>
-              다시 테스트
-            </Link>
-            {isStandalone ? (
-              <Link href="/app/home" className={nbBtnSecondaryBlock}>
-                이제 앱에서 루틴을 시작해요
-              </Link>
-            ) : (
-              <>
-                <Link href="/app/home" className={nbBtnSecondaryBlock}>
-                  홈으로
-                </Link>
-                <p className="text-xs text-stone-500 text-center">
-                  설치하면 알림·출석이 편해져요
-                </p>
-              </>
-            )}
-          </div>
         </div>
       </main>
       <BottomNav />

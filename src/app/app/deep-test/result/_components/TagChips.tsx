@@ -28,7 +28,7 @@ export default function TagChips({ focusTags, avoidTags }: TagChipsProps) {
       {hasFocus && (
         <div>
           <p className="text-xs font-medium text-stone-500 mb-2">
-            집중 영역
+            집중 포인트
           </p>
           <div className="flex flex-wrap gap-2">
             {focusTags.map((tag) => (
@@ -46,7 +46,7 @@ export default function TagChips({ focusTags, avoidTags }: TagChipsProps) {
       {hasAvoid && (
         <div>
           <p className="text-xs font-medium text-stone-500 mb-2">
-            당분간 피하기
+            피해야 할 자극
           </p>
           <div className="flex flex-wrap gap-2">
             {avoidTags.map((tag) => (
