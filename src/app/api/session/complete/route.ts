@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
     // 해당 세션 플랜 조회
     const { data: plan, error: planFetchErr } = await supabase
       .from('session_plans')
-      .select('id, status, session_number')
+      .select('id, status, session_number, duration_seconds, completion_mode')
       .eq('user_id', userId)
       .eq('session_number', sessionNumber)
       .maybeSingle();
@@ -119,13 +119,16 @@ export async function POST(req: NextRequest) {
     }
 
     const nowIso = new Date().toISOString();
+    const durationClamped = Math.min(7200, Math.max(0, durationSeconds));
 
-    // session_plans 완료 처리
+    // session_plans 완료 처리 (duration/mode 저장)
     const { error: planUpdateErr } = await supabase
       .from('session_plans')
       .update({
         status: 'completed',
         completed_at: nowIso,
+        duration_seconds: durationClamped,
+        completion_mode: completionMode,
       })
       .eq('user_id', userId)
       .eq('session_number', sessionNumber);
