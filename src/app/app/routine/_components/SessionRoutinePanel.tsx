@@ -7,11 +7,12 @@
  * 7일 시스템과 완전 분리. 기존 7일 로직/컴포넌트 미변경.
  *
  * 상태 머신:
- *   idle → loading → active | empty | deep_missing | error | done
+ *   loading | active | empty | deep_missing | done | error | summary
  *
  * 네트워크 가드:
  *   - GET /api/session/active: mount 시 1회만
  *   - POST /api/session/create: 버튼 클릭 시에만
+ *   - POST /api/session/complete: 종료 버튼 클릭 시에만
  *   - 무한 재시도 없음
  */
 
@@ -19,7 +20,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Sparkles,
-  ChevronRight,
   SlidersHorizontal,
   Zap,
   X,
@@ -30,10 +30,19 @@ import { NeoCard, NeoButton } from '@/components/neobrutalism';
 import {
   getActiveSession,
   createSession,
+  completeSession,
   type SessionPlan,
   type SessionProgress,
   type CreateSessionInput,
 } from '@/lib/session/client';
+import {
+  loadSessionDraft,
+  saveSessionDraft,
+  deleteSessionDraft,
+  type SessionDraft,
+} from '@/lib/session/storage';
+import SessionRecoveryModal from './SessionRecoveryModal';
+import SessionCompleteSummary from './SessionCompleteSummary';
 
 // ─── 날짜 포맷 ─────────────────────────────────────────────────────────────────
 
@@ -42,6 +51,12 @@ function getTodayLabel(): string {
   const days = ['일', '월', '화', '수', '목', '금', '토'];
   return `${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
 }
+
+function itemKey(segTitle: string, order: number, templateId: string): string {
+  return `${segTitle}_${order}_${templateId}`;
+}
+
+const MAX_DURATION_SEC = 7200; // 120분
 
 // ─── 스켈레톤 ──────────────────────────────────────────────────────────────────
 
@@ -59,7 +74,13 @@ function SessionSkeleton() {
 
 // ─── 세그먼트 리스트 ───────────────────────────────────────────────────────────
 
-function SegmentList({ plan }: { plan: SessionPlan }) {
+type SegmentListProps = {
+  plan: SessionPlan;
+  checked: Record<string, boolean>;
+  onToggle: (key: string) => void;
+};
+
+function SegmentList({ plan, checked, onToggle }: SegmentListProps) {
   const { segments = [], meta, flags } = plan.plan_json;
 
   return (
@@ -97,25 +118,43 @@ function SegmentList({ plan }: { plan: SessionPlan }) {
             </span>
           </div>
           <ul className="space-y-1">
-            {seg.items.map((item) => (
-              <li
-                key={item.order}
-                className="flex items-center gap-2 text-sm text-slate-600"
-              >
-                <span className="size-1.5 shrink-0 rounded-full bg-orange-400" />
-                <span className="flex-1">{item.name}</span>
-                {item.sets && item.reps && (
-                  <span className="text-xs text-slate-400 shrink-0">
-                    {item.sets}×{item.reps}
+            {seg.items.map((item) => {
+              const key = itemKey(seg.title, item.order, item.templateId);
+              const isChecked = !!checked[key];
+              return (
+                <li
+                  key={key}
+                  className="flex items-center gap-2 text-sm text-slate-600"
+                >
+                  <button
+                    type="button"
+                    onClick={() => onToggle(key)}
+                    className={[
+                      'size-5 shrink-0 rounded border-2 flex items-center justify-center transition',
+                      isChecked
+                        ? 'border-emerald-600 bg-emerald-500 text-white'
+                        : 'border-stone-400 bg-white',
+                    ].join(' ')}
+                    aria-label={`${item.name} ${isChecked ? '체크 해제' : '체크'}`}
+                  >
+                    {isChecked && <CheckCircle2 className="size-3" strokeWidth={3} />}
+                  </button>
+                  <span className={['flex-1', isChecked && 'line-through text-slate-400'].filter(Boolean).join(' ')}>
+                    {item.name}
                   </span>
-                )}
-                {item.hold_seconds && (
-                  <span className="text-xs text-slate-400 shrink-0">
-                    {item.hold_seconds}초 유지
-                  </span>
-                )}
-              </li>
-            ))}
+                  {item.sets && item.reps && (
+                    <span className="text-xs text-slate-400 shrink-0">
+                      {item.sets}×{item.reps}
+                    </span>
+                  )}
+                  {item.hold_seconds && (
+                    <span className="text-xs text-slate-400 shrink-0">
+                      {item.hold_seconds}초 유지
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       ))}
@@ -236,6 +275,46 @@ function AdjustModal({
   );
 }
 
+// ─── 종료 확인 모달 (일부 미완료 시) ───────────────────────────────────────────
+
+function ConfirmCompleteModal({
+  onClose,
+  onConfirm,
+  loading,
+}: {
+  onClose: () => void;
+  onConfirm: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-md rounded-t-3xl border-2 border-slate-900 bg-white p-6 shadow-[0_-4px_0_0_rgba(15,23,42,1)]">
+        <h2 className="text-base font-bold text-slate-800 mb-2">그래도 종료할까요?</h2>
+        <p className="text-sm text-slate-600 mb-5">
+          아직 완료하지 않은 운동이 있어요. 그래도 종료할까요?
+        </p>
+        <div className="flex gap-2">
+          <NeoButton variant="secondary" fullWidth onClick={onClose} className="py-3">
+            계속하기
+          </NeoButton>
+          <NeoButton
+            variant="orange"
+            fullWidth
+            disabled={loading}
+            onClick={onConfirm}
+            className="py-3"
+          >
+            {loading ? '처리 중...' : '그대로 종료'}
+          </NeoButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── 메인 패널 ─────────────────────────────────────────────────────────────────
 
 type PanelState =
@@ -244,7 +323,8 @@ type PanelState =
   | 'empty'
   | 'deep_missing'
   | 'done'
-  | 'error';
+  | 'error'
+  | 'summary';
 
 export default function SessionRoutinePanel() {
   const router = useRouter();
@@ -254,11 +334,23 @@ export default function SessionRoutinePanel() {
   const [progress, setProgress] = useState<SessionProgress | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [completing, setCompleting] = useState(false);
   const [showAdjust, setShowAdjust] = useState(false);
+  const [showConfirmComplete, setShowConfirmComplete] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
   const [token, setToken] = useState<string | null>(null);
 
-  // 최초 1회만 실행 보장
+  // 체크 상태 + startedAt (로컬)
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
+
+  // 완료 후 Summary 표시용
+  const [summaryDurationSec, setSummaryDurationSec] = useState<number>(0);
+  const [summaryNextTheme, setSummaryNextTheme] = useState<string | null>(null);
+  const [durationClamped, setDurationClamped] = useState(false);
+
   const initializedRef = useRef(false);
+  const activeLoadedRef = useRef(false);
 
   // GET /api/session/active — mount 시 1회
   useEffect(() => {
@@ -298,7 +390,26 @@ export default function SessionRoutinePanel() {
 
       if (active) {
         setActivePlan(active);
-        setPanelState('active');
+        const draft = loadSessionDraft(active.session_number);
+        if (draft && draft.sessionNumber === active.session_number) {
+          setChecked(draft.checked);
+          setStartedAtMs(draft.startedAtMs);
+          if (!cancelled) setShowRecovery(true);
+        } else {
+          const now = Date.now();
+          setStartedAtMs(now);
+          saveSessionDraft({
+            sessionNumber: active.session_number,
+            startedAtMs: now,
+            lastUpdatedAtMs: now,
+            checked: {},
+            note: active.condition
+              ? { mood: active.condition.condition_mood, time_budget: active.condition.time_budget }
+              : undefined,
+          });
+        }
+        if (!cancelled) setPanelState('active');
+        activeLoadedRef.current = true;
       } else if (prog.completed_sessions >= prog.total_sessions) {
         setPanelState('done');
       } else {
@@ -353,7 +464,99 @@ export default function SessionRoutinePanel() {
     setActivePlan(active);
     setProgress(prog);
     setPanelState('active');
+    const now = Date.now();
+    setStartedAtMs(now);
+    setChecked({});
+    saveSessionDraft({
+      sessionNumber: active.session_number,
+      startedAtMs: now,
+      lastUpdatedAtMs: now,
+      checked: {},
+      note: { mood: active.condition.condition_mood, time_budget: active.condition.time_budget },
+    });
   }, [token, creating]);
+
+  const handleToggleChecked = useCallback((key: string) => {
+    setChecked((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      return next;
+    });
+  }, []);
+
+  // checked 변경 시 storage 저장 (activePlan.session_number 필요)
+  useEffect(() => {
+    if (!activePlan || panelState !== 'active') return;
+    const draft = loadSessionDraft(activePlan.session_number);
+    if (draft) {
+      saveSessionDraft({
+        ...draft,
+        checked,
+        lastUpdatedAtMs: Date.now(),
+      });
+    }
+  }, [checked, activePlan, panelState]);
+
+  const performComplete = useCallback(async () => {
+    if (!token || !activePlan || completing) return;
+    const start = startedAtMs ?? Date.now();
+    let durationSec = Math.floor((Date.now() - start) / 1000);
+    const clamped = durationSec > MAX_DURATION_SEC;
+    if (clamped) durationSec = MAX_DURATION_SEC;
+    const allItems = activePlan.plan_json?.segments?.flatMap((s) =>
+      s.items.map((i) => itemKey(s.title, i.order, i.templateId))
+    ) ?? [];
+    const allChecked = allItems.length > 0 && allItems.every((k) => checked[k]);
+    const completionMode = allChecked ? 'all_done' : 'partial_done';
+
+    setCompleting(true);
+    const result = await completeSession(token, {
+      session_number: activePlan.session_number,
+      duration_seconds: durationSec,
+      completion_mode: completionMode,
+    });
+    setCompleting(false);
+
+    if (!result.ok) {
+      setErrorMsg(result.error.message);
+      setPanelState('error');
+      return;
+    }
+    deleteSessionDraft(activePlan.session_number);
+    setProgress(result.data.progress);
+    setSummaryDurationSec(durationSec);
+    setSummaryNextTheme(result.data.next_theme ?? null);
+    setDurationClamped(clamped);
+    setActivePlan(null);
+    setPanelState('summary');
+  }, [token, activePlan, completing, startedAtMs, checked]);
+
+  const handleCompleteClick = useCallback(() => {
+    const allItems = activePlan?.plan_json?.segments?.flatMap((s) =>
+      s.items.map((i) => itemKey(s.title, i.order, i.templateId))
+    ) ?? [];
+    const allChecked = allItems.length > 0 && allItems.every((k) => checked[k]);
+    if (!allChecked && allItems.length > 0) {
+      setShowConfirmComplete(true);
+    } else {
+      performComplete();
+    }
+  }, [activePlan, checked, performComplete]);
+
+  const handleRecoveryAction = useCallback(
+    (action: 'resume' | 'complete' | 'discard') => {
+      if (action === 'resume') {
+        setShowRecovery(false);
+      } else if (action === 'discard') {
+        if (activePlan) deleteSessionDraft(activePlan.session_number);
+        setChecked({});
+        setShowRecovery(false);
+      } else {
+        setShowRecovery(false);
+        performComplete();
+      }
+    },
+    [activePlan, performComplete]
+  );
 
   // ─── 렌더 ────────────────────────────────────────────────────────────────────
 
@@ -409,6 +612,17 @@ export default function SessionRoutinePanel() {
     );
   }
 
+  if (panelState === 'summary' && progress) {
+    return (
+      <SessionCompleteSummary
+        durationSeconds={summaryDurationSec}
+        progress={progress}
+        nextTheme={summaryNextTheme}
+        durationClamped={durationClamped}
+      />
+    );
+  }
+
   // active 또는 empty 상태
   return (
     <>
@@ -446,14 +660,9 @@ export default function SessionRoutinePanel() {
         {/* active: 세그먼트 리스트 */}
         {panelState === 'active' && activePlan ? (
           <>
-            <SegmentList plan={activePlan} />
-            {/* 이어하기 버튼 — UI-02(종료/플레이어 연결)에서 활성화 */}
+            <SegmentList plan={activePlan} checked={checked} onToggle={handleToggleChecked} />
             <div className="mt-4 flex items-center justify-between">
-              <span className="text-xs text-slate-400">운동 시작은 다음 업데이트에서</span>
-              <div className="flex items-center gap-1 text-xs text-slate-500">
-                <span>Session {activePlan.session_number}</span>
-                <ChevronRight className="size-3.5" />
-              </div>
+              <span className="text-xs text-slate-500">Session {activePlan.session_number}</span>
             </div>
           </>
         ) : (
@@ -480,6 +689,28 @@ export default function SessionRoutinePanel() {
         )}
       </NeoCard>
 
+      {/* Sticky 종료 버튼 — active일 때만 */}
+      {panelState === 'active' && activePlan && (
+        <div className="sticky bottom-0 left-0 right-0 z-40 -mx-4 px-4 py-3 bg-[#f8f6f0] border-t border-stone-200 mt-4">
+          <NeoButton
+            variant="orange"
+            fullWidth
+            disabled={completing}
+            onClick={handleCompleteClick}
+            className="py-3 text-base font-bold"
+          >
+            {completing ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                처리 중...
+              </span>
+            ) : (
+              '오늘 운동 종료하기'
+            )}
+          </NeoButton>
+        </div>
+      )}
+
       {/* 조정 모달 */}
       {showAdjust && (
         <AdjustModal
@@ -488,6 +719,26 @@ export default function SessionRoutinePanel() {
           loading={creating}
           onClose={() => setShowAdjust(false)}
           onSubmit={handleCreate}
+        />
+      )}
+
+      {/* 종료 확인 모달 (일부 미완료) */}
+      {showConfirmComplete && (
+        <ConfirmCompleteModal
+          onClose={() => setShowConfirmComplete(false)}
+          onConfirm={() => {
+            setShowConfirmComplete(false);
+            performComplete();
+          }}
+          loading={completing}
+        />
+      )}
+
+      {/* Recovery 모달 */}
+      {showRecovery && (
+        <SessionRecoveryModal
+          onAction={handleRecoveryAction}
+          loading={completing}
         />
       )}
     </>
