@@ -51,9 +51,20 @@ export async function POST(req: NextRequest) {
   const debugFlag = body?.debug;
   const isDebug = debugFlag === true || debugFlag === 1 || debugFlag === '1';
   try {
-    const { routineId, dayNumber, includeMedia: includeMediaRaw, mediaMode: mediaModeRaw, includeStatus: includeStatusRaw } = body;
+    const {
+      routineId,
+      dayNumber,
+      includeMedia: includeMediaRaw,
+      mediaMode: mediaModeRaw,
+      includeStatus: includeStatusRaw,
+      includeTemplates: includeTemplatesRaw,
+    } = body;
     const includeMedia = includeMediaRaw === true || includeMediaRaw === 1 || includeMediaRaw === '1';
     const includeStatus = includeStatusRaw === true || includeStatusRaw === 1 || includeStatusRaw === '1';
+    const includeTemplates =
+      includeTemplatesRaw === true ||
+      includeTemplatesRaw === 1 ||
+      includeTemplatesRaw === '1';
     const rawMode = mediaModeRaw === 'none' || mediaModeRaw === 'first' || mediaModeRaw === 'all'
       ? mediaModeRaw
       : includeMedia
@@ -184,61 +195,73 @@ export async function POST(req: NextRequest) {
     let tTemplatesFetch = tGenerate;
     let tMedia = tGenerate;
 
-    if (mediaMode !== 'none' && ids.length > 0) {
+    if ((includeTemplates || mediaMode !== 'none') && ids.length > 0) {
       const { getTemplatesForMediaByIds } = await import('@/lib/workout-routine/exercise-templates-db');
-      const signIds = mediaMode === 'all' ? ids : ids.slice(0, 1);
-
       const templates = await getTemplatesForMediaByIds(ids);
       tTemplatesFetch = performance.now();
       const templateMap = new Map(templates.map((t) => [t.id, t]));
-      const placeholderMedia = {
-        kind: 'placeholder' as const,
-        autoplayAllowed: false,
-        notes: ['영상 준비 중입니다.'],
-      };
-
-      const signTemplates = templates.filter((t) => signIds.includes(t.id));
-      let mediaById = new Map<string, { kind: string; autoplayAllowed: boolean; notes?: string[] }>();
-      if (signTemplates.length > 0) {
-        let settled: PromiseSettledResult<{ kind: string; autoplayAllowed: boolean; notes?: string[] }>[];
-        try {
-          const { buildMediaPayload } = await import('@/lib/media/media-payload');
-          settled = await Promise.allSettled(
-            signTemplates.map((t) =>
-              buildMediaPayload(t.media_ref, t.duration_sec ?? 300)
-            )
-          );
-        } catch (importErr) {
-          if (isDebug) console.warn('[routine-plan/ensure] media-payload import failed', importErr);
-          settled = signTemplates.map(() => ({ status: 'rejected' as const, reason: 'import_failed' }));
-        }
-        tMedia = performance.now();
-        signTemplates.forEach((t, i) => {
-          const payload = settled[i]?.status === 'fulfilled'
-            ? (settled[i] as PromiseFulfilledResult<{ kind: string; autoplayAllowed: boolean; notes?: string[] }>).value
-            : placeholderMedia;
-          mediaById.set(t.id, payload);
+      if (includeTemplates) {
+        payload.segments = ids.map((id, i) => {
+          const t = templateMap.get(id);
+          return {
+            templateId: id,
+            templateName: t?.name ?? `운동 ${i + 1}`,
+            durationSec: t?.duration_sec ?? 60,
+            kind: 'work' as const,
+          };
         });
-        if (isDebug && settled.some((s) => s.status === 'rejected')) {
-          const warnings: string[] = [];
-          settled.forEach((s, i) => {
-            if (s.status === 'rejected') {
-              warnings.push(`media_fail:${signTemplates[i]?.id ?? i}`);
-            }
-          });
-          payload.debug_warnings = warnings;
-        }
       }
-
-      payload.segments_with_media = ids.map((id, i) => {
-        const t = templateMap.get(id);
-        const media = mediaById.get(id) ?? placeholderMedia;
-        return {
-          templateId: id,
-          templateName: t?.name ?? `운동 ${i + 1}`,
-          mediaPayload: media,
+      if (mediaMode !== 'none') {
+        const signIds = mediaMode === 'all' ? ids : ids.slice(0, 1);
+        const placeholderMedia = {
+          kind: 'placeholder' as const,
+          autoplayAllowed: false,
+          notes: ['영상 준비 중입니다.'],
         };
-      });
+
+        const signTemplates = templates.filter((t) => signIds.includes(t.id));
+        let mediaById = new Map<string, { kind: string; autoplayAllowed: boolean; notes?: string[] }>();
+        if (signTemplates.length > 0) {
+          let settled: PromiseSettledResult<{ kind: string; autoplayAllowed: boolean; notes?: string[] }>[];
+          try {
+            const { buildMediaPayload } = await import('@/lib/media/media-payload');
+            settled = await Promise.allSettled(
+              signTemplates.map((t) =>
+                buildMediaPayload(t.media_ref, t.duration_sec ?? 300)
+              )
+            );
+          } catch (importErr) {
+            if (isDebug) console.warn('[routine-plan/ensure] media-payload import failed', importErr);
+            settled = signTemplates.map(() => ({ status: 'rejected' as const, reason: 'import_failed' }));
+          }
+          tMedia = performance.now();
+          signTemplates.forEach((t, i) => {
+            const payload = settled[i]?.status === 'fulfilled'
+              ? (settled[i] as PromiseFulfilledResult<{ kind: string; autoplayAllowed: boolean; notes?: string[] }>).value
+              : placeholderMedia;
+            mediaById.set(t.id, payload);
+          });
+          if (isDebug && settled.some((s) => s.status === 'rejected')) {
+            const warnings: string[] = [];
+            settled.forEach((s, i) => {
+              if (s.status === 'rejected') {
+                warnings.push(`media_fail:${signTemplates[i]?.id ?? i}`);
+              }
+            });
+            payload.debug_warnings = warnings;
+          }
+        }
+
+        payload.segments_with_media = ids.map((id, i) => {
+          const t = templateMap.get(id);
+          const media = mediaById.get(id) ?? placeholderMedia;
+          return {
+            templateId: id,
+            templateName: t?.name ?? `운동 ${i + 1}`,
+            mediaPayload: media,
+          };
+        });
+      }
     }
     if (includeStatus) {
       try {
