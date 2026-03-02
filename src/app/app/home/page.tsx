@@ -123,6 +123,14 @@ export default function ResetHomePage() {
     }
   };
 
+  useEffect(() => {
+    if (!latestRoutineId) return;
+    const targetDay = currentDay >= 1 && currentDay <= 7 ? currentDay : 1;
+    router.prefetch(
+      `/app/routine/player?routineId=${encodeURIComponent(latestRoutineId)}&day=${targetDay}`
+    );
+  }, [router, latestRoutineId, currentDay]);
+
   const renderState =
     isCompleted
       ? 'COMPLETED'
