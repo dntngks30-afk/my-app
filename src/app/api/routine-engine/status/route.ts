@@ -11,16 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
-import { checkAndUpdateRoutineStatus } from '@/lib/routine-engine';
-import { getServerSupabaseAdmin } from '@/lib/supabase';
-
-const MS_24H = 24 * 60 * 60 * 1000;
-const MS_48H = 48 * 60 * 60 * 1000;
-
-function maskUserId(userId: string): string {
-  if (!userId || userId.length < 6) return '******';
-  return `${userId.slice(0, 6)}...`;
-}
+import { computeRoutineStatusPayload } from '@/lib/routine-engine';
 
 export async function GET(req: NextRequest) {
   try {
@@ -29,52 +20,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
     }
 
-    const result = await checkAndUpdateRoutineStatus(userId);
-    const server_now_utc = new Date().toISOString();
+    const status = await computeRoutineStatusPayload(userId);
 
-    const baseAtUtc = result.state.lastActivatedAt;
-    let lock_until_utc: string | null = null;
-    let auto_advance_at_utc: string | null = null;
-    let rest_recommended = false;
-    if (baseAtUtc) {
-      const baseMs = new Date(baseAtUtc).getTime();
-      const elapsed = Date.now() - baseMs;
-      lock_until_utc = new Date(baseMs + MS_24H).toISOString();
-      auto_advance_at_utc = new Date(baseMs + MS_48H).toISOString();
-      rest_recommended = elapsed < MS_24H;
-    }
-
-    const supabase = getServerSupabaseAdmin();
-    const { data: completionRow } = await supabase
-      .from('routine_completions')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('day_number', result.state.currentDay)
-      .limit(1)
-      .maybeSingle();
-
-    const todayCompletedForDay = !!completionRow;
-
-    console.log('[ROUTINE_STATUS]', {
-      userId: maskUserId(userId),
-      nowUtc: server_now_utc,
-      baseAtUtc: baseAtUtc ?? null,
-      lockUntilUtc: lock_until_utc,
-      autoAdvanceAtUtc: auto_advance_at_utc,
-      status: result.state.status,
-    });
-
-    const res = NextResponse.json({
-      success: true,
-      state: result.state,
-      changed: result.changed,
-      server_now_utc,
-      todayCompletedForDay,
-      lock_until_utc,
-      auto_advance_at_utc,
-      rest_recommended,
-    });
-
+    const res = NextResponse.json({ success: true, ...status });
     res.headers.set('Cache-Control', 'no-store, max-age=0');
     return res;
   } catch (err) {

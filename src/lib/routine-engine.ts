@@ -167,6 +167,56 @@ export async function activateRoutine(userId: string): Promise<RoutineState> {
   return mapToState(data);
 }
 
+const MS_48H = 48 * 60 * 60 * 1000;
+
+export interface RoutineStatusPayload {
+  state: RoutineState;
+  changed: boolean;
+  server_now_utc: string;
+  todayCompletedForDay: boolean;
+  lock_until_utc: string | null;
+  auto_advance_at_utc: string | null;
+  rest_recommended: boolean;
+}
+
+export async function computeRoutineStatusPayload(
+  userId: string,
+): Promise<RoutineStatusPayload> {
+  const result = await checkAndUpdateRoutineStatus(userId);
+  const server_now_utc = new Date().toISOString();
+
+  const baseAtUtc = result.state.lastActivatedAt;
+  let lock_until_utc: string | null = null;
+  let auto_advance_at_utc: string | null = null;
+  let rest_recommended = false;
+  if (baseAtUtc) {
+    const baseMs = new Date(baseAtUtc).getTime();
+    const elapsed = Date.now() - baseMs;
+    lock_until_utc = new Date(baseMs + MS_24H).toISOString();
+    auto_advance_at_utc = new Date(baseMs + MS_48H).toISOString();
+    rest_recommended = elapsed < MS_24H;
+  }
+
+  const supabase = getServerSupabaseAdmin();
+  const { data: completionRow } = await supabase
+    .from('routine_completions')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('day_number', result.state.currentDay)
+    .limit(1)
+    .maybeSingle();
+
+  return {
+    state: result.state,
+    changed: result.changed,
+    server_now_utc,
+    todayCompletedForDay: !!completionRow,
+    lock_until_utc,
+    auto_advance_at_utc,
+    rest_recommended,
+  };
+}
+
 function mapToState(row: Record<string, unknown>): RoutineState {
   return {
     id: row.id as string,
