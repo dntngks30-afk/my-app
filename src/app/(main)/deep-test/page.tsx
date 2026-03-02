@@ -1,6 +1,6 @@
 /**
  * Demo Deep Test - Landing (NO LOGIN)
- * 404 unless DEMO_DEEP_TEST_ENABLED=1
+ * 404 unless NEXT_PUBLIC_DEMO_DEEP_TEST_ENABLED=1
  */
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +14,7 @@ const nbBtnPrimary =
   'block w-full rounded-full border-2 border-slate-950 bg-slate-800 py-4 text-center text-base font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95';
 
 export default function DemoDeepTestPage() {
-  if (process.env.DEMO_DEEP_TEST_ENABLED !== '1') {
+  if (process.env.NEXT_PUBLIC_DEMO_DEEP_TEST_ENABLED !== '1') {
     notFound();
   }
 

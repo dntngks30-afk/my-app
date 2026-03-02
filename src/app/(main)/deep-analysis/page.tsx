@@ -9,7 +9,7 @@ import DeepAnalysisClient from './_components/DeepAnalysisClient';
 
 export default function DeepAnalysisPage() {
   const showDemoCta =
-    process.env.DEMO_DEEP_TEST_ENABLED === '1' &&
+    process.env.NEXT_PUBLIC_DEMO_DEEP_TEST_ENABLED === '1' &&
     process.env.VERCEL_ENV !== 'production';
 
   return (
