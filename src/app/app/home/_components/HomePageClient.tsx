@@ -1,76 +1,34 @@
 'use client';
 
-import { useState, useEffect, useRef, memo } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  SlidersHorizontal,
-  Check,
-  Play,
-  ArrowRight,
-  AlertTriangle,
-} from 'lucide-react';
+import { SlidersHorizontal, ArrowRight, FlaskConical } from 'lucide-react';
 import { getSessionSafe } from '@/lib/supabase';
 import BottomNav from '../../_components/BottomNav';
-
-const DAYS = [1, 2, 3, 4, 5, 6, 7] as const;
-
-type DayStatus = 'done' | 'active' | 'upcoming';
-
-function getDayStatus(
-  day: number,
-  currentDay: number,
-  isCompleted: boolean
-): DayStatus {
-  if (isCompleted || day < currentDay) return 'done';
-  if (day === currentDay) return 'active';
-  return 'upcoming';
-}
-
-function formatCountdown(lockUntilUtc: string, serverNowUtc: string, clientElapsedMs: number): string {
-  const lockMs = new Date(lockUntilUtc).getTime();
-  const serverMs = new Date(serverNowUtc).getTime();
-  const remainingMs = Math.max(0, lockMs - (serverMs + clientElapsedMs));
-  const totalSeconds = Math.floor(remainingMs / 1000);
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  return [h, m, s].map((n) => String(n).padStart(2, '0')).join(':');
-}
 
 export default function HomePageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const debugFlag = searchParams.get('debug') === '1';
 
-  const [state, setState] = useState<{ currentDay: number; status: string } | null>(null);
-  const [restRecommended, setRestRecommended] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [todayCompletedForDay, setTodayCompletedForDay] = useState(false);
-  const [latestRoutineId, setLatestRoutineId] = useState<string | null>(null);
-  const [serverNowUtc, setServerNowUtc] = useState<string | null>(null);
-  const [lockUntilUtc, setLockUntilUtc] = useState<string | null>(null);
-  const fetchTimeRef = useRef(0);
-
-  const currentDay = state?.currentDay ?? 1;
-  const isCompleted = state?.status === 'COMPLETED';
-  const [isStarting, setIsStarting] = useState(false);
-  const [startError, setStartError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const _t0 = performance.now();
       const { session } = await getSessionSafe();
-      if (!session?.access_token || cancelled) return;
+      if (!session?.access_token || cancelled) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
       try {
         const url = `/api/home/dashboard${debugFlag ? '?debug=1' : ''}`;
         const res = await fetch(url, {
           cache: 'no-store' as RequestCache,
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
-        const _tResp = performance.now();
         if (cancelled) return;
         const data = await res.json();
         if (!res.ok) {
@@ -78,30 +36,10 @@ export default function HomePageClient() {
           setLoading(false);
           return;
         }
-        const s = data.state;
-        setState(s ? { currentDay: s.currentDay, status: s.status } : null);
-        setTodayCompletedForDay(data.todayCompletedForDay === true);
-        setRestRecommended(data.rest_recommended === true);
-        setLatestRoutineId(data.routine?.latestRoutineId ?? null);
-        setServerNowUtc(data.server_now_utc ?? null);
-        setLockUntilUtc(data.lock_until_utc ?? null);
-        fetchTimeRef.current = Date.now();
-
-        if (!data.lock_until_utc && data.rest_recommended && s?.lastActivatedAt) {
-          const MS = 24 * 60 * 60 * 1000;
-          setLockUntilUtc(new Date(new Date(s.lastActivatedAt).getTime() + MS).toISOString());
-        }
         setError(null);
-        if (process.env.NODE_ENV === 'development') {
-          const _tDone = performance.now();
-          console.log('[PERF:home]', { ttfb: Math.round(_tResp - _t0), server_total: data?.timings?.t_total, render: Math.round(_tDone - _tResp) });
-        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '세션을 확인해 주세요');
-          setState(null);
-          setRestRecommended(false);
-          setTodayCompletedForDay(false);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -110,87 +48,54 @@ export default function HomePageClient() {
     return () => { cancelled = true; };
   }, [debugFlag]);
 
-  const countdownTicker = lockUntilUtc && serverNowUtc ? (
-    <CountdownTicker lockUntilUtc={lockUntilUtc} serverNowUtc={serverNowUtc} fetchTimeMs={fetchTimeRef.current} />
-  ) : null;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#f8f6f0] pb-20">
+        <header className="px-4 pt-6 pb-4">
+          <span className="text-sm font-semibold text-orange-500">Routine</span>
+          <h1 className="mt-2 text-4xl font-bold text-slate-800">Routine</h1>
+          <p className="mt-2 text-base text-slate-800">로딩 중...</p>
+        </header>
+        <main className="px-4 space-y-6">
+          <div className="h-24 animate-pulse rounded-2xl bg-stone-200" />
+          <div className="h-32 animate-pulse rounded-2xl bg-stone-200" />
+        </main>
+        <BottomNav />
+      </div>
+    );
+  }
 
-  const handleDayPillClick = (day: number) => {
-    if (latestRoutineId) {
-      router.push(`/app/routine/player?routineId=${encodeURIComponent(latestRoutineId)}&day=${day}`);
-    } else {
-      router.push('/app/routine');
-    }
-  };
-
-  const renderState =
-    isCompleted
-      ? 'COMPLETED'
-      : todayCompletedForDay
-        ? 'TODAY_COMPLETED'
-        : restRecommended
-          ? 'REST_RECOMMENDED'
-          : state?.status === 'READY'
-            ? 'READY'
-            : 'ACTIVE';
-  const requestInFlightRef = useRef(false);
-
-  const handleStartClick = async (day: number) => {
-    const { session } = await getSessionSafe();
-    if (!session?.access_token) {
-      console.warn('[HOME_NO_SESSION]');
-      router.push(`/app/auth?next=${encodeURIComponent('/app/home')}`);
-      return;
-    }
-
-    if (requestInFlightRef.current) return;
-    requestInFlightRef.current = true;
-    setIsStarting(true);
-    setStartError(null);
-
-    const opts: RequestInit = {
-      cache: 'no-store' as RequestCache,
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-    };
-
-    try {
-      const res = await fetch('/api/routine-engine/start-day', {
-        method: 'POST',
-        ...opts,
-        body: JSON.stringify({ dayNumber: day }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setStartError(data?.error ?? '루틴에 실패했습니다.');
-        return;
-      }
-      const routineId = data?.routineId;
-      if (!routineId) {
-        setStartError('루틴 정보를 받아오지 못했습니다.');
-        return;
-      }
-      router.push(`/app/routine/player?routineId=${routineId}&day=${day}`);
-    } catch (err) {
-      console.warn('[HOME_START_FAIL]', {
-        message: err instanceof Error ? err.message : String(err),
-      });
-      setStartError(err instanceof Error ? err.message : '루틴에 실패했습니다.');
-    } finally {
-      requestInFlightRef.current = false;
-      setIsStarting(false);
-    }
-  };
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[#f8f6f0] pb-20">
+        <header className="px-4 pt-6 pb-4">
+          <h1 className="text-4xl font-bold text-slate-800">Routine</h1>
+        </header>
+        <main className="px-4">
+          <div className="rounded-full border-2 border-red-300 bg-red-50 px-6 py-5 text-center text-sm text-red-700">
+            {error}
+          </div>
+          <p className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => router.push('/app/auth?next=/app/home')}
+              className="text-sm font-medium text-orange-500 underline"
+            >
+              로그인하기
+            </button>
+          </p>
+        </main>
+        <BottomNav />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8f6f0] pb-20">
-      {/* 1. Header Area */}
+      {/* 1. Header */}
       <header className="px-4 pt-6 pb-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-orange-500">
-            7-DAY RESET
-          </span>
+          <span className="text-sm font-semibold text-orange-500">Routine</span>
           <button
             type="button"
             className="flex size-9 items-center justify-center rounded-full text-slate-800 hover:bg-white/60"
@@ -206,107 +111,40 @@ export default function HomePageClient() {
       </header>
 
       <main className="px-4 space-y-6">
-        {/* 2. Day Selector */}
-        <section>
-          {loading ? (
-            <DaySelectorSkeleton />
-          ) : (
-            <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-              {DAYS.map((day) => (
-                <DayPill
-                  key={day}
-                  day={day}
-                  status={getDayStatus(day, currentDay, isCompleted)}
-                  restRecommended={day >= 2 && restRecommended}
-                  onClick={() => handleDayPillClick(day)}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 3. XP Progress Card */}
+        {/* 2. 여정도 — 최소 표시 (Deep/세션 진행은 데이터 없음 시 생략) */}
         <section className="rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)]">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-slate-800">
-              28일 누적 실천
-            </span>
-            <span className="text-sm font-bold text-slate-800">28% XP</span>
-          </div>
-          <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-stone-300">
-            <div className="h-full w-[28%] rounded-full bg-orange-400 transition-all" />
-          </div>
-          <p className="mt-2 text-xs font-medium text-orange-500">
-            2일 차: 코어 시작점
+          <h3 className="text-sm font-semibold text-slate-800">현재 여정도</h3>
+          <p className="mt-2 text-sm text-slate-600">
+            루틴 탭에서 세션을 시작하고 진행도를 확인하세요.
           </p>
         </section>
 
-        {/* 4. Main CTA */}
-        <section>
-          {startError && (
-            <div className="mb-4 rounded-2xl border-2 border-red-300 bg-red-50 p-4">
-              <p className="text-sm text-red-700 mb-3">{startError}</p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStartError(null);
-                    handleStartClick(currentDay);
-                  }}
-                  className="rounded-full border-2 border-slate-900 bg-orange-400 px-4 py-2 text-sm font-bold text-white"
-                >
-                  다시 시도
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStartError(null)}
-                  className="text-sm font-medium text-red-700 underline"
-                >
-                  닫기
-                </button>
-              </div>
-            </div>
-          )}
-          {loading ? (
-            <CtaSkeleton />
-          ) : error ? (
-            <div className="rounded-full border-2 border-red-300 bg-red-50 px-6 py-5 text-center text-sm text-red-700">
-              {error}
-            </div>
-          ) : (
-            <MainCta
-              status={state?.status ?? 'READY'}
-              currentDay={currentDay}
-              countdownNode={countdownTicker}
-              restRecommended={restRecommended}
-              todayCompletedForDay={todayCompletedForDay}
-              onStartClick={handleStartClick}
-              isStarting={isStarting}
-            />
-          )}
-          {!loading && !error && (
-            <p className="mt-2 text-center text-sm text-stone-400">
-              12 MIN • FULL BODY
-            </p>
-          )}
+        {/* 3. 나의 상태 요약 — Deep 미완료 시 CTA만 */}
+        <section className="rounded-2xl bg-slate-100/50 p-5">
+          <h3 className="text-sm font-semibold text-slate-800">나의 상태 요약</h3>
+          <p className="mt-2 text-sm text-slate-800">
+            심층 테스트를 완료하면 맞춤 루틴이 시작됩니다.
+          </p>
+          <div className="mt-4">
+            <Link
+              href="/app/deep-test"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white/80 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-white transition"
+            >
+              <FlaskConical className="size-4" strokeWidth={2} />
+              심층 테스트 하러가기
+            </Link>
+          </div>
         </section>
 
-        {/* 5. Body Status Summary */}
-        <section className="rounded-2xl bg-slate-100/50 p-5">
-          <h3 className="text-sm font-semibold text-slate-800">
-            나의 상태 요약
-          </h3>
-          <div className="mt-3 flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-500" strokeWidth={2} />
-            <p className="text-sm text-slate-800">
-              정확 움직임: 내부적 관절 추적
-            </p>
-          </div>
-          <div className="mt-4">
-            <span className="inline-block rounded-lg border border-slate-300 bg-white/60 px-3 py-1.5 text-xs font-medium text-slate-800">
-              이번 주 측정 추천: 정확 기록 시작
-            </span>
-          </div>
+        {/* 4. 단일 CTA */}
+        <section>
+          <Link
+            href="/app/routine"
+            className="flex w-full items-center justify-between gap-4 rounded-full border-2 border-slate-900 bg-orange-400 px-6 py-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95"
+          >
+            <span className="text-lg font-bold text-white">루틴으로 이동</span>
+            <ArrowRight className="size-5 shrink-0 text-white" strokeWidth={2.5} />
+          </Link>
         </section>
       </main>
 
@@ -314,215 +152,3 @@ export default function HomePageClient() {
     </div>
   );
 }
-
-type MainCtaProps = {
-  status: string;
-  currentDay: number;
-  countdownNode: React.ReactNode;
-  restRecommended: boolean;
-  todayCompletedForDay: boolean;
-  onStartClick: (day: number) => void;
-  isStarting: boolean;
-};
-
-function MainCta({
-  status,
-  currentDay,
-  countdownNode,
-  restRecommended,
-  todayCompletedForDay,
-  onStartClick,
-  isStarting,
-}: MainCtaProps) {
-  const isCompleted = status === 'COMPLETED';
-
-  if (isCompleted) {
-    return (
-      <Link
-        href="/app/report/day7"
-        className="flex items-center gap-4 rounded-full border-2 border-slate-900 bg-slate-800 px-6 py-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95"
-      >
-        <div className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-slate-600 bg-slate-700">
-          <Check className="size-6 text-white" strokeWidth={2.5} />
-        </div>
-        <span className="flex-1 text-left text-lg font-bold text-white">
-          7일 루틴 완료 🎉 리포트 보기
-        </span>
-        <ArrowRight className="size-5 text-white" strokeWidth={2.5} />
-      </Link>
-    );
-  }
-
-  if (todayCompletedForDay) {
-    return (
-      <div
-        className="flex items-center gap-4 rounded-full border-2 border-slate-900 bg-slate-200 px-6 py-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)] cursor-not-allowed opacity-90"
-        role="status"
-        aria-label="오늘 완료"
-      >
-        <div className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-slate-600 bg-slate-500">
-          <Check className="size-6 text-white" strokeWidth={2.5} />
-        </div>
-        <span className="flex-1 text-left text-lg font-bold text-slate-700">
-          오늘 완료 ✓
-        </span>
-      </div>
-    );
-  }
-
-  if (restRecommended) {
-    return (
-      <button
-        type="button"
-        onClick={() => onStartClick(currentDay)}
-        disabled={isStarting}
-        className="flex w-full gap-4 rounded-full border-2 border-slate-900 bg-amber-50 px-6 py-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)] disabled:cursor-not-allowed disabled:opacity-70"
-      >
-        <div className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-amber-400 bg-amber-200">
-          <Play className="size-6 text-amber-800" fill="currentColor" strokeWidth={0} />
-        </div>
-        <span className="flex-1 text-left">
-          <span className="block text-lg font-bold text-slate-800">
-            Day {currentDay} 루틴 시작하기
-          </span>
-          <span className="block text-sm font-medium text-amber-700">
-            휴식 후 ⏳ {countdownNode ?? '00:00:00'} 후 시작
-          </span>
-        </span>
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-400">
-          <ArrowRight className="size-5 text-white" strokeWidth={2.5} />
-        </div>
-      </button>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => onStartClick(currentDay)}
-      disabled={isStarting}
-      className="flex w-full items-center gap-4 rounded-full border-2 border-slate-900 bg-white px-6 py-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)] disabled:cursor-not-allowed disabled:opacity-70"
-    >
-      <div className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-slate-800 bg-slate-800">
-        <Play className="size-6 text-white" fill="currentColor" strokeWidth={0} />
-      </div>
-      <span className="flex-1 text-left text-lg font-bold text-slate-800">
-        {isStarting ? '루틴 정보 불러오는...' : `Day ${currentDay} 루틴 시작하기`}
-      </span>
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-400">
-        <ArrowRight className="size-5 text-white" strokeWidth={2.5} />
-      </div>
-    </button>
-  );
-}
-
-function DaySelectorSkeleton() {
-  return (
-    <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
-      {DAYS.map((day) => (
-        <div
-          key={day}
-          className="flex shrink-0 flex-col items-center gap-1"
-          aria-hidden
-        >
-          <div className="size-12 shrink-0 animate-pulse rounded-full bg-stone-200" />
-          <div className="h-3 w-12 animate-pulse rounded bg-stone-200" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function CtaSkeleton() {
-  return (
-    <div
-      className="flex items-center gap-4 rounded-full border-2 border-slate-900 bg-white px-6 py-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)]"
-      aria-hidden
-    >
-      <div className="size-12 shrink-0 animate-pulse rounded-full bg-stone-200" />
-      <div className="h-6 flex-1 animate-pulse rounded bg-stone-200" />
-      <div className="size-10 shrink-0 animate-pulse rounded-full bg-stone-200" />
-    </div>
-  );
-}
-
-function DayPill({
-  day,
-  status,
-  restRecommended,
-  onClick,
-}: {
-  day: number;
-  status: DayStatus;
-  restRecommended?: boolean;
-  onClick: () => void;
-}) {
-  const dayStr = String(day).padStart(2, '0');
-  const isUpcoming = status === 'upcoming';
-  const showRestBadge = isUpcoming && restRecommended;
-
-  const baseClass = 'flex shrink-0 flex-col items-center gap-1 cursor-pointer transition hover:opacity-90 active:opacity-80';
-
-  if (status === 'done') {
-    return (
-      <button type="button" onClick={onClick} className={baseClass} aria-label={`Day ${day} 보기`}>
-        <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-slate-800">
-          <Check className="size-6 text-white" strokeWidth={2.5} />
-        </div>
-        <span className="text-xs font-medium text-slate-800">DAY {day}</span>
-      </button>
-    );
-  }
-
-  if (status === 'active') {
-    return (
-      <button type="button" onClick={onClick} className={baseClass} aria-label={`Day ${day} 진행`}>
-        <div className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-slate-800 bg-white">
-          <span className="text-xl font-bold text-slate-800">{dayStr}</span>
-        </div>
-        <span className="text-xs font-bold text-orange-500 underline decoration-orange-500 underline-offset-2">
-          DAY {day}
-        </span>
-      </button>
-    );
-  }
-
-  return (
-    <button type="button" onClick={onClick} className={baseClass} aria-label={`Day ${day} 진행`}>
-      <div className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-stone-300 bg-white">
-        <span className="text-xl font-bold text-stone-400">{dayStr}</span>
-      </div>
-      <span className="text-xs font-medium text-stone-400">
-        DAY {day}
-        {showRestBadge && (
-          <span className="ml-0.5 text-amber-600" title="휴식 권장"> · 휴식 권장</span>
-        )}
-      </span>
-    </button>
-  );
-}
-
-const CountdownTicker = memo(function CountdownTicker({
-  lockUntilUtc,
-  serverNowUtc,
-  fetchTimeMs,
-}: {
-  lockUntilUtc: string;
-  serverNowUtc: string;
-  fetchTimeMs: number;
-}) {
-  const [display, setDisplay] = useState(() =>
-    formatCountdown(lockUntilUtc, serverNowUtc, Date.now() - fetchTimeMs),
-  );
-
-  useEffect(() => {
-    const update = () => {
-      setDisplay(formatCountdown(lockUntilUtc, serverNowUtc, Date.now() - fetchTimeMs));
-    };
-    update();
-    const id = setInterval(update, 1000);
-    return () => clearInterval(id);
-  }, [lockUntilUtc, serverNowUtc, fetchTimeMs]);
-
-  return <>{display}</>;
-});
