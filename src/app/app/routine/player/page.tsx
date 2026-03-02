@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Play, Pause, Check, Lock } from 'lucide-react';
-import Hls from 'hls.js';
+import type Hls from 'hls.js';
 import { getSessionSafe } from '@/lib/supabase';
 
 /** media_payload shape (API response) */
@@ -83,20 +83,23 @@ function MediaPlayer({
     if (!video || !payload || segment.mediaError) return;
 
     if (payload.kind === 'hls' && payload.streamUrl) {
-      if (Hls.isSupported()) {
-        const hls = new Hls();
-        hlsRef.current = hls;
-        hls.loadSource(payload.streamUrl);
-        hls.attachMedia(video);
-        return () => {
-          hls.destroy();
-          hlsRef.current = null;
-        };
-      }
-      if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = payload.streamUrl;
-        return () => { video.src = ''; };
-      }
+      let destroyed = false;
+      import('hls.js').then(({ default: HlsLib }) => {
+        if (destroyed || !video) return;
+        if (HlsLib.isSupported()) {
+          const hls = new HlsLib();
+          hlsRef.current = hls;
+          hls.loadSource(payload.streamUrl!);
+          hls.attachMedia(video);
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = payload.streamUrl!;
+        }
+      });
+      return () => {
+        destroyed = true;
+        if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+        else { video.src = ''; }
+      };
     }
   }, [segment.id, segment.mediaPayload?.streamUrl, segment.mediaError]);
 
@@ -310,7 +313,7 @@ export default function RoutinePlayerPage() {
             routineId,
             dayNumber,
             debug: debugFlag,
-            mediaMode: 'first',
+            mediaMode: 'none',
           }),
         });
         const _tResp = performance.now();
