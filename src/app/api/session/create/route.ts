@@ -76,13 +76,31 @@ function buildTheme(
   return `Phase ${phaseIdx + 1} · ${phaseLabel}`;
 }
 
-// ─── plan_json stub v2 ────────────────────────────────────────────────────────
+// ─── plan_json stub v3 (condition×time matrix) ──────────────────────────────────
+
+/** Baseline: Prep 2, Main 3, Release 1. Matrix adjusts counts/sets/reps. */
+type ItemKind = 'warmup' | 'strength' | 'mobility' | 'breath' | 'core' | 'release';
+
+type PlanItem = {
+  key: string;
+  order: number;
+  templateId: string;
+  name: string;
+  title: string;
+  kind: ItemKind;
+  sets: number;
+  reps?: number;
+  hold_seconds?: number;
+  focus_tag?: string | null;
+  notes?: string;
+};
 
 /**
- * plan_json stub v2 생성.
- * meta: deep 결과 요약 포함.
- * items: 구체 운동명 없음 (templateId는 placeholder, 다음 PR에서 실제 연결).
- * condition × time_budget: flags + items 수량/세트 수만 반영.
+ * condition×time matrix — plan_json only, no heavy work.
+ * Baseline: Prep 2, Main 3, Release 1.
+ * short: fewer items + sets-1 (min 1).
+ * good/normal: Main sets+1, reps+2.
+ * bad: recovery=true, mobility/breath/core, lower volume.
  */
 function buildStubPlanJsonV2(
   sessionNumber: number,
@@ -94,11 +112,108 @@ function buildStubPlanJsonV2(
 ) {
   const isShort = timeBudget === 'short';
   const isRecovery = conditionMood === 'bad';
-  const sets = isShort ? 2 : 3;
-  const mainItems = isShort ? 2 : 4;
+  const isGood = conditionMood === 'good';
+
+  // Matrix: item counts (baseline Prep 2, Main 3, Release 1)
+  let prepCount: number;
+  let mainCount: number;
+  const releaseCount = 1;
+
+  if (isRecovery) {
+    prepCount = isShort ? 1 : 2;
+    mainCount = isShort ? 1 : 2;
+  } else if (isShort) {
+    prepCount = 1;
+    mainCount = 2;
+  } else {
+    prepCount = 2;
+    mainCount = 3;
+  }
+
+  // Matrix: sets
+  let prepSets = 1;
+  let mainSets: number;
+  const releaseSets = 1;
+
+  if (isRecovery) {
+    mainSets = 1;
+  } else if (isShort) {
+    mainSets = 2; // short baseline
+  } else if (isGood) {
+    mainSets = 4; // ok normal=3, good +1
+  } else {
+    mainSets = 3;
+  }
+
+  // Matrix: reps / seconds
+  const prepReps = isRecovery ? 6 : 10;
+  let mainReps: number;
+  const releaseSeconds = isRecovery ? 20 : 30;
+
+  if (isRecovery) {
+    mainReps = 6;
+  } else if (isGood && !isShort) {
+    mainReps = 14; // ok=12, good +2
+  } else {
+    mainReps = isShort ? 10 : 12;
+  }
+
+  const focusTag = (i: number) =>
+    deep.focus.length > 0 ? deep.focus[i % deep.focus.length] ?? null : null;
+
+  // Prep
+  const prepKinds: ItemKind[] = isRecovery ? ['mobility', 'breath'] : ['warmup', 'warmup'];
+  const prepItems: PlanItem[] = Array.from({ length: prepCount }, (_, i) => ({
+    key: `prep_${i + 1}`,
+    order: i + 1,
+    templateId: `stub_prep_${i + 1}`,
+    name: isRecovery ? `호흡·이완 ${i + 1}` : `준비 ${i + 1}`,
+    title: isRecovery ? `호흡·이완 ${i + 1}` : `준비 ${i + 1}`,
+    kind: prepKinds[i] ?? 'warmup',
+    sets: prepSets,
+    reps: prepReps,
+    focus_tag: null,
+    notes: isRecovery ? '회복 모드' : undefined,
+  }));
+
+  // Main — recovery: mobility/core; else theme-based
+  const mainKinds: ItemKind[] = isRecovery
+    ? (mainCount === 1 ? ['core'] : ['mobility', 'core'])
+    : (['strength', 'strength', 'strength'] as ItemKind[]);
+  const mainItems: PlanItem[] = Array.from({ length: mainCount }, (_, i) => ({
+    key: `main_${i + 1}`,
+    order: i + 1,
+    templateId: `stub_main_p${phase}_${i + 1}`,
+    name: isRecovery ? `회복 운동 ${i + 1}` : `${theme} ${i + 1}`,
+    title: isRecovery ? `회복 운동 ${i + 1}` : `${theme} ${i + 1}`,
+    kind: mainKinds[i] ?? 'strength',
+    sets: mainSets,
+    reps: mainReps,
+    focus_tag: isRecovery ? null : focusTag(i),
+    notes: isRecovery ? '회복 모드' : undefined,
+  }));
+
+  // Release
+  const releaseItems: PlanItem[] = [
+    {
+      key: 'release_1',
+      order: 1,
+      templateId: 'stub_release_1',
+      name: '이완 1',
+      title: '이완 1',
+      kind: 'release',
+      sets: releaseSets,
+      hold_seconds: releaseSeconds,
+      notes: isRecovery ? '회복 모드' : undefined,
+    },
+  ];
+
+  const prepDuration = isShort ? 90 : isRecovery ? 120 : 180;
+  const mainDuration = isShort ? 180 : isRecovery ? 240 : 420;
+  const releaseDuration = isShort ? 45 : isRecovery ? 60 : 120;
 
   return {
-    version: 'session_stub_v2',
+    version: 'session_stub_v3',
     meta: {
       session_number: sessionNumber,
       phase,
@@ -109,43 +224,24 @@ function buildStubPlanJsonV2(
       scoring_version: deep.scoring_version,
     },
     flags: {
-      recovery: isRecovery,
       short: isShort,
+      recovery: isRecovery,
     },
     segments: [
       {
         title: 'Prep',
-        duration_sec: isShort ? 120 : 180,
-        items: Array.from({ length: isShort ? 2 : 3 }, (_, i) => ({
-          order: i + 1,
-          templateId: `stub_prep_${i + 1}`,
-          name: `준비 ${i + 1}`,
-          sets: 1,
-          reps: 10,
-        })),
+        duration_sec: prepDuration,
+        items: prepItems,
       },
       {
         title: 'Main',
-        duration_sec: isShort ? 240 : 420,
-        items: Array.from({ length: mainItems }, (_, i) => ({
-          order: i + 1,
-          templateId: `stub_main_p${phase}_${i + 1}`,
-          name: isRecovery ? `회복 운동 ${i + 1}` : `${theme} ${i + 1}`,
-          sets,
-          reps: isRecovery ? 8 : 12,
-          focus_tag: deep.focus.length > 0 ? deep.focus[i % deep.focus.length] ?? null : null,
-        })),
+        duration_sec: mainDuration,
+        items: mainItems,
       },
       {
         title: 'Release',
-        duration_sec: isShort ? 60 : 120,
-        items: Array.from({ length: isShort ? 1 : 2 }, (_, i) => ({
-          order: i + 1,
-          templateId: `stub_release_${i + 1}`,
-          name: `이완 ${i + 1}`,
-          sets: 1,
-          hold_seconds: 30,
-        })),
+        duration_sec: releaseDuration,
+        items: releaseItems,
       },
     ],
   };
