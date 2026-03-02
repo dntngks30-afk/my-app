@@ -11,7 +11,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireActivePlan } from '@/lib/auth/requireActivePlan';
 import type { GenerateDayPlanResult } from '@/lib/routine-plan/day-plan-generator';
 import type { DailyCondition } from '@/lib/routine-plan/day-plan-generator';
-import { getTemplatesForMediaByIds } from '@/lib/workout-routine/exercise-templates-db';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
@@ -57,8 +56,8 @@ export async function POST(req: NextRequest) {
     const rawMode = mediaModeRaw === 'none' || mediaModeRaw === 'first' || mediaModeRaw === 'all'
       ? mediaModeRaw
       : includeMedia
-        ? 'all'
-        : 'first';
+        ? 'first'
+        : 'none';
     const mediaMode = rawMode as 'none' | 'first' | 'all';
 
     if (!routineId || !dayNumber) {
@@ -183,12 +182,11 @@ export async function POST(req: NextRequest) {
     const ids = plan.selected_template_ids ?? [];
     let tTemplatesFetch = tGenerate;
     let tMedia = tGenerate;
-    const signIds =
-      mediaMode === 'all' ? ids
-      : mediaMode === 'first' ? ids.slice(0, 1)
-      : [];
 
-    if (ids.length > 0) {
+    if (mediaMode !== 'none' && ids.length > 0) {
+      const { getTemplatesForMediaByIds } = await import('@/lib/workout-routine/exercise-templates-db');
+      const signIds = mediaMode === 'all' ? ids : ids.slice(0, 1);
+
       const templates = await getTemplatesForMediaByIds(ids);
       tTemplatesFetch = performance.now();
       const templateMap = new Map(templates.map((t) => [t.id, t]));
