@@ -13,13 +13,7 @@ import BottomNav from '../../_components/BottomNav';
 import PwaInstallModal from '@/components/pwa/PwaInstallModal';
 import { usePwaInstall } from '@/lib/pwa/usePwaInstall';
 import { getSessionSafe } from '@/lib/supabase';
-import { getCopy } from '@/lib/deep-result/copy';
-import { toRadarScores } from '@/lib/deep-result/score-utils';
-import PatternBanner from './_components/PatternBanner';
-import RadarChart from './_components/RadarChart';
-import ResultNarrative from './_components/ResultNarrative';
-import ScoreCards from './_components/ScoreCards';
-import TagChips from './_components/TagChips';
+import DeepResultViewClient from '@/components/deep-result/DeepResultViewClient';
 
 interface DeepResult {
   source: string;
@@ -231,13 +225,13 @@ export default function DeepTestResultPage() {
   }
 
   const att = result?.attempt;
-  const resultType = att?.resultType ?? null;
   const derived = att?.scores?.derived;
-  const focusTags = derived?.focus_tags ?? [];
-  const avoidTags = derived?.avoid_tags ?? [];
-  const radarScores = toRadarScores(derived?.algorithm_scores);
-
-  const copy = getCopy(resultType);
+  const derivedForView = {
+    result_type: att?.resultType ?? undefined,
+    algorithm_scores: derived?.algorithm_scores,
+    focus_tags: derived?.focus_tags ?? [],
+    avoid_tags: derived?.avoid_tags ?? [],
+  };
 
   return (
     <div className="min-h-screen bg-[#f8f6f0] pb-20">
@@ -250,16 +244,7 @@ export default function DeepTestResultPage() {
             </h1>
           </div>
 
-          <PatternBanner copy={copy} />
-
-          {/* 시각화 섹션: 모바일 세로 / 데스크탑 2열 */}
-          <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <RadarChart scores={radarScores} maxScore={10} size={240} />
-            <ScoreCards scores={radarScores} maxScore={10} />
-          </section>
-
-          <ResultNarrative copy={copy} />
-          <TagChips focusTags={focusTags} avoidTags={avoidTags} />
+          <DeepResultViewClient derived={derivedForView} variant="paid" />
 
           {/* 다음 단계 카드 */}
           <section className={`${nbCard} space-y-3`}>
