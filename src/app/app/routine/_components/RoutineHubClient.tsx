@@ -3,10 +3,10 @@
 /**
  * RoutineHubClient — 루틴 탭 메인 (리디자인)
  *
- * 레이아웃: Today 헤더 → CalendarPills → TodayGoalCard → CTA → Accordion(active 시)
- * 7일 시스템 제거. Session rail 전용.
+ * 레이아웃: Today 헤더 → CalendarPills → TodayGoalCard → CTA → Accordion(모달 확정 후)
+ * CTA 클릭 → 오늘 컨디션 조정 모달 → 확정(리셋 시작) 시에만 create 또는 표시.
  *
- * Network: GET active 1x, GET history 1x, POST create는 CTA 클릭 시에만.
+ * Network: GET active 1x, GET history 1x, POST create는 모달 확정 시에만.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -18,6 +18,7 @@ import BottomNav from '../../_components/BottomNav';
 import CalendarPills from './CalendarPills';
 import TodayGoalCard from './TodayGoalCard';
 import RoutineAccordionList from './RoutineAccordionList';
+import SessionAdjustModal from './SessionAdjustModal';
 import SessionRecoveryModal from './SessionRecoveryModal';
 import SessionCompleteSummary from './SessionCompleteSummary';
 import {
@@ -75,6 +76,8 @@ export default function RoutineHubClient() {
   const [creating, setCreating] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [showRecovery, setShowRecovery] = useState(false);
+  const [showTodayRoutine, setShowTodayRoutine] = useState(false);
+  const [isModalOpen, setModalOpen] = useState(false);
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
@@ -174,13 +177,23 @@ export default function RoutineHubClient() {
     return () => { cancelled = true; };
   }, []);
 
-  const handleCreate = useCallback(async () => {
+  const handleConfirmCreate = useCallback(async (
+    mood: 'good' | 'ok' | 'bad',
+    budget: 'short' | 'normal'
+  ) => {
     if (!token || creating) return;
     setCreating(true);
 
+    if (activePlan) {
+      setShowTodayRoutine(true);
+      setModalOpen(false);
+      setCreating(false);
+      return;
+    }
+
     const result = await createSession(token, {
-      condition_mood: 'ok',
-      time_budget: 'short',
+      condition_mood: mood,
+      time_budget: budget,
     });
     setCreating(false);
 
@@ -190,11 +203,13 @@ export default function RoutineHubClient() {
       } else {
         setErrorMsg(result.error.message);
       }
+      setModalOpen(false);
       return;
     }
 
     if ('done' in result.data && result.data.done) {
       setProgress(result.data.progress);
+      setModalOpen(false);
       return;
     }
 
@@ -205,6 +220,8 @@ export default function RoutineHubClient() {
     };
     setActivePlan(active);
     setProgress(prog);
+    setShowTodayRoutine(true);
+    setModalOpen(false);
     const now = Date.now();
     setStartedAtMs(now);
     saveSessionDraft({
@@ -214,7 +231,7 @@ export default function RoutineHubClient() {
       checked: {},
       note: { mood: active.condition.condition_mood, time_budget: active.condition.time_budget },
     });
-  }, [token, creating]);
+  }, [token, creating, activePlan]);
 
   const performComplete = useCallback(async () => {
     if (!token || !activePlan || completing) return;
@@ -388,7 +405,7 @@ export default function RoutineHubClient() {
           kcalLabel="예상 120 kcal"
         />
 
-        {activePlan ? (
+        {showTodayRoutine && activePlan ? (
           <>
             <section>
               <h2 className="text-sm font-semibold text-slate-800 mb-3">내 루틴 목록</h2>
@@ -422,24 +439,24 @@ export default function RoutineHubClient() {
             <NeoButton
               variant="orange"
               fullWidth
-              disabled={creating}
-              onClick={handleCreate}
+              onClick={() => setModalOpen(true)}
               className="py-3 text-base font-bold flex items-center justify-center gap-2"
             >
-              {creating ? (
-                <>
-                  <span className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  생성 중...
-                </>
-              ) : (
-                <>
-                  <Play className="size-5" fill="currentColor" strokeWidth={0} />
-                  움직임 리셋 시작
-                </>
-              )}
+              <Play className="size-5" fill="currentColor" strokeWidth={0} />
+              움직임 리셋 시작
             </NeoButton>
           </div>
         )}
+
+      {isModalOpen && (
+        <SessionAdjustModal
+          defaultMood="ok"
+          defaultBudget="short"
+          loading={creating}
+          onClose={() => setModalOpen(false)}
+          onSubmit={handleConfirmCreate}
+        />
+      )}
 
       </main>
 
