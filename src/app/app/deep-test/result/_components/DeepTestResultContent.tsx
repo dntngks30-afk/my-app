@@ -17,7 +17,6 @@ import {
   ChevronRight,
   AlertCircle,
   Zap,
-  Info,
 } from 'lucide-react';
 import { getCopy } from '@/lib/deep-result/copy';
 import { toRadarScores } from '@/lib/deep-result/score-utils';
@@ -108,7 +107,6 @@ function getPos(score: number, angleIdx: number, radius = maxRadius) {
 
 export default function DeepTestResultContent({
   resultType,
-  confidence = null,
   focusTags,
   avoidTags,
   algorithmScores,
@@ -150,9 +148,9 @@ export default function DeepTestResultContent({
   const mPain = statusForPainRisk(painRisk);
 
   const metrics = [
-    { id: 'mobility' as const, label: '가동성', score: mobility, status: mMob.status, color: '#FF8A00' },
-    { id: 'stability' as const, label: '안정성', score: stability, status: mSta.status, color: '#F87171' },
-    { id: 'pain' as const, label: '통증', score: painRisk, status: mPain.status, color: '#34D399' },
+    { id: 'mobility' as const, label: '가동성', score: mobility, status: mMob.status, statusColor: mMob.color },
+    { id: 'stability' as const, label: '안정성', score: stability, status: mSta.status, statusColor: mSta.color },
+    { id: 'pain' as const, label: '통증', score: painRisk, status: mPain.status, statusColor: mPain.color },
   ];
 
   const copy = getCopy(resultType);
@@ -259,17 +257,11 @@ export default function DeepTestResultContent({
 
       {/* Hero Diagnosis Card */}
       <div className="bg-white border-[3px] border-black rounded-[32px] p-7 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-        <div className="flex items-center justify-between mb-5">
-          <div className="inline-flex items-center gap-2 bg-[#FF8A00] text-white px-3 py-1 rounded-full border-[2px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-            <Zap size={10} fill="currentColor" />
-            <span className="text-[10px] font-black uppercase tracking-wider">{mainTag}</span>
+        <div className="mb-5">
+          <div className="inline-flex items-center gap-2 bg-[#FF8A00] text-white px-3 py-1.5 rounded-full border-[2px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+            <Zap size={12} fill="currentColor" />
+            <span className="text-base font-black tracking-wider">{mainTag}</span>
           </div>
-          {confidence != null && (
-            <div className="text-[10px] font-black text-gray-500 flex items-center gap-2">
-              <Info size={14} strokeWidth={3} />
-              <span>{`신뢰도 ${Math.round(clamp(toNum(confidence, 0) * 100, 0, 100))}%`}</span>
-            </div>
-          )}
         </div>
 
         <h1 className="text-[22px] font-black leading-tight mb-3 break-keep text-black">
@@ -288,10 +280,10 @@ export default function DeepTestResultContent({
       {/* Radar Chart */}
       <div className="bg-white border-[3px] border-black rounded-[40px] p-12 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] relative overflow-visible">
         <div className="flex flex-col items-center mb-12">
-          <h2 className="text-base font-black text-gray-400 tracking-wide">
+          <h2 className="text-xl font-black text-black tracking-wide">
             움직임 지표
           </h2>
-          <p className="mt-2 text-[11px] font-black text-black/60 break-keep text-center">
+          <p className="mt-2 text-[11px] font-bold text-black/60 break-keep text-center">
             통증은 낮을수록 좋음 축으로 표시됩니다.
           </p>
         </div>
@@ -356,19 +348,18 @@ export default function DeepTestResultContent({
               className="z-20"
             >
               <div className="bg-white border-[2.5px] border-black px-3 py-1.5 rounded-2xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-col items-center min-w-[72px] transition-transform hover:-translate-y-1">
-                <p className="text-[10px] font-black text-gray-500 mb-0.5">
+                <p className="text-[10px] font-black text-gray-500 mb-0.5 whitespace-nowrap">
                   {metric.label}
                 </p>
-                <div className="flex items-baseline gap-1">
+                <div className="flex items-center gap-1 flex-nowrap">
                   <span
-                    className="text-lg font-black italic tracking-tighter"
-                    style={{ color: metric.id === 'mobility' ? '#000' : metric.color }}
+                    className="text-lg font-black italic tracking-tighter text-black shrink-0"
                   >
                     {metric.score.toFixed(1)}
                   </span>
                   <span
-                    className="text-[8px] font-black px-1 py-0.5 rounded bg-gray-50 border border-black/10"
-                    style={{ color: metric.color }}
+                    className="text-[8px] font-black px-1 py-0.5 rounded bg-gray-50 border border-black/10 whitespace-nowrap shrink-0"
+                    style={{ color: metric.statusColor }}
                   >
                     {metric.status}
                   </span>
@@ -381,8 +372,8 @@ export default function DeepTestResultContent({
 
       {/* Insights */}
       <div className="bg-white border-[3px] border-black rounded-[32px] p-7 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-        <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.4em] mb-8 flex items-center gap-3">
-          <div className="w-1.5 h-5 bg-black rounded-full" />
+        <h3 className="text-lg font-black text-black mb-8 flex items-center gap-3">
+          <div className="w-1.5 h-6 bg-black rounded-full" />
           움직임 경고 신호
         </h3>
         <div className="space-y-6">
@@ -414,8 +405,8 @@ export default function DeepTestResultContent({
         <div className="absolute top-[-20px] right-[-20px] p-4 opacity-10 rotate-12 pointer-events-none">
           <Activity size={160} strokeWidth={1} />
         </div>
-        <h3 className="text-[11px] font-black text-black/40 uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
-          <Target size={16} strokeWidth={3} />
+        <h3 className="text-lg font-black text-black mb-6 flex items-center gap-2">
+          <Target size={18} strokeWidth={3} />
           7일 움직임 리셋
         </h3>
         <div className="space-y-3 relative z-10">
