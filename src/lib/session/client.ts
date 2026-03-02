@@ -160,3 +160,28 @@ export async function createSession(
     body: JSON.stringify(input),
   });
 }
+
+// ─── complete ──────────────────────────────────────────────────────────────────
+
+export type CompleteSessionInput = {
+  session_number: number;
+  duration_seconds: number;
+  completion_mode: 'all_done' | 'partial_done' | 'stop_early';
+};
+
+export type CompleteSessionResponse = {
+  progress: SessionProgress;
+  next_theme: string | null;
+  idempotent: boolean;
+};
+
+/** POST /api/session/complete — 세션 완료 (유저 명시적 액션 전용) */
+export async function completeSession(
+  token: string,
+  input: CompleteSessionInput
+): Promise<ApiResult<CompleteSessionResponse>> {
+  return sessionFetch<CompleteSessionResponse>('/api/session/complete', token, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
