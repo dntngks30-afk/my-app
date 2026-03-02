@@ -35,6 +35,7 @@ export default function BottomNav() {
           <Link
             key={href}
             href={href}
+            prefetch={href !== '/app/routine/player'}
             className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs transition ${
               active ? 'font-semibold text-slate-800' : 'text-slate-400'
             }`}

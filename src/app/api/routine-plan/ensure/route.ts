@@ -9,9 +9,16 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireActivePlan } from '@/lib/auth/requireActivePlan';
+import { createServerTiming } from '@/lib/debug/serverTiming';
 import type { GenerateDayPlanResult } from '@/lib/routine-plan/day-plan-generator';
 import type { DailyCondition } from '@/lib/routine-plan/day-plan-generator';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+
+function traceId(): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID().slice(0, 8)
+    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -46,8 +53,10 @@ function toPlanResponse(plan: {
 }
 
 export async function POST(req: NextRequest) {
-  const t0 = performance.now();
+  const t = createServerTiming();
+  const rid = traceId();
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+  t.mark('body');
   const debugFlag = body?.debug;
   const isDebug = debugFlag === true || debugFlag === 1 || debugFlag === '1';
   try {
@@ -73,16 +82,23 @@ export async function POST(req: NextRequest) {
     const mediaMode = rawMode as 'none' | 'first' | 'all';
 
     if (!routineId || !dayNumber) {
-      return NextResponse.json(
+      const res = NextResponse.json(
         { error: 'routineId와 dayNumber는 필수입니다.' },
         { status: 400 }
       );
+      res.headers.set('Server-Timing', t.header());
+      res.headers.set('x-mr-trace', rid);
+      return res;
     }
 
     const auth = await requireActivePlan(req, { recordTimings: isDebug });
-    if (auth instanceof NextResponse) return auth;
+    t.mark('auth');
+    if (auth instanceof NextResponse) {
+      auth.headers.set('Server-Timing', t.header());
+      auth.headers.set('x-mr-trace', rid);
+      return auth;
+    }
     const userId = auth.userId;
-    const tAuth = performance.now();
 
     const day = Math.max(1, Math.min(7, Math.floor(Number(dayNumber))));
 
@@ -103,10 +119,13 @@ export async function POST(req: NextRequest) {
     ]);
 
     if (!routine || routine.user_id !== userId) {
-      return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
+      const res = NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
+      res.headers.set('Server-Timing', t.header());
+      res.headers.set('x-mr-trace', rid);
+      return res;
     }
 
-    const tSelectDaily = performance.now();
+    t.mark('db_select');
 
     let generateResult: GenerateDayPlanResult | null = null;
     let plan: {
@@ -181,9 +200,10 @@ export async function POST(req: NextRequest) {
         daily_condition_snapshot: dailyCondition ?? generateResult.plan.daily_condition_snapshot,
       };
       regenerated = generateResult.regenerated;
+      t.mark('db_plan_create');
     }
 
-    const tGenerate = performance.now();
+    t.mark('payload_start');
 
     const payload: Record<string, unknown> = {
       success: true,
@@ -192,13 +212,10 @@ export async function POST(req: NextRequest) {
     };
 
     const ids = plan.selected_template_ids ?? [];
-    let tTemplatesFetch = tGenerate;
-    let tMedia = tGenerate;
 
     if ((includeTemplates || mediaMode !== 'none') && ids.length > 0) {
       const { getTemplatesForMediaByIds } = await import('@/lib/workout-routine/exercise-templates-db');
       const templates = await getTemplatesForMediaByIds(ids);
-      tTemplatesFetch = performance.now();
       const templateMap = new Map(templates.map((t) => [t.id, t]));
       if (includeTemplates) {
         payload.segments = ids.map((id, i) => {
@@ -234,7 +251,6 @@ export async function POST(req: NextRequest) {
             if (isDebug) console.warn('[routine-plan/ensure] media-payload import failed', importErr);
             settled = signTemplates.map(() => ({ status: 'rejected' as const, reason: 'import_failed' }));
           }
-          tMedia = performance.now();
           signTemplates.forEach((t, i) => {
             const payload = settled[i]?.status === 'fulfilled'
               ? (settled[i] as PromiseFulfilledResult<{ kind: string; autoplayAllowed: boolean; notes?: string[] }>).value
@@ -272,26 +288,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const tEnd = performance.now();
+    t.mark('payload');
+
     if (isDebug) {
-      const t_auth = Math.round(tAuth - t0);
-      const t_select = Math.round(tSelectDaily - tAuth);
-      const t_generate = Math.round(tGenerate - tSelectDaily);
-      const t_templates_fetch = Math.round(tTemplatesFetch - tGenerate);
-      const t_media = Math.round(tMedia - tTemplatesFetch);
-      const t_total = Math.round(tEnd - t0);
-      const t_db = t_select + t_templates_fetch;
-      const t_compute = t_generate + t_media;
-      const timings: Record<string, number> = {
-        t_auth,
-        t_db,
-        t_compute,
-        t_select,
-        t_generate,
-        t_templates_fetch,
-        t_media,
-        t_total,
-      };
+      const timings: Record<string, number> = {};
       if (auth.timings) {
         timings.t_auth_user = auth.timings.t_auth_user;
         timings.t_auth_plan = auth.timings.t_auth_plan;
@@ -306,15 +306,9 @@ export async function POST(req: NextRequest) {
     }
     const res = NextResponse.json(payload);
     res.headers.set('Cache-Control', 'no-store, max-age=0');
-    if (isDebug && payload.timings) {
-      const t = payload.timings as Record<string, number>;
-      res.headers.set('Server-Timing', [
-        `auth;dur=${t.t_auth ?? 0}`,
-        `db;dur=${t.t_db ?? 0}`,
-        `compute;dur=${t.t_compute ?? 0}`,
-        `total;dur=${t.t_total ?? 0}`,
-      ].join(', '));
-    }
+    res.headers.set('Server-Timing', t.header());
+    res.headers.set('x-mr-trace', rid);
+    res.headers.set('x-mr-ensure-mode', regenerated ? 'create' : 'read');
     return res;
   } catch (error) {
     console.error('[routine-plan/ensure]', error);
@@ -324,6 +318,9 @@ export async function POST(req: NextRequest) {
     if (isDebug) {
       payload.details = error instanceof Error ? error.message : String(error);
     }
-    return NextResponse.json(payload, { status: 500 });
+    const res = NextResponse.json(payload, { status: 500 });
+    res.headers.set('Server-Timing', t.header());
+    res.headers.set('x-mr-trace', rid);
+    return res;
   }
 }

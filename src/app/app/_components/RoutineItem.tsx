@@ -35,6 +35,7 @@ export default function RoutineItem({
       </div>
       <Link
         href={href}
+        prefetch={false}
         onClick={onPlay}
         className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--brand)] text-white hover:brightness-95"
         aria-label="재생"
