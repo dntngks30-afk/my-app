@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -44,7 +44,7 @@ export default function ResetHomePage() {
   const debugFlag = searchParams.get('debug') === '1';
 
   const [state, setState] = useState<{ currentDay: number; status: string } | null>(null);
-  const [countdown, setCountdown] = useState<string | null>(null);
+  // countdown moved to CountdownTicker component
   const [restRecommended, setRestRecommended] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,19 +88,9 @@ export default function ResetHomePage() {
         setLockUntilUtc(data.lock_until_utc ?? null);
         fetchTimeRef.current = Date.now();
 
-        if (data.rest_recommended && data.lock_until_utc && data.server_now_utc) {
-          setCountdown(formatCountdown(data.lock_until_utc, data.server_now_utc, 0));
-        } else if (data.rest_recommended && s?.lastActivatedAt) {
-          const MS_24H = 24 * 60 * 60 * 1000;
-          const unlockAt = new Date(s.lastActivatedAt).getTime() + MS_24H;
-          const remainingMs = Math.max(0, unlockAt - Date.now());
-          const totalSeconds = Math.floor(remainingMs / 1000);
-          const h = Math.floor(totalSeconds / 3600);
-          const m = Math.floor((totalSeconds % 3600) / 60);
-          const sec = totalSeconds % 60;
-          setCountdown([h, m, sec].map((n) => String(n).padStart(2, '0')).join(':'));
-        } else {
-          setCountdown(null);
+        if (!data.lock_until_utc && data.rest_recommended && s?.lastActivatedAt) {
+          const MS = 24 * 60 * 60 * 1000;
+          setLockUntilUtc(new Date(new Date(s.lastActivatedAt).getTime() + MS).toISOString());
         }
         setError(null);
         if (process.env.NODE_ENV === 'development') {
@@ -111,7 +101,6 @@ export default function ResetHomePage() {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '대시보드 조회 실패');
           setState(null);
-          setCountdown(null);
           setRestRecommended(false);
           setTodayCompletedForDay(false);
         }
@@ -122,17 +111,9 @@ export default function ResetHomePage() {
     return () => { cancelled = true; };
   }, [debugFlag]);
 
-  useEffect(() => {
-    if (state?.status !== 'LOCKED') return;
-    if (!lockUntilUtc || !serverNowUtc) return;
-    const update = () => {
-      const clientElapsedMs = Date.now() - fetchTimeRef.current;
-      setCountdown(formatCountdown(lockUntilUtc, serverNowUtc, clientElapsedMs));
-    };
-    update();
-    const id = setInterval(update, 1000);
-    return () => clearInterval(id);
-  }, [state?.status, lockUntilUtc, serverNowUtc]);
+  const countdownTicker = lockUntilUtc && serverNowUtc ? (
+    <CountdownTicker lockUntilUtc={lockUntilUtc} serverNowUtc={serverNowUtc} fetchTimeMs={fetchTimeRef.current} />
+  ) : null;
 
   const handleDayPillClick = (day: number) => {
     if (latestRoutineId) {
@@ -297,7 +278,7 @@ export default function ResetHomePage() {
             <MainCta
               status={state?.status ?? 'READY'}
               currentDay={currentDay}
-              countdown={countdown}
+              countdownNode={countdownTicker}
               restRecommended={restRecommended}
               todayCompletedForDay={todayCompletedForDay}
               onStartClick={handleStartClick}
@@ -338,7 +319,7 @@ export default function ResetHomePage() {
 type MainCtaProps = {
   status: string;
   currentDay: number;
-  countdown: string | null;
+  countdownNode: React.ReactNode;
   restRecommended: boolean;
   todayCompletedForDay: boolean;
   onStartClick: (day: number) => void;
@@ -348,7 +329,7 @@ type MainCtaProps = {
 function MainCta({
   status,
   currentDay,
-  countdown,
+  countdownNode,
   restRecommended,
   todayCompletedForDay,
   onStartClick,
@@ -406,7 +387,7 @@ function MainCta({
             Day {currentDay} 리셋 시작하기
           </span>
           <span className="block text-sm font-medium text-amber-700">
-            휴식 권장 ⏳ {countdown ?? '00:00:00'} 후 권장
+            휴식 권장 ⏳ {countdownNode ?? '00:00:00'} 후 권장
           </span>
         </span>
         <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-400">
@@ -521,3 +502,28 @@ function DayPill({
     </button>
   );
 }
+
+const CountdownTicker = memo(function CountdownTicker({
+  lockUntilUtc,
+  serverNowUtc,
+  fetchTimeMs,
+}: {
+  lockUntilUtc: string;
+  serverNowUtc: string;
+  fetchTimeMs: number;
+}) {
+  const [display, setDisplay] = useState(() =>
+    formatCountdown(lockUntilUtc, serverNowUtc, Date.now() - fetchTimeMs),
+  );
+
+  useEffect(() => {
+    const update = () => {
+      setDisplay(formatCountdown(lockUntilUtc, serverNowUtc, Date.now() - fetchTimeMs));
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [lockUntilUtc, serverNowUtc, fetchTimeMs]);
+
+  return <>{display}</>;
+});
