@@ -150,9 +150,9 @@ export default function DeepTestResultContent({
   const mPain = statusForPainRisk(painRisk);
 
   const metrics = [
-    { id: 'mobility' as const, label: 'Mobility', score: mobility, status: mMob.status, color: '#FF8A00' },
-    { id: 'stability' as const, label: 'Stability', score: stability, status: mSta.status, color: '#F87171' },
-    { id: 'pain' as const, label: 'Pain', score: painRisk, status: mPain.status, color: '#34D399' },
+    { id: 'mobility' as const, label: '가동성', score: mobility, status: mMob.status, color: '#FF8A00' },
+    { id: 'stability' as const, label: '안정성', score: stability, status: mSta.status, color: '#F87171' },
+    { id: 'pain' as const, label: '통증', score: painRisk, status: mPain.status, color: '#34D399' },
   ];
 
   const copy = getCopy(resultType);
@@ -245,8 +245,8 @@ export default function DeepTestResultContent({
           <div className="w-9 h-9 bg-[#FFB800] border-[3px] border-black rounded-xl flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             <ShieldCheck size={20} strokeWidth={3} />
           </div>
-          <span className="font-black text-base tracking-tighter uppercase italic">
-            Body Analysis
+          <span className="font-black text-base tracking-tighter italic">
+            심층 분석 결과
           </span>
         </div>
         <div className="text-right">
@@ -288,11 +288,11 @@ export default function DeepTestResultContent({
       {/* Radar Chart */}
       <div className="bg-white border-[3px] border-black rounded-[40px] p-12 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] relative overflow-visible">
         <div className="flex flex-col items-center mb-12">
-          <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em]">
-            Movement Metrics
+          <h2 className="text-base font-black text-gray-400 tracking-wide">
+            움직임 지표
           </h2>
           <p className="mt-2 text-[11px] font-black text-black/60 break-keep text-center">
-            Pain은 &quot;통증 위험(낮을수록 좋음)&quot; 축으로 표시됩니다.
+            통증은 낮을수록 좋음 축으로 표시됩니다.
           </p>
         </div>
 
@@ -356,7 +356,7 @@ export default function DeepTestResultContent({
               className="z-20"
             >
               <div className="bg-white border-[2.5px] border-black px-3 py-1.5 rounded-2xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-col items-center min-w-[72px] transition-transform hover:-translate-y-1">
-                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">
+                <p className="text-[10px] font-black text-gray-500 mb-0.5">
                   {metric.label}
                 </p>
                 <div className="flex items-baseline gap-1">
@@ -383,7 +383,7 @@ export default function DeepTestResultContent({
       <div className="bg-white border-[3px] border-black rounded-[32px] p-7 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
         <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.4em] mb-8 flex items-center gap-3">
           <div className="w-1.5 h-5 bg-black rounded-full" />
-          Deep Insights
+          움직임 경고 신호
         </h3>
         <div className="space-y-6">
           {insightsText.map((text, i) => {
