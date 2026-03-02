@@ -3,6 +3,8 @@
  * 404 unless DEMO_DEEP_TEST_ENABLED=1
  */
 
+export const dynamic = 'force-dynamic';
+
 import { notFound } from 'next/navigation';
 import DemoResultClient from './DemoResultClient';
 
