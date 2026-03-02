@@ -122,6 +122,12 @@ export default function RoutineHubPage() {
   const latest = routines[0];
   const canContinue = latest && (latest.status === 'active' || latest.status === 'draft' || latest.status === 'completed');
 
+  useEffect(() => {
+    if (!latest) return;
+    const day = latest.nextDay >= 1 && latest.nextDay <= 7 ? latest.nextDay : 1;
+    router.prefetch(`/app/routine/player?routineId=${encodeURIComponent(latest.id)}&day=${day}`);
+  }, [router, latest]);
+
   const handleContinue = () => {
     if (!latest) return;
     const day = latest.nextDay;
