@@ -57,8 +57,20 @@ export async function POST(req: NextRequest) {
   const rid = traceId();
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
   t.mark('body');
-  const debugFlag = body?.debug;
-  const isDebug = debugFlag === true || debugFlag === 1 || debugFlag === '1';
+  const bodyDebug = body?.debug;
+  const queryDebug = (() => {
+    try {
+      const u = new URL(req.url);
+      return u.searchParams.get('debug') === '1';
+    } catch {
+      return false;
+    }
+  })();
+  const isDebug =
+    queryDebug ||
+    bodyDebug === true ||
+    bodyDebug === 1 ||
+    bodyDebug === '1';
   try {
     const {
       routineId,

@@ -312,7 +312,11 @@ export default function RoutinePlayerPage() {
       };
 
       try {
-        const ensureRes = await fetch('/api/routine-plan/ensure', {
+        const ensureUrl =
+          process.env.NEXT_PUBLIC_DEBUG_TIMINGS === '1'
+            ? '/api/routine-plan/ensure?debug=1'
+            : '/api/routine-plan/ensure';
+        const ensureRes = await fetch(ensureUrl, {
           method: 'POST',
           cache: 'no-store',
           headers: {
