@@ -63,11 +63,15 @@ export async function POST(req: NextRequest) {
     const {
       routineId,
       dayNumber,
+      createIfMissing: createIfMissingRaw,
       includeMedia: includeMediaRaw,
       mediaMode: mediaModeRaw,
       includeStatus: includeStatusRaw,
       includeTemplates: includeTemplatesRaw,
     } = body;
+    const createIfMissing = !(
+      createIfMissingRaw === false || createIfMissingRaw === 0 || createIfMissingRaw === '0'
+    );
     const includeMedia = includeMediaRaw === true || includeMediaRaw === 1 || includeMediaRaw === '1';
     const includeStatus = includeStatusRaw === true || includeStatusRaw === 1 || includeStatusRaw === '1';
     const includeTemplates =
@@ -154,6 +158,18 @@ export async function POST(req: NextRequest) {
         daily_condition_snapshot: existingPlan.daily_condition_snapshot ?? null,
       };
       regenerated = false;
+    } else if (!createIfMissing) {
+      const missingPayload: Record<string, unknown> = {
+        error: 'plan_missing',
+        plan: null,
+        missing: true,
+      };
+      const res = NextResponse.json(missingPayload, { status: 404 });
+      res.headers.set('Cache-Control', 'no-store, max-age=0');
+      res.headers.set('Server-Timing', t.header());
+      res.headers.set('x-mr-trace', rid);
+      res.headers.set('x-mr-ensure-mode', 'read');
+      return res;
     } else {
       const { generateDayPlan } = await import('@/lib/routine-plan/day-plan-generator');
       const DEFAULT_CONDITION: DailyCondition & { source?: string } = {

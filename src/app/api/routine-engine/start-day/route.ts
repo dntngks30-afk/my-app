@@ -54,8 +54,22 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const dayNumber = Math.max(1, Math.min(7, Math.floor(Number(body?.dayNumber ?? 1))));
+    const bodyRoutineId = typeof body?.routineId === 'string' ? body.routineId : null;
 
-    const routineId = await getCurrentRoutineId(userId);
+    let routineId: string | null = null;
+    if (bodyRoutineId) {
+      const supabase = getServerSupabaseAdmin();
+      const { data } = await supabase
+        .from('workout_routines')
+        .select('id')
+        .eq('id', bodyRoutineId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      routineId = data?.id ?? null;
+    }
+    if (!routineId) {
+      routineId = await getCurrentRoutineId(userId);
+    }
     if (!routineId) {
       return NextResponse.json(
         { error: '운동 루틴을 찾을 수 없습니다.' },

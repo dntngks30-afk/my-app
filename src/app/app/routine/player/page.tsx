@@ -198,7 +198,9 @@ export default function RoutinePlayerPage() {
   const [planLoading, setPlanLoading] = useState(true);
   const [planError, setPlanError] = useState<string | null>(null);
   const [planEmpty, setPlanEmpty] = useState(false);
+  const [planMissing, setPlanMissing] = useState(false);
   const [planErrorText, setPlanErrorText] = useState<string | null>(null);
+  const [planCreating, setPlanCreating] = useState(false);
   const [planRetryCount, setPlanRetryCount] = useState(0);
   const [ensureTimings, setEnsureTimings] = useState<Record<string, number> | null>(null);
   const authCheckedRef = useRef(false);
@@ -266,6 +268,7 @@ export default function RoutinePlayerPage() {
       return;
     }
     setPlanEmpty(false);
+    setPlanMissing(false);
     setPlanError(null);
     setPlanErrorText(null);
     setEnsureTimings(null);
@@ -322,6 +325,7 @@ export default function RoutinePlayerPage() {
           body: JSON.stringify({
             routineId,
             dayNumber,
+            createIfMissing: 0,
             debug: debugFlag,
             mediaMode: 'none',
             includeTemplates: 1,
@@ -333,6 +337,15 @@ export default function RoutinePlayerPage() {
 
         if (cancelled) return;
         if (data?.timings) setEnsureTimings(data.timings as Record<string, number>);
+        const isPlanMissing =
+          ensureRes.status === 404 || (data?.error as string) === 'plan_missing';
+        if (isPlanMissing) {
+          setPlanMissing(true);
+          setPlanErrorText('오늘 루틴을 생성해야 시작할 수 있어요.');
+          setPlanEmpty(true);
+          setPlanLoading(false);
+          return;
+        }
         if (!ensureRes.ok) {
           setPlanError((data?.error as string) ?? 'Day Plan 조회/생성 실패');
           setPlanLoading(false);
@@ -824,17 +837,45 @@ export default function RoutinePlayerPage() {
   if (planEmpty) {
     const playerUrl = `/app/routine/player?routineId=${encodeURIComponent(routineId)}&day=${dayNumber}`;
     const checkinUrl = `/app/checkin?postWorkout=0&next=${encodeURIComponent(playerUrl)}`;
-    const handleRetry = () => {
-      setPlanEmpty(false);
-      setPlanLoading(true);
+    const handleCreatePlan = async () => {
+      setPlanCreating(true);
       setPlanErrorText(null);
-      setPlanRetryCount((c) => c + 1);
+      try {
+        const { session } = await getSessionSafe();
+        if (!session?.access_token) {
+          setPlanErrorText('로그인이 필요해요.');
+          setPlanCreating(false);
+          return;
+        }
+        const res = await fetch('/api/routine-engine/start-day', {
+          method: 'POST',
+          cache: 'no-store',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ routineId, dayNumber }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          setPlanErrorText(data?.error ?? '루틴 생성에 실패했어요.');
+          setPlanCreating(false);
+          return;
+        }
+        setPlanEmpty(false);
+        setPlanLoading(true);
+        setPlanRetryCount((c) => c + 1);
+      } catch (err) {
+        setPlanErrorText(err instanceof Error ? err.message : '루틴 생성에 실패했어요.');
+      } finally {
+        setPlanCreating(false);
+      }
     };
     return (
       <div className="min-h-screen bg-[#F8F6F0] flex flex-col items-center justify-center px-4">
         <div className="max-w-md w-full rounded-2xl border-2 border-slate-900 bg-white p-6 shadow-[4px_4px_0_0_rgba(15,23,42,1)]">
           <h2 className="text-lg font-bold text-slate-800 mb-2">
-            {planErrorText ? '플랜 생성에 실패했어요.' : '플랜을 불러오지 못했어요.'}
+            {planMissing ? '오늘 루틴을 시작해 주세요' : planErrorText ? '플랜 생성에 실패했어요.' : '플랜을 불러오지 못했어요.'}
           </h2>
           <p className="text-sm text-slate-600 mb-6">
             {planErrorText ?? '다시 시도해 주세요.'}
@@ -842,10 +883,11 @@ export default function RoutinePlayerPage() {
           <div className="flex flex-col gap-3">
             <button
               type="button"
-              onClick={handleRetry}
-              className="min-h-[44px] w-full px-6 py-3 rounded-full border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95"
+              onClick={handleCreatePlan}
+              disabled={planCreating}
+              className="min-h-[44px] w-full px-6 py-3 rounded-full border-2 border-slate-900 bg-orange-400 font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              플랜 다시 생성하기
+              {planCreating ? '루틴 생성 중...' : '오늘 루틴 생성'}
             </button>
             <button
               type="button"
