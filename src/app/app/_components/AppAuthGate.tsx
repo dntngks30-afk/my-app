@@ -25,6 +25,8 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
 
   useEffect(() => {
     let cancelled = false;
+    let retryCount = 0;
+    const MAX_ABORT_RETRIES = 2;
 
     async function check() {
       try {
@@ -74,11 +76,17 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
           lastAllowedUserIdRef.current = null;
           setStatus('paywall');
         }
-      } catch {
-        if (!cancelled) {
-          lastAllowedUserIdRef.current = null;
-          setStatus('auth');
+      } catch (e) {
+        if (cancelled) return;
+        const isAbortError = e instanceof Error && e.name === 'AbortError';
+        if (isAbortError && retryCount < MAX_ABORT_RETRIES) {
+          retryCount += 1;
+          await new Promise((r) => setTimeout(r, 80));
+          if (!cancelled) check();
+          return;
         }
+        lastAllowedUserIdRef.current = null;
+        setStatus('auth');
       }
     }
 
