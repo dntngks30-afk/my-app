@@ -23,11 +23,13 @@ export default function SessionCompleteSummary({
   progress,
   nextTheme,
   durationClamped,
+  onDismiss,
 }: {
   durationSeconds: number;
   progress: SessionProgress;
   nextTheme: string | null;
   durationClamped?: boolean;
+  onDismiss?: () => void;
 }) {
   const router = useRouter();
 
@@ -88,7 +90,10 @@ export default function SessionCompleteSummary({
         <NeoButton
           variant="secondary"
           fullWidth
-          onClick={() => router.push('/app/routine')}
+          onClick={() => {
+            onDismiss?.();
+            router.push('/app/routine');
+          }}
           className="py-3 flex items-center justify-center gap-2"
         >
           <Calendar className="size-4" />
