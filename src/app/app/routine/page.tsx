@@ -76,6 +76,8 @@ export default function RoutineHubPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const debugFlag = searchParams.get('debug') === '1';
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -86,7 +88,7 @@ export default function RoutineHubPage() {
         return;
       }
       try {
-        const url = `/api/routine/list${searchParams.get('debug') === '1' ? '?debug=1' : ''}`;
+        const url = `/api/routine/list${debugFlag ? '?debug=1' : ''}`;
         const res = await fetch(url, {
           cache: 'no-store' as RequestCache,
           headers: { Authorization: `Bearer ${session.access_token}` },
@@ -115,7 +117,7 @@ export default function RoutineHubPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [searchParams]);
+  }, [debugFlag]);
 
   const latest = routines[0];
   const canContinue = latest && (latest.status === 'active' || latest.status === 'draft' || latest.status === 'completed');
