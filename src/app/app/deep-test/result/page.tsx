@@ -14,8 +14,11 @@ import PwaInstallModal from '@/components/pwa/PwaInstallModal';
 import { usePwaInstall } from '@/lib/pwa/usePwaInstall';
 import { getSessionSafe } from '@/lib/supabase';
 import { getCopy } from '@/lib/deep-result/copy';
+import { toRadarScores } from '@/lib/deep-result/score-utils';
 import PatternBanner from './_components/PatternBanner';
+import RadarChart from './_components/RadarChart';
 import ResultNarrative from './_components/ResultNarrative';
+import ScoreCards from './_components/ScoreCards';
 import TagChips from './_components/TagChips';
 
 interface DeepResult {
@@ -32,6 +35,13 @@ interface DeepResult {
       derived?: {
         focus_tags?: string[];
         avoid_tags?: string[];
+        algorithm_scores?: {
+          upper_score?: number;
+          lower_score?: number;
+          core_score?: number;
+          balance_score?: number;
+          pain_risk?: number;
+        };
       };
     };
     resultType?: string | null;
@@ -225,6 +235,7 @@ export default function DeepTestResultPage() {
   const derived = att?.scores?.derived;
   const focusTags = derived?.focus_tags ?? [];
   const avoidTags = derived?.avoid_tags ?? [];
+  const radarScores = toRadarScores(derived?.algorithm_scores);
 
   const copy = getCopy(resultType);
 
@@ -240,6 +251,10 @@ export default function DeepTestResultPage() {
           </div>
 
           <PatternBanner copy={copy} />
+          <div className="space-y-4">
+            <RadarChart scores={radarScores} maxScore={10} size={240} />
+            <ScoreCards scores={radarScores} maxScore={10} />
+          </div>
           <ResultNarrative copy={copy} />
           <TagChips focusTags={focusTags} avoidTags={avoidTags} />
 
