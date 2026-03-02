@@ -1,36 +1,38 @@
 /**
  * POST /api/session/create
  *
- * 세션 플랜 멱등 생성.
- * - active_session_number가 있으면 기존 세션 그대로 반환 (새로 생성 금지)
- * - 없으면 next = completed_sessions + 1
- * - next > total_sessions이면 { done:true, progress } 반환
- * - UPSERT: UNIQUE(user_id, session_number) 기반 멱등 보장
+ * 세션 플랜 멱등 생성 (Deep Result 요약 연결).
  *
- * 입력:
- *   condition_mood: 'good' | 'ok' | 'bad'
- *   time_budget: 'short' | 'normal'
- *   pain_flags?: string[]
- *   equipment?: 'none' | 'band'
+ * 동작 순서:
+ *   1) auth: userId 확보
+ *   2) progress 조회/초기화
+ *   3) active_session_number 있으면 기존 plan 그대로 반환 (deep 재조회 없음 — 멱등)
+ *   4) next_session_number 결정
+ *   5) [NEW] deep_test_attempts에서 최신 final 결과 요약 로드
+ *      → 없으면 404 DEEP_RESULT_MISSING
+ *   6) 테마/메타 결정 (session_number × deep summary)
+ *   7) plan_json stub v2 (meta 포함) 생성
+ *   8) session_plans UPSERT + progress.active_session_number 세팅
  *
- * plan_json: 이번 PR은 STUB (Deep Result 연결은 다음 PR)
- *   version: 'session_stub_v1'
- *   segments: Warmup + Main + Cooldown (time_budget=short면 세트 수 감소)
- *   bad 컨디션이면 plan_json.recovery: true
+ * 성능 가드 (금지 목록):
+ *   - 템플릿 대량 fetch 없음 (exercise_templates 테이블 접근 없음)
+ *   - media sign 호출 없음
+ *   - 재계산 알고리즘 없음 (DB 저장값 그대로 사용)
  *
  * 테마 4단계 (session_number 기반):
- *   1~4:  "1순위 타겟"
- *   5~8:  "2순위 타겟"
- *   9~12: "통합"
- *   13~16:"릴렉스"
+ *   1~4:  Phase 1 · focus[0] 안정화
+ *   5~8:  Phase 2 · focus[1 or 0] 심화
+ *   9~12: Phase 3 · 통합
+ *   13~16: Phase 4 · 릴렉스
  *
  * Path B 독립 레일: 기존 7일 테이블/엔드포인트와 완전 분리.
- * Auth: Bearer token. Write: service role admin client.
+ * Auth: Bearer token. Write: service role admin client (RLS bypass).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -40,71 +42,116 @@ const DEFAULT_TOTAL_SESSIONS = 16;
 type ConditionMood = 'good' | 'ok' | 'bad';
 type TimeBudget = 'short' | 'normal';
 
-/** session_number → 4단계 테마 */
-function getTheme(sessionNumber: number): string {
-  if (sessionNumber <= 4)  return '1순위 타겟';
-  if (sessionNumber <= 8)  return '2순위 타겟';
-  if (sessionNumber <= 12) return '통합';
-  return '릴렉스';
+// ─── 테마 결정 ────────────────────────────────────────────────────────────────
+
+const PHASE_LABELS = ['1순위 타겟', '2순위 타겟', '통합', '릴렉스'] as const;
+
+/** session_number → 0-based phase index (0~3) */
+function getPhaseIndex(sessionNumber: number): number {
+  return Math.min(3, Math.floor((sessionNumber - 1) / 4));
 }
 
 /**
- * 스텁 plan_json 생성 (Deep Result 연결 전 최소 구조)
- * - time_budget=short: items/sets 수 축소
- * - condition_mood=bad: recovery 플래그 추가
+ * Deep 결과 + session_number → 테마 문자열 결정 (운동명/구체 코드 절대 금지)
+ * - Phase 1: "Phase 1 · {focus[0]} 안정화"
+ * - Phase 2: "Phase 2 · {focus[1] or focus[0]} 심화"
+ * - Phase 3: "Phase 3 · 통합"
+ * - Phase 4: "Phase 4 · 릴렉스"
  */
-function buildStubPlanJson(
+function buildTheme(
   sessionNumber: number,
+  deep: { result_type: string; focus: string[] }
+): string {
+  const phaseIdx = getPhaseIndex(sessionNumber);
+  const phaseLabel = PHASE_LABELS[phaseIdx];
+
+  if (phaseIdx === 0) {
+    const target = deep.focus[0] ?? deep.result_type;
+    return `Phase 1 · ${target} 안정화`;
+  }
+  if (phaseIdx === 1) {
+    const target = deep.focus[1] ?? deep.focus[0] ?? deep.result_type;
+    return `Phase 2 · ${target} 심화`;
+  }
+  return `Phase ${phaseIdx + 1} · ${phaseLabel}`;
+}
+
+// ─── plan_json stub v2 ────────────────────────────────────────────────────────
+
+/**
+ * plan_json stub v2 생성.
+ * meta: deep 결과 요약 포함.
+ * items: 구체 운동명 없음 (templateId는 placeholder, 다음 PR에서 실제 연결).
+ * condition × time_budget: flags + items 수량/세트 수만 반영.
+ */
+function buildStubPlanJsonV2(
+  sessionNumber: number,
+  phase: number,
   theme: string,
   timeBudget: TimeBudget,
-  conditionMood: ConditionMood
+  conditionMood: ConditionMood,
+  deep: { result_type: string; confidence: number; focus: string[]; avoid: string[]; scoring_version: string }
 ) {
   const isShort = timeBudget === 'short';
   const isRecovery = conditionMood === 'bad';
   const sets = isShort ? 2 : 3;
-  const items = isShort ? 2 : 4;
+  const mainItems = isShort ? 2 : 4;
 
   return {
-    version: 'session_stub_v1',
-    recovery: isRecovery,
+    version: 'session_stub_v2',
+    meta: {
+      session_number: sessionNumber,
+      phase,
+      result_type: deep.result_type,
+      confidence: deep.confidence,
+      focus: deep.focus.slice(0, 4),
+      avoid: deep.avoid.slice(0, 4),
+      scoring_version: deep.scoring_version,
+    },
+    flags: {
+      recovery: isRecovery,
+      short: isShort,
+    },
     segments: [
       {
-        title: 'Warmup',
+        title: 'Prep',
         duration_sec: isShort ? 120 : 180,
         items: Array.from({ length: isShort ? 2 : 3 }, (_, i) => ({
           order: i + 1,
-          templateId: `stub_warmup_${i + 1}`,
-          name: `준비 운동 ${i + 1}`,
+          templateId: `stub_prep_${i + 1}`,
+          name: `준비 ${i + 1}`,
           sets: 1,
           reps: 10,
         })),
       },
       {
-        title: `Main (${theme})`,
+        title: 'Main',
         duration_sec: isShort ? 240 : 420,
-        items: Array.from({ length: items }, (_, i) => ({
+        items: Array.from({ length: mainItems }, (_, i) => ({
           order: i + 1,
-          templateId: `stub_main_s${sessionNumber}_${i + 1}`,
-          name: isRecovery ? `회복 운동 ${i + 1}` : `${theme} 운동 ${i + 1}`,
+          templateId: `stub_main_p${phase}_${i + 1}`,
+          name: isRecovery ? `회복 운동 ${i + 1}` : `${theme} ${i + 1}`,
           sets,
           reps: isRecovery ? 8 : 12,
+          focus_tag: deep.focus.length > 0 ? deep.focus[i % deep.focus.length] ?? null : null,
         })),
       },
       {
-        title: 'Cooldown',
+        title: 'Release',
         duration_sec: isShort ? 60 : 120,
         items: Array.from({ length: isShort ? 1 : 2 }, (_, i) => ({
           order: i + 1,
-          templateId: `stub_cooldown_${i + 1}`,
-          name: `마무리 스트레칭 ${i + 1}`,
+          templateId: `stub_release_${i + 1}`,
+          name: `이완 ${i + 1}`,
           sets: 1,
-          reps: 30,
-          note: 'hold_seconds',
+          hold_seconds: 30,
         })),
       },
     ],
   };
 }
+
+// ─── Route Handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
@@ -167,7 +214,7 @@ export async function POST(req: NextRequest) {
       progress = created;
     }
 
-    // 이미 active session이 있으면 그대로 반환 (멱등)
+    // ── 멱등: active session이 이미 있으면 deep 재조회 없이 그대로 반환 ──
     if (progress.active_session_number) {
       const { data: existingPlan } = await supabase
         .from('session_plans')
@@ -189,17 +236,44 @@ export async function POST(req: NextRequest) {
 
     // 프로그램 전체 완료
     if (nextSessionNumber > progress.total_sessions) {
-      const res = NextResponse.json({
-        done: true,
-        progress,
-      });
+      const res = NextResponse.json({ done: true, progress });
       res.headers.set('Cache-Control', 'no-store');
       return res;
     }
 
-    const theme = getTheme(nextSessionNumber);
-    const planJson = buildStubPlanJson(nextSessionNumber, theme, timeBudget, conditionMood);
-    const condition = { condition_mood: conditionMood, time_budget: timeBudget, pain_flags: painFlags, equipment };
+    // ── [NEW] Deep Result 요약 로드 (next 생성 시점에만) ──────────────────────
+    // 성능 가드: SELECT 5개 컬럼, LIMIT 1, 재계산 없음
+    const deepSummary = await loadSessionDeepSummary(userId);
+
+    if (!deepSummary) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'DEEP_RESULT_MISSING',
+            message: '심화 테스트 결과가 없습니다. Deep Test를 먼저 완료해 주세요.',
+          },
+        },
+        { status: 404 }
+      );
+    }
+
+    const phaseIndex = getPhaseIndex(nextSessionNumber);
+    const phase = phaseIndex + 1;
+    const theme = buildTheme(nextSessionNumber, deepSummary);
+    const planJson = buildStubPlanJsonV2(
+      nextSessionNumber,
+      phase,
+      theme,
+      timeBudget,
+      conditionMood,
+      deepSummary
+    );
+    const condition = {
+      condition_mood: conditionMood,
+      time_budget: timeBudget,
+      pain_flags: painFlags,
+      equipment,
+    };
 
     // UPSERT: UNIQUE(user_id, session_number) — 멱등 보장
     const { data: plan, error: upsertErr } = await supabase
