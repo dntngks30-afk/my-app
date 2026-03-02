@@ -1,6 +1,6 @@
 /**
  * Deep Test v2 스코어링
- * 14문항, 6타입, ObjectiveScores/FinalScores, STABLE/DECONDITIONED 게이트
+ * 14문항, 6타입, config 기반, signals + pattern scoring
  * deep_v1.ts는 수정하지 않음
  */
 
@@ -14,7 +14,9 @@ import type {
   DeepSecondaryFocus,
   DeepV2ExtendedResult,
   DeepAlgorithmScores,
+  DeepV2Signals,
 } from '../types';
+import { getPainIntensityMap, getFocusToTags, getAxisToAvoid } from '../config';
 
 export const SCORING_VERSION = 'deep_v2';
 
@@ -64,19 +66,11 @@ function toLocationArray(v: DeepAnswerValue): string[] {
   return v.filter((x): x is string => typeof x === 'string');
 }
 
-// --- Pain intensity: 없음 0, 약간 1, 중간 2, 강함 3 ---
-const PAIN_INTENSITY_MAP: Record<string, number> = {
-  없음: 0,
-  약간: 1,
-  중간: 2,
-  강함: 3,
-};
-
-function parsePainIntensity(v: DeepAnswerValue): number {
+function parsePainIntensity(v: DeepAnswerValue, painMap: Record<string, number>): number {
   const s = toString(v);
   if (!s) return 0;
   const lower = s.trim().toLowerCase();
-  for (const [k, val] of Object.entries(PAIN_INTENSITY_MAP)) {
+  for (const [k, val] of Object.entries(painMap)) {
     if (s.includes(k) || lower.includes(k.toLowerCase())) return val;
   }
   return 0;
@@ -131,7 +125,8 @@ function emptyScores(): DeepObjectiveScores {
 
 export function calculateDeepV2(
   answers: Record<string, DeepAnswerValue>
-): DeepV2Result {
+): DeepV2Result & { signals?: DeepV2Signals } {
+  const painMap = getPainIntensityMap();
   const obj = emptyScores();
 
   // --- Answered count (DEEP_V2_QUESTION_IDS 기준) ---
@@ -146,7 +141,7 @@ export function calculateDeepV2(
       }
     }
   }
-  const confidence = answeredCount / TOTAL_COUNT;
+  const baseConfidence = answeredCount / TOTAL_COUNT;
 
   // --- Q1: deep_basic_age ---
   const age = toNumber(answers.deep_basic_age);
@@ -170,7 +165,7 @@ export function calculateDeepV2(
   }
 
   // --- Q6: deep_squat_pain_intensity ---
-  const q6Int = parsePainIntensity(answers.deep_squat_pain_intensity);
+  const q6Int = parsePainIntensity(answers.deep_squat_pain_intensity, painMap);
   const q6Loc = toLocationArray(answers.deep_squat_pain_location);
   if (q6Int > 0) {
     if (q6Loc.length > 0) addPainLocationPoints(q6Loc, obj, q6Int);
@@ -185,7 +180,7 @@ export function calculateDeepV2(
   }
 
   // --- Q9, Q10, Q11: wallangel ---
-  const q9Int = parsePainIntensity(answers.deep_wallangel_pain_intensity);
+  const q9Int = parsePainIntensity(answers.deep_wallangel_pain_intensity, painMap);
   const q10Loc = toLocationArray(answers.deep_wallangel_pain_location);
   if (q9Int > 0) {
     if (q10Loc.length > 0) addPainLocationPoints(q10Loc, obj, q9Int);
@@ -200,7 +195,7 @@ export function calculateDeepV2(
   }
 
   // --- Q12, Q13, Q14: sls ---
-  const q12Int = parsePainIntensity(answers.deep_sls_pain_intensity);
+  const q12Int = parsePainIntensity(answers.deep_sls_pain_intensity, painMap);
   const q13Loc = toLocationArray(answers.deep_sls_pain_location);
   if (q12Int > 0) {
     if (q13Loc.length > 0) addPainLocationPoints(q13Loc, obj, q12Int);
@@ -231,11 +226,17 @@ export function calculateDeepV2(
     else if (q5.includes('무릎') || q5.includes('발목')) finalScores.Lo += 4;
   }
 
+  // --- signals (red_flags, pain_sum) ---
+  const pain_sum = q6Int + q9Int + q12Int;
+  const red_flags =
+    q6Int >= 3 || q9Int >= 3 || q12Int >= 3 || objectiveScores.D >= 7;
+  const signals: DeepV2Signals = { red_flags, pain_sum };
+
   // --- STABLE gate (Q5=해당없음, Q6/Q9/Q12=없음, Q8/Q11/Q14 특정값, D<=3) ---
   const q5해당없음 = q5?.includes('해당 없음') ?? false;
-  const q6없음 = parsePainIntensity(answers.deep_squat_pain_intensity) === 0;
-  const q9없음 = parsePainIntensity(answers.deep_wallangel_pain_intensity) === 0;
-  const q12없음 = parsePainIntensity(answers.deep_sls_pain_intensity) === 0;
+  const q6없음 = q6Int === 0;
+  const q9없음 = q9Int === 0;
+  const q12없음 = q12Int === 0;
   const q8무릎잘감 = q8?.includes('무릎이 발 앞으로 잘 감') ?? false;
   const q11문제없음 = q11?.includes('문제 없음') ?? false;
   const q14안정적 = q14?.includes('10초 안정적으로 가능') ?? false;
@@ -257,9 +258,10 @@ export function calculateDeepV2(
       secondaryFocus: 'NONE',
       objectiveScores,
       finalScores: { ...finalScores },
-      confidence,
+      confidence: baseConfidence,
       answeredCount,
       totalCount: TOTAL_COUNT,
+      signals,
     };
   }
 
@@ -281,9 +283,28 @@ export function calculateDeepV2(
       secondaryFocus: secondary,
       objectiveScores,
       finalScores: { ...finalScores },
-      confidence,
+      confidence: baseConfidence,
       answeredCount,
       totalCount: TOTAL_COUNT,
+      signals,
+    };
+  }
+
+  // --- red_flags gate: PAIN_DOMINANT → DECONDITIONED ---
+  if (red_flags) {
+    const primary = computePrimaryFocus(q5, objectiveScores, q14 ?? null, q11 ?? null);
+    const secondary = computeSecondaryFocus(objectiveScores, primary);
+    return {
+      scoring_version: 'deep_v2',
+      result_type: 'DECONDITIONED',
+      primaryFocus: primary,
+      secondaryFocus: secondary,
+      objectiveScores,
+      finalScores: { ...finalScores },
+      confidence: baseConfidence,
+      answeredCount,
+      totalCount: TOTAL_COUNT,
+      signals,
     };
   }
 
@@ -292,6 +313,19 @@ export function calculateDeepV2(
   const resultType = axisToResultType(maxAxis);
   const primary = computePrimaryFocus(q5, objectiveScores, q14 ?? null, q11 ?? null);
   const secondary = computeSecondaryFocus(objectiveScores, primary);
+
+  // --- confidence: gap 기반 (1차-2차 점수 차이) ---
+  const arr: [AxisKey, number][] = [
+    ['N', finalScores.N],
+    ['L', finalScores.L],
+    ['U', finalScores.U],
+    ['Lo', finalScores.Lo],
+  ];
+  arr.sort((a, b) => b[1] - a[1]);
+  const top = arr[0]?.[1] ?? 0;
+  const second = arr[1]?.[1] ?? 0;
+  const gap = top > 0 ? (top - second) / top : 0;
+  const confidence = Math.min(1, Math.max(0, baseConfidence + gap * 0.15));
 
   return {
     scoring_version: 'deep_v2',
@@ -303,6 +337,7 @@ export function calculateDeepV2(
     confidence,
     answeredCount,
     totalCount: TOTAL_COUNT,
+    signals,
   };
 }
 
@@ -416,30 +451,15 @@ function computeSecondaryFocus(
   return axisToFocus(arr[0][0]);
 }
 
-/** DeepFocus → exercise_templates focus_tags 매핑 */
-const FOCUS_TO_TAGS: Record<string, string[]> = {
-  'NECK-SHOULDER': ['upper_trap_release', 'neck_mobility', 'thoracic_mobility'],
-  'LUMBO-PELVIS': ['hip_mobility', 'glute_activation', 'core_control'],
-  'UPPER-LIMB': ['shoulder_mobility', 'shoulder_stability'],
-  'LOWER-LIMB': ['lower_chain_stability', 'glute_medius', 'ankle_mobility'],
-  'FULL': ['core_control', 'full_body_reset'],
-};
-
-/** 축 점수 높을 때 추가할 avoid_tags */
-const AXIS_TO_AVOID: Record<AxisKey, string[]> = {
-  N: ['shoulder_overhead'],
-  L: ['lower_back_pain'],
-  U: ['wrist_load'],
-  Lo: ['knee_load', 'knee_ground_pain'],
-  D: [],
-};
-
 /**
  * DeepV2Result → DeepV2ExtendedResult (level, focus_tags, avoid_tags)
+ * config 기반 tag_map, hybrid focus_tags (primary+secondary)
  * day-plan-generator가 소비하는 SSOT
  */
-export function extendDeepV2(v2: DeepV2Result): DeepV2ExtendedResult {
+export function extendDeepV2(v2: DeepV2Result & { signals?: DeepV2Signals }): DeepV2ExtendedResult {
   const { result_type, primaryFocus, secondaryFocus, objectiveScores, finalScores, confidence } = v2;
+  const FOCUS_TO_TAGS = getFocusToTags();
+  const AXIS_TO_AVOID = getAxisToAvoid();
   const D = objectiveScores.D;
 
   let level: number;
