@@ -60,7 +60,11 @@ function IconArrow() {
   );
 }
 
-export default function DeepAnalysisClient() {
+interface DeepAnalysisClientProps {
+  showDemoCta?: boolean;
+}
+
+export default function DeepAnalysisClient({ showDemoCta = false }: DeepAnalysisClientProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -212,8 +216,17 @@ export default function DeepAnalysisClient() {
             </p>
             <p className="text-slate-700">을 가질 수 있습니다.</p>
           </div>
+          {showDemoCta && (
+            <Link
+              href="/deep-test/run"
+              className="block w-full py-5 text-lg font-bold rounded-full border-2 border-slate-900 bg-amber-400 text-slate-900 shadow-[4px_4px_0_0_rgba(15,23,42,1)] hover:opacity-95 transition mb-4 flex items-center justify-center gap-2"
+            >
+              데모로 심층 테스트 해보기 (로그인 없이)
+              <IconArrow />
+            </Link>
+          )}
           <NeoButton
-            variant="orange"
+            variant={showDemoCta ? 'secondary' : 'orange'}
             onClick={handleCtaClick}
             disabled={loading}
             className="w-full py-5 text-lg flex items-center justify-center gap-2"

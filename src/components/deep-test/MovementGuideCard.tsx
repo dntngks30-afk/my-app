@@ -50,6 +50,7 @@ export default function MovementGuideCard({
             </div>
           ) : (
             <video
+              key={videoMp4Src}
               autoPlay
               loop
               muted

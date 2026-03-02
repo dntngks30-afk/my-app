@@ -6,7 +6,7 @@
  * - 버튼 클릭 시에만 save, autosave 없음
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import AppTopBar from '../../_components/AppTopBar';
 import BottomNav from '../../_components/BottomNav';
@@ -70,6 +70,14 @@ function getSectionIndexFromAnswers(answers: Record<string, DeepAnswerValue>): n
     }
   }
   return 0;
+}
+
+function isQuestionAnswered(q: DeepQuestion, answers: Record<string, DeepAnswerValue>): boolean {
+  const v = answers[q.id];
+  if (q.type === 'number') return typeof v === 'number' && !Number.isNaN(v);
+  if (q.type === 'single') return typeof v === 'string' && v.trim() !== '';
+  if (q.type === 'multi') return Array.isArray(v) && v.length > 0;
+  return false;
 }
 
 export default function DeepTestRunPage() {
@@ -205,16 +213,13 @@ export default function DeepTestRunPage() {
     }
   };
 
-  /** Section 1만 나이(deep_basic_age) 필수, 나머지는 비어 있어도 진행 허용 */
-  const canProceedFromSection = (idx: number): boolean => {
-    if (idx === 0) {
-      const age = answers['deep_basic_age'];
-      return typeof age === 'number' && !Number.isNaN(age);
-    }
-    return true;
-  };
+  const mainRef = useRef<HTMLElement>(null);
 
-  const ageWarning = sectionIndex === 0 && (typeof answers['deep_basic_age'] !== 'number' || Number.isNaN(answers['deep_basic_age'] as number));
+  const canProceedFromSection = (idx: number): boolean => {
+    const ids = STEPPER_SECTIONS[idx].questionIds;
+    const qs = getQuestionsForSection(ids);
+    return qs.every((q) => isQuestionAnswered(q, answers));
+  };
 
   function buildPatchForSection(idx: number): Record<string, DeepAnswerValue> {
     const ids = STEPPER_SECTIONS[idx].questionIds;
@@ -229,14 +234,19 @@ export default function DeepTestRunPage() {
     return patch;
   }
 
+  const scrollToTop = () => {
+    mainRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const handlePrev = () => {
     setSaveError(null);
     setSectionIndex((i) => Math.max(0, i - 1));
+    scrollToTop();
   };
 
   const handleNext = async () => {
-    if (sectionIndex === 0 && !canProceedFromSection(0)) {
-      setSaveError('나이는 꼭 입력해주세요.');
+    if (!canProceedFromSection(sectionIndex)) {
+      setSaveError('모든 질문에 답해주세요.');
       return;
     }
     setSaveError(null);
@@ -278,6 +288,7 @@ export default function DeepTestRunPage() {
       router.push('/app/deep-test/result');
     } else {
       setSectionIndex((i) => i + 1);
+      scrollToTop();
     }
   };
 
@@ -358,7 +369,7 @@ export default function DeepTestRunPage() {
   return (
     <div className="min-h-screen bg-[#f8f6f0] pb-24">
       <AppTopBar />
-      <main className="container mx-auto px-4 py-6">
+      <main ref={mainRef} className="container mx-auto px-4 py-6">
         <span className="text-sm font-semibold text-orange-500">
           {sectionIndex + 1} / {STEPPER_SECTIONS.length}
         </span>
@@ -580,9 +591,9 @@ export default function DeepTestRunPage() {
           ))}
         </div>
 
-        {(saveError || ageWarning) && (
+        {saveError && (
           <p className="mt-4 text-sm text-amber-600 font-medium">
-            {saveError || (ageWarning ? '나이는 꼭 입력해주세요.' : null)}
+            {saveError}
           </p>
         )}
         <div className="mt-8 flex items-center justify-between gap-3">
@@ -605,7 +616,7 @@ export default function DeepTestRunPage() {
             <button
               type="button"
               onClick={handleNext}
-              disabled={saving || (sectionIndex === 0 && !canProceedFromSection(0))}
+              disabled={saving || !canProceedFromSection(sectionIndex)}
               className={nbBtnPrimary}
             >
               {isLastSection ? '결과 보기' : '다음'}
