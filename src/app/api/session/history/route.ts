@@ -2,7 +2,8 @@
  * GET /api/session/history
  *
  * 완료된 세션 스탬프 목록 (캘린더/히스토리 UI용).
- * Read-only. DB 마이그레이션 없음. 7일 시스템 미변경.
+ * BE-05: duration_seconds, completion_mode 포함.
+ * Read-only. 7일 시스템 미변경.
  *
  * Auth: Bearer token. 401 if not logged in.
  */
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
         .maybeSingle(),
       supabase
         .from('session_plans')
-        .select('session_number, completed_at, theme')
+        .select('session_number, completed_at, duration_seconds, completion_mode, theme')
         .eq('user_id', userId)
         .eq('status', 'completed')
         .order('completed_at', { ascending: false })
@@ -72,7 +73,8 @@ export async function GET(req: NextRequest) {
       items: plans.map((p) => ({
         session_number: p.session_number,
         completed_at: p.completed_at ?? '',
-        duration_seconds: null as number | null,
+        duration_seconds: p.duration_seconds ?? null,
+        completion_mode: p.completion_mode ?? null,
         theme: p.theme ?? '',
       })),
     };
