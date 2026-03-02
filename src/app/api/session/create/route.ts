@@ -33,7 +33,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
-import type { SessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -59,19 +58,21 @@ function getPhaseIndex(sessionNumber: number): number {
  * - Phase 3: "Phase 3 · 통합"
  * - Phase 4: "Phase 4 · 릴렉스"
  */
-function buildTheme(sessionNumber: number, deep: SessionDeepSummary): string {
+function buildTheme(
+  sessionNumber: number,
+  deep: { result_type: string; focus: string[] }
+): string {
   const phaseIdx = getPhaseIndex(sessionNumber);
   const phaseLabel = PHASE_LABELS[phaseIdx];
 
   if (phaseIdx === 0) {
-    const target = deep.focusTags[0] ?? deep.resultType;
+    const target = deep.focus[0] ?? deep.result_type;
     return `Phase 1 · ${target} 안정화`;
   }
   if (phaseIdx === 1) {
-    const target = deep.focusTags[1] ?? deep.focusTags[0] ?? deep.resultType;
+    const target = deep.focus[1] ?? deep.focus[0] ?? deep.result_type;
     return `Phase 2 · ${target} 심화`;
   }
-  // Phase 3, 4: 고정 라벨
   return `Phase ${phaseIdx + 1} · ${phaseLabel}`;
 }
 
@@ -89,7 +90,7 @@ function buildStubPlanJsonV2(
   theme: string,
   timeBudget: TimeBudget,
   conditionMood: ConditionMood,
-  deep: SessionDeepSummary
+  deep: { result_type: string; confidence: number; focus: string[]; avoid: string[]; scoring_version: string }
 ) {
   const isShort = timeBudget === 'short';
   const isRecovery = conditionMood === 'bad';
@@ -101,11 +102,11 @@ function buildStubPlanJsonV2(
     meta: {
       session_number: sessionNumber,
       phase,
-      result_type: deep.resultType,
+      result_type: deep.result_type,
       confidence: deep.confidence,
-      focus: deep.focusTags.slice(0, 4),
-      avoid: deep.avoidTags.slice(0, 4),
-      scoring_version: deep.scoringVersion,
+      focus: deep.focus.slice(0, 4),
+      avoid: deep.avoid.slice(0, 4),
+      scoring_version: deep.scoring_version,
     },
     flags: {
       recovery: isRecovery,
@@ -132,7 +133,7 @@ function buildStubPlanJsonV2(
           name: isRecovery ? `회복 운동 ${i + 1}` : `${theme} ${i + 1}`,
           sets,
           reps: isRecovery ? 8 : 12,
-          focus_tag: deep.focusTags[i % deep.focusTags.length] ?? null,
+          focus_tag: deep.focus.length > 0 ? deep.focus[i % deep.focus.length] ?? null : null,
         })),
       },
       {
@@ -242,7 +243,7 @@ export async function POST(req: NextRequest) {
 
     // ── [NEW] Deep Result 요약 로드 (next 생성 시점에만) ──────────────────────
     // 성능 가드: SELECT 5개 컬럼, LIMIT 1, 재계산 없음
-    const deepSummary = await loadSessionDeepSummary(supabase, userId);
+    const deepSummary = await loadSessionDeepSummary(userId);
 
     if (!deepSummary) {
       return NextResponse.json(

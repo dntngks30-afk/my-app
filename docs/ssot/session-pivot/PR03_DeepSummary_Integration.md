@@ -42,20 +42,13 @@ LIMIT 1;
 | DB/JSON 경로 | 의미 | 사용처 |
 |---|---|---|
 | `result_type` (컬럼) | 'LOWER-LIMB' 등 6타입 | meta.result_type |
-| `confidence` (컬럼) | 0~1 float | meta.confidence(라벨 변환) |
+| `confidence` (컬럼) | 0~1 float | meta.confidence (원값) |
 | `scores.derived.focus_tags` | ['glute_activation', ...] | meta.focus, 테마 결정 |
 | `scores.derived.avoid_tags` | ['knee_load', ...] | meta.avoid |
 | `scoring_version` (컬럼) | 'deep_v2' | meta.scoring_version |
 
-### confidence 라벨 변환
-```
-raw >= 0.75 → 'high'
-raw >= 0.50 → 'mid'
-raw <  0.50 → 'low'
-```
-
 ### 코드 근거
-- `src/lib/deep-result/session-deep-summary.ts` — `loadSessionDeepSummary(supabase, userId)`
+- `src/lib/deep-result/session-deep-summary.ts` — `loadSessionDeepSummary(userId)` (단일 SELECT, LIMIT 1)
 - 기존 `get-latest/route.ts`와 동일 쿼리 패턴 재사용
 
 ---
@@ -71,7 +64,7 @@ raw <  0.50 → 'low'
     "session_number": 3,
     "phase": 1,
     "result_type": "LOWER-LIMB",
-    "confidence": "mid",
+    "confidence": 0.72,
     "focus": ["glute_activation", "lower_chain_stability"],
     "avoid": ["knee_load", "deep_squat"],
     "scoring_version": "deep_v2"
@@ -185,7 +178,7 @@ curl -s -X POST "$BASE/api/session/create" \
 
 # 예상:
 # { "session_number": 1, "phase": 1, "result_type": "LOWER-LIMB",
-#   "confidence": "mid", "focus": [...], "avoid": [...] }
+#   "confidence": 0.72, "focus": ["glute_activation", ...], "avoid": ["knee_load", ...], "scoring_version": "deep_v2" }
 
 # (2) GET /api/session/active → 동일 meta 확인
 curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/session/active" \
@@ -207,6 +200,47 @@ curl -s -X POST "$BASE/api/session/create" \
 
 # 예상: { "error": { "code": "DEEP_RESULT_MISSING", ... } }
 ```
+
+---
+
+## Acceptance Test Results (PR 본문용)
+
+### A1) 200 — Deep 있음, meta 포함
+```json
+// curl -s -X POST .../api/session/create -H "Authorization: Bearer $TOKEN" -d '{"condition_mood":"ok","time_budget":"short"}'
+{
+  "progress": { "active_session_number": 1, "completed_sessions": 0, ... },
+  "active": {
+    "session_number": 1,
+    "plan_json": {
+      "meta": {
+        "session_number": 1,
+        "phase": 1,
+        "result_type": "LOWER-LIMB",
+        "confidence": 0.72,
+        "focus": ["glute_activation", "lower_chain_stability"],
+        "avoid": ["knee_load"],
+        "scoring_version": "deep_v2"
+      }
+    }
+  },
+  "idempotent": false
+}
+```
+
+### A2) 404 — Deep 없음
+```json
+// curl -s -X POST .../api/session/create -H "Authorization: Bearer $TOKEN_NO_DEEP" -d '{"condition_mood":"ok","time_budget":"short"}'
+{
+  "error": {
+    "code": "DEEP_RESULT_MISSING",
+    "message": "심화 테스트 결과가 없습니다. Deep Test를 먼저 완료해 주세요."
+  }
+}
+```
+
+### A3) Idempotency — create 2회 호출 시 동일 plan
+두 번째 호출: `{ "idempotent": true, "active": { "session_number": 1, ... } }` — Deep 재조회 없음.
 
 ---
 
