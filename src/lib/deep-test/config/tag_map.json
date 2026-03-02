@@ -1,0 +1,16 @@
+{
+  "focus_to_tags": {
+    "NECK-SHOULDER": ["upper_trap_release", "neck_mobility", "thoracic_mobility"],
+    "LUMBO-PELVIS": ["hip_mobility", "glute_activation", "core_control"],
+    "UPPER-LIMB": ["shoulder_mobility", "shoulder_stability"],
+    "LOWER-LIMB": ["lower_chain_stability", "glute_medius", "ankle_mobility"],
+    "FULL": ["core_control", "full_body_reset"]
+  },
+  "axis_to_avoid": {
+    "N": ["shoulder_overhead"],
+    "L": ["lower_back_pain"],
+    "U": ["wrist_load"],
+    "Lo": ["knee_load", "knee_ground_pain"],
+    "D": []
+  }
+}

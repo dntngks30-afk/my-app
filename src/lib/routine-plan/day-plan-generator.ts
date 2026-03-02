@@ -136,6 +136,34 @@ function getMaxTemplates(dailyCondition?: DailyCondition | null): number {
 }
 
 
+/** derived shape from scores.derived (DeepV2ExtendedResult) */
+function toDeepResultInput(extended: {
+  level?: number;
+  focus_tags?: string[];
+  avoid_tags?: string[];
+  primaryFocus?: string;
+  secondaryFocus?: string;
+  finalScores?: Record<string, number>;
+}): DeepResultInput {
+  return {
+    level: extended.level ?? 1,
+    focus_tags: Array.isArray(extended.focus_tags) ? extended.focus_tags : [],
+    avoid_tags: Array.isArray(extended.avoid_tags) ? extended.avoid_tags : [],
+    primaryFocus: extended.primaryFocus,
+    secondaryFocus: extended.secondaryFocus,
+    finalScores: extended.finalScores,
+  };
+}
+
+/** STABLE 기본값 (derived 없을 때 크래시 방지) */
+const STABLE_FALLBACK: DeepResultInput = {
+  level: 2,
+  focus_tags: ['core_control', 'full_body_reset'],
+  avoid_tags: [],
+  primaryFocus: 'FULL',
+  secondaryFocus: 'NONE',
+};
+
 export async function loadDeepResultForUser(
   userId: string
 ): Promise<DeepResultInput | null> {
@@ -143,30 +171,39 @@ export async function loadDeepResultForUser(
 
   const { data: attempt, error } = await supabase
     .from('deep_test_attempts')
-    .select('answers, scoring_version')
+    .select('answers, scoring_version, scores')
     .eq('user_id', userId)
     .eq('status', 'final')
     .order('finalized_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (error || !attempt?.answers) return null;
+  if (error) return null;
+  if (!attempt) return null;
 
-  const answers = attempt.answers as Record<string, DeepAnswerValue>;
   if (attempt.scoring_version === 'deep_v1') {
     return null;
   }
 
-  const v2 = calculateDeepV2(answers);
-  const extended = extendDeepV2(v2);
-  return {
-    level: extended.level,
-    focus_tags: extended.focus_tags,
-    avoid_tags: extended.avoid_tags,
-    primaryFocus: extended.primaryFocus,
-    secondaryFocus: extended.secondaryFocus,
-    finalScores: extended.finalScores,
-  };
+  const scores = attempt.scores as Record<string, unknown> | null;
+  const derived = scores?.derived as Record<string, unknown> | null | undefined;
+
+  if (derived && typeof derived.level === 'number' && Array.isArray(derived.focus_tags)) {
+    return toDeepResultInput(derived as Parameters<typeof toDeepResultInput>[0]);
+  }
+
+  const answers = (attempt.answers ?? {}) as Record<string, DeepAnswerValue>;
+  if (!answers || Object.keys(answers).length === 0) {
+    return STABLE_FALLBACK;
+  }
+
+  try {
+    const v2 = calculateDeepV2(answers);
+    const extended = extendDeepV2(v2);
+    return toDeepResultInput(extended);
+  } catch {
+    return STABLE_FALLBACK;
+  }
 }
 
 async function loadRecentUsedIds(

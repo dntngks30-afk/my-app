@@ -1,0 +1,48 @@
+{
+  "pain_intensity": {
+    "없음": 0,
+    "약간": 1,
+    "약간(0~3)": 1,
+    "중간": 2,
+    "중간(4~6)": 2,
+    "강함": 3,
+    "강함(7~10)": 3
+  },
+  "deep_basic_age": {
+    "ranges": [
+      { "min": 55, "axis": "D", "points": 2 },
+      { "min": 40, "max": 54, "axis": "D", "points": 1 }
+    ]
+  },
+  "deep_basic_experience": {
+    "match_keywords": {
+      "없음": { "D": 2 },
+      "어렸을 때 조금": { "D": 1 }
+    }
+  },
+  "deep_basic_workstyle": {
+    "match_keywords": {
+      "대부분 누움": { "D": 3 },
+      "대부분 앉아서": { "D": 1 }
+    }
+  },
+  "deep_basic_primary_discomfort": {
+    "match_keywords": {
+      "목·어깨": { "N": 4 },
+      "허리·골반": { "L": 4 },
+      "손목·팔꿈치": { "U": 4 },
+      "무릎·발목": { "Lo": 4 }
+    }
+  },
+  "location_axis": {
+    "목": "N",
+    "어깨": "N",
+    "허리": "L",
+    "골반": "L",
+    "손목": "U",
+    "팔꿈치": "U",
+    "무릎": "Lo",
+    "발목": "Lo",
+    "전신": "D"
+  }
+}

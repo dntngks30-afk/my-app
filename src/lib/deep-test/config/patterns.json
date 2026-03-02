@@ -1,0 +1,35 @@
+{
+  "stable": {
+    "result_type": "STABLE",
+    "conditions": {
+      "q5_해당없음": true,
+      "q6_없음": true,
+      "q9_없음": true,
+      "q12_없음": true,
+      "q8_무릎잘감": true,
+      "q11_문제없음": true,
+      "q14_안정적": true,
+      "D_max": 3
+    }
+  },
+  "deconditioned": {
+    "result_type": "DECONDITIONED",
+    "conditions": {
+      "D_min": 6,
+      "max_part_max": "D_minus_1"
+    }
+  },
+  "red_flags": {
+    "result_type": "DECONDITIONED",
+    "triggers": [
+      "pain_intensity_강함_any",
+      "D_ge_7"
+    ]
+  },
+  "axis_to_result_type": {
+    "N": "NECK-SHOULDER",
+    "L": "LUMBO-PELVIS",
+    "U": "UPPER-LIMB",
+    "Lo": "LOWER-LIMB"
+  }
+}
