@@ -6,6 +6,7 @@ import { PlayCircle, Play } from 'lucide-react';
 import { getSessionSafe } from '@/lib/supabase';
 import { NeoCard, NeoButton } from '@/components/neobrutalism';
 import BottomNav from '../../_components/BottomNav';
+import SessionRoutinePanel from './SessionRoutinePanel';
 
 function RoutineListSkeleton() {
   return (
@@ -138,11 +139,14 @@ export default function RoutineHubClient() {
       <header className="px-4 pt-6 pb-4">
         <h1 className="text-4xl font-bold text-slate-800">루틴</h1>
         <p className="mt-2 text-base text-slate-600">
-          나의 7-Day Reset 루틴 목록
+          세션 루틴 &amp; 7-Day Reset
         </p>
       </header>
 
       <main className="px-4 space-y-6">
+        {/* Path B: 세션 루틴 패널 (7일 시스템과 독립) */}
+        <SessionRoutinePanel />
+
         {loading ? (
           <RoutineListSkeleton />
         ) : error ? (
