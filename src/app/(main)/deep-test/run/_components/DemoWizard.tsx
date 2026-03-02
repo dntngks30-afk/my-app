@@ -156,13 +156,8 @@ export default function DemoWizard() {
     return qs.every((q) => isQuestionAnswered(q, answers));
   };
 
-  const scrollToTop = () => {
-    topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   const handlePrev = () => {
     setSectionIndex((i) => Math.max(0, i - 1));
-    scrollToTop();
   };
 
   const handleNext = () => {
@@ -185,9 +180,15 @@ export default function DemoWizard() {
       }
     } else {
       setSectionIndex((i) => i + 1);
-      scrollToTop();
     }
   };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      topRef.current?.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [sectionIndex]);
 
   const guideKey = currentSection?.id;
   const guide = guideKey && guideKey in GUIDE_CONFIG ? GUIDE_CONFIG[guideKey as keyof typeof GUIDE_CONFIG] : null;
