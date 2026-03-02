@@ -106,7 +106,7 @@ export default function RoutineHubPage() {
         setError(null);
         if (process.env.NODE_ENV === 'development') {
           const _tDone = performance.now();
-          console.log('[PERF:routine]', { ttfb: Math.round(_tResp - _t0), render: Math.round(_tDone - _tResp), server: data?.timings?.t_total });
+          console.log('[PERF:routine]', { ttfb: Math.round(_tResp - _t0), server_total: data?.timings?.t_total, render: Math.round(_tDone - _tResp) });
         }
       } catch (e) {
         if (!cancelled) {

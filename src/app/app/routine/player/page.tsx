@@ -424,7 +424,7 @@ export default function RoutinePlayerPage() {
         }
         if (process.env.NODE_ENV === 'development') {
           const _tDone = performance.now();
-          console.log(`[PERF:player:day${dayNumber}]`, { ttfb: Math.round(_tResp - _t0), render: Math.round(_tDone - _tResp), server: (data?.timings as Record<string, number> | undefined)?.t_total });
+          console.log('[PERF:player]', { ttfb: Math.round(_tResp - _t0), server_total: (data?.timings as Record<string, number> | undefined)?.t_total, render: Math.round(_tDone - _tResp) });
         }
       } catch (err) {
         if (cancelled) return;
