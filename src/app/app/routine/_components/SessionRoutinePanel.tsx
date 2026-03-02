@@ -268,7 +268,7 @@ function AdjustModal({
           onClick={() => onSubmit(mood, budget)}
           className="py-3 text-base"
         >
-          {loading ? '생성 중...' : '이 설정으로 시작'}
+          {loading ? '생성 중...' : '리셋 시작'}
         </NeoButton>
       </div>
     </div>

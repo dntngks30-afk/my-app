@@ -1,92 +1,159 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { PlayCircle, Play } from 'lucide-react';
+/**
+ * RoutineHubClient — 루틴 탭 메인 (리디자인)
+ *
+ * 레이아웃: Today 헤더 → CalendarPills → TodayGoalCard → CTA → Accordion(모달 확정 후)
+ * CTA 클릭 → 오늘 컨디션 조정 모달 → 확정(리셋 시작) 시에만 create 또는 표시.
+ *
+ * Network: GET active 1x, GET history 1x, POST create는 모달 확정 시에만.
+ */
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { Calendar, Bell, Play, Sparkles, CheckCircle2 } from 'lucide-react';
 import { getSessionSafe } from '@/lib/supabase';
-import { NeoCard, NeoButton } from '@/components/neobrutalism';
+import { NeoButton } from '@/components/neobrutalism';
 import BottomNav from '../../_components/BottomNav';
-import SessionRoutinePanel from './SessionRoutinePanel';
-import SessionHistoryPanel from './SessionHistoryPanel';
-import { getSessionHistory, type SessionHistoryResponse } from '@/lib/session/client';
+import CalendarPills from './CalendarPills';
+import TodayGoalCard from './TodayGoalCard';
+import RoutineAccordionList from './RoutineAccordionList';
+import SessionAdjustModal from './SessionAdjustModal';
+import SessionRecoveryModal from './SessionRecoveryModal';
+import SessionCompleteSummary from './SessionCompleteSummary';
+import {
+  getActiveSession,
+  getSessionHistory,
+  createSession,
+  completeSession,
+  type SessionPlan,
+  type SessionProgress,
+  type SessionHistoryResponse,
+} from '@/lib/session/client';
+import { buildWeeklyGoalSummary } from '@/lib/session/goal-summary';
+import { loadSessionDraft, saveSessionDraft, deleteSessionDraft } from '@/lib/session/storage';
+import type { RoutineAccordionItemData } from './RoutineAccordionItem';
 
-function RoutineListSkeleton() {
-  return (
-    <>
-      <NeoCard className="p-5">
-        <div className="animate-pulse space-y-3">
-          <div className="h-4 w-3/4 rounded bg-stone-200" />
-          <div className="h-4 w-1/2 rounded bg-stone-200" />
-          <div className="h-10 w-full rounded-full bg-stone-200" />
-        </div>
-      </NeoCard>
-      <section>
-        <div className="h-4 w-24 rounded bg-stone-200 mb-3" />
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <NeoCard key={i} className="p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div className="min-w-0 flex-1 space-y-2">
-                  <div className="h-4 w-3/4 animate-pulse rounded bg-stone-200" />
-                  <div className="h-3 w-1/2 animate-pulse rounded bg-stone-200" />
-                </div>
-                <div className="size-10 shrink-0 animate-pulse rounded-full bg-stone-200" />
-              </div>
-            </NeoCard>
-          ))}
-        </div>
-      </section>
-    </>
-  );
+const MAX_DURATION_SEC = 7200;
+
+function flattenPlanToAccordionItems(plan: SessionPlan): RoutineAccordionItemData[] {
+  const segments = plan.plan_json?.segments ?? [];
+  const items: RoutineAccordionItemData[] = [];
+  let idx = 0;
+  for (const seg of segments) {
+    const perItemSec = seg.items.length > 0 ? seg.duration_sec / seg.items.length : 0;
+    for (const it of seg.items) {
+      if (idx >= 4) break;
+      items.push({
+        id: `${seg.title}_${it.order}_${it.templateId}`,
+        title: it.name,
+        kind: it.focus_tag ?? seg.title,
+        durationSec: Math.round(perItemSec),
+        videoUrl: null,
+        description: it.sets && it.reps ? `${it.sets}×${it.reps}` : undefined,
+      });
+      idx++;
+    }
+    if (idx >= 4) break;
+  }
+  return items.slice(0, 4);
 }
 
-type RoutineItem = {
-  id: string;
-  created_at: string;
-  status: string;
-  started_at: string | null;
-  completedDays: number;
-  lastCompletedDay: number;
-  nextDay: number;
-};
-
-function formatRoutineTitle(r: RoutineItem, index: number): string {
-  const d = r.created_at ? new Date(r.created_at) : new Date();
-  const dateStr = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
-  if (r.status === 'completed') return `7-Day Reset #${index + 1} (완료)`;
-  if (r.status === 'active') return `7-Day Reset #${index + 1} (진행중)`;
-  if (r.status === 'draft') return `7-Day Reset #${index + 1} (대기)`;
-  return `7-Day Reset #${index + 1} (${dateStr})`;
-}
-
-function getStatusLabel(status: string): string {
-  const map: Record<string, string> = {
-    draft: '대기',
-    active: '진행중',
-    completed: '완료',
-    paused: '일시정지',
-    cancelled: '중단',
-  };
-  return map[status] ?? status;
+function getTimeLabel(timeBudget: 'short' | 'normal'): string {
+  return timeBudget === 'short' ? '15분 소요' : '25~30분 소요';
 }
 
 export default function RoutineHubClient() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const reason = searchParams.get('reason');
 
-  const [routines, setRoutines] = useState<RoutineItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
+  const [activePlan, setActivePlan] = useState<SessionPlan | null>(null);
+  const [progress, setProgress] = useState<SessionProgress | null>(null);
   const [historyData, setHistoryData] = useState<SessionHistoryResponse | null>(null);
+  const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [showTodayRoutine, setShowTodayRoutine] = useState(false);
+  const [isModalOpen, setModalOpen] = useState(false);
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
+
+  const [summaryDurationSec, setSummaryDurationSec] = useState(0);
+  const [summaryNextTheme, setSummaryNextTheme] = useState<string | null>(null);
+  const [durationClamped, setDurationClamped] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
+
+  const activeFetchedRef = useRef(false);
   const historyFetchedRef = useRef(false);
 
-  const debugFlag = searchParams.get('debug') === '1';
+  const panelState =
+    loading ? 'loading' :
+    errorMsg ? 'error' :
+    activePlan ? 'active' :
+    progress && progress.completed_sessions >= progress.total_sessions ? 'done' :
+    'empty';
 
-  // GET /api/session/history — 루틴 탭 진입 시 1회만 (캘린더/히스토리용)
+  const isDeepMissing = useRef(false);
+
+  // GET /api/session/active — 1회
+  useEffect(() => {
+    if (activeFetchedRef.current) return;
+    activeFetchedRef.current = true;
+
+    let cancelled = false;
+    (async () => {
+      const { session } = await getSessionSafe();
+      if (!session?.access_token) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
+      setToken(session.access_token);
+      const result = await getActiveSession(session.access_token);
+      if (cancelled) return;
+
+      if (!result.ok) {
+        if (result.status === 401) {
+          setErrorMsg('로그인이 필요합니다.');
+        } else {
+          setErrorMsg(result.error.message);
+        }
+        setLoading(false);
+        return;
+      }
+
+      const { active, progress: prog } = result.data;
+      setProgress(prog);
+
+      if (active) {
+        setActivePlan(active);
+        const draft = loadSessionDraft(active.session_number);
+        if (draft && draft.sessionNumber === active.session_number) {
+          setStartedAtMs(draft.startedAtMs);
+          if (!cancelled) setShowRecovery(true);
+        } else {
+          const now = Date.now();
+          setStartedAtMs(now);
+          saveSessionDraft({
+            sessionNumber: active.session_number,
+            startedAtMs: now,
+            lastUpdatedAtMs: now,
+            checked: {},
+            note: active.condition
+              ? { mood: active.condition.condition_mood, time_budget: active.condition.time_budget }
+              : undefined,
+          });
+        }
+      }
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // GET /api/session/history — 1회
   useEffect(() => {
     if (historyFetchedRef.current) return;
     historyFetchedRef.current = true;
@@ -102,7 +169,6 @@ export default function RoutineHubClient() {
       if (cancelled) return;
       if (result.ok) {
         setHistoryData(result.data);
-        setHistoryError(false);
       } else {
         setHistoryError(true);
       }
@@ -111,164 +177,306 @@ export default function RoutineHubClient() {
     return () => { cancelled = true; };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const _t0 = performance.now();
-      const { session } = await getSessionSafe();
-      if (!session?.access_token) {
-        setLoading(false);
-        return;
+  const handleConfirmCreate = useCallback(async (
+    mood: 'good' | 'ok' | 'bad',
+    budget: 'short' | 'normal'
+  ) => {
+    if (!token || creating) return;
+    setCreating(true);
+
+    if (activePlan) {
+      setShowTodayRoutine(true);
+      setModalOpen(false);
+      setCreating(false);
+      return;
+    }
+
+    const result = await createSession(token, {
+      condition_mood: mood,
+      time_budget: budget,
+    });
+    setCreating(false);
+
+    if (!result.ok) {
+      if (result.error.code === 'DEEP_RESULT_MISSING') {
+        isDeepMissing.current = true;
+      } else {
+        setErrorMsg(result.error.message);
       }
-      try {
-        const url = `/api/routine/list${debugFlag ? '?debug=1' : ''}`;
-        const res = await fetch(url, {
-          cache: 'no-store' as RequestCache,
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-        const _tResp = performance.now();
-        if (cancelled) return;
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          setError(body?.error ?? '조회 실패');
-          setLoading(false);
-          return;
-        }
-        const data = await res.json();
-        setRoutines(data?.routines ?? []);
-        setError(null);
-        if (process.env.NODE_ENV === 'development') {
-          const _tDone = performance.now();
-          console.log('[PERF:routine]', { ttfb: Math.round(_tResp - _t0), server_total: data?.timings?.t_total, render: Math.round(_tDone - _tResp) });
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError('조회 실패');
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+      setModalOpen(false);
+      return;
+    }
+
+    if ('done' in result.data && result.data.done) {
+      setProgress(result.data.progress);
+      setModalOpen(false);
+      return;
+    }
+
+    const { active, progress: prog } = result.data as {
+      active: SessionPlan;
+      progress: SessionProgress;
+      idempotent: boolean;
+    };
+    setActivePlan(active);
+    setProgress(prog);
+    setShowTodayRoutine(true);
+    setModalOpen(false);
+    const now = Date.now();
+    setStartedAtMs(now);
+    saveSessionDraft({
+      sessionNumber: active.session_number,
+      startedAtMs: now,
+      lastUpdatedAtMs: now,
+      checked: {},
+      note: { mood: active.condition.condition_mood, time_budget: active.condition.time_budget },
+    });
+  }, [token, creating, activePlan]);
+
+  const performComplete = useCallback(async () => {
+    if (!token || !activePlan || completing) return;
+    const start = startedAtMs ?? Date.now();
+    let durationSec = Math.floor((Date.now() - start) / 1000);
+    const clamped = durationSec > MAX_DURATION_SEC;
+    if (clamped) durationSec = MAX_DURATION_SEC;
+
+    setCompleting(true);
+    const result = await completeSession(token, {
+      session_number: activePlan.session_number,
+      duration_seconds: durationSec,
+      completion_mode: 'all_done',
+    });
+    setCompleting(false);
+
+    if (!result.ok) {
+      setErrorMsg(result.error.message);
+      return;
+    }
+    deleteSessionDraft(activePlan.session_number);
+    setProgress(result.data.progress);
+    setSummaryDurationSec(durationSec);
+    setSummaryNextTheme(result.data.next_theme ?? null);
+    setDurationClamped(clamped);
+    setActivePlan(null);
+    setShowSummary(true);
+  }, [token, activePlan, completing, startedAtMs]);
+
+  const handleRecoveryAction = useCallback(
+    (action: 'resume' | 'complete' | 'discard') => {
+      if (action === 'resume') {
+        setShowRecovery(false);
+      } else if (action === 'discard') {
+        if (activePlan) deleteSessionDraft(activePlan.session_number);
+        setShowRecovery(false);
+      } else {
+        setShowRecovery(false);
+        performComplete();
       }
-    })();
-    return () => { cancelled = true; };
-  }, [debugFlag]);
+    },
+    [activePlan, performComplete]
+  );
 
-  const latest = routines[0];
-  const canContinue = latest && (latest.status === 'active' || latest.status === 'draft' || latest.status === 'completed');
+  const goal = activePlan?.plan_json?.meta
+    ? buildWeeklyGoalSummary(
+        activePlan.plan_json.meta,
+        progress?.total_sessions ?? 16
+      )
+    : {
+        title: '오늘의 목표',
+        description: '오늘의 목표를 설정하려면 루틴을 시작하세요.',
+        weekLabel: '',
+        chips: [] as string[],
+      };
 
-  const handleContinue = () => {
-    if (!latest) return;
-    const day = latest.nextDay;
-    router.push(`/app/routine/player?routineId=${encodeURIComponent(latest.id)}&day=${day}`);
-  };
+  const timeLabel = activePlan?.condition?.time_budget
+    ? getTimeLabel(activePlan.condition.time_budget)
+    : '15분 소요';
 
-  const handleCardClick = (r: RoutineItem) => {
-    const day = r.nextDay;
-    router.push(`/app/routine/player?routineId=${encodeURIComponent(r.id)}&day=${day}`);
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#f8f6f0] pb-24">
+        <div className="px-4 pt-6 pb-4">
+          <div className="h-8 w-24 animate-pulse rounded bg-stone-200" />
+        </div>
+        <div className="px-4 space-y-4">
+          <div className="h-20 animate-pulse rounded-2xl bg-stone-200" />
+          <div className="h-40 animate-pulse rounded-2xl bg-stone-200" />
+        </div>
+        <BottomNav />
+      </div>
+    );
+  }
+
+  if (isDeepMissing.current || (errorMsg && !activePlan)) {
+    const showDeepMissing = isDeepMissing.current;
+    return (
+      <div className="min-h-screen bg-[#f8f6f0] pb-24">
+        <header className="px-4 pt-6 pb-4">
+          <h1 className="text-2xl font-bold text-slate-800">Today</h1>
+        </header>
+        <main className="px-4">
+          <div className="rounded-2xl border-2 border-slate-200 bg-white p-5">
+            <div className="flex items-start gap-3">
+              <Sparkles className="size-5 text-violet-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-bold text-slate-800">
+                  {showDeepMissing ? '심층 테스트 필요' : '오류'}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {showDeepMissing
+                    ? '나에게 맞는 세션 루틴을 만들려면 Deep Test가 필요해요.'
+                    : errorMsg}
+                </p>
+              </div>
+            </div>
+            {showDeepMissing && (
+              <NeoButton
+                variant="primary"
+                fullWidth
+                onClick={() => router.push('/app/deep-test')}
+                className="mt-4 py-2.5 text-sm"
+              >
+                Deep Test 시작하기 →
+              </NeoButton>
+            )}
+          </div>
+        </main>
+        <BottomNav />
+      </div>
+    );
+  }
+
+  if (panelState === 'done' && progress) {
+    return (
+      <div className="min-h-screen bg-[#f8f6f0] pb-24">
+        <header className="px-4 pt-6 pb-4">
+          <h1 className="text-2xl font-bold text-slate-800">Today</h1>
+        </header>
+        <main className="px-4">
+          <div className="rounded-2xl border-2 border-slate-200 bg-white p-5">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="size-6 text-emerald-500 shrink-0" />
+              <div>
+                <p className="text-sm font-bold text-slate-800">프로그램 완료!</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {progress.completed_sessions}회 / {progress.total_sessions}회 세션을 모두 마쳤어요.
+                </p>
+              </div>
+            </div>
+          </div>
+        </main>
+        <BottomNav />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#f8f6f0] pb-20">
-      <header className="px-4 pt-6 pb-4">
-        <h1 className="text-4xl font-bold text-slate-800">루틴</h1>
-        <p className="mt-2 text-base text-slate-600">
-          세션 루틴 &amp; 7-Day Reset
-        </p>
+    <div className="min-h-screen bg-[#f8f6f0] pb-24">
+      <header className="px-4 pt-6 pb-3 flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-slate-800">Today</h1>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="flex size-9 items-center justify-center rounded-full border border-stone-300 text-slate-500"
+            aria-label="캘린더"
+          >
+            <Calendar className="size-4" />
+          </button>
+          <button
+            type="button"
+            className="flex size-9 items-center justify-center rounded-full border border-stone-300 text-slate-500"
+            aria-label="알림"
+          >
+            <Bell className="size-4" />
+          </button>
+        </div>
       </header>
 
-      <main className="px-4 space-y-6">
-        {/* Path B: 세션 히스토리 (캘린더 스탬프 + 완료 리스트, history 실패 시 숨김) */}
-        <SessionHistoryPanel
-          history={historyData}
-          loading={historyLoading}
-          error={historyError}
+      <main className="px-4 space-y-4">
+        <CalendarPills
+          history={historyError ? null : historyData}
+          selectedDateKey={selectedDateKey}
+          onSelectDate={setSelectedDateKey}
         />
 
-        {/* Path B: 세션 루틴 패널 (7일 시스템과 독립) */}
-        <SessionRoutinePanel />
+        <TodayGoalCard
+          goal={goal}
+          timeLabel={timeLabel}
+          kcalLabel="예상 120 kcal"
+        />
 
-        {loading ? (
-          <RoutineListSkeleton />
-        ) : error ? (
-          <NeoCard className="p-5">
-            <p className="text-sm text-red-600">{error}</p>
-          </NeoCard>
-        ) : routines.length === 0 ? (
-          <NeoCard className="p-5">
-            <h2 className="text-sm font-semibold text-slate-800 mb-2">루틴이 없습니다</h2>
-            <p className="text-sm text-slate-600 mb-4">
-              운동 검사 후 홈에서 7-Day Reset을 시작해 보세요.
-            </p>
-            <NeoButton
-              variant="orange"
-              onClick={() => router.push('/app/home')}
-              className="py-3 px-4"
-            >
-              홈으로 이동
-            </NeoButton>
-          </NeoCard>
-        ) : (
+        {showTodayRoutine && activePlan ? (
           <>
-            {canContinue && (
-              <NeoCard className="p-5">
-                <h2 className="text-sm font-semibold text-slate-800 mb-3">최신 루틴 이어하기</h2>
-                <p className="text-sm text-slate-600 mb-4">
-                  {formatRoutineTitle(latest!, 0)} • Day {latest!.nextDay}/7
-                </p>
-                <NeoButton
-                  variant="orange"
-                  fullWidth
-                  onClick={handleContinue}
-                  className="py-3 flex items-center justify-center gap-2"
-                >
-                  <Play className="size-5" fill="currentColor" strokeWidth={0} />
-                  이어하기
-                </NeoButton>
-              </NeoCard>
-            )}
-
             <section>
               <h2 className="text-sm font-semibold text-slate-800 mb-3">내 루틴 목록</h2>
-              <div className="space-y-3">
-                {routines.map((r, idx) => (
-                  <NeoCard
-                    key={r.id}
-                    className="p-4 cursor-pointer hover:opacity-95 transition"
-                    onClick={() => handleCardClick(r)}
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-slate-800 truncate">
-                          {formatRoutineTitle(r, idx)}
-                        </p>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          {r.completedDays}/7 완료 • {getStatusLabel(r.status)}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCardClick(r);
-                        }}
-                        className="flex size-10 shrink-0 items-center justify-center rounded-full border-2 border-slate-900 bg-orange-400 text-white shadow-[2px_2px_0_0_rgba(15,23,42,1)] transition hover:opacity-95"
-                        aria-label="이 루틴 열기"
-                      >
-                        <PlayCircle className="size-5" fill="currentColor" strokeWidth={0} />
-                      </button>
-                    </div>
-                  </NeoCard>
-                ))}
-              </div>
+              <RoutineAccordionList items={flattenPlanToAccordionItems(activePlan)} />
             </section>
+
+            <div className="sticky bottom-0 left-0 right-0 z-40 -mx-4 px-4 py-3 bg-[#f8f6f0] border-t border-stone-200">
+              <NeoButton
+                variant="orange"
+                fullWidth
+                disabled={completing}
+                onClick={performComplete}
+                className="py-3 text-base font-bold flex items-center justify-center gap-2"
+              >
+                {completing ? (
+                  <>
+                    <span className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    처리 중...
+                  </>
+                ) : (
+                  <>
+                    <Play className="size-5" fill="currentColor" strokeWidth={0} />
+                    오늘 운동 종료하기
+                  </>
+                )}
+              </NeoButton>
+            </div>
           </>
+        ) : (
+          <div className="fixed bottom-20 left-4 right-4 z-40">
+            <NeoButton
+              variant="orange"
+              fullWidth
+              onClick={() => setModalOpen(true)}
+              className="py-3 text-base font-bold flex items-center justify-center gap-2"
+            >
+              <Play className="size-5" fill="currentColor" strokeWidth={0} />
+              움직임 리셋 시작
+            </NeoButton>
+          </div>
         )}
 
-        {reason === 'missing_params' && (
-          <p className="text-xs text-slate-500 text-center">
-            루틴 정보가 필요합니다. 위 목록에서 루틴을 선택해 주세요.
-          </p>
-        )}
+      {isModalOpen && (
+        <SessionAdjustModal
+          defaultMood="ok"
+          defaultBudget="short"
+          loading={creating}
+          onClose={() => setModalOpen(false)}
+          onSubmit={handleConfirmCreate}
+        />
+      )}
+
       </main>
+
+      {showSummary && progress && summaryDurationSec > 0 && (
+        <div className="fixed inset-0 z-50 bg-[#f8f6f0] overflow-auto">
+          <div className="p-4 pt-6">
+            <SessionCompleteSummary
+              durationSeconds={summaryDurationSec}
+              progress={progress}
+              nextTheme={summaryNextTheme}
+              durationClamped={durationClamped}
+              onDismiss={() => setShowSummary(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {showRecovery && activePlan && (
+        <SessionRecoveryModal onAction={handleRecoveryAction} loading={completing} />
+      )}
 
       <BottomNav />
     </div>
