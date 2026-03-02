@@ -549,7 +549,10 @@ export async function generateDayPlan(
   const safetyReason = isSafetyTrigger ? auditReason : null;
 
   const tDbWrite0 = performance.now();
-  await supabase.from('routine_day_plans').upsert(
+
+  const hasChange = !existing.data || oldHash !== planHash;
+
+  const upsertOp = supabase.from('routine_day_plans').upsert(
     {
       routine_id: routineId,
       day_number: dayNumber,
@@ -569,28 +572,39 @@ export async function generateDayPlan(
     { onConflict: 'routine_id,day_number' }
   );
 
-  const hasChange = !existing.data || oldHash !== planHash;
-  if (hasChange) {
-    await supabase.from('routine_day_plan_revisions').insert({
-      routine_id: routineId,
-      day_number: dayNumber,
-      revision_no: nextRevisionNo,
-      reason: auditReason,
-      old_hash: oldHash,
-      new_hash: planHash,
-      created_by: userId,
-    });
-  }
-  if (existing.data && oldHash !== planHash) {
-    await supabase.from('routine_day_plan_audit').insert({
-      routine_id: routineId,
-      day_number: dayNumber,
-      old_plan_hash: oldHash,
-      new_plan_hash: planHash,
-      reason: auditReason,
-      revision_no: nextRevisionNo,
-      created_by: userId,
-    });
+  const revisionPayload = {
+    routine_id: routineId,
+    day_number: dayNumber,
+    revision_no: nextRevisionNo,
+    reason: auditReason,
+    old_hash: oldHash,
+    new_hash: planHash,
+    created_by: userId,
+  };
+  const auditPayload = {
+    routine_id: routineId,
+    day_number: dayNumber,
+    old_plan_hash: oldHash,
+    new_plan_hash: planHash,
+    reason: auditReason,
+    revision_no: nextRevisionNo,
+    created_by: userId,
+  };
+
+  if (existing.data) {
+    const writes: Promise<unknown>[] = [upsertOp];
+    if (hasChange) {
+      writes.push(supabase.from('routine_day_plan_revisions').insert(revisionPayload));
+    }
+    if (oldHash !== planHash) {
+      writes.push(supabase.from('routine_day_plan_audit').insert(auditPayload));
+    }
+    await Promise.all(writes);
+  } else {
+    await upsertOp;
+    if (hasChange) {
+      await supabase.from('routine_day_plan_revisions').insert(revisionPayload);
+    }
   }
 
   if (isDebug) {
