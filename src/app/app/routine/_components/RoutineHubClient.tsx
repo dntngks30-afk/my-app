@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { PlayCircle, Play } from 'lucide-react';
 import { getSessionSafe } from '@/lib/supabase';
 import { NeoCard, NeoButton } from '@/components/neobrutalism';
 import BottomNav from '../../_components/BottomNav';
 import SessionRoutinePanel from './SessionRoutinePanel';
+import SessionHistoryPanel from './SessionHistoryPanel';
+import { getSessionHistory, type SessionHistoryResponse } from '@/lib/session/client';
 
 function RoutineListSkeleton() {
   return (
@@ -77,7 +79,37 @@ export default function RoutineHubClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [historyData, setHistoryData] = useState<SessionHistoryResponse | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState(false);
+  const historyFetchedRef = useRef(false);
+
   const debugFlag = searchParams.get('debug') === '1';
+
+  // GET /api/session/history — 루틴 탭 진입 시 1회만 (캘린더/히스토리용)
+  useEffect(() => {
+    if (historyFetchedRef.current) return;
+    historyFetchedRef.current = true;
+
+    let cancelled = false;
+    (async () => {
+      const { session } = await getSessionSafe();
+      if (!session?.access_token) {
+        if (!cancelled) setHistoryLoading(false);
+        return;
+      }
+      const result = await getSessionHistory(session.access_token, 60);
+      if (cancelled) return;
+      if (result.ok) {
+        setHistoryData(result.data);
+        setHistoryError(false);
+      } else {
+        setHistoryError(true);
+      }
+      setHistoryLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,6 +176,13 @@ export default function RoutineHubClient() {
       </header>
 
       <main className="px-4 space-y-6">
+        {/* Path B: 세션 히스토리 (캘린더 스탬프 + 완료 리스트, history 실패 시 숨김) */}
+        <SessionHistoryPanel
+          history={historyData}
+          loading={historyLoading}
+          error={historyError}
+        />
+
         {/* Path B: 세션 루틴 패널 (7일 시스템과 독립) */}
         <SessionRoutinePanel />
 

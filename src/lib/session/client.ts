@@ -185,3 +185,30 @@ export async function completeSession(
     body: JSON.stringify(input),
   });
 }
+
+// ─── history (read-only, calendar/history UI) ───────────────────────────────────
+
+export type SessionHistoryItem = {
+  session_number: number;
+  completed_at: string;
+  duration_seconds: number | null;
+  theme: string;
+};
+
+export type SessionHistoryResponse = {
+  progress: {
+    completed_sessions: number;
+    total_sessions: number;
+    last_completed_at: string | null;
+  };
+  items: SessionHistoryItem[];
+};
+
+/** GET /api/session/history — 완료된 세션 목록 (캘린더/히스토리용, read-only) */
+export async function getSessionHistory(
+  token: string,
+  limit = 60
+): Promise<ApiResult<SessionHistoryResponse>> {
+  const path = `/api/session/history?limit=${Math.min(120, Math.max(1, limit))}`;
+  return sessionFetch<SessionHistoryResponse>(path, token, { method: 'GET' });
+}
