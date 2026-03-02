@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  memo,
   useMemo,
   useRef,
   useState,
@@ -76,7 +77,7 @@ const FALLBACK_SEGMENTS: Segment[] = (() => {
 
 type PlayerStatus = 'idle' | 'running' | 'paused' | 'done';
 
-function MediaPlayer({
+const MediaPlayer = memo(function MediaPlayer({
   segment,
   isActive,
 }: {
@@ -175,7 +176,7 @@ function MediaPlayer({
       <p className="text-sm text-slate-600">미디어를 로드할 수 없습니다.</p>
     </div>
   );
-}
+});
 
 function formatRemaining(ms: number): string {
   const totalSec = Math.max(0, Math.ceil(ms / 1000));
@@ -580,6 +581,42 @@ export default function RoutinePlayerPage() {
 
   const currentSegment = segments[derivedIndex] ?? null;
   const isLastSegment = derivedIndex === segments.length - 1;
+  const segmentListItems = useMemo(
+    () =>
+      segments.map((seg, idx) => {
+        const done = idx < derivedIndex;
+        const active = idx === derivedIndex;
+        return (
+          <li
+            key={seg.id}
+            className={`flex items-center gap-3 rounded-xl border-2 p-3 ${
+              active
+                ? 'border-slate-900 bg-orange-50 shadow-[3px_3px_0_0_rgba(15,23,42,1)]'
+                : done
+                  ? 'border-slate-300 bg-stone-100 opacity-60'
+                  : 'border-slate-300 bg-white'
+            }`}
+          >
+            {done && (
+              <div className="flex size-6 items-center justify-center rounded-full bg-slate-700">
+                <Check className="size-3.5 text-white" strokeWidth={3} />
+              </div>
+            )}
+            <span
+              className={`font-medium ${
+                done ? 'text-slate-500 line-through' : 'text-slate-800'
+              }`}
+            >
+              {seg.title}
+            </span>
+            <span className="ml-auto text-sm text-slate-600">
+              {seg.durationSec}초
+            </span>
+          </li>
+        );
+      }),
+    [segments, derivedIndex]
+  );
 
   /** On-demand 미디어 서명: 현재 세그먼트가 placeholder일 때만 호출 */
   useEffect(() => {
@@ -994,40 +1031,7 @@ export default function RoutinePlayerPage() {
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-800 mb-2">
             세그먼트
           </h2>
-          <ul className="space-y-2">
-            {segments.map((seg, idx) => {
-              const done = idx < derivedIndex;
-              const active = idx === derivedIndex;
-              return (
-                <li
-                  key={seg.id}
-                  className={`flex items-center gap-3 rounded-xl border-2 p-3 ${
-                    active
-                      ? 'border-slate-900 bg-orange-50 shadow-[3px_3px_0_0_rgba(15,23,42,1)]'
-                      : done
-                        ? 'border-slate-300 bg-stone-100 opacity-60'
-                        : 'border-slate-300 bg-white'
-                  }`}
-                >
-                  {done && (
-                    <div className="flex size-6 items-center justify-center rounded-full bg-slate-700">
-                      <Check className="size-3.5 text-white" strokeWidth={3} />
-                    </div>
-                  )}
-                  <span
-                    className={`font-medium ${
-                      done ? 'text-slate-500 line-through' : 'text-slate-800'
-                    }`}
-                  >
-                    {seg.title}
-                  </span>
-                  <span className="ml-auto text-sm text-slate-600">
-                    {seg.durationSec}초
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
+          <ul className="space-y-2">{segmentListItems}</ul>
         </div>
       </main>
     </div>
