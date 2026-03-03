@@ -11,6 +11,7 @@
 export type SessionApiError = {
   code: string;
   message: string;
+  next_unlock_at?: string;
 };
 
 type ApiResult<T> =
@@ -43,7 +44,10 @@ async function sessionFetch<T>(
       const message = typeof rawErr === 'object' && rawErr !== null
         ? (rawErr.message as string) ?? res.statusText
         : typeof rawErr === 'string' ? rawErr : res.statusText;
-      return { ok: false, status: res.status, error: { code, message } };
+      const nextUnlockAt = typeof rawErr === 'object' && rawErr !== null && typeof rawErr.next_unlock_at === 'string'
+        ? rawErr.next_unlock_at
+        : undefined;
+      return { ok: false, status: res.status, error: { code, message, ...(nextUnlockAt && { next_unlock_at: nextUnlockAt }) } };
     }
 
     return { ok: true, data: body as T };

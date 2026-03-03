@@ -12,7 +12,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Calendar, Bell, Play, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Calendar, Bell, Play, Sparkles, CheckCircle2, Home, BarChart2 } from 'lucide-react';
 import { getSessionSafe } from '@/lib/supabase';
 import { NeoButton } from '@/components/neobrutalism';
 import BottomNav from '../../_components/BottomNav';
@@ -113,6 +113,7 @@ export default function RoutineHubClient() {
   const [durationClamped, setDurationClamped] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [todayCompleted, setTodayCompleted] = useState(false);
+  const [nextUnlockAt, setNextUnlockAt] = useState<string | null>(null);
 
   const activeFetchedRef = useRef(false);
   const historyFetchedRef = useRef(false);
@@ -169,6 +170,7 @@ export default function RoutineHubClient() {
         if (!cancelled) {
           setProgress(prog);
           setTodayCompleted(today_completed === true);
+          setNextUnlockAt(typeof next_unlock_at === 'string' ? next_unlock_at : null);
         }
 
         if (active && !cancelled) {
@@ -253,6 +255,7 @@ export default function RoutineHubClient() {
         isDeepMissing.current = true;
       } else if (result.error.code === 'DAILY_LIMIT_REACHED') {
         setTodayCompleted(true);
+        if (result.error.next_unlock_at) setNextUnlockAt(result.error.next_unlock_at);
       } else {
         setErrorMsg(result.error.message);
       }
@@ -541,15 +544,31 @@ export default function RoutineHubClient() {
             </div>
           </>
         ) : todayCompleted ? (
-          <div className="rounded-2xl border-2 border-slate-200 bg-white p-5">
+          <div className="rounded-2xl border-2 border-slate-200 bg-white p-5 space-y-4">
             <div className="flex items-center gap-3">
               <CheckCircle2 className="size-6 text-emerald-500 shrink-0" />
               <div>
                 <p className="text-sm font-bold text-slate-800">오늘 완료</p>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  오늘 세션을 이미 완료했어요. 내일 다시 시작해 주세요.
+                  오늘 세션을 이미 완료했어요. 다음 세션은 자정 이후 가능해요.
                 </p>
               </div>
+            </div>
+            <div className="flex gap-3">
+              <Link
+                href="/app/home"
+                className="flex-1 flex items-center justify-center gap-2 rounded-full border-2 border-slate-900 bg-white py-2.5 text-sm font-bold text-slate-800 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95"
+              >
+                <Home className="size-4" />
+                홈으로
+              </Link>
+              <Link
+                href="/app/checkin"
+                className="flex-1 flex items-center justify-center gap-2 rounded-full border-2 border-slate-900 bg-orange-400 py-2.5 text-sm font-bold text-slate-900 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95"
+              >
+                <BarChart2 className="size-4" />
+                루틴 확인
+              </Link>
             </div>
           </div>
         ) : (
