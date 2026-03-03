@@ -291,9 +291,9 @@ export default function ResetMapCard({
         )}
       </div>
 
-      {/* 디버그 패널 — debugMap=1일 때만 (우상단 floating) */}
+      {/* 디버그 패널 — debugMap=1일 때만 (지도 바깥, 하단) */}
       {debugMap && process.env.NODE_ENV !== 'production' && (
-        <div className="absolute right-4 top-4 z-30 max-w-[280px] rounded-lg border border-slate-300 bg-slate-100/95 p-3 text-xs shadow-lg backdrop-blur-sm">
+        <div className="mt-3 rounded-lg border border-slate-300 bg-slate-100 p-3 text-xs">
           <div className="mb-2 font-mono text-slate-700">
             effCompleted={effCompleted} effTotal={effTotal} · ratio=
             {progressRatio.toFixed(3)}

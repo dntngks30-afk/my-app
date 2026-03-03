@@ -3,7 +3,8 @@
 /**
  * AuthCard - 로그인/회원가입 폼 (네오브루탈리즘)
  * mode="login" | "signup"
- * signup: signInWithOtp → 메일 확인 UI
+ * signup: signInWithOtp → 메일 확인 UI (프로덕션)
+ * signup (개발): signUp → 이메일 인증 없이 바로 가입
  * login: signInWithPassword → / 리다이렉트
  * errorParam: searchParams.error (auth_failed 등) — 서버에서 props로 전달
  */
@@ -26,6 +27,8 @@ interface AuthCardProps {
   redirectTo?: string;
 }
 
+const isDevSignup = process.env.NODE_ENV === 'development';
+
 export default function AuthCard({ mode, errorParam, redirectTo = '/' }: AuthCardProps) {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -47,6 +50,25 @@ export default function AuthCard({ mode, errorParam, redirectTo = '/' }: AuthCar
 
     try {
       if (mode === 'signup') {
+        if (isDevSignup) {
+          const { data, error: err } = await supabaseBrowser.auth.signUp({
+            email: email.trim(),
+            password: password || 'dev1234',
+            options: { emailRedirectTo: `${window.location.origin}/signup/complete` },
+          });
+          if (err) {
+            setError(err.message);
+            return;
+          }
+          if (data.session) {
+            router.replace(redirectTo);
+            return;
+          }
+          setError(
+            'Supabase 이메일 확인이 켜져 있습니다. 대시보드 > Auth > Providers > Email에서 "Confirm email" 비활성화 후 재시도하세요.'
+          );
+          return;
+        }
         const { error: err } = await supabaseBrowser.auth.signInWithOtp({
           email: email.trim(),
           options: {
@@ -106,12 +128,14 @@ export default function AuthCard({ mode, errorParam, redirectTo = '/' }: AuthCar
 
   return (
     <AuthShell
-      badgeText={isLogin ? '로그인' : '회원가입'}
+      badgeText={isLogin ? '로그인' : isDevSignup ? '개발자용 회원가입' : '회원가입'}
       title={isLogin ? '로그인' : '회원가입'}
       description={
         isLogin
           ? '계정에 로그인하여 맞춤 교정 솔루션을 이용하세요.'
-          : '계정을 만들고 맞춤 교정 솔루션을 받아보세요.'
+          : isDevSignup
+            ? '이메일 인증 없이 바로 가입 (개발 환경 전용)'
+            : '계정을 만들고 맞춤 교정 솔루션을 받아보세요.'
       }
     >
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -135,16 +159,19 @@ export default function AuthCard({ mode, errorParam, redirectTo = '/' }: AuthCar
           />
         </div>
 
-        {isLogin && (
+        {(isLogin || (mode === 'signup' && isDevSignup)) && (
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-slate-800 mb-1">
               비밀번호
+              {mode === 'signup' && isDevSignup && (
+                <span className="ml-2 text-xs text-amber-600">(개발용: 인증 없이 바로 가입)</span>
+              )}
             </label>
             <Input
               id="password"
               type="password"
-              placeholder="비밀번호"
-              required
+              placeholder={mode === 'signup' && isDevSignup ? '비밀번호 (미입력 시 dev1234)' : '비밀번호'}
+              required={isLogin}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className={NEO_INPUT}

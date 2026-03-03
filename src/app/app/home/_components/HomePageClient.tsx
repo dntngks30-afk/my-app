@@ -17,13 +17,16 @@ export default function HomePageClient() {
   const debugMap = searchParams.get('debugMap') === '1';
   const tsOverride = searchParams.get('ts');
   const csOverride = searchParams.get('cs');
-  const totalSessionsOverride =
-    tsOverride != null && csOverride != null
-      ? Math.max(1, parseInt(tsOverride, 10) || 1)
+  const hasTsCs = tsOverride != null && csOverride != null;
+  const totalSessionsOverride = hasTsCs
+    ? Math.max(1, parseInt(tsOverride!, 10) || 1)
+    : debugMap
+      ? 8
       : undefined;
-  const completedSessionsOverride =
-    tsOverride != null && csOverride != null
-      ? Math.max(0, parseInt(csOverride, 10) || 0)
+  const completedSessionsOverride = hasTsCs
+    ? Math.max(0, parseInt(csOverride!, 10) || 0)
+    : debugMap
+      ? 0
       : undefined;
 
   const [loading, setLoading] = useState(true);
