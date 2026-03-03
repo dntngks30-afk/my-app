@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Calendar, Bell, Play, Sparkles, CheckCircle2 } from 'lucide-react';
 import { getSessionSafe } from '@/lib/supabase';
@@ -104,6 +105,7 @@ export default function RoutineHubClient() {
   const [isModalOpen, setModalOpen] = useState(false);
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [authRequired, setAuthRequired] = useState(false);
   const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
 
   const [summaryDurationSec, setSummaryDurationSec] = useState(0);
@@ -130,49 +132,70 @@ export default function RoutineHubClient() {
 
     let cancelled = false;
     (async () => {
-      const { session } = await getSessionSafe();
-      if (!session?.access_token) {
-        if (!cancelled) setLoading(false);
-        return;
-      }
-      setToken(session.access_token);
-      const result = await getActiveSession(session.access_token);
-      if (cancelled) return;
+      if (process.env.NODE_ENV !== 'production') console.log('[routine] active effect start');
+      try {
+        const { session } = await getSessionSafe();
+        const hasToken = !!session?.access_token;
+        if (process.env.NODE_ENV !== 'production') console.log('[routine] token present?', hasToken);
 
-      if (!result.ok) {
-        if (result.status === 401) {
-          setErrorMsg('로그인이 필요합니다.');
-        } else {
-          setErrorMsg(result.error.message);
+        if (!hasToken) {
+          if (!cancelled) {
+            setAuthRequired(true);
+            setLoading(false);
+          }
+          return;
         }
+
+        setToken(session!.access_token);
+        if (process.env.NODE_ENV !== 'production') console.log('[routine] calling /api/session/active');
+        const result = await getActiveSession(session!.access_token);
+        if (cancelled) return;
+
+        if (!result.ok) {
+          if (!cancelled) {
+            if (result.status === 401) {
+              setAuthRequired(true);
+              setErrorMsg('로그인이 필요합니다.');
+            } else {
+              setErrorMsg(result.error.message);
+            }
+            setLoading(false);
+          }
+          return;
+        }
+
+        const { active, progress: prog } = result.data;
+        if (!cancelled) setProgress(prog);
+
+        if (active && !cancelled) {
+          setActivePlan(active);
+          const draft = loadSessionDraft(active.session_number);
+          if (draft && draft.sessionNumber === active.session_number) {
+            setStartedAtMs(draft.startedAtMs);
+            setShowRecovery(true);
+          } else {
+            const now = Date.now();
+            setStartedAtMs(now);
+            saveSessionDraft({
+              sessionNumber: active.session_number,
+              startedAtMs: now,
+              lastUpdatedAtMs: now,
+              checked: {},
+              note: active.condition
+                ? { mood: active.condition.condition_mood, time_budget: active.condition.time_budget }
+                : undefined,
+            });
+          }
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setErrorMsg(e instanceof Error ? e.message : '오류가 발생했습니다.');
+          setLoading(false);
+        }
+      } finally {
+        if (process.env.NODE_ENV !== 'production') console.log('[routine] setLoading(false)');
         setLoading(false);
-        return;
       }
-
-      const { active, progress: prog } = result.data;
-      setProgress(prog);
-
-      if (active) {
-        setActivePlan(active);
-        const draft = loadSessionDraft(active.session_number);
-        if (draft && draft.sessionNumber === active.session_number) {
-          setStartedAtMs(draft.startedAtMs);
-          if (!cancelled) setShowRecovery(true);
-        } else {
-          const now = Date.now();
-          setStartedAtMs(now);
-          saveSessionDraft({
-            sessionNumber: active.session_number,
-            startedAtMs: now,
-            lastUpdatedAtMs: now,
-            checked: {},
-            note: active.condition
-              ? { mood: active.condition.condition_mood, time_budget: active.condition.time_budget }
-              : undefined,
-          });
-        }
-      }
-      setLoading(false);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -317,6 +340,7 @@ export default function RoutineHubClient() {
     : '15분 소요';
 
   if (loading) {
+    if (process.env.NODE_ENV !== 'production') console.log('[routine] render (loading)');
     return (
       <div className="min-h-screen bg-[#f8f6f0] pb-24">
         <div className="px-4 pt-6 pb-4">
@@ -326,6 +350,36 @@ export default function RoutineHubClient() {
           <div className="h-20 animate-pulse rounded-2xl bg-stone-200" />
           <div className="h-40 animate-pulse rounded-2xl bg-stone-200" />
         </div>
+        <BottomNav />
+      </div>
+    );
+  }
+
+  if (authRequired) {
+    return (
+      <div className="min-h-screen bg-[#f8f6f0] pb-24">
+        <header className="px-4 pt-6 pb-4">
+          <h1 className="text-2xl font-bold text-slate-800">Today</h1>
+        </header>
+        <main className="px-4">
+          <div className="rounded-2xl border-2 border-slate-200 bg-white p-5">
+            <div className="flex items-start gap-3">
+              <Sparkles className="size-5 text-violet-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-bold text-slate-800">로그인이 필요합니다</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  루틴을 시작하려면 로그인해 주세요.
+                </p>
+              </div>
+            </div>
+            <Link
+              href={`/app/auth?next=${encodeURIComponent('/app/routine')}`}
+              className="mt-4 block w-full rounded-full border-2 border-slate-900 bg-orange-400 py-3 text-center text-sm font-bold text-slate-900 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95"
+            >
+              로그인하기
+            </Link>
+          </div>
+        </main>
         <BottomNav />
       </div>
     );
