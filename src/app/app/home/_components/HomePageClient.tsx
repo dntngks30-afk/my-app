@@ -2,18 +2,25 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { SlidersHorizontal, ArrowRight, FlaskConical } from 'lucide-react';
 import { getSessionSafe } from '@/lib/supabase';
+import { getActiveSession } from '@/lib/session/client';
 import BottomNav from '../../_components/BottomNav';
+import JourneyMap from './JourneyMap';
 
 export default function HomePageClient() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const debugFlag = searchParams.get('debug') === '1';
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sessionProgress, setSessionProgress] = useState<{
+    total_sessions: number;
+    completed_sessions: number;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,6 +54,25 @@ export default function HomePageClient() {
     })();
     return () => { cancelled = true; };
   }, [debugFlag]);
+
+  useEffect(() => {
+    if (pathname !== '/app/home') return;
+    let cancelled = false;
+    (async () => {
+      const { session } = await getSessionSafe();
+      if (!session?.access_token || cancelled) return;
+      const result = await getActiveSession(session.access_token);
+      if (cancelled) return;
+      if (result.ok && result.data.progress) {
+        const p = result.data.progress;
+        setSessionProgress({
+          total_sessions: p.total_sessions,
+          completed_sessions: p.completed_sessions ?? 0,
+        });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [pathname]);
 
   if (loading) {
     return (
@@ -111,12 +137,21 @@ export default function HomePageClient() {
       </header>
 
       <main className="px-4 space-y-6">
-        {/* 2. 여정도 — 최소 표시 (Deep/세션 진행은 데이터 없음 시 생략) */}
+        {/* 2. 여정도 — session progress 기반 */}
         <section className="rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)]">
           <h3 className="text-sm font-semibold text-slate-800">현재 여정도</h3>
-          <p className="mt-2 text-sm text-slate-600">
-            루틴 탭에서 세션을 시작하고 진행도를 확인하세요.
-          </p>
+          {sessionProgress ? (
+            <div className="mt-3">
+              <JourneyMap
+                total={sessionProgress.total_sessions}
+                completed={sessionProgress.completed_sessions}
+              />
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-slate-600">
+              루틴 탭에서 세션을 시작하고 진행도를 확인하세요.
+            </p>
+          )}
         </section>
 
         {/* 3. 나의 상태 요약 — Deep 미완료 시 CTA만 */}
