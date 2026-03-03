@@ -15,6 +15,16 @@ export default function HomePageClient() {
   const searchParams = useSearchParams();
   const debugFlag = searchParams.get('debug') === '1';
   const debugMap = searchParams.get('debugMap') === '1';
+  const tsOverride = searchParams.get('ts');
+  const csOverride = searchParams.get('cs');
+  const totalSessionsOverride =
+    tsOverride != null && csOverride != null
+      ? Math.max(1, parseInt(tsOverride, 10) || 1)
+      : undefined;
+  const completedSessionsOverride =
+    tsOverride != null && csOverride != null
+      ? Math.max(0, parseInt(csOverride, 10) || 0)
+      : undefined;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -138,12 +148,14 @@ export default function HomePageClient() {
       </header>
 
       <main className="px-4 space-y-6">
-        {/* 2. 리셋 지도 — session progress 기반 */}
-        {sessionProgress ? (
+        {/* 2. 리셋 지도 — session progress 기반 (debugMap=1이면 progress 없어도 표시) */}
+        {sessionProgress || debugMap ? (
           <ResetMapCard
-            totalSessions={sessionProgress.total_sessions}
-            completedSessions={sessionProgress.completed_sessions}
+            totalSessions={sessionProgress?.total_sessions ?? 8}
+            completedSessions={sessionProgress?.completed_sessions ?? 0}
             debugMap={debugMap}
+            totalSessionsOverride={totalSessionsOverride}
+            completedSessionsOverride={completedSessionsOverride}
           />
         ) : (
           <section className="rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)]">

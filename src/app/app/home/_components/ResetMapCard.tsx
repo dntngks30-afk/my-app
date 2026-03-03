@@ -5,80 +5,152 @@
  *
  * 배경 트랙 + 러너 overlay. completed_sessions에 따라 러너가 START→FINISH로 이동.
  * total_sessions: 8/12/16/20
+ *
+ * debugMap=1: 디버그 캘리브레이션 툴 (점 선택, 방향키, Copy TRACK 등)
+ * ts/cs URL 파라미터: 러너 위치 강제 override
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import Image from 'next/image';
+import { TRACK_V1 } from '@/lib/home/reset-map-track';
 
-/** 폴리라인 기반 트랙 좌표 (0~1 비율, 컨테이너 기준) */
-const TRACK: { x: number; y: number }[] = [
-  { x: 0.16, y: 0.12 },
-  { x: 0.88, y: 0.12 },
-  { x: 0.88, y: 0.32 },
-  { x: 0.2, y: 0.32 },
-  { x: 0.2, y: 0.52 },
-  { x: 0.86, y: 0.52 },
-  { x: 0.86, y: 0.72 },
-  { x: 0.21, y: 0.72 },
-  { x: 0.21, y: 0.88 },
-  { x: 0.86, y: 0.88 },
-];
+type TrackPoint = { x: number; y: number };
 
-function segmentLength(a: { x: number; y: number }, b: { x: number; y: number }): number {
+function segmentLength(a: TrackPoint, b: TrackPoint): number {
   return Math.hypot(b.x - a.x, b.y - a.y);
 }
 
-function getTrackLength(): number {
+function getTrackLength(track: TrackPoint[]): number {
   let len = 0;
-  for (let i = 1; i < TRACK.length; i++) {
-    len += segmentLength(TRACK[i - 1], TRACK[i]);
+  for (let i = 1; i < track.length; i++) {
+    len += segmentLength(track[i - 1], track[i]);
   }
   return len;
 }
 
-function getRunnerPosition(progressRatio: number): { x: number; y: number } {
-  if (progressRatio <= 0) return TRACK[0];
-  if (progressRatio >= 1) return TRACK[TRACK.length - 1];
+function getRunnerPosition(track: TrackPoint[], progressRatio: number): TrackPoint {
+  if (progressRatio <= 0) return track[0];
+  if (progressRatio >= 1) return track[track.length - 1];
 
-  const totalLen = getTrackLength();
+  const totalLen = getTrackLength(track);
   const targetDist = progressRatio * totalLen;
 
   let acc = 0;
-  for (let i = 1; i < TRACK.length; i++) {
-    const segLen = segmentLength(TRACK[i - 1], TRACK[i]);
+  for (let i = 1; i < track.length; i++) {
+    const segLen = segmentLength(track[i - 1], track[i]);
     if (acc + segLen >= targetDist) {
       const t = (targetDist - acc) / segLen;
       return {
-        x: TRACK[i - 1].x + t * (TRACK[i].x - TRACK[i - 1].x),
-        y: TRACK[i - 1].y + t * (TRACK[i].y - TRACK[i - 1].y),
+        x: track[i - 1].x + t * (track[i].x - track[i - 1].x),
+        y: track[i - 1].y + t * (track[i].y - track[i - 1].y),
       };
     }
     acc += segLen;
   }
-  return TRACK[TRACK.length - 1];
+  return track[track.length - 1];
 }
+
+function clamp(v: number): number {
+  return Math.max(0, Math.min(1, v));
+}
+
+const STEP_NORMAL = 0.005;
+const STEP_SHIFT = 0.01;
+const STEP_ALT = 0.001;
 
 type ResetMapCardProps = {
   totalSessions: number;
   completedSessions: number;
   debugMap?: boolean;
+  /** URL ts/cs override: ts=total, cs=completed */
+  totalSessionsOverride?: number;
+  completedSessionsOverride?: number;
 };
 
 export default function ResetMapCard({
   totalSessions,
   completedSessions,
   debugMap = false,
+  totalSessionsOverride,
+  completedSessionsOverride,
 }: ResetMapCardProps) {
   const [trackImgError, setTrackImgError] = useState(false);
   const [runnerImgError, setRunnerImgError] = useState(false);
+  const [copyToast, setCopyToast] = useState<string | null>(null);
+
+  const ts = totalSessionsOverride ?? totalSessions;
+  const cs = completedSessionsOverride ?? completedSessions;
 
   const weeklyFrequency = totalSessions / 4;
-  const progressRatio =
-    totalSessions === 0 ? 0 : Math.min(1, completedSessions / totalSessions);
-  const runnerPos = useMemo(() => getRunnerPosition(progressRatio), [progressRatio]);
+  const progressRatio = ts === 0 ? 0 : Math.min(1, cs / ts);
+
+  const [track, setTrack] = useState<TrackPoint[]>(TRACK_V1);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  const activeTrack = debugMap ? track : TRACK_V1;
+  const runnerPos = useMemo(
+    () => getRunnerPosition(activeTrack, progressRatio),
+    [activeTrack, progressRatio]
+  );
+
+  useEffect(() => {
+    if (!debugMap || process.env.NODE_ENV === 'production') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const step = e.altKey ? STEP_ALT : e.shiftKey ? STEP_SHIFT : STEP_NORMAL;
+      let dx = 0;
+      let dy = 0;
+      if (e.key === 'ArrowLeft') dx = -step;
+      else if (e.key === 'ArrowRight') dx = step;
+      else if (e.key === 'ArrowUp') dy = -step;
+      else if (e.key === 'ArrowDown') dy = step;
+      else return;
+
+      e.preventDefault();
+      setTrack((prev) => {
+        const next = [...prev];
+        const p = next[selectedIndex];
+        next[selectedIndex] = {
+          x: clamp(p.x + dx),
+          y: clamp(p.y + dy),
+        };
+        return next;
+      });
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [debugMap, selectedIndex]);
+
+  const handleCopyTrack = async () => {
+    const text = JSON.stringify(
+      track.map((p) => ({ x: p.x, y: p.y })),
+      null,
+      2
+    );
+    await navigator.clipboard.writeText(text);
+    setCopyToast('TRACK 복사됨');
+    setTimeout(() => setCopyToast(null), 2000);
+  };
+
+  const handleReset = () => {
+    setTrack([...TRACK_V1]);
+    setCopyToast('Reset됨');
+    setTimeout(() => setCopyToast(null), 1500);
+  };
+
+  const handleCopySelected = async () => {
+    const p = track[selectedIndex];
+    const text = `${selectedIndex}, { x: ${p.x.toFixed(3)}, y: ${p.y.toFixed(3)} }`;
+    await navigator.clipboard.writeText(text);
+    setCopyToast('선택점 복사됨');
+    setTimeout(() => setCopyToast(null), 1500);
+  };
+
+  const stepLabel = 'Alt:0.001 / 기본:0.005 / Shift:0.01';
 
   return (
-    <section className="rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)]">
+    <section className="relative rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)]">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-slate-800">리셋 지도</h3>
         <span className="text-xs font-medium text-slate-500">
@@ -86,7 +158,10 @@ export default function ResetMapCard({
         </span>
       </div>
 
-      <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-slate-100">
+      <div
+        className="relative overflow-hidden rounded-xl bg-slate-100"
+        style={{ aspectRatio: '2048/1529' }}
+      >
         {/* 배경: 이미지 또는 SVG 트랙 */}
         <div className="absolute inset-0">
           {!trackImgError ? (
@@ -94,7 +169,7 @@ export default function ResetMapCard({
               src="/ui/reset-map-track.png"
               alt="리셋 트랙"
               fill
-              className="object-contain"
+              className="object-cover"
               sizes="(max-width: 768px) 100vw, 400px"
               onError={() => setTrackImgError(true)}
             />
@@ -168,22 +243,42 @@ export default function ResetMapCard({
           )}
         </div>
 
-        {/* 디버그 오버레이 */}
+        {/* 디버그 오버레이 — debugMap=1일 때만 */}
         {debugMap && process.env.NODE_ENV !== 'production' && (
           <>
-            {TRACK.map((p, i) => (
-              <div
+            {track.map((p, i) => (
+              <button
                 key={i}
-                className="absolute size-2 rounded-full bg-blue-500"
+                type="button"
+                onClick={() => setSelectedIndex(i)}
+                className={`absolute rounded-full outline-none transition-all focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 ${
+                  selectedIndex === i
+                    ? 'size-4 border-2 border-orange-500 bg-orange-400'
+                    : 'size-2 bg-blue-500 hover:size-3'
+                }`}
                 style={{
                   left: `${p.x * 100}%`,
                   top: `${p.y * 100}%`,
                   transform: 'translate(-50%, -50%)',
                 }}
+                aria-label={`점 ${i} 선택`}
               />
             ))}
+            {track.map((p, i) => (
+              <span
+                key={`label-${i}`}
+                className="absolute z-20 text-[10px] font-mono font-bold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]"
+                style={{
+                  left: `${p.x * 100}%`,
+                  top: `${p.y * 100}%`,
+                  transform: 'translate(4px, -50%)',
+                }}
+              >
+                {i}
+              </span>
+            ))}
             <div
-              className="absolute size-4 rounded-full border-2 border-red-500 bg-red-500/30"
+              className="absolute z-20 size-4 rounded-full border-2 border-red-500 bg-red-500/30"
               style={{
                 left: `${runnerPos.x * 100}%`,
                 top: `${runnerPos.y * 100}%`,
@@ -193,6 +288,49 @@ export default function ResetMapCard({
           </>
         )}
       </div>
+
+      {/* 디버그 패널 — debugMap=1일 때만 (우상단 floating) */}
+      {debugMap && process.env.NODE_ENV !== 'production' && (
+        <div className="absolute right-4 top-4 z-30 max-w-[280px] rounded-lg border border-slate-300 bg-slate-100/95 p-3 text-xs shadow-lg backdrop-blur-sm">
+          <div className="mb-2 font-mono text-slate-700">
+            debugMap=1 · ts={ts} cs={cs} · ratio={progressRatio.toFixed(3)}
+          </div>
+          <div className="mb-2 font-mono text-slate-700">
+            selectedIndex={selectedIndex} · x={track[selectedIndex]?.x.toFixed(3)} y=
+            {track[selectedIndex]?.y.toFixed(3)}
+          </div>
+          <div className="mb-2 text-slate-600">{stepLabel}</div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleCopyTrack}
+              className="rounded bg-slate-800 px-2 py-1 font-medium text-white hover:bg-slate-700"
+            >
+              Copy TRACK
+            </button>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="rounded bg-slate-600 px-2 py-1 font-medium text-white hover:bg-slate-500"
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={handleCopySelected}
+              className="rounded bg-slate-600 px-2 py-1 font-medium text-white hover:bg-slate-500"
+            >
+              Copy Selected
+            </button>
+          </div>
+          <p className="mt-2 text-slate-500">
+            Copy TRACK → reset-map-track.ts의 TRACK_V1 배열에 교체
+          </p>
+          {copyToast && (
+            <p className="mt-1 text-green-600 font-medium">{copyToast}</p>
+          )}
+        </div>
+      )}
     </section>
   );
 }
