@@ -15,6 +15,22 @@ export function getKstDayKey(now: Date = new Date()): string {
 }
 
 /**
+ * Compute today_completed and next_unlock_at from progress.
+ * Shared by /api/session/active and /api/session/create.
+ */
+export function getTodayCompletedAndNextUnlock(progress: {
+  last_completed_day_key?: string | Date | null;
+} | null): { todayCompleted: boolean; nextUnlockAt: string | null } {
+  const todayKstDayKey = getKstDayKey(new Date());
+  const lastDayKey = progress?.last_completed_day_key != null
+    ? String(progress.last_completed_day_key)
+    : null;
+  const todayCompleted = lastDayKey === todayKstDayKey;
+  const nextUnlockAt = todayCompleted ? getNextKstMidnightUtcIso(new Date()) : null;
+  return { todayCompleted, nextUnlockAt };
+}
+
+/**
  * Next KST midnight as UTC ISO string.
  * Used for next_unlock_at when today_completed=true.
  * KST = UTC+9, so 00:00 KST = 15:00 UTC previous day.

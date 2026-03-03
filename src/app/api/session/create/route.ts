@@ -25,7 +25,7 @@ import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import { buildSessionPlanJson } from '@/lib/session/plan-generator';
-import { getKstDayKey, getNextKstMidnightUtcIso } from '@/lib/session/kst';
+import { getKstDayKey, getNextKstMidnightUtcIso, getTodayCompletedAndNextUnlock } from '@/lib/session/kst';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -179,6 +179,23 @@ export async function POST(req: NextRequest) {
       progress = created;
     }
 
+    const { todayCompleted, nextUnlockAt } = getTodayCompletedAndNextUnlock(progress);
+
+    // Daily cap: 오늘 완료했으면 create 차단 (SSOT)
+    if (todayCompleted) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'DAILY_LIMIT_REACHED',
+            message: '오늘 이미 세션을 완료했습니다. 내일 다시 시작해 주세요.',
+            next_unlock_at: nextUnlockAt ?? getNextKstMidnightUtcIso(new Date()),
+            day_key: getKstDayKey(new Date()),
+          },
+        },
+        { status: 409 }
+      );
+    }
+
     // ── 멱등: active session이 이미 있으면 profile 조회 없이 그대로 반환 ──
     if (progress.active_session_number) {
       const { data: existingPlan } = await supabase
@@ -192,6 +209,8 @@ export async function POST(req: NextRequest) {
         progress,
         active: existingPlan ?? null,
         idempotent: true,
+        today_completed: todayCompleted,
+        ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }),
       });
       res.headers.set('Cache-Control', 'no-store');
       return res;
@@ -214,28 +233,16 @@ export async function POST(req: NextRequest) {
       console.warn('[session/create] sync skipped: resolved < completed_sessions');
     }
 
-    // Daily cap: max 1 completed session per KST day
-    const todayKstDayKey = getKstDayKey(new Date());
-    const lastDayKey = progress.last_completed_day_key as string | null | undefined;
-    if (lastDayKey === todayKstDayKey) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'DAILY_LIMIT_REACHED',
-            message: '오늘 이미 세션을 완료했습니다. 내일 다시 시작해 주세요.',
-            next_unlock_at: getNextKstMidnightUtcIso(new Date()),
-            day_key: todayKstDayKey,
-          },
-        },
-        { status: 409 }
-      );
-    }
-
     const nextSessionNumber = progress.completed_sessions + 1;
 
     // 프로그램 전체 완료
     if (nextSessionNumber > progress.total_sessions) {
-      const res = NextResponse.json({ done: true, progress });
+      const res = NextResponse.json({
+        done: true,
+        progress,
+        today_completed: todayCompleted,
+        ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }),
+      });
       res.headers.set('Cache-Control', 'no-store');
       return res;
     }
@@ -293,32 +300,106 @@ export async function POST(req: NextRequest) {
       equipment,
     };
 
-    // UPSERT: UNIQUE(user_id, session_number) — 멱등 보장
-    const { data: plan, error: upsertErr } = await supabase
+    // completed row 덮어쓰기 금지: status IN ('draft','started')일 때만 갱신
+    const { data: existingPlan } = await supabase
       .from('session_plans')
-      .upsert(
-        {
-          user_id: userId,
-          session_number: nextSessionNumber,
-          status: 'draft',
-          theme,
-          plan_json: planJson,
-          condition,
-        },
-        { onConflict: 'user_id,session_number', ignoreDuplicates: false }
-      )
       .select('session_number, status, theme, plan_json, condition')
-      .single();
+      .eq('user_id', userId)
+      .eq('session_number', nextSessionNumber)
+      .maybeSingle();
 
-    if (upsertErr || !plan) {
-      console.error('[session/create] upsert failed', upsertErr);
+    if (existingPlan?.status === 'completed') {
+      const res = NextResponse.json({
+        progress,
+        active: existingPlan,
+        idempotent: true,
+        today_completed: todayCompleted,
+        ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }),
+      });
+      res.headers.set('Cache-Control', 'no-store');
+      return res;
+    }
+
+    const planPayload = {
+      user_id: userId,
+      session_number: nextSessionNumber,
+      status: 'draft' as const,
+      theme,
+      plan_json: planJson,
+      condition,
+    };
+
+    let plan: typeof existingPlan;
+    if (existingPlan && (existingPlan.status === 'draft' || existingPlan.status === 'started')) {
+      const { data: updated, error: updateErr } = await supabase
+        .from('session_plans')
+        .update({ theme: planPayload.theme, plan_json: planPayload.plan_json, condition: planPayload.condition })
+        .eq('user_id', userId)
+        .eq('session_number', nextSessionNumber)
+        .in('status', ['draft', 'started'])
+        .select('session_number, status, theme, plan_json, condition')
+        .maybeSingle();
+
+      if (updateErr) {
+        console.error('[session/create] plan update failed', updateErr);
+        return NextResponse.json(
+          { error: { code: 'DB_ERROR', message: '세션 플랜 업데이트에 실패했습니다.' } },
+          { status: 500 }
+        );
+      }
+      plan = updated ?? existingPlan;
+    } else {
+      const { data: inserted, error: insertErr } = await supabase
+        .from('session_plans')
+        .insert(planPayload)
+        .select('session_number, status, theme, plan_json, condition')
+        .maybeSingle();
+
+      if (insertErr) {
+        if (insertErr.code === '23505') {
+          const [{ data: raced }, { data: prog }] = await Promise.all([
+            supabase
+              .from('session_plans')
+              .select('session_number, status, theme, plan_json, condition')
+              .eq('user_id', userId)
+              .eq('session_number', nextSessionNumber)
+              .maybeSingle(),
+            supabase
+              .from('session_program_progress')
+              .select('*')
+              .eq('user_id', userId)
+              .maybeSingle(),
+          ]);
+          if (raced) {
+            const p = prog ?? { ...progress, active_session_number: nextSessionNumber };
+            const { todayCompleted: tc, nextUnlockAt: nua } = getTodayCompletedAndNextUnlock(p);
+            const res = NextResponse.json({
+              progress: p,
+              active: raced,
+              idempotent: true,
+              today_completed: tc,
+              ...(nua != null && { next_unlock_at: nua }),
+            });
+            res.headers.set('Cache-Control', 'no-store');
+            return res;
+          }
+        }
+        console.error('[session/create] plan insert failed', insertErr);
+        return NextResponse.json(
+          { error: { code: 'DB_ERROR', message: '세션 플랜 생성에 실패했습니다.' } },
+          { status: 500 }
+        );
+      }
+      plan = inserted;
+    }
+
+    if (!plan) {
       return NextResponse.json(
-        { error: { code: 'DB_ERROR', message: '세션 플랜 생성에 실패했습니다.' } },
+        { error: { code: 'DB_ERROR', message: '세션 플랜을 가져올 수 없습니다.' } },
         { status: 500 }
       );
     }
 
-    // progress.active_session_number 업데이트
     const { data: updatedProgress, error: progressErr } = await supabase
       .from('session_program_progress')
       .update({ active_session_number: nextSessionNumber })
@@ -330,10 +411,15 @@ export async function POST(req: NextRequest) {
       console.error('[session/create] progress update failed', progressErr);
     }
 
+    const finalProgress = updatedProgress ?? { ...progress, active_session_number: nextSessionNumber };
+    const { todayCompleted: tc, nextUnlockAt: nua } = getTodayCompletedAndNextUnlock(finalProgress);
+
     const res = NextResponse.json({
-      progress: updatedProgress ?? { ...progress, active_session_number: nextSessionNumber },
+      progress: finalProgress,
       active: plan,
       idempotent: false,
+      today_completed: tc,
+      ...(nua != null && { next_unlock_at: nua }),
     });
     res.headers.set('Cache-Control', 'no-store');
     return res;

@@ -18,7 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
-import { getKstDayKey, getNextKstMidnightUtcIso } from '@/lib/session/kst';
+import { getTodayCompletedAndNextUnlock } from '@/lib/session/kst';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -113,13 +113,7 @@ export async function GET(req: NextRequest) {
     }
 
     const activeSessionNumber = progress.active_session_number;
-
-    const todayKstDayKey = getKstDayKey(new Date());
-    const lastDayKey = progress.last_completed_day_key != null
-      ? String(progress.last_completed_day_key)
-      : null;
-    const todayCompleted = lastDayKey === todayKstDayKey;
-    const nextUnlockAt = todayCompleted ? getNextKstMidnightUtcIso(new Date()) : null;
+    const { todayCompleted, nextUnlockAt } = getTodayCompletedAndNextUnlock(progress);
 
     if (!activeSessionNumber) {
       const res = NextResponse.json({
