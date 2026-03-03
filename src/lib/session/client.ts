@@ -115,12 +115,15 @@ export type SessionProgress = {
   completed_sessions: number;
   active_session_number: number | null;
   last_completed_at: string | null;
+  last_completed_day_key?: string | null;
   updated_at: string;
 };
 
 export type ActiveSessionResponse = {
   progress: SessionProgress;
   active: SessionPlan | null;
+  today_completed?: boolean;
+  next_unlock_at?: string;
 };
 
 export type CreateSessionResponse = {

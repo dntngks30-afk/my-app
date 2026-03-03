@@ -20,6 +20,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { getKstDayKey } from '@/lib/session/kst';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -149,6 +150,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     const newCompleted = Math.max(currentProgress?.completed_sessions ?? 0, sessionNumber);
+    const todayKstDayKey = getKstDayKey(new Date());
 
     const { data: updatedProgress, error: progressErr } = await supabase
       .from('session_program_progress')
@@ -156,6 +158,7 @@ export async function POST(req: NextRequest) {
         completed_sessions: newCompleted,
         active_session_number: null,
         last_completed_at: nowIso,
+        last_completed_day_key: todayKstDayKey,
       })
       .eq('user_id', userId)
       .select()

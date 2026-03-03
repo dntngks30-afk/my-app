@@ -25,6 +25,7 @@ import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import { buildSessionPlanJson } from '@/lib/session/plan-generator';
+import { getKstDayKey, getNextKstMidnightUtcIso } from '@/lib/session/kst';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -211,6 +212,23 @@ export async function POST(req: NextRequest) {
       if (!syncErr && synced) progress = synced;
     } else if (resolved.totalSessions < completed) {
       console.warn('[session/create] sync skipped: resolved < completed_sessions');
+    }
+
+    // Daily cap: max 1 completed session per KST day
+    const todayKstDayKey = getKstDayKey(new Date());
+    const lastDayKey = progress.last_completed_day_key as string | null | undefined;
+    if (lastDayKey === todayKstDayKey) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'DAILY_LIMIT_REACHED',
+            message: '오늘 이미 세션을 완료했습니다. 내일 다시 시작해 주세요.',
+            next_unlock_at: getNextKstMidnightUtcIso(new Date()),
+            day_key: todayKstDayKey,
+          },
+        },
+        { status: 409 }
+      );
     }
 
     const nextSessionNumber = progress.completed_sessions + 1;
