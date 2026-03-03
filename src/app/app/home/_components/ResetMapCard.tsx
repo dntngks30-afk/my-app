@@ -135,20 +135,20 @@ export default function ResetMapCard({
           style={{
             left: `${runnerPos.x * 100}%`,
             top: `${runnerPos.y * 100}%`,
-            transform: 'translate(-50%, -70%)',
+            transform: 'translate(-50%, -65%)',
           }}
         >
           {!runnerImgError ? (
             <Image
               src="/ui/reset-map-runner.png"
               alt="러너"
-              width={48}
-              height={48}
-              className="object-contain"
+              width={120}
+              height={120}
+              className="object-contain mix-blend-multiply drop-shadow-md"
               onError={() => setRunnerImgError(true)}
             />
           ) : (
-            <div className="flex size-12 items-center justify-center rounded-full bg-orange-400 text-white shadow-lg">
+            <div className="flex size-[120px] items-center justify-center rounded-full bg-orange-400 text-white shadow-lg">
               <svg
                 width="24"
                 height="24"
