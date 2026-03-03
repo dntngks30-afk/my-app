@@ -20,13 +20,14 @@
  * Auth: Bearer token. Write: service role admin client (RLS bypass).
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import { buildSessionPlanJson } from '@/lib/session/plan-generator';
-import { getKstDayKey, getNextKstMidnightUtcIso, getTodayCompletedAndNextUnlock } from '@/lib/session/kst';
+import { getKstDayKeyUTC, getNextKstMidnightUtcIso, getTodayCompletedAndNextUnlock } from '@/lib/time/kst';
 import { logSessionEvent } from '@/lib/session-events';
+import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -122,10 +123,7 @@ export async function POST(req: NextRequest) {
   try {
     const userId = await getCurrentUserId(req);
     if (!userId) {
-      return NextResponse.json(
-        { error: { code: 'UNAUTHENTICATED', message: '인증이 필요합니다.' } },
-        { status: 401 }
-      );
+      return fail(401, ApiErrorCode.AUTH_REQUIRED, '로그인이 필요합니다');
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -179,10 +177,7 @@ export async function POST(req: NextRequest) {
           code: 'DB_ERROR',
           meta: { message_short: 'progress init failed' },
         });
-        return NextResponse.json(
-          { error: { code: 'DB_ERROR', message: '진행 상태 초기화에 실패했습니다.' } },
-          { status: 500 }
-        );
+        return fail(500, ApiErrorCode.INTERNAL_ERROR, '진행 상태 초기화에 실패했습니다');
       }
       progress = created;
     }
@@ -196,18 +191,16 @@ export async function POST(req: NextRequest) {
         eventType: 'session_create_blocked',
         status: 'blocked',
         code: 'DAILY_LIMIT_REACHED',
-        meta: { day_key: getKstDayKey(new Date()) },
+        meta: { day_key: getKstDayKeyUTC() },
       });
-      return NextResponse.json(
-        {
-          error: {
-            code: 'DAILY_LIMIT_REACHED',
-            message: '오늘 이미 세션을 완료했습니다. 내일 다시 시작해 주세요.',
-            next_unlock_at: nextUnlockAt ?? getNextKstMidnightUtcIso(new Date()),
-            day_key: getKstDayKey(new Date()),
-          },
-        },
-        { status: 409 }
+      const nextUnlock = nextUnlockAt ?? getNextKstMidnightUtcIso();
+      const kstDay = getKstDayKeyUTC();
+      return fail(
+        409,
+        ApiErrorCode.DAILY_LIMIT_REACHED,
+        '오늘은 이미 완료했습니다',
+        { next_unlock_at: nextUnlock, kst_day: kstDay },
+        { next_unlock_at: nextUnlock }
       );
     }
 
@@ -228,15 +221,8 @@ export async function POST(req: NextRequest) {
         meta: { reason: 'active_exists' },
       });
 
-      const res = NextResponse.json({
-        progress,
-        active: existingPlan ?? null,
-        idempotent: true,
-        today_completed: todayCompleted,
-        ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }),
-      });
-      res.headers.set('Cache-Control', 'no-store');
-      return res;
+      const data = { progress, active: existingPlan ?? null, idempotent: true, today_completed: todayCompleted, ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }) };
+      return ok(data, data);
     }
 
     // BE-ONB-02: progress 있음 + active 없음 → profile 기반 sync (안전 조건 시)
@@ -267,14 +253,9 @@ export async function POST(req: NextRequest) {
         code: 'PROGRAM_FINISHED',
         meta: { total_sessions: progress.total_sessions, completed_sessions: progress.completed_sessions },
       });
-      const res = NextResponse.json({
-        done: true,
-        progress,
-        today_completed: todayCompleted,
-        ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }),
-      });
-      res.headers.set('Cache-Control', 'no-store');
-      return res;
+      // 하위호환: FE가 done/progress로 panelState('done') 처리. 추후 409+code로 전환 시 FE 분기 추가.
+      const data = { done: true, progress, today_completed: todayCompleted, ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }) };
+      return ok(data, data);
     }
 
     // ── [NEW] Deep Result 요약 로드 (next 생성 시점에만) ──────────────────────
@@ -289,15 +270,7 @@ export async function POST(req: NextRequest) {
         code: 'DEEP_RESULT_MISSING',
         meta: {},
       });
-      return NextResponse.json(
-        {
-          error: {
-            code: 'DEEP_RESULT_MISSING',
-            message: '심화 테스트 결과가 없습니다. Deep Test를 먼저 완료해 주세요.',
-          },
-        },
-        { status: 404 }
-      );
+      return fail(404, ApiErrorCode.DEEP_RESULT_MISSING, '심층 결과가 없습니다');
     }
 
     const phaseIndex = getPhaseIndex(nextSessionNumber);
@@ -353,15 +326,8 @@ export async function POST(req: NextRequest) {
         sessionNumber: nextSessionNumber,
         meta: { reason: 'conflict_return' },
       });
-      const res = NextResponse.json({
-        progress,
-        active: existingPlan,
-        idempotent: true,
-        today_completed: todayCompleted,
-        ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }),
-      });
-      res.headers.set('Cache-Control', 'no-store');
-      return res;
+      const data = { progress, active: existingPlan, idempotent: true, today_completed: todayCompleted, ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }) };
+      return ok(data, data);
     }
 
     const planPayload = {
@@ -393,10 +359,7 @@ export async function POST(req: NextRequest) {
           code: 'DB_ERROR',
           meta: { message_short: 'plan update failed' },
         });
-        return NextResponse.json(
-          { error: { code: 'DB_ERROR', message: '세션 플랜 업데이트에 실패했습니다.' } },
-          { status: 500 }
-        );
+        return fail(500, ApiErrorCode.INTERNAL_ERROR, '세션 플랜 업데이트에 실패했습니다');
       }
       plan = updated ?? existingPlan;
     } else {
@@ -431,15 +394,8 @@ export async function POST(req: NextRequest) {
             });
             const p = prog ?? { ...progress, active_session_number: nextSessionNumber };
             const { todayCompleted: tc, nextUnlockAt: nua } = getTodayCompletedAndNextUnlock(p);
-            const res = NextResponse.json({
-              progress: p,
-              active: raced,
-              idempotent: true,
-              today_completed: tc,
-              ...(nua != null && { next_unlock_at: nua }),
-            });
-            res.headers.set('Cache-Control', 'no-store');
-            return res;
+            const data = { progress: p, active: raced, idempotent: true, today_completed: tc, ...(nua != null && { next_unlock_at: nua }) };
+            return ok(data, data);
           }
         }
         console.error('[session/create] plan insert failed', insertErr);
@@ -450,10 +406,7 @@ export async function POST(req: NextRequest) {
           code: 'DB_ERROR',
           meta: { message_short: 'plan insert failed' },
         });
-        return NextResponse.json(
-          { error: { code: 'DB_ERROR', message: '세션 플랜 생성에 실패했습니다.' } },
-          { status: 500 }
-        );
+        return fail(500, ApiErrorCode.INTERNAL_ERROR, '세션 플랜 생성에 실패했습니다');
       }
       plan = inserted;
     }
@@ -466,10 +419,7 @@ export async function POST(req: NextRequest) {
         code: 'DB_ERROR',
         meta: { message_short: 'plan not found after insert' },
       });
-      return NextResponse.json(
-        { error: { code: 'DB_ERROR', message: '세션 플랜을 가져올 수 없습니다.' } },
-        { status: 500 }
-      );
+      return fail(500, ApiErrorCode.INTERNAL_ERROR, '세션 플랜을 가져올 수 없습니다');
     }
 
     const { data: updatedProgress, error: progressErr } = await supabase
@@ -497,15 +447,8 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const res = NextResponse.json({
-      progress: finalProgress,
-      active: plan,
-      idempotent: false,
-      today_completed: tc,
-      ...(nua != null && { next_unlock_at: nua }),
-    });
-    res.headers.set('Cache-Control', 'no-store');
-    return res;
+    const data = { progress: finalProgress, active: plan, idempotent: false, today_completed: tc, ...(nua != null && { next_unlock_at: nua }) };
+    return ok(data, data);
   } catch (err) {
     console.error('[session/create]', err);
     try {
@@ -521,9 +464,6 @@ export async function POST(req: NextRequest) {
         });
       }
     } catch (_) { /* noop */ }
-    return NextResponse.json(
-      { error: { code: 'INTERNAL', message: err instanceof Error ? err.message : '서버 오류' } },
-      { status: 500 }
-    );
+    return fail(500, ApiErrorCode.INTERNAL_ERROR, '서버 오류');
   }
 }

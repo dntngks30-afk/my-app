@@ -15,11 +15,12 @@
  * Write: getServerSupabaseAdmin (service role) — RLS bypass, 클라 direct write 차단됨.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
-import { getTodayCompletedAndNextUnlock } from '@/lib/session/kst';
+import { getTodayCompletedAndNextUnlock } from '@/lib/time/kst';
 import { logSessionEvent } from '@/lib/session-events';
+import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -55,10 +56,7 @@ export async function GET(req: NextRequest) {
   try {
     const userId = await getCurrentUserId(req);
     if (!userId) {
-      return NextResponse.json(
-        { error: { code: 'UNAUTHENTICATED', message: '인증이 필요합니다.' } },
-        { status: 401 }
-      );
+      return fail(401, ApiErrorCode.AUTH_REQUIRED, '로그인이 필요합니다');
     }
 
     const supabase = getServerSupabaseAdmin();
@@ -92,10 +90,7 @@ export async function GET(req: NextRequest) {
           code: 'DB_ERROR',
           meta: { message_short: 'progress init failed' },
         });
-        return NextResponse.json(
-          { error: { code: 'DB_ERROR', message: '진행 상태 초기화에 실패했습니다.' } },
-          { status: 500 }
-        );
+        return fail(500, ApiErrorCode.INTERNAL_ERROR, '진행 상태 초기화에 실패했습니다');
       }
       progress = created;
     } else {
@@ -130,14 +125,8 @@ export async function GET(req: NextRequest) {
         status: 'ok',
         meta: { has_active: false, today_completed: todayCompleted },
       });
-      const res = NextResponse.json({
-        progress,
-        active: null,
-        today_completed: todayCompleted,
-        ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }),
-      });
-      res.headers.set('Cache-Control', 'no-store');
-      return res;
+      const data = { progress, active: null, today_completed: todayCompleted, ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }) };
+      return ok(data, data);
     }
 
     // active 세션 플랜 조회
@@ -157,10 +146,7 @@ export async function GET(req: NextRequest) {
         code: 'DB_ERROR',
         meta: { message_short: 'plan fetch failed' },
       });
-      return NextResponse.json(
-        { error: { code: 'DB_ERROR', message: '세션 플랜 조회에 실패했습니다.' } },
-        { status: 500 }
-      );
+      return fail(500, ApiErrorCode.INTERNAL_ERROR, '세션 플랜 조회에 실패했습니다');
     }
 
     void logSessionEvent(supabase, {
@@ -171,14 +157,8 @@ export async function GET(req: NextRequest) {
       meta: { has_active: !!activeSessionNumber, today_completed: todayCompleted },
     });
 
-    const res = NextResponse.json({
-      progress,
-      active: plan ?? null,
-      today_completed: todayCompleted,
-      ...(nextUnlockAt && { next_unlock_at: nextUnlockAt }),
-    });
-    res.headers.set('Cache-Control', 'no-store');
-    return res;
+    const data = { progress, active: plan ?? null, today_completed: todayCompleted, ...(nextUnlockAt && { next_unlock_at: nextUnlockAt }) };
+    return ok(data, data);
   } catch (err) {
     console.error('[session/active]', err);
     try {
@@ -194,9 +174,6 @@ export async function GET(req: NextRequest) {
         });
       }
     } catch (_) { /* noop */ }
-    return NextResponse.json(
-      { error: { code: 'INTERNAL', message: err instanceof Error ? err.message : '서버 오류' } },
-      { status: 500 }
-    );
+    return fail(500, ApiErrorCode.INTERNAL_ERROR, '서버 오류');
   }
 }

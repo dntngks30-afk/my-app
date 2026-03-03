@@ -5,6 +5,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getKstDayKeyUTC } from '@/lib/time/kst';
 
 const META_MAX_BYTES = 4096;
 
@@ -33,7 +34,7 @@ export async function logSessionEvent(
       meta = { _truncated: true, _size: metaStr.length };
     }
 
-    const kstDay = getKstDayIso();
+    const kstDay = getKstDayKeyUTC();
     await admin.from('session_events').insert({
       user_id: params.userId,
       event_type: params.eventType,
@@ -47,17 +48,6 @@ export async function logSessionEvent(
   } catch (err) {
     console.error('[session-events] log failed', params.eventType, err);
   }
-}
-
-/** KST day as YYYY-MM-DD for PostgreSQL date. */
-function getKstDayIso(): string {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Seoul',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  return formatter.format(new Date());
 }
 
 type LogItem = {
