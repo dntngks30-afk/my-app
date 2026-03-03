@@ -63,6 +63,30 @@ function getTimeLabel(timeBudget: 'short' | 'normal'): string {
   return timeBudget === 'short' ? '15분 소요' : '25~30분 소요';
 }
 
+/** Path B 디버그 라벨: total_sessions + templateId 샘플 (읽기 전용) */
+function getDebugBadgeText(
+  progress: SessionProgress | null,
+  activePlan: SessionPlan | null
+): string {
+  const show = process.env.NEXT_PUBLIC_SHOW_DEBUG_BADGES !== '0' &&
+    process.env.NEXT_PUBLIC_SHOW_DEBUG_BADGES !== 'false';
+  if (!show) return '';
+
+  const total = progress?.total_sessions ?? null;
+  const totalStr = total != null ? String(total) : 'unknown';
+
+  let templateStr = 'unknown';
+  if (activePlan?.plan_json?.segments) {
+    const first = activePlan.plan_json.segments[0]?.items?.[0]?.templateId;
+    if (typeof first === 'string') {
+      if (first.startsWith('stub_')) templateStr = 'stub';
+      else if (/^M\d+$/.test(first)) templateStr = first;
+    }
+  }
+
+  return `total_sessions: ${totalStr} · template: ${templateStr}`;
+}
+
 export default function RoutineHubClient() {
   const router = useRouter();
 
@@ -309,10 +333,16 @@ export default function RoutineHubClient() {
 
   if (isDeepMissing.current || (errorMsg && !activePlan)) {
     const showDeepMissing = isDeepMissing.current;
+    const debugText = getDebugBadgeText(progress, activePlan);
     return (
       <div className="min-h-screen bg-[#f8f6f0] pb-24">
         <header className="px-4 pt-6 pb-4">
           <h1 className="text-2xl font-bold text-slate-800">Today</h1>
+          {debugText && (
+            <p className="mt-1 text-xs text-slate-400 font-mono" aria-hidden="true">
+              {debugText}
+            </p>
+          )}
         </header>
         <main className="px-4">
           <div className="rounded-2xl border-2 border-slate-200 bg-white p-5">
@@ -347,10 +377,16 @@ export default function RoutineHubClient() {
   }
 
   if (panelState === 'done' && progress) {
+    const debugText = getDebugBadgeText(progress, null);
     return (
       <div className="min-h-screen bg-[#f8f6f0] pb-24">
         <header className="px-4 pt-6 pb-4">
           <h1 className="text-2xl font-bold text-slate-800">Today</h1>
+          {debugText && (
+            <p className="mt-1 text-xs text-slate-400 font-mono" aria-hidden="true">
+              {debugText}
+            </p>
+          )}
         </header>
         <main className="px-4">
           <div className="rounded-2xl border-2 border-slate-200 bg-white p-5">
@@ -370,10 +406,19 @@ export default function RoutineHubClient() {
     );
   }
 
+  const debugText = getDebugBadgeText(progress, activePlan);
+
   return (
     <div className="min-h-screen bg-[#f8f6f0] pb-24">
       <header className="px-4 pt-6 pb-3 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">Today</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Today</h1>
+          {debugText && (
+            <p className="mt-1 text-xs text-slate-400 font-mono" aria-hidden="true">
+              {debugText}
+            </p>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <button
             type="button"

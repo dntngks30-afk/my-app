@@ -4,6 +4,7 @@
  * Deep Test 진행 페이지 - 3섹션 Stepper UX
  * Section 1: 기본(5) / Section 2: 스쿼트(3) / Section 3: 벽천사+한발서기(6)
  * - 버튼 클릭 시에만 save, autosave 없음
+ * - UI-DEEP-ONB-ONE: Section 0에 주당 빈도(2/3/4/5) 추가, "다음" 시 profile best-effort 저장
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -11,9 +12,13 @@ import { useRouter } from 'next/navigation';
 import AppTopBar from '../../_components/AppTopBar';
 import BottomNav from '../../_components/BottomNav';
 import { getSessionSafe } from '@/lib/supabase';
+import { postSessionProfile } from '@/lib/session/client';
 import { DEEP_V2_QUESTIONS, type DeepQuestion } from '../_data/questions';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
 import MovementGuideCard from '@/components/deep-test/MovementGuideCard';
+import TargetFrequencyPicker, { type TargetFrequency } from '@/components/session/TargetFrequencyPicker';
+
+const SESSION_FREQUENCY_DRAFT_KEY = 'session_target_frequency_draft';
 
 type Status = 'loading' | 'ready' | 'error' | 'auth' | 'paywall' | 'finalizing';
 
@@ -89,6 +94,23 @@ export default function DeepTestRunPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const [targetFrequency, setTargetFrequency] = useState<TargetFrequency>(3);
+  const frequencyDraftLoaded = useRef(false);
+
+  useEffect(() => {
+    if (frequencyDraftLoaded.current) return;
+    frequencyDraftLoaded.current = true;
+    try {
+      const draft = sessionStorage.getItem(SESSION_FREQUENCY_DRAFT_KEY);
+      if (draft) {
+        const n = parseInt(draft, 10);
+        if ([2, 3, 4, 5].includes(n)) setTargetFrequency(n as TargetFrequency);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const getToken = useCallback(async () => {
     const { session } = await getSessionSafe();
@@ -260,6 +282,36 @@ export default function DeepTestRunPage() {
       }
     }
 
+    if (sectionIndex === 0) {
+      const token = await getToken();
+      if (token) {
+        try {
+          const profileResult = await postSessionProfile(token, {
+            target_frequency: targetFrequency,
+          });
+          if (!profileResult.ok) {
+            try {
+              sessionStorage.setItem(SESSION_FREQUENCY_DRAFT_KEY, String(targetFrequency));
+            } catch {
+              /* ignore */
+            }
+          } else {
+            try {
+              sessionStorage.removeItem(SESSION_FREQUENCY_DRAFT_KEY);
+            } catch {
+              /* ignore */
+            }
+          }
+        } catch {
+          try {
+            sessionStorage.setItem(SESSION_FREQUENCY_DRAFT_KEY, String(targetFrequency));
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }
+
     if (isLastSection) {
       setStatus('finalizing');
       const token = await getToken();
@@ -378,6 +430,12 @@ export default function DeepTestRunPage() {
         </h2>
 
         <div className="space-y-6">
+          {sectionIndex === 0 && (
+            <TargetFrequencyPicker
+              value={targetFrequency}
+              onChange={setTargetFrequency}
+            />
+          )}
           {sectionIndex === 1 && (
             <MovementGuideCard
               title="스쿼트"
