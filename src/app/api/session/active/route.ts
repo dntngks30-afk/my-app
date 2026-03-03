@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { getKstDayKey, getNextKstMidnightUtcIso } from '@/lib/session/kst';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -135,7 +136,12 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const res = NextResponse.json({ progress, active: plan ?? null });
+    const res = NextResponse.json({
+      progress,
+      active: plan ?? null,
+      today_completed: todayCompleted,
+      ...(nextUnlockAt && { next_unlock_at: nextUnlockAt }),
+    });
     res.headers.set('Cache-Control', 'no-store');
     return res;
   } catch (err) {

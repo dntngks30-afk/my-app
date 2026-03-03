@@ -110,6 +110,7 @@ export default function RoutineHubClient() {
   const [summaryNextTheme, setSummaryNextTheme] = useState<string | null>(null);
   const [durationClamped, setDurationClamped] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [todayCompleted, setTodayCompleted] = useState(false);
 
   const activeFetchedRef = useRef(false);
   const historyFetchedRef = useRef(false);
@@ -149,8 +150,9 @@ export default function RoutineHubClient() {
         return;
       }
 
-      const { active, progress: prog } = result.data;
+      const { active, progress: prog, today_completed, next_unlock_at } = result.data;
       setProgress(prog);
+      setTodayCompleted(today_completed === true);
 
       if (active) {
         setActivePlan(active);
@@ -224,6 +226,8 @@ export default function RoutineHubClient() {
     if (!result.ok) {
       if (result.error.code === 'DEEP_RESULT_MISSING') {
         isDeepMissing.current = true;
+      } else if (result.error.code === 'DAILY_LIMIT_REACHED') {
+        setTodayCompleted(true);
       } else {
         setErrorMsg(result.error.message);
       }
@@ -282,6 +286,7 @@ export default function RoutineHubClient() {
     setSummaryNextTheme(result.data.next_theme ?? null);
     setDurationClamped(clamped);
     setActivePlan(null);
+    setTodayCompleted(true);
     setShowSummary(true);
   }, [token, activePlan, completing, startedAtMs]);
 
@@ -479,6 +484,18 @@ export default function RoutineHubClient() {
               </NeoButton>
             </div>
           </>
+        ) : todayCompleted ? (
+          <div className="rounded-2xl border-2 border-slate-200 bg-white p-5">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="size-6 text-emerald-500 shrink-0" />
+              <div>
+                <p className="text-sm font-bold text-slate-800">오늘 완료</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  오늘 세션을 이미 완료했어요. 내일 다시 시작해 주세요.
+                </p>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="fixed bottom-20 left-4 right-4 z-40">
             <NeoButton
