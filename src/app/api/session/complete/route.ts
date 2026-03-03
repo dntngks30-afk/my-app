@@ -1,10 +1,10 @@
 /**
  * POST /api/session/complete
  *
- * 세션 완료 처리 (멱등).
- * - status='completed'면 중복 +1 없이 같은 응답 반환
- * - session_plans: status='completed', completed_at=now()
- * - progress: completed_sessions=GREATEST(기존, session_number), active_session_number=null
+ * 세션 완료 처리 (멱등, race-safe).
+ * - status IN ('draft','started')일 때만 업데이트 → 첫 완료만 exercise_logs 저장
+ * - session_plans: status='completed', completed_at, duration_seconds, completion_mode, exercise_logs
+ * - progress: DB trigger session_sync_progress_on_plan_completed가 SSOT
  * - 응답: next_theme만 포함 (운동 리스트 예고 금지)
  *
  * 테마 4단계 (session_number 기반):
@@ -20,7 +20,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
-import { getKstDayKey } from '@/lib/session/kst';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -138,50 +137,6 @@ export async function POST(req: NextRequest) {
 
     const supabase = getServerSupabaseAdmin();
 
-    // 해당 세션 플랜 조회
-    const { data: plan, error: planFetchErr } = await supabase
-      .from('session_plans')
-      .select('id, status, session_number, duration_seconds, completion_mode, exercise_logs')
-      .eq('user_id', userId)
-      .eq('session_number', sessionNumber)
-      .maybeSingle();
-
-    if (planFetchErr) {
-      console.error('[session/complete] plan fetch failed', planFetchErr);
-      return NextResponse.json(
-        { error: { code: 'DB_ERROR', message: '세션 플랜 조회에 실패했습니다.' } },
-        { status: 500 }
-      );
-    }
-
-    if (!plan) {
-      return NextResponse.json(
-        { error: { code: 'NOT_FOUND', message: '해당 세션 플랜을 찾을 수 없습니다.' } },
-        { status: 404 }
-      );
-    }
-
-    // 이미 완료 — 멱등: 중복 처리 없이 같은 응답 반환
-    if (plan.status === 'completed') {
-      const { data: progress } = await supabase
-        .from('session_program_progress')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      const nextNum = (progress?.completed_sessions ?? sessionNumber) + 1;
-      const nextTheme = progress && nextNum <= progress.total_sessions ? getTheme(nextNum) : null;
-
-      const res = NextResponse.json({
-        progress: progress ?? null,
-        next_theme: nextTheme,
-        idempotent: true,
-        exercise_logs: plan.exercise_logs ?? null,
-      });
-      res.headers.set('Cache-Control', 'no-store');
-      return res;
-    }
-
     const nowIso = new Date().toISOString();
     const durationClamped = Math.min(7200, Math.max(0, durationSeconds));
 
@@ -195,12 +150,14 @@ export async function POST(req: NextRequest) {
       planUpdatePayload.exercise_logs = exerciseLogs;
     }
 
-    // session_plans 완료 처리 (duration/mode/exercise_logs 저장)
-    const { error: planUpdateErr } = await supabase
+    // Race-safe: only first completion writes (status IN draft|started)
+    const { data: updatedRows, error: planUpdateErr } = await supabase
       .from('session_plans')
       .update(planUpdatePayload)
       .eq('user_id', userId)
-      .eq('session_number', sessionNumber);
+      .eq('session_number', sessionNumber)
+      .in('status', ['draft', 'started'])
+      .select('status, exercise_logs');
 
     if (planUpdateErr) {
       console.error('[session/complete] plan update failed', planUpdateErr);
@@ -210,45 +167,66 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // progress 조회 후 업데이트
-    const { data: currentProgress } = await supabase
-      .from('session_program_progress')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+    if (updatedRows && updatedRows.length >= 1) {
+      // First completion — DB trigger syncs progress
+      const { data: progress } = await supabase
+        .from('session_program_progress')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
 
-    const newCompleted = Math.max(currentProgress?.completed_sessions ?? 0, sessionNumber);
-    const todayKstDayKey = getKstDayKey(new Date());
+      const newCompleted = Math.max(progress?.completed_sessions ?? 0, sessionNumber);
+      const nextNum = newCompleted + 1;
+      const nextTheme = progress && nextNum <= progress.total_sessions ? getTheme(nextNum) : null;
 
-    const { data: updatedProgress, error: progressErr } = await supabase
-      .from('session_program_progress')
-      .update({
-        completed_sessions: newCompleted,
-        active_session_number: null,
-        last_completed_at: nowIso,
-        last_completed_day_key: todayKstDayKey,
-      })
-      .eq('user_id', userId)
-      .select()
-      .single();
-
-    if (progressErr) {
-      console.error('[session/complete] progress update failed', progressErr);
+      const res = NextResponse.json({
+        progress: progress ?? null,
+        next_theme: nextTheme,
+        idempotent: false,
+      });
+      res.headers.set('Cache-Control', 'no-store');
+      return res;
     }
 
-    const finalProgress = updatedProgress ?? currentProgress;
-    const nextNum = newCompleted + 1;
-    const nextTheme = finalProgress && nextNum <= finalProgress.total_sessions
-      ? getTheme(nextNum)
-      : null;
+    // 0 rows updated — plan not found, already completed, or concurrent
+    const { data: planRow } = await supabase
+      .from('session_plans')
+      .select('status, exercise_logs')
+      .eq('user_id', userId)
+      .eq('session_number', sessionNumber)
+      .maybeSingle();
 
-    const res = NextResponse.json({
-      progress: finalProgress,
-      next_theme: nextTheme,
-      idempotent: false,
-    });
-    res.headers.set('Cache-Control', 'no-store');
-    return res;
+    if (!planRow) {
+      return NextResponse.json(
+        { error: { code: 'NOT_FOUND', message: '해당 세션 플랜을 찾을 수 없습니다.' } },
+        { status: 404 }
+      );
+    }
+
+    if (planRow.status === 'completed') {
+      const { data: progress } = await supabase
+        .from('session_program_progress')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      const nextNum = (progress?.completed_sessions ?? sessionNumber) + 1;
+      const nextTheme = progress && nextNum <= progress.total_sessions ? getTheme(nextNum) : null;
+
+      const res = NextResponse.json({
+        progress: progress ?? null,
+        next_theme: nextTheme,
+        idempotent: true,
+        exercise_logs: planRow.exercise_logs ?? null,
+      });
+      res.headers.set('Cache-Control', 'no-store');
+      return res;
+    }
+
+    return NextResponse.json(
+      { error: { code: 'CONCURRENT_UPDATE', message: '동시 업데이트가 감지되었습니다. 잠시 후 다시 시도해 주세요.' } },
+      { status: 409 }
+    );
   } catch (err) {
     console.error('[session/complete]', err);
     return NextResponse.json(

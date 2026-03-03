@@ -114,8 +114,20 @@ export async function GET(req: NextRequest) {
 
     const activeSessionNumber = progress.active_session_number;
 
+    const todayKstDayKey = getKstDayKey(new Date());
+    const lastDayKey = progress.last_completed_day_key != null
+      ? String(progress.last_completed_day_key)
+      : null;
+    const todayCompleted = lastDayKey === todayKstDayKey;
+    const nextUnlockAt = todayCompleted ? getNextKstMidnightUtcIso(new Date()) : null;
+
     if (!activeSessionNumber) {
-      const res = NextResponse.json({ progress, active: null });
+      const res = NextResponse.json({
+        progress,
+        active: null,
+        today_completed: todayCompleted,
+        ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }),
+      });
       res.headers.set('Cache-Control', 'no-store');
       return res;
     }
