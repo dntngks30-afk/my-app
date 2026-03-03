@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
-import { NeoCard, NeoButton } from '@/components/neobrutalism';
+import { NeoCard } from '@/components/neobrutalism';
 import BottomNav from '../_components/BottomNav';
-import { CheckInModal } from '../_components/CheckInModal';
+import { getSessionHistory } from '@/lib/session/client';
+import type { SessionHistoryItem, ExerciseLogItem } from '@/lib/session/client';
 
 type SeriesItem = {
   day_key_utc: string;
@@ -34,19 +35,50 @@ function formatDayLabel(dayKey: string): string {
   return `${month}/${date}`;
 }
 
+const ORDINAL_KO: Record<number, string> = {
+  1: '첫번째', 2: '두번째', 3: '세번째', 4: '네번째', 5: '다섯번째',
+  6: '여섯번째', 7: '일곱번째', 8: '여덟번째', 9: '아홉번째', 10: '열번째',
+  11: '열한번째', 12: '열두번째', 13: '열세번째', 14: '열네번째', 15: '열다섯번째',
+  16: '열여섯번째', 17: '열일곱번째', 18: '열여덟번째', 19: '열아홉번째', 20: '스무번째',
+};
+
+function getOrdinalLabel(n: number): string {
+  return ORDINAL_KO[n] ?? `${n}번째 움직임`;
+}
+
+function formatDuration(seconds: number | null): string {
+  if (seconds == null) return '-';
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return s > 0 ? `${m}분 ${s}초` : `${m}분`;
+}
+
+function formatCompletedAt(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const month = d.getMonth() + 1;
+    const date = d.getDate();
+    const hour = d.getHours();
+    const min = d.getMinutes();
+    return `${month}/${date} ${hour}:${String(min).padStart(2, '0')}`;
+  } catch {
+    return iso;
+  }
+}
+
 export default function CheckinPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const nextUrl = searchParams.get('next');
-  const postWorkout = searchParams.get('postWorkout') === '1';
-  const [isPostWorkoutContext, setIsPostWorkoutContext] = useState(false);
+  const focusSession = searchParams.get('focusSession');
+  const focusSessionNum = focusSession ? parseInt(focusSession, 10) : null;
+
   const [report, setReport] = useState<WeeklyReport | null>(null);
   const [reportLoading, setReportLoading] = useState(true);
   const [reportError, setReportError] = useState<string | null>(null);
-  const [showConditionModal, setShowConditionModal] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sessionItems, setSessionItems] = useState<SessionHistoryItem[]>([]);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [expandedSession, setExpandedSession] = useState<number | null>(null);
+  const focusRef = useRef<HTMLDivElement>(null);
 
   const fetchReport = async () => {
     const { session } = await getSessionSafe();
@@ -54,7 +86,6 @@ export default function CheckinPage() {
       setReportLoading(false);
       return;
     }
-    console.log('[CHECKIN_REPORT_FETCH_START]');
     try {
       const res = await fetch('/api/report/weekly', {
         cache: 'no-store' as RequestCache,
@@ -63,16 +94,13 @@ export default function CheckinPage() {
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         setReportError(body?.error || '조회 실패');
-        console.log('[CHECKIN_REPORT_FETCH_FAIL]', { status: res.status });
         return;
       }
       const data = await res.json();
       setReport(data);
       setReportError(null);
-      console.log('[CHECKIN_REPORT_FETCH_SUCCESS]');
     } catch (e) {
       setReportError('조회 실패');
-      console.log('[CHECKIN_REPORT_FETCH_FAIL]', { error: String(e) });
     } finally {
       setReportLoading(false);
     }
@@ -84,124 +112,48 @@ export default function CheckinPage() {
       const { session } = await getSessionSafe();
       if (!session?.access_token) {
         setReportLoading(false);
+        setSessionLoading(false);
         return;
       }
       await fetchReport();
       if (cancelled) return;
+
+      const result = await getSessionHistory(session.access_token, 20);
+      if (cancelled) return;
+      if (result.ok) {
+        setSessionItems(result.data.items);
+        setSessionError(null);
+      } else {
+        setSessionError(result.error.message);
+      }
+      setSessionLoading(false);
     })();
     return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
-    if (report && !reportLoading) {
-      console.log('[CHECKIN_REPORT_RENDER]', { completed_days: report.summary.completed_days });
-    }
-  }, [report, reportLoading]);
-
-  /** 저장 성공 시 "저장 완료" 표시 후 next 또는 /app/routine으로 리다이렉트 */
-  useEffect(() => {
-    if (!saveSuccess) return;
-    const target = nextUrl || '/app/routine';
-    const t = setTimeout(() => {
-      setShowConditionModal(false);
-      setSaveSuccess(false);
-      router.replace(target);
-      fetchReport();
-    }, 1500);
-    return () => clearTimeout(t);
-  }, [saveSuccess, nextUrl, router]);
-
-  /** postWorkout=1일 때만: 오늘 컨디션 없으면 모달 자동 오픈, 있으면 스킵. URL에서 postWorkout 제거로 중복 방지 */
-  useEffect(() => {
-    if (!postWorkout) return;
-    let cancelled = false;
-    (async () => {
-      const { session } = await getSessionSafe();
-      if (!session?.access_token || cancelled) return;
-      console.log('[CHECKIN_TODAY_FETCH_START]', { source: 'postWorkout' });
-      try {
-        const res = await fetch('/api/daily-condition/today', {
-          cache: 'no-store' as RequestCache,
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-        if (cancelled) return;
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          console.log('[CHECKIN_TODAY_FETCH_FAIL]', { status: res.status });
-          return;
-        }
-        const condition = data?.condition ?? null;
-        if (condition) {
-          console.log('[CHECKIN_TODAY_FETCH_SUCCESS]', { hasCondition: true });
-        } else {
-          console.log('[CHECKIN_TODAY_FETCH_EMPTY]');
-        }
-        const cleanPath = '/app/checkin' + (nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : '');
-        router.replace(cleanPath);
-        if (cancelled) return;
-        if (!condition) {
-          setIsPostWorkoutContext(true);
-          setShowConditionModal(true);
-          console.log('[CHECKIN_MODAL_AUTO_OPEN]', { source: 'postWorkout' });
-        }
-      } catch (e) {
-        if (cancelled) return;
-        console.log('[CHECKIN_TODAY_FETCH_FAIL]', { error: String(e) });
-        router.replace('/app/checkin' + (nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ''));
+    if (focusSessionNum != null && sessionItems.length > 0 && !sessionLoading) {
+      const exists = sessionItems.some((i) => i.session_number === focusSessionNum);
+      if (exists) {
+        setExpandedSession(focusSessionNum);
       }
-    })();
-    return () => { cancelled = true; };
-  }, [postWorkout, nextUrl, router]);
-
-  const handleConditionSubmit = async (values: {
-    pain_today?: number | null;
-    stiffness?: number | null;
-    sleep?: number | null;
-    time_available_min?: number | null;
-    equipment_available?: string[];
-  }) => {
-    const { session } = await getSessionSafe();
-    if (!session?.access_token) return;
-    setIsSubmitting(true);
-    setSaveError(null);
-    const payload = {
-      ...values,
-      source: isPostWorkoutContext ? 'post_workout' : 'checkin',
-    };
-    try {
-      const res = await fetch('/api/daily-condition/upsert', {
-        method: 'POST',
-        cache: 'no-store',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setSaveError(body?.error ?? body?.details ?? '저장에 실패했습니다.');
-        return;
-      }
-      setSaveError(null);
-      setSaveSuccess(true);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : '저장에 실패했습니다.');
-    } finally {
-      setIsSubmitting(false);
     }
-  };
+  }, [focusSessionNum, sessionItems, sessionLoading]);
+
+  useEffect(() => {
+    if (expandedSession != null && focusRef.current) {
+      focusRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [expandedSession]);
 
   return (
     <div className="min-h-screen bg-[#f8f6f0] pb-20">
-      {/* A) PageHeader - 통합 UI 스타일 */}
       <header className="px-4 pt-6 pb-4">
         <h1 className="text-4xl font-bold text-slate-800">기록</h1>
         <p className="mt-2 text-base text-slate-600">지난 7일 변화와 완료 기록</p>
       </header>
 
       <main className="px-4 space-y-6">
-        {/* B) Weekly Report Card - NeoCard */}
         <NeoCard className="p-5">
           <h2 className="text-sm font-semibold text-slate-800 mb-3">7일 변화</h2>
           {reportLoading && (
@@ -256,40 +208,69 @@ export default function CheckinPage() {
           )}
         </NeoCard>
 
-        {/* C) Daily Condition Log - CTA */}
         <NeoCard className="p-5">
-          <h3 className="text-sm font-semibold text-slate-800 mb-3">오늘 컨디션</h3>
-          <NeoButton
-            variant="orange"
-            fullWidth
-            onClick={() => setShowConditionModal(true)}
-            className="py-3"
-          >
-            오늘 컨디션 입력하기
-          </NeoButton>
+          <h2 className="text-sm font-semibold text-slate-800 mb-3">세션 기록</h2>
+          {sessionLoading && (
+            <p className="text-sm text-slate-600">불러오는 중...</p>
+          )}
+          {sessionError && !sessionLoading && (
+            <p className="text-sm text-slate-600">{sessionError}</p>
+          )}
+          {!sessionLoading && sessionItems.length === 0 && !sessionError && (
+            <p className="text-sm text-slate-600">완료된 세션이 없습니다.</p>
+          )}
+          {!sessionLoading && sessionItems.length > 0 && (
+            <div className="space-y-3">
+              {sessionItems.map((item) => {
+                const isExpanded = expandedSession === item.session_number;
+                const title = getOrdinalLabel(item.session_number);
+                return (
+                  <div
+                    key={item.session_number}
+                    ref={item.session_number === focusSessionNum ? focusRef : undefined}
+                    className="rounded-xl border-2 border-stone-200 bg-white overflow-hidden"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setExpandedSession(isExpanded ? null : item.session_number)}
+                      className="w-full flex items-center justify-between p-4 text-left hover:bg-stone-50 transition"
+                    >
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">{title}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {formatCompletedAt(item.completed_at)} · {formatDuration(item.duration_seconds)}
+                        </p>
+                      </div>
+                      <span className="text-slate-400 text-sm">
+                        {isExpanded ? '▲' : '▼'}
+                      </span>
+                    </button>
+                    {isExpanded && item.exercise_logs && item.exercise_logs.length > 0 && (
+                      <div className="px-4 pb-4 pt-0 border-t border-stone-100">
+                        <ul className="space-y-2 mt-3">
+                          {(item.exercise_logs as ExerciseLogItem[]).map((log, i) => (
+                            <li key={i} className="text-sm text-slate-700">
+                              {log.name}
+                              {(log.sets != null || log.reps != null) && (
+                                <span className="text-slate-600 ml-1">
+                                  · {log.sets ?? '-'}×{log.reps ?? '-'}
+                                </span>
+                              )}
+                              {log.difficulty != null && (
+                                <span className="text-slate-600 ml-1">· 난이도 {log.difficulty}</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </NeoCard>
       </main>
-
-      {showConditionModal && (
-        <CheckInModal
-          isPostWorkout={isPostWorkoutContext}
-          submitLabel={nextUrl ? '저장 후 계속하기' : '저장'}
-          isSubmitting={isSubmitting}
-          onSubmit={handleConditionSubmit}
-          onSkip={() => {
-            setShowConditionModal(false);
-            setSaveError(null);
-            setIsPostWorkoutContext(false);
-          }}
-          onClose={() => {
-            setShowConditionModal(false);
-            setSaveError(null);
-            setIsPostWorkoutContext(false);
-          }}
-          saveError={saveError}
-          saveSuccess={saveSuccess}
-        />
-      )}
 
       <BottomNav />
     </div>

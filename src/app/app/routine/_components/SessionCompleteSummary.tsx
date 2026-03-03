@@ -4,13 +4,13 @@
  * SessionCompleteSummary
  *
  * complete 응답 후 표시되는 요약 화면.
- * 오늘 운동 시간 / 진척도 / 다음 테마 (운동 리스트 금지)
+ * 오늘 운동 시간 / 진척도 / 오늘 기록(exercise_logs) / 다음 테마
  */
 
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Home, Calendar } from 'lucide-react';
+import { CheckCircle2, Home, BarChart2 } from 'lucide-react';
 import { NeoCard, NeoButton } from '@/components/neobrutalism';
-import type { SessionProgress } from '@/lib/session/client';
+import type { SessionProgress, ExerciseLogItem } from '@/lib/session/client';
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -23,12 +23,16 @@ export default function SessionCompleteSummary({
   progress,
   nextTheme,
   durationClamped,
+  exerciseLogs,
+  completedSessionNumber,
   onDismiss,
 }: {
   durationSeconds: number;
   progress: SessionProgress;
   nextTheme: string | null;
   durationClamped?: boolean;
+  exerciseLogs?: ExerciseLogItem[] | null;
+  completedSessionNumber?: number | null;
   onDismiss?: () => void;
 }) {
   const router = useRouter();
@@ -67,6 +71,29 @@ export default function SessionCompleteSummary({
           </p>
         </div>
 
+        {exerciseLogs && exerciseLogs.length > 0 && (
+          <div className="rounded-xl bg-stone-50 p-4 border border-stone-200">
+            <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">
+              오늘 기록
+            </p>
+            <ul className="space-y-1.5">
+              {exerciseLogs.map((log, i) => (
+                <li key={i} className="text-sm text-slate-800">
+                  {log.name}
+                  {(log.sets != null || log.reps != null) && (
+                    <span className="text-slate-600 ml-1">
+                      · {log.sets ?? '-'}×{log.reps ?? '-'}
+                    </span>
+                  )}
+                  {log.difficulty != null && (
+                    <span className="text-slate-600 ml-1">· 난이도 {log.difficulty}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {nextTheme && (
           <div className="rounded-xl bg-violet-50 p-4 border border-violet-200">
             <p className="text-xs text-violet-600 uppercase tracking-wide mb-0.5">
@@ -92,11 +119,12 @@ export default function SessionCompleteSummary({
           fullWidth
           onClick={() => {
             onDismiss?.();
-            router.push('/app/routine');
+            const q = completedSessionNumber != null ? `?focusSession=${completedSessionNumber}` : '';
+            router.push(`/app/checkin${q}`);
           }}
           className="py-3 flex items-center justify-center gap-2"
         >
-          <Calendar className="size-4" />
+          <BarChart2 className="size-4" />
           루틴 확인
         </NeoButton>
       </div>

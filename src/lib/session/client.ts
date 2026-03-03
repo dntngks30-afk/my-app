@@ -170,10 +170,19 @@ export async function createSession(
 
 // ─── complete ──────────────────────────────────────────────────────────────────
 
+export type ExerciseLogItem = {
+  templateId: string;
+  name: string;
+  sets: number | null;
+  reps: number | null;
+  difficulty: number | null;
+};
+
 export type CompleteSessionInput = {
   session_number: number;
   duration_seconds: number;
   completion_mode: 'all_done' | 'partial_done' | 'stop_early';
+  exercise_logs?: ExerciseLogItem[];
 };
 
 export type CompleteSessionResponse = {
@@ -200,6 +209,7 @@ export type SessionHistoryItem = {
   completed_at: string;
   duration_seconds: number | null;
   theme: string;
+  exercise_logs?: ExerciseLogItem[] | null;
 };
 
 export type SessionHistoryResponse = {

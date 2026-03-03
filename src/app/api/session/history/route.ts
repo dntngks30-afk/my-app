@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
         .maybeSingle(),
       supabase
         .from('session_plans')
-        .select('session_number, completed_at, duration_seconds, completion_mode, theme')
+        .select('session_number, completed_at, duration_seconds, completion_mode, theme, exercise_logs')
         .eq('user_id', userId)
         .eq('status', 'completed')
         .order('completed_at', { ascending: false })
@@ -76,6 +76,7 @@ export async function GET(req: NextRequest) {
         duration_seconds: p.duration_seconds ?? null,
         completion_mode: p.completion_mode ?? null,
         theme: p.theme ?? '',
+        exercise_logs: p.exercise_logs ?? null,
       })),
     };
 

@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
 
     const sessionNumber = typeof body.session_number === 'number' ? Math.floor(body.session_number) : null;
     const durationSeconds = typeof body.duration_seconds === 'number' ? Math.max(0, body.duration_seconds) : null;
+    const exerciseLogs = Array.isArray(body.exercise_logs) ? body.exercise_logs : null;
     const completionMode: CompletionMode | null = (
       ['all_done', 'partial_done', 'stop_early'] as CompletionMode[]
     ).includes(body.completion_mode as CompletionMode)
@@ -122,15 +123,20 @@ export async function POST(req: NextRequest) {
     const nowIso = new Date().toISOString();
     const durationClamped = Math.min(7200, Math.max(0, durationSeconds));
 
-    // session_plans 완료 처리 (duration/mode 저장)
+    const updatePayload: Record<string, unknown> = {
+      status: 'completed',
+      completed_at: nowIso,
+      duration_seconds: durationClamped,
+      completion_mode: completionMode,
+    };
+    if (exerciseLogs && exerciseLogs.length > 0) {
+      updatePayload.exercise_logs = exerciseLogs;
+    }
+
+    // session_plans 완료 처리 (duration/mode/exercise_logs 저장)
     const { error: planUpdateErr } = await supabase
       .from('session_plans')
-      .update({
-        status: 'completed',
-        completed_at: nowIso,
-        duration_seconds: durationClamped,
-        completion_mode: completionMode,
-      })
+      .update(updatePayload)
       .eq('user_id', userId)
       .eq('session_number', sessionNumber);
 
