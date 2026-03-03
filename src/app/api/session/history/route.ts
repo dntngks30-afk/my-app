@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { logSessionEvent } from '@/lib/session-events';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -69,6 +70,13 @@ export async function GET(req: NextRequest) {
       console.error('[session/history] plans fetch error', plansErr);
     }
 
+    void logSessionEvent(supabase, {
+      userId,
+      eventType: 'session_history_read',
+      status: 'ok',
+      meta: { limit, returned_count: plans.length },
+    });
+
     const payload = {
       progress: {
         completed_sessions: progress?.completed_sessions ?? 0,
@@ -90,6 +98,19 @@ export async function GET(req: NextRequest) {
     return res;
   } catch (err) {
     console.error('[session/history]', err);
+    try {
+      const userId = await getCurrentUserId(req);
+      if (userId) {
+        const supabase = getServerSupabaseAdmin();
+        void logSessionEvent(supabase, {
+          userId,
+          eventType: 'session_history_read',
+          status: 'error',
+          code: 'INTERNAL',
+          meta: { message_short: err instanceof Error ? err.message : '서버 오류' },
+        });
+      }
+    } catch (_) { /* noop */ }
     return NextResponse.json(
       { error: { code: 'INTERNAL', message: err instanceof Error ? err.message : '서버 오류' } },
       { status: 500 }

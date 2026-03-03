@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { getTodayCompletedAndNextUnlock } from '@/lib/session/kst';
+import { logSessionEvent } from '@/lib/session-events';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -84,6 +85,13 @@ export async function GET(req: NextRequest) {
 
       if (insertErr || !created) {
         console.error('[session/active] progress init failed', insertErr);
+        void logSessionEvent(supabase, {
+          userId,
+          eventType: 'session_active_read',
+          status: 'error',
+          code: 'DB_ERROR',
+          meta: { message_short: 'progress init failed' },
+        });
         return NextResponse.json(
           { error: { code: 'DB_ERROR', message: '진행 상태 초기화에 실패했습니다.' } },
           { status: 500 }
@@ -116,6 +124,12 @@ export async function GET(req: NextRequest) {
     const { todayCompleted, nextUnlockAt } = getTodayCompletedAndNextUnlock(progress);
 
     if (!activeSessionNumber) {
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_active_read',
+        status: 'ok',
+        meta: { has_active: false, today_completed: todayCompleted },
+      });
       const res = NextResponse.json({
         progress,
         active: null,
@@ -136,11 +150,26 @@ export async function GET(req: NextRequest) {
 
     if (planErr) {
       console.error('[session/active] plan fetch failed', planErr);
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_active_read',
+        status: 'error',
+        code: 'DB_ERROR',
+        meta: { message_short: 'plan fetch failed' },
+      });
       return NextResponse.json(
         { error: { code: 'DB_ERROR', message: '세션 플랜 조회에 실패했습니다.' } },
         { status: 500 }
       );
     }
+
+    void logSessionEvent(supabase, {
+      userId,
+      eventType: 'session_active_read',
+      status: 'ok',
+      sessionNumber: activeSessionNumber ?? undefined,
+      meta: { has_active: !!activeSessionNumber, today_completed: todayCompleted },
+    });
 
     const res = NextResponse.json({
       progress,
@@ -152,6 +181,19 @@ export async function GET(req: NextRequest) {
     return res;
   } catch (err) {
     console.error('[session/active]', err);
+    try {
+      const userId = await getCurrentUserId(req);
+      if (userId) {
+        const supabase = getServerSupabaseAdmin();
+        void logSessionEvent(supabase, {
+          userId,
+          eventType: 'session_active_read',
+          status: 'error',
+          code: 'INTERNAL',
+          meta: { message_short: err instanceof Error ? err.message : '서버 오류' },
+        });
+      }
+    } catch (_) { /* noop */ }
     return NextResponse.json(
       { error: { code: 'INTERNAL', message: err instanceof Error ? err.message : '서버 오류' } },
       { status: 500 }

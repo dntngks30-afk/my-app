@@ -20,6 +20,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { logSessionEvent, summarizeExerciseLogs } from '@/lib/session-events';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -161,6 +162,14 @@ export async function POST(req: NextRequest) {
 
     if (planUpdateErr) {
       console.error('[session/complete] plan update failed', planUpdateErr);
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_complete_blocked',
+        status: 'error',
+        code: 'DB_ERROR',
+        sessionNumber,
+        meta: { message_short: 'plan update failed' },
+      });
       return NextResponse.json(
         { error: { code: 'DB_ERROR', message: '세션 완료 업데이트에 실패했습니다.' } },
         { status: 500 }
@@ -169,6 +178,18 @@ export async function POST(req: NextRequest) {
 
     if (updatedRows && updatedRows.length >= 1) {
       // First completion — DB trigger syncs progress
+      const logsSummary = summarizeExerciseLogs(exerciseLogs);
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_complete',
+        status: 'ok',
+        sessionNumber,
+        meta: {
+          duration_seconds: durationClamped,
+          completion_mode: completionMode,
+          logs_summary: logsSummary,
+        },
+      });
       const { data: progress } = await supabase
         .from('session_program_progress')
         .select('*')
@@ -197,6 +218,14 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (!planRow) {
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_complete_blocked',
+        status: 'blocked',
+        code: 'NOT_FOUND',
+        sessionNumber,
+        meta: {},
+      });
       return NextResponse.json(
         { error: { code: 'NOT_FOUND', message: '해당 세션 플랜을 찾을 수 없습니다.' } },
         { status: 404 }
@@ -204,6 +233,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (planRow.status === 'completed') {
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_complete_idempotent',
+        status: 'ok',
+        sessionNumber,
+        meta: { returned_stored: true },
+      });
       const { data: progress } = await supabase
         .from('session_program_progress')
         .select('*')
@@ -223,12 +259,33 @@ export async function POST(req: NextRequest) {
       return res;
     }
 
+    void logSessionEvent(supabase, {
+      userId,
+      eventType: 'session_complete_blocked',
+      status: 'blocked',
+      code: 'CONCURRENT_UPDATE',
+      sessionNumber,
+      meta: {},
+    });
     return NextResponse.json(
       { error: { code: 'CONCURRENT_UPDATE', message: '동시 업데이트가 감지되었습니다. 잠시 후 다시 시도해 주세요.' } },
       { status: 409 }
     );
   } catch (err) {
     console.error('[session/complete]', err);
+    try {
+      const userId = await getCurrentUserId(req);
+      if (userId) {
+        const supabase = getServerSupabaseAdmin();
+        void logSessionEvent(supabase, {
+          userId,
+          eventType: 'session_complete_blocked',
+          status: 'error',
+          code: 'INTERNAL',
+          meta: { message_short: err instanceof Error ? err.message : '서버 오류' },
+        });
+      }
+    } catch (_) { /* noop */ }
     return NextResponse.json(
       { error: { code: 'INTERNAL', message: err instanceof Error ? err.message : '서버 오류' } },
       { status: 500 }

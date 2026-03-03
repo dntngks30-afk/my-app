@@ -26,6 +26,7 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import { buildSessionPlanJson } from '@/lib/session/plan-generator';
 import { getKstDayKey, getNextKstMidnightUtcIso, getTodayCompletedAndNextUnlock } from '@/lib/session/kst';
+import { logSessionEvent } from '@/lib/session-events';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -171,6 +172,13 @@ export async function POST(req: NextRequest) {
 
       if (insertErr || !created) {
         console.error('[session/create] progress init failed', insertErr);
+        void logSessionEvent(supabase, {
+          userId,
+          eventType: 'session_create_blocked',
+          status: 'error',
+          code: 'DB_ERROR',
+          meta: { message_short: 'progress init failed' },
+        });
         return NextResponse.json(
           { error: { code: 'DB_ERROR', message: '진행 상태 초기화에 실패했습니다.' } },
           { status: 500 }
@@ -183,6 +191,13 @@ export async function POST(req: NextRequest) {
 
     // Daily cap: 오늘 완료했으면 create 차단 (SSOT)
     if (todayCompleted) {
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_create_blocked',
+        status: 'blocked',
+        code: 'DAILY_LIMIT_REACHED',
+        meta: { day_key: getKstDayKey(new Date()) },
+      });
       return NextResponse.json(
         {
           error: {
@@ -204,6 +219,14 @@ export async function POST(req: NextRequest) {
         .eq('user_id', userId)
         .eq('session_number', progress.active_session_number)
         .maybeSingle();
+
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_create_idempotent',
+        status: 'ok',
+        sessionNumber: progress.active_session_number,
+        meta: { reason: 'active_exists' },
+      });
 
       const res = NextResponse.json({
         progress,
@@ -237,6 +260,13 @@ export async function POST(req: NextRequest) {
 
     // 프로그램 전체 완료
     if (nextSessionNumber > progress.total_sessions) {
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_create_blocked',
+        status: 'blocked',
+        code: 'PROGRAM_FINISHED',
+        meta: { total_sessions: progress.total_sessions, completed_sessions: progress.completed_sessions },
+      });
       const res = NextResponse.json({
         done: true,
         progress,
@@ -252,6 +282,13 @@ export async function POST(req: NextRequest) {
     const deepSummary = await loadSessionDeepSummary(userId);
 
     if (!deepSummary) {
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_create_blocked',
+        status: 'blocked',
+        code: 'DEEP_RESULT_MISSING',
+        meta: {},
+      });
       return NextResponse.json(
         {
           error: {
@@ -309,6 +346,13 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (existingPlan?.status === 'completed') {
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_create_idempotent',
+        status: 'ok',
+        sessionNumber: nextSessionNumber,
+        meta: { reason: 'conflict_return' },
+      });
       const res = NextResponse.json({
         progress,
         active: existingPlan,
@@ -342,6 +386,13 @@ export async function POST(req: NextRequest) {
 
       if (updateErr) {
         console.error('[session/create] plan update failed', updateErr);
+        void logSessionEvent(supabase, {
+          userId,
+          eventType: 'session_create_blocked',
+          status: 'error',
+          code: 'DB_ERROR',
+          meta: { message_short: 'plan update failed' },
+        });
         return NextResponse.json(
           { error: { code: 'DB_ERROR', message: '세션 플랜 업데이트에 실패했습니다.' } },
           { status: 500 }
@@ -371,6 +422,13 @@ export async function POST(req: NextRequest) {
               .maybeSingle(),
           ]);
           if (raced) {
+            void logSessionEvent(supabase, {
+              userId,
+              eventType: 'session_create_idempotent',
+              status: 'ok',
+              sessionNumber: nextSessionNumber,
+              meta: { reason: 'conflict_return' },
+            });
             const p = prog ?? { ...progress, active_session_number: nextSessionNumber };
             const { todayCompleted: tc, nextUnlockAt: nua } = getTodayCompletedAndNextUnlock(p);
             const res = NextResponse.json({
@@ -385,6 +443,13 @@ export async function POST(req: NextRequest) {
           }
         }
         console.error('[session/create] plan insert failed', insertErr);
+        void logSessionEvent(supabase, {
+          userId,
+          eventType: 'session_create_blocked',
+          status: 'error',
+          code: 'DB_ERROR',
+          meta: { message_short: 'plan insert failed' },
+        });
         return NextResponse.json(
           { error: { code: 'DB_ERROR', message: '세션 플랜 생성에 실패했습니다.' } },
           { status: 500 }
@@ -394,6 +459,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (!plan) {
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_create_blocked',
+        status: 'error',
+        code: 'DB_ERROR',
+        meta: { message_short: 'plan not found after insert' },
+      });
       return NextResponse.json(
         { error: { code: 'DB_ERROR', message: '세션 플랜을 가져올 수 없습니다.' } },
         { status: 500 }
@@ -414,6 +486,17 @@ export async function POST(req: NextRequest) {
     const finalProgress = updatedProgress ?? { ...progress, active_session_number: nextSessionNumber };
     const { todayCompleted: tc, nextUnlockAt: nua } = getTodayCompletedAndNextUnlock(finalProgress);
 
+    void logSessionEvent(supabase, {
+      userId,
+      eventType: 'session_create',
+      status: 'ok',
+      sessionNumber: nextSessionNumber,
+      meta: {
+        total_sessions: finalProgress.total_sessions,
+        completed_sessions_before: progress.completed_sessions,
+      },
+    });
+
     const res = NextResponse.json({
       progress: finalProgress,
       active: plan,
@@ -425,6 +508,19 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (err) {
     console.error('[session/create]', err);
+    try {
+      const userId = await getCurrentUserId(req);
+      if (userId) {
+        const supabase = getServerSupabaseAdmin();
+        void logSessionEvent(supabase, {
+          userId,
+          eventType: 'session_create_blocked',
+          status: 'error',
+          code: 'INTERNAL',
+          meta: { message_short: err instanceof Error ? err.message : '서버 오류' },
+        });
+      }
+    } catch (_) { /* noop */ }
     return NextResponse.json(
       { error: { code: 'INTERNAL', message: err instanceof Error ? err.message : '서버 오류' } },
       { status: 500 }
