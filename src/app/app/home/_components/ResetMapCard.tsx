@@ -91,7 +91,7 @@ export default function ResetMapCard({
         <div className="absolute inset-0">
           {!trackImgError ? (
             <Image
-              src="/ui/reset-map-track.svg"
+              src="/ui/reset-map-track.png"
               alt="리셋 트랙"
               fill
               className="object-contain"
@@ -140,7 +140,7 @@ export default function ResetMapCard({
         >
           {!runnerImgError ? (
             <Image
-              src="/ui/reset-map-runner.svg"
+              src="/ui/reset-map-runner.png"
               alt="러너"
               width={48}
               height={48}
