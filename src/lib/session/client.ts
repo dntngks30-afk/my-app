@@ -212,3 +212,27 @@ export async function getSessionHistory(
   const path = `/api/session/history?limit=${Math.min(120, Math.max(1, limit))}`;
   return sessionFetch<SessionHistoryResponse>(path, token, { method: 'GET' });
 }
+
+// ─── profile (온보딩: 주당 빈도) ─────────────────────────────────────────────────
+
+export type PostSessionProfileInput = {
+  target_frequency: 2 | 3 | 4 | 5;
+  lifestyle_tag?: string;
+};
+
+export type PostSessionProfileResponse = {
+  profile: Record<string, unknown>;
+  progress: Record<string, unknown>;
+  warning?: string;
+};
+
+/** POST /api/session/profile — 주당 목표 횟수 저장 (best-effort, fail-open) */
+export async function postSessionProfile(
+  token: string,
+  input: PostSessionProfileInput
+): Promise<ApiResult<PostSessionProfileResponse>> {
+  return sessionFetch<PostSessionProfileResponse>('/api/session/profile', token, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
