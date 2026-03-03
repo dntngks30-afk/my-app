@@ -22,6 +22,7 @@ import RoutineAccordionList from './RoutineAccordionList';
 import SessionAdjustModal from './SessionAdjustModal';
 import SessionRecoveryModal from './SessionRecoveryModal';
 import SessionCompleteSummary from './SessionCompleteSummary';
+import SessionExerciseLogModal from './SessionExerciseLogModal';
 import {
   getActiveSession,
   getSessionHistory,
@@ -30,6 +31,7 @@ import {
   type SessionPlan,
   type SessionProgress,
   type SessionHistoryResponse,
+  type ExerciseLogItem,
 } from '@/lib/session/client';
 import { buildWeeklyGoalSummary } from '@/lib/session/goal-summary';
 import { loadSessionDraft, saveSessionDraft, deleteSessionDraft } from '@/lib/session/storage';
@@ -110,8 +112,11 @@ export default function RoutineHubClient() {
 
   const [summaryDurationSec, setSummaryDurationSec] = useState(0);
   const [summaryNextTheme, setSummaryNextTheme] = useState<string | null>(null);
+  const [summaryExerciseLogs, setSummaryExerciseLogs] = useState<ExerciseLogItem[] | null>(null);
+  const [summaryCompletedSessionNumber, setSummaryCompletedSessionNumber] = useState<number | null>(null);
   const [durationClamped, setDurationClamped] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [showExerciseLogModal, setShowExerciseLogModal] = useState(false);
   const [todayCompleted, setTodayCompleted] = useState(false);
   const [nextUnlockAt, setNextUnlockAt] = useState<string | null>(null);
 
@@ -289,34 +294,48 @@ export default function RoutineHubClient() {
     });
   }, [token, creating, activePlan]);
 
-  const performComplete = useCallback(async () => {
-    if (!token || !activePlan || completing) return;
-    const start = startedAtMs ?? Date.now();
-    let durationSec = Math.floor((Date.now() - start) / 1000);
-    const clamped = durationSec > MAX_DURATION_SEC;
-    if (clamped) durationSec = MAX_DURATION_SEC;
+  const performComplete = useCallback(
+    async (exerciseLogs?: ExerciseLogItem[]) => {
+      if (!token || !activePlan || completing) return;
+      const start = startedAtMs ?? Date.now();
+      let durationSec = Math.floor((Date.now() - start) / 1000);
+      const clamped = durationSec > MAX_DURATION_SEC;
+      if (clamped) durationSec = MAX_DURATION_SEC;
 
-    setCompleting(true);
-    const result = await completeSession(token, {
-      session_number: activePlan.session_number,
-      duration_seconds: durationSec,
-      completion_mode: 'all_done',
-    });
-    setCompleting(false);
+      setCompleting(true);
+      const result = await completeSession(token, {
+        session_number: activePlan.session_number,
+        duration_seconds: durationSec,
+        completion_mode: 'all_done',
+        exercise_logs: exerciseLogs && exerciseLogs.length > 0 ? exerciseLogs : undefined,
+      });
+      setCompleting(false);
 
-    if (!result.ok) {
-      setErrorMsg(result.error.message);
-      return;
-    }
-    deleteSessionDraft(activePlan.session_number);
-    setProgress(result.data.progress);
-    setSummaryDurationSec(durationSec);
-    setSummaryNextTheme(result.data.next_theme ?? null);
-    setDurationClamped(clamped);
-    setActivePlan(null);
-    setTodayCompleted(true);
-    setShowSummary(true);
-  }, [token, activePlan, completing, startedAtMs]);
+      if (!result.ok) {
+        setErrorMsg(result.error.message);
+        return;
+      }
+      deleteSessionDraft(activePlan.session_number);
+      setProgress(result.data.progress);
+      setSummaryDurationSec(durationSec);
+      setSummaryNextTheme(result.data.next_theme ?? null);
+      setSummaryExerciseLogs(exerciseLogs ?? null);
+      setSummaryCompletedSessionNumber(activePlan.session_number);
+      setDurationClamped(clamped);
+      setActivePlan(null);
+      setTodayCompleted(true);
+      setShowExerciseLogModal(false);
+      setShowSummary(true);
+    },
+    [token, activePlan, completing, startedAtMs]
+  );
+
+  const handleExerciseLogSave = useCallback(
+    async (exerciseLogs: ExerciseLogItem[]) => {
+      await performComplete(exerciseLogs);
+    },
+    [performComplete]
+  );
 
   const handleRecoveryAction = useCallback(
     (action: 'resume' | 'complete' | 'discard') => {
@@ -526,7 +545,7 @@ export default function RoutineHubClient() {
                 variant="orange"
                 fullWidth
                 disabled={completing}
-                onClick={performComplete}
+                onClick={() => setShowExerciseLogModal(true)}
                 className="py-3 text-base font-bold flex items-center justify-center gap-2"
               >
                 {completing ? (
@@ -597,6 +616,15 @@ export default function RoutineHubClient() {
 
       </main>
 
+      {showExerciseLogModal && activePlan && (
+        <SessionExerciseLogModal
+          plan={activePlan}
+          onClose={() => !completing && setShowExerciseLogModal(false)}
+          onSave={handleExerciseLogSave}
+          isSubmitting={completing}
+        />
+      )}
+
       {showSummary && progress && summaryDurationSec > 0 && (
         <div className="fixed inset-0 z-50 bg-[#f8f6f0] overflow-auto">
           <div className="p-4 pt-6">
@@ -605,6 +633,8 @@ export default function RoutineHubClient() {
               progress={progress}
               nextTheme={summaryNextTheme}
               durationClamped={durationClamped}
+              exerciseLogs={summaryExerciseLogs}
+              completedSessionNumber={summaryCompletedSessionNumber}
               onDismiss={() => setShowSummary(false)}
             />
           </div>
