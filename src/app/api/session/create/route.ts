@@ -1,29 +1,20 @@
 /**
  * POST /api/session/create
  *
- * 세션 플랜 멱등 생성 (Deep Result 요약 연결).
+ * 세션 플랜 멱등 생성 (Deep Result + exercise_templates 연결).
  *
  * 동작 순서:
  *   1) auth: userId 확보
  *   2) progress 조회/초기화
- *   3) active_session_number 있으면 기존 plan 그대로 반환 (deep 재조회 없음 — 멱등)
+ *   3) active_session_number 있으면 기존 plan 그대로 반환 (멱등)
  *   4) next_session_number 결정
- *   5) [NEW] deep_test_attempts에서 최신 final 결과 요약 로드
- *      → 없으면 404 DEEP_RESULT_MISSING
- *   6) 테마/메타 결정 (session_number × deep summary)
- *   7) plan_json stub v2 (meta 포함) 생성
+ *   5) deep_test_attempts에서 최신 final 결과 요약 로드
+ *   6) 직전 세션 plan_json에서 used_template_ids 로드 (반복 방지)
+ *   7) exercise_templates 조회 → 스코어링 → plan_json 생성 (BE-06)
  *   8) session_plans UPSERT + progress.active_session_number 세팅
  *
- * 성능 가드 (금지 목록):
- *   - 템플릿 대량 fetch 없음 (exercise_templates 테이블 접근 없음)
- *   - media sign 호출 없음
- *   - 재계산 알고리즘 없음 (DB 저장값 그대로 사용)
- *
- * 테마 4단계 (session_number 기반):
- *   1~4:  Phase 1 · focus[0] 안정화
- *   5~8:  Phase 2 · focus[1 or 0] 심화
- *   9~12: Phase 3 · 통합
- *   13~16: Phase 4 · 릴렉스
+ * BE-06: exercise_templates(28) 기반, safety gate, repetition penalty.
+ * media sign 호출 없음.
  *
  * Path B 독립 레일: 기존 7일 테이블/엔드포인트와 완전 분리.
  * Auth: Bearer token. Write: service role admin client (RLS bypass).
@@ -33,6 +24,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
+import { buildSessionPlanJson } from '@/lib/session/plan-generator';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -49,6 +41,27 @@ const PHASE_LABELS = ['1순위 타겟', '2순위 타겟', '통합', '릴렉스']
 /** session_number → 0-based phase index (0~3) */
 function getPhaseIndex(sessionNumber: number): number {
   return Math.min(3, Math.floor((sessionNumber - 1) / 4));
+}
+
+/**
+ * 직전 세션 plan_json에서 used_template_ids 추출.
+ * meta.used_template_ids 또는 segments[].items[].templateId 플랫튼.
+ */
+function getUsedTemplateIds(planJson: unknown): string[] {
+  if (!planJson || typeof planJson !== 'object') return [];
+  const meta = (planJson as Record<string, unknown>).meta as Record<string, unknown> | undefined;
+  if (meta && Array.isArray(meta.used_template_ids)) {
+    return (meta.used_template_ids as unknown[]).filter((x): x is string => typeof x === 'string');
+  }
+  const segments = (planJson as Record<string, unknown>).segments as Array<{ items?: Array<{ templateId?: string }> }> | undefined;
+  if (!Array.isArray(segments)) return [];
+  const ids: string[] = [];
+  for (const seg of segments) {
+    for (const it of seg.items ?? []) {
+      if (typeof it.templateId === 'string') ids.push(it.templateId);
+    }
+  }
+  return ids;
 }
 
 /**
@@ -74,81 +87,6 @@ function buildTheme(
     return `Phase 2 · ${target} 심화`;
   }
   return `Phase ${phaseIdx + 1} · ${phaseLabel}`;
-}
-
-// ─── plan_json stub v2 ────────────────────────────────────────────────────────
-
-/**
- * plan_json stub v2 생성.
- * meta: deep 결과 요약 포함.
- * items: 구체 운동명 없음 (templateId는 placeholder, 다음 PR에서 실제 연결).
- * condition × time_budget: flags + items 수량/세트 수만 반영.
- */
-function buildStubPlanJsonV2(
-  sessionNumber: number,
-  phase: number,
-  theme: string,
-  timeBudget: TimeBudget,
-  conditionMood: ConditionMood,
-  deep: { result_type: string; confidence: number; focus: string[]; avoid: string[]; scoring_version: string }
-) {
-  const isShort = timeBudget === 'short';
-  const isRecovery = conditionMood === 'bad';
-  const sets = isShort ? 2 : 3;
-  const mainItems = isShort ? 2 : 4;
-
-  return {
-    version: 'session_stub_v2',
-    meta: {
-      session_number: sessionNumber,
-      phase,
-      result_type: deep.result_type,
-      confidence: deep.confidence,
-      focus: deep.focus.slice(0, 4),
-      avoid: deep.avoid.slice(0, 4),
-      scoring_version: deep.scoring_version,
-    },
-    flags: {
-      recovery: isRecovery,
-      short: isShort,
-    },
-    segments: [
-      {
-        title: 'Prep',
-        duration_sec: isShort ? 120 : 180,
-        items: Array.from({ length: isShort ? 2 : 3 }, (_, i) => ({
-          order: i + 1,
-          templateId: `stub_prep_${i + 1}`,
-          name: `준비 ${i + 1}`,
-          sets: 1,
-          reps: 10,
-        })),
-      },
-      {
-        title: 'Main',
-        duration_sec: isShort ? 240 : 420,
-        items: Array.from({ length: mainItems }, (_, i) => ({
-          order: i + 1,
-          templateId: `stub_main_p${phase}_${i + 1}`,
-          name: isRecovery ? `회복 운동 ${i + 1}` : `${theme} ${i + 1}`,
-          sets,
-          reps: isRecovery ? 8 : 12,
-          focus_tag: deep.focus.length > 0 ? deep.focus[i % deep.focus.length] ?? null : null,
-        })),
-      },
-      {
-        title: 'Release',
-        duration_sec: isShort ? 60 : 120,
-        items: Array.from({ length: isShort ? 1 : 2 }, (_, i) => ({
-          order: i + 1,
-          templateId: `stub_release_${i + 1}`,
-          name: `이완 ${i + 1}`,
-          sets: 1,
-          hold_seconds: 30,
-        })),
-      },
-    ],
-  };
 }
 
 // ─── Route Handler ────────────────────────────────────────────────────────────
@@ -258,16 +196,35 @@ export async function POST(req: NextRequest) {
     }
 
     const phaseIndex = getPhaseIndex(nextSessionNumber);
-    const phase = phaseIndex + 1;
+    const phase = phaseIndex + 1 as 1 | 2 | 3 | 4;
     const theme = buildTheme(nextSessionNumber, deepSummary);
-    const planJson = buildStubPlanJsonV2(
-      nextSessionNumber,
+
+    let usedTemplateIds: string[] = [];
+    if (nextSessionNumber > 1) {
+      const { data: prevPlan } = await supabase
+        .from('session_plans')
+        .select('plan_json')
+        .eq('user_id', userId)
+        .eq('session_number', nextSessionNumber - 1)
+        .maybeSingle();
+      usedTemplateIds = getUsedTemplateIds(prevPlan?.plan_json);
+    }
+
+    const planJson = await buildSessionPlanJson({
+      sessionNumber: nextSessionNumber,
+      totalSessions: progress.total_sessions,
       phase,
       theme,
       timeBudget,
       conditionMood,
-      deepSummary
-    );
+      focus: deepSummary.focus,
+      avoid: deepSummary.avoid,
+      painFlags,
+      usedTemplateIds,
+      resultType: deepSummary.result_type,
+      confidence: deepSummary.confidence,
+      scoringVersion: deepSummary.scoring_version,
+    });
     const condition = {
       condition_mood: conditionMood,
       time_budget: timeBudget,
