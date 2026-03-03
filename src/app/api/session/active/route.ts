@@ -2,7 +2,9 @@
  * GET /api/session/active
  *
  * 진행 중(active_session_number) 세션을 반환. 없으면 active:null.
- * progress row가 없으면 자동 upsert (total_sessions=16 기본).
+ * progress row가 없으면 자동 upsert (total_sessions는 profile 기반, 없으면 16).
+ *
+ * BE-ONB-02: session_user_profile.target_frequency → total_sessions(8/12/16/20) 연동.
  *
  * Path B 독립 레일: 기존 7일 테이블/엔드포인트와 완전 분리.
  *
@@ -21,6 +23,31 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const DEFAULT_TOTAL_SESSIONS = 16;
+
+const FREQUENCY_TO_TOTAL: Record<number, number> = {
+  2: 8,
+  3: 12,
+  4: 16,
+  5: 20,
+};
+
+/** BE-ONB-02: profile.target_frequency → total_sessions. 없으면 16. */
+async function resolveTotalSessions(
+  supabase: Awaited<ReturnType<typeof getServerSupabaseAdmin>>,
+  userId: string
+): Promise<{ totalSessions: number; source: 'profile' | 'default' }> {
+  const { data } = await supabase
+    .from('session_user_profile')
+    .select('target_frequency')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  const freq = data?.target_frequency;
+  if (typeof freq === 'number' && freq in FREQUENCY_TO_TOTAL) {
+    return { totalSessions: FREQUENCY_TO_TOTAL[freq], source: 'profile' };
+  }
+  return { totalSessions: DEFAULT_TOTAL_SESSIONS, source: 'default' };
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -42,11 +69,12 @@ export async function GET(req: NextRequest) {
       .maybeSingle();
 
     if (!progress) {
+      const resolved = await resolveTotalSessions(supabase, userId);
       const { data: created, error: insertErr } = await supabase
         .from('session_program_progress')
         .insert({
           user_id: userId,
-          total_sessions: DEFAULT_TOTAL_SESSIONS,
+          total_sessions: resolved.totalSessions,
           completed_sessions: 0,
           active_session_number: null,
         })
@@ -61,6 +89,26 @@ export async function GET(req: NextRequest) {
         );
       }
       progress = created;
+    } else {
+      // BE-ONB-02: progress 있음 + profile 존재 시 안전 조건일 때만 sync
+      const activeSessionNumber = progress.active_session_number;
+      if (activeSessionNumber === null) {
+        const resolved = await resolveTotalSessions(supabase, userId);
+        const completed = progress.completed_sessions ?? 0;
+        const safeToSync =
+          resolved.totalSessions >= completed && progress.total_sessions !== resolved.totalSessions;
+        if (safeToSync) {
+          const { data: synced, error: syncErr } = await supabase
+            .from('session_program_progress')
+            .update({ total_sessions: resolved.totalSessions })
+            .eq('user_id', userId)
+            .select()
+            .single();
+          if (!syncErr && synced) progress = synced;
+        } else if (resolved.totalSessions < completed) {
+          console.warn('[session/active] sync skipped: resolved < completed_sessions');
+        }
+      }
     }
 
     const activeSessionNumber = progress.active_session_number;

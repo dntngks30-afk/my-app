@@ -31,6 +31,31 @@ export const runtime = 'nodejs';
 
 const DEFAULT_TOTAL_SESSIONS = 16;
 
+const FREQUENCY_TO_TOTAL: Record<number, number> = {
+  2: 8,
+  3: 12,
+  4: 16,
+  5: 20,
+};
+
+/** BE-ONB-02: profile.target_frequency → total_sessions. 없으면 16. */
+async function resolveTotalSessions(
+  supabase: Awaited<ReturnType<typeof getServerSupabaseAdmin>>,
+  userId: string
+): Promise<{ totalSessions: number; source: 'profile' | 'default' }> {
+  const { data } = await supabase
+    .from('session_user_profile')
+    .select('target_frequency')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  const freq = data?.target_frequency;
+  if (typeof freq === 'number' && freq in FREQUENCY_TO_TOTAL) {
+    return { totalSessions: FREQUENCY_TO_TOTAL[freq], source: 'profile' };
+  }
+  return { totalSessions: DEFAULT_TOTAL_SESSIONS, source: 'default' };
+}
+
 type ConditionMood = 'good' | 'ok' | 'bad';
 type TimeBudget = 'short' | 'normal';
 
@@ -123,7 +148,7 @@ export async function POST(req: NextRequest) {
 
     const supabase = getServerSupabaseAdmin();
 
-    // progress 조회 — 없으면 자동 생성
+    // progress 조회 — 없으면 자동 생성 (BE-ONB-02: profile 기반 total_sessions)
     let { data: progress } = await supabase
       .from('session_program_progress')
       .select('*')
@@ -131,11 +156,12 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (!progress) {
+      const resolved = await resolveTotalSessions(supabase, userId);
       const { data: created, error: insertErr } = await supabase
         .from('session_program_progress')
         .insert({
           user_id: userId,
-          total_sessions: DEFAULT_TOTAL_SESSIONS,
+          total_sessions: resolved.totalSessions,
           completed_sessions: 0,
           active_session_number: null,
         })
@@ -152,7 +178,7 @@ export async function POST(req: NextRequest) {
       progress = created;
     }
 
-    // ── 멱등: active session이 이미 있으면 deep 재조회 없이 그대로 반환 ──
+    // ── 멱등: active session이 이미 있으면 profile 조회 없이 그대로 반환 ──
     if (progress.active_session_number) {
       const { data: existingPlan } = await supabase
         .from('session_plans')
@@ -168,6 +194,23 @@ export async function POST(req: NextRequest) {
       });
       res.headers.set('Cache-Control', 'no-store');
       return res;
+    }
+
+    // BE-ONB-02: progress 있음 + active 없음 → profile 기반 sync (안전 조건 시)
+    const resolved = await resolveTotalSessions(supabase, userId);
+    const completed = progress.completed_sessions ?? 0;
+    const safeToSync =
+      resolved.totalSessions >= completed && progress.total_sessions !== resolved.totalSessions;
+    if (safeToSync) {
+      const { data: synced, error: syncErr } = await supabase
+        .from('session_program_progress')
+        .update({ total_sessions: resolved.totalSessions })
+        .eq('user_id', userId)
+        .select()
+        .single();
+      if (!syncErr && synced) progress = synced;
+    } else if (resolved.totalSessions < completed) {
+      console.warn('[session/create] sync skipped: resolved < completed_sessions');
     }
 
     const nextSessionNumber = progress.completed_sessions + 1;
