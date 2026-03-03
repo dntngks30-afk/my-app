@@ -170,16 +170,26 @@ export async function createSession(
 
 // ─── complete ──────────────────────────────────────────────────────────────────
 
+export type ExerciseLogItem = {
+  templateId: string;
+  name: string;
+  sets: number | null;
+  reps: number | null;
+  difficulty: number | null;
+};
+
 export type CompleteSessionInput = {
   session_number: number;
   duration_seconds: number;
   completion_mode: 'all_done' | 'partial_done' | 'stop_early';
+  exercise_logs?: ExerciseLogItem[];
 };
 
 export type CompleteSessionResponse = {
   progress: SessionProgress;
   next_theme: string | null;
   idempotent: boolean;
+  exercise_logs?: ExerciseLogItem[] | null;
 };
 
 /** POST /api/session/complete — 세션 완료 (유저 명시적 액션 전용) */
@@ -199,7 +209,9 @@ export type SessionHistoryItem = {
   session_number: number;
   completed_at: string;
   duration_seconds: number | null;
+  completion_mode: string | null;
   theme: string;
+  exercise_logs?: ExerciseLogItem[] | null;
 };
 
 export type SessionHistoryResponse = {
