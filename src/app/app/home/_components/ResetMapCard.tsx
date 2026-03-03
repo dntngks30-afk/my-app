@@ -142,13 +142,13 @@ export default function ResetMapCard({
             <Image
               src="/ui/reset-map-runner.png"
               alt="러너"
-              width={120}
-              height={120}
+              width={180}
+              height={180}
               className="object-contain mix-blend-multiply drop-shadow-md"
               onError={() => setRunnerImgError(true)}
             />
           ) : (
-            <div className="flex size-[120px] items-center justify-center rounded-full bg-orange-400 text-white shadow-lg">
+            <div className="flex size-[180px] items-center justify-center rounded-full bg-orange-400 text-white shadow-lg">
               <svg
                 width="24"
                 height="24"
