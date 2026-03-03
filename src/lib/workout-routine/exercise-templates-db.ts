@@ -159,6 +159,57 @@ export async function getFilteredExerciseTemplates(
   return pool;
 }
 
+/** Session plan용 템플릿 row (duration_sec, is_fallback 포함) */
+export interface SessionTemplateRow {
+  id: string;
+  name: string;
+  level: number;
+  focus_tags: string[];
+  contraindications: string[];
+  duration_sec: number;
+  media_ref: unknown;
+  is_fallback: boolean;
+}
+
+/**
+ * Fetch templates for session plan generation.
+ * limit 60, scoring_version='deep_v2'. 28→300 확장 대비.
+ */
+export async function getTemplatesForSessionPlan(opts?: {
+  scoringVersion?: string;
+}): Promise<SessionTemplateRow[]> {
+  const supabase = getServerSupabaseAdmin();
+  let q = supabase
+    .from('exercise_templates')
+    .select('id,name,level,focus_tags,contraindications,duration_sec,media_ref,is_fallback')
+    .eq('is_active', true)
+    .order('id')
+    .limit(60);
+
+  if (opts?.scoringVersion) {
+    q = q.eq('scoring_version', opts.scoringVersion);
+  } else {
+    q = q.eq('scoring_version', 'deep_v2');
+  }
+
+  const { data, error } = await q;
+
+  if (error) {
+    throw new Error(`exercise_templates session plan fetch failed: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    level: row.level ?? 1,
+    focus_tags: row.focus_tags ?? [],
+    contraindications: row.contraindications ?? [],
+    duration_sec: row.duration_sec ?? 300,
+    media_ref: row.media_ref ?? null,
+    is_fallback: row.is_fallback ?? false,
+  })) as SessionTemplateRow[];
+}
+
 /**
  * Get fallback templates (M01, M28) for empty days.
  * 캐시(TTL 120초) + 최소 컬럼.
