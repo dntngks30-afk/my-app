@@ -1,9 +1,8 @@
 /**
  * GET /api/session/history
  *
- * 완료된 세션 스탬프 목록 (캘린더/히스토리 UI용).
- * BE-05: duration_seconds, completion_mode 포함.
- * Read-only. 7일 시스템 미변경.
+ * 완료된 세션 기록 SSOT. status='completed'만 노출.
+ * 정렬: session_number DESC (최신 위). 스키마 고정, null 금지.
  *
  * Auth: Bearer token. 401 if not logged in.
  */
@@ -15,8 +14,14 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const DEFAULT_LIMIT = 60;
-const MAX_LIMIT = 120;
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 100;
+
+function toExerciseLogsArray(val: unknown): unknown[] {
+  if (val == null) return [];
+  if (!Array.isArray(val)) return [];
+  return val;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -48,7 +53,7 @@ export async function GET(req: NextRequest) {
         .select('session_number, completed_at, duration_seconds, completion_mode, theme, exercise_logs')
         .eq('user_id', userId)
         .eq('status', 'completed')
-        .order('completed_at', { ascending: false })
+        .order('session_number', { ascending: false })
         .limit(limit),
     ]);
 
@@ -72,11 +77,11 @@ export async function GET(req: NextRequest) {
       },
       items: plans.map((p) => ({
         session_number: p.session_number,
-        completed_at: p.completed_at ?? '',
-        duration_seconds: p.duration_seconds ?? null,
-        completion_mode: p.completion_mode ?? null,
         theme: p.theme ?? '',
-        exercise_logs: (p as { exercise_logs?: unknown }).exercise_logs ?? null,
+        completed_at: p.completed_at ?? '',
+        duration_seconds: p.duration_seconds ?? 0,
+        completion_mode: p.completion_mode ?? 'unknown',
+        exercise_logs: toExerciseLogsArray((p as { exercise_logs?: unknown }).exercise_logs),
       })),
     };
 
