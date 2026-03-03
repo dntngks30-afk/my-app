@@ -10,7 +10,7 @@
  * ts/cs URL 파라미터: 러너 위치 강제 override
  */
 
-import { useMemo, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { TRACK_V1 } from '@/lib/home/reset-map-track';
 
@@ -28,9 +28,13 @@ function getTrackLength(track: TrackPoint[]): number {
   return len;
 }
 
+const RATIO_EPS = 1e-10;
+
 function getRunnerPosition(track: TrackPoint[], progressRatio: number): TrackPoint {
+  if (!track.length) return { x: 0, y: 0 };
+  const lastIdx = track.length - 1;
   if (progressRatio <= 0) return track[0];
-  if (progressRatio >= 1) return track[track.length - 1];
+  if (progressRatio >= 1 - RATIO_EPS) return track[lastIdx];
 
   const totalLen = getTrackLength(track);
   const targetDist = progressRatio * totalLen;
@@ -39,7 +43,7 @@ function getRunnerPosition(track: TrackPoint[], progressRatio: number): TrackPoi
   for (let i = 1; i < track.length; i++) {
     const segLen = segmentLength(track[i - 1], track[i]);
     if (acc + segLen >= targetDist) {
-      const t = (targetDist - acc) / segLen;
+      const t = segLen > 0 ? Math.min(1, (targetDist - acc) / segLen) : 1;
       return {
         x: track[i - 1].x + t * (track[i].x - track[i - 1].x),
         y: track[i - 1].y + t * (track[i].y - track[i - 1].y),
@@ -47,7 +51,7 @@ function getRunnerPosition(track: TrackPoint[], progressRatio: number): TrackPoi
     }
     acc += segLen;
   }
-  return track[track.length - 1];
+  return track[lastIdx];
 }
 
 function clamp(v: number): number {
@@ -78,20 +82,18 @@ export default function ResetMapCard({
   const [runnerImgError, setRunnerImgError] = useState(false);
   const [copyToast, setCopyToast] = useState<string | null>(null);
 
-  const ts = totalSessionsOverride ?? totalSessions;
-  const cs = completedSessionsOverride ?? completedSessions;
+  const effTotal = totalSessionsOverride ?? totalSessions;
+  const effCompleted = completedSessionsOverride ?? completedSessions;
+  const ratioRaw = effTotal > 0 ? effCompleted / effTotal : 0;
+  const progressRatio = Math.max(0, Math.min(1, ratioRaw));
 
   const weeklyFrequency = totalSessions / 4;
-  const progressRatio = ts === 0 ? 0 : Math.min(1, cs / ts);
 
   const [track, setTrack] = useState<TrackPoint[]>(TRACK_V1);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const activeTrack = debugMap ? track : TRACK_V1;
-  const runnerPos = useMemo(
-    () => getRunnerPosition(activeTrack, progressRatio),
-    [activeTrack, progressRatio]
-  );
+  const runnerPos = getRunnerPosition(activeTrack, progressRatio);
 
   useEffect(() => {
     if (!debugMap || process.env.NODE_ENV === 'production') return;
@@ -293,7 +295,11 @@ export default function ResetMapCard({
       {debugMap && process.env.NODE_ENV !== 'production' && (
         <div className="absolute right-4 top-4 z-30 max-w-[280px] rounded-lg border border-slate-300 bg-slate-100/95 p-3 text-xs shadow-lg backdrop-blur-sm">
           <div className="mb-2 font-mono text-slate-700">
-            debugMap=1 · ts={ts} cs={cs} · ratio={progressRatio.toFixed(3)}
+            effCompleted={effCompleted} effTotal={effTotal} · ratio=
+            {progressRatio.toFixed(3)}
+          </div>
+          <div className="mb-1 font-mono text-slate-700">
+            pos.x={runnerPos.x.toFixed(3)} pos.y={runnerPos.y.toFixed(3)}
           </div>
           <div className="mb-2 font-mono text-slate-700">
             selectedIndex={selectedIndex} · x={track[selectedIndex]?.x.toFixed(3)} y=
