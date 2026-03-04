@@ -81,6 +81,13 @@ function parseAndValidateExerciseLogs(raw: unknown): ExerciseLogItem[] | null {
   return result;
 }
 
+/** PR4A-Delta: null/undefined → [] 보장. 응답 계약용. */
+function toExerciseLogsArray(val: unknown): unknown[] {
+  if (val == null) return [];
+  if (!Array.isArray(val)) return [];
+  return val;
+}
+
 /** session_number → 4단계 테마 */
 function getTheme(sessionNumber: number): string {
   if (sessionNumber <= 4)  return '1순위 타겟';
@@ -116,13 +123,15 @@ export async function POST(req: NextRequest) {
       return fail(400, ApiErrorCode.VALIDATION_FAILED, 'completion_mode는 all_done|partial_done|stop_early 중 하나여야 합니다');
     }
 
-    let exerciseLogs: ExerciseLogItem[] | null = null;
+    let exerciseLogsArray: ExerciseLogItem[];
     if (body.exercise_logs !== undefined && body.exercise_logs !== null) {
       const parsed = parseAndValidateExerciseLogs(body.exercise_logs);
       if (parsed === null) {
         return fail(400, ApiErrorCode.VALIDATION_FAILED, 'exercise_logs 형식이 올바르지 않습니다 (최대 50개, templateId/name 필수)');
       }
-      exerciseLogs = parsed;
+      exerciseLogsArray = parsed;
+    } else {
+      exerciseLogsArray = [];
     }
 
     const headerKey = req.headers.get('Idempotency-Key') ?? null;
@@ -181,10 +190,8 @@ export async function POST(req: NextRequest) {
       completed_at: nowIso,
       duration_seconds: durationClamped,
       completion_mode: completionMode,
+      exercise_logs: exerciseLogsArray,
     };
-    if (exerciseLogs !== null) {
-      planUpdatePayload.exercise_logs = exerciseLogs;
-    }
 
     // Race-safe: only first completion writes (status IN draft|started)
     const { data: updatedRows, error: planUpdateErr } = await supabase
@@ -210,7 +217,7 @@ export async function POST(req: NextRequest) {
 
     if (updatedRows && updatedRows.length >= 1) {
       // First completion — DB trigger syncs progress
-      const logsSummary = summarizeExerciseLogs(exerciseLogs);
+      const logsSummary = summarizeExerciseLogs(exerciseLogsArray);
       void logSessionEvent(supabase, {
         userId,
         eventType: 'session_complete',
@@ -232,7 +239,7 @@ export async function POST(req: NextRequest) {
       const nextNum = newCompleted + 1;
       const nextTheme = progress && nextNum <= progress.total_sessions ? getTheme(nextNum) : null;
 
-      const data = { progress: progress ?? null, next_theme: nextTheme, idempotent: false };
+      const data = { progress: progress ?? null, next_theme: nextTheme, idempotent: false, exercise_logs: exerciseLogsArray };
       return ok(data, data);
     }
 
@@ -287,7 +294,7 @@ export async function POST(req: NextRequest) {
       const nextNum = (progress?.completed_sessions ?? sessionNumber) + 1;
       const nextTheme = progress && nextNum <= progress.total_sessions ? getTheme(nextNum) : null;
 
-      const data = { progress: progress ?? null, next_theme: nextTheme, idempotent: true, exercise_logs: planRow.exercise_logs ?? null };
+      const data = { progress: progress ?? null, next_theme: nextTheme, idempotent: true, exercise_logs: toExerciseLogsArray(planRow.exercise_logs) };
       return ok(data, data);
     }
 
