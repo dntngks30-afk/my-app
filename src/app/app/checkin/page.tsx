@@ -71,6 +71,7 @@ export default function CheckinPage() {
   const searchParams = useSearchParams();
   const focusSession = searchParams.get('focusSession');
   const focusSessionNum = focusSession ? parseInt(focusSession, 10) : null;
+  const prod = process.env.NODE_ENV === 'production';
   const navV2 = searchParams.get('navV2') === '1';
 
   const [report, setReport] = useState<WeeklyReport | null>(null);
@@ -150,7 +151,7 @@ export default function CheckinPage() {
     }
   }, [expandedSession]);
 
-  if (navV2) {
+  if (prod || navV2) {
     return (
       <div className="min-h-screen bg-white pb-20">
         <header className="px-4 pt-6 pb-4 border-b border-slate-100">

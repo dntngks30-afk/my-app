@@ -7,6 +7,7 @@ import { getSessionSafe } from '@/lib/supabase';
 import { getActiveSession } from '@/lib/session/client';
 
 export default function ProfilePage() {
+  const prod = process.env.NODE_ENV === 'production';
   const [navV2, setNavV2] = useState(false);
   const [completedSessions, setCompletedSessions] = useState(0);
 
@@ -28,7 +29,7 @@ export default function ProfilePage() {
     } catch { /* noop */ }
   }, []);
 
-  if (navV2) {
+  if (prod || navV2) {
     return (
       <div className="min-h-screen bg-white pb-20">
         <header className="px-4 pt-6 pb-4 border-b border-slate-100">

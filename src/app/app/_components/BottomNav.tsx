@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Calendar, PlayCircle, BarChart2, User, Map, BarChart3 } from 'lucide-react';
+import { isNavV2Enabled } from '@/lib/nav/navV2';
 
 /* ── navV1 탭 (기존) ── */
 const TABS_V1 = [
@@ -32,11 +33,11 @@ function isTabActive(href: string, pathname: string | null): boolean {
 export default function BottomNav() {
   const pathname = usePathname();
 
-  // navV2 여부: 클라이언트에서만 읽어 hydration 불일치 방지
+  // navV2 여부: production 강제 ON, dev에서는 query로 토글
   const [navV2, setNavV2] = useState(false);
   useEffect(() => {
     try {
-      const v2 = new URLSearchParams(window.location.search).get('navV2') === '1';
+      const v2 = isNavV2Enabled({ search: window.location.search });
       setNavV2(v2);
     } catch { /* noop */ }
   }, [pathname]); // pathname 변경 시도 재평가
