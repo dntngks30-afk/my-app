@@ -7,6 +7,7 @@ import { NeoCard } from '@/components/neobrutalism';
 import BottomNav from '../_components/BottomNav';
 import { getSessionHistory } from '@/lib/session/client';
 import type { SessionHistoryItem, ExerciseLogItem } from '@/lib/session/client';
+import { StatsViewV2 } from '../_components/nav-v2/StatsViewV2';
 
 type SeriesItem = {
   day_key_utc: string;
@@ -70,6 +71,7 @@ export default function CheckinPage() {
   const searchParams = useSearchParams();
   const focusSession = searchParams.get('focusSession');
   const focusSessionNum = focusSession ? parseInt(focusSession, 10) : null;
+  const navV2 = searchParams.get('navV2') === '1';
 
   const [report, setReport] = useState<WeeklyReport | null>(null);
   const [reportLoading, setReportLoading] = useState(true);
@@ -78,6 +80,7 @@ export default function CheckinPage() {
   const [sessionLoading, setSessionLoading] = useState(true);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [expandedSession, setExpandedSession] = useState<number | null>(null);
+  const [completedSessions, setCompletedSessions] = useState(0);
   const focusRef = useRef<HTMLDivElement>(null);
 
   const fetchReport = async () => {
@@ -122,6 +125,7 @@ export default function CheckinPage() {
       if (cancelled) return;
       if (result.ok) {
         setSessionItems(result.data.items);
+        setCompletedSessions(result.data.progress?.completed_sessions ?? result.data.items.length);
         setSessionError(null);
       } else {
         setSessionError(result.error.message);
@@ -145,6 +149,24 @@ export default function CheckinPage() {
       focusRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [expandedSession]);
+
+  if (navV2) {
+    return (
+      <div className="min-h-screen bg-white pb-20">
+        <header className="px-4 pt-6 pb-4 border-b border-slate-100">
+          <h1 className="text-2xl font-bold text-slate-800">통계</h1>
+          <p className="mt-1 text-sm text-slate-500">나의 리셋 진행 현황</p>
+        </header>
+        <main className="overflow-y-auto">
+          <StatsViewV2
+            completed={completedSessions}
+            currentSession={completedSessions + 1}
+          />
+        </main>
+        <BottomNav />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8f6f0] pb-20">
