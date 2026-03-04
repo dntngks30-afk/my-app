@@ -50,12 +50,20 @@ export function validateMediaRef(val: unknown): MediaRefValidationResult {
     if (!playbackId || typeof playbackId !== 'string' || !playbackId.trim()) {
       errors.push('provider=mux requires playback_id (non-empty string)');
     }
+    const start = obj.start;
+    if (start !== undefined && (typeof start !== 'number' || !Number.isFinite(start))) {
+      errors.push('mux start must be a number if present');
+    }
+    const end = obj.end;
+    if (end !== undefined && (typeof end !== 'number' || !Number.isFinite(end))) {
+      errors.push('mux end must be a number if present');
+    }
   } else if (provider === 'legacy') {
     const url = obj.url;
     if (!url || typeof url !== 'string' || !url.trim()) {
       errors.push('provider=legacy requires url (non-empty string)');
-    } else if (!/^https?:\/\//i.test(url.trim())) {
-      errors.push('legacy url must start with http:// or https://');
+    } else if (!/^https:\/\//i.test(url.trim())) {
+      errors.push('legacy url must start with https://');
     }
   } else {
     errors.push(`provider must be 'mux' or 'legacy', got: ${provider}`);
@@ -66,4 +74,13 @@ export function validateMediaRef(val: unknown): MediaRefValidationResult {
     errors,
     warnings,
   };
+}
+
+/** API용: { ok: true } | { ok: false, code, reason } */
+export function validateMediaRefForApi(
+  val: unknown
+): { ok: true } | { ok: false; code: 'MEDIA_REF_INVALID'; reason: string } {
+  const r = validateMediaRef(val);
+  if (r.valid) return { ok: true };
+  return { ok: false, code: 'MEDIA_REF_INVALID', reason: r.errors.join('; ') };
 }

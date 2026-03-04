@@ -1,14 +1,19 @@
 /**
  * GET /api/exercise-template/media?templateId=M01
  *
- * media_payload 반환 (plan_status='active' 유저만)
+ * 계약(SSOT): 200 { templateId, payload, cache_ttl_sec }
+ * 404: TEMPLATE_NOT_FOUND
+ * 422: MEDIA_REF_INVALID
  * Cache-Control: no-store
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireActivePlan } from '@/lib/auth/requireActivePlan';
+import { validateMediaRefForApi } from '@/lib/admin/media-ref-schema';
 import { buildMediaPayload } from '@/lib/media/media-payload';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+
+const CACHE_TTL_SEC = 60;
 
 export async function GET(req: NextRequest) {
   try {
@@ -19,7 +24,7 @@ export async function GET(req: NextRequest) {
     const templateId = searchParams.get('templateId');
     if (!templateId) {
       return NextResponse.json(
-        { error: 'templateId가 필요합니다.' },
+        { error: 'templateId가 필요합니다.', code: 'MISSING_TEMPLATE_ID' },
         { status: 400 }
       );
     }
@@ -42,20 +47,30 @@ export async function GET(req: NextRequest) {
 
     if (!template) {
       return NextResponse.json(
-        { error: '템플릿을 찾을 수 없습니다.' },
+        { error: '템플릿을 찾을 수 없습니다.', code: 'TEMPLATE_NOT_FOUND' },
         { status: 404 }
       );
     }
 
-    const payload = await buildMediaPayload(template.media_ref, template.duration_sec ?? 300);
+    const validation = validateMediaRefForApi(template.media_ref);
+    if (!validation.ok) {
+      return NextResponse.json(
+        { error: validation.reason, code: validation.code },
+        { status: 422 }
+      );
+    }
+
+    const payload = await buildMediaPayload(
+      template.media_ref,
+      template.duration_sec ?? 300
+    );
 
     const res = NextResponse.json({
-      success: true,
       templateId: template.id,
-      templateName: template.name,
-      media: payload,
+      payload,
+      cache_ttl_sec: CACHE_TTL_SEC,
     });
-    res.headers.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+    res.headers.set('Cache-Control', 'no-store');
     return res;
   } catch (err) {
     console.error('[exercise-template/media]', err);

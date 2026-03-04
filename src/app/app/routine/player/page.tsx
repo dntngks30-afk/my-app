@@ -225,6 +225,8 @@ export default function RoutinePlayerPage() {
   const lastRoutineIdRef = useRef<string | null>(null);
   const statusLoading = useRef(false);
   const mediaFetchInFlightRef = useRef<Set<string>>(new Set());
+  const payloadMemoRef = useRef<Map<string, MediaPayload>>(new Map());
+  const mediaInflightPromiseRef = useRef<Map<string, Promise<MediaPayload | null>>>(new Map());
   const [currentDay, setCurrentDay] = useState(1);
 
   useEffect(() => {
@@ -631,51 +633,74 @@ export default function RoutinePlayerPage() {
     [segments, derivedIndex]
   );
 
-  /** On-demand 미디어 서명: 현재 세그먼트가 placeholder일 때만 호출 */
+  /** On-demand 미디어 서명: placeholder일 때만 호출. payload 메모이즈 + 인플라이트 promise 캐시로 중복 요청 감소 */
   useEffect(() => {
     const seg = currentSegment;
     if (!seg || seg.kind !== 'work' || !seg.templateId) return;
     const tid = seg.templateId;
     const needsMedia =
       !seg.mediaPayload || seg.mediaPayload.kind === 'placeholder';
-    if (!needsMedia || mediaFetchInFlightRef.current.has(tid)) return;
+    if (!needsMedia) return;
 
-    mediaFetchInFlightRef.current.add(tid);
-    getSessionSafe().then(({ session }) => {
-      if (!session?.access_token) {
-        mediaFetchInFlightRef.current.delete(tid);
-        return;
-      }
-      fetch('/api/media/sign', {
-        method: 'POST',
-        cache: 'no-store',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ templateId: tid }),
-      })
-        .then((res) => res.json().catch(() => ({})))
-        .then((data: Record<string, unknown>) => {
-          mediaFetchInFlightRef.current.delete(tid);
-          const mediaById = data?.mediaById as Record<string, MediaPayload> | undefined;
-          const payload = mediaById?.[tid];
+    const memoized = payloadMemoRef.current.get(tid);
+    if (memoized && memoized.kind !== 'placeholder') {
+      setSegments((prev) =>
+        prev.map((p) =>
+          p.templateId === tid
+            ? { ...p, mediaPayload: memoized, mediaError: false }
+            : p
+        )
+      );
+      return;
+    }
+
+    let promise = mediaInflightPromiseRef.current.get(tid);
+    if (!promise) {
+      promise = (async (): Promise<MediaPayload | null> => {
+        const { session } = await getSessionSafe();
+        if (!session?.access_token) return null;
+        mediaFetchInFlightRef.current.add(tid);
+        try {
+          const res = await fetch('/api/media/sign', {
+            method: 'POST',
+            cache: 'no-store',
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ templateIds: [tid] }),
+          });
+          const data = (await res.json().catch(() => ({}))) as {
+            results?: Array<{ templateId: string; payload: MediaPayload }>;
+          };
+          const r = data?.results?.find((x) => x.templateId === tid);
+          const payload = r?.payload ?? null;
           if (payload && payload.kind !== 'placeholder') {
-            setSegments((prev) =>
-              prev.map((p) =>
-                p.templateId === tid
-                  ? { ...p, mediaPayload: payload, mediaError: false }
-                  : p
-              )
-            );
+            payloadMemoRef.current.set(tid, payload);
           }
-        })
-        .catch((err) => {
+          return payload;
+        } finally {
           mediaFetchInFlightRef.current.delete(tid);
-          if (searchParams.get('debug') === '1') {
-            console.warn('[player] on-demand media failed', err);
-          }
-        });
+          mediaInflightPromiseRef.current.delete(tid);
+        }
+      })();
+      mediaInflightPromiseRef.current.set(tid, promise);
+    }
+
+    promise.then((payload) => {
+      if (payload && payload.kind !== 'placeholder') {
+        setSegments((prev) =>
+          prev.map((p) =>
+            p.templateId === tid
+              ? { ...p, mediaPayload: payload, mediaError: false }
+              : p
+          )
+        );
+      }
+    }).catch(() => {
+      if (searchParams.get('debug') === '1') {
+        console.warn('[player] on-demand media failed');
+      }
     });
   }, [currentSegment?.id, currentSegment?.templateId, currentSegment?.mediaPayload?.kind, searchParams]);
 
