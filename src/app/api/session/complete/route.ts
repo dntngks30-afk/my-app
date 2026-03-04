@@ -17,10 +17,14 @@
  * Auth: Bearer token. Write: service role admin client.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { logSessionEvent, summarizeExerciseLogs } from '@/lib/session-events';
+import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
+import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
+
+const ROUTE_COMPLETE = '/api/session/complete';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -89,10 +93,7 @@ export async function POST(req: NextRequest) {
   try {
     const userId = await getCurrentUserId(req);
     if (!userId) {
-      return NextResponse.json(
-        { error: { code: 'UNAUTHENTICATED', message: '인증이 필요합니다.' } },
-        { status: 401 }
-      );
+      return fail(401, ApiErrorCode.AUTH_REQUIRED, '로그인이 필요합니다');
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -106,37 +107,50 @@ export async function POST(req: NextRequest) {
       : null;
 
     if (!sessionNumber || sessionNumber < 1) {
-      return NextResponse.json(
-        { error: { code: 'BAD_REQUEST', message: 'session_number가 유효하지 않습니다 (1 이상의 정수).' } },
-        { status: 400 }
-      );
+      return fail(400, ApiErrorCode.VALIDATION_FAILED, 'session_number가 유효하지 않습니다 (1 이상의 정수)');
     }
     if (durationSeconds === null) {
-      return NextResponse.json(
-        { error: { code: 'BAD_REQUEST', message: 'duration_seconds가 필요합니다 (0 이상의 숫자).' } },
-        { status: 400 }
-      );
+      return fail(400, ApiErrorCode.VALIDATION_FAILED, 'duration_seconds가 필요합니다 (0 이상의 숫자)');
     }
     if (!completionMode) {
-      return NextResponse.json(
-        { error: { code: 'BAD_REQUEST', message: 'completion_mode는 all_done|partial_done|stop_early 중 하나여야 합니다.' } },
-        { status: 400 }
-      );
+      return fail(400, ApiErrorCode.VALIDATION_FAILED, 'completion_mode는 all_done|partial_done|stop_early 중 하나여야 합니다');
     }
 
     let exerciseLogs: ExerciseLogItem[] | null = null;
     if (body.exercise_logs !== undefined && body.exercise_logs !== null) {
       const parsed = parseAndValidateExerciseLogs(body.exercise_logs);
       if (parsed === null) {
-        return NextResponse.json(
-          { error: { code: 'BAD_REQUEST', message: 'exercise_logs 형식이 올바르지 않습니다. (최대 50개, templateId/name 필수)' } },
-          { status: 400 }
-        );
+        return fail(400, ApiErrorCode.VALIDATION_FAILED, 'exercise_logs 형식이 올바르지 않습니다 (최대 50개, templateId/name 필수)');
       }
       exerciseLogs = parsed;
     }
 
+    const headerKey = req.headers.get('Idempotency-Key') ?? null;
+    const dedupeKey = buildDedupeKey({
+      route: ROUTE_COMPLETE,
+      userId,
+      sessionNumber,
+      headerKey,
+    });
     const supabase = getServerSupabaseAdmin();
+    const acquired = await tryAcquireDedupe(supabase, {
+      route: ROUTE_COMPLETE,
+      userId,
+      dedupeKey,
+      sessionNumber,
+      ttlSeconds: 10,
+    });
+    if (!acquired) {
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'request_deduped',
+        status: 'blocked',
+        code: 'REQUEST_DEDUPED',
+        sessionNumber,
+        meta: { route: ROUTE_COMPLETE },
+      });
+      return fail(409, ApiErrorCode.REQUEST_DEDUPED, '요청이 처리 중입니다. 잠시 후 다시 시도하세요');
+    }
 
     const nowIso = new Date().toISOString();
     const durationClamped = Math.min(7200, Math.max(0, durationSeconds));
@@ -170,10 +184,7 @@ export async function POST(req: NextRequest) {
         sessionNumber,
         meta: { message_short: 'plan update failed' },
       });
-      return NextResponse.json(
-        { error: { code: 'DB_ERROR', message: '세션 완료 업데이트에 실패했습니다.' } },
-        { status: 500 }
-      );
+      return fail(500, ApiErrorCode.INTERNAL_ERROR, '세션 완료 업데이트에 실패했습니다');
     }
 
     if (updatedRows && updatedRows.length >= 1) {
@@ -200,13 +211,8 @@ export async function POST(req: NextRequest) {
       const nextNum = newCompleted + 1;
       const nextTheme = progress && nextNum <= progress.total_sessions ? getTheme(nextNum) : null;
 
-      const res = NextResponse.json({
-        progress: progress ?? null,
-        next_theme: nextTheme,
-        idempotent: false,
-      });
-      res.headers.set('Cache-Control', 'no-store');
-      return res;
+      const data = { progress: progress ?? null, next_theme: nextTheme, idempotent: false };
+      return ok(data, data);
     }
 
     // 0 rows updated — plan not found, already completed, or concurrent
@@ -226,10 +232,7 @@ export async function POST(req: NextRequest) {
         sessionNumber,
         meta: {},
       });
-      return NextResponse.json(
-        { error: { code: 'NOT_FOUND', message: '해당 세션 플랜을 찾을 수 없습니다.' } },
-        { status: 404 }
-      );
+      return fail(404, ApiErrorCode.SESSION_PLAN_NOT_FOUND, '해당 세션 플랜을 찾을 수 없습니다');
     }
 
     if (planRow.status === 'completed') {
@@ -249,14 +252,8 @@ export async function POST(req: NextRequest) {
       const nextNum = (progress?.completed_sessions ?? sessionNumber) + 1;
       const nextTheme = progress && nextNum <= progress.total_sessions ? getTheme(nextNum) : null;
 
-      const res = NextResponse.json({
-        progress: progress ?? null,
-        next_theme: nextTheme,
-        idempotent: true,
-        exercise_logs: planRow.exercise_logs ?? null,
-      });
-      res.headers.set('Cache-Control', 'no-store');
-      return res;
+      const data = { progress: progress ?? null, next_theme: nextTheme, idempotent: true, exercise_logs: planRow.exercise_logs ?? null };
+      return ok(data, data);
     }
 
     void logSessionEvent(supabase, {
@@ -267,10 +264,7 @@ export async function POST(req: NextRequest) {
       sessionNumber,
       meta: {},
     });
-    return NextResponse.json(
-      { error: { code: 'CONCURRENT_UPDATE', message: '동시 업데이트가 감지되었습니다. 잠시 후 다시 시도해 주세요.' } },
-      { status: 409 }
-    );
+    return fail(409, ApiErrorCode.CONCURRENT_UPDATE, '동시 업데이트가 감지되었습니다. 잠시 후 다시 시도해 주세요');
   } catch (err) {
     console.error('[session/complete]', err);
     try {
@@ -286,9 +280,6 @@ export async function POST(req: NextRequest) {
         });
       }
     } catch (_) { /* noop */ }
-    return NextResponse.json(
-      { error: { code: 'INTERNAL', message: err instanceof Error ? err.message : '서버 오류' } },
-      { status: 500 }
-    );
+    return fail(500, ApiErrorCode.INTERNAL_ERROR, '서버 오류');
   }
 }

@@ -27,7 +27,10 @@ import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import { buildSessionPlanJson } from '@/lib/session/plan-generator';
 import { getKstDayKeyUTC, getNextKstMidnightUtcIso, getTodayCompletedAndNextUnlock } from '@/lib/time/kst';
 import { logSessionEvent } from '@/lib/session-events';
+import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
+
+const ROUTE_CREATE = '/api/session/create';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -126,6 +129,28 @@ export async function POST(req: NextRequest) {
       return fail(401, ApiErrorCode.AUTH_REQUIRED, '로그인이 필요합니다');
     }
 
+    const headerKey = req.headers.get('Idempotency-Key') ?? null;
+    const kstDay = getKstDayKeyUTC();
+    const dedupeKey = buildDedupeKey({ route: ROUTE_CREATE, userId, kstDay, headerKey });
+    const supabase = getServerSupabaseAdmin();
+    const acquired = await tryAcquireDedupe(supabase, {
+      route: ROUTE_CREATE,
+      userId,
+      dedupeKey,
+      kstDay,
+      ttlSeconds: 10,
+    });
+    if (!acquired) {
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'request_deduped',
+        status: 'blocked',
+        code: 'REQUEST_DEDUPED',
+        meta: { route: ROUTE_CREATE },
+      });
+      return fail(409, ApiErrorCode.REQUEST_DEDUPED, '요청이 처리 중입니다. 잠시 후 다시 시도하세요');
+    }
+
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
     const conditionMood: ConditionMood = (['good', 'ok', 'bad'] as const).includes(
@@ -145,8 +170,6 @@ export async function POST(req: NextRequest) {
       : [];
 
     const equipment = typeof body.equipment === 'string' ? body.equipment : 'none';
-
-    const supabase = getServerSupabaseAdmin();
 
     // progress 조회 — 없으면 자동 생성 (BE-ONB-02: profile 기반 total_sessions)
     let { data: progress } = await supabase
