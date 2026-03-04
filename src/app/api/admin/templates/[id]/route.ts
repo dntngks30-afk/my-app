@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/requireAdmin';
-import { validateMediaRef } from '@/lib/admin/media-ref-schema';
+import { validateMediaRefForAdminSave } from '@/lib/admin/media-ref-schema';
 
 const ALLOWED_FIELDS = [
   'name', 'level', 'focus_tags', 'contraindications', 'equipment',
@@ -72,6 +72,18 @@ export async function PATCH(
     return NextResponse.json({ error: 'INVALID_BODY' }, { status: 400 });
   }
 
+  if (body.media_ref_raw !== undefined && typeof body.media_ref_raw === 'string') {
+    const raw = body.media_ref_raw.trim();
+    try {
+      body.media_ref = raw ? JSON.parse(raw) : null;
+    } catch {
+      return NextResponse.json(
+        { ok: false, error: { code: 'VALIDATION_FAILED', message: 'media_ref_raw JSON 파싱 실패' } },
+        { status: 400 }
+      );
+    }
+  }
+
   const updates = sanitizeBody(body);
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'NO_VALID_FIELDS' }, { status: 400 });
@@ -102,14 +114,21 @@ export async function PATCH(
   }
 
   if (updates.media_ref !== undefined) {
-    const vr = validateMediaRef(updates.media_ref);
-    if (!vr.valid) {
-      return NextResponse.json({
-        error: 'VALIDATION_ERROR',
-        details: vr.errors,
-      }, { status: 400 });
+    const vr = validateMediaRefForAdminSave(updates.media_ref);
+    if (!vr.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: {
+            code: 'MEDIA_REF_INVALID',
+            message: 'media_ref 형식이 올바르지 않습니다',
+            details: { reason: vr.reason },
+          },
+        },
+        { status: 422 }
+      );
     }
-    updates.media_ref = updates.media_ref ?? null;
+    updates.media_ref = vr.value;
   }
 
   const { data: before } = await supabase

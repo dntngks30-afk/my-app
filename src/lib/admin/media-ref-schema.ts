@@ -84,3 +84,12 @@ export function validateMediaRefForApi(
   if (r.valid) return { ok: true };
   return { ok: false, code: 'MEDIA_REF_INVALID', reason: r.errors.join('; ') };
 }
+
+/** Admin 저장용: { ok: true, value } | { ok: false, reason } */
+export function validateMediaRefForAdminSave(
+  val: unknown
+): { ok: true; value: MediaRefJson } | { ok: false; reason: string } {
+  const r = validateMediaRef(val);
+  if (r.valid) return { ok: true, value: (val === null || val === undefined ? null : val) as MediaRefJson };
+  return { ok: false, reason: r.errors.join('; ') };
+}

@@ -181,7 +181,9 @@ export default function AdminTemplateDetailPage() {
         setTemplate((prev) => (prev ? { ...prev, ...data.template } : data.template));
         setMessage({ type: 'success', text: '저장되었습니다.' });
       } else {
-        const errMsg = Array.isArray(data.details) ? data.details.join(', ') : (data.error || '저장 실패');
+        const err = data?.error;
+        const reason = typeof err?.details?.reason === 'string' ? err.details.reason : null;
+        const errMsg = reason ?? (Array.isArray(data.details) ? data.details.join(', ') : err?.message ?? data.error ?? '저장 실패');
         setMessage({ type: 'error', text: errMsg });
       }
     } catch {
