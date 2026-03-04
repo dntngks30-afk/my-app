@@ -95,14 +95,10 @@ export async function buildMediaPayload(
       signMuxPlaybackId(playbackId, 'thumbnail'),
     ]);
 
-    if (!videoToken) {
-      return {
-        ...placeholder,
-        notes: ['재생 준비 중입니다. 잠시 후 다시 시도해 주세요.'],
-      };
-    }
-
-    const streamUrl = `https://stream.mux.com/${playbackId}.m3u8?token=${videoToken}`;
+    // Signing token 생성 실패 시에도 public playback 자산은 재생 가능하도록 fallback.
+    const streamUrl = videoToken
+      ? `https://stream.mux.com/${playbackId}.m3u8?token=${videoToken}`
+      : `https://stream.mux.com/${playbackId}.m3u8`;
     const posterUrl = thumbToken
       ? `https://image.mux.com/${playbackId}/thumbnail.jpg?token=${thumbToken}`
       : `https://image.mux.com/${playbackId}/thumbnail.jpg`;
@@ -114,6 +110,7 @@ export async function buildMediaPayload(
       posterUrl,
       durationSec: durationSec ?? 300,
       autoplayAllowed: false,
+      notes: videoToken ? undefined : ['서명 토큰 없이 public playback으로 재생합니다.'],
     };
   }
 
