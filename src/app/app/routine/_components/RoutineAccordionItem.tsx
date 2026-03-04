@@ -3,12 +3,13 @@
 /**
  * RoutineAccordionItem
  *
- * Accordion 항목: 접힘(제목+태그+메타), 펼침(mediaPayload 기반 재생/embed/placeholder).
+ * Accordion 항목: 접힘(제목+태그+메타), 펼침(mediaPayload 기반 재생/embed/placeholder/error).
  * 영상은 펼칠 때만 렌더(lazy).
+ * 상태: loading | ready | placeholder | error
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Play } from 'lucide-react';
+import { ChevronDown, ChevronUp, Play, RefreshCw } from 'lucide-react';
 
 export type MediaPayloadHub = {
   kind: 'hls' | 'embed' | 'placeholder';
@@ -29,13 +30,27 @@ export type RoutineAccordionItemData = {
   templateId?: string;
   mediaRef?: unknown;
   mediaPayload?: MediaPayloadHub | null;
+  mediaError?: boolean;
 };
 
 type RoutineAccordionItemProps = {
   item: RoutineAccordionItemData;
+  onRetry?: (templateId: string) => void;
 };
 
-export default function RoutineAccordionItem({ item }: RoutineAccordionItemProps) {
+type MediaStatus = 'loading' | 'ready' | 'placeholder' | 'error';
+
+function getMediaStatus(item: RoutineAccordionItemData): MediaStatus {
+  if (item.mediaError) return 'error';
+  const p = item.mediaPayload;
+  if (!p) return item.templateId ? 'loading' : 'placeholder';
+  if (p.kind === 'hls' && p.streamUrl) return 'ready';
+  if (p.kind === 'embed' && p.embedUrl) return 'ready';
+  if (p.kind === 'placeholder') return 'placeholder';
+  return 'placeholder';
+}
+
+export default function RoutineAccordionItem({ item, onRetry }: RoutineAccordionItemProps) {
   const [expanded, setExpanded] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<{ destroy: () => void } | null>(null);
@@ -45,6 +60,7 @@ export default function RoutineAccordionItem({ item }: RoutineAccordionItemProps
     : null;
 
   const p = item.mediaPayload;
+  const status = getMediaStatus(item);
 
   useEffect(() => {
     if (!expanded || !p || p.kind !== 'hls' || !p.streamUrl) return;
@@ -74,6 +90,31 @@ export default function RoutineAccordionItem({ item }: RoutineAccordionItemProps
   }, [expanded, p?.kind, p?.streamUrl]);
 
   const renderMedia = () => {
+    if (status === 'error') {
+      return (
+        <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-lg bg-slate-200 text-slate-600">
+          <p className="text-sm">영상을 불러올 수 없습니다</p>
+          {item.templateId && onRetry && (
+            <button
+              type="button"
+              onClick={() => onRetry(item.templateId!)}
+              className="flex items-center gap-2 rounded-lg border border-slate-400 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <RefreshCw className="size-4" />
+              재시도
+            </button>
+          )}
+        </div>
+      );
+    }
+    if (status === 'loading') {
+      return (
+        <div className="flex aspect-video w-full flex-col items-center justify-center rounded-lg bg-slate-200 text-slate-500">
+          <div className="h-8 w-16 animate-pulse rounded bg-slate-300" />
+          <p className="mt-2 text-xs">로딩 중...</p>
+        </div>
+      );
+    }
     if (p?.kind === 'hls' && p.streamUrl) {
       return (
         <div className="aspect-video w-full rounded-lg overflow-hidden bg-black">

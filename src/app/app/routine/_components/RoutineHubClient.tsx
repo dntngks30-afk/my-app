@@ -38,6 +38,44 @@ import { loadSessionDraft, saveSessionDraft, deleteSessionDraft } from '@/lib/se
 import type { RoutineAccordionItemData, MediaPayloadHub } from './RoutineAccordionItem';
 
 const MAX_DURATION_SEC = 7200;
+const CACHE_BUFFER_SEC = 10;
+
+/** templateId → { payload, expiresAt } — 클라이언트 캐시 */
+const payloadCache = new Map<string, { payload: MediaPayloadHub; expiresAt: number }>();
+/** templateIds key → Promise — 배치 inflight */
+const batchInflightMap = new Map<string, Promise<Record<string, { payload: MediaPayloadHub; expiresAt: number }>>>();
+
+function isCacheValid(expiresAt: number): boolean {
+  return Date.now() < expiresAt - CACHE_BUFFER_SEC * 1000;
+}
+
+async function fetchMediaSign(
+  templateIds: string[],
+  token: string
+): Promise<Record<string, { payload: MediaPayloadHub; expiresAt: number }>> {
+  const res = await fetch('/api/media/sign', {
+    method: 'POST',
+    cache: 'no-store',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ templateIds }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    results?: Array<{ templateId: string; payload: MediaPayloadHub; cache_ttl_sec?: number }>;
+  };
+  const now = Date.now();
+  const out: Record<string, { payload: MediaPayloadHub; expiresAt: number }> = {};
+  for (const r of data?.results ?? []) {
+    if (!r.templateId || !r.payload) continue;
+    const ttl = r.cache_ttl_sec ?? 60;
+    const expiresAt = now + ttl * 1000;
+    out[r.templateId] = { payload: r.payload, expiresAt };
+    payloadCache.set(r.templateId, { payload: r.payload, expiresAt });
+  }
+  return out;
+}
 
 function flattenPlanToAccordionItems(plan: SessionPlan): RoutineAccordionItemData[] {
   const segments = plan.plan_json?.segments ?? [];
@@ -123,57 +161,94 @@ export default function RoutineHubClient() {
 
   const activeFetchedRef = useRef(false);
   const historyFetchedRef = useRef(false);
-  const mediaSignInflightRef = useRef<{ key: string; promise: Promise<Record<string, MediaPayloadHub>> } | null>(null);
 
   const baseItems = activePlan ? flattenPlanToAccordionItems(activePlan) : [];
   const [itemsWithMedia, setItemsWithMedia] = useState<RoutineAccordionItemData[]>([]);
   const items = itemsWithMedia.length > 0 ? itemsWithMedia : baseItems;
+
+  const handleRetry = useCallback(async (templateId: string) => {
+    const { session } = await getSessionSafe();
+    if (!session?.access_token) return;
+    payloadCache.delete(templateId);
+    try {
+      const byId = await fetchMediaSign([templateId], session.access_token);
+      const payload = byId[templateId]?.payload ?? null;
+      setItemsWithMedia((prev) =>
+        prev.map((i) =>
+          i.templateId === templateId ? { ...i, mediaPayload: payload, mediaError: !payload } : i
+        )
+      );
+    } catch {
+      setItemsWithMedia((prev) =>
+        prev.map((i) => (i.templateId === templateId ? { ...i, mediaError: true } : i))
+      );
+    }
+  }, []);
 
   useEffect(() => {
     if (!activePlan || baseItems.length === 0) {
       setItemsWithMedia([]);
       return;
     }
-    setItemsWithMedia(baseItems);
-    const templateIds = baseItems.map((i) => i.templateId).filter((id): id is string => !!id);
-    if (templateIds.length === 0) return;
+    const templateIds = [...new Set(baseItems.map((i) => i.templateId).filter((id): id is string => !!id))];
+    if (templateIds.length === 0) {
+      setItemsWithMedia(baseItems);
+      return;
+    }
 
-    const key = [...templateIds].sort().join(',');
-    let promise = mediaSignInflightRef.current?.key === key ? mediaSignInflightRef.current.promise : null;
+    const needsFetch = templateIds.filter((id) => {
+      const cached = payloadCache.get(id);
+      return !cached || !isCacheValid(cached.expiresAt);
+    });
+
+    const initialById: Record<string, { payload: MediaPayloadHub; expiresAt: number }> = {};
+    for (const id of templateIds) {
+      const cached = payloadCache.get(id);
+      if (cached && isCacheValid(cached.expiresAt)) {
+        initialById[id] = cached;
+      }
+    }
+
+    setItemsWithMedia(
+      baseItems.map((i) => ({
+        ...i,
+        mediaPayload: i.templateId ? (initialById[i.templateId]?.payload ?? null) : null,
+      }))
+    );
+
+    if (needsFetch.length === 0) return;
+
+    const key = [...needsFetch].sort().join(',');
+    let promise = batchInflightMap.get(key);
     if (!promise) {
       promise = (async () => {
         const { session } = await getSessionSafe();
-        if (!session?.access_token) return {} as Record<string, MediaPayloadHub>;
-        const res = await fetch('/api/media/sign', {
-          method: 'POST',
-          cache: 'no-store',
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ templateIds }),
-        });
-        const data = (await res.json().catch(() => ({}))) as { results?: Array<{ templateId: string; payload: MediaPayloadHub }> };
-        const byId: Record<string, MediaPayloadHub> = {};
-        for (const r of data?.results ?? []) {
-          if (r.templateId && r.payload) byId[r.templateId] = r.payload;
-        }
-        return byId;
+        if (!session?.access_token) return {} as Record<string, { payload: MediaPayloadHub; expiresAt: number }>;
+        return fetchMediaSign(needsFetch, session.access_token);
       })();
-      mediaSignInflightRef.current = { key, promise };
+      batchInflightMap.set(key, promise);
     }
 
-    promise.then((byId) => {
-      mediaSignInflightRef.current = null;
-      setItemsWithMedia((prev) =>
-        prev.map((i) => ({
-          ...i,
-          mediaPayload: i.templateId ? (byId[i.templateId] ?? null) : null,
-        }))
-      );
-    }).catch(() => {
-      mediaSignInflightRef.current = null;
-    });
+    promise
+      .then((byId) => {
+        batchInflightMap.delete(key);
+        const merged: Record<string, { payload: MediaPayloadHub; expiresAt: number }> = { ...initialById };
+        for (const [id, v] of Object.entries(byId)) {
+          merged[id] = v;
+        }
+        setItemsWithMedia((prev) =>
+          prev.map((i) => ({
+            ...i,
+            mediaPayload: i.templateId ? (merged[i.templateId]?.payload ?? null) : null,
+          }))
+        );
+      })
+      .catch(() => {
+        batchInflightMap.delete(key);
+        setItemsWithMedia((prev) =>
+          prev.map((i) => (needsFetch.includes(i.templateId!) ? { ...i, mediaError: true } : i))
+        );
+      });
   }, [activePlan]);
 
   const panelState =
@@ -594,7 +669,7 @@ export default function RoutineHubClient() {
           <>
             <section>
               <h2 className="text-sm font-semibold text-slate-800 mb-3">내 루틴 목록</h2>
-              <RoutineAccordionList items={items} />
+              <RoutineAccordionList items={items} onRetry={handleRetry} />
             </section>
 
             <div className="sticky bottom-0 left-0 right-0 z-40 -mx-4 px-4 py-3 bg-[#f8f6f0] border-t border-stone-200">
