@@ -1,9 +1,14 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import { getSessionSafe } from '@/lib/supabase'
 import { completeSession } from '@/lib/session/client'
+import {
+  loadExerciseLogsDraft,
+  saveExerciseLogsDraft,
+  deleteExerciseLogsDraft,
+} from '@/lib/session/storage'
 import type { ExerciseItem } from './planJsonAdapter'
 import type { ExerciseLogItem, SessionPlan } from '@/lib/session/client'
 import { ExercisePlayerModal } from './ExercisePlayerModal'
@@ -72,6 +77,10 @@ function PanelInner({
 }: Required<Omit<SessionPanelV2Props, 'onSessionCompleted'>> & {
   onSessionCompleted?: (completedSessions: number) => void
 }) {
+  // planId: 현재 세션의 plan과 일치할 때만 사용 (draft key)
+  const planId =
+    activePlan?.id && sessionId === activePlan.session_number ? activePlan.id : undefined
+
   // 로컬 운동 로그 누적 (templateId → log)
   const [logs, setLogs] = useState<Record<string, ExerciseLogItem>>({})
   // 모달에서 열린 운동 아이템
@@ -83,8 +92,29 @@ function PanelInner({
   // 패널 오픈 시각 (duration 계산용)
   const startedAtRef = useRef(Date.now())
 
+  // 마운트 시 draft 복원 (planId 있을 때만)
+  useEffect(() => {
+    if (!planId) return
+    const draft = loadExerciseLogsDraft(planId)
+    if (draft?.logsByTemplateId && Object.keys(draft.logsByTemplateId).length > 0) {
+      setLogs(draft.logsByTemplateId)
+    }
+  }, [planId])
+
   const handleLogComplete = (log: ExerciseLogItem) => {
-    setLogs(prev => ({ ...prev, [log.templateId]: log }))
+    setLogs(prev => {
+      const next = { ...prev, [log.templateId]: log }
+      if (planId && activePlan?.session_number != null) {
+        saveExerciseLogsDraft(planId, {
+          version: 1,
+          updatedAt: Date.now(),
+          planId,
+          sessionNumber: activePlan.session_number,
+          logsByTemplateId: next,
+        })
+      }
+      return next
+    })
     setOpenItem(null)
   }
 
@@ -128,6 +158,10 @@ function PanelInner({
 
       setCompleted(true)
       setCompleting(false)
+      if (planId) {
+        deleteExerciseLogsDraft(planId)
+        setLogs({})
+      }
 
       const newCompleted = result.data.progress?.completed_sessions ?? sessionNumber
       onSessionCompleted?.(newCompleted)

@@ -102,6 +102,7 @@ export type SessionPlanJson = {
 };
 
 export type SessionPlan = {
+  id: string;
   session_number: number;
   status: 'draft' | 'started' | 'completed';
   theme: string;

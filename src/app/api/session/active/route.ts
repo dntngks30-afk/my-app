@@ -132,7 +132,7 @@ export async function GET(req: NextRequest) {
     // active 세션 플랜 조회
     const { data: plan, error: planErr } = await supabase
       .from('session_plans')
-      .select('session_number, status, theme, plan_json, condition, created_at, started_at')
+      .select('id, session_number, status, theme, plan_json, condition, created_at, started_at')
       .eq('user_id', userId)
       .eq('session_number', activeSessionNumber)
       .maybeSingle();
