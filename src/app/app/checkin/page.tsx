@@ -154,7 +154,7 @@ export default function CheckinPage() {
     return (
       <div className="min-h-screen bg-white pb-20">
         <header className="px-4 pt-6 pb-4 border-b border-slate-100">
-          <h1 className="text-2xl font-bold text-slate-800">통계</h1>
+          <h1 className="text-2xl font-bold text-slate-800">여정</h1>
           <p className="mt-1 text-sm text-slate-500">나의 리셋 진행 현황</p>
         </header>
         <main className="overflow-y-auto">

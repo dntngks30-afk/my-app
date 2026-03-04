@@ -16,7 +16,7 @@ const TABS_V1 = [
 /* ── navV2 탭 (3개) ── */
 const TABS_V2 = [
   { id: 'map', baseHref: '/app/home', label: '지도', icon: Map },
-  { id: 'stats', baseHref: '/app/checkin', label: '통계', icon: BarChart3 },
+  { id: 'stats', baseHref: '/app/checkin', label: '여정', icon: BarChart3 },
   { id: 'my', baseHref: '/app/profile', label: '마이', icon: User },
 ] as const;
 
