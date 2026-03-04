@@ -8,6 +8,7 @@ import { getSessionSafe } from '@/lib/supabase';
 import { getActiveSession } from '@/lib/session/client';
 import BottomNav from '../../_components/BottomNav';
 import ResetMapCard from './ResetMapCard';
+import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
 
 export default function HomePageClient() {
   const router = useRouter();
@@ -15,6 +16,7 @@ export default function HomePageClient() {
   const searchParams = useSearchParams();
   const debugFlag = searchParams.get('debug') === '1';
   const debugMap = searchParams.get('debugMap') === '1';
+  const mapV2 = searchParams.get('mapV2') === '1';
   const tsOverride = searchParams.get('ts');
   const csOverride = searchParams.get('cs');
   const hasTsCs = tsOverride != null && csOverride != null;
@@ -151,23 +153,36 @@ export default function HomePageClient() {
       </header>
 
       <main className="px-4 space-y-6">
-        {/* 2. 리셋 지도 — session progress 기반 (debugMap=1이면 progress 없어도 표시) */}
-        {sessionProgress || debugMap ? (
-          <ResetMapCard
-            totalSessions={sessionProgress?.total_sessions ?? 8}
-            completedSessions={sessionProgress?.completed_sessions ?? 0}
-            debugMap={debugMap}
-            totalSessionsOverride={totalSessionsOverride}
-            completedSessionsOverride={completedSessionsOverride}
-          />
-        ) : (
-          <section className="rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)]">
-            <h3 className="text-sm font-semibold text-slate-800">리셋 지도</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              루틴 탭에서 세션을 시작하고 진행도를 확인하세요.
-            </p>
-          </section>
-        )}
+        {/* 2. 리셋 지도 — mapV2=1이면 새 지도 UX, 그 외 기존 ResetMapCard */}
+        {(() => {
+          const total = totalSessionsOverride ?? sessionProgress?.total_sessions ?? 8;
+          const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
+
+          if (mapV2 && total <= 20) {
+            return <ResetMapV2 total={total} completed={completed} />;
+          }
+
+          if (sessionProgress || debugMap) {
+            return (
+              <ResetMapCard
+                totalSessions={sessionProgress?.total_sessions ?? 8}
+                completedSessions={sessionProgress?.completed_sessions ?? 0}
+                debugMap={debugMap}
+                totalSessionsOverride={totalSessionsOverride}
+                completedSessionsOverride={completedSessionsOverride}
+              />
+            );
+          }
+
+          return (
+            <section className="rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)]">
+              <h3 className="text-sm font-semibold text-slate-800">리셋 지도</h3>
+              <p className="mt-2 text-sm text-slate-600">
+                루틴 탭에서 세션을 시작하고 진행도를 확인하세요.
+              </p>
+            </section>
+          );
+        })()}
 
         {/* 3. 단일 CTA */}
         <section>
