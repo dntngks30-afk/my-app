@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { fail, ApiErrorCode } from '@/lib/api/contract';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -68,14 +69,10 @@ export async function POST(req: NextRequest) {
 
     const completedSessions = existingProgress?.completed_sessions ?? 0;
     if (totalSessions < completedSessions) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: `이미 ${completedSessions}회 완료되어 total_sessions를 ${totalSessions}로 줄일 수 없습니다.`,
-          },
-        },
-        { status: 400 }
+      return fail(
+        409,
+        ApiErrorCode.POLICY_LOCKED,
+        `이미 ${completedSessions}회 완료되어 total_sessions를 ${totalSessions}로 줄일 수 없습니다.`
       );
     }
 

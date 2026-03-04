@@ -205,6 +205,38 @@ export async function POST(req: NextRequest) {
       progress = created;
     }
 
+    // P0-09: 프로그램 종료 — completed_sessions >= total_sessions 이면 create 차단
+    const totalSessions = progress.total_sessions ?? 16;
+    const completedCount = progress.completed_sessions ?? 0;
+    if (completedCount >= totalSessions) {
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_create_blocked',
+        status: 'blocked',
+        code: 'PROGRAM_FINISHED',
+        meta: { total_sessions: totalSessions, completed_sessions: completedCount },
+      });
+      return fail(409, ApiErrorCode.PROGRAM_FINISHED, '모든 세션을 완료했습니다');
+    }
+
+    // P0-09: active_session_number > total_sessions 이면 정리 후 차단
+    const activeNum = progress.active_session_number;
+    if (activeNum != null && activeNum > totalSessions) {
+      await supabase
+        .from('session_program_progress')
+        .update({ active_session_number: null })
+        .eq('user_id', userId);
+      progress = { ...progress, active_session_number: null };
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_create_blocked',
+        status: 'blocked',
+        code: 'PROGRAM_FINISHED',
+        meta: { total_sessions: totalSessions, active_session_number: activeNum },
+      });
+      return fail(409, ApiErrorCode.PROGRAM_FINISHED, '모든 세션을 완료했습니다');
+    }
+
     const { todayCompleted, nextUnlockAt } = getTodayCompletedAndNextUnlock(progress);
 
     // Daily cap: 오늘 완료했으면 create 차단 (SSOT)
@@ -266,8 +298,6 @@ export async function POST(req: NextRequest) {
     }
 
     const nextSessionNumber = progress.completed_sessions + 1;
-
-    // 프로그램 전체 완료
     if (nextSessionNumber > progress.total_sessions) {
       void logSessionEvent(supabase, {
         userId,
@@ -276,9 +306,7 @@ export async function POST(req: NextRequest) {
         code: 'PROGRAM_FINISHED',
         meta: { total_sessions: progress.total_sessions, completed_sessions: progress.completed_sessions },
       });
-      // 하위호환: FE가 done/progress로 panelState('done') 처리. 추후 409+code로 전환 시 FE 분기 추가.
-      const data = { done: true, progress, today_completed: todayCompleted, ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }) };
-      return ok(data, data);
+      return fail(409, ApiErrorCode.PROGRAM_FINISHED, '모든 세션을 완료했습니다');
     }
 
     // ── [NEW] Deep Result 요약 로드 (next 생성 시점에만) ──────────────────────

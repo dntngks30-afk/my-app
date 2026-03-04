@@ -133,6 +133,27 @@ export async function POST(req: NextRequest) {
       headerKey,
     });
     const supabase = getServerSupabaseAdmin();
+
+    // P0-09: progress 조회 — session_number > total_sessions, completed_sessions >= total 검증용
+    const { data: progress } = await supabase
+      .from('session_program_progress')
+      .select('total_sessions, completed_sessions')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    const totalSessions = progress?.total_sessions ?? 16;
+    if (sessionNumber > totalSessions) {
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_complete_blocked',
+        status: 'blocked',
+        code: 'PROGRAM_FINISHED',
+        sessionNumber,
+        meta: { total_sessions: totalSessions },
+      });
+      return fail(409, ApiErrorCode.PROGRAM_FINISHED, '모든 세션을 완료했습니다');
+    }
+
     const acquired = await tryAcquireDedupe(supabase, {
       route: ROUTE_COMPLETE,
       userId,
@@ -233,6 +254,20 @@ export async function POST(req: NextRequest) {
         meta: {},
       });
       return fail(404, ApiErrorCode.SESSION_PLAN_NOT_FOUND, '해당 세션 플랜을 찾을 수 없습니다');
+    }
+
+    // P0-09: 프로그램 종료 상태에서 미완료 세션 완료 시도 → 409
+    const completedSessions = progress?.completed_sessions ?? 0;
+    if (completedSessions >= totalSessions && planRow.status !== 'completed') {
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_complete_blocked',
+        status: 'blocked',
+        code: 'PROGRAM_FINISHED',
+        sessionNumber,
+        meta: { completed_sessions: completedSessions, total_sessions: totalSessions },
+      });
+      return fail(409, ApiErrorCode.PROGRAM_FINISHED, '모든 세션을 완료했습니다');
     }
 
     if (planRow.status === 'completed') {
