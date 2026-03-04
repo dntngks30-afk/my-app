@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { SlidersHorizontal, ArrowRight } from 'lucide-react';
 import { getSessionSafe } from '@/lib/supabase';
-import { getActiveSession } from '@/lib/session/client';
+import { getActiveSession, type SessionPlan } from '@/lib/session/client';
 import BottomNav from '../../_components/BottomNav';
 import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
@@ -37,6 +37,7 @@ export default function HomePageClient() {
     total_sessions: number;
     completed_sessions: number;
   } | null>(null);
+  const [activePlan, setActivePlan] = useState<SessionPlan | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,6 +86,7 @@ export default function HomePageClient() {
           total_sessions: p.total_sessions,
           completed_sessions: p.completed_sessions ?? 0,
         });
+        setActivePlan(result.data.active ?? null);
       }
     })();
     return () => { cancelled = true; };
@@ -159,7 +161,7 @@ export default function HomePageClient() {
           const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
 
           if (mapV2 && total <= 20) {
-            return <ResetMapV2 total={total} completed={completed} />;
+            return <ResetMapV2 total={total} completed={completed} activePlan={activePlan} />;
           }
 
           if (sessionProgress || debugMap) {
