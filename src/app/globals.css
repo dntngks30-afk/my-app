@@ -197,3 +197,21 @@ h1, h2, h3 {
 [data-bg-pattern="softGradient"] .landing-hero {
   background: linear-gradient(135deg, var(--bg) 0%, var(--surface-2) 100%);
 }
+
+/* ── ResetMapV2 animations (no extra package needed) ── */
+@keyframes movere_fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes movere_slideInFromBottom {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.animate-in {
+  animation-duration: 180ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  animation-fill-mode: both;
+}
+.fade-in               { animation-name: movere_fadeIn; }
+.slide-in-from-bottom  { animation-name: movere_slideInFromBottom; }
+.slide-in-from-bottom-4 { animation-name: movere_slideInFromBottom; }
