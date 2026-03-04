@@ -326,6 +326,10 @@ export default function RoutineHubClient() {
       setTodayCompleted(true);
       setShowExerciseLogModal(false);
       setShowSummary(true);
+      // PR4B-Delta: history refetch — 기록 탭/캘린더 pills 즉시 반영
+      getSessionHistory(token, 60).then((hRes) => {
+        if (hRes.ok) setHistoryData(hRes.data);
+      });
     },
     [token, activePlan, completing, startedAtMs]
   );
