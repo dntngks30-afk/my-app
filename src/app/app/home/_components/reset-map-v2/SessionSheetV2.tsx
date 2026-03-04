@@ -66,19 +66,11 @@ export function SessionSheetV2({ session, isCompleted, isCurrent, onClose, onCom
             )}
           </div>
 
-          {/* Exercises */}
-          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">
-            {'운동 목록'}
-          </p>
-          <div className="space-y-2 mb-8">
-            {session.exercises.map((exercise, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-xl bg-secondary/40 px-4 py-3">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-medium text-muted-foreground bg-muted/60">
-                  {i + 1}
-                </span>
-                <span className="text-sm text-foreground">{exercise}</span>
-              </div>
-            ))}
+          {/* Exercises placeholder — 목업 데이터 비노출, PR2에서 plan_json으로 교체 예정 */}
+          <div className="mb-8 rounded-xl bg-secondary/30 px-4 py-4 text-center">
+            <p className="text-sm text-muted-foreground">
+              {'세션 상세(운동 구성)는 곧 연결됩니다'}
+            </p>
           </div>
 
           {/* Action */}
