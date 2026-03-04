@@ -1,20 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { X, CheckCircle2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { X, CheckCircle2, RefreshCw } from 'lucide-react'
 import { getSessionSafe } from '@/lib/supabase'
+import { getSignedMediaPayloads, type MediaPayload } from '@/lib/media/client-media-cache'
 import type { ExerciseItem } from './planJsonAdapter'
 import type { ExerciseLogItem } from '@/lib/session/client'
-
-interface MediaPayload {
-  kind: 'hls' | 'embed' | 'placeholder'
-  streamUrl?: string
-  embedUrl?: string
-  posterUrl?: string
-}
-
-/** 모달 간 미디어 서명 결과를 재사용하기 위한 module-level 캐시 */
-const mediaCache = new Map<string, MediaPayload>()
 
 interface ExercisePlayerModalProps {
   item: ExerciseItem | null
@@ -50,53 +41,44 @@ function ModalInner({
 }) {
   const [media, setMedia] = useState<MediaPayload | null>(null)
   const [mediaLoading, setMediaLoading] = useState(true)
+  const [mediaError, setMediaError] = useState(false)
   const [sets, setSets] = useState(String(initialLog?.sets ?? item.targetSets ?? 3))
   const [reps, setReps] = useState(String(initialLog?.reps ?? item.targetReps ?? ''))
   const [difficulty, setDifficulty] = useState<number | null>(initialLog?.difficulty ?? null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<{ destroy: () => void } | null>(null)
 
-  /* 미디어 서명 — 캐시 우선, 없으면 /api/media/sign 1회 */
+  /* 미디어 로드 — 공용 캐시/inflight 사용 */
+  const loadMedia = useCallback(async (force = false) => {
+    setMediaLoading(true)
+    setMediaError(false)
+    try {
+      const { session } = await getSessionSafe()
+      if (!session?.access_token) {
+        setMedia({ kind: 'placeholder' })
+        return
+      }
+      const payloads = await getSignedMediaPayloads(
+        session.access_token,
+        [item.templateId],
+        { force },
+      )
+      setMedia(payloads[item.templateId] ?? { kind: 'placeholder' })
+    } catch {
+      setMediaError(true)
+      setMedia({ kind: 'placeholder' })
+    } finally {
+      setMediaLoading(false)
+    }
+  }, [item.templateId])
+
   useEffect(() => {
     let cancelled = false
-    const cached = mediaCache.get(item.templateId)
-    if (cached) {
-      setMedia(cached)
-      setMediaLoading(false)
-      return
-    }
-    ;(async () => {
-      try {
-        const { session } = await getSessionSafe()
-        if (!session?.access_token) {
-          if (!cancelled) { setMedia({ kind: 'placeholder' }); setMediaLoading(false) }
-          return
-        }
-        const res = await fetch('/api/media/sign', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ templateIds: [item.templateId] }),
-        })
-        if (cancelled) return
-        if (res.ok) {
-          const data = await res.json()
-          const payload: MediaPayload = data.results?.[0]?.payload ?? { kind: 'placeholder' }
-          mediaCache.set(item.templateId, payload)
-          setMedia(payload)
-        } else {
-          setMedia({ kind: 'placeholder' })
-        }
-      } catch {
-        if (!cancelled) setMedia({ kind: 'placeholder' })
-      } finally {
-        if (!cancelled) setMediaLoading(false)
-      }
-    })()
+    loadMedia().then(() => {
+      if (cancelled) { setMedia(null); setMediaLoading(true) }
+    })
     return () => { cancelled = true }
-  }, [item.templateId])
+  }, [loadMedia])
 
   /* HLS 플레이어 연결 */
   useEffect(() => {
@@ -202,9 +184,20 @@ function ModalInner({
                 />
               </div>
             ) : (
-              <div className="flex aspect-video flex-col items-center justify-center gap-2 bg-slate-800">
+              <div className="flex aspect-video flex-col items-center justify-center gap-3 bg-slate-800">
                 <p className="text-sm text-slate-400">영상 준비 중</p>
-                <p className="text-xs text-slate-500">텍스트 가이드를 참고해 주세요</p>
+                {mediaError ? (
+                  <button
+                    type="button"
+                    onClick={() => loadMedia(true)}
+                    className="flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-600 transition-colors"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    다시 시도
+                  </button>
+                ) : (
+                  <p className="text-xs text-slate-500">텍스트 가이드를 참고해 주세요</p>
+                )}
               </div>
             )}
           </div>

@@ -48,3 +48,6 @@ app__DISABLED__*
 
 .recovery/
 
+
+.vercel
+.env*.local

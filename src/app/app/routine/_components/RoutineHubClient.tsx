@@ -35,47 +35,10 @@ import {
 } from '@/lib/session/client';
 import { buildWeeklyGoalSummary } from '@/lib/session/goal-summary';
 import { loadSessionDraft, saveSessionDraft, deleteSessionDraft } from '@/lib/session/storage';
+import { getSignedMediaPayloads } from '@/lib/media/client-media-cache';
 import type { RoutineAccordionItemData, MediaPayloadHub } from './RoutineAccordionItem';
 
 const MAX_DURATION_SEC = 7200;
-const CACHE_BUFFER_SEC = 10;
-
-/** templateId → { payload, expiresAt } — 클라이언트 캐시 */
-const payloadCache = new Map<string, { payload: MediaPayloadHub; expiresAt: number }>();
-/** templateIds key → Promise — 배치 inflight */
-const batchInflightMap = new Map<string, Promise<Record<string, { payload: MediaPayloadHub; expiresAt: number }>>>();
-
-function isCacheValid(expiresAt: number): boolean {
-  return Date.now() < expiresAt - CACHE_BUFFER_SEC * 1000;
-}
-
-async function fetchMediaSign(
-  templateIds: string[],
-  token: string
-): Promise<Record<string, { payload: MediaPayloadHub; expiresAt: number }>> {
-  const res = await fetch('/api/media/sign', {
-    method: 'POST',
-    cache: 'no-store',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ templateIds }),
-  });
-  const data = (await res.json().catch(() => ({}))) as {
-    results?: Array<{ templateId: string; payload: MediaPayloadHub; cache_ttl_sec?: number }>;
-  };
-  const now = Date.now();
-  const out: Record<string, { payload: MediaPayloadHub; expiresAt: number }> = {};
-  for (const r of data?.results ?? []) {
-    if (!r.templateId || !r.payload) continue;
-    const ttl = r.cache_ttl_sec ?? 60;
-    const expiresAt = now + ttl * 1000;
-    out[r.templateId] = { payload: r.payload, expiresAt };
-    payloadCache.set(r.templateId, { payload: r.payload, expiresAt });
-  }
-  return out;
-}
 
 function flattenPlanToAccordionItems(plan: SessionPlan): RoutineAccordionItemData[] {
   const segments = plan.plan_json?.segments ?? [];
@@ -168,10 +131,9 @@ export default function RoutineHubClient() {
 
   const handleRetry = useCallback(async (templateId: string) => {
     if (!token) return;
-    payloadCache.delete(templateId);
     try {
-      const byId = await fetchMediaSign([templateId], token);
-      const payload = byId[templateId]?.payload ?? null;
+      const byId = await getSignedMediaPayloads(token, [templateId], { force: true });
+      const payload = (byId[templateId] as MediaPayloadHub | undefined) ?? null;
       setItemsWithMedia((prev) =>
         prev.map((i) =>
           i.templateId === templateId ? { ...i, mediaPayload: payload, mediaError: !payload } : i
@@ -195,53 +157,21 @@ export default function RoutineHubClient() {
       return;
     }
 
-    const needsFetch = templateIds.filter((id) => {
-      const cached = payloadCache.get(id);
-      return !cached || !isCacheValid(cached.expiresAt);
-    });
-
-    const initialById: Record<string, { payload: MediaPayloadHub; expiresAt: number }> = {};
-    for (const id of templateIds) {
-      const cached = payloadCache.get(id);
-      if (cached && isCacheValid(cached.expiresAt)) {
-        initialById[id] = cached;
-      }
-    }
-
-    setItemsWithMedia(
-      baseItems.map((i) => ({
-        ...i,
-        mediaPayload: i.templateId ? (initialById[i.templateId]?.payload ?? null) : null,
-      }))
-    );
-
-    if (needsFetch.length === 0) return;
-
-    const key = [...needsFetch].sort().join(',');
-    let promise = batchInflightMap.get(key);
-    if (!promise) {
-      promise = fetchMediaSign(needsFetch, token);
-      batchInflightMap.set(key, promise);
-    }
-
-    promise
+    // 공용 캐시 사용: 배치 호출 + TTL + placeholder 미캐시
+    getSignedMediaPayloads(token, templateIds)
       .then((byId) => {
-        batchInflightMap.delete(key);
-        const merged: Record<string, { payload: MediaPayloadHub; expiresAt: number }> = { ...initialById };
-        for (const [id, v] of Object.entries(byId)) {
-          merged[id] = v;
-        }
         setItemsWithMedia((prev) =>
-          prev.map((i) => ({
+          (prev.length > 0 ? prev : baseItems).map((i) => ({
             ...i,
-            mediaPayload: i.templateId ? (merged[i.templateId]?.payload ?? null) : null,
+            mediaPayload: i.templateId ? ((byId[i.templateId] as MediaPayloadHub | undefined) ?? null) : null,
           }))
         );
       })
       .catch(() => {
-        batchInflightMap.delete(key);
         setItemsWithMedia((prev) =>
-          prev.map((i) => (needsFetch.includes(i.templateId!) ? { ...i, mediaError: true } : i))
+          (prev.length > 0 ? prev : baseItems).map((i) =>
+            templateIds.includes(i.templateId!) ? { ...i, mediaError: true } : i
+          )
         );
       });
   }, [activePlan, token]);

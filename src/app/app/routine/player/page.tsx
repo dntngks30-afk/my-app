@@ -12,18 +12,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Play, Pause, Check, Lock } from 'lucide-react';
 import type Hls from 'hls.js';
 import { getSessionSafe } from '@/lib/supabase';
+import { getSignedMediaPayloads } from '@/lib/media/client-media-cache';
+import type { MediaPayload as _MediaPayloadLib } from '@/lib/media/client-media-cache';
 
-/** media_payload shape (API response) */
-type MediaPayload = {
-  kind: 'embed' | 'hls' | 'placeholder';
-  provider?: string;
-  streamUrl?: string;
-  embedUrl?: string;
-  posterUrl?: string;
-  durationSec?: number;
-  autoplayAllowed: boolean;
-  notes?: string[];
-};
+/** media_payload shape (API response) — 공용 타입과 호환, autoplayAllowed 기본 false */
+type MediaPayload = _MediaPayloadLib & { autoplayAllowed?: boolean };
 
 /** /api/.../ensure 응답 shape (plan만 최소 사용) */
 type EnsurePlan = { selected_template_ids?: string[] };
@@ -224,9 +217,7 @@ export default function RoutinePlayerPage() {
   const initSyncDone = useRef(false);
   const lastRoutineIdRef = useRef<string | null>(null);
   const statusLoading = useRef(false);
-  const mediaFetchInFlightRef = useRef<Set<string>>(new Set());
-  const payloadMemoRef = useRef<Map<string, MediaPayload>>(new Map());
-  const mediaInflightPromiseRef = useRef<Map<string, Promise<MediaPayload | null>>>(new Map());
+  // 미디어 캐시는 src/lib/media/client-media-cache.ts 공용 모듈로 통합됨
   const [currentDay, setCurrentDay] = useState(1);
 
   useEffect(() => {
@@ -642,66 +633,28 @@ export default function RoutinePlayerPage() {
       !seg.mediaPayload || seg.mediaPayload.kind === 'placeholder';
     if (!needsMedia) return;
 
-    const memoized = payloadMemoRef.current.get(tid);
-    if (memoized && memoized.kind !== 'placeholder') {
-      setSegments((prev) =>
-        prev.map((p) =>
-          p.templateId === tid
-            ? { ...p, mediaPayload: memoized, mediaError: false }
-            : p
-        )
-      );
-      return;
-    }
-
-    let promise = mediaInflightPromiseRef.current.get(tid);
-    if (!promise) {
-      promise = (async (): Promise<MediaPayload | null> => {
+    // 공용 캐시 사용: 모듈 레벨 캐시 히트 시 재호출 없음
+    (async () => {
+      try {
         const { session } = await getSessionSafe();
-        if (!session?.access_token) return null;
-        mediaFetchInFlightRef.current.add(tid);
-        try {
-          const res = await fetch('/api/media/sign', {
-            method: 'POST',
-            cache: 'no-store',
-            headers: {
-              Authorization: `Bearer ${session.access_token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ templateIds: [tid] }),
-          });
-          const data = (await res.json().catch(() => ({}))) as {
-            results?: Array<{ templateId: string; payload: MediaPayload }>;
-          };
-          const r = data?.results?.find((x) => x.templateId === tid);
-          const payload = r?.payload ?? null;
-          if (payload && payload.kind !== 'placeholder') {
-            payloadMemoRef.current.set(tid, payload);
-          }
-          return payload;
-        } finally {
-          mediaFetchInFlightRef.current.delete(tid);
-          mediaInflightPromiseRef.current.delete(tid);
+        if (!session?.access_token) return;
+        const payloads = await getSignedMediaPayloads(session.access_token, [tid]);
+        const payload = payloads[tid] ?? null;
+        if (payload && payload.kind !== 'placeholder') {
+          setSegments((prev) =>
+            prev.map((p) =>
+              p.templateId === tid
+                ? { ...p, mediaPayload: payload as MediaPayload, mediaError: false }
+                : p
+            )
+          );
         }
-      })();
-      mediaInflightPromiseRef.current.set(tid, promise);
-    }
-
-    promise.then((payload) => {
-      if (payload && payload.kind !== 'placeholder') {
-        setSegments((prev) =>
-          prev.map((p) =>
-            p.templateId === tid
-              ? { ...p, mediaPayload: payload, mediaError: false }
-              : p
-          )
-        );
+      } catch {
+        if (searchParams.get('debug') === '1') {
+          console.warn('[player] on-demand media failed');
+        }
       }
-    }).catch(() => {
-      if (searchParams.get('debug') === '1') {
-        console.warn('[player] on-demand media failed');
-      }
-    });
+    })();
   }, [currentSegment?.id, currentSegment?.templateId, currentSegment?.mediaPayload?.kind, searchParams]);
 
   useEffect(() => {
