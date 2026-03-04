@@ -44,13 +44,15 @@ async function sessionFetch<T>(
       const message = typeof rawErr === 'object' && rawErr !== null
         ? (rawErr.message as string) ?? res.statusText
         : typeof rawErr === 'string' ? rawErr : res.statusText;
+      const details = typeof rawErr === 'object' && rawErr !== null ? (rawErr.details as Record<string, unknown>) : undefined;
       const nextUnlockAt = typeof rawErr === 'object' && rawErr !== null && typeof rawErr.next_unlock_at === 'string'
         ? rawErr.next_unlock_at
-        : undefined;
+        : (details && typeof details.next_unlock_at === 'string' ? details.next_unlock_at : undefined);
       return { ok: false, status: res.status, error: { code, message, ...(nextUnlockAt && { next_unlock_at: nextUnlockAt }) } };
     }
 
-    return { ok: true, data: body as T };
+    const data = (body?.ok === true && body?.data != null) ? (body.data as T) : (body as T);
+    return { ok: true, data };
   } catch (e) {
     return {
       ok: false,

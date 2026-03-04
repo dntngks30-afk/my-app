@@ -7,10 +7,11 @@
  * Auth: Bearer token. 401 if not logged in.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { logSessionEvent } from '@/lib/session-events';
+import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -28,10 +29,7 @@ export async function GET(req: NextRequest) {
   try {
     const userId = await getCurrentUserId(req);
     if (!userId) {
-      return NextResponse.json(
-        { error: { code: 'UNAUTHENTICATED', message: '인증이 필요합니다.' } },
-        { status: 401 }
-      );
+      return fail(401, ApiErrorCode.AUTH_REQUIRED, '로그인이 필요합니다');
     }
 
     const { searchParams } = new URL(req.url);
@@ -93,9 +91,7 @@ export async function GET(req: NextRequest) {
       })),
     };
 
-    const res = NextResponse.json(payload);
-    res.headers.set('Cache-Control', 'no-store');
-    return res;
+    return ok(payload, payload);
   } catch (err) {
     console.error('[session/history]', err);
     try {
@@ -111,9 +107,6 @@ export async function GET(req: NextRequest) {
         });
       }
     } catch (_) { /* noop */ }
-    return NextResponse.json(
-      { error: { code: 'INTERNAL', message: err instanceof Error ? err.message : '서버 오류' } },
-      { status: 500 }
-    );
+    return fail(500, ApiErrorCode.INTERNAL_ERROR, '서버 오류');
   }
 }
