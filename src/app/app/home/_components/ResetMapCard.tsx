@@ -206,9 +206,9 @@ export default function ResetMapCard({
           )}
         </div>
 
-        {/* 러너 overlay */}
+        {/* 러너 overlay — 모바일 45px, 데스크톱 180px */}
         <div
-          className="absolute z-10 transition-all duration-[350ms] ease-out"
+          className="absolute z-10 w-[75px] h-[75px] md:w-[180px] md:h-[180px] transition-all duration-[350ms] ease-out"
           style={{
             left: `${runnerPos.x * 100}%`,
             top: `${runnerPos.y * 100}%`,
@@ -219,13 +219,12 @@ export default function ResetMapCard({
             <Image
               src="/ui/reset-map-runner.png"
               alt="러너"
-              width={180}
-              height={180}
+              fill
               className="object-contain mix-blend-multiply drop-shadow-md"
               onError={() => setRunnerImgError(true)}
             />
           ) : (
-            <div className="flex size-[180px] items-center justify-center rounded-full bg-orange-400 text-white shadow-lg">
+            <div className="flex size-full items-center justify-center rounded-full bg-orange-400 text-white shadow-lg">
               <svg
                 width="24"
                 height="24"
