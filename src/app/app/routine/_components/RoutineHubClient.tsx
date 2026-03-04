@@ -167,11 +167,10 @@ export default function RoutineHubClient() {
   const items = itemsWithMedia.length > 0 ? itemsWithMedia : baseItems;
 
   const handleRetry = useCallback(async (templateId: string) => {
-    const { session } = await getSessionSafe();
-    if (!session?.access_token) return;
+    if (!token) return;
     payloadCache.delete(templateId);
     try {
-      const byId = await fetchMediaSign([templateId], session.access_token);
+      const byId = await fetchMediaSign([templateId], token);
       const payload = byId[templateId]?.payload ?? null;
       setItemsWithMedia((prev) =>
         prev.map((i) =>
@@ -183,10 +182,10 @@ export default function RoutineHubClient() {
         prev.map((i) => (i.templateId === templateId ? { ...i, mediaError: true } : i))
       );
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
-    if (!activePlan || baseItems.length === 0) {
+    if (!activePlan || baseItems.length === 0 || !token) {
       setItemsWithMedia([]);
       return;
     }
@@ -221,11 +220,7 @@ export default function RoutineHubClient() {
     const key = [...needsFetch].sort().join(',');
     let promise = batchInflightMap.get(key);
     if (!promise) {
-      promise = (async () => {
-        const { session } = await getSessionSafe();
-        if (!session?.access_token) return {} as Record<string, { payload: MediaPayloadHub; expiresAt: number }>;
-        return fetchMediaSign(needsFetch, session.access_token);
-      })();
+      promise = fetchMediaSign(needsFetch, token);
       batchInflightMap.set(key, promise);
     }
 
@@ -249,7 +244,7 @@ export default function RoutineHubClient() {
           prev.map((i) => (needsFetch.includes(i.templateId!) ? { ...i, mediaError: true } : i))
         );
       });
-  }, [activePlan]);
+  }, [activePlan, token]);
 
   const panelState =
     loading ? 'loading' :
