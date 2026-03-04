@@ -39,6 +39,8 @@ export interface MediaPayload {
 }
 
 const TOKEN_EXPIRY = '1h';
+// public playback policy를 사용하는 경우 토큰 서명 비활성화
+const SIGNING_ENABLED = false;
 
 function getMuxClient(): Mux | null {
   const signingKey = process.env.MUX_SIGNING_KEY;
@@ -90,10 +92,12 @@ export async function buildMediaPayload(
     const playbackId = ref.playback_id as string | undefined;
     if (!playbackId) return placeholder;
 
-    const [videoToken, thumbToken] = await Promise.all([
-      signMuxPlaybackId(playbackId, 'video'),
-      signMuxPlaybackId(playbackId, 'thumbnail'),
-    ]);
+    const [videoToken, thumbToken] = SIGNING_ENABLED
+      ? await Promise.all([
+          signMuxPlaybackId(playbackId, 'video'),
+          signMuxPlaybackId(playbackId, 'thumbnail'),
+        ])
+      : [null, null];
 
     // Signing token 생성 실패 시에도 public playback 자산은 재생 가능하도록 fallback.
     const streamUrl = videoToken
