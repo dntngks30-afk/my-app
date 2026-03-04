@@ -14,9 +14,11 @@ interface ResetMapV2Props {
   completed: number
   /** HomePageClient에서 내려받은 active plan (plan_json 포함) */
   activePlan: SessionPlan | null
+  /** 세션 완료 후 HomePageClient의 sessionProgress 갱신용 콜백 */
+  onSessionCompleted?: (completedSessions: number) => void
 }
 
-export function ResetMapV2({ total, completed, activePlan }: ResetMapV2Props) {
+export function ResetMapV2({ total, completed, activePlan, onSessionCompleted }: ResetMapV2Props) {
   // currentSession: 다음에 해야 할 세션 번호 (1-indexed)
   const currentSession = Math.min(completed + 1, total, sessions.length)
 
@@ -47,8 +49,6 @@ export function ResetMapV2({ total, completed, activePlan }: ResetMapV2Props) {
     ) {
       return extractSessionExercises(activePlan.plan_json)
     }
-    // 완료 세션이라도 현재는 plan을 조회하지 않음(PR3 스코프)
-    // locked 세션도 undefined → ExerciseList에서 locked 상태 처리
     return []
   }, [selectedSessionId, selectedStatus, activePlan])
 
@@ -58,10 +58,10 @@ export function ResetMapV2({ total, completed, activePlan }: ResetMapV2Props) {
       style={{ height: '70vh', maxHeight: 560 }}
     >
       {/* 헤더 */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
         <div>
-          <p className="text-xs font-semibold text-orange-500 uppercase tracking-widest">리셋 지도</p>
-          <p className="text-sm font-bold text-slate-800 mt-0.5">
+          <p className="text-xs font-semibold uppercase tracking-widest text-orange-500">리셋 지도</p>
+          <p className="mt-0.5 text-sm font-bold text-slate-800">
             {completed} / {total} 세션 완료
           </p>
         </div>
@@ -77,13 +77,15 @@ export function ResetMapV2({ total, completed, activePlan }: ResetMapV2Props) {
         onNodeTap={handleNodeTap}
       />
 
-      {/* 하단 패널 — plan_json 운동 목록 */}
+      {/* 하단 패널 — plan_json 운동 목록 + 세션 종료 */}
       <SessionPanelV2
         sessionId={selectedSessionId}
         total={total}
         status={selectedStatus}
         exercises={exercises}
+        activePlan={activePlan}
         onClose={handleClose}
+        onSessionCompleted={onSessionCompleted}
       />
     </div>
   )

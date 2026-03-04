@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { SlidersHorizontal, ArrowRight } from 'lucide-react';
@@ -38,6 +38,14 @@ export default function HomePageClient() {
     completed_sessions: number;
   } | null>(null);
   const [activePlan, setActivePlan] = useState<SessionPlan | null>(null);
+
+  const handleSessionCompleted = useCallback((completedSessions: number) => {
+    setSessionProgress(prev =>
+      prev ? { ...prev, completed_sessions: completedSessions } : prev
+    );
+    // active plan은 완료됐으므로 null 처리
+    setActivePlan(null);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -161,7 +169,7 @@ export default function HomePageClient() {
           const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
 
           if (mapV2 && total <= 20) {
-            return <ResetMapV2 total={total} completed={completed} activePlan={activePlan} />;
+            return <ResetMapV2 total={total} completed={completed} activePlan={activePlan} onSessionCompleted={handleSessionCompleted} />;
           }
 
           if (sessionProgress || debugMap) {
