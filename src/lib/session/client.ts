@@ -85,6 +85,7 @@ export type SessionPlanSegmentItem = {
   reps?: number;
   hold_seconds?: number;
   focus_tag?: string | null;
+  media_ref?: unknown;
 };
 
 export type SessionPlanSegment = {

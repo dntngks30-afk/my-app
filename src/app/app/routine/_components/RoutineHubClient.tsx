@@ -35,7 +35,7 @@ import {
 } from '@/lib/session/client';
 import { buildWeeklyGoalSummary } from '@/lib/session/goal-summary';
 import { loadSessionDraft, saveSessionDraft, deleteSessionDraft } from '@/lib/session/storage';
-import type { RoutineAccordionItemData } from './RoutineAccordionItem';
+import type { RoutineAccordionItemData, MediaPayloadHub } from './RoutineAccordionItem';
 
 const MAX_DURATION_SEC = 7200;
 
@@ -52,7 +52,8 @@ function flattenPlanToAccordionItems(plan: SessionPlan): RoutineAccordionItemDat
         title: it.name,
         kind: it.focus_tag ?? seg.title,
         durationSec: Math.round(perItemSec),
-        videoUrl: null,
+        templateId: it.templateId,
+        mediaRef: it.media_ref,
         description: it.sets && it.reps ? `${it.sets}×${it.reps}` : undefined,
       });
       idx++;
@@ -122,6 +123,58 @@ export default function RoutineHubClient() {
 
   const activeFetchedRef = useRef(false);
   const historyFetchedRef = useRef(false);
+  const mediaSignInflightRef = useRef<{ key: string; promise: Promise<Record<string, MediaPayloadHub>> } | null>(null);
+
+  const baseItems = activePlan ? flattenPlanToAccordionItems(activePlan) : [];
+  const [itemsWithMedia, setItemsWithMedia] = useState<RoutineAccordionItemData[]>([]);
+  const items = itemsWithMedia.length > 0 ? itemsWithMedia : baseItems;
+
+  useEffect(() => {
+    if (!activePlan || baseItems.length === 0) {
+      setItemsWithMedia([]);
+      return;
+    }
+    setItemsWithMedia(baseItems);
+    const templateIds = baseItems.map((i) => i.templateId).filter((id): id is string => !!id);
+    if (templateIds.length === 0) return;
+
+    const key = [...templateIds].sort().join(',');
+    let promise = mediaSignInflightRef.current?.key === key ? mediaSignInflightRef.current.promise : null;
+    if (!promise) {
+      promise = (async () => {
+        const { session } = await getSessionSafe();
+        if (!session?.access_token) return {} as Record<string, MediaPayloadHub>;
+        const res = await fetch('/api/media/sign', {
+          method: 'POST',
+          cache: 'no-store',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ templateIds }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { results?: Array<{ templateId: string; payload: MediaPayloadHub }> };
+        const byId: Record<string, MediaPayloadHub> = {};
+        for (const r of data?.results ?? []) {
+          if (r.templateId && r.payload) byId[r.templateId] = r.payload;
+        }
+        return byId;
+      })();
+      mediaSignInflightRef.current = { key, promise };
+    }
+
+    promise.then((byId) => {
+      mediaSignInflightRef.current = null;
+      setItemsWithMedia((prev) =>
+        prev.map((i) => ({
+          ...i,
+          mediaPayload: i.templateId ? (byId[i.templateId] ?? null) : null,
+        }))
+      );
+    }).catch(() => {
+      mediaSignInflightRef.current = null;
+    });
+  }, [activePlan]);
 
   const panelState =
     loading ? 'loading' :
@@ -541,7 +594,7 @@ export default function RoutineHubClient() {
           <>
             <section>
               <h2 className="text-sm font-semibold text-slate-800 mb-3">내 루틴 목록</h2>
-              <RoutineAccordionList items={flattenPlanToAccordionItems(activePlan)} />
+              <RoutineAccordionList items={items} />
             </section>
 
             <div className="sticky bottom-0 left-0 right-0 z-40 -mx-4 px-4 py-3 bg-[#f8f6f0] border-t border-stone-200">
