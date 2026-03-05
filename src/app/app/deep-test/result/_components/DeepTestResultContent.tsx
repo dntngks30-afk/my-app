@@ -451,7 +451,7 @@ export default function DeepTestResultContent({
 
         {isApp ? (
           <>
-            <Link href="/app/routine" className={nbBtnPrimaryBlock}>
+            <Link href="/app/home" className={nbBtnPrimaryBlock}>
               움직임 리셋 시작하기
             </Link>
             <Link href="/app/home" className={nbBtnSecondaryBlock}>

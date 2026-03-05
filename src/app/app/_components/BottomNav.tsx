@@ -32,14 +32,17 @@ function isTabActive(href: string, pathname: string | null): boolean {
 export default function BottomNav() {
   const pathname = usePathname();
 
-  // navV2 여부: 클라이언트에서만 읽어 hydration 불일치 방지
+  // navV2: production=항상 V2, dev=기본 V2, ?navV2=0으로만 legacy
   const [navV2, setNavV2] = useState(false);
   useEffect(() => {
     try {
-      const v2 = new URLSearchParams(window.location.search).get('navV2') === '1';
+      const v = new URLSearchParams(window.location.search).get('navV2');
+      const v2 = process.env.NODE_ENV === 'production'
+        ? true
+        : (v !== '0');
       setNavV2(v2);
     } catch { /* noop */ }
-  }, [pathname]); // pathname 변경 시도 재평가
+  }, [pathname]);
 
   useEffect(() => {
     const activeTab = navV2
@@ -53,7 +56,7 @@ export default function BottomNav() {
       <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t-2 border-slate-900 bg-white px-2 safe-area-pb shadow-[0_-2px_0_0_rgba(15,23,42,1)]">
         {TABS_V2.map(({ id, baseHref, label, icon: Icon }) => {
           const active = isTabActive(baseHref, pathname);
-          const href = `${baseHref}?navV2=1`;
+          const href = baseHref;
           return (
             <Link
               key={id}
@@ -72,15 +75,16 @@ export default function BottomNav() {
     );
   }
 
-  /* navV1 — 기존 탭 */
+  /* navV1 — 기존 탭 (dev에서만, ?navV2=0으로 유지) */
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t-2 border-slate-900 bg-white px-2 safe-area-pb shadow-[0_-2px_0_0_rgba(15,23,42,1)]">
       {TABS_V1.map(({ id, href, label, icon: Icon }) => {
         const active = isTabActive(href, pathname);
+        const legacyHref = `${href}?navV2=0`;
         return (
           <Link
             key={id}
-            href={href}
+            href={legacyHref}
             onClick={() => console.log('[NAV_TAB_CLICK]', { tab: id, href })}
             className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs transition ${
               active ? 'font-semibold text-slate-800' : 'text-slate-400'
