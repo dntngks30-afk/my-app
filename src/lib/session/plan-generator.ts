@@ -10,6 +10,7 @@ import { computePhase, type Phase } from './phase';
 import { buildExcludeSet, hasContraindicationOverlap } from './safety';
 
 const REPETITION_PENALTY = 100;
+const REPETITION_PENALTY_RELAXED = 10; // Pass2: used_template_ids 완화
 const CONTRAINDICATION_PENALTY = 100;
 const PRIMARY_FOCUS_BONUS = 3;
 const SECONDARY_FOCUS_BONUS = 2;
@@ -52,6 +53,19 @@ export type PlanSegment = {
   items: PlanItem[];
 };
 
+/** plan_json 품질 audit (meta.audit, consumers 무시 가능) */
+export type PlanAudit = {
+  candidate_count: number;
+  selected_count: number;
+  unique_count: number;
+  fallback_count: number;
+  primary_coverage: boolean;
+  secondary_coverage: boolean;
+  conflicts: number;
+  degraded: boolean;
+  degraded_reason: string[];
+};
+
 export type PlanJsonOutput = {
   version: string;
   meta: {
@@ -63,6 +77,7 @@ export type PlanJsonOutput = {
     avoid: string[];
     scoring_version: string;
     used_template_ids: string[];
+    audit?: PlanAudit;
   };
   flags: { recovery: boolean; short: boolean };
   segments: PlanSegment[];
@@ -70,7 +85,8 @@ export type PlanJsonOutput = {
 
 function scoreTemplate(
   t: SessionTemplateRow,
-  input: PlanGeneratorInput
+  input: PlanGeneratorInput,
+  repetitionPenalty: number = REPETITION_PENALTY
 ): number {
   const excludeSet = buildExcludeSet(input.avoid, input.painFlags);
   if (hasContraindicationOverlap(t.contraindications, excludeSet)) {
@@ -78,7 +94,7 @@ function scoreTemplate(
   }
 
   if (input.usedTemplateIds.includes(t.id)) {
-    return -REPETITION_PENALTY;
+    return -repetitionPenalty;
   }
 
   let score = 0;
@@ -140,37 +156,85 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     (t) => !hasContraindicationOverlap(t.contraindications, excludeSet)
   );
 
-  const scored = candidates.map((t) => ({
-    template: t,
-    score: scoreTemplate(t, input),
-  }));
-
-  let sorted = scored
-    .filter((s) => s.score >= 0)
-    .sort((a, b) => b.score - a.score);
-
-  if (sorted.length === 0) {
-    const fallbacks = candidates.length > 0
-      ? candidates.filter((t) => t.is_fallback)
-      : templates.filter((t) => t.is_fallback);
-    sorted = fallbacks.map((t) => ({ template: t, score: 0 }));
-  }
-
   const isShort = input.timeBudget === 'short';
   const isRecovery = input.conditionMood === 'bad';
   const mainCount = isShort ? (isRecovery ? 1 : 2) : isRecovery ? 2 : 3;
   const prepCount = 1;
   const releaseCount = 1;
+  const requiredCount = prepCount + mainCount + releaseCount;
 
-  const selected: SessionTemplateRow[] = [];
-  const used = new Set<string>([...input.usedTemplateIds]);
+  const degradedReasons: string[] = [];
 
-  for (const { template } of sorted) {
-    if (selected.length >= prepCount + mainCount + releaseCount) break;
-    if (used.has(template.id)) continue;
-    selected.push(template);
-    used.add(template.id);
+  function selectFromScored(
+    scored: { template: SessionTemplateRow; score: number }[],
+    used: Set<string>
+  ): SessionTemplateRow[] {
+    const out: SessionTemplateRow[] = [];
+    for (const { template } of scored) {
+      if (out.length >= requiredCount) break;
+      if (used.has(template.id)) continue;
+      out.push(template);
+      used.add(template.id);
+    }
+    return out;
   }
+
+  const scoredPass1 = candidates.map((t) => ({
+    template: t,
+    score: scoreTemplate(t, input, REPETITION_PENALTY),
+  }));
+  let sortedPass1 = scoredPass1
+    .filter((s) => s.score >= 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (sortedPass1.length === 0) {
+    const fallbacks = candidates.length > 0
+      ? candidates.filter((t) => t.is_fallback)
+      : templates.filter((t) => t.is_fallback);
+    sortedPass1 = fallbacks.map((t) => ({ template: t, score: 0 }));
+    degradedReasons.push('FALLBACK_ONLY');
+  }
+
+  const used = new Set<string>([...input.usedTemplateIds]);
+  let selected = selectFromScored(sortedPass1, used);
+
+  if (selected.length < requiredCount && sortedPass1.length > 0) {
+    const scoredPass2 = candidates.map((t) => ({
+      template: t,
+      score: scoreTemplate(t, input, REPETITION_PENALTY_RELAXED),
+    }));
+    const sortedPass2 = scoredPass2
+      .filter((s) => s.score >= 0)
+      .sort((a, b) => b.score - a.score);
+    if (sortedPass2.length > 0) {
+      const used2 = new Set<string>([...input.usedTemplateIds]);
+      selected = selectFromScored(sortedPass2, used2);
+      degradedReasons.push('PASS2_RELAXED');
+    }
+  }
+
+  if (selected.length < requiredCount) {
+    degradedReasons.push('LOW_CANDIDATES');
+  }
+
+  const primary = input.focus[0];
+  const secondary = input.focus[1] ?? input.focus[0];
+  const primaryCoverage = !primary || selected.some((t) => t.focus_tags.includes(primary));
+  const secondaryCoverage = !secondary || selected.some((t) => t.focus_tags.includes(secondary));
+  if (!primaryCoverage) degradedReasons.push('PRIMARY_COVERAGE_MISS');
+  if (!secondaryCoverage && primary !== secondary) degradedReasons.push('SECONDARY_COVERAGE_MISS');
+
+  const audit: PlanAudit = {
+    candidate_count: candidates.length,
+    selected_count: selected.length,
+    unique_count: new Set(selected.map((t) => t.id)).size,
+    fallback_count: selected.filter((t) => t.is_fallback).length,
+    primary_coverage: primaryCoverage,
+    secondary_coverage: secondaryCoverage,
+    conflicts: 0,
+    degraded: degradedReasons.length > 0,
+    degraded_reason: degradedReasons,
+  };
 
   const prepItems = selected.slice(0, prepCount);
   const mainItems = selected.slice(prepCount, prepCount + mainCount);
@@ -228,6 +292,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       avoid: input.avoid.slice(0, 4),
       scoring_version: input.scoringVersion ?? 'deep_v2',
       used_template_ids: usedTemplateIds,
+      audit,
     },
     flags: {
       recovery: isRecovery,

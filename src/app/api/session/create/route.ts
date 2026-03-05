@@ -356,6 +356,18 @@ export async function POST(req: NextRequest) {
       confidence: deepSummary.confidence,
       scoringVersion: deepSummary.scoring_version,
     });
+
+    const debugHeader = req.headers.get('x-debug');
+    if (debugHeader === '1' && planJson.meta.audit) {
+      console.log('[session/create] audit', {
+        session: nextSessionNumber,
+        candidate_count: planJson.meta.audit.candidate_count,
+        selected_count: planJson.meta.audit.selected_count,
+        fallback_count: planJson.meta.audit.fallback_count,
+        degraded: planJson.meta.audit.degraded,
+        degraded_reason: planJson.meta.audit.degraded_reason,
+      });
+    }
     const condition = {
       condition_mood: conditionMood,
       time_budget: timeBudget,
