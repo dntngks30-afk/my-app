@@ -32,14 +32,14 @@ function isTabActive(href: string, pathname: string | null): boolean {
 export default function BottomNav() {
   const pathname = usePathname();
 
-  // navV2 여부: 클라이언트에서만 읽어 hydration 불일치 방지
-  const [navV2, setNavV2] = useState(false);
+  // navV2 여부: 기본값 true (지도/여정/마이). navV2=0 시에만 navV1(리셋/루틴/기록/마이)
+  const [navV2, setNavV2] = useState(true);
   useEffect(() => {
     try {
-      const v2 = new URLSearchParams(window.location.search).get('navV2') === '1';
-      setNavV2(v2);
+      const v = new URLSearchParams(window.location.search).get('navV2');
+      setNavV2(v !== '0');
     } catch { /* noop */ }
-  }, [pathname]); // pathname 변경 시도 재평가
+  }, [pathname]);
 
   useEffect(() => {
     const activeTab = navV2
@@ -72,15 +72,16 @@ export default function BottomNav() {
     );
   }
 
-  /* navV1 — 기존 탭 */
+  /* navV1 — opt-out 시에만 (navV2=0) */
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t-2 border-slate-900 bg-white px-2 safe-area-pb shadow-[0_-2px_0_0_rgba(15,23,42,1)]">
       {TABS_V1.map(({ id, href, label, icon: Icon }) => {
         const active = isTabActive(href, pathname);
+        const hrefWithOptOut = `${href}${href.includes('?') ? '&' : '?'}navV2=0`;
         return (
           <Link
             key={id}
-            href={href}
+            href={hrefWithOptOut}
             onClick={() => console.log('[NAV_TAB_CLICK]', { tab: id, href })}
             className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs transition ${
               active ? 'font-semibold text-slate-800' : 'text-slate-400'

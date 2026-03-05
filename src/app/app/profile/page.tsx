@@ -7,14 +7,14 @@ import { getSessionSafe } from '@/lib/supabase';
 import { getActiveSession } from '@/lib/session/client';
 
 export default function ProfilePage() {
-  const [navV2, setNavV2] = useState(false);
+  const [navV2, setNavV2] = useState(true);
   const [completedSessions, setCompletedSessions] = useState(0);
 
   useEffect(() => {
     try {
-      const v2 = new URLSearchParams(window.location.search).get('navV2') === '1';
-      setNavV2(v2);
-      if (!v2) return;
+      const v = new URLSearchParams(window.location.search).get('navV2');
+      setNavV2(v !== '0');
+      if (v === '0') return;
       (async () => {
         try {
           const { session } = await getSessionSafe();

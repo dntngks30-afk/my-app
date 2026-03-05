@@ -71,7 +71,7 @@ export default function CheckinPage() {
   const searchParams = useSearchParams();
   const focusSession = searchParams.get('focusSession');
   const focusSessionNum = focusSession ? parseInt(focusSession, 10) : null;
-  const navV2 = searchParams.get('navV2') === '1';
+  const navV2 = searchParams.get('navV2') !== '0';
 
   const [report, setReport] = useState<WeeklyReport | null>(null);
   const [reportLoading, setReportLoading] = useState(true);
