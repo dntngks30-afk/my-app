@@ -10,12 +10,17 @@ import type {
   DeepV2ResultType,
   DeepObjectiveScores,
   DeepFinalScores,
+  DeepFocus,
   DeepPrimaryFocus,
   DeepSecondaryFocus,
   DeepV2ExtendedResult,
   DeepAlgorithmScores,
   DeepV2Signals,
+  DeepDecisionTrace,
 } from '../types';
+
+/** tie-break 시 고정 우선순위 (결정론적) */
+const TIE_PRIORITY: AxisKey[] = ['N', 'L', 'U', 'Lo'];
 import { getPainIntensityMap, getFocusToTags, getAxisToAvoid } from '../config';
 
 export const SCORING_VERSION = 'deep_v2';
@@ -125,7 +130,7 @@ function emptyScores(): DeepObjectiveScores {
 
 export function calculateDeepV2(
   answers: Record<string, DeepAnswerValue>
-): DeepV2Result & { signals?: DeepV2Signals } {
+): DeepV2Result & { signals?: DeepV2Signals; decision_trace?: DeepDecisionTrace } {
   const painMap = getPainIntensityMap();
   const obj = emptyScores();
 
@@ -240,6 +245,30 @@ export function calculateDeepV2(
   const q8무릎잘감 = q8?.includes('발바닥이 바닥에 잘 붙은 채로') ?? false;
   const q11문제없음 = q11?.includes('문제 없음') ?? false;
   const q14안정적 = q14?.includes('10초 안정적으로 가능') ?? false;
+  const D = objectiveScores.D;
+  const maxPart = Math.max(
+    objectiveScores.N,
+    objectiveScores.L,
+    objectiveScores.U,
+    objectiveScores.Lo
+  );
+
+  const buildTrace = (finalType: string, gate: 'stable' | 'deconditioned' | 'red_flags' | 'axis'): DeepDecisionTrace => ({
+    stable_gate: {
+      passed: q5해당없음 && q6없음 && q9없음 && q12없음 && q8무릎잘감 && q11문제없음 && q14안정적 && D <= 3,
+      inputs: { q5: q5해당없음, q6: q6없음, q8: q8무릎잘감, q9: q9없음, q11: q11문제없음, q12: q12없음, q14: q14안정적, D },
+    },
+    deconditioned_gate: { passed: D >= 6 && maxPart <= D - 1, inputs: { D, maxPart } },
+    red_flags: { triggered: red_flags, inputs: { D } },
+    axis: {
+      objective: { ...objectiveScores },
+      final: { ...finalScores },
+      max_axis: '—',
+      tie_break: '—',
+    },
+    confidence: { answeredCount, totalCount: TOTAL_COUNT, score: baseConfidence },
+    final_type: finalType,
+  });
 
   if (
     q5해당없음 &&
@@ -249,8 +278,10 @@ export function calculateDeepV2(
     q8무릎잘감 &&
     q11문제없음 &&
     q14안정적 &&
-    objectiveScores.D <= 3
+    D <= 3
   ) {
+    const trace = buildTrace('STABLE', 'stable');
+    trace.stable_gate.passed = true;
     return {
       scoring_version: 'deep_v2',
       result_type: 'STABLE',
@@ -262,20 +293,16 @@ export function calculateDeepV2(
       answeredCount,
       totalCount: TOTAL_COUNT,
       signals,
+      decision_trace: trace,
     };
   }
 
   // --- DECONDITIONED gate ---
-  const D = objectiveScores.D;
-  const maxPart = Math.max(
-    objectiveScores.N,
-    objectiveScores.L,
-    objectiveScores.U,
-    objectiveScores.Lo
-  );
   if (D >= 6 && maxPart <= D - 1) {
     const primary = computePrimaryFocus(q5, objectiveScores, q14 ?? null, q11 ?? null);
     const secondary = computeSecondaryFocus(objectiveScores, primary);
+    const trace = buildTrace('DECONDITIONED', 'deconditioned');
+    trace.deconditioned_gate.passed = true;
     return {
       scoring_version: 'deep_v2',
       result_type: 'DECONDITIONED',
@@ -287,6 +314,7 @@ export function calculateDeepV2(
       answeredCount,
       totalCount: TOTAL_COUNT,
       signals,
+      decision_trace: trace,
     };
   }
 
@@ -294,6 +322,8 @@ export function calculateDeepV2(
   if (red_flags) {
     const primary = computePrimaryFocus(q5, objectiveScores, q14 ?? null, q11 ?? null);
     const secondary = computeSecondaryFocus(objectiveScores, primary);
+    const trace = buildTrace('DECONDITIONED', 'red_flags');
+    trace.red_flags.triggered = true;
     return {
       scoring_version: 'deep_v2',
       result_type: 'DECONDITIONED',
@@ -305,11 +335,12 @@ export function calculateDeepV2(
       answeredCount,
       totalCount: TOTAL_COUNT,
       signals,
+      decision_trace: trace,
     };
   }
 
   // --- Normal result_type from FinalScores max ---
-  const maxAxis = getMaxAxis(finalScores, q14, q11);
+  const { axis: maxAxis, tieBreak } = getMaxAxisWithReason(finalScores, q14, q11);
   const resultType = axisToResultType(maxAxis);
   const primary = computePrimaryFocus(q5, objectiveScores, q14 ?? null, q11 ?? null);
   const secondary = computeSecondaryFocus(objectiveScores, primary);
@@ -321,11 +352,19 @@ export function calculateDeepV2(
     ['U', finalScores.U],
     ['Lo', finalScores.Lo],
   ];
-  arr.sort((a, b) => b[1] - a[1]);
+  arr.sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return TIE_PRIORITY.indexOf(a[0]) - TIE_PRIORITY.indexOf(b[0]);
+  });
   const top = arr[0]?.[1] ?? 0;
   const second = arr[1]?.[1] ?? 0;
   const gap = top > 0 ? (top - second) / top : 0;
   const confidence = Math.min(1, Math.max(0, baseConfidence + gap * 0.15));
+
+  const trace = buildTrace(resultType, 'axis');
+  trace.axis.max_axis = maxAxis;
+  trace.axis.tie_break = tieBreak;
+  trace.confidence.score = confidence;
 
   return {
     scoring_version: 'deep_v2',
@@ -338,7 +377,48 @@ export function calculateDeepV2(
     answeredCount,
     totalCount: TOTAL_COUNT,
     signals,
+    decision_trace: trace,
   };
+}
+
+function getMaxAxisWithReason(
+  scores: DeepObjectiveScores,
+  q14?: string | null,
+  q11?: string | null
+): { axis: AxisKey; tieBreak: string } {
+  const arr: [AxisKey, number][] = [
+    ['N', scores.N],
+    ['L', scores.L],
+    ['U', scores.U],
+    ['Lo', scores.Lo],
+  ];
+  // 점수 내림차순, 동점 시 TIE_PRIORITY 순 (결정론적)
+  arr.sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    const ia = TIE_PRIORITY.indexOf(a[0]);
+    const ib = TIE_PRIORITY.indexOf(b[0]);
+    return ia - ib;
+  });
+  const top = arr[0];
+  const second = arr[1];
+  if (!second || top![1] > second[1]) return { axis: top![0], tieBreak: 'clear' };
+
+  const a = top![0];
+  const b = second[0];
+  if ((a === 'Lo' || b === 'Lo') && (a === 'L' || b === 'L')) {
+    if (q14?.includes('무릎') || q14?.includes('발목')) return { axis: 'Lo', tieBreak: 'q14:Lo' };
+    if (q14?.includes('골반') || q14?.includes('허리')) return { axis: 'L', tieBreak: 'q14:L' };
+    return { axis: 'Lo', tieBreak: 'priority:Lo>L' };
+  }
+  if ((a === 'N' || b === 'N') && (a === 'U' || b === 'U')) {
+    if (q11?.includes('목') || q11?.includes('긴장')) return { axis: 'N', tieBreak: 'q11:N' };
+    if (q11?.includes('손목') || q11?.includes('팔꿈치')) return { axis: 'U', tieBreak: 'q11:U' };
+    return { axis: 'N', tieBreak: 'priority:N>U' };
+  }
+  // 기타 동점: TIE_PRIORITY 첫 번째
+  const tied = [a, b].sort((x, y) => TIE_PRIORITY.indexOf(x) - TIE_PRIORITY.indexOf(y));
+  const chosen = tied[0]!;
+  return { axis: chosen, tieBreak: `priority:${chosen}` };
 }
 
 function getMaxAxis(
@@ -346,30 +426,7 @@ function getMaxAxis(
   q14?: string | null,
   q11?: string | null
 ): AxisKey {
-  const arr: [AxisKey, number][] = [
-    ['N', scores.N],
-    ['L', scores.L],
-    ['U', scores.U],
-    ['Lo', scores.Lo],
-  ];
-  arr.sort((a, b) => b[1] - a[1]);
-  const top = arr[0];
-  const second = arr[1];
-  if (!second || top[1] > second[1]) return top[0];
-
-  const a = top[0];
-  const b = second[0];
-  if ((a === 'Lo' || b === 'Lo') && (a === 'L' || b === 'L')) {
-    if (q14?.includes('무릎') || q14?.includes('발목')) return 'Lo';
-    if (q14?.includes('골반') || q14?.includes('허리')) return 'L';
-    return 'Lo';
-  }
-  if ((a === 'N' || b === 'N') && (a === 'U' || b === 'U')) {
-    if (q11?.includes('목') || q11?.includes('긴장')) return 'N';
-    if (q11?.includes('손목') || q11?.includes('팔꿈치')) return 'U';
-    return 'Lo';
-  }
-  return 'Lo';
+  return getMaxAxisWithReason(scores, q14, q11).axis;
 }
 
 function axisToResultType(axis: AxisKey): Exclude<DeepV2ResultType, 'DECONDITIONED' | 'STABLE'> {
@@ -456,7 +513,9 @@ function computeSecondaryFocus(
  * config 기반 tag_map, hybrid focus_tags (primary+secondary)
  * day-plan-generator가 소비하는 SSOT
  */
-export function extendDeepV2(v2: DeepV2Result & { signals?: DeepV2Signals }): DeepV2ExtendedResult {
+export function extendDeepV2(
+  v2: DeepV2Result & { signals?: DeepV2Signals; decision_trace?: DeepDecisionTrace }
+): DeepV2ExtendedResult {
   const { result_type, primaryFocus, secondaryFocus, objectiveScores, finalScores, confidence } = v2;
   const FOCUS_TO_TAGS = getFocusToTags();
   const AXIS_TO_AVOID = getAxisToAvoid();
@@ -501,11 +560,13 @@ export function extendDeepV2(v2: DeepV2Result & { signals?: DeepV2Signals }): De
     pain_risk: objectiveScores.D,
   };
 
-  return {
+  const out: DeepV2ExtendedResult = {
     ...v2,
     level,
     focus_tags,
     avoid_tags: [...new Set(avoid_tags)],
     algorithm_scores,
   };
+  if (v2.decision_trace) out.decision_trace = v2.decision_trace;
+  return out;
 }

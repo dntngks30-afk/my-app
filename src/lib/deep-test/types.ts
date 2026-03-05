@@ -90,6 +90,16 @@ export interface DeepV2Result {
   totalCount: number; // 14
 }
 
+/** 결정 근거 trace (PII 없음, 최소 지표만) */
+export interface DeepDecisionTrace {
+  stable_gate: { passed: boolean; inputs: { q5: boolean; q6: boolean; q8: boolean; q9: boolean; q11: boolean; q12: boolean; q14: boolean; D: number } };
+  deconditioned_gate: { passed: boolean; inputs: { D: number; maxPart: number } };
+  red_flags: { triggered: boolean; inputs: { D: number } };
+  axis: { objective: Record<string, number>; final: Record<string, number>; max_axis: string; tie_break: string };
+  confidence: { answeredCount: number; totalCount: number; score: number };
+  final_type: string;
+}
+
 /** * 🚀 [SSOT 핵심] 7일 루틴 자동 생성 API가 소비할 V2 확장 인터페이스
  * (이 데이터가 서버 알고리즘의 유일한 판단 기준이 됩니다)
  */
@@ -98,4 +108,5 @@ export interface DeepV2ExtendedResult extends DeepV2Result {
   focus_tags: string[];                   // 템플릿 추출용 목표 태그 (예: ['glute_activation'])
   avoid_tags: string[];                   // 절대 금지 태그 (예: ['knee_load', 'shoulder_overhead'])
   algorithm_scores: DeepAlgorithmScores;  // 알고리즘 내부 계산용 상세 점수 객체
+  decision_trace?: DeepDecisionTrace;    // 결정 근거 (설명가능성)
 }
