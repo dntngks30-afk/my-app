@@ -231,28 +231,41 @@ export function isStripeError(error: unknown): error is Stripe.StripeError {
  * Stripe 에러를 사용자 친화적인 메시지로 변환
  */
 export function getStripeErrorMessage(error: unknown): string {
-  if (isStripeError(error)) {
-    switch (error.type) {
-      case 'StripeCardError':
-        return '카드 결제에 실패했습니다. 카드 정보를 확인해주세요.';
-      case 'StripeRateLimitError':
-        return '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.';
-      case 'StripeInvalidRequestError':
-        return '잘못된 요청입니다. 입력 정보를 확인해주세요.';
-      case 'StripeAPIError':
-        return '결제 서비스에 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해주세요.';
-      case 'StripeConnectionError':
-        return '결제 서비스에 연결할 수 없습니다. 네트워크를 확인해주세요.';
-      case 'StripeAuthenticationError':
-        return '결제 서비스 인증에 실패했습니다.';
-      default:
-        return error.message || '결제 처리 중 오류가 발생했습니다.';
+  const fallback = '결제 처리 중 오류가 발생했습니다.';
+
+  try {
+    if (isStripeError(error)) {
+      switch (error.type) {
+        case 'StripeCardError':
+          return '카드 결제에 실패했습니다. 카드 정보를 확인해주세요.';
+        case 'StripeRateLimitError':
+          return '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.';
+        case 'StripeInvalidRequestError':
+          return '잘못된 요청입니다. 입력 정보를 확인해주세요.';
+        case 'StripeAPIError':
+          return '결제 서비스에 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해주세요.';
+        case 'StripeConnectionError':
+          return '결제 서비스에 연결할 수 없습니다. 네트워크를 확인해주세요.';
+        case 'StripeAuthenticationError':
+          return '결제 서비스 인증에 실패했습니다.';
+        default:
+          if (typeof error.message === 'string' && error.message.trim().length > 0) {
+            return error.message;
+          }
+          return fallback;
+      }
     }
-  }
 
-  if (error instanceof Error) {
-    return error.message;
-  }
+    if (error instanceof Error && typeof error.message === 'string' && error.message.trim().length > 0) {
+      return error.message;
+    }
 
-  return '알 수 없는 오류가 발생했습니다.';
+    if (typeof error === 'string' && error.trim().length > 0) {
+      return error;
+    }
+
+    return fallback;
+  } catch {
+    return fallback;
+  }
 }

@@ -144,13 +144,28 @@ export async function POST(req: NextRequest) {
           sessionId: session.id,
         });
       } catch (stripeErr) {
-        const safeMsg = stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
-        console.error(`[${requestId}] code=STRIPE_ERROR`, safeMsg);
+        let safeMsg = 'Unknown stripe error';
+        try {
+          safeMsg = stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
+        } catch {
+          safeMsg = 'Unserializable stripe error';
+        }
+        if (process.env.NODE_ENV !== 'production') {
+          console.error(`[${requestId}] code=STRIPE_ERROR`, stripeErr);
+        } else {
+          console.error(`[${requestId}] code=STRIPE_ERROR`, safeMsg);
+        }
+        let errorMessage = '결제 처리 중 오류가 발생했습니다.';
+        try {
+          errorMessage = getStripeErrorMessage(stripeErr);
+        } catch {
+          errorMessage = '결제 처리 중 오류가 발생했습니다.';
+        }
         return NextResponse.json(
           {
             success: false,
             code: 'STRIPE_ERROR',
-            error: getStripeErrorMessage(stripeErr),
+            error: errorMessage,
           },
           { status: 500 }
         );
@@ -288,27 +303,53 @@ export async function POST(req: NextRequest) {
         plan: { id: plan.id, name: plan.name, tier: plan.tier, price: plan.price, billingType: plan.billing_type },
       });
     } catch (stripeErr) {
-      const safeMsg = stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
-      console.error(`[${requestId}] code=STRIPE_ERROR`, safeMsg);
+      let safeMsg = 'Unknown stripe error';
+      try {
+        safeMsg = stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
+      } catch {
+        safeMsg = 'Unserializable stripe error';
+      }
+      if (process.env.NODE_ENV !== 'production') {
+        console.error(`[${requestId}] code=STRIPE_ERROR`, stripeErr);
+      } else {
+        console.error(`[${requestId}] code=STRIPE_ERROR`, safeMsg);
+      }
+      let errorMessage = '결제 처리 중 오류가 발생했습니다.';
+      try {
+        errorMessage = getStripeErrorMessage(stripeErr);
+      } catch {
+        errorMessage = '결제 처리 중 오류가 발생했습니다.';
+      }
       return NextResponse.json(
         {
           success: false,
           code: 'STRIPE_ERROR',
-          error: getStripeErrorMessage(stripeErr),
+          error: errorMessage,
         },
         { status: 500 }
       );
     }
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    let msg = 'Unexpected error';
+    try {
+      msg = error instanceof Error ? error.message : String(error);
+    } catch {
+      msg = 'Unserializable unexpected error';
+    }
     console.error(`[${requestId}] Unexpected error`, msg);
     const isConfigMissing = msg.includes('STRIPE_SECRET_KEY') || msg.includes('환경 변수') || msg.includes('Missing');
+    let details = '결제 처리 중 오류가 발생했습니다.';
+    try {
+      details = getStripeErrorMessage(error);
+    } catch {
+      details = '결제 처리 중 오류가 발생했습니다.';
+    }
     return NextResponse.json(
       {
         success: false,
         code: 'SERVER_ERROR',
         error: isConfigMissing ? 'Stripe configuration is missing' : 'Checkout failed',
-        details: getStripeErrorMessage(error),
+        details,
       },
       { status: 500 }
     );
