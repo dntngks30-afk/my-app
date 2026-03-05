@@ -134,7 +134,6 @@ export async function POST(req: NextRequest) {
           success_url: successUrlFinal,
           cancel_url: (typeof cancelUrl === 'string' ? cancelUrl : null) || defaultCancelUrl,
           metadata: { userId, productId: 'move-re-7d' },
-          customer_email: userEmail,
           allow_promotion_codes: true,
         });
 
