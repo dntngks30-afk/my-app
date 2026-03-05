@@ -11,6 +11,7 @@ import {
 } from './map-data'
 
 interface JourneyMapV2Props {
+  total: number
   currentSession: number
   onNodeTap: (session: SessionNode) => void
 }
@@ -68,20 +69,23 @@ function Flag({ x, y }: { x: number; y: number }) {
   )
 }
 
-function JourneyMapV2Inner({ currentSession, onNodeTap }: JourneyMapV2Props) {
+function JourneyMapV2Inner({ total, currentSession, onNodeTap }: JourneyMapV2Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [, setMounted] = useState(false)
 
-  const fullPath = generatePathD(sessions)
+  const safeTotal = Math.max(1, Math.min(20, total ?? 20))
+  const visibleSessions = sessions.filter(s => s.id <= safeTotal)
+
+  const fullPath = visibleSessions.length >= 2 ? generatePathD(visibleSessions) : ''
   const contours = generateContourLines()
 
-  const completedSessions = sessions.filter(s => s.id <= currentSession)
+  const completedSessions = visibleSessions.filter(s => s.id <= currentSession)
   const completedPath = completedSessions.length >= 2 ? generatePathD(completedSessions) : ''
 
   useEffect(() => {
     setMounted(true)
     if (scrollRef.current) {
-      const node = sessions.find(s => s.id === currentSession)
+      const node = visibleSessions.find(s => s.id === currentSession)
       if (node) {
         const ratio = node.y / VH
         const ch = scrollRef.current.clientHeight
@@ -90,7 +94,7 @@ function JourneyMapV2Inner({ currentSession, onNodeTap }: JourneyMapV2Props) {
         scrollRef.current.scrollTo({ top: target, behavior: 'smooth' })
       }
     }
-  }, [currentSession])
+  }, [currentSession, visibleSessions])
 
   const status = useCallback(
     (id: number): 'completed' | 'current' | 'locked' => {
@@ -256,7 +260,7 @@ function JourneyMapV2Inner({ currentSession, onNodeTap }: JourneyMapV2Props) {
         )}
 
         {/* Distance markers */}
-        {sessions.filter((_, i) => i % 4 === 2).map(s => {
+        {visibleSessions.filter((_, i) => i % 4 === 2).map(s => {
           const km = Math.round((s.id / 20) * 42)
           return (
             <g key={`dist-${s.id}`}>
@@ -270,17 +274,19 @@ function JourneyMapV2Inner({ currentSession, onNodeTap }: JourneyMapV2Props) {
 
         {/* START / FINISH */}
         <g>
-          <rect x={sessions[0].x - 22} y={sessions[0].y + 26} width="44" height="16" rx="3" fill={C.white} fillOpacity="0.9" stroke={C.lockedStroke} strokeWidth="0.5" />
-          <text x={sessions[0].x} y={sessions[0].y + 37} textAnchor="middle" fill={C.label} fontSize="8" fontWeight="600" letterSpacing="0.15em" className="font-sans">
+          <rect x={visibleSessions[0].x - 22} y={visibleSessions[0].y + 26} width="44" height="16" rx="3" fill={C.white} fillOpacity="0.9" stroke={C.lockedStroke} strokeWidth="0.5" />
+          <text x={visibleSessions[0].x} y={visibleSessions[0].y + 37} textAnchor="middle" fill={C.label} fontSize="8" fontWeight="600" letterSpacing="0.15em" className="font-sans">
             {'START'}
           </text>
         </g>
-        <g>
-          <rect x={sessions[19].x - 24} y={sessions[19].y - 40} width="48" height="16" rx="3" fill={C.blue} fillOpacity="0.12" stroke={C.blue} strokeWidth="0.6" />
-          <text x={sessions[19].x} y={sessions[19].y - 29} textAnchor="middle" fill={C.blue} fontSize="8" fontWeight="600" letterSpacing="0.15em" className="font-sans">
-            {'FINISH'}
-          </text>
-        </g>
+        {visibleSessions.length > 0 && (
+          <g>
+            <rect x={visibleSessions[visibleSessions.length - 1].x - 24} y={visibleSessions[visibleSessions.length - 1].y - 40} width="48" height="16" rx="3" fill={C.blue} fillOpacity="0.12" stroke={C.blue} strokeWidth="0.6" />
+            <text x={visibleSessions[visibleSessions.length - 1].x} y={visibleSessions[visibleSessions.length - 1].y - 29} textAnchor="middle" fill={C.blue} fontSize="8" fontWeight="600" letterSpacing="0.15em" className="font-sans">
+              {'FINISH'}
+            </text>
+          </g>
+        )}
 
         {/* Week dividers */}
         {[1140, 740, 350].map((y, i) => (
@@ -293,7 +299,7 @@ function JourneyMapV2Inner({ currentSession, onNodeTap }: JourneyMapV2Props) {
         ))}
 
         {/* Session nodes */}
-        {sessions.map((session) => {
+        {visibleSessions.map((session) => {
           const st = status(session.id)
           const r = session.type === 'milestone' ? MILESTONE_R : NODE_R
           const isMile = session.type === 'milestone'

@@ -88,6 +88,7 @@ export function ResetMapV2({ total, completed, activePlan, onSessionCompleted }:
 
       {/* 지도 영역 */}
       <JourneyMapV2
+        total={total}
         currentSession={currentSession}
         onNodeTap={handleNodeTap}
       />
