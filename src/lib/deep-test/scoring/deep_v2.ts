@@ -18,10 +18,10 @@ import type {
   DeepV2Signals,
   DeepDecisionTrace,
 } from '../types';
+import { getPainIntensityMap, getFocusToTags, getAxisToAvoid } from '../config';
 
 /** tie-break 시 고정 우선순위 (결정론적) */
-const TIE_PRIORITY: AxisKey[] = ['N', 'L', 'U', 'Lo'];
-import { getPainIntensityMap, getFocusToTags, getAxisToAvoid } from '../config';
+const TIE_PRIORITY = ['N', 'L', 'U', 'Lo'] as const;
 
 export const SCORING_VERSION = 'deep_v2';
 
