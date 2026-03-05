@@ -355,6 +355,10 @@ export async function POST(req: NextRequest) {
       resultType: deepSummary.result_type,
       confidence: deepSummary.confidence,
       scoringVersion: deepSummary.scoring_version,
+      deep_level: deepSummary.deep_level,
+      pain_risk: deepSummary.pain_risk,
+      red_flags: deepSummary.red_flags,
+      safety_mode: deepSummary.safety_mode,
     });
     const condition = {
       condition_mood: conditionMood,

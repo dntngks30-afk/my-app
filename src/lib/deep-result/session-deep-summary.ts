@@ -6,12 +6,21 @@
 
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 
+/** pain_risk thresholds (0~10+ scale, matches deep_v2 D) */
+const PAIN_RISK_RED = 7;
+const PAIN_RISK_YELLOW = 4;
+
 export interface SessionDeepSummary {
   result_type: string;
   confidence: number;
   focus: string[];
   avoid: string[];
   scoring_version: string;
+  /** Optional enrichment from scores.derived (PR-B) */
+  deep_level?: 1 | 2 | 3;
+  pain_risk?: number;
+  red_flags?: boolean;
+  safety_mode?: 'red' | 'yellow' | 'none';
 }
 
 /**
@@ -45,11 +54,39 @@ export async function loadSessionDeepSummary(
     ? (derived.avoid_tags as string[]).filter((x): x is string => typeof x === 'string')
     : [];
 
+  const levelRaw = derived?.level;
+  const deep_level: 1 | 2 | 3 | undefined =
+    typeof levelRaw === 'number' && levelRaw >= 1 && levelRaw <= 3
+      ? (levelRaw as 1 | 2 | 3)
+      : undefined;
+
+  const algorithmScores = derived?.algorithm_scores as Record<string, unknown> | null | undefined;
+  const pain_risk =
+    typeof algorithmScores?.pain_risk === 'number' && !Number.isNaN(algorithmScores.pain_risk)
+      ? (algorithmScores.pain_risk as number)
+      : undefined;
+
+  const signals = derived?.signals as Record<string, unknown> | null | undefined;
+  const red_flags =
+    typeof signals?.red_flags === 'boolean' ? (signals.red_flags as boolean) : undefined;
+
+  let safety_mode: 'red' | 'yellow' | 'none' = 'none';
+  if (red_flags === true) {
+    safety_mode = 'red';
+  } else if (typeof pain_risk === 'number') {
+    if (pain_risk >= PAIN_RISK_RED) safety_mode = 'red';
+    else if (pain_risk >= PAIN_RISK_YELLOW) safety_mode = 'yellow';
+  }
+
   return {
     result_type: typeof attempt.result_type === 'string' ? attempt.result_type : 'UNKNOWN',
     confidence: typeof attempt.confidence === 'number' ? attempt.confidence : 0,
     focus,
     avoid,
     scoring_version: attempt.scoring_version ?? 'deep_v2',
+    ...(deep_level !== undefined && { deep_level }),
+    ...(pain_risk !== undefined && { pain_risk }),
+    ...(red_flags !== undefined && { red_flags }),
+    safety_mode,
   };
 }

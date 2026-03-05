@@ -75,6 +75,13 @@ export type SessionPlanMeta = {
   focus: string[];
   avoid: string[];
   scoring_version: string;
+  /** PR-C optional enrichment */
+  deep_level?: 1 | 2 | 3;
+  pain_risk?: number;
+  red_flags?: boolean;
+  safety_mode?: 'red' | 'yellow' | 'none';
+  finalTargetLevel?: number;
+  maxLevel?: number;
 };
 
 export type SessionPlanSegmentItem = {

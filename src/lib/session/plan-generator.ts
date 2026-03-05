@@ -33,6 +33,12 @@ export type PlanGeneratorInput = {
   resultType?: string;
   confidence?: number;
   scoringVersion?: string;
+  /** PR-C: deep_level (1~3), 없으면 2. targetLevel base. */
+  deep_level?: 1 | 2 | 3;
+  pain_risk?: number;
+  red_flags?: boolean;
+  /** PR-C: safety_mode → maxLevel cap. red=1, yellow=2, none=3 */
+  safety_mode?: 'red' | 'yellow' | 'none';
 };
 
 export type PlanItem = {
@@ -63,6 +69,13 @@ export type PlanJsonOutput = {
     avoid: string[];
     scoring_version: string;
     used_template_ids: string[];
+    /** PR-C optional enrichment */
+    deep_level?: 1 | 2 | 3;
+    pain_risk?: number;
+    red_flags?: boolean;
+    safety_mode?: 'red' | 'yellow' | 'none';
+    finalTargetLevel?: number;
+    maxLevel?: number;
   };
   flags: { recovery: boolean; short: boolean };
   segments: PlanSegment[];
@@ -70,7 +83,8 @@ export type PlanJsonOutput = {
 
 function scoreTemplate(
   t: SessionTemplateRow,
-  input: PlanGeneratorInput
+  input: PlanGeneratorInput,
+  finalTargetLevel: number
 ): number {
   const excludeSet = buildExcludeSet(input.avoid, input.painFlags);
   if (hasContraindicationOverlap(t.contraindications, excludeSet)) {
@@ -90,8 +104,7 @@ function scoreTemplate(
 
   if (input.timeBudget === 'short' && t.duration_sec <= 420) score += SHORT_DURATION_BONUS;
 
-  const targetLevel = input.conditionMood === 'bad' ? 1 : input.conditionMood === 'good' ? 2 : 1;
-  if (t.level === targetLevel) score += LEVEL_MATCH_BONUS;
+  if (t.level === finalTargetLevel) score += LEVEL_MATCH_BONUS;
 
   return score;
 }
@@ -127,6 +140,27 @@ function toPlanItem(
 }
 
 /**
+ * PR-C: targetLevel 결정론
+ * base = deep_level ?? 2, mood → target, safety_mode → maxLevel, finalTargetLevel = min(target, maxLevel)
+ */
+function computeTargetLevel(input: PlanGeneratorInput): {
+  finalTargetLevel: number;
+  maxLevel: number;
+} {
+  const base = input.deep_level ?? 2;
+  const target =
+    input.conditionMood === 'bad'
+      ? 1
+      : input.conditionMood === 'ok'
+        ? base
+        : Math.min(base + 1, 3);
+  const maxLevel =
+    input.safety_mode === 'red' ? 1 : input.safety_mode === 'yellow' ? 2 : 3;
+  const finalTargetLevel = Math.min(target, maxLevel);
+  return { finalTargetLevel, maxLevel };
+}
+
+/**
  * 세션 플랜 plan_json 생성.
  * 템플릿 1회 조회, 스코어링, 선택, 세그먼트 조립.
  */
@@ -135,14 +169,17 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     scoringVersion: input.scoringVersion ?? 'deep_v2',
   });
 
+  const { finalTargetLevel, maxLevel } = computeTargetLevel(input);
+
   const excludeSet = buildExcludeSet(input.avoid, input.painFlags);
   const candidates = templates.filter(
-    (t) => !hasContraindicationOverlap(t.contraindications, excludeSet)
+    (t) =>
+      !hasContraindicationOverlap(t.contraindications, excludeSet) && t.level <= maxLevel
   );
 
   const scored = candidates.map((t) => ({
     template: t,
-    score: scoreTemplate(t, input),
+    score: scoreTemplate(t, input, finalTargetLevel),
   }));
 
   let sorted = scored
@@ -152,13 +189,16 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   if (sorted.length === 0) {
     const fallbacks = candidates.length > 0
       ? candidates.filter((t) => t.is_fallback)
-      : templates.filter((t) => t.is_fallback);
+      : templates.filter((t) => t.is_fallback && t.level <= maxLevel);
     sorted = fallbacks.map((t) => ({ template: t, score: 0 }));
   }
 
   const isShort = input.timeBudget === 'short';
   const isRecovery = input.conditionMood === 'bad';
-  const mainCount = isShort ? (isRecovery ? 1 : 2) : isRecovery ? 2 : 3;
+  let mainCount = isShort ? (isRecovery ? 1 : 2) : isRecovery ? 2 : 3;
+  if (input.safety_mode === 'red') {
+    mainCount = Math.min(mainCount, isShort ? 1 : 2);
+  }
   const prepCount = 1;
   const releaseCount = 1;
 
@@ -228,6 +268,12 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       avoid: input.avoid.slice(0, 4),
       scoring_version: input.scoringVersion ?? 'deep_v2',
       used_template_ids: usedTemplateIds,
+      ...(input.deep_level != null && { deep_level: input.deep_level }),
+      ...(input.pain_risk != null && { pain_risk: input.pain_risk }),
+      ...(input.red_flags != null && { red_flags: input.red_flags }),
+      ...(input.safety_mode != null && { safety_mode: input.safety_mode }),
+      finalTargetLevel,
+      maxLevel,
     },
     flags: {
       recovery: isRecovery,
