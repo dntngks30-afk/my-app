@@ -12,6 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { headers } from 'next/headers';
 import { getStripeServerClient, getOrCreateStripeCustomer, getStripeErrorMessage } from '@/lib/stripe';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 
@@ -33,6 +34,14 @@ function isValidNextPath(next: unknown): next is string {
   if (!next.startsWith('/')) return false;
   if (next.includes('//')) return false;
   return ALLOWED_NEXT_PREFIXES.some((p) => next === p || next.startsWith(`${p}/`));
+}
+
+function getRequestOrigin() {
+  const h = headers();
+  const proto = h.get('x-forwarded-proto') ?? 'https';
+  const host = h.get('x-forwarded-host') ?? h.get('host');
+  if (!host) throw new Error('Missing host header for Stripe redirect origin');
+  return `${proto}://${host}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -74,7 +83,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const { productId, planId: planIdFromBody, next, successUrl, cancelUrl, consent } = body;
+    const { productId, planId: planIdFromBody, next, consent } = body;
     const productIdStr = typeof productId === 'string' ? productId : '';
     const planIdStr = typeof planIdFromBody === 'string' ? planIdFromBody : '';
 
@@ -117,22 +126,19 @@ export async function POST(req: NextRequest) {
           null
         );
 
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-        let successUrlFinal = `${baseUrl}/payments/stripe-success?session_id={CHECKOUT_SESSION_ID}`;
-        if (typeof successUrl === 'string' && successUrl) {
-          successUrlFinal = successUrl;
-        } else if (isValidNextPath(next)) {
-          successUrlFinal = `${baseUrl}/payments/stripe-success?session_id={CHECKOUT_SESSION_ID}&next=${encodeURIComponent(next)}`;
-        }
-        const defaultCancelUrl = `${baseUrl}/pricing`;
+        const origin = getRequestOrigin();
+        const successNext = isValidNextPath(next) ? next : '/app/deep-test';
+        const cancelNext = isValidNextPath(next) ? next : '/app';
+        const successUrl = `${origin}/payments/stripe-success?session_id={CHECKOUT_SESSION_ID}&next=${encodeURIComponent(successNext)}`;
+        const cancelUrl = `${origin}/payments/stripe-cancel?next=${encodeURIComponent(cancelNext)}`;
 
         const session = await stripe.checkout.sessions.create({
           customer: customer.id,
           payment_method_types: ['card'],
           mode: 'payment',
           line_items: [{ price: priceId.trim(), quantity: 1 }],
-          success_url: successUrlFinal,
-          cancel_url: (typeof cancelUrl === 'string' ? cancelUrl : null) || defaultCancelUrl,
+          success_url: successUrl,
+          cancel_url: cancelUrl,
           metadata: { userId, productId: 'move-re-7d' },
           allow_promotion_codes: true,
         });
@@ -249,17 +255,19 @@ export async function POST(req: NextRequest) {
           .eq('id', userId);
       }
 
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-      const defaultSuccessUrl = `${baseUrl}/payments/stripe-success?session_id={CHECKOUT_SESSION_ID}`;
-      const defaultCancelUrl = `${baseUrl}/pricing`;
+      const origin = getRequestOrigin();
+      const successNext = isValidNextPath(next) ? next : '/app/deep-test';
+      const cancelNext = isValidNextPath(next) ? next : '/app';
+      const successUrl = `${origin}/payments/stripe-success?session_id={CHECKOUT_SESSION_ID}&next=${encodeURIComponent(successNext)}`;
+      const cancelUrl = `${origin}/payments/stripe-cancel?next=${encodeURIComponent(cancelNext)}`;
 
       const session = await stripe.checkout.sessions.create({
         customer: customer.id,
         payment_method_types: ['card'],
         mode: plan.billing_type === 'subscription' ? 'subscription' : 'payment',
         line_items: [{ price: plan.stripe_price_id, quantity: 1 }],
-        success_url: (typeof successUrl === 'string' ? successUrl : null) || defaultSuccessUrl,
-        cancel_url: (typeof cancelUrl === 'string' ? cancelUrl : null) || defaultCancelUrl,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
         metadata: { userId, productId: 'move-re-7d', planId: plan.id, planTier: plan.tier, planName: plan.name },
         allow_promotion_codes: true,
         ...(plan.billing_type === 'subscription'
