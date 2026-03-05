@@ -10,19 +10,30 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { supabaseBrowser } from '@/lib/supabase';
 
-/** 오픈 리다이렉트 방지 - 허용 prefix만 redirect에 사용 */
-const ALLOWED_NEXT_PREFIXES = [
-  '/app/deep-test',
-  '/app/home',
-  '/app/deep-test/run',
-  '/app/deep-test/result',
-  '/app/reports',
-];
+/** 오픈 리다이렉트 방지 - 허용 prefix만 redirect에 사용 (레거시 7일 루틴 경로 제외) */
+const ALLOWED_NEXT_PREFIXES = ['/app/home', '/app/reports', '/app'];
+
+/** 레거시 7일 루틴/deep-test 경로 → /app/home로 치환 */
+const LEGACY_PREFIXES = ['/app/routine', '/my-routine', '/app/deep-test'];
+
+function isLegacyNext(next: string | undefined | null): boolean {
+  if (!next || typeof next !== 'string') return false;
+  return LEGACY_PREFIXES.some((p) => next === p || next.startsWith(`${p}/`));
+}
 
 function isValidNextForRedirect(next: string | undefined | null): boolean {
   if (!next || typeof next !== 'string') return false;
   if (!next.startsWith('/') || next.includes('//')) return false;
   return ALLOWED_NEXT_PREFIXES.some((p) => next === p || next.startsWith(`${p}/`));
+}
+
+/** 결제 성공 후 이동할 canonical 경로 (레거시면 /app/home) */
+function resolveRedirectTarget(next: string | undefined | null): string {
+  const canonical = '/app/home';
+  if (!next || typeof next !== 'string') return canonical;
+  if (isLegacyNext(next)) return canonical;
+  if (isValidNextForRedirect(next)) return next;
+  return canonical;
 }
 
 interface PaymentInfo {
@@ -93,11 +104,10 @@ export default function StripeSuccessClient({
 
         setPaymentInfo(payload);
 
-        if (isValidNextForRedirect(nextParam ?? null)) {
-          router.replace(nextParam!);
-          setLoading(false);
-          return;
-        }
+        const target = resolveRedirectTarget(nextParam ?? null);
+        router.replace(target);
+        setLoading(false);
+        return;
 
         if (payload.isSubscription) {
           setRoutineCreating(true);
@@ -301,40 +311,18 @@ export default function StripeSuccessClient({
                 다음 단계
               </h2>
               <p className="text-sm text-[var(--muted)]">
-                {isValidNextForRedirect(nextParam ?? undefined)
-                  ? '심층분석을 시작하세요'
-                  : paymentInfo.isSubscription
-                    ? routineCreated
-                      ? '생성된 운동 루틴을 확인하고 시작하세요'
-                      : '운동 검사를 완료하고 맞춤 루틴을 받으세요'
-                    : '운동 검사를 완료하고 맞춤 루틴을 받으세요'}
+                지도에서 움직임 리셋을 시작하세요
               </p>
             </div>
           </div>
 
           <div className="mt-6 space-y-3">
-            {isValidNextForRedirect(nextParam ?? undefined) ? (
-              <Link
-                href={nextParam!}
-                className="block w-full rounded-xl bg-[var(--brand)] py-4 text-center text-lg font-bold text-white hover:opacity-90"
-              >
-                심층분석 시작하기
-              </Link>
-            ) : paymentInfo.isSubscription && routineCreated ? (
-              <Link
-                href="/my-routine"
-                className="block w-full rounded-xl bg-[var(--brand)] py-4 text-center text-lg font-bold text-white hover:opacity-90"
-              >
-                운동 루틴 시작하기
-              </Link>
-            ) : (
-              <Link
-                href="/"
-                className="block w-full rounded-xl bg-[var(--brand)] py-4 text-center text-lg font-bold text-white hover:opacity-90"
-              >
-                운동 검사 시작하기
-              </Link>
-            )}
+            <Link
+              href={resolveRedirectTarget(nextParam ?? null)}
+              className="block w-full rounded-xl bg-[var(--brand)] py-4 text-center text-lg font-bold text-white hover:opacity-90"
+            >
+              지도로 이동
+            </Link>
             <Link
               href="/my-report"
               className="block w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] py-3 text-center font-semibold text-[var(--text)] hover:bg-[var(--surface-2)]"
