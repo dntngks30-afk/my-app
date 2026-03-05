@@ -7,11 +7,7 @@
  * - progress: DB trigger session_sync_progress_on_plan_completed가 SSOT
  * - 응답: next_theme만 포함 (운동 리스트 예고 금지)
  *
- * 테마 4단계 (session_number 기반):
- *   1~4:  "1순위 타겟"
- *   5~8:  "2순위 타겟"
- *   9~12: "통합"
- *   13~16:"릴렉스"
+ * 테마 4단계: total_sessions 기반 computePhase (8/12/16/20 균등 분배)
  *
  * Path B 독립 레일: 기존 7일 테이블/엔드포인트와 완전 분리.
  * Auth: Bearer token. Write: service role admin client.
@@ -23,6 +19,7 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { logSessionEvent, summarizeExerciseLogs } from '@/lib/session-events';
 import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
+import { computePhase } from '@/lib/session/phase';
 
 const ROUTE_COMPLETE = '/api/session/complete';
 
@@ -88,12 +85,13 @@ function toExerciseLogsArray(val: unknown): unknown[] {
   return val;
 }
 
-/** session_number → 4단계 테마 */
-function getTheme(sessionNumber: number): string {
-  if (sessionNumber <= 4)  return '1순위 타겟';
-  if (sessionNumber <= 8)  return '2순위 타겟';
-  if (sessionNumber <= 12) return '통합';
-  return '릴렉스';
+const PHASE_LABELS = ['1순위 타겟', '2순위 타겟', '통합', '릴렉스'] as const;
+
+/** total_sessions 기반 phase → 테마 라벨 (create/plan-generator와 동일 규칙) */
+function getThemeForSession(totalSessions: number, sessionNumber: number): string {
+  const total = Math.max(1, Math.min(20, totalSessions));
+  const phase = computePhase(total, sessionNumber);
+  return PHASE_LABELS[phase - 1];
 }
 
 export async function POST(req: NextRequest) {
@@ -237,7 +235,8 @@ export async function POST(req: NextRequest) {
 
       const newCompleted = Math.max(progress?.completed_sessions ?? 0, sessionNumber);
       const nextNum = newCompleted + 1;
-      const nextTheme = progress && nextNum <= progress.total_sessions ? getTheme(nextNum) : null;
+      const totalSessions = progress?.total_sessions ?? 16;
+      const nextTheme = progress && nextNum <= totalSessions ? getThemeForSession(totalSessions, nextNum) : null;
 
       const data = { progress: progress ?? null, next_theme: nextTheme, idempotent: false, exercise_logs: exerciseLogsArray };
       return ok(data, data);
@@ -292,7 +291,8 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       const nextNum = (progress?.completed_sessions ?? sessionNumber) + 1;
-      const nextTheme = progress && nextNum <= progress.total_sessions ? getTheme(nextNum) : null;
+      const totalSessions = progress?.total_sessions ?? 16;
+      const nextTheme = progress && nextNum <= totalSessions ? getThemeForSession(totalSessions, nextNum) : null;
 
       const data = { progress: progress ?? null, next_theme: nextTheme, idempotent: true, exercise_logs: toExerciseLogsArray(planRow.exercise_logs) };
       return ok(data, data);
