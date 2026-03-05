@@ -29,6 +29,7 @@ import { getKstDayKeyUTC, getNextKstMidnightUtcIso, getTodayCompletedAndNextUnlo
 import { logSessionEvent } from '@/lib/session-events';
 import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
+import { computePhase } from '@/lib/session/phase';
 
 const ROUTE_CREATE = '/api/session/create';
 
@@ -69,9 +70,9 @@ type TimeBudget = 'short' | 'normal';
 
 const PHASE_LABELS = ['1순위 타겟', '2순위 타겟', '통합', '릴렉스'] as const;
 
-/** session_number → 0-based phase index (0~3) */
-function getPhaseIndex(sessionNumber: number): number {
-  return Math.min(3, Math.floor((sessionNumber - 1) / 4));
+/** session_number → 0-based phase index (0~3). totalSessions 기반으로 균등 분배. */
+function getPhaseIndex(sessionNumber: number, totalSessions: number): number {
+  return computePhase(totalSessions, sessionNumber) - 1;
 }
 
 /**
@@ -104,9 +105,10 @@ function getUsedTemplateIds(planJson: unknown): string[] {
  */
 function buildTheme(
   sessionNumber: number,
+  totalSessions: number,
   deep: { result_type: string; focus: string[] }
 ): string {
-  const phaseIdx = getPhaseIndex(sessionNumber);
+  const phaseIdx = getPhaseIndex(sessionNumber, totalSessions);
   const phaseLabel = PHASE_LABELS[phaseIdx];
 
   if (phaseIdx === 0) {
@@ -324,9 +326,9 @@ export async function POST(req: NextRequest) {
       return fail(404, ApiErrorCode.DEEP_RESULT_MISSING, '심층 결과가 없습니다');
     }
 
-    const phaseIndex = getPhaseIndex(nextSessionNumber);
-    const phase = phaseIndex + 1 as 1 | 2 | 3 | 4;
-    const theme = buildTheme(nextSessionNumber, deepSummary);
+    const totalSessionsForPhase = progress.total_sessions ?? DEFAULT_TOTAL_SESSIONS;
+    const phase = computePhase(totalSessionsForPhase, nextSessionNumber);
+    const theme = buildTheme(nextSessionNumber, totalSessionsForPhase, deepSummary);
 
     let usedTemplateIds: string[] = [];
     if (nextSessionNumber > 1) {
