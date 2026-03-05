@@ -359,13 +359,17 @@ export async function POST(req: NextRequest) {
 
     const debugHeader = req.headers.get('x-debug');
     if (debugHeader === '1' && planJson.meta.audit) {
+      const a = planJson.meta.audit;
       console.log('[session/create] audit', {
         session: nextSessionNumber,
-        candidate_count: planJson.meta.audit.candidate_count,
-        selected_count: planJson.meta.audit.selected_count,
-        fallback_count: planJson.meta.audit.fallback_count,
-        degraded: planJson.meta.audit.degraded,
-        degraded_reason: planJson.meta.audit.degraded_reason,
+        candidate_loaded: a.candidate_loaded_count,
+        candidate_after_safety: a.candidate_after_safety_count,
+        selected_total: a.selected_total_count,
+        fallback_used: a.fallback_used,
+        fallback_count: a.fallback_selected_count,
+        pass2_used: a.pass2_used,
+        degraded: a.degraded,
+        degraded_reasons: a.degraded_reasons,
       });
     }
     const condition = {

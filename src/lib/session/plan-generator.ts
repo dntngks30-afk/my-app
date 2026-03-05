@@ -55,15 +55,27 @@ export type PlanSegment = {
 
 /** plan_json 품질 audit (meta.audit, consumers 무시 가능) */
 export type PlanAudit = {
-  candidate_count: number;
-  selected_count: number;
-  unique_count: number;
-  fallback_count: number;
-  primary_coverage: boolean;
-  secondary_coverage: boolean;
-  conflicts: number;
+  version: 'audit_v1';
+  candidate_loaded_count: number;
+  candidate_after_safety_count: number;
+  selected_total_count: number;
+  selected_unique_template_ids: string[];
+  fallback_used: boolean;
+  fallback_selected_count: number;
+  pass2_used: boolean;
+  used_penalty: { pass1: number; pass2: number };
+  coverage: { primary_hit: boolean; secondary_hit: boolean };
   degraded: boolean;
-  degraded_reason: string[];
+  degraded_reasons: string[];
+  duplicates_blocked_count?: number;
+  /** @deprecated use candidate_after_safety_count */
+  candidate_count?: number;
+  /** @deprecated use selected_total_count */
+  selected_count?: number;
+  /** @deprecated use fallback_selected_count */
+  fallback_count?: number;
+  /** @deprecated use degraded_reasons */
+  degraded_reason?: string[];
 };
 
 export type PlanJsonOutput = {
@@ -197,6 +209,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
 
   const used = new Set<string>([...input.usedTemplateIds]);
   let selected = selectFromScored(sortedPass1, used);
+  let pass2Used = false;
 
   if (selected.length < requiredCount && sortedPass1.length > 0) {
     const scoredPass2 = candidates.map((t) => ({
@@ -209,6 +222,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     if (sortedPass2.length > 0) {
       const used2 = new Set<string>([...input.usedTemplateIds]);
       selected = selectFromScored(sortedPass2, used2);
+      pass2Used = true;
       degradedReasons.push('PASS2_RELAXED');
     }
   }
@@ -219,20 +233,35 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
 
   const primary = input.focus[0];
   const secondary = input.focus[1] ?? input.focus[0];
-  const primaryCoverage = !primary || selected.some((t) => t.focus_tags.includes(primary));
-  const secondaryCoverage = !secondary || selected.some((t) => t.focus_tags.includes(secondary));
-  if (!primaryCoverage) degradedReasons.push('PRIMARY_COVERAGE_MISS');
-  if (!secondaryCoverage && primary !== secondary) degradedReasons.push('SECONDARY_COVERAGE_MISS');
+  const primaryHit = !primary || selected.some((t) => t.focus_tags.includes(primary));
+  const secondaryHit = !secondary || selected.some((t) => t.focus_tags.includes(secondary));
+  if (!primaryHit) degradedReasons.push('PRIMARY_COVERAGE_MISS');
+  if (!secondaryHit && primary !== secondary) degradedReasons.push('SECONDARY_COVERAGE_MISS');
+
+  const fallbackSelected = selected.filter((t) => t.is_fallback).length;
+  const fallbackUsed = fallbackSelected > 0 || degradedReasons.includes('FALLBACK_ONLY');
+
+  const duplicatesBlocked = sortedPass1.filter((s) =>
+    input.usedTemplateIds.includes(s.template.id)
+  ).length;
 
   const audit: PlanAudit = {
+    version: 'audit_v1',
+    candidate_loaded_count: templates.length,
+    candidate_after_safety_count: candidates.length,
+    selected_total_count: selected.length,
+    selected_unique_template_ids: selected.map((t) => t.id),
+    fallback_used: fallbackUsed,
+    fallback_selected_count: fallbackSelected,
+    pass2_used: pass2Used,
+    used_penalty: { pass1: REPETITION_PENALTY, pass2: REPETITION_PENALTY_RELAXED },
+    coverage: { primary_hit: primaryHit, secondary_hit: secondaryHit },
+    degraded: degradedReasons.length > 0,
+    degraded_reasons: degradedReasons,
+    duplicates_blocked_count: duplicatesBlocked,
     candidate_count: candidates.length,
     selected_count: selected.length,
-    unique_count: new Set(selected.map((t) => t.id)).size,
-    fallback_count: selected.filter((t) => t.is_fallback).length,
-    primary_coverage: primaryCoverage,
-    secondary_coverage: secondaryCoverage,
-    conflicts: 0,
-    degraded: degradedReasons.length > 0,
+    fallback_count: fallbackSelected,
     degraded_reason: degradedReasons,
   };
 
