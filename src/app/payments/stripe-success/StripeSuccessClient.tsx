@@ -25,6 +25,21 @@ function isValidNextForRedirect(next: string | undefined | null): boolean {
   return ALLOWED_NEXT_PREFIXES.some((p) => next === p || next.startsWith(`${p}/`));
 }
 
+function isLegacyNextPath(next: string | undefined | null): boolean {
+  if (!next || typeof next !== 'string') return false;
+  return (
+    next.startsWith('/app/routine') ||
+    next.startsWith('/my-routine') ||
+    next.startsWith('/app/report/day7')
+  );
+}
+
+function resolvePostPaymentNext(next: string | undefined | null): string {
+  if (isLegacyNextPath(next)) return '/app/home';
+  if (isValidNextForRedirect(next)) return next;
+  return '/app/deep-test';
+}
+
 interface PaymentInfo {
   sessionId: string;
   planName: string;
@@ -93,11 +108,10 @@ export default function StripeSuccessClient({
 
         setPaymentInfo(payload);
 
-        if (isValidNextForRedirect(nextParam ?? null)) {
-          router.replace(nextParam!);
-          setLoading(false);
-          return;
-        }
+        const postPaymentNext = resolvePostPaymentNext(nextParam ?? null);
+        router.replace(postPaymentNext);
+        setLoading(false);
+        return;
 
         if (payload.isSubscription) {
           setRoutineCreating(true);
@@ -322,10 +336,10 @@ export default function StripeSuccessClient({
               </Link>
             ) : paymentInfo.isSubscription && routineCreated ? (
               <Link
-                href="/my-routine"
+                href="/app/deep-test"
                 className="block w-full rounded-xl bg-[var(--brand)] py-4 text-center text-lg font-bold text-white hover:opacity-90"
               >
-                운동 루틴 시작하기
+                심층분석 시작하기
               </Link>
             ) : (
               <Link
@@ -377,10 +391,10 @@ export default function StripeSuccessClient({
           </Link>
           <span className="text-[var(--border)]">|</span>
           <Link
-            href="/my-routine"
+            href="/app/deep-test"
             className="text-[var(--muted)] hover:text-[var(--text)]"
           >
-            내 루틴
+            심층분석
           </Link>
           <span className="text-[var(--border)]">|</span>
           <Link

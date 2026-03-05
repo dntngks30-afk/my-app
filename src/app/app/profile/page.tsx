@@ -7,10 +7,25 @@ import { getSessionSafe } from '@/lib/supabase';
 import { getActiveSession } from '@/lib/session/client';
 
 export default function ProfilePage() {
+  const isProd = process.env.NODE_ENV === 'production';
   const [navV2, setNavV2] = useState(true);
   const [completedSessions, setCompletedSessions] = useState(0);
 
   useEffect(() => {
+    if (isProd) {
+      setNavV2(true);
+      (async () => {
+        try {
+          const { session } = await getSessionSafe();
+          if (!session?.access_token) return;
+          const result = await getActiveSession(session.access_token);
+          if (result.ok && result.data.progress) {
+            setCompletedSessions(result.data.progress.completed_sessions ?? 0);
+          }
+        } catch { /* noop */ }
+      })();
+      return;
+    }
     try {
       const v = new URLSearchParams(window.location.search).get('navV2');
       setNavV2(v !== '0');
@@ -26,7 +41,7 @@ export default function ProfilePage() {
         } catch { /* noop */ }
       })();
     } catch { /* noop */ }
-  }, []);
+  }, [isProd]);
 
   if (navV2) {
     return (

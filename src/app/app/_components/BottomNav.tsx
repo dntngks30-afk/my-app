@@ -31,15 +31,20 @@ function isTabActive(href: string, pathname: string | null): boolean {
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const isProd = process.env.NODE_ENV === 'production';
 
   // navV2 여부: 기본값 true (지도/여정/마이). navV2=0 시에만 navV1(리셋/루틴/기록/마이)
   const [navV2, setNavV2] = useState(true);
   useEffect(() => {
+    if (isProd) {
+      setNavV2(true);
+      return;
+    }
     try {
       const v = new URLSearchParams(window.location.search).get('navV2');
       setNavV2(v !== '0');
     } catch { /* noop */ }
-  }, [pathname]);
+  }, [pathname, isProd]);
 
   useEffect(() => {
     const activeTab = navV2
