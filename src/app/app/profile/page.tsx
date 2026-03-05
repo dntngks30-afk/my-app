@@ -12,6 +12,10 @@ export default function ProfilePage() {
 
   useEffect(() => {
     try {
+      if (process.env.NODE_ENV === 'production') {
+        setNavV2(true);
+        return;
+      }
       const v = new URLSearchParams(window.location.search).get('navV2');
       setNavV2(v !== '0');
       if (v === '0') return;

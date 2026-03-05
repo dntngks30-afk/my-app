@@ -15,7 +15,7 @@ export default function HomePageClient() {
   const searchParams = useSearchParams();
   const debugFlag = searchParams.get('debug') === '1';
   const debugMap = searchParams.get('debugMap') === '1';
-  const navV2 = searchParams.get('navV2') !== '0';
+  const navV2 = process.env.NODE_ENV === 'production' ? true : (searchParams.get('navV2') !== '0');
   const mapV2 = searchParams.get('mapV2') === '1' || navV2;
   const tsOverride = searchParams.get('ts');
   const csOverride = searchParams.get('cs');

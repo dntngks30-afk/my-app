@@ -32,10 +32,14 @@ function isTabActive(href: string, pathname: string | null): boolean {
 export default function BottomNav() {
   const pathname = usePathname();
 
-  // navV2 여부: 기본값 true (지도/여정/마이). navV2=0 시에만 navV1(리셋/루틴/기록/마이)
+  // prod: V2 강제 ON. dev: navV2=0 시에만 V1 (테스트용)
   const [navV2, setNavV2] = useState(true);
   useEffect(() => {
     try {
+      if (process.env.NODE_ENV === 'production') {
+        setNavV2(true);
+        return;
+      }
       const v = new URLSearchParams(window.location.search).get('navV2');
       setNavV2(v !== '0');
     } catch { /* noop */ }
@@ -45,7 +49,9 @@ export default function BottomNav() {
     const activeTab = navV2
       ? TABS_V2.find(t => isTabActive(t.baseHref, pathname))?.id ?? null
       : TABS_V1.find(t => isTabActive(t.href, pathname))?.id ?? null;
-    console.log('[NAV_TAB_RENDER]', { pathname, activeTab, navV2 });
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[NAV_TAB_RENDER]', { pathname, activeTab, navV2 });
+    }
   }, [pathname, navV2]);
 
   if (navV2) {
@@ -53,12 +59,12 @@ export default function BottomNav() {
       <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t-2 border-slate-900 bg-white px-2 safe-area-pb shadow-[0_-2px_0_0_rgba(15,23,42,1)]">
         {TABS_V2.map(({ id, baseHref, label, icon: Icon }) => {
           const active = isTabActive(baseHref, pathname);
-          const href = `${baseHref}?navV2=1`;
+          const href = baseHref;
           return (
             <Link
               key={id}
               href={href}
-              onClick={() => console.log('[NAV_TAB_CLICK]', { tab: id, href })}
+              onClick={() => { if (process.env.NODE_ENV !== 'production') console.log('[NAV_TAB_CLICK]', { tab: id, href }); }}
               className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs transition ${
                 active ? 'font-semibold text-slate-800' : 'text-slate-400'
               }`}
