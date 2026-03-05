@@ -36,8 +36,8 @@ function isValidNextPath(next: unknown): next is string {
   return ALLOWED_NEXT_PREFIXES.some((p) => next === p || next.startsWith(`${p}/`));
 }
 
-function getRequestOrigin() {
-  const h = headers();
+async function getRequestOrigin() {
+  const h = await headers();
   const proto = h.get('x-forwarded-proto') ?? 'https';
   const host = h.get('x-forwarded-host') ?? h.get('host');
   if (!host) throw new Error('Missing host header for Stripe redirect origin');
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
           null
         );
 
-        const origin = getRequestOrigin();
+        const origin = await getRequestOrigin();
         const successNext = isValidNextPath(next) ? next : '/app/deep-test';
         const cancelNext = isValidNextPath(next) ? next : '/app';
         const successUrl = `${origin}/payments/stripe-success?session_id={CHECKOUT_SESSION_ID}&next=${encodeURIComponent(successNext)}`;
@@ -270,7 +270,7 @@ export async function POST(req: NextRequest) {
           .eq('id', userId);
       }
 
-      const origin = getRequestOrigin();
+      const origin = await getRequestOrigin();
       const successNext = isValidNextPath(next) ? next : '/app/deep-test';
       const cancelNext = isValidNextPath(next) ? next : '/app';
       const successUrl = `${origin}/payments/stripe-success?session_id={CHECKOUT_SESSION_ID}&next=${encodeURIComponent(successNext)}`;
