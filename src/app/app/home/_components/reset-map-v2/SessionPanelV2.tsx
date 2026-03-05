@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import { getSessionSafe } from '@/lib/supabase'
 import { completeSession } from '@/lib/session/client'
@@ -19,6 +19,8 @@ interface SessionPanelV2Props {
   exercises: ExerciseItem[] | undefined
   /** 현재 active plan — session_number + status 사용 */
   activePlan: SessionPlan | null
+  /** 완료된 세션의 exercise_logs (read-only 표시용) */
+  pastExerciseLogs?: Record<string, ExerciseLogItem>
   onClose: () => void
   /** 세션 완료 후 새 completed_sessions 값을 상위로 전달 */
   onSessionCompleted?: (completedSessions: number) => void
@@ -41,6 +43,7 @@ export function SessionPanelV2({
   status,
   exercises,
   activePlan,
+  pastExerciseLogs = {},
   onClose,
   onSessionCompleted,
 }: SessionPanelV2Props) {
@@ -53,6 +56,7 @@ export function SessionPanelV2({
       status={status}
       exercises={exercises}
       activePlan={activePlan}
+      pastExerciseLogs={pastExerciseLogs}
       onClose={onClose}
       onSessionCompleted={onSessionCompleted}
     />
@@ -67,13 +71,15 @@ function PanelInner({
   status,
   exercises,
   activePlan,
+  pastExerciseLogs,
   onClose,
   onSessionCompleted,
 }: Required<Omit<SessionPanelV2Props, 'onSessionCompleted'>> & {
   onSessionCompleted?: (completedSessions: number) => void
 }) {
-  // 로컬 운동 로그 누적 (templateId → log)
+  // 로컬 운동 로그 누적 (templateId → log). completed 세션은 pastExerciseLogs 사용
   const [logs, setLogs] = useState<Record<string, ExerciseLogItem>>({})
+  const displayLogs = status === 'completed' ? pastExerciseLogs : logs
   // 모달에서 열린 운동 아이템
   const [openItem, setOpenItem] = useState<ExerciseItem | null>(null)
   // 종료 API 상태
@@ -161,6 +167,13 @@ function PanelInner({
             <div className="h-1 w-10 rounded-full bg-slate-200" />
           </div>
 
+          {/* 완료된 세션 안내 (read-only) */}
+          {status === 'completed' && (
+            <div className="border-b border-slate-100 bg-slate-50 px-5 py-3">
+              <p className="text-center text-sm text-slate-600">완료된 세션입니다. 기록을 확인할 수 있습니다.</p>
+            </div>
+          )}
+
           {/* 종료 CTA 바 (current 세션만) */}
           {status === 'current' && !completed && (
             <div className="border-b border-slate-100 px-5 py-3">
@@ -217,7 +230,7 @@ function PanelInner({
             <ExerciseList
               exercises={exercises}
               status={status}
-              logs={logs}
+              logs={displayLogs}
               onPlay={item => setOpenItem(item)}
             />
           </div>

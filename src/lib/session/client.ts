@@ -226,6 +226,26 @@ export type SessionHistoryResponse = {
   items: SessionHistoryItem[];
 };
 
+export type SessionPlanResponse = {
+  session_number: number;
+  status: string;
+  plan_json: SessionPlanJson | null;
+  completed_at: string | null;
+  exercise_logs?: ExerciseLogItem[];
+};
+
+/** GET /api/session/plan?session_number=N — 특정 세션 plan_json 조회 (read-only). 지도 과거 세션 클릭용. */
+export async function getSessionPlan(
+  token: string,
+  sessionNumber: number
+): Promise<ApiResult<SessionPlanResponse>> {
+  return sessionFetch<SessionPlanResponse>(
+    `/api/session/plan?session_number=${encodeURIComponent(sessionNumber)}`,
+    token,
+    { method: 'GET' }
+  );
+}
+
 /** GET /api/session/history — 완료된 세션 목록 (캘린더/히스토리용, read-only) */
 export async function getSessionHistory(
   token: string,

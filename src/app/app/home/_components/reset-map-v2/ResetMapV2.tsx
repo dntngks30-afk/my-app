@@ -1,11 +1,14 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { JourneyMapV2 } from './JourneyMapV2'
 import { SessionPanelV2 } from './SessionPanelV2'
 import { sessions, type SessionNode } from './map-data'
 import { extractSessionExercises } from './planJsonAdapter'
+import type { ExerciseItem } from './planJsonAdapter'
 import type { SessionPlan } from '@/lib/session/client'
+import { getSessionSafe } from '@/lib/supabase'
+import { getSessionPlan } from '@/lib/session/client'
 
 interface ResetMapV2Props {
   /** 전체 세션 수 (max 20) */
@@ -23,6 +26,8 @@ export function ResetMapV2({ total, completed, activePlan, onSessionCompleted }:
   const currentSession = Math.min(completed + 1, total, sessions.length)
 
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null)
+  /** 과거(완료) 세션 plan_json + exercise_logs 캐시 — 클릭 시 1회 조회 */
+  const [pastPlanCache, setPastPlanCache] = useState<Record<number, { exercises: ExerciseItem[]; logs: Record<string, ExerciseLogItem> } | 'loading'>>({})
 
   const handleNodeTap = useCallback((session: SessionNode) => {
     setSelectedSessionId(session.id)
@@ -40,17 +45,50 @@ export function ResetMapV2({ total, completed, activePlan, onSessionCompleted }:
     return 'locked' as const
   }, [selectedSessionId, currentSession])
 
-  // plan_json에서 운동 추출 — active 세션(= currentSession)과 클릭한 세션이 일치할 때만 표시
-  const exercises = useMemo(() => {
+  // 과거 세션 클릭 시 plan_json 1회 조회
+  useEffect(() => {
+    if (selectedSessionId === null || selectedStatus !== 'completed') return
+    const cached = pastPlanCache[selectedSessionId]
+    if (cached !== undefined && cached !== 'loading') return
+
+    setPastPlanCache(prev => ({ ...prev, [selectedSessionId]: 'loading' }))
+    let cancelled = false
+    ;(async () => {
+      const { session } = await getSessionSafe()
+      if (!session?.access_token || cancelled) return
+      const result = await getSessionPlan(session.access_token, selectedSessionId)
+      if (cancelled) return
+      const exercises = result.ok && result.data.plan_json
+        ? extractSessionExercises(result.data.plan_json)
+        : []
+      const logs: Record<string, import('@/lib/session/client').ExerciseLogItem> = {}
+      if (result.ok && Array.isArray(result.data.exercise_logs)) {
+        for (const log of result.data.exercise_logs) {
+          if (log?.templateId) logs[log.templateId] = log
+        }
+      }
+      setPastPlanCache(prev => ({ ...prev, [selectedSessionId]: { exercises, logs } }))
+    })()
+    return () => { cancelled = true }
+  }, [selectedSessionId, selectedStatus])
+
+  // plan_json에서 운동 추출 — current: activePlan, completed: pastPlanCache
+  const exercises = useMemo((): ExerciseItem[] | undefined => {
     if (selectedSessionId === null) return undefined
-    if (
-      selectedStatus === 'current' &&
-      activePlan?.session_number === selectedSessionId
-    ) {
+    if (selectedStatus === 'current' && activePlan?.session_number === selectedSessionId) {
       return extractSessionExercises(activePlan.plan_json)
     }
+    if (selectedStatus === 'completed') {
+      const cached = pastPlanCache[selectedSessionId]
+      if (cached === 'loading') return undefined
+      return cached?.exercises ?? []
+    }
     return []
-  }, [selectedSessionId, selectedStatus, activePlan])
+  }, [selectedSessionId, selectedStatus, activePlan, pastPlanCache])
+
+  const pastExerciseLogs: Record<string, ExerciseLogItem> = selectedSessionId !== null && selectedStatus === 'completed'
+    ? (pastPlanCache[selectedSessionId] !== 'loading' && pastPlanCache[selectedSessionId]?.logs) ?? {}
+    : {}
 
   return (
     <div
@@ -73,6 +111,7 @@ export function ResetMapV2({ total, completed, activePlan, onSessionCompleted }:
 
       {/* 지도 영역 */}
       <JourneyMapV2
+        total={total}
         currentSession={currentSession}
         onNodeTap={handleNodeTap}
       />
@@ -84,6 +123,7 @@ export function ResetMapV2({ total, completed, activePlan, onSessionCompleted }:
         status={selectedStatus}
         exercises={exercises}
         activePlan={activePlan}
+        pastExerciseLogs={pastExerciseLogs}
         onClose={handleClose}
         onSessionCompleted={onSessionCompleted}
       />
