@@ -2,6 +2,7 @@
  * Segment loading skeleton for /app/home
  * 리셋 지도(Reset Map) UI에 맞춘 스켈레톤. 네오브루탈 스타일 유지.
  */
+import BottomNav from '../_components/BottomNav';
 
 const CARD_CLASS =
   'rounded-2xl border-2 border-slate-900 bg-white shadow-[4px_4px_0_0_rgba(15,23,42,1)]';
@@ -30,6 +31,7 @@ export default function HomeLoading() {
           </div>
         </section>
       </main>
+      <BottomNav />
     </div>
   );
 }
