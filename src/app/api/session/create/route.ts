@@ -9,7 +9,7 @@
  *   3) active_session_number 있으면 기존 plan 그대로 반환 (멱등)
  *   4) next_session_number 결정
  *   5) deep_test_attempts에서 최신 final 결과 요약 로드
- *   6) 직전 세션 plan_json에서 used_template_ids 로드 (반복 방지)
+ *   6) 최근 K세션 plan_json에서 used_template_ids 로드 (반복 방지)
  *   7) exercise_templates 조회 → 스코어링 → plan_json 생성 (BE-06)
  *   8) session_plans UPSERT + progress.active_session_number 세팅
  *
@@ -32,6 +32,9 @@ import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import { computePhase } from '@/lib/session/phase';
 
 const ROUTE_CREATE = '/api/session/create';
+
+/** 최근 K세션 plan_json에서 used_template_ids 수집 (반복 억제). clamp 1..8 */
+const USED_WINDOW_K = 4;
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -332,13 +335,21 @@ export async function POST(req: NextRequest) {
 
     let usedTemplateIds: string[] = [];
     if (nextSessionNumber > 1) {
-      const { data: prevPlan } = await supabase
+      const K = Math.max(1, Math.min(8, USED_WINDOW_K));
+      const { data: plans } = await supabase
         .from('session_plans')
         .select('plan_json')
         .eq('user_id', userId)
-        .eq('session_number', nextSessionNumber - 1)
-        .maybeSingle();
-      usedTemplateIds = getUsedTemplateIds(prevPlan?.plan_json);
+        .lt('session_number', nextSessionNumber)
+        .order('session_number', { ascending: false })
+        .limit(K);
+      const usedSet = new Set<string>();
+      for (const row of plans ?? []) {
+        for (const id of getUsedTemplateIds(row?.plan_json)) {
+          usedSet.add(id);
+        }
+      }
+      usedTemplateIds = Array.from(usedSet);
     }
 
     const planJson = await buildSessionPlanJson({
