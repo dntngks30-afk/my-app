@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
-import { getActiveSession, type SessionPlan } from '@/lib/session/client';
+import { getCachedActiveSession, invalidateActiveCache } from '@/lib/session/active-cache';
+import type { SessionPlan } from '@/lib/session/client';
 import BottomNav from '../../_components/BottomNav';
 import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
@@ -14,7 +15,7 @@ export default function HomePageClient() {
   const searchParams = useSearchParams();
   const debugFlag = searchParams.get('debug') === '1';
   const debugMap = searchParams.get('debugMap') === '1';
-  const navV2 = searchParams.get('navV2') === '1';
+  const navV2 = searchParams.get('navV2') !== '0';
   const mapV2 = searchParams.get('mapV2') === '1' || navV2;
   const tsOverride = searchParams.get('ts');
   const csOverride = searchParams.get('cs');
@@ -37,16 +38,22 @@ export default function HomePageClient() {
     completed_sessions: number;
   } | null>(null);
   const [activePlan, setActivePlan] = useState<SessionPlan | null>(null);
+  const activeFetchedRef = useRef(false);
 
   const handleSessionCompleted = useCallback((completedSessions: number) => {
     setSessionProgress(prev =>
       prev ? { ...prev, completed_sessions: completedSessions } : prev
     );
-    // active plan은 완료됐으므로 null 처리
     setActivePlan(null);
+    invalidateActiveCache();
   }, []);
 
   useEffect(() => {
+    if (pathname !== '/app/home') return;
+    if (activeFetchedRef.current) return;
+    activeFetchedRef.current = true;
+
+    const t0 = performance.now();
     let cancelled = false;
     (async () => {
       const { session } = await getSessionSafe();
@@ -55,45 +62,39 @@ export default function HomePageClient() {
         return;
       }
       try {
-        const url = `/api/home/dashboard${debugFlag ? '?debug=1' : ''}`;
-        const res = await fetch(url, {
-          cache: 'no-store' as RequestCache,
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
+        const result = await getCachedActiveSession(session.access_token);
         if (cancelled) return;
-        const data = await res.json();
-        if (!res.ok) {
-          setError(data?.error ?? '세션을 확인해 주세요');
+        const elapsed = Math.round(performance.now() - t0);
+        if (typeof performance !== 'undefined' && performance.mark) {
+          performance.mark('home_active_loaded');
+        }
+        if (process.env.NODE_ENV !== 'production') {
+          console.info('[perf] home_active_loaded', elapsed, 'ms');
+        }
+        if (!result.ok) {
+          if (result.status === 401) {
+            setError('세션을 확인해 주세요');
+          } else {
+            setError(result.error?.message ?? '세션을 확인해 주세요');
+          }
           setLoading(false);
           return;
         }
         setError(null);
+        const p = result.data.progress;
+        if (p) {
+          setSessionProgress({
+            total_sessions: p.total_sessions,
+            completed_sessions: p.completed_sessions ?? 0,
+          });
+          setActivePlan(result.data.active ?? null);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '세션을 확인해 주세요');
         }
       } finally {
         if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [debugFlag]);
-
-  useEffect(() => {
-    if (pathname !== '/app/home') return;
-    let cancelled = false;
-    (async () => {
-      const { session } = await getSessionSafe();
-      if (!session?.access_token || cancelled) return;
-      const result = await getActiveSession(session.access_token);
-      if (cancelled) return;
-      if (result.ok && result.data.progress) {
-        const p = result.data.progress;
-        setSessionProgress({
-          total_sessions: p.total_sessions,
-          completed_sessions: p.completed_sessions ?? 0,
-        });
-        setActivePlan(result.data.active ?? null);
       }
     })();
     return () => { cancelled = true; };

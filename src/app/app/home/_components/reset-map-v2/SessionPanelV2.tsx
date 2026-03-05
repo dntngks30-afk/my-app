@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import { getSessionSafe } from '@/lib/supabase'
 import { completeSession } from '@/lib/session/client'
@@ -76,6 +76,16 @@ function PanelInner({
   const [logs, setLogs] = useState<Record<string, ExerciseLogItem>>({})
   // 모달에서 열린 운동 아이템
   const [openItem, setOpenItem] = useState<ExerciseItem | null>(null)
+
+  // 패널 open 측정
+  useEffect(() => {
+    if (sessionId != null && typeof performance !== 'undefined' && performance.mark) {
+      performance.mark('panel_opened')
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[perf] panel_opened')
+      }
+    }
+  }, [sessionId])
   // 종료 API 상태
   const [completing, setCompleting] = useState(false)
   const [completeError, setCompleteError] = useState<string | null>(null)

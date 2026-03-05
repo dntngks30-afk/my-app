@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useRef, useEffect, useState, useCallback, memo } from 'react'
 import {
   sessions,
   generatePathD,
@@ -68,7 +68,7 @@ function Flag({ x, y }: { x: number; y: number }) {
   )
 }
 
-export function JourneyMapV2({ currentSession, onNodeTap }: JourneyMapV2Props) {
+function JourneyMapV2Inner({ currentSession, onNodeTap }: JourneyMapV2Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [, setMounted] = useState(false)
 
@@ -392,3 +392,5 @@ export function JourneyMapV2({ currentSession, onNodeTap }: JourneyMapV2Props) {
     </div>
   )
 }
+
+export const JourneyMapV2 = memo(JourneyMapV2Inner)

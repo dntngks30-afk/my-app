@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { JourneyMapV2 } from './JourneyMapV2'
 import { SessionPanelV2 } from './SessionPanelV2'
 import { sessions, type SessionNode } from './map-data'
 import { extractSessionExercises } from './planJsonAdapter'
 import type { SessionPlan } from '@/lib/session/client'
+import { getSessionSafe } from '@/lib/supabase'
+import { prefetchMediaSign } from './media-cache'
 
 interface ResetMapV2Props {
   /** 전체 세션 수 (max 20) */
@@ -51,6 +53,19 @@ export function ResetMapV2({ total, completed, activePlan, onSessionCompleted }:
     }
     return []
   }, [selectedSessionId, selectedStatus, activePlan])
+
+  // 패널 open 시 exercises의 templateIds 배치 prefetch
+  useEffect(() => {
+    if (!exercises?.length) return
+    const ids = [...new Set(exercises.map(e => e.templateId).filter(Boolean))]
+    if (ids.length === 0) return
+    let cancelled = false
+    getSessionSafe().then(({ session }) => {
+      if (cancelled || !session?.access_token) return
+      prefetchMediaSign(ids, session.access_token)
+    })
+    return () => { cancelled = true }
+  }, [exercises])
 
   return (
     <div

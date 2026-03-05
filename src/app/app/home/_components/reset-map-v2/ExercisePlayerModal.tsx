@@ -5,16 +5,7 @@ import { X, CheckCircle2 } from 'lucide-react'
 import { getSessionSafe } from '@/lib/supabase'
 import type { ExerciseItem } from './planJsonAdapter'
 import type { ExerciseLogItem } from '@/lib/session/client'
-
-interface MediaPayload {
-  kind: 'hls' | 'embed' | 'placeholder'
-  streamUrl?: string
-  embedUrl?: string
-  posterUrl?: string
-}
-
-/** 모달 간 미디어 서명 결과를 재사용하기 위한 module-level 캐시 */
-const mediaCache = new Map<string, MediaPayload>()
+import { getMediaPayload, setMediaPayload, type MediaPayload } from './media-cache'
 
 interface ExercisePlayerModalProps {
   item: ExerciseItem | null
@@ -56,13 +47,19 @@ function ModalInner({
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<{ destroy: () => void } | null>(null)
 
-  /* 미디어 서명 — 캐시 우선, 없으면 /api/media/sign 1회 */
+  /* 미디어 서명 — 공용 캐시 우선(prefetch hit), miss 시 /api/media/sign 1회 */
   useEffect(() => {
     let cancelled = false
-    const cached = mediaCache.get(item.templateId)
+    const cached = getMediaPayload(item.templateId)
     if (cached) {
       setMedia(cached)
       setMediaLoading(false)
+      if (typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('modal_media_ready')
+      }
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[perf] modal_media_ready (cache hit)')
+      }
       return
     }
     ;(async () => {
@@ -84,8 +81,14 @@ function ModalInner({
         if (res.ok) {
           const data = await res.json()
           const payload: MediaPayload = data.results?.[0]?.payload ?? { kind: 'placeholder' }
-          mediaCache.set(item.templateId, payload)
+          setMediaPayload(item.templateId, payload)
           setMedia(payload)
+          if (typeof performance !== 'undefined' && performance.mark) {
+            performance.mark('modal_media_ready')
+          }
+          if (process.env.NODE_ENV !== 'production') {
+            console.info('[perf] modal_media_ready (fetch)')
+          }
         } else {
           setMedia({ kind: 'placeholder' })
         }
