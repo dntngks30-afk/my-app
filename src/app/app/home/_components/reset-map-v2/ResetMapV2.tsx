@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { JourneyMapV2 } from './JourneyMapV2'
 import { SessionPanelV2 } from './SessionPanelV2'
 import { sessions, type SessionNode } from './map-data'
 import { extractSessionExercises } from './planJsonAdapter'
-import type { SessionPlan } from '@/lib/session/client'
+import { createSession, type SessionPlan } from '@/lib/session/client'
 import { getSessionSafe } from '@/lib/supabase'
 import { prefetchMediaSign } from './media-cache'
 
@@ -18,13 +18,27 @@ interface ResetMapV2Props {
   activePlan: SessionPlan | null
   /** 세션 완료 후 HomePageClient의 sessionProgress 갱신용 콜백 */
   onSessionCompleted?: (completedSessions: number) => void
+  /** createSession 성공 시 HomePageClient의 activePlan 갱신용 콜백 */
+  onActivePlanCreated?: (plan: SessionPlan) => void
 }
 
-export function ResetMapV2({ total, completed, activePlan, onSessionCompleted }: ResetMapV2Props) {
+export function ResetMapV2({ total, completed, activePlan, onSessionCompleted, onActivePlanCreated }: ResetMapV2Props) {
   // currentSession: 다음에 해야 할 세션 번호 (1-indexed)
   const currentSession = Math.min(completed + 1, total, sessions.length)
 
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null)
+
+  // localActivePlan: prop에서 시작, createSession 성공 시 갱신
+  const [localActivePlan, setLocalActivePlan] = useState<SessionPlan | null>(activePlan)
+  const [planLoading, setPlanLoading] = useState(false)
+  const createCalledRef = useRef(false)
+
+  // prop 변경(세션 완료 후 null 리셋 등) 반영
+  useEffect(() => {
+    setLocalActivePlan(activePlan)
+    // activePlan이 리셋되면 다음 패널 오픈 시 재호출 허용
+    if (activePlan === null) createCalledRef.current = false
+  }, [activePlan])
 
   const handleNodeTap = useCallback((session: SessionNode) => {
     setSelectedSessionId(session.id)
@@ -42,17 +56,49 @@ export function ResetMapV2({ total, completed, activePlan, onSessionCompleted }:
     return 'locked' as const
   }, [selectedSessionId, currentSession])
 
-  // plan_json에서 운동 추출 — active 세션(= currentSession)과 클릭한 세션이 일치할 때만 표시
+  // current 세션 패널 오픈 + activePlan 없음 → createSession 호출
+  useEffect(() => {
+    if (selectedStatus !== 'current') return
+    if (selectedSessionId === null) return
+    if (localActivePlan !== null) return
+    if (createCalledRef.current) return
+
+    createCalledRef.current = true
+    let cancelled = false
+    setPlanLoading(true)
+
+    getSessionSafe().then(async ({ session }) => {
+      if (cancelled || !session?.access_token) {
+        if (!cancelled) setPlanLoading(false)
+        return
+      }
+      const result = await createSession(session.access_token, {
+        condition_mood: 'ok',
+        time_budget: 'normal',
+      })
+      if (cancelled) return
+      setPlanLoading(false)
+      if (result.ok && 'active' in result.data && result.data.active) {
+        const plan = result.data.active as SessionPlan
+        setLocalActivePlan(plan)
+        onActivePlanCreated?.(plan)
+      }
+    })
+
+    return () => { cancelled = true }
+  }, [selectedStatus, selectedSessionId, localActivePlan, onActivePlanCreated])
+
+  // plan_json에서 운동 추출
   const exercises = useMemo(() => {
     if (selectedSessionId === null) return undefined
-    if (
-      selectedStatus === 'current' &&
-      activePlan?.session_number === selectedSessionId
-    ) {
-      return extractSessionExercises(activePlan.plan_json)
+    if (selectedStatus !== 'current') return []
+    // 로딩 중: undefined(로딩 스피너)
+    if (planLoading && localActivePlan === null) return undefined
+    if (localActivePlan?.session_number === selectedSessionId) {
+      return extractSessionExercises(localActivePlan.plan_json)
     }
     return []
-  }, [selectedSessionId, selectedStatus, activePlan])
+  }, [selectedSessionId, selectedStatus, localActivePlan, planLoading])
 
   // 패널 open 시 exercises의 templateIds 배치 prefetch
   useEffect(() => {
@@ -99,7 +145,7 @@ export function ResetMapV2({ total, completed, activePlan, onSessionCompleted }:
         total={total}
         status={selectedStatus}
         exercises={exercises}
-        activePlan={activePlan}
+        activePlan={localActivePlan}
         onClose={handleClose}
         onSessionCompleted={onSessionCompleted}
       />

@@ -48,6 +48,11 @@ export default function HomePageClient() {
     invalidateActiveCache();
   }, []);
 
+  const handleActivePlanCreated = useCallback((plan: SessionPlan) => {
+    setActivePlan(plan);
+    invalidateActiveCache();
+  }, []);
+
   useEffect(() => {
     if (pathname !== '/app/home') return;
     if (activeFetchedRef.current) return;
@@ -159,7 +164,7 @@ export default function HomePageClient() {
           const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
 
           if (mapV2 && total <= 20) {
-            return <ResetMapV2 total={total} completed={completed} activePlan={activePlan} onSessionCompleted={handleSessionCompleted} />;
+            return <ResetMapV2 total={total} completed={completed} activePlan={activePlan} onSessionCompleted={handleSessionCompleted} onActivePlanCreated={handleActivePlanCreated} />;
           }
 
           if (sessionProgress || debugMap) {

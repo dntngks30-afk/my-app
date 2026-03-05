@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect } from 'react'
-import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
+import { X, Play, CheckCircle2, AlertCircle, Loader2, Dumbbell } from 'lucide-react'
 import { getSessionSafe } from '@/lib/supabase'
 import { completeSession } from '@/lib/session/client'
 import type { ExerciseItem } from './planJsonAdapter'
@@ -265,7 +265,17 @@ function ExerciseList({
       </div>
     )
   }
-  if (!exercises?.length) {
+  // undefined = 로딩 중 (createSession 호출 전/중)
+  if (exercises === undefined) {
+    return (
+      <div className="flex flex-col items-center gap-2 rounded-xl bg-slate-50 px-4 py-8">
+        <Dumbbell className="h-5 w-5 animate-pulse text-orange-400" />
+        <p className="text-sm text-slate-500">운동 구성을 준비 중입니다...</p>
+      </div>
+    )
+  }
+  // [] = 데이터 없음 (createSession 실패 등)
+  if (exercises.length === 0) {
     return (
       <div className="space-y-1 rounded-xl bg-slate-50 px-4 py-5 text-center">
         <p className="text-sm text-slate-500">운동 구성을 불러올 수 없습니다.</p>
