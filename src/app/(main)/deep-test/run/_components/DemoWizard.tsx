@@ -12,6 +12,7 @@ import type { DeepAnswerValue } from '@/lib/deep-test/types';
 import { calculateDeepV2, extendDeepV2 } from '@/lib/deep-test/scoring/deep_v2';
 import { load, saveAnswers, saveDerived } from '@/lib/demo/deepTestDemoStorage';
 import MovementGuideCard from '@/components/deep-test/MovementGuideCard';
+import TargetFrequencyPicker, { type TargetFrequency } from '@/components/session/TargetFrequencyPicker';
 
 function getQuestionsForSection(questionIds: readonly string[]): DeepQuestion[] {
   return questionIds
@@ -86,6 +87,7 @@ export default function DemoWizard() {
   const [answers, setAnswers] = useState<Record<string, DeepAnswerValue>>({});
   const [finalizing, setFinalizing] = useState(false);
   const [ageWarning, setAgeWarning] = useState(false);
+  const [targetFrequency, setTargetFrequency] = useState<TargetFrequency>(3);
 
   useEffect(() => {
     const data = load();
@@ -227,6 +229,12 @@ export default function DemoWizard() {
       )}
 
       <div className="space-y-6">
+        {isLastSection && (
+          <TargetFrequencyPicker
+            value={targetFrequency}
+            onChange={setTargetFrequency}
+          />
+        )}
         {questions.map((q) => (
           <div key={q.id} className={nbCard}>
             <p className="text-sm font-semibold text-slate-800 mb-3">{q.title}</p>

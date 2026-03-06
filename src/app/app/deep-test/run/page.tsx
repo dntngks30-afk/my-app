@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * Deep Test 진행 페이지 - 4섹션 Stepper UX (1페이지 = 1개 동작)
- * Section 1: 기본(5) / Section 2: 스쿼트(3) / Section 3: 벽천사(3) / Section 4: 한발서기(3)
+ * Deep Test 진행 페이지 - 5섹션 Stepper UX (1페이지 = 1개 동작)
+ * Section 0: 기본(3) / Section 1: 스쿼트(3) / Section 2: 벽천사(3) / Section 3: 한발서기(3) / Section 4: 마지막 단계(나이+성별+빈도)
  * - 버튼 클릭 시에만 save, autosave 없음
- * - UI-DEEP-ONB-ONE: Section 0에 주당 빈도(2/3/4/5) 추가, "다음" 시 profile best-effort 저장
+ * - 주당 빈도: Section 4(마지막 화면)에서만 표시, "결과 보기" 시 profile best-effort 저장
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -22,14 +22,12 @@ const SESSION_FREQUENCY_DRAFT_KEY = 'session_target_frequency_draft';
 
 type Status = 'loading' | 'ready' | 'error' | 'auth' | 'paywall' | 'finalizing';
 
-/** PR3: 4섹션 고정 — 1페이지 = 1개 동작 (questions.ts 변경 없음) */
+/** 5섹션 고정 — 1페이지 = 1개 동작, 마지막 단계에 나이/성별/빈도 통합 */
 const STEPPER_SECTIONS = [
   {
     id: 'basic',
     title: '기본 정보',
     questionIds: [
-      'deep_basic_age',
-      'deep_basic_gender',
       'deep_basic_experience',
       'deep_basic_workstyle',
       'deep_basic_primary_discomfort',
@@ -60,6 +58,14 @@ const STEPPER_SECTIONS = [
       'deep_sls_pain_intensity',
       'deep_sls_pain_location',
       'deep_sls_quality',
+    ],
+  },
+  {
+    id: 'final',
+    title: '마지막 단계',
+    questionIds: [
+      'deep_basic_age',
+      'deep_basic_gender',
     ],
   },
 ] as const;
@@ -101,7 +107,7 @@ export default function DeepTestRunPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const [targetFrequency, setTargetFrequency] = useState<TargetFrequency>(3);
+  const [targetFrequency, setTargetFrequency] = useState<TargetFrequency | null>(null);
   const frequencyDraftLoaded = useRef(false);
 
   useEffect(() => {
@@ -250,7 +256,10 @@ export default function DeepTestRunPage() {
   const canProceedFromSection = (idx: number): boolean => {
     const ids = STEPPER_SECTIONS[idx].questionIds;
     const qs = getQuestionsForSection(ids);
-    return qs.every((q) => isQuestionAnswered(q, answers));
+    if (!qs.every((q) => isQuestionAnswered(q, answers))) return false;
+    // Final section also requires explicit frequency selection
+    if (idx === STEPPER_SECTIONS.length - 1 && targetFrequency === null) return false;
+    return true;
   };
 
   function buildPatchForSection(idx: number): Record<string, DeepAnswerValue> {
@@ -292,9 +301,17 @@ export default function DeepTestRunPage() {
       }
     }
 
-    if (sectionIndex === 0) {
+    if (isLastSection) {
+      setStatus('finalizing');
       const token = await getToken();
-      if (token) {
+      if (!token || !attemptId) {
+        setStatus('error');
+        setErrorMessage('인증이 필요합니다.');
+        return;
+      }
+
+      // Save frequency profile best-effort before finalize
+      if (targetFrequency !== null) {
         try {
           const profileResult = await postSessionProfile(token, {
             target_frequency: targetFrequency,
@@ -319,16 +336,6 @@ export default function DeepTestRunPage() {
             /* ignore */
           }
         }
-      }
-    }
-
-    if (isLastSection) {
-      setStatus('finalizing');
-      const token = await getToken();
-      if (!token || !attemptId) {
-        setStatus('error');
-        setErrorMessage('인증이 필요합니다.');
-        return;
       }
 
       const res = await fetch('/api/deep-test/finalize', {
@@ -440,12 +447,6 @@ export default function DeepTestRunPage() {
         </h2>
 
         <div className="space-y-6">
-          {sectionIndex === 0 && (
-            <TargetFrequencyPicker
-              value={targetFrequency}
-              onChange={setTargetFrequency}
-            />
-          )}
           {sectionIndex === 1 && (
             <MovementGuideCard
               title="스쿼트"
@@ -483,6 +484,12 @@ export default function DeepTestRunPage() {
               ]}
               videoMp4Src="/deep-test/guides/one-leg-stand.mp4"
               videoAlt="한발서기 동작 가이드"
+            />
+          )}
+          {isLastSection && (
+            <TargetFrequencyPicker
+              value={targetFrequency}
+              onChange={setTargetFrequency}
             />
           )}
           {questions.map((q) => (

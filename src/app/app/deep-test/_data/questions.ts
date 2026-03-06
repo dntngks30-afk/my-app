@@ -168,8 +168,9 @@ export const DEEP_V2_QUESTIONS: DeepQuestion[] = [
 ];
 
 export const DEEP_SECTIONS = [
-  { id: 'basic', title: '기본', questionIds: ['deep_basic_age', 'deep_basic_gender', 'deep_basic_experience', 'deep_basic_workstyle', 'deep_basic_primary_discomfort'] },
+  { id: 'basic', title: '기본', questionIds: ['deep_basic_experience', 'deep_basic_workstyle', 'deep_basic_primary_discomfort'] },
   { id: 'squat', title: '스쿼트', questionIds: ['deep_squat_pain_intensity', 'deep_squat_pain_location', 'deep_squat_knee_alignment'] },
   { id: 'wallangel', title: '벽천사', questionIds: ['deep_wallangel_pain_intensity', 'deep_wallangel_pain_location', 'deep_wallangel_quality'] },
   { id: 'sls', title: '한발서기', questionIds: ['deep_sls_pain_intensity', 'deep_sls_pain_location', 'deep_sls_quality'] },
+  { id: 'final', title: '마지막 단계', questionIds: ['deep_basic_age', 'deep_basic_gender'] },
 ] as const;

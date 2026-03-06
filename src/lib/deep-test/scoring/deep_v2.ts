@@ -10,6 +10,7 @@ import type {
   DeepV2ResultType,
   DeepObjectiveScores,
   DeepFinalScores,
+  DeepFocus,
   DeepPrimaryFocus,
   DeepSecondaryFocus,
   DeepV2ExtendedResult,
@@ -77,14 +78,15 @@ function parsePainIntensity(v: DeepAnswerValue, painMap: Record<string, number>)
 }
 
 // --- Location → axis: 목·어깨=>N, 허리·골반=>L, 손목·팔꿈치=>U, 무릎·발목=>Lo ---
+// IMPORTANT: check 손목/발목 BEFORE 목 — '목' is a substring of '손목'(wrist) and '발목'(ankle).
 type AxisKey = 'N' | 'L' | 'U' | 'Lo' | 'D';
 
 function locationToAxis(loc: string): AxisKey | null {
   const s = loc.trim();
-  if (s.includes('목') || s.includes('어깨')) return 'N';
-  if (s.includes('허리') || s.includes('골반')) return 'L';
   if (s.includes('손목') || s.includes('팔꿈치')) return 'U';
   if (s.includes('무릎') || s.includes('발목')) return 'Lo';
+  if (s.includes('목') || s.includes('어깨')) return 'N';
+  if (s.includes('허리') || s.includes('골반')) return 'L';
   if (s.includes('전신')) return 'D';
   return null;
 }
@@ -188,7 +190,7 @@ export function calculateDeepV2(
   }
   const q11 = toString(answers.deep_wallangel_quality);
   if (q11) {
-    if (q11.includes('어깨가 들리') || q11.includes('목이 긴장')) obj.N += 2;
+    if (q11.includes('어깨가 들리') || q11.includes('목이 긴장')) obj.N += 1;
     else if (q11.includes('팔꿈치') || q11.includes('손목')) obj.U += 2;
     else if (q11.includes('허리') || q11.includes('갈비뼈')) obj.L += 2;
     else if (q11.includes('전신') || q11.includes('뻣뻣') || q11.includes('피곤')) obj.D += 2;
@@ -216,14 +218,15 @@ export function calculateDeepV2(
 
   const objectiveScores = { ...obj };
 
-  // --- Q5: primary discomfort → FinalScores +4 ---
+  // --- Q5: primary discomfort → FinalScores +1 (weak subjective prior, not dominant) ---
+  // Check 손목/발목 BEFORE 목 to prevent '목' in '손목'/'발목' from triggering neck boost.
   const q5 = toString(answers.deep_basic_primary_discomfort);
   const finalScores = { ...obj };
   if (q5) {
-    if (q5.includes('목') || q5.includes('어깨')) finalScores.N += 4;
-    else if (q5.includes('허리') || q5.includes('골반')) finalScores.L += 4;
-    else if (q5.includes('손목') || q5.includes('팔꿈치')) finalScores.U += 4;
-    else if (q5.includes('무릎') || q5.includes('발목')) finalScores.Lo += 4;
+    if (q5.includes('손목') || q5.includes('팔꿈치')) finalScores.U += 1;
+    else if (q5.includes('무릎') || q5.includes('발목')) finalScores.Lo += 1;
+    else if (q5.includes('목') || q5.includes('어깨')) finalScores.N += 1;
+    else if (q5.includes('허리') || q5.includes('골반')) finalScores.L += 1;
   }
 
   // --- signals (red_flags, pain_sum) ---
@@ -365,7 +368,8 @@ function getMaxAxis(
     return 'Lo';
   }
   if ((a === 'N' || b === 'N') && (a === 'U' || b === 'U')) {
-    if (q11?.includes('목') || q11?.includes('긴장')) return 'N';
+    // Use specific neck pattern — '목이 긴장' — to avoid '목' in '손목' causing false N match.
+    if (q11?.includes('어깨가 들리') || q11?.includes('목이 긴장')) return 'N';
     if (q11?.includes('손목') || q11?.includes('팔꿈치')) return 'U';
     return 'Lo';
   }
@@ -408,14 +412,18 @@ function computePrimaryFocus(
   _q14?: string | null,
   _q11?: string | null
 ): DeepPrimaryFocus {
+  const objMaxAxis = getMaxAxis(obj, _q14, _q11);
+  // Trust objective movement evidence when it's meaningful (≥2 points)
+  if (obj[objMaxAxis] >= 2) return axisToFocus(objMaxAxis);
+  // Weak objective evidence — use Q5 subjective report as tiebreaker.
+  // Check 손목/발목 before 목 to prevent false neck matches.
   if (q5) {
-    if (q5.includes('목') || q5.includes('어깨')) return 'NECK-SHOULDER';
-    if (q5.includes('허리') || q5.includes('골반')) return 'LUMBO-PELVIS';
     if (q5.includes('손목') || q5.includes('팔꿈치')) return 'UPPER-LIMB';
     if (q5.includes('무릎') || q5.includes('발목')) return 'LOWER-LIMB';
+    if (q5.includes('목') || q5.includes('어깨')) return 'NECK-SHOULDER';
+    if (q5.includes('허리') || q5.includes('골반')) return 'LUMBO-PELVIS';
   }
-  const maxAxis = getMaxAxis(obj, _q14, _q11);
-  return axisToFocus(maxAxis);
+  return axisToFocus(objMaxAxis);
 }
 
 function computeSecondaryFocus(
