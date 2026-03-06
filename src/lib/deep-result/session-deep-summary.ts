@@ -15,6 +15,8 @@ const PAIN_RISK_RED = 7;
 const PAIN_RISK_YELLOW = 4;
 
 export interface SessionDeepSummary {
+  /** P1-3: deep_test_attempts row id (for source_deep_attempt_id snapshot) */
+  source_deep_attempt_id?: string;
   result_type: string;
   /** @deprecated use effective_confidence. backward compat only */
   confidence: number;
@@ -48,7 +50,7 @@ export async function loadSessionDeepSummary(
 
   const { data: attempt, error } = await supabase
     .from('deep_test_attempts')
-    .select('result_type, confidence, scoring_version, scores')
+    .select('id, result_type, confidence, scoring_version, scores')
     .eq('user_id', userId)
     .eq('status', 'final')
     .eq('scoring_version', 'deep_v2')
@@ -115,6 +117,7 @@ export async function loadSessionDeepSummary(
     typeof derived?.secondaryFocus === 'string' ? derived.secondaryFocus : undefined;
 
   return {
+    ...(typeof attempt.id === 'string' && { source_deep_attempt_id: attempt.id }),
     result_type: typeof attempt.result_type === 'string' ? attempt.result_type : 'UNKNOWN',
     confidence: legacyConfidence,
     effective_confidence,

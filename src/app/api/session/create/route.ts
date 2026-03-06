@@ -25,6 +25,12 @@ import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import { buildSessionPlanJson } from '@/lib/session/plan-generator';
+import {
+  PLAN_VERSION,
+  buildDeepSummarySnapshot,
+  buildProfileSnapshot,
+  buildGenerationTrace,
+} from '@/lib/session/session-snapshot';
 import { getKstDayKeyUTC, getNextKstMidnightUtcIso, getTodayCompletedAndNextUnlock } from '@/lib/time/kst';
 import { logSessionEvent } from '@/lib/session-events';
 import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
@@ -52,7 +58,7 @@ const FREQUENCY_TO_TOTAL: Record<number, number> = {
 async function resolveTotalSessions(
   supabase: Awaited<ReturnType<typeof getServerSupabaseAdmin>>,
   userId: string
-): Promise<{ totalSessions: number; source: 'profile' | 'default' }> {
+): Promise<{ totalSessions: number; source: 'profile' | 'default'; profile: { target_frequency?: number } | null }> {
   const { data } = await supabase
     .from('session_user_profile')
     .select('target_frequency')
@@ -61,9 +67,9 @@ async function resolveTotalSessions(
 
   const freq = data?.target_frequency;
   if (typeof freq === 'number' && freq in FREQUENCY_TO_TOTAL) {
-    return { totalSessions: FREQUENCY_TO_TOTAL[freq], source: 'profile' };
+    return { totalSessions: FREQUENCY_TO_TOTAL[freq], source: 'profile', profile: data };
   }
-  return { totalSessions: DEFAULT_TOTAL_SESSIONS, source: 'default' };
+  return { totalSessions: DEFAULT_TOTAL_SESSIONS, source: 'default', profile: data };
 }
 
 type ConditionMood = 'good' | 'ok' | 'bad';
@@ -378,6 +384,24 @@ export async function POST(req: NextRequest) {
       equipment,
     };
 
+    const confidenceSource =
+      deepSummary.effective_confidence !== undefined && deepSummary.effective_confidence !== null
+        ? ('effective_confidence' as const)
+        : ('legacy_confidence' as const);
+    const deepSummarySnapshot = buildDeepSummarySnapshot(deepSummary);
+    const profileSnapshot = buildProfileSnapshot(resolved.profile, totalSessionsForPhase);
+    const generationTrace = buildGenerationTrace({
+      sessionNumber: nextSessionNumber,
+      totalSessions: totalSessionsForPhase,
+      phase,
+      theme,
+      confidenceSource,
+      scoringVersion: deepSummary.scoring_version,
+      safetyMode: deepSummary.safety_mode,
+      primaryFocus: deepSummary.primaryFocus,
+      secondaryFocus: deepSummary.secondaryFocus,
+    });
+
     // completed row 덮어쓰기 금지: status IN ('draft','started')일 때만 갱신
     const { data: existingPlan } = await supabase
       .from('session_plans')
@@ -405,6 +429,11 @@ export async function POST(req: NextRequest) {
       theme,
       plan_json: planJson,
       condition,
+      plan_version: PLAN_VERSION,
+      source_deep_attempt_id: deepSummary.source_deep_attempt_id ?? null,
+      deep_summary_snapshot_json: deepSummarySnapshot,
+      profile_snapshot_json: profileSnapshot,
+      generation_trace_json: generationTrace,
     };
 
     let plan: typeof existingPlan;
