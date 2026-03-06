@@ -57,15 +57,10 @@ function clamp(n: number, min: number, max: number) {
 
 type MetricStatus = '정상' | '주의' | '위험';
 
-function statusForPositive(score: number): { status: MetricStatus; color: string } {
-  if (score >= 7) return { status: '정상', color: '#34D399' };
-  if (score >= 4) return { status: '주의', color: '#FF8A00' };
-  return { status: '위험', color: '#F87171' };
-}
-
-function statusForPainRisk(risk: number): { status: MetricStatus; color: string } {
-  if (risk <= 3) return { status: '정상', color: '#34D399' };
-  if (risk <= 6) return { status: '주의', color: '#FF8A00' };
+/** 가동성·안정성·통증 위험 모두 낮을수록 좋음(문제/위험도 점수). 정상 ≤3, 주의 4~6, 위험 >6 */
+function statusForLowerBetter(score: number): { status: MetricStatus; color: string } {
+  if (score <= 3) return { status: '정상', color: '#34D399' };
+  if (score <= 6) return { status: '주의', color: '#FF8A00' };
   return { status: '위험', color: '#F87171' };
 }
 
@@ -143,9 +138,9 @@ export default function DeepTestResultContent({
     10
   );
 
-  const mMob = statusForPositive(mobility);
-  const mSta = statusForPositive(stability);
-  const mPain = statusForPainRisk(painRisk);
+  const mMob = statusForLowerBetter(mobility);
+  const mSta = statusForLowerBetter(stability);
+  const mPain = statusForLowerBetter(painRisk);
 
   const metrics = [
     { id: 'mobility' as const, label: '가동성', score: mobility, status: mMob.status, statusColor: mMob.color },
