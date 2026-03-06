@@ -26,6 +26,10 @@ export const DEEP_V2_QUESTION_IDS = [
   'deep_basic_experience',
   'deep_basic_workstyle',
   'deep_basic_primary_discomfort',
+  'deep_basic_more_uncomfortable_side',
+  'deep_basic_main_limitation_type',
+  'deep_basic_discomfort_frequency',
+  'deep_basic_discomfort_trigger',
   'deep_squat_pain_intensity',
   'deep_squat_pain_location',
   'deep_squat_knee_alignment',
@@ -37,7 +41,7 @@ export const DEEP_V2_QUESTION_IDS = [
   'deep_sls_quality',
 ] as const;
 
-const TOTAL_COUNT = 14;
+const TOTAL_COUNT = 18;
 
 // --- Value parsers (deep_v1 패턴 재사용, free import 금지) ---
 function toNumber(v: DeepAnswerValue): number | null {
@@ -188,7 +192,8 @@ export function calculateDeepV2(
   }
   const q11 = toString(answers.deep_wallangel_quality);
   if (q11) {
-    if (q11.includes('어깨가 들리') || q11.includes('목이 긴장')) obj.N += 2;
+    // Q11 demotion: "어깨가 들리거나 목이 긴장됨" = compensation signal, not strong direct N
+    if (q11.includes('어깨가 들리') || q11.includes('목이 긴장')) obj.N += 1;
     else if (q11.includes('팔꿈치') || q11.includes('손목')) obj.U += 2;
     else if (q11.includes('허리') || q11.includes('갈비뼈')) obj.L += 2;
     else if (q11.includes('전신') || q11.includes('뻣뻣') || q11.includes('피곤')) obj.D += 2;
@@ -216,14 +221,14 @@ export function calculateDeepV2(
 
   const objectiveScores = { ...obj };
 
-  // --- Q5: primary discomfort → FinalScores +4 ---
+  // --- Q5 demotion: primary discomfort = weak prior/tie-breaker, not hard override ---
   const q5 = toString(answers.deep_basic_primary_discomfort);
   const finalScores = { ...obj };
   if (q5) {
-    if (q5.includes('목') || q5.includes('어깨')) finalScores.N += 4;
-    else if (q5.includes('허리') || q5.includes('골반')) finalScores.L += 4;
-    else if (q5.includes('손목') || q5.includes('팔꿈치')) finalScores.U += 4;
-    else if (q5.includes('무릎') || q5.includes('발목')) finalScores.Lo += 4;
+    if (q5.includes('목') || q5.includes('어깨')) finalScores.N += 2;
+    else if (q5.includes('허리') || q5.includes('골반')) finalScores.L += 2;
+    else if (q5.includes('손목') || q5.includes('팔꿈치')) finalScores.U += 2;
+    else if (q5.includes('무릎') || q5.includes('발목')) finalScores.Lo += 2;
   }
 
   // --- signals (red_flags, pain_sum) ---
@@ -405,17 +410,32 @@ function axisToFocus(axis: AxisKey): DeepFocus {
 function computePrimaryFocus(
   q5: string | null,
   obj: DeepObjectiveScores,
-  _q14?: string | null,
-  _q11?: string | null
+  q14?: string | null,
+  q11?: string | null
 ): DeepPrimaryFocus {
-  if (q5) {
-    if (q5.includes('목') || q5.includes('어깨')) return 'NECK-SHOULDER';
-    if (q5.includes('허리') || q5.includes('골반')) return 'LUMBO-PELVIS';
-    if (q5.includes('손목') || q5.includes('팔꿈치')) return 'UPPER-LIMB';
-    if (q5.includes('무릎') || q5.includes('발목')) return 'LOWER-LIMB';
-  }
-  const maxAxis = getMaxAxis(obj, _q14, _q11);
-  return axisToFocus(maxAxis);
+  // Q5 demotion: use movement evidence first; q5 only as tie-breaker
+  const maxAxis = getMaxAxis(obj, q14, q11);
+  const movementFocus = axisToFocus(maxAxis);
+  if (!q5) return movementFocus;
+  const q5Axis = q5.includes('목') || q5.includes('어깨') ? 'N'
+    : q5.includes('허리') || q5.includes('골반') ? 'L'
+    : q5.includes('손목') || q5.includes('팔꿈치') ? 'U'
+    : q5.includes('무릎') || q5.includes('발목') ? 'Lo'
+    : null;
+  if (!q5Axis) return movementFocus;
+  const arr: [AxisKey, number][] = [
+    ['N', obj.N],
+    ['L', obj.L],
+    ['U', obj.U],
+    ['Lo', obj.Lo],
+  ];
+  arr.sort((a, b) => b[1] - a[1]);
+  const top = arr[0];
+  const second = arr[1];
+  if (!top || top[1] === 0) return axisToFocus(q5Axis);
+  if (!second || top[1] > second[1]) return movementFocus;
+  if (top[0] === q5Axis || second[0] === q5Axis) return axisToFocus(q5Axis);
+  return movementFocus;
 }
 
 function computeSecondaryFocus(

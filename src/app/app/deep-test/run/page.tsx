@@ -33,6 +33,10 @@ const STEPPER_SECTIONS = [
       'deep_basic_experience',
       'deep_basic_workstyle',
       'deep_basic_primary_discomfort',
+      'deep_basic_more_uncomfortable_side',
+      'deep_basic_main_limitation_type',
+      'deep_basic_discomfort_frequency',
+      'deep_basic_discomfort_trigger',
     ],
   },
   {
@@ -440,12 +444,6 @@ export default function DeepTestRunPage() {
         </h2>
 
         <div className="space-y-6">
-          {sectionIndex === 0 && (
-            <TargetFrequencyPicker
-              value={targetFrequency}
-              onChange={setTargetFrequency}
-            />
-          )}
           {sectionIndex === 1 && (
             <MovementGuideCard
               title="스쿼트"
@@ -574,6 +572,18 @@ export default function DeepTestRunPage() {
               )}
             </div>
           ))}
+          {sectionIndex === 0 && (
+            <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/80 p-4 shadow-[4px_4px_0_0_rgba(251,191,36,0.5)]">
+              <p className="text-sm font-semibold text-amber-900 mb-2">운동 계획 / 세션 설정</p>
+              <p className="text-xs text-amber-800/80 mb-3">
+                주당 목표 횟수는 진단 결과와 무관하게 세션 배분에만 사용됩니다.
+              </p>
+              <TargetFrequencyPicker
+                value={targetFrequency}
+                onChange={setTargetFrequency}
+              />
+            </div>
+          )}
         </div>
 
         {saveError && (

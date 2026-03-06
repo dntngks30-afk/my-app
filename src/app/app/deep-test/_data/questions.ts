@@ -61,6 +61,53 @@ export const DEEP_V2_QUESTIONS: DeepQuestion[] = [
     ],
   },
   {
+    id: 'deep_basic_more_uncomfortable_side',
+    type: 'single',
+    title: '더 불편한 쪽이 있으신가요?',
+    options: [
+      { label: '왼쪽', value: '왼쪽' },
+      { label: '오른쪽', value: '오른쪽' },
+      { label: '양쪽 비슷', value: '양쪽 비슷' },
+      { label: '잘 모르겠음', value: '잘 모르겠음' },
+    ],
+  },
+  {
+    id: 'deep_basic_main_limitation_type',
+    type: 'single',
+    title: '가장 크게 느껴지는 문제는 무엇인가요?',
+    options: [
+      { label: '통증', value: '통증' },
+      { label: '뻣뻣함', value: '뻣뻣함' },
+      { label: '흔들림/불안정', value: '흔들림/불안정' },
+      { label: '힘 부족', value: '힘 부족' },
+      { label: '잘 모르겠음', value: '잘 모르겠음' },
+    ],
+  },
+  {
+    id: 'deep_basic_discomfort_frequency',
+    type: 'single',
+    title: '이런 불편함은 얼마나 자주 느끼시나요?',
+    options: [
+      { label: '거의 없음', value: '거의 없음' },
+      { label: '가끔', value: '가끔' },
+      { label: '주 1~2회', value: '주 1~2회' },
+      { label: '자주', value: '자주' },
+      { label: '거의 매일', value: '거의 매일' },
+    ],
+  },
+  {
+    id: 'deep_basic_discomfort_trigger',
+    type: 'single',
+    title: '언제 가장 두드러지나요?',
+    options: [
+      { label: '오래 앉은 뒤', value: '오래 앉은 뒤' },
+      { label: '운동할 때', value: '운동할 때' },
+      { label: '걷기/계단', value: '걷기/계단' },
+      { label: '아침 첫 움직임', value: '아침 첫 움직임' },
+      { label: '잘 모르겠음', value: '잘 모르겠음' },
+    ],
+  },
+  {
     id: 'deep_squat_pain_intensity',
     type: 'single',
     title: '동작 진행 시 불편함이 있으신가요?',
@@ -168,7 +215,21 @@ export const DEEP_V2_QUESTIONS: DeepQuestion[] = [
 ];
 
 export const DEEP_SECTIONS = [
-  { id: 'basic', title: '기본', questionIds: ['deep_basic_age', 'deep_basic_gender', 'deep_basic_experience', 'deep_basic_workstyle', 'deep_basic_primary_discomfort'] },
+  {
+    id: 'basic',
+    title: '기본',
+    questionIds: [
+      'deep_basic_age',
+      'deep_basic_gender',
+      'deep_basic_experience',
+      'deep_basic_workstyle',
+      'deep_basic_primary_discomfort',
+      'deep_basic_more_uncomfortable_side',
+      'deep_basic_main_limitation_type',
+      'deep_basic_discomfort_frequency',
+      'deep_basic_discomfort_trigger',
+    ],
+  },
   { id: 'squat', title: '스쿼트', questionIds: ['deep_squat_pain_intensity', 'deep_squat_pain_location', 'deep_squat_knee_alignment'] },
   { id: 'wallangel', title: '벽천사', questionIds: ['deep_wallangel_pain_intensity', 'deep_wallangel_pain_location', 'deep_wallangel_quality'] },
   { id: 'sls', title: '한발서기', questionIds: ['deep_sls_pain_intensity', 'deep_sls_pain_location', 'deep_sls_quality'] },
