@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 /**
  * Deep Test 寃곌낵 ?섏씠吏 (濡쒓렇??
@@ -244,9 +244,10 @@ export default function DeepTestResultPage() {
     );
   }
 
-  // Ready: 怨듯넻 DeepTestResultContent ?ъ슜
+  // Ready: 공통 DeepTestResultContent 사용
   const att = result?.attempt;
-  const derived = att?.scores?.derived;
+  const scores = att?.scores as Record<string, unknown> | null | undefined;
+  const derived = scores?.derived as Record<string, unknown> | null | undefined;
 
   return (
     <div className="min-h-screen bg-[#F7F3EE] pb-24">
@@ -255,9 +256,13 @@ export default function DeepTestResultPage() {
         <DeepTestResultContent
           resultType={att?.resultType ?? null}
           confidence={att?.confidence ?? null}
-          focusTags={derived?.focus_tags ?? []}
-          avoidTags={derived?.avoid_tags ?? []}
-          algorithmScores={derived?.algorithm_scores}
+          primaryFocus={(scores?.primaryFocus ?? derived?.primaryFocus) as string | null | undefined}
+          secondaryFocus={(scores?.secondaryFocus ?? derived?.secondaryFocus) as string | null | undefined}
+          rationale={derived?.rationale as string | null | undefined}
+          confidenceLabel={(derived?.decision_trace as Record<string, unknown> | null | undefined)?.confidence_label as string | null | undefined}
+          focusTags={(derived?.focus_tags ?? []) as string[]}
+          avoidTags={(derived?.avoid_tags ?? []) as string[]}
+          algorithmScores={derived?.algorithm_scores as Record<string, number> | null | undefined}
           scoringVersion={result?.scoring_version}
           attemptId={att?.id}
           variant="app"

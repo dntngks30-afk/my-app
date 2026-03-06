@@ -132,3 +132,18 @@ export function getCopy(
   if (VALID_TYPES.includes(key)) return DEEP_RESULT_COPY[key];
   return FALLBACK_COPY;
 }
+
+export type ConfidenceLabel = 'high' | 'medium' | 'low';
+
+export function getConfidenceLabel(confidence: number | null | undefined): ConfidenceLabel {
+  if (confidence == null || typeof confidence !== 'number' || Number.isNaN(confidence)) return 'medium';
+  if (confidence >= 0.7) return 'high';
+  if (confidence >= 0.5) return 'medium';
+  return 'low';
+}
+
+/** Soft-copy subhead override for low-confidence cases */
+export function getSoftSubhead(resultType: string | null | undefined): string | null {
+  if (!resultType || resultType === 'STABLE' || resultType === 'DECONDITIONED') return null;
+  return '복합적인 패턴이 함께 보여 단일 유형으로 단정하기는 어렵습니다. 우선순위를 참고해 점진적으로 진행해 보세요.';
+}

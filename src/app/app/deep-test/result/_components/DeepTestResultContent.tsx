@@ -18,15 +18,34 @@ import {
   AlertCircle,
   Zap,
 } from 'lucide-react';
-import { getCopy } from '@/lib/deep-result/copy';
+import { getCopy, getConfidenceLabel, getSoftSubhead } from '@/lib/deep-result/copy';
 import { toRadarScores } from '@/lib/deep-result/score-utils';
 import TagChips from './TagChips';
 
 type Variant = 'app' | 'demo';
 
+const FOCUS_LABELS: Record<string, string> = {
+  'NECK-SHOULDER': '상체 가동성',
+  'LUMBO-PELVIS': '코어·골반',
+  'UPPER-LIMB': '상지 부위',
+  'LOWER-LIMB': '하체 안정성',
+  FULL: '전반적 안정',
+  NONE: '',
+};
+
+const CONFIDENCE_LABELS: Record<string, string> = {
+  high: '높음',
+  medium: '보통',
+  low: '낮음',
+};
+
 export interface DeepTestResultContentProps {
   resultType: string | null;
   confidence?: number | null;
+  primaryFocus?: string | null;
+  secondaryFocus?: string | null;
+  rationale?: string | null;
+  confidenceLabel?: string | null;
   focusTags: string[];
   avoidTags: string[];
   algorithmScores?: {
@@ -107,6 +126,11 @@ function getPos(score: number, angleIdx: number, radius = maxRadius) {
 
 export default function DeepTestResultContent({
   resultType,
+  confidence,
+  primaryFocus,
+  secondaryFocus,
+  rationale,
+  confidenceLabel,
   focusTags,
   avoidTags,
   algorithmScores,
@@ -156,6 +180,10 @@ export default function DeepTestResultContent({
   const copy = getCopy(resultType);
   const copyAny = copy as unknown as Record<string, unknown>;
 
+  const confLabel = confidenceLabel ?? getConfidenceLabel(confidence);
+  const isLowConfidence = confLabel === 'low';
+  const softSubhead = isLowConfidence ? getSoftSubhead(resultType) : null;
+
   const mainTag = asString(
     copyAny?.badgeTitle ?? copyAny?.tag ?? copyAny?.badge ?? copyAny?.bannerTag,
     '우선순위 확인'
@@ -165,13 +193,16 @@ export default function DeepTestResultContent({
     '나의 움직임 경향 요약'
   );
   const mainSummary = asString(
-    copyAny?.subhead ??
+    rationale ?? (softSubhead ?? (copyAny?.subhead ??
       copyAny?.summary ??
       copyAny?.desc ??
       copyAny?.short ??
-      (copyAny?.narrative as Record<string, unknown>)?.summary,
+      (copyAny?.narrative as Record<string, unknown>)?.summary)),
     '지금은 "진단"이 아니라, 오늘부터 바꿀 수 있는 우선순위를 정리한 결과입니다.'
   );
+
+  const primaryLabel = primaryFocus ? (FOCUS_LABELS[primaryFocus] ?? primaryFocus) : null;
+  const secondaryLabel = secondaryFocus && secondaryFocus !== 'NONE' ? (FOCUS_LABELS[secondaryFocus] ?? secondaryFocus) : null;
 
   const insightsText = (() => {
     const fromCopy = asStringArray(
@@ -270,6 +301,24 @@ export default function DeepTestResultContent({
         <p className="text-gray-600 text-[13px] font-bold leading-relaxed break-keep">
           {mainSummary}
         </p>
+
+        {(primaryLabel || secondaryLabel || confLabel) && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {primaryLabel && (
+              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-100 text-[11px] font-bold text-slate-700 border border-slate-200">
+                1차: {primaryLabel}
+              </span>
+            )}
+            {secondaryLabel && (
+              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-50 text-[11px] font-medium text-slate-600 border border-slate-100">
+                2차: {secondaryLabel}
+              </span>
+            )}
+            <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-amber-50 text-[11px] font-medium text-amber-800 border border-amber-200">
+              신뢰도: {CONFIDENCE_LABELS[confLabel] ?? confLabel}
+            </span>
+          </div>
+        )}
 
         <div className="mt-5 flex items-center justify-between text-[10px] font-black text-gray-400">
           <span className="uppercase tracking-widest">Report</span>

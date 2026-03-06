@@ -12,9 +12,11 @@ import type {
   DeepFinalScores,
   DeepPrimaryFocus,
   DeepSecondaryFocus,
+  DeepFocus,
   DeepV2ExtendedResult,
   DeepAlgorithmScores,
   DeepV2Signals,
+  DeepV2DecisionTrace,
 } from '../types';
 import { getPainIntensityMap, getFocusToTags, getAxisToAvoid } from '../config';
 
@@ -501,11 +503,126 @@ export function extendDeepV2(v2: DeepV2Result & { signals?: DeepV2Signals }): De
     pain_risk: objectiveScores.D,
   };
 
+  const decision_trace = buildDecisionTrace(v2, objectiveScores, finalScores);
+  const rationale = buildRationale(v2.result_type, v2.primaryFocus, v2.secondaryFocus, confidence, decision_trace);
+
   return {
     ...v2,
     level,
     focus_tags,
     avoid_tags: [...new Set(avoid_tags)],
     algorithm_scores,
+    decision_trace,
+    rationale,
   };
+}
+
+const AXIS_LABELS: Record<string, string> = {
+  N: '목·어깨',
+  L: '허리·골반',
+  U: '손목·팔꿈치',
+  Lo: '무릎·발목',
+  D: '전신·밸런스',
+};
+
+function buildDecisionTrace(
+  v2: DeepV2Result & { signals?: DeepV2Signals },
+  obj: DeepObjectiveScores,
+  final: DeepFinalScores
+): DeepV2DecisionTrace {
+  const arr: [string, number][] = [
+    ['N', final.N],
+    ['L', final.L],
+    ['U', final.U],
+    ['Lo', final.Lo],
+  ];
+  arr.sort((a, b) => b[1] - a[1]);
+  const primary_axis = focusToAxis(v2.primaryFocus);
+  const secondary_axis = v2.secondaryFocus && v2.secondaryFocus !== 'NONE' ? focusToAxis(v2.secondaryFocus) : '';
+
+  const top_scores: Record<string, number> = {};
+  for (const [k, v] of arr) {
+    if (v > 0) top_scores[k] = v;
+  }
+
+  const dominant_reasons: string[] = [];
+  if (obj.N >= 2) dominant_reasons.push('상체·어깨 관련 신호');
+  if (obj.L >= 2) dominant_reasons.push('허리·골반 관련 신호');
+  if (obj.U >= 2) dominant_reasons.push('손목·팔꿈치 관련 신호');
+  if (obj.Lo >= 2) dominant_reasons.push('무릎·발목 관련 신호');
+  if (obj.D >= 3) dominant_reasons.push('전신·밸런스 신호');
+
+  const direct_evidence_count_by_axis: Record<string, number> = {
+    N: obj.N,
+    L: obj.L,
+    U: obj.U,
+    Lo: obj.Lo,
+    D: obj.D,
+  };
+
+  const compensation_flags: string[] = [];
+  if (v2.signals?.red_flags) compensation_flags.push('red_flags');
+
+  const conf = v2.confidence;
+  const confidence_label: 'high' | 'medium' | 'low' =
+    conf >= 0.7 ? 'high' : conf >= 0.5 ? 'medium' : 'low';
+
+  return {
+    primary_axis: AXIS_LABELS[primary_axis] ?? primary_axis,
+    secondary_axis: secondary_axis ? (AXIS_LABELS[secondary_axis] ?? secondary_axis) : '',
+    confidence_label,
+    top_scores,
+    dominant_reasons,
+    direct_evidence_count_by_axis,
+    compensation_flags,
+    scoring_version: v2.scoring_version ?? 'deep_v2',
+  };
+}
+
+function focusToAxis(f: string): string {
+  if (f === 'NECK-SHOULDER') return 'N';
+  if (f === 'LUMBO-PELVIS') return 'L';
+  if (f === 'UPPER-LIMB') return 'U';
+  if (f === 'LOWER-LIMB') return 'Lo';
+  if (f === 'FULL') return '';
+  return '';
+}
+
+function buildRationale(
+  resultType: DeepV2ResultType,
+  primaryFocus: DeepPrimaryFocus,
+  secondaryFocus: DeepSecondaryFocus,
+  confidence: number,
+  trace: DeepV2DecisionTrace
+): string {
+  const patternLabels: Record<string, string> = {
+    'NECK-SHOULDER': '상체 가동성',
+    'LUMBO-PELVIS': '코어·골반',
+    'UPPER-LIMB': '상지 부위',
+    'LOWER-LIMB': '하체 안정성',
+    FULL: '전반적 안정',
+    NONE: '',
+  };
+  const primary = patternLabels[primaryFocus] ?? primaryFocus;
+  const secondary = secondaryFocus && secondaryFocus !== 'NONE' ? patternLabels[secondaryFocus] : '';
+
+  if (resultType === 'STABLE') {
+    return '전반적으로 안정적인 움직임 패턴이 관찰됩니다.';
+  }
+  if (resultType === 'DECONDITIONED') {
+    return '통증·전신 부하 신호가 우세하여, 안정적인 움직임 복구가 우선입니다.';
+  }
+
+  const confLabel = trace.confidence_label;
+  if (confLabel === 'high') {
+    return `현재는 ${primary} 경향이 가장 우세합니다.`;
+  }
+  if (confLabel === 'medium') {
+    return secondary
+      ? `${primary} 경향이 우세하지만, ${secondary} 패턴도 일부 함께 보입니다.`
+      : `${primary} 경향이 우세하지만, 다른 보상 패턴도 일부 함께 보입니다.`;
+  }
+  return secondary
+    ? `${primary} 경향이 다소 우세하지만, ${secondary} 등 복합적인 패턴이 함께 보여 단일 유형으로 단정하기는 어렵습니다.`
+    : `${primary} 경향이 다소 우세하지만, 복합적인 패턴이 함께 보여 단일 유형으로 단정하기는 어렵습니다.`;
 }

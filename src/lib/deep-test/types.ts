@@ -90,6 +90,19 @@ export interface DeepV2Result {
   totalCount: number; // 14
 }
 
+/** decision_trace: 디버깅/설명가능성용 메타 */
+export interface DeepV2DecisionTrace {
+  primary_axis: string;
+  secondary_axis: string;
+  confidence_label: 'high' | 'medium' | 'low';
+  top_scores: Record<string, number>;
+  dominant_reasons: string[];
+  direct_evidence_count_by_axis?: Record<string, number>;
+  subjective_support_by_axis?: Record<string, number>;
+  compensation_flags?: string[];
+  scoring_version: string;
+}
+
 /** * 🚀 [SSOT 핵심] 7일 루틴 자동 생성 API가 소비할 V2 확장 인터페이스
  * (이 데이터가 서버 알고리즘의 유일한 판단 기준이 됩니다)
  */
@@ -98,4 +111,6 @@ export interface DeepV2ExtendedResult extends DeepV2Result {
   focus_tags: string[];                   // 템플릿 추출용 목표 태그 (예: ['glute_activation'])
   avoid_tags: string[];                   // 절대 금지 태그 (예: ['knee_load', 'shoulder_overhead'])
   algorithm_scores: DeepAlgorithmScores;  // 알고리즘 내부 계산용 상세 점수 객체
+  decision_trace?: DeepV2DecisionTrace;
+  rationale?: string;
 }
