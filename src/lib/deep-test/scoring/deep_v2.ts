@@ -10,6 +10,7 @@ import type {
   DeepV2ResultType,
   DeepObjectiveScores,
   DeepFinalScores,
+  DeepFocus,
   DeepPrimaryFocus,
   DeepSecondaryFocus,
   DeepV2ExtendedResult,
@@ -20,7 +21,8 @@ import { getPainIntensityMap, getFocusToTags, getAxisToAvoid } from '../config';
 
 export const SCORING_VERSION = 'deep_v2';
 
-export const DEEP_V2_QUESTION_IDS = [
+/** Legacy schema (14 questions) — used for denominator when attempt has no context answers */
+export const LEGACY_QUESTION_IDS = [
   'deep_basic_age',
   'deep_basic_gender',
   'deep_basic_experience',
@@ -37,7 +39,34 @@ export const DEEP_V2_QUESTION_IDS = [
   'deep_sls_quality',
 ] as const;
 
-const TOTAL_COUNT = 14;
+/** Context questions added later — presence in answers implies extended schema */
+const CONTEXT_QUESTION_IDS = [
+  'deep_basic_main_limitation_type',
+  'deep_basic_more_uncomfortable_side',
+  'deep_basic_discomfort_frequency',
+  'deep_basic_discomfort_trigger',
+] as const;
+
+/** Current full set (legacy + context) for extended schema */
+export const DEEP_V2_QUESTION_IDS = [
+  ...LEGACY_QUESTION_IDS,
+  ...CONTEXT_QUESTION_IDS,
+] as const;
+
+function hasAnyContextAnswer(answers: Record<string, DeepAnswerValue>): boolean {
+  for (const id of CONTEXT_QUESTION_IDS) {
+    const v = answers[id];
+    if (v !== undefined && v !== null) {
+      if (Array.isArray(v) && v.length > 0) return true;
+      if (!Array.isArray(v)) return true;
+    }
+  }
+  return false;
+}
+
+function getApplicableQuestionIds(answers: Record<string, DeepAnswerValue>): readonly string[] {
+  return hasAnyContextAnswer(answers) ? DEEP_V2_QUESTION_IDS : LEGACY_QUESTION_IDS;
+}
 
 // --- Value parsers (deep_v1 패턴 재사용, free import 금지) ---
 function toNumber(v: DeepAnswerValue): number | null {
@@ -129,9 +158,11 @@ export function calculateDeepV2(
   const painMap = getPainIntensityMap();
   const obj = emptyScores();
 
-  // --- Answered count (DEEP_V2_QUESTION_IDS 기준) ---
+  // --- Version-aware answered count: legacy (14) vs extended (18) denominator ---
+  const applicableIds = getApplicableQuestionIds(answers);
+  const totalCount = applicableIds.length;
   let answeredCount = 0;
-  for (const id of DEEP_V2_QUESTION_IDS) {
+  for (const id of applicableIds) {
     const v = answers[id];
     if (v !== undefined && v !== null) {
       if (Array.isArray(v)) {
@@ -141,7 +172,7 @@ export function calculateDeepV2(
       }
     }
   }
-  const baseConfidence = answeredCount / TOTAL_COUNT;
+  const baseConfidence = totalCount > 0 ? answeredCount / totalCount : 0;
 
   // --- Q1: deep_basic_age ---
   const age = toNumber(answers.deep_basic_age);
@@ -260,7 +291,7 @@ export function calculateDeepV2(
       finalScores: { ...finalScores },
       confidence: baseConfidence,
       answeredCount,
-      totalCount: TOTAL_COUNT,
+      totalCount,
       signals,
     };
   }
@@ -285,7 +316,7 @@ export function calculateDeepV2(
       finalScores: { ...finalScores },
       confidence: baseConfidence,
       answeredCount,
-      totalCount: TOTAL_COUNT,
+      totalCount,
       signals,
     };
   }
@@ -303,7 +334,7 @@ export function calculateDeepV2(
       finalScores: { ...finalScores },
       confidence: baseConfidence,
       answeredCount,
-      totalCount: TOTAL_COUNT,
+      totalCount,
       signals,
     };
   }
@@ -336,7 +367,7 @@ export function calculateDeepV2(
     finalScores: { ...finalScores },
     confidence,
     answeredCount,
-    totalCount: TOTAL_COUNT,
+    totalCount,
     signals,
   };
 }
