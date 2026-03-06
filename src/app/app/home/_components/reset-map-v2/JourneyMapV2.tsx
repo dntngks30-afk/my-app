@@ -12,7 +12,9 @@ import {
 
 interface JourneyMapV2Props {
   total: number
-  currentSession: number
+  completed: number
+  /** null = daily cap, 현재 세션 없음 */
+  currentSession: number | null
   onNodeTap: (session: SessionNode) => void
 }
 
@@ -69,7 +71,7 @@ function Flag({ x, y }: { x: number; y: number }) {
   )
 }
 
-function JourneyMapV2Inner({ total, currentSession, onNodeTap }: JourneyMapV2Props) {
+function JourneyMapV2Inner({ total, completed, currentSession, onNodeTap }: JourneyMapV2Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [, setMounted] = useState(false)
 
@@ -79,12 +81,13 @@ function JourneyMapV2Inner({ total, currentSession, onNodeTap }: JourneyMapV2Pro
   const fullPath = visibleSessions.length >= 2 ? generatePathD(visibleSessions) : ''
   const contours = generateContourLines()
 
-  const completedSessions = visibleSessions.filter(s => s.id <= currentSession)
+  const pathBoundary = currentSession ?? completed
+  const completedSessions = visibleSessions.filter(s => s.id <= pathBoundary)
   const completedPath = completedSessions.length >= 2 ? generatePathD(completedSessions) : ''
 
   useEffect(() => {
     setMounted(true)
-    if (scrollRef.current) {
+    if (scrollRef.current && currentSession != null) {
       const node = visibleSessions.find(s => s.id === currentSession)
       if (node) {
         const ratio = node.y / VH
@@ -98,11 +101,14 @@ function JourneyMapV2Inner({ total, currentSession, onNodeTap }: JourneyMapV2Pro
 
   const status = useCallback(
     (id: number): 'completed' | 'current' | 'locked' => {
+      if (currentSession === null) {
+        return id <= completed ? 'completed' : 'locked'
+      }
       if (id < currentSession) return 'completed'
       if (id === currentSession) return 'current'
       return 'locked'
     },
-    [currentSession],
+    [currentSession, completed],
   )
 
   const C = {

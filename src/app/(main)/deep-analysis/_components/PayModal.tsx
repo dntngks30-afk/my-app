@@ -89,6 +89,12 @@ export default function PayModal({ isOpen, onClose, returnUrl }: PayModalProps) 
 
       if (!checkoutRes.ok) {
         const code = json?.code ?? '';
+        // 이미 활성화된 경우: 에러 대신 홈으로 이동
+        if (checkoutRes.status === 409 && code === 'ALREADY_ACTIVE') {
+          router.replace('/app/home');
+          setIsLoading(false);
+          return;
+        }
         const errMsg = json?.error || json?.message || '결제 세션 생성에 실패했습니다.';
         console.error('Checkout failed', { status: checkoutRes.status, code, error: errMsg });
         setErrorMessage(errMsg);

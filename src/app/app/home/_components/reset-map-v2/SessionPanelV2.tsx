@@ -19,6 +19,10 @@ interface SessionPanelV2Props {
   exercises: ExerciseItem[] | undefined
   /** 현재 active plan — session_number + status 사용 */
   activePlan: SessionPlan | null
+  /** daily cap: 다음 세션이 오늘 완료로 locked인 경우 */
+  isLockedNext?: boolean
+  /** daily cap: 다음 세션 해제 시각 (ISO string) */
+  nextUnlockAt?: string
   onClose: () => void
   /** 세션 완료 후 새 completed_sessions 값을 상위로 전달 */
   onSessionCompleted?: (completedSessions: number) => void
@@ -41,6 +45,8 @@ export function SessionPanelV2({
   status,
   exercises,
   activePlan,
+  isLockedNext,
+  nextUnlockAt,
   onClose,
   onSessionCompleted,
 }: SessionPanelV2Props) {
@@ -53,6 +59,8 @@ export function SessionPanelV2({
       status={status}
       exercises={exercises}
       activePlan={activePlan}
+      isLockedNext={isLockedNext}
+      nextUnlockAt={nextUnlockAt}
       onClose={onClose}
       onSessionCompleted={onSessionCompleted}
     />
@@ -67,6 +75,8 @@ function PanelInner({
   status,
   exercises,
   activePlan,
+  isLockedNext,
+  nextUnlockAt,
   onClose,
   onSessionCompleted,
 }: Required<Omit<SessionPanelV2Props, 'onSessionCompleted'>> & {
@@ -228,6 +238,8 @@ function PanelInner({
               exercises={exercises}
               status={status}
               logs={logs}
+              isLockedNext={isLockedNext}
+              nextUnlockAt={nextUnlockAt}
               onPlay={item => setOpenItem(item)}
             />
           </div>
@@ -247,21 +259,45 @@ function PanelInner({
 
 /* ─── 운동 목록 ──────────────────────────────────────────────── */
 
+function formatUnlockMessage(nextUnlockAt?: string): string {
+  if (nextUnlockAt) {
+    try {
+      const d = new Date(nextUnlockAt)
+      if (!Number.isNaN(d.getTime())) {
+        const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000)
+        const h = kst.getUTCHours()
+        const m = kst.getUTCMinutes()
+        if (h === 0 && m === 0) return '다음 세션은 내일 다시 열립니다.'
+        return `다음 세션은 ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} 이후 열립니다.`
+      }
+    } catch { /* fallback */ }
+  }
+  return '내일 다시 열립니다.'
+}
+
 function ExerciseList({
   exercises,
   status,
   logs,
+  isLockedNext,
+  nextUnlockAt,
   onPlay,
 }: {
   exercises: ExerciseItem[] | undefined
   status: SessionStatus
   logs: Record<string, ExerciseLogItem>
+  isLockedNext?: boolean
+  nextUnlockAt?: string
   onPlay: (item: ExerciseItem) => void
 }) {
   if (status === 'locked') {
     return (
       <div className="rounded-xl bg-slate-50 px-4 py-5 text-center">
-        <p className="text-sm text-slate-500">아직 준비되지 않은 세션입니다.</p>
+        <p className="text-sm text-slate-500">
+          {isLockedNext
+            ? `오늘 세션을 완료했어요. ${formatUnlockMessage(nextUnlockAt)}`
+            : '아직 준비되지 않은 세션입니다.'}
+        </p>
       </div>
     )
   }
@@ -333,15 +369,15 @@ function ExerciseList({
                     </p>
                   </div>
 
-                  {/* ▶ 버튼 — current 세션만 활성화 */}
+                  {/* ▶ 버튼 — current/completed(과거) 세션에서 재생 가능 */}
                   <button
                     type="button"
-                    onClick={() => status === 'current' ? onPlay(item) : undefined}
-                    disabled={status !== 'current'}
-                    title={status === 'current' ? '운동 시작' : '현재 세션이 아닙니다'}
+                    onClick={() => (status === 'current' || status === 'completed') ? onPlay(item) : undefined}
+                    disabled={status === 'locked'}
+                    title={status === 'locked' ? '현재 세션이 아닙니다' : '운동 보기'}
                     className={[
                       'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors',
-                      status === 'current'
+                      status === 'current' || status === 'completed'
                         ? isDone
                           ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
                           : 'bg-orange-100 text-orange-600 hover:bg-orange-200'

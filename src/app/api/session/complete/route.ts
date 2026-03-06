@@ -141,12 +141,26 @@ export async function POST(req: NextRequest) {
     });
     const supabase = getServerSupabaseAdmin();
 
-    // P0-09: progress 조회 — session_number > total_sessions, completed_sessions >= total 검증용
+    // P0-09: progress 조회 — session_number > total_sessions, completed_sessions >= total, active 가드
     const { data: progress } = await supabase
       .from('session_program_progress')
-      .select('total_sessions, completed_sessions')
+      .select('total_sessions, completed_sessions, active_session_number')
       .eq('user_id', userId)
       .maybeSingle();
+
+    // 과거 세션 완료 차단 (read-only) — active 세션만 complete 허용
+    const activeSessionNumber = progress?.active_session_number;
+    if (activeSessionNumber !== sessionNumber) {
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_complete_blocked',
+        status: 'blocked',
+        code: 'PAST_SESSION_READ_ONLY',
+        sessionNumber,
+        meta: { active_session_number: activeSessionNumber ?? null },
+      });
+      return fail(409, ApiErrorCode.PAST_SESSION_READ_ONLY, '과거 세션은 읽기 전용입니다. 현재 진행 중인 세션만 완료할 수 있습니다');
+    }
 
     const totalSessions = progress?.total_sessions ?? 16;
     if (sessionNumber > totalSessions) {

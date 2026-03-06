@@ -38,13 +38,24 @@ export default function HomePageClient() {
     completed_sessions: number;
   } | null>(null);
   const [activePlan, setActivePlan] = useState<SessionPlan | null>(null);
+  const [todayCompleted, setTodayCompleted] = useState(false);
+  const [nextUnlockAt, setNextUnlockAt] = useState<string | null>(null);
 
-  const handleSessionCompleted = useCallback((completedSessions: number) => {
+  const handleSessionCompleted = useCallback(async (completedSessions: number) => {
     setSessionProgress(prev =>
       prev ? { ...prev, completed_sessions: completedSessions } : prev
     );
     setActivePlan(null);
     invalidateActiveCache();
+    // Refetch to get todayCompleted/nextUnlockAt (daily cap 상태)
+    const { session } = await getSessionSafe();
+    if (session?.access_token) {
+      const result = await getCachedActiveSession(session.access_token);
+      if (result.ok) {
+        setTodayCompleted(result.data.today_completed === true);
+        setNextUnlockAt(typeof result.data.next_unlock_at === 'string' ? result.data.next_unlock_at : null);
+      }
+    }
   }, []);
 
   const handleActivePlanCreated = useCallback((plan: SessionPlan) => {
@@ -91,6 +102,8 @@ export default function HomePageClient() {
           });
           setActivePlan(result.data.active ?? null);
         }
+        setTodayCompleted(result.data.today_completed === true);
+        setNextUnlockAt(typeof result.data.next_unlock_at === 'string' ? result.data.next_unlock_at : null);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '세션을 확인해 주세요');
@@ -161,7 +174,17 @@ export default function HomePageClient() {
           const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
 
           if (mapV2 && total <= 20) {
-            return <ResetMapV2 total={total} completed={completed} activePlan={activePlan} onSessionCompleted={handleSessionCompleted} onActivePlanCreated={handleActivePlanCreated} />;
+            return (
+              <ResetMapV2
+                total={total}
+                completed={completed}
+                activePlan={activePlan}
+                todayCompleted={todayCompleted}
+                nextUnlockAt={nextUnlockAt}
+                onSessionCompleted={handleSessionCompleted}
+                onActivePlanCreated={handleActivePlanCreated}
+              />
+            );
           }
 
           if (sessionProgress || debugMap) {

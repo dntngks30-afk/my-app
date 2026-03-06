@@ -117,6 +117,19 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // Entitlement guard: already active → 409 (중복 결제 차단)
+      const { data: planStatusRow } = await supabaseAdmin
+        .from('users')
+        .select('plan_status')
+        .eq('id', userId)
+        .single();
+      if ((planStatusRow as { plan_status?: string } | null)?.plan_status === 'active') {
+        return NextResponse.json(
+          { success: false, code: 'ALREADY_ACTIVE', error: 'Already active' },
+          { status: 409 }
+        );
+      }
+
       try {
         const stripe = getStripeServerClient();
         const customer = await getOrCreateStripeCustomer(
@@ -251,6 +264,14 @@ export async function POST(req: NextRequest) {
           error: plan.stripe_price_id ? 'Plan is inactive' : 'Plan not linked to Stripe',
         },
         { status: 400 }
+      );
+    }
+
+    // Entitlement guard: already active → 409 (중복 결제 차단)
+    if (dbUser.plan_status === 'active') {
+      return NextResponse.json(
+        { success: false, code: 'ALREADY_ACTIVE', error: 'Already active' },
+        { status: 409 }
       );
     }
 

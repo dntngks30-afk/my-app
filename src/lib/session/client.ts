@@ -160,6 +160,15 @@ export async function getActiveSession(
   });
 }
 
+/** GET /api/session/plan?session_number=N — 과거/현재 세션 plan 조회 (read-only) */
+export async function getSessionPlan(
+  token: string,
+  sessionNumber: number
+): Promise<ApiResult<SessionPlan>> {
+  const path = `/api/session/plan?session_number=${encodeURIComponent(sessionNumber)}`;
+  return sessionFetch<SessionPlan>(path, token, { method: 'GET' });
+}
+
 export type CreateSessionInput = {
   condition_mood: 'good' | 'ok' | 'bad';
   time_budget: 'short' | 'normal';

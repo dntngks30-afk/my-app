@@ -5,7 +5,7 @@ import { JourneyMapV2 } from './JourneyMapV2'
 import { SessionPanelV2 } from './SessionPanelV2'
 import { sessions, type SessionNode } from './map-data'
 import { extractSessionExercises } from './planJsonAdapter'
-import { createSession, type SessionPlan } from '@/lib/session/client'
+import { createSession, getSessionPlan, type SessionPlan } from '@/lib/session/client'
 import { getSessionSafe } from '@/lib/supabase'
 import { prefetchMediaSign } from './media-cache'
 
@@ -16,20 +16,27 @@ interface ResetMapV2Props {
   completed: number
   /** HomePageClient에서 내려받은 active plan (plan_json 포함) */
   activePlan: SessionPlan | null
+  /** daily cap: 오늘 세션 완료 여부 */
+  todayCompleted?: boolean
+  /** daily cap: 다음 세션 해제 시각 (ISO string) */
+  nextUnlockAt?: string | null
   /** 세션 완료 후 HomePageClient의 sessionProgress 갱신용 콜백 */
   onSessionCompleted?: (completedSessions: number) => void
   /** createSession 성공 시 HomePageClient의 activePlan 갱신용 콜백 */
   onActivePlanCreated?: (plan: SessionPlan) => void
 }
 
-export function ResetMapV2({ total, completed, activePlan, onSessionCompleted, onActivePlanCreated }: ResetMapV2Props) {
-  // currentSession: 다음에 해야 할 세션 번호 (1-indexed)
-  const currentSession = Math.min(completed + 1, total, sessions.length)
+export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, onSessionCompleted, onActivePlanCreated }: ResetMapV2Props) {
+  // daily cap: today_completed && !activePlan → 현재 세션 없음, 다음 세션 locked
+  const isLockedNext = !!(todayCompleted && !activePlan)
+  const nextSessionNum = Math.min(completed + 1, total, sessions.length)
+  const effectiveCurrentSession = isLockedNext ? null : nextSessionNum
 
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null)
 
   // localActivePlan: prop에서 시작, createSession 성공 시 갱신
   const [localActivePlan, setLocalActivePlan] = useState<SessionPlan | null>(activePlan)
+  const [pastSessionPlan, setPastSessionPlan] = useState<SessionPlan | null>(null)
   const [planLoading, setPlanLoading] = useState(false)
   const createCalledRef = useRef(false)
 
@@ -40,6 +47,30 @@ export function ResetMapV2({ total, completed, activePlan, onSessionCompleted, o
     if (activePlan === null) createCalledRef.current = false
   }, [activePlan])
 
+  // 과거 세션 클릭 시 plan_json 조회 (read-only)
+  useEffect(() => {
+    if (selectedStatus !== 'completed' || selectedSessionId === null) {
+      setPastSessionPlan(null)
+      return
+    }
+    let cancelled = false
+    setPastSessionPlan(null)
+    setPlanLoading(true)
+    getSessionSafe().then(async ({ session }) => {
+      if (cancelled || !session?.access_token) {
+        if (!cancelled) setPlanLoading(false)
+        return
+      }
+      const result = await getSessionPlan(session.access_token, selectedSessionId)
+      if (cancelled) return
+      setPlanLoading(false)
+      if (result.ok && result.data) {
+        setPastSessionPlan(result.data)
+      }
+    })
+    return () => { cancelled = true }
+  }, [selectedStatus, selectedSessionId])
+
   const handleNodeTap = useCallback((session: SessionNode) => {
     setSelectedSessionId(session.id)
   }, [])
@@ -48,13 +79,17 @@ export function ResetMapV2({ total, completed, activePlan, onSessionCompleted, o
     setSelectedSessionId(null)
   }, [])
 
-  // 선택한 세션의 상태
+  // 선택한 세션의 상태 (effectiveCurrentSession: null이면 다음 세션도 locked)
   const selectedStatus = useMemo(() => {
     if (selectedSessionId === null) return 'locked' as const
-    if (selectedSessionId < currentSession) return 'completed' as const
-    if (selectedSessionId === currentSession) return 'current' as const
+    if (effectiveCurrentSession === null) {
+      if (selectedSessionId <= completed) return 'completed' as const
+      return 'locked' as const
+    }
+    if (selectedSessionId < effectiveCurrentSession) return 'completed' as const
+    if (selectedSessionId === effectiveCurrentSession) return 'current' as const
     return 'locked' as const
-  }, [selectedSessionId, currentSession])
+  }, [selectedSessionId, effectiveCurrentSession, completed])
 
   // current 세션 패널 오픈 + activePlan 없음 → createSession 호출
   useEffect(() => {
@@ -88,17 +123,25 @@ export function ResetMapV2({ total, completed, activePlan, onSessionCompleted, o
     return () => { cancelled = true }
   }, [selectedStatus, selectedSessionId, localActivePlan, onActivePlanCreated])
 
-  // plan_json에서 운동 추출
+  // plan_json에서 운동 추출 (current: createSession, completed: getSessionPlan)
   const exercises = useMemo(() => {
     if (selectedSessionId === null) return undefined
-    if (selectedStatus !== 'current') return []
-    // 로딩 중: undefined(로딩 스피너)
-    if (planLoading && localActivePlan === null) return undefined
-    if (localActivePlan?.session_number === selectedSessionId) {
-      return extractSessionExercises(localActivePlan.plan_json)
+    if (selectedStatus === 'current') {
+      if (planLoading && localActivePlan === null) return undefined
+      if (localActivePlan?.session_number === selectedSessionId) {
+        return extractSessionExercises(localActivePlan.plan_json)
+      }
+      return []
+    }
+    if (selectedStatus === 'completed') {
+      if (planLoading && pastSessionPlan === null) return undefined
+      if (pastSessionPlan?.session_number === selectedSessionId) {
+        return extractSessionExercises(pastSessionPlan.plan_json)
+      }
+      return []
     }
     return []
-  }, [selectedSessionId, selectedStatus, localActivePlan, planLoading])
+  }, [selectedSessionId, selectedStatus, localActivePlan, pastSessionPlan, planLoading])
 
   // 패널 open 시 exercises의 templateIds 배치 prefetch
   useEffect(() => {
@@ -128,14 +171,17 @@ export function ResetMapV2({ total, completed, activePlan, onSessionCompleted, o
         </div>
         <div className="text-right">
           <p className="text-[10px] text-slate-500">현재 세션</p>
-          <p className="text-lg font-bold text-slate-800">{currentSession}</p>
+          <p className="text-lg font-bold text-slate-800">
+            {effectiveCurrentSession ?? '—'}
+          </p>
         </div>
       </div>
 
       {/* 지도 영역 */}
       <JourneyMapV2
         total={total}
-        currentSession={currentSession}
+        completed={completed}
+        currentSession={effectiveCurrentSession}
         onNodeTap={handleNodeTap}
       />
 
@@ -145,7 +191,9 @@ export function ResetMapV2({ total, completed, activePlan, onSessionCompleted, o
         total={total}
         status={selectedStatus}
         exercises={exercises}
-        activePlan={localActivePlan}
+        activePlan={selectedStatus === 'current' ? localActivePlan : pastSessionPlan}
+        isLockedNext={selectedStatus === 'locked' && isLockedNext && selectedSessionId === nextSessionNum}
+        nextUnlockAt={nextUnlockAt ?? undefined}
         onClose={handleClose}
         onSessionCompleted={onSessionCompleted}
       />
