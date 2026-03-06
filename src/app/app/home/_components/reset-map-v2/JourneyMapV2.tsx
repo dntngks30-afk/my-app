@@ -313,10 +313,10 @@ function JourneyMapV2Inner({ total, completed, currentSession, onNodeTap }: Jour
           return (
             <g
               key={session.id}
-              onClick={() => st !== 'locked' && onNodeTap(session)}
-              className={st !== 'locked' ? 'cursor-pointer' : ''}
-              role={st !== 'locked' ? 'button' : undefined}
-              tabIndex={st !== 'locked' ? 0 : undefined}
+              onClick={() => onNodeTap(session)}
+              className="cursor-pointer"
+              role="button"
+              tabIndex={0}
               aria-label={`세션 ${session.id}: ${session.label}${st === 'locked' ? ' (잠김)' : ''}`}
             >
               {st === 'current' && (

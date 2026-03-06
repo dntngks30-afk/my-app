@@ -46,8 +46,11 @@ export default function HomePageClient() {
       prev ? { ...prev, completed_sessions: completedSessions } : prev
     );
     setActivePlan(null);
+    // 낙관적 업데이트: 세션이 방금 완료되었으므로 오늘 cap 즉시 반영
+    // refetch 완료 전 타이밍 윈도우에서 다음 세션이 'current'로 노출되는 것을 방지
+    setTodayCompleted(true);
     invalidateActiveCache();
-    // Refetch to get todayCompleted/nextUnlockAt (daily cap 상태)
+    // Refetch to get accurate todayCompleted/nextUnlockAt from server
     const { session } = await getSessionSafe();
     if (session?.access_token) {
       const result = await getCachedActiveSession(session.access_token);

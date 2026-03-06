@@ -27,8 +27,10 @@ interface ResetMapV2Props {
 }
 
 export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, onSessionCompleted, onActivePlanCreated }: ResetMapV2Props) {
-  // daily cap: today_completed && !activePlan → 현재 세션 없음, 다음 세션 locked
-  const isLockedNext = !!(todayCompleted && !activePlan)
+  // localDailyCapActive: createSession이 DAILY_LIMIT_REACHED 반환 시 클라이언트 측 즉시 반영 (방어)
+  const [localDailyCapActive, setLocalDailyCapActive] = useState(false)
+  // daily cap: today_completed || localDailyCapActive, activePlan 없을 때 → 현재 세션 없음, 다음 세션 locked
+  const isLockedNext = !!((todayCompleted || localDailyCapActive) && !activePlan)
   const nextSessionNum = Math.min(completed + 1, total, sessions.length)
   const effectiveCurrentSession = isLockedNext ? null : nextSessionNum
 
@@ -46,6 +48,23 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     // activePlan이 리셋되면 다음 패널 오픈 시 재호출 허용
     if (activePlan === null) createCalledRef.current = false
   }, [activePlan])
+
+  // 서버에서 todayCompleted=false로 갱신되면 localDailyCapActive도 리셋
+  useEffect(() => {
+    if (!todayCompleted) setLocalDailyCapActive(false)
+  }, [todayCompleted])
+
+  // 선택한 세션의 상태 (effectiveCurrentSession: null이면 다음 세션도 locked)
+  const selectedStatus = useMemo(() => {
+    if (selectedSessionId === null) return 'locked' as const
+    if (effectiveCurrentSession === null) {
+      if (selectedSessionId <= completed) return 'completed' as const
+      return 'locked' as const
+    }
+    if (selectedSessionId < effectiveCurrentSession) return 'completed' as const
+    if (selectedSessionId === effectiveCurrentSession) return 'current' as const
+    return 'locked' as const
+  }, [selectedSessionId, effectiveCurrentSession, completed])
 
   // 과거 세션 클릭 시 plan_json 조회 (read-only)
   useEffect(() => {
@@ -79,18 +98,6 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     setSelectedSessionId(null)
   }, [])
 
-  // 선택한 세션의 상태 (effectiveCurrentSession: null이면 다음 세션도 locked)
-  const selectedStatus = useMemo(() => {
-    if (selectedSessionId === null) return 'locked' as const
-    if (effectiveCurrentSession === null) {
-      if (selectedSessionId <= completed) return 'completed' as const
-      return 'locked' as const
-    }
-    if (selectedSessionId < effectiveCurrentSession) return 'completed' as const
-    if (selectedSessionId === effectiveCurrentSession) return 'current' as const
-    return 'locked' as const
-  }, [selectedSessionId, effectiveCurrentSession, completed])
-
   // current 세션 패널 오픈 + activePlan 없음 → createSession 호출
   useEffect(() => {
     if (selectedStatus !== 'current') return
@@ -113,7 +120,15 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       })
       if (cancelled) return
       setPlanLoading(false)
-      if (result.ok && 'active' in result.data && result.data.active) {
+      if (!result.ok) {
+        // 하루 1세션 cap 초과 시 로컬 상태 즉시 반영 → locked 패널 표시
+        if (result.error.code === 'DAILY_LIMIT_REACHED') {
+          setLocalDailyCapActive(true)
+          createCalledRef.current = false
+        }
+        return
+      }
+      if ('active' in result.data && result.data.active) {
         const plan = result.data.active as SessionPlan
         setLocalActivePlan(plan)
         onActivePlanCreated?.(plan)
