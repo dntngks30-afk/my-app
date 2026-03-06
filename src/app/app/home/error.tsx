@@ -1,9 +1,12 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
+/**
+ * useSearchParams 제거 — Suspense 없이 사용 시 "Cannot access '$' before initialization" 등
+ * ReferenceError 유발 가능. window.location으로 debug 파라미터만 클라이언트에서 읽음.
+ */
 export default function HomeErrorBoundary({
   error,
   reset,
@@ -11,8 +14,14 @@ export default function HomeErrorBoundary({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  const searchParams = useSearchParams();
-  const debug = searchParams.get('debug') === '1';
+  const [debug, setDebug] = useState(false);
+  useEffect(() => {
+    try {
+      setDebug(typeof window !== 'undefined' && window.location?.search?.includes('debug=1'));
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     console.error('[home/error]', error);

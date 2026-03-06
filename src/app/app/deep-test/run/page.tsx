@@ -187,6 +187,10 @@ export default function DeepTestRunPage() {
         const data = await res.json();
         const att = data?.attempt;
         if (att?.id) {
+          if (att.status === 'final') {
+            if (!cancelled) router.push('/app/deep-test/result');
+            return;
+          }
           const loadedAnswers = (att.answers ?? {}) as Record<string, DeepAnswerValue>;
           setAttemptId(att.id);
           setAnswers(loadedAnswers);
