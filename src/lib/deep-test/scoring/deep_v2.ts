@@ -77,14 +77,15 @@ function parsePainIntensity(v: DeepAnswerValue, painMap: Record<string, number>)
 }
 
 // --- Location → axis: 목·어깨=>N, 허리·골반=>L, 손목·팔꿈치=>U, 무릎·발목=>Lo ---
+// Check longer/specific tokens first to avoid "손목" matching "목", "발목" matching "목"
 type AxisKey = 'N' | 'L' | 'U' | 'Lo' | 'D';
 
 function locationToAxis(loc: string): AxisKey | null {
   const s = loc.trim();
-  if (s.includes('목') || s.includes('어깨')) return 'N';
-  if (s.includes('허리') || s.includes('골반')) return 'L';
   if (s.includes('손목') || s.includes('팔꿈치')) return 'U';
   if (s.includes('무릎') || s.includes('발목')) return 'Lo';
+  if (s.includes('허리') || s.includes('골반')) return 'L';
+  if (s.includes('목') || s.includes('어깨')) return 'N';
   if (s.includes('전신')) return 'D';
   return null;
 }
@@ -220,10 +221,10 @@ export function calculateDeepV2(
   const q5 = toString(answers.deep_basic_primary_discomfort);
   const finalScores = { ...obj };
   if (q5) {
-    if (q5.includes('목') || q5.includes('어깨')) finalScores.N += 4;
-    else if (q5.includes('허리') || q5.includes('골반')) finalScores.L += 4;
-    else if (q5.includes('손목') || q5.includes('팔꿈치')) finalScores.U += 4;
+    if (q5.includes('손목') || q5.includes('팔꿈치')) finalScores.U += 4;
     else if (q5.includes('무릎') || q5.includes('발목')) finalScores.Lo += 4;
+    else if (q5.includes('허리') || q5.includes('골반')) finalScores.L += 4;
+    else if (q5.includes('목') || q5.includes('어깨')) finalScores.N += 4;
   }
 
   // --- signals (red_flags, pain_sum) ---
@@ -365,8 +366,8 @@ function getMaxAxis(
     return 'Lo';
   }
   if ((a === 'N' || b === 'N') && (a === 'U' || b === 'U')) {
-    if (q11?.includes('목') || q11?.includes('긴장')) return 'N';
     if (q11?.includes('손목') || q11?.includes('팔꿈치')) return 'U';
+    if (q11?.includes('목') || q11?.includes('긴장')) return 'N';
     return 'Lo';
   }
   return 'Lo';
@@ -409,10 +410,10 @@ function computePrimaryFocus(
   _q11?: string | null
 ): DeepPrimaryFocus {
   if (q5) {
-    if (q5.includes('목') || q5.includes('어깨')) return 'NECK-SHOULDER';
-    if (q5.includes('허리') || q5.includes('골반')) return 'LUMBO-PELVIS';
     if (q5.includes('손목') || q5.includes('팔꿈치')) return 'UPPER-LIMB';
     if (q5.includes('무릎') || q5.includes('발목')) return 'LOWER-LIMB';
+    if (q5.includes('허리') || q5.includes('골반')) return 'LUMBO-PELVIS';
+    if (q5.includes('목') || q5.includes('어깨')) return 'NECK-SHOULDER';
   }
   const maxAxis = getMaxAxis(obj, _q14, _q11);
   return axisToFocus(maxAxis);
