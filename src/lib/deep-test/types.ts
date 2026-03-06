@@ -76,6 +76,34 @@ export interface DeepV2Signals {
   pain_sum: number;
 }
 
+/** P1: evidence-quality 기반 confidence breakdown */
+export interface ConfidenceBreakdown {
+  coverage_score: number;
+  signal_strength: number;
+  agreement_score: number;
+  conflict_penalty: number;
+  version_penalty: number;
+  final_confidence: number;
+}
+
+export type EvidenceQuality = 'low' | 'medium' | 'high';
+
+/** P1: 디버깅/내부용 구조화 데이터 */
+export interface DecisionTrace {
+  primary_reason: string;
+  secondary_reason?: string;
+  top_positive_signals: string[];
+  top_conflicts: string[];
+  safety_reason?: string;
+}
+
+/** P1: 사용자 노출용 짧은 문장 */
+export interface Rationale {
+  summary: string;
+  focus_reason?: string;
+  caution_reason?: string;
+}
+
 /** * V2 기본 결과 인터페이스 (UI 및 레거시 데이터 통신용)
  */
 export interface DeepV2Result {
@@ -88,6 +116,11 @@ export interface DeepV2Result {
   confidence: number;
   answeredCount: number;
   totalCount: number; // 14
+  /** P1: optional explainability (구버전 attempt fallback) */
+  confidence_breakdown?: ConfidenceBreakdown;
+  evidence_quality?: EvidenceQuality;
+  rationale?: Rationale;
+  decision_trace?: DecisionTrace;
 }
 
 /** * 🚀 [SSOT 핵심] 7일 루틴 자동 생성 API가 소비할 V2 확장 인터페이스

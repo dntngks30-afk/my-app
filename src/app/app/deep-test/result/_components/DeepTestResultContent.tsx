@@ -24,6 +24,21 @@ import TagChips from './TagChips';
 
 type Variant = 'app' | 'demo';
 
+/** P1: optional explainability (구버전 attempt fallback) */
+export interface RationaleProp {
+  summary?: string;
+  focus_reason?: string;
+  caution_reason?: string;
+}
+
+export interface DecisionTraceProp {
+  primary_reason?: string;
+  secondary_reason?: string;
+  top_positive_signals?: string[];
+  top_conflicts?: string[];
+  safety_reason?: string;
+}
+
 export interface DeepTestResultContentProps {
   resultType: string | null;
   confidence?: number | null;
@@ -44,6 +59,9 @@ export interface DeepTestResultContentProps {
   isStandalone?: boolean;
   canPromptInstall?: boolean;
   onInstallClick?: () => void;
+  /** P1: optional explainability */
+  rationale?: RationaleProp | null;
+  decisionTrace?: DecisionTraceProp | null;
 }
 
 function toNum(v: unknown, fallback = 0): number {
@@ -113,6 +131,8 @@ export default function DeepTestResultContent({
   isStandalone = false,
   canPromptInstall = false,
   onInstallClick,
+  rationale,
+  decisionTrace,
 }: DeepTestResultContentProps) {
   const [animate, setAnimate] = useState(false);
   React.useEffect(() => {
@@ -364,6 +384,32 @@ export default function DeepTestResultContent({
           ))}
         </div>
       </div>
+
+      {/* P1: 왜 이렇게 나왔나요? (optional explainability) */}
+      {(rationale?.summary || (decisionTrace?.top_positive_signals?.length ?? 0) > 0) && (
+        <div className="bg-white border-[3px] border-black rounded-[24px] p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+          <h3 className="text-sm font-black text-gray-500 uppercase tracking-wider mb-3">
+            왜 이렇게 나왔나요?
+          </h3>
+          {rationale?.summary && (
+            <p className="text-[13px] font-bold text-black leading-relaxed break-keep mb-2">
+              {rationale.summary}
+            </p>
+          )}
+          {decisionTrace?.top_positive_signals && decisionTrace.top_positive_signals.length > 0 && (
+            <ul className="list-disc list-inside text-[12px] font-medium text-stone-600 space-y-1">
+              {decisionTrace.top_positive_signals.slice(0, 3).map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ul>
+          )}
+          {rationale?.caution_reason && (
+            <p className="text-[11px] font-medium text-amber-700 mt-2 break-keep">
+              {rationale.caution_reason}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Insights */}
       <div className="bg-white border-[3px] border-black rounded-[32px] p-7 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">

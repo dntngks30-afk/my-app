@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test:deep-golden": "npx tsx scripts/deep-v2-golden.mjs",
-    "test:deep-id-check": "npx tsx scripts/deep-question-id-validate.mjs"
+    "test:deep-id-check": "npx tsx scripts/deep-question-id-validate.mjs",
+    "test:deep-p1-rationale": "npx tsx scripts/deep-p1-rationale.mjs"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",

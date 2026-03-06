@@ -16,6 +16,10 @@ import type {
   DeepV2ExtendedResult,
   DeepAlgorithmScores,
   DeepV2Signals,
+  ConfidenceBreakdown,
+  EvidenceQuality,
+  DecisionTrace,
+  Rationale,
 } from '../types';
 import { getPainIntensityMap, getFocusToTags, getAxisToAvoid } from '../config';
 import {
@@ -112,6 +116,236 @@ function addPainLocationPoints(
 
 function emptyScores(): DeepObjectiveScores {
   return { N: 0, L: 0, U: 0, Lo: 0, D: 0 };
+}
+
+// --- P1: Evidence-quality explainability constants ---
+const COVERAGE_WEIGHT = 0.4;
+const SIGNAL_WEIGHT = 0.2;
+const AGREEMENT_WEIGHT = 0.2;
+const CONFLICT_PENALTY_MAX = 0.15;
+const VERSION_PENALTY_PER_MISSING = 0.02;
+const MAX_VERSION_PENALTY = 0.1;
+
+function clamp01(n: number): number {
+  return Math.max(0, Math.min(1, n));
+}
+
+function computeCoverageScore(answeredCount: number, totalCount: number): number {
+  return totalCount > 0 ? answeredCount / totalCount : 0;
+}
+
+function computeSignalStrength(finalScores: DeepFinalScores): number {
+  const arr: [AxisKey, number][] = [
+    ['N', finalScores.N],
+    ['L', finalScores.L],
+    ['U', finalScores.U],
+    ['Lo', finalScores.Lo],
+  ];
+  arr.sort((a, b) => b[1] - a[1]);
+  const top = arr[0]?.[1] ?? 0;
+  const second = arr[1]?.[1] ?? 0;
+  if (top <= 0) return 0;
+  const gap = (top - second) / top;
+  return clamp01(gap);
+}
+
+function q5ToAxis(q5: string | null): AxisKey | null {
+  if (!q5 || q5.includes('해당 없음')) return null;
+  if (q5.includes('손목') || q5.includes('팔꿈치')) return 'U';
+  if (q5.includes('무릎') || q5.includes('발목')) return 'Lo';
+  if (q5.includes('목') || q5.includes('어깨')) return 'N';
+  if (q5.includes('허리') || q5.includes('골반')) return 'L';
+  return null;
+}
+
+function focusToAxis(focus: DeepPrimaryFocus): AxisKey | null {
+  switch (focus) {
+    case 'NECK-SHOULDER':
+      return 'N';
+    case 'LUMBO-PELVIS':
+      return 'L';
+    case 'UPPER-LIMB':
+      return 'U';
+    case 'LOWER-LIMB':
+      return 'Lo';
+    default:
+      return null;
+  }
+}
+
+function computeAgreementScore(
+  q5: string | null,
+  primaryFocus: DeepPrimaryFocus,
+  maxAxis: AxisKey
+): number {
+  const q5Axis = q5ToAxis(q5);
+  if (q5Axis === null) return 1; // 해당없음 → no disagreement
+  const focusAxis = focusToAxis(primaryFocus);
+  if (focusAxis === null) return 1;
+  return q5Axis === maxAxis ? 1 : q5Axis === focusAxis ? 0.5 : 0;
+}
+
+function computeConflictPenalty(
+  q5: string | null,
+  maxAxis: AxisKey,
+  finalScores: DeepFinalScores
+): number {
+  const q5Axis = q5ToAxis(q5);
+  if (q5Axis === null) return 0;
+  if (q5Axis === maxAxis) return 0;
+  const maxScore = finalScores[maxAxis];
+  if (maxScore >= 2) return CONFLICT_PENALTY_MAX;
+  return maxScore >= 1 ? CONFLICT_PENALTY_MAX * 0.5 : 0;
+}
+
+function computeVersionPenalty(answeredCount: number, totalCount: number): number {
+  const missing = totalCount - answeredCount;
+  if (missing <= 0) return 0;
+  return Math.min(MAX_VERSION_PENALTY, missing * VERSION_PENALTY_PER_MISSING);
+}
+
+function buildDecisionTrace(
+  resultType: DeepV2ResultType,
+  primaryFocus: DeepPrimaryFocus,
+  secondaryFocus: DeepSecondaryFocus,
+  finalScores: DeepFinalScores,
+  redFlags: boolean,
+  maxAxis: AxisKey
+): DecisionTrace {
+  const axisLabels: Record<AxisKey, string> = {
+    N: '목·어깨',
+    L: '허리·골반',
+    U: '손목·팔꿈치',
+    Lo: '무릎·발목',
+    D: '전신',
+  };
+  const primary = axisLabels[maxAxis];
+  const top = finalScores[maxAxis];
+  const signals: string[] = [];
+  if (resultType === 'STABLE') {
+    signals.push('모든 동작에서 안정적인 패턴');
+  } else if (resultType === 'DECONDITIONED') {
+    signals.push('전신/밸런스 우선 개선');
+  } else {
+    if (top >= 2) signals.push(`${primary} 영역에서 ${top}점 이상의 신호`);
+    if (secondaryFocus !== 'NONE') {
+      const secAxis = focusToAxis(secondaryFocus as DeepFocus);
+      if (secAxis && finalScores[secAxis] >= 1) {
+        signals.push(`${axisLabels[secAxis]} 보조 신호`);
+      }
+    }
+  }
+  const conflicts: string[] = [];
+  const safety: string | undefined = redFlags
+    ? '통증·위험 신호로 인해 안전 모드 적용'
+    : undefined;
+
+  const primaryReason =
+    resultType === 'STABLE'
+      ? '모든 동작에서 안정적인 패턴이 확인되었습니다.'
+      : resultType === 'DECONDITIONED'
+        ? '전반적인 움직임 패턴 개선이 우선입니다.'
+        : `${primary} 영역이 우선 타겟으로 보입니다.`;
+
+  return {
+    primary_reason: primaryReason,
+    secondary_reason:
+      secondaryFocus !== 'NONE' ? `${axisLabels[focusToAxis(secondaryFocus as DeepFocus) ?? 'D']} 보완` : undefined,
+    top_positive_signals: signals.length > 0 ? signals : [`${primary} 관련 움직임 평가`],
+    top_conflicts: conflicts,
+    safety_reason: safety,
+  };
+}
+
+function buildRationale(
+  resultType: DeepV2ResultType,
+  primaryFocus: DeepPrimaryFocus,
+  redFlags: boolean
+): Rationale {
+  const focusLabels: Record<string, string> = {
+    'NECK-SHOULDER': '목·어깨',
+    'LUMBO-PELVIS': '허리·골반',
+    'UPPER-LIMB': '손목·팔꿈치',
+    'LOWER-LIMB': '무릎·발목',
+    FULL: '전신',
+  };
+  const primary = focusLabels[primaryFocus] ?? primaryFocus;
+  return {
+    summary:
+      resultType === 'STABLE'
+        ? '모든 동작에서 안정적인 패턴이 보였습니다.'
+        : resultType === 'DECONDITIONED'
+          ? '전반적인 움직임 패턴이 우선순위입니다.'
+          : `${primary} 영역을 우선적으로 보강하는 것이 좋아 보입니다.`,
+    caution_reason: redFlags ? '통증·위험 신호가 있어 안전 모드로 적용됩니다.' : undefined,
+  };
+}
+
+function deriveEvidenceQuality(
+  coverage: number,
+  signalStrength: number,
+  agreement: number,
+  conflictPenalty: number
+): EvidenceQuality {
+  const effective = coverage * 0.4 + signalStrength * 0.3 + agreement * 0.3 - conflictPenalty;
+  if (effective >= 0.7) return 'high';
+  if (effective >= 0.4) return 'medium';
+  return 'low';
+}
+
+function buildExplainability(
+  ctx: {
+    answeredCount: number;
+    totalCount: number;
+    finalScores: DeepFinalScores;
+    q5: string | null;
+    resultType: DeepV2ResultType;
+    primaryFocus: DeepPrimaryFocus;
+    secondaryFocus: DeepSecondaryFocus;
+    confidence: number;
+    redFlags: boolean;
+    maxAxis: AxisKey;
+  }
+): {
+  confidence_breakdown: ConfidenceBreakdown;
+  evidence_quality: EvidenceQuality;
+  rationale: Rationale;
+  decision_trace: DecisionTrace;
+} {
+  const coverage = computeCoverageScore(ctx.answeredCount, ctx.totalCount);
+  const signalStrength = computeSignalStrength(ctx.finalScores);
+  const agreement = computeAgreementScore(ctx.q5, ctx.primaryFocus, ctx.maxAxis);
+  const conflictPenalty = computeConflictPenalty(ctx.q5, ctx.maxAxis, ctx.finalScores);
+  const versionPenalty = computeVersionPenalty(ctx.answeredCount, ctx.totalCount);
+
+  const raw =
+    coverage * COVERAGE_WEIGHT +
+    signalStrength * SIGNAL_WEIGHT +
+    agreement * AGREEMENT_WEIGHT -
+    conflictPenalty -
+    versionPenalty;
+  const finalConfidence = clamp01(raw);
+
+  return {
+    confidence_breakdown: {
+      coverage_score: coverage,
+      signal_strength: signalStrength,
+      agreement_score: agreement,
+      conflict_penalty: conflictPenalty,
+      version_penalty: versionPenalty,
+      final_confidence: finalConfidence,
+    },
+    evidence_quality: deriveEvidenceQuality(coverage, signalStrength, agreement, conflictPenalty),
+    rationale: buildRationale(ctx.resultType, ctx.primaryFocus, ctx.redFlags),
+    decision_trace: buildDecisionTrace(
+      ctx.resultType,
+      ctx.primaryFocus,
+      ctx.secondaryFocus,
+      ctx.finalScores,
+      ctx.redFlags,
+      ctx.maxAxis
+    ),
+  };
 }
 
 export function calculateDeepV2(
@@ -243,6 +477,19 @@ export function calculateDeepV2(
     q14안정적 &&
     objectiveScores.D <= 3
   ) {
+    const maxAxisStable = getMaxAxis(objectiveScores, q14 ?? null, q11 ?? null);
+    const explain = buildExplainability({
+      answeredCount,
+      totalCount: DEEP_V2_TOTAL_COUNT,
+      finalScores: { ...finalScores },
+      q5,
+      resultType: 'STABLE',
+      primaryFocus: 'FULL',
+      secondaryFocus: 'NONE',
+      confidence: baseConfidence,
+      redFlags: false,
+      maxAxis: maxAxisStable,
+    });
     return {
       scoring_version: 'deep_v2',
       result_type: 'STABLE',
@@ -254,6 +501,7 @@ export function calculateDeepV2(
       answeredCount,
       totalCount: DEEP_V2_TOTAL_COUNT,
       signals,
+      ...explain,
     };
   }
 
@@ -268,6 +516,19 @@ export function calculateDeepV2(
   if (D >= 6 && maxPart <= D - 1) {
     const primary = computePrimaryFocus(q5, objectiveScores, q14 ?? null, q11 ?? null);
     const secondary = computeSecondaryFocus(objectiveScores, primary);
+    const maxAxisDec = focusToAxis(primary) ?? getMaxAxis(finalScores, q14 ?? null, q11 ?? null);
+    const explain = buildExplainability({
+      answeredCount,
+      totalCount: DEEP_V2_TOTAL_COUNT,
+      finalScores: { ...finalScores },
+      q5,
+      resultType: 'DECONDITIONED',
+      primaryFocus: primary,
+      secondaryFocus: secondary,
+      confidence: baseConfidence,
+      redFlags: false,
+      maxAxis: maxAxisDec,
+    });
     return {
       scoring_version: 'deep_v2',
       result_type: 'DECONDITIONED',
@@ -279,6 +540,7 @@ export function calculateDeepV2(
       answeredCount,
       totalCount: DEEP_V2_TOTAL_COUNT,
       signals,
+      ...explain,
     };
   }
 
@@ -286,6 +548,19 @@ export function calculateDeepV2(
   if (red_flags) {
     const primary = computePrimaryFocus(q5, objectiveScores, q14 ?? null, q11 ?? null);
     const secondary = computeSecondaryFocus(objectiveScores, primary);
+    const maxAxisRed = focusToAxis(primary) ?? getMaxAxis(finalScores, q14 ?? null, q11 ?? null);
+    const explain = buildExplainability({
+      answeredCount,
+      totalCount: DEEP_V2_TOTAL_COUNT,
+      finalScores: { ...finalScores },
+      q5,
+      resultType: 'DECONDITIONED',
+      primaryFocus: primary,
+      secondaryFocus: secondary,
+      confidence: baseConfidence,
+      redFlags: true,
+      maxAxis: maxAxisRed,
+    });
     return {
       scoring_version: 'deep_v2',
       result_type: 'DECONDITIONED',
@@ -297,6 +572,7 @@ export function calculateDeepV2(
       answeredCount,
       totalCount: DEEP_V2_TOTAL_COUNT,
       signals,
+      ...explain,
     };
   }
 
@@ -319,6 +595,19 @@ export function calculateDeepV2(
   const gap = top > 0 ? (top - second) / top : 0;
   const confidence = Math.min(1, Math.max(0, baseConfidence + gap * 0.15));
 
+  const explain = buildExplainability({
+    answeredCount,
+    totalCount: DEEP_V2_TOTAL_COUNT,
+    finalScores: { ...finalScores },
+    q5,
+    resultType,
+    primaryFocus: primary,
+    secondaryFocus: secondary,
+    confidence,
+    redFlags: false,
+    maxAxis,
+  });
+
   return {
     scoring_version: 'deep_v2',
     result_type: resultType,
@@ -330,6 +619,7 @@ export function calculateDeepV2(
     answeredCount,
     totalCount: DEEP_V2_TOTAL_COUNT,
     signals,
+    ...explain,
   };
 }
 

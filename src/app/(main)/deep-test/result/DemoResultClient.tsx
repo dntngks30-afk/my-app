@@ -10,7 +10,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { load, reset } from '@/lib/demo/deepTestDemoStorage';
 import DeepTestResultContent from '@/app/app/deep-test/result/_components/DeepTestResultContent';
-import type { DeepTestResultContentProps } from '@/app/app/deep-test/result/_components/DeepTestResultContent';
+import type {
+  DeepTestResultContentProps,
+  RationaleProp,
+  DecisionTraceProp,
+} from '@/app/app/deep-test/result/_components/DeepTestResultContent';
 
 interface DerivedData {
   result_type?: string;
@@ -18,6 +22,8 @@ interface DerivedData {
   algorithm_scores?: DeepTestResultContentProps['algorithmScores'];
   focus_tags?: string[];
   avoid_tags?: string[];
+  rationale?: RationaleProp;
+  decision_trace?: DecisionTraceProp;
 }
 
 const nbCard = 'rounded-2xl border-2 border-slate-950 bg-white p-4 shadow-[4px_4px_0_0_rgba(2,6,23,1)]';
@@ -81,6 +87,8 @@ export default function DemoResultClient() {
       algorithmScores={derived.algorithm_scores ?? undefined}
       variant="demo"
       onReset={handleReset}
+      rationale={derived.rationale ?? null}
+      decisionTrace={derived.decision_trace ?? null}
     />
   );
 }

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 /**
  * Deep Test 寃곌낵 ?섏씠吏 (濡쒓렇??
@@ -265,6 +265,8 @@ export default function DeepTestResultPage() {
           isStandalone={isStandalone}
           canPromptInstall={canPromptInstall}
           onInstallClick={() => setInstallModalOpen(true)}
+          rationale={derived?.rationale ?? null}
+          decisionTrace={derived?.decision_trace ?? null}
         />
       </main>
       <BottomNav />
