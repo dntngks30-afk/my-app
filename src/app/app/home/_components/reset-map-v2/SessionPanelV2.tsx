@@ -177,49 +177,25 @@ function PanelInner({
       >
         <div className="mx-auto max-w-[430px] rounded-2xl border border-slate-200 bg-white shadow-xl">
           {/* Drag handle */}
-          <div className="mx-auto mb-0 pt-3 flex justify-center">
-            <div className="h-1 w-10 rounded-full bg-slate-200" />
+          <div className="pt-3 pb-1 flex justify-center">
+            <div className="h-1.5 w-12 rounded-full bg-slate-200" />
           </div>
-
-          {/* 종료 CTA 바 (current 세션만) */}
-          {status === 'current' && !completed && (
-            <div className="border-b border-slate-100 px-5 py-3">
-              {completeError && (
-                <div className="mb-2 flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2">
-                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
-                  <p className="text-xs text-red-600">{completeError}</p>
-                </div>
-              )}
-              <button
-                type="button"
-                disabled={completing || !activePlan?.session_number}
-                onClick={handleSessionComplete}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-400 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-orange-500 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {completing ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" />저장 중...</>
-                ) : (
-                  <>세션 종료하기</>
-                )}
-              </button>
-            </div>
-          )}
 
           {/* 완료 상태 배너 */}
           {completed && (
-            <div className="border-b border-emerald-100 bg-emerald-50 px-5 py-4 text-center">
+            <div className="mx-4 mt-2 mb-0 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-center">
               <p className="text-sm font-semibold text-emerald-700">세션 완료! 수고하셨습니다 🎉</p>
             </div>
           )}
 
           {/* 헤더 */}
-          <div className="flex items-center justify-between px-5 py-4">
+          <div className="flex items-center justify-between px-5 pt-3 pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-bold text-slate-800">
                 {`세션 ${sessionId}`}
                 <span className="ml-1.5 text-sm font-normal text-slate-400">{`/ ${total}`}</span>
               </h2>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_CLASS[status]}`}>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_CLASS[status]}`}>
                 {STATUS_LABEL[status]}
               </span>
             </div>
@@ -233,7 +209,7 @@ function PanelInner({
           </div>
 
           {/* 운동 목록 */}
-          <div className="max-h-[50vh] overflow-y-auto px-5 pb-12">
+          <div className="max-h-[58vh] overflow-y-auto px-5 pt-4 pb-4">
             <ExerciseList
               exercises={exercises}
               status={status}
@@ -243,6 +219,30 @@ function PanelInner({
               onPlay={item => setOpenItem(item)}
             />
           </div>
+
+          {/* 종료 CTA 바 (current 세션만) — 운동 목록 하단에 위치 */}
+          {status === 'current' && !completed && (
+            <div className="border-t border-slate-100 px-5 py-4">
+              {completeError && (
+                <div className="mb-3 flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
+                  <p className="text-xs text-red-600">{completeError}</p>
+                </div>
+              )}
+              <button
+                type="button"
+                disabled={completing || !activePlan?.session_number}
+                onClick={handleSessionComplete}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-400 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-orange-500 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {completing ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" />저장 중...</>
+                ) : (
+                  <>세션 종료하기</>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -326,7 +326,7 @@ function ExerciseList({
     <div className="space-y-4">
       {grouped.map(({ title, items }) => (
         <div key={title}>
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-slate-400">
             {title}
           </p>
           <div className="space-y-1.5">
