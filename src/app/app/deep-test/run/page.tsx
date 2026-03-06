@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Deep Test 진행 페이지 - 3섹션 Stepper UX
- * Section 1: 기본(5) / Section 2: 스쿼트(3) / Section 3: 벽천사+한발서기(6)
+ * Deep Test 진행 페이지 - 4섹션 Stepper UX (1페이지 = 1개 동작)
+ * Section 1: 기본(5) / Section 2: 스쿼트(3) / Section 3: 벽천사(3) / Section 4: 한발서기(3)
  * - 버튼 클릭 시에만 save, autosave 없음
  * - UI-DEEP-ONB-ONE: Section 0에 주당 빈도(2/3/4/5) 추가, "다음" 시 profile best-effort 저장
  */
@@ -22,7 +22,7 @@ const SESSION_FREQUENCY_DRAFT_KEY = 'session_target_frequency_draft';
 
 type Status = 'loading' | 'ready' | 'error' | 'auth' | 'paywall' | 'finalizing';
 
-/** PR3: 3섹션 고정 (questions.ts 변경 없음) */
+/** PR3: 4섹션 고정 — 1페이지 = 1개 동작 (questions.ts 변경 없음) */
 const STEPPER_SECTIONS = [
   {
     id: 'basic',
@@ -45,12 +45,18 @@ const STEPPER_SECTIONS = [
     ],
   },
   {
-    id: 'wallangel_sls',
-    title: '벽천사 + 한발서기',
+    id: 'wallangel',
+    title: '벽천사',
     questionIds: [
       'deep_wallangel_pain_intensity',
       'deep_wallangel_pain_location',
       'deep_wallangel_quality',
+    ],
+  },
+  {
+    id: 'sls',
+    title: '한발서기',
+    questionIds: [
       'deep_sls_pain_intensity',
       'deep_sls_pain_location',
       'deep_sls_quality',
@@ -462,90 +468,7 @@ export default function DeepTestRunPage() {
               videoAlt="벽천사 동작 가이드"
             />
           )}
-          {sectionIndex === 2
-            ? questions.slice(0, 3).map((q) => (
-                <div
-                  key={q.id}
-                  className="rounded-2xl border-2 border-slate-900 bg-white p-4 shadow-[4px_4px_0_0_rgba(15,23,42,1)]"
-                >
-                  <p className="text-sm font-semibold text-slate-800 mb-3">
-                    {q.title}
-                  </p>
-                  {q.type === 'number' && (
-                    <input
-                      type="number"
-                      min={1}
-                      max={120}
-                      value={
-                        typeof answers[q.id] === 'number'
-                          ? (answers[q.id] as number)
-                          : ''
-                      }
-                      onChange={(e) => {
-                        const n = parseInt(e.target.value, 10);
-                        if (e.target.value === '') {
-                          setAnswers((prev) => {
-                            const next = { ...prev };
-                            delete next[q.id];
-                            return next;
-                          });
-                        } else {
-                          handleAnswer(q.id, Number.isNaN(n) ? 0 : n);
-                        }
-                      }}
-                      className="w-full rounded-lg border-2 border-slate-900 bg-white px-4 py-3 text-slate-800"
-                      placeholder="나이 입력"
-                    />
-                  )}
-                  {q.type === 'single' && q.options && (
-                    <div className="flex flex-col gap-2">
-                      {q.options.map((opt) => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => handleAnswer(q.id, opt.value)}
-                          className={`rounded-full border-2 px-4 py-3 text-left text-sm font-medium transition ${
-                            answers[q.id] === opt.value
-                              ? 'border-slate-900 bg-slate-800 text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)]'
-                              : 'border-slate-900 bg-white text-slate-800 hover:bg-slate-100'
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {q.type === 'multi' && q.options && (
-                    <>
-                      <p className="text-xs text-stone-500 mb-2">1~2개 권장</p>
-                      <div className="flex flex-col gap-2">
-                        {q.options.map((opt) => {
-                          const arr = (answers[q.id] ?? []) as string[];
-                          const checked = arr.includes(opt.value);
-                          return (
-                            <label
-                              key={opt.value}
-                              className="flex items-center gap-3 rounded-full border-2 border-slate-900 bg-white px-4 py-3 cursor-pointer hover:bg-slate-50 transition"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={(e) =>
-                                  handleMultiChange(q.id, opt.value, e.target.checked)
-                                }
-                                className="rounded border-2 border-slate-900"
-                              />
-                              <span className="text-sm font-medium text-slate-800">{opt.label}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))
-            : null}
-          {sectionIndex === 2 && (
+          {sectionIndex === 3 && (
             <MovementGuideCard
               title="한발서기"
               subtitle="한 발로 10초 버틴 뒤, 흔들림/통증을 체크하세요."
@@ -558,7 +481,7 @@ export default function DeepTestRunPage() {
               videoAlt="한발서기 동작 가이드"
             />
           )}
-          {(sectionIndex === 0 || sectionIndex === 1 || (sectionIndex === 2 && questions.length > 3)) && (sectionIndex !== 2 ? questions : questions.slice(3)).map((q) => (
+          {questions.map((q) => (
             <div
               key={q.id}
               className="rounded-2xl border-2 border-slate-900 bg-white p-4 shadow-[4px_4px_0_0_rgba(15,23,42,1)]"
