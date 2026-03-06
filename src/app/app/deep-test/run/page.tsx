@@ -13,7 +13,7 @@ import AppTopBar from '../../_components/AppTopBar';
 import BottomNav from '../../_components/BottomNav';
 import { getSessionSafe } from '@/lib/supabase';
 import { postSessionProfile } from '@/lib/session/client';
-import { DEEP_V2_QUESTIONS, type DeepQuestion } from '../_data/questions';
+import { DEEP_V2_QUESTIONS, DEEP_SECTIONS, type DeepQuestion } from '../_data/questions';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
 import MovementGuideCard from '@/components/deep-test/MovementGuideCard';
 import TargetFrequencyPicker, { type TargetFrequency } from '@/components/session/TargetFrequencyPicker';
@@ -22,53 +22,14 @@ const SESSION_FREQUENCY_DRAFT_KEY = 'session_target_frequency_draft';
 
 type Status = 'loading' | 'ready' | 'error' | 'auth' | 'paywall' | 'finalizing';
 
-/** 5섹션 고정 — 1페이지 = 1개 동작, 마지막 단계에 나이/성별/빈도 통합 */
-const STEPPER_SECTIONS = [
-  {
-    id: 'basic',
-    title: '기본 정보',
-    questionIds: [
-      'deep_basic_experience',
-      'deep_basic_workstyle',
-      'deep_basic_primary_discomfort',
-    ],
-  },
-  {
-    id: 'squat',
-    title: '스쿼트',
-    questionIds: [
-      'deep_squat_pain_intensity',
-      'deep_squat_pain_location',
-      'deep_squat_knee_alignment',
-    ],
-  },
-  {
-    id: 'wallangel',
-    title: '벽천사',
-    questionIds: [
-      'deep_wallangel_pain_intensity',
-      'deep_wallangel_pain_location',
-      'deep_wallangel_quality',
-    ],
-  },
-  {
-    id: 'sls',
-    title: '한발서기',
-    questionIds: [
-      'deep_sls_pain_intensity',
-      'deep_sls_pain_location',
-      'deep_sls_quality',
-    ],
-  },
-  {
-    id: 'final',
-    title: '마지막 단계',
-    questionIds: [
-      'deep_basic_age',
-      'deep_basic_gender',
-    ],
-  },
-] as const;
+/** Stepper display titles (DEEP_SECTIONS uses canonical questionIds) */
+const STEPPER_TITLES: Record<string, string> = {
+  basic: '기본 정보',
+  squat: '스쿼트',
+  wallangel: '벽천사',
+  sls: '한발서기',
+  final: '마지막 단계',
+};
 
 function getQuestionsForSection(questionIds: readonly string[]): DeepQuestion[] {
   return questionIds
@@ -77,8 +38,8 @@ function getQuestionsForSection(questionIds: readonly string[]): DeepQuestion[] 
 }
 
 function getSectionIndexFromAnswers(answers: Record<string, DeepAnswerValue>): number {
-  for (let i = STEPPER_SECTIONS.length - 1; i >= 0; i--) {
-    const ids = STEPPER_SECTIONS[i].questionIds;
+  for (let i = DEEP_SECTIONS.length - 1; i >= 0; i--) {
+    const ids = DEEP_SECTIONS[i].questionIds;
     if (ids.some((id) => {
       const v = answers[id];
       return v !== undefined && v !== null && v !== '';
@@ -217,11 +178,11 @@ export default function DeepTestRunPage() {
     };
   }, [getToken]);
 
-  const currentSection = STEPPER_SECTIONS[sectionIndex];
+  const currentSection = DEEP_SECTIONS[sectionIndex];
   const questions = currentSection
     ? getQuestionsForSection(currentSection.questionIds)
     : [];
-  const isLastSection = sectionIndex >= STEPPER_SECTIONS.length - 1;
+  const isLastSection = sectionIndex >= DEEP_SECTIONS.length - 1;
 
   const handleAnswer = (qId: string, value: DeepAnswerValue) => {
     setAnswers((prev) => ({ ...prev, [qId]: value }));
@@ -254,16 +215,16 @@ export default function DeepTestRunPage() {
   const mainRef = useRef<HTMLElement>(null);
 
   const canProceedFromSection = (idx: number): boolean => {
-    const ids = STEPPER_SECTIONS[idx].questionIds;
+    const ids = DEEP_SECTIONS[idx].questionIds;
     const qs = getQuestionsForSection(ids);
     if (!qs.every((q) => isQuestionAnswered(q, answers))) return false;
     // Final section also requires explicit frequency selection
-    if (idx === STEPPER_SECTIONS.length - 1 && targetFrequency === null) return false;
+    if (idx === DEEP_SECTIONS.length - 1 && targetFrequency === null) return false;
     return true;
   };
 
   function buildPatchForSection(idx: number): Record<string, DeepAnswerValue> {
-    const ids = STEPPER_SECTIONS[idx].questionIds;
+    const ids = DEEP_SECTIONS[idx].questionIds;
     const patch: Record<string, DeepAnswerValue> = {};
     for (const id of ids) {
       const v = answers[id];
@@ -440,10 +401,10 @@ export default function DeepTestRunPage() {
       <AppTopBar />
       <main ref={mainRef} className="container mx-auto px-4 py-6">
         <span className="text-sm font-semibold text-orange-500">
-          {sectionIndex + 1} / {STEPPER_SECTIONS.length}
+          {sectionIndex + 1} / {DEEP_SECTIONS.length}
         </span>
         <h2 className="mt-2 text-lg font-bold text-slate-800 mb-6">
-          {currentSection?.title}
+          {currentSection ? (STEPPER_TITLES[currentSection.id] ?? currentSection.title) : ''}
         </h2>
 
         <div className="space-y-6">

@@ -18,27 +18,16 @@ import type {
   DeepV2Signals,
 } from '../types';
 import { getPainIntensityMap, getFocusToTags, getAxisToAvoid } from '../config';
+import {
+  DEEP_V2_QUESTION_IDS,
+  DEEP_V2_TOTAL_COUNT,
+  getApplicableQuestionIds,
+} from '../question-ids';
 
 export const SCORING_VERSION = 'deep_v2';
 
-export const DEEP_V2_QUESTION_IDS = [
-  'deep_basic_age',
-  'deep_basic_gender',
-  'deep_basic_experience',
-  'deep_basic_workstyle',
-  'deep_basic_primary_discomfort',
-  'deep_squat_pain_intensity',
-  'deep_squat_pain_location',
-  'deep_squat_knee_alignment',
-  'deep_wallangel_pain_intensity',
-  'deep_wallangel_pain_location',
-  'deep_wallangel_quality',
-  'deep_sls_pain_intensity',
-  'deep_sls_pain_location',
-  'deep_sls_quality',
-] as const;
-
-const TOTAL_COUNT = 14;
+/** Re-export for consumers that import from deep_v2 */
+export { DEEP_V2_QUESTION_IDS, getApplicableQuestionIds };
 
 // --- Value parsers (deep_v1 패턴 재사용, free import 금지) ---
 function toNumber(v: DeepAnswerValue): number | null {
@@ -131,9 +120,9 @@ export function calculateDeepV2(
   const painMap = getPainIntensityMap();
   const obj = emptyScores();
 
-  // --- Answered count (DEEP_V2_QUESTION_IDS 기준) ---
+  // --- Answered count (canonical applicable IDs) ---
   let answeredCount = 0;
-  for (const id of DEEP_V2_QUESTION_IDS) {
+  for (const id of getApplicableQuestionIds()) {
     const v = answers[id];
     if (v !== undefined && v !== null) {
       if (Array.isArray(v)) {
@@ -143,7 +132,7 @@ export function calculateDeepV2(
       }
     }
   }
-  const baseConfidence = answeredCount / TOTAL_COUNT;
+  const baseConfidence = answeredCount / DEEP_V2_TOTAL_COUNT;
 
   // --- Q1: deep_basic_age ---
   const age = toNumber(answers.deep_basic_age);
@@ -263,7 +252,7 @@ export function calculateDeepV2(
       finalScores: { ...finalScores },
       confidence: baseConfidence,
       answeredCount,
-      totalCount: TOTAL_COUNT,
+      totalCount: DEEP_V2_TOTAL_COUNT,
       signals,
     };
   }
@@ -288,7 +277,7 @@ export function calculateDeepV2(
       finalScores: { ...finalScores },
       confidence: baseConfidence,
       answeredCount,
-      totalCount: TOTAL_COUNT,
+      totalCount: DEEP_V2_TOTAL_COUNT,
       signals,
     };
   }
@@ -306,7 +295,7 @@ export function calculateDeepV2(
       finalScores: { ...finalScores },
       confidence: baseConfidence,
       answeredCount,
-      totalCount: TOTAL_COUNT,
+      totalCount: DEEP_V2_TOTAL_COUNT,
       signals,
     };
   }
@@ -339,7 +328,7 @@ export function calculateDeepV2(
     finalScores: { ...finalScores },
     confidence,
     answeredCount,
-    totalCount: TOTAL_COUNT,
+    totalCount: DEEP_V2_TOTAL_COUNT,
     signals,
   };
 }

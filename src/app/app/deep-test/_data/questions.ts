@@ -1,6 +1,7 @@
 /**
- * Deep Test v2 - 14문항 (고정 ID)
- * DEEP_V2_QUESTION_IDS와 1:1 매칭
+ * Deep Test v2 - Question registry (UI/copy)
+ * IDs must match lib/deep-test/question-ids.ts (SSOT).
+ * Drift guard: npm run test:deep-id-check
  */
 
 export type DeepQuestionType = 'number' | 'single' | 'multi';
