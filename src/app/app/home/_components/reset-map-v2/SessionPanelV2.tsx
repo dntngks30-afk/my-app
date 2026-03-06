@@ -173,9 +173,9 @@ function PanelInner({
       {/* Bottom Sheet */}
       <div
         className="fixed inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom-4"
-        style={{ animationDuration: '280ms', animationTimingFunction: 'cubic-bezier(0.2,0,0,1)' }}
+        style={{ animationDuration: '280ms', animationTimingFunction: 'cubic-bezier(0.2,0,0,1)', paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <div className="mx-auto max-w-[430px] overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-xl">
+        <div className="mx-auto max-w-[430px] rounded-t-2xl border border-slate-200 bg-white shadow-xl">
           {/* Drag handle */}
           <div className="mx-auto mb-0 pt-3 flex justify-center">
             <div className="h-1 w-10 rounded-full bg-slate-200" />
@@ -233,7 +233,7 @@ function PanelInner({
           </div>
 
           {/* 운동 목록 */}
-          <div className="max-h-[50vh] overflow-y-auto px-5 pb-8">
+          <div className="max-h-[50vh] overflow-y-auto px-5 pb-12">
             <ExerciseList
               exercises={exercises}
               status={status}
