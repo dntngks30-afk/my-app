@@ -20,6 +20,10 @@ import {
 } from 'lucide-react';
 import { getCopy } from '@/lib/deep-result/copy';
 import { toRadarScores } from '@/lib/deep-result/score-utils';
+import {
+  detectMissingExplainabilityFields,
+  warnExplainabilityFallback,
+} from '@/lib/deep-result/explainability-fallback';
 import TagChips from './TagChips';
 
 type Variant = 'app' | 'demo';
@@ -124,6 +128,17 @@ export default function DeepTestResultContent({
     const t = setTimeout(() => setAnimate(true), 250);
     return () => clearTimeout(t);
   }, []);
+
+  React.useEffect(() => {
+    const missing = detectMissingExplainabilityFields({
+      resultType,
+      focusTags,
+      avoidTags,
+    });
+    if (missing.length > 0) {
+      warnExplainabilityFallback(missing, { resultType, attemptId });
+    }
+  }, [resultType, focusTags, avoidTags, attemptId]);
 
   const radar = toRadarScores(algorithmScores ?? null);
   const r = radar as unknown as Record<string, unknown> | null;
