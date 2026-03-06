@@ -9,6 +9,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { load, reset } from '@/lib/demo/deepTestDemoStorage';
+import {
+  getEffectiveConfidence,
+  toConfidenceSourceFromDerived,
+} from '@/lib/deep-result/effective-confidence';
 import DeepTestResultContent from '@/app/app/deep-test/result/_components/DeepTestResultContent';
 import type { DeepTestResultContentProps } from '@/app/app/deep-test/result/_components/DeepTestResultContent';
 
@@ -72,10 +76,12 @@ export default function DemoResultClient() {
     );
   }
 
+  const effectiveConfidence = getEffectiveConfidence(toConfidenceSourceFromDerived(derived));
+
   return (
     <DeepTestResultContent
       resultType={derived.result_type}
-      confidence={derived.confidence ?? null}
+      confidence={effectiveConfidence}
       focusTags={derived.focus_tags ?? []}
       avoidTags={derived.avoid_tags ?? []}
       algorithmScores={derived.algorithm_scores ?? undefined}

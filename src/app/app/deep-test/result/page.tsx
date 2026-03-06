@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 /**
  * Deep Test 寃곌낵 ?섏씠吏 (濡쒓렇??
@@ -15,6 +15,7 @@ import BottomNav from '../../_components/BottomNav';
 import PwaInstallModal from '@/components/pwa/PwaInstallModal';
 import { usePwaInstall } from '@/lib/pwa/usePwaInstall';
 import { getSessionSafe } from '@/lib/supabase';
+import { getEffectiveConfidence, toConfidenceSource } from '@/lib/deep-result/effective-confidence';
 import DeepTestResultContent from './_components/DeepTestResultContent';
 
 interface DeepResult {
@@ -244,9 +245,10 @@ export default function DeepTestResultPage() {
     );
   }
 
-  // Ready: 怨듯넻 DeepTestResultContent ?ъ슜
+  // Ready: 공통 DeepTestResultContent 사용. effective_confidence SSOT
   const att = result?.attempt;
   const derived = att?.scores?.derived;
+  const effectiveConfidence = getEffectiveConfidence(toConfidenceSource(att));
 
   return (
     <div className="min-h-screen bg-[#F7F3EE] pb-24">
@@ -254,7 +256,7 @@ export default function DeepTestResultPage() {
       <main className="container mx-auto px-4 py-8">
         <DeepTestResultContent
           resultType={att?.resultType ?? null}
-          confidence={att?.confidence ?? null}
+          confidence={effectiveConfidence}
           focusTags={derived?.focus_tags ?? []}
           avoidTags={derived?.avoid_tags ?? []}
           algorithmScores={derived?.algorithm_scores}

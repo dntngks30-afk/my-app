@@ -364,7 +364,7 @@ export async function POST(req: NextRequest) {
       painFlags,
       usedTemplateIds,
       resultType: deepSummary.result_type,
-      confidence: deepSummary.confidence,
+      confidence: deepSummary.effective_confidence ?? deepSummary.confidence,
       scoringVersion: deepSummary.scoring_version,
       deep_level: deepSummary.deep_level,
       pain_risk: deepSummary.pain_risk,

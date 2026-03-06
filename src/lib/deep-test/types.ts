@@ -90,6 +90,42 @@ export interface DeepV2Result {
   totalCount: number; // 14
 }
 
+// ==========================================
+// [P1-2] Explainability (optional, backward-compatible)
+// ==========================================
+
+/** confidence_breakdown.final_confidence가 있으면 SSOT, 없으면 legacy confidence 사용 */
+export interface ConfidenceBreakdown {
+  base_confidence?: number;
+  gap_bonus?: number;
+  final_confidence: number;
+}
+
+export interface EvidenceQuality {
+  answered_ratio?: number;
+  pain_detail?: 'none' | 'partial' | 'full';
+}
+
+export interface Rationale {
+  summary?: string;
+  top_positive_signals?: string[];
+  caution_reason?: string;
+}
+
+export interface DecisionTrace {
+  primary_axis?: string;
+  secondary_axis?: string;
+  level_reason?: string;
+}
+
+/** scores.derived.explainability 또는 derived 내 개별 필드로 전달 */
+export interface DeepExplainability {
+  confidence_breakdown?: ConfidenceBreakdown;
+  evidence_quality?: EvidenceQuality;
+  rationale?: Rationale;
+  decision_trace?: DecisionTrace;
+}
+
 /** * 🚀 [SSOT 핵심] 7일 루틴 자동 생성 API가 소비할 V2 확장 인터페이스
  * (이 데이터가 서버 알고리즘의 유일한 판단 기준이 됩니다)
  */
