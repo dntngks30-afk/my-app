@@ -164,7 +164,7 @@ function PanelInner({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm animate-in fade-in"
+        className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-sm animate-in fade-in"
         style={{ animationDuration: '180ms' }}
         onClick={openItem ? undefined : onClose}
         aria-hidden
@@ -172,7 +172,7 @@ function PanelInner({
 
       {/* Bottom Sheet */}
       <div
-        className="fixed inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom-4"
+        className="fixed inset-x-0 bottom-0 z-[70] animate-in slide-in-from-bottom-4"
         style={{ animationDuration: '280ms', animationTimingFunction: 'cubic-bezier(0.2,0,0,1)', paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="mx-auto max-w-[430px] rounded-t-2xl border border-slate-200 bg-white shadow-xl">
