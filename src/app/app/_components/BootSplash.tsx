@@ -27,7 +27,7 @@ export default function BootSplash({ copy = LOADING_COPIES[0], status }: BootSpl
       <div className="relative mb-6 animate-in fade-in" style={{ animationDuration: '500ms' }}>
         <div className="relative h-24 w-48 sm:h-28 sm:w-56">
           <Image
-            src="/brand/move-re-logo.png"
+            src="/brand/move-re-icon-512.png"
             alt="MOVE RE"
             fill
             priority
