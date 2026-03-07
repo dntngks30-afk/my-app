@@ -1,6 +1,7 @@
 /**
  * 요청 단위(Request-scoped) Bearer 토큰 → userId 캐시
- * 동일 요청 내에서 supabase.auth.getUser(token) 중복 호출 방지
+ * getClaims(token) 사용: 비대칭 JWT 키 시 로컬 검증(네트워크 없음), getUser 대비 지연 대폭 감소.
+ * 동일 요청 내 중복 호출 방지.
  */
 
 import type { NextRequest } from 'next/server';
@@ -8,8 +9,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
  * JWT payload의 sub(userId) 클레임을 로컬 base64 디코드로 추출.
- * 서버 검증 없이 userId만 선취득하기 위한 용도. 실제 인증은 getUser()가 담당.
- * 디코드 실패 시 null 반환 (신뢰 없는 토큰 차단은 getUser()에서 수행).
+ * 서버 검증 없이 userId만 선취득하기 위한 용도. 실제 인증은 getClaims/getUser가 담당.
+ * 디코드 실패 시 null 반환.
  */
 export function decodeJwtSub(token: string): string | null {
   try {
@@ -50,7 +51,8 @@ export function getBearerToken(req: NextRequest): string | null {
 }
 
 /**
- * 요청 1회당 1번만 getUser 호출. 캐시된 Promise 반환.
+ * 요청 1회당 1번만 auth 검증. getClaims(token) 사용 — 비대칭 키 시 로컬 검증(네트워크 없음).
+ * 대칭 키(legacy) 시에는 Auth 서버 호출로 fallback.
  */
 export async function getCachedUserId(
   req: NextRequest,
@@ -61,9 +63,15 @@ export async function getCachedUserId(
 
   let entry = cache.get(req)!;
   if (!entry.userIdPromise) {
-    entry.userIdPromise = supabase.auth
-      .getUser(token)
-      .then(({ data: { user }, error }) => (error || !user ? null : user.id));
+    entry.userIdPromise = (async () => {
+      const auth = supabase.auth as { getClaims?: (jwt?: string) => Promise<{ data: { sub?: string } | null; error: unknown }> };
+      if (typeof auth.getClaims === 'function') {
+        const { data, error } = await auth.getClaims(token);
+        if (!error && data?.sub) return data.sub;
+      }
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      return error || !user ? null : user.id;
+    })();
   }
   return entry.userIdPromise;
 }

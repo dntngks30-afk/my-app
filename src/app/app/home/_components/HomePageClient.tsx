@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
 import { getCachedActiveSession, invalidateActiveCache } from '@/lib/session/active-cache';
@@ -42,6 +42,8 @@ export default function HomePageClient() {
   const [todayCompleted, setTodayCompleted] = useState(false);
   const [nextUnlockAt, setNextUnlockAt] = useState<string | null>(null);
 
+  const activeFetchedRef = useRef(false);
+
   const handleSessionCompleted = useCallback(async (completedSessions: number) => {
     setSessionProgress(prev =>
       prev ? { ...prev, completed_sessions: completedSessions } : prev
@@ -69,6 +71,8 @@ export default function HomePageClient() {
 
   useEffect(() => {
     if (pathname !== '/app/home') return;
+    if (activeFetchedRef.current) return;
+    activeFetchedRef.current = true;
 
     const t0 = performance.now();
     let cancelled = false;
@@ -116,7 +120,10 @@ export default function HomePageClient() {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      activeFetchedRef.current = false; // allow remount (e.g. Strict Mode) to refetch
+    };
   }, [pathname]);
 
   if (loading) {

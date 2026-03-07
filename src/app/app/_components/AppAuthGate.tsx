@@ -94,19 +94,10 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
     return () => { cancelled = true; };
   }, [pathname, isAuthPage, router]);
 
+  // Perf: Don't block render on plan_status. Show children (loading skeleton) immediately.
+  // plan_status check runs in background; paywall shown if not active.
   if (status === 'loading') {
-    return (
-      <>
-        {children}
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg)]/90"
-          aria-live="polite"
-          aria-busy="true"
-        >
-          <p className="text-sm text-[var(--muted)]">확인 중...</p>
-        </div>
-      </>
-    );
+    return <>{children}</>;
   }
 
   if (status === 'auth' && isAuthPage) {
