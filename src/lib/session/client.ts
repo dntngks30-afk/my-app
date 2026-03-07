@@ -140,6 +140,16 @@ export type ActiveSessionResponse = {
   next_unlock_at?: string;
 };
 
+/** Home 초기 로드용 경량 응답 — plan_json 제외 */
+export type ActivePlanSummary = { session_number: number; status: string };
+
+export type ActiveSessionLiteResponse = {
+  progress: SessionProgress;
+  active: ActivePlanSummary | null;
+  today_completed?: boolean;
+  next_unlock_at?: string;
+};
+
 export type CreateSessionResponse = {
   progress: SessionProgress;
   active: SessionPlan;
@@ -151,11 +161,20 @@ export type CreateSessionResponse = {
 
 // ─── API 함수 ──────────────────────────────────────────────────────────────────
 
-/** GET /api/session/active — 진행 중 세션 조회 */
+/** GET /api/session/active — 진행 중 세션 조회 (전체 plan_json 포함) */
 export async function getActiveSession(
   token: string
 ): Promise<ApiResult<ActiveSessionResponse>> {
   return sessionFetch<ActiveSessionResponse>('/api/session/active', token, {
+    method: 'GET',
+  });
+}
+
+/** GET /api/session/active-lite — Home 초기 로드용 경량 조회 (plan_json 제외) */
+export async function getActiveSessionLite(
+  token: string
+): Promise<ApiResult<ActiveSessionLiteResponse>> {
+  return sessionFetch<ActiveSessionLiteResponse>('/api/session/active-lite', token, {
     method: 'GET',
   });
 }

@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
-import { getCachedActiveSession, invalidateActiveCache } from '@/lib/session/active-cache';
-import type { SessionPlan } from '@/lib/session/client';
+import { getCachedActiveSessionLite, invalidateActiveCache } from '@/lib/session/active-cache';
+import type { SessionPlan, ActivePlanSummary } from '@/lib/session/client';
 import BottomNav from '../../_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
@@ -38,7 +38,7 @@ export default function HomePageClient() {
     total_sessions: number;
     completed_sessions: number;
   } | null>(null);
-  const [activePlan, setActivePlan] = useState<SessionPlan | null>(null);
+  const [activePlan, setActivePlan] = useState<SessionPlan | ActivePlanSummary | null>(null);
   const [todayCompleted, setTodayCompleted] = useState(false);
   const [nextUnlockAt, setNextUnlockAt] = useState<string | null>(null);
 
@@ -56,7 +56,7 @@ export default function HomePageClient() {
     // Refetch to get accurate todayCompleted/nextUnlockAt from server
     const { session } = await getSessionSafe();
     if (session?.access_token) {
-      const result = await getCachedActiveSession(session.access_token);
+      const result = await getCachedActiveSessionLite(session.access_token);
       if (result.ok) {
         setTodayCompleted(result.data.today_completed === true);
         setNextUnlockAt(typeof result.data.next_unlock_at === 'string' ? result.data.next_unlock_at : null);
@@ -83,7 +83,7 @@ export default function HomePageClient() {
         return;
       }
       try {
-        const result = await getCachedActiveSession(session.access_token);
+        const result = await getCachedActiveSessionLite(session.access_token);
         if (cancelled) return;
         const elapsed = Math.round(performance.now() - t0);
         if (typeof performance !== 'undefined' && performance.mark) {

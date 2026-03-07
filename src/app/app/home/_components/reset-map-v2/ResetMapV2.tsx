@@ -5,7 +5,7 @@ import { JourneyMapV2 } from './JourneyMapV2'
 import { SessionPanelV2 } from './SessionPanelV2'
 import { sessions, type SessionNode } from './map-data'
 import { extractSessionExercises } from './planJsonAdapter'
-import { createSession, getSessionPlan, type SessionPlan } from '@/lib/session/client'
+import { createSession, getSessionPlan, type SessionPlan, type ActivePlanSummary } from '@/lib/session/client'
 import { getSessionSafe } from '@/lib/supabase'
 import { prefetchMediaSign } from './media-cache'
 
@@ -14,8 +14,8 @@ interface ResetMapV2Props {
   total: number
   /** 완료된 세션 수 */
   completed: number
-  /** HomePageClient에서 내려받은 active plan (plan_json 포함) */
-  activePlan: SessionPlan | null
+  /** HomePageClient에서 내려받은 active plan (lite: session_number,status만 / full: plan_json 포함) */
+  activePlan: SessionPlan | ActivePlanSummary | null
   /** daily cap: 오늘 세션 완료 여부 */
   todayCompleted?: boolean
   /** daily cap: 다음 세션 해제 시각 (ISO string) */
@@ -36,8 +36,8 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
 
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null)
 
-  // localActivePlan: prop에서 시작, createSession 성공 시 갱신
-  const [localActivePlan, setLocalActivePlan] = useState<SessionPlan | null>(activePlan)
+  // localActivePlan: prop에서 시작, createSession 성공 또는 getSessionPlan fetch 시 갱신
+  const [localActivePlan, setLocalActivePlan] = useState<SessionPlan | ActivePlanSummary | null>(activePlan)
   const [pastSessionPlan, setPastSessionPlan] = useState<SessionPlan | null>(null)
   const [planLoading, setPlanLoading] = useState(false)
   const createCalledRef = useRef(false)
@@ -98,6 +98,31 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     setSelectedSessionId(null)
   }, [])
 
+  // current 세션 패널 오픈 + lite만 있음(plan_json 없음) → getSessionPlan으로 상세 fetch
+  useEffect(() => {
+    if (selectedStatus !== 'current' || selectedSessionId === null) return
+    const plan = localActivePlan
+    if (plan == null) return
+    if ('plan_json' in plan && plan.plan_json) return // 이미 full plan
+    if (plan.session_number !== selectedSessionId) return
+
+    let cancelled = false
+    setPlanLoading(true)
+    getSessionSafe().then(async ({ session }) => {
+      if (cancelled || !session?.access_token) {
+        if (!cancelled) setPlanLoading(false)
+        return
+      }
+      const result = await getSessionPlan(session.access_token, selectedSessionId)
+      if (cancelled) return
+      setPlanLoading(false)
+      if (result.ok && result.data) {
+        setLocalActivePlan(result.data)
+      }
+    })
+    return () => { cancelled = true }
+  }, [selectedStatus, selectedSessionId, localActivePlan])
+
   // current 세션 패널 오픈 + activePlan 없음 → createSession 호출
   useEffect(() => {
     if (selectedStatus !== 'current') return
@@ -138,14 +163,15 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     return () => { cancelled = true }
   }, [selectedStatus, selectedSessionId, localActivePlan, onActivePlanCreated])
 
-  // plan_json에서 운동 추출 (current: createSession, completed: getSessionPlan)
+  // plan_json에서 운동 추출 (current: createSession 또는 getSessionPlan, completed: getSessionPlan)
   const exercises = useMemo(() => {
     if (selectedSessionId === null) return undefined
     if (selectedStatus === 'current') {
-      if (planLoading && localActivePlan === null) return undefined
-      if (localActivePlan?.session_number === selectedSessionId) {
+      if (planLoading && !localActivePlan) return undefined
+      if (localActivePlan?.session_number === selectedSessionId && 'plan_json' in localActivePlan && localActivePlan.plan_json) {
         return extractSessionExercises(localActivePlan.plan_json)
       }
+      if (localActivePlan?.session_number === selectedSessionId && !('plan_json' in localActivePlan)) return undefined // lite, fetch 중
       return []
     }
     if (selectedStatus === 'completed') {

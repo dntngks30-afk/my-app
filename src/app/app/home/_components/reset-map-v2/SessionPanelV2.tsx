@@ -5,7 +5,7 @@ import { X, Play, CheckCircle2, AlertCircle, Loader2, Dumbbell } from 'lucide-re
 import { getSessionSafe } from '@/lib/supabase'
 import { completeSession } from '@/lib/session/client'
 import type { ExerciseItem } from './planJsonAdapter'
-import type { ExerciseLogItem, SessionPlan } from '@/lib/session/client'
+import type { ExerciseLogItem, SessionPlan, ActivePlanSummary } from '@/lib/session/client'
 import { ExercisePlayerModal } from './ExercisePlayerModal'
 
 type SessionStatus = 'current' | 'completed' | 'locked'
@@ -17,8 +17,8 @@ interface SessionPanelV2Props {
   status: SessionStatus
   /** plan_json에서 추출된 운동 배열. undefined = 로딩 전, [] = 데이터 없음 */
   exercises: ExerciseItem[] | undefined
-  /** 현재 active plan — session_number + status 사용 */
-  activePlan: SessionPlan | null
+  /** 현재 active plan — session_number + status 사용 (SessionPlan | ActivePlanSummary) */
+  activePlan: SessionPlan | ActivePlanSummary | null
   /** daily cap: 다음 세션이 오늘 완료로 locked인 경우 */
   isLockedNext?: boolean
   /** daily cap: 다음 세션 해제 시각 (ISO string) */
