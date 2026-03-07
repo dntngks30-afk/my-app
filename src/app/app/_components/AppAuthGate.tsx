@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { supabase, getSessionSafe } from '@/lib/supabase';
 import { isAllowed, isAllowlistEmpty } from '@/lib/appAccess';
-import AppEntryLoader, { isAppBooted, setAppBooted } from './AppEntryLoader';
+import AppEntryLoader, { isAppBooted } from './AppEntryLoader';
 
 interface AppAuthGateProps {
   children: React.ReactNode;
@@ -72,7 +72,6 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
 
         if (hasActivePlan(user.plan_status)) {
           lastAllowedUserIdRef.current = userId;
-          setAppBooted();
           setStatus('allowed');
         } else {
           lastAllowedUserIdRef.current = null;

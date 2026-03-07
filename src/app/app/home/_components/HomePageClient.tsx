@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
 import { getCachedActiveSessionLite, invalidateActiveCache } from '@/lib/session/active-cache';
+import AppEntryLoader, { isAppBooted, setAppBooted } from '../../_components/AppEntryLoader';
 import type { SessionPlan, ActivePlanSummary } from '@/lib/session/client';
 import BottomNav from '../../_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
@@ -117,7 +118,10 @@ export default function HomePageClient() {
           setError(err instanceof Error ? err.message : '세션을 확인해 주세요');
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          if (!isAppBooted()) setAppBooted();
+        }
       }
     })();
     return () => {
@@ -127,18 +131,16 @@ export default function HomePageClient() {
   }, [pathname]);
 
   if (loading) {
+    if (!isAppBooted()) {
+      return <AppEntryLoader status="홈 로딩 중" />;
+    }
     return (
-      <div className="min-h-screen bg-[#f8f6f0] pb-20">
-        <header className="px-4 pt-6 pb-4">
-          <span className="text-sm font-semibold text-orange-500">Move Re</span>
-          <h1 className="mt-2 text-4xl font-bold text-orange-500">Move Re</h1>
-          <p className="mt-2 text-base text-slate-800">로딩 중...</p>
-        </header>
-        <main className="px-4 space-y-6">
-          <div className="h-24 animate-pulse rounded-2xl bg-stone-200" />
-          <div className="h-32 animate-pulse rounded-2xl bg-stone-200" />
-        </main>
-        <BottomNav />
+      <div className="flex min-h-[50vh] items-center justify-center bg-[#f8f6f0]">
+        <div
+          className="h-6 w-6 rounded-full border-2 border-[#e2e8f0] border-t-[#0F172A] app-entry-spinner"
+          aria-busy="true"
+          aria-label="로딩 중"
+        />
       </div>
     );
   }
