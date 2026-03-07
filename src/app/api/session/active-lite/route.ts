@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
 
     let { data: progress } = await supabase
       .from('session_program_progress')
-      .select('*')
+      .select('user_id, total_sessions, completed_sessions, active_session_number, last_completed_day_key')
       .eq('user_id', userId)
       .maybeSingle();
 
@@ -107,7 +107,7 @@ export async function GET(req: NextRequest) {
           completed_sessions: 0,
           active_session_number: null,
         })
-        .select()
+        .select('user_id, total_sessions, completed_sessions, active_session_number, last_completed_day_key')
         .single();
 
       timings.progress_insert_ms = Math.round(performance.now() - tInsertStart);
@@ -138,7 +138,7 @@ export async function GET(req: NextRequest) {
             .from('session_program_progress')
             .update({ total_sessions: resolved.totalSessions })
             .eq('user_id', userId)
-            .select()
+            .select('user_id, total_sessions, completed_sessions, active_session_number, last_completed_day_key')
             .single();
           timings.progress_sync_ms = Math.round(performance.now() - tSyncStart);
           if (!syncErr && synced) progress = synced;
