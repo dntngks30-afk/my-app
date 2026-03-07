@@ -56,7 +56,7 @@ export default function HomePageClient() {
     // Refetch to get accurate todayCompleted/nextUnlockAt from server
     const { session } = await getSessionSafe();
     if (session?.access_token) {
-      const result = await getCachedActiveSessionLite(session.access_token);
+      const result = await getCachedActiveSessionLite(session.access_token, { debug: debugFlag });
       if (result.ok) {
         setTodayCompleted(result.data.today_completed === true);
         setNextUnlockAt(typeof result.data.next_unlock_at === 'string' ? result.data.next_unlock_at : null);
@@ -83,7 +83,7 @@ export default function HomePageClient() {
         return;
       }
       try {
-        const result = await getCachedActiveSessionLite(session.access_token);
+        const result = await getCachedActiveSessionLite(session.access_token, { debug: debugFlag });
         if (cancelled) return;
         const elapsed = Math.round(performance.now() - t0);
         if (typeof performance !== 'undefined' && performance.mark) {

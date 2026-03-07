@@ -34,17 +34,18 @@ function tokenKey(t: string): string {
 
 /** Home 초기 로드용 — active-lite 캐시 (plan_json 제외, 경량) */
 export async function getCachedActiveSessionLite(
-  token: string
+  token: string,
+  opts?: { debug?: boolean }
 ): Promise<{ ok: true; data: ActiveSessionLiteResponse } | { ok: false; status: number; error: unknown }> {
   const key = tokenKey(token);
   const now = Date.now();
-  if (liteCache && liteCache.tokenKey === key && liteCache.entry.expiresAt > now) {
+  if (!opts?.debug && liteCache && liteCache.tokenKey === key && liteCache.entry.expiresAt > now) {
     return { ok: true, data: liteCache.entry.data };
   }
   if (liteInflight) {
     return liteInflight;
   }
-  const promise = getActiveSessionLite(token).then((result) => {
+  const promise = getActiveSessionLite(token, opts).then((result) => {
     liteInflight = null;
     if (result.ok) {
       liteCache = {

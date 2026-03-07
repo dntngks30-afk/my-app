@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect } from 'react'
-import { X, Play, CheckCircle2, AlertCircle, Loader2, Dumbbell } from 'lucide-react'
+import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import { getSessionSafe } from '@/lib/supabase'
 import { completeSession } from '@/lib/session/client'
 import type { ExerciseItem } from './planJsonAdapter'
@@ -162,18 +162,18 @@ function PanelInner({
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop — 즉시 반응 느낌 */}
       <div
         className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm animate-in fade-in"
-        style={{ animationDuration: '180ms' }}
+        style={{ animationDuration: '100ms' }}
         onClick={openItem ? undefined : onClose}
         aria-hidden
       />
 
-      {/* Bottom Sheet */}
+      {/* Bottom Sheet — 빠른 슬라이드 */}
       <div
         className="fixed inset-x-0 bottom-0 z-[70] px-3 pb-3 animate-in slide-in-from-bottom-4"
-        style={{ animationDuration: '280ms', animationTimingFunction: 'cubic-bezier(0.2,0,0,1)', paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        style={{ animationDuration: '180ms', animationTimingFunction: 'cubic-bezier(0.2,0,0,1)', paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
       >
         <div className="mx-auto max-w-[430px] rounded-2xl border border-slate-200 bg-white shadow-xl">
           {/* Drag handle */}
@@ -301,12 +301,23 @@ function ExerciseList({
       </div>
     )
   }
-  // undefined = 로딩 중 (createSession 호출 전/중)
+  // undefined = 로딩 중 (createSession/getSessionPlan 호출 중) — 스켈레톤으로 즉시 레이아웃 고정
   if (exercises === undefined) {
     return (
-      <div className="flex flex-col items-center gap-2 rounded-xl bg-slate-50 px-4 py-8">
-        <Dumbbell className="h-5 w-5 animate-pulse text-orange-400" />
-        <p className="text-sm text-slate-500">운동 구성을 준비 중입니다...</p>
+      <div className="space-y-4 animate-in fade-in" style={{ animationDuration: '120ms' }}>
+        <div className="space-y-1.5">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex items-center gap-3 rounded-xl px-4 py-3 bg-slate-100">
+              <div className="h-5 w-5 shrink-0 rounded bg-slate-200 animate-pulse" />
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="h-3.5 w-24 rounded bg-slate-200 animate-pulse" />
+                <div className="h-3 w-16 rounded bg-slate-100 animate-pulse" />
+              </div>
+              <div className="h-8 w-8 shrink-0 rounded-lg bg-slate-200 animate-pulse" />
+            </div>
+          ))}
+        </div>
+        <p className="text-center text-xs text-slate-400">운동 구성을 불러오는 중...</p>
       </div>
     )
   }

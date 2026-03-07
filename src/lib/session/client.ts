@@ -172,11 +172,11 @@ export async function getActiveSession(
 
 /** GET /api/session/active-lite — Home 초기 로드용 경량 조회 (plan_json 제외) */
 export async function getActiveSessionLite(
-  token: string
+  token: string,
+  opts?: { debug?: boolean }
 ): Promise<ApiResult<ActiveSessionLiteResponse>> {
-  return sessionFetch<ActiveSessionLiteResponse>('/api/session/active-lite', token, {
-    method: 'GET',
-  });
+  const path = opts?.debug ? '/api/session/active-lite?debug=1' : '/api/session/active-lite';
+  return sessionFetch<ActiveSessionLiteResponse>(path, token, { method: 'GET' });
 }
 
 /** GET /api/session/plan?session_number=N — 과거/현재 세션 plan 조회 (read-only) */

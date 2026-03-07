@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { JourneyMapV2 } from './JourneyMapV2'
 import { SessionPanelV2 } from './SessionPanelV2'
 import { sessions, type SessionNode } from './map-data'
@@ -99,7 +99,8 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   }, [])
 
   // current 세션 패널 오픈 + lite만 있음(plan_json 없음) → getSessionPlan으로 상세 fetch
-  useEffect(() => {
+  // useLayoutEffect: fetch 시작을 paint 전에 해서 로딩 상태를 첫 프레임에 반영
+  useLayoutEffect(() => {
     if (selectedStatus !== 'current' || selectedSessionId === null) return
     const plan = localActivePlan
     if (plan == null) return
@@ -184,17 +185,23 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     return []
   }, [selectedSessionId, selectedStatus, localActivePlan, pastSessionPlan, planLoading])
 
-  // 패널 open 시 exercises의 templateIds 배치 prefetch
+  // 패널 open 후 미디어 prefetch — critical path 밖으로 지연 (패널 첫 인상 먼저)
   useEffect(() => {
     if (!exercises?.length) return
     const ids = [...new Set(exercises.map(e => e.templateId).filter(Boolean))]
     if (ids.length === 0) return
     let cancelled = false
-    getSessionSafe().then(({ session }) => {
-      if (cancelled || !session?.access_token) return
-      prefetchMediaSign(ids, session.access_token)
-    })
-    return () => { cancelled = true }
+    const t = setTimeout(() => {
+      if (cancelled) return
+      getSessionSafe().then(({ session }) => {
+        if (cancelled || !session?.access_token) return
+        prefetchMediaSign(ids, session.access_token)
+      })
+    }, 200)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
   }, [exercises])
 
   return (
