@@ -17,6 +17,11 @@ const SECONDARY_FOCUS_BONUS = 2;
 const SHORT_DURATION_BONUS = 1;
 const LEVEL_MATCH_BONUS = 1;
 
+/** PR-P2-4: constraint hardening */
+const MAX_SAME_FOCUS_IN_MAIN = 2;
+const MIN_CANDIDATES_FOR_STRICT_AVOID = 3;
+const SHORT_TOTAL_ITEM_CAP = 4;
+
 export type ConditionMood = 'good' | 'ok' | 'bad';
 export type TimeBudget = 'short' | 'normal';
 
@@ -84,6 +89,15 @@ export type PlanJsonOutput = {
     safety_mode?: 'red' | 'yellow' | 'none';
     finalTargetLevel?: number;
     maxLevel?: number;
+    /** PR-P2-4: constraint trace */
+    constraint_flags?: {
+      avoid_filter_applied: boolean;
+      duplicate_filtered_count: number;
+      focus_diversity_enforced: boolean;
+      fallback_used: boolean;
+      short_mode_applied: boolean;
+      recovery_mode_applied: boolean;
+    };
   };
   flags: { recovery: boolean; short: boolean };
   segments: PlanSegment[];
@@ -115,6 +129,51 @@ function scoreTemplate(
   if (t.level === finalTargetLevel) score += LEVEL_MATCH_BONUS;
 
   return score;
+}
+
+/**
+ * PR-P2-4: Select templates with focus diversity in Main.
+ * Deterministic: same input → same output.
+ */
+function selectTemplatesWithConstraints(
+  sorted: Array<{ template: SessionTemplateRow; score: number }>,
+  usedTemplateIds: string[],
+  prepCount: number,
+  mainCount: number,
+  releaseCount: number,
+  onDuplicateFiltered: (count: number) => void
+): SessionTemplateRow[] {
+  const totalNeeded = prepCount + mainCount + releaseCount;
+  const used = new Set<string>([...usedTemplateIds]);
+  const selected: SessionTemplateRow[] = [];
+  const mainFocusCount = new Map<string, number>();
+  let duplicateFiltered = 0;
+
+  for (const { template } of sorted) {
+    if (selected.length >= totalNeeded) break;
+    if (used.has(template.id)) {
+      duplicateFiltered++;
+      continue;
+    }
+
+    const segmentIndex = selected.length;
+    const inMain = segmentIndex >= prepCount && segmentIndex < prepCount + mainCount;
+
+    if (inMain) {
+      const ft = template.focus_tags[0] ?? '_none';
+      if ((mainFocusCount.get(ft) ?? 0) >= MAX_SAME_FOCUS_IN_MAIN) continue;
+    }
+
+    selected.push(template);
+    used.add(template.id);
+    if (inMain) {
+      const ft = template.focus_tags[0] ?? '_none';
+      mainFocusCount.set(ft, (mainFocusCount.get(ft) ?? 0) + 1);
+    }
+  }
+
+  onDuplicateFiltered(duplicateFiltered);
+  return selected;
 }
 
 function toPlanItem(
@@ -204,11 +263,13 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     .filter((s) => s.score >= 0)
     .sort((a, b) => b.score - a.score);
 
+  let usedFallbackPool = false;
   if (sorted.length === 0) {
     const fallbacks = candidates.length > 0
       ? candidates.filter((t) => t.is_fallback)
       : templates.filter((t) => t.is_fallback && t.level <= maxLevel);
     sorted = fallbacks.map((t) => ({ template: t, score: 0 }));
+    usedFallbackPool = true;
   }
 
   const overlay = input.adaptiveOverlay;
@@ -220,15 +281,42 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   }
   const prepCount = 1;
   const releaseCount = 1;
+  if (isShort && prepCount + mainCount + releaseCount > SHORT_TOTAL_ITEM_CAP) {
+    mainCount = Math.max(1, SHORT_TOTAL_ITEM_CAP - prepCount - releaseCount);
+  }
+  const totalNeeded = prepCount + mainCount + releaseCount;
 
-  const selected: SessionTemplateRow[] = [];
-  const used = new Set<string>([...input.usedTemplateIds]);
+  const avoidFilterApplied = avoidIds.size > 0;
+  const fallbackUsed = usedFallbackPool;
+  let duplicateFilteredCount = 0;
 
-  for (const { template } of sorted) {
-    if (selected.length >= prepCount + mainCount + releaseCount) break;
-    if (used.has(template.id)) continue;
-    selected.push(template);
-    used.add(template.id);
+  let selected = selectTemplatesWithConstraints(
+    sorted,
+    input.usedTemplateIds,
+    prepCount,
+    mainCount,
+    releaseCount,
+    (d) => { duplicateFilteredCount = d; }
+  );
+
+  if (selected.length < totalNeeded && candidates.length < MIN_CANDIDATES_FOR_STRICT_AVOID) {
+    const relaxedCandidates = templates.filter(
+      (t) =>
+        t.level <= maxLevel &&
+        !hasContraindicationOverlap(t.contraindications, excludeSet)
+    );
+    const relaxedSorted = relaxedCandidates.map((t) => ({ template: t, score: 0 }));
+    const relaxedSelected = selectTemplatesWithConstraints(
+      relaxedSorted,
+      input.usedTemplateIds,
+      prepCount,
+      mainCount,
+      releaseCount,
+      () => {}
+    );
+    if (relaxedSelected.length >= totalNeeded) {
+      selected = relaxedSelected;
+    }
   }
 
   const prepItems = selected.slice(0, prepCount);
@@ -293,6 +381,14 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       ...(input.safety_mode != null && { safety_mode: input.safety_mode }),
       finalTargetLevel,
       maxLevel,
+      constraint_flags: {
+        avoid_filter_applied: avoidFilterApplied,
+        duplicate_filtered_count: duplicateFilteredCount,
+        focus_diversity_enforced: true,
+        fallback_used: fallbackUsed,
+        short_mode_applied: isShort,
+        recovery_mode_applied: isRecovery,
+      },
     },
     flags: {
       recovery: isRecovery,
