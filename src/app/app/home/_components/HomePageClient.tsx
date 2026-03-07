@@ -6,6 +6,7 @@ import { getSessionSafe } from '@/lib/supabase';
 import { getCachedActiveSession, invalidateActiveCache } from '@/lib/session/active-cache';
 import type { SessionPlan } from '@/lib/session/client';
 import BottomNav from '../../_components/BottomNav';
+import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
 
@@ -212,6 +213,8 @@ export default function HomePageClient() {
           );
         })()}
 
+        {/* PR-P2-2: 4세션 변화 리포트 foundation */}
+        <ProgressReportCard />
       </main>
 
       <BottomNav />

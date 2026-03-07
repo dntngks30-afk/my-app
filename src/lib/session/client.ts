@@ -267,6 +267,60 @@ export type SessionHistoryResponse = {
   items: SessionHistoryItem[];
 };
 
+// ─── progress report (PR-P2-2) ─────────────────────────────────────────────
+
+export type ProgressWindowReport = {
+  window_size: 4;
+  available_sessions: number;
+  sufficient_data: boolean;
+  baseline: {
+    result_type?: string | null;
+    primary_focus?: string | null;
+    secondary_focus?: string | null;
+    effective_confidence?: number | null;
+    safety_mode?: 'none' | 'yellow' | 'red' | null;
+    scoring_version?: string | null;
+  };
+  current: {
+    completed_sessions_in_window: number;
+    completion_rate?: number | null;
+    avg_rpe?: number | null;
+    avg_pain_after?: number | null;
+    avg_completion_ratio?: number | null;
+    difficulty_mix?: { too_easy: number; ok: number; too_hard: number };
+    top_problem_exercises?: Array<{
+      exercise_key: string;
+      pain_delta_avg?: number | null;
+      skip_count?: number;
+      replace_count?: number;
+    }>;
+  };
+  trends: {
+    adherence: 'up' | 'steady' | 'down' | 'unknown';
+    exertion: 'up' | 'steady' | 'down' | 'unknown';
+    pain_burden: 'improving' | 'steady' | 'worsening' | 'unknown';
+    session_tolerance: 'improving' | 'steady' | 'worsening' | 'unknown';
+  };
+  summary: {
+    headline: string;
+    bullets: string[];
+    caution?: string | null;
+  };
+};
+
+/** GET /api/session/progress-report — 4세션 변화 요약 (read-only) */
+export async function getProgressReport(
+  token: string,
+  windowSize?: number
+): Promise<ApiResult<ProgressWindowReport>> {
+  const qs = windowSize ? `?window_size=${windowSize}` : '';
+  return sessionFetch<ProgressWindowReport>(`/api/session/progress-report${qs}`, token, {
+    method: 'GET',
+  });
+}
+
+// ─── history (read-only, calendar/history UI) ───────────────────────────────────
+
 /** GET /api/session/history — 완료된 세션 목록 (캘린더/히스토리용, read-only) */
 export async function getSessionHistory(
   token: string,
