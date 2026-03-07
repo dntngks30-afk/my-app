@@ -11,6 +11,7 @@ import { buildExcludeSet, hasContraindicationOverlap } from './safety';
 
 const REPETITION_PENALTY = 100;
 const CONTRAINDICATION_PENALTY = 100;
+const MAX_LEVEL_CAP = 3;
 const PRIMARY_FOCUS_BONUS = 3;
 const SECONDARY_FOCUS_BONUS = 2;
 const SHORT_DURATION_BONUS = 1;
@@ -39,6 +40,13 @@ export type PlanGeneratorInput = {
   red_flags?: boolean;
   /** PR-C: safety_mode → maxLevel cap. red=1, yellow=2, none=3 */
   safety_mode?: 'red' | 'yellow' | 'none';
+  /** PR-P2-3: adaptive overlay from recent feedback */
+  adaptiveOverlay?: {
+    targetLevelDelta?: -1 | 0 | 1;
+    forceShort?: boolean;
+    forceRecovery?: boolean;
+    avoidTemplateIds?: string[];
+  };
 };
 
 export type PlanItem = {
@@ -142,6 +150,7 @@ function toPlanItem(
 /**
  * PR-C: targetLevel 결정론
  * base = deep_level ?? 2, mood → target, safety_mode → maxLevel, finalTargetLevel = min(target, maxLevel)
+ * PR-P2-3: adaptiveOverlay.targetLevelDelta 적용 (clamp 1~3)
  */
 function computeTargetLevel(input: PlanGeneratorInput): {
   finalTargetLevel: number;
@@ -156,7 +165,13 @@ function computeTargetLevel(input: PlanGeneratorInput): {
         : Math.min(base + 1, 3);
   const maxLevel =
     input.safety_mode === 'red' ? 1 : input.safety_mode === 'yellow' ? 2 : 3;
-  const finalTargetLevel = Math.min(target, maxLevel);
+  let finalTargetLevel = Math.min(target, maxLevel);
+
+  const delta = input.adaptiveOverlay?.targetLevelDelta ?? 0;
+  if (delta !== 0) {
+    finalTargetLevel = Math.min(MAX_LEVEL_CAP, Math.max(1, finalTargetLevel + delta));
+    finalTargetLevel = Math.min(finalTargetLevel, maxLevel);
+  }
   return { finalTargetLevel, maxLevel };
 }
 
@@ -172,9 +187,12 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const { finalTargetLevel, maxLevel } = computeTargetLevel(input);
 
   const excludeSet = buildExcludeSet(input.avoid, input.painFlags);
+  const avoidIds = new Set(input.adaptiveOverlay?.avoidTemplateIds ?? []);
   const candidates = templates.filter(
     (t) =>
-      !hasContraindicationOverlap(t.contraindications, excludeSet) && t.level <= maxLevel
+      !hasContraindicationOverlap(t.contraindications, excludeSet) &&
+      t.level <= maxLevel &&
+      !avoidIds.has(t.id)
   );
 
   const scored = candidates.map((t) => ({
@@ -193,8 +211,9 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     sorted = fallbacks.map((t) => ({ template: t, score: 0 }));
   }
 
-  const isShort = input.timeBudget === 'short';
-  const isRecovery = input.conditionMood === 'bad';
+  const overlay = input.adaptiveOverlay;
+  const isShort = overlay?.forceShort ?? input.timeBudget === 'short';
+  const isRecovery = overlay?.forceRecovery ?? input.conditionMood === 'bad';
   let mainCount = isShort ? (isRecovery ? 1 : 2) : isRecovery ? 2 : 3;
   if (input.safety_mode === 'red') {
     mainCount = Math.min(mainCount, isShort ? 1 : 2);

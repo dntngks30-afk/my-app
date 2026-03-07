@@ -13,6 +13,7 @@
     "test:session-snapshot": "npx tsx scripts/session-snapshot-smoke.mjs",
     "test:session-feedback": "npx tsx scripts/session-feedback-smoke.mjs",
     "test:progress-report": "npx tsx scripts/progress-report-smoke.mjs",
+    "test:adaptive-progression": "npx tsx scripts/adaptive-progression-smoke.mjs",
     "test:phase-policy": "npx tsx scripts/phase-policy-test.mjs"
   },
   "dependencies": {

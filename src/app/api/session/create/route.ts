@@ -31,6 +31,11 @@ import {
   buildProfileSnapshot,
   buildGenerationTrace,
 } from '@/lib/session/session-snapshot';
+import {
+  loadRecentAdaptiveSignals,
+  deriveAdaptiveModifiers,
+  buildAdaptationTrace,
+} from '@/lib/session/adaptive-progression';
 import { getKstDayKeyUTC, getNextKstMidnightUtcIso, getTodayCompletedAndNextUnlock } from '@/lib/time/kst';
 import { logSessionEvent } from '@/lib/session-events';
 import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
@@ -405,6 +410,26 @@ export async function POST(req: NextRequest) {
       usedTemplateIds = Array.from(usedSet);
     }
 
+    const { sessionFeedback, exerciseFeedback, sourceSessionNumbers } =
+      await loadRecentAdaptiveSignals(userId, nextSessionNumber);
+    const modifiers = deriveAdaptiveModifiers(
+      sessionFeedback,
+      exerciseFeedback,
+      sourceSessionNumbers
+    );
+
+    const adaptiveOverlay =
+      modifiers.reason === 'none'
+        ? undefined
+        : {
+            targetLevelDelta: modifiers.targetLevelDelta,
+            ...(modifiers.forceShort && { forceShort: true }),
+            ...(modifiers.forceRecovery && { forceRecovery: true }),
+            ...(modifiers.avoidExerciseKeys.length > 0 && {
+              avoidTemplateIds: modifiers.avoidExerciseKeys,
+            }),
+          };
+
     const planJson = await buildSessionPlanJson({
       sessionNumber: nextSessionNumber,
       totalSessions: progress.total_sessions,
@@ -423,6 +448,7 @@ export async function POST(req: NextRequest) {
       pain_risk: deepSummary.pain_risk,
       red_flags: deepSummary.red_flags,
       safety_mode: deepSummary.safety_mode,
+      adaptiveOverlay,
     });
     const condition = {
       condition_mood: conditionMood,
@@ -439,7 +465,7 @@ export async function POST(req: NextRequest) {
     const profileSnapshot = buildProfileSnapshot(resolved.profile, totalSessionsForPhase);
     const phasePolicy = isAdaptivePhasePolicy(policyOptions) ? 'front_loaded' : 'equal';
     const phasePolicyReason = resolvePhasePolicyReason(policyOptions);
-    const generationTrace = buildGenerationTrace({
+    const baseTrace = buildGenerationTrace({
       sessionNumber: nextSessionNumber,
       totalSessions: totalSessionsForPhase,
       phase,
@@ -453,6 +479,11 @@ export async function POST(req: NextRequest) {
       phasePolicy,
       phasePolicyReason,
     });
+    const adaptationTrace = buildAdaptationTrace(modifiers, sourceSessionNumbers);
+    const generationTrace = {
+      ...baseTrace,
+      adaptation: adaptationTrace,
+    };
 
     // completed row 덮어쓰기 금지: status IN ('draft','started')일 때만 갱신
     const { data: existingPlan } = await supabase
@@ -492,7 +523,12 @@ export async function POST(req: NextRequest) {
     if (existingPlan && (existingPlan.status === 'draft' || existingPlan.status === 'started')) {
       const { data: updated, error: updateErr } = await supabase
         .from('session_plans')
-        .update({ theme: planPayload.theme, plan_json: planPayload.plan_json, condition: planPayload.condition })
+        .update({
+          theme: planPayload.theme,
+          plan_json: planPayload.plan_json,
+          condition: planPayload.condition,
+          generation_trace_json: planPayload.generation_trace_json,
+        })
         .eq('user_id', userId)
         .eq('session_number', nextSessionNumber)
         .in('status', ['draft', 'started'])

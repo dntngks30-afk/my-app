@@ -1,0 +1,296 @@
+/**
+ * PR-P2-3: Adaptive progression v1 (rule-based)
+ * 최근 1~2세션 feedback 기반 보수적 조정. deterministic.
+ */
+
+/* Lazy import to allow deriveAdaptiveModifiers (pure) to run without Supabase env */
+
+// ─── Constants ─────────────────────────────────────────────────────────────
+
+const HIGH_PAIN_AFTER = 5;
+const HIGH_PAIN_DELTA = 2;
+const LOW_COMPLETION = 0.6;
+const HIGH_COMPLETION = 0.9;
+const HIGH_RPE = 8;
+const LOW_RPE = 4;
+const PROBLEM_EXERCISE_THRESHOLD = 2;
+const MAX_LEVEL_CAP = 3;
+const ADAPTIVE_WINDOW = 2;
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+export type AdaptiveReason = 'pain_flare' | 'low_tolerance' | 'high_tolerance' | 'none';
+
+export type AdaptiveModifiers = {
+  reason: AdaptiveReason;
+  targetLevelDelta: -1 | 0 | 1;
+  forceShort?: boolean;
+  forceRecovery?: boolean;
+  avoidExerciseKeys: string[];
+  signalSummary?: {
+    avg_rpe?: number | null;
+    avg_pain_after?: number | null;
+    avg_completion_ratio?: number | null;
+    skip_count?: number;
+    replace_count?: number;
+  };
+};
+
+type SessionFeedbackRow = {
+  session_number: number;
+  overall_rpe?: number | null;
+  pain_after?: number | null;
+  difficulty_feedback?: string | null;
+  completion_ratio?: number | null;
+};
+
+type ExerciseFeedbackRow = {
+  session_number: number;
+  exercise_key: string;
+  pain_delta?: number | null;
+  was_replaced?: boolean | null;
+  skipped?: boolean | null;
+};
+
+// ─── Load signals ───────────────────────────────────────────────────────────
+
+/**
+ * Load recent 1~2 completed sessions' feedback for adaptation.
+ * Only sessions < nextSessionNumber (completed only).
+ */
+export async function loadRecentAdaptiveSignals(
+  userId: string,
+  nextSessionNumber: number
+): Promise<{
+  sessionFeedback: SessionFeedbackRow[];
+  exerciseFeedback: ExerciseFeedbackRow[];
+  sourceSessionNumbers: number[];
+}> {
+  if (nextSessionNumber <= 1) {
+    return { sessionFeedback: [], exerciseFeedback: [], sourceSessionNumbers: [] };
+  }
+
+  const { getServerSupabaseAdmin } = await import('@/lib/supabase');
+  const supabase = getServerSupabaseAdmin();
+  const fromSession = Math.max(1, nextSessionNumber - ADAPTIVE_WINDOW);
+  const toSession = nextSessionNumber - 1;
+
+  const [sfRes, exRes, plansRes] = await Promise.all([
+    supabase
+      .from('session_feedback')
+      .select('session_number, overall_rpe, pain_after, difficulty_feedback, completion_ratio')
+      .eq('user_id', userId)
+      .gte('session_number', fromSession)
+      .lte('session_number', toSession)
+      .order('session_number', { ascending: false }),
+    supabase
+      .from('exercise_feedback')
+      .select('session_number, exercise_key, pain_delta, was_replaced, skipped')
+      .eq('user_id', userId)
+      .gte('session_number', fromSession)
+      .lte('session_number', toSession),
+    supabase
+      .from('session_plans')
+      .select('session_number')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .gte('session_number', fromSession)
+      .lte('session_number', toSession)
+      .order('session_number', { ascending: false })
+      .limit(ADAPTIVE_WINDOW),
+  ]);
+
+  const completedNumbers = new Set((plansRes.data ?? []).map((r) => r.session_number));
+  const sf = (sfRes.data ?? []).filter((r) => completedNumbers.has(r.session_number)) as SessionFeedbackRow[];
+  const ex = (exRes.data ?? []).filter((r) => completedNumbers.has(r.session_number)) as ExerciseFeedbackRow[];
+
+  return {
+    sessionFeedback: sf,
+    exerciseFeedback: ex,
+    sourceSessionNumbers: Array.from(completedNumbers).sort((a, b) => b - a),
+  };
+}
+
+// ─── Derive modifiers ────────────────────────────────────────────────────────
+
+function avg(values: (number | null | undefined)[]): number | null {
+  const nums = values.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+  if (nums.length === 0) return null;
+  return nums.reduce((a, b) => a + b, 0) / nums.length;
+}
+
+function getProblemExerciseKeys(
+  exFeedback: ExerciseFeedbackRow[],
+  sessionNumbers: number[]
+): string[] {
+  const inWindow = exFeedback.filter((e) => sessionNumbers.includes(e.session_number));
+  const byKey = new Map<string, { painDeltas: number[]; skipCount: number; replaceCount: number }>();
+
+  for (const e of inWindow) {
+    if (!e.exercise_key) continue;
+    let entry = byKey.get(e.exercise_key);
+    if (!entry) {
+      entry = { painDeltas: [], skipCount: 0, replaceCount: 0 };
+      byKey.set(e.exercise_key, entry);
+    }
+    if (typeof e.pain_delta === 'number' && Number.isFinite(e.pain_delta)) {
+      entry.painDeltas.push(e.pain_delta);
+    }
+    if (e.skipped === true) entry.skipCount++;
+    if (e.was_replaced === true) entry.replaceCount++;
+  }
+
+  const problemKeys: string[] = [];
+  for (const [key, v] of byKey.entries()) {
+    const avgPain = v.painDeltas.length > 0
+      ? v.painDeltas.reduce((a, b) => a + b, 0) / v.painDeltas.length
+      : 0;
+    const problemScore = avgPain >= HIGH_PAIN_DELTA ? 2 : 0;
+    const skipReplaceScore = v.skipCount + v.replaceCount;
+    if (problemScore >= 2 || skipReplaceScore >= PROBLEM_EXERCISE_THRESHOLD) {
+      problemKeys.push(key);
+    }
+  }
+  return [...new Set(problemKeys)].sort();
+}
+
+/**
+ * Deterministic. Priority: pain_flare > low_tolerance > high_tolerance > none.
+ */
+export function deriveAdaptiveModifiers(
+  sessionFeedback: SessionFeedbackRow[],
+  exerciseFeedback: ExerciseFeedbackRow[],
+  sourceSessionNumbers: number[]
+): AdaptiveModifiers {
+  const none: AdaptiveModifiers = {
+    reason: 'none',
+    targetLevelDelta: 0,
+    avoidExerciseKeys: [],
+  };
+
+  if (sourceSessionNumbers.length === 0) return none;
+
+  const inWindow = sessionFeedback.filter((f) => sourceSessionNumbers.includes(f.session_number));
+  const avgRpe = avg(inWindow.map((f) => f.overall_rpe));
+  const avgPainAfter = avg(inWindow.map((f) => f.pain_after));
+  const avgCompletion = avg(inWindow.map((f) => f.completion_ratio));
+
+  let skipCount = 0;
+  let replaceCount = 0;
+  for (const e of exerciseFeedback) {
+    if (sourceSessionNumbers.includes(e.session_number)) {
+      if (e.skipped === true) skipCount++;
+      if (e.was_replaced === true) replaceCount++;
+    }
+  }
+
+  const signalSummary = {
+    avg_rpe: avgRpe,
+    avg_pain_after: avgPainAfter,
+    avg_completion_ratio: avgCompletion,
+    skip_count: skipCount,
+    replace_count: replaceCount,
+  };
+
+  const hasPainFlare =
+    (avgPainAfter != null && avgPainAfter >= HIGH_PAIN_AFTER) ||
+    exerciseFeedback.some(
+      (e) =>
+        sourceSessionNumbers.includes(e.session_number) &&
+        typeof e.pain_delta === 'number' &&
+        e.pain_delta >= HIGH_PAIN_DELTA
+    );
+
+  const hasLowTolerance =
+    (avgCompletion != null && avgCompletion < LOW_COMPLETION) ||
+    inWindow.some((f) => f.difficulty_feedback === 'too_hard') ||
+    (avgRpe != null && avgRpe >= HIGH_RPE) ||
+    skipCount + replaceCount >= PROBLEM_EXERCISE_THRESHOLD;
+
+  const hasHighTolerance =
+    !hasPainFlare &&
+    inWindow.length >= 2 &&
+    inWindow.every((f) => (f.completion_ratio ?? 1) >= HIGH_COMPLETION) &&
+    (avgRpe == null || avgRpe <= LOW_RPE) &&
+    (avgPainAfter == null || avgPainAfter < HIGH_PAIN_AFTER) &&
+    skipCount + replaceCount < 2;
+
+  const problemKeys = getProblemExerciseKeys(exerciseFeedback, sourceSessionNumbers);
+
+  if (hasPainFlare) {
+    return {
+      reason: 'pain_flare',
+      targetLevelDelta: -1,
+      forceShort: true,
+      forceRecovery: true,
+      avoidExerciseKeys: problemKeys,
+      signalSummary,
+    };
+  }
+
+  if (hasLowTolerance) {
+    return {
+      reason: 'low_tolerance',
+      targetLevelDelta: -1,
+      forceShort: true,
+      forceRecovery: false,
+      avoidExerciseKeys: problemKeys,
+      signalSummary,
+    };
+  }
+
+  if (hasHighTolerance) {
+    return {
+      reason: 'high_tolerance',
+      targetLevelDelta: 1,
+      forceShort: false,
+      forceRecovery: false,
+      avoidExerciseKeys: [],
+      signalSummary,
+    };
+  }
+
+  return { ...none, signalSummary };
+}
+
+// ─── Build trace ────────────────────────────────────────────────────────────
+
+export type AdaptationTrace = {
+  reason: AdaptiveReason;
+  source_sessions: number[];
+  applied_modifiers: {
+    target_level_delta: -1 | 0 | 1;
+    force_short?: boolean;
+    force_recovery?: boolean;
+    avoid_exercise_keys?: string[];
+  };
+  signal_summary?: {
+    avg_rpe?: number | null;
+    avg_pain_after?: number | null;
+    avg_completion_ratio?: number | null;
+    skip_count?: number;
+    replace_count?: number;
+  };
+};
+
+export function buildAdaptationTrace(
+  modifiers: AdaptiveModifiers,
+  sourceSessionNumbers: number[]
+): AdaptationTrace {
+  const trace: AdaptationTrace = {
+    reason: modifiers.reason,
+    source_sessions: [...sourceSessionNumbers].sort((a, b) => a - b),
+    applied_modifiers: {
+      target_level_delta: modifiers.targetLevelDelta,
+    },
+  };
+
+  if (modifiers.forceShort) trace.applied_modifiers.force_short = true;
+  if (modifiers.forceRecovery) trace.applied_modifiers.force_recovery = true;
+  if (modifiers.avoidExerciseKeys.length > 0) {
+    trace.applied_modifiers.avoid_exercise_keys = modifiers.avoidExerciseKeys;
+  }
+  if (modifiers.signalSummary) trace.signal_summary = modifiers.signalSummary;
+
+  return trace;
+}
