@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { supabase, getSessionSafe } from '@/lib/supabase';
 import { isAllowed, isAllowlistEmpty } from '@/lib/appAccess';
+import BootSplash from './BootSplash';
 
 interface AppAuthGateProps {
   children: React.ReactNode;
@@ -94,10 +95,9 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
     return () => { cancelled = true; };
   }, [pathname, isAuthPage, router]);
 
-  // Perf: Don't block render on plan_status. Show children (loading skeleton) immediately.
-  // plan_status check runs in background; paywall shown if not active.
+  // During auth check, show branded boot screen (single clean loading identity).
   if (status === 'loading') {
-    return <>{children}</>;
+    return <BootSplash copy="진행 상태를 확인하는 중" status="인증 확인 중" />;
   }
 
   if (status === 'auth' && isAuthPage) {

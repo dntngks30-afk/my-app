@@ -215,3 +215,12 @@ h1, h2, h3 {
 .fade-in               { animation-name: movere_fadeIn; }
 .slide-in-from-bottom  { animation-name: movere_slideInFromBottom; }
 .slide-in-from-bottom-4 { animation-name: movere_slideInFromBottom; }
+
+/* BootSplash shimmer bar */
+@keyframes boot-shimmer {
+  0%, 100% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+}
+.boot-shimmer {
+  animation: boot-shimmer 1.5s ease-in-out infinite;
+}
