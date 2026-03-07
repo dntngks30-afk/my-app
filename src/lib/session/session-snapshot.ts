@@ -32,6 +32,8 @@ export interface ProfileSnapshot {
   snapshot_at?: string;
 }
 
+import type { PhaseLengths, PhasePolicy, PhasePolicyReason } from './phase';
+
 export interface GenerationTrace {
   session_number: number;
   total_sessions: number;
@@ -44,6 +46,10 @@ export interface GenerationTrace {
   secondary_focus?: string;
   summary_source: 'deep_summary_snapshot';
   created_by: string;
+  /** PR-P1-4: phase policy for program consistency */
+  phase_lengths?: PhaseLengths;
+  phase_policy?: PhasePolicy;
+  phase_policy_reason?: PhasePolicyReason;
 }
 
 /**
@@ -97,8 +103,11 @@ export function buildGenerationTrace(input: {
   safetyMode?: 'red' | 'yellow' | 'none';
   primaryFocus?: string;
   secondaryFocus?: string;
+  phaseLengths?: PhaseLengths;
+  phasePolicy?: PhasePolicy;
+  phasePolicyReason?: PhasePolicyReason;
 }): GenerationTrace {
-  return {
+  const trace: GenerationTrace = {
     session_number: input.sessionNumber,
     total_sessions: input.totalSessions,
     resolved_phase: input.phase,
@@ -111,4 +120,8 @@ export function buildGenerationTrace(input: {
     summary_source: 'deep_summary_snapshot',
     created_by: CREATED_BY,
   };
+  if (input.phaseLengths) trace.phase_lengths = input.phaseLengths;
+  if (input.phasePolicy) trace.phase_policy = input.phasePolicy;
+  if (input.phasePolicyReason) trace.phase_policy_reason = input.phasePolicyReason;
+  return trace;
 }

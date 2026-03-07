@@ -81,6 +81,23 @@ ok('trace has confidence_source', trace.confidence_source === 'effective_confide
 ok('trace has created_by', trace.created_by === CREATED_BY);
 ok('trace has summary_source', trace.summary_source === 'deep_summary_snapshot');
 
+// P1-4: trace with phase_lengths
+const traceWithPhase = buildGenerationTrace({
+  sessionNumber: 1,
+  totalSessions: 8,
+  phase: 1,
+  theme: 'Phase 1 · test',
+  confidenceSource: 'effective_confidence',
+  scoringVersion: 'deep_v2',
+  phaseLengths: [3, 2, 2, 1],
+  phasePolicy: 'front_loaded',
+  phasePolicyReason: 'deep_level_1',
+});
+ok('trace has phase_lengths', Array.isArray(traceWithPhase.phase_lengths) && traceWithPhase.phase_lengths.length === 4);
+ok('trace phase_lengths sum', traceWithPhase.phase_lengths?.reduce((a, b) => a + b, 0) === 8);
+ok('trace has phase_policy', traceWithPhase.phase_policy === 'front_loaded');
+ok('trace has phase_policy_reason', traceWithPhase.phase_policy_reason === 'deep_level_1');
+
 ok('PLAN_VERSION constant', PLAN_VERSION === 'session_plan_v1');
 
 console.log(`\n${passed} passed, ${failed} failed`);

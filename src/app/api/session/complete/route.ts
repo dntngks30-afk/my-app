@@ -19,7 +19,7 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { logSessionEvent, summarizeExerciseLogs } from '@/lib/session-events';
 import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
-import { computePhase } from '@/lib/session/phase';
+import { computePhase, type PhaseLengths } from '@/lib/session/phase';
 
 const ROUTE_COMPLETE = '/api/session/complete';
 
@@ -87,10 +87,26 @@ function toExerciseLogsArray(val: unknown): unknown[] {
 
 const PHASE_LABELS = ['1순위 타겟', '2순위 타겟', '통합', '릴렉스'] as const;
 
-/** total_sessions 기반 phase → 테마 라벨 (create/plan-generator와 동일 규칙) */
-function getThemeForSession(totalSessions: number, sessionNumber: number): string {
+/** generation_trace_json에서 phase_lengths 추출 */
+function getPhaseLengthsFromTrace(trace: unknown): PhaseLengths | null {
+  if (!trace || typeof trace !== 'object') return null;
+  const arr = (trace as Record<string, unknown>).phase_lengths;
+  if (!Array.isArray(arr) || arr.length !== 4) return null;
+  const nums = arr.map((x) => (typeof x === 'number' && Number.isInteger(x) && x >= 1 ? x : null));
+  if (nums.some((n) => n === null)) return null;
+  const sum = (nums as number[]).reduce((a, b) => a + b, 0);
+  if (sum < 4 || sum > 20) return null;
+  return nums as PhaseLengths;
+}
+
+/** total_sessions + optional phase_lengths → 테마 라벨 (create와 동일 phase 경계) */
+function getThemeForSession(
+  totalSessions: number,
+  sessionNumber: number,
+  phaseLengths?: PhaseLengths | null
+): string {
   const total = Math.max(1, Math.min(20, totalSessions));
-  const phase = computePhase(total, sessionNumber);
+  const phase = computePhase(total, sessionNumber, { phaseLengths, policyOptions: null });
   return PHASE_LABELS[phase - 1];
 }
 
@@ -194,6 +210,14 @@ export async function POST(req: NextRequest) {
       return fail(409, ApiErrorCode.REQUEST_DEDUPED, '요청이 처리 중입니다. 잠시 후 다시 시도하세요');
     }
 
+    const { data: currentPlan } = await supabase
+      .from('session_plans')
+      .select('generation_trace_json')
+      .eq('user_id', userId)
+      .eq('session_number', sessionNumber)
+      .maybeSingle();
+    const phaseLengthsForNext = getPhaseLengthsFromTrace(currentPlan?.generation_trace_json);
+
     const nowIso = new Date().toISOString();
     const durationClamped = Math.min(7200, Math.max(0, durationSeconds));
 
@@ -250,7 +274,10 @@ export async function POST(req: NextRequest) {
       const newCompleted = Math.max(progress?.completed_sessions ?? 0, sessionNumber);
       const nextNum = newCompleted + 1;
       const totalSessions = progress?.total_sessions ?? 16;
-      const nextTheme = progress && nextNum <= totalSessions ? getThemeForSession(totalSessions, nextNum) : null;
+      const nextTheme =
+        progress && nextNum <= totalSessions
+          ? getThemeForSession(totalSessions, nextNum, phaseLengthsForNext)
+          : null;
 
       const data = { progress: progress ?? null, next_theme: nextTheme, idempotent: false, exercise_logs: exerciseLogsArray };
       return ok(data, data);
@@ -306,7 +333,10 @@ export async function POST(req: NextRequest) {
 
       const nextNum = (progress?.completed_sessions ?? sessionNumber) + 1;
       const totalSessions = progress?.total_sessions ?? 16;
-      const nextTheme = progress && nextNum <= totalSessions ? getThemeForSession(totalSessions, nextNum) : null;
+      const nextTheme =
+        progress && nextNum <= totalSessions
+          ? getThemeForSession(totalSessions, nextNum, phaseLengthsForNext)
+          : null;
 
       const data = { progress: progress ?? null, next_theme: nextTheme, idempotent: true, exercise_logs: toExerciseLogsArray(planRow.exercise_logs) };
       return ok(data, data);

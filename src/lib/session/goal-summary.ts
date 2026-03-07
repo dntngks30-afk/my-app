@@ -2,11 +2,14 @@
  * Session goal summary — Phase 기반 사용자별 목표 요약
  *
  * 나중에 서버에서 goal_summary를 내려줄 때 TodayGoalCard의 goal prop만 교체하면 됨.
+ * PR-P1-4: phase.ts computePhase 사용 (equal/adaptive 정렬).
  */
+
+import { computePhase, type Phase } from './phase';
 
 const TOTAL_SESSIONS_DEFAULT = 16;
 
-export type Phase = 1 | 2 | 3 | 4;
+export type { Phase };
 
 export type GoalSummaryMeta = {
   session_number?: number;
@@ -24,18 +27,8 @@ export type GoalSummary = {
   chips: string[];
 };
 
-/**
- * totalSessions(기본 16)와 session_number로 Phase(1~4) 계산
- */
-export function computePhase(
-  totalSessions: number,
-  sessionNumber: number
-): Phase {
-  if (sessionNumber < 1) return 1;
-  const perPhase = Math.max(1, Math.floor(totalSessions / 4));
-  const phase = Math.min(4, Math.ceil(sessionNumber / perPhase));
-  return (phase as Phase) || 1;
-}
+/** Re-export for consumers that need phase calculation */
+export { computePhase };
 
 /**
  * Phase별 주차 라벨

@@ -35,7 +35,14 @@ import { getKstDayKeyUTC, getNextKstMidnightUtcIso, getTodayCompletedAndNextUnlo
 import { logSessionEvent } from '@/lib/session-events';
 import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
-import { computePhase } from '@/lib/session/phase';
+import {
+  computePhase,
+  resolvePhaseLengths,
+  isAdaptivePhasePolicy,
+  resolvePhasePolicyReason,
+  type PhaseLengths,
+  type PhasePolicyOptions,
+} from '@/lib/session/phase';
 
 const ROUTE_CREATE = '/api/session/create';
 
@@ -79,9 +86,25 @@ type TimeBudget = 'short' | 'normal';
 
 const PHASE_LABELS = ['1순위 타겟', '2순위 타겟', '통합', '릴렉스'] as const;
 
-/** session_number → 0-based phase index (0~3). totalSessions 기반으로 균등 분배. */
-function getPhaseIndex(sessionNumber: number, totalSessions: number): number {
-  return computePhase(totalSessions, sessionNumber) - 1;
+/** session_number → 0-based phase index (0~3). phase_lengths 또는 options 기반. */
+function getPhaseIndex(
+  sessionNumber: number,
+  totalSessions: number,
+  options?: { phaseLengths?: PhaseLengths | null; policyOptions?: PhasePolicyOptions | null }
+): number {
+  return computePhase(totalSessions, sessionNumber, options) - 1;
+}
+
+/** generation_trace_json에서 phase_lengths 추출. 유효하면 반환. */
+function getPhaseLengthsFromTrace(trace: unknown): PhaseLengths | null {
+  if (!trace || typeof trace !== 'object') return null;
+  const arr = (trace as Record<string, unknown>).phase_lengths;
+  if (!Array.isArray(arr) || arr.length !== 4) return null;
+  const nums = arr.map((x) => (typeof x === 'number' && Number.isInteger(x) && x >= 1 ? x : null));
+  if (nums.some((n) => n === null)) return null;
+  const sum = (nums as number[]).reduce((a, b) => a + b, 0);
+  if (sum < 4 || sum > 20) return null;
+  return nums as PhaseLengths;
 }
 
 /**
@@ -115,9 +138,10 @@ function getUsedTemplateIds(planJson: unknown): string[] {
 function buildTheme(
   sessionNumber: number,
   totalSessions: number,
-  deep: { result_type: string; focus: string[] }
+  deep: { result_type: string; focus: string[] },
+  options?: { phaseLengths?: PhaseLengths | null; policyOptions?: PhasePolicyOptions | null }
 ): string {
-  const phaseIdx = getPhaseIndex(sessionNumber, totalSessions);
+  const phaseIdx = getPhaseIndex(sessionNumber, totalSessions, options);
   const phaseLabel = PHASE_LABELS[phaseIdx];
 
   if (phaseIdx === 0) {
@@ -336,8 +360,31 @@ export async function POST(req: NextRequest) {
     }
 
     const totalSessionsForPhase = progress.total_sessions ?? DEFAULT_TOTAL_SESSIONS;
-    const phase = computePhase(totalSessionsForPhase, nextSessionNumber);
-    const theme = buildTheme(nextSessionNumber, totalSessionsForPhase, deepSummary);
+    const policyOptions: PhasePolicyOptions = {
+      deepLevel: deepSummary.deep_level ?? null,
+      safetyMode: deepSummary.safety_mode ?? null,
+      redFlags: deepSummary.red_flags ?? null,
+    };
+
+    let phaseLengths: PhaseLengths | null = null;
+    if (nextSessionNumber > 1) {
+      const { data: prevPlan } = await supabase
+        .from('session_plans')
+        .select('generation_trace_json')
+        .eq('user_id', userId)
+        .eq('session_number', nextSessionNumber - 1)
+        .maybeSingle();
+      phaseLengths = getPhaseLengthsFromTrace(prevPlan?.generation_trace_json);
+    }
+    if (!phaseLengths) {
+      phaseLengths = resolvePhaseLengths(totalSessionsForPhase, policyOptions);
+    }
+
+    const phase = computePhase(totalSessionsForPhase, nextSessionNumber, { phaseLengths });
+    const theme = buildTheme(nextSessionNumber, totalSessionsForPhase, deepSummary, {
+      phaseLengths,
+      policyOptions,
+    });
 
     let usedTemplateIds: string[] = [];
     if (nextSessionNumber > 1) {
@@ -390,6 +437,8 @@ export async function POST(req: NextRequest) {
         : ('legacy_confidence' as const);
     const deepSummarySnapshot = buildDeepSummarySnapshot(deepSummary);
     const profileSnapshot = buildProfileSnapshot(resolved.profile, totalSessionsForPhase);
+    const phasePolicy = isAdaptivePhasePolicy(policyOptions) ? 'front_loaded' : 'equal';
+    const phasePolicyReason = resolvePhasePolicyReason(policyOptions);
     const generationTrace = buildGenerationTrace({
       sessionNumber: nextSessionNumber,
       totalSessions: totalSessionsForPhase,
@@ -400,6 +449,9 @@ export async function POST(req: NextRequest) {
       safetyMode: deepSummary.safety_mode,
       primaryFocus: deepSummary.primaryFocus,
       secondaryFocus: deepSummary.secondaryFocus,
+      phaseLengths,
+      phasePolicy,
+      phasePolicyReason,
     });
 
     // completed row 덮어쓰기 금지: status IN ('draft','started')일 때만 갱신
