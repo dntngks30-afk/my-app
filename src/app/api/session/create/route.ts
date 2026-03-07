@@ -163,12 +163,17 @@ function buildTheme(
 // ─── Route Handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const t0 = performance.now();
+  const timings: Record<string, number> = {};
+
   try {
     const userId = await getCurrentUserId(req);
+    timings.auth_ms = Math.round(performance.now() - t0);
     if (!userId) {
       return fail(401, ApiErrorCode.AUTH_REQUIRED, '로그인이 필요합니다');
     }
 
+    const tDedupe = performance.now();
     const headerKey = req.headers.get('Idempotency-Key') ?? null;
     const kstDay = getKstDayKeyUTC();
     const dedupeKey = buildDedupeKey({ route: ROUTE_CREATE, userId, kstDay, headerKey });
@@ -180,6 +185,7 @@ export async function POST(req: NextRequest) {
       kstDay,
       ttlSeconds: 10,
     });
+    timings.dedupe_ms = Math.round(performance.now() - tDedupe);
     if (!acquired) {
       void logSessionEvent(supabase, {
         userId,
@@ -192,6 +198,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const isDebug = body.debug === true;
 
     const conditionMood: ConditionMood = (['good', 'ok', 'bad'] as const).includes(
       body.condition_mood as ConditionMood
@@ -211,6 +218,7 @@ export async function POST(req: NextRequest) {
 
     const equipment = typeof body.equipment === 'string' ? body.equipment : 'none';
 
+    const tProgress = performance.now();
     // progress 조회 — 없으면 자동 생성 (BE-ONB-02: profile 기반 total_sessions)
     let { data: progress } = await supabase
       .from('session_program_progress')
@@ -244,6 +252,7 @@ export async function POST(req: NextRequest) {
       }
       progress = created;
     }
+    timings.progress_db_ms = Math.round(performance.now() - tProgress);
 
     // P0-09: 프로그램 종료 — completed_sessions >= total_sessions 이면 create 차단
     const totalSessions = progress.total_sessions ?? 16;
@@ -410,8 +419,10 @@ export async function POST(req: NextRequest) {
       usedTemplateIds = Array.from(usedSet);
     }
 
+    const tAdaptive = performance.now();
     const { sessionFeedback, exerciseFeedback, sourceSessionNumbers } =
       await loadRecentAdaptiveSignals(userId, nextSessionNumber);
+    timings.adaptive_load_ms = Math.round(performance.now() - tAdaptive);
     const modifiers = deriveAdaptiveModifiers(
       sessionFeedback,
       exerciseFeedback,
@@ -430,6 +441,7 @@ export async function POST(req: NextRequest) {
             }),
           };
 
+    const tGen = performance.now();
     const planJson = await buildSessionPlanJson({
       sessionNumber: nextSessionNumber,
       totalSessions: progress.total_sessions,
@@ -450,6 +462,7 @@ export async function POST(req: NextRequest) {
       safety_mode: deepSummary.safety_mode,
       adaptiveOverlay,
     });
+    timings.generation_ms = Math.round(performance.now() - tGen);
     const condition = {
       condition_mood: conditionMood,
       time_budget: timeBudget,
@@ -519,6 +532,7 @@ export async function POST(req: NextRequest) {
       generation_trace_json: generationTrace,
     };
 
+    const tPlanWrite = performance.now();
     let plan: typeof existingPlan;
     if (existingPlan && (existingPlan.status === 'draft' || existingPlan.status === 'started')) {
       const { data: updated, error: updateErr } = await supabase
@@ -547,6 +561,7 @@ export async function POST(req: NextRequest) {
         return fail(500, ApiErrorCode.INTERNAL_ERROR, '세션 플랜 업데이트에 실패했습니다');
       }
       plan = updated ?? existingPlan;
+      timings.plan_write_ms = Math.round(performance.now() - tPlanWrite);
     } else {
       const { data: inserted, error: insertErr } = await supabase
         .from('session_plans')
@@ -594,6 +609,7 @@ export async function POST(req: NextRequest) {
         return fail(500, ApiErrorCode.INTERNAL_ERROR, '세션 플랜 생성에 실패했습니다');
       }
       plan = inserted;
+      timings.plan_write_ms = Math.round(performance.now() - tPlanWrite);
     }
 
     if (!plan) {
@@ -632,8 +648,13 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    timings.total_ms = Math.round(performance.now() - t0);
+    if (isDebug && process.env.NODE_ENV !== 'production') {
+      console.info('[session/create] perf', timings);
+    }
+
     const data = { progress: finalProgress, active: plan, idempotent: false, today_completed: tc, ...(nua != null && { next_unlock_at: nua }) };
-    return ok(data, data);
+    return ok(data, isDebug ? { ...data, timings } : data);
   } catch (err) {
     console.error('[session/create]', err);
     try {

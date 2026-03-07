@@ -5,7 +5,7 @@ import { JourneyMapV2 } from './JourneyMapV2'
 import { SessionPanelV2 } from './SessionPanelV2'
 import { sessions, type SessionNode } from './map-data'
 import { extractSessionExercises } from './planJsonAdapter'
-import { createSession, getSessionPlan, type SessionPlan, type ActivePlanSummary } from '@/lib/session/client'
+import { createSession, getSessionPlanSummary, type SessionPlan, type ActivePlanSummary } from '@/lib/session/client'
 import { getSessionSafe } from '@/lib/supabase'
 import { prefetchMediaSign } from './media-cache'
 
@@ -36,7 +36,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
 
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null)
 
-  // localActivePlan: prop에서 시작, createSession 성공 또는 getSessionPlan fetch 시 갱신
+  // localActivePlan: prop에서 시작, createSession 성공 또는 plan-summary fetch 시 갱신
   const [localActivePlan, setLocalActivePlan] = useState<SessionPlan | ActivePlanSummary | null>(activePlan)
   const [pastSessionPlan, setPastSessionPlan] = useState<SessionPlan | null>(null)
   const [planLoading, setPlanLoading] = useState(false)
@@ -66,7 +66,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     return 'locked' as const
   }, [selectedSessionId, effectiveCurrentSession, completed])
 
-  // 과거 세션 클릭 시 plan_json 조회 (read-only)
+  // 과거 세션 클릭 시 plan-summary 조회 (패널 첫 렌더용 경량)
   useEffect(() => {
     if (selectedStatus !== 'completed' || selectedSessionId === null) {
       setPastSessionPlan(null)
@@ -80,11 +80,19 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         if (!cancelled) setPlanLoading(false)
         return
       }
-      const result = await getSessionPlan(session.access_token, selectedSessionId)
+      const result = await getSessionPlanSummary(session.access_token, selectedSessionId)
       if (cancelled) return
       setPlanLoading(false)
       if (result.ok && result.data) {
-        setPastSessionPlan(result.data)
+        setPastSessionPlan({
+          session_number: result.data.session_number,
+          status: result.data.status as 'draft' | 'started' | 'completed',
+          theme: '',
+          plan_json: { segments: result.data.segments } as SessionPlan['plan_json'],
+          condition: { condition_mood: 'ok', time_budget: 'normal' },
+          created_at: '',
+          started_at: null,
+        })
       }
     })
     return () => { cancelled = true }
@@ -98,13 +106,12 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     setSelectedSessionId(null)
   }, [])
 
-  // current 세션 패널 오픈 + lite만 있음(plan_json 없음) → getSessionPlan으로 상세 fetch
-  // useLayoutEffect: fetch 시작을 paint 전에 해서 로딩 상태를 첫 프레임에 반영
+  // current 세션 패널 오픈 + lite만 있음(plan_json 없음) → plan-summary로 경량 fetch (패널 첫 렌더)
   useLayoutEffect(() => {
     if (selectedStatus !== 'current' || selectedSessionId === null) return
     const plan = localActivePlan
     if (plan == null) return
-    if ('plan_json' in plan && plan.plan_json) return // 이미 full plan
+    if ('plan_json' in plan && plan.plan_json) return // 이미 full/segments plan
     if (plan.session_number !== selectedSessionId) return
 
     let cancelled = false
@@ -114,11 +121,19 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         if (!cancelled) setPlanLoading(false)
         return
       }
-      const result = await getSessionPlan(session.access_token, selectedSessionId)
+      const result = await getSessionPlanSummary(session.access_token, selectedSessionId)
       if (cancelled) return
       setPlanLoading(false)
       if (result.ok && result.data) {
-        setLocalActivePlan(result.data)
+        setLocalActivePlan({
+          session_number: result.data.session_number,
+          status: result.data.status as 'draft' | 'started' | 'completed',
+          theme: '',
+          plan_json: { segments: result.data.segments } as SessionPlan['plan_json'],
+          condition: { condition_mood: 'ok', time_budget: 'normal' },
+          created_at: '',
+          started_at: null,
+        })
       }
     })
     return () => { cancelled = true }
@@ -164,7 +179,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     return () => { cancelled = true }
   }, [selectedStatus, selectedSessionId, localActivePlan, onActivePlanCreated])
 
-  // plan_json에서 운동 추출 (current: createSession 또는 getSessionPlan, completed: getSessionPlan)
+  // plan_json에서 운동 추출 (current: createSession 또는 plan-summary, completed: plan-summary)
   const exercises = useMemo(() => {
     if (selectedSessionId === null) return undefined
     if (selectedStatus === 'current') {
@@ -185,22 +200,34 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     return []
   }, [selectedSessionId, selectedStatus, localActivePlan, pastSessionPlan, planLoading])
 
-  // 패널 open 후 미디어 prefetch — critical path 밖으로 지연 (패널 첫 인상 먼저)
+  // 미디어 prefetch — critical path 밖. 운동 목록 렌더 후, paint 완료·idle 시점에 실행.
   useEffect(() => {
     if (!exercises?.length) return
     const ids = [...new Set(exercises.map(e => e.templateId).filter(Boolean))]
     if (ids.length === 0) return
     let cancelled = false
-    const t = setTimeout(() => {
+    const runPrefetch = () => {
       if (cancelled) return
       getSessionSafe().then(({ session }) => {
         if (cancelled || !session?.access_token) return
         prefetchMediaSign(ids, session.access_token)
       })
-    }, 200)
+    }
+    // 2 RAF: content paint 완료 후, requestIdleCallback으로 main thread idle 시 prefetch
+    const raf1 = requestAnimationFrame(() => {
+      if (cancelled) return
+      requestAnimationFrame(() => {
+        if (cancelled) return
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(runPrefetch, { timeout: 1500 })
+        } else {
+          setTimeout(runPrefetch, 300)
+        }
+      })
+    })
     return () => {
       cancelled = true
-      clearTimeout(t)
+      cancelAnimationFrame(raf1)
     }
   }, [exercises])
 

@@ -301,7 +301,7 @@ function ExerciseList({
       </div>
     )
   }
-  // undefined = 로딩 중 (createSession/getSessionPlan 호출 중) — 스켈레톤으로 즉시 레이아웃 고정
+  // undefined = 로딩 중 (createSession/plan-summary 호출 중) — 스켈레톤으로 즉시 레이아웃 고정
   if (exercises === undefined) {
     return (
       <div className="space-y-4 animate-in fade-in" style={{ animationDuration: '120ms' }}>

@@ -182,10 +182,41 @@ export async function getActiveSessionLite(
 /** GET /api/session/plan?session_number=N — 과거/현재 세션 plan 조회 (read-only) */
 export async function getSessionPlan(
   token: string,
-  sessionNumber: number
+  sessionNumber: number,
+  opts?: { debug?: boolean }
 ): Promise<ApiResult<SessionPlan>> {
-  const path = `/api/session/plan?session_number=${encodeURIComponent(sessionNumber)}`;
+  const path = opts?.debug
+    ? `/api/session/plan?session_number=${encodeURIComponent(sessionNumber)}&debug=1`
+    : `/api/session/plan?session_number=${encodeURIComponent(sessionNumber)}`;
   return sessionFetch<SessionPlan>(path, token, { method: 'GET' });
+}
+
+/** GET /api/session/plan-summary — 패널 첫 렌더용 경량 조회 (segments만) */
+export type PlanSummaryResponse = {
+  session_number: number;
+  status: string;
+  segments: Array<{
+    title: string;
+    items: Array<{
+      templateId: string;
+      name: string;
+      order: number;
+      sets?: number;
+      reps?: number;
+      hold_seconds?: number;
+    }>;
+  }>;
+};
+
+export async function getSessionPlanSummary(
+  token: string,
+  sessionNumber: number,
+  opts?: { debug?: boolean }
+): Promise<ApiResult<PlanSummaryResponse>> {
+  const path = opts?.debug
+    ? `/api/session/plan-summary?session_number=${encodeURIComponent(sessionNumber)}&debug=1`
+    : `/api/session/plan-summary?session_number=${encodeURIComponent(sessionNumber)}`;
+  return sessionFetch<PlanSummaryResponse>(path, token, { method: 'GET' });
 }
 
 export type CreateSessionInput = {
@@ -193,6 +224,8 @@ export type CreateSessionInput = {
   time_budget: 'short' | 'normal';
   pain_flags?: string[];
   equipment?: string;
+  /** debug: true → response에 timings 포함 (측정용) */
+  debug?: boolean;
 };
 
 /** POST /api/session/create — 세션 멱등 생성 */
