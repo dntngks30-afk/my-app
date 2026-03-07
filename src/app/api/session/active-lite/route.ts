@@ -47,7 +47,7 @@ async function resolveTotalSessions(
 
 export type ActiveLiteSummary = { session_number: number; status: string };
 
-function addTimingHeaders(res: NextResponse, timings: Record<string, number>, isDebug: boolean): NextResponse {
+function addTimingHeaders(res: NextResponse, timings: Record<string, number>, isDebug: boolean): Response {
   if (!isDebug || Object.keys(timings).length === 0) return res;
   const parts = Object.entries(timings).map(([k, v]) => `${k};dur=${v}`);
   const next = res.clone();
