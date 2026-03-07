@@ -11,6 +11,7 @@
     "test:deep-id-check": "npx tsx scripts/deep-question-id-validate.mjs",
     "test:deep-p1-effective": "npx tsx scripts/deep-p1-effective-confidence.mjs",
     "test:session-snapshot": "npx tsx scripts/session-snapshot-smoke.mjs",
+    "test:session-feedback": "npx tsx scripts/session-feedback-smoke.mjs",
     "test:phase-policy": "npx tsx scripts/phase-policy-test.mjs"
   },
   "dependencies": {

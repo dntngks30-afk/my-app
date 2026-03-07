@@ -20,6 +20,7 @@ import { logSessionEvent, summarizeExerciseLogs } from '@/lib/session-events';
 import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import { computePhase, type PhaseLengths } from '@/lib/session/phase';
+import { normalizeSessionFeedbackPayload, saveSessionFeedback } from '@/lib/session/feedback';
 
 const ROUTE_COMPLETE = '/api/session/complete';
 
@@ -148,6 +149,8 @@ export async function POST(req: NextRequest) {
       exerciseLogsArray = [];
     }
 
+    const feedbackPayload = normalizeSessionFeedbackPayload(body.feedback);
+
     const headerKey = req.headers.get('Idempotency-Key') ?? null;
     const dedupeKey = buildDedupeKey({
       route: ROUTE_COMPLETE,
@@ -236,7 +239,7 @@ export async function POST(req: NextRequest) {
       .eq('user_id', userId)
       .eq('session_number', sessionNumber)
       .in('status', ['draft', 'started'])
-      .select('status, exercise_logs');
+      .select('id, status, exercise_logs');
 
     if (planUpdateErr) {
       console.error('[session/complete] plan update failed', planUpdateErr);
@@ -279,14 +282,30 @@ export async function POST(req: NextRequest) {
           ? getThemeForSession(totalSessions, nextNum, phaseLengthsForNext)
           : null;
 
-      const data = { progress: progress ?? null, next_theme: nextTheme, idempotent: false, exercise_logs: exerciseLogsArray };
+      let feedbackSaved = false;
+      if (feedbackPayload) {
+        const result = await saveSessionFeedback(supabase, feedbackPayload, {
+          userId,
+          sessionNumber,
+          sessionPlanId: updatedRows?.[0] != null && 'id' in updatedRows[0] ? (updatedRows[0] as { id: string }).id : null,
+        });
+        feedbackSaved = result.saved;
+      }
+
+      const data = {
+        progress: progress ?? null,
+        next_theme: nextTheme,
+        idempotent: false,
+        exercise_logs: exerciseLogsArray,
+        ...(feedbackPayload && { feedback_saved: feedbackSaved }),
+      };
       return ok(data, data);
     }
 
     // 0 rows updated — plan not found, already completed, or concurrent
     const { data: planRow } = await supabase
       .from('session_plans')
-      .select('status, exercise_logs')
+      .select('id, status, exercise_logs')
       .eq('user_id', userId)
       .eq('session_number', sessionNumber)
       .maybeSingle();
@@ -338,7 +357,23 @@ export async function POST(req: NextRequest) {
           ? getThemeForSession(totalSessions, nextNum, phaseLengthsForNext)
           : null;
 
-      const data = { progress: progress ?? null, next_theme: nextTheme, idempotent: true, exercise_logs: toExerciseLogsArray(planRow.exercise_logs) };
+      let feedbackSaved = false;
+      if (feedbackPayload) {
+        const result = await saveSessionFeedback(supabase, feedbackPayload, {
+          userId,
+          sessionNumber,
+          sessionPlanId: planRow && 'id' in planRow ? (planRow as { id: string }).id : null,
+        });
+        feedbackSaved = result.saved;
+      }
+
+      const data = {
+        progress: progress ?? null,
+        next_theme: nextTheme,
+        idempotent: true,
+        exercise_logs: toExerciseLogsArray(planRow.exercise_logs),
+        ...(feedbackPayload && { feedback_saved: feedbackSaved }),
+      };
       return ok(data, data);
     }
 

@@ -197,11 +197,35 @@ export type ExerciseLogItem = {
   difficulty: number | null;
 };
 
+/** PR-P2-1: optional feedback payload */
+export type SessionFeedbackInput = {
+  overallRpe?: number;
+  painAfter?: number;
+  difficultyFeedback?: 'too_easy' | 'ok' | 'too_hard';
+  completionRatio?: number;
+  timeOverrun?: boolean;
+  note?: string;
+};
+
+export type ExerciseFeedbackInput = {
+  exerciseKey: string;
+  completionRatio?: number;
+  perceivedDifficulty?: number;
+  painDelta?: number;
+  wasReplaced?: boolean;
+  skipped?: boolean;
+  dislikedReason?: string;
+};
+
 export type CompleteSessionInput = {
   session_number: number;
   duration_seconds: number;
   completion_mode: 'all_done' | 'partial_done' | 'stop_early';
   exercise_logs?: ExerciseLogItem[];
+  feedback?: {
+    sessionFeedback?: SessionFeedbackInput;
+    exerciseFeedback?: ExerciseFeedbackInput[];
+  };
 };
 
 export type CompleteSessionResponse = {
@@ -209,6 +233,7 @@ export type CompleteSessionResponse = {
   next_theme: string | null;
   idempotent: boolean;
   exercise_logs?: ExerciseLogItem[] | null;
+  feedback_saved?: boolean;
 };
 
 /** POST /api/session/complete — 세션 완료 (유저 명시적 액션 전용) */
