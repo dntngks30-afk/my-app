@@ -224,3 +224,11 @@ h1, h2, h3 {
 .boot-shimmer {
   animation: boot-shimmer 1.5s ease-in-out infinite;
 }
+
+/* AppEntryLoader spinner */
+@keyframes app-entry-spin {
+  to { transform: rotate(360deg); }
+}
+.app-entry-spinner {
+  animation: app-entry-spin 0.8s linear infinite;
+}

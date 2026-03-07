@@ -1,5 +1,22 @@
-import BootSplash from './_components/BootSplash';
+'use client';
+
+import { useState } from 'react';
+import AppEntryLoader, { isAppBooted } from './_components/AppEntryLoader';
 
 export default function AppLoading() {
-  return <BootSplash copy="내 리셋 지도를 준비하고 있어요" status="앱 로딩 중" />;
+  const [booted] = useState(() => isAppBooted());
+
+  if (booted) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center bg-[#faf8f5]">
+        <div
+          className="h-6 w-6 rounded-full border-2 border-[#e2e8f0] border-t-[#0F172A] app-entry-spinner"
+          aria-busy="true"
+          aria-label="로딩 중"
+        />
+      </div>
+    );
+  }
+
+  return <AppEntryLoader status="앱 로딩 중" />;
 }

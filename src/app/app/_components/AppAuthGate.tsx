@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { supabase, getSessionSafe } from '@/lib/supabase';
 import { isAllowed, isAllowlistEmpty } from '@/lib/appAccess';
-import BootSplash from './BootSplash';
+import AppEntryLoader, { isAppBooted, setAppBooted } from './AppEntryLoader';
 
 interface AppAuthGateProps {
   children: React.ReactNode;
@@ -72,6 +72,7 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
 
         if (hasActivePlan(user.plan_status)) {
           lastAllowedUserIdRef.current = userId;
+          setAppBooted();
           setStatus('allowed');
         } else {
           lastAllowedUserIdRef.current = null;
@@ -95,9 +96,12 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
     return () => { cancelled = true; };
   }, [pathname, isAuthPage, router]);
 
-  // During auth check, show branded boot screen (single clean loading identity).
+  // 앱 첫 진입 시에만 풀스크린 로더. 탭 전환에서는 재출현 금지.
   if (status === 'loading') {
-    return <BootSplash copy="진행 상태를 확인하는 중" status="인증 확인 중" />;
+    if (isAppBooted()) {
+      return <>{children}</>;
+    }
+    return <AppEntryLoader status="인증 확인 중" />;
   }
 
   if (status === 'auth' && isAuthPage) {
