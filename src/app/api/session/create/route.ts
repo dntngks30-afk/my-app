@@ -54,6 +54,28 @@ const ROUTE_CREATE = '/api/session/create';
 /** 최근 K세션 plan_json에서 used_template_ids 수집 (반복 억제). clamp 1..8 */
 const USED_WINDOW_K = 4;
 
+/** Panel first render용: plan_json을 segments만 남긴 경량 형태로 변환 */
+function toSummaryPlan(
+  plan: { session_number: number; status: string; theme: string; plan_json: unknown; condition: unknown }
+): typeof plan {
+  const pj = plan.plan_json as { segments?: Array<{ title?: string; items?: Array<{ templateId?: string; name?: string; order?: number; sets?: number; reps?: number; hold_seconds?: number }> }> } | null;
+  const segments = (pj?.segments ?? []).map((seg) => ({
+    title: seg.title ?? '',
+    items: (seg.items ?? []).map((it) => ({
+      templateId: it.templateId ?? '',
+      name: it.name ?? '',
+      order: it.order ?? 0,
+      sets: it.sets,
+      reps: it.reps,
+      hold_seconds: it.hold_seconds,
+    })),
+  }));
+  return {
+    ...plan,
+    plan_json: { segments },
+  };
+}
+
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -199,6 +221,7 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const isDebug = body.debug === true;
+    const summaryOnly = body.summary === true;
 
     const conditionMood: ConditionMood = (['good', 'ok', 'bad'] as const).includes(
       body.condition_mood as ConditionMood
@@ -325,7 +348,8 @@ export async function POST(req: NextRequest) {
         meta: { reason: 'active_exists' },
       });
 
-      const data = { progress, active: existingPlan ?? null, idempotent: true, today_completed: todayCompleted, ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }) };
+      const active = existingPlan ? (summaryOnly ? toSummaryPlan(existingPlan) : existingPlan) : null;
+      const data = { progress, active, idempotent: true, today_completed: todayCompleted, ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }) };
       return ok(data, data);
     }
 
@@ -514,7 +538,8 @@ export async function POST(req: NextRequest) {
         sessionNumber: nextSessionNumber,
         meta: { reason: 'conflict_return' },
       });
-      const data = { progress, active: existingPlan, idempotent: true, today_completed: todayCompleted, ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }) };
+      const active = summaryOnly ? toSummaryPlan(existingPlan) : existingPlan;
+      const data = { progress, active, idempotent: true, today_completed: todayCompleted, ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }) };
       return ok(data, data);
     }
 
@@ -594,7 +619,8 @@ export async function POST(req: NextRequest) {
             });
             const p = prog ?? { ...progress, active_session_number: nextSessionNumber };
             const { todayCompleted: tc, nextUnlockAt: nua } = getTodayCompletedAndNextUnlock(p);
-            const data = { progress: p, active: raced, idempotent: true, today_completed: tc, ...(nua != null && { next_unlock_at: nua }) };
+            const active = summaryOnly ? toSummaryPlan(raced) : raced;
+            const data = { progress: p, active, idempotent: true, today_completed: tc, ...(nua != null && { next_unlock_at: nua }) };
             return ok(data, data);
           }
         }
@@ -653,7 +679,8 @@ export async function POST(req: NextRequest) {
       console.info('[session/create] perf', timings);
     }
 
-    const data = { progress: finalProgress, active: plan, idempotent: false, today_completed: tc, ...(nua != null && { next_unlock_at: nua }) };
+    const active = summaryOnly ? toSummaryPlan(plan) : plan;
+    const data = { progress: finalProgress, active, idempotent: false, today_completed: tc, ...(nua != null && { next_unlock_at: nua }) };
     return ok(data, isDebug ? { ...data, timings } : data);
   } catch (err) {
     console.error('[session/create]', err);

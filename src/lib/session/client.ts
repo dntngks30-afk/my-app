@@ -237,6 +237,8 @@ export type CreateSessionInput = {
   equipment?: string;
   /** debug: true → response에 timings 포함 (측정용) */
   debug?: boolean;
+  /** summary: true → active.plan_json을 segments만 반환 (패널 첫 렌더용 경량) */
+  summary?: boolean;
 };
 
 /** POST /api/session/create — 세션 멱등 생성 */
