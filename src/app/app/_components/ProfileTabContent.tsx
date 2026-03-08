@@ -8,14 +8,17 @@ import { ProfileViewV2 } from './nav-v2/ProfileViewV2';
 
 interface ProfileTabContentProps {
   hideBottomNav?: boolean;
+  /** Lazy fetch: only fetch when tab is first visible */
+  isVisible?: boolean;
 }
 
-export default function ProfileTabContent({ hideBottomNav }: ProfileTabContentProps) {
+export default function ProfileTabContent({ hideBottomNav, isVisible = false }: ProfileTabContentProps) {
   const [completed, setCompleted] = useState(0);
   const [loading, setLoading] = useState(true);
   const fetchedRef = useRef(false);
 
   useEffect(() => {
+    if (!isVisible) return;
     if (fetchedRef.current) return;
     fetchedRef.current = true;
     let cancelled = false;
@@ -25,12 +28,22 @@ export default function ProfileTabContent({ hideBottomNav }: ProfileTabContentPr
     if (cached?.progress) {
       setCompleted(cached.progress.completed_sessions ?? 0);
       setLoading(false);
+      void getSessionSafe().then(({ session }) => {
+        if (session?.access_token && !cancelled) {
+          void getCachedActiveSessionLite(session.access_token).then((result) => {
+            if (!cancelled && result.ok && result.data.progress) {
+              setCompleted(result.data.progress.completed_sessions ?? 0);
+            }
+          });
+        }
+      });
+      return () => { cancelled = true };
     }
 
     (async () => {
       const { session } = await getSessionSafe();
       if (!session?.access_token || cancelled) {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
         return;
       }
       const result = await getCachedActiveSessionLite(session.access_token);
@@ -40,8 +53,8 @@ export default function ProfileTabContent({ hideBottomNav }: ProfileTabContentPr
       }
       setLoading(false);
     })();
-    return () => { cancelled = true; fetchedRef.current = false; };
-  }, []);
+    return () => { cancelled = true };
+  }, [isVisible]);
 
   return (
     <div className="min-h-screen bg-white pb-20">

@@ -8,15 +8,18 @@ import { StatsViewV2 } from './nav-v2/StatsViewV2';
 
 interface StatsTabContentProps {
   hideBottomNav?: boolean;
+  /** Lazy fetch: only fetch when tab is first visible */
+  isVisible?: boolean;
 }
 
-export default function StatsTabContent({ hideBottomNav }: StatsTabContentProps) {
+export default function StatsTabContent({ hideBottomNav, isVisible = false }: StatsTabContentProps) {
   const [completed, setCompleted] = useState(0);
   const [total, setTotal] = useState(20);
   const [loading, setLoading] = useState(true);
   const fetchedRef = useRef(false);
 
   useEffect(() => {
+    if (!isVisible) return;
     if (fetchedRef.current) return;
     fetchedRef.current = true;
     let cancelled = false;
@@ -27,12 +30,24 @@ export default function StatsTabContent({ hideBottomNav }: StatsTabContentProps)
       setCompleted(cached.progress.completed_sessions ?? 0);
       setTotal(cached.progress.total_sessions ?? 20);
       setLoading(false);
+      void getSessionSafe().then(({ session }) => {
+        if (session?.access_token && !cancelled) {
+          void getCachedActiveSessionLite(session.access_token).then((result) => {
+            if (!cancelled && result.ok && result.data.progress) {
+              const p = result.data.progress;
+              setCompleted(p.completed_sessions ?? 0);
+              setTotal(p.total_sessions ?? 20);
+            }
+          });
+        }
+      });
+      return () => { cancelled = true };
     }
 
     (async () => {
       const { session } = await getSessionSafe();
       if (!session?.access_token || cancelled) {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
         return;
       }
       const result = await getCachedActiveSessionLite(session.access_token);
@@ -44,8 +59,8 @@ export default function StatsTabContent({ hideBottomNav }: StatsTabContentProps)
       }
       setLoading(false);
     })();
-    return () => { cancelled = true; fetchedRef.current = false; };
-  }, []);
+    return () => { cancelled = true };
+  }, [isVisible]);
 
   return (
     <div className="min-h-screen bg-white pb-20">

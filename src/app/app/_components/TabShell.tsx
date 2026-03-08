@@ -17,8 +17,9 @@ function isTabPath(path: string | null): path is (typeof TAB_PATHS)[number] {
 }
 
 /**
- * weekly/history prefetch 제거 — first paint 방해.
- * stats 탭은 사용자가 탭 진입 시 checkin 페이지에서 fetch.
+ * Persistent tab shell — all tabs stay mounted, visibility toggle only.
+ * Tab switch = instant (no remount, no refetch).
+ * Stats/Profile fetch only when first opened (isVisible).
  */
 export default function TabShell() {
   const pathname = usePathname();
@@ -41,19 +42,29 @@ export default function TabShell() {
         <HomePageClient hideBottomNav />
       </div>
 
-      {/* Stats (여정) — lazy mount: 탭 진입 시에만 마운트 */}
-      {showStats && (
-        <div className="tab-panel transition-opacity duration-150 ease-out" aria-hidden={false}>
-          <StatsTabContent hideBottomNav />
-        </div>
-      )}
+      {/* Stats (여정) — persistent mount, visibility toggle */}
+      <div
+        className="tab-panel transition-opacity duration-150 ease-out"
+        style={{
+          display: showStats ? 'block' : 'none',
+          opacity: showStats ? 1 : 0,
+        }}
+        aria-hidden={!showStats}
+      >
+        <StatsTabContent hideBottomNav isVisible={showStats} />
+      </div>
 
-      {/* Profile (마이) — lazy mount: 탭 진입 시에만 마운트 */}
-      {showProfile && (
-        <div className="tab-panel transition-opacity duration-150 ease-out" aria-hidden={false}>
-          <ProfileTabContent hideBottomNav />
-        </div>
-      )}
+      {/* Profile (마이) — persistent mount, visibility toggle */}
+      <div
+        className="tab-panel transition-opacity duration-150 ease-out"
+        style={{
+          display: showProfile ? 'block' : 'none',
+          opacity: showProfile ? 1 : 0,
+        }}
+        aria-hidden={!showProfile}
+      >
+        <ProfileTabContent hideBottomNav isVisible={showProfile} />
+      </div>
 
       <BottomNav />
     </div>
