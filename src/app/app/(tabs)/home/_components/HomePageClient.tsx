@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
 import { getCachedActiveSessionLite, invalidateActiveCache } from '@/lib/session/active-cache';
+import { getCache } from '@/lib/cache/tabDataCache';
 import AppEntryLoader, { isAppBooted, setAppBooted } from '@/app/app/_components/AppEntryLoader';
-import type { SessionPlan, ActivePlanSummary } from '@/lib/session/client';
+import type { SessionPlan, ActivePlanSummary, ActiveSessionLiteResponse } from '@/lib/session/client';
 import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
@@ -79,6 +80,18 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     if (activeFetchedRef.current) return;
     activeFetchedRef.current = true;
 
+    const cached = getCache<ActiveSessionLiteResponse>('home.activeLite');
+    if (cached?.progress && isAppBooted()) {
+      setSessionProgress({
+        total_sessions: cached.progress.total_sessions,
+        completed_sessions: cached.progress.completed_sessions ?? 0,
+      });
+      setActivePlan(cached.active ?? null);
+      setTodayCompleted(cached.today_completed === true);
+      setNextUnlockAt(typeof cached.next_unlock_at === 'string' ? cached.next_unlock_at : null);
+      setLoading(false);
+    }
+
     const t0 = performance.now();
     let cancelled = false;
     (async () => {
@@ -107,16 +120,17 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
           return;
         }
         setError(null);
-        const p = result.data.progress;
+        const d = result.data;
+        const p = d.progress;
         if (p) {
           setSessionProgress({
             total_sessions: p.total_sessions,
             completed_sessions: p.completed_sessions ?? 0,
           });
-          setActivePlan(result.data.active ?? null);
+          setActivePlan(d.active ?? null);
         }
-        setTodayCompleted(result.data.today_completed === true);
-        setNextUnlockAt(typeof result.data.next_unlock_at === 'string' ? result.data.next_unlock_at : null);
+        setTodayCompleted(d.today_completed === true);
+        setNextUnlockAt(typeof d.next_unlock_at === 'string' ? d.next_unlock_at : null);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '세션을 확인해 주세요');

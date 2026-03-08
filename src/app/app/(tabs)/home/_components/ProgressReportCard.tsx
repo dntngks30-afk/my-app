@@ -8,10 +8,12 @@
 import { useState, useEffect } from 'react';
 import { getSessionSafe } from '@/lib/supabase';
 import { getProgressReport, type ProgressWindowReport } from '@/lib/session/client';
+import { getCache, setCache } from '@/lib/cache/tabDataCache';
 
 export default function ProgressReportCard() {
-  const [report, setReport] = useState<ProgressWindowReport | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cached = getCache<ProgressWindowReport>('home.progressReport');
+  const [report, setReport] = useState<ProgressWindowReport | null>(cached);
+  const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,6 +29,7 @@ export default function ProgressReportCard() {
         if (cancelled) return;
         if (result.ok) {
           setReport(result.data);
+          setCache('home.progressReport', result.data);
           setError(null);
         } else {
           setReport(null);

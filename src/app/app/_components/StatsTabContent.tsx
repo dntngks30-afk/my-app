@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { getSessionSafe } from '@/lib/supabase';
 import { getCachedActiveSessionLite } from '@/lib/session/active-cache';
-import { getTabCache } from '@/lib/tab-cache';
+import { getCache } from '@/lib/cache/tabDataCache';
 import { StatsViewV2 } from './nav-v2/StatsViewV2';
 
 interface StatsTabContentProps {
@@ -21,7 +21,7 @@ export default function StatsTabContent({ hideBottomNav }: StatsTabContentProps)
     fetchedRef.current = true;
     let cancelled = false;
 
-    const cached = getTabCache();
+    const cached = getCache<{ progress?: { completed_sessions?: number; total_sessions?: number } }>('home.activeLite');
     if (cached?.progress) {
       setCompleted(cached.progress.completed_sessions ?? 0);
       setTotal(cached.progress.total_sessions ?? 20);

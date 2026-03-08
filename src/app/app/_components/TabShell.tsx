@@ -8,6 +8,8 @@ import ProfileTabContent from './ProfileTabContent';
 import BottomNav from './BottomNav';
 import { getSessionSafe } from '@/lib/supabase';
 import { getCachedActiveSessionLite } from '@/lib/session/active-cache';
+import { getCache, setCache } from '@/lib/cache/tabDataCache';
+import { getSessionHistory } from '@/lib/session/client';
 
 const TAB_PATHS = ['/app/home', '/app/checkin', '/app/profile'] as const;
 
@@ -23,15 +25,29 @@ export default function TabShell() {
   const pathname = usePathname();
   const prefetchedRef = useRef(false);
 
-  // Prefetch stats/profile when on home (idle)
+  // Prefetch stats when on home (idle) — stats tab loads instantly on switch
   useEffect(() => {
     if (pathname !== '/app/home' || prefetchedRef.current) return;
     const cb = () => {
       prefetchedRef.current = true;
-      getSessionSafe().then(({ session }) => {
-        if (session?.access_token) {
-          getCachedActiveSessionLite(session.access_token);
-        }
+      getSessionSafe().then(async ({ session }) => {
+        if (!session?.access_token) return;
+        getCachedActiveSessionLite(session.access_token);
+        if (getCache('stats.weekly') && getCache('stats.history')) return;
+        try {
+          const [weeklyRes, historyRes] = await Promise.all([
+            fetch('/api/report/weekly', {
+              cache: 'no-store' as RequestCache,
+              headers: { Authorization: `Bearer ${session.access_token}` },
+            }),
+            getSessionHistory(session.access_token, 20),
+          ]);
+          if (weeklyRes.ok) {
+            const data = await weeklyRes.json();
+            setCache('stats.weekly', data);
+          }
+          if (historyRes.ok) setCache('stats.history', historyRes.data);
+        } catch { /* noop */ }
       });
     };
     const useIdle = typeof requestIdleCallback !== 'undefined';

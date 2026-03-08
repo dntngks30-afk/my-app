@@ -3,7 +3,7 @@
  * TTL 5초, module-level. inflight dedupe로 동시 중복 호출 방지.
  */
 
-import { setTabCache, invalidateTabCache } from '@/lib/tab-cache';
+import { setCache, invalidateCache } from '@/lib/cache/tabDataCache';
 import {
   getActiveSession,
   getActiveSessionLite,
@@ -53,7 +53,7 @@ export async function getCachedActiveSessionLite(
         tokenKey: key,
         entry: { data: result.data, expiresAt: Date.now() + TTL_MS },
       };
-      setTabCache(result.data);
+      setCache('home.activeLite', result.data);
     } else {
       liteCache = null;
     }
@@ -93,5 +93,5 @@ export async function getCachedActiveSession(
 export function invalidateActiveCache(): void {
   cache = null;
   liteCache = null;
-  invalidateTabCache();
+  invalidateCache('home.activeLite');
 }

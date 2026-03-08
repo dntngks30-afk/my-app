@@ -6,7 +6,8 @@ import { getSessionSafe } from '@/lib/supabase';
 import { NeoCard } from '@/components/neobrutalism';
 import BottomNav from '@/app/app/_components/BottomNav';
 import { getSessionHistory } from '@/lib/session/client';
-import type { SessionHistoryItem, ExerciseLogItem } from '@/lib/session/client';
+import type { SessionHistoryItem, ExerciseLogItem, SessionHistoryResponse } from '@/lib/session/client';
+import { getCache, setCache } from '@/lib/cache/tabDataCache';
 import { StatsViewV2 } from '@/app/app/_components/nav-v2/StatsViewV2';
 
 type SeriesItem = {
@@ -73,14 +74,18 @@ export default function CheckinPage() {
   const focusSessionNum = focusSession ? parseInt(focusSession, 10) : null;
   const navV2 = process.env.NODE_ENV === 'production' ? true : (searchParams.get('navV2') !== '0');
 
-  const [report, setReport] = useState<WeeklyReport | null>(null);
-  const [reportLoading, setReportLoading] = useState(true);
+  const cachedWeekly = getCache<WeeklyReport>('stats.weekly');
+  const cachedHistory = getCache<SessionHistoryResponse>('stats.history');
+  const [report, setReport] = useState<WeeklyReport | null>(cachedWeekly ?? null);
+  const [reportLoading, setReportLoading] = useState(!cachedWeekly);
   const [reportError, setReportError] = useState<string | null>(null);
-  const [sessionItems, setSessionItems] = useState<SessionHistoryItem[]>([]);
-  const [sessionLoading, setSessionLoading] = useState(true);
+  const [sessionItems, setSessionItems] = useState<SessionHistoryItem[]>(cachedHistory?.items ?? []);
+  const [sessionLoading, setSessionLoading] = useState(!cachedHistory);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [expandedSession, setExpandedSession] = useState<number | null>(null);
-  const [completedSessions, setCompletedSessions] = useState(0);
+  const [completedSessions, setCompletedSessions] = useState(
+    cachedHistory?.progress?.completed_sessions ?? cachedHistory?.items?.length ?? 0
+  );
   const focusRef = useRef<HTMLDivElement>(null);
 
   const fetchReport = async () => {
@@ -101,6 +106,7 @@ export default function CheckinPage() {
       }
       const data = await res.json();
       setReport(data);
+      setCache('stats.weekly', data);
       setReportError(null);
     } catch (e) {
       setReportError('조회 실패');
@@ -126,6 +132,7 @@ export default function CheckinPage() {
       if (result.ok) {
         setSessionItems(result.data.items);
         setCompletedSessions(result.data.progress?.completed_sessions ?? result.data.items.length);
+        setCache('stats.history', result.data);
         setSessionError(null);
       } else {
         setSessionError(result.error.message);
