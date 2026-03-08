@@ -4,7 +4,7 @@
  * bootstrap: 홈 초기 진입 시 activeLite + progressReport 1회 조회.
  */
 
-import { setCache, invalidateCache } from '@/lib/cache/tabDataCache';
+import { setCache, invalidateCache, getCacheStale } from '@/lib/cache/tabDataCache';
 import {
   getActiveSession,
   getActiveSessionLite,
@@ -39,7 +39,8 @@ function tokenKey(t: string): string {
   return t && t.length >= 16 ? t.slice(-16) : t || '';
 }
 
-/** Home 초기 로드용 — active-lite 캐시 (plan_json 제외, 경량) */
+/** Home 초기 로드용 — active-lite 캐시 (plan_json 제외, 경량)
+ * stale-while-revalidate: tabDataCache에 stale이 있으면 즉시 반환, 백그라운드 재검증 */
 export async function getCachedActiveSessionLite(
   token: string,
   opts?: { debug?: boolean }
@@ -50,6 +51,18 @@ export async function getCachedActiveSessionLite(
     return { ok: true, data: liteCache.entry.data };
   }
   if (liteInflight) {
+    return liteInflight;
+  }
+  const stale = getCacheStale<ActiveSessionLiteResponse>('home.activeLite');
+  if (stale) {
+    liteInflight = Promise.resolve({ ok: true as const, data: stale });
+    void getActiveSessionLite(token, opts).then((result) => {
+      liteInflight = null;
+      if (result.ok) {
+        liteCache = { tokenKey: key, entry: { data: result.data, expiresAt: Date.now() + TTL_MS } };
+        setCache('home.activeLite', result.data);
+      }
+    });
     return liteInflight;
   }
   const promise = getActiveSessionLite(token, opts).then((result) => {
