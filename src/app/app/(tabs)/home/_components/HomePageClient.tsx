@@ -4,14 +4,18 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
 import { getCachedActiveSessionLite, invalidateActiveCache } from '@/lib/session/active-cache';
-import AppEntryLoader, { isAppBooted, setAppBooted } from '../../_components/AppEntryLoader';
+import AppEntryLoader, { isAppBooted, setAppBooted } from '@/app/app/_components/AppEntryLoader';
 import type { SessionPlan, ActivePlanSummary } from '@/lib/session/client';
-import BottomNav from '../../_components/BottomNav';
+import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
 
-export default function HomePageClient() {
+interface HomePageClientProps {
+  hideBottomNav?: boolean;
+}
+
+export default function HomePageClient({ hideBottomNav }: HomePageClientProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -165,7 +169,7 @@ export default function HomePageClient() {
             </button>
           </p>
         </main>
-        <BottomNav />
+        {!hideBottomNav && <BottomNav />}
       </div>
     );
   }
@@ -226,7 +230,7 @@ export default function HomePageClient() {
         <ProgressReportCard />
       </main>
 
-      <BottomNav />
+      {!hideBottomNav && <BottomNav />}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import AppEntryLoader, { isAppBooted } from '../_components/AppEntryLoader';
+import AppEntryLoader, { isAppBooted } from '@/app/app/_components/AppEntryLoader';
 
 export default function HomeLoading() {
   const [booted] = useState(() => isAppBooted());

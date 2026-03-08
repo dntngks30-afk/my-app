@@ -4,10 +4,10 @@ import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
 import { NeoCard } from '@/components/neobrutalism';
-import BottomNav from '../_components/BottomNav';
+import BottomNav from '@/app/app/_components/BottomNav';
 import { getSessionHistory } from '@/lib/session/client';
 import type { SessionHistoryItem, ExerciseLogItem } from '@/lib/session/client';
-import { StatsViewV2 } from '../_components/nav-v2/StatsViewV2';
+import { StatsViewV2 } from '@/app/app/_components/nav-v2/StatsViewV2';
 
 type SeriesItem = {
   day_key_utc: string;

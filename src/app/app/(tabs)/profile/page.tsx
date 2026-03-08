@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import BottomNav from '../_components/BottomNav';
-import { ProfileViewV2 } from '../_components/nav-v2/ProfileViewV2';
+import BottomNav from '@/app/app/_components/BottomNav';
+import { ProfileViewV2 } from '@/app/app/_components/nav-v2/ProfileViewV2';
 import { getSessionSafe } from '@/lib/supabase';
 import { getActiveSession } from '@/lib/session/client';
 
