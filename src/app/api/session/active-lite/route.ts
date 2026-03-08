@@ -104,51 +104,57 @@ export async function GET(req: NextRequest) {
     let progress = progressRes.data;
 
     if (!progress) {
-      const tResolveStart = performance.now();
-      const resolved = await resolveTotalSessions(supabase, userId);
-      timings.profile_db_ms = Math.round(performance.now() - tResolveStart);
-      const tInsertStart = performance.now();
-      const { data: created, error: insertErr } = await supabase
-        .from('session_program_progress')
-        .insert({
-          user_id: userId,
-          total_sessions: resolved.totalSessions,
-          completed_sessions: 0,
-          active_session_number: null,
-        })
-        .select('user_id, total_sessions, completed_sessions, active_session_number, last_completed_day_key')
-        .single();
-
-      timings.progress_init_ms = Math.round(performance.now() - tInsertStart);
-      if (insertErr || !created) {
-        console.error('[session/active-lite] progress init failed', insertErr);
-        void logSessionEvent(supabase, {
-          userId,
-          eventType: 'session_active_read',
-          status: 'error',
-          code: 'DB_ERROR',
-          meta: { message_short: 'progress init failed' },
+      timings.profile_db_ms = 0;
+      timings.progress_init_ms = 0;
+      progress = {
+        user_id: userId,
+        total_sessions: DEFAULT_TOTAL_SESSIONS,
+        completed_sessions: 0,
+        active_session_number: null,
+        last_completed_day_key: null,
+      };
+      void resolveTotalSessions(supabase, userId)
+        .then((resolved) =>
+          supabase
+            .from('session_program_progress')
+            .insert({
+              user_id: userId,
+              total_sessions: resolved.totalSessions,
+              completed_sessions: 0,
+              active_session_number: null,
+            })
+            .select('user_id, total_sessions, completed_sessions, active_session_number, last_completed_day_key')
+            .single()
+        )
+        .then(({ error: insertErr }) => {
+          if (insertErr) {
+            console.error('[session/active-lite] progress init deferred failed', insertErr);
+            void logSessionEvent(supabase, {
+              userId,
+              eventType: 'session_active_read',
+              status: 'error',
+              code: 'DB_ERROR',
+              meta: { message_short: 'progress init deferred failed' },
+            });
+          }
         });
-        return fail(500, ApiErrorCode.INTERNAL_ERROR, '진행 상태 초기화에 실패했습니다');
-      }
-      progress = created;
     } else {
       const activeSessionNumber = progress.active_session_number;
       if (activeSessionNumber === null) {
-        const tResolveStart = performance.now();
-        const resolved = await resolveTotalSessions(supabase, userId);
-        timings.profile_db_ms = Math.round(performance.now() - tResolveStart);
+        timings.profile_db_ms = 0;
         const completed = progress.completed_sessions ?? 0;
-        const safeToSync =
-          resolved.totalSessions >= completed && progress.total_sessions !== resolved.totalSessions;
-        if (safeToSync) {
-          timings.progress_sync_ms = 0;
-          void supabase
-            .from('session_program_progress')
-            .update({ total_sessions: resolved.totalSessions })
-            .eq('user_id', userId)
-            .then(() => {});
-        }
+        const totalSessions = progress.total_sessions;
+        void resolveTotalSessions(supabase, userId).then((resolved) => {
+          const safeToSync =
+            resolved.totalSessions >= completed && totalSessions !== resolved.totalSessions;
+          if (safeToSync) {
+            void supabase
+              .from('session_program_progress')
+              .update({ total_sessions: resolved.totalSessions })
+              .eq('user_id', userId)
+              .then(() => {});
+          }
+        });
       }
     }
 
