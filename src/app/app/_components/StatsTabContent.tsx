@@ -27,6 +27,18 @@ export default function StatsTabContent({ hideBottomNav }: StatsTabContentProps)
       setCompleted(cached.progress.completed_sessions ?? 0);
       setTotal(cached.progress.total_sessions ?? 20);
       setLoading(false);
+      void getSessionSafe().then(({ session }) => {
+        if (session?.access_token && !cancelled) {
+          void getCachedActiveSessionLite(session.access_token).then((result) => {
+            if (!cancelled && result.ok && result.data.progress) {
+              const p = result.data.progress;
+              setCompleted(p.completed_sessions ?? 0);
+              setTotal(p.total_sessions ?? 20);
+            }
+          });
+        }
+      });
+      return () => { cancelled = true; fetchedRef.current = false; };
     }
 
     (async () => {
