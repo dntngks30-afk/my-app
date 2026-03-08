@@ -64,6 +64,7 @@ export default function BottomNav() {
             <Link
               key={id}
               href={href}
+              prefetch={false}
               onClick={() => { if (process.env.NODE_ENV !== 'production') console.log('[NAV_TAB_CLICK]', { tab: id, href }); }}
               className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs transition ${
                 active ? 'font-semibold text-slate-800' : 'text-slate-400'
@@ -88,6 +89,7 @@ export default function BottomNav() {
           <Link
             key={id}
             href={hrefWithOptOut}
+            prefetch={false}
             onClick={() => console.log('[NAV_TAB_CLICK]', { tab: id, href })}
             className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs transition ${
               active ? 'font-semibold text-slate-800' : 'text-slate-400'
