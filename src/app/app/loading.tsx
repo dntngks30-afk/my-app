@@ -1,10 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AppEntryLoader, { isAppBooted } from './_components/AppEntryLoader';
 
 export default function AppLoading() {
-  const [booted] = useState(() => isAppBooted());
+  const [booted, setBooted] = useState(false);
+
+  useEffect(() => {
+    setBooted(isAppBooted());
+  }, []);
 
   if (booted) {
     return (
