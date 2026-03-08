@@ -46,3 +46,36 @@ export function invalidateCache(key?: CacheKey): void {
     (Object.keys(store) as CacheKey[]).forEach((k) => delete store[k]);
   }
 }
+
+/** Tab prefetch key — stats/my share activeLite */
+export type TabPrefetchKey = 'stats' | 'my';
+
+let prefetchInflight: Promise<void> | null = null;
+let lastPrefetchAt = 0;
+const PREFETCH_DEBOUNCE_MS = 2000;
+
+/**
+ * Prefetch tab data (stats/my share activeLite). Deduped by time + inflight.
+ * Fire-and-forget. Call from BottomNav on pointer/touch/focus.
+ */
+export function prefetchTabData(_key: TabPrefetchKey): void {
+  if (typeof window === 'undefined') return;
+  const now = Date.now();
+  if (now - lastPrefetchAt < PREFETCH_DEBOUNCE_MS) return;
+  if (getCache('home.activeLite')) return; // already warm
+  if (prefetchInflight) return; // already in flight
+
+  prefetchInflight = (async () => {
+    try {
+      const { getSessionSafe } = await import('@/lib/supabase');
+      const { getCachedActiveSessionLite } = await import('@/lib/session/active-cache');
+      const { session } = await getSessionSafe();
+      if (session?.access_token) {
+        await getCachedActiveSessionLite(session.access_token);
+      }
+    } finally {
+      prefetchInflight = null;
+      lastPrefetchAt = Date.now();
+    }
+  })();
+}

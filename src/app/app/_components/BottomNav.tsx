@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Calendar, PlayCircle, BarChart2, User, Map, BarChart3 } from 'lucide-react';
+import { prefetchTabData } from '@/lib/cache/tabDataCache';
 
 /* ── navV1 탭 (기존) ── */
 const TABS_V1 = [
@@ -55,6 +56,9 @@ export default function BottomNav() {
   }, [pathname, navV2]);
 
   if (navV2) {
+    const handlePrefetch = (tabId: string) => {
+      if (tabId === 'stats' || tabId === 'my') prefetchTabData(tabId);
+    };
     return (
       <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t-2 border-slate-900 bg-white px-2 safe-area-pb shadow-[0_-2px_0_0_rgba(15,23,42,1)]">
         {TABS_V2.map(({ id, baseHref, label, icon: Icon }) => {
@@ -65,6 +69,9 @@ export default function BottomNav() {
               key={id}
               href={href}
               prefetch={false}
+              onPointerEnter={() => handlePrefetch(id)}
+              onTouchStart={() => handlePrefetch(id)}
+              onFocus={() => handlePrefetch(id)}
               onClick={() => { if (process.env.NODE_ENV !== 'production') console.log('[NAV_TAB_CLICK]', { tab: id, href }); }}
               className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs transition ${
                 active ? 'font-semibold text-slate-800' : 'text-slate-400'
