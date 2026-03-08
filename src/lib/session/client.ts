@@ -181,10 +181,9 @@ export async function getActiveSessionLite(
   return sessionFetch<ActiveSessionLiteResponse>(path, token, { method: 'GET' });
 }
 
-/** GET /api/home/bootstrap — 홈 초기 진입용 집계 (activeLite + progressReport) */
+/** GET /api/home/bootstrap — 홈 초기 진입용 경량 (activeLite만, bootstrap-lite) */
 export type BootstrapResponse = {
   activeLite: ActiveSessionLiteResponse;
-  progressReport: ProgressWindowReport | null;
 };
 
 export async function getBootstrap(token: string): Promise<ApiResult<BootstrapResponse>> {

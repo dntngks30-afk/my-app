@@ -1,11 +1,11 @@
 /**
- * GET /api/home/bootstrap
+ * GET /api/home/bootstrap (bootstrap-lite)
  *
- * 홈 초기 진입용 집계 API. active-lite + progress-report를 1회에 반환.
- * 요청 수 감소, first render에 필요한 최소 데이터 제공.
+ * 홈 초기 진입용 경량 API. active-lite만 반환.
+ * progressReport는 ProgressReportCard가 /api/session/progress-report에서 별도 조회.
  *
  * Auth: Bearer token
- * active-lite 실패 시 전체 실패. progress-report 실패 시 progressReport: null.
+ * active-lite 실패 시 전체 실패.
  *
  * Timing: ?debug=1 시 __debug 블록과 서버 로그에 단계별 ms 반환.
  */
@@ -14,8 +14,6 @@ import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { fetchActiveLiteData } from '@/lib/session/active-lite-data';
-import { getProgressWindowReport } from '@/lib/session/progress-report';
-import type { ProgressWindowReport } from '@/lib/session/progress-report';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import type { ActiveSessionLiteResponse } from '@/lib/session/client';
 
@@ -24,7 +22,6 @@ export const runtime = 'nodejs';
 
 export type BootstrapResponse = {
   activeLite: ActiveSessionLiteResponse;
-  progressReport: ProgressWindowReport | null;
 };
 
 export async function GET(req: NextRequest) {
@@ -43,26 +40,11 @@ export async function GET(req: NextRequest) {
     const supabase = getServerSupabaseAdmin();
 
     let progress_read_ms = 0;
-    let extra_ms = 0;
+    const extra_ms = 0;
 
-    const [activeResult, progressReport] = await Promise.all([
-      debug
-        ? (async () => {
-            const t = performance.now();
-            const r = await fetchActiveLiteData(supabase, userId);
-            progress_read_ms = Math.round(performance.now() - t);
-            return r;
-          })()
-        : fetchActiveLiteData(supabase, userId),
-      debug
-        ? (async () => {
-            const t = performance.now();
-            const r = await getProgressWindowReport(userId).catch(() => null);
-            extra_ms = Math.round(performance.now() - t);
-            return r;
-          })()
-        : getProgressWindowReport(userId).catch(() => null),
-    ]);
+    const tProgressStart = debug ? performance.now() : 0;
+    const activeResult = await fetchActiveLiteData(supabase, userId);
+    if (debug) progress_read_ms = Math.round(performance.now() - tProgressStart);
 
     if (!activeResult.ok) {
       return fail(
@@ -74,7 +56,6 @@ export async function GET(req: NextRequest) {
 
     const data: BootstrapResponse = {
       activeLite: activeResult.data,
-      progressReport,
     };
 
     if (debug) {

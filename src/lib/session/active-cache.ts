@@ -1,7 +1,7 @@
 /**
  * session/active 응답 캐시 — 탭 왕복 시 재요청 폭주 방지
  * TTL 5초, module-level. inflight dedupe로 동시 중복 호출 방지.
- * bootstrap: 홈 초기 진입 시 activeLite + progressReport 1회 조회.
+ * bootstrap: 홈 초기 진입 시 activeLite만 조회 (bootstrap-lite).
  */
 
 import { setCache, invalidateCache, getCacheStale } from '@/lib/cache/tabDataCache';
@@ -103,7 +103,6 @@ export async function getCachedBootstrap(
       };
       setCache('home.activeLite', result.data.activeLite);
       setCache('home.bootstrap', result.data);
-      if (result.data.progressReport) setCache('home.progressReport', result.data.progressReport);
       liteCache = {
         tokenKey: key,
         entry: { data: result.data.activeLite, expiresAt: Date.now() + TTL_MS },
