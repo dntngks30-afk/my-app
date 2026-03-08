@@ -6,9 +6,11 @@
  *
  * Auth: Bearer token
  * active-lite 실패 시 전체 실패. progress-report 실패 시 progressReport: null.
+ *
+ * Timing: ?debug=1 시 __debug 블록과 서버 로그에 단계별 ms 반환.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { fetchActiveLiteData } from '@/lib/session/active-lite-data';
@@ -26,17 +28,40 @@ export type BootstrapResponse = {
 };
 
 export async function GET(req: NextRequest) {
+  const debug = req.nextUrl.searchParams.get('debug') === '1';
+  const t0 = debug ? performance.now() : 0;
+
   try {
+    const tAuthStart = debug ? performance.now() : 0;
     const userId = await getCurrentUserId(req);
+    const auth_ms = debug ? Math.round(performance.now() - tAuthStart) : 0;
+
     if (!userId) {
       return fail(401, ApiErrorCode.AUTH_REQUIRED, '로그인이 필요합니다');
     }
 
     const supabase = getServerSupabaseAdmin();
 
+    let progress_read_ms = 0;
+    let extra_ms = 0;
+
     const [activeResult, progressReport] = await Promise.all([
-      fetchActiveLiteData(supabase, userId),
-      getProgressWindowReport(userId).catch(() => null),
+      debug
+        ? (async () => {
+            const t = performance.now();
+            const r = await fetchActiveLiteData(supabase, userId);
+            progress_read_ms = Math.round(performance.now() - t);
+            return r;
+          })()
+        : fetchActiveLiteData(supabase, userId),
+      debug
+        ? (async () => {
+            const t = performance.now();
+            const r = await getProgressWindowReport(userId).catch(() => null);
+            extra_ms = Math.round(performance.now() - t);
+            return r;
+          })()
+        : getProgressWindowReport(userId).catch(() => null),
     ]);
 
     if (!activeResult.ok) {
@@ -51,6 +76,26 @@ export async function GET(req: NextRequest) {
       activeLite: activeResult.data,
       progressReport,
     };
+
+    if (debug) {
+      const total_ms = Math.round(performance.now() - t0);
+      const session_lookup_ms = 0;
+      const map_data_ms = 0;
+      const user_ms = 0;
+      const write_ms = 0;
+      const timings = {
+        auth_ms,
+        user_ms,
+        progress_read_ms,
+        session_lookup_ms,
+        map_data_ms,
+        extra_ms,
+        write_ms,
+        total_ms,
+      };
+      console.log('[bootstrap-timing]', timings);
+      return ok(data, { __debug: timings });
+    }
 
     return ok(data);
   } catch (err) {
