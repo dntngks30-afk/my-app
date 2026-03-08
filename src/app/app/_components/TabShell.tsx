@@ -7,7 +7,7 @@ import StatsTabContent from './StatsTabContent';
 import ProfileTabContent from './ProfileTabContent';
 import BottomNav from './BottomNav';
 import { getSessionSafe } from '@/lib/supabase';
-import { getCachedActiveSessionLite } from '@/lib/session/active-cache';
+import { getCachedBootstrap } from '@/lib/session/active-cache';
 import { getCache, setCache } from '@/lib/cache/tabDataCache';
 import { getSessionHistory } from '@/lib/session/client';
 
@@ -32,7 +32,7 @@ export default function TabShell() {
       prefetchedRef.current = true;
       getSessionSafe().then(async ({ session }) => {
         if (!session?.access_token) return;
-        getCachedActiveSessionLite(session.access_token);
+        getCachedBootstrap(session.access_token);
         if (getCache('stats.weekly') && getCache('stats.history')) return;
         try {
           const [weeklyRes, historyRes] = await Promise.all([

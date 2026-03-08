@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
-import { getCachedActiveSessionLite, invalidateActiveCache } from '@/lib/session/active-cache';
+import { getCachedBootstrap, invalidateActiveCache } from '@/lib/session/active-cache';
 import { getCache } from '@/lib/cache/tabDataCache';
 import AppEntryLoader, { isAppBooted, setAppBooted } from '@/app/app/_components/AppEntryLoader';
 import type { SessionPlan, ActivePlanSummary, ActiveSessionLiteResponse } from '@/lib/session/client';
@@ -62,10 +62,11 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     // Refetch to get accurate todayCompleted/nextUnlockAt from server
     const { session } = await getSessionSafe();
     if (session?.access_token) {
-      const result = await getCachedActiveSessionLite(session.access_token, { debug: debugFlag });
+      const result = await getCachedBootstrap(session.access_token);
       if (result.ok) {
-        setTodayCompleted(result.data.today_completed === true);
-        setNextUnlockAt(typeof result.data.next_unlock_at === 'string' ? result.data.next_unlock_at : null);
+        const d = result.data.activeLite;
+        setTodayCompleted(d.today_completed === true);
+        setNextUnlockAt(typeof d.next_unlock_at === 'string' ? d.next_unlock_at : null);
       }
     }
   }, []);
@@ -80,7 +81,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     if (activeFetchedRef.current) return;
     activeFetchedRef.current = true;
 
-    const cached = getCache<ActiveSessionLiteResponse>('home.activeLite');
+    const cached = getCache<ActiveSessionLiteResponse>('home.activeLite') ?? getCache<{ activeLite: ActiveSessionLiteResponse }>('home.bootstrap')?.activeLite;
     if (cached?.progress && isAppBooted()) {
       setSessionProgress({
         total_sessions: cached.progress.total_sessions,
@@ -101,7 +102,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         return;
       }
       try {
-        const result = await getCachedActiveSessionLite(session.access_token, { debug: debugFlag });
+        const result = await getCachedBootstrap(session.access_token);
         if (cancelled) return;
         const elapsed = Math.round(performance.now() - t0);
         if (typeof performance !== 'undefined' && performance.mark) {
@@ -120,7 +121,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
           return;
         }
         setError(null);
-        const d = result.data;
+        const d = result.data.activeLite;
         const p = d.progress;
         if (p) {
           setSessionProgress({

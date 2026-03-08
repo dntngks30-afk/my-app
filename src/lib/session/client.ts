@@ -181,6 +181,16 @@ export async function getActiveSessionLite(
   return sessionFetch<ActiveSessionLiteResponse>(path, token, { method: 'GET' });
 }
 
+/** GET /api/home/bootstrap — 홈 초기 진입용 집계 (activeLite + progressReport) */
+export type BootstrapResponse = {
+  activeLite: ActiveSessionLiteResponse;
+  progressReport: ProgressWindowReport | null;
+};
+
+export async function getBootstrap(token: string): Promise<ApiResult<BootstrapResponse>> {
+  return sessionFetch<BootstrapResponse>('/api/home/bootstrap', token, { method: 'GET' });
+}
+
 /** GET /api/session/plan?session_number=N — 과거/현재 세션 plan 조회 (read-only) */
 export async function getSessionPlan(
   token: string,
