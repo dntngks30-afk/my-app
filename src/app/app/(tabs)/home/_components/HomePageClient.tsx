@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
 import { getCachedBootstrap, invalidateActiveCache } from '@/lib/session/active-cache';
 import { getCache } from '@/lib/cache/tabDataCache';
@@ -18,7 +18,6 @@ interface HomePageClientProps {
 
 export default function HomePageClient({ hideBottomNav }: HomePageClientProps = {}) {
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const debugFlag = searchParams.get('debug') === '1';
   const debugMap = searchParams.get('debugMap') === '1';
@@ -77,12 +76,12 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   }, []);
 
   useEffect(() => {
-    if (pathname !== '/app/home') return;
     if (activeFetchedRef.current) return;
     activeFetchedRef.current = true;
 
-    const cached = getCache<ActiveSessionLiteResponse>('home.activeLite') ?? getCache<{ activeLite: ActiveSessionLiteResponse }>('home.bootstrap')?.activeLite;
-    if (cached?.progress && isAppBooted()) {
+    const cached = getCache<ActiveSessionLiteResponse>('home.activeLite')
+      ?? getCache<{ activeLite: ActiveSessionLiteResponse }>('home.bootstrap')?.activeLite;
+    if (cached?.progress) {
       setSessionProgress({
         total_sessions: cached.progress.total_sessions,
         completed_sessions: cached.progress.completed_sessions ?? 0,
@@ -91,6 +90,11 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       setTodayCompleted(cached.today_completed === true);
       setNextUnlockAt(typeof cached.next_unlock_at === 'string' ? cached.next_unlock_at : null);
       setLoading(false);
+      setError(null);
+      if (!isAppBooted()) setAppBooted();
+      return () => {
+        activeFetchedRef.current = false;
+      };
     }
 
     const t0 = performance.now();
@@ -147,7 +151,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       cancelled = true;
       activeFetchedRef.current = false; // allow remount (e.g. Strict Mode) to refetch
     };
-  }, [pathname]);
+  }, []);
 
   if (loading) {
     if (!isAppBooted()) {

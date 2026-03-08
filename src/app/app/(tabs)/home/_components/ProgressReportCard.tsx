@@ -17,6 +17,10 @@ export default function ProgressReportCard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (cached) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       const { session } = await getSessionSafe();
