@@ -21,9 +21,14 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [status, setStatus] = useState<'loading' | 'auth' | 'denied' | 'paywall' | 'allowed'>('loading');
+  const [skipLoader, setSkipLoader] = useState(false);
   const lastAllowedUserIdRef = useRef<string | null>(null);
 
   const isAuthPage = pathname?.startsWith('/app/auth');
+
+  useEffect(() => {
+    setSkipLoader(isAppBooted());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,8 +109,9 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
   }, [pathname, isAuthPage, router]);
 
   // 앱 첫 진입 시에만 풀스크린 로더. 탭 전환에서는 재출현 금지.
+  // skipLoader는 useEffect에서만 설정 → Hydration mismatch 방지
   if (status === 'loading') {
-    if (isAppBooted()) {
+    if (skipLoader) {
       return <>{children}</>;
     }
     return <AppEntryLoader status="인증 확인 중" />;

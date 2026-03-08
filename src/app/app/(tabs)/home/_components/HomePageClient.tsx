@@ -38,6 +38,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       : undefined;
 
   const [loading, setLoading] = useState(true);
+  const [skipLoader, setSkipLoader] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionProgress, setSessionProgress] = useState<{
     total_sessions: number;
@@ -153,8 +154,13 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     };
   }, []);
 
+  useEffect(() => {
+    setSkipLoader(isAppBooted());
+  }, []);
+
   if (loading) {
-    if (!isAppBooted()) {
+    // skipLoader는 useEffect에서만 설정 → Hydration mismatch 방지
+    if (!skipLoader) {
       return <AppEntryLoader status="홈 로딩 중" />;
     }
     return (

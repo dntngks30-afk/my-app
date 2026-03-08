@@ -1,10 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AppEntryLoader, { isAppBooted } from '@/app/app/_components/AppEntryLoader';
 
 export default function HomeLoading() {
-  const [booted] = useState(() => isAppBooted());
+  const [booted, setBooted] = useState(false);
+
+  useEffect(() => {
+    setBooted(isAppBooted());
+  }, []);
 
   // 탭 전환 시: 풀스크린 로더 재출현 금지. 최소 placeholder만.
   if (booted) {
