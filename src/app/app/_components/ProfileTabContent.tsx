@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { getSessionSafe } from '@/lib/supabase';
 import { getCachedActiveSessionLite } from '@/lib/session/active-cache';
-import { getCache } from '@/lib/cache/tabDataCache';
+import { getCache, getCacheStale } from '@/lib/cache/tabDataCache';
 import { ProfileViewV2 } from './nav-v2/ProfileViewV2';
 
 interface ProfileTabContentProps {
@@ -20,7 +20,8 @@ export default function ProfileTabContent({ hideBottomNav }: ProfileTabContentPr
     fetchedRef.current = true;
     let cancelled = false;
 
-    const cached = getCache<{ progress?: { completed_sessions?: number } }>('home.activeLite');
+    const cached = getCache<{ progress?: { completed_sessions?: number } }>('home.activeLite')
+      ?? getCacheStale<{ progress?: { completed_sessions?: number } }>('home.activeLite');
     if (cached?.progress) {
       setCompleted(cached.progress.completed_sessions ?? 0);
       setLoading(false);

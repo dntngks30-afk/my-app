@@ -7,7 +7,7 @@ import { NeoCard } from '@/components/neobrutalism';
 import BottomNav from '@/app/app/_components/BottomNav';
 import { getSessionHistory } from '@/lib/session/client';
 import type { SessionHistoryItem, ExerciseLogItem, SessionHistoryResponse } from '@/lib/session/client';
-import { getCache, setCache } from '@/lib/cache/tabDataCache';
+import { getCache, getCacheStale, setCache } from '@/lib/cache/tabDataCache';
 import { StatsViewV2 } from '@/app/app/_components/nav-v2/StatsViewV2';
 
 type SeriesItem = {
@@ -74,8 +74,8 @@ export default function CheckinPage() {
   const focusSessionNum = focusSession ? parseInt(focusSession, 10) : null;
   const navV2 = process.env.NODE_ENV === 'production' ? true : (searchParams.get('navV2') !== '0');
 
-  const cachedWeekly = getCache<WeeklyReport>('stats.weekly');
-  const cachedHistory = getCache<SessionHistoryResponse>('stats.history');
+  const cachedWeekly = getCache<WeeklyReport>('stats.weekly') ?? getCacheStale<WeeklyReport>('stats.weekly');
+  const cachedHistory = getCache<SessionHistoryResponse>('stats.history') ?? getCacheStale<SessionHistoryResponse>('stats.history');
   const [report, setReport] = useState<WeeklyReport | null>(cachedWeekly ?? null);
   const [reportLoading, setReportLoading] = useState(!cachedWeekly);
   const [reportError, setReportError] = useState<string | null>(null);

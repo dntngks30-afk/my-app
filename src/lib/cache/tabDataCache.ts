@@ -3,7 +3,7 @@
  * stale-while-revalidate: 캐시 있으면 즉시 표시, 백그라운드 재검증
  */
 
-const TTL_MS = 30_000;
+const TTL_MS = 60_000;
 
 type CacheKey =
   | 'home.activeLite'
@@ -21,6 +21,13 @@ const store: Partial<Record<CacheKey, Entry<unknown>>> = {};
 export function getCache<T>(key: CacheKey): T | null {
   const entry = store[key] as Entry<T> | undefined;
   if (!entry || entry.expiresAt < Date.now()) return null;
+  return entry.data;
+}
+
+/** Stale-while-revalidate: 만료된 캐시도 반환 (탭 재방문 시 즉시 표시용) */
+export function getCacheStale<T>(key: CacheKey): T | null {
+  const entry = store[key] as Entry<T> | undefined;
+  if (!entry) return null;
   return entry.data;
 }
 
