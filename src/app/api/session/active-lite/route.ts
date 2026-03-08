@@ -59,12 +59,14 @@ function logTimingBreakdown(timings: Record<string, number>, path: string): void
   const lines = [
     '[session/active-lite] perf',
     `  auth_ms: ${timings.auth_ms ?? '-'}`,
-    `  progress_query_ms: ${timings.progress_query_ms ?? '-'}`,
-    `  profile_query_ms: ${timings.profile_query_ms ?? '-'}`,
-    `  progress_insert_ms: ${timings.progress_insert_ms ?? '-'}`,
+    `  progress_db_ms: ${timings.progress_db_ms ?? '-'}`,
+    `  plan_status_db_ms: ${timings.plan_status_db_ms ?? '-'}`,
+    `  profile_db_ms: ${timings.profile_db_ms ?? '-'}`,
+    `  progress_init_ms: ${timings.progress_init_ms ?? '-'}`,
     `  progress_sync_ms: ${timings.progress_sync_ms ?? '-'}`,
-    `  plan_query_ms: ${timings.plan_query_ms ?? '-'}`,
+    `  active_plan_db_ms: ${timings.active_plan_db_ms ?? '-'}`,
     `  processing_ms: ${timings.processing_ms ?? '-'}`,
+    `  event_log_ms: ${timings.event_log_ms ?? '-'}`,
     `  total_ms: ${timings.total_ms ?? '-'}`,
     `  path: ${path}`,
   ];
@@ -95,14 +97,16 @@ export async function GET(req: NextRequest) {
       supabase.from('users').select('plan_status').eq('id', userId).maybeSingle(),
     ]);
 
-    timings.progress_query_ms = Math.round(performance.now() - tProgressStart);
+    const parallelDbMs = Math.round(performance.now() - tProgressStart);
+    timings.progress_db_ms = parallelDbMs;
+    timings.plan_status_db_ms = parallelDbMs;
     const planStatus = (planStatusRes.data as { plan_status?: string } | null)?.plan_status ?? null;
     let progress = progressRes.data;
 
     if (!progress) {
       const tResolveStart = performance.now();
       const resolved = await resolveTotalSessions(supabase, userId);
-      timings.profile_query_ms = Math.round(performance.now() - tResolveStart);
+      timings.profile_db_ms = Math.round(performance.now() - tResolveStart);
       const tInsertStart = performance.now();
       const { data: created, error: insertErr } = await supabase
         .from('session_program_progress')
@@ -115,7 +119,7 @@ export async function GET(req: NextRequest) {
         .select('user_id, total_sessions, completed_sessions, active_session_number, last_completed_day_key')
         .single();
 
-      timings.progress_insert_ms = Math.round(performance.now() - tInsertStart);
+      timings.progress_init_ms = Math.round(performance.now() - tInsertStart);
       if (insertErr || !created) {
         console.error('[session/active-lite] progress init failed', insertErr);
         void logSessionEvent(supabase, {
@@ -133,20 +137,17 @@ export async function GET(req: NextRequest) {
       if (activeSessionNumber === null) {
         const tResolveStart = performance.now();
         const resolved = await resolveTotalSessions(supabase, userId);
-        timings.profile_query_ms = Math.round(performance.now() - tResolveStart);
+        timings.profile_db_ms = Math.round(performance.now() - tResolveStart);
         const completed = progress.completed_sessions ?? 0;
         const safeToSync =
           resolved.totalSessions >= completed && progress.total_sessions !== resolved.totalSessions;
         if (safeToSync) {
-          const tSyncStart = performance.now();
-          const { data: synced, error: syncErr } = await supabase
+          timings.progress_sync_ms = 0;
+          void supabase
             .from('session_program_progress')
             .update({ total_sessions: resolved.totalSessions })
             .eq('user_id', userId)
-            .select('user_id, total_sessions, completed_sessions, active_session_number, last_completed_day_key')
-            .single();
-          timings.progress_sync_ms = Math.round(performance.now() - tSyncStart);
-          if (!syncErr && synced) progress = synced;
+            .then(() => {});
         }
       }
     }
@@ -157,6 +158,7 @@ export async function GET(req: NextRequest) {
     timings.processing_ms = Math.round(performance.now() - tProcessingStart);
 
     if (!activeSessionNumber) {
+      timings.event_log_ms = 0;
       void logSessionEvent(supabase, {
         userId,
         eventType: 'session_active_read',
@@ -196,10 +198,11 @@ export async function GET(req: NextRequest) {
       return fail(500, ApiErrorCode.INTERNAL_ERROR, '세션 플랜 조회에 실패했습니다');
     }
 
-    timings.plan_query_ms = Math.round(performance.now() - tPlanStart);
+    timings.active_plan_db_ms = Math.round(performance.now() - tPlanStart);
     timings.total_ms = Math.round(performance.now() - t0);
     if (isDebug) logTimingBreakdown(timings, 'with_active');
 
+    timings.event_log_ms = 0;
     void logSessionEvent(supabase, {
       userId,
       eventType: 'session_active_read',
