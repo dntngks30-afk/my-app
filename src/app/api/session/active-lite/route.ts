@@ -86,13 +86,18 @@ export async function GET(req: NextRequest) {
     const supabase = getServerSupabaseAdmin();
     const tProgressStart = performance.now();
 
-    let { data: progress } = await supabase
-      .from('session_program_progress')
-      .select('user_id, total_sessions, completed_sessions, active_session_number, last_completed_day_key')
-      .eq('user_id', userId)
-      .maybeSingle();
+    const [progressRes, planStatusRes] = await Promise.all([
+      supabase
+        .from('session_program_progress')
+        .select('user_id, total_sessions, completed_sessions, active_session_number, last_completed_day_key')
+        .eq('user_id', userId)
+        .maybeSingle(),
+      supabase.from('users').select('plan_status').eq('id', userId).maybeSingle(),
+    ]);
 
     timings.progress_query_ms = Math.round(performance.now() - tProgressStart);
+    const planStatus = (planStatusRes.data as { plan_status?: string } | null)?.plan_status ?? null;
+    let progress = progressRes.data;
 
     if (!progress) {
       const tResolveStart = performance.now();
@@ -164,6 +169,7 @@ export async function GET(req: NextRequest) {
         progress,
         active: null as ActiveLiteSummary | null,
         today_completed: todayCompleted,
+        plan_status: planStatus,
         ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }),
       };
       return addTimingHeaders(ok(data, isDebug ? { timings } : undefined), timings, isDebug);
@@ -210,6 +216,7 @@ export async function GET(req: NextRequest) {
       progress,
       active,
       today_completed: todayCompleted,
+      plan_status: planStatus,
       ...(nextUnlockAt && { next_unlock_at: nextUnlockAt }),
     };
     return addTimingHeaders(ok(data, isDebug ? { timings } : undefined), timings, isDebug);

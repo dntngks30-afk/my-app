@@ -148,6 +148,8 @@ export type ActiveSessionLiteResponse = {
   active: ActivePlanSummary | null;
   today_completed?: boolean;
   next_unlock_at?: string;
+  /** plan_status from users table — paywall check용, AppAuthGate에서 재사용 */
+  plan_status?: string | null;
 };
 
 export type CreateSessionResponse = {

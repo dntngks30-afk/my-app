@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { supabase, getSessionSafe } from '@/lib/supabase';
+import { getCachedActiveSessionLite } from '@/lib/session/active-cache';
 import { isAllowed, isAllowlistEmpty } from '@/lib/appAccess';
 import AppEntryLoader, { isAppBooted } from './AppEntryLoader';
 
@@ -56,21 +57,28 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
           return;
         }
 
-        const { data: user, error: userError } = await supabase
-          .from('users')
-          .select('plan_status')
-          .eq('id', userId)
-          .single();
+        const result = await getCachedActiveSessionLite(session.access_token);
 
         if (cancelled) return;
 
-        if (userError || !user) {
+        if (!result.ok) {
+          if (result.status === 401) {
+            lastAllowedUserIdRef.current = null;
+            setStatus('auth');
+            if (!isAuthPage) {
+              const next = encodeURIComponent(pathname || '/app/home');
+              router.replace(`/app/auth?next=${next}`);
+            }
+            return;
+          }
           lastAllowedUserIdRef.current = null;
           setStatus('paywall');
           return;
         }
 
-        if (hasActivePlan(user.plan_status)) {
+        const planStatus = result.data.plan_status ?? null;
+
+        if (hasActivePlan(planStatus)) {
           lastAllowedUserIdRef.current = userId;
           setStatus('allowed');
         } else {
