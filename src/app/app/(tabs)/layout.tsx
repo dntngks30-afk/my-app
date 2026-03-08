@@ -2,14 +2,14 @@
 
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import TabShell from '../_components/TabShell';
+import AppShell from '../_shell/AppShell';
 
 function TabsLayoutInner({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   const navV2 = process.env.NODE_ENV === 'production' ? true : searchParams.get('navV2') !== '0';
 
   if (navV2) {
-    return <TabShell />;
+    return <AppShell />;
   }
   return <>{children}</>;
 }

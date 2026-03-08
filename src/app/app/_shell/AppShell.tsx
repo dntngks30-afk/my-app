@@ -1,10 +1,10 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import HomePageClient from '../(tabs)/home/_components/HomePageClient';
-import StatsTabContent from './StatsTabContent';
-import ProfileTabContent from './ProfileTabContent';
-import BottomNav from './BottomNav';
+import MapTab from '../_tabs/map/MapTab';
+import StatsTab from '../_tabs/stats/StatsTab';
+import MyTab from '../_tabs/my/MyTab';
+import BottomNav from '../_components/BottomNav';
 
 const TAB_PATHS = ['/app/home', '/app/checkin', '/app/profile'] as const;
 
@@ -17,32 +17,32 @@ function isTabPath(path: string | null): path is (typeof TAB_PATHS)[number] {
 }
 
 /**
- * Persistent tab shell — all tabs stay mounted, visibility toggle only.
- * Tab switch = instant (no remount, no refetch).
- * Stats/Profile fetch only when first opened (isVisible).
+ * Persistent app shell — 지도 / 통계 / 마이 tabs stay mounted.
+ * Tab switch = visibility toggle only (no remount, no refetch).
+ * Stats/My fetch only when first opened (isVisible).
  */
-export default function TabShell() {
+export default function AppShell() {
   const pathname = usePathname();
   const active = isTabPath(pathname) ? pathname : '/app/home';
-  const showHome = active === '/app/home' || active.startsWith('/app/home');
+  const showMap = active === '/app/home' || active.startsWith('/app/home');
   const showStats = active.startsWith('/app/checkin');
-  const showProfile = active === '/app/profile';
+  const showMy = active === '/app/profile';
 
   return (
     <div className="relative min-h-screen bg-white">
-      {/* Home — persistent mount */}
+      {/* 지도 — persistent mount */}
       <div
         className="tab-panel transition-opacity duration-150 ease-out"
         style={{
-          display: showHome ? 'block' : 'none',
-          opacity: showHome ? 1 : 0,
+          display: showMap ? 'block' : 'none',
+          opacity: showMap ? 1 : 0,
         }}
-        aria-hidden={!showHome}
+        aria-hidden={!showMap}
       >
-        <HomePageClient hideBottomNav />
+        <MapTab />
       </div>
 
-      {/* Stats (여정) — persistent mount, visibility toggle */}
+      {/* 통계(여정) — persistent mount, visibility toggle */}
       <div
         className="tab-panel transition-opacity duration-150 ease-out"
         style={{
@@ -51,19 +51,19 @@ export default function TabShell() {
         }}
         aria-hidden={!showStats}
       >
-        <StatsTabContent hideBottomNav isVisible={showStats} />
+        <StatsTab isVisible={showStats} />
       </div>
 
-      {/* Profile (마이) — persistent mount, visibility toggle */}
+      {/* 마이 — persistent mount, visibility toggle */}
       <div
         className="tab-panel transition-opacity duration-150 ease-out"
         style={{
-          display: showProfile ? 'block' : 'none',
-          opacity: showProfile ? 1 : 0,
+          display: showMy ? 'block' : 'none',
+          opacity: showMy ? 1 : 0,
         }}
-        aria-hidden={!showProfile}
+        aria-hidden={!showMy}
       >
-        <ProfileTabContent hideBottomNav isVisible={showProfile} />
+        <MyTab isVisible={showMy} />
       </div>
 
       <BottomNav />
