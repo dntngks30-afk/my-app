@@ -31,6 +31,37 @@
     }
   },
   {
+    "id": "lower-mobility-ankle",
+    "label": "하체 가동성 제한형 (발목)",
+    "description": "스쿼트는 양호, 한발서기에서 발목 꺾임. primary_discomfort 무릎·발목. 기대: LOWER_MOBILITY_RESTRICTION",
+    "input": {
+      "deep_basic_age": 42,
+      "deep_basic_gender": "여",
+      "deep_basic_experience": "지금도 자주함",
+      "deep_basic_workstyle": "균형",
+      "deep_basic_primary_discomfort": "무릎·발목",
+      "deep_squat_pain_intensity": "없음",
+      "deep_squat_pain_location": [],
+      "deep_squat_knee_alignment": "발바닥이 바닥에 잘 붙은 채로 편하게 내려가서 2–3초 유지 가능",
+      "deep_wallangel_pain_intensity": "없음",
+      "deep_wallangel_pain_location": [],
+      "deep_wallangel_quality": "문제 없음",
+      "deep_sls_pain_intensity": "없음",
+      "deep_sls_pain_location": [],
+      "deep_sls_quality": "무릎이 안쪽/바깥쪽으로 흔들리거나 발목이 꺾이며 흔들림"
+    },
+    "expected_analysis": {
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "pain_mode": "none",
+      "priority_vector_contains": ["lower_mobility"]
+    },
+    "expected_plan_hints": {
+      "preferred_target_vectors": ["ankle_mobility", "hip_mobility", "lower_chain_stability"],
+      "avoided_characteristics": ["knee_load"],
+      "expected_session_bias": "mobility"
+    }
+  },
+  {
     "id": "lower-instability-severe",
     "label": "하체 불안정 심한형",
     "description": "스쿼트 자주 크게 흔들림, 한발서기 무릎/발목 흔들림",

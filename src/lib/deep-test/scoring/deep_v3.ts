@@ -135,8 +135,17 @@ export function calculateDeepV3StateVector(
     }
   }
 
-  // --- 통증부위/좌우 차이 → asymmetry (primary_discomfort 보조, 비중 축소) ---
+  // --- PR-ALG-08: lower_mobility 보정 (발목 가동성 제한) ---
+  // SLS "발목이 꺾이며" + primary_discomfort 무릎·발목 → ankle mobility restriction proxy
   const q5 = toString(answers.deep_basic_primary_discomfort);
+  if (q14?.includes('발목') && q14?.includes('꺾이며')) {
+    sv.lower_mobility += 2;
+    if (q5?.includes('무릎') || q5?.includes('발목')) {
+      sv.lower_mobility += 1;
+    }
+  }
+
+  // --- 통증부위/좌우 차이 → asymmetry (primary_discomfort 보조, 비중 축소) ---
   const q6Loc = toLocationArray(answers.deep_squat_pain_location);
   const q10Loc = toLocationArray(answers.deep_wallangel_pain_location);
   const q13Loc = toLocationArray(answers.deep_sls_pain_location);
@@ -209,6 +218,7 @@ export function classifyDeepV3(
   }
 
   // 우선순위: 가장 높은 축 → primary, 두번째 → secondary
+  // PR-ALG-08: tie-break 일관성 - 동점 시 axes 순서 우선 (lower_stability > lower_mobility > ...)
   const axes: (keyof DeepV3StateVector)[] = [
     'lower_stability',
     'lower_mobility',
@@ -216,7 +226,11 @@ export function classifyDeepV3(
     'trunk_control',
     'asymmetry',
   ];
-  const sorted = [...axes].sort((a, b) => stateVector[b] - stateVector[a]);
+  const sorted = [...axes].sort((a, b) => {
+    const diff = stateVector[b] - stateVector[a];
+    if (diff !== 0) return diff;
+    return axes.indexOf(a) - axes.indexOf(b);
+  });
   const top = sorted[0];
   const second = sorted[1];
   const topVal = top ? stateVector[top] : 0;
