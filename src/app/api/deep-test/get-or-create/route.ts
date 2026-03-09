@@ -8,7 +8,7 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { requireDeepAuth } from '@/lib/deep-test/auth';
 
 const SOURCE = 'deep';
-const DEFAULT_VERSION = 'deep_v2';
+const DEFAULT_VERSION = 'deep_v3';
 
 function toAttemptPayload(row: {
   id: string;
