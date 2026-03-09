@@ -362,10 +362,11 @@ export function buildDeepV3Derived(
 
   const result_type = v3TypeToV2ResultType(primary_type);
   const primaryFocus = v3TypeToFocus(primary_type);
+  const rawSecondary = secondary_type && secondary_type !== primary_type
+    ? v3TypeToFocus(secondary_type)
+    : 'NONE';
   const secondaryFocus: DeepSecondaryFocus =
-    secondary_type && secondary_type !== primary_type
-      ? v3TypeToFocus(secondary_type)
-      : 'NONE';
+    rawSecondary === 'FULL' ? 'NONE' : rawSecondary;
 
   let level: number;
   if (primary_type === 'STABLE') {
