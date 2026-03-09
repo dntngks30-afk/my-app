@@ -135,12 +135,12 @@ export async function POST(req: NextRequest) {
 
   if (useV3 && v3Result) {
     const { derived } = v3Result;
-    const shadowCandidate = calculateDeepV3WithCandidate(answers, 'pain_mode_relaxed');
+    const shadowCandidate = calculateDeepV3WithCandidate(answers, 'pain_mode_legacy');
     const shadowCompare = buildShadowCompare(
       v3Result,
       shadowCandidate,
-      'pain_mode_relaxed',
-      'deep_v3_pain_mode_candidate_relaxed'
+      'pain_mode_legacy',
+      'deep_v3_pain_mode_legacy'
     );
     scoresPayload = {
       objectiveScores: v3Result.objectiveScores,

@@ -161,7 +161,7 @@ export function calculateDeepV3StateVector(
 
 /**
  * pain_mode: none / caution / protected
- * 통증강도 기반 게이트
+ * PR-ALG-13A: low-risk 승격. maxInt=1 + primary_discomfort "해당 없음" → none. 그 외 caution 1+.
  */
 export function resolvePainMode(
   answers: Record<string, DeepAnswerValue>,
@@ -172,9 +172,13 @@ export function resolvePainMode(
   const q9 = parsePainIntensity(answers.deep_wallangel_pain_intensity, painMap);
   const q12 = parsePainIntensity(answers.deep_sls_pain_intensity, painMap);
   const maxInt = Math.max(q6, q9, q12);
+  const q5 = toString(answers.deep_basic_primary_discomfort);
+  const primaryDiscomfortNone = q5?.includes('해당 없음') ?? false;
+
   if (maxInt >= 3) return 'protected';
-  if (maxInt >= 1) return 'caution';
-  return 'none';
+  if (maxInt >= 2) return 'caution';
+  if (maxInt === 1 && primaryDiscomfortNone) return 'none';
+  return maxInt >= 1 ? 'caution' : 'none';
 }
 
 /**
@@ -555,9 +559,7 @@ export function resolveDeepScoringByVersion(
 export const ACTIVE_RULE_VERSION = 'deep_v3_calibration_v1';
 export const SHADOW_COMPARE_VERSION = 'shadow_compare_v1';
 
-/** pain_mode candidate: relaxed = caution at 2+ (vs current 1+). protected unchanged. */
-/** PR-ALG-11B: relaxed_v2 = maxInt=1일 때 primary_discomfort "해당 없음"인 경우에만 none. 그 외는 active와 동일. */
-/** PR-ALG-12B: relaxed_v3 = v2와 동일 규칙. low-risk fixture로 검증 가능하게 함. */
+/** PR-ALG-13A: pain_mode_legacy = 이전 active (caution at 1+). shadow compare용. */
 function resolvePainModeCandidate(
   answers: Record<string, DeepAnswerValue>,
   _stateVector: DeepV3StateVector,
@@ -568,19 +570,10 @@ function resolvePainModeCandidate(
   const q9 = parsePainIntensity(answers.deep_wallangel_pain_intensity, painMap);
   const q12 = parsePainIntensity(answers.deep_sls_pain_intensity, painMap);
   const maxInt = Math.max(q6, q9, q12);
-  const q5 = toString(answers.deep_basic_primary_discomfort);
-  const primaryDiscomfortNone = q5?.includes('해당 없음') ?? false;
-
-  if (candidateName === 'pain_mode_relaxed') {
+  if (candidateName === 'pain_mode_legacy') {
     if (maxInt >= 3) return 'protected';
-    if (maxInt >= 2) return 'caution';
+    if (maxInt >= 1) return 'caution';
     return 'none';
-  }
-  if (candidateName === 'pain_mode_relaxed_v2' || candidateName === 'pain_mode_relaxed_v3') {
-    if (maxInt >= 3) return 'protected';
-    if (maxInt >= 2) return 'caution';
-    if (maxInt === 1 && primaryDiscomfortNone) return 'none';
-    return maxInt >= 1 ? 'caution' : 'none';
   }
   return resolvePainMode(answers, _stateVector);
 }

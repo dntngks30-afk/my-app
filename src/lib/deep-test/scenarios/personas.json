@@ -697,7 +697,7 @@
     },
     "expected_analysis": {
       "primary_type": "STABLE",
-      "pain_mode": "caution",
+      "pain_mode": "none",
       "priority_vector_contains": []
     },
     "expected_plan_hints": {
