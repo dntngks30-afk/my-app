@@ -5,7 +5,7 @@ import { JourneyMapV2 } from './JourneyMapV2'
 import { SessionPanelV2 } from './SessionPanelV2'
 import { sessions, type SessionNode } from './map-data'
 import { extractSessionExercises } from './planJsonAdapter'
-import { createSession, getSessionPlanSummary, type SessionPlan, type ActivePlanSummary, type ExerciseLogItem } from '@/lib/session/client'
+import { createSession, getSessionPlanSummary, type SessionPlan, type ActivePlanSummary, type ExerciseLogItem, type PlanSummaryResponse } from '@/lib/session/client'
 import { getSessionSafe } from '@/lib/supabase'
 import { prefetchMediaSign } from './media-cache'
 
@@ -42,6 +42,8 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   const [pastSessionInitialLogs, setPastSessionInitialLogs] = useState<Record<string, ExerciseLogItem>>({})
   const [planLoading, setPlanLoading] = useState(false)
   const createCalledRef = useRef(false)
+  const prefetchedSummaryRef = useRef<{ sessionNumber: number; data: PlanSummaryResponse } | null>(null)
+  const prefetchedPastRef = useRef<{ sessionNumber: number; data: PlanSummaryResponse } | null>(null)
 
   // prop 변경(세션 완료 후 null 리셋 등) 반영
   useEffect(() => {
@@ -49,6 +51,43 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     // activePlan이 리셋되면 다음 패널 오픈 시 재호출 허용
     if (activePlan === null) createCalledRef.current = false
   }, [activePlan])
+
+  // 현재 세션 lite만 있을 때 plan-summary 미리 로드 (패널 첫 클릭 시 체감 개선)
+  useEffect(() => {
+    const plan = activePlan ?? localActivePlan
+    if (!plan || effectiveCurrentSession === null) return
+    if (plan.session_number !== effectiveCurrentSession) return
+    if ('plan_json' in plan && plan.plan_json) return // 이미 full
+    if (prefetchedSummaryRef.current?.sessionNumber === plan.session_number) return
+
+    let cancelled = false
+    getSessionSafe().then(async ({ session }) => {
+      if (cancelled || !session?.access_token) return
+      const result = await getSessionPlanSummary(session.access_token, plan.session_number)
+      if (cancelled) return
+      if (result.ok && result.data) {
+        prefetchedSummaryRef.current = { sessionNumber: plan.session_number, data: result.data }
+      }
+    })
+    return () => { cancelled = true }
+  }, [activePlan, localActivePlan, effectiveCurrentSession])
+
+  // 과거 세션: 가장 최근 완료 세션 미리 로드 (클릭 시 체감 개선)
+  useEffect(() => {
+    if (completed < 1) return
+    if (prefetchedPastRef.current?.sessionNumber === completed) return
+
+    let cancelled = false
+    getSessionSafe().then(async ({ session }) => {
+      if (cancelled || !session?.access_token) return
+      const result = await getSessionPlanSummary(session.access_token, completed)
+      if (cancelled) return
+      if (result.ok && result.data) {
+        prefetchedPastRef.current = { sessionNumber: completed, data: result.data }
+      }
+    })
+    return () => { cancelled = true }
+  }, [completed])
 
   // 서버에서 todayCompleted=false로 갱신되면 localDailyCapActive도 리셋
   useEffect(() => {
@@ -67,13 +106,35 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     return 'locked' as const
   }, [selectedSessionId, effectiveCurrentSession, completed])
 
-  // 과거 세션 클릭 시 plan-summary 조회 (패널 첫 렌더용 경량)
+  // 과거 세션 클릭 시 plan-summary 조회 (패널 첫 렌더용 경량). prefetch 캐시 있으면 즉시 사용
   useEffect(() => {
     if (selectedStatus !== 'completed' || selectedSessionId === null) {
       setPastSessionPlan(null)
       setPastSessionInitialLogs({})
       return
     }
+
+    const prefetched = prefetchedPastRef.current
+    if (prefetched?.sessionNumber === selectedSessionId) {
+      setPlanLoading(false)
+      setPastSessionPlan({
+        session_number: prefetched.data.session_number,
+        status: prefetched.data.status as 'draft' | 'started' | 'completed',
+        theme: '',
+        plan_json: { segments: prefetched.data.segments } as SessionPlan['plan_json'],
+        condition: { condition_mood: 'ok', time_budget: 'normal' },
+        created_at: '',
+        started_at: null,
+      })
+      const logs = prefetched.data.exercise_logs
+      if (logs?.length) {
+        const map: Record<string, ExerciseLogItem> = {}
+        for (const l of logs) map[l.templateId] = l
+        setPastSessionInitialLogs(map)
+      }
+      return
+    }
+
     let cancelled = false
     setPastSessionPlan(null)
     setPastSessionInitialLogs({})
@@ -122,6 +183,21 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     if (plan == null) return
     if ('plan_json' in plan && plan.plan_json) return // 이미 full/segments plan
     if (plan.session_number !== selectedSessionId) return
+
+    const prefetched = prefetchedSummaryRef.current
+    if (prefetched?.sessionNumber === selectedSessionId) {
+      setPlanLoading(false)
+      setLocalActivePlan({
+        session_number: prefetched.data.session_number,
+        status: prefetched.data.status as 'draft' | 'started' | 'completed',
+        theme: '',
+        plan_json: { segments: prefetched.data.segments } as SessionPlan['plan_json'],
+        condition: { condition_mood: 'ok', time_budget: 'normal' },
+        created_at: '',
+        started_at: null,
+      })
+      return
+    }
 
     let cancelled = false
     setPlanLoading(true)
