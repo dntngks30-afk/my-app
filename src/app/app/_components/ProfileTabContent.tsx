@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { getSessionSafe } from '@/lib/supabase';
 import { getCachedActiveSessionLite } from '@/lib/session/active-cache';
-import { getCache, getCacheStale } from '@/lib/cache/tabDataCache';
+import { getCache, getCacheStale, isFresh } from '@/lib/cache/tabDataCache';
 import { ProfileViewV2 } from './nav-v2/ProfileViewV2';
 
 interface ProfileTabContentProps {
@@ -19,10 +19,25 @@ export default function ProfileTabContent({ hideBottomNav, isVisible = false }: 
 
   useEffect(() => {
     if (!isVisible) return;
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
     let cancelled = false;
 
+    if (fetchedRef.current) {
+      const stale = getCacheStale<{ progress?: { completed_sessions?: number } }>('home.activeLite');
+      if (stale?.progress && !isFresh('home.activeLite')) {
+        void getSessionSafe().then(({ session }) => {
+          if (session?.access_token && !cancelled) {
+            void getCachedActiveSessionLite(session.access_token).then((result) => {
+              if (!cancelled && result.ok && result.data.progress) {
+                setCompleted(result.data.progress.completed_sessions ?? 0);
+              }
+            });
+          }
+        });
+      }
+      return () => { cancelled = true };
+    }
+
+    fetchedRef.current = true;
     const cached = getCache<{ progress?: { completed_sessions?: number } }>('home.activeLite')
       ?? getCacheStale<{ progress?: { completed_sessions?: number } }>('home.activeLite');
     if (cached?.progress) {

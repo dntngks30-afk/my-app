@@ -32,6 +32,12 @@ export function getCacheStale<T>(key: CacheKey): T | null {
   return entry.data;
 }
 
+/** TTL 내 fresh 여부 (탭 재방문 시 revalidate 판단용) */
+export function isFresh(key: CacheKey): boolean {
+  const entry = store[key] as Entry<unknown> | undefined;
+  return !!entry && entry.expiresAt > Date.now();
+}
+
 export function setCache<T>(key: CacheKey, data: T): void {
   store[key] = {
     data,

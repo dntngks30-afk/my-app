@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { getSessionSafe } from '@/lib/supabase';
 import { getCachedActiveSessionLite } from '@/lib/session/active-cache';
-import { getCache, getCacheStale } from '@/lib/cache/tabDataCache';
+import { getCache, getCacheStale, isFresh } from '@/lib/cache/tabDataCache';
 import { StatsViewV2 } from './nav-v2/StatsViewV2';
 
 interface StatsTabContentProps {
@@ -20,10 +20,27 @@ export default function StatsTabContent({ hideBottomNav, isVisible = false }: St
 
   useEffect(() => {
     if (!isVisible) return;
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
     let cancelled = false;
 
+    if (fetchedRef.current) {
+      const stale = getCacheStale<{ progress?: { completed_sessions?: number; total_sessions?: number } }>('home.activeLite');
+      if (stale?.progress && !isFresh('home.activeLite')) {
+        void getSessionSafe().then(({ session }) => {
+          if (session?.access_token && !cancelled) {
+            void getCachedActiveSessionLite(session.access_token).then((result) => {
+              if (!cancelled && result.ok && result.data.progress) {
+                const p = result.data.progress;
+                setCompleted(p.completed_sessions ?? 0);
+                setTotal(p.total_sessions ?? 20);
+              }
+            });
+          }
+        });
+      }
+      return () => { cancelled = true };
+    }
+
+    fetchedRef.current = true;
     const cached = getCache<{ progress?: { completed_sessions?: number; total_sessions?: number } }>('home.activeLite')
       ?? getCacheStale<{ progress?: { completed_sessions?: number; total_sessions?: number } }>('home.activeLite');
     if (cached?.progress) {
