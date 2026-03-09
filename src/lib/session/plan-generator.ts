@@ -19,6 +19,38 @@ const LEVEL_MATCH_BONUS = 1;
 
 /** PR-P2-4: constraint hardening */
 const MAX_SAME_FOCUS_IN_MAIN = 2;
+
+/** Phase-safe composition: focus_tags → segment eligibility (no DB change) */
+const PREP_TAGS = new Set([
+  'full_body_reset', 'calf_release', 'upper_trap_release', 'neck_mobility',
+  'thoracic_mobility', 'shoulder_mobility', 'hip_flexor_stretch', 'hip_mobility',
+  'ankle_mobility', 'core_control',
+]);
+const MAIN_TAGS = new Set([
+  'core_stability', 'global_core', 'upper_back_activation', 'shoulder_stability',
+  'glute_activation', 'lower_chain_stability', 'glute_medius', 'basic_balance',
+]);
+/** Main-strength tags: NEVER place in Release/Cooldown */
+const MAIN_EXCLUSIVE_FROM_RELEASE = new Set([
+  'lower_chain_stability', 'glute_medius', 'glute_activation', 'core_stability',
+  'global_core', 'shoulder_stability', 'upper_back_activation',
+]);
+const RELEASE_TAGS = new Set([
+  'full_body_reset', 'calf_release', 'upper_trap_release', 'neck_mobility',
+  'thoracic_mobility', 'shoulder_mobility', 'hip_flexor_stretch', 'hip_mobility',
+]);
+
+function isPrepEligible(t: SessionTemplateRow): boolean {
+  return t.focus_tags.some((tag) => PREP_TAGS.has(tag));
+}
+function isMainEligible(t: SessionTemplateRow): boolean {
+  return t.focus_tags.some((tag) => MAIN_TAGS.has(tag));
+}
+function isReleaseEligible(t: SessionTemplateRow): boolean {
+  const hasReleaseTag = t.focus_tags.some((tag) => RELEASE_TAGS.has(tag));
+  const hasMainExclusive = t.focus_tags.some((tag) => MAIN_EXCLUSIVE_FROM_RELEASE.has(tag));
+  return hasReleaseTag && !hasMainExclusive;
+}
 const MIN_CANDIDATES_FOR_STRICT_AVOID = 3;
 const SHORT_TOTAL_ITEM_CAP = 4;
 
@@ -132,7 +164,8 @@ function scoreTemplate(
 }
 
 /**
- * PR-P2-4: Select templates with focus diversity in Main.
+ * PR-P2-4: Phase-safe selection. Prep/Main/Release each use phase-eligible templates only.
+ * Fallback: Release may use prep-eligible (stretch) if no release-eligible; never main-exclusive.
  * Deterministic: same input → same output.
  */
 function selectTemplatesWithConstraints(
@@ -143,37 +176,60 @@ function selectTemplatesWithConstraints(
   releaseCount: number,
   onDuplicateFiltered: (count: number) => void
 ): SessionTemplateRow[] {
-  const totalNeeded = prepCount + mainCount + releaseCount;
   const used = new Set<string>([...usedTemplateIds]);
-  const selected: SessionTemplateRow[] = [];
-  const mainFocusCount = new Map<string, number>();
   let duplicateFiltered = 0;
 
-  for (const { template } of sorted) {
-    if (selected.length >= totalNeeded) break;
-    if (used.has(template.id)) {
-      duplicateFiltered++;
-      continue;
+  const pick = (
+    pool: Array<{ template: SessionTemplateRow; score: number }>,
+    eligible: (t: SessionTemplateRow) => boolean,
+    count: number,
+    mainFocusCap?: Map<string, number>
+  ): SessionTemplateRow[] => {
+    const out: SessionTemplateRow[] = [];
+    for (const { template } of pool) {
+      if (out.length >= count) break;
+      if (used.has(template.id)) {
+        duplicateFiltered++;
+        continue;
+      }
+      if (!eligible(template)) continue;
+      if (mainFocusCap) {
+        const ft = template.focus_tags[0] ?? '_none';
+        if ((mainFocusCap.get(ft) ?? 0) >= MAX_SAME_FOCUS_IN_MAIN) continue;
+      }
+      out.push(template);
+      used.add(template.id);
+      if (mainFocusCap) {
+        const ft = template.focus_tags[0] ?? '_none';
+        mainFocusCap.set(ft, (mainFocusCap.get(ft) ?? 0) + 1);
+      }
     }
+    return out;
+  };
 
-    const segmentIndex = selected.length;
-    const inMain = segmentIndex >= prepCount && segmentIndex < prepCount + mainCount;
-
-    if (inMain) {
-      const ft = template.focus_tags[0] ?? '_none';
-      if ((mainFocusCount.get(ft) ?? 0) >= MAX_SAME_FOCUS_IN_MAIN) continue;
-    }
-
-    selected.push(template);
-    used.add(template.id);
-    if (inMain) {
-      const ft = template.focus_tags[0] ?? '_none';
-      mainFocusCount.set(ft, (mainFocusCount.get(ft) ?? 0) + 1);
-    }
+  const mainFocusCount = new Map<string, number>();
+  let prepItems = pick(sorted, isPrepEligible, prepCount);
+  if (prepItems.length < prepCount) {
+    prepItems = [...prepItems, ...pick(sorted, () => true, prepCount - prepItems.length)];
+  }
+  let mainItems = pick(sorted, isMainEligible, mainCount, mainFocusCount);
+  if (mainItems.length < mainCount) {
+    mainItems = [...mainItems, ...pick(sorted, () => true, mainCount - mainItems.length, mainFocusCount)];
+  }
+  let releaseItems = pick(sorted, isReleaseEligible, releaseCount);
+  if (releaseItems.length < releaseCount) {
+    const more = pick(sorted, isPrepEligible, releaseCount - releaseItems.length);
+    releaseItems = [...releaseItems, ...more];
+  }
+  if (releaseItems.length < releaseCount) {
+    const safeForRelease = (t: SessionTemplateRow) =>
+      !t.focus_tags.some((tag) => MAIN_EXCLUSIVE_FROM_RELEASE.has(tag));
+    const more = pick(sorted, safeForRelease, releaseCount - releaseItems.length);
+    releaseItems = [...releaseItems, ...more];
   }
 
   onDuplicateFiltered(duplicateFiltered);
-  return selected;
+  return [...prepItems, ...mainItems, ...releaseItems];
 }
 
 function toPlanItem(
