@@ -9,7 +9,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { requireDeepAuth } from '@/lib/deep-test/auth';
 import { calculateDeepV2, extendDeepV2 } from '@/lib/deep-test/scoring/deep_v2';
-import { calculateDeepV3, resolveDeepScoringByVersion } from '@/lib/deep-test/scoring/deep_v3';
+import {
+  resolveDeepScoringByVersion,
+  calculateDeepV3WithCandidate,
+  buildShadowCompare,
+} from '@/lib/deep-test/scoring/deep_v3';
 import { ensureDeepWorkoutRoutine, maskId } from '@/lib/deep-test/ensure-deep-routine';
 import { seedDay1PlanIfRoutine } from '@/lib/deep-test/seed-day1';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
@@ -131,6 +135,13 @@ export async function POST(req: NextRequest) {
 
   if (useV3 && v3Result) {
     const { derived } = v3Result;
+    const shadowCandidate = calculateDeepV3WithCandidate(answers, 'pain_mode_relaxed');
+    const shadowCompare = buildShadowCompare(
+      v3Result,
+      shadowCandidate,
+      'pain_mode_relaxed',
+      'deep_v3_pain_mode_candidate_relaxed'
+    );
     scoresPayload = {
       objectiveScores: v3Result.objectiveScores,
       finalScores: v3Result.finalScores,
@@ -152,6 +163,7 @@ export async function POST(req: NextRequest) {
         priority_vector: derived.priority_vector,
         pain_mode: derived.pain_mode,
       },
+      shadow_compare: shadowCompare,
     };
     resultType = v3Result.result_type;
     resultConfidence = v3Result.confidence;

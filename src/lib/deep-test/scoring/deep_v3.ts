@@ -548,3 +548,168 @@ export function resolveDeepScoringByVersion(
   }
   return { useV3: false };
 }
+
+// ─── PR-ALG-09: Shadow Compare (safe rollout) ─────────────────────────────────
+
+export const ACTIVE_RULE_VERSION = 'deep_v3_calibration_v1';
+export const SHADOW_COMPARE_VERSION = 'shadow_compare_v1';
+
+/** pain_mode candidate: relaxed = caution at 2+ (vs current 1+). protected unchanged. */
+function resolvePainModeCandidate(
+  answers: Record<string, DeepAnswerValue>,
+  _stateVector: DeepV3StateVector,
+  candidateName: string
+): DeepV3PainMode {
+  const painMap = getPainIntensityMap();
+  const q6 = parsePainIntensity(answers.deep_squat_pain_intensity, painMap);
+  const q9 = parsePainIntensity(answers.deep_wallangel_pain_intensity, painMap);
+  const q12 = parsePainIntensity(answers.deep_sls_pain_intensity, painMap);
+  const maxInt = Math.max(q6, q9, q12);
+  if (candidateName === 'pain_mode_relaxed') {
+    if (maxInt >= 3) return 'protected';
+    if (maxInt >= 2) return 'caution';
+    return 'none';
+  }
+  return resolvePainMode(answers, _stateVector);
+}
+
+/** Shadow result with candidate pain_mode. State vector unchanged. */
+export function calculateDeepV3WithCandidate(
+  answers: Record<string, DeepAnswerValue>,
+  candidateName: string
+): ReturnType<typeof calculateDeepV3> {
+  let answeredCount = 0;
+  for (const id of getApplicableQuestionIds()) {
+    const v = answers[id];
+    if (v !== undefined && v !== null) {
+      if (Array.isArray(v)) {
+        if (v.length > 0) answeredCount += 1;
+      } else {
+        answeredCount += 1;
+      }
+    }
+  }
+  const baseConfidence = answeredCount / DEEP_V2_TOTAL_COUNT;
+
+  const stateVector = calculateDeepV3StateVector(answers);
+  const painMode = resolvePainModeCandidate(answers, stateVector, candidateName);
+
+  const q5 = toString(answers.deep_basic_primary_discomfort);
+  const painMap = getPainIntensityMap();
+  const q6Int = parsePainIntensity(answers.deep_squat_pain_intensity, painMap);
+  const q9Int = parsePainIntensity(answers.deep_wallangel_pain_intensity, painMap);
+  const q12Int = parsePainIntensity(answers.deep_sls_pain_intensity, painMap);
+  const q8 = toString(answers.deep_squat_knee_alignment);
+  const q11 = toString(answers.deep_wallangel_quality);
+  const q14 = toString(answers.deep_sls_quality);
+
+  const q5해당없음 = q5?.includes('해당 없음') ?? false;
+  const noPain = q6Int === 0 && q9Int === 0 && q12Int === 0;
+  const q8Good = q8?.includes('발바닥이 바닥에 잘 붙은 채로') ?? false;
+  const q11Good = q11?.includes('문제 없음') ?? false;
+  const q14Good = q14?.includes('10초 안정적으로 가능') ?? false;
+  const decondLow = stateVector.deconditioned <= 3;
+
+  let primary_type: DeepV3Type;
+  let secondary_type: DeepV3Type | null;
+
+  if (
+    q5해당없음 &&
+    noPain &&
+    q8Good &&
+    q11Good &&
+    q14Good &&
+    decondLow &&
+    stateVector.lower_stability === 0 &&
+    stateVector.upper_mobility === 0 &&
+    stateVector.trunk_control === 0
+  ) {
+    primary_type = 'STABLE';
+    secondary_type = null;
+  } else {
+    const classified = classifyDeepV3(stateVector, painMode);
+    primary_type = classified.primary_type;
+    secondary_type = classified.secondary_type;
+  }
+
+  const derived = buildDeepV3Derived(
+    stateVector,
+    painMode,
+    primary_type,
+    secondary_type,
+    baseConfidence
+  );
+
+  const confidence = Math.min(1, Math.max(0, baseConfidence + 0.1));
+
+  return {
+    scoring_version: 'deep_v3',
+    result_type: derived.result_type,
+    primaryFocus: derived.primaryFocus,
+    secondaryFocus: derived.secondaryFocus,
+    objectiveScores: derived.objectiveScores,
+    finalScores: derived.finalScores,
+    confidence,
+    answeredCount,
+    totalCount: DEEP_V2_TOTAL_COUNT,
+    primary_type,
+    secondary_type,
+    priority_vector: derived.priority_vector,
+    pain_mode: painMode,
+    derived,
+  };
+}
+
+export type ShadowCompareBlock = {
+  active_rule_version: string;
+  shadow_rule_version: string;
+  candidate_name: string;
+  active_primary_type: string;
+  shadow_primary_type: string;
+  active_secondary_type: string | null;
+  shadow_secondary_type: string | null;
+  active_priority_vector: Record<string, number>;
+  shadow_priority_vector: Record<string, number>;
+  active_pain_mode: string;
+  shadow_pain_mode: string;
+  diff_flags: string[];
+  comparison_reason: string;
+  compare_version: string;
+};
+
+function priorityVectorToString(pv: Record<string, number>): string {
+  const axes = ['lower_stability', 'lower_mobility', 'upper_mobility', 'trunk_control', 'asymmetry', 'deconditioned'];
+  return axes.map((a) => `${a}:${(pv[a] ?? 0).toFixed(2)}`).join(',');
+}
+
+export function buildShadowCompare(
+  active: ReturnType<typeof calculateDeepV3>,
+  shadow: ReturnType<typeof calculateDeepV3>,
+  candidateName: string,
+  shadowRuleVersion: string
+): ShadowCompareBlock {
+  const diffFlags: string[] = [];
+  if (active.primary_type !== shadow.primary_type) diffFlags.push('primary_type_changed');
+  if (String(active.secondary_type ?? '') !== String(shadow.secondary_type ?? '')) diffFlags.push('secondary_type_changed');
+  if (priorityVectorToString(active.priority_vector) !== priorityVectorToString(shadow.priority_vector)) {
+    diffFlags.push('priority_order_changed');
+  }
+  if (active.pain_mode !== shadow.pain_mode) diffFlags.push('pain_mode_changed');
+
+  return {
+    active_rule_version: ACTIVE_RULE_VERSION,
+    shadow_rule_version: shadowRuleVersion,
+    candidate_name: candidateName,
+    active_primary_type: active.primary_type,
+    shadow_primary_type: shadow.primary_type,
+    active_secondary_type: active.secondary_type,
+    shadow_secondary_type: shadow.secondary_type,
+    active_priority_vector: { ...active.priority_vector },
+    shadow_priority_vector: { ...shadow.priority_vector },
+    active_pain_mode: active.pain_mode,
+    shadow_pain_mode: shadow.pain_mode,
+    diff_flags: diffFlags,
+    comparison_reason: `${candidateName} vs active`,
+    compare_version: SHADOW_COMPARE_VERSION,
+  };
+}
