@@ -158,7 +158,6 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       const result = await createSession(session.access_token, {
         condition_mood: 'ok',
         time_budget: 'normal',
-        summary: true,
       })
       if (cancelled) return
       setPlanLoading(false)

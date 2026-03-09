@@ -221,7 +221,6 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const isDebug = body.debug === true;
-    const summaryOnly = body.summary === true;
 
     const conditionMood: ConditionMood = (['good', 'ok', 'bad'] as const).includes(
       body.condition_mood as ConditionMood
@@ -348,7 +347,7 @@ export async function POST(req: NextRequest) {
         meta: { reason: 'active_exists' },
       });
 
-      const active = existingPlan ? (summaryOnly ? toSummaryPlan(existingPlan) : existingPlan) : null;
+      const active = existingPlan ? toSummaryPlan(existingPlan) : null;
       const data = { progress, active, idempotent: true, today_completed: todayCompleted, ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }) };
       return ok(data, data);
     }
@@ -538,7 +537,7 @@ export async function POST(req: NextRequest) {
         sessionNumber: nextSessionNumber,
         meta: { reason: 'conflict_return' },
       });
-      const active = summaryOnly ? toSummaryPlan(existingPlan) : existingPlan;
+      const active = toSummaryPlan(existingPlan);
       const data = { progress, active, idempotent: true, today_completed: todayCompleted, ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }) };
       return ok(data, data);
     }
@@ -619,7 +618,7 @@ export async function POST(req: NextRequest) {
             });
             const p = prog ?? { ...progress, active_session_number: nextSessionNumber };
             const { todayCompleted: tc, nextUnlockAt: nua } = getTodayCompletedAndNextUnlock(p);
-            const active = summaryOnly ? toSummaryPlan(raced) : raced;
+            const active = toSummaryPlan(raced);
             const data = { progress: p, active, idempotent: true, today_completed: tc, ...(nua != null && { next_unlock_at: nua }) };
             return ok(data, data);
           }
@@ -679,7 +678,7 @@ export async function POST(req: NextRequest) {
       console.info('[session/create] perf', timings);
     }
 
-    const active = summaryOnly ? toSummaryPlan(plan) : plan;
+    const active = toSummaryPlan(plan);
     const data = { progress: finalProgress, active, idempotent: false, today_completed: tc, ...(nua != null && { next_unlock_at: nua }) };
     return ok(data, isDebug ? { ...data, timings } : data);
   } catch (err) {

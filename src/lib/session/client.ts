@@ -202,6 +202,15 @@ export async function getSessionPlan(
   return sessionFetch<SessionPlan>(path, token, { method: 'GET' });
 }
 
+/** GET /api/session/plan-detail?session_number=N — 플레이어용 전체 plan_json (media, cues, metadata) */
+export async function getSessionPlanDetail(
+  token: string,
+  sessionNumber: number
+): Promise<ApiResult<SessionPlanJson>> {
+  const path = `/api/session/plan-detail?session_number=${encodeURIComponent(sessionNumber)}`;
+  return sessionFetch<SessionPlanJson>(path, token, { method: 'GET' });
+}
+
 /** GET /api/session/plan-summary — 패널 첫 렌더용 경량 조회 (segments만) */
 export type PlanSummaryResponse = {
   session_number: number;
