@@ -21,12 +21,17 @@ const ADAPTIVE_WINDOW = 2;
 
 export type AdaptiveReason = 'pain_flare' | 'low_tolerance' | 'high_tolerance' | 'none';
 
+/** PR-ALG-05: difficulty cap when regression (template metadata) */
+export type DifficultyCap = 'low' | 'medium' | 'high';
+
 export type AdaptiveModifiers = {
   reason: AdaptiveReason;
   targetLevelDelta: -1 | 0 | 1;
   forceShort?: boolean;
   forceRecovery?: boolean;
   avoidExerciseKeys: string[];
+  /** PR-ALG-05: exclude templates with difficulty above this */
+  maxDifficultyCap?: DifficultyCap;
   signalSummary?: {
     avg_rpe?: number | null;
     avg_pain_after?: number | null;
@@ -154,13 +159,21 @@ function getProblemExerciseKeys(
   return [...new Set(problemKeys)].sort();
 }
 
+/** PR-ALG-05: deep_v3 context for adaptive weighting */
+export type AdaptiveContext = {
+  priority_vector?: Record<string, number> | null;
+  pain_mode?: 'none' | 'caution' | 'protected' | null;
+};
+
 /**
  * Deterministic. Priority: pain_flare > low_tolerance > high_tolerance > none.
+ * PR-ALG-05: ctx.pain_mode=protected → regression bias; ctx.pain_mode=none + high_tolerance → progression.
  */
 export function deriveAdaptiveModifiers(
   sessionFeedback: SessionFeedbackRow[],
   exerciseFeedback: ExerciseFeedbackRow[],
-  sourceSessionNumbers: number[]
+  sourceSessionNumbers: number[],
+  ctx?: AdaptiveContext | null
 ): AdaptiveModifiers {
   const none: AdaptiveModifiers = {
     reason: 'none',
@@ -192,23 +205,34 @@ export function deriveAdaptiveModifiers(
     replace_count: replaceCount,
   };
 
+  const painMode = ctx?.pain_mode ?? 'none';
+  const isProtected = painMode === 'protected';
+  const isCaution = painMode === 'caution';
+
+  // PR-ALG-05: protected → lower thresholds for regression
+  const painAfterThreshold = isProtected ? 4 : HIGH_PAIN_AFTER;
+  const painDeltaThreshold = isProtected ? 1.5 : HIGH_PAIN_DELTA;
+  const lowCompletionThreshold = isProtected ? 0.75 : LOW_COMPLETION;
+
   const hasPainFlare =
-    (avgPainAfter != null && avgPainAfter >= HIGH_PAIN_AFTER) ||
+    (avgPainAfter != null && avgPainAfter >= painAfterThreshold) ||
     exerciseFeedback.some(
       (e) =>
         sourceSessionNumbers.includes(e.session_number) &&
         typeof e.pain_delta === 'number' &&
-        e.pain_delta >= HIGH_PAIN_DELTA
+        e.pain_delta >= painDeltaThreshold
     );
 
   const hasLowTolerance =
-    (avgCompletion != null && avgCompletion < LOW_COMPLETION) ||
+    (avgCompletion != null && avgCompletion < lowCompletionThreshold) ||
     inWindow.some((f) => f.difficulty_feedback === 'too_hard') ||
     (avgRpe != null && avgRpe >= HIGH_RPE) ||
     skipCount + replaceCount >= PROBLEM_EXERCISE_THRESHOLD;
 
+  // PR-ALG-05: none only → allow progression; protected/caution block
   const hasHighTolerance =
     !hasPainFlare &&
+    painMode === 'none' &&
     inWindow.length >= 2 &&
     inWindow.every((f) => (f.completion_ratio ?? 1) >= HIGH_COMPLETION) &&
     (avgRpe == null || avgRpe <= LOW_RPE) &&
@@ -217,6 +241,10 @@ export function deriveAdaptiveModifiers(
 
   const problemKeys = getProblemExerciseKeys(exerciseFeedback, sourceSessionNumbers);
 
+  // PR-ALG-05: regression → maxDifficultyCap by pain_mode
+  const regressionCap: DifficultyCap | undefined =
+    isProtected ? 'low' : isCaution ? 'medium' : undefined;
+
   if (hasPainFlare) {
     return {
       reason: 'pain_flare',
@@ -224,6 +252,7 @@ export function deriveAdaptiveModifiers(
       forceShort: true,
       forceRecovery: true,
       avoidExerciseKeys: problemKeys,
+      ...(regressionCap && { maxDifficultyCap: regressionCap }),
       signalSummary,
     };
   }
@@ -235,6 +264,7 @@ export function deriveAdaptiveModifiers(
       forceShort: true,
       forceRecovery: false,
       avoidExerciseKeys: problemKeys,
+      ...(regressionCap && { maxDifficultyCap: regressionCap }),
       signalSummary,
     };
   }
@@ -263,6 +293,8 @@ export type AdaptationTrace = {
     force_short?: boolean;
     force_recovery?: boolean;
     avoid_exercise_keys?: string[];
+    /** PR-ALG-05: exclude templates with difficulty above this */
+    max_difficulty_cap?: DifficultyCap;
   };
   signal_summary?: {
     avg_rpe?: number | null;
@@ -271,11 +303,15 @@ export type AdaptationTrace = {
     skip_count?: number;
     replace_count?: number;
   };
+  /** PR-ALG-05: deep_v3 context used */
+  pain_mode?: 'none' | 'caution' | 'protected';
+  priority_vector_keys?: string[];
 };
 
 export function buildAdaptationTrace(
   modifiers: AdaptiveModifiers,
-  sourceSessionNumbers: number[]
+  sourceSessionNumbers: number[],
+  ctx?: AdaptiveContext | null
 ): AdaptationTrace {
   const trace: AdaptationTrace = {
     reason: modifiers.reason,
@@ -290,7 +326,14 @@ export function buildAdaptationTrace(
   if (modifiers.avoidExerciseKeys.length > 0) {
     trace.applied_modifiers.avoid_exercise_keys = modifiers.avoidExerciseKeys;
   }
+  if (modifiers.maxDifficultyCap) {
+    trace.applied_modifiers.max_difficulty_cap = modifiers.maxDifficultyCap;
+  }
   if (modifiers.signalSummary) trace.signal_summary = modifiers.signalSummary;
+  if (ctx?.pain_mode) trace.pain_mode = ctx.pain_mode;
+  if (ctx?.priority_vector && Object.keys(ctx.priority_vector).length > 0) {
+    trace.priority_vector_keys = Object.keys(ctx.priority_vector);
+  }
 
   return trace;
 }

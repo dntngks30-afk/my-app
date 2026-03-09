@@ -123,5 +123,36 @@ const withProblems = deriveAdaptiveModifiers(
 );
 ok('pain_flare includes problem exercise in avoid', withProblems.avoidExerciseKeys.includes('bad-tpl'));
 
+// PR-ALG-05: pain_mode=protected → regression bias
+const protectedPainFlare = deriveAdaptiveModifiers(
+  [{ session_number: 2, pain_after: 4 }],
+  [],
+  [2],
+  { pain_mode: 'protected' }
+);
+ok('protected: pain_after 4 triggers pain_flare', protectedPainFlare.reason === 'pain_flare');
+ok('protected pain_flare has maxDifficultyCap low', protectedPainFlare.maxDifficultyCap === 'low');
+
+// PR-ALG-05: pain_mode=caution → regression with medium cap
+const cautionLowTol = deriveAdaptiveModifiers(
+  [{ session_number: 2, completion_ratio: 0.5 }],
+  [],
+  [2],
+  { pain_mode: 'caution' }
+);
+ok('caution low_tolerance has maxDifficultyCap medium', cautionLowTol.maxDifficultyCap === 'medium');
+
+// PR-ALG-05: pain_mode=protected blocks high_tolerance progression
+const protectedHighCompletion = deriveAdaptiveModifiers(
+  [
+    { session_number: 2, completion_ratio: 0.95, overall_rpe: 3, pain_after: 1 },
+    { session_number: 1, completion_ratio: 0.92, overall_rpe: 4, pain_after: 0 },
+  ],
+  [],
+  [1, 2],
+  { pain_mode: 'protected' }
+);
+ok('protected blocks high_tolerance (returns none)', protectedHighCompletion.reason === 'none');
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

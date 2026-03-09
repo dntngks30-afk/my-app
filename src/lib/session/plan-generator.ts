@@ -62,6 +62,29 @@ function isReleaseEligible(t: SessionTemplateRow): boolean {
 const MIN_CANDIDATES_FOR_STRICT_AVOID = 3;
 const SHORT_TOTAL_ITEM_CAP = 4;
 
+/** PR-ALG-05: difficulty order for cap (low < medium < high) */
+const DIFFICULTY_ORDER: Record<string, number> = { low: 1, medium: 2, high: 3 };
+
+function isDifficultyAboveCap(
+  templateDifficulty: string | null | undefined,
+  cap: 'low' | 'medium' | 'high'
+): boolean {
+  if (!templateDifficulty || !(templateDifficulty in DIFFICULTY_ORDER)) return false;
+  const tOrder = DIFFICULTY_ORDER[templateDifficulty] ?? 0;
+  const capOrder = DIFFICULTY_ORDER[cap] ?? 3;
+  return tOrder > capOrder;
+}
+
+/** PR-ALG-05: template excluded by pain_mode? (avoid_if_pain_mode) */
+function isExcludedByPainMode(
+  template: SessionTemplateRow,
+  painMode?: 'none' | 'caution' | 'protected' | null
+): boolean {
+  if (!painMode || painMode === 'none') return false;
+  const avoid = template.avoid_if_pain_mode ?? [];
+  return avoid.includes(painMode);
+}
+
 export type ConditionMood = 'good' | 'ok' | 'bad';
 export type TimeBudget = 'short' | 'normal';
 
@@ -85,12 +108,14 @@ export type PlanGeneratorInput = {
   red_flags?: boolean;
   /** PR-C: safety_mode → maxLevel cap. red=1, yellow=2, none=3 */
   safety_mode?: 'red' | 'yellow' | 'none';
-  /** PR-P2-3: adaptive overlay from recent feedback */
+  /** PR-P2-3: adaptive overlay from recent feedback. PR-ALG-05: maxDifficultyCap */
   adaptiveOverlay?: {
     targetLevelDelta?: -1 | 0 | 1;
     forceShort?: boolean;
     forceRecovery?: boolean;
     avoidTemplateIds?: string[];
+    /** PR-ALG-05: exclude templates with difficulty above this (metadata) */
+    maxDifficultyCap?: 'low' | 'medium' | 'high';
   };
   /** PR-ALG-02: deep_v3 additive (optional) */
   primary_type?: string;
@@ -339,11 +364,15 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const extendedPainFlags = [...input.painFlags, ...painExtraAvoid];
   const excludeSet = buildExcludeSet(input.avoid, extendedPainFlags);
   const avoidIds = new Set(input.adaptiveOverlay?.avoidTemplateIds ?? []);
+  const maxDifficultyCap = input.adaptiveOverlay?.maxDifficultyCap;
+
   const candidates = templates.filter(
     (t) =>
       !hasContraindicationOverlap(t.contraindications, excludeSet) &&
       t.level <= maxLevel &&
-      !avoidIds.has(t.id)
+      !avoidIds.has(t.id) &&
+      !isExcludedByPainMode(t, input.pain_mode) &&
+      !(maxDifficultyCap && isDifficultyAboveCap(t.difficulty ?? null, maxDifficultyCap))
   );
 
   const scored = candidates.map((t) => ({

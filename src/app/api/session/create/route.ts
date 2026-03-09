@@ -450,10 +450,15 @@ export async function POST(req: NextRequest) {
     const { sessionFeedback, exerciseFeedback, sourceSessionNumbers } =
       await loadRecentAdaptiveSignals(userId, nextSessionNumber);
     timings.adaptive_load_ms = Math.round(performance.now() - tAdaptive);
+    const adaptiveCtx = {
+      priority_vector: deepSummary.priority_vector ?? null,
+      pain_mode: deepSummary.pain_mode ?? null,
+    };
     const modifiers = deriveAdaptiveModifiers(
       sessionFeedback,
       exerciseFeedback,
-      sourceSessionNumbers
+      sourceSessionNumbers,
+      adaptiveCtx
     );
 
     const adaptiveOverlay =
@@ -465,6 +470,9 @@ export async function POST(req: NextRequest) {
             ...(modifiers.forceRecovery && { forceRecovery: true }),
             ...(modifiers.avoidExerciseKeys.length > 0 && {
               avoidTemplateIds: modifiers.avoidExerciseKeys,
+            }),
+            ...(modifiers.maxDifficultyCap && {
+              maxDifficultyCap: modifiers.maxDifficultyCap,
             }),
           };
 
@@ -548,7 +556,11 @@ export async function POST(req: NextRequest) {
       phasePolicy,
       phasePolicyReason,
     });
-    const adaptationTrace = buildAdaptationTrace(modifiers, sourceSessionNumbers);
+    const adaptationTrace = buildAdaptationTrace(
+      modifiers,
+      sourceSessionNumbers,
+      adaptiveCtx
+    );
     const generationTrace = {
       ...baseTrace,
       adaptation: adaptationTrace,
