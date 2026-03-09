@@ -1,38 +1,15 @@
 /**
  * active-lite 데이터 조회 로직 — route와 bootstrap에서 공유
  * Auth는 호출자가 처리. 이 모듈은 userId + supabase만 사용.
+ *
+ * Read-only: progress insert/update, event log 제거 (홈 첫 진입 critical path 경량화).
+ * progress 없으면 safe default 반환. 생성은 session/create 또는 session/profile에서 수행.
  */
 
-import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { getTodayCompletedAndNextUnlock } from '@/lib/time/kst';
-import { logSessionEvent } from '@/lib/session-events';
 import type { ActiveSessionLiteResponse } from './client';
 
 const DEFAULT_TOTAL_SESSIONS = 16;
-
-const FREQUENCY_TO_TOTAL: Record<number, number> = {
-  2: 8,
-  3: 12,
-  4: 16,
-  5: 20,
-};
-
-async function resolveTotalSessions(
-  supabase: Awaited<ReturnType<typeof getServerSupabaseAdmin>>,
-  userId: string
-): Promise<{ totalSessions: number }> {
-  const { data } = await supabase
-    .from('session_user_profile')
-    .select('target_frequency')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  const freq = data?.target_frequency;
-  if (typeof freq === 'number' && freq in FREQUENCY_TO_TOTAL) {
-    return { totalSessions: FREQUENCY_TO_TOTAL[freq] };
-  }
-  return { totalSessions: DEFAULT_TOTAL_SESSIONS };
-}
 
 export type ActiveLiteSummary = { session_number: number; status: string };
 
@@ -40,10 +17,19 @@ export type FetchActiveLiteResult =
   | { ok: true; data: ActiveSessionLiteResponse }
   | { ok: false; status: number; code: string; message: string };
 
+export type FetchActiveLiteOpts = {
+  /** debug 시 단계별 ms 기록 (progress_read_ms, session_lookup_ms, write_ms) */
+  timings?: Record<string, number>;
+};
+
 export async function fetchActiveLiteData(
-  supabase: Awaited<ReturnType<typeof getServerSupabaseAdmin>>,
-  userId: string
+  supabase: Awaited<ReturnType<typeof import('@/lib/supabase').getServerSupabaseAdmin>>,
+  userId: string,
+  opts?: FetchActiveLiteOpts
 ): Promise<FetchActiveLiteResult> {
+  const timings = opts?.timings;
+  const t0 = timings ? performance.now() : 0;
+
   try {
     const [progressRes, planStatusRes] = await Promise.all([
       supabase
@@ -53,6 +39,9 @@ export async function fetchActiveLiteData(
         .maybeSingle(),
       supabase.from('users').select('plan_status').eq('id', userId).maybeSingle(),
     ]);
+
+    if (timings) timings.progress_read_ms = Math.round(performance.now() - t0);
+    if (timings) timings.write_ms = 0;
 
     const planStatus = (planStatusRes.data as { plan_status?: string } | null)?.plan_status ?? null;
     let progress = progressRes.data;
@@ -65,60 +54,14 @@ export async function fetchActiveLiteData(
         active_session_number: null,
         last_completed_day_key: null,
       };
-      void resolveTotalSessions(supabase, userId)
-        .then((resolved) =>
-          supabase
-            .from('session_program_progress')
-            .insert({
-              user_id: userId,
-              total_sessions: resolved.totalSessions,
-              completed_sessions: 0,
-              active_session_number: null,
-            })
-            .select('user_id, total_sessions, completed_sessions, active_session_number, last_completed_day_key')
-            .single()
-        )
-        .then(({ error: insertErr }) => {
-          if (insertErr) {
-            console.error('[active-lite-data] progress init deferred failed', insertErr);
-            void logSessionEvent(supabase, {
-              userId,
-              eventType: 'session_active_read',
-              status: 'error',
-              code: 'DB_ERROR',
-              meta: { message_short: 'progress init deferred failed' },
-            });
-          }
-        });
-    } else {
-      const activeSessionNumber = progress.active_session_number;
-      if (activeSessionNumber === null) {
-        const completed = progress.completed_sessions ?? 0;
-        const totalSessions = progress.total_sessions;
-        void resolveTotalSessions(supabase, userId).then((resolved) => {
-          const safeToSync =
-            resolved.totalSessions >= completed && totalSessions !== resolved.totalSessions;
-          if (safeToSync) {
-            void supabase
-              .from('session_program_progress')
-              .update({ total_sessions: resolved.totalSessions })
-              .eq('user_id', userId)
-              .then(() => {});
-          }
-        });
-      }
     }
 
     const activeSessionNumber = progress.active_session_number;
     const { todayCompleted, nextUnlockAt } = getTodayCompletedAndNextUnlock(progress);
 
     if (!activeSessionNumber) {
-      void logSessionEvent(supabase, {
-        userId,
-        eventType: 'session_active_read',
-        status: 'ok',
-        meta: { has_active: false, today_completed: todayCompleted },
-      });
+      if (timings) timings.session_lookup_ms = 0;
+      if (timings) timings.extra_ms = Math.round(performance.now() - t0) - (timings.progress_read_ms ?? 0);
       return {
         ok: true,
         data: {
@@ -131,6 +74,7 @@ export async function fetchActiveLiteData(
       };
     }
 
+    const tPlan = timings ? performance.now() : 0;
     const { data: planRow, error: planErr } = await supabase
       .from('session_plans')
       .select('session_number, status')
@@ -138,25 +82,13 @@ export async function fetchActiveLiteData(
       .eq('session_number', activeSessionNumber)
       .maybeSingle();
 
+    if (timings) timings.session_lookup_ms = Math.round(performance.now() - tPlan);
+    if (timings) timings.extra_ms = Math.round(performance.now() - t0) - (timings.progress_read_ms ?? 0) - (timings.session_lookup_ms ?? 0);
+
     if (planErr) {
       console.error('[active-lite-data] plan fetch failed', planErr);
-      void logSessionEvent(supabase, {
-        userId,
-        eventType: 'session_active_read',
-        status: 'error',
-        code: 'DB_ERROR',
-        meta: { message_short: 'plan fetch failed' },
-      });
       return { ok: false, status: 500, code: 'DB_ERROR', message: '세션 플랜 조회에 실패했습니다' };
     }
-
-    void logSessionEvent(supabase, {
-      userId,
-      eventType: 'session_active_read',
-      status: 'ok',
-      sessionNumber: activeSessionNumber,
-      meta: { has_active: true, today_completed: todayCompleted },
-    });
 
     const active: ActiveLiteSummary | null = planRow
       ? { session_number: planRow.session_number, status: planRow.status ?? 'draft' }

@@ -1,12 +1,12 @@
 /**
  * GET /api/session/active-lite
  *
- * Home 초기 로드용 경량 엔드포인트. plan_json, condition 등 제외.
- * progress + today_completed + next_unlock_at + active(session_number, status)만 반환.
+ * Home 초기 로드용 경량 엔드포인트. Read-only (insert/update/event log 없음).
+ * plan_json, condition 등 제외. progress + today_completed + next_unlock_at + active만 반환.
  * 상세 plan은 패널/플레이어 오픈 시 /api/session/plan으로 별도 조회.
  *
  * Auth: Bearer token (getCurrentUserId → getClaims 우선)
- * Perf: ?debug=1 → Server-Timing + data.timings for latency breakdown.
+ * Perf: ?debug=1 → Server-Timing + data.timings for latency breakdown (write_ms=0).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -32,6 +32,9 @@ function logTimingBreakdown(timings: Record<string, number>, path: string): void
   const lines = [
     '[session/active-lite] perf',
     `  auth_ms: ${timings.auth_ms ?? '-'}`,
+    `  progress_read_ms: ${timings.progress_read_ms ?? '-'}`,
+    `  session_lookup_ms: ${timings.session_lookup_ms ?? '-'}`,
+    `  write_ms: ${timings.write_ms ?? 0}`,
     `  total_ms: ${timings.total_ms ?? '-'}`,
     `  path: ${path}`,
   ];
@@ -51,7 +54,7 @@ export async function GET(req: NextRequest) {
     }
 
     const supabase = getServerSupabaseAdmin();
-    const result = await fetchActiveLiteData(supabase, userId);
+    const result = await fetchActiveLiteData(supabase, userId, isDebug ? { timings } : undefined);
     timings.total_ms = Math.round(performance.now() - t0);
 
     if (!result.ok) {

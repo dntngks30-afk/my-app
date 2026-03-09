@@ -39,12 +39,12 @@ export async function GET(req: NextRequest) {
 
     const supabase = getServerSupabaseAdmin();
 
-    let progress_read_ms = 0;
-    const extra_ms = 0;
-
-    const tProgressStart = debug ? performance.now() : 0;
-    const activeResult = await fetchActiveLiteData(supabase, userId);
-    if (debug) progress_read_ms = Math.round(performance.now() - tProgressStart);
+    const timingsObj: Record<string, number> = {};
+    const activeResult = await fetchActiveLiteData(
+      supabase,
+      userId,
+      debug ? { timings: timingsObj } : undefined
+    );
 
     if (!activeResult.ok) {
       return fail(
@@ -60,18 +60,12 @@ export async function GET(req: NextRequest) {
 
     if (debug) {
       const total_ms = Math.round(performance.now() - t0);
-      const session_lookup_ms = 0;
-      const map_data_ms = 0;
-      const user_ms = 0;
-      const write_ms = 0;
       const timings = {
         auth_ms,
-        user_ms,
-        progress_read_ms,
-        session_lookup_ms,
-        map_data_ms,
-        extra_ms,
-        write_ms,
+        progress_read_ms: timingsObj.progress_read_ms ?? 0,
+        session_lookup_ms: timingsObj.session_lookup_ms ?? 0,
+        extra_ms: timingsObj.extra_ms ?? 0,
+        write_ms: timingsObj.write_ms ?? 0,
         total_ms,
       };
       console.log('[bootstrap-timing]', timings);
