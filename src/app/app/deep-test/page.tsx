@@ -15,12 +15,14 @@ interface AttemptInfo {
   id: string;
   status: string;
   answers: Record<string, unknown>;
+  scoringVersion?: string;
 }
 
 export default function DeepTestStartPage() {
   const router = useRouter();
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'auth' | 'paywall'>('loading');
   const [attempt, setAttempt] = useState<AttemptInfo | null>(null);
+  const [hasV2Final, setHasV2Final] = useState<boolean | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
 
   useEffect(() => {
@@ -61,10 +63,25 @@ export default function DeepTestStartPage() {
         }
 
         const data = await res.json();
-        if (data?.source === 'deep' && data?.attempt) {
-          setAttempt(data.attempt);
+        const att = data?.source === 'deep' && data?.attempt ? data.attempt : null;
+        if (att) setAttempt(att);
+
+        if (att?.status === 'draft') {
+          const latestRes = await fetch('/api/deep-test/get-latest', {
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          });
+          if (!cancelled && latestRes.ok) {
+            const latestData = await latestRes.json();
+            const v = latestData?.attempt?.scoringVersion ?? latestData?.scoring_version;
+            setHasV2Final(v === 'deep_v2');
+          } else if (!cancelled) {
+            setHasV2Final(false);
+          }
+        } else {
+          setHasV2Final(false);
         }
-        setStatus('ready');
+
+        if (!cancelled) setStatus('ready');
       } catch {
         if (!cancelled) {
           setErrorMessage('네트워크 오류가 발생했습니다.');
@@ -78,9 +95,23 @@ export default function DeepTestStartPage() {
   }, []);
 
   const hasAnswers = attempt && typeof attempt.answers === 'object' && Object.keys(attempt.answers).length > 0;
+  const isFinal = attempt?.status === 'final';
+
+  const ctaLabel =
+    isFinal
+      ? '결과 보기'
+      : hasV2Final
+        ? '재테스트 시작'
+        : hasAnswers
+          ? '이어하기'
+          : '시작하기';
 
   const handleStart = () => {
-    router.push('/app/deep-test/run');
+    if (isFinal) {
+      router.push('/app/deep-test/result');
+    } else {
+      router.push('/app/deep-test/run');
+    }
   };
 
   const nbCard = 'rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)]';
@@ -176,7 +207,7 @@ export default function DeepTestStartPage() {
               onClick={handleStart}
               className="w-full rounded-full border-2 border-slate-900 bg-slate-800 py-4 text-base font-bold text-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_rgba(15,23,42,1)]"
             >
-              {hasAnswers ? '이어하기' : '시작하기'}
+              {ctaLabel}
             </button>
           </div>
         </div>
