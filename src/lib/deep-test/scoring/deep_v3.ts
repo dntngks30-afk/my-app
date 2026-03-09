@@ -555,6 +555,7 @@ export const ACTIVE_RULE_VERSION = 'deep_v3_calibration_v1';
 export const SHADOW_COMPARE_VERSION = 'shadow_compare_v1';
 
 /** pain_mode candidate: relaxed = caution at 2+ (vs current 1+). protected unchanged. */
+/** PR-ALG-11B: relaxed_v2 = maxInt=1일 때 primary_discomfort "해당 없음"인 경우에만 none. 그 외는 active와 동일. */
 function resolvePainModeCandidate(
   answers: Record<string, DeepAnswerValue>,
   _stateVector: DeepV3StateVector,
@@ -565,10 +566,19 @@ function resolvePainModeCandidate(
   const q9 = parsePainIntensity(answers.deep_wallangel_pain_intensity, painMap);
   const q12 = parsePainIntensity(answers.deep_sls_pain_intensity, painMap);
   const maxInt = Math.max(q6, q9, q12);
+  const q5 = toString(answers.deep_basic_primary_discomfort);
+  const primaryDiscomfortNone = q5?.includes('해당 없음') ?? false;
+
   if (candidateName === 'pain_mode_relaxed') {
     if (maxInt >= 3) return 'protected';
     if (maxInt >= 2) return 'caution';
     return 'none';
+  }
+  if (candidateName === 'pain_mode_relaxed_v2') {
+    if (maxInt >= 3) return 'protected';
+    if (maxInt >= 2) return 'caution';
+    if (maxInt === 1 && primaryDiscomfortNone) return 'none';
+    return maxInt >= 1 ? 'caution' : 'none';
   }
   return resolvePainMode(answers, _stateVector);
 }

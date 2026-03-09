@@ -43,14 +43,23 @@ npx tsx scripts/deep-v3-shadow-report.mjs
 | pain-protected category에서 pain_mode_changed 발생 | **keep_shadow** |
 | protected -> caution 또는 protected -> none | **keep_shadow** |
 
-### 3.2 promote 보류 조건
+### 3.2 caution -> none 비율 구간별 판정 (PR-ALG-11B 보완)
+
+| caution -> none 비율 | 판정 |
+|---------------------|------|
+| ≤ 15% | **promote_to_active** 검토 가능 |
+| > 15% and ≤ 30% | **keep_shadow** |
+| > 30% | **adjust_candidate** |
+
+※ pain-protected category 변화 0건이 전제. 위 비율은 해당 전제 충족 시 적용.
+
+### 3.3 기타 보류 조건
 
 | 조건 | 판정 |
 |------|------|
-| caution -> none 비율 > 30% | **adjust_candidate** |
 | primary_type_changed가 high-risk persona에서 발생 | **adjust_candidate** |
 
-### 3.3 promote_to_active 검토 가능 조건
+### 3.4 promote_to_active 검토 가능 조건
 
 | 조건 | 판정 |
 |------|------|

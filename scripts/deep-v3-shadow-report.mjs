@@ -1,6 +1,7 @@
 /**
- * PR-ALG-10: Shadow analysis report
- * Run: npx tsx scripts/deep-v3-shadow-report.mjs
+ * PR-ALG-10 / PR-ALG-11B: Shadow analysis report
+ * Run: npx tsx scripts/deep-v3-shadow-report.mjs [candidate]
+ *   candidate: pain_mode_relaxed (default) | pain_mode_relaxed_v2
  * Aggregates shadow_compare from persona pack (and optionally golden fixtures).
  * Outputs: diff rate, pain_mode direction, category breakdown, apply gate recommendation.
  */
@@ -12,8 +13,14 @@ import { dirname, join } from 'path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 process.chdir(join(__dirname, '..'));
 
-const CANDIDATE_NAME = 'pain_mode_relaxed';
-const SHADOW_RULE_VERSION = 'deep_v3_pain_mode_candidate_relaxed';
+const CANDIDATE_ARG = process.argv[2] || 'pain_mode_relaxed';
+const CANDIDATE_NAME = ['pain_mode_relaxed', 'pain_mode_relaxed_v2'].includes(CANDIDATE_ARG)
+  ? CANDIDATE_ARG
+  : 'pain_mode_relaxed';
+const SHADOW_RULE_VERSION =
+  CANDIDATE_NAME === 'pain_mode_relaxed_v2'
+    ? 'deep_v3_pain_mode_candidate_relaxed_v2'
+    : 'deep_v3_pain_mode_candidate_relaxed';
 
 /** Map persona/scenario id to risk category */
 function getScenarioCategory(id) {
