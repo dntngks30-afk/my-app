@@ -6,6 +6,15 @@ import { getCachedActiveSessionLite } from '@/lib/session/active-cache';
 import { getCache, getCacheStale, isFresh } from '@/lib/cache/tabDataCache';
 import { StatsViewV2 } from './nav-v2/StatsViewV2';
 
+type ActiveLiteCache = { progress?: { completed_sessions?: number; total_sessions?: number } };
+
+function getInitialFromCache(): { completed: number; total: number; hasCache: boolean } {
+  if (typeof window === 'undefined') return { completed: 0, total: 20, hasCache: false };
+  const c = getCacheStale<ActiveLiteCache>('home.activeLite') ?? getCacheStale<{ activeLite: ActiveLiteCache }>('home.bootstrap')?.activeLite;
+  const p = c?.progress;
+  return { completed: p?.completed_sessions ?? 0, total: p?.total_sessions ?? 20, hasCache: !!p };
+}
+
 interface StatsTabContentProps {
   hideBottomNav?: boolean;
   /** Lazy fetch: only fetch when tab is first visible */
@@ -13,9 +22,9 @@ interface StatsTabContentProps {
 }
 
 export default function StatsTabContent({ hideBottomNav, isVisible = false }: StatsTabContentProps) {
-  const [completed, setCompleted] = useState(0);
-  const [total, setTotal] = useState(20);
-  const [loading, setLoading] = useState(true);
+  const [completed, setCompleted] = useState(() => getInitialFromCache().completed);
+  const [total, setTotal] = useState(() => getInitialFromCache().total);
+  const [loading, setLoading] = useState(() => !getInitialFromCache().hasCache);
   const fetchedRef = useRef(false);
 
   useEffect(() => {
@@ -23,8 +32,8 @@ export default function StatsTabContent({ hideBottomNav, isVisible = false }: St
     let cancelled = false;
 
     if (fetchedRef.current) {
-      const stale = getCacheStale<{ progress?: { completed_sessions?: number; total_sessions?: number } }>('home.activeLite');
-      if (stale?.progress && !isFresh('home.activeLite')) {
+      const stale = getCacheStale<ActiveLiteCache>('home.activeLite') ?? getCacheStale<{ activeLite: ActiveLiteCache }>('home.bootstrap')?.activeLite;
+      if (!isFresh('home.activeLite') || !stale?.progress) {
         void getSessionSafe().then(({ session }) => {
           if (session?.access_token && !cancelled) {
             void getCachedActiveSessionLite(session.access_token).then((result) => {
@@ -41,23 +50,26 @@ export default function StatsTabContent({ hideBottomNav, isVisible = false }: St
     }
 
     fetchedRef.current = true;
-    const cached = getCache<{ progress?: { completed_sessions?: number; total_sessions?: number } }>('home.activeLite')
-      ?? getCacheStale<{ progress?: { completed_sessions?: number; total_sessions?: number } }>('home.activeLite');
+    const cached = getCache<ActiveLiteCache>('home.activeLite')
+      ?? getCacheStale<ActiveLiteCache>('home.activeLite')
+      ?? getCacheStale<{ activeLite: ActiveLiteCache }>('home.bootstrap')?.activeLite;
     if (cached?.progress) {
       setCompleted(cached.progress.completed_sessions ?? 0);
       setTotal(cached.progress.total_sessions ?? 20);
       setLoading(false);
-      void getSessionSafe().then(({ session }) => {
-        if (session?.access_token && !cancelled) {
-          void getCachedActiveSessionLite(session.access_token).then((result) => {
-            if (!cancelled && result.ok && result.data.progress) {
-              const p = result.data.progress;
-              setCompleted(p.completed_sessions ?? 0);
-              setTotal(p.total_sessions ?? 20);
-            }
-          });
-        }
-      });
+      if (!isFresh('home.activeLite')) {
+        void getSessionSafe().then(({ session }) => {
+          if (session?.access_token && !cancelled) {
+            void getCachedActiveSessionLite(session.access_token).then((result) => {
+              if (!cancelled && result.ok && result.data.progress) {
+                const p = result.data.progress;
+                setCompleted(p.completed_sessions ?? 0);
+                setTotal(p.total_sessions ?? 20);
+              }
+            });
+          }
+        });
+      }
       return () => { cancelled = true };
     }
 

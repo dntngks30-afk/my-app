@@ -6,6 +6,15 @@ import { getCachedActiveSessionLite } from '@/lib/session/active-cache';
 import { getCache, getCacheStale, isFresh } from '@/lib/cache/tabDataCache';
 import { ProfileViewV2 } from './nav-v2/ProfileViewV2';
 
+type ActiveLiteCache = { progress?: { completed_sessions?: number } };
+
+function getInitialFromCache(): { completed: number; hasCache: boolean } {
+  if (typeof window === 'undefined') return { completed: 0, hasCache: false };
+  const c = getCacheStale<ActiveLiteCache>('home.activeLite') ?? getCacheStale<{ activeLite: ActiveLiteCache }>('home.bootstrap')?.activeLite;
+  const p = c?.progress;
+  return { completed: p?.completed_sessions ?? 0, hasCache: !!p };
+}
+
 interface ProfileTabContentProps {
   hideBottomNav?: boolean;
   /** Lazy fetch: only fetch when tab is first visible */
@@ -13,8 +22,8 @@ interface ProfileTabContentProps {
 }
 
 export default function ProfileTabContent({ hideBottomNav, isVisible = false }: ProfileTabContentProps) {
-  const [completed, setCompleted] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [completed, setCompleted] = useState(() => getInitialFromCache().completed);
+  const [loading, setLoading] = useState(() => !getInitialFromCache().hasCache);
   const fetchedRef = useRef(false);
 
   useEffect(() => {
@@ -22,8 +31,8 @@ export default function ProfileTabContent({ hideBottomNav, isVisible = false }: 
     let cancelled = false;
 
     if (fetchedRef.current) {
-      const stale = getCacheStale<{ progress?: { completed_sessions?: number } }>('home.activeLite');
-      if (stale?.progress && !isFresh('home.activeLite')) {
+      const stale = getCacheStale<ActiveLiteCache>('home.activeLite') ?? getCacheStale<{ activeLite: ActiveLiteCache }>('home.bootstrap')?.activeLite;
+      if (!isFresh('home.activeLite') || !stale?.progress) {
         void getSessionSafe().then(({ session }) => {
           if (session?.access_token && !cancelled) {
             void getCachedActiveSessionLite(session.access_token).then((result) => {
@@ -38,20 +47,23 @@ export default function ProfileTabContent({ hideBottomNav, isVisible = false }: 
     }
 
     fetchedRef.current = true;
-    const cached = getCache<{ progress?: { completed_sessions?: number } }>('home.activeLite')
-      ?? getCacheStale<{ progress?: { completed_sessions?: number } }>('home.activeLite');
+    const cached = getCache<ActiveLiteCache>('home.activeLite')
+      ?? getCacheStale<ActiveLiteCache>('home.activeLite')
+      ?? getCacheStale<{ activeLite: ActiveLiteCache }>('home.bootstrap')?.activeLite;
     if (cached?.progress) {
       setCompleted(cached.progress.completed_sessions ?? 0);
       setLoading(false);
-      void getSessionSafe().then(({ session }) => {
-        if (session?.access_token && !cancelled) {
-          void getCachedActiveSessionLite(session.access_token).then((result) => {
-            if (!cancelled && result.ok && result.data.progress) {
-              setCompleted(result.data.progress.completed_sessions ?? 0);
-            }
-          });
-        }
-      });
+      if (!isFresh('home.activeLite')) {
+        void getSessionSafe().then(({ session }) => {
+          if (session?.access_token && !cancelled) {
+            void getCachedActiveSessionLite(session.access_token).then((result) => {
+              if (!cancelled && result.ok && result.data.progress) {
+                setCompleted(result.data.progress.completed_sessions ?? 0);
+              }
+            });
+          }
+        });
+      }
       return () => { cancelled = true };
     }
 
