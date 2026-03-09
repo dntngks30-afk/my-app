@@ -48,6 +48,7 @@ import {
   type PhaseLengths,
   type PhasePolicyOptions,
 } from '@/lib/session/phase';
+import { getCachedPlan, setCachedPlan } from '@/lib/session-gen-cache';
 
 const ROUTE_CREATE = '/api/session/create';
 
@@ -220,7 +221,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const isDebug = body.debug === true;
+    const isDebug = body.debug === true || new URL(req.url ?? '').searchParams.get('debug') === '1';
 
     const conditionMood: ConditionMood = (['good', 'ok', 'bad'] as const).includes(
       body.condition_mood as ConditionMood
@@ -247,6 +248,7 @@ export async function POST(req: NextRequest) {
       .select('*')
       .eq('user_id', userId)
       .maybeSingle();
+    timings.progress_read_ms = Math.round(performance.now() - tProgress);
 
     if (!progress) {
       const resolved = await resolveTotalSessions(supabase, userId);
@@ -383,7 +385,9 @@ export async function POST(req: NextRequest) {
 
     // ── [NEW] Deep Result 요약 로드 (next 생성 시점에만) ──────────────────────
     // 성능 가드: SELECT 5개 컬럼, LIMIT 1, 재계산 없음
+    const tDeep = performance.now();
     const deepSummary = await loadSessionDeepSummary(userId);
+    timings.deep_profile_ms = Math.round(performance.now() - tDeep);
 
     if (!deepSummary) {
       void logSessionEvent(supabase, {
@@ -464,28 +468,51 @@ export async function POST(req: NextRequest) {
             }),
           };
 
-    const tGen = performance.now();
-    const planJson = await buildSessionPlanJson({
+    const cacheInput = {
+      userId,
       sessionNumber: nextSessionNumber,
-      totalSessions: progress.total_sessions,
+      totalSessions: progress.total_sessions ?? DEFAULT_TOTAL_SESSIONS,
       phase,
       theme,
       timeBudget,
       conditionMood,
-      focus: deepSummary.focus,
-      avoid: deepSummary.avoid,
+      focus: deepSummary.focus ?? [],
+      avoid: deepSummary.avoid ?? [],
       painFlags,
       usedTemplateIds,
-      resultType: deepSummary.result_type,
-      confidence: deepSummary.effective_confidence ?? deepSummary.confidence,
-      scoringVersion: deepSummary.scoring_version,
-      deep_level: deepSummary.deep_level,
-      pain_risk: deepSummary.pain_risk,
-      red_flags: deepSummary.red_flags,
-      safety_mode: deepSummary.safety_mode,
-      adaptiveOverlay,
-    });
+      adaptiveOverlay: adaptiveOverlay ?? undefined,
+    };
+
+    const tGen = performance.now();
+    let planJson = getCachedPlan(cacheInput);
+    if (!planJson) {
+      planJson = await buildSessionPlanJson({
+        sessionNumber: nextSessionNumber,
+        totalSessions: progress.total_sessions,
+        phase,
+        theme,
+        timeBudget,
+        conditionMood,
+        focus: deepSummary.focus,
+        avoid: deepSummary.avoid,
+        painFlags,
+        usedTemplateIds,
+        resultType: deepSummary.result_type,
+        confidence: deepSummary.effective_confidence ?? deepSummary.confidence,
+        scoringVersion: deepSummary.scoring_version,
+        deep_level: deepSummary.deep_level,
+        pain_risk: deepSummary.pain_risk,
+        red_flags: deepSummary.red_flags,
+        safety_mode: deepSummary.safety_mode,
+        adaptiveOverlay,
+      });
+      setCachedPlan(cacheInput, planJson as Record<string, unknown>);
+    }
     timings.generation_ms = Math.round(performance.now() - tGen);
+
+    const tSer = performance.now();
+    JSON.stringify(planJson);
+    timings.serialization_ms = Math.round(performance.now() - tSer);
     const condition = {
       condition_mood: conditionMood,
       time_budget: timeBudget,
@@ -680,7 +707,7 @@ export async function POST(req: NextRequest) {
 
     const active = toSummaryPlan(plan);
     const data = { progress: finalProgress, active, idempotent: false, today_completed: tc, ...(nua != null && { next_unlock_at: nua }) };
-    return ok(data, isDebug ? { ...data, timings } : data);
+    return ok(data, isDebug ? { debug: timings } : undefined);
   } catch (err) {
     console.error('[session/create]', err);
     try {
