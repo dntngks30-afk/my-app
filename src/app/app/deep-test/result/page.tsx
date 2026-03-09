@@ -39,6 +39,8 @@ interface DeepResult {
           balance_score?: number;
           pain_risk?: number;
         };
+        priority_vector?: Record<string, number>;
+        pain_mode?: 'none' | 'caution' | 'protected';
       };
     };
     resultType?: string | null;
@@ -262,6 +264,8 @@ export default function DeepTestResultPage() {
           algorithmScores={derived?.algorithm_scores}
           scoringVersion={result?.scoring_version}
           attemptId={att?.id}
+          priorityVector={derived?.priority_vector}
+          painMode={derived?.pain_mode}
           variant="app"
           showPwaSection
           isStandalone={isStandalone}
