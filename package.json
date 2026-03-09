@@ -18,7 +18,9 @@
     "test:plan-generator": "npx tsx scripts/plan-generator-smoke.mjs",
     "test:priority-layer": "npx tsx scripts/priority-layer-smoke.mjs",
     "test:phase-policy": "npx tsx scripts/phase-policy-test.mjs",
-    "test:evaluation-trace": "npx tsx scripts/evaluation-trace-smoke.mjs"
+    "test:evaluation-trace": "npx tsx scripts/evaluation-trace-smoke.mjs",
+    "test:deep-v3-persona": "npx tsx scripts/deep-v3-persona-check.mjs",
+    "test:session-scenario": "npx tsx scripts/session-scenario-check.mjs"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
