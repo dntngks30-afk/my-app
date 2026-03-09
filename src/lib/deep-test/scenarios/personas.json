@@ -674,5 +674,36 @@
       "avoided_characteristics": [],
       "expected_session_bias": "recovery"
     }
+  },
+  {
+    "id": "stable-low-pain",
+    "label": "안정형 경미통증 (PR-ALG-12B)",
+    "description": "maxInt=1, primary 해당 없음, 품질 양호. shadow candidate v2/v3 완화 검증용",
+    "input": {
+      "deep_basic_age": 32,
+      "deep_basic_gender": "여",
+      "deep_basic_experience": "지금도 자주함",
+      "deep_basic_workstyle": "균형",
+      "deep_basic_primary_discomfort": "해당 없음",
+      "deep_squat_pain_intensity": "약간(0~3)",
+      "deep_squat_pain_location": [],
+      "deep_squat_knee_alignment": "발바닥이 바닥에 잘 붙은 채로 편하게 내려가서 2–3초 유지 가능",
+      "deep_wallangel_pain_intensity": "없음",
+      "deep_wallangel_pain_location": [],
+      "deep_wallangel_quality": "문제 없음",
+      "deep_sls_pain_intensity": "없음",
+      "deep_sls_pain_location": [],
+      "deep_sls_quality": "10초 안정적으로 가능"
+    },
+    "expected_analysis": {
+      "primary_type": "STABLE",
+      "pain_mode": "caution",
+      "priority_vector_contains": []
+    },
+    "expected_plan_hints": {
+      "preferred_target_vectors": ["core_control", "full_body_reset"],
+      "avoided_characteristics": [],
+      "expected_session_bias": "balanced"
+    }
   }
 ]
