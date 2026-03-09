@@ -7,6 +7,13 @@
  * @module workout-routine/exercise-templates
  */
 
+/** PR-ALG-04: session phase */
+export type TemplatePhase = 'prep' | 'main' | 'accessory' | 'cooldown';
+/** PR-ALG-04: 동작 난이도 (level과 별개) */
+export type TemplateDifficulty = 'low' | 'medium' | 'high';
+/** PR-ALG-04: pain_mode에서 제외할 때 */
+export type AvoidPainMode = 'caution' | 'protected';
+
 export interface ExerciseTemplate {
   /** Unique identifier (M01–M28) */
   id: string;
@@ -20,6 +27,16 @@ export interface ExerciseTemplate {
   avoid_tags: readonly string[];
   /** Optional video URL for instruction */
   videoUrl: string | null;
+  /** PR-ALG-04: 세션 phase (prep/main/accessory/cooldown) */
+  phase?: TemplatePhase;
+  /** PR-ALG-04: priority_vector axis 매칭용 (lower_stability, trunk_control 등) */
+  target_vector?: readonly string[];
+  /** PR-ALG-04: 동작 난이도 (level과 별개) */
+  difficulty?: TemplateDifficulty;
+  /** PR-ALG-04: 해당 pain_mode에서 제외 */
+  avoid_if_pain_mode?: readonly AvoidPainMode[];
+  /** PR-ALG-04: target_vector 내 progression 순서 1-3 */
+  progression_level?: number;
 }
 
 /**
