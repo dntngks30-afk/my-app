@@ -24,12 +24,12 @@ async function run() {
   for (const fx of fixtures) {
     try {
       const active = calculateDeepV3(fx.answers);
-      const shadow = calculateDeepV3WithCandidate(fx.answers, 'pain_mode_relaxed');
+      const shadow = calculateDeepV3WithCandidate(fx.answers, 'pain_mode_legacy');
       const compare = buildShadowCompare(
         active,
         shadow,
-        'pain_mode_relaxed',
-        'deep_v3_pain_mode_candidate_relaxed'
+        'pain_mode_legacy',
+        'deep_v3_pain_mode_legacy'
       );
 
       if (compare.active_primary_type !== active.primary_type) {
@@ -61,7 +61,7 @@ async function run() {
   let painModeChangedCount = 0;
   for (const fx of fixtures) {
     const active = calculateDeepV3(fx.answers);
-    const shadow = calculateDeepV3WithCandidate(fx.answers, 'pain_mode_relaxed');
+    const shadow = calculateDeepV3WithCandidate(fx.answers, 'pain_mode_legacy');
     if (active.pain_mode !== shadow.pain_mode) painModeChangedCount++;
   }
 
