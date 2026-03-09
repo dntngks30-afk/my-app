@@ -8,12 +8,20 @@
 import { getTemplatesForSessionPlan, type SessionTemplateRow } from '@/lib/workout-routine/exercise-templates-db';
 import { computePhase, type Phase } from './phase';
 import { buildExcludeSet, hasContraindicationOverlap } from './safety';
+import {
+  getPainModeExtraAvoid,
+  resolveSessionPriorities,
+  scoreByPriority,
+  getPainModePenalty,
+} from './priority-layer';
 
 const REPETITION_PENALTY = 100;
 const CONTRAINDICATION_PENALTY = 100;
 const MAX_LEVEL_CAP = 3;
 const PRIMARY_FOCUS_BONUS = 3;
 const SECONDARY_FOCUS_BONUS = 2;
+/** PR-ALG-03: priority_vector 기반 추가 보너스 */
+const PRIORITY_MATCH_BONUS = 2;
 const SHORT_DURATION_BONUS = 1;
 const LEVEL_MATCH_BONUS = 1;
 
@@ -139,6 +147,9 @@ export type PlanJsonOutput = {
       fallback_used: boolean;
       short_mode_applied: boolean;
       recovery_mode_applied: boolean;
+      /** PR-ALG-03 */
+      priority_applied?: boolean;
+      pain_gate_applied?: boolean;
     };
   };
   flags: { recovery: boolean; short: boolean };
@@ -148,9 +159,9 @@ export type PlanJsonOutput = {
 function scoreTemplate(
   t: SessionTemplateRow,
   input: PlanGeneratorInput,
-  finalTargetLevel: number
+  finalTargetLevel: number,
+  excludeSet: Set<string>
 ): number {
-  const excludeSet = buildExcludeSet(input.avoid, input.painFlags);
   if (hasContraindicationOverlap(t.contraindications, excludeSet)) {
     return -CONTRAINDICATION_PENALTY;
   }
@@ -160,11 +171,23 @@ function scoreTemplate(
   }
 
   let score = 0;
-  const primary = input.focus[0];
-  const secondary = input.focus[1] ?? input.focus[0];
+
+  // PR-ALG-03: priority_vector 우선, 없으면 focus fallback
+  const priorityTags = resolveSessionPriorities(input.priority_vector);
+  const effectiveFocus = priorityTags && priorityTags.length > 0 ? priorityTags : input.focus;
+  const primary = effectiveFocus[0];
+  const secondary = effectiveFocus[1] ?? effectiveFocus[0];
 
   if (primary && t.focus_tags.includes(primary)) score += PRIMARY_FOCUS_BONUS;
   if (secondary && t.focus_tags.includes(secondary)) score += SECONDARY_FOCUS_BONUS;
+
+  // PR-ALG-03: priority_vector 기반 추가 보너스
+  if (priorityTags) {
+    score += scoreByPriority(t.focus_tags, priorityTags, PRIORITY_MATCH_BONUS);
+  }
+
+  // PR-ALG-03: pain_mode 기반 penalty
+  score -= getPainModePenalty(t.contraindications, input.pain_mode);
 
   if (input.timeBudget === 'short' && t.duration_sec <= 420) score += SHORT_DURATION_BONUS;
 
@@ -311,7 +334,10 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
 
   const { finalTargetLevel, maxLevel } = computeTargetLevel(input);
 
-  const excludeSet = buildExcludeSet(input.avoid, input.painFlags);
+  // PR-ALG-03: pain_mode Safety Gate - 추가 제외 태그
+  const painExtraAvoid = getPainModeExtraAvoid(input.pain_mode);
+  const extendedPainFlags = [...input.painFlags, ...painExtraAvoid];
+  const excludeSet = buildExcludeSet(input.avoid, extendedPainFlags);
   const avoidIds = new Set(input.adaptiveOverlay?.avoidTemplateIds ?? []);
   const candidates = templates.filter(
     (t) =>
@@ -322,7 +348,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
 
   const scored = candidates.map((t) => ({
     template: t,
-    score: scoreTemplate(t, input, finalTargetLevel),
+    score: scoreTemplate(t, input, finalTargetLevel, excludeSet),
   }));
 
   let sorted = scored
@@ -458,6 +484,8 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
         fallback_used: fallbackUsed,
         short_mode_applied: isShort,
         recovery_mode_applied: isRecovery,
+        priority_applied: !!input.priority_vector,
+        pain_gate_applied: !!input.pain_mode && input.pain_mode !== 'none',
       },
     },
     flags: {

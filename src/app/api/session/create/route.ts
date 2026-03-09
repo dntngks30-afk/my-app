@@ -481,6 +481,8 @@ export async function POST(req: NextRequest) {
       painFlags,
       usedTemplateIds,
       adaptiveOverlay: adaptiveOverlay ?? undefined,
+      priority_vector: deepSummary.priority_vector ?? undefined,
+      pain_mode: deepSummary.pain_mode ?? undefined,
     };
 
     const tGen = performance.now();
