@@ -135,3 +135,37 @@ export interface DeepV2ExtendedResult extends DeepV2Result {
   avoid_tags: string[];                   // 절대 금지 태그 (예: ['knee_load', 'shoulder_overhead'])
   algorithm_scores: DeepAlgorithmScores;  // 알고리즘 내부 계산용 상세 점수 객체
 }
+
+// ==========================================
+// [PR-ALG-01] Deep V3 (상태벡터 스코어링)
+// ==========================================
+
+/** deep_v3 상태벡터 6축 */
+export type DeepV3StateVector = {
+  lower_stability: number;
+  lower_mobility: number;
+  upper_mobility: number;
+  trunk_control: number;
+  asymmetry: number;
+  deconditioned: number;
+};
+
+/** deep_v3 pain_mode: 보호모드 게이트 */
+export type DeepV3PainMode = 'none' | 'caution' | 'protected';
+
+/** deep_v3 권장 타입 (설명용) */
+export type DeepV3Type =
+  | 'LOWER_INSTABILITY'
+  | 'LOWER_MOBILITY_RESTRICTION'
+  | 'UPPER_IMMOBILITY'
+  | 'CORE_CONTROL_DEFICIT'
+  | 'DECONDITIONED'
+  | 'STABLE';
+
+/** deep_v3 derived 확장 (기존 + 신규) */
+export interface DeepV3ExtendedDerived extends DeepV2ExtendedResult {
+  primary_type?: DeepV3Type;
+  secondary_type?: DeepV3Type | null;
+  priority_vector?: DeepV3StateVector;
+  pain_mode?: DeepV3PainMode;
+}

@@ -9,6 +9,7 @@
  */
 
 import { calculateDeepV2, extendDeepV2 } from '@/lib/deep-test/scoring/deep_v2';
+import { calculateDeepV3 } from '@/lib/deep-test/scoring/deep_v3';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import {
@@ -198,6 +199,18 @@ export async function loadDeepResultForUser(
   }
 
   try {
+    if (attempt.scoring_version === 'deep_v3') {
+      const v3 = calculateDeepV3(answers);
+      const derived = v3.derived;
+      return toDeepResultInput({
+        level: derived.level,
+        focus_tags: derived.focus_tags,
+        avoid_tags: derived.avoid_tags,
+        primaryFocus: derived.primaryFocus,
+        secondaryFocus: derived.secondaryFocus,
+        finalScores: derived.finalScores,
+      });
+    }
     const v2 = calculateDeepV2(answers);
     const extended = extendDeepV2(v2);
     return toDeepResultInput(extended);

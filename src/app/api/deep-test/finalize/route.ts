@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { requireDeepAuth } from '@/lib/deep-test/auth';
 import { calculateDeepV2, extendDeepV2 } from '@/lib/deep-test/scoring/deep_v2';
+import { calculateDeepV3, resolveDeepScoringByVersion } from '@/lib/deep-test/scoring/deep_v3';
 import { ensureDeepWorkoutRoutine, maskId } from '@/lib/deep-test/ensure-deep-routine';
 import { seedDay1PlanIfRoutine } from '@/lib/deep-test/seed-day1';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
@@ -111,9 +112,9 @@ export async function POST(req: NextRequest) {
   }
 
   const scoringVersion = attempt.scoring_version ?? 'deep_v2';
-  if (scoringVersion !== 'deep_v2') {
+  if (scoringVersion !== 'deep_v2' && scoringVersion !== 'deep_v3') {
     return NextResponse.json(
-      { error: 'deep_v1은 더 이상 지원되지 않습니다. deep_v2를 사용해 주세요.' },
+      { error: 'deep_v1은 더 이상 지원되지 않습니다. deep_v2 또는 deep_v3를 사용해 주세요.' },
       { status: 410 }
     );
   }
@@ -121,25 +122,82 @@ export async function POST(req: NextRequest) {
   const answers = (attempt.answers ?? {}) as Record<string, DeepAnswerValue>;
   const now = new Date().toISOString();
 
-  const v2Result = calculateDeepV2(answers);
-  const extended = extendDeepV2(v2Result);
-  const scoresPayload = {
-    objectiveScores: v2Result.objectiveScores,
-    finalScores: v2Result.finalScores,
-    primaryFocus: v2Result.primaryFocus,
-    secondaryFocus: v2Result.secondaryFocus,
-    answeredCount: v2Result.answeredCount,
-    totalCount: v2Result.totalCount,
-    derived: extended,
-  };
+  const { useV3, v3Result } = resolveDeepScoringByVersion(scoringVersion, answers);
+
+  let scoresPayload: Record<string, unknown>;
+  let resultType: string;
+  let resultConfidence: number;
+  let resultPayload: Record<string, unknown>;
+
+  if (useV3 && v3Result) {
+    const { derived } = v3Result;
+    scoresPayload = {
+      objectiveScores: v3Result.objectiveScores,
+      finalScores: v3Result.finalScores,
+      primaryFocus: v3Result.primaryFocus,
+      secondaryFocus: v3Result.secondaryFocus,
+      answeredCount: v3Result.answeredCount,
+      totalCount: v3Result.totalCount,
+      derived: {
+        ...derived,
+        result_type: derived.result_type,
+        primaryFocus: derived.primaryFocus,
+        secondaryFocus: derived.secondaryFocus,
+        level: derived.level,
+        focus_tags: derived.focus_tags,
+        avoid_tags: derived.avoid_tags,
+        algorithm_scores: derived.algorithm_scores,
+        primary_type: v3Result.primary_type,
+        secondary_type: v3Result.secondary_type,
+        priority_vector: derived.priority_vector,
+        pain_mode: derived.pain_mode,
+      },
+    };
+    resultType = v3Result.result_type;
+    resultConfidence = v3Result.confidence;
+    resultPayload = {
+      result_type: v3Result.result_type,
+      primaryFocus: v3Result.primaryFocus,
+      secondaryFocus: v3Result.secondaryFocus,
+      objectiveScores: v3Result.objectiveScores,
+      finalScores: v3Result.finalScores,
+      confidence: v3Result.confidence,
+      answeredCount: v3Result.answeredCount,
+      totalCount: v3Result.totalCount,
+    };
+  } else {
+    const v2Result = calculateDeepV2(answers);
+    const extended = extendDeepV2(v2Result);
+    scoresPayload = {
+      objectiveScores: v2Result.objectiveScores,
+      finalScores: v2Result.finalScores,
+      primaryFocus: v2Result.primaryFocus,
+      secondaryFocus: v2Result.secondaryFocus,
+      answeredCount: v2Result.answeredCount,
+      totalCount: v2Result.totalCount,
+      derived: extended,
+    };
+    resultType = v2Result.result_type;
+    resultConfidence = v2Result.confidence;
+    resultPayload = {
+      result_type: v2Result.result_type,
+      primaryFocus: v2Result.primaryFocus,
+      secondaryFocus: v2Result.secondaryFocus,
+      objectiveScores: v2Result.objectiveScores,
+      finalScores: v2Result.finalScores,
+      confidence: v2Result.confidence,
+      answeredCount: v2Result.answeredCount,
+      totalCount: v2Result.totalCount,
+    };
+  }
 
   const { data: updated, error: updateError } = await supabase
     .from('deep_test_attempts')
     .update({
       status: 'final',
       scores: scoresPayload,
-      result_type: extended.result_type,
-      confidence: extended.confidence,
+      result_type: resultType,
+      confidence: resultConfidence,
       finalized_at: now,
       updated_at: now,
     })
@@ -181,17 +239,8 @@ export async function POST(req: NextRequest) {
   }
   return NextResponse.json({
     source: SOURCE,
-    scoring_version: 'deep_v2',
-    result: {
-      result_type: v2Result.result_type,
-      primaryFocus: v2Result.primaryFocus,
-      secondaryFocus: v2Result.secondaryFocus,
-      objectiveScores: v2Result.objectiveScores,
-      finalScores: v2Result.finalScores,
-      confidence: v2Result.confidence,
-      answeredCount: v2Result.answeredCount,
-      totalCount: v2Result.totalCount,
-    },
+    scoring_version: scoringVersion,
+    result: resultPayload,
     attempt: toAttemptPayload(updated!),
     routineCreated,
   });

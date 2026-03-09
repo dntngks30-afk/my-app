@@ -46,9 +46,9 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const scoringVersion =
     body.scoringVersion ?? body.scoring_version ?? DEFAULT_VERSION;
-  if (scoringVersion !== 'deep_v2') {
+  if (scoringVersion !== 'deep_v2' && scoringVersion !== 'deep_v3') {
     return NextResponse.json(
-      { error: '지원하는 scoring_version은 deep_v2입니다.' },
+      { error: '지원하는 scoring_version은 deep_v2 또는 deep_v3입니다.' },
       { status: 400 }
     );
   }
