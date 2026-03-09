@@ -24,6 +24,11 @@ export interface DeepSummarySnapshot {
   evidence_quality?: { answered_ratio?: number; pain_detail?: string };
   rationale?: { summary?: string; top_positive_signals?: string[]; caution_reason?: string };
   decision_trace?: { primary_axis?: string; secondary_axis?: string; level_reason?: string };
+  /** PR-ALG-02: deep_v3 additive */
+  primary_type?: string;
+  secondary_type?: string | null;
+  priority_vector?: Record<string, number>;
+  pain_mode?: 'none' | 'caution' | 'protected';
 }
 
 export interface ProfileSnapshot {
@@ -73,6 +78,10 @@ export function buildDeepSummarySnapshot(summary: SessionDeepSummary): DeepSumma
   if (summary.evidence_quality) base.evidence_quality = summary.evidence_quality;
   if (summary.rationale) base.rationale = summary.rationale;
   if (summary.decision_trace) base.decision_trace = summary.decision_trace;
+  if (summary.primary_type !== undefined) base.primary_type = summary.primary_type;
+  if (summary.secondary_type !== undefined) base.secondary_type = summary.secondary_type;
+  if (summary.priority_vector) base.priority_vector = summary.priority_vector;
+  if (summary.pain_mode) base.pain_mode = summary.pain_mode;
   return base;
 }
 

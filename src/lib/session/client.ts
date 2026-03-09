@@ -82,6 +82,11 @@ export type SessionPlanMeta = {
   safety_mode?: 'red' | 'yellow' | 'none';
   finalTargetLevel?: number;
   maxLevel?: number;
+  /** PR-ALG-02: deep_v3 additive */
+  primary_type?: string;
+  secondary_type?: string | null;
+  priority_vector?: Record<string, number>;
+  pain_mode?: 'none' | 'caution' | 'protected';
 };
 
 export type SessionPlanSegmentItem = {
