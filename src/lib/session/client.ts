@@ -226,6 +226,8 @@ export type PlanSummaryResponse = {
       hold_seconds?: number;
     }>;
   }>;
+  /** 완료된 세션 재조회 시 저장된 실제 기록 (templateId 기준 병합용) */
+  exercise_logs?: ExerciseLogItem[];
 };
 
 export async function getSessionPlanSummary(

@@ -5,7 +5,7 @@ import { JourneyMapV2 } from './JourneyMapV2'
 import { SessionPanelV2 } from './SessionPanelV2'
 import { sessions, type SessionNode } from './map-data'
 import { extractSessionExercises } from './planJsonAdapter'
-import { createSession, getSessionPlanSummary, type SessionPlan, type ActivePlanSummary } from '@/lib/session/client'
+import { createSession, getSessionPlanSummary, type SessionPlan, type ActivePlanSummary, type ExerciseLogItem } from '@/lib/session/client'
 import { getSessionSafe } from '@/lib/supabase'
 import { prefetchMediaSign } from './media-cache'
 
@@ -39,6 +39,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   // localActivePlan: prop에서 시작, createSession 성공 또는 plan-summary fetch 시 갱신
   const [localActivePlan, setLocalActivePlan] = useState<SessionPlan | ActivePlanSummary | null>(activePlan)
   const [pastSessionPlan, setPastSessionPlan] = useState<SessionPlan | null>(null)
+  const [pastSessionInitialLogs, setPastSessionInitialLogs] = useState<Record<string, ExerciseLogItem>>({})
   const [planLoading, setPlanLoading] = useState(false)
   const createCalledRef = useRef(false)
 
@@ -70,10 +71,12 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   useEffect(() => {
     if (selectedStatus !== 'completed' || selectedSessionId === null) {
       setPastSessionPlan(null)
+      setPastSessionInitialLogs({})
       return
     }
     let cancelled = false
     setPastSessionPlan(null)
+    setPastSessionInitialLogs({})
     setPlanLoading(true)
     getSessionSafe().then(async ({ session }) => {
       if (cancelled || !session?.access_token) {
@@ -93,6 +96,12 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
           created_at: '',
           started_at: null,
         })
+        const logs = result.data.exercise_logs
+        if (logs?.length) {
+          const map: Record<string, ExerciseLogItem> = {}
+          for (const l of logs) map[l.templateId] = l
+          setPastSessionInitialLogs(map)
+        }
       }
     })
     return () => { cancelled = true }
@@ -267,6 +276,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         status={selectedStatus}
         exercises={exercises}
         activePlan={selectedStatus === 'current' ? localActivePlan : pastSessionPlan}
+        initialLogs={selectedStatus === 'completed' ? pastSessionInitialLogs : undefined}
         isLockedNext={selectedStatus === 'locked' && isLockedNext && selectedSessionId === nextSessionNum}
         nextUnlockAt={nextUnlockAt ?? undefined}
         onClose={handleClose}

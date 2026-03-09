@@ -65,6 +65,13 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       const result = await getCachedBootstrap(session.access_token);
       if (result.ok) {
         const d = result.data.activeLite;
+        const p = d.progress;
+        if (p) {
+          setSessionProgress({
+            total_sessions: p.total_sessions,
+            completed_sessions: p.completed_sessions ?? 0,
+          });
+        }
         setTodayCompleted(d.today_completed === true);
         setNextUnlockAt(typeof d.next_unlock_at === 'string' ? d.next_unlock_at : null);
       }

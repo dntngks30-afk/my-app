@@ -19,6 +19,8 @@ interface SessionPanelV2Props {
   exercises: ExerciseItem[] | undefined
   /** 현재 active plan — session_number + status 사용 (SessionPlan | ActivePlanSummary) */
   activePlan: SessionPlan | ActivePlanSummary | null
+  /** 완료된 세션 재조회 시 서버에서 받은 exercise_logs (templateId → log) */
+  initialLogs?: Record<string, ExerciseLogItem>
   /** daily cap: 다음 세션이 오늘 완료로 locked인 경우 */
   isLockedNext?: boolean
   /** daily cap: 다음 세션 해제 시각 (ISO string) */
@@ -45,6 +47,7 @@ export function SessionPanelV2({
   status,
   exercises,
   activePlan,
+  initialLogs,
   isLockedNext,
   nextUnlockAt,
   onClose,
@@ -59,6 +62,7 @@ export function SessionPanelV2({
       status={status}
       exercises={exercises}
       activePlan={activePlan}
+      initialLogs={initialLogs}
       isLockedNext={isLockedNext}
       nextUnlockAt={nextUnlockAt}
       onClose={onClose}
@@ -75,6 +79,7 @@ function PanelInner({
   status,
   exercises,
   activePlan,
+  initialLogs,
   isLockedNext,
   nextUnlockAt,
   onClose,
@@ -82,8 +87,20 @@ function PanelInner({
 }: Required<Omit<SessionPanelV2Props, 'onSessionCompleted'>> & {
   onSessionCompleted?: (completedSessions: number) => void
 }) {
-  // 로컬 운동 로그 누적 (templateId → log)
+  // 로컬 운동 로그 누적 (templateId → log). 완료 세션 재조회 시 initialLogs로 초기화
   const [logs, setLogs] = useState<Record<string, ExerciseLogItem>>({})
+
+  // 세션 전환 시 logs 초기화
+  useEffect(() => {
+    setLogs({})
+  }, [sessionId])
+
+  // 완료된 세션 재조회 시 서버 exercise_logs를 logs에 반영
+  useEffect(() => {
+    if (status === 'completed' && initialLogs && Object.keys(initialLogs).length > 0) {
+      setLogs(initialLogs)
+    }
+  }, [status, initialLogs])
   // 모달에서 열린 운동 아이템
   const [openItem, setOpenItem] = useState<ExerciseItem | null>(null)
 

@@ -16,6 +16,14 @@ import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+export type PlanSummaryExerciseLogItem = {
+  templateId: string;
+  name: string;
+  sets: number | null;
+  reps: number | null;
+  difficulty: number | null;
+};
+
 export type PlanSummaryResponse = {
   session_number: number;
   status: string;
@@ -30,6 +38,8 @@ export type PlanSummaryResponse = {
       hold_seconds?: number;
     }>;
   }>;
+  /** 완료된 세션 재조회 시 저장된 실제 기록 (templateId 기준 병합용) */
+  exercise_logs?: PlanSummaryExerciseLogItem[];
 };
 
 export async function GET(req: NextRequest) {
@@ -58,7 +68,7 @@ export async function GET(req: NextRequest) {
     const supabase = getServerSupabaseAdmin();
     const { data: row, error } = await supabase
       .from('session_plans')
-      .select('session_number, status, plan_json')
+      .select('session_number, status, plan_json, exercise_logs')
       .eq('user_id', userId)
       .eq('session_number', sessionNumber)
       .maybeSingle();
@@ -93,10 +103,26 @@ export async function GET(req: NextRequest) {
       console.info('[session/plan-summary] perf', timings);
     }
 
+    const statusVal = row.status ?? 'draft';
+    const rawLogs = row.exercise_logs as unknown;
+    const exercise_logs: PlanSummaryExerciseLogItem[] | undefined =
+      statusVal === 'completed' && Array.isArray(rawLogs)
+        ? rawLogs
+            .filter((it: unknown) => it && typeof it === 'object' && typeof (it as { templateId?: unknown }).templateId === 'string')
+            .map((it: { templateId: string; name?: string; sets?: number; reps?: number; difficulty?: number }) => ({
+              templateId: it.templateId,
+              name: typeof it.name === 'string' ? it.name : '',
+              sets: typeof it.sets === 'number' && Number.isFinite(it.sets) ? it.sets : null,
+              reps: typeof it.reps === 'number' && Number.isFinite(it.reps) ? it.reps : null,
+              difficulty: typeof it.difficulty === 'number' && Number.isFinite(it.difficulty) ? it.difficulty : null,
+            }))
+        : undefined;
+
     const data: PlanSummaryResponse = {
       session_number: row.session_number,
-      status: row.status ?? 'draft',
+      status: statusVal,
       segments,
+      ...(exercise_logs != null && { exercise_logs }),
     };
 
     return ok(data, isDebug ? { timings } : undefined);
