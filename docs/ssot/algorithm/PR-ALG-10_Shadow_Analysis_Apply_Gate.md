@@ -57,6 +57,8 @@ npx tsx scripts/deep-v3-shadow-report.mjs
 
 | 조건 | 판정 |
 |------|------|
+| caution -> none 비율 > 30% | **adjust_candidate** |
+| > 15% and ≤ 30% | **monitor_more** (주기적 재분석) |
 | primary_type_changed가 high-risk persona에서 발생 | **adjust_candidate** |
 
 ### 3.4 promote_to_active 검토 가능 조건
