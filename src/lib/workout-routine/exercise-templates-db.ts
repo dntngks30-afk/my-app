@@ -204,11 +204,10 @@ export async function getTemplatesForSessionPlan(opts?: {
     .order('id')
     .limit(60);
 
-  if (opts?.scoringVersion) {
-    q = q.eq('scoring_version', opts.scoringVersion);
-  } else {
-    q = q.eq('scoring_version', 'deep_v2');
-  }
+  // deep_v3 uses same template pool as deep_v2 (templates have scoring_version='deep_v2')
+  const templateScoringVersion =
+    opts?.scoringVersion === 'deep_v3' ? 'deep_v2' : (opts?.scoringVersion ?? 'deep_v2');
+  q = q.eq('scoring_version', templateScoringVersion);
 
   const { data, error } = await q;
 

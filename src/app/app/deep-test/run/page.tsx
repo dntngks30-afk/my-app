@@ -133,7 +133,7 @@ export default function DeepTestRunPage() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ scoringVersion: 'deep_v2' }),
+          body: JSON.stringify({ scoringVersion: 'deep_v3' }),
         });
 
         if (cancelled) return;
