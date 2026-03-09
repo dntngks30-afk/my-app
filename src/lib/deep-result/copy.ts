@@ -132,3 +132,86 @@ export function getCopy(
   if (VALID_TYPES.includes(key)) return DEEP_RESULT_COPY[key];
   return FALLBACK_COPY;
 }
+
+/** PR-ALG-02: deep_v3 처방 근거 narrative (priority_vector / pain_mode 기반) */
+export interface V3PrescriptionNarrative {
+  movementFeatures: string[];
+  cautionPoints: string[];
+  sessionGoals: string[];
+  expectedFeeling: string;
+}
+
+const AXIS_TO_FEATURE: Record<string, string> = {
+  lower_stability: '하체 안정성',
+  lower_mobility: '하체 가동성',
+  upper_mobility: '상체 가동성',
+  trunk_control: '몸통 제어',
+  asymmetry: '좌우 균형',
+  deconditioned: '전신 회복',
+};
+
+const AXIS_TO_CAUTION: Record<string, string> = {
+  lower_stability: '빠른 단측 하중은 당분간 보수적으로 접근합니다',
+  lower_mobility: '깊은 스쿼트·넓은 범위 동작은 점진적으로',
+  upper_mobility: '팔 올리기·지지 동작은 통증 없는 범위에서',
+  trunk_control: '한발 서기·회전 동작 시 몸통 흔들림 주의',
+  asymmetry: '한쪽만 과사용하지 않도록 의식적으로 균형을 맞추세요',
+  deconditioned: '강도보다 일관된 움직임 복구가 우선입니다',
+};
+
+const AXIS_TO_GOAL: Record<string, string> = {
+  lower_stability: '골반 안정',
+  lower_mobility: '고관절·발목 가동성',
+  upper_mobility: '어깨·흉추 가동성',
+  trunk_control: '코어 제어',
+  asymmetry: '균형 회복',
+  deconditioned: '전신 리셋',
+};
+
+const AXIS_TO_FEELING: Record<string, string> = {
+  lower_stability: '한발 설 때 흔들림 감소',
+  lower_mobility: '앉았다 일어날 때 편안함',
+  upper_mobility: '팔 올릴 때 막힘 감소',
+  trunk_control: '한발 설 때 상체 흔들림 감소',
+  asymmetry: '좌우 차이 체감 감소',
+  deconditioned: '아침에 몸이 덜 무거움',
+};
+
+export function getV3PrescriptionNarrative(
+  priorityVector?: Record<string, number> | null,
+  painMode?: 'none' | 'caution' | 'protected' | null,
+  focusTags?: string[]
+): V3PrescriptionNarrative | null {
+  if (!priorityVector || typeof priorityVector !== 'object') return null;
+
+  const axes = Object.entries(priorityVector)
+    .filter(([, v]) => typeof v === 'number' && v > 0)
+    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
+
+  if (axes.length === 0) return null;
+
+  const top2 = axes.slice(0, 2);
+  const movementFeatures = top2.map(
+    ([k]) => `${AXIS_TO_FEATURE[k] ?? k}이(가) 먼저 필요합니다`
+  );
+  const cautionPoints = top2.map(([k]) => AXIS_TO_CAUTION[k]).filter(Boolean);
+  if (painMode === 'caution') {
+    cautionPoints.unshift('통증이 있으면 강도를 낮추고 범위를 줄여요.');
+  } else if (painMode === 'protected') {
+    cautionPoints.unshift('통증이 강하면 보호 모드로 진행해요. 무리하지 마세요.');
+  }
+  const sessionGoals = top2.map(([k]) => AXIS_TO_GOAL[k]).filter(Boolean);
+  if (focusTags?.length && sessionGoals.length < 3) {
+    const tagLabels = focusTags.slice(0, 2).map((t) => t.replace(/_/g, ' '));
+    sessionGoals.push(...tagLabels);
+  }
+  const topAxis = top2[0]?.[0];
+  const expectedFeeling = (topAxis && AXIS_TO_FEELING[topAxis]) ?? '움직임이 조금 더 편해짐';
+
+  return {
+    movementFeatures,
+    cautionPoints: cautionPoints.slice(0, 2),
+    sessionGoals: [...new Set(sessionGoals)].slice(0, 3),
+    expectedFeeling,
+  };
+}

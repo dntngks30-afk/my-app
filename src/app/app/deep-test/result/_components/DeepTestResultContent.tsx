@@ -18,7 +18,7 @@ import {
   AlertCircle,
   Zap,
 } from 'lucide-react';
-import { getCopy } from '@/lib/deep-result/copy';
+import { getCopy, getV3PrescriptionNarrative } from '@/lib/deep-result/copy';
 import { toRadarScores } from '@/lib/deep-result/score-utils';
 import TagChips from './TagChips';
 
@@ -29,6 +29,9 @@ export interface DeepTestResultContentProps {
   confidence?: number | null;
   focusTags: string[];
   avoidTags: string[];
+  /** PR-ALG-02: deep_v3 additive (optional) */
+  priorityVector?: Record<string, number> | null;
+  painMode?: 'none' | 'caution' | 'protected' | null;
   algorithmScores?: {
     upper_score?: number;
     lower_score?: number;
@@ -104,6 +107,8 @@ export default function DeepTestResultContent({
   resultType,
   focusTags,
   avoidTags,
+  priorityVector,
+  painMode,
   algorithmScores,
   scoringVersion = 'DEEP v2',
   attemptId,
@@ -151,6 +156,8 @@ export default function DeepTestResultContent({
   const copy = getCopy(resultType);
   const copyAny = copy as unknown as Record<string, unknown>;
 
+  const v3Narrative = getV3PrescriptionNarrative(priorityVector ?? undefined, painMode ?? undefined, focusTags);
+
   const mainTag = asString(
     copyAny?.badgeTitle ?? copyAny?.tag ?? copyAny?.badge ?? copyAny?.bannerTag,
     '우선순위 확인'
@@ -169,6 +176,11 @@ export default function DeepTestResultContent({
   );
 
   const insightsText = (() => {
+    if (v3Narrative?.movementFeatures?.length) {
+      const feats = v3Narrative.movementFeatures.slice(0, 2);
+      const cautions = v3Narrative.cautionPoints.slice(0, 1);
+      return [...feats, ...cautions].slice(0, 3);
+    }
     const fromCopy = asStringArray(
       copyAny?.symptoms ?? copyAny?.insights ?? copyAny?.keyPoints ?? copyAny?.bullets
     );
@@ -186,6 +198,9 @@ export default function DeepTestResultContent({
   })();
 
   const actionPlan = (() => {
+    if (v3Narrative?.sessionGoals?.length) {
+      return v3Narrative.sessionGoals.slice(0, 3).map((g) => `${g} 중심`);
+    }
     const fromCopy = asStringArray(
       copyAny?.goals7d ?? copyAny?.actionPlan ?? copyAny?.plan ?? copyAny?.nextSteps
     );
@@ -194,10 +209,11 @@ export default function DeepTestResultContent({
     return ['가동성 5분', '안정화 5분', '호흡 2분'];
   })();
 
-  const caution = asString(
-    copyAny?.caution ?? copyAny?.disclaimer,
-    '저림/방사통이 있으면 무리한 범위 확장은 피하고, 통증 없는 범위에서 진행해요.'
-  );
+  const caution = v3Narrative?.cautionPoints?.[0]
+    ?? asString(
+      copyAny?.caution ?? copyAny?.disclaimer,
+      '저림/방사통이 있으면 무리한 범위 확장은 피하고, 통증 없는 범위에서 진행해요.'
+    );
 
   const reportDate = new Date().toLocaleString('ko-KR');
   const reportId = attemptId

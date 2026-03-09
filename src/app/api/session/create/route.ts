@@ -504,6 +504,10 @@ export async function POST(req: NextRequest) {
         pain_risk: deepSummary.pain_risk,
         red_flags: deepSummary.red_flags,
         safety_mode: deepSummary.safety_mode,
+        primary_type: deepSummary.primary_type,
+        secondary_type: deepSummary.secondary_type,
+        priority_vector: deepSummary.priority_vector,
+        pain_mode: deepSummary.pain_mode,
         adaptiveOverlay,
       });
       setCachedPlan(cacheInput, planJson as Record<string, unknown>);

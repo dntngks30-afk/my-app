@@ -37,28 +37,48 @@ export interface SessionDeepSummary {
   evidence_quality?: EvidenceQuality;
   rationale?: Rationale;
   decision_trace?: DecisionTrace;
+  /** PR-ALG-02: deep_v3 additive (optional) */
+  primary_type?: string;
+  secondary_type?: string | null;
+  priority_vector?: Record<string, number>;
+  pain_mode?: 'none' | 'caution' | 'protected';
 }
 
 /**
  * Load minimal Deep Result summary for session create.
- * Returns null if no final deep_v2 result exists → 404 DEEP_RESULT_MISSING.
+ * PR-ALG-02: deep_v3 우선, 없으면 deep_v2 fallback.
+ * Returns null if no final result exists → 404 DEEP_RESULT_MISSING.
  */
 export async function loadSessionDeepSummary(
   userId: string
 ): Promise<SessionDeepSummary | null> {
   const supabase = getServerSupabaseAdmin();
 
-  const { data: attempt, error } = await supabase
+  // deep_v3 우선, 없으면 deep_v2 fallback
+  const { data: v3, error: e3 } = await supabase
     .from('deep_test_attempts')
     .select('id, result_type, confidence, scoring_version, scores')
     .eq('user_id', userId)
     .eq('status', 'final')
-    .eq('scoring_version', 'deep_v2')
+    .eq('scoring_version', 'deep_v3')
     .order('finalized_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (error || !attempt) return null;
+  let attempt = !e3 && v3 ? v3 : null;
+  if (!attempt) {
+    const { data: v2, error: e2 } = await supabase
+      .from('deep_test_attempts')
+      .select('id, result_type, confidence, scoring_version, scores')
+      .eq('user_id', userId)
+      .eq('status', 'final')
+      .eq('scoring_version', 'deep_v2')
+      .order('finalized_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (e2 || !v2) return null;
+    attempt = v2;
+  }
 
   const scores = attempt.scores as Record<string, unknown> | null;
   const derived = scores?.derived as Record<string, unknown> | null | undefined;
@@ -116,6 +136,16 @@ export async function loadSessionDeepSummary(
   const secondaryFocus =
     typeof derived?.secondaryFocus === 'string' ? derived.secondaryFocus : undefined;
 
+  // PR-ALG-02: deep_v3 additive
+  const primary_type = typeof derived?.primary_type === 'string' ? derived.primary_type : undefined;
+  const secondary_type = derived?.secondary_type === null ? null : (typeof derived?.secondary_type === 'string' ? derived.secondary_type : undefined);
+  const priority_vector = derived?.priority_vector && typeof derived.priority_vector === 'object' && !Array.isArray(derived.priority_vector)
+    ? (derived.priority_vector as Record<string, number>)
+    : undefined;
+  const pain_mode = derived?.pain_mode === 'none' || derived?.pain_mode === 'caution' || derived?.pain_mode === 'protected'
+    ? derived.pain_mode
+    : undefined;
+
   return {
     ...(typeof attempt.id === 'string' && { source_deep_attempt_id: attempt.id }),
     result_type: typeof attempt.result_type === 'string' ? attempt.result_type : 'UNKNOWN',
@@ -134,5 +164,9 @@ export async function loadSessionDeepSummary(
     ...(evidence_quality && { evidence_quality }),
     ...(rationale && { rationale }),
     ...(decision_trace && { decision_trace }),
+    ...(primary_type !== undefined && { primary_type }),
+    ...(secondary_type !== undefined && { secondary_type }),
+    ...(priority_vector && { priority_vector }),
+    ...(pain_mode && { pain_mode }),
   };
 }

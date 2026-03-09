@@ -84,6 +84,11 @@ export type PlanGeneratorInput = {
     forceRecovery?: boolean;
     avoidTemplateIds?: string[];
   };
+  /** PR-ALG-02: deep_v3 additive (optional) */
+  primary_type?: string;
+  secondary_type?: string | null;
+  priority_vector?: Record<string, number>;
+  pain_mode?: 'none' | 'caution' | 'protected';
 };
 
 export type PlanItem = {
@@ -121,6 +126,11 @@ export type PlanJsonOutput = {
     safety_mode?: 'red' | 'yellow' | 'none';
     finalTargetLevel?: number;
     maxLevel?: number;
+    /** PR-ALG-02: deep_v3 additive */
+    primary_type?: string;
+    secondary_type?: string | null;
+    priority_vector?: Record<string, number>;
+    pain_mode?: 'none' | 'caution' | 'protected';
     /** PR-P2-4: constraint trace */
     constraint_flags?: {
       avoid_filter_applied: boolean;
@@ -435,6 +445,10 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       ...(input.pain_risk != null && { pain_risk: input.pain_risk }),
       ...(input.red_flags != null && { red_flags: input.red_flags }),
       ...(input.safety_mode != null && { safety_mode: input.safety_mode }),
+      ...(input.primary_type != null && { primary_type: input.primary_type }),
+      ...(input.secondary_type !== undefined && { secondary_type: input.secondary_type }),
+      ...(input.priority_vector != null && { priority_vector: input.priority_vector }),
+      ...(input.pain_mode != null && { pain_mode: input.pain_mode }),
       finalTargetLevel,
       maxLevel,
       constraint_flags: {

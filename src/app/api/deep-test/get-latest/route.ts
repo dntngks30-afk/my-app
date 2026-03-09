@@ -1,6 +1,6 @@
 /**
  * GET /api/deep-test/get-latest
- * user_id 湲곗? scoring_version='deep_v1' 理쒖떊 row (?놁쑝硫?404)
+ * PR-ALG-02: deep_v3 우선, 없으면 deep_v2 fallback.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -8,7 +8,6 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { requireDeepAuth } from '@/lib/deep-test/auth';
 
 const SOURCE = 'deep';
-const SCORING_VERSION = 'deep_v2';
 
 function toAttemptPayload(row: {
   id: string;
@@ -45,24 +44,38 @@ export async function GET(req: NextRequest) {
 
   const supabase = getServerSupabaseAdmin();
 
-  const { data: attempt, error } = await supabase
+  // deep_v3 우선, 없으면 deep_v2 fallback
+  const { data: v3, error: e3 } = await supabase
     .from('deep_test_attempts')
     .select('*')
     .eq('user_id', userId)
-    .eq('scoring_version', SCORING_VERSION)
+    .eq('scoring_version', 'deep_v3')
     .eq('status', 'final')
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (error) {
-    console.error('get-latest error:', error);
-    const r = NextResponse.json(
-      { error: '결과를 불러오는데 실패했습니다.' },
-      { status: 500 }
-    );
-    r.headers.set('Cache-Control', 'no-store');
-    return r;
+  let attempt = !e3 && v3 ? v3 : null;
+  if (!attempt) {
+    const { data: v2, error: e2 } = await supabase
+      .from('deep_test_attempts')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('scoring_version', 'deep_v2')
+      .eq('status', 'final')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (e2) {
+      console.error('get-latest error:', e2);
+      const r = NextResponse.json(
+        { error: '결과를 불러오는데 실패했습니다.' },
+        { status: 500 }
+      );
+      r.headers.set('Cache-Control', 'no-store');
+      return r;
+    }
+    attempt = v2;
   }
 
   if (!attempt) {
@@ -76,7 +89,7 @@ export async function GET(req: NextRequest) {
 
   const res = NextResponse.json({
     source: SOURCE,
-    scoring_version: SCORING_VERSION,
+    scoring_version: attempt.scoring_version ?? 'deep_v2',
     attempt: toAttemptPayload(attempt),
   });
   res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
