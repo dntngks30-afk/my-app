@@ -21,6 +21,7 @@ import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import { computePhase, type PhaseLengths } from '@/lib/session/phase';
 import { normalizeSessionFeedbackPayload, saveSessionFeedback } from '@/lib/session/feedback';
+import { buildExecutionSummary } from '@/lib/session/execution-summary';
 
 const ROUTE_COMPLETE = '/api/session/complete';
 
@@ -224,12 +225,21 @@ export async function POST(req: NextRequest) {
     const nowIso = new Date().toISOString();
     const durationClamped = Math.min(7200, Math.max(0, durationSeconds));
 
+    const executionSummary = buildExecutionSummary(
+      sessionNumber,
+      nowIso,
+      completionMode,
+      feedbackPayload,
+      !!feedbackPayload
+    );
+
     const planUpdatePayload: Record<string, unknown> = {
       status: 'completed',
       completed_at: nowIso,
       duration_seconds: durationClamped,
       completion_mode: completionMode,
       exercise_logs: exerciseLogsArray,
+      execution_summary_json: executionSummary,
     };
 
     // Race-safe: only first completion writes (status IN draft|started)
