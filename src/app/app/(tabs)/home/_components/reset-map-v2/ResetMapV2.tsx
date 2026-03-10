@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { JourneyMapV2 } from './JourneyMapV2'
 import { SessionPanelV2 } from './SessionPanelV2'
 import { sessions, type SessionNode } from './map-data'
@@ -28,6 +28,25 @@ interface ResetMapV2Props {
   onActivePlanCreated?: (plan: SessionPlan) => void
 }
 
+function toPanelPlan(data: PlanSummaryResponse): SessionPlan {
+  return {
+    session_number: data.session_number,
+    status: data.status as 'draft' | 'started' | 'completed',
+    theme: '',
+    plan_json: { segments: data.segments } as SessionPlan['plan_json'],
+    condition: { condition_mood: 'ok', time_budget: 'normal' },
+    created_at: '',
+    started_at: null,
+  }
+}
+
+function toExerciseLogMap(logs?: ExerciseLogItem[]): Record<string, ExerciseLogItem> {
+  if (!logs?.length) return {}
+  const map: Record<string, ExerciseLogItem> = {}
+  for (const log of logs) map[log.templateId] = log
+  return map
+}
+
 export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated }: ResetMapV2Props) {
   // localDailyCapActive: createSession이 DAILY_LIMIT_REACHED 반환 시 클라이언트 측 즉시 반영 (방어)
   const [localDailyCapActive, setLocalDailyCapActive] = useState(false)
@@ -44,14 +63,38 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   const [pastSessionInitialLogs, setPastSessionInitialLogs] = useState<Record<string, ExerciseLogItem>>({})
   const [planLoading, setPlanLoading] = useState(false)
   const createCalledRef = useRef(false)
-  const prefetchedSummaryRef = useRef<{ sessionNumber: number; data: PlanSummaryResponse } | null>(null)
-  const prefetchedPastRef = useRef<{ sessionNumber: number; data: PlanSummaryResponse } | null>(null)
+  const summaryCacheRef = useRef(new Map<number, PlanSummaryResponse>())
+  const summaryRequestRef = useRef(new Map<number, Promise<PlanSummaryResponse | null>>())
 
   const resolveAuthToken = useCallback(async () => {
     if (getAuthToken) return getAuthToken()
     const { session } = await getSessionSafe()
     return session?.access_token ?? null
   }, [getAuthToken])
+
+  const loadSessionSummary = useCallback(async (sessionNumber: number) => {
+    const cached = summaryCacheRef.current.get(sessionNumber)
+    if (cached) return cached
+
+    const pending = summaryRequestRef.current.get(sessionNumber)
+    if (pending) return pending
+
+    const request = (async () => {
+      const token = await resolveAuthToken()
+      if (!token) return null
+      const result = await getSessionPlanSummary(token, sessionNumber)
+      if (!result.ok || !result.data) return null
+      summaryCacheRef.current.set(sessionNumber, result.data)
+      return result.data
+    })()
+
+    summaryRequestRef.current.set(sessionNumber, request)
+    try {
+      return await request
+    } finally {
+      summaryRequestRef.current.delete(sessionNumber)
+    }
+  }, [resolveAuthToken])
 
   // prop 변경(세션 완료 후 null 리셋 등) 반영
   useEffect(() => {
@@ -66,7 +109,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     if (!plan || effectiveCurrentSession === null) return
     if (plan.session_number !== effectiveCurrentSession) return
     if ('plan_json' in plan && plan.plan_json) return // 이미 full
-    if (prefetchedSummaryRef.current?.sessionNumber === plan.session_number) return
+    if (summaryCacheRef.current.has(plan.session_number)) return
 
     let cancelled = false
     let raf1 = 0
@@ -74,13 +117,8 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     let timeoutId: number | null = null
     let idleId: number | null = null
     const run = async () => {
-      const token = await resolveAuthToken()
-      if (cancelled || !token) return
-      const result = await getSessionPlanSummary(token, plan.session_number)
       if (cancelled) return
-      if (result.ok && result.data) {
-        prefetchedSummaryRef.current = { sessionNumber: plan.session_number, data: result.data }
-      }
+      await loadSessionSummary(plan.session_number)
     }
     raf1 = requestAnimationFrame(() => {
       raf2 = requestAnimationFrame(() => {
@@ -100,12 +138,12 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       }
       if (timeoutId !== null) clearTimeout(timeoutId)
     }
-  }, [activePlan, localActivePlan, effectiveCurrentSession, resolveAuthToken])
+  }, [activePlan, localActivePlan, effectiveCurrentSession, loadSessionSummary])
 
   // 과거 세션: 가장 최근 완료 세션 미리 로드 (클릭 시 체감 개선)
   useEffect(() => {
     if (completed < 1) return
-    if (prefetchedPastRef.current?.sessionNumber === completed) return
+    if (summaryCacheRef.current.has(completed)) return
 
     let cancelled = false
     let raf1 = 0
@@ -113,13 +151,8 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     let timeoutId: number | null = null
     let idleId: number | null = null
     const run = async () => {
-      const token = await resolveAuthToken()
-      if (cancelled || !token) return
-      const result = await getSessionPlanSummary(token, completed)
       if (cancelled) return
-      if (result.ok && result.data) {
-        prefetchedPastRef.current = { sessionNumber: completed, data: result.data }
-      }
+      await loadSessionSummary(completed)
     }
     raf1 = requestAnimationFrame(() => {
       raf2 = requestAnimationFrame(() => {
@@ -139,7 +172,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       }
       if (timeoutId !== null) clearTimeout(timeoutId)
     }
-  }, [completed, resolveAuthToken])
+  }, [completed, loadSessionSummary])
 
   // 서버에서 todayCompleted=false로 갱신되면 localDailyCapActive도 리셋
   useEffect(() => {
@@ -166,24 +199,11 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       return
     }
 
-    const prefetched = prefetchedPastRef.current
-    if (prefetched?.sessionNumber === selectedSessionId) {
+    const cached = summaryCacheRef.current.get(selectedSessionId)
+    if (cached) {
       setPlanLoading(false)
-      setPastSessionPlan({
-        session_number: prefetched.data.session_number,
-        status: prefetched.data.status as 'draft' | 'started' | 'completed',
-        theme: '',
-        plan_json: { segments: prefetched.data.segments } as SessionPlan['plan_json'],
-        condition: { condition_mood: 'ok', time_budget: 'normal' },
-        created_at: '',
-        started_at: null,
-      })
-      const logs = prefetched.data.exercise_logs
-      if (logs?.length) {
-        const map: Record<string, ExerciseLogItem> = {}
-        for (const l of logs) map[l.templateId] = l
-        setPastSessionInitialLogs(map)
-      }
+      setPastSessionPlan(toPanelPlan(cached))
+      setPastSessionInitialLogs(toExerciseLogMap(cached.exercise_logs))
       return
     }
 
@@ -191,90 +211,71 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     setPastSessionPlan(null)
     setPastSessionInitialLogs({})
     setPlanLoading(true)
-    getSessionSafe().then(async ({ session }) => {
-      if (cancelled || !session?.access_token) {
-        if (!cancelled) setPlanLoading(false)
-        return
-      }
-      const result = await getSessionPlanSummary(session.access_token, selectedSessionId)
+    void loadSessionSummary(selectedSessionId).then((data) => {
       if (cancelled) return
       setPlanLoading(false)
-      if (result.ok && result.data) {
-        setPastSessionPlan({
-          session_number: result.data.session_number,
-          status: result.data.status as 'draft' | 'started' | 'completed',
-          theme: '',
-          plan_json: { segments: result.data.segments } as SessionPlan['plan_json'],
-          condition: { condition_mood: 'ok', time_budget: 'normal' },
-          created_at: '',
-          started_at: null,
-        })
-        const logs = result.data.exercise_logs
-        if (logs?.length) {
-          const map: Record<string, ExerciseLogItem> = {}
-          for (const l of logs) map[l.templateId] = l
-          setPastSessionInitialLogs(map)
-        }
-      }
+      if (!data) return
+      setPastSessionPlan(toPanelPlan(data))
+      setPastSessionInitialLogs(toExerciseLogMap(data.exercise_logs))
     })
     return () => { cancelled = true }
-  }, [selectedStatus, selectedSessionId])
+  }, [selectedStatus, selectedSessionId, loadSessionSummary])
 
   const handleNodeTap = useCallback((session: SessionNode) => {
+    const nextStatus =
+      effectiveCurrentSession === null
+        ? (session.id <= completed ? 'completed' : 'locked')
+        : session.id < effectiveCurrentSession
+          ? 'completed'
+          : session.id === effectiveCurrentSession
+            ? 'current'
+            : 'locked'
+
+    const currentPlanReady =
+      localActivePlan?.session_number === session.id &&
+      'plan_json' in localActivePlan &&
+      !!localActivePlan.plan_json
+    const completedPlanReady =
+      pastSessionPlan?.session_number === session.id ||
+      summaryCacheRef.current.has(session.id)
+
+    const shouldShowLoading =
+      (nextStatus === 'current' && !currentPlanReady) ||
+      (nextStatus === 'completed' && !completedPlanReady)
+
+    setPlanLoading(shouldShowLoading)
     setSelectedSessionId(session.id)
-  }, [])
+  }, [effectiveCurrentSession, completed, localActivePlan, pastSessionPlan])
 
   const handleClose = useCallback(() => {
     setSelectedSessionId(null)
   }, [])
 
   // current 세션 패널 오픈 + lite만 있음(plan_json 없음) → plan-summary로 경량 fetch (패널 첫 렌더)
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (selectedStatus !== 'current' || selectedSessionId === null) return
     const plan = localActivePlan
     if (plan == null) return
     if ('plan_json' in plan && plan.plan_json) return // 이미 full/segments plan
     if (plan.session_number !== selectedSessionId) return
 
-    const prefetched = prefetchedSummaryRef.current
-    if (prefetched?.sessionNumber === selectedSessionId) {
+    const cached = summaryCacheRef.current.get(selectedSessionId)
+    if (cached) {
       setPlanLoading(false)
-      setLocalActivePlan({
-        session_number: prefetched.data.session_number,
-        status: prefetched.data.status as 'draft' | 'started' | 'completed',
-        theme: '',
-        plan_json: { segments: prefetched.data.segments } as SessionPlan['plan_json'],
-        condition: { condition_mood: 'ok', time_budget: 'normal' },
-        created_at: '',
-        started_at: null,
-      })
+      setLocalActivePlan(toPanelPlan(cached))
       return
     }
 
     let cancelled = false
     setPlanLoading(true)
-    getSessionSafe().then(async ({ session }) => {
-      if (cancelled || !session?.access_token) {
-        if (!cancelled) setPlanLoading(false)
-        return
-      }
-      const result = await getSessionPlanSummary(session.access_token, selectedSessionId)
+    void loadSessionSummary(selectedSessionId).then((data) => {
       if (cancelled) return
       setPlanLoading(false)
-      if (result.ok && result.data) {
-        setLocalActivePlan({
-          session_number: result.data.session_number,
-          status: result.data.status as 'draft' | 'started' | 'completed',
-          theme: '',
-          plan_json: { segments: result.data.segments } as SessionPlan['plan_json'],
-          condition: { condition_mood: 'ok', time_budget: 'normal' },
-          created_at: '',
-          started_at: null,
-        })
-      }
+      if (!data) return
+      setLocalActivePlan(toPanelPlan(data))
     })
     return () => { cancelled = true }
-  }, [selectedStatus, selectedSessionId, localActivePlan])
+  }, [selectedStatus, selectedSessionId, localActivePlan, loadSessionSummary])
 
   // current 세션 패널 오픈 + activePlan 없음 → createSession 호출
   useEffect(() => {
@@ -287,14 +288,15 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     let cancelled = false
     setPlanLoading(true)
 
-    getSessionSafe().then(async ({ session }) => {
-      if (cancelled || !session?.access_token) {
+    resolveAuthToken().then(async (token) => {
+      if (cancelled || !token) {
         if (!cancelled) setPlanLoading(false)
         return
       }
-      const result = await createSession(session.access_token, {
+      const result = await createSession(token, {
         condition_mood: 'ok',
         time_budget: 'normal',
+        summary: true,
       })
       if (cancelled) return
       setPlanLoading(false)
@@ -314,7 +316,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     })
 
     return () => { cancelled = true }
-  }, [selectedStatus, selectedSessionId, localActivePlan, onActivePlanCreated])
+  }, [selectedStatus, selectedSessionId, localActivePlan, onActivePlanCreated, resolveAuthToken])
 
   // plan_json에서 운동 추출 (current: createSession 또는 plan-summary, completed: plan-summary)
   const exercises = useMemo(() => {
