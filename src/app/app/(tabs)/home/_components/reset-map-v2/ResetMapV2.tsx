@@ -20,13 +20,15 @@ interface ResetMapV2Props {
   todayCompleted?: boolean
   /** daily cap: 다음 세션 해제 시각 (ISO string) */
   nextUnlockAt?: string | null
+  /** HomePageClient에서 공유하는 auth 토큰 resolver */
+  getAuthToken?: () => Promise<string | null>
   /** 세션 완료 후 HomePageClient의 sessionProgress 갱신용 콜백 */
   onSessionCompleted?: (completedSessions: number) => void
   /** createSession 성공 시 HomePageClient의 activePlan 갱신용 콜백 */
   onActivePlanCreated?: (plan: SessionPlan) => void
 }
 
-export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, onSessionCompleted, onActivePlanCreated }: ResetMapV2Props) {
+export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated }: ResetMapV2Props) {
   // localDailyCapActive: createSession이 DAILY_LIMIT_REACHED 반환 시 클라이언트 측 즉시 반영 (방어)
   const [localDailyCapActive, setLocalDailyCapActive] = useState(false)
   // daily cap: today_completed || localDailyCapActive, activePlan 없을 때 → 현재 세션 없음, 다음 세션 locked
@@ -45,6 +47,12 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   const prefetchedSummaryRef = useRef<{ sessionNumber: number; data: PlanSummaryResponse } | null>(null)
   const prefetchedPastRef = useRef<{ sessionNumber: number; data: PlanSummaryResponse } | null>(null)
 
+  const resolveAuthToken = useCallback(async () => {
+    if (getAuthToken) return getAuthToken()
+    const { session } = await getSessionSafe()
+    return session?.access_token ?? null
+  }, [getAuthToken])
+
   // prop 변경(세션 완료 후 null 리셋 등) 반영
   useEffect(() => {
     setLocalActivePlan(activePlan)
@@ -61,16 +69,38 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     if (prefetchedSummaryRef.current?.sessionNumber === plan.session_number) return
 
     let cancelled = false
-    getSessionSafe().then(async ({ session }) => {
-      if (cancelled || !session?.access_token) return
-      const result = await getSessionPlanSummary(session.access_token, plan.session_number)
+    let raf1 = 0
+    let raf2 = 0
+    let timeoutId: number | null = null
+    let idleId: number | null = null
+    const run = async () => {
+      const token = await resolveAuthToken()
+      if (cancelled || !token) return
+      const result = await getSessionPlanSummary(token, plan.session_number)
       if (cancelled) return
       if (result.ok && result.data) {
         prefetchedSummaryRef.current = { sessionNumber: plan.session_number, data: result.data }
       }
+    }
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        if (typeof requestIdleCallback !== 'undefined') {
+          idleId = requestIdleCallback(() => { void run() }, { timeout: 1200 }) as unknown as number
+        } else {
+          timeoutId = window.setTimeout(() => { void run() }, 250)
+        }
+      })
     })
-    return () => { cancelled = true }
-  }, [activePlan, localActivePlan, effectiveCurrentSession])
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+      if (idleId !== null && typeof cancelIdleCallback !== 'undefined') {
+        cancelIdleCallback(idleId)
+      }
+      if (timeoutId !== null) clearTimeout(timeoutId)
+    }
+  }, [activePlan, localActivePlan, effectiveCurrentSession, resolveAuthToken])
 
   // 과거 세션: 가장 최근 완료 세션 미리 로드 (클릭 시 체감 개선)
   useEffect(() => {
@@ -78,16 +108,38 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     if (prefetchedPastRef.current?.sessionNumber === completed) return
 
     let cancelled = false
-    getSessionSafe().then(async ({ session }) => {
-      if (cancelled || !session?.access_token) return
-      const result = await getSessionPlanSummary(session.access_token, completed)
+    let raf1 = 0
+    let raf2 = 0
+    let timeoutId: number | null = null
+    let idleId: number | null = null
+    const run = async () => {
+      const token = await resolveAuthToken()
+      if (cancelled || !token) return
+      const result = await getSessionPlanSummary(token, completed)
       if (cancelled) return
       if (result.ok && result.data) {
         prefetchedPastRef.current = { sessionNumber: completed, data: result.data }
       }
+    }
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        if (typeof requestIdleCallback !== 'undefined') {
+          idleId = requestIdleCallback(() => { void run() }, { timeout: 1200 }) as unknown as number
+        } else {
+          timeoutId = window.setTimeout(() => { void run() }, 250)
+        }
+      })
     })
-    return () => { cancelled = true }
-  }, [completed])
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+      if (idleId !== null && typeof cancelIdleCallback !== 'undefined') {
+        cancelIdleCallback(idleId)
+      }
+      if (timeoutId !== null) clearTimeout(timeoutId)
+    }
+  }, [completed, resolveAuthToken])
 
   // 서버에서 todayCompleted=false로 갱신되면 localDailyCapActive도 리셋
   useEffect(() => {

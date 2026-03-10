@@ -10,7 +10,11 @@ import { getSessionSafe } from '@/lib/supabase';
 import { getProgressReport, type ProgressWindowReport } from '@/lib/session/client';
 import { getCache, setCache } from '@/lib/cache/tabDataCache';
 
-export default function ProgressReportCard() {
+interface ProgressReportCardProps {
+  getAuthToken?: () => Promise<string | null>;
+}
+
+export default function ProgressReportCard({ getAuthToken }: ProgressReportCardProps = {}) {
   const cached = getCache<ProgressWindowReport>('home.progressReport');
   const [report, setReport] = useState<ProgressWindowReport | null>(cached);
   const [loading, setLoading] = useState(!cached);
@@ -22,14 +26,20 @@ export default function ProgressReportCard() {
       return;
     }
     let cancelled = false;
-    (async () => {
-      const { session } = await getSessionSafe();
-      if (!session?.access_token || cancelled) {
+    let raf1 = 0;
+    let raf2 = 0;
+    let timeoutId: number | null = null;
+    let idleId: number | null = null;
+    const run = async () => {
+      const token = getAuthToken
+        ? await getAuthToken()
+        : (await getSessionSafe()).session?.access_token ?? null;
+      if (!token || cancelled) {
         if (!cancelled) setLoading(false);
         return;
       }
       try {
-        const result = await getProgressReport(session.access_token);
+        const result = await getProgressReport(token);
         if (cancelled) return;
         if (result.ok) {
           setReport(result.data);
@@ -46,9 +56,26 @@ export default function ProgressReportCard() {
       } finally {
         if (!cancelled) setLoading(false);
       }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    };
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        if (typeof requestIdleCallback !== 'undefined') {
+          idleId = requestIdleCallback(() => { void run(); }, { timeout: 1500 }) as unknown as number;
+        } else {
+          timeoutId = window.setTimeout(() => { void run(); }, 300);
+        }
+      });
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      if (idleId !== null && typeof cancelIdleCallback !== 'undefined') {
+        cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    };
+  }, [cached, getAuthToken]);
 
   if (loading) {
     return (

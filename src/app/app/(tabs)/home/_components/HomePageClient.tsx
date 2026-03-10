@@ -49,6 +49,26 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const [nextUnlockAt, setNextUnlockAt] = useState<string | null>(null);
 
   const activeFetchedRef = useRef(false);
+  const authTokenRef = useRef<string | null>(null);
+  const authTokenInflightRef = useRef<Promise<string | null> | null>(null);
+
+  const getAuthToken = useCallback(async () => {
+    if (authTokenRef.current) return authTokenRef.current;
+    if (authTokenInflightRef.current) return authTokenInflightRef.current;
+
+    const promise = getSessionSafe()
+      .then(({ session }) => {
+        const token = session?.access_token ?? null;
+        authTokenRef.current = token;
+        return token;
+      })
+      .finally(() => {
+        authTokenInflightRef.current = null;
+      });
+
+    authTokenInflightRef.current = promise;
+    return promise;
+  }, []);
 
   const handleSessionCompleted = useCallback(async (completedSessions: number) => {
     setSessionProgress(prev =>
@@ -60,9 +80,9 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     setTodayCompleted(true);
     invalidateActiveCache();
     // Refetch to get accurate todayCompleted/nextUnlockAt from server
-    const { session } = await getSessionSafe();
-    if (session?.access_token) {
-      const result = await getCachedBootstrap(session.access_token);
+    const token = await getAuthToken();
+    if (token) {
+      const result = await getCachedBootstrap(token);
       if (result.ok) {
         const d = result.data.activeLite;
         const p = d.progress;
@@ -76,7 +96,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         setNextUnlockAt(typeof d.next_unlock_at === 'string' ? d.next_unlock_at : null);
       }
     }
-  }, []);
+  }, [getAuthToken]);
 
   const handleActivePlanCreated = useCallback((plan: SessionPlan) => {
     setActivePlan(plan);
@@ -108,13 +128,13 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     const t0 = performance.now();
     let cancelled = false;
     (async () => {
-      const { session } = await getSessionSafe();
-      if (!session?.access_token || cancelled) {
+      const token = await getAuthToken();
+      if (!token || cancelled) {
         if (!cancelled) setLoading(false);
         return;
       }
       try {
-        const result = await getCachedBootstrap(session.access_token);
+        const result = await getCachedBootstrap(token);
         if (cancelled) return;
         const elapsed = Math.round(performance.now() - t0);
         if (typeof performance !== 'undefined' && performance.mark) {
@@ -159,7 +179,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       cancelled = true;
       activeFetchedRef.current = false; // allow remount (e.g. Strict Mode) to refetch
     };
-  }, []);
+  }, [getAuthToken]);
 
   useEffect(() => {
     setSkipLoader(isAppBooted());
@@ -230,6 +250,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
                 activePlan={activePlan}
                 todayCompleted={todayCompleted}
                 nextUnlockAt={nextUnlockAt}
+                getAuthToken={getAuthToken}
                 onSessionCompleted={handleSessionCompleted}
                 onActivePlanCreated={handleActivePlanCreated}
               />
@@ -259,7 +280,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         })()}
 
         {/* PR-P2-2: 4세션 변화 리포트 foundation */}
-        <ProgressReportCard />
+        <ProgressReportCard getAuthToken={getAuthToken} />
       </main>
 
       {!hideBottomNav && <BottomNav />}
