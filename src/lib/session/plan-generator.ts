@@ -6,6 +6,7 @@
  */
 
 import { getTemplatesForSessionPlan, type SessionTemplateRow } from '@/lib/workout-routine/exercise-templates-db';
+import type { TemplatePhase } from '@/lib/workout-routine/exercise-templates';
 import { computePhase, type Phase } from './phase';
 import { buildExcludeSet, hasContraindicationOverlap } from './safety';
 import {
@@ -27,6 +28,9 @@ const LEVEL_MATCH_BONUS = 1;
 
 /** PR-P2-4: constraint hardening */
 const MAX_SAME_FOCUS_IN_MAIN = 2;
+const GOLD_PATH_VECTORS = ['lower_stability', 'lower_mobility', 'trunk_control', 'upper_mobility', 'deconditioned'] as const;
+type GoldPathVector = typeof GOLD_PATH_VECTORS[number];
+type SegmentKind = 'prep' | 'main' | 'accessory' | 'cooldown';
 
 /** Phase-safe composition: focus_tags → segment eligibility (no DB change) */
 const PREP_TAGS = new Set([
@@ -59,6 +63,67 @@ function isReleaseEligible(t: SessionTemplateRow): boolean {
   const hasMainExclusive = t.focus_tags.some((tag) => MAIN_EXCLUSIVE_FROM_RELEASE.has(tag));
   return hasReleaseTag && !hasMainExclusive;
 }
+
+function hasTemplatePhase(
+  template: SessionTemplateRow,
+  phases: TemplatePhase[]
+): boolean {
+  return !!template.phase && phases.includes(template.phase as TemplatePhase);
+}
+
+function hasTargetVector(
+  template: SessionTemplateRow,
+  vectors: readonly GoldPathVector[]
+): boolean {
+  return !!template.target_vector?.some((vector) => vectors.includes(vector as GoldPathVector));
+}
+
+function getDifficultyRank(difficulty: string | null | undefined): number {
+  return DIFFICULTY_ORDER[difficulty ?? ''] ?? 0;
+}
+
+type GoldPathSegmentRule = {
+  title: 'Prep' | 'Main' | 'Accessory' | 'Cooldown';
+  kind: SegmentKind;
+  preferredPhases: TemplatePhase[];
+  preferredVectors: GoldPathVector[];
+  fallbackVectors: GoldPathVector[];
+  preferredProgression: number[];
+  count: number;
+};
+
+const GOLD_PATH_RULES: Record<GoldPathVector, Omit<GoldPathSegmentRule, 'count'>[]> = {
+  lower_stability: [
+    { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: ['trunk_control'], fallbackVectors: ['lower_mobility', 'deconditioned'], preferredProgression: [1] },
+    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['lower_stability'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2, 3] },
+    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['lower_stability'], fallbackVectors: ['trunk_control', 'lower_mobility'], preferredProgression: [1, 2] },
+    { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['accessory', 'prep'], preferredVectors: ['lower_mobility'], fallbackVectors: ['deconditioned', 'trunk_control'], preferredProgression: [1] },
+  ],
+  lower_mobility: [
+    { title: 'Prep', kind: 'prep', preferredPhases: ['prep', 'accessory'], preferredVectors: ['lower_mobility'], fallbackVectors: ['deconditioned'], preferredProgression: [1] },
+    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['lower_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [2, 1, 3] },
+    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['lower_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2] },
+    { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['accessory', 'prep'], preferredVectors: ['lower_mobility'], fallbackVectors: ['deconditioned'], preferredProgression: [1] },
+  ],
+  trunk_control: [
+    { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: ['trunk_control', 'deconditioned'], fallbackVectors: ['upper_mobility'], preferredProgression: [1] },
+    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['trunk_control'], fallbackVectors: ['lower_stability'], preferredProgression: [1, 2, 3] },
+    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['trunk_control'], fallbackVectors: ['lower_stability', 'upper_mobility'], preferredProgression: [1, 2] },
+    { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['accessory', 'prep'], preferredVectors: ['deconditioned', 'trunk_control'], fallbackVectors: ['upper_mobility'], preferredProgression: [1] },
+  ],
+  upper_mobility: [
+    { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: ['upper_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [1] },
+    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['upper_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [2, 1, 3] },
+    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['upper_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2] },
+    { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['accessory', 'prep'], preferredVectors: ['upper_mobility'], fallbackVectors: ['deconditioned'], preferredProgression: [1] },
+  ],
+  deconditioned: [
+    { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: ['deconditioned'], fallbackVectors: ['trunk_control'], preferredProgression: [1] },
+    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['deconditioned', 'trunk_control'], fallbackVectors: ['lower_mobility', 'upper_mobility'], preferredProgression: [1, 2] },
+    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'prep'], preferredVectors: ['lower_mobility', 'upper_mobility'], fallbackVectors: ['deconditioned', 'trunk_control'], preferredProgression: [1] },
+    { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['prep', 'accessory'], preferredVectors: ['deconditioned'], fallbackVectors: ['lower_mobility', 'upper_mobility'], preferredProgression: [1] },
+  ],
+};
 const MIN_CANDIDATES_FOR_STRICT_AVOID = 3;
 const SHORT_TOTAL_ITEM_CAP = 4;
 
@@ -73,6 +138,30 @@ function isDifficultyAboveCap(
   const tOrder = DIFFICULTY_ORDER[templateDifficulty] ?? 0;
   const capOrder = DIFFICULTY_ORDER[cap] ?? 3;
   return tOrder > capOrder;
+}
+
+function resolveGoldPathVector(input: PlanGeneratorInput): GoldPathVector | null {
+  const ranked = Object.entries(input.priority_vector ?? {})
+    .filter((entry): entry is [GoldPathVector, number] =>
+      GOLD_PATH_VECTORS.includes(entry[0] as GoldPathVector) && typeof entry[1] === 'number' && entry[1] > 0
+    )
+    .sort((a, b) => b[1] - a[1]);
+  if (ranked.length > 0) return ranked[0][0];
+
+  switch (input.primary_type) {
+    case 'LOWER_INSTABILITY':
+      return 'lower_stability';
+    case 'LOWER_MOBILITY_RESTRICTION':
+      return 'lower_mobility';
+    case 'CORE_CONTROL_DEFICIT':
+      return 'trunk_control';
+    case 'UPPER_IMMOBILITY':
+      return 'upper_mobility';
+    case 'DECONDITIONED':
+      return 'deconditioned';
+    default:
+      return null;
+  }
 }
 
 /** PR-ALG-05: template excluded by pain_mode? (avoid_if_pain_mode) */
@@ -290,6 +379,162 @@ function selectTemplatesWithConstraints(
   return [...prepItems, ...mainItems, ...releaseItems];
 }
 
+function scoreGoldPathSegmentFit(
+  template: SessionTemplateRow,
+  rule: GoldPathSegmentRule,
+  painMode?: 'none' | 'caution' | 'protected'
+): number {
+  let score = 0;
+
+  if (hasTemplatePhase(template, rule.preferredPhases)) {
+    score += 8;
+  } else if (rule.kind === 'cooldown' && isReleaseEligible(template)) {
+    score += 5;
+  } else if (rule.kind === 'accessory' && template.phase === 'main') {
+    score += 2;
+  }
+
+  if (hasTargetVector(template, rule.preferredVectors)) {
+    score += 12;
+  } else if (hasTargetVector(template, rule.fallbackVectors)) {
+    score += 6;
+  }
+
+  const progression = template.progression_level ?? 1;
+  const progressionIdx = rule.preferredProgression.indexOf(progression);
+  if (progressionIdx >= 0) {
+    score += Math.max(1, 5 - progressionIdx);
+  }
+
+  const difficultyRank = getDifficultyRank(template.difficulty);
+  if (rule.kind === 'cooldown') {
+    if (difficultyRank <= 1) score += 5;
+    if (difficultyRank >= 3) score -= 12;
+    if (!isReleaseEligible(template) && template.phase === 'main') score -= 20;
+  } else if (rule.kind === 'prep' || rule.kind === 'accessory') {
+    if (difficultyRank <= 1) score += 3;
+    if (difficultyRank >= 3) score -= 8;
+  }
+
+  if (painMode === 'protected') {
+    if (difficultyRank >= 3) score -= 30;
+    else if (difficultyRank === 2) score -= 8;
+  } else if (painMode === 'caution') {
+    if (difficultyRank >= 3) score -= 16;
+    else if (difficultyRank === 1) score += 2;
+  }
+
+  return score;
+}
+
+function isConservativeFallbackEligible(
+  template: SessionTemplateRow,
+  kind: SegmentKind
+): boolean {
+  if (kind === 'cooldown') {
+    return isReleaseEligible(template) || template.phase === 'prep' || template.phase === 'accessory' || getDifficultyRank(template.difficulty) <= 1;
+  }
+  if (kind === 'prep') {
+    return template.phase === 'prep' || getDifficultyRank(template.difficulty) <= 1 || isPrepEligible(template);
+  }
+  if (kind === 'accessory') {
+    return template.phase === 'accessory' || (template.phase === 'prep' && getDifficultyRank(template.difficulty) <= 1);
+  }
+  return template.phase === 'main' || isMainEligible(template);
+}
+
+function buildGoldPathSegmentRules(
+  vector: GoldPathVector,
+  mainCount: number
+): GoldPathSegmentRule[] {
+  return GOLD_PATH_RULES[vector].map((rule) => ({
+    ...rule,
+    count: rule.kind === 'main' ? mainCount : 1,
+  }));
+}
+
+function selectGoldPathTemplates(
+  sorted: Array<{ template: SessionTemplateRow; score: number }>,
+  input: PlanGeneratorInput,
+  vector: GoldPathVector,
+  mainCount: number,
+  onDuplicateFiltered: (count: number) => void
+): Array<{ rule: GoldPathSegmentRule; items: SessionTemplateRow[] }> {
+  const used = new Set<string>(input.usedTemplateIds);
+  const duplicateSeen = new Set<string>();
+  let duplicateFiltered = 0;
+  const mainFocusCount = new Map<string, number>();
+  const rules = buildGoldPathSegmentRules(vector, mainCount);
+
+  const segments = rules.map((rule) => {
+    const ranked = sorted
+      .map(({ template, score }) => ({
+        template,
+        score: score + scoreGoldPathSegmentFit(template, rule, input.pain_mode),
+      }))
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        const aProgression = a.template.progression_level ?? 1;
+        const bProgression = b.template.progression_level ?? 1;
+        if (aProgression !== bProgression) return aProgression - bProgression;
+        const aDifficulty = getDifficultyRank(a.template.difficulty);
+        const bDifficulty = getDifficultyRank(b.template.difficulty);
+        if (aDifficulty !== bDifficulty) return aDifficulty - bDifficulty;
+        return a.template.id.localeCompare(b.template.id);
+      });
+
+    const items: SessionTemplateRow[] = [];
+    const tryPick = (candidate: SessionTemplateRow) => {
+      if (used.has(candidate.id)) {
+        if (!duplicateSeen.has(candidate.id)) {
+          duplicateSeen.add(candidate.id);
+          duplicateFiltered++;
+        }
+        return false;
+      }
+      if (rule.kind === 'main') {
+        const ft = candidate.focus_tags[0] ?? '_none';
+        if ((mainFocusCount.get(ft) ?? 0) >= MAX_SAME_FOCUS_IN_MAIN) return false;
+        mainFocusCount.set(ft, (mainFocusCount.get(ft) ?? 0) + 1);
+      }
+      used.add(candidate.id);
+      items.push(candidate);
+      return true;
+    };
+
+    for (const { template } of ranked) {
+      if (items.length >= rule.count) break;
+      if (!hasTemplatePhase(template, rule.preferredPhases)) continue;
+      if (!hasTargetVector(template, rule.preferredVectors)) continue;
+      tryPick(template);
+    }
+
+    for (const { template } of ranked) {
+      if (items.length >= rule.count) break;
+      if (!hasTemplatePhase(template, rule.preferredPhases)) continue;
+      if (!hasTargetVector(template, rule.fallbackVectors)) continue;
+      tryPick(template);
+    }
+
+    for (const { template } of ranked) {
+      if (items.length >= rule.count) break;
+      if (!hasTargetVector(template, rule.preferredVectors)) continue;
+      tryPick(template);
+    }
+
+    for (const { template } of ranked) {
+      if (items.length >= rule.count) break;
+      if (!isConservativeFallbackEligible(template, rule.kind)) continue;
+      tryPick(template);
+    }
+
+    return { rule, items };
+  });
+
+  onDuplicateFiltered(duplicateFiltered);
+  return segments;
+}
+
 function toPlanItem(
   t: SessionTemplateRow,
   order: number,
@@ -309,7 +554,7 @@ function toPlanItem(
     media_ref: t.media_ref ?? undefined,
   };
 
-  if (t.name.includes('이완') || segmentTitle === 'Release') {
+  if (t.name.includes('이완') || segmentTitle === 'Cooldown') {
     item.sets = 1;
     item.hold_seconds = 30;
   } else {
@@ -396,29 +641,49 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const overlay = input.adaptiveOverlay;
   const isShort = overlay?.forceShort ?? input.timeBudget === 'short';
   const isRecovery = overlay?.forceRecovery ?? input.conditionMood === 'bad';
-  let mainCount = isShort ? (isRecovery ? 1 : 2) : isRecovery ? 2 : 3;
+  let mainCount = isShort ? 1 : isRecovery ? 1 : 2;
   if (input.safety_mode === 'red') {
-    mainCount = Math.min(mainCount, isShort ? 1 : 2);
+    mainCount = 1;
   }
   const prepCount = 1;
-  const releaseCount = 1;
-  if (isShort && prepCount + mainCount + releaseCount > SHORT_TOTAL_ITEM_CAP) {
-    mainCount = Math.max(1, SHORT_TOTAL_ITEM_CAP - prepCount - releaseCount);
+  const accessoryCount = 1;
+  const cooldownCount = 1;
+  if (isShort && prepCount + mainCount + accessoryCount + cooldownCount > SHORT_TOTAL_ITEM_CAP) {
+    mainCount = Math.max(1, SHORT_TOTAL_ITEM_CAP - prepCount - accessoryCount - cooldownCount);
   }
-  const totalNeeded = prepCount + mainCount + releaseCount;
+  const totalNeeded = prepCount + mainCount + accessoryCount + cooldownCount;
 
   const avoidFilterApplied = avoidIds.size > 0;
   const fallbackUsed = usedFallbackPool;
   let duplicateFilteredCount = 0;
 
-  let selected = selectTemplatesWithConstraints(
-    sorted,
-    input.usedTemplateIds,
-    prepCount,
-    mainCount,
-    releaseCount,
-    (d) => { duplicateFilteredCount = d; }
-  );
+  const goldPathVector = resolveGoldPathVector(input);
+  let selected: SessionTemplateRow[] = [];
+  let selectedSegments: Array<{ title: string; items: SessionTemplateRow[] }> | null = null;
+
+  if (goldPathVector) {
+    const goldSegments = selectGoldPathTemplates(
+      sorted,
+      input,
+      goldPathVector,
+      mainCount,
+      (d) => { duplicateFilteredCount = d; }
+    );
+    selectedSegments = goldSegments.map((segment) => ({
+      title: segment.rule.title,
+      items: segment.items,
+    }));
+    selected = goldSegments.flatMap((segment) => segment.items);
+  } else {
+    selected = selectTemplatesWithConstraints(
+      sorted,
+      input.usedTemplateIds,
+      prepCount,
+      mainCount + accessoryCount,
+      cooldownCount,
+      (d) => { duplicateFilteredCount = d; }
+    );
+  }
 
   if (selected.length < totalNeeded && candidates.length < MIN_CANDIDATES_FOR_STRICT_AVOID) {
     const relaxedCandidates = templates.filter(
@@ -427,58 +692,62 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
         !hasContraindicationOverlap(t.contraindications, excludeSet)
     );
     const relaxedSorted = relaxedCandidates.map((t) => ({ template: t, score: 0 }));
-    const relaxedSelected = selectTemplatesWithConstraints(
-      relaxedSorted,
-      input.usedTemplateIds,
-      prepCount,
-      mainCount,
-      releaseCount,
-      () => {}
-    );
-    if (relaxedSelected.length >= totalNeeded) {
-      selected = relaxedSelected;
+    const relaxedSelected = goldPathVector
+      ? selectGoldPathTemplates(relaxedSorted, input, goldPathVector, mainCount, () => {})
+      : [{
+          rule: { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: [] as GoldPathVector[], fallbackVectors: [] as GoldPathVector[], preferredProgression: [1], count: 0 },
+          items: selectTemplatesWithConstraints(
+            relaxedSorted,
+            input.usedTemplateIds,
+            prepCount,
+            mainCount + accessoryCount,
+            cooldownCount,
+            () => {}
+          ),
+        }];
+    const relaxedItems = goldPathVector
+      ? relaxedSelected.flatMap((segment) => segment.items)
+      : relaxedSelected[0].items;
+    if (relaxedItems.length >= totalNeeded) {
+      selected = relaxedItems;
+      if (goldPathVector) {
+        selectedSegments = (relaxedSelected as Array<{ rule: GoldPathSegmentRule; items: SessionTemplateRow[] }>).map((segment) => ({
+          title: segment.rule.title,
+          items: segment.items,
+        }));
+      } else {
+        selectedSegments = null;
+      }
     }
   }
 
-  const prepItems = selected.slice(0, prepCount);
-  const mainItems = selected.slice(prepCount, prepCount + mainCount);
-  const releaseItems = selected.slice(prepCount + mainCount, prepCount + mainCount + releaseCount);
-
-  const prepDuration = isShort ? 120 : 180;
-  const mainDuration = isShort ? 240 : 420;
-  const releaseDuration = isShort ? 60 : 120;
-
-  const sets = isShort ? 2 : 3;
-  const reps = isRecovery ? 8 : 12;
+  const prepDuration = isShort ? 90 : 150;
+  const mainDuration = isShort ? 180 : 300;
+  const accessoryDuration = isShort ? 90 : 150;
+  const cooldownDuration = isShort ? 60 : 120;
 
   const segments: PlanSegment[] = [];
+  const segmentEntries = selectedSegments ?? [
+    { title: 'Prep', items: selected.slice(0, prepCount) },
+    { title: 'Main', items: selected.slice(prepCount, prepCount + mainCount) },
+    { title: 'Accessory', items: selected.slice(prepCount + mainCount, prepCount + mainCount + accessoryCount) },
+    { title: 'Cooldown', items: selected.slice(prepCount + mainCount + accessoryCount, prepCount + mainCount + accessoryCount + cooldownCount) },
+  ];
 
-  if (prepItems.length > 0) {
-    segments.push({
-      title: 'Prep',
-      duration_sec: prepDuration,
-      items: prepItems.map((t, i) =>
-        toPlanItem(t, i + 1, 'Prep', input.conditionMood)
-      ),
-    });
-  }
+  const durationByTitle: Record<string, number> = {
+    Prep: prepDuration,
+    Main: mainDuration,
+    Accessory: accessoryDuration,
+    Cooldown: cooldownDuration,
+  };
 
-  if (mainItems.length > 0) {
+  for (const entry of segmentEntries) {
+    if (entry.items.length === 0) continue;
     segments.push({
-      title: 'Main',
-      duration_sec: mainDuration,
-      items: mainItems.map((t, i) =>
-        toPlanItem(t, i + 1, 'Main', input.conditionMood)
-      ),
-    });
-  }
-
-  if (releaseItems.length > 0) {
-    segments.push({
-      title: 'Release',
-      duration_sec: releaseDuration,
-      items: releaseItems.map((t, i) =>
-        toPlanItem(t, i + 1, 'Release', input.conditionMood)
+      title: entry.title,
+      duration_sec: durationByTitle[entry.title] ?? accessoryDuration,
+      items: entry.items.map((t, i) =>
+        toPlanItem(t, i + 1, entry.title, input.conditionMood)
       ),
     });
   }

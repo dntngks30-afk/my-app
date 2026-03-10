@@ -22,6 +22,7 @@ try {
 }
 
 const { buildSessionPlanJson } = mod;
+const { getTemplatesForSessionPlan } = await import('../src/lib/workout-routine/exercise-templates-db.ts');
 
 let passed = 0;
 let failed = 0;
@@ -55,6 +56,8 @@ const baseInput = {
 console.log('Plan generator smoke test\n');
 
 try {
+  const templates = await getTemplatesForSessionPlan({ scoringVersion: 'deep_v2' });
+  const byId = new Map(templates.map((t) => [t.id, t]));
   const plan = await buildSessionPlanJson(baseInput);
 
   ok('plan has segments', Array.isArray(plan.segments) && plan.segments.length > 0);
@@ -90,6 +93,52 @@ try {
   const avoidedIds = new Set(allItems.slice(0, 2).map((i) => i.templateId));
   const overlap = avoidItems.filter((i) => avoidedIds.has(i.templateId));
   ok('avoidTemplateIds excludes templates when possible', overlap.length === 0 || avoidPlan.meta.constraint_flags.fallback_used);
+
+  const goldCases = [
+    { name: 'lower_stability', priority_vector: { lower_stability: 3 }, safety_mode: 'none', pain_mode: 'none' },
+    { name: 'lower_mobility', priority_vector: { lower_mobility: 3 }, safety_mode: 'none', pain_mode: 'none' },
+    { name: 'trunk_control', priority_vector: { trunk_control: 3 }, safety_mode: 'none', pain_mode: 'none' },
+    { name: 'upper_mobility', priority_vector: { upper_mobility: 3 }, safety_mode: 'none', pain_mode: 'none' },
+    { name: 'deconditioned', priority_vector: { deconditioned: 3 }, safety_mode: 'yellow', pain_mode: 'caution' },
+  ];
+
+  for (const testCase of goldCases) {
+    const goldPlan = await buildSessionPlanJson({
+      ...baseInput,
+      theme: `Phase 1 · ${testCase.name}`,
+      priority_vector: testCase.priority_vector,
+      safety_mode: testCase.safety_mode,
+      pain_mode: testCase.pain_mode,
+    });
+    const titles = goldPlan.segments.map((s) => s.title);
+    ok(`${testCase.name} has stable 4-phase flow`, ['Prep', 'Main', 'Accessory', 'Cooldown'].every((t) => titles.includes(t)));
+  }
+
+  const protectedPlan = await buildSessionPlanJson({
+    ...baseInput,
+    theme: 'Phase 1 · lower_stability protected',
+    priority_vector: { lower_stability: 3 },
+    safety_mode: 'red',
+    pain_mode: 'protected',
+  });
+  const protectedIds = protectedPlan.segments.flatMap((s) => s.items.map((i) => i.templateId));
+  ok(
+    'protected excludes templates marked for protected',
+    protectedIds.every((id) => !(byId.get(id)?.avoid_if_pain_mode ?? []).includes('protected'))
+  );
+
+  const cautionPlan = await buildSessionPlanJson({
+    ...baseInput,
+    theme: 'Phase 1 · lower_stability caution',
+    priority_vector: { lower_stability: 3 },
+    safety_mode: 'yellow',
+    pain_mode: 'caution',
+  });
+  const cautionMain = cautionPlan.segments.find((s) => s.title === 'Main')?.items ?? [];
+  ok(
+    'caution avoids high difficulty when safer candidates exist',
+    cautionMain.every((item) => (byId.get(item.templateId)?.difficulty ?? 'low') !== 'high')
+  );
 } catch (e) {
   failed++;
   console.error('  ✗ buildSessionPlanJson threw', e);
