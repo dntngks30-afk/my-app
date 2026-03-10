@@ -59,7 +59,10 @@ const USED_WINDOW_K = 4;
 function toSummaryPlan(
   plan: { session_number: number; status: string; theme: string; plan_json: unknown; condition: unknown }
 ): typeof plan {
-  const pj = plan.plan_json as { segments?: Array<{ title?: string; items?: Array<{ templateId?: string; name?: string; order?: number; sets?: number; reps?: number; hold_seconds?: number }> }> } | null;
+  const pj = plan.plan_json as {
+    meta?: { focus?: string[]; priority_vector?: Record<string, number>; pain_mode?: 'none' | 'caution' | 'protected' };
+    segments?: Array<{ title?: string; items?: Array<{ templateId?: string; name?: string; order?: number; sets?: number; reps?: number; hold_seconds?: number }> }>
+  } | null;
   const segments = (pj?.segments ?? []).map((seg) => ({
     title: seg.title ?? '',
     items: (seg.items ?? []).map((it) => ({
@@ -73,7 +76,16 @@ function toSummaryPlan(
   }));
   return {
     ...plan,
-    plan_json: { segments },
+    plan_json: {
+      ...(pj?.meta && {
+        meta: {
+          ...(Array.isArray(pj.meta.focus) && { focus: pj.meta.focus.slice(0, 3) }),
+          ...(pj.meta.priority_vector && { priority_vector: pj.meta.priority_vector }),
+          ...(pj.meta.pain_mode && { pain_mode: pj.meta.pain_mode }),
+        },
+      }),
+      segments,
+    },
   };
 }
 

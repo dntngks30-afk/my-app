@@ -6,6 +6,7 @@ import { getSessionSafe } from '@/lib/supabase'
 import { completeSession } from '@/lib/session/client'
 import type { ExerciseItem } from './planJsonAdapter'
 import type { ExerciseLogItem, SessionPlan, ActivePlanSummary } from '@/lib/session/client'
+import { buildBriefSessionRationale } from '@/lib/deep-result/copy'
 import { ExercisePlayerModal } from './ExercisePlayerModal'
 
 type SessionStatus = 'current' | 'completed' | 'locked'
@@ -39,6 +40,18 @@ const STATUS_CLASS: Record<SessionStatus, string> = {
   current: 'bg-orange-100 text-orange-700',
   completed: 'bg-emerald-100 text-emerald-700',
   locked: 'bg-slate-100 text-slate-500',
+}
+
+function getPlanRationale(plan: SessionPlan | ActivePlanSummary | null) {
+  if (!plan || !('plan_json' in plan) || !plan.plan_json || typeof plan.plan_json !== 'object') return null
+  const meta = (plan.plan_json as {
+    meta?: {
+      focus?: string[]
+      priority_vector?: Record<string, number>
+      pain_mode?: 'none' | 'caution' | 'protected'
+    }
+  }).meta
+  return buildBriefSessionRationale(meta?.priority_vector, meta?.pain_mode, meta?.focus)
 }
 
 export function SessionPanelV2({
@@ -89,6 +102,7 @@ function PanelInner({
 }) {
   // 로컬 운동 로그 누적 (templateId → log). 완료 세션 재조회 시 initialLogs로 초기화
   const [logs, setLogs] = useState<Record<string, ExerciseLogItem>>({})
+  const rationale = getPlanRationale(activePlan)
 
   // 세션 전환 시 logs 초기화
   useEffect(() => {
@@ -227,6 +241,12 @@ function PanelInner({
 
           {/* 운동 목록 */}
           <div className="max-h-[58vh] overflow-y-auto px-5 pt-4 pb-4">
+            {rationale && (status === 'current' || status === 'completed') && (
+              <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-sm font-semibold text-slate-800">{rationale.headline}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">{rationale.detail}</p>
+              </div>
+            )}
             <ExerciseList
               exercises={exercises}
               status={status}

@@ -28,12 +28,29 @@ interface ResetMapV2Props {
   onActivePlanCreated?: (plan: SessionPlan) => void
 }
 
-function toPanelPlan(data: PlanSummaryResponse): SessionPlan {
+type PanelPlanSummaryResponse = PlanSummaryResponse & {
+  rationale?: {
+    focus?: string[]
+    priority_vector?: Record<string, number>
+    pain_mode?: 'none' | 'caution' | 'protected'
+  }
+}
+
+function toPanelPlan(data: PanelPlanSummaryResponse): SessionPlan {
   return {
     session_number: data.session_number,
     status: data.status as 'draft' | 'started' | 'completed',
     theme: '',
-    plan_json: { segments: data.segments } as SessionPlan['plan_json'],
+    plan_json: {
+      ...(data.rationale && {
+        meta: {
+          ...(data.rationale.focus && { focus: data.rationale.focus }),
+          ...(data.rationale.priority_vector && { priority_vector: data.rationale.priority_vector }),
+          ...(data.rationale.pain_mode && { pain_mode: data.rationale.pain_mode }),
+        },
+      }),
+      segments: data.segments,
+    } as SessionPlan['plan_json'],
     condition: { condition_mood: 'ok', time_budget: 'normal' },
     created_at: '',
     started_at: null,
@@ -63,8 +80,8 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   const [pastSessionInitialLogs, setPastSessionInitialLogs] = useState<Record<string, ExerciseLogItem>>({})
   const [planLoading, setPlanLoading] = useState(false)
   const createCalledRef = useRef(false)
-  const summaryCacheRef = useRef(new Map<number, PlanSummaryResponse>())
-  const summaryRequestRef = useRef(new Map<number, Promise<PlanSummaryResponse | null>>())
+  const summaryCacheRef = useRef(new Map<number, PanelPlanSummaryResponse>())
+  const summaryRequestRef = useRef(new Map<number, Promise<PanelPlanSummaryResponse | null>>())
 
   const resolveAuthToken = useCallback(async () => {
     if (getAuthToken) return getAuthToken()
@@ -84,8 +101,9 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       if (!token) return null
       const result = await getSessionPlanSummary(token, sessionNumber)
       if (!result.ok || !result.data) return null
-      summaryCacheRef.current.set(sessionNumber, result.data)
-      return result.data
+      const data = result.data as PanelPlanSummaryResponse
+      summaryCacheRef.current.set(sessionNumber, data)
+      return data
     })()
 
     summaryRequestRef.current.set(sessionNumber, request)

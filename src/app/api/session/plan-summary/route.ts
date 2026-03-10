@@ -1,7 +1,7 @@
 /**
  * GET /api/session/plan-summary?session_number=N
  *
- * 패널 첫 렌더용 경량 조회. segments만 반환 (plan_json.meta, condition 등 제외).
+ * 패널 첫 렌더용 경량 조회. segments + 설명용 rationale 메타만 반환.
  * exercise list / routine summary 렌더에 필요한 최소 데이터.
  *
  * Auth: Bearer token.
@@ -27,6 +27,11 @@ export type PlanSummaryExerciseLogItem = {
 export type PlanSummaryResponse = {
   session_number: number;
   status: string;
+  rationale?: {
+    focus?: string[];
+    priority_vector?: Record<string, number>;
+    pain_mode?: 'none' | 'caution' | 'protected';
+  };
   segments: Array<{
     title: string;
     items: Array<{
@@ -83,7 +88,10 @@ export async function GET(req: NextRequest) {
     }
 
     const tExtract = performance.now();
-    const planJson = row.plan_json as { segments?: Array<{ title?: string; items?: Array<{ templateId?: string; name?: string; order?: number; sets?: number; reps?: number; hold_seconds?: number }> }> } | null;
+    const planJson = row.plan_json as {
+      meta?: { focus?: string[]; priority_vector?: Record<string, number>; pain_mode?: 'none' | 'caution' | 'protected' };
+      segments?: Array<{ title?: string; items?: Array<{ templateId?: string; name?: string; order?: number; sets?: number; reps?: number; hold_seconds?: number }> }>
+    } | null;
     const segments = (planJson?.segments ?? []).map(seg => ({
       title: seg.title ?? '',
       items: (seg.items ?? []).map(it => ({
@@ -104,6 +112,13 @@ export async function GET(req: NextRequest) {
     }
 
     const statusVal = row.status ?? 'draft';
+    const rationale = planJson?.meta
+      ? {
+          ...(Array.isArray(planJson.meta.focus) && { focus: planJson.meta.focus.slice(0, 3) }),
+          ...(planJson.meta.priority_vector && { priority_vector: planJson.meta.priority_vector }),
+          ...(planJson.meta.pain_mode && { pain_mode: planJson.meta.pain_mode }),
+        }
+      : undefined;
     const rawLogs = row.exercise_logs as unknown;
     const exercise_logs: PlanSummaryExerciseLogItem[] | undefined =
       statusVal === 'completed' && Array.isArray(rawLogs)
@@ -121,6 +136,7 @@ export async function GET(req: NextRequest) {
     const data: PlanSummaryResponse = {
       session_number: row.session_number,
       status: statusVal,
+      ...(rationale && { rationale }),
       segments,
       ...(exercise_logs != null && { exercise_logs }),
     };

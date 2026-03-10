@@ -141,6 +141,11 @@ export interface V3PrescriptionNarrative {
   expectedFeeling: string;
 }
 
+export interface BriefSessionRationale {
+  headline: string;
+  detail: string;
+}
+
 const AXIS_TO_FEATURE: Record<string, string> = {
   lower_stability: '하체 안정성',
   lower_mobility: '하체 가동성',
@@ -213,5 +218,34 @@ export function getV3PrescriptionNarrative(
     cautionPoints: cautionPoints.slice(0, 2),
     sessionGoals: [...new Set(sessionGoals)].slice(0, 3),
     expectedFeeling,
+  };
+}
+
+export function buildBriefSessionRationale(
+  priorityVector?: Record<string, number> | null,
+  painMode?: 'none' | 'caution' | 'protected' | null,
+  focusTags?: string[]
+): BriefSessionRationale | null {
+  const narrative = getV3PrescriptionNarrative(priorityVector, painMode, focusTags);
+  if (!narrative) return null;
+
+  const goal = narrative.sessionGoals[0] ?? '움직임 정리';
+  const headline = `이번 세션은 ${goal}을 먼저 정리하는 흐름이에요.`;
+
+  if (painMode === 'protected') {
+    return {
+      headline,
+      detail: '오늘은 강도보다 편안한 범위와 안정적인 연결을 우선합니다.',
+    };
+  }
+  if (painMode === 'caution') {
+    return {
+      headline,
+      detail: '불편감이 올라오지 않도록 강도와 범위를 보수적으로 맞춰 진행해요.',
+    };
+  }
+  return {
+    headline,
+    detail: `${narrative.expectedFeeling}을 느끼기 쉽게 순서를 구성했어요.`,
   };
 }
