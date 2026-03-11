@@ -14,6 +14,7 @@ import {
 import "./globals.css";
 import { PresetProvider } from "@/components/PresetProvider";
 import FontSwitcher from "@/components/FontSwitcher";
+import PwaUpdateHandler from "@/components/shared/PwaUpdateHandler";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -195,6 +196,7 @@ export default function RootLayout({
       <body className="antialiased">
         <PresetProvider>
           <FontSwitcher />
+          <PwaUpdateHandler />
           {children}
         </PresetProvider>
       </body>
