@@ -32,6 +32,8 @@ export type PlanSummaryResponse = {
     priority_vector?: Record<string, number>;
     pain_mode?: 'none' | 'caution' | 'protected';
   };
+  /** Adaptive trace reason summary (one-liner). Only when adaptation was applied. */
+  adaptation_summary?: string;
   segments: Array<{
     title: string;
     items: Array<{
@@ -73,7 +75,7 @@ export async function GET(req: NextRequest) {
     const supabase = getServerSupabaseAdmin();
     const { data: row, error } = await supabase
       .from('session_plans')
-      .select('session_number, status, plan_json, exercise_logs')
+      .select('session_number, status, plan_json, exercise_logs, generation_trace_json')
       .eq('user_id', userId)
       .eq('session_number', sessionNumber)
       .maybeSingle();
@@ -133,10 +135,14 @@ export async function GET(req: NextRequest) {
             }))
         : undefined;
 
+    const genTrace = row.generation_trace_json as { adaptation?: { reason_summary?: string } } | null;
+    const adaptationSummary = genTrace?.adaptation?.reason_summary;
+
     const data: PlanSummaryResponse = {
       session_number: row.session_number,
       status: statusVal,
       ...(rationale && { rationale }),
+      ...(adaptationSummary && { adaptation_summary: adaptationSummary }),
       segments,
       ...(exercise_logs != null && { exercise_logs }),
     };

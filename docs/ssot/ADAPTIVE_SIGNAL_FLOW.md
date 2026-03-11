@@ -2,7 +2,7 @@
 
 **SSOT**: 현재 workout player 입력 → session complete → adaptive progression 데이터 흐름의 실제 상태.
 
-**Last updated**: 2025-03 (pr/bridge-player-difficulty-to-adaptive-01)
+**Last updated**: 2025-03 (pr/adaptive-trace-and-explanation-01)
 
 ---
 
@@ -88,28 +88,74 @@
 
 ---
 
-## 7. Minimum-Diff Fix Recommendation
+## 7. Adaptive Trace (pr/adaptive-trace-and-explanation-01)
 
-**현재 상황**: Player difficulty는 저장되지만 adaptive에 전혀 연결되지 않음.
+**Storage**: `session_plans.generation_trace_json.adaptation`
 
-**최소 수정 제안** (구현 시 별도 PR):
+**Trace shape** (실제 코드 필드):
 
-1. **Option A**: Session complete 시점에 `exercise_logs`의 difficulty를 `exercise_feedback`로 변환:
-   - `exercise_logs`에서 `templateId` → `exercise_key`, `difficulty` → `perceived_difficulty` 매핑.
-   - `session/complete/route.ts`에서 `feedbackPayload`가 없을 때 `exercise_logs`를 기반으로 `exerciseFeedback` 생성 후 `saveSessionFeedback` 호출.
+```json
+{
+  "reason": "pain_flare" | "low_tolerance" | "high_tolerance" | "none",
+  "source_sessions": [1, 2],
+  "applied_modifiers": {
+    "target_level_delta": -1 | 0 | 1,
+    "force_short": true,
+    "force_recovery": true,
+    "avoid_exercise_keys": ["key1"],
+    "max_difficulty_cap": "low" | "medium" | "high"
+  },
+  "signal_summary": {
+    "avg_rpe": "number | null",
+    "avg_pain_after": "number | null",
+    "avg_completion_ratio": "number | null",
+    "skip_count": 0,
+    "replace_count": 0,
+    "difficulty_mix": { "too_easy": 0, "ok": 1, "too_hard": 0 }
+  },
+  "reason_summary": "이전 수행 난이도를 반영해 강도를 소폭 조정했어요",
+  "pain_mode": "none" | "caution" | "protected",
+  "priority_vector_keys": ["key1"]
+}
+```
 
-2. **Option B**: Adaptive에서 `perceived_difficulty`를 사용하도록:
-   - `loadRecentAdaptiveSignals`에서 `exercise_feedback.perceived_difficulty` select 추가.
-   - `deriveAdaptiveModifiers`에서 `perceived_difficulty`를 사용하도록 로직 추가.
+**Evidence**: `src/lib/session/adaptive-progression.ts` lines 297–361 (`buildAdaptationTrace`).
 
-3. **Option C**: Client에서 `feedback` 전송:
-   - SessionPanelV2에서 complete 시 `exercise_logs`를 `exerciseFeedback`로 변환해 `feedback`에 포함.
+**Adaptive modifiers produced** (deriveAdaptiveModifiers output):
 
-**권장**: Option A — 서버에서 complete 시점에 `exercise_logs` → `exercise_feedback` 브릿지 추가. Client 변경 없음, 기존 history 기록 유지.
+| Reason | targetLevelDelta | forceShort | forceRecovery | avoidExerciseKeys | maxDifficultyCap |
+|--------|------------------|------------|---------------|-------------------|------------------|
+| pain_flare | -1 | true | true | problemKeys | low/medium (protected/caution) |
+| low_tolerance | -1 | true | false | problemKeys | low/medium (protected/caution) |
+| high_tolerance | 1 | false | false | [] | — |
+| none | 0 | — | — | [] | — |
 
 ---
 
-## 8. Client Path Summary
+## 8. User-Facing Explanation
+
+**Where**: `SessionPanelV2` rationale box (세션 패널 내부).
+
+**When**: `reason !== 'none'`일 때만 `adaptation_summary` 한 줄 표시.
+
+**Source**:
+- Create success: `toSummaryPlan(plan, adaptationTrace)` → `plan_json.meta.adaptation_summary`
+- Plan-summary API: `generation_trace_json.adaptation.reason_summary` → `adaptation_summary`
+
+**Text strings** (REASON_SUMMARY):
+
+| reason | reason_summary |
+|--------|----------------|
+| pain_flare | 최근 통증/부담 기록을 반영해 회복 중심으로 조정했어요 |
+| low_tolerance | 이전 수행 난이도를 반영해 강도를 소폭 조정했어요 |
+| high_tolerance | 이전 수행이 원활해 강도를 소폭 올렸어요 |
+| none | (표시 안 함) |
+
+**Evidence**: `src/app/app/(tabs)/home/_components/reset-map-v2/SessionPanelV2.tsx` (`getPlanRationale`), `plan-summary/route.ts` lines 136–146.
+
+---
+
+## 9. Client Path Summary
 
 | Client Path | exercise_logs | feedback |
 |-------------|---------------|----------|

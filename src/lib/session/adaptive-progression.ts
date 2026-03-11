@@ -38,6 +38,7 @@ export type AdaptiveModifiers = {
     avg_completion_ratio?: number | null;
     skip_count?: number;
     replace_count?: number;
+    difficulty_mix?: { too_easy: number; ok: number; too_hard: number };
   };
 };
 
@@ -197,12 +198,20 @@ export function deriveAdaptiveModifiers(
     }
   }
 
+  const difficultyMix = { too_easy: 0, ok: 0, too_hard: 0 };
+  for (const f of inWindow) {
+    if (f.difficulty_feedback === 'too_easy') difficultyMix.too_easy++;
+    else if (f.difficulty_feedback === 'ok') difficultyMix.ok++;
+    else if (f.difficulty_feedback === 'too_hard') difficultyMix.too_hard++;
+  }
+
   const signalSummary = {
     avg_rpe: avgRpe,
     avg_pain_after: avgPainAfter,
     avg_completion_ratio: avgCompletion,
     skip_count: skipCount,
     replace_count: replaceCount,
+    difficulty_mix: difficultyMix,
   };
 
   const painMode = ctx?.pain_mode ?? 'none';
@@ -302,10 +311,20 @@ export type AdaptationTrace = {
     avg_completion_ratio?: number | null;
     skip_count?: number;
     replace_count?: number;
+    difficulty_mix?: { too_easy: number; ok: number; too_hard: number };
   };
+  /** User-facing one-liner derived from reason. Only when reason !== 'none'. */
+  reason_summary?: string;
   /** PR-ALG-05: deep_v3 context used */
   pain_mode?: 'none' | 'caution' | 'protected';
   priority_vector_keys?: string[];
+};
+
+const REASON_SUMMARY: Record<AdaptiveReason, string> = {
+  pain_flare: '최근 통증/부담 기록을 반영해 회복 중심으로 조정했어요',
+  low_tolerance: '이전 수행 난이도를 반영해 강도를 소폭 조정했어요',
+  high_tolerance: '이전 수행이 원활해 강도를 소폭 올렸어요',
+  none: '',
 };
 
 export function buildAdaptationTrace(
@@ -333,6 +352,9 @@ export function buildAdaptationTrace(
   if (ctx?.pain_mode) trace.pain_mode = ctx.pain_mode;
   if (ctx?.priority_vector && Object.keys(ctx.priority_vector).length > 0) {
     trace.priority_vector_keys = Object.keys(ctx.priority_vector);
+  }
+  if (modifiers.reason !== 'none') {
+    trace.reason_summary = REASON_SUMMARY[modifiers.reason] || '';
   }
 
   return trace;

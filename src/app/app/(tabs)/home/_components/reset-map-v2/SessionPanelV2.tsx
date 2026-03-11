@@ -50,9 +50,11 @@ function getPlanRationale(plan: SessionPlan | ActivePlanSummary | null) {
       focus?: string[]
       priority_vector?: Record<string, number>
       pain_mode?: 'none' | 'caution' | 'protected'
+      adaptation_summary?: string
     }
   }).meta
-  return buildBriefSessionRationale(meta?.priority_vector, meta?.pain_mode, meta?.focus)
+  const base = buildBriefSessionRationale(meta?.priority_vector, meta?.pain_mode, meta?.focus)
+  return meta?.adaptation_summary ? { ...base, adaptation_summary: meta.adaptation_summary } : base
 }
 
 export function SessionPanelV2({
@@ -273,6 +275,9 @@ function PanelInner({
               <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <p className="text-sm font-semibold text-slate-800">{rationale.headline}</p>
                 <p className="mt-1 text-xs leading-5 text-slate-500">{rationale.detail}</p>
+                {'adaptation_summary' in rationale && rationale.adaptation_summary && (
+                  <p className="mt-1.5 text-xs text-slate-600">{rationale.adaptation_summary}</p>
+                )}
               </div>
             )}
             <ExerciseList

@@ -57,7 +57,8 @@ const USED_WINDOW_K = 4;
 
 /** Panel first render용: plan_json을 segments만 남긴 경량 형태로 변환 */
 function toSummaryPlan(
-  plan: { session_number: number; status: string; theme: string; plan_json: unknown; condition: unknown }
+  plan: { session_number: number; status: string; theme: string; plan_json: unknown; condition: unknown },
+  adaptationTrace?: { reason_summary?: string } | null
 ): typeof plan {
   const pj = plan.plan_json as {
     meta?: { focus?: string[]; priority_vector?: Record<string, number>; pain_mode?: 'none' | 'caution' | 'protected' };
@@ -74,16 +75,18 @@ function toSummaryPlan(
       hold_seconds: it.hold_seconds,
     })),
   }));
+  const meta: Record<string, unknown> = {};
+  if (pj?.meta) {
+    if (Array.isArray(pj.meta.focus)) meta.focus = pj.meta.focus.slice(0, 3);
+    if (pj.meta.priority_vector) meta.priority_vector = pj.meta.priority_vector;
+    if (pj.meta.pain_mode) meta.pain_mode = pj.meta.pain_mode;
+  }
+  if (adaptationTrace?.reason_summary) meta.adaptation_summary = adaptationTrace.reason_summary;
+
   return {
     ...plan,
     plan_json: {
-      ...(pj?.meta && {
-        meta: {
-          ...(Array.isArray(pj.meta.focus) && { focus: pj.meta.focus.slice(0, 3) }),
-          ...(pj.meta.priority_vector && { priority_vector: pj.meta.priority_vector }),
-          ...(pj.meta.pain_mode && { pain_mode: pj.meta.pain_mode }),
-        },
-      }),
+      ...(Object.keys(meta).length > 0 && { meta }),
       segments,
     },
   };
@@ -735,7 +738,7 @@ export async function POST(req: NextRequest) {
       console.info('[session/create] perf', timings);
     }
 
-    const active = toSummaryPlan(plan);
+    const active = toSummaryPlan(plan, adaptationTrace);
     const data = { progress: finalProgress, active, idempotent: false, today_completed: tc, ...(nua != null && { next_unlock_at: nua }) };
     return ok(data, isDebug ? { debug: timings } : undefined);
   } catch (err) {

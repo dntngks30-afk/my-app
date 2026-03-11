@@ -37,18 +37,20 @@ type PanelPlanSummaryResponse = PlanSummaryResponse & {
 }
 
 function toPanelPlan(data: PanelPlanSummaryResponse): SessionPlan {
+  const meta: Record<string, unknown> = {};
+  if (data.rationale) {
+    if (data.rationale.focus) meta.focus = data.rationale.focus;
+    if (data.rationale.priority_vector) meta.priority_vector = data.rationale.priority_vector;
+    if (data.rationale.pain_mode) meta.pain_mode = data.rationale.pain_mode;
+  }
+  if (data.adaptation_summary) meta.adaptation_summary = data.adaptation_summary;
+
   return {
     session_number: data.session_number,
     status: data.status as 'draft' | 'started' | 'completed',
     theme: '',
     plan_json: {
-      ...(data.rationale && {
-        meta: {
-          ...(data.rationale.focus && { focus: data.rationale.focus }),
-          ...(data.rationale.priority_vector && { priority_vector: data.rationale.priority_vector }),
-          ...(data.rationale.pain_mode && { pain_mode: data.rationale.pain_mode }),
-        },
-      }),
+      ...(Object.keys(meta).length > 0 && { meta }),
       segments: data.segments,
     } as SessionPlan['plan_json'],
     condition: { condition_mood: 'ok', time_budget: 'normal' },
