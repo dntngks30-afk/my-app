@@ -18,6 +18,7 @@ import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { logSessionEvent, summarizeExerciseLogs } from '@/lib/session-events';
 import { buildSessionExerciseEvents, writeSessionExerciseEvents } from '@/lib/session/session-exercise-events';
+import { runEvaluatorAndUpsert } from '@/lib/session/adaptive-evaluator';
 import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import { computePhase, type PhaseLengths } from '@/lib/session/phase';
@@ -318,9 +319,10 @@ export async function POST(req: NextRequest) {
 
       // PR-A: exercise-level session_exercise_events (truthful, no fake per-set)
       let eventLogResult: { attempted: number; written: number; failed: number } | undefined;
-      if (exerciseLogsArray.length > 0 && currentPlan?.id) {
-        const planId = (updatedRows[0] as { id?: string }).id ?? currentPlan.id;
-        const eventRows = buildSessionExerciseEvents(exerciseLogsArray, currentPlan.plan_json as Record<string, unknown> | null, {
+      let adaptiveSummary: { completion_ratio: number; dropout_risk_score: number; discomfort_burden_score: number; effort_mismatch_score: number; flags: string[] } | null = null;
+      const planId = (updatedRows[0] as { id?: string }).id ?? currentPlan?.id;
+      if (exerciseLogsArray.length > 0 && planId) {
+        const eventRows = buildSessionExerciseEvents(exerciseLogsArray, currentPlan?.plan_json as Record<string, unknown> | null, {
           userId,
           sessionPlanId: planId,
           sessionNumber,
@@ -330,6 +332,8 @@ export async function POST(req: NextRequest) {
         if (process.env.NODE_ENV !== 'production') {
           console.info('[session/complete] event_log', { sessionNumber, ...eventLogResult });
         }
+        // PR-B: run adaptive evaluator after event logging
+        adaptiveSummary = await runEvaluatorAndUpsert(supabase, { userId, sessionPlanId: planId, sessionNumber });
       }
       const { data: progress } = await supabase
         .from('session_program_progress')
@@ -362,7 +366,10 @@ export async function POST(req: NextRequest) {
         exercise_logs: exerciseLogsArray,
         ...(feedbackPayload && { feedback_saved: feedbackSaved }),
       };
-      return ok(data, isDebug && eventLogResult ? { debug: { event_log: eventLogResult } } : undefined);
+      const debugExtras: Record<string, unknown> = {};
+      if (isDebug && eventLogResult) debugExtras.event_log = eventLogResult;
+      if (isDebug && adaptiveSummary) debugExtras.adaptive_summary = adaptiveSummary;
+      return ok(data, Object.keys(debugExtras).length > 0 ? { debug: debugExtras } : undefined);
     }
 
     // 0 rows updated — plan not found, already completed, or concurrent
