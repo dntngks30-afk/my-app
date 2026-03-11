@@ -1,27 +1,32 @@
 /**
  * 푸시 알림 클라이언트 유틸리티
- * 
- * 브라우저 푸시 알림 권한 요청 및 토큰 관리
+ *
+ * 브라우저 푸시 알림 권한 요청 및 토큰 관리.
+ * SW 등록은 next-pwa가 단일 소유. 이 모듈은 기존 등록만 재사용.
  */
 
+/** next-pwa가 등록한 SW의 scope와 동일 */
+const SW_SCOPE = '/';
+
 /**
- * Service Worker 등록
+ * 기존 Service Worker 등록 조회 (재사용 전용).
+ * next-pwa(register:true)가 유일한 등록 주체. 직접 register() 호출 없음.
+ * 푸시 구독/조회 시 이 함수로 registration을 얻는다.
  */
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
-    console.warn('Service Worker를 지원하지 않는 브라우저입니다.');
     return null;
   }
 
   try {
-    const registration = await navigator.serviceWorker.register('/sw.js', {
-      scope: '/',
-    });
+    let registration = await navigator.serviceWorker.getRegistration(SW_SCOPE);
+    if (registration) return registration;
 
-    console.log('Service Worker 등록 성공:', registration.scope);
-    return registration;
-  } catch (error) {
-    console.error('Service Worker 등록 실패:', error);
+    // next-pwa 주입 스크립트가 아직 실행되지 않은 경우 대기 후 재시도
+    await new Promise((r) => setTimeout(r, 400));
+    registration = await navigator.serviceWorker.getRegistration(SW_SCOPE);
+    return registration ?? null;
+  } catch {
     return null;
   }
 }
