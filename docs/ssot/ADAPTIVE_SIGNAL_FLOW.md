@@ -2,7 +2,7 @@
 
 **SSOT**: 현재 workout player 입력 → session complete → adaptive progression 데이터 흐름의 실제 상태.
 
-**Last traced**: 2025-03 (pr/trace-adaptive-signal-flow-01)
+**Last updated**: 2025-03 (pr/bridge-player-difficulty-to-adaptive-01)
 
 ---
 
@@ -29,7 +29,7 @@
 |--------|--------------|---------------|-----------------|----------------|---------------|
 | sets | ExercisePlayerModal | `exercise_logs[].sets` | `session_plans.exercise_logs` (JSON) | ❌ No | ✅ Yes |
 | reps | ExercisePlayerModal | `exercise_logs[].reps` | `session_plans.exercise_logs` (JSON) | ❌ No | ✅ Yes |
-| difficulty (1–5) | ExercisePlayerModal | `exercise_logs[].difficulty` | `session_plans.exercise_logs` (JSON) | ❌ No | ✅ Yes |
+| difficulty (1–5) | ExercisePlayerModal | `exercise_logs[].difficulty` | `session_plans.exercise_logs` (JSON) + **derived** → `session_feedback.difficulty_feedback` | ✅ Yes (via bridge) | ✅ Yes |
 | overall RPE | — | `feedback.sessionFeedback.overallRpe` | `session_feedback.overall_rpe` | ✅ Yes (if present) | — |
 | pain after | — | `feedback.sessionFeedback.painAfter` | `session_feedback.pain_after` | ✅ Yes (if present) | — |
 | difficulty_feedback | — | `feedback.sessionFeedback.difficultyFeedback` | `session_feedback.difficulty_feedback` | ✅ Yes (if present) | — |
@@ -65,17 +65,12 @@
 
 ## 5. Is Player Difficulty Adaptive-Effective Right Now?
 
-**No — player difficulty is NOT adaptive-effective.**
+**Yes — via server-side bridge (pr/bridge-player-difficulty-to-adaptive-01).**
 
-- Player difficulty (1–5)는 `exercise_logs[].difficulty`로만 전송됨.
-- `exercise_logs`는 `session_plans.exercise_logs`에만 저장됨.
-- Adaptive는 `session_feedback` / `exercise_feedback`만 읽음.
-- `session_feedback` / `exercise_feedback`는 현재 client에서 **전혀 전송되지 않음**.
-
-**Evidence**:
-- `SessionPanelV2.tsx` lines 171–176: `completeSession` 호출 시 `feedback` 없음.
-- `SessionRoutinePanel.tsx` lines 512–516: `feedback` 없음.
-- `RoutineHubClient.tsx` lines 429–435: `feedback` 없음.
+- Player difficulty (1–5)는 `exercise_logs[].difficulty`로 전송됨.
+- `exercise_logs`는 `session_plans.exercise_logs`에 저장됨 (history).
+- **Bridge**: `/api/session/complete`에서 explicit feedback이 없을 때, `exercise_logs`의 difficulty 평균을 `session_feedback.difficulty_feedback`로 파생하여 저장.
+- Adaptive는 `session_feedback.difficulty_feedback`를 읽음 (`deriveAdaptiveModifiers` → `hasLowTolerance` when `too_hard`).
 
 ---
 
@@ -85,12 +80,11 @@
 |------------|------|-------|
 | Player captures difficulty | `ExercisePlayerModal.tsx` | 45, 127–136, 256–277 |
 | SessionPanelV2 sends exercise_logs only | `SessionPanelV2.tsx` | 171–176 |
-| No feedback sent | `SessionPanelV2.tsx`, `SessionRoutinePanel.tsx`, `RoutineHubClient.tsx` | 171–176, 512–516, 429–435 |
-| Complete API accepts feedback | `session/complete/route.ts` | 153, 296–304 |
+| No feedback sent by clients | `SessionPanelV2.tsx`, `SessionRoutinePanel.tsx`, `RoutineHubClient.tsx` | 171–176, 512–516, 429–435 |
+| **Bridge: derive from exercise_logs** | `session/complete/route.ts` | `deriveDifficultyFeedbackFromExerciseLogs`, `ensureFeedbackWithDerivedDifficulty` |
+| Complete API persists derived feedback | `session/complete/route.ts` | 296–304 (saveSessionFeedback) |
 | Exercise_logs stored in session_plans | `session/complete/route.ts` | 241, 246 |
-| Adaptive reads session_feedback, exercise_feedback only | `adaptive-progression.ts` | 82–94 |
-| Adaptive does NOT read exercise_logs | `adaptive-progression.ts` | 82–94 |
-| Adaptive does NOT read perceived_difficulty | `adaptive-progression.ts` | 91–92 |
+| Adaptive reads session_feedback.difficulty_feedback | `adaptive-progression.ts` | 228 (`too_hard` → hasLowTolerance) |
 
 ---
 
@@ -123,4 +117,4 @@
 | SessionRoutinePanel (Routine tab) | ❌ No | ❌ No |
 | RoutineHubClient | ✅ Optional | ❌ No |
 
-**결론**: 어떤 client path도 `feedback`을 전송하지 않음. `session_feedback` / `exercise_feedback`는 현재 비어 있음.
+**결론**: Client는 `feedback`을 전송하지 않음. 서버가 `exercise_logs`에서 `difficulty_feedback`를 파생하여 `session_feedback`에 저장함.

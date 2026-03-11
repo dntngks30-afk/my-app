@@ -22,8 +22,42 @@ import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import { computePhase, type PhaseLengths } from '@/lib/session/phase';
 import { normalizeSessionFeedbackPayload, saveSessionFeedback } from '@/lib/session/feedback';
 import { buildExecutionSummary } from '@/lib/session/execution-summary';
+import type { FeedbackPayload } from '@/lib/session/feedback-types';
 
 const ROUTE_COMPLETE = '/api/session/complete';
+
+/** Player difficulty 1–5 → session_feedback.difficulty_feedback. Uses existing adaptive semantics. */
+type DifficultyFeedbackValue = 'too_easy' | 'ok' | 'too_hard';
+
+function deriveDifficultyFeedbackFromExerciseLogs(
+  logs: ExerciseLogItem[]
+): DifficultyFeedbackValue | null {
+  const withDiff = logs.filter((l) => typeof l.difficulty === 'number' && l.difficulty >= 1 && l.difficulty <= 5);
+  if (withDiff.length === 0) return null;
+  const avg = withDiff.reduce((s, l) => s + (l.difficulty ?? 0), 0) / withDiff.length;
+  if (avg <= 2) return 'too_easy';
+  if (avg >= 4) return 'too_hard';
+  return 'ok';
+}
+
+/** Merge derived session feedback when explicit feedback is missing. */
+function ensureFeedbackWithDerivedDifficulty(
+  feedbackPayload: FeedbackPayload | null,
+  exerciseLogsArray: ExerciseLogItem[]
+): FeedbackPayload | null {
+  const hasExplicit = feedbackPayload?.sessionFeedback?.difficultyFeedback != null;
+  if (hasExplicit) return feedbackPayload;
+
+  const derived = deriveDifficultyFeedbackFromExerciseLogs(exerciseLogsArray);
+  if (derived == null) return feedbackPayload;
+
+  const sessionFeedback = feedbackPayload?.sessionFeedback ?? {};
+  const merged: FeedbackPayload = {
+    ...feedbackPayload,
+    sessionFeedback: { ...sessionFeedback, difficultyFeedback: derived },
+  };
+  return merged;
+}
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -150,7 +184,8 @@ export async function POST(req: NextRequest) {
       exerciseLogsArray = [];
     }
 
-    const feedbackPayload = normalizeSessionFeedbackPayload(body.feedback);
+    let feedbackPayload = normalizeSessionFeedbackPayload(body.feedback);
+    feedbackPayload = ensureFeedbackWithDerivedDifficulty(feedbackPayload, exerciseLogsArray);
 
     const headerKey = req.headers.get('Idempotency-Key') ?? null;
     const dedupeKey = buildDedupeKey({
