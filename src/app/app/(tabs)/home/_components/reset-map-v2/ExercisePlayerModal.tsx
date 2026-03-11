@@ -44,6 +44,8 @@ function ModalInner({
   const [sets, setSets] = useState(String(initialLog?.sets ?? item.targetSets ?? 3))
   const [reps, setReps] = useState(String(initialLog?.reps ?? item.targetReps ?? ''))
   const [difficulty, setDifficulty] = useState<number | null>(initialLog?.difficulty ?? null)
+  const [rpe, setRpe] = useState<number | null>(initialLog?.rpe ?? null)
+  const [discomfort, setDiscomfort] = useState<number | null>(initialLog?.discomfort ?? null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<{ destroy: () => void } | null>(null)
 
@@ -134,6 +136,8 @@ function ModalInner({
       sets: Number.isNaN(setsNum) ? null : Math.min(20, Math.max(0, setsNum)),
       reps: Number.isNaN(repsNum) ? null : Math.min(200, Math.max(0, repsNum)),
       difficulty,
+      rpe: rpe != null && rpe >= 1 && rpe <= 10 ? rpe : null,
+      discomfort: discomfort != null && discomfort >= 0 && discomfort <= 10 ? discomfort : null,
     })
   }
 
@@ -268,6 +272,52 @@ function ModalInner({
                     {d}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* RPE / 불편감 (선택, 운동 단위 adaptive signal) */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  RPE (선택)
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {([1, 3, 5, 7, 10] as const).map(v => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setRpe(prev => prev === v ? null : v)}
+                      className={[
+                        'rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors',
+                        rpe === v ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                      ].join(' ')}
+                      aria-pressed={rpe === v}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  불편감 (선택)
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {([0, 2, 5, 7, 10] as const).map(v => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setDiscomfort(prev => prev === v ? null : v)}
+                      className={[
+                        'rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors',
+                        discomfort === v ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                      ].join(' ')}
+                      aria-pressed={discomfort === v}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 

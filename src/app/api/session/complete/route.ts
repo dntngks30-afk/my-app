@@ -72,6 +72,8 @@ type ExerciseLogItem = {
   sets: number | null;
   reps: number | null;
   difficulty: number | null;
+  rpe?: number | null;
+  discomfort?: number | null;
 };
 
 const MAX_LOGS = 50;
@@ -111,7 +113,17 @@ function parseAndValidateExerciseLogs(raw: unknown): ExerciseLogItem[] | null {
       difficulty = Math.min(5, Math.max(1, Math.floor(obj.difficulty)));
     }
 
-    result.push({ templateId, name, sets, reps, difficulty });
+    let rpe: number | null = null;
+    if (typeof obj.rpe === 'number' && Number.isFinite(obj.rpe)) {
+      rpe = Math.min(10, Math.max(1, Math.floor(obj.rpe)));
+    }
+
+    let discomfort: number | null = null;
+    if (typeof obj.discomfort === 'number' && Number.isFinite(obj.discomfort)) {
+      discomfort = Math.min(10, Math.max(0, Math.floor(obj.discomfort)));
+    }
+
+    result.push({ templateId, name, sets, reps, difficulty, rpe, discomfort });
   }
   return result;
 }
