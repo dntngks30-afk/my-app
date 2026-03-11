@@ -17,6 +17,7 @@ import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { logSessionEvent, summarizeExerciseLogs } from '@/lib/session-events';
+import { buildSessionExerciseEvents } from '@/lib/session/session-exercise-events';
 import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import { computePhase, type PhaseLengths } from '@/lib/session/phase';
@@ -251,7 +252,7 @@ export async function POST(req: NextRequest) {
 
     const { data: currentPlan } = await supabase
       .from('session_plans')
-      .select('generation_trace_json')
+      .select('id, generation_trace_json, plan_json')
       .eq('user_id', userId)
       .eq('session_number', sessionNumber)
       .maybeSingle();
@@ -313,6 +314,28 @@ export async function POST(req: NextRequest) {
           logs_summary: logsSummary,
         },
       });
+
+      // PR-A: per-set session_exercise_events (fire-and-forget)
+      if (exerciseLogsArray.length > 0 && currentPlan?.id) {
+        const planId = (updatedRows[0] as { id?: string }).id ?? currentPlan.id;
+        const eventRows = buildSessionExerciseEvents(exerciseLogsArray, currentPlan.plan_json as Record<string, unknown> | null, {
+          userId,
+          sessionPlanId: planId,
+          sessionNumber,
+          completedAt: nowIso,
+        });
+        if (eventRows.length > 0) {
+          supabase
+            .from('session_exercise_events')
+            .upsert(eventRows, {
+              onConflict: 'session_plan_id,template_id,set_index,event_source',
+              ignoreDuplicates: true,
+            })
+            .then(({ error }) => {
+              if (error) console.error('[session/complete] session_exercise_events insert failed', error.message);
+            });
+        }
+      }
       const { data: progress } = await supabase
         .from('session_program_progress')
         .select('*')
