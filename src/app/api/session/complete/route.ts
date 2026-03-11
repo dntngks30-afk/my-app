@@ -17,7 +17,7 @@ import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { logSessionEvent, summarizeExerciseLogs } from '@/lib/session-events';
-import { buildSessionExerciseEvents } from '@/lib/session/session-exercise-events';
+import { buildSessionExerciseEvents, writeSessionExerciseEvents } from '@/lib/session/session-exercise-events';
 import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import { computePhase, type PhaseLengths } from '@/lib/session/phase';
@@ -155,6 +155,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const isDebug = body.debug === true || new URL(req.url ?? '/').searchParams.get('debug') === '1';
 
     const sessionNumber = typeof body.session_number === 'number' ? Math.floor(body.session_number) : null;
     const durationSeconds = typeof body.duration_seconds === 'number' ? Math.max(0, body.duration_seconds) : null;
@@ -315,7 +316,8 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // PR-A: per-set session_exercise_events (fire-and-forget)
+      // PR-A: exercise-level session_exercise_events (truthful, no fake per-set)
+      let eventLogResult: { attempted: number; written: number; failed: number } | undefined;
       if (exerciseLogsArray.length > 0 && currentPlan?.id) {
         const planId = (updatedRows[0] as { id?: string }).id ?? currentPlan.id;
         const eventRows = buildSessionExerciseEvents(exerciseLogsArray, currentPlan.plan_json as Record<string, unknown> | null, {
@@ -324,16 +326,9 @@ export async function POST(req: NextRequest) {
           sessionNumber,
           completedAt: nowIso,
         });
-        if (eventRows.length > 0) {
-          supabase
-            .from('session_exercise_events')
-            .upsert(eventRows, {
-              onConflict: 'session_plan_id,template_id,set_index,event_source',
-              ignoreDuplicates: true,
-            })
-            .then(({ error }) => {
-              if (error) console.error('[session/complete] session_exercise_events insert failed', error.message);
-            });
+        eventLogResult = await writeSessionExerciseEvents(supabase, eventRows);
+        if (process.env.NODE_ENV !== 'production') {
+          console.info('[session/complete] event_log', { sessionNumber, ...eventLogResult });
         }
       }
       const { data: progress } = await supabase
@@ -367,7 +362,7 @@ export async function POST(req: NextRequest) {
         exercise_logs: exerciseLogsArray,
         ...(feedbackPayload && { feedback_saved: feedbackSaved }),
       };
-      return ok(data, data);
+      return ok(data, isDebug && eventLogResult ? { debug: { event_log: eventLogResult } } : undefined);
     }
 
     // 0 rows updated — plan not found, already completed, or concurrent
