@@ -8,6 +8,7 @@ import type { ExerciseItem } from './planJsonAdapter'
 import type { ExerciseLogItem, SessionPlan, ActivePlanSummary } from '@/lib/session/client'
 import { buildBriefSessionRationale } from '@/lib/deep-result/copy'
 import { ExercisePlayerModal } from './ExercisePlayerModal'
+import SessionCompleteSummary from '@/app/app/routine/_components/SessionCompleteSummary'
 
 type SessionStatus = 'current' | 'completed' | 'locked'
 
@@ -131,6 +132,12 @@ function PanelInner({
   const [completing, setCompleting] = useState(false)
   const [completeError, setCompleteError] = useState<string | null>(null)
   const [completed, setCompleted] = useState(false)
+  const [completeResult, setCompleteResult] = useState<{
+    progress: { completed_sessions: number; total_sessions: number }
+    next_theme: string | null
+    duration_seconds: number
+    exercise_logs?: ExerciseLogItem[] | null
+  } | null>(null)
   // 패널 오픈 시각 (duration 계산용)
   const startedAtRef = useRef(Date.now())
 
@@ -179,12 +186,15 @@ function PanelInner({
 
       setCompleted(true)
       setCompleting(false)
+      setCompleteResult({
+        progress: result.data.progress ?? { completed_sessions: sessionNumber, total_sessions: total },
+        next_theme: result.data.next_theme ?? null,
+        duration_seconds: durationSec,
+        exercise_logs: result.data.exercise_logs ?? exerciseLogsArray,
+      })
 
       const newCompleted = result.data.progress?.completed_sessions ?? sessionNumber
       onSessionCompleted?.(newCompleted)
-
-      // 1.5초 후 패널 자동 닫기
-      setTimeout(onClose, 1500)
     } catch (err) {
       setCompleteError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.')
       setCompleting(false)
@@ -212,6 +222,24 @@ function PanelInner({
             <div className="h-1.5 w-12 rounded-full bg-slate-200" />
           </div>
 
+          {/* Reflection: complete 이후 요약 화면 */}
+          {completed && completeResult && (
+            <div className="px-4 pb-4 max-h-[70vh] overflow-y-auto">
+              <SessionCompleteSummary
+                durationSeconds={completeResult.duration_seconds}
+                progress={completeResult.progress}
+                nextTheme={completeResult.next_theme}
+                exerciseLogs={completeResult.exercise_logs}
+                completedSessionNumber={sessionId}
+                onDismiss={onClose}
+                showBodyCheckCta
+              />
+            </div>
+          )}
+
+          {/* 기존 패널: 미완료 시 */}
+          {!(completed && completeResult) && (
+            <>
           {/* 완료 상태 배너 */}
           {completed && (
             <div className="mx-4 mt-2 mb-0 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-center">
@@ -279,6 +307,8 @@ function PanelInner({
                 )}
               </button>
             </div>
+          )}
+            </>
           )}
         </div>
       </div>

@@ -5,11 +5,15 @@
  *
  * complete 응답 후 표시되는 요약 화면.
  * 오늘 운동 시간 / 진척도 / 오늘 기록(exercise_logs) / 다음 테마
+ * + 오늘 몸상태 체크 CTA (daily_conditions SSOT 연결)
  */
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Home, BarChart2 } from 'lucide-react';
+import { CheckCircle2, Home, BarChart2, Activity } from 'lucide-react';
 import { NeoCard, NeoButton } from '@/components/neobrutalism';
+import { CheckInModal } from '@/app/app/_components/CheckInModal';
+import { getSessionSafe } from '@/lib/supabase';
 import type { SessionProgress, ExerciseLogItem } from '@/lib/session/client';
 
 function formatDuration(seconds: number): string {
@@ -26,6 +30,7 @@ export default function SessionCompleteSummary({
   exerciseLogs,
   completedSessionNumber,
   onDismiss,
+  showBodyCheckCta = true,
 }: {
   durationSeconds: number;
   progress: SessionProgress;
@@ -34,8 +39,41 @@ export default function SessionCompleteSummary({
   exerciseLogs?: ExerciseLogItem[] | null;
   completedSessionNumber?: number | null;
   onDismiss?: () => void;
+  /** 오늘 몸상태 체크 CTA 표시 (post-completion reflection) */
+  showBodyCheckCta?: boolean;
 }) {
   const router = useRouter();
+  const [showCheckIn, setShowCheckIn] = useState(false);
+  const [checkInError, setCheckInError] = useState<string | null>(null);
+  const [checkInSuccess, setCheckInSuccess] = useState(false);
+
+  const handleCheckInSubmit = async (values: {
+    pain_today?: number | null;
+    stiffness?: number | null;
+    sleep?: number | null;
+    time_available_min?: number | null;
+  }) => {
+    const { session } = await getSessionSafe();
+    if (!session?.access_token) {
+      setCheckInError('로그인이 필요합니다.');
+      return;
+    }
+    setCheckInError(null);
+    const res = await fetch('/api/daily-condition/upsert', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ ...values, source: 'post_workout' }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setCheckInError(data?.error ?? '저장 실패');
+      return;
+    }
+    setCheckInSuccess(true);
+  };
 
   return (
     <NeoCard className="p-6">
@@ -104,30 +142,57 @@ export default function SessionCompleteSummary({
         )}
       </div>
 
-      <div className="flex gap-2">
-        <NeoButton
-          variant="orange"
-          fullWidth
-          onClick={() => router.push('/app/home')}
-          className="py-3 flex items-center justify-center gap-2"
-        >
-          <Home className="size-4" />
-          홈으로
-        </NeoButton>
-        <NeoButton
-          variant="secondary"
-          fullWidth
-          onClick={() => {
-            onDismiss?.();
-            const q = completedSessionNumber != null ? `?focusSession=${completedSessionNumber}` : '';
-            router.push(`/app/checkin${q}`);
-          }}
-          className="py-3 flex items-center justify-center gap-2"
-        >
-          <BarChart2 className="size-4" />
-          루틴 확인
-        </NeoButton>
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-2">
+          <NeoButton
+            variant="orange"
+            fullWidth
+            onClick={() => {
+              onDismiss?.();
+              router.push('/app/home');
+            }}
+            className="py-3 flex items-center justify-center gap-2"
+          >
+            <Home className="size-4" />
+            홈으로
+          </NeoButton>
+          <NeoButton
+            variant="secondary"
+            fullWidth
+            onClick={() => {
+              onDismiss?.();
+              const q = completedSessionNumber != null ? `?focusSession=${completedSessionNumber}` : '';
+              router.push(`/app/checkin${q}`);
+            }}
+            className="py-3 flex items-center justify-center gap-2"
+          >
+            <BarChart2 className="size-4" />
+            루틴 확인
+          </NeoButton>
+        </div>
+        {showBodyCheckCta && (
+          <button
+            type="button"
+            onClick={() => setShowCheckIn(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-slate-300 bg-white py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 active:scale-[0.98]"
+          >
+            <Activity className="size-4" />
+            오늘 몸상태 체크
+          </button>
+        )}
       </div>
+
+      {showCheckIn && (
+        <CheckInModal
+          isPostWorkout
+          submitLabel="저장"
+          onSubmit={handleCheckInSubmit}
+          onSkip={() => setShowCheckIn(false)}
+          onClose={() => setShowCheckIn(false)}
+          saveError={checkInError}
+          saveSuccess={checkInSuccess}
+        />
+      )}
     </NeoCard>
   );
 }

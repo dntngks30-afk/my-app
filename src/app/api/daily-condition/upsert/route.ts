@@ -92,6 +92,7 @@ export async function POST(req: NextRequest) {
   }
 
   const dayKeyUtc = getDayKeyUtc();
+  const source = validateSource(body.source) ?? 'checkin';
 
   const payload: Record<string, unknown> = {
     user_id: userId,
