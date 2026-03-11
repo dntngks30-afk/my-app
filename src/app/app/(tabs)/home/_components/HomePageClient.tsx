@@ -134,7 +134,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         return;
       }
       try {
-        const result = await getCachedBootstrap(token);
+        const result = await getCachedBootstrap(token, { debug: debugFlag });
         if (cancelled) return;
         const elapsed = Math.round(performance.now() - t0);
         if (typeof performance !== 'undefined' && performance.mark) {

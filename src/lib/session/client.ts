@@ -191,8 +191,12 @@ export type BootstrapResponse = {
   activeLite: ActiveSessionLiteResponse;
 };
 
-export async function getBootstrap(token: string): Promise<ApiResult<BootstrapResponse>> {
-  return sessionFetch<BootstrapResponse>('/api/home/bootstrap', token, { method: 'GET' });
+export async function getBootstrap(
+  token: string,
+  opts?: { debug?: boolean }
+): Promise<ApiResult<BootstrapResponse>> {
+  const path = opts?.debug ? '/api/home/bootstrap?debug=1' : '/api/home/bootstrap';
+  return sessionFetch<BootstrapResponse>(path, token, { method: 'GET' });
 }
 
 /** GET /api/session/plan?session_number=N — 과거/현재 세션 plan 조회 (read-only) */

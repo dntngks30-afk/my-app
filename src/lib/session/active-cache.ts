@@ -7,7 +7,6 @@
 import { setCache, invalidateCache, getCacheStale } from '@/lib/cache/tabDataCache';
 import {
   getActiveSession,
-  getActiveSessionLite,
   getBootstrap,
   type ActiveSessionResponse,
   type ActiveSessionLiteResponse,
@@ -30,7 +29,6 @@ let cache: { entry: CacheEntry; tokenKey: string } | null = null;
 let inflight: Promise<{ ok: true; data: ActiveSessionResponse } | { ok: false; status: number; error: unknown }> | null = null;
 
 let liteCache: { entry: LiteCacheEntry; tokenKey: string } | null = null;
-let liteInflight: Promise<{ ok: true; data: ActiveSessionLiteResponse } | { ok: false; status: number; error: unknown }> | null = null;
 
 let bootstrapCache: { entry: { data: BootstrapResponse; expiresAt: number }; tokenKey: string } | null = null;
 let bootstrapInflight: Promise<{ ok: true; data: BootstrapResponse } | { ok: false; status: number; error: unknown }> | null = null;
@@ -39,62 +37,66 @@ function tokenKey(t: string): string {
   return t && t.length >= 16 ? t.slice(-16) : t || '';
 }
 
-/** Home 초기 로드용 — active-lite 캐시 (plan_json 제외, 경량)
+/** Home/Stats/My 탭용 — bootstrap SSOT 재사용. active-lite 대신 /api/home/bootstrap 단일 호출.
  * stale-while-revalidate: tabDataCache에 stale이 있으면 즉시 반환, 백그라운드 재검증 */
 export async function getCachedActiveSessionLite(
   token: string,
-  opts?: { debug?: boolean }
+  _opts?: { debug?: boolean }
 ): Promise<{ ok: true; data: ActiveSessionLiteResponse } | { ok: false; status: number; error: unknown }> {
   const key = tokenKey(token);
   const now = Date.now();
-  if (!opts?.debug && liteCache && liteCache.tokenKey === key && liteCache.entry.expiresAt > now) {
+  if (liteCache && liteCache.tokenKey === key && liteCache.entry.expiresAt > now) {
     return { ok: true, data: liteCache.entry.data };
   }
-  if (liteInflight) {
-    return liteInflight;
-  }
-  const stale = getCacheStale<ActiveSessionLiteResponse>('home.activeLite');
+  const stale =
+    getCacheStale<ActiveSessionLiteResponse>('home.activeLite') ??
+    getCacheStale<{ activeLite: ActiveSessionLiteResponse }>('home.bootstrap')?.activeLite;
   if (stale) {
-    liteInflight = Promise.resolve({ ok: true as const, data: stale });
-    void getActiveSessionLite(token, opts).then((result) => {
-      liteInflight = null;
-      if (result.ok) {
-        liteCache = { tokenKey: key, entry: { data: result.data, expiresAt: Date.now() + TTL_MS } };
-        setCache('home.activeLite', result.data);
-      }
+    void getCachedBootstrap(token).then(() => {
+      /* background revalidate; bootstrap updates liteCache + tabDataCache */
     });
-    return liteInflight;
+    return { ok: true as const, data: stale };
   }
-  const promise = getActiveSessionLite(token, opts).then((result) => {
-    liteInflight = null;
-    if (result.ok) {
-      liteCache = {
-        tokenKey: key,
-        entry: { data: result.data, expiresAt: Date.now() + TTL_MS },
-      };
-      setCache('home.activeLite', result.data);
-    } else {
-      liteCache = null;
-    }
-    return result;
-  });
-  liteInflight = promise;
-  return promise;
+  const result = await getCachedBootstrap(token);
+  if (result.ok) return { ok: true, data: result.data.activeLite };
+  return { ok: false, status: result.status, error: result.error };
 }
 
-/** 홈 초기 진입용 — bootstrap (activeLite + progressReport) 1회 조회, 캐시 공유 */
+/** 홈 초기 진입용 — bootstrap (activeLite) 1회 조회, 캐시 공유.
+ * stale-while-revalidate: tabDataCache에 stale이 있으면 즉시 반환, 백그라운드 재검증.
+ * debug=true 시 캐시 우회하여 timing 정보 반환 (AT1). */
 export async function getCachedBootstrap(
-  token: string
+  token: string,
+  opts?: { debug?: boolean }
 ): Promise<{ ok: true; data: BootstrapResponse } | { ok: false; status: number; error: unknown }> {
   const key = tokenKey(token);
   const now = Date.now();
-  if (bootstrapCache && bootstrapCache.tokenKey === key && bootstrapCache.entry.expiresAt > now) {
+  if (!opts?.debug && bootstrapCache && bootstrapCache.tokenKey === key && bootstrapCache.entry.expiresAt > now) {
     return { ok: true, data: bootstrapCache.entry.data };
   }
-  if (bootstrapInflight) {
+  if (!opts?.debug && bootstrapInflight) {
     return bootstrapInflight;
   }
-  const promise = getBootstrap(token).then((result) => {
+  const stale = !opts?.debug ? getCacheStale<BootstrapResponse>('home.bootstrap') : null;
+  if (stale) {
+    const revalidate = getBootstrap(token).then((result) => {
+      bootstrapInflight = null;
+      if (result.ok) {
+        bootstrapCache = {
+          tokenKey: key,
+          entry: { data: result.data, expiresAt: Date.now() + TTL_MS },
+        };
+        setCache('home.activeLite', result.data.activeLite);
+        setCache('home.bootstrap', result.data);
+        liteCache = { tokenKey: key, entry: { data: result.data.activeLite, expiresAt: Date.now() + TTL_MS } };
+      }
+      return result;
+    });
+    bootstrapInflight = revalidate;
+    void revalidate;
+    return { ok: true as const, data: stale };
+  }
+  const promise = getBootstrap(token, opts).then((result) => {
     bootstrapInflight = null;
     if (result.ok) {
       bootstrapCache = {
@@ -147,6 +149,7 @@ export function invalidateActiveCache(): void {
   cache = null;
   liteCache = null;
   bootstrapCache = null;
+  bootstrapInflight = null;
   invalidateCache('home.activeLite');
   invalidateCache('home.bootstrap');
   invalidateCache('home.progressReport');
