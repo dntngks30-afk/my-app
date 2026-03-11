@@ -11,7 +11,6 @@ import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
-import NextSessionPreviewCard from './NextSessionPreviewCard';
 
 interface HomePageClientProps {
   hideBottomNav?: boolean;
@@ -52,7 +51,6 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const activeFetchedRef = useRef(false);
   const authTokenRef = useRef<string | null>(null);
   const authTokenInflightRef = useRef<Promise<string | null> | null>(null);
-  const mapSectionRef = useRef<HTMLDivElement | null>(null);
 
   const getAuthToken = useCallback(async () => {
     if (authTokenRef.current) return authTokenRef.current;
@@ -103,10 +101,6 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const handleActivePlanCreated = useCallback((plan: SessionPlan) => {
     setActivePlan(plan);
     invalidateActiveCache();
-  }, []);
-
-  const scrollToMap = useCallback(() => {
-    mapSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
   useEffect(() => {
@@ -243,18 +237,8 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       </header>
 
       <main className="px-4 space-y-6">
-        {/* 1. 다음 세션 미리보기 */}
-        <NextSessionPreviewCard
-          totalSessions={totalSessionsOverride ?? sessionProgress?.total_sessions ?? 8}
-          completedSessions={completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0}
-          activePlan={activePlan}
-          todayCompleted={todayCompleted}
-          nextUnlockAt={nextUnlockAt}
-          onScrollToMap={scrollToMap}
-        />
-
-        {/* 2. 리셋 지도 — mapV2=1이면 새 지도 UX, 그 외 기존 ResetMapCard */}
-        <div ref={mapSectionRef}>
+        {/* 1. 리셋 지도 — mapV2=1이면 새 지도 UX, 그 외 기존 ResetMapCard */}
+        <div>
         {(() => {
           const total = totalSessionsOverride ?? sessionProgress?.total_sessions ?? 8;
           const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
