@@ -39,6 +39,8 @@ export type GenCacheInput = {
   painFlags: string[];
   usedTemplateIds: string[];
   adaptiveOverlay?: Record<string, unknown>;
+  /** PR-C: volume modifier from session_adaptive_summaries */
+  volumeModifier?: number;
   /** PR-ALG-03: deep_v3 priority/pain (cache key에 포함) */
   priority_vector?: Record<string, number> | null;
   pain_mode?: string | null;
@@ -58,6 +60,7 @@ function buildKey(input: GenCacheInput): string {
     pf: [...input.painFlags].sort(),
     ut: [...input.usedTemplateIds].sort(),
     ao: input.adaptiveOverlay ? JSON.stringify(input.adaptiveOverlay) : '',
+    vm: input.volumeModifier ?? '',
     pv: input.priority_vector ? JSON.stringify(input.priority_vector) : '',
     pm: input.pain_mode ?? '',
   });

@@ -206,6 +206,8 @@ export type PlanGeneratorInput = {
     /** PR-ALG-05: exclude templates with difficulty above this (metadata) */
     maxDifficultyCap?: 'low' | 'medium' | 'high';
   };
+  /** PR-C: modifier from session_adaptive_summaries. Reduces Main segment count. */
+  volumeModifier?: number;
   /** PR-ALG-02: deep_v3 additive (optional) */
   primary_type?: string;
   secondary_type?: string | null;
@@ -644,6 +646,9 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   let mainCount = isShort ? 1 : isRecovery ? 1 : 2;
   if (input.safety_mode === 'red') {
     mainCount = 1;
+  }
+  if (typeof input.volumeModifier === 'number' && input.volumeModifier < 0) {
+    mainCount = Math.max(1, Math.floor(mainCount * (1 + input.volumeModifier)));
   }
   const prepCount = 1;
   const accessoryCount = 1;

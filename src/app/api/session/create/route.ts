@@ -36,6 +36,11 @@ import {
   deriveAdaptiveModifiers,
   buildAdaptationTrace,
 } from '@/lib/session/adaptive-progression';
+import {
+  loadLatestAdaptiveSummary,
+  resolveAdaptiveModifier,
+  type AdaptiveModifier,
+} from '@/lib/session/adaptive-modifier-resolver';
 import { getKstDayKeyUTC, getNextKstMidnightUtcIso, getTodayCompletedAndNextUnlock } from '@/lib/time/kst';
 import { logSessionEvent } from '@/lib/session-events';
 import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
@@ -476,7 +481,7 @@ export async function POST(req: NextRequest) {
       adaptiveCtx
     );
 
-    const adaptiveOverlay =
+    let adaptiveOverlay =
       modifiers.reason === 'none'
         ? undefined
         : {
@@ -491,6 +496,18 @@ export async function POST(req: NextRequest) {
             }),
           };
 
+    // PR-C: merge modifier from session_adaptive_summaries (only for draft/new sessions)
+    let adaptiveModifier: AdaptiveModifier | null = null;
+    const summary = await loadLatestAdaptiveSummary(supabase, userId);
+    adaptiveModifier = resolveAdaptiveModifier(summary);
+    if (adaptiveModifier.volume_modifier !== 0 || adaptiveModifier.complexity_cap !== 'none' || adaptiveModifier.recovery_bias) {
+      adaptiveOverlay = {
+        ...adaptiveOverlay,
+        ...(adaptiveModifier.recovery_bias && { forceRecovery: true }),
+        ...(adaptiveModifier.complexity_cap === 'basic' && { maxDifficultyCap: 'medium' as const }),
+      };
+    }
+
     const cacheInput = {
       userId,
       sessionNumber: nextSessionNumber,
@@ -504,6 +521,7 @@ export async function POST(req: NextRequest) {
       painFlags,
       usedTemplateIds,
       adaptiveOverlay: adaptiveOverlay ?? undefined,
+      volumeModifier: adaptiveModifier?.volume_modifier,
       priority_vector: deepSummary.priority_vector ?? undefined,
       pain_mode: deepSummary.pain_mode ?? undefined,
     };
@@ -534,6 +552,7 @@ export async function POST(req: NextRequest) {
         priority_vector: deepSummary.priority_vector,
         pain_mode: deepSummary.pain_mode,
         adaptiveOverlay,
+        volumeModifier: adaptiveModifier?.volume_modifier,
       });
       setCachedPlan(cacheInput, planJson as Record<string, unknown>);
     }
@@ -740,7 +759,21 @@ export async function POST(req: NextRequest) {
 
     const active = toSummaryPlan(plan, adaptationTrace);
     const data = { progress: finalProgress, active, idempotent: false, today_completed: tc, ...(nua != null && { next_unlock_at: nua }) };
-    return ok(data, isDebug ? { debug: timings } : undefined);
+    const debugExtras = isDebug
+      ? {
+          debug: {
+            ...timings,
+            ...(adaptiveModifier && {
+              adaptive_modifier: {
+                volume_modifier: adaptiveModifier.volume_modifier,
+                complexity_cap: adaptiveModifier.complexity_cap,
+                recovery_bias: adaptiveModifier.recovery_bias,
+              },
+            }),
+          },
+        }
+      : undefined;
+    return ok(data, debugExtras);
   } catch (err) {
     console.error('[session/create]', err);
     try {
