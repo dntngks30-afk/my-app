@@ -26,6 +26,8 @@ interface ResetMapV2Props {
   onSessionCompleted?: (completedSessions: number) => void
   /** createSession 성공 시 HomePageClient의 activePlan 갱신용 콜백 */
   onActivePlanCreated?: (plan: SessionPlan) => void
+  /** debug: true → createSession 응답에 timings 포함 (cold path 측정용) */
+  debug?: boolean
 }
 
 type PanelPlanSummaryResponse = PlanSummaryResponse & {
@@ -66,7 +68,7 @@ function toExerciseLogMap(logs?: ExerciseLogItem[]): Record<string, ExerciseLogI
   return map
 }
 
-export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated }: ResetMapV2Props) {
+export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, debug }: ResetMapV2Props) {
   // localDailyCapActive: createSession이 DAILY_LIMIT_REACHED 반환 시 클라이언트 측 즉시 반영 (방어)
   const [localDailyCapActive, setLocalDailyCapActive] = useState(false)
   // daily cap: today_completed || localDailyCapActive, activePlan 없을 때 → 현재 세션 없음, 다음 세션 locked
@@ -313,12 +315,19 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         if (!cancelled) setPlanLoading(false)
         return
       }
+      if (typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('createSession-start')
+      }
       const result = await createSession(token, {
         condition_mood: 'ok',
         time_budget: 'normal',
         summary: true,
+        ...(debug && { debug: true }),
       })
       if (cancelled) return
+      if (typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('createSession-end')
+      }
       setPlanLoading(false)
       if (!result.ok) {
         // 하루 1세션 cap 초과 시 로컬 상태 즉시 반영 → locked 패널 표시
@@ -336,7 +345,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     })
 
     return () => { cancelled = true }
-  }, [selectedStatus, selectedSessionId, localActivePlan, onActivePlanCreated, resolveAuthToken])
+  }, [selectedStatus, selectedSessionId, localActivePlan, onActivePlanCreated, resolveAuthToken, debug])
 
   // plan_json에서 운동 추출 (current: createSession 또는 plan-summary, completed: plan-summary)
   const exercises = useMemo(() => {

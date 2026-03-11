@@ -132,6 +132,17 @@ function PanelInner({
       }
     }
   }, [sessionId])
+  // exercises ready 측정 (createSession cold path → panel first paint)
+  const prevExercisesRef = useRef<ExerciseItem[] | undefined>(undefined)
+  useEffect(() => {
+    if (exercises !== undefined && prevExercisesRef.current === undefined && typeof performance !== 'undefined' && performance.mark) {
+      performance.mark('panel_exercises_ready')
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[perf] panel_exercises_ready')
+      }
+    }
+    prevExercisesRef.current = exercises
+  }, [exercises])
   // 세션 피드백 (adaptive signal)
   const [feedback, setFeedback] = useState<FeedbackPayload | null>(null)
   // 종료 API 상태

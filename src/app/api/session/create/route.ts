@@ -408,6 +408,7 @@ export async function POST(req: NextRequest) {
     const tDeep = performance.now();
     const deepSummary = await loadSessionDeepSummary(userId);
     timings.deep_profile_ms = Math.round(performance.now() - tDeep);
+    timings.deep_load_ms = timings.deep_profile_ms;
 
     if (!deepSummary) {
       void logSessionEvent(supabase, {
@@ -470,6 +471,7 @@ export async function POST(req: NextRequest) {
     const { sessionFeedback, exerciseFeedback, sourceSessionNumbers } =
       await loadRecentAdaptiveSignals(userId, nextSessionNumber);
     timings.adaptive_load_ms = Math.round(performance.now() - tAdaptive);
+
     const adaptiveCtx = {
       priority_vector: deepSummary.priority_vector ?? null,
       pain_mode: deepSummary.pain_mode ?? null,
@@ -497,6 +499,7 @@ export async function POST(req: NextRequest) {
           };
 
     // PR-C: merge modifier from session_adaptive_summaries (only for draft/new sessions)
+    const tAdaptiveMod = performance.now();
     let adaptiveModifier: AdaptiveModifier | null = null;
     const summary = await loadLatestAdaptiveSummary(supabase, userId);
     adaptiveModifier = resolveAdaptiveModifier(summary);
@@ -507,6 +510,7 @@ export async function POST(req: NextRequest) {
         ...(adaptiveModifier.complexity_cap === 'basic' && { maxDifficultyCap: 'medium' as const }),
       };
     }
+    timings.adaptive_modifier_ms = Math.round(performance.now() - tAdaptiveMod);
 
     const cacheInput = {
       userId,

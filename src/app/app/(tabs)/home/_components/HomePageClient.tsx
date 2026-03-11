@@ -254,6 +254,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
                 getAuthToken={getAuthToken}
                 onSessionCompleted={handleSessionCompleted}
                 onActivePlanCreated={handleActivePlanCreated}
+                debug={debugFlag}
               />
             );
           }
