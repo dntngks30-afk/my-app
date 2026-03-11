@@ -9,6 +9,8 @@ import type { ExerciseLogItem, SessionPlan, ActivePlanSummary } from '@/lib/sess
 import { buildBriefSessionRationale } from '@/lib/deep-result/copy'
 import { ExercisePlayerModal } from './ExercisePlayerModal'
 import SessionCompleteSummary from '@/app/app/routine/_components/SessionCompleteSummary'
+import { SessionFeedbackQuickForm } from '@/app/app/_components/SessionFeedbackQuickForm'
+import type { FeedbackPayload } from '@/lib/session/feedback-types'
 
 type SessionStatus = 'current' | 'completed' | 'locked'
 
@@ -130,6 +132,8 @@ function PanelInner({
       }
     }
   }, [sessionId])
+  // 세션 피드백 (adaptive signal)
+  const [feedback, setFeedback] = useState<FeedbackPayload | null>(null)
   // 종료 API 상태
   const [completing, setCompleting] = useState(false)
   const [completeError, setCompleteError] = useState<string | null>(null)
@@ -172,12 +176,16 @@ function PanelInner({
         exercises && exercises.length > 0 && exercises.every(e => !!logs[e.templateId])
       const completionMode = allDone ? 'all_done' : exerciseLogsArray.length > 0 ? 'partial_done' : 'stop_early'
 
-      const result = await completeSession(session.access_token, {
+      const payload: Parameters<typeof completeSession>[1] = {
         session_number: sessionNumber,
         duration_seconds: durationSec,
         completion_mode: completionMode,
         exercise_logs: exerciseLogsArray,
-      })
+      }
+      if (feedback?.sessionFeedback && Object.keys(feedback.sessionFeedback).length > 0) {
+        payload.feedback = feedback
+      }
+      const result = await completeSession(session.access_token, payload)
 
       if (!result.ok) {
         // 이미 완료된 경우(idempotent)는 에러가 아님
@@ -292,7 +300,16 @@ function PanelInner({
 
           {/* 종료 CTA 바 (current 세션만) — 운동 목록 하단에 위치 */}
           {status === 'current' && !completed && (
-            <div className="border-t border-slate-100 px-5 py-4">
+            <div className="border-t border-slate-100 px-5 py-4 space-y-4">
+              <SessionFeedbackQuickForm
+                value={feedback}
+                onChange={setFeedback}
+                derivedCompletionRatio={
+                  exercises && exercises.length > 0
+                    ? exercises.filter((e) => logs[e.templateId]).length / exercises.length
+                    : undefined
+                }
+              />
               {completeError && (
                 <div className="mb-3 flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2">
                   <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />

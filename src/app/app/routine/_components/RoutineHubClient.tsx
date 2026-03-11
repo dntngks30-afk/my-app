@@ -23,6 +23,7 @@ import SessionAdjustModal from './SessionAdjustModal';
 import SessionRecoveryModal from './SessionRecoveryModal';
 import SessionCompleteSummary from './SessionCompleteSummary';
 import SessionExerciseLogModal from './SessionExerciseLogModal';
+import type { FeedbackPayload } from '@/lib/session/feedback-types';
 import {
   getActiveSession,
   getSessionHistory,
@@ -418,7 +419,7 @@ export default function RoutineHubClient() {
   }, [token, creating, activePlan]);
 
   const performComplete = useCallback(
-    async (exerciseLogs?: ExerciseLogItem[]) => {
+    async (exerciseLogs?: ExerciseLogItem[], feedback?: FeedbackPayload | null) => {
       if (!token || !activePlan || completing) return;
       const start = startedAtMs ?? Date.now();
       let durationSec = Math.floor((Date.now() - start) / 1000);
@@ -426,12 +427,16 @@ export default function RoutineHubClient() {
       if (clamped) durationSec = MAX_DURATION_SEC;
 
       setCompleting(true);
-      const result = await completeSession(token, {
+      const payload: Parameters<typeof completeSession>[1] = {
         session_number: activePlan.session_number,
         duration_seconds: durationSec,
         completion_mode: 'all_done',
         exercise_logs: exerciseLogs && exerciseLogs.length > 0 ? exerciseLogs : undefined,
-      });
+      };
+      if (feedback?.sessionFeedback && Object.keys(feedback.sessionFeedback).length > 0) {
+        payload.feedback = feedback;
+      }
+      const result = await completeSession(token, payload);
       setCompleting(false);
 
       if (!result.ok) {
@@ -458,8 +463,8 @@ export default function RoutineHubClient() {
   );
 
   const handleExerciseLogSave = useCallback(
-    async (exerciseLogs: ExerciseLogItem[]) => {
-      await performComplete(exerciseLogs);
+    async (exerciseLogs: ExerciseLogItem[], feedback?: FeedbackPayload | null) => {
+      await performComplete(exerciseLogs, feedback);
     },
     [performComplete]
   );

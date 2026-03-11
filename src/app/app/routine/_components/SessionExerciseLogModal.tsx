@@ -4,7 +4,7 @@
  * SessionExerciseLogModal — 운동 종료 시 세트/횟수/난이도 입력 모달
  *
  * activePlan.plan_json.segments[].items 기반으로 운동 리스트 구성.
- * "저장 후 종료" 클릭 시 exercise_logs 배열을 만들어 onSave 호출.
+ * "저장 후 종료" 클릭 시 exercise_logs + feedback을 onSave 호출.
  */
 
 import { useState, useMemo } from 'react';
@@ -12,6 +12,8 @@ import { X } from 'lucide-react';
 import { NeoButton } from '@/components/neobrutalism';
 import type { SessionPlan } from '@/lib/session/client';
 import type { ExerciseLogItem } from '@/lib/session/client';
+import { SessionFeedbackQuickForm } from '@/app/app/_components/SessionFeedbackQuickForm';
+import type { FeedbackPayload } from '@/lib/session/feedback-types';
 
 type ExerciseRow = {
   templateId: string;
@@ -39,7 +41,7 @@ function flattenPlanItems(plan: SessionPlan): ExerciseRow[] {
 type Props = {
   plan: SessionPlan;
   onClose: () => void;
-  onSave: (exerciseLogs: ExerciseLogItem[]) => Promise<void>;
+  onSave: (exerciseLogs: ExerciseLogItem[], feedback?: FeedbackPayload | null) => Promise<void>;
   isSubmitting?: boolean;
 };
 
@@ -53,6 +55,7 @@ export default function SessionExerciseLogModal({
 }: Props) {
   const rows = useMemo(() => flattenPlanItems(plan), [plan]);
 
+  const [feedback, setFeedback] = useState<FeedbackPayload | null>(null);
   const [values, setValues] = useState<Record<string, { sets: number | null; reps: number | null; difficulty: number | null }>>(() => {
     const init: Record<string, { sets: number | null; reps: number | null; difficulty: number | null }> = {};
     for (const r of rows) {
@@ -84,7 +87,7 @@ export default function SessionExerciseLogModal({
         difficulty: v.difficulty,
       };
     });
-    await onSave(exerciseLogs);
+    await onSave(exerciseLogs, feedback?.sessionFeedback && Object.keys(feedback.sessionFeedback).length > 0 ? feedback : undefined);
   };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
@@ -187,6 +190,16 @@ export default function SessionExerciseLogModal({
               </div>
             );
           })}
+
+          <SessionFeedbackQuickForm
+            value={feedback}
+            onChange={setFeedback}
+            derivedCompletionRatio={
+              rows.length > 0
+                ? rows.filter((r) => (values[r.templateId]?.sets ?? 0) > 0).length / rows.length
+                : undefined
+            }
+          />
         </div>
 
         <div className="p-4 border-t border-stone-200 shrink-0">

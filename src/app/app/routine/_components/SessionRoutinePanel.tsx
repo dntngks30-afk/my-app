@@ -43,6 +43,8 @@ import {
 } from '@/lib/session/storage';
 import SessionRecoveryModal from './SessionRecoveryModal';
 import SessionCompleteSummary from './SessionCompleteSummary';
+import { SessionFeedbackQuickForm } from '@/app/app/_components/SessionFeedbackQuickForm';
+import type { FeedbackPayload } from '@/lib/session/feedback-types';
 
 // ─── 날짜 포맷 ─────────────────────────────────────────────────────────────────
 
@@ -348,6 +350,7 @@ export default function SessionRoutinePanel() {
   const [summaryDurationSec, setSummaryDurationSec] = useState<number>(0);
   const [summaryNextTheme, setSummaryNextTheme] = useState<string | null>(null);
   const [durationClamped, setDurationClamped] = useState(false);
+  const [feedback, setFeedback] = useState<FeedbackPayload | null>(null);
 
   const initializedRef = useRef(false);
   const activeLoadedRef = useRef(false);
@@ -509,11 +512,15 @@ export default function SessionRoutinePanel() {
     const completionMode = allChecked ? 'all_done' : 'partial_done';
 
     setCompleting(true);
-    const result = await completeSession(token, {
+    const payload: Parameters<typeof completeSession>[1] = {
       session_number: activePlan.session_number,
       duration_seconds: durationSec,
       completion_mode: completionMode,
-    });
+    };
+    if (feedback?.sessionFeedback && Object.keys(feedback.sessionFeedback).length > 0) {
+      payload.feedback = feedback;
+    }
+    const result = await completeSession(token, payload);
     setCompleting(false);
 
     if (!result.ok) {
@@ -528,7 +535,7 @@ export default function SessionRoutinePanel() {
     setDurationClamped(clamped);
     setActivePlan(null);
     setPanelState('summary');
-  }, [token, activePlan, completing, startedAtMs, checked]);
+  }, [token, activePlan, completing, startedAtMs, checked, feedback]);
 
   const handleCompleteClick = useCallback(() => {
     const allItems = activePlan?.plan_json?.segments?.flatMap((s) =>
@@ -691,7 +698,21 @@ export default function SessionRoutinePanel() {
 
       {/* Sticky 종료 버튼 — active일 때만 */}
       {panelState === 'active' && activePlan && (
-        <div className="sticky bottom-0 left-0 right-0 z-40 -mx-4 px-4 py-3 bg-[#f8f6f0] border-t border-stone-200 mt-4">
+        <div className="sticky bottom-0 left-0 right-0 z-40 -mx-4 px-4 py-3 bg-[#f8f6f0] border-t border-stone-200 mt-4 space-y-4">
+          <SessionFeedbackQuickForm
+            value={feedback}
+            onChange={setFeedback}
+            derivedCompletionRatio={
+              (() => {
+                const allItems = activePlan.plan_json?.segments?.flatMap((s) =>
+                  s.items.map((i) => itemKey(s.title, i.order, i.templateId))
+                ) ?? [];
+                return allItems.length > 0
+                  ? allItems.filter((k) => checked[k]).length / allItems.length
+                  : undefined;
+              })()
+            }
+          />
           <NeoButton
             variant="orange"
             fullWidth
