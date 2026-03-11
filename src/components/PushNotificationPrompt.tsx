@@ -67,10 +67,10 @@ export default function PushNotificationPrompt() {
     setIsSubscribing(true);
 
     try {
-      // 1. Service Worker 등록
+      // 1. 기존 SW 등록 조회 (next-pwa가 등록)
       const registration = await registerServiceWorker();
       if (!registration) {
-        throw new Error('Service Worker 등록 실패');
+        throw new Error('Service Worker를 찾을 수 없습니다. 페이지를 새로고침한 후 다시 시도해 주세요.');
       }
 
       // 2. 권한 요청
