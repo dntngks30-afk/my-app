@@ -28,6 +28,7 @@
     "test:deep-v3-persona": "npx tsx scripts/deep-v3-persona-check.mjs",
     "test:deep-validation-pack": "npx tsx scripts/deep-validation-pack.mjs",
     "test:deep-neck-shoulder-verify": "npx tsx scripts/deep-neck-shoulder-verify.mjs",
+    "test:deep-pr-fix-02": "npx tsx scripts/deep-v3-neck-shoulder-pr-fix-02.mjs",
     "analyze:deep-test": "npx tsx scripts/analyze_deep_test_funnel.mjs",
     "test:session-scenario": "npx tsx scripts/session-scenario-check.mjs",
     "test:deep-v3-shadow": "npx tsx scripts/deep-v3-shadow-compare.mjs",

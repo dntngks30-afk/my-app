@@ -1,0 +1,173 @@
+[
+  {
+    "id": "ns_stable_wallangel_neck_tension",
+    "description": "NS-01: neck/shoulder discomfort + wallangel neck tension + stable SLS",
+    "answers": {
+      "deep_basic_age": 40,
+      "deep_basic_gender": "여",
+      "deep_basic_experience": "지금도 자주함",
+      "deep_basic_workstyle": "대부분 앉아서",
+      "deep_basic_primary_discomfort": "목·어깨",
+      "deep_squat_pain_intensity": "없음",
+      "deep_squat_pain_location": [],
+      "deep_squat_knee_alignment": "발바닥이 바닥에 잘 붙은 채로 편하게 내려가서 2–3초 유지 가능",
+      "deep_wallangel_pain_intensity": "약간(0~3)",
+      "deep_wallangel_pain_location": ["목·어깨"],
+      "deep_wallangel_quality": "어깨가 위로 들리거나 목이 긴장됨",
+      "deep_sls_pain_intensity": "없음",
+      "deep_sls_pain_location": [],
+      "deep_sls_quality": "10초 안정적으로 가능"
+    },
+    "expected": {
+      "result_type": "NECK-SHOULDER",
+      "primaryFocus": "NECK-SHOULDER",
+      "not_result_type": "LUMBO-PELVIS"
+    }
+  },
+  {
+    "id": "ns_mild_noise_but_still_neck_primary",
+    "description": "NS-02: neck/shoulder + wallangel neck tension + SLS stable (mild lower noise approximated)",
+    "answers": {
+      "deep_basic_age": 38,
+      "deep_basic_gender": "남",
+      "deep_basic_experience": "어렸을 때 조금",
+      "deep_basic_workstyle": "대부분 앉아서",
+      "deep_basic_primary_discomfort": "목·어깨",
+      "deep_squat_pain_intensity": "없음",
+      "deep_squat_pain_location": [],
+      "deep_squat_knee_alignment": "발바닥이 바닥에 잘 붙은 채로 편하게 내려가서 2–3초 유지 가능",
+      "deep_wallangel_pain_intensity": "약간(0~3)",
+      "deep_wallangel_pain_location": ["목·어깨"],
+      "deep_wallangel_quality": "어깨가 위로 들리거나 목이 긴장됨",
+      "deep_sls_pain_intensity": "없음",
+      "deep_sls_pain_location": [],
+      "deep_sls_quality": "10초 안정적으로 가능"
+    },
+    "expected": {
+      "result_type": "NECK-SHOULDER",
+      "primaryFocus": "NECK-SHOULDER",
+      "not_result_type": "LUMBO-PELVIS"
+    }
+  },
+  {
+    "id": "ns_upper_mobility_neck_discomfort",
+    "description": "NS-03/UM-01: neck discomfort + wallangel elbow/wrist restriction + stable SLS",
+    "answers": {
+      "deep_basic_age": 35,
+      "deep_basic_gender": "여",
+      "deep_basic_experience": "지금도 자주함",
+      "deep_basic_workstyle": "대부분 앉아서",
+      "deep_basic_primary_discomfort": "목·어깨",
+      "deep_squat_pain_intensity": "없음",
+      "deep_squat_pain_location": [],
+      "deep_squat_knee_alignment": "발바닥이 바닥에 잘 붙은 채로 편하게 내려가서 2–3초 유지 가능",
+      "deep_wallangel_pain_intensity": "약간(0~3)",
+      "deep_wallangel_pain_location": ["목·어깨"],
+      "deep_wallangel_quality": "팔꿈치가 굽거나 손목·팔꿈치가 불편해서 팔을 못 올림",
+      "deep_sls_pain_intensity": "없음",
+      "deep_sls_pain_location": [],
+      "deep_sls_quality": "10초 안정적으로 가능"
+    },
+    "expected": {
+      "result_type_one_of": ["NECK-SHOULDER", "UPPER-LIMB"],
+      "not_result_type": "LUMBO-PELVIS"
+    }
+  },
+  {
+    "id": "trunk_true_dominant_with_neck_discomfort",
+    "description": "TC-02: neck discomfort reported but wallangel+SLS show trunk dominance",
+    "answers": {
+      "deep_basic_age": 45,
+      "deep_basic_gender": "여",
+      "deep_basic_experience": "지금도 자주함",
+      "deep_basic_workstyle": "대부분 앉아서",
+      "deep_basic_primary_discomfort": "목·어깨",
+      "deep_squat_pain_intensity": "없음",
+      "deep_squat_pain_location": [],
+      "deep_squat_knee_alignment": "발바닥이 바닥에 잘 붙은 채로 편하게 내려가서 2–3초 유지 가능",
+      "deep_wallangel_pain_intensity": "없음",
+      "deep_wallangel_pain_location": [],
+      "deep_wallangel_quality": "허리가 꺾이거나 갈비뼈가 들리며 \"허리로\" 버티는 느낌",
+      "deep_sls_pain_intensity": "없음",
+      "deep_sls_pain_location": [],
+      "deep_sls_quality": "골반이 한쪽으로 꺼지거나 허리가 비틀리며 버팀"
+    },
+    "expected": {
+      "result_type": "LUMBO-PELVIS",
+      "primaryFocus": "LUMBO-PELVIS"
+    }
+  },
+  {
+    "id": "trunk_true_dominant_lower_back",
+    "description": "TC-01: true trunk-control dominant",
+    "answers": {
+      "deep_basic_age": 50,
+      "deep_basic_gender": "여",
+      "deep_basic_experience": "지금도 자주함",
+      "deep_basic_workstyle": "대부분 앉아서",
+      "deep_basic_primary_discomfort": "허리·골반",
+      "deep_squat_pain_intensity": "없음",
+      "deep_squat_pain_location": [],
+      "deep_squat_knee_alignment": "발바닥이 바닥에 잘 붙은 채로 편하게 내려가서 2–3초 유지 가능",
+      "deep_wallangel_pain_intensity": "없음",
+      "deep_wallangel_pain_location": [],
+      "deep_wallangel_quality": "허리가 꺾이거나 갈비뼈가 들리며 \"허리로\" 버티는 느낌",
+      "deep_sls_pain_intensity": "없음",
+      "deep_sls_pain_location": [],
+      "deep_sls_quality": "골반이 한쪽으로 꺼지거나 허리가 비틀리며 버팀"
+    },
+    "expected": {
+      "result_type": "LUMBO-PELVIS",
+      "primaryFocus": "LUMBO-PELVIS"
+    }
+  },
+  {
+    "id": "upper_mobility_clear_case",
+    "description": "UM-02: wrist/elbow discomfort + wallangel restriction, must not hijack to neck",
+    "answers": {
+      "deep_basic_age": 32,
+      "deep_basic_gender": "남",
+      "deep_basic_experience": "매일함",
+      "deep_basic_workstyle": "균형",
+      "deep_basic_primary_discomfort": "손목·팔꿈치",
+      "deep_squat_pain_intensity": "없음",
+      "deep_squat_pain_location": [],
+      "deep_squat_knee_alignment": "발바닥이 바닥에 잘 붙은 채로 편하게 내려가서 2–3초 유지 가능",
+      "deep_wallangel_pain_intensity": "약간(0~3)",
+      "deep_wallangel_pain_location": ["손목·팔꿈치"],
+      "deep_wallangel_quality": "팔꿈치가 굽거나 손목·팔꿈치가 불편해서 팔을 못 올림",
+      "deep_sls_pain_intensity": "없음",
+      "deep_sls_pain_location": [],
+      "deep_sls_quality": "10초 안정적으로 가능"
+    },
+    "expected": {
+      "result_type": "UPPER-LIMB",
+      "primaryFocus": "UPPER-LIMB",
+      "not_result_type": "NECK-SHOULDER"
+    }
+  },
+  {
+    "id": "deconditioned_clear_case",
+    "description": "DC-01: general fatigue, no strong neck or trunk-specific evidence",
+    "answers": {
+      "deep_basic_age": 62,
+      "deep_basic_gender": "남",
+      "deep_basic_experience": "없음",
+      "deep_basic_workstyle": "대부분 누움",
+      "deep_basic_primary_discomfort": "해당 없음",
+      "deep_squat_pain_intensity": "없음",
+      "deep_squat_pain_location": [],
+      "deep_squat_knee_alignment": "발바닥이 바닥에 잘 붙은 채로 편하게 내려가서 2–3초 유지 가능",
+      "deep_wallangel_pain_intensity": "없음",
+      "deep_wallangel_pain_location": [],
+      "deep_wallangel_quality": "전신이 너무 뻣뻣/피곤해서 동작 유지가 어려움",
+      "deep_sls_pain_intensity": "없음",
+      "deep_sls_pain_location": [],
+      "deep_sls_quality": "상체가 크게 흔들리고 팔을 휘저어야 하며, 10초 유지가 어려움"
+    },
+    "expected": {
+      "result_type": "DECONDITIONED",
+      "not_result_type": "NECK-SHOULDER"
+    }
+  }
+]

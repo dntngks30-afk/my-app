@@ -31,6 +31,9 @@ async function run() {
       if (exp.primary_type && v3.primary_type !== exp.primary_type) {
         throw new Error(`primary_type: expected ${exp.primary_type}, got ${v3.primary_type}`);
       }
+      if (exp.result_type && v3.result_type !== exp.result_type) {
+        throw new Error(`result_type: expected ${exp.result_type}, got ${v3.result_type}`);
+      }
       if (exp.pain_mode && v3.pain_mode !== exp.pain_mode) {
         throw new Error(`pain_mode: expected ${exp.pain_mode}, got ${v3.pain_mode}`);
       }

@@ -275,7 +275,8 @@ function applyNeckShoulderOverrideIfNeeded(
   if (primary_type !== 'CORE_CONTROL_DEFICIT') return;
   if (!q5?.includes('목·어깨')) return;
   if (!q11?.includes('어깨가 들리') && !q11?.includes('목이 긴장')) return;
-  if (!q14?.includes('10초 안정적으로')) return;
+  // Strong trunk evidence in SLS (골반/허리) → no override; trunk dominance wins
+  if (q14?.includes('골반') || q14?.includes('허리')) return;
   derived.result_type = 'NECK-SHOULDER';
   derived.primaryFocus = 'NECK-SHOULDER';
 }
