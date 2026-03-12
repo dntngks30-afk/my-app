@@ -26,6 +26,7 @@
     "test:session-gen-cache": "npx tsx scripts/session-gen-cache-smoke.mjs",
     "test:deep-v3-persona": "npx tsx scripts/deep-v3-persona-check.mjs",
     "test:deep-validation-pack": "npx tsx scripts/deep-validation-pack.mjs",
+    "analyze:deep-test": "npx tsx scripts/analyze_deep_test_funnel.mjs",
     "test:session-scenario": "npx tsx scripts/session-scenario-check.mjs",
     "test:deep-v3-shadow": "npx tsx scripts/deep-v3-shadow-compare.mjs",
     "test:deep-v3-shadow-report": "npx tsx scripts/deep-v3-shadow-report.mjs",
