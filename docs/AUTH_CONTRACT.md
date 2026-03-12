@@ -55,6 +55,7 @@
 | `/api/daily-condition/today` | client | no | |
 | `/api/daily-condition/upsert` | client | no | |
 | `/api/report/weekly` | client | no | |
+| `/api/report/day7` | client | no | |
 | `/api/routine-engine/activate` | client | no | |
 | `/api/routine-engine/status` | client | no | |
 | `/api/routine-engine/start-day` | client | no | |
@@ -62,7 +63,19 @@
 | `/api/workout-routine/get` | client | no | |
 | `/api/workout-routine/start` | client | no | |
 | `/api/workout-routine/complete-day` | client | no | |
+| `/api/routine-plan/get` | client | no | |
+| `/api/routine-plan/generate` | client | no | |
 | `/api/routine-plan/revisions` | client | no | |
+| `/api/exercise-templates` | client | no | |
+| `/api/exercise-templates/[id]` | client | no | |
+| `/api/exercise-templates/filter` | routine-engine | no | |
+| `/api/movement-test/get-latest-by-user` | StripeSuccessClient | no | |
+| `/api/movement-test/save-result` | client | no | |
+| `/api/push-notifications/subscribe` | client | no | body.userId 신뢰 안 함 |
+| `/api/my-report` | client | no | |
+| `/api/coach-comments/[id]` | client | no | |
+| `/api/coach-comments/generate` | client | no | body.userId 신뢰 안 함 |
+| `/api/coach-comments/user/[userId]` | client | no | params.userId 신뢰 안 함 |
 
 ### 3.2 Bearer + Active Plan (requireActivePlan)
 
@@ -88,21 +101,11 @@
 | `/api/admin/backfill/deep-routine-day1` | admin | |
 | `/api/admin/backfill/routine-plans` | admin | |
 
-### 3.4 Inline Auth (로컬 getCurrentUserId 또는 getUser)
+### 3.4 Inline Auth (의도적 유지 — 변경 금지)
 
-| Path | Auth 방식 | 권장 |
+| Path | Auth 방식 | 비고 |
 |------|------------|------|
-| `/api/report/day7` | 로컬 getCurrentUserId (Bearer + getUser) | → getCurrentUserId로 통일 |
-| `/api/movement-test/get-latest-by-user` | 로컬 getCurrentUserId | → getCurrentUserId로 통일 |
-| `/api/movement-test/save-result` | 로컬 getCurrentUserId | → getCurrentUserId로 통일 |
-| `/api/routine-plan/get` | 로컬 getCurrentUserId | → getCurrentUserId로 통일 |
-| `/api/routine-plan/generate` | 로컬 getCurrentUserId | → getCurrentUserId로 통일 |
-| `/api/exercise-templates` | 로컬 getCurrentUserId | → getCurrentUserId로 통일 |
-| `/api/exercise-templates/[id]` | 로컬 getCurrentUserId | → getCurrentUserId로 통일 |
-| `/api/exercise-templates/filter` | 로컬 getCurrentUserId | → getCurrentUserId로 통일 |
-| `/api/push-notifications/subscribe` | 로컬 getCurrentUserId | → getCurrentUserId로 통일 |
-| `/api/my-report` | Bearer + getUser 직접 | → getCurrentUserId로 통일 |
-| `/api/payments` | Bearer + getUser 직접 | 결제 흐름 — 변경 시 주의 |
+| `/api/payments` | Bearer + getUser 직접 | 결제 흐름 — 변경 금지 |
 | `/api/admin/check` | Bearer + getUser | Admin 전용 |
 | `/api/admin/users/plan-status` | Bearer + getUser | Admin 전용 |
 | `/api/stripe/checkout` | Bearer + getUser | 결제 — 변경 금지 |
@@ -114,8 +117,15 @@
 |------|------|------|
 | `/api/cron/daily-workout-notification` | `Bearer ${CRON_SECRET}` | Vercel Cron |
 | `/api/admin/rls-audit` | `x-admin-audit-key` | ADMIN_AUDIT_KEY env |
-| `/api/coach-comments/generate` | body.userId (인증 없음) | ⚠️ 호출자 검증 필요 |
 | `/api/stripe/webhook` | Stripe signature | Webhook 전용 |
+
+### 3.6 Intentional Public / Anonymous
+
+| Path | Auth | 비고 |
+|------|------|------|
+| `/api/movement-test/get-result/[shareId]` | 없음 | 공유 링크 — share_id로 조회 |
+| `/api/movement-test/feedback` | 없음 | 익명 피드백 설문 |
+| `/api/plans/get-by-tier` | 없음 | 공개 플랜 정보 |
 
 ---
 
@@ -153,10 +163,11 @@
 
 | 영역 | 이슈 | 위험도 |
 |------|------|--------|
-| **Inline getCurrentUserId** | 9개 라우트가 공유 헬퍼 대신 로컬 구현 사용. requestAuthCache 미사용 → 요청당 중복 getUser 가능. | 중 |
-| **coach-comments/generate** | body.userId만 검증. Bearer 없음. 호출자 신원 미확인. | 높음 |
-| **Session vs Bearer 혼재** | 클라이언트는 session, API는 Bearer. 동일 토큰이지만 문서화 부족 시 혼란. | 낮음 |
 | **payments / stripe** | getUser 직접 호출. 결제 흐름 — 변경 시 Stripe 연동 검증 필요. | 변경 금지 |
+| **admin/check, admin/users/plan-status** | Bearer + getUser. Admin 전용 — requireAdmin 전환 시 별도 검토. | 낮음 |
+| **Session vs Bearer 혼재** | 클라이언트는 session, API는 Bearer. 동일 토큰이지만 문서화 부족 시 혼란. | 낮음 |
+
+**완료된 표준화 (2025-03)**: report/day7, movement-test/*, routine-plan/*, exercise-templates/*, push-notifications/subscribe, my-report, coach-comments/* → 공유 getCurrentUserId 사용.
 
 ---
 
@@ -172,18 +183,19 @@
 
 ## 7. Recommended Migration Order (Future PRs)
 
-1. **Inline getCurrentUserId → 공유 헬퍼**: report/day7, movement-test/*, routine-plan/*, exercise-templates/*, push-notifications/subscribe, my-report. 각 라우트별 PR.
-2. **coach-comments/generate**: Bearer 인증 추가. body.userId와 토큰 sub 일치 검증.
+1. **payments / stripe**: 결제 흐름 — 변경 금지. 필요 시 별도 결제 인프라 PR.
+2. **admin/check, admin/users/plan-status**: requireAdmin 전환 검토 (선택).
 3. **문서 동기화**: 이 문서를 라우트 추가/변경 시마다 갱신.
 
 ---
 
 ## 8. Verification Notes
 
-- **검색 근거** (2025-03 기준):
-  - `getCurrentUserId`: 25+ API 라우트
+- **검색 근거** (2025-03 리스캔 기준):
+  - `getCurrentUserId`: 35+ API 라우트 (표준화 완료)
   - `requireActivePlan`: 7 라우트 (media/sign, routine/list, routine-plan/ensure, home/dashboard, workout-routine/create, movement-test/retest, deep-test/*)
   - `requireAdmin`: 6 admin 라우트
+  - Inline getUser (의도적 유지): payments, stripe/checkout, stripe/verify-session, admin/check, admin/users/plan-status
   - `getSessionSafe`: 20+ 클라이언트 컴포넌트/페이지
 - **호출 흐름**: AppAuthGate → getSessionSafe → getCachedBootstrap(token) → /api/home/bootstrap (Bearer)
 
@@ -199,3 +211,13 @@
 - `src/app/api/session/create/route.ts` — 세션 생성
 - `src/app/api/stripe/*` — 결제
 - `src/app/api/payments/route.ts` — 결제
+
+---
+
+## 10. Prioritized Next PRs (Auth Residue Rescan 2025-03)
+
+| 우선순위 | PR 대상 | 위험도 | 비고 |
+|----------|----------|--------|------|
+| 1 | — | — | Inline auth 표준화 완료. 추가 low-risk residue 없음. |
+| 2 | (선택) admin/check, admin/users/plan-status | 낮음 | requireAdmin 전환 시 별도 검토 |
+| 3 | payments/stripe | — | 변경 금지. 결제 흐름 별도 인프라 PR 필요 시 |

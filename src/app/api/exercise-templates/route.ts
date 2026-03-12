@@ -6,18 +6,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getAllExerciseTemplates } from '@/lib/workout-routine/exercise-templates-db';
-
-async function getCurrentUserId(req: NextRequest): Promise<string | null> {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-
-  const token = authHeader.substring(7);
-  const { getServerSupabaseAdmin } = await import('@/lib/supabase');
-  const supabase = getServerSupabaseAdmin();
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  return error || !user ? null : user.id;
-}
 
 export async function GET(req: NextRequest) {
   try {
