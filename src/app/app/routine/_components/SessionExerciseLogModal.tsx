@@ -56,20 +56,22 @@ export default function SessionExerciseLogModal({
   const rows = useMemo(() => flattenPlanItems(plan), [plan]);
 
   const [feedback, setFeedback] = useState<FeedbackPayload | null>(null);
-  const [values, setValues] = useState<Record<string, { sets: number | null; reps: number | null; difficulty: number | null }>>(() => {
-    const init: Record<string, { sets: number | null; reps: number | null; difficulty: number | null }> = {};
+  const [values, setValues] = useState<Record<string, { sets: number | null; reps: number | null; difficulty: number | null; rpe: number | null; discomfort: number | null }>>(() => {
+    const init: Record<string, { sets: number | null; reps: number | null; difficulty: number | null; rpe: number | null; discomfort: number | null }> = {};
     for (const r of rows) {
       const key = r.templateId;
       init[key] = {
         sets: r.suggestedSets ?? 1,
         reps: r.suggestedReps ?? null,
         difficulty: null,
+        rpe: null,
+        discomfort: null,
       };
     }
     return init;
   });
 
-  const updateValue = (key: string, field: 'sets' | 'reps' | 'difficulty', val: number | null) => {
+  const updateValue = (key: string, field: 'sets' | 'reps' | 'difficulty' | 'rpe' | 'discomfort', val: number | null) => {
     setValues((prev) => ({
       ...prev,
       [key]: { ...prev[key], [field]: val },
@@ -78,13 +80,15 @@ export default function SessionExerciseLogModal({
 
   const handleSave = async () => {
     const exerciseLogs: ExerciseLogItem[] = rows.map((r) => {
-      const v = values[r.templateId] ?? { sets: 1, reps: null, difficulty: null };
+      const v = values[r.templateId] ?? { sets: 1, reps: null, difficulty: null, rpe: null, discomfort: null };
       return {
         templateId: r.templateId,
         name: r.name,
         sets: v.sets,
         reps: v.reps,
         difficulty: v.difficulty,
+        rpe: v.rpe ?? undefined,
+        discomfort: v.discomfort ?? undefined,
       };
     });
     await onSave(exerciseLogs, feedback?.sessionFeedback && Object.keys(feedback.sessionFeedback).length > 0 ? feedback : undefined);
@@ -118,7 +122,7 @@ export default function SessionExerciseLogModal({
 
         <div className="overflow-y-auto flex-1 p-4 space-y-4">
           {rows.map((r) => {
-            const v = values[r.templateId] ?? { sets: 1, reps: null, difficulty: null };
+            const v = values[r.templateId] ?? { sets: 1, reps: null, difficulty: null, rpe: null, discomfort: null };
             const key = r.templateId;
             return (
               <div
@@ -185,6 +189,44 @@ export default function SessionExerciseLogModal({
                         </button>
                       );
                     })}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-600 mb-1">RPE (선택)</label>
+                    <div className="flex flex-wrap gap-1">
+                      {([1, 3, 5, 7, 10] as const).map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => updateValue(key, 'rpe', v.rpe === val ? null : val)}
+                          className={[
+                            'rounded px-2 py-1 text-xs font-medium transition',
+                            v.rpe === val ? 'border-2 border-slate-900 bg-orange-100' : 'border-2 border-stone-300 bg-white',
+                          ].join(' ')}
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-600 mb-1">불편감 (선택)</label>
+                    <div className="flex flex-wrap gap-1">
+                      {([0, 2, 5, 7, 10] as const).map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => updateValue(key, 'discomfort', v.discomfort === val ? null : val)}
+                          className={[
+                            'rounded px-2 py-1 text-xs font-medium transition',
+                            v.discomfort === val ? 'border-2 border-slate-900 bg-orange-100' : 'border-2 border-stone-300 bg-white',
+                          ].join(' ')}
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>

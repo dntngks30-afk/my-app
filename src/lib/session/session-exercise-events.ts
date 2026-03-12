@@ -10,6 +10,8 @@ export type ExerciseLogItem = {
   sets: number | null;
   reps: number | null;
   difficulty: number | null;
+  rpe?: number | null;
+  discomfort?: number | null;
 };
 
 type PlanSegment = {
@@ -168,6 +170,8 @@ export function buildSessionExerciseEvents(
     const actualSets = typeof log.sets === 'number' && log.sets >= 0 ? Math.min(20, Math.floor(log.sets)) : 0;
     const actualReps = typeof log.reps === 'number' && Number.isFinite(log.reps) ? Math.floor(log.reps) : null;
     const difficultyVariant = typeof log.difficulty === 'number' && log.difficulty >= 1 && log.difficulty <= 5 ? log.difficulty : null;
+    const rpeVal = typeof log.rpe === 'number' && log.rpe >= 1 && log.rpe <= 10 ? Math.floor(log.rpe) : null;
+    const discomfortVal = typeof log.discomfort === 'number' && log.discomfort >= 0 && log.discomfort <= 10 ? Math.floor(log.discomfort) : null;
 
     rows.push({
       user_id: ctx.userId,
@@ -186,8 +190,8 @@ export function buildSessionExerciseEvents(
       skipped: actualSets === 0,
       actual_reps: actualReps,
       actual_hold_seconds: null,
-      rpe: null,
-      discomfort: null,
+      rpe: rpeVal,
+      discomfort: discomfortVal,
       difficulty_variant: difficultyVariant,
       started_at: null,
       completed_at: ctx.completedAt,

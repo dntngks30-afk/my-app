@@ -280,6 +280,10 @@ export type ExerciseLogItem = {
   sets: number | null;
   reps: number | null;
   difficulty: number | null;
+  /** RPE 1~10 (exercise-level). Optional. */
+  rpe?: number | null;
+  /** Discomfort 0~10 (exercise-level). Optional. */
+  discomfort?: number | null;
 };
 
 /** PR-P2-1: optional feedback payload */
