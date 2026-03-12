@@ -2,7 +2,87 @@
  * PR-C: Adaptive Modifier Resolver
  * Loads session_adaptive_summaries and produces modifier for next session generation.
  * Deterministic, minimal. Does NOT modify session composer internals.
+ * PR-01: Safety-first merge helpers for overlay + modifier combination.
  */
+
+/** Difficulty cap strictness: low = strictest, high = loosest */
+export type DifficultyCap = 'low' | 'medium' | 'high';
+
+const CAP_STRICTNESS: Record<DifficultyCap, number> = { low: 1, medium: 2, high: 3 };
+
+/**
+ * Returns the stricter of two difficulty caps. Does not mutate inputs.
+ * low < medium < high in strictness.
+ */
+export function pickStricterDifficultyCap(
+  a: DifficultyCap | undefined | null,
+  b: DifficultyCap | undefined | null
+): DifficultyCap | undefined {
+  if (!a && !b) return undefined;
+  if (!a) return b ?? undefined;
+  if (!b) return a;
+  return CAP_STRICTNESS[a] <= CAP_STRICTNESS[b] ? a : b;
+}
+
+/**
+ * Merges volume modifiers. Larger reduction wins. Does not mutate inputs.
+ * undefined + -0.2 => -0.2; -0.1 + -0.2 => -0.2; -0.2 + 0 => -0.2;
+ * undefined + 0 => undefined (neutral modifier = no volume change).
+ */
+export function mergeVolumeModifier(
+  base: number | undefined | null,
+  next: number | undefined | null
+): number | undefined {
+  if (next === undefined || next === null) return base ?? undefined;
+  if (next === 0) return base ?? undefined;
+  if (base === undefined || base === null) return next;
+  return Math.min(base, next);
+}
+
+/** Overlay shape consumed by plan-generator */
+export type AdaptiveOverlayShape = {
+  targetLevelDelta?: -1 | 0 | 1;
+  forceShort?: boolean;
+  forceRecovery?: boolean;
+  avoidTemplateIds?: string[];
+  maxDifficultyCap?: DifficultyCap;
+};
+
+/**
+ * Merges modifier into base overlay with safety-first semantics.
+ * - Neutral modifier is no-op.
+ * - forceRecovery true overrides false.
+ * - Stricter difficulty cap wins (existing cap must NOT be weakened).
+ * - Does not mutate input objects.
+ */
+export function mergeAdaptiveOverlayWithModifier(
+  baseOverlay: AdaptiveOverlayShape | undefined | null,
+  modifier: AdaptiveModifier
+): AdaptiveOverlayShape | undefined {
+  const isNeutral =
+    modifier.volume_modifier === 0 &&
+    modifier.complexity_cap === 'none' &&
+    !modifier.recovery_bias;
+  if (isNeutral) return baseOverlay ?? undefined;
+
+  const modifierCap: DifficultyCap | undefined =
+    modifier.complexity_cap === 'basic' ? 'medium' : undefined;
+
+  const mergedCap = pickStricterDifficultyCap(
+    baseOverlay?.maxDifficultyCap,
+    modifierCap
+  );
+
+  const forceRecovery = modifier.recovery_bias || baseOverlay?.forceRecovery;
+
+  const result: AdaptiveOverlayShape = {
+    ...(baseOverlay ?? {}),
+    ...(forceRecovery && { forceRecovery: true }),
+    ...(mergedCap && { maxDifficultyCap: mergedCap }),
+  };
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
 
 export type AdaptiveModifier = {
   volume_modifier: number;

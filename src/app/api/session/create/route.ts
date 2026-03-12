@@ -39,6 +39,8 @@ import {
 import {
   loadLatestAdaptiveSummary,
   resolveAdaptiveModifier,
+  mergeAdaptiveOverlayWithModifier,
+  mergeVolumeModifier,
   type AdaptiveModifier,
 } from '@/lib/session/adaptive-modifier-resolver';
 import { getKstDayKeyUTC, getNextKstMidnightUtcIso, getTodayCompletedAndNextUnlock } from '@/lib/time/kst';
@@ -498,18 +500,12 @@ export async function POST(req: NextRequest) {
             }),
           };
 
-    // PR-C: merge modifier from session_adaptive_summaries (only for draft/new sessions)
+    // PR-C: merge modifier from session_adaptive_summaries (PR-01: safety-first merge)
     const tAdaptiveMod = performance.now();
-    let adaptiveModifier: AdaptiveModifier | null = null;
     const summary = await loadLatestAdaptiveSummary(supabase, userId);
-    adaptiveModifier = resolveAdaptiveModifier(summary);
-    if (adaptiveModifier.volume_modifier !== 0 || adaptiveModifier.complexity_cap !== 'none' || adaptiveModifier.recovery_bias) {
-      adaptiveOverlay = {
-        ...adaptiveOverlay,
-        ...(adaptiveModifier.recovery_bias && { forceRecovery: true }),
-        ...(adaptiveModifier.complexity_cap === 'basic' && { maxDifficultyCap: 'medium' as const }),
-      };
-    }
+    const adaptiveModifier = resolveAdaptiveModifier(summary);
+    adaptiveOverlay = mergeAdaptiveOverlayWithModifier(adaptiveOverlay, adaptiveModifier);
+    const mergedVolume = mergeVolumeModifier(undefined, adaptiveModifier.volume_modifier);
     timings.adaptive_modifier_ms = Math.round(performance.now() - tAdaptiveMod);
 
     const cacheInput = {
@@ -525,7 +521,7 @@ export async function POST(req: NextRequest) {
       painFlags,
       usedTemplateIds,
       adaptiveOverlay: adaptiveOverlay ?? undefined,
-      volumeModifier: adaptiveModifier?.volume_modifier,
+      volumeModifier: mergedVolume,
       priority_vector: deepSummary.priority_vector ?? undefined,
       pain_mode: deepSummary.pain_mode ?? undefined,
     };
@@ -556,7 +552,7 @@ export async function POST(req: NextRequest) {
         priority_vector: deepSummary.priority_vector,
         pain_mode: deepSummary.pain_mode,
         adaptiveOverlay,
-        volumeModifier: adaptiveModifier?.volume_modifier,
+        volumeModifier: mergedVolume,
       });
       setCachedPlan(cacheInput, planJson as Record<string, unknown>);
     }
