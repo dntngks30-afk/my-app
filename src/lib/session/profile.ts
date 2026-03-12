@@ -23,6 +23,14 @@ export function isValidTargetFrequency(
   return typeof v === 'number' && VALID_FREQUENCIES.includes(v as TargetFrequency);
 }
 
+/** Policy lock: true if total_sessions would be reduced below completed_sessions. */
+export function wouldPolicyLock(
+  existingCompletedSessions: number,
+  targetFrequency: TargetFrequency
+): boolean {
+  return FREQUENCY_TO_TOTAL[targetFrequency] < existingCompletedSessions;
+}
+
 export type ApplyTargetFrequencyResult =
   | { ok: true; totalSessions: number }
   | { ok: false; code: 'VALIDATION' | 'POLICY_LOCKED' | 'DB_ERROR'; message: string };
@@ -46,7 +54,7 @@ export async function applyTargetFrequency(
     .maybeSingle();
 
   const completedSessions = existingProgress?.completed_sessions ?? 0;
-  if (totalSessions < completedSessions) {
+  if (wouldPolicyLock(completedSessions, targetFrequency)) {
     return {
       ok: false,
       code: 'POLICY_LOCKED',

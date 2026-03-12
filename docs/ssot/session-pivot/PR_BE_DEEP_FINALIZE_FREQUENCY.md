@@ -37,6 +37,17 @@ Deep Test 완료 시 사용자가 선택한 `target_frequency`가 **서버에서
 
 ---
 
+## Regression tests
+
+`npm run test:target-frequency-regression` (scripts/target-frequency-regression.mjs)
+
+- E. Mapping: 2→8, 3→12, 4→16, 5→20
+- A/B. Stale 16 prevention: freq 5 must resolve to 20
+- C. applyTargetFrequency mock: server authoritative path (pre-save failure path)
+- D. existing progress safety: wouldPolicyLock when total would drop below completed
+
+---
+
 ## 관련 문서
 
 - BE-ONB-01: profile API
