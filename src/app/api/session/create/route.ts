@@ -505,6 +505,7 @@ export async function POST(req: NextRequest) {
     const summary = await loadLatestAdaptiveSummary(supabase, userId);
     const adaptiveModifier = resolveAdaptiveModifier(summary);
     adaptiveOverlay = mergeAdaptiveOverlayWithModifier(adaptiveOverlay, adaptiveModifier);
+    // PR-01: 현재 session/create 구조상 base volume source 없음. 따라서 modifier-only merge가 SSOT.
     const mergedVolume = mergeVolumeModifier(undefined, adaptiveModifier.volume_modifier);
     timings.adaptive_modifier_ms = Math.round(performance.now() - tAdaptiveMod);
 
