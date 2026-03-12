@@ -46,8 +46,10 @@ export default function CoachCommentsPage() {
         const currentUserId = session.user.id;
         setUserId(currentUserId);
 
-        // 코치 코멘트 조회
-        const res = await fetch(`/api/coach-comments/user/${currentUserId}`);
+        // 코치 코멘트 조회 (Bearer 인증)
+        const res = await fetch(`/api/coach-comments/user/${currentUserId}`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
 
         if (!res.ok) {
           if (res.status === 404) {
