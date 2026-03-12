@@ -20,6 +20,7 @@ import type { ExerciseTemplate } from '@/lib/workout-routine/exercise-templates'
 import {
   applySafetyFilter,
   applyLevelFilter,
+  applyFirstSessionGuardrail,
   scoreByFocusTags,
 } from '@/lib/workout-routine/strategies/filter-strategy';
 
@@ -432,6 +433,14 @@ export async function generateDayPlan(
   }
   pool = poolAfterLevel;
 
+  // First-session guardrail: no high difficulty / high progression
+  let firstSessionGuardrailUsed = false;
+  if (dayNumber === 1) {
+    const before = pool.length;
+    pool = applyFirstSessionGuardrail(pool);
+    firstSessionGuardrailUsed = pool.length < before;
+  }
+
   const theme = DAY_THEMES[dayNumber - 1];
   const baseTags = theme.primaryTags.length > 0
     ? [...theme.primaryTags, ...(theme.secondaryTags ?? [])]
@@ -526,6 +535,7 @@ export async function generateDayPlan(
   const constraintsApplied = [
     ...avoidTags.map((a) => `avoid:${a}`),
     `level<=${level}`,
+    ...(dayNumber === 1 ? ['first_session:no_high_difficulty'] : []),
   ];
   if (process.env.NODE_ENV !== 'production') {
     if (recentUsedIds.size > 0) constraintsApplied.push(`recentUsed:${recentUsedIds.size}`);
@@ -533,6 +543,7 @@ export async function generateDayPlan(
     if (usePenalty) constraintsApplied.push('recentPenalty');
     if (fallbackUsed) constraintsApplied.push('fallbackUsed');
     if (levelRelaxUsed) constraintsApplied.push('level1Relax');
+    if (firstSessionGuardrailUsed) constraintsApplied.push('firstSessionGuardrail');
   }
 
   const planHash = computePlanHash(selectedIds);

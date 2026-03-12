@@ -58,6 +58,23 @@ export function applyLevelFilter(
 }
 
 /**
+ * First-session guardrail: exclude high-difficulty / high-progression templates.
+ * Prevents first session from being too demanding.
+ *
+ * @param templates - Pool of exercise templates
+ * @returns Templates with difficulty !== 'high' and progression_level < 3
+ */
+export function applyFirstSessionGuardrail(
+  templates: readonly ExerciseTemplate[]
+): ExerciseTemplate[] {
+  return templates.filter((t) => {
+    if (t.difficulty === 'high') return false;
+    if (typeof t.progression_level === 'number' && t.progression_level >= 3) return false;
+    return true;
+  });
+}
+
+/**
  * Score templates by number of matching focus_tags.
  * Higher match count = higher priority. Does not mutate; returns new sorted array.
  *
