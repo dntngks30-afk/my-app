@@ -11,6 +11,7 @@ import { ExercisePlayerModal } from './ExercisePlayerModal'
 import SessionCompleteSummary from '@/app/app/routine/_components/SessionCompleteSummary'
 import { SessionCompletionSheet } from './SessionCompletionSheet'
 import type { SessionPainArea } from '@/lib/session/feedback-types'
+import { loadHomeSessionDraft, saveHomeSessionDraft, deleteHomeSessionDraft } from '@/lib/session/home-session-draft'
 
 type SessionStatus = 'current' | 'completed' | 'locked'
 
@@ -105,21 +106,48 @@ function PanelInner({
 }: Required<Omit<SessionPanelV2Props, 'onSessionCompleted'>> & {
   onSessionCompleted?: (completedSessions: number) => void
 }) {
-  // 로컬 운동 로그 누적 (templateId → log). 완료 세션 재조회 시 initialLogs로 초기화
+  // 로컬 운동 로그 누적 (templateId → log). PR-DRAFT-01: draft 복구 또는 initialLogs
   const [logs, setLogs] = useState<Record<string, ExerciseLogItem>>({})
   const rationale = getPlanRationale(activePlan)
 
-  // 세션 전환 시 logs 초기화
+  // PR-DRAFT-01: 세션 진입 시 draft 복구 또는 초기화
   useEffect(() => {
-    setLogs({})
-  }, [sessionId])
-
-  // 완료된 세션 재조회 시 서버 exercise_logs를 logs에 반영
-  useEffect(() => {
-    if (status === 'completed' && initialLogs && Object.keys(initialLogs).length > 0) {
-      setLogs(initialLogs)
+    if (status === 'completed') {
+      if (initialLogs && Object.keys(initialLogs).length > 0) {
+        setLogs(initialLogs)
+      } else {
+        setLogs({})
+      }
+      if (sessionId != null) deleteHomeSessionDraft(sessionId)
+      return
     }
-  }, [status, initialLogs])
+    if (sessionId == null) return
+    if (status === 'current') {
+      const draft = loadHomeSessionDraft(sessionId)
+      if (draft && Object.keys(draft.logs).length > 0) {
+        setLogs(draft.logs)
+        if (draft.sessionPerceivedDifficulty != null) setSessionPerceivedDifficulty(draft.sessionPerceivedDifficulty)
+        if (draft.sessionPainAreas && draft.sessionPainAreas.length > 0) setSessionPainAreas(draft.sessionPainAreas)
+      } else {
+        setLogs({})
+      }
+    } else {
+      setLogs({})
+    }
+  }, [sessionId, status, initialLogs])
+
+  // PR-DRAFT-01: logs 변경 시 draft 저장 (current 세션만)
+  useEffect(() => {
+    if (sessionId == null || status !== 'current' || !activePlan?.session_number) return
+    if (sessionId !== activePlan.session_number) return
+    saveHomeSessionDraft({
+      sessionNumber: sessionId,
+      logs,
+      sessionPerceivedDifficulty,
+      sessionPainAreas,
+      lastUpdatedAtMs: Date.now(),
+    })
+  }, [sessionId, status, activePlan?.session_number, logs, sessionPerceivedDifficulty, sessionPainAreas])
   // 모달에서 열린 운동 아이템
   const [openItem, setOpenItem] = useState<ExerciseItem | null>(null)
 
@@ -220,6 +248,8 @@ function PanelInner({
         duration_seconds: durationSec,
         exercise_logs: result.data.exercise_logs ?? exerciseLogsArray,
       })
+
+      deleteHomeSessionDraft(sessionNumber)
 
       const newCompleted = result.data.progress?.completed_sessions ?? sessionNumber
       onSessionCompleted?.(newCompleted)
