@@ -3,7 +3,10 @@
  * Reduces regeneration cost on retry (e.g. network failure).
  * Cache key includes userId, sessionNumber, and all generation inputs.
  * TTL 10min, max 50 entries. Serverless-safe (memory resets on cold start).
+ * PR-04: Uses canonical serialization for object-like fields (adaptiveOverlay, priority_vector).
  */
+
+import { canonicalizeObject } from '@/lib/session/cache-key-canonical';
 
 const TTL_MS = 10 * 60 * 1000;
 const MAX_ENTRIES = 50;
@@ -46,7 +49,15 @@ export type GenCacheInput = {
   pain_mode?: string | null;
 };
 
+/**
+ * Build deterministic cache key. PR-04: canonical serialization for object-like fields.
+ * - focus: order preserved (primary/secondary semantics)
+ * - avoid, painFlags, usedTemplateIds: set-like, deduped + sorted
+ * - adaptiveOverlay, priority_vector: key-sorted recursively (canonical)
+ * - volumeModifier: undefined => ''; 0 and other numbers preserved (generator: undefined/0 both mean no reduction)
+ */
 function buildKey(input: GenCacheInput): string {
+  const setLike = (arr: string[]) => JSON.stringify([...new Set(arr)].sort());
   const canonical = JSON.stringify({
     u: input.userId,
     sn: input.sessionNumber,
@@ -55,13 +66,13 @@ function buildKey(input: GenCacheInput): string {
     th: input.theme,
     tb: input.timeBudget,
     cm: input.conditionMood,
-    f: [...input.focus].sort(),
-    a: [...input.avoid].sort(),
-    pf: [...input.painFlags].sort(),
-    ut: [...input.usedTemplateIds].sort(),
-    ao: input.adaptiveOverlay ? JSON.stringify(input.adaptiveOverlay) : '',
+    f: input.focus,
+    a: setLike(input.avoid),
+    pf: setLike(input.painFlags),
+    ut: setLike(input.usedTemplateIds),
+    ao: canonicalizeObject(input.adaptiveOverlay ?? undefined),
     vm: input.volumeModifier ?? '',
-    pv: input.priority_vector ? JSON.stringify(input.priority_vector) : '',
+    pv: canonicalizeObject(input.priority_vector ?? undefined),
     pm: input.pain_mode ?? '',
   });
   return simpleHash(canonical);
