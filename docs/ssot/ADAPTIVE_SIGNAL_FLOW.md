@@ -209,3 +209,31 @@
 | avg_rpe (event) | session_adaptive_summaries | evaluateSession | dropout_risk_score (≥8) | event_based_summary.avg_rpe |
 | avg_discomfort (event) | session_adaptive_summaries | evaluateSession | discomfort_burden_score (≥60→recovery_bias), dropout_risk_score | event_based_summary.avg_discomfort |
 | discomfort_burden_score | session_adaptive_summaries | evaluateSession | **recovery_bias (≥60)** | event_based_summary.discomfort_burden_score |
+
+---
+
+## 11. Execution → Adaptive Loop (PR-SESSION-ADAPTIVE-01)
+
+**목표**: Execution Data → Adaptive Summary → Session Modifier → Next Session 흐름 연결.
+
+### 신호 추출
+- `deriveExecutionSignals(events)` → completion_rate, avg_rpe, discomfort_signal, skipped_count
+- `resolveAdaptiveModifier` 규칙:
+  - completion_ratio < 0.6 → difficulty_adjustment = -1
+  - completion_ratio ≥ 0.9 → difficulty_adjustment = 1
+  - avg_rpe ≥ 8 → intensity_adjustment = -1
+  - avg_rpe ≤ 4 → intensity_adjustment = 1
+  - avg_discomfort ≥ 6 → caution_bias = true
+
+### Modifier 적용
+- `mergeAdaptiveOverlayWithModifier`: progression.reason === 'none'일 때 difficulty_adjustment → targetLevelDelta
+- caution_bias → forceRecovery
+- intensity_adjustment === 1 → volumeModifier += 0.1
+
+### 적용 순서
+1. applyFirstSessionGuardrails
+2. volumeModifier (mainCount 조정)
+3. adaptiveOverlay (targetLevelDelta, maxDifficultyCap 등)
+
+### 로깅
+- session_adaptive_summaries: difficulty_adjustment, intensity_adjustment, caution_bias 컬럼 저장

@@ -204,13 +204,16 @@ export function evaluateSession(
 
 function buildEvaluatorTrace(
   summary: AdaptiveSummaryRow,
-  ctx: { sessionPlanId: string; sessionNumber: number }
+  ctx: { sessionPlanId: string; sessionNumber: number },
+  modifier?: ReturnType<typeof resolveAdaptiveModifier>
 ): AdaptiveEvaluatorTrace {
-  const modifier = resolveAdaptiveModifier({
+  const _modifier = modifier ?? resolveAdaptiveModifier({
     completion_ratio: summary.completion_ratio,
     skipped_exercises: summary.skipped_exercises,
     dropout_risk_score: summary.dropout_risk_score,
     discomfort_burden_score: summary.discomfort_burden_score,
+    avg_rpe: summary.avg_rpe,
+    avg_discomfort: summary.avg_discomfort,
   });
   const flags = new Set(summary.flags);
   return {
@@ -231,16 +234,22 @@ function buildEvaluatorTrace(
       high_discomfort: flags.has('high_discomfort'),
       high_rpe: flags.has('high_rpe'),
       skip_cluster: flags.has('skip_cluster'),
-      recovery_bias: modifier.recovery_bias,
-      complexity_cap_basic: modifier.complexity_cap === 'basic',
-      volume_reduction: modifier.volume_modifier < 0,
+      recovery_bias: _modifier.recovery_bias,
+      complexity_cap_basic: _modifier.complexity_cap === 'basic',
+      volume_reduction: _modifier.volume_modifier < 0,
+      difficulty_adjustment: _modifier.difficulty_adjustment,
+      intensity_adjustment: _modifier.intensity_adjustment,
+      caution_bias: _modifier.caution_bias,
     },
     decision: {
       reasons: summary.reasons,
       modifier: {
-        volume_modifier: modifier.volume_modifier,
-        complexity_cap: modifier.complexity_cap,
-        recovery_bias: modifier.recovery_bias,
+        volume_modifier: _modifier.volume_modifier,
+        complexity_cap: _modifier.complexity_cap,
+        recovery_bias: _modifier.recovery_bias,
+        difficulty_adjustment: _modifier.difficulty_adjustment,
+        intensity_adjustment: _modifier.intensity_adjustment,
+        caution_bias: _modifier.caution_bias,
       },
     },
   };
@@ -262,6 +271,15 @@ export async function runEvaluatorAndUpsert(
   const summary = evaluateSession(events, ctx);
   if (!summary) return { summary_status: 'insufficient_data' };
 
+  const modifier = resolveAdaptiveModifier({
+    completion_ratio: summary.completion_ratio,
+    skipped_exercises: summary.skipped_exercises,
+    dropout_risk_score: summary.dropout_risk_score,
+    discomfort_burden_score: summary.discomfort_burden_score,
+    avg_rpe: summary.avg_rpe,
+    avg_discomfort: summary.avg_discomfort,
+  });
+
   const row = {
     user_id: summary.user_id,
     session_plan_id: summary.session_plan_id,
@@ -281,6 +299,9 @@ export async function runEvaluatorAndUpsert(
     rpe_sample_count: summary.rpe_sample_count,
     discomfort_sample_count: summary.discomfort_sample_count,
     summary_status: summary.summary_status,
+    difficulty_adjustment: modifier.difficulty_adjustment ?? null,
+    intensity_adjustment: modifier.intensity_adjustment ?? null,
+    caution_bias: modifier.caution_bias ?? null,
   };
 
   const { error } = await supabase.from('session_adaptive_summaries').upsert([row], {
@@ -294,7 +315,7 @@ export async function runEvaluatorAndUpsert(
   const evaluator_trace = buildEvaluatorTrace(summary, {
     sessionPlanId: ctx.sessionPlanId,
     sessionNumber: ctx.sessionNumber,
-  });
+  }, modifier);
 
   return {
     completion_ratio: summary.completion_ratio,

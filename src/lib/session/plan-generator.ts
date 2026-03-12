@@ -705,6 +705,9 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   if (typeof input.volumeModifier === 'number' && input.volumeModifier < 0) {
     mainCount = Math.max(1, Math.floor(mainCount * (1 + input.volumeModifier)));
   }
+  if (typeof input.volumeModifier === 'number' && input.volumeModifier > 0 && !isFirstSession) {
+    mainCount = Math.min(3, Math.ceil(mainCount * (1 + input.volumeModifier)));
+  }
   const prepCount = 1;
   const accessoryCount = 1;
   const cooldownCount = 1;

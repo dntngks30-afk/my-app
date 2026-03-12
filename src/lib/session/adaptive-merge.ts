@@ -65,12 +65,17 @@ export function resolveAdaptiveMerge(input: MergeInput): ResolvedAdaptivePlanCon
     summary_created_at: summary?.created_at,
   };
 
-  // Volume: modifier-only (no base in current session/create flow)
-  const volumeModifier = mergeVolumeModifier(undefined, modifier.volume_modifier);
+  // Volume: modifier-only (no base in current session/create flow). PR-SESSION-ADAPTIVE-01: intensity_adjustment can add to volume.
+  let volumeModifier = mergeVolumeModifier(undefined, modifier.volume_modifier);
+  if ((modifier.intensity_adjustment ?? 0) === 1 && (volumeModifier ?? 0) >= 0) {
+    volumeModifier = 0.1;
+    reasons.push('summary_intensity_up');
+  }
 
-  // forceRecovery: recovery must never be weakened
-  const forceRecovery = modifier.recovery_bias || progression.forceRecovery || false;
+  // forceRecovery: recovery must never be weakened. PR-SESSION-ADAPTIVE-01: caution_bias included.
+  const forceRecovery = modifier.recovery_bias || (modifier.caution_bias ?? false) || progression.forceRecovery || false;
   if (modifier.recovery_bias) reasons.push('summary_recovery_bias');
+  if (modifier.caution_bias) reasons.push('summary_caution_bias');
 
   // maxDifficultyCap: stricter wins
   const modifierCap: DifficultyCap | undefined =
@@ -81,9 +86,15 @@ export function resolveAdaptiveMerge(input: MergeInput): ResolvedAdaptivePlanCon
   );
   if (modifier.complexity_cap === 'basic') reasons.push('summary_complexity_cap_basic');
 
-  // targetLevelDelta: neutralize +1 when summary says be conservative
-  const hasRecoverySignal = modifier.recovery_bias || modifier.complexity_cap === 'basic';
+  // targetLevelDelta: progression + modifier. PR-SESSION-ADAPTIVE-01: apply difficulty_adjustment when progression is none.
+  const hasRecoverySignal = modifier.recovery_bias || (modifier.caution_bias ?? false) || modifier.complexity_cap === 'basic';
   let targetLevelDelta: -1 | 0 | 1 = progression.targetLevelDelta;
+
+  const diffAdj = modifier.difficulty_adjustment ?? 0;
+  if (progression.reason === 'none' && diffAdj !== 0) {
+    targetLevelDelta = diffAdj;
+    reasons.push(`summary_difficulty_adjustment_${diffAdj}`);
+  }
 
   if (targetLevelDelta === 1 && hasRecoverySignal) {
     targetLevelDelta = 0;

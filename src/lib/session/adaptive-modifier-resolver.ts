@@ -59,10 +59,16 @@ export function mergeAdaptiveOverlayWithModifier(
   baseOverlay: AdaptiveOverlayShape | undefined | null,
   modifier: AdaptiveModifier
 ): AdaptiveOverlayShape | undefined {
+  const diffAdj = modifier.difficulty_adjustment ?? 0;
+  const intAdj = modifier.intensity_adjustment ?? 0;
+  const caution = modifier.caution_bias ?? false;
   const isNeutral =
     modifier.volume_modifier === 0 &&
     modifier.complexity_cap === 'none' &&
-    !modifier.recovery_bias;
+    !modifier.recovery_bias &&
+    diffAdj === 0 &&
+    intAdj === 0 &&
+    !caution;
   if (isNeutral) return baseOverlay ?? undefined;
 
   const modifierCap: DifficultyCap | undefined =
@@ -88,6 +94,12 @@ export type AdaptiveModifier = {
   volume_modifier: number;
   complexity_cap: 'none' | 'basic';
   recovery_bias: boolean;
+  /** PR-SESSION-ADAPTIVE-01: completion-based difficulty adjustment */
+  difficulty_adjustment?: -1 | 0 | 1;
+  /** PR-SESSION-ADAPTIVE-01: RPE-based intensity adjustment */
+  intensity_adjustment?: -1 | 0 | 1;
+  /** PR-SESSION-ADAPTIVE-01: discomfort present → caution */
+  caution_bias?: boolean;
 };
 
 const SUMMARY_MAX_AGE_DAYS = 30;
@@ -144,17 +156,23 @@ export async function loadLatestAdaptiveSummary(
 /**
  * Resolve modifier from summary. No summary → neutral modifier.
  * recovery_bias: dropout_risk >= 50 OR discomfort_burden >= 60 (event-level discomfort alone can trigger recovery).
+ * PR-SESSION-ADAPTIVE-01: difficulty_adjustment from completion, intensity_adjustment from RPE, caution_bias from discomfort.
  */
 export function resolveAdaptiveModifier(summary: {
   completion_ratio: number;
   skipped_exercises: number;
   dropout_risk_score: number;
   discomfort_burden_score?: number;
+  avg_rpe?: number | null;
+  avg_discomfort?: number | null;
 } | null): AdaptiveModifier {
   const neutral: AdaptiveModifier = {
     volume_modifier: 0,
     complexity_cap: 'none',
     recovery_bias: false,
+    difficulty_adjustment: 0,
+    intensity_adjustment: 0,
+    caution_bias: false,
   };
   if (!summary) return neutral;
 
@@ -166,9 +184,30 @@ export function resolveAdaptiveModifier(summary: {
   const discomfortBurden = summary.discomfort_burden_score ?? 0;
   const recovery_bias = summary.dropout_risk_score >= 50 || discomfortBurden >= 60;
 
+  // PR-SESSION-ADAPTIVE-01: completion_rate < 60% → difficulty_down, >= 90% → difficulty_up
+  let difficulty_adjustment: -1 | 0 | 1 = 0;
+  if (summary.completion_ratio < 0.6) difficulty_adjustment = -1;
+  else if (summary.completion_ratio >= 0.9) difficulty_adjustment = 1;
+
+  // PR-SESSION-ADAPTIVE-01: RPE >= 8 → intensity_down, RPE <= 4 → intensity_up
+  let intensity_adjustment: -1 | 0 | 1 = 0;
+  const avgRpe = summary.avg_rpe ?? null;
+  if (avgRpe != null) {
+    if (avgRpe >= 8) intensity_adjustment = -1;
+    else if (avgRpe <= 4) intensity_adjustment = 1;
+  }
+  if (intensity_adjustment === -1 && volume_modifier === 0) volume_modifier = -0.15;
+
+  // PR-SESSION-ADAPTIVE-01: discomfort present → caution_bias
+  const avgDiscomfort = summary.avg_discomfort ?? null;
+  const caution_bias = avgDiscomfort != null && avgDiscomfort >= 6;
+
   return {
     volume_modifier,
     complexity_cap,
     recovery_bias,
+    difficulty_adjustment,
+    intensity_adjustment,
+    caution_bias,
   };
 }
