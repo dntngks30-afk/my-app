@@ -430,6 +430,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       <SessionPanelV2
         sessionId={selectedSessionId}
         total={total}
+        completedSessions={completed}
         status={selectedStatus}
         exercises={exercises}
         activePlan={selectedStatus === 'current' ? localActivePlan : pastSessionPlan}

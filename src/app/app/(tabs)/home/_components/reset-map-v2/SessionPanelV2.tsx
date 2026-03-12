@@ -19,6 +19,8 @@ interface SessionPanelV2Props {
   /** null이면 패널 닫힘 */
   sessionId: number | null
   total: number
+  /** 완료된 세션 수 (다음 세션 미리보기 배너용) */
+  completedSessions?: number
   status: SessionStatus
   /** plan_json에서 추출된 운동 배열. undefined = 로딩 전, [] = 데이터 없음 */
   exercises: ExerciseItem[] | undefined
@@ -88,6 +90,7 @@ function getPlanRationale(plan: SessionPlan | ActivePlanSummary | null) {
 export function SessionPanelV2({
   sessionId,
   total,
+  completedSessions,
   status,
   exercises,
   activePlan,
@@ -122,6 +125,7 @@ export function SessionPanelV2({
 function PanelInner({
   sessionId,
   total,
+  completedSessions,
   status,
   exercises,
   activePlan,
@@ -344,15 +348,15 @@ function PanelInner({
             <div className="h-1.5 w-12 rounded-full bg-slate-200" />
           </div>
 
-          {/* Reflection: complete 이후 요약 화면 */}
-          {completed && completeResult && (
+          {/* Reflection: complete 이후 요약 화면 — 방금 완료한 세션만 표시 */}
+          {completed && completeResult && sessionId === completeResult.progress.completed_sessions && (
             <div className="px-4 pb-4 max-h-[70vh] overflow-y-auto">
               <SessionCompleteSummary
                 durationSeconds={completeResult.duration_seconds}
                 progress={completeResult.progress}
                 nextTheme={completeResult.next_theme}
                 exerciseLogs={completeResult.exercise_logs}
-                completedSessionNumber={sessionId}
+                completedSessionNumber={completeResult.progress.completed_sessions}
                 onDismiss={onClose}
                 showBodyCheckCta
                 variant="home"
@@ -369,11 +373,19 @@ function PanelInner({
             </div>
           )}
 
-          {/* 기존 패널: 미완료 시 */}
-          {!(completed && completeResult) && (
+          {/* 기존 패널: 미완료 시 또는 다음 세션 미리보기 */}
+          {!(completed && completeResult && sessionId === completeResult.progress.completed_sessions) && (
             <>
-          {/* 완료 상태 배너 */}
-          {completed && (
+          {/* PR-SESSION-FIX-03: 다음 세션 미리보기 배너 */}
+          {completedSessions != null && sessionId === completedSessions + 1 && (
+            <div className="mx-4 mt-2 mb-0 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-center">
+              <p className="text-sm font-semibold text-violet-800">다음 세션 준비됐어요</p>
+              <p className="text-xs text-violet-600 mt-0.5">세션 {sessionId}에서 이런 운동을 하게 돼요</p>
+            </div>
+          )}
+
+          {/* 완료 상태 배너 (다음 세션 미리보기 배너와 겹치지 않음) */}
+          {completed && completedSessions != null && sessionId !== completedSessions + 1 && (
             <div className="mx-4 mt-2 mb-0 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-center">
               <p className="text-sm font-semibold text-emerald-700">세션 완료! 수고하셨습니다 🎉</p>
             </div>

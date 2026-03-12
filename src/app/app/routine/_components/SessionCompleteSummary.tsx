@@ -9,7 +9,7 @@
  * + 오늘 몸상태 체크 CTA (daily_conditions SSOT 연결)
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Home, BarChart2, Activity } from 'lucide-react';
 import { NeoCard, NeoButton } from '@/components/neobrutalism';
@@ -56,6 +56,20 @@ export default function SessionCompleteSummary({
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [checkInError, setCheckInError] = useState<string | null>(null);
   const [checkInSuccess, setCheckInSuccess] = useState(false);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!checkInSuccess || !showCheckIn) return;
+    closeTimeoutRef.current = setTimeout(() => {
+      setShowCheckIn(false);
+    }, 500);
+    return () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+        closeTimeoutRef.current = null;
+      }
+    };
+  }, [checkInSuccess, showCheckIn]);
 
   const handleCheckInSubmit = async (values: {
     pain_today?: number | null;
