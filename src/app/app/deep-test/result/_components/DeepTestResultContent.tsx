@@ -24,6 +24,7 @@ import {
   getCopy,
   getV3PrescriptionNarrative,
 } from '@/lib/deep-result/copy';
+import { trackDeepEvent } from '@/lib/deep-test/events';
 import { toRadarScores } from '@/lib/deep-result/score-utils';
 import TagChips from './TagChips';
 
@@ -527,15 +528,39 @@ export default function DeepTestResultContent({
 
         {isApp ? (
           <>
-            <Link href="/app/home" className={nbBtnPrimaryBlock}>
+            <Link
+              href="/app/home"
+              className={nbBtnPrimaryBlock}
+              onClick={() =>
+                trackDeepEvent('deep_result_cta_clicked', {
+                  cta_type: 'session_start',
+                  attempt_id: attemptId ?? undefined,
+                })
+              }
+            >
               움직임 리셋 시작하기
             </Link>
-            <Link href="/app/home" className={nbBtnSecondaryBlock}>
+            <Link
+              href="/app/home"
+              className={nbBtnSecondaryBlock}
+              onClick={() =>
+                trackDeepEvent('deep_result_cta_clicked', {
+                  cta_type: 'home',
+                  attempt_id: attemptId ?? undefined,
+                })
+              }
+            >
               홈으로
             </Link>
             <Link
               href="/app/deep-test"
               className="block w-full rounded-full border-2 border-slate-300 bg-white py-3 text-center text-sm font-medium text-slate-600 shadow-[4px_4px_0_0_rgba(15,23,42,1)] transition hover:opacity-95"
+              onClick={() =>
+                trackDeepEvent('deep_result_cta_clicked', {
+                  cta_type: 'retest',
+                  attempt_id: attemptId ?? undefined,
+                })
+              }
             >
               심화 테스트 다시하기
             </Link>

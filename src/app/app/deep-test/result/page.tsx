@@ -16,6 +16,7 @@ import PwaInstallModal from '@/components/pwa/PwaInstallModal';
 import { usePwaInstall } from '@/lib/pwa/usePwaInstall';
 import { getSessionSafe } from '@/lib/supabase';
 import { getEffectiveConfidence, toConfidenceSource } from '@/lib/deep-result/effective-confidence';
+import { trackDeepEvent, setDeepTrackToken } from '@/lib/deep-test/events';
 import DeepTestResultContent from './_components/DeepTestResultContent';
 
 interface DeepResult {
@@ -84,6 +85,7 @@ export default function DeepTestResultPage() {
         if (!cancelled) setStatus('auth');
         return;
       }
+      setDeepTrackToken(session.access_token);
 
       try {
         const res = await fetch('/api/deep-test/get-latest', {
@@ -115,6 +117,25 @@ export default function DeepTestResultPage() {
         if (data?.source === 'deep') {
           setResult(data);
           setStatus('ready');
+          if (!cancelled) {
+            const att = data?.attempt;
+            const derived = att?.scores?.derived;
+            const pv = derived?.priority_vector as Record<string, number> | undefined;
+            const topAxis =
+              pv && typeof pv === 'object'
+                ? Object.entries(pv)
+                    .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
+                    .slice(0, 2)
+                    .map(([k]) => k)
+                : [];
+            trackDeepEvent('deep_result_viewed', {
+              attempt_id: att?.id,
+              pain_mode: derived?.pain_mode ?? 'none',
+              primary_type: att?.resultType ?? null,
+              top_priority_axis: topAxis,
+              secondary_type: att?.scores?.secondaryFocus ?? null,
+            });
+          }
         } else {
           setErrorMessage('?섎せ??寃곌낵 ?뺤떇?낅땲??');
           setStatus('error');

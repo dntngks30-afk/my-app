@@ -13,6 +13,7 @@ import AppTopBar from '../../_components/AppTopBar';
 import BottomNav from '../../_components/BottomNav';
 import { getSessionSafe } from '@/lib/supabase';
 import { postSessionProfile } from '@/lib/session/client';
+import { trackDeepEvent, setDeepTrackToken } from '@/lib/deep-test/events';
 import { DEEP_V2_QUESTIONS, DEEP_SECTIONS, type DeepQuestion } from '../_data/questions';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
 import MovementGuideCard from '@/components/deep-test/MovementGuideCard';
@@ -98,6 +99,14 @@ export default function DeepTestRunPage() {
 
   const [targetFrequency, setTargetFrequency] = useState<TargetFrequency | null>(null);
   const frequencyDraftLoaded = useRef(false);
+  const sectionEnteredAtRef = useRef<number>(0);
+  const startedAtRef = useRef<number>(0);
+  const submittedRef = useRef(false);
+  const abandonDataRef = useRef<{
+    lastSection: string;
+    lastSectionIndex: number;
+    answeredCount: number;
+  } | null>(null);
 
   useEffect(() => {
     if (frequencyDraftLoaded.current) return;
@@ -153,6 +162,7 @@ export default function DeepTestRunPage() {
         if (!cancelled) setStatus('auth');
         return;
       }
+      setDeepTrackToken(token);
 
       try {
         const res = await fetch('/api/deep-test/get-or-create', {
@@ -187,9 +197,17 @@ export default function DeepTestRunPage() {
             return;
           }
           const loadedAnswers = (att.answers ?? {}) as Record<string, DeepAnswerValue>;
+          const idx = getSectionIndexFromAnswers(loadedAnswers);
           setAttemptId(att.id);
           setAnswers(loadedAnswers);
-          setSectionIndex(getSectionIndexFromAnswers(loadedAnswers));
+          setSectionIndex(idx);
+          if (!cancelled) {
+            startedAtRef.current = Date.now();
+            trackDeepEvent('deep_test_started', {
+              attempt_id: att.id,
+              section_index: idx,
+            });
+          }
         }
         setStatus('ready');
       } catch {
@@ -212,6 +230,39 @@ export default function DeepTestRunPage() {
     ? getQuestionsForSection(currentSection.questionIds)
     : [];
   const isLastSection = sectionIndex >= DEEP_SECTIONS.length - 1;
+
+  useEffect(() => {
+    if (status !== 'ready') return;
+    const sec = DEEP_SECTIONS[sectionIndex];
+    if (!sec) return;
+    sectionEnteredAtRef.current = Date.now();
+    abandonDataRef.current = {
+      lastSection: sec.id,
+      lastSectionIndex: sectionIndex,
+      answeredCount: Object.keys(answers).filter((k) => {
+        const v = answers[k];
+        return v !== undefined && v !== null && v !== '';
+      }).length,
+    };
+    trackDeepEvent('deep_test_section_viewed', {
+      section_id: sec.id,
+      section_index: sectionIndex,
+    });
+  }, [status, sectionIndex, answers]);
+
+  useEffect(() => {
+    return () => {
+      if (submittedRef.current) return;
+      const d = abandonDataRef.current;
+      if (!d) return;
+      trackDeepEvent('deep_test_abandoned', {
+        last_section: d.lastSection,
+        last_section_index: d.lastSectionIndex,
+        answered_count: d.answeredCount,
+        elapsed_ms: Date.now() - startedAtRef.current,
+      });
+    };
+  }, []);
 
   const handleAnswer = (qId: string, value: DeepAnswerValue) => {
     setAnswers((prev) => ({ ...prev, [qId]: value }));
@@ -291,6 +342,19 @@ export default function DeepTestRunPage() {
       }
     }
 
+    const sec = DEEP_SECTIONS[sectionIndex];
+    if (sec) {
+      trackDeepEvent('deep_test_section_completed', {
+        section_id: sec.id,
+        section_index: sectionIndex,
+        section_duration_ms: Date.now() - sectionEnteredAtRef.current,
+        answered_count: Object.keys(answers).filter((k) => {
+          const v = answers[k];
+          return v !== undefined && v !== null && v !== '';
+        }).length,
+      });
+    }
+
     if (isLastSection) {
       setStatus('finalizing');
       const token = await getToken();
@@ -344,6 +408,8 @@ export default function DeepTestRunPage() {
         return;
       }
 
+      submittedRef.current = true;
+      trackDeepEvent('deep_test_submitted', { attempt_id: attemptId });
       router.push('/app/deep-test/result');
     } else {
       setSectionIndex((i) => i + 1);
