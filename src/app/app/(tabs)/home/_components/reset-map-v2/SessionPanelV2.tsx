@@ -342,6 +342,7 @@ function PanelInner({
                 onDismiss={onClose}
                 showBodyCheckCta
                 variant="home"
+                isNextLockedUntilTomorrow={isLockedNext ?? false}
                 onNextSessionClick={
                   onRequestNextSession
                     ? () => {

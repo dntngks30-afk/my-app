@@ -4,6 +4,7 @@
  * SessionCompleteSummary
  *
  * complete 응답 후 표시되는 요약 화면.
+ * PR-RETENTION-01: 오늘 운동 완료 / Reset Map 진행 / 다음 세션 CTA / Return Loop
  * 오늘 운동 시간 / 진척도 / 오늘 기록(exercise_logs) / 다음 테마
  * + 오늘 몸상태 체크 CTA (daily_conditions SSOT 연결)
  */
@@ -33,6 +34,8 @@ export default function SessionCompleteSummary({
   showBodyCheckCta = true,
   variant = 'routine',
   onNextSessionClick,
+  /** PR-RETENTION-01: daily cap 시 "내일 다음 세션이 준비됩니다" 표시 */
+  isNextLockedUntilTomorrow = false,
 }: {
   durationSeconds: number;
   progress: SessionProgress;
@@ -47,6 +50,7 @@ export default function SessionCompleteSummary({
   variant?: 'home' | 'routine';
   /** PR-SESSION-EXPERIENCE-01: 다음 세션 보기 클릭 시 (variant=home) */
   onNextSessionClick?: () => void;
+  isNextLockedUntilTomorrow?: boolean;
 }) {
   const router = useRouter();
   const [showCheckIn, setShowCheckIn] = useState(false);
@@ -88,8 +92,10 @@ export default function SessionCompleteSummary({
           <CheckCircle2 className="size-7 text-emerald-600" />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-slate-800">오늘 운동 완료!</h2>
-          <p className="text-sm text-slate-500">잘했어요 🎉</p>
+          <h2 className="text-lg font-bold text-slate-800">오늘 세션 완료</h2>
+          <p className="text-sm text-slate-500">
+            Reset Map 한 칸 진행 · 잘했어요 🎉
+          </p>
         </div>
       </div>
 
@@ -108,10 +114,18 @@ export default function SessionCompleteSummary({
 
         <div className="rounded-xl bg-stone-50 p-4 border border-stone-200">
           <p className="text-xs text-slate-500 uppercase tracking-wide mb-0.5">
-            진행도
+            리셋 지도 진행률
           </p>
           <p className="text-xl font-bold text-slate-800">
             {progress.completed_sessions} / {progress.total_sessions} 세션
+          </p>
+          {completedSessionNumber != null && (
+            <p className="text-xs text-slate-600 mt-1 font-medium">
+              Day {completedSessionNumber} 완료
+            </p>
+          )}
+          <p className="text-xs text-slate-500 mt-0.5">
+            {Math.round((progress.completed_sessions / Math.max(1, progress.total_sessions)) * 100)}% 완료
           </p>
         </div>
 
@@ -141,9 +155,10 @@ export default function SessionCompleteSummary({
         {nextTheme && (
           <div className="rounded-xl bg-violet-50 p-4 border border-violet-200">
             <p className="text-xs text-violet-600 uppercase tracking-wide mb-0.5">
-              다음 세션 테마
+              다음 세션
             </p>
             <p className="text-base font-semibold text-violet-900">{nextTheme}</p>
+            <p className="text-xs text-violet-600 mt-1">예상 시간 약 10분</p>
           </div>
         )}
       </div>
@@ -208,6 +223,21 @@ export default function SessionCompleteSummary({
             </>
           )}
         </div>
+        {isNextLockedUntilTomorrow && (
+          <p className="text-center text-xs text-slate-500">
+            내일 다음 세션이 준비됩니다
+          </p>
+        )}
+        {nextTheme && !isNextLockedUntilTomorrow && (
+          <p className="text-center text-xs text-slate-500">
+            다음 세션은 몸 상태에 맞게 조정됩니다
+          </p>
+        )}
+        {!nextTheme && progress.completed_sessions >= progress.total_sessions && (
+          <p className="text-center text-xs text-slate-500">
+            모든 세션을 완료했어요. 수고하셨습니다!
+          </p>
+        )}
         {showBodyCheckCta && (
           <button
             type="button"
