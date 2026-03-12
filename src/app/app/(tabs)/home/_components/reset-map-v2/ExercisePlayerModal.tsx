@@ -41,11 +41,15 @@ function ModalInner({
   initialLog,
   onClose,
   onComplete,
+  sessionGoalText,
+  painModeMessage,
 }: {
   item: ExerciseItem;
   initialLog?: ExerciseLogItem;
   onClose: () => void;
   onComplete: (log: ExerciseLogItem) => void;
+  sessionGoalText?: string;
+  painModeMessage?: string;
 }) {
   const [media, setMedia] = useState<MediaPayload | null>(null);
   const [mediaLoading, setMediaLoading] = useState(true);
