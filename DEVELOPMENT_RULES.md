@@ -120,6 +120,8 @@ cookie session
 
 인증 방식 변경 금지 (사용자 확인 필요)
 
+Auth 모델·라우트 인벤토리: docs/AUTH_CONTRACT.md 참조
+
 7. 결제(Stripe) 규칙
 
 Stripe 관련 코드는 다음 원칙을 따른다.
