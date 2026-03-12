@@ -146,6 +146,16 @@ export interface BriefSessionRationale {
   detail: string;
 }
 
+export interface DeepResultReasonBridge {
+  bullets: string[];
+}
+
+export interface FirstSessionBridge {
+  headline: string;
+  principles: string[];
+  note?: string;
+}
+
 const AXIS_TO_FEATURE: Record<string, string> = {
   lower_stability: '하체 안정성',
   lower_mobility: '하체 가동성',
@@ -181,6 +191,48 @@ const AXIS_TO_FEELING: Record<string, string> = {
   asymmetry: '좌우 차이 체감 감소',
   deconditioned: '아침에 몸이 덜 무거움',
 };
+
+const AXIS_TO_REASON: Record<string, string> = {
+  lower_stability: '하체가 무너지지 않게 버티는 안정성 신호가 우선순위로 잡혔어요.',
+  lower_mobility: '깊은 범위보다 발목·고관절 가동 범위를 먼저 정리할 필요가 보여요.',
+  upper_mobility: '팔 올림과 상체 가동성 쪽 관리 우선순위가 높게 잡혔어요.',
+  trunk_control: '몸통이 보상하지 않도록 제어를 먼저 잡는 흐름이 더 맞아요.',
+  asymmetry: '좌우 균형 차이를 먼저 줄이는 쪽이 더 효율적인 상태로 보여요.',
+  deconditioned: '강도보다 기본 움직임을 편하게 복구하는 쪽이 먼저예요.',
+};
+
+const AXIS_TO_SESSION_PRINCIPLE: Record<string, string> = {
+  lower_stability: '하체 안정과 무릎 정렬 중심',
+  lower_mobility: '깊이보다 발목·고관절 가동 범위 중심',
+  upper_mobility: '상체 가동성과 팔 올림 연결 중심',
+  trunk_control: '몸통 제어와 흔들림 감소 중심',
+  asymmetry: '좌우 균형과 한쪽 과사용 감소 중심',
+  deconditioned: '강도보다 기본 움직임 복구 중심',
+};
+
+const TAG_TO_LABEL: Record<string, string> = {
+  thoracic_mobility: '흉추 모빌리티',
+  scapular_control: '견갑 안정화',
+  neck_stability: '목/경추 안정화',
+  hip_mobility: '고관절 리셋',
+  ankle_mobility: '발목 가동성',
+  glute_medius: '중둔근 활성화',
+  core_bracing: '코어 브레이싱',
+  breathing_reset: '호흡 리셋',
+};
+
+function getTopAxes(priorityVector?: Record<string, number> | null, count = 2): string[] {
+  if (!priorityVector || typeof priorityVector !== 'object') return [];
+  return Object.entries(priorityVector)
+    .filter(([, value]) => typeof value === 'number' && value > 0)
+    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
+    .slice(0, count)
+    .map(([axis]) => axis);
+}
+
+function labelFocusTag(tag: string): string {
+  return TAG_TO_LABEL[tag] ?? tag.replace(/_/g, ' ');
+}
 
 export function getV3PrescriptionNarrative(
   priorityVector?: Record<string, number> | null,
@@ -218,6 +270,68 @@ export function getV3PrescriptionNarrative(
     cautionPoints: cautionPoints.slice(0, 2),
     sessionGoals: [...new Set(sessionGoals)].slice(0, 3),
     expectedFeeling,
+  };
+}
+
+export function buildDeepResultReasonBridge(
+  priorityVector?: Record<string, number> | null,
+  painMode?: 'none' | 'caution' | 'protected' | null,
+  focusTags?: string[]
+): DeepResultReasonBridge | null {
+  const topAxes = getTopAxes(priorityVector, 2);
+  if (topAxes.length === 0) return null;
+
+  const bullets = topAxes.map(
+    (axis) => AXIS_TO_REASON[axis] ?? `${AXIS_TO_FEATURE[axis] ?? axis} 우선순위가 높게 잡혔어요.`
+  );
+
+  if (painMode === 'protected') {
+    bullets.push('통증 응답이 커서 첫 단계는 보호 모드로, 통증 없는 범위 안에서 시작해요.');
+  } else if (painMode === 'caution') {
+    bullets.push('통증 응답이 있어 초반 강도와 범위는 보수적으로 잡아요.');
+  } else if (focusTags?.[0]) {
+    bullets.push(`${labelFocusTag(focusTags[0])} 쪽을 먼저 정리하면 초기 체감이 더 빨라질 수 있어요.`);
+  }
+
+  return {
+    bullets: [...new Set(bullets)].slice(0, 3),
+  };
+}
+
+export function buildFirstSessionBridge(
+  priorityVector?: Record<string, number> | null,
+  painMode?: 'none' | 'caution' | 'protected' | null,
+  focusTags?: string[]
+): FirstSessionBridge | null {
+  const topAxes = getTopAxes(priorityVector, 2);
+  if (topAxes.length === 0) return null;
+
+  const sessionGoals = topAxes
+    .map((axis) => AXIS_TO_GOAL[axis] ?? AXIS_TO_FEATURE[axis] ?? axis)
+    .filter(Boolean);
+  const headline = `${sessionGoals.slice(0, 2).join(' + ')}을 첫 세션 우선순위로 잡았어요.`;
+
+  const principles = topAxes.map(
+    (axis) => AXIS_TO_SESSION_PRINCIPLE[axis] ?? `${AXIS_TO_FEATURE[axis] ?? axis} 중심`
+  );
+
+  if (painMode === 'protected' || painMode === 'caution') {
+    principles.push('통증 없는 범위에서 강도와 범위를 보수적으로 시작');
+  } else if (focusTags?.[0]) {
+    principles.push(`${labelFocusTag(focusTags[0])} 같은 기본 연결부터 함께 정리`);
+  }
+
+  const note =
+    painMode === 'protected'
+      ? '불편감이 강하면 강도보다 안정적인 연결을 먼저 회복해요.'
+      : painMode === 'caution'
+        ? '불편감이 올라오지 않도록 깊이와 속도를 천천히 맞춰 진행해요.'
+        : undefined;
+
+  return {
+    headline,
+    principles: [...new Set(principles)].slice(0, 3),
+    note,
   };
 }
 

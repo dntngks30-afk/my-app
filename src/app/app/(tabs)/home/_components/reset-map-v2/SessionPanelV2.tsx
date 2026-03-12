@@ -108,6 +108,8 @@ function PanelInner({
 }) {
   // 로컬 운동 로그 누적 (templateId → log). PR-DRAFT-01: draft 복구 또는 initialLogs
   const [logs, setLogs] = useState<Record<string, ExerciseLogItem>>({})
+  const [sessionPerceivedDifficulty, setSessionPerceivedDifficulty] = useState<'too_easy' | 'ok' | 'too_hard' | null>(null)
+  const [sessionPainAreas, setSessionPainAreas] = useState<SessionPainArea[]>([])
   const rationale = getPlanRationale(activePlan)
 
   // PR-DRAFT-01: 세션 진입 시 draft 복구 또는 초기화
@@ -173,8 +175,6 @@ function PanelInner({
   }, [exercises])
   // 세션 피드백 (PR-UX-00: 종료 시 시트에서만 수집)
   const [showSessionCompletionSheet, setShowSessionCompletionSheet] = useState(false)
-  const [sessionPerceivedDifficulty, setSessionPerceivedDifficulty] = useState<'too_easy' | 'ok' | 'too_hard' | null>(null)
-  const [sessionPainAreas, setSessionPainAreas] = useState<SessionPainArea[]>([])
   // 종료 API 상태
   const [completing, setCompleting] = useState(false)
   const [completeError, setCompleteError] = useState<string | null>(null)

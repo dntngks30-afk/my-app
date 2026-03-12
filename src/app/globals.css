@@ -232,3 +232,9 @@ h1, h2, h3 {
 .app-entry-spinner {
   animation: app-entry-spin 0.8s linear infinite;
 }
+
+/* Next.js dev portal positioning override */
+nextjs-portal {
+  left: 1px;
+  top: unset;
+}

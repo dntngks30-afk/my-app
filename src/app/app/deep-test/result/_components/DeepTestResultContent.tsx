@@ -18,7 +18,12 @@ import {
   AlertCircle,
   Zap,
 } from 'lucide-react';
-import { getCopy, getV3PrescriptionNarrative } from '@/lib/deep-result/copy';
+import {
+  buildDeepResultReasonBridge,
+  buildFirstSessionBridge,
+  getCopy,
+  getV3PrescriptionNarrative,
+} from '@/lib/deep-result/copy';
 import { toRadarScores } from '@/lib/deep-result/score-utils';
 import TagChips from './TagChips';
 
@@ -157,6 +162,8 @@ export default function DeepTestResultContent({
   const copyAny = copy as unknown as Record<string, unknown>;
 
   const v3Narrative = getV3PrescriptionNarrative(priorityVector ?? undefined, painMode ?? undefined, focusTags);
+  const reasonBridge = buildDeepResultReasonBridge(priorityVector ?? undefined, painMode ?? undefined, focusTags);
+  const firstSessionBridge = buildFirstSessionBridge(priorityVector ?? undefined, painMode ?? undefined, focusTags);
 
   const mainTag = asString(
     copyAny?.badgeTitle ?? copyAny?.tag ?? copyAny?.badge ?? copyAny?.bannerTag,
@@ -178,8 +185,10 @@ export default function DeepTestResultContent({
   const insightsText = (() => {
     if (v3Narrative?.movementFeatures?.length) {
       const feats = v3Narrative.movementFeatures.slice(0, 2);
-      const cautions = v3Narrative.cautionPoints.slice(0, 1);
-      return [...feats, ...cautions].slice(0, 3);
+      const expected = v3Narrative.expectedFeeling
+        ? [`우선순위를 먼저 잡으면 ${v3Narrative.expectedFeeling}을 체감하기 쉬워요.`]
+        : [];
+      return [...feats, ...expected].slice(0, 3);
     }
     const fromCopy = asStringArray(
       copyAny?.symptoms ?? copyAny?.insights ?? copyAny?.keyPoints ?? copyAny?.bullets
@@ -197,7 +206,29 @@ export default function DeepTestResultContent({
     return [a, b, c];
   })();
 
+  const reasonBullets = (() => {
+    if (reasonBridge?.bullets?.length) return reasonBridge.bullets.slice(0, 3);
+    const fromCopy = asStringArray(
+      copyAny?.insights ?? copyAny?.keyPoints ?? copyAny?.symptoms ?? copyAny?.bullets
+    );
+    if (fromCopy.length > 0) return fromCopy.slice(0, 3);
+    const fallback = [
+      focusTags[0]
+        ? `${labelTag(focusTags[0])} 쪽을 먼저 관리하는 흐름이 더 효율적이에요.`
+        : '지금은 가장 약한 고리를 먼저 정리하는 흐름이 더 효율적이에요.',
+      painMode === 'protected'
+        ? '강도보다 보호 범위 안에서 안정적으로 움직이는 쪽을 우선해요.'
+        : painMode === 'caution'
+          ? '통증 신호가 올라오지 않도록 초반 강도와 범위를 보수적으로 잡아요.'
+          : '큰 강도보다 제어가 되는 범위부터 차근차근 올리는 구성이 더 맞아요.',
+    ];
+    return fallback.slice(0, 3);
+  })();
+
   const actionPlan = (() => {
+    if (firstSessionBridge?.principles?.length) {
+      return firstSessionBridge.principles.slice(0, 3);
+    }
     if (v3Narrative?.sessionGoals?.length) {
       return v3Narrative.sessionGoals.slice(0, 3).map((g) => `${g} 중심`);
     }
@@ -214,6 +245,9 @@ export default function DeepTestResultContent({
       copyAny?.caution ?? copyAny?.disclaimer,
       '저림/방사통이 있으면 무리한 범위 확장은 피하고, 통증 없는 범위에서 진행해요.'
     );
+  const firstSessionHeadline = firstSessionBridge?.headline
+    ?? '첫 세션은 무리하게 많이 하기보다, 우선순위가 높은 패턴부터 정리하는 흐름이에요.';
+  const firstSessionNote = firstSessionBridge?.note ?? caution;
 
   const reportDate = new Date().toLocaleString('ko-KR');
   const reportId = attemptId
@@ -241,7 +275,7 @@ export default function DeepTestResultContent({
   const isApp = variant === 'app';
 
   return (
-    <div className="max-w-md mx-auto space-y-6">
+    <div className="mx-auto max-w-md space-y-5">
       {variant === 'demo' && (
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400 text-slate-900 text-xs font-bold">
           DEMO (NO LOGIN)
@@ -267,7 +301,7 @@ export default function DeepTestResultContent({
       </div>
 
       {/* Hero Diagnosis Card */}
-      <div className="bg-white border-[3px] border-black rounded-[32px] p-7 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+      <div className="bg-white border-[3px] border-black rounded-[32px] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
         <div className="mb-5">
           <div className="inline-flex items-center gap-2 bg-[#FF8A00] text-white px-3 py-1.5 rounded-full border-[2px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
             <Zap size={12} fill="currentColor" />
@@ -289,8 +323,8 @@ export default function DeepTestResultContent({
       </div>
 
       {/* Radar Chart */}
-      <div className="bg-white border-[3px] border-black rounded-[40px] p-12 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] relative overflow-visible">
-        <div className="flex flex-col items-center mb-12">
+      <div className="bg-white border-[3px] border-black rounded-[40px] p-6 sm:p-10 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] relative overflow-visible">
+        <div className="mb-10 flex flex-col items-center">
           <h2 className="text-xl font-black text-black tracking-wide">
             움직임 지표
           </h2>
@@ -382,12 +416,12 @@ export default function DeepTestResultContent({
       </div>
 
       {/* Insights */}
-      <div className="bg-white border-[3px] border-black rounded-[32px] p-7 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-        <h3 className="text-lg font-black text-black mb-8 flex items-center gap-3">
+      <div className="bg-white border-[3px] border-black rounded-[32px] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+        <h3 className="mb-6 flex items-center gap-3 text-lg font-black text-black">
           <div className="w-1.5 h-6 bg-black rounded-full" />
-          움직임 경고 신호
+          현재 상태를 이렇게 봤어요
         </h3>
-        <div className="space-y-6">
+        <div className="space-y-5">
           {insightsText.map((text, i) => {
             const icon =
               i === 0 ? (
@@ -398,11 +432,11 @@ export default function DeepTestResultContent({
                 <Target size={20} strokeWidth={3} />
               );
             return (
-              <div key={i} className="flex gap-5 items-start group">
+              <div key={i} className="flex items-start gap-4 group">
                 <div className="w-12 h-12 rounded-2xl bg-[#F7F3EE] border-[3px] border-black flex items-center justify-center shrink-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] group-hover:bg-[#FFB800] transition-all">
                   {icon}
                 </div>
-                <p className="text-[14px] font-black text-black leading-tight pt-2 break-keep">
+                <p className="pt-2 text-[14px] font-black leading-tight text-black break-keep">
                   {text}
                 </p>
               </div>
@@ -411,20 +445,42 @@ export default function DeepTestResultContent({
         </div>
       </div>
 
-      {/* Action Plan */}
-      <div className="bg-[#FF8A00] border-[3px] border-black rounded-[32px] p-7 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden">
+      {/* Reason Bridge */}
+      <div className="bg-white border-[3px] border-black rounded-[32px] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+        <h3 className="mb-4 flex items-center gap-3 text-lg font-black text-black">
+          <div className="h-6 w-1.5 rounded-full bg-[#FF8A00]" />
+          이렇게 판단했어요
+        </h3>
+        <ul className="space-y-3">
+          {reasonBullets.map((text, i) => (
+            <li
+              key={i}
+              className="flex items-start gap-3 rounded-2xl border-2 border-slate-900 bg-[#F7F3EE] px-4 py-3"
+            >
+              <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-[#FF8A00]" />
+              <p className="text-sm font-semibold leading-6 text-slate-800 break-keep">{text}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* First Session Bridge */}
+      <div className="bg-[#FF8A00] border-[3px] border-black rounded-[32px] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden">
         <div className="absolute top-[-20px] right-[-20px] p-4 opacity-10 rotate-12 pointer-events-none">
           <Activity size={160} strokeWidth={1} />
         </div>
-        <h3 className="text-lg font-black text-black mb-6 flex items-center gap-2">
+        <h3 className="text-lg font-black text-black mb-2 flex items-center gap-2">
           <Target size={18} strokeWidth={3} />
-          7일 움직임 리셋
+          첫 세션은 이렇게 시작돼요
         </h3>
+        <p className="relative z-10 mb-5 text-sm font-bold leading-6 text-black/80 break-keep">
+          {firstSessionHeadline}
+        </p>
         <div className="space-y-3 relative z-10">
           {actionPlan.map((plan, i) => (
             <div
               key={i}
-              className="flex items-center justify-between bg-white border-[3px] border-black p-4 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] group hover:translate-x-1 hover:-translate-y-1 transition-all active:shadow-none"
+              className="flex items-center justify-between bg-white border-[3px] border-black p-4 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
             >
               <div className="flex items-center gap-3">
                 <div className="w-7 h-7 rounded-lg bg-black text-white flex items-center justify-center text-[12px] font-black italic">
@@ -434,24 +490,16 @@ export default function DeepTestResultContent({
                   {plan}
                 </span>
               </div>
-              <ChevronRight size={18} strokeWidth={3} className="text-gray-300 group-hover:text-black" />
+              <ChevronRight size={18} strokeWidth={3} className="text-gray-300" />
             </div>
           ))}
         </div>
         <div className="mt-8 pt-5 border-t-[2.5px] border-black/10 flex items-start gap-3">
           <AlertCircle size={18} strokeWidth={3} className="shrink-0 mt-0.5" />
           <p className="text-[12px] font-black leading-snug italic opacity-90 break-keep">
-            &quot;{caution}&quot;
+            &quot;{firstSessionNote}&quot;
           </p>
         </div>
-      </div>
-
-      {/* Tags */}
-      <div className="bg-white border-[3px] border-black rounded-[24px] p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-        <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.4em] mb-4">
-          Tags
-        </h3>
-        <TagChips focusTags={focusTags} avoidTags={avoidTags} />
       </div>
 
       {/* CTA */}
@@ -491,6 +539,14 @@ export default function DeepTestResultContent({
             )}
           </div>
         )}
+      </div>
+
+      {/* Tags */}
+      <div className="bg-white border-[3px] border-black rounded-[24px] p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+        <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.4em] mb-4">
+          Tags
+        </h3>
+        <TagChips focusTags={focusTags} avoidTags={avoidTags} />
       </div>
 
       {/* PWA Section (app only) */}

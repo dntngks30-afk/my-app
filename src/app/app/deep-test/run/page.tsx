@@ -24,11 +24,39 @@ type Status = 'loading' | 'ready' | 'error' | 'auth' | 'paywall' | 'finalizing';
 
 /** Stepper display titles (DEEP_SECTIONS uses canonical questionIds) */
 const STEPPER_TITLES: Record<string, string> = {
-  basic: '기본 정보',
+  basic: '기본 상태',
   squat: '스쿼트',
   wallangel: '벽천사',
   sls: '한발서기',
-  final: '마지막 단계',
+  final: '마무리 정보',
+};
+
+const ANALYSIS_PHASES: Record<string, { step: number; title: string; description: string }> = {
+  basic: {
+    step: 1,
+    title: '기본 상태 확인',
+    description: '지금 몸 상태와 생활 패턴을 먼저 정리해요.',
+  },
+  squat: {
+    step: 2,
+    title: '하체 움직임 확인',
+    description: '스쿼트에서 통증·무릎 방향·흔들림을 확인해요.',
+  },
+  wallangel: {
+    step: 3,
+    title: '상체·균형 확인',
+    description: '팔 올림과 몸통 보상 움직임을 확인해요.',
+  },
+  sls: {
+    step: 3,
+    title: '상체·균형 확인',
+    description: '한발서기에서 흔들림과 좌우 차이를 확인해요.',
+  },
+  final: {
+    step: 3,
+    title: '운동 빈도·나이·성별 입력',
+    description: '마무리 정보까지 반영해 결과를 정리해요.',
+  },
 };
 
 function getQuestionsForSection(questionIds: readonly string[]): DeepQuestion[] {
@@ -179,6 +207,7 @@ export default function DeepTestRunPage() {
   }, [getToken]);
 
   const currentSection = DEEP_SECTIONS[sectionIndex];
+  const currentPhase = currentSection ? ANALYSIS_PHASES[currentSection.id] : null;
   const questions = currentSection
     ? getQuestionsForSection(currentSection.questionIds)
     : [];
@@ -400,22 +429,37 @@ export default function DeepTestRunPage() {
     <div className="min-h-screen bg-[#f8f6f0] pb-24">
       <AppTopBar />
       <main ref={mainRef} className="container mx-auto px-4 py-6">
-        <span className="text-sm font-semibold text-orange-500">
-          {sectionIndex + 1} / {DEEP_SECTIONS.length}
-        </span>
-        <h2 className="mt-2 text-lg font-bold text-slate-800 mb-6">
-          {currentSection ? (STEPPER_TITLES[currentSection.id] ?? currentSection.title) : ''}
-        </h2>
+        <section className="mb-6 rounded-2xl border-2 border-slate-900 bg-white p-4 shadow-[4px_4px_0_0_rgba(15,23,42,1)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-orange-500">
+                {currentPhase ? `분석 단계 ${currentPhase.step}/3` : '분석 단계'}
+              </p>
+              <h2 className="mt-2 text-lg font-bold text-slate-900">
+                {currentPhase?.title ?? ''}
+              </h2>
+              <p className="mt-1 text-sm leading-5 text-stone-600">
+                {currentPhase?.description ?? ''}
+              </p>
+            </div>
+            <div className="shrink-0 rounded-full border-2 border-slate-900 bg-[#f8f6f0] px-3 py-1 text-xs font-semibold text-slate-700">
+              {sectionIndex + 1} / {DEEP_SECTIONS.length}
+            </div>
+          </div>
+          <p className="mt-3 text-xs font-medium text-slate-500">
+            현재 항목: {currentSection ? (STEPPER_TITLES[currentSection.id] ?? currentSection.title) : ''}
+          </p>
+        </section>
 
         <div className="space-y-6">
           {sectionIndex === 1 && (
             <MovementGuideCard
               title="스쿼트"
-              subtitle="맨몸 스쿼트 5회만 해보고, 느낌에 맞게 답해주세요."
+              subtitle="맨몸 스쿼트 5회 해보고, 통증·무릎 방향·흔들림을 봐주세요."
               bullets={[
                 '발 어깨너비, 발바닥 전체가 바닥에.',
                 '엉덩이를 뒤로 빼며 내려가고, 무릎은 발끝 방향.',
-                '통증이 있으면 가능한 범위까지만.',
+                '깊이보다 통증·무릎 흔들림을 기준으로 답해주세요.',
               ]}
               videoMp4Src="/deep-test/guides/squat.mp4"
               videoAlt="스쿼트 동작 가이드"
@@ -428,7 +472,7 @@ export default function DeepTestRunPage() {
               bullets={[
                 '뒤통수/등/엉덩이를 벽에(허리는 과하게 뜨지 않게).',
                 '팔꿈치·손등이 벽에서 떨어지지 않게 천천히.',
-                '통증/저림이 올라오면 범위를 줄이기.',
+                '상체 가동성·막힘·뻣뻣함을 기준으로 답해주세요.',
               ]}
               videoMp4Src="/deep-test/guides/wall-angel.mp4"
               videoAlt="벽천사 동작 가이드"
@@ -437,11 +481,11 @@ export default function DeepTestRunPage() {
           {sectionIndex === 3 && (
             <MovementGuideCard
               title="한발서기"
-              subtitle="한 발로 10초 버틴 뒤, 흔들림/통증을 체크하세요."
+              subtitle="한 발로 10초 버틴 뒤, 흔들림과 좌우 차이를 봐주세요."
               bullets={[
                 '시선 정면, 골반 수평 유지.',
                 '버티는 발은 엄지·새끼·뒤꿈치 3점 지지.',
-                '무릎은 발끝 방향(안쪽으로 무너지지 않게).',
+                '오래 버틴 시간보다 흔들림·좌우 차이를 기준으로 답해주세요.',
               ]}
               videoMp4Src="/deep-test/guides/one-leg-stand.mp4"
               videoAlt="한발서기 동작 가이드"
@@ -458,12 +502,12 @@ export default function DeepTestRunPage() {
               key={q.id}
               className="rounded-2xl border-2 border-slate-900 bg-white p-4 shadow-[4px_4px_0_0_rgba(15,23,42,1)]"
             >
-              {q.helperText && (
-                <p className="text-xs text-stone-500 mb-2">{q.helperText}</p>
-              )}
               <p className="text-sm font-semibold text-slate-800 mb-3">
                 {q.title}
               </p>
+              {q.helperText && (
+                <p className="mb-3 text-xs leading-5 text-stone-500">{q.helperText}</p>
+              )}
 
               {q.type === 'number' && (
                 <input
@@ -512,11 +556,7 @@ export default function DeepTestRunPage() {
               )}
 
               {q.type === 'multi' && q.options && (
-                <>
-                  <p className="text-xs text-stone-500 mb-2">
-                    1~2개 권장
-                  </p>
-                  <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2">
                     {q.options.map((opt) => {
                       const arr = (answers[q.id] ?? []) as string[];
                       const checked = arr.includes(opt.value);
@@ -538,7 +578,6 @@ export default function DeepTestRunPage() {
                       );
                     })}
                   </div>
-                </>
               )}
             </div>
           ))}
