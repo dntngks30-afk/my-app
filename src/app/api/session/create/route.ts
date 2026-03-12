@@ -600,6 +600,12 @@ export async function POST(req: NextRequest) {
       adaptiveCtx
     );
     if (summary) {
+      const triggerReasons: string[] = [];
+      if (summary.completion_ratio < 0.6) triggerReasons.push('completion_ratio_low');
+      else if (summary.completion_ratio < 0.8) triggerReasons.push('completion_ratio_moderate');
+      if (summary.skipped_exercises >= 2) triggerReasons.push('skipped_exercises_high');
+      if (summary.dropout_risk_score >= 50) triggerReasons.push('dropout_risk_high');
+      if (summary.discomfort_burden_score >= 60) triggerReasons.push('discomfort_burden_high');
       adaptationTrace = {
         ...adaptationTrace,
         event_based_summary: {
@@ -609,6 +615,7 @@ export async function POST(req: NextRequest) {
           dropout_risk_score: summary.dropout_risk_score,
           discomfort_burden_score: summary.discomfort_burden_score,
           flags: summary.flags,
+          trigger_reasons: triggerReasons.length > 0 ? triggerReasons : undefined,
         },
       };
     }

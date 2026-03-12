@@ -61,11 +61,13 @@ export async function loadLatestAdaptiveSummary(
 
 /**
  * Resolve modifier from summary. No summary → neutral modifier.
+ * recovery_bias: dropout_risk >= 50 OR discomfort_burden >= 60 (event-level discomfort alone can trigger recovery).
  */
 export function resolveAdaptiveModifier(summary: {
   completion_ratio: number;
   skipped_exercises: number;
   dropout_risk_score: number;
+  discomfort_burden_score?: number;
 } | null): AdaptiveModifier {
   const neutral: AdaptiveModifier = {
     volume_modifier: 0,
@@ -79,7 +81,8 @@ export function resolveAdaptiveModifier(summary: {
   else if (summary.completion_ratio < 0.8) volume_modifier = -0.1;
 
   const complexity_cap = summary.skipped_exercises >= 2 ? 'basic' : 'none';
-  const recovery_bias = summary.dropout_risk_score >= 50;
+  const discomfortBurden = summary.discomfort_burden_score ?? 0;
+  const recovery_bias = summary.dropout_risk_score >= 50 || discomfortBurden >= 60;
 
   return {
     volume_modifier,

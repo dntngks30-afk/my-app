@@ -321,6 +321,8 @@ export type AdaptationTrace = {
     dropout_risk_score: number;
     discomfort_burden_score: number;
     flags: string[];
+    /** Which signals triggered modifier application (for explainability). */
+    trigger_reasons?: string[];
   };
   /** User-facing one-liner derived from reason. Only when reason !== 'none'. */
   reason_summary?: string;

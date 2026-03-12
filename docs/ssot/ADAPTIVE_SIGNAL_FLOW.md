@@ -2,7 +2,7 @@
 
 **SSOT**: 현재 workout player 입력 → session complete → adaptive progression 데이터 흐름의 실제 상태.
 
-**Last updated**: 2025-03 (pr/adaptive-summary-consumption-verify)
+**Last updated**: 2025-03 (pr/adaptive-modifier-weighting-v1)
 
 ---
 
@@ -124,7 +124,8 @@
     "avg_discomfort": 4,
     "dropout_risk_score": 0,
     "discomfort_burden_score": 0,
-    "flags": []
+    "flags": [],
+    "trigger_reasons": []
   }
 }
 ```
@@ -206,4 +207,5 @@
 | completion_ratio | session_feedback | deriveAdaptiveModifiers | hasLowTolerance, hasHighTolerance | signal_summary.avg_completion_ratio |
 | difficulty_feedback | session_feedback | deriveAdaptiveModifiers | hasLowTolerance (too_hard) | signal_summary.difficulty_mix |
 | avg_rpe (event) | session_adaptive_summaries | evaluateSession | dropout_risk_score (≥8) | event_based_summary.avg_rpe |
-| avg_discomfort (event) | session_adaptive_summaries | evaluateSession | discomfort_burden_score, dropout_risk_score | event_based_summary.avg_discomfort |
+| avg_discomfort (event) | session_adaptive_summaries | evaluateSession | discomfort_burden_score (≥60→recovery_bias), dropout_risk_score | event_based_summary.avg_discomfort |
+| discomfort_burden_score | session_adaptive_summaries | evaluateSession | **recovery_bias (≥60)** | event_based_summary.discomfort_burden_score |
