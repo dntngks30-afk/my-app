@@ -1,81 +1,83 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { X, Plus, CheckCircle2, Trash2 } from 'lucide-react';
+import { X, Plus, Minus, Trash2 } from 'lucide-react';
 import { getSessionSafe } from '@/lib/supabase';
 import type { ExerciseItem } from './planJsonAdapter';
 import type { ExerciseLogItem } from '@/lib/session/client';
 import { getMediaPayload, setMediaPayload, type MediaPayload } from './media-cache';
-import { ExerciseCompletionSheet } from './ExerciseCompletionSheet';
-import type { ExercisePerceivedDifficulty, ExercisePostPain } from './ExerciseCompletionSheet';
 
 interface ExercisePlayerModalProps {
   item: ExerciseItem | null;
+  exerciseIndex?: number | null;
+  totalExercises?: number;
   initialLog?: ExerciseLogItem;
   onClose: () => void;
   onComplete: (log: ExerciseLogItem) => void;
+  /** PR-SESSION-UX-02: 다음/세션 종료 연속 흐름 */
+  onNextOrEnd?: (log: ExerciseLogItem) => void;
   /** PR-SESSION-EXPERIENCE-01: 세션 목표 reminder (예: "하체 안정 + 균형") */
   sessionGoalText?: string;
   /** PR-SESSION-EXPERIENCE-01: pain_mode caution/protected 시 안전 문구 */
   painModeMessage?: string;
 }
 
-export function ExercisePlayerModal({ item, initialLog, onClose, onComplete, sessionGoalText, painModeMessage }: ExercisePlayerModalProps) {
+export function ExercisePlayerModal({ item, exerciseIndex = 0, totalExercises = 0, initialLog, onClose, onComplete, onNextOrEnd, sessionGoalText, painModeMessage }: ExercisePlayerModalProps) {
   if (!item) return null;
   return (
     <ModalInner
       item={item}
+      exerciseIndex={exerciseIndex}
+      totalExercises={totalExercises}
       initialLog={initialLog}
       onClose={onClose}
       onComplete={onComplete}
+      onNextOrEnd={onNextOrEnd}
       sessionGoalText={sessionGoalText}
       painModeMessage={painModeMessage}
     />
   );
 }
 
-type SetEntry = { reps: string; holdSeconds: string };
+type SetEntry = { reps: number; holdSeconds: number };
 
 function ModalInner({
   item,
+  exerciseIndex = 0,
+  totalExercises = 0,
   initialLog,
   onClose,
   onComplete,
+  onNextOrEnd,
   sessionGoalText,
   painModeMessage,
 }: {
   item: ExerciseItem;
+  exerciseIndex?: number;
+  totalExercises?: number;
   initialLog?: ExerciseLogItem;
   onClose: () => void;
   onComplete: (log: ExerciseLogItem) => void;
+  onNextOrEnd?: (log: ExerciseLogItem) => void;
   sessionGoalText?: string;
   painModeMessage?: string;
 }) {
   const [media, setMedia] = useState<MediaPayload | null>(null);
   const [mediaLoading, setMediaLoading] = useState(true);
   const isHold = !!item.holdSeconds && !item.targetReps;
-  const defaultReps = String(initialLog?.reps ?? item.targetReps ?? '');
+  const targetReps = item.targetReps ?? 8;
+  const targetHold = item.holdSeconds ?? 10;
   const defaultSets = initialLog?.sets ?? item.targetSets ?? 1;
   const [setEntries, setSetEntries] = useState<SetEntry[]>(() => {
     if (initialLog?.sets && initialLog?.reps != null) {
       const perSet = Math.floor(initialLog.reps / initialLog.sets);
-      return Array.from({ length: initialLog.sets }, () => ({ reps: String(perSet), holdSeconds: '' }));
+      return Array.from({ length: initialLog.sets }, () => (isHold ? { reps: 0, holdSeconds: perSet } : { reps: perSet, holdSeconds: 0 }));
     }
     return Array.from({ length: Math.max(1, defaultSets) }, () =>
-      isHold ? { reps: '', holdSeconds: String(item.holdSeconds ?? '') } : { reps: defaultReps, holdSeconds: '' }
+      isHold ? { reps: 0, holdSeconds: targetHold } : { reps: targetReps, holdSeconds: 0 }
     );
   });
-  const [showCompletionSheet, setShowCompletionSheet] = useState(false);
-  const [perceivedDifficulty, setPerceivedDifficulty] = useState<ExercisePerceivedDifficulty | null>(
-    initialLog?.difficulty != null && initialLog.difficulty >= 1 && initialLog.difficulty <= 5
-      ? (initialLog.difficulty as ExercisePerceivedDifficulty)
-      : null
-  );
-  const [postPain, setPostPain] = useState<ExercisePostPain | null>(
-    initialLog?.discomfort != null && [0, 2, 5, 8, 10].includes(initialLog.discomfort)
-      ? (initialLog.discomfort as ExercisePostPain)
-      : null
-  );
+  const isLast = totalExercises > 0 && exerciseIndex >= totalExercises - 1;
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<{ destroy: () => void } | null>(null);
 
@@ -155,7 +157,7 @@ function ModalInner({
   const addSet = () => {
     setSetEntries((prev) => [
       ...prev,
-      isHold ? { reps: '', holdSeconds: String(item.holdSeconds ?? '') } : { reps: '', holdSeconds: '' },
+      isHold ? { reps: 0, holdSeconds: targetHold } : { reps: targetReps, holdSeconds: 0 },
     ]);
   };
 
@@ -164,86 +166,44 @@ function ModalInner({
     setSetEntries((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const updateSetEntry = (idx: number, field: 'reps' | 'holdSeconds', value: string) => {
+  const adjustSetEntry = (idx: number, field: 'reps' | 'holdSeconds', delta: number) => {
     setSetEntries((prev) => {
       const next = [...prev];
-      next[idx] = { ...next[idx], [field]: value };
+      const curr = next[idx][field];
+      next[idx] = { ...next[idx], [field]: Math.max(0, curr + delta) };
       return next;
     });
   };
 
   const aggregateToLog = (): { sets: number; reps: number | null } => {
-    const filled = setEntries.filter((s) => {
-      const r = parseInt(s.reps, 10);
-      const h = parseInt(s.holdSeconds, 10);
-      return (isHold ? !Number.isNaN(h) && h > 0 : !Number.isNaN(r) && r >= 0);
-    });
+    const filled = setEntries.filter((s) => (isHold ? s.holdSeconds > 0 : s.reps >= 0));
     if (filled.length === 0) return { sets: 0, reps: null };
     if (isHold) {
-      const totalSec = filled.reduce((sum, s) => sum + (parseInt(s.holdSeconds, 10) || 0), 0);
+      const totalSec = filled.reduce((sum, s) => sum + s.holdSeconds, 0);
       return { sets: filled.length, reps: totalSec };
     }
-    const totalReps = filled.reduce((sum, s) => sum + (parseInt(s.reps, 10) || 0), 0);
+    const totalReps = filled.reduce((sum, s) => sum + s.reps, 0);
     return { sets: filled.length, reps: totalReps };
   };
 
-  const handleCompleteClick = () => {
-    setShowCompletionSheet(true);
-  };
-
-  const handleCompletionConfirm = () => {
+  const handleNextOrEndClick = () => {
     const { sets, reps } = aggregateToLog();
-    onComplete({
+    const log: ExerciseLogItem = {
       templateId: item.templateId,
       name: item.name,
       sets: sets > 0 ? Math.min(20, sets) : null,
       reps: reps != null ? Math.min(200, Math.max(0, reps)) : null,
-      difficulty: perceivedDifficulty,
+      difficulty: null,
       rpe: null,
-      discomfort: postPain,
-    });
-    onClose();
+      discomfort: null,
+    };
+    if (onNextOrEnd) {
+      onNextOrEnd(log);
+    } else {
+      onComplete(log);
+      onClose();
+    }
   };
-
-  if (showCompletionSheet) {
-    return (
-      <>
-        <div
-          className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm animate-in fade-in"
-          style={{ animationDuration: '150ms' }}
-          aria-hidden
-        />
-        <div
-          className="fixed inset-x-0 bottom-0 z-[70] animate-in slide-in-from-bottom-4"
-          style={{ animationDuration: '250ms', animationTimingFunction: 'cubic-bezier(0.2,0,0,1)', paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
-        >
-          <div className="mx-auto max-w-[430px] rounded-t-2xl border border-slate-200 bg-white px-5 py-5 pb-8 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                운동 완료 — 간단한 체크
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowCompletionSheet(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                aria-label="취소"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <ExerciseCompletionSheet
-              exerciseName={item.name}
-              perceivedDifficulty={perceivedDifficulty}
-              postPain={postPain}
-              onPerceivedDifficultyChange={setPerceivedDifficulty}
-              onPostPainChange={setPostPain}
-              onConfirm={handleCompletionConfirm}
-            />
-          </div>
-        </div>
-      </>
-    );
-  }
 
   return (
     <>
@@ -266,6 +226,11 @@ function ModalInner({
               {painModeMessage && (
                 <p className="text-[10px] text-amber-600">{painModeMessage}</p>
               )}
+            </div>
+          )}
+          {totalExercises > 0 && (
+            <div className="border-b border-slate-100 px-4 py-2">
+              <p className="text-[10px] font-semibold text-slate-500">운동 {exerciseIndex + 1} / {totalExercises}</p>
             </div>
           )}
           <div className="flex items-start justify-between border-b border-slate-100 px-5 pt-4 pb-3">
@@ -332,30 +297,28 @@ function ModalInner({
             <div className="space-y-2">
               {setEntries.map((entry, idx) => (
                 <div key={idx} className="flex items-center gap-2">
-                  <span className="w-10 shrink-0 text-sm font-medium text-slate-600">{idx + 1}세트</span>
-                  {isHold ? (
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min="0"
-                      max="600"
-                      placeholder="초"
-                      value={entry.holdSeconds}
-                      onChange={(e) => updateSetEntry(idx, 'holdSeconds', e.target.value)}
-                      className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-center text-lg font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-300"
-                    />
-                  ) : (
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min="0"
-                      max="200"
-                      placeholder="회"
-                      value={entry.reps}
-                      onChange={(e) => updateSetEntry(idx, 'reps', e.target.value)}
-                      className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-center text-lg font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-300"
-                    />
-                  )}
+                  <span className="w-10 shrink-0 text-sm font-medium text-slate-600">Set {idx + 1}</span>
+                  <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5">
+                    <button
+                      type="button"
+                      onClick={() => adjustSetEntry(idx, isHold ? 'holdSeconds' : 'reps', -1)}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 active:scale-95"
+                      aria-label="감소"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </button>
+                    <span className="min-w-[3rem] flex-1 text-center text-lg font-bold text-slate-800">
+                      {isHold ? `${entry.holdSeconds}s` : entry.reps}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => adjustSetEntry(idx, isHold ? 'holdSeconds' : 'reps', 1)}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 active:scale-95"
+                      aria-label="증가"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
                   {setEntries.length > 1 && (
                     <button
                       type="button"
@@ -380,11 +343,10 @@ function ModalInner({
 
             <button
               type="button"
-              onClick={handleCompleteClick}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-[0.98]"
+              onClick={handleNextOrEndClick}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-400 py-3.5 text-sm font-bold text-white transition hover:bg-orange-500 active:scale-[0.98]"
             >
-              <CheckCircle2 className="h-4 w-4" />
-              이 운동 완료
+              {isLast ? '세션 종료' : '다음'}
             </button>
           </div>
         </div>

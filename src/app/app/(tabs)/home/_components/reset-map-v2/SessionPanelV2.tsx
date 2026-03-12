@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect } from 'react'
-import { X, Play, CheckCircle2, AlertCircle, Loader2, Sparkles } from 'lucide-react'
+import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import { getSessionSafe } from '@/lib/supabase'
 import { completeSession } from '@/lib/session/client'
 import type { ExerciseItem } from './planJsonAdapter'
@@ -142,9 +142,9 @@ function PanelInner({
   const [bodyStateAfter, setBodyStateAfter] = useState<BodyStateAfter | null>(null)
   const rationale = getPlanRationale(activePlan)
 
-  // PR-SESSION-EXPERIENCE-01: 세션 전환 시 context 화면 리셋
+  // PR-SESSION-UX-02: 세션 전환 시 운동 뷰 리셋
   useEffect(() => {
-    setContextViewDismissed(false)
+    setExerciseIndex(null)
   }, [sessionId])
   // 세션 전환 시 완료 상태 리셋 (다음 세션 보기 시)
   useEffect(() => {
@@ -190,10 +190,8 @@ function PanelInner({
       lastUpdatedAtMs: Date.now(),
     })
   }, [sessionId, status, activePlan?.session_number, logs, sessionPerceivedDifficulty, sessionPainAreas])
-  // 모달에서 열린 운동 아이템
-  const [openItem, setOpenItem] = useState<ExerciseItem | null>(null)
-  // PR-SESSION-EXPERIENCE-01: 세션 시작 전 context 화면 (current 세션, 첫 진입 시)
-  const [contextViewDismissed, setContextViewDismissed] = useState(false)
+  // PR-SESSION-UX-02: 운동 인덱스 (null = 목록, number = 해당 운동 화면)
+  const [exerciseIndex, setExerciseIndex] = useState<number | null>(null)
 
   // 패널 open 측정
   useEffect(() => {
@@ -232,7 +230,22 @@ function PanelInner({
 
   const handleLogComplete = (log: ExerciseLogItem) => {
     setLogs(prev => ({ ...prev, [log.templateId]: log }))
-    setOpenItem(null)
+  }
+
+  const handleNextOrEnd = (log: ExerciseLogItem) => {
+    setLogs(prev => ({ ...prev, [log.templateId]: log }))
+    if (!exercises || exercises.length === 0) return
+    let nextIdx: number | null = null
+    let showSessionSheet = false
+    if (exerciseIndex != null) {
+      if (exerciseIndex < exercises.length - 1) {
+        nextIdx = exerciseIndex + 1
+      } else {
+        showSessionSheet = true
+      }
+    }
+    setExerciseIndex(nextIdx)
+    if (showSessionSheet) setShowSessionCompletionSheet(true)
   }
 
   const doSessionComplete = async () => {
@@ -386,50 +399,11 @@ function PanelInner({
             </button>
           </div>
 
-          {/* PR-SESSION-EXPERIENCE-01: 세션 시작 Context Screen (current, 첫 진입) */}
-          {status === 'current' && !contextViewDismissed && rationale && exercises && exercises.length > 0 ? (
-            <div className="px-5 pt-4 pb-6 max-h-[58vh] overflow-y-auto">
-              <div className="rounded-2xl border-2 border-slate-200 bg-amber-50/50 p-5 space-y-4">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-amber-500 shrink-0" />
-                  <h3 className="text-base font-bold text-slate-800">오늘의 리셋 세션</h3>
-                </div>
-                <p className="text-sm leading-relaxed text-slate-700">
-                  {rationale.headline}
-                </p>
-                {'chips' in rationale && Array.isArray(rationale.chips) && rationale.chips.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {rationale.chips.map((chip) => (
-                      <span
-                        key={chip}
-                        className="inline-flex rounded-lg bg-amber-100 px-3 py-1 text-xs font-medium text-slate-700"
-                      >
-                        {chip}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <p className="text-xs text-slate-500">
-                  {activePlan && 'plan_json' in activePlan && (activePlan.plan_json as { meta?: { pain_mode?: string } })?.meta?.pain_mode &&
-                  ['caution', 'protected'].includes((activePlan.plan_json as { meta?: { pain_mode?: string } }).meta?.pain_mode ?? '')
-                    ? '무리하지 말고 편안한 범위에서 수행하세요'
-                    : '통증 없는 범위에서 편안하게 움직여보세요'}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setContextViewDismissed(true)}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-400 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-orange-500 active:scale-[0.98]"
-                >
-                  <Play className="h-4 w-4" fill="currentColor" />
-                  세션 시작
-                </button>
-              </div>
-            </div>
-          ) : (
+          {/* PR-SESSION-UX-02: 세션 클릭 시 바로 운동 목록 (시작 화면 제거) */}
           <>
-          {/* 운동 목록 */}
+          {/* 운동 목록 — rationale은 상단에만 표시 */}
           <div className="max-h-[58vh] overflow-y-auto px-5 pt-4 pb-4">
-            {rationale && (status === 'current' ? contextViewDismissed : true) && (status === 'current' || status === 'completed') && 'chips' in rationale && Array.isArray(rationale.chips) && rationale.chips.length > 0 && (
+            {rationale && (status === 'current' || status === 'completed') && 'chips' in rationale && Array.isArray(rationale.chips) && rationale.chips.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-2">
                 {rationale.chips.map((chip) => (
                   <span key={chip} className="rounded-lg bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
@@ -453,7 +427,7 @@ function PanelInner({
               logs={logs}
               isLockedNext={isLockedNext}
               nextUnlockAt={nextUnlockAt}
-              onPlay={item => setOpenItem(item)}
+              onPlay={(item, idx) => setExerciseIndex(idx)}
             />
           </div>
 
@@ -481,18 +455,20 @@ function PanelInner({
             </div>
           )}
           </>
-          )}
         </>
           )}
         </div>
       </div>
 
-      {/* 운동 실행 모달 */}
+      {/* 운동 실행 모달 — PR-SESSION-UX-02: 다음 버튼으로 연속 흐름 */}
       <ExercisePlayerModal
-        item={openItem}
-        initialLog={openItem ? logs[openItem.templateId] : undefined}
-        onClose={() => setOpenItem(null)}
+        item={exercises && exerciseIndex != null ? exercises[exerciseIndex] ?? null : null}
+        exerciseIndex={exerciseIndex}
+        totalExercises={exercises?.length ?? 0}
+        initialLog={exercises && exerciseIndex != null ? logs[exercises[exerciseIndex]?.templateId ?? ''] : undefined}
+        onClose={() => setExerciseIndex(null)}
         onComplete={handleLogComplete}
+        onNextOrEnd={handleNextOrEnd}
         sessionGoalText={
           rationale && 'chips' in rationale && Array.isArray(rationale.chips) && rationale.chips.length > 0
             ? rationale.chips.slice(0, 2).join(' + ')
@@ -572,7 +548,7 @@ function ExerciseList({
   logs: Record<string, ExerciseLogItem>
   isLockedNext?: boolean
   nextUnlockAt?: string
-  onPlay: (item: ExerciseItem) => void
+  onPlay: (item: ExerciseItem, index: number) => void
 }) {
   if (status === 'locked') {
     return (
@@ -667,7 +643,7 @@ function ExerciseList({
                   {/* ▶ 버튼 — current/completed(과거) 세션에서 재생 가능 */}
                   <button
                     type="button"
-                    onClick={() => (status === 'current' || status === 'completed') ? onPlay(item) : undefined}
+                    onClick={() => (status === 'current' || status === 'completed') ? onPlay(item, Math.max(0, exercises?.findIndex((e) => e.templateId === item.templateId && e.segmentTitle === item.segmentTitle && e.order === item.order) ?? 0)) : undefined}
                     disabled={status === 'locked'}
                     title={status === 'locked' ? '현재 세션이 아닙니다' : '운동 보기'}
                     className={[
