@@ -97,8 +97,12 @@ export default function PushNotificationPrompt() {
         throw new Error('푸시 구독 생성 실패');
       }
 
-      // 5. 서버에 구독 정보 전송
-      const success = await sendSubscriptionToServer(subscription, userId);
+      // 5. 서버에 구독 정보 전송 (Bearer 인증)
+      const { session } = await getSessionSafe();
+      if (!session?.access_token) {
+        throw new Error('로그인이 필요합니다.');
+      }
+      const success = await sendSubscriptionToServer(subscription, session.access_token);
       if (!success) {
         throw new Error('서버 전송 실패');
       }

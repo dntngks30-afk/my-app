@@ -1,61 +1,28 @@
 /**
  * 푸시 알림 구독 API
- * 
+ *
  * POST /api/push-notifications/subscribe
- * 
+ *
  * 클라이언트에서 생성한 푸시 구독 정보를 받아서 DB에 저장합니다.
+ * Auth: Bearer 토큰 필수 (shared getCurrentUserId). body.userId는 신뢰하지 않음.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
-
-/**
- * 요청에서 사용자 ID 추출
- */
-async function getCurrentUserId(req: NextRequest): Promise<string | null> {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    // Authorization 헤더가 없으면 body에서 userId 사용
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  const supabase = getServerSupabaseAdmin();
-
-  try {
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
-      return null;
-    }
-
-    return user.id;
-  } catch (error) {
-    console.error('User authentication error:', error);
-    return null;
-  }
-}
+import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { subscription, userId: bodyUserId } = body;
+    const userId = await getCurrentUserId(req);
+    if (!userId) {
+      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const { subscription } = body;
 
     if (!subscription) {
       return NextResponse.json({ error: 'subscription은 필수입니다.' }, { status: 400 });
-    }
-
-    // 사용자 ID 확인 (헤더 또는 body에서)
-    let userId = await getCurrentUserId(req);
-    if (!userId && bodyUserId) {
-      userId = bodyUserId;
-    }
-
-    if (!userId) {
-      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
     }
 
     const supabase = getServerSupabaseAdmin();

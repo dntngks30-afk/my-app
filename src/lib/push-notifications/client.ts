@@ -127,20 +127,21 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 
 /**
  * 푸시 구독 정보를 서버에 전송
+ * accessToken: Bearer 토큰 (session.access_token)
  */
 export async function sendSubscriptionToServer(
   subscription: PushSubscription,
-  userId: string
+  accessToken: string
 ): Promise<boolean> {
   try {
     const response = await fetch('/api/push-notifications/subscribe', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
         subscription: subscription.toJSON(),
-        userId,
       }),
     });
 
