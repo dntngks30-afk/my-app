@@ -93,6 +93,8 @@ export type FeedbackPayload = {
     overallRpe?: number;
     painAfter?: number;
     completionRatio?: number;
+    difficultyFeedback?: 'too_easy' | 'ok' | 'too_hard';
+    painAreas?: string[];
   };
   exerciseFeedback?: Array<{ exerciseKey?: string }>;
 };
@@ -167,8 +169,14 @@ function computeReflectionFlags(
   const hasDiscomfort = exerciseLogs.some(
     (l) => typeof l.discomfort === 'number' && l.discomfort >= 0
   );
+  const hasDifficultyFeedback =
+    feedbackPayload?.sessionFeedback?.difficultyFeedback != null;
+  const hasPainAreas =
+    Array.isArray(feedbackPayload?.sessionFeedback?.painAreas) &&
+    feedbackPayload.sessionFeedback.painAreas.length > 0;
   return {
-    reflection: hasSessionRpe || hasPainAfter || hasExerciseRpe || hasDiscomfort,
+    reflection: hasSessionRpe || hasPainAfter || hasExerciseRpe || hasDiscomfort ||
+      hasDifficultyFeedback || hasPainAreas,
     rpe: hasSessionRpe || hasExerciseRpe,
     discomfort: hasPainAfter || hasDiscomfort,
   };

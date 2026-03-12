@@ -329,7 +329,7 @@ function PanelInner({
       <div
         className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm animate-in fade-in"
         style={{ animationDuration: '100ms' }}
-        onClick={openItem ? undefined : onClose}
+        onClick={exerciseIndex != null ? undefined : onClose}
         aria-hidden
       />
 
