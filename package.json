@@ -16,6 +16,7 @@
     "test:progress-report": "npx tsx scripts/progress-report-smoke.mjs",
     "test:adaptive-progression": "npx tsx scripts/adaptive-progression-smoke.mjs",
     "test:adaptive-modifier-merge": "npx tsx scripts/adaptive-modifier-merge-smoke.mjs",
+    "test:adaptive-merge": "npx tsx scripts/adaptive-merge-smoke.mjs",
     "test:plan-generator": "npx tsx scripts/plan-generator-smoke.mjs",
     "test:priority-layer": "npx tsx scripts/priority-layer-smoke.mjs",
     "test:phase-policy": "npx tsx scripts/phase-policy-test.mjs",

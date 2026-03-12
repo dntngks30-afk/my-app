@@ -39,10 +39,8 @@ import {
 import {
   loadLatestAdaptiveSummary,
   resolveAdaptiveModifier,
-  mergeAdaptiveOverlayWithModifier,
-  mergeVolumeModifier,
-  type AdaptiveModifier,
 } from '@/lib/session/adaptive-modifier-resolver';
+import { resolveAdaptiveMerge } from '@/lib/session/adaptive-merge';
 import { getKstDayKeyUTC, getNextKstMidnightUtcIso, getTodayCompletedAndNextUnlock } from '@/lib/time/kst';
 import { logSessionEvent } from '@/lib/session-events';
 import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
@@ -485,28 +483,17 @@ export async function POST(req: NextRequest) {
       adaptiveCtx
     );
 
-    let adaptiveOverlay =
-      modifiers.reason === 'none'
-        ? undefined
-        : {
-            targetLevelDelta: modifiers.targetLevelDelta,
-            ...(modifiers.forceShort && { forceShort: true }),
-            ...(modifiers.forceRecovery && { forceRecovery: true }),
-            ...(modifiers.avoidExerciseKeys.length > 0 && {
-              avoidTemplateIds: modifiers.avoidExerciseKeys,
-            }),
-            ...(modifiers.maxDifficultyCap && {
-              maxDifficultyCap: modifiers.maxDifficultyCap,
-            }),
-          };
-
-    // PR-C: merge modifier from session_adaptive_summaries (PR-01: safety-first merge)
+    // PR-02: centralized merge (progression + summary modifier)
     const tAdaptiveMod = performance.now();
     const summary = await loadLatestAdaptiveSummary(supabase, userId);
     const adaptiveModifier = resolveAdaptiveModifier(summary);
-    adaptiveOverlay = mergeAdaptiveOverlayWithModifier(adaptiveOverlay, adaptiveModifier);
-    // PR-01: 현재 session/create 구조상 base volume source 없음. 따라서 modifier-only merge가 SSOT.
-    const mergedVolume = mergeVolumeModifier(undefined, adaptiveModifier.volume_modifier);
+    const mergedControls = resolveAdaptiveMerge({
+      progression: modifiers,
+      modifier: adaptiveModifier,
+      summary: summary ? { flags: summary.flags, created_at: summary.created_at } : null,
+    });
+    const adaptiveOverlay = mergedControls.overlay;
+    const mergedVolume = mergedControls.volumeModifier;
     timings.adaptive_modifier_ms = Math.round(performance.now() - tAdaptiveMod);
 
     const cacheInput = {
@@ -591,8 +578,16 @@ export async function POST(req: NextRequest) {
       phasePolicy,
       phasePolicyReason,
     });
+    const traceModifiers = {
+      ...modifiers,
+      targetLevelDelta: mergedControls.targetLevelDelta,
+      forceShort: mergedControls.forceShort,
+      forceRecovery: mergedControls.forceRecovery,
+      avoidExerciseKeys: mergedControls.avoidTemplateIds,
+      maxDifficultyCap: mergedControls.maxDifficultyCap,
+    };
     let adaptationTrace = buildAdaptationTrace(
-      modifiers,
+      traceModifiers,
       sourceSessionNumbers,
       adaptiveCtx
     );
