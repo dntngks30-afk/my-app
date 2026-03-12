@@ -130,6 +130,7 @@ function PanelInner({
   nextUnlockAt,
   onClose,
   onSessionCompleted,
+  onRequestNextSession,
 }: Required<Omit<SessionPanelV2Props, 'onSessionCompleted' | 'onRequestNextSession'>> & {
   onSessionCompleted?: (completedSessions: number) => void
   onRequestNextSession?: (nextSessionNumber: number) => void
