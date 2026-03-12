@@ -78,6 +78,29 @@ const mockSupabaseEmpty = {
 const insufficientResult = await runEvaluatorAndUpsert(mockSupabaseEmpty, ctx);
 ok('D. insufficient_data: runEvaluatorAndUpsert returns summary_status insufficient_data', insufficientResult?.summary_status === 'insufficient_data');
 
+// evaluator_trace: runEvaluatorAndUpsert returns trace when summary is produced
+const mockSupabaseWithEvents = {
+  from: (t) =>
+    t === 'session_exercise_events'
+      ? {
+          select: () => ({
+            eq: () =>
+              Promise.resolve({
+                data: eventsA.map((e) => ({ ...e, execution_granularity: 'exercise', data_quality: e.data_quality ?? 'full' })),
+              }),
+          }),
+        }
+      : {
+          upsert: () => Promise.resolve({ error: null }),
+        },
+};
+const traceResult = await runEvaluatorAndUpsert(mockSupabaseWithEvents, ctx);
+ok('evaluator_trace: runEvaluatorAndUpsert returns evaluator_trace', traceResult?.evaluator_trace != null);
+ok('evaluator_trace has version', traceResult?.evaluator_trace?.version === '1.0');
+ok('evaluator_trace has input', traceResult?.evaluator_trace?.input?.exercise_count === 3);
+ok('evaluator_trace has flags', typeof traceResult?.evaluator_trace?.flags === 'object');
+ok('evaluator_trace has decision.modifier', traceResult?.evaluator_trace?.decision?.modifier != null);
+
 // partial: no RPE/discomfort samples
 const eventsPartial = [
   { execution_granularity: 'exercise', data_quality: 'full', completed: true, skipped: false, actual_reps: 10, prescribed_reps: 10, rpe: null, discomfort: null },

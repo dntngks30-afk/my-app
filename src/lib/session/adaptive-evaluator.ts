@@ -2,7 +2,40 @@
  * PR-B: Session Adaptive Evaluator v1
  * Rule-based evaluation from session_exercise_events.
  * Produces session_adaptive_summary for future PR-C adaptive generation.
+ * PR-03: Observability trace for explainability.
  */
+
+import { resolveAdaptiveModifier } from './adaptive-modifier-resolver';
+
+export const EVALUATOR_TRACE_VERSION = '1.0';
+
+export type AdaptiveEvaluatorTrace = {
+  version: string;
+  source_session_plan_id?: string;
+  source_session_number?: number;
+  input: {
+    exercise_count?: number;
+    completed_count?: number;
+    skipped_count?: number;
+    ratio_denom?: number;
+    avg_rpe?: number | null;
+    avg_discomfort?: number | null;
+    completion_ratio?: number;
+  };
+  flags: {
+    low_completion?: boolean;
+    high_discomfort?: boolean;
+    high_rpe?: boolean;
+    skip_cluster?: boolean;
+    recovery_bias?: boolean;
+    complexity_cap_basic?: boolean;
+    volume_reduction?: boolean;
+  };
+  decision: {
+    reasons: string[];
+    modifier: { volume_modifier: number; complexity_cap: string; recovery_bias: boolean };
+  };
+};
 
 export type AdaptiveSummaryRow = {
   user_id: string;
@@ -37,6 +70,8 @@ export type AdaptiveSummaryDebug = {
   rpe_sample_count: number;
   discomfort_sample_count: number;
   summary_status: 'full' | 'partial';
+  /** PR-03: evaluator trace for explainability */
+  evaluator_trace?: AdaptiveEvaluatorTrace;
 };
 
 type EventRow = {
@@ -167,6 +202,50 @@ export function evaluateSession(
   };
 }
 
+function buildEvaluatorTrace(
+  summary: AdaptiveSummaryRow,
+  ctx: { sessionPlanId: string; sessionNumber: number }
+): AdaptiveEvaluatorTrace {
+  const modifier = resolveAdaptiveModifier({
+    completion_ratio: summary.completion_ratio,
+    skipped_exercises: summary.skipped_exercises,
+    dropout_risk_score: summary.dropout_risk_score,
+    discomfort_burden_score: summary.discomfort_burden_score,
+  });
+  const flags = new Set(summary.flags);
+  return {
+    version: EVALUATOR_TRACE_VERSION,
+    source_session_plan_id: ctx.sessionPlanId,
+    source_session_number: ctx.sessionNumber,
+    input: {
+      exercise_count: summary.exercise_count,
+      completed_count: summary.completed_exercises,
+      skipped_count: summary.skipped_exercises,
+      ratio_denom: summary.ratio_denom,
+      avg_rpe: summary.avg_rpe,
+      avg_discomfort: summary.avg_discomfort,
+      completion_ratio: summary.completion_ratio,
+    },
+    flags: {
+      low_completion: flags.has('low_completion'),
+      high_discomfort: flags.has('high_discomfort'),
+      high_rpe: flags.has('high_rpe'),
+      skip_cluster: flags.has('skip_cluster'),
+      recovery_bias: modifier.recovery_bias,
+      complexity_cap_basic: modifier.complexity_cap === 'basic',
+      volume_reduction: modifier.volume_modifier < 0,
+    },
+    decision: {
+      reasons: summary.reasons,
+      modifier: {
+        volume_modifier: modifier.volume_modifier,
+        complexity_cap: modifier.complexity_cap,
+        recovery_bias: modifier.recovery_bias,
+      },
+    },
+  };
+}
+
 /**
  * Run evaluator and upsert summary. Returns summary for debug.
  */
@@ -212,6 +291,11 @@ export async function runEvaluatorAndUpsert(
     return null;
   }
 
+  const evaluator_trace = buildEvaluatorTrace(summary, {
+    sessionPlanId: ctx.sessionPlanId,
+    sessionNumber: ctx.sessionNumber,
+  });
+
   return {
     completion_ratio: summary.completion_ratio,
     dropout_risk_score: summary.dropout_risk_score,
@@ -222,5 +306,6 @@ export async function runEvaluatorAndUpsert(
     rpe_sample_count: summary.rpe_sample_count,
     discomfort_sample_count: summary.discomfort_sample_count,
     summary_status: summary.summary_status,
+    evaluator_trace,
   };
 }

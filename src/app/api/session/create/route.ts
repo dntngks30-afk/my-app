@@ -786,6 +786,28 @@ export async function POST(req: NextRequest) {
                 recovery_bias: adaptiveModifier.recovery_bias,
               },
             }),
+            adaptive_consumption_trace: {
+              summary_consumed: summary
+                ? { id: summary.id, created_at: summary.created_at, flags: summary.flags }
+                : null,
+              modifier: adaptiveModifier
+                ? {
+                    volume_modifier: adaptiveModifier.volume_modifier,
+                    complexity_cap: adaptiveModifier.complexity_cap,
+                    recovery_bias: adaptiveModifier.recovery_bias,
+                  }
+                : null,
+              merged_controls: {
+                targetLevelDelta: mergedControls.targetLevelDelta,
+                forceShort: mergedControls.forceShort,
+                forceRecovery: mergedControls.forceRecovery,
+                avoidTemplateIds: mergedControls.avoidTemplateIds,
+                maxDifficultyCap: mergedControls.maxDifficultyCap,
+                volumeModifier: mergedVolume,
+              },
+              merge_reasons: mergedControls.reasons,
+              sources: mergedControls.sources,
+            },
           },
         }
       : undefined;
