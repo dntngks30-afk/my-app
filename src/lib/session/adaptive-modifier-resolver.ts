@@ -28,6 +28,8 @@ export async function loadLatestAdaptiveSummary(
   dropout_risk_score: number;
   discomfort_burden_score: number;
   flags: string[];
+  avg_rpe: number | null;
+  avg_discomfort: number | null;
   created_at: string;
 } | null> {
   const cutoff = new Date();
@@ -36,12 +38,12 @@ export async function loadLatestAdaptiveSummary(
 
   const { data } = await supabase
     .from('session_adaptive_summaries')
-    .select('completion_ratio, skipped_exercises, dropout_risk_score, discomfort_burden_score, flags, created_at')
+    .select('completion_ratio, skipped_exercises, dropout_risk_score, discomfort_burden_score, flags, avg_rpe, avg_discomfort, created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(1);
 
-  const row = Array.isArray(data) && data.length > 0 ? (data[0] as { completion_ratio?: number; skipped_exercises?: number; dropout_risk_score?: number; discomfort_burden_score?: number; flags?: string[]; created_at?: string }) : null;
+  const row = Array.isArray(data) && data.length > 0 ? (data[0] as { completion_ratio?: number; skipped_exercises?: number; dropout_risk_score?: number; discomfort_burden_score?: number; flags?: string[]; avg_rpe?: number | null; avg_discomfort?: number | null; created_at?: string }) : null;
   if (!row?.created_at) return null;
   if (row.created_at < cutoffIso) return null;
 
@@ -51,6 +53,8 @@ export async function loadLatestAdaptiveSummary(
     dropout_risk_score: row.dropout_risk_score ?? 0,
     discomfort_burden_score: row.discomfort_burden_score ?? 0,
     flags: Array.isArray(row.flags) ? row.flags : [],
+    avg_rpe: row.avg_rpe ?? null,
+    avg_discomfort: row.avg_discomfort ?? null,
     created_at: row.created_at,
   };
 }

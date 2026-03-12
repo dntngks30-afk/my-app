@@ -313,6 +313,15 @@ export type AdaptationTrace = {
     replace_count?: number;
     difficulty_mix?: { too_easy: number; ok: number; too_hard: number };
   };
+  /** Event-based summary from session_adaptive_summaries (exercise-level rpe/discomfort). For trace/debug. */
+  event_based_summary?: {
+    completion_ratio: number;
+    avg_rpe: number | null;
+    avg_discomfort: number | null;
+    dropout_risk_score: number;
+    discomfort_burden_score: number;
+    flags: string[];
+  };
   /** User-facing one-liner derived from reason. Only when reason !== 'none'. */
   reason_summary?: string;
   /** PR-ALG-05: deep_v3 context used */

@@ -2,7 +2,7 @@
 
 **SSOT**: 현재 workout player 입력 → session complete → adaptive progression 데이터 흐름의 실제 상태.
 
-**Last updated**: 2025-03 (pr/adaptive-trace-and-explanation-01)
+**Last updated**: 2025-03 (pr/adaptive-summary-consumption-verify)
 
 ---
 
@@ -38,6 +38,8 @@
 | skipped | — | `feedback.exerciseFeedback[].skipped` | `exercise_feedback.skipped` | ✅ Yes (if present) | — |
 | was_replaced | — | `feedback.exerciseFeedback[].wasReplaced` | `exercise_feedback.was_replaced` | ✅ Yes (if present) | — |
 | perceived_difficulty | — | `feedback.exerciseFeedback[].perceivedDifficulty` | `exercise_feedback.perceived_difficulty` | ❌ Not read by adaptive | — |
+| **rpe** (exercise-level) | ExercisePlayerModal, SessionExerciseLogModal | `exercise_logs[].rpe` | `session_exercise_events.rpe` → `session_adaptive_summaries.avg_rpe` | ✅ Yes (via evaluator → modifier) | — |
+| **discomfort** (exercise-level) | ExercisePlayerModal, SessionExerciseLogModal | `exercise_logs[].discomfort` | `session_exercise_events.discomfort` → `session_adaptive_summaries.avg_discomfort` | ✅ Yes (via evaluator → modifier) | — |
 
 ---
 
@@ -115,7 +117,15 @@
   },
   "reason_summary": "이전 수행 난이도를 반영해 강도를 소폭 조정했어요",
   "pain_mode": "none" | "caution" | "protected",
-  "priority_vector_keys": ["key1"]
+  "priority_vector_keys": ["key1"],
+  "event_based_summary": {
+    "completion_ratio": 0.85,
+    "avg_rpe": 6.5,
+    "avg_discomfort": 4,
+    "dropout_risk_score": 0,
+    "discomfort_burden_score": 0,
+    "flags": []
+  }
 }
 ```
 
@@ -163,4 +173,37 @@
 | SessionRoutinePanel (Routine tab) | ❌ No | ❌ No |
 | RoutineHubClient | ✅ Optional | ❌ No |
 
-**결론**: Client는 `feedback`을 전송하지 않음. 서버가 `exercise_logs`에서 `difficulty_feedback`를 파생하여 `session_feedback`에 저장함.
+**결론**: SessionPanelV2, RoutineHubClient는 SessionFeedbackQuickForm으로 feedback 전송 가능. 서버가 `exercise_logs`에서 `difficulty_feedback`를 파생하여 `session_feedback`에 저장함.
+
+---
+
+## 10. Adaptive Summary Consumption Path (pr/adaptive-summary-consumption-verify)
+
+**SSOT**: session_adaptive_summaries 생성/소비 경로.
+
+### 생성 경로
+1. `complete` API → `writeSessionExerciseEvents` (session_exercise_events)
+2. `runEvaluatorAndUpsert` → session_exercise_events 읽기 → evaluateSession → session_adaptive_summaries upsert
+
+**입력**: session_exercise_events (rpe, discomfort, completed, skipped, actual_reps, prescribed_reps)
+
+**출력**: session_adaptive_summaries (completion_ratio, avg_rpe, avg_discomfort, dropout_risk_score, discomfort_burden_score, flags)
+
+### 소비 경로
+1. `createSession` → `loadLatestAdaptiveSummary` (session_adaptive_summaries 최신 1건)
+2. `resolveAdaptiveModifier` → volume_modifier (completion_ratio), complexity_cap (skipped_exercises), recovery_bias (dropout_risk_score)
+3. adaptiveOverlay에 merge → buildSessionPlanJson
+
+### Trace 가시성
+- `generation_trace_json.adaptation.event_based_summary`: session_adaptive_summaries 기반 avg_rpe, avg_discomfort, completion_ratio, dropout_risk_score, discomfort_burden_score, flags
+- `signal_summary`: session_feedback 기반 (overall_rpe, pain_after, completion_ratio, difficulty_mix)
+
+### 신호별 반영 상태
+| 신호 | 저장 | 집계 | modifier 사용 | trace 노출 |
+|------|------|------|---------------|------------|
+| overall_rpe | session_feedback | deriveAdaptiveModifiers | hasLowTolerance (≥8) | signal_summary.avg_rpe |
+| pain_after | session_feedback | deriveAdaptiveModifiers | hasPainFlare | signal_summary.avg_pain_after |
+| completion_ratio | session_feedback | deriveAdaptiveModifiers | hasLowTolerance, hasHighTolerance | signal_summary.avg_completion_ratio |
+| difficulty_feedback | session_feedback | deriveAdaptiveModifiers | hasLowTolerance (too_hard) | signal_summary.difficulty_mix |
+| avg_rpe (event) | session_adaptive_summaries | evaluateSession | dropout_risk_score (≥8) | event_based_summary.avg_rpe |
+| avg_discomfort (event) | session_adaptive_summaries | evaluateSession | discomfort_burden_score, dropout_risk_score | event_based_summary.avg_discomfort |

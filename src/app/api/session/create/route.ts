@@ -590,11 +590,24 @@ export async function POST(req: NextRequest) {
       phasePolicy,
       phasePolicyReason,
     });
-    const adaptationTrace = buildAdaptationTrace(
+    let adaptationTrace = buildAdaptationTrace(
       modifiers,
       sourceSessionNumbers,
       adaptiveCtx
     );
+    if (summary) {
+      adaptationTrace = {
+        ...adaptationTrace,
+        event_based_summary: {
+          completion_ratio: summary.completion_ratio,
+          avg_rpe: summary.avg_rpe,
+          avg_discomfort: summary.avg_discomfort,
+          dropout_risk_score: summary.dropout_risk_score,
+          discomfort_burden_score: summary.discomfort_burden_score,
+          flags: summary.flags,
+        },
+      };
+    }
     const generationTrace = {
       ...baseTrace,
       adaptation: adaptationTrace,
