@@ -153,6 +153,10 @@ export interface DeepResultReasonBridge {
 export interface FirstSessionBridge {
   headline: string;
   principles: string[];
+  /** priority_vector 기반 chip 라벨 (하체 안정, 좌우 균형 등) */
+  chips?: string[];
+  /** pain_mode caution/protected 시 표시 */
+  conservativeNote?: string;
   note?: string;
 }
 
@@ -303,7 +307,7 @@ export function buildFirstSessionBridge(
   painMode?: 'none' | 'caution' | 'protected' | null,
   focusTags?: string[]
 ): FirstSessionBridge | null {
-  const topAxes = getTopAxes(priorityVector, 2);
+  const topAxes = getTopAxes(priorityVector, 3);
   if (topAxes.length === 0) return null;
 
   const sessionGoals = topAxes
@@ -321,6 +325,11 @@ export function buildFirstSessionBridge(
     principles.push(`${labelFocusTag(focusTags[0])} 같은 기본 연결부터 함께 정리`);
   }
 
+  const chips = topAxes.map((axis) => AXIS_TO_FEATURE[axis] ?? axis).filter(Boolean);
+  const conservativeNote =
+    painMode === 'protected' || painMode === 'caution'
+      ? '초반 강도는 보수적으로 설정됩니다'
+      : undefined;
   const note =
     painMode === 'protected'
       ? '불편감이 강하면 강도보다 안정적인 연결을 먼저 회복해요.'
@@ -331,6 +340,8 @@ export function buildFirstSessionBridge(
   return {
     headline,
     principles: [...new Set(principles)].slice(0, 3),
+    chips: [...new Set(chips)].slice(0, 4),
+    conservativeNote,
     note,
   };
 }

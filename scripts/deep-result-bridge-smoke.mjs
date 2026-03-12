@@ -35,9 +35,21 @@ assert(
   'protected pain mode should keep conservative first session principle'
 );
 assert(
+  protectedBridge.conservativeNote === '초반 강도는 보수적으로 설정됩니다',
+  'protected pain mode should include conservativeNote'
+);
+assert(
   protectedBridge.note?.includes('안정적인 연결'),
   'protected bridge note should explain stable low-intensity start'
 );
+
+const cautionBridge = buildFirstSessionBridge(
+  { lower_stability: 0.8, asymmetry: 0.5 },
+  'caution',
+  []
+);
+assert(cautionBridge?.conservativeNote === '초반 강도는 보수적으로 설정됩니다', 'caution should show conservativeNote');
+assert(cautionBridge?.chips?.length >= 1, 'first session bridge should include chips from priority_vector');
 
 const fallbackBridge = buildFirstSessionBridge(null, null, []);
 assert.equal(fallbackBridge, null, 'bridge should stay null when no v3 priority vector exists');

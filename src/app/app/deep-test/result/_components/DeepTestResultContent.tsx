@@ -473,6 +473,23 @@ export default function DeepTestResultContent({
           <Target size={18} strokeWidth={3} />
           첫 세션은 이렇게 시작돼요
         </h3>
+        {firstSessionBridge?.chips && firstSessionBridge.chips.length > 0 && (
+          <div className="relative z-10 mb-4 flex flex-wrap gap-2">
+            {firstSessionBridge.chips.map((chip) => (
+              <span
+                key={chip}
+                className="inline-flex items-center px-3 py-1.5 rounded-full bg-white border-[2px] border-black text-[12px] font-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+              >
+                {chip}
+              </span>
+            ))}
+          </div>
+        )}
+        {firstSessionBridge?.conservativeNote && (
+          <p className="relative z-10 mb-3 text-[13px] font-black text-black/90 break-keep">
+            {firstSessionBridge.conservativeNote}
+          </p>
+        )}
         <p className="relative z-10 mb-5 text-sm font-bold leading-6 text-black/80 break-keep">
           {firstSessionHeadline}
         </p>
