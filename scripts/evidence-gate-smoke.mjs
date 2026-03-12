@@ -1,5 +1,6 @@
 /**
  * PR-DATA-01: Evidence gate smoke test
+ * PR-DATA-01A: Observability smoke test
  * Run: npx tsx scripts/evidence-gate-smoke.mjs
  */
 
@@ -10,6 +11,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 process.chdir(join(__dirname, '..'));
 
 const { evaluateEvidenceGate } = await import('../src/lib/session/evidence-gate.ts');
+const constants = await import('../src/lib/session/evidence-gate-constants.ts');
 
 let passed = 0;
 let failed = 0;
@@ -84,6 +86,33 @@ const r5 = evaluateEvidenceGate(planNoMain, [
   { templateId: 'p2', name: 'P2', sets: 1, reps: 5, difficulty: null, rpe: null, discomfort: null },
 ], { sessionFeedback: { overallRpe: 5 } });
 ok('plan with no Main: 100% coverage allowed', r5.allowed === true);
+
+// PR-DATA-01A: observability - AT1 successful path records evidence score breakdown
+ok('AT1: allowed path has observability', !!r3.observability);
+ok('AT1: observability has evidence_score_total', typeof r3.observability.evidence_score_total === 'number');
+ok('AT1: observability has evidence_score_breakdown', !!r3.observability.evidence_score_breakdown);
+ok('AT1: observability rejected_or_allowed=allowed', r3.observability.rejected_or_allowed === 'allowed');
+
+// PR-DATA-01A: observability - AT2 rejected path records code + reason detail
+ok('AT2: rejected path has reject_reason_code', r2.observability.reject_reason_code === 'MAIN_SEGMENT_REQUIRED');
+// INSUFFICIENT_EXECUTION_EVIDENCE (score < 50) has internal reject_reason_detail
+const logsLowEvidence = [
+  { templateId: 'p1', name: 'P1', sets: 1, reps: 1, difficulty: null, rpe: null, discomfort: null },
+  { templateId: 'm1', name: 'M1', sets: 1, reps: 1, difficulty: null, rpe: null, discomfort: null },
+  { templateId: 'm2', name: 'M2', sets: 0, reps: null, difficulty: null, rpe: null, discomfort: null },
+];
+const rLowScore = evaluateEvidenceGate(planWithMain, logsLowEvidence, null);
+if (!rLowScore.allowed && rLowScore.code === 'INSUFFICIENT_EXECUTION_EVIDENCE') {
+  ok('AT2: INSUFFICIENT has reject_reason_detail', !!rLowScore.observability.reject_reason_detail);
+}
+
+// PR-DATA-01A: observability - AT3 MAIN gate skipped
+ok('AT3: planNoMain has main_gate_skipped', r5.observability.main_gate_skipped === true);
+ok('AT3: main_gate_skip_reason', r5.observability.main_gate_skip_reason === 'no_main_segment');
+
+// PR-DATA-01A: AT4 threshold constants centralized
+ok('AT4: constants exist', !!constants.EVIDENCE_GATE_COMPLETION_MIN_RATIO);
+ok('AT4: score threshold tunable', typeof constants.EVIDENCE_GATE_SCORE_ALLOW_THRESHOLD === 'number');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

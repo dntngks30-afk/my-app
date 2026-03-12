@@ -289,7 +289,10 @@ export async function POST(req: NextRequest) {
         status: 'blocked',
         code: gateResult.code,
         sessionNumber,
-        meta: { message: gateResult.message },
+        meta: {
+          message: gateResult.message,
+          evidence_gate: gateResult.observability,
+        },
       });
       return fail(422, gateResult.code as ApiErrorCode, gateResult.message);
     }
@@ -305,13 +308,19 @@ export async function POST(req: NextRequest) {
       !!feedbackPayload
     );
 
+    // PR-DATA-01A: persist evidence gate observability on successful completion
+    const executionSummaryWithGate = {
+      ...executionSummary,
+      evidence_gate: gateResult.observability,
+    };
+
     const planUpdatePayload: Record<string, unknown> = {
       status: 'completed',
       completed_at: nowIso,
       duration_seconds: durationClamped,
       completion_mode: completionMode,
       exercise_logs: exerciseLogsArray,
-      execution_summary_json: executionSummary,
+      execution_summary_json: executionSummaryWithGate,
     };
 
     // Race-safe: only first completion writes (status IN draft|started)
