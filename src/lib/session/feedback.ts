@@ -8,6 +8,7 @@ import type {
   FeedbackPayload,
   SessionFeedbackPayload,
   ExerciseFeedbackItem,
+  SessionPainArea,
 } from './feedback-types';
 
 // ─── Validation ─────────────────────────────────────────────────────────────
@@ -48,6 +49,10 @@ export function normalizeSessionFeedbackPayload(raw: unknown): FeedbackPayload |
     }
     if (typeof sf.completionRatio === 'number' && Number.isFinite(sf.completionRatio)) {
       session.completionRatio = Math.min(RATIO_MAX, Math.max(RATIO_MIN, sf.completionRatio));
+    }
+    if (Array.isArray(sf.painAreas) && sf.painAreas.length > 0) {
+      const valid: SessionPainArea[] = ['neck', 'lower_back', 'knee', 'wrist', 'shoulder'];
+      session.painAreas = sf.painAreas.filter((a): a is SessionPainArea => valid.includes(a));
     }
     if (typeof sf.timeOverrun === 'boolean') {
       session.timeOverrun = sf.timeOverrun;

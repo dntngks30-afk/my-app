@@ -9,8 +9,8 @@ import type { ExerciseLogItem, SessionPlan, ActivePlanSummary } from '@/lib/sess
 import { buildBriefSessionRationale } from '@/lib/deep-result/copy'
 import { ExercisePlayerModal } from './ExercisePlayerModal'
 import SessionCompleteSummary from '@/app/app/routine/_components/SessionCompleteSummary'
-import { SessionFeedbackQuickForm } from '@/app/app/_components/SessionFeedbackQuickForm'
-import type { FeedbackPayload } from '@/lib/session/feedback-types'
+import { SessionCompletionSheet } from './SessionCompletionSheet'
+import type { SessionPainArea } from '@/lib/session/feedback-types'
 
 type SessionStatus = 'current' | 'completed' | 'locked'
 
@@ -143,8 +143,10 @@ function PanelInner({
     }
     prevExercisesRef.current = exercises
   }, [exercises])
-  // 세션 피드백 (adaptive signal)
-  const [feedback, setFeedback] = useState<FeedbackPayload | null>(null)
+  // 세션 피드백 (PR-UX-00: 종료 시 시트에서만 수집)
+  const [showSessionCompletionSheet, setShowSessionCompletionSheet] = useState(false)
+  const [sessionPerceivedDifficulty, setSessionPerceivedDifficulty] = useState<'too_easy' | 'ok' | 'too_hard' | null>(null)
+  const [sessionPainAreas, setSessionPainAreas] = useState<SessionPainArea[]>([])
   // 종료 API 상태
   const [completing, setCompleting] = useState(false)
   const [completeError, setCompleteError] = useState<string | null>(null)
@@ -163,7 +165,7 @@ function PanelInner({
     setOpenItem(null)
   }
 
-  const handleSessionComplete = async () => {
+  const doSessionComplete = async () => {
     if (completing || completed) return
     const sessionNumber = activePlan?.session_number
     if (!sessionNumber) return
@@ -182,7 +184,6 @@ function PanelInner({
       const durationSec = Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1000))
       const exerciseLogsArray = Object.values(logs)
 
-      // 전체 완료 여부로 completion_mode 결정
       const allDone =
         exercises && exercises.length > 0 && exercises.every(e => !!logs[e.templateId])
       const completionMode = allDone ? 'all_done' : exerciseLogsArray.length > 0 ? 'partial_done' : 'stop_early'
@@ -193,8 +194,14 @@ function PanelInner({
         completion_mode: completionMode,
         exercise_logs: exerciseLogsArray,
       }
-      if (feedback?.sessionFeedback && Object.keys(feedback.sessionFeedback).length > 0) {
-        payload.feedback = feedback
+      const hasSessionFeedback = sessionPerceivedDifficulty != null || sessionPainAreas.length > 0
+      if (hasSessionFeedback) {
+        payload.feedback = {
+          sessionFeedback: {
+            difficultyFeedback: sessionPerceivedDifficulty ?? undefined,
+            painAreas: sessionPainAreas.length > 0 ? sessionPainAreas : undefined,
+          },
+        }
       }
       const result = await completeSession(session.access_token, payload)
 
@@ -220,6 +227,15 @@ function PanelInner({
       setCompleteError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.')
       setCompleting(false)
     }
+  }
+
+  const handleSessionCompleteClick = () => {
+    setShowSessionCompletionSheet(true)
+  }
+
+  const handleSessionCompletionConfirm = () => {
+    setShowSessionCompletionSheet(false)
+    doSessionComplete()
   }
 
   return (
@@ -309,20 +325,11 @@ function PanelInner({
             />
           </div>
 
-          {/* 종료 CTA 바 (current 세션만) — 운동 목록 하단에 위치 */}
+          {/* 종료 CTA 바 (current 세션만) — PR-UX-00: 질문 블록 제거, 버튼만 */}
           {status === 'current' && !completed && (
-            <div className="border-t border-slate-100 px-5 py-4 space-y-4">
-              <SessionFeedbackQuickForm
-                value={feedback}
-                onChange={setFeedback}
-                derivedCompletionRatio={
-                  exercises && exercises.length > 0
-                    ? exercises.filter((e) => logs[e.templateId]).length / exercises.length
-                    : undefined
-                }
-              />
+            <div className="border-t border-slate-100 px-5 py-4 space-y-3">
               {completeError && (
-                <div className="mb-3 flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2">
+                <div className="flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2">
                   <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
                   <p className="text-xs text-red-600">{completeError}</p>
                 </div>
@@ -330,7 +337,7 @@ function PanelInner({
               <button
                 type="button"
                 disabled={completing || !activePlan?.session_number}
-                onClick={handleSessionComplete}
+                onClick={handleSessionCompleteClick}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-400 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-orange-500 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {completing ? (
@@ -353,6 +360,36 @@ function PanelInner({
         onClose={() => setOpenItem(null)}
         onComplete={handleLogComplete}
       />
+
+      {/* 세션 종료 시트 (PR-UX-00) */}
+      {showSessionCompletionSheet && status === 'current' && !completed && (
+        <>
+          <div
+            className="fixed inset-0 z-[75] bg-black/70 backdrop-blur-sm animate-in fade-in"
+            style={{ animationDuration: '150ms' }}
+            onClick={() => setShowSessionCompletionSheet(false)}
+            aria-hidden
+          />
+          <div
+            className="fixed inset-x-0 bottom-0 z-[80] animate-in slide-in-from-bottom-4"
+            style={{ animationDuration: '250ms', animationTimingFunction: 'cubic-bezier(0.2,0,0,1)', paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+          >
+            <div className="mx-auto max-w-[430px] rounded-t-2xl border border-slate-200 bg-white px-5 py-5 pb-8 shadow-2xl">
+              <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                세션 종료 — 간단한 체크
+              </p>
+              <SessionCompletionSheet
+                perceivedDifficulty={sessionPerceivedDifficulty}
+                painAreas={sessionPainAreas}
+                onPerceivedDifficultyChange={setSessionPerceivedDifficulty}
+                onPainAreasChange={setSessionPainAreas}
+                onConfirm={handleSessionCompletionConfirm}
+                completing={completing}
+              />
+            </div>
+          </div>
+        </>
+      )}
     </>
   )
 }

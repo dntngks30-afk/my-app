@@ -1,21 +1,23 @@
-'use client'
+'use client';
 
-import { useEffect, useRef, useState } from 'react'
-import { X, CheckCircle2 } from 'lucide-react'
-import { getSessionSafe } from '@/lib/supabase'
-import type { ExerciseItem } from './planJsonAdapter'
-import type { ExerciseLogItem } from '@/lib/session/client'
-import { getMediaPayload, setMediaPayload, type MediaPayload } from './media-cache'
+import { useEffect, useRef, useState } from 'react';
+import { X, Plus, CheckCircle2, Trash2 } from 'lucide-react';
+import { getSessionSafe } from '@/lib/supabase';
+import type { ExerciseItem } from './planJsonAdapter';
+import type { ExerciseLogItem } from '@/lib/session/client';
+import { getMediaPayload, setMediaPayload, type MediaPayload } from './media-cache';
+import { ExerciseCompletionSheet } from './ExerciseCompletionSheet';
+import type { ExercisePerceivedDifficulty, ExercisePostPain } from './ExerciseCompletionSheet';
 
 interface ExercisePlayerModalProps {
-  item: ExerciseItem | null
-  initialLog?: ExerciseLogItem
-  onClose: () => void
-  onComplete: (log: ExerciseLogItem) => void
+  item: ExerciseItem | null;
+  initialLog?: ExerciseLogItem;
+  onClose: () => void;
+  onComplete: (log: ExerciseLogItem) => void;
 }
 
 export function ExercisePlayerModal({ item, initialLog, onClose, onComplete }: ExercisePlayerModalProps) {
-  if (!item) return null
+  if (!item) return null;
   return (
     <ModalInner
       item={item}
@@ -23,10 +25,10 @@ export function ExercisePlayerModal({ item, initialLog, onClose, onComplete }: E
       onClose={onClose}
       onComplete={onComplete}
     />
-  )
+  );
 }
 
-/* ─── 내부 컴포넌트 (item이 확정된 상태) ─────────────────────── */
+type SetEntry = { reps: string; holdSeconds: string };
 
 function ModalInner({
   item,
@@ -34,42 +36,56 @@ function ModalInner({
   onClose,
   onComplete,
 }: {
-  item: ExerciseItem
-  initialLog?: ExerciseLogItem
-  onClose: () => void
-  onComplete: (log: ExerciseLogItem) => void
+  item: ExerciseItem;
+  initialLog?: ExerciseLogItem;
+  onClose: () => void;
+  onComplete: (log: ExerciseLogItem) => void;
 }) {
-  const [media, setMedia] = useState<MediaPayload | null>(null)
-  const [mediaLoading, setMediaLoading] = useState(true)
-  const [sets, setSets] = useState(String(initialLog?.sets ?? item.targetSets ?? 3))
-  const [reps, setReps] = useState(String(initialLog?.reps ?? item.targetReps ?? ''))
-  const [difficulty, setDifficulty] = useState<number | null>(initialLog?.difficulty ?? null)
-  const [rpe, setRpe] = useState<number | null>(initialLog?.rpe ?? null)
-  const [discomfort, setDiscomfort] = useState<number | null>(initialLog?.discomfort ?? null)
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const hlsRef = useRef<{ destroy: () => void } | null>(null)
-
-  /* 미디어 서명 — 공용 캐시 우선(prefetch hit), miss 시 /api/media/sign 1회 */
-  useEffect(() => {
-    let cancelled = false
-    const cached = getMediaPayload(item.templateId)
-    if (cached) {
-      setMedia(cached)
-      setMediaLoading(false)
-      if (typeof performance !== 'undefined' && performance.mark) {
-        performance.mark('modal_media_ready')
-      }
-      if (process.env.NODE_ENV !== 'production') {
-        console.info('[perf] modal_media_ready (cache hit)')
-      }
-      return
+  const [media, setMedia] = useState<MediaPayload | null>(null);
+  const [mediaLoading, setMediaLoading] = useState(true);
+  const isHold = !!item.holdSeconds && !item.targetReps;
+  const defaultReps = String(initialLog?.reps ?? item.targetReps ?? '');
+  const defaultSets = initialLog?.sets ?? item.targetSets ?? 1;
+  const [setEntries, setSetEntries] = useState<SetEntry[]>(() => {
+    if (initialLog?.sets && initialLog?.reps != null) {
+      const perSet = Math.floor(initialLog.reps / initialLog.sets);
+      return Array.from({ length: initialLog.sets }, () => ({ reps: String(perSet), holdSeconds: '' }));
     }
-    ;(async () => {
+    return Array.from({ length: Math.max(1, defaultSets) }, () =>
+      isHold ? { reps: '', holdSeconds: String(item.holdSeconds ?? '') } : { reps: defaultReps, holdSeconds: '' }
+    );
+  });
+  const [showCompletionSheet, setShowCompletionSheet] = useState(false);
+  const [perceivedDifficulty, setPerceivedDifficulty] = useState<ExercisePerceivedDifficulty | null>(
+    initialLog?.difficulty != null && initialLog.difficulty >= 1 && initialLog.difficulty <= 5
+      ? (initialLog.difficulty as ExercisePerceivedDifficulty)
+      : null
+  );
+  const [postPain, setPostPain] = useState<ExercisePostPain | null>(
+    initialLog?.discomfort != null && [0, 2, 5, 8, 10].includes(initialLog.discomfort)
+      ? (initialLog.discomfort as ExercisePostPain)
+      : null
+  );
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<{ destroy: () => void } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const cached = getMediaPayload(item.templateId);
+    if (cached) {
+      setMedia(cached);
+      setMediaLoading(false);
+      return;
+    }
+    (async () => {
       try {
-        const { session } = await getSessionSafe()
+        const { session } = await getSessionSafe();
         if (!session?.access_token) {
-          if (!cancelled) { setMedia({ kind: 'placeholder' }); setMediaLoading(false) }
-          return
+          if (!cancelled) {
+            setMedia({ kind: 'placeholder' });
+            setMediaLoading(false);
+          }
+          return;
         }
         const res = await fetch('/api/media/sign', {
           method: 'POST',
@@ -78,86 +94,160 @@ function ModalInner({
             Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({ templateIds: [item.templateId] }),
-        })
-        if (cancelled) return
+        });
+        if (cancelled) return;
         if (res.ok) {
-          const data = await res.json()
-          const payload: MediaPayload = data.results?.[0]?.payload ?? { kind: 'placeholder' }
-          setMediaPayload(item.templateId, payload)
-          setMedia(payload)
-          if (typeof performance !== 'undefined' && performance.mark) {
-            performance.mark('modal_media_ready')
-          }
-          if (process.env.NODE_ENV !== 'production') {
-            console.info('[perf] modal_media_ready (fetch)')
-          }
+          const data = await res.json();
+          const payload: MediaPayload = data.results?.[0]?.payload ?? { kind: 'placeholder' };
+          setMediaPayload(item.templateId, payload);
+          setMedia(payload);
         } else {
-          setMedia({ kind: 'placeholder' })
+          setMedia({ kind: 'placeholder' });
         }
       } catch {
-        if (!cancelled) setMedia({ kind: 'placeholder' })
+        if (!cancelled) setMedia({ kind: 'placeholder' });
       } finally {
-        if (!cancelled) setMediaLoading(false)
+        if (!cancelled) setMediaLoading(false);
       }
-    })()
-    return () => { cancelled = true }
-  }, [item.templateId])
-
-  /* HLS 플레이어 연결 */
-  useEffect(() => {
-    if (!media || media.kind !== 'hls' || !media.streamUrl) return
-    const video = videoRef.current
-    if (!video) return
-    let destroyed = false
-    import('hls.js').then(({ default: HlsLib }) => {
-      if (destroyed || !video) return
-      if (HlsLib.isSupported()) {
-        const hls = new HlsLib()
-        hlsRef.current = hls
-        hls.loadSource(media.streamUrl!)
-        hls.attachMedia(video)
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = media.streamUrl!
-      }
-    })
+    })();
     return () => {
-      destroyed = true
-      if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
-      else if (video) { video.src = '' }
-    }
-  }, [media?.kind, media?.streamUrl])
+      cancelled = true;
+    };
+  }, [item.templateId]);
 
-  const handleComplete = () => {
-    const setsNum = parseInt(sets, 10)
-    const repsNum = parseInt(reps, 10)
+  useEffect(() => {
+    if (!media || media.kind !== 'hls' || !media.streamUrl) return;
+    const video = videoRef.current;
+    if (!video) return;
+    let destroyed = false;
+    import('hls.js').then(({ default: HlsLib }) => {
+      if (destroyed || !video) return;
+      if (HlsLib.isSupported()) {
+        const hls = new HlsLib();
+        hlsRef.current = hls;
+        hls.loadSource(media.streamUrl!);
+        hls.attachMedia(video);
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = media.streamUrl!;
+      }
+    });
+    return () => {
+      destroyed = true;
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      } else if (video) {
+        video.src = '';
+      }
+    };
+  }, [media?.kind, media?.streamUrl]);
+
+  const addSet = () => {
+    setSetEntries((prev) => [
+      ...prev,
+      isHold ? { reps: '', holdSeconds: String(item.holdSeconds ?? '') } : { reps: '', holdSeconds: '' },
+    ]);
+  };
+
+  const removeSet = (idx: number) => {
+    if (setEntries.length <= 1) return;
+    setSetEntries((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateSetEntry = (idx: number, field: 'reps' | 'holdSeconds', value: string) => {
+    setSetEntries((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: value };
+      return next;
+    });
+  };
+
+  const aggregateToLog = (): { sets: number; reps: number | null } => {
+    const filled = setEntries.filter((s) => {
+      const r = parseInt(s.reps, 10);
+      const h = parseInt(s.holdSeconds, 10);
+      return (isHold ? !Number.isNaN(h) && h > 0 : !Number.isNaN(r) && r >= 0);
+    });
+    if (filled.length === 0) return { sets: 0, reps: null };
+    if (isHold) {
+      const totalSec = filled.reduce((sum, s) => sum + (parseInt(s.holdSeconds, 10) || 0), 0);
+      return { sets: filled.length, reps: totalSec };
+    }
+    const totalReps = filled.reduce((sum, s) => sum + (parseInt(s.reps, 10) || 0), 0);
+    return { sets: filled.length, reps: totalReps };
+  };
+
+  const handleCompleteClick = () => {
+    setShowCompletionSheet(true);
+  };
+
+  const handleCompletionConfirm = () => {
+    const { sets, reps } = aggregateToLog();
     onComplete({
       templateId: item.templateId,
       name: item.name,
-      sets: Number.isNaN(setsNum) ? null : Math.min(20, Math.max(0, setsNum)),
-      reps: Number.isNaN(repsNum) ? null : Math.min(200, Math.max(0, repsNum)),
-      difficulty,
-      rpe: rpe != null && rpe >= 1 && rpe <= 10 ? rpe : null,
-      discomfort: discomfort != null && discomfort >= 0 && discomfort <= 10 ? discomfort : null,
-    })
+      sets: sets > 0 ? Math.min(20, sets) : null,
+      reps: reps != null ? Math.min(200, Math.max(0, reps)) : null,
+      difficulty: perceivedDifficulty,
+      rpe: null,
+      discomfort: postPain,
+    });
+    onClose();
+  };
+
+  if (showCompletionSheet) {
+    return (
+      <>
+        <div
+          className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm animate-in fade-in"
+          style={{ animationDuration: '150ms' }}
+          aria-hidden
+        />
+        <div
+          className="fixed inset-x-0 bottom-0 z-[70] animate-in slide-in-from-bottom-4"
+          style={{ animationDuration: '250ms', animationTimingFunction: 'cubic-bezier(0.2,0,0,1)', paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="mx-auto max-w-[430px] rounded-t-2xl border border-slate-200 bg-white px-5 py-5 pb-8 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                운동 완료 — 간단한 체크
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowCompletionSheet(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="취소"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <ExerciseCompletionSheet
+              exerciseName={item.name}
+              perceivedDifficulty={perceivedDifficulty}
+              postPain={postPain}
+              onPerceivedDifficultyChange={setPerceivedDifficulty}
+              onPostPainChange={setPostPain}
+              onConfirm={handleCompletionConfirm}
+            />
+          </div>
+        </div>
+      </>
+    );
   }
 
   return (
     <>
-      {/* Backdrop (z-[60] — SessionPanelV2의 z-50보다 높게) */}
       <div
         className="fixed inset-0 z-[60] bg-black/60 animate-in fade-in"
         style={{ animationDuration: '150ms' }}
         onClick={onClose}
         aria-hidden
       />
-
-      {/* Sheet */}
       <div
         className="fixed inset-x-0 bottom-0 z-[70] animate-in slide-in-from-bottom-4"
         style={{ animationDuration: '250ms', animationTimingFunction: 'cubic-bezier(0.2,0,0,1)' }}
       >
         <div className="mx-auto max-w-[430px] overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl">
-          {/* 헤더 */}
           <div className="flex items-start justify-between border-b border-slate-100 px-5 pt-4 pb-3">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
@@ -183,7 +273,6 @@ function ModalInner({
             </button>
           </div>
 
-          {/* 영상 영역 */}
           <div className="bg-black">
             {mediaLoading ? (
               <div className="flex aspect-video items-center justify-center bg-slate-800">
@@ -216,115 +305,62 @@ function ModalInner({
             )}
           </div>
 
-          {/* 입력 영역 */}
           <div className="space-y-4 px-5 py-4 pb-8">
-            {/* sets × reps */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                  세트 수
-                </label>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  max="20"
-                  value={sets}
-                  onChange={e => setSets(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-center text-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-300"
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                  회 / 세트
-                </label>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  max="200"
-                  value={reps}
-                  onChange={e => setReps(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-center text-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-300"
-                />
-              </div>
-            </div>
-
-            {/* 난이도 1-5 */}
-            <div>
-              <label className="mb-2 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                체감 난이도 (선택)
-              </label>
-              <div className="flex gap-2">
-                {([1, 2, 3, 4, 5] as const).map(d => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setDifficulty(prev => prev === d ? null : d)}
-                    className={[
-                      'flex-1 rounded-xl py-2.5 text-sm font-semibold transition-colors',
-                      difficulty === d
-                        ? 'bg-orange-400 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
-                    ].join(' ')}
-                    aria-pressed={difficulty === d}
-                  >
-                    {d}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* RPE / 불편감 (선택, 운동 단위 adaptive signal) */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                  RPE (선택)
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {([1, 3, 5, 7, 10] as const).map(v => (
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              세트별 기록 {isHold ? '(초)' : '(회)'}
+            </p>
+            <div className="space-y-2">
+              {setEntries.map((entry, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <span className="w-10 shrink-0 text-sm font-medium text-slate-600">{idx + 1}세트</span>
+                  {isHold ? (
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      max="600"
+                      placeholder="초"
+                      value={entry.holdSeconds}
+                      onChange={(e) => updateSetEntry(idx, 'holdSeconds', e.target.value)}
+                      className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-center text-lg font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-300"
+                    />
+                  ) : (
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      max="200"
+                      placeholder="회"
+                      value={entry.reps}
+                      onChange={(e) => updateSetEntry(idx, 'reps', e.target.value)}
+                      className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-center text-lg font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-300"
+                    />
+                  )}
+                  {setEntries.length > 1 && (
                     <button
-                      key={v}
                       type="button"
-                      onClick={() => setRpe(prev => prev === v ? null : v)}
-                      className={[
-                        'rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors',
-                        rpe === v ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
-                      ].join(' ')}
-                      aria-pressed={rpe === v}
+                      onClick={() => removeSet(idx)}
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-400 hover:bg-red-50 hover:border-red-200 hover:text-red-500 transition-colors"
+                      aria-label={`${idx + 1}세트 삭제`}
                     >
-                      {v}
+                      <Trash2 className="h-4 w-4" />
                     </button>
-                  ))}
+                  )}
                 </div>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                  불편감 (선택)
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {([0, 2, 5, 7, 10] as const).map(v => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => setDiscomfort(prev => prev === v ? null : v)}
-                      className={[
-                        'rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors',
-                        discomfort === v ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
-                      ].join(' ')}
-                      aria-pressed={discomfort === v}
-                    >
-                      {v}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              ))}
             </div>
-
-            {/* 완료 버튼 */}
             <button
               type="button"
-              onClick={handleComplete}
+              onClick={addSet}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 py-3.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:border-slate-400 transition-colors"
+            >
+              <Plus className="h-5 w-5" />
+              세트 추가
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCompleteClick}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-[0.98]"
             >
               <CheckCircle2 className="h-4 w-4" />
@@ -334,5 +370,5 @@ function ModalInner({
         </div>
       </div>
     </>
-  )
+  );
 }

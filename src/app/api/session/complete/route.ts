@@ -309,9 +309,11 @@ export async function POST(req: NextRequest) {
     );
 
     // PR-DATA-01A: persist evidence gate observability on successful completion
+    // PR-UX-00: pain_areas stored in execution_summary_json (no session_feedback schema change)
     const executionSummaryWithGate = {
       ...executionSummary,
       evidence_gate: gateResult.observability,
+      pain_areas: feedbackPayload?.sessionFeedback?.painAreas ?? undefined,
     };
 
     const planUpdatePayload: Record<string, unknown> = {
