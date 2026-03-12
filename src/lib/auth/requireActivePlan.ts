@@ -1,7 +1,7 @@
 /**
  * 유료 접근 통일 헬퍼 — SSOT: plan_status === 'active'
- *
  * Bearer 인증 + plan_status 확인. 401/403 반환 또는 { userId } 반환.
+ * @see docs/AUTH_CONTRACT.md — Auth 모델 및 라우트 인벤토리
  *
  * [병렬화 전략]
  * JWT payload의 sub 클레임으로 userId를 로컬 디코드하여 즉시 선취득.

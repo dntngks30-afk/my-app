@@ -216,6 +216,7 @@ Do not silently switch authentication methods
 
 설명
 인증 방식 변경은 사용자 확인 없이 수행하지 않는다.
+Auth 모델·라우트 인벤토리: docs/AUTH_CONTRACT.md 참조.
 
 7. API Safety Rules
 

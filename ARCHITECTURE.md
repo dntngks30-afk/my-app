@@ -47,7 +47,7 @@ Supabase PostgreSQL
 
 Authentication
 
-Supabase Auth
+Supabase Auth (Bearer + Session 혼재. 상세: docs/AUTH_CONTRACT.md)
 
 Payment
 

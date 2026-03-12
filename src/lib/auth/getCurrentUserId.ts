@@ -3,6 +3,7 @@
  * SSOT: 단일 구현, 모든 API에서 import
  * 요청 1회당 getUser 1번만 호출 (requestAuthCache)
  * supabase 미전달 시 내부에서 생성 (호환)
+ * @see docs/AUTH_CONTRACT.md — Auth 모델 및 라우트 인벤토리
  */
 
 import type { NextRequest } from 'next/server';
