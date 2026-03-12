@@ -264,6 +264,22 @@ export function classifyDeepV3(
   return { primary_type, secondary_type };
 }
 
+/** Neck-shoulder trust override: when CORE_CONTROL_DEFICIT but evidence is neck/shoulder. */
+function applyNeckShoulderOverrideIfNeeded(
+  derived: { result_type: DeepV2ResultType; primaryFocus: DeepPrimaryFocus },
+  primary_type: DeepV3Type,
+  q5: string | null,
+  q11: string | null,
+  q14: string | null
+): void {
+  if (primary_type !== 'CORE_CONTROL_DEFICIT') return;
+  if (!q5?.includes('목·어깨')) return;
+  if (!q11?.includes('어깨가 들리') && !q11?.includes('목이 긴장')) return;
+  if (!q14?.includes('10초 안정적으로')) return;
+  derived.result_type = 'NECK-SHOULDER';
+  derived.primaryFocus = 'NECK-SHOULDER';
+}
+
 /** DeepV3Type → DeepV2ResultType (호환용) */
 function v3TypeToV2ResultType(t: DeepV3Type): DeepV2ResultType {
   switch (t) {
@@ -520,6 +536,7 @@ export function calculateDeepV3(
     secondary_type,
     baseConfidence
   );
+  applyNeckShoulderOverrideIfNeeded(derived, primary_type, q5, q11, q14);
 
   const confidence = Math.min(1, Math.max(0, baseConfidence + 0.1));
 
@@ -644,6 +661,7 @@ export function calculateDeepV3WithCandidate(
     secondary_type,
     baseConfidence
   );
+  applyNeckShoulderOverrideIfNeeded(derived, primary_type, q5, q11, q14);
 
   const confidence = Math.min(1, Math.max(0, baseConfidence + 0.1));
 
