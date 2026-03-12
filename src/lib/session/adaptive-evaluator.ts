@@ -19,6 +19,11 @@ export type AdaptiveSummaryRow = {
   dropout_risk_score: number;
   flags: string[];
   reasons: string[];
+  /** PR-03: observability */
+  ratio_denom: number;
+  rpe_sample_count: number;
+  discomfort_sample_count: number;
+  summary_status: 'full' | 'partial';
 };
 
 export type AdaptiveSummaryDebug = {
@@ -27,6 +32,11 @@ export type AdaptiveSummaryDebug = {
   discomfort_burden_score: number;
   effort_mismatch_score: number;
   flags: string[];
+  /** PR-03: observability */
+  ratio_denom: number;
+  rpe_sample_count: number;
+  discomfort_sample_count: number;
+  summary_status: 'full' | 'partial';
 };
 
 type EventRow = {
@@ -130,6 +140,11 @@ export function evaluateSession(
 
   const reasons = [...new Set([...effortReasons, ...discomfortReasons, ...dropoutReasons])];
 
+  const rpeSampleCount = rpeVals.length;
+  const discomfortSampleCount = discomfortVals.length;
+  const summaryStatus: 'full' | 'partial' =
+    rpeSampleCount > 0 && discomfortSampleCount > 0 ? 'full' : 'partial';
+
   return {
     user_id: ctx.userId,
     session_plan_id: ctx.sessionPlanId,
@@ -145,6 +160,10 @@ export function evaluateSession(
     dropout_risk_score: dropoutRisk,
     flags,
     reasons,
+    ratio_denom: ratioDenom,
+    rpe_sample_count: rpeSampleCount,
+    discomfort_sample_count: discomfortSampleCount,
+    summary_status: summaryStatus,
   };
 }
 
@@ -159,10 +178,10 @@ export async function runEvaluatorAndUpsert(
     };
   },
   ctx: { userId: string; sessionPlanId: string; sessionNumber: number }
-): Promise<AdaptiveSummaryDebug | null> {
+): Promise<AdaptiveSummaryDebug | { summary_status: 'insufficient_data' } | null> {
   const events = await loadSessionEventsForEval(supabase, ctx.sessionPlanId);
   const summary = evaluateSession(events, ctx);
-  if (!summary) return null;
+  if (!summary) return { summary_status: 'insufficient_data' };
 
   const row = {
     user_id: summary.user_id,
@@ -179,6 +198,10 @@ export async function runEvaluatorAndUpsert(
     dropout_risk_score: summary.dropout_risk_score,
     flags: summary.flags,
     reasons: summary.reasons,
+    ratio_denom: summary.ratio_denom,
+    rpe_sample_count: summary.rpe_sample_count,
+    discomfort_sample_count: summary.discomfort_sample_count,
+    summary_status: summary.summary_status,
   };
 
   const { error } = await supabase.from('session_adaptive_summaries').upsert([row], {
@@ -195,5 +218,9 @@ export async function runEvaluatorAndUpsert(
     discomfort_burden_score: summary.discomfort_burden_score,
     effort_mismatch_score: summary.effort_mismatch_score,
     flags: summary.flags,
+    ratio_denom: summary.ratio_denom,
+    rpe_sample_count: summary.rpe_sample_count,
+    discomfort_sample_count: summary.discomfort_sample_count,
+    summary_status: summary.summary_status,
   };
 }

@@ -18,7 +18,10 @@ import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { logSessionEvent, summarizeExerciseLogs } from '@/lib/session-events';
 import { buildSessionExerciseEvents, writeSessionExerciseEvents } from '@/lib/session/session-exercise-events';
-import { runEvaluatorAndUpsert } from '@/lib/session/adaptive-evaluator';
+import { runEvaluatorAndUpsert, type AdaptiveSummaryDebug } from '@/lib/session/adaptive-evaluator';
+
+/** Debug-only: insufficient_data when evaluator cannot produce a summary row */
+type AdaptiveSummaryDebugOrInsufficient = AdaptiveSummaryDebug | { summary_status: 'insufficient_data' };
 import { buildDedupeKey, tryAcquireDedupe } from '@/lib/request-dedupe';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import { computePhase, type PhaseLengths } from '@/lib/session/phase';
@@ -331,7 +334,7 @@ export async function POST(req: NextRequest) {
 
       // PR-A: exercise-level session_exercise_events (truthful, no fake per-set)
       let eventLogResult: { attempted: number; written: number; failed: number } | undefined;
-      let adaptiveSummary: { completion_ratio: number; dropout_risk_score: number; discomfort_burden_score: number; effort_mismatch_score: number; flags: string[] } | null = null;
+      let adaptiveSummary: AdaptiveSummaryDebugOrInsufficient | null = null;
       const planId = (updatedRows[0] as { id?: string }).id ?? currentPlan?.id;
       if (exerciseLogsArray.length > 0 && planId) {
         const eventRows = buildSessionExerciseEvents(exerciseLogsArray, currentPlan?.plan_json as Record<string, unknown> | null, {
