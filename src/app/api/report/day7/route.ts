@@ -1,11 +1,12 @@
 /**
  * GET /api/report/day7
  * 7일 여정 완료 시 리포트 (report/weekly 데이터 + journey_complete 플래그)
- * Bearer only, no-store
+ * Bearer only, no-store. Auth: shared getCurrentUserId(req)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,16 +33,6 @@ function getSevenDayRange(): {
   }
 
   return { startDayKey, endDayKey, dayKeys };
-}
-
-async function getCurrentUserId(req: NextRequest): Promise<string | null> {
-  const auth = req.headers.get('authorization');
-  if (!auth?.startsWith('Bearer ')) return null;
-
-  const token = auth.slice(7);
-  const supabase = getServerSupabaseAdmin();
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  return error || !user ? null : user.id;
 }
 
 type SeriesItem = {
