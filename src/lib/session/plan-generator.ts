@@ -127,6 +127,10 @@ const GOLD_PATH_RULES: Record<GoldPathVector, Omit<GoldPathSegmentRule, 'count'>
 const MIN_CANDIDATES_FOR_STRICT_AVOID = 3;
 const SHORT_TOTAL_ITEM_CAP = 4;
 
+/** PR-SESSION-QUALITY-01: First session guardrails */
+const MAX_FIRST_SESSION_MAIN_COUNT = 1;
+const MAX_FIRST_SESSION_TOTAL_EXERCISES = 5;
+
 /** PR-ALG-05: difficulty order for cap (low < medium < high) */
 const DIFFICULTY_ORDER: Record<string, number> = { low: 1, medium: 2, high: 3 };
 
@@ -138,6 +142,32 @@ function isDifficultyAboveCap(
   const tOrder = DIFFICULTY_ORDER[templateDifficulty] ?? 0;
   const capOrder = DIFFICULTY_ORDER[cap] ?? 3;
   return tOrder > capOrder;
+}
+
+/** PR-SESSION-QUALITY-01: priority_vector top 1–2 axes for session focus */
+function resolveSessionFocusAxes(priorityVector?: Record<string, number> | null): string[] {
+  if (!priorityVector || typeof priorityVector !== 'object') return [];
+  return Object.entries(priorityVector)
+    .filter(([, v]) => typeof v === 'number' && v > 0)
+    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
+    .slice(0, 2)
+    .map(([axis]) => axis);
+}
+
+function resolveSessionRationale(priorityVector?: Record<string, number> | null): string | null {
+  const axes = resolveSessionFocusAxes(priorityVector);
+  if (axes.length === 0) return null;
+  const LABELS: Record<string, string> = {
+    lower_stability: '하체 안정',
+    lower_mobility: '하체 가동성',
+    upper_mobility: '상체 가동성',
+    trunk_control: '몸통 제어',
+    asymmetry: '좌우 균형',
+    deconditioned: '기본 움직임 복구',
+  };
+  const parts = axes.map((a) => LABELS[a] ?? a);
+  if (parts.length === 1) return `${parts[0]}을(를) 먼저 회복하기 위한 구성입니다`;
+  return `${parts[0]}과 ${parts[1]}을(를) 먼저 회복하기 위한 구성입니다`;
 }
 
 function resolveGoldPathVector(input: PlanGeneratorInput): GoldPathVector | null {
@@ -172,6 +202,20 @@ function isExcludedByPainMode(
   if (!painMode || painMode === 'none') return false;
   const avoid = template.avoid_if_pain_mode ?? [];
   return avoid.includes(painMode);
+}
+
+/**
+ * PR-SESSION-QUALITY-01: First session guardrails.
+ * Exclude high difficulty / high progression when session_number === 1.
+ */
+function isExcludedByFirstSessionGuardrail(
+  template: SessionTemplateRow,
+  sessionNumber: number
+): boolean {
+  if (sessionNumber !== 1) return false;
+  if (template.difficulty === 'high') return true;
+  if (typeof template.progression_level === 'number' && template.progression_level >= 3) return true;
+  return false;
 }
 
 export type ConditionMood = 'good' | 'ok' | 'bad';
@@ -255,6 +299,10 @@ export type PlanJsonOutput = {
     secondary_type?: string | null;
     priority_vector?: Record<string, number>;
     pain_mode?: 'none' | 'caution' | 'protected';
+    /** PR-SESSION-QUALITY-01: priority_vector top axes for session focus */
+    session_focus_axes?: string[];
+    /** PR-SESSION-QUALITY-01: rationale for session composition */
+    session_rationale?: string | null;
     /** PR-P2-4: constraint trace */
     constraint_flags?: {
       avoid_filter_applied: boolean;
@@ -266,6 +314,8 @@ export type PlanJsonOutput = {
       /** PR-ALG-03 */
       priority_applied?: boolean;
       pain_gate_applied?: boolean;
+      /** PR-SESSION-QUALITY-01 */
+      first_session_guardrail_applied?: boolean;
     };
   };
   flags: { recovery: boolean; short: boolean };
@@ -619,7 +669,8 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       t.level <= maxLevel &&
       !avoidIds.has(t.id) &&
       !isExcludedByPainMode(t, input.pain_mode) &&
-      !(maxDifficultyCap && isDifficultyAboveCap(t.difficulty ?? null, maxDifficultyCap))
+      !(maxDifficultyCap && isDifficultyAboveCap(t.difficulty ?? null, maxDifficultyCap)) &&
+      !isExcludedByFirstSessionGuardrail(t, input.sessionNumber)
   );
 
   const scored = candidates.map((t) => ({
@@ -643,9 +694,13 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const overlay = input.adaptiveOverlay;
   const isShort = overlay?.forceShort ?? input.timeBudget === 'short';
   const isRecovery = overlay?.forceRecovery ?? input.conditionMood === 'bad';
+  const isFirstSession = input.sessionNumber === 1;
   let mainCount = isShort ? 1 : isRecovery ? 1 : 2;
   if (input.safety_mode === 'red') {
     mainCount = 1;
+  }
+  if (isFirstSession && mainCount > MAX_FIRST_SESSION_MAIN_COUNT) {
+    mainCount = MAX_FIRST_SESSION_MAIN_COUNT;
   }
   if (typeof input.volumeModifier === 'number' && input.volumeModifier < 0) {
     mainCount = Math.max(1, Math.floor(mainCount * (1 + input.volumeModifier)));
@@ -655,6 +710,9 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const cooldownCount = 1;
   if (isShort && prepCount + mainCount + accessoryCount + cooldownCount > SHORT_TOTAL_ITEM_CAP) {
     mainCount = Math.max(1, SHORT_TOTAL_ITEM_CAP - prepCount - accessoryCount - cooldownCount);
+  }
+  if (isFirstSession && prepCount + mainCount + accessoryCount + cooldownCount > MAX_FIRST_SESSION_TOTAL_EXERCISES) {
+    mainCount = Math.max(1, MAX_FIRST_SESSION_TOTAL_EXERCISES - prepCount - accessoryCount - cooldownCount);
   }
   const totalNeeded = prepCount + mainCount + accessoryCount + cooldownCount;
 
@@ -778,6 +836,12 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       ...(input.secondary_type !== undefined && { secondary_type: input.secondary_type }),
       ...(input.priority_vector != null && { priority_vector: input.priority_vector }),
       ...(input.pain_mode != null && { pain_mode: input.pain_mode }),
+      ...(input.priority_vector != null && {
+        session_focus_axes: resolveSessionFocusAxes(input.priority_vector),
+      }),
+      ...(input.priority_vector != null && {
+        session_rationale: resolveSessionRationale(input.priority_vector),
+      }),
       finalTargetLevel,
       maxLevel,
       constraint_flags: {
@@ -789,6 +853,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
         recovery_mode_applied: isRecovery,
         priority_applied: !!input.priority_vector,
         pain_gate_applied: !!input.pain_mode && input.pain_mode !== 'none',
+        first_session_guardrail_applied: isFirstSession,
       },
     },
     flags: {

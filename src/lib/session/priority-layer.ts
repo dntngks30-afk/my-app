@@ -15,12 +15,13 @@ const PRIORITY_AXIS_TO_FOCUS_TAGS: Record<string, string[]> = {
   deconditioned: ['full_body_reset', 'core_control'],
 };
 
-/** pain_mode=protected 시 추가 제외할 contraindication 코드 */
+/** pain_mode=protected 시 추가 제외할 contraindication 코드. PR-SESSION-QUALITY-01: deep_squat 추가 */
 const PAIN_PROTECTED_EXTRA_AVOID = [
   'knee_load',
   'wrist_load',
   'shoulder_overhead',
   'ankle_instability',
+  'deep_squat',
 ];
 
 /** pain_mode=caution 시 추가 제외 (완화) */
