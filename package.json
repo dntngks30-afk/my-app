@@ -12,6 +12,7 @@
     "test:deep-id-check": "npx tsx scripts/deep-question-id-validate.mjs",
     "test:deep-p1-effective": "npx tsx scripts/deep-p1-effective-confidence.mjs",
     "test:session-snapshot": "npx tsx scripts/session-snapshot-smoke.mjs",
+    "test:evidence-gate": "npx tsx scripts/evidence-gate-smoke.mjs",
     "test:session-feedback": "npx tsx scripts/session-feedback-smoke.mjs",
     "test:progress-report": "npx tsx scripts/progress-report-smoke.mjs",
     "test:adaptive-progression": "npx tsx scripts/adaptive-progression-smoke.mjs",

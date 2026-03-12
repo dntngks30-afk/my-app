@@ -511,11 +511,27 @@ export default function SessionRoutinePanel() {
     const allChecked = allItems.length > 0 && allItems.every((k) => checked[k]);
     const completionMode = allChecked ? 'all_done' : 'partial_done';
 
+    // PR-DATA-01: evidence gate requires exercise_logs — build from checked items
+    const exerciseLogs = activePlan.plan_json?.segments?.flatMap((s, segIdx) =>
+      (s.items ?? []).map((i, itemIdx) => ({ item: i, key: itemKey(s.title ?? '', i.order ?? itemIdx, i.templateId ?? '') }))
+        .filter(({ key }) => checked[key])
+        .map(({ item: i }) => ({
+          templateId: i.templateId,
+          name: i.name,
+          sets: typeof i.sets === 'number' ? i.sets : 1,
+          reps: typeof i.reps === 'number' ? i.reps : 1,
+          difficulty: null as number | null,
+          rpe: null as number | null,
+          discomfort: null as number | null,
+        }))
+    ) ?? [];
+
     setCompleting(true);
     const payload: Parameters<typeof completeSession>[1] = {
       session_number: activePlan.session_number,
       duration_seconds: durationSec,
       completion_mode: completionMode,
+      exercise_logs: exerciseLogs,
     };
     if (feedback?.sessionFeedback && Object.keys(feedback.sessionFeedback).length > 0) {
       payload.feedback = feedback;

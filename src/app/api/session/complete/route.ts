@@ -28,6 +28,7 @@ import { computePhase, type PhaseLengths } from '@/lib/session/phase';
 import { normalizeSessionFeedbackPayload, saveSessionFeedback } from '@/lib/session/feedback';
 import { buildExecutionSummary } from '@/lib/session/execution-summary';
 import type { FeedbackPayload } from '@/lib/session/feedback-types';
+import { evaluateEvidenceGate } from '@/lib/session/evidence-gate';
 
 const ROUTE_COMPLETE = '/api/session/complete';
 
@@ -274,6 +275,24 @@ export async function POST(req: NextRequest) {
       .eq('session_number', sessionNumber)
       .maybeSingle();
     const phaseLengthsForNext = getPhaseLengthsFromTrace(currentPlan?.generation_trace_json);
+
+    // PR-DATA-01: evidence gate — reject insufficient execution evidence before persisting
+    const gateResult = evaluateEvidenceGate(
+      currentPlan?.plan_json as Record<string, unknown> | null,
+      exerciseLogsArray,
+      feedbackPayload
+    );
+    if (!gateResult.allowed) {
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_complete_blocked',
+        status: 'blocked',
+        code: gateResult.code,
+        sessionNumber,
+        meta: { message: gateResult.message },
+      });
+      return fail(422, gateResult.code as ApiErrorCode, gateResult.message);
+    }
 
     const nowIso = new Date().toISOString();
     const durationClamped = Math.min(7200, Math.max(0, durationSeconds));
