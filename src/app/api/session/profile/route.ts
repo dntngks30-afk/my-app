@@ -17,18 +17,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { fail, ApiErrorCode } from '@/lib/api/contract';
+import {
+  applyTargetFrequency,
+  isValidTargetFrequency,
+} from '@/lib/session/profile';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-
-const FREQUENCY_TO_TOTAL: Record<number, number> = {
-  2: 8,
-  3: 12,
-  4: 16,
-  5: 20,
-};
-
-const VALID_FREQUENCIES = [2, 3, 4, 5] as const;
 
 export async function POST(req: NextRequest) {
   try {
@@ -42,11 +37,7 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const rawFreq = body.target_frequency;
-    const targetFrequency = typeof rawFreq === 'number' && VALID_FREQUENCIES.includes(rawFreq as 2 | 3 | 4 | 5)
-      ? (rawFreq as 2 | 3 | 4 | 5)
-      : null;
-
-    if (targetFrequency === null) {
+    if (!isValidTargetFrequency(rawFreq)) {
       return NextResponse.json(
         { error: { code: 'VALIDATION_ERROR', message: 'target_frequency는 2, 3, 4, 5 중 하나여야 합니다.' } },
         { status: 400 }
@@ -57,95 +48,46 @@ export async function POST(req: NextRequest) {
       ? body.lifestyle_tag.trim() || null
       : null;
 
-    const totalSessions = FREQUENCY_TO_TOTAL[targetFrequency];
     const supabase = getServerSupabaseAdmin();
+    const result = await applyTargetFrequency(supabase, userId, rawFreq, {
+      lifestyleTag,
+    });
 
-    // 기존 progress 조회 (completed_sessions 체크용)
-    const { data: existingProgress } = await supabase
-      .from('session_program_progress')
-      .select('completed_sessions, active_session_number')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    const completedSessions = existingProgress?.completed_sessions ?? 0;
-    if (totalSessions < completedSessions) {
-      return fail(
-        409,
-        ApiErrorCode.POLICY_LOCKED,
-        `이미 ${completedSessions}회 완료되어 total_sessions를 ${totalSessions}로 줄일 수 없습니다.`
-      );
-    }
-
-    // 1) session_user_profile upsert
-    const { data: profile, error: profileErr } = await supabase
-      .from('session_user_profile')
-      .upsert(
-        {
-          user_id: userId,
-          target_frequency: targetFrequency,
-          lifestyle_tag: lifestyleTag,
-        },
-        { onConflict: 'user_id' }
-      )
-      .select()
-      .single();
-
-    if (profileErr || !profile) {
-      console.error('[session/profile] profile upsert failed', profileErr);
+    if (!result.ok) {
+      if (result.code === 'POLICY_LOCKED') {
+        return fail(409, ApiErrorCode.POLICY_LOCKED, result.message);
+      }
       return NextResponse.json(
-        { error: { code: 'DB_ERROR', message: '프로필 저장에 실패했습니다.' } },
+        { error: { code: 'DB_ERROR', message: result.message } },
         { status: 500 }
       );
     }
 
-    // 2) session_program_progress upsert (total_sessions만, completed/active 건드리지 않음)
-    let progress: Record<string, unknown>;
-    if (existingProgress) {
-      const { data: updated, error: progressErr } = await supabase
-        .from('session_program_progress')
-        .update({ total_sessions: totalSessions })
-        .eq('user_id', userId)
-        .select()
-        .single();
-
-      if (progressErr || !updated) {
-        console.error('[session/profile] progress update failed', progressErr);
-        return NextResponse.json(
-          { error: { code: 'DB_ERROR', message: '진행 상태 업데이트에 실패했습니다.' } },
-          { status: 500 }
-        );
-      }
-      progress = updated;
-    } else {
-      const { data: inserted, error: insertErr } = await supabase
-        .from('session_program_progress')
-        .insert({
-          user_id: userId,
-          total_sessions: totalSessions,
-          completed_sessions: 0,
-          active_session_number: null,
-        })
-        .select()
-        .single();
-
-      if (insertErr || !inserted) {
-        console.error('[session/profile] progress insert failed', insertErr);
-        return NextResponse.json(
-          { error: { code: 'DB_ERROR', message: '진행 상태 초기화에 실패했습니다.' } },
-          { status: 500 }
-        );
-      }
-      progress = inserted;
-    }
-
+    const { data: existingProgress } = await supabase
+      .from('session_program_progress')
+      .select('completed_sessions')
+      .eq('user_id', userId)
+      .maybeSingle();
+    const completedSessions = existingProgress?.completed_sessions ?? 0;
     const warning =
       completedSessions > 0
         ? '이미 완료된 세션이 있습니다. total_sessions 변경 시 진행률 해석에 주의하세요.'
         : undefined;
 
+    const { data: profile } = await supabase
+      .from('session_user_profile')
+      .select()
+      .eq('user_id', userId)
+      .single();
+    const { data: progress } = await supabase
+      .from('session_program_progress')
+      .select()
+      .eq('user_id', userId)
+      .single();
+
     const res = NextResponse.json({
-      profile,
-      progress,
+      profile: profile ?? {},
+      progress: progress ?? {},
       ...(warning && { warning }),
     });
     res.headers.set('Cache-Control', 'no-store');

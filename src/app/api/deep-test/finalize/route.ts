@@ -3,11 +3,15 @@
  * draft → final 전환, 스코어 계산. scoring_version 따라 계산.
  * final이면 그대로 반환.
  * 성공 시 workout_routines 멱등 생성 (source=deep, source_id=attemptId)
+ *
+ * target_frequency: 선택 시 서버에서 session_user_profile + session_program_progress에
+ *   즉시 반영. 실패 시 finalize 성공 차단 (silent fail-open 방지).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { requireDeepAuth } from '@/lib/deep-test/auth';
+import { applyTargetFrequency, isValidTargetFrequency } from '@/lib/session/profile';
 import { calculateDeepV2, extendDeepV2 } from '@/lib/deep-test/scoring/deep_v2';
 import {
   resolveDeepScoringByVersion,
@@ -54,7 +58,7 @@ export async function POST(req: NextRequest) {
   const { userId } = auth;
 
   const body = await req.json().catch(() => ({}));
-  const { attemptId } = body;
+  const { attemptId, target_frequency: rawTargetFrequency } = body;
 
   if (!attemptId) {
     return NextResponse.json(
@@ -64,6 +68,20 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = getServerSupabaseAdmin();
+
+  // target_frequency: 서버에서 즉시 반영. 실패 시 finalize 차단.
+  if (isValidTargetFrequency(rawTargetFrequency)) {
+    const freqResult = await applyTargetFrequency(supabase, userId, rawTargetFrequency);
+    if (!freqResult.ok) {
+      return NextResponse.json(
+        {
+          error: freqResult.message,
+          code: freqResult.code,
+        },
+        { status: freqResult.code === 'POLICY_LOCKED' ? 409 : 500 }
+      );
+    }
+  }
 
   const { data: attempt, error: fetchError } = await supabase
     .from('deep_test_attempts')

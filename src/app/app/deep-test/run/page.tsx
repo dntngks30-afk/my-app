@@ -364,19 +364,13 @@ export default function DeepTestRunPage() {
         return;
       }
 
-      // Save frequency profile best-effort before finalize
+      // UX: client pre-save optional. Server finalize owns authoritative persistence.
       if (targetFrequency !== null) {
         try {
           const profileResult = await postSessionProfile(token, {
             target_frequency: targetFrequency,
           });
-          if (!profileResult.ok) {
-            try {
-              sessionStorage.setItem(SESSION_FREQUENCY_DRAFT_KEY, String(targetFrequency));
-            } catch {
-              /* ignore */
-            }
-          } else {
+          if (profileResult.ok) {
             try {
               sessionStorage.removeItem(SESSION_FREQUENCY_DRAFT_KEY);
             } catch {
@@ -384,11 +378,7 @@ export default function DeepTestRunPage() {
             }
           }
         } catch {
-          try {
-            sessionStorage.setItem(SESSION_FREQUENCY_DRAFT_KEY, String(targetFrequency));
-          } catch {
-            /* ignore */
-          }
+          /* ignore - finalize will persist server-side */
         }
       }
 
@@ -398,7 +388,10 @@ export default function DeepTestRunPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ attemptId }),
+        body: JSON.stringify({
+          attemptId,
+          ...(targetFrequency !== null && { target_frequency: targetFrequency }),
+        }),
       });
 
       if (!res.ok) {
