@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 
 const SCORING_VERSION = process.env.MOVEMENT_SCORING_VERSION ?? '1.0';
 
@@ -17,20 +18,6 @@ function generateShareId(): string {
     id += SHARE_ID_CHARS[Math.floor(Math.random() * SHARE_ID_CHARS.length)];
   }
   return id;
-}
-
-async function getCurrentUserId(req: NextRequest): Promise<string | null> {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.substring(7);
-  const supabase = getServerSupabaseAdmin();
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) return null;
-    return user.id;
-  } catch {
-    return null;
-  }
 }
 
 export async function POST(request: NextRequest) {

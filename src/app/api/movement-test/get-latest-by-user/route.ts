@@ -5,20 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
-
-async function getCurrentUserId(req: NextRequest): Promise<string | null> {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.substring(7);
-  const supabase = getServerSupabaseAdmin();
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) return null;
-    return user.id;
-  } catch {
-    return null;
-  }
-}
+import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 
 export async function GET(req: NextRequest) {
   try {
