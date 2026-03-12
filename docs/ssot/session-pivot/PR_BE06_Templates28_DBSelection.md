@@ -1,8 +1,8 @@
-# BE-06: exercise_templates(28) 기반 세션 플랜 생성
+# BE-06: exercise_templates 기반 세션 플랜 생성
 
 ## 목적
 
-`/api/session/create`가 stub 대신 `public.exercise_templates` (28개)를 조회해
+`/api/session/create`가 stub 대신 `public.exercise_templates` (28개→48개, M29~M48 추가: 202603211200)를 조회해
 실제 템플릿 기반 plan_json을 생성합니다.
 
 ---
