@@ -87,6 +87,9 @@ export type SessionPlanMeta = {
   secondary_type?: string | null;
   priority_vector?: Record<string, number>;
   pain_mode?: 'none' | 'caution' | 'protected';
+  /** PR-SESSION-QUALITY-01 */
+  session_rationale?: string | null;
+  session_focus_axes?: string[];
 };
 
 export type SessionPlanSegmentItem = {

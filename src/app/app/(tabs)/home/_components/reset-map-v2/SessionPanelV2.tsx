@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect } from 'react'
-import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
+import { X, Play, CheckCircle2, AlertCircle, Loader2, Sparkles } from 'lucide-react'
 import { getSessionSafe } from '@/lib/supabase'
 import { completeSession } from '@/lib/session/client'
 import type { ExerciseItem } from './planJsonAdapter'
@@ -9,7 +9,7 @@ import type { ExerciseLogItem, SessionPlan, ActivePlanSummary } from '@/lib/sess
 import { buildBriefSessionRationale } from '@/lib/deep-result/copy'
 import { ExercisePlayerModal } from './ExercisePlayerModal'
 import SessionCompleteSummary from '@/app/app/routine/_components/SessionCompleteSummary'
-import { SessionCompletionSheet } from './SessionCompletionSheet'
+import { SessionCompletionSheet, type BodyStateAfter } from './SessionCompletionSheet'
 import type { SessionPainArea } from '@/lib/session/feedback-types'
 import { loadHomeSessionDraft, saveHomeSessionDraft, deleteHomeSessionDraft } from '@/lib/session/home-session-draft'
 
@@ -33,6 +33,8 @@ interface SessionPanelV2Props {
   onClose: () => void
   /** 세션 완료 후 새 completed_sessions 값을 상위로 전달 */
   onSessionCompleted?: (completedSessions: number) => void
+  /** PR-SESSION-EXPERIENCE-01: 다음 세션 보기 요청 (nextSessionNumber) */
+  onRequestNextSession?: (nextSessionNumber: number) => void
 }
 
 const STATUS_LABEL: Record<SessionStatus, string> = {
@@ -46,6 +48,16 @@ const STATUS_CLASS: Record<SessionStatus, string> = {
   locked: 'bg-slate-100 text-slate-500',
 }
 
+/** PR-SESSION-EXPERIENCE-01: session_focus_axes → 한글 라벨 */
+const FOCUS_AXIS_LABELS: Record<string, string> = {
+  lower_stability: '하체 안정',
+  lower_mobility: '하체 가동성',
+  upper_mobility: '상체 가동성',
+  trunk_control: '몸통 제어',
+  asymmetry: '좌우 균형',
+  deconditioned: '전신 회복',
+}
+
 function getPlanRationale(plan: SessionPlan | ActivePlanSummary | null) {
   if (!plan || !('plan_json' in plan) || !plan.plan_json || typeof plan.plan_json !== 'object') return null
   const meta = (plan.plan_json as {
@@ -54,10 +66,23 @@ function getPlanRationale(plan: SessionPlan | ActivePlanSummary | null) {
       priority_vector?: Record<string, number>
       pain_mode?: 'none' | 'caution' | 'protected'
       adaptation_summary?: string
+      session_rationale?: string | null
+      session_focus_axes?: string[]
     }
   }).meta
   const base = buildBriefSessionRationale(meta?.priority_vector, meta?.pain_mode, meta?.focus)
-  return meta?.adaptation_summary ? { ...base, adaptation_summary: meta.adaptation_summary } : base
+  const headline = meta?.session_rationale ?? base?.headline
+  const detail = meta?.session_rationale ? undefined : base?.detail
+  const chips = (meta?.session_focus_axes ?? []).map((a) => FOCUS_AXIS_LABELS[a] ?? a)
+  return base
+    ? {
+        ...base,
+        headline: headline ?? base.headline,
+        ...(detail && { detail }),
+        chips,
+        ...(meta?.adaptation_summary && { adaptation_summary: meta.adaptation_summary }),
+      }
+    : null
 }
 
 export function SessionPanelV2({
@@ -71,6 +96,7 @@ export function SessionPanelV2({
   nextUnlockAt,
   onClose,
   onSessionCompleted,
+  onRequestNextSession,
 }: SessionPanelV2Props) {
   if (sessionId === null) return null
 
@@ -86,6 +112,7 @@ export function SessionPanelV2({
       nextUnlockAt={nextUnlockAt}
       onClose={onClose}
       onSessionCompleted={onSessionCompleted}
+      onRequestNextSession={onRequestNextSession}
     />
   )
 }
@@ -103,15 +130,27 @@ function PanelInner({
   nextUnlockAt,
   onClose,
   onSessionCompleted,
-}: Required<Omit<SessionPanelV2Props, 'onSessionCompleted'>> & {
+}: Required<Omit<SessionPanelV2Props, 'onSessionCompleted' | 'onRequestNextSession'>> & {
   onSessionCompleted?: (completedSessions: number) => void
+  onRequestNextSession?: (nextSessionNumber: number) => void
 }) {
   // 로컬 운동 로그 누적 (templateId → log). PR-DRAFT-01: draft 복구 또는 initialLogs
   const [logs, setLogs] = useState<Record<string, ExerciseLogItem>>({})
   const [sessionPerceivedDifficulty, setSessionPerceivedDifficulty] = useState<'too_easy' | 'ok' | 'too_hard' | null>(null)
   const [sessionPainAreas, setSessionPainAreas] = useState<SessionPainArea[]>([])
+  const [bodyStateAfter, setBodyStateAfter] = useState<BodyStateAfter | null>(null)
   const rationale = getPlanRationale(activePlan)
 
+  // PR-SESSION-EXPERIENCE-01: 세션 전환 시 context 화면 리셋
+  useEffect(() => {
+    setContextViewDismissed(false)
+  }, [sessionId])
+  // 세션 전환 시 완료 상태 리셋 (다음 세션 보기 시)
+  useEffect(() => {
+    setCompleted(false)
+    setCompleteResult(null)
+    setBodyStateAfter(null)
+  }, [sessionId])
   // PR-DRAFT-01: 세션 진입 시 draft 복구 또는 초기화
   useEffect(() => {
     if (status === 'completed') {
@@ -152,6 +191,8 @@ function PanelInner({
   }, [sessionId, status, activePlan?.session_number, logs, sessionPerceivedDifficulty, sessionPainAreas])
   // 모달에서 열린 운동 아이템
   const [openItem, setOpenItem] = useState<ExerciseItem | null>(null)
+  // PR-SESSION-EXPERIENCE-01: 세션 시작 전 context 화면 (current 세션, 첫 진입 시)
+  const [contextViewDismissed, setContextViewDismissed] = useState(false)
 
   // 패널 open 측정
   useEffect(() => {
@@ -300,6 +341,15 @@ function PanelInner({
                 completedSessionNumber={sessionId}
                 onDismiss={onClose}
                 showBodyCheckCta
+                variant="home"
+                onNextSessionClick={
+                  onRequestNextSession
+                    ? () => {
+                        const next = Math.min(completeResult.progress.completed_sessions + 1, total)
+                        if (next <= total) onRequestNextSession(next)
+                      }
+                    : undefined
+                }
               />
             </div>
           )}
@@ -334,8 +384,58 @@ function PanelInner({
             </button>
           </div>
 
+          {/* PR-SESSION-EXPERIENCE-01: 세션 시작 Context Screen (current, 첫 진입) */}
+          {status === 'current' && !contextViewDismissed && rationale && exercises && exercises.length > 0 ? (
+            <div className="px-5 pt-4 pb-6 max-h-[58vh] overflow-y-auto">
+              <div className="rounded-2xl border-2 border-slate-200 bg-amber-50/50 p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-amber-500 shrink-0" />
+                  <h3 className="text-base font-bold text-slate-800">오늘의 리셋 세션</h3>
+                </div>
+                <p className="text-sm leading-relaxed text-slate-700">
+                  {rationale.headline}
+                </p>
+                {'chips' in rationale && Array.isArray(rationale.chips) && rationale.chips.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {rationale.chips.map((chip) => (
+                      <span
+                        key={chip}
+                        className="inline-flex rounded-lg bg-amber-100 px-3 py-1 text-xs font-medium text-slate-700"
+                      >
+                        {chip}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-slate-500">
+                  {activePlan && 'plan_json' in activePlan && (activePlan.plan_json as { meta?: { pain_mode?: string } })?.meta?.pain_mode &&
+                  ['caution', 'protected'].includes((activePlan.plan_json as { meta?: { pain_mode?: string } }).meta?.pain_mode ?? '')
+                    ? '무리하지 말고 편안한 범위에서 수행하세요'
+                    : '통증 없는 범위에서 편안하게 움직여보세요'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setContextViewDismissed(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-400 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-orange-500 active:scale-[0.98]"
+                >
+                  <Play className="h-4 w-4" fill="currentColor" />
+                  세션 시작
+                </button>
+              </div>
+            </div>
+          ) : (
+          <>
           {/* 운동 목록 */}
           <div className="max-h-[58vh] overflow-y-auto px-5 pt-4 pb-4">
+            {rationale && (status === 'current' ? contextViewDismissed : true) && (status === 'current' || status === 'completed') && 'chips' in rationale && Array.isArray(rationale.chips) && rationale.chips.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {rationale.chips.map((chip) => (
+                  <span key={chip} className="rounded-lg bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            )}
             {rationale && (status === 'current' || status === 'completed') && (
               <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <p className="text-sm font-semibold text-slate-800">{rationale.headline}</p>
@@ -378,7 +478,9 @@ function PanelInner({
               </button>
             </div>
           )}
-            </>
+          </>
+          )}
+        </>
           )}
         </div>
       </div>
@@ -389,6 +491,17 @@ function PanelInner({
         initialLog={openItem ? logs[openItem.templateId] : undefined}
         onClose={() => setOpenItem(null)}
         onComplete={handleLogComplete}
+        sessionGoalText={
+          rationale && 'chips' in rationale && Array.isArray(rationale.chips) && rationale.chips.length > 0
+            ? rationale.chips.slice(0, 2).join(' + ')
+            : undefined
+        }
+        painModeMessage={
+          activePlan && 'plan_json' in activePlan &&
+          ['caution', 'protected'].includes((activePlan.plan_json as { meta?: { pain_mode?: string } })?.meta?.pain_mode ?? '')
+            ? '무리하지 말고 편안한 범위에서 수행하세요'
+            : undefined
+        }
       />
 
       {/* 세션 종료 시트 (PR-UX-00) */}
@@ -415,6 +528,8 @@ function PanelInner({
                 onPainAreasChange={setSessionPainAreas}
                 onConfirm={handleSessionCompletionConfirm}
                 completing={completing}
+                bodyStateAfter={bodyStateAfter}
+                onBodyStateAfterChange={setBodyStateAfter}
               />
             </div>
           </div>

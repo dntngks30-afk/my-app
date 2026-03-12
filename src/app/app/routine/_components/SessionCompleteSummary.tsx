@@ -31,6 +31,8 @@ export default function SessionCompleteSummary({
   completedSessionNumber,
   onDismiss,
   showBodyCheckCta = true,
+  variant = 'routine',
+  onNextSessionClick,
 }: {
   durationSeconds: number;
   progress: SessionProgress;
@@ -41,6 +43,10 @@ export default function SessionCompleteSummary({
   onDismiss?: () => void;
   /** 오늘 몸상태 체크 CTA 표시 (post-completion reflection) */
   showBodyCheckCta?: boolean;
+  /** PR-SESSION-EXPERIENCE-01: home 맥락 시 "지도 돌아가기" / "다음 세션 보기" 표시 */
+  variant?: 'home' | 'routine';
+  /** PR-SESSION-EXPERIENCE-01: 다음 세션 보기 클릭 시 (variant=home) */
+  onNextSessionClick?: () => void;
 }) {
   const router = useRouter();
   const [showCheckIn, setShowCheckIn] = useState(false);
@@ -144,31 +150,63 @@ export default function SessionCompleteSummary({
 
       <div className="flex flex-col gap-2">
         <div className="flex gap-2">
-          <NeoButton
-            variant="orange"
-            fullWidth
-            onClick={() => {
-              onDismiss?.();
-              router.push('/app/home');
-            }}
-            className="py-3 flex items-center justify-center gap-2"
-          >
-            <Home className="size-4" />
-            홈으로
-          </NeoButton>
-          <NeoButton
-            variant="secondary"
-            fullWidth
-            onClick={() => {
-              onDismiss?.();
-              const q = completedSessionNumber != null ? `?focusSession=${completedSessionNumber}` : '';
-              router.push(`/app/checkin${q}`);
-            }}
-            className="py-3 flex items-center justify-center gap-2"
-          >
-            <BarChart2 className="size-4" />
-            루틴 확인
-          </NeoButton>
+          {variant === 'home' ? (
+            <>
+              <NeoButton
+                variant="orange"
+                fullWidth
+                onClick={() => {
+                  onDismiss?.();
+                  router.push('/app/home');
+                }}
+                className="py-3 flex items-center justify-center gap-2"
+              >
+                <Home className="size-4" />
+                지도 돌아가기
+              </NeoButton>
+              {onNextSessionClick && (
+                <NeoButton
+                  variant="secondary"
+                  fullWidth
+                  onClick={() => {
+                    onNextSessionClick();
+                  }}
+                  className="py-3 flex items-center justify-center gap-2"
+                >
+                  <BarChart2 className="size-4" />
+                  다음 세션 보기
+                </NeoButton>
+              )}
+            </>
+          ) : (
+            <>
+              <NeoButton
+                variant="orange"
+                fullWidth
+                onClick={() => {
+                  onDismiss?.();
+                  router.push('/app/home');
+                }}
+                className="py-3 flex items-center justify-center gap-2"
+              >
+                <Home className="size-4" />
+                홈으로
+              </NeoButton>
+              <NeoButton
+                variant="secondary"
+                fullWidth
+                onClick={() => {
+                  onDismiss?.();
+                  const q = completedSessionNumber != null ? `?focusSession=${completedSessionNumber}` : '';
+                  router.push(`/app/checkin${q}`);
+                }}
+                className="py-3 flex items-center justify-center gap-2"
+              >
+                <BarChart2 className="size-4" />
+                루틴 확인
+              </NeoButton>
+            </>
+          )}
         </div>
         {showBodyCheckCta && (
           <button

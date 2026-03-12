@@ -31,6 +31,8 @@ export type PlanSummaryResponse = {
     focus?: string[];
     priority_vector?: Record<string, number>;
     pain_mode?: 'none' | 'caution' | 'protected';
+    session_rationale?: string | null;
+    session_focus_axes?: string[];
   };
   /** Adaptive trace reason summary (one-liner). Only when adaptation was applied. */
   adaptation_summary?: string;
@@ -91,7 +93,13 @@ export async function GET(req: NextRequest) {
 
     const tExtract = performance.now();
     const planJson = row.plan_json as {
-      meta?: { focus?: string[]; priority_vector?: Record<string, number>; pain_mode?: 'none' | 'caution' | 'protected' };
+      meta?: {
+        focus?: string[];
+        priority_vector?: Record<string, number>;
+        pain_mode?: 'none' | 'caution' | 'protected';
+        session_rationale?: string | null;
+        session_focus_axes?: string[];
+      };
       segments?: Array<{ title?: string; items?: Array<{ templateId?: string; name?: string; order?: number; sets?: number; reps?: number; hold_seconds?: number }> }>
     } | null;
     const segments = (planJson?.segments ?? []).map(seg => ({
@@ -119,6 +127,10 @@ export async function GET(req: NextRequest) {
           ...(Array.isArray(planJson.meta.focus) && { focus: planJson.meta.focus.slice(0, 3) }),
           ...(planJson.meta.priority_vector && { priority_vector: planJson.meta.priority_vector }),
           ...(planJson.meta.pain_mode && { pain_mode: planJson.meta.pain_mode }),
+          ...(planJson.meta.session_rationale != null && { session_rationale: planJson.meta.session_rationale }),
+          ...(Array.isArray(planJson.meta.session_focus_axes) && planJson.meta.session_focus_axes.length > 0 && {
+            session_focus_axes: planJson.meta.session_focus_axes,
+          }),
         }
       : undefined;
     const rawLogs = row.exercise_logs as unknown;

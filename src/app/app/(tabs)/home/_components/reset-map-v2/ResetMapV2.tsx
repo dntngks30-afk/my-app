@@ -26,17 +26,13 @@ interface ResetMapV2Props {
   onSessionCompleted?: (completedSessions: number) => void
   /** createSession 성공 시 HomePageClient의 activePlan 갱신용 콜백 */
   onActivePlanCreated?: (plan: SessionPlan) => void
+  /** PR-SESSION-EXPERIENCE-01: 다음 세션 보기 요청 시 */
+  onRequestNextSession?: (nextSessionNumber: number) => void
   /** debug: true → createSession 응답에 timings 포함 (cold path 측정용) */
   debug?: boolean
 }
 
-type PanelPlanSummaryResponse = PlanSummaryResponse & {
-  rationale?: {
-    focus?: string[]
-    priority_vector?: Record<string, number>
-    pain_mode?: 'none' | 'caution' | 'protected'
-  }
-}
+type PanelPlanSummaryResponse = PlanSummaryResponse;
 
 function toPanelPlan(data: PanelPlanSummaryResponse): SessionPlan {
   const meta: Record<string, unknown> = {};
@@ -44,6 +40,8 @@ function toPanelPlan(data: PanelPlanSummaryResponse): SessionPlan {
     if (data.rationale.focus) meta.focus = data.rationale.focus;
     if (data.rationale.priority_vector) meta.priority_vector = data.rationale.priority_vector;
     if (data.rationale.pain_mode) meta.pain_mode = data.rationale.pain_mode;
+    if (data.rationale.session_rationale != null) meta.session_rationale = data.rationale.session_rationale;
+    if (Array.isArray(data.rationale.session_focus_axes)) meta.session_focus_axes = data.rationale.session_focus_axes;
   }
   if (data.adaptation_summary) meta.adaptation_summary = data.adaptation_summary;
 
@@ -68,7 +66,7 @@ function toExerciseLogMap(logs?: ExerciseLogItem[]): Record<string, ExerciseLogI
   return map
 }
 
-export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, debug }: ResetMapV2Props) {
+export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, onRequestNextSession, debug }: ResetMapV2Props) {
   // localDailyCapActive: createSession이 DAILY_LIMIT_REACHED 반환 시 클라이언트 측 즉시 반영 (방어)
   const [localDailyCapActive, setLocalDailyCapActive] = useState(false)
   // daily cap: today_completed || localDailyCapActive, activePlan 없을 때 → 현재 세션 없음, 다음 세션 locked
@@ -440,6 +438,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         nextUnlockAt={nextUnlockAt ?? undefined}
         onClose={handleClose}
         onSessionCompleted={onSessionCompleted}
+        onRequestNextSession={onRequestNextSession ?? ((next) => setSelectedSessionId(next))}
       />
     </div>
   )

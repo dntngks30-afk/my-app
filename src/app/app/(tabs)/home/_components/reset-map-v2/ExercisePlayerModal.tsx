@@ -14,9 +14,13 @@ interface ExercisePlayerModalProps {
   initialLog?: ExerciseLogItem;
   onClose: () => void;
   onComplete: (log: ExerciseLogItem) => void;
+  /** PR-SESSION-EXPERIENCE-01: 세션 목표 reminder (예: "하체 안정 + 균형") */
+  sessionGoalText?: string;
+  /** PR-SESSION-EXPERIENCE-01: pain_mode caution/protected 시 안전 문구 */
+  painModeMessage?: string;
 }
 
-export function ExercisePlayerModal({ item, initialLog, onClose, onComplete }: ExercisePlayerModalProps) {
+export function ExercisePlayerModal({ item, initialLog, onClose, onComplete, sessionGoalText, painModeMessage }: ExercisePlayerModalProps) {
   if (!item) return null;
   return (
     <ModalInner
@@ -24,6 +28,8 @@ export function ExercisePlayerModal({ item, initialLog, onClose, onComplete }: E
       initialLog={initialLog}
       onClose={onClose}
       onComplete={onComplete}
+      sessionGoalText={sessionGoalText}
+      painModeMessage={painModeMessage}
     />
   );
 }
@@ -248,6 +254,16 @@ function ModalInner({
         style={{ animationDuration: '250ms', animationTimingFunction: 'cubic-bezier(0.2,0,0,1)' }}
       >
         <div className="mx-auto max-w-[430px] overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl">
+          {(sessionGoalText || painModeMessage) && (
+            <div className="border-b border-slate-100 px-4 py-2 space-y-0.5">
+              {sessionGoalText && (
+                <p className="text-[10px] font-semibold text-slate-500">오늘 목표 · {sessionGoalText}</p>
+              )}
+              {painModeMessage && (
+                <p className="text-[10px] text-amber-600">{painModeMessage}</p>
+              )}
+            </div>
+          )}
           <div className="flex items-start justify-between border-b border-slate-100 px-5 pt-4 pb-3">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
