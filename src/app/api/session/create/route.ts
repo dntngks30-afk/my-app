@@ -25,7 +25,6 @@ import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import { buildSessionPlanJson } from '@/lib/session/plan-generator';
-import { applySessionGuardrail } from '@/core/session-guardrail';
 import {
   computeAdaptiveModifier,
   getAvoidTagsForDiscomfort,
@@ -607,14 +606,6 @@ export async function POST(req: NextRequest) {
         adaptiveOverlay,
         volumeModifier: mergedVolume,
       });
-      if (nextSessionNumber === 1) {
-        planJson = await applySessionGuardrail(planJson, {
-          session_number: nextSessionNumber,
-          priority_vector: deepSummary.priority_vector,
-          pain_mode: deepSummary.pain_mode,
-          scoring_version: deepSummary.scoring_version,
-        });
-      }
       setCachedPlan(cacheInput, planJson as Record<string, unknown>);
     }
     timings.generation_ms = Math.round(performance.now() - tGen);
@@ -848,10 +839,21 @@ export async function POST(req: NextRequest) {
 
     const active = toSummaryPlan(plan, adaptationTrace);
     const data = { progress: finalProgress, active, idempotent: false, today_completed: tc, ...(nua != null && { next_unlock_at: nua }) };
+    const pjMeta = planJson && typeof planJson === 'object' && 'meta' in planJson
+      ? (planJson as { meta?: { constraint_engine?: { reasons?: unknown[]; flags?: Record<string, boolean>; summary?: Record<string, unknown>; applied_rule_count?: number } } }).meta
+      : undefined;
     const debugExtras = isDebug
       ? {
           debug: {
             ...timings,
+            ...(pjMeta?.constraint_engine && {
+              constraint_engine: {
+                reasons: pjMeta.constraint_engine.reasons ?? [],
+                flags: pjMeta.constraint_engine.flags ?? {},
+                summary: pjMeta.constraint_engine.summary ?? {},
+                applied_rule_count: pjMeta.constraint_engine.applied_rule_count ?? 0,
+              },
+            }),
             ...(adaptiveModifier && {
               adaptive_modifier: {
                 volume_modifier: adaptiveModifier.volume_modifier,

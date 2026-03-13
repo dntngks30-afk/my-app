@@ -191,6 +191,8 @@ export interface SessionTemplateRow {
   difficulty?: string | null;
   avoid_if_pain_mode?: string[] | null;
   progression_level?: number | null;
+  balance_demand?: string | null;
+  complexity?: string | null;
 }
 
 /**

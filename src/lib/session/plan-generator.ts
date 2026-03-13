@@ -16,6 +16,8 @@ import {
   getPainModePenalty,
 } from './priority-layer';
 import { generateSessionRationale, getExerciseRationale } from '@/core/session-rationale';
+import { applySessionConstraints } from './constraints';
+import type { ConstraintEngineMeta } from './constraints';
 
 const REPETITION_PENALTY = 100;
 const CONTRAINDICATION_PENALTY = 100;
@@ -328,6 +330,8 @@ export type PlanJsonOutput = {
       /** PR-SESSION-QUALITY-01 */
       first_session_guardrail_applied?: boolean;
     };
+    /** PR-ALG-16A: additive, explainable constraint engine meta */
+    constraint_engine?: ConstraintEngineMeta;
   };
   flags: { recovery: boolean; short: boolean };
   segments: PlanSegment[];
@@ -837,7 +841,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
 
   const usedTemplateIds = selected.map((t) => t.id);
 
-  return {
+  const basePlan: PlanJsonOutput = {
     version: 'session_plan_v1',
     meta: {
       session_number: input.sessionNumber,
@@ -882,4 +886,13 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     },
     segments,
   };
+  const constraintResult = applySessionConstraints(basePlan, templates, {
+    sessionNumber: input.sessionNumber,
+    totalSessions: input.totalSessions,
+    painMode: input.pain_mode ?? null,
+    isFirstSession,
+    priorityVector: input.priority_vector ?? null,
+    scoringVersion: input.scoringVersion ?? 'deep_v2',
+  });
+  return constraintResult.plan;
 }

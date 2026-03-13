@@ -5,7 +5,11 @@
  * Volume clamp, difficulty clamp, movement safety, pain protection.
  */
 
-export { applySessionGuardrail, type GuardrailContext } from './applySessionGuardrail';
+export {
+  applySessionGuardrail,
+  applySessionGuardrailWithTemplates,
+  type GuardrailContext,
+} from './applySessionGuardrail';
 export {
   VOLUME_LIMITS,
   DIFFICULTY_CAP,

@@ -20,6 +20,7 @@
     "test:adaptive-modifier-merge": "npx tsx scripts/adaptive-modifier-merge-smoke.mjs",
     "test:adaptive-merge": "npx tsx scripts/adaptive-merge-smoke.mjs",
     "test:plan-generator": "npx tsx scripts/plan-generator-smoke.mjs",
+    "test:session-constraints": "npx tsx scripts/session-constraints-unit.mjs",
     "test:priority-layer": "npx tsx scripts/priority-layer-smoke.mjs",
     "test:phase-policy": "npx tsx scripts/phase-policy-test.mjs",
     "test:evaluation-trace": "npx tsx scripts/evaluation-trace-smoke.mjs",
