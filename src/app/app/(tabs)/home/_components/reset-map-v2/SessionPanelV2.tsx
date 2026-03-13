@@ -4,6 +4,7 @@ import { useRef, useEffect } from 'react'
 import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import type { ExerciseItem } from './planJsonAdapter'
 import type { ExerciseLogItem, SessionPlan, ActivePlanSummary } from '@/lib/session/client'
+import { isExerciseLogCompleted, getExerciseLogDisplayValue } from './exercise-log-helpers'
 import { buildBriefSessionRationale } from '@/lib/deep-result/copy'
 import { ExercisePlayerModal } from './ExercisePlayerModal'
 import SessionCompleteSummary from '@/app/app/routine/_components/SessionCompleteSummary'
@@ -503,8 +504,9 @@ function ExerciseList({
           </p>
           <div className="space-y-1.5">
             {items.map((item, i) => {
-              const isDone = !!logs[item.templateId]
               const log = logs[item.templateId]
+              const isDone = isExerciseLogCompleted(log, item)
+              const displayValue = getExerciseLogDisplayValue(log, item)
               return (
                 <div
                   key={`${item.templateId}-${i}`}
@@ -534,12 +536,12 @@ function ExerciseList({
                       <p className="mt-0.5 text-xs text-slate-500">{item.rationale}</p>
                     )}
                     <p className="mt-0.5 text-xs text-slate-400">
-                      {isDone && log
-                        ? `${log.sets ?? '-'}세트 × ${log.reps ?? '-'}회${log.difficulty ? ` · 난이도 ${log.difficulty}` : ''}`
+                      {isDone && displayValue
+                        ? `${displayValue}${log?.difficulty ? ` · 난이도 ${log.difficulty}` : ''}`
                         : item.targetSets && item.targetReps
                           ? `목표 ${item.targetSets}×${item.targetReps}`
                           : item.holdSeconds
-                            ? `${item.holdSeconds}초 유지`
+                            ? `목표 ${item.holdSeconds}초 유지`
                             : null}
                     </p>
                   </div>

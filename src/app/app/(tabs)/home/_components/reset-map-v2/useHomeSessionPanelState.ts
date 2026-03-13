@@ -16,6 +16,7 @@ import { getSessionSafe } from '@/lib/supabase';
 import { completeSession, saveSessionReflection, saveSessionProgress } from '@/lib/session/client';
 import type { ExerciseLogItem, SessionPlan, ActivePlanSummary } from '@/lib/session/client';
 import type { ExerciseItem } from './planJsonAdapter';
+import { isExerciseLogCompleted } from './exercise-log-helpers';
 import type { SessionPainArea } from '@/lib/session/feedback-types';
 import { loadSessionDraft, saveSessionDraft, clearSessionDraft, draftToLogs } from '@/lib/session/draftStorage';
 import type { ReflectionData } from './ReflectionModal';
@@ -222,7 +223,7 @@ export function useHomeSessionPanelState({
         const durationSec = Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1000));
         const exerciseLogsArray = Object.values(logs);
         const allDone =
-          exercises && exercises.length > 0 && exercises.every((e) => !!logs[e.templateId]);
+          exercises && exercises.length > 0 && exercises.every((e) => isExerciseLogCompleted(logs[e.templateId], e));
         const completionMode = allDone ? 'all_done' : exerciseLogsArray.length > 0 ? 'partial_done' : 'stop_early';
 
         const payload: Parameters<typeof completeSession>[1] = {
