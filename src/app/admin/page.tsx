@@ -394,6 +394,12 @@ export default function AdminPage() {
           >
             템플릿 운영
           </Link>
+          <Link
+            href="/admin/dogfooding"
+            className="rounded-t-lg px-4 py-2 text-sm font-medium text-slate-400 hover:bg-slate-900/50 hover:text-slate-300 transition"
+          >
+            도그푸딩 Ops
+          </Link>
         </div>
 
         {activeTab === "backfill" ? (
