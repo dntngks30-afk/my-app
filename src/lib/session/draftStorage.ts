@@ -260,8 +260,18 @@ export function clearSessionDraft(planId: string): void {
 }
 
 /**
+ * PR-RISK-08b: Clear home draft for a specific session (identity-based invalidation).
+ * Use when activePlan non-null→null: clear only the session that was active.
+ * Prefer over clearAllSessionDrafts to avoid wiping unrelated drafts.
+ */
+export function clearSessionDraftForSession(sessionNumber: number): void {
+  clearSessionDraft(String(sessionNumber));
+}
+
+/**
  * Clear all home session drafts from localStorage.
- * Use when the session rail is reset or the active plan lifecycle restarts.
+ * Use only when program/session rail is fully reset (safety net).
+ * PR-RISK-08b: Prefer clearSessionDraftForSession for activePlan lifecycle.
  */
 export function clearAllSessionDrafts(): void {
   if (typeof window === 'undefined') return;

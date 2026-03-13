@@ -17,7 +17,7 @@ import {
 } from '@/lib/session/client'
 import { getSessionSafe } from '@/lib/supabase'
 import { prefetchMediaSign } from './media-cache'
-import { clearAllSessionDrafts } from '@/lib/session/draftStorage'
+import { clearSessionDraftForSession } from '@/lib/session/draftStorage'
 
 interface ResetMapV2Props {
   /** 전체 세션 수 (max 20) */
@@ -172,15 +172,35 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   const bootstrapRequestRef = useRef(new Map<number, Promise<SessionPlan | null>>())
   const prevActivePlanRef = useRef<SessionPlan | ActivePlanSummary | null>(activePlan)
 
-  const resetPanelCaches = useCallback(() => {
-    summaryCacheRef.current.clear()
-    summaryRequestRef.current.clear()
-    bootstrapCacheRef.current.clear()
-    bootstrapRequestRef.current.clear()
-    setCurrentSessionServerLogs({})
-    setPastSessionInitialLogs({})
-    setPastSessionPlan(null)
-  }, [])
+  /** PR-RISK-08b: Scoped invalidation — only stale sessions (completed + next). */
+  const invalidateStaleSessionCaches = useCallback(
+    (
+      completedSessionNumber: number,
+      totalSessions: number,
+      displayedSessionId: number | null
+    ) => {
+      const nextNum = Math.min(completedSessionNumber + 1, totalSessions)
+      summaryCacheRef.current.delete(completedSessionNumber)
+      summaryRequestRef.current.delete(completedSessionNumber)
+      bootstrapCacheRef.current.delete(completedSessionNumber)
+      bootstrapRequestRef.current.delete(completedSessionNumber)
+      if (nextNum !== completedSessionNumber) {
+        summaryCacheRef.current.delete(nextNum)
+        summaryRequestRef.current.delete(nextNum)
+        bootstrapCacheRef.current.delete(nextNum)
+        bootstrapRequestRef.current.delete(nextNum)
+      }
+      setCurrentSessionServerLogs({})
+      if (
+        displayedSessionId === completedSessionNumber ||
+        displayedSessionId === nextNum
+      ) {
+        setPastSessionInitialLogs({})
+        setPastSessionPlan(null)
+      }
+    },
+    []
+  )
 
   const resolveAuthToken = useCallback(async () => {
     if (getAuthToken) return getAuthToken()
@@ -242,19 +262,20 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   }, [resolveAuthToken, debug])
 
   // prop 변경(세션 완료 후 null 리셋 등) 반영
+  // PR-RISK-08b: activePlan non-null→null 시 identity 기반 정밀 invalidation (prefix purge 대체)
   useEffect(() => {
     const prevActivePlan = prevActivePlanRef.current
     setFullPlan(activePlan)
     setCurrentSessionServerLogs({})
-    // activePlan이 리셋되면 다음 세션/완료 세션 캐시도 함께 비워 stale logs 복원을 막는다.
     if (prevActivePlan !== null && activePlan === null) {
       createCalledRef.current = false
       setBootstrapPlan(null)
-      resetPanelCaches()
-      clearAllSessionDrafts()
+      const completedSessionNum = prevActivePlan.session_number
+      invalidateStaleSessionCaches(completedSessionNum, total, selectedSessionId)
+      clearSessionDraftForSession(completedSessionNum)
     }
     prevActivePlanRef.current = activePlan
-  }, [activePlan, resetPanelCaches])
+  }, [activePlan, total, selectedSessionId, invalidateStaleSessionCaches])
 
   // 현재 세션 lite만 있을 때 plan-summary 미리 로드 (패널 첫 클릭 시 체감 개선)
   useEffect(() => {
