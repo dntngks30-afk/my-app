@@ -260,6 +260,28 @@ export function clearSessionDraft(planId: string): void {
 }
 
 /**
+ * Clear all home session drafts from localStorage.
+ * Use when the session rail is reset or the active plan lifecycle restarts.
+ */
+export function clearAllSessionDrafts(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const keysToRemove: string[] = [];
+    for (let idx = 0; idx < localStorage.length; idx++) {
+      const key = localStorage.key(idx);
+      if (typeof key === 'string' && key.startsWith(KEY_PREFIX)) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+/**
  * Convert SessionDraftData to logs Record for SessionPanelV2.
  * Key: plan_item_key when draft uses it, else templateId (backward compat).
  * nameByKey: Record<key, name> — build from exercises (plan_item_key or templateId).

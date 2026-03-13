@@ -11,12 +11,16 @@ import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
+import type { ExerciseLogItem } from '@/lib/session/types';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 type ProgressItem = {
   template_id: string;
+  plan_item_key?: string;
+  segment_index?: number;
+  item_index?: number;
   sets: number;
   reps: number;
   hold_seconds: number;
@@ -30,6 +34,11 @@ function parseProgressItem(raw: unknown): ProgressItem | null {
   const o = raw as Record<string, unknown>;
   const template_id = typeof o.template_id === 'string' ? o.template_id.trim().slice(0, 80) : null;
   if (!template_id) return null;
+  const plan_item_key = typeof o.plan_item_key === 'string' && /^\d+:\d+:.+$/.test(o.plan_item_key)
+    ? o.plan_item_key.trim().slice(0, 120)
+    : undefined;
+  const segment_index = typeof o.segment_index === 'number' && Number.isInteger(o.segment_index) ? o.segment_index : undefined;
+  const item_index = typeof o.item_index === 'number' && Number.isInteger(o.item_index) ? o.item_index : undefined;
   const sets = typeof o.sets === 'number' && Number.isFinite(o.sets) ? Math.min(20, Math.max(0, Math.floor(o.sets))) : 0;
   const reps = typeof o.reps === 'number' && Number.isFinite(o.reps) ? Math.min(200, Math.max(0, Math.floor(o.reps))) : 0;
   const hold_seconds = typeof o.hold_seconds === 'number' && Number.isFinite(o.hold_seconds) ? Math.min(600, Math.max(0, Math.floor(o.hold_seconds))) : 0;
@@ -38,25 +47,18 @@ function parseProgressItem(raw: unknown): ProgressItem | null {
   else if (o.rpe === null) rpe = null;
   const completed = o.completed === true;
   const skipped = o.skipped === true;
-  return { template_id, sets, reps, hold_seconds, rpe, completed, skipped };
+  return { template_id, plan_item_key, segment_index, item_index, sets, reps, hold_seconds, rpe, completed, skipped };
 }
 
-type ExerciseLogStored = {
-  templateId: string;
-  name: string;
-  sets: number | null;
-  reps: number | null;
-  difficulty?: number | null;
-  rpe?: number | null;
-  discomfort?: number | null;
-};
-
 function mergeLog(
-  existing: ExerciseLogStored[],
+  existing: ExerciseLogItem[],
   item: ProgressItem,
   name: string
-): ExerciseLogStored[] {
-  const without = existing.filter((l) => l.templateId !== item.template_id);
+): ExerciseLogItem[] {
+  const without = existing.filter((l) => {
+    if (item.plan_item_key && l.plan_item_key) return l.plan_item_key !== item.plan_item_key;
+    return l.templateId !== item.template_id;
+  });
   const reps = item.hold_seconds > 0 ? item.hold_seconds : item.reps;
   without.push({
     templateId: item.template_id,
@@ -65,6 +67,9 @@ function mergeLog(
     reps: reps > 0 ? reps : null,
     difficulty: null,
     rpe: item.rpe,
+    ...(item.plan_item_key && { plan_item_key: item.plan_item_key }),
+    ...(typeof item.segment_index === 'number' && { segment_index: item.segment_index }),
+    ...(typeof item.item_index === 'number' && { item_index: item.item_index }),
   });
   return without;
 }
@@ -125,7 +130,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    let merged = (Array.isArray(plan.exercise_logs) ? plan.exercise_logs : []) as ExerciseLogStored[];
+    let merged = (Array.isArray(plan.exercise_logs) ? plan.exercise_logs : []) as ExerciseLogItem[];
     for (const item of items) {
       merged = mergeLog(merged, item, nameByTemplateId[item.template_id] ?? '운동');
     }

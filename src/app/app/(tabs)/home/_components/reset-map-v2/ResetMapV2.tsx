@@ -17,6 +17,7 @@ import {
 } from '@/lib/session/client'
 import { getSessionSafe } from '@/lib/supabase'
 import { prefetchMediaSign } from './media-cache'
+import { clearAllSessionDrafts } from '@/lib/session/draftStorage'
 
 interface ResetMapV2Props {
   /** 전체 세션 수 (max 20) */
@@ -169,6 +170,17 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   const summaryRequestRef = useRef(new Map<number, Promise<PanelPlanSummaryResponse | null>>())
   const bootstrapCacheRef = useRef(new Map<number, SessionPlan>())
   const bootstrapRequestRef = useRef(new Map<number, Promise<SessionPlan | null>>())
+  const prevActivePlanRef = useRef<SessionPlan | ActivePlanSummary | null>(activePlan)
+
+  const resetPanelCaches = useCallback(() => {
+    summaryCacheRef.current.clear()
+    summaryRequestRef.current.clear()
+    bootstrapCacheRef.current.clear()
+    bootstrapRequestRef.current.clear()
+    setCurrentSessionServerLogs({})
+    setPastSessionInitialLogs({})
+    setPastSessionPlan(null)
+  }, [])
 
   const resolveAuthToken = useCallback(async () => {
     if (getAuthToken) return getAuthToken()
@@ -231,13 +243,18 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
 
   // prop 변경(세션 완료 후 null 리셋 등) 반영
   useEffect(() => {
+    const prevActivePlan = prevActivePlanRef.current
     setFullPlan(activePlan)
-    // activePlan이 리셋되면 다음 패널 오픈 시 재호출 허용
-    if (activePlan === null) {
+    setCurrentSessionServerLogs({})
+    // activePlan이 리셋되면 다음 세션/완료 세션 캐시도 함께 비워 stale logs 복원을 막는다.
+    if (prevActivePlan !== null && activePlan === null) {
       createCalledRef.current = false
       setBootstrapPlan(null)
+      resetPanelCaches()
+      clearAllSessionDrafts()
     }
-  }, [activePlan])
+    prevActivePlanRef.current = activePlan
+  }, [activePlan, resetPanelCaches])
 
   // 현재 세션 lite만 있을 때 plan-summary 미리 로드 (패널 첫 클릭 시 체감 개선)
   useEffect(() => {

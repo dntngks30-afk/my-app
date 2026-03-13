@@ -164,12 +164,17 @@ export function useHomeSessionPanelState({
       if (!token || Object.keys(logs).length === 0) return;
       const holdMap: Record<string, number> = {};
       if (exercises) for (const e of exercises) if (e.holdSeconds) holdMap[e.templateId] = e.holdSeconds;
-      const items = Object.entries(logs).map(([, log]) => {
+      const items = Object.entries(logs).map(([logKey, log]) => {
         const sets = log.sets ?? 0;
         const reps = log.reps ?? 0;
         const isHold = holdMap[log.templateId] != null && holdMap[log.templateId] > 0;
         return {
           template_id: log.templateId,
+          ...((log.plan_item_key ?? (logKey.includes(':') ? logKey : undefined)) && {
+            plan_item_key: log.plan_item_key ?? (logKey.includes(':') ? logKey : undefined),
+          }),
+          ...(typeof log.segment_index === 'number' && { segment_index: log.segment_index }),
+          ...(typeof log.item_index === 'number' && { item_index: log.item_index }),
           sets,
           reps: isHold ? 0 : reps,
           hold_seconds: isHold ? reps : 0,

@@ -385,6 +385,9 @@ export type CompleteSessionResponse = {
 /** PR-EXEC-02: POST /api/session/progress — 진행 저장 (완료 트리거 없음) */
 export type SaveProgressItem = {
   template_id: string;
+  plan_item_key?: string;
+  segment_index?: number;
+  item_index?: number;
   sets: number;
   reps: number;
   hold_seconds: number;

@@ -377,8 +377,9 @@ export function evaluateEvidenceGate(
   const segmentCompletion: { cooldown_items_count: number; cooldown_completed_count: number } | undefined =
     cooldownItemsCount > 0 ? { cooldown_items_count: cooldownItemsCount, cooldown_completed_count: cooldownCompleted } : undefined;
 
-  // Hard gate 1: at least 1 MAIN segment item must be completed (skip if no Main)
-  if (mainItemsCount > 0 && mainCompleted < 1) {
+  // Hard gate 1 (relaxed): block only when there are main items and nothing at all was completed.
+  // If the user completed prep/cooldown items with enough overall evidence, let later gates decide.
+  if (mainItemsCount > 0 && mainCompleted < 1 && completed === 0) {
     const obs = buildObservability(
       totalItems, completed, mainCompleted, mainItemsCount, withPerformedValue,
       feedbackPayload, exerciseLogs, scoreResult, false,
@@ -401,7 +402,7 @@ export function evaluateEvidenceGate(
     // Record skip trace for observability
   }
 
-  // Hard gate 2: at least 60% of total items completed
+  // Hard gate 2: require at least the configured minimum completion ratio.
   const coverageRatio = completed / totalItems;
   if (coverageRatio < EVIDENCE_GATE_COMPLETION_MIN_RATIO) {
     const coverageRejectDetail: RejectReasonDetail | undefined =
