@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import { getSessionSafe } from '@/lib/supabase'
 import { completeSession } from '@/lib/session/client'
@@ -11,7 +11,7 @@ import { ExercisePlayerModal } from './ExercisePlayerModal'
 import SessionCompleteSummary from '@/app/app/routine/_components/SessionCompleteSummary'
 import { SessionCompletionSheet, type BodyStateAfter } from './SessionCompletionSheet'
 import type { SessionPainArea } from '@/lib/session/feedback-types'
-import { loadHomeSessionDraft, saveHomeSessionDraft, deleteHomeSessionDraft } from '@/lib/session/home-session-draft'
+import { loadSessionDraft, saveSessionDraft, clearSessionDraft, draftToLogs } from '@/lib/session/draftStorage'
 
 type SessionStatus = 'current' | 'completed' | 'locked'
 
@@ -147,8 +147,9 @@ function PanelInner({
   onSessionCompleted?: (completedSessions: number) => void
   onRequestNextSession?: (nextSessionNumber: number) => void
 }) {
-  // 로컬 운동 로그 누적 (templateId → log). PR-DRAFT-01: draft 복구 또는 initialLogs
+  // 로컬 운동 로그 누적 (templateId → log). PR-PERSIST-01: draft 복구 또는 initialLogs
   const [logs, setLogs] = useState<Record<string, ExerciseLogItem>>({})
+  const [draftRestored, setDraftRestored] = useState(false)
   const [sessionPerceivedDifficulty, setSessionPerceivedDifficulty] = useState<'too_easy' | 'ok' | 'too_hard' | null>(null)
   const [sessionPainAreas, setSessionPainAreas] = useState<SessionPainArea[]>([])
   const [bodyStateAfter, setBodyStateAfter] = useState<BodyStateAfter | null>(null)
@@ -163,8 +164,9 @@ function PanelInner({
     setCompleted(false)
     setCompleteResult(null)
     setBodyStateAfter(null)
+    setDraftRestored(false)
   }, [sessionId])
-  // PR-DRAFT-01: 세션 진입 시 draft 복구 또는 초기화
+  // PR-PERSIST-01: 세션 진입 시 draft 복구 또는 초기화
   useEffect(() => {
     if (status === 'completed') {
       if (initialLogs && Object.keys(initialLogs).length > 0) {
@@ -172,36 +174,61 @@ function PanelInner({
       } else {
         setLogs({})
       }
-      if (sessionId != null) deleteHomeSessionDraft(sessionId)
+      if (sessionId != null) clearSessionDraft(String(sessionId))
       return
     }
     if (sessionId == null) return
     if (status === 'current') {
-      const draft = loadHomeSessionDraft(sessionId)
-      if (draft && Object.keys(draft.logs).length > 0) {
-        setLogs(draft.logs)
+      const planId = String(sessionId)
+      const draft = loadSessionDraft(planId)
+      if (draft && draft.session_number === sessionId && Object.keys(draft.exercises).length > 0) {
+        const nameByTemplateId: Record<string, string> = {}
+        if (exercises) for (const e of exercises) nameByTemplateId[e.templateId] = e.name
+        const restoredLogs = draftToLogs(draft, nameByTemplateId)
+        setLogs(restoredLogs)
         if (draft.sessionPerceivedDifficulty != null) setSessionPerceivedDifficulty(draft.sessionPerceivedDifficulty)
         if (draft.sessionPainAreas && draft.sessionPainAreas.length > 0) setSessionPainAreas(draft.sessionPainAreas)
+        setDraftRestored(true)
       } else {
         setLogs({})
       }
     } else {
       setLogs({})
     }
-  }, [sessionId, status, initialLogs])
+  }, [sessionId, status, initialLogs, exercises])
 
-  // PR-DRAFT-01: logs 변경 시 draft 저장 (current 세션만)
-  useEffect(() => {
+  // PR-PERSIST-01: logs 변경 시 draft 저장 (current 세션만, 300ms debounce)
+  const saveDraftRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const saveDraft = useCallback(() => {
     if (sessionId == null || status !== 'current' || !activePlan?.session_number) return
     if (sessionId !== activePlan.session_number) return
-    saveHomeSessionDraft({
-      sessionNumber: sessionId,
+    const planId = String(sessionId)
+    const holdSecondsByTemplateId: Record<string, number> = {}
+    if (exercises) for (const e of exercises) if (e.holdSeconds) holdSecondsByTemplateId[e.templateId] = e.holdSeconds
+    saveSessionDraft(planId, {
+      session_number: sessionId,
+      plan_id: planId,
       logs,
+      holdSecondsByTemplateId: Object.keys(holdSecondsByTemplateId).length ? holdSecondsByTemplateId : undefined,
       sessionPerceivedDifficulty,
       sessionPainAreas,
-      lastUpdatedAtMs: Date.now(),
     })
-  }, [sessionId, status, activePlan?.session_number, logs, sessionPerceivedDifficulty, sessionPainAreas])
+  }, [sessionId, status, activePlan?.session_number, logs, sessionPerceivedDifficulty, sessionPainAreas, exercises])
+  useEffect(() => {
+    if (sessionId == null || status !== 'current' || sessionId !== activePlan?.session_number) return
+    if (saveDraftRef.current) clearTimeout(saveDraftRef.current)
+    saveDraftRef.current = setTimeout(saveDraft, 300)
+    return () => {
+      if (saveDraftRef.current) clearTimeout(saveDraftRef.current)
+    }
+  }, [sessionId, status, activePlan?.session_number, logs, sessionPerceivedDifficulty, sessionPainAreas, exercises, saveDraft])
+  // PR-PERSIST-01: 복구 안내 4초 후 자동 숨김
+  useEffect(() => {
+    if (!draftRestored) return
+    const t = setTimeout(() => setDraftRestored(false), 4000)
+    return () => clearTimeout(t)
+  }, [draftRestored])
+
   // PR-SESSION-UX-02: 운동 인덱스 (null = 목록, number = 해당 운동 화면)
   const [exerciseIndex, setExerciseIndex] = useState<number | null>(null)
 
@@ -316,7 +343,7 @@ function PanelInner({
         exercise_logs: result.data.exercise_logs ?? exerciseLogsArray,
       })
 
-      deleteHomeSessionDraft(sessionNumber)
+      clearSessionDraft(String(sessionNumber))
 
       const newCompleted = result.data.progress?.completed_sessions ?? sessionNumber
       onSessionCompleted?.(newCompleted)
@@ -396,6 +423,13 @@ function PanelInner({
           {completed && completedSessions != null && sessionId !== completedSessions + 1 && (
             <div className="mx-4 mt-2 mb-0 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-center">
               <p className="text-sm font-semibold text-emerald-700">세션 완료! 수고하셨습니다 🎉</p>
+            </div>
+          )}
+
+          {/* PR-PERSIST-01: 이전 진행 복구 안내 */}
+          {draftRestored && status === 'current' && (
+            <div className="mx-4 mt-2 mb-0 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-center">
+              <p className="text-xs font-medium text-emerald-700">이전 진행이 복구되었습니다</p>
             </div>
           )}
 
