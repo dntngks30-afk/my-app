@@ -101,6 +101,8 @@ export type SessionPlanSegmentItem = {
   hold_seconds?: number;
   focus_tag?: string | null;
   media_ref?: unknown;
+  /** PR-ALG-10: 운동 처방 근거 */
+  rationale?: string | null;
 };
 
 export type SessionPlanSegment = {

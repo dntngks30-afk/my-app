@@ -9,6 +9,8 @@ export interface ExerciseItem {
   holdSeconds?: number
   segmentTitle: string
   order: number
+  /** PR-ALG-10: 운동 처방 근거 */
+  rationale?: string | null
 }
 
 /**
@@ -30,6 +32,7 @@ export function extractSessionExercises(
       holdSeconds: item.hold_seconds,
       segmentTitle: seg.title,
       order: item.order,
+      rationale: item.rationale ?? undefined,
     })),
   )
 }

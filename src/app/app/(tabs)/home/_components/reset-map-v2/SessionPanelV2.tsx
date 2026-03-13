@@ -534,23 +534,31 @@ function PanelInner({
 
           {/* PR-SESSION-UX-02: 세션 클릭 시 바로 운동 목록 (시작 화면 제거) */}
           <>
-          {/* 운동 목록 — rationale은 상단에만 표시 */}
+          {/* PR-ALG-10: Session Goal — rationale 상단 표시 */}
           <div className="max-h-[58vh] overflow-y-auto px-5 pt-4 pb-4">
-            {rationale && (status === 'current' || status === 'completed') && 'chips' in rationale && Array.isArray(rationale.chips) && rationale.chips.length > 0 && (
-              <div className="mb-3 flex flex-wrap gap-2">
-                {rationale.chips.map((chip) => (
-                  <span key={chip} className="rounded-lg bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                    {chip}
-                  </span>
-                ))}
-              </div>
-            )}
             {rationale && (status === 'current' || status === 'completed') && (
               <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-sm font-semibold text-slate-800">{rationale.headline}</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">{rationale.detail}</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">오늘의 목표</p>
+                {'chips' in rationale && Array.isArray(rationale.chips) && rationale.chips.length > 0 && rationale.chips[0] && (
+                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                    {String(rationale.chips[0])} 개선
+                  </p>
+                )}
+                <p className="mt-1.5 text-xs leading-5 text-slate-600">{rationale.headline}</p>
+                {rationale.detail && (
+                  <p className="mt-1 text-xs leading-5 text-slate-500">{rationale.detail}</p>
+                )}
                 {'adaptation_summary' in rationale && rationale.adaptation_summary && (
                   <p className="mt-1.5 text-xs text-slate-600">{rationale.adaptation_summary}</p>
+                )}
+                {'chips' in rationale && Array.isArray(rationale.chips) && rationale.chips.length > 1 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {rationale.chips.slice(1).map((chip) => (
+                      <span key={chip} className="rounded-lg bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                        {chip}
+                      </span>
+                    ))}
+                  </div>
                 )}
               </div>
             )}
@@ -730,7 +738,7 @@ function ExerciseList({
                     </span>
                   )}
 
-                  {/* 운동명 + 목표/실적 */}
+                  {/* 운동명 + rationale + 목표/실적 */}
                   <div className="min-w-0 flex-1">
                     <p className={[
                       'truncate text-sm font-medium',
@@ -738,6 +746,9 @@ function ExerciseList({
                     ].join(' ')}>
                       {item.name}
                     </p>
+                    {item.rationale && (
+                      <p className="mt-0.5 text-xs text-slate-500">{item.rationale}</p>
+                    )}
                     <p className="mt-0.5 text-xs text-slate-400">
                       {isDone && log
                         ? `${log.sets ?? '-'}세트 × ${log.reps ?? '-'}회${log.difficulty ? ` · 난이도 ${log.difficulty}` : ''}`

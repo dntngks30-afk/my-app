@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
         session_rationale?: string | null;
         session_focus_axes?: string[];
       };
-      segments?: Array<{ title?: string; items?: Array<{ templateId?: string; name?: string; order?: number; sets?: number; reps?: number; hold_seconds?: number }> }>
+      segments?: Array<{ title?: string; items?: Array<{ templateId?: string; name?: string; order?: number; sets?: number; reps?: number; hold_seconds?: number; rationale?: string | null }> }>
     } | null;
     const segments = (planJson?.segments ?? []).map(seg => ({
       title: seg.title ?? '',
@@ -111,6 +111,7 @@ export async function GET(req: NextRequest) {
         sets: it.sets,
         reps: it.reps,
         hold_seconds: it.hold_seconds,
+        rationale: it.rationale ?? undefined,
       })),
     }));
 

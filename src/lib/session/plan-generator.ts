@@ -15,6 +15,7 @@ import {
   scoreByPriority,
   getPainModePenalty,
 } from './priority-layer';
+import { generateSessionRationale, getExerciseRationale } from '@/core/session-rationale';
 
 const REPETITION_PENALTY = 100;
 const CONTRAINDICATION_PENALTY = 100;
@@ -154,20 +155,14 @@ function resolveSessionFocusAxes(priorityVector?: Record<string, number> | null)
     .map(([axis]) => axis);
 }
 
-function resolveSessionRationale(priorityVector?: Record<string, number> | null): string | null {
-  const axes = resolveSessionFocusAxes(priorityVector);
-  if (axes.length === 0) return null;
-  const LABELS: Record<string, string> = {
-    lower_stability: '하체 안정',
-    lower_mobility: '하체 가동성',
-    upper_mobility: '상체 가동성',
-    trunk_control: '몸통 제어',
-    asymmetry: '좌우 균형',
-    deconditioned: '기본 움직임 복구',
-  };
-  const parts = axes.map((a) => LABELS[a] ?? a);
-  if (parts.length === 1) return `${parts[0]}을(를) 먼저 회복하기 위한 구성입니다`;
-  return `${parts[0]}과 ${parts[1]}을(를) 먼저 회복하기 위한 구성입니다`;
+/** PR-ALG-10: Session Rationale Engine 사용. 없으면 fallback */
+function resolveSessionRationale(
+  priorityVector?: Record<string, number> | null,
+  painMode?: 'none' | 'caution' | 'protected' | null
+): string | null {
+  const result = generateSessionRationale({ priority_vector: priorityVector, pain_mode: painMode });
+  if (result.session_focus_axes.length === 0) return null;
+  return result.rationale_text;
 }
 
 function resolveGoldPathVector(input: PlanGeneratorInput): GoldPathVector | null {
@@ -268,6 +263,8 @@ export type PlanItem = {
   hold_seconds?: number;
   focus_tag?: string | null;
   media_ref?: unknown;
+  /** PR-ALG-10: 운동 처방 근거 */
+  rationale?: string | null;
 };
 
 export type PlanSegment = {
@@ -598,12 +595,14 @@ function toPlanItem(
   const reps = isRecovery ? 8 : 12;
   const focusTag = t.focus_tags[0] ?? null;
 
+  const rationale = getExerciseRationale(focusTag);
   const item: PlanItem = {
     order,
     templateId: t.id,
     name: t.name,
     focus_tag: focusTag,
     media_ref: t.media_ref ?? undefined,
+    ...(rationale && { rationale }),
   };
 
   if (t.name.includes('이완') || segmentTitle === 'Cooldown') {
@@ -843,7 +842,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
         session_focus_axes: resolveSessionFocusAxes(input.priority_vector),
       }),
       ...(input.priority_vector != null && {
-        session_rationale: resolveSessionRationale(input.priority_vector),
+        session_rationale: resolveSessionRationale(input.priority_vector, input.pain_mode),
       }),
       finalTargetLevel,
       maxLevel,
