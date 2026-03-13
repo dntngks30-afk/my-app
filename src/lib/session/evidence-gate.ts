@@ -60,6 +60,11 @@ export type EvidenceGateObservability = {
     matched_by_template_fallback_count: number;
     unmatched_plan_items_count: number;
   };
+  /** PR-RISK-04: cooldown parity debug — segment별 완료 수 */
+  segment_completion?: {
+    cooldown_items_count: number;
+    cooldown_completed_count: number;
+  };
 };
 
 export type EvidenceGateResult =
@@ -114,6 +119,7 @@ type PlanItemInfo = {
   templateId: string;
   segmentTitle: string;
   isMain: boolean;
+  isCooldown: boolean;
   plan_item_key: string;
 };
 
@@ -172,6 +178,7 @@ function countCompletedItems(
   let matchedByPlanItemKey = 0;
   let matchedByTemplateFallback = 0;
 
+  let cooldownCompleted = 0;
   for (const p of planItems) {
     let log: ExerciseLogItem | undefined = byPlanItemKey.get(p.plan_item_key);
     if (log) {
@@ -184,6 +191,7 @@ function countCompletedItems(
     if (log) {
       completed++;
       if (p.isMain) mainCompleted++;
+      if (p.isCooldown) cooldownCompleted++;
       const hasValue =
         (typeof log.sets === 'number' && log.sets > 0) ||
         (typeof log.reps === 'number' && log.reps > 0);
@@ -191,12 +199,15 @@ function countCompletedItems(
     }
   }
 
+  const cooldownItemsCount = planItems.filter((p) => p.isCooldown).length;
   return {
     completed,
     mainCompleted,
     withPerformedValue,
     matchedByPlanItemKey,
     matchedByTemplateFallback,
+    cooldownItemsCount,
+    cooldownCompleted,
   };
 }
 
@@ -273,7 +284,9 @@ function buildObservability(
   allowed: boolean,
   code?: EvidenceGateErrorCode,
   rejectDetail?: RejectReasonDetail,
-  mainGateSkipped?: boolean
+  mainGateSkipped?: boolean,
+  identityMatch?: { matchedByPlanItemKey: number; matchedByTemplateFallback: number },
+  segmentCompletion?: { cooldown_items_count: number; cooldown_completed_count: number }
 ): EvidenceGateObservability {
   const { reflection, rpe, discomfort } = computeReflectionFlags(feedbackPayload, exerciseLogs);
   const completionRatio = totalItems > 0 ? completed / totalItems : 0;
@@ -311,6 +324,7 @@ function buildObservability(
       unmatched_plan_items_count: totalItems - completed,
     };
   }
+  if (segmentCompletion) obs.segment_completion = segmentCompletion;
 
   return obs;
 }
@@ -357,6 +371,8 @@ export function evaluateEvidenceGate(
     withPerformedValue,
     matchedByPlanItemKey,
     matchedByTemplateFallback,
+    cooldownItemsCount,
+    cooldownCompleted,
   } = countCompletedItems(planItems, exerciseLogs);
 
   const scoreResult = computeEvidenceScoreWithBreakdown(
@@ -368,6 +384,8 @@ export function evaluateEvidenceGate(
   );
 
   const identityMatch = { matchedByPlanItemKey, matchedByTemplateFallback };
+  const segmentCompletion: { cooldown_items_count: number; cooldown_completed_count: number } | undefined =
+    cooldownItemsCount > 0 ? { cooldown_items_count: cooldownItemsCount, cooldown_completed_count: cooldownCompleted } : undefined;
 
   // Hard gate 1: at least 1 MAIN segment item must be completed (skip if no Main)
   if (mainItemsCount > 0 && mainCompleted < 1) {
@@ -377,7 +395,8 @@ export function evaluateEvidenceGate(
       'MAIN_SEGMENT_REQUIRED',
       undefined,
       undefined,
-      identityMatch
+      identityMatch,
+      segmentCompletion
     );
     return {
       allowed: false,
@@ -403,7 +422,8 @@ export function evaluateEvidenceGate(
       'NOT_ENOUGH_COMPLETION_COVERAGE',
       coverageRejectDetail,
       undefined,
-      identityMatch
+      identityMatch,
+      segmentCompletion
     );
     if (mainGateSkipped) {
       obs.main_gate_skipped = true;
@@ -449,7 +469,8 @@ export function evaluateEvidenceGate(
     'INSUFFICIENT_EXECUTION_EVIDENCE',
     rejectDetail,
     undefined,
-    identityMatch
+    identityMatch,
+    segmentCompletion
   );
   if (mainGateSkipped) {
     obs.main_gate_skipped = true;

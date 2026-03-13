@@ -22,6 +22,10 @@ export type PlanSummaryExerciseLogItem = {
   sets: number | null;
   reps: number | null;
   difficulty: number | null;
+  /** PR-RISK-04: cooldown parity — preserve for log lookup (plan_item_key 우선) */
+  plan_item_key?: string;
+  segment_index?: number;
+  item_index?: number;
 };
 
 export type PlanSummaryResponse = {
@@ -140,13 +144,36 @@ export async function GET(req: NextRequest) {
       Array.isArray(rawLogs)
         ? rawLogs
             .filter((it: unknown) => it && typeof it === 'object' && typeof (it as { templateId?: unknown }).templateId === 'string')
-            .map((it: { templateId: string; name?: string; sets?: number; reps?: number; difficulty?: number }) => ({
-              templateId: it.templateId,
-              name: typeof it.name === 'string' ? it.name : '',
-              sets: typeof it.sets === 'number' && Number.isFinite(it.sets) ? it.sets : null,
-              reps: typeof it.reps === 'number' && Number.isFinite(it.reps) ? it.reps : null,
-              difficulty: typeof it.difficulty === 'number' && Number.isFinite(it.difficulty) ? it.difficulty : null,
-            }))
+            .map((it: {
+              templateId: string;
+              name?: string;
+              sets?: number;
+              reps?: number;
+              difficulty?: number;
+              plan_item_key?: string;
+              segment_index?: number;
+              item_index?: number;
+            }) => {
+              const planItemKey = typeof it.plan_item_key === 'string' && /^\d+:\d+:.+$/.test(it.plan_item_key)
+                ? it.plan_item_key
+                : undefined;
+              const segIdx = typeof it.segment_index === 'number' && Number.isInteger(it.segment_index)
+                ? it.segment_index
+                : undefined;
+              const itemIdx = typeof it.item_index === 'number' && Number.isInteger(it.item_index)
+                ? it.item_index
+                : undefined;
+              return {
+                templateId: it.templateId,
+                name: typeof it.name === 'string' ? it.name : '',
+                sets: typeof it.sets === 'number' && Number.isFinite(it.sets) ? it.sets : null,
+                reps: typeof it.reps === 'number' && Number.isFinite(it.reps) ? it.reps : null,
+                difficulty: typeof it.difficulty === 'number' && Number.isFinite(it.difficulty) ? it.difficulty : null,
+                ...(planItemKey && { plan_item_key: planItemKey }),
+                ...(segIdx !== undefined && { segment_index: segIdx }),
+                ...(itemIdx !== undefined && { item_index: itemIdx }),
+              };
+            })
         : undefined;
 
     const genTrace = row.generation_trace_json as { adaptation?: { reason_summary?: string } } | null;
