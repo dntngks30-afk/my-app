@@ -66,15 +66,24 @@ function ModalInner({
   const [mediaLoading, setMediaLoading] = useState(true);
   const isHold = !!item.holdSeconds && !item.targetReps;
   const targetReps = item.targetReps ?? 8;
-  const targetHold = item.holdSeconds ?? 10;
+  /** PR-RISK-03: hold 기본값 우선순위 — initialLog 복원 > prescribed > 30초 fallback */
+  const getInitialHoldPerSet = (): number => {
+    if (initialLog?.sets && initialLog?.reps != null && initialLog.sets > 0) {
+      const perSet = Math.floor(initialLog.reps / initialLog.sets);
+      return Math.min(600, Math.max(0, perSet));
+    }
+    const prescribed = item.holdSeconds ?? 30;
+    return Math.min(600, Math.max(0, prescribed));
+  };
   const defaultSets = initialLog?.sets ?? item.targetSets ?? 1;
   const [setEntries, setSetEntries] = useState<SetEntry[]>(() => {
     if (initialLog?.sets && initialLog?.reps != null) {
       const perSet = Math.floor(initialLog.reps / initialLog.sets);
-      return Array.from({ length: initialLog.sets }, () => (isHold ? { reps: 0, holdSeconds: perSet } : { reps: perSet, holdSeconds: 0 }));
+      return Array.from({ length: initialLog.sets }, () => (isHold ? { reps: 0, holdSeconds: Math.min(600, Math.max(0, perSet)) } : { reps: perSet, holdSeconds: 0 }));
     }
+    const holdDefault = getInitialHoldPerSet();
     return Array.from({ length: Math.max(1, defaultSets) }, () =>
-      isHold ? { reps: 0, holdSeconds: targetHold } : { reps: targetReps, holdSeconds: 0 }
+      isHold ? { reps: 0, holdSeconds: holdDefault } : { reps: targetReps, holdSeconds: 0 }
     );
   });
   const isLast = totalExercises > 0 && exerciseIndex >= totalExercises - 1;
@@ -166,11 +175,25 @@ function ModalInner({
     setSetEntries((prev) => prev.filter((_, i) => i !== idx));
   };
 
+  const handleHoldDirectInput = (idx: number, raw: string) => {
+    const parsed = parseInt(raw, 10);
+    if (Number.isNaN(parsed)) return;
+    const clamped = Math.min(600, Math.max(0, parsed));
+    setSetEntries((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], holdSeconds: clamped };
+      return next;
+    });
+  };
+
+  /** PR-RISK-03: hold는 ±step, 0–600 clamp. reps는 기존 ±1 유지 */
   const adjustSetEntry = (idx: number, field: 'reps' | 'holdSeconds', delta: number) => {
     setSetEntries((prev) => {
       const next = [...prev];
       const curr = next[idx][field];
-      next[idx] = { ...next[idx], [field]: Math.max(0, curr + delta) };
+      const nextVal = curr + delta;
+      const clamped = field === 'holdSeconds' ? Math.min(600, Math.max(0, nextVal)) : Math.max(0, nextVal);
+      next[idx] = { ...next[idx], [field]: clamped };
       return next;
     });
   };
@@ -301,20 +324,36 @@ function ModalInner({
                   <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5">
                     <button
                       type="button"
-                      onClick={() => adjustSetEntry(idx, isHold ? 'holdSeconds' : 'reps', -1)}
+                      onClick={() => adjustSetEntry(idx, isHold ? 'holdSeconds' : 'reps', isHold ? -5 : -1)}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 active:scale-95"
-                      aria-label="감소"
+                      aria-label={isHold ? '5초 감소' : '감소'}
                     >
                       <Minus className="h-4 w-4" />
                     </button>
-                    <span className="min-w-[3rem] flex-1 text-center text-lg font-bold text-slate-800">
-                      {isHold ? `${entry.holdSeconds}s` : entry.reps}
-                    </span>
+                    {isHold ? (
+                      <span className="min-w-[3rem] flex-1 flex items-center justify-center gap-0.5">
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          max={600}
+                          value={entry.holdSeconds}
+                          onChange={(e) => handleHoldDirectInput(idx, e.target.value)}
+                          className="w-12 text-center text-lg font-bold text-slate-800 bg-transparent border-0 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          aria-label={`${idx + 1}세트 초 입력`}
+                        />
+                        <span className="text-slate-600">초</span>
+                      </span>
+                    ) : (
+                      <span className="min-w-[3rem] flex-1 text-center text-lg font-bold text-slate-800">
+                        {entry.reps}
+                      </span>
+                    )}
                     <button
                       type="button"
-                      onClick={() => adjustSetEntry(idx, isHold ? 'holdSeconds' : 'reps', 1)}
+                      onClick={() => adjustSetEntry(idx, isHold ? 'holdSeconds' : 'reps', isHold ? 5 : 1)}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 active:scale-95"
-                      aria-label="증가"
+                      aria-label={isHold ? '5초 증가' : '증가'}
                     >
                       <Plus className="h-4 w-4" />
                     </button>
