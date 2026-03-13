@@ -139,6 +139,46 @@ try {
     'caution avoids high difficulty when safer candidates exist',
     cautionMain.every((item) => (byId.get(item.templateId)?.difficulty ?? 'low') !== 'high')
   );
+
+  // PR-21: first-session guardrail v2
+  const firstSessionPlan = await buildSessionPlanJson({
+    ...baseInput,
+    sessionNumber: 1,
+    theme: 'Phase 1 · first session',
+  });
+  const firstItems = firstSessionPlan.segments.flatMap((s) => s.items);
+  ok('first session total item cap', firstItems.length <= 5);
+  const firstMain = firstSessionPlan.segments.find((s) => s.title === 'Main')?.items ?? [];
+  ok('first session main count cap', firstMain.length <= 1);
+  ok(
+    'first session no difficulty=high',
+    firstItems.every((i) => (byId.get(i.templateId)?.difficulty ?? 'low') !== 'high')
+  );
+  ok(
+    'first session no balance_demand=high',
+    firstItems.every((i) => (byId.get(i.templateId)?.balance_demand ?? 'low') !== 'high')
+  );
+  ok(
+    'first session no complexity=high',
+    firstItems.every((i) => (byId.get(i.templateId)?.complexity ?? 'low') !== 'high')
+  );
+  ok('first_session_guardrail_applied', firstSessionPlan.meta.constraint_flags?.first_session_guardrail_applied === true);
+
+  const protectedFirstPlan = await buildSessionPlanJson({
+    ...baseInput,
+    sessionNumber: 1,
+    pain_mode: 'protected',
+    safety_mode: 'red',
+    theme: 'Phase 1 · first session protected',
+  });
+  const protectedFirstItems = protectedFirstPlan.segments.flatMap((s) => s.items);
+  ok(
+    'first session protected: no difficulty=medium or high',
+    protectedFirstItems.every((i) => {
+      const d = byId.get(i.templateId)?.difficulty ?? 'low';
+      return d === 'low';
+    })
+  );
 } catch (e) {
   failed++;
   console.error('  ✗ buildSessionPlanJson threw', e);

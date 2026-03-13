@@ -132,6 +132,47 @@ const SHORT_TOTAL_ITEM_CAP = 4;
 const MAX_FIRST_SESSION_MAIN_COUNT = 1;
 const MAX_FIRST_SESSION_TOTAL_EXERCISES = 5;
 
+/** PR-21: First session guardrail v2 resolver output */
+export type FirstSessionGuardrailResult = {
+  isFirstSession: boolean;
+  mainCountCap: number;
+  totalCap: number;
+  maxDifficultyCap: 'low' | 'medium' | 'high';
+  excludeBalanceHigh: boolean;
+  excludeComplexityHigh: boolean;
+  maxProgressionLevel: number;
+  strictMode: boolean;
+};
+
+/**
+ * PR-21: First Session Guardrail v2 resolver.
+ * Centralizes first-session caps. Additive only.
+ */
+function resolveFirstSessionGuardrail(input: PlanGeneratorInput): FirstSessionGuardrailResult {
+  const isFirstSession = input.sessionNumber === 1;
+  const strictMode =
+    isFirstSession &&
+    (input.pain_mode === 'protected' ||
+      input.primary_type === 'DECONDITIONED' ||
+      (typeof input.priority_vector?.deconditioned === 'number' && input.priority_vector.deconditioned >= 2) ||
+      (typeof input.priority_vector?.asymmetry === 'number' && input.priority_vector.asymmetry >= 2) ||
+      input.safety_mode === 'red');
+
+  const maxDifficultyCap = strictMode ? 'low' : isFirstSession ? 'medium' : 'high';
+  const maxProgressionLevel = isFirstSession ? 2 : 3;
+
+  return {
+    isFirstSession,
+    mainCountCap: MAX_FIRST_SESSION_MAIN_COUNT,
+    totalCap: MAX_FIRST_SESSION_TOTAL_EXERCISES,
+    maxDifficultyCap,
+    excludeBalanceHigh: isFirstSession || !!input.pain_mode,
+    excludeComplexityHigh: isFirstSession || input.pain_mode === 'protected',
+    maxProgressionLevel,
+    strictMode,
+  };
+}
+
 /** PR-ALG-05: difficulty order for cap (low < medium < high) */
 const DIFFICULTY_ORDER: Record<string, number> = { low: 1, medium: 2, high: 3 };
 
@@ -200,19 +241,22 @@ function isExcludedByPainMode(
 }
 
 /**
- * PR-SESSION-QUALITY-01: First session guardrails.
- * Exclude high difficulty / high progression / high balance / high complexity when session_number === 1.
- * PR-20: balance_demand=high, complexity=high 추가.
+ * PR-21: First session guardrails (v2).
+ * Uses resolveFirstSessionGuardrail result for consistent caps.
  */
 function isExcludedByFirstSessionGuardrail(
   template: SessionTemplateRow,
-  sessionNumber: number
+  guardrail: FirstSessionGuardrailResult
 ): boolean {
-  if (sessionNumber !== 1) return false;
-  if (template.difficulty === 'high') return true;
-  if (typeof template.progression_level === 'number' && template.progression_level >= 3) return true;
-  if (template.balance_demand === 'high') return true;
-  if (template.complexity === 'high') return true;
+  if (!guardrail.isFirstSession) return false;
+  if (isDifficultyAboveCap(template.difficulty ?? null, guardrail.maxDifficultyCap)) return true;
+  if (
+    typeof template.progression_level === 'number' &&
+    template.progression_level > guardrail.maxProgressionLevel
+  )
+    return true;
+  if (guardrail.excludeBalanceHigh && template.balance_demand === 'high') return true;
+  if (guardrail.excludeComplexityHigh && template.complexity === 'high') return true;
   return false;
 }
 
@@ -327,6 +371,10 @@ export type PlanJsonOutput = {
       pain_gate_applied?: boolean;
       /** PR-SESSION-QUALITY-01 */
       first_session_guardrail_applied?: boolean;
+      /** PR-21: first-session v2 trace */
+      difficulty_cap_applied?: boolean;
+      complexity_filtered?: boolean;
+      balance_filtered?: boolean;
     };
   };
   flags: { recovery: boolean; short: boolean };
@@ -668,13 +716,17 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   });
 
   const { finalTargetLevel, maxLevel } = computeTargetLevel(input);
+  const firstSessionGuardrail = resolveFirstSessionGuardrail(input);
 
   // PR-ALG-03: pain_mode Safety Gate - 추가 제외 태그
   const painExtraAvoid = getPainModeExtraAvoid(input.pain_mode);
   const extendedPainFlags = [...input.painFlags, ...painExtraAvoid];
   const excludeSet = buildExcludeSet(input.avoid, extendedPainFlags);
   const avoidIds = new Set(input.adaptiveOverlay?.avoidTemplateIds ?? []);
-  const maxDifficultyCap = input.adaptiveOverlay?.maxDifficultyCap;
+  const effectiveMaxDifficultyCap =
+    firstSessionGuardrail.isFirstSession
+      ? firstSessionGuardrail.maxDifficultyCap
+      : input.adaptiveOverlay?.maxDifficultyCap;
 
   const candidates = templates.filter(
     (t) =>
@@ -682,8 +734,8 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       t.level <= maxLevel &&
       !avoidIds.has(t.id) &&
       !isExcludedByPainMode(t, input.pain_mode) &&
-      !(maxDifficultyCap && isDifficultyAboveCap(t.difficulty ?? null, maxDifficultyCap)) &&
-      !isExcludedByFirstSessionGuardrail(t, input.sessionNumber) &&
+      !(effectiveMaxDifficultyCap && isDifficultyAboveCap(t.difficulty ?? null, effectiveMaxDifficultyCap)) &&
+      !isExcludedByFirstSessionGuardrail(t, firstSessionGuardrail) &&
       !isExcludedByProtectedV2Guardrail(t, input.pain_mode)
   );
 
@@ -708,13 +760,13 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const overlay = input.adaptiveOverlay;
   const isShort = overlay?.forceShort ?? input.timeBudget === 'short';
   const isRecovery = overlay?.forceRecovery ?? input.conditionMood === 'bad';
-  const isFirstSession = input.sessionNumber === 1;
+  const isFirstSession = firstSessionGuardrail.isFirstSession;
   let mainCount = isShort ? 1 : isRecovery ? 1 : 2;
   if (input.safety_mode === 'red') {
     mainCount = 1;
   }
-  if (isFirstSession && mainCount > MAX_FIRST_SESSION_MAIN_COUNT) {
-    mainCount = MAX_FIRST_SESSION_MAIN_COUNT;
+  if (isFirstSession && mainCount > firstSessionGuardrail.mainCountCap) {
+    mainCount = firstSessionGuardrail.mainCountCap;
   }
   if (typeof input.volumeModifier === 'number' && input.volumeModifier < 0) {
     mainCount = Math.max(1, Math.floor(mainCount * (1 + input.volumeModifier)));
@@ -728,8 +780,8 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   if (isShort && prepCount + mainCount + accessoryCount + cooldownCount > SHORT_TOTAL_ITEM_CAP) {
     mainCount = Math.max(1, SHORT_TOTAL_ITEM_CAP - prepCount - accessoryCount - cooldownCount);
   }
-  if (isFirstSession && prepCount + mainCount + accessoryCount + cooldownCount > MAX_FIRST_SESSION_TOTAL_EXERCISES) {
-    mainCount = Math.max(1, MAX_FIRST_SESSION_TOTAL_EXERCISES - prepCount - accessoryCount - cooldownCount);
+  if (isFirstSession && prepCount + mainCount + accessoryCount + cooldownCount > firstSessionGuardrail.totalCap) {
+    mainCount = Math.max(1, firstSessionGuardrail.totalCap - prepCount - accessoryCount - cooldownCount);
   }
   const totalNeeded = prepCount + mainCount + accessoryCount + cooldownCount;
 
@@ -769,7 +821,9 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     const relaxedCandidates = templates.filter(
       (t) =>
         t.level <= maxLevel &&
-        !hasContraindicationOverlap(t.contraindications, excludeSet)
+        !hasContraindicationOverlap(t.contraindications, excludeSet) &&
+        (!firstSessionGuardrail.isFirstSession || !isExcludedByFirstSessionGuardrail(t, firstSessionGuardrail)) &&
+        !isExcludedByProtectedV2Guardrail(t, input.pain_mode)
     );
     const relaxedSorted = relaxedCandidates.map((t) => ({ template: t, score: 0 }));
     const relaxedSelected = goldPathVector
@@ -871,6 +925,9 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
         priority_applied: !!input.priority_vector,
         pain_gate_applied: !!input.pain_mode && input.pain_mode !== 'none',
         first_session_guardrail_applied: isFirstSession,
+        difficulty_cap_applied: isFirstSession && !!effectiveMaxDifficultyCap,
+        complexity_filtered: firstSessionGuardrail.excludeComplexityHigh,
+        balance_filtered: firstSessionGuardrail.excludeBalanceHigh,
       },
     },
     flags: {
