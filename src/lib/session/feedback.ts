@@ -60,6 +60,15 @@ export function normalizeSessionFeedbackPayload(raw: unknown): FeedbackPayload |
     if (typeof sf.note === 'string') {
       session.note = sf.note.trim().slice(0, MAX_STR_LEN) || undefined;
     }
+    const bodyState = sf.bodyStateChange ?? sf.body_state_change;
+    if (bodyState === 'better' || bodyState === 'same' || bodyState === 'worse') {
+      session.bodyStateChange = bodyState;
+    }
+    const discomfort = sf.discomfortArea ?? sf.discomfort_area;
+    if (typeof discomfort === 'string' && discomfort.trim()) {
+      const valid = ['neck', 'lower_back', 'knee', 'wrist', 'shoulder'];
+      if (valid.includes(discomfort)) session.discomfortArea = discomfort;
+    }
 
     if (Object.keys(session).length > 0) {
       result.sessionFeedback = session;
@@ -128,6 +137,9 @@ export type SessionFeedbackRow = {
   completion_ratio: number | null;
   time_overrun: boolean | null;
   note: string | null;
+  /** PR-UX-03 */
+  body_state_change?: string | null;
+  discomfort_area?: string | null;
 };
 
 export type ExerciseFeedbackRow = {
@@ -157,6 +169,8 @@ export function buildSessionFeedbackRow(
     completion_ratio: payload.completionRatio ?? null,
     time_overrun: payload.timeOverrun ?? null,
     note: payload.note ?? null,
+    body_state_change: payload.bodyStateChange ?? null,
+    discomfort_area: payload.discomfortArea ?? null,
   };
 }
 

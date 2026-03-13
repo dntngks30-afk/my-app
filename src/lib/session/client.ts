@@ -330,6 +330,10 @@ export type SessionFeedbackInput = {
   completionRatio?: number;
   timeOverrun?: boolean;
   note?: string;
+  painAreas?: string[];
+  /** PR-UX-03 */
+  bodyStateChange?: 'better' | 'same' | 'worse';
+  discomfortArea?: string;
 };
 
 export type ExerciseFeedbackInput = {
@@ -381,6 +385,17 @@ export async function saveSessionProgress(
   return sessionFetch<{ saved: boolean }>('/api/session/progress', token, {
     method: 'POST',
     body: JSON.stringify({ session_number: sessionNumber, items }),
+  });
+}
+
+/** PR-UX-03: POST /api/session/reflection — 세션 리플렉션 저장 */
+export async function saveSessionReflection(
+  token: string,
+  data: { session_number: number; difficulty: number; body_state_change: string; discomfort_area?: string | null }
+): Promise<ApiResult<{ saved: boolean }>> {
+  return sessionFetch<{ saved: boolean }>('/api/session/reflection', token, {
+    method: 'POST',
+    body: JSON.stringify(data),
   });
 }
 

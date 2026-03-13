@@ -171,8 +171,13 @@ export default function SessionCompleteSummary({
             <p className="text-xs text-violet-600 uppercase tracking-wide mb-0.5">
               다음 세션
             </p>
+            {completedSessionNumber != null && (
+              <p className="text-sm font-semibold text-violet-800 mb-0.5">
+                세션 {completedSessionNumber + 1}
+              </p>
+            )}
             <p className="text-base font-semibold text-violet-900">{nextTheme}</p>
-            <p className="text-xs text-violet-600 mt-1">예상 시간 약 10분</p>
+            <p className="text-xs text-violet-600 mt-1">예상 시간 약 10~12분</p>
           </div>
         )}
       </div>

@@ -3,13 +3,13 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import { getSessionSafe } from '@/lib/supabase'
-import { completeSession } from '@/lib/session/client'
+import { completeSession, saveSessionReflection } from '@/lib/session/client'
 import type { ExerciseItem } from './planJsonAdapter'
 import type { ExerciseLogItem, SessionPlan, ActivePlanSummary } from '@/lib/session/client'
 import { buildBriefSessionRationale } from '@/lib/deep-result/copy'
 import { ExercisePlayerModal } from './ExercisePlayerModal'
 import SessionCompleteSummary from '@/app/app/routine/_components/SessionCompleteSummary'
-import { SessionCompletionSheet, type BodyStateAfter } from './SessionCompletionSheet'
+import { ReflectionModal, type ReflectionData } from './ReflectionModal'
 import type { SessionPainArea } from '@/lib/session/feedback-types'
 import { loadSessionDraft, saveSessionDraft, clearSessionDraft, draftToLogs } from '@/lib/session/draftStorage'
 import { saveSessionProgress } from '@/lib/session/client'
@@ -153,7 +153,6 @@ function PanelInner({
   const [draftRestored, setDraftRestored] = useState(false)
   const [sessionPerceivedDifficulty, setSessionPerceivedDifficulty] = useState<'too_easy' | 'ok' | 'too_hard' | null>(null)
   const [sessionPainAreas, setSessionPainAreas] = useState<SessionPainArea[]>([])
-  const [bodyStateAfter, setBodyStateAfter] = useState<BodyStateAfter | null>(null)
   const rationale = getPlanRationale(activePlan)
 
   // PR-SESSION-UX-02: 세션 전환 시 운동 뷰 리셋
@@ -164,7 +163,6 @@ function PanelInner({
   useEffect(() => {
     setCompleted(false)
     setCompleteResult(null)
-    setBodyStateAfter(null)
     setDraftRestored(false)
   }, [sessionId])
   // PR-PERSIST-01 + PR-EXEC-02: 세션 진입 시 draft 복구 또는 initialLogs(서버 진행) 또는 초기화
@@ -188,7 +186,7 @@ function PanelInner({
         const restoredLogs = draftToLogs(draft, nameByTemplateId)
         setLogs(restoredLogs)
         if (draft.sessionPerceivedDifficulty != null) setSessionPerceivedDifficulty(draft.sessionPerceivedDifficulty)
-        if (draft.sessionPainAreas && draft.sessionPainAreas.length > 0) setSessionPainAreas(draft.sessionPainAreas)
+        if (draft.sessionPainAreas?.length) setSessionPainAreas(draft.sessionPainAreas)
         setDraftRestored(true)
       } else if (initialLogs && Object.keys(initialLogs).length > 0) {
         setLogs(initialLogs)
@@ -287,8 +285,8 @@ function PanelInner({
     }
     prevExercisesRef.current = exercises
   }, [exercises])
-  // 세션 피드백 (PR-UX-00: 종료 시 시트에서만 수집)
-  const [showSessionCompletionSheet, setShowSessionCompletionSheet] = useState(false)
+  // PR-UX-03: 리플렉션 모달 (종료 전 필수)
+  const [showReflectionModal, setShowReflectionModal] = useState(false)
   // 종료 API 상태
   const [completing, setCompleting] = useState(false)
   const [completeError, setCompleteError] = useState<string | null>(null)
@@ -319,10 +317,17 @@ function PanelInner({
       }
     }
     setExerciseIndex(nextIdx)
-    if (showSessionSheet) setShowSessionCompletionSheet(true)
+    if (showSessionSheet) setShowReflectionModal(true)
   }
 
-  const doSessionComplete = async () => {
+  type FeedbackOverride = {
+    difficultyFeedback?: 'too_easy' | 'ok' | 'too_hard'
+    painAreas?: SessionPainArea[]
+    bodyStateChange?: 'better' | 'same' | 'worse'
+    discomfortArea?: string
+  }
+
+  const doSessionComplete = async (feedbackOverride?: FeedbackOverride) => {
     if (completing || completed) return
     const sessionNumber = activePlan?.session_number
     if (!sessionNumber) return
@@ -351,12 +356,16 @@ function PanelInner({
         completion_mode: completionMode,
         exercise_logs: exerciseLogsArray,
       }
-      const hasSessionFeedback = sessionPerceivedDifficulty != null || sessionPainAreas.length > 0
+      const diff = feedbackOverride?.difficultyFeedback ?? sessionPerceivedDifficulty
+      const areas = feedbackOverride?.painAreas ?? sessionPainAreas
+      const hasSessionFeedback = diff != null || (areas?.length ?? 0) > 0 || feedbackOverride?.bodyStateChange || feedbackOverride?.discomfortArea
       if (hasSessionFeedback) {
         payload.feedback = {
           sessionFeedback: {
-            difficultyFeedback: sessionPerceivedDifficulty ?? undefined,
-            painAreas: sessionPainAreas.length > 0 ? sessionPainAreas : undefined,
+            difficultyFeedback: diff ?? undefined,
+            painAreas: (areas?.length ?? 0) > 0 ? areas : undefined,
+            bodyStateChange: feedbackOverride?.bodyStateChange,
+            discomfortArea: feedbackOverride?.discomfortArea,
           },
         }
       }
@@ -389,12 +398,47 @@ function PanelInner({
   }
 
   const handleSessionCompleteClick = () => {
-    setShowSessionCompletionSheet(true)
+    setShowReflectionModal(true)
   }
 
-  const handleSessionCompletionConfirm = () => {
-    setShowSessionCompletionSheet(false)
-    doSessionComplete()
+  const handleReflectionSubmit = async (data: ReflectionData) => {
+    const sessionNumber = activePlan?.session_number
+    if (!sessionNumber) return
+
+    setCompleting(true)
+    setCompleteError(null)
+
+    try {
+      const { session } = await getSessionSafe()
+      if (!session?.access_token) {
+        setCompleteError('로그인이 필요합니다. 페이지를 새로고침해 주세요.')
+        setCompleting(false)
+        return
+      }
+
+      const refResult = await saveSessionReflection(session.access_token, {
+        session_number: sessionNumber,
+        difficulty: data.difficulty,
+        body_state_change: data.body_state_change,
+        discomfort_area: data.discomfort_area ?? undefined,
+      })
+      if (!refResult.ok) {
+        setCompleteError(refResult.error.message)
+        setCompleting(false)
+        return
+      }
+
+      setShowReflectionModal(false)
+      await doSessionComplete({
+        difficultyFeedback: data.difficulty <= 2 ? 'too_easy' : data.difficulty >= 4 ? 'too_hard' : 'ok',
+        painAreas: data.discomfort_area ? [data.discomfort_area as SessionPainArea] : undefined,
+        bodyStateChange: data.body_state_change,
+        discomfortArea: data.discomfort_area ?? undefined,
+      })
+    } catch (err) {
+      setCompleteError(err instanceof Error ? err.message : '저장에 실패했습니다.')
+      setCompleting(false)
+    }
   }
 
   return (
@@ -571,36 +615,12 @@ function PanelInner({
         }
       />
 
-      {/* 세션 종료 시트 (PR-UX-00) */}
-      {showSessionCompletionSheet && status === 'current' && !completed && (
-        <>
-          <div
-            className="fixed inset-0 z-[75] bg-black/70 backdrop-blur-sm animate-in fade-in"
-            style={{ animationDuration: '150ms' }}
-            onClick={() => setShowSessionCompletionSheet(false)}
-            aria-hidden
-          />
-          <div
-            className="fixed inset-x-0 bottom-0 z-[80] animate-in slide-in-from-bottom-4"
-            style={{ animationDuration: '250ms', animationTimingFunction: 'cubic-bezier(0.2,0,0,1)', paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
-          >
-            <div className="mx-auto max-w-[430px] rounded-t-2xl border border-slate-200 bg-white px-5 py-5 pb-8 shadow-2xl">
-              <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                세션 종료 — 간단한 체크
-              </p>
-              <SessionCompletionSheet
-                perceivedDifficulty={sessionPerceivedDifficulty}
-                painAreas={sessionPainAreas}
-                onPerceivedDifficultyChange={setSessionPerceivedDifficulty}
-                onPainAreasChange={setSessionPainAreas}
-                onConfirm={handleSessionCompletionConfirm}
-                completing={completing}
-                bodyStateAfter={bodyStateAfter}
-                onBodyStateAfterChange={setBodyStateAfter}
-              />
-            </div>
-          </div>
-        </>
+      {/* PR-UX-03: 리플렉션 모달 (종료 전 필수, 닫기 불가) */}
+      {showReflectionModal && status === 'current' && !completed && (
+        <ReflectionModal
+          onSubmit={handleReflectionSubmit}
+          submitting={completing}
+        />
       )}
     </>
   )
