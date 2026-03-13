@@ -276,7 +276,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
     const phaseLengthsForNext = getPhaseLengthsFromTrace(currentPlan?.generation_trace_json);
 
-    // PR-EXEC-02: merge persisted logs — completion validation uses DB; client overrides for same templateId
+    // PR-EXEC-02: merge persisted logs — plan order 유지, templateId 중복 시 1:1 매칭 보장
     const dbLogs = currentPlan?.exercise_logs && Array.isArray(currentPlan.exercise_logs) ? (currentPlan.exercise_logs as Array<Record<string, unknown>>) : [];
     const clientByTemplateId = new Map(exerciseLogsArray.map((l) => [l.templateId, l]));
     const dbByTemplateId = new Map<string, ExerciseLogItem>();
@@ -292,16 +292,22 @@ export async function POST(req: NextRequest) {
         dbByTemplateId.set(templateId, { templateId, name, sets, reps, difficulty: difficulty ?? null, rpe: rpe ?? null, discomfort: discomfort ?? null });
       }
     }
+    const pj = currentPlan?.plan_json as { segments?: Array<{ items?: Array<{ templateId?: string }> }> } | null;
+    const planOrder: string[] = [];
+    if (pj?.segments) {
+      for (const seg of pj.segments) {
+        for (const it of seg.items ?? []) {
+          const tid = it?.templateId;
+          if (typeof tid === 'string') planOrder.push(tid);
+        }
+      }
+    }
     const merged: ExerciseLogItem[] = [];
-    const seen = new Set<string>();
-    for (const [tid, log] of clientByTemplateId) {
-      merged.push(log);
-      seen.add(tid);
+    for (const tid of planOrder) {
+      const log = clientByTemplateId.get(tid) ?? dbByTemplateId.get(tid);
+      if (log) merged.push(log);
     }
-    for (const [tid, log] of dbByTemplateId) {
-      if (!seen.has(tid)) merged.push(log);
-    }
-    exerciseLogsArray = merged;
+    exerciseLogsArray = merged.length > 0 ? merged : exerciseLogsArray;
 
     // PR-DATA-01: evidence gate — reject insufficient execution evidence before persisting
     const gateResult = evaluateEvidenceGate(
@@ -310,6 +316,7 @@ export async function POST(req: NextRequest) {
       feedbackPayload
     );
     if (!gateResult.allowed) {
+      const obs = gateResult.observability;
       void logSessionEvent(supabase, {
         userId,
         eventType: 'session_complete_blocked',
@@ -318,10 +325,22 @@ export async function POST(req: NextRequest) {
         sessionNumber,
         meta: {
           message: gateResult.message,
-          evidence_gate: gateResult.observability,
+          evidence_gate: obs,
         },
       });
-      return fail(422, gateResult.code as ApiErrorCode, gateResult.message);
+      const details = isDebug
+        ? {
+            total_items: obs.total_items,
+            completed_items: obs.completed_items,
+            completion_ratio: obs.completion_ratio,
+            main_completed: obs.main_segment_completed,
+            with_performed_value: obs.performed_value_count,
+            received_exercise_logs_count: exerciseLogsArray.length,
+            reject_reason_code: obs.reject_reason_code,
+            reject_reason_detail: obs.reject_reason_detail,
+          }
+        : undefined;
+      return fail(422, gateResult.code as ApiErrorCode, gateResult.message, details);
     }
 
     const nowIso = new Date().toISOString();

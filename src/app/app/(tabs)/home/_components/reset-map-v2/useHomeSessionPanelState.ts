@@ -221,7 +221,10 @@ export function useHomeSessionPanelState({
         }
 
         const durationSec = Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1000));
-        const exerciseLogsArray = Object.values(logs);
+        /** HOTFIX: plan order로 1:1 전달 — templateId 중복 시 Object.values가 덮어써서 undercount 방지 */
+        const exerciseLogsArray = (exercises ?? [])
+          .map((ex) => logs[ex.templateId])
+          .filter((l): l is ExerciseLogItem => l != null);
         const allDone =
           exercises && exercises.length > 0 && exercises.every((e) => isExerciseLogCompleted(logs[e.templateId], e));
         const completionMode = allDone ? 'all_done' : exerciseLogsArray.length > 0 ? 'partial_done' : 'stop_early';
