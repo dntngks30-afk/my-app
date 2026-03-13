@@ -41,6 +41,7 @@ type EnsureSegment = {
   templateName?: string;
   durationSec?: number;
   kind?: 'work' | 'rest';
+  segmentTitle?: 'Prep' | 'Main' | 'Cooldown';
 };
 
 /** 세그먼트 shape (템플릿/DB 연결) */
@@ -53,6 +54,8 @@ type Segment = {
   mediaPayload?: MediaPayload | null;
   mediaError?: boolean;
   templateName?: string;
+  /** PR-RISK-05: parity with routine/home — Prep/Main/Cooldown */
+  segmentTitle?: 'Prep' | 'Main' | 'Cooldown';
 };
 
 /** plan 없는 경우 fallback 세그먼트 */
@@ -277,13 +280,23 @@ export default function RoutinePlayerPage() {
     let cancelled = false;
     const debugFlag = searchParams.get('debug') === '1';
 
+    /** PR-RISK-05: parity — same heuristic as ensure API */
+    const getSegmentTitle = (i: number, total: number): 'Prep' | 'Main' | 'Cooldown' => {
+      if (total <= 1) return 'Main';
+      if (i === 0) return 'Prep';
+      if (i === total - 1) return 'Cooldown';
+      return 'Main';
+    };
+
     const buildSegmentsFromSwm = (
-      segmentsWithMedia: Array<{ templateId: string; templateName: string; mediaPayload?: MediaPayload | null }>
+      segmentsWithMedia: Array<{ templateId: string; templateName: string; mediaPayload?: MediaPayload | null; segmentTitle?: 'Prep' | 'Main' | 'Cooldown' }>
     ): Segment[] => {
       const segs: Segment[] = [];
-      for (let i = 0; i < segmentsWithMedia.length; i++) {
+      const total = segmentsWithMedia.length;
+      for (let i = 0; i < total; i++) {
         const swm = segmentsWithMedia[i];
         const durationSec = swm.mediaPayload?.durationSec ?? 60;
+        const segmentTitle = swm.segmentTitle ?? getSegmentTitle(i, total);
         segs.push({
           id: `work-${swm.templateId}-${i}`,
           templateId: swm.templateId,
@@ -293,8 +306,9 @@ export default function RoutinePlayerPage() {
           mediaPayload: swm.mediaPayload ?? null,
           mediaError: false,
           templateName: swm.templateName,
+          segmentTitle,
         });
-        if (i < segmentsWithMedia.length - 1) {
+        if (i < total - 1) {
           segs.push({
             id: `rest-${i + 1}`,
             title: `휴식 ${i + 1}`,
@@ -373,7 +387,8 @@ export default function RoutinePlayerPage() {
           setSegments(buildSegmentsFromSwm(segmentsWithMedia));
         } else if (segmentsMeta?.length) {
           const segs: Segment[] = [];
-          for (let i = 0; i < segmentsMeta.length; i++) {
+          const total = segmentsMeta.length;
+          for (let i = 0; i < total; i++) {
             const sm = segmentsMeta[i];
             if ((sm.kind ?? 'work') === 'rest') {
               segs.push({
@@ -384,6 +399,7 @@ export default function RoutinePlayerPage() {
               });
               continue;
             }
+            const segmentTitle = sm.segmentTitle ?? getSegmentTitle(i, total);
             segs.push({
               id: `work-${sm.templateId}-${i}`,
               templateId: sm.templateId,
@@ -393,8 +409,9 @@ export default function RoutinePlayerPage() {
               mediaPayload: null,
               mediaError: false,
               templateName: sm.templateName,
+              segmentTitle,
             });
-            if (i < segmentsMeta.length - 1) {
+            if (i < total - 1) {
               segs.push({
                 id: `rest-${i + 1}`,
                 title: `휴식 ${i + 1}`,
@@ -416,6 +433,7 @@ export default function RoutinePlayerPage() {
               kind: 'work',
               mediaPayload: null,
               mediaError: false,
+              segmentTitle: getSegmentTitle(i, ids.length),
             });
             if (i < ids.length - 1) {
               segs.push({
@@ -596,11 +614,15 @@ export default function RoutinePlayerPage() {
 
   const currentSegment = segments[derivedIndex] ?? null;
   const isLastSegment = derivedIndex === segments.length - 1;
+  /** PR-RISK-05: segment label parity — Prep/Main/Cooldown (routine/home와 동일) */
+  const SEGMENT_LABELS: Record<string, string> = { Prep: '준비', Main: '메인', Cooldown: '마무리' };
   const segmentListItems = useMemo(
     () =>
       segments.map((seg, idx) => {
         const done = idx < derivedIndex;
         const active = idx === derivedIndex;
+        const label = seg.kind === 'work' && seg.segmentTitle ? SEGMENT_LABELS[seg.segmentTitle] ?? seg.segmentTitle : null;
+        const displayTitle = label ? `${label} · ${seg.title}` : seg.title;
         return (
           <li
             key={seg.id}
@@ -622,7 +644,7 @@ export default function RoutinePlayerPage() {
                 done ? 'text-slate-500 line-through' : 'text-slate-800'
               }`}
             >
-              {seg.title}
+              {displayTitle}
             </span>
             <span className="ml-auto text-sm text-slate-600">
               {seg.durationSec}초

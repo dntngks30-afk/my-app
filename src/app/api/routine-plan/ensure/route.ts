@@ -229,6 +229,14 @@ export async function POST(req: NextRequest) {
 
     const ids = plan.selected_template_ids ?? [];
 
+    /** PR-RISK-05: parity with routine/home — Prep/Main/Cooldown by position (no Accessory) */
+    const getSegmentTitle = (i: number, total: number): 'Prep' | 'Main' | 'Cooldown' => {
+      if (total <= 1) return 'Main';
+      if (i === 0) return 'Prep';
+      if (i === total - 1) return 'Cooldown';
+      return 'Main';
+    };
+
     if ((includeTemplates || mediaMode !== 'none') && ids.length > 0) {
       const { getTemplatesForMediaByIds } = await import('@/lib/workout-routine/exercise-templates-db');
       const templates = await getTemplatesForMediaByIds(ids);
@@ -241,6 +249,7 @@ export async function POST(req: NextRequest) {
             templateName: t?.name ?? `운동 ${i + 1}`,
             durationSec: t?.duration_sec ?? 60,
             kind: 'work' as const,
+            segmentTitle: getSegmentTitle(i, ids.length),
           };
         });
       }
@@ -291,6 +300,7 @@ export async function POST(req: NextRequest) {
             templateId: id,
             templateName: t?.name ?? `운동 ${i + 1}`,
             mediaPayload: media,
+            segmentTitle: getSegmentTitle(i, ids.length),
           };
         });
       }
