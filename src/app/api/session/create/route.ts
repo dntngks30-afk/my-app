@@ -25,6 +25,7 @@ import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import { buildSessionPlanJson } from '@/lib/session/plan-generator';
+import { applySessionGuardrail } from '@/core/session-guardrail';
 import {
   PLAN_VERSION,
   buildDeepSummarySnapshot,
@@ -542,6 +543,14 @@ export async function POST(req: NextRequest) {
         adaptiveOverlay,
         volumeModifier: mergedVolume,
       });
+      if (nextSessionNumber === 1) {
+        planJson = await applySessionGuardrail(planJson, {
+          session_number: nextSessionNumber,
+          priority_vector: deepSummary.priority_vector,
+          pain_mode: deepSummary.pain_mode,
+          scoring_version: deepSummary.scoring_version,
+        });
+      }
       setCachedPlan(cacheInput, planJson as Record<string, unknown>);
     }
     timings.generation_ms = Math.round(performance.now() - tGen);
