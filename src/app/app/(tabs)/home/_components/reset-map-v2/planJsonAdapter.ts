@@ -11,6 +11,20 @@ export interface ExerciseItem {
   order: number
   /** PR-ALG-10: 운동 처방 근거 */
   rationale?: string | null
+  /** HOTFIX: plan item identity — stable key for log matching (segmentIndex:itemIndex:templateId) */
+  plan_item_key?: string
+  segment_index?: number
+  item_index?: number
+}
+
+/** Stable plan item identity. Same format as session-exercise-events. */
+export function buildPlanItemKey(segmentIndex: number, itemIndex: number, templateId: string): string {
+  return `${segmentIndex}:${itemIndex}:${templateId}`
+}
+
+/** logs lookup key — plan_item_key 우선, templateId fallback */
+export function getLogKey(item: ExerciseItem, log?: { plan_item_key?: string }): string {
+  return log?.plan_item_key ?? item.plan_item_key ?? item.templateId
 }
 
 /**
@@ -23,16 +37,22 @@ export function extractSessionExercises(
   if (!planJson?.segments?.length) return []
 
   /** PR-SESSION-BASELINE-01: Accessory를 Main에 흡수해 UI는 prep/main/cooldown만 표시 */
-  return planJson.segments.flatMap(seg =>
-    (seg.items ?? []).map(item => ({
-      templateId: item.templateId ?? '',
-      name: item.name ?? '',
-      targetSets: item.sets,
-      targetReps: item.reps,
-      holdSeconds: item.hold_seconds,
-      segmentTitle: (seg.title === 'Accessory' ? 'Main' : seg.title) ?? '',
-      order: item.order ?? 0,
-      rationale: item.rationale ?? undefined,
-    })),
+  return planJson.segments.flatMap((seg, segIdx) =>
+    (seg.items ?? []).map((item, itemIdx) => {
+      const templateId = item.templateId ?? ''
+      return {
+        templateId,
+        name: item.name ?? '',
+        targetSets: item.sets,
+        targetReps: item.reps,
+        holdSeconds: item.hold_seconds,
+        segmentTitle: (seg.title === 'Accessory' ? 'Main' : seg.title) ?? '',
+        order: item.order ?? 0,
+        rationale: item.rationale ?? undefined,
+        plan_item_key: buildPlanItemKey(segIdx, itemIdx, templateId),
+        segment_index: segIdx,
+        item_index: itemIdx,
+      }
+    }),
   )
 }

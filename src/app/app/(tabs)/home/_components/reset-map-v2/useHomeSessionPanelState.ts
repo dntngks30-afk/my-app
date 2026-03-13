@@ -16,6 +16,7 @@ import { getSessionSafe } from '@/lib/supabase';
 import { completeSession, saveSessionReflection, saveSessionProgress } from '@/lib/session/client';
 import type { ExerciseLogItem, SessionPlan, ActivePlanSummary } from '@/lib/session/client';
 import type { ExerciseItem } from './planJsonAdapter';
+import { getLogKey } from './planJsonAdapter';
 import { isExerciseLogCompleted } from './exercise-log-helpers';
 import type { SessionPainArea } from '@/lib/session/feedback-types';
 import { loadSessionDraft, saveSessionDraft, clearSessionDraft, draftToLogs } from '@/lib/session/draftStorage';
@@ -100,9 +101,14 @@ export function useHomeSessionPanelState({
       const planId = String(sessionId);
       const draft = loadSessionDraft(planId);
       if (draft && draft.session_number === sessionId && Object.keys(draft.exercises).length > 0) {
-        const nameByTemplateId: Record<string, string> = {};
-        if (exercises) for (const e of exercises) nameByTemplateId[e.templateId] = e.name;
-        setLogs(draftToLogs(draft, nameByTemplateId));
+        const nameByKey: Record<string, string> = {};
+        if (exercises) {
+          for (const e of exercises) {
+            if (e.plan_item_key) nameByKey[e.plan_item_key] = e.name;
+            nameByKey[e.templateId] = e.name;
+          }
+        }
+        setLogs(draftToLogs(draft, nameByKey));
         setSessionPerceivedDifficulty(draft.sessionPerceivedDifficulty ?? null);
         setSessionPainAreas(draft.sessionPainAreas ?? []);
         setDraftRestored(true);
@@ -152,12 +158,12 @@ export function useHomeSessionPanelState({
       if (!token || Object.keys(logs).length === 0) return;
       const holdMap: Record<string, number> = {};
       if (exercises) for (const e of exercises) if (e.holdSeconds) holdMap[e.templateId] = e.holdSeconds;
-      const items = Object.entries(logs).map(([templateId, log]) => {
+      const items = Object.entries(logs).map(([, log]) => {
         const sets = log.sets ?? 0;
         const reps = log.reps ?? 0;
-        const isHold = holdMap[templateId] != null && holdMap[templateId] > 0;
+        const isHold = holdMap[log.templateId] != null && holdMap[log.templateId] > 0;
         return {
-          template_id: templateId,
+          template_id: log.templateId,
           sets,
           reps: isHold ? 0 : reps,
           hold_seconds: isHold ? reps : 0,
@@ -181,12 +187,14 @@ export function useHomeSessionPanelState({
   }, [draftRestored]);
 
   const handleLogComplete = useCallback((log: ExerciseLogItem) => {
-    setLogs((prev) => ({ ...prev, [log.templateId]: log }));
+    const key = log.plan_item_key ?? log.templateId;
+    setLogs((prev) => ({ ...prev, [key]: log }));
   }, []);
 
   const handleNextOrEnd = useCallback(
     (log: ExerciseLogItem) => {
-      setLogs((prev) => ({ ...prev, [log.templateId]: log }));
+      const key = log.plan_item_key ?? log.templateId;
+      setLogs((prev) => ({ ...prev, [key]: log }));
       if (!exercises || exercises.length === 0) return;
       let nextIdx: number | null = null;
       let showSheet = false;
@@ -221,12 +229,14 @@ export function useHomeSessionPanelState({
         }
 
         const durationSec = Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1000));
-        /** HOTFIX: plan order로 1:1 전달 — templateId 중복 시 Object.values가 덮어써서 undercount 방지 */
+        /** HOTFIX: plan order로 1:1 전달, plan_item_key 우선 lookup */
         const exerciseLogsArray = (exercises ?? [])
-          .map((ex) => logs[ex.templateId])
+          .map((ex) => logs[ex.plan_item_key ?? ex.templateId] ?? logs[ex.templateId])
           .filter((l): l is ExerciseLogItem => l != null);
         const allDone =
-          exercises && exercises.length > 0 && exercises.every((e) => isExerciseLogCompleted(logs[e.templateId], e));
+          exercises &&
+          exercises.length > 0 &&
+          exercises.every((e) => isExerciseLogCompleted(logs[getLogKey(e)] ?? logs[e.templateId], e));
         const completionMode = allDone ? 'all_done' : exerciseLogsArray.length > 0 ? 'partial_done' : 'stop_early';
 
         const payload: Parameters<typeof completeSession>[1] = {

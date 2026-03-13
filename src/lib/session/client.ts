@@ -347,6 +347,10 @@ export type ExerciseLogItem = {
   rpe?: number | null;
   /** Discomfort 0~10 (exercise-level). Optional. */
   discomfort?: number | null;
+  /** HOTFIX: plan item identity — stable key for matching (segmentIndex:itemIndex:templateId) */
+  plan_item_key?: string;
+  segment_index?: number;
+  item_index?: number;
 };
 
 /** PR-P2-1: optional feedback payload */

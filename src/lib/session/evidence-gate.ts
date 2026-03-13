@@ -86,6 +86,10 @@ export type ExerciseLogItem = {
   difficulty: number | null;
   rpe?: number | null;
   discomfort?: number | null;
+  /** HOTFIX: plan item identity — segmentIndex:itemIndex:templateId */
+  plan_item_key?: string;
+  segment_index?: number;
+  item_index?: number;
 };
 
 export type FeedbackPayload = {
@@ -103,18 +107,30 @@ type PlanItemInfo = {
   templateId: string;
   segmentTitle: string;
   isMain: boolean;
+  plan_item_key: string;
 };
+
+function buildPlanItemKey(segmentIndex: number, itemIndex: number, templateId: string): string {
+  return `${segmentIndex}:${itemIndex}:${templateId}`;
+}
 
 function buildPlanItemList(planJson: PlanJson | null | undefined): PlanItemInfo[] {
   const items: PlanItemInfo[] = [];
   if (!planJson?.segments) return items;
-  for (const seg of planJson.segments) {
+  for (let segIdx = 0; segIdx < planJson.segments.length; segIdx++) {
+    const seg = planJson.segments[segIdx]!;
     const title = seg.title ?? '';
     const isMain = title.toLowerCase() === 'main';
-    for (const it of seg.items ?? []) {
+    for (let itemIdx = 0; itemIdx < (seg.items ?? []).length; itemIdx++) {
+      const it = seg.items![itemIdx];
       const tid = it?.templateId;
       if (tid) {
-        items.push({ templateId: tid, segmentTitle: title, isMain });
+        items.push({
+          templateId: tid,
+          segmentTitle: title,
+          isMain,
+          plan_item_key: buildPlanItemKey(segIdx, itemIdx, tid),
+        });
       }
     }
   }
@@ -122,17 +138,22 @@ function buildPlanItemList(planJson: PlanJson | null | undefined): PlanItemInfo[
 }
 
 /**
- * Match exercise_logs to plan items (1:1 by templateId, consuming logs in order).
+ * Match exercise_logs to plan items. plan_item_key 우선, templateId fallback (backward compat).
  */
 function countCompletedItems(
   planItems: PlanItemInfo[],
   exerciseLogs: ExerciseLogItem[]
 ): { completed: number; mainCompleted: number; withPerformedValue: number } {
-  const logQueue = new Map<string, ExerciseLogItem[]>();
+  const byPlanItemKey = new Map<string, ExerciseLogItem>();
+  const logQueueByTemplateId = new Map<string, ExerciseLogItem[]>();
   for (const log of exerciseLogs) {
-    const q = logQueue.get(log.templateId) ?? [];
-    q.push(log);
-    logQueue.set(log.templateId, q);
+    if (log.plan_item_key) {
+      byPlanItemKey.set(log.plan_item_key, log);
+    } else {
+      const q = logQueueByTemplateId.get(log.templateId) ?? [];
+      q.push(log);
+      logQueueByTemplateId.set(log.templateId, q);
+    }
   }
 
   let completed = 0;
@@ -140,8 +161,11 @@ function countCompletedItems(
   let withPerformedValue = 0;
 
   for (const p of planItems) {
-    const q = logQueue.get(p.templateId);
-    const log = q?.shift();
+    let log: ExerciseLogItem | undefined = byPlanItemKey.get(p.plan_item_key);
+    if (!log) {
+      const q = logQueueByTemplateId.get(p.templateId);
+      log = q?.shift();
+    }
     if (log) {
       completed++;
       if (p.isMain) mainCompleted++;

@@ -127,7 +127,24 @@ function parseAndValidateExerciseLogs(raw: unknown): ExerciseLogItem[] | null {
       discomfort = Math.min(10, Math.max(0, Math.floor(obj.discomfort)));
     }
 
-    result.push({ templateId, name, sets, reps, difficulty, rpe, discomfort });
+    const plan_item_key = typeof obj.plan_item_key === 'string' && /^\d+:\d+:.+$/.test(obj.plan_item_key)
+      ? obj.plan_item_key.trim().slice(0, 120)
+      : undefined;
+    const segment_index = typeof obj.segment_index === 'number' && Number.isInteger(obj.segment_index) ? obj.segment_index : undefined;
+    const item_index = typeof obj.item_index === 'number' && Number.isInteger(obj.item_index) ? obj.item_index : undefined;
+
+    result.push({
+      templateId,
+      name,
+      sets,
+      reps,
+      difficulty,
+      rpe,
+      discomfort,
+      ...(plan_item_key && { plan_item_key }),
+      ...(segment_index !== undefined && { segment_index }),
+      ...(item_index !== undefined && { item_index }),
+    });
   }
   return result;
 }
@@ -276,9 +293,19 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
     const phaseLengthsForNext = getPhaseLengthsFromTrace(currentPlan?.generation_trace_json);
 
-    // PR-EXEC-02: merge persisted logs — plan order 유지, templateId 중복 시 1:1 매칭 보장
+    // PR-EXEC-02: merge persisted logs — plan_item_key 우선, templateId fallback
     const dbLogs = currentPlan?.exercise_logs && Array.isArray(currentPlan.exercise_logs) ? (currentPlan.exercise_logs as Array<Record<string, unknown>>) : [];
-    const clientByTemplateId = new Map(exerciseLogsArray.map((l) => [l.templateId, l]));
+    const clientByPlanItemKey = new Map<string, ExerciseLogItem>();
+    const clientQueueByTemplateId = new Map<string, ExerciseLogItem[]>();
+    for (const l of exerciseLogsArray) {
+      if (l.plan_item_key) {
+        clientByPlanItemKey.set(l.plan_item_key, l);
+      } else {
+        const q = clientQueueByTemplateId.get(l.templateId) ?? [];
+        q.push(l);
+        clientQueueByTemplateId.set(l.templateId, q);
+      }
+    }
     const dbByTemplateId = new Map<string, ExerciseLogItem>();
     for (const row of dbLogs) {
       const templateId = typeof row.templateId === 'string' ? row.templateId : null;
@@ -293,18 +320,26 @@ export async function POST(req: NextRequest) {
       }
     }
     const pj = currentPlan?.plan_json as { segments?: Array<{ items?: Array<{ templateId?: string }> }> } | null;
-    const planOrder: string[] = [];
+    const planItems: Array<{ plan_item_key: string; templateId: string }> = [];
     if (pj?.segments) {
-      for (const seg of pj.segments) {
-        for (const it of seg.items ?? []) {
-          const tid = it?.templateId;
-          if (typeof tid === 'string') planOrder.push(tid);
+      for (let segIdx = 0; segIdx < pj.segments.length; segIdx++) {
+        const seg = pj.segments[segIdx]!;
+        for (let itemIdx = 0; itemIdx < (seg.items ?? []).length; itemIdx++) {
+          const tid = seg.items![itemIdx]?.templateId;
+          if (typeof tid === 'string') {
+            planItems.push({ plan_item_key: `${segIdx}:${itemIdx}:${tid}`, templateId: tid });
+          }
         }
       }
     }
     const merged: ExerciseLogItem[] = [];
-    for (const tid of planOrder) {
-      const log = clientByTemplateId.get(tid) ?? dbByTemplateId.get(tid);
+    for (const p of planItems) {
+      let log = clientByPlanItemKey.get(p.plan_item_key);
+      if (!log) {
+        const q = clientQueueByTemplateId.get(p.templateId);
+        log = q?.shift();
+      }
+      if (!log) log = dbByTemplateId.get(p.templateId) ?? undefined;
       if (log) merged.push(log);
     }
     exerciseLogsArray = merged.length > 0 ? merged : exerciseLogsArray;

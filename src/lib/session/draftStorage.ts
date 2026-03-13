@@ -67,13 +67,20 @@ function logToExercise(
   };
 }
 
+/** plan_item_key 형식: segmentIndex:itemIndex:templateId. templateId 추출용 */
+function parseTemplateIdFromKey(key: string): string {
+  const parts = key.split(':');
+  return parts.length >= 3 ? parts[2]! : key;
+}
+
 function exerciseToLog(
+  key: string,
   templateId: string,
   name: string,
   ex: SessionDraftData['exercises'][string]
 ): ExerciseLogItem {
   const reps = ex.hold_seconds > 0 ? ex.hold_seconds : ex.reps;
-  return {
+  const log: ExerciseLogItem = {
     templateId,
     name,
     sets: ex.sets_completed > 0 ? ex.sets_completed : null,
@@ -82,6 +89,10 @@ function exerciseToLog(
     rpe: ex.rpe ?? null,
     discomfort: ex.discomfort ?? null,
   };
+  if (key.includes(':') && key.split(':').length >= 3) {
+    log.plan_item_key = key;
+  }
+  return log;
 }
 
 function isValidExercise(obj: unknown): obj is SessionDraftData['exercises'][string] {
@@ -196,16 +207,18 @@ export function clearSessionDraft(planId: string): void {
 
 /**
  * Convert SessionDraftData to logs Record for SessionPanelV2.
- * Requires exercise names from plan — pass logs with names for merge.
+ * Key: plan_item_key when draft uses it, else templateId (backward compat).
+ * nameByKey: Record<key, name> — build from exercises (plan_item_key or templateId).
  */
 export function draftToLogs(
   draft: SessionDraftData,
-  nameByTemplateId: Record<string, string>
+  nameByKey: Record<string, string>
 ): Record<string, ExerciseLogItem> {
   const result: Record<string, ExerciseLogItem> = {};
-  for (const [templateId, ex] of Object.entries(draft.exercises)) {
-    const name = nameByTemplateId[templateId] ?? '운동';
-    result[templateId] = exerciseToLog(templateId, name, ex);
+  for (const [key, ex] of Object.entries(draft.exercises)) {
+    const templateId = parseTemplateIdFromKey(key);
+    const name = nameByKey[key] ?? nameByKey[templateId] ?? '운동';
+    result[key] = exerciseToLog(key, templateId, name, ex);
   }
   return result;
 }

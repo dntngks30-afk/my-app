@@ -76,10 +76,13 @@ function summaryToPanelPlan(data: PanelPlanSummaryResponse): SessionPlan {
   }
 }
 
+/** HOTFIX: plan_item_key 우선 key, templateId fallback (backward compat). templateId 중복 시 overwrite 방지. */
 function toExerciseLogMap(logs?: ExerciseLogItem[]): Record<string, ExerciseLogItem> {
   if (!logs?.length) return {}
   const map: Record<string, ExerciseLogItem> = {}
-  for (const log of logs) map[log.templateId] = log
+  for (const log of logs) {
+    map[log.plan_item_key ?? log.templateId] = log
+  }
   return map
 }
 

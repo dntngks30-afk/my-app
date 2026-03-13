@@ -219,6 +219,9 @@ function ModalInner({
       difficulty: null,
       rpe: null,
       discomfort: null,
+      ...(item.plan_item_key && { plan_item_key: item.plan_item_key }),
+      ...(typeof item.segment_index === 'number' && { segment_index: item.segment_index }),
+      ...(typeof item.item_index === 'number' && { item_index: item.item_index }),
     };
     if (onNextOrEnd) {
       onNextOrEnd(log);

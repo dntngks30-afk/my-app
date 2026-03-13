@@ -3,6 +3,7 @@
 import { useRef, useEffect } from 'react'
 import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import type { ExerciseItem } from './planJsonAdapter'
+import { getLogKey } from './planJsonAdapter'
 import type { ExerciseLogItem, SessionPlan, ActivePlanSummary } from '@/lib/session/client'
 import { isExerciseLogCompleted, getExerciseLogDisplayValue } from './exercise-log-helpers'
 import type { NextSessionPreviewData } from '../NextSessionPreviewCard'
@@ -420,7 +421,7 @@ function PanelInner({
         item={exercises && exerciseIndex != null ? exercises[exerciseIndex] ?? null : null}
         exerciseIndex={exerciseIndex}
         totalExercises={exercises?.length ?? 0}
-        initialLog={exercises && exerciseIndex != null ? logs[exercises[exerciseIndex]?.templateId ?? ''] : undefined}
+        initialLog={exercises && exerciseIndex != null ? logs[getLogKey(exercises[exerciseIndex]!)] ?? logs[exercises[exerciseIndex]?.templateId ?? ''] : undefined}
         onClose={() => setExerciseIndex(null)}
         onComplete={handleLogComplete}
         onNextOrEnd={handleNextOrEnd}
@@ -533,7 +534,7 @@ function ExerciseList({
           </p>
           <div className="space-y-1.5">
             {items.map((item, i) => {
-              const log = logs[item.templateId]
+              const log = logs[getLogKey(item)] ?? logs[item.templateId]
               const isDone = isExerciseLogCompleted(log, item)
               const displayValue = getExerciseLogDisplayValue(log, item)
               return (
@@ -578,7 +579,7 @@ function ExerciseList({
                   {/* ▶ 버튼 — current/completed(과거) 세션에서 재생 가능 */}
                   <button
                     type="button"
-                    onClick={() => (status === 'current' || status === 'completed') ? onPlay(item, Math.max(0, exercises?.findIndex((e) => e.templateId === item.templateId && e.segmentTitle === item.segmentTitle && e.order === item.order) ?? 0)) : undefined}
+                    onClick={() => (status === 'current' || status === 'completed') ? onPlay(item, Math.max(0, exercises?.findIndex((e) => (e.plan_item_key ? e.plan_item_key === item.plan_item_key : e.templateId === item.templateId && e.segmentTitle === item.segmentTitle && e.order === item.order)) ?? 0)) : undefined}
                     disabled={status === 'locked'}
                     title={status === 'locked' ? '현재 세션이 아닙니다' : '운동 보기'}
                     className={[
