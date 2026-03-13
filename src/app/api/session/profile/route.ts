@@ -13,10 +13,10 @@
  * Auth: Bearer token (session APIs와 동일). Write: service role (RLS bypass).
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
-import { fail, ApiErrorCode } from '@/lib/api/contract';
+import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import {
   applyTargetFrequency,
   isValidTargetFrequency,
@@ -29,19 +29,13 @@ export async function POST(req: NextRequest) {
   try {
     const userId = await getCurrentUserId(req);
     if (!userId) {
-      return NextResponse.json(
-        { error: { code: 'UNAUTHENTICATED', message: '인증이 필요합니다.' } },
-        { status: 401 }
-      );
+      return fail(401, ApiErrorCode.AUTH_REQUIRED, '인증이 필요합니다.');
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const rawFreq = body.target_frequency;
     if (!isValidTargetFrequency(rawFreq)) {
-      return NextResponse.json(
-        { error: { code: 'VALIDATION_ERROR', message: 'target_frequency는 2, 3, 4, 5 중 하나여야 합니다.' } },
-        { status: 400 }
-      );
+      return fail(400, ApiErrorCode.VALIDATION_FAILED, 'target_frequency는 2, 3, 4, 5 중 하나여야 합니다.');
     }
 
     const lifestyleTag = typeof body.lifestyle_tag === 'string'
@@ -57,10 +51,7 @@ export async function POST(req: NextRequest) {
       if (result.code === 'POLICY_LOCKED') {
         return fail(409, ApiErrorCode.POLICY_LOCKED, result.message);
       }
-      return NextResponse.json(
-        { error: { code: 'DB_ERROR', message: result.message } },
-        { status: 500 }
-      );
+      return fail(500, ApiErrorCode.INTERNAL_ERROR, result.message);
     }
 
     const { data: existingProgress } = await supabase
@@ -85,18 +76,14 @@ export async function POST(req: NextRequest) {
       .eq('user_id', userId)
       .single();
 
-    const res = NextResponse.json({
+    const data = {
       profile: profile ?? {},
       progress: progress ?? {},
       ...(warning && { warning }),
-    });
-    res.headers.set('Cache-Control', 'no-store');
-    return res;
+    };
+    return ok(data, data);
   } catch (err) {
     console.error('[session/profile]', err);
-    return NextResponse.json(
-      { error: { code: 'INTERNAL', message: err instanceof Error ? err.message : '서버 오류' } },
-      { status: 500 }
-    );
+    return fail(500, ApiErrorCode.INTERNAL_ERROR, err instanceof Error ? err.message : '서버 오류');
   }
 }
