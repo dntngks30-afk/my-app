@@ -27,6 +27,10 @@ import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import { buildSessionPlanJson } from '@/lib/session/plan-generator';
 import { applySessionGuardrail } from '@/core/session-guardrail';
 import {
+  computeAdaptiveModifier,
+  getAvoidTagsForDiscomfort,
+} from '@/core/adaptive-engine';
+import {
   PLAN_VERSION,
   buildDeepSummarySnapshot,
   buildProfileSnapshot,
@@ -488,11 +492,71 @@ export async function POST(req: NextRequest) {
     const tAdaptiveMod = performance.now();
     const summary = await loadLatestAdaptiveSummary(supabase, userId);
     const adaptiveModifier = resolveAdaptiveModifier(summary);
-    const mergedControls = resolveAdaptiveMerge({
+    let mergedControls = resolveAdaptiveMerge({
       progression: modifiers,
       modifier: adaptiveModifier,
       summary: summary ? { flags: summary.flags, created_at: summary.created_at } : null,
     });
+
+    // PR-ALG-12: Adaptive Engine v1 — merge execution-signal modifier
+    const engineModifier = computeAdaptiveModifier({
+      sessionFeedback: sessionFeedback.map((f) => ({
+        session_number: f.session_number,
+        overall_rpe: f.overall_rpe,
+        pain_after: f.pain_after,
+        difficulty_feedback: f.difficulty_feedback,
+        completion_ratio: f.completion_ratio,
+        body_state_change: f.body_state_change,
+        discomfort_area: f.discomfort_area,
+      })),
+      adaptiveSummary: summary
+        ? {
+            completion_ratio: summary.completion_ratio,
+            skipped_exercises: summary.skipped_exercises,
+            avg_rpe: summary.avg_rpe,
+            avg_discomfort: summary.avg_discomfort,
+            dropout_risk_score: summary.dropout_risk_score,
+            discomfort_burden_score: summary.discomfort_burden_score,
+          }
+        : null,
+    });
+
+    if (engineModifier.protection_mode) {
+      const baseOverlay = mergedControls.overlay ?? {};
+      mergedControls = {
+        ...mergedControls,
+        forceRecovery: true,
+        overlay: {
+          ...baseOverlay,
+          forceRecovery: true,
+          targetLevelDelta: -1 as const,
+          ...(baseOverlay.maxDifficultyCap ? {} : { maxDifficultyCap: 'medium' as const }),
+        },
+      };
+    }
+    if (engineModifier.volume_modifier === -1 && (mergedControls.volumeModifier ?? 0) > -0.2) {
+      mergedControls = {
+        ...mergedControls,
+        volumeModifier: Math.min(mergedControls.volumeModifier ?? 0, -0.2),
+      };
+    }
+    if (engineModifier.difficulty_modifier === -1 && !mergedControls.maxDifficultyCap) {
+      mergedControls = {
+        ...mergedControls,
+        maxDifficultyCap: 'medium' as const,
+        overlay: {
+          ...mergedControls.overlay,
+          maxDifficultyCap: 'medium' as const,
+        } as typeof mergedControls.overlay,
+      };
+    }
+
+    let effectivePainFlags = [...painFlags];
+    const discomfortAvoid = getAvoidTagsForDiscomfort(engineModifier.discomfort_area);
+    for (const tag of discomfortAvoid) {
+      if (!effectivePainFlags.includes(tag)) effectivePainFlags.push(tag);
+    }
+
     const adaptiveOverlay = mergedControls.overlay;
     const mergedVolume = mergedControls.volumeModifier;
     timings.adaptive_modifier_ms = Math.round(performance.now() - tAdaptiveMod);
@@ -507,7 +571,7 @@ export async function POST(req: NextRequest) {
       conditionMood,
       focus: deepSummary.focus ?? [],
       avoid: deepSummary.avoid ?? [],
-      painFlags,
+      painFlags: effectivePainFlags,
       usedTemplateIds,
       adaptiveOverlay: adaptiveOverlay ?? undefined,
       volumeModifier: mergedVolume,
@@ -527,7 +591,7 @@ export async function POST(req: NextRequest) {
         conditionMood,
         focus: deepSummary.focus,
         avoid: deepSummary.avoid,
-        painFlags,
+        painFlags: effectivePainFlags,
         usedTemplateIds,
         resultType: deepSummary.result_type,
         confidence: deepSummary.effective_confidence ?? deepSummary.confidence,
@@ -561,7 +625,7 @@ export async function POST(req: NextRequest) {
     const condition = {
       condition_mood: conditionMood,
       time_budget: timeBudget,
-      pain_flags: painFlags,
+      pain_flags: effectivePainFlags,
       equipment,
     };
 

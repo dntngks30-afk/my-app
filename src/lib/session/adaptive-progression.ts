@@ -48,6 +48,8 @@ type SessionFeedbackRow = {
   pain_after?: number | null;
   difficulty_feedback?: string | null;
   completion_ratio?: number | null;
+  body_state_change?: string | null;
+  discomfort_area?: string | null;
 };
 
 type ExerciseFeedbackRow = {
@@ -84,7 +86,7 @@ export async function loadRecentAdaptiveSignals(
   const [sfRes, exRes, plansRes] = await Promise.all([
     supabase
       .from('session_feedback')
-      .select('session_number, overall_rpe, pain_after, difficulty_feedback, completion_ratio')
+      .select('session_number, overall_rpe, pain_after, difficulty_feedback, completion_ratio, body_state_change, discomfort_area')
       .eq('user_id', userId)
       .gte('session_number', fromSession)
       .lte('session_number', toSession)
