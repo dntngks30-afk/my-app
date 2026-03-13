@@ -2,7 +2,13 @@
  * PR-A: session_exercise_events — truthful execution logging for drift/dropout/adaptive.
  * Populated on session complete from exercise_logs + plan_json.
  * AGGREGATE-ONLY: one row per exercise block. Do NOT fabricate per-set rows.
+ *
+ * PR-RISK-06: plan_item_key is the canonical identity for session_exercise_events.
+ * New writes must use plan_item_key (segmentIndex:itemIndex:templateId).
+ * Legacy event identity (seg{N}-item{M}, log{N}) is read-only fallback.
  */
+
+import { buildPlanItemKey } from './exercise-log-identity';
 
 export type ExerciseLogItem = {
   templateId: string;
@@ -66,6 +72,12 @@ export type EventLogResult = {
   attempted: number;
   written: number;
   failed: number;
+  /** PR-RISK-06: observability for event identity mode */
+  event_identity?: {
+    written_with_plan_item_key_count: number;
+    legacy_event_identity_fallback_count: number;
+    unresolved_event_identity_count: number;
+  };
 };
 
 /**
@@ -113,10 +125,13 @@ function buildPlanItemList(planJson: PlanJson | null | undefined): Array<{
   return items;
 }
 
+/** Canonical plan_item_key format: segmentIndex:itemIndex:templateId */
+const PLAN_ITEM_KEY_REGEX = /^\d+:\d+:.+$/;
+
 /**
  * Build exercise-level event rows from exercise_logs + plan_json.
  * ONE row per exercise block. Never fabricate per-set rows from aggregate data.
- * plan_item_key: seg{N}-item{M} when plan available, log{N} when fallback.
+ * plan_item_key: canonical (segmentIndex:itemIndex:templateId) when derivable; log{N} legacy fallback only.
  */
 export function buildSessionExerciseEvents(
   exerciseLogs: ExerciseLogItem[],
@@ -156,7 +171,7 @@ export function buildSessionExerciseEvents(
     let itemIndex: number | null = null;
     let dataQuality: 'full' | 'partial' = 'partial';
 
-    if (log.plan_item_key && /^\d+:\d+:.+$/.test(log.plan_item_key)) {
+    if (log.plan_item_key && PLAN_ITEM_KEY_REGEX.test(log.plan_item_key)) {
       planItemKey = log.plan_item_key;
       segmentIndex = log.segment_index ?? null;
       itemIndex = log.item_index ?? null;
@@ -165,12 +180,14 @@ export function buildSessionExerciseEvents(
         dataQuality = 'full';
       }
     } else if (match && hasPlan) {
-      planItemKey = `seg${match.segmentIndex}-item${match.itemIndex}`;
-      planItem = planByKey.get(planItemKey) ?? null;
+      // PR-RISK-06: use canonical plan_item_key (segmentIndex:itemIndex:templateId), not seg{N}-item{M}
+      planItemKey = buildPlanItemKey(match.segmentIndex, match.itemIndex, log.templateId);
+      planItem = planByKey.get(`seg${match.segmentIndex}-item${match.itemIndex}`) ?? null;
       segmentIndex = match.segmentIndex;
       itemIndex = match.itemIndex;
       dataQuality = 'full';
     } else {
+      // Legacy fallback only when plan match unavailable
       planItemKey = `log${logIdx}`;
       dataQuality = 'partial';
     }
@@ -230,6 +247,11 @@ export async function writeSessionExerciseEvents(
   if (attempted === 0) {
     return { attempted: 0, written: 0, failed: 0 };
   }
+
+  const writtenWithPlanItemKey = rows.filter((r) => PLAN_ITEM_KEY_REGEX.test(r.plan_item_key)).length;
+  const legacyFallback = rows.filter((r) => /^log\d+$/.test(r.plan_item_key)).length;
+  const unresolved = rows.length - writtenWithPlanItemKey - legacyFallback;
+
   try {
     const { data, error } = await supabase
       .from('session_exercise_events')
@@ -238,12 +260,39 @@ export async function writeSessionExerciseEvents(
       });
     if (error) {
       console.error('[session_exercise_events] upsert failed', error.message);
-      return { attempted, written: 0, failed: attempted };
+      return {
+        attempted,
+        written: 0,
+        failed: attempted,
+        event_identity: {
+          written_with_plan_item_key_count: writtenWithPlanItemKey,
+          legacy_event_identity_fallback_count: legacyFallback,
+          unresolved_event_identity_count: unresolved,
+        },
+      };
     }
     const written = Array.isArray(data) ? data.length : 0;
-    return { attempted, written, failed: 0 };
+    return {
+      attempted,
+      written,
+      failed: 0,
+      event_identity: {
+        written_with_plan_item_key_count: writtenWithPlanItemKey,
+        legacy_event_identity_fallback_count: legacyFallback,
+        unresolved_event_identity_count: unresolved,
+      },
+    };
   } catch (err) {
     console.error('[session_exercise_events] upsert error', err);
-    return { attempted, written: 0, failed: attempted };
+    return {
+      attempted,
+      written: 0,
+      failed: attempted,
+      event_identity: {
+        written_with_plan_item_key_count: writtenWithPlanItemKey,
+        legacy_event_identity_fallback_count: legacyFallback,
+        unresolved_event_identity_count: unresolved,
+      },
+    };
   }
 }

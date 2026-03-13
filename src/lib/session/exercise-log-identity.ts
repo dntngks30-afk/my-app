@@ -34,6 +34,71 @@ export function isLegacyItemKey(key: string): boolean {
   return key.includes('_') && !key.includes(':');
 }
 
+/** Canonical plan_item_key format for session_exercise_events */
+const PLAN_ITEM_KEY_REGEX = /^\d+:\d+:.+$/;
+
+/**
+ * PR-RISK-06: Legacy event identity formats (seg{N}-item{M}, log{N}).
+ * Used only for read/normalize fallback. New writes use plan_item_key.
+ */
+export function isLegacyEventItemKey(key: string): boolean {
+  if (!key) return false;
+  if (PLAN_ITEM_KEY_REGEX.test(key)) return false;
+  return /^seg\d+-item\d+$/.test(key) || /^log\d+$/.test(key);
+}
+
+/**
+ * PR-RISK-06: Normalize legacy event plan_item_key to canonical format.
+ * seg{N}-item{M} + templateId → segmentIndex:itemIndex:templateId.
+ * log{N} cannot be resolved; returns null.
+ */
+export function normalizeLegacyEventItemIdentity(
+  key: string,
+  templateId: string
+): string | null {
+  if (!key) return null;
+  if (PLAN_ITEM_KEY_REGEX.test(key)) return key;
+  const segMatch = /^seg(\d+)-item(\d+)$/.exec(key);
+  if (segMatch) {
+    return buildPlanItemKey(parseInt(segMatch[1]!, 10), parseInt(segMatch[2]!, 10), templateId);
+  }
+  return null;
+}
+
+/**
+ * PR-RISK-06: Resolve event plan_item_key to canonical form for analysis/replay.
+ * Use plan_item_key when canonical; normalize legacy (seg{N}-item{M}) when templateId available.
+ */
+export function resolveEventPlanItemKey(
+  planItemKey: string,
+  templateId: string
+): string {
+  const normalized = normalizeLegacyEventItemIdentity(planItemKey, templateId);
+  return normalized ?? planItemKey;
+}
+
+/**
+ * PR-RISK-06: Debug meta for event identity observability.
+ */
+export function buildEventIdentityDebugMeta(rows: Array<{ plan_item_key: string; template_id?: string }>): {
+  written_with_plan_item_key_count: number;
+  legacy_event_identity_fallback_count: number;
+  unresolved_event_identity_count: number;
+} {
+  let canonical = 0;
+  let legacy = 0;
+  for (const r of rows) {
+    const key = r.plan_item_key;
+    if (PLAN_ITEM_KEY_REGEX.test(key)) canonical++;
+    else if (/^log\d+$/.test(key)) legacy++;
+  }
+  return {
+    written_with_plan_item_key_count: canonical,
+    legacy_event_identity_fallback_count: legacy,
+    unresolved_event_identity_count: rows.length - canonical - legacy,
+  };
+}
+
 /**
  * Try to derive plan_item_key from legacy key. Requires plan segments to resolve.
  * Returns key as-is if already plan_item_key format (contains :), or null if cannot resolve.

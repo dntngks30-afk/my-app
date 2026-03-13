@@ -87,6 +87,8 @@ type EventRow = {
 
 /**
  * Load exercise-level events for a session plan.
+ * PR-RISK-06: When grouping by item identity (replay/analytics), use resolveEventPlanItemKey
+ * from exercise-log-identity to normalize legacy plan_item_key (seg{N}-item{M}, log{N}).
  */
 export async function loadSessionEventsForEval(
   supabase: { from: (t: string) => { select: (cols: string) => { eq: (col: string, val: unknown) => Promise<{ data: unknown[] | null }> } } },
