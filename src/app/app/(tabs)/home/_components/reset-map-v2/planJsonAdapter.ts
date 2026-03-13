@@ -22,6 +22,7 @@ export function extractSessionExercises(
 ): ExerciseItem[] {
   if (!planJson?.segments?.length) return []
 
+  /** PR-SESSION-BASELINE-01: Accessory를 Main에 흡수해 UI는 prep/main/cooldown만 표시 */
   return planJson.segments.flatMap(seg =>
     (seg.items ?? []).map(item => ({
       templateId: item.templateId ?? '',
@@ -29,7 +30,7 @@ export function extractSessionExercises(
       targetSets: item.sets,
       targetReps: item.reps,
       holdSeconds: item.hold_seconds,
-      segmentTitle: seg.title ?? '',
+      segmentTitle: (seg.title === 'Accessory' ? 'Main' : seg.title) ?? '',
       order: item.order ?? 0,
       rationale: item.rationale ?? undefined,
     })),

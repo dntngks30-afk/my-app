@@ -420,7 +420,8 @@ export function buildSessionBootstrapSummaryFromTemplates(
     .filter((entry) => entry.score >= 0)
     .sort((a, b) => b.score - a.score)
 
-  let mainCount = input.deepSummary.safety_mode === 'red' ? 1 : 2
+  /** PR-SESSION-BASELINE-01: main 2~3 baseline. red=1, yellow=2, else 3. first session guardrail 유지 */
+  let mainCount = input.deepSummary.safety_mode === 'red' ? 1 : input.deepSummary.safety_mode === 'yellow' ? 2 : 3
   if (isFirstSession && mainCount > MAX_FIRST_SESSION_MAIN_COUNT) {
     mainCount = MAX_FIRST_SESSION_MAIN_COUNT
   }

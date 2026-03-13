@@ -709,9 +709,12 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const isShort = overlay?.forceShort ?? input.timeBudget === 'short';
   const isRecovery = overlay?.forceRecovery ?? input.conditionMood === 'bad';
   const isFirstSession = input.sessionNumber === 1;
-  let mainCount = isShort ? 1 : isRecovery ? 1 : 2;
+  /** PR-SESSION-BASELINE-01: main 2~3 baseline. red=1, yellow=2, else 3 */
+  let mainCount = isShort ? 1 : isRecovery ? 1 : 3;
   if (input.safety_mode === 'red') {
     mainCount = 1;
+  } else if (input.safety_mode === 'yellow') {
+    mainCount = 2;
   }
   if (isFirstSession && mainCount > MAX_FIRST_SESSION_MAIN_COUNT) {
     mainCount = MAX_FIRST_SESSION_MAIN_COUNT;
