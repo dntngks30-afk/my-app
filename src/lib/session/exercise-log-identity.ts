@@ -9,6 +9,8 @@
  * New writes must use plan_item_key. Remove bridge after legacy hit rate approaches zero.
  */
 
+import type { ExerciseLogItemWithIdentity, LegacyDraftKeyMigrationMeta } from './types';
+
 /** Stable plan item identity. Format: segmentIndex:itemIndex:templateId */
 export function buildPlanItemKey(
   segmentIndex: number,
@@ -20,6 +22,7 @@ export function buildPlanItemKey(
 
 /**
  * Get checked/draft key for a plan item. SSOT — use this instead of segTitle/order/templateId.
+ * @returns plan_item_key (segmentIndex:itemIndex:templateId)
  */
 export function getCheckedItemKey(
   segmentIndex: number,
@@ -63,7 +66,7 @@ export function assertPlanItemKeyForWrite(key: string): boolean {
 export function filterCheckedForSave(
   checked: Record<string, boolean>,
   segments: PlanSegment[] | undefined
-): { filtered: Record<string, boolean>; meta: ReturnType<typeof buildLegacyDraftMigrationMeta> } {
+): { filtered: Record<string, boolean>; meta: LegacyDraftKeyMigrationMeta } {
   const keys = Object.keys(checked);
   const meta = buildLegacyDraftMigrationMeta(keys, segments);
   const filtered: Record<string, boolean> = {};
@@ -85,12 +88,7 @@ export function filterCheckedForSave(
 export function buildLegacyDraftMigrationMeta(
   keys: string[],
   segments: PlanSegment[] | undefined
-): {
-  legacy_checked_key_hits: number;
-  legacy_checked_key_migrated: number;
-  legacy_checked_key_unresolved: number;
-  unresolved_legacy_keys: string[];
-} {
+): LegacyDraftKeyMigrationMeta {
   let hits = 0;
   let migrated = 0;
   let unresolved = 0;
@@ -231,6 +229,7 @@ export type PlanSegment = {
 /**
  * Build exercise_logs with plan_item_key from plan segments.
  * Use for complete payload — ensures identity for evidence gate.
+ * @returns ExerciseLogItemWithIdentity[] — each item has required plan_item_key, segment_index, item_index
  */
 export function buildCompletionExerciseLogsWithIdentity(
   segments: PlanSegment[] | undefined,
@@ -243,30 +242,8 @@ export function buildCompletionExerciseLogsWithIdentity(
     rpe?: number | null;
     discomfort?: number | null;
   } | null
-): Array<{
-  templateId: string;
-  name: string;
-  sets: number | null;
-  reps: number | null;
-  difficulty: number | null;
-  rpe?: number | null;
-  discomfort?: number | null;
-  plan_item_key: string;
-  segment_index: number;
-  item_index: number;
-}> {
-  const result: Array<{
-    templateId: string;
-    name: string;
-    sets: number | null;
-    reps: number | null;
-    difficulty: number | null;
-    rpe?: number | null;
-    discomfort?: number | null;
-    plan_item_key: string;
-    segment_index: number;
-    item_index: number;
-  }> = [];
+): ExerciseLogItemWithIdentity[] {
+  const result: ExerciseLogItemWithIdentity[] = [];
   if (!segments?.length) return result;
   for (let segIdx = 0; segIdx < segments.length; segIdx++) {
     const seg = segments[segIdx]!;

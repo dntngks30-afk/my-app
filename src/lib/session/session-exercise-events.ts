@@ -9,20 +9,9 @@
  */
 
 import { buildPlanItemKey } from './exercise-log-identity';
+import type { ExerciseLogItem } from './types';
 
-export type ExerciseLogItem = {
-  templateId: string;
-  name: string;
-  sets: number | null;
-  reps: number | null;
-  difficulty: number | null;
-  rpe?: number | null;
-  discomfort?: number | null;
-  /** SSOT: segmentIndex:itemIndex:templateId. Use when available for event identity. */
-  plan_item_key?: string;
-  segment_index?: number;
-  item_index?: number;
-};
+export type { ExerciseLogItem } from './types';
 
 type PlanSegment = {
   title?: string;

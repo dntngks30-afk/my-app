@@ -5,6 +5,7 @@
  */
 
 import { buildPlanItemKey } from './exercise-log-identity';
+import type { ExerciseLogItem } from './types';
 import {
   EVIDENCE_GATE_COMPLETION_MIN_RATIO,
   EVIDENCE_GATE_SCORE_ALLOW_THRESHOLD,
@@ -90,19 +91,7 @@ type PlanJson = {
   segments?: PlanSegment[];
 };
 
-export type ExerciseLogItem = {
-  templateId: string;
-  name: string;
-  sets: number | null;
-  reps: number | null;
-  difficulty: number | null;
-  rpe?: number | null;
-  discomfort?: number | null;
-  /** HOTFIX: plan item identity — segmentIndex:itemIndex:templateId */
-  plan_item_key?: string;
-  segment_index?: number;
-  item_index?: number;
-};
+export type { ExerciseLogItem } from './types';
 
 export type FeedbackPayload = {
   sessionFeedback?: {

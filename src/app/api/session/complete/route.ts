@@ -18,6 +18,7 @@ import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { logSessionEvent, summarizeExerciseLogs } from '@/lib/session-events';
 import { buildSessionExerciseEvents, writeSessionExerciseEvents } from '@/lib/session/session-exercise-events';
+import type { ExerciseLogItem } from '@/lib/session/types';
 import { runEvaluatorAndUpsert, type AdaptiveSummaryDebug } from '@/lib/session/adaptive-evaluator';
 
 /** Debug-only: insufficient_data when evaluator cannot produce a summary row */
@@ -69,20 +70,6 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 type CompletionMode = 'all_done' | 'partial_done' | 'stop_early';
-
-type ExerciseLogItem = {
-  templateId: string;
-  name: string;
-  sets: number | null;
-  reps: number | null;
-  difficulty: number | null;
-  rpe?: number | null;
-  discomfort?: number | null;
-  /** HOTFIX: plan item identity — templateId-only is legacy fallback */
-  plan_item_key?: string;
-  segment_index?: number;
-  item_index?: number;
-};
 
 const MAX_LOGS = 50;
 const MAX_STR_LEN = 80;
