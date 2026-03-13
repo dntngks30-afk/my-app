@@ -29,6 +29,11 @@ export type NextSessionPreviewData = {
   session_rationale?: string | null;
 };
 
+export type AdaptiveExplanation = {
+  title: string;
+  message: string;
+};
+
 export type NextSessionPreviewCardProps = {
   data: NextSessionPreviewData | null;
   /** 'post-completion' = after reflection submit, 'home' = home top section */
@@ -41,6 +46,8 @@ export type NextSessionPreviewCardProps = {
   lastSessionDifficulty?: 'too_easy' | 'ok' | 'too_hard' | null;
   /** Optional: last session had pain/discomfort areas → protection message */
   lastSessionHadPainAreas?: boolean;
+  /** PR-ALG-15: Server-generated adaptive explanation (from bootstrap) */
+  adaptiveExplanation?: AdaptiveExplanation | null;
 };
 
 function formatFocusLabel(data: NextSessionPreviewData): string {
@@ -69,6 +76,7 @@ export function NextSessionPreviewCard({
   isLockedUntilTomorrow = false,
   lastSessionDifficulty,
   lastSessionHadPainAreas,
+  adaptiveExplanation,
 }: NextSessionPreviewCardProps) {
   const hasDetails = data && (formatFocusLabel(data) || data.estimated_time || data.exercise_count);
 
@@ -158,16 +166,40 @@ export function NextSessionPreviewCard({
               {data.session_rationale}
             </p>
           )}
-          {conditionalMessage && (
-            <p className="mt-1.5 text-xs leading-relaxed text-violet-600">
-              {conditionalMessage}
-            </p>
+          {/* PR-ALG-15: Adaptive explanation (server-generated) */}
+          {adaptiveExplanation ? (
+            <div className="mt-3 rounded-xl border border-violet-200 bg-violet-100/80 px-3 py-2.5">
+              <p className="text-xs font-semibold text-violet-800">
+                {adaptiveExplanation.title}
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-violet-700">
+                {adaptiveExplanation.message}
+              </p>
+            </div>
+          ) : (
+            conditionalMessage && (
+              <p className="mt-1.5 text-xs leading-relaxed text-violet-600">
+                {conditionalMessage}
+              </p>
+            )
           )}
         </>
       ) : (
-        <p className="mt-2 text-xs text-violet-600">
-          지난 세션을 바탕으로 다음은 골반 안정성과 균형에 더 집중합니다.
-        </p>
+        <>
+          <p className="mt-2 text-xs text-violet-600">
+            지난 세션을 바탕으로 다음은 골반 안정성과 균형에 더 집중합니다.
+          </p>
+          {adaptiveExplanation && (
+            <div className="mt-3 rounded-xl border border-violet-200 bg-violet-100/80 px-3 py-2.5">
+              <p className="text-xs font-semibold text-violet-800">
+                {adaptiveExplanation.title}
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-violet-700">
+                {adaptiveExplanation.message}
+              </p>
+            </div>
+          )}
+        </>
       )}
 
       {onPrimaryCta && (

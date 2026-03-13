@@ -39,6 +39,8 @@ interface SessionPanelV2Props {
   onSessionCompleted?: (completedSessions: number) => void
   /** PR-SESSION-EXPERIENCE-01: 다음 세션 보기 요청 (nextSessionNumber) */
   onRequestNextSession?: (nextSessionNumber: number) => void
+  /** PR-ALG-15: adaptive explanation from bootstrap */
+  adaptiveExplanation?: { title: string; message: string } | null
 }
 
 const STATUS_LABEL: Record<SessionStatus, string> = {
@@ -110,6 +112,7 @@ export function SessionPanelV2({
   onClose,
   onSessionCompleted,
   onRequestNextSession,
+  adaptiveExplanation,
 }: SessionPanelV2Props) {
   if (sessionId === null) return null
 
@@ -123,10 +126,11 @@ export function SessionPanelV2({
       initialLogs={initialLogs}
       isLockedNext={isLockedNext}
       nextUnlockAt={nextUnlockAt}
-      onClose={onClose}
-      onSessionCompleted={onSessionCompleted}
-      onRequestNextSession={onRequestNextSession}
-    />
+  onClose={onClose}
+  onSessionCompleted={onSessionCompleted}
+  onRequestNextSession={onRequestNextSession}
+  adaptiveExplanation={adaptiveExplanation}
+/>
   )
 }
 
@@ -504,6 +508,7 @@ function PanelInner({
                 isLockedUntilTomorrow={isLockedNext ?? false}
                 lastSessionDifficulty={lastReflectionDifficulty}
                 lastSessionHadPainAreas={lastReflectionHadPainAreas}
+                adaptiveExplanation={adaptiveExplanation}
                 onPrimaryCta={
                   (isLockedNext ?? false)
                     ? onClose

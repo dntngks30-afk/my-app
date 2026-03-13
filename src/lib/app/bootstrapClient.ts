@@ -15,6 +15,11 @@ export type AppBootstrapStatsPreview = {
   weekly_streak: number;
 };
 
+export type AdaptiveExplanation = {
+  title: string;
+  message: string;
+};
+
 export type AppBootstrapResponse = {
   user: {
     id: string;
@@ -32,6 +37,8 @@ export type AppBootstrapResponse = {
     focus_axes: string[];
     estimated_time: number;
   } | null;
+  /** PR-ALG-15: Human-readable adaptive adjustment explanation */
+  adaptive_explanation?: AdaptiveExplanation | null;
   stats_preview: AppBootstrapStatsPreview;
 };
 

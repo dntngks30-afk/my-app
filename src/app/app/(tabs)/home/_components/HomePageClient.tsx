@@ -52,6 +52,8 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const [statsPreview, setStatsPreview] = useState<AppBootstrapStatsPreview | null>(null);
   /** PR-UX-14: next session preview (bootstrap) */
   const [nextSession, setNextSession] = useState<AppBootstrapResponse['next_session']>(null);
+  /** PR-ALG-15: adaptive explanation (bootstrap) */
+  const [adaptiveExplanation, setAdaptiveExplanation] = useState<AppBootstrapResponse['adaptive_explanation']>(null);
 
   const activeFetchedRef = useRef(false);
   const authTokenRef = useRef<string | null>(null);
@@ -98,6 +100,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         setNextUnlockAt(typeof result.data.session.next_unlock_at === 'string' ? result.data.session.next_unlock_at : null);
         setStatsPreview(result.data.stats_preview);
         setNextSession(result.data.next_session ?? null);
+        setAdaptiveExplanation(result.data.adaptive_explanation ?? null);
       }
     }
   }, [getAuthToken]);
@@ -123,6 +126,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       setNextUnlockAt(typeof cachedBootstrap.session.next_unlock_at === 'string' ? cachedBootstrap.session.next_unlock_at : null);
       setStatsPreview(cachedBootstrap.stats_preview);
       setNextSession(cachedBootstrap.next_session ?? null);
+      setAdaptiveExplanation(cachedBootstrap.adaptive_explanation ?? null);
       setLoading(false);
       setError(null);
       if (!isAppBooted()) setAppBooted();
@@ -186,6 +190,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         setNextUnlockAt(typeof result.data.session.next_unlock_at === 'string' ? result.data.session.next_unlock_at : null);
         setStatsPreview(result.data.stats_preview);
         setNextSession(result.data.next_session ?? null);
+        setAdaptiveExplanation(result.data.adaptive_explanation ?? null);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '세션을 확인해 주세요');
@@ -277,6 +282,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
               }
               variant="home"
               isLockedUntilTomorrow={todayCompleted}
+              adaptiveExplanation={adaptiveExplanation}
               onPrimaryCta={() => {
                 if (mapV2) {
                   const next = Math.min(sessionProgress.completed_sessions + 1, sessionProgress.total_sessions);
@@ -307,6 +313,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
                 getAuthToken={getAuthToken}
                 onSessionCompleted={handleSessionCompleted}
                 onActivePlanCreated={handleActivePlanCreated}
+                adaptiveExplanation={adaptiveExplanation}
                 initialSelectedSessionId={
                   focusSessionNum != null && focusSessionNum >= 1 && focusSessionNum <= total
                     ? focusSessionNum

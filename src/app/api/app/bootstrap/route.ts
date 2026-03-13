@@ -4,6 +4,10 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import { buildSessionBootstrapSummary } from '@/lib/session/bootstrap-summary';
 import { fetchActiveLiteData } from '@/lib/session/active-lite-data';
+import { loadRecentAdaptiveSignals } from '@/lib/session/adaptive-progression';
+import { loadLatestAdaptiveSummary } from '@/lib/session/adaptive-modifier-resolver';
+import { computeAdaptiveModifier } from '@/core/adaptive-engine';
+import { generateAdaptiveExplanation } from '@/core/adaptive-explanation';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 
 export const dynamic = 'force-dynamic';
@@ -25,6 +29,11 @@ type AppBootstrapData = {
     session_number: number;
     focus_axes: string[];
     estimated_time: number;
+  } | null;
+  /** PR-ALG-15: Human-readable explanation of adaptive adjustments */
+  adaptive_explanation: {
+    title: string;
+    message: string;
   } | null;
   stats_preview: {
     completed_sessions: number;
@@ -148,6 +157,46 @@ export async function GET(req: NextRequest) {
     );
     timings.next_session_ms = Math.round(performance.now() - tNext);
 
+    // PR-ALG-15: Adaptive explanation from last session signals
+    let adaptiveExplanation: AppBootstrapData['adaptive_explanation'] = null;
+    const nextSessionNumber = sessionData.completed_sessions + 1;
+    if (
+      nextSessionNumber >= 1 &&
+      nextSessionNumber <= sessionData.total_sessions
+    ) {
+      try {
+        const { sessionFeedback } = await loadRecentAdaptiveSignals(
+          userId,
+          nextSessionNumber
+        );
+        const summary = await loadLatestAdaptiveSummary(supabase, userId);
+        const engineModifier = computeAdaptiveModifier({
+          sessionFeedback: sessionFeedback.map((f) => ({
+            session_number: f.session_number,
+            overall_rpe: f.overall_rpe,
+            pain_after: f.pain_after,
+            difficulty_feedback: f.difficulty_feedback,
+            completion_ratio: f.completion_ratio,
+            body_state_change: f.body_state_change,
+            discomfort_area: f.discomfort_area,
+          })),
+          adaptiveSummary: summary
+            ? {
+                completion_ratio: summary.completion_ratio,
+                skipped_exercises: summary.skipped_exercises,
+                avg_rpe: summary.avg_rpe,
+                avg_discomfort: summary.avg_discomfort,
+                dropout_risk_score: summary.dropout_risk_score,
+                discomfort_burden_score: summary.discomfort_burden_score,
+              }
+            : null,
+        });
+        adaptiveExplanation = generateAdaptiveExplanation(engineModifier);
+      } catch (err) {
+        console.warn('[app/bootstrap] adaptive_explanation fallback', err);
+      }
+    }
+
     const data: AppBootstrapData = {
       user: {
         id: userId,
@@ -155,6 +204,7 @@ export async function GET(req: NextRequest) {
       },
       session: sessionData,
       next_session: nextSession,
+      adaptive_explanation: adaptiveExplanation,
       stats_preview: {
         completed_sessions: activeLite.data.progress.completed_sessions ?? 0,
         weekly_streak: getWeeklyStreak(activeLite.data.progress),
