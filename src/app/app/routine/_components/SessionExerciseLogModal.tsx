@@ -99,6 +99,9 @@ export default function SessionExerciseLogModal({
         difficulty: v.difficulty,
         rpe: v.rpe ?? undefined,
         discomfort: v.discomfort ?? undefined,
+        plan_item_key: r.plan_item_key,
+        segment_index: r.segment_index,
+        item_index: r.item_index,
       };
     });
     await onSave(exerciseLogs, feedback?.sessionFeedback && Object.keys(feedback.sessionFeedback).length > 0 ? feedback : undefined);

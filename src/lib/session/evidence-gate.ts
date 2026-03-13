@@ -138,6 +138,7 @@ function buildPlanItemList(planJson: PlanJson | null | undefined): PlanItemInfo[
           templateId: tid,
           segmentTitle: title,
           isMain,
+          isCooldown: title.toLowerCase() === 'cooldown',
           plan_item_key: buildPlanItemKey(segIdx, itemIdx, tid),
         });
       }

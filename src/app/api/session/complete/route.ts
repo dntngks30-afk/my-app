@@ -344,7 +344,16 @@ export async function POST(req: NextRequest) {
         log = q?.shift();
       }
       if (!log) log = dbByTemplateId.get(p.templateId) ?? undefined;
-      if (log) merged.push(log);
+      if (log) {
+        // PR-RISK-04: enrich with plan_item_key when missing (templateId fallback path)
+        const parts = p.plan_item_key.split(':');
+        const segIdx = parseInt(parts[0] ?? '0', 10);
+        const itemIdx = parseInt(parts[1] ?? '0', 10);
+        const enriched: ExerciseLogItem = log.plan_item_key
+          ? log
+          : { ...log, plan_item_key: p.plan_item_key, segment_index: segIdx, item_index: itemIdx };
+        merged.push(enriched);
+      }
     }
     exerciseLogsArray = merged.length > 0 ? merged : exerciseLogsArray;
 
