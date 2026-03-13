@@ -45,7 +45,11 @@ import SessionRecoveryModal from './SessionRecoveryModal';
 import SessionCompleteSummary from './SessionCompleteSummary';
 import { SessionFeedbackQuickForm } from '@/app/app/_components/SessionFeedbackQuickForm';
 import type { FeedbackPayload } from '@/lib/session/feedback-types';
-import { buildCompletionExerciseLogsWithIdentity } from '@/lib/session/exercise-log-identity';
+import {
+  buildCompletionExerciseLogsWithIdentity,
+  getCheckedItemKey,
+  normalizeLegacyItemKey,
+} from '@/lib/session/exercise-log-identity';
 
 // ─── 날짜 포맷 ─────────────────────────────────────────────────────────────────
 
@@ -53,10 +57,6 @@ function getTodayLabel(): string {
   const d = new Date();
   const days = ['일', '월', '화', '수', '목', '금', '토'];
   return `${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
-}
-
-function itemKey(segTitle: string, order: number, templateId: string): string {
-  return `${segTitle}_${order}_${templateId}`;
 }
 
 const MAX_DURATION_SEC = 7200; // 120분
@@ -107,7 +107,7 @@ function SegmentList({ plan, checked, onToggle }: SegmentListProps) {
         )}
       </div>
 
-      {segments.map((seg) => (
+      {segments.map((seg, segIdx) => (
         <div
           key={seg.title}
           className="rounded-xl border border-stone-200 bg-stone-50 p-3"
@@ -121,8 +121,8 @@ function SegmentList({ plan, checked, onToggle }: SegmentListProps) {
             </span>
           </div>
           <ul className="space-y-1">
-            {seg.items.map((item) => {
-              const key = itemKey(seg.title, item.order, item.templateId);
+            {seg.items.map((item, itemIdx) => {
+              const key = getCheckedItemKey(segIdx, itemIdx, item.templateId ?? '');
               const isChecked = !!checked[key];
               return (
                 <li
@@ -396,7 +396,15 @@ export default function SessionRoutinePanel() {
         setActivePlan(active);
         const draft = loadSessionDraft(active.session_number);
         if (draft && draft.sessionNumber === active.session_number) {
-          setChecked(draft.checked);
+          const segments = active.plan_json?.segments;
+          const migrated: Record<string, boolean> = {};
+          for (const [key, val] of Object.entries(draft.checked)) {
+            const canonical = key.includes(':')
+              ? key
+              : normalizeLegacyItemKey(key, segments) ?? key;
+            migrated[canonical] = val;
+          }
+          setChecked(migrated);
           setStartedAtMs(draft.startedAtMs);
           if (!cancelled) setShowRecovery(true);
         } else {
@@ -506,8 +514,8 @@ export default function SessionRoutinePanel() {
     let durationSec = Math.floor((Date.now() - start) / 1000);
     const clamped = durationSec > MAX_DURATION_SEC;
     if (clamped) durationSec = MAX_DURATION_SEC;
-    const allItems = activePlan.plan_json?.segments?.flatMap((s) =>
-      s.items.map((i) => itemKey(s.title, i.order, i.templateId))
+    const allItems = activePlan.plan_json?.segments?.flatMap((s, segIdx) =>
+      (s.items ?? []).map((i, itemIdx) => getCheckedItemKey(segIdx, itemIdx, i.templateId ?? ''))
     ) ?? [];
     const allChecked = allItems.length > 0 && allItems.every((k) => checked[k]);
     const completionMode = allChecked ? 'all_done' : 'partial_done';
@@ -516,8 +524,7 @@ export default function SessionRoutinePanel() {
     const exerciseLogs = buildCompletionExerciseLogsWithIdentity(
       activePlan.plan_json?.segments,
       (segIdx, itemIdx, item) => {
-        const seg = activePlan.plan_json?.segments?.[segIdx];
-        const key = itemKey(seg?.title ?? '', item.order ?? itemIdx, item.templateId ?? '');
+        const key = getCheckedItemKey(segIdx, itemIdx, item.templateId ?? '');
         if (!checked[key]) return null;
         return {
           templateId: item.templateId ?? '',
@@ -559,8 +566,8 @@ export default function SessionRoutinePanel() {
   }, [token, activePlan, completing, startedAtMs, checked, feedback]);
 
   const handleCompleteClick = useCallback(() => {
-    const allItems = activePlan?.plan_json?.segments?.flatMap((s) =>
-      s.items.map((i) => itemKey(s.title, i.order, i.templateId))
+    const allItems = activePlan?.plan_json?.segments?.flatMap((s, segIdx) =>
+      (s.items ?? []).map((i, itemIdx) => getCheckedItemKey(segIdx, itemIdx, i.templateId ?? ''))
     ) ?? [];
     const allChecked = allItems.length > 0 && allItems.every((k) => checked[k]);
     if (!allChecked && allItems.length > 0) {
@@ -725,8 +732,8 @@ export default function SessionRoutinePanel() {
             onChange={setFeedback}
             derivedCompletionRatio={
               (() => {
-                const allItems = activePlan.plan_json?.segments?.flatMap((s) =>
-                  s.items.map((i) => itemKey(s.title, i.order, i.templateId))
+                const allItems = activePlan.plan_json?.segments?.flatMap((s, segIdx) =>
+                  (s.items ?? []).map((i, itemIdx) => getCheckedItemKey(segIdx, itemIdx, i.templateId ?? ''))
                 ) ?? [];
                 return allItems.length > 0
                   ? allItems.filter((k) => checked[k]).length / allItems.length

@@ -169,14 +169,15 @@ export function loadSessionDraft(planId: string): SessionDraftData | null {
 /**
  * Save session draft to localStorage.
  * Uses planId for key; overwrites existing draft for same plan.
+ * Key: plan_item_key when logs use it (SSOT); legacy templateId is read-only fallback.
  */
 export function saveSessionDraft(planId: string, data: SessionDraftInput): void {
   if (typeof window === 'undefined') return;
   try {
     const exercises: SessionDraftData['exercises'] = {};
     const holdMap = data.holdSecondsByTemplateId ?? {};
-    for (const [templateId, log] of Object.entries(data.logs)) {
-      exercises[templateId] = logToExercise(log, holdMap[templateId]);
+    for (const [logKey, log] of Object.entries(data.logs)) {
+      exercises[logKey] = logToExercise(log, holdMap[log.templateId]);
     }
     const toSave: SessionDraftData = {
       session_number: data.session_number,

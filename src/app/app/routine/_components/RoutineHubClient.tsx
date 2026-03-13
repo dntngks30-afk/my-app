@@ -24,6 +24,7 @@ import SessionRecoveryModal from './SessionRecoveryModal';
 import SessionCompleteSummary from './SessionCompleteSummary';
 import SessionExerciseLogModal from './SessionExerciseLogModal';
 import type { FeedbackPayload } from '@/lib/session/feedback-types';
+import { buildPlanItemKey } from '@/lib/session/exercise-log-identity';
 import {
   getActiveSession,
   getSessionHistory,
@@ -82,12 +83,14 @@ function flattenPlanToAccordionItems(plan: SessionPlan): RoutineAccordionItemDat
   const segments = plan.plan_json?.segments ?? [];
   const items: RoutineAccordionItemData[] = [];
   let idx = 0;
-  for (const seg of segments) {
+  for (let segIdx = 0; segIdx < segments.length; segIdx++) {
+    const seg = segments[segIdx]!;
     const perItemSec = seg.items.length > 0 ? seg.duration_sec / seg.items.length : 0;
-    for (const it of seg.items) {
+    for (let itemIdx = 0; itemIdx < seg.items.length; itemIdx++) {
       if (idx >= 4) break;
+      const it = seg.items[itemIdx]!;
       items.push({
-        id: `${seg.title}_${it.order}_${it.templateId}`,
+        id: buildPlanItemKey(segIdx, itemIdx, it.templateId ?? ''),
         title: it.name,
         kind: it.focus_tag ?? seg.title,
         durationSec: Math.round(perItemSec),

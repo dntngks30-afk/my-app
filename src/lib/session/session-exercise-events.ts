@@ -12,6 +12,10 @@ export type ExerciseLogItem = {
   difficulty: number | null;
   rpe?: number | null;
   discomfort?: number | null;
+  /** SSOT: segmentIndex:itemIndex:templateId. Use when available for event identity. */
+  plan_item_key?: string;
+  segment_index?: number;
+  item_index?: number;
 };
 
 type PlanSegment = {
@@ -152,7 +156,15 @@ export function buildSessionExerciseEvents(
     let itemIndex: number | null = null;
     let dataQuality: 'full' | 'partial' = 'partial';
 
-    if (match && hasPlan) {
+    if (log.plan_item_key && /^\d+:\d+:.+$/.test(log.plan_item_key)) {
+      planItemKey = log.plan_item_key;
+      segmentIndex = log.segment_index ?? null;
+      itemIndex = log.item_index ?? null;
+      if (hasPlan && match) {
+        planItem = planByKey.get(`seg${match.segmentIndex}-item${match.itemIndex}`) ?? null;
+        dataQuality = 'full';
+      }
+    } else if (match && hasPlan) {
       planItemKey = `seg${match.segmentIndex}-item${match.itemIndex}`;
       planItem = planByKey.get(planItemKey) ?? null;
       segmentIndex = match.segmentIndex;

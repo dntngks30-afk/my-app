@@ -20,6 +20,7 @@ export type SessionDraft = {
   sessionNumber: number;
   startedAtMs: number;
   lastUpdatedAtMs: number;
+  /** Key: plan_item_key (SSOT). Legacy segTitle_order_templateId is read-only fallback on load. */
   checked: Record<string, boolean>;
   note?: SessionDraftNote;
 };
