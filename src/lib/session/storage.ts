@@ -1,10 +1,11 @@
 /**
- * Session draft 저장소 (로컬, 탭/세션 내 복구용)
+ * Session draft 저장소 (sessionStorage, 탭/세션 내 복구용)
  *
  * 키: mr_session_active_${session_number}_v1
  * 내용: 진행 상태 + startTime (Recovery 모달 판단용)
  *
- * sessionStorage 우선(탭 닫으면 초기화). 필요 시 localStorage 확장 가능.
+ * PR-19: Distinct from draftStorage.ts (localStorage, home session execution draft).
+ * This module: routine-tab / sessionStorage. draftStorage: home reset-map flow.
  */
 
 const KEY_PREFIX = 'mr_session_active_';

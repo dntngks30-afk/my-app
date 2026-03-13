@@ -1,19 +1,15 @@
 'use client'
 
-import { useRef, useState, useEffect, useCallback } from 'react'
+import { useRef, useEffect } from 'react'
 import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
-import { getSessionSafe } from '@/lib/supabase'
-import { completeSession, saveSessionReflection } from '@/lib/session/client'
 import type { ExerciseItem } from './planJsonAdapter'
 import type { ExerciseLogItem, SessionPlan, ActivePlanSummary } from '@/lib/session/client'
 import { buildBriefSessionRationale } from '@/lib/deep-result/copy'
 import { ExercisePlayerModal } from './ExercisePlayerModal'
 import SessionCompleteSummary from '@/app/app/routine/_components/SessionCompleteSummary'
-import { ReflectionModal, type ReflectionData } from './ReflectionModal'
+import { ReflectionModal } from './ReflectionModal'
 import { NextSessionPreviewCard } from '../NextSessionPreviewCard'
-import type { SessionPainArea } from '@/lib/session/feedback-types'
-import { loadSessionDraft, saveSessionDraft, clearSessionDraft, draftToLogs } from '@/lib/session/draftStorage'
-import { saveSessionProgress } from '@/lib/session/client'
+import { useHomeSessionPanelState } from './useHomeSessionPanelState'
 
 type SessionStatus = 'current' | 'completed' | 'locked'
 
@@ -149,129 +145,42 @@ function PanelInner({
   onClose,
   onSessionCompleted,
   onRequestNextSession,
+  adaptiveExplanation,
 }: Required<Omit<SessionPanelV2Props, 'onSessionCompleted' | 'onRequestNextSession'>> & {
   onSessionCompleted?: (completedSessions: number) => void
   onRequestNextSession?: (nextSessionNumber: number) => void
 }) {
-  // 로컬 운동 로그 누적 (templateId → log). PR-PERSIST-01: draft 복구 또는 initialLogs
-  const [logs, setLogs] = useState<Record<string, ExerciseLogItem>>({})
-  const [draftRestored, setDraftRestored] = useState(false)
-  const [sessionPerceivedDifficulty, setSessionPerceivedDifficulty] = useState<'too_easy' | 'ok' | 'too_hard' | null>(null)
-  const [sessionPainAreas, setSessionPainAreas] = useState<SessionPainArea[]>([])
+  const panelState = useHomeSessionPanelState({
+    sessionId,
+    total,
+    status,
+    exercises,
+    activePlan,
+    initialLogs,
+    onSessionCompleted,
+  })
+
+  const {
+    logs,
+    draftRestored,
+    exerciseIndex,
+    setExerciseIndex,
+    showReflectionModal,
+    completing,
+    completeError,
+    completed,
+    completeResult,
+    lastReflectionDifficulty,
+    lastReflectionHadPainAreas,
+    handleLogComplete,
+    handleNextOrEnd,
+    handleSessionCompleteClick,
+    handleReflectionSubmit,
+  } = panelState
+
   const rationale = getPlanRationale(activePlan)
 
-  // PR-SESSION-UX-02: 세션 전환 시 운동 뷰 리셋
-  useEffect(() => {
-    setExerciseIndex(null)
-  }, [sessionId])
-  // 세션 전환 시 완료 상태 리셋 (다음 세션 보기 시)
-  useEffect(() => {
-    setCompleted(false)
-    setCompleteResult(null)
-    setLastReflectionDifficulty(null)
-    setLastReflectionHadPainAreas(false)
-    setDraftRestored(false)
-  }, [sessionId])
-  // PR-PERSIST-01 + PR-EXEC-02: 세션 진입 시 draft 복구 또는 initialLogs(서버 진행) 또는 초기화
-  useEffect(() => {
-    if (status === 'completed') {
-      if (initialLogs && Object.keys(initialLogs).length > 0) {
-        setLogs(initialLogs)
-      } else {
-        setLogs({})
-      }
-      if (sessionId != null) clearSessionDraft(String(sessionId))
-      return
-    }
-    if (sessionId == null) return
-    if (status === 'current') {
-      const planId = String(sessionId)
-      const draft = loadSessionDraft(planId)
-      if (draft && draft.session_number === sessionId && Object.keys(draft.exercises).length > 0) {
-        const nameByTemplateId: Record<string, string> = {}
-        if (exercises) for (const e of exercises) nameByTemplateId[e.templateId] = e.name
-        const restoredLogs = draftToLogs(draft, nameByTemplateId)
-        setLogs(restoredLogs)
-        if (draft.sessionPerceivedDifficulty != null) setSessionPerceivedDifficulty(draft.sessionPerceivedDifficulty)
-        if (draft.sessionPainAreas?.length) setSessionPainAreas(draft.sessionPainAreas)
-        setDraftRestored(true)
-      } else if (initialLogs && Object.keys(initialLogs).length > 0) {
-        setLogs(initialLogs)
-      } else {
-        setLogs({})
-      }
-    } else {
-      setLogs({})
-    }
-  }, [sessionId, status, initialLogs, exercises])
-
-  // PR-PERSIST-01: logs 변경 시 draft 저장 (current 세션만, 300ms debounce)
-  const saveDraftRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const saveDraft = useCallback(() => {
-    if (sessionId == null || status !== 'current' || !activePlan?.session_number) return
-    if (sessionId !== activePlan.session_number) return
-    const planId = String(sessionId)
-    const holdSecondsByTemplateId: Record<string, number> = {}
-    if (exercises) for (const e of exercises) if (e.holdSeconds) holdSecondsByTemplateId[e.templateId] = e.holdSeconds
-    saveSessionDraft(planId, {
-      session_number: sessionId,
-      plan_id: planId,
-      logs,
-      holdSecondsByTemplateId: Object.keys(holdSecondsByTemplateId).length ? holdSecondsByTemplateId : undefined,
-      sessionPerceivedDifficulty,
-      sessionPainAreas,
-    })
-  }, [sessionId, status, activePlan?.session_number, logs, sessionPerceivedDifficulty, sessionPainAreas, exercises])
-  useEffect(() => {
-    if (sessionId == null || status !== 'current' || sessionId !== activePlan?.session_number) return
-    if (saveDraftRef.current) clearTimeout(saveDraftRef.current)
-    saveDraftRef.current = setTimeout(saveDraft, 300)
-    return () => {
-      if (saveDraftRef.current) clearTimeout(saveDraftRef.current)
-    }
-  }, [sessionId, status, activePlan?.session_number, logs, sessionPerceivedDifficulty, sessionPainAreas, exercises, saveDraft])
-
-  // PR-EXEC-02: 진행 서버 저장 (500ms debounce)
-  const saveProgressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => {
-    if (sessionId == null || status !== 'current' || sessionId !== activePlan?.session_number) return
-    const tokenPromise = getSessionSafe().then((r) => r.session?.access_token ?? null)
-    if (saveProgressRef.current) clearTimeout(saveProgressRef.current)
-    saveProgressRef.current = setTimeout(async () => {
-      const token = await tokenPromise
-      if (!token || Object.keys(logs).length === 0) return
-      const holdMap: Record<string, number> = {}
-      if (exercises) for (const e of exercises) if (e.holdSeconds) holdMap[e.templateId] = e.holdSeconds
-      const items = Object.entries(logs).map(([templateId, log]) => {
-        const sets = log.sets ?? 0
-        const reps = log.reps ?? 0
-        const isHold = holdMap[templateId] != null && holdMap[templateId] > 0
-        return {
-          template_id: templateId,
-          sets,
-          reps: isHold ? 0 : reps,
-          hold_seconds: isHold ? reps : 0,
-          rpe: log.rpe ?? null,
-          completed: sets > 0 || reps > 0,
-          skipped: false,
-        }
-      })
-      saveSessionProgress(token, sessionId, items)
-    }, 500)
-    return () => {
-      if (saveProgressRef.current) clearTimeout(saveProgressRef.current)
-    }
-  }, [sessionId, status, activePlan?.session_number, logs, exercises])
-  // PR-PERSIST-01: 복구 안내 4초 후 자동 숨김
-  useEffect(() => {
-    if (!draftRestored) return
-    const t = setTimeout(() => setDraftRestored(false), 4000)
-    return () => clearTimeout(t)
-  }, [draftRestored])
-
-  // PR-SESSION-UX-02: 운동 인덱스 (null = 목록, number = 해당 운동 화면)
-  const [exerciseIndex, setExerciseIndex] = useState<number | null>(null)
-
+  // PR-SESSION-UX-02: 세션 전환 시 운동 뷰 리셋 (hook 내부에서 처리)
   // 패널 open 측정
   useEffect(() => {
     if (sessionId != null && typeof performance !== 'undefined' && performance.mark) {
@@ -292,167 +201,6 @@ function PanelInner({
     }
     prevExercisesRef.current = exercises
   }, [exercises])
-  // PR-UX-03: 리플렉션 모달 (종료 전 필수)
-  const [showReflectionModal, setShowReflectionModal] = useState(false)
-  // 종료 API 상태
-  const [completing, setCompleting] = useState(false)
-  const [completeError, setCompleteError] = useState<string | null>(null)
-  const [completed, setCompleted] = useState(false)
-  const [completeResult, setCompleteResult] = useState<{
-    progress: { completed_sessions: number; total_sessions: number }
-    next_theme: string | null
-    duration_seconds: number
-    exercise_logs?: ExerciseLogItem[] | null
-  } | null>(null)
-  /** PR-UX-14: reflection 난이도 → conditional message */
-  const [lastReflectionDifficulty, setLastReflectionDifficulty] = useState<'too_easy' | 'ok' | 'too_hard' | null>(null)
-  const [lastReflectionHadPainAreas, setLastReflectionHadPainAreas] = useState(false)
-  // 패널 오픈 시각 (duration 계산용)
-  const startedAtRef = useRef(Date.now())
-
-  const handleLogComplete = (log: ExerciseLogItem) => {
-    setLogs(prev => ({ ...prev, [log.templateId]: log }))
-  }
-
-  const handleNextOrEnd = (log: ExerciseLogItem) => {
-    setLogs(prev => ({ ...prev, [log.templateId]: log }))
-    if (!exercises || exercises.length === 0) return
-    let nextIdx: number | null = null
-    let showSessionSheet = false
-    if (exerciseIndex != null) {
-      if (exerciseIndex < exercises.length - 1) {
-        nextIdx = exerciseIndex + 1
-      } else {
-        showSessionSheet = true
-      }
-    }
-    setExerciseIndex(nextIdx)
-    if (showSessionSheet) setShowReflectionModal(true)
-  }
-
-  type FeedbackOverride = {
-    difficultyFeedback?: 'too_easy' | 'ok' | 'too_hard'
-    painAreas?: SessionPainArea[]
-    bodyStateChange?: 'better' | 'same' | 'worse'
-    discomfortArea?: string
-  }
-
-  const doSessionComplete = async (feedbackOverride?: FeedbackOverride) => {
-    if (completing || completed) return
-    const sessionNumber = activePlan?.session_number
-    if (!sessionNumber) return
-
-    setCompleting(true)
-    setCompleteError(null)
-
-    try {
-      const { session } = await getSessionSafe()
-      if (!session?.access_token) {
-        setCompleteError('로그인이 필요합니다. 페이지를 새로고침해 주세요.')
-        setCompleting(false)
-        return
-      }
-
-      const durationSec = Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1000))
-      const exerciseLogsArray = Object.values(logs)
-
-      const allDone =
-        exercises && exercises.length > 0 && exercises.every(e => !!logs[e.templateId])
-      const completionMode = allDone ? 'all_done' : exerciseLogsArray.length > 0 ? 'partial_done' : 'stop_early'
-
-      const payload: Parameters<typeof completeSession>[1] = {
-        session_number: sessionNumber,
-        duration_seconds: durationSec,
-        completion_mode: completionMode,
-        exercise_logs: exerciseLogsArray,
-      }
-      const diff = feedbackOverride?.difficultyFeedback ?? sessionPerceivedDifficulty
-      const areas = feedbackOverride?.painAreas ?? sessionPainAreas
-      const hasSessionFeedback = diff != null || (areas?.length ?? 0) > 0 || feedbackOverride?.bodyStateChange || feedbackOverride?.discomfortArea
-      if (hasSessionFeedback) {
-        payload.feedback = {
-          sessionFeedback: {
-            difficultyFeedback: diff ?? undefined,
-            painAreas: (areas?.length ?? 0) > 0 ? areas : undefined,
-            bodyStateChange: feedbackOverride?.bodyStateChange,
-            discomfortArea: feedbackOverride?.discomfortArea,
-          },
-        }
-      }
-      const result = await completeSession(session.access_token, payload)
-
-      if (!result.ok) {
-        // 이미 완료된 경우(idempotent)는 에러가 아님
-        setCompleteError(`저장 실패: ${result.error.message}. 다시 시도하거나 페이지를 새로고침해 주세요.`)
-        setCompleting(false)
-        return
-      }
-
-      setCompleted(true)
-      setCompleting(false)
-      setCompleteResult({
-        progress: result.data.progress ?? { completed_sessions: sessionNumber, total_sessions: total },
-        next_theme: result.data.next_theme ?? null,
-        duration_seconds: durationSec,
-        exercise_logs: result.data.exercise_logs ?? exerciseLogsArray,
-      })
-
-      clearSessionDraft(String(sessionNumber))
-
-      const newCompleted = result.data.progress?.completed_sessions ?? sessionNumber
-      onSessionCompleted?.(newCompleted)
-    } catch (err) {
-      setCompleteError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.')
-      setCompleting(false)
-    }
-  }
-
-  const handleSessionCompleteClick = () => {
-    setShowReflectionModal(true)
-  }
-
-  const handleReflectionSubmit = async (data: ReflectionData) => {
-    const sessionNumber = activePlan?.session_number
-    if (!sessionNumber) return
-
-    setCompleting(true)
-    setCompleteError(null)
-
-    try {
-      const { session } = await getSessionSafe()
-      if (!session?.access_token) {
-        setCompleteError('로그인이 필요합니다. 페이지를 새로고침해 주세요.')
-        setCompleting(false)
-        return
-      }
-
-      const refResult = await saveSessionReflection(session.access_token, {
-        session_number: sessionNumber,
-        difficulty: data.difficulty,
-        body_state_change: data.body_state_change,
-        discomfort_area: data.discomfort_area ?? undefined,
-      })
-      if (!refResult.ok) {
-        setCompleteError(refResult.error.message)
-        setCompleting(false)
-        return
-      }
-
-      setShowReflectionModal(false)
-      const diff = data.difficulty <= 2 ? 'too_easy' : data.difficulty >= 4 ? 'too_hard' : 'ok'
-      setLastReflectionDifficulty(diff)
-      setLastReflectionHadPainAreas(!!data.discomfort_area)
-      await doSessionComplete({
-        difficultyFeedback: diff,
-        painAreas: data.discomfort_area ? [data.discomfort_area as SessionPainArea] : undefined,
-        bodyStateChange: data.body_state_change,
-        discomfortArea: data.discomfort_area ?? undefined,
-      })
-    } catch (err) {
-      setCompleteError(err instanceof Error ? err.message : '저장에 실패했습니다.')
-      setCompleting(false)
-    }
-  }
 
   return (
     <>

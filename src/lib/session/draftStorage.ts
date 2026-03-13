@@ -1,8 +1,11 @@
 /**
- * PR-PERSIST-01: Session draft persistence layer (localStorage)
+ * PR-PERSIST-01: Home session draft persistence (localStorage).
  * Prevents workout progress loss during session execution.
  * Key: moveRe:draft:{planId}
  * Client-side only — no server changes.
+ *
+ * PR-19: Distinct from src/lib/session/storage.ts (sessionStorage, routine-tab draft).
+ * This module: home/reset-map session execution draft. storage.ts: different flow.
  */
 
 import type { ExerciseLogItem } from './client';
