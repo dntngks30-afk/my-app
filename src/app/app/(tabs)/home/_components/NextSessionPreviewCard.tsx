@@ -81,17 +81,22 @@ export function NextSessionPreviewCard({
   const hasDetails = data && (formatFocusLabel(data) || data.estimated_time || data.exercise_count);
 
   if (isLockedUntilTomorrow) {
+    const completedNum = data?.session_number != null ? data.session_number - 1 : null;
     return (
-      <div className="rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-4">
-        <p className="text-sm font-semibold text-slate-700">다음 세션</p>
-        <p className="mt-1 text-xs text-slate-600">
-          오늘 세션을 완료했어요. 내일 다음 세션이 준비됩니다.
+      <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 px-4 py-4">
+        <p className="text-sm font-semibold text-emerald-800">
+          {completedNum != null ? `세션 ${completedNum} 완료` : '오늘 수고하셨어요'}
+        </p>
+        <p className="mt-1 text-xs text-emerald-700">
+          {completedNum != null
+            ? `내일 세션 ${completedNum + 1}이 준비됩니다. 지도에서 진행 상황을 확인해보세요.`
+            : '내일 다음 세션이 준비됩니다. 지도에서 진행 상황을 확인해보세요.'}
         </p>
         {onPrimaryCta && (
           <button
             type="button"
             onClick={onPrimaryCta}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-200 py-2.5 text-sm font-medium text-slate-700"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-200 py-2.5 text-sm font-medium text-emerald-800 hover:bg-emerald-300"
           >
             지도에서 확인하기
             <ChevronRight className="h-4 w-4" />
@@ -208,7 +213,7 @@ export function NextSessionPreviewCard({
           onClick={onPrimaryCta}
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-violet-500 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-violet-600 active:scale-[0.98]"
         >
-          {variant === 'post-completion' ? '다음 세션 준비 보기' : '지도에서 확인하기'}
+          {variant === 'post-completion' ? '다음 세션 준비 보기' : '지도에서 지금 시작하기'}
           <ChevronRight className="h-4 w-4" />
         </button>
       )}

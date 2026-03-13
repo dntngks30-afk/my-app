@@ -183,11 +183,23 @@ export default function SessionCompleteSummary({
       </div>
 
       <div className="flex flex-col gap-2">
+        {/* PR-23: CTA hierarchy — body check primary when relevant, then home/next */}
+        {showBodyCheckCta && (
+          <NeoButton
+            variant="orange"
+            fullWidth
+            onClick={() => setShowCheckIn(true)}
+            className="py-3 flex items-center justify-center gap-2"
+          >
+            <Activity className="size-4" />
+            오늘 몸상태 체크하기
+          </NeoButton>
+        )}
         <div className="flex gap-2">
           {variant === 'home' ? (
             <>
               <NeoButton
-                variant="orange"
+                variant={showBodyCheckCta ? 'secondary' : 'orange'}
                 fullWidth
                 onClick={() => {
                   onDismiss?.();
@@ -198,7 +210,7 @@ export default function SessionCompleteSummary({
                 <Home className="size-4" />
                 지도 돌아가기
               </NeoButton>
-              {onNextSessionClick && (
+              {onNextSessionClick && !isNextLockedUntilTomorrow && (
                 <NeoButton
                   variant="secondary"
                   fullWidth
@@ -215,7 +227,7 @@ export default function SessionCompleteSummary({
           ) : (
             <>
               <NeoButton
-                variant="orange"
+                variant={showBodyCheckCta ? 'secondary' : 'orange'}
                 fullWidth
                 onClick={() => {
                   onDismiss?.();
@@ -256,16 +268,6 @@ export default function SessionCompleteSummary({
           <p className="text-center text-xs text-slate-500">
             모든 세션을 완료했어요. 수고하셨습니다!
           </p>
-        )}
-        {showBodyCheckCta && (
-          <button
-            type="button"
-            onClick={() => setShowCheckIn(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-slate-300 bg-white py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 active:scale-[0.98]"
-          >
-            <Activity className="size-4" />
-            오늘 몸상태 체크
-          </button>
         )}
       </div>
 
