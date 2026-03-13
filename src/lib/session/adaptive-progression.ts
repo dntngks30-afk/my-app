@@ -5,6 +5,8 @@
 
 /* Lazy import to allow deriveAdaptiveModifiers (pure) to run without Supabase env */
 
+import { getSummaryForReason } from './adaptive-explanation';
+
 // ─── Constants ─────────────────────────────────────────────────────────────
 
 const HIGH_PAIN_AFTER = 5;
@@ -333,13 +335,6 @@ export type AdaptationTrace = {
   priority_vector_keys?: string[];
 };
 
-const REASON_SUMMARY: Record<AdaptiveReason, string> = {
-  pain_flare: '최근 통증/부담 기록을 반영해 회복 중심으로 조정했어요',
-  low_tolerance: '이전 수행 난이도를 반영해 강도를 소폭 조정했어요',
-  high_tolerance: '이전 수행이 원활해 강도를 소폭 올렸어요',
-  none: '',
-};
-
 export function buildAdaptationTrace(
   modifiers: AdaptiveModifiers,
   sourceSessionNumbers: number[],
@@ -367,7 +362,7 @@ export function buildAdaptationTrace(
     trace.priority_vector_keys = Object.keys(ctx.priority_vector);
   }
   if (modifiers.reason !== 'none') {
-    trace.reason_summary = REASON_SUMMARY[modifiers.reason] || '';
+    trace.reason_summary = getSummaryForReason(modifiers.reason);
   }
 
   return trace;

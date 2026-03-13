@@ -7,7 +7,7 @@ import { fetchActiveLiteData } from '@/lib/session/active-lite-data';
 import { loadRecentAdaptiveSignals } from '@/lib/session/adaptive-progression';
 import { loadLatestAdaptiveSummary } from '@/lib/session/adaptive-modifier-resolver';
 import { computeAdaptiveModifier } from '@/core/adaptive-engine';
-import { generateAdaptiveExplanation } from '@/core/adaptive-explanation';
+import { buildAdaptiveExplanationFromModifier } from '@/lib/session/adaptive-explanation';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 
 export const dynamic = 'force-dynamic';
@@ -191,7 +191,8 @@ export async function GET(req: NextRequest) {
               }
             : null,
         });
-        adaptiveExplanation = generateAdaptiveExplanation(engineModifier);
+        const result = buildAdaptiveExplanationFromModifier(engineModifier);
+        adaptiveExplanation = result ? { title: result.title, message: result.message } : null;
       } catch (err) {
         console.warn('[app/bootstrap] adaptive_explanation fallback', err);
       }
