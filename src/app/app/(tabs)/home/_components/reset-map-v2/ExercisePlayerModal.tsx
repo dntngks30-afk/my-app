@@ -66,6 +66,7 @@ function ModalInner({
   const [mediaLoading, setMediaLoading] = useState(true);
   const isHold = !!item.holdSeconds && !item.targetReps;
   const targetReps = item.targetReps ?? 8;
+  const targetHold = item.holdSeconds ?? 30;
   /** PR-RISK-03: hold 기본값 우선순위 — initialLog 복원 > prescribed > 30초 fallback */
   const getInitialHoldPerSet = (): number => {
     if (initialLog?.sets && initialLog?.reps != null && initialLog.sets > 0) {
