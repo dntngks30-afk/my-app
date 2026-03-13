@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
-import { getCachedBootstrap, invalidateActiveCache } from '@/lib/session/active-cache';
+import { invalidateActiveCache } from '@/lib/session/active-cache';
 import { getCache } from '@/lib/cache/tabDataCache';
 import AppEntryLoader, { isAppBooted, setAppBooted } from '@/app/app/_components/AppEntryLoader';
 import type { SessionPlan, ActivePlanSummary, ActiveSessionLiteResponse } from '@/lib/session/client';
+import { getCachedAppBootstrap, invalidateAppBootstrapCache, type AppBootstrapResponse, type AppBootstrapStatsPreview } from '@/lib/app/bootstrapClient';
 import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
@@ -47,6 +48,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const [activePlan, setActivePlan] = useState<SessionPlan | ActivePlanSummary | null>(null);
   const [todayCompleted, setTodayCompleted] = useState(false);
   const [nextUnlockAt, setNextUnlockAt] = useState<string | null>(null);
+  const [statsPreview, setStatsPreview] = useState<AppBootstrapStatsPreview | null>(null);
 
   const activeFetchedRef = useRef(false);
   const authTokenRef = useRef<string | null>(null);
@@ -79,21 +81,19 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     // refetch 완료 전 타이밍 윈도우에서 다음 세션이 'current'로 노출되는 것을 방지
     setTodayCompleted(true);
     invalidateActiveCache();
+    invalidateAppBootstrapCache();
     // Refetch to get accurate todayCompleted/nextUnlockAt from server
     const token = await getAuthToken();
     if (token) {
-      const result = await getCachedBootstrap(token);
+      const result = await getCachedAppBootstrap(token);
       if (result.ok) {
-        const d = result.data.activeLite;
-        const p = d.progress;
-        if (p) {
-          setSessionProgress({
-            total_sessions: p.total_sessions,
-            completed_sessions: p.completed_sessions ?? 0,
-          });
-        }
-        setTodayCompleted(d.today_completed === true);
-        setNextUnlockAt(typeof d.next_unlock_at === 'string' ? d.next_unlock_at : null);
+        setSessionProgress({
+          total_sessions: result.data.session.total_sessions,
+          completed_sessions: result.data.session.completed_sessions ?? 0,
+        });
+        setTodayCompleted(result.data.session.today_completed === true);
+        setNextUnlockAt(typeof result.data.session.next_unlock_at === 'string' ? result.data.session.next_unlock_at : null);
+        setStatsPreview(result.data.stats_preview);
       }
     }
   }, [getAuthToken]);
@@ -101,11 +101,30 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const handleActivePlanCreated = useCallback((plan: SessionPlan) => {
     setActivePlan(plan);
     invalidateActiveCache();
+    invalidateAppBootstrapCache();
   }, []);
 
   useEffect(() => {
     if (activeFetchedRef.current) return;
     activeFetchedRef.current = true;
+
+    const cachedBootstrap = getCache<AppBootstrapResponse>('app.bootstrap');
+    if (cachedBootstrap) {
+      setSessionProgress({
+        total_sessions: cachedBootstrap.session.total_sessions,
+        completed_sessions: cachedBootstrap.session.completed_sessions ?? 0,
+      });
+      setActivePlan(cachedBootstrap.session.active_session ?? null);
+      setTodayCompleted(cachedBootstrap.session.today_completed === true);
+      setNextUnlockAt(typeof cachedBootstrap.session.next_unlock_at === 'string' ? cachedBootstrap.session.next_unlock_at : null);
+      setStatsPreview(cachedBootstrap.stats_preview);
+      setLoading(false);
+      setError(null);
+      if (!isAppBooted()) setAppBooted();
+      return () => {
+        activeFetchedRef.current = false;
+      };
+    }
 
     const cached = getCache<ActiveSessionLiteResponse>('home.activeLite')
       ?? getCache<{ activeLite: ActiveSessionLiteResponse }>('home.bootstrap')?.activeLite;
@@ -134,7 +153,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         return;
       }
       try {
-        const result = await getCachedBootstrap(token, { debug: debugFlag });
+        const result = await getCachedAppBootstrap(token, { debug: debugFlag });
         if (cancelled) return;
         const elapsed = Math.round(performance.now() - t0);
         if (typeof performance !== 'undefined' && performance.mark) {
@@ -153,17 +172,14 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
           return;
         }
         setError(null);
-        const d = result.data.activeLite;
-        const p = d.progress;
-        if (p) {
-          setSessionProgress({
-            total_sessions: p.total_sessions,
-            completed_sessions: p.completed_sessions ?? 0,
-          });
-          setActivePlan(d.active ?? null);
-        }
-        setTodayCompleted(d.today_completed === true);
-        setNextUnlockAt(typeof d.next_unlock_at === 'string' ? d.next_unlock_at : null);
+        setSessionProgress({
+          total_sessions: result.data.session.total_sessions,
+          completed_sessions: result.data.session.completed_sessions ?? 0,
+        });
+        setActivePlan(result.data.session.active_session ?? null);
+        setTodayCompleted(result.data.session.today_completed === true);
+        setNextUnlockAt(typeof result.data.session.next_unlock_at === 'string' ? result.data.session.next_unlock_at : null);
+        setStatsPreview(result.data.stats_preview);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '세션을 확인해 주세요');
@@ -283,7 +299,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         </div>
 
         {/* PR-P2-2: 4세션 변화 리포트 foundation */}
-        <ProgressReportCard getAuthToken={getAuthToken} />
+        <ProgressReportCard getAuthToken={getAuthToken} initialPreview={statsPreview} />
       </main>
 
       {!hideBottomNav && <BottomNav />}

@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { supabase, getSessionSafe } from '@/lib/supabase';
-import { getCachedBootstrap } from '@/lib/session/active-cache';
+import { getCachedAppBootstrap } from '@/lib/app/bootstrapClient';
 import { isAllowed, isAllowlistEmpty } from '@/lib/appAccess';
 import AppEntryLoader, { isAppBooted } from './AppEntryLoader';
 
@@ -62,7 +62,7 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
           return;
         }
 
-        const result = await getCachedBootstrap(session.access_token);
+        const result = await getCachedAppBootstrap(session.access_token);
 
         if (cancelled) return;
 
@@ -81,7 +81,7 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
           return;
         }
 
-        const planStatus = result.data.activeLite.plan_status ?? null;
+        const planStatus = result.data.user.plan_status ?? null;
 
         if (hasActivePlan(planStatus)) {
           lastAllowedUserIdRef.current = userId;

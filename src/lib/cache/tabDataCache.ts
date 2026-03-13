@@ -6,6 +6,7 @@
 const TTL_MS = 60_000;
 
 type CacheKey =
+  | 'app.bootstrap'
   | 'home.activeLite'
   | 'home.bootstrap'
   | 'home.progressReport'

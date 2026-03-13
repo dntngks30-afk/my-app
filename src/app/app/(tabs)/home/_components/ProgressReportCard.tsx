@@ -9,16 +9,23 @@ import { useState, useEffect } from 'react';
 import { getSessionSafe } from '@/lib/supabase';
 import { getProgressReport, type ProgressWindowReport } from '@/lib/session/client';
 import { getCache, setCache } from '@/lib/cache/tabDataCache';
+import type { AppBootstrapStatsPreview } from '@/lib/app/bootstrapClient';
 
 interface ProgressReportCardProps {
   getAuthToken?: () => Promise<string | null>;
+  initialPreview?: AppBootstrapStatsPreview | null;
 }
 
-export default function ProgressReportCard({ getAuthToken }: ProgressReportCardProps = {}) {
+export default function ProgressReportCard({ getAuthToken, initialPreview }: ProgressReportCardProps = {}) {
   const cached = getCache<ProgressWindowReport>('home.progressReport');
   const [report, setReport] = useState<ProgressWindowReport | null>(cached);
-  const [loading, setLoading] = useState(!cached);
+  const [preview, setPreview] = useState<AppBootstrapStatsPreview | null>(initialPreview ?? null);
+  const [loading, setLoading] = useState(!cached && !initialPreview);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPreview(initialPreview ?? null);
+  }, [initialPreview]);
 
   useEffect(() => {
     if (cached) {
@@ -77,7 +84,7 @@ export default function ProgressReportCard({ getAuthToken }: ProgressReportCardP
     };
   }, [cached, getAuthToken]);
 
-  if (loading) {
+  if (loading && !preview) {
     return (
       <section className="rounded-2xl border-2 border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="text-sm font-semibold text-slate-800">진행 요약</h3>
@@ -86,11 +93,22 @@ export default function ProgressReportCard({ getAuthToken }: ProgressReportCardP
     );
   }
 
-  if (error) {
+  if (error && !preview) {
     return (
       <section className="rounded-2xl border-2 border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="text-sm font-semibold text-slate-800">진행 요약</h3>
         <p className="mt-2 text-sm text-slate-500">{error}</p>
+      </section>
+    );
+  }
+
+  if (!report && preview) {
+    return (
+      <section className="rounded-2xl border-2 border-slate-200 bg-white p-5 shadow-sm">
+        <h3 className="text-sm font-semibold text-slate-800">진행 요약</h3>
+        <p className="mt-2 text-sm text-slate-700">
+          지금까지 {preview.completed_sessions}세션 완료, 이번 주 연속 {preview.weekly_streak}일 유지 중이에요.
+        </p>
       </section>
     );
   }
