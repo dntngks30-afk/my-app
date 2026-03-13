@@ -21,11 +21,16 @@ export type ConstraintReasonCode =
 
 export type ConstraintScope = 'session' | 'plan' | 'segment' | 'item';
 
+/** PR-ALG-16B: rule_id/stage for 1:1 traceability with policy registry */
 export interface ConstraintReason {
   kind: ConstraintOutcome;
   code: ConstraintReasonCode;
   scope: ConstraintScope;
   message: string;
+  /** Policy registry rule id (1:1 with reason) */
+  rule_id?: string;
+  /** selection | post_selection | audit */
+  stage?: string;
   segmentIndex?: number;
   itemIndex?: number;
   beforeValue?: number | string;

@@ -58,19 +58,19 @@ export function applyLevelFilter(
 }
 
 /**
- * First-session guardrail: exclude high-difficulty / high-progression templates.
- * Prevents first session from being too demanding.
+ * First-session guardrail: exclude high-difficulty / high-progression / balance_demand / complexity.
+ * PR-ALG-16B: Delegates to policy-registry selection rules for consistency.
  *
  * @param templates - Pool of exercise templates
- * @returns Templates with difficulty !== 'high' and progression_level < 3
+ * @returns Templates safe for first session
  */
 export function applyFirstSessionGuardrail(
   templates: readonly ExerciseTemplate[]
 ): ExerciseTemplate[] {
-  return templates.filter((t) => {
-    if (t.difficulty === 'high') return false;
-    if (typeof t.progression_level === 'number' && t.progression_level >= 3) return false;
-    return true;
+  const { applySelectionExcludes } = require('@/lib/session/policy-registry');
+  return applySelectionExcludes(templates as { id: string; focus_tags: string[]; phase?: string | null; difficulty?: string | null; progression_level?: number | null; avoid_if_pain_mode?: readonly string[] | null; balance_demand?: string | null; complexity?: string | null }[], {
+    sessionNumber: 1,
+    painMode: 'none',
   });
 }
 

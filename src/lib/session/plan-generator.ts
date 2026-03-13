@@ -6,6 +6,7 @@
  */
 
 import { getTemplatesForSessionPlan, type SessionTemplateRow } from '@/lib/workout-routine/exercise-templates-db';
+import { applySelectionExcludes } from '@/lib/session/policy-registry';
 import type { TemplatePhase } from '@/lib/workout-routine/exercise-templates';
 import { computePhase, type Phase } from './phase';
 import { buildExcludeSet, hasContraindicationOverlap } from './safety';
@@ -191,43 +192,7 @@ function resolveGoldPathVector(input: PlanGeneratorInput): GoldPathVector | null
   }
 }
 
-/** PR-ALG-05: template excluded by pain_mode? (avoid_if_pain_mode) */
-function isExcludedByPainMode(
-  template: SessionTemplateRow,
-  painMode?: 'none' | 'caution' | 'protected' | null
-): boolean {
-  if (!painMode || painMode === 'none') return false;
-  const avoid = template.avoid_if_pain_mode ?? [];
-  return avoid.includes(painMode);
-}
-
-/**
- * PR-SESSION-QUALITY-01: First session guardrails.
- * Exclude high difficulty / high progression / high balance / high complexity when session_number === 1.
- * PR-20: balance_demand=high, complexity=high 추가.
- */
-function isExcludedByFirstSessionGuardrail(
-  template: SessionTemplateRow,
-  sessionNumber: number
-): boolean {
-  if (sessionNumber !== 1) return false;
-  if (template.difficulty === 'high') return true;
-  if (typeof template.progression_level === 'number' && template.progression_level >= 3) return true;
-  if (template.balance_demand === 'high') return true;
-  if (template.complexity === 'high') return true;
-  return false;
-}
-
-/** PR-20: protected pain mode에서 balance_demand=high, complexity=high 제외 */
-function isExcludedByProtectedV2Guardrail(
-  template: SessionTemplateRow,
-  painMode?: 'none' | 'caution' | 'protected' | null
-): boolean {
-  if (!painMode || painMode !== 'protected') return false;
-  if (template.balance_demand === 'high') return true;
-  if (template.complexity === 'high') return true;
-  return false;
-}
+/** PR-ALG-16B: selection-time excludes delegated to policy-registry.applySelectionExcludes */
 
 export type ConditionMood = 'good' | 'ok' | 'bad';
 export type TimeBudget = 'short' | 'normal';
@@ -680,16 +645,17 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const avoidIds = new Set(input.adaptiveOverlay?.avoidTemplateIds ?? []);
   const maxDifficultyCap = input.adaptiveOverlay?.maxDifficultyCap;
 
-  const candidates = templates.filter(
+  const preFiltered = templates.filter(
     (t) =>
       !hasContraindicationOverlap(t.contraindications, excludeSet) &&
       t.level <= maxLevel &&
       !avoidIds.has(t.id) &&
-      !isExcludedByPainMode(t, input.pain_mode) &&
-      !(maxDifficultyCap && isDifficultyAboveCap(t.difficulty ?? null, maxDifficultyCap)) &&
-      !isExcludedByFirstSessionGuardrail(t, input.sessionNumber) &&
-      !isExcludedByProtectedV2Guardrail(t, input.pain_mode)
+      !(maxDifficultyCap && isDifficultyAboveCap(t.difficulty ?? null, maxDifficultyCap))
   );
+  const candidates = applySelectionExcludes(preFiltered, {
+    sessionNumber: input.sessionNumber,
+    painMode: input.pain_mode ?? null,
+  });
 
   const scored = candidates.map((t) => ({
     template: t,

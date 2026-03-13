@@ -13,6 +13,7 @@ import {
   hasSingleLegLoad,
 } from '@/core/session-guardrail/movementSafetyRules';
 import { DECONDITIONED_REDUCTIONS } from '@/core/session-guardrail/guardrailRules';
+import { RULE_IDS } from '@/lib/session/policy-registry';
 import { createConstraintReason } from './reasons';
 import type {
   ConstraintEngineContext,
@@ -154,7 +155,14 @@ export function applyFirstSessionPolicy(
           painMode !== 'none' ? 'blocked_by_pain_mode' : 'first_session_guardrail_applied',
           'item',
           `first session replacement: ${item.templateId} -> ${replacement.id}`,
-          { segmentIndex: segIdx, itemIndex: itemIdx, beforeValue: item.templateId, afterValue: replacement.id }
+          {
+            segmentIndex: segIdx,
+            itemIndex: itemIdx,
+            beforeValue: item.templateId,
+            afterValue: replacement.id,
+            rule_id: RULE_IDS.post_first_session_item,
+            stage: 'post_selection',
+          }
         )
       );
     }
@@ -192,7 +200,14 @@ export function applyFirstSessionPolicy(
         'replaced_unsafe_combination',
         'item',
         `unsafe combination replaced: ${item.templateId} -> ${replacement.id}`,
-        { segmentIndex: b.segIdx, itemIndex: b.itemIdx, beforeValue: item.templateId, afterValue: replacement.id }
+        {
+          segmentIndex: b.segIdx,
+          itemIndex: b.itemIdx,
+          beforeValue: item.templateId,
+          afterValue: replacement.id,
+          rule_id: RULE_IDS.post_first_session_unsafe_combo,
+          stage: 'post_selection',
+        }
       )
     );
   }
@@ -204,7 +219,8 @@ export function applyFirstSessionPolicy(
         'degrade_applied',
         'first_session_guardrail_applied',
         'session',
-        'first session volume clamp applied'
+        'first session volume clamp applied',
+        { rule_id: RULE_IDS.post_first_session_volume, stage: 'post_selection' }
       )
     );
   }
@@ -229,7 +245,8 @@ export function applyFirstSessionPolicy(
         'degrade_applied',
         'reduced_due_to_deconditioned',
         'session',
-        'deconditioned reduction applied to first session'
+        'deconditioned reduction applied to first session',
+        { rule_id: RULE_IDS.post_deconditioned, stage: 'post_selection' }
       )
     );
   }

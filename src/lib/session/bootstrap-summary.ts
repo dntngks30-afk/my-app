@@ -182,20 +182,6 @@ function computeTargetLevel(input: SessionBootstrapSummaryInput): { finalTargetL
   return { finalTargetLevel: Math.min(base, maxLevel), maxLevel }
 }
 
-function isExcludedByPainMode(
-  template: SessionTemplateRow,
-  painMode?: 'none' | 'caution' | 'protected'
-): boolean {
-  if (!painMode || painMode === 'none') return false
-  return (template.avoid_if_pain_mode ?? []).includes(painMode)
-}
-
-function isExcludedByFirstSessionGuardrail(template: SessionTemplateRow, sessionNumber: number): boolean {
-  if (sessionNumber !== 1) return false
-  if (template.difficulty === 'high') return true
-  if (typeof template.progression_level === 'number' && template.progression_level >= 3) return true
-  return false
-}
 
 function scoreTemplate(
   template: SessionTemplateRow,

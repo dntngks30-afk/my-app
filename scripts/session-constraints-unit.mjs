@@ -243,5 +243,12 @@ const wrapperPlan = applySessionGuardrailWithTemplates(
 ok('legacy first-session wrapper still returns plan shape', Array.isArray(wrapperPlan.segments));
 ok('legacy wrapper delegates to new constraint meta', !!wrapperPlan.meta.constraint_engine);
 
+// PR-ALG-16B: reason traceability — rule_id and stage in meta
+const withReasons = painProtected.meta.reasons.filter((r) => r.rule_id && r.stage);
+ok(
+  'reason traceability: reasons have rule_id and stage when constraints apply',
+  withReasons.length > 0 && withReasons.every((r) => typeof r.rule_id === 'string' && r.stage === 'post_selection')
+);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

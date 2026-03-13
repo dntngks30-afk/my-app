@@ -4,6 +4,7 @@
  */
 
 import type { PlanJsonOutput, PlanSegment } from '@/lib/session/plan-generator';
+import { RULE_IDS } from '@/lib/session/policy-registry';
 import {
   CONSTRAINT_ENGINE_VERSION,
   FATIGUE_CAP_SCORE,
@@ -81,7 +82,8 @@ function normalizePhaseOrder(
         'degrade_applied',
         'phase_order_violation',
         'session',
-        'segment order normalized to Prep → Main → Accessory → Cooldown'
+        'segment order normalized to Prep → Main → Accessory → Cooldown',
+        { rule_id: RULE_IDS.post_phase_order, stage: 'post_selection' }
       )
     );
   }
@@ -165,7 +167,7 @@ function enforcePainModeSafety(
             'blocked_by_pain_mode',
             'item',
             `unsafe item replaced for pain_mode=${painMode}: ${item.templateId} -> ${replacement.id}`,
-            { segmentIndex: segIdx, itemIndex: itemIdx, beforeValue: item.templateId, afterValue: replacement.id }
+            { segmentIndex: segIdx, itemIndex: itemIdx, beforeValue: item.templateId, afterValue: replacement.id, rule_id: RULE_IDS.post_pain_safety, stage: 'post_selection' }
           )
         );
       } else {
@@ -177,7 +179,7 @@ function enforcePainModeSafety(
             'degraded_due_to_low_inventory',
             'item',
             `unsafe item removed with no safe replacement: ${item.templateId}`,
-            { segmentIndex: segIdx, beforeValue: item.templateId }
+            { segmentIndex: segIdx, beforeValue: item.templateId, rule_id: RULE_IDS.post_main_low_inventory, stage: 'post_selection' }
           )
         );
       }
@@ -213,7 +215,7 @@ function enforceMainCountMinimum(
         'degraded_due_to_main_count_shortage',
         'segment',
         `promoted accessory items to satisfy main minimum (${before} -> ${main.items.length})`,
-        { beforeValue: before, afterValue: main.items.length }
+        { beforeValue: before, afterValue: main.items.length, rule_id: RULE_IDS.post_main_min, stage: 'post_selection' }
       )
     );
     return;
@@ -225,7 +227,8 @@ function enforceMainCountMinimum(
       'degrade_applied',
       lowInventory ? 'degraded_due_to_low_inventory' : 'degraded_due_to_main_count_shortage',
       'segment',
-      `main count below minimum (${main.items.length}/${MAIN_COUNT_MIN}) after degrade`
+      `main count below minimum (${main.items.length}/${MAIN_COUNT_MIN}) after degrade`,
+      { rule_id: lowInventory ? RULE_IDS.post_main_low_inventory : RULE_IDS.post_main_min, stage: 'post_selection' }
     )
   );
 }
@@ -261,7 +264,8 @@ function enforcePatternCap(
         'hard_block',
         'blocked_by_pattern_cap',
         'segment',
-        `moved ${extras.length} overloaded main item(s) with focus ${focus} to Accessory`
+        `moved ${extras.length} overloaded main item(s) with focus ${focus} to Accessory`,
+        { rule_id: RULE_IDS.post_pattern_cap, stage: 'post_selection' }
       )
     );
   }
@@ -386,7 +390,7 @@ function enforceFatigueCap(
       'blocked_by_fatigue_cap',
       'session',
       `fatigue cap applied (${fatigueScore}/${FATIGUE_CAP_SCORE})`,
-      { afterValue: fatigueScore }
+      { afterValue: fatigueScore, rule_id: RULE_IDS.post_fatigue_cap, stage: 'post_selection' }
     )
   );
   return fatigueScore;
