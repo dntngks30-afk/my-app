@@ -37,6 +37,8 @@ interface ResetMapV2Props {
   onActivePlanCreated?: (plan: SessionPlan) => void
   /** PR-SESSION-EXPERIENCE-01: 다음 세션 보기 요청 시 */
   onRequestNextSession?: (nextSessionNumber: number) => void
+  /** PR-UX-14: URL focusSession으로 패널 열기 */
+  initialSelectedSessionId?: number | null
   /** debug: true → createSession 응답에 timings 포함 (cold path 측정용) */
   debug?: boolean
 }
@@ -130,7 +132,7 @@ function toBootstrapPanelPlan(data: PanelBootstrapResponse): SessionPlan {
   }
 }
 
-export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, onRequestNextSession, debug }: ResetMapV2Props) {
+export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, onRequestNextSession, initialSelectedSessionId, debug }: ResetMapV2Props) {
   // localDailyCapActive: createSession이 DAILY_LIMIT_REACHED 반환 시 클라이언트 측 즉시 반영 (방어)
   const [localDailyCapActive, setLocalDailyCapActive] = useState(false)
   // daily cap: today_completed || localDailyCapActive, activePlan 없을 때 → 현재 세션 없음, 다음 세션 locked
@@ -139,6 +141,13 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   const effectiveCurrentSession = isLockedNext ? null : nextSessionNum
 
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null)
+
+  // PR-UX-14: URL focusSession → 패널 열기
+  useEffect(() => {
+    if (initialSelectedSessionId != null && initialSelectedSessionId >= 1 && initialSelectedSessionId <= total) {
+      setSelectedSessionId(initialSelectedSessionId)
+    }
+  }, [initialSelectedSessionId, total])
 
   const [bootstrapPlan, setBootstrapPlan] = useState<SessionPlan | null>(null)
   const [fullPlan, setFullPlan] = useState<SessionPlan | ActivePlanSummary | null>(activePlan)

@@ -10,6 +10,7 @@ import { buildBriefSessionRationale } from '@/lib/deep-result/copy'
 import { ExercisePlayerModal } from './ExercisePlayerModal'
 import SessionCompleteSummary from '@/app/app/routine/_components/SessionCompleteSummary'
 import { ReflectionModal, type ReflectionData } from './ReflectionModal'
+import { NextSessionPreviewCard } from '../NextSessionPreviewCard'
 import type { SessionPainArea } from '@/lib/session/feedback-types'
 import { loadSessionDraft, saveSessionDraft, clearSessionDraft, draftToLogs } from '@/lib/session/draftStorage'
 import { saveSessionProgress } from '@/lib/session/client'
@@ -163,6 +164,8 @@ function PanelInner({
   useEffect(() => {
     setCompleted(false)
     setCompleteResult(null)
+    setLastReflectionDifficulty(null)
+    setLastReflectionHadPainAreas(false)
     setDraftRestored(false)
   }, [sessionId])
   // PR-PERSIST-01 + PR-EXEC-02: 세션 진입 시 draft 복구 또는 initialLogs(서버 진행) 또는 초기화
@@ -297,6 +300,9 @@ function PanelInner({
     duration_seconds: number
     exercise_logs?: ExerciseLogItem[] | null
   } | null>(null)
+  /** PR-UX-14: reflection 난이도 → conditional message */
+  const [lastReflectionDifficulty, setLastReflectionDifficulty] = useState<'too_easy' | 'ok' | 'too_hard' | null>(null)
+  const [lastReflectionHadPainAreas, setLastReflectionHadPainAreas] = useState(false)
   // 패널 오픈 시각 (duration 계산용)
   const startedAtRef = useRef(Date.now())
 
@@ -429,8 +435,11 @@ function PanelInner({
       }
 
       setShowReflectionModal(false)
+      const diff = data.difficulty <= 2 ? 'too_easy' : data.difficulty >= 4 ? 'too_hard' : 'ok'
+      setLastReflectionDifficulty(diff)
+      setLastReflectionHadPainAreas(!!data.discomfort_area)
       await doSessionComplete({
-        difficultyFeedback: data.difficulty <= 2 ? 'too_easy' : data.difficulty >= 4 ? 'too_hard' : 'ok',
+        difficultyFeedback: diff,
         painAreas: data.discomfort_area ? [data.discomfort_area as SessionPainArea] : undefined,
         bodyStateChange: data.body_state_change,
         discomfortArea: data.discomfort_area ?? undefined,
@@ -464,7 +473,7 @@ function PanelInner({
 
           {/* Reflection: complete 이후 요약 화면 — 방금 완료한 세션만 표시 */}
           {completed && completeResult && sessionId === completeResult.progress.completed_sessions && (
-            <div className="px-4 pb-4 max-h-[70vh] overflow-y-auto">
+            <div className="px-4 pb-4 max-h-[70vh] overflow-y-auto space-y-4">
               <SessionCompleteSummary
                 durationSeconds={completeResult.duration_seconds}
                 progress={completeResult.progress}
@@ -482,6 +491,28 @@ function PanelInner({
                         if (next <= total) onRequestNextSession(next)
                       }
                     : undefined
+                }
+              />
+              {/* PR-UX-14: Next Session Preview Card — completion → next action bridge */}
+              <NextSessionPreviewCard
+                data={{
+                  session_number: Math.min(completeResult.progress.completed_sessions + 1, total),
+                  focus_label: completeResult.next_theme,
+                  estimated_time: 12,
+                }}
+                variant="post-completion"
+                isLockedUntilTomorrow={isLockedNext ?? false}
+                lastSessionDifficulty={lastReflectionDifficulty}
+                lastSessionHadPainAreas={lastReflectionHadPainAreas}
+                onPrimaryCta={
+                  (isLockedNext ?? false)
+                    ? onClose
+                    : onRequestNextSession
+                      ? () => {
+                          const next = Math.min(completeResult.progress.completed_sessions + 1, total)
+                          if (next <= total) onRequestNextSession(next)
+                        }
+                      : onClose
                 }
               />
             </div>

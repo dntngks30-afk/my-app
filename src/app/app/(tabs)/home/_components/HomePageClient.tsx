@@ -12,6 +12,7 @@ import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
+import { NextSessionPreviewCard } from './NextSessionPreviewCard';
 
 interface HomePageClientProps {
   hideBottomNav?: boolean;
@@ -49,6 +50,8 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const [todayCompleted, setTodayCompleted] = useState(false);
   const [nextUnlockAt, setNextUnlockAt] = useState<string | null>(null);
   const [statsPreview, setStatsPreview] = useState<AppBootstrapStatsPreview | null>(null);
+  /** PR-UX-14: next session preview (bootstrap) */
+  const [nextSession, setNextSession] = useState<AppBootstrapResponse['next_session']>(null);
 
   const activeFetchedRef = useRef(false);
   const authTokenRef = useRef<string | null>(null);
@@ -94,6 +97,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         setTodayCompleted(result.data.session.today_completed === true);
         setNextUnlockAt(typeof result.data.session.next_unlock_at === 'string' ? result.data.session.next_unlock_at : null);
         setStatsPreview(result.data.stats_preview);
+        setNextSession(result.data.next_session ?? null);
       }
     }
   }, [getAuthToken]);
@@ -118,6 +122,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       setTodayCompleted(cachedBootstrap.session.today_completed === true);
       setNextUnlockAt(typeof cachedBootstrap.session.next_unlock_at === 'string' ? cachedBootstrap.session.next_unlock_at : null);
       setStatsPreview(cachedBootstrap.stats_preview);
+      setNextSession(cachedBootstrap.next_session ?? null);
       setLoading(false);
       setError(null);
       if (!isAppBooted()) setAppBooted();
@@ -180,6 +185,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         setTodayCompleted(result.data.session.today_completed === true);
         setNextUnlockAt(typeof result.data.session.next_unlock_at === 'string' ? result.data.session.next_unlock_at : null);
         setStatsPreview(result.data.stats_preview);
+        setNextSession(result.data.next_session ?? null);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '세션을 확인해 주세요');
@@ -253,6 +259,35 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       </header>
 
       <main className="px-4 space-y-6">
+        {/* PR-UX-14: Next Session Preview Card — home top section */}
+        {sessionProgress &&
+          sessionProgress.completed_sessions < sessionProgress.total_sessions && (
+            <NextSessionPreviewCard
+              data={
+                nextSession
+                  ? {
+                      session_number: nextSession.session_number,
+                      focus_axes: nextSession.focus_axes,
+                      estimated_time: nextSession.estimated_time,
+                    }
+                  : {
+                      session_number: sessionProgress.completed_sessions + 1,
+                      estimated_time: 12,
+                    }
+              }
+              variant="home"
+              isLockedUntilTomorrow={todayCompleted}
+              onPrimaryCta={() => {
+                if (mapV2) {
+                  const next = Math.min(sessionProgress.completed_sessions + 1, sessionProgress.total_sessions);
+                  router.push(`/app/home?focusSession=${next}`);
+                } else {
+                  router.push('/app/home');
+                }
+              }}
+            />
+          )}
+
         {/* 1. 리셋 지도 — mapV2=1이면 새 지도 UX, 그 외 기존 ResetMapCard */}
         <div>
         {(() => {
@@ -260,6 +295,8 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
           const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
 
           if (mapV2 && total <= 20) {
+            const focusSession = searchParams.get('focusSession');
+            const focusSessionNum = focusSession ? parseInt(focusSession, 10) : null;
             return (
               <ResetMapV2
                 total={total}
@@ -270,6 +307,11 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
                 getAuthToken={getAuthToken}
                 onSessionCompleted={handleSessionCompleted}
                 onActivePlanCreated={handleActivePlanCreated}
+                initialSelectedSessionId={
+                  focusSessionNum != null && focusSessionNum >= 1 && focusSessionNum <= total
+                    ? focusSessionNum
+                    : null
+                }
                 debug={debugFlag}
               />
             );
