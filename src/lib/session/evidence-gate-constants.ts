@@ -20,3 +20,10 @@ export const EVIDENCE_SCORE_PERFORMED_VALUE_MAX = 20;
 
 /** Max points for reflection/RPE/discomfort presence */
 export const EVIDENCE_SCORE_REFLECTION_MAX = 15;
+
+/**
+ * PR-RISK-08a: Threshold profile identifier for observability.
+ * Relaxed threshold operation must remain observable.
+ * Threshold changes should be evaluated against allow-quality metrics.
+ */
+export const EVIDENCE_GATE_THRESHOLD_PROFILE = 'relaxed';

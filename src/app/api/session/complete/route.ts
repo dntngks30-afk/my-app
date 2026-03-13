@@ -368,10 +368,13 @@ export async function POST(req: NextRequest) {
             total_items: obs.total_items,
             completed_items: obs.completed_items,
             completion_ratio: obs.completion_ratio,
+            coverage_ratio: obs.coverage_ratio,
             main_completed: obs.main_segment_completed,
             with_performed_value: obs.performed_value_count,
-            received_exercise_logs_count: exerciseLogsArray.length,
-            reject_reason_code: obs.reject_reason_code,
+            evidence_score: obs.evidence_score_total,
+            received_exercise_logs_count: obs.received_exercise_logs_count,
+            threshold_profile: obs.threshold_profile,
+            reject_reason_code: obs.reject_reason_code ?? null,
             reject_reason_detail: obs.reject_reason_detail,
             ...(obs.identity_match && { identity_match: obs.identity_match }),
           }
@@ -391,6 +394,7 @@ export async function POST(req: NextRequest) {
     );
 
     // PR-DATA-01A: persist evidence gate observability on successful completion
+    // PR-RISK-08a: allow path — evidence_gate in execution_summary_json + debug response when debug=1
     // PR-UX-00: pain_areas stored in execution_summary_json (no session_feedback schema change)
     const executionSummaryWithGate = {
       ...executionSummary,
@@ -494,6 +498,7 @@ export async function POST(req: NextRequest) {
         ...(feedbackPayload && { feedback_saved: feedbackSaved }),
       };
       const debugExtras: Record<string, unknown> = {};
+      if (isDebug) debugExtras.evidence_gate = gateResult.observability;
       if (isDebug && eventLogResult) debugExtras.event_log = eventLogResult;
       if (isDebug && adaptiveSummary) debugExtras.adaptive_summary = adaptiveSummary;
       return ok(data, Object.keys(debugExtras).length > 0 ? { debug: debugExtras } : undefined);

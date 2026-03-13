@@ -1,6 +1,9 @@
 /**
  * PR-DATA-01: Session completion evidence gate
  * PR-DATA-01A: Observability and threshold-tuning support.
+ * PR-RISK-08a: Relaxed evidence gate observability — allow/reject both emit evidence meta.
+ *   - relaxed threshold operation must remain observable
+ *   - threshold changes should be evaluated against allow-quality metrics
  * Server-side validation to prevent completing sessions with insufficient execution evidence.
  */
 
@@ -10,6 +13,7 @@ import {
   EVIDENCE_GATE_COMPLETION_MIN_RATIO,
   EVIDENCE_GATE_SCORE_ALLOW_THRESHOLD,
   EVIDENCE_GATE_SCORE_RECOVERABLE_MIN,
+  EVIDENCE_GATE_THRESHOLD_PROFILE,
   EVIDENCE_SCORE_COVERAGE_MAX,
   EVIDENCE_SCORE_PERFORMED_VALUE_MAX,
   EVIDENCE_SCORE_REFLECTION_MAX,
@@ -33,6 +37,8 @@ export type EvidenceGateObservability = {
   total_items: number;
   completed_items: number;
   completion_ratio: number;
+  /** PR-RISK-08a: alias for completion_ratio (allow/reject meta parity) */
+  coverage_ratio: number;
   main_segment_required: boolean;
   main_segment_completed: number;
   main_gate_skipped?: boolean;
@@ -52,6 +58,9 @@ export type EvidenceGateObservability = {
     score_allow: number;
     score_recoverable_min: number;
   };
+  /** PR-RISK-08a: relaxed/strict — threshold changes evaluated against allow-quality metrics */
+  threshold_profile: string;
+  received_exercise_logs_count: number;
   rejected_or_allowed: 'rejected' | 'allowed';
   reject_reason_code?: EvidenceGateErrorCode;
   reject_reason_detail?: RejectReasonDetail;
@@ -278,6 +287,7 @@ function buildObservability(
   identityMatch?: { matchedByPlanItemKey: number; matchedByTemplateFallback: number },
   segmentCompletion?: { cooldown_items_count: number; cooldown_completed_count: number }
 ): EvidenceGateObservability {
+  const receivedExerciseLogsCount = exerciseLogs.length;
   const { reflection, rpe, discomfort } = computeReflectionFlags(feedbackPayload, exerciseLogs);
   const completionRatio = totalItems > 0 ? completed / totalItems : 0;
 
@@ -285,6 +295,7 @@ function buildObservability(
     total_items: totalItems,
     completed_items: completed,
     completion_ratio: completionRatio,
+    coverage_ratio: completionRatio,
     main_segment_required: mainItemsCount > 0,
     main_segment_completed: mainCompleted,
     performed_value_count: withPerformedValue,
@@ -298,6 +309,8 @@ function buildObservability(
       score_allow: EVIDENCE_GATE_SCORE_ALLOW_THRESHOLD,
       score_recoverable_min: EVIDENCE_GATE_SCORE_RECOVERABLE_MIN,
     },
+    threshold_profile: EVIDENCE_GATE_THRESHOLD_PROFILE,
+    received_exercise_logs_count: receivedExerciseLogsCount,
     rejected_or_allowed: allowed ? 'allowed' : 'rejected',
   };
 
