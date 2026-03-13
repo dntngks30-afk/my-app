@@ -133,9 +133,10 @@ export async function GET(req: NextRequest) {
           }),
         }
       : undefined;
+    // PR-EXEC-02: return exercise_logs for in-progress (draft/started) and completed
     const rawLogs = row.exercise_logs as unknown;
     const exercise_logs: PlanSummaryExerciseLogItem[] | undefined =
-      statusVal === 'completed' && Array.isArray(rawLogs)
+      Array.isArray(rawLogs)
         ? rawLogs
             .filter((it: unknown) => it && typeof it === 'object' && typeof (it as { templateId?: unknown }).templateId === 'string')
             .map((it: { templateId: string; name?: string; sets?: number; reps?: number; difficulty?: number }) => ({

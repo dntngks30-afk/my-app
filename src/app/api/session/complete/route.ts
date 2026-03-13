@@ -270,11 +270,38 @@ export async function POST(req: NextRequest) {
 
     const { data: currentPlan } = await supabase
       .from('session_plans')
-      .select('id, generation_trace_json, plan_json')
+      .select('id, generation_trace_json, plan_json, exercise_logs')
       .eq('user_id', userId)
       .eq('session_number', sessionNumber)
       .maybeSingle();
     const phaseLengthsForNext = getPhaseLengthsFromTrace(currentPlan?.generation_trace_json);
+
+    // PR-EXEC-02: merge persisted logs — completion validation uses DB; client overrides for same templateId
+    const dbLogs = currentPlan?.exercise_logs && Array.isArray(currentPlan.exercise_logs) ? (currentPlan.exercise_logs as Array<Record<string, unknown>>) : [];
+    const clientByTemplateId = new Map(exerciseLogsArray.map((l) => [l.templateId, l]));
+    const dbByTemplateId = new Map<string, ExerciseLogItem>();
+    for (const row of dbLogs) {
+      const templateId = typeof row.templateId === 'string' ? row.templateId : null;
+      const name = typeof row.name === 'string' ? row.name : '';
+      if (templateId) {
+        const sets = typeof row.sets === 'number' && Number.isFinite(row.sets) ? Math.min(20, Math.max(0, Math.floor(row.sets))) : null;
+        const reps = typeof row.reps === 'number' && Number.isFinite(row.reps) ? Math.min(200, Math.max(0, Math.floor(row.reps))) : null;
+        const difficulty = typeof row.difficulty === 'number' && Number.isFinite(row.difficulty) ? Math.min(5, Math.max(1, Math.floor(row.difficulty))) : null;
+        const rpe = typeof row.rpe === 'number' && Number.isFinite(row.rpe) ? Math.min(10, Math.max(1, Math.floor(row.rpe))) : null;
+        const discomfort = typeof row.discomfort === 'number' && Number.isFinite(row.discomfort) ? Math.min(10, Math.max(0, Math.floor(row.discomfort))) : null;
+        dbByTemplateId.set(templateId, { templateId, name, sets, reps, difficulty: difficulty ?? null, rpe: rpe ?? null, discomfort: discomfort ?? null });
+      }
+    }
+    const merged: ExerciseLogItem[] = [];
+    const seen = new Set<string>();
+    for (const [tid, log] of clientByTemplateId) {
+      merged.push(log);
+      seen.add(tid);
+    }
+    for (const [tid, log] of dbByTemplateId) {
+      if (!seen.has(tid)) merged.push(log);
+    }
+    exerciseLogsArray = merged;
 
     // PR-DATA-01: evidence gate — reject insufficient execution evidence before persisting
     const gateResult = evaluateEvidenceGate(

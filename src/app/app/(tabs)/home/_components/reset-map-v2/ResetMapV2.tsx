@@ -144,6 +144,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   const [fullPlan, setFullPlan] = useState<SessionPlan | ActivePlanSummary | null>(activePlan)
   const [pastSessionPlan, setPastSessionPlan] = useState<SessionPlan | null>(null)
   const [pastSessionInitialLogs, setPastSessionInitialLogs] = useState<Record<string, ExerciseLogItem>>({})
+  const [currentSessionServerLogs, setCurrentSessionServerLogs] = useState<Record<string, ExerciseLogItem>>({})
   const [planLoading, setPlanLoading] = useState(false)
   const createCalledRef = useRef(false)
   const summaryCacheRef = useRef(new Map<number, PanelPlanSummaryResponse>())
@@ -371,7 +372,10 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
 
   // current 세션 패널 오픈 + lite만 있음(plan_json 없음) → plan-summary로 경량 fetch (패널 첫 렌더)
   useEffect(() => {
-    if (selectedStatus !== 'current' || selectedSessionId === null) return
+    if (selectedStatus !== 'current' || selectedSessionId === null) {
+      setCurrentSessionServerLogs({})
+      return
+    }
     const plan = fullPlan
     if (plan == null) return
     if ('plan_json' in plan && plan.plan_json) return // 이미 full/segments plan
@@ -381,6 +385,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     if (cached) {
       setPlanLoading(false)
       setFullPlan(toPanelPlan(cached))
+      setCurrentSessionServerLogs(toExerciseLogMap(cached.exercise_logs))
       return
     }
 
@@ -391,9 +396,26 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       setPlanLoading(false)
       if (!data) return
       setFullPlan(toPanelPlan(data))
+      setCurrentSessionServerLogs(toExerciseLogMap(data.exercise_logs))
     })
     return () => { cancelled = true }
   }, [selectedStatus, selectedSessionId, fullPlan, loadSessionSummary])
+
+  // PR-EXEC-02: current 세션 선택 시 plan-summary 로드 (exercise_logs용, fullPlan이 이미 있어도)
+  useEffect(() => {
+    if (selectedStatus !== 'current' || selectedSessionId === null) return
+    const cached = summaryCacheRef.current.get(selectedSessionId)
+    if (cached) {
+      setCurrentSessionServerLogs(toExerciseLogMap(cached.exercise_logs))
+      return
+    }
+    let cancelled = false
+    void loadSessionSummary(selectedSessionId).then((data) => {
+      if (cancelled || !data) return
+      setCurrentSessionServerLogs(toExerciseLogMap(data.exercise_logs))
+    })
+    return () => { cancelled = true }
+  }, [selectedStatus, selectedSessionId, loadSessionSummary])
 
   // current 세션 패널 오픈 + activePlan 없음 → bootstrap summary 먼저 로드
   useEffect(() => {
@@ -569,7 +591,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         status={selectedStatus}
         exercises={exercises}
         activePlan={selectedStatus === 'current' ? (currentRenderablePlan ?? fullPlan) : pastSessionPlan}
-        initialLogs={selectedStatus === 'completed' ? pastSessionInitialLogs : undefined}
+        initialLogs={selectedStatus === 'completed' ? pastSessionInitialLogs : selectedStatus === 'current' ? currentSessionServerLogs : undefined}
         isLockedNext={selectedStatus === 'locked' && isLockedNext && selectedSessionId === nextSessionNum}
         nextUnlockAt={nextUnlockAt ?? undefined}
         onClose={handleClose}

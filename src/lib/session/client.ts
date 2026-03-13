@@ -361,6 +361,29 @@ export type CompleteSessionResponse = {
   feedback_saved?: boolean;
 };
 
+/** PR-EXEC-02: POST /api/session/progress — 진행 저장 (완료 트리거 없음) */
+export type SaveProgressItem = {
+  template_id: string;
+  sets: number;
+  reps: number;
+  hold_seconds: number;
+  rpe: number | null;
+  completed: boolean;
+  skipped: boolean;
+};
+
+export async function saveSessionProgress(
+  token: string,
+  sessionNumber: number,
+  items: SaveProgressItem[]
+): Promise<ApiResult<{ saved: boolean }>> {
+  if (items.length === 0) return { ok: true, data: { saved: true } };
+  return sessionFetch<{ saved: boolean }>('/api/session/progress', token, {
+    method: 'POST',
+    body: JSON.stringify({ session_number: sessionNumber, items }),
+  });
+}
+
 /** POST /api/session/complete — 세션 완료 (유저 명시적 액션 전용) */
 export async function completeSession(
   token: string,

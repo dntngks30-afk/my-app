@@ -12,6 +12,7 @@ import SessionCompleteSummary from '@/app/app/routine/_components/SessionComplet
 import { SessionCompletionSheet, type BodyStateAfter } from './SessionCompletionSheet'
 import type { SessionPainArea } from '@/lib/session/feedback-types'
 import { loadSessionDraft, saveSessionDraft, clearSessionDraft, draftToLogs } from '@/lib/session/draftStorage'
+import { saveSessionProgress } from '@/lib/session/client'
 
 type SessionStatus = 'current' | 'completed' | 'locked'
 
@@ -166,7 +167,7 @@ function PanelInner({
     setBodyStateAfter(null)
     setDraftRestored(false)
   }, [sessionId])
-  // PR-PERSIST-01: 세션 진입 시 draft 복구 또는 초기화
+  // PR-PERSIST-01 + PR-EXEC-02: 세션 진입 시 draft 복구 또는 initialLogs(서버 진행) 또는 초기화
   useEffect(() => {
     if (status === 'completed') {
       if (initialLogs && Object.keys(initialLogs).length > 0) {
@@ -189,6 +190,8 @@ function PanelInner({
         if (draft.sessionPerceivedDifficulty != null) setSessionPerceivedDifficulty(draft.sessionPerceivedDifficulty)
         if (draft.sessionPainAreas && draft.sessionPainAreas.length > 0) setSessionPainAreas(draft.sessionPainAreas)
         setDraftRestored(true)
+      } else if (initialLogs && Object.keys(initialLogs).length > 0) {
+        setLogs(initialLogs)
       } else {
         setLogs({})
       }
@@ -222,6 +225,38 @@ function PanelInner({
       if (saveDraftRef.current) clearTimeout(saveDraftRef.current)
     }
   }, [sessionId, status, activePlan?.session_number, logs, sessionPerceivedDifficulty, sessionPainAreas, exercises, saveDraft])
+
+  // PR-EXEC-02: 진행 서버 저장 (500ms debounce)
+  const saveProgressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (sessionId == null || status !== 'current' || sessionId !== activePlan?.session_number) return
+    const tokenPromise = getSessionSafe().then((r) => r.session?.access_token ?? null)
+    if (saveProgressRef.current) clearTimeout(saveProgressRef.current)
+    saveProgressRef.current = setTimeout(async () => {
+      const token = await tokenPromise
+      if (!token || Object.keys(logs).length === 0) return
+      const holdMap: Record<string, number> = {}
+      if (exercises) for (const e of exercises) if (e.holdSeconds) holdMap[e.templateId] = e.holdSeconds
+      const items = Object.entries(logs).map(([templateId, log]) => {
+        const sets = log.sets ?? 0
+        const reps = log.reps ?? 0
+        const isHold = holdMap[templateId] != null && holdMap[templateId] > 0
+        return {
+          template_id: templateId,
+          sets,
+          reps: isHold ? 0 : reps,
+          hold_seconds: isHold ? reps : 0,
+          rpe: log.rpe ?? null,
+          completed: sets > 0 || reps > 0,
+          skipped: false,
+        }
+      })
+      saveSessionProgress(token, sessionId, items)
+    }, 500)
+    return () => {
+      if (saveProgressRef.current) clearTimeout(saveProgressRef.current)
+    }
+  }, [sessionId, status, activePlan?.session_number, logs, exercises])
   // PR-PERSIST-01: 복구 안내 4초 후 자동 숨김
   useEffect(() => {
     if (!draftRestored) return
