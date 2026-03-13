@@ -221,3 +221,16 @@
 | 1 | — | — | Inline auth 표준화 완료. 추가 low-risk residue 없음. |
 | 2 | (선택) admin/check, admin/users/plan-status | 낮음 | requireAdmin 전환 시 별도 검토 |
 | 3 | payments/stripe | — | 변경 금지. 결제 흐름 별도 인프라 PR 필요 시 |
+
+---
+
+## 11. PR-TECH-16 Verification (Auth Normalization)
+
+**검증일**: 2025-03. **결과**: 코드 변경 불필요. 모든 대상 라우트 이미 getCurrentUserId 사용.
+
+| 분류 | 라우트 | 상태 |
+|------|--------|------|
+| **ALREADY_STANDARDIZED** | report/day7, movement-test/get-latest-by-user, movement-test/save-result, routine-plan/get, routine-plan/generate, exercise-templates, exercise-templates/[id], exercise-templates/filter, push-notifications/subscribe, my-report, coach-comments/*, bootstrap, app/bootstrap, session/*, daily-condition/*, report/weekly, routine-engine/*, workout-routine/* | getCurrentUserId 사용 |
+| **EXCLUDE** | stripe/checkout, stripe/verify-session, payments | 결제 — 변경 금지 |
+| **EXCLUDE** | admin/check, admin/users/plan-status | 의도적 inline (Admin 전용) |
+| **SAFE_TO_STANDARDIZE** | — | 없음 |
