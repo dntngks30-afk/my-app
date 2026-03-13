@@ -50,6 +50,7 @@ import {
   getCheckedItemKey,
   normalizeLegacyItemKey,
 } from '@/lib/session/exercise-log-identity';
+import { normalizeSessionSegmentsForUI } from '@/lib/session/session-segments-ui';
 
 // ─── 날짜 포맷 ─────────────────────────────────────────────────────────────────
 
@@ -84,7 +85,8 @@ type SegmentListProps = {
 };
 
 function SegmentList({ plan, checked, onToggle }: SegmentListProps) {
-  const { segments = [], meta, flags } = plan.plan_json;
+  const { meta, flags } = plan.plan_json;
+  const segments = normalizeSessionSegmentsForUI(plan.plan_json.segments);
 
   return (
     <div className="space-y-2">
@@ -121,8 +123,8 @@ function SegmentList({ plan, checked, onToggle }: SegmentListProps) {
             </span>
           </div>
           <ul className="space-y-1">
-            {seg.items.map((item, itemIdx) => {
-              const key = getCheckedItemKey(segIdx, itemIdx, item.templateId ?? '');
+            {seg.items.map((item) => {
+              const key = getCheckedItemKey(item._originalSegIdx, item._originalItemIdx, item.templateId ?? '');
               const isChecked = !!checked[key];
               return (
                 <li

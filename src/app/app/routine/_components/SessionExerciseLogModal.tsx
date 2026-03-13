@@ -13,6 +13,7 @@ import { NeoButton } from '@/components/neobrutalism';
 import type { SessionPlan } from '@/lib/session/client';
 import type { ExerciseLogItem } from '@/lib/session/client';
 import { buildPlanItemKey } from '@/lib/session/exercise-log-identity';
+import { normalizeSessionSegmentsForUI } from '@/lib/session/session-segments-ui';
 import { SessionFeedbackQuickForm } from '@/app/app/_components/SessionFeedbackQuickForm';
 import type { FeedbackPayload } from '@/lib/session/feedback-types';
 
@@ -28,21 +29,19 @@ type ExerciseRow = {
 };
 
 function flattenPlanItems(plan: SessionPlan): ExerciseRow[] {
-  const segments = plan.plan_json?.segments ?? [];
+  const segments = normalizeSessionSegmentsForUI(plan.plan_json?.segments);
   const rows: ExerciseRow[] = [];
-  for (let segIdx = 0; segIdx < segments.length; segIdx++) {
-    const seg = segments[segIdx]!;
-    for (let itemIdx = 0; itemIdx < (seg.items ?? []).length; itemIdx++) {
-      const it = seg.items![itemIdx]!;
+  for (const seg of segments) {
+    for (const it of seg.items) {
       const tid = it.templateId ?? `item_${it.order}`;
       rows.push({
         templateId: tid,
         name: it.name ?? '운동',
         suggestedSets: it.sets ?? null,
         suggestedReps: it.reps ?? null,
-        plan_item_key: buildPlanItemKey(segIdx, itemIdx, tid),
-        segment_index: segIdx,
-        item_index: itemIdx,
+        plan_item_key: buildPlanItemKey(it._originalSegIdx, it._originalItemIdx, tid),
+        segment_index: it._originalSegIdx,
+        item_index: it._originalItemIdx,
       });
     }
   }

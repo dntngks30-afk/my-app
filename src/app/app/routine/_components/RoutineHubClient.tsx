@@ -25,6 +25,7 @@ import SessionCompleteSummary from './SessionCompleteSummary';
 import SessionExerciseLogModal from './SessionExerciseLogModal';
 import type { FeedbackPayload } from '@/lib/session/feedback-types';
 import { buildPlanItemKey } from '@/lib/session/exercise-log-identity';
+import { normalizeSessionSegmentsForUI } from '@/lib/session/session-segments-ui';
 import {
   getActiveSession,
   getSessionHistory,
@@ -80,19 +81,17 @@ async function fetchMediaSign(
 }
 
 function flattenPlanToAccordionItems(plan: SessionPlan): RoutineAccordionItemData[] {
-  const segments = plan.plan_json?.segments ?? [];
+  const segments = normalizeSessionSegmentsForUI(plan.plan_json?.segments);
   const items: RoutineAccordionItemData[] = [];
   let idx = 0;
-  for (let segIdx = 0; segIdx < segments.length; segIdx++) {
-    const seg = segments[segIdx]!;
+  for (const seg of segments) {
     const perItemSec = seg.items.length > 0 ? seg.duration_sec / seg.items.length : 0;
-    for (let itemIdx = 0; itemIdx < seg.items.length; itemIdx++) {
+    for (const it of seg.items) {
       if (idx >= 4) break;
-      const it = seg.items[itemIdx]!;
       items.push({
-        id: buildPlanItemKey(segIdx, itemIdx, it.templateId ?? ''),
+        id: buildPlanItemKey(it._originalSegIdx, it._originalItemIdx, it.templateId ?? ''),
         title: it.name,
-        kind: it.focus_tag ?? seg.title,
+        kind: it.focus_tag ?? seg.title ?? 'work',
         durationSec: Math.round(perItemSec),
         templateId: it.templateId,
         mediaRef: it.media_ref,
