@@ -37,6 +37,10 @@ export interface ExerciseTemplate {
   avoid_if_pain_mode?: readonly AvoidPainMode[];
   /** PR-ALG-04: target_vector 내 progression 순서 1-3 */
   progression_level?: number;
+  /** PR-20: 균형 요구도. first session/deconditioned/asymmetry/protected 시 high 제외 */
+  balance_demand?: 'low' | 'medium' | 'high';
+  /** PR-20: 동작 복잡도. first session/protected 시 high 제외 */
+  complexity?: 'low' | 'medium' | 'high';
 }
 
 /**

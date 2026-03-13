@@ -11,7 +11,7 @@
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import type { ExerciseTemplate } from './exercise-templates';
 
-/** DB row shape (최소 컬럼 + PR-ALG-04 메타) */
+/** DB row shape (최소 컬럼 + PR-ALG-04 메타 + PR-20 v2) */
 interface DbExerciseTemplate {
   id: string;
   name: string;
@@ -24,6 +24,8 @@ interface DbExerciseTemplate {
   difficulty?: string | null;
   avoid_if_pain_mode?: string[] | null;
   progression_level?: number | null;
+  balance_demand?: string | null;
+  complexity?: string | null;
 }
 
 const TEMPLATE_CACHE_TTL_MS = 120_000; // 120초
@@ -47,6 +49,8 @@ function toExerciseTemplate(row: DbExerciseTemplate): ExerciseTemplate {
       avoid_if_pain_mode: row.avoid_if_pain_mode as ExerciseTemplate['avoid_if_pain_mode'],
     }),
     ...(row.progression_level != null && { progression_level: row.progression_level }),
+    ...(row.balance_demand && { balance_demand: row.balance_demand as ExerciseTemplate['balance_demand'] }),
+    ...(row.complexity && { complexity: row.complexity as ExerciseTemplate['complexity'] }),
   };
 }
 
@@ -73,7 +77,7 @@ export async function getAllExerciseTemplates(
   const supabase = getServerSupabaseAdmin();
   let q = supabase
     .from('exercise_templates')
-    .select('id,name,level,focus_tags,contraindications,media_ref,phase,target_vector,difficulty,avoid_if_pain_mode,progression_level')
+    .select('id,name,level,focus_tags,contraindications,media_ref,phase,target_vector,difficulty,avoid_if_pain_mode,progression_level,balance_demand,complexity')
     .eq('is_active', true)
     .order('id');
 
@@ -130,7 +134,7 @@ export async function getExerciseTemplateById(
 
   const { data, error } = await supabase
     .from('exercise_templates')
-    .select('id,name,level,focus_tags,contraindications,equipment,duration_sec,media_ref,template_version,scoring_version,is_fallback,is_active,phase,target_vector,difficulty,avoid_if_pain_mode,progression_level')
+    .select('id,name,level,focus_tags,contraindications,equipment,duration_sec,media_ref,template_version,scoring_version,is_fallback,is_active,phase,target_vector,difficulty,avoid_if_pain_mode,progression_level,balance_demand,complexity')
     .eq('id', id)
     .eq('is_active', true)
     .maybeSingle();
@@ -199,7 +203,7 @@ export async function getTemplatesForSessionPlan(opts?: {
   const supabase = getServerSupabaseAdmin();
   let q = supabase
     .from('exercise_templates')
-    .select('id,name,level,focus_tags,contraindications,duration_sec,media_ref,is_fallback,phase,target_vector,difficulty,avoid_if_pain_mode,progression_level')
+    .select('id,name,level,focus_tags,contraindications,duration_sec,media_ref,is_fallback,phase,target_vector,difficulty,avoid_if_pain_mode,progression_level,balance_demand,complexity')
     .eq('is_active', true)
     .order('id')
     .limit(60);
@@ -229,6 +233,8 @@ export async function getTemplatesForSessionPlan(opts?: {
     difficulty: row.difficulty ?? null,
     avoid_if_pain_mode: row.avoid_if_pain_mode ?? null,
     progression_level: row.progression_level ?? null,
+    balance_demand: row.balance_demand ?? null,
+    complexity: row.complexity ?? null,
   })) as SessionTemplateRow[];
 }
 
@@ -245,7 +251,7 @@ export async function getFallbackTemplates(): Promise<ExerciseTemplate[]> {
   const supabase = getServerSupabaseAdmin();
   const { data, error } = await supabase
     .from('exercise_templates')
-    .select('id,name,level,focus_tags,contraindications,media_ref,phase,target_vector,difficulty,avoid_if_pain_mode,progression_level')
+    .select('id,name,level,focus_tags,contraindications,media_ref,phase,target_vector,difficulty,avoid_if_pain_mode,progression_level,balance_demand,complexity')
     .eq('is_active', true)
     .eq('is_fallback', true)
     .order('id');

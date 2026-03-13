@@ -201,7 +201,8 @@ function isExcludedByPainMode(
 
 /**
  * PR-SESSION-QUALITY-01: First session guardrails.
- * Exclude high difficulty / high progression when session_number === 1.
+ * Exclude high difficulty / high progression / high balance / high complexity when session_number === 1.
+ * PR-20: balance_demand=high, complexity=high 추가.
  */
 function isExcludedByFirstSessionGuardrail(
   template: SessionTemplateRow,
@@ -210,6 +211,19 @@ function isExcludedByFirstSessionGuardrail(
   if (sessionNumber !== 1) return false;
   if (template.difficulty === 'high') return true;
   if (typeof template.progression_level === 'number' && template.progression_level >= 3) return true;
+  if (template.balance_demand === 'high') return true;
+  if (template.complexity === 'high') return true;
+  return false;
+}
+
+/** PR-20: protected pain mode에서 balance_demand=high, complexity=high 제외 */
+function isExcludedByProtectedV2Guardrail(
+  template: SessionTemplateRow,
+  painMode?: 'none' | 'caution' | 'protected' | null
+): boolean {
+  if (!painMode || painMode !== 'protected') return false;
+  if (template.balance_demand === 'high') return true;
+  if (template.complexity === 'high') return true;
   return false;
 }
 
@@ -669,7 +683,8 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       !avoidIds.has(t.id) &&
       !isExcludedByPainMode(t, input.pain_mode) &&
       !(maxDifficultyCap && isDifficultyAboveCap(t.difficulty ?? null, maxDifficultyCap)) &&
-      !isExcludedByFirstSessionGuardrail(t, input.sessionNumber)
+      !isExcludedByFirstSessionGuardrail(t, input.sessionNumber) &&
+      !isExcludedByProtectedV2Guardrail(t, input.pain_mode)
   );
 
   const scored = candidates.map((t) => ({
