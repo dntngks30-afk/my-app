@@ -166,20 +166,7 @@ export default function SessionCompleteSummary({
           </div>
         )}
 
-        {nextTheme && (
-          <div className="rounded-xl bg-violet-50 p-4 border border-violet-200">
-            <p className="text-xs text-violet-600 uppercase tracking-wide mb-0.5">
-              다음 세션
-            </p>
-            {completedSessionNumber != null && (
-              <p className="text-sm font-semibold text-violet-800 mb-0.5">
-                세션 {completedSessionNumber + 1}
-              </p>
-            )}
-            <p className="text-base font-semibold text-violet-900">{nextTheme}</p>
-            <p className="text-xs text-violet-600 mt-1">예상 시간 약 10~12분</p>
-          </div>
-        )}
+        {/* PR-RISK-02: 다음 세션 안내는 NextSessionPreviewCard에서만 표시 (중복 제거) */}
       </div>
 
       <div className="flex flex-col gap-2">
@@ -198,19 +185,7 @@ export default function SessionCompleteSummary({
                 <Home className="size-4" />
                 지도 돌아가기
               </NeoButton>
-              {onNextSessionClick && (
-                <NeoButton
-                  variant="secondary"
-                  fullWidth
-                  onClick={() => {
-                    onNextSessionClick();
-                  }}
-                  className="py-3 flex items-center justify-center gap-2"
-                >
-                  <BarChart2 className="size-4" />
-                  다음 세션 보기
-                </NeoButton>
-              )}
+              {/* PR-RISK-02: 다음 세션 CTA는 NextSessionPreviewCard에서만 (중복 제거) */}
             </>
           ) : (
             <>
@@ -247,11 +222,7 @@ export default function SessionCompleteSummary({
             내일 다음 세션이 준비됩니다
           </p>
         )}
-        {nextTheme && !isNextLockedUntilTomorrow && (
-          <p className="text-center text-xs text-slate-500">
-            다음 세션은 몸 상태에 맞게 조정됩니다
-          </p>
-        )}
+        {/* PR-RISK-02: 다음 세션 설명은 NextSessionPreviewCard에서만 */}
         {!nextTheme && progress.completed_sessions >= progress.total_sessions && (
           <p className="text-center text-xs text-slate-500">
             모든 세션을 완료했어요. 수고하셨습니다!

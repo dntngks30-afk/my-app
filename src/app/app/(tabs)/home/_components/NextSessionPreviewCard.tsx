@@ -187,7 +187,10 @@ export function NextSessionPreviewCard({
       ) : (
         <>
           <p className="mt-2 text-xs text-violet-600">
-            지난 세션을 바탕으로 다음은 골반 안정성과 균형에 더 집중합니다.
+            현재 흐름을 이어 다음 세션이 준비됩니다
+          </p>
+          <p className="mt-0.5 text-xs text-violet-600">
+            예상 시간: {formatEstimatedTime(data.estimated_time)}
           </p>
           {adaptiveExplanation && (
             <div className="mt-3 rounded-xl border border-violet-200 bg-violet-100/80 px-3 py-2.5">

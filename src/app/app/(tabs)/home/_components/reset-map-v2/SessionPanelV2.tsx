@@ -5,6 +5,7 @@ import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import type { ExerciseItem } from './planJsonAdapter'
 import type { ExerciseLogItem, SessionPlan, ActivePlanSummary } from '@/lib/session/client'
 import { isExerciseLogCompleted, getExerciseLogDisplayValue } from './exercise-log-helpers'
+import type { NextSessionPreviewData } from '../NextSessionPreviewCard'
 import { buildBriefSessionRationale } from '@/lib/deep-result/copy'
 import { ExercisePlayerModal } from './ExercisePlayerModal'
 import SessionCompleteSummary from '@/app/app/routine/_components/SessionCompleteSummary'
@@ -38,6 +39,30 @@ interface SessionPanelV2Props {
   onRequestNextSession?: (nextSessionNumber: number) => void
   /** PR-ALG-15: adaptive explanation from bootstrap */
   adaptiveExplanation?: { title: string; message: string } | null
+  /** PR-RISK-02: next session from bootstrap (post-completion 카드 데이터 우선) */
+  nextSession?: { session_number: number; focus_axes: string[]; estimated_time: number } | null
+}
+
+/** PR-RISK-02: bootstrap next_session 우선, completeResult fallback */
+function buildPostCompletionNextSessionData(
+  completedSessions: number,
+  total: number,
+  nextTheme: string | null,
+  nextSession: { session_number: number; focus_axes: string[]; estimated_time: number } | null | undefined
+): NextSessionPreviewData {
+  const nextNum = Math.min(completedSessions + 1, total)
+  if (nextSession && nextSession.session_number === nextNum) {
+    return {
+      session_number: nextSession.session_number,
+      focus_axes: nextSession.focus_axes,
+      estimated_time: nextSession.estimated_time,
+    }
+  }
+  return {
+    session_number: nextNum,
+    focus_label: nextTheme,
+    estimated_time: 12,
+  }
 }
 
 const STATUS_LABEL: Record<SessionStatus, string> = {
@@ -110,6 +135,7 @@ export function SessionPanelV2({
   onSessionCompleted,
   onRequestNextSession,
   adaptiveExplanation,
+  nextSession,
 }: SessionPanelV2Props) {
   if (sessionId === null) return null
 
@@ -127,6 +153,7 @@ export function SessionPanelV2({
   onSessionCompleted={onSessionCompleted}
   onRequestNextSession={onRequestNextSession}
   adaptiveExplanation={adaptiveExplanation}
+  nextSession={nextSession}
 />
   )
 }
@@ -147,6 +174,7 @@ function PanelInner({
   onSessionCompleted,
   onRequestNextSession,
   adaptiveExplanation,
+  nextSession,
 }: Required<Omit<SessionPanelV2Props, 'onSessionCompleted' | 'onRequestNextSession'>> & {
   onSessionCompleted?: (completedSessions: number) => void
   onRequestNextSession?: (nextSessionNumber: number) => void
@@ -246,13 +274,14 @@ function PanelInner({
                     : undefined
                 }
               />
-              {/* PR-UX-14: Next Session Preview Card — completion → next action bridge */}
+              {/* PR-RISK-02: 다음 세션 안내는 NextSessionPreviewCard 단일 블록. bootstrap next_session 우선, completeResult fallback */}
               <NextSessionPreviewCard
-                data={{
-                  session_number: Math.min(completeResult.progress.completed_sessions + 1, total),
-                  focus_label: completeResult.next_theme,
-                  estimated_time: 12,
-                }}
+                data={buildPostCompletionNextSessionData(
+                  completeResult.progress.completed_sessions,
+                  total,
+                  completeResult.next_theme,
+                  nextSession
+                )}
                 variant="post-completion"
                 isLockedUntilTomorrow={isLockedNext ?? false}
                 lastSessionDifficulty={lastReflectionDifficulty}

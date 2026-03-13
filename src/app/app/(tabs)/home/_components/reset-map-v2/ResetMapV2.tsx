@@ -41,6 +41,8 @@ interface ResetMapV2Props {
   initialSelectedSessionId?: number | null
   /** PR-ALG-15: adaptive explanation from bootstrap */
   adaptiveExplanation?: { title: string; message: string } | null
+  /** PR-RISK-02: next session preview from bootstrap (post-completion 카드용) */
+  nextSession?: { session_number: number; focus_axes: string[]; estimated_time: number } | null
   /** debug: true → createSession 응답에 timings 포함 (cold path 측정용) */
   debug?: boolean
 }
@@ -136,7 +138,7 @@ function bootstrapToPanelPlan(data: PanelBootstrapResponse): SessionPlan {
   }
 }
 
-export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, onRequestNextSession, initialSelectedSessionId, adaptiveExplanation, debug }: ResetMapV2Props) {
+export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, onRequestNextSession, initialSelectedSessionId, adaptiveExplanation, nextSession, debug }: ResetMapV2Props) {
   // localDailyCapActive: createSession이 DAILY_LIMIT_REACHED 반환 시 클라이언트 측 즉시 반영 (방어)
   const [localDailyCapActive, setLocalDailyCapActive] = useState(false)
   // daily cap: today_completed || localDailyCapActive, activePlan 없을 때 → 현재 세션 없음, 다음 세션 locked
@@ -611,6 +613,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         onSessionCompleted={onSessionCompleted}
         onRequestNextSession={onRequestNextSession ?? ((next) => setSelectedSessionId(next))}
         adaptiveExplanation={adaptiveExplanation}
+        nextSession={nextSession}
       />
     </div>
   )

@@ -314,6 +314,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
                 onSessionCompleted={handleSessionCompleted}
                 onActivePlanCreated={handleActivePlanCreated}
                 adaptiveExplanation={adaptiveExplanation}
+                nextSession={nextSession}
                 initialSelectedSessionId={
                   focusSessionNum != null && focusSessionNum >= 1 && focusSessionNum <= total
                     ? focusSessionNum
