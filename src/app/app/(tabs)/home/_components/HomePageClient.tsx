@@ -12,7 +12,6 @@ import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
-import { NextSessionPreviewCard } from './NextSessionPreviewCard';
 
 interface HomePageClientProps {
   hideBottomNav?: boolean;
@@ -264,36 +263,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       </header>
 
       <main className="px-4 space-y-6">
-        {/* PR-UX-14: Next Session Preview Card — home top section */}
-        {sessionProgress &&
-          sessionProgress.completed_sessions < sessionProgress.total_sessions && (
-            <NextSessionPreviewCard
-              data={
-                nextSession
-                  ? {
-                      session_number: nextSession.session_number,
-                      focus_axes: nextSession.focus_axes,
-                      estimated_time: nextSession.estimated_time,
-                    }
-                  : {
-                      session_number: sessionProgress.completed_sessions + 1,
-                      estimated_time: 12,
-                    }
-              }
-              variant="home"
-              isLockedUntilTomorrow={todayCompleted}
-              adaptiveExplanation={adaptiveExplanation}
-              onPrimaryCta={() => {
-                if (mapV2) {
-                  const next = Math.min(sessionProgress.completed_sessions + 1, sessionProgress.total_sessions);
-                  router.push(`/app/home?focusSession=${next}`);
-                } else {
-                  router.push('/app/home');
-                }
-              }}
-            />
-          )}
-
+        {/* PR-UX-16a: home 상단 대형 preview 제거 — Reset Map first-view. 다음 세션 안내는 post-completion 또는 지도 맥락에서만 */}
         {/* 1. 리셋 지도 — mapV2=1이면 새 지도 UX, 그 외 기존 ResetMapCard */}
         <div>
         {(() => {
