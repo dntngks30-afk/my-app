@@ -48,7 +48,8 @@ interface ResetMapV2Props {
 type PanelPlanSummaryResponse = PlanSummaryResponse;
 type PanelBootstrapResponse = SessionBootstrapResponse;
 
-function toPanelPlan(data: PanelPlanSummaryResponse): SessionPlan {
+/** PR-18: summary → panel-compatible plan (display only). Full plan_json 아님. */
+function summaryToPanelPlan(data: PanelPlanSummaryResponse): SessionPlan {
   const meta: Record<string, unknown> = {};
   if (data.rationale) {
     if (data.rationale.focus) meta.focus = data.rationale.focus;
@@ -95,7 +96,8 @@ function buildBootstrapRationale(focusAxes: string[]): string | null {
   return `${labels[0]}과 ${labels[1]} 중심으로 먼저 몸을 정리하는 구성입니다`
 }
 
-function toBootstrapPanelPlan(data: PanelBootstrapResponse): SessionPlan {
+/** PR-18: bootstrap → panel-compatible plan (display only). Full plan_json 아님. */
+function bootstrapToPanelPlan(data: PanelBootstrapResponse): SessionPlan {
   const flagMap = new Set(data.constraint_flags)
   return {
     session_number: data.session_number,
@@ -209,7 +211,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         ...(debug && { debug: true }),
       })
       if (!result.ok || !result.data) return null
-      const data = toBootstrapPanelPlan(result.data as PanelBootstrapResponse)
+      const data = bootstrapToPanelPlan(result.data as PanelBootstrapResponse)
       bootstrapCacheRef.current.set(sessionNumber, data)
       return data
     })()
@@ -331,7 +333,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     const cached = summaryCacheRef.current.get(selectedSessionId)
     if (cached) {
       setPlanLoading(false)
-      setPastSessionPlan(toPanelPlan(cached))
+      setPastSessionPlan(summaryToPanelPlan(cached))
       setPastSessionInitialLogs(toExerciseLogMap(cached.exercise_logs))
       return
     }
@@ -344,7 +346,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       if (cancelled) return
       setPlanLoading(false)
       if (!data) return
-      setPastSessionPlan(toPanelPlan(data))
+      setPastSessionPlan(summaryToPanelPlan(data))
       setPastSessionInitialLogs(toExerciseLogMap(data.exercise_logs))
     })
     return () => { cancelled = true }
@@ -395,7 +397,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     const cached = summaryCacheRef.current.get(selectedSessionId)
     if (cached) {
       setPlanLoading(false)
-      setFullPlan(toPanelPlan(cached))
+      setFullPlan(summaryToPanelPlan(cached))
       setCurrentSessionServerLogs(toExerciseLogMap(cached.exercise_logs))
       return
     }
@@ -406,7 +408,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       if (cancelled) return
       setPlanLoading(false)
       if (!data) return
-      setFullPlan(toPanelPlan(data))
+      setFullPlan(summaryToPanelPlan(data))
       setCurrentSessionServerLogs(toExerciseLogMap(data.exercise_logs))
     })
     return () => { cancelled = true }

@@ -225,10 +225,18 @@ export async function getSessionPlanDetail(
   return sessionFetch<SessionPlanJson>(path, token, { method: 'GET' });
 }
 
-/** GET /api/session/plan-summary — 패널 첫 렌더용 경량 조회 (segments만) */
+/** GET /api/session/plan-summary — 패널 첫 렌더용 경량 조회 (segments + rationale). Full plan_json 아님. */
 export type PlanSummaryResponse = {
   session_number: number;
   status: string;
+  rationale?: {
+    focus?: string[];
+    priority_vector?: Record<string, number>;
+    pain_mode?: 'none' | 'caution' | 'protected';
+    session_rationale?: string | null;
+    session_focus_axes?: string[];
+  };
+  adaptation_summary?: string;
   segments: Array<{
     title: string;
     items: Array<{
@@ -238,10 +246,27 @@ export type PlanSummaryResponse = {
       sets?: number;
       reps?: number;
       hold_seconds?: number;
+      rationale?: string | null;
     }>;
   }>;
   /** 완료된 세션 재조회 시 저장된 실제 기록 (templateId 기준 병합용) */
   exercise_logs?: ExerciseLogItem[];
+};
+
+/** extractSessionExercises 등에서 사용. summary/full plan_json 모두 segments만 있으면 동작. */
+export type PlanJsonSegmentsForDisplay = {
+  segments?: Array<{
+    title?: string;
+    items?: Array<{
+      templateId?: string;
+      name?: string;
+      order?: number;
+      sets?: number;
+      reps?: number;
+      hold_seconds?: number;
+      rationale?: string | null;
+    }>;
+  }>;
 };
 
 export async function getSessionPlanSummary(
@@ -295,7 +320,7 @@ export type CreateSessionInput = {
   equipment?: string;
   /** debug: true → response에 timings 포함 (측정용) */
   debug?: boolean;
-  /** summary: true → active.plan_json을 segments만 반환 (패널 첫 렌더용 경량) */
+  /** summary: true → active.plan_json을 segments+minimal meta만 반환 (패널 첫 렌더용). Full plan_json 아님. */
   summary?: boolean;
 };
 

@@ -1,4 +1,4 @@
-import type { SessionPlanJson } from '@/lib/session/client'
+import type { PlanJsonSegmentsForDisplay } from '@/lib/session/client'
 
 /** SessionPanelV2에서 렌더할 최소 운동 표현 */
 export interface ExerciseItem {
@@ -14,24 +14,23 @@ export interface ExerciseItem {
 }
 
 /**
- * plan_json에서 전체 운동 배열을 추출한다.
- * segments 순서를 유지하며 flatMap한다.
- * plan_json이 없거나 segments가 없으면 빈 배열을 반환한다.
+ * plan_json(또는 summary)에서 전체 운동 배열을 추출한다.
+ * summary/full 모두 segments만 있으면 동작. segments 순서를 유지하며 flatMap.
  */
 export function extractSessionExercises(
-  planJson: SessionPlanJson | undefined | null,
+  planJson: PlanJsonSegmentsForDisplay | undefined | null,
 ): ExerciseItem[] {
   if (!planJson?.segments?.length) return []
 
   return planJson.segments.flatMap(seg =>
-    seg.items.map(item => ({
-      templateId: item.templateId,
-      name: item.name,
+    (seg.items ?? []).map(item => ({
+      templateId: item.templateId ?? '',
+      name: item.name ?? '',
       targetSets: item.sets,
       targetReps: item.reps,
       holdSeconds: item.hold_seconds,
-      segmentTitle: seg.title,
-      order: item.order,
+      segmentTitle: seg.title ?? '',
+      order: item.order ?? 0,
       rationale: item.rationale ?? undefined,
     })),
   )
