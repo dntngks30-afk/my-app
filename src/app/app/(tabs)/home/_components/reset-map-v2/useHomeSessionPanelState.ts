@@ -123,12 +123,17 @@ export function useHomeSessionPanelState({
   }, [sessionId, status, initialLogs, exercises]);
 
   // Draft save (current only, 300ms debounce)
+  // PR-RISK-07: segments passed for legacy key migration. New writes use plan_item_key only.
   const saveDraftRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveDraft = useCallback(() => {
     if (status !== 'current' || !activePlan?.session_number || sessionId !== activePlan.session_number) return;
     const planId = String(sessionId);
     const holdSecondsByTemplateId: Record<string, number> = {};
     if (exercises) for (const e of exercises) if (e.holdSeconds) holdSecondsByTemplateId[e.templateId] = e.holdSeconds;
+    const planJson = activePlan && 'plan_json' in activePlan ? activePlan.plan_json : null;
+    const segments = planJson && typeof planJson === 'object' && 'segments' in planJson
+      ? (planJson as { segments?: unknown }).segments
+      : undefined;
     saveSessionDraft(planId, {
       session_number: sessionId,
       plan_id: planId,
@@ -136,8 +141,9 @@ export function useHomeSessionPanelState({
       holdSecondsByTemplateId: Object.keys(holdSecondsByTemplateId).length ? holdSecondsByTemplateId : undefined,
       sessionPerceivedDifficulty,
       sessionPainAreas,
+      segments: Array.isArray(segments) ? segments : undefined,
     });
-  }, [sessionId, status, activePlan?.session_number, logs, sessionPerceivedDifficulty, sessionPainAreas, exercises]);
+  }, [sessionId, status, activePlan, logs, sessionPerceivedDifficulty, sessionPainAreas, exercises]);
   useEffect(() => {
     if (status !== 'current' || sessionId !== activePlan?.session_number) return;
     if (saveDraftRef.current) clearTimeout(saveDraftRef.current);

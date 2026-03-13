@@ -49,6 +49,8 @@ import {
   buildCompletionExerciseLogsWithIdentity,
   getCheckedItemKey,
   normalizeLegacyItemKey,
+  filterCheckedForSave,
+  buildLegacyDraftMigrationMeta,
 } from '@/lib/session/exercise-log-identity';
 import { normalizeSessionSegmentsForUI } from '@/lib/session/session-segments-ui';
 
@@ -407,6 +409,10 @@ export default function SessionRoutinePanel() {
               : normalizeLegacyItemKey(key, segments) ?? key;
             migrated[canonical] = val;
           }
+          const meta = buildLegacyDraftMigrationMeta(Object.keys(draft.checked), segments);
+          if (process.env.NODE_ENV !== 'production' && (meta.legacy_checked_key_hits > 0 || meta.legacy_checked_key_unresolved > 0)) {
+            console.info('[SessionRoutinePanel] legacy draft load meta:', meta);
+          }
           setChecked(migrated);
           setStartedAtMs(draft.startedAtMs);
           if (!cancelled) setShowRecovery(true);
@@ -499,13 +505,19 @@ export default function SessionRoutinePanel() {
   }, []);
 
   // checked 변경 시 storage 저장 (activePlan.session_number 필요)
+  // PR-RISK-07: Only plan_item_key keys are persisted. Legacy keys filtered before save.
   useEffect(() => {
     if (!activePlan || panelState !== 'active') return;
     const draft = loadSessionDraft(activePlan.session_number);
     if (draft) {
+      const segments = activePlan.plan_json?.segments;
+      const { filtered, meta } = filterCheckedForSave(checked, segments);
+      if (process.env.NODE_ENV !== 'production' && (meta.legacy_checked_key_unresolved > 0 || meta.legacy_checked_key_migrated > 0)) {
+        console.info('[SessionRoutinePanel] legacy draft save meta:', meta);
+      }
       saveSessionDraft({
         ...draft,
-        checked,
+        checked: filtered,
         lastUpdatedAtMs: Date.now(),
       });
     }

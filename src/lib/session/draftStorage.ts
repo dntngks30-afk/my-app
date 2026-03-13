@@ -6,9 +6,16 @@
  *
  * PR-19: Distinct from src/lib/session/storage.ts (sessionStorage, routine-tab draft).
  * This module: home/reset-map session execution draft. storage.ts: different flow.
+ *
+ * PR-RISK-07: New writes must use plan_item_key only. Legacy keys are read-only fallback.
  */
 
 import type { ExerciseLogItem } from './client';
+import {
+  isPlanItemKeyFormat,
+  normalizeLegacyItemKey,
+  type PlanSegment,
+} from './exercise-log-identity';
 import type { SessionPainArea } from './feedback-types';
 
 const KEY_PREFIX = 'moveRe:draft:';
@@ -43,6 +50,16 @@ export type SessionDraftInput = {
   holdSecondsByTemplateId?: Record<string, number>;
   sessionPerceivedDifficulty?: 'too_easy' | 'ok' | 'too_hard' | null;
   sessionPainAreas?: SessionPainArea[];
+  /** PR-RISK-07: For legacy key migration. When provided, legacy keys are migrated before save. */
+  segments?: PlanSegment[];
+};
+
+/** PR-RISK-07: Debug meta for draft save observability */
+export type DraftSaveDebugMeta = {
+  written_with_plan_item_key_count: number;
+  legacy_key_migrated_count: number;
+  legacy_key_unresolved_count: number;
+  unresolved_legacy_keys: string[];
 };
 
 function getKey(planId: string): string {
@@ -169,16 +186,41 @@ export function loadSessionDraft(planId: string): SessionDraftData | null {
 /**
  * Save session draft to localStorage.
  * Uses planId for key; overwrites existing draft for same plan.
- * Key: plan_item_key when logs use it (SSOT); legacy templateId is read-only fallback.
+ * PR-RISK-07: New writes use plan_item_key only. Legacy keys are migrated when segments provided, else skipped.
  */
-export function saveSessionDraft(planId: string, data: SessionDraftInput): void {
+export function saveSessionDraft(planId: string, data: SessionDraftInput): DraftSaveDebugMeta | void {
   if (typeof window === 'undefined') return;
   try {
     const exercises: SessionDraftData['exercises'] = {};
     const holdMap = data.holdSecondsByTemplateId ?? {};
+    const segments = data.segments;
+    let writtenCanonical = 0;
+    let migrated = 0;
+    let unresolved = 0;
+    const unresolvedKeys: string[] = [];
+
     for (const [logKey, log] of Object.entries(data.logs)) {
-      exercises[logKey] = logToExercise(log, holdMap[log.templateId]);
+      let writeKey: string;
+      if (isPlanItemKeyFormat(logKey)) {
+        writeKey = logKey;
+        writtenCanonical++;
+      } else {
+        const canonical = normalizeLegacyItemKey(logKey, segments);
+        if (canonical) {
+          writeKey = canonical;
+          migrated++;
+        } else {
+          unresolved++;
+          unresolvedKeys.push(logKey);
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn('[draftStorage] legacy key skipped (unresolved):', logKey);
+          }
+          continue;
+        }
+      }
+      exercises[writeKey] = logToExercise(log, holdMap[log.templateId]);
     }
+
     const toSave: SessionDraftData = {
       session_number: data.session_number,
       plan_id: data.plan_id,
@@ -188,6 +230,17 @@ export function saveSessionDraft(planId: string, data: SessionDraftInput): void 
       sessionPainAreas: data.sessionPainAreas?.length ? data.sessionPainAreas : undefined,
     };
     localStorage.setItem(getKey(planId), JSON.stringify(toSave));
+
+    const meta: DraftSaveDebugMeta = {
+      written_with_plan_item_key_count: writtenCanonical,
+      legacy_key_migrated_count: migrated,
+      legacy_key_unresolved_count: unresolved,
+      unresolved_legacy_keys: unresolvedKeys,
+    };
+    if (process.env.NODE_ENV !== 'production' && (migrated > 0 || unresolved > 0)) {
+      console.info('[draftStorage] save meta:', meta);
+    }
+    return meta;
   } catch {
     // quota etc — ignore
   }

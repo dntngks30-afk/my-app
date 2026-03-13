@@ -6,6 +6,8 @@
  *
  * PR-19: Distinct from draftStorage.ts (localStorage, home session execution draft).
  * This module: routine-tab / sessionStorage. draftStorage: home reset-map flow.
+ *
+ * PR-RISK-07: Caller must pass checked filtered to plan_item_key only. Legacy keys are read-only fallback on load.
  */
 
 const KEY_PREFIX = 'mr_session_active_';
