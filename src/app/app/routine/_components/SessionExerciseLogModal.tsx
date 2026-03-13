@@ -12,6 +12,7 @@ import { X } from 'lucide-react';
 import { NeoButton } from '@/components/neobrutalism';
 import type { SessionPlan } from '@/lib/session/client';
 import type { ExerciseLogItem } from '@/lib/session/client';
+import { buildPlanItemKey } from '@/lib/session/exercise-log-identity';
 import { SessionFeedbackQuickForm } from '@/app/app/_components/SessionFeedbackQuickForm';
 import type { FeedbackPayload } from '@/lib/session/feedback-types';
 
@@ -20,18 +21,28 @@ type ExerciseRow = {
   name: string;
   suggestedSets: number | null;
   suggestedReps: number | null;
+  /** plan_item_key for identity — templateId-only is legacy fallback */
+  plan_item_key: string;
+  segment_index: number;
+  item_index: number;
 };
 
 function flattenPlanItems(plan: SessionPlan): ExerciseRow[] {
   const segments = plan.plan_json?.segments ?? [];
   const rows: ExerciseRow[] = [];
-  for (const seg of segments) {
-    for (const it of seg.items ?? []) {
+  for (let segIdx = 0; segIdx < segments.length; segIdx++) {
+    const seg = segments[segIdx]!;
+    for (let itemIdx = 0; itemIdx < (seg.items ?? []).length; itemIdx++) {
+      const it = seg.items![itemIdx]!;
+      const tid = it.templateId ?? `item_${it.order}`;
       rows.push({
-        templateId: it.templateId ?? `item_${it.order}`,
+        templateId: tid,
         name: it.name ?? '운동',
         suggestedSets: it.sets ?? null,
         suggestedReps: it.reps ?? null,
+        plan_item_key: buildPlanItemKey(segIdx, itemIdx, tid),
+        segment_index: segIdx,
+        item_index: itemIdx,
       });
     }
   }
@@ -59,7 +70,7 @@ export default function SessionExerciseLogModal({
   const [values, setValues] = useState<Record<string, { sets: number | null; reps: number | null; difficulty: number | null; rpe: number | null; discomfort: number | null }>>(() => {
     const init: Record<string, { sets: number | null; reps: number | null; difficulty: number | null; rpe: number | null; discomfort: number | null }> = {};
     for (const r of rows) {
-      const key = r.templateId;
+      const key = r.plan_item_key;
       init[key] = {
         sets: r.suggestedSets ?? 1,
         reps: r.suggestedReps ?? null,
@@ -80,7 +91,7 @@ export default function SessionExerciseLogModal({
 
   const handleSave = async () => {
     const exerciseLogs: ExerciseLogItem[] = rows.map((r) => {
-      const v = values[r.templateId] ?? { sets: 1, reps: null, difficulty: null, rpe: null, discomfort: null };
+      const v = values[r.plan_item_key] ?? { sets: 1, reps: null, difficulty: null, rpe: null, discomfort: null };
       return {
         templateId: r.templateId,
         name: r.name,
@@ -122,8 +133,8 @@ export default function SessionExerciseLogModal({
 
         <div className="overflow-y-auto flex-1 p-4 space-y-4">
           {rows.map((r) => {
-            const v = values[r.templateId] ?? { sets: 1, reps: null, difficulty: null, rpe: null, discomfort: null };
-            const key = r.templateId;
+            const v = values[r.plan_item_key] ?? { sets: 1, reps: null, difficulty: null, rpe: null, discomfort: null };
+            const key = r.plan_item_key;
             return (
               <div
                 key={key}
@@ -238,7 +249,7 @@ export default function SessionExerciseLogModal({
             onChange={setFeedback}
             derivedCompletionRatio={
               rows.length > 0
-                ? rows.filter((r) => (values[r.templateId]?.sets ?? 0) > 0).length / rows.length
+                ? rows.filter((r) => (values[r.plan_item_key]?.sets ?? 0) > 0).length / rows.length
                 : undefined
             }
           />

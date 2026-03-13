@@ -45,6 +45,7 @@ import SessionRecoveryModal from './SessionRecoveryModal';
 import SessionCompleteSummary from './SessionCompleteSummary';
 import { SessionFeedbackQuickForm } from '@/app/app/_components/SessionFeedbackQuickForm';
 import type { FeedbackPayload } from '@/lib/session/feedback-types';
+import { buildCompletionExerciseLogsWithIdentity } from '@/lib/session/exercise-log-identity';
 
 // ─── 날짜 포맷 ─────────────────────────────────────────────────────────────────
 
@@ -511,20 +512,24 @@ export default function SessionRoutinePanel() {
     const allChecked = allItems.length > 0 && allItems.every((k) => checked[k]);
     const completionMode = allChecked ? 'all_done' : 'partial_done';
 
-    // PR-DATA-01: evidence gate requires exercise_logs — build from checked items
-    const exerciseLogs = activePlan.plan_json?.segments?.flatMap((s, segIdx) =>
-      (s.items ?? []).map((i, itemIdx) => ({ item: i, key: itemKey(s.title ?? '', i.order ?? itemIdx, i.templateId ?? '') }))
-        .filter(({ key }) => checked[key])
-        .map(({ item: i }) => ({
-          templateId: i.templateId,
-          name: i.name,
-          sets: typeof i.sets === 'number' ? i.sets : 1,
-          reps: typeof i.reps === 'number' ? i.reps : 1,
-          difficulty: null as number | null,
-          rpe: null as number | null,
-          discomfort: null as number | null,
-        }))
-    ) ?? [];
+    // PR-DATA-01: evidence gate requires exercise_logs — plan_item_key identity (templateId-only is legacy fallback)
+    const exerciseLogs = buildCompletionExerciseLogsWithIdentity(
+      activePlan.plan_json?.segments,
+      (segIdx, itemIdx, item) => {
+        const seg = activePlan.plan_json?.segments?.[segIdx];
+        const key = itemKey(seg?.title ?? '', item.order ?? itemIdx, item.templateId ?? '');
+        if (!checked[key]) return null;
+        return {
+          templateId: item.templateId ?? '',
+          name: item.name ?? '',
+          sets: typeof item.sets === 'number' ? item.sets : 1,
+          reps: typeof item.reps === 'number' ? item.reps : 1,
+          difficulty: null,
+          rpe: null,
+          discomfort: null,
+        };
+      }
+    );
 
     setCompleting(true);
     const payload: Parameters<typeof completeSession>[1] = {

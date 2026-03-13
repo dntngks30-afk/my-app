@@ -78,6 +78,10 @@ type ExerciseLogItem = {
   difficulty: number | null;
   rpe?: number | null;
   discomfort?: number | null;
+  /** HOTFIX: plan item identity — templateId-only is legacy fallback */
+  plan_item_key?: string;
+  segment_index?: number;
+  item_index?: number;
 };
 
 const MAX_LOGS = 50;
@@ -373,6 +377,7 @@ export async function POST(req: NextRequest) {
             received_exercise_logs_count: exerciseLogsArray.length,
             reject_reason_code: obs.reject_reason_code,
             reject_reason_detail: obs.reject_reason_detail,
+            ...(obs.identity_match && { identity_match: obs.identity_match }),
           }
         : undefined;
       return fail(422, gateResult.code as ApiErrorCode, gateResult.message, details);

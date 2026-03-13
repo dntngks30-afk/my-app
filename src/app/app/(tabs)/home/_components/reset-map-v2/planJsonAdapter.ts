@@ -1,4 +1,5 @@
 import type { PlanJsonSegmentsForDisplay } from '@/lib/session/client'
+import { buildPlanItemKey } from '@/lib/session/exercise-log-identity'
 
 /** SessionPanelV2에서 렌더할 최소 운동 표현 */
 export interface ExerciseItem {
@@ -17,10 +18,8 @@ export interface ExerciseItem {
   item_index?: number
 }
 
-/** Stable plan item identity. Same format as session-exercise-events. */
-export function buildPlanItemKey(segmentIndex: number, itemIndex: number, templateId: string): string {
-  return `${segmentIndex}:${itemIndex}:${templateId}`
-}
+/** Re-export for backward compat. SSOT: @/lib/session/exercise-log-identity */
+export { buildPlanItemKey }
 
 /** logs lookup key — plan_item_key 우선, templateId fallback */
 export function getLogKey(item: ExerciseItem, log?: { plan_item_key?: string }): string {

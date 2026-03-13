@@ -4,6 +4,7 @@
  * Server-side validation to prevent completing sessions with insufficient execution evidence.
  */
 
+import { buildPlanItemKey } from './exercise-log-identity';
 import {
   EVIDENCE_GATE_COMPLETION_MIN_RATIO,
   EVIDENCE_GATE_SCORE_ALLOW_THRESHOLD,
@@ -53,6 +54,12 @@ export type EvidenceGateObservability = {
   rejected_or_allowed: 'rejected' | 'allowed';
   reject_reason_code?: EvidenceGateErrorCode;
   reject_reason_detail?: RejectReasonDetail;
+  /** HOTFIX: identity match observability — plan_item_key vs templateId fallback */
+  identity_match?: {
+    matched_by_plan_item_key_count: number;
+    matched_by_template_fallback_count: number;
+    unmatched_plan_items_count: number;
+  };
 };
 
 export type EvidenceGateResult =
@@ -110,10 +117,6 @@ type PlanItemInfo = {
   plan_item_key: string;
 };
 
-function buildPlanItemKey(segmentIndex: number, itemIndex: number, templateId: string): string {
-  return `${segmentIndex}:${itemIndex}:${templateId}`;
-}
-
 function buildPlanItemList(planJson: PlanJson | null | undefined): PlanItemInfo[] {
   const items: PlanItemInfo[] = [];
   if (!planJson?.segments) return items;
@@ -139,11 +142,18 @@ function buildPlanItemList(planJson: PlanJson | null | undefined): PlanItemInfo[
 
 /**
  * Match exercise_logs to plan items. plan_item_key 우선, templateId fallback (backward compat).
+ * templateId-only matching is legacy fallback; new paths must provide plan_item_key.
  */
 function countCompletedItems(
   planItems: PlanItemInfo[],
   exerciseLogs: ExerciseLogItem[]
-): { completed: number; mainCompleted: number; withPerformedValue: number } {
+): {
+  completed: number;
+  mainCompleted: number;
+  withPerformedValue: number;
+  matchedByPlanItemKey: number;
+  matchedByTemplateFallback: number;
+} {
   const byPlanItemKey = new Map<string, ExerciseLogItem>();
   const logQueueByTemplateId = new Map<string, ExerciseLogItem[]>();
   for (const log of exerciseLogs) {
@@ -159,12 +169,17 @@ function countCompletedItems(
   let completed = 0;
   let mainCompleted = 0;
   let withPerformedValue = 0;
+  let matchedByPlanItemKey = 0;
+  let matchedByTemplateFallback = 0;
 
   for (const p of planItems) {
     let log: ExerciseLogItem | undefined = byPlanItemKey.get(p.plan_item_key);
-    if (!log) {
+    if (log) {
+      matchedByPlanItemKey++;
+    } else {
       const q = logQueueByTemplateId.get(p.templateId);
       log = q?.shift();
+      if (log) matchedByTemplateFallback++;
     }
     if (log) {
       completed++;
@@ -176,7 +191,13 @@ function countCompletedItems(
     }
   }
 
-  return { completed, mainCompleted, withPerformedValue };
+  return {
+    completed,
+    mainCompleted,
+    withPerformedValue,
+    matchedByPlanItemKey,
+    matchedByTemplateFallback,
+  };
 }
 
 function computeReflectionFlags(
@@ -283,6 +304,13 @@ function buildObservability(
   }
   if (!allowed && code) obs.reject_reason_code = code;
   if (!allowed && rejectDetail) obs.reject_reason_detail = rejectDetail;
+  if (identityMatch) {
+    obs.identity_match = {
+      matched_by_plan_item_key_count: identityMatch.matchedByPlanItemKey,
+      matched_by_template_fallback_count: identityMatch.matchedByTemplateFallback,
+      unmatched_plan_items_count: totalItems - completed,
+    };
+  }
 
   return obs;
 }
@@ -323,10 +351,13 @@ export function evaluateEvidenceGate(
     };
   }
 
-  const { completed, mainCompleted, withPerformedValue } = countCompletedItems(
-    planItems,
-    exerciseLogs
-  );
+  const {
+    completed,
+    mainCompleted,
+    withPerformedValue,
+    matchedByPlanItemKey,
+    matchedByTemplateFallback,
+  } = countCompletedItems(planItems, exerciseLogs);
 
   const scoreResult = computeEvidenceScoreWithBreakdown(
     totalItems,
@@ -336,12 +367,17 @@ export function evaluateEvidenceGate(
     exerciseLogs
   );
 
+  const identityMatch = { matchedByPlanItemKey, matchedByTemplateFallback };
+
   // Hard gate 1: at least 1 MAIN segment item must be completed (skip if no Main)
   if (mainItemsCount > 0 && mainCompleted < 1) {
     const obs = buildObservability(
       totalItems, completed, mainCompleted, mainItemsCount, withPerformedValue,
       feedbackPayload, exerciseLogs, scoreResult, false,
-      'MAIN_SEGMENT_REQUIRED'
+      'MAIN_SEGMENT_REQUIRED',
+      undefined,
+      undefined,
+      identityMatch
     );
     return {
       allowed: false,
@@ -365,7 +401,9 @@ export function evaluateEvidenceGate(
       totalItems, completed, mainCompleted, mainItemsCount, withPerformedValue,
       feedbackPayload, exerciseLogs, scoreResult, false,
       'NOT_ENOUGH_COMPLETION_COVERAGE',
-      coverageRejectDetail
+      coverageRejectDetail,
+      undefined,
+      identityMatch
     );
     if (mainGateSkipped) {
       obs.main_gate_skipped = true;
@@ -385,7 +423,11 @@ export function evaluateEvidenceGate(
   if (score >= EVIDENCE_GATE_SCORE_ALLOW_THRESHOLD) {
     const obs = buildObservability(
       totalItems, completed, mainCompleted, mainItemsCount, withPerformedValue,
-      feedbackPayload, exerciseLogs, scoreResult, true
+      feedbackPayload, exerciseLogs, scoreResult, true,
+      undefined,
+      undefined,
+      undefined,
+      identityMatch
     );
     if (mainGateSkipped) {
       obs.main_gate_skipped = true;
@@ -405,7 +447,9 @@ export function evaluateEvidenceGate(
     totalItems, completed, mainCompleted, mainItemsCount, withPerformedValue,
     feedbackPayload, exerciseLogs, scoreResult, false,
     'INSUFFICIENT_EXECUTION_EVIDENCE',
-    rejectDetail
+    rejectDetail,
+    undefined,
+    identityMatch
   );
   if (mainGateSkipped) {
     obs.main_gate_skipped = true;
