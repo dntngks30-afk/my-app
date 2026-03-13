@@ -5,7 +5,16 @@ import { JourneyMapV2 } from './JourneyMapV2'
 import { SessionPanelV2 } from './SessionPanelV2'
 import { sessions, type SessionNode } from './map-data'
 import { extractSessionExercises } from './planJsonAdapter'
-import { createSession, getSessionPlanSummary, type SessionPlan, type ActivePlanSummary, type ExerciseLogItem, type PlanSummaryResponse } from '@/lib/session/client'
+import {
+  bootstrapSession,
+  createSession,
+  getSessionPlanSummary,
+  type SessionBootstrapResponse,
+  type SessionPlan,
+  type ActivePlanSummary,
+  type ExerciseLogItem,
+  type PlanSummaryResponse,
+} from '@/lib/session/client'
 import { getSessionSafe } from '@/lib/supabase'
 import { prefetchMediaSign } from './media-cache'
 
@@ -33,6 +42,7 @@ interface ResetMapV2Props {
 }
 
 type PanelPlanSummaryResponse = PlanSummaryResponse;
+type PanelBootstrapResponse = SessionBootstrapResponse;
 
 function toPanelPlan(data: PanelPlanSummaryResponse): SessionPlan {
   const meta: Record<string, unknown> = {};
@@ -66,6 +76,60 @@ function toExerciseLogMap(logs?: ExerciseLogItem[]): Record<string, ExerciseLogI
   return map
 }
 
+function buildBootstrapRationale(focusAxes: string[]): string | null {
+  const LABELS: Record<string, string> = {
+    lower_stability: '하체 안정',
+    lower_mobility: '하체 가동성',
+    upper_mobility: '상체 가동성',
+    trunk_control: '몸통 제어',
+    asymmetry: '좌우 균형',
+    deconditioned: '전신 회복',
+  }
+  const labels = focusAxes.map((axis) => LABELS[axis] ?? axis).filter(Boolean)
+  if (labels.length === 0) return null
+  if (labels.length === 1) return `${labels[0]} 중심으로 먼저 몸을 정리하는 구성입니다`
+  return `${labels[0]}과 ${labels[1]} 중심으로 먼저 몸을 정리하는 구성입니다`
+}
+
+function toBootstrapPanelPlan(data: PanelBootstrapResponse): SessionPlan {
+  const flagMap = new Set(data.constraint_flags)
+  return {
+    session_number: data.session_number,
+    status: 'draft',
+    theme: data.theme,
+    plan_json: {
+      version: 'session_bootstrap_v1',
+      meta: {
+        session_number: data.session_number,
+        phase: data.phase,
+        result_type: 'BOOTSTRAP',
+        confidence: 'mid',
+        focus: [],
+        avoid: [],
+        scoring_version: 'session_bootstrap_v1',
+        session_focus_axes: data.focus_axes,
+        session_rationale: buildBootstrapRationale(data.focus_axes),
+        constraint_flags: {
+          avoid_filter_applied: flagMap.has('avoid_filter_applied'),
+          duplicate_filtered_count: flagMap.has('duplicate_filtered') ? 1 : 0,
+          focus_diversity_enforced: false,
+          fallback_used: false,
+          short_mode_applied: false,
+          recovery_mode_applied: false,
+          priority_applied: flagMap.has('priority_applied'),
+          pain_gate_applied: flagMap.has('pain_gate_applied'),
+          first_session_guardrail_applied: flagMap.has('first_session_guardrail_applied'),
+        },
+      },
+      flags: { recovery: false, short: false },
+      segments: data.segments,
+    },
+    condition: { condition_mood: 'ok', time_budget: 'normal' },
+    created_at: '',
+    started_at: null,
+  }
+}
+
 export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, onRequestNextSession, debug }: ResetMapV2Props) {
   // localDailyCapActive: createSession이 DAILY_LIMIT_REACHED 반환 시 클라이언트 측 즉시 반영 (방어)
   const [localDailyCapActive, setLocalDailyCapActive] = useState(false)
@@ -76,14 +140,16 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
 
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null)
 
-  // localActivePlan: prop에서 시작, createSession 성공 또는 plan-summary fetch 시 갱신
-  const [localActivePlan, setLocalActivePlan] = useState<SessionPlan | ActivePlanSummary | null>(activePlan)
+  const [bootstrapPlan, setBootstrapPlan] = useState<SessionPlan | null>(null)
+  const [fullPlan, setFullPlan] = useState<SessionPlan | ActivePlanSummary | null>(activePlan)
   const [pastSessionPlan, setPastSessionPlan] = useState<SessionPlan | null>(null)
   const [pastSessionInitialLogs, setPastSessionInitialLogs] = useState<Record<string, ExerciseLogItem>>({})
   const [planLoading, setPlanLoading] = useState(false)
   const createCalledRef = useRef(false)
   const summaryCacheRef = useRef(new Map<number, PanelPlanSummaryResponse>())
   const summaryRequestRef = useRef(new Map<number, Promise<PanelPlanSummaryResponse | null>>())
+  const bootstrapCacheRef = useRef(new Map<number, SessionPlan>())
+  const bootstrapRequestRef = useRef(new Map<number, Promise<SessionPlan | null>>())
 
   const resolveAuthToken = useCallback(async () => {
     if (getAuthToken) return getAuthToken()
@@ -116,16 +182,47 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     }
   }, [resolveAuthToken])
 
+  const loadSessionBootstrap = useCallback(async (sessionNumber: number) => {
+    const cached = bootstrapCacheRef.current.get(sessionNumber)
+    if (cached) return cached
+
+    const pending = bootstrapRequestRef.current.get(sessionNumber)
+    if (pending) return pending
+
+    const request = (async () => {
+      const token = await resolveAuthToken()
+      if (!token) return null
+      const result = await bootstrapSession(token, {
+        session_number: sessionNumber,
+        ...(debug && { debug: true }),
+      })
+      if (!result.ok || !result.data) return null
+      const data = toBootstrapPanelPlan(result.data as PanelBootstrapResponse)
+      bootstrapCacheRef.current.set(sessionNumber, data)
+      return data
+    })()
+
+    bootstrapRequestRef.current.set(sessionNumber, request)
+    try {
+      return await request
+    } finally {
+      bootstrapRequestRef.current.delete(sessionNumber)
+    }
+  }, [resolveAuthToken, debug])
+
   // prop 변경(세션 완료 후 null 리셋 등) 반영
   useEffect(() => {
-    setLocalActivePlan(activePlan)
+    setFullPlan(activePlan)
     // activePlan이 리셋되면 다음 패널 오픈 시 재호출 허용
-    if (activePlan === null) createCalledRef.current = false
+    if (activePlan === null) {
+      createCalledRef.current = false
+      setBootstrapPlan(null)
+    }
   }, [activePlan])
 
   // 현재 세션 lite만 있을 때 plan-summary 미리 로드 (패널 첫 클릭 시 체감 개선)
   useEffect(() => {
-    const plan = activePlan ?? localActivePlan
+    const plan = activePlan ?? fullPlan
     if (!plan || effectiveCurrentSession === null) return
     if (plan.session_number !== effectiveCurrentSession) return
     if ('plan_json' in plan && plan.plan_json) return // 이미 full
@@ -158,7 +255,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       }
       if (timeoutId !== null) clearTimeout(timeoutId)
     }
-  }, [activePlan, localActivePlan, effectiveCurrentSession, loadSessionSummary])
+  }, [activePlan, fullPlan, effectiveCurrentSession, loadSessionSummary])
 
   // 과거 세션: 가장 최근 완료 세션 미리 로드 (클릭 시 체감 개선)
   useEffect(() => {
@@ -252,9 +349,10 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
             : 'locked'
 
     const currentPlanReady =
-      localActivePlan?.session_number === session.id &&
-      'plan_json' in localActivePlan &&
-      !!localActivePlan.plan_json
+      (fullPlan?.session_number === session.id &&
+        'plan_json' in fullPlan &&
+        !!fullPlan.plan_json) ||
+      bootstrapPlan?.session_number === session.id
     const completedPlanReady =
       pastSessionPlan?.session_number === session.id ||
       summaryCacheRef.current.has(session.id)
@@ -265,7 +363,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
 
     setPlanLoading(shouldShowLoading)
     setSelectedSessionId(session.id)
-  }, [effectiveCurrentSession, completed, localActivePlan, pastSessionPlan])
+  }, [effectiveCurrentSession, completed, fullPlan, bootstrapPlan, pastSessionPlan])
 
   const handleClose = useCallback(() => {
     setSelectedSessionId(null)
@@ -274,7 +372,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   // current 세션 패널 오픈 + lite만 있음(plan_json 없음) → plan-summary로 경량 fetch (패널 첫 렌더)
   useEffect(() => {
     if (selectedStatus !== 'current' || selectedSessionId === null) return
-    const plan = localActivePlan
+    const plan = fullPlan
     if (plan == null) return
     if ('plan_json' in plan && plan.plan_json) return // 이미 full/segments plan
     if (plan.session_number !== selectedSessionId) return
@@ -282,7 +380,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     const cached = summaryCacheRef.current.get(selectedSessionId)
     if (cached) {
       setPlanLoading(false)
-      setLocalActivePlan(toPanelPlan(cached))
+      setFullPlan(toPanelPlan(cached))
       return
     }
 
@@ -292,16 +390,38 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       if (cancelled) return
       setPlanLoading(false)
       if (!data) return
-      setLocalActivePlan(toPanelPlan(data))
+      setFullPlan(toPanelPlan(data))
     })
     return () => { cancelled = true }
-  }, [selectedStatus, selectedSessionId, localActivePlan, loadSessionSummary])
+  }, [selectedStatus, selectedSessionId, fullPlan, loadSessionSummary])
+
+  // current 세션 패널 오픈 + activePlan 없음 → bootstrap summary 먼저 로드
+  useEffect(() => {
+    if (selectedStatus !== 'current' || selectedSessionId === null) return
+    if (fullPlan !== null) return
+    if (bootstrapPlan?.session_number === selectedSessionId) {
+      setPlanLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setPlanLoading(true)
+    void loadSessionBootstrap(selectedSessionId).then((plan) => {
+      if (cancelled) return
+      if (plan) {
+        setBootstrapPlan(plan)
+        setPlanLoading(false)
+      }
+    })
+
+    return () => { cancelled = true }
+  }, [selectedStatus, selectedSessionId, fullPlan, bootstrapPlan, loadSessionBootstrap])
 
   // current 세션 패널 오픈 + activePlan 없음 → createSession 호출
   useEffect(() => {
     if (selectedStatus !== 'current') return
     if (selectedSessionId === null) return
-    if (localActivePlan !== null) return
+    if (fullPlan !== null) return
     if (createCalledRef.current) return
 
     createCalledRef.current = true
@@ -326,34 +446,49 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       if (typeof performance !== 'undefined' && performance.mark) {
         performance.mark('createSession-end')
       }
-      setPlanLoading(false)
       if (!result.ok) {
         // 하루 1세션 cap 초과 시 로컬 상태 즉시 반영 → locked 패널 표시
         if (result.error.code === 'DAILY_LIMIT_REACHED') {
           setLocalDailyCapActive(true)
           createCalledRef.current = false
         }
+        if (!bootstrapPlan) setPlanLoading(false)
         return
       }
       if ('active' in result.data && result.data.active) {
         const plan = result.data.active as SessionPlan
-        setLocalActivePlan(plan)
+        setFullPlan(plan)
+        setBootstrapPlan((prev) => (prev?.session_number === plan.session_number ? null : prev))
+        setPlanLoading(false)
         onActivePlanCreated?.(plan)
       }
     })
 
     return () => { cancelled = true }
-  }, [selectedStatus, selectedSessionId, localActivePlan, onActivePlanCreated, resolveAuthToken, debug])
+  }, [selectedStatus, selectedSessionId, fullPlan, bootstrapPlan, onActivePlanCreated, resolveAuthToken, debug])
+
+  const currentRenderablePlan = useMemo(() => {
+    if (selectedStatus !== 'current' || selectedSessionId === null) return null
+    if (
+      fullPlan?.session_number === selectedSessionId &&
+      'plan_json' in fullPlan &&
+      fullPlan.plan_json
+    ) {
+      return fullPlan
+    }
+    if (bootstrapPlan?.session_number === selectedSessionId) return bootstrapPlan
+    return null
+  }, [selectedStatus, selectedSessionId, fullPlan, bootstrapPlan])
 
   // plan_json에서 운동 추출 (current: createSession 또는 plan-summary, completed: plan-summary)
   const exercises = useMemo(() => {
     if (selectedSessionId === null) return undefined
     if (selectedStatus === 'current') {
-      if (planLoading && !localActivePlan) return undefined
-      if (localActivePlan?.session_number === selectedSessionId && 'plan_json' in localActivePlan && localActivePlan.plan_json) {
-        return extractSessionExercises(localActivePlan.plan_json)
+      if (planLoading && !currentRenderablePlan && !fullPlan) return undefined
+      if (currentRenderablePlan?.session_number === selectedSessionId) {
+        return extractSessionExercises(currentRenderablePlan.plan_json)
       }
-      if (localActivePlan?.session_number === selectedSessionId && !('plan_json' in localActivePlan)) return undefined // lite, fetch 중
+      if (fullPlan?.session_number === selectedSessionId && !('plan_json' in fullPlan)) return undefined
       return []
     }
     if (selectedStatus === 'completed') {
@@ -364,7 +499,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       return []
     }
     return []
-  }, [selectedSessionId, selectedStatus, localActivePlan, pastSessionPlan, planLoading])
+  }, [selectedSessionId, selectedStatus, currentRenderablePlan, fullPlan, pastSessionPlan, planLoading])
 
   // 미디어 prefetch — critical path 밖. 운동 목록 렌더 후, paint 완료·idle 시점에 실행.
   useEffect(() => {
@@ -433,7 +568,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         completedSessions={completed}
         status={selectedStatus}
         exercises={exercises}
-        activePlan={selectedStatus === 'current' ? localActivePlan : pastSessionPlan}
+        activePlan={selectedStatus === 'current' ? (currentRenderablePlan ?? fullPlan) : pastSessionPlan}
         initialLogs={selectedStatus === 'completed' ? pastSessionInitialLogs : undefined}
         isLockedNext={selectedStatus === 'locked' && isLockedNext && selectedSessionId === nextSessionNum}
         nextUnlockAt={nextUnlockAt ?? undefined}

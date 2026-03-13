@@ -253,6 +253,39 @@ export async function getSessionPlanSummary(
   return sessionFetch<PlanSummaryResponse>(path, token, { method: 'GET' });
 }
 
+export type SessionBootstrapResponse = {
+  session_number: number;
+  phase: number;
+  theme: string;
+  segments: Array<{
+    title: string;
+    items: Array<{
+      templateId: string;
+      name: string;
+      order: number;
+      sets?: number;
+      reps?: number;
+      hold_seconds?: number;
+    }>;
+  }>;
+  estimated_duration: number;
+  focus_axes: string[];
+  constraint_flags: string[];
+};
+
+export async function bootstrapSession(
+  token: string,
+  input?: { session_number?: number; debug?: boolean }
+): Promise<ApiResult<SessionBootstrapResponse>> {
+  const body: Record<string, unknown> = {};
+  if (typeof input?.session_number === 'number') body.session_number = input.session_number;
+  if (input?.debug) body.debug = true;
+  return sessionFetch<SessionBootstrapResponse>('/api/session/bootstrap', token, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 export type CreateSessionInput = {
   condition_mood: 'good' | 'ok' | 'bad';
   time_budget: 'short' | 'normal';

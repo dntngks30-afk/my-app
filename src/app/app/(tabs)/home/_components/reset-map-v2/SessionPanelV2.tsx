@@ -76,6 +76,14 @@ function getPlanRationale(plan: SessionPlan | ActivePlanSummary | null) {
   const headline = meta?.session_rationale ?? base?.headline
   const detail = meta?.session_rationale ? undefined : base?.detail
   const chips = (meta?.session_focus_axes ?? []).map((a) => FOCUS_AXIS_LABELS[a] ?? a)
+  if (!base && (headline || chips.length > 0)) {
+    return {
+      headline: headline ?? '이번 세션을 빠르게 미리 볼 수 있는 요약입니다',
+      detail: '패널은 먼저 요약을 보여주고, 뒤에서 실제 세션 구성을 불러옵니다.',
+      chips,
+      ...(meta?.adaptation_summary && { adaptation_summary: meta.adaptation_summary }),
+    }
+  }
   return base
     ? {
         ...base,
