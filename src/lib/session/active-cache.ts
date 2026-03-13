@@ -145,6 +145,12 @@ export async function getCachedActiveSession(
   return promise;
 }
 
+/**
+ * 홈/세션 관련 클라이언트 메모리 캐시 무효화.
+ * 세션 생성·완료·리플렉션 등 상태 변경 시 호출.
+ * app bootstrap 캐시도 무효화해야 할 경우 invalidateAppBootstrapCache()를 함께 호출.
+ * @see docs/ssot/PWA_SERVICE_WORKER.md
+ */
 export function invalidateActiveCache(): void {
   cache = null;
   liteCache = null;

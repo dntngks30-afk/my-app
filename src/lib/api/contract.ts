@@ -29,10 +29,12 @@ export const ApiErrorCode = {
 
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];
 
+/** PR-24: User-scoped API 응답은 SW/runtime 캐시에 저장되면 안 됨. */
 const CACHE_NO_STORE = { 'Cache-Control': 'no-store' };
 
 /**
  * 성공 응답. data + extras(하위호환용 top-level 필드).
+ * Cache-Control: no-store 자동 적용.
  */
 export function ok<T>(data: T, extras?: Record<string, unknown>): NextResponse {
   const body = { ok: true as const, data, ...extras };

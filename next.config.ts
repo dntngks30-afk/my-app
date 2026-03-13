@@ -8,6 +8,8 @@ const withPWA = withPWAInit({
   register: true,
   workboxOptions: {
     skipWaiting: false,
+    // PR-24: Do NOT add runtimeCaching for /api/home/bootstrap, /api/session/*, /api/app/bootstrap.
+    // User-scoped session data must stay network/no-store. See docs/ssot/PWA_SERVICE_WORKER.md.
   },
 });
 

@@ -161,6 +161,11 @@ export async function getCachedAppBootstrap(
   return promise;
 }
 
+/**
+ * App bootstrap 클라이언트 메모리 캐시 무효화.
+ * 세션 생성·완료 시 invalidateActiveCache()와 함께 호출.
+ * @see docs/ssot/PWA_SERVICE_WORKER.md
+ */
 export function invalidateAppBootstrapCache(): void {
   bootstrapCache = null;
   bootstrapInflight = null;
