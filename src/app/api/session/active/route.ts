@@ -122,13 +122,27 @@ export async function GET(req: NextRequest) {
       const resolved = await resolveTotalSessions(supabase, userId);
       lastResolved = resolved;
       timings.profile_query_ms = Math.round(performance.now() - tResolveStart);
+
       if (resolved.source === 'default') {
-        console.warn('[session/active] progress init with default total_sessions', {
-          profile_present: resolved.profile_present,
-          target_frequency: resolved.target_frequency,
-          total_sessions: resolved.totalSessions,
+        void logSessionEvent(supabase, {
+          userId,
+          eventType: 'session_active_read',
+          status: 'blocked',
+          code: 'FREQUENCY_REQUIRED',
+          meta: {
+            profile_present: resolved.profile_present,
+            target_frequency: resolved.target_frequency,
+            fallback_blocked: true,
+          },
         });
+        return fail(
+          409,
+          ApiErrorCode.FREQUENCY_REQUIRED,
+          '주당 목표 빈도를 먼저 설정해 주세요. 심층 테스트 결과 보기에서 빈도를 선택한 후 다시 시도해 주세요.',
+          { fallback_blocked: true, rail_ready: false }
+        );
       }
+
       const tInsertStart = performance.now();
       const { data: created, error: insertErr } = await supabase
         .from('session_program_progress')

@@ -277,11 +277,23 @@ export async function POST(req: NextRequest) {
     if (!progress) {
       const resolved = await resolveTotalSessions(supabase, userId);
       if (resolved.source === 'default') {
-        console.warn('[session/create] progress init with default total_sessions', {
-          profile_present: !!resolved.profile,
-          target_frequency: resolved.profile?.target_frequency ?? null,
-          total_sessions: resolved.totalSessions,
+        void logSessionEvent(supabase, {
+          userId,
+          eventType: 'session_create_blocked',
+          status: 'blocked',
+          code: 'FREQUENCY_REQUIRED',
+          meta: {
+            profile_present: !!resolved.profile,
+            target_frequency: resolved.profile?.target_frequency ?? null,
+            fallback_blocked: true,
+          },
         });
+        return fail(
+          409,
+          ApiErrorCode.FREQUENCY_REQUIRED,
+          '주당 목표 빈도를 먼저 설정해 주세요. 심층 테스트 결과 보기에서 빈도를 선택한 후 다시 시도해 주세요.',
+          { fallback_blocked: true, rail_ready: false }
+        );
       }
       const { data: created, error: insertErr } = await supabase
         .from('session_program_progress')

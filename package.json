@@ -13,6 +13,7 @@
     "test:deep-p1-effective": "npx tsx scripts/deep-p1-effective-confidence.mjs",
     "test:session-snapshot": "npx tsx scripts/session-snapshot-smoke.mjs",
     "test:target-frequency-regression": "npx tsx scripts/target-frequency-regression.mjs",
+    "test:frequency-fail-close": "npx tsx scripts/frequency-fail-close-regression.mjs",
     "test:frequency-ssot": "npx tsx scripts/frequency-ssot-smoke.mjs",
     "test:evidence-gate": "npx tsx scripts/evidence-gate-smoke.mjs",
     "test:session-feedback": "npx tsx scripts/session-feedback-smoke.mjs",

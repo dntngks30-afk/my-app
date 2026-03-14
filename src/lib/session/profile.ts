@@ -120,3 +120,44 @@ export async function applyTargetFrequency(
 
   return { ok: true, totalSessions };
 }
+
+export type RailReadyResult = {
+  ready: boolean;
+  reason?: string;
+  profile?: { target_frequency?: number };
+  progress?: { total_sessions?: number };
+};
+
+/** PR-P0-2: Rail-ready check. total_sessions must match FREQUENCY_TO_TOTAL[target_frequency]. */
+export async function checkRailReady(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<RailReadyResult> {
+  const [profileRes, progressRes] = await Promise.all([
+    supabase
+      .from('session_user_profile')
+      .select('target_frequency')
+      .eq('user_id', userId)
+      .maybeSingle(),
+    supabase
+      .from('session_program_progress')
+      .select('total_sessions')
+      .eq('user_id', userId)
+      .maybeSingle(),
+  ]);
+  const profile = profileRes.data as { target_frequency?: number } | null;
+  const progress = progressRes.data as { total_sessions?: number } | null;
+  const freq = profile?.target_frequency;
+  const total = progress?.total_sessions;
+  if (typeof freq !== 'number' || !(freq in FREQUENCY_TO_TOTAL)) {
+    return { ready: false, reason: 'profile_target_frequency_missing', profile: profile ?? undefined, progress: progress ?? undefined };
+  }
+  const expected = FREQUENCY_TO_TOTAL[freq];
+  if (typeof total !== 'number') {
+    return { ready: false, reason: 'progress_total_sessions_missing', profile: profile ?? undefined, progress: progress ?? undefined };
+  }
+  if (total !== expected) {
+    return { ready: false, reason: 'total_sessions_mismatch', profile: profile ?? undefined, progress: progress ?? undefined };
+  }
+  return { ready: true, profile: profile ?? undefined, progress: progress ?? undefined };
+}

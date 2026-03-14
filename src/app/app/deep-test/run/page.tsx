@@ -396,8 +396,11 @@ export default function DeepTestRunPage() {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setSaveError(err?.error || '확정에 실패했습니다.');
+        const err = await res.json().catch(() => ({})) as { error?: { code?: string; message?: string } };
+        const msg = typeof err?.error === 'object' && err?.error?.message
+          ? err.error.message
+          : (typeof err?.error === 'string' ? err.error : '확정에 실패했습니다.');
+        setSaveError(msg);
         setStatus('ready');
         return;
       }

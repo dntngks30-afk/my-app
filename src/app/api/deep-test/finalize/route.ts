@@ -69,23 +69,32 @@ export async function POST(req: NextRequest) {
 
   const supabase = getServerSupabaseAdmin();
 
-  // target_frequency: 서버에서 즉시 반영. 실패 시 finalize 차단.
-  if (isValidTargetFrequency(rawTargetFrequency)) {
-    const freqResult = await applyTargetFrequency(supabase, userId, rawTargetFrequency);
-    if (!freqResult.ok) {
-      return NextResponse.json(
-        {
-          error: freqResult.message,
-          code: freqResult.code,
+  // PR-P0-2: target_frequency 필수. 없으면 finalize 차단 (fail-close).
+  if (!isValidTargetFrequency(rawTargetFrequency)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: {
+          code: 'FREQUENCY_REQUIRED',
+          message: '주당 목표 빈도(2/3/4/5)를 선택해 주세요.',
         },
-        { status: freqResult.code === 'POLICY_LOCKED' ? 409 : 500 }
-      );
-    }
-  } else {
-    console.warn('[deep-test/finalize] target_frequency not applied', {
-      raw: rawTargetFrequency,
-      valid: isValidTargetFrequency(rawTargetFrequency),
-    });
+      },
+      { status: 400 }
+    );
+  }
+
+  const freqResult = await applyTargetFrequency(supabase, userId, rawTargetFrequency);
+  if (!freqResult.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: {
+          code: freqResult.code,
+          message: freqResult.message,
+        },
+      },
+      { status: freqResult.code === 'POLICY_LOCKED' ? 409 : 500 }
+    );
   }
 
   const { data: attempt, error: fetchError } = await supabase
@@ -126,6 +135,7 @@ export async function POST(req: NextRequest) {
       });
     }
     return NextResponse.json({
+      ok: true,
       source: SOURCE,
       scoring_version: attempt.scoring_version,
       result: {
@@ -135,6 +145,9 @@ export async function POST(req: NextRequest) {
       },
       attempt: toAttemptPayload(attempt),
       routineCreated,
+      applied_target_frequency: rawTargetFrequency,
+      applied_total_sessions: freqResult.totalSessions,
+      rail_ready: true,
     });
   }
 
@@ -273,10 +286,14 @@ export async function POST(req: NextRequest) {
     });
   }
   return NextResponse.json({
+    ok: true,
     source: SOURCE,
     scoring_version: scoringVersion,
     result: resultPayload,
     attempt: toAttemptPayload(updated!),
     routineCreated,
+    applied_target_frequency: rawTargetFrequency,
+    applied_total_sessions: freqResult.totalSessions,
+    rail_ready: true,
   });
 }

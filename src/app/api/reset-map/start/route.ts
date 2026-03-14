@@ -19,6 +19,7 @@ import {
 } from '@/lib/idempotency/guard';
 import { logResetMapEvent } from '@/lib/reset-map/events';
 import { getActiveFlowByUser } from '@/lib/reset-map/activeFlow';
+import { checkRailReady } from '@/lib/session/profile';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -78,6 +79,22 @@ export async function POST(req: NextRequest) {
         attrs: { idempotency_key: idempotencyKey },
       });
       return guardResult.response;
+    }
+
+    const railCheck = await checkRailReady(supabase, userId);
+    if (!railCheck.ready) {
+      void logResetMapEvent(supabase, {
+        flowId: '00000000-0000-0000-0000-000000000000',
+        userId,
+        name: 'rail_not_ready_blocked',
+        attrs: { reason: railCheck.reason ?? 'unknown' },
+      });
+      return fail(
+        409,
+        ApiErrorCode.RAIL_NOT_READY,
+        '세션 레일이 준비되지 않았습니다. 심층 테스트 결과 보기에서 주당 빈도를 선택한 후 다시 시도해 주세요.',
+        { reason: railCheck.reason, rail_ready: false }
+      );
     }
 
     const activeFlow = await getActiveFlowByUser(supabase, userId);

@@ -33,6 +33,10 @@ export const ApiErrorCode = {
   /** PR-RESET-02: idempotency layer */
   IDEMPOTENCY_KEY_REQUIRED: 'IDEMPOTENCY_KEY_REQUIRED',
   IDEMPOTENCY_KEY_REUSED: 'IDEMPOTENCY_KEY_REUSED',
+  /** PR-P0-2: new user session rail fail-close */
+  FREQUENCY_REQUIRED: 'FREQUENCY_REQUIRED',
+  ONBOARDING_INCOMPLETE: 'ONBOARDING_INCOMPLETE',
+  RAIL_NOT_READY: 'RAIL_NOT_READY',
 } as const;
 
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];
