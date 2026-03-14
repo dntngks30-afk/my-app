@@ -35,6 +35,36 @@ const RESULT_TYPE_TO_FOCUS_TAGS: Record<string, string[]> = {
   'LUMBO-PELVIS': ['hip_mobility', 'glute_activation', 'core_control', 'core_stability'],
 };
 
+/** PR-ALIGN-01: resultType → GoldPathVector for first-session composition. Ensures UPPER-LIMB does not start as core-only. */
+const RESULT_TYPE_TO_GOLD_PATH: Record<string, string> = {
+  'UPPER-LIMB': 'upper_mobility',
+  'NECK-SHOULDER': 'upper_mobility',
+  'LOWER-LIMB': 'lower_stability',
+  'LUMBO-PELVIS': 'trunk_control',
+  'DECONDITIONED': 'deconditioned',
+  'STABLE': '', // use priority_vector
+};
+
+/** PR-ALIGN-01: resultType → session_focus_axes (axis names for meta). First session alignment. */
+const RESULT_TYPE_TO_FOCUS_AXES: Record<string, string[]> = {
+  'UPPER-LIMB': ['upper_mobility'],
+  'NECK-SHOULDER': ['upper_mobility'],
+  'LOWER-LIMB': ['lower_stability'],
+  'LUMBO-PELVIS': ['trunk_control'],
+  'DECONDITIONED': ['deconditioned'],
+  'STABLE': [],
+};
+
+/** PR-ALIGN-01: resultType → session_rationale first sentence. User-facing alignment. */
+const RESULT_TYPE_TO_RATIONALE: Record<string, string> = {
+  'UPPER-LIMB': '손목·팔꿈치 부담을 줄이기 위해 상체 가동성과 움직임 범위를 개선하는 세션입니다.',
+  'NECK-SHOULDER': '어깨·목 움직임을 정리하기 위해 흉추·견갑 가동성을 회복하는 세션입니다.',
+  'LOWER-LIMB': '무릎·발목 안정을 잡기 위해 엉덩이와 골반 안정성을 강화하는 세션입니다.',
+  'LUMBO-PELVIS': '몸통 안정을 잡기 위해 호흡·코어 연결을 강화하는 세션입니다.',
+  'DECONDITIONED': '기본 움직임 회복이 우선이어서 안정적인 움직임 기반을 다지는 세션입니다.',
+  'STABLE': '',
+};
+
 export type PainMode = 'none' | 'caution' | 'protected';
 
 /**
@@ -44,6 +74,38 @@ export type PainMode = 'none' | 'caution' | 'protected';
 export function getResultTypeFocusTags(resultType?: string | null): string[] {
   if (!resultType || typeof resultType !== 'string') return [];
   return RESULT_TYPE_TO_FOCUS_TAGS[resultType] ?? [];
+}
+
+/**
+ * PR-ALIGN-01: First-session alignment policy. resultType = 1차 앵커, priority_vector = 2차 보조.
+ * UPPER-LIMB 사용자가 코어-only 첫 세션을 받지 않도록 함.
+ */
+export interface FirstSessionAlignmentPolicy {
+  /** GoldPathVector for segment selection. null = use legacy resolveGoldPathVector. */
+  alignedGoldPathVector: string | null;
+  /** session_focus_axes for plan_json.meta */
+  alignedFocusAxes: string[];
+  /** session_rationale for plan_json.meta */
+  alignedRationale: string | null;
+}
+
+export function resolveFirstSessionAlignmentPolicy(
+  resultType: string | null | undefined,
+  sessionNumber: number,
+  priorityVector?: Record<string, number> | null,
+  _painMode?: 'none' | 'caution' | 'protected' | null
+): FirstSessionAlignmentPolicy | null {
+  if (sessionNumber !== 1 || !resultType || typeof resultType !== 'string') return null;
+  const key = resultType.trim();
+  const goldPath = RESULT_TYPE_TO_GOLD_PATH[key];
+  const focusAxes = RESULT_TYPE_TO_FOCUS_AXES[key];
+  const rationale = RESULT_TYPE_TO_RATIONALE[key];
+  if (!goldPath && !focusAxes?.length && !rationale) return null;
+  return {
+    alignedGoldPathVector: goldPath || null,
+    alignedFocusAxes: Array.isArray(focusAxes) ? focusAxes : [],
+    alignedRationale: rationale || null,
+  };
 }
 
 /**

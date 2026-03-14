@@ -16,6 +16,7 @@ import {
   scoreByPriority,
   getPainModePenalty,
   getResultTypeFocusTags,
+  resolveFirstSessionAlignmentPolicy,
 } from './priority-layer';
 import { generateSessionRationale, getExerciseRationale } from '@/core/session-rationale';
 import { applySessionConstraints } from './constraints';
@@ -878,6 +879,21 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
 
   const usedTemplateIds = selected.map((t) => t.id);
 
+  /** PR-ALIGN-01: First session meta uses resultType-aligned focus/rationale, not raw priority_vector only. */
+  const firstSessionAlignment = resolveFirstSessionAlignmentPolicy(
+    input.resultType,
+    input.sessionNumber,
+    input.priority_vector,
+    input.pain_mode
+  );
+  const effectiveFocusAxes =
+    firstSessionAlignment?.alignedFocusAxes?.length
+      ? firstSessionAlignment.alignedFocusAxes
+      : resolveSessionFocusAxes(input.priority_vector);
+  const effectiveRationale =
+    firstSessionAlignment?.alignedRationale ??
+    resolveSessionRationale(input.priority_vector, input.pain_mode);
+
   const basePlan: PlanJsonOutput = {
     version: 'session_plan_v1',
     meta: {
@@ -897,11 +913,11 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       ...(input.secondary_type !== undefined && { secondary_type: input.secondary_type }),
       ...(input.priority_vector != null && { priority_vector: input.priority_vector }),
       ...(input.pain_mode != null && { pain_mode: input.pain_mode }),
-      ...(input.priority_vector != null && {
-        session_focus_axes: resolveSessionFocusAxes(input.priority_vector),
+      ...((effectiveFocusAxes.length > 0 || input.priority_vector != null) && {
+        session_focus_axes: effectiveFocusAxes.length > 0 ? effectiveFocusAxes : resolveSessionFocusAxes(input.priority_vector),
       }),
-      ...(input.priority_vector != null && {
-        session_rationale: resolveSessionRationale(input.priority_vector, input.pain_mode),
+      ...((effectiveRationale != null || input.priority_vector != null) && {
+        session_rationale: effectiveRationale ?? resolveSessionRationale(input.priority_vector, input.pain_mode),
       }),
       finalTargetLevel,
       maxLevel,
@@ -955,6 +971,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     priorityVector: input.priority_vector ?? null,
     timeBudget: input.timeBudget,
     conditionMood: input.conditionMood,
+    resultType: input.resultType ?? null,
   });
 
   return {

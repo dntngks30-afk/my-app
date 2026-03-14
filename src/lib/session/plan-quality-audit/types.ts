@@ -28,4 +28,6 @@ export interface AuditContext {
   priorityVector?: Record<string, number> | null;
   timeBudget?: 'short' | 'normal';
   conditionMood?: 'good' | 'ok' | 'bad';
+  /** PR-ALIGN-01: for first-session resultType alignment check */
+  resultType?: string | null;
 }

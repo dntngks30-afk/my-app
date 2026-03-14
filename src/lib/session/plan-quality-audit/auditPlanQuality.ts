@@ -4,6 +4,7 @@
  */
 
 import type { PlanItem, PlanJsonOutput, PlanSegment } from '@/lib/session/plan-generator';
+import { getResultTypeFocusTags } from '@/lib/session/priority-layer';
 import { normalizeExerciseTaxonomy } from '@/lib/session/taxonomy';
 import type { AuditBand, AuditContext, AuditIssue, PlanQualityAuditMeta } from './types';
 import {
@@ -105,6 +106,45 @@ export function auditPlanQuality(
           });
           score -= PENALTY_HIGH;
         }
+      }
+    }
+
+    /** PR-ALIGN-01: UPPER-LIMB first session must not be core-only. */
+    const resultType = context.resultType ?? plan.meta?.result_type;
+    if (resultType === 'UPPER-LIMB') {
+      const focusAxes = plan.meta?.session_focus_axes ?? [];
+      const isTrunkOnly = focusAxes.length > 0 && focusAxes.every((a) => a === 'trunk_control');
+      if (isTrunkOnly) {
+        issues.push({
+          code: 'UPPER_LIMB_CORE_ONLY_MISMATCH',
+          severity: 'warn',
+          message: 'UPPER-LIMB first session has session_focus_axes=trunk_control only (expected upper-related)',
+        });
+        score -= PENALTY_WARN;
+      }
+      const rationale = plan.meta?.session_rationale ?? '';
+      const isCoreOnlyRationale =
+        rationale && /몸통|코어|안정성/.test(rationale) && !/상체|어깨|손목|팔꿈치|흉추|견갑/.test(rationale);
+      if (isCoreOnlyRationale) {
+        issues.push({
+          code: 'UPPER_LIMB_RATIONALE_MISMATCH',
+          severity: 'warn',
+          message: 'UPPER-LIMB first session rationale is core-only (expected upper-limb direction)',
+        });
+        score -= PENALTY_WARN;
+      }
+      const upperTags = new Set(getResultTypeFocusTags('UPPER-LIMB'));
+      const hasUpperItem = allItemsWithSeg.some(({ item }) => {
+        const t = templateById.get(item.templateId);
+        return t?.focus_tags?.some((tag) => upperTags.has(tag));
+      });
+      if (!hasUpperItem && allItemsWithSeg.length > 0) {
+        issues.push({
+          code: 'UPPER_LIMB_NO_RELEVANT_ITEM',
+          severity: 'warn',
+          message: 'UPPER-LIMB first session has no upper-limb relevant exercise (shoulder/thoracic/upper_back)',
+        });
+        score -= PENALTY_WARN;
       }
     }
   }
