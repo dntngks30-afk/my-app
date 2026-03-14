@@ -1,4 +1,4 @@
-import { getCacheStale, invalidateCache, setCache } from '@/lib/cache/tabDataCache';
+import { getCache, getCacheStale, invalidateCache, setCache } from '@/lib/cache/tabDataCache';
 import type { ActivePlanSummary, ActiveSessionLiteResponse, SessionProgress } from '@/lib/session/client';
 import type { NextSessionPreviewPayload } from '@/lib/session/next-session-preview';
 
@@ -47,12 +47,73 @@ export type AppBootstrapResponse = {
 };
 
 const TTL_MS = 5_000;
+const APP_BOOTSTRAP_CACHE_VERSION = 1;
 
 let bootstrapCache: { tokenKey: string; data: AppBootstrapResponse; expiresAt: number } | null = null;
 let bootstrapInflight: Promise<ApiResult<AppBootstrapResponse>> | null = null;
 
+type AppBootstrapCacheEnvelope = {
+  version: number;
+  data: AppBootstrapResponse;
+};
+
 function toTokenKey(token: string): string {
   return token && token.length >= 16 ? token.slice(-16) : token || '';
+}
+
+function isNextSessionPreviewPayload(value: unknown): value is NextSessionPreviewPayload {
+  if (value == null) return true;
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.session_number === 'number' &&
+    Array.isArray(candidate.focus_axes) &&
+    typeof candidate.estimated_time === 'number' &&
+    typeof candidate.exercise_count === 'number' &&
+    (candidate.session_rationale === null || typeof candidate.session_rationale === 'string') &&
+    Array.isArray(candidate.exercises_preview)
+  );
+}
+
+function isAppBootstrapResponseLike(value: unknown): value is AppBootstrapResponse {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  const session = candidate.session as Record<string, unknown> | undefined;
+  const user = candidate.user as Record<string, unknown> | undefined;
+  const statsPreview = candidate.stats_preview as Record<string, unknown> | undefined;
+  return (
+    !!user &&
+    typeof user.id === 'string' &&
+    !!session &&
+    typeof session.total_sessions === 'number' &&
+    typeof session.completed_sessions === 'number' &&
+    !!statsPreview &&
+    typeof statsPreview.completed_sessions === 'number' &&
+    typeof statsPreview.weekly_streak === 'number' &&
+    isNextSessionPreviewPayload(candidate.next_session)
+  );
+}
+
+function wrapAppBootstrapCache(data: AppBootstrapResponse): AppBootstrapCacheEnvelope {
+  return {
+    version: APP_BOOTSTRAP_CACHE_VERSION,
+    data,
+  };
+}
+
+function unwrapAppBootstrapCache(value: unknown): AppBootstrapResponse | null {
+  if (!value) return null;
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'version' in value &&
+    'data' in value
+  ) {
+    const envelope = value as { version?: unknown; data?: unknown };
+    if (envelope.version !== APP_BOOTSTRAP_CACHE_VERSION) return null;
+    return isAppBootstrapResponseLike(envelope.data) ? envelope.data : null;
+  }
+  return isAppBootstrapResponseLike(value) ? value : null;
 }
 
 function toActiveLite(data: AppBootstrapResponse): ActiveSessionLiteResponse {
@@ -72,6 +133,20 @@ function toActiveLite(data: AppBootstrapResponse): ActiveSessionLiteResponse {
     ...(data.session.next_unlock_at ? { next_unlock_at: data.session.next_unlock_at } : {}),
     plan_status: data.user.plan_status,
   };
+}
+
+function storeBootstrapData(tokenKey: string, data: AppBootstrapResponse): void {
+  bootstrapCache = { tokenKey, data, expiresAt: Date.now() + TTL_MS };
+  setCache('app.bootstrap', wrapAppBootstrapCache(data));
+  setCache('home.activeLite', toActiveLite(data));
+}
+
+export function getAppBootstrapCacheSnapshot(): AppBootstrapResponse | null {
+  return unwrapAppBootstrapCache(getCache<unknown>('app.bootstrap'));
+}
+
+function getStaleAppBootstrapCacheSnapshot(): AppBootstrapResponse | null {
+  return unwrapAppBootstrapCache(getCacheStale<unknown>('app.bootstrap'));
 }
 
 async function fetchAppBootstrap(
@@ -134,14 +209,12 @@ export async function getCachedAppBootstrap(
     return bootstrapInflight;
   }
 
-  const stale = !opts?.debug ? getCacheStale<AppBootstrapResponse>('app.bootstrap') : null;
+  const stale = !opts?.debug ? getStaleAppBootstrapCacheSnapshot() : null;
   if (stale) {
     const revalidate = fetchAppBootstrap(token).then((result) => {
       bootstrapInflight = null;
       if (result.ok) {
-        bootstrapCache = { tokenKey: key, data: result.data, expiresAt: Date.now() + TTL_MS };
-        setCache('app.bootstrap', result.data);
-        setCache('home.activeLite', toActiveLite(result.data));
+        storeBootstrapData(key, result.data);
       }
       return result;
     });
@@ -153,15 +226,34 @@ export async function getCachedAppBootstrap(
   const promise = fetchAppBootstrap(token, opts).then((result) => {
     bootstrapInflight = null;
     if (result.ok) {
-      bootstrapCache = { tokenKey: key, data: result.data, expiresAt: Date.now() + TTL_MS };
-      setCache('app.bootstrap', result.data);
-      setCache('home.activeLite', toActiveLite(result.data));
+      storeBootstrapData(key, result.data);
     } else {
       bootstrapCache = null;
     }
     return result;
   });
   bootstrapInflight = promise;
+  return promise;
+}
+
+export async function revalidateAppBootstrap(
+  token: string,
+  opts?: { debug?: boolean }
+): Promise<ApiResult<AppBootstrapResponse>> {
+  const key = toTokenKey(token);
+  if (!opts?.debug && bootstrapInflight) {
+    return bootstrapInflight;
+  }
+  const promise = fetchAppBootstrap(token, opts).then((result) => {
+    bootstrapInflight = null;
+    if (result.ok) {
+      storeBootstrapData(key, result.data);
+    }
+    return result;
+  });
+  if (!opts?.debug) {
+    bootstrapInflight = promise;
+  }
   return promise;
 }
 

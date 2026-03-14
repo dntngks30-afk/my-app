@@ -41,6 +41,7 @@
     "test:result-session-structural-alignment": "npx tsx scripts/result-session-structural-alignment-regression.mjs",
     "test:first-session-ssot": "npx tsx scripts/first-session-ssot-regression.mjs",
     "test:next-session-preview": "npx tsx scripts/next-session-preview-regression.mjs",
+    "test:bootstrap-cache-revalidate": "npx tsx scripts/bootstrap-cache-revalidate-regression.mjs",
     "test:deep-neck-shoulder-verify": "npx tsx scripts/deep-neck-shoulder-verify.mjs",
     "test:deep-pr-fix-02": "npx tsx scripts/deep-v3-neck-shoulder-pr-fix-02.mjs",
     "test:session-bootstrap": "npx tsx scripts/session-bootstrap-smoke.mjs",

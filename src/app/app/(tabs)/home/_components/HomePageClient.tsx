@@ -7,7 +7,14 @@ import { invalidateActiveCache } from '@/lib/session/active-cache';
 import { getCache } from '@/lib/cache/tabDataCache';
 import AppEntryLoader, { isAppBooted, setAppBooted } from '@/app/app/_components/AppEntryLoader';
 import type { SessionPlan, ActivePlanSummary, ActiveSessionLiteResponse } from '@/lib/session/client';
-import { getCachedAppBootstrap, invalidateAppBootstrapCache, type AppBootstrapResponse, type AppBootstrapStatsPreview } from '@/lib/app/bootstrapClient';
+import {
+  getAppBootstrapCacheSnapshot,
+  getCachedAppBootstrap,
+  invalidateAppBootstrapCache,
+  revalidateAppBootstrap,
+  type AppBootstrapResponse,
+  type AppBootstrapStatsPreview,
+} from '@/lib/app/bootstrapClient';
 import {
   getLatestResetMapFlow,
   startResetMapFlow,
@@ -93,6 +100,29 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     return promise;
   }, []);
 
+  const applyBootstrapState = useCallback((data: AppBootstrapResponse) => {
+    setSessionProgress({
+      total_sessions: data.session.total_sessions,
+      completed_sessions: data.session.completed_sessions ?? 0,
+    });
+    setActivePlan(data.session.active_session ?? null);
+    setTodayCompleted(data.session.today_completed === true);
+    setNextUnlockAt(typeof data.session.next_unlock_at === 'string' ? data.session.next_unlock_at : null);
+    setStatsPreview(data.stats_preview);
+    setNextSession(data.next_session ?? null);
+    setAdaptiveExplanation(data.adaptive_explanation ?? null);
+  }, []);
+
+  const applyActiveLiteState = useCallback((data: ActiveSessionLiteResponse) => {
+    setSessionProgress({
+      total_sessions: data.progress.total_sessions,
+      completed_sessions: data.progress.completed_sessions ?? 0,
+    });
+    setActivePlan(data.active ?? null);
+    setTodayCompleted(data.today_completed === true);
+    setNextUnlockAt(typeof data.next_unlock_at === 'string' ? data.next_unlock_at : null);
+  }, []);
+
   const handleSessionCompleted = useCallback(async (completedSessions: number) => {
     setSessionProgress(prev =>
       prev ? { ...prev, completed_sessions: completedSessions } : prev
@@ -131,42 +161,24 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     if (activeFetchedRef.current) return;
     activeFetchedRef.current = true;
 
-    const cachedBootstrap = getCache<AppBootstrapResponse>('app.bootstrap');
+    let hydratedFromCache = false;
+    const cachedBootstrap = getAppBootstrapCacheSnapshot();
     if (cachedBootstrap) {
-      setSessionProgress({
-        total_sessions: cachedBootstrap.session.total_sessions,
-        completed_sessions: cachedBootstrap.session.completed_sessions ?? 0,
-      });
-      setActivePlan(cachedBootstrap.session.active_session ?? null);
-      setTodayCompleted(cachedBootstrap.session.today_completed === true);
-      setNextUnlockAt(typeof cachedBootstrap.session.next_unlock_at === 'string' ? cachedBootstrap.session.next_unlock_at : null);
-      setStatsPreview(cachedBootstrap.stats_preview);
-      setNextSession(cachedBootstrap.next_session ?? null);
-      setAdaptiveExplanation(cachedBootstrap.adaptive_explanation ?? null);
-      setLoading(false);
-      setError(null);
-      if (!isAppBooted()) setAppBooted();
-      return () => {
-        activeFetchedRef.current = false;
-      };
+      applyBootstrapState(cachedBootstrap);
+      hydratedFromCache = true;
     }
 
     const cached = getCache<ActiveSessionLiteResponse>('home.activeLite')
       ?? getCache<{ activeLite: ActiveSessionLiteResponse }>('home.bootstrap')?.activeLite;
-    if (cached?.progress) {
-      setSessionProgress({
-        total_sessions: cached.progress.total_sessions,
-        completed_sessions: cached.progress.completed_sessions ?? 0,
-      });
-      setActivePlan(cached.active ?? null);
-      setTodayCompleted(cached.today_completed === true);
-      setNextUnlockAt(typeof cached.next_unlock_at === 'string' ? cached.next_unlock_at : null);
+    if (!hydratedFromCache && cached?.progress) {
+      applyActiveLiteState(cached);
+      hydratedFromCache = true;
+    }
+
+    if (hydratedFromCache) {
       setLoading(false);
       setError(null);
       if (!isAppBooted()) setAppBooted();
-      return () => {
-        activeFetchedRef.current = false;
-      };
     }
 
     const t0 = performance.now();
@@ -174,11 +186,13 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     (async () => {
       const token = await getAuthToken();
       if (!token || cancelled) {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && !hydratedFromCache) setLoading(false);
         return;
       }
       try {
-        const result = await getCachedAppBootstrap(token, { debug: debugFlag });
+        const result = hydratedFromCache
+          ? await revalidateAppBootstrap(token, { debug: debugFlag })
+          : await getCachedAppBootstrap(token, { debug: debugFlag });
         if (cancelled) return;
         const elapsed = Math.round(performance.now() - t0);
         if (typeof performance !== 'undefined' && performance.mark) {
@@ -188,32 +202,26 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
           console.info('[perf] home_active_loaded', elapsed, 'ms');
         }
         if (!result.ok) {
-          if (result.status === 401) {
-            setError('세션을 확인해 주세요');
-          } else {
-            setError(result.error?.message ?? '세션을 확인해 주세요');
+          if (!hydratedFromCache) {
+            if (result.status === 401) {
+              setError('세션을 확인해 주세요');
+            } else {
+              setError(result.error?.message ?? '세션을 확인해 주세요');
+            }
           }
-          setLoading(false);
           return;
         }
         setError(null);
-        setSessionProgress({
-          total_sessions: result.data.session.total_sessions,
-          completed_sessions: result.data.session.completed_sessions ?? 0,
-        });
-        setActivePlan(result.data.session.active_session ?? null);
-        setTodayCompleted(result.data.session.today_completed === true);
-        setNextUnlockAt(typeof result.data.session.next_unlock_at === 'string' ? result.data.session.next_unlock_at : null);
-        setStatsPreview(result.data.stats_preview);
-        setNextSession(result.data.next_session ?? null);
-        setAdaptiveExplanation(result.data.adaptive_explanation ?? null);
+        applyBootstrapState(result.data);
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && !hydratedFromCache) {
           setError(err instanceof Error ? err.message : '세션을 확인해 주세요');
         }
       } finally {
         if (!cancelled) {
-          setLoading(false);
+          if (!hydratedFromCache) {
+            setLoading(false);
+          }
           if (!isAppBooted()) setAppBooted();
         }
       }
@@ -222,7 +230,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       cancelled = true;
       activeFetchedRef.current = false; // allow remount (e.g. Strict Mode) to refetch
     };
-  }, [getAuthToken]);
+  }, [applyActiveLiteState, applyBootstrapState, debugFlag, getAuthToken]);
 
   useEffect(() => {
     setSkipLoader(isAppBooted());
@@ -242,7 +250,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   useEffect(() => {
     if (!mapV2 || loading) return;
 
-    const bootstrap = getCache<AppBootstrapResponse>('app.bootstrap');
+    const bootstrap = getAppBootstrapCacheSnapshot();
     const hasBootstrapResetMap = bootstrap?.reset_map != null;
 
     if (recheckTrigger === 0 && hasBootstrapResetMap) {
