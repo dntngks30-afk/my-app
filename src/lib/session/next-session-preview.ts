@@ -31,6 +31,11 @@ export type NextSessionPreviewData = NextSessionPreviewPayload & {
   focus_label?: string | null
 }
 
+export type LockedNextPreviewRecoveryReason =
+  | 'missing_prop_preview'
+  | 'mismatched_session_number'
+  | 'unusable_preview_payload'
+
 const FOCUS_AXIS_LABELS: Record<string, string> = {
   lower_stability: '하체 안정',
   lower_mobility: '하체 가동성',
@@ -190,6 +195,36 @@ export function buildFallbackNextSessionPreview(input: {
   }
 }
 
+export function isUsableNextSessionPreview(
+  payload: NextSessionPreviewPayload | null | undefined,
+  sessionId: number | null
+): boolean {
+  if (!payload || sessionId == null) return false
+  if (payload.session_number !== sessionId) return false
+
+  let populatedFields = 0
+  if (Array.isArray(payload.focus_axes) && payload.focus_axes.length > 0) populatedFields += 1
+  if (typeof payload.estimated_time === 'number' && payload.estimated_time > 0) populatedFields += 1
+  if (typeof payload.exercise_count === 'number' && payload.exercise_count > 0) populatedFields += 1
+  if (typeof payload.session_rationale === 'string' && payload.session_rationale.trim().length > 0) populatedFields += 1
+  if (Array.isArray(payload.exercises_preview) && payload.exercises_preview.length > 0) populatedFields += 1
+
+  return populatedFields >= 2
+}
+
+export function getLockedNextPreviewRecoveryReason(input: {
+  sessionId: number | null
+  status: 'current' | 'completed' | 'locked'
+  isLockedNext?: boolean
+  nextSession?: NextSessionPreviewPayload | null
+}): LockedNextPreviewRecoveryReason | null {
+  if (input.status !== 'locked' || !input.isLockedNext || input.sessionId == null) return null
+  if (!input.nextSession) return 'missing_prop_preview'
+  if (input.nextSession.session_number !== input.sessionId) return 'mismatched_session_number'
+  if (!isUsableNextSessionPreview(input.nextSession, input.sessionId)) return 'unusable_preview_payload'
+  return null
+}
+
 export function resolvePostCompletionNextSessionPreview(input: {
   completedSessions: number
   total: number
@@ -212,7 +247,6 @@ export function resolveLockedNextSessionPreview(input: {
   isLockedNext?: boolean
   nextSession?: NextSessionPreviewPayload | null
 }): NextSessionPreviewPayload | null {
-  if (input.status !== 'locked' || !input.isLockedNext || input.sessionId == null) return null
-  if (!input.nextSession || input.nextSession.session_number !== input.sessionId) return null
+  if (getLockedNextPreviewRecoveryReason(input) !== null) return null
   return input.nextSession
 }

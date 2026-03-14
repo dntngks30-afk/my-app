@@ -12,10 +12,17 @@ import SessionCompleteSummary from '@/app/app/routine/_components/SessionComplet
 import { ReflectionModal } from './ReflectionModal'
 import { NextSessionPreviewCard } from '../NextSessionPreviewCard'
 import {
+  getLockedNextPreviewRecoveryReason,
+  isUsableNextSessionPreview,
   resolveLockedNextSessionPreview,
   resolvePostCompletionNextSessionPreview,
+  type LockedNextPreviewRecoveryReason,
   type NextSessionPreviewPayload,
 } from '@/lib/session/next-session-preview'
+import {
+  shouldShowLockedPreviewLoadingState,
+  type LockedPreviewFetchState,
+} from '@/lib/session/locked-preview-recovery'
 import { useHomeSessionPanelState } from './useHomeSessionPanelState'
 
 type SessionStatus = 'current' | 'completed' | 'locked'
@@ -46,8 +53,11 @@ interface SessionPanelV2Props {
   adaptiveExplanation?: { title: string; message: string } | null
   /** PR-RISK-02: next session from bootstrap (post-completion 카드 데이터 우선) */
   nextSession?: NextSessionPreviewPayload | null
-  /** PR-NEXT-04: locked-next 패널에서 preview null/mismatch 시 fallback fetch */
-  onFetchLockedPreview?: (sessionNumber: number) => Promise<NextSessionPreviewPayload | null>
+  /** PR-NEXT-05: locked-next 패널에서 preview null/mismatch/thin 시 fallback fetch */
+  onFetchLockedPreview?: (
+    sessionNumber: number,
+    options?: { forceRefresh?: boolean }
+  ) => Promise<NextSessionPreviewPayload | null>
 }
 
 const STATUS_LABEL: Record<SessionStatus, string> = {
@@ -197,6 +207,12 @@ function PanelInner({
   } = panelState
 
   const rationale = getPlanRationale(activePlan)
+  const lockedPreviewRecoveryReason = getLockedNextPreviewRecoveryReason({
+    sessionId,
+    status,
+    isLockedNext,
+    nextSession,
+  })
   const lockedPreviewData = resolveLockedNextSessionPreview({
     sessionId,
     status,
@@ -204,25 +220,62 @@ function PanelInner({
     nextSession,
   })
 
-  // PR-NEXT-04: locked-next 패널에서 prop preview 없거나 mismatch 시 fallback fetch
+  // PR-NEXT-05: locked-next 패널에서 prop preview null/mismatch/thin 시 fallback fetch
   const [fallbackPreview, setFallbackPreview] = useState<NextSessionPreviewPayload | null>(null)
+  const [fallbackFetchState, setFallbackFetchState] = useState<LockedPreviewFetchState>('idle')
   const fallbackFetchAttemptedRef = useRef(false) // sessionId별로 한 번만 시도
   const needsFallbackFetch =
     status === 'locked' &&
     isLockedNext === true &&
     sessionId != null &&
-    !lockedPreviewData &&
+    lockedPreviewRecoveryReason !== null &&
     !!onFetchLockedPreview
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return
+    if (!needsFallbackFetch || !lockedPreviewRecoveryReason) return
+    console.info('[locked-next-preview]', {
+      sessionId,
+      reason: lockedPreviewRecoveryReason,
+    })
+  }, [needsFallbackFetch, lockedPreviewRecoveryReason, sessionId])
 
   useEffect(() => {
     if (!needsFallbackFetch) return
     if (fallbackFetchAttemptedRef.current) return
     fallbackFetchAttemptedRef.current = true
+    setFallbackFetchState('loading')
 
     let cancelled = false
-    void onFetchLockedPreview!(sessionId).then((payload) => {
-      if (cancelled || !payload) return
-      setFallbackPreview(payload)
+    void onFetchLockedPreview!(sessionId, { forceRefresh: true }).then((payload) => {
+      if (cancelled) return
+      if (isUsableNextSessionPreview(payload, sessionId)) {
+        setFallbackPreview(payload)
+        setFallbackFetchState('succeeded')
+        if (process.env.NODE_ENV !== 'production') {
+          console.info('[locked-next-preview]', {
+            sessionId,
+            reason: 'fallback_fetch_succeeded',
+          })
+        }
+        return
+      }
+      setFallbackFetchState('failed')
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[locked-next-preview]', {
+          sessionId,
+          reason: 'fallback_fetch_failed',
+        })
+      }
+    }).catch(() => {
+      if (cancelled) return
+      setFallbackFetchState('failed')
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[locked-next-preview]', {
+          sessionId,
+          reason: 'fallback_fetch_failed',
+        })
+      }
     })
     return () => {
       cancelled = true
@@ -236,10 +289,19 @@ function PanelInner({
       prevSessionIdRef.current = sessionId
       fallbackFetchAttemptedRef.current = false
       setFallbackPreview(null)
+      setFallbackFetchState('idle')
     }
   }, [sessionId])
 
   const effectiveLockedPreview = lockedPreviewData ?? fallbackPreview
+  const showLockedPreviewLoading = shouldShowLockedPreviewLoadingState({
+    status,
+    isLockedNext,
+    sessionId,
+    effectiveLockedPreview,
+    recoveryReason: lockedPreviewRecoveryReason,
+    fallbackFetchState,
+  })
 
   // PR-SESSION-UX-02: 세션 전환 시 운동 뷰 리셋 (hook 내부에서 처리)
   // 패널 open 측정
@@ -414,6 +476,8 @@ function PanelInner({
                 variant="locked-panel"
                 isLockedUntilTomorrow
               />
+            ) : showLockedPreviewLoading ? (
+              <LockedPreviewLoadingState reason={lockedPreviewRecoveryReason} />
             ) : (
               <ExerciseList
                 exercises={exercises}
@@ -489,6 +553,27 @@ function PanelInner({
 }
 
 /* ─── 운동 목록 ──────────────────────────────────────────────── */
+
+function LockedPreviewLoadingState({
+  reason,
+}: {
+  reason: LockedNextPreviewRecoveryReason | null
+}) {
+  return (
+    <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-5 text-center">
+      <div className="flex items-center justify-center gap-2 text-violet-700">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <p className="text-sm font-semibold">다음 세션 미리보기를 불러오는 중...</p>
+      </div>
+      <p className="mt-1 text-xs text-violet-600">
+        잠금 상태는 유지되지만, 다음 세션 내용을 새로 복구하고 있습니다.
+      </p>
+      {process.env.NODE_ENV !== 'production' && reason && (
+        <p className="mt-2 text-[11px] text-violet-500">{`debug: ${reason}`}</p>
+      )}
+    </div>
+  )
+}
 
 function formatUnlockMessage(nextUnlockAt?: string): string {
   if (nextUnlockAt) {

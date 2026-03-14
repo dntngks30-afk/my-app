@@ -25,6 +25,7 @@ import {
   buildNextSessionPreviewFromPlanJson,
   type NextSessionPreviewPayload,
 } from '@/lib/session/next-session-preview'
+import { getSessionBootstrapFetchStrategy } from '@/lib/session/locked-preview-recovery'
 import { getSessionSafe } from '@/lib/supabase'
 import { prefetchMediaSign } from './media-cache'
 import { clearSessionDraftForSession } from '@/lib/session/draftStorage'
@@ -64,6 +65,9 @@ interface ResetMapV2Props {
 
 type PanelPlanSummaryResponse = PlanSummaryResponse;
 type PanelBootstrapResponse = SessionBootstrapResponse;
+type LoadSessionBootstrapOptions = {
+  forceRefresh?: boolean
+}
 
 /** PR-18: summary → panel-compatible plan (display only). Full plan_json 아님. */
 function summaryToPanelPlan(data: PanelPlanSummaryResponse): SessionPlan {
@@ -232,12 +236,21 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     }
   }, [resolveAuthToken])
 
-  const loadSessionBootstrap = useCallback(async (sessionNumber: number) => {
-    const cached = bootstrapCacheRef.current.get(sessionNumber)
-    if (cached) return cached
+  const loadSessionBootstrap = useCallback(async (
+    sessionNumber: number,
+    options?: LoadSessionBootstrapOptions
+  ) => {
+    const strategy = getSessionBootstrapFetchStrategy(options)
+    if (strategy === 'network-first') {
+      bootstrapCacheRef.current.delete(sessionNumber)
+      bootstrapRequestRef.current.delete(sessionNumber)
+    } else {
+      const cached = bootstrapCacheRef.current.get(sessionNumber)
+      if (cached) return cached
 
-    const pending = bootstrapRequestRef.current.get(sessionNumber)
-    if (pending) return pending
+      const pending = bootstrapRequestRef.current.get(sessionNumber)
+      if (pending) return pending
+    }
 
     const request = (async () => {
       const token = await resolveAuthToken()
@@ -634,10 +647,15 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     return () => { cancelled = true }
   }, [selectedStatus, selectedSessionId, fullPlan, bootstrapPlan, onActivePlanCreated, onFlowApplied, resetMapFlowId, resolveAuthToken, debug])
 
-  /** PR-NEXT-04: locked-next 패널 fallback fetch — loadSessionBootstrap 재사용 */
+  /** PR-NEXT-05: locked-next 패널 fallback fetch — stale cache를 우회해 fresh bootstrap 우선 */
   const onFetchLockedPreview = useCallback(
-    async (sessionNumber: number): Promise<NextSessionPreviewPayload | null> => {
-      const plan = await loadSessionBootstrap(sessionNumber)
+    async (
+      sessionNumber: number,
+      options?: { forceRefresh?: boolean }
+    ): Promise<NextSessionPreviewPayload | null> => {
+      const plan = await loadSessionBootstrap(sessionNumber, {
+        forceRefresh: options?.forceRefresh === true,
+      })
       if (!plan?.plan_json) return null
       const segs = Array.isArray(plan.plan_json.segments) ? plan.plan_json.segments : []
       const totalSec = segs.reduce((s, seg) => s + (seg.duration_sec ?? 0), 0)

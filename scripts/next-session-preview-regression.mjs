@@ -1,4 +1,5 @@
 import previewModule from '../src/lib/session/next-session-preview.ts'
+import recoveryModule from '../src/lib/session/locked-preview-recovery.ts'
 
 const {
   resolveBootstrapNextSessionPreview,
@@ -6,7 +7,14 @@ const {
   resolveLockedNextSessionPreview,
   buildLockedNextPreviewFromBootstrapResponse,
   buildNextSessionPreviewFromPlanJson,
+  isUsableNextSessionPreview,
+  getLockedNextPreviewRecoveryReason,
 } = previewModule
+
+const {
+  getSessionBootstrapFetchStrategy,
+  shouldShowLockedPreviewLoadingState,
+} = recoveryModule
 
 let passed = 0
 
@@ -154,6 +162,45 @@ const mismatchedPreview = resolveLockedNextSessionPreview({
 
 ok('locked preview는 session_number mismatch 시 비활성', mismatchedPreview === null)
 
+ok('유효한 locked preview payload는 usable=true', isUsableNextSessionPreview(staleActiveAfterCompletion, 4) === true)
+
+const unusableThinPreview = {
+  session_number: 4,
+  focus_axes: [],
+  estimated_time: 0,
+  exercise_count: 0,
+  session_rationale: null,
+  exercises_preview: [],
+}
+ok('thin preview payload는 unusable로 처리', isUsableNextSessionPreview(unusableThinPreview, 4) === false)
+ok(
+  'null prop preview는 missing_prop_preview reason 반환',
+  getLockedNextPreviewRecoveryReason({
+    sessionId: 4,
+    status: 'locked',
+    isLockedNext: true,
+    nextSession: null,
+  }) === 'missing_prop_preview'
+)
+ok(
+  'mismatch preview는 mismatched_session_number reason 반환',
+  getLockedNextPreviewRecoveryReason({
+    sessionId: 5,
+    status: 'locked',
+    isLockedNext: true,
+    nextSession: staleActiveAfterCompletion,
+  }) === 'mismatched_session_number'
+)
+ok(
+  'thin preview는 unusable_preview_payload reason 반환',
+  getLockedNextPreviewRecoveryReason({
+    sessionId: 4,
+    status: 'locked',
+    isLockedNext: true,
+    nextSession: unusableThinPreview,
+  }) === 'unusable_preview_payload'
+)
+
 // PR-NEXT-04: locked-next fallback fetch 시나리오
 const lockedNullProp = resolveLockedNextSessionPreview({
   sessionId: 4,
@@ -175,6 +222,7 @@ const lockedFromBootstrap = buildLockedNextPreviewFromBootstrapResponse({
 ok('buildLockedNextPreviewFromBootstrapResponse는 유효 payload 반환', lockedFromBootstrap.session_number === 4)
 ok('bootstrap response → preview payload 변환 성공', lockedFromBootstrap.exercise_count === 3)
 ok('bootstrap response → focus_axes 유지', lockedFromBootstrap.focus_axes?.length === 2)
+ok('bootstrap response payload는 usable=true', isUsableNextSessionPreview(lockedFromBootstrap, 4) === true)
 
 const lockedFromPlanJson = buildNextSessionPreviewFromPlanJson({
   sessionNumber: 5,
@@ -189,5 +237,43 @@ const lockedFromPlanJson = buildNextSessionPreviewFromPlanJson({
 })
 ok('buildNextSessionPreviewFromPlanJson fallback path 유효', lockedFromPlanJson.session_number === 5)
 ok('planJson fallback exercise_count', lockedFromPlanJson.exercise_count === 2)
+ok('planJson fallback payload는 usable=true', isUsableNextSessionPreview(lockedFromPlanJson, 5) === true)
+
+ok('forceRefresh=true면 network-first 전략 사용', getSessionBootstrapFetchStrategy({ forceRefresh: true }) === 'network-first')
+ok('forceRefresh 없으면 cache-first 전략 사용', getSessionBootstrapFetchStrategy() === 'cache-first')
+
+ok(
+  'fallback fetch 진행 중에는 loading state를 유지',
+  shouldShowLockedPreviewLoadingState({
+    status: 'locked',
+    isLockedNext: true,
+    sessionId: 4,
+    effectiveLockedPreview: null,
+    recoveryReason: 'missing_prop_preview',
+    fallbackFetchState: 'loading',
+  }) === true
+)
+ok(
+  'fallback fetch 실패 전 idle 상태에서도 generic fallback 즉시 노출하지 않음',
+  shouldShowLockedPreviewLoadingState({
+    status: 'locked',
+    isLockedNext: true,
+    sessionId: 4,
+    effectiveLockedPreview: null,
+    recoveryReason: 'unusable_preview_payload',
+    fallbackFetchState: 'idle',
+  }) === true
+)
+ok(
+  'fallback fetch 실패 후에만 loading state가 꺼짐',
+  shouldShowLockedPreviewLoadingState({
+    status: 'locked',
+    isLockedNext: true,
+    sessionId: 4,
+    effectiveLockedPreview: null,
+    recoveryReason: 'missing_prop_preview',
+    fallbackFetchState: 'failed',
+  }) === false
+)
 
 console.log(`\nnext-session preview regression: ${passed} passed`)
