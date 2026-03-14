@@ -5,6 +5,7 @@
 
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { readFileSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 process.chdir(join(__dirname, '..'));
@@ -49,6 +50,35 @@ console.log('\n--- E. reason bridge resultType first ---');
 const reasonWithAnchor = buildDeepResultReasonBridge('UPPER-LIMB', { trunk_control: 2 }, null, []);
 const firstBullet = reasonWithAnchor?.bullets?.[0] ?? '';
 ok('first bullet is resultType anchor (손목/팔꿈치)', firstBullet.includes('손목') || firstBullet.includes('팔꿈치'));
+
+console.log('\n--- F. PR-UX-22B: 몸통 제어 완전 제거 ---');
+const copyContent = readFileSync('src/lib/deep-result/copy.ts', 'utf8');
+ok('copy.ts has zero 몸통 제어', !copyContent.includes('몸통 제어'));
+
+console.log('\n--- G. PR-UX-22B: UPPER-LIMB principles/chips 타입 정합성 ---');
+const upperFirst = buildFirstSessionBridge('UPPER-LIMB', { trunk_control: 1 }, null, []);
+const upperPrinciples = upperFirst?.principles ?? [];
+const upperChips = upperFirst?.chips ?? [];
+const hasUpperInPrinciples = upperPrinciples.some(
+  (p) => p.includes('손목') || p.includes('팔꿈치') || p.includes('어깨')
+);
+const hasUpperInChips = upperChips.some(
+  (c) => c.includes('손목') || c.includes('팔꿈치') || c.includes('어깨')
+);
+ok('UPPER-LIMB principles have upper-related language', hasUpperInPrinciples);
+ok('UPPER-LIMB chips have upper-related language', hasUpperInChips);
+
+console.log('\n--- H. LOWER-LIMB / NECK-SHOULDER 타입 정합성 ---');
+const lowerFirst = buildFirstSessionBridge('LOWER-LIMB', { upper_mobility: 1 }, null, []);
+const lowerHasLower = (lowerFirst?.principles ?? []).some(
+  (p) => p.includes('무릎') || p.includes('발목') || p.includes('골반')
+);
+ok('LOWER-LIMB principles have lower-related language', lowerHasLower);
+const neckFirst = buildFirstSessionBridge('NECK-SHOULDER', { lower_stability: 1 }, null, []);
+const neckHasNeck = (neckFirst?.principles ?? []).some(
+  (p) => p.includes('어깨') || p.includes('목') || p.includes('흉추')
+);
+ok('NECK-SHOULDER principles have neck/shoulder language', neckHasNeck);
 
 console.log('\n--- Summary ---');
 console.log(`${passed} passed, ${failed} failed`);

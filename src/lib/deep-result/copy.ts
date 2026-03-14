@@ -211,7 +211,7 @@ const AXIS_TO_REASON: Record<string, string> = {
   lower_stability: '하체가 무너지지 않게 버티는 안정성 신호가 우선순위로 잡혔어요.',
   lower_mobility: '깊은 범위보다 발목·고관절 가동 범위를 먼저 정리할 필요가 보여요.',
   upper_mobility: '팔 올림과 상체 가동성 쪽 관리 우선순위가 높게 잡혔어요.',
-  trunk_control: '몸통이 보상하지 않도록 제어를 먼저 잡는 흐름이 더 맞아요.',
+  trunk_control: '몸통이 보상하지 않도록 안정성을 먼저 잡는 흐름이 더 맞아요.',
   asymmetry: '좌우 균형 차이를 먼저 줄이는 쪽이 더 효율적인 상태로 보여요.',
   deconditioned: '강도보다 기본 움직임을 편하게 복구하는 쪽이 먼저예요.',
 };
@@ -226,11 +226,31 @@ const RESULT_TYPE_TO_FIRST_HEADLINE: Record<string, string> = {
   'STABLE': '가동성 유지와 루틴 습관화 중심으로 시작해요.',
 };
 
+/** PR-UX-22B: resultType → principles. 하위 설명층도 타입 정합성. */
+const RESULT_TYPE_TO_PRINCIPLES: Record<string, string[]> = {
+  'UPPER-LIMB': ['손목·팔꿈치 부담 분산', '어깨 안정화로 지지 부담 완화', '팔 지지 동작 범위 정리'],
+  'NECK-SHOULDER': ['어깨·등 움직임 회복', '목 주변 긴장 완화', '흉추·견갑 연결 정리'],
+  'LOWER-LIMB': ['무릎·발목 흔들림 감소', '골반 안정', '한발 서기 안정성'],
+  'LUMBO-PELVIS': ['몸통 안정성', '골반 중심 유지', '호흡·코어 연결'],
+  'DECONDITIONED': ['기본 움직임 복구', '부하 안전 분산', '일상 편안함 회복'],
+  'STABLE': ['가동성 유지', '피로 누적 방지', '루틴 습관화'],
+};
+
+/** PR-UX-22B: resultType → chips. 최소 1개는 타입 관련. */
+const RESULT_TYPE_TO_CHIPS: Record<string, string[]> = {
+  'UPPER-LIMB': ['손목·팔꿈치', '어깨 안정화'],
+  'NECK-SHOULDER': ['어깨·목', '흉추·견갑'],
+  'LOWER-LIMB': ['무릎·발목', '골반 안정'],
+  'LUMBO-PELVIS': ['몸통 안정', '골반 중심'],
+  'DECONDITIONED': ['기초 회복', '기본 움직임'],
+  'STABLE': ['가동성 유지', '루틴 습관화'],
+};
+
 const AXIS_TO_SESSION_PRINCIPLE: Record<string, string> = {
   lower_stability: '하체 안정과 무릎 정렬 중심',
   lower_mobility: '깊이보다 발목·고관절 가동 범위 중심',
-  upper_mobility: '상체 가동성과 팔 올림 연결 중심',
-  trunk_control: '몸통 제어와 흔들림 감소 중심',
+  upper_mobility: '어깨·등 움직임과 팔 올림 연결 중심',
+  trunk_control: '몸통 안정성과 흔들림 감소 중심',
   asymmetry: '좌우 균형과 한쪽 과사용 감소 중심',
   deconditioned: '강도보다 기본 움직임 복구 중심',
 };
@@ -350,17 +370,23 @@ export function buildFirstSessionBridge(
           .join(' + ')}을 첫 세션 우선순위로 잡았어요.`
       : '첫 세션은 무리하게 많이 하기보다, 우선순위가 높은 패턴부터 정리하는 흐름이에요.');
 
-  const principles = topAxes.map(
+  /** PR-UX-22B: principles = resultType 앵커 우선, axis는 2차 보조 */
+  const typePrinciples = resultType ? (RESULT_TYPE_TO_PRINCIPLES[resultType] ?? []) : [];
+  const axisPrinciples = topAxes.map(
     (axis) => AXIS_TO_SESSION_PRINCIPLE[axis] ?? `${AXIS_TO_FEATURE[axis] ?? axis} 중심`
   );
+  const principles = [...typePrinciples, ...axisPrinciples].filter(Boolean);
 
   if (painMode === 'protected' || painMode === 'caution') {
     principles.push('통증 없는 범위에서 강도와 범위를 보수적으로 시작');
-  } else if (focusTags?.[0]) {
+  } else if (focusTags?.[0] && principles.length < 3) {
     principles.push(`${labelFocusTag(focusTags[0])} 같은 기본 연결부터 함께 정리`);
   }
 
-  const chips = topAxes.map((axis) => AXIS_TO_FEATURE[axis] ?? axis).filter(Boolean);
+  /** PR-UX-22B: chips = resultType 관련 최소 1개 + axis 보조 */
+  const typeChips = resultType ? (RESULT_TYPE_TO_CHIPS[resultType] ?? []) : [];
+  const axisChips = topAxes.map((axis) => AXIS_TO_FEATURE[axis] ?? axis).filter(Boolean);
+  const chips = [...new Set([...typeChips.slice(0, 2), ...axisChips])].filter(Boolean);
   const conservativeNote =
     painMode === 'protected' || painMode === 'caution'
       ? '초반 강도는 보수적으로 설정됩니다'
@@ -375,7 +401,7 @@ export function buildFirstSessionBridge(
   return {
     headline,
     principles: [...new Set(principles)].slice(0, 3),
-    chips: [...new Set(chips)].slice(0, 4),
+    chips: [...new Set(chips)].slice(0, 4).filter(Boolean),
     conservativeNote,
     note,
   };
