@@ -15,6 +15,7 @@ import {
   storeIdempotentResult,
   ROUTE_KEYS,
 } from '@/lib/idempotency/guard';
+import { logResetMapEvent } from '@/lib/reset-map/events';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -72,6 +73,13 @@ export async function POST(req: NextRequest) {
       console.error('[reset-map/start] insert failed', error);
       return fail(500, ApiErrorCode.INTERNAL_ERROR, '플로우 시작에 실패했습니다');
     }
+
+    void logResetMapEvent(supabase, {
+      flowId: data.id,
+      userId,
+      name: 'started',
+      attrs: { flow_version: 'v1', session_id: sessionId },
+    });
 
     const responseBody = { ok: true as const, data };
     await storeIdempotentResult({

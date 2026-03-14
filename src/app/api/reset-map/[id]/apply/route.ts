@@ -18,6 +18,7 @@ import {
   storeIdempotentResult,
   ROUTE_KEYS,
 } from '@/lib/idempotency/guard';
+import { logResetMapEvent } from '@/lib/reset-map/events';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -78,6 +79,12 @@ export async function POST(
 
     const state = row.state as ResetMapState;
     if (!canApply(state)) {
+      void logResetMapEvent(supabase, {
+        flowId: id,
+        userId,
+        name: 'invalid_state_attempt',
+        attrs: { current_state: state, attempted_transition: 'apply' },
+      });
       return fail(
         422,
         ApiErrorCode.INVALID_STATE,
@@ -112,6 +119,13 @@ export async function POST(
         { state }
       );
     }
+
+    void logResetMapEvent(supabase, {
+      flowId: id,
+      userId,
+      name: 'applied',
+      attrs: { previous_state: state, result: 'applied' },
+    });
 
     const responseBody = { ok: true as const, data };
     await storeIdempotentResult({
