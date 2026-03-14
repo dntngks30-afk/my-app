@@ -10,7 +10,7 @@ const ATTRS_MAX_BYTES = 4096;
 export type LogResetMapEventParams = {
   flowId: string;
   userId: string;
-  name: 'started' | 'applied' | 'invalid_state_attempt' | 'aborted';
+  name: 'started' | 'applied' | 'invalid_state_attempt' | 'aborted' | 'preview_ready' | 'preview_blocked';
   attrs?: Record<string, unknown>;
 };
 
