@@ -36,6 +36,7 @@
     "test:session-gen-cache": "npx tsx scripts/session-gen-cache-smoke.mjs",
     "test:deep-v3-persona": "npx tsx scripts/deep-v3-persona-check.mjs",
     "test:deep-validation-pack": "npx tsx scripts/deep-validation-pack.mjs",
+    "test:ux-22-deep-result-language": "npx tsx scripts/ux-22-deep-result-language-regression.mjs",
     "test:deep-neck-shoulder-verify": "npx tsx scripts/deep-neck-shoulder-verify.mjs",
     "test:deep-pr-fix-02": "npx tsx scripts/deep-v3-neck-shoulder-pr-fix-02.mjs",
     "test:session-bootstrap": "npx tsx scripts/session-bootstrap-smoke.mjs",

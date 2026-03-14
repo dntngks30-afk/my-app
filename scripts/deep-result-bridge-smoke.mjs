@@ -11,6 +11,7 @@ const cautionPriority = {
 };
 
 const reasonBridge = buildDeepResultReasonBridge(
+  'LOWER-LIMB',
   cautionPriority,
   'caution',
   ['glute_medius']
@@ -24,6 +25,7 @@ assert(
 );
 
 const protectedBridge = buildFirstSessionBridge(
+  'DECONDITIONED',
   { deconditioned: 1, trunk_control: 0.6 },
   'protected',
   ['breathing_reset']
@@ -44,6 +46,7 @@ assert(
 );
 
 const cautionBridge = buildFirstSessionBridge(
+  'LOWER-LIMB',
   { lower_stability: 0.8, asymmetry: 0.5 },
   'caution',
   []
@@ -51,7 +54,7 @@ const cautionBridge = buildFirstSessionBridge(
 assert(cautionBridge?.conservativeNote === '초반 강도는 보수적으로 설정됩니다', 'caution should show conservativeNote');
 assert(cautionBridge?.chips?.length >= 1, 'first session bridge should include chips from priority_vector');
 
-const fallbackBridge = buildFirstSessionBridge(null, null, []);
+const fallbackBridge = buildFirstSessionBridge(null, null, null, []);
 assert.equal(fallbackBridge, null, 'bridge should stay null when no v3 priority vector exists');
 
 console.log('deep-result-bridge smoke passed');

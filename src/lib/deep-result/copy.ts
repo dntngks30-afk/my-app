@@ -25,7 +25,7 @@ const FALLBACK_COPY: DeepResultCopy = {
 
 export const DEEP_RESULT_COPY = {
   'NECK-SHOULDER': {
-    badgeTitle: '상체 가동성 제한 경향',
+    badgeTitle: '어깨·목 움직임 제한',
     headline: '어깨·흉추가 막히면 목/허리에 보상 움직임이 생기기 쉬워요.',
     subhead: '팔 올리기, 등 펴기 동작에서 제한이 느껴질 수 있어요.',
     symptoms: [
@@ -41,7 +41,7 @@ export const DEEP_RESULT_COPY = {
     caution: '저림/방사통이 있으면 무리한 스트레칭은 피하고 범위를 줄여요.',
   },
   'LUMBO-PELVIS': {
-    badgeTitle: '코어 컨트롤 부족 경향',
+    badgeTitle: '몸통 안정성 부족',
     headline: '몸통이 흔들리면 팔다리가 대신 버텨서 허리/골반에 부담이 실려요.',
     subhead: '한발 서기, 계단 오르기에서 보상이 커질 수 있어요.',
     symptoms: [
@@ -57,7 +57,7 @@ export const DEEP_RESULT_COPY = {
     caution: '허리 통증이 올라오면 강도를 즉시 낮추고 호흡부터 재정렬.',
   },
   'UPPER-LIMB': {
-    badgeTitle: '상지 부위 경향',
+    badgeTitle: '손목·팔꿈치 부담 집중',
     headline: '손목·팔꿈치 부위에 과부하가 쌓이기 쉬워요.',
     subhead: '팔꿈치 지지, 손목 굽힘 동작에서 불편함이 느껴질 수 있어요.',
     symptoms: [
@@ -73,7 +73,7 @@ export const DEEP_RESULT_COPY = {
     caution: '저림이나 통증이 있으면 무리한 지지 동작은 피해요.',
   },
   'LOWER-LIMB': {
-    badgeTitle: '하체 불안정 경향',
+    badgeTitle: '무릎·발목 흔들림',
     headline: '무릎·골반이 흔들리면 힘이 분산돼 통증/피로가 쌓이기 쉬워요.',
     subhead: '스쿼트, 계단, 한발 서기에서 불안정이 느껴질 수 있어요.',
     symptoms: [
@@ -89,7 +89,7 @@ export const DEEP_RESULT_COPY = {
     caution: '통증 있는 날은 깊은 스쿼트/점프는 강도를 낮춰요.',
   },
   'DECONDITIONED': {
-    badgeTitle: '통증 우세 경향',
+    badgeTitle: '기초 회복 우선',
     headline: "지금은 '강화'보다 '안정적인 움직임 복구'가 우선이에요.",
     subhead: '부하를 점진적으로 올리면서 회복 기반을 다져요.',
     symptoms: [
@@ -105,7 +105,7 @@ export const DEEP_RESULT_COPY = {
     caution: '통증이 날카롭거나 악화 중이면 의료 상담을 권장해요.',
   },
   'STABLE': {
-    badgeTitle: '전반적으로 안정',
+    badgeTitle: '전반적으로 안정적',
     headline: '큰 제한은 적지만, 작은 습관 차이가 컨디션을 갈라요.',
     subhead: '가동성 유지와 루틴 습관화가 핵심이에요.',
     symptoms: [
@@ -160,13 +160,24 @@ export interface FirstSessionBridge {
   note?: string;
 }
 
+/** PR-UX-22: user-facing chip/axis labels. 전문 용어 최소화. */
 const AXIS_TO_FEATURE: Record<string, string> = {
   lower_stability: '하체 안정성',
-  lower_mobility: '하체 가동성',
-  upper_mobility: '상체 가동성',
-  trunk_control: '몸통 제어',
+  lower_mobility: '발목·고관절 움직임',
+  upper_mobility: '어깨·등 움직임',
+  trunk_control: '몸통 안정성',
   asymmetry: '좌우 균형',
-  deconditioned: '전신 회복',
+  deconditioned: '기초 회복',
+};
+
+/** PR-UX-22: resultType → 첫 문장 앵커. "왜 이렇게 판단했는지" 사용자 언어. */
+const RESULT_TYPE_TO_ANCHOR: Record<string, string> = {
+  'UPPER-LIMB': '손목·팔꿈치 부위에 부담이 쌓이는 패턴이 우선으로 잡혔어요.',
+  'NECK-SHOULDER': '어깨·목 쪽 움직임 제한이 우선으로 보여요.',
+  'LOWER-LIMB': '무릎·발목 쪽 흔들림이 우선으로 잡혔어요.',
+  'LUMBO-PELVIS': '몸통이 흔들릴 때 보상이 커지는 패턴이 우선이에요.',
+  'DECONDITIONED': '지금은 강도보다 기본 움직임 복구가 우선이에요.',
+  'STABLE': '큰 제한은 적고, 작은 습관 차이가 컨디션을 갈라요.',
 };
 
 const AXIS_TO_CAUTION: Record<string, string> = {
@@ -180,11 +191,11 @@ const AXIS_TO_CAUTION: Record<string, string> = {
 
 const AXIS_TO_GOAL: Record<string, string> = {
   lower_stability: '골반 안정',
-  lower_mobility: '고관절·발목 가동성',
-  upper_mobility: '어깨·흉추 가동성',
-  trunk_control: '코어 제어',
+  lower_mobility: '발목·고관절 움직임',
+  upper_mobility: '어깨·등 움직임',
+  trunk_control: '몸통 안정성',
   asymmetry: '균형 회복',
-  deconditioned: '전신 리셋',
+  deconditioned: '기초 회복',
 };
 
 const AXIS_TO_FEELING: Record<string, string> = {
@@ -203,6 +214,16 @@ const AXIS_TO_REASON: Record<string, string> = {
   trunk_control: '몸통이 보상하지 않도록 제어를 먼저 잡는 흐름이 더 맞아요.',
   asymmetry: '좌우 균형 차이를 먼저 줄이는 쪽이 더 효율적인 상태로 보여요.',
   deconditioned: '강도보다 기본 움직임을 편하게 복구하는 쪽이 먼저예요.',
+};
+
+/** PR-UX-22: resultType → 첫 세션 headline 앵커. "왜 이런 운동이 나오는지" */
+const RESULT_TYPE_TO_FIRST_HEADLINE: Record<string, string> = {
+  'UPPER-LIMB': '손목·팔꿈치 부담을 줄이면서 어깨 안정화부터 시작해요.',
+  'NECK-SHOULDER': '어깨·목 움직임을 정리하면서 흉추·견갑부터 시작해요.',
+  'LOWER-LIMB': '무릎·발목 안정을 잡으면서 골반·중둔근부터 시작해요.',
+  'LUMBO-PELVIS': '몸통 안정을 잡으면서 호흡·코어 연결부터 시작해요.',
+  'DECONDITIONED': '기본 움직임을 편하게 복구하는 쪽부터 시작해요.',
+  'STABLE': '가동성 유지와 루틴 습관화 중심으로 시작해요.',
 };
 
 const AXIS_TO_SESSION_PRINCIPLE: Record<string, string> = {
@@ -277,43 +298,57 @@ export function getV3PrescriptionNarrative(
   };
 }
 
+/** PR-UX-22: resultType = 1차 앵커, priority_vector = 보조 이유. */
 export function buildDeepResultReasonBridge(
+  resultType?: string | null,
   priorityVector?: Record<string, number> | null,
   painMode?: 'none' | 'caution' | 'protected' | null,
   focusTags?: string[]
 ): DeepResultReasonBridge | null {
+  const anchor = resultType && RESULT_TYPE_TO_ANCHOR[resultType];
   const topAxes = getTopAxes(priorityVector, 2);
-  if (topAxes.length === 0) return null;
-
-  const bullets = topAxes.map(
+  const supplementBullets = topAxes.map(
     (axis) => AXIS_TO_REASON[axis] ?? `${AXIS_TO_FEATURE[axis] ?? axis} 우선순위가 높게 잡혔어요.`
   );
 
+  const bullets: string[] = [];
+  if (anchor) bullets.push(anchor);
   if (painMode === 'protected') {
     bullets.push('통증 응답이 커서 첫 단계는 보호 모드로, 통증 없는 범위 안에서 시작해요.');
   } else if (painMode === 'caution') {
     bullets.push('통증 응답이 있어 초반 강도와 범위는 보수적으로 잡아요.');
-  } else if (focusTags?.[0]) {
+  }
+  bullets.push(...supplementBullets.filter((b) => !bullets.includes(b)));
+  if (focusTags?.[0] && bullets.length < 3) {
     bullets.push(`${labelFocusTag(focusTags[0])} 쪽을 먼저 정리하면 초기 체감이 더 빨라질 수 있어요.`);
   }
 
+  if (bullets.length === 0 && !anchor) return null;
   return {
-    bullets: [...new Set(bullets)].slice(0, 3),
+    bullets: [...new Set(bullets)].slice(0, 4),
   };
 }
 
+/** PR-UX-22: resultType = 1차 앵커, priority_vector chips = 보조. */
 export function buildFirstSessionBridge(
+  resultType?: string | null,
   priorityVector?: Record<string, number> | null,
   painMode?: 'none' | 'caution' | 'protected' | null,
   focusTags?: string[]
 ): FirstSessionBridge | null {
   const topAxes = getTopAxes(priorityVector, 3);
-  if (topAxes.length === 0) return null;
+  const hasAnchor = resultType && RESULT_TYPE_TO_FIRST_HEADLINE[resultType];
+  if (!hasAnchor && topAxes.length === 0) return null;
 
-  const sessionGoals = topAxes
-    .map((axis) => AXIS_TO_GOAL[axis] ?? AXIS_TO_FEATURE[axis] ?? axis)
-    .filter(Boolean);
-  const headline = `${sessionGoals.slice(0, 2).join(' + ')}을 첫 세션 우선순위로 잡았어요.`;
+  const headline =
+    (resultType && RESULT_TYPE_TO_FIRST_HEADLINE[resultType]) ??
+    (topAxes.length > 0
+      ? `${topAxes
+          .map((axis) => AXIS_TO_GOAL[axis] ?? AXIS_TO_FEATURE[axis] ?? axis)
+          .filter(Boolean)
+          .slice(0, 2)
+          .join(' + ')}을 첫 세션 우선순위로 잡았어요.`
+      : '첫 세션은 무리하게 많이 하기보다, 우선순위가 높은 패턴부터 정리하는 흐름이에요.');
 
   const principles = topAxes.map(
     (axis) => AXIS_TO_SESSION_PRINCIPLE[axis] ?? `${AXIS_TO_FEATURE[axis] ?? axis} 중심`

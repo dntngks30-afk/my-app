@@ -90,8 +90,9 @@ async function run() {
     const painMode = v3.pain_mode ?? null;
     const focusTags = v3.derived?.focus_tags ?? [];
 
-    const reasonBridge = buildDeepResultReasonBridge(pv, painMode, focusTags);
-    const firstSession = buildFirstSessionBridge(pv, painMode, focusTags);
+    const resultType = v3.result_type ?? v3.derived?.result_type ?? null;
+    const reasonBridge = buildDeepResultReasonBridge(resultType, pv, painMode, focusTags);
+    const firstSession = buildFirstSessionBridge(resultType, pv, painMode, focusTags);
     const narrative = getV3PrescriptionNarrative(pv, painMode, focusTags);
 
     // No banned phrases
@@ -141,7 +142,7 @@ async function run() {
   // 4. buildFirstSessionBridge null when no priority_vector (deep_v2 fallback)
   console.log('\n4. deep_v2 fallback (no priority_vector)');
   const v2StyleResult = { priority_vector: null, pain_mode: null, derived: { focus_tags: [] } };
-  const bridgeNull = buildFirstSessionBridge(null, null, []);
+  const bridgeNull = buildFirstSessionBridge(null, null, null, []);
   ok('buildFirstSessionBridge returns null when no pv', bridgeNull === null);
 
   console.log(`\n${passed} passed, ${failed} failed`);

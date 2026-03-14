@@ -163,8 +163,18 @@ export default function DeepTestResultContent({
   const copyAny = copy as unknown as Record<string, unknown>;
 
   const v3Narrative = getV3PrescriptionNarrative(priorityVector ?? undefined, painMode ?? undefined, focusTags);
-  const reasonBridge = buildDeepResultReasonBridge(priorityVector ?? undefined, painMode ?? undefined, focusTags);
-  const firstSessionBridge = buildFirstSessionBridge(priorityVector ?? undefined, painMode ?? undefined, focusTags);
+  const reasonBridge = buildDeepResultReasonBridge(
+    resultType ?? undefined,
+    priorityVector ?? undefined,
+    painMode ?? undefined,
+    focusTags
+  );
+  const firstSessionBridge = buildFirstSessionBridge(
+    resultType ?? undefined,
+    priorityVector ?? undefined,
+    painMode ?? undefined,
+    focusTags
+  );
 
   const mainTag = asString(
     copyAny?.badgeTitle ?? copyAny?.tag ?? copyAny?.badge ?? copyAny?.bannerTag,
@@ -183,7 +193,12 @@ export default function DeepTestResultContent({
     '지금은 "진단"이 아니라, 오늘부터 바꿀 수 있는 우선순위를 정리한 결과입니다.'
   );
 
+  /** PR-UX-22: "현재 상태를 이렇게 봤어요" = resultType 일상 체감 언어 우선 */
   const insightsText = (() => {
+    const fromCopy = asStringArray(
+      copyAny?.symptoms ?? copyAny?.insights ?? copyAny?.keyPoints ?? copyAny?.bullets
+    );
+    if (fromCopy.length > 0) return fromCopy.slice(0, 3);
     if (v3Narrative?.movementFeatures?.length) {
       const feats = v3Narrative.movementFeatures.slice(0, 2);
       const expected = v3Narrative.expectedFeeling
@@ -191,10 +206,6 @@ export default function DeepTestResultContent({
         : [];
       return [...feats, ...expected].slice(0, 3);
     }
-    const fromCopy = asStringArray(
-      copyAny?.symptoms ?? copyAny?.insights ?? copyAny?.keyPoints ?? copyAny?.bullets
-    );
-    if (fromCopy.length > 0) return fromCopy.slice(0, 3);
     const a = focusTags[0]
       ? `${labelTag(focusTags[0])}이(가) 우선순위로 보입니다.`
       : '가장 약한 고리를 먼저 보강하는 게 효율적입니다.';
