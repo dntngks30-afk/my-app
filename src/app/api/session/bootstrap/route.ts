@@ -40,6 +40,16 @@ type BootstrapRouteData = {
 const DEFAULT_TOTAL_SESSIONS = 16
 const PHASE_LABELS = ['1순위 타겟', '2순위 타겟', '통합', '릴렉스'] as const
 
+export function shouldAllowTodayCompletedBootstrapPreview(input: {
+  todayCompleted: boolean
+  requestedSessionNumber: number | null
+  nextSessionNumber: number
+}): boolean {
+  if (!input.todayCompleted) return false
+  if (input.requestedSessionNumber == null) return false
+  return input.requestedSessionNumber === input.nextSessionNumber
+}
+
 function getPhaseLengthsFromTrace(trace: unknown): PhaseLengths | null {
   if (!trace || typeof trace !== 'object') return null
   const arr = (trace as Record<string, unknown>).phase_lengths
@@ -152,16 +162,22 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    if (today_completed) {
-      return fail(409, ApiErrorCode.DAILY_LIMIT_REACHED, '오늘은 이미 완료했습니다')
-    }
-
     const nextSessionNumber = (progress.completed_sessions ?? 0) + 1
     if (requestedSessionNumber != null && requestedSessionNumber !== nextSessionNumber) {
       return fail(400, ApiErrorCode.VALIDATION_FAILED, '요청한 session_number가 현재 생성 가능한 세션과 다릅니다')
     }
     if (nextSessionNumber > totalSessions) {
       return fail(409, ApiErrorCode.PROGRAM_FINISHED, '모든 세션을 완료했습니다')
+    }
+    if (
+      today_completed &&
+      !shouldAllowTodayCompletedBootstrapPreview({
+        todayCompleted: today_completed,
+        requestedSessionNumber,
+        nextSessionNumber,
+      })
+    ) {
+      return fail(409, ApiErrorCode.DAILY_LIMIT_REACHED, '오늘은 이미 완료했습니다')
     }
 
     const deepSummary = await loadSessionDeepSummary(userId)

@@ -45,6 +45,7 @@
     "test:deep-neck-shoulder-verify": "npx tsx scripts/deep-neck-shoulder-verify.mjs",
     "test:deep-pr-fix-02": "npx tsx scripts/deep-v3-neck-shoulder-pr-fix-02.mjs",
     "test:session-bootstrap": "npx tsx scripts/session-bootstrap-smoke.mjs",
+    "test:session-bootstrap-preview": "npx tsx scripts/session-bootstrap-preview-allowance-regression.mjs",
     "analyze:deep-test": "npx tsx scripts/analyze_deep_test_funnel.mjs",
     "test:session-scenario": "npx tsx scripts/session-scenario-check.mjs",
     "test:deep-v3-shadow": "npx tsx scripts/deep-v3-shadow-compare.mjs",
