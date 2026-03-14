@@ -14,6 +14,7 @@ import { NextSessionPreviewCard } from '../NextSessionPreviewCard'
 import {
   getLockedNextPreviewRecoveryReason,
   isUsableNextSessionPreview,
+  normalizeNextSessionPreviewForDisplay,
   resolveLockedNextSessionPreview,
   resolvePostCompletionNextSessionPreview,
   type LockedNextPreviewRecoveryReason,
@@ -249,8 +250,9 @@ function PanelInner({
     let cancelled = false
     void onFetchLockedPreview!(sessionId, { forceRefresh: true }).then((payload) => {
       if (cancelled) return
-      if (isUsableNextSessionPreview(payload, sessionId)) {
-        setFallbackPreview(payload)
+      const normalizedPayload = normalizeNextSessionPreviewForDisplay(payload)
+      if (isUsableNextSessionPreview(normalizedPayload, sessionId)) {
+        setFallbackPreview(normalizedPayload)
         setFallbackFetchState('succeeded')
         if (process.env.NODE_ENV !== 'production') {
           console.info('[locked-next-preview]', {
@@ -293,7 +295,7 @@ function PanelInner({
     }
   }, [sessionId])
 
-  const effectiveLockedPreview = lockedPreviewData ?? fallbackPreview
+  const effectiveLockedPreview = normalizeNextSessionPreviewForDisplay(lockedPreviewData ?? fallbackPreview)
   const showLockedPreviewLoading = shouldShowLockedPreviewLoadingState({
     status,
     isLockedNext,

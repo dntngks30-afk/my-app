@@ -18,6 +18,8 @@ type BootstrapSummaryLike = {
   segments: PreviewSegment[]
 } | null | undefined
 
+type NextSessionPreviewDisplayInput = NextSessionPreviewData | NextSessionPreviewPayload | null | undefined
+
 export type NextSessionPreviewPayload = {
   session_number: number
   focus_axes: string[]
@@ -46,10 +48,61 @@ const FOCUS_AXIS_LABELS: Record<string, string> = {
 }
 
 export function buildNextSessionPreviewRationale(focusAxes: string[]): string | null {
+  const primaryAxis = focusAxes[0]
+  if (primaryAxis === 'upper_mobility') {
+    return '상체 가동성과 움직임 범위를 여는 흐름으로 시작합니다'
+  }
+  if (primaryAxis === 'lower_stability') {
+    return '하체 안정성과 중심 제어를 먼저 정리하는 세션입니다'
+  }
+  if (primaryAxis === 'trunk_control') {
+    return '몸통 안정성과 자세 제어를 우선 회복하는 세션입니다'
+  }
+  if (primaryAxis === 'lower_mobility') {
+    return '하체 가동성과 움직임 연결을 부드럽게 회복하는 세션입니다'
+  }
+  if (primaryAxis === 'asymmetry') {
+    return '좌우 균형과 움직임 대칭을 먼저 맞추는 세션입니다'
+  }
+  if (primaryAxis === 'deconditioned') {
+    return '전신 회복과 기본 움직임 리듬을 다시 세우는 세션입니다'
+  }
+
   const labels = focusAxes.map((axis) => FOCUS_AXIS_LABELS[axis] ?? axis).filter(Boolean)
   if (labels.length === 0) return null
   if (labels.length === 1) return `${labels[0]} 중심으로 다음 흐름을 이어가는 세션입니다`
   return `${labels[0]}과 ${labels[1]} 중심으로 다음 흐름을 이어가는 세션입니다`
+}
+
+export function getNextSessionFocusLabel(
+  focusAxes?: string[] | null,
+  maxCount = 2
+): string | null {
+  if (!Array.isArray(focusAxes) || focusAxes.length === 0) return null
+  const labels = focusAxes
+    .map((axis) => FOCUS_AXIS_LABELS[axis] ?? axis)
+    .filter((label): label is string => typeof label === 'string' && label.trim().length > 0)
+    .slice(0, Math.max(1, maxCount))
+  if (labels.length === 0) return null
+  return labels.join(' · ')
+}
+
+function normalizePreviewNames(names?: string[] | null, maxCount = 3): string[] {
+  if (!Array.isArray(names)) return []
+  const unique = new Set<string>()
+  for (const name of names) {
+    if (typeof name !== 'string') continue
+    const trimmed = name.trim()
+    if (!trimmed) continue
+    unique.add(trimmed)
+    if (unique.size >= maxCount) break
+  }
+  return Array.from(unique)
+}
+
+function buildSafeExercisePreviewSummary(exerciseCount: number): string[] {
+  if (!(typeof exerciseCount === 'number' && exerciseCount > 0)) return []
+  return [`운동 ${exerciseCount}개 구성`]
 }
 
 export function countPreviewExercises(segments?: PreviewSegment[] | null): number {
@@ -195,21 +248,85 @@ export function buildFallbackNextSessionPreview(input: {
   }
 }
 
-export function isUsableNextSessionPreview(
-  payload: NextSessionPreviewPayload | null | undefined,
+export function normalizeNextSessionPreviewForDisplay(
+  payload: NextSessionPreviewDisplayInput,
+  options?: {
+    segments?: PreviewSegment[] | null
+    focusLabel?: string | null
+    estimatedTime?: number | null
+  }
+): NextSessionPreviewData | null {
+  if (!payload) return null
+
+  const focusAxes = Array.isArray(payload.focus_axes) ? payload.focus_axes.filter(Boolean) : []
+  const focusLabel =
+    (typeof payload.focus_label === 'string' && payload.focus_label.trim().length > 0
+      ? payload.focus_label.trim()
+      : null) ??
+    (typeof options?.focusLabel === 'string' && options.focusLabel.trim().length > 0
+      ? options.focusLabel.trim()
+      : null) ??
+    getNextSessionFocusLabel(focusAxes)
+
+  const fallbackExerciseCount = countPreviewExercises(options?.segments)
+  const exerciseCount =
+    typeof payload.exercise_count === 'number' && payload.exercise_count > 0
+      ? payload.exercise_count
+      : fallbackExerciseCount
+
+  const estimatedTime =
+    typeof payload.estimated_time === 'number' && payload.estimated_time > 0
+      ? Math.round(payload.estimated_time)
+      : typeof options?.estimatedTime === 'number' && options.estimatedTime > 0
+        ? Math.round(options.estimatedTime)
+        : 12
+
+  const exerciseNamesFromSegments = pickPreviewExerciseNames(options?.segments)
+  const exercisesPreview = (() => {
+    const directNames = normalizePreviewNames(payload.exercises_preview)
+    if (directNames.length > 0) return directNames
+    if (exerciseNamesFromSegments.length > 0) return exerciseNamesFromSegments
+    return buildSafeExercisePreviewSummary(exerciseCount)
+  })()
+
+  const sessionRationale =
+    typeof payload.session_rationale === 'string' && payload.session_rationale.trim().length > 0
+      ? payload.session_rationale.trim()
+      : buildNextSessionPreviewRationale(focusAxes)
+
+  return {
+    session_number: payload.session_number,
+    focus_axes: focusAxes,
+    focus_label: focusLabel,
+    estimated_time: estimatedTime,
+    exercise_count: exerciseCount,
+    session_rationale: sessionRationale,
+    exercises_preview: exercisesPreview,
+  }
+}
+
+export function isDisplayReadyNextSessionPreview(
+  payload: NextSessionPreviewPayload | NextSessionPreviewData | null | undefined,
   sessionId: number | null
 ): boolean {
-  if (!payload || sessionId == null) return false
-  if (payload.session_number !== sessionId) return false
+  const normalized = normalizeNextSessionPreviewForDisplay(payload)
+  if (!normalized || sessionId == null) return false
+  if (normalized.session_number !== sessionId) return false
 
-  let populatedFields = 0
-  if (Array.isArray(payload.focus_axes) && payload.focus_axes.length > 0) populatedFields += 1
-  if (typeof payload.estimated_time === 'number' && payload.estimated_time > 0) populatedFields += 1
-  if (typeof payload.exercise_count === 'number' && payload.exercise_count > 0) populatedFields += 1
-  if (typeof payload.session_rationale === 'string' && payload.session_rationale.trim().length > 0) populatedFields += 1
-  if (Array.isArray(payload.exercises_preview) && payload.exercises_preview.length > 0) populatedFields += 1
+  let meaningfulFields = 0
+  if (typeof normalized.focus_label === 'string' && normalized.focus_label.trim().length > 0) meaningfulFields += 1
+  if (typeof normalized.session_rationale === 'string' && normalized.session_rationale.trim().length > 0) meaningfulFields += 1
+  if (typeof normalized.exercise_count === 'number' && normalized.exercise_count > 0) meaningfulFields += 1
+  if (Array.isArray(normalized.exercises_preview) && normalized.exercises_preview.length > 0) meaningfulFields += 1
 
-  return populatedFields >= 2
+  return meaningfulFields >= 2
+}
+
+export function isUsableNextSessionPreview(
+  payload: NextSessionPreviewPayload | NextSessionPreviewData | null | undefined,
+  sessionId: number | null
+): boolean {
+  return isDisplayReadyNextSessionPreview(payload, sessionId)
 }
 
 export function getLockedNextPreviewRecoveryReason(input: {
@@ -233,7 +350,9 @@ export function resolvePostCompletionNextSessionPreview(input: {
 }): NextSessionPreviewData {
   const nextNum = Math.min(input.completedSessions + 1, input.total)
   if (input.nextSession && input.nextSession.session_number === nextNum) {
-    return input.nextSession
+    return normalizeNextSessionPreviewForDisplay(input.nextSession, {
+      focusLabel: input.nextTheme ?? null,
+    }) ?? input.nextSession
   }
   return buildFallbackNextSessionPreview({
     sessionNumber: nextNum,
@@ -248,5 +367,5 @@ export function resolveLockedNextSessionPreview(input: {
   nextSession?: NextSessionPreviewPayload | null
 }): NextSessionPreviewPayload | null {
   if (getLockedNextPreviewRecoveryReason(input) !== null) return null
-  return input.nextSession
+  return normalizeNextSessionPreviewForDisplay(input.nextSession) ?? input.nextSession
 }

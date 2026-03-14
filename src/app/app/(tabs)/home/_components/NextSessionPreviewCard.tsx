@@ -9,16 +9,11 @@
  */
 
 import { ChevronRight } from 'lucide-react';
-import type { NextSessionPreviewData } from '@/lib/session/next-session-preview';
-
-const FOCUS_AXIS_LABELS: Record<string, string> = {
-  lower_stability: '하체 안정',
-  lower_mobility: '하체 가동성',
-  upper_mobility: '상체 가동성',
-  trunk_control: '몸통 제어',
-  asymmetry: '좌우 균형',
-  deconditioned: '전신 회복',
-};
+import {
+  getNextSessionFocusLabel,
+  normalizeNextSessionPreviewForDisplay,
+  type NextSessionPreviewData,
+} from '@/lib/session/next-session-preview';
 
 export type AdaptiveExplanation = {
   title: string;
@@ -42,15 +37,10 @@ export type NextSessionPreviewCardProps = {
 };
 
 function formatFocusLabel(data: NextSessionPreviewData): string {
-  const axes = data.focus_axes;
-  if (Array.isArray(axes) && axes.length > 0) {
-    const labels = axes.map((a) => FOCUS_AXIS_LABELS[a] ?? a).filter(Boolean);
-    return labels[0] ?? '';
-  }
   if (data.focus_label && typeof data.focus_label === 'string') {
     return data.focus_label;
   }
-  return '';
+  return getNextSessionFocusLabel(data.focus_axes, 2) ?? '';
 }
 
 function formatEstimatedTime(minutes?: number): string {
@@ -69,9 +59,16 @@ export function NextSessionPreviewCard({
   lastSessionHadPainAreas,
   adaptiveExplanation,
 }: NextSessionPreviewCardProps) {
-  const hasDetails = data && (formatFocusLabel(data) || data.estimated_time || data.exercise_count);
+  const normalizedData = normalizeNextSessionPreviewForDisplay(data);
+  const hasDetails =
+    normalizedData &&
+    (formatFocusLabel(normalizedData) ||
+      normalizedData.estimated_time > 0 ||
+      normalizedData.exercise_count > 0 ||
+      normalizedData.exercises_preview.length > 0 ||
+      !!normalizedData.session_rationale);
 
-  if (!data) {
+  if (!normalizedData) {
     return (
       <div className="rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-4">
         <p className="text-sm font-semibold text-slate-700">다음 세션</p>
@@ -92,10 +89,10 @@ export function NextSessionPreviewCard({
     );
   }
 
-  const focusLabel = formatFocusLabel(data);
-  const estimatedTime = formatEstimatedTime(data.estimated_time);
-  const exerciseCount = data.exercise_count;
-  const exercisesPreview = Array.isArray(data.exercises_preview) ? data.exercises_preview : [];
+  const focusLabel = formatFocusLabel(normalizedData);
+  const estimatedTime = formatEstimatedTime(normalizedData.estimated_time);
+  const exerciseCount = normalizedData.exercise_count;
+  const exercisesPreview = Array.isArray(normalizedData.exercises_preview) ? normalizedData.exercises_preview : [];
   const isLockedCard = isLockedUntilTomorrow === true;
   const toneClass = isLockedCard
     ? 'border-slate-200 bg-slate-50'
@@ -132,25 +129,21 @@ export function NextSessionPreviewCard({
         {isLockedCard ? '잠긴 다음 세션' : '다음 세션'}
       </p>
       <p className={`mt-0.5 text-lg font-bold ${titleClass}`}>
-        세션 {data.session_number}
+        {variant === 'locked-panel' ? `다음 세션 ${normalizedData.session_number}` : `세션 ${normalizedData.session_number}`}
       </p>
 
       {hasDetails ? (
         <>
-          {focusLabel && (
-            <p className={`mt-2 text-sm font-medium ${bodyClass}`}>
-              목표: {focusLabel}
-            </p>
-          )}
+          <p className={`mt-2 text-sm font-medium ${bodyClass}`}>
+            {focusLabel ? `목표: ${focusLabel}` : '목표: 다음 세션 흐름 준비'}
+          </p>
           <div className={`mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs ${bodyClass}`}>
             <span>예상 시간: {estimatedTime}</span>
-            {typeof exerciseCount === 'number' && exerciseCount > 0 && (
-              <span>운동 수: {exerciseCount}개</span>
-            )}
+            <span>{typeof exerciseCount === 'number' && exerciseCount > 0 ? `운동 수: ${exerciseCount}개` : '운동 수: 구성 확인 중'}</span>
           </div>
-          {data.session_rationale && (
+          {normalizedData.session_rationale && (
             <p className={`mt-2 text-xs leading-relaxed ${subBodyClass}`}>
-              {data.session_rationale}
+              {normalizedData.session_rationale}
             </p>
           )}
           {exercisesPreview.length > 0 && (
@@ -182,7 +175,7 @@ export function NextSessionPreviewCard({
             현재 흐름을 이어 다음 세션이 준비됩니다
           </p>
           <p className={`mt-0.5 text-xs ${subBodyClass}`}>
-            예상 시간: {formatEstimatedTime(data.estimated_time)}
+            예상 시간: {formatEstimatedTime(normalizedData.estimated_time)}
           </p>
           {adaptiveExplanation && (
             <div className={`mt-3 rounded-xl border px-3 py-2.5 ${isLockedCard ? 'border-slate-200 bg-slate-100' : 'border-violet-200 bg-violet-100/80'}`}>

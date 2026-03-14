@@ -7,7 +7,10 @@ const {
   resolveLockedNextSessionPreview,
   buildLockedNextPreviewFromBootstrapResponse,
   buildNextSessionPreviewFromPlanJson,
+  normalizeNextSessionPreviewForDisplay,
+  getNextSessionFocusLabel,
   isUsableNextSessionPreview,
+  isDisplayReadyNextSessionPreview,
   getLockedNextPreviewRecoveryReason,
 } = previewModule
 
@@ -167,12 +170,13 @@ ok('유효한 locked preview payload는 usable=true', isUsableNextSessionPreview
 const unusableThinPreview = {
   session_number: 4,
   focus_axes: [],
-  estimated_time: 0,
+  estimated_time: 11,
   exercise_count: 0,
   session_rationale: null,
   exercises_preview: [],
 }
 ok('thin preview payload는 unusable로 처리', isUsableNextSessionPreview(unusableThinPreview, 4) === false)
+ok('thin preview payload는 display-ready=false', isDisplayReadyNextSessionPreview(unusableThinPreview, 4) === false)
 ok(
   'null prop preview는 missing_prop_preview reason 반환',
   getLockedNextPreviewRecoveryReason({
@@ -238,6 +242,54 @@ const lockedFromPlanJson = buildNextSessionPreviewFromPlanJson({
 ok('buildNextSessionPreviewFromPlanJson fallback path 유효', lockedFromPlanJson.session_number === 5)
 ok('planJson fallback exercise_count', lockedFromPlanJson.exercise_count === 2)
 ok('planJson fallback payload는 usable=true', isUsableNextSessionPreview(lockedFromPlanJson, 5) === true)
+
+const focusOnlyPreview = normalizeNextSessionPreviewForDisplay({
+  session_number: 6,
+  focus_axes: ['upper_mobility'],
+  estimated_time: 0,
+  exercise_count: 0,
+  session_rationale: null,
+  exercises_preview: [],
+})
+ok('focus_axes만 있으면 focus label 자동 생성', focusOnlyPreview?.focus_label === '상체 가동성')
+ok('focus_axes만 있으면 rationale 자동 생성', typeof focusOnlyPreview?.session_rationale === 'string' && focusOnlyPreview.session_rationale.length > 0)
+ok('focus_axes 기반 payload는 정규화 후 display-ready', isDisplayReadyNextSessionPreview(focusOnlyPreview, 6) === true)
+
+const countOnlyPreview = normalizeNextSessionPreviewForDisplay({
+  session_number: 7,
+  focus_axes: [],
+  estimated_time: 0,
+  exercise_count: 3,
+  session_rationale: null,
+  exercises_preview: [],
+})
+ok('exercise_count만 있으면 안전 요약 문구 생성', countOnlyPreview?.exercises_preview?.[0] === '운동 3개 구성')
+ok('exercise_count 기반 payload는 정규화 후 estimated_time 기본값 보강', countOnlyPreview?.estimated_time === 12)
+ok('exercise_count 기반 payload는 정규화 후 display-ready', isDisplayReadyNextSessionPreview(countOnlyPreview, 7) === true)
+
+const fallbackThinPreview = normalizeNextSessionPreviewForDisplay({
+  session_number: 8,
+  focus_axes: ['trunk_control'],
+  estimated_time: 0,
+  exercise_count: 2,
+  session_rationale: null,
+  exercises_preview: [],
+})
+ok('fallback success 후 thin payload도 label/rationale 보강', fallbackThinPreview?.focus_label === '몸통 제어')
+ok('fallback success 후 thin payload도 blank-looking card가 아님', isDisplayReadyNextSessionPreview(fallbackThinPreview, 8) === true)
+
+const propThinPreview = normalizeNextSessionPreviewForDisplay({
+  session_number: 9,
+  focus_axes: [],
+  estimated_time: 15,
+  exercise_count: 4,
+  session_rationale: '하체 중심 흐름을 이어갑니다',
+  exercises_preview: [],
+})
+ok('prop preview도 동일 normalization 경로 사용', propThinPreview?.exercises_preview?.[0] === '운동 4개 구성')
+ok('prop preview thin payload도 display contract 충족', isDisplayReadyNextSessionPreview(propThinPreview, 9) === true)
+
+ok('복수 focus_axes는 한글 라벨 요약 가능', getNextSessionFocusLabel(['upper_mobility', 'trunk_control']) === '상체 가동성 · 몸통 제어')
 
 ok('forceRefresh=true면 network-first 전략 사용', getSessionBootstrapFetchStrategy({ forceRefresh: true }) === 'network-first')
 ok('forceRefresh 없으면 cache-first 전략 사용', getSessionBootstrapFetchStrategy() === 'cache-first')
