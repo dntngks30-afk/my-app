@@ -29,29 +29,109 @@ const bootstrapPreview = resolveBootstrapNextSessionPreview({
 })
 
 ok('today_completed=true 여도 bootstrap preview 유지', bootstrapPreview !== null)
+ok('today_completed=true preview는 실제 next session 번호 사용', bootstrapPreview?.session_number === 4)
 ok('bootstrap preview에 exercise_count 포함', bootstrapPreview?.exercise_count === 3)
 ok('bootstrap preview에 session_rationale 포함', typeof bootstrapPreview?.session_rationale === 'string')
 ok('bootstrap preview에 exercises_preview 포함', bootstrapPreview?.exercises_preview.length === 3)
+
+const staleActiveAfterCompletion = resolveBootstrapNextSessionPreview({
+  completedSessions: 3,
+  totalSessions: 8,
+  todayCompleted: true,
+  activeSessionPlan: {
+    session_number: 3,
+    estimatedTime: 99,
+    planJson: {
+      meta: {
+        session_focus_axes: ['deconditioned'],
+        session_rationale: 'stale active preview',
+      },
+      segments: [{ items: [{ name: '이전 세션 운동' }] }],
+    },
+  },
+  bootstrapSummary: {
+    focus_axes: ['upper_mobility', 'trunk_control'],
+    estimated_duration: 780,
+    segments: [
+      { items: [{ name: '벽 슬라이드' }] },
+      { items: [{ name: '밴드 풀어파트' }, { name: '흉추 회전' }] },
+    ],
+  },
+})
+
+ok('completion 직후 stale active session은 next preview source로 사용하지 않음', staleActiveAfterCompletion?.session_number === 4)
+ok('stale active 대신 next summary exercise count 사용', staleActiveAfterCompletion?.exercise_count === 3)
+
+const staleActiveWithoutTodayCompleted = resolveBootstrapNextSessionPreview({
+  completedSessions: 3,
+  totalSessions: 8,
+  todayCompleted: false,
+  activeSessionPlan: {
+    session_number: 3,
+    estimatedTime: 99,
+    planJson: {
+      meta: {
+        session_focus_axes: ['deconditioned'],
+        session_rationale: 'stale active preview',
+      },
+      segments: [{ items: [{ name: '이전 세션 운동' }] }],
+    },
+  },
+  bootstrapSummary: {
+    focus_axes: ['upper_mobility'],
+    estimated_duration: 600,
+    segments: [{ items: [{ name: '다음 세션 운동' }, { name: '호흡 정렬' }] }],
+  },
+})
+
+ok('activeSession.session_number <= completed_sessions 이면 stale active로 처리', staleActiveWithoutTodayCompleted?.session_number === 4)
+ok('stale active는 summary preview로 대체', staleActiveWithoutTodayCompleted?.exercise_count === 2)
 
 const postCompletionPreview = resolvePostCompletionNextSessionPreview({
   completedSessions: 3,
   total: 8,
   nextTheme: '가벼운 회복',
-  nextSession: bootstrapPreview,
+  nextSession: staleActiveAfterCompletion,
 })
 
 ok('post-completion은 서버 preview를 우선 사용', postCompletionPreview.exercise_count === 3)
-ok('post-completion은 서버 rationale을 유지', postCompletionPreview.session_rationale === bootstrapPreview?.session_rationale)
+ok('post-completion은 실제 next session 번호 기준 preview를 사용', postCompletionPreview.session_number === 4)
+ok('post-completion은 서버 rationale을 유지', postCompletionPreview.session_rationale === staleActiveAfterCompletion?.session_rationale)
 
 const lockedPreview = resolveLockedNextSessionPreview({
   sessionId: 4,
   status: 'locked',
   isLockedNext: true,
-  nextSession: bootstrapPreview,
+  nextSession: staleActiveAfterCompletion,
 })
 
-ok('locked-next 패널도 동일 preview source 사용', lockedPreview?.session_number === bootstrapPreview?.session_number)
+ok('locked-next 패널도 동일 preview source 사용', lockedPreview?.session_number === staleActiveAfterCompletion?.session_number)
 ok('locked-next 패널은 generic fallback으로 빠지지 않음', lockedPreview?.exercise_count === 3)
+
+const activeInProgressPreview = resolveBootstrapNextSessionPreview({
+  completedSessions: 3,
+  totalSessions: 8,
+  todayCompleted: false,
+  activeSessionPlan: {
+    session_number: 4,
+    estimatedTime: 14,
+    planJson: {
+      meta: {
+        session_focus_axes: ['trunk_control'],
+        session_rationale: '진행 중 active preview',
+      },
+      segments: [{ items: [{ name: '데드버그' }, { name: '버드독' }] }],
+    },
+  },
+  bootstrapSummary: {
+    focus_axes: ['upper_mobility'],
+    estimated_duration: 600,
+    segments: [{ items: [{ name: '다른 요약 운동' }] }],
+  },
+})
+
+ok('진짜 active session 진행 중에는 active preview 유지', activeInProgressPreview?.session_number === 4)
+ok('진짜 active session 진행 중에는 active plan 데이터 사용', activeInProgressPreview?.exercise_count === 2)
 
 const fallbackPreview = resolvePostCompletionNextSessionPreview({
   completedSessions: 3,
@@ -67,7 +147,7 @@ const mismatchedPreview = resolveLockedNextSessionPreview({
   sessionId: 5,
   status: 'locked',
   isLockedNext: true,
-  nextSession: bootstrapPreview,
+  nextSession: staleActiveAfterCompletion,
 })
 
 ok('locked preview는 session_number mismatch 시 비활성', mismatchedPreview === null)

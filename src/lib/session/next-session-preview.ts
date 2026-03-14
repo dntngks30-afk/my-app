@@ -132,16 +132,23 @@ export function resolveBootstrapNextSessionPreview(input: {
   todayCompleted?: boolean
   bootstrapSummary?: BootstrapSummaryLike
 }): NextSessionPreviewPayload | null {
-  if (input.activeSessionPlan?.session_number) {
+  const nextSessionNumber = input.completedSessions + 1
+  if (nextSessionNumber > input.totalSessions) return null
+
+  const activeSessionNumber = input.activeSessionPlan?.session_number ?? null
+  const shouldUseActivePreview =
+    activeSessionNumber != null &&
+    input.todayCompleted !== true &&
+    activeSessionNumber > input.completedSessions &&
+    activeSessionNumber === nextSessionNumber
+
+  if (shouldUseActivePreview && input.activeSessionPlan) {
     return buildNextSessionPreviewFromPlanJson({
-      sessionNumber: input.activeSessionPlan.session_number,
+      sessionNumber: activeSessionNumber,
       planJson: input.activeSessionPlan.planJson,
       estimatedTime: input.activeSessionPlan.estimatedTime,
     })
   }
-
-  const nextSessionNumber = input.completedSessions + 1
-  if (nextSessionNumber > input.totalSessions) return null
 
   return buildNextSessionPreviewFromBootstrapSummary({
     sessionNumber: nextSessionNumber,

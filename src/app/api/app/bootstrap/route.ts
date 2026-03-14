@@ -82,7 +82,14 @@ async function loadNextSessionPreview(
   session: { completed_sessions: number; total_sessions: number; today_completed?: boolean }
 ): Promise<NextSessionPreviewPayload | null> {
   try {
-    if (activeSession?.session_number) {
+    const nextSessionNumber = session.completed_sessions + 1;
+    const shouldUseActivePreview =
+      activeSession?.session_number != null &&
+      session.today_completed !== true &&
+      activeSession.session_number > session.completed_sessions &&
+      activeSession.session_number === nextSessionNumber;
+
+    if (shouldUseActivePreview && activeSession?.session_number) {
       const { data: row } = await supabase
         .from('session_plans')
         .select('session_number, plan_json')
@@ -107,7 +114,6 @@ async function loadNextSessionPreview(
       });
     }
 
-    const nextSessionNumber = session.completed_sessions + 1;
     if (nextSessionNumber > session.total_sessions) return null;
 
     const deepSummary = await loadSessionDeepSummary(userId);
