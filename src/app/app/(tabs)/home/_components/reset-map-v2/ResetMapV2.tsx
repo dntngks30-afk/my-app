@@ -22,6 +22,7 @@ import {
 import { getIdempotencyKey, clearApplyKey } from '@/lib/reset-map/clientIdempotency'
 import {
   buildNextSessionPreviewRationale,
+  buildNextSessionPreviewFromPlanJson,
   type NextSessionPreviewPayload,
 } from '@/lib/session/next-session-preview'
 import { getSessionSafe } from '@/lib/supabase'
@@ -633,6 +634,23 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     return () => { cancelled = true }
   }, [selectedStatus, selectedSessionId, fullPlan, bootstrapPlan, onActivePlanCreated, onFlowApplied, resetMapFlowId, resolveAuthToken, debug])
 
+  /** PR-NEXT-04: locked-next 패널 fallback fetch — loadSessionBootstrap 재사용 */
+  const onFetchLockedPreview = useCallback(
+    async (sessionNumber: number): Promise<NextSessionPreviewPayload | null> => {
+      const plan = await loadSessionBootstrap(sessionNumber)
+      if (!plan?.plan_json) return null
+      const segs = Array.isArray(plan.plan_json.segments) ? plan.plan_json.segments : []
+      const totalSec = segs.reduce((s, seg) => s + (seg.duration_sec ?? 0), 0)
+      const estimatedTime = totalSec > 0 ? Math.max(1, Math.round(totalSec / 60)) : undefined
+      return buildNextSessionPreviewFromPlanJson({
+        sessionNumber: plan.session_number,
+        planJson: plan.plan_json,
+        estimatedTime,
+      })
+    },
+    [loadSessionBootstrap]
+  )
+
   const currentRenderablePlan = useMemo(() => {
     if (selectedStatus !== 'current' || selectedSessionId === null) return null
     if (
@@ -743,6 +761,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         onRequestNextSession={onRequestNextSession ?? ((next) => setSelectedSessionId(next))}
         adaptiveExplanation={adaptiveExplanation}
         nextSession={nextSession}
+        onFetchLockedPreview={onFetchLockedPreview}
       />
     </div>
   )

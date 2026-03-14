@@ -4,6 +4,8 @@ const {
   resolveBootstrapNextSessionPreview,
   resolvePostCompletionNextSessionPreview,
   resolveLockedNextSessionPreview,
+  buildLockedNextPreviewFromBootstrapResponse,
+  buildNextSessionPreviewFromPlanJson,
 } = previewModule
 
 let passed = 0
@@ -151,5 +153,41 @@ const mismatchedPreview = resolveLockedNextSessionPreview({
 })
 
 ok('locked preview는 session_number mismatch 시 비활성', mismatchedPreview === null)
+
+// PR-NEXT-04: locked-next fallback fetch 시나리오
+const lockedNullProp = resolveLockedNextSessionPreview({
+  sessionId: 4,
+  status: 'locked',
+  isLockedNext: true,
+  nextSession: null,
+})
+ok('locked-next nextSession null이면 prop preview 없음 → fallback fetch 필요', lockedNullProp === null)
+
+const lockedFromBootstrap = buildLockedNextPreviewFromBootstrapResponse({
+  session_number: 4,
+  focus_axes: ['trunk_control', 'upper_mobility'],
+  estimated_duration: 720,
+  segments: [
+    { items: [{ name: '벽 슬라이드' }] },
+    { items: [{ name: '밴드 풀어파트' }, { name: '흉추 회전' }] },
+  ],
+})
+ok('buildLockedNextPreviewFromBootstrapResponse는 유효 payload 반환', lockedFromBootstrap.session_number === 4)
+ok('bootstrap response → preview payload 변환 성공', lockedFromBootstrap.exercise_count === 3)
+ok('bootstrap response → focus_axes 유지', lockedFromBootstrap.focus_axes?.length === 2)
+
+const lockedFromPlanJson = buildNextSessionPreviewFromPlanJson({
+  sessionNumber: 5,
+  planJson: {
+    meta: {
+      session_focus_axes: ['lower_stability'],
+      session_rationale: '하체 안정 중심',
+    },
+    segments: [{ items: [{ name: '스쿼트' }, { name: '런지' }] }],
+  },
+  estimatedTime: 14,
+})
+ok('buildNextSessionPreviewFromPlanJson fallback path 유효', lockedFromPlanJson.session_number === 5)
+ok('planJson fallback exercise_count', lockedFromPlanJson.exercise_count === 2)
 
 console.log(`\nnext-session preview regression: ${passed} passed`)

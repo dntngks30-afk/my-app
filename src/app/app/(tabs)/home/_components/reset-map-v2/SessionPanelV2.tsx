@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import type { ExerciseItem } from './planJsonAdapter'
 import { getLogKey } from './planJsonAdapter'
@@ -46,6 +46,8 @@ interface SessionPanelV2Props {
   adaptiveExplanation?: { title: string; message: string } | null
   /** PR-RISK-02: next session from bootstrap (post-completion 카드 데이터 우선) */
   nextSession?: NextSessionPreviewPayload | null
+  /** PR-NEXT-04: locked-next 패널에서 preview null/mismatch 시 fallback fetch */
+  onFetchLockedPreview?: (sessionNumber: number) => Promise<NextSessionPreviewPayload | null>
 }
 
 const STATUS_LABEL: Record<SessionStatus, string> = {
@@ -119,6 +121,7 @@ export function SessionPanelV2({
   onRequestNextSession,
   adaptiveExplanation,
   nextSession,
+  onFetchLockedPreview,
 }: SessionPanelV2Props) {
   if (sessionId === null) return null
 
@@ -133,12 +136,13 @@ export function SessionPanelV2({
       initialLogs={initialLogs}
       isLockedNext={isLockedNext}
       nextUnlockAt={nextUnlockAt}
-  onClose={onClose}
-  onSessionCompleted={onSessionCompleted}
-  onRequestNextSession={onRequestNextSession}
-  adaptiveExplanation={adaptiveExplanation}
-  nextSession={nextSession}
-/>
+      onClose={onClose}
+      onSessionCompleted={onSessionCompleted}
+      onRequestNextSession={onRequestNextSession}
+      adaptiveExplanation={adaptiveExplanation}
+      nextSession={nextSession}
+      onFetchLockedPreview={onFetchLockedPreview}
+    />
   )
 }
 
@@ -159,6 +163,7 @@ function PanelInner({
   onRequestNextSession,
   adaptiveExplanation,
   nextSession,
+  onFetchLockedPreview,
 }: Required<Omit<SessionPanelV2Props, 'onSessionCompleted' | 'onRequestNextSession'>> & {
   onSessionCompleted?: (completedSessions: number) => void
   onRequestNextSession?: (nextSessionNumber: number) => void
@@ -198,6 +203,43 @@ function PanelInner({
     isLockedNext,
     nextSession,
   })
+
+  // PR-NEXT-04: locked-next 패널에서 prop preview 없거나 mismatch 시 fallback fetch
+  const [fallbackPreview, setFallbackPreview] = useState<NextSessionPreviewPayload | null>(null)
+  const fallbackFetchAttemptedRef = useRef(false) // sessionId별로 한 번만 시도
+  const needsFallbackFetch =
+    status === 'locked' &&
+    isLockedNext === true &&
+    sessionId != null &&
+    !lockedPreviewData &&
+    !!onFetchLockedPreview
+
+  useEffect(() => {
+    if (!needsFallbackFetch) return
+    if (fallbackFetchAttemptedRef.current) return
+    fallbackFetchAttemptedRef.current = true
+
+    let cancelled = false
+    void onFetchLockedPreview!(sessionId).then((payload) => {
+      if (cancelled || !payload) return
+      setFallbackPreview(payload)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [needsFallbackFetch, sessionId, onFetchLockedPreview])
+
+  // sessionId 변경 시 fallback 상태 리셋
+  const prevSessionIdRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (prevSessionIdRef.current !== sessionId) {
+      prevSessionIdRef.current = sessionId
+      fallbackFetchAttemptedRef.current = false
+      setFallbackPreview(null)
+    }
+  }, [sessionId])
+
+  const effectiveLockedPreview = lockedPreviewData ?? fallbackPreview
 
   // PR-SESSION-UX-02: 세션 전환 시 운동 뷰 리셋 (hook 내부에서 처리)
   // 패널 open 측정
@@ -366,9 +408,9 @@ function PanelInner({
                 )}
               </div>
             )}
-            {lockedPreviewData ? (
+            {effectiveLockedPreview ? (
               <NextSessionPreviewCard
-                data={lockedPreviewData}
+                data={effectiveLockedPreview}
                 variant="locked-panel"
                 isLockedUntilTomorrow
               />

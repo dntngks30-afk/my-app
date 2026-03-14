@@ -125,6 +125,24 @@ export function buildNextSessionPreviewFromBootstrapSummary(input: {
   })
 }
 
+/** PR-NEXT-04: bootstrap response → preview payload (locked-panel fallback용) */
+export function buildLockedNextPreviewFromBootstrapResponse(response: {
+  session_number: number
+  focus_axes: string[]
+  estimated_duration: number
+  segments?: Array<{ items?: Array<{ name?: string | null }> }> | null
+}): NextSessionPreviewPayload {
+  const payload = buildNextSessionPreviewFromBootstrapSummary({
+    sessionNumber: response.session_number,
+    summary: {
+      focus_axes: response.focus_axes,
+      estimated_duration: response.estimated_duration,
+      segments: response.segments ?? [],
+    },
+  })
+  return payload ?? buildFallbackNextSessionPreview({ sessionNumber: response.session_number })
+}
+
 export function resolveBootstrapNextSessionPreview(input: {
   activeSessionPlan?: { session_number: number; planJson: PlanJsonLike; estimatedTime?: number | null } | null
   completedSessions: number
