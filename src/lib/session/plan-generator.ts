@@ -19,6 +19,8 @@ import {
 import { generateSessionRationale, getExerciseRationale } from '@/core/session-rationale';
 import { applySessionConstraints } from './constraints';
 import type { ConstraintEngineMeta } from './constraints';
+import { applySessionOrdering } from './ordering';
+import type { OrderingEngineMeta } from './ordering';
 
 const REPETITION_PENALTY = 100;
 const CONTRAINDICATION_PENALTY = 100;
@@ -297,6 +299,8 @@ export type PlanJsonOutput = {
     };
     /** PR-ALG-16A: additive, explainable constraint engine meta */
     constraint_engine?: ConstraintEngineMeta;
+    /** PR-ALG-17: additive, explainable ordering engine meta */
+    ordering_engine?: OrderingEngineMeta;
   };
   flags: { recovery: boolean; short: boolean };
   segments: PlanSegment[];
@@ -860,5 +864,12 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     priorityVector: input.priority_vector ?? null,
     scoringVersion: input.scoringVersion ?? 'deep_v2',
   });
-  return constraintResult.plan;
+
+  const orderingResult = applySessionOrdering(constraintResult.plan, templates, {
+    sessionNumber: input.sessionNumber,
+    isFirstSession,
+    painMode: input.pain_mode ?? null,
+    priorityVector: input.priority_vector ?? null,
+  });
+  return orderingResult.plan;
 }

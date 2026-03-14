@@ -21,6 +21,7 @@
     "test:adaptive-merge": "npx tsx scripts/adaptive-merge-smoke.mjs",
     "test:plan-generator": "npx tsx scripts/plan-generator-smoke.mjs",
     "test:session-constraints": "npx tsx scripts/session-constraints-unit.mjs",
+    "test:session-ordering": "npx tsx scripts/session-ordering-unit.mjs",
     "test:taxonomy": "npx tsx scripts/taxonomy-unit.mjs",
     "test:priority-layer": "npx tsx scripts/priority-layer-smoke.mjs",
     "test:phase-policy": "npx tsx scripts/phase-policy-test.mjs",
