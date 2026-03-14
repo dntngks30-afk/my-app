@@ -23,6 +23,8 @@ import { applySessionOrdering } from './ordering';
 import type { OrderingEngineMeta } from './ordering';
 import { applyCandidateCompetition } from './candidate-competition';
 import type { CandidateCompetitionMeta } from './candidate-competition';
+import { auditPlanQuality } from './plan-quality-audit';
+import type { PlanQualityAuditMeta } from './plan-quality-audit';
 
 const REPETITION_PENALTY = 100;
 const CONTRAINDICATION_PENALTY = 100;
@@ -312,6 +314,8 @@ export type PlanJsonOutput = {
     };
     /** PR-ALG-18: additive candidate competition meta */
     candidate_competition?: CandidateCompetitionMeta;
+    /** PR-ALG-19: additive plan quality audit meta */
+    plan_quality_audit?: PlanQualityAuditMeta;
   };
   flags: { recovery: boolean; short: boolean };
   segments: PlanSegment[];
@@ -899,5 +903,21 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     painMode: input.pain_mode ?? null,
     priorityVector: input.priority_vector ?? null,
   });
-  return orderingResult.plan;
+
+  const auditResult = auditPlanQuality(orderingResult.plan, templates, {
+    sessionNumber: input.sessionNumber,
+    isFirstSession,
+    painMode: input.pain_mode ?? null,
+    priorityVector: input.priority_vector ?? null,
+    timeBudget: input.timeBudget,
+    conditionMood: input.conditionMood,
+  });
+
+  return {
+    ...orderingResult.plan,
+    meta: {
+      ...orderingResult.plan.meta,
+      plan_quality_audit: auditResult,
+    },
+  };
 }

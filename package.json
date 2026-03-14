@@ -24,6 +24,7 @@
     "test:session-ordering": "npx tsx scripts/session-ordering-unit.mjs",
     "test:policy-registry": "npx tsx scripts/policy-registry-smoke.mjs",
     "test:candidate-competition": "npx tsx scripts/candidate-competition-smoke.mjs",
+    "test:plan-quality-audit": "npx tsx scripts/plan-quality-audit-smoke.mjs",
     "test:taxonomy": "npx tsx scripts/taxonomy-unit.mjs",
     "test:priority-layer": "npx tsx scripts/priority-layer-smoke.mjs",
     "test:phase-policy": "npx tsx scripts/phase-policy-test.mjs",
@@ -72,6 +73,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
+    "dotenv-cli": "^11.0.0",
     "typescript": "5.9.3"
   }
 }
