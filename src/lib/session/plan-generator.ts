@@ -194,6 +194,17 @@ function resolveSessionRationale(
 }
 
 function resolveGoldPathVector(input: PlanGeneratorInput): GoldPathVector | null {
+  /** PR-ALIGN-01: First session uses resultType as primary anchor. UPPER-LIMB → upper_mobility, not trunk_control. */
+  const alignment = resolveFirstSessionAlignmentPolicy(
+    input.resultType,
+    input.sessionNumber,
+    input.priority_vector,
+    input.pain_mode
+  );
+  if (alignment?.alignedGoldPathVector && GOLD_PATH_VECTORS.includes(alignment.alignedGoldPathVector as GoldPathVector)) {
+    return alignment.alignedGoldPathVector as GoldPathVector;
+  }
+
   const ranked = Object.entries(input.priority_vector ?? {})
     .filter((entry): entry is [GoldPathVector, number] =>
       GOLD_PATH_VECTORS.includes(entry[0] as GoldPathVector) && typeof entry[1] === 'number' && entry[1] > 0
