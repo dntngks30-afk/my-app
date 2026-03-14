@@ -8,6 +8,7 @@ import { loadRecentAdaptiveSignals } from '@/lib/session/adaptive-progression';
 import { loadLatestAdaptiveSummary } from '@/lib/session/adaptive-modifier-resolver';
 import { computeAdaptiveModifier } from '@/core/adaptive-engine';
 import { generateAdaptiveExplanation } from '@/core/adaptive-explanation';
+import { getActiveFlowByUser, type ResetMapFlowRow } from '@/lib/reset-map/activeFlow';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 
 export const dynamic = 'force-dynamic';
@@ -38,6 +39,11 @@ type AppBootstrapData = {
   stats_preview: {
     completed_sessions: number;
     weekly_streak: number;
+  };
+  /** PR-PERF-21: Reset Map active flow merged into bootstrap to remove waterfall */
+  reset_map: {
+    active_flow: ResetMapFlowRow | null;
+    should_start: boolean;
   };
 };
 
@@ -148,6 +154,10 @@ export async function GET(req: NextRequest) {
       next_unlock_at: activeLite.data.next_unlock_at ?? null,
     };
 
+    const tResetMap = performance.now();
+    const activeFlow = await getActiveFlowByUser(supabase, userId);
+    timings.reset_map_ms = Math.round(performance.now() - tResetMap);
+
     const tNext = performance.now();
     const nextSession = await loadNextSessionPreview(
       supabase,
@@ -208,6 +218,10 @@ export async function GET(req: NextRequest) {
       stats_preview: {
         completed_sessions: activeLite.data.progress.completed_sessions ?? 0,
         weekly_streak: getWeeklyStreak(activeLite.data.progress),
+      },
+      reset_map: {
+        active_flow: activeFlow,
+        should_start: !activeFlow,
       },
     };
 

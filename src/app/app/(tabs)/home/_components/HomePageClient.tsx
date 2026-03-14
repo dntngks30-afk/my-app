@@ -238,9 +238,50 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     return () => document.removeEventListener('visibilitychange', handler);
   }, []);
 
-  /** PR-RESET-05/09: Ensure reset-map flow on entry. Server truth precedence. */
+  /** PR-PERF-21: Bootstrap-driven reset-map. Recheck uses getLatest for multi-tab safety. */
   useEffect(() => {
     if (!mapV2 || loading) return;
+
+    const bootstrap = getCache<AppBootstrapResponse>('app.bootstrap');
+    const hasBootstrapResetMap = bootstrap?.reset_map != null;
+
+    if (recheckTrigger === 0 && hasBootstrapResetMap) {
+      const rm = bootstrap!.reset_map!;
+      if (rm.active_flow) {
+        setResetMapFlowId(rm.active_flow.id);
+        setResetMapClientState({
+          flow_id: rm.active_flow.id,
+          start_key: getIdempotencyKey('start'),
+          updated_at: Date.now(),
+        });
+        return;
+      }
+      if (rm.should_start) {
+        const runStart = () => {
+          getAuthToken().then(async (token) => {
+            if (!token) return;
+            clearResetMapClientState();
+            clearAllKeysForNewFlow();
+            const startKey = getIdempotencyKey('start');
+            const startRes = await startResetMapFlow(token, startKey);
+            if (startRes.ok && startRes.data) {
+              setResetMapFlowId(startRes.data.flow_id);
+              setResetMapClientState({
+                flow_id: startRes.data.flow_id,
+                start_key: startKey,
+                updated_at: Date.now(),
+              });
+            }
+          });
+        };
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(runStart, { timeout: 500 });
+        } else {
+          setTimeout(runStart, 0);
+        }
+        return;
+      }
+    }
 
     let cancelled = false;
     (async () => {

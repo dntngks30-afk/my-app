@@ -20,6 +20,11 @@ export type AdaptiveExplanation = {
   message: string;
 };
 
+export type BootstrapResetMap = {
+  active_flow: import('@/lib/reset-map/activeFlow').ResetMapFlowRow | null;
+  should_start: boolean;
+};
+
 export type AppBootstrapResponse = {
   user: {
     id: string;
@@ -40,6 +45,8 @@ export type AppBootstrapResponse = {
   /** PR-ALG-15: Human-readable adaptive adjustment explanation */
   adaptive_explanation?: AdaptiveExplanation | null;
   stats_preview: AppBootstrapStatsPreview;
+  /** PR-PERF-21: Reset Map active flow (removes latest/start waterfall) */
+  reset_map?: BootstrapResetMap;
 };
 
 const TTL_MS = 5_000;
