@@ -27,7 +27,24 @@ const PAIN_PROTECTED_EXTRA_AVOID = [
 /** pain_mode=caution 시 추가 제외 (완화) */
 const PAIN_CAUTION_EXTRA_AVOID = ['knee_load', 'wrist_load'];
 
+/** PR-ALG-21: resultType (user-facing) → focus_tags for type-to-session alignment */
+const RESULT_TYPE_TO_FOCUS_TAGS: Record<string, string[]> = {
+  'NECK-SHOULDER': ['upper_trap_release', 'neck_mobility', 'thoracic_mobility', 'shoulder_stability'],
+  'UPPER-LIMB': ['shoulder_mobility', 'shoulder_stability', 'upper_back_activation'],
+  'LOWER-LIMB': ['lower_chain_stability', 'glute_medius', 'ankle_mobility', 'glute_activation'],
+  'LUMBO-PELVIS': ['hip_mobility', 'glute_activation', 'core_control', 'core_stability'],
+};
+
 export type PainMode = 'none' | 'caution' | 'protected';
+
+/**
+ * PR-ALG-21: resultType-aligned focus tags for scoring bonus.
+ * Ensures first session main has at least one item matching user-facing type.
+ */
+export function getResultTypeFocusTags(resultType?: string | null): string[] {
+  if (!resultType || typeof resultType !== 'string') return [];
+  return RESULT_TYPE_TO_FOCUS_TAGS[resultType] ?? [];
+}
 
 /**
  * Safety Gate: pain_mode에 따라 추가 exclude 태그 반환.

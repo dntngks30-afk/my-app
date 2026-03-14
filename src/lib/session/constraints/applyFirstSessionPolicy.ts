@@ -5,7 +5,11 @@
 
 import type { PlanItem, PlanJsonOutput, PlanSegment } from '@/lib/session/plan-generator';
 import { getExerciseRationale } from '@/core/session-rationale';
-import { exceedsVolumeLimits, clampVolume } from '@/core/session-guardrail/volumeClamp';
+import {
+  exceedsVolumeLimits,
+  clampVolume,
+  type VolumeLimitsTier,
+} from '@/core/session-guardrail/volumeClamp';
 import { exceedsDifficultyCap, isSafeForFirstSession } from '@/core/session-guardrail/difficultyClamp';
 import {
   isUnsafeCombination,
@@ -100,6 +104,19 @@ function findReplacementTemplate(
   return null;
 }
 
+function deriveFirstSessionTier(context: ConstraintEngineContext): VolumeLimitsTier {
+  if (context.firstSessionTier) return context.firstSessionTier;
+  if (!context.isFirstSession) return 'normal';
+  if (context.painMode === 'protected' || context.safetyMode === 'red') return 'conservative';
+  if (context.painMode === 'caution' || context.safetyMode === 'yellow') return 'moderate';
+  const pv = context.priorityVector ?? {};
+  const topAxis = Object.entries(pv)
+    .filter(([, v]) => typeof v === 'number' && v > 0)
+    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0];
+  if (topAxis === 'deconditioned') return 'moderate';
+  return 'normal';
+}
+
 export function applyFirstSessionPolicy(
   plan: PlanJsonOutput,
   templates: ConstraintTemplateLike[],
@@ -109,6 +126,7 @@ export function applyFirstSessionPolicy(
     return { plan, reasons: [] };
   }
 
+  const volumeTier = deriveFirstSessionTier(context);
   const templateById = new Map(templates.map((template) => [template.id, template]));
   const usedIds = new Set(plan.meta.used_template_ids ?? []);
   const painMode = context.painMode ?? 'none';
@@ -212,8 +230,8 @@ export function applyFirstSessionPolicy(
     );
   }
 
-  if (exceedsVolumeLimits(segments)) {
-    segments = clampVolume(segments);
+  if (exceedsVolumeLimits(segments, volumeTier)) {
+    segments = clampVolume(segments, volumeTier);
     reasons.push(
       createConstraintReason(
         'degrade_applied',

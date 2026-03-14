@@ -5,7 +5,19 @@
  */
 
 import type { PlanSegment, PlanItem } from '@/lib/session/plan-generator';
-import { VOLUME_LIMITS } from './guardrailRules';
+import {
+  VOLUME_LIMITS,
+  VOLUME_LIMITS_CONSERVATIVE,
+  VOLUME_LIMITS_MODERATE,
+  VOLUME_LIMITS_NORMAL,
+} from './guardrailRules';
+
+export type VolumeLimitsTier = 'conservative' | 'moderate' | 'normal';
+const TIER_LIMITS = {
+  conservative: VOLUME_LIMITS_CONSERVATIVE,
+  moderate: VOLUME_LIMITS_MODERATE,
+  normal: VOLUME_LIMITS_NORMAL,
+} as const;
 
 /** Segment titles */
 const MAIN_TITLE = 'Main';
@@ -36,29 +48,38 @@ export function estimateSessionTimeMinutes(segments: PlanSegment[]): number {
   return segments.reduce((sum, seg) => sum + (seg.duration_sec ?? 0), 0) / 60;
 }
 
-/** Returns true if plan exceeds volume limits */
-export function exceedsVolumeLimits(segments: PlanSegment[]): boolean {
+/** Returns true if plan exceeds volume limits. tier defaults to conservative. */
+export function exceedsVolumeLimits(
+  segments: PlanSegment[],
+  tier: VolumeLimitsTier = 'conservative'
+): boolean {
+  const limits = TIER_LIMITS[tier];
   const total = countTotalExercises(segments);
   const mainCount = countMainExercises(segments);
   const totalSets = countTotalSets(segments);
   const timeMin = estimateSessionTimeMinutes(segments);
 
   return (
-    total > VOLUME_LIMITS.max_exercises ||
-    mainCount > VOLUME_LIMITS.max_main_exercises ||
-    totalSets > VOLUME_LIMITS.max_total_sets ||
-    timeMin > VOLUME_LIMITS.max_session_time_minutes
+    total > limits.max_exercises ||
+    mainCount > limits.max_main_exercises ||
+    totalSets > limits.max_total_sets ||
+    timeMin > limits.max_session_time_minutes
   );
 }
 
 /**
  * Reduce exercises to meet limits. Removes lowest priority (Cooldown last items, then Accessory, then Main overflow).
+ * tier defaults to conservative.
  */
-export function clampVolume(segments: PlanSegment[]): PlanSegment[] {
-  const maxTotal = VOLUME_LIMITS.max_exercises;
-  const maxMain = VOLUME_LIMITS.max_main_exercises;
-  const maxSets = VOLUME_LIMITS.max_total_sets;
-  const maxTimeMin = VOLUME_LIMITS.max_session_time_minutes;
+export function clampVolume(
+  segments: PlanSegment[],
+  tier: VolumeLimitsTier = 'conservative'
+): PlanSegment[] {
+  const limits = TIER_LIMITS[tier];
+  const maxTotal = limits.max_exercises;
+  const maxMain = limits.max_main_exercises;
+  const maxSets = limits.max_total_sets;
+  const maxTimeMin = limits.max_session_time_minutes;
 
   let result = segments.map((seg) => ({ ...seg, items: [...seg.items] }));
 

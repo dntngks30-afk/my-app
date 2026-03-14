@@ -37,6 +37,9 @@ export interface ConstraintReason {
   afterValue?: number | string;
 }
 
+/** PR-ALG-21: first session risk tier for volume clamp */
+export type FirstSessionTier = 'conservative' | 'moderate' | 'normal';
+
 export interface ConstraintEngineContext {
   sessionNumber: number;
   totalSessions?: number;
@@ -44,6 +47,9 @@ export interface ConstraintEngineContext {
   isFirstSession: boolean;
   priorityVector?: Record<string, number> | null;
   scoringVersion?: string;
+  /** PR-ALG-21: for tiered volume clamp. Derived from pain/safety/priority if absent. */
+  firstSessionTier?: FirstSessionTier;
+  safetyMode?: 'red' | 'yellow' | 'none' | null;
 }
 
 export interface ConstraintTemplateLike {

@@ -29,11 +29,11 @@ export const FATIGUE_WEIGHT_PROGRESSION = 2;
 /** Hold duration contributes by 15s unit. */
 export const FATIGUE_HOLD_UNIT_SECONDS = 15;
 
-/** First session: max total exercises */
-export const FIRST_SESSION_MAX_TOTAL = 5;
+/** First session: max total exercises (normal tier). Conservative=5. */
+export const FIRST_SESSION_MAX_TOTAL = 6;
 
-/** First session: max main count */
-export const FIRST_SESSION_MAX_MAIN = 1;
+/** First session: max main count (normal tier). Conservative=1. */
+export const FIRST_SESSION_MAX_MAIN = 2;
 
 /** First session: max difficulty allowed */
 export const FIRST_SESSION_MAX_DIFFICULTY = 'medium';

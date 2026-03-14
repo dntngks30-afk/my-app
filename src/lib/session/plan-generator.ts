@@ -15,6 +15,7 @@ import {
   resolveSessionPriorities,
   scoreByPriority,
   getPainModePenalty,
+  getResultTypeFocusTags,
 } from './priority-layer';
 import { generateSessionRationale, getExerciseRationale } from '@/core/session-rationale';
 import { applySessionConstraints } from './constraints';
@@ -137,9 +138,26 @@ const GOLD_PATH_RULES: Record<GoldPathVector, Omit<GoldPathSegmentRule, 'count'>
 const MIN_CANDIDATES_FOR_STRICT_AVOID = 3;
 const SHORT_TOTAL_ITEM_CAP = 4;
 
-/** PR-SESSION-QUALITY-01: First session guardrails */
-const MAX_FIRST_SESSION_MAIN_COUNT = 1;
-const MAX_FIRST_SESSION_TOTAL_EXERCISES = 5;
+/** PR-ALG-21: First session guardrails — risk-tiered. */
+type FirstSessionTier = 'conservative' | 'moderate' | 'normal';
+/** conservative: protected/red or deconditioned top. moderate: caution/yellow. normal: none + general */
+function getFirstSessionTier(input: PlanGeneratorInput): FirstSessionTier {
+  if (input.sessionNumber !== 1) return 'normal';
+  if (input.pain_mode === 'protected' || input.safety_mode === 'red') return 'conservative';
+  if (input.pain_mode === 'caution' || input.safety_mode === 'yellow') return 'moderate';
+  const pv = input.priority_vector ?? {};
+  const decond = pv.deconditioned ?? 0;
+  const topAxis = Object.entries(pv)
+    .filter(([, v]) => typeof v === 'number' && v > 0)
+    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0];
+  if (topAxis === 'deconditioned' && decond > 0) return 'moderate';
+  return 'normal';
+}
+const FIRST_SESSION_LIMITS: Record<FirstSessionTier, { maxMain: number; maxTotal: number }> = {
+  conservative: { maxMain: 1, maxTotal: 5 },
+  moderate: { maxMain: 2, maxTotal: 5 },
+  normal: { maxMain: 2, maxTotal: 6 },
+};
 
 /** PR-ALG-05: difficulty order for cap (low < medium < high) */
 const DIFFICULTY_ORDER: Record<string, number> = { low: 1, medium: 2, high: 3 };
@@ -349,6 +367,12 @@ function scoreTemplate(
   // PR-ALG-03: priority_vector 기반 추가 보너스
   if (priorityTags) {
     score += scoreByPriority(t.focus_tags, priorityTags, PRIORITY_MATCH_BONUS);
+  }
+
+  // PR-ALG-21: resultType anchor — ensure first session main aligns with user-facing type
+  const resultTypeTags = getResultTypeFocusTags(input.resultType);
+  if (resultTypeTags.length > 0 && t.focus_tags.some((tag) => resultTypeTags.includes(tag))) {
+    score += PRIORITY_MATCH_BONUS;
   }
 
   // PR-ALG-03: pain_mode 기반 penalty
@@ -586,14 +610,25 @@ function selectGoldPathTemplates(
   return segments;
 }
 
+/** PR-ALG-21: sets/reps context for first session. Cooldown/release always 1 set. */
+type ToPlanItemContext = {
+  conditionMood: ConditionMood;
+  isFirstSession: boolean;
+  firstSessionTier: FirstSessionTier;
+};
 function toPlanItem(
   t: SessionTemplateRow,
   order: number,
   segmentTitle: string,
-  conditionMood: ConditionMood
+  ctx: ToPlanItemContext
 ): PlanItem {
-  const isRecovery = conditionMood === 'bad';
-  const sets = isRecovery ? 1 : 2;
+  const isRecovery = ctx.conditionMood === 'bad';
+  const isCooldownOrRelease = t.name.includes('이완') || segmentTitle === 'Cooldown';
+  const allowSingleSet =
+    isCooldownOrRelease ||
+    isRecovery ||
+    ctx.firstSessionTier === 'conservative';
+  const sets = allowSingleSet ? 1 : 2;
   const reps = isRecovery ? 8 : 12;
   const focusTag = t.focus_tags[0] ?? null;
 
@@ -607,7 +642,7 @@ function toPlanItem(
     ...(rationale && { rationale }),
   };
 
-  if (t.name.includes('이완') || segmentTitle === 'Cooldown') {
+  if (isCooldownOrRelease) {
     item.sets = 1;
     item.hold_seconds = 30;
   } else {
@@ -708,6 +743,8 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const isShort = overlay?.forceShort ?? input.timeBudget === 'short';
   const isRecovery = overlay?.forceRecovery ?? input.conditionMood === 'bad';
   const isFirstSession = input.sessionNumber === 1;
+  const firstSessionTier = getFirstSessionTier(input);
+  const firstSessionLimits = FIRST_SESSION_LIMITS[firstSessionTier];
   /** PR-SESSION-BASELINE-01: main 2~3 baseline. red=1, yellow=2, else 3 */
   let mainCount = isShort ? 1 : isRecovery ? 1 : 3;
   if (input.safety_mode === 'red') {
@@ -715,8 +752,8 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   } else if (input.safety_mode === 'yellow') {
     mainCount = 2;
   }
-  if (isFirstSession && mainCount > MAX_FIRST_SESSION_MAIN_COUNT) {
-    mainCount = MAX_FIRST_SESSION_MAIN_COUNT;
+  if (isFirstSession && mainCount > firstSessionLimits.maxMain) {
+    mainCount = firstSessionLimits.maxMain;
   }
   if (typeof input.volumeModifier === 'number' && input.volumeModifier < 0) {
     mainCount = Math.max(1, Math.floor(mainCount * (1 + input.volumeModifier)));
@@ -730,8 +767,8 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   if (isShort && prepCount + mainCount + accessoryCount + cooldownCount > SHORT_TOTAL_ITEM_CAP) {
     mainCount = Math.max(1, SHORT_TOTAL_ITEM_CAP - prepCount - accessoryCount - cooldownCount);
   }
-  if (isFirstSession && prepCount + mainCount + accessoryCount + cooldownCount > MAX_FIRST_SESSION_TOTAL_EXERCISES) {
-    mainCount = Math.max(1, MAX_FIRST_SESSION_TOTAL_EXERCISES - prepCount - accessoryCount - cooldownCount);
+  if (isFirstSession && prepCount + mainCount + accessoryCount + cooldownCount > firstSessionLimits.maxTotal) {
+    mainCount = Math.max(1, firstSessionLimits.maxTotal - prepCount - accessoryCount - cooldownCount);
   }
   const totalNeeded = prepCount + mainCount + accessoryCount + cooldownCount;
 
@@ -823,13 +860,18 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     Cooldown: cooldownDuration,
   };
 
+  const toPlanItemCtx: ToPlanItemContext = {
+    conditionMood: input.conditionMood,
+    isFirstSession,
+    firstSessionTier,
+  };
   for (const entry of segmentEntries) {
     if (entry.items.length === 0) continue;
     segments.push({
       title: entry.title,
       duration_sec: durationByTitle[entry.title] ?? accessoryDuration,
       items: entry.items.map((t, i) =>
-        toPlanItem(t, i + 1, entry.title, input.conditionMood)
+        toPlanItem(t, i + 1, entry.title, toPlanItemCtx)
       ),
     });
   }
@@ -895,6 +937,8 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     isFirstSession,
     priorityVector: input.priority_vector ?? null,
     scoringVersion: input.scoringVersion ?? 'deep_v2',
+    firstSessionTier,
+    safetyMode: input.safety_mode ?? null,
   });
 
   const orderingResult = applySessionOrdering(constraintResult.plan, templates, {

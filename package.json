@@ -22,6 +22,7 @@
     "test:adaptive-modifier-merge": "npx tsx scripts/adaptive-modifier-merge-smoke.mjs",
     "test:adaptive-merge": "npx tsx scripts/adaptive-merge-smoke.mjs",
     "test:plan-generator": "npx tsx scripts/plan-generator-smoke.mjs",
+    "test:alg-21-first-session": "npx tsx scripts/alg-21-first-session-regression.mjs",
     "test:session-constraints": "npx tsx scripts/session-constraints-unit.mjs",
     "test:session-ordering": "npx tsx scripts/session-ordering-unit.mjs",
     "test:policy-registry": "npx tsx scripts/policy-registry-smoke.mjs",
