@@ -15,8 +15,8 @@ import {
   resolveSessionPriorities,
   scoreByPriority,
   getPainModePenalty,
-  getResultTypeFocusTags,
-  resolveFirstSessionAlignmentPolicy,
+  resolveFirstSessionIntent,
+  type FirstSessionIntentSSOT,
 } from './priority-layer';
 import { generateSessionRationale, getExerciseRationale } from '@/core/session-rationale';
 import { applySessionConstraints } from './constraints';
@@ -193,16 +193,12 @@ function resolveSessionRationale(
   return result.rationale_text;
 }
 
-function resolveGoldPathVector(input: PlanGeneratorInput): GoldPathVector | null {
-  /** PR-ALIGN-01: First session uses resultType as primary anchor. UPPER-LIMB → upper_mobility, not trunk_control. */
-  const alignment = resolveFirstSessionAlignmentPolicy(
-    input.resultType,
-    input.sessionNumber,
-    input.priority_vector,
-    input.pain_mode
-  );
-  if (alignment?.alignedGoldPathVector && GOLD_PATH_VECTORS.includes(alignment.alignedGoldPathVector as GoldPathVector)) {
-    return alignment.alignedGoldPathVector as GoldPathVector;
+function resolveGoldPathVector(
+  input: PlanGeneratorInput,
+  firstSessionIntent?: FirstSessionIntentSSOT | null
+): GoldPathVector | null {
+  if (firstSessionIntent?.goldPath && GOLD_PATH_VECTORS.includes(firstSessionIntent.goldPath as GoldPathVector)) {
+    return firstSessionIntent.goldPath as GoldPathVector;
   }
 
   const ranked = Object.entries(input.priority_vector ?? {})
@@ -355,7 +351,8 @@ function scoreTemplate(
   t: SessionTemplateRow,
   input: PlanGeneratorInput,
   finalTargetLevel: number,
-  excludeSet: Set<string>
+  excludeSet: Set<string>,
+  firstSessionIntent?: FirstSessionIntentSSOT | null
 ): number {
   if (hasContraindicationOverlap(t.contraindications, excludeSet)) {
     return -CONTRAINDICATION_PENALTY;
@@ -381,10 +378,10 @@ function scoreTemplate(
     score += scoreByPriority(t.focus_tags, priorityTags, PRIORITY_MATCH_BONUS);
   }
 
-  // PR-ALG-21: resultType anchor — ensure first session main aligns with user-facing type
-  const resultTypeTags = getResultTypeFocusTags(input.resultType);
-  if (resultTypeTags.length > 0 && t.focus_tags.some((tag) => resultTypeTags.includes(tag))) {
-    score += PRIORITY_MATCH_BONUS;
+  // PR-SSOT-01: session 1 intent SSOT adds explicit required tag bias.
+  const requiredIntentTags = firstSessionIntent?.requiredTags ?? [];
+  if (requiredIntentTags.length > 0 && t.focus_tags.some((tag) => requiredIntentTags.includes(tag))) {
+    score += PRIMARY_FOCUS_BONUS;
   }
 
   // PR-ALG-03: pain_mode 기반 penalty
@@ -395,6 +392,30 @@ function scoreTemplate(
   if (t.level === finalTargetLevel) score += LEVEL_MATCH_BONUS;
 
   return score;
+}
+
+function hasFirstSessionIntentTag(
+  template: SessionTemplateRow,
+  firstSessionIntent?: FirstSessionIntentSSOT | null
+): boolean {
+  if (!firstSessionIntent || firstSessionIntent.requiredTags.length === 0) return false;
+  const tagSet = new Set([
+    ...firstSessionIntent.requiredTags,
+    ...firstSessionIntent.preferredTemplateTags,
+  ]);
+  return template.focus_tags.some((tag) => tagSet.has(tag));
+}
+
+function scoreFirstSessionIntentFit(
+  template: SessionTemplateRow,
+  rule: GoldPathSegmentRule,
+  firstSessionIntent?: FirstSessionIntentSSOT | null
+): number {
+  if (!firstSessionIntent) return 0;
+  if (!hasFirstSessionIntentTag(template, firstSessionIntent)) return 0;
+  if (rule.kind === 'main') return 10;
+  if (rule.kind === 'prep') return 6;
+  return 3;
 }
 
 /**
@@ -545,7 +566,8 @@ function selectGoldPathTemplates(
   input: PlanGeneratorInput,
   vector: GoldPathVector,
   mainCount: number,
-  onDuplicateFiltered: (count: number) => void
+  onDuplicateFiltered: (count: number) => void,
+  firstSessionIntent?: FirstSessionIntentSSOT | null
 ): Array<{ rule: GoldPathSegmentRule; items: SessionTemplateRow[] }> {
   const used = new Set<string>(input.usedTemplateIds);
   const duplicateSeen = new Set<string>();
@@ -557,7 +579,10 @@ function selectGoldPathTemplates(
     const ranked = sorted
       .map(({ template, score }) => ({
         template,
-        score: score + scoreGoldPathSegmentFit(template, rule, input.pain_mode),
+        score:
+          score +
+          scoreGoldPathSegmentFit(template, rule, input.pain_mode) +
+          scoreFirstSessionIntentFit(template, rule, firstSessionIntent),
       }))
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;
@@ -620,6 +645,42 @@ function selectGoldPathTemplates(
 
   onDuplicateFiltered(duplicateFiltered);
   return segments;
+}
+
+function enforceFirstSessionIntentOnSegments(
+  segmentEntries: Array<{ title: string; items: SessionTemplateRow[] }>,
+  sorted: Array<{ template: SessionTemplateRow; score: number }>,
+  painMode: 'none' | 'caution' | 'protected' | undefined,
+  firstSessionIntent?: FirstSessionIntentSSOT | null
+): Array<{ title: string; items: SessionTemplateRow[] }> {
+  if (!firstSessionIntent || firstSessionIntent.requiredTags.length === 0) return segmentEntries;
+
+  const prepAndMain = segmentEntries.filter((entry) => entry.title === 'Prep' || entry.title === 'Main');
+  const alreadyAligned = prepAndMain.some((entry) =>
+    entry.items.some((item) => hasFirstSessionIntentTag(item, firstSessionIntent))
+  );
+  if (alreadyAligned) return segmentEntries;
+
+  const usedIds = new Set(segmentEntries.flatMap((entry) => entry.items.map((item) => item.id)));
+  const replacement = sorted
+    .map(({ template }) => template)
+    .find((template) => {
+      if (usedIds.has(template.id)) return false;
+      if (!hasFirstSessionIntentTag(template, firstSessionIntent)) return false;
+      if (painMode && painMode !== 'none' && (template.avoid_if_pain_mode ?? []).includes(painMode)) return false;
+      return isMainEligible(template) || isPrepEligible(template);
+    });
+
+  if (!replacement) return segmentEntries;
+
+  return segmentEntries.map((entry) => {
+    if (entry.title === 'Main' && entry.items.length > 0) {
+      const nextItems = [...entry.items];
+      nextItems[nextItems.length - 1] = replacement;
+      return { ...entry, items: nextItems };
+    }
+    return entry;
+  });
 }
 
 /** PR-ALG-21: sets/reps context for first session. Cooldown/release always 1 set. */
@@ -703,6 +764,17 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   });
 
   const { finalTargetLevel, maxLevel } = computeTargetLevel(input);
+  const firstSessionIntent = resolveFirstSessionIntent({
+    resultType: input.resultType,
+    primaryType: input.primary_type,
+    secondaryType: input.secondary_type,
+    priorityVector: input.priority_vector,
+    painMode: input.pain_mode,
+    sessionNumber: input.sessionNumber,
+    deepLevel: input.deep_level,
+    safetyMode: input.safety_mode,
+    redFlags: input.red_flags,
+  });
 
   // PR-ALG-03: pain_mode Safety Gate - 추가 제외 태그
   const painExtraAvoid = getPainModeExtraAvoid(input.pain_mode);
@@ -726,7 +798,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
 
   const scored = candidates.map((t) => ({
     template: t,
-    score: scoreTemplate(t, input, finalTargetLevel, excludeSet),
+    score: scoreTemplate(t, input, finalTargetLevel, excludeSet, firstSessionIntent),
   }));
 
   const scoredPositive = scored.filter((s) => s.score >= 0);
@@ -788,7 +860,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const fallbackUsed = usedFallbackPool;
   let duplicateFilteredCount = 0;
 
-  const goldPathVector = resolveGoldPathVector(input);
+  const goldPathVector = resolveGoldPathVector(input, firstSessionIntent);
   let selected: SessionTemplateRow[] = [];
   let selectedSegments: Array<{ title: string; items: SessionTemplateRow[] }> | null = null;
 
@@ -798,7 +870,8 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       input,
       goldPathVector,
       mainCount,
-      (d) => { duplicateFilteredCount = d; }
+      (d) => { duplicateFilteredCount = d; },
+      firstSessionIntent
     );
     selectedSegments = goldSegments.map((segment) => ({
       title: segment.rule.title,
@@ -824,7 +897,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     );
     const relaxedSorted = relaxedCandidates.map((t) => ({ template: t, score: 0 }));
     const relaxedSelected = goldPathVector
-      ? selectGoldPathTemplates(relaxedSorted, input, goldPathVector, mainCount, () => {})
+      ? selectGoldPathTemplates(relaxedSorted, input, goldPathVector, mainCount, () => {}, firstSessionIntent)
       : [{
           rule: { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: [] as GoldPathVector[], fallbackVectors: [] as GoldPathVector[], preferredProgression: [1], count: 0 },
           items: selectTemplatesWithConstraints(
@@ -858,12 +931,18 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const cooldownDuration = isShort ? 60 : 120;
 
   const segments: PlanSegment[] = [];
-  const segmentEntries = selectedSegments ?? [
+  let segmentEntries = selectedSegments ?? [
     { title: 'Prep', items: selected.slice(0, prepCount) },
     { title: 'Main', items: selected.slice(prepCount, prepCount + mainCount) },
     { title: 'Accessory', items: selected.slice(prepCount + mainCount, prepCount + mainCount + accessoryCount) },
     { title: 'Cooldown', items: selected.slice(prepCount + mainCount + accessoryCount, prepCount + mainCount + accessoryCount + cooldownCount) },
   ];
+  segmentEntries = enforceFirstSessionIntentOnSegments(
+    segmentEntries,
+    sorted,
+    input.pain_mode,
+    firstSessionIntent
+  );
 
   const durationByTitle: Record<string, number> = {
     Prep: prepDuration,
@@ -888,21 +967,14 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     });
   }
 
-  const usedTemplateIds = selected.map((t) => t.id);
+  const usedTemplateIds = segmentEntries.flatMap((entry) => entry.items.map((item) => item.id));
 
-  /** PR-ALIGN-01: First session meta uses resultType-aligned focus/rationale, not raw priority_vector only. */
-  const firstSessionAlignment = resolveFirstSessionAlignmentPolicy(
-    input.resultType,
-    input.sessionNumber,
-    input.priority_vector,
-    input.pain_mode
-  );
   const effectiveFocusAxes =
-    firstSessionAlignment?.alignedFocusAxes?.length
-      ? firstSessionAlignment.alignedFocusAxes
+    firstSessionIntent?.focusAxes?.length
+      ? firstSessionIntent.focusAxes
       : resolveSessionFocusAxes(input.priority_vector);
   const effectiveRationale =
-    firstSessionAlignment?.alignedRationale ??
+    firstSessionIntent?.rationale ??
     resolveSessionRationale(input.priority_vector, input.pain_mode);
 
   const basePlan: PlanJsonOutput = {
@@ -983,6 +1055,10 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     timeBudget: input.timeBudget,
     conditionMood: input.conditionMood,
     resultType: input.resultType ?? null,
+    primaryType: input.primary_type ?? null,
+    secondaryType: input.secondary_type ?? null,
+    safetyMode: input.safety_mode ?? null,
+    redFlags: input.red_flags ?? null,
   });
 
   return {

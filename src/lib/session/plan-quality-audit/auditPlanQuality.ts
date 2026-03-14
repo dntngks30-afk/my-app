@@ -4,7 +4,7 @@
  */
 
 import type { PlanItem, PlanJsonOutput, PlanSegment } from '@/lib/session/plan-generator';
-import { getResultTypeFocusTags } from '@/lib/session/priority-layer';
+import { resolveFirstSessionIntent } from '@/lib/session/priority-layer';
 import { normalizeExerciseTaxonomy } from '@/lib/session/taxonomy';
 import type { AuditBand, AuditContext, AuditIssue, PlanQualityAuditMeta } from './types';
 import {
@@ -45,6 +45,19 @@ function getAllItems(plan: PlanJsonOutput): Array<{ item: PlanItem; segmentTitle
   return out;
 }
 
+function hasRelevantItem(
+  allItemsWithSeg: Array<{ item: PlanItem; segmentTitle: string }>,
+  templateById: Map<string, AuditTemplateLike>,
+  requiredTags: string[]
+): boolean {
+  if (requiredTags.length === 0) return true;
+  const tagSet = new Set(requiredTags);
+  return allItemsWithSeg.some(({ item }) => {
+    const template = templateById.get(item.templateId);
+    return template?.focus_tags?.some((tag) => tagSet.has(tag));
+  });
+}
+
 export function auditPlanQuality(
   plan: PlanJsonOutput,
   templates: AuditTemplateLike[],
@@ -63,6 +76,16 @@ export function auditPlanQuality(
 
   const sessionFocusAxes = (plan.meta?.session_focus_axes ?? []).slice(0, 2);
   const priorityVector = context.priorityVector ?? plan.meta?.priority_vector ?? {};
+  const firstSessionIntent = resolveFirstSessionIntent({
+    resultType: context.resultType ?? plan.meta?.result_type ?? null,
+    primaryType: context.primaryType ?? plan.meta?.primary_type ?? null,
+    secondaryType: context.secondaryType ?? plan.meta?.secondary_type ?? null,
+    priorityVector,
+    painMode: context.painMode ?? plan.meta?.pain_mode ?? null,
+    sessionNumber: context.sessionNumber ?? plan.meta?.session_number ?? 0,
+    safetyMode: context.safetyMode ?? plan.meta?.safety_mode ?? null,
+    redFlags: context.redFlags ?? plan.meta?.red_flags ?? null,
+  });
 
   if (context.isFirstSession) {
     const mainCount = mainSeg?.items.length ?? 0;
@@ -109,11 +132,15 @@ export function auditPlanQuality(
       }
     }
 
-    /** PR-ALIGN-01: UPPER-LIMB first session must not be core-only. */
-    const resultType = context.resultType ?? plan.meta?.result_type;
+    /** PR-SSOT-01: session 1 audit consumes first-session intent SSOT expectations. */
+    const resultType = firstSessionIntent?.anchorType ?? context.resultType ?? plan.meta?.result_type;
+    const expectations = firstSessionIntent?.auditExpectations;
     if (resultType === 'UPPER-LIMB') {
       const focusAxes = plan.meta?.session_focus_axes ?? [];
-      const isTrunkOnly = focusAxes.length > 0 && focusAxes.every((a) => a === 'trunk_control');
+      const isTrunkOnly =
+        focusAxes.length > 0 &&
+        expectations?.forbiddenDominantAxes?.length &&
+        focusAxes.every((a) => expectations.forbiddenDominantAxes.includes(a));
       if (isTrunkOnly) {
         issues.push({
           code: 'UPPER_LIMB_CORE_ONLY_MISMATCH',
@@ -124,7 +151,9 @@ export function auditPlanQuality(
       }
       const rationale = plan.meta?.session_rationale ?? '';
       const isCoreOnlyRationale =
-        rationale && /몸통|코어|안정성/.test(rationale) && !/상체|어깨|손목|팔꿈치|흉추|견갑/.test(rationale);
+        rationale &&
+        (expectations?.rationaleMustAvoidOnly ?? []).some((token) => rationale.includes(token)) &&
+        !(expectations?.rationaleMustInclude ?? []).some((token) => rationale.includes(token));
       if (isCoreOnlyRationale) {
         issues.push({
           code: 'UPPER_LIMB_RATIONALE_MISMATCH',
@@ -133,11 +162,11 @@ export function auditPlanQuality(
         });
         score -= PENALTY_WARN;
       }
-      const upperTags = new Set(getResultTypeFocusTags('UPPER-LIMB'));
-      const hasUpperItem = allItemsWithSeg.some(({ item }) => {
-        const t = templateById.get(item.templateId);
-        return t?.focus_tags?.some((tag) => upperTags.has(tag));
-      });
+      const hasUpperItem = hasRelevantItem(
+        allItemsWithSeg,
+        templateById,
+        expectations?.requiredTags ?? []
+      );
       if (!hasUpperItem && allItemsWithSeg.length > 0) {
         issues.push({
           code: 'UPPER_LIMB_NO_RELEVANT_ITEM',
@@ -151,7 +180,10 @@ export function auditPlanQuality(
     /** PR-ALIGN-03: LOWER-LIMB / NECK-SHOULDER / LUMBO-PELVIS minimal alignment checks */
     if (resultType === 'LOWER-LIMB') {
       const focusAxes = plan.meta?.session_focus_axes ?? [];
-      const isUpperOnly = focusAxes.length > 0 && focusAxes.every((a) => a === 'upper_mobility');
+      const isUpperOnly =
+        focusAxes.length > 0 &&
+        expectations?.forbiddenDominantAxes?.length &&
+        focusAxes.every((a) => expectations.forbiddenDominantAxes.includes(a));
       if (isUpperOnly) {
         issues.push({
           code: 'LOWER_LIMB_FOCUS_MISMATCH',
@@ -160,11 +192,11 @@ export function auditPlanQuality(
         });
         score -= PENALTY_WARN;
       }
-      const lowerTags = new Set(getResultTypeFocusTags('LOWER-LIMB'));
-      const hasLowerItem = allItemsWithSeg.some(({ item }) => {
-        const t = templateById.get(item.templateId);
-        return t?.focus_tags?.some((tag) => lowerTags.has(tag));
-      });
+      const hasLowerItem = hasRelevantItem(
+        allItemsWithSeg,
+        templateById,
+        expectations?.requiredTags ?? []
+      );
       if (!hasLowerItem && allItemsWithSeg.length > 0) {
         issues.push({
           code: 'LOWER_LIMB_NO_RELEVANT_ITEM',
@@ -176,7 +208,10 @@ export function auditPlanQuality(
     }
     if (resultType === 'NECK-SHOULDER') {
       const focusAxes = plan.meta?.session_focus_axes ?? [];
-      const isTrunkOnly = focusAxes.length > 0 && focusAxes.every((a) => a === 'trunk_control');
+      const isTrunkOnly =
+        focusAxes.length > 0 &&
+        expectations?.forbiddenDominantAxes?.length &&
+        focusAxes.every((a) => expectations.forbiddenDominantAxes.includes(a));
       if (isTrunkOnly) {
         issues.push({
           code: 'NECK_SHOULDER_FOCUS_MISMATCH',
@@ -185,11 +220,11 @@ export function auditPlanQuality(
         });
         score -= PENALTY_WARN;
       }
-      const neckTags = new Set(getResultTypeFocusTags('NECK-SHOULDER'));
-      const hasNeckItem = allItemsWithSeg.some(({ item }) => {
-        const t = templateById.get(item.templateId);
-        return t?.focus_tags?.some((tag) => neckTags.has(tag));
-      });
+      const hasNeckItem = hasRelevantItem(
+        allItemsWithSeg,
+        templateById,
+        expectations?.requiredTags ?? []
+      );
       if (!hasNeckItem && allItemsWithSeg.length > 0) {
         issues.push({
           code: 'NECK_SHOULDER_NO_RELEVANT_ITEM',
@@ -201,7 +236,7 @@ export function auditPlanQuality(
     }
     if (resultType === 'LUMBO-PELVIS') {
       const focusAxes = plan.meta?.session_focus_axes ?? [];
-      const hasTrunk = focusAxes.includes('trunk_control');
+      const hasTrunk = (expectations?.requiredFocusAxes ?? []).every((axis) => focusAxes.includes(axis));
       if (focusAxes.length > 0 && !hasTrunk) {
         issues.push({
           code: 'LUMBO_PELVIS_FOCUS_MISMATCH',
@@ -210,11 +245,11 @@ export function auditPlanQuality(
         });
         score -= PENALTY_WARN;
       }
-      const lumboTags = new Set(getResultTypeFocusTags('LUMBO-PELVIS'));
-      const hasLumboItem = allItemsWithSeg.some(({ item }) => {
-        const t = templateById.get(item.templateId);
-        return t?.focus_tags?.some((tag) => lumboTags.has(tag));
-      });
+      const hasLumboItem = hasRelevantItem(
+        allItemsWithSeg,
+        templateById,
+        expectations?.requiredTags ?? []
+      );
       if (!hasLumboItem && allItemsWithSeg.length > 0) {
         issues.push({
           code: 'LUMBO_PELVIS_NO_RELEVANT_ITEM',

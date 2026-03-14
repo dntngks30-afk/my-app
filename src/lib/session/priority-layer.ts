@@ -80,12 +80,109 @@ export function getResultTypeFocusTags(resultType?: string | null): string[] {
  * PR-ALIGN-01: First-session alignment policy. resultType = 1차 앵커, priority_vector = 2차 보조.
  * UPPER-LIMB 사용자가 코어-only 첫 세션을 받지 않도록 함.
  */
+export interface FirstSessionAuditExpectations {
+  forbiddenDominantAxes: string[];
+  requiredFocusAxes: string[];
+  requiredTags: string[];
+  rationaleMustInclude: string[];
+  rationaleMustAvoidOnly: string[];
+}
+
+export interface FirstSessionIntentSSOT {
+  anchorType: string;
+  goldPath: string | null;
+  focusAxes: string[];
+  rationale: string | null;
+  requiredTags: string[];
+  preferredTemplateTags: string[];
+  forbiddenDominantAxes: string[];
+  forbiddenTemplateTags: string[];
+  intensityTier: 'inherit';
+  auditExpectations: FirstSessionAuditExpectations;
+}
+
+export interface ResolveFirstSessionIntentInput {
+  resultType?: string | null;
+  primaryType?: string | null;
+  secondaryType?: string | null;
+  priorityVector?: Record<string, number> | null;
+  painMode?: PainMode | null;
+  sessionNumber: number;
+  deepLevel?: 1 | 2 | 3;
+  safetyMode?: 'red' | 'yellow' | 'none';
+  redFlags?: boolean;
+}
+
+/**
+ * PR-SSOT-01: session 1 canonical intent SSOT.
+ * resultType = primary anchor, priority_vector = secondary modulation only.
+ */
+export function resolveFirstSessionIntent(
+  input: ResolveFirstSessionIntentInput
+): FirstSessionIntentSSOT | null {
+  if (input.sessionNumber !== 1) return null;
+  const key = typeof input.resultType === 'string' ? input.resultType.trim() : '';
+  if (!key) return null;
+
+  const goldPath = RESULT_TYPE_TO_GOLD_PATH[key];
+  const focusAxes = RESULT_TYPE_TO_FOCUS_AXES[key] ?? [];
+  const rationale = RESULT_TYPE_TO_RATIONALE[key] ?? null;
+  const requiredTags = RESULT_TYPE_TO_FOCUS_TAGS[key] ?? [];
+  if (!goldPath && focusAxes.length === 0 && !rationale && requiredTags.length === 0) return null;
+
+  const forbiddenDominantAxes =
+    key === 'UPPER-LIMB'
+      ? ['trunk_control']
+      : key === 'LOWER-LIMB'
+        ? ['upper_mobility']
+        : key === 'NECK-SHOULDER'
+          ? ['trunk_control']
+          : key === 'LUMBO-PELVIS'
+            ? ['upper_mobility']
+            : [];
+
+  const rationaleMustInclude =
+    key === 'UPPER-LIMB'
+      ? ['상체', '어깨', '손목', '팔꿈치', '흉추', '견갑']
+      : key === 'LOWER-LIMB'
+        ? ['하체', '무릎', '발목', '엉덩이', '골반']
+        : key === 'NECK-SHOULDER'
+          ? ['목', '어깨', '흉추', '견갑']
+          : key === 'LUMBO-PELVIS'
+            ? ['몸통', '코어', '호흡', '골반']
+            : [];
+
+  const rationaleMustAvoidOnly =
+    key === 'UPPER-LIMB'
+      ? ['몸통', '코어', '안정성']
+      : key === 'NECK-SHOULDER'
+        ? ['몸통', '코어', '안정성']
+        : [];
+
+  return {
+    anchorType: key,
+    goldPath: goldPath || null,
+    focusAxes: [...focusAxes],
+    rationale,
+    requiredTags: [...requiredTags],
+    preferredTemplateTags: [...requiredTags],
+    forbiddenDominantAxes,
+    forbiddenTemplateTags: [],
+    intensityTier: 'inherit',
+    auditExpectations: {
+      forbiddenDominantAxes,
+      requiredFocusAxes: [...focusAxes],
+      requiredTags: [...requiredTags],
+      rationaleMustInclude,
+      rationaleMustAvoidOnly,
+    },
+  };
+}
+
+/** Backward-compatible wrapper for existing call sites. */
 export interface FirstSessionAlignmentPolicy {
-  /** GoldPathVector for segment selection. null = use legacy resolveGoldPathVector. */
   alignedGoldPathVector: string | null;
-  /** session_focus_axes for plan_json.meta */
   alignedFocusAxes: string[];
-  /** session_rationale for plan_json.meta */
   alignedRationale: string | null;
 }
 
@@ -93,18 +190,19 @@ export function resolveFirstSessionAlignmentPolicy(
   resultType: string | null | undefined,
   sessionNumber: number,
   priorityVector?: Record<string, number> | null,
-  _painMode?: 'none' | 'caution' | 'protected' | null
+  painMode?: 'none' | 'caution' | 'protected' | null
 ): FirstSessionAlignmentPolicy | null {
-  if (sessionNumber !== 1 || !resultType || typeof resultType !== 'string') return null;
-  const key = resultType.trim();
-  const goldPath = RESULT_TYPE_TO_GOLD_PATH[key];
-  const focusAxes = RESULT_TYPE_TO_FOCUS_AXES[key];
-  const rationale = RESULT_TYPE_TO_RATIONALE[key];
-  if (!goldPath && !focusAxes?.length && !rationale) return null;
+  const intent = resolveFirstSessionIntent({
+    resultType,
+    sessionNumber,
+    priorityVector,
+    painMode,
+  });
+  if (!intent) return null;
   return {
-    alignedGoldPathVector: goldPath || null,
-    alignedFocusAxes: Array.isArray(focusAxes) ? focusAxes : [],
-    alignedRationale: rationale || null,
+    alignedGoldPathVector: intent.goldPath,
+    alignedFocusAxes: intent.focusAxes,
+    alignedRationale: intent.rationale,
   };
 }
 
