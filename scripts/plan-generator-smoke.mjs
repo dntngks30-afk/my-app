@@ -65,6 +65,7 @@ try {
   ok('plan has flags', typeof plan.flags === 'object');
   ok('plan has constraint_flags', typeof plan.meta.constraint_flags === 'object');
   ok('plan has ordering_engine meta (PR-ALG-17)', typeof plan.meta.ordering_engine === 'object' && plan.meta.ordering_engine?.version === 'session_ordering_engine_v1');
+  ok('plan has candidate_competition meta (PR-ALG-18)', typeof plan.meta.candidate_competition === 'object' && plan.meta.candidate_competition?.version === 'candidate_competition_v1');
 
   const allItems = plan.segments.flatMap((s) => s.items);
   const templateIds = allItems.map((i) => i.templateId);

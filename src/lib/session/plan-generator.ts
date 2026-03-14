@@ -21,6 +21,8 @@ import { applySessionConstraints } from './constraints';
 import type { ConstraintEngineMeta } from './constraints';
 import { applySessionOrdering } from './ordering';
 import type { OrderingEngineMeta } from './ordering';
+import { applyCandidateCompetition } from './candidate-competition';
+import type { CandidateCompetitionMeta } from './candidate-competition';
 
 const REPETITION_PENALTY = 100;
 const CONTRAINDICATION_PENALTY = 100;
@@ -308,6 +310,8 @@ export type PlanJsonOutput = {
       excluded_count_by_rule: Record<string, number>;
       taxonomy_mode: 'derived_v1';
     };
+    /** PR-ALG-18: additive candidate competition meta */
+    candidate_competition?: CandidateCompetitionMeta;
   };
   flags: { recovery: boolean; short: boolean };
   segments: PlanSegment[];
@@ -674,9 +678,18 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     score: scoreTemplate(t, input, finalTargetLevel, excludeSet),
   }));
 
-  let sorted = scored
-    .filter((s) => s.score >= 0)
-    .sort((a, b) => b.score - a.score);
+  const scoredPositive = scored.filter((s) => s.score >= 0);
+  const competitionResult = applyCandidateCompetition(scoredPositive, {
+    sessionNumber: input.sessionNumber,
+    isFirstSession: input.sessionNumber === 1,
+    painMode: input.pain_mode ?? null,
+    priorityVector: input.priority_vector ?? null,
+    timeBudget: input.timeBudget,
+    conditionMood: input.conditionMood,
+    usedTemplateIds: input.usedTemplateIds,
+  });
+
+  let sorted = competitionResult.ranked;
 
   let usedFallbackPool = false;
   if (sorted.length === 0) {
@@ -863,6 +876,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
         excluded_count_by_rule: selectionResult.excludedCountByRule,
         taxonomy_mode: 'derived_v1',
       },
+      candidate_competition: competitionResult.meta,
     },
     flags: {
       recovery: isRecovery,
