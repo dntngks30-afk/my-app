@@ -296,6 +296,10 @@ function PanelInner({
   }, [sessionId])
 
   const effectiveLockedPreview = normalizeNextSessionPreviewForDisplay(lockedPreviewData ?? fallbackPreview)
+  const shouldRenderLockedPreviewCard =
+    status === 'locked' &&
+    isLockedNext === true &&
+    !!effectiveLockedPreview
   const showLockedPreviewLoading = shouldShowLockedPreviewLoadingState({
     status,
     isLockedNext,
@@ -472,7 +476,7 @@ function PanelInner({
                 )}
               </div>
             )}
-            {effectiveLockedPreview ? (
+            {shouldRenderLockedPreviewCard ? (
               <NextSessionPreviewCard
                 data={effectiveLockedPreview}
                 variant="locked-panel"

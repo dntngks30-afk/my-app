@@ -366,6 +366,7 @@ export function resolveLockedNextSessionPreview(input: {
   isLockedNext?: boolean
   nextSession?: NextSessionPreviewPayload | null
 }): NextSessionPreviewPayload | null {
+  if (input.status !== 'locked' || !input.isLockedNext || input.sessionId == null) return null
   if (getLockedNextPreviewRecoveryReason(input) !== null) return null
   return normalizeNextSessionPreviewForDisplay(input.nextSession) ?? input.nextSession
 }

@@ -164,6 +164,33 @@ const mismatchedPreview = resolveLockedNextSessionPreview({
 })
 
 ok('locked preview는 session_number mismatch 시 비활성', mismatchedPreview === null)
+ok(
+  'current 세션 패널에서는 locked preview를 렌더하지 않음',
+  resolveLockedNextSessionPreview({
+    sessionId: 4,
+    status: 'current',
+    isLockedNext: true,
+    nextSession: staleActiveAfterCompletion,
+  }) === null
+)
+ok(
+  'completed 세션 패널에서는 locked preview를 렌더하지 않음',
+  resolveLockedNextSessionPreview({
+    sessionId: 4,
+    status: 'completed',
+    isLockedNext: true,
+    nextSession: staleActiveAfterCompletion,
+  }) === null
+)
+ok(
+  'locked-next가 아닌 locked 패널에서는 locked preview를 렌더하지 않음',
+  resolveLockedNextSessionPreview({
+    sessionId: 4,
+    status: 'locked',
+    isLockedNext: false,
+    nextSession: staleActiveAfterCompletion,
+  }) === null
+)
 
 ok('유효한 locked preview payload는 usable=true', isUsableNextSessionPreview(staleActiveAfterCompletion, 4) === true)
 
