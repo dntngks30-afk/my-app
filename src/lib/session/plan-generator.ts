@@ -6,7 +6,7 @@
  */
 
 import { getTemplatesForSessionPlan, type SessionTemplateRow } from '@/lib/workout-routine/exercise-templates-db';
-import { applySelectionExcludes } from '@/lib/session/policy-registry';
+import { applySelectionExcludesWithTrace } from '@/lib/session/policy-registry';
 import type { TemplatePhase } from '@/lib/workout-routine/exercise-templates';
 import { computePhase, type Phase } from './phase';
 import { buildExcludeSet, hasContraindicationOverlap } from './safety';
@@ -301,6 +301,13 @@ export type PlanJsonOutput = {
     constraint_engine?: ConstraintEngineMeta;
     /** PR-ALG-17: additive, explainable ordering engine meta */
     ordering_engine?: OrderingEngineMeta;
+    /** PR-ALG-16B: additive, explainable policy registry selection trace */
+    policy_registry?: {
+      version: 'session_policy_registry_v1';
+      selection_rule_ids: string[];
+      excluded_count_by_rule: Record<string, number>;
+      taxonomy_mode: 'derived_v1';
+    };
   };
   flags: { recovery: boolean; short: boolean };
   segments: PlanSegment[];
@@ -656,10 +663,11 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       !avoidIds.has(t.id) &&
       !(maxDifficultyCap && isDifficultyAboveCap(t.difficulty ?? null, maxDifficultyCap))
   );
-  const candidates = applySelectionExcludes(preFiltered, {
+  const selectionResult = applySelectionExcludesWithTrace(preFiltered, {
     sessionNumber: input.sessionNumber,
     painMode: input.pain_mode ?? null,
   });
+  const candidates = selectionResult.templates;
 
   const scored = candidates.map((t) => ({
     template: t,
@@ -848,6 +856,12 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
         priority_applied: !!input.priority_vector,
         pain_gate_applied: !!input.pain_mode && input.pain_mode !== 'none',
         first_session_guardrail_applied: isFirstSession,
+      },
+      policy_registry: {
+        version: 'session_policy_registry_v1',
+        selection_rule_ids: selectionResult.appliedRuleIds,
+        excluded_count_by_rule: selectionResult.excludedCountByRule,
+        taxonomy_mode: 'derived_v1',
       },
     },
     flags: {

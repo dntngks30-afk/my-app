@@ -8,5 +8,19 @@ export {
   getRuleById,
   RULE_IDS,
 } from './sessionPolicyRegistry';
-export { applySelectionExcludes } from './rules/selectionRules';
-export type { PolicyRuleDef, RuleStage, RuleSeverity } from './types';
+export {
+  applySelectionExcludes,
+  applySelectionExcludesWithTrace,
+  getSelectionRules,
+} from './rules/selectionRules';
+export type {
+  PolicyRuleDef,
+  RuleStage,
+  RuleSeverity,
+} from './types';
+export type {
+  SelectionContext,
+  SelectionExcludeTraceResult,
+  SelectionTemplateLike,
+  SelectionTraceEntry,
+} from './rules/selectionRules';

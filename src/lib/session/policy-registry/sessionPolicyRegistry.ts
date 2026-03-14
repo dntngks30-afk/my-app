@@ -122,8 +122,11 @@ export function getRulesByCategory(category: string): PolicyRuleDef[] {
   return SESSION_POLICY_RULES.filter((r) => r.category === category);
 }
 
-/** Rule IDs for traceability in constraint engine meta */
+/** Rule IDs for traceability (selection + post_selection) */
 export const RULE_IDS = {
+  sel_pain_avoid: 'sel_pain_avoid',
+  sel_protected_v2: 'sel_protected_v2',
+  sel_first_session: 'sel_first_session',
   post_phase_order: 'post_phase_order',
   post_pain_safety: 'post_pain_safety',
   post_main_min: 'post_main_min',
