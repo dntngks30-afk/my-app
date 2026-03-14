@@ -8,6 +8,20 @@ import { getCache } from '@/lib/cache/tabDataCache';
 import AppEntryLoader, { isAppBooted, setAppBooted } from '@/app/app/_components/AppEntryLoader';
 import type { SessionPlan, ActivePlanSummary, ActiveSessionLiteResponse } from '@/lib/session/client';
 import { getCachedAppBootstrap, invalidateAppBootstrapCache, type AppBootstrapResponse, type AppBootstrapStatsPreview } from '@/lib/app/bootstrapClient';
+import {
+  getLatestResetMapFlow,
+  startResetMapFlow,
+} from '@/lib/reset-map/client';
+import {
+  getResetMapClientState,
+  setResetMapClientState,
+  clearResetMapClientState,
+} from '@/lib/reset-map/clientStorage';
+import {
+  getIdempotencyKey,
+  resetStartKey,
+  clearApplyKey,
+} from '@/lib/reset-map/clientIdempotency';
 import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
@@ -53,6 +67,8 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const [nextSession, setNextSession] = useState<AppBootstrapResponse['next_session']>(null);
   /** PR-ALG-15: adaptive explanation (bootstrap) */
   const [adaptiveExplanation, setAdaptiveExplanation] = useState<AppBootstrapResponse['adaptive_explanation']>(null);
+  /** PR-RESET-05: reset-map flow for execution-entry tracking */
+  const [resetMapFlowId, setResetMapFlowId] = useState<string | null>(null);
 
   const activeFetchedRef = useRef(false);
   const authTokenRef = useRef<string | null>(null);
@@ -211,6 +227,58 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     setSkipLoader(isAppBooted());
   }, []);
 
+  /** PR-RESET-05: Ensure reset-map flow on entry. Resume or start. */
+  useEffect(() => {
+    if (!mapV2 || loading) return;
+
+    let cancelled = false;
+    (async () => {
+      const token = await getAuthToken();
+      if (!token || cancelled) return;
+
+      const local = getResetMapClientState();
+      const latestRes = await getLatestResetMapFlow(token);
+      if (cancelled) return;
+
+      if (latestRes.ok && latestRes.data.flow) {
+        const flow = latestRes.data.flow;
+        if (flow.state === 'started' || flow.state === 'preview_ready') {
+          setResetMapFlowId(flow.id);
+          if (!local || local.flow_id !== flow.id) {
+            setResetMapClientState({
+              flow_id: flow.id,
+              start_key: local?.start_key ?? getIdempotencyKey('start'),
+              updated_at: Date.now(),
+            });
+          }
+          return;
+        }
+      }
+
+      clearResetMapClientState();
+      resetStartKey();
+      const startKey = getIdempotencyKey('start');
+      const startRes = await startResetMapFlow(token, startKey);
+      if (cancelled) return;
+
+      if (startRes.ok && startRes.data) {
+        setResetMapFlowId(startRes.data.id);
+        setResetMapClientState({
+          flow_id: startRes.data.id,
+          start_key: startKey,
+          updated_at: Date.now(),
+        });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mapV2, loading, getAuthToken]);
+
+  const handleFlowApplied = useCallback(() => {
+    clearResetMapClientState();
+    clearApplyKey();
+    setResetMapFlowId(null);
+  }, []);
+
   if (loading) {
     // skipLoader는 useEffect에서만 설정 → Hydration mismatch 방지
     if (!skipLoader) {
@@ -283,6 +351,8 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
                 getAuthToken={getAuthToken}
                 onSessionCompleted={handleSessionCompleted}
                 onActivePlanCreated={handleActivePlanCreated}
+                onFlowApplied={handleFlowApplied}
+                resetMapFlowId={resetMapFlowId}
                 adaptiveExplanation={adaptiveExplanation}
                 nextSession={nextSession}
                 initialSelectedSessionId={

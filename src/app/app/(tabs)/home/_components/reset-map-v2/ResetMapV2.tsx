@@ -15,6 +15,11 @@ import {
   type ExerciseLogItem,
   type PlanSummaryResponse,
 } from '@/lib/session/client'
+import {
+  submitResetMapPreview,
+  applyResetMapFlow,
+} from '@/lib/reset-map/client'
+import { getIdempotencyKey, clearApplyKey } from '@/lib/reset-map/clientIdempotency'
 import { getSessionSafe } from '@/lib/supabase'
 import { prefetchMediaSign } from './media-cache'
 import { clearSessionDraftForSession } from '@/lib/session/draftStorage'
@@ -44,6 +49,10 @@ interface ResetMapV2Props {
   adaptiveExplanation?: { title: string; message: string } | null
   /** PR-RISK-02: next session preview from bootstrap (post-completion 카드용) */
   nextSession?: { session_number: number; focus_axes: string[]; estimated_time: number } | null
+  /** PR-RESET-05: reset-map flow id for preview/apply wiring */
+  resetMapFlowId?: string | null
+  /** PR-RESET-05: called after successful apply */
+  onFlowApplied?: () => void
   /** debug: true → createSession 응답에 timings 포함 (cold path 측정용) */
   debug?: boolean
 }
@@ -142,7 +151,7 @@ function bootstrapToPanelPlan(data: PanelBootstrapResponse): SessionPlan {
   }
 }
 
-export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, onRequestNextSession, initialSelectedSessionId, adaptiveExplanation, nextSession, debug }: ResetMapV2Props) {
+export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, onFlowApplied, resetMapFlowId, onRequestNextSession, initialSelectedSessionId, adaptiveExplanation, nextSession, debug }: ResetMapV2Props) {
   // localDailyCapActive: createSession이 DAILY_LIMIT_REACHED 반환 시 클라이언트 측 즉시 반영 (방어)
   const [localDailyCapActive, setLocalDailyCapActive] = useState(false)
   // daily cap: today_completed || localDailyCapActive, activePlan 없을 때 → 현재 세션 없음, 다음 세션 locked
@@ -473,6 +482,21 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     return () => { cancelled = true }
   }, [selectedStatus, selectedSessionId, loadSessionSummary])
 
+  // PR-RESET-05: current 세션 패널 오픈 시 preview gate (minimal pass-through)
+  const previewSubmittedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (selectedStatus !== 'current' || selectedSessionId === null || !resetMapFlowId) return
+    if (previewSubmittedRef.current === resetMapFlowId) return
+
+    let cancelled = false
+    previewSubmittedRef.current = resetMapFlowId
+    resolveAuthToken().then(async (token) => {
+      if (cancelled || !token) return
+      await submitResetMapPreview(token, resetMapFlowId, { permission_state: 'granted' })
+    })
+    return () => { cancelled = true }
+  }, [selectedStatus, selectedSessionId, resetMapFlowId, resolveAuthToken])
+
   // current 세션 패널 오픈 + activePlan 없음 → bootstrap summary 먼저 로드
   useEffect(() => {
     if (selectedStatus !== 'current' || selectedSessionId === null) return
@@ -539,11 +563,19 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         setBootstrapPlan((prev) => (prev?.session_number === plan.session_number ? null : prev))
         setPlanLoading(false)
         onActivePlanCreated?.(plan)
+        if (resetMapFlowId && onFlowApplied) {
+          const applyKey = getIdempotencyKey('apply')
+          const applyRes = await applyResetMapFlow(token, resetMapFlowId, applyKey)
+          if (applyRes.ok) {
+            clearApplyKey()
+            onFlowApplied()
+          }
+        }
       }
     })
 
     return () => { cancelled = true }
-  }, [selectedStatus, selectedSessionId, fullPlan, bootstrapPlan, onActivePlanCreated, resolveAuthToken, debug])
+  }, [selectedStatus, selectedSessionId, fullPlan, bootstrapPlan, onActivePlanCreated, onFlowApplied, resetMapFlowId, resolveAuthToken, debug])
 
   const currentRenderablePlan = useMemo(() => {
     if (selectedStatus !== 'current' || selectedSessionId === null) return null
