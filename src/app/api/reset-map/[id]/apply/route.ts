@@ -2,8 +2,8 @@
  * POST /api/reset-map/[id]/apply
  *
  * PR-RESET-01: Reset Map Flow apply 전이.
+ * PR-RESET-02: Idempotency-Key required. Replay safe.
  * started | preview_ready → applied.
- * 422 INVALID_STATE: 이미 applied/aborted.
  * Auth: Bearer token. Write: service role (RLS bypass).
  */
 
@@ -13,6 +13,11 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { canApply } from '@/lib/reset-map/state';
 import type { ResetMapState } from '@/lib/reset-map/types';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
+import {
+  checkIdempotency,
+  storeIdempotentResult,
+  ROUTE_KEYS,
+} from '@/lib/idempotency/guard';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -21,6 +26,15 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const idempotencyKey = req.headers.get('Idempotency-Key')?.trim();
+  if (!idempotencyKey) {
+    return fail(
+      400,
+      ApiErrorCode.IDEMPOTENCY_KEY_REQUIRED,
+      'Idempotency-Key 헤더가 필요합니다'
+    );
+  }
+
   try {
     const userId = await getCurrentUserId(req);
     if (!userId) {
@@ -33,6 +47,19 @@ export async function POST(
     }
 
     const supabase = getServerSupabaseAdmin();
+    const fingerprintPayload = { flow_id: id };
+
+    const guardResult = await checkIdempotency({
+      supabase,
+      idempotencyKey,
+      routeKey: ROUTE_KEYS.RESET_MAP_APPLY,
+      fingerprintPayload,
+      userId,
+    });
+
+    if (guardResult.action === 'reject') return guardResult.response;
+    if (guardResult.action === 'replay') return guardResult.response;
+
     const { data: row, error: fetchErr } = await supabase
       .from('reset_map_flow')
       .select('*')
@@ -85,6 +112,18 @@ export async function POST(
         { state }
       );
     }
+
+    const responseBody = { ok: true as const, data };
+    await storeIdempotentResult({
+      supabase,
+      idempotencyKey,
+      routeKey: ROUTE_KEYS.RESET_MAP_APPLY,
+      fingerprintPayload,
+      userId,
+      statusCode: 200,
+      responseBody,
+      flowId: id,
+    });
 
     return ok(data);
   } catch (err) {
