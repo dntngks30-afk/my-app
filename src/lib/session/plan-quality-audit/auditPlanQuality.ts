@@ -147,6 +147,83 @@ export function auditPlanQuality(
         score -= PENALTY_WARN;
       }
     }
+
+    /** PR-ALIGN-03: LOWER-LIMB / NECK-SHOULDER / LUMBO-PELVIS minimal alignment checks */
+    if (resultType === 'LOWER-LIMB') {
+      const focusAxes = plan.meta?.session_focus_axes ?? [];
+      const isUpperOnly = focusAxes.length > 0 && focusAxes.every((a) => a === 'upper_mobility');
+      if (isUpperOnly) {
+        issues.push({
+          code: 'LOWER_LIMB_FOCUS_MISMATCH',
+          severity: 'warn',
+          message: 'LOWER-LIMB first session has session_focus_axes=upper_mobility only (expected lower-related)',
+        });
+        score -= PENALTY_WARN;
+      }
+      const lowerTags = new Set(getResultTypeFocusTags('LOWER-LIMB'));
+      const hasLowerItem = allItemsWithSeg.some(({ item }) => {
+        const t = templateById.get(item.templateId);
+        return t?.focus_tags?.some((tag) => lowerTags.has(tag));
+      });
+      if (!hasLowerItem && allItemsWithSeg.length > 0) {
+        issues.push({
+          code: 'LOWER_LIMB_NO_RELEVANT_ITEM',
+          severity: 'warn',
+          message: 'LOWER-LIMB first session has no lower-limb relevant exercise',
+        });
+        score -= PENALTY_WARN;
+      }
+    }
+    if (resultType === 'NECK-SHOULDER') {
+      const focusAxes = plan.meta?.session_focus_axes ?? [];
+      const isTrunkOnly = focusAxes.length > 0 && focusAxes.every((a) => a === 'trunk_control');
+      if (isTrunkOnly) {
+        issues.push({
+          code: 'NECK_SHOULDER_FOCUS_MISMATCH',
+          severity: 'warn',
+          message: 'NECK-SHOULDER first session has session_focus_axes=trunk_control only (expected upper-related)',
+        });
+        score -= PENALTY_WARN;
+      }
+      const neckTags = new Set(getResultTypeFocusTags('NECK-SHOULDER'));
+      const hasNeckItem = allItemsWithSeg.some(({ item }) => {
+        const t = templateById.get(item.templateId);
+        return t?.focus_tags?.some((tag) => neckTags.has(tag));
+      });
+      if (!hasNeckItem && allItemsWithSeg.length > 0) {
+        issues.push({
+          code: 'NECK_SHOULDER_NO_RELEVANT_ITEM',
+          severity: 'warn',
+          message: 'NECK-SHOULDER first session has no neck/shoulder relevant exercise',
+        });
+        score -= PENALTY_WARN;
+      }
+    }
+    if (resultType === 'LUMBO-PELVIS') {
+      const focusAxes = plan.meta?.session_focus_axes ?? [];
+      const hasTrunk = focusAxes.includes('trunk_control');
+      if (focusAxes.length > 0 && !hasTrunk) {
+        issues.push({
+          code: 'LUMBO_PELVIS_FOCUS_MISMATCH',
+          severity: 'warn',
+          message: 'LUMBO-PELVIS first session session_focus_axes should include trunk_control',
+        });
+        score -= PENALTY_WARN;
+      }
+      const lumboTags = new Set(getResultTypeFocusTags('LUMBO-PELVIS'));
+      const hasLumboItem = allItemsWithSeg.some(({ item }) => {
+        const t = templateById.get(item.templateId);
+        return t?.focus_tags?.some((tag) => lumboTags.has(tag));
+      });
+      if (!hasLumboItem && allItemsWithSeg.length > 0) {
+        issues.push({
+          code: 'LUMBO_PELVIS_NO_RELEVANT_ITEM',
+          severity: 'warn',
+          message: 'LUMBO-PELVIS first session has no lumbo-pelvis relevant exercise',
+        });
+        score -= PENALTY_WARN;
+      }
+    }
   }
 
   const segmentTitles = plan.segments.map((s) => s.title);
