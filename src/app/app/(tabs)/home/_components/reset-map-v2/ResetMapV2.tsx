@@ -323,6 +323,41 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     }
   }, [activePlan, fullPlan, effectiveCurrentSession, loadSessionSummary])
 
+  /** PR-PERF-22: Prefetch bootstrap for current session so panel renders immediately on click. */
+  useEffect(() => {
+    if (effectiveCurrentSession === null) return
+    if (fullPlan !== null) return
+    if (bootstrapCacheRef.current.has(effectiveCurrentSession)) return
+
+    let cancelled = false
+    let raf1 = 0
+    let raf2 = 0
+    let timeoutId: number | null = null
+    let idleId: number | null = null
+    const run = async () => {
+      if (cancelled) return
+      await loadSessionBootstrap(effectiveCurrentSession)
+    }
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        if (typeof requestIdleCallback !== 'undefined') {
+          idleId = requestIdleCallback(() => { void run() }, { timeout: 1200 }) as unknown as number
+        } else {
+          timeoutId = window.setTimeout(() => { void run() }, 250)
+        }
+      })
+    })
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+      if (idleId !== null && typeof cancelIdleCallback !== 'undefined') {
+        cancelIdleCallback(idleId)
+      }
+      if (timeoutId !== null) clearTimeout(timeoutId)
+    }
+  }, [effectiveCurrentSession, fullPlan, loadSessionBootstrap])
+
   // 과거 세션: 가장 최근 완료 세션 미리 로드 (클릭 시 체감 개선)
   useEffect(() => {
     if (completed < 1) return
@@ -404,6 +439,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     return () => { cancelled = true }
   }, [selectedStatus, selectedSessionId, loadSessionSummary])
 
+  /** PR-PERF-22: Summary-first panel. Open immediately, use cached bootstrap if available. */
   const handleNodeTap = useCallback((session: SessionNode) => {
     const nextStatus =
       effectiveCurrentSession === null
@@ -423,12 +459,21 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       pastSessionPlan?.session_number === session.id ||
       summaryCacheRef.current.has(session.id)
 
+    setSelectedSessionId(session.id)
+
+    if (nextStatus === 'current') {
+      const cachedBootstrap = bootstrapCacheRef.current.get(session.id)
+      if (cachedBootstrap) {
+        setBootstrapPlan(cachedBootstrap)
+        setPlanLoading(false)
+        return
+      }
+    }
+
     const shouldShowLoading =
       (nextStatus === 'current' && !currentPlanReady) ||
       (nextStatus === 'completed' && !completedPlanReady)
-
     setPlanLoading(shouldShowLoading)
-    setSelectedSessionId(session.id)
   }, [effectiveCurrentSession, completed, fullPlan, bootstrapPlan, pastSessionPlan])
 
   const handleClose = useCallback(() => {
@@ -538,7 +583,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     return () => { cancelled = true }
   }, [selectedStatus, selectedSessionId, fullPlan, bootstrapPlan, loadSessionBootstrap])
 
-  // current 세션 패널 오픈 + activePlan 없음 → createSession 호출
+  /** PR-PERF-22: createSession runs in background. Panel renders bootstrap immediately. */
   useEffect(() => {
     if (selectedStatus !== 'current') return
     if (selectedSessionId === null) return
@@ -547,7 +592,6 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
 
     createCalledRef.current = true
     let cancelled = false
-    setPlanLoading(true)
 
     resolveAuthToken().then(async (token) => {
       if (cancelled || !token) {
