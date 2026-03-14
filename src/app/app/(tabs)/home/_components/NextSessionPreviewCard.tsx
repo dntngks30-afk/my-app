@@ -9,6 +9,7 @@
  */
 
 import { ChevronRight } from 'lucide-react';
+import type { NextSessionPreviewData } from '@/lib/session/next-session-preview';
 
 const FOCUS_AXIS_LABELS: Record<string, string> = {
   lower_stability: '하체 안정',
@@ -19,16 +20,6 @@ const FOCUS_AXIS_LABELS: Record<string, string> = {
   deconditioned: '전신 회복',
 };
 
-export type NextSessionPreviewData = {
-  session_number: number;
-  focus_axes?: string[];
-  /** fallback when focus_axes empty — e.g. next_theme from complete API */
-  focus_label?: string | null;
-  estimated_time?: number;
-  exercise_count?: number;
-  session_rationale?: string | null;
-};
-
 export type AdaptiveExplanation = {
   title: string;
   message: string;
@@ -37,7 +28,7 @@ export type AdaptiveExplanation = {
 export type NextSessionPreviewCardProps = {
   data: NextSessionPreviewData | null;
   /** 'post-completion' = after reflection submit, 'home' = home top section */
-  variant?: 'post-completion' | 'home';
+  variant?: 'post-completion' | 'home' | 'locked-panel';
   /** Primary CTA: "다음 세션 준비 보기" / "지도에서 확인하기" */
   onPrimaryCta?: () => void;
   /** When next session is locked (today completed) */
@@ -80,27 +71,6 @@ export function NextSessionPreviewCard({
 }: NextSessionPreviewCardProps) {
   const hasDetails = data && (formatFocusLabel(data) || data.estimated_time || data.exercise_count);
 
-  if (isLockedUntilTomorrow) {
-    return (
-      <div className="rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-4">
-        <p className="text-sm font-semibold text-slate-700">다음 세션</p>
-        <p className="mt-1 text-xs text-slate-600">
-          오늘 세션을 완료했어요. 내일 다음 세션이 준비됩니다.
-        </p>
-        {onPrimaryCta && (
-          <button
-            type="button"
-            onClick={onPrimaryCta}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-200 py-2.5 text-sm font-medium text-slate-700"
-          >
-            지도에서 확인하기
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-    );
-  }
-
   if (!data) {
     return (
       <div className="rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-4">
@@ -125,6 +95,23 @@ export function NextSessionPreviewCard({
   const focusLabel = formatFocusLabel(data);
   const estimatedTime = formatEstimatedTime(data.estimated_time);
   const exerciseCount = data.exercise_count;
+  const exercisesPreview = Array.isArray(data.exercises_preview) ? data.exercises_preview : [];
+  const isLockedCard = isLockedUntilTomorrow === true;
+  const toneClass = isLockedCard
+    ? 'border-slate-200 bg-slate-50'
+    : 'border-violet-200 bg-violet-50';
+  const eyebrowClass = isLockedCard
+    ? 'text-slate-500'
+    : 'text-violet-600';
+  const titleClass = isLockedCard
+    ? 'text-slate-900'
+    : 'text-violet-900';
+  const bodyClass = isLockedCard
+    ? 'text-slate-700'
+    : 'text-violet-700';
+  const subBodyClass = isLockedCard
+    ? 'text-slate-600'
+    : 'text-violet-600';
 
   const conditionalMessage = (() => {
     if (lastSessionHadPainAreas) {
@@ -140,45 +127,50 @@ export function NextSessionPreviewCard({
   })();
 
   return (
-    <div className="rounded-2xl border-2 border-violet-200 bg-violet-50 px-4 py-4">
-      <p className="text-xs font-semibold uppercase tracking-wider text-violet-600">
-        다음 세션
+    <div className={`rounded-2xl border-2 px-4 py-4 ${toneClass}`}>
+      <p className={`text-xs font-semibold uppercase tracking-wider ${eyebrowClass}`}>
+        {isLockedCard ? '잠긴 다음 세션' : '다음 세션'}
       </p>
-      <p className="mt-0.5 text-lg font-bold text-violet-900">
+      <p className={`mt-0.5 text-lg font-bold ${titleClass}`}>
         세션 {data.session_number}
       </p>
 
       {hasDetails ? (
         <>
           {focusLabel && (
-            <p className="mt-2 text-sm font-medium text-violet-800">
+            <p className={`mt-2 text-sm font-medium ${bodyClass}`}>
               목표: {focusLabel}
             </p>
           )}
-          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-violet-700">
+          <div className={`mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs ${bodyClass}`}>
             <span>예상 시간: {estimatedTime}</span>
             {typeof exerciseCount === 'number' && exerciseCount > 0 && (
               <span>운동 수: {exerciseCount}개</span>
             )}
           </div>
           {data.session_rationale && (
-            <p className="mt-2 text-xs leading-relaxed text-violet-600">
+            <p className={`mt-2 text-xs leading-relaxed ${subBodyClass}`}>
               {data.session_rationale}
+            </p>
+          )}
+          {exercisesPreview.length > 0 && (
+            <p className={`mt-1.5 text-xs leading-relaxed ${subBodyClass}`}>
+              미리 볼 운동: {exercisesPreview.join(', ')}
             </p>
           )}
           {/* PR-ALG-15: Adaptive explanation (server-generated) */}
           {adaptiveExplanation ? (
-            <div className="mt-3 rounded-xl border border-violet-200 bg-violet-100/80 px-3 py-2.5">
-              <p className="text-xs font-semibold text-violet-800">
+            <div className={`mt-3 rounded-xl border px-3 py-2.5 ${isLockedCard ? 'border-slate-200 bg-slate-100' : 'border-violet-200 bg-violet-100/80'}`}>
+              <p className={`text-xs font-semibold ${isLockedCard ? 'text-slate-800' : 'text-violet-800'}`}>
                 {adaptiveExplanation.title}
               </p>
-              <p className="mt-0.5 text-xs leading-relaxed text-violet-700">
+              <p className={`mt-0.5 text-xs leading-relaxed ${isLockedCard ? 'text-slate-700' : 'text-violet-700'}`}>
                 {adaptiveExplanation.message}
               </p>
             </div>
           ) : (
             conditionalMessage && (
-              <p className="mt-1.5 text-xs leading-relaxed text-violet-600">
+              <p className={`mt-1.5 text-xs leading-relaxed ${subBodyClass}`}>
                 {conditionalMessage}
               </p>
             )
@@ -186,18 +178,18 @@ export function NextSessionPreviewCard({
         </>
       ) : (
         <>
-          <p className="mt-2 text-xs text-violet-600">
+          <p className={`mt-2 text-xs ${subBodyClass}`}>
             현재 흐름을 이어 다음 세션이 준비됩니다
           </p>
-          <p className="mt-0.5 text-xs text-violet-600">
+          <p className={`mt-0.5 text-xs ${subBodyClass}`}>
             예상 시간: {formatEstimatedTime(data.estimated_time)}
           </p>
           {adaptiveExplanation && (
-            <div className="mt-3 rounded-xl border border-violet-200 bg-violet-100/80 px-3 py-2.5">
-              <p className="text-xs font-semibold text-violet-800">
+            <div className={`mt-3 rounded-xl border px-3 py-2.5 ${isLockedCard ? 'border-slate-200 bg-slate-100' : 'border-violet-200 bg-violet-100/80'}`}>
+              <p className={`text-xs font-semibold ${isLockedCard ? 'text-slate-800' : 'text-violet-800'}`}>
                 {adaptiveExplanation.title}
               </p>
-              <p className="mt-0.5 text-xs leading-relaxed text-violet-700">
+              <p className={`mt-0.5 text-xs leading-relaxed ${isLockedCard ? 'text-slate-700' : 'text-violet-700'}`}>
                 {adaptiveExplanation.message}
               </p>
             </div>
@@ -205,13 +197,30 @@ export function NextSessionPreviewCard({
         </>
       )}
 
+      {isLockedCard && (
+        <div className="mt-3 rounded-xl border border-slate-200 bg-white/80 px-3 py-2.5">
+          <p className="text-xs font-semibold text-slate-700">내일 시작할 수 있어요</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
+            오늘은 미리보기만 확인할 수 있어요.
+          </p>
+        </div>
+      )}
+
       {onPrimaryCta && (
         <button
           type="button"
           onClick={onPrimaryCta}
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-violet-500 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-violet-600 active:scale-[0.98]"
+          className={`mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold shadow-sm transition active:scale-[0.98] ${
+            isLockedCard
+              ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+              : 'bg-violet-500 text-white hover:bg-violet-600'
+          }`}
         >
-          {variant === 'post-completion' ? '다음 세션 준비 보기' : '지도에서 확인하기'}
+          {isLockedCard
+            ? '미리보기만 확인할 수 있어요'
+            : variant === 'post-completion'
+              ? '다음 세션 준비 보기'
+              : '지도에서 확인하기'}
           <ChevronRight className="h-4 w-4" />
         </button>
       )}

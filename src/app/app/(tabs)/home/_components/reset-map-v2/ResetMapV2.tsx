@@ -20,6 +20,10 @@ import {
   applyResetMapFlow,
 } from '@/lib/reset-map/client'
 import { getIdempotencyKey, clearApplyKey } from '@/lib/reset-map/clientIdempotency'
+import {
+  buildNextSessionPreviewRationale,
+  type NextSessionPreviewPayload,
+} from '@/lib/session/next-session-preview'
 import { getSessionSafe } from '@/lib/supabase'
 import { prefetchMediaSign } from './media-cache'
 import { clearSessionDraftForSession } from '@/lib/session/draftStorage'
@@ -48,7 +52,7 @@ interface ResetMapV2Props {
   /** PR-ALG-15: adaptive explanation from bootstrap */
   adaptiveExplanation?: { title: string; message: string } | null
   /** PR-RISK-02: next session preview from bootstrap (post-completion 카드용) */
-  nextSession?: { session_number: number; focus_axes: string[]; estimated_time: number } | null
+  nextSession?: NextSessionPreviewPayload | null
   /** PR-RESET-05: reset-map flow id for preview/apply wiring */
   resetMapFlowId?: string | null
   /** PR-RESET-05: called after successful apply */
@@ -96,21 +100,6 @@ function toExerciseLogMap(logs?: ExerciseLogItem[]): Record<string, ExerciseLogI
   return map
 }
 
-function buildBootstrapRationale(focusAxes: string[]): string | null {
-  const LABELS: Record<string, string> = {
-    lower_stability: '하체 안정',
-    lower_mobility: '하체 가동성',
-    upper_mobility: '상체 가동성',
-    trunk_control: '몸통 제어',
-    asymmetry: '좌우 균형',
-    deconditioned: '전신 회복',
-  }
-  const labels = focusAxes.map((axis) => LABELS[axis] ?? axis).filter(Boolean)
-  if (labels.length === 0) return null
-  if (labels.length === 1) return `${labels[0]} 중심으로 먼저 몸을 정리하는 구성입니다`
-  return `${labels[0]}과 ${labels[1]} 중심으로 먼저 몸을 정리하는 구성입니다`
-}
-
 /** PR-18: bootstrap → panel-compatible plan (display only). Full plan_json 아님. */
 function bootstrapToPanelPlan(data: PanelBootstrapResponse): SessionPlan {
   const flagMap = new Set(data.constraint_flags)
@@ -129,7 +118,7 @@ function bootstrapToPanelPlan(data: PanelBootstrapResponse): SessionPlan {
         avoid: [],
         scoring_version: 'session_bootstrap_v1',
         session_focus_axes: data.focus_axes,
-        session_rationale: buildBootstrapRationale(data.focus_axes),
+        session_rationale: buildNextSessionPreviewRationale(data.focus_axes),
         constraint_flags: {
           avoid_filter_applied: flagMap.has('avoid_filter_applied'),
           duplicate_filtered_count: flagMap.has('duplicate_filtered') ? 1 : 0,

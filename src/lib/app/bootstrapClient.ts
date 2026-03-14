@@ -1,5 +1,6 @@
 import { getCacheStale, invalidateCache, setCache } from '@/lib/cache/tabDataCache';
 import type { ActivePlanSummary, ActiveSessionLiteResponse, SessionProgress } from '@/lib/session/client';
+import type { NextSessionPreviewPayload } from '@/lib/session/next-session-preview';
 
 type ApiError = {
   code: string;
@@ -37,11 +38,7 @@ export type AppBootstrapResponse = {
     today_completed?: boolean;
     next_unlock_at?: string | null;
   };
-  next_session: {
-    session_number: number;
-    focus_axes: string[];
-    estimated_time: number;
-  } | null;
+  next_session: NextSessionPreviewPayload | null;
   /** PR-ALG-15: Human-readable adaptive adjustment explanation */
   adaptive_explanation?: AdaptiveExplanation | null;
   stats_preview: AppBootstrapStatsPreview;

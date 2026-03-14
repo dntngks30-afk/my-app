@@ -6,12 +6,16 @@ import type { ExerciseItem } from './planJsonAdapter'
 import { getLogKey } from './planJsonAdapter'
 import type { ExerciseLogItem, SessionPlan, ActivePlanSummary } from '@/lib/session/client'
 import { isExerciseLogCompleted, getExerciseLogDisplayValue } from './exercise-log-helpers'
-import type { NextSessionPreviewData } from '../NextSessionPreviewCard'
 import { buildBriefSessionRationale } from '@/lib/deep-result/copy'
 import { ExercisePlayerModal } from './ExercisePlayerModal'
 import SessionCompleteSummary from '@/app/app/routine/_components/SessionCompleteSummary'
 import { ReflectionModal } from './ReflectionModal'
 import { NextSessionPreviewCard } from '../NextSessionPreviewCard'
+import {
+  resolveLockedNextSessionPreview,
+  resolvePostCompletionNextSessionPreview,
+  type NextSessionPreviewPayload,
+} from '@/lib/session/next-session-preview'
 import { useHomeSessionPanelState } from './useHomeSessionPanelState'
 
 type SessionStatus = 'current' | 'completed' | 'locked'
@@ -41,29 +45,7 @@ interface SessionPanelV2Props {
   /** PR-ALG-15: adaptive explanation from bootstrap */
   adaptiveExplanation?: { title: string; message: string } | null
   /** PR-RISK-02: next session from bootstrap (post-completion 카드 데이터 우선) */
-  nextSession?: { session_number: number; focus_axes: string[]; estimated_time: number } | null
-}
-
-/** PR-RISK-02: bootstrap next_session 우선, completeResult fallback */
-function buildPostCompletionNextSessionData(
-  completedSessions: number,
-  total: number,
-  nextTheme: string | null,
-  nextSession: { session_number: number; focus_axes: string[]; estimated_time: number } | null | undefined
-): NextSessionPreviewData {
-  const nextNum = Math.min(completedSessions + 1, total)
-  if (nextSession && nextSession.session_number === nextNum) {
-    return {
-      session_number: nextSession.session_number,
-      focus_axes: nextSession.focus_axes,
-      estimated_time: nextSession.estimated_time,
-    }
-  }
-  return {
-    session_number: nextNum,
-    focus_label: nextTheme,
-    estimated_time: 12,
-  }
+  nextSession?: NextSessionPreviewPayload | null
 }
 
 const STATUS_LABEL: Record<SessionStatus, string> = {
@@ -144,6 +126,7 @@ export function SessionPanelV2({
     <PanelInner
       sessionId={sessionId}
       total={total}
+      completedSessions={completedSessions}
       status={status}
       exercises={exercises}
       activePlan={activePlan}
@@ -209,6 +192,12 @@ function PanelInner({
   } = panelState
 
   const rationale = getPlanRationale(activePlan)
+  const lockedPreviewData = resolveLockedNextSessionPreview({
+    sessionId,
+    status,
+    isLockedNext,
+    nextSession,
+  })
 
   // PR-SESSION-UX-02: 세션 전환 시 운동 뷰 리셋 (hook 내부에서 처리)
   // 패널 open 측정
@@ -277,12 +266,12 @@ function PanelInner({
               />
               {/* PR-RISK-02: 다음 세션 안내는 NextSessionPreviewCard 단일 블록. bootstrap next_session 우선, completeResult fallback */}
               <NextSessionPreviewCard
-                data={buildPostCompletionNextSessionData(
-                  completeResult.progress.completed_sessions,
+                data={resolvePostCompletionNextSessionPreview({
+                  completedSessions: completeResult.progress.completed_sessions,
                   total,
-                  completeResult.next_theme,
-                  nextSession
-                )}
+                  nextTheme: completeResult.next_theme,
+                  nextSession,
+                })}
                 variant="post-completion"
                 isLockedUntilTomorrow={isLockedNext ?? false}
                 lastSessionDifficulty={lastReflectionDifficulty}
@@ -306,7 +295,7 @@ function PanelInner({
           {!(completed && completeResult && sessionId === completeResult.progress.completed_sessions) && (
             <>
           {/* PR-SESSION-FIX-03: 다음 세션 미리보기 배너 */}
-          {completedSessions != null && sessionId === completedSessions + 1 && (
+          {completedSessions != null && sessionId === completedSessions + 1 && status !== 'locked' && (
             <div className="mx-4 mt-2 mb-0 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-center">
               <p className="text-sm font-semibold text-violet-800">다음 세션 준비됐어요</p>
               <p className="text-xs text-violet-600 mt-0.5">세션 {sessionId}에서 이런 운동을 하게 돼요</p>
@@ -377,14 +366,22 @@ function PanelInner({
                 )}
               </div>
             )}
-            <ExerciseList
-              exercises={exercises}
-              status={status}
-              logs={logs}
-              isLockedNext={isLockedNext}
-              nextUnlockAt={nextUnlockAt}
-              onPlay={(item, idx) => setExerciseIndex(idx)}
-            />
+            {lockedPreviewData ? (
+              <NextSessionPreviewCard
+                data={lockedPreviewData}
+                variant="locked-panel"
+                isLockedUntilTomorrow
+              />
+            ) : (
+              <ExerciseList
+                exercises={exercises}
+                status={status}
+                logs={logs}
+                isLockedNext={isLockedNext}
+                nextUnlockAt={nextUnlockAt}
+                onPlay={(item, idx) => setExerciseIndex(idx)}
+              />
+            )}
           </div>
 
           {/* 종료 CTA 바 (current 세션만) — PR-UX-00: 질문 블록 제거, 버튼만 */}

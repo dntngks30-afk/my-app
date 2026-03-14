@@ -4,6 +4,10 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import { buildSessionBootstrapSummary } from '@/lib/session/bootstrap-summary';
 import { fetchActiveLiteData } from '@/lib/session/active-lite-data';
+import {
+  resolveBootstrapNextSessionPreview,
+  type NextSessionPreviewPayload,
+} from '@/lib/session/next-session-preview';
 import { loadRecentAdaptiveSignals } from '@/lib/session/adaptive-progression';
 import { loadLatestAdaptiveSummary } from '@/lib/session/adaptive-modifier-resolver';
 import { computeAdaptiveModifier } from '@/core/adaptive-engine';
@@ -30,6 +34,9 @@ type AppBootstrapData = {
     session_number: number;
     focus_axes: string[];
     estimated_time: number;
+    exercise_count: number;
+    session_rationale: string | null;
+    exercises_preview: string[];
   } | null;
   /** PR-ALG-15: Human-readable explanation of adaptive adjustments */
   adaptive_explanation: {
@@ -73,7 +80,7 @@ async function loadNextSessionPreview(
   userId: string,
   activeSession: { session_number: number; status: string } | null,
   session: { completed_sessions: number; total_sessions: number; today_completed?: boolean }
-): Promise<AppBootstrapData['next_session']> {
+): Promise<NextSessionPreviewPayload | null> {
   try {
     if (activeSession?.session_number) {
       const { data: row } = await supabase
@@ -84,19 +91,21 @@ async function loadNextSessionPreview(
         .maybeSingle();
 
       const planJson = row?.plan_json as {
-        meta?: { session_focus_axes?: string[] };
+        meta?: { session_focus_axes?: string[]; session_rationale?: string | null };
+        segments?: Array<{ items?: Array<{ name?: string | null }> }>;
       } | null;
 
-      return {
-        session_number: row?.session_number ?? activeSession.session_number,
-        focus_axes: Array.isArray(planJson?.meta?.session_focus_axes)
-          ? planJson.meta.session_focus_axes
-          : [],
-        estimated_time: estimateMinutesFromPlanJson(planJson),
-      };
+      return resolveBootstrapNextSessionPreview({
+        activeSessionPlan: {
+          session_number: row?.session_number ?? activeSession.session_number,
+          planJson,
+          estimatedTime: estimateMinutesFromPlanJson(planJson),
+        },
+        completedSessions: session.completed_sessions,
+        totalSessions: session.total_sessions,
+        todayCompleted: session.today_completed,
+      });
     }
-
-    if (session.today_completed) return null;
 
     const nextSessionNumber = session.completed_sessions + 1;
     if (nextSessionNumber > session.total_sessions) return null;
@@ -109,11 +118,12 @@ async function loadNextSessionPreview(
       deepSummary,
     });
 
-    return {
-      session_number: nextSessionNumber,
-      focus_axes: summary.focus_axes,
-      estimated_time: Math.max(1, Math.round(summary.estimated_duration / 60)),
-    };
+    return resolveBootstrapNextSessionPreview({
+      completedSessions: session.completed_sessions,
+      totalSessions: session.total_sessions,
+      todayCompleted: session.today_completed,
+      bootstrapSummary: summary,
+    });
   } catch (err) {
     console.warn('[app/bootstrap] next_session preview fallback', err);
     return null;
