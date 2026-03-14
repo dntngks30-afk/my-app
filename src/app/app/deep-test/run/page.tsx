@@ -13,6 +13,7 @@ import AppTopBar from '../../_components/AppTopBar';
 import BottomNav from '../../_components/BottomNav';
 import { getSessionSafe } from '@/lib/supabase';
 import { postSessionProfile } from '@/lib/session/client';
+import { invalidateAppBootstrapCache } from '@/lib/app/bootstrapClient';
 import { trackDeepEvent, setDeepTrackToken } from '@/lib/deep-test/events';
 import { DEEP_V2_QUESTIONS, DEEP_SECTIONS, type DeepQuestion } from '../_data/questions';
 import type { DeepAnswerValue } from '@/lib/deep-test/types';
@@ -401,6 +402,7 @@ export default function DeepTestRunPage() {
         return;
       }
 
+      invalidateAppBootstrapCache();
       submittedRef.current = true;
       trackDeepEvent('deep_test_submitted', { attempt_id: attemptId });
       router.push('/app/deep-test/result');

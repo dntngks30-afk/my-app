@@ -81,6 +81,11 @@ export async function POST(req: NextRequest) {
         { status: freqResult.code === 'POLICY_LOCKED' ? 409 : 500 }
       );
     }
+  } else {
+    console.warn('[deep-test/finalize] target_frequency not applied', {
+      raw: rawTargetFrequency,
+      valid: isValidTargetFrequency(rawTargetFrequency),
+    });
   }
 
   const { data: attempt, error: fetchError } = await supabase

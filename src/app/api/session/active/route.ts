@@ -66,22 +66,30 @@ function logTimingBreakdown(timings: Record<string, number>, path: string): void
   console.info(lines.join('\n'));
 }
 
-/** BE-ONB-02: profile.target_frequency → total_sessions. 없으면 16. */
+type ResolvedTotal = {
+  totalSessions: number;
+  source: 'profile' | 'default';
+  profile_present: boolean;
+  target_frequency: number | null;
+};
+
+/** BE-ONB-02: profile.target_frequency → total_sessions. 없으면 16. P0: observability for default fallback. */
 async function resolveTotalSessions(
   supabase: Awaited<ReturnType<typeof getServerSupabaseAdmin>>,
   userId: string
-): Promise<{ totalSessions: number; source: 'profile' | 'default' }> {
+): Promise<ResolvedTotal> {
   const { data } = await supabase
     .from('session_user_profile')
     .select('target_frequency')
     .eq('user_id', userId)
     .maybeSingle();
 
-  const freq = data?.target_frequency;
+  const freq = data?.target_frequency ?? null;
+  const profilePresent = data != null;
   if (typeof freq === 'number' && freq in FREQUENCY_TO_TOTAL) {
-    return { totalSessions: FREQUENCY_TO_TOTAL[freq], source: 'profile' };
+    return { totalSessions: FREQUENCY_TO_TOTAL[freq], source: 'profile', profile_present: true, target_frequency: freq };
   }
-  return { totalSessions: DEFAULT_TOTAL_SESSIONS, source: 'default' };
+  return { totalSessions: DEFAULT_TOTAL_SESSIONS, source: 'default', profile_present: profilePresent, target_frequency: freq };
 }
 
 export async function GET(req: NextRequest) {
@@ -98,6 +106,7 @@ export async function GET(req: NextRequest) {
 
     const supabase = getServerSupabaseAdmin();
     const tProgressStart = performance.now();
+    let lastResolved: ResolvedTotal | null = null;
 
     // progress 조회 — 없으면 자동 생성(upsert)
     let { data: progress } = await supabase
@@ -111,7 +120,15 @@ export async function GET(req: NextRequest) {
     if (!progress) {
       const tResolveStart = performance.now();
       const resolved = await resolveTotalSessions(supabase, userId);
+      lastResolved = resolved;
       timings.profile_query_ms = Math.round(performance.now() - tResolveStart);
+      if (resolved.source === 'default') {
+        console.warn('[session/active] progress init with default total_sessions', {
+          profile_present: resolved.profile_present,
+          target_frequency: resolved.target_frequency,
+          total_sessions: resolved.totalSessions,
+        });
+      }
       const tInsertStart = performance.now();
       const { data: created, error: insertErr } = await supabase
         .from('session_program_progress')
@@ -143,6 +160,7 @@ export async function GET(req: NextRequest) {
       if (activeSessionNumber === null) {
         const tResolveStart = performance.now();
         const resolved = await resolveTotalSessions(supabase, userId);
+        lastResolved = resolved;
         timings.profile_query_ms = Math.round(performance.now() - tResolveStart);
         const completed = progress.completed_sessions ?? 0;
         const safeToSync =
@@ -158,7 +176,22 @@ export async function GET(req: NextRequest) {
           timings.progress_sync_ms = Math.round(performance.now() - tSyncStart);
           if (!syncErr && synced) progress = synced;
         } else if (resolved.totalSessions < completed) {
-          console.warn('[session/active] sync skipped: resolved < completed_sessions');
+          console.warn('[session/active] sync skipped: resolved < completed_sessions', {
+            resolved_total: resolved.totalSessions,
+            completed_sessions: completed,
+            profile_present: resolved.profile_present,
+          });
+          void logSessionEvent(supabase, {
+            userId,
+            eventType: 'session_active_read',
+            status: 'ok',
+            meta: {
+              sync_skipped: true,
+              reason: 'resolved_total_sessions_lt_completed',
+              resolved_total: resolved.totalSessions,
+              completed_sessions: completed,
+            },
+          });
         }
       }
     }
@@ -169,16 +202,21 @@ export async function GET(req: NextRequest) {
     timings.processing_ms = Math.round(performance.now() - tProcessingStart);
 
     if (!activeSessionNumber) {
-      void logSessionEvent(supabase, {
-        userId,
-        eventType: 'session_active_read',
-        status: 'ok',
-        meta: { has_active: false, today_completed: todayCompleted },
-      });
+      const meta: Record<string, unknown> = { has_active: false, today_completed: todayCompleted };
+      if (lastResolved) {
+        meta.freq_source = lastResolved.source;
+        meta.profile_present = lastResolved.profile_present;
+        meta.target_frequency = lastResolved.target_frequency;
+        meta.total_sessions = lastResolved.totalSessions;
+      }
+      void logSessionEvent(supabase, { userId, eventType: 'session_active_read', status: 'ok', meta });
       timings.total_ms = Math.round(performance.now() - t0);
       if (isDebug) logTimingBreakdown(timings, 'no_active');
       const data = { progress, active: null, today_completed: todayCompleted, ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }) };
-      return addTimingHeaders(ok(data, isDebug ? { timings } : undefined), timings, isDebug);
+      const debugExtras = isDebug && lastResolved
+        ? { freq_source: lastResolved.source, profile_present: lastResolved.profile_present, target_frequency: lastResolved.target_frequency }
+        : undefined;
+      return addTimingHeaders(ok(data, isDebug ? { timings, ...debugExtras } : undefined), timings, isDebug);
     }
 
     // active 세션 플랜 조회

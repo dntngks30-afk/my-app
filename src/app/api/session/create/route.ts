@@ -276,6 +276,13 @@ export async function POST(req: NextRequest) {
 
     if (!progress) {
       const resolved = await resolveTotalSessions(supabase, userId);
+      if (resolved.source === 'default') {
+        console.warn('[session/create] progress init with default total_sessions', {
+          profile_present: !!resolved.profile,
+          target_frequency: resolved.profile?.target_frequency ?? null,
+          total_sessions: resolved.totalSessions,
+        });
+      }
       const { data: created, error: insertErr } = await supabase
         .from('session_program_progress')
         .insert({
@@ -392,7 +399,22 @@ export async function POST(req: NextRequest) {
         .single();
       if (!syncErr && synced) progress = synced;
     } else if (resolved.totalSessions < completed) {
-      console.warn('[session/create] sync skipped: resolved < completed_sessions');
+      console.warn('[session/create] sync skipped: resolved < completed_sessions', {
+        resolved_total: resolved.totalSessions,
+        completed_sessions: completed,
+        profile_present: !!resolved.profile,
+      });
+      void logSessionEvent(supabase, {
+        userId,
+        eventType: 'session_create',
+        status: 'ok',
+        meta: {
+          sync_skipped: true,
+          reason: 'resolved_total_sessions_lt_completed',
+          resolved_total: resolved.totalSessions,
+          completed_sessions: completed,
+        },
+      });
     }
 
     const nextSessionNumber = progress.completed_sessions + 1;
@@ -846,6 +868,9 @@ export async function POST(req: NextRequest) {
       ? {
           debug: {
             ...timings,
+            freq_source: resolved.source,
+            profile_present: !!resolved.profile,
+            target_frequency: resolved.profile?.target_frequency ?? null,
             ...(pjMeta?.constraint_engine && {
               constraint_engine: {
                 reasons: pjMeta.constraint_engine.reasons ?? [],
