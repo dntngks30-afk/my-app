@@ -6,6 +6,10 @@ import {
   resolveSessionPriorities,
   scoreByPriority,
 } from '@/lib/session/priority-layer'
+import {
+  isExcludedByFirstSessionGuardrail,
+  isExcludedByPainMode,
+} from '@/lib/session/policy-registry/rules/selectionRules'
 import type { SessionTemplateRow } from '@/lib/workout-routine/exercise-templates-db'
 
 type GoldPathVector =
