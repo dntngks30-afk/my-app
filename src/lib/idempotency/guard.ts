@@ -75,10 +75,7 @@ export async function checkIdempotency(params: {
   };
 }
 
-/**
- * Store idempotent result after successful processing.
- */
-export async function storeIdempotentResult(params: {
+export type StoreIdempotentResultParams = {
   supabase: SupabaseClient;
   idempotencyKey: string;
   routeKey: string;
@@ -88,7 +85,20 @@ export async function storeIdempotentResult(params: {
   responseBody: Record<string, unknown>;
   flowId?: string | null;
   method?: string;
-}): Promise<void> {
+};
+
+export type StoreIdempotentResultOutcome =
+  | { stored: true }
+  | { conflict: true; fingerprintMatch: true; storedResponse: Record<string, unknown>; statusCode: number }
+  | { conflict: true; fingerprintMatch: false };
+
+/**
+ * Store idempotent result. On unique conflict, re-read and verify fingerprint.
+ * Caller must return stored replay or 409 based on outcome.
+ */
+export async function storeIdempotentResult(
+  params: StoreIdempotentResultParams
+): Promise<StoreIdempotentResultOutcome> {
   const { supabase, idempotencyKey, routeKey, fingerprintPayload, userId } = params;
   const { statusCode, responseBody, flowId } = params;
   const method = params.method ?? 'POST';
@@ -100,7 +110,7 @@ export async function storeIdempotentResult(params: {
     userId,
   });
 
-  await supabase.from('idempotent_requests').insert({
+  const { error } = await supabase.from('idempotent_requests').insert({
     idempotency_key: idempotencyKey,
     route_key: routeKey,
     user_id: userId,
@@ -109,4 +119,29 @@ export async function storeIdempotentResult(params: {
     response_body: responseBody,
     flow_id: flowId ?? null,
   });
+
+  if (error?.code !== '23505') {
+    return { stored: true };
+  }
+
+  const { data: existing } = await supabase
+    .from('idempotent_requests')
+    .select('fingerprint_hash, status_code, response_body')
+    .eq('idempotency_key', idempotencyKey)
+    .maybeSingle();
+
+  if (!existing) {
+    return { stored: true };
+  }
+
+  if (existing.fingerprint_hash === fingerprintHash) {
+    return {
+      conflict: true,
+      fingerprintMatch: true,
+      storedResponse: (existing.response_body as Record<string, unknown>) ?? {},
+      statusCode: (existing.status_code as number) ?? 200,
+    };
+  }
+
+  return { conflict: true, fingerprintMatch: false };
 }

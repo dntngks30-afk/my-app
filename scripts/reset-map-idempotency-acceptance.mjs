@@ -89,7 +89,7 @@ async function run() {
   });
   ok('AT1: first start with key creates flow', r1.status === 200);
   const d1 = await r1.json();
-  ok('AT1: response ok and data', d1.ok === true && d1.data?.id);
+  ok('AT1: response ok and data', d1.ok === true && d1.data?.flow_id);
 
   const r2 = await fetch(`${baseUrl}/api/reset-map/start`, {
     method: 'POST',
@@ -98,19 +98,24 @@ async function run() {
   });
   ok('AT2: repeated identical start returns same success', r2.status === 200);
   const d2 = await r2.json();
-  ok('AT2: same flow id on replay', d2.ok === true && d2.data?.id === d1.data?.id);
+  ok('AT2: same flow id on replay', d2.ok === true && d2.data?.flow_id === d1.data?.flow_id);
 
   const { createClient } = await import('@supabase/supabase-js');
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
+  const { data: flowRow } = await supabaseAdmin
+    .from('reset_map_flow')
+    .select('user_id')
+    .eq('id', d1.data?.flow_id)
+    .single();
   const { data: countRows } = await supabaseAdmin
     .from('reset_map_flow')
     .select('id')
-    .eq('user_id', d1.data?.user_id)
-    .eq('state', 'started');
-  ok('AT1: exactly one flow created (no duplicates)', (countRows?.length ?? 0) === 1);
+    .eq('user_id', flowRow?.user_id)
+    .in('state', ['started', 'preview_ready']);
+  ok('AT1: exactly one active flow (no duplicates)', (countRows?.length ?? 0) === 1);
 
   const keyDiff = `${key1}-diff-payload`;
   const r3 = await fetch(`${baseUrl}/api/reset-map/start`, {
@@ -143,7 +148,7 @@ async function run() {
   const d5 = await r5.json();
   ok('AT5: IDEMPOTENCY_KEY_REQUIRED', d5.ok === false && d5.error?.code === 'IDEMPOTENCY_KEY_REQUIRED');
 
-  const flowId = d1.data?.id;
+  const flowId = d1.data?.flow_id;
   const applyKey = `acceptance-apply-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const r6 = await fetch(`${baseUrl}/api/reset-map/${flowId}/apply`, {
     method: 'POST',

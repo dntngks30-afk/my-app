@@ -262,9 +262,9 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       if (cancelled) return;
 
       if (startRes.ok && startRes.data) {
-        setResetMapFlowId(startRes.data.id);
+        setResetMapFlowId(startRes.data.flow_id);
         setResetMapClientState({
-          flow_id: startRes.data.id,
+          flow_id: startRes.data.flow_id,
           start_key: startKey,
           updated_at: Date.now(),
         });

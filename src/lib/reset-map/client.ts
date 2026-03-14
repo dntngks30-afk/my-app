@@ -74,7 +74,13 @@ async function resetMapFetch<T>(
   }
 }
 
-export type StartResult = ResetMapFlowRow;
+/** PR-RESET-06: Normalized start response. */
+export type StartResult = {
+  flow_id: string;
+  state: string;
+  reused: boolean;
+  started_at: string;
+};
 export type LatestResult = { flow: ResetMapFlowRow | null };
 export type PreviewResult = {
   flow_id: string;

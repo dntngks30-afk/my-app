@@ -70,11 +70,11 @@ async function run() {
   console.log('\nAPI: start → apply flow');
   const startKey = `acceptance-conn-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const startRes = await client.startResetMapFlow(token, startKey);
-  ok('AT1: start creates flow', startRes.ok && startRes.data?.id);
-  const flowId = startRes.data?.id;
+  ok('AT1: start creates flow', startRes.ok && startRes.data?.flow_id);
+  const flowId = startRes.data?.flow_id;
 
   const startRes2 = await client.startResetMapFlow(token, startKey);
-  ok('AT2: same key replay returns same flow', startRes2.ok && startRes2.data?.id === flowId);
+  ok('AT2: same key replay returns same flow', startRes2.ok && startRes2.data?.flow_id === flowId);
 
   const previewRes = await client.submitResetMapPreview(token, flowId, {
     permission_state: 'granted',
