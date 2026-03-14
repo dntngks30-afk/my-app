@@ -20,7 +20,8 @@ export type LogResetMapEventParams = {
     | 'active_flow_reused'
     | 'duplicate_start_prevented'
     | 'idempotent_replay_served'
-    | 'idempotent_conflict_recovered';
+    | 'idempotent_conflict_recovered'
+    | 'apply_blocked_preview_required';
   attrs?: Record<string, unknown>;
 };
 

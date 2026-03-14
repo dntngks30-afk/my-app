@@ -482,20 +482,39 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     return () => { cancelled = true }
   }, [selectedStatus, selectedSessionId, loadSessionSummary])
 
-  // PR-RESET-05: current 세션 패널 오픈 시 preview gate (minimal pass-through)
+  // PR-RESET-05/08: current 세션 패널 오픈 시 preview gate. PR-RESET-08: apply only when proceed.
   const previewSubmittedRef = useRef<string | null>(null)
+  const previewProceedRef = useRef<{ flowId: string; proceed: boolean } | null>(null)
+  const pendingApplyRef = useRef<boolean>(false)
+
   useEffect(() => {
     if (selectedStatus !== 'current' || selectedSessionId === null || !resetMapFlowId) return
     if (previewSubmittedRef.current === resetMapFlowId) return
 
     let cancelled = false
     previewSubmittedRef.current = resetMapFlowId
+    previewProceedRef.current = null
     resolveAuthToken().then(async (token) => {
       if (cancelled || !token) return
-      await submitResetMapPreview(token, resetMapFlowId, { permission_state: 'granted' })
+      const res = await submitResetMapPreview(token, resetMapFlowId, {
+        permission_state: 'granted',
+        tracking_conf: 0.5,
+        landmark_coverage: 0.6,
+      })
+      if (cancelled) return
+      previewProceedRef.current = { flowId: resetMapFlowId, proceed: res.ok && res.data?.proceed === true }
+      if (pendingApplyRef.current && previewProceedRef.current.proceed && onFlowApplied) {
+        const applyKey = getIdempotencyKey('apply')
+        const applyRes = await applyResetMapFlow(token, resetMapFlowId, applyKey)
+        if (applyRes.ok) {
+          clearApplyKey()
+          onFlowApplied()
+        }
+        pendingApplyRef.current = false
+      }
     })
     return () => { cancelled = true }
-  }, [selectedStatus, selectedSessionId, resetMapFlowId, resolveAuthToken])
+  }, [selectedStatus, selectedSessionId, resetMapFlowId, resolveAuthToken, onFlowApplied])
 
   // current 세션 패널 오픈 + activePlan 없음 → bootstrap summary 먼저 로드
   useEffect(() => {
@@ -564,11 +583,15 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         setPlanLoading(false)
         onActivePlanCreated?.(plan)
         if (resetMapFlowId && onFlowApplied) {
-          const applyKey = getIdempotencyKey('apply')
-          const applyRes = await applyResetMapFlow(token, resetMapFlowId, applyKey)
-          if (applyRes.ok) {
-            clearApplyKey()
-            onFlowApplied()
+          if (previewProceedRef.current?.flowId === resetMapFlowId && previewProceedRef.current.proceed) {
+            const applyKey = getIdempotencyKey('apply')
+            const applyRes = await applyResetMapFlow(token, resetMapFlowId, applyKey)
+            if (applyRes.ok) {
+              clearApplyKey()
+              onFlowApplied()
+            }
+          } else {
+            pendingApplyRef.current = true
           }
         }
       }

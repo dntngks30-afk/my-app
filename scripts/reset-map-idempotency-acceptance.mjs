@@ -149,6 +149,22 @@ async function run() {
   ok('AT5: IDEMPOTENCY_KEY_REQUIRED', d5.ok === false && d5.error?.code === 'IDEMPOTENCY_KEY_REQUIRED');
 
   const flowId = d1.data?.flow_id;
+  const prevRes = await fetch(`${baseUrl}/api/reset-map/${flowId}/preview-result`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      permission_state: 'granted',
+      tracking_conf: 0.5,
+      landmark_coverage: 0.6,
+    }),
+  });
+  ok('preview before apply', prevRes.status === 200);
+  const prevData = await prevRes.json();
+  ok('preview proceed', prevData.ok && prevData.data?.proceed === true);
+
   const applyKey = `acceptance-apply-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const r6 = await fetch(`${baseUrl}/api/reset-map/${flowId}/apply`, {
     method: 'POST',

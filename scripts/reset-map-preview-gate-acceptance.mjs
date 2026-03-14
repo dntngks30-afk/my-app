@@ -89,7 +89,7 @@ async function run() {
   });
   ok('start creates flow', rStart.status === 200);
   const dStart = await rStart.json();
-  const flowId = dStart.data?.id;
+  const flowId = dStart.data?.flow_id ?? dStart.data?.id;
 
   console.log('\nAPI: preview proceed');
   const rProceed = await fetch(`${baseUrl}/api/reset-map/${flowId}/preview-result`, {
@@ -135,6 +135,38 @@ async function run() {
   });
   ok('AT7: apply after preview_ready succeeds', rApply.status === 200);
 
+  console.log('\nAPI: apply from started → PREVIEW_REQUIRED (PR-RESET-08)');
+  const keyNew = `preview-started-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const rStartNew = await fetch(`${baseUrl}/api/reset-map/start`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': keyNew,
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ variant_tag: 'preview-started' }),
+  });
+  const dStartNew = await rStartNew.json();
+  const flowIdStarted = dStartNew.data?.flow_id ?? dStartNew.data?.id;
+  const rApplyStarted = await fetch(`${baseUrl}/api/reset-map/${flowIdStarted}/apply`, {
+    method: 'POST',
+    headers: {
+      'Idempotency-Key': `preview-apply-started-${Date.now()}`,
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  ok('AT8: apply from started returns 422', rApplyStarted.status === 422);
+  const dApplyStarted = await rApplyStarted.json();
+  ok('AT8: PREVIEW_REQUIRED error', dApplyStarted.ok === false && dApplyStarted.error?.code === 'PREVIEW_REQUIRED');
+
+  const { data: blockedEvent } = await supabase
+    .from('reset_map_events')
+    .select('name')
+    .eq('flow_id', flowIdStarted)
+    .eq('name', 'apply_blocked_preview_required')
+    .maybeSingle();
+  ok('AT8: apply_blocked_preview_required event', !!blockedEvent);
+
   console.log('\nAPI: create flow for blocked test');
   const key2 = `preview-blocked-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const rStart2 = await fetch(`${baseUrl}/api/reset-map/start`, {
@@ -147,7 +179,7 @@ async function run() {
     body: JSON.stringify({ variant_tag: 'preview-blocked' }),
   });
   const dStart2 = await rStart2.json();
-  const flowId2 = dStart2.data?.id;
+  const flowId2 = dStart2.data?.flow_id ?? dStart2.data?.id;
 
   const rBlocked = await fetch(`${baseUrl}/api/reset-map/${flowId2}/preview-result`, {
     method: 'POST',

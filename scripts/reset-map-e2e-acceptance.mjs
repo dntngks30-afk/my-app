@@ -104,7 +104,7 @@ async function apply(baseUrl, token, flowId, idempotencyKey) {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
   });
-  return { ok: res.ok, status: res.status, data: body?.data ?? body };
+  return { ok: res.ok, status: res.status, data: body?.data ?? body, body };
 }
 
 // ─── Client entry logic (mirrors HomePageClient) ───────────────────────────
@@ -195,11 +195,18 @@ async function run() {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  // Ensure clean slate: terminate any existing active flow for this user
+  // Ensure clean slate: terminate any existing active flow (PR-RESET-08: apply only from preview_ready)
   const latest0 = await getLatest(baseUrl, token);
   if (latest0.ok && latest0.data?.flow) {
     const flow = latest0.data.flow;
     if (flow.state === 'started' || flow.state === 'preview_ready') {
+      if (flow.state === 'started') {
+        await preview(baseUrl, token, flow.id, {
+          permission_state: 'granted',
+          tracking_conf: 0.5,
+          landmark_coverage: 0.6,
+        });
+      }
       const applyKey = `e2e-cleanup-${Date.now()}`;
       await apply(baseUrl, token, flow.id, applyKey);
     }
@@ -251,6 +258,40 @@ async function run() {
     pass('AT2', 'Local storage has correct flow_id');
   } else {
     fail('AT2', `Local flow_id=${local2?.flow_id}, expected ${flowId1}`);
+  }
+
+  // ─── AT2b: Apply from started → PREVIEW_REQUIRED (PR-RESET-08) ───────────
+  console.log('\nAT2b: Apply from started → PREVIEW_REQUIRED');
+  const applyKey2b = `e2e-apply-started-${Date.now()}`;
+  const app2b = await apply(baseUrl, token, flowId1, applyKey2b);
+  const errCode = app2b.body?.error?.code ?? app2b.data?.error?.code;
+  if (app2b.status === 422 && errCode === 'PREVIEW_REQUIRED') {
+    pass('AT2b', 'Apply from started returns 422 PREVIEW_REQUIRED');
+  } else {
+    fail('AT2b', `Expected 422 PREVIEW_REQUIRED, got ${app2b.status} code=${errCode}`);
+  }
+
+  const { data: flow2b } = await supabase
+    .from('reset_map_flow')
+    .select('state')
+    .eq('id', flowId1)
+    .single();
+  if (flow2b?.state === 'started') {
+    pass('AT2b', 'Flow state unchanged (not mutated)');
+  } else {
+    fail('AT2b', `Flow should stay started, got ${flow2b?.state}`);
+  }
+
+  const { data: ev2b } = await supabase
+    .from('reset_map_events')
+    .select('name')
+    .eq('flow_id', flowId1)
+    .eq('name', 'apply_blocked_preview_required')
+    .maybeSingle();
+  if (ev2b) {
+    pass('AT2b', 'apply_blocked_preview_required event recorded');
+  } else {
+    fail('AT2b', 'apply_blocked_preview_required event not found');
   }
 
   // ─── AT3: Preview blocked → same flow remains active ─────────────────────

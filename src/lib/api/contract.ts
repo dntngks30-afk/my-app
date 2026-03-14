@@ -28,6 +28,8 @@ export const ApiErrorCode = {
   /** PR-RESET-01: reset-map flow state machine */
   INVALID_STATE: 'INVALID_STATE',
   RESET_FLOW_NOT_FOUND: 'RESET_FLOW_NOT_FOUND',
+  /** PR-RESET-08: preview gate enforcement */
+  PREVIEW_REQUIRED: 'PREVIEW_REQUIRED',
   /** PR-RESET-02: idempotency layer */
   IDEMPOTENCY_KEY_REQUIRED: 'IDEMPOTENCY_KEY_REQUIRED',
   IDEMPOTENCY_KEY_REUSED: 'IDEMPOTENCY_KEY_REUSED',

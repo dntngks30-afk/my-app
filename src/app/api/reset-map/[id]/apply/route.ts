@@ -3,7 +3,7 @@
  *
  * PR-RESET-01: Reset Map Flow apply 전이.
  * PR-RESET-02: Idempotency-Key required. Replay safe.
- * started | preview_ready → applied.
+ * PR-RESET-08: Apply only from preview_ready (true execution-entry gate).
  * Auth: Bearer token. Write: service role (RLS bypass).
  */
 
@@ -79,6 +79,20 @@ export async function POST(
 
     const state = row.state as ResetMapState;
     if (!canApply(state)) {
+      if (state === 'started') {
+        void logResetMapEvent(supabase, {
+          flowId: id,
+          userId,
+          name: 'apply_blocked_preview_required',
+          attrs: { current_state: state },
+        });
+        return fail(
+          422,
+          ApiErrorCode.PREVIEW_REQUIRED,
+          '프리뷰를 먼저 완료해 주세요',
+          { state }
+        );
+      }
       void logResetMapEvent(supabase, {
         flowId: id,
         userId,
@@ -102,7 +116,7 @@ export async function POST(
       })
       .eq('id', id)
       .eq('user_id', userId)
-      .in('state', ['started', 'preview_ready'])
+      .eq('state', 'preview_ready')
       .select()
       .single();
 
