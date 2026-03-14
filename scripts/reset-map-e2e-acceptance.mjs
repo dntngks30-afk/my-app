@@ -107,7 +107,7 @@ async function apply(baseUrl, token, flowId, idempotencyKey) {
   return { ok: res.ok, status: res.status, data: body?.data ?? body, body };
 }
 
-// ─── Client entry logic (mirrors HomePageClient) ───────────────────────────
+// ─── Client entry logic (mirrors HomePageClient, PR-RESET-09 reconcile) ────
 async function runEntryFlow(baseUrl, token) {
   const local = getLocalState();
   const latestRes = await getLatest(baseUrl, token);
@@ -116,6 +116,7 @@ async function runEntryFlow(baseUrl, token) {
     const flow = latestRes.data.flow;
     if (flow.state === 'started' || flow.state === 'preview_ready') {
       if (!local || local.flow_id !== flow.id) {
+        if (local) storage.delete(KEY_PREFIX + 'apply');
         setLocalState({
           flow_id: flow.id,
           start_key: local?.start_key ?? getOrCreateKey('start'),
@@ -127,7 +128,6 @@ async function runEntryFlow(baseUrl, token) {
   }
 
   clearLocalState();
-  resetStartKey();
   const startKey = getOrCreateKey('start');
   const startRes = await start(baseUrl, token, startKey);
 

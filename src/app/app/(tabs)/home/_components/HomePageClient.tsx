@@ -19,9 +19,10 @@ import {
 } from '@/lib/reset-map/clientStorage';
 import {
   getIdempotencyKey,
-  resetStartKey,
+  clearAllKeysForNewFlow,
   clearApplyKey,
 } from '@/lib/reset-map/clientIdempotency';
+import { reconcileResetMapClientState } from '@/lib/reset-map/reconcile';
 import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
@@ -227,7 +228,17 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     setSkipLoader(isAppBooted());
   }, []);
 
-  /** PR-RESET-05: Ensure reset-map flow on entry. Resume or start. */
+  /** PR-RESET-09: Re-check on visibility restore (multi-tab safety). */
+  const [recheckTrigger, setRecheckTrigger] = useState(0);
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === 'visible') setRecheckTrigger((n) => n + 1);
+    };
+    document.addEventListener('visibilitychange', handler);
+    return () => document.removeEventListener('visibilitychange', handler);
+  }, []);
+
+  /** PR-RESET-05/09: Ensure reset-map flow on entry. Server truth precedence. */
   useEffect(() => {
     if (!mapV2 || loading) return;
 
@@ -240,23 +251,30 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       const latestRes = await getLatestResetMapFlow(token);
       if (cancelled) return;
 
-      if (latestRes.ok && latestRes.data.flow) {
-        const flow = latestRes.data.flow;
-        if (flow.state === 'started' || flow.state === 'preview_ready') {
-          setResetMapFlowId(flow.id);
-          if (!local || local.flow_id !== flow.id) {
-            setResetMapClientState({
-              flow_id: flow.id,
-              start_key: local?.start_key ?? getIdempotencyKey('start'),
-              updated_at: Date.now(),
-            });
-          }
-          return;
-        }
+      const latestFlow =
+        latestRes.ok && latestRes.data?.flow
+          ? { id: latestRes.data.flow.id, state: latestRes.data.flow.state }
+          : null;
+      const result = reconcileResetMapClientState(latestFlow, local);
+
+      if (result.action === 'repair') {
+        setResetMapFlowId(result.flow_id);
+        if (result.clearApplyKey) clearApplyKey();
+        setResetMapClientState({
+          flow_id: result.flow_id,
+          start_key: local?.start_key ?? getIdempotencyKey('start'),
+          updated_at: Date.now(),
+        });
+        return;
+      }
+
+      if (result.action === 'none') {
+        setResetMapFlowId(result.flow_id);
+        return;
       }
 
       clearResetMapClientState();
-      resetStartKey();
+      clearAllKeysForNewFlow();
       const startKey = getIdempotencyKey('start');
       const startRes = await startResetMapFlow(token, startKey);
       if (cancelled) return;
@@ -271,11 +289,11 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       }
     })();
     return () => { cancelled = true; };
-  }, [mapV2, loading, getAuthToken]);
+  }, [mapV2, loading, getAuthToken, recheckTrigger]);
 
   const handleFlowApplied = useCallback(() => {
     clearResetMapClientState();
-    clearApplyKey();
+    clearAllKeysForNewFlow();
     setResetMapFlowId(null);
   }, []);
 

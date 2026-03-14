@@ -53,3 +53,17 @@ export function resetStartKey(): void {
     // ignore
   }
 }
+
+/**
+ * PR-RESET-09: Clear both start and apply keys when flow becomes terminal or mismatched.
+ * Prevents stale keys from leaking into a new flow.
+ */
+export function clearAllKeysForNewFlow(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.removeItem(getStorageKey('start'));
+    sessionStorage.removeItem(getStorageKey('apply'));
+  } catch {
+    // ignore
+  }
+}
