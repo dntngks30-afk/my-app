@@ -34,7 +34,7 @@ import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
-import { ImportedHomeMap } from '@/features/map_ui_import/home_map_20260315/ImportedHomeMap';
+import { DonorHomeLayout } from '@/features/map_ui_import/home_map_20260315/DonorHomeLayout';
 
 interface HomePageClientProps {
   hideBottomNav?: boolean;
@@ -389,7 +389,19 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     );
   }
 
+  const total = totalSessionsOverride ?? sessionProgress?.total_sessions ?? 8;
+  const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
   const useImportedTheme = importedMap && mapV2;
+
+  /* donor Home 전체 시각 이식 — presentation = donor */
+  if (importedMap && mapV2 && total <= 20) {
+    return (
+      <>
+        <DonorHomeLayout total={total} completed={completed} />
+        {!hideBottomNav && <BottomNav />}
+      </>
+    );
+  }
 
   return (
     <div
@@ -397,28 +409,22 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         useImportedTheme ? 'bg-[oklch(0.22_0.03_245)]' : 'bg-[#f8f6f0]'
       }`}
     >
-      {/* 1. Header */}
-      <header className={`px-4 pt-6 pb-4 ${useImportedTheme ? 'text-white/90' : ''}`}>
-        <h1 className="text-4xl font-bold text-orange-500">Move Re</h1>
-        <p className={`mt-2 text-base ${useImportedTheme ? 'text-white/70' : 'text-slate-800'}`}>
-          당신의, 당신에 의한, 당신을 위한 여정
-        </p>
-      </header>
+      {/* 1. Header — imported theme 시 숨김 */}
+      {!useImportedTheme && (
+        <header className="px-4 pt-6 pb-4">
+          <h1 className="text-4xl font-bold text-orange-500">Move Re</h1>
+          <p className="mt-2 text-base text-slate-800">
+            당신의, 당신에 의한, 당신을 위한 여정
+          </p>
+        </header>
+      )}
 
-      <main className={`px-4 ${useImportedTheme ? 'space-y-4' : 'space-y-6'}`}>
-        {/* PR-UX-16a: home 상단 대형 preview 제거 — Reset Map first-view. 다음 세션 안내는 post-completion 또는 지도 맥락에서만 */}
-        {/* 1. 리셋 지도 — mapV2=1이면 새 지도 UX, 그 외 기존 ResetMapCard */}
+      <main className={`px-4 ${useImportedTheme ? 'pt-4 space-y-4' : 'space-y-6'}`}>
+        {/* PR-UX-16a: home 상단 대형 preview 제거 — Reset Map first-view */}
         <div>
         {(() => {
-          const total = totalSessionsOverride ?? sessionProgress?.total_sessions ?? 8;
-          const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
-
-          if (importedMap && mapV2 && total <= 20) {
-            return (
-              <ImportedHomeMap total={total} completed={completed} />
-            );
-          }
           if (mapV2 && total <= 20) {
+            /* importedMap 분기는 위에서 DonorHomeLayout으로 조기 반환 */
             const focusSession = searchParams.get('focusSession');
             const focusSessionNum = focusSession ? parseInt(focusSession, 10) : null;
             return (
