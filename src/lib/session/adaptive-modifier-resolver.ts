@@ -108,11 +108,8 @@ const SUMMARY_MAX_AGE_DAYS = 30;
  * Load latest session_adaptive_summary for user. Ignore older than 30 days.
  */
 export async function loadLatestAdaptiveSummary(
-  supabase: {
-    from: (t: string) => {
-      select: (cols: string) => { eq: (col: string, val: unknown) => { order: (col: string, opts: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: unknown[] | null }> } } };
-    };
-  },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase generics cause "excessively deep" TS errors
+  supabase: any,
   userId: string
 ): Promise<{
   id?: string;
