@@ -34,7 +34,7 @@ import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
-import { DonorHomeLayout } from '@/features/map_ui_import/home_map_20260315/DonorHomeLayout';
+import { ResetMap as DonorResetMap } from '@/features/map_ui_import/home_map_20260315/components/reset-map';
 
 interface HomePageClientProps {
   hideBottomNav?: boolean;
@@ -393,21 +393,10 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
   const useImportedTheme = importedMap && mapV2;
 
-  /* donor Home 전체 시각 이식 — presentation = donor */
-  if (importedMap && mapV2 && total <= 20) {
-    return (
-      <>
-        <DonorHomeLayout total={total} completed={completed} />
-        {!hideBottomNav && <BottomNav />}
-      </>
-    );
-  }
-
   return (
     <div
-      className={`min-h-screen pb-20 ${
-        useImportedTheme ? 'bg-[oklch(0.22_0.03_245)]' : 'bg-[#f8f6f0]'
-      }`}
+      className={`min-h-screen pb-20 ${useImportedTheme ? '' : 'bg-[#f8f6f0]'}`}
+      style={useImportedTheme ? { backgroundColor: 'oklch(0.22 0.03 245)' } : undefined}
     >
       {/* 1. Header — imported theme 시 숨김 */}
       {!useImportedTheme && (
@@ -424,7 +413,6 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         <div>
         {(() => {
           if (mapV2 && total <= 20) {
-            /* importedMap 분기는 위에서 DonorHomeLayout으로 조기 반환 */
             const focusSession = searchParams.get('focusSession');
             const focusSessionNum = focusSession ? parseInt(focusSession, 10) : null;
             return (
@@ -447,6 +435,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
                     : null
                 }
                 debug={debugFlag}
+                mapRenderer={importedMap ? DonorResetMap : undefined}
               />
             );
           }

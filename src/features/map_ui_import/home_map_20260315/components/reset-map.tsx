@@ -1,42 +1,45 @@
 "use client"
 
-import { useRef, useEffect, useState, useCallback } from "react"
+import { useRef, useEffect, useState, useCallback, useMemo } from "react"
 import { motion, useSpring, useTransform, useMotionValue, animate } from "framer-motion"
 import { Check, Lock, Dumbbell } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { sessions as mapDataSessions } from "@/app/app/(tabs)/home/_components/reset-map-v2/map-data"
+import type { SessionNode as MapDataSessionNode } from "@/app/app/(tabs)/home/_components/reset-map-v2/map-data"
 
-interface Session {
+interface DonorSession {
   id: number
   title: string
   subtitle: string
   status: "completed" | "active" | "locked"
 }
 
-// Full 20-session journey — MOVE RE 톤의 한국어 라벨
-const sessions: Session[] = [
-  { id: 1, title: "점화", subtitle: "전신 활성화", status: "completed" },
-  { id: 2, title: "기초", subtitle: "코어 안정성 구축", status: "completed" },
-  { id: 3, title: "흐름", subtitle: "움직임 흐름과 유연성", status: "active" },
-  { id: 4, title: "확장", subtitle: "코어 확장", status: "locked" },
-  { id: 5, title: "균형", subtitle: "전신 균형", status: "locked" },
-  { id: 6, title: "밀어내기", subtitle: "힘의 방출", status: "locked" },
-  { id: 7, title: "통합", subtitle: "완전 통합", status: "locked" },
-  { id: 8, title: "심화", subtitle: "깊은 연결", status: "locked" },
-  { id: 9, title: "각성", subtitle: "신체 각성", status: "locked" },
-  { id: 10, title: "조화", subtitle: "전체 조화", status: "locked" },
-  { id: 11, title: "완성", subtitle: "리셋 완성", status: "locked" },
-  { id: 12, title: "재도약", subtitle: "새로운 시작", status: "locked" },
-  { id: 13, title: "강화", subtitle: "패턴 강화", status: "locked" },
-  { id: 14, title: "정렬", subtitle: "전신 정렬", status: "locked" },
-  { id: 15, title: "유연", subtitle: "깊은 유연", status: "locked" },
-  { id: 16, title: "집중", subtitle: "정신 집중", status: "locked" },
-  { id: 17, title: "해방", subtitle: "완전 해방", status: "locked" },
-  { id: 18, title: "회복", subtitle: "통합 회복", status: "locked" },
-  { id: 19, title: "숙달", subtitle: "리셋 숙달", status: "locked" },
-  { id: 20, title: "마스터", subtitle: "완전 마스터", status: "locked" },
-]
+/** 프로덕션 total/completed/currentSession으로 donor 세션 목록 생성. 8/12/16/20 지원. */
+function buildImportedSessionsFromProgress(
+  total: number,
+  completed: number,
+  currentSession: number | null
+): DonorSession[] {
+  const safeTotal = Math.max(1, Math.min(20, total))
+  const items: DonorSession[] = []
+  for (let id = 1; id <= safeTotal; id++) {
+    const node = mapDataSessions.find((s) => s.id === id)
+    const title = node?.label ?? `세션 ${id}`
+    const subtitle = node?.description ?? ""
+    let status: "completed" | "active" | "locked"
+    if (currentSession === null) {
+      status = id <= completed ? "completed" : "locked"
+    } else {
+      if (id < currentSession) status = "completed"
+      else if (id === currentSession) status = "active"
+      else status = "locked"
+    }
+    items.push({ id, title, subtitle, status })
+  }
+  return items
+}
 
-// Expanded canvas for 20 sessions
+// Expanded canvas for 8/12/16/20 sessions — path fixed, anchors scale by total
 const CANVAS_WIDTH = 600
 const CANVAS_HEIGHT = 4000
 const VIEWPORT_HEIGHT = 480
@@ -45,7 +48,6 @@ const VIEWPORT_HEIGHT = 480
 const CENTER_X = 300
 const START_Y = 3880
 const END_Y = 80
-const TOTAL_SESSIONS = 20
 const ROUTE_SAMPLES = 120 // Dense points for smooth curved path
 
 // Uniform gap from road edge to panel center
@@ -103,12 +105,11 @@ function generatePath(): string {
   return path
 }
 
-function generateCompletedPath(): string {
-  const activeIndex = sessions.findIndex((s) => s.status === "active")
-  if (activeIndex < 1) return `M ${round(routePoints[0].x)} ${round(routePoints[0].y)}`
+function generateCompletedPath(total: number, progressIndex: number): string {
+  if (total < 2 || progressIndex < 0) return `M ${round(routePoints[0].x)} ${round(routePoints[0].y)}`
 
-  const segment = ROUTE_SAMPLES / (TOTAL_SESSIONS - 1)
-  const endIdx = Math.min(Math.ceil(activeIndex * segment) + 1, ROUTE_SAMPLES)
+  const segment = ROUTE_SAMPLES / (total - 1)
+  const endIdx = Math.min(Math.ceil(progressIndex * segment) + 1, ROUTE_SAMPLES)
 
   let path = `M ${round(routePoints[0].x)} ${round(routePoints[0].y)}`
   for (let i = 1; i <= endIdx && i < routePoints.length; i++) {
@@ -131,14 +132,14 @@ function generateCompletedPath(): string {
 // Generate area blocks for map richness
 function generateAreaBlocks() {
   const blocks: { x: number; y: number; w: number; h: number }[] = []
-  
+
   for (let y = 300; y < CANVAS_HEIGHT - 200; y += 500) {
     blocks.push({ x: 20, y: y, w: 60, h: 40 })
     blocks.push({ x: 520, y: y + 100, w: 60, h: 35 })
     blocks.push({ x: 40, y: y + 250, w: 50, h: 30 })
     blocks.push({ x: 510, y: y + 350, w: 55, h: 38 })
   }
-  
+
   return blocks
 }
 
@@ -153,13 +154,14 @@ type SessionAnchor = {
   side: number
 }
 
-function computeAnchorsFromPath(pathEl: SVGPathElement): SessionAnchor[] {
+function computeAnchorsFromPath(pathEl: SVGPathElement, total: number): SessionAnchor[] {
   const totalLength = pathEl.getTotalLength()
   const delta = Math.max(12, totalLength / 150)
   const anchors: SessionAnchor[] = []
+  const safeTotal = Math.max(1, Math.min(20, total))
 
-  for (let i = 0; i < TOTAL_SESSIONS; i++) {
-    const progress = i / (TOTAL_SESSIONS - 1)
+  for (let i = 0; i < safeTotal; i++) {
+    const progress = safeTotal === 1 ? 0 : i / (safeTotal - 1)
     const sampleLength = totalLength * progress
     const anchor = pathEl.getPointAtLength(sampleLength)
 
@@ -205,14 +207,35 @@ function computeAnchorsFromPath(pathEl: SVGPathElement): SessionAnchor[] {
   return anchors
 }
 
-export function ResetMap() {
+export interface DonorResetMapProps {
+  total: number
+  completed: number
+  /** null = daily cap, 현재 세션 없음 */
+  currentSession: number | null
+  onNodeTap?: (session: MapDataSessionNode) => void
+}
+
+export function ResetMap({
+  total,
+  completed,
+  currentSession,
+  onNodeTap,
+}: DonorResetMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [sessionAnchors, setSessionAnchors] = useState<SessionAnchor[] | null>(null)
   const hasInitialScrolled = useRef(false)
 
-  const mainPathRef = useCallback((el: SVGPathElement | null) => {
-    if (el) setSessionAnchors(computeAnchorsFromPath(el))
-  }, [])
+  const sessions = useMemo(
+    () => buildImportedSessionsFromProgress(total, completed, currentSession),
+    [total, completed, currentSession]
+  )
+
+  const mainPathRef = useCallback(
+    (el: SVGPathElement | null) => {
+      if (el) setSessionAnchors(computeAnchorsFromPath(el, total))
+    },
+    [total]
+  )
 
   const [isDragging, setIsDragging] = useState(false)
   const dragStartY = useRef(0)
@@ -235,14 +258,18 @@ export function ResetMap() {
     return Math.max(minPan, Math.min(0, value))
   }, [])
 
-  // One-time initial scroll to active session on mount only (never re-center after user pans)
+  const progressIndex =
+    currentSession != null ? currentSession - 1 : Math.max(0, completed - 1)
+
+  // One-time initial scroll to active/current session on mount only (never re-center after user pans)
   useEffect(() => {
     if (!sessionAnchors?.length || hasInitialScrolled.current) return
     hasInitialScrolled.current = true
     const activeIndex = sessions.findIndex((s) => s.status === "active")
-    const targetY = -(sessionAnchors[activeIndex].y - VIEWPORT_HEIGHT / 2)
+    const scrollIndex = activeIndex >= 0 ? activeIndex : Math.max(0, completed - 1)
+    const targetY = -(sessionAnchors[scrollIndex].y - VIEWPORT_HEIGHT / 2)
     panY.set(clampPan(targetY))
-  }, [sessionAnchors, panY, clampPan])
+  }, [sessionAnchors, panY, clampPan, sessions, completed])
 
   const handleDragStart = (clientY: number) => {
     setIsDragging(true)
@@ -290,10 +317,10 @@ export function ResetMap() {
   const areaBlocks = generateAreaBlocks()
 
   return (
-    <div 
+    <div
       ref={containerRef}
-      className="relative h-full w-full overflow-hidden rounded-2xl bg-[oklch(0.22_0.03_245)] cursor-grab active:cursor-grabbing select-none"
-      style={{ height: VIEWPORT_HEIGHT }}
+      className="relative h-full w-full overflow-hidden rounded-2xl cursor-grab active:cursor-grabbing select-none"
+      style={{ height: VIEWPORT_HEIGHT, backgroundColor: 'oklch(0.22 0.03 245)' }}
       onMouseDown={(e) => handleDragStart(e.clientY)}
       onMouseMove={(e) => handleDragMove(e.clientY)}
       onMouseUp={handleDragEnd}
@@ -303,13 +330,13 @@ export function ResetMap() {
       onTouchEnd={handleDragEnd}
     >
       {/* Edge fade hints */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[oklch(0.22_0.03_245)] via-[oklch(0.22_0.03_245/0.7)] to-transparent z-20" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[oklch(0.22_0.03_245)] via-[oklch(0.22_0.03_245/0.7)] to-transparent z-20" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 z-20" style={{ background: 'linear-gradient(to bottom, oklch(0.22 0.03 245), oklch(0.22 0.03 245 / 0.7), transparent)' }} />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 z-20" style={{ background: 'linear-gradient(to top, oklch(0.22 0.03 245), oklch(0.22 0.03 245 / 0.7), transparent)' }} />
 
       {/* Animated background layers with parallax */}
-      <BackgroundLayers 
-        layer1Y={bgLayer1Y} 
-        layer2Y={bgLayer2Y} 
+      <BackgroundLayers
+        layer1Y={bgLayer1Y}
+        layer2Y={bgLayer2Y}
         layer3Y={bgLayer3Y}
         layer4Y={bgLayer4Y}
         areaBlocks={areaBlocks}
@@ -318,18 +345,18 @@ export function ResetMap() {
       {/* Main pannable canvas - 600x4000 matches SVG viewBox for exact panel alignment */}
       <motion.div
         className="absolute left-1/2 -translate-x-1/2"
-        style={{ 
+        style={{
           width: CANVAS_WIDTH,
           height: CANVAS_HEIGHT,
           y: springY,
         }}
       >
         {/* Route SVG */}
-        <svg 
-          className="absolute inset-0 pointer-events-none" 
+        <svg
+          className="absolute inset-0 pointer-events-none"
           viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
           preserveAspectRatio="xMidYMid meet"
-          style={{ width: '100%', height: '100%' }}
+          style={{ width: "100%", height: "100%" }}
         >
           <defs>
             <linearGradient id="activeRouteGradient" x1="0%" y1="100%" x2="0%" y2="0%">
@@ -382,7 +409,7 @@ export function ResetMap() {
 
           {/* Completed path glow base */}
           <motion.path
-            d={generateCompletedPath()}
+            d={generateCompletedPath(total, progressIndex)}
             fill="none"
             stroke="url(#activeRouteGradient)"
             strokeWidth="6"
@@ -395,7 +422,7 @@ export function ResetMap() {
 
           {/* Flowing energy overlay on active path */}
           <motion.path
-            d={generateCompletedPath()}
+            d={generateCompletedPath(total, progressIndex)}
             fill="none"
             stroke="url(#flowingEnergy)"
             strokeWidth="4"
@@ -406,36 +433,47 @@ export function ResetMap() {
           />
 
           {/* Debug: anchor dots + normal direction lines (set to true to verify alignment) */}
-          {false && sessionAnchors?.map((a, i) => (
-            <g key={`dbg-${i}`}>
-              <circle cx={a.roadX} cy={a.roadY} r={3} fill="red" opacity={0.7} />
-              <line
-                x1={a.roadX}
-                y1={a.roadY}
-                x2={a.roadX + (a.x - a.roadX) * 0.3}
-                y2={a.roadY + (a.y - a.roadY) * 0.3}
-                stroke="lime"
-                strokeWidth={1.5}
-                opacity={0.6}
-              />
-            </g>
-          ))}
+          {false &&
+            sessionAnchors?.map((a, i) => (
+              <g key={`dbg-${i}`}>
+                <circle cx={a.roadX} cy={a.roadY} r={3} fill="red" opacity={0.7} />
+                <line
+                  x1={a.roadX}
+                  y1={a.roadY}
+                  x2={a.roadX + (a.x - a.roadX) * 0.3}
+                  y2={a.roadY + (a.y - a.roadY) * 0.3}
+                  stroke="lime"
+                  strokeWidth={1.5}
+                  opacity={0.6}
+                />
+              </g>
+            ))}
         </svg>
 
         {/* Session nodes - all anchored to road, unified GAP, alternating left/right */}
-        {sessionAnchors?.map((anchor, index) => (
-          <SessionNode
-            key={sessions[index].id}
-            session={sessions[index]}
-            anchor={anchor}
-            index={index}
-          />
-        ))}
+        {sessionAnchors?.map((anchor, index) =>
+          sessions[index] ? (
+            <SessionNode
+              key={sessions[index].id}
+              session={sessions[index]}
+              anchor={anchor}
+              index={index}
+              onTap={
+                onNodeTap
+                  ? () => {
+                      const node = mapDataSessions.find((s) => s.id === sessions[index].id)
+                      if (node) onNodeTap(node)
+                    }
+                  : undefined
+              }
+            />
+          ) : null
+        )}
       </motion.div>
 
       {/* Subtle drag hint indicator */}
       <motion.div
-        className="absolute right-3 top-1/2 z-10 flex flex-col items-center gap-1 -translate-y-1/2 pointer-events-none opacity-20"
+        className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-1 opacity-20 pointer-events-none"
         animate={{ opacity: [0.2, 0.1, 0.2] }}
         transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
       >
@@ -446,13 +484,13 @@ export function ResetMap() {
   )
 }
 
-function BackgroundLayers({ 
-  layer1Y, 
-  layer2Y, 
+function BackgroundLayers({
+  layer1Y,
+  layer2Y,
   layer3Y,
   layer4Y,
   areaBlocks,
-}: { 
+}: {
   layer1Y: ReturnType<typeof useTransform>
   layer2Y: ReturnType<typeof useTransform>
   layer3Y: ReturnType<typeof useTransform>
@@ -460,36 +498,35 @@ function BackgroundLayers({
   areaBlocks: { x: number; y: number; w: number; h: number }[]
 }) {
   return (
-    <div className="absolute inset-0 overflow-hidden">
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
       {/* Layer 1: Deep grid with slow drift */}
-      <motion.div 
+      <motion.div
         className="absolute inset-0"
         style={{ y: layer1Y }}
         animate={{ x: [0, 10, 0, -10, 0] }}
         transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
       >
-        <svg className="absolute -inset-40 opacity-[0.04]" viewBox="0 0 800 5000" style={{ width: '180%', height: '180%' }}>
+        <svg className="absolute -inset-40 opacity-[0.04]" viewBox="0 0 800 5000" style={{ width: "180%", height: "180%" }}>
           {[...Array(250)].map((_, i) => (
-            <line key={`h1-${i}`} x1="0" y1={i * 20} x2="800" y2={i * 20} stroke="currentColor" strokeWidth="1" className="text-white/60" />
+            <line key={`h1-${i}`} x1="0" y1={i * 20} x2="800" y2={i * 20} stroke="currentColor" strokeWidth="1" className="text-slate-400" />
           ))}
           {[...Array(40)].map((_, i) => (
-            <line key={`v1-${i}`} x1={i * 20} y1="0" x2={i * 20} y2="5000" stroke="currentColor" strokeWidth="1" className="text-white/60" />
+            <line key={`v1-${i}`} x1={i * 20} y1="0" x2={i * 20} y2="5000" stroke="currentColor" strokeWidth="1" className="text-slate-400" />
           ))}
         </svg>
       </motion.div>
 
       {/* Layer 2: Terrain contours with medium drift */}
-      <motion.div 
+      <motion.div
         className="absolute inset-0"
         style={{ y: layer2Y }}
         animate={{ x: [0, -15, 0, 15, 0] }}
         transition={{ duration: 45, repeat: Infinity, ease: "linear" }}
       >
-        <svg className="absolute -inset-40 opacity-[0.06]" viewBox="0 0 800 5000" style={{ width: '180%', height: '180%' }}>
-          {/* Terrain elevation contours spread throughout */}
+        <svg className="absolute -inset-40 opacity-[0.06]" viewBox="0 0 800 5000" style={{ width: "180%", height: "180%" }}>
           {[...Array(35)].map((_, i) => {
             const baseY = i * 140 + 50
-            const baseX = (i % 2 === 0) ? 100 : 600
+            const baseX = i % 2 === 0 ? 100 : 600
             return (
               <g key={`terrain-${i}`}>
                 <ellipse cx={baseX} cy={baseY} rx={60 + (i % 3) * 20} ry={35 + (i % 4) * 10} fill="none" stroke="oklch(0.42 0.04 245)" strokeWidth="1.5" />
@@ -502,13 +539,13 @@ function BackgroundLayers({
       </motion.div>
 
       {/* Layer 3: Area blocks only - no branch roads */}
-      <motion.div 
+      <motion.div
         className="absolute inset-0"
         style={{ y: layer3Y }}
         animate={{ x: [0, 8, 0, -8, 0] }}
         transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
       >
-        <svg className="absolute -inset-20 opacity-[0.15]" viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`} style={{ width: '140%', height: '100%' }}>
+        <svg className="absolute -inset-20 opacity-[0.15]" viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`} style={{ width: "140%", height: "100%" }}>
           {areaBlocks.map((block, i) => (
             <rect key={`block-${i}`} x={block.x} y={block.y} width={block.w} height={block.h} fill="oklch(0.30 0.035 245)" rx="3" />
           ))}
@@ -516,28 +553,25 @@ function BackgroundLayers({
       </motion.div>
 
       {/* Layer 4: Landmark dots and checkpoints */}
-      <motion.div 
+      <motion.div
         className="absolute inset-0"
         style={{ y: layer4Y }}
         animate={{ x: [0, -6, 0, 6, 0] }}
         transition={{ duration: 22, repeat: Infinity, ease: "linear" }}
       >
-        <svg className="absolute -inset-10 opacity-[0.18]" viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`} style={{ width: '130%', height: '100%' }}>
-          {/* Landmark dots spread across the entire map */}
+        <svg className="absolute -inset-10 opacity-[0.18]" viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`} style={{ width: "130%", height: "100%" }}>
           {[...Array(100)].map((_, i) => {
-            const x = round(30 + (i % 7) * 80 + (Math.sin(i) * 25))
-            const y = round(80 + Math.floor(i / 7) * 280 + (Math.cos(i) * 35))
+            const x = round(30 + (i % 7) * 80 + Math.sin(i) * 25)
+            const y = round(80 + Math.floor(i / 7) * 280 + Math.cos(i) * 35)
             return <circle key={`dot-${i}`} cx={x} cy={y} r={2.5 + (i % 3)} fill="oklch(0.46 0.04 245)" />
           })}
-          
-          {/* Checkpoint squares */}
+
           {[...Array(50)].map((_, i) => {
-            const x = round(50 + (i % 6) * 90 + (Math.cos(i * 2) * 15))
-            const y = round(150 + Math.floor(i / 6) * 480 + (Math.sin(i * 2) * 25))
+            const x = round(50 + (i % 6) * 90 + Math.cos(i * 2) * 15)
+            const y = round(150 + Math.floor(i / 6) * 480 + Math.sin(i * 2) * 25)
             return <rect key={`sq-${i}`} x={x} y={y} width={4} height={4} fill="oklch(0.44 0.04 245)" transform={`rotate(45 ${round(x + 2)} ${round(y + 2)})`} />
           })}
 
-          {/* Small intersection markers */}
           {[...Array(70)].map((_, i) => {
             const x = 60 + (i % 10) * 50
             const y = 100 + Math.floor(i / 10) * 560
@@ -553,7 +587,7 @@ function BackgroundLayers({
 
       {/* Layer 5: Floating zone labels */}
       <motion.div
-        className="absolute inset-0 text-[8px] font-medium uppercase tracking-[0.2em] text-white/80 opacity-[0.07]"
+        className="absolute inset-0 opacity-[0.07] text-[8px] font-medium tracking-[0.2em] text-slate-300 uppercase"
         style={{ y: layer3Y }}
       >
         {[
@@ -573,9 +607,9 @@ function BackgroundLayers({
           { label: "Zone N", x: 445, y: 3680 },
           { label: "시작", x: 380, y: 3850 },
         ].map(({ label, x, y }, i) => (
-          <motion.span 
+          <motion.span
             key={label}
-            className="absolute whitespace-nowrap" 
+            className="absolute whitespace-nowrap"
             style={{ left: x, top: y }}
             animate={{ y: [0, -4, 0] }}
             transition={{ duration: 5 + i * 0.2, repeat: Infinity, ease: "easeInOut", delay: i * 0.15 }}
@@ -592,20 +626,38 @@ function SessionNode({
   session,
   anchor,
   index,
+  onTap,
 }: {
-  session: Session
+  session: DonorSession
   anchor: SessionAnchor
   index: number
+  onTap?: () => void
 }) {
   const isCompleted = session.status === "completed"
   const isActive = session.status === "active"
   const isLocked = session.status === "locked"
   const position = { x: anchor.x, y: anchor.y }
-  const labelOnRight = anchor.side === 1 // Strict alternating: right, left, right, left...
+  const labelOnRight = anchor.side === 1
+  const isClickable = !!onTap
 
   return (
     <motion.div
-      className="absolute z-10"
+      className={cn("absolute z-10", isClickable && "cursor-pointer")}
+      onPointerDown={(e) => {
+        if (onTap) {
+          e.stopPropagation()
+          e.preventDefault()
+          onTap()
+        }
+      }}
+      onKeyDown={(e) => {
+        if (onTap && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault()
+          onTap()
+        }
+      }}
+      role={isClickable ? "button" : undefined}
+      tabIndex={isClickable ? 0 : undefined}
       style={{
         left: position.x,
         top: position.y,
@@ -664,7 +716,7 @@ function SessionNode({
         </>
       )}
 
-      {/* Node circle — donor-faithful: filled orange for completed/active, muted for locked */}
+      {/* Node circle - ~12% smaller */}
       <motion.div
         className={cn(
           "relative flex items-center justify-center rounded-full transition-all",
@@ -673,13 +725,9 @@ function SessionNode({
           isLocked && "bg-[oklch(0.32_0.04_245)] text-slate-400"
         )}
         style={{
-          width: isActive ? 52 : isCompleted ? 44 : 38,
-          height: isActive ? 52 : isCompleted ? 44 : 38,
-          boxShadow: isActive
-            ? "0 0 30px 10px oklch(0.70 0.16 50 / 0.5), 0 0 60px 20px oklch(0.70 0.16 50 / 0.25)"
-            : isCompleted
-              ? "0 0 16px 4px oklch(0.70 0.16 50 / 0.3)"
-              : "none",
+          width: isActive ? 46 : isCompleted ? 40 : 35,
+          height: isActive ? 46 : isCompleted ? 40 : 35,
+          boxShadow: isActive ? "0 0 30px 10px oklch(0.70 0.16 50 / 0.5), 0 0 60px 20px oklch(0.70 0.16 50 / 0.25)" : isCompleted ? "0 0 16px 4px oklch(0.70 0.16 50 / 0.3)" : "none",
           border: isActive ? "3px solid oklch(0.80 0.16 50)" : "none",
         }}
         animate={
@@ -695,17 +743,14 @@ function SessionNode({
         }
         transition={isActive ? { duration: 1.8, repeat: Infinity, ease: "easeInOut" } : {}}
       >
-        {isCompleted && <Check className="w-5 h-5" strokeWidth={3} />}
-        {isActive && <Dumbbell className="w-5 h-5" strokeWidth={2.5} />}
-        {isLocked && <Lock className="w-4 h-4" strokeWidth={2.5} />}
+        {isCompleted && <Check className="w-4 h-4" strokeWidth={3} />}
+        {isActive && <Dumbbell className="w-4 h-4" strokeWidth={2.5} />}
+        {isLocked && <Lock className="w-3 h-3" strokeWidth={2.5} />}
       </motion.div>
 
-      {/* Label — donor-faithful: session number, title, subtitle visible */}
+      {/* Label — donor-faithful: session number, title, subtitle */}
       <motion.div
-        className={cn(
-          "absolute top-1/2 -translate-y-1/2 whitespace-nowrap",
-          labelOnRight ? "left-full ml-4" : "right-full mr-4 text-right"
-        )}
+        className={cn("absolute top-1/2 -translate-y-1/2 whitespace-nowrap", labelOnRight ? "left-full ml-3" : "right-full mr-3 text-right")}
         initial={{ opacity: 0, x: labelOnRight ? -8 : 8 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: index * 0.03 + 0.7 }}

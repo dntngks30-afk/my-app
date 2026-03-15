@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef, type ComponentType } from 'react'
 import { JourneyMapV2 } from './JourneyMapV2'
 import { SessionPanelV2 } from './SessionPanelV2'
 import { sessions, type SessionNode } from './map-data'
@@ -61,6 +61,13 @@ interface ResetMapV2Props {
   onFlowApplied?: () => void
   /** debug: true → createSession 응답에 timings 포함 (cold path 측정용) */
   debug?: boolean
+  /** imported donor map: JourneyMapV2 대신 렌더. production SessionPanelV2 플로우 재사용 */
+  mapRenderer?: ComponentType<{
+    total: number
+    completed: number
+    currentSession: number | null
+    onNodeTap: (session: SessionNode) => void
+  }>
 }
 
 type PanelPlanSummaryResponse = PlanSummaryResponse;
@@ -145,7 +152,7 @@ function bootstrapToPanelPlan(data: PanelBootstrapResponse): SessionPlan {
   }
 }
 
-export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, onFlowApplied, resetMapFlowId, onRequestNextSession, initialSelectedSessionId, adaptiveExplanation, nextSession, debug }: ResetMapV2Props) {
+export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, onFlowApplied, resetMapFlowId, onRequestNextSession, initialSelectedSessionId, adaptiveExplanation, nextSession, debug, mapRenderer }: ResetMapV2Props) {
   // localDailyCapActive: createSession이 DAILY_LIMIT_REACHED 반환 시 클라이언트 측 즉시 반영 (방어)
   const [localDailyCapActive, setLocalDailyCapActive] = useState(false)
   // daily cap: today_completed || localDailyCapActive, activePlan 없을 때 → 현재 세션 없음, 다음 세션 locked
@@ -734,34 +741,93 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     }
   }, [exercises])
 
+  const isDonorCard = !!mapRenderer
+  /** 페이지·맵과 동일한 배경 (0.22) — 경계 없이 통일 */
+  const DONOR_BG = 'oklch(0.22 0.03 245)'
+
   return (
     <div
-      className="flex flex-col overflow-hidden rounded-2xl border-2 border-slate-900 bg-white shadow-[4px_4px_0_0_rgba(15,23,42,1)]"
-      style={{ height: '70vh', maxHeight: 560 }}
+      className={`flex flex-col overflow-hidden ${
+        isDonorCard ? 'rounded-3xl border border-white/10' : 'rounded-2xl border-2 border-slate-900 bg-white shadow-[4px_4px_0_0_rgba(15,23,42,1)]'
+      }`}
+      style={
+        isDonorCard
+          ? { height: '80vh', maxHeight: 720, backgroundColor: DONOR_BG }
+          : { height: '70vh', maxHeight: 560 }
+      }
     >
       {/* 헤더 */}
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+      <div
+        className={`flex justify-between border-b ${
+          isDonorCard ? 'items-start border-white/10 px-5 pt-5 pb-4' : 'items-center border-slate-100 px-4 py-3'
+        }`}
+      >
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-orange-500">리셋 지도</p>
-          <p className="mt-0.5 text-sm font-bold text-slate-800">
-            {completed} / {total} 세션 완료
+          <p
+            className={
+              isDonorCard
+                ? 'mb-1 text-[11px] font-medium uppercase tracking-wide text-white/60'
+                : 'text-xs font-semibold uppercase tracking-widest text-orange-500'
+            }
+          >
+            리셋 지도
+          </p>
+          <p
+            className={
+              isDonorCard
+                ? 'text-[26px] font-bold leading-tight tracking-tight text-white'
+                : 'mt-0.5 text-sm font-bold text-slate-800'
+            }
+          >
+            {completed} / {total}
+            {isDonorCard && <span className="ml-1 text-lg font-medium text-white/60">세션 완료</span>}
+            {!isDonorCard && ' 세션 완료'}
           </p>
         </div>
-        <div className="text-right">
-          <p className="text-[10px] text-slate-500">현재 세션</p>
-          <p className="text-lg font-bold text-slate-800">
+        <div className={`text-right ${isDonorCard ? 'pt-1' : ''}`}>
+          <p
+            className={
+              isDonorCard ? 'mb-1 text-[11px] font-medium uppercase tracking-wide text-white/60' : 'text-[10px] text-slate-500'
+            }
+          >
+            현재 세션
+          </p>
+          <p
+            className={
+              isDonorCard ? 'text-base font-semibold text-orange-500' : 'text-lg font-bold text-slate-800'
+            }
+          >
             {effectiveCurrentSession ?? '—'}
           </p>
         </div>
       </div>
 
-      {/* 지도 영역 */}
-      <JourneyMapV2
-        total={total}
-        completed={completed}
-        currentSession={effectiveCurrentSession}
-        onNodeTap={handleNodeTap}
-      />
+      {/* 지도 영역 — donor: flex-1 min-h-0 p-3, minHeight 480으로 축소 방지 */}
+      {mapRenderer ? (
+        <div
+          className="min-h-0 flex-1 shrink-0 p-3"
+          style={{ minHeight: 480 }}
+        >
+          {(() => {
+            const DonorMap = mapRenderer
+            return (
+              <DonorMap
+                total={total}
+                completed={completed}
+                currentSession={effectiveCurrentSession}
+                onNodeTap={handleNodeTap}
+              />
+            )
+          })()}
+        </div>
+      ) : (
+        <JourneyMapV2
+          total={total}
+          completed={completed}
+          currentSession={effectiveCurrentSession}
+          onNodeTap={handleNodeTap}
+        />
+      )}
 
       {/* 하단 패널 — plan_json 운동 목록 + 세션 종료 */}
       <SessionPanelV2
