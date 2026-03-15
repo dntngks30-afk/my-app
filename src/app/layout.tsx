@@ -3,6 +3,7 @@ import {
   Geist, 
   Geist_Mono, 
   Noto_Sans_KR, 
+  Noto_Serif_KR,
   IBM_Plex_Sans_KR, 
   Gowun_Dodum,
   Gothic_A1,
@@ -30,6 +31,12 @@ const notoSansKR = Noto_Sans_KR({
   variable: "--font-sans-noto",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
+});
+
+const notoSerifKR = Noto_Serif_KR({
+  variable: "--font-serif-noto",
+  subsets: ["latin"],
+  weight: ["400", "700", "900"],
 });
 
 const ibmPlexSansKR = IBM_Plex_Sans_KR({
@@ -172,7 +179,7 @@ export default function RootLayout({
   return (
     <html 
       lang="ko"
-      className={`${geistSans.variable} ${geistMono.variable} ${notoSansKR.variable} ${ibmPlexSansKR.variable} ${gowunDodum.variable} ${gothicA1.variable} ${nanumGothic.variable} ${jua.variable} ${doHyeon.variable} ${nanumPenScript.variable}`}
+      className={`${geistSans.variable} ${geistMono.variable} ${notoSansKR.variable} ${notoSerifKR.variable} ${ibmPlexSansKR.variable} ${gowunDodum.variable} ${gothicA1.variable} ${nanumGothic.variable} ${jua.variable} ${doHyeon.variable} ${nanumPenScript.variable}`}
     >
       <head>
         <link rel="icon" href="/favicon.ico" />
