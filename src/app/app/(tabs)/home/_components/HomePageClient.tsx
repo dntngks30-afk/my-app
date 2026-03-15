@@ -34,6 +34,7 @@ import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
+import { ImportedHomeMap } from '@/features/map_ui_import/home_map_20260315/ImportedHomeMap';
 
 interface HomePageClientProps {
   hideBottomNav?: boolean;
@@ -46,6 +47,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const debugMap = searchParams.get('debugMap') === '1';
   const navV2 = process.env.NODE_ENV === 'production' ? true : (searchParams.get('navV2') !== '0');
   const mapV2 = searchParams.get('mapV2') === '1' || navV2;
+  const useImportedMap = searchParams.get('importedMap') === '1';
   const tsOverride = searchParams.get('ts');
   const csOverride = searchParams.get('cs');
   const hasTsCs = tsOverride != null && csOverride != null;
@@ -406,6 +408,11 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
           const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
 
           if (mapV2 && total <= 20) {
+            if (useImportedMap) {
+              return (
+                <ImportedHomeMap total={total} completed={completed} />
+              );
+            }
             const focusSession = searchParams.get('focusSession');
             const focusSessionNum = focusSession ? parseInt(focusSession, 10) : null;
             return (
