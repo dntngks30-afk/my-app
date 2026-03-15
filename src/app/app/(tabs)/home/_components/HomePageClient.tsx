@@ -34,6 +34,7 @@ import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
+import { ImportedHomeMap } from '@/features/map_ui_import/home_map_20260315/ImportedHomeMap';
 
 interface HomePageClientProps {
   hideBottomNav?: boolean;
@@ -46,6 +47,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const debugMap = searchParams.get('debugMap') === '1';
   const navV2 = process.env.NODE_ENV === 'production' ? true : (searchParams.get('navV2') !== '0');
   const mapV2 = searchParams.get('mapV2') === '1' || navV2;
+  const importedMap = searchParams.get('importedMap') === '1';
   const tsOverride = searchParams.get('ts');
   const csOverride = searchParams.get('cs');
   const hasTsCs = tsOverride != null && csOverride != null;
@@ -387,17 +389,23 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     );
   }
 
+  const useImportedTheme = importedMap && mapV2;
+
   return (
-    <div className="min-h-screen bg-[#f8f6f0] pb-20">
+    <div
+      className={`min-h-screen pb-20 ${
+        useImportedTheme ? 'bg-[oklch(0.22_0.03_245)]' : 'bg-[#f8f6f0]'
+      }`}
+    >
       {/* 1. Header */}
-      <header className="px-4 pt-6 pb-4">
+      <header className={`px-4 pt-6 pb-4 ${useImportedTheme ? 'text-white/90' : ''}`}>
         <h1 className="text-4xl font-bold text-orange-500">Move Re</h1>
-        <p className="mt-2 text-base text-slate-800">
+        <p className={`mt-2 text-base ${useImportedTheme ? 'text-white/70' : 'text-slate-800'}`}>
           당신의, 당신에 의한, 당신을 위한 여정
         </p>
       </header>
 
-      <main className="px-4 space-y-6">
+      <main className={`px-4 ${useImportedTheme ? 'space-y-4' : 'space-y-6'}`}>
         {/* PR-UX-16a: home 상단 대형 preview 제거 — Reset Map first-view. 다음 세션 안내는 post-completion 또는 지도 맥락에서만 */}
         {/* 1. 리셋 지도 — mapV2=1이면 새 지도 UX, 그 외 기존 ResetMapCard */}
         <div>
@@ -405,6 +413,11 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
           const total = totalSessionsOverride ?? sessionProgress?.total_sessions ?? 8;
           const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
 
+          if (importedMap && mapV2 && total <= 20) {
+            return (
+              <ImportedHomeMap total={total} completed={completed} />
+            );
+          }
           if (mapV2 && total <= 20) {
             const focusSession = searchParams.get('focusSession');
             const focusSessionNum = focusSession ? parseInt(focusSession, 10) : null;
@@ -455,8 +468,10 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         })()}
         </div>
 
-        {/* PR-P2-2: 4세션 변화 리포트 foundation */}
-        <ProgressReportCard getAuthToken={getAuthToken} initialPreview={statsPreview} />
+        {/* PR-P2-2: 4세션 변화 리포트 foundation — imported theme 시 숨김 */}
+        {!useImportedTheme && (
+          <ProgressReportCard getAuthToken={getAuthToken} initialPreview={statsPreview} />
+        )}
       </main>
 
       {!hideBottomNav && <BottomNav />}
