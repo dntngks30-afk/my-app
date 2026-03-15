@@ -1,42 +1,45 @@
 "use client"
 
-import { useRef, useEffect, useState, useCallback } from "react"
+import { useRef, useEffect, useState, useCallback, useMemo } from "react"
 import { motion, useSpring, useTransform, useMotionValue, animate } from "framer-motion"
 import { Check, Lock, Dumbbell } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { sessions as mapDataSessions } from "@/app/app/(tabs)/home/_components/reset-map-v2/map-data"
+import type { SessionNode as MapDataSessionNode } from "@/app/app/(tabs)/home/_components/reset-map-v2/map-data"
 
-interface Session {
+interface DonorSession {
   id: number
   title: string
   subtitle: string
   status: "completed" | "active" | "locked"
 }
 
-// Full 20-session journey — MOVE RE 톤의 한국어 라벨
-const sessions: Session[] = [
-  { id: 1, title: "점화", subtitle: "전신 활성화", status: "completed" },
-  { id: 2, title: "기초", subtitle: "코어 안정성 구축", status: "completed" },
-  { id: 3, title: "흐름", subtitle: "움직임 흐름과 유연성", status: "active" },
-  { id: 4, title: "확장", subtitle: "코어 확장", status: "locked" },
-  { id: 5, title: "균형", subtitle: "전신 균형", status: "locked" },
-  { id: 6, title: "밀어내기", subtitle: "힘의 방출", status: "locked" },
-  { id: 7, title: "통합", subtitle: "완전 통합", status: "locked" },
-  { id: 8, title: "심화", subtitle: "깊은 연결", status: "locked" },
-  { id: 9, title: "각성", subtitle: "신체 각성", status: "locked" },
-  { id: 10, title: "조화", subtitle: "전체 조화", status: "locked" },
-  { id: 11, title: "완성", subtitle: "리셋 완성", status: "locked" },
-  { id: 12, title: "재도약", subtitle: "새로운 시작", status: "locked" },
-  { id: 13, title: "강화", subtitle: "패턴 강화", status: "locked" },
-  { id: 14, title: "정렬", subtitle: "전신 정렬", status: "locked" },
-  { id: 15, title: "유연", subtitle: "깊은 유연", status: "locked" },
-  { id: 16, title: "집중", subtitle: "정신 집중", status: "locked" },
-  { id: 17, title: "해방", subtitle: "완전 해방", status: "locked" },
-  { id: 18, title: "회복", subtitle: "통합 회복", status: "locked" },
-  { id: 19, title: "숙달", subtitle: "리셋 숙달", status: "locked" },
-  { id: 20, title: "마스터", subtitle: "완전 마스터", status: "locked" },
-]
+/** 프로덕션 total/completed/currentSession으로 donor 세션 목록 생성. 8/12/16/20 지원. */
+function buildImportedSessionsFromProgress(
+  total: number,
+  completed: number,
+  currentSession: number | null
+): DonorSession[] {
+  const safeTotal = Math.max(1, Math.min(20, total))
+  const items: DonorSession[] = []
+  for (let id = 1; id <= safeTotal; id++) {
+    const node = mapDataSessions.find((s) => s.id === id)
+    const title = node?.label ?? `세션 ${id}`
+    const subtitle = node?.description ?? ""
+    let status: "completed" | "active" | "locked"
+    if (currentSession === null) {
+      status = id <= completed ? "completed" : "locked"
+    } else {
+      if (id < currentSession) status = "completed"
+      else if (id === currentSession) status = "active"
+      else status = "locked"
+    }
+    items.push({ id, title, subtitle, status })
+  }
+  return items
+}
 
-// Expanded canvas for 20 sessions
+// Expanded canvas for 8/12/16/20 sessions — path fixed, anchors scale by total
 const CANVAS_WIDTH = 600
 const CANVAS_HEIGHT = 4000
 const VIEWPORT_HEIGHT = 480
@@ -45,7 +48,6 @@ const VIEWPORT_HEIGHT = 480
 const CENTER_X = 300
 const START_Y = 3880
 const END_Y = 80
-const TOTAL_SESSIONS = 20
 const ROUTE_SAMPLES = 120 // Dense points for smooth curved path
 
 // Uniform gap from road edge to panel center
@@ -103,12 +105,11 @@ function generatePath(): string {
   return path
 }
 
-function generateCompletedPath(): string {
-  const activeIndex = sessions.findIndex((s) => s.status === "active")
-  if (activeIndex < 1) return `M ${round(routePoints[0].x)} ${round(routePoints[0].y)}`
+function generateCompletedPath(total: number, progressIndex: number): string {
+  if (total < 2 || progressIndex < 0) return `M ${round(routePoints[0].x)} ${round(routePoints[0].y)}`
 
-  const segment = ROUTE_SAMPLES / (TOTAL_SESSIONS - 1)
-  const endIdx = Math.min(Math.ceil(activeIndex * segment) + 1, ROUTE_SAMPLES)
+  const segment = ROUTE_SAMPLES / (total - 1)
+  const endIdx = Math.min(Math.ceil(progressIndex * segment) + 1, ROUTE_SAMPLES)
 
   let path = `M ${round(routePoints[0].x)} ${round(routePoints[0].y)}`
   for (let i = 1; i <= endIdx && i < routePoints.length; i++) {
@@ -153,13 +154,14 @@ type SessionAnchor = {
   side: number
 }
 
-function computeAnchorsFromPath(pathEl: SVGPathElement): SessionAnchor[] {
+function computeAnchorsFromPath(pathEl: SVGPathElement, total: number): SessionAnchor[] {
   const totalLength = pathEl.getTotalLength()
   const delta = Math.max(12, totalLength / 150)
   const anchors: SessionAnchor[] = []
+  const safeTotal = Math.max(1, Math.min(20, total))
 
-  for (let i = 0; i < TOTAL_SESSIONS; i++) {
-    const progress = i / (TOTAL_SESSIONS - 1)
+  for (let i = 0; i < safeTotal; i++) {
+    const progress = safeTotal === 1 ? 0 : i / (safeTotal - 1)
     const sampleLength = totalLength * progress
     const anchor = pathEl.getPointAtLength(sampleLength)
 
@@ -205,14 +207,35 @@ function computeAnchorsFromPath(pathEl: SVGPathElement): SessionAnchor[] {
   return anchors
 }
 
-export function ResetMap() {
+export interface DonorResetMapProps {
+  total: number
+  completed: number
+  /** null = daily cap, 현재 세션 없음 */
+  currentSession: number | null
+  onNodeTap?: (session: MapDataSessionNode) => void
+}
+
+export function ResetMap({
+  total,
+  completed,
+  currentSession,
+  onNodeTap,
+}: DonorResetMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [sessionAnchors, setSessionAnchors] = useState<SessionAnchor[] | null>(null)
   const hasInitialScrolled = useRef(false)
 
-  const mainPathRef = useCallback((el: SVGPathElement | null) => {
-    if (el) setSessionAnchors(computeAnchorsFromPath(el))
-  }, [])
+  const sessions = useMemo(
+    () => buildImportedSessionsFromProgress(total, completed, currentSession),
+    [total, completed, currentSession]
+  )
+
+  const mainPathRef = useCallback(
+    (el: SVGPathElement | null) => {
+      if (el) setSessionAnchors(computeAnchorsFromPath(el, total))
+    },
+    [total]
+  )
 
   const [isDragging, setIsDragging] = useState(false)
   const dragStartY = useRef(0)
@@ -235,14 +258,18 @@ export function ResetMap() {
     return Math.max(minPan, Math.min(0, value))
   }, [])
 
-  // One-time initial scroll to active session on mount only (never re-center after user pans)
+  const progressIndex =
+    currentSession != null ? currentSession - 1 : Math.max(0, completed - 1)
+
+  // One-time initial scroll to active/current session on mount only (never re-center after user pans)
   useEffect(() => {
     if (!sessionAnchors?.length || hasInitialScrolled.current) return
     hasInitialScrolled.current = true
     const activeIndex = sessions.findIndex((s) => s.status === "active")
-    const targetY = -(sessionAnchors[activeIndex].y - VIEWPORT_HEIGHT / 2)
+    const scrollIndex = activeIndex >= 0 ? activeIndex : Math.max(0, completed - 1)
+    const targetY = -(sessionAnchors[scrollIndex].y - VIEWPORT_HEIGHT / 2)
     panY.set(clampPan(targetY))
-  }, [sessionAnchors, panY, clampPan])
+  }, [sessionAnchors, panY, clampPan, sessions, completed])
 
   const handleDragStart = (clientY: number) => {
     setIsDragging(true)
@@ -292,8 +319,8 @@ export function ResetMap() {
   return (
     <div
       ref={containerRef}
-      className="relative h-full w-full overflow-hidden rounded-2xl bg-[oklch(0.22_0.03_245)] cursor-grab active:cursor-grabbing select-none"
-      style={{ height: VIEWPORT_HEIGHT }}
+      className="relative h-full w-full overflow-hidden rounded-2xl cursor-grab active:cursor-grabbing select-none"
+      style={{ height: VIEWPORT_HEIGHT, backgroundColor: 'oklch(0.22 0.03 245)' }}
       onMouseDown={(e) => handleDragStart(e.clientY)}
       onMouseMove={(e) => handleDragMove(e.clientY)}
       onMouseUp={handleDragEnd}
@@ -303,8 +330,8 @@ export function ResetMap() {
       onTouchEnd={handleDragEnd}
     >
       {/* Edge fade hints */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[oklch(0.22_0.03_245)] via-[oklch(0.22_0.03_245/0.7)] to-transparent z-20" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[oklch(0.22_0.03_245)] via-[oklch(0.22_0.03_245/0.7)] to-transparent z-20" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 z-20" style={{ background: 'linear-gradient(to bottom, oklch(0.22 0.03 245), oklch(0.22 0.03 245 / 0.7), transparent)' }} />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 z-20" style={{ background: 'linear-gradient(to top, oklch(0.22 0.03 245), oklch(0.22 0.03 245 / 0.7), transparent)' }} />
 
       {/* Animated background layers with parallax */}
       <BackgroundLayers
@@ -382,7 +409,7 @@ export function ResetMap() {
 
           {/* Completed path glow base */}
           <motion.path
-            d={generateCompletedPath()}
+            d={generateCompletedPath(total, progressIndex)}
             fill="none"
             stroke="url(#activeRouteGradient)"
             strokeWidth="6"
@@ -395,7 +422,7 @@ export function ResetMap() {
 
           {/* Flowing energy overlay on active path */}
           <motion.path
-            d={generateCompletedPath()}
+            d={generateCompletedPath(total, progressIndex)}
             fill="none"
             stroke="url(#flowingEnergy)"
             strokeWidth="4"
@@ -424,14 +451,24 @@ export function ResetMap() {
         </svg>
 
         {/* Session nodes - all anchored to road, unified GAP, alternating left/right */}
-        {sessionAnchors?.map((anchor, index) => (
-          <SessionNode
-            key={sessions[index].id}
-            session={sessions[index]}
-            anchor={anchor}
-            index={index}
-          />
-        ))}
+        {sessionAnchors?.map((anchor, index) =>
+          sessions[index] ? (
+            <SessionNode
+              key={sessions[index].id}
+              session={sessions[index]}
+              anchor={anchor}
+              index={index}
+              onTap={
+                onNodeTap
+                  ? () => {
+                      const node = mapDataSessions.find((s) => s.id === sessions[index].id)
+                      if (node) onNodeTap(node)
+                    }
+                  : undefined
+              }
+            />
+          ) : null
+        )}
       </motion.div>
 
       {/* Subtle drag hint indicator */}
@@ -461,7 +498,7 @@ function BackgroundLayers({
   areaBlocks: { x: number; y: number; w: number; h: number }[]
 }) {
   return (
-    <div className="absolute inset-0 overflow-hidden">
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
       {/* Layer 1: Deep grid with slow drift */}
       <motion.div
         className="absolute inset-0"
@@ -589,20 +626,38 @@ function SessionNode({
   session,
   anchor,
   index,
+  onTap,
 }: {
-  session: Session
+  session: DonorSession
   anchor: SessionAnchor
   index: number
+  onTap?: () => void
 }) {
   const isCompleted = session.status === "completed"
   const isActive = session.status === "active"
   const isLocked = session.status === "locked"
   const position = { x: anchor.x, y: anchor.y }
   const labelOnRight = anchor.side === 1
+  const isClickable = !!onTap
 
   return (
     <motion.div
-      className="absolute z-10"
+      className={cn("absolute z-10", isClickable && "cursor-pointer")}
+      onPointerDown={(e) => {
+        if (onTap) {
+          e.stopPropagation()
+          e.preventDefault()
+          onTap()
+        }
+      }}
+      onKeyDown={(e) => {
+        if (onTap && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault()
+          onTap()
+        }
+      }}
+      role={isClickable ? "button" : undefined}
+      tabIndex={isClickable ? 0 : undefined}
       style={{
         left: position.x,
         top: position.y,
@@ -693,7 +748,7 @@ function SessionNode({
         {isLocked && <Lock className="w-3 h-3" strokeWidth={2.5} />}
       </motion.div>
 
-      {/* Label - compact */}
+      {/* Label — donor-faithful: session number, title, subtitle */}
       <motion.div
         className={cn("absolute top-1/2 -translate-y-1/2 whitespace-nowrap", labelOnRight ? "left-full ml-3" : "right-full mr-3 text-right")}
         initial={{ opacity: 0, x: labelOnRight ? -8 : 8 }}
@@ -702,9 +757,19 @@ function SessionNode({
       >
         <p
           className={cn(
-            "text-xs font-semibold",
+            "text-[10px] font-medium tabular-nums",
+            isActive && "text-orange-400",
+            isCompleted && "text-slate-300",
+            isLocked && "text-slate-500"
+          )}
+        >
+          세션 {session.id}
+        </p>
+        <p
+          className={cn(
+            "text-sm font-semibold",
             isActive && "text-orange-500",
-            isCompleted && "text-slate-200",
+            isCompleted && "text-white/95",
             isLocked && "text-slate-400"
           )}
         >
@@ -712,10 +777,10 @@ function SessionNode({
         </p>
         <p
           className={cn(
-            "text-[10px]",
-            isActive && "text-orange-400/80",
+            "text-[11px]",
+            isActive && "text-orange-400/90",
             isCompleted && "text-slate-400",
-            isLocked && "text-slate-500"
+            isLocked && "text-slate-500/70"
           )}
         >
           {session.subtitle}

@@ -34,7 +34,7 @@ import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
-import { ImportedHomeMap } from '@/features/map_ui_import/home_map_20260315/ImportedHomeMap';
+import { ResetMap as DonorResetMap } from '@/features/map_ui_import/home_map_20260315/components/reset-map';
 
 interface HomePageClientProps {
   hideBottomNav?: boolean;
@@ -47,7 +47,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const debugMap = searchParams.get('debugMap') === '1';
   const navV2 = process.env.NODE_ENV === 'production' ? true : (searchParams.get('navV2') !== '0');
   const mapV2 = searchParams.get('mapV2') === '1' || navV2;
-  const useImportedMap = searchParams.get('importedMap') === '1';
+  const importedMap = searchParams.get('importedMap') === '1';
   const tsOverride = searchParams.get('ts');
   const csOverride = searchParams.get('cs');
   const hasTsCs = tsOverride != null && csOverride != null;
@@ -389,30 +389,30 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     );
   }
 
-  return (
-    <div className="min-h-screen bg-[#f8f6f0] pb-20">
-      {/* 1. Header */}
-      <header className="px-4 pt-6 pb-4">
-        <h1 className="text-4xl font-bold text-orange-500">Move Re</h1>
-        <p className="mt-2 text-base text-slate-800">
-          당신의, 당신에 의한, 당신을 위한 여정
-        </p>
-      </header>
+  const total = totalSessionsOverride ?? sessionProgress?.total_sessions ?? 8;
+  const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
+  const useImportedTheme = importedMap && mapV2;
 
-      <main className="px-4 space-y-6">
-        {/* PR-UX-16a: home 상단 대형 preview 제거 — Reset Map first-view. 다음 세션 안내는 post-completion 또는 지도 맥락에서만 */}
-        {/* 1. 리셋 지도 — mapV2=1이면 새 지도 UX, 그 외 기존 ResetMapCard */}
+  return (
+    <div
+      className={`min-h-screen pb-20 ${useImportedTheme ? '' : 'bg-[#f8f6f0]'}`}
+      style={useImportedTheme ? { backgroundColor: 'oklch(0.22 0.03 245)' } : undefined}
+    >
+      {/* 1. Header — imported theme 시 숨김 */}
+      {!useImportedTheme && (
+        <header className="px-4 pt-6 pb-4">
+          <h1 className="text-4xl font-bold text-orange-500">Move Re</h1>
+          <p className="mt-2 text-base text-slate-800">
+            당신의, 당신에 의한, 당신을 위한 여정
+          </p>
+        </header>
+      )}
+
+      <main className={`px-4 ${useImportedTheme ? 'pt-4 space-y-4' : 'space-y-6'}`}>
+        {/* PR-UX-16a: home 상단 대형 preview 제거 — Reset Map first-view */}
         <div>
         {(() => {
-          const total = totalSessionsOverride ?? sessionProgress?.total_sessions ?? 8;
-          const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
-
           if (mapV2 && total <= 20) {
-            if (useImportedMap) {
-              return (
-                <ImportedHomeMap total={total} completed={completed} />
-              );
-            }
             const focusSession = searchParams.get('focusSession');
             const focusSessionNum = focusSession ? parseInt(focusSession, 10) : null;
             return (
@@ -435,6 +435,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
                     : null
                 }
                 debug={debugFlag}
+                mapRenderer={importedMap ? DonorResetMap : undefined}
               />
             );
           }
@@ -462,8 +463,10 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         })()}
         </div>
 
-        {/* PR-P2-2: 4세션 변화 리포트 foundation */}
-        <ProgressReportCard getAuthToken={getAuthToken} initialPreview={statsPreview} />
+        {/* PR-P2-2: 4세션 변화 리포트 foundation — imported theme 시 숨김 */}
+        {!useImportedTheme && (
+          <ProgressReportCard getAuthToken={getAuthToken} initialPreview={statsPreview} />
+        )}
       </main>
 
       {!hideBottomNav && <BottomNav />}
