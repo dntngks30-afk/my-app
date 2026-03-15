@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Calendar, PlayCircle, BarChart2, User, Map, BarChart3 } from 'lucide-react';
 import { prefetchTabData } from '@/lib/cache/tabDataCache';
@@ -14,11 +14,11 @@ const TABS_V1 = [
   { id: 'profile', href: '/app/profile', label: '마이', icon: User },
 ] as const;
 
-/* ── navV2 탭 (3개) ── */
+/* ── navV2 탭 (3개) — imported theme: 지도, 리셋, 여정 ── */
 const TABS_V2 = [
   { id: 'map', baseHref: '/app/home', label: '지도', icon: Map },
-  { id: 'stats', baseHref: '/app/checkin', label: '여정', icon: BarChart3 },
-  { id: 'my', baseHref: '/app/profile', label: '마이', icon: User },
+  { id: 'stats', baseHref: '/app/checkin', label: '리셋', icon: BarChart3 },
+  { id: 'my', baseHref: '/app/profile', label: '여정', icon: User },
 ] as const;
 
 function isTabActive(href: string, pathname: string | null): boolean {
@@ -32,6 +32,11 @@ function isTabActive(href: string, pathname: string | null): boolean {
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // imported theme: /app/home?importedMap=1 시 deep gray + orange accent
+  const importedTheme =
+    pathname === '/app/home' && searchParams.get('importedMap') === '1';
 
   // prod: V2 강제 ON. dev: navV2=0 시에만 V1 (테스트용)
   const [navV2, setNavV2] = useState(true);
@@ -59,11 +64,23 @@ export default function BottomNav() {
     const handlePrefetch = (tabId: string) => {
       if (tabId === 'stats' || tabId === 'my') prefetchTabData(tabId);
     };
+    const navClassName = importedTheme
+      ? 'fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-white/10 bg-[oklch(0.22_0.03_245)] px-2 safe-area-pb'
+      : 'fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t-2 border-slate-900 bg-white px-2 safe-area-pb shadow-[0_-2px_0_0_rgba(15,23,42,1)]';
+    const linkActiveClass = importedTheme
+      ? 'font-semibold text-orange-500'
+      : 'font-semibold text-slate-800';
+    const linkInactiveClass = importedTheme
+      ? 'text-white/50'
+      : 'text-slate-400';
     return (
-      <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t-2 border-slate-900 bg-white px-2 safe-area-pb shadow-[0_-2px_0_0_rgba(15,23,42,1)]">
+      <nav className={navClassName}>
         {TABS_V2.map(({ id, baseHref, label, icon: Icon }) => {
           const active = isTabActive(baseHref, pathname);
-          const href = baseHref;
+          const href =
+            id === 'map' && importedTheme
+              ? `${baseHref}?importedMap=1`
+              : baseHref;
           return (
             <Link
               key={id}
@@ -74,7 +91,7 @@ export default function BottomNav() {
               onFocus={() => handlePrefetch(id)}
               onClick={() => { if (process.env.NODE_ENV !== 'production') console.log('[NAV_TAB_CLICK]', { tab: id, href }); }}
               className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs transition ${
-                active ? 'font-semibold text-slate-800' : 'text-slate-400'
+                active ? linkActiveClass : linkInactiveClass
               }`}
             >
               <Icon className="size-5" strokeWidth={active ? 2.5 : 2} />
