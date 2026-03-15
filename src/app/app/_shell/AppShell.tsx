@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import MapTab from '../_tabs/map/MapTab';
 import StatsTab from '../_tabs/stats/StatsTab';
 import MyTab from '../_tabs/my/MyTab';
@@ -23,13 +23,21 @@ function isTabPath(path: string | null): path is (typeof TAB_PATHS)[number] {
  */
 export default function AppShell() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const active = isTabPath(pathname) ? pathname : '/app/home';
   const showMap = active === '/app/home' || active.startsWith('/app/home');
   const showStats = active.startsWith('/app/checkin');
   const showMy = active === '/app/profile';
 
+  const importedTheme =
+    pathname === '/app/home' && searchParams.get('importedMap') === '1';
+
   return (
-    <div className="relative min-h-screen bg-white">
+    <div
+      className={`relative min-h-screen ${
+        importedTheme ? 'bg-[oklch(0.22_0.03_245)]' : 'bg-white'
+      }`}
+    >
       {/* 지도 — persistent mount */}
       <div
         className="tab-panel transition-opacity duration-150 ease-out"
