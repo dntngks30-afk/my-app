@@ -47,7 +47,6 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const debugMap = searchParams.get('debugMap') === '1';
   const navV2 = process.env.NODE_ENV === 'production' ? true : (searchParams.get('navV2') !== '0');
   const mapV2 = searchParams.get('mapV2') === '1' || navV2;
-  const importedMap = searchParams.get('importedMap') === '1';
   const tsOverride = searchParams.get('ts');
   const csOverride = searchParams.get('cs');
   const hasTsCs = tsOverride != null && csOverride != null;
@@ -391,15 +390,16 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
 
   const total = totalSessionsOverride ?? sessionProgress?.total_sessions ?? 8;
   const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
-  const useImportedTheme = importedMap && mapV2;
+  /** donor 지도 기본 승격: mapV2 + total<=20 시 donor theme (presentation=donor, behavior=production) */
+  const useDonorTheme = mapV2 && total <= 20;
 
   return (
     <div
-      className={`min-h-screen pb-20 ${useImportedTheme ? '' : 'bg-[#f8f6f0]'}`}
-      style={useImportedTheme ? { backgroundColor: 'oklch(0.22 0.03 245)' } : undefined}
+      className={`min-h-screen pb-20 ${useDonorTheme ? '' : 'bg-[#f8f6f0]'}`}
+      style={useDonorTheme ? { backgroundColor: 'oklch(0.22 0.03 245)' } : undefined}
     >
-      {/* 1. Header — imported theme 시 숨김 */}
-      {!useImportedTheme && (
+      {/* 1. Header — donor theme 시 숨김 (지도 카드 헤더에 통합) */}
+      {!useDonorTheme && (
         <header className="px-4 pt-6 pb-4">
           <h1 className="text-4xl font-bold text-orange-500">Move Re</h1>
           <p className="mt-2 text-base text-slate-800">
@@ -408,7 +408,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         </header>
       )}
 
-      <main className={`px-4 ${useImportedTheme ? 'pt-4 space-y-4' : 'space-y-6'}`}>
+      <main className={`px-4 ${useDonorTheme ? 'pt-4 space-y-4' : 'space-y-6'}`}>
         {/* PR-UX-16a: home 상단 대형 preview 제거 — Reset Map first-view */}
         <div>
         {(() => {
@@ -435,7 +435,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
                     : null
                 }
                 debug={debugFlag}
-                mapRenderer={importedMap ? DonorResetMap : undefined}
+                mapRenderer={DonorResetMap}
               />
             );
           }
@@ -463,8 +463,8 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         })()}
         </div>
 
-        {/* PR-P2-2: 4세션 변화 리포트 foundation — imported theme 시 숨김 */}
-        {!useImportedTheme && (
+        {/* PR-P2-2: 4세션 변화 리포트 foundation — donor theme 시 숨김 */}
+        {!useDonorTheme && (
           <ProgressReportCard getAuthToken={getAuthToken} initialPreview={statsPreview} />
         )}
       </main>

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Calendar, PlayCircle, BarChart2, User, Map, BarChart3 } from 'lucide-react';
 import { prefetchTabData } from '@/lib/cache/tabDataCache';
@@ -32,11 +32,9 @@ function isTabActive(href: string, pathname: string | null): boolean {
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
-  // imported theme: /app/home?importedMap=1 시 deep gray + orange accent
-  const importedTheme =
-    pathname === '/app/home' && searchParams.get('importedMap') === '1';
+  /** donor 지도 기본 승격: /app/home 에서 donor theme (deep gray + orange accent) */
+  const useDonorTheme = pathname === '/app/home';
 
   // prod: V2 강제 ON. dev: navV2=0 시에만 V1 (테스트용)
   const [navV2, setNavV2] = useState(true);
@@ -64,23 +62,20 @@ export default function BottomNav() {
     const handlePrefetch = (tabId: string) => {
       if (tabId === 'stats' || tabId === 'my') prefetchTabData(tabId);
     };
-    const navClassName = importedTheme
+    const navClassName = useDonorTheme
       ? 'fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-white/10 bg-[oklch(0.22_0.03_245)] px-2 safe-area-pb'
       : 'fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t-2 border-slate-900 bg-white px-2 safe-area-pb shadow-[0_-2px_0_0_rgba(15,23,42,1)]';
-    const linkActiveClass = importedTheme
+    const linkActiveClass = useDonorTheme
       ? 'font-semibold text-orange-500'
       : 'font-semibold text-slate-800';
-    const linkInactiveClass = importedTheme
+    const linkInactiveClass = useDonorTheme
       ? 'text-white/50'
       : 'text-slate-400';
     return (
       <nav className={navClassName}>
         {TABS_V2.map(({ id, baseHref, label, icon: Icon }) => {
           const active = isTabActive(baseHref, pathname);
-          const href =
-            id === 'map' && importedTheme
-              ? `${baseHref}?importedMap=1`
-              : baseHref;
+          const href = baseHref;
           return (
             <Link
               key={id}
