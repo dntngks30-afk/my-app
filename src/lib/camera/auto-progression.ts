@@ -62,7 +62,13 @@ const AUTO_ADVANCE_DELAY_MS: Record<CameraStepId, number> = {
   'single-leg-balance': 900,
 };
 
-const PASS_CONFIDENCE_THRESHOLD: Record<CameraStepId, number> = {
+const BASIC_PASS_CONFIDENCE_THRESHOLD: Record<CameraStepId, number> = {
+  squat: 0.62,
+  'wall-angel': 0.76,
+  'single-leg-balance': 0.8,
+};
+
+const STRONG_QUALITY_CONFIDENCE_THRESHOLD: Record<CameraStepId, number> = {
   squat: 0.78,
   'wall-angel': 0.76,
   'single-leg-balance': 0.8,
@@ -235,11 +241,16 @@ function getRetryMessage(guardrail: StepGuardrailResult): string {
     guardrail.flags.includes('rep_incomplete') ||
     guardrail.flags.includes('hold_too_short')
   ) {
-    return '다시 한 번 해볼게요';
+    return '한 번 더 천천히 해주세요';
   }
 
-  if (guardrail.flags.includes('partial_capture')) {
-    return '프레임을 다시 맞춰 주세요';
+  if (
+    guardrail.flags.includes('framing_invalid') ||
+    guardrail.flags.includes('partial_capture') ||
+    guardrail.flags.includes('left_side_missing') ||
+    guardrail.flags.includes('right_side_missing')
+  ) {
+    return '머리부터 발끝까지 보이게 해주세요';
   }
 
   return '조금 더 안정적으로 해주세요';
@@ -256,13 +267,23 @@ function getUserGuidance(
 ): string[] {
   const messages: string[] = [];
 
+  if (failureReasons.includes('framing_invalid')) {
+    messages.push('머리부터 발끝까지 보이게 해주세요');
+  }
+
+  if (
+    failureReasons.includes('partial_capture') ||
+    failureReasons.includes('left_side_missing') ||
+    failureReasons.includes('right_side_missing')
+  ) {
+    messages.push('조금 더 가까이 와주세요');
+  }
+
   if (
     failureReasons.includes('capture_quality_invalid') ||
-    failureReasons.includes('capture_quality_low') ||
-    guardrail.flags.includes('framing_invalid') ||
-    guardrail.flags.includes('partial_capture')
+    failureReasons.includes('capture_quality_low')
   ) {
-    messages.push('화면에 몸이 다 나오게 서주세요');
+    messages.push('몸이 화면 안에서 더 크게 보이게 해주세요');
   }
 
   if (guardrail.flags.includes('landmark_confidence_low')) {
@@ -277,7 +298,7 @@ function getUserGuidance(
     failureReasons.includes('insufficient_signal') ||
     guardrail.flags.includes('valid_frames_too_few')
   ) {
-    messages.push('동작을 조금 더 천천히 끝까지 해주세요');
+    messages.push('한 번 더 천천히 해주세요');
   }
 
   if (stepId === 'squat') {
@@ -285,10 +306,10 @@ function getUserGuidance(
       messages.push('조금 더 깊게 앉아주세요');
     }
     if (failureReasons.includes('ascent_not_detected')) {
-      messages.push('앉았다가 끝까지 다시 올라와 주세요');
+      messages.push('조금 더 앉았다가 다시 올라와주세요');
     }
     if (failureReasons.includes('rep_incomplete')) {
-      messages.push('한 번 더 끝까지 앉았다 일어나 주세요');
+      messages.push('조금 더 앉았다가 다시 올라와주세요');
     }
   }
 
@@ -306,10 +327,82 @@ function getUserGuidance(
   }
 
   if (failureReasons.includes('confidence_too_low')) {
-    messages.push('같은 동작을 한 번 더 안정적으로 해주세요');
+    messages.push('자세를 잠깐 고정한 뒤 다시 해주세요');
   }
 
   return toUniqueGuidance(messages);
+}
+
+interface SquatQualitySignals {
+  depthTooShallow: boolean;
+  trunkLeanHigh: boolean;
+  kneeTrackingOff: boolean;
+  bottomStabilityLow: boolean;
+  strongQuality: boolean;
+}
+
+function getSquatQualitySignals(
+  result: EvaluatorResult,
+  confidence: number
+): SquatQualitySignals {
+  const depth = getMetricValue(result.metrics, 'depth') ?? 0;
+  const trunkLean = getMetricValue(result.metrics, 'trunk_lean') ?? 999;
+  const kneeTracking = getMetricValue(result.metrics, 'knee_alignment_trend') ?? 0;
+  const bottomStability = getMetricValue(result.rawMetrics, 'bottom_stability_proxy') ?? 0;
+  const depthTooShallow = depth < 45;
+  const trunkLeanHigh = trunkLean >= 24;
+  const kneeTrackingOff = kneeTracking < 0.82 || kneeTracking > 1.18;
+  const bottomStabilityLow = bottomStability < 40;
+
+  return {
+    depthTooShallow,
+    trunkLeanHigh,
+    kneeTrackingOff,
+    bottomStabilityLow,
+    strongQuality:
+      confidence >= STRONG_QUALITY_CONFIDENCE_THRESHOLD.squat &&
+      !depthTooShallow &&
+      !trunkLeanHigh &&
+      !kneeTrackingOff &&
+      !bottomStabilityLow,
+  };
+}
+
+function getHardBlockerReasons(
+  stepId: CameraStepId,
+  guardrail: StepGuardrailResult
+): string[] {
+  const commonBlockers = [
+    'insufficient_signal',
+    'valid_frames_too_few',
+    'framing_invalid',
+  ];
+
+  if (stepId === 'squat') {
+    return [
+      ...commonBlockers,
+      ...(guardrail.flags.includes('left_side_missing') ? ['left_side_missing'] : []),
+      ...(guardrail.flags.includes('right_side_missing') ? ['right_side_missing'] : []),
+    ];
+  }
+
+  return [...commonBlockers, 'left_side_missing', 'right_side_missing', 'partial_capture'];
+}
+
+function getSquatProgressionCompletionSatisfied(
+  result: EvaluatorResult,
+  guardrail: StepGuardrailResult
+): boolean {
+  const descentCount = getHighlightedMetric(result, 'descentCount');
+  const bottomCount = getHighlightedMetric(result, 'bottomCount');
+  const ascentCount = getHighlightedMetric(result, 'ascentCount');
+
+  return (
+    guardrail.completionStatus === 'complete' &&
+    descentCount > 0 &&
+    bottomCount > 0 &&
+    ascentCount > 0
+  );
 }
 
 function getSquatFailureReasons(
@@ -322,9 +415,16 @@ function getSquatFailureReasons(
   const descentCount = getHighlightedMetric(result, 'descentCount');
   const bottomCount = getHighlightedMetric(result, 'bottomCount');
   const ascentCount = getHighlightedMetric(result, 'ascentCount');
+  const qualitySignals = getSquatQualitySignals(result, confidence);
 
-  if (guardrail.flags.includes('insufficient_signal') || guardrail.flags.includes('valid_frames_too_few')) {
+  if (guardrail.flags.includes('insufficient_signal')) {
     failureReasons.add('insufficient_signal');
+  }
+  if (guardrail.flags.includes('valid_frames_too_few')) {
+    failureReasons.add('valid_frames_too_few');
+  }
+  if (guardrail.flags.includes('framing_invalid')) {
+    failureReasons.add('framing_invalid');
   }
   if (guardrail.flags.includes('rep_incomplete') || result.completionHints?.includes('rep_phase_incomplete')) {
     failureReasons.add('rep_incomplete');
@@ -334,21 +434,23 @@ function getSquatFailureReasons(
       guardrail.captureQuality === 'low' ? 'capture_quality_low' : 'capture_quality_invalid'
     );
   }
-  if (confidence < PASS_CONFIDENCE_THRESHOLD.squat) {
+  if (confidence < BASIC_PASS_CONFIDENCE_THRESHOLD.squat) {
     failureReasons.add('confidence_too_low');
   }
-  if (depth < 45) {
+  if (qualitySignals.depthTooShallow) {
     failureReasons.add('depth_not_reached');
   }
   if (ascentCount === 0 || (descentCount > 0 && bottomCount > 0 && ascentCount === 0)) {
     failureReasons.add('ascent_not_detected');
   }
-  if (
-    guardrail.flags.includes('left_side_missing') ||
-    guardrail.flags.includes('right_side_missing') ||
-    guardrail.flags.includes('partial_capture')
-  ) {
-    failureReasons.add('side_missing');
+  if (guardrail.flags.includes('left_side_missing')) {
+    failureReasons.add('left_side_missing');
+  }
+  if (guardrail.flags.includes('right_side_missing')) {
+    failureReasons.add('right_side_missing');
+  }
+  if (guardrail.flags.includes('partial_capture')) {
+    failureReasons.add('partial_capture');
   }
 
   return Array.from(failureReasons);
@@ -367,17 +469,29 @@ function getFailureReasons(
   }
 
   const reasons = new Set<string>();
-  if (guardrail.flags.includes('insufficient_signal') || guardrail.flags.includes('valid_frames_too_few')) {
+  if (guardrail.flags.includes('insufficient_signal')) {
     reasons.add('insufficient_signal');
+  }
+  if (guardrail.flags.includes('valid_frames_too_few')) {
+    reasons.add('valid_frames_too_few');
+  }
+  if (guardrail.flags.includes('framing_invalid')) {
+    reasons.add('framing_invalid');
   }
   if (guardrail.captureQuality !== 'ok') {
     reasons.add(guardrail.captureQuality === 'low' ? 'capture_quality_low' : 'capture_quality_invalid');
   }
-  if (confidence < PASS_CONFIDENCE_THRESHOLD[stepId]) {
+  if (confidence < BASIC_PASS_CONFIDENCE_THRESHOLD[stepId]) {
     reasons.add('confidence_too_low');
   }
-  if (guardrail.flags.includes('left_side_missing') || guardrail.flags.includes('right_side_missing')) {
-    reasons.add('side_missing');
+  if (guardrail.flags.includes('left_side_missing')) {
+    reasons.add('left_side_missing');
+  }
+  if (guardrail.flags.includes('right_side_missing')) {
+    reasons.add('right_side_missing');
+  }
+  if (guardrail.flags.includes('partial_capture')) {
+    reasons.add('partial_capture');
   }
   return Array.from(reasons);
 }
@@ -390,13 +504,19 @@ export function evaluateExerciseAutoProgress(
   const evaluatorResult = runEvaluator(stepId, landmarks);
   const guardrail = assessStepGuardrail(stepId, landmarks, stats, evaluatorResult);
   const confidence = getEffectiveConfidence(stepId, evaluatorResult, guardrail);
-  const completionSatisfied = getCompletionSatisfied(stepId, evaluatorResult, guardrail);
   const reasons = getCommonReasons(evaluatorResult, guardrail);
-  const passThreshold = PASS_CONFIDENCE_THRESHOLD[stepId];
+  const passThreshold = BASIC_PASS_CONFIDENCE_THRESHOLD[stepId];
+  const completionSatisfied =
+    stepId === 'squat'
+      ? getSquatProgressionCompletionSatisfied(evaluatorResult, guardrail)
+      : getCompletionSatisfied(stepId, evaluatorResult, guardrail);
+  const squatQualitySignals =
+    stepId === 'squat' ? getSquatQualitySignals(evaluatorResult, confidence) : null;
   const severeFail = isSevereInvalid(guardrail) && stats.captureDurationMs >= 4500;
   const autoAdvanceDelayMs = AUTO_ADVANCE_DELAY_MS[stepId];
   const lowConfidenceRetry =
     guardrail.retryRecommended && confidence < passThreshold;
+  const hardBlockerReasons = getHardBlockerReasons(stepId, guardrail);
   const noNextAllowed = false;
   const failureReasons = getFailureReasons(
     stepId,
@@ -431,19 +551,14 @@ export function evaluateExerciseAutoProgress(
     };
   }
 
-  if (
+  const progressionPassed =
     completionSatisfied &&
-    guardrail.captureQuality === 'ok' &&
+    guardrail.captureQuality !== 'invalid' &&
     confidence >= passThreshold &&
-    !hasAnyReason(reasons, [
-      'rep_incomplete',
-      'hold_too_short',
-      'left_side_missing',
-      'right_side_missing',
-      'partial_capture',
-      'framing_invalid',
-    ])
-  ) {
+    !hasAnyReason(reasons, hardBlockerReasons) &&
+    !hasAnyReason(reasons, ['rep_incomplete', 'hold_too_short']);
+
+  if (progressionPassed) {
     return {
       status: 'pass',
       progressionState: 'passed',
@@ -457,7 +572,10 @@ export function evaluateExerciseAutoProgress(
       retryRecommended: false,
       evaluatorResult,
       guardrail,
-      uiMessage: '충분한 신호를 확인했어요',
+      uiMessage:
+        stepId === 'squat' && squatQualitySignals && !squatQualitySignals.strongQuality
+          ? '좋습니다, 동작을 확인했어요'
+          : '충분한 신호를 확인했어요',
       autoAdvanceDelayMs,
     };
   }

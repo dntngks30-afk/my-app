@@ -59,6 +59,7 @@ export interface StepGuardrailResult {
 }
 
 const MIN_VALID_FRAMES = 8;
+const SQUAT_BASIC_DEPTH_FLOOR = 0.3;
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(max, Math.max(min, value));
@@ -150,11 +151,16 @@ function getMotionCompleteness(
       return { score: 0.2, status: 'partial' };
     }
     const peakDepth = Math.max(...depthValues);
-    if (peakDepth < 0.45 || descentCount === 0 || bottomCount === 0 || ascentCount === 0) {
+    if (
+      peakDepth < SQUAT_BASIC_DEPTH_FLOOR ||
+      descentCount === 0 ||
+      bottomCount === 0 ||
+      ascentCount === 0
+    ) {
       flags.add('rep_incomplete');
       return { score: clamp(peakDepth), status: 'partial' };
     }
-    return { score: clamp(peakDepth * 1.15), status: 'complete' };
+    return { score: clamp(0.45 + peakDepth * 0.55), status: 'complete' };
   }
 
   if (stepId === 'wall-angel') {

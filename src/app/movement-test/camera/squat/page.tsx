@@ -52,7 +52,10 @@ function getSquatOverlayGuide(
   }
 
   if (
-    failureReasons.includes('side_missing') ||
+    failureReasons.includes('framing_invalid') ||
+    failureReasons.includes('left_side_missing') ||
+    failureReasons.includes('right_side_missing') ||
+    failureReasons.includes('partial_capture') ||
     failureReasons.includes('capture_quality_invalid') ||
     failureReasons.includes('capture_quality_low')
   ) {
@@ -185,7 +188,7 @@ export default function CameraSquatPage() {
     stop();
     persistCurrentStep();
     setProgressionState('passed');
-    setStatusMessage('충분한 신호를 확인했어요');
+    setStatusMessage(gate.uiMessage);
     appendTransition('passed', 'gate_status_pass');
     const next = getNextStepPath(STEP_ID);
     if (!next) {
@@ -206,7 +209,7 @@ export default function CameraSquatPage() {
       });
       router.push(next);
     }, gate.autoAdvanceDelayMs);
-  }, [appendTransition, clearAutoAdvanceTimer, gate.autoAdvanceDelayMs, persistCurrentStep, router, stop]);
+  }, [appendTransition, clearAutoAdvanceTimer, gate.autoAdvanceDelayMs, gate.uiMessage, persistCurrentStep, router, stop]);
 
   useEffect(() => {
     if (permissionDenied || !cameraReady || settledRef.current) {
