@@ -40,6 +40,8 @@ export interface ExerciseGateResult {
   passConfirmationWindowCount: number;
 }
 
+const REQUIRED_STABLE_FRAMES = 3;
+
 export function isGatePassReady(
   gate: Pick<
     ExerciseGateResult,
@@ -51,6 +53,32 @@ export function isGatePassReady(
     gate.nextAllowed &&
     gate.completionSatisfied &&
     gate.passConfirmationSatisfied
+  );
+}
+
+/**
+ * Strict success contract: success UI, tone, and auto-advance must depend ONLY on this.
+ * Aligned with progressionPassed: captureQuality 'low' and unstable_frame_timing must NOT
+ * block final latch when passConfirmed (completionSatisfied + passConfirmationSatisfied) is true.
+ */
+export function isFinalPassLatched(
+  stepId: CameraStepId,
+  gate: Pick<
+    ExerciseGateResult,
+    | 'completionSatisfied'
+    | 'confidence'
+    | 'passConfirmationSatisfied'
+    | 'passConfirmationFrameCount'
+    | 'guardrail'
+  >
+): boolean {
+  const passThreshold = BASIC_PASS_CONFIDENCE_THRESHOLD[stepId];
+  return (
+    gate.completionSatisfied === true &&
+    gate.guardrail.captureQuality !== 'invalid' &&
+    gate.confidence >= passThreshold &&
+    gate.passConfirmationSatisfied === true &&
+    gate.passConfirmationFrameCount >= REQUIRED_STABLE_FRAMES
   );
 }
 

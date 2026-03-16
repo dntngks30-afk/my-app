@@ -21,7 +21,7 @@ import { usePoseCapture } from '@/lib/camera/use-pose-capture';
 import {
   evaluateExerciseAutoProgress,
   getCameraGuideTone,
-  isGatePassReady,
+  isFinalPassLatched,
   type ExerciseProgressionState,
 } from '@/lib/camera/auto-progression';
 
@@ -121,7 +121,28 @@ export default function CameraSquatPage() {
     () => evaluateExerciseAutoProgress(STEP_ID, landmarks, stats),
     [landmarks, stats]
   );
-  const passReady = isGatePassReady(gate);
+  const finalPassLatched = isFinalPassLatched(STEP_ID, gate);
+
+  useEffect(() => {
+    if (!debugEnabled || stats.sampledFrameCount === 0) return;
+    console.info('[camera:squat-contract]', {
+      passCandidate: gate.status === 'pass',
+      completionSatisfied: gate.completionSatisfied,
+      guardrailStatus: gate.guardrail.captureQuality,
+      effectiveConfidence: gate.confidence,
+      stableFrameCount: gate.passConfirmationFrameCount,
+      finalPassLatched,
+    });
+  }, [
+    debugEnabled,
+    stats.sampledFrameCount,
+    gate.status,
+    gate.completionSatisfied,
+    gate.guardrail.captureQuality,
+    gate.confidence,
+    gate.passConfirmationFrameCount,
+    finalPassLatched,
+  ]);
 
   const appendTransition = useCallback(
     (state: ExerciseProgressionState, reason: string) => {
@@ -238,7 +259,7 @@ export default function CameraSquatPage() {
     setProgressionState(gate.progressionState);
     setStatusMessage(gate.uiMessage);
 
-    if (passReady) {
+    if (finalPassLatched) {
       latchPassEvent();
       return;
     }
@@ -258,7 +279,7 @@ export default function CameraSquatPage() {
     cameraReady,
     gate,
     latchPassEvent,
-    passReady,
+    finalPassLatched,
     passLatched,
     permissionDenied,
     stats.sampledFrameCount,
@@ -424,12 +445,17 @@ export default function CameraSquatPage() {
       : nextTriggeredAt
         ? 'next_triggered'
         : 'pass_not_detected';
-  const visibleUserGuidance = passLatched ? [] : gate.userGuidance;
-  const effectiveProgressionState = passLatched ? 'passed' : progressionState;
-  const guideTone = getCameraGuideTone({
-    ...(passLatched
+  const visibleUserGuidance = finalPassLatched || passLatched ? [] : gate.userGuidance;
+  const effectiveProgressionState = finalPassLatched || passLatched ? 'passed' : progressionState;
+  // Success tone ONLY when finalPassLatched (strict contract)
+  const toneGate =
+    finalPassLatched || passLatched
       ? { ...gate, status: 'pass' as const, nextAllowed: true, completionSatisfied: true }
-      : gate),
+      : gate.status === 'pass' && !finalPassLatched
+        ? { ...gate, status: 'detecting' as const, progressionState: 'detecting' as const }
+        : gate;
+  const guideTone = getCameraGuideTone({
+    ...toneGate,
     progressionState: effectiveProgressionState,
   });
   const overlayGuide = getSquatOverlayGuide(gate.failureReasons, effectiveProgressionState);
@@ -566,7 +592,7 @@ export default function CameraSquatPage() {
                     <span>captureQuality: {gate.guardrail.captureQuality}</span>
                     <span>completionSatisfied: {String(gate.completionSatisfied)}</span>
                     <span>nextAllowed: {String(gate.nextAllowed)}</span>
-                    <span>passReady: {String(passReady)}</span>
+                    <span>finalPassLatched: {String(finalPassLatched)}</span>
                     <span>passLatched: {String(passLatched)}</span>
                     <span>passConfirmed: {String(gate.passConfirmationSatisfied)}</span>
                     <span>passFrames: {gate.passConfirmationFrameCount}/{gate.passConfirmationWindowCount}</span>
