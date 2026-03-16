@@ -62,7 +62,7 @@ export default function IntroProfilePage() {
         mergeIntroProfileIntoSurveySession();
         router.push('/movement-test/survey');
       } else if (d.entryMode === 'camera') {
-        router.push('/deep-test/run');
+        router.push('/movement-test/camera');
       } else {
         router.push('/movement-test/precheck');
       }

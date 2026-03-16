@@ -1,0 +1,139 @@
+'use client';
+
+/**
+ * 카메라 테스트 - 벽 천사
+ */
+import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { ChevronLeft } from 'lucide-react';
+import { Starfield } from '@/components/landing/Starfield';
+import { CameraPreview } from '@/components/public/CameraPreview';
+import {
+  saveCameraTest,
+  loadCameraTest,
+  getNextStepPath,
+  getPrevStepPath,
+  type CameraStepId,
+} from '@/lib/public/camera-test';
+
+const BG = '#0d161f';
+const ACCENT = '#ff7b00';
+const STEP_ID: CameraStepId = 'wall-angel';
+
+const INSTRUCTION = '등을 벽에 붙이고, 팔을 벽을 따라 위로 올렸다 내리세요. 5회 반복.';
+
+export default function CameraWallAngelPage() {
+  const router = useRouter();
+  const [permissionDenied, setPermissionDenied] = useState(false);
+
+  const handleNext = useCallback(() => {
+    const current = loadCameraTest();
+    const completed = [...(current.completedSteps ?? []), STEP_ID];
+    saveCameraTest({
+      completedSteps: completed,
+      lastStepAt: new Date().toISOString(),
+    });
+    const next = getNextStepPath(STEP_ID);
+    if (next) router.push(next);
+  }, [router]);
+
+  const handleRetry = useCallback(() => {
+    setPermissionDenied(false);
+  }, []);
+
+  const handleSurveyFallback = useCallback(() => {
+    router.push('/movement-test/survey');
+  }, [router]);
+
+  const prevPath = getPrevStepPath(STEP_ID);
+
+  return (
+    <div
+      className="relative min-h-[100svh] overflow-hidden flex flex-col"
+      style={{ backgroundColor: BG }}
+    >
+      <Starfield />
+
+      <header className="relative z-20 flex items-center justify-between px-4 pt-4 pb-2">
+        <div className="w-12">
+          {prevPath ? (
+            <Link
+              href={prevPath}
+              className="inline-flex items-center justify-center size-10 rounded-full hover:bg-white/10 transition-colors min-h-[44px] min-w-[44px]"
+              aria-label="이전"
+            >
+              <ChevronLeft className="size-6" style={{ color: ACCENT }} />
+            </Link>
+          ) : (
+            <span />
+          )}
+        </div>
+        <p className="text-slate-400 text-sm" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+          2 / 3
+        </p>
+        <div className="w-12" />
+      </header>
+
+      <main className="relative z-10 flex-1 flex flex-col items-center px-6 py-4 overflow-hidden">
+        <h1
+          className="text-xl font-bold text-slate-100 mb-2"
+          style={{ fontFamily: 'var(--font-sans-noto)' }}
+        >
+          벽 천사
+        </h1>
+        <p
+          className="text-slate-400 text-sm mb-4 text-center break-keep"
+          style={{ fontFamily: 'var(--font-sans-noto)' }}
+        >
+          {INSTRUCTION}
+        </p>
+
+        {permissionDenied ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 w-full max-w-md">
+            <p className="text-slate-400 text-sm text-center">
+              카메라 접근이 거부되었습니다.
+              <br />
+              브라우저 설정에서 카메라 권한을 허용해 주세요.
+            </p>
+            <div className="flex flex-col gap-3 w-full">
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="w-full min-h-[48px] rounded-xl font-bold text-slate-900 bg-white hover:bg-slate-100"
+                style={{ fontFamily: 'var(--font-sans-noto)' }}
+              >
+                다시 시도
+              </button>
+              <button
+                type="button"
+                onClick={handleSurveyFallback}
+                className="w-full min-h-[48px] rounded-xl font-medium text-slate-300 border border-white/20 hover:bg-white/5"
+                style={{ fontFamily: 'var(--font-sans-noto)' }}
+              >
+                설문형으로 전환
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="w-full max-w-md flex-1 min-h-0 flex flex-col items-center">
+              <CameraPreview
+                onError={() => setPermissionDenied(true)}
+                className="w-full"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleNext}
+              className="w-full max-w-md mt-4 min-h-[48px] rounded-xl font-bold text-slate-900 bg-white hover:bg-slate-100 transition-colors"
+              style={{ fontFamily: 'var(--font-sans-noto)' }}
+            >
+              다음
+            </button>
+          </>
+        )}
+      </main>
+    </div>
+  );
+}
