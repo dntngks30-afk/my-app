@@ -13,6 +13,7 @@ import type { AnimalAxis, ScoreResultV2 } from '@/features/movement-test/v2';
 import { NeoButton, NeoCard, NeoPageLayout } from '@/components/neobrutalism';
 import { loadCameraResult } from '@/lib/camera/camera-result';
 import type { NormalizedCameraResult } from '@/lib/camera/normalize';
+import { getResultBridgeExplanation } from '@/lib/camera/result-bridge';
 
 const KEY = 'movementTestSession:v2';
 
@@ -558,6 +559,11 @@ export default function ResultPage() {
     return k in RESULT_CONTENT ? (k as ResultContentKey) : 'monkey';
   }, [cameraResult]);
 
+  const bridgeExplanation = useMemo(() => {
+    if (!cameraResult) return null;
+    return getResultBridgeExplanation(cameraResult);
+  }, [cameraResult]);
+
   const cameraActions = useMemo((): ResultActionContent | null => {
     if (!cameraResult) return null;
     const base = cameraContentKey && RESULT_CONTENT[cameraContentKey]?.actions;
@@ -615,15 +621,17 @@ export default function ResultPage() {
       : getResultContentKey(mainAnimal, resultType);
   const content = contentKey ? RESULT_CONTENT[contentKey] : null;
   const mainHeroTitle = isCameraMode
-    ? (cameraResult!.insufficientSignal ? '촬영 데이터 부족' : content?.displayName ?? `당신은 ${cameraResult!.movementType}형 입니다.`)
+    ? (bridgeExplanation?.headline ?? (cameraResult!.insufficientSignal ? '촬영 데이터 부족' : content?.displayName ?? `당신은 ${cameraResult!.movementType}형 입니다.`))
     : (content?.displayName ?? (RESULT_TYPE_LABELS[resultType] ?? resultType));
   const cardTitle = isCameraMode
     ? (cameraResult!.insufficientSignal ? '분석 불가' : content?.cardTitle ?? cameraResult!.movementType)
     : (content?.cardTitle ?? (RESULT_TYPE_LABELS[resultType] ?? resultType));
   const resultBody = isCameraMode
-    ? cameraResult!.patternSummary
+    ? (bridgeExplanation?.explanation ?? cameraResult!.patternSummary)
     : (content?.body ?? '6축 점수가 비교적 고르게 분포되어 있어, 현재 균형이 잘 잡혀 있는 편이에요.');
+  const resultReasons = isCameraMode && bridgeExplanation?.reasons?.length ? bridgeExplanation.reasons : [];
   const resultActions = isCameraMode ? cameraActions : (content ? content.actions : null);
+  const primaryCta = isCameraMode && bridgeExplanation ? bridgeExplanation : null;
   const resultBodyParagraphs = resultBody.split('\n\n');
   const cameraSignalNotice = isCameraMode && cameraResult
     ? cameraResult.captureQuality === 'invalid'
@@ -668,6 +676,13 @@ export default function ResultPage() {
                     {paragraph}
                   </p>
                 ))}
+                {resultReasons.length > 0 && (
+                  <ul className="list-disc list-inside text-base text-slate-700 space-y-1">
+                    {resultReasons.map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
               {cameraSignalNotice && (
                 <p className="text-sm text-slate-600 break-keep">{cameraSignalNotice}</p>
@@ -678,6 +693,22 @@ export default function ResultPage() {
                   cuteClassName={cuteFont.className}
                   cuteStyle={cuteFontStyle}
                 />
+              )}
+              {primaryCta && (
+                <div className="mt-4">
+                  <NeoButton
+                    variant="orange"
+                    onClick={() => router.push(primaryCta.primaryCtaPath)}
+                    className="w-full min-h-[48px]"
+                  >
+                    {primaryCta.primaryCtaLabel}
+                  </NeoButton>
+                </div>
+              )}
+              {isCameraMode && !cameraResult?.insufficientSignal && (
+                <p className="mt-3 text-xs text-slate-500 break-keep">
+                  움직임 기반 해석이며, 의학적 진단이 아닙니다.
+                </p>
               )}
           </NeoCard>
         </section>
@@ -715,6 +746,13 @@ export default function ResultPage() {
                     {paragraph}
                   </p>
                 ))}
+                {resultReasons.length > 0 && (
+                  <ul className="list-disc list-inside text-base text-slate-700 space-y-1 text-left lg:text-center">
+                    {resultReasons.map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
               {cameraSignalNotice && (
                 <p className="mt-4 text-sm text-slate-600 whitespace-normal break-keep text-left lg:text-center">
@@ -727,6 +765,22 @@ export default function ResultPage() {
                   cuteClassName={cuteFont.className}
                   cuteStyle={cuteFontStyle}
                 />
+              )}
+              {primaryCta && (
+                <div className="mt-4 text-center">
+                  <NeoButton
+                    variant="orange"
+                    onClick={() => router.push(primaryCta.primaryCtaPath)}
+                    className="min-h-[48px] px-8 py-4"
+                  >
+                    {primaryCta.primaryCtaLabel}
+                  </NeoButton>
+                </div>
+              )}
+              {isCameraMode && !cameraResult?.insufficientSignal && (
+                <p className="mt-3 text-xs text-slate-500 break-keep text-left lg:text-center">
+                  움직임 기반 해석이며, 의학적 진단이 아닙니다.
+                </p>
               )}
               {hasSurveyResult && scoreResult?.subTendency && (
                 <p className="mt-4 text-sm text-slate-600 whitespace-normal break-keep">

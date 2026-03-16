@@ -20,6 +20,7 @@
     "test:camera-pr3-stability": "npx tsx scripts/camera-pr3-motion-stability-smoke.mjs",
     "test:camera-pr4-trace": "npx tsx scripts/camera-pr4-observability-trace-smoke.mjs",
     "test:camera-pr5-guidance": "npx tsx scripts/camera-pr5-guidance-recovery-smoke.mjs",
+    "test:camera-pr6-bridge": "npx tsx scripts/camera-pr6-result-bridge-smoke.mjs",
     "test:session-feedback": "npx tsx scripts/session-feedback-smoke.mjs",
     "test:progress-report": "npx tsx scripts/progress-report-smoke.mjs",
     "test:adaptive-progression": "npx tsx scripts/adaptive-progression-smoke.mjs",
