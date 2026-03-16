@@ -2,7 +2,8 @@
 
 /**
  * movement-test 결과 페이지 (PR3-4)
- * v2 스코어링만 사용. localStorage KEY='movementTestSession:v2'만 읽음.
+ * v2 스코어링 + 카메라 결과 공통 소비.
+ * movementTestSession:v2 | moveReCameraResult:v1
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -10,6 +11,8 @@ import { Nunito } from 'next/font/google';
 import { calculateScoresV2 } from '@/features/movement-test/v2';
 import type { AnimalAxis, ScoreResultV2 } from '@/features/movement-test/v2';
 import { NeoButton, NeoCard, NeoPageLayout } from '@/components/neobrutalism';
+import { loadCameraResult } from '@/lib/camera/camera-result';
+import type { NormalizedCameraResult } from '@/lib/camera/normalize';
 
 const KEY = 'movementTestSession:v2';
 
@@ -469,12 +472,15 @@ const SHARE_TEXT = '무료 움직임 테스트 해봐!';
 export default function ResultPage() {
   const router = useRouter();
   const [session, setSession] = useState<SessionV2 | null>(null);
+  const [cameraResult, setCameraResult] = useState<NormalizedCameraResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [shareOpen, setShareOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     setSession(loadSession());
+    const cam = loadCameraResult();
+    setCameraResult(cam?.result ?? null);
     setLoading(false);
   }, []);
 
@@ -546,6 +552,22 @@ export default function ResultPage() {
     return calculateScoresV2(answers);
   }, [session]);
 
+  const cameraContentKey = useMemo((): ResultContentKey | null => {
+    if (!cameraResult || cameraResult.insufficientSignal) return null;
+    const k = cameraResult.movementType;
+    return k in RESULT_CONTENT ? (k as ResultContentKey) : 'monkey';
+  }, [cameraResult]);
+
+  const cameraActions = useMemo((): ResultActionContent | null => {
+    if (!cameraResult) return null;
+    const base = cameraContentKey && RESULT_CONTENT[cameraContentKey]?.actions;
+    return {
+      doTodayTop1: cameraResult.resetAction,
+      avoidTop1: cameraResult.avoidItems[0] ?? (base?.avoidTop1 ?? ''),
+      trySport: base?.trySport ?? '요가·수영처럼 전신을 고르게 쓰는 운동을 시도해 보세요.',
+    };
+  }, [cameraResult, cameraContentKey]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F8F6F0] overflow-x-hidden flex items-center justify-center">
@@ -557,7 +579,10 @@ export default function ResultPage() {
     );
   }
 
-  if (!session || !session.isCompleted || !scoreResult) {
+  const hasSurveyResult = session?.isCompleted && scoreResult;
+  const hasCameraResult = !!cameraResult;
+
+  if (!hasSurveyResult && !hasCameraResult) {
     return (
       <div className="min-h-screen bg-[#F8F6F0] overflow-x-hidden">
         <NeoPageLayout maxWidth="md">
@@ -580,23 +605,25 @@ export default function ResultPage() {
     );
   }
 
-  const mainAnimal = scoreResult.mainAnimal ?? scoreResult.baseType;
-  const resultType = scoreResult.resultType ?? 'BASIC';
-  const contentKey =
-    session?.finalType && session.finalType in RESULT_CONTENT
-      ? (session.finalType as ResultContentKey)
+  const isCameraMode = hasCameraResult && !hasSurveyResult;
+  const mainAnimal = hasSurveyResult ? (scoreResult!.mainAnimal ?? scoreResult!.baseType) : 'monkey';
+  const resultType = hasSurveyResult ? (scoreResult!.resultType ?? 'BASIC') : 'BASIC';
+  const contentKey = isCameraMode
+    ? cameraContentKey
+    : session?.finalType && session.finalType in RESULT_CONTENT
+      ? (session!.finalType as ResultContentKey)
       : getResultContentKey(mainAnimal, resultType);
   const content = contentKey ? RESULT_CONTENT[contentKey] : null;
-  const mainHeroTitle = content
-    ? content.displayName
-    : (RESULT_TYPE_LABELS[resultType] ?? resultType);
-  const cardTitle = content
-    ? content.cardTitle
-    : (RESULT_TYPE_LABELS[resultType] ?? resultType);
-  const resultBody = content
-    ? content.body
-    : '6축 점수가 비교적 고르게 분포되어 있어, 현재 균형이 잘 잡혀 있는 편이에요.';
-  const resultActions = content ? content.actions : null;
+  const mainHeroTitle = isCameraMode
+    ? (cameraResult!.insufficientSignal ? '촬영 데이터 부족' : content?.displayName ?? `당신은 ${cameraResult!.movementType}형 입니다.`)
+    : (content?.displayName ?? (RESULT_TYPE_LABELS[resultType] ?? resultType));
+  const cardTitle = isCameraMode
+    ? (cameraResult!.insufficientSignal ? '분석 불가' : content?.cardTitle ?? cameraResult!.movementType)
+    : (content?.cardTitle ?? (RESULT_TYPE_LABELS[resultType] ?? resultType));
+  const resultBody = isCameraMode
+    ? cameraResult!.patternSummary
+    : (content?.body ?? '6축 점수가 비교적 고르게 분포되어 있어, 현재 균형이 잘 잡혀 있는 편이에요.');
+  const resultActions = isCameraMode ? cameraActions : (content ? content.actions : null);
   const resultBodyParagraphs = resultBody.split('\n\n');
   const cuteFontStyle = {
     fontFamily:
@@ -686,7 +713,7 @@ export default function ResultPage() {
                   cuteStyle={cuteFontStyle}
                 />
               )}
-              {scoreResult.subTendency && (
+              {hasSurveyResult && scoreResult?.subTendency && (
                 <p className="mt-4 text-sm text-slate-600 whitespace-normal break-keep">
                   보조 경향: {AXIS_LABELS[scoreResult.subTendency]}
                 </p>

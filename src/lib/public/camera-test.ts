@@ -2,6 +2,8 @@
  * 카메라 동작 테스트 shell - localStorage 스키마
  * moveReCameraTest:v1
  */
+import type { EvaluatorResult } from '@/lib/camera/evaluators/types';
+
 export const CAMERA_TEST_KEY = 'moveReCameraTest:v1';
 
 export type CameraStepId = 'squat' | 'wall-angel' | 'single-leg-balance';
@@ -16,6 +18,8 @@ export interface CameraTestData {
   startedAt?: string;
   completedSteps?: CameraStepId[];
   lastStepAt?: string;
+  /** step별 evaluator 결과 (normalize 입력) */
+  evaluatorResults?: Partial<Record<CameraStepId, EvaluatorResult>>;
 }
 
 export function loadCameraTest(): CameraTestData {

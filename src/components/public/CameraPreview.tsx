@@ -11,6 +11,8 @@ const BG = '#0d161f';
 interface CameraPreviewProps {
   /** 권한 허용 시 표시할 비디오 */
   onReady?: (stream: MediaStream) => void;
+  /** 비디오 엘리먼트 준비 시 (pose capture용) */
+  onVideoReady?: (video: HTMLVideoElement) => void;
   /** 권한 거부/실패 시 */
   onError?: (error: Error) => void;
   /** 비디오 미러 표시 */
@@ -20,6 +22,7 @@ interface CameraPreviewProps {
 
 export function CameraPreview({
   onReady,
+  onVideoReady,
   onError,
   mirrored = true,
   className = '',
@@ -68,6 +71,12 @@ export function CameraPreview({
       streamRef.current = null;
     };
   }, [onReady, onError]);
+
+  useEffect(() => {
+    if (status === 'ready' && videoRef.current && onVideoReady) {
+      onVideoReady(videoRef.current);
+    }
+  }, [status, onVideoReady]);
 
   if (status === 'error') return null;
   if (status === 'loading') {

@@ -2,8 +2,9 @@
 
 /**
  * 카메라 테스트 - 벽 천사
+ * pose capture → evaluator → evaluatorResults 저장
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
@@ -16,6 +17,8 @@ import {
   getPrevStepPath,
   type CameraStepId,
 } from '@/lib/public/camera-test';
+import { usePoseCapture } from '@/lib/camera/use-pose-capture';
+import { runEvaluator } from '@/lib/camera/run-evaluators';
 
 const BG = '#0d161f';
 const ACCENT = '#ff7b00';
@@ -26,17 +29,33 @@ const INSTRUCTION = '등을 벽에 붙이고, 팔을 벽을 따라 위로 올렸
 export default function CameraWallAngelPage() {
   const router = useRouter();
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const { landmarks, start, stop } = usePoseCapture();
+  const hasStartedRef = useRef(false);
+
+  const handleVideoReady = useCallback(
+    (video: HTMLVideoElement) => {
+      if (!hasStartedRef.current) {
+        hasStartedRef.current = true;
+        start(video);
+      }
+    },
+    [start]
+  );
 
   const handleNext = useCallback(() => {
+    stop();
+    const result = runEvaluator(STEP_ID, landmarks);
     const current = loadCameraTest();
     const completed = [...(current.completedSteps ?? []), STEP_ID];
+    const evaluatorResults = { ...(current.evaluatorResults ?? {}), [STEP_ID]: result };
     saveCameraTest({
       completedSteps: completed,
       lastStepAt: new Date().toISOString(),
+      evaluatorResults,
     });
     const next = getNextStepPath(STEP_ID);
     if (next) router.push(next);
-  }, [router]);
+  }, [router, landmarks, stop]);
 
   const handleRetry = useCallback(() => {
     setPermissionDenied(false);
@@ -119,6 +138,7 @@ export default function CameraWallAngelPage() {
           <>
             <div className="w-full max-w-md flex-1 min-h-0 flex flex-col items-center">
               <CameraPreview
+                onVideoReady={handleVideoReady}
                 onError={() => setPermissionDenied(true)}
                 className="w-full"
               />
