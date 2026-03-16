@@ -1,0 +1,95 @@
+/**
+ * Public camera voice guidance smoke test
+ * Run: npx tsx scripts/camera-voice-guidance-smoke.mjs
+ */
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+process.chdir(join(__dirname, '..'));
+
+const {
+  createVoicePlaybackState,
+  decideVoicePlayback,
+  getCorrectiveVoiceCue,
+  getCountdownVoiceCue,
+  getStartVoiceCue,
+  getSuccessVoiceCue,
+  speakVoiceCue,
+  unlockVoiceGuidance,
+} = await import('../src/lib/camera/voice-guidance.ts');
+
+let passed = 0;
+let failed = 0;
+
+function ok(name, cond) {
+  if (cond) {
+    passed++;
+    console.log(`  ✓ ${name}`);
+  } else {
+    failed++;
+    console.error(`  ✗ ${name}`);
+  }
+}
+
+function createGate(overrides = {}) {
+  return {
+    failureReasons: [],
+    userGuidance: [],
+    progressionState: 'detecting',
+    guardrail: {
+      captureQuality: 'valid',
+      flags: [],
+    },
+    ...overrides,
+  };
+}
+
+console.log('Camera voice guidance smoke test\n');
+
+// AT1: start / countdown / success cue basics
+ok('AT1a: squat start cue exists', getStartVoiceCue('squat').text.includes('촬영을 시작합니다'));
+ok('AT1b: countdown cue says 3', getCountdownVoiceCue(3).text === '3');
+ok('AT1c: success cue says 좋아요', getSuccessVoiceCue().text === '좋아요');
+
+// AT2: cooldown / dedupe
+const playbackState = createVoicePlaybackState();
+const countdownCue = getCountdownVoiceCue(3);
+const allowFirst = decideVoicePlayback(playbackState, countdownCue, 1000);
+ok('AT2a: first cue allowed', allowFirst.allowed === true);
+playbackState.lastSpokenAt[countdownCue.dedupeKey] = 1000;
+const blockedRepeat = decideVoicePlayback(playbackState, countdownCue, 1500);
+ok('AT2b: repeated cue blocked by cooldown', blockedRepeat.allowed === false);
+
+// AT3: higher priority cue may interrupt lower priority cue
+playbackState.activeCueKey = 'correction:motion:squat';
+playbackState.activePriority = 3;
+const successDecision = decideVoicePlayback(playbackState, getSuccessVoiceCue(), 5000);
+ok('AT3: success interrupts lower priority cue', successDecision.allowed && successDecision.interruptActive);
+
+// AT4: representative framing / motion mappings
+const framingCue = getCorrectiveVoiceCue(
+  'squat',
+  createGate({ failureReasons: ['left_side_missing'] })
+);
+ok('AT4a: framing cue maps to full-body message', framingCue?.text === '머리부터 발끝까지 보이게 해주세요');
+
+const depthCue = getCorrectiveVoiceCue(
+  'squat',
+  createGate({ failureReasons: ['depth_not_reached'] })
+);
+ok('AT4b: squat depth cue maps correctly', depthCue?.text === '조금 더 깊게 앉아주세요');
+
+const holdCue = getCorrectiveVoiceCue(
+  'overhead-reach',
+  createGate({ failureReasons: ['hold_too_short'] })
+);
+ok('AT4c: overhead hold cue maps correctly', holdCue?.text === '맨 위에서 잠깐 멈춰주세요');
+
+// AT5: non-blocking failure in non-browser env
+unlockVoiceGuidance();
+const noBrowserResult = await speakVoiceCue(getStartVoiceCue('squat'));
+ok('AT5: no-browser speak fails gracefully', noBrowserResult === false);
+
+console.log(`\n${passed} passed, ${failed} failed`);
+process.exit(failed > 0 ? 1 : 0);

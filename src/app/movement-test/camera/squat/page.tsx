@@ -32,6 +32,16 @@ import {
   getPreCaptureGuidance,
   getEffectiveRetryGuidance,
 } from '@/lib/camera/camera-guidance';
+import {
+  cancelVoiceGuidance,
+  getCorrectiveVoiceCue,
+  getCountdownVoiceCue,
+  getStartVoiceCue,
+  getSuccessVoiceCue,
+  resetVoiceGuidanceSession,
+  speakVoiceCue,
+  unlockVoiceGuidance,
+} from '@/lib/camera/voice-guidance';
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 
 const BG = '#0d161f';
@@ -126,6 +136,9 @@ export default function CameraSquatPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const armingTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const countdownTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const startCueAttemptedRef = useRef(false);
+  const lastCountdownSpokenRef = useRef<number | null>(null);
+  const successCueAttemptedRef = useRef(false);
   const lastProgressionStateRef = useRef<ExerciseProgressionState>('idle');
   const passLatchedStepKeyRef = useRef<string | null>(null);
   const scheduledAdvanceStepKeyRef = useRef<string | null>(null);
@@ -188,11 +201,15 @@ export default function CameraSquatPage() {
 
   useEffect(() => {
     clearAutoAdvanceTimer();
+    resetVoiceGuidanceSession();
     settledRef.current = false;
     advanceLockRef.current = false;
     scheduledAdvanceStepKeyRef.current = null;
     triggeredAdvanceStepKeyRef.current = null;
     passLatchedStepKeyRef.current = null;
+    startCueAttemptedRef.current = false;
+    lastCountdownSpokenRef.current = null;
+    successCueAttemptedRef.current = false;
     lastProgressionStateRef.current = 'idle';
     setPassLatched(false);
     setPassLatchedAt(null);
@@ -245,11 +262,16 @@ export default function CameraSquatPage() {
   );
 
   const handleSetupReady = useCallback(() => {
+    unlockVoiceGuidance();
     setCameraPhase('arming');
   }, []);
 
   useEffect(() => {
     if (cameraPhase !== 'arming') return;
+    if (!startCueAttemptedRef.current) {
+      startCueAttemptedRef.current = true;
+      void speakVoiceCue(getStartVoiceCue(STEP_ID));
+    }
     armingTimerRef.current = window.setTimeout(() => {
       armingTimerRef.current = null;
       setCameraPhase('countdown');
@@ -265,6 +287,10 @@ export default function CameraSquatPage() {
 
   useEffect(() => {
     if (cameraPhase !== 'countdown' || countdownValue <= 0) return;
+    if (lastCountdownSpokenRef.current !== countdownValue) {
+      lastCountdownSpokenRef.current = countdownValue;
+      void speakVoiceCue(getCountdownVoiceCue(countdownValue as 1 | 2 | 3));
+    }
     const id = window.setTimeout(() => {
       if (countdownValue === 1) {
         setCountdownValue(0);
@@ -282,6 +308,26 @@ export default function CameraSquatPage() {
       }
     };
   }, [cameraPhase, countdownValue, start]);
+
+  useEffect(() => {
+    if (cameraPhase !== 'capturing' || passLatched || permissionDenied) {
+      return;
+    }
+
+    const cue = getCorrectiveVoiceCue(STEP_ID, gate);
+    if (cue) {
+      void speakVoiceCue(cue);
+    }
+  }, [cameraPhase, gate, passLatched, permissionDenied]);
+
+  useEffect(() => {
+    if (!passLatched || successCueAttemptedRef.current) {
+      return;
+    }
+
+    successCueAttemptedRef.current = true;
+    void speakVoiceCue(getSuccessVoiceCue());
+  }, [passLatched]);
 
   const latchPassEvent = useCallback(() => {
     if (passLatchedStepKeyRef.current === currentStepKey || passLatched) {
@@ -424,13 +470,16 @@ export default function CameraSquatPage() {
 
   useEffect(() => {
     return () => {
+      cancelVoiceGuidance();
       clearAutoAdvanceTimer();
     };
   }, [clearAutoAdvanceTimer]);
 
   const handleRetry = useCallback(() => {
+    unlockVoiceGuidance();
     recordAttemptSnapshot(STEP_ID, gate);
     clearAutoAdvanceTimer();
+    resetVoiceGuidanceSession();
     stop();
     if (armingTimerRef.current) {
       window.clearTimeout(armingTimerRef.current);
@@ -467,6 +516,7 @@ export default function CameraSquatPage() {
 
   const handleCameraError = useCallback(() => {
     clearAutoAdvanceTimer();
+    cancelVoiceGuidance();
     settledRef.current = false;
     advanceLockRef.current = false;
     passLatchedStepKeyRef.current = null;
@@ -482,6 +532,7 @@ export default function CameraSquatPage() {
 
   const handleSurveyFallback = useCallback(() => {
     clearAutoAdvanceTimer();
+    cancelVoiceGuidance();
     stop();
     router.push('/movement-test/survey');
   }, [clearAutoAdvanceTimer, router, stop]);

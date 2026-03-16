@@ -30,6 +30,15 @@ import {
   getPreCaptureGuidance,
   getEffectiveRetryGuidance,
 } from '@/lib/camera/camera-guidance';
+import {
+  cancelVoiceGuidance,
+  getCorrectiveVoiceCue,
+  getStartVoiceCue,
+  getSuccessVoiceCue,
+  resetVoiceGuidanceSession,
+  speakVoiceCue,
+  unlockVoiceGuidance,
+} from '@/lib/camera/voice-guidance';
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 
 const BG = '#0d161f';
@@ -143,6 +152,8 @@ export default function CameraOverheadReachPage() {
   const passLatchedStepKeyRef = useRef<string | null>(null);
   const scheduledAdvanceStepKeyRef = useRef<string | null>(null);
   const triggeredAdvanceStepKeyRef = useRef<string | null>(null);
+  const startCueAttemptedRef = useRef(false);
+  const successCueAttemptedRef = useRef(false);
   const currentStepKey = `${STEP_ID}:${previewKey}`;
   const nextPath = getNextStepPath(STEP_ID) ?? '/movement-test/camera/complete';
   const debugEnabled = IS_DEV;
@@ -200,11 +211,14 @@ export default function CameraOverheadReachPage() {
 
   useEffect(() => {
     clearAutoAdvanceTimer();
+    resetVoiceGuidanceSession();
     settledRef.current = false;
     advanceLockRef.current = false;
     passLatchedStepKeyRef.current = null;
     scheduledAdvanceStepKeyRef.current = null;
     triggeredAdvanceStepKeyRef.current = null;
+    startCueAttemptedRef.current = false;
+    successCueAttemptedRef.current = false;
     setPassLatched(false);
     setPassLatchedAt(null);
     setNavigationTriggered(false);
@@ -251,6 +265,35 @@ export default function CameraOverheadReachPage() {
     },
     [start]
   );
+
+  useEffect(() => {
+    if (!cameraReady || startCueAttemptedRef.current) {
+      return;
+    }
+
+    startCueAttemptedRef.current = true;
+    void speakVoiceCue(getStartVoiceCue(STEP_ID));
+  }, [cameraReady]);
+
+  useEffect(() => {
+    if (passLatched || permissionDenied) {
+      return;
+    }
+
+    const cue = getCorrectiveVoiceCue(STEP_ID, gate);
+    if (cue) {
+      void speakVoiceCue(cue);
+    }
+  }, [gate, passLatched, permissionDenied]);
+
+  useEffect(() => {
+    if (!passLatched || successCueAttemptedRef.current) {
+      return;
+    }
+
+    successCueAttemptedRef.current = true;
+    void speakVoiceCue(getSuccessVoiceCue());
+  }, [passLatched]);
 
   const latchPassEvent = useCallback(() => {
     if (passLatchedStepKeyRef.current === currentStepKey || passLatched) {
@@ -476,13 +519,16 @@ export default function CameraOverheadReachPage() {
 
   useEffect(() => {
     return () => {
+      cancelVoiceGuidance();
       clearAutoAdvanceTimer();
     };
   }, [clearAutoAdvanceTimer]);
 
   const handleRetry = useCallback(() => {
+    unlockVoiceGuidance();
     recordAttemptSnapshot(STEP_ID, gate);
     clearAutoAdvanceTimer();
+    resetVoiceGuidanceSession();
     stop();
     settledRef.current = false;
     advanceLockRef.current = false;
@@ -507,6 +553,7 @@ export default function CameraOverheadReachPage() {
 
   const handleCameraError = useCallback(() => {
     clearAutoAdvanceTimer();
+    cancelVoiceGuidance();
     settledRef.current = false;
     advanceLockRef.current = false;
     passLatchedStepKeyRef.current = null;
@@ -526,6 +573,7 @@ export default function CameraOverheadReachPage() {
 
   const handleSurveyFallback = useCallback(() => {
     clearAutoAdvanceTimer();
+    cancelVoiceGuidance();
     stop();
     router.push('/movement-test/survey');
   }, [clearAutoAdvanceTimer, router, stop]);
