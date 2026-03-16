@@ -40,14 +40,17 @@ export default function CameraWallAngelPage() {
   const [progressionState, setProgressionState] =
     useState<ExerciseProgressionState>('idle');
   const [statusMessage, setStatusMessage] = useState('준비 중');
+  const [passLatched, setPassLatched] = useState(false);
   const { landmarks, stats, start, stop, pushFrame } = usePoseCapture();
   const hasStartedRef = useRef(false);
   const settledRef = useRef(false);
   const advanceLockRef = useRef(false);
   const autoAdvanceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const passLatchedStepKeyRef = useRef<string | null>(null);
   const scheduledAdvanceStepKeyRef = useRef<string | null>(null);
   const triggeredAdvanceStepKeyRef = useRef<string | null>(null);
   const currentStepKey = `${STEP_ID}:${previewKey}`;
+  const nextPath = getNextStepPath(STEP_ID);
 
   const gate = useMemo(
     () => evaluateExerciseAutoProgress(STEP_ID, landmarks, stats),
@@ -66,8 +69,10 @@ export default function CameraWallAngelPage() {
     clearAutoAdvanceTimer();
     settledRef.current = false;
     advanceLockRef.current = false;
+    passLatchedStepKeyRef.current = null;
     scheduledAdvanceStepKeyRef.current = null;
     triggeredAdvanceStepKeyRef.current = null;
+    setPassLatched(false);
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
   const persistCurrentStep = useCallback(() => {
@@ -106,58 +111,23 @@ export default function CameraWallAngelPage() {
     [start]
   );
 
-  const handlePassAdvance = useCallback(() => {
-    if (
-      advanceLockRef.current &&
-      autoAdvanceTimerRef.current &&
-      scheduledAdvanceStepKeyRef.current === currentStepKey
-    ) {
+  const latchPassEvent = useCallback(() => {
+    if (passLatchedStepKeyRef.current === currentStepKey || passLatched) {
       return;
     }
 
-    if (advanceLockRef.current && !autoAdvanceTimerRef.current) {
-      advanceLockRef.current = false;
-    }
-
-    if (triggeredAdvanceStepKeyRef.current === currentStepKey) return;
-
-    const next = getNextStepPath(STEP_ID);
-    if (!next) return;
-
-    advanceLockRef.current = true;
+    passLatchedStepKeyRef.current = currentStepKey;
     settledRef.current = true;
+    advanceLockRef.current = true;
+    setPassLatched(true);
     stop();
     persistCurrentStep();
     setProgressionState('passed');
     setStatusMessage(gate.uiMessage);
-
-    clearAutoAdvanceTimer();
-    scheduledAdvanceStepKeyRef.current = currentStepKey;
-    autoAdvanceTimerRef.current = window.setTimeout(() => {
-      if (triggeredAdvanceStepKeyRef.current === currentStepKey) return;
-      triggeredAdvanceStepKeyRef.current = currentStepKey;
-
-      if (IS_DEV) {
-        console.info('[camera:auto-next]', {
-          stepId: STEP_ID,
-          currentStepKey,
-          reason: 'route_push_next_step',
-        });
-      }
-      router.push(next);
-    }, gate.autoAdvanceDelayMs);
-  }, [
-    clearAutoAdvanceTimer,
-    currentStepKey,
-    gate.autoAdvanceDelayMs,
-    gate.uiMessage,
-    persistCurrentStep,
-    router,
-    stop,
-  ]);
+  }, [currentStepKey, gate.uiMessage, passLatched, persistCurrentStep, stop]);
 
   useEffect(() => {
-    if (permissionDenied || !cameraReady || settledRef.current) {
+    if (permissionDenied || !cameraReady || passLatched) {
       return;
     }
 
@@ -171,7 +141,7 @@ export default function CameraWallAngelPage() {
     setStatusMessage(gate.uiMessage);
 
     if (passReady) {
-      handlePassAdvance();
+      latchPassEvent();
       return;
     }
 
@@ -184,12 +154,60 @@ export default function CameraWallAngelPage() {
   }, [
     cameraReady,
     gate,
-    handlePassAdvance,
+    latchPassEvent,
     passReady,
+    passLatched,
     permissionDenied,
     stats.sampledFrameCount,
     stop,
   ]);
+
+  useEffect(() => {
+    if (!passLatched || passLatchedStepKeyRef.current !== currentStepKey) {
+      return;
+    }
+
+    if (triggeredAdvanceStepKeyRef.current === currentStepKey || !nextPath) {
+      return;
+    }
+
+    if (
+      advanceLockRef.current &&
+      autoAdvanceTimerRef.current &&
+      scheduledAdvanceStepKeyRef.current === currentStepKey
+    ) {
+      return;
+    }
+
+    if (advanceLockRef.current && !autoAdvanceTimerRef.current) {
+      advanceLockRef.current = false;
+    }
+
+    advanceLockRef.current = true;
+    clearAutoAdvanceTimer();
+    scheduledAdvanceStepKeyRef.current = currentStepKey;
+    autoAdvanceTimerRef.current = window.setTimeout(() => {
+      if (
+        triggeredAdvanceStepKeyRef.current === currentStepKey ||
+        passLatchedStepKeyRef.current !== currentStepKey
+      ) {
+        return;
+      }
+
+      triggeredAdvanceStepKeyRef.current = currentStepKey;
+
+      if (IS_DEV) {
+        console.info('[camera:auto-next]', {
+          stepId: STEP_ID,
+          currentStepKey,
+          nextPath,
+          reason: 'route_push_next_step',
+        });
+      }
+
+      router.push(nextPath);
+    }, gate.autoAdvanceDelayMs);
+  }, [clearAutoAdvanceTimer, currentStepKey, gate.autoAdvanceDelayMs, nextPath, passLatched, router]);
 
   useEffect(() => {
     return () => {
@@ -202,8 +220,12 @@ export default function CameraWallAngelPage() {
     stop();
     settledRef.current = false;
     advanceLockRef.current = false;
+    passLatchedStepKeyRef.current = null;
+    scheduledAdvanceStepKeyRef.current = null;
+    triggeredAdvanceStepKeyRef.current = null;
     hasStartedRef.current = false;
     setCameraReady(false);
+    setPassLatched(false);
     setProgressionState('idle');
     setStatusMessage('준비 중');
     setPermissionDenied(false);
@@ -214,6 +236,10 @@ export default function CameraWallAngelPage() {
     clearAutoAdvanceTimer();
     settledRef.current = false;
     advanceLockRef.current = false;
+    passLatchedStepKeyRef.current = null;
+    scheduledAdvanceStepKeyRef.current = null;
+    triggeredAdvanceStepKeyRef.current = null;
+    setPassLatched(false);
     setCameraReady(false);
     setPermissionDenied(true);
   }, [clearAutoAdvanceTimer]);
@@ -226,17 +252,21 @@ export default function CameraWallAngelPage() {
 
   const handleDevOverride = useCallback(() => {
     if (!IS_DEV) return;
-    handlePassAdvance();
-  }, [handlePassAdvance]);
+    latchPassEvent();
+  }, [latchPassEvent]);
 
   const prevPath = getPrevStepPath(STEP_ID);
   const showRetryActions =
     progressionState === 'retry_required' ||
     progressionState === 'failed' ||
     progressionState === 'insufficient_signal';
+  const visibleUserGuidance = passLatched ? [] : gate.userGuidance;
+  const effectiveProgressionState = passLatched ? 'passed' : progressionState;
   const guideTone = getCameraGuideTone({
-    ...gate,
-    progressionState,
+    ...(passLatched
+      ? { ...gate, status: 'pass' as const, nextAllowed: true, completionSatisfied: true }
+      : gate),
+    progressionState: effectiveProgressionState,
   });
 
   return (
@@ -326,12 +356,12 @@ export default function CameraWallAngelPage() {
                 >
                   {statusMessage}
                 </p>
-                {gate.userGuidance.length > 0 && (
+                {visibleUserGuidance.length > 0 && (
                   <div
                     className="mt-2 space-y-1 text-xs text-slate-400 break-keep"
                     style={{ fontFamily: 'var(--font-sans-noto)' }}
                   >
-                    {gate.userGuidance.map((message) => (
+                    {visibleUserGuidance.map((message) => (
                       <p key={message}>{message}</p>
                     ))}
                   </div>

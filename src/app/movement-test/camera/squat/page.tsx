@@ -96,6 +96,9 @@ export default function CameraSquatPage() {
   const [statusMessage, setStatusMessage] = useState('준비 중');
   const [transitionLocked, setTransitionLocked] = useState(false);
   const [autoAdvanceScheduled, setAutoAdvanceScheduled] = useState(false);
+  const [passLatched, setPassLatched] = useState(false);
+  const [passLatchedAt, setPassLatchedAt] = useState<string | null>(null);
+  const [navigationTriggered, setNavigationTriggered] = useState(false);
   const [passDetectedAt, setPassDetectedAt] = useState<string | null>(null);
   const [nextScheduledAt, setNextScheduledAt] = useState<string | null>(null);
   const [nextTriggeredAt, setNextTriggeredAt] = useState<string | null>(null);
@@ -107,10 +110,12 @@ export default function CameraSquatPage() {
   const advanceLockRef = useRef(false);
   const autoAdvanceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const lastProgressionStateRef = useRef<ExerciseProgressionState>('idle');
+  const passLatchedStepKeyRef = useRef<string | null>(null);
   const scheduledAdvanceStepKeyRef = useRef<string | null>(null);
   const triggeredAdvanceStepKeyRef = useRef<string | null>(null);
   const debugEnabled = IS_DEV;
   const currentStepKey = `${STEP_ID}:${previewKey}`;
+  const nextPath = getNextStepPath(STEP_ID);
 
   const gate = useMemo(
     () => evaluateExerciseAutoProgress(STEP_ID, landmarks, stats),
@@ -148,7 +153,11 @@ export default function CameraSquatPage() {
     advanceLockRef.current = false;
     scheduledAdvanceStepKeyRef.current = null;
     triggeredAdvanceStepKeyRef.current = null;
+    passLatchedStepKeyRef.current = null;
     lastProgressionStateRef.current = 'idle';
+    setPassLatched(false);
+    setPassLatchedAt(null);
+    setNavigationTriggered(false);
     setTransitionLocked(false);
     setPassDetectedAt(null);
     setNextScheduledAt(null);
@@ -194,77 +203,29 @@ export default function CameraSquatPage() {
     [appendTransition, start]
   );
 
-  const handlePassAdvance = useCallback(() => {
-    if (
-      advanceLockRef.current &&
-      autoAdvanceTimerRef.current &&
-      scheduledAdvanceStepKeyRef.current === currentStepKey
-    ) {
-      setNextTriggerReason('transition_locked');
+  const latchPassEvent = useCallback(() => {
+    if (passLatchedStepKeyRef.current === currentStepKey || passLatched) {
       return;
     }
 
-    if (advanceLockRef.current && !autoAdvanceTimerRef.current) {
-      advanceLockRef.current = false;
-      setTransitionLocked(false);
-      setNextTriggerReason('stale_transition_lock_released');
-    }
-
-    if (triggeredAdvanceStepKeyRef.current === currentStepKey) {
-      setNextTriggerReason('next_already_triggered');
-      return;
-    }
-
-    const next = getNextStepPath(STEP_ID);
-    if (!next) {
-      setNextTriggerReason('transition_not_triggered');
-      return;
-    }
-
-    advanceLockRef.current = true;
+    const latchedAt = new Date().toISOString();
+    passLatchedStepKeyRef.current = currentStepKey;
     settledRef.current = true;
+    advanceLockRef.current = true;
+    setPassLatched(true);
+    setPassLatchedAt(latchedAt);
+    setPassDetectedAt(latchedAt);
     setTransitionLocked(true);
-    setPassDetectedAt(new Date().toISOString());
-    setNextTriggerReason('pass_detected');
+    setNextTriggerReason('pass_latched');
     stop();
     persistCurrentStep();
     setProgressionState('passed');
     setStatusMessage(gate.uiMessage);
-    appendTransition('passed', 'gate_status_pass');
-
-    clearAutoAdvanceTimer();
-    scheduledAdvanceStepKeyRef.current = currentStepKey;
-    setAutoAdvanceScheduled(true);
-    setNextScheduledAt(new Date().toISOString());
-    setNextTriggerReason('auto_advance_scheduled');
-    autoAdvanceTimerRef.current = window.setTimeout(() => {
-      if (triggeredAdvanceStepKeyRef.current === currentStepKey) {
-        return;
-      }
-
-      triggeredAdvanceStepKeyRef.current = currentStepKey;
-      setNextTriggeredAt(new Date().toISOString());
-      setNextTriggerReason('route_push_next_step');
-      console.info('[camera:squat-next]', {
-        currentStepKey,
-        triggeredAt: new Date().toISOString(),
-        reason: 'route_push_next_step',
-      });
-      router.push(next);
-    }, gate.autoAdvanceDelayMs);
-  }, [
-    appendTransition,
-    clearAutoAdvanceTimer,
-    currentStepKey,
-    gate.autoAdvanceDelayMs,
-    gate.uiMessage,
-    persistCurrentStep,
-    router,
-    stop,
-  ]);
+    appendTransition('passed', 'pass_latched');
+  }, [appendTransition, currentStepKey, gate.uiMessage, passLatched, persistCurrentStep, stop]);
 
   useEffect(() => {
-    if (permissionDenied || !cameraReady || settledRef.current) {
+    if (permissionDenied || !cameraReady || passLatched) {
       return;
     }
 
@@ -278,7 +239,7 @@ export default function CameraSquatPage() {
     setStatusMessage(gate.uiMessage);
 
     if (passReady) {
-      handlePassAdvance();
+      latchPassEvent();
       return;
     }
 
@@ -296,11 +257,77 @@ export default function CameraSquatPage() {
     appendTransition,
     cameraReady,
     gate,
-    handlePassAdvance,
+    latchPassEvent,
     passReady,
+    passLatched,
     permissionDenied,
     stats.sampledFrameCount,
     stop,
+  ]);
+
+  useEffect(() => {
+    if (!passLatched || passLatchedStepKeyRef.current !== currentStepKey) {
+      return;
+    }
+
+    if (triggeredAdvanceStepKeyRef.current === currentStepKey || navigationTriggered) {
+      return;
+    }
+
+    if (!nextPath) {
+      setNextTriggerReason('transition_not_triggered');
+      return;
+    }
+
+    if (
+      advanceLockRef.current &&
+      autoAdvanceTimerRef.current &&
+      scheduledAdvanceStepKeyRef.current === currentStepKey
+    ) {
+      return;
+    }
+
+    if (advanceLockRef.current && !autoAdvanceTimerRef.current) {
+      advanceLockRef.current = false;
+      setTransitionLocked(false);
+      setNextTriggerReason('stale_transition_lock_released');
+    }
+
+    advanceLockRef.current = true;
+    setTransitionLocked(true);
+    clearAutoAdvanceTimer();
+    scheduledAdvanceStepKeyRef.current = currentStepKey;
+    setAutoAdvanceScheduled(true);
+    setNextScheduledAt(new Date().toISOString());
+    setNextTriggerReason('auto_advance_scheduled');
+    autoAdvanceTimerRef.current = window.setTimeout(() => {
+      if (
+        triggeredAdvanceStepKeyRef.current === currentStepKey ||
+        passLatchedStepKeyRef.current !== currentStepKey
+      ) {
+        return;
+      }
+
+      triggeredAdvanceStepKeyRef.current = currentStepKey;
+      setNavigationTriggered(true);
+      setNextTriggeredAt(new Date().toISOString());
+      setNextTriggerReason('route_push_next_step');
+      console.info('[camera:squat-next]', {
+        currentStepKey,
+        nextPath,
+        triggeredAt: new Date().toISOString(),
+        reason: 'route_push_next_step',
+      });
+      router.push(nextPath);
+    }, gate.autoAdvanceDelayMs);
+  }, [
+    clearAutoAdvanceTimer,
+    currentStepKey,
+    gate.autoAdvanceDelayMs,
+    navigationTriggered,
+    nextPath,
+    passLatched,
+    router,
   ]);
 
   useEffect(() => {
@@ -324,8 +351,14 @@ export default function CameraSquatPage() {
     stop();
     settledRef.current = false;
     advanceLockRef.current = false;
+    passLatchedStepKeyRef.current = null;
+    scheduledAdvanceStepKeyRef.current = null;
+    triggeredAdvanceStepKeyRef.current = null;
     hasStartedRef.current = false;
     setCameraReady(false);
+    setPassLatched(false);
+    setPassLatchedAt(null);
+    setNavigationTriggered(false);
     setProgressionState('idle');
     setStatusMessage('준비 중');
     setTransitionLocked(false);
@@ -343,6 +376,12 @@ export default function CameraSquatPage() {
     clearAutoAdvanceTimer();
     settledRef.current = false;
     advanceLockRef.current = false;
+    passLatchedStepKeyRef.current = null;
+    scheduledAdvanceStepKeyRef.current = null;
+    triggeredAdvanceStepKeyRef.current = null;
+    setPassLatched(false);
+    setPassLatchedAt(null);
+    setNavigationTriggered(false);
     setTransitionLocked(false);
     setCameraReady(false);
     setPermissionDenied(true);
@@ -356,8 +395,8 @@ export default function CameraSquatPage() {
 
   const handleDevOverride = useCallback(() => {
     if (!IS_DEV) return;
-    handlePassAdvance();
-  }, [handlePassAdvance]);
+    latchPassEvent();
+  }, [latchPassEvent]);
 
   const prevPath = getPrevStepPath(STEP_ID);
   const showRetryActions =
@@ -385,11 +424,15 @@ export default function CameraSquatPage() {
       : nextTriggeredAt
         ? 'next_triggered'
         : 'pass_not_detected';
+  const visibleUserGuidance = passLatched ? [] : gate.userGuidance;
+  const effectiveProgressionState = passLatched ? 'passed' : progressionState;
   const guideTone = getCameraGuideTone({
-    ...gate,
-    progressionState,
+    ...(passLatched
+      ? { ...gate, status: 'pass' as const, nextAllowed: true, completionSatisfied: true }
+      : gate),
+    progressionState: effectiveProgressionState,
   });
-  const overlayGuide = getSquatOverlayGuide(gate.failureReasons, progressionState);
+  const overlayGuide = getSquatOverlayGuide(gate.failureReasons, effectiveProgressionState);
 
   return (
     <div
@@ -487,12 +530,12 @@ export default function CameraSquatPage() {
                 >
                   {statusMessage}
                 </p>
-                {gate.userGuidance.length > 0 && (
+                {visibleUserGuidance.length > 0 && (
                   <div
                     className="mt-2 space-y-1 text-xs text-slate-400 break-keep"
                     style={{ fontFamily: 'var(--font-sans-noto)' }}
                   >
-                    {gate.userGuidance.map((message) => (
+                    {visibleUserGuidance.map((message) => (
                       <p key={message}>{message}</p>
                     ))}
                   </div>
@@ -518,11 +561,13 @@ export default function CameraSquatPage() {
                     style={{ fontFamily: 'var(--font-sans-noto)' }}
                   >
                     <span>status: {gate.status}</span>
-                    <span>state: {progressionState}</span>
+                    <span>state: {effectiveProgressionState}</span>
                     <span>confidence: {gate.confidence}</span>
                     <span>captureQuality: {gate.guardrail.captureQuality}</span>
                     <span>completionSatisfied: {String(gate.completionSatisfied)}</span>
                     <span>nextAllowed: {String(gate.nextAllowed)}</span>
+                    <span>passReady: {String(passReady)}</span>
+                    <span>passLatched: {String(passLatched)}</span>
                     <span>repCount: {repCount}</span>
                     <span>retryRecommended: {String(gate.retryRecommended)}</span>
                     <span>depthProxy: {depthProxy ?? 'n/a'}</span>
@@ -537,12 +582,15 @@ export default function CameraSquatPage() {
                     <span>autoAdvanceScheduled: {String(autoAdvanceScheduled)}</span>
                     <span>currentStepKey: {currentStepKey}</span>
                     <span>autoAdvanceReason: {nextTriggerReason ?? 'n/a'}</span>
+                    <span>navigationTriggered: {String(navigationTriggered)}</span>
+                    <span>nextPath: {nextPath ?? 'n/a'}</span>
                   </div>
 
                   <div className="mt-3 text-[11px] text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
                     <p>flags: {gate.flags.join(', ') || 'none'}</p>
                     <p>failureReasons: {gate.failureReasons.join(', ') || 'none'}</p>
                     <p>passDetectedAt: {passDetectedAt ?? 'n/a'}</p>
+                    <p>passLatchedAt: {passLatchedAt ?? 'n/a'}</p>
                     <p>nextScheduledAt: {nextScheduledAt ?? 'n/a'}</p>
                     <p>nextTriggeredAt: {nextTriggeredAt ?? 'n/a'}</p>
                     <p>nextTriggerReason: {nextTriggerReason ?? 'n/a'}</p>
