@@ -13,6 +13,9 @@ export type CameraStepId =
   | 'wall-angel'
   | 'single-leg-balance';
 
+/** Setup 화면 경로 (squat 전 공통 준비) */
+export const CAMERA_SETUP_PATH = '/movement-test/camera/setup';
+
 export const CAMERA_STEPS: { id: CameraStepId; path: string; title: string }[] = [
   { id: 'squat', path: '/movement-test/camera/squat', title: '스쿼트' },
   { id: 'overhead-reach', path: '/movement-test/camera/overhead-reach', title: '오버헤드 리치' },
@@ -71,6 +74,7 @@ export function getNextStepPath(currentId: CameraStepId): string | null {
 
 export function getPrevStepPath(currentId: CameraStepId): string | null {
   const i = CAMERA_STEPS.findIndex((s) => s.id === currentId);
-  if (i <= 0) return null;
+  if (i < 0) return null;
+  if (i === 0) return CAMERA_SETUP_PATH;
   return CAMERA_STEPS[i - 1]!.path;
 }

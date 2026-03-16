@@ -5,7 +5,7 @@
  */
 import { useRouter } from 'next/navigation';
 import { Starfield } from '@/components/landing/Starfield';
-import { CAMERA_STEPS, resetCameraTest, saveCameraTest } from '@/lib/public/camera-test';
+import { CAMERA_SETUP_PATH, resetCameraTest, saveCameraTest } from '@/lib/public/camera-test';
 import { clearCameraResult } from '@/lib/camera/camera-result';
 
 const BG = '#0d161f';
@@ -23,7 +23,7 @@ export default function CameraEntryPage() {
       evaluatorResults: {},
       guardrailResults: {},
     });
-    router.push(CAMERA_STEPS[0]?.path ?? '/movement-test/camera/squat');
+    router.push(CAMERA_SETUP_PATH);
   };
 
   return (
@@ -45,7 +45,7 @@ export default function CameraEntryPage() {
             className="text-slate-400 text-sm leading-relaxed"
             style={{ fontFamily: 'var(--font-sans-noto)' }}
           >
-            카메라를 사용해 {CAMERA_STEPS.length}가지 동작을 촬영합니다.
+            카메라를 사용해 2가지 동작을 촬영합니다.
             <br />
             전신이 보이도록 프레임에 맞춰 주세요.
           </p>
