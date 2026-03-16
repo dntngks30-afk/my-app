@@ -30,7 +30,7 @@ const INSTRUCTION = '등을 벽에 붙이고, 팔을 벽을 따라 위로 올렸
 export default function CameraWallAngelPage() {
   const router = useRouter();
   const [permissionDenied, setPermissionDenied] = useState(false);
-  const { landmarks, stats, start, stop } = usePoseCapture();
+  const { landmarks, stats, start, stop, pushFrame } = usePoseCapture();
   const hasStartedRef = useRef(false);
 
   const handleVideoReady = useCallback(
@@ -147,6 +147,7 @@ export default function CameraWallAngelPage() {
             <div className="w-full max-w-md flex-1 min-h-0 flex flex-col items-center">
               <CameraPreview
                 onVideoReady={handleVideoReady}
+                onPoseFrame={pushFrame}
                 onError={handleCameraError}
                 className="w-full"
               />

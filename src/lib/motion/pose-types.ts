@@ -9,6 +9,14 @@ export interface PoseLandmark {
   visibility?: number;
 }
 
+export interface PoseFrame {
+  timestampMs: number;
+  landmarks: PoseLandmark[] | null;
+  source: 'mediapipe';
+  width: number;
+  height: number;
+}
+
 export interface PoseLandmarks {
   /** 33개 랜드마크 (MediaPipe 인덱스) */
   landmarks: PoseLandmark[];
@@ -52,3 +60,43 @@ export const POSE_LANDMARKS = {
   LEFT_FOOT_INDEX: 31,
   RIGHT_FOOT_INDEX: 32,
 } as const;
+
+const DEFAULT_VISIBILITY_THRESHOLD = 0.45;
+
+export function toPoseLandmarks(frame: PoseFrame): PoseLandmarks | null {
+  if (!frame.landmarks || frame.landmarks.length === 0) {
+    return null;
+  }
+
+  return {
+    landmarks: frame.landmarks,
+    timestamp: frame.timestampMs,
+  };
+}
+
+export function getPoseFrameLandmarkCount(frame: PoseFrame): number {
+  return frame.landmarks?.length ?? 0;
+}
+
+export function getPoseFrameVisibleRatio(
+  frame: PoseFrame,
+  visibilityThreshold = DEFAULT_VISIBILITY_THRESHOLD
+): number {
+  if (!frame.landmarks || frame.landmarks.length === 0) {
+    return 0;
+  }
+
+  const visibleCount = frame.landmarks.filter((landmark) => {
+    if (typeof landmark.visibility !== 'number') {
+      return true;
+    }
+
+    return landmark.visibility >= visibilityThreshold;
+  }).length;
+
+  return visibleCount / frame.landmarks.length;
+}
+
+export function isValidPoseFrame(frame: PoseFrame): boolean {
+  return getPoseFrameLandmarkCount(frame) >= 33;
+}

@@ -5,31 +5,47 @@
  * 권한 거부/실패 시 null 반환, 부모에서 fallback UI 처리
  */
 import { useEffect, useRef, useState } from 'react';
+import type { PoseFrame } from '@/lib/motion/pose-types';
+import {
+  clearPoseOverlay,
+  createLivePoseAnalyzer,
+  drawPoseFrameToCanvas,
+  type LivePoseAnalyzer,
+} from '@/lib/motion/mediapipe-pose';
 
 const BG = '#0d161f';
+const ANALYSIS_INTERVAL_MS = 90;
 
 interface CameraPreviewProps {
   /** 권한 허용 시 표시할 비디오 */
   onReady?: (stream: MediaStream) => void;
   /** 비디오 엘리먼트 준비 시 (pose capture용) */
   onVideoReady?: (video: HTMLVideoElement) => void;
+  /** live pose frame 전달 */
+  onPoseFrame?: (frame: PoseFrame) => void;
   /** 권한 거부/실패 시 */
   onError?: (error: Error) => void;
   /** 비디오 미러 표시 */
   mirrored?: boolean;
+  /** 개발용 skeleton overlay */
+  showPoseDebugOverlay?: boolean;
   className?: string;
 }
 
 export function CameraPreview({
   onReady,
   onVideoReady,
+  onPoseFrame,
   onError,
   mirrored = true,
+  showPoseDebugOverlay = process.env.NODE_ENV !== 'production',
   className = '',
 }: CameraPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const onReadyRef = useRef(onReady);
   const onVideoReadyRef = useRef(onVideoReady);
+  const onPoseFrameRef = useRef(onPoseFrame);
   const onErrorRef = useRef(onError);
   const [status, setStatus] = useState<
     'idle' | 'requesting' | 'binding' | 'ready' | 'error'
@@ -37,6 +53,11 @@ export function CameraPreview({
   const streamRef = useRef<MediaStream | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const analyzerRef = useRef<LivePoseAnalyzer | null>(null);
+  const analyzerInitRef = useRef<Promise<LivePoseAnalyzer> | null>(null);
+  const analysisRafRef = useRef<number | null>(null);
+  const [poseStatus, setPoseStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [poseErrorMessage, setPoseErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     onReadyRef.current = onReady;
@@ -45,6 +66,10 @@ export function CameraPreview({
   useEffect(() => {
     onVideoReadyRef.current = onVideoReady;
   }, [onVideoReady]);
+
+  useEffect(() => {
+    onPoseFrameRef.current = onPoseFrame;
+  }, [onPoseFrame]);
 
   useEffect(() => {
     onErrorRef.current = onError;
@@ -59,10 +84,12 @@ export function CameraPreview({
         readyState: video?.readyState ?? null,
         videoWidth: video?.videoWidth ?? 0,
         videoHeight: video?.videoHeight ?? 0,
+        poseStatus,
         errorMessage,
+        poseErrorMessage,
       });
     }
-  }, [status, stream, errorMessage]);
+  }, [status, stream, poseStatus, errorMessage, poseErrorMessage]);
 
   useEffect(() => {
     let mounted = true;
@@ -102,6 +129,13 @@ export function CameraPreview({
     startCamera();
     return () => {
       mounted = false;
+      if (analysisRafRef.current != null) {
+        cancelAnimationFrame(analysisRafRef.current);
+        analysisRafRef.current = null;
+      }
+      analyzerRef.current?.close();
+      analyzerRef.current = null;
+      clearPoseOverlay(overlayCanvasRef.current);
       if (videoRef.current) {
         videoRef.current.pause();
         videoRef.current.srcObject = null;
@@ -110,6 +144,97 @@ export function CameraPreview({
       streamRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const shouldAnalyze = Boolean(onPoseFrameRef.current) || showPoseDebugOverlay;
+
+    if (!video || status !== 'ready' || !shouldAnalyze) {
+      setPoseStatus('idle');
+      setPoseErrorMessage(null);
+      clearPoseOverlay(overlayCanvasRef.current);
+      return;
+    }
+
+    let cancelled = false;
+    let lastAnalyzedAt = 0;
+
+    const startAnalyzer = async () => {
+      try {
+        setPoseStatus('loading');
+        setPoseErrorMessage(null);
+
+        if (!analyzerInitRef.current) {
+          analyzerInitRef.current = createLivePoseAnalyzer();
+        }
+
+        const analyzer = await analyzerInitRef.current;
+        if (cancelled) return;
+
+        analyzerRef.current = analyzer;
+        setPoseStatus('ready');
+
+        const loop = () => {
+          if (cancelled) return;
+
+          const currentVideo = videoRef.current;
+          if (
+            !currentVideo ||
+            !streamRef.current ||
+            currentVideo.readyState < 2 ||
+            currentVideo.paused ||
+            currentVideo.ended
+          ) {
+            analysisRafRef.current = requestAnimationFrame(loop);
+            return;
+          }
+
+          const now = performance.now();
+          if (now - lastAnalyzedAt >= ANALYSIS_INTERVAL_MS) {
+            lastAnalyzedAt = now;
+            const frame = analyzer.analyze(currentVideo, now);
+
+            onPoseFrameRef.current?.(frame);
+
+            if (showPoseDebugOverlay && overlayCanvasRef.current) {
+              drawPoseFrameToCanvas(overlayCanvasRef.current, frame, { mirrored });
+            } else {
+              clearPoseOverlay(overlayCanvasRef.current);
+            }
+          }
+
+          analysisRafRef.current = requestAnimationFrame(loop);
+        };
+
+        analysisRafRef.current = requestAnimationFrame(loop);
+      } catch (error) {
+        if (cancelled) return;
+
+        const message =
+          error instanceof Error ? error.message : 'Pose analyzer 초기화에 실패했습니다.';
+        setPoseStatus('error');
+        setPoseErrorMessage(message);
+        clearPoseOverlay(overlayCanvasRef.current);
+
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[CameraPreview:pose]', message);
+        }
+      }
+    };
+
+    startAnalyzer();
+
+    return () => {
+      cancelled = true;
+      if (analysisRafRef.current != null) {
+        cancelAnimationFrame(analysisRafRef.current);
+        analysisRafRef.current = null;
+      }
+      analyzerRef.current?.close();
+      analyzerRef.current = null;
+      clearPoseOverlay(overlayCanvasRef.current);
+    };
+  }, [status, mirrored, showPoseDebugOverlay]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -173,6 +298,7 @@ export function CameraPreview({
     <div
       className={`relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 ${className}`}
       data-camera-phase={status}
+      data-pose-phase={poseStatus}
     >
       <video
         ref={videoRef}
@@ -182,21 +308,26 @@ export function CameraPreview({
         className={`relative z-10 block w-full min-h-[320px] aspect-[3/4] object-cover max-h-[50vh] ${mirrored ? 'scale-x-[-1]' : ''}`}
         style={{ backgroundColor: BG }}
       />
+      <canvas
+        ref={overlayCanvasRef}
+        className={`absolute inset-0 z-20 h-full w-full pointer-events-none ${mirrored ? 'scale-x-[-1]' : ''}`}
+        aria-hidden
+      />
       {showLoading && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none bg-black/20">
+        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-black/20">
           <p className="text-slate-300 text-sm">카메라 연결 중...</p>
         </div>
       )}
       {/* 전신 framing guide */}
       <div
-        className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center"
+        className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center"
         aria-hidden
       >
         <div className="w-3/4 h-[85%] rounded-2xl border-2 border-dashed border-white/30" />
       </div>
       {process.env.NODE_ENV !== 'production' && (
-        <div className="absolute bottom-2 left-2 z-30 rounded bg-black/50 px-2 py-1 text-[10px] text-white pointer-events-none">
-          {status}
+        <div className="absolute bottom-2 left-2 z-40 rounded bg-black/50 px-2 py-1 text-[10px] text-white pointer-events-none">
+          {status} / pose:{poseStatus}
         </div>
       )}
     </div>

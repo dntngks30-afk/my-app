@@ -1,7 +1,7 @@
 /**
  * Pose 추출 인터페이스
- * stub: 항상 null 반환 (insufficient signal)
- * 실제 MediaPipe 연동 시 이 인터페이스 구현체 교체
+ * 현재 live MediaPipe analyzer는 CameraPreview 내부에서 동작한다.
+ * 이 파일은 이전 extractor 기반 흐름과의 호환을 위한 최소 stub만 유지한다.
  */
 import type { PoseLandmarks } from './pose-types';
 
