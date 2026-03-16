@@ -82,17 +82,9 @@ export default function CameraCompletePage() {
         allowContinue: false,
       };
     }
-    if (analysis.captureQuality === 'low' || analysis.retryRecommended) {
-      return {
-        title: '일부 신호가 약했습니다',
-        description:
-          '확인 가능한 범위의 결과는 정리했지만 일부 구간이 짧거나 흔들렸어요. 다시 촬영하면 더 안정적인 결과를 볼 수 있습니다.',
-        allowContinue: true,
-      };
-    }
     return {
       title: '촬영이 완료되었습니다',
-        description: `${ACTIVE_STEP_COUNT}가지 동작의 촬영 신호가 안정적으로 확인되었습니다. 결과를 확인해 보세요.`,
+      description: `${ACTIVE_STEP_COUNT}가지 동작의 촬영 신호를 확인했습니다. 결과를 확인해 보세요.`,
       allowContinue: true,
     };
   }, [analysis]);
@@ -121,11 +113,11 @@ export default function CameraCompletePage() {
           {analysis && (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-left">
               <p className="text-xs text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                촬영 신호: {analysis.captureQuality === 'ok'
-                  ? '안정적'
-                  : analysis.captureQuality === 'low'
-                    ? '조금 약함'
-                    : '재촬영 권장'}
+                촬영 신호: {uiState.allowContinue
+                  ? '확인됨'
+                  : analysis.captureQuality === 'invalid'
+                    ? '재촬영 권장'
+                    : '안정적'}
               </p>
               {process.env.NODE_ENV !== 'production' && analysis.flags.length > 0 && (
                 <p
@@ -145,7 +137,7 @@ export default function CameraCompletePage() {
                 className="w-full min-h-[48px] rounded-xl font-bold text-slate-900 bg-white hover:bg-slate-100"
                 style={{ fontFamily: 'var(--font-sans-noto)' }}
               >
-                {analysis?.captureQuality === 'low' ? '현재 결과 보기' : '결과 보기'}
+                결과 보기
               </button>
             )}
             <button

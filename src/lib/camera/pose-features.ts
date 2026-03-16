@@ -89,8 +89,20 @@ export interface PoseFeaturesFrame {
   };
 }
 
+export interface SquatRecoverySignal {
+  peakDepth: number;
+  tailDepth: number;
+  recoveryDrop: number;
+  recovered: boolean;
+}
+
 const VISIBILITY_THRESHOLD = 0.45;
 const SMOOTHING_ALPHA = 0.4;
+const LOW_VISIBILITY_SMOOTHING_ALPHA = 0.18;
+const OUTLIER_SMOOTHING_ALPHA = 0.24;
+const HIGH_CONFIDENCE_SMOOTHING_ALPHA = 0.5;
+const JITTER_DISTANCE_THRESHOLD = 0.025;
+const OUTLIER_DISTANCE_THRESHOLD = 0.18;
 const TIMESTAMP_GAP_MS = 700;
 
 const STEP_CRITICAL_JOINTS: Record<CameraStepId, JointKey[]> = {
@@ -163,6 +175,49 @@ function mean(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecoverySignal {
+  const depthSeries = frames
+    .map((frame, index) => ({
+      index,
+      depth: frame.derived.squatDepthProxy,
+    }))
+    .filter((entry): entry is { index: number; depth: number } => typeof entry.depth === 'number');
+
+  if (depthSeries.length < 4) {
+    return {
+      peakDepth: 0,
+      tailDepth: 0,
+      recoveryDrop: 0,
+      recovered: false,
+    };
+  }
+
+  const peakSample = depthSeries.reduce((best, entry) => (entry.depth > best.depth ? entry : best));
+  const trailingDepths = depthSeries
+    .filter((entry) => entry.index > peakSample.index)
+    .map((entry) => entry.depth);
+
+  if (trailingDepths.length < 3) {
+    return {
+      peakDepth: peakSample.depth,
+      tailDepth: peakSample.depth,
+      recoveryDrop: 0,
+      recovered: false,
+    };
+  }
+
+  const tailWindow = trailingDepths.slice(-Math.min(6, trailingDepths.length));
+  const tailDepth = mean(tailWindow);
+  const recoveryDrop = peakSample.depth - tailDepth;
+
+  return {
+    peakDepth: peakSample.depth,
+    tailDepth,
+    recoveryDrop,
+    recovered: peakSample.depth >= 0.45 && recoveryDrop >= 0.08,
+  };
+}
+
 function angle(a: PoseLandmark, b: PoseLandmark, c: PoseLandmark): number {
   const rad = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
   return Math.abs((rad * 180) / Math.PI);
@@ -198,16 +253,30 @@ function smoothLandmark(current: PoseLandmark | null, previous: PoseLandmark | n
   if (!current) return previous;
   if (!previous) return current;
 
+  const distance = Math.hypot(current.x - previous.x, current.y - previous.y);
+  const visibility = typeof current.visibility === 'number' ? current.visibility : 1;
+  let alpha = SMOOTHING_ALPHA;
+
+  if (visibility < 0.35) {
+    alpha = LOW_VISIBILITY_SMOOTHING_ALPHA;
+  } else if (distance < JITTER_DISTANCE_THRESHOLD) {
+    alpha = HIGH_CONFIDENCE_SMOOTHING_ALPHA;
+  }
+
+  if (distance > OUTLIER_DISTANCE_THRESHOLD && visibility < 0.65) {
+    alpha = Math.min(alpha, OUTLIER_SMOOTHING_ALPHA);
+  }
+
   return {
-    x: previous.x + (current.x - previous.x) * SMOOTHING_ALPHA,
-    y: previous.y + (current.y - previous.y) * SMOOTHING_ALPHA,
+    x: previous.x + (current.x - previous.x) * alpha,
+    y: previous.y + (current.y - previous.y) * alpha,
     z:
       typeof current.z === 'number' && typeof previous.z === 'number'
-        ? previous.z + (current.z - previous.z) * SMOOTHING_ALPHA
+        ? previous.z + (current.z - previous.z) * alpha
         : current.z ?? previous.z,
     visibility:
       typeof current.visibility === 'number' && typeof previous.visibility === 'number'
-        ? previous.visibility + (current.visibility - previous.visibility) * SMOOTHING_ALPHA
+        ? previous.visibility + (current.visibility - previous.visibility) * alpha
         : current.visibility ?? previous.visibility,
   };
 }
@@ -490,14 +559,14 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
         const depthDelta =
           typeof previousDepth === 'number' ? currentDepth - previousDepth : 0;
 
-        if (currentDepth < 0.12) {
+        if (currentDepth < 0.08) {
           phaseHint = 'start';
-        } else if (currentDepth >= maxDepth * 0.85 && Math.abs(depthDelta) < 0.03) {
-          phaseHint = 'bottom';
-        } else if (depthDelta > 0.02) {
+        } else if (depthDelta > 0.01) {
           phaseHint = 'descent';
-        } else if (depthDelta < -0.02) {
+        } else if (depthDelta < -0.008) {
           phaseHint = 'ascent';
+        } else if (currentDepth >= maxDepth * 0.68 && Math.abs(depthDelta) < 0.02) {
+          phaseHint = 'bottom';
         }
       }
 

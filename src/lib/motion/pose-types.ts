@@ -62,6 +62,35 @@ export const POSE_LANDMARKS = {
 } as const;
 
 const DEFAULT_VISIBILITY_THRESHOLD = 0.45;
+const MIN_USABLE_VISIBLE_RATIO = 0.25;
+const MIN_CORE_VISIBILITY_RATIO = 0.34;
+const MIN_BODY_BOX_AREA = 0.02;
+const MAX_BODY_BOX_AREA = 0.98;
+const MAX_CORE_JITTER_DISTANCE = 0.16;
+
+const CORE_LANDMARK_INDICES = [
+  POSE_LANDMARKS.LEFT_SHOULDER,
+  POSE_LANDMARKS.RIGHT_SHOULDER,
+  POSE_LANDMARKS.LEFT_HIP,
+  POSE_LANDMARKS.RIGHT_HIP,
+  POSE_LANDMARKS.LEFT_KNEE,
+  POSE_LANDMARKS.RIGHT_KNEE,
+] as const;
+
+export interface PoseFrameBodyBox {
+  width: number;
+  height: number;
+  area: number;
+}
+
+export interface PoseFrameQuality {
+  usable: boolean;
+  visibleRatio: number;
+  coreVisibilityRatio: number;
+  bodyBox: PoseFrameBodyBox;
+  jitterDistance: number | null;
+  reasons: string[];
+}
 
 export function toPoseLandmarks(frame: PoseFrame): PoseLandmarks | null {
   if (!frame.landmarks || frame.landmarks.length === 0) {
@@ -99,4 +128,101 @@ export function getPoseFrameVisibleRatio(
 
 export function isValidPoseFrame(frame: PoseFrame): boolean {
   return getPoseFrameLandmarkCount(frame) >= 33;
+}
+
+export function getPoseFrameBodyBox(frame: PoseFrame): PoseFrameBodyBox {
+  if (!frame.landmarks || frame.landmarks.length === 0) {
+    return { width: 0, height: 0, area: 0 };
+  }
+
+  const xs = frame.landmarks.map((landmark) => landmark.x);
+  const ys = frame.landmarks.map((landmark) => landmark.y);
+  const width = Math.max(...xs) - Math.min(...xs);
+  const height = Math.max(...ys) - Math.min(...ys);
+
+  return {
+    width,
+    height,
+    area: width * height,
+  };
+}
+
+export function getPoseFrameCoreVisibilityRatio(frame: PoseFrame): number {
+  if (!frame.landmarks || frame.landmarks.length === 0) {
+    return 0;
+  }
+
+  const visibleCount = CORE_LANDMARK_INDICES.filter((index) => {
+    const landmark = frame.landmarks?.[index];
+    if (!landmark) return false;
+    if (typeof landmark.visibility !== 'number') return true;
+    return landmark.visibility >= DEFAULT_VISIBILITY_THRESHOLD;
+  }).length;
+
+  return visibleCount / CORE_LANDMARK_INDICES.length;
+}
+
+export function getPoseFrameJitterDistance(
+  frame: PoseFrame,
+  previousFrame: PoseFrame | null
+): number | null {
+  if (!frame.landmarks || !previousFrame?.landmarks) {
+    return null;
+  }
+
+  const distances = CORE_LANDMARK_INDICES.flatMap((index) => {
+    const current = frame.landmarks?.[index];
+    const previous = previousFrame.landmarks?.[index];
+    if (!current || !previous) return [];
+
+    return [Math.hypot(current.x - previous.x, current.y - previous.y)];
+  });
+
+  if (distances.length === 0) {
+    return null;
+  }
+
+  return distances.reduce((sum, value) => sum + value, 0) / distances.length;
+}
+
+export function getPoseFrameQuality(
+  frame: PoseFrame,
+  previousFrame: PoseFrame | null = null
+): PoseFrameQuality {
+  const reasons: string[] = [];
+  const visibleRatio = getPoseFrameVisibleRatio(frame);
+  const coreVisibilityRatio = getPoseFrameCoreVisibilityRatio(frame);
+  const bodyBox = getPoseFrameBodyBox(frame);
+  const jitterDistance = getPoseFrameJitterDistance(frame, previousFrame);
+
+  if (!isValidPoseFrame(frame)) {
+    reasons.push('landmark_count');
+  }
+  if (visibleRatio < MIN_USABLE_VISIBLE_RATIO) {
+    reasons.push('low_visibility');
+  }
+  if (coreVisibilityRatio < MIN_CORE_VISIBILITY_RATIO) {
+    reasons.push('core_joints_missing');
+  }
+  if (bodyBox.area < MIN_BODY_BOX_AREA || bodyBox.area > MAX_BODY_BOX_AREA) {
+    reasons.push('body_box_invalid');
+  }
+  if (
+    jitterDistance !== null &&
+    jitterDistance > MAX_CORE_JITTER_DISTANCE &&
+    visibleRatio < 0.5
+  ) {
+    reasons.push('unstable_frame');
+  }
+
+  const blockingReasons = reasons.filter((reason) => reason !== 'unstable_frame');
+
+  return {
+    usable: blockingReasons.length === 0,
+    visibleRatio,
+    coreVisibilityRatio,
+    bodyBox,
+    jitterDistance,
+    reasons,
+  };
 }

@@ -102,9 +102,22 @@ function mergeFlags(guardrails: StepGuardrailResult[]): CameraGuardrailFlag[] {
   return [...new Set(guardrails.flatMap((guardrail) => guardrail.flags))];
 }
 
-function getOverallCaptureQuality(guardrails: StepGuardrailResult[]): CaptureQuality {
+function getAverageGuardrailConfidence(guardrails: StepGuardrailResult[]): number {
+  if (guardrails.length === 0) return 0;
+  return round(
+    clamp(guardrails.reduce((sum, guardrail) => sum + guardrail.confidence, 0) / guardrails.length)
+  );
+}
+
+function getOverallCaptureQuality(
+  guardrails: StepGuardrailResult[],
+  flags: CameraGuardrailFlag[],
+  confidence: number
+): CaptureQuality {
   if (guardrails.some((guardrail) => guardrail.captureQuality === 'invalid')) return 'invalid';
   if (guardrails.some((guardrail) => guardrail.captureQuality === 'low')) return 'low';
+  if (flags.includes('unstable_motion_signal') || flags.includes('partial_capture')) return 'low';
+  if (confidence < 0.82) return 'low';
   return 'ok';
 }
 
@@ -120,7 +133,12 @@ function getFallbackMode(
   ) {
     return 'survey';
   }
-  if (captureQuality === 'low' || confidence < 0.72 || flags.includes('partial_capture')) {
+  if (
+    captureQuality === 'low' ||
+    confidence < 0.8 ||
+    flags.includes('partial_capture') ||
+    flags.includes('unstable_motion_signal')
+  ) {
     return 'retry';
   }
   return null;
@@ -149,20 +167,20 @@ export function normalizeCameraResult(
   const anyInsufficient = evaluatorResults.some((r) => r.insufficientSignal);
   const validResults = evaluatorResults.filter((r) => !r.insufficientSignal);
   const flags = mergeFlags(guardrailResults);
-  const captureQuality =
-    guardrailResults.length > 0 ? getOverallCaptureQuality(guardrailResults) : anyInsufficient ? 'invalid' : 'ok';
   const confidence =
     guardrailResults.length > 0
-      ? round(
-          clamp(
-            guardrailResults.reduce((sum, guardrail) => sum + guardrail.confidence, 0) / guardrailResults.length
-          )
-        )
+      ? getAverageGuardrailConfidence(guardrailResults)
       : round(
           validResults.length > 0
             ? Math.min(1, validResults.length / Math.max(validResults.length, 2))
             : 0
         );
+  const captureQuality =
+    guardrailResults.length > 0
+      ? getOverallCaptureQuality(guardrailResults, flags, confidence)
+      : anyInsufficient
+        ? 'invalid'
+        : 'ok';
   const fallbackMode = getFallbackMode(captureQuality, confidence, flags);
 
   if ((anyInsufficient && validResults.length < 2) || captureQuality === 'invalid') {

@@ -568,6 +568,8 @@ export default function CameraSquatPage() {
                     <span>nextAllowed: {String(gate.nextAllowed)}</span>
                     <span>passReady: {String(passReady)}</span>
                     <span>passLatched: {String(passLatched)}</span>
+                    <span>passConfirmed: {String(gate.passConfirmationSatisfied)}</span>
+                    <span>passFrames: {gate.passConfirmationFrameCount}/{gate.passConfirmationWindowCount}</span>
                     <span>repCount: {repCount}</span>
                     <span>retryRecommended: {String(gate.retryRecommended)}</span>
                     <span>depthProxy: {depthProxy ?? 'n/a'}</span>

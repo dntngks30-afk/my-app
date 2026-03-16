@@ -3,7 +3,7 @@
  * evaluator 위에서 입력 품질과 재촬영 권장 여부를 판단한다.
  */
 import type { CameraStepId } from '@/lib/public/camera-test';
-import { buildPoseFeaturesFrames } from './pose-features';
+import { buildPoseFeaturesFrames, getSquatRecoverySignal } from './pose-features';
 import type { PoseFeaturesFrame } from './pose-features';
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
 import type { EvaluatorResult } from './evaluators/types';
@@ -59,7 +59,7 @@ export interface StepGuardrailResult {
 }
 
 const MIN_VALID_FRAMES = 8;
-const SQUAT_BASIC_DEPTH_FLOOR = 0.3;
+const SQUAT_BASIC_DEPTH_FLOOR = 0.18;
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(max, Math.max(min, value));
@@ -145,6 +145,8 @@ function getMotionCompleteness(
     const descentCount = frames.filter((frame) => frame.phaseHint === 'descent').length;
     const bottomCount = frames.filter((frame) => frame.phaseHint === 'bottom').length;
     const ascentCount = frames.filter((frame) => frame.phaseHint === 'ascent').length;
+    const recovery = getSquatRecoverySignal(frames);
+    const ascentSatisfied = ascentCount > 0 || recovery.recovered;
 
     if (depthValues.length < MIN_VALID_FRAMES) {
       flags.add('rep_incomplete');
@@ -155,7 +157,7 @@ function getMotionCompleteness(
       peakDepth < SQUAT_BASIC_DEPTH_FLOOR ||
       descentCount === 0 ||
       bottomCount === 0 ||
-      ascentCount === 0
+      !ascentSatisfied
     ) {
       flags.add('rep_incomplete');
       return { score: clamp(peakDepth), status: 'partial' };

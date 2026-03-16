@@ -3,6 +3,7 @@ import type { StepGuardrailResult } from './guardrails';
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
 import type { PoseCaptureStats } from './use-pose-capture';
 import type { CameraStepId } from '@/lib/public/camera-test';
+import { buildPoseFeaturesFrames } from './pose-features';
 import { runEvaluator } from './run-evaluators';
 import { assessStepGuardrail } from './guardrails';
 
@@ -34,18 +35,29 @@ export interface ExerciseGateResult {
   guardrail: StepGuardrailResult;
   uiMessage: string;
   autoAdvanceDelayMs: number;
+  passConfirmationSatisfied: boolean;
+  passConfirmationFrameCount: number;
+  passConfirmationWindowCount: number;
 }
 
 export function isGatePassReady(
-  gate: Pick<ExerciseGateResult, 'status' | 'nextAllowed' | 'completionSatisfied'>
+  gate: Pick<
+    ExerciseGateResult,
+    'status' | 'nextAllowed' | 'completionSatisfied' | 'passConfirmationSatisfied'
+  >
 ): boolean {
-  return gate.status === 'pass' && gate.nextAllowed && gate.completionSatisfied;
+  return (
+    gate.status === 'pass' &&
+    gate.nextAllowed &&
+    gate.completionSatisfied &&
+    gate.passConfirmationSatisfied
+  );
 }
 
 export function getCameraGuideTone(
   gate: Pick<
     ExerciseGateResult,
-    'status' | 'progressionState' | 'nextAllowed' | 'completionSatisfied'
+    'status' | 'progressionState' | 'nextAllowed' | 'completionSatisfied' | 'passConfirmationSatisfied'
   >
 ): CameraGuideTone {
   if (isGatePassReady(gate) || gate.progressionState === 'passed') {
@@ -88,6 +100,11 @@ const STRONG_QUALITY_CONFIDENCE_THRESHOLD: Record<CameraStepId, number> = {
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function mean(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 function getMetricValue(metrics: EvaluatorMetric[] | undefined, name: string): number | null {
@@ -393,10 +410,11 @@ function getSquatQualitySignals(
   confidence: number
 ): SquatQualitySignals {
   const depth = getMetricValue(result.metrics, 'depth') ?? 0;
+  const depthPeak = getHighlightedMetric(result, 'depthPeak');
   const trunkLean = getMetricValue(result.metrics, 'trunk_lean') ?? 999;
   const kneeTracking = getMetricValue(result.metrics, 'knee_alignment_trend') ?? 0;
   const bottomStability = getMetricValue(result.rawMetrics, 'bottom_stability_proxy') ?? 0;
-  const depthTooShallow = depth < 45;
+  const depthTooShallow = Math.max(depth, depthPeak) < 45;
   const trunkLeanHigh = trunkLean >= 24;
   const kneeTrackingOff = kneeTracking < 0.82 || kneeTracking > 1.18;
   const bottomStabilityLow = bottomStability < 40;
@@ -443,13 +461,56 @@ function getSquatProgressionCompletionSatisfied(
   const descentCount = getHighlightedMetric(result, 'descentCount');
   const bottomCount = getHighlightedMetric(result, 'bottomCount');
   const ascentCount = getHighlightedMetric(result, 'ascentCount');
+  const ascentRecovered = getHighlightedMetric(result, 'ascentRecovered');
 
   return (
     guardrail.completionStatus === 'complete' &&
     descentCount > 0 &&
     bottomCount > 0 &&
-    ascentCount > 0
+    (ascentCount > 0 || ascentRecovered > 0)
   );
+}
+
+function getPassConfirmation(
+  stepId: CameraStepId,
+  landmarks: PoseLandmarks[]
+): {
+  satisfied: boolean;
+  stableFrameCount: number;
+  windowFrameCount: number;
+} {
+  const recentLandmarks = landmarks.slice(-8);
+  if (recentLandmarks.length === 0) {
+    return {
+      satisfied: false,
+      stableFrameCount: 0,
+      windowFrameCount: 0,
+    };
+  }
+
+  const recentFrames = buildPoseFeaturesFrames(stepId, recentLandmarks);
+  const stableFrames = recentFrames.filter((frame) => {
+    return (
+      frame.isValid &&
+      frame.visibilitySummary.visibleLandmarkRatio >= 0.45 &&
+      frame.visibilitySummary.criticalJointsAvailability >= 0.5 &&
+      frame.bodyBox.area >= 0.05 &&
+      frame.bodyBox.area <= 0.95 &&
+      !frame.qualityHints.includes('timestamp_gap')
+    );
+  });
+  const stableFrameCount = stableFrames.length;
+  const recentVisibility =
+    stableFrames.length > 0
+      ? mean(stableFrames.map((frame) => frame.visibilitySummary.visibleLandmarkRatio))
+      : 0;
+  const satisfied = stableFrameCount >= 3 && recentVisibility >= 0.52;
+
+  return {
+    satisfied,
+    stableFrameCount,
+    windowFrameCount: recentFrames.length,
+  };
 }
 
 function getSquatFailureReasons(
@@ -462,6 +523,7 @@ function getSquatFailureReasons(
   const descentCount = getHighlightedMetric(result, 'descentCount');
   const bottomCount = getHighlightedMetric(result, 'bottomCount');
   const ascentCount = getHighlightedMetric(result, 'ascentCount');
+  const ascentRecovered = getHighlightedMetric(result, 'ascentRecovered');
   const qualitySignals = getSquatQualitySignals(result, confidence);
 
   if (guardrail.flags.includes('insufficient_signal')) {
@@ -487,7 +549,11 @@ function getSquatFailureReasons(
   if (qualitySignals.depthTooShallow) {
     failureReasons.add('depth_not_reached');
   }
-  if (ascentCount === 0 || (descentCount > 0 && bottomCount > 0 && ascentCount === 0)) {
+  if (
+    ascentCount === 0 &&
+    ascentRecovered === 0 &&
+    (descentCount === 0 || bottomCount === 0 || ascentCount === 0)
+  ) {
     failureReasons.add('ascent_not_detected');
   }
   if (guardrail.flags.includes('left_side_missing')) {
@@ -559,6 +625,7 @@ export function evaluateExerciseAutoProgress(
   const confidence = getEffectiveConfidence(stepId, evaluatorResult, guardrail);
   const reasons = getCommonReasons(evaluatorResult, guardrail);
   const passThreshold = BASIC_PASS_CONFIDENCE_THRESHOLD[stepId];
+  const passConfirmation = getPassConfirmation(stepId, landmarks);
   const completionSatisfied =
     stepId === 'squat'
       ? getSquatProgressionCompletionSatisfied(evaluatorResult, guardrail)
@@ -601,6 +668,9 @@ export function evaluateExerciseAutoProgress(
       guardrail,
       uiMessage: detecting.uiMessage,
       autoAdvanceDelayMs,
+      passConfirmationSatisfied: passConfirmation.satisfied,
+      passConfirmationFrameCount: passConfirmation.stableFrameCount,
+      passConfirmationWindowCount: passConfirmation.windowFrameCount,
     };
   }
 
@@ -608,6 +678,7 @@ export function evaluateExerciseAutoProgress(
     completionSatisfied &&
     guardrail.captureQuality !== 'invalid' &&
     confidence >= passThreshold &&
+    passConfirmation.satisfied &&
     !hasAnyReason(reasons, hardBlockerReasons) &&
     !hasAnyReason(reasons, ['rep_incomplete', 'hold_too_short']);
 
@@ -630,6 +701,9 @@ export function evaluateExerciseAutoProgress(
           ? '좋습니다, 동작을 확인했어요'
           : '충분한 신호를 확인했어요',
       autoAdvanceDelayMs,
+      passConfirmationSatisfied: true,
+      passConfirmationFrameCount: passConfirmation.stableFrameCount,
+      passConfirmationWindowCount: passConfirmation.windowFrameCount,
     };
   }
 
@@ -649,6 +723,9 @@ export function evaluateExerciseAutoProgress(
       guardrail,
       uiMessage: '설문형으로 전환할 수 있어요',
       autoAdvanceDelayMs,
+      passConfirmationSatisfied: passConfirmation.satisfied,
+      passConfirmationFrameCount: passConfirmation.stableFrameCount,
+      passConfirmationWindowCount: passConfirmation.windowFrameCount,
     };
   }
 
@@ -687,6 +764,9 @@ export function evaluateExerciseAutoProgress(
           ? '조금만 더 유지해 주세요'
           : getRetryMessage(guardrail),
       autoAdvanceDelayMs,
+      passConfirmationSatisfied: passConfirmation.satisfied,
+      passConfirmationFrameCount: passConfirmation.stableFrameCount,
+      passConfirmationWindowCount: passConfirmation.windowFrameCount,
     };
   }
 
@@ -705,5 +785,8 @@ export function evaluateExerciseAutoProgress(
     guardrail,
     uiMessage: '좋습니다, 계속하세요',
     autoAdvanceDelayMs,
+    passConfirmationSatisfied: passConfirmation.satisfied,
+    passConfirmationFrameCount: passConfirmation.stableFrameCount,
+    passConfirmationWindowCount: passConfirmation.windowFrameCount,
   };
 }

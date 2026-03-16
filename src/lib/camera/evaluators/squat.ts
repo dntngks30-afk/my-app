@@ -3,7 +3,7 @@
  * metrics: depth, knee alignment trend, trunk lean, asymmetry
  */
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
-import { buildPoseFeaturesFrames } from '@/lib/camera/pose-features';
+import { buildPoseFeaturesFrames, getSquatRecoverySignal } from '@/lib/camera/pose-features';
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 import type { EvaluatorResult, EvaluatorMetric } from './types';
 
@@ -69,9 +69,11 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const descentCount = countPhases(valid, 'descent');
   const bottomCount = countPhases(valid, 'bottom');
   const ascentCount = countPhases(valid, 'ascent');
-  const repCountEstimate = Math.min(descentCount, bottomCount, ascentCount);
+  const recovery = getSquatRecoverySignal(valid);
+  const ascentSatisfied = ascentCount > 0 || recovery.recovered;
+  const repCountEstimate = descentCount > 0 && bottomCount > 0 && ascentSatisfied ? 1 : 0;
 
-  if (descentCount === 0 || bottomCount === 0 || ascentCount === 0) {
+  if (descentCount === 0 || bottomCount === 0 || !ascentSatisfied) {
     completionHints.push('rep_phase_incomplete');
   } else {
     interpretedSignals.push('descent-bottom-ascent pattern detected');
@@ -150,6 +152,8 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         descentCount,
         bottomCount,
         ascentCount,
+        ascentRecovered: recovery.recovered ? 1 : 0,
+        recoveryDrop: Math.round(recovery.recoveryDrop * 100),
         repCount: repCountEstimate,
       },
     },

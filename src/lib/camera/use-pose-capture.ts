@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  getPoseFrameQuality,
   getPoseFrameLandmarkCount,
   getPoseFrameVisibleRatio,
   isValidPoseFrame,
@@ -18,6 +19,8 @@ const TIMESTAMP_GAP_MS = 600;
 export interface PoseCaptureStats {
   sampledFrameCount: number;
   droppedFrameCount: number;
+  filteredLowQualityFrameCount: number;
+  unstableFrameCount: number;
   captureDurationMs: number;
   validFrameCount: number;
   averageLandmarkCount: number;
@@ -28,6 +31,8 @@ export interface PoseCaptureStats {
 const EMPTY_STATS: PoseCaptureStats = {
   sampledFrameCount: 0,
   droppedFrameCount: 0,
+  filteredLowQualityFrameCount: 0,
+  unstableFrameCount: 0,
   captureDurationMs: 0,
   validFrameCount: 0,
   averageLandmarkCount: 0,
@@ -40,17 +45,22 @@ export function usePoseCapture() {
   const [stats, setStats] = useState<PoseCaptureStats>(EMPTY_STATS);
   const sampledFrameCountRef = useRef(0);
   const droppedFrameCountRef = useRef(0);
+  const filteredLowQualityFrameCountRef = useRef(0);
+  const unstableFrameCountRef = useRef(0);
   const validFrameCountRef = useRef(0);
   const landmarkCountTotalRef = useRef(0);
   const visibleRatioTotalRef = useRef(0);
   const timestampDiscontinuityCountRef = useRef(0);
   const lastTimestampMsRef = useRef<number | null>(null);
   const captureStartedAtRef = useRef<number | null>(null);
+  const lastAcceptedFrameRef = useRef<PoseFrame | null>(null);
 
   const syncStats = useCallback((durationMs?: number) => {
     setStats({
       sampledFrameCount: sampledFrameCountRef.current,
       droppedFrameCount: droppedFrameCountRef.current,
+      filteredLowQualityFrameCount: filteredLowQualityFrameCountRef.current,
+      unstableFrameCount: unstableFrameCountRef.current,
       captureDurationMs:
         durationMs ?? (captureStartedAtRef.current ? performance.now() - captureStartedAtRef.current : 0),
       validFrameCount: validFrameCountRef.current,
@@ -77,9 +87,27 @@ export function usePoseCapture() {
       return;
     }
 
+    const quality = getPoseFrameQuality(frame, lastAcceptedFrameRef.current);
+    if (!quality.usable) {
+      droppedFrameCountRef.current += 1;
+      if (quality.reasons.some((reason) => reason === 'low_visibility' || reason === 'core_joints_missing' || reason === 'body_box_invalid')) {
+        filteredLowQualityFrameCountRef.current += 1;
+      }
+      if (quality.reasons.includes('unstable_frame')) {
+        unstableFrameCountRef.current += 1;
+      }
+      syncStats();
+      return;
+    }
+
+    if (quality.reasons.includes('unstable_frame')) {
+      unstableFrameCountRef.current += 1;
+    }
+
     validFrameCountRef.current += 1;
     landmarkCountTotalRef.current += getPoseFrameLandmarkCount(frame);
     visibleRatioTotalRef.current += getPoseFrameVisibleRatio(frame);
+    lastAcceptedFrameRef.current = frame;
 
     setLandmarks((prev) => [...prev.slice(-(MAX_CAPTURED_FRAMES - 1)), adaptedFrame]);
     syncStats();
@@ -89,11 +117,14 @@ export function usePoseCapture() {
     (_video?: HTMLVideoElement) => {
       sampledFrameCountRef.current = 0;
       droppedFrameCountRef.current = 0;
+      filteredLowQualityFrameCountRef.current = 0;
+      unstableFrameCountRef.current = 0;
       validFrameCountRef.current = 0;
       landmarkCountTotalRef.current = 0;
       visibleRatioTotalRef.current = 0;
       timestampDiscontinuityCountRef.current = 0;
       lastTimestampMsRef.current = null;
+      lastAcceptedFrameRef.current = null;
       captureStartedAtRef.current = performance.now();
       setLandmarks([]);
       setStats(EMPTY_STATS);
