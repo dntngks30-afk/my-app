@@ -19,6 +19,7 @@ import {
 import { usePoseCapture } from '@/lib/camera/use-pose-capture';
 import {
   evaluateExerciseAutoProgress,
+  getCameraGuideTone,
   type ExerciseProgressionState,
 } from '@/lib/camera/auto-progression';
 
@@ -183,6 +184,7 @@ export default function CameraSingleLegBalancePage() {
     progressionState === 'retry_required' ||
     progressionState === 'failed' ||
     progressionState === 'insufficient_signal';
+  const guideTone = getCameraGuideTone(gate);
 
   return (
     <div
@@ -259,6 +261,7 @@ export default function CameraSingleLegBalancePage() {
                 onVideoReady={handleVideoReady}
                 onPoseFrame={pushFrame}
                 onError={handleCameraError}
+                guideTone={guideTone}
                 className="w-full"
               />
             </div>

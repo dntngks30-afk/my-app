@@ -20,6 +20,7 @@ import {
 import { usePoseCapture } from '@/lib/camera/use-pose-capture';
 import {
   evaluateExerciseAutoProgress,
+  getCameraGuideTone,
   type ExerciseProgressionState,
 } from '@/lib/camera/auto-progression';
 
@@ -187,6 +188,7 @@ export default function CameraWallAngelPage() {
     progressionState === 'retry_required' ||
     progressionState === 'failed' ||
     progressionState === 'insufficient_signal';
+  const guideTone = getCameraGuideTone(gate);
 
   return (
     <div
@@ -263,6 +265,7 @@ export default function CameraWallAngelPage() {
                 onVideoReady={handleVideoReady}
                 onPoseFrame={pushFrame}
                 onError={handleCameraError}
+                guideTone={guideTone}
                 className="w-full"
               />
             </div>

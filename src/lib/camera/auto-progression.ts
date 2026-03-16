@@ -17,6 +17,7 @@ export type ExerciseProgressionState =
   | 'failed';
 
 export type ExerciseGateStatus = 'pass' | 'retry' | 'fail' | 'detecting';
+export type CameraGuideTone = 'neutral' | 'warning' | 'success';
 
 export interface ExerciseGateResult {
   status: ExerciseGateStatus;
@@ -33,6 +34,26 @@ export interface ExerciseGateResult {
   guardrail: StepGuardrailResult;
   uiMessage: string;
   autoAdvanceDelayMs: number;
+}
+
+export function getCameraGuideTone(
+  gate: Pick<ExerciseGateResult, 'status' | 'progressionState'>
+): CameraGuideTone {
+  if (gate.status === 'pass' || gate.progressionState === 'passed') {
+    return 'success';
+  }
+
+  if (
+    gate.status === 'retry' ||
+    gate.status === 'fail' ||
+    gate.progressionState === 'retry_required' ||
+    gate.progressionState === 'insufficient_signal' ||
+    gate.progressionState === 'failed'
+  ) {
+    return 'warning';
+  }
+
+  return 'neutral';
 }
 
 const AUTO_ADVANCE_DELAY_MS: Record<CameraStepId, number> = {

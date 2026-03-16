@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type { PoseFrame } from '@/lib/motion/pose-types';
+import type { CameraGuideTone } from '@/lib/camera/auto-progression';
 import {
   clearPoseOverlay,
   createLivePoseAnalyzer,
@@ -29,7 +30,33 @@ interface CameraPreviewProps {
   mirrored?: boolean;
   /** 개발용 skeleton overlay */
   showPoseDebugOverlay?: boolean;
+  /** 실시간 가이드 색상 */
+  guideTone?: CameraGuideTone;
   className?: string;
+}
+
+function getGuidePalette(tone: CameraGuideTone) {
+  if (tone === 'success') {
+    return {
+      frame: 'rgba(34, 197, 94, 0.9)',
+      glow: 'rgba(34, 197, 94, 0.24)',
+      fill: 'rgba(34, 197, 94, 0.14)',
+    };
+  }
+
+  if (tone === 'warning') {
+    return {
+      frame: 'rgba(248, 113, 113, 0.95)',
+      glow: 'rgba(248, 113, 113, 0.24)',
+      fill: 'rgba(248, 113, 113, 0.14)',
+    };
+  }
+
+  return {
+    frame: 'rgba(255, 255, 255, 0.62)',
+    glow: 'rgba(255, 255, 255, 0.12)',
+    fill: 'rgba(255, 255, 255, 0.08)',
+  };
 }
 
 export function CameraPreview({
@@ -39,6 +66,7 @@ export function CameraPreview({
   onError,
   mirrored = true,
   showPoseDebugOverlay = process.env.NODE_ENV !== 'production',
+  guideTone = 'neutral',
   className = '',
 }: CameraPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -293,6 +321,7 @@ export function CameraPreview({
   }
 
   const showLoading = status === 'requesting' || status === 'binding';
+  const guidePalette = getGuidePalette(guideTone);
 
   return (
     <div
@@ -318,12 +347,87 @@ export function CameraPreview({
           <p className="text-slate-300 text-sm">카메라 연결 중...</p>
         </div>
       )}
-      {/* 전신 framing guide */}
+      {/* 사용자가 멀리서도 맞추기 쉽도록 사람 실루엣 가이드를 겹쳐 보여준다. */}
       <div
         className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center"
         aria-hidden
       >
-        <div className="w-3/4 h-[85%] rounded-2xl border-2 border-dashed border-white/30" />
+        <svg
+          viewBox="0 0 240 520"
+          className="h-[85%] w-auto max-w-[78%] drop-shadow-[0_0_18px_rgba(255,255,255,0.08)]"
+        >
+          <rect
+            x="22"
+            y="18"
+            width="196"
+            height="484"
+            rx="30"
+            fill="none"
+            stroke={guidePalette.frame}
+            strokeWidth="3"
+            strokeDasharray="10 10"
+          />
+          <circle
+            cx="120"
+            cy="88"
+            r="31"
+            fill={guidePalette.fill}
+            stroke={guidePalette.frame}
+            strokeWidth="3"
+          />
+          <path
+            d="M88 160C88 144 101 132 117 132H123C139 132 152 144 152 160V222C152 238 139 250 123 250H117C101 250 88 238 88 222V160Z"
+            fill={guidePalette.fill}
+            stroke={guidePalette.frame}
+            strokeWidth="3"
+          />
+          <path
+            d="M87 188L55 252"
+            stroke={guidePalette.frame}
+            strokeWidth="16"
+            strokeLinecap="round"
+          />
+          <path
+            d="M153 188L185 252"
+            stroke={guidePalette.frame}
+            strokeWidth="16"
+            strokeLinecap="round"
+          />
+          <path
+            d="M108 250L86 412"
+            stroke={guidePalette.frame}
+            strokeWidth="18"
+            strokeLinecap="round"
+          />
+          <path
+            d="M132 250L154 412"
+            stroke={guidePalette.frame}
+            strokeWidth="18"
+            strokeLinecap="round"
+          />
+          <path
+            d="M78 418H95"
+            stroke={guidePalette.frame}
+            strokeWidth="10"
+            strokeLinecap="round"
+          />
+          <path
+            d="M145 418H162"
+            stroke={guidePalette.frame}
+            strokeWidth="10"
+            strokeLinecap="round"
+          />
+          <rect
+            x="18"
+            y="14"
+            width="204"
+            height="492"
+            rx="34"
+            fill="none"
+            stroke={guidePalette.glow}
+            strokeWidth="12"
+          />
+        </svg>
       </div>
       {process.env.NODE_ENV !== 'production' && (
         <div className="absolute bottom-2 left-2 z-40 rounded bg-black/50 px-2 py-1 text-[10px] text-white pointer-events-none">
