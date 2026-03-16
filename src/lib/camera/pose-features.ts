@@ -5,6 +5,7 @@
 import { POSE_LANDMARKS } from '@/lib/motion/pose-types';
 import type { PoseLandmark, PoseLandmarks } from '@/lib/motion/pose-types';
 import type { CameraStepId } from '@/lib/public/camera-test';
+import { smoothSignalValue, stabilizePhaseSequence } from './stability';
 
 export type PoseFrameValidity = 'valid' | 'low_visibility' | 'missing_keypoints' | 'invalid';
 export type PosePhaseHint =
@@ -541,39 +542,89 @@ function getFrameValidity(
   return { frameValidity: 'valid', qualityHints, isValid: true };
 }
 
+function stabilizeDerivedSignals(frames: PoseFeaturesFrame[]): PoseFeaturesFrame[] {
+  let previousDepth: number | null = null;
+  let previousArmElevation: number | null = null;
+  let previousArmElevationLeft: number | null = null;
+  let previousArmElevationRight: number | null = null;
+  let previousTrunkLean: number | null = null;
+  let previousKneeTracking: number | null = null;
+
+  return frames.map((frame) => {
+    const squatDepthProxy = smoothSignalValue(frame.derived.squatDepthProxy, previousDepth, 0.46);
+    const armElevationAvg = smoothSignalValue(frame.derived.armElevationAvg, previousArmElevation, 0.42);
+    const armElevationLeft = smoothSignalValue(
+      frame.derived.armElevationLeft,
+      previousArmElevationLeft,
+      0.42
+    );
+    const armElevationRight = smoothSignalValue(
+      frame.derived.armElevationRight,
+      previousArmElevationRight,
+      0.42
+    );
+    const trunkLeanDeg = smoothSignalValue(frame.derived.trunkLeanDeg, previousTrunkLean, 0.4);
+    const kneeTrackingRatio = smoothSignalValue(
+      frame.derived.kneeTrackingRatio,
+      previousKneeTracking,
+      0.4
+    );
+
+    previousDepth = squatDepthProxy;
+    previousArmElevation = armElevationAvg;
+    previousArmElevationLeft = armElevationLeft;
+    previousArmElevationRight = armElevationRight;
+    previousTrunkLean = trunkLeanDeg;
+    previousKneeTracking = kneeTrackingRatio;
+
+    return {
+      ...frame,
+      derived: {
+        ...frame.derived,
+        squatDepthProxy,
+        armElevationAvg,
+        armElevationLeft,
+        armElevationRight,
+        trunkLeanDeg,
+        kneeTrackingRatio,
+      },
+    };
+  });
+}
+
 function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): PoseFeaturesFrame[] {
   if (frames.length === 0) return frames;
 
   if (stepId === 'squat') {
-    const maxDepth = Math.max(
-      ...frames.map((frame) => frame.derived.squatDepthProxy ?? 0)
-    );
-
-    return frames.map((frame, index) => {
+    const maxDepth = Math.max(...frames.map((frame) => frame.derived.squatDepthProxy ?? 0));
+    const bottomThreshold = maxDepth * 0.66;
+    const candidates = frames.map((frame, index) => {
       const previousDepth = index > 0 ? frames[index - 1]!.derived.squatDepthProxy : null;
       const currentDepth = frame.derived.squatDepthProxy;
       let phaseHint: PosePhaseHint = 'unknown';
-      const eventHints = [...frame.eventHints];
 
       if (typeof currentDepth === 'number') {
-        const depthDelta =
-          typeof previousDepth === 'number' ? currentDepth - previousDepth : 0;
+        const depthDelta = typeof previousDepth === 'number' ? currentDepth - previousDepth : 0;
 
         if (currentDepth < 0.08) {
           phaseHint = 'start';
-        } else if (depthDelta > 0.01) {
-          phaseHint = 'descent';
-        } else if (depthDelta < -0.008) {
-          phaseHint = 'ascent';
-        } else if (currentDepth >= maxDepth * 0.68 && Math.abs(depthDelta) < 0.02) {
+        } else if (currentDepth >= bottomThreshold && Math.abs(depthDelta) < 0.018) {
           phaseHint = 'bottom';
+        } else if (depthDelta > 0.012) {
+          phaseHint = 'descent';
+        } else if (depthDelta < -0.01) {
+          phaseHint = 'ascent';
         }
       }
 
-      if (phaseHint === 'bottom') {
-        eventHints.push('bottom_reached');
-      }
+      return phaseHint;
+    });
+    const stabilized = stabilizePhaseSequence(candidates, 2);
 
+    return frames.map((frame, index) => {
+      const phaseHint = stabilized[index] ?? 'unknown';
+      const eventHints = [...frame.eventHints];
+      if (phaseHint === 'bottom') eventHints.push('bottom_reached');
       return { ...frame, phaseHint, eventHints };
     });
   }
@@ -613,35 +664,35 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
   }
 
   if (stepId === 'overhead-reach') {
-    const maxElevation = Math.max(
-      ...frames.map((frame) => frame.derived.armElevationAvg ?? 0)
-    );
-
-    return frames.map((frame, index) => {
+    const maxElevation = Math.max(...frames.map((frame) => frame.derived.armElevationAvg ?? 0));
+    const peakThreshold = maxElevation * 0.88;
+    const candidates = frames.map((frame, index) => {
       const previousElevation = index > 0 ? frames[index - 1]!.derived.armElevationAvg : null;
       const currentElevation = frame.derived.armElevationAvg;
       let phaseHint: PosePhaseHint = 'unknown';
-      const eventHints = [...frame.eventHints];
 
       if (typeof currentElevation === 'number') {
-        const delta =
-          typeof previousElevation === 'number' ? currentElevation - previousElevation : 0;
+        const delta = typeof previousElevation === 'number' ? currentElevation - previousElevation : 0;
 
         if (currentElevation < 40) {
           phaseHint = 'start';
-        } else if (currentElevation >= maxElevation * 0.9 && Math.abs(delta) < 3) {
+        } else if (currentElevation >= peakThreshold && Math.abs(delta) < 2.6) {
           phaseHint = 'peak';
-        } else if (delta > 2.5) {
+        } else if (delta > 2.2) {
           phaseHint = 'raise';
-        } else if (delta < -2.5) {
+        } else if (delta < -2.2) {
           phaseHint = 'lower';
         }
       }
 
-      if (phaseHint === 'peak') {
-        eventHints.push('peak_reached');
-      }
+      return phaseHint;
+    });
+    const stabilized = stabilizePhaseSequence(candidates, 2);
 
+    return frames.map((frame, index) => {
+      const phaseHint = stabilized[index] ?? 'unknown';
+      const eventHints = [...frame.eventHints];
+      if (phaseHint === 'peak') eventHints.push('peak_reached');
       return { ...frame, phaseHint, eventHints };
     });
   }
@@ -723,5 +774,5 @@ export function buildPoseFeaturesFrames(
     });
   }
 
-  return applyPhaseHints(stepId, features);
+  return applyPhaseHints(stepId, stabilizeDerivedSignals(features));
 }

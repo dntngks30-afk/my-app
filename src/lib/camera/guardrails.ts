@@ -8,6 +8,7 @@ import type { PoseFeaturesFrame } from './pose-features';
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
 import type { EvaluatorResult } from './evaluators/types';
 import type { PoseCaptureStats } from './use-pose-capture';
+import { selectQualityWindow } from './stability';
 
 export type CaptureQuality = 'ok' | 'low' | 'invalid';
 export type CameraFallbackMode = 'survey' | 'retry' | null;
@@ -49,6 +50,11 @@ export interface StepGuardrailDebug extends StepMetrics {
   captureDurationMs: number;
   metricSufficiency: number;
   timestampDiscontinuityCount?: number;
+  warmupExcludedFrameCount?: number;
+  qualityFrameCount?: number;
+  selectedWindowStartMs?: number | null;
+  selectedWindowEndMs?: number | null;
+  selectedWindowScore?: number | null;
   /** PR-2: per-step 진단 (evaluator에서 전달, additive) */
   perStepDiagnostics?: Record<string, unknown>;
 }
@@ -125,49 +131,6 @@ function getBboxStability(frames: PoseFeaturesFrame[]): number {
   const variance = mean(areas.map((area) => (area - avg) ** 2));
   const stdDev = Math.sqrt(variance);
   return clamp(1 - stdDev / avg);
-}
-
-/** Exclude first ~500ms warmup frames from quality calculation */
-function excludeWarmupFrames(
-  frames: PoseFeaturesFrame[],
-  warmupMs: number
-): PoseFeaturesFrame[] {
-  if (frames.length === 0) return frames;
-  const t0 = frames[0]!.timestampMs;
-  return frames.filter((f) => f.timestampMs - t0 >= warmupMs);
-}
-
-/** Find most stable 0.8–1.2s window for quality evaluation */
-function getBestWindow(
-  frames: PoseFeaturesFrame[],
-  minMs: number,
-  maxMs: number
-): PoseFeaturesFrame[] {
-  if (frames.length < 4) return frames;
-  let bestScore = -1;
-  let bestSlice: PoseFeaturesFrame[] = frames;
-
-  for (let i = 0; i < frames.length; i++) {
-    const startT = frames[i]!.timestampMs;
-    let j = i;
-    while (j < frames.length && frames[j]!.timestampMs - startT < minMs) j++;
-    if (j >= frames.length) break;
-    while (j + 1 < frames.length && frames[j + 1]!.timestampMs - startT <= maxMs) j++;
-    const window = frames.slice(i, j + 1);
-    if (window.length < 4) continue;
-    const areas = window.map((f) => f.bodyBox.area).filter((a) => a > 0);
-    const bboxStability =
-      areas.length >= 2
-        ? clamp(1 - Math.sqrt(mean(areas.map((a) => (a - mean(areas)) ** 2))) / Math.max(mean(areas), 0.01))
-        : 0;
-    const visMean = mean(window.map((f) => f.visibilitySummary.visibleLandmarkRatio));
-    const score = bboxStability * 0.5 + visMean * 0.5;
-    if (score > bestScore) {
-      bestScore = score;
-      bestSlice = window;
-    }
-  }
-  return bestSlice.length >= 4 ? bestSlice : frames;
 }
 
 function countNoisyFrames(frames: PoseFeaturesFrame[]): number {
@@ -309,11 +272,12 @@ export function assessStepGuardrail(
   const validFrames = featureFrames.filter((frame) => frame.isValid);
   const flags = new Set<CameraGuardrailFlag>();
 
-  const postWarmup = excludeWarmupFrames(validFrames, WARMUP_MS);
-  const qualityFrames =
-    postWarmup.length >= 4
-      ? getBestWindow(postWarmup, BEST_WINDOW_MIN_MS, BEST_WINDOW_MAX_MS)
-      : validFrames;
+  const qualitySelection = selectQualityWindow(validFrames, {
+    warmupMs: WARMUP_MS,
+    minWindowMs: BEST_WINDOW_MIN_MS,
+    maxWindowMs: BEST_WINDOW_MAX_MS,
+  });
+  const qualityFrames = qualitySelection.frames;
 
   const visibleJointsRatio = getVisibleJointsRatio(qualityFrames);
   const averageLandmarkConfidence = getAverageLandmarkConfidence(qualityFrames);
@@ -462,6 +426,13 @@ export function assessStepGuardrail(
       captureDurationMs: Math.round(stats.captureDurationMs),
       metricSufficiency: round(metricSufficiency),
       timestampDiscontinuityCount: stats.timestampDiscontinuityCount,
+      warmupExcludedFrameCount: qualitySelection.warmupExcludedFrameCount,
+      qualityFrameCount: qualitySelection.qualityFrameCount,
+      selectedWindowStartMs: qualitySelection.selectedWindowStartMs,
+      selectedWindowEndMs: qualitySelection.selectedWindowEndMs,
+      selectedWindowScore: qualitySelection.selectedWindowScore === null
+        ? null
+        : round(qualitySelection.selectedWindowScore),
       perStepDiagnostics: evaluatorResult.debug?.perStepDiagnostics,
     },
   };
