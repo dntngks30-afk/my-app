@@ -625,6 +625,13 @@ export default function ResultPage() {
     : (content?.body ?? '6축 점수가 비교적 고르게 분포되어 있어, 현재 균형이 잘 잡혀 있는 편이에요.');
   const resultActions = isCameraMode ? cameraActions : (content ? content.actions : null);
   const resultBodyParagraphs = resultBody.split('\n\n');
+  const cameraSignalNotice = isCameraMode && cameraResult
+    ? cameraResult.captureQuality === 'invalid'
+      ? '촬영 신호가 충분하지 않아 결과를 참고용으로만 보여주고 있어요. 다시 촬영하거나 설문형 테스트로 이어서 확인해 보세요.'
+      : cameraResult.retryRecommended
+        ? '일부 구간 신호가 약해 확인 가능한 범위만 반영되었어요. 다시 촬영하면 더 안정적인 결과를 볼 수 있어요.'
+        : null
+    : null;
   const cuteFontStyle = {
     fontFamily:
       `${cuteFont.style.fontFamily}, Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif`,
@@ -662,6 +669,9 @@ export default function ResultPage() {
                   </p>
                 ))}
               </div>
+              {cameraSignalNotice && (
+                <p className="text-sm text-slate-600 break-keep">{cameraSignalNotice}</p>
+              )}
               {resultActions && (
                 <TypeActionCards
                   actions={resultActions}
@@ -706,6 +716,11 @@ export default function ResultPage() {
                   </p>
                 ))}
               </div>
+              {cameraSignalNotice && (
+                <p className="mt-4 text-sm text-slate-600 whitespace-normal break-keep text-left lg:text-center">
+                  {cameraSignalNotice}
+                </p>
+              )}
               {resultActions && (
                 <TypeActionCards
                   actions={resultActions}

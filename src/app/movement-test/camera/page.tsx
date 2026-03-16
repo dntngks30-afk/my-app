@@ -5,7 +5,8 @@
  */
 import { useRouter } from 'next/navigation';
 import { Starfield } from '@/components/landing/Starfield';
-import { saveCameraTest } from '@/lib/public/camera-test';
+import { resetCameraTest, saveCameraTest } from '@/lib/public/camera-test';
+import { clearCameraResult } from '@/lib/camera/camera-result';
 
 const BG = '#0d161f';
 const ACCENT = '#ff7b00';
@@ -14,7 +15,14 @@ export default function CameraEntryPage() {
   const router = useRouter();
 
   const handleStart = () => {
-    saveCameraTest({ startedAt: new Date().toISOString() });
+    resetCameraTest();
+    clearCameraResult();
+    saveCameraTest({
+      startedAt: new Date().toISOString(),
+      completedSteps: [],
+      evaluatorResults: {},
+      guardrailResults: {},
+    });
     router.push('/movement-test/camera/squat');
   };
 

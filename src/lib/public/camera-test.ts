@@ -3,6 +3,7 @@
  * moveReCameraTest:v1
  */
 import type { EvaluatorResult } from '@/lib/camera/evaluators/types';
+import type { StepGuardrailResult } from '@/lib/camera/guardrails';
 
 export const CAMERA_TEST_KEY = 'moveReCameraTest:v1';
 
@@ -20,6 +21,8 @@ export interface CameraTestData {
   lastStepAt?: string;
   /** step별 evaluator 결과 (normalize 입력) */
   evaluatorResults?: Partial<Record<CameraStepId, EvaluatorResult>>;
+  /** step별 guardrail 결과 (retry / fallback 판단용) */
+  guardrailResults?: Partial<Record<CameraStepId, StepGuardrailResult>>;
 }
 
 export function loadCameraTest(): CameraTestData {
@@ -38,6 +41,15 @@ export function saveCameraTest(data: Partial<CameraTestData>) {
     const current = loadCameraTest();
     const merged = { ...current, ...data };
     localStorage.setItem(CAMERA_TEST_KEY, JSON.stringify(merged));
+  } catch {
+    // ignore
+  }
+}
+
+export function resetCameraTest() {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(CAMERA_TEST_KEY);
   } catch {
     // ignore
   }

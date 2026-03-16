@@ -18,6 +18,7 @@ import {
 } from '@/lib/public/camera-test';
 import { usePoseCapture } from '@/lib/camera/use-pose-capture';
 import { runEvaluator } from '@/lib/camera/run-evaluators';
+import { assessStepGuardrail } from '@/lib/camera/guardrails';
 
 const BG = '#0d161f';
 const ACCENT = '#ff7b00';
@@ -28,7 +29,7 @@ const INSTRUCTION = '한 발로 10초 서세요. 좌우 각각 진행해 주세�
 export default function CameraSingleLegBalancePage() {
   const router = useRouter();
   const [permissionDenied, setPermissionDenied] = useState(false);
-  const { landmarks, start, stop } = usePoseCapture();
+  const { landmarks, stats, start, stop } = usePoseCapture();
   const hasStartedRef = useRef(false);
 
   const handleVideoReady = useCallback(
@@ -44,16 +45,19 @@ export default function CameraSingleLegBalancePage() {
   const handleNext = useCallback(() => {
     stop();
     const result = runEvaluator(STEP_ID, landmarks);
+    const guardrail = assessStepGuardrail(STEP_ID, landmarks, stats, result);
     const current = loadCameraTest();
     const completed = [...(current.completedSteps ?? []), STEP_ID];
     const evaluatorResults = { ...(current.evaluatorResults ?? {}), [STEP_ID]: result };
+    const guardrailResults = { ...(current.guardrailResults ?? {}), [STEP_ID]: guardrail };
     saveCameraTest({
       completedSteps: completed,
       lastStepAt: new Date().toISOString(),
       evaluatorResults,
+      guardrailResults,
     });
     router.push('/movement-test/camera/complete');
-  }, [router, landmarks, stop]);
+  }, [router, landmarks, stats, stop]);
 
   const handleRetry = useCallback(() => {
     setPermissionDenied(false);
