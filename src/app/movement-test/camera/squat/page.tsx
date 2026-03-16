@@ -549,6 +549,13 @@ export default function CameraSquatPage() {
   const overlayGuide = getSquatOverlayGuide(gate.failureReasons, effectiveProgressionState);
   const isPreCapturePhase =
     cameraPhase === 'setup' || cameraPhase === 'arming' || cameraPhase === 'countdown';
+  const isMinimalCapture =
+    cameraPhase === 'capturing' && !showRetryActions;
+  const showDebugPanel =
+    debugEnabled &&
+    (isPreCapturePhase ||
+      showRetryActions ||
+      (typeof window !== 'undefined' && window.location.search.includes('debug=1')));
 
   return (
     <div
@@ -584,26 +591,36 @@ export default function CameraSquatPage() {
       </header>
 
       <main className="relative z-10 flex-1 flex flex-col items-center px-6 py-4 overflow-hidden">
-        <h1
-          className="text-xl font-bold text-slate-100 mb-2 shrink-0"
-          style={{ fontFamily: 'var(--font-sans-noto)' }}
-        >
-          스쿼트
-        </h1>
-        <p
-          className="text-slate-400 text-sm mb-4 text-center break-keep shrink-0"
-          style={{ fontFamily: 'var(--font-sans-noto)' }}
-        >
-          {isPreCapturePhase ? (
-            <>
-              휴대폰을 벽이나 가구에 기대 세워 주세요.
-              <br />
-              머리부터 발끝까지 화면 안에 들어오면 됩니다.
-            </>
-          ) : (
-            INSTRUCTION
-          )}
-        </p>
+        {!isMinimalCapture && (
+          <>
+            <h1
+              className="text-xl font-bold text-slate-100 mb-2 shrink-0"
+              style={{ fontFamily: 'var(--font-sans-noto)' }}
+            >
+              스쿼트
+            </h1>
+            <p
+              className="text-slate-400 text-sm mb-4 text-center break-keep shrink-0"
+              style={{ fontFamily: 'var(--font-sans-noto)' }}
+            >
+              {cameraPhase === 'setup' ? (
+                <>
+                  휴대폰을 벽이나 가구에 기대 세워 주세요.
+                  <br />
+                  머리부터 발끝까지 화면 안에 들어오면 됩니다.
+                  <br />
+                  <span className="text-slate-300 mt-1 block">{INSTRUCTION}</span>
+                </>
+              ) : cameraPhase === 'arming' ? (
+                '준비 중...'
+              ) : cameraPhase === 'countdown' ? (
+                ''
+              ) : (
+                '위치를 다시 맞춰 주세요'
+              )}
+            </p>
+          </>
+        )}
 
         {permissionDenied ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-4 w-full max-w-md">
@@ -640,13 +657,14 @@ export default function CameraSquatPage() {
                 onPoseFrame={pushFrame}
                 onError={handleCameraError}
                 guideTone={isPreCapturePhase ? 'neutral' : guideTone}
-                guideHint={isPreCapturePhase ? null : overlayGuide.hint}
-                guideFocus={isPreCapturePhase ? null : overlayGuide.focus}
-                guideAnimated={isPreCapturePhase ? false : overlayGuide.animated}
+                guideHint={isMinimalCapture ? null : isPreCapturePhase ? null : overlayGuide.hint}
+                guideFocus={isMinimalCapture ? null : isPreCapturePhase ? null : overlayGuide.focus}
+                guideAnimated={isMinimalCapture ? false : isPreCapturePhase ? false : overlayGuide.animated}
                 guideVariant="default"
-                guideBadges={isPreCapturePhase ? ['전신', '1.8~2m 거리', '폰 낮게'] : setupGuide.badges}
-                guideInstructions={isPreCapturePhase ? undefined : setupGuide.instructions}
-                guideReadinessLabel={isPreCapturePhase ? undefined : setupGuide.readinessLabel}
+                guideBadges={isMinimalCapture ? [] : cameraPhase === 'setup' ? ['전신', '1.8~2m 거리', '폰 낮게'] : []}
+                guideInstructions={cameraPhase === 'setup' ? setupGuide.instructions : undefined}
+                guideReadinessLabel={cameraPhase === 'setup' ? setupGuide.readinessLabel : null}
+                minimalCaptureMode={isMinimalCapture}
                 className="w-full"
               />
               {cameraPhase === 'countdown' && countdownValue > 0 && (
@@ -663,6 +681,7 @@ export default function CameraSquatPage() {
                 </div>
               )}
             </div>
+            {!isMinimalCapture && (
             <div className="w-full max-w-md mt-4 space-y-3 shrink-0">
               {isPreCapturePhase ? (
                 <div className="space-y-3">
@@ -686,6 +705,25 @@ export default function CameraSquatPage() {
                       준비됐어요
                     </button>
                   )}
+                </div>
+              ) : showRetryActions ? (
+                <div className="flex flex-col gap-3">
+                  <button
+                    type="button"
+                    onClick={handleRetry}
+                    className="w-full min-h-[48px] rounded-xl font-bold text-slate-900 bg-white hover:bg-slate-100 transition-colors"
+                    style={{ fontFamily: 'var(--font-sans-noto)' }}
+                  >
+                    다시 해주세요
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSurveyFallback}
+                    className="w-full min-h-[48px] rounded-xl font-medium text-slate-300 border border-white/20 hover:bg-white/5"
+                    style={{ fontFamily: 'var(--font-sans-noto)' }}
+                  >
+                    설문형으로 전환
+                  </button>
                 </div>
               ) : (
                 <>
@@ -725,7 +763,7 @@ export default function CameraSquatPage() {
                 )}
               </div>
 
-              {debugEnabled && (
+              {showDebugPanel && (
                 <div className="rounded-2xl border border-amber-500/20 bg-black/30 p-4 text-left">
                   <p className="text-xs text-amber-200" style={{ fontFamily: 'var(--font-sans-noto)' }}>
                     squat debug
@@ -784,28 +822,7 @@ export default function CameraSquatPage() {
                 </div>
               )}
 
-              {showRetryActions && (
-                <div className="flex flex-col gap-3">
-                  <button
-                    type="button"
-                    onClick={handleRetry}
-                    className="w-full min-h-[48px] rounded-xl font-bold text-slate-900 bg-white hover:bg-slate-100 transition-colors"
-                    style={{ fontFamily: 'var(--font-sans-noto)' }}
-                  >
-                    다시 해주세요
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSurveyFallback}
-                    className="w-full min-h-[48px] rounded-xl font-medium text-slate-300 border border-white/20 hover:bg-white/5"
-                    style={{ fontFamily: 'var(--font-sans-noto)' }}
-                  >
-                    설문형으로 전환
-                  </button>
-                </div>
-              )}
-
-              {IS_DEV && !advanceLockRef.current && (
+              {!showRetryActions && IS_DEV && !advanceLockRef.current && (
                 <button
                   type="button"
                   onClick={handleDevOverride}
@@ -818,6 +835,7 @@ export default function CameraSquatPage() {
           </>
         )}
             </div>
+            )}
           </>
         )}
       </main>

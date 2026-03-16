@@ -54,5 +54,11 @@ ok('AT4c: single-leg-balance not in CAMERA_STEPS', !CAMERA_STEPS.some((s) => s.i
 ok('AT5a: entry->squat path is squat', CAMERA_SQUAT_PATH === '/movement-test/camera/squat');
 ok('AT5b: squat prev is entry not setup', getPrevStepPath('squat') === '/movement-test/camera');
 
+// AT6: PR-CAM-UX-02 capture stripdown (silhouette palette)
+const { getCameraGuideTone } = await import('../src/lib/camera/auto-progression.ts');
+ok('AT6a: guideTone success maps to green', getCameraGuideTone({ status: 'pass', progressionState: 'passed', nextAllowed: true, completionSatisfied: true, passConfirmationSatisfied: true }) === 'success');
+ok('AT6b: guideTone retry maps to warning', getCameraGuideTone({ status: 'retry', progressionState: 'retry_required', nextAllowed: false, completionSatisfied: false, passConfirmationSatisfied: false }) === 'warning');
+ok('AT6c: guideTone neutral for detecting', getCameraGuideTone({ status: 'detecting', progressionState: 'detecting', nextAllowed: false, completionSatisfied: false, passConfirmationSatisfied: false }) === 'neutral');
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

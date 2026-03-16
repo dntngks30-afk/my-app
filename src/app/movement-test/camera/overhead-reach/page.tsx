@@ -540,6 +540,11 @@ export default function CameraOverheadReachPage() {
     progressionState === 'retry_required' ||
     progressionState === 'failed' ||
     progressionState === 'insufficient_signal';
+  const isMinimalCapture = !showRetryActions;
+  const showDebugPanel =
+    debugEnabled &&
+    (showRetryActions ||
+      (typeof window !== 'undefined' && window.location.search.includes('debug=1')));
   const setupGuide = useMemo(() => getMovementSetupGuide(STEP_ID, gate), [gate]);
   const preCaptureGuidance = useMemo(
     () => getPreCaptureGuidance(STEP_ID, gate, stats.sampledFrameCount),
@@ -606,18 +611,22 @@ export default function CameraOverheadReachPage() {
       </header>
 
       <main className="relative z-10 flex-1 flex flex-col items-center px-6 py-4 overflow-hidden">
-        <h1
-          className="text-xl font-bold text-slate-100 mb-2"
-          style={{ fontFamily: 'var(--font-sans-noto)' }}
-        >
-          오버헤드 리치
-        </h1>
-        <p
-          className="text-slate-400 text-sm mb-4 text-center break-keep"
-          style={{ fontFamily: 'var(--font-sans-noto)' }}
-        >
-          {INSTRUCTION}
-        </p>
+        {!isMinimalCapture && (
+          <>
+            <h1
+              className="text-xl font-bold text-slate-100 mb-2"
+              style={{ fontFamily: 'var(--font-sans-noto)' }}
+            >
+              오버헤드 리치
+            </h1>
+            <p
+              className="text-slate-400 text-sm mb-4 text-center break-keep"
+              style={{ fontFamily: 'var(--font-sans-noto)' }}
+            >
+              위치를 다시 맞춰 주세요
+            </p>
+          </>
+        )}
 
         {permissionDenied ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-4 w-full max-w-md">
@@ -654,54 +663,38 @@ export default function CameraOverheadReachPage() {
                 onPoseFrame={pushFrame}
                 onError={handleCameraError}
                 guideTone={guideTone}
-                guideHint={overlayGuide.hint}
-                guideFocus={overlayGuide.focus}
-                guideAnimated={overlayGuide.animated}
+                guideHint={isMinimalCapture ? null : overlayGuide.hint}
+                guideFocus={isMinimalCapture ? null : overlayGuide.focus}
+                guideAnimated={isMinimalCapture ? false : overlayGuide.animated}
                 guideVariant="overhead-reach"
-                guideBadges={setupGuide.badges}
-                guideInstructions={setupGuide.instructions}
-                guideReadinessLabel={setupGuide.readinessLabel}
+                guideBadges={[]}
+                guideInstructions={undefined}
+                guideReadinessLabel={null}
+                minimalCaptureMode={isMinimalCapture}
                 className="w-full"
               />
             </div>
+            {!isMinimalCapture && (
             <div className="w-full max-w-md mt-4 space-y-3">
-              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-center">
-                <p
-                  className="text-sm text-slate-200"
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  className="w-full min-h-[48px] rounded-xl font-bold text-slate-900 bg-white hover:bg-slate-100 transition-colors"
                   style={{ fontFamily: 'var(--font-sans-noto)' }}
                 >
-                  {statusMessage}
-                </p>
-                {showPreCaptureHint && (
-                  <p
-                    className="mt-1 text-xs text-slate-400 break-keep"
-                    style={{ fontFamily: 'var(--font-sans-noto)' }}
-                  >
-                    {preCaptureGuidance.primary}
-                  </p>
-                )}
-                {visibleUserGuidance.length > 0 && (
-                  <div
-                    className="mt-2 space-y-1 text-xs text-slate-400 break-keep"
-                    style={{ fontFamily: 'var(--font-sans-noto)' }}
-                  >
-                    {visibleUserGuidance.map((message) => (
-                      <p key={message}>{message}</p>
-                    ))}
-                  </div>
-                )}
-                {IS_DEV && (
-                  <p
-                    className="mt-2 text-[11px] text-slate-500 break-all"
-                    style={{ fontFamily: 'var(--font-sans-noto)' }}
-                  >
-                    state={progressionState}, gate={gate.status}, confidence={gate.confidence},
-                    quality={gate.guardrail.captureQuality}
-                  </p>
-                )}
+                  다시 해주세요
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSurveyFallback}
+                  className="w-full min-h-[48px] rounded-xl font-medium text-slate-300 border border-white/20 hover:bg-white/5"
+                  style={{ fontFamily: 'var(--font-sans-noto)' }}
+                >
+                  설문형으로 전환
+                </button>
               </div>
-
-              {debugEnabled && (
+              {showDebugPanel && (
                 <div className="rounded-2xl border border-amber-500/20 bg-black/30 p-4 text-left">
                   <p className="text-xs text-amber-200" style={{ fontFamily: 'var(--font-sans-noto)' }}>
                     overhead reach debug
@@ -746,39 +739,8 @@ export default function CameraOverheadReachPage() {
                   <TraceDebugPanel />
                 </div>
               )}
-
-              {showRetryActions && (
-                <div className="flex flex-col gap-3">
-                  <button
-                    type="button"
-                    onClick={handleRetry}
-                    className="w-full min-h-[48px] rounded-xl font-bold text-slate-900 bg-white hover:bg-slate-100 transition-colors"
-                    style={{ fontFamily: 'var(--font-sans-noto)' }}
-                  >
-                    다시 해주세요
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSurveyFallback}
-                    className="w-full min-h-[48px] rounded-xl font-medium text-slate-300 border border-white/20 hover:bg-white/5"
-                    style={{ fontFamily: 'var(--font-sans-noto)' }}
-                  >
-                    설문형으로 전환
-                  </button>
-                </div>
-              )}
-
-              {IS_DEV && !advanceLockRef.current && (
-                <button
-                  type="button"
-                  onClick={handleDevOverride}
-                  className="w-full min-h-[44px] rounded-xl border border-amber-500/30 text-amber-200 hover:bg-amber-500/10 transition-colors"
-                  style={{ fontFamily: 'var(--font-sans-noto)' }}
-                >
-                  강제 다음
-                </button>
-              )}
             </div>
+            )}
           </>
         )}
       </main>

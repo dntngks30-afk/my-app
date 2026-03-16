@@ -46,6 +46,8 @@ interface CameraPreviewProps {
   guideInstructions?: string[];
   /** 간단한 준비 상태 힌트 */
   guideReadinessLabel?: string | null;
+  /** PR-CAM-UX-02: 캡처 중 클러터 숨김 (배지/힌트/가이드/개발 오버레이) */
+  minimalCaptureMode?: boolean;
   className?: string;
 }
 
@@ -266,6 +268,7 @@ export function CameraPreview({
   guideBadges = [],
   guideInstructions = [],
   guideReadinessLabel = null,
+  minimalCaptureMode = false,
   className = '',
 }: CameraPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -521,8 +524,11 @@ export function CameraPreview({
 
   const showLoading = status === 'requesting' || status === 'binding';
   const guidePalette = getGuidePalette(guideTone);
-  const showGuideBadge = Boolean(guideHint) && status === 'ready';
-  const showStaticGuide = status === 'ready' && (guideBadges.length > 0 || guideInstructions.length > 0);
+  const showGuideBadge =
+    !minimalCaptureMode && Boolean(guideHint) && status === 'ready';
+  const showStaticGuide =
+    !minimalCaptureMode && status === 'ready' && (guideBadges.length > 0 || guideInstructions.length > 0);
+  const showFocusOverlay = !minimalCaptureMode && Boolean(guideFocus);
 
   return (
     <div
@@ -553,7 +559,7 @@ export function CameraPreview({
         className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center"
         aria-hidden
       >
-        {guideFocus && (
+        {showFocusOverlay && guideFocus && (
           <div
             className={`absolute rounded-[2rem] border-2 ${
               guideAnimated ? 'animate-pulse' : ''
@@ -654,7 +660,7 @@ export function CameraPreview({
           )}
         </div>
       )}
-      {status === 'ready' && guideReadinessLabel && (
+      {!minimalCaptureMode && status === 'ready' && guideReadinessLabel && (
         <div className="absolute left-1/2 top-14 z-45 -translate-x-1/2 pointer-events-none">
           <div className="rounded-full border border-emerald-400/20 bg-emerald-500/15 px-3 py-1 text-[11px] font-medium text-emerald-100 backdrop-blur-sm">
             {guideReadinessLabel}
@@ -675,7 +681,7 @@ export function CameraPreview({
           </div>
         </div>
       )}
-      {process.env.NODE_ENV !== 'production' && (
+      {!minimalCaptureMode && process.env.NODE_ENV !== 'production' && (
         <div className="absolute bottom-2 left-2 z-40 rounded bg-black/50 px-2 py-1 text-[10px] text-white pointer-events-none">
           {status} / pose:{poseStatus}
         </div>
