@@ -1,81 +1,30 @@
 'use client';
 
 /**
- * movement-test survey 페이지 (PR3-3)
- * QUESTIONS_V2 18문항을 축별 6단계 위저드로 진행 → result
+ * movement-test survey 페이지
+ * 18문항 1문항씩 full-screen, 원형 5개 탭 시 즉시 저장 후 자동 다음
+ * QUESTIONS_V2/answersById/movementTestSession:v2 계약 유지
  */
 import { useRouter } from 'next/navigation';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { ChevronLeft } from 'lucide-react';
 import {
   QUESTIONS_V2,
   ANSWER_CHOICES_V2,
   calculateScoresV2,
 } from '@/features/movement-test/v2';
-import { NeoButton, NeoCard, NeoPageLayout } from '@/components/neobrutalism';
+import { Starfield } from '@/components/landing/Starfield';
 import type { AnimalAxis } from '@/features/movement-test/v2';
 import type { TestAnswerValue } from '@/features/movement-test/v2';
 
-/** 설문 답변 값: 0(전혀 아니다) ~ 4(거의 항상). 미선택은 undefined */
 type AnswerValue = 0 | 1 | 2 | 3 | 4;
 type AnswersById = Record<string, AnswerValue | undefined>;
 
 const KEY = 'movementTestSession:v2';
-
-const AXIS_ORDER: AnimalAxis[] = [
-  'turtle',
-  'hedgehog',
-  'kangaroo',
-  'penguin',
-  'crab',
-  'meerkat',
-];
-
-const DOMAIN_TO_AXIS: Record<string, AnimalAxis> = {
-  A: 'turtle',
-  B: 'hedgehog',
-  C: 'kangaroo',
-  D: 'penguin',
-  F: 'crab',
-  G: 'meerkat',
-};
-
-/** id에서 도메인·슬롯 추출 (v2_A1 -> { domain: 'A', slot: 1 }) */
-function parseQuestionId(id: string): { domain: string; slot: number } {
-  const match = id.match(/^v2_([A-Z])(\d)$/);
-  if (!match) return { domain: '', slot: 0 };
-  return { domain: match[1]!, slot: parseInt(match[2]!, 10) };
-}
-
-/** 축별로 묶고, 축 내부는 q1→q2→q3 정렬 */
-function groupQuestionsByAxis() {
-  const byAxis = new Map<AnimalAxis, Array<{ id: string; text: string }>>();
-  for (const q of QUESTIONS_V2) {
-    const { domain, slot } = parseQuestionId(q.id);
-    const axis = DOMAIN_TO_AXIS[domain];
-    if (!axis) continue;
-    if (!byAxis.has(axis)) byAxis.set(axis, []);
-    byAxis.get(axis)!.push({ id: q.id, text: q.text });
-  }
-  for (const arr of byAxis.values()) {
-    arr.sort((a, b) => {
-      const slotA = parseQuestionId(a.id).slot;
-      const slotB = parseQuestionId(b.id).slot;
-      return slotA - slotB;
-    });
-  }
-  return AXIS_ORDER.map((axis) => ({
-    axis,
-    questions: byAxis.get(axis) ?? [],
-  })).filter((g) => g.questions.length > 0);
-}
-
-const GROUPS = groupQuestionsByAxis();
-
-interface SelfTestSession {
-  isCompleted: boolean;
-  answersById: Record<string, 0 | 1 | 2 | 3 | 4>;
-  completedAt?: string;
-}
+const BG = '#0d161f';
+const ACCENT = '#ff7b00';
+const TOTAL = QUESTIONS_V2.length;
+const AUTO_ADVANCE_MS = 200;
 
 interface SessionV2 {
   version: 'v2';
@@ -84,26 +33,16 @@ interface SessionV2 {
   completedAt?: string;
   profile?: Record<string, unknown>;
   answersById: Record<string, TestAnswerValue>;
-  selfTest?: SelfTestSession;
-  finalType?:
-    | AnimalAxis
-    | 'armadillo'
-    | 'sloth'
-    | 'monkey';
+  selfTest?: { isCompleted: boolean; answersById: Record<string, 0 | 1 | 2 | 3 | 4> };
+  finalType?: AnimalAxis | 'armadillo' | 'sloth' | 'monkey';
 }
 
-/** 저장된 answersById를 로드. 누락된 문항은 채우지 않음.
- * - isCompleted: true → 이전 테스트 결과. 새 테스트 시작이므로 answersById는 빈 객체.
- * - 전체 0이면 prefilled로 간주해 무시.
- */
 function loadSession(): SessionV2 | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (data?.version !== 'v2') return null;
-
-    // [원인] 완료된 세션(isCompleted: true)은 "다시 테스트" 시 이전 답변이 그대로 복원되어 체크된 것처럼 보임 → 복원하지 않음
     if (data?.isCompleted === true) {
       return {
         version: 'v2',
@@ -116,7 +55,6 @@ function loadSession(): SessionV2 | null {
         finalType: data.finalType,
       };
     }
-
     const rawById = data.answersById ?? {};
     const answersById: Record<string, TestAnswerValue> = {};
     let allZeros = true;
@@ -160,9 +98,7 @@ function getAxisSummary(answersById: Record<string, TestAnswerValue>) {
     axis: axis as AnimalAxis,
     score: normalizePercent(score),
   }));
-  const avg =
-    axisEntries.reduce((sum, item) => sum + item.score, 0) /
-    axisEntries.length;
+  const avg = axisEntries.reduce((sum, item) => sum + item.score, 0) / axisEntries.length;
   const sorted = [...axisEntries].sort((a, b) => b.score - a.score);
   return {
     avg,
@@ -171,16 +107,13 @@ function getAxisSummary(answersById: Record<string, TestAnswerValue>) {
   };
 }
 
-const SCALE_VALUES = [0, 1, 2, 3, 4] as const;
-/** 모바일 축소 후 크기: base 36/30/24, sm 40/34/28, md+ 44/36/28 */
-/** 터치 영역 최소 44px (min-w-11), 시각적 크기는 sm/md에서 확대 */
-const SCALE_SIZE_CLASS: Record<number, string> = {
-  0: 'min-w-11 min-h-11 w-11 h-11 sm:w-10 sm:h-10 md:w-11 md:h-11',
-  1: 'min-w-11 min-h-11 w-11 h-11 sm:w-9 sm:h-9 md:w-9 md:h-9',
-  2: 'min-w-11 min-h-11 w-11 h-11 sm:w-8 sm:h-8 md:w-7 md:h-7',
-  3: 'min-w-11 min-h-11 w-11 h-11 sm:w-9 sm:h-9 md:w-9 md:h-9',
-  4: 'min-w-11 min-h-11 w-11 h-11 sm:w-10 sm:h-10 md:w-11 md:h-11',
-};
+/** 첫 미응답 문항 인덱스. 모두 응답 시 TOTAL 반환 */
+function getFirstUnansweredIndex(answersById: AnswersById): number {
+  for (let i = 0; i < TOTAL; i++) {
+    if (answersById[QUESTIONS_V2[i].id] === undefined) return i;
+  }
+  return TOTAL;
+}
 
 export default function MovementTestSurveyPage() {
   const router = useRouter();
@@ -188,73 +121,56 @@ export default function MovementTestSurveyPage() {
   const [answersById, setAnswersById] = useState<AnswersById>({});
   const [ready, setReady] = useState(false);
   const [showSelfTestModal, setShowSelfTestModal] = useState(false);
+  const isTransitioningRef = useRef(false);
 
-  // 재진입/뒤로가기/BFCache 포함, 항상 새 테스트 상태로 시작
-  const resetTestState = useCallback(() => {
+  const initFromSession = useCallback(() => {
     const current = loadSession();
-    const fresh: SessionV2 = {
-      version: 'v2',
-      isCompleted: false,
-      startedAt: new Date().toISOString(),
-      profile: current?.profile ?? {},
-      answersById: {},
-      selfTest: undefined,
-    };
-    try {
-      localStorage.removeItem(KEY);
-      sessionStorage.removeItem(KEY);
-    } catch {
-      // ignore
+    if (current?.isCompleted === true) {
+      const fresh: SessionV2 = {
+        version: 'v2',
+        isCompleted: false,
+        startedAt: new Date().toISOString(),
+        profile: current.profile ?? {},
+        answersById: {},
+        selfTest: undefined,
+      };
+      saveSession(fresh);
+      setStep(0);
+      setAnswersById({});
+    } else if (current?.answersById && Object.keys(current.answersById).length > 0) {
+      setAnswersById(current.answersById as AnswersById);
+      const idx = getFirstUnansweredIndex(current.answersById as AnswersById);
+      setStep(Math.min(idx, TOTAL - 1));
+    } else {
+      const fresh: SessionV2 = {
+        version: 'v2',
+        isCompleted: false,
+        startedAt: new Date().toISOString(),
+        profile: current?.profile ?? {},
+        answersById: {},
+        selfTest: undefined,
+      };
+      saveSession(fresh);
+      setStep(0);
+      setAnswersById({});
     }
-    saveSession(fresh);
-    setStep(0);
-    setAnswersById({});
-    setShowSelfTestModal(false);
+    setReady(true);
   }, []);
 
   useEffect(() => {
-    resetTestState();
-    setReady(true);
-  }, [resetTestState]);
+    initFromSession();
+  }, [initFromSession]);
 
   useEffect(() => {
     const onPageShow = (event: PageTransitionEvent) => {
-      const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
-      const isBackForward = navEntries[0]?.type === 'back_forward';
-      if (event.persisted || isBackForward) {
-        resetTestState();
-        setReady(true);
-      }
+      if (event.persisted) initFromSession();
     };
     window.addEventListener('pageshow', onPageShow);
     return () => window.removeEventListener('pageshow', onPageShow);
-  }, [resetTestState]);
+  }, [initFromSession]);
 
-  useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
-  }, [step]);
-
-  useEffect(() => {
-    if (!showSelfTestModal) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [showSelfTestModal]);
-
-  useEffect(() => {
-    if (!showSelfTestModal) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowSelfTestModal(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [showSelfTestModal]);
-
-  const group = GROUPS[step];
-  const questionIds = group?.questions.map((q) => q.id) ?? [];
-  const allAnswered =
-    questionIds.length > 0 &&
-    questionIds.every((id) => answersById[id] !== undefined);
+  const question = QUESTIONS_V2[step];
+  const currentAnswer = question ? answersById[question.id] : undefined;
 
   const persist = useCallback(
     (updates: Partial<SessionV2>) => {
@@ -266,6 +182,8 @@ export default function MovementTestSurveyPage() {
         completedAt: current?.completedAt,
         profile: current?.profile ?? {},
         answersById: { ...(current?.answersById ?? {}), ...answersById },
+        selfTest: current?.selfTest,
+        finalType: current?.finalType,
         ...updates,
       };
       saveSession(merged);
@@ -273,53 +191,59 @@ export default function MovementTestSurveyPage() {
     [answersById]
   );
 
-  const handleAnswer = useCallback(
-    (questionId: string, value: TestAnswerValue) => {
-      const next: AnswersById = { ...answersById, [questionId]: value };
-      setAnswersById(next);
-      persist({ answersById: next });
+  const advanceOrComplete = useCallback(
+    (next: Record<string, TestAnswerValue>) => {
+      if (step >= TOTAL - 1) {
+        const { avg, topScore } = getAxisSummary(next);
+        if (avg >= 35 && avg <= 49) {
+          setShowSelfTestModal(true);
+          return;
+        }
+        const s = loadSession();
+        const final: SessionV2 = {
+          version: 'v2',
+          isCompleted: true,
+          startedAt: s?.startedAt ?? new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          profile: s?.profile ?? {},
+          answersById: next,
+          selfTest: s?.selfTest,
+          finalType: topScore <= 30 ? 'monkey' : undefined,
+        };
+        saveSession(final);
+        router.push('/movement-test/result');
+      } else {
+        setStep((s) => s + 1);
+      }
     },
-    [answersById, persist]
+    [step, router]
   );
 
-  const handleNext = useCallback(() => {
-    if (!allAnswered) return;
-    const next = { ...answersById } as Record<string, TestAnswerValue>;
-    persist({ answersById: next });
+  const handleAnswer = useCallback(
+    (value: TestAnswerValue) => {
+      if (!question || isTransitioningRef.current) return;
+      isTransitioningRef.current = true;
 
-    if (step >= GROUPS.length - 1) {
-      const { avg, topScore } = getAxisSummary(next);
-      // 자가테스트 팝업: 6축 평균 35~49(포함)일 때만 노출
-      if (avg >= 35 && avg <= 49) {
-        setShowSelfTestModal(true);
-        return;
-      }
+      const next: AnswersById = { ...answersById, [question.id]: value };
+      setAnswersById(next);
+      persist({ answersById: next });
 
-      // 전역 안전장치: Top1<=30이면 monkey 확정(자가테스트 완료 오버라이드 없음)
-      const s = loadSession();
-      const final: SessionV2 = {
-        version: 'v2',
-        isCompleted: true,
-        startedAt: s?.startedAt ?? new Date().toISOString(),
-        completedAt: new Date().toISOString(),
-        profile: s?.profile ?? {},
-        answersById: next,
-        selfTest: s?.selfTest,
-        finalType: topScore <= 30 ? 'monkey' : undefined,
-      };
-      saveSession(final);
-      router.push('/movement-test/result');
-    } else {
-      setStep((s) => s + 1);
-      window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
-    }
-  }, [allAnswered, answersById, step, persist, router]);
+      setTimeout(() => {
+        advanceOrComplete(next as Record<string, TestAnswerValue>);
+        isTransitioningRef.current = false;
+      }, AUTO_ADVANCE_MS);
+    },
+    [question, answersById, persist, advanceOrComplete]
+  );
+
+  const handlePrev = useCallback(() => {
+    if (step > 0 && !isTransitioningRef.current) setStep((s) => s - 1);
+  }, [step]);
 
   const handleSkipToResult = useCallback(() => {
     const next = { ...answersById } as Record<string, TestAnswerValue>;
     const s = loadSession();
     const { topAxis, topScore } = getAxisSummary(next);
-    // 팝업 건너뛰기 확정: Top1<=30 → monkey, 아니면 Top1 축 타입
     const finalType: SessionV2['finalType'] = topScore <= 30 ? 'monkey' : topAxis;
     const final: SessionV2 = {
       version: 'v2',
@@ -353,145 +277,139 @@ export default function MovementTestSurveyPage() {
     router.push('/movement-test/self-test');
   }, [answersById, router]);
 
-  if (!ready) {
+  useEffect(() => {
+    if (!showSelfTestModal) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [showSelfTestModal]);
+
+  useEffect(() => {
+    if (!showSelfTestModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowSelfTestModal(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showSelfTestModal]);
+
+  if (!ready || !question) {
     return (
-      <div className="min-h-screen bg-[var(--bg)] flex items-center justify-center">
-        <p className="text-[var(--muted)]">로딩 중...</p>
+      <div
+        className="min-h-[100svh] flex items-center justify-center"
+        style={{ backgroundColor: BG }}
+      >
+        <p className="text-slate-400 text-sm">로딩 중...</p>
       </div>
     );
   }
 
-  if (!group) {
-    router.push('/movement-test/result');
-    return null;
-  }
-
   return (
-    <NeoPageLayout maxWidth="lg">
-      {/* Hero */}
-      <section className="py-10 sm:py-12 md:py-16 text-center">
-        <h1
-          className="text-3xl sm:text-4xl md:text-5xl font-bold text-slate-800 mb-2"
-          style={{ fontFamily: 'var(--font-display)' }}
-        >
-          무료 움직임 테스트
-        </h1>
-        <p className="text-sm sm:text-base text-slate-600 whitespace-normal break-keep">
-          아래 문장에 얼마나 해당하는지 선택해주세요
-        </p>
-      </section>
+    <div
+      className="relative min-h-[100svh] overflow-hidden flex flex-col"
+      style={{ backgroundColor: BG }}
+    >
+      <Starfield />
 
-      {/* 카드: 진행 + 질문 */}
-      <section className="pb-10 sm:pb-12">
-        <NeoCard className="p-4 sm:p-6 md:p-8">
-          <p className="text-slate-600 text-xs sm:text-sm mb-4 md:mb-6">
-            STEP {step + 1} / 6
+      {/* 상단: 이전 + 진행 */}
+      <header className="relative z-20 flex items-center justify-between px-4 pt-4 pb-2">
+        <div className="w-12">
+          {step > 0 ? (
+            <button
+              type="button"
+              onClick={handlePrev}
+              className="inline-flex items-center justify-center size-10 rounded-full hover:bg-white/10 transition-colors min-h-[44px] min-w-[44px]"
+              aria-label="이전"
+            >
+              <ChevronLeft className="size-6" style={{ color: ACCENT }} />
+            </button>
+          ) : (
+            <span />
+          )}
+        </div>
+        <p className="text-slate-400 text-sm" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+          {step + 1} / {TOTAL}
+        </p>
+        <div className="w-12" />
+      </header>
+
+      {/* 진행 바 */}
+      <div className="relative z-20 px-4 pb-2">
+        <div className="h-0.5 w-full rounded-full bg-white/10 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-300"
+            style={{
+              width: `${((step + 1) / TOTAL) * 100}%`,
+              backgroundColor: ACCENT,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* 질문 + 선택 */}
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-6">
+        <div
+          key={step}
+          className="w-full max-w-md space-y-8 animate-in fade-in"
+        >
+          <p
+            className="text-lg sm:text-xl text-slate-100 leading-relaxed break-keep"
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
+          >
+            {question.text}
           </p>
 
-          <div className="space-y-6 md:space-y-8 overflow-x-hidden">
-            {group.questions.map((q) => (
-              <div key={q.id}>
-                <p className="text-base sm:text-lg text-slate-800 font-medium mb-4 leading-relaxed whitespace-normal break-keep">
-                  {q.text}
-                </p>
-                <div className="flex flex-col items-center gap-2">
-                  <div
-                    className="flex items-center justify-between text-xs text-slate-600 w-full md:hidden whitespace-normal break-keep"
-                        aria-hidden
-                      >
-                        <span>전혀 아니다</span>
-                        <span>거의 항상</span>
-                      </div>
-                      {/* 스케일 행 */}
-                      <div className="flex items-center gap-2 sm:gap-3 md:gap-4 w-full min-w-0">
-                        <span className="hidden md:block text-sm text-slate-600 shrink-0 whitespace-normal break-keep">
-                          전혀 아니다
-                        </span>
-                        <div className="flex-1 flex items-center justify-center min-w-0">
-                          <div
-                            className="flex items-center justify-between w-full max-w-[320px] sm:max-w-[360px] md:max-w-[420px] gap-1 sm:gap-2"
-                            role="group"
-                            aria-label="응답 선택"
-                          >
-                            {SCALE_VALUES.map((value) => {
-                              const selected = answersById[q.id] === value;
-                              const sizeClass =
-                                SCALE_SIZE_CLASS[value] ?? 'w-7 h-7';
-                              const label =
-                                ANSWER_CHOICES_V2.find(
-                                  (c) => c.value === value
-                                )?.label ?? '';
-                              return (
-                                <button
-                                  key={value}
-                                  type="button"
-                                  onClick={() =>
-                                    handleAnswer(
-                                      q.id,
-                                      value as TestAnswerValue
-                                    )
-                                  }
-                                  aria-label={`${value} (${label})`}
-                                  aria-pressed={selected}
-                                  className={`
-                                    rounded-full transition-all shrink-0
-                                    flex items-center justify-center
-                                    focus:outline-none focus:ring-2 focus:ring-orange-400
-                                    hover:border-orange-400
-                                    ${sizeClass}
-                                    ${
-                                      selected
-                                        ? 'border-2 border-slate-900 bg-orange-400'
-                                        : 'border-2 border-slate-900 bg-white shadow-[2px_2px_0_0_rgba(15,23,42,1)]'
-                                    }
-                                  `}
-                                >
-                                  {selected && value === 2 ? (
-                                    <span
-                                      className="rounded-full bg-white"
-                                      style={{ width: 8, height: 8 }}
-                                    />
-                                  ) : selected && value !== 2 ? (
-                                    <span
-                                      className="rounded-full bg-white opacity-90"
-                                      style={{ width: 10, height: 10 }}
-                                    />
-                                  ) : null}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                        <span className="hidden md:block text-sm text-slate-600 shrink-0 whitespace-normal break-keep">
-                          거의 항상
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-          <div className="mt-6 md:mt-8 text-center">
-            <NeoButton
-              variant={allAnswered ? 'orange' : 'secondary'}
-              disabled={!allAnswered}
-              className="w-full sm:w-auto min-h-[44px] px-8 py-4"
-              onClick={handleNext}
+          <div className="flex flex-col items-center gap-4">
+            <div
+              className="flex items-center justify-center gap-2 sm:gap-3 w-full min-w-0"
+              role="group"
+              aria-label="응답 선택"
             >
-              {step >= GROUPS.length - 1 ? '결과 보기' : '다음'}
-            </NeoButton>
+              {ANSWER_CHOICES_V2.map((choice) => {
+                const selected = currentAnswer === choice.value;
+                const label = choice.label;
+                return (
+                  <button
+                    key={choice.value}
+                    type="button"
+                    onClick={() => handleAnswer(choice.value)}
+                    aria-label={label}
+                    aria-pressed={selected}
+                    className={`
+                      shrink-0 min-w-[44px] min-h-[44px] w-11 h-11 sm:w-12 sm:h-12 rounded-full
+                      flex items-center justify-center transition-all duration-150
+                      focus:outline-none focus:ring-2 focus:ring-[#ff7b00] focus:ring-offset-2 focus:ring-offset-[#0d161f]
+                      ${selected
+                        ? 'border-2 border-[#ff7b00] bg-[#ff7b00]/30'
+                        : 'border-2 border-white/20 bg-white/5 hover:border-white/30 hover:bg-white/10'
+                      }
+                    `}
+                  >
+                    {selected && (
+                      <span
+                        className="rounded-full bg-white"
+                        style={{ width: choice.value === 2 ? 8 : 10, height: choice.value === 2 ? 8 : 10 }}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-slate-500 text-xs" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+              전혀 아니다 ← → 거의 항상
+            </p>
           </div>
-        </NeoCard>
-      </section>
+        </div>
+      </main>
 
-      {/* 자가테스트 안내 모달 */}
+      {/* 자가테스트 모달 */}
       {showSelfTestModal && (
         <>
           <div
             role="button"
             tabIndex={0}
             aria-label="닫기"
-            className="fixed inset-0 bg-black/40 z-40"
+            className="fixed inset-0 bg-black/50 z-40"
             onClick={() => setShowSelfTestModal(false)}
             onKeyDown={(e) => e.key === 'Enter' && setShowSelfTestModal(false)}
           />
@@ -501,27 +419,44 @@ export default function MovementTestSurveyPage() {
             aria-labelledby="self-test-modal-title"
           >
             <div
-              className="w-full max-w-md mx-auto rounded-2xl border-2 border-slate-900 bg-white shadow-[4px_4px_0_0_rgba(15,23,42,1)] p-6"
+              className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0d161f] p-6 shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <h2 id="self-test-modal-title" className="text-lg font-bold text-slate-800 mb-2 whitespace-normal break-keep">
+              <h2
+                id="self-test-modal-title"
+                className="text-lg font-bold text-slate-100 mb-2 break-keep"
+                style={{ fontFamily: 'var(--font-sans-noto)' }}
+              >
                 더 정확한 분석을 위해 1분 자가테스트를 진행하시겠어요?
               </h2>
-              <p className="text-sm text-slate-600 mb-6 whitespace-normal break-keep">
+              <p
+                className="text-sm text-slate-400 mb-6 break-keep"
+                style={{ fontFamily: 'var(--font-sans-noto)' }}
+              >
                 간단한 3가지 체크로 결과의 신뢰도를 높일 수 있어요.
               </p>
               <div className="flex flex-col gap-3">
-                <NeoButton variant="orange" className="w-full min-h-[44px]" onClick={handleGoToSelfTest}>
+                <button
+                  type="button"
+                  onClick={handleGoToSelfTest}
+                  className="w-full min-h-[48px] rounded-xl font-bold text-slate-900 bg-white hover:bg-slate-100 transition-colors"
+                  style={{ fontFamily: 'var(--font-sans-noto)' }}
+                >
                   자가테스트 하기
-                </NeoButton>
-                <NeoButton variant="secondary" className="w-full min-h-[44px]" onClick={handleSkipToResult}>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSkipToResult}
+                  className="w-full min-h-[48px] rounded-xl font-medium text-slate-300 border border-white/20 hover:bg-white/5 transition-colors"
+                  style={{ fontFamily: 'var(--font-sans-noto)' }}
+                >
                   건너뛰기
-                </NeoButton>
+                </button>
               </div>
             </div>
           </div>
         </>
       )}
-    </NeoPageLayout>
+    </div>
   );
 }
