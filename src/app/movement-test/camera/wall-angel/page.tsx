@@ -29,8 +29,42 @@ const BG = '#0d161f';
 const ACCENT = '#ff7b00';
 const STEP_ID: CameraStepId = 'wall-angel';
 const IS_DEV = process.env.NODE_ENV !== 'production';
+const DEBUG_SESSION_KEY = `move-re-camera-debug:${STEP_ID}`;
 
 const INSTRUCTION = '등을 벽에 붙이고, 팔을 벽을 따라 위로 올렸다 내리세요. 5회 반복.';
+
+interface WallAngelDebugSnapshot {
+  exercise: CameraStepId;
+  passedAt: string;
+  currentStepKey: string;
+  metrics: {
+    armRange: number | null;
+    armElevation: number | null;
+    symmetry: number | null;
+    compensation: number | null;
+    raiseCount: number;
+    peakCount: number;
+    lowerCount: number;
+  };
+  gate: {
+    status: string;
+    progressionState: ExerciseProgressionState;
+    confidence: number;
+    completionSatisfied: boolean;
+    nextAllowed: boolean;
+    captureQuality: string;
+    flags: string[];
+    failureReasons: string[];
+  };
+  navigation: {
+    nextPath: string | null;
+    transitionLocked: boolean;
+    navigationTriggered: boolean;
+    nextScheduledAt: string | null;
+    nextTriggeredAt: string | null;
+    autoAdvanceReason: string | null;
+  };
+}
 
 export default function CameraWallAngelPage() {
   const router = useRouter();
@@ -40,7 +74,15 @@ export default function CameraWallAngelPage() {
   const [progressionState, setProgressionState] =
     useState<ExerciseProgressionState>('idle');
   const [statusMessage, setStatusMessage] = useState('준비 중');
+  const [transitionLocked, setTransitionLocked] = useState(false);
+  const [autoAdvanceScheduled, setAutoAdvanceScheduled] = useState(false);
   const [passLatched, setPassLatched] = useState(false);
+  const [passLatchedAt, setPassLatchedAt] = useState<string | null>(null);
+  const [navigationTriggered, setNavigationTriggered] = useState(false);
+  const [nextScheduledAt, setNextScheduledAt] = useState<string | null>(null);
+  const [nextTriggeredAt, setNextTriggeredAt] = useState<string | null>(null);
+  const [nextTriggerReason, setNextTriggerReason] = useState<string | null>(null);
+  const [successSnapshot, setSuccessSnapshot] = useState<WallAngelDebugSnapshot | null>(null);
   const { landmarks, stats, start, stop, pushFrame } = usePoseCapture();
   const hasStartedRef = useRef(false);
   const settledRef = useRef(false);
@@ -51,19 +93,58 @@ export default function CameraWallAngelPage() {
   const triggeredAdvanceStepKeyRef = useRef<string | null>(null);
   const currentStepKey = `${STEP_ID}:${previewKey}`;
   const nextPath = getNextStepPath(STEP_ID);
+  const debugEnabled = IS_DEV;
 
   const gate = useMemo(
     () => evaluateExerciseAutoProgress(STEP_ID, landmarks, stats),
     [landmarks, stats]
   );
   const passReady = isGatePassReady(gate);
+  const raiseCount =
+    typeof gate.evaluatorResult.debug?.highlightedMetrics?.raiseCount === 'number'
+      ? gate.evaluatorResult.debug.highlightedMetrics.raiseCount
+      : 0;
+  const peakCount =
+    typeof gate.evaluatorResult.debug?.highlightedMetrics?.peakCount === 'number'
+      ? gate.evaluatorResult.debug.highlightedMetrics.peakCount
+      : 0;
+  const lowerCount =
+    typeof gate.evaluatorResult.debug?.highlightedMetrics?.lowerCount === 'number'
+      ? gate.evaluatorResult.debug.highlightedMetrics.lowerCount
+      : 0;
+  const armRange = getMetricValueFromList(gate.evaluatorResult.metrics, 'arm_range');
+  const compensation = getMetricValueFromList(gate.evaluatorResult.metrics, 'lumbar_extension');
+  const symmetry = getMetricValueFromList(gate.evaluatorResult.metrics, 'asymmetry');
+  const armElevation =
+    typeof gate.evaluatorResult.debug?.highlightedMetrics?.peakArmElevation === 'number'
+      ? gate.evaluatorResult.debug.highlightedMetrics.peakArmElevation
+      : armRange;
 
   const clearAutoAdvanceTimer = useCallback(() => {
     if (autoAdvanceTimerRef.current) {
       window.clearTimeout(autoAdvanceTimerRef.current);
       autoAdvanceTimerRef.current = null;
     }
+    setAutoAdvanceScheduled(false);
   }, []);
+
+  useEffect(() => {
+    if (!debugEnabled || typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      if (!successSnapshot) {
+        window.sessionStorage.removeItem(DEBUG_SESSION_KEY);
+        return;
+      }
+
+      window.sessionStorage.setItem(DEBUG_SESSION_KEY, JSON.stringify(successSnapshot));
+      console.info('[camera:wall-angel-success-snapshot]', successSnapshot);
+    } catch {
+      // ignore debug persistence failures
+    }
+  }, [debugEnabled, successSnapshot]);
 
   useEffect(() => {
     clearAutoAdvanceTimer();
@@ -73,6 +154,13 @@ export default function CameraWallAngelPage() {
     scheduledAdvanceStepKeyRef.current = null;
     triggeredAdvanceStepKeyRef.current = null;
     setPassLatched(false);
+    setPassLatchedAt(null);
+    setNavigationTriggered(false);
+    setTransitionLocked(false);
+    setNextScheduledAt(null);
+    setNextTriggeredAt(null);
+    setNextTriggerReason(null);
+    setSuccessSnapshot(null);
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
   const persistCurrentStep = useCallback(() => {
@@ -116,15 +204,73 @@ export default function CameraWallAngelPage() {
       return;
     }
 
+    const latchedAt = new Date().toISOString();
     passLatchedStepKeyRef.current = currentStepKey;
     settledRef.current = true;
     advanceLockRef.current = true;
     setPassLatched(true);
+    setPassLatchedAt(latchedAt);
+    setTransitionLocked(true);
+    setNextTriggerReason('pass_latched');
     stop();
     persistCurrentStep();
     setProgressionState('passed');
     setStatusMessage(gate.uiMessage);
-  }, [currentStepKey, gate.uiMessage, passLatched, persistCurrentStep, stop]);
+    setSuccessSnapshot({
+      exercise: STEP_ID,
+      passedAt: latchedAt,
+      currentStepKey,
+      metrics: {
+        armRange,
+        armElevation,
+        symmetry,
+        compensation,
+        raiseCount,
+        peakCount,
+        lowerCount,
+      },
+      gate: {
+        status: gate.status,
+        progressionState: gate.progressionState,
+        confidence: gate.confidence,
+        completionSatisfied: gate.completionSatisfied,
+        nextAllowed: gate.nextAllowed,
+        captureQuality: gate.guardrail.captureQuality,
+        flags: gate.flags,
+        failureReasons: gate.failureReasons,
+      },
+      navigation: {
+        nextPath,
+        transitionLocked: true,
+        navigationTriggered: false,
+        nextScheduledAt: null,
+        nextTriggeredAt: null,
+        autoAdvanceReason: 'pass_latched',
+      },
+    });
+  }, [
+    armElevation,
+    armRange,
+    compensation,
+    currentStepKey,
+    gate.completionSatisfied,
+    gate.confidence,
+    gate.failureReasons,
+    gate.flags,
+    gate.guardrail.captureQuality,
+    gate.nextAllowed,
+    gate.progressionState,
+    gate.status,
+    gate.uiMessage,
+    lowerCount,
+    nextPath,
+    passLatched,
+    peakCount,
+    persistCurrentStep,
+    raiseCount,
+    stop,
+    symmetry,
+  ]);
 
   useEffect(() => {
     if (permissionDenied || !cameraReady || passLatched) {
@@ -167,7 +313,24 @@ export default function CameraWallAngelPage() {
       return;
     }
 
-    if (triggeredAdvanceStepKeyRef.current === currentStepKey || !nextPath) {
+    if (triggeredAdvanceStepKeyRef.current === currentStepKey || navigationTriggered) {
+      return;
+    }
+
+    if (!nextPath) {
+      setNextTriggerReason('transition_not_triggered');
+      setSuccessSnapshot((prev) =>
+        prev
+          ? {
+              ...prev,
+              navigation: {
+                ...prev.navigation,
+                nextPath,
+                autoAdvanceReason: 'transition_not_triggered',
+              },
+            }
+          : prev
+      );
       return;
     }
 
@@ -176,16 +339,38 @@ export default function CameraWallAngelPage() {
       autoAdvanceTimerRef.current &&
       scheduledAdvanceStepKeyRef.current === currentStepKey
     ) {
+      setNextTriggerReason('transition_locked');
       return;
     }
 
     if (advanceLockRef.current && !autoAdvanceTimerRef.current) {
       advanceLockRef.current = false;
+      setTransitionLocked(false);
+      setNextTriggerReason('stale_transition_lock_released');
     }
 
     advanceLockRef.current = true;
+    setTransitionLocked(true);
     clearAutoAdvanceTimer();
     scheduledAdvanceStepKeyRef.current = currentStepKey;
+    setAutoAdvanceScheduled(true);
+    const scheduledAt = new Date().toISOString();
+    setNextScheduledAt(scheduledAt);
+    setNextTriggerReason('auto_advance_scheduled');
+    setSuccessSnapshot((prev) =>
+      prev
+        ? {
+            ...prev,
+            navigation: {
+              ...prev.navigation,
+              nextPath,
+              transitionLocked: true,
+              nextScheduledAt: scheduledAt,
+              autoAdvanceReason: 'auto_advance_scheduled',
+            },
+          }
+        : prev
+    );
     autoAdvanceTimerRef.current = window.setTimeout(() => {
       if (
         triggeredAdvanceStepKeyRef.current === currentStepKey ||
@@ -195,6 +380,25 @@ export default function CameraWallAngelPage() {
       }
 
       triggeredAdvanceStepKeyRef.current = currentStepKey;
+      const triggeredAt = new Date().toISOString();
+      setNavigationTriggered(true);
+      setNextTriggeredAt(triggeredAt);
+      setNextTriggerReason('route_push_next_step');
+      setSuccessSnapshot((prev) =>
+        prev
+          ? {
+              ...prev,
+              navigation: {
+                ...prev.navigation,
+                nextPath,
+                transitionLocked: true,
+                navigationTriggered: true,
+                nextTriggeredAt: triggeredAt,
+                autoAdvanceReason: 'route_push_next_step',
+              },
+            }
+          : prev
+      );
 
       if (IS_DEV) {
         console.info('[camera:auto-next]', {
@@ -207,7 +411,15 @@ export default function CameraWallAngelPage() {
 
       router.push(nextPath);
     }, gate.autoAdvanceDelayMs);
-  }, [clearAutoAdvanceTimer, currentStepKey, gate.autoAdvanceDelayMs, nextPath, passLatched, router]);
+  }, [
+    clearAutoAdvanceTimer,
+    currentStepKey,
+    gate.autoAdvanceDelayMs,
+    navigationTriggered,
+    nextPath,
+    passLatched,
+    router,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -226,8 +438,15 @@ export default function CameraWallAngelPage() {
     hasStartedRef.current = false;
     setCameraReady(false);
     setPassLatched(false);
+    setPassLatchedAt(null);
+    setNavigationTriggered(false);
     setProgressionState('idle');
     setStatusMessage('준비 중');
+    setTransitionLocked(false);
+    setNextScheduledAt(null);
+    setNextTriggeredAt(null);
+    setNextTriggerReason(null);
+    setSuccessSnapshot(null);
     setPermissionDenied(false);
     setPreviewKey((prev) => prev + 1);
   }, [clearAutoAdvanceTimer, stop]);
@@ -240,6 +459,13 @@ export default function CameraWallAngelPage() {
     scheduledAdvanceStepKeyRef.current = null;
     triggeredAdvanceStepKeyRef.current = null;
     setPassLatched(false);
+    setPassLatchedAt(null);
+    setNavigationTriggered(false);
+    setTransitionLocked(false);
+    setNextScheduledAt(null);
+    setNextTriggeredAt(null);
+    setNextTriggerReason(null);
+    setSuccessSnapshot(null);
     setCameraReady(false);
     setPermissionDenied(true);
   }, [clearAutoAdvanceTimer]);
@@ -262,6 +488,14 @@ export default function CameraWallAngelPage() {
     progressionState === 'insufficient_signal';
   const visibleUserGuidance = passLatched ? [] : gate.userGuidance;
   const effectiveProgressionState = passLatched ? 'passed' : progressionState;
+  const autoNextObservation =
+    passLatched && !nextTriggeredAt
+      ? nextScheduledAt
+        ? 'pass_latched_waiting_for_auto_next'
+        : 'transition_not_triggered'
+      : nextTriggeredAt
+        ? 'next_triggered'
+        : 'pass_not_latched';
   const guideTone = getCameraGuideTone({
     ...(passLatched
       ? { ...gate, status: 'pass' as const, nextAllowed: true, completionSatisfied: true }
@@ -377,6 +611,49 @@ export default function CameraWallAngelPage() {
                 )}
               </div>
 
+              {debugEnabled && (
+                <div className="rounded-2xl border border-amber-500/20 bg-black/30 p-4 text-left">
+                  <p className="text-xs text-amber-200" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+                    wall angel debug
+                  </p>
+                  <div
+                    className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-slate-300"
+                    style={{ fontFamily: 'var(--font-sans-noto)' }}
+                  >
+                    <span>status: {gate.status}</span>
+                    <span>state: {effectiveProgressionState}</span>
+                    <span>confidence: {gate.confidence}</span>
+                    <span>captureQuality: {gate.guardrail.captureQuality}</span>
+                    <span>completionSatisfied: {String(gate.completionSatisfied)}</span>
+                    <span>nextAllowed: {String(gate.nextAllowed)}</span>
+                    <span>passReady: {String(passReady)}</span>
+                    <span>passLatched: {String(passLatched)}</span>
+                    <span>passLatchedAt: {passLatchedAt ?? 'n/a'}</span>
+                    <span>navigationTriggered: {String(navigationTriggered)}</span>
+                    <span>transitionLocked: {String(transitionLocked)}</span>
+                    <span>autoAdvanceScheduled: {String(autoAdvanceScheduled)}</span>
+                    <span>currentStepKey: {currentStepKey}</span>
+                    <span>nextPath: {nextPath ?? 'n/a'}</span>
+                    <span>nextScheduledAt: {nextScheduledAt ?? 'n/a'}</span>
+                    <span>nextTriggeredAt: {nextTriggeredAt ?? 'n/a'}</span>
+                    <span>autoAdvanceReason: {nextTriggerReason ?? 'n/a'}</span>
+                    <span>autoNextObservation: {autoNextObservation}</span>
+                    <span>armRange: {armRange ?? 'n/a'}</span>
+                    <span>armElevation: {armElevation ?? 'n/a'}</span>
+                    <span>symmetry: {symmetry ?? 'n/a'}</span>
+                    <span>compensation: {compensation ?? 'n/a'}</span>
+                    <span>raiseCount: {raiseCount}</span>
+                    <span>peakCount: {peakCount}</span>
+                    <span>lowerCount: {lowerCount}</span>
+                  </div>
+                  <div className="mt-3 text-[11px] text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+                    <p>flags: {gate.flags.join(', ') || 'none'}</p>
+                    <p>failureReasons: {gate.failureReasons.join(', ') || 'none'}</p>
+                    <p>snapshotStored: {successSnapshot ? 'yes' : 'no'}</p>
+                  </div>
+                </div>
+              )}
+
               {showRetryActions && (
                 <div className="flex flex-col gap-3">
                   <button
@@ -414,4 +691,12 @@ export default function CameraWallAngelPage() {
       </main>
     </div>
   );
+}
+
+function getMetricValueFromList(
+  metrics: Array<{ name: string; value: number }> | undefined,
+  name: string
+): number | null {
+  const metric = metrics?.find((item) => item.name === name);
+  return typeof metric?.value === 'number' ? metric.value : null;
 }
