@@ -8,6 +8,7 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { IntroSlide } from '@/components/public/IntroSlide';
 import { FUNNEL_KEY, type FunnelData } from '@/lib/public/intro-funnel';
+import { mergeIntroProfileIntoSurveySession } from '@/lib/public/survey-bridge';
 
 const AGE_OPTIONS = [
   { value: '10-19', label: '10대' },
@@ -55,11 +56,11 @@ export default function IntroProfilePage() {
       gender: gender || undefined,
       introCompletedAt: new Date().toISOString(),
     });
-    // entryMode 기준 분기: 다음 PR에서 /movement-test/precheck 또는 /deep-test/run 등 연결
     if (typeof window !== 'undefined') {
       const d = loadFunnel() as FunnelData;
       if (d.entryMode === 'survey') {
-        router.push('/movement-test/precheck');
+        mergeIntroProfileIntoSurveySession();
+        router.push('/movement-test/survey');
       } else if (d.entryMode === 'camera') {
         router.push('/deep-test/run');
       } else {
