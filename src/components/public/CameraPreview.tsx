@@ -28,8 +28,41 @@ export function CameraPreview({
   className = '',
 }: CameraPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const onReadyRef = useRef(onReady);
+  const onVideoReadyRef = useRef(onVideoReady);
+  const onErrorRef = useRef(onError);
+  const [status, setStatus] = useState<
+    'idle' | 'requesting' | 'binding' | 'ready' | 'error'
+  >('idle');
   const streamRef = useRef<MediaStream | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
+
+  useEffect(() => {
+    onVideoReadyRef.current = onVideoReady;
+  }, [onVideoReady]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      const video = videoRef.current;
+      console.info('[CameraPreview]', {
+        phase: status,
+        hasStream: Boolean(stream),
+        readyState: video?.readyState ?? null,
+        videoWidth: video?.videoWidth ?? 0,
+        videoHeight: video?.videoHeight ?? 0,
+        errorMessage,
+      });
+    }
+  }, [status, stream, errorMessage]);
 
   useEffect(() => {
     let mounted = true;
@@ -38,10 +71,12 @@ export function CameraPreview({
       if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
         const err = new Error('카메라를 지원하지 않는 환경입니다.');
         setStatus('error');
-        onError?.(err);
+        setErrorMessage(err.message);
+        onErrorRef.current?.(err);
         return;
       }
-      setStatus('loading');
+      setStatus('requesting');
+      setErrorMessage(null);
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
@@ -52,60 +87,118 @@ export function CameraPreview({
           return;
         }
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-        setStatus('ready');
-        onReady?.(stream);
+        setStream(stream);
+        setStatus('binding');
+        onReadyRef.current?.(stream);
       } catch (e) {
         if (!mounted) return;
+        const error = e instanceof Error ? e : new Error('카메라 접근 실패');
         setStatus('error');
-        onError?.(e instanceof Error ? e : new Error('카메라 접근 실패'));
+        setErrorMessage(error.message);
+        onErrorRef.current?.(error);
       }
     }
 
     startCamera();
     return () => {
       mounted = false;
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.srcObject = null;
+      }
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
-  }, [onReady, onError]);
+  }, []);
 
   useEffect(() => {
-    if (status === 'ready' && videoRef.current && onVideoReady) {
-      onVideoReady(videoRef.current);
-    }
-  }, [status, onVideoReady]);
+    const video = videoRef.current;
+    if (!video || !stream) return;
 
-  if (status === 'error') return null;
-  if (status === 'loading') {
-    return (
-      <div
-        className={`flex items-center justify-center aspect-[3/4] max-h-[50vh] rounded-2xl bg-white/5 border border-white/10 ${className}`}
-      >
-        <p className="text-slate-400 text-sm">카메라 연결 중...</p>
-      </div>
-    );
+    let cancelled = false;
+
+    const bindStream = async () => {
+      try {
+        if (video.srcObject !== stream) {
+          video.srcObject = stream;
+        }
+
+        const playPromise = video.play();
+        if (playPromise) {
+          await playPromise;
+        }
+        if (cancelled) return;
+        setStatus('ready');
+        setErrorMessage(null);
+        onVideoReadyRef.current?.(video);
+      } catch (e) {
+        if (cancelled) return;
+        const error = e instanceof Error ? e : new Error('카메라 미리보기 재생 실패');
+        setStatus('error');
+        setErrorMessage(error.message);
+        onErrorRef.current?.(error);
+      }
+    };
+
+    const handleLoadedMetadata = () => {
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[CameraPreview:metadata]', {
+          readyState: video.readyState,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+        });
+      }
+    };
+
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    bindStream();
+
+    return () => {
+      cancelled = true;
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      if (video.srcObject === stream) {
+        video.pause();
+        video.srcObject = null;
+      }
+    };
+  }, [stream]);
+
+  if (status === 'error') {
+    return null;
   }
 
+  const showLoading = status === 'requesting' || status === 'binding';
+
   return (
-    <div className={`relative overflow-hidden rounded-2xl border border-white/10 ${className}`}>
+    <div
+      className={`relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 ${className}`}
+      data-camera-phase={status}
+    >
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className={`block w-full aspect-[3/4] object-cover max-h-[50vh] ${mirrored ? 'scale-x-[-1]' : ''}`}
+        className={`relative z-10 block w-full min-h-[320px] aspect-[3/4] object-cover max-h-[50vh] ${mirrored ? 'scale-x-[-1]' : ''}`}
         style={{ backgroundColor: BG }}
       />
+      {showLoading && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none bg-black/20">
+          <p className="text-slate-300 text-sm">카메라 연결 중...</p>
+        </div>
+      )}
       {/* 전신 framing guide */}
       <div
-        className="absolute inset-0 pointer-events-none flex items-center justify-center"
+        className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center"
         aria-hidden
       >
         <div className="w-3/4 h-[85%] rounded-2xl border-2 border-dashed border-white/30" />
       </div>
+      {process.env.NODE_ENV !== 'production' && (
+        <div className="absolute bottom-2 left-2 z-30 rounded bg-black/50 px-2 py-1 text-[10px] text-white pointer-events-none">
+          {status}
+        </div>
+      )}
     </div>
   );
 }

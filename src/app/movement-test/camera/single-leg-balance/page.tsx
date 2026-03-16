@@ -63,6 +63,10 @@ export default function CameraSingleLegBalancePage() {
     setPermissionDenied(false);
   }, []);
 
+  const handleCameraError = useCallback(() => {
+    setPermissionDenied(true);
+  }, []);
+
   const handleSurveyFallback = useCallback(() => {
     router.push('/movement-test/survey');
   }, [router]);
@@ -141,7 +145,7 @@ export default function CameraSingleLegBalancePage() {
             <div className="w-full max-w-md flex-1 min-h-0 flex flex-col items-center">
               <CameraPreview
                 onVideoReady={handleVideoReady}
-                onError={() => setPermissionDenied(true)}
+                onError={handleCameraError}
                 className="w-full"
               />
             </div>
