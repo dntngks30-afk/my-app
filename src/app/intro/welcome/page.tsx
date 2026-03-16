@@ -1,17 +1,35 @@
 'use client';
 
 /**
- * 공통 intro 첫 화면
- * 랜딩 CTA(설문형/동작형) 선택 후 진입.
- * entryMode는 localStorage(moveRePublicFunnel:v1)에 저장됨.
- * 이후 PR에서 실제 intro 콘텐츠 연결.
+ * intro 첫 화면: 환영 + MOVE RE 소개
  */
+import { IntroSlide } from '@/components/public/IntroSlide';
+
 export default function IntroWelcomePage() {
   return (
-    <div className="min-h-[100svh] flex flex-col items-center justify-center px-6 bg-[#0d161f] text-slate-100">
-      <p className="text-slate-400 text-sm" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-        공통 intro 첫 화면 (다음 PR에서 연결)
-      </p>
-    </div>
+    <IntroSlide currentPath="/intro/welcome" tapLabel="TAP TO CONTINUE">
+      <div className="max-w-md w-full text-center space-y-6">
+        <p
+          className="text-slate-400 text-base"
+          style={{ fontFamily: 'var(--font-sans-noto)' }}
+        >
+          안녕하세요,
+        </p>
+        <h1
+          className="text-2xl md:text-3xl font-bold text-slate-100 leading-snug"
+          style={{ fontFamily: 'var(--font-serif-noto)' }}
+        >
+          MOVE RE가 당신의 움직임 패턴을
+          <br />
+          분석해드립니다
+        </h1>
+        <p
+          className="text-slate-400 text-sm"
+          style={{ fontFamily: 'var(--font-sans-noto)' }}
+        >
+          당신도 몰랐던 몸의 반복 패턴을 알려드릴게요
+        </p>
+      </div>
+    </IntroSlide>
   );
 }

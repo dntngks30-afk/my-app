@@ -1,0 +1,49 @@
+/**
+ * 공통 intro/story funnel 설정
+ * moveRePublicFunnel:v1 스키마 및 단계 정의
+ */
+
+export const FUNNEL_KEY = 'moveRePublicFunnel:v1';
+
+export type EntryMode = 'survey' | 'camera';
+
+export interface FunnelData {
+  entryMode: EntryMode;
+  age?: string;
+  gender?: string;
+  introCompletedAt?: string;
+}
+
+/** movement-test session profile과 merge 가능한 형태 */
+export const toProfileMerge = (d: FunnelData): Record<string, unknown> => ({
+  age: d.age,
+  gender: d.gender,
+});
+
+/** funnel 단계 순서 (1-based index) */
+export const INTRO_STEPS = [
+  { path: '/intro/welcome', step: 1 },
+  { path: '/intro/report', step: 2 },
+  { path: '/intro/examples/1', step: 3 },
+  { path: '/intro/examples/2', step: 4 },
+  { path: '/intro/types', step: 5 },
+  { path: '/intro/trust', step: 6 },
+  { path: '/intro/profile', step: 7 },
+] as const;
+
+export const TOTAL_STEPS = INTRO_STEPS.length;
+
+export function getStepIndex(path: string): number {
+  const i = INTRO_STEPS.findIndex((s) => s.path === path);
+  return i >= 0 ? i : 0;
+}
+
+export function getPrevPath(path: string): string | null {
+  const i = getStepIndex(path);
+  return i > 0 ? INTRO_STEPS[i - 1].path : null;
+}
+
+export function getNextPath(path: string): string | null {
+  const i = getStepIndex(path);
+  return i >= 0 && i < TOTAL_STEPS - 1 ? INTRO_STEPS[i + 1].path : null;
+}
