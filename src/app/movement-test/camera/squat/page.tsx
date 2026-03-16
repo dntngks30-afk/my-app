@@ -25,6 +25,11 @@ import {
   type ExerciseProgressionState,
 } from '@/lib/camera/auto-progression';
 import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
+import {
+  getMovementSetupGuide,
+  getPreCaptureGuidance,
+  getEffectiveRetryGuidance,
+} from '@/lib/camera/camera-guidance';
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 
 const BG = '#0d161f';
@@ -449,7 +454,23 @@ export default function CameraSquatPage() {
       : nextTriggeredAt
         ? 'next_triggered'
         : 'pass_not_detected';
-  const visibleUserGuidance = finalPassLatched || passLatched ? [] : gate.userGuidance;
+  const setupGuide = useMemo(() => getMovementSetupGuide(STEP_ID, gate), [gate]);
+  const preCaptureGuidance = useMemo(
+    () => getPreCaptureGuidance(STEP_ID, gate, stats.sampledFrameCount),
+    [gate, stats.sampledFrameCount]
+  );
+  const retryGuidance = useMemo(
+    () => (showRetryActions ? getEffectiveRetryGuidance(STEP_ID, gate) : null),
+    [showRetryActions, gate]
+  );
+  const visibleUserGuidance = finalPassLatched || passLatched
+    ? []
+    : retryGuidance
+      ? [retryGuidance.primary, retryGuidance.secondary].filter(Boolean)
+      : gate.userGuidance;
+  const showPreCaptureHint =
+    (progressionState === 'camera_ready' || progressionState === 'insufficient_signal') &&
+    stats.sampledFrameCount < 8;
   const effectiveProgressionState = finalPassLatched || passLatched ? 'passed' : progressionState;
   // Success tone ONLY when finalPassLatched (strict contract)
   const toneGate =
@@ -549,6 +570,10 @@ export default function CameraSquatPage() {
                 guideHint={overlayGuide.hint}
                 guideFocus={overlayGuide.focus}
                 guideAnimated={overlayGuide.animated}
+                guideVariant="default"
+                guideBadges={setupGuide.badges}
+                guideInstructions={setupGuide.instructions}
+                guideReadinessLabel={setupGuide.readinessLabel}
                 className="w-full"
               />
             </div>
@@ -560,6 +585,14 @@ export default function CameraSquatPage() {
                 >
                   {statusMessage}
                 </p>
+                {showPreCaptureHint && (
+                  <p
+                    className="mt-1 text-xs text-slate-400 break-keep"
+                    style={{ fontFamily: 'var(--font-sans-noto)' }}
+                  >
+                    {preCaptureGuidance.primary}
+                  </p>
+                )}
                 {visibleUserGuidance.length > 0 && (
                   <div
                     className="mt-2 space-y-1 text-xs text-slate-400 break-keep"

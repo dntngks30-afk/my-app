@@ -25,6 +25,11 @@ import {
   type ExerciseProgressionState,
 } from '@/lib/camera/auto-progression';
 import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
+import {
+  getMovementSetupGuide,
+  getPreCaptureGuidance,
+  getEffectiveRetryGuidance,
+} from '@/lib/camera/camera-guidance';
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 
 const BG = '#0d161f';
@@ -535,29 +540,29 @@ export default function CameraOverheadReachPage() {
     progressionState === 'retry_required' ||
     progressionState === 'failed' ||
     progressionState === 'insufficient_signal';
-  const visibleUserGuidance = passLatched ? [] : gate.userGuidance;
+  const setupGuide = useMemo(() => getMovementSetupGuide(STEP_ID, gate), [gate]);
+  const preCaptureGuidance = useMemo(
+    () => getPreCaptureGuidance(STEP_ID, gate, stats.sampledFrameCount),
+    [gate, stats.sampledFrameCount]
+  );
+  const retryGuidance = useMemo(
+    () => (showRetryActions ? getEffectiveRetryGuidance(STEP_ID, gate) : null),
+    [showRetryActions, gate]
+  );
+  const visibleUserGuidance = passLatched
+    ? []
+    : retryGuidance
+      ? [retryGuidance.primary, retryGuidance.secondary].filter(Boolean)
+      : gate.userGuidance;
+  const showPreCaptureHint =
+    (progressionState === 'camera_ready' || progressionState === 'insufficient_signal') &&
+    stats.sampledFrameCount < 8;
   const effectiveProgressionState = passLatched ? 'passed' : progressionState;
   const overlayGuide = getOverheadReachOverlayGuide(
     gate.reasons,
     gate.failureReasons,
     effectiveProgressionState
   );
-  const guideBadges = ['정면 촬영', '상체+손끝 보이기', '1초 정지'];
-  const guideInstructions = [
-    '정면으로 서서 양팔을 머리 위로 올려주세요',
-    '맨 위에서 잠깐 멈춘 뒤 천천히 내려주세요',
-    '허리를 과하게 꺾지 말고 길게 뻗어주세요',
-  ];
-  const guideReadinessLabel =
-    cameraReady &&
-    stats.sampledFrameCount > 0 &&
-    gate.guardrail.captureQuality !== 'invalid' &&
-    !gate.flags.includes('framing_invalid') &&
-    !gate.flags.includes('hard_partial') &&
-    !gate.flags.includes('left_side_missing') &&
-    !gate.flags.includes('right_side_missing')
-      ? '양팔과 손끝이 잘 보여요'
-      : null;
   const autoNextObservation =
     passLatched && !nextTriggeredAt
       ? nextScheduledAt
@@ -653,9 +658,9 @@ export default function CameraOverheadReachPage() {
                 guideFocus={overlayGuide.focus}
                 guideAnimated={overlayGuide.animated}
                 guideVariant="overhead-reach"
-                guideBadges={guideBadges}
-                guideInstructions={guideInstructions}
-                guideReadinessLabel={guideReadinessLabel}
+                guideBadges={setupGuide.badges}
+                guideInstructions={setupGuide.instructions}
+                guideReadinessLabel={setupGuide.readinessLabel}
                 className="w-full"
               />
             </div>
@@ -667,6 +672,14 @@ export default function CameraOverheadReachPage() {
                 >
                   {statusMessage}
                 </p>
+                {showPreCaptureHint && (
+                  <p
+                    className="mt-1 text-xs text-slate-400 break-keep"
+                    style={{ fontFamily: 'var(--font-sans-noto)' }}
+                  >
+                    {preCaptureGuidance.primary}
+                  </p>
+                )}
                 {visibleUserGuidance.length > 0 && (
                   <div
                     className="mt-2 space-y-1 text-xs text-slate-400 break-keep"
