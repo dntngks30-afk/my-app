@@ -69,6 +69,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const descentCount = countPhases(valid, 'descent');
   const bottomCount = countPhases(valid, 'bottom');
   const ascentCount = countPhases(valid, 'ascent');
+  const repCountEstimate = Math.min(descentCount, bottomCount, ascentCount);
 
   if (descentCount === 0 || bottomCount === 0 || ascentCount === 0) {
     completionHints.push('rep_phase_incomplete');
@@ -149,6 +150,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         descentCount,
         bottomCount,
         ascentCount,
+        repCount: repCountEstimate,
       },
     },
   };

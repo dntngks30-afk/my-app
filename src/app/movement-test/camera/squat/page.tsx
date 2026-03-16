@@ -30,6 +30,12 @@ const IS_DEV = process.env.NODE_ENV !== 'production';
 
 const INSTRUCTION = '발을 어깨 너비로 벌리고, 허리를 펴고 천천히 앉았다 일어나세요.';
 
+interface DebugTransitionEntry {
+  at: string;
+  state: ExerciseProgressionState;
+  reason: string;
+}
+
 export default function CameraSquatPage() {
   const router = useRouter();
   const [permissionDenied, setPermissionDenied] = useState(false);
@@ -38,15 +44,40 @@ export default function CameraSquatPage() {
   const [progressionState, setProgressionState] =
     useState<ExerciseProgressionState>('idle');
   const [statusMessage, setStatusMessage] = useState('준비 중');
+  const [transitionLocked, setTransitionLocked] = useState(false);
+  const [autoAdvanceScheduled, setAutoAdvanceScheduled] = useState(false);
+  const [passDetectedAt, setPassDetectedAt] = useState<string | null>(null);
+  const [nextScheduledAt, setNextScheduledAt] = useState<string | null>(null);
+  const [nextTriggeredAt, setNextTriggeredAt] = useState<string | null>(null);
+  const [nextTriggerReason, setNextTriggerReason] = useState<string | null>(null);
+  const [transitionHistory, setTransitionHistory] = useState<DebugTransitionEntry[]>([]);
   const { landmarks, stats, start, stop, pushFrame } = usePoseCapture();
   const hasStartedRef = useRef(false);
   const settledRef = useRef(false);
   const advanceLockRef = useRef(false);
   const autoAdvanceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const lastProgressionStateRef = useRef<ExerciseProgressionState>('idle');
+  const debugEnabled = IS_DEV;
 
   const gate = useMemo(
     () => evaluateExerciseAutoProgress(STEP_ID, landmarks, stats),
     [landmarks, stats]
+  );
+
+  const appendTransition = useCallback(
+    (state: ExerciseProgressionState, reason: string) => {
+      if (!debugEnabled) return;
+
+      const entry = {
+        at: new Date().toISOString(),
+        state,
+        reason,
+      };
+
+      setTransitionHistory((prev) => [...prev.slice(-7), entry]);
+      console.info('[camera:squat-transition]', entry);
+    },
+    [debugEnabled]
   );
 
   const clearAutoAdvanceTimer = useCallback(() => {
@@ -54,6 +85,7 @@ export default function CameraSquatPage() {
       window.clearTimeout(autoAdvanceTimerRef.current);
       autoAdvanceTimerRef.current = null;
     }
+    setAutoAdvanceScheduled(false);
   }, []);
 
   const persistCurrentStep = useCallback(() => {
@@ -88,27 +120,47 @@ export default function CameraSquatPage() {
       setCameraReady(true);
       setProgressionState('camera_ready');
       setStatusMessage('동작을 시작해 주세요');
+      appendTransition('camera_ready', 'video_ready');
     },
-    [start]
+    [appendTransition, start]
   );
 
   const handlePassAdvance = useCallback(() => {
-    if (advanceLockRef.current) return;
+    if (advanceLockRef.current) {
+      setNextTriggerReason('transition_locked');
+      return;
+    }
 
     advanceLockRef.current = true;
     settledRef.current = true;
+    setTransitionLocked(true);
+    setPassDetectedAt(new Date().toISOString());
+    setNextTriggerReason('pass_detected');
     stop();
     persistCurrentStep();
     setProgressionState('passed');
     setStatusMessage('충분한 신호를 확인했어요');
+    appendTransition('passed', 'gate_status_pass');
     const next = getNextStepPath(STEP_ID);
-    if (!next) return;
+    if (!next) {
+      setNextTriggerReason('transition_not_triggered');
+      return;
+    }
 
     clearAutoAdvanceTimer();
+    setAutoAdvanceScheduled(true);
+    setNextScheduledAt(new Date().toISOString());
+    setNextTriggerReason('auto_advance_scheduled');
     autoAdvanceTimerRef.current = window.setTimeout(() => {
+      setNextTriggeredAt(new Date().toISOString());
+      setNextTriggerReason('route_push_next_step');
+      console.info('[camera:squat-next]', {
+        triggeredAt: new Date().toISOString(),
+        reason: 'route_push_next_step',
+      });
       router.push(next);
     }, gate.autoAdvanceDelayMs);
-  }, [clearAutoAdvanceTimer, gate.autoAdvanceDelayMs, persistCurrentStep, router, stop]);
+  }, [appendTransition, clearAutoAdvanceTimer, gate.autoAdvanceDelayMs, persistCurrentStep, router, stop]);
 
   useEffect(() => {
     if (permissionDenied || !cameraReady || settledRef.current) {
@@ -134,8 +186,13 @@ export default function CameraSquatPage() {
       stop();
       setProgressionState(gate.progressionState);
       setStatusMessage(gate.uiMessage);
+      appendTransition(
+        gate.progressionState,
+        gate.failureReasons.length > 0 ? gate.failureReasons.join(',') : gate.reasons.join(',')
+      );
     }
   }, [
+    appendTransition,
     cameraReady,
     gate,
     handlePassAdvance,
@@ -143,6 +200,16 @@ export default function CameraSquatPage() {
     stats.sampledFrameCount,
     stop,
   ]);
+
+  useEffect(() => {
+    if (lastProgressionStateRef.current !== progressionState) {
+      appendTransition(
+        progressionState,
+        gate.failureReasons.length > 0 ? gate.failureReasons.join(',') : gate.reasons.join(',') || 'state_update'
+      );
+      lastProgressionStateRef.current = progressionState;
+    }
+  }, [appendTransition, gate.failureReasons, gate.reasons, progressionState]);
 
   useEffect(() => {
     return () => {
@@ -159,14 +226,22 @@ export default function CameraSquatPage() {
     setCameraReady(false);
     setProgressionState('idle');
     setStatusMessage('준비 중');
+    setTransitionLocked(false);
+    setPassDetectedAt(null);
+    setNextScheduledAt(null);
+    setNextTriggeredAt(null);
+    setNextTriggerReason(null);
+    setTransitionHistory([]);
     setPermissionDenied(false);
     setPreviewKey((prev) => prev + 1);
+    appendTransition('idle', 'manual_retry');
   }, [clearAutoAdvanceTimer, stop]);
 
   const handleCameraError = useCallback(() => {
     clearAutoAdvanceTimer();
     settledRef.current = false;
     advanceLockRef.current = false;
+    setTransitionLocked(false);
     setCameraReady(false);
     setPermissionDenied(true);
   }, [clearAutoAdvanceTimer]);
@@ -187,6 +262,27 @@ export default function CameraSquatPage() {
     progressionState === 'retry_required' ||
     progressionState === 'failed' ||
     progressionState === 'insufficient_signal';
+  const repCount =
+    typeof gate.evaluatorResult.debug?.highlightedMetrics?.repCount === 'number'
+      ? gate.evaluatorResult.debug.highlightedMetrics.repCount
+      : 0;
+  const depthProxy =
+    typeof gate.evaluatorResult.debug?.highlightedMetrics?.depthPeak === 'number'
+      ? gate.evaluatorResult.debug.highlightedMetrics.depthPeak
+      : getMetricValueFromList(gate.evaluatorResult.metrics, 'depth');
+  const trunkLeanProxy = getMetricValueFromList(gate.evaluatorResult.metrics, 'trunk_lean');
+  const kneeTrackingProxy = getMetricValueFromList(
+    gate.evaluatorResult.metrics,
+    'knee_alignment_trend'
+  );
+  const autoNextObservation =
+    passDetectedAt && !nextTriggeredAt
+      ? nextScheduledAt
+        ? 'pass_detected_but_waiting_for_auto_next'
+        : 'transition_not_triggered'
+      : nextTriggeredAt
+        ? 'next_triggered'
+        : 'pass_not_detected';
 
   return (
     <div
@@ -280,6 +376,16 @@ export default function CameraSquatPage() {
                 >
                   {statusMessage}
                 </p>
+                {gate.userGuidance.length > 0 && (
+                  <div
+                    className="mt-2 space-y-1 text-xs text-slate-400 break-keep"
+                    style={{ fontFamily: 'var(--font-sans-noto)' }}
+                  >
+                    {gate.userGuidance.map((message) => (
+                      <p key={message}>{message}</p>
+                    ))}
+                  </div>
+                )}
                 {IS_DEV && (
                   <p
                     className="mt-2 text-[11px] text-slate-500 break-all"
@@ -290,6 +396,55 @@ export default function CameraSquatPage() {
                   </p>
                 )}
               </div>
+
+              {debugEnabled && (
+                <div className="rounded-2xl border border-amber-500/20 bg-black/30 p-4 text-left">
+                  <p className="text-xs text-amber-200" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+                    squat debug
+                  </p>
+                  <div
+                    className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-slate-300"
+                    style={{ fontFamily: 'var(--font-sans-noto)' }}
+                  >
+                    <span>status: {gate.status}</span>
+                    <span>state: {progressionState}</span>
+                    <span>confidence: {gate.confidence}</span>
+                    <span>captureQuality: {gate.guardrail.captureQuality}</span>
+                    <span>completionSatisfied: {String(gate.completionSatisfied)}</span>
+                    <span>nextAllowed: {String(gate.nextAllowed)}</span>
+                    <span>repCount: {repCount}</span>
+                    <span>retryRecommended: {String(gate.retryRecommended)}</span>
+                    <span>depthProxy: {depthProxy ?? 'n/a'}</span>
+                    <span>trunkLean: {trunkLeanProxy ?? 'n/a'}</span>
+                    <span>kneeTracking: {kneeTrackingProxy ?? 'n/a'}</span>
+                    <span>validFrames: {gate.guardrail.debug.validFrameCount}</span>
+                    <span>sampledFrames: {gate.guardrail.debug.sampledFrameCount}</span>
+                    <span>motionStatus: {gate.guardrail.completionStatus}</span>
+                    <span>visibleRatio: {gate.guardrail.debug.visibleJointsRatio}</span>
+                    <span>left/right: {gate.guardrail.debug.leftSideCompleteness}/{gate.guardrail.debug.rightSideCompleteness}</span>
+                    <span>transitionLocked: {String(transitionLocked)}</span>
+                    <span>autoAdvanceScheduled: {String(autoAdvanceScheduled)}</span>
+                  </div>
+
+                  <div className="mt-3 text-[11px] text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+                    <p>flags: {gate.flags.join(', ') || 'none'}</p>
+                    <p>failureReasons: {gate.failureReasons.join(', ') || 'none'}</p>
+                    <p>passDetectedAt: {passDetectedAt ?? 'n/a'}</p>
+                    <p>nextScheduledAt: {nextScheduledAt ?? 'n/a'}</p>
+                    <p>nextTriggeredAt: {nextTriggeredAt ?? 'n/a'}</p>
+                    <p>nextTriggerReason: {nextTriggerReason ?? 'n/a'}</p>
+                    <p>autoNextObservation: {autoNextObservation}</p>
+                  </div>
+
+                  <div className="mt-3 text-[11px] text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+                    {transitionHistory.map((entry) => (
+                      <p key={`${entry.at}-${entry.state}`}>
+                        {entry.at} {entry.state} {entry.reason}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {showRetryActions && (
                 <div className="flex flex-col gap-3">
@@ -328,4 +483,12 @@ export default function CameraSquatPage() {
       </main>
     </div>
   );
+}
+
+function getMetricValueFromList(
+  metrics: Array<{ name: string; value: number }> | undefined,
+  name: string
+): number | null {
+  const metric = metrics?.find((item) => item.name === name);
+  return typeof metric?.value === 'number' ? metric.value : null;
 }

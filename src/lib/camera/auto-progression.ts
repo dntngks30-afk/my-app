@@ -26,6 +26,8 @@ export interface ExerciseGateResult {
   nextAllowed: boolean;
   flags: string[];
   reasons: string[];
+  failureReasons: string[];
+  userGuidance: string[];
   retryRecommended: boolean;
   evaluatorResult: EvaluatorResult;
   guardrail: StepGuardrailResult;
@@ -222,6 +224,143 @@ function getRetryMessage(guardrail: StepGuardrailResult): string {
   return '조금 더 안정적으로 해주세요';
 }
 
+function toUniqueGuidance(messages: string[]): string[] {
+  return [...new Set(messages)].slice(0, 2);
+}
+
+function getUserGuidance(
+  stepId: CameraStepId,
+  failureReasons: string[],
+  guardrail: StepGuardrailResult
+): string[] {
+  const messages: string[] = [];
+
+  if (
+    failureReasons.includes('capture_quality_invalid') ||
+    failureReasons.includes('capture_quality_low') ||
+    guardrail.flags.includes('framing_invalid') ||
+    guardrail.flags.includes('partial_capture')
+  ) {
+    messages.push('화면에 몸이 다 나오게 서주세요');
+  }
+
+  if (guardrail.flags.includes('landmark_confidence_low')) {
+    messages.push('조명을 조금 더 밝게 해주세요');
+  }
+
+  if (guardrail.flags.includes('unstable_motion_signal')) {
+    messages.push('카메라를 고정하고 천천히 움직여주세요');
+  }
+
+  if (
+    failureReasons.includes('insufficient_signal') ||
+    guardrail.flags.includes('valid_frames_too_few')
+  ) {
+    messages.push('동작을 조금 더 천천히 끝까지 해주세요');
+  }
+
+  if (stepId === 'squat') {
+    if (failureReasons.includes('depth_not_reached')) {
+      messages.push('조금 더 깊게 앉아주세요');
+    }
+    if (failureReasons.includes('ascent_not_detected')) {
+      messages.push('앉았다가 끝까지 다시 올라와 주세요');
+    }
+    if (failureReasons.includes('rep_incomplete')) {
+      messages.push('한 번 더 끝까지 앉았다 일어나 주세요');
+    }
+  }
+
+  if (stepId === 'wall-angel' && failureReasons.includes('rep_incomplete')) {
+    messages.push('팔을 끝까지 올렸다가 천천히 내려주세요');
+  }
+
+  if (stepId === 'single-leg-balance') {
+    if (guardrail.flags.includes('hold_too_short')) {
+      messages.push('한 발 자세를 조금만 더 유지해 주세요');
+    }
+    if (failureReasons.includes('side_missing')) {
+      messages.push('좌우 자세가 모두 보이게 다시 맞춰주세요');
+    }
+  }
+
+  if (failureReasons.includes('confidence_too_low')) {
+    messages.push('같은 동작을 한 번 더 안정적으로 해주세요');
+  }
+
+  return toUniqueGuidance(messages);
+}
+
+function getSquatFailureReasons(
+  result: EvaluatorResult,
+  guardrail: StepGuardrailResult,
+  confidence: number
+): string[] {
+  const failureReasons = new Set<string>();
+  const depth = getMetricValue(result.metrics, 'depth') ?? 0;
+  const descentCount = getHighlightedMetric(result, 'descentCount');
+  const bottomCount = getHighlightedMetric(result, 'bottomCount');
+  const ascentCount = getHighlightedMetric(result, 'ascentCount');
+
+  if (guardrail.flags.includes('insufficient_signal') || guardrail.flags.includes('valid_frames_too_few')) {
+    failureReasons.add('insufficient_signal');
+  }
+  if (guardrail.flags.includes('rep_incomplete') || result.completionHints?.includes('rep_phase_incomplete')) {
+    failureReasons.add('rep_incomplete');
+  }
+  if (guardrail.captureQuality !== 'ok') {
+    failureReasons.add(
+      guardrail.captureQuality === 'low' ? 'capture_quality_low' : 'capture_quality_invalid'
+    );
+  }
+  if (confidence < PASS_CONFIDENCE_THRESHOLD.squat) {
+    failureReasons.add('confidence_too_low');
+  }
+  if (depth < 45) {
+    failureReasons.add('depth_not_reached');
+  }
+  if (ascentCount === 0 || (descentCount > 0 && bottomCount > 0 && ascentCount === 0)) {
+    failureReasons.add('ascent_not_detected');
+  }
+  if (
+    guardrail.flags.includes('left_side_missing') ||
+    guardrail.flags.includes('right_side_missing') ||
+    guardrail.flags.includes('partial_capture')
+  ) {
+    failureReasons.add('side_missing');
+  }
+
+  return Array.from(failureReasons);
+}
+
+function getFailureReasons(
+  stepId: CameraStepId,
+  result: EvaluatorResult,
+  guardrail: StepGuardrailResult,
+  confidence: number,
+  completionSatisfied: boolean,
+  nextAllowed: boolean
+): string[] {
+  if (stepId === 'squat') {
+    return getSquatFailureReasons(result, guardrail, confidence);
+  }
+
+  const reasons = new Set<string>();
+  if (guardrail.flags.includes('insufficient_signal') || guardrail.flags.includes('valid_frames_too_few')) {
+    reasons.add('insufficient_signal');
+  }
+  if (guardrail.captureQuality !== 'ok') {
+    reasons.add(guardrail.captureQuality === 'low' ? 'capture_quality_low' : 'capture_quality_invalid');
+  }
+  if (confidence < PASS_CONFIDENCE_THRESHOLD[stepId]) {
+    reasons.add('confidence_too_low');
+  }
+  if (guardrail.flags.includes('left_side_missing') || guardrail.flags.includes('right_side_missing')) {
+    reasons.add('side_missing');
+  }
+  return Array.from(reasons);
+}
+
 export function evaluateExerciseAutoProgress(
   stepId: CameraStepId,
   landmarks: PoseLandmarks[],
@@ -237,6 +376,16 @@ export function evaluateExerciseAutoProgress(
   const autoAdvanceDelayMs = AUTO_ADVANCE_DELAY_MS[stepId];
   const lowConfidenceRetry =
     guardrail.retryRecommended && confidence < passThreshold;
+  const noNextAllowed = false;
+  const failureReasons = getFailureReasons(
+    stepId,
+    evaluatorResult,
+    guardrail,
+    confidence,
+    completionSatisfied,
+    noNextAllowed
+  );
+  const userGuidance = getUserGuidance(stepId, failureReasons, guardrail);
 
   if (
     stats.sampledFrameCount === 0 ||
@@ -251,6 +400,8 @@ export function evaluateExerciseAutoProgress(
       nextAllowed: false,
       flags: guardrail.flags,
       reasons,
+      failureReasons,
+      userGuidance,
       retryRecommended: guardrail.retryRecommended,
       evaluatorResult,
       guardrail,
@@ -280,6 +431,8 @@ export function evaluateExerciseAutoProgress(
       nextAllowed: true,
       flags: guardrail.flags,
       reasons,
+      failureReasons: [],
+      userGuidance: [],
       retryRecommended: false,
       evaluatorResult,
       guardrail,
@@ -297,6 +450,8 @@ export function evaluateExerciseAutoProgress(
       nextAllowed: false,
       flags: guardrail.flags,
       reasons,
+      failureReasons,
+      userGuidance,
       retryRecommended: true,
       evaluatorResult,
       guardrail,
@@ -330,6 +485,8 @@ export function evaluateExerciseAutoProgress(
       nextAllowed: false,
       flags: guardrail.flags,
       reasons,
+      failureReasons,
+      userGuidance,
       retryRecommended: true,
       evaluatorResult,
       guardrail,
@@ -349,6 +506,8 @@ export function evaluateExerciseAutoProgress(
     nextAllowed: false,
     flags: guardrail.flags,
     reasons,
+    failureReasons,
+    userGuidance,
     retryRecommended: guardrail.retryRecommended,
     evaluatorResult,
     guardrail,

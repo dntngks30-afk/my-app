@@ -274,6 +274,16 @@ export default function CameraWallAngelPage() {
                 >
                   {statusMessage}
                 </p>
+                {gate.userGuidance.length > 0 && (
+                  <div
+                    className="mt-2 space-y-1 text-xs text-slate-400 break-keep"
+                    style={{ fontFamily: 'var(--font-sans-noto)' }}
+                  >
+                    {gate.userGuidance.map((message) => (
+                      <p key={message}>{message}</p>
+                    ))}
+                  </div>
+                )}
                 {IS_DEV && (
                   <p
                     className="mt-2 text-[11px] text-slate-500 break-all"
