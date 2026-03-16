@@ -32,6 +32,12 @@ interface CameraPreviewProps {
   showPoseDebugOverlay?: boolean;
   /** 실시간 가이드 색상 */
   guideTone?: CameraGuideTone;
+  /** 카메라 안에서 바로 보이는 짧은 가이드 라벨 */
+  guideHint?: string | null;
+  /** 어떤 영역을 강조할지 지정 */
+  guideFocus?: 'frame' | 'upper' | 'lower' | 'full' | null;
+  /** 강조 애니메이션 여부 */
+  guideAnimated?: boolean;
   className?: string;
 }
 
@@ -67,6 +73,9 @@ export function CameraPreview({
   mirrored = true,
   showPoseDebugOverlay = process.env.NODE_ENV !== 'production',
   guideTone = 'neutral',
+  guideHint = null,
+  guideFocus = null,
+  guideAnimated = false,
   className = '',
 }: CameraPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -322,6 +331,7 @@ export function CameraPreview({
 
   const showLoading = status === 'requesting' || status === 'binding';
   const guidePalette = getGuidePalette(guideTone);
+  const showGuideBadge = Boolean(guideHint) && status === 'ready';
 
   return (
     <div
@@ -352,6 +362,48 @@ export function CameraPreview({
         className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center"
         aria-hidden
       >
+        {guideFocus && (
+          <div
+            className={`absolute rounded-[2rem] border-2 ${
+              guideAnimated ? 'animate-pulse' : ''
+            }`}
+            style={{
+              left:
+                guideFocus === 'upper'
+                  ? '31%'
+                  : guideFocus === 'lower'
+                    ? '32%'
+                    : guideFocus === 'full'
+                      ? '28%'
+                      : '18%',
+              top:
+                guideFocus === 'upper'
+                  ? '18%'
+                  : guideFocus === 'lower'
+                    ? '46%'
+                    : guideFocus === 'full'
+                      ? '18%'
+                      : '8%',
+              width:
+                guideFocus === 'frame'
+                  ? '64%'
+                  : guideFocus === 'full'
+                    ? '44%'
+                    : '36%',
+              height:
+                guideFocus === 'upper'
+                  ? '28%'
+                  : guideFocus === 'lower'
+                    ? '30%'
+                    : guideFocus === 'full'
+                      ? '58%'
+                      : '84%',
+              borderColor: guidePalette.frame,
+              backgroundColor: guidePalette.fill,
+              boxShadow: `0 0 0 10px ${guidePalette.glow}`,
+            }}
+          />
+        )}
         <svg
           viewBox="0 0 240 520"
           className="h-[85%] w-auto max-w-[78%] drop-shadow-[0_0_18px_rgba(255,255,255,0.08)]"
@@ -429,6 +481,21 @@ export function CameraPreview({
           />
         </svg>
       </div>
+      {showGuideBadge && (
+        <div className="absolute top-3 left-1/2 z-50 -translate-x-1/2 pointer-events-none">
+          <div
+            className={`rounded-full px-4 py-2 text-sm font-semibold text-white shadow-lg ${
+              guideAnimated ? 'animate-pulse' : ''
+            }`}
+            style={{
+              backgroundColor: guidePalette.frame,
+              boxShadow: `0 0 18px ${guidePalette.glow}`,
+            }}
+          >
+            {guideHint}
+          </div>
+        </div>
+      )}
       {process.env.NODE_ENV !== 'production' && (
         <div className="absolute bottom-2 left-2 z-40 rounded bg-black/50 px-2 py-1 text-[10px] text-white pointer-events-none">
           {status} / pose:{poseStatus}

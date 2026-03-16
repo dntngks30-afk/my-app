@@ -37,6 +37,51 @@ interface DebugTransitionEntry {
   reason: string;
 }
 
+interface SquatOverlayGuide {
+  hint: string | null;
+  focus: 'frame' | 'upper' | 'lower' | 'full' | null;
+  animated: boolean;
+}
+
+function getSquatOverlayGuide(
+  failureReasons: string[],
+  progressionState: ExerciseProgressionState
+): SquatOverlayGuide {
+  if (progressionState === 'passed') {
+    return { hint: '통과', focus: 'full', animated: true };
+  }
+
+  if (
+    failureReasons.includes('side_missing') ||
+    failureReasons.includes('capture_quality_invalid') ||
+    failureReasons.includes('capture_quality_low')
+  ) {
+    return { hint: '위치 다시', focus: 'frame', animated: true };
+  }
+
+  if (failureReasons.includes('depth_not_reached')) {
+    return { hint: '더 깊게', focus: 'lower', animated: true };
+  }
+
+  if (failureReasons.includes('ascent_not_detected')) {
+    return { hint: '끝까지 올라오기', focus: 'upper', animated: true };
+  }
+
+  if (failureReasons.includes('rep_incomplete')) {
+    return { hint: '동작 이어가기', focus: 'full', animated: true };
+  }
+
+  if (failureReasons.includes('confidence_too_low')) {
+    return { hint: '자세 고정', focus: 'full', animated: false };
+  }
+
+  if (progressionState === 'camera_ready') {
+    return { hint: '자세 준비', focus: 'full', animated: false };
+  }
+
+  return { hint: null, focus: null, animated: false };
+}
+
 export default function CameraSquatPage() {
   const router = useRouter();
   const [permissionDenied, setPermissionDenied] = useState(false);
@@ -285,6 +330,7 @@ export default function CameraSquatPage() {
         ? 'next_triggered'
         : 'pass_not_detected';
   const guideTone = getCameraGuideTone(gate);
+  const overlayGuide = getSquatOverlayGuide(gate.failureReasons, progressionState);
 
   return (
     <div
@@ -368,6 +414,9 @@ export default function CameraSquatPage() {
                 onPoseFrame={pushFrame}
                 onError={handleCameraError}
                 guideTone={guideTone}
+                guideHint={overlayGuide.hint}
+                guideFocus={overlayGuide.focus}
+                guideAnimated={overlayGuide.animated}
                 className="w-full"
               />
             </div>
