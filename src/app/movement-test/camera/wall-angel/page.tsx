@@ -21,6 +21,7 @@ import { usePoseCapture } from '@/lib/camera/use-pose-capture';
 import {
   evaluateExerciseAutoProgress,
   getCameraGuideTone,
+  isGatePassReady,
   type ExerciseProgressionState,
 } from '@/lib/camera/auto-progression';
 
@@ -44,11 +45,15 @@ export default function CameraWallAngelPage() {
   const settledRef = useRef(false);
   const advanceLockRef = useRef(false);
   const autoAdvanceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const scheduledAdvanceStepKeyRef = useRef<string | null>(null);
+  const triggeredAdvanceStepKeyRef = useRef<string | null>(null);
+  const currentStepKey = `${STEP_ID}:${previewKey}`;
 
   const gate = useMemo(
     () => evaluateExerciseAutoProgress(STEP_ID, landmarks, stats),
     [landmarks, stats]
   );
+  const passReady = isGatePassReady(gate);
 
   const clearAutoAdvanceTimer = useCallback(() => {
     if (autoAdvanceTimerRef.current) {
@@ -56,6 +61,14 @@ export default function CameraWallAngelPage() {
       autoAdvanceTimerRef.current = null;
     }
   }, []);
+
+  useEffect(() => {
+    clearAutoAdvanceTimer();
+    settledRef.current = false;
+    advanceLockRef.current = false;
+    scheduledAdvanceStepKeyRef.current = null;
+    triggeredAdvanceStepKeyRef.current = null;
+  }, [clearAutoAdvanceTimer, currentStepKey]);
 
   const persistCurrentStep = useCallback(() => {
     const current = loadCameraTest();
@@ -94,22 +107,54 @@ export default function CameraWallAngelPage() {
   );
 
   const handlePassAdvance = useCallback(() => {
-    if (advanceLockRef.current) return;
+    if (
+      advanceLockRef.current &&
+      autoAdvanceTimerRef.current &&
+      scheduledAdvanceStepKeyRef.current === currentStepKey
+    ) {
+      return;
+    }
+
+    if (advanceLockRef.current && !autoAdvanceTimerRef.current) {
+      advanceLockRef.current = false;
+    }
+
+    if (triggeredAdvanceStepKeyRef.current === currentStepKey) return;
+
+    const next = getNextStepPath(STEP_ID);
+    if (!next) return;
 
     advanceLockRef.current = true;
     settledRef.current = true;
     stop();
     persistCurrentStep();
     setProgressionState('passed');
-    setStatusMessage('충분한 신호를 확인했어요');
-    const next = getNextStepPath(STEP_ID);
-    if (!next) return;
+    setStatusMessage(gate.uiMessage);
 
     clearAutoAdvanceTimer();
+    scheduledAdvanceStepKeyRef.current = currentStepKey;
     autoAdvanceTimerRef.current = window.setTimeout(() => {
+      if (triggeredAdvanceStepKeyRef.current === currentStepKey) return;
+      triggeredAdvanceStepKeyRef.current = currentStepKey;
+
+      if (IS_DEV) {
+        console.info('[camera:auto-next]', {
+          stepId: STEP_ID,
+          currentStepKey,
+          reason: 'route_push_next_step',
+        });
+      }
       router.push(next);
     }, gate.autoAdvanceDelayMs);
-  }, [clearAutoAdvanceTimer, gate.autoAdvanceDelayMs, persistCurrentStep, router, stop]);
+  }, [
+    clearAutoAdvanceTimer,
+    currentStepKey,
+    gate.autoAdvanceDelayMs,
+    gate.uiMessage,
+    persistCurrentStep,
+    router,
+    stop,
+  ]);
 
   useEffect(() => {
     if (permissionDenied || !cameraReady || settledRef.current) {
@@ -125,7 +170,7 @@ export default function CameraWallAngelPage() {
     setProgressionState(gate.progressionState);
     setStatusMessage(gate.uiMessage);
 
-    if (gate.status === 'pass' && gate.nextAllowed) {
+    if (passReady) {
       handlePassAdvance();
       return;
     }
@@ -140,6 +185,7 @@ export default function CameraWallAngelPage() {
     cameraReady,
     gate,
     handlePassAdvance,
+    passReady,
     permissionDenied,
     stats.sampledFrameCount,
     stop,
@@ -188,7 +234,10 @@ export default function CameraWallAngelPage() {
     progressionState === 'retry_required' ||
     progressionState === 'failed' ||
     progressionState === 'insufficient_signal';
-  const guideTone = getCameraGuideTone(gate);
+  const guideTone = getCameraGuideTone({
+    ...gate,
+    progressionState,
+  });
 
   return (
     <div

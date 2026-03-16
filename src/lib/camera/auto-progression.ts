@@ -36,10 +36,19 @@ export interface ExerciseGateResult {
   autoAdvanceDelayMs: number;
 }
 
+export function isGatePassReady(
+  gate: Pick<ExerciseGateResult, 'status' | 'nextAllowed' | 'completionSatisfied'>
+): boolean {
+  return gate.status === 'pass' && gate.nextAllowed && gate.completionSatisfied;
+}
+
 export function getCameraGuideTone(
-  gate: Pick<ExerciseGateResult, 'status' | 'progressionState'>
+  gate: Pick<
+    ExerciseGateResult,
+    'status' | 'progressionState' | 'nextAllowed' | 'completionSatisfied'
+  >
 ): CameraGuideTone {
-  if (gate.status === 'pass' || gate.progressionState === 'passed') {
+  if (isGatePassReady(gate) || gate.progressionState === 'passed') {
     return 'success';
   }
 
