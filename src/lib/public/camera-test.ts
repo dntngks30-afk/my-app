@@ -13,8 +13,21 @@ export type CameraStepId =
   | 'wall-angel'
   | 'single-leg-balance';
 
-/** Setup 화면 경로 (squat 전 공통 준비) */
+/** Setup 화면 경로 (squat 전 공통 준비) - PR-CAM-UX-01 이후 squat에 병합됨, 호환용 유지 */
 export const CAMERA_SETUP_PATH = '/movement-test/camera/setup';
+
+/** squat 첫 단계 경로 (entry에서 바로 진입) */
+export const CAMERA_SQUAT_PATH = '/movement-test/camera/squat';
+
+/** 단일 카메라 화면 내 phase (PR-CAM-UX-01) */
+export type CameraPhase =
+  | 'setup'
+  | 'arming'
+  | 'countdown'
+  | 'capturing'
+  | 'success'
+  | 'transitioning'
+  | 'retry_recovery';
 
 export const CAMERA_STEPS: { id: CameraStepId; path: string; title: string }[] = [
   { id: 'squat', path: '/movement-test/camera/squat', title: '스쿼트' },
@@ -75,6 +88,7 @@ export function getNextStepPath(currentId: CameraStepId): string | null {
 export function getPrevStepPath(currentId: CameraStepId): string | null {
   const i = CAMERA_STEPS.findIndex((s) => s.id === currentId);
   if (i < 0) return null;
-  if (i === 0) return CAMERA_SETUP_PATH;
+  /** squat: setup이 병합되어 entry로 돌아감 */
+  if (i === 0) return '/movement-test/camera';
   return CAMERA_STEPS[i - 1]!.path;
 }

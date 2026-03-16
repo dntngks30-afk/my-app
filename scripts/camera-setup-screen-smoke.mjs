@@ -9,7 +9,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 process.chdir(join(__dirname, '..'));
 
 const { getSetupFramingHint } = await import('../src/lib/camera/setup-framing.ts');
-const { CAMERA_SETUP_PATH, CAMERA_STEPS, getPrevStepPath } = await import('../src/lib/public/camera-test.ts');
+const {
+  CAMERA_SETUP_PATH,
+  CAMERA_SQUAT_PATH,
+  CAMERA_STEPS,
+  getPrevStepPath,
+} = await import('../src/lib/public/camera-test.ts');
 
 let passed = 0;
 let failed = 0;
@@ -24,12 +29,13 @@ function ok(name, cond) {
   }
 }
 
-console.log('Camera setup screen smoke test\n');
+console.log('Camera setup screen smoke test (PR-CAM-UX-01: single-screen phase)\n');
 
-// AT1: Setup path and flow
-ok('AT1a: CAMERA_SETUP_PATH exists', typeof CAMERA_SETUP_PATH === 'string' && CAMERA_SETUP_PATH.includes('setup'));
-ok('AT1b: squat prev returns setup', getPrevStepPath('squat') === CAMERA_SETUP_PATH);
-ok('AT1c: overhead-reach prev returns squat', getPrevStepPath('overhead-reach') === CAMERA_STEPS[0].path);
+// AT1: Path and flow (PR-CAM-UX-01: squat prev returns entry, setup merged into squat)
+ok('AT1a: CAMERA_SETUP_PATH exists (compat)', typeof CAMERA_SETUP_PATH === 'string' && CAMERA_SETUP_PATH.includes('setup'));
+ok('AT1b: CAMERA_SQUAT_PATH exists', typeof CAMERA_SQUAT_PATH === 'string' && CAMERA_SQUAT_PATH.includes('squat'));
+ok('AT1c: squat prev returns entry (setup merged)', getPrevStepPath('squat') === '/movement-test/camera');
+ok('AT1d: overhead-reach prev returns squat', getPrevStepPath('overhead-reach') === CAMERA_STEPS[0].path);
 
 // AT2: Setup framing hint
 ok('AT2a: empty landmarks returns null', getSetupFramingHint([]) === null);
@@ -43,6 +49,10 @@ ok('AT3: setup-framing does not import evaluator', true);
 ok('AT4a: CAMERA_STEPS has squat and overhead-reach only', CAMERA_STEPS.length === 2);
 ok('AT4b: wall-angel not in CAMERA_STEPS', !CAMERA_STEPS.some((s) => s.id === 'wall-angel'));
 ok('AT4c: single-leg-balance not in CAMERA_STEPS', !CAMERA_STEPS.some((s) => s.id === 'single-leg-balance'));
+
+// AT5: PR-CAM-UX-01 phase model (single-screen flow)
+ok('AT5a: entry->squat path is squat', CAMERA_SQUAT_PATH === '/movement-test/camera/squat');
+ok('AT5b: squat prev is entry not setup', getPrevStepPath('squat') === '/movement-test/camera');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

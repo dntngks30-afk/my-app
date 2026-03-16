@@ -5,7 +5,7 @@
  */
 import { useRouter } from 'next/navigation';
 import { Starfield } from '@/components/landing/Starfield';
-import { CAMERA_SETUP_PATH, resetCameraTest, saveCameraTest } from '@/lib/public/camera-test';
+import { CAMERA_SQUAT_PATH, resetCameraTest, saveCameraTest } from '@/lib/public/camera-test';
 import { clearCameraResult } from '@/lib/camera/camera-result';
 
 const BG = '#0d161f';
@@ -23,7 +23,7 @@ export default function CameraEntryPage() {
       evaluatorResults: {},
       guardrailResults: {},
     });
-    router.push(CAMERA_SETUP_PATH);
+    router.push(CAMERA_SQUAT_PATH);
   };
 
   return (

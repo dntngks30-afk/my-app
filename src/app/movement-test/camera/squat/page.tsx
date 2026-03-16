@@ -16,8 +16,10 @@ import {
   getNextStepPath,
   getPrevStepPath,
   type CameraStepId,
+  type CameraPhase,
 } from '@/lib/public/camera-test';
 import { usePoseCapture } from '@/lib/camera/use-pose-capture';
+import { getSetupFramingHint } from '@/lib/camera/setup-framing';
 import {
   evaluateExerciseAutoProgress,
   getCameraGuideTone,
@@ -93,11 +95,16 @@ function getSquatOverlayGuide(
   return { hint: null, focus: null, animated: false };
 }
 
+const ARMING_DELAY_MS = 800;
+const COUNTDOWN_SECONDS = 3;
+
 export default function CameraSquatPage() {
   const router = useRouter();
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [previewKey, setPreviewKey] = useState(0);
+  const [cameraPhase, setCameraPhase] = useState<CameraPhase>('setup');
+  const [countdownValue, setCountdownValue] = useState(0);
   const [progressionState, setProgressionState] =
     useState<ExerciseProgressionState>('idle');
   const [statusMessage, setStatusMessage] = useState('준비 중');
@@ -116,6 +123,9 @@ export default function CameraSquatPage() {
   const settledRef = useRef(false);
   const advanceLockRef = useRef(false);
   const autoAdvanceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const armingTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const countdownTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const lastProgressionStateRef = useRef<ExerciseProgressionState>('idle');
   const passLatchedStepKeyRef = useRef<string | null>(null);
   const scheduledAdvanceStepKeyRef = useRef<string | null>(null);
@@ -129,6 +139,7 @@ export default function CameraSquatPage() {
     [landmarks, stats]
   );
   const finalPassLatched = isFinalPassLatched(STEP_ID, gate);
+  const setupFramingHint = useMemo(() => getSetupFramingHint(landmarks), [landmarks]);
 
   useEffect(() => {
     if (!debugEnabled || stats.sampledFrameCount === 0) return;
@@ -219,6 +230,7 @@ export default function CameraSquatPage() {
 
   const handleVideoReady = useCallback(
     (video: HTMLVideoElement) => {
+      videoRef.current = video;
       if (!hasStartedRef.current) {
         hasStartedRef.current = true;
         start(video);
@@ -231,6 +243,45 @@ export default function CameraSquatPage() {
     },
     [appendTransition, start]
   );
+
+  const handleSetupReady = useCallback(() => {
+    setCameraPhase('arming');
+  }, []);
+
+  useEffect(() => {
+    if (cameraPhase !== 'arming') return;
+    armingTimerRef.current = window.setTimeout(() => {
+      armingTimerRef.current = null;
+      setCameraPhase('countdown');
+      setCountdownValue(COUNTDOWN_SECONDS);
+    }, ARMING_DELAY_MS);
+    return () => {
+      if (armingTimerRef.current) {
+        window.clearTimeout(armingTimerRef.current);
+        armingTimerRef.current = null;
+      }
+    };
+  }, [cameraPhase]);
+
+  useEffect(() => {
+    if (cameraPhase !== 'countdown' || countdownValue <= 0) return;
+    const id = window.setTimeout(() => {
+      if (countdownValue === 1) {
+        setCountdownValue(0);
+        setCameraPhase('capturing');
+        if (videoRef.current) start(videoRef.current);
+      } else {
+        setCountdownValue((v) => v - 1);
+      }
+    }, 1000);
+    countdownTimerRef.current = id;
+    return () => {
+      if (countdownTimerRef.current) {
+        window.clearTimeout(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+      }
+    };
+  }, [cameraPhase, countdownValue, start]);
 
   const latchPassEvent = useCallback(() => {
     if (passLatchedStepKeyRef.current === currentStepKey || passLatched) {
@@ -254,6 +305,7 @@ export default function CameraSquatPage() {
   }, [appendTransition, currentStepKey, gate.uiMessage, passLatched, persistCurrentStep, stop]);
 
   useEffect(() => {
+    if (cameraPhase !== 'capturing') return;
     if (permissionDenied || !cameraReady || passLatched) {
       return;
     }
@@ -284,6 +336,7 @@ export default function CameraSquatPage() {
     }
   }, [
     appendTransition,
+    cameraPhase,
     cameraReady,
     gate,
     latchPassEvent,
@@ -379,12 +432,22 @@ export default function CameraSquatPage() {
     recordAttemptSnapshot(STEP_ID, gate);
     clearAutoAdvanceTimer();
     stop();
+    if (armingTimerRef.current) {
+      window.clearTimeout(armingTimerRef.current);
+      armingTimerRef.current = null;
+    }
+    if (countdownTimerRef.current) {
+      window.clearTimeout(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
     settledRef.current = false;
     advanceLockRef.current = false;
     passLatchedStepKeyRef.current = null;
     scheduledAdvanceStepKeyRef.current = null;
     triggeredAdvanceStepKeyRef.current = null;
     hasStartedRef.current = false;
+    setCameraPhase('setup');
+    setCountdownValue(0);
     setCameraReady(false);
     setPassLatched(false);
     setPassLatchedAt(null);
@@ -484,6 +547,8 @@ export default function CameraSquatPage() {
     progressionState: effectiveProgressionState,
   });
   const overlayGuide = getSquatOverlayGuide(gate.failureReasons, effectiveProgressionState);
+  const isPreCapturePhase =
+    cameraPhase === 'setup' || cameraPhase === 'arming' || cameraPhase === 'countdown';
 
   return (
     <div
@@ -520,16 +585,24 @@ export default function CameraSquatPage() {
 
       <main className="relative z-10 flex-1 flex flex-col items-center px-6 py-4 overflow-hidden">
         <h1
-          className="text-xl font-bold text-slate-100 mb-2"
+          className="text-xl font-bold text-slate-100 mb-2 shrink-0"
           style={{ fontFamily: 'var(--font-sans-noto)' }}
         >
           스쿼트
         </h1>
         <p
-          className="text-slate-400 text-sm mb-4 text-center break-keep"
+          className="text-slate-400 text-sm mb-4 text-center break-keep shrink-0"
           style={{ fontFamily: 'var(--font-sans-noto)' }}
         >
-          {INSTRUCTION}
+          {isPreCapturePhase ? (
+            <>
+              휴대폰을 벽이나 가구에 기대 세워 주세요.
+              <br />
+              머리부터 발끝까지 화면 안에 들어오면 됩니다.
+            </>
+          ) : (
+            INSTRUCTION
+          )}
         </p>
 
         {permissionDenied ? (
@@ -560,24 +633,62 @@ export default function CameraSquatPage() {
           </div>
         ) : (
           <>
-            <div className="w-full max-w-md flex-1 min-h-0 flex flex-col items-center">
+            <div className="w-full max-w-md flex-1 min-h-0 flex flex-col items-center relative">
               <CameraPreview
                 key={previewKey}
                 onVideoReady={handleVideoReady}
                 onPoseFrame={pushFrame}
                 onError={handleCameraError}
-                guideTone={guideTone}
-                guideHint={overlayGuide.hint}
-                guideFocus={overlayGuide.focus}
-                guideAnimated={overlayGuide.animated}
+                guideTone={isPreCapturePhase ? 'neutral' : guideTone}
+                guideHint={isPreCapturePhase ? null : overlayGuide.hint}
+                guideFocus={isPreCapturePhase ? null : overlayGuide.focus}
+                guideAnimated={isPreCapturePhase ? false : overlayGuide.animated}
                 guideVariant="default"
-                guideBadges={setupGuide.badges}
-                guideInstructions={setupGuide.instructions}
-                guideReadinessLabel={setupGuide.readinessLabel}
+                guideBadges={isPreCapturePhase ? ['전신', '1.8~2m 거리', '폰 낮게'] : setupGuide.badges}
+                guideInstructions={isPreCapturePhase ? undefined : setupGuide.instructions}
+                guideReadinessLabel={isPreCapturePhase ? undefined : setupGuide.readinessLabel}
                 className="w-full"
               />
+              {cameraPhase === 'countdown' && countdownValue > 0 && (
+                <div
+                  className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                  aria-live="polite"
+                >
+                  <span
+                    className="text-8xl font-bold text-white drop-shadow-lg"
+                    style={{ fontFamily: 'var(--font-sans-noto)' }}
+                  >
+                    {countdownValue}
+                  </span>
+                </div>
+              )}
             </div>
-            <div className="w-full max-w-md mt-4 space-y-3">
+            <div className="w-full max-w-md mt-4 space-y-3 shrink-0">
+              {isPreCapturePhase ? (
+                <div className="space-y-3">
+                  <p
+                    className="text-center text-xs text-slate-500"
+                    style={{ fontFamily: 'var(--font-sans-noto)' }}
+                  >
+                    {cameraPhase === 'arming'
+                      ? '준비 중...'
+                      : cameraPhase === 'countdown'
+                        ? ''
+                        : setupFramingHint ?? '준비가 되면 다음으로 넘어가세요'}
+                  </p>
+                  {cameraPhase === 'setup' && (
+                    <button
+                      type="button"
+                      onClick={handleSetupReady}
+                      className="w-full min-h-[48px] rounded-xl font-bold text-slate-900 bg-white hover:bg-slate-100 transition-colors"
+                      style={{ fontFamily: 'var(--font-sans-noto)' }}
+                    >
+                      준비됐어요
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <>
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-center">
                 <p
                   className="text-sm text-slate-200"
@@ -704,6 +815,8 @@ export default function CameraSquatPage() {
                   강제 다음
                 </button>
               )}
+          </>
+        )}
             </div>
           </>
         )}
