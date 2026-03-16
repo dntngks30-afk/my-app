@@ -24,7 +24,8 @@ export type CameraGuardrailFlag =
   | 'hard_partial'
   | 'unstable_frame_timing'
   | 'unstable_bbox'
-  | 'unstable_landmarks';
+  | 'unstable_landmarks'
+  | 'unilateral_joint_dropout';
 
 type CompletionStatus = 'complete' | 'partial' | 'insufficient';
 
@@ -48,6 +49,8 @@ export interface StepGuardrailDebug extends StepMetrics {
   captureDurationMs: number;
   metricSufficiency: number;
   timestampDiscontinuityCount?: number;
+  /** PR-2: per-step 진단 (evaluator에서 전달, additive) */
+  perStepDiagnostics?: Record<string, unknown>;
 }
 
 export interface StepGuardrailResult {
@@ -334,14 +337,41 @@ export function assessStepGuardrail(
   }
   if (leftSideCompleteness < 0.55) flags.add('left_side_missing');
   if (rightSideCompleteness < 0.55) flags.add('right_side_missing');
-  if (leftSideCompleteness < 0.55 || rightSideCompleteness < 0.55) {
-    flags.add('hard_partial');
+  if (Math.abs(leftSideCompleteness - rightSideCompleteness) > 0.35) {
+    flags.add('unilateral_joint_dropout');
   }
-  if (
-    (leftSideCompleteness >= 0.55 && leftSideCompleteness < 0.7) ||
-    (rightSideCompleteness >= 0.55 && rightSideCompleteness < 0.7)
-  ) {
-    flags.add('soft_partial');
+  const perStep = evaluatorResult.debug?.perStepDiagnostics;
+  if (perStep && typeof perStep === 'object') {
+    const steps = Object.values(perStep) as Array<{
+      missingCriticalJoints?: string[];
+      criticalJointAvailability?: number;
+      leftSideCompleteness?: number;
+      rightSideCompleteness?: number;
+    }>;
+    const hasHardPartial = steps.some(
+      (s) =>
+        (s.missingCriticalJoints?.length ?? 0) >= 2 ||
+        (s.leftSideCompleteness ?? 1) < 0.55 ||
+        (s.rightSideCompleteness ?? 1) < 0.55
+    );
+    const hasSoftPartial = steps.some(
+      (s) =>
+        ((s.missingCriticalJoints?.length ?? 0) === 1 && (s.criticalJointAvailability ?? 0) >= 0.6) ||
+        ((s.leftSideCompleteness ?? 0) >= 0.55 && (s.leftSideCompleteness ?? 0) < 0.7) ||
+        ((s.rightSideCompleteness ?? 0) >= 0.55 && (s.rightSideCompleteness ?? 0) < 0.7)
+    );
+    if (hasHardPartial) flags.add('hard_partial');
+    else if (hasSoftPartial) flags.add('soft_partial');
+  } else {
+    if (leftSideCompleteness < 0.55 || rightSideCompleteness < 0.55) {
+      flags.add('hard_partial');
+    }
+    if (
+      (leftSideCompleteness >= 0.55 && leftSideCompleteness < 0.7) ||
+      (rightSideCompleteness >= 0.55 && rightSideCompleteness < 0.7)
+    ) {
+      flags.add('soft_partial');
+    }
   }
   if (droppedFrameRatio > 0.45 || stats.timestampDiscontinuityCount > 0) {
     flags.add('unstable_frame_timing');
@@ -432,6 +462,7 @@ export function assessStepGuardrail(
       captureDurationMs: Math.round(stats.captureDurationMs),
       metricSufficiency: round(metricSufficiency),
       timestampDiscontinuityCount: stats.timestampDiscontinuityCount,
+      perStepDiagnostics: evaluatorResult.debug?.perStepDiagnostics,
     },
   };
 }

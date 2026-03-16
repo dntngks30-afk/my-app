@@ -5,6 +5,7 @@
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
 import { buildPoseFeaturesFrames, getSquatRecoverySignal } from '@/lib/camera/pose-features';
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
+import { getSquatPerStepDiagnostics } from '@/lib/camera/step-joint-spec';
 import type { EvaluatorResult, EvaluatorMetric } from './types';
 
 const MIN_VALID_FRAMES = 8;
@@ -29,6 +30,16 @@ function countPhases(frames: PoseFeaturesFrame[], phase: PoseFeaturesFrame['phas
 export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): EvaluatorResult {
   const valid = frames.filter((frame) => frame.isValid);
   if (valid.length < MIN_VALID_FRAMES) {
+    const emptyDiag = {
+      criticalJointAvailability: 0,
+      missingCriticalJoints: [] as string[],
+      leftSideCompleteness: 0,
+      rightSideCompleteness: 0,
+      leftRightAsymmetry: 0,
+      metricSufficiency: 0,
+      frameCount: 0,
+      instabilityFlags: [] as string[],
+    };
     return {
       stepId: 'squat',
       metrics: [],
@@ -40,9 +51,8 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         frameCount: frames.length,
         validFrameCount: valid.length,
         phaseHints: Array.from(new Set(frames.map((frame) => frame.phaseHint))),
-        highlightedMetrics: {
-          validFrameCount: valid.length,
-        },
+        highlightedMetrics: { validFrameCount: valid.length },
+        perStepDiagnostics: { descent: emptyDiag, bottom: emptyDiag, ascent: emptyDiag },
       },
     };
   }
@@ -134,6 +144,13 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     });
   }
 
+  const perStepDiagnostics = getSquatPerStepDiagnostics(valid, metrics.length);
+  const perStepRecord: Record<string, typeof perStepDiagnostics.descent> = {
+    descent: perStepDiagnostics.descent,
+    bottom: perStepDiagnostics.bottom,
+    ascent: perStepDiagnostics.ascent,
+  };
+
   return {
     stepId: 'squat',
     metrics,
@@ -156,6 +173,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         recoveryDrop: Math.round(recovery.recoveryDrop * 100),
         repCount: repCountEstimate,
       },
+      perStepDiagnostics: perStepRecord,
     },
   };
 }

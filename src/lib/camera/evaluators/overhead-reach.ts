@@ -5,6 +5,7 @@
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
 import { buildPoseFeaturesFrames } from '@/lib/camera/pose-features';
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
+import { getOverheadPerStepDiagnostics } from '@/lib/camera/step-joint-spec';
 import type { EvaluatorResult, EvaluatorMetric } from './types';
 
 const MIN_VALID_FRAMES = 8;
@@ -27,6 +28,16 @@ export function evaluateOverheadReachFromPoseFrames(
 ): EvaluatorResult {
   const valid = frames.filter((frame) => frame.isValid);
   if (valid.length < MIN_VALID_FRAMES) {
+    const emptyDiag = {
+      criticalJointAvailability: 0,
+      missingCriticalJoints: [] as string[],
+      leftSideCompleteness: 0,
+      rightSideCompleteness: 0,
+      leftRightAsymmetry: 0,
+      metricSufficiency: 0,
+      frameCount: 0,
+      instabilityFlags: [] as string[],
+    };
     return {
       stepId: 'overhead-reach',
       metrics: [],
@@ -38,9 +49,8 @@ export function evaluateOverheadReachFromPoseFrames(
         frameCount: frames.length,
         validFrameCount: valid.length,
         phaseHints: Array.from(new Set(frames.map((frame) => frame.phaseHint))),
-        highlightedMetrics: {
-          validFrameCount: valid.length,
-        },
+        highlightedMetrics: { validFrameCount: valid.length },
+        perStepDiagnostics: { raise: emptyDiag, hold: emptyDiag },
       },
     };
   }
@@ -123,6 +133,12 @@ export function evaluateOverheadReachFromPoseFrames(
     trend: holdDurationMs >= 900 ? 'good' : holdDurationMs >= 700 ? 'neutral' : 'concern',
   });
 
+  const perStepDiagnostics = getOverheadPerStepDiagnostics(valid, metrics.length);
+  const perStepRecord: Record<string, (typeof perStepDiagnostics)['raise']> = {
+    raise: perStepDiagnostics.raise,
+    hold: perStepDiagnostics.hold,
+  };
+
   return {
     stepId: 'overhead-reach',
     metrics,
@@ -142,6 +158,7 @@ export function evaluateOverheadReachFromPoseFrames(
         peakArmElevation:
           armElevationAvgValues.length > 0 ? Math.round(Math.max(...armElevationAvgValues)) : null,
       },
+      perStepDiagnostics: perStepRecord,
     },
   };
 }

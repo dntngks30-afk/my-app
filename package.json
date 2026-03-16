@@ -16,6 +16,7 @@
     "test:frequency-fail-close": "npx tsx scripts/frequency-fail-close-regression.mjs",
     "test:frequency-ssot": "npx tsx scripts/frequency-ssot-smoke.mjs",
     "test:evidence-gate": "npx tsx scripts/evidence-gate-smoke.mjs",
+    "test:camera-pr2-signal": "npx tsx scripts/camera-pr2-signal-structure-smoke.mjs",
     "test:session-feedback": "npx tsx scripts/session-feedback-smoke.mjs",
     "test:progress-report": "npx tsx scripts/progress-report-smoke.mjs",
     "test:adaptive-progression": "npx tsx scripts/adaptive-progression-smoke.mjs",
