@@ -2,98 +2,158 @@
  * 스쿼트 evaluator
  * metrics: depth, knee alignment trend, trunk lean, asymmetry
  */
-import { POSE_LANDMARKS } from '@/lib/motion/pose-types';
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
+import { buildPoseFeaturesFrames } from '@/lib/camera/pose-features';
+import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 import type { EvaluatorResult, EvaluatorMetric } from './types';
 
 const MIN_VALID_FRAMES = 8;
 
-function angle(a: { x: number; y: number }, b: { x: number; y: number }, c: { x: number; y: number }): number {
-  const rad = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
-  return Math.abs((rad * 180) / Math.PI);
+function mean(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-export function evaluateSquat(landmarks: PoseLandmarks[]): EvaluatorResult {
-  const valid = landmarks.filter((l) => l.landmarks?.length >= 33);
+function clamp(value: number, min = 0, max = 1): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getNumbers(values: Array<number | null>): number[] {
+  return values.filter((value): value is number => typeof value === 'number');
+}
+
+function countPhases(frames: PoseFeaturesFrame[], phase: PoseFeaturesFrame['phaseHint']): number {
+  return frames.filter((frame) => frame.phaseHint === phase).length;
+}
+
+export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): EvaluatorResult {
+  const valid = frames.filter((frame) => frame.isValid);
   if (valid.length < MIN_VALID_FRAMES) {
     return {
       stepId: 'squat',
       metrics: [],
       insufficientSignal: true,
-      reason: valid.length < MIN_VALID_FRAMES ? '프레임 부족' : undefined,
+      reason: '프레임 부족',
+      qualityHints: ['valid_frames_too_few'],
+      completionHints: ['rep_missing'],
+      debug: {
+        frameCount: frames.length,
+        validFrameCount: valid.length,
+        phaseHints: Array.from(new Set(frames.map((frame) => frame.phaseHint))),
+        highlightedMetrics: {
+          validFrameCount: valid.length,
+        },
+      },
     };
   }
 
   const metrics: EvaluatorMetric[] = [];
-  const depths: number[] = [];
-  const kneeAlignments: number[] = [];
-  const trunkLeans: number[] = [];
+  const rawMetrics: EvaluatorMetric[] = [];
+  const interpretedSignals: string[] = [];
+  const qualityHints = [...new Set(valid.flatMap((frame) => frame.qualityHints))];
+  const completionHints: string[] = [];
+  const depthValues = getNumbers(valid.map((frame) => frame.derived.squatDepthProxy));
+  const kneeTracking = getNumbers(valid.map((frame) => frame.derived.kneeTrackingRatio));
+  const trunkLeanValues = getNumbers(valid.map((frame) => frame.derived.trunkLeanDeg)).map((value) =>
+    Math.abs(value)
+  );
+  const asymmetryValues = getNumbers(valid.map((frame) => frame.derived.kneeAngleGap));
+  const weightShiftValues = getNumbers(valid.map((frame) => frame.derived.weightShiftRatio));
+  const bottomFrames = valid.filter((frame) => frame.phaseHint === 'bottom');
+  const bottomDepths = getNumbers(bottomFrames.map((frame) => frame.derived.squatDepthProxy));
 
-  for (const frame of valid) {
-    const lm = frame.landmarks;
-    const lHip = lm[POSE_LANDMARKS.LEFT_HIP];
-    const rHip = lm[POSE_LANDMARKS.RIGHT_HIP];
-    const lKnee = lm[POSE_LANDMARKS.LEFT_KNEE];
-    const rKnee = lm[POSE_LANDMARKS.RIGHT_KNEE];
-    const lAnkle = lm[POSE_LANDMARKS.LEFT_ANKLE];
-    const rAnkle = lm[POSE_LANDMARKS.RIGHT_ANKLE];
-    const lShoulder = lm[POSE_LANDMARKS.LEFT_SHOULDER];
-    const rShoulder = lm[POSE_LANDMARKS.RIGHT_SHOULDER];
-
-    if (lHip && rHip && lKnee && rKnee && lAnkle && rAnkle) {
-      const hipKneeAngleL = angle(lHip, lKnee, lAnkle);
-      const hipKneeAngleR = angle(rHip, rKnee, rAnkle);
-      depths.push((hipKneeAngleL + hipKneeAngleR) / 2);
-    }
-    if (lHip && rHip && lKnee && rKnee) {
-      const kneeWidth = Math.abs(lKnee.x - rKnee.x);
-      const hipWidth = Math.abs(lHip.x - rHip.x);
-      kneeAlignments.push(hipWidth > 0 ? kneeWidth / hipWidth : 1);
-    }
-    if (lShoulder && rShoulder && lHip && rHip) {
-      const shoulderMid = { x: (lShoulder.x + rShoulder.x) / 2, y: (lShoulder.y + rShoulder.y) / 2 };
-      const hipMid = { x: (lHip.x + rHip.x) / 2, y: (lHip.y + rHip.y) / 2 };
-      trunkLeans.push(Math.atan2(shoulderMid.x - hipMid.x, hipMid.y - shoulderMid.y) * (180 / Math.PI));
-    }
-  }
-
-  if (depths.length > 0) {
-    const avgDepth = depths.reduce((a, b) => a + b, 0) / depths.length;
-    const maxDepth = Math.max(...depths);
-    metrics.push({ name: 'depth', value: avgDepth, unit: 'deg', trend: maxDepth >= 80 ? 'good' : maxDepth >= 60 ? 'neutral' : 'concern' });
-  }
-  if (kneeAlignments.length > 0) {
-    const avg = kneeAlignments.reduce((a, b) => a + b, 0) / kneeAlignments.length;
-    metrics.push({ name: 'knee_alignment_trend', value: avg, trend: avg > 0.9 && avg < 1.1 ? 'good' : 'concern' });
-  }
-  if (trunkLeans.length > 0) {
-    const avg = trunkLeans.reduce((a, b) => a + b, 0) / trunkLeans.length;
-    metrics.push({ name: 'trunk_lean', value: avg, unit: 'deg', trend: Math.abs(avg) < 15 ? 'good' : 'concern' });
-  }
-  if (depths.length >= 2) {
-    const leftDepths = valid.map((f) => {
-      const lm = f.landmarks;
-      const lHip = lm[POSE_LANDMARKS.LEFT_HIP];
-      const lKnee = lm[POSE_LANDMARKS.LEFT_KNEE];
-      const lAnkle = lm[POSE_LANDMARKS.LEFT_ANKLE];
-      return lHip && lKnee && lAnkle ? angle(lHip, lKnee, lAnkle) : 0;
-    }).filter(Boolean);
-    const rightDepths = valid.map((f) => {
-      const lm = f.landmarks;
-      const rHip = lm[POSE_LANDMARKS.RIGHT_HIP];
-      const rKnee = lm[POSE_LANDMARKS.RIGHT_KNEE];
-      const rAnkle = lm[POSE_LANDMARKS.RIGHT_ANKLE];
-      return rHip && rKnee && rAnkle ? angle(rHip, rKnee, rAnkle) : 0;
-    }).filter(Boolean);
-    const asym = leftDepths.length && rightDepths.length
-      ? Math.abs(leftDepths.reduce((a, b) => a + b, 0) / leftDepths.length - rightDepths.reduce((a, b) => a + b, 0) / rightDepths.length)
+  const bottomStability =
+    bottomDepths.length > 1
+      ? clamp(1 - (Math.max(...bottomDepths) - Math.min(...bottomDepths)) / 0.2)
       : 0;
-    metrics.push({ name: 'asymmetry', value: asym, unit: 'deg', trend: asym < 10 ? 'good' : asym < 20 ? 'neutral' : 'concern' });
+  const descentCount = countPhases(valid, 'descent');
+  const bottomCount = countPhases(valid, 'bottom');
+  const ascentCount = countPhases(valid, 'ascent');
+
+  if (descentCount === 0 || bottomCount === 0 || ascentCount === 0) {
+    completionHints.push('rep_phase_incomplete');
+  } else {
+    interpretedSignals.push('descent-bottom-ascent pattern detected');
+  }
+
+  if (depthValues.length > 0) {
+    const avgDepth = mean(depthValues) * 100;
+    const peakDepth = Math.max(...depthValues) * 100;
+    metrics.push({
+      name: 'depth',
+      value: Math.round(avgDepth),
+      unit: '%',
+      trend: peakDepth >= 68 ? 'good' : peakDepth >= 48 ? 'neutral' : 'concern',
+    });
+    rawMetrics.push({
+      name: 'bottom_stability_proxy',
+      value: Math.round(bottomStability * 100),
+      unit: '%',
+      trend: bottomStability >= 0.65 ? 'good' : bottomStability >= 0.45 ? 'neutral' : 'concern',
+    });
+  }
+
+  if (kneeTracking.length > 0) {
+    const avg = mean(kneeTracking);
+    metrics.push({
+      name: 'knee_alignment_trend',
+      value: Math.round(avg * 100) / 100,
+      trend: avg > 0.88 && avg < 1.12 ? 'good' : avg > 0.8 && avg < 1.2 ? 'neutral' : 'concern',
+    });
+  }
+
+  if (trunkLeanValues.length > 0) {
+    const avg = mean(trunkLeanValues);
+    metrics.push({
+      name: 'trunk_lean',
+      value: Math.round(avg * 10) / 10,
+      unit: 'deg',
+      trend: avg < 15 ? 'good' : avg < 24 ? 'neutral' : 'concern',
+    });
+  }
+
+  if (asymmetryValues.length > 0) {
+    const asym = mean(asymmetryValues);
+    metrics.push({
+      name: 'asymmetry',
+      value: Math.round(asym * 10) / 10,
+      unit: 'deg',
+      trend: asym < 10 ? 'good' : asym < 18 ? 'neutral' : 'concern',
+    });
+  }
+
+  if (weightShiftValues.length > 0) {
+    rawMetrics.push({
+      name: 'left_right_weight_shift_proxy',
+      value: Math.round(mean(weightShiftValues) * 100),
+      unit: '%',
+      trend: mean(weightShiftValues) < 0.22 ? 'good' : mean(weightShiftValues) < 0.35 ? 'neutral' : 'concern',
+    });
   }
 
   return {
     stepId: 'squat',
     metrics,
     insufficientSignal: false,
+    rawMetrics,
+    interpretedSignals,
+    qualityHints,
+    completionHints,
+    debug: {
+      frameCount: frames.length,
+      validFrameCount: valid.length,
+      phaseHints: Array.from(new Set(valid.map((frame) => frame.phaseHint))),
+      highlightedMetrics: {
+        depthPeak: depthValues.length > 0 ? Math.round(Math.max(...depthValues) * 100) : null,
+        bottomStability: Math.round(bottomStability * 100),
+        descentCount,
+        bottomCount,
+        ascentCount,
+      },
+    },
   };
+}
+
+export function evaluateSquat(landmarks: PoseLandmarks[]): EvaluatorResult {
+  return evaluateSquatFromPoseFrames(buildPoseFeaturesFrames('squat', landmarks));
 }

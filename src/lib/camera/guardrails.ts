@@ -3,8 +3,9 @@
  * evaluator 위에서 입력 품질과 재촬영 권장 여부를 판단한다.
  */
 import type { CameraStepId } from '@/lib/public/camera-test';
-import { POSE_LANDMARKS } from '@/lib/motion/pose-types';
-import type { PoseLandmark, PoseLandmarks } from '@/lib/motion/pose-types';
+import { buildPoseFeaturesFrames } from './pose-features';
+import type { PoseFeaturesFrame } from './pose-features';
+import type { PoseLandmarks } from '@/lib/motion/pose-types';
 import type { EvaluatorResult } from './evaluators/types';
 import type { PoseCaptureStats } from './use-pose-capture';
 
@@ -43,6 +44,7 @@ export interface StepGuardrailDebug extends StepMetrics {
   droppedFrameCount: number;
   captureDurationMs: number;
   metricSufficiency: number;
+  timestampDiscontinuityCount?: number;
 }
 
 export interface StepGuardrailResult {
@@ -56,59 +58,7 @@ export interface StepGuardrailResult {
   debug: StepGuardrailDebug;
 }
 
-const VISIBILITY_THRESHOLD = 0.45;
 const MIN_VALID_FRAMES = 8;
-
-const STEP_CRITICAL_JOINTS: Record<CameraStepId, number[]> = {
-  squat: [
-    POSE_LANDMARKS.LEFT_HIP,
-    POSE_LANDMARKS.RIGHT_HIP,
-    POSE_LANDMARKS.LEFT_KNEE,
-    POSE_LANDMARKS.RIGHT_KNEE,
-    POSE_LANDMARKS.LEFT_ANKLE,
-    POSE_LANDMARKS.RIGHT_ANKLE,
-    POSE_LANDMARKS.LEFT_SHOULDER,
-    POSE_LANDMARKS.RIGHT_SHOULDER,
-  ],
-  'wall-angel': [
-    POSE_LANDMARKS.LEFT_SHOULDER,
-    POSE_LANDMARKS.RIGHT_SHOULDER,
-    POSE_LANDMARKS.LEFT_ELBOW,
-    POSE_LANDMARKS.RIGHT_ELBOW,
-    POSE_LANDMARKS.LEFT_WRIST,
-    POSE_LANDMARKS.RIGHT_WRIST,
-    POSE_LANDMARKS.LEFT_HIP,
-    POSE_LANDMARKS.RIGHT_HIP,
-  ],
-  'single-leg-balance': [
-    POSE_LANDMARKS.LEFT_HIP,
-    POSE_LANDMARKS.RIGHT_HIP,
-    POSE_LANDMARKS.LEFT_KNEE,
-    POSE_LANDMARKS.RIGHT_KNEE,
-    POSE_LANDMARKS.LEFT_ANKLE,
-    POSE_LANDMARKS.RIGHT_ANKLE,
-    POSE_LANDMARKS.LEFT_SHOULDER,
-    POSE_LANDMARKS.RIGHT_SHOULDER,
-  ],
-};
-
-const LEFT_SIDE_JOINTS = [
-  POSE_LANDMARKS.LEFT_SHOULDER,
-  POSE_LANDMARKS.LEFT_ELBOW,
-  POSE_LANDMARKS.LEFT_WRIST,
-  POSE_LANDMARKS.LEFT_HIP,
-  POSE_LANDMARKS.LEFT_KNEE,
-  POSE_LANDMARKS.LEFT_ANKLE,
-];
-
-const RIGHT_SIDE_JOINTS = [
-  POSE_LANDMARKS.RIGHT_SHOULDER,
-  POSE_LANDMARKS.RIGHT_ELBOW,
-  POSE_LANDMARKS.RIGHT_WRIST,
-  POSE_LANDMARKS.RIGHT_HIP,
-  POSE_LANDMARKS.RIGHT_KNEE,
-  POSE_LANDMARKS.RIGHT_ANKLE,
-];
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(max, Math.max(min, value));
@@ -118,63 +68,44 @@ function round(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function getVisibleRatio(landmark: PoseLandmark | undefined): number {
-  if (!landmark) return 0;
-  if (typeof landmark.visibility === 'number') {
-    return landmark.visibility >= VISIBILITY_THRESHOLD ? 1 : 0;
-  }
-  return 1;
-}
-
-function hasJoint(landmark: PoseLandmark | undefined): boolean {
-  return getVisibleRatio(landmark) > 0;
-}
-
 function mean(values: number[]): number {
   if (values.length === 0) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function collectConfidenceSamples(frames: PoseLandmarks[]): number[] {
-  return frames.flatMap((frame) =>
-    frame.landmarks
-      .map((landmark) => landmark.visibility)
-      .filter((value): value is number => typeof value === 'number')
+function getVisibleJointsRatio(frames: PoseFeaturesFrame[]): number {
+  if (frames.length === 0) return 0;
+  return mean(frames.map((frame) => frame.visibilitySummary.visibleLandmarkRatio));
+}
+
+function getAverageLandmarkConfidence(frames: PoseFeaturesFrame[]): number | null {
+  const values = frames
+    .map((frame) => frame.visibilitySummary.averageVisibility)
+    .filter((value): value is number => typeof value === 'number');
+  return values.length > 0 ? mean(values) : null;
+}
+
+function getCriticalAvailability(frames: PoseFeaturesFrame[]): number {
+  if (frames.length === 0) return 0;
+  return mean(frames.map((frame) => frame.visibilitySummary.criticalJointsAvailability));
+}
+
+function getSideCompleteness(
+  frames: PoseFeaturesFrame[],
+  side: 'left' | 'right'
+): number {
+  if (frames.length === 0) return 0;
+  return mean(
+    frames.map((frame) =>
+      side === 'left'
+        ? frame.visibilitySummary.leftSideCompleteness
+        : frame.visibilitySummary.rightSideCompleteness
+    )
   );
 }
 
-function getBboxArea(frame: PoseLandmarks): number {
-  const xs = frame.landmarks.map((landmark) => landmark.x);
-  const ys = frame.landmarks.map((landmark) => landmark.y);
-  if (xs.length === 0 || ys.length === 0) return 0;
-  const width = Math.max(...xs) - Math.min(...xs);
-  const height = Math.max(...ys) - Math.min(...ys);
-  return width * height;
-}
-
-function getJointRatio(frames: PoseLandmarks[], jointIndexes: number[]): number {
-  if (frames.length === 0) return 0;
-  const frameScores = frames.map((frame) =>
-    mean(jointIndexes.map((jointIndex) => getVisibleRatio(frame.landmarks[jointIndex])))
-  );
-  return mean(frameScores);
-}
-
-function getCriticalAvailability(frames: PoseLandmarks[], stepId: CameraStepId): number {
-  return getJointRatio(frames, STEP_CRITICAL_JOINTS[stepId]);
-}
-
-function getFrameVisibleRatio(frame: PoseLandmarks): number {
-  return mean(frame.landmarks.map((landmark) => getVisibleRatio(landmark)));
-}
-
-function getVisibleJointsRatio(frames: PoseLandmarks[]): number {
-  if (frames.length === 0) return 0;
-  return mean(frames.map(getFrameVisibleRatio));
-}
-
-function getBboxStability(frames: PoseLandmarks[]): number {
-  const areas = frames.map(getBboxArea).filter((area) => area > 0);
+function getBboxStability(frames: PoseFeaturesFrame[]): number {
+  const areas = frames.map((frame) => frame.bodyBox.area).filter((area) => area > 0);
   if (areas.length < 2) return 0;
   const avg = mean(areas);
   if (avg <= 0) return 0;
@@ -183,65 +114,20 @@ function getBboxStability(frames: PoseLandmarks[]): number {
   return clamp(1 - stdDev / avg);
 }
 
-function countNoisyFrames(frames: PoseLandmarks[]): number {
+function countNoisyFrames(frames: PoseFeaturesFrame[]): number {
   return frames.filter((frame) => {
-    const visibleRatio = getFrameVisibleRatio(frame);
-    const bboxArea = getBboxArea(frame);
-    return visibleRatio < 0.45 || bboxArea < 0.05 || bboxArea > 0.95;
+    return (
+      frame.frameValidity !== 'valid' ||
+      frame.bodyBox.area < 0.05 ||
+      frame.bodyBox.area > 0.95 ||
+      frame.qualityHints.includes('timestamp_gap')
+    );
   }).length;
-}
-
-function angle(
-  a: { x: number; y: number },
-  b: { x: number; y: number },
-  c: { x: number; y: number }
-): number {
-  const rad = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
-  return Math.abs((rad * 180) / Math.PI);
-}
-
-function getSquatAngles(frames: PoseLandmarks[]): number[] {
-  return frames.flatMap((frame) => {
-    const lHip = frame.landmarks[POSE_LANDMARKS.LEFT_HIP];
-    const rHip = frame.landmarks[POSE_LANDMARKS.RIGHT_HIP];
-    const lKnee = frame.landmarks[POSE_LANDMARKS.LEFT_KNEE];
-    const rKnee = frame.landmarks[POSE_LANDMARKS.RIGHT_KNEE];
-    const lAnkle = frame.landmarks[POSE_LANDMARKS.LEFT_ANKLE];
-    const rAnkle = frame.landmarks[POSE_LANDMARKS.RIGHT_ANKLE];
-    if (!lHip || !rHip || !lKnee || !rKnee || !lAnkle || !rAnkle) return [];
-    return [(angle(lHip, lKnee, lAnkle) + angle(rHip, rKnee, rAnkle)) / 2];
-  });
-}
-
-function getWallAngelRanges(frames: PoseLandmarks[]): { left: number[]; right: number[] } {
-  const left = frames.flatMap((frame) => {
-    const shoulder = frame.landmarks[POSE_LANDMARKS.LEFT_SHOULDER];
-    const elbow = frame.landmarks[POSE_LANDMARKS.LEFT_ELBOW];
-    const wrist = frame.landmarks[POSE_LANDMARKS.LEFT_WRIST];
-    if (!shoulder || !elbow || !wrist) return [];
-    return [angle(shoulder, elbow, wrist)];
-  });
-  const right = frames.flatMap((frame) => {
-    const shoulder = frame.landmarks[POSE_LANDMARKS.RIGHT_SHOULDER];
-    const elbow = frame.landmarks[POSE_LANDMARKS.RIGHT_ELBOW];
-    const wrist = frame.landmarks[POSE_LANDMARKS.RIGHT_WRIST];
-    if (!shoulder || !elbow || !wrist) return [];
-    return [angle(shoulder, elbow, wrist)];
-  });
-  return { left, right };
-}
-
-function getSingleLegHalfCounts(frames: PoseLandmarks[]): { firstHalf: number; secondHalf: number } {
-  const pivot = Math.floor(frames.length / 2);
-  return {
-    firstHalf: frames.slice(0, pivot).length,
-    secondHalf: frames.slice(pivot).length,
-  };
 }
 
 function getMotionCompleteness(
   stepId: CameraStepId,
-  frames: PoseLandmarks[],
+  frames: PoseFeaturesFrame[],
   stats: PoseCaptureStats,
   flags: Set<CameraGuardrailFlag>
 ): { score: number; status: CompletionStatus } {
@@ -252,37 +138,48 @@ function getMotionCompleteness(
   }
 
   if (stepId === 'squat') {
-    const angles = getSquatAngles(frames);
-    if (angles.length < MIN_VALID_FRAMES) {
+    const depthValues = frames
+      .map((frame) => frame.derived.squatDepthProxy)
+      .filter((value): value is number => typeof value === 'number');
+    const descentCount = frames.filter((frame) => frame.phaseHint === 'descent').length;
+    const bottomCount = frames.filter((frame) => frame.phaseHint === 'bottom').length;
+    const ascentCount = frames.filter((frame) => frame.phaseHint === 'ascent').length;
+
+    if (depthValues.length < MIN_VALID_FRAMES) {
       flags.add('rep_incomplete');
       return { score: 0.2, status: 'partial' };
     }
-    const range = Math.max(...angles) - Math.min(...angles);
-    const startWindow = angles.slice(0, Math.max(2, Math.floor(angles.length / 4)));
-    const endWindow = angles.slice(-Math.max(2, Math.floor(angles.length / 4)));
-    const recovered =
-      mean(startWindow) - Math.min(...angles) > 15 &&
-      mean(endWindow) - Math.min(...angles) > 15;
-    if (range < 20 || !recovered) {
+    const peakDepth = Math.max(...depthValues);
+    if (peakDepth < 0.45 || descentCount === 0 || bottomCount === 0 || ascentCount === 0) {
       flags.add('rep_incomplete');
-      return { score: clamp(range / 35), status: 'partial' };
+      return { score: clamp(peakDepth), status: 'partial' };
     }
-    return { score: clamp(range / 50), status: 'complete' };
+    return { score: clamp(peakDepth * 1.15), status: 'complete' };
   }
 
   if (stepId === 'wall-angel') {
-    const { left, right } = getWallAngelRanges(frames);
-    const leftRange = left.length > 1 ? Math.max(...left) - Math.min(...left) : 0;
-    const rightRange = right.length > 1 ? Math.max(...right) - Math.min(...right) : 0;
-    const avgRange = mean([leftRange, rightRange]);
-    if (frames.length < 12 || avgRange < 18) {
+    const armElevations = frames
+      .map((frame) => frame.derived.armElevationAvg)
+      .filter((value): value is number => typeof value === 'number');
+    const raiseCount = frames.filter((frame) => frame.phaseHint === 'raise').length;
+    const peakCount = frames.filter((frame) => frame.phaseHint === 'peak').length;
+    const lowerCount = frames.filter((frame) => frame.phaseHint === 'lower').length;
+    const peakElevation = armElevations.length > 0 ? Math.max(...armElevations) : 0;
+
+    if (frames.length < 12 || peakElevation < 95 || raiseCount === 0 || peakCount === 0 || lowerCount === 0) {
       flags.add('rep_incomplete');
-      return { score: clamp(avgRange / 35), status: 'partial' };
+      return { score: clamp(peakElevation / 140), status: 'partial' };
     }
-    return { score: clamp(avgRange / 45), status: 'complete' };
+    return { score: clamp(peakElevation / 155), status: 'complete' };
   }
 
-  const { firstHalf, secondHalf } = getSingleLegHalfCounts(frames);
+  const holdFrames = frames.filter(
+    (frame) => frame.phaseHint === 'hold_start' || frame.phaseHint === 'hold_ongoing'
+  );
+  const breakCount = frames.filter((frame) => frame.phaseHint === 'break').length;
+  const firstHalf = Math.floor(holdFrames.length / 2);
+  const secondHalf = holdFrames.length - firstHalf;
+
   if (firstHalf < 12) {
     flags.add('left_side_missing');
     flags.add('partial_capture');
@@ -295,14 +192,16 @@ function getMotionCompleteness(
     flags.add('hold_too_short');
   }
 
-  const halfScore = clamp(Math.min(firstHalf, secondHalf) / 45);
+  const holdDurationMs =
+    holdFrames.length > 1 ? holdFrames[holdFrames.length - 1]!.timestampMs - holdFrames[0]!.timestampMs : 0;
+  const halfScore = clamp(Math.min(firstHalf, secondHalf) / 35);
   if (flags.has('left_side_missing') || flags.has('right_side_missing')) {
     return { score: clamp(halfScore * 0.7), status: 'partial' };
   }
-  if (flags.has('hold_too_short')) {
-    return { score: clamp(frames.length / 70), status: 'partial' };
+  if (flags.has('hold_too_short') || holdFrames.length === 0 || breakCount > 0) {
+    return { score: clamp(Math.max(holdDurationMs / 9000, holdFrames.length / 70)), status: 'partial' };
   }
-  return { score: clamp(Math.min(frames.length / 90, stats.captureDurationMs / 9000)), status: 'complete' };
+  return { score: clamp(Math.min(holdDurationMs / 9000, holdFrames.length / 80)), status: 'complete' };
 }
 
 function getMetricSufficiency(stepId: CameraStepId, evaluatorResult: EvaluatorResult): number {
@@ -320,22 +219,21 @@ export function assessStepGuardrail(
   stats: PoseCaptureStats,
   evaluatorResult: EvaluatorResult
 ): StepGuardrailResult {
-  const validFrames = frames.filter((frame) => frame.landmarks.length >= 33);
+  const featureFrames = buildPoseFeaturesFrames(stepId, frames);
+  const validFrames = featureFrames.filter((frame) => frame.isValid);
   const flags = new Set<CameraGuardrailFlag>();
 
   const visibleJointsRatio = getVisibleJointsRatio(validFrames);
-  const confidenceSamples = collectConfidenceSamples(validFrames);
-  const averageLandmarkConfidence =
-    confidenceSamples.length > 0 ? mean(confidenceSamples) : null;
-  const criticalJointsAvailability = getCriticalAvailability(validFrames, stepId);
+  const averageLandmarkConfidence = getAverageLandmarkConfidence(validFrames);
+  const criticalJointsAvailability = getCriticalAvailability(validFrames);
   const bboxSizeStability = getBboxStability(validFrames);
   const validFrameCount = validFrames.length;
   const droppedFrameRatio =
     stats.sampledFrameCount > 0 ? stats.droppedFrameCount / stats.sampledFrameCount : 1;
   const noisyFrameRatio =
     validFrameCount > 0 ? countNoisyFrames(validFrames) / validFrameCount : 1;
-  const leftSideCompleteness = getJointRatio(validFrames, LEFT_SIDE_JOINTS);
-  const rightSideCompleteness = getJointRatio(validFrames, RIGHT_SIDE_JOINTS);
+  const leftSideCompleteness = getSideCompleteness(validFrames, 'left');
+  const rightSideCompleteness = getSideCompleteness(validFrames, 'right');
 
   if (validFrameCount < MIN_VALID_FRAMES) {
     flags.add('insufficient_signal');
@@ -347,7 +245,12 @@ export function assessStepGuardrail(
   }
   if (leftSideCompleteness < 0.55) flags.add('left_side_missing');
   if (rightSideCompleteness < 0.55) flags.add('right_side_missing');
-  if (droppedFrameRatio > 0.45 || noisyFrameRatio > 0.35 || bboxSizeStability < 0.45) {
+  if (
+    droppedFrameRatio > 0.45 ||
+    noisyFrameRatio > 0.35 ||
+    bboxSizeStability < 0.45 ||
+    stats.timestampDiscontinuityCount > 0
+  ) {
     flags.add('unstable_motion_signal');
   }
   if (leftSideCompleteness < 0.7 || rightSideCompleteness < 0.7) {
@@ -428,6 +331,7 @@ export function assessStepGuardrail(
       droppedFrameCount: stats.droppedFrameCount,
       captureDurationMs: Math.round(stats.captureDurationMs),
       metricSufficiency: round(metricSufficiency),
+      timestampDiscontinuityCount: stats.timestampDiscontinuityCount,
     },
   };
 }

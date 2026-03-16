@@ -2,83 +2,157 @@
  * 한발 서기 evaluator
  * metrics: hold stability, sway, pelvic drop, left/right gap
  */
-import { POSE_LANDMARKS } from '@/lib/motion/pose-types';
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
+import { buildPoseFeaturesFrames } from '@/lib/camera/pose-features';
+import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 import type { EvaluatorResult, EvaluatorMetric } from './types';
 
 const MIN_VALID_FRAMES = 8;
 
-export function evaluateSingleLegBalance(landmarks: PoseLandmarks[]): EvaluatorResult {
-  const valid = landmarks.filter((l) => l.landmarks?.length >= 33);
+function mean(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function getNumbers(values: Array<number | null>): number[] {
+  return values.filter((value): value is number => typeof value === 'number');
+}
+
+function countPhases(frames: PoseFeaturesFrame[], phase: PoseFeaturesFrame['phaseHint']): number {
+  return frames.filter((frame) => frame.phaseHint === phase).length;
+}
+
+export function evaluateSingleLegBalanceFromPoseFrames(
+  frames: PoseFeaturesFrame[]
+): EvaluatorResult {
+  const valid = frames.filter((frame) => frame.isValid);
   if (valid.length < MIN_VALID_FRAMES) {
     return {
       stepId: 'single-leg-balance',
       metrics: [],
       insufficientSignal: true,
       reason: '프레임 부족',
+      qualityHints: ['valid_frames_too_few'],
+      completionHints: ['hold_missing'],
+      debug: {
+        frameCount: frames.length,
+        validFrameCount: valid.length,
+        phaseHints: Array.from(new Set(frames.map((frame) => frame.phaseHint))),
+        highlightedMetrics: {
+          validFrameCount: valid.length,
+        },
+      },
     };
   }
 
   const metrics: EvaluatorMetric[] = [];
-  const hipHeights: number[] = [];
-  const shoulderHeights: number[] = [];
-  const noseX: number[] = [];
-  const hipMidX: number[] = [];
+  const rawMetrics: EvaluatorMetric[] = [];
+  const interpretedSignals: string[] = [];
+  const qualityHints = [...new Set(valid.flatMap((frame) => frame.qualityHints))];
+  const completionHints: string[] = [];
 
-  for (const frame of valid) {
-    const lm = frame.landmarks;
-    const lHip = lm[POSE_LANDMARKS.LEFT_HIP];
-    const rHip = lm[POSE_LANDMARKS.RIGHT_HIP];
-    const lShoulder = lm[POSE_LANDMARKS.LEFT_SHOULDER];
-    const rShoulder = lm[POSE_LANDMARKS.RIGHT_SHOULDER];
-    const nose = lm[POSE_LANDMARKS.NOSE];
+  const holdFrames = valid.filter(
+    (frame) => frame.phaseHint === 'hold_start' || frame.phaseHint === 'hold_ongoing'
+  );
+  const swayValues = getNumbers(valid.map((frame) => frame.derived.swayAmplitude));
+  const holdBalanceValues = getNumbers(valid.map((frame) => frame.derived.holdBalance));
+  const pelvicDropValues = getNumbers(valid.map((frame) => frame.derived.pelvicDrop));
+  const footHeightGapValues = getNumbers(valid.map((frame) => frame.derived.footHeightGap));
+  const torsoCorrectionCount = valid.filter((frame) => frame.derived.torsoCorrectionDetected).length;
+  const holdStartCount = countPhases(valid, 'hold_start');
+  const holdOngoingCount = countPhases(valid, 'hold_ongoing');
+  const breakCount = countPhases(valid, 'break');
 
-    if (lHip && rHip) {
-      hipHeights.push((lHip.y + rHip.y) / 2);
-      hipMidX.push((lHip.x + rHip.x) / 2);
-    }
-    if (lShoulder && rShoulder) {
-      shoulderHeights.push((lShoulder.y + rShoulder.y) / 2);
-    }
-    if (nose) noseX.push(nose.x);
+  if (holdFrames.length === 0) {
+    completionHints.push('hold_not_detected');
+  } else {
+    interpretedSignals.push('hold segment detected');
   }
 
-  if (hipHeights.length >= 2) {
-    const sway = Math.max(...hipHeights) - Math.min(...hipHeights);
-    metrics.push({ name: 'sway', value: sway, trend: sway < 0.05 ? 'good' : sway < 0.1 ? 'neutral' : 'concern' });
-  }
-  if (noseX.length >= 2) {
-    const swayX = Math.max(...noseX) - Math.min(...noseX);
-    metrics.push({ name: 'hold_stability', value: 1 - swayX, trend: swayX < 0.03 ? 'good' : swayX < 0.08 ? 'neutral' : 'concern' });
-  }
-  if (hipHeights.length > 0 && shoulderHeights.length > 0) {
-    const hipAvg = hipHeights.reduce((a, b) => a + b, 0) / hipHeights.length;
-    const shoulderAvg = shoulderHeights.reduce((a, b) => a + b, 0) / shoulderHeights.length;
-    const pelvicDrop = Math.abs(hipAvg - shoulderAvg);
-    metrics.push({ name: 'pelvic_drop', value: pelvicDrop, trend: pelvicDrop < 0.05 ? 'good' : 'concern' });
-  }
-  if (hipMidX.length >= 2) {
-    const leftFrames = valid.filter((_, i) => i < valid.length / 2);
-    const rightFrames = valid.filter((_, i) => i >= valid.length / 2);
-    const leftHipX = leftFrames.flatMap((f) => {
-      const lm = f.landmarks;
-      const lHip = lm[POSE_LANDMARKS.LEFT_HIP];
-      return lHip ? [lHip.x] : [];
+  if (swayValues.length > 0) {
+    const sway = Math.max(...swayValues);
+    metrics.push({
+      name: 'sway',
+      value: Math.round(sway * 1000) / 1000,
+      trend: sway < 0.03 ? 'good' : sway < 0.06 ? 'neutral' : 'concern',
     });
-    const rightHipX = rightFrames.flatMap((f) => {
-      const lm = f.landmarks;
-      const rHip = lm[POSE_LANDMARKS.RIGHT_HIP];
-      return rHip ? [rHip.x] : [];
+  }
+
+  if (holdBalanceValues.length > 0) {
+    const avgHoldBalance = mean(holdBalanceValues);
+    metrics.push({
+      name: 'hold_stability',
+      value: Math.round(avgHoldBalance * 100),
+      unit: '%',
+      trend: avgHoldBalance >= 0.8 ? 'good' : avgHoldBalance >= 0.65 ? 'neutral' : 'concern',
     });
-    const leftAvg = leftHipX.length ? leftHipX.reduce((a, b) => a + b, 0) / leftHipX.length : 0;
-    const rightAvg = rightHipX.length ? rightHipX.reduce((a, b) => a + b, 0) / rightHipX.length : 0;
-    const gap = Math.abs(leftAvg - rightAvg);
-    metrics.push({ name: 'left_right_gap', value: gap, trend: gap < 0.05 ? 'good' : 'neutral' });
+  }
+
+  if (pelvicDropValues.length > 0) {
+    const pelvicDrop = mean(pelvicDropValues);
+    metrics.push({
+      name: 'pelvic_drop',
+      value: Math.round(pelvicDrop * 1000) / 1000,
+      trend: pelvicDrop < 0.03 ? 'good' : pelvicDrop < 0.055 ? 'neutral' : 'concern',
+    });
+  }
+
+  if (footHeightGapValues.length > 0) {
+    const firstHalf = footHeightGapValues.slice(0, Math.floor(footHeightGapValues.length / 2));
+    const secondHalf = footHeightGapValues.slice(Math.floor(footHeightGapValues.length / 2));
+    const leftRightGap = Math.abs(mean(firstHalf) - mean(secondHalf));
+    metrics.push({
+      name: 'left_right_gap',
+      value: Math.round(leftRightGap * 1000) / 1000,
+      trend: leftRightGap < 0.03 ? 'good' : leftRightGap < 0.06 ? 'neutral' : 'concern',
+    });
+  }
+
+  if (holdFrames.length > 1) {
+    const holdDurationMs =
+      holdFrames[holdFrames.length - 1]!.timestampMs - holdFrames[0]!.timestampMs;
+    rawMetrics.push({
+      name: 'hold_duration',
+      value: Math.round(holdDurationMs),
+      unit: 'ms',
+      trend: holdDurationMs >= 8000 ? 'good' : holdDurationMs >= 5000 ? 'neutral' : 'concern',
+    });
+  }
+
+  rawMetrics.push({
+    name: 'torso_correction_frequency',
+    value: torsoCorrectionCount,
+    trend: torsoCorrectionCount <= 3 ? 'good' : torsoCorrectionCount <= 7 ? 'neutral' : 'concern',
+  });
+
+  if (breakCount > 0) {
+    completionHints.push('hold_break_detected');
   }
 
   return {
     stepId: 'single-leg-balance',
     metrics,
     insufficientSignal: false,
+    rawMetrics,
+    interpretedSignals,
+    qualityHints,
+    completionHints,
+    debug: {
+      frameCount: frames.length,
+      validFrameCount: valid.length,
+      phaseHints: Array.from(new Set(valid.map((frame) => frame.phaseHint))),
+      highlightedMetrics: {
+        holdStartCount,
+        holdOngoingCount,
+        breakCount,
+        torsoCorrectionCount,
+      },
+    },
   };
+}
+
+export function evaluateSingleLegBalance(landmarks: PoseLandmarks[]): EvaluatorResult {
+  return evaluateSingleLegBalanceFromPoseFrames(
+    buildPoseFeaturesFrames('single-leg-balance', landmarks)
+  );
 }
