@@ -701,6 +701,8 @@ export default function CameraOverheadReachPage() {
                     <span>nextAllowed: {String(gate.nextAllowed)}</span>
                     <span>passReady: {String(passReady)}</span>
                     <span>passLatched: {String(passLatched)}</span>
+                    <span>passConfirmed: {String(gate.passConfirmationSatisfied)}</span>
+                    <span>passFrames: {gate.passConfirmationFrameCount}/{gate.passConfirmationWindowCount}</span>
                     <span>passLatchedAt: {passLatchedAt ?? 'n/a'}</span>
                     <span>navigationTriggered: {String(navigationTriggered)}</span>
                     <span>transitionLocked: {String(transitionLocked)}</span>
