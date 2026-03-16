@@ -67,6 +67,51 @@ interface SingleLegBalanceDebugSnapshot {
   };
 }
 
+interface SingleLegBalanceOverlayGuide {
+  hint: string | null;
+  focus: 'frame' | 'upper' | 'lower' | 'full' | null;
+  animated: boolean;
+}
+
+function getSingleLegBalanceOverlayGuide(
+  reasons: string[],
+  failureReasons: string[],
+  progressionState: ExerciseProgressionState
+): SingleLegBalanceOverlayGuide {
+  if (progressionState === 'passed') {
+    return { hint: '통과', focus: 'full', animated: true };
+  }
+
+  if (
+    failureReasons.includes('framing_invalid') ||
+    failureReasons.includes('left_side_missing') ||
+    failureReasons.includes('right_side_missing') ||
+    failureReasons.includes('partial_capture') ||
+    failureReasons.includes('capture_quality_invalid') ||
+    failureReasons.includes('capture_quality_low')
+  ) {
+    return { hint: '전신 다시 맞추기', focus: 'frame', animated: true };
+  }
+
+  if (reasons.includes('hold_too_short')) {
+    return { hint: '10초 유지', focus: 'full', animated: true };
+  }
+
+  if (reasons.includes('hold_break_detected')) {
+    return { hint: '중심 다시 잡기', focus: 'full', animated: true };
+  }
+
+  if (failureReasons.includes('confidence_too_low')) {
+    return { hint: '잠깐 고정', focus: 'full', animated: false };
+  }
+
+  if (progressionState === 'camera_ready') {
+    return { hint: '정면 준비', focus: 'full', animated: false };
+  }
+
+  return { hint: null, focus: null, animated: false };
+}
+
 export default function CameraSingleLegBalancePage() {
   const router = useRouter();
   const [permissionDenied, setPermissionDenied] = useState(false);
@@ -467,6 +512,27 @@ export default function CameraSingleLegBalancePage() {
     progressionState === 'insufficient_signal';
   const visibleUserGuidance = passLatched ? [] : gate.userGuidance;
   const effectiveProgressionState = passLatched ? 'passed' : progressionState;
+  const overlayGuide = getSingleLegBalanceOverlayGuide(
+    gate.reasons,
+    gate.failureReasons,
+    effectiveProgressionState
+  );
+  const guideBadges = ['정면 촬영', '전신이 보여야 함', '10초 유지'];
+  const guideInstructions = [
+    '머리부터 발끝까지 모두 보이게 서주세요',
+    '한 발을 들고 10초 유지해 주세요',
+    '흔들려도 화면 안에서 중심을 다시 잡아주세요',
+  ];
+  const guideReadinessLabel =
+    cameraReady &&
+    stats.sampledFrameCount > 0 &&
+    gate.guardrail.captureQuality !== 'invalid' &&
+    !gate.flags.includes('framing_invalid') &&
+    !gate.flags.includes('partial_capture') &&
+    !gate.flags.includes('left_side_missing') &&
+    !gate.flags.includes('right_side_missing')
+      ? '전신과 두 다리가 잘 보여요'
+      : null;
   const autoNextObservation =
     passLatched && !nextTriggeredAt
       ? nextScheduledAt
@@ -558,6 +624,13 @@ export default function CameraSingleLegBalancePage() {
                 onPoseFrame={pushFrame}
                 onError={handleCameraError}
                 guideTone={guideTone}
+                guideHint={overlayGuide.hint}
+                guideFocus={overlayGuide.focus}
+                guideAnimated={overlayGuide.animated}
+                guideVariant="single-leg-balance"
+                guideBadges={guideBadges}
+                guideInstructions={guideInstructions}
+                guideReadinessLabel={guideReadinessLabel}
                 className="w-full"
               />
             </div>

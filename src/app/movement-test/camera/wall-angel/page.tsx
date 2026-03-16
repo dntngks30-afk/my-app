@@ -66,6 +66,47 @@ interface WallAngelDebugSnapshot {
   };
 }
 
+interface WallAngelOverlayGuide {
+  hint: string | null;
+  focus: 'frame' | 'upper' | 'lower' | 'full' | null;
+  animated: boolean;
+}
+
+function getWallAngelOverlayGuide(
+  reasons: string[],
+  failureReasons: string[],
+  progressionState: ExerciseProgressionState
+): WallAngelOverlayGuide {
+  if (progressionState === 'passed') {
+    return { hint: '통과', focus: 'upper', animated: true };
+  }
+
+  if (
+    failureReasons.includes('framing_invalid') ||
+    failureReasons.includes('left_side_missing') ||
+    failureReasons.includes('right_side_missing') ||
+    failureReasons.includes('partial_capture') ||
+    failureReasons.includes('capture_quality_invalid') ||
+    failureReasons.includes('capture_quality_low')
+  ) {
+    return { hint: '팔 전체 보이기', focus: 'frame', animated: true };
+  }
+
+  if (reasons.includes('rep_incomplete') || reasons.includes('raise_peak_lower_incomplete')) {
+    return { hint: '끝까지 올리고 내리기', focus: 'upper', animated: true };
+  }
+
+  if (failureReasons.includes('confidence_too_low')) {
+    return { hint: '잠깐 고정', focus: 'upper', animated: false };
+  }
+
+  if (progressionState === 'camera_ready') {
+    return { hint: '정면 준비', focus: 'upper', animated: false };
+  }
+
+  return { hint: null, focus: null, animated: false };
+}
+
 export default function CameraWallAngelPage() {
   const router = useRouter();
   const [permissionDenied, setPermissionDenied] = useState(false);
@@ -488,6 +529,27 @@ export default function CameraWallAngelPage() {
     progressionState === 'insufficient_signal';
   const visibleUserGuidance = passLatched ? [] : gate.userGuidance;
   const effectiveProgressionState = passLatched ? 'passed' : progressionState;
+  const overlayGuide = getWallAngelOverlayGuide(
+    gate.reasons,
+    gate.failureReasons,
+    effectiveProgressionState
+  );
+  const guideBadges = ['정면 촬영', '벽이 보여야 함', '상반신+팔 전체'];
+  const guideInstructions = [
+    '벽과 상체가 함께 보이게 맞춰주세요',
+    '팔을 끝까지 올렸다가 천천히 내려주세요',
+    '허리를 꺾지 말고 어깨와 팔꿈치를 길게 써주세요',
+  ];
+  const guideReadinessLabel =
+    cameraReady &&
+    stats.sampledFrameCount > 0 &&
+    gate.guardrail.captureQuality !== 'invalid' &&
+    !gate.flags.includes('framing_invalid') &&
+    !gate.flags.includes('partial_capture') &&
+    !gate.flags.includes('left_side_missing') &&
+    !gate.flags.includes('right_side_missing')
+      ? '팔과 상체가 잘 보여요'
+      : null;
   const autoNextObservation =
     passLatched && !nextTriggeredAt
       ? nextScheduledAt
@@ -579,6 +641,13 @@ export default function CameraWallAngelPage() {
                 onPoseFrame={pushFrame}
                 onError={handleCameraError}
                 guideTone={guideTone}
+                guideHint={overlayGuide.hint}
+                guideFocus={overlayGuide.focus}
+                guideAnimated={overlayGuide.animated}
+                guideVariant="wall-angel"
+                guideBadges={guideBadges}
+                guideInstructions={guideInstructions}
+                guideReadinessLabel={guideReadinessLabel}
                 className="w-full"
               />
             </div>

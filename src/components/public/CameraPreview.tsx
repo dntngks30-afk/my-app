@@ -38,7 +38,160 @@ interface CameraPreviewProps {
   guideFocus?: 'frame' | 'upper' | 'lower' | 'full' | null;
   /** 강조 애니메이션 여부 */
   guideAnimated?: boolean;
+  /** 동작별 실루엣 형태 */
+  guideVariant?: 'default' | 'wall-angel' | 'single-leg-balance';
+  /** 상단 고정 가이드 배지 */
+  guideBadges?: string[];
+  /** 하단 고정 가이드 문구 */
+  guideInstructions?: string[];
+  /** 간단한 준비 상태 힌트 */
+  guideReadinessLabel?: string | null;
   className?: string;
+}
+
+function renderDefaultSilhouette(palette: ReturnType<typeof getGuidePalette>) {
+  return (
+    <>
+      <circle
+        cx="120"
+        cy="88"
+        r="31"
+        fill={palette.fill}
+        stroke={palette.frame}
+        strokeWidth="3"
+      />
+      <path
+        d="M88 160C88 144 101 132 117 132H123C139 132 152 144 152 160V222C152 238 139 250 123 250H117C101 250 88 238 88 222V160Z"
+        fill={palette.fill}
+        stroke={palette.frame}
+        strokeWidth="3"
+      />
+      <path d="M87 188L55 252" stroke={palette.frame} strokeWidth="16" strokeLinecap="round" />
+      <path d="M153 188L185 252" stroke={palette.frame} strokeWidth="16" strokeLinecap="round" />
+      <path d="M108 250L86 412" stroke={palette.frame} strokeWidth="18" strokeLinecap="round" />
+      <path d="M132 250L154 412" stroke={palette.frame} strokeWidth="18" strokeLinecap="round" />
+      <path d="M78 418H95" stroke={palette.frame} strokeWidth="10" strokeLinecap="round" />
+      <path d="M145 418H162" stroke={palette.frame} strokeWidth="10" strokeLinecap="round" />
+    </>
+  );
+}
+
+function renderWallAngelSilhouette(palette: ReturnType<typeof getGuidePalette>) {
+  return (
+    <>
+      <path
+        d="M68 130V380"
+        stroke={palette.glow}
+        strokeWidth="18"
+        strokeLinecap="round"
+      />
+      <path
+        d="M78 128V382"
+        stroke={palette.frame}
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeDasharray="6 10"
+      />
+      <circle
+        cx="126"
+        cy="92"
+        r="29"
+        fill={palette.fill}
+        stroke={palette.frame}
+        strokeWidth="3"
+      />
+      <path
+        d="M96 158C96 143 108 132 123 132H129C144 132 156 143 156 158V236C156 251 144 262 129 262H123C108 262 96 251 96 236V158Z"
+        fill={palette.fill}
+        stroke={palette.frame}
+        strokeWidth="3"
+      />
+      <path
+        d="M103 175L76 122"
+        stroke={palette.frame}
+        strokeWidth="14"
+        strokeLinecap="round"
+      />
+      <path
+        d="M151 175L178 122"
+        stroke={palette.frame}
+        strokeWidth="14"
+        strokeLinecap="round"
+      />
+      <path
+        d="M76 122L88 80"
+        stroke={palette.frame}
+        strokeWidth="14"
+        strokeLinecap="round"
+      />
+      <path
+        d="M178 122L166 80"
+        stroke={palette.frame}
+        strokeWidth="14"
+        strokeLinecap="round"
+      />
+      <path d="M120 262L104 412" stroke={palette.frame} strokeWidth="17" strokeLinecap="round" />
+      <path d="M136 262L152 412" stroke={palette.frame} strokeWidth="17" strokeLinecap="round" />
+      <path d="M96 418H111" stroke={palette.frame} strokeWidth="10" strokeLinecap="round" />
+      <path d="M145 418H160" stroke={palette.frame} strokeWidth="10" strokeLinecap="round" />
+    </>
+  );
+}
+
+function renderSingleLegBalanceSilhouette(palette: ReturnType<typeof getGuidePalette>) {
+  return (
+    <>
+      <circle
+        cx="120"
+        cy="90"
+        r="30"
+        fill={palette.fill}
+        stroke={palette.frame}
+        strokeWidth="3"
+      />
+      <path
+        d="M92 158C92 143 104 132 119 132H125C140 132 152 143 152 158V232C152 248 140 260 125 260H119C104 260 92 248 92 232V158Z"
+        fill={palette.fill}
+        stroke={palette.frame}
+        strokeWidth="3"
+      />
+      <path d="M92 188L62 248" stroke={palette.frame} strokeWidth="15" strokeLinecap="round" />
+      <path d="M152 188L178 238" stroke={palette.frame} strokeWidth="15" strokeLinecap="round" />
+      <path d="M112 260L102 414" stroke={palette.frame} strokeWidth="18" strokeLinecap="round" />
+      <path d="M126 260L168 326" stroke={palette.frame} strokeWidth="18" strokeLinecap="round" />
+      <path d="M168 326L198 302" stroke={palette.frame} strokeWidth="16" strokeLinecap="round" />
+      <path d="M93 418H111" stroke={palette.frame} strokeWidth="10" strokeLinecap="round" />
+      <path d="M194 304H208" stroke={palette.frame} strokeWidth="10" strokeLinecap="round" />
+      <path
+        d="M60 428H185"
+        stroke={palette.glow}
+        strokeWidth="12"
+        strokeLinecap="round"
+      />
+      <path
+        d="M62 428H183"
+        stroke={palette.frame}
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray="8 8"
+      />
+    </>
+  );
+}
+
+function renderGuideSilhouette(
+  variant: NonNullable<CameraPreviewProps['guideVariant']>,
+  palette: ReturnType<typeof getGuidePalette>
+) {
+  if (variant === 'wall-angel') {
+    return renderWallAngelSilhouette(palette);
+  }
+
+  if (variant === 'single-leg-balance') {
+    return renderSingleLegBalanceSilhouette(palette);
+  }
+
+  return renderDefaultSilhouette(palette);
 }
 
 function getGuidePalette(tone: CameraGuideTone) {
@@ -76,6 +229,10 @@ export function CameraPreview({
   guideHint = null,
   guideFocus = null,
   guideAnimated = false,
+  guideVariant = 'default',
+  guideBadges = [],
+  guideInstructions = [],
+  guideReadinessLabel = null,
   className = '',
 }: CameraPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -332,6 +489,7 @@ export function CameraPreview({
   const showLoading = status === 'requesting' || status === 'binding';
   const guidePalette = getGuidePalette(guideTone);
   const showGuideBadge = Boolean(guideHint) && status === 'ready';
+  const showStaticGuide = status === 'ready' && (guideBadges.length > 0 || guideInstructions.length > 0);
 
   return (
     <div
@@ -419,56 +577,7 @@ export function CameraPreview({
             strokeWidth="3"
             strokeDasharray="10 10"
           />
-          <circle
-            cx="120"
-            cy="88"
-            r="31"
-            fill={guidePalette.fill}
-            stroke={guidePalette.frame}
-            strokeWidth="3"
-          />
-          <path
-            d="M88 160C88 144 101 132 117 132H123C139 132 152 144 152 160V222C152 238 139 250 123 250H117C101 250 88 238 88 222V160Z"
-            fill={guidePalette.fill}
-            stroke={guidePalette.frame}
-            strokeWidth="3"
-          />
-          <path
-            d="M87 188L55 252"
-            stroke={guidePalette.frame}
-            strokeWidth="16"
-            strokeLinecap="round"
-          />
-          <path
-            d="M153 188L185 252"
-            stroke={guidePalette.frame}
-            strokeWidth="16"
-            strokeLinecap="round"
-          />
-          <path
-            d="M108 250L86 412"
-            stroke={guidePalette.frame}
-            strokeWidth="18"
-            strokeLinecap="round"
-          />
-          <path
-            d="M132 250L154 412"
-            stroke={guidePalette.frame}
-            strokeWidth="18"
-            strokeLinecap="round"
-          />
-          <path
-            d="M78 418H95"
-            stroke={guidePalette.frame}
-            strokeWidth="10"
-            strokeLinecap="round"
-          />
-          <path
-            d="M145 418H162"
-            stroke={guidePalette.frame}
-            strokeWidth="10"
-            strokeLinecap="round"
-          />
+          {renderGuideSilhouette(guideVariant, guidePalette)}
           <rect
             x="18"
             y="14"
@@ -493,6 +602,43 @@ export function CameraPreview({
             }}
           >
             {guideHint}
+          </div>
+        </div>
+      )}
+      {showStaticGuide && (
+        <div className="absolute inset-x-3 top-3 z-45 pointer-events-none">
+          {guideBadges.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {guideBadges.map((badge) => (
+                <div
+                  key={badge}
+                  className="rounded-full border border-white/15 bg-black/40 px-3 py-1 text-[11px] font-medium text-slate-100 backdrop-blur-sm"
+                >
+                  {badge}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {status === 'ready' && guideReadinessLabel && (
+        <div className="absolute left-1/2 top-14 z-45 -translate-x-1/2 pointer-events-none">
+          <div className="rounded-full border border-emerald-400/20 bg-emerald-500/15 px-3 py-1 text-[11px] font-medium text-emerald-100 backdrop-blur-sm">
+            {guideReadinessLabel}
+          </div>
+        </div>
+      )}
+      {showStaticGuide && guideInstructions.length > 0 && (
+        <div className="absolute inset-x-3 bottom-3 z-45 pointer-events-none">
+          <div className="rounded-2xl border border-white/10 bg-black/38 px-4 py-3 backdrop-blur-sm">
+            <p className="text-[11px] font-semibold tracking-[0.18em] text-slate-400">
+              GUIDE
+            </p>
+            <div className="mt-2 space-y-1 text-sm font-medium text-slate-100">
+              {guideInstructions.slice(0, 4).map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+            </div>
           </div>
         </div>
       )}
