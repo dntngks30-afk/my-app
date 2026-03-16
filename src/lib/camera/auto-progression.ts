@@ -67,18 +67,21 @@ export function getCameraGuideTone(
 
 const AUTO_ADVANCE_DELAY_MS: Record<CameraStepId, number> = {
   squat: 700,
+  'overhead-reach': 700,
   'wall-angel': 700,
   'single-leg-balance': 900,
 };
 
 const BASIC_PASS_CONFIDENCE_THRESHOLD: Record<CameraStepId, number> = {
   squat: 0.62,
+  'overhead-reach': 0.72,
   'wall-angel': 0.76,
   'single-leg-balance': 0.8,
 };
 
 const STRONG_QUALITY_CONFIDENCE_THRESHOLD: Record<CameraStepId, number> = {
   squat: 0.78,
+  'overhead-reach': 0.78,
   'wall-angel': 0.76,
   'single-leg-balance': 0.8,
 };
@@ -114,6 +117,13 @@ function getStableSignalBonus(stepId: CameraStepId, result: EvaluatorResult): nu
     const peakCount = getHighlightedMetric(result, 'peakCount');
     const lowerCount = getHighlightedMetric(result, 'lowerCount');
     return raiseCount > 1 && peakCount > 0 && lowerCount > 1 ? 0.04 : 0;
+  }
+
+  if (stepId === 'overhead-reach') {
+    const raiseCount = getHighlightedMetric(result, 'raiseCount');
+    const peakCount = getHighlightedMetric(result, 'peakCount');
+    const holdDurationMs = getHighlightedMetric(result, 'holdDurationMs');
+    return raiseCount > 0 && peakCount >= 4 && holdDurationMs >= 700 ? 0.04 : 0;
   }
 
   const holdOngoingCount = getHighlightedMetric(result, 'holdOngoingCount');
@@ -197,6 +207,24 @@ function evaluateWallAngelCompletion(result: EvaluatorResult, guardrail: StepGua
   );
 }
 
+function evaluateOverheadReachCompletion(
+  result: EvaluatorResult,
+  guardrail: StepGuardrailResult
+) {
+  const armRange = getMetricValue(result.metrics, 'arm_range') ?? 0;
+  const holdDuration = getMetricValue(result.rawMetrics, 'hold_duration') ?? 0;
+  const raiseCount = getHighlightedMetric(result, 'raiseCount');
+  const peakCount = getHighlightedMetric(result, 'peakCount');
+
+  return (
+    guardrail.completionStatus === 'complete' &&
+    armRange >= 120 &&
+    holdDuration >= 700 &&
+    raiseCount > 0 &&
+    peakCount > 0
+  );
+}
+
 function evaluateBalanceCompletion(result: EvaluatorResult, guardrail: StepGuardrailResult) {
   const holdStability = getMetricValue(result.metrics, 'hold_stability') ?? 0;
   const sway = getMetricValue(result.metrics, 'sway') ?? 999;
@@ -222,6 +250,7 @@ function getCompletionSatisfied(
   guardrail: StepGuardrailResult
 ): boolean {
   if (stepId === 'squat') return evaluateSquatCompletion(result, guardrail);
+  if (stepId === 'overhead-reach') return evaluateOverheadReachCompletion(result, guardrail);
   if (stepId === 'wall-angel') return evaluateWallAngelCompletion(result, guardrail);
   return evaluateBalanceCompletion(result, guardrail);
 }
@@ -324,6 +353,15 @@ function getUserGuidance(
 
   if (stepId === 'wall-angel' && failureReasons.includes('rep_incomplete')) {
     messages.push('팔을 끝까지 올렸다가 천천히 내려주세요');
+  }
+
+  if (stepId === 'overhead-reach') {
+    if (failureReasons.includes('rep_incomplete')) {
+      messages.push('양팔을 머리 위로 끝까지 올려주세요');
+    }
+    if (guardrail.flags.includes('hold_too_short')) {
+      messages.push('맨 위에서 잠깐 멈춰주세요');
+    }
   }
 
   if (stepId === 'single-leg-balance') {
@@ -486,6 +524,12 @@ function getFailureReasons(
   }
   if (guardrail.flags.includes('framing_invalid')) {
     reasons.add('framing_invalid');
+  }
+  if (guardrail.flags.includes('rep_incomplete')) {
+    reasons.add('rep_incomplete');
+  }
+  if (guardrail.flags.includes('hold_too_short')) {
+    reasons.add('hold_too_short');
   }
   if (guardrail.captureQuality !== 'ok') {
     reasons.add(guardrail.captureQuality === 'low' ? 'capture_quality_low' : 'capture_quality_invalid');

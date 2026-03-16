@@ -39,7 +39,7 @@ interface CameraPreviewProps {
   /** 강조 애니메이션 여부 */
   guideAnimated?: boolean;
   /** 동작별 실루엣 형태 */
-  guideVariant?: 'default' | 'wall-angel' | 'single-leg-balance';
+  guideVariant?: 'default' | 'overhead-reach' | 'wall-angel' | 'single-leg-balance';
   /** 상단 고정 가이드 배지 */
   guideBadges?: string[];
   /** 하단 고정 가이드 문구 */
@@ -138,6 +138,35 @@ function renderWallAngelSilhouette(palette: ReturnType<typeof getGuidePalette>) 
   );
 }
 
+function renderOverheadReachSilhouette(palette: ReturnType<typeof getGuidePalette>) {
+  return (
+    <>
+      <circle
+        cx="120"
+        cy="92"
+        r="29"
+        fill={palette.fill}
+        stroke={palette.frame}
+        strokeWidth="3"
+      />
+      <path
+        d="M94 158C94 143 106 132 121 132H127C142 132 154 143 154 158V238C154 253 142 264 127 264H121C106 264 94 253 94 238V158Z"
+        fill={palette.fill}
+        stroke={palette.frame}
+        strokeWidth="3"
+      />
+      <path d="M104 176L92 110" stroke={palette.frame} strokeWidth="14" strokeLinecap="round" />
+      <path d="M146 176L158 110" stroke={palette.frame} strokeWidth="14" strokeLinecap="round" />
+      <path d="M92 110L106 58" stroke={palette.frame} strokeWidth="14" strokeLinecap="round" />
+      <path d="M158 110L144 58" stroke={palette.frame} strokeWidth="14" strokeLinecap="round" />
+      <path d="M120 264L104 412" stroke={palette.frame} strokeWidth="17" strokeLinecap="round" />
+      <path d="M136 264L152 412" stroke={palette.frame} strokeWidth="17" strokeLinecap="round" />
+      <path d="M96 418H111" stroke={palette.frame} strokeWidth="10" strokeLinecap="round" />
+      <path d="M145 418H160" stroke={palette.frame} strokeWidth="10" strokeLinecap="round" />
+    </>
+  );
+}
+
 function renderSingleLegBalanceSilhouette(palette: ReturnType<typeof getGuidePalette>) {
   return (
     <>
@@ -183,6 +212,10 @@ function renderGuideSilhouette(
   variant: NonNullable<CameraPreviewProps['guideVariant']>,
   palette: ReturnType<typeof getGuidePalette>
 ) {
+  if (variant === 'overhead-reach') {
+    return renderOverheadReachSilhouette(palette);
+  }
+
   if (variant === 'wall-angel') {
     return renderWallAngelSilhouette(palette);
   }

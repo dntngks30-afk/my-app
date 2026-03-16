@@ -87,10 +87,12 @@ function toAvoidItems(results: EvaluatorResult[]): string[] {
 /** reset action 추천 */
 function toResetAction(results: EvaluatorResult[]): string {
   const hasSquat = results.some((r) => r.stepId === 'squat' && !r.insufficientSignal);
+  const hasOverheadReach = results.some((r) => r.stepId === 'overhead-reach' && !r.insufficientSignal);
   const hasWallAngel = results.some((r) => r.stepId === 'wall-angel' && !r.insufficientSignal);
   const hasBalance = results.some((r) => r.stepId === 'single-leg-balance' && !r.insufficientSignal);
 
   if (hasSquat) return '벽에 등을 대고 천천히 스쿼트 5회를 다시 맞춰 보세요.';
+  if (hasOverheadReach) return '정면에서 양팔을 머리 위로 올리고 1초씩 5회 멈춰 보세요.';
   if (hasWallAngel) return '문틀에 팔을 걸고 가슴을 부드럽게 열어 20초씩 2번 해 보세요.';
   if (hasBalance) return '벽을 살짝 짚고 한발로 10초 서기를 좌우 번갈아 다시 해 보세요.';
   return '전신이 보이도록 다시 촬영하거나 설문형 테스트로 전환해 보세요.';
@@ -135,8 +137,8 @@ function toPatternSummary(
   if (captureQuality === 'low' || flags.includes('partial_capture')) {
     return '일부 구간의 신호가 약했지만 확인 가능한 범위에서 움직임 패턴을 정리했습니다.';
   }
-  return validResults.length >= 3
-    ? '3가지 동작 분석을 바탕으로 움직임 패턴을 확인했습니다.'
+  return validResults.length >= 2
+    ? `${validResults.length}가지 동작 분석을 바탕으로 움직임 패턴을 확인했습니다.`
     : `${validResults.length}개 동작 분석 결과입니다.`;
 }
 
@@ -156,7 +158,11 @@ export function normalizeCameraResult(
             guardrailResults.reduce((sum, guardrail) => sum + guardrail.confidence, 0) / guardrailResults.length
           )
         )
-      : round(validResults.length > 0 ? Math.min(1, validResults.length / 3) : 0);
+      : round(
+          validResults.length > 0
+            ? Math.min(1, validResults.length / Math.max(validResults.length, 2))
+            : 0
+        );
   const fallbackMode = getFallbackMode(captureQuality, confidence, flags);
 
   if ((anyInsufficient && validResults.length < 2) || captureQuality === 'invalid') {

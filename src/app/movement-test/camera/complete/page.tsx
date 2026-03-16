@@ -16,6 +16,7 @@ import { normalizeCameraResult, type NormalizedCameraResult } from '@/lib/camera
 import { clearCameraResult, saveCameraResult } from '@/lib/camera/camera-result';
 
 const BG = '#0d161f';
+const ACTIVE_STEP_COUNT = CAMERA_STEPS.length;
 
 export default function CameraCompletePage() {
   const router = useRouter();
@@ -91,7 +92,7 @@ export default function CameraCompletePage() {
     }
     return {
       title: '촬영이 완료되었습니다',
-      description: '3가지 동작의 촬영 신호가 안정적으로 확인되었습니다. 결과를 확인해 보세요.',
+        description: `${ACTIVE_STEP_COUNT}가지 동작의 촬영 신호가 안정적으로 확인되었습니다. 결과를 확인해 보세요.`,
       allowContinue: true,
     };
   }, [analysis]);

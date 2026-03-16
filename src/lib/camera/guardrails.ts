@@ -179,6 +179,33 @@ function getMotionCompleteness(
     return { score: clamp(peakElevation / 155), status: 'complete' };
   }
 
+  if (stepId === 'overhead-reach') {
+    const armElevations = frames
+      .map((frame) => frame.derived.armElevationAvg)
+      .filter((value): value is number => typeof value === 'number');
+    const peakFrames = frames.filter((frame) => frame.phaseHint === 'peak');
+    const raiseCount = frames.filter((frame) => frame.phaseHint === 'raise').length;
+    const peakCount = peakFrames.length;
+    const peakElevation = armElevations.length > 0 ? Math.max(...armElevations) : 0;
+    const holdDurationMs =
+      peakFrames.length > 1
+        ? peakFrames[peakFrames.length - 1]!.timestampMs - peakFrames[0]!.timestampMs
+        : 0;
+
+    if (frames.length < 10 || peakElevation < 120 || raiseCount === 0 || peakCount === 0) {
+      flags.add('rep_incomplete');
+      return { score: clamp(peakElevation / 150), status: 'partial' };
+    }
+    if (holdDurationMs < 700) {
+      flags.add('hold_too_short');
+      return { score: clamp(Math.max(peakElevation / 155, holdDurationMs / 900)), status: 'partial' };
+    }
+    return {
+      score: clamp(Math.min(peakElevation / 160, Math.max(holdDurationMs / 900, 0.75))),
+      status: 'complete',
+    };
+  }
+
   const holdFrames = frames.filter(
     (frame) => frame.phaseHint === 'hold_start' || frame.phaseHint === 'hold_ongoing'
   );
@@ -213,6 +240,7 @@ function getMotionCompleteness(
 function getMetricSufficiency(stepId: CameraStepId, evaluatorResult: EvaluatorResult): number {
   const expectedMetricsByStep: Record<CameraStepId, number> = {
     squat: 4,
+    'overhead-reach': 3,
     'wall-angel': 3,
     'single-leg-balance': 4,
   };

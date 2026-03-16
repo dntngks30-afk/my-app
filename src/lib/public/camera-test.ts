@@ -7,10 +7,18 @@ import type { StepGuardrailResult } from '@/lib/camera/guardrails';
 
 export const CAMERA_TEST_KEY = 'moveReCameraTest:v1';
 
-export type CameraStepId = 'squat' | 'wall-angel' | 'single-leg-balance';
+export type CameraStepId =
+  | 'squat'
+  | 'overhead-reach'
+  | 'wall-angel'
+  | 'single-leg-balance';
 
 export const CAMERA_STEPS: { id: CameraStepId; path: string; title: string }[] = [
   { id: 'squat', path: '/movement-test/camera/squat', title: '스쿼트' },
+  { id: 'overhead-reach', path: '/movement-test/camera/overhead-reach', title: '오버헤드 리치' },
+];
+
+export const DEFERRED_CAMERA_STEPS: { id: CameraStepId; path: string; title: string }[] = [
   { id: 'wall-angel', path: '/movement-test/camera/wall-angel', title: '벽 천사' },
   { id: 'single-leg-balance', path: '/movement-test/camera/single-leg-balance', title: '한발 서기' },
 ];

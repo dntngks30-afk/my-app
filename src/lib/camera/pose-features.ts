@@ -104,6 +104,16 @@ const STEP_CRITICAL_JOINTS: Record<CameraStepId, JointKey[]> = {
     'leftShoulder',
     'rightShoulder',
   ],
+  'overhead-reach': [
+    'leftShoulder',
+    'rightShoulder',
+    'leftElbow',
+    'rightElbow',
+    'leftWrist',
+    'rightWrist',
+    'leftHip',
+    'rightHip',
+  ],
   'wall-angel': [
     'leftShoulder',
     'rightShoulder',
@@ -521,6 +531,40 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
         } else if (delta > 3) {
           phaseHint = 'raise';
         } else if (delta < -3) {
+          phaseHint = 'lower';
+        }
+      }
+
+      if (phaseHint === 'peak') {
+        eventHints.push('peak_reached');
+      }
+
+      return { ...frame, phaseHint, eventHints };
+    });
+  }
+
+  if (stepId === 'overhead-reach') {
+    const maxElevation = Math.max(
+      ...frames.map((frame) => frame.derived.armElevationAvg ?? 0)
+    );
+
+    return frames.map((frame, index) => {
+      const previousElevation = index > 0 ? frames[index - 1]!.derived.armElevationAvg : null;
+      const currentElevation = frame.derived.armElevationAvg;
+      let phaseHint: PosePhaseHint = 'unknown';
+      const eventHints = [...frame.eventHints];
+
+      if (typeof currentElevation === 'number') {
+        const delta =
+          typeof previousElevation === 'number' ? currentElevation - previousElevation : 0;
+
+        if (currentElevation < 40) {
+          phaseHint = 'start';
+        } else if (currentElevation >= maxElevation * 0.9 && Math.abs(delta) < 3) {
+          phaseHint = 'peak';
+        } else if (delta > 2.5) {
+          phaseHint = 'raise';
+        } else if (delta < -2.5) {
           phaseHint = 'lower';
         }
       }
