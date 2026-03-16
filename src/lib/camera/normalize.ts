@@ -109,15 +109,21 @@ function getAverageGuardrailConfidence(guardrails: StepGuardrailResult[]): numbe
   );
 }
 
+const AGGREGATE_CONFIDENCE_FLOOR = 0.74;
+
 function getOverallCaptureQuality(
   guardrails: StepGuardrailResult[],
   flags: CameraGuardrailFlag[],
   confidence: number
 ): CaptureQuality {
   if (guardrails.some((guardrail) => guardrail.captureQuality === 'invalid')) return 'invalid';
+  const okCount = guardrails.filter((g) => g.captureQuality === 'ok').length;
+  const lowCount = guardrails.filter((g) => g.captureQuality === 'low').length;
+  if (okCount >= 1 && lowCount >= 1 && confidence >= AGGREGATE_CONFIDENCE_FLOOR) return 'ok';
+  if (okCount >= 1 && confidence >= AGGREGATE_CONFIDENCE_FLOOR) return 'ok';
   if (guardrails.some((guardrail) => guardrail.captureQuality === 'low')) return 'low';
-  if (flags.includes('unstable_motion_signal') || flags.includes('partial_capture')) return 'low';
-  if (confidence < 0.82) return 'low';
+  if (flags.includes('hard_partial')) return 'low';
+  if (confidence < AGGREGATE_CONFIDENCE_FLOOR) return 'low';
   return 'ok';
 }
 
@@ -135,9 +141,8 @@ function getFallbackMode(
   }
   if (
     captureQuality === 'low' ||
-    confidence < 0.8 ||
-    flags.includes('partial_capture') ||
-    flags.includes('unstable_motion_signal')
+    confidence < 0.74 ||
+    flags.includes('hard_partial')
   ) {
     return 'retry';
   }
@@ -152,7 +157,7 @@ function toPatternSummary(
   if (captureQuality === 'invalid') {
     return '촬영 신호가 충분하지 않아 결과를 바로 확정하지 않았습니다.';
   }
-  if (captureQuality === 'low' || flags.includes('partial_capture')) {
+  if (captureQuality === 'low' || flags.includes('hard_partial') || flags.includes('soft_partial')) {
     return '일부 구간의 신호가 약했지만 확인 가능한 범위에서 움직임 패턴을 정리했습니다.';
   }
   return validResults.length >= 2

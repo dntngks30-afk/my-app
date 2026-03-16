@@ -85,7 +85,7 @@ function getWallAngelOverlayGuide(
     failureReasons.includes('framing_invalid') ||
     failureReasons.includes('left_side_missing') ||
     failureReasons.includes('right_side_missing') ||
-    failureReasons.includes('partial_capture') ||
+    failureReasons.includes('hard_partial') ||
     failureReasons.includes('capture_quality_invalid') ||
     failureReasons.includes('capture_quality_low')
   ) {
@@ -545,7 +545,7 @@ export default function CameraWallAngelPage() {
     stats.sampledFrameCount > 0 &&
     gate.guardrail.captureQuality !== 'invalid' &&
     !gate.flags.includes('framing_invalid') &&
-    !gate.flags.includes('partial_capture') &&
+    !gate.flags.includes('hard_partial') &&
     !gate.flags.includes('left_side_missing') &&
     !gate.flags.includes('right_side_missing')
       ? '팔과 상체가 잘 보여요'

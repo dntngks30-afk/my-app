@@ -20,8 +20,11 @@ export type CameraGuardrailFlag =
   | 'hold_too_short'
   | 'left_side_missing'
   | 'right_side_missing'
-  | 'partial_capture'
-  | 'unstable_motion_signal';
+  | 'soft_partial'
+  | 'hard_partial'
+  | 'unstable_frame_timing'
+  | 'unstable_bbox'
+  | 'unstable_landmarks';
 
 type CompletionStatus = 'complete' | 'partial' | 'insufficient';
 
@@ -60,6 +63,12 @@ export interface StepGuardrailResult {
 
 const MIN_VALID_FRAMES = 8;
 const SQUAT_BASIC_DEPTH_FLOOR = 0.18;
+const WARMUP_MS = 500;
+const BEST_WINDOW_MIN_MS = 800;
+const BEST_WINDOW_MAX_MS = 1200;
+const JITTER_PENALTY_CAP = 0.12;
+const FRAMING_PENALTY_CAP = 0.08;
+const LANDMARK_PENALTY_CAP = 0.06;
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(max, Math.max(min, value));
@@ -113,6 +122,49 @@ function getBboxStability(frames: PoseFeaturesFrame[]): number {
   const variance = mean(areas.map((area) => (area - avg) ** 2));
   const stdDev = Math.sqrt(variance);
   return clamp(1 - stdDev / avg);
+}
+
+/** Exclude first ~500ms warmup frames from quality calculation */
+function excludeWarmupFrames(
+  frames: PoseFeaturesFrame[],
+  warmupMs: number
+): PoseFeaturesFrame[] {
+  if (frames.length === 0) return frames;
+  const t0 = frames[0]!.timestampMs;
+  return frames.filter((f) => f.timestampMs - t0 >= warmupMs);
+}
+
+/** Find most stable 0.8–1.2s window for quality evaluation */
+function getBestWindow(
+  frames: PoseFeaturesFrame[],
+  minMs: number,
+  maxMs: number
+): PoseFeaturesFrame[] {
+  if (frames.length < 4) return frames;
+  let bestScore = -1;
+  let bestSlice: PoseFeaturesFrame[] = frames;
+
+  for (let i = 0; i < frames.length; i++) {
+    const startT = frames[i]!.timestampMs;
+    let j = i;
+    while (j < frames.length && frames[j]!.timestampMs - startT < minMs) j++;
+    if (j >= frames.length) break;
+    while (j + 1 < frames.length && frames[j + 1]!.timestampMs - startT <= maxMs) j++;
+    const window = frames.slice(i, j + 1);
+    if (window.length < 4) continue;
+    const areas = window.map((f) => f.bodyBox.area).filter((a) => a > 0);
+    const bboxStability =
+      areas.length >= 2
+        ? clamp(1 - Math.sqrt(mean(areas.map((a) => (a - mean(areas)) ** 2))) / Math.max(mean(areas), 0.01))
+        : 0;
+    const visMean = mean(window.map((f) => f.visibilitySummary.visibleLandmarkRatio));
+    const score = bboxStability * 0.5 + visMean * 0.5;
+    if (score > bestScore) {
+      bestScore = score;
+      bestSlice = window;
+    }
+  }
+  return bestSlice.length >= 4 ? bestSlice : frames;
 }
 
 function countNoisyFrames(frames: PoseFeaturesFrame[]): number {
@@ -215,14 +267,9 @@ function getMotionCompleteness(
   const firstHalf = Math.floor(holdFrames.length / 2);
   const secondHalf = holdFrames.length - firstHalf;
 
-  if (firstHalf < 12) {
-    flags.add('left_side_missing');
-    flags.add('partial_capture');
-  }
-  if (secondHalf < 12) {
-    flags.add('right_side_missing');
-    flags.add('partial_capture');
-  }
+  if (firstHalf < 12) flags.add('left_side_missing');
+  if (secondHalf < 12) flags.add('right_side_missing');
+  if (firstHalf < 12 || secondHalf < 12) flags.add('hard_partial');
   if (stats.captureDurationMs < 6000 || frames.length < 45) {
     flags.add('hold_too_short');
   }
@@ -259,17 +306,23 @@ export function assessStepGuardrail(
   const validFrames = featureFrames.filter((frame) => frame.isValid);
   const flags = new Set<CameraGuardrailFlag>();
 
-  const visibleJointsRatio = getVisibleJointsRatio(validFrames);
-  const averageLandmarkConfidence = getAverageLandmarkConfidence(validFrames);
-  const criticalJointsAvailability = getCriticalAvailability(validFrames);
-  const bboxSizeStability = getBboxStability(validFrames);
+  const postWarmup = excludeWarmupFrames(validFrames, WARMUP_MS);
+  const qualityFrames =
+    postWarmup.length >= 4
+      ? getBestWindow(postWarmup, BEST_WINDOW_MIN_MS, BEST_WINDOW_MAX_MS)
+      : validFrames;
+
+  const visibleJointsRatio = getVisibleJointsRatio(qualityFrames);
+  const averageLandmarkConfidence = getAverageLandmarkConfidence(qualityFrames);
+  const criticalJointsAvailability = getCriticalAvailability(qualityFrames);
+  const bboxSizeStability = getBboxStability(qualityFrames);
   const validFrameCount = validFrames.length;
   const droppedFrameRatio =
     stats.sampledFrameCount > 0 ? stats.droppedFrameCount / stats.sampledFrameCount : 1;
   const noisyFrameRatio =
     validFrameCount > 0 ? countNoisyFrames(validFrames) / validFrameCount : 1;
-  const leftSideCompleteness = getSideCompleteness(validFrames, 'left');
-  const rightSideCompleteness = getSideCompleteness(validFrames, 'right');
+  const leftSideCompleteness = getSideCompleteness(qualityFrames, 'left');
+  const rightSideCompleteness = getSideCompleteness(qualityFrames, 'right');
 
   if (validFrameCount < MIN_VALID_FRAMES) {
     flags.add('insufficient_signal');
@@ -281,17 +334,20 @@ export function assessStepGuardrail(
   }
   if (leftSideCompleteness < 0.55) flags.add('left_side_missing');
   if (rightSideCompleteness < 0.55) flags.add('right_side_missing');
+  if (leftSideCompleteness < 0.55 || rightSideCompleteness < 0.55) {
+    flags.add('hard_partial');
+  }
   if (
-    droppedFrameRatio > 0.45 ||
-    noisyFrameRatio > 0.35 ||
-    bboxSizeStability < 0.45 ||
-    stats.timestampDiscontinuityCount > 0
+    (leftSideCompleteness >= 0.55 && leftSideCompleteness < 0.7) ||
+    (rightSideCompleteness >= 0.55 && rightSideCompleteness < 0.7)
   ) {
-    flags.add('unstable_motion_signal');
+    flags.add('soft_partial');
   }
-  if (leftSideCompleteness < 0.7 || rightSideCompleteness < 0.7) {
-    flags.add('partial_capture');
+  if (droppedFrameRatio > 0.45 || stats.timestampDiscontinuityCount > 0) {
+    flags.add('unstable_frame_timing');
   }
+  if (bboxSizeStability < 0.45) flags.add('unstable_bbox');
+  if (noisyFrameRatio > 0.35) flags.add('unstable_landmarks');
 
   const motion = getMotionCompleteness(stepId, validFrames, stats, flags);
   const metricSufficiency = getMetricSufficiency(stepId, evaluatorResult);
@@ -319,10 +375,18 @@ export function assessStepGuardrail(
   const qualityScore = captureQuality === 'ok' ? 1 : captureQuality === 'low' ? 0.65 : 0.2;
   const validFrameScore = clamp(validFrameCount / 30);
   const sideScore = Math.min(leftSideCompleteness, rightSideCompleteness);
+
+  const jitterRaw =
+    (flags.has('unstable_frame_timing') ? droppedFrameRatio * 0.08 : 0) +
+    (flags.has('unstable_landmarks') ? noisyFrameRatio * 0.06 : 0);
+  const framingRaw =
+    (flags.has('soft_partial') ? 0.04 : 0) + (flags.has('hard_partial') ? 0.06 : 0);
+  const landmarkRaw =
+    averageLandmarkConfidence !== null && averageLandmarkConfidence < 0.45 ? 0.1 : 0;
   const confidencePenalty =
-    droppedFrameRatio * 0.18 +
-    noisyFrameRatio * 0.12 +
-    (averageLandmarkConfidence !== null && averageLandmarkConfidence < 0.45 ? 0.1 : 0);
+    Math.min(jitterRaw, JITTER_PENALTY_CAP) +
+    Math.min(framingRaw, FRAMING_PENALTY_CAP) +
+    Math.min(landmarkRaw, LANDMARK_PENALTY_CAP);
 
   const confidence = round(
     clamp(
@@ -338,7 +402,7 @@ export function assessStepGuardrail(
   );
 
   const retryRecommended =
-    captureQuality !== 'ok' || confidence < 0.72 || flags.has('partial_capture');
+    captureQuality !== 'ok' || confidence < 0.72 || flags.has('hard_partial');
   const fallbackMode: CameraFallbackMode =
     captureQuality === 'invalid' ? 'survey' : retryRecommended ? 'retry' : null;
 

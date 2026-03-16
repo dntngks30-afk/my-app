@@ -148,13 +148,24 @@ function getStableSignalBonus(stepId: CameraStepId, result: EvaluatorResult): nu
   return holdOngoingCount >= 8 && breakCount === 0 ? 0.05 : 0;
 }
 
+const JITTER_PENALTY_CAP = 0.12;
+const FRAMING_PENALTY_CAP = 0.08;
+const LANDMARK_PENALTY_CAP = 0.06;
+
 function getNoisePenalty(guardrail: StepGuardrailResult): number {
-  let penalty = 0;
-  if (guardrail.flags.includes('unstable_motion_signal')) penalty += 0.07;
-  if (guardrail.flags.includes('partial_capture')) penalty += 0.06;
-  if (guardrail.flags.includes('landmark_confidence_low')) penalty += 0.04;
-  if ((guardrail.debug.timestampDiscontinuityCount ?? 0) > 0) penalty += 0.04;
-  return penalty;
+  let jitter = 0;
+  if (guardrail.flags.includes('unstable_frame_timing')) jitter += 0.05;
+  if (guardrail.flags.includes('unstable_landmarks')) jitter += 0.04;
+  if ((guardrail.debug.timestampDiscontinuityCount ?? 0) > 0) jitter += 0.04;
+  let framing = 0;
+  if (guardrail.flags.includes('hard_partial')) framing += 0.06;
+  if (guardrail.flags.includes('soft_partial')) framing += 0.03;
+  const landmark = guardrail.flags.includes('landmark_confidence_low') ? 0.04 : 0;
+  return (
+    Math.min(jitter, JITTER_PENALTY_CAP) +
+    Math.min(framing, FRAMING_PENALTY_CAP) +
+    Math.min(landmark, LANDMARK_PENALTY_CAP)
+  );
 }
 
 function getEffectiveConfidence(
@@ -301,7 +312,7 @@ function getRetryMessage(guardrail: StepGuardrailResult): string {
 
   if (
     guardrail.flags.includes('framing_invalid') ||
-    guardrail.flags.includes('partial_capture') ||
+    guardrail.flags.includes('hard_partial') ||
     guardrail.flags.includes('left_side_missing') ||
     guardrail.flags.includes('right_side_missing')
   ) {
@@ -327,7 +338,7 @@ function getUserGuidance(
   }
 
   if (
-    failureReasons.includes('partial_capture') ||
+    failureReasons.includes('hard_partial') ||
     failureReasons.includes('left_side_missing') ||
     failureReasons.includes('right_side_missing')
   ) {
@@ -345,7 +356,11 @@ function getUserGuidance(
     messages.push('조명을 조금 더 밝게 해주세요');
   }
 
-  if (guardrail.flags.includes('unstable_motion_signal')) {
+  if (
+    guardrail.flags.includes('unstable_frame_timing') ||
+    guardrail.flags.includes('unstable_bbox') ||
+    guardrail.flags.includes('unstable_landmarks')
+  ) {
     messages.push('카메라를 고정하고 천천히 움직여주세요');
   }
 
@@ -451,7 +466,7 @@ function getHardBlockerReasons(
     ];
   }
 
-  return [...commonBlockers, 'left_side_missing', 'right_side_missing', 'partial_capture'];
+  return [...commonBlockers, 'left_side_missing', 'right_side_missing', 'hard_partial'];
 }
 
 function getSquatProgressionCompletionSatisfied(
@@ -562,8 +577,8 @@ function getSquatFailureReasons(
   if (guardrail.flags.includes('right_side_missing')) {
     failureReasons.add('right_side_missing');
   }
-  if (guardrail.flags.includes('partial_capture')) {
-    failureReasons.add('partial_capture');
+  if (guardrail.flags.includes('hard_partial')) {
+    failureReasons.add('hard_partial');
   }
 
   return Array.from(failureReasons);
@@ -609,8 +624,8 @@ function getFailureReasons(
   if (guardrail.flags.includes('right_side_missing')) {
     reasons.add('right_side_missing');
   }
-  if (guardrail.flags.includes('partial_capture')) {
-    reasons.add('partial_capture');
+  if (guardrail.flags.includes('hard_partial')) {
+    reasons.add('hard_partial');
   }
   return Array.from(reasons);
 }
@@ -737,7 +752,7 @@ export function evaluateExerciseAutoProgress(
       'hold_too_short',
       'left_side_missing',
       'right_side_missing',
-      'partial_capture',
+      'hard_partial',
     ])
   ) {
     const progressionState =

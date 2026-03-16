@@ -34,7 +34,7 @@ export default function CameraCompletePage() {
 
     if (allResults.length < CAMERA_STEPS.length || allGuardrails.length < CAMERA_STEPS.length) {
       normalized.captureQuality = 'invalid';
-      normalized.flags = [...new Set([...normalized.flags, 'partial_capture', 'insufficient_signal'])];
+      normalized.flags = [...new Set([...normalized.flags, 'hard_partial', 'insufficient_signal'])];
       normalized.retryRecommended = true;
       normalized.fallbackMode = 'survey';
       normalized.insufficientSignal = true;

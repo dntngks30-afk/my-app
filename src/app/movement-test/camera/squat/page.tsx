@@ -56,7 +56,7 @@ function getSquatOverlayGuide(
     failureReasons.includes('framing_invalid') ||
     failureReasons.includes('left_side_missing') ||
     failureReasons.includes('right_side_missing') ||
-    failureReasons.includes('partial_capture') ||
+    failureReasons.includes('hard_partial') ||
     failureReasons.includes('capture_quality_invalid') ||
     failureReasons.includes('capture_quality_low')
   ) {

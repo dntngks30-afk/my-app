@@ -85,7 +85,7 @@ function getOverheadReachOverlayGuide(
     failureReasons.includes('framing_invalid') ||
     failureReasons.includes('left_side_missing') ||
     failureReasons.includes('right_side_missing') ||
-    failureReasons.includes('partial_capture') ||
+    failureReasons.includes('hard_partial') ||
     failureReasons.includes('capture_quality_invalid') ||
     failureReasons.includes('capture_quality_low')
   ) {
@@ -549,7 +549,7 @@ export default function CameraOverheadReachPage() {
     stats.sampledFrameCount > 0 &&
     gate.guardrail.captureQuality !== 'invalid' &&
     !gate.flags.includes('framing_invalid') &&
-    !gate.flags.includes('partial_capture') &&
+    !gate.flags.includes('hard_partial') &&
     !gate.flags.includes('left_side_missing') &&
     !gate.flags.includes('right_side_missing')
       ? '양팔과 손끝이 잘 보여요'
