@@ -18,6 +18,7 @@
     "test:evidence-gate": "npx tsx scripts/evidence-gate-smoke.mjs",
     "test:camera-pr2-signal": "npx tsx scripts/camera-pr2-signal-structure-smoke.mjs",
     "test:camera-pr3-stability": "npx tsx scripts/camera-pr3-motion-stability-smoke.mjs",
+    "test:camera-pr4-trace": "npx tsx scripts/camera-pr4-observability-trace-smoke.mjs",
     "test:session-feedback": "npx tsx scripts/session-feedback-smoke.mjs",
     "test:progress-report": "npx tsx scripts/progress-report-smoke.mjs",
     "test:adaptive-progression": "npx tsx scripts/adaptive-progression-smoke.mjs",

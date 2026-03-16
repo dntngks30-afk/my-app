@@ -24,6 +24,8 @@ import {
   isFinalPassLatched,
   type ExerciseProgressionState,
 } from '@/lib/camera/auto-progression';
+import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
+import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 
 const BG = '#0d161f';
 const ACCENT = '#ff7b00';
@@ -188,6 +190,7 @@ export default function CameraSquatPage() {
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
   const persistCurrentStep = useCallback(() => {
+    recordAttemptSnapshot(STEP_ID, gate);
     const current = loadCameraTest();
     const completed = current.completedSteps?.includes(STEP_ID)
       ? current.completedSteps
@@ -207,7 +210,7 @@ export default function CameraSquatPage() {
       evaluatorResults,
       guardrailResults,
     });
-  }, [gate.evaluatorResult, gate.guardrail]);
+  }, [gate]);
 
   const handleVideoReady = useCallback(
     (video: HTMLVideoElement) => {
@@ -368,6 +371,7 @@ export default function CameraSquatPage() {
   }, [clearAutoAdvanceTimer]);
 
   const handleRetry = useCallback(() => {
+    recordAttemptSnapshot(STEP_ID, gate);
     clearAutoAdvanceTimer();
     stop();
     settledRef.current = false;
@@ -391,7 +395,7 @@ export default function CameraSquatPage() {
     setPermissionDenied(false);
     setPreviewKey((prev) => prev + 1);
     appendTransition('idle', 'manual_retry');
-  }, [clearAutoAdvanceTimer, stop]);
+  }, [clearAutoAdvanceTimer, gate, stop]);
 
   const handleCameraError = useCallback(() => {
     clearAutoAdvanceTimer();
@@ -632,6 +636,7 @@ export default function CameraSquatPage() {
                       </p>
                     ))}
                   </div>
+                  <TraceDebugPanel />
                 </div>
               )}
 

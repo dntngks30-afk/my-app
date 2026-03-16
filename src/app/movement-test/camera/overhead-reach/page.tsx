@@ -24,6 +24,8 @@ import {
   isGatePassReady,
   type ExerciseProgressionState,
 } from '@/lib/camera/auto-progression';
+import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
+import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 
 const BG = '#0d161f';
 const ACCENT = '#ff7b00';
@@ -209,6 +211,7 @@ export default function CameraOverheadReachPage() {
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
   const persistCurrentStep = useCallback(() => {
+    recordAttemptSnapshot(STEP_ID, gate);
     const current = loadCameraTest();
     const completed = current.completedSteps?.includes(STEP_ID)
       ? current.completedSteps
@@ -228,7 +231,7 @@ export default function CameraOverheadReachPage() {
       evaluatorResults,
       guardrailResults,
     });
-  }, [gate.evaluatorResult, gate.guardrail]);
+  }, [gate]);
 
   const handleVideoReady = useCallback(
     (video: HTMLVideoElement) => {
@@ -473,6 +476,7 @@ export default function CameraOverheadReachPage() {
   }, [clearAutoAdvanceTimer]);
 
   const handleRetry = useCallback(() => {
+    recordAttemptSnapshot(STEP_ID, gate);
     clearAutoAdvanceTimer();
     stop();
     settledRef.current = false;
@@ -494,7 +498,7 @@ export default function CameraOverheadReachPage() {
     setSuccessSnapshot(null);
     setPermissionDenied(false);
     setPreviewKey((prev) => prev + 1);
-  }, [clearAutoAdvanceTimer, stop]);
+  }, [clearAutoAdvanceTimer, gate, stop]);
 
   const handleCameraError = useCallback(() => {
     clearAutoAdvanceTimer();
@@ -726,6 +730,7 @@ export default function CameraOverheadReachPage() {
                     <p>failureReasons: {gate.failureReasons.join(', ') || 'none'}</p>
                     <p>snapshotStored: {successSnapshot ? 'yes' : 'no'}</p>
                   </div>
+                  <TraceDebugPanel />
                 </div>
               )}
 
