@@ -20,10 +20,13 @@ import {
 import { usePoseCapture } from '@/lib/camera/use-pose-capture';
 import {
   evaluateExerciseAutoProgress,
-  getCameraGuideTone,
   isGatePassReady,
   type ExerciseProgressionState,
 } from '@/lib/camera/auto-progression';
+import {
+  getGuideToneFromLiveReadiness,
+  getLiveReadinessState,
+} from '@/lib/camera/live-readiness';
 import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
 import {
   getMovementSetupGuide,
@@ -624,12 +627,11 @@ export default function CameraOverheadReachPage() {
       : nextTriggeredAt
         ? 'next_triggered'
         : 'pass_not_latched';
-  const guideTone = getCameraGuideTone({
-    ...(passLatched
-      ? { ...gate, status: 'pass' as const, nextAllowed: true, completionSatisfied: true }
-      : gate),
-    progressionState: effectiveProgressionState,
+  const liveReadiness = getLiveReadinessState({
+    success: passLatched,
+    guardrail: gate.guardrail,
   });
+  const guideTone = getGuideToneFromLiveReadiness(liveReadiness);
 
   return (
     <div

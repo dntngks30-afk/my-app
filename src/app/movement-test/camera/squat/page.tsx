@@ -22,10 +22,13 @@ import { usePoseCapture } from '@/lib/camera/use-pose-capture';
 import { getSetupFramingHint } from '@/lib/camera/setup-framing';
 import {
   evaluateExerciseAutoProgress,
-  getCameraGuideTone,
   isFinalPassLatched,
   type ExerciseProgressionState,
 } from '@/lib/camera/auto-progression';
+import {
+  getGuideToneFromLiveReadiness,
+  getLiveReadinessState,
+} from '@/lib/camera/live-readiness';
 import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
 import {
   getMovementSetupGuide,
@@ -586,17 +589,11 @@ export default function CameraSquatPage() {
     (progressionState === 'camera_ready' || progressionState === 'insufficient_signal') &&
     stats.sampledFrameCount < 8;
   const effectiveProgressionState = finalPassLatched || passLatched ? 'passed' : progressionState;
-  // Success tone ONLY when finalPassLatched (strict contract)
-  const toneGate =
-    finalPassLatched || passLatched
-      ? { ...gate, status: 'pass' as const, nextAllowed: true, completionSatisfied: true }
-      : gate.status === 'pass' && !finalPassLatched
-        ? { ...gate, status: 'detecting' as const, progressionState: 'detecting' as const }
-        : gate;
-  const guideTone = getCameraGuideTone({
-    ...toneGate,
-    progressionState: effectiveProgressionState,
+  const liveReadiness = getLiveReadinessState({
+    success: finalPassLatched || passLatched,
+    guardrail: gate.guardrail,
   });
+  const guideTone = getGuideToneFromLiveReadiness(liveReadiness);
   const overlayGuide = getSquatOverlayGuide(gate.failureReasons, effectiveProgressionState);
   const isPreCapturePhase =
     cameraPhase === 'setup' || cameraPhase === 'arming' || cameraPhase === 'countdown';
