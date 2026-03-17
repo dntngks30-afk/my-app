@@ -12,6 +12,7 @@ import {
   type AttemptSnapshot,
 } from '@/lib/camera/camera-trace';
 import { getCorrectiveCueObservability } from '@/lib/camera/voice-guidance';
+import { getLastPlaybackObservability } from '@/lib/camera/korean-audio-pack';
 
 interface TraceDebugPanelProps {
   liveReadiness?: {
@@ -146,6 +147,20 @@ export function TraceDebugPanel({ liveReadiness }: TraceDebugPanelProps) {
             <p>cue={cueObs.cueCandidate ?? 'none'} latched={cueObs.latchedKey ?? 'none'}</p>
             <p>suppressed={cueObs.suppressedReason ?? 'none'} played={String(cueObs.played)}</p>
             <p>lastReadiness={cueObs.lastReadiness ?? 'n/a'}</p>
+          </div>
+        );
+      })()}
+      {(() => {
+        const pb = getLastPlaybackObservability();
+        if (!pb) return null;
+        return (
+          <div className="mt-2 text-[10px] text-slate-500">
+            <p>playback: mode={pb.mode} cueKey={pb.cueKey}</p>
+            <p>
+              clipKey={pb.clipKey ?? 'none'}{' '}
+              {pb.clipMissing ? 'clipMissing' : ''}
+              {pb.clipFailed ? ' clipFailed' : ''} success={String(pb.success)}
+            </p>
           </div>
         );
       })()}

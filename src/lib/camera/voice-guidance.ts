@@ -2,6 +2,11 @@ import type { CameraStepId } from '@/lib/public/camera-test';
 import type { ExerciseGateResult } from './auto-progression';
 import { getEffectiveRetryGuidance } from './camera-guidance';
 import type { LiveReadinessState } from './live-readiness';
+import {
+  playCueWithFallback,
+  cancelClipPlayback,
+  type SpeakTTSOptions,
+} from './korean-audio-pack';
 
 export type VoiceCueKind = 'start' | 'countdown' | 'correction' | 'success';
 export type VoiceCuePriority = 1 | 2 | 3 | 4 | 5 | 6;
@@ -166,6 +171,7 @@ export function unlockVoiceGuidance() {
 }
 
 export function cancelVoiceGuidance() {
+  cancelClipPlayback();
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel();
   }
@@ -390,43 +396,66 @@ export async function speakVoiceCue(cue: VoiceCue | null): Promise<boolean> {
   runtimeState.activeCueKey = cue.dedupeKey;
   runtimeState.activePriority = cue.priority;
 
-  const canSpeak =
-    'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined';
+  const currentCueKey = cue.dedupeKey;
 
-  if (!canSpeak) {
-    const beepPlayed = await playFallbackBeep(cue);
+  const speakWithTTS = async (text: string, opts: SpeakTTSOptions): Promise<boolean> => {
+    const canSpeak =
+      typeof window !== 'undefined' &&
+      'speechSynthesis' in window &&
+      typeof SpeechSynthesisUtterance !== 'undefined';
+    if (!canSpeak) return false;
+
+    try {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'ko-KR';
+      utterance.rate = opts.rate ?? 1;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+      utterance.onend = () => {
+        opts.onEnd?.();
+      };
+      utterance.onerror = () => {
+        opts.onError?.();
+      };
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const onEnd = () => {
+    if (runtimeState.activeCueKey === currentCueKey) {
+      runtimeState.activeCueKey = null;
+      runtimeState.activePriority = 0;
+    }
+  };
+
+  const onError = () => {
+    if (runtimeState.activeCueKey === currentCueKey) {
+      runtimeState.activeCueKey = null;
+      runtimeState.activePriority = 0;
+    }
+    void playFallbackBeep(cue);
+  };
+
+  const playBeep = () => playFallbackBeep(cue);
+
+  const ok = await playCueWithFallback(
+    cue,
+    speakWithTTS,
+    playBeep,
+    onEnd,
+    onError
+  );
+
+  if (!ok) {
     runtimeState.activeCueKey = null;
     runtimeState.activePriority = 0;
-    return beepPlayed;
   }
 
-  try {
-    const utterance = new SpeechSynthesisUtterance(cue.text);
-    utterance.lang = 'ko-KR';
-    utterance.rate = cue.kind === 'countdown' ? 0.96 : 1;
-    utterance.pitch = 1;
-    utterance.volume = 1;
-    utterance.onend = () => {
-      if (runtimeState.activeCueKey === cue.dedupeKey) {
-        runtimeState.activeCueKey = null;
-        runtimeState.activePriority = 0;
-      }
-    };
-    utterance.onerror = () => {
-      if (runtimeState.activeCueKey === cue.dedupeKey) {
-        runtimeState.activeCueKey = null;
-        runtimeState.activePriority = 0;
-      }
-      void playFallbackBeep(cue);
-    };
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-    return true;
-  } catch {
-    runtimeState.activeCueKey = null;
-    runtimeState.activePriority = 0;
-    return playFallbackBeep(cue);
-  }
+  return ok;
 }
 
 export function getStartVoiceCue(stepId: CameraStepId): VoiceCue {
