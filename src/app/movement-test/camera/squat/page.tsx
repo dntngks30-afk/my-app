@@ -592,6 +592,7 @@ export default function CameraSquatPage() {
   const liveReadiness = getLiveReadinessState({
     success: finalPassLatched || passLatched,
     guardrail: gate.guardrail,
+    framingHint: setupFramingHint,
   });
   const guideTone = getGuideToneFromLiveReadiness(liveReadiness);
   const overlayGuide = getSquatOverlayGuide(gate.failureReasons, effectiveProgressionState);

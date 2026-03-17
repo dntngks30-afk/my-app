@@ -63,9 +63,27 @@ const readyLowQualityState = getLiveReadinessState({
       rightSideCompleteness: 0.7,
     },
   }),
+  framingHint: null,
 });
 ok('AT2: low-quality but usable state is ready', readyLowQualityState === 'ready');
 ok('AT2b: ready maps to white tone', getGuideToneFromLiveReadiness(readyLowQualityState) === 'neutral');
+
+const readyEvenIfQualityInvalidState = getLiveReadinessState({
+  success: false,
+  guardrail: createGuardrail({
+    captureQuality: 'invalid',
+    flags: ['valid_frames_too_few'],
+    debug: {
+      validFrameCount: 3,
+      visibleJointsRatio: 0.46,
+      criticalJointsAvailability: 0.41,
+      leftSideCompleteness: 0.5,
+      rightSideCompleteness: 0.52,
+    },
+  }),
+  framingHint: null,
+});
+ok('AT2c: captureQuality invalid alone does not block ready', readyEvenIfQualityInvalidState === 'ready');
 
 const invalidState = getLiveReadinessState({
   success: false,
@@ -80,6 +98,7 @@ const invalidState = getLiveReadinessState({
       rightSideCompleteness: 0.42,
     },
   }),
+  framingHint: '조금 뒤로 가 주세요',
 });
 ok('AT3: invalid framing stays not_ready', invalidState === 'not_ready');
 ok('AT3b: not_ready maps to red tone', getGuideToneFromLiveReadiness(invalidState) === 'warning');
@@ -97,6 +116,7 @@ const crossMotionParityState = getLiveReadinessState({
       rightSideCompleteness: 0.67,
     },
   }),
+  framingHint: null,
 });
 ok('AT4: motion incompleteness does not force not_ready', crossMotionParityState === 'ready');
 

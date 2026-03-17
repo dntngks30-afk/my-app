@@ -42,6 +42,7 @@ import {
   speakVoiceCue,
   unlockVoiceGuidance,
 } from '@/lib/camera/voice-guidance';
+import { getSetupFramingHint } from '@/lib/camera/setup-framing';
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 
 const BG = '#0d161f';
@@ -178,6 +179,7 @@ export default function CameraOverheadReachPage() {
     typeof gate.evaluatorResult.debug?.highlightedMetrics?.holdDurationMs === 'number'
       ? gate.evaluatorResult.debug.highlightedMetrics.holdDurationMs
       : 0;
+  const setupFramingHint = useMemo(() => getSetupFramingHint(landmarks), [landmarks]);
   const armRange = getMetricValueFromList(gate.evaluatorResult.metrics, 'arm_range');
   const compensation = getMetricValueFromList(gate.evaluatorResult.metrics, 'lumbar_extension');
   const symmetry = getMetricValueFromList(gate.evaluatorResult.metrics, 'asymmetry');
@@ -630,6 +632,7 @@ export default function CameraOverheadReachPage() {
   const liveReadiness = getLiveReadinessState({
     success: passLatched,
     guardrail: gate.guardrail,
+    framingHint: setupFramingHint,
   });
   const guideTone = getGuideToneFromLiveReadiness(liveReadiness);
 
