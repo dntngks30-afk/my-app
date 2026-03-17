@@ -32,18 +32,32 @@ export interface StabilizedLiveReadiness {
   smoothingApplied: boolean;
 }
 
-const MIN_READY_VALID_FRAMES = 2;
-const MIN_READY_VISIBLE_JOINTS_RATIO = 0.35;
-const MIN_READY_CRITICAL_AVAILABILITY = 0.3;
+/** WHITE requires all of these; fallback is RED when uncertain or any blocker. */
+const MIN_READY_VALID_FRAMES = 4;
+const MIN_READY_VISIBLE_JOINTS_RATIO = 0.42;
+const MIN_READY_CRITICAL_AVAILABILITY = 0.38;
 const READY_ENTER_DELAY_MS = 60;
-const NOT_READY_EXIT_DELAY_MS = 120;
+
+function isReadinessInputValid(debug: LiveReadinessInput['guardrail']['debug']): boolean {
+  if (!debug) return false;
+  const v = debug.validFrameCount;
+  const vis = debug.visibleJointsRatio;
+  const crit = debug.criticalJointsAvailability;
+  return (
+    typeof v === 'number' &&
+    !Number.isNaN(v) &&
+    typeof vis === 'number' &&
+    !Number.isNaN(vis) &&
+    typeof crit === 'number' &&
+    !Number.isNaN(crit)
+  );
+}
 
 export function getLiveReadinessSummary(input: LiveReadinessInput): LiveReadinessSummary {
-  const {
-    validFrameCount,
-    visibleJointsRatio,
-    criticalJointsAvailability,
-  } = input.guardrail.debug;
+  const debug = input.guardrail?.debug;
+  const validFrameCount = debug?.validFrameCount ?? 0;
+  const visibleJointsRatio = debug?.visibleJointsRatio ?? 0;
+  const criticalJointsAvailability = debug?.criticalJointsAvailability ?? 0;
 
   if (input.success) {
     return {
@@ -64,6 +78,27 @@ export function getLiveReadinessSummary(input: LiveReadinessInput): LiveReadines
     };
   }
 
+  /** Default to RED when uncertain: missing/invalid debug data. */
+  if (!isReadinessInputValid(debug)) {
+    return {
+      state: 'not_ready',
+      blockers: {
+        severeFramingInvalid: Boolean(input.framingHint),
+        landmarkPresenceEnough: false,
+        fullBodyVisibleEnough: false,
+        minimalFramesReady: false,
+      },
+      framingHint: input.framingHint ?? null,
+      activeBlockers: ['readiness_uncertain'],
+      inputs: {
+        validFrameCount,
+        visibleJointsRatio,
+        criticalJointsAvailability,
+      },
+    };
+  }
+
+  /** Explicit RED blockers: any of these -> not_ready. */
   const blockers = {
     severeFramingInvalid: Boolean(input.framingHint),
     landmarkPresenceEnough: criticalJointsAvailability >= MIN_READY_CRITICAL_AVAILABILITY,
@@ -77,8 +112,12 @@ export function getLiveReadinessSummary(input: LiveReadinessInput): LiveReadines
   if (!blockers.fullBodyVisibleEnough) activeBlockers.push('visible_landmarks_too_low');
   if (!blockers.landmarkPresenceEnough) activeBlockers.push('critical_landmarks_too_low');
 
+  /** WHITE only when ALL minimum framing readiness conditions are satisfied. Else RED. */
+  const state: LiveReadinessState =
+    activeBlockers.length === 0 ? 'ready' : 'not_ready';
+
   return {
-    state: activeBlockers.length > 0 ? 'not_ready' : 'ready',
+    state,
     blockers,
     framingHint: input.framingHint ?? null,
     activeBlockers,
@@ -115,12 +154,17 @@ export function useStabilizedLiveReadiness(
       return;
     }
 
-    // Keep readiness permissive, but absorb single-frame noise before repainting red/white.
-    const delayMs = rawState === 'ready' ? READY_ENTER_DELAY_MS : NOT_READY_EXIT_DELAY_MS;
+    /** RED applies immediately when blockers appear; no sticky-white. */
+    if (rawState === 'not_ready') {
+      setStableState('not_ready');
+      return;
+    }
+
+    /** WHITE: small delay to absorb single-frame noise before repainting. */
     timeoutRef.current = window.setTimeout(() => {
       timeoutRef.current = null;
       setStableState(rawState);
-    }, delayMs);
+    }, READY_ENTER_DELAY_MS);
 
     return () => {
       if (timeoutRef.current) {

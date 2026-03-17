@@ -75,7 +75,7 @@ const readyEvenIfQualityInvalidState = getLiveReadinessState({
     captureQuality: 'invalid',
     flags: ['valid_frames_too_few'],
     debug: {
-      validFrameCount: 3,
+      validFrameCount: 5,
       visibleJointsRatio: 0.46,
       criticalJointsAvailability: 0.41,
       leftSideCompleteness: 0.5,
@@ -84,7 +84,7 @@ const readyEvenIfQualityInvalidState = getLiveReadinessState({
   }),
   framingHint: null,
 });
-ok('AT2c: captureQuality invalid alone does not block ready', readyEvenIfQualityInvalidState === 'ready');
+ok('AT2c: captureQuality invalid alone does not block ready when framing satisfied', readyEvenIfQualityInvalidState === 'ready');
 
 const invalidState = getLiveReadinessState({
   success: false,
@@ -137,6 +137,28 @@ const readinessSummary = getLiveReadinessSummary({
 });
 ok('AT5: readiness summary exposes framing-first blocker', readinessSummary.activeBlockers[0] === '머리부터 발끝까지 보이게 해주세요');
 ok('AT5b: readiness summary preserves minimal observability inputs', readinessSummary.inputs.validFrameCount === 1 && readinessSummary.blockers.minimalFramesReady === false);
+
+const marginalFramingState = getLiveReadinessState({
+  success: false,
+  guardrail: createGuardrail({
+    debug: {
+      validFrameCount: 2,
+      visibleJointsRatio: 0.38,
+      criticalJointsAvailability: 0.35,
+      leftSideCompleteness: 0.5,
+      rightSideCompleteness: 0.52,
+    },
+  }),
+  framingHint: null,
+});
+ok('AT6: marginal framing stays RED (default is RED not WHITE)', marginalFramingState === 'not_ready');
+
+const uncertainState = getLiveReadinessState({
+  success: false,
+  guardrail: createGuardrail({ debug: undefined }),
+  framingHint: null,
+});
+ok('AT7: uncertain/missing debug defaults to RED', uncertainState === 'not_ready');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
