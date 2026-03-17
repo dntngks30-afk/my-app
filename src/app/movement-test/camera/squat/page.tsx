@@ -404,13 +404,9 @@ export default function CameraSquatPage() {
         readyConfirmTimerRef.current = null;
       }
     }
-
-    return () => {
-      if (readyConfirmTimerRef.current) {
-        window.clearTimeout(readyConfirmTimerRef.current);
-        readyConfirmTimerRef.current = null;
-      }
-    };
+    /* cleanup 없음: liveReadiness 변화 시마다 cleanup이 실행되면
+     * 타이머가 반복적으로 리셋되므로 의도적으로 cleanup을 등록하지 않는다.
+     * phase 이탈은 위 cameraPhase !== 'setup' 분기에서, retry는 handleRetry에서 처리한다. */
   }, [cameraPhase, liveReadiness]);
 
   useEffect(() => {
