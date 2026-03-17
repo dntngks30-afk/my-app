@@ -3,8 +3,13 @@
 /**
  * 카메라 미리보기 (전신 framing guide 포함)
  * 권한 거부/실패 시 null 반환, 부모에서 fallback UI 처리
+ * PR G1: CameraSessionProvider 내부에서는 stream 재사용, motion 전환 시 teardown 없음
  */
 import { useEffect, useRef, useState } from 'react';
+import {
+  useCameraSession,
+  getCameraSessionObservability,
+} from '@/lib/camera/camera-session-context';
 import type { PoseFrame } from '@/lib/motion/pose-types';
 import type { CameraGuideTone } from '@/lib/camera/auto-progression';
 import {
@@ -277,6 +282,7 @@ export function CameraPreview({
   const onVideoReadyRef = useRef(onVideoReady);
   const onPoseFrameRef = useRef(onPoseFrame);
   const onErrorRef = useRef(onError);
+  const session = useCameraSession();
   const [status, setStatus] = useState<
     'idle' | 'requesting' | 'binding' | 'ready' | 'error'
   >('idle');
@@ -321,9 +327,27 @@ export function CameraPreview({
     }
   }, [status, stream, poseStatus, errorMessage, poseErrorMessage]);
 
+  /** PR G1: session 내부면 stream 재사용, 외부면 standalone acquire */
   useEffect(() => {
-    let mounted = true;
+    if (session) {
+      session.requestStream();
+      return () => {
+        if (analysisRafRef.current != null) {
+          cancelAnimationFrame(analysisRafRef.current);
+          analysisRafRef.current = null;
+        }
+        analyzerRef.current?.close();
+        analyzerRef.current = null;
+        clearPoseOverlay(overlayCanvasRef.current);
+        if (videoRef.current) {
+          videoRef.current.pause();
+          videoRef.current.srcObject = null;
+        }
+        /* stream은 provider 소유, teardown 안 함 */
+      };
+    }
 
+    let mounted = true;
     async function startCamera() {
       if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
         const err = new Error('카메라를 지원하지 않는 환경입니다.');
@@ -335,18 +359,18 @@ export function CameraPreview({
       setStatus('requesting');
       setErrorMessage(null);
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        const s = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
           audio: false,
         });
         if (!mounted) {
-          stream.getTracks().forEach((t) => t.stop());
+          s.getTracks().forEach((t) => t.stop());
           return;
         }
-        streamRef.current = stream;
-        setStream(stream);
+        streamRef.current = s;
+        setStream(s);
         setStatus('binding');
-        onReadyRef.current?.(stream);
+        onReadyRef.current?.(s);
       } catch (e) {
         if (!mounted) return;
         const error = e instanceof Error ? e : new Error('카메라 접근 실패');
@@ -355,7 +379,6 @@ export function CameraPreview({
         onErrorRef.current?.(error);
       }
     }
-
     startCamera();
     return () => {
       mounted = false;
@@ -373,7 +396,24 @@ export function CameraPreview({
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
-  }, []);
+  }, [session]);
+
+  /** PR G1: session.stream/status 동기화 */
+  useEffect(() => {
+    if (!session) return;
+    if (session.status === 'requesting') setStatus('requesting');
+    if (session.stream) {
+      streamRef.current = session.stream;
+      setStream(session.stream);
+      setStatus(session.status === 'ready' ? 'binding' : session.status);
+      onReadyRef.current?.(session.stream);
+    }
+    if (session.status === 'error' && session.error) {
+      setStatus('error');
+      setErrorMessage(session.error.message);
+      onErrorRef.current?.(session.error);
+    }
+  }, [session, session?.stream, session?.status, session?.error]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -684,6 +724,10 @@ export function CameraPreview({
       {!minimalCaptureMode && process.env.NODE_ENV !== 'production' && (
         <div className="absolute bottom-2 left-2 z-40 rounded bg-black/50 px-2 py-1 text-[10px] text-white pointer-events-none">
           {status} / pose:{poseStatus}
+          {session && (() => {
+            const obs = getCameraSessionObservability();
+            return obs ? ` | gum:${obs.gumCallCount} reuse:${obs.streamReuseCount}` : null;
+          })()}
         </div>
       )}
     </div>
