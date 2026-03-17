@@ -70,21 +70,39 @@ ok('AT3: success interrupts lower priority cue', successDecision.allowed && succ
 // AT4: representative framing / motion mappings
 const framingCue = getCorrectiveVoiceCue(
   'squat',
-  createGate({ failureReasons: ['left_side_missing'] })
+  createGate({ failureReasons: ['left_side_missing'], readinessState: 'not_ready' })
 );
 ok('AT4a: framing cue maps to full-body message', framingCue?.text === '머리부터 발끝까지 보이게 해주세요');
 
+const framingCueSuppressedWhenReady = getCorrectiveVoiceCue(
+  'squat',
+  createGate({ failureReasons: ['left_side_missing'], readinessState: 'ready' })
+);
+ok('AT4a-2: framing cue is suppressed once readiness is white', framingCueSuppressedWhenReady === null);
+
 const depthCue = getCorrectiveVoiceCue(
   'squat',
-  createGate({ failureReasons: ['depth_not_reached'] })
+  createGate({ failureReasons: ['depth_not_reached'], readinessState: 'ready' })
 );
 ok('AT4b: squat depth cue maps correctly', depthCue?.text === '조금 더 깊게 앉아주세요');
 
 const holdCue = getCorrectiveVoiceCue(
   'overhead-reach',
-  createGate({ failureReasons: ['hold_too_short'] })
+  createGate({ failureReasons: ['hold_too_short'], readinessState: 'ready' })
 );
 ok('AT4c: overhead hold cue maps correctly', holdCue?.text === '맨 위에서 잠깐 멈춰주세요');
+
+const framingHintCue = getCorrectiveVoiceCue(
+  'squat',
+  createGate({ readinessState: 'not_ready', framingHint: '조금 뒤로 가 주세요' })
+);
+ok('AT4d: explicit framing hint wins for red readiness', framingHintCue?.text === '조금 뒤로 가 주세요');
+
+const readyCameraCue = getCorrectiveVoiceCue(
+  'squat',
+  createGate({ progressionState: 'camera_ready', readinessState: 'ready', failureReasons: ['valid_frames_too_few'] })
+);
+ok('AT4e: ready camera state stays quiet for framing setup noise', readyCameraCue === null);
 
 // AT5: non-blocking failure in non-browser env
 unlockVoiceGuidance();

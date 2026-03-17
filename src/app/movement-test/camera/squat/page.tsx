@@ -27,7 +27,9 @@ import {
 } from '@/lib/camera/auto-progression';
 import {
   getGuideToneFromLiveReadiness,
-  getLiveReadinessState,
+  getLiveReadinessSummary,
+  getPrimaryReadinessBlocker,
+  useStabilizedLiveReadiness,
 } from '@/lib/camera/live-readiness';
 import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
 import {
@@ -156,6 +158,38 @@ export default function CameraSquatPage() {
   );
   const finalPassLatched = isFinalPassLatched(STEP_ID, gate);
   const setupFramingHint = useMemo(() => getSetupFramingHint(landmarks), [landmarks]);
+  const liveReadinessSummary = useMemo(
+    () =>
+      getLiveReadinessSummary({
+        success: finalPassLatched || passLatched,
+        guardrail: gate.guardrail,
+        framingHint: setupFramingHint,
+      }),
+    [finalPassLatched, passLatched, gate.guardrail, setupFramingHint]
+  );
+  const rawLiveReadiness = liveReadinessSummary.state;
+  const primaryReadinessBlocker = getPrimaryReadinessBlocker(liveReadinessSummary);
+  const { stableState: liveReadiness, smoothingApplied: readinessSmoothingApplied } =
+    useStabilizedLiveReadiness(rawLiveReadiness);
+  const readinessTraceSummary = useMemo(
+    () => ({
+      state: liveReadiness,
+      rawState: rawLiveReadiness,
+      blocker: primaryReadinessBlocker,
+      framingHint: liveReadinessSummary.framingHint,
+      smoothingApplied: readinessSmoothingApplied,
+      validFrameCount: liveReadinessSummary.inputs.validFrameCount,
+      visibleJointsRatio: liveReadinessSummary.inputs.visibleJointsRatio,
+      criticalJointsAvailability: liveReadinessSummary.inputs.criticalJointsAvailability,
+    }),
+    [
+      liveReadiness,
+      rawLiveReadiness,
+      primaryReadinessBlocker,
+      liveReadinessSummary,
+      readinessSmoothingApplied,
+    ]
+  );
 
   useEffect(() => {
     if (!debugEnabled || stats.sampledFrameCount === 0) return;
@@ -226,7 +260,7 @@ export default function CameraSquatPage() {
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
   const persistCurrentStep = useCallback(() => {
-    recordAttemptSnapshot(STEP_ID, gate);
+    recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary);
     const current = loadCameraTest();
     const completed = current.completedSteps?.includes(STEP_ID)
       ? current.completedSteps
@@ -246,7 +280,7 @@ export default function CameraSquatPage() {
       evaluatorResults,
       guardrailResults,
     });
-  }, [gate]);
+  }, [gate, readinessTraceSummary]);
 
   const handleVideoReady = useCallback(
     (video: HTMLVideoElement) => {
@@ -317,11 +351,26 @@ export default function CameraSquatPage() {
       return;
     }
 
-    const cue = getCorrectiveVoiceCue(STEP_ID, gate);
+    const cue = getCorrectiveVoiceCue(STEP_ID, {
+      ...gate,
+      readinessState: liveReadiness,
+      framingHint:
+        liveReadiness === 'not_ready'
+          ? liveReadinessSummary.framingHint ?? primaryReadinessBlocker
+          : null,
+    });
     if (cue) {
       void speakVoiceCue(cue);
     }
-  }, [cameraPhase, gate, passLatched, permissionDenied]);
+  }, [
+    cameraPhase,
+    gate,
+    liveReadiness,
+    liveReadinessSummary.framingHint,
+    passLatched,
+    permissionDenied,
+    primaryReadinessBlocker,
+  ]);
 
   useEffect(() => {
     if (!passLatched || successCueAttemptedRef.current) {
@@ -480,7 +529,7 @@ export default function CameraSquatPage() {
 
   const handleRetry = useCallback(() => {
     unlockVoiceGuidance();
-    recordAttemptSnapshot(STEP_ID, gate);
+    recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary);
     clearAutoAdvanceTimer();
     resetVoiceGuidanceSession();
     stop();
@@ -515,7 +564,7 @@ export default function CameraSquatPage() {
     setPermissionDenied(false);
     setPreviewKey((prev) => prev + 1);
     appendTransition('idle', 'manual_retry');
-  }, [clearAutoAdvanceTimer, gate, stop]);
+  }, [clearAutoAdvanceTimer, gate, readinessTraceSummary, stop]);
 
   const handleCameraError = useCallback(() => {
     clearAutoAdvanceTimer();
@@ -589,11 +638,6 @@ export default function CameraSquatPage() {
     (progressionState === 'camera_ready' || progressionState === 'insufficient_signal') &&
     stats.sampledFrameCount < 8;
   const effectiveProgressionState = finalPassLatched || passLatched ? 'passed' : progressionState;
-  const liveReadiness = getLiveReadinessState({
-    success: finalPassLatched || passLatched,
-    guardrail: gate.guardrail,
-    framingHint: setupFramingHint,
-  });
   const guideTone = getGuideToneFromLiveReadiness(liveReadiness);
   const overlayGuide = getSquatOverlayGuide(gate.failureReasons, effectiveProgressionState);
   const isPreCapturePhase =
@@ -838,8 +882,13 @@ export default function CameraSquatPage() {
                     <span>kneeTracking: {kneeTrackingProxy ?? 'n/a'}</span>
                     <span>validFrames: {gate.guardrail.debug.validFrameCount}</span>
                     <span>sampledFrames: {gate.guardrail.debug.sampledFrameCount}</span>
+                    <span>readinessRaw: {rawLiveReadiness}</span>
+                    <span>readinessStable: {liveReadiness}</span>
+                    <span>readinessBlocker: {primaryReadinessBlocker ?? 'none'}</span>
+                    <span>readinessSmoothing: {String(readinessSmoothingApplied)}</span>
                     <span>motionStatus: {gate.guardrail.completionStatus}</span>
                     <span>visibleRatio: {gate.guardrail.debug.visibleJointsRatio}</span>
+                    <span>criticalRatio: {gate.guardrail.debug.criticalJointsAvailability}</span>
                     <span>left/right: {gate.guardrail.debug.leftSideCompleteness}/{gate.guardrail.debug.rightSideCompleteness}</span>
                     <span>transitionLocked: {String(transitionLocked)}</span>
                     <span>autoAdvanceScheduled: {String(autoAdvanceScheduled)}</span>
@@ -867,7 +916,12 @@ export default function CameraSquatPage() {
                       </p>
                     ))}
                   </div>
-                  <TraceDebugPanel />
+                  <TraceDebugPanel
+                    liveReadiness={{
+                      ...readinessTraceSummary,
+                      finalPassLatched,
+                    }}
+                  />
                 </div>
               )}
 

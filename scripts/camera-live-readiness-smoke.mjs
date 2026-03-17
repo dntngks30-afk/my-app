@@ -10,6 +10,7 @@ process.chdir(join(__dirname, '..'));
 
 const {
   getGuideToneFromLiveReadiness,
+  getLiveReadinessSummary,
   getLiveReadinessState,
 } = await import('../src/lib/camera/live-readiness.ts');
 
@@ -119,6 +120,23 @@ const crossMotionParityState = getLiveReadinessState({
   framingHint: null,
 });
 ok('AT4: motion incompleteness does not force not_ready', crossMotionParityState === 'ready');
+
+const readinessSummary = getLiveReadinessSummary({
+  success: false,
+  guardrail: createGuardrail({
+    captureQuality: 'invalid',
+    debug: {
+      validFrameCount: 1,
+      visibleJointsRatio: 0.32,
+      criticalJointsAvailability: 0.22,
+      leftSideCompleteness: 0.3,
+      rightSideCompleteness: 0.34,
+    },
+  }),
+  framingHint: '머리부터 발끝까지 보이게 해주세요',
+});
+ok('AT5: readiness summary exposes framing-first blocker', readinessSummary.activeBlockers[0] === '머리부터 발끝까지 보이게 해주세요');
+ok('AT5b: readiness summary preserves minimal observability inputs', readinessSummary.inputs.validFrameCount === 1 && readinessSummary.blockers.minimalFramesReady === false);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

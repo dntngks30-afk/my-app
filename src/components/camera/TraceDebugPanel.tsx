@@ -12,7 +12,21 @@ import {
   type AttemptSnapshot,
 } from '@/lib/camera/camera-trace';
 
-export function TraceDebugPanel() {
+interface TraceDebugPanelProps {
+  liveReadiness?: {
+    state: string;
+    rawState?: string;
+    blocker?: string | null;
+    framingHint?: string | null;
+    smoothingApplied?: boolean;
+    finalPassLatched?: boolean;
+    validFrameCount?: number;
+    visibleJointsRatio?: number;
+    criticalJointsAvailability?: number;
+  };
+}
+
+export function TraceDebugPanel({ liveReadiness }: TraceDebugPanelProps) {
   const [attempts, setAttempts] = useState<AttemptSnapshot[]>([]);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
 
@@ -44,6 +58,8 @@ export function TraceDebugPanel() {
         outcome: a.outcome,
         quality: a.captureQuality,
         conf: a.confidence.toFixed(2),
+        readiness: a.readinessSummary?.state ?? 'n/a',
+        blocker: a.readinessSummary?.blocker ?? 'none',
       }))
     );
     refresh();
@@ -95,6 +111,32 @@ export function TraceDebugPanel() {
           Clear
         </button>
       </div>
+      {liveReadiness && (
+        <div className="mt-2 text-[10px] text-slate-400">
+          <p>
+            readiness={liveReadiness.state}
+            {liveReadiness.rawState ? ` raw=${liveReadiness.rawState}` : ''}
+            {typeof liveReadiness.smoothingApplied === 'boolean'
+              ? ` smoothing=${liveReadiness.smoothingApplied}`
+              : ''}
+            {typeof liveReadiness.finalPassLatched === 'boolean'
+              ? ` finalPass=${liveReadiness.finalPassLatched}`
+              : ''}
+          </p>
+          <p>blocker={liveReadiness.blocker ?? 'none'}</p>
+          <p>framingHint={liveReadiness.framingHint ?? 'none'}</p>
+          <p>
+            frames={liveReadiness.validFrameCount ?? 'n/a'} visible=
+            {typeof liveReadiness.visibleJointsRatio === 'number'
+              ? liveReadiness.visibleJointsRatio.toFixed(2)
+              : 'n/a'}{' '}
+            critical=
+            {typeof liveReadiness.criticalJointsAvailability === 'number'
+              ? liveReadiness.criticalJointsAvailability.toFixed(2)
+              : 'n/a'}
+          </p>
+        </div>
+      )}
       {attempts.length > 0 && (
         <div className="mt-2 max-h-24 overflow-y-auto text-[10px] text-slate-500">
           <p>

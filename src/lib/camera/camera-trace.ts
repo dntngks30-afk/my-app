@@ -35,6 +35,16 @@ export interface AttemptSnapshot {
   flags: string[];
   topReasons: string[];
   perStepSummary?: Record<string, unknown>;
+  readinessSummary?: {
+    state: 'not_ready' | 'ready' | 'success';
+    rawState?: 'not_ready' | 'ready' | 'success';
+    blocker: string | null;
+    framingHint: string | null;
+    smoothingApplied: boolean;
+    validFrameCount?: number;
+    visibleJointsRatio?: number;
+    criticalJointsAvailability?: number;
+  };
   stabilitySummary?: {
     warmupExcludedFrameCount?: number;
     qualityFrameCount?: number;
@@ -120,7 +130,8 @@ function extractPerStepSummary(gate: ExerciseGateResult): Record<string, unknown
  */
 export function buildAttemptSnapshot(
   stepId: CameraStepId,
-  gate: ExerciseGateResult
+  gate: ExerciseGateResult,
+  context?: AttemptSnapshot['readinessSummary']
 ): AttemptSnapshot | null {
   const movementType = stepIdToMovementType(stepId);
   if (!movementType) return null;
@@ -148,6 +159,7 @@ export function buildAttemptSnapshot(
     ),
     topReasons: buildTopReasons(gate),
     perStepSummary: extractPerStepSummary(gate),
+    readinessSummary: context,
     stabilitySummary: extractStabilitySummary(gate),
     debugVersion: DEBUG_VERSION,
   };
@@ -278,10 +290,11 @@ export function getQuickStats(snapshots: AttemptSnapshot[]): TraceQuickStats {
  */
 export function recordAttemptSnapshot(
   stepId: CameraStepId,
-  gate: ExerciseGateResult
+  gate: ExerciseGateResult,
+  context?: AttemptSnapshot['readinessSummary']
 ): void {
   try {
-    const snapshot = buildAttemptSnapshot(stepId, gate);
+    const snapshot = buildAttemptSnapshot(stepId, gate, context);
     if (snapshot) pushAttemptSnapshot(snapshot);
   } catch {
     // trace 실패 시 카메라 플로우는 정상 동작해야 함

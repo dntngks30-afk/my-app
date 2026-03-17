@@ -25,7 +25,9 @@ import {
 } from '@/lib/camera/auto-progression';
 import {
   getGuideToneFromLiveReadiness,
-  getLiveReadinessState,
+  getLiveReadinessSummary,
+  getPrimaryReadinessBlocker,
+  useStabilizedLiveReadiness,
 } from '@/lib/camera/live-readiness';
 import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
 import {
@@ -180,6 +182,38 @@ export default function CameraOverheadReachPage() {
       ? gate.evaluatorResult.debug.highlightedMetrics.holdDurationMs
       : 0;
   const setupFramingHint = useMemo(() => getSetupFramingHint(landmarks), [landmarks]);
+  const liveReadinessSummary = useMemo(
+    () =>
+      getLiveReadinessSummary({
+        success: passLatched,
+        guardrail: gate.guardrail,
+        framingHint: setupFramingHint,
+      }),
+    [passLatched, gate.guardrail, setupFramingHint]
+  );
+  const rawLiveReadiness = liveReadinessSummary.state;
+  const primaryReadinessBlocker = getPrimaryReadinessBlocker(liveReadinessSummary);
+  const { stableState: liveReadiness, smoothingApplied: readinessSmoothingApplied } =
+    useStabilizedLiveReadiness(rawLiveReadiness);
+  const readinessTraceSummary = useMemo(
+    () => ({
+      state: liveReadiness,
+      rawState: rawLiveReadiness,
+      blocker: primaryReadinessBlocker,
+      framingHint: liveReadinessSummary.framingHint,
+      smoothingApplied: readinessSmoothingApplied,
+      validFrameCount: liveReadinessSummary.inputs.validFrameCount,
+      visibleJointsRatio: liveReadinessSummary.inputs.visibleJointsRatio,
+      criticalJointsAvailability: liveReadinessSummary.inputs.criticalJointsAvailability,
+    }),
+    [
+      liveReadiness,
+      rawLiveReadiness,
+      primaryReadinessBlocker,
+      liveReadinessSummary,
+      readinessSmoothingApplied,
+    ]
+  );
   const armRange = getMetricValueFromList(gate.evaluatorResult.metrics, 'arm_range');
   const compensation = getMetricValueFromList(gate.evaluatorResult.metrics, 'lumbar_extension');
   const symmetry = getMetricValueFromList(gate.evaluatorResult.metrics, 'asymmetry');
@@ -235,7 +269,7 @@ export default function CameraOverheadReachPage() {
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
   const persistCurrentStep = useCallback(() => {
-    recordAttemptSnapshot(STEP_ID, gate);
+    recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary);
     const current = loadCameraTest();
     const completed = current.completedSteps?.includes(STEP_ID)
       ? current.completedSteps
@@ -255,7 +289,7 @@ export default function CameraOverheadReachPage() {
       evaluatorResults,
       guardrailResults,
     });
-  }, [gate]);
+  }, [gate, readinessTraceSummary]);
 
   const handleVideoReady = useCallback(
     (video: HTMLVideoElement) => {
@@ -285,11 +319,25 @@ export default function CameraOverheadReachPage() {
       return;
     }
 
-    const cue = getCorrectiveVoiceCue(STEP_ID, gate);
+    const cue = getCorrectiveVoiceCue(STEP_ID, {
+      ...gate,
+      readinessState: liveReadiness,
+      framingHint:
+        liveReadiness === 'not_ready'
+          ? liveReadinessSummary.framingHint ?? primaryReadinessBlocker
+          : null,
+    });
     if (cue) {
       void speakVoiceCue(cue);
     }
-  }, [gate, passLatched, permissionDenied]);
+  }, [
+    gate,
+    liveReadiness,
+    liveReadinessSummary.framingHint,
+    passLatched,
+    permissionDenied,
+    primaryReadinessBlocker,
+  ]);
 
   useEffect(() => {
     if (!passLatched || successCueAttemptedRef.current) {
@@ -531,7 +579,7 @@ export default function CameraOverheadReachPage() {
 
   const handleRetry = useCallback(() => {
     unlockVoiceGuidance();
-    recordAttemptSnapshot(STEP_ID, gate);
+    recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary);
     clearAutoAdvanceTimer();
     resetVoiceGuidanceSession();
     stop();
@@ -554,7 +602,7 @@ export default function CameraOverheadReachPage() {
     setSuccessSnapshot(null);
     setPermissionDenied(false);
     setPreviewKey((prev) => prev + 1);
-  }, [clearAutoAdvanceTimer, gate, stop]);
+  }, [clearAutoAdvanceTimer, gate, readinessTraceSummary, stop]);
 
   const handleCameraError = useCallback(() => {
     clearAutoAdvanceTimer();
@@ -629,11 +677,6 @@ export default function CameraOverheadReachPage() {
       : nextTriggeredAt
         ? 'next_triggered'
         : 'pass_not_latched';
-  const liveReadiness = getLiveReadinessState({
-    success: passLatched,
-    guardrail: gate.guardrail,
-    framingHint: setupFramingHint,
-  });
   const guideTone = getGuideToneFromLiveReadiness(liveReadiness);
 
   return (
@@ -764,6 +807,10 @@ export default function CameraOverheadReachPage() {
                     <span>nextAllowed: {String(gate.nextAllowed)}</span>
                     <span>passReady: {String(passReady)}</span>
                     <span>passLatched: {String(passLatched)}</span>
+                    <span>readinessRaw: {rawLiveReadiness}</span>
+                    <span>readinessStable: {liveReadiness}</span>
+                    <span>readinessBlocker: {primaryReadinessBlocker ?? 'none'}</span>
+                    <span>readinessSmoothing: {String(readinessSmoothingApplied)}</span>
                     <span>passConfirmed: {String(gate.passConfirmationSatisfied)}</span>
                     <span>passFrames: {gate.passConfirmationFrameCount}/{gate.passConfirmationWindowCount}</span>
                     <span>passLatchedAt: {passLatchedAt ?? 'n/a'}</span>
@@ -783,13 +830,21 @@ export default function CameraOverheadReachPage() {
                     <span>raiseCount: {raiseCount}</span>
                     <span>peakCount: {peakCount}</span>
                     <span>holdDurationMs: {holdDurationMs}</span>
+                    <span>validFrames: {gate.guardrail.debug.validFrameCount}</span>
+                    <span>visibleRatio: {gate.guardrail.debug.visibleJointsRatio}</span>
+                    <span>criticalRatio: {gate.guardrail.debug.criticalJointsAvailability}</span>
                   </div>
                   <div className="mt-3 text-[11px] text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
                     <p>flags: {gate.flags.join(', ') || 'none'}</p>
                     <p>failureReasons: {gate.failureReasons.join(', ') || 'none'}</p>
                     <p>snapshotStored: {successSnapshot ? 'yes' : 'no'}</p>
                   </div>
-                  <TraceDebugPanel />
+                  <TraceDebugPanel
+                    liveReadiness={{
+                      ...readinessTraceSummary,
+                      finalPassLatched: passLatched,
+                    }}
+                  />
                 </div>
               )}
             </div>

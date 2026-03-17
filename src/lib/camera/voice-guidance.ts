@@ -1,6 +1,7 @@
 import type { CameraStepId } from '@/lib/public/camera-test';
 import type { ExerciseGateResult } from './auto-progression';
 import { getEffectiveRetryGuidance } from './camera-guidance';
+import type { LiveReadinessState } from './live-readiness';
 
 export type VoiceCueKind = 'start' | 'countdown' | 'correction' | 'success';
 export type VoiceCuePriority = 1 | 2 | 3 | 4 | 5 | 6;
@@ -32,6 +33,8 @@ type VoiceGuidanceGate = {
   userGuidance: ExerciseGateResult['userGuidance'];
   progressionState: ExerciseGateResult['progressionState'];
   guardrail: Pick<ExerciseGateResult['guardrail'], 'captureQuality' | 'flags'>;
+  readinessState?: LiveReadinessState;
+  framingHint?: string | null;
 };
 
 const FRAMING_REASONS = [
@@ -277,8 +280,20 @@ export function getCorrectiveVoiceCue(
   const failureReasons = gate.failureReasons ?? [];
   const flags = gate.guardrail?.flags ?? [];
   const allReasons = [...failureReasons, ...flags];
+  const isNotReady = gate.readinessState === 'not_ready';
 
-  if (failureReasons.includes('left_side_missing') || failureReasons.includes('right_side_missing')) {
+  if (isNotReady && gate.framingHint) {
+    return {
+      kind: 'correction',
+      dedupeKey: `correction:framing-hint:${gate.framingHint}`,
+      text: gate.framingHint,
+      priority: 5,
+      cooldownMs: 3200,
+      interrupt: true,
+    };
+  }
+
+  if (isNotReady && (failureReasons.includes('left_side_missing') || failureReasons.includes('right_side_missing'))) {
     return {
       kind: 'correction',
       dedupeKey: 'correction:full-body',
@@ -289,7 +304,7 @@ export function getCorrectiveVoiceCue(
     };
   }
 
-  if (failureReasons.includes('capture_quality_invalid')) {
+  if (isNotReady && failureReasons.includes('capture_quality_invalid')) {
     return {
       kind: 'correction',
       dedupeKey: 'correction:step-back',
@@ -300,7 +315,7 @@ export function getCorrectiveVoiceCue(
     };
   }
 
-  if (hasAny(allReasons, FRAMING_REASONS)) {
+  if (isNotReady && hasAny(allReasons, FRAMING_REASONS)) {
     return {
       kind: 'correction',
       dedupeKey: 'correction:framing',
@@ -309,6 +324,10 @@ export function getCorrectiveVoiceCue(
       cooldownMs: 4200,
       interrupt: true,
     };
+  }
+
+  if (gate.progressionState === 'camera_ready' && gate.readinessState === 'ready') {
+    return null;
   }
 
   if (hasAny(allReasons, STABILITY_REASONS)) {
