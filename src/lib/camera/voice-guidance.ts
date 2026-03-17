@@ -611,6 +611,21 @@ export function getCorrectiveVoiceCue(
     };
   }
 
+  // ankle_not_in_frame 블로커 시에도 full-body 안내 (발목 미감지 = 전신 미포함)
+  const ankleYMean = gate.guardrail?.debug && 'ankleYMean' in gate.guardrail.debug
+    ? gate.guardrail.debug.ankleYMean
+    : undefined;
+  if (isNotReady && ankleYMean === null) {
+    return {
+      kind: 'correction',
+      dedupeKey: 'correction:full-body',
+      text: '머리부터 발끝까지 보이게 해주세요',
+      priority: 5,
+      cooldownMs: 3600,
+      interrupt: true,
+    };
+  }
+
   if (isNotReady && (failureReasons.includes('left_side_missing') || failureReasons.includes('right_side_missing'))) {
     return {
       kind: 'correction',
