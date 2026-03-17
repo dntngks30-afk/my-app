@@ -24,6 +24,7 @@ export type CameraGuideTone = 'neutral' | 'warning' | 'success';
 export interface SquatCycleDebug {
   armingSatisfied: boolean;
   startPoseSatisfied: boolean;
+  startBeforeBottom: boolean;
   descendDetected: boolean;
   bottomDetected: boolean;
   ascendDetected: boolean;
@@ -541,7 +542,8 @@ function getSquatProgressionCompletionSatisfied(
   const depthPeak = getHighlightedMetric(result, 'depthPeak');
 
   const armingSatisfied = stats.captureDurationMs >= SQUAT_ARMING_MS;
-  const startPoseSatisfied = startCount > 0;
+  const startBeforeBottom = getHighlightedMetric(result, 'startBeforeBottom') > 0;
+  const startPoseSatisfied = startCount > 0 && startBeforeBottom;
   const descendDetected = descentCount > 0;
   const bottomDetected = bottomCount > 0;
   const ascendDetected = ascentCount > 0;
@@ -550,6 +552,7 @@ function getSquatProgressionCompletionSatisfied(
   const squatCycleDebug: SquatCycleDebug = {
     armingSatisfied,
     startPoseSatisfied,
+    startBeforeBottom,
     descendDetected,
     bottomDetected,
     ascendDetected,
@@ -567,7 +570,7 @@ function getSquatProgressionCompletionSatisfied(
     return { satisfied: false, squatCycleDebug };
   }
   if (!startPoseSatisfied) {
-    squatCycleDebug.passBlockedReason = 'start_pose_missing';
+    squatCycleDebug.passBlockedReason = startCount > 0 && !startBeforeBottom ? 'bottom_from_start' : 'start_pose_missing';
     return { satisfied: false, squatCycleDebug };
   }
   if (!descendDetected) {

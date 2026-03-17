@@ -89,6 +89,10 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     bottomCount > 0 &&
     (ascentCount > 0 || recovery.recovered) &&
     recovery.recovered;
+  /** PR G5: bottom-from-start 차단 — start가 bottom보다 먼저 나와야 함 (설치 자세 false positive 방지) */
+  const firstStartIdx = valid.findIndex((f) => f.phaseHint === 'start');
+  const firstBottomIdx = valid.findIndex((f) => f.phaseHint === 'bottom');
+  const startBeforeBottom = firstStartIdx >= 0 && (firstBottomIdx < 0 || firstStartIdx < firstBottomIdx);
   const repCountEstimate = cycleComplete ? 1 : 0;
 
   if (descentCount === 0 || bottomCount === 0 || !ascentSatisfied) {
@@ -184,6 +188,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         recoveryDrop: Math.round(recovery.recoveryDrop * 100),
         repCount: repCountEstimate,
         cycleComplete: cycleComplete ? 1 : 0,
+        startBeforeBottom: startBeforeBottom ? 1 : 0,
       },
       perStepDiagnostics: perStepRecord,
     },

@@ -20,6 +20,7 @@ import {
 import { usePoseCapture } from '@/lib/camera/use-pose-capture';
 import {
   evaluateExerciseAutoProgress,
+  isFinalPassLatched,
   isGatePassReady,
   type ExerciseProgressionState,
 } from '@/lib/camera/auto-progression';
@@ -184,6 +185,8 @@ export default function CameraOverheadReachPage() {
     [landmarks, stats]
   );
   const passReady = isGatePassReady(gate);
+  const finalPassLatched = isFinalPassLatched(STEP_ID, gate);
+  const effectivePassLatched = finalPassLatched || passLatched;
   const raiseCount =
     typeof gate.evaluatorResult.debug?.highlightedMetrics?.raiseCount === 'number'
       ? gate.evaluatorResult.debug.highlightedMetrics.raiseCount
@@ -200,11 +203,11 @@ export default function CameraOverheadReachPage() {
   const liveReadinessSummary = useMemo(
     () =>
       getLiveReadinessSummary({
-        success: passLatched,
+        success: effectivePassLatched,
         guardrail: gate.guardrail,
         framingHint: setupFramingHint,
       }),
-    [passLatched, gate.guardrail, setupFramingHint]
+    [effectivePassLatched, gate.guardrail, setupFramingHint]
   );
   const rawLiveReadiness = liveReadinessSummary.state;
   const primaryReadinessBlocker = getPrimaryReadinessBlocker(liveReadinessSummary);
@@ -394,7 +397,7 @@ export default function CameraOverheadReachPage() {
   }, [startSequenceComplete, liveReadiness]);
 
   useEffect(() => {
-    if (passLatched || permissionDenied || !captureCuingEnabled) {
+    if (effectivePassLatched || permissionDenied || !captureCuingEnabled) {
       return;
     }
     /* captureCuingEnabled state가 다음 렌더에 반영되기 전 보호: ready_to_shoot 재생 중에는
@@ -409,28 +412,28 @@ export default function CameraOverheadReachPage() {
         framingHint:
           liveReadiness === 'not_ready' ? liveReadinessSummary.framingHint ?? null : null,
       },
-      passLatched,
+      passLatched: effectivePassLatched,
       liveCueingEnabled: startSequenceComplete,
     });
   }, [
     captureCuingEnabled,
+    effectivePassLatched,
     gate,
     liveReadiness,
     liveReadinessSummary.framingHint,
-    passLatched,
     permissionDenied,
     startSequenceComplete,
   ]);
 
   useEffect(() => {
-    if (!passLatched || successCueAttemptedRef.current) {
+    if (!effectivePassLatched || successCueAttemptedRef.current) {
       return;
     }
 
     successCueAttemptedRef.current = true;
     cancelCorrectiveCueForSuccess();
     void speakVoiceCue(getSuccessVoiceCue());
-  }, [passLatched]);
+  }, [effectivePassLatched]);
 
   const latchPassEvent = useCallback(() => {
     if (passLatchedStepKeyRef.current === currentStepKey || passLatched) {
@@ -505,8 +508,14 @@ export default function CameraOverheadReachPage() {
     symmetry,
   ]);
 
+  /* PR G5: passConfirmed -> passLatched 공통 계약. effectivePassLatched(finalPassLatched || passLatched)로 latch. */
   useEffect(() => {
     if (permissionDenied || !cameraReady || passLatched || settledRef.current) {
+      return;
+    }
+
+    if (effectivePassLatched) {
+      latchPassEvent();
       return;
     }
 
@@ -532,6 +541,7 @@ export default function CameraOverheadReachPage() {
     }
   }, [
     cameraReady,
+    effectivePassLatched,
     gate.progressionState,
     gate.status,
     gate.uiMessage,
@@ -544,7 +554,12 @@ export default function CameraOverheadReachPage() {
   ]);
 
   useEffect(() => {
-    if (!passLatched || passLatchedStepKeyRef.current !== currentStepKey) {
+    if (!effectivePassLatched) {
+      return;
+    }
+
+    if (passLatchedStepKeyRef.current !== currentStepKey) {
+      latchPassEvent();
       return;
     }
 
@@ -649,10 +664,11 @@ export default function CameraOverheadReachPage() {
   }, [
     clearAutoAdvanceTimer,
     currentStepKey,
+    effectivePassLatched,
     gate.autoAdvanceDelayMs,
+    latchPassEvent,
     navigationTriggered,
     nextPath,
-    passLatched,
     router,
   ]);
 
@@ -743,7 +759,7 @@ export default function CameraOverheadReachPage() {
     () => (showRetryActions ? getEffectiveRetryGuidance(STEP_ID, gate) : null),
     [showRetryActions, gate]
   );
-  const visibleUserGuidance = passLatched
+  const visibleUserGuidance = effectivePassLatched
     ? []
     : retryGuidance
       ? [retryGuidance.primary, retryGuidance.secondary].filter(Boolean)
@@ -751,14 +767,14 @@ export default function CameraOverheadReachPage() {
   const showPreCaptureHint =
     (progressionState === 'camera_ready' || progressionState === 'insufficient_signal') &&
     stats.sampledFrameCount < 8;
-  const effectiveProgressionState = passLatched ? 'passed' : progressionState;
+  const effectiveProgressionState = effectivePassLatched ? 'passed' : progressionState;
   const overlayGuide = getOverheadReachOverlayGuide(
     gate.reasons,
     gate.failureReasons,
     effectiveProgressionState
   );
   const autoNextObservation =
-    passLatched && !nextTriggeredAt
+    effectivePassLatched && !nextTriggeredAt
       ? nextScheduledAt
         ? 'pass_latched_waiting_for_auto_next'
         : 'transition_not_triggered'
@@ -901,6 +917,7 @@ export default function CameraOverheadReachPage() {
                     <span>nextAllowed: {String(gate.nextAllowed)}</span>
                     <span>passReady: {String(passReady)}</span>
                     <span>passLatched: {String(passLatched)}</span>
+                    <span>finalPassLatched: {String(finalPassLatched)}</span>
                     <span>introAlreadyPlayed: {String(hasFunnelIntroPlayed())}</span>
                     <span>introSuppressedReason: {hasFunnelIntroPlayed() ? 'funnel_intro_already_played' : 'n/a'}</span>
                     <span>readinessPhase: {isOverheadWarmupPhase ? 'warmup' : liveReadiness}</span>
@@ -912,7 +929,9 @@ export default function CameraOverheadReachPage() {
                     <span>startPoseSatisfied: {String(stats.sampledFrameCount >= 8)}</span>
                     <span>upwardMotionDetected: {String(raiseCount > 0)}</span>
                     <span>topReachDetected: {String(peakCount > 0)}</span>
+                    <span>holdSatisfied: {String(holdDurationMs >= 600)}</span>
                     <span>passBlockedReason: {gate.completionSatisfied ? 'n/a' : (stats.captureDurationMs < 800 ? 'arming_window' : gate.guardrail.completionStatus !== 'complete' ? 'guardrail_not_complete' : 'metrics')}</span>
+                    <span>latchBlockedReason: {effectivePassLatched ? 'n/a' : (!gate.completionSatisfied ? 'completion' : !gate.passConfirmationSatisfied ? 'passConfirmation' : gate.guardrail.captureQuality === 'invalid' ? 'captureQuality' : gate.confidence < 0.72 ? 'confidence' : 'passFrames')}</span>
                     <span>passConfirmed: {String(gate.passConfirmationSatisfied)}</span>
                     <span>passFrames: {gate.passConfirmationFrameCount}/{gate.passConfirmationWindowCount}</span>
                     <span>passLatchedAt: {passLatchedAt ?? 'n/a'}</span>
@@ -944,7 +963,7 @@ export default function CameraOverheadReachPage() {
                   <TraceDebugPanel
                     liveReadiness={{
                       ...readinessTraceSummary,
-                      finalPassLatched: passLatched,
+                      finalPassLatched: effectivePassLatched,
                     }}
                   />
                 </div>

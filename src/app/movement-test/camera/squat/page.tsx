@@ -1055,6 +1055,7 @@ export default function CameraSquatPage() {
                       <>
                         <span>armingSatisfied: {String(gate.squatCycleDebug.armingSatisfied)}</span>
                         <span>startPoseSatisfied: {String(gate.squatCycleDebug.startPoseSatisfied)}</span>
+                        <span>startBeforeBottom: {String(gate.squatCycleDebug.startBeforeBottom)}</span>
                         <span>descendDetected: {String(gate.squatCycleDebug.descendDetected)}</span>
                         <span>bottomDetected: {String(gate.squatCycleDebug.bottomDetected)}</span>
                         <span>ascendDetected: {String(gate.squatCycleDebug.ascendDetected)}</span>
