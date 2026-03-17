@@ -1049,6 +1049,19 @@ export default function CameraSquatPage() {
                         <span>readyToShootSuppress: {whiteTransitionDebug.suppressionReason ?? 'none'}</span>
                       </>
                     )}
+                    {gate.squatCycleDebug && (
+                      <>
+                        <span>armingSatisfied: {String(gate.squatCycleDebug.armingSatisfied)}</span>
+                        <span>startPoseSatisfied: {String(gate.squatCycleDebug.startPoseSatisfied)}</span>
+                        <span>descendDetected: {String(gate.squatCycleDebug.descendDetected)}</span>
+                        <span>bottomDetected: {String(gate.squatCycleDebug.bottomDetected)}</span>
+                        <span>ascendDetected: {String(gate.squatCycleDebug.ascendDetected)}</span>
+                        <span>recoveryDetected: {String(gate.squatCycleDebug.recoveryDetected)}</span>
+                        <span>cycleComplete: {String(gate.squatCycleDebug.cycleComplete)}</span>
+                        <span>passBlockedReason: {gate.squatCycleDebug.passBlockedReason ?? 'none'}</span>
+                        <span>passTriggeredAtPhase: {gate.squatCycleDebug.passTriggeredAtPhase ?? 'n/a'}</span>
+                      </>
+                    )}
                   </div>
 
                   <div className="mt-3 text-[11px] text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>

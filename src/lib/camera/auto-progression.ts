@@ -20,6 +20,19 @@ export type ExerciseProgressionState =
 export type ExerciseGateStatus = 'pass' | 'retry' | 'fail' | 'detecting';
 export type CameraGuideTone = 'neutral' | 'warning' | 'success';
 
+/** PR G3: squat full-cycle observability (dev/debug only) */
+export interface SquatCycleDebug {
+  armingSatisfied: boolean;
+  startPoseSatisfied: boolean;
+  descendDetected: boolean;
+  bottomDetected: boolean;
+  ascendDetected: boolean;
+  recoveryDetected: boolean;
+  cycleComplete: boolean;
+  passBlockedReason: string | null;
+  passTriggeredAtPhase?: string;
+}
+
 export interface ExerciseGateResult {
   status: ExerciseGateStatus;
   progressionState: ExerciseProgressionState;
@@ -38,6 +51,8 @@ export interface ExerciseGateResult {
   passConfirmationSatisfied: boolean;
   passConfirmationFrameCount: number;
   passConfirmationWindowCount: number;
+  /** PR G3: squat cycle state (set only when stepId === 'squat') */
+  squatCycleDebug?: SquatCycleDebug;
 }
 
 const REQUIRED_STABLE_FRAMES = 3;
@@ -497,21 +512,77 @@ function getHardBlockerReasons(
   return [...commonBlockers, 'left_side_missing', 'right_side_missing', 'hard_partial'];
 }
 
+/** PR G3: arming window — countdown 직후 즉시 pass되지 않도록 최소 캡처 시간 */
+const SQUAT_ARMING_MS = 1500;
+/** PR G3: shallow dip 차단 — depth peak 최소값 (0.42 = 42%) */
+const SQUAT_MIN_DEPTH_PEAK = 42;
+
 function getSquatProgressionCompletionSatisfied(
   result: EvaluatorResult,
-  guardrail: StepGuardrailResult
-): boolean {
+  guardrail: StepGuardrailResult,
+  stats: PoseCaptureStats
+): { satisfied: boolean; squatCycleDebug: SquatCycleDebug } {
+  const startCount = getHighlightedMetric(result, 'startCount');
   const descentCount = getHighlightedMetric(result, 'descentCount');
   const bottomCount = getHighlightedMetric(result, 'bottomCount');
   const ascentCount = getHighlightedMetric(result, 'ascentCount');
   const ascentRecovered = getHighlightedMetric(result, 'ascentRecovered');
+  const cycleComplete = getHighlightedMetric(result, 'cycleComplete') > 0;
+  const depthPeak = getHighlightedMetric(result, 'depthPeak');
 
-  return (
-    guardrail.completionStatus === 'complete' &&
-    descentCount > 0 &&
-    bottomCount > 0 &&
-    (ascentCount > 0 || ascentRecovered > 0)
-  );
+  const armingSatisfied = stats.captureDurationMs >= SQUAT_ARMING_MS;
+  const startPoseSatisfied = startCount > 0;
+  const descendDetected = descentCount > 0;
+  const bottomDetected = bottomCount > 0;
+  const ascendDetected = ascentCount > 0;
+  const recoveryDetected = ascentRecovered > 0;
+
+  const squatCycleDebug: SquatCycleDebug = {
+    armingSatisfied,
+    startPoseSatisfied,
+    descendDetected,
+    bottomDetected,
+    ascendDetected,
+    recoveryDetected,
+    cycleComplete,
+    passBlockedReason: null,
+  };
+
+  if (guardrail.completionStatus !== 'complete') {
+    squatCycleDebug.passBlockedReason = 'guardrail_not_complete';
+    return { satisfied: false, squatCycleDebug };
+  }
+  if (!armingSatisfied) {
+    squatCycleDebug.passBlockedReason = 'arming_window';
+    return { satisfied: false, squatCycleDebug };
+  }
+  if (!startPoseSatisfied) {
+    squatCycleDebug.passBlockedReason = 'start_pose_missing';
+    return { satisfied: false, squatCycleDebug };
+  }
+  if (!descendDetected) {
+    squatCycleDebug.passBlockedReason = 'descend_not_detected';
+    return { satisfied: false, squatCycleDebug };
+  }
+  if (!bottomDetected) {
+    squatCycleDebug.passBlockedReason = 'bottom_not_detected';
+    return { satisfied: false, squatCycleDebug };
+  }
+  if (!ascendDetected && !recoveryDetected) {
+    squatCycleDebug.passBlockedReason = 'ascent_recovery_missing';
+    return { satisfied: false, squatCycleDebug };
+  }
+  if (!recoveryDetected) {
+    squatCycleDebug.passBlockedReason = 'recovery_not_confirmed';
+    return { satisfied: false, squatCycleDebug };
+  }
+  if (depthPeak < SQUAT_MIN_DEPTH_PEAK) {
+    squatCycleDebug.passBlockedReason = 'depth_too_shallow';
+    return { satisfied: false, squatCycleDebug };
+  }
+
+  squatCycleDebug.passTriggeredAtPhase = 'recovery';
+  return { satisfied: true, squatCycleDebug };
 }
 
 function getPassConfirmation(
@@ -599,6 +670,13 @@ function getSquatFailureReasons(
   ) {
     failureReasons.add('ascent_not_detected');
   }
+  if (
+    (descentCount > 0 && bottomCount > 0) &&
+    ascentRecovered === 0 &&
+    result.completionHints?.includes('recovery_not_confirmed')
+  ) {
+    failureReasons.add('ascent_not_detected');
+  }
   if (guardrail.flags.includes('left_side_missing')) {
     failureReasons.add('left_side_missing');
   }
@@ -669,10 +747,15 @@ export function evaluateExerciseAutoProgress(
   const reasons = getCommonReasons(evaluatorResult, guardrail);
   const passThreshold = BASIC_PASS_CONFIDENCE_THRESHOLD[stepId];
   const passConfirmation = getPassConfirmation(stepId, landmarks);
-  const completionSatisfied =
-    stepId === 'squat'
-      ? getSquatProgressionCompletionSatisfied(evaluatorResult, guardrail)
-      : getCompletionSatisfied(stepId, evaluatorResult, guardrail);
+  let completionSatisfied: boolean;
+  let squatCycleDebug: SquatCycleDebug | undefined;
+  if (stepId === 'squat') {
+    const squatResult = getSquatProgressionCompletionSatisfied(evaluatorResult, guardrail, stats);
+    completionSatisfied = squatResult.satisfied;
+    squatCycleDebug = squatResult.squatCycleDebug;
+  } else {
+    completionSatisfied = getCompletionSatisfied(stepId, evaluatorResult, guardrail);
+  }
   const squatQualitySignals =
     stepId === 'squat' ? getSquatQualitySignals(evaluatorResult, confidence) : null;
   const severeFail = isSevereInvalid(guardrail) && stats.captureDurationMs >= 4500;
@@ -714,6 +797,7 @@ export function evaluateExerciseAutoProgress(
       passConfirmationSatisfied: passConfirmation.satisfied,
       passConfirmationFrameCount: passConfirmation.stableFrameCount,
       passConfirmationWindowCount: passConfirmation.windowFrameCount,
+      ...(squatCycleDebug && { squatCycleDebug }),
     };
   }
 
@@ -747,6 +831,7 @@ export function evaluateExerciseAutoProgress(
       passConfirmationSatisfied: true,
       passConfirmationFrameCount: passConfirmation.stableFrameCount,
       passConfirmationWindowCount: passConfirmation.windowFrameCount,
+      ...(squatCycleDebug && { squatCycleDebug }),
     };
   }
 
@@ -769,6 +854,7 @@ export function evaluateExerciseAutoProgress(
       passConfirmationSatisfied: passConfirmation.satisfied,
       passConfirmationFrameCount: passConfirmation.stableFrameCount,
       passConfirmationWindowCount: passConfirmation.windowFrameCount,
+      ...(squatCycleDebug && { squatCycleDebug }),
     };
   }
 
@@ -810,6 +896,7 @@ export function evaluateExerciseAutoProgress(
       passConfirmationSatisfied: passConfirmation.satisfied,
       passConfirmationFrameCount: passConfirmation.stableFrameCount,
       passConfirmationWindowCount: passConfirmation.windowFrameCount,
+      ...(squatCycleDebug && { squatCycleDebug }),
     };
   }
 
@@ -831,5 +918,6 @@ export function evaluateExerciseAutoProgress(
     passConfirmationSatisfied: passConfirmation.satisfied,
     passConfirmationFrameCount: passConfirmation.stableFrameCount,
     passConfirmationWindowCount: passConfirmation.windowFrameCount,
+    ...(squatCycleDebug && { squatCycleDebug }),
   };
 }

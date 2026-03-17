@@ -76,17 +76,27 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     bottomDepths.length > 1
       ? clamp(1 - (Math.max(...bottomDepths) - Math.min(...bottomDepths)) / 0.2)
       : 0;
+  const startCount = countPhases(valid, 'start');
   const descentCount = countPhases(valid, 'descent');
   const bottomCount = countPhases(valid, 'bottom');
   const ascentCount = countPhases(valid, 'ascent');
   const recovery = getSquatRecoverySignal(valid);
   const ascentSatisfied = ascentCount > 0 || recovery.recovered;
-  const repCountEstimate = descentCount > 0 && bottomCount > 0 && ascentSatisfied ? 1 : 0;
+  /** PR G3: full cycle = start → descend → bottom → ascend → recovery */
+  const cycleComplete =
+    startCount > 0 &&
+    descentCount > 0 &&
+    bottomCount > 0 &&
+    (ascentCount > 0 || recovery.recovered) &&
+    recovery.recovered;
+  const repCountEstimate = cycleComplete ? 1 : 0;
 
   if (descentCount === 0 || bottomCount === 0 || !ascentSatisfied) {
     completionHints.push('rep_phase_incomplete');
+  } else if (!recovery.recovered) {
+    completionHints.push('recovery_not_confirmed');
   } else {
-    interpretedSignals.push('descent-bottom-ascent pattern detected');
+    interpretedSignals.push('descent-bottom-ascent-recovery pattern detected');
   }
 
   if (depthValues.length > 0) {
@@ -166,12 +176,14 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       highlightedMetrics: {
         depthPeak: depthValues.length > 0 ? Math.round(Math.max(...depthValues) * 100) : null,
         bottomStability: Math.round(bottomStability * 100),
+        startCount,
         descentCount,
         bottomCount,
         ascentCount,
         ascentRecovered: recovery.recovered ? 1 : 0,
         recoveryDrop: Math.round(recovery.recoveryDrop * 100),
         repCount: repCountEstimate,
+        cycleComplete: cycleComplete ? 1 : 0,
       },
       perStepDiagnostics: perStepRecord,
     },
