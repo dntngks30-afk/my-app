@@ -388,6 +388,9 @@ export default function CameraOverheadReachPage() {
     if (passLatched || permissionDenied || !captureCuingEnabled) {
       return;
     }
+    /* captureCuingEnabled state가 다음 렌더에 반영되기 전 보호: ready_to_shoot 재생 중에는
+     * priority 4 stability cue가 ready_to_shoot(3)을 interrupt하지 않도록 차단 */
+    if (readyToShootAttemptedRef.current && !hasReadyToShootPlayedThisSession()) return;
 
     trySpeakCorrectiveCueWithAntiSpam({
       stepId: STEP_ID,
