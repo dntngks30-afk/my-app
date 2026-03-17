@@ -36,12 +36,13 @@ import {
   getEffectiveRetryGuidance,
 } from '@/lib/camera/camera-guidance';
 import {
+  cancelCorrectiveCueForSuccess,
   cancelVoiceGuidance,
-  getCorrectiveVoiceCue,
   getStartVoiceCue,
   getSuccessVoiceCue,
   resetVoiceGuidanceSession,
   speakVoiceCue,
+  trySpeakCorrectiveCueWithAntiSpam,
   unlockVoiceGuidance,
 } from '@/lib/camera/voice-guidance';
 import { getSetupFramingHint } from '@/lib/camera/setup-framing';
@@ -319,17 +320,18 @@ export default function CameraOverheadReachPage() {
       return;
     }
 
-    const cue = getCorrectiveVoiceCue(STEP_ID, {
-      ...gate,
-      readinessState: liveReadiness,
-      framingHint:
-        liveReadiness === 'not_ready'
-          ? liveReadinessSummary.framingHint ?? primaryReadinessBlocker
-          : null,
+    trySpeakCorrectiveCueWithAntiSpam({
+      stepId: STEP_ID,
+      gate: {
+        ...gate,
+        readinessState: liveReadiness,
+        framingHint:
+          liveReadiness === 'not_ready'
+            ? liveReadinessSummary.framingHint ?? primaryReadinessBlocker
+            : null,
+      },
+      passLatched,
     });
-    if (cue) {
-      void speakVoiceCue(cue);
-    }
   }, [
     gate,
     liveReadiness,
@@ -345,6 +347,7 @@ export default function CameraOverheadReachPage() {
     }
 
     successCueAttemptedRef.current = true;
+    cancelCorrectiveCueForSuccess();
     void speakVoiceCue(getSuccessVoiceCue());
   }, [passLatched]);
 

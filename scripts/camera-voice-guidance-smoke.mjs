@@ -15,7 +15,9 @@ const {
   getCountdownVoiceCue,
   getStartVoiceCue,
   getSuccessVoiceCue,
+  resetVoiceGuidanceSession,
   speakVoiceCue,
+  trySpeakCorrectiveCueWithAntiSpam,
   unlockVoiceGuidance,
 } = await import('../src/lib/camera/voice-guidance.ts');
 
@@ -108,6 +110,33 @@ ok('AT4e: ready camera state stays quiet for framing setup noise', readyCameraCu
 unlockVoiceGuidance();
 const noBrowserResult = await speakVoiceCue(getStartVoiceCue('squat'));
 ok('AT5: no-browser speak fails gracefully', noBrowserResult === false);
+
+// AT6: anti-spam - passLatched suppresses corrective
+resetVoiceGuidanceSession();
+const passLatchedResult = trySpeakCorrectiveCueWithAntiSpam({
+  stepId: 'squat',
+  gate: createGate({ failureReasons: ['left_side_missing'], readinessState: 'not_ready' }),
+  passLatched: true,
+});
+ok('AT6a: passLatched suppresses corrective cue', passLatchedResult.played === false);
+
+// AT7: anti-spam - readiness white blocks framing cue
+const whiteFramingResult = trySpeakCorrectiveCueWithAntiSpam({
+  stepId: 'squat',
+  gate: createGate({ failureReasons: ['left_side_missing'], readinessState: 'ready' }),
+  passLatched: false,
+});
+ok('AT7: readiness white blocks framing cue', whiteFramingResult.played === false);
+
+// AT8: anti-spam - stable hold suppresses immediate speak
+resetVoiceGuidanceSession();
+const immediateResult = trySpeakCorrectiveCueWithAntiSpam({
+  stepId: 'squat',
+  gate: createGate({ failureReasons: ['depth_not_reached'], readinessState: 'ready' }),
+  passLatched: false,
+  now: 1000,
+});
+ok('AT8: stable hold or cooldown suppresses rapid cue', immediateResult.suppressedReason === 'stable_hold' || immediateResult.played === false);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

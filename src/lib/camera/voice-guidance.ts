@@ -176,6 +176,200 @@ export function cancelVoiceGuidance() {
 export function resetVoiceGuidanceSession() {
   cancelVoiceGuidance();
   runtimeState.lastSpokenAt = {};
+  correctiveAntiSpamState.lastCandidateKey = null;
+  correctiveAntiSpamState.candidateStableSince = null;
+  correctiveAntiSpamState.correctiveLatchedKey = null;
+  correctiveAntiSpamState.lastReadiness = null;
+}
+
+/** PR C: corrective cue anti-spam / latching state */
+const STABLE_HOLD_MS = 500;
+const REPEAT_COOLDOWN_MS = 5000;
+const FRAMING_CUE_PREFIXES = [
+  'correction:framing',
+  'correction:full-body',
+  'correction:step-back',
+  'correction:framing-hint:',
+];
+
+const correctiveAntiSpamState: {
+  lastCandidateKey: string | null;
+  candidateStableSince: number | null;
+  correctiveLatchedKey: string | null;
+  lastReadiness: LiveReadinessState | null;
+  lastObserved: {
+    cueCandidate: string | null;
+    suppressedReason: string | null;
+    played: boolean;
+  } | null;
+} = {
+  lastCandidateKey: null,
+  candidateStableSince: null,
+  correctiveLatchedKey: null,
+  lastReadiness: null,
+  lastObserved: null,
+};
+
+function isFramingCue(dedupeKey: string): boolean {
+  return FRAMING_CUE_PREFIXES.some((p) => dedupeKey.startsWith(p));
+}
+
+export interface CorrectiveCueResult {
+  played: boolean;
+  suppressedReason?: string;
+  cueCanceled?: boolean;
+}
+
+export interface CorrectiveCueOptions {
+  stepId: CameraStepId;
+  gate: VoiceGuidanceGate;
+  passLatched: boolean;
+  now?: number;
+}
+
+/**
+ * PR C: State-transition-driven corrective cue with anti-spam.
+ * Requires stable hold before speaking, latch + repeat cooldown, stale cancel on readiness change.
+ */
+export function trySpeakCorrectiveCueWithAntiSpam(
+  options: CorrectiveCueOptions
+): CorrectiveCueResult {
+  const { stepId, gate, passLatched } = options;
+  const now = options.now ?? Date.now();
+  const readiness = gate.readinessState ?? null;
+
+  if (passLatched) {
+    correctiveAntiSpamState.lastReadiness = readiness;
+    if (correctiveAntiSpamState.correctiveLatchedKey) {
+      cancelVoiceGuidance();
+      correctiveAntiSpamState.correctiveLatchedKey = null;
+      correctiveAntiSpamState.lastCandidateKey = null;
+      correctiveAntiSpamState.candidateStableSince = null;
+      correctiveAntiSpamState.lastObserved = {
+        cueCandidate: null,
+        suppressedReason: 'success_override',
+        played: false,
+      };
+      return { played: false, cueCanceled: true };
+    }
+    correctiveAntiSpamState.lastObserved = {
+      cueCandidate: null,
+      suppressedReason: 'pass_latched',
+      played: false,
+    };
+    return { played: false };
+  }
+
+  const cue = getCorrectiveVoiceCue(stepId, gate);
+  const candidateKey = cue?.dedupeKey ?? null;
+
+  if (readiness === 'ready' && correctiveAntiSpamState.lastReadiness === 'not_ready') {
+    if (isFramingCue(correctiveAntiSpamState.correctiveLatchedKey ?? '')) {
+      cancelVoiceGuidance();
+      correctiveAntiSpamState.correctiveLatchedKey = null;
+    }
+    correctiveAntiSpamState.lastCandidateKey = null;
+    correctiveAntiSpamState.candidateStableSince = null;
+  }
+  correctiveAntiSpamState.lastReadiness = readiness;
+
+  if (!cue) {
+    if (candidateKey !== correctiveAntiSpamState.lastCandidateKey) {
+      correctiveAntiSpamState.lastCandidateKey = null;
+      correctiveAntiSpamState.candidateStableSince = null;
+    }
+    correctiveAntiSpamState.lastObserved = {
+      cueCandidate: null,
+      suppressedReason: 'no_cue',
+      played: false,
+    };
+    return { played: false };
+  }
+
+  if (readiness === 'ready' && isFramingCue(cue.dedupeKey)) {
+    correctiveAntiSpamState.lastObserved = {
+      cueCandidate: cue.dedupeKey,
+      suppressedReason: 'readiness_white_framing_stale',
+      played: false,
+    };
+    return { played: false, suppressedReason: 'readiness_white_framing_stale' };
+  }
+
+  if (candidateKey !== correctiveAntiSpamState.lastCandidateKey) {
+    correctiveAntiSpamState.lastCandidateKey = candidateKey;
+    correctiveAntiSpamState.candidateStableSince = now;
+  }
+
+  const stableSince = correctiveAntiSpamState.candidateStableSince ?? now;
+  const holdElapsed = now - stableSince;
+  if (holdElapsed < STABLE_HOLD_MS) {
+    correctiveAntiSpamState.lastObserved = {
+      cueCandidate: cue.dedupeKey,
+      suppressedReason: 'stable_hold',
+      played: false,
+    };
+    return { played: false, suppressedReason: 'stable_hold' };
+  }
+
+  const lastSpokenAt = runtimeState.lastSpokenAt[cue.dedupeKey];
+  const cooldownElapsed = typeof lastSpokenAt === 'number' ? now - lastSpokenAt : Infinity;
+  const effectiveCooldown = Math.max(cue.cooldownMs, REPEAT_COOLDOWN_MS);
+  if (cooldownElapsed < effectiveCooldown) {
+    correctiveAntiSpamState.lastObserved = {
+      cueCandidate: cue.dedupeKey,
+      suppressedReason: 'repeat_cooldown',
+      played: false,
+    };
+    return { played: false, suppressedReason: 'repeat_cooldown' };
+  }
+
+  const decision = decideVoicePlayback(runtimeState, cue, now);
+  if (!decision.allowed) {
+    correctiveAntiSpamState.lastObserved = {
+      cueCandidate: cue.dedupeKey,
+      suppressedReason: decision.reason,
+      played: false,
+    };
+    return { played: false, suppressedReason: decision.reason };
+  }
+
+  if (decision.interruptActive) {
+    cancelVoiceGuidance();
+  }
+
+  void speakVoiceCue(cue);
+  correctiveAntiSpamState.correctiveLatchedKey = cue.dedupeKey;
+  correctiveAntiSpamState.lastObserved = {
+    cueCandidate: cue.dedupeKey,
+    suppressedReason: null,
+    played: true,
+  };
+  return { played: true };
+}
+
+export function cancelCorrectiveCueForSuccess() {
+  if (correctiveAntiSpamState.correctiveLatchedKey) {
+    cancelVoiceGuidance();
+    correctiveAntiSpamState.correctiveLatchedKey = null;
+    correctiveAntiSpamState.lastCandidateKey = null;
+    correctiveAntiSpamState.candidateStableSince = null;
+  }
+}
+
+export function getCorrectiveCueObservability(): {
+  cueCandidate: string | null;
+  suppressedReason: string | null;
+  played: boolean;
+  latchedKey: string | null;
+  lastReadiness: string | null;
+} | null {
+  const obs = correctiveAntiSpamState.lastObserved;
+  if (!obs) return null;
+  return {
+    ...obs,
+    latchedKey: correctiveAntiSpamState.correctiveLatchedKey,
+    lastReadiness: correctiveAntiSpamState.lastReadiness,
+  };
 }
 
 export async function speakVoiceCue(cue: VoiceCue | null): Promise<boolean> {

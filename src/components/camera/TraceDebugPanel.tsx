@@ -11,6 +11,7 @@ import {
   getQuickStats,
   type AttemptSnapshot,
 } from '@/lib/camera/camera-trace';
+import { getCorrectiveCueObservability } from '@/lib/camera/voice-guidance';
 
 interface TraceDebugPanelProps {
   liveReadiness?: {
@@ -137,6 +138,17 @@ export function TraceDebugPanel({ liveReadiness }: TraceDebugPanelProps) {
           </p>
         </div>
       )}
+      {(() => {
+        const cueObs = getCorrectiveCueObservability();
+        if (!cueObs) return null;
+        return (
+          <div className="mt-2 text-[10px] text-slate-500">
+            <p>cue={cueObs.cueCandidate ?? 'none'} latched={cueObs.latchedKey ?? 'none'}</p>
+            <p>suppressed={cueObs.suppressedReason ?? 'none'} played={String(cueObs.played)}</p>
+            <p>lastReadiness={cueObs.lastReadiness ?? 'n/a'}</p>
+          </div>
+        );
+      })()}
       {attempts.length > 0 && (
         <div className="mt-2 max-h-24 overflow-y-auto text-[10px] text-slate-500">
           <p>
