@@ -333,12 +333,17 @@ export default function CameraSquatPage() {
     const runId = startSequenceRunIdRef.current + 1;
     startSequenceRunIdRef.current = runId;
     const isActive = () => startSequenceRunIdRef.current === runId;
-    /* 버튼 클릭 시점의 readiness 캡처 (async 내부에서 stale closure 방지) */
-    const isWhiteAtStart = liveReadiness === 'ready';
+    /* liveReadiness는 useCallback dep으로 캡처되어 stale 없음 */
+    const isWhite = liveReadiness === 'ready';
 
     const runStartSequence = async () => {
-      /* 버튼 클릭 시점에 white 상태면 ready_to_shoot을 먼저 재생하고 완료를 대기 */
-      if (isWhiteAtStart) {
+      /* white 상태면 1000ms 안정 확인 후 ready_to_shoot 재생.
+       * 1000ms 대기 중 not_ready로 떨어져도 타이머는 계속 진행한다 —
+       * 버튼을 눌렀다는 것은 이미 충분히 white를 확인한 상태이기 때문.
+       * corrective cue는 readyToShootCompletedRef가 true가 될 때까지 차단된다. */
+      if (isWhite) {
+        await waitForTimer(1000, armingTimerRef);
+        if (!isActive()) return;
         await speakVoiceCueAndWait(getReadyToShootVoiceCue());
         if (!isActive()) return;
       }
