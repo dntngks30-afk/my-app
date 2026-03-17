@@ -150,9 +150,7 @@ export default function CameraSquatPage() {
   const armingTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const countdownTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const startCueAttemptedRef = useRef(false);
-  const readyCueAttemptedRef = useRef(false);
-  const readyConfirmTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
-  const lastSetupReadinessRef = useRef<string | null>(null);
+  const readyToShootCompletedRef = useRef(false);
   const startSequenceRunIdRef = useRef(0);
   const successCueAttemptedRef = useRef(false);
   const lastProgressionStateRef = useRef<ExerciseProgressionState>('idle');
@@ -268,12 +266,7 @@ export default function CameraSquatPage() {
     triggeredAdvanceStepKeyRef.current = null;
     passLatchedStepKeyRef.current = null;
     startCueAttemptedRef.current = false;
-    readyCueAttemptedRef.current = false;
-    if (readyConfirmTimerRef.current) {
-      window.clearTimeout(readyConfirmTimerRef.current);
-      readyConfirmTimerRef.current = null;
-    }
-    lastSetupReadinessRef.current = null;
+    readyToShootCompletedRef.current = false;
     startSequenceRunIdRef.current += 1;
     successCueAttemptedRef.current = false;
     lastProgressionStateRef.current = 'idle';
@@ -340,8 +333,17 @@ export default function CameraSquatPage() {
     const runId = startSequenceRunIdRef.current + 1;
     startSequenceRunIdRef.current = runId;
     const isActive = () => startSequenceRunIdRef.current === runId;
+    /* 버튼 클릭 시점의 readiness 캡처 (async 내부에서 stale closure 방지) */
+    const isWhiteAtStart = liveReadiness === 'ready';
 
     const runStartSequence = async () => {
+      /* 버튼 클릭 시점에 white 상태면 ready_to_shoot을 먼저 재생하고 완료를 대기 */
+      if (isWhiteAtStart) {
+        await speakVoiceCueAndWait(getReadyToShootVoiceCue());
+        if (!isActive()) return;
+      }
+      readyToShootCompletedRef.current = true;
+
       setCountdownValue(0);
       await speakVoiceCueAndWait(getStartVoiceCue(STEP_ID));
       if (!isActive()) return;
@@ -369,50 +371,14 @@ export default function CameraSquatPage() {
     };
 
     void runStartSequence();
-  }, [start, waitForTimer]);
-
-  /* setup 단계에서 white 상태가 1500ms 유지된 뒤 ready_to_shoot을 1회 재생.
-   * 그 전에 red로 돌아가면 타이머를 취소하여 재확인을 강제한다. */
-  useEffect(() => {
-    /* setup 단계가 아니면 진행 중인 타이머를 정리하고 이전 상태를 초기화 */
-    if (cameraPhase !== 'setup') {
-      if (readyConfirmTimerRef.current) {
-        window.clearTimeout(readyConfirmTimerRef.current);
-        readyConfirmTimerRef.current = null;
-      }
-      lastSetupReadinessRef.current = null;
-      return;
-    }
-
-    /* 이미 재생했으면 skip */
-    if (readyCueAttemptedRef.current) return;
-
-    if (liveReadiness === 'ready') {
-      /* white 진입 — 아직 타이머가 없으면 1500ms 확인 타이머 시작 */
-      if (readyConfirmTimerRef.current) return;
-      readyConfirmTimerRef.current = window.setTimeout(() => {
-        readyConfirmTimerRef.current = null;
-        if (readyCueAttemptedRef.current) return;
-        readyCueAttemptedRef.current = true;
-        unlockVoiceGuidance();
-        void speakVoiceCue(getReadyToShootVoiceCue());
-      }, 1500);
-    } else {
-      /* red로 돌아오면 타이머 취소 — 다시 white가 되면 새로 카운트 */
-      if (readyConfirmTimerRef.current) {
-        window.clearTimeout(readyConfirmTimerRef.current);
-        readyConfirmTimerRef.current = null;
-      }
-    }
-    /* cleanup 없음: liveReadiness 변화 시마다 cleanup이 실행되면
-     * 타이머가 반복적으로 리셋되므로 의도적으로 cleanup을 등록하지 않는다.
-     * phase 이탈은 위 cameraPhase !== 'setup' 분기에서, retry는 handleRetry에서 처리한다. */
-  }, [cameraPhase, liveReadiness]);
+  }, [liveReadiness, start, waitForTimer]);
 
   useEffect(() => {
     if (cameraPhase !== 'capturing' || effectivePassLatched || permissionDenied) {
       return;
     }
+    /* ready_to_shoot 재생이 완료되기 전까지 교정 음성 차단 */
+    if (!readyToShootCompletedRef.current) return;
 
     trySpeakCorrectiveCueWithAntiSpam({
       stepId: STEP_ID,
@@ -616,14 +582,10 @@ export default function CameraSquatPage() {
       window.clearTimeout(countdownTimerRef.current);
       countdownTimerRef.current = null;
     }
-    if (readyConfirmTimerRef.current) {
-      window.clearTimeout(readyConfirmTimerRef.current);
-      readyConfirmTimerRef.current = null;
-    }
     settledRef.current = false;
     advanceLockRef.current = false;
     startCueAttemptedRef.current = false;
-    readyCueAttemptedRef.current = false;
+    readyToShootCompletedRef.current = false;
     startSequenceRunIdRef.current += 1; /* 진행 중인 시퀀스 무효화 */
     passLatchedStepKeyRef.current = null;
     scheduledAdvanceStepKeyRef.current = null;
