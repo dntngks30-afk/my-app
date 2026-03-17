@@ -42,9 +42,11 @@ import {
   getReadyToShootVoiceCue,
   getStartVoiceCue,
   getSuccessVoiceCue,
+  hasFunnelIntroPlayed,
   hasReadyToShootPlayedThisSession,
   markReadyToShootPlayed,
   resetVoiceGuidanceSession,
+  setFunnelIntroPlayed,
   speakVoiceCue,
   speakVoiceCueAndWait,
   trySpeakCorrectiveCueWithAntiSpam,
@@ -322,14 +324,21 @@ export default function CameraOverheadReachPage() {
     [start]
   );
 
+  /* PR G4: funnel intro 중복 제거 — squat 이후 overhead 진입 시 "촬영이 시작됩니다" 재실행 금지.
+   * hasFunnelIntroPlayed()면 바로 motion-ready로 전환(800ms settle). */
   useEffect(() => {
     if (!cameraReady || startCueAttemptedRef.current) {
       return;
     }
 
     startCueAttemptedRef.current = true;
-    void speakVoiceCue(getStartVoiceCue(STEP_ID));
-    const id = window.setTimeout(() => setStartSequenceComplete(true), 3000);
+    const alreadyPlayed = hasFunnelIntroPlayed();
+    if (!alreadyPlayed) {
+      void speakVoiceCue(getStartVoiceCue(STEP_ID));
+      setFunnelIntroPlayed();
+    }
+    const settleMs = alreadyPlayed ? 800 : 3000;
+    const id = window.setTimeout(() => setStartSequenceComplete(true), settleMs);
     return () => window.clearTimeout(id);
   }, [cameraReady]);
 
@@ -756,7 +765,13 @@ export default function CameraOverheadReachPage() {
       : nextTriggeredAt
         ? 'next_triggered'
         : 'pass_not_latched';
-  const guideTone = getGuideToneFromLiveReadiness(liveReadiness);
+  /* PR G4: readiness parity — fallback/default red, warm-up/settle window.
+   * 진입 직후 즉시 white 금지. startSequenceComplete 전이거나 샘플 8프레임 미만이면 red 유지. */
+  const isOverheadWarmupPhase =
+    !startSequenceComplete || stats.sampledFrameCount < 8;
+  const guideTone = isOverheadWarmupPhase
+    ? 'warning'
+    : getGuideToneFromLiveReadiness(liveReadiness);
 
   return (
     <div
@@ -886,10 +901,18 @@ export default function CameraOverheadReachPage() {
                     <span>nextAllowed: {String(gate.nextAllowed)}</span>
                     <span>passReady: {String(passReady)}</span>
                     <span>passLatched: {String(passLatched)}</span>
+                    <span>introAlreadyPlayed: {String(hasFunnelIntroPlayed())}</span>
+                    <span>introSuppressedReason: {hasFunnelIntroPlayed() ? 'funnel_intro_already_played' : 'n/a'}</span>
+                    <span>readinessPhase: {isOverheadWarmupPhase ? 'warmup' : liveReadiness}</span>
                     <span>readinessRaw: {rawLiveReadiness}</span>
                     <span>readinessStable: {liveReadiness}</span>
                     <span>readinessBlocker: {primaryReadinessBlocker ?? 'none'}</span>
                     <span>readinessSmoothing: {String(readinessSmoothingApplied)}</span>
+                    <span>silhouetteVsVoice: {isOverheadWarmupPhase ? 'warmup_override' : 'match'}</span>
+                    <span>startPoseSatisfied: {String(stats.sampledFrameCount >= 8)}</span>
+                    <span>upwardMotionDetected: {String(raiseCount > 0)}</span>
+                    <span>topReachDetected: {String(peakCount > 0)}</span>
+                    <span>passBlockedReason: {gate.completionSatisfied ? 'n/a' : (stats.captureDurationMs < 800 ? 'arming_window' : gate.guardrail.completionStatus !== 'complete' ? 'guardrail_not_complete' : 'metrics')}</span>
                     <span>passConfirmed: {String(gate.passConfirmationSatisfied)}</span>
                     <span>passFrames: {gate.passConfirmationFrameCount}/{gate.passConfirmationWindowCount}</span>
                     <span>passLatchedAt: {passLatchedAt ?? 'n/a'}</span>

@@ -278,19 +278,22 @@ function evaluateWallAngelCompletion(result: EvaluatorResult, guardrail: StepGua
   );
 }
 
+/** PR G4: overhead reach pass — usable signal capture. peak 기반 elevation 사용, threshold 완화. */
 function evaluateOverheadReachCompletion(
   result: EvaluatorResult,
   guardrail: StepGuardrailResult
 ) {
+  const peakArm = getHighlightedMetric(result, 'peakArmElevation');
   const armRange = getMetricValue(result.metrics, 'arm_range') ?? 0;
+  const effectiveArm = peakArm > 0 ? peakArm : armRange;
   const holdDuration = getMetricValue(result.rawMetrics, 'hold_duration') ?? 0;
   const raiseCount = getHighlightedMetric(result, 'raiseCount');
   const peakCount = getHighlightedMetric(result, 'peakCount');
 
   return (
     guardrail.completionStatus === 'complete' &&
-    armRange >= 120 &&
-    holdDuration >= 700 &&
+    effectiveArm >= 110 &&
+    holdDuration >= 600 &&
     raiseCount > 0 &&
     peakCount > 0
   );
@@ -315,13 +318,20 @@ function evaluateBalanceCompletion(result: EvaluatorResult, guardrail: StepGuard
   );
 }
 
+/** PR G4: overhead 최소 캡처 시간 — settle 후 유효 이벤트만 pass */
+const OVERHEAD_ARMING_MS = 800;
+
 function getCompletionSatisfied(
   stepId: CameraStepId,
   result: EvaluatorResult,
-  guardrail: StepGuardrailResult
+  guardrail: StepGuardrailResult,
+  stats?: PoseCaptureStats
 ): boolean {
   if (stepId === 'squat') return evaluateSquatCompletion(result, guardrail);
-  if (stepId === 'overhead-reach') return evaluateOverheadReachCompletion(result, guardrail);
+  if (stepId === 'overhead-reach') {
+    if (stats && stats.captureDurationMs < OVERHEAD_ARMING_MS) return false;
+    return evaluateOverheadReachCompletion(result, guardrail);
+  }
   if (stepId === 'wall-angel') return evaluateWallAngelCompletion(result, guardrail);
   return evaluateBalanceCompletion(result, guardrail);
 }
@@ -754,7 +764,7 @@ export function evaluateExerciseAutoProgress(
     completionSatisfied = squatResult.satisfied;
     squatCycleDebug = squatResult.squatCycleDebug;
   } else {
-    completionSatisfied = getCompletionSatisfied(stepId, evaluatorResult, guardrail);
+    completionSatisfied = getCompletionSatisfied(stepId, evaluatorResult, guardrail, stats);
   }
   const squatQualitySignals =
     stepId === 'squat' ? getSquatQualitySignals(evaluatorResult, confidence) : null;

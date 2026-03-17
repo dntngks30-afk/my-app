@@ -217,6 +217,23 @@ export function resetVoiceGuidanceSession() {
   correctiveAntiSpamState.lastEmittedAtMs = null;
 }
 
+/** PR G4: funnel-level intro — "촬영이 시작됩니다"는 funnel 첫 진입에서만 1회.
+ * squat 이후 overhead 등 다음 motion step에서는 재실행하지 않는다. */
+let funnelIntroPlayed = false;
+
+export function hasFunnelIntroPlayed(): boolean {
+  return funnelIntroPlayed;
+}
+
+export function setFunnelIntroPlayed(): void {
+  funnelIntroPlayed = true;
+}
+
+/** PR G4: funnel 이탈 시 호출 (layout unmount). 다음 funnel 진입 시 intro 재생 허용. */
+export function clearFunnelIntro(): void {
+  funnelIntroPlayed = false;
+}
+
 /** PR G2: ready_to_shoot cue가 이번 capture session에서 이미 재생되었는지 */
 export function hasReadyToShootPlayedThisSession(): boolean {
   return correctiveAntiSpamState.readyToShootPlayedThisSession;

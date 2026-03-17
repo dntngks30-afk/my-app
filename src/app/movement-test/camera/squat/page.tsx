@@ -48,6 +48,7 @@ import {
   hasReadyToShootPlayedThisSession,
   markReadyToShootPlayed,
   resetVoiceGuidanceSession,
+  setFunnelIntroPlayed,
   speakVoiceCue,
   speakVoiceCueAndWait,
   trySpeakCorrectiveCueWithAntiSpam,
@@ -371,6 +372,7 @@ export default function CameraSquatPage() {
       setCountdownValue(0);
       await speakVoiceCueAndWait(getStartVoiceCue(STEP_ID));
       if (!isActive()) return;
+      setFunnelIntroPlayed();
 
       await waitForTimer(START_SEQUENCE_GAP_MS, armingTimerRef);
       if (!isActive()) return;
