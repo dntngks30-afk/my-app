@@ -17,6 +17,8 @@ export interface LiveReadinessSummary {
     landmarkPresenceEnough: boolean;
     fullBodyVisibleEnough: boolean;
     minimalFramesReady: boolean;
+    /** 발목이 화면 하단부에 있는지 (전신 포함 여부 rough 체크) */
+    ankleVisibleInFrame: boolean;
   };
   framingHint: string | null;
   activeBlockers: string[];
@@ -67,6 +69,7 @@ export function getLiveReadinessSummary(input: LiveReadinessInput): LiveReadines
         landmarkPresenceEnough: true,
         fullBodyVisibleEnough: true,
         minimalFramesReady: true,
+        ankleVisibleInFrame: true,
       },
       framingHint: input.framingHint ?? null,
       activeBlockers: [],
@@ -87,6 +90,7 @@ export function getLiveReadinessSummary(input: LiveReadinessInput): LiveReadines
         landmarkPresenceEnough: false,
         fullBodyVisibleEnough: false,
         minimalFramesReady: false,
+        ankleVisibleInFrame: false,
       },
       framingHint: input.framingHint ?? null,
       activeBlockers: ['readiness_uncertain'],
@@ -99,11 +103,27 @@ export function getLiveReadinessSummary(input: LiveReadinessInput): LiveReadines
   }
 
   /** Explicit RED blockers: any of these -> not_ready. */
+
+  /**
+   * 전신 포함 여부 rough 체크:
+   * - ankleYMean 이 null(발목 미감지) → 화면에 전신이 없음 → 블로킹
+   * - ankleYMean >= 0.55 → 발목이 화면 하단 45% 안에 있음 → 통과
+   * - ankleYMean 필드 자체가 undefined(이전 debug 구조) → 체크 스킵(블로킹 안함)
+   *
+   * 0.55 는 Rough 기준이므로 사용자가 완벽하게 서있지 않아도 통과 가능.
+   */
+  const ankleYMean = debug && 'ankleYMean' in debug ? debug.ankleYMean : undefined;
+  const ankleVisibleInFrame: boolean =
+    ankleYMean === undefined
+      ? true // 필드 없으면 체크 스킵
+      : ankleYMean !== null && ankleYMean >= 0.55;
+
   const blockers = {
     severeFramingInvalid: Boolean(input.framingHint),
     landmarkPresenceEnough: criticalJointsAvailability >= MIN_READY_CRITICAL_AVAILABILITY,
     fullBodyVisibleEnough: visibleJointsRatio >= MIN_READY_VISIBLE_JOINTS_RATIO,
     minimalFramesReady: validFrameCount >= MIN_READY_VALID_FRAMES,
+    ankleVisibleInFrame,
   };
 
   const activeBlockers: string[] = [];
@@ -111,6 +131,7 @@ export function getLiveReadinessSummary(input: LiveReadinessInput): LiveReadines
   if (!blockers.minimalFramesReady) activeBlockers.push('valid_frames_too_few');
   if (!blockers.fullBodyVisibleEnough) activeBlockers.push('visible_landmarks_too_low');
   if (!blockers.landmarkPresenceEnough) activeBlockers.push('critical_landmarks_too_low');
+  if (!blockers.ankleVisibleInFrame) activeBlockers.push('ankle_not_in_frame');
 
   /** WHITE only when ALL minimum framing readiness conditions are satisfied. Else RED. */
   const state: LiveReadinessState =

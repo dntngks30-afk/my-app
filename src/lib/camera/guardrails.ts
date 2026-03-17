@@ -57,6 +57,12 @@ export interface StepGuardrailDebug extends StepMetrics {
   selectedWindowScore?: number | null;
   /** PR-2: per-step 진단 (evaluator에서 전달, additive) */
   perStepDiagnostics?: Record<string, unknown>;
+  /**
+   * 발목 Y 좌표 평균 (visibility >= 0.35 인 발목 랜드마크 기준).
+   * null = 충분한 가시성의 발목 랜드마크 없음 (화면 밖 또는 미감지).
+   * live-readiness 에서 전신 화면 포함 여부 판단에 사용.
+   */
+  ankleYMean?: number | null;
 }
 
 export interface StepGuardrailResult {
@@ -131,6 +137,22 @@ function getBboxStability(frames: PoseFeaturesFrame[]): number {
   const variance = mean(areas.map((area) => (area - avg) ** 2));
   const stdDev = Math.sqrt(variance);
   return clamp(1 - stdDev / avg);
+}
+
+/**
+ * visibility >= 0.35 인 발목 랜드마크의 Y 좌표 평균을 반환한다.
+ * 반환값이 null 이면 확인 가능한 발목 랜드마크가 없음을 의미한다.
+ */
+function getAnkleYMean(frames: PoseFeaturesFrame[]): number | null {
+  const ys: number[] = [];
+  for (const frame of frames) {
+    const left = frame.joints.leftAnkle;
+    const right = frame.joints.rightAnkle;
+    // visibility 미제공 시 1로 간주 (레거시 프레임 호환)
+    if (left && (left.visibility ?? 1) >= 0.35) ys.push(left.y);
+    if (right && (right.visibility ?? 1) >= 0.35) ys.push(right.y);
+  }
+  return ys.length > 0 ? mean(ys) : null;
 }
 
 function countNoisyFrames(frames: PoseFeaturesFrame[]): number {
@@ -434,6 +456,7 @@ export function assessStepGuardrail(
         ? null
         : round(qualitySelection.selectedWindowScore),
       perStepDiagnostics: evaluatorResult.debug?.perStepDiagnostics,
+      ankleYMean: getAnkleYMean(qualityFrames),
     },
   };
 }
