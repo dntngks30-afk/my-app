@@ -41,6 +41,7 @@ import {
   cancelCorrectiveCueForSuccess,
   cancelVoiceGuidance,
   getCountdownVoiceCue,
+  getReadyToShootVoiceCue,
   getStartVoiceCue,
   getSuccessVoiceCue,
   resetVoiceGuidanceSession,
@@ -114,6 +115,10 @@ function getSquatOverlayGuide(
 /** PR E: 3초 대기 후 카운트다운 (촬영을 시작합니다 -> 3s -> 3,2,1) */
 const ARMING_DELAY_MS = 3000;
 const COUNTDOWN_SECONDS = 3;
+/** 카운트다운 숫자 간 간격 (ms) - 3, 2, 1 천천히 */
+const COUNTDOWN_INTERVAL_MS = 1500;
+/** 통과 후 다음 단계로 전환 대기 (gate 의존성 제거로 effect 재실행 방지) */
+const SQUAT_AUTO_ADVANCE_MS = 700;
 
 export default function CameraSquatPage() {
   const router = useRouter();
@@ -144,6 +149,7 @@ export default function CameraSquatPage() {
   const armingTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const countdownTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const startCueAttemptedRef = useRef(false);
+  const readyCueAttemptedRef = useRef(false);
   const lastCountdownSpokenRef = useRef<number | null>(null);
   const successCueAttemptedRef = useRef(false);
   const lastProgressionStateRef = useRef<ExerciseProgressionState>('idle');
@@ -247,6 +253,7 @@ export default function CameraSquatPage() {
     triggeredAdvanceStepKeyRef.current = null;
     passLatchedStepKeyRef.current = null;
     startCueAttemptedRef.current = false;
+    readyCueAttemptedRef.current = false;
     lastCountdownSpokenRef.current = null;
     successCueAttemptedRef.current = false;
     lastProgressionStateRef.current = 'idle';
@@ -296,6 +303,8 @@ export default function CameraSquatPage() {
       setProgressionState('camera_ready');
       setStatusMessage('동작을 시작해 주세요');
       appendTransition('camera_ready', 'video_ready');
+      /* 음성 재생을 위해 가능한 시점에 unlock (카메라 권한 허용 시 사용자 제스처 있음) */
+      unlockVoiceGuidance();
     },
     [appendTransition, start]
   );
@@ -304,6 +313,15 @@ export default function CameraSquatPage() {
     unlockVoiceGuidance();
     setCameraPhase('arming');
   }, []);
+
+  /* setup 단계에서 실루엣이 white(ready)로 변하면 Ready to shoot 재생 */
+  useEffect(() => {
+    if (cameraPhase !== 'setup' || liveReadiness !== 'ready' || readyCueAttemptedRef.current) {
+      return;
+    }
+    readyCueAttemptedRef.current = true;
+    void speakVoiceCue(getReadyToShootVoiceCue());
+  }, [cameraPhase, liveReadiness]);
 
   useEffect(() => {
     if (cameraPhase !== 'arming') return;
@@ -338,7 +356,7 @@ export default function CameraSquatPage() {
       } else {
         setCountdownValue((v) => v - 1);
       }
-    }, 1000);
+    }, COUNTDOWN_INTERVAL_MS);
     countdownTimerRef.current = id;
     return () => {
       if (countdownTimerRef.current) {
@@ -505,11 +523,10 @@ export default function CameraSquatPage() {
         reason: 'route_push_next_step',
       });
       router.push(nextPath);
-    }, gate.autoAdvanceDelayMs);
+    }, SQUAT_AUTO_ADVANCE_MS);
   }, [
     clearAutoAdvanceTimer,
     currentStepKey,
-    gate.autoAdvanceDelayMs,
     navigationTriggered,
     nextPath,
     passLatched,

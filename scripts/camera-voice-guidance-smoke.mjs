@@ -52,7 +52,7 @@ console.log('Camera voice guidance smoke test\n');
 // AT1: start / countdown / success cue basics
 ok('AT1a: squat start cue exists', getStartVoiceCue('squat').text.includes('촬영을 시작합니다'));
 ok('AT1b: countdown cue says 3', getCountdownVoiceCue(3).text === '3');
-ok('AT1c: success cue says 좋아요', getSuccessVoiceCue().text === '좋아요');
+ok('AT1c: success cue says 잘했어요', getSuccessVoiceCue().text === '잘했어요');
 
 // AT2: cooldown / dedupe
 const playbackState = createVoicePlaybackState();

@@ -24,10 +24,12 @@ export type KoreanCueClipKey =
   | 'overhead_raise_higher'
   | 'overhead_hold_top'
   | 'good_job'
-  | 'success';
+  | 'success'
+  | 'ready_to_shoot';
 
 /** dedupeKey → clip key 매핑 (정적 cue, 실제 파일명 사용) */
 const DEDUPE_KEY_TO_CLIP: Record<string, KoreanCueClipKey> = {
+  'ready:setup': 'ready_to_shoot',
   'start:squat': 'start_capture',
   'start:overhead-reach': 'start_capture',
   'countdown:3': 'countdown_3',

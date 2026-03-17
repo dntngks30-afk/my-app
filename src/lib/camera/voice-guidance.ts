@@ -502,6 +502,18 @@ export function getStartVoiceCue(stepId: CameraStepId): VoiceCue {
   };
 }
 
+/** setup 단계에서 실루엣이 white(ready)일 때 재생 */
+export function getReadyToShootVoiceCue(): VoiceCue {
+  return {
+    kind: 'correction',
+    dedupeKey: 'ready:setup',
+    text: '촬영 준비됐어요',
+    priority: 3,
+    cooldownMs: 6000,
+    fallbackBeep: false,
+  };
+}
+
 export function getCountdownVoiceCue(value: 1 | 2 | 3): VoiceCue {
   return {
     kind: 'countdown',
@@ -518,7 +530,7 @@ export function getSuccessVoiceCue(): VoiceCue {
   return {
     kind: 'success',
     dedupeKey: 'success:generic',
-    text: '좋아요',
+    text: '잘했어요',
     priority: 6,
     cooldownMs: 1500,
     interrupt: true,
