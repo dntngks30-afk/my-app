@@ -33,10 +33,10 @@ export interface StabilizedLiveReadiness {
 }
 
 /** WHITE requires all of these; fallback is RED when uncertain or any blocker. */
-const MIN_READY_VALID_FRAMES = 4;
-const MIN_READY_VISIBLE_JOINTS_RATIO = 0.42;
-const MIN_READY_CRITICAL_AVAILABILITY = 0.38;
-const READY_ENTER_DELAY_MS = 60;
+const MIN_READY_VALID_FRAMES = 8;
+const MIN_READY_VISIBLE_JOINTS_RATIO = 0.70;
+const MIN_READY_CRITICAL_AVAILABILITY = 0.65;
+const READY_ENTER_DELAY_MS = 300;
 
 function isReadinessInputValid(debug: LiveReadinessInput['guardrail']['debug']): boolean {
   if (!debug) return false;
