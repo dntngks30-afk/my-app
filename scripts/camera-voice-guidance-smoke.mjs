@@ -100,6 +100,12 @@ const framingHintCue = getCorrectiveVoiceCue(
 );
 ok('AT4d: explicit framing hint wins for red readiness', framingHintCue?.text === '조금 뒤로 가 주세요');
 
+const internalHintCue = getCorrectiveVoiceCue(
+  'squat',
+  createGate({ readinessState: 'not_ready', framingHint: 'framing_invalid' })
+);
+ok('AT4d-2: internal framing hint sanitized to approved Korean', internalHintCue?.text === '전신이 화면에 들어오게 맞춰주세요');
+
 const readyCameraCue = getCorrectiveVoiceCue(
   'squat',
   createGate({ progressionState: 'camera_ready', readinessState: 'ready', failureReasons: ['valid_frames_too_few'] })

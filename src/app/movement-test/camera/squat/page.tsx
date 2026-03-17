@@ -111,7 +111,8 @@ function getSquatOverlayGuide(
   return { hint: null, focus: null, animated: false };
 }
 
-const ARMING_DELAY_MS = 800;
+/** PR E: 3초 대기 후 카운트다운 (촬영을 시작합니다 -> 3s -> 3,2,1) */
+const ARMING_DELAY_MS = 3000;
 const COUNTDOWN_SECONDS = 3;
 
 export default function CameraSquatPage() {
@@ -358,11 +359,10 @@ export default function CameraSquatPage() {
         ...gate,
         readinessState: liveReadiness,
         framingHint:
-          liveReadiness === 'not_ready'
-            ? liveReadinessSummary.framingHint ?? primaryReadinessBlocker
-            : null,
+          liveReadiness === 'not_ready' ? liveReadinessSummary.framingHint ?? null : null,
       },
       passLatched,
+      liveCueingEnabled: cameraPhase === 'capturing',
     });
   }, [
     cameraPhase,
@@ -371,7 +371,6 @@ export default function CameraSquatPage() {
     liveReadinessSummary.framingHint,
     passLatched,
     permissionDenied,
-    primaryReadinessBlocker,
   ]);
 
   useEffect(() => {

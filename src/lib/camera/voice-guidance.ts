@@ -42,6 +42,26 @@ type VoiceGuidanceGate = {
   framingHint?: string | null;
 };
 
+/** PR E: approved Korean phrases for TTS — internal/debug strings must never be spoken */
+const APPROVED_KOREAN_FRAMING_HINTS = new Set([
+  '화면이 너무 어두워요',
+  '조금 뒤로 가 주세요',
+  '머리부터 발끝까지 보이게 해주세요',
+  '전신이 화면에 들어오게 맞춰주세요',
+  '머리부터 발끝까지 보이게 해주세요',
+  '조금 더 가까이 와주세요',
+  '손끝까지 보이게 해 주세요',
+  '몸이 화면 안에서 더 크게 보이게 해주세요',
+  '전신이 보이도록 다시 맞춰 주세요',
+]);
+
+function toApprovedKoreanFramingText(raw: string | null | undefined): string | null {
+  if (!raw || typeof raw !== 'string') return null;
+  if (APPROVED_KOREAN_FRAMING_HINTS.has(raw)) return raw;
+  /* internal/debug string — never speak; use generic fallback or silence */
+  return '전신이 화면에 들어오게 맞춰주세요';
+}
+
 const FRAMING_REASONS = [
   'framing_invalid',
   'left_side_missing',
@@ -231,6 +251,8 @@ export interface CorrectiveCueOptions {
   gate: VoiceGuidanceGate;
   passLatched: boolean;
   now?: number;
+  /** PR E: live cueing blocked during intro/countdown */
+  liveCueingEnabled?: boolean;
 }
 
 /**
@@ -240,9 +262,18 @@ export interface CorrectiveCueOptions {
 export function trySpeakCorrectiveCueWithAntiSpam(
   options: CorrectiveCueOptions
 ): CorrectiveCueResult {
-  const { stepId, gate, passLatched } = options;
+  const { stepId, gate, passLatched, liveCueingEnabled = true } = options;
   const now = options.now ?? Date.now();
   const readiness = gate.readinessState ?? null;
+
+  if (!liveCueingEnabled) {
+    correctiveAntiSpamState.lastObserved = {
+      cueCandidate: null,
+      suppressedReason: 'intro_countdown_active',
+      played: false,
+    };
+    return { played: false, suppressedReason: 'intro_countdown_active' };
+  }
 
   if (passLatched) {
     correctiveAntiSpamState.lastReadiness = readiness;
@@ -388,9 +419,8 @@ export async function speakVoiceCue(cue: VoiceCue | null): Promise<boolean> {
     return false;
   }
 
-  if (decision.interruptActive) {
-    cancelVoiceGuidance();
-  }
+  /* PR E: single-channel — always cancel any active playback before starting new */
+  cancelVoiceGuidance();
 
   runtimeState.lastSpokenAt[cue.dedupeKey] = Date.now();
   runtimeState.activeCueKey = cue.dedupeKey;
@@ -506,10 +536,12 @@ export function getCorrectiveVoiceCue(
   const isNotReady = gate.readinessState === 'not_ready';
 
   if (isNotReady && gate.framingHint) {
+    const approvedText = toApprovedKoreanFramingText(gate.framingHint);
+    if (!approvedText) return null;
     return {
       kind: 'correction',
       dedupeKey: `correction:framing-hint:${gate.framingHint}`,
-      text: gate.framingHint,
+      text: approvedText,
       priority: 5,
       cooldownMs: 3200,
       interrupt: true,

@@ -161,6 +161,7 @@ export default function CameraOverheadReachPage() {
   const triggeredAdvanceStepKeyRef = useRef<string | null>(null);
   const startCueAttemptedRef = useRef(false);
   const successCueAttemptedRef = useRef(false);
+  const [startSequenceComplete, setStartSequenceComplete] = useState(false);
   const currentStepKey = `${STEP_ID}:${previewKey}`;
   const nextPath = getNextStepPath(STEP_ID) ?? '/movement-test/camera/complete';
   const debugEnabled = IS_DEV;
@@ -259,6 +260,7 @@ export default function CameraOverheadReachPage() {
     triggeredAdvanceStepKeyRef.current = null;
     startCueAttemptedRef.current = false;
     successCueAttemptedRef.current = false;
+    setStartSequenceComplete(false);
     setPassLatched(false);
     setPassLatchedAt(null);
     setNavigationTriggered(false);
@@ -313,6 +315,8 @@ export default function CameraOverheadReachPage() {
 
     startCueAttemptedRef.current = true;
     void speakVoiceCue(getStartVoiceCue(STEP_ID));
+    const id = window.setTimeout(() => setStartSequenceComplete(true), 3000);
+    return () => window.clearTimeout(id);
   }, [cameraReady]);
 
   useEffect(() => {
@@ -326,11 +330,10 @@ export default function CameraOverheadReachPage() {
         ...gate,
         readinessState: liveReadiness,
         framingHint:
-          liveReadiness === 'not_ready'
-            ? liveReadinessSummary.framingHint ?? primaryReadinessBlocker
-            : null,
+          liveReadiness === 'not_ready' ? liveReadinessSummary.framingHint ?? null : null,
       },
       passLatched,
+      liveCueingEnabled: startSequenceComplete,
     });
   }, [
     gate,
@@ -338,7 +341,7 @@ export default function CameraOverheadReachPage() {
     liveReadinessSummary.framingHint,
     passLatched,
     permissionDenied,
-    primaryReadinessBlocker,
+    startSequenceComplete,
   ]);
 
   useEffect(() => {
