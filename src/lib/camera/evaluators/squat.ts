@@ -103,6 +103,15 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     interpretedSignals.push('descent-bottom-ascent-recovery pattern detected');
   }
 
+  /** PR G6: depthBand — completion과 분리된 quality 해석. shallow(<35%), moderate(35-55%), deep(>=55%) */
+  const depthBand =
+    depthValues.length > 0
+      ? (() => {
+          const peakPct = Math.max(...depthValues) * 100;
+          return peakPct >= 55 ? 2 : peakPct >= 35 ? 1 : 0;
+        })()
+      : 0;
+
   if (depthValues.length > 0) {
     const avgDepth = mean(depthValues) * 100;
     const peakDepth = Math.max(...depthValues) * 100;
@@ -179,6 +188,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       phaseHints: Array.from(new Set(valid.map((frame) => frame.phaseHint))),
       highlightedMetrics: {
         depthPeak: depthValues.length > 0 ? Math.round(Math.max(...depthValues) * 100) : null,
+        depthBand,
         bottomStability: Math.round(bottomStability * 100),
         startCount,
         descentCount,

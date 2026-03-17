@@ -27,10 +27,14 @@ export interface SquatCycleDebug {
   startBeforeBottom: boolean;
   descendDetected: boolean;
   bottomDetected: boolean;
+  bottomTurningPointDetected: boolean;
   ascendDetected: boolean;
   recoveryDetected: boolean;
   cycleComplete: boolean;
+  completionStatus: string;
+  depthBand: 'shallow' | 'moderate' | 'deep';
   passBlockedReason: string | null;
+  qualityInterpretationReason: string | null;
   passTriggeredAtPhase?: string;
 }
 
@@ -525,8 +529,7 @@ function getHardBlockerReasons(
 
 /** PR G3: arming window — countdown 직후 즉시 pass되지 않도록 최소 캡처 시간 */
 const SQUAT_ARMING_MS = 1500;
-/** PR G3: shallow dip 차단 — depth peak 최소값 (0.42 = 42%) */
-const SQUAT_MIN_DEPTH_PEAK = 42;
+/** PR G6: depth는 completion이 아니라 quality band. completion은 full cycle만 요구. */
 
 function getSquatProgressionCompletionSatisfied(
   result: EvaluatorResult,
@@ -540,6 +543,7 @@ function getSquatProgressionCompletionSatisfied(
   const ascentRecovered = getHighlightedMetric(result, 'ascentRecovered');
   const cycleComplete = getHighlightedMetric(result, 'cycleComplete') > 0;
   const depthPeak = getHighlightedMetric(result, 'depthPeak');
+  const depthBand = getHighlightedMetric(result, 'depthBand'); /* 0=shallow, 1=moderate, 2=deep */
 
   const armingSatisfied = stats.captureDurationMs >= SQUAT_ARMING_MS;
   const startBeforeBottom = getHighlightedMetric(result, 'startBeforeBottom') > 0;
@@ -549,16 +553,24 @@ function getSquatProgressionCompletionSatisfied(
   const ascendDetected = ascentCount > 0;
   const recoveryDetected = ascentRecovered > 0;
 
+  const bottomTurningPointDetected = bottomDetected;
+  const depthBandLabel: 'shallow' | 'moderate' | 'deep' =
+    depthBand === 2 ? 'deep' : depthBand === 1 ? 'moderate' : 'shallow';
+
   const squatCycleDebug: SquatCycleDebug = {
     armingSatisfied,
     startPoseSatisfied,
     startBeforeBottom,
     descendDetected,
     bottomDetected,
+    bottomTurningPointDetected,
     ascendDetected,
     recoveryDetected,
     cycleComplete,
+    completionStatus: guardrail.completionStatus,
+    depthBand: depthBandLabel,
     passBlockedReason: null,
+    qualityInterpretationReason: null,
   };
 
   if (guardrail.completionStatus !== 'complete') {
@@ -589,12 +601,11 @@ function getSquatProgressionCompletionSatisfied(
     squatCycleDebug.passBlockedReason = 'recovery_not_confirmed';
     return { satisfied: false, squatCycleDebug };
   }
-  if (depthPeak < SQUAT_MIN_DEPTH_PEAK) {
-    squatCycleDebug.passBlockedReason = 'depth_too_shallow';
-    return { satisfied: false, squatCycleDebug };
-  }
+  /* PR G6: depth는 completion gate에서 제거. quality band로만 해석. */
 
   squatCycleDebug.passTriggeredAtPhase = 'recovery';
+  squatCycleDebug.qualityInterpretationReason =
+    depthBand === 0 ? 'valid_limited_shallow' : 'valid_strong';
   return { satisfied: true, squatCycleDebug };
 }
 
@@ -646,12 +657,10 @@ function getSquatFailureReasons(
   confidence: number
 ): string[] {
   const failureReasons = new Set<string>();
-  const depth = getMetricValue(result.metrics, 'depth') ?? 0;
   const descentCount = getHighlightedMetric(result, 'descentCount');
   const bottomCount = getHighlightedMetric(result, 'bottomCount');
   const ascentCount = getHighlightedMetric(result, 'ascentCount');
   const ascentRecovered = getHighlightedMetric(result, 'ascentRecovered');
-  const qualitySignals = getSquatQualitySignals(result, confidence);
 
   if (guardrail.flags.includes('insufficient_signal')) {
     failureReasons.add('insufficient_signal');
@@ -673,9 +682,7 @@ function getSquatFailureReasons(
   if (confidence < BASIC_PASS_CONFIDENCE_THRESHOLD.squat) {
     failureReasons.add('confidence_too_low');
   }
-  if (qualitySignals.depthTooShallow) {
-    failureReasons.add('depth_not_reached');
-  }
+  /* PR G6: depth는 completion 실패 사유가 아님. quality band로만 해석. */
   if (
     ascentCount === 0 &&
     ascentRecovered === 0 &&

@@ -77,7 +77,8 @@ export interface StepGuardrailResult {
 }
 
 const MIN_VALID_FRAMES = 8;
-const SQUAT_BASIC_DEPTH_FLOOR = 0.18;
+/** PR G6: noise floor — 이하만 partial. shallow(0.12~0.35) full cycle도 complete 허용 */
+const SQUAT_NOISE_FLOOR = 0.12;
 const WARMUP_MS = 500;
 const BEST_WINDOW_MIN_MS = 800;
 const BEST_WINDOW_MAX_MS = 1200;
@@ -194,7 +195,7 @@ function getMotionCompleteness(
     }
     const peakDepth = Math.max(...depthValues);
     if (
-      peakDepth < SQUAT_BASIC_DEPTH_FLOOR ||
+      peakDepth < SQUAT_NOISE_FLOOR ||
       descentCount === 0 ||
       bottomCount === 0 ||
       !ascentSatisfied

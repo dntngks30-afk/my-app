@@ -1058,10 +1058,14 @@ export default function CameraSquatPage() {
                         <span>startBeforeBottom: {String(gate.squatCycleDebug.startBeforeBottom)}</span>
                         <span>descendDetected: {String(gate.squatCycleDebug.descendDetected)}</span>
                         <span>bottomDetected: {String(gate.squatCycleDebug.bottomDetected)}</span>
+                        <span>bottomTurningPointDetected: {String(gate.squatCycleDebug.bottomTurningPointDetected)}</span>
                         <span>ascendDetected: {String(gate.squatCycleDebug.ascendDetected)}</span>
                         <span>recoveryDetected: {String(gate.squatCycleDebug.recoveryDetected)}</span>
                         <span>cycleComplete: {String(gate.squatCycleDebug.cycleComplete)}</span>
+                        <span>completionStatus: {gate.squatCycleDebug.completionStatus}</span>
+                        <span>depthBand: {gate.squatCycleDebug.depthBand}</span>
                         <span>passBlockedReason: {gate.squatCycleDebug.passBlockedReason ?? 'none'}</span>
+                        <span>qualityInterpretationReason: {gate.squatCycleDebug.qualityInterpretationReason ?? 'n/a'}</span>
                         <span>passTriggeredAtPhase: {gate.squatCycleDebug.passTriggeredAtPhase ?? 'n/a'}</span>
                       </>
                     )}

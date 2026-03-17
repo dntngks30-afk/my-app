@@ -211,11 +211,16 @@ export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecove
   const tailDepth = mean(tailWindow);
   const recoveryDrop = peakSample.depth - tailDepth;
 
+  /** PR G6: shallow squat completion — 얕아도 full return이면 recovered.
+   * noise 방지: peakDepth >= 0.15. 복귀: recoveryDrop >= peakDepth * 0.25 */
+  const recovered =
+    peakSample.depth >= 0.15 && recoveryDrop >= peakSample.depth * 0.25;
+
   return {
     peakDepth: peakSample.depth,
     tailDepth,
     recoveryDrop,
-    recovered: peakSample.depth >= 0.45 && recoveryDrop >= 0.08,
+    recovered,
   };
 }
 
