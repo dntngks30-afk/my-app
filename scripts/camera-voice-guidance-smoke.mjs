@@ -94,6 +94,12 @@ const holdCue = getCorrectiveVoiceCue(
 );
 ok('AT4c: overhead hold cue maps correctly', holdCue?.text === '맨 위에서 잠깐 멈춰주세요');
 
+const whiteHardPartialCue = getCorrectiveVoiceCue(
+  'overhead-reach',
+  createGate({ failureReasons: ['hard_partial'], readinessState: 'ready' })
+);
+ok('AT4c-2: white readiness blocks framing-only hard partial speech', whiteHardPartialCue === null);
+
 const framingHintCue = getCorrectiveVoiceCue(
   'squat',
   createGate({ readinessState: 'not_ready', framingHint: '조금 뒤로 가 주세요' })

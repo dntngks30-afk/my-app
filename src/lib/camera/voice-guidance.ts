@@ -91,12 +91,14 @@ const MOTION_REASONS = [
 const runtimeState: VoicePlaybackState & {
   unlocked: boolean;
   audioContext: AudioContext | null;
+  waitResolver: ((ok: boolean) => void) | null;
 } = {
   activeCueKey: null,
   activePriority: 0,
   lastSpokenAt: {},
   unlocked: false,
   audioContext: null,
+  waitResolver: null,
 };
 
 function hasAny(reasons: string[], expected: readonly string[]) {
@@ -194,6 +196,11 @@ export function cancelVoiceGuidance() {
   cancelClipPlayback();
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel();
+  }
+  if (runtimeState.waitResolver) {
+    const resolve = runtimeState.waitResolver;
+    runtimeState.waitResolver = null;
+    resolve(false);
   }
   runtimeState.activeCueKey = null;
   runtimeState.activePriority = 0;
@@ -409,7 +416,7 @@ export function getCorrectiveCueObservability(): {
   };
 }
 
-export async function speakVoiceCue(cue: VoiceCue | null): Promise<boolean> {
+async function playVoiceCue(cue: VoiceCue | null, waitUntilEnd: boolean): Promise<boolean> {
   if (!cue || typeof window === 'undefined' || !runtimeState.unlocked) {
     return false;
   }
@@ -427,6 +434,19 @@ export async function speakVoiceCue(cue: VoiceCue | null): Promise<boolean> {
   runtimeState.activePriority = cue.priority;
 
   const currentCueKey = cue.dedupeKey;
+  let waitResolve: ((ok: boolean) => void) | null = null;
+  let waitSettled = false;
+
+  const settleWait = (ok: boolean) => {
+    if (!waitUntilEnd || waitSettled) {
+      return;
+    }
+    waitSettled = true;
+    if (runtimeState.waitResolver === settleWait) {
+      runtimeState.waitResolver = null;
+    }
+    waitResolve?.(ok);
+  };
 
   const speakWithTTS = async (text: string, opts: SpeakTTSOptions): Promise<boolean> => {
     const canSpeak =
@@ -460,6 +480,7 @@ export async function speakVoiceCue(cue: VoiceCue | null): Promise<boolean> {
       runtimeState.activeCueKey = null;
       runtimeState.activePriority = 0;
     }
+    settleWait(true);
   };
 
   const onError = () => {
@@ -468,9 +489,16 @@ export async function speakVoiceCue(cue: VoiceCue | null): Promise<boolean> {
       runtimeState.activePriority = 0;
     }
     void playFallbackBeep(cue);
+    settleWait(false);
   };
 
   const playBeep = () => playFallbackBeep(cue);
+  const waitPromise = waitUntilEnd
+    ? new Promise<boolean>((resolve) => {
+        waitResolve = resolve;
+        runtimeState.waitResolver = settleWait;
+      })
+    : null;
 
   const ok = await playCueWithFallback(
     cue,
@@ -483,9 +511,23 @@ export async function speakVoiceCue(cue: VoiceCue | null): Promise<boolean> {
   if (!ok) {
     runtimeState.activeCueKey = null;
     runtimeState.activePriority = 0;
+    settleWait(false);
+    return false;
   }
 
-  return ok;
+  if (!waitPromise) {
+    return true;
+  }
+
+  return waitPromise;
+}
+
+export async function speakVoiceCue(cue: VoiceCue | null): Promise<boolean> {
+  return playVoiceCue(cue, false);
+}
+
+export async function speakVoiceCueAndWait(cue: VoiceCue | null): Promise<boolean> {
+  return playVoiceCue(cue, true);
 }
 
 export function getStartVoiceCue(stepId: CameraStepId): VoiceCue {
@@ -544,7 +586,16 @@ export function getCorrectiveVoiceCue(
 ): VoiceCue | null {
   const failureReasons = gate.failureReasons ?? [];
   const flags = gate.guardrail?.flags ?? [];
-  const allReasons = [...failureReasons, ...flags];
+  const blockFramingSpeech = gate.readinessState === 'ready';
+  const effectiveFailureReasons = blockFramingSpeech
+    ? failureReasons.filter(
+        (reason) => !FRAMING_REASONS.includes(reason as (typeof FRAMING_REASONS)[number])
+      )
+    : failureReasons;
+  const effectiveFlags = blockFramingSpeech
+    ? flags.filter((flag) => !FRAMING_REASONS.includes(flag as (typeof FRAMING_REASONS)[number]))
+    : flags;
+  const allReasons = [...effectiveFailureReasons, ...effectiveFlags];
   const isNotReady = gate.readinessState === 'not_ready';
 
   if (isNotReady && gate.framingHint) {
@@ -599,8 +650,11 @@ export function getCorrectiveVoiceCue(
 
   if (hasAny(allReasons, STABILITY_REASONS)) {
     const recovery = getEffectiveRetryGuidance(stepId, {
-      failureReasons: gate.failureReasons,
-      guardrail: gate.guardrail,
+      failureReasons: effectiveFailureReasons,
+      guardrail: {
+        ...gate.guardrail,
+        flags: effectiveFlags,
+      },
       userGuidance: gate.userGuidance,
     });
     return {
@@ -624,8 +678,11 @@ export function getCorrectiveVoiceCue(
 
   if (hasAny(allReasons, MOTION_REASONS)) {
     const recovery = getEffectiveRetryGuidance(stepId, {
-      failureReasons: gate.failureReasons,
-      guardrail: gate.guardrail,
+      failureReasons: effectiveFailureReasons,
+      guardrail: {
+        ...gate.guardrail,
+        flags: effectiveFlags,
+      },
       userGuidance: gate.userGuidance,
     });
     return {

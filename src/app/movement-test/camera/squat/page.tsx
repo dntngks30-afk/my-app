@@ -46,6 +46,7 @@ import {
   getSuccessVoiceCue,
   resetVoiceGuidanceSession,
   speakVoiceCue,
+  speakVoiceCueAndWait,
   trySpeakCorrectiveCueWithAntiSpam,
   unlockVoiceGuidance,
 } from '@/lib/camera/voice-guidance';
@@ -112,11 +113,11 @@ function getSquatOverlayGuide(
   return { hint: null, focus: null, animated: false };
 }
 
-/** PR E: 3초 대기 후 카운트다운 (촬영을 시작합니다 -> 3s -> 3,2,1) */
-const ARMING_DELAY_MS = 3000;
-const COUNTDOWN_SECONDS = 3;
-/** 카운트다운 숫자 간 간격 (ms) - 3, 2, 1 천천히 */
-const COUNTDOWN_INTERVAL_MS = 1500;
+/** 시작 안내가 끝난 뒤 1초 쉬고 카운트다운 시작 */
+const START_SEQUENCE_GAP_MS = 1000;
+/** 3, 2, 1 사이 아주 짧은 쉼 */
+const COUNTDOWN_BETWEEN_GAP_MS = 600;
+const COUNTDOWN_VALUES = [3, 2, 1] as const;
 /** 통과 후 다음 단계로 전환 대기 (gate 의존성 제거로 effect 재실행 방지) */
 const SQUAT_AUTO_ADVANCE_MS = 700;
 
@@ -150,7 +151,8 @@ export default function CameraSquatPage() {
   const countdownTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const startCueAttemptedRef = useRef(false);
   const readyCueAttemptedRef = useRef(false);
-  const lastCountdownSpokenRef = useRef<number | null>(null);
+  const lastSetupReadinessRef = useRef<string | null>(null);
+  const startSequenceRunIdRef = useRef(0);
   const successCueAttemptedRef = useRef(false);
   const lastProgressionStateRef = useRef<ExerciseProgressionState>('idle');
   const passLatchedStepKeyRef = useRef<string | null>(null);
@@ -165,15 +167,16 @@ export default function CameraSquatPage() {
     [landmarks, stats]
   );
   const finalPassLatched = isFinalPassLatched(STEP_ID, gate);
+  const effectivePassLatched = finalPassLatched || passLatched;
   const setupFramingHint = useMemo(() => getSetupFramingHint(landmarks), [landmarks]);
   const liveReadinessSummary = useMemo(
     () =>
       getLiveReadinessSummary({
-        success: finalPassLatched || passLatched,
+        success: effectivePassLatched,
         guardrail: gate.guardrail,
         framingHint: setupFramingHint,
       }),
-    [finalPassLatched, passLatched, gate.guardrail, setupFramingHint]
+    [effectivePassLatched, gate.guardrail, setupFramingHint]
   );
   const rawLiveReadiness = liveReadinessSummary.state;
   const primaryReadinessBlocker = getPrimaryReadinessBlocker(liveReadinessSummary);
@@ -244,6 +247,17 @@ export default function CameraSquatPage() {
     setAutoAdvanceScheduled(false);
   }, []);
 
+  const waitForTimer = useCallback(
+    (ms: number, timerRef: { current: ReturnType<typeof window.setTimeout> | null }) =>
+      new Promise<void>((resolve) => {
+        timerRef.current = window.setTimeout(() => {
+          timerRef.current = null;
+          resolve();
+        }, ms);
+      }),
+    []
+  );
+
   useEffect(() => {
     clearAutoAdvanceTimer();
     resetVoiceGuidanceSession();
@@ -254,7 +268,8 @@ export default function CameraSquatPage() {
     passLatchedStepKeyRef.current = null;
     startCueAttemptedRef.current = false;
     readyCueAttemptedRef.current = false;
-    lastCountdownSpokenRef.current = null;
+    lastSetupReadinessRef.current = null;
+    startSequenceRunIdRef.current += 1;
     successCueAttemptedRef.current = false;
     lastProgressionStateRef.current = 'idle';
     setPassLatched(false);
@@ -314,60 +329,80 @@ export default function CameraSquatPage() {
     setCameraPhase('arming');
   }, []);
 
-  /* setup 단계에서 실루엣이 white(ready)로 변하면 Ready to shoot 재생 */
+  /* setup 단계에서 white 전환 직후 Ready to shoot를 한 번만 재생 */
   useEffect(() => {
-    if (cameraPhase !== 'setup' || liveReadiness !== 'ready' || readyCueAttemptedRef.current) {
+    if (cameraPhase !== 'setup') {
+      lastSetupReadinessRef.current = null;
       return;
     }
+
+    const prevReadiness = lastSetupReadinessRef.current;
+    lastSetupReadinessRef.current = liveReadiness;
+    if (
+      prevReadiness === 'ready' ||
+      liveReadiness !== 'ready' ||
+      readyCueAttemptedRef.current
+    ) {
+      return;
+    }
+
     readyCueAttemptedRef.current = true;
+    unlockVoiceGuidance();
     void speakVoiceCue(getReadyToShootVoiceCue());
   }, [cameraPhase, liveReadiness]);
 
   useEffect(() => {
-    if (cameraPhase !== 'arming') return;
-    if (!startCueAttemptedRef.current) {
-      startCueAttemptedRef.current = true;
-      void speakVoiceCue(getStartVoiceCue(STEP_ID));
-    }
-    armingTimerRef.current = window.setTimeout(() => {
-      armingTimerRef.current = null;
+    if (cameraPhase !== 'arming' || startCueAttemptedRef.current) return;
+
+    startCueAttemptedRef.current = true;
+    const runId = startSequenceRunIdRef.current + 1;
+    startSequenceRunIdRef.current = runId;
+    let cancelled = false;
+    const isActive = () => !cancelled && startSequenceRunIdRef.current === runId;
+
+    const runStartSequence = async () => {
+      setCountdownValue(0);
+      await speakVoiceCueAndWait(getStartVoiceCue(STEP_ID));
+      if (!isActive()) return;
+
+      await waitForTimer(START_SEQUENCE_GAP_MS, armingTimerRef);
+      if (!isActive()) return;
+
       setCameraPhase('countdown');
-      setCountdownValue(COUNTDOWN_SECONDS);
-    }, ARMING_DELAY_MS);
+      for (const value of COUNTDOWN_VALUES) {
+        if (!isActive()) return;
+        setCountdownValue(value);
+        await speakVoiceCueAndWait(getCountdownVoiceCue(value));
+        if (!isActive()) return;
+        if (value !== 1) {
+          await waitForTimer(COUNTDOWN_BETWEEN_GAP_MS, countdownTimerRef);
+        }
+      }
+      if (!isActive()) return;
+
+      setCountdownValue(0);
+      setCameraPhase('capturing');
+      if (videoRef.current) {
+        start(videoRef.current);
+      }
+    };
+
+    void runStartSequence();
     return () => {
+      cancelled = true;
       if (armingTimerRef.current) {
         window.clearTimeout(armingTimerRef.current);
         armingTimerRef.current = null;
       }
-    };
-  }, [cameraPhase]);
-
-  useEffect(() => {
-    if (cameraPhase !== 'countdown' || countdownValue <= 0) return;
-    if (lastCountdownSpokenRef.current !== countdownValue) {
-      lastCountdownSpokenRef.current = countdownValue;
-      void speakVoiceCue(getCountdownVoiceCue(countdownValue as 1 | 2 | 3));
-    }
-    const id = window.setTimeout(() => {
-      if (countdownValue === 1) {
-        setCountdownValue(0);
-        setCameraPhase('capturing');
-        if (videoRef.current) start(videoRef.current);
-      } else {
-        setCountdownValue((v) => v - 1);
-      }
-    }, COUNTDOWN_INTERVAL_MS);
-    countdownTimerRef.current = id;
-    return () => {
       if (countdownTimerRef.current) {
         window.clearTimeout(countdownTimerRef.current);
         countdownTimerRef.current = null;
       }
     };
-  }, [cameraPhase, countdownValue, start]);
+  }, [cameraPhase, start, waitForTimer]);
 
   useEffect(() => {
-    if (cameraPhase !== 'capturing' || passLatched || permissionDenied) {
+    if (cameraPhase !== 'capturing' || effectivePassLatched || permissionDenied) {
       return;
     }
 
@@ -384,22 +419,26 @@ export default function CameraSquatPage() {
     });
   }, [
     cameraPhase,
+    effectivePassLatched,
     gate,
     liveReadiness,
     liveReadinessSummary.framingHint,
-    passLatched,
     permissionDenied,
   ]);
 
   useEffect(() => {
-    if (!passLatched || successCueAttemptedRef.current) {
+    if (
+      !effectivePassLatched ||
+      successCueAttemptedRef.current ||
+      passLatchedStepKeyRef.current !== currentStepKey
+    ) {
       return;
     }
 
     successCueAttemptedRef.current = true;
     cancelCorrectiveCueForSuccess();
     void speakVoiceCue(getSuccessVoiceCue());
-  }, [passLatched]);
+  }, [currentStepKey, effectivePassLatched]);
 
   const latchPassEvent = useCallback(() => {
     if (passLatchedStepKeyRef.current === currentStepKey || passLatched) {
@@ -424,7 +463,12 @@ export default function CameraSquatPage() {
 
   useEffect(() => {
     if (cameraPhase !== 'capturing') return;
-    if (permissionDenied || !cameraReady || passLatched || settledRef.current) {
+    if (permissionDenied || !cameraReady || settledRef.current) {
+      return;
+    }
+
+    if (effectivePassLatched) {
+      latchPassEvent();
       return;
     }
 
@@ -436,11 +480,6 @@ export default function CameraSquatPage() {
 
     setProgressionState((prev) => (prev === gate.progressionState ? prev : gate.progressionState));
     setStatusMessage((prev) => (prev === gate.uiMessage ? prev : gate.uiMessage));
-
-    if (finalPassLatched) {
-      latchPassEvent();
-      return;
-    }
 
     if (gate.status === 'retry' || gate.status === 'fail') {
       settledRef.current = true;
@@ -462,15 +501,19 @@ export default function CameraSquatPage() {
     gate.status,
     gate.uiMessage,
     latchPassEvent,
-    finalPassLatched,
-    passLatched,
+    effectivePassLatched,
     permissionDenied,
     stats.sampledFrameCount,
     stop,
   ]);
 
   useEffect(() => {
-    if (!passLatched || passLatchedStepKeyRef.current !== currentStepKey) {
+    if (!effectivePassLatched) {
+      return;
+    }
+
+    if (passLatchedStepKeyRef.current !== currentStepKey) {
+      latchPassEvent();
       return;
     }
 
@@ -527,9 +570,10 @@ export default function CameraSquatPage() {
   }, [
     clearAutoAdvanceTimer,
     currentStepKey,
+    effectivePassLatched,
+    latchPassEvent,
     navigationTriggered,
     nextPath,
-    passLatched,
     router,
   ]);
 
@@ -652,7 +696,7 @@ export default function CameraSquatPage() {
     () => (showRetryActions ? getEffectiveRetryGuidance(STEP_ID, gate) : null),
     [showRetryActions, gate]
   );
-  const visibleUserGuidance = finalPassLatched || passLatched
+  const visibleUserGuidance = effectivePassLatched
     ? []
     : retryGuidance
       ? [retryGuidance.primary, retryGuidance.secondary].filter(Boolean)
@@ -660,7 +704,7 @@ export default function CameraSquatPage() {
   const showPreCaptureHint =
     (progressionState === 'camera_ready' || progressionState === 'insufficient_signal') &&
     stats.sampledFrameCount < 8;
-  const effectiveProgressionState = finalPassLatched || passLatched ? 'passed' : progressionState;
+  const effectiveProgressionState = effectivePassLatched ? 'passed' : progressionState;
   const guideTone = getGuideToneFromLiveReadiness(liveReadiness);
   const overlayGuide = getSquatOverlayGuide(gate.failureReasons, effectiveProgressionState);
   const isPreCapturePhase =
