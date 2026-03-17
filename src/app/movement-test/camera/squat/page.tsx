@@ -326,39 +326,15 @@ export default function CameraSquatPage() {
 
   const handleSetupReady = useCallback(() => {
     unlockVoiceGuidance();
-    setCameraPhase('arming');
-  }, []);
-
-  /* setup 단계에서 white 전환 직후 Ready to shoot를 한 번만 재생 */
-  useEffect(() => {
-    if (cameraPhase !== 'setup') {
-      lastSetupReadinessRef.current = null;
-      return;
-    }
-
-    const prevReadiness = lastSetupReadinessRef.current;
-    lastSetupReadinessRef.current = liveReadiness;
-    if (
-      prevReadiness === 'ready' ||
-      liveReadiness !== 'ready' ||
-      readyCueAttemptedRef.current
-    ) {
-      return;
-    }
-
-    readyCueAttemptedRef.current = true;
-    unlockVoiceGuidance();
-    void speakVoiceCue(getReadyToShootVoiceCue());
-  }, [cameraPhase, liveReadiness]);
-
-  useEffect(() => {
-    if (cameraPhase !== 'arming' || startCueAttemptedRef.current) return;
-
+    if (startCueAttemptedRef.current) return;
     startCueAttemptedRef.current = true;
+
+    /* phase를 'arming'으로 올려 UI 표시 */
+    setCameraPhase('arming');
+
     const runId = startSequenceRunIdRef.current + 1;
     startSequenceRunIdRef.current = runId;
-    let cancelled = false;
-    const isActive = () => !cancelled && startSequenceRunIdRef.current === runId;
+    const isActive = () => startSequenceRunIdRef.current === runId;
 
     const runStartSequence = async () => {
       setCountdownValue(0);
@@ -388,18 +364,29 @@ export default function CameraSquatPage() {
     };
 
     void runStartSequence();
-    return () => {
-      cancelled = true;
-      if (armingTimerRef.current) {
-        window.clearTimeout(armingTimerRef.current);
-        armingTimerRef.current = null;
-      }
-      if (countdownTimerRef.current) {
-        window.clearTimeout(countdownTimerRef.current);
-        countdownTimerRef.current = null;
-      }
-    };
-  }, [cameraPhase, start, waitForTimer]);
+  }, [start, waitForTimer]);
+
+  /* setup 단계에서 white 전환 직후 Ready to shoot를 한 번만 재생 */
+  useEffect(() => {
+    if (cameraPhase !== 'setup') {
+      lastSetupReadinessRef.current = null;
+      return;
+    }
+
+    const prevReadiness = lastSetupReadinessRef.current;
+    lastSetupReadinessRef.current = liveReadiness;
+    if (
+      prevReadiness === 'ready' ||
+      liveReadiness !== 'ready' ||
+      readyCueAttemptedRef.current
+    ) {
+      return;
+    }
+
+    readyCueAttemptedRef.current = true;
+    unlockVoiceGuidance();
+    void speakVoiceCue(getReadyToShootVoiceCue());
+  }, [cameraPhase, liveReadiness]);
 
   useEffect(() => {
     if (cameraPhase !== 'capturing' || effectivePassLatched || permissionDenied) {
@@ -610,6 +597,8 @@ export default function CameraSquatPage() {
     }
     settledRef.current = false;
     advanceLockRef.current = false;
+    startCueAttemptedRef.current = false;
+    startSequenceRunIdRef.current += 1; /* 진행 중인 시퀀스 무효화 */
     passLatchedStepKeyRef.current = null;
     scheduledAdvanceStepKeyRef.current = null;
     triggeredAdvanceStepKeyRef.current = null;
