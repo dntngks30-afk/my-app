@@ -28,6 +28,7 @@ import {
   getLiveReadinessSummary,
   getPrimaryReadinessBlocker,
   useStabilizedLiveReadiness,
+  type LiveReadinessState,
 } from '@/lib/camera/live-readiness';
 import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
 import {
@@ -168,6 +169,10 @@ export default function CameraOverheadReachPage() {
   const [startSequenceComplete, setStartSequenceComplete] = useState(false);
   /** PR G2: readiness phase 기반 큐잉 게이트 (ready_to_shoot 재생 중 = false) */
   const [captureCuingEnabled, setCaptureCuingEnabled] = useState(false);
+  /** PR HOTFIX-02: start sequence 이후 직전 readiness 추적 (red→white 전환 감지용) */
+  const prevCapturingReadinessRef = useRef<LiveReadinessState | null>(null);
+  /** PR HOTFIX-02: ready_to_shoot 시도 여부 — async IIFE 재진입 방지 */
+  const readyToShootAttemptedRef = useRef(false);
   const currentStepKey = `${STEP_ID}:${previewKey}`;
   const nextPath = getNextStepPath(STEP_ID) ?? '/movement-test/camera/complete';
   const debugEnabled = IS_DEV;
@@ -266,6 +271,8 @@ export default function CameraOverheadReachPage() {
     triggeredAdvanceStepKeyRef.current = null;
     startCueAttemptedRef.current = false;
     successCueAttemptedRef.current = false;
+    prevCapturingReadinessRef.current = null;
+    readyToShootAttemptedRef.current = false;
     setStartSequenceComplete(false);
     setCaptureCuingEnabled(false);
     setPassLatched(false);
@@ -326,31 +333,53 @@ export default function CameraOverheadReachPage() {
     return () => window.clearTimeout(id);
   }, [cameraReady]);
 
-  /* PR G2: start sequence 완료 후 readiness phase 전환 감지
-   * - red(not_ready): framing cue 허용 (captureCuingEnabled=true)
-   * - red → white(ready): 최초 1회만 ready_to_shoot 재생 → movement cue 허용
-   *   (이미 재생된 세션이면 스킵하고 바로 허용)
-   * - white → red 복귀: framing cue 허용으로 전환 */
+  /* PR HOTFIX-02: start sequence 완료 후 red → white 전환 감지 및 one-shot ready_to_shoot 재생
+   * squat/page.tsx와 동일한 패턴. getReadyToShootVoiceCue()에 interrupt:true가 추가되어
+   * 재생 중인 framing cue(priority 5)에 의한 차단 문제도 함께 해소됨. */
   useEffect(() => {
-    if (!startSequenceComplete) return;
+    if (!startSequenceComplete) {
+      prevCapturingReadinessRef.current = null;
+      readyToShootAttemptedRef.current = false;
+      return;
+    }
+
+    const prevReadiness = prevCapturingReadinessRef.current;
+    const enteredWhite = prevReadiness !== 'ready' && liveReadiness === 'ready';
+    prevCapturingReadinessRef.current = liveReadiness;
 
     if (liveReadiness === 'ready') {
       setCaptureCuingEnabled(false);
-      if (hasReadyToShootPlayedThisSession()) {
+
+      const alreadyHandled =
+        hasReadyToShootPlayedThisSession() ||
+        readyToShootAttemptedRef.current ||
+        !enteredWhite;
+
+      if (alreadyHandled) {
         setCaptureCuingEnabled(true);
         return;
       }
+
+      readyToShootAttemptedRef.current = true;
       let cancelled = false;
       void (async () => {
-        await speakVoiceCueAndWait(getReadyToShootVoiceCue());
+        const played = await speakVoiceCueAndWait(getReadyToShootVoiceCue());
         markReadyToShootPlayed();
+        if (IS_DEV) {
+          console.info('[camera:overhead-reach-white-transition]', {
+            prevReadiness,
+            enteredWhite,
+            played,
+            suppressionReason: played ? null : 'playback_returned_false',
+            readyToShootPlayedThisSession: true,
+          });
+        }
         if (!cancelled) setCaptureCuingEnabled(true);
       })();
       return () => { cancelled = true; };
     }
 
     if (liveReadiness === 'not_ready') {
-      /* red phase: framing cue 허용 */
       setCaptureCuingEnabled(true);
     }
   }, [startSequenceComplete, liveReadiness]);
@@ -634,6 +663,8 @@ export default function CameraOverheadReachPage() {
     scheduledAdvanceStepKeyRef.current = null;
     triggeredAdvanceStepKeyRef.current = null;
     hasStartedRef.current = false;
+    prevCapturingReadinessRef.current = null;
+    readyToShootAttemptedRef.current = false;
     setCameraReady(false);
     setPassLatched(false);
     setPassLatchedAt(null);

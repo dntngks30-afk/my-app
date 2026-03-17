@@ -30,6 +30,7 @@ import {
   getLiveReadinessSummary,
   getPrimaryReadinessBlocker,
   useStabilizedLiveReadiness,
+  type LiveReadinessState,
 } from '@/lib/camera/live-readiness';
 import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
 import {
@@ -156,6 +157,17 @@ export default function CameraSquatPage() {
   /* capturing 중 ready_to_shoot 완료 후 교정 음성 허용 여부.
    * ref가 아닌 state: true로 바뀔 때 corrective cue effect가 re-run되어야 하기 때문. */
   const [captureCuingEnabled, setCaptureCuingEnabled] = useState(false);
+  /** PR HOTFIX-02: capturing 구간에서 직전 readiness 추적 (red→white 전환 감지용) */
+  const prevCapturingReadinessRef = useRef<LiveReadinessState | null>(null);
+  /** PR HOTFIX-02: ready_to_shoot 시도 여부 — async IIFE 재진입 방지 */
+  const readyToShootAttemptedRef = useRef(false);
+  /** PR HOTFIX-02: white 전환 one-shot 관측 state (dev only) */
+  const [whiteTransitionDebug, setWhiteTransitionDebug] = useState<{
+    prevReadiness: string | null;
+    enteredWhite: boolean;
+    played: boolean | null;
+    suppressionReason: string | null;
+  } | null>(null);
   const successCueAttemptedRef = useRef(false);
   const lastProgressionStateRef = useRef<ExerciseProgressionState>('idle');
   const passLatchedStepKeyRef = useRef<string | null>(null);
@@ -273,7 +285,10 @@ export default function CameraSquatPage() {
     startSequenceRunIdRef.current += 1;
     successCueAttemptedRef.current = false;
     lastProgressionStateRef.current = 'idle';
+    prevCapturingReadinessRef.current = null;
+    readyToShootAttemptedRef.current = false;
     setCaptureCuingEnabled(false);
+    setWhiteTransitionDebug(null);
     setPassLatched(false);
     setPassLatchedAt(null);
     setNavigationTriggered(false);
@@ -382,26 +397,65 @@ export default function CameraSquatPage() {
     void runStartSequence();
   }, [liveReadiness, start, waitForTimer]);
 
-  /* PR G2: capturing 중 readiness phase 전환 감지
-   * - red(not_ready): framing cue만 허용 (captureCuingEnabled=true, ready_to_shoot 없음)
-   * - red → white(ready): 최초 1회만 ready_to_shoot 재생 → 완료 후 movement cue 허용
-   *   (이미 재생된 세션이면 ready_to_shoot 스킵하고 바로 movement cue 허용)
+  /* PR HOTFIX-02: capturing 중 red → white 전환 감지 및 one-shot ready_to_shoot 재생
+   *
+   * - capturing 진입 시 prevCapturingReadinessRef 초기화
+   * - red(not_ready): framing cue만 허용 (captureCuingEnabled=true)
+   * - red → white(ready) 전환 감지(enteredWhite): 최초 1회만 ready_to_shoot 재생 후 movement cue 허용
+   *   · hasReadyToShootPlayedThisSession() — setup 단계에서 이미 재생된 경우 스킵
+   *   · readyToShootAttemptedRef — async IIFE 재진입 방지
+   *   · !enteredWhite — white 상태 유지 중 재실행 시 재생 방지
    * - white → red 복귀: movement cue 차단, framing cue 허용
-   * - success: effectivePassLatched로 corrective cue effect 자체가 막힘 */
+   * - success: effectivePassLatched로 corrective cue effect 자체가 막힘
+   *
+   * 루트 픽스: getReadyToShootVoiceCue()에 interrupt:true 추가 —
+   *   playVoiceCue 내 decideVoicePlayback이 active framing cue(priority 5)에 의해
+   *   ready_to_shoot(priority 3)을 lower_priority_active로 차단하던 문제 해소. */
   useEffect(() => {
-    if (cameraPhase !== 'capturing') return;
+    if (cameraPhase !== 'capturing') {
+      /* capturing 이외 구간(setup/arming/countdown)에서는 추적 리셋 */
+      prevCapturingReadinessRef.current = null;
+      readyToShootAttemptedRef.current = false;
+      return;
+    }
+
+    const prevReadiness = prevCapturingReadinessRef.current;
+    const enteredWhite = prevReadiness !== 'ready' && liveReadiness === 'ready';
+    prevCapturingReadinessRef.current = liveReadiness;
 
     if (liveReadiness === 'ready') {
       setCaptureCuingEnabled(false);
-      if (hasReadyToShootPlayedThisSession()) {
-        /* 이미 재생된 세션 — 중복 재생 금지, 바로 movement cue 허용 */
+
+      /* 이미 처리된 케이스: 세션 재생 완료 / 이미 시도 중 / 전환 아님(white 유지 재실행) */
+      const alreadyHandled =
+        hasReadyToShootPlayedThisSession() ||
+        readyToShootAttemptedRef.current ||
+        !enteredWhite;
+
+      if (alreadyHandled) {
         setCaptureCuingEnabled(true);
         return;
       }
+
+      /* red → white 최초 전환: one-shot 발화 */
+      readyToShootAttemptedRef.current = true;
       let cancelled = false;
       void (async () => {
-        await speakVoiceCueAndWait(getReadyToShootVoiceCue());
+        const played = await speakVoiceCueAndWait(getReadyToShootVoiceCue());
         markReadyToShootPlayed();
+        if (IS_DEV) {
+          const debugInfo = {
+            prevReadiness,
+            enteredWhite,
+            played,
+            suppressionReason: played ? null : 'playback_returned_false',
+          };
+          setWhiteTransitionDebug(debugInfo);
+          console.info('[camera:squat-white-transition]', {
+            ...debugInfo,
+            readyToShootPlayedThisSession: true,
+          });
+        }
         if (!cancelled) setCaptureCuingEnabled(true);
       })();
       return () => { cancelled = true; };
@@ -631,7 +685,10 @@ export default function CameraSquatPage() {
     scheduledAdvanceStepKeyRef.current = null;
     triggeredAdvanceStepKeyRef.current = null;
     hasStartedRef.current = false;
+    prevCapturingReadinessRef.current = null;
+    readyToShootAttemptedRef.current = false;
     setCameraPhase('setup');
+    setWhiteTransitionDebug(null);
     setCountdownValue(0);
     setCameraReady(false);
     setCaptureCuingEnabled(false);
@@ -981,6 +1038,14 @@ export default function CameraSquatPage() {
                     <span>autoAdvanceReason: {nextTriggerReason ?? 'n/a'}</span>
                     <span>navigationTriggered: {String(navigationTriggered)}</span>
                     <span>nextPath: {nextPath ?? 'n/a'}</span>
+                    {whiteTransitionDebug && (
+                      <>
+                        <span>prevReadiness: {whiteTransitionDebug.prevReadiness ?? 'null'}</span>
+                        <span>enteredWhite: {String(whiteTransitionDebug.enteredWhite)}</span>
+                        <span>readyToShootPlayed: {String(whiteTransitionDebug.played ?? false)}</span>
+                        <span>readyToShootSuppress: {whiteTransitionDebug.suppressionReason ?? 'none'}</span>
+                      </>
+                    )}
                   </div>
 
                   <div className="mt-3 text-[11px] text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>

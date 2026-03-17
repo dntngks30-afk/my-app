@@ -583,7 +583,9 @@ export function getStartVoiceCue(stepId: CameraStepId): VoiceCue {
   };
 }
 
-/** setup 단계에서 실루엣이 white(ready)일 때 재생 */
+/** red → white 전환 순간 1회 재생되는 상태 전이 cue.
+ * interrupt: true — 재생 중인 framing cue(priority 5)를 중단하고 우선 발화한다.
+ * (decideVoicePlayback의 lower_priority_active 차단을 우회하기 위해 필요) */
 export function getReadyToShootVoiceCue(): VoiceCue {
   return {
     kind: 'correction',
@@ -592,6 +594,7 @@ export function getReadyToShootVoiceCue(): VoiceCue {
     priority: 3,
     cooldownMs: 6000,
     fallbackBeep: false,
+    interrupt: true,
   };
 }
 
