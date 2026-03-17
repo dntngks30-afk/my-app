@@ -6,15 +6,18 @@
  */
 import type { VoiceCue } from './voice-guidance';
 
-/** 지원하는 한국어 cue clip 키 (MVP 세트) */
+/**
+ * 지원하는 한국어 cue clip 키
+ * public/audio/cues/ko 내 실제 파일명 기준
+ */
 export type KoreanCueClipKey =
   | 'start_capture'
   | 'countdown_3'
   | 'countdown_2'
   | 'countdown_1'
   | 'framing_full_body'
+  | 'framing_hold_still'
   | 'framing_step_back'
-  | 'framing_center_body'
   | 'move_slowly'
   | 'squat_go_deeper'
   | 'overhead_raise_higher'
@@ -22,7 +25,7 @@ export type KoreanCueClipKey =
   | 'good_job'
   | 'success';
 
-/** dedupeKey → clip key 매핑 (정적 cue) */
+/** dedupeKey → clip key 매핑 (정적 cue, 실제 파일명 사용) */
 const DEDUPE_KEY_TO_CLIP: Record<string, KoreanCueClipKey> = {
   'start:squat': 'start_capture',
   'start:overhead-reach': 'start_capture',
@@ -31,17 +34,18 @@ const DEDUPE_KEY_TO_CLIP: Record<string, KoreanCueClipKey> = {
   'countdown:1': 'countdown_1',
   'correction:full-body': 'framing_full_body',
   'correction:step-back': 'framing_step_back',
-  'correction:framing': 'framing_center_body',
+  'correction:framing': 'framing_full_body',
   'correction:hold:overhead-reach': 'overhead_hold_top',
   'success:generic': 'good_job',
 };
 
-/** recovery.primary 텍스트 → clip key (동적 cue) */
+/** recovery.primary 텍스트 → clip key (동적 cue, 실제 파일명 사용) */
 const TEXT_TO_CLIP: Record<string, KoreanCueClipKey> = {
   '카메라를 고정하고 천천히 움직여주세요': 'move_slowly',
   '조금 더 깊게 앉아주세요': 'squat_go_deeper',
   '양팔을 머리 위로 끝까지 올려주세요': 'overhead_raise_higher',
   '맨 위에서 잠깐 멈춰주세요': 'overhead_hold_top',
+  '자세를 잠깐 고정한 뒤 다시 해주세요': 'framing_hold_still',
 };
 
 const AUDIO_BASE = '/audio/cues/ko';
@@ -70,6 +74,7 @@ export function getClipPath(clipKey: KoreanCueClipKey): string {
 export interface PlaybackObservability {
   cueKey: string;
   clipKey: KoreanCueClipKey | null;
+  clipPath: string | null;
   mode: 'clip' | 'speech' | 'beep';
   clipMissing?: boolean;
   clipFailed?: boolean;
@@ -128,6 +133,7 @@ async function tryPlayClip(
     setPlaybackObs({
       cueKey: clipKey,
       clipKey,
+      clipPath: getClipPath(clipKey),
       mode: 'speech',
       clipMissing: true,
       success: false,
@@ -146,6 +152,7 @@ async function tryPlayClip(
       setPlaybackObs({
         cueKey: clipKey,
         clipKey,
+        clipPath: getClipPath(clipKey),
         mode: 'speech',
         clipFailed: true,
         success: false,
@@ -157,6 +164,7 @@ async function tryPlayClip(
     setPlaybackObs({
       cueKey: clipKey,
       clipKey,
+      clipPath: getClipPath(clipKey),
       mode: 'clip',
       success: true,
     });
@@ -166,6 +174,7 @@ async function tryPlayClip(
     setPlaybackObs({
       cueKey: clipKey,
       clipKey,
+      clipPath: getClipPath(clipKey),
       mode: 'speech',
       clipFailed: true,
       success: false,
@@ -221,6 +230,7 @@ export async function playCueWithFallback(
     setPlaybackObs({
       cueKey: cue.dedupeKey,
       clipKey: clipKey ?? null,
+      clipPath: clipKey ? getClipPath(clipKey) : null,
       mode: 'speech',
       success: true,
     });
@@ -231,6 +241,7 @@ export async function playCueWithFallback(
   setPlaybackObs({
     cueKey: cue.dedupeKey,
     clipKey: clipKey ?? null,
+    clipPath: clipKey ? getClipPath(clipKey) : null,
     mode: 'beep',
     success: beepOk,
   });

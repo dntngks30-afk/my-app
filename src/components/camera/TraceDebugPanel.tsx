@@ -157,7 +157,7 @@ export function TraceDebugPanel({ liveReadiness }: TraceDebugPanelProps) {
           <div className="mt-2 text-[10px] text-slate-500">
             <p>playback: mode={pb.mode} cueKey={pb.cueKey}</p>
             <p>
-              clipKey={pb.clipKey ?? 'none'}{' '}
+              clipPath={pb.clipPath ?? 'none'} clipKey={pb.clipKey ?? 'none'}{' '}
               {pb.clipMissing ? 'clipMissing' : ''}
               {pb.clipFailed ? ' clipFailed' : ''} success={String(pb.success)}
             </p>
