@@ -45,6 +45,7 @@ const DEDUPE_KEY_TO_CLIP: Record<string, KoreanCueClipKey> = {
 /** recovery.primary 텍스트 → clip key (동적 cue, 실제 파일명 사용) */
 const TEXT_TO_CLIP: Record<string, KoreanCueClipKey> = {
   '카메라를 고정하고 천천히 움직여주세요': 'move_slowly',
+  '조금 뒤로 가 주세요': 'framing_step_back',
   '조금 더 깊게 앉아주세요': 'squat_go_deeper',
   '조금 더 앉았다가 다시 올라와주세요': 'squat_go_deeper',
   '양팔을 머리 위로 끝까지 올려주세요': 'overhead_raise_higher',

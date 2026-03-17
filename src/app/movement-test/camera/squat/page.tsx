@@ -150,8 +150,10 @@ export default function CameraSquatPage() {
   const armingTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const countdownTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const startCueAttemptedRef = useRef(false);
-  const readyToShootCompletedRef = useRef(false);
   const startSequenceRunIdRef = useRef(0);
+  /* capturing 중 ready_to_shoot 완료 후 교정 음성 허용 여부.
+   * ref가 아닌 state: true로 바뀔 때 corrective cue effect가 re-run되어야 하기 때문. */
+  const [captureCuingEnabled, setCaptureCuingEnabled] = useState(false);
   const successCueAttemptedRef = useRef(false);
   const lastProgressionStateRef = useRef<ExerciseProgressionState>('idle');
   const passLatchedStepKeyRef = useRef<string | null>(null);
@@ -266,10 +268,10 @@ export default function CameraSquatPage() {
     triggeredAdvanceStepKeyRef.current = null;
     passLatchedStepKeyRef.current = null;
     startCueAttemptedRef.current = false;
-    readyToShootCompletedRef.current = false;
     startSequenceRunIdRef.current += 1;
     successCueAttemptedRef.current = false;
     lastProgressionStateRef.current = 'idle';
+    setCaptureCuingEnabled(false);
     setPassLatched(false);
     setPassLatchedAt(null);
     setNavigationTriggered(false);
@@ -337,17 +339,15 @@ export default function CameraSquatPage() {
     const isWhite = liveReadiness === 'ready';
 
     const runStartSequence = async () => {
-      /* white 상태면 1000ms 안정 확인 후 ready_to_shoot 재생.
-       * 1000ms 대기 중 not_ready로 떨어져도 타이머는 계속 진행한다 —
-       * 버튼을 눌렀다는 것은 이미 충분히 white를 확인한 상태이기 때문.
-       * corrective cue는 readyToShootCompletedRef가 true가 될 때까지 차단된다. */
+      /* white 상태면 1000ms 확인 후 ready_to_shoot 재생 (setup 단계 전용).
+       * capturing 진입 후 white 전환 시의 ready_to_shoot은 별도 useEffect가 담당한다. */
       if (isWhite) {
         await waitForTimer(1000, armingTimerRef);
         if (!isActive()) return;
         await speakVoiceCueAndWait(getReadyToShootVoiceCue());
         if (!isActive()) return;
       }
-      readyToShootCompletedRef.current = true;
+      /* captureCuingEnabled는 capturing 진입 후 useEffect가 관리하므로 여기서 설정하지 않는다. */
 
       setCountdownValue(0);
       await speakVoiceCueAndWait(getStartVoiceCue(STEP_ID));
@@ -378,12 +378,35 @@ export default function CameraSquatPage() {
     void runStartSequence();
   }, [liveReadiness, start, waitForTimer]);
 
+  /* capturing 중 liveReadiness 전환 감지:
+   * - white(ready) 진입 시: captureCuingEnabled=false → ready_to_shoot 재생 → 완료 후 true
+   * - red(not_ready) 복귀 시: captureCuingEnabled=false (다시 white가 되면 위 흐름 반복)
+   * - success 또는 pass 시: 교정 큐 불필요하므로 true로 바로 전환 */
+  useEffect(() => {
+    if (cameraPhase !== 'capturing') return;
+
+    if (liveReadiness === 'ready') {
+      setCaptureCuingEnabled(false);
+      let cancelled = false;
+      void (async () => {
+        await speakVoiceCueAndWait(getReadyToShootVoiceCue());
+        if (!cancelled) setCaptureCuingEnabled(true);
+      })();
+      return () => { cancelled = true; };
+    }
+
+    if (liveReadiness === 'not_ready') {
+      setCaptureCuingEnabled(false);
+    }
+    /* success는 effectivePassLatched로 corrective cue effect 자체가 막힘 */
+  }, [cameraPhase, liveReadiness]);
+
   useEffect(() => {
     if (cameraPhase !== 'capturing' || effectivePassLatched || permissionDenied) {
       return;
     }
     /* ready_to_shoot 재생이 완료되기 전까지 교정 음성 차단 */
-    if (!readyToShootCompletedRef.current) return;
+    if (!captureCuingEnabled) return;
 
     trySpeakCorrectiveCueWithAntiSpam({
       stepId: STEP_ID,
@@ -397,6 +420,7 @@ export default function CameraSquatPage() {
       liveCueingEnabled: cameraPhase === 'capturing',
     });
   }, [
+    captureCuingEnabled,
     cameraPhase,
     effectivePassLatched,
     gate,
@@ -590,7 +614,6 @@ export default function CameraSquatPage() {
     settledRef.current = false;
     advanceLockRef.current = false;
     startCueAttemptedRef.current = false;
-    readyToShootCompletedRef.current = false;
     startSequenceRunIdRef.current += 1; /* 진행 중인 시퀀스 무효화 */
     passLatchedStepKeyRef.current = null;
     scheduledAdvanceStepKeyRef.current = null;
@@ -599,6 +622,7 @@ export default function CameraSquatPage() {
     setCameraPhase('setup');
     setCountdownValue(0);
     setCameraReady(false);
+    setCaptureCuingEnabled(false);
     setPassLatched(false);
     setPassLatchedAt(null);
     setNavigationTriggered(false);
