@@ -213,11 +213,27 @@ export function resetVoiceGuidanceSession() {
   correctiveAntiSpamState.candidateStableSince = null;
   correctiveAntiSpamState.correctiveLatchedKey = null;
   correctiveAntiSpamState.lastReadiness = null;
+  correctiveAntiSpamState.readyToShootPlayedThisSession = false;
+  correctiveAntiSpamState.lastEmittedAtMs = null;
+}
+
+/** PR G2: ready_to_shoot cue가 이번 capture session에서 이미 재생되었는지 */
+export function hasReadyToShootPlayedThisSession(): boolean {
+  return correctiveAntiSpamState.readyToShootPlayedThisSession;
+}
+
+/** PR G2: ready_to_shoot cue 재생 완료 시 호출 — 이후 중복 재생 방지 */
+export function markReadyToShootPlayed(): void {
+  correctiveAntiSpamState.readyToShootPlayedThisSession = true;
 }
 
 /** PR C: corrective cue anti-spam / latching state */
 const STABLE_HOLD_MS = 500;
-const REPEAT_COOLDOWN_MS = 5000;
+/**
+ * PR G2: 4s cadence lock — red(framing) 및 white(movement) 모두 4초 주기.
+ * frame-reactive 발화를 억제하고 time-gated 정책을 강제한다.
+ */
+const REPEAT_COOLDOWN_MS = 4000;
 const FRAMING_CUE_PREFIXES = [
   'correction:framing',
   'correction:full-body',
@@ -235,12 +251,18 @@ const correctiveAntiSpamState: {
     suppressedReason: string | null;
     played: boolean;
   } | null;
+  /** PR G2: capturing 시작 후 최초 white 진입에만 ready_to_shoot 1회 */
+  readyToShootPlayedThisSession: boolean;
+  /** PR G2: 마지막 emit 타임스탬프 (observability) */
+  lastEmittedAtMs: number | null;
 } = {
   lastCandidateKey: null,
   candidateStableSince: null,
   correctiveLatchedKey: null,
   lastReadiness: null,
   lastObserved: null,
+  readyToShootPlayedThisSession: false,
+  lastEmittedAtMs: null,
 };
 
 function isFramingCue(dedupeKey: string): boolean {
@@ -383,6 +405,7 @@ export function trySpeakCorrectiveCueWithAntiSpam(
 
   void speakVoiceCue(cue);
   correctiveAntiSpamState.correctiveLatchedKey = cue.dedupeKey;
+  correctiveAntiSpamState.lastEmittedAtMs = now;
   correctiveAntiSpamState.lastObserved = {
     cueCandidate: cue.dedupeKey,
     suppressedReason: null,
@@ -406,13 +429,29 @@ export function getCorrectiveCueObservability(): {
   played: boolean;
   latchedKey: string | null;
   lastReadiness: string | null;
+  /** PR G2: 현재 readiness 기반 phase */
+  readinessPhase: 'red' | 'white' | 'green' | null;
+  /** PR G2: 마지막 emit 타임스탬프 (ms) */
+  emittedAtMs: number | null;
+  /** PR G2: 다음 eligible emit 타임 (ms) — emittedAtMs + REPEAT_COOLDOWN_MS */
+  nextEligibleAtMs: number | null;
+  /** PR G2: ready_to_shoot 이번 세션에서 재생 여부 */
+  readyToShootPlayed: boolean;
 } | null {
   const obs = correctiveAntiSpamState.lastObserved;
   if (!obs) return null;
+  const r = correctiveAntiSpamState.lastReadiness;
+  const readinessPhase: 'red' | 'white' | 'green' | null =
+    r === 'not_ready' ? 'red' : r === 'ready' ? 'white' : r === 'success' ? 'green' : null;
+  const emittedAtMs = correctiveAntiSpamState.lastEmittedAtMs;
   return {
     ...obs,
     latchedKey: correctiveAntiSpamState.correctiveLatchedKey,
     lastReadiness: correctiveAntiSpamState.lastReadiness,
+    readinessPhase,
+    emittedAtMs,
+    nextEligibleAtMs: emittedAtMs !== null ? emittedAtMs + REPEAT_COOLDOWN_MS : null,
+    readyToShootPlayed: correctiveAntiSpamState.readyToShootPlayedThisSession,
   };
 }
 

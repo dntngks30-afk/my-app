@@ -38,10 +38,14 @@ import {
 import {
   cancelCorrectiveCueForSuccess,
   cancelVoiceGuidance,
+  getReadyToShootVoiceCue,
   getStartVoiceCue,
   getSuccessVoiceCue,
+  hasReadyToShootPlayedThisSession,
+  markReadyToShootPlayed,
   resetVoiceGuidanceSession,
   speakVoiceCue,
+  speakVoiceCueAndWait,
   trySpeakCorrectiveCueWithAntiSpam,
   unlockVoiceGuidance,
 } from '@/lib/camera/voice-guidance';
@@ -162,6 +166,8 @@ export default function CameraOverheadReachPage() {
   const startCueAttemptedRef = useRef(false);
   const successCueAttemptedRef = useRef(false);
   const [startSequenceComplete, setStartSequenceComplete] = useState(false);
+  /** PR G2: readiness phase 기반 큐잉 게이트 (ready_to_shoot 재생 중 = false) */
+  const [captureCuingEnabled, setCaptureCuingEnabled] = useState(false);
   const currentStepKey = `${STEP_ID}:${previewKey}`;
   const nextPath = getNextStepPath(STEP_ID) ?? '/movement-test/camera/complete';
   const debugEnabled = IS_DEV;
@@ -261,6 +267,7 @@ export default function CameraOverheadReachPage() {
     startCueAttemptedRef.current = false;
     successCueAttemptedRef.current = false;
     setStartSequenceComplete(false);
+    setCaptureCuingEnabled(false);
     setPassLatched(false);
     setPassLatchedAt(null);
     setNavigationTriggered(false);
@@ -319,8 +326,37 @@ export default function CameraOverheadReachPage() {
     return () => window.clearTimeout(id);
   }, [cameraReady]);
 
+  /* PR G2: start sequence 완료 후 readiness phase 전환 감지
+   * - red(not_ready): framing cue 허용 (captureCuingEnabled=true)
+   * - red → white(ready): 최초 1회만 ready_to_shoot 재생 → movement cue 허용
+   *   (이미 재생된 세션이면 스킵하고 바로 허용)
+   * - white → red 복귀: framing cue 허용으로 전환 */
   useEffect(() => {
-    if (passLatched || permissionDenied) {
+    if (!startSequenceComplete) return;
+
+    if (liveReadiness === 'ready') {
+      setCaptureCuingEnabled(false);
+      if (hasReadyToShootPlayedThisSession()) {
+        setCaptureCuingEnabled(true);
+        return;
+      }
+      let cancelled = false;
+      void (async () => {
+        await speakVoiceCueAndWait(getReadyToShootVoiceCue());
+        markReadyToShootPlayed();
+        if (!cancelled) setCaptureCuingEnabled(true);
+      })();
+      return () => { cancelled = true; };
+    }
+
+    if (liveReadiness === 'not_ready') {
+      /* red phase: framing cue 허용 */
+      setCaptureCuingEnabled(true);
+    }
+  }, [startSequenceComplete, liveReadiness]);
+
+  useEffect(() => {
+    if (passLatched || permissionDenied || !captureCuingEnabled) {
       return;
     }
 
@@ -336,6 +372,7 @@ export default function CameraOverheadReachPage() {
       liveCueingEnabled: startSequenceComplete,
     });
   }, [
+    captureCuingEnabled,
     gate,
     liveReadiness,
     liveReadinessSummary.framingHint,

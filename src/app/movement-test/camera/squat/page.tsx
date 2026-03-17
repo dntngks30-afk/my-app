@@ -44,6 +44,8 @@ import {
   getReadyToShootVoiceCue,
   getStartVoiceCue,
   getSuccessVoiceCue,
+  hasReadyToShootPlayedThisSession,
+  markReadyToShootPlayed,
   resetVoiceGuidanceSession,
   speakVoiceCue,
   speakVoiceCueAndWait,
@@ -339,12 +341,14 @@ export default function CameraSquatPage() {
     const isWhite = liveReadiness === 'ready';
 
     const runStartSequence = async () => {
-      /* white 상태면 1000ms 확인 후 ready_to_shoot 재생 (setup 단계 전용).
+      /* PR G2: white 상태면 1000ms 확인 후 ready_to_shoot 재생 (setup 단계 전용).
+       * 1회 재생 후 markReadyToShootPlayed()로 중복 차단.
        * capturing 진입 후 white 전환 시의 ready_to_shoot은 별도 useEffect가 담당한다. */
       if (isWhite) {
         await waitForTimer(1000, armingTimerRef);
         if (!isActive()) return;
         await speakVoiceCueAndWait(getReadyToShootVoiceCue());
+        markReadyToShootPlayed();
         if (!isActive()) return;
       }
       /* captureCuingEnabled는 capturing 진입 후 useEffect가 관리하므로 여기서 설정하지 않는다. */
@@ -378,27 +382,35 @@ export default function CameraSquatPage() {
     void runStartSequence();
   }, [liveReadiness, start, waitForTimer]);
 
-  /* capturing 중 liveReadiness 전환 감지:
-   * - white(ready) 진입 시: captureCuingEnabled=false → ready_to_shoot 재생 → 완료 후 true
-   * - red(not_ready) 복귀 시: captureCuingEnabled=false (다시 white가 되면 위 흐름 반복)
-   * - success 또는 pass 시: 교정 큐 불필요하므로 true로 바로 전환 */
+  /* PR G2: capturing 중 readiness phase 전환 감지
+   * - red(not_ready): framing cue만 허용 (captureCuingEnabled=true, ready_to_shoot 없음)
+   * - red → white(ready): 최초 1회만 ready_to_shoot 재생 → 완료 후 movement cue 허용
+   *   (이미 재생된 세션이면 ready_to_shoot 스킵하고 바로 movement cue 허용)
+   * - white → red 복귀: movement cue 차단, framing cue 허용
+   * - success: effectivePassLatched로 corrective cue effect 자체가 막힘 */
   useEffect(() => {
     if (cameraPhase !== 'capturing') return;
 
     if (liveReadiness === 'ready') {
       setCaptureCuingEnabled(false);
+      if (hasReadyToShootPlayedThisSession()) {
+        /* 이미 재생된 세션 — 중복 재생 금지, 바로 movement cue 허용 */
+        setCaptureCuingEnabled(true);
+        return;
+      }
       let cancelled = false;
       void (async () => {
         await speakVoiceCueAndWait(getReadyToShootVoiceCue());
+        markReadyToShootPlayed();
         if (!cancelled) setCaptureCuingEnabled(true);
       })();
       return () => { cancelled = true; };
     }
 
     if (liveReadiness === 'not_ready') {
-      setCaptureCuingEnabled(false);
+      /* red phase: framing cue 허용을 위해 captureCuingEnabled=true */
+      setCaptureCuingEnabled(true);
     }
-    /* success는 effectivePassLatched로 corrective cue effect 자체가 막힘 */
   }, [cameraPhase, liveReadiness]);
 
   useEffect(() => {
