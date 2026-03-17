@@ -425,18 +425,18 @@ export default function CameraOverheadReachPage() {
   ]);
 
   useEffect(() => {
-    if (permissionDenied || !cameraReady || passLatched) {
+    if (permissionDenied || !cameraReady || passLatched || settledRef.current) {
       return;
     }
 
     if (stats.sampledFrameCount === 0) {
-      setProgressionState('camera_ready');
-      setStatusMessage('동작을 시작해 주세요');
+      setProgressionState((prev) => (prev === 'camera_ready' ? prev : 'camera_ready'));
+      setStatusMessage((prev) => (prev === '동작을 시작해 주세요' ? prev : '동작을 시작해 주세요'));
       return;
     }
 
-    setProgressionState(gate.progressionState);
-    setStatusMessage(gate.uiMessage);
+    setProgressionState((prev) => (prev === gate.progressionState ? prev : gate.progressionState));
+    setStatusMessage((prev) => (prev === gate.uiMessage ? prev : gate.uiMessage));
 
     if (passReady) {
       latchPassEvent();
@@ -446,12 +446,14 @@ export default function CameraOverheadReachPage() {
     if (gate.status === 'retry' || gate.status === 'fail') {
       settledRef.current = true;
       stop();
-      setProgressionState(gate.progressionState);
-      setStatusMessage(gate.uiMessage);
+      setProgressionState((prev) => (prev === gate.progressionState ? prev : gate.progressionState));
+      setStatusMessage((prev) => (prev === gate.uiMessage ? prev : gate.uiMessage));
     }
   }, [
     cameraReady,
-    gate,
+    gate.progressionState,
+    gate.status,
+    gate.uiMessage,
     latchPassEvent,
     passReady,
     passLatched,

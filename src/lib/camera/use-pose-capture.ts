@@ -15,6 +15,7 @@ import {
 
 const MAX_CAPTURED_FRAMES = 180; // 약 10~12초 분량 보존
 const TIMESTAMP_GAP_MS = 600;
+const STATS_SYNC_INTERVAL_MS = 120;
 
 export interface PoseCaptureStats {
   sampledFrameCount: number;
@@ -54,9 +55,17 @@ export function usePoseCapture() {
   const lastTimestampMsRef = useRef<number | null>(null);
   const captureStartedAtRef = useRef<number | null>(null);
   const lastAcceptedFrameRef = useRef<PoseFrame | null>(null);
+  const lastStatsSyncedAtRef = useRef(0);
 
-  const syncStats = useCallback((durationMs?: number) => {
-    setStats({
+  const syncStats = useCallback((durationMs?: number, force = false) => {
+    const now = performance.now();
+    if (!force && now - lastStatsSyncedAtRef.current < STATS_SYNC_INTERVAL_MS) {
+      return;
+    }
+    lastStatsSyncedAtRef.current = now;
+
+    setStats((prev) => {
+      const nextStats = {
       sampledFrameCount: sampledFrameCountRef.current,
       droppedFrameCount: droppedFrameCountRef.current,
       filteredLowQualityFrameCount: filteredLowQualityFrameCountRef.current,
@@ -69,6 +78,9 @@ export function usePoseCapture() {
       averageVisibleLandmarkRatio:
         validFrameCountRef.current > 0 ? visibleRatioTotalRef.current / validFrameCountRef.current : 0,
       timestampDiscontinuityCount: timestampDiscontinuityCountRef.current,
+      };
+
+      return JSON.stringify(prev) === JSON.stringify(nextStats) ? prev : nextStats;
     });
   }, []);
 
@@ -125,6 +137,7 @@ export function usePoseCapture() {
       timestampDiscontinuityCountRef.current = 0;
       lastTimestampMsRef.current = null;
       lastAcceptedFrameRef.current = null;
+      lastStatsSyncedAtRef.current = 0;
       captureStartedAtRef.current = performance.now();
       setLandmarks([]);
       setStats(EMPTY_STATS);
@@ -136,7 +149,7 @@ export function usePoseCapture() {
     const durationMs = captureStartedAtRef.current
       ? Math.max(0, performance.now() - captureStartedAtRef.current)
       : 0;
-    syncStats(durationMs);
+    syncStats(durationMs, true);
   }, [syncStats]);
 
   useEffect(() => {

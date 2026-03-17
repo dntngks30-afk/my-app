@@ -407,18 +407,18 @@ export default function CameraSquatPage() {
 
   useEffect(() => {
     if (cameraPhase !== 'capturing') return;
-    if (permissionDenied || !cameraReady || passLatched) {
+    if (permissionDenied || !cameraReady || passLatched || settledRef.current) {
       return;
     }
 
     if (stats.sampledFrameCount === 0) {
-      setProgressionState('camera_ready');
-      setStatusMessage('동작을 시작해 주세요');
+      setProgressionState((prev) => (prev === 'camera_ready' ? prev : 'camera_ready'));
+      setStatusMessage((prev) => (prev === '동작을 시작해 주세요' ? prev : '동작을 시작해 주세요'));
       return;
     }
 
-    setProgressionState(gate.progressionState);
-    setStatusMessage(gate.uiMessage);
+    setProgressionState((prev) => (prev === gate.progressionState ? prev : gate.progressionState));
+    setStatusMessage((prev) => (prev === gate.uiMessage ? prev : gate.uiMessage));
 
     if (finalPassLatched) {
       latchPassEvent();
@@ -428,8 +428,8 @@ export default function CameraSquatPage() {
     if (gate.status === 'retry' || gate.status === 'fail') {
       settledRef.current = true;
       stop();
-      setProgressionState(gate.progressionState);
-      setStatusMessage(gate.uiMessage);
+      setProgressionState((prev) => (prev === gate.progressionState ? prev : gate.progressionState));
+      setStatusMessage((prev) => (prev === gate.uiMessage ? prev : gate.uiMessage));
       appendTransition(
         gate.progressionState,
         gate.failureReasons.length > 0 ? gate.failureReasons.join(',') : gate.reasons.join(',')
@@ -439,7 +439,11 @@ export default function CameraSquatPage() {
     appendTransition,
     cameraPhase,
     cameraReady,
-    gate,
+    gate.failureReasons,
+    gate.progressionState,
+    gate.reasons,
+    gate.status,
+    gate.uiMessage,
     latchPassEvent,
     finalPassLatched,
     passLatched,

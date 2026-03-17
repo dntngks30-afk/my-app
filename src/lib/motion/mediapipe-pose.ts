@@ -93,23 +93,30 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
         return createEmptyPoseFrame(video, timestampMs);
       }
 
-      const result = landmarker.detectForVideo(video, timestampMs);
-      const firstPose = result.landmarks?.[0];
+      try {
+        const result = landmarker.detectForVideo(video, timestampMs);
+        const firstPose = result.landmarks?.[0];
 
-      if (!firstPose || firstPose.length === 0) {
+        if (!firstPose || firstPose.length === 0) {
+          return createEmptyPoseFrame(video, timestampMs);
+        }
+
+        return toPoseFrame(
+          video,
+          timestampMs,
+          firstPose.map((landmark) => ({
+            x: landmark.x,
+            y: landmark.y,
+            z: landmark.z,
+            visibility: landmark.visibility,
+          }))
+        );
+      } catch (error) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[mediapipe-pose] detectForVideo failed', error);
+        }
         return createEmptyPoseFrame(video, timestampMs);
       }
-
-      return toPoseFrame(
-        video,
-        timestampMs,
-        firstPose.map((landmark) => ({
-          x: landmark.x,
-          y: landmark.y,
-          z: landmark.z,
-          visibility: landmark.visibility,
-        }))
-      );
     },
     close() {
       // Shared landmarker는 유지하고 preview loop만 정리한다.
