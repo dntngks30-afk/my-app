@@ -16,6 +16,7 @@ export type KoreanCueClipKey =
   | 'countdown_2'
   | 'countdown_1'
   | 'framing_full_body'
+  | 'framing_center_body'
   | 'framing_hold_still'
   | 'framing_step_back'
   | 'move_slowly'
@@ -34,7 +35,7 @@ const DEDUPE_KEY_TO_CLIP: Record<string, KoreanCueClipKey> = {
   'countdown:1': 'countdown_1',
   'correction:full-body': 'framing_full_body',
   'correction:step-back': 'framing_step_back',
-  'correction:framing': 'framing_full_body',
+  'correction:framing': 'framing_center_body',
   'correction:hold:overhead-reach': 'overhead_hold_top',
   'success:generic': 'good_job',
 };
@@ -46,6 +47,7 @@ const TEXT_TO_CLIP: Record<string, KoreanCueClipKey> = {
   '양팔을 머리 위로 끝까지 올려주세요': 'overhead_raise_higher',
   '맨 위에서 잠깐 멈춰주세요': 'overhead_hold_top',
   '자세를 잠깐 고정한 뒤 다시 해주세요': 'framing_hold_still',
+  '전신이 화면에 들어오게 맞춰주세요': 'framing_center_body',
 };
 
 const AUDIO_BASE = '/audio/cues/ko';

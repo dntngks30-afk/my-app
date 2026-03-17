@@ -10,7 +10,8 @@
 | countdown_3.mp3 | 카운트다운 3 |
 | countdown_2.mp3 | 카운트다운 2 |
 | countdown_1.mp3 | 카운트다운 1 |
-| framing_full_body.mp3 | 머리부터 발끝까지 / 전신이 화면에 들어오게 |
+| framing_full_body.mp3 | 머리부터 발끝까지 보이게 해주세요 |
+| framing_center_body.mp3 | 전신이 화면에 들어오게 맞춰주세요 |
 | framing_hold_still.mp3 | 자세를 잠깐 고정한 뒤 다시 해주세요 |
 | framing_step_back.mp3 | 조금 뒤로 가 주세요 |
 | move_slowly.mp3 | 카메라를 고정하고 천천히 움직여주세요 |
