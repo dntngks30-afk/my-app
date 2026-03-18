@@ -550,6 +550,8 @@ function getSquatProgressionCompletionSatisfied(
   const bottomDetected = bottomCount > 0;
   const ascendDetected = ascentCount > 0;
   const recoveryDetected = ascentRecovered > 0;
+  /** PR G10: recovery proves meaningful excursion (peak>=10%, came back). Allow completion without bottom phase. */
+  const excursionOrBottomConfirmed = bottomDetected || recoveryDetected;
 
   const bottomTurningPointDetected = bottomDetected;
   const depthBandLabel: 'shallow' | 'moderate' | 'deep' =
@@ -587,8 +589,8 @@ function getSquatProgressionCompletionSatisfied(
     squatCycleDebug.passBlockedReason = 'descend_not_detected';
     return { satisfied: false, squatCycleDebug };
   }
-  if (!bottomDetected) {
-    squatCycleDebug.passBlockedReason = 'bottom_not_detected';
+  if (!excursionOrBottomConfirmed) {
+    squatCycleDebug.passBlockedReason = 'excursion_not_confirmed';
     return { satisfied: false, squatCycleDebug };
   }
   if (!ascendDetected && !recoveryDetected) {

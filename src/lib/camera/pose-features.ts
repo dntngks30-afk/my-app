@@ -601,8 +601,8 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
 
   if (stepId === 'squat') {
     const maxDepth = Math.max(...frames.map((frame) => frame.derived.squatDepthProxy ?? 0));
-    /** PR G9: bottom = 40% of excursion (was 50%). Shallower real cycle can pass. */
-    const bottomThreshold = maxDepth * 0.4;
+    /** PR G10: bottom = 30% of excursion. Shallower real cycle can get bottom phase. */
+    const bottomThreshold = maxDepth * 0.3;
     const candidates = frames.map((frame, index) => {
       const previousDepth = index > 0 ? frames[index - 1]!.derived.squatDepthProxy : null;
       const currentDepth = frame.derived.squatDepthProxy;
@@ -613,7 +613,7 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
 
         if (currentDepth < 0.08) {
           phaseHint = 'start';
-        } else if (currentDepth >= bottomThreshold && Math.abs(depthDelta) < 0.018) {
+        } else if (currentDepth >= bottomThreshold && Math.abs(depthDelta) < 0.022) {
           phaseHint = 'bottom';
         } else if (depthDelta > 0.008) {
           phaseHint = 'descent';

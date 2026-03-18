@@ -194,10 +194,12 @@ function getMotionCompleteness(
       return { score: 0.2, status: 'partial' };
     }
     const peakDepth = Math.max(...depthValues);
+    /** PR G10: recovery proves meaningful excursion. Allow complete without bottom phase. */
+    const excursionOrBottom = bottomCount > 0 || recovery.recovered;
     if (
       peakDepth < SQUAT_NOISE_FLOOR ||
       descentCount === 0 ||
-      bottomCount === 0 ||
+      !excursionOrBottom ||
       !ascentSatisfied
     ) {
       flags.add('rep_incomplete');
