@@ -101,6 +101,13 @@ export interface SquatRecoverySignal {
   ultraLowRomRecovered: boolean;
   /** PR-A5: guarded ultra-low-ROM — peak 1–2%, 60% recovery, 5+ trailing frames. Stricter than ultraLowRom. */
   ultraLowRomGuardedRecovered: boolean;
+  /** PR squat-low-rom: trace — return-to-standing continuity */
+  recoveryPeakDepth?: number;
+  recoveryDropRatio?: number;
+  trailingDepthCount?: number;
+  returnContinuityFrames?: number;
+  lowRomRecoveryReason?: string;
+  ultraLowRomRecoveryReason?: string;
 }
 
 const VISIBILITY_THRESHOLD = 0.45;
@@ -182,6 +189,27 @@ function mean(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+/**
+ * PR squat-low-rom: return-to-standing continuity.
+ * Count consecutive frames at tail where depth <= peak * (1 - minRecoveryRatio).
+ * When continuity >= 3, accept slightly relaxed recoveryDrop for low/ultra-low.
+ */
+function getReturnContinuityFrames(
+  trailingDepths: number[],
+  peakDepth: number,
+  minRecoveryRatio: number
+): number {
+  let count = 0;
+  for (let i = trailingDepths.length - 1; i >= 0; i--) {
+    if (trailingDepths[i]! <= peakDepth * (1 - minRecoveryRatio)) {
+      count += 1;
+    } else {
+      break;
+    }
+  }
+  return count;
+}
+
 export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecoverySignal {
   const depthSeries = frames
     .map((frame, index) => ({
@@ -190,16 +218,24 @@ export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecove
     }))
     .filter((entry): entry is { index: number; depth: number } => typeof entry.depth === 'number');
 
+  const emptyResult = (peakDepth: number, tailDepth: number, recoveryDrop: number) => ({
+    peakDepth,
+    tailDepth,
+    recoveryDrop,
+    recovered: false,
+    lowRomRecovered: false,
+    ultraLowRomRecovered: false,
+    ultraLowRomGuardedRecovered: false,
+    recoveryPeakDepth: peakDepth,
+    recoveryDropRatio: peakDepth > 0 ? recoveryDrop / peakDepth : 0,
+    trailingDepthCount: 0,
+    returnContinuityFrames: 0,
+    lowRomRecoveryReason: 'trailing_too_few' as const,
+    ultraLowRomRecoveryReason: 'trailing_too_few' as const,
+  });
+
   if (depthSeries.length < 4) {
-    return {
-      peakDepth: 0,
-      tailDepth: 0,
-      recoveryDrop: 0,
-      recovered: false,
-      lowRomRecovered: false,
-      ultraLowRomRecovered: false,
-      ultraLowRomGuardedRecovered: false,
-    };
+    return { ...emptyResult(0, 0, 0), trailingDepthCount: depthSeries.length };
   }
 
   const peakSample = depthSeries.reduce((best, entry) => (entry.depth > best.depth ? entry : best));
@@ -207,36 +243,66 @@ export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecove
     .filter((entry) => entry.index > peakSample.index)
     .map((entry) => entry.depth);
 
+  const trailingDepthCount = trailingDepths.length;
+
   if (trailingDepths.length < 3) {
     return {
-      peakDepth: peakSample.depth,
-      tailDepth: peakSample.depth,
-      recoveryDrop: 0,
-      recovered: false,
-      lowRomRecovered: false,
-      ultraLowRomRecovered: false,
-      ultraLowRomGuardedRecovered: false,
+      ...emptyResult(peakSample.depth, peakSample.depth, 0),
+      trailingDepthCount,
+      recoveryDropRatio: 0,
     };
   }
 
   const tailWindow = trailingDepths.slice(-Math.min(6, trailingDepths.length));
   const tailDepth = mean(tailWindow);
   const recoveryDrop = peakSample.depth - tailDepth;
+  const dropRatio = peakSample.depth > 0 ? recoveryDrop / peakSample.depth : 0;
 
-  /** PR G9: allow shallower valid cycle. Min 10% depth (was 12%). 복귀: recoveryDrop >= peakDepth * 0.25 */
+  /** PR squat-low-rom: return-to-standing continuity — consecutive frames at tail below peak*0.6 */
+  const returnContinuityFrames = getReturnContinuityFrames(trailingDepths, peakSample.depth, 0.4);
+  const hasReturnContinuity = returnContinuityFrames >= 3;
+
+  /** PR G9: allow shallower valid cycle. Min 10% depth. 복귀: recoveryDrop >= peakDepth * 0.25 */
   const recovered =
     peakSample.depth >= 0.1 && recoveryDrop >= peakSample.depth * 0.25;
 
-  /** PR G11: low-ROM path. Min 7% excursion, stricter recovery (40%). Blocks tiny dip. */
+  /** PR G11: low-ROM path. Min 7% excursion. Stricter recovery (40%) OR continuity bonus (35% when 3+ return frames). */
+  const lowRomDropOk = recoveryDrop >= peakSample.depth * 0.4;
+  const lowRomContinuityOk =
+    hasReturnContinuity && recoveryDrop >= peakSample.depth * 0.35;
   const lowRomRecovered =
     peakSample.depth >= 0.07 &&
-    recoveryDrop >= peakSample.depth * 0.4;
+    peakSample.depth < 0.1 &&
+    (lowRomDropOk || lowRomContinuityOk);
 
-  /** Ultra-low-ROM path. Min 2% excursion (above tiny-dip), 50% recovery. Real cycle proof. */
+  const lowRomRecoveryReason = !(peakSample.depth >= 0.07 && peakSample.depth < 0.1)
+    ? 'peak_out_of_range'
+    : lowRomRecovered
+      ? lowRomDropOk
+        ? 'recovery_drop_40'
+        : 'return_continuity_35'
+      : lowRomContinuityOk
+        ? 'recovery_drop_below_35'
+        : 'recovery_drop_below_40';
+
+  /** Ultra-low-ROM path. Min 2% excursion, 50% recovery OR continuity bonus (45% when 3+ return frames). */
+  const ultraDropOk = recoveryDrop >= peakSample.depth * 0.5;
+  const ultraContinuityOk =
+    hasReturnContinuity && recoveryDrop >= peakSample.depth * 0.45;
   const ultraLowRomRecovered =
     peakSample.depth >= 0.02 &&
     peakSample.depth < 0.07 &&
-    recoveryDrop >= peakSample.depth * 0.5;
+    (ultraDropOk || ultraContinuityOk);
+
+  const ultraLowRomRecoveryReason = !(peakSample.depth >= 0.02 && peakSample.depth < 0.07)
+    ? 'peak_out_of_range'
+    : ultraLowRomRecovered
+      ? ultraDropOk
+        ? 'recovery_drop_50'
+        : 'return_continuity_45'
+      : ultraContinuityOk
+        ? 'recovery_drop_below_45'
+        : 'recovery_drop_below_50';
 
   /** PR-A5: guarded ultra-low-ROM — peak 1–2%, 60% recovery, 5+ trailing frames. Anti-tiny-dip. */
   const ultraLowRomGuardedRecovered =
@@ -253,6 +319,12 @@ export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecove
     lowRomRecovered,
     ultraLowRomRecovered,
     ultraLowRomGuardedRecovered,
+    recoveryPeakDepth: peakSample.depth,
+    recoveryDropRatio: dropRatio,
+    trailingDepthCount,
+    returnContinuityFrames,
+    lowRomRecoveryReason,
+    ultraLowRomRecoveryReason,
   };
 }
 
@@ -636,6 +708,10 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
     const maxDepth = Math.max(...frames.map((frame) => frame.derived.squatDepthProxy ?? 0));
     /** PR G10: bottom = 30% of excursion. Shallower real cycle can get bottom phase. */
     const bottomThreshold = maxDepth * 0.3;
+    /** PR squat-low-rom: shallow range (5–12%) uses lower delta for descent/ascent. Standing (<5%) keeps 0.008. */
+    const isShallowRange = maxDepth >= 0.05 && maxDepth < 0.12;
+    const descentDelta = isShallowRange ? 0.006 : 0.008;
+    const ascentDelta = isShallowRange ? 0.006 : 0.008;
     const candidates = frames.map((frame, index) => {
       const previousDepth = index > 0 ? frames[index - 1]!.derived.squatDepthProxy : null;
       const currentDepth = frame.derived.squatDepthProxy;
@@ -648,9 +724,9 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
           phaseHint = 'start';
         } else if (currentDepth >= bottomThreshold && Math.abs(depthDelta) < 0.022) {
           phaseHint = 'bottom';
-        } else if (depthDelta > 0.008) {
+        } else if (depthDelta > descentDelta) {
           phaseHint = 'descent';
-        } else if (depthDelta < -0.008) {
+        } else if (depthDelta < -ascentDelta) {
           phaseHint = 'ascent';
         }
       }

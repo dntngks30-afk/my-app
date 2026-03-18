@@ -236,6 +236,12 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         ascentRecoveredUltraLowRom: recovery.ultraLowRomRecovered ? 1 : 0,
         ascentRecoveredUltraLowRomGuarded: recovery.ultraLowRomGuardedRecovered ? 1 : 0,
         recoveryDrop: Math.round(recovery.recoveryDrop * 100),
+        /** PR squat-low-rom: trace */
+        recoveryReturnContinuityFrames: recovery.returnContinuityFrames,
+        recoveryTrailingDepthCount: recovery.trailingDepthCount,
+        recoveryDropRatio: recovery.recoveryDropRatio != null ? Math.round(recovery.recoveryDropRatio * 100) / 100 : undefined,
+        lowRomRecoveryReason: recovery.lowRomRecoveryReason,
+        ultraLowRomRecoveryReason: recovery.ultraLowRomRecoveryReason,
         repCount: repCountEstimate,
         cycleComplete: cycleComplete ? 1 : 0,
         startBeforeBottom: startBeforeBottom ? 1 : 0,

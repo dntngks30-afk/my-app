@@ -66,6 +66,12 @@ export interface SquatCycleDebug {
   romBand?: 'shallow' | 'moderate' | 'deep';
   confidenceDowngradeReason?: string | null;
   insufficientSignalReason?: string | null;
+  /** PR squat-low-rom: trace — why low/ultra-low path blocked */
+  lowRomRejectionReason?: string | null;
+  ultraLowRomRejectionReason?: string | null;
+  recoveryReturnContinuityFrames?: number;
+  recoveryTrailingDepthCount?: number;
+  recoveryDropRatio?: number;
 }
 
 export interface ExerciseGateResult {
@@ -581,6 +587,11 @@ function getSquatProgressionCompletionSatisfied(
   const cycleComplete = getHighlightedMetric(result, 'cycleComplete') > 0;
   const depthPeak = getHighlightedMetric(result, 'depthPeak');
   const depthBand = getHighlightedMetric(result, 'depthBand'); /* 0=shallow, 1=moderate, 2=deep */
+  const lowRomRecoveryReason = (result.debug?.highlightedMetrics?.lowRomRecoveryReason as string) ?? null;
+  const ultraLowRomRecoveryReason = (result.debug?.highlightedMetrics?.ultraLowRomRecoveryReason as string) ?? null;
+  const recoveryReturnContinuityFrames = (result.debug?.highlightedMetrics?.recoveryReturnContinuityFrames as number) ?? undefined;
+  const recoveryTrailingDepthCount = (result.debug?.highlightedMetrics?.recoveryTrailingDepthCount as number) ?? undefined;
+  const recoveryDropRatio = (result.debug?.highlightedMetrics?.recoveryDropRatio as number) ?? undefined;
   const downwardCommitmentDelta =
     (getHighlightedMetric(result, 'downwardCommitmentDelta') ?? 0) / 100;
 
@@ -702,6 +713,13 @@ function getSquatProgressionCompletionSatisfied(
     romBand: depthBandLabel,
     confidenceDowngradeReason,
     insufficientSignalReason,
+    lowRomRejectionReason:
+      depthPeak >= 7 && depthPeak < 10 && !recoveryLowRomDetected ? lowRomRecoveryReason : null,
+    ultraLowRomRejectionReason:
+      depthPeak >= 2 && depthPeak < 7 && !recoveryUltraLowRomDetected ? ultraLowRomRecoveryReason : null,
+    recoveryReturnContinuityFrames,
+    recoveryTrailingDepthCount,
+    recoveryDropRatio,
   };
 
   if (guardrail.completionStatus !== 'complete') {
@@ -743,7 +761,12 @@ function getSquatProgressionCompletionSatisfied(
   }
   if (!excursionOrBottomConfirmed) {
     squatCycleDebug.passBlockedReason = 'excursion_not_confirmed';
-    squatCycleDebug.completionRejectedReason = 'excursion_not_confirmed';
+    squatCycleDebug.completionRejectedReason =
+      depthPeak >= 7 && depthPeak < 10 && !recoveryLowRomDetected
+        ? `excursion_low_rom:${lowRomRecoveryReason ?? 'unknown'}`
+        : depthPeak >= 2 && depthPeak < 7 && !recoveryUltraLowRomDetected
+          ? `excursion_ultra_low_rom:${ultraLowRomRecoveryReason ?? 'unknown'}`
+          : 'excursion_not_confirmed';
     squatCycleDebug.falsePositiveBlockReason = 'excursion_not_confirmed';
     squatCycleDebug.insufficientSignalReason = 'excursion_not_confirmed';
     squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
@@ -761,7 +784,12 @@ function getSquatProgressionCompletionSatisfied(
   }
   if (!recoveryOrLowRom) {
     squatCycleDebug.passBlockedReason = 'recovery_not_confirmed';
-    squatCycleDebug.completionRejectedReason = 'recovery_not_confirmed';
+    squatCycleDebug.completionRejectedReason =
+      depthPeak >= 7 && depthPeak < 10
+        ? `recovery_low_rom:${lowRomRecoveryReason ?? 'unknown'}`
+        : depthPeak >= 2 && depthPeak < 7
+          ? `recovery_ultra_low_rom:${ultraLowRomRecoveryReason ?? 'unknown'}`
+          : 'recovery_not_confirmed';
     squatCycleDebug.falsePositiveBlockReason = 'recovery_not_confirmed';
     squatCycleDebug.insufficientSignalReason = 'recovery_not_confirmed';
     squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
