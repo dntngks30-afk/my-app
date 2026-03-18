@@ -785,6 +785,11 @@ export function evaluateExerciseAutoProgress(
   } else {
     completionSatisfied = getCompletionSatisfied(stepId, evaluatorResult, guardrail, stats);
   }
+  /** PR G10: overhead — passConfirmation is provisional; never true without completion. */
+  const effectivePassConfirmation =
+    stepId === 'overhead-reach'
+      ? passConfirmation.satisfied && completionSatisfied
+      : passConfirmation.satisfied;
   const squatQualitySignals =
     stepId === 'squat' ? getSquatQualitySignals(evaluatorResult, confidence) : null;
   const severeFail = isSevereInvalid(guardrail) && stats.captureDurationMs >= 4500;
@@ -823,7 +828,7 @@ export function evaluateExerciseAutoProgress(
       guardrail,
       uiMessage: detecting.uiMessage,
       autoAdvanceDelayMs,
-      passConfirmationSatisfied: passConfirmation.satisfied,
+      passConfirmationSatisfied: effectivePassConfirmation,
       passConfirmationFrameCount: passConfirmation.stableFrameCount,
       passConfirmationWindowCount: passConfirmation.windowFrameCount,
       ...(squatCycleDebug && { squatCycleDebug }),
@@ -834,7 +839,7 @@ export function evaluateExerciseAutoProgress(
     completionSatisfied &&
     guardrail.captureQuality !== 'invalid' &&
     confidence >= passThreshold &&
-    passConfirmation.satisfied &&
+    effectivePassConfirmation &&
     !hasAnyReason(reasons, hardBlockerReasons) &&
     !hasAnyReason(reasons, ['rep_incomplete', 'hold_too_short']);
 
@@ -857,7 +862,7 @@ export function evaluateExerciseAutoProgress(
           ? '좋습니다, 동작을 확인했어요'
           : '충분한 신호를 확인했어요',
       autoAdvanceDelayMs,
-      passConfirmationSatisfied: true,
+      passConfirmationSatisfied: effectivePassConfirmation,
       passConfirmationFrameCount: passConfirmation.stableFrameCount,
       passConfirmationWindowCount: passConfirmation.windowFrameCount,
       ...(squatCycleDebug && { squatCycleDebug }),
@@ -880,7 +885,7 @@ export function evaluateExerciseAutoProgress(
       guardrail,
       uiMessage: '설문형으로 전환할 수 있어요',
       autoAdvanceDelayMs,
-      passConfirmationSatisfied: passConfirmation.satisfied,
+      passConfirmationSatisfied: effectivePassConfirmation,
       passConfirmationFrameCount: passConfirmation.stableFrameCount,
       passConfirmationWindowCount: passConfirmation.windowFrameCount,
       ...(squatCycleDebug && { squatCycleDebug }),
@@ -944,7 +949,7 @@ export function evaluateExerciseAutoProgress(
     guardrail,
     uiMessage: '좋습니다, 계속하세요',
     autoAdvanceDelayMs,
-    passConfirmationSatisfied: passConfirmation.satisfied,
+    passConfirmationSatisfied: effectivePassConfirmation,
     passConfirmationFrameCount: passConfirmation.stableFrameCount,
     passConfirmationWindowCount: passConfirmation.windowFrameCount,
     ...(squatCycleDebug && { squatCycleDebug }),

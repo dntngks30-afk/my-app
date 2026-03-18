@@ -119,5 +119,8 @@ ok('H: short hold does not satisfy completion (no instant pass)', !shortHoldGate
 // I. Squat unchanged (run squat smoke test separately to verify)
 ok('I: overhead-reach evaluator unchanged for squat', true);
 
+// J. PR G10: passConfirmation gated by completion — arm raise alone must not yield passConfirmed
+ok('J: weak raise has passConfirmationSatisfied=false when completionSatisfied=false', !weakGate.completionSatisfied && !weakGate.passConfirmationSatisfied);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

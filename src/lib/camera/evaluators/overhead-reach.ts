@@ -70,10 +70,27 @@ export function evaluateOverheadReachFromPoseFrames(
   );
   const raiseCount = countPhases(valid, 'raise');
   const peakFrames = valid.filter((frame) => frame.phaseHint === 'peak');
-  const peakCount = peakFrames.length;
+  /** PR G10: hold only counts after true top entry — blocks early pass from arm raise alone */
+  const maxElevation = armElevationAvgValues.length > 0 ? Math.max(...armElevationAvgValues) : 0;
+  const topEntryThreshold = Math.max(maxElevation * 0.95, 118);
+  let topEntryIndex = -1;
+  for (let i = 0; i < valid.length; i++) {
+    const e = valid[i]!.derived.armElevationAvg;
+    const prev = i > 0 ? valid[i - 1]!.derived.armElevationAvg : null;
+    const delta = typeof e === 'number' && typeof prev === 'number' ? e - prev : 0;
+    if (typeof e === 'number' && e >= topEntryThreshold && Math.abs(delta) < 2.6) {
+      topEntryIndex = i;
+      break;
+    }
+  }
+  const topConfirmedPeaks =
+    topEntryIndex >= 0
+      ? peakFrames.filter((f) => valid.indexOf(f) >= topEntryIndex)
+      : [];
+  const peakCount = topConfirmedPeaks.length;
   const holdDurationMs =
-    peakFrames.length > 1
-      ? peakFrames[peakFrames.length - 1]!.timestampMs - peakFrames[0]!.timestampMs
+    topConfirmedPeaks.length > 1
+      ? topConfirmedPeaks[topConfirmedPeaks.length - 1]!.timestampMs - topConfirmedPeaks[0]!.timestampMs
       : 0;
 
   if (raiseCount === 0 || peakCount === 0) {

@@ -233,18 +233,31 @@ function getMotionCompleteness(
   }
 
   /* PR G8/G9: overhead reach — hold_too_short at 650ms creates buffer before completion (800ms).
-   * Avoids hold cue and success firing in same edge window. */
+   * PR G10: hold only counts after true top entry — blocks early pass from arm raise alone. */
   if (stepId === 'overhead-reach') {
     const armElevations = frames
       .map((frame) => frame.derived.armElevationAvg)
       .filter((value): value is number => typeof value === 'number');
     const peakFrames = frames.filter((frame) => frame.phaseHint === 'peak');
     const raiseCount = frames.filter((frame) => frame.phaseHint === 'raise').length;
-    const peakCount = peakFrames.length;
     const peakElevation = armElevations.length > 0 ? Math.max(...armElevations) : 0;
+    const topEntryThreshold = Math.max(peakElevation * 0.95, 118);
+    let topEntryIndex = -1;
+    for (let i = 0; i < frames.length; i++) {
+      const e = frames[i]!.derived.armElevationAvg;
+      const prev = i > 0 ? frames[i - 1]!.derived.armElevationAvg : null;
+      const delta = typeof e === 'number' && typeof prev === 'number' ? e - prev : 0;
+      if (typeof e === 'number' && e >= topEntryThreshold && Math.abs(delta) < 2.6) {
+        topEntryIndex = i;
+        break;
+      }
+    }
+    const topConfirmedPeaks =
+      topEntryIndex >= 0 ? peakFrames.filter((f) => frames.indexOf(f) >= topEntryIndex) : [];
+    const peakCount = topConfirmedPeaks.length;
     const holdDurationMs =
-      peakFrames.length > 1
-        ? peakFrames[peakFrames.length - 1]!.timestampMs - peakFrames[0]!.timestampMs
+      topConfirmedPeaks.length > 1
+        ? topConfirmedPeaks[topConfirmedPeaks.length - 1]!.timestampMs - topConfirmedPeaks[0]!.timestampMs
         : 0;
 
     if (frames.length < 10 || peakElevation < 120 || raiseCount === 0 || peakCount === 0) {
