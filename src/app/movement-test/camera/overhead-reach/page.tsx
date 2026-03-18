@@ -61,6 +61,8 @@ const BG = '#0d161f';
 const ACCENT = '#ff7b00';
 const STEP_ID: CameraStepId = 'overhead-reach';
 const IS_DEV = process.env.NODE_ENV !== 'production';
+/** final outro 재생 실패 시 fallback 대기 시간 (ms) */
+const FINAL_OUTRO_FALLBACK_MS = 5000;
 const DEBUG_SESSION_KEY = `move-re-camera-debug:${STEP_ID}`;
 
 const INSTRUCTION = '정면으로 서서 양팔을 머리 위로 올리고, 맨 위에서 잠깐 멈춰주세요.';
@@ -179,6 +181,8 @@ export default function CameraOverheadReachPage() {
   const readyToShootAttemptedRef = useRef(false);
   const currentStepKey = `${STEP_ID}:${previewKey}`;
   const nextPath = getNextStepPath(STEP_ID) ?? '/movement-test/camera/complete';
+  /** 마지막 단계(overhead-reach → complete): outro 재생 완료 후에만 이동 */
+  const isFinalStep = getNextStepPath(STEP_ID) === null;
   const debugEnabled = IS_DEV;
 
   const gate = useMemo(
@@ -450,11 +454,15 @@ export default function CameraOverheadReachPage() {
     if (!effectivePassLatched || successCueAttemptedRef.current) {
       return;
     }
+    /* 마지막 단계: success cue는 navigation effect에서 speakVoiceCueAndWait로 재생 후 이동 */
+    if (isFinalStep) {
+      return;
+    }
 
     successCueAttemptedRef.current = true;
     cancelCorrectiveCueForSuccess();
     void speakVoiceCue(getFinalSuccessVoiceCue());
-  }, [effectivePassLatched]);
+  }, [effectivePassLatched, isFinalStep]);
 
   const latchPassEvent = useCallback(() => {
     if (passLatchedStepKeyRef.current === currentStepKey || passLatched) {
@@ -642,14 +650,14 @@ export default function CameraOverheadReachPage() {
           }
         : prev
     );
-    autoAdvanceTimerRef.current = window.setTimeout(() => {
+
+    const doNavigate = () => {
       if (
         triggeredAdvanceStepKeyRef.current === currentStepKey ||
         passLatchedStepKeyRef.current !== currentStepKey
       ) {
         return;
       }
-
       triggeredAdvanceStepKeyRef.current = currentStepKey;
       const triggeredAt = new Date().toISOString();
       setNavigationTriggered(true);
@@ -670,7 +678,6 @@ export default function CameraOverheadReachPage() {
             }
           : prev
       );
-
       if (IS_DEV) {
         console.info('[camera:auto-next]', {
           stepId: STEP_ID,
@@ -679,14 +686,30 @@ export default function CameraOverheadReachPage() {
           reason: 'route_push_next_step',
         });
       }
-
       router.push(nextPath);
-    }, gate.autoAdvanceDelayMs);
+    };
+
+    if (isFinalStep) {
+      /* 마지막 단계: final outro 재생 완료 후에만 이동. 실패/타임아웃 시 fallback으로 이동 */
+      void (async () => {
+        const timeout = new Promise<boolean>((r) =>
+          setTimeout(() => r(false), FINAL_OUTRO_FALLBACK_MS)
+        );
+        await Promise.race([
+          speakVoiceCueAndWait(getFinalSuccessVoiceCue()),
+          timeout,
+        ]);
+        doNavigate();
+      })();
+    } else {
+      autoAdvanceTimerRef.current = window.setTimeout(doNavigate, gate.autoAdvanceDelayMs);
+    }
   }, [
     clearAutoAdvanceTimer,
     currentStepKey,
     effectivePassLatched,
     gate.autoAdvanceDelayMs,
+    isFinalStep,
     latchPassEvent,
     navigationTriggered,
     nextPath,
