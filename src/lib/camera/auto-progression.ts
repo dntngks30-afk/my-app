@@ -188,7 +188,7 @@ function getStableSignalBonus(stepId: CameraStepId, result: EvaluatorResult): nu
     const raiseCount = getHighlightedMetric(result, 'raiseCount');
     const peakCount = getHighlightedMetric(result, 'peakCount');
     const holdDurationMs = getHighlightedMetric(result, 'holdDurationMs');
-    return raiseCount > 0 && peakCount >= 4 && holdDurationMs >= 700 ? 0.04 : 0;
+    return raiseCount > 0 && peakCount >= OVERHEAD_MIN_PEAK_FRAMES && holdDurationMs >= OVERHEAD_HOLD_COMPLETION_MS ? 0.04 : 0;
   }
 
   const holdOngoingCount = getHighlightedMetric(result, 'holdOngoingCount');
@@ -277,7 +277,11 @@ function evaluateWallAngelCompletion(result: EvaluatorResult, guardrail: StepGua
   );
 }
 
-/** PR G8: overhead reach — real attempt required. Was 110°/600ms (too easy). */
+/** PR G8/G9: overhead reach — real attempt + brief top confirmation before success.
+ * hold 800ms + peakCount>=3 avoids premature pass and hold-cue/success overlap. */
+const OVERHEAD_HOLD_COMPLETION_MS = 800;
+const OVERHEAD_MIN_PEAK_FRAMES = 3;
+
 function evaluateOverheadReachCompletion(
   result: EvaluatorResult,
   guardrail: StepGuardrailResult
@@ -292,9 +296,9 @@ function evaluateOverheadReachCompletion(
   return (
     guardrail.completionStatus === 'complete' &&
     effectiveArm >= 120 &&
-    holdDuration >= 700 &&
+    holdDuration >= OVERHEAD_HOLD_COMPLETION_MS &&
     raiseCount > 0 &&
-    peakCount > 0
+    peakCount >= OVERHEAD_MIN_PEAK_FRAMES
   );
 }
 

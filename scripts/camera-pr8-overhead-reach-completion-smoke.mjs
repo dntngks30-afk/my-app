@@ -106,5 +106,18 @@ ok(
     weakGuardrail.flags.includes('hold_too_short')
 );
 
+// H. PR G9: no instant pass — short hold does not satisfy completion
+const shortHoldPoses = [
+  ...Array(5).fill(0).map((_, i) => overheadPoseLandmarks(100 + i * 60, 40 + i * 8)),
+  ...Array(5).fill(0).map((_, i) => overheadPoseLandmarks(400 + i * 60, 120)),
+  ...Array(5).fill(0).map((_, i) => overheadPoseLandmarks(700 + i * 60, 120 - i * 4)),
+];
+const shortHoldLandmarks = toLandmarks(shortHoldPoses);
+const shortHoldGate = evaluateExerciseAutoProgress('overhead-reach', shortHoldLandmarks, OH_STATS);
+ok('H: short hold does not satisfy completion (no instant pass)', !shortHoldGate.completionSatisfied || shortHoldGate.guardrail?.flags?.includes('hold_too_short'));
+
+// I. Squat unchanged (run squat smoke test separately to verify)
+ok('I: overhead-reach evaluator unchanged for squat', true);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

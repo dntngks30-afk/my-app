@@ -222,7 +222,8 @@ function getMotionCompleteness(
     return { score: clamp(peakElevation / 155), status: 'complete' };
   }
 
-  /* PR G8: overhead reach — real attempt. peak 120°, hold 700ms (was 110°/600ms). */
+  /* PR G8/G9: overhead reach — hold_too_short at 650ms creates buffer before completion (800ms).
+   * Avoids hold cue and success firing in same edge window. */
   if (stepId === 'overhead-reach') {
     const armElevations = frames
       .map((frame) => frame.derived.armElevationAvg)
@@ -240,7 +241,7 @@ function getMotionCompleteness(
       flags.add('rep_incomplete');
       return { score: clamp(peakElevation / 150), status: 'partial' };
     }
-    if (holdDurationMs < 700) {
+    if (holdDurationMs < 650) {
       flags.add('hold_too_short');
       return { score: clamp(Math.max(peakElevation / 155, holdDurationMs / 900)), status: 'partial' };
     }
