@@ -279,6 +279,9 @@ export interface SquatFailedShallowSnapshot {
   ultraLowRomRecoveryConfirmed: boolean;
   passConfirmationSatisfied: boolean;
   cycleDurationMs: number | undefined;
+  guardrailPartialReason?: string | null;
+  lowRomRecoveredReason?: string | null;
+  ultraLowRomRecoveredReason?: string | null;
   diagVersion: string;
 }
 
@@ -339,6 +342,9 @@ export function recordSquatFailedShallowSnapshot(
       ultraLowRomRecoveryConfirmed,
       passConfirmationSatisfied: gate.passConfirmationSatisfied ?? false,
       cycleDurationMs: sc?.cycleDurationMs,
+      guardrailPartialReason: gate.guardrail.debug?.guardrailPartialReason ?? null,
+      lowRomRecoveredReason: sc?.lowRomRejectionReason ?? (hm?.lowRomRecoveryReason as string) ?? null,
+      ultraLowRomRecoveredReason: sc?.ultraLowRomRejectionReason ?? (hm?.ultraLowRomRecoveryReason as string) ?? null,
       diagVersion: CAMERA_DIAG_VERSION,
     };
 

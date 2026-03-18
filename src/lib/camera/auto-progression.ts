@@ -74,6 +74,10 @@ export interface SquatCycleDebug {
   recoveryReturnContinuityFrames?: number;
   recoveryTrailingDepthCount?: number;
   recoveryDropRatio?: number;
+  /** PR shallow: guardrail partial 시 이유 (guardrail_not_complete일 때) */
+  guardrailPartialReason?: string;
+  /** PR shallow: guardrail complete 시 경로 */
+  guardrailCompletePath?: string;
 }
 
 export interface ExerciseGateResult {
@@ -742,6 +746,7 @@ function getSquatProgressionCompletionSatisfied(
     squatCycleDebug.insufficientSignalReason = 'guardrail_not_complete';
     squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
     squatCycleDebug.squatEvidenceReasons = ['guardrail_not_complete'];
+    squatCycleDebug.guardrailPartialReason = guardrail.debug?.guardrailPartialReason;
     return { satisfied: false, squatCycleDebug };
   }
   if (!armingSatisfied) {
@@ -864,6 +869,7 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.passTriggeredAtPhase = 'recovery';
   squatCycleDebug.qualityInterpretationReason =
     depthBand === 0 ? 'valid_limited_shallow' : 'valid_strong';
+  squatCycleDebug.guardrailCompletePath = guardrail.debug?.guardrailCompletePath;
   return { satisfied: true, squatCycleDebug };
 }
 

@@ -245,7 +245,7 @@ export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecove
 
   const trailingDepthCount = trailingDepths.length;
 
-  if (trailingDepths.length < 3) {
+  if (trailingDepths.length < 2) {
     return {
       ...emptyResult(peakSample.depth, peakSample.depth, 0),
       trailingDepthCount,

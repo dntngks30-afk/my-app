@@ -67,6 +67,10 @@ export interface StepGuardrailDebug extends StepMetrics {
    * live-readiness 에서 전신 화면 포함 여부 판단에 사용.
    */
   ankleYMean?: number | null;
+  /** PR shallow: guardrail partial 시 이유 */
+  guardrailPartialReason?: string;
+  /** PR shallow: guardrail complete 시 경로 (standard | low_rom_reversal | ultra_low_rom_reversal) */
+  guardrailCompletePath?: string;
 }
 
 export interface StepGuardrailResult {
@@ -184,11 +188,11 @@ function getMotionCompleteness(
   frames: PoseFeaturesFrame[],
   stats: PoseCaptureStats,
   flags: Set<CameraGuardrailFlag>
-): { score: number; status: CompletionStatus } {
+): { score: number; status: CompletionStatus; partialReason?: string; completePath?: string } {
   if (frames.length < MIN_VALID_FRAMES) {
     flags.add('insufficient_signal');
     flags.add('valid_frames_too_few');
-    return { score: 0, status: 'insufficient' };
+    return { score: 0, status: 'insufficient', partialReason: 'valid_frames_too_few' };
   }
 
   if (stepId === 'squat') {
@@ -224,7 +228,7 @@ function getMotionCompleteness(
 
     if (depthValues.length < MIN_VALID_FRAMES) {
       flags.add('rep_incomplete');
-      return { score: 0.2, status: 'partial' };
+      return { score: 0.2, status: 'partial', partialReason: 'depth_values_too_few' };
     }
     const peakSample = depthWithIndex.reduce((best, x) => (x.d > best.d ? x : best), {
       i: -1,
@@ -246,11 +250,11 @@ function getMotionCompleteness(
 
     if (descentCount === 0) {
       flags.add('rep_incomplete');
-      return { score: clamp(peakDepth), status: 'partial' };
+      return { score: clamp(peakDepth), status: 'partial', partialReason: 'descent_count_zero' };
     }
     if (!startBeforeBottom) {
       flags.add('rep_incomplete');
-      return { score: clamp(peakDepth), status: 'partial' };
+      return { score: clamp(peakDepth), status: 'partial', partialReason: 'start_not_before_bottom' };
     }
 
     /** PR-A6: guarded path 임시 비활성화 — standing false positive emergency hotfix */
@@ -271,11 +275,11 @@ function getMotionCompleteness(
 
     if (stats.captureDurationMs < MIN_CYCLE_DURATION_MS) {
       flags.add('rep_incomplete');
-      return { score: clamp(peakDepth), status: 'partial' };
+      return { score: clamp(peakDepth), status: 'partial', partialReason: 'cycle_duration_short' };
     }
     if (downwardCommitment < MIN_DOWNWARD_COMMITMENT) {
       flags.add('rep_incomplete');
-      return { score: clamp(peakDepth), status: 'partial' };
+      return { score: clamp(peakDepth), status: 'partial', partialReason: 'downward_commitment_low' };
     }
 
     /** PR G10: recovery proves meaningful excursion. Allow complete without bottom phase. */
@@ -285,22 +289,29 @@ function getMotionCompleteness(
       peakDepth >= SQUAT_LOW_ROM_FLOOR &&
       peakDepth < SQUAT_NOISE_FLOOR &&
       recovery.lowRomRecovered;
-    /** Ultra-low-ROM path — peak 2–7%, very strict recovery. PR-A6: descent >= 5, ascent >= 3 (standing sway 차단) */
+    /** Ultra-low-ROM path — peak 2–7%, very strict recovery. PR real-device: descent >= 3, ascent >= 2 (standing sway 차단, 실기기 false-negative 완화) */
     const ultraLowRomExcursion =
       peakDepth >= SQUAT_ULTRA_LOW_ROM_FLOOR &&
       peakDepth < SQUAT_LOW_ROM_FLOOR &&
       recovery.ultraLowRomRecovered &&
-      descentCount >= 5 &&
-      ascentCount >= 3;
+      descentCount >= 3 &&
+      ascentCount >= 2;
     const excursionOrBottom = standardExcursion || lowRomExcursion || ultraLowRomExcursion;
 
     if (!excursionOrBottom || !ascentSatisfied) {
       flags.add('rep_incomplete');
-      return { score: clamp(peakDepth), status: 'partial' };
+      const excReason = !excursionOrBottom
+        ? (peakDepth >= SQUAT_LOW_ROM_FLOOR && peakDepth < SQUAT_NOISE_FLOOR
+            ? `low_rom:${recovery.lowRomRecoveryReason ?? 'recovery_fail'}`
+            : peakDepth >= SQUAT_ULTRA_LOW_ROM_FLOOR && peakDepth < SQUAT_LOW_ROM_FLOOR
+              ? `ultra_low_rom:${recovery.ultraLowRomRecoveryReason ?? 'recovery_fail'}`
+              : 'excursion_or_ascent_not_satisfied')
+        : 'ascent_not_satisfied';
+      return { score: clamp(peakDepth), status: 'partial', partialReason: excReason };
     }
     if (peakDepth < SQUAT_ULTRA_LOW_ROM_FLOOR) {
       flags.add('rep_incomplete');
-      return { score: clamp(peakDepth), status: 'partial' };
+      return { score: clamp(peakDepth), status: 'partial', partialReason: 'peak_below_ultra_low_floor' };
     }
     /** PR standing-fp: standard path requires sequence + relative depth + min cycle */
     const isStandardPath =
@@ -308,11 +319,11 @@ function getMotionCompleteness(
     if (isStandardPath) {
       if (!descendBeforeReversal || !reversalBeforeRecovery) {
         flags.add('rep_incomplete');
-        return { score: clamp(peakDepth), status: 'partial' };
+        return { score: clamp(peakDepth), status: 'partial', partialReason: 'standard_sequence_fail' };
       }
       if (relativeDepthPeak < MIN_STANDARD_RELATIVE_DEPTH) {
         flags.add('rep_incomplete');
-        return { score: clamp(peakDepth), status: 'partial' };
+        return { score: clamp(peakDepth), status: 'partial', partialReason: 'standard_relative_depth_insufficient' };
       }
       const cycleDurationMs =
         firstDescentIdx >= 0 && frames.length > 0
@@ -321,10 +332,15 @@ function getMotionCompleteness(
           : 0;
       if (cycleDurationMs < MIN_CYCLE_DURATION_MS) {
         flags.add('rep_incomplete');
-        return { score: clamp(peakDepth), status: 'partial' };
+        return { score: clamp(peakDepth), status: 'partial', partialReason: 'standard_cycle_duration_short' };
       }
     }
-    return { score: clamp(0.45 + peakDepth * 0.55), status: 'complete' };
+    const completePath = ultraLowRomExcursion
+      ? 'ultra_low_rom_reversal'
+      : lowRomExcursion
+        ? 'low_rom_reversal'
+        : 'standard';
+    return { score: clamp(0.45 + peakDepth * 0.55), status: 'complete', completePath };
   }
 
   if (stepId === 'wall-angel') {
@@ -585,6 +601,8 @@ export function assessStepGuardrail(
         : round(qualitySelection.selectedWindowScore),
       perStepDiagnostics: evaluatorResult.debug?.perStepDiagnostics,
       ankleYMean: getAnkleYMean(qualityFrames),
+      guardrailPartialReason: motion.status !== 'complete' ? (motion as { partialReason?: string }).partialReason : undefined,
+      guardrailCompletePath: motion.status === 'complete' ? (motion as { completePath?: string }).completePath : undefined,
     },
   };
 }

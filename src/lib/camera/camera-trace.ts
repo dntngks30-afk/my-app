@@ -110,6 +110,14 @@ export interface AttemptSnapshot {
       failureOverlayBlockedReason?: string | null;
       attemptStarted?: boolean;
       downwardCommitmentReached?: boolean;
+      /** PR shallow: guardrail partial 시 이유 */
+      guardrailPartialReason?: string;
+      /** PR shallow: guardrail complete 시 경로 */
+      guardrailCompletePath?: string;
+      /** PR shallow: low-ROM recovery 미확인 이유 */
+      lowRomRejectionReason?: string | null;
+      /** PR shallow: ultra-low-ROM recovery 미확인 이유 */
+      ultraLowRomRejectionReason?: string | null;
     };
     /** overhead — PR-C4 trace, PR overhead-dwell */
     overhead?: {
@@ -316,6 +324,10 @@ function buildDiagnosisSummary(
       romBand: sc.romBand,
       confidenceDowngradeReason: sc.confidenceDowngradeReason,
       insufficientSignalReason: sc.insufficientSignalReason,
+      guardrailPartialReason: sc.guardrailPartialReason,
+      guardrailCompletePath: sc.guardrailCompletePath,
+      lowRomRejectionReason: sc.lowRomRejectionReason,
+      ultraLowRomRejectionReason: sc.ultraLowRomRejectionReason,
     };
   }
 

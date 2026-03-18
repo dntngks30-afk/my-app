@@ -29,11 +29,14 @@ function SquatFailedFields({ s }: { s: SquatFailedShallowSnapshot }) {
       <p><span className="text-slate-500">failureOverlayArmed</span> {String(s.failureOverlayArmed ?? true)}</p>
       <p><span className="text-slate-500">failureOverlayBlockedReason</span> {s.failureOverlayBlockedReason ?? 'n/a'}</p>
       <p><span className="text-slate-500">guardrailCompletionStatus</span> {s.guardrailCompletionStatus}</p>
+      <p><span className="text-slate-500">guardrailPartialReason</span> {s.guardrailPartialReason ?? 'n/a'}</p>
       <p><span className="text-slate-500">autoProgressionCompletionSatisfied</span> {String(s.autoProgressionCompletionSatisfied)}</p>
       <p><span className="text-slate-500">completionPathUsed</span> {s.completionPathUsed ?? 'n/a'}</p>
       <p><span className="text-slate-500">completionRejectedReason</span> {s.completionRejectedReason ?? 'n/a'}</p>
       <p><span className="text-slate-500">lowRomRecoveryConfirmed</span> {String(s.lowRomRecoveryConfirmed)}</p>
+      <p><span className="text-slate-500">lowRomRecoveredReason</span> {s.lowRomRecoveredReason ?? 'n/a'}</p>
       <p><span className="text-slate-500">ultraLowRomRecoveryConfirmed</span> {String(s.ultraLowRomRecoveryConfirmed)}</p>
+      <p><span className="text-slate-500">ultraLowRomRecoveredReason</span> {s.ultraLowRomRecoveredReason ?? 'n/a'}</p>
       <p><span className="text-slate-500">passConfirmationSatisfied</span> {String(s.passConfirmationSatisfied)}</p>
       <p><span className="text-slate-500">cycleDurationMs</span> {s.cycleDurationMs ?? 'n/a'}</p>
       <p><span className="text-slate-500">diagVersion</span> {s.diagVersion}</p>
