@@ -34,6 +34,7 @@ import {
 import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
 import {
   recordOverheadSuccessSnapshot,
+  isDiagnosticFreezeMode,
   type SuccessOpenedBy,
 } from '@/lib/camera/camera-success-diagnostic';
 import {
@@ -162,6 +163,7 @@ export default function CameraOverheadReachPage() {
   const [passLatched, setPassLatched] = useState(false);
   const [passLatchedAt, setPassLatchedAt] = useState<string | null>(null);
   const [navigationTriggered, setNavigationTriggered] = useState(false);
+  const [showSuccessFreezeOverlay, setShowSuccessFreezeOverlay] = useState(false);
   const [nextScheduledAt, setNextScheduledAt] = useState<string | null>(null);
   const [nextTriggeredAt, setNextTriggeredAt] = useState<string | null>(null);
   const [nextTriggerReason, setNextTriggerReason] = useState<string | null>(null);
@@ -648,6 +650,12 @@ export default function CameraOverheadReachPage() {
       return;
     }
 
+    /* diagnostic freeze: overlay 표시, auto-advance 금지 */
+    if (isDiagnosticFreezeMode()) {
+      setShowSuccessFreezeOverlay(true);
+      return;
+    }
+
     if (
       advanceLockRef.current &&
       autoAdvanceTimerRef.current &&
@@ -794,6 +802,7 @@ export default function CameraOverheadReachPage() {
     setNextTriggerReason(null);
     setSuccessSnapshot(null);
     setPermissionDenied(false);
+    setShowSuccessFreezeOverlay(false);
     setPreviewKey((prev) => prev + 1);
   }, [clearAutoAdvanceTimer, gate, readinessTraceSummary, startSequenceComplete, stop]);
 
@@ -815,6 +824,7 @@ export default function CameraOverheadReachPage() {
     setSuccessSnapshot(null);
     setCameraReady(false);
     setPermissionDenied(true);
+    setShowSuccessFreezeOverlay(false);
   }, [clearAutoAdvanceTimer]);
 
   const handleSurveyFallback = useCallback(() => {
@@ -828,6 +838,12 @@ export default function CameraOverheadReachPage() {
     if (!IS_DEV) return;
     latchPassEvent('effectivePassLatched', []);
   }, [latchPassEvent]);
+
+  const handleSuccessFreezeContinue = useCallback(() => {
+    setShowSuccessFreezeOverlay(false);
+    const path = getNextStepPath(STEP_ID);
+    if (path) router.push(path);
+  }, [router]);
 
   const prevPath = getPrevStepPath(STEP_ID);
   const showRetryActions =
@@ -883,6 +899,12 @@ export default function CameraOverheadReachPage() {
       className="relative min-h-[100svh] overflow-hidden flex flex-col"
       style={{ backgroundColor: BG }}
     >
+      {showSuccessFreezeOverlay && (
+        <SuccessFreezeOverlay
+          motionType="overhead_reach"
+          onContinue={handleSuccessFreezeContinue}
+        />
+      )}
       <Starfield />
 
       <header className="relative z-20 flex items-center justify-between px-4 pt-4 pb-2">

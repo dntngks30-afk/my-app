@@ -12,6 +12,36 @@ export const CAMERA_DIAG_VERSION = 'success-diagnostic-2025-03-18';
 /** source file marker — 해당 파일이 런타임에 포함됐는지 확인 */
 export const SUCCESS_DIAG_SOURCE_MARKER = 'camera-success-diagnostic-v1';
 
+const DIAG_FREEZE_LOCALSTORAGE_KEY = 'moveReCameraDiagFreezeSuccess';
+
+/**
+ * diagnostic freeze mode: success 직후 자동 전환 대신 overlay로 freeze.
+ * ?diag=1&freeze_success=1 또는 localStorage flag.
+ */
+export function isDiagnosticFreezeMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('diag') === '1' && params.get('freeze_success') === '1') return true;
+    return localStorage.getItem(DIAG_FREEZE_LOCALSTORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setDiagnosticFreezeMode(enabled: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (enabled) {
+      localStorage.setItem(DIAG_FREEZE_LOCALSTORAGE_KEY, '1');
+    } else {
+      localStorage.removeItem(DIAG_FREEZE_LOCALSTORAGE_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 const SUCCESS_SNAPSHOT_KEY = 'moveReCameraSuccessSnapshots:v1';
 const MAX_SUCCESS_SNAPSHOTS = 20;
 

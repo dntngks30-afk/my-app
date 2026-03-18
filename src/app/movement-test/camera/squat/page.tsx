@@ -33,7 +33,10 @@ import {
   type LiveReadinessState,
 } from '@/lib/camera/live-readiness';
 import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
-import { recordSquatSuccessSnapshot } from '@/lib/camera/camera-success-diagnostic';
+import {
+  recordSquatSuccessSnapshot,
+  isDiagnosticFreezeMode,
+} from '@/lib/camera/camera-success-diagnostic';
 import {
   getMovementSetupGuide,
   getPreCaptureGuidance,
@@ -56,6 +59,7 @@ import {
   unlockVoiceGuidance,
 } from '@/lib/camera/voice-guidance';
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
+import { SuccessFreezeOverlay } from '@/components/camera/SuccessFreezeOverlay';
 
 const BG = '#0d161f';
 const ACCENT = '#ff7b00';
@@ -141,6 +145,7 @@ export default function CameraSquatPage() {
   const [passLatched, setPassLatched] = useState(false);
   const [passLatchedAt, setPassLatchedAt] = useState<string | null>(null);
   const [navigationTriggered, setNavigationTriggered] = useState(false);
+  const [showSuccessFreezeOverlay, setShowSuccessFreezeOverlay] = useState(false);
   const [passDetectedAt, setPassDetectedAt] = useState<string | null>(null);
   const [nextScheduledAt, setNextScheduledAt] = useState<string | null>(null);
   const [nextTriggeredAt, setNextTriggeredAt] = useState<string | null>(null);
@@ -629,6 +634,12 @@ export default function CameraSquatPage() {
       return;
     }
 
+    /* diagnostic freeze: overlay 표시, auto-advance 금지 */
+    if (isDiagnosticFreezeMode()) {
+      setShowSuccessFreezeOverlay(true);
+      return;
+    }
+
     if (
       advanceLockRef.current &&
       autoAdvanceTimerRef.current &&
@@ -741,6 +752,7 @@ export default function CameraSquatPage() {
     setNextTriggerReason(null);
     setTransitionHistory([]);
     setPermissionDenied(false);
+    setShowSuccessFreezeOverlay(false);
     setPreviewKey((prev) => prev + 1);
     appendTransition('idle', 'manual_retry');
   }, [cameraPhase, clearAutoAdvanceTimer, gate, readinessTraceSummary, stop]);
@@ -772,6 +784,12 @@ export default function CameraSquatPage() {
     if (!IS_DEV) return;
     latchPassEvent();
   }, [latchPassEvent]);
+
+  const handleSuccessFreezeContinue = useCallback(() => {
+    setShowSuccessFreezeOverlay(false);
+    const path = getNextStepPath(STEP_ID);
+    if (path) router.push(path);
+  }, [router]);
 
   const prevPath = getPrevStepPath(STEP_ID);
   const showRetryActions =
@@ -834,6 +852,12 @@ export default function CameraSquatPage() {
       className="relative min-h-[100svh] overflow-hidden flex flex-col"
       style={{ backgroundColor: BG }}
     >
+      {showSuccessFreezeOverlay && (
+        <SuccessFreezeOverlay
+          motionType="squat"
+          onContinue={handleSuccessFreezeContinue}
+        />
+      )}
       <Starfield />
 
       <header className="relative z-20 flex items-center justify-between px-4 pt-4 pb-2">
