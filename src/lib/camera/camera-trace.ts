@@ -129,6 +129,7 @@ export interface AttemptSnapshot {
       dwellHoldDurationMs?: number;
       legacyHoldDurationMs?: number;
       stableTopEnteredAtMs?: number;
+      holdArmedAtMs?: number;
       stableTopExitedAtMs?: number;
       stableTopDwellMs?: number;
       stableTopSegmentCount?: number;
@@ -339,6 +340,7 @@ function buildDiagnosisSummary(
     const dwellHoldDurationMs = typeof hm?.dwellHoldDurationMs === 'number' ? hm.dwellHoldDurationMs : holdDurationMs;
     const legacyHoldDurationMs = typeof hm?.legacyHoldDurationMs === 'number' ? hm.legacyHoldDurationMs : holdDurationMsLegacySpan;
     const stableTopEnteredAtMs = typeof hm?.stableTopEnteredAtMs === 'number' ? hm.stableTopEnteredAtMs : undefined;
+    const holdArmedAtMs = typeof hm?.holdArmedAtMs === 'number' ? hm.holdArmedAtMs : undefined;
     const stableTopExitedAtMs = typeof hm?.stableTopExitedAtMs === 'number' ? hm.stableTopExitedAtMs : undefined;
     const stableTopDwellMs = typeof hm?.stableTopDwellMs === 'number' ? hm.stableTopDwellMs : undefined;
     const stableTopSegmentCount = typeof hm?.stableTopSegmentCount === 'number' ? hm.stableTopSegmentCount : undefined;
@@ -365,6 +367,7 @@ function buildDiagnosisSummary(
       dwellHoldDurationMs,
       legacyHoldDurationMs,
       stableTopEnteredAtMs,
+      holdArmedAtMs,
       stableTopExitedAtMs,
       stableTopDwellMs,
       stableTopSegmentCount,

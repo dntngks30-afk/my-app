@@ -21,6 +21,7 @@ export const OVERHEAD_STABLE_TOP_CONSECUTIVE = 3;
 export interface OverheadStableTopDwellResult {
   holdDurationMs: number;
   stableTopEnteredAtMs: number | undefined;
+  holdArmedAtMs: number | undefined;
   stableTopExitedAtMs: number | undefined;
   stableTopDwellMs: number;
   stableTopSegmentCount: number;
@@ -31,14 +32,22 @@ export interface OverheadStableTopDwellResult {
 
 /** timestamp gap > 이 값이면 segment break — 프레임 누락 시 누적 불가 */
 const MAX_DWELL_DELTA_MS = 120;
+/** hold clock: ascent 제외 — delta >= 이 값이면 상승 중으로 간주, hold에 포함 안 함 */
+const ASCENT_DELTA_THRESHOLD_DEG = 1.0;
+/** dwell arming: arm이 settle된 후에만 hold clock 시작. |delta| < 이 값이어야 hold 누적 */
+const HOLD_ARMED_DELTA_MAX_DEG = 0.8;
+/** arming: hold clock 시작 전 필요한 연속 settle 프레임 수 */
+const HOLD_ARMING_CONSECUTIVE = 2;
 
 /**
  * 연속 stable-top dwell time 계산.
  * stable top: elevation >= floor, |delta| < deltaMax.
  * 3연속 진입 후 구간 시작, 깨지면 reset. 최장 구간 dwell = hold.
  *
- * PR fix: hold = frame-to-frame delta 누적만. segment span 대신 실제 연속 프레임 시간만 합산.
- * timestamp gap > MAX_DWELL_DELTA_MS 이면 segment break.
+ * PR fix: hold = armed stable-top dwell만. 상승 중 프레임 제외, arming 후에만 hold clock 시작.
+ * - ascent (delta >= 1.0) 제외
+ * - hold clock은 |delta| < 0.8 인 settle 상태에서만 누적
+ * - segment 진입 후 2연속 settle 되어야 hold clock 시작 (holdArmedAtMs)
  */
 export function computeOverheadStableTopDwell(
   frames: PoseFeaturesFrame[],
@@ -76,9 +85,13 @@ export function computeOverheadStableTopDwell(
   let segmentStartMs: number | null = null;
   let segmentDwellMs = 0;
   let prevStableTimestampMs: number | null = null;
+  let holdArmed = false;
+  let armedStreak = 0;
+  let holdArmedAtMs: number | undefined;
   let bestDwellMs = 0;
   let bestEnteredMs: number | undefined;
   let bestExitedMs: number | undefined;
+  let bestHoldArmedMs: number | undefined;
   let segmentCount = 0;
 
   for (let i = 0; i < valid.length; i++) {
@@ -88,6 +101,14 @@ export function computeOverheadStableTopDwell(
     const delta = typeof e === 'number' && typeof prev === 'number' ? e - prev : 0;
     const isStable =
       typeof e === 'number' && e >= floorDeg && Math.abs(delta) < deltaMax;
+    /** ascent 제외: delta >= 1.0 이면 상승 중 */
+    const isNotAscent = delta < ASCENT_DELTA_THRESHOLD_DEG;
+    /** arm settled: |delta| < 0.8 — hold clock 누적 조건 */
+    const isSettled =
+      typeof e === 'number' &&
+      e >= floorDeg &&
+      Math.abs(delta) < HOLD_ARMED_DELTA_MAX_DEG &&
+      isNotAscent;
 
     const timestampDeltaMs =
       prevStableTimestampMs !== null ? f.timestampMs - prevStableTimestampMs : 0;
@@ -98,6 +119,9 @@ export function computeOverheadStableTopDwell(
         segmentStartMs = f.timestampMs;
         segmentDwellMs = 0;
         prevStableTimestampMs = f.timestampMs;
+        holdArmed = false;
+        armedStreak = 0;
+        holdArmedAtMs = undefined;
         segmentCount += 1;
       }
       if (segmentStartMs !== null) {
@@ -105,15 +129,33 @@ export function computeOverheadStableTopDwell(
           segmentStartMs = f.timestampMs;
           segmentDwellMs = 0;
           prevStableTimestampMs = f.timestampMs;
+          holdArmed = false;
+          armedStreak = 0;
+          holdArmedAtMs = undefined;
           segmentCount += 1;
-        } else {
-          segmentDwellMs += timestampDeltaMs;
-          prevStableTimestampMs = f.timestampMs;
-          if (segmentDwellMs > bestDwellMs) {
-            bestDwellMs = segmentDwellMs;
-            bestEnteredMs = segmentStartMs;
-            bestExitedMs = f.timestampMs;
+        } else if (isSettled) {
+          if (!holdArmed) {
+            armedStreak += 1;
+            if (armedStreak >= HOLD_ARMING_CONSECUTIVE) {
+              holdArmed = true;
+              holdArmedAtMs = f.timestampMs;
+              prevStableTimestampMs = f.timestampMs;
+            }
           }
+          if (holdArmed) {
+            segmentDwellMs += timestampDeltaMs;
+            prevStableTimestampMs = f.timestampMs;
+            if (segmentDwellMs > bestDwellMs) {
+              bestDwellMs = segmentDwellMs;
+              bestEnteredMs = segmentStartMs;
+              bestExitedMs = f.timestampMs;
+              bestHoldArmedMs = holdArmedAtMs;
+            }
+          }
+        } else {
+          armedStreak = 0;
+          holdArmed = false;
+          prevStableTimestampMs = f.timestampMs;
         }
       }
     } else {
@@ -121,12 +163,16 @@ export function computeOverheadStableTopDwell(
       segmentStartMs = null;
       segmentDwellMs = 0;
       prevStableTimestampMs = null;
+      holdArmed = false;
+      armedStreak = 0;
+      holdArmedAtMs = undefined;
     }
   }
 
   return {
     holdDurationMs: bestDwellMs,
     stableTopEnteredAtMs: bestEnteredMs,
+    holdArmedAtMs: bestHoldArmedMs,
     stableTopExitedAtMs: bestExitedMs,
     stableTopDwellMs: bestDwellMs,
     stableTopSegmentCount: segmentCount,
@@ -326,6 +372,7 @@ export function evaluateOverheadReachFromPoseFrames(
           armElevationAvgValues.length > 0 ? Math.round(Math.max(...armElevationAvgValues)) : null,
         /** PR overhead-dwell: trace fields */
         stableTopEnteredAtMs: dwellResult.stableTopEnteredAtMs,
+        holdArmedAtMs: dwellResult.holdArmedAtMs,
         stableTopExitedAtMs: dwellResult.stableTopExitedAtMs,
         stableTopDwellMs: dwellResult.stableTopDwellMs,
         stableTopSegmentCount: dwellResult.stableTopSegmentCount,
