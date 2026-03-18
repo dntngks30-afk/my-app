@@ -277,9 +277,11 @@ function evaluateWallAngelCompletion(result: EvaluatorResult, guardrail: StepGua
   );
 }
 
-/** PR G8/G9: overhead reach — real attempt + brief top confirmation before success.
- * PR G11: absolute top floor — effectiveArm must reach true overhead level. */
-const OVERHEAD_HOLD_COMPLETION_MS = 800;
+/** PR G8/G9: overhead reach — real attempt + explicit top-hold window before success.
+ * PR G11: absolute top floor — effectiveArm must reach true overhead level.
+ * Product: user must hold at top ~1–2s before final success. */
+const REQUIRED_TOP_HOLD_MS = 1200;
+const OVERHEAD_HOLD_COMPLETION_MS = REQUIRED_TOP_HOLD_MS;
 const OVERHEAD_MIN_PEAK_FRAMES = 3;
 const OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG = 132;
 

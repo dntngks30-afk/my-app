@@ -243,8 +243,9 @@ function getMotionCompleteness(
     return { score: clamp(peakElevation / 155), status: 'complete' };
   }
 
-  /* PR G8/G9: overhead reach — hold_too_short at 650ms creates buffer before completion (800ms).
-   * PR G11: absolute top floor — relative max alone never sufficient. Hold starts only after true top. */
+  /* PR G8/G9: overhead reach — hold_too_short until explicit top-hold window satisfied.
+   * Product: ~1–2s hold at true top required. hold_too_short threshold slightly below completion. */
+  const OVERHEAD_HOLD_TOO_SHORT_MS = 1100;
   if (stepId === 'overhead-reach') {
     const armElevations = frames
       .map((frame) => frame.derived.armElevationAvg)
@@ -280,9 +281,9 @@ function getMotionCompleteness(
       flags.add('rep_incomplete');
       return { score: clamp(peakElevation / 150), status: 'partial' };
     }
-    if (holdDurationMs < 650) {
+    if (holdDurationMs < OVERHEAD_HOLD_TOO_SHORT_MS) {
       flags.add('hold_too_short');
-      return { score: clamp(Math.max(peakElevation / 155, holdDurationMs / 900)), status: 'partial' };
+      return { score: clamp(Math.max(peakElevation / 155, holdDurationMs / 1400)), status: 'partial' };
     }
     return {
       score: clamp(Math.min(peakElevation / 160, Math.max(holdDurationMs / 900, 0.75))),

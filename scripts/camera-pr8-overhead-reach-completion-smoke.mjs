@@ -130,5 +130,16 @@ const nearMaxWeakLandmarks = toLandmarks(nearMaxWeakPoses);
 const nearMaxWeakGate = evaluateExerciseAutoProgress('overhead-reach', nearMaxWeakLandmarks, OH_STATS);
 ok('K: near-local-max raise (125°) does not pass (absolute floor 132°)', !nearMaxWeakGate.completionSatisfied);
 
+// L. Explicit top-hold: short hold (< 1.2s) does not pass
+const shortTopHoldPoses = [
+  ...Array(5).fill(0).map((_, i) => overheadPoseLandmarks(100 + i * 60, 40 + i * 20)),
+  ...Array(8).fill(0).map((_, i) => overheadPoseLandmarks(400 + i * 60, 150)),
+  ...Array(5).fill(0).map((_, i) => overheadPoseLandmarks(880 + i * 60, 150 - i * 6)),
+];
+const shortTopHoldLandmarks = toLandmarks(shortTopHoldPoses);
+const shortTopHoldStats = { ...OH_STATS, captureDurationMs: 1500 };
+const shortTopHoldGate = evaluateExerciseAutoProgress('overhead-reach', shortTopHoldLandmarks, shortTopHoldStats);
+ok('L: short top hold (< 1.2s) does not satisfy completion', !shortTopHoldGate.completionSatisfied);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

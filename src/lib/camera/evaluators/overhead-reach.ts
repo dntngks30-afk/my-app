@@ -98,7 +98,9 @@ export function evaluateOverheadReachFromPoseFrames(
     interpretedSignals.push('raise-peak cycle detected');
   }
 
-  if (holdDurationMs < 700) {
+  /** Product: explicit top-hold window ~1–2s. Hold starts only after true top entry. */
+  const REQUIRED_TOP_HOLD_MS = 1200;
+  if (holdDurationMs < REQUIRED_TOP_HOLD_MS) {
     completionHints.push('top_hold_short');
   }
 
@@ -146,7 +148,7 @@ export function evaluateOverheadReachFromPoseFrames(
     name: 'hold_duration',
     value: holdDurationMs,
     unit: 'ms',
-    trend: holdDurationMs >= 900 ? 'good' : holdDurationMs >= 700 ? 'neutral' : 'concern',
+    trend: holdDurationMs >= 1200 ? 'good' : holdDurationMs >= 1000 ? 'neutral' : 'concern',
   });
 
   const perStepDiagnostics = getOverheadPerStepDiagnostics(valid, metrics.length);
