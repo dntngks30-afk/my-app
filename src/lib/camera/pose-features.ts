@@ -97,6 +97,8 @@ export interface SquatRecoverySignal {
   recovered: boolean;
   /** PR G11: low-ROM path — peak 7–10%, stricter recovery proof. Blocks tiny dip. */
   lowRomRecovered: boolean;
+  /** Ultra-low-ROM path — peak 2–7%, very strict recovery (50%). Real cycle proof, blocks micro bend. */
+  ultraLowRomRecovered: boolean;
 }
 
 const VISIBILITY_THRESHOLD = 0.45;
@@ -193,6 +195,7 @@ export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecove
       recoveryDrop: 0,
       recovered: false,
       lowRomRecovered: false,
+      ultraLowRomRecovered: false,
     };
   }
 
@@ -208,6 +211,7 @@ export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecove
       recoveryDrop: 0,
       recovered: false,
       lowRomRecovered: false,
+      ultraLowRomRecovered: false,
     };
   }
 
@@ -224,12 +228,19 @@ export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecove
     peakSample.depth >= 0.07 &&
     recoveryDrop >= peakSample.depth * 0.4;
 
+  /** Ultra-low-ROM path. Min 2% excursion (above tiny-dip), 50% recovery. Real cycle proof. */
+  const ultraLowRomRecovered =
+    peakSample.depth >= 0.02 &&
+    peakSample.depth < 0.07 &&
+    recoveryDrop >= peakSample.depth * 0.5;
+
   return {
     peakDepth: peakSample.depth,
     tailDepth,
     recoveryDrop,
     recovered,
     lowRomRecovered,
+    ultraLowRomRecovered,
   };
 }
 

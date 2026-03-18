@@ -81,6 +81,8 @@ const MIN_VALID_FRAMES = 8;
 const SQUAT_NOISE_FLOOR = 0.1;
 /** PR G11: low-ROM floor 0.07 — 7–10% excursion with strict recovery can complete */
 const SQUAT_LOW_ROM_FLOOR = 0.07;
+/** Ultra-low-ROM floor 0.02 — 2–7% excursion with very strict recovery. Real cycle proof only. */
+const SQUAT_ULTRA_LOW_ROM_FLOOR = 0.02;
 const WARMUP_MS = 500;
 const BEST_WINDOW_MIN_MS = 800;
 const BEST_WINDOW_MAX_MS = 1200;
@@ -189,7 +191,11 @@ function getMotionCompleteness(
     const bottomCount = frames.filter((frame) => frame.phaseHint === 'bottom').length;
     const ascentCount = frames.filter((frame) => frame.phaseHint === 'ascent').length;
     const recovery = getSquatRecoverySignal(frames);
-    const ascentSatisfied = ascentCount > 0 || recovery.recovered || recovery.lowRomRecovered;
+    const ascentSatisfied =
+      ascentCount > 0 ||
+      recovery.recovered ||
+      recovery.lowRomRecovered ||
+      recovery.ultraLowRomRecovered;
 
     if (depthValues.length < MIN_VALID_FRAMES) {
       flags.add('rep_incomplete');
@@ -203,9 +209,14 @@ function getMotionCompleteness(
       peakDepth >= SQUAT_LOW_ROM_FLOOR &&
       peakDepth < SQUAT_NOISE_FLOOR &&
       recovery.lowRomRecovered;
-    const excursionOrBottom = standardExcursion || lowRomExcursion;
+    /** Ultra-low-ROM path — peak 2–7%, very strict recovery. Real cycle proof. */
+    const ultraLowRomExcursion =
+      peakDepth >= SQUAT_ULTRA_LOW_ROM_FLOOR &&
+      peakDepth < SQUAT_LOW_ROM_FLOOR &&
+      recovery.ultraLowRomRecovered;
+    const excursionOrBottom = standardExcursion || lowRomExcursion || ultraLowRomExcursion;
     if (
-      peakDepth < SQUAT_LOW_ROM_FLOOR ||
+      peakDepth < SQUAT_ULTRA_LOW_ROM_FLOOR ||
       descentCount === 0 ||
       !excursionOrBottom ||
       !ascentSatisfied

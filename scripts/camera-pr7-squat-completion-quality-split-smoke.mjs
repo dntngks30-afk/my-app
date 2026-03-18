@@ -85,6 +85,23 @@ const lowRomSyntheticFrames = [0.02, 0.04, 0.08, 0.07, 0.05, 0.04, 0.03].map((d)
 const lowRomRecovery = getSquatRecoverySignal(lowRomSyntheticFrames);
 ok('B-PR11: low-ROM recovery signal (peak 8%, recovery 40%) yields lowRomRecovered', lowRomRecovery.lowRomRecovered && lowRomRecovery.peakDepth >= 0.07 && lowRomRecovery.peakDepth < 0.1);
 
+// B-ultra. Ultra-low-ROM recovery signal: peak 2–7% with 50% recoveryDrop yields ultraLowRomRecovered
+const ultraLowRomSyntheticFrames = [0.01, 0.02, 0.05, 0.03, 0.02, 0.015, 0.01].map((d) => ({
+  derived: { squatDepthProxy: d },
+  isValid: true,
+}));
+const ultraLowRomRecovery = getSquatRecoverySignal(ultraLowRomSyntheticFrames);
+ok('B-ultra: ultra-low-ROM recovery signal (peak 5%, recovery 50%+) yields ultraLowRomRecovered', ultraLowRomRecovery.ultraLowRomRecovered && ultraLowRomRecovery.peakDepth >= 0.02 && ultraLowRomRecovery.peakDepth < 0.07);
+
+// B-ultra-valid. Ultra-low-ROM recovery signal (synthetic frames: peak 5%, tail ~1.5%, drop 50%+)
+const ultraLowRomValidFrames = [
+  ...Array(3).fill(0).map((_, i) => ({ derived: { squatDepthProxy: 0.01 + i * 0.013 }, isValid: true })),
+  ...Array(2).fill(0).map(() => ({ derived: { squatDepthProxy: 0.05 }, isValid: true })),
+  ...Array(5).fill(0).map((_, i) => ({ derived: { squatDepthProxy: 0.025 - i * 0.004 }, isValid: true })),
+];
+const ultraLowRomValidRecovery = getSquatRecoverySignal(ultraLowRomValidFrames);
+ok('B-ultra-valid: ultra-low-ROM recovery yields ultraLowRomRecovered', ultraLowRomValidRecovery.ultraLowRomRecovered);
+
 // B. Descend-only does not pass
 const descendOnlyPoses = [
   ...Array(4).fill(0).map((_, i) => squatPoseLandmarks(100 + i * 80, 0.02 + i * 0.02)),
@@ -99,6 +116,14 @@ const setupCrouchPoses = Array(12).fill(0).map((_, i) => squatPoseLandmarks(100 
 const setupCrouchLandmarks = toLandmarks(setupCrouchPoses);
 const setupCrouchGate = evaluateExerciseAutoProgress('squat', setupCrouchLandmarks, squatStats(setupCrouchLandmarks));
 ok('C: setup crouch does not pass', !setupCrouchGate.completionSatisfied);
+
+// D-ultra. Micro dip with poor recovery does not pass (peak 4%, recovery < 50%)
+const microDipFrames = [0.01, 0.02, 0.04, 0.038, 0.036, 0.034, 0.032].map((d) => ({
+  derived: { squatDepthProxy: d },
+  isValid: true,
+}));
+const microDipRecovery = getSquatRecoverySignal(microDipFrames);
+ok('D-ultra: micro dip with poor recovery does not yield ultraLowRomRecovered', !microDipRecovery.ultraLowRomRecovered);
 
 // D. Tiny dip does not pass (peak < noise floor)
 const tinyDipPoses = [

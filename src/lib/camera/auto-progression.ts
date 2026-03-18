@@ -541,6 +541,7 @@ function getSquatProgressionCompletionSatisfied(
   const ascentCount = getHighlightedMetric(result, 'ascentCount');
   const ascentRecovered = getHighlightedMetric(result, 'ascentRecovered');
   const ascentRecoveredLowRom = getHighlightedMetric(result, 'ascentRecoveredLowRom');
+  const ascentRecoveredUltraLowRom = getHighlightedMetric(result, 'ascentRecoveredUltraLowRom');
   const cycleComplete = getHighlightedMetric(result, 'cycleComplete') > 0;
   const depthPeak = getHighlightedMetric(result, 'depthPeak');
   const depthBand = getHighlightedMetric(result, 'depthBand'); /* 0=shallow, 1=moderate, 2=deep */
@@ -553,15 +554,21 @@ function getSquatProgressionCompletionSatisfied(
   const ascendDetected = ascentCount > 0;
   const recoveryDetected = ascentRecovered > 0;
   const recoveryLowRomDetected = ascentRecoveredLowRom > 0;
+  const recoveryUltraLowRomDetected = ascentRecoveredUltraLowRom > 0;
   /** PR G11: low-ROM path — peak 7–10%, stricter recovery. */
   const lowRomRecoveryConfirmed =
     depthPeak >= 7 && depthPeak < 10 && recoveryLowRomDetected;
+  /** Ultra-low-ROM path — peak 2–7%, very strict recovery. Real cycle proof. */
+  const ultraLowRomRecoveryConfirmed =
+    depthPeak >= 2 && depthPeak < 7 && recoveryUltraLowRomDetected;
   /** PR G10: recovery proves meaningful excursion (peak>=10%, came back). Allow completion without bottom phase. */
   const excursionOrBottomConfirmed =
     bottomDetected ||
     recoveryDetected ||
-    lowRomRecoveryConfirmed;
-  const recoveryOrLowRom = recoveryDetected || lowRomRecoveryConfirmed;
+    lowRomRecoveryConfirmed ||
+    ultraLowRomRecoveryConfirmed;
+  const recoveryOrLowRom =
+    recoveryDetected || lowRomRecoveryConfirmed || ultraLowRomRecoveryConfirmed;
 
   const bottomTurningPointDetected = bottomDetected;
   const depthBandLabel: 'shallow' | 'moderate' | 'deep' =
