@@ -278,9 +278,10 @@ function evaluateWallAngelCompletion(result: EvaluatorResult, guardrail: StepGua
 }
 
 /** PR G8/G9: overhead reach — real attempt + brief top confirmation before success.
- * hold 800ms + peakCount>=3 avoids premature pass and hold-cue/success overlap. */
+ * PR G11: absolute top floor — effectiveArm must reach true overhead level. */
 const OVERHEAD_HOLD_COMPLETION_MS = 800;
 const OVERHEAD_MIN_PEAK_FRAMES = 3;
+const OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG = 132;
 
 function evaluateOverheadReachCompletion(
   result: EvaluatorResult,
@@ -295,7 +296,7 @@ function evaluateOverheadReachCompletion(
 
   return (
     guardrail.completionStatus === 'complete' &&
-    effectiveArm >= 120 &&
+    effectiveArm >= OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG &&
     holdDuration >= OVERHEAD_HOLD_COMPLETION_MS &&
     raiseCount > 0 &&
     peakCount >= OVERHEAD_MIN_PEAK_FRAMES

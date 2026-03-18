@@ -233,7 +233,7 @@ function getMotionCompleteness(
   }
 
   /* PR G8/G9: overhead reach — hold_too_short at 650ms creates buffer before completion (800ms).
-   * PR G10: hold only counts after true top entry — blocks early pass from arm raise alone. */
+   * PR G11: absolute top floor — relative max alone never sufficient. Hold starts only after true top. */
   if (stepId === 'overhead-reach') {
     const armElevations = frames
       .map((frame) => frame.derived.armElevationAvg)
@@ -241,13 +241,13 @@ function getMotionCompleteness(
     const peakFrames = frames.filter((frame) => frame.phaseHint === 'peak');
     const raiseCount = frames.filter((frame) => frame.phaseHint === 'raise').length;
     const peakElevation = armElevations.length > 0 ? Math.max(...armElevations) : 0;
-    const topEntryThreshold = Math.max(peakElevation * 0.95, 118);
+    const ABSOLUTE_TOP_FLOOR_DEG = 132;
     let topEntryIndex = -1;
     for (let i = 0; i < frames.length; i++) {
       const e = frames[i]!.derived.armElevationAvg;
       const prev = i > 0 ? frames[i - 1]!.derived.armElevationAvg : null;
       const delta = typeof e === 'number' && typeof prev === 'number' ? e - prev : 0;
-      if (typeof e === 'number' && e >= topEntryThreshold && Math.abs(delta) < 2.6) {
+      if (typeof e === 'number' && e >= ABSOLUTE_TOP_FLOOR_DEG && Math.abs(delta) < 2.6) {
         topEntryIndex = i;
         break;
       }
@@ -260,7 +260,12 @@ function getMotionCompleteness(
         ? topConfirmedPeaks[topConfirmedPeaks.length - 1]!.timestampMs - topConfirmedPeaks[0]!.timestampMs
         : 0;
 
-    if (frames.length < 10 || peakElevation < 120 || raiseCount === 0 || peakCount === 0) {
+    if (
+      frames.length < 10 ||
+      peakElevation < ABSOLUTE_TOP_FLOOR_DEG ||
+      raiseCount === 0 ||
+      peakCount === 0
+    ) {
       flags.add('rep_incomplete');
       return { score: clamp(peakElevation / 150), status: 'partial' };
     }

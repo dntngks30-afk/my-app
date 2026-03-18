@@ -70,15 +70,14 @@ export function evaluateOverheadReachFromPoseFrames(
   );
   const raiseCount = countPhases(valid, 'raise');
   const peakFrames = valid.filter((frame) => frame.phaseHint === 'peak');
-  /** PR G10: hold only counts after true top entry — blocks early pass from arm raise alone */
-  const maxElevation = armElevationAvgValues.length > 0 ? Math.max(...armElevationAvgValues) : 0;
-  const topEntryThreshold = Math.max(maxElevation * 0.95, 118);
+  /** PR G11: absolute top floor — relative max alone is never sufficient. Hold starts only after true top. */
+  const ABSOLUTE_TOP_FLOOR_DEG = 132;
   let topEntryIndex = -1;
   for (let i = 0; i < valid.length; i++) {
     const e = valid[i]!.derived.armElevationAvg;
     const prev = i > 0 ? valid[i - 1]!.derived.armElevationAvg : null;
     const delta = typeof e === 'number' && typeof prev === 'number' ? e - prev : 0;
-    if (typeof e === 'number' && e >= topEntryThreshold && Math.abs(delta) < 2.6) {
+    if (typeof e === 'number' && e >= ABSOLUTE_TOP_FLOOR_DEG && Math.abs(delta) < 2.6) {
       topEntryIndex = i;
       break;
     }

@@ -76,7 +76,7 @@ const realOhLandmarks = toLandmarks(realOhPoses);
 const realOhGate = evaluateExerciseAutoProgress('overhead-reach', realOhLandmarks, OH_STATS);
 ok('B: real overhead sequence produces valid gate', realOhGate.guardrail != null && realOhGate.evaluatorResult != null);
 
-// C. Guardrail requires peak >= 120 and hold >= 700
+// C. PR G11: peak elevation and hold duration exist (absolute top floor 132°)
 const realFrames = buildPoseFeaturesFrames('overhead-reach', realOhLandmarks);
 const realResult = evaluateOverheadReachFromPoseFrames(realFrames);
 const peakArm = realResult.debug?.highlightedMetrics?.peakArmElevation ?? 0;
@@ -121,6 +121,14 @@ ok('I: overhead-reach evaluator unchanged for squat', true);
 
 // J. PR G10: passConfirmation gated by completion — arm raise alone must not yield passConfirmed
 ok('J: weak raise has passConfirmationSatisfied=false when completionSatisfied=false', !weakGate.completionSatisfied && !weakGate.passConfirmationSatisfied);
+
+// K. PR G11: relative max alone insufficient — raise to 125° (above old 118 floor, below 132) must not pass
+const nearMaxWeakPoses = Array(20)
+  .fill(0)
+  .map((_, i) => overheadPoseLandmarks(100 + i * 60, Math.min(125, 30 + i * 5)));
+const nearMaxWeakLandmarks = toLandmarks(nearMaxWeakPoses);
+const nearMaxWeakGate = evaluateExerciseAutoProgress('overhead-reach', nearMaxWeakLandmarks, OH_STATS);
+ok('K: near-local-max raise (125°) does not pass (absolute floor 132°)', !nearMaxWeakGate.completionSatisfied);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
