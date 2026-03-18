@@ -187,6 +187,8 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
                   <>
                     <p>peakDepth={d.squatCycle.peakDepth ?? 'n/a'} bottom={d.squatCycle.bottomDetected} recovery={d.squatCycle.recoveryDetected} startBeforeBottom={d.squatCycle.startBeforeBottom}</p>
                     <p className="text-slate-500">PR-A4: path={d.squatCycle.completionPathUsed ?? 'n/a'} rejected={d.squatCycle.completionRejectedReason ?? 'n/a'} cycleMs={d.squatCycle.cycleDurationMs ?? 'n/a'}</p>
+                    <p className="text-slate-500">PR-A5: ultraCand={d.squatCycle.ultraLowRomCandidate ?? 'n/a'} ultraPass={d.squatCycle.ultraLowRomGuardPassed ?? 'n/a'} ultraRej={d.squatCycle.ultraLowRomRejectReason ?? 'n/a'} commitDelta={d.squatCycle.downwardCommitmentDelta ?? 'n/a'}</p>
+                    <p className="text-slate-500">PR-A6: standingRej={d.squatCycle.standingStillRejected ?? 'n/a'} fpBlock={d.squatCycle.falsePositiveBlockReason ?? 'n/a'} ultraDisabled={d.squatCycle.ultraLowRomPathDisabledOrGuarded ?? 'n/a'}</p>
                   </>
                 )}
                 {d.overhead && (

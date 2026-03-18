@@ -82,6 +82,16 @@ export interface AttemptSnapshot {
       ascendStartAtMs?: number;
       recoveryAtMs?: number;
       cycleDurationMs?: number;
+      downwardCommitmentDelta?: number;
+      ultraLowRomCandidate?: boolean;
+      ultraLowRomGuardPassed?: boolean;
+      ultraLowRomRejectReason?: string | null;
+      standingStillRejected?: boolean;
+      falsePositiveBlockReason?: string | null;
+      descendConfirmed?: boolean;
+      reversalConfirmedAfterDescend?: boolean;
+      recoveryConfirmedAfterReversal?: boolean;
+      ultraLowRomPathDisabledOrGuarded?: boolean;
     };
     /** overhead — PR-C4 trace */
     overhead?: {
@@ -245,6 +255,16 @@ function buildDiagnosisSummary(
       ascendStartAtMs: sc.ascendStartAtMs,
       recoveryAtMs: sc.recoveryAtMs,
       cycleDurationMs: sc.cycleDurationMs,
+      downwardCommitmentDelta: sc.downwardCommitmentDelta,
+      ultraLowRomCandidate: sc.ultraLowRomCandidate,
+      ultraLowRomGuardPassed: sc.ultraLowRomGuardPassed,
+      ultraLowRomRejectReason: sc.ultraLowRomRejectReason,
+      standingStillRejected: sc.standingStillRejected,
+      falsePositiveBlockReason: sc.falsePositiveBlockReason,
+      descendConfirmed: sc.descendConfirmed,
+      reversalConfirmedAfterDescend: sc.reversalConfirmedAfterDescend,
+      recoveryConfirmedAfterReversal: sc.recoveryConfirmedAfterReversal,
+      ultraLowRomPathDisabledOrGuarded: sc.ultraLowRomPathDisabledOrGuarded,
     };
   }
 

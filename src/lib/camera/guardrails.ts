@@ -83,6 +83,10 @@ const SQUAT_NOISE_FLOOR = 0.1;
 const SQUAT_LOW_ROM_FLOOR = 0.07;
 /** Ultra-low-ROM floor 0.02 — 2–7% excursion with very strict recovery. Real cycle proof only. */
 const SQUAT_ULTRA_LOW_ROM_FLOOR = 0.02;
+/** PR-A5: guarded ultra-low-ROM floor 0.01 — 1–2% with very strict recovery + persistence. */
+const SQUAT_ULTRA_LOW_ROM_GUARDED_FLOOR = 0.01;
+/** PR-A6: emergency disable — standing false positive 차단. guarded path 임시 비활성화. */
+const ULTRA_LOW_ROM_GUARDED_DISABLED = true;
 const WARMUP_MS = 500;
 const BEST_WINDOW_MIN_MS = 800;
 const BEST_WINDOW_MAX_MS = 1200;
@@ -187,6 +191,10 @@ function getMotionCompleteness(
     /** PR-A4: cycle-proof-first — depth는 anti-noise 보조, completion은 cycle proof 중심 */
     const MIN_CYCLE_DURATION_MS = 1200;
     const MIN_DOWNWARD_COMMITMENT = 0.02;
+    /** PR-A5: guarded ultra-low-ROM — relaxed only when extra cycle proof */
+    const MIN_CYCLE_DURATION_MS_GUARDED = 1000;
+    const MIN_DOWNWARD_COMMITMENT_GUARDED = 0.01;
+    const MIN_DESCEND_FRAMES_GUARDED = 3;
     const depthWithIndex = frames
       .map((f, i) => ({ i, d: f.derived.squatDepthProxy }))
       .filter((x): x is { i: number; d: number } => typeof x.d === 'number');
@@ -199,7 +207,8 @@ function getMotionCompleteness(
       ascentCount > 0 ||
       recovery.recovered ||
       recovery.lowRomRecovered ||
-      recovery.ultraLowRomRecovered;
+      recovery.ultraLowRomRecovered ||
+      recovery.ultraLowRomGuardedRecovered;
     const firstStartIdx = frames.findIndex((f) => f.phaseHint === 'start');
     const firstBottomIdx = frames.findIndex((f) => f.phaseHint === 'bottom');
     const startBeforeBottom =
@@ -226,6 +235,23 @@ function getMotionCompleteness(
       flags.add('rep_incomplete');
       return { score: clamp(peakDepth), status: 'partial' };
     }
+
+    /** PR-A6: guarded path 임시 비활성화 — standing false positive emergency hotfix */
+    if (!ULTRA_LOW_ROM_GUARDED_DISABLED) {
+      const ultraLowRomGuardedCandidate =
+        peakDepth >= SQUAT_ULTRA_LOW_ROM_GUARDED_FLOOR &&
+        peakDepth < SQUAT_ULTRA_LOW_ROM_FLOOR &&
+        recovery.ultraLowRomGuardedRecovered;
+      const ultraLowRomGuardPassed =
+        ultraLowRomGuardedCandidate &&
+        stats.captureDurationMs >= MIN_CYCLE_DURATION_MS_GUARDED &&
+        downwardCommitment >= MIN_DOWNWARD_COMMITMENT_GUARDED &&
+        descentCount >= MIN_DESCEND_FRAMES_GUARDED;
+      if (ultraLowRomGuardPassed) {
+        return { score: clamp(0.45 + peakDepth * 0.55), status: 'complete' };
+      }
+    }
+
     if (stats.captureDurationMs < MIN_CYCLE_DURATION_MS) {
       flags.add('rep_incomplete');
       return { score: clamp(peakDepth), status: 'partial' };
@@ -242,11 +268,13 @@ function getMotionCompleteness(
       peakDepth >= SQUAT_LOW_ROM_FLOOR &&
       peakDepth < SQUAT_NOISE_FLOOR &&
       recovery.lowRomRecovered;
-    /** Ultra-low-ROM path — peak 2–7%, very strict recovery. Real cycle proof. */
+    /** Ultra-low-ROM path — peak 2–7%, very strict recovery. PR-A6: descent >= 5, ascent >= 3 (standing sway 차단) */
     const ultraLowRomExcursion =
       peakDepth >= SQUAT_ULTRA_LOW_ROM_FLOOR &&
       peakDepth < SQUAT_LOW_ROM_FLOOR &&
-      recovery.ultraLowRomRecovered;
+      recovery.ultraLowRomRecovered &&
+      descentCount >= 5 &&
+      ascentCount >= 3;
     const excursionOrBottom = standardExcursion || lowRomExcursion || ultraLowRomExcursion;
 
     if (!excursionOrBottom || !ascentSatisfied) {

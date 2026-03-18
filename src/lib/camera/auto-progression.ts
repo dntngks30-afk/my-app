@@ -37,14 +37,25 @@ export interface SquatCycleDebug {
   passBlockedReason: string | null;
   qualityInterpretationReason: string | null;
   passTriggeredAtPhase?: string;
-  completionPathUsed?: 'standard' | 'low_rom_reversal' | 'ultra_low_rom_reversal';
+  completionPathUsed?: 'standard' | 'low_rom_reversal' | 'ultra_low_rom_reversal' | 'ultra_low_rom_guarded';
   completionRejectedReason?: string | null;
+  ultraLowRomCandidate?: boolean;
+  ultraLowRomGuardPassed?: boolean;
+  ultraLowRomRejectReason?: string | null;
+  /** PR-A6: standing false positive trace */
+  standingStillRejected?: boolean;
+  falsePositiveBlockReason?: string | null;
+  descendConfirmed?: boolean;
+  reversalConfirmedAfterDescend?: boolean;
+  recoveryConfirmedAfterReversal?: boolean;
+  ultraLowRomPathDisabledOrGuarded?: boolean;
   descendStartAtMs?: number;
   downwardCommitmentAtMs?: number;
   reversalAtMs?: number;
   ascendStartAtMs?: number;
   recoveryAtMs?: number;
   cycleDurationMs?: number;
+  downwardCommitmentDelta?: number;
 }
 
 export interface ExerciseGateResult {
@@ -553,9 +564,15 @@ function getSquatProgressionCompletionSatisfied(
   const ascentRecovered = getHighlightedMetric(result, 'ascentRecovered');
   const ascentRecoveredLowRom = getHighlightedMetric(result, 'ascentRecoveredLowRom');
   const ascentRecoveredUltraLowRom = getHighlightedMetric(result, 'ascentRecoveredUltraLowRom');
+  const ascentRecoveredUltraLowRomGuarded = getHighlightedMetric(
+    result,
+    'ascentRecoveredUltraLowRomGuarded'
+  ) > 0;
   const cycleComplete = getHighlightedMetric(result, 'cycleComplete') > 0;
   const depthPeak = getHighlightedMetric(result, 'depthPeak');
   const depthBand = getHighlightedMetric(result, 'depthBand'); /* 0=shallow, 1=moderate, 2=deep */
+  const downwardCommitmentDelta =
+    (getHighlightedMetric(result, 'downwardCommitmentDelta') ?? 0) / 100;
 
   const armingSatisfied = stats.captureDurationMs >= SQUAT_ARMING_MS;
   const startBeforeBottom = getHighlightedMetric(result, 'startBeforeBottom') > 0;
@@ -572,6 +589,14 @@ function getSquatProgressionCompletionSatisfied(
   /** Ultra-low-ROM path — peak 2–7%, very strict recovery. Real cycle proof. */
   const ultraLowRomRecoveryConfirmed =
     depthPeak >= 2 && depthPeak < 7 && recoveryUltraLowRomDetected;
+  /** PR-A5: guarded ultra-low-ROM — peak 1–2%. PR-A6: emergency disabled (standing false positive). */
+  const ULTRA_LOW_ROM_GUARDED_DISABLED = true;
+  const ultraLowRomGuardedCandidate =
+    !ULTRA_LOW_ROM_GUARDED_DISABLED &&
+    depthPeak >= 1 &&
+    depthPeak < 2 &&
+    ascentRecoveredUltraLowRomGuarded;
+  const ultraLowRomGuardPassed = false; /* PR-A6: path disabled */
   /** PR G10: recovery proves meaningful excursion (peak>=10%, came back). Allow completion without bottom phase. */
   const excursionOrBottomConfirmed =
     bottomDetected ||
@@ -579,7 +604,9 @@ function getSquatProgressionCompletionSatisfied(
     lowRomRecoveryConfirmed ||
     ultraLowRomRecoveryConfirmed;
   const recoveryOrLowRom =
-    recoveryDetected || lowRomRecoveryConfirmed || ultraLowRomRecoveryConfirmed;
+    recoveryDetected ||
+    lowRomRecoveryConfirmed ||
+    ultraLowRomRecoveryConfirmed;
 
   const bottomTurningPointDetected = bottomDetected;
   const depthBandLabel: 'shallow' | 'moderate' | 'deep' =
@@ -612,46 +639,71 @@ function getSquatProgressionCompletionSatisfied(
     ascendStartAtMs,
     recoveryAtMs,
     cycleDurationMs,
+    downwardCommitmentDelta,
+    ultraLowRomCandidate: ultraLowRomGuardedCandidate,
+    ultraLowRomGuardPassed: ultraLowRomGuardPassed,
+    ultraLowRomRejectReason: ultraLowRomGuardedCandidate && !ultraLowRomGuardPassed
+      ? (stats.captureDurationMs < 1000
+          ? 'cycle_duration_short'
+          : downwardCommitmentDelta < 0.01
+            ? 'commitment_too_low'
+            : descentCount < 3
+              ? 'descend_frames_insufficient'
+              : 'guard_not_passed')
+      : undefined,
+    standingStillRejected: depthPeak < 2,
+    falsePositiveBlockReason: null,
+    descendConfirmed: descendDetected,
+    reversalConfirmedAfterDescend: bottomDetected || ascendDetected || recoveryDetected,
+    recoveryConfirmedAfterReversal: recoveryDetected || recoveryLowRomDetected || recoveryUltraLowRomDetected,
+    ultraLowRomPathDisabledOrGuarded: ULTRA_LOW_ROM_GUARDED_DISABLED,
   };
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';
     squatCycleDebug.completionRejectedReason = 'guardrail_not_complete';
+    squatCycleDebug.falsePositiveBlockReason = 'guardrail_not_complete';
     return { satisfied: false, squatCycleDebug };
   }
   if (!armingSatisfied) {
     squatCycleDebug.passBlockedReason = 'arming_window';
     squatCycleDebug.completionRejectedReason = 'arming_window';
+    squatCycleDebug.falsePositiveBlockReason = 'arming_window';
     return { satisfied: false, squatCycleDebug };
   }
   if (!startPoseSatisfied) {
     squatCycleDebug.passBlockedReason =
       startCount > 0 && !startBeforeBottom ? 'bottom_from_start' : 'start_pose_missing';
     squatCycleDebug.completionRejectedReason = squatCycleDebug.passBlockedReason;
+    squatCycleDebug.falsePositiveBlockReason = squatCycleDebug.passBlockedReason;
     return { satisfied: false, squatCycleDebug };
   }
   if (!descendDetected) {
     squatCycleDebug.passBlockedReason = 'descend_not_detected';
     squatCycleDebug.completionRejectedReason = 'descend_not_detected';
+    squatCycleDebug.falsePositiveBlockReason = 'descend_not_detected';
     return { satisfied: false, squatCycleDebug };
   }
   if (!excursionOrBottomConfirmed) {
     squatCycleDebug.passBlockedReason = 'excursion_not_confirmed';
     squatCycleDebug.completionRejectedReason = 'excursion_not_confirmed';
+    squatCycleDebug.falsePositiveBlockReason = 'excursion_not_confirmed';
     return { satisfied: false, squatCycleDebug };
   }
   if (!ascendDetected && !recoveryOrLowRom) {
     squatCycleDebug.passBlockedReason = 'ascent_recovery_missing';
     squatCycleDebug.completionRejectedReason = 'ascent_recovery_missing';
+    squatCycleDebug.falsePositiveBlockReason = 'ascent_recovery_missing';
     return { satisfied: false, squatCycleDebug };
   }
   if (!recoveryOrLowRom) {
     squatCycleDebug.passBlockedReason = 'recovery_not_confirmed';
     squatCycleDebug.completionRejectedReason = 'recovery_not_confirmed';
+    squatCycleDebug.falsePositiveBlockReason = 'recovery_not_confirmed';
     return { satisfied: false, squatCycleDebug };
   }
   /* PR G6: depth는 completion gate에서 제거. quality band로만 해석. */
-  /* PR-A4: completionPathUsed for trace */
+  /* PR-A4/A5: completionPathUsed for trace */
   squatCycleDebug.completionPathUsed = ultraLowRomRecoveryConfirmed
     ? 'ultra_low_rom_reversal'
     : lowRomRecoveryConfirmed
