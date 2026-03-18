@@ -3,6 +3,10 @@
  * evaluator 위에서 입력 품질과 재촬영 권장 여부를 판단한다.
  */
 import type { CameraStepId } from '@/lib/public/camera-test';
+import {
+  computeOverheadStableTopDwell,
+  OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG,
+} from './evaluators/overhead-reach';
 import { buildPoseFeaturesFrames, getSquatRecoverySignal } from './pose-features';
 import type { PoseFeaturesFrame } from './pose-features';
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
@@ -304,49 +308,25 @@ function getMotionCompleteness(
     return { score: clamp(peakElevation / 155), status: 'complete' };
   }
 
-  /* PR overhead-hold: stable top entry + explicit hold window. reach-only 차단. */
+  /* PR overhead-dwell: evaluator와 동일한 hold truth — 연속 stable-top dwell time. */
   const OVERHEAD_HOLD_COMPLETE_MS = 1200;
   if (stepId === 'overhead-reach') {
     const armElevations = frames
       .map((frame) => frame.derived.armElevationAvg)
       .filter((value): value is number => typeof value === 'number');
-    const peakFrames = frames.filter((frame) => frame.phaseHint === 'peak');
     const raiseCount = frames.filter((frame) => frame.phaseHint === 'raise').length;
     const peakElevation = armElevations.length > 0 ? Math.max(...armElevations) : 0;
-    const ABSOLUTE_TOP_FLOOR_DEG = 132;
-    const STABLE_TOP_CONSECUTIVE = 3;
-
-    let stableTopEntryIndex = -1;
-    for (let i = 0; i <= frames.length - STABLE_TOP_CONSECUTIVE; i++) {
-      let allStable = true;
-      for (let k = 0; k < STABLE_TOP_CONSECUTIVE; k++) {
-        const e = frames[i + k]!.derived.armElevationAvg;
-        const prev = i + k > 0 ? frames[i + k - 1]!.derived.armElevationAvg : null;
-        const delta = typeof e === 'number' && typeof prev === 'number' ? e - prev : 0;
-        if (typeof e !== 'number' || e < ABSOLUTE_TOP_FLOOR_DEG || Math.abs(delta) >= 2.6) {
-          allStable = false;
-          break;
-        }
-      }
-      if (allStable) {
-        stableTopEntryIndex = i;
-        break;
-      }
-    }
-    const topConfirmedPeaks =
-      stableTopEntryIndex >= 0 ? peakFrames.filter((f) => frames.indexOf(f) >= stableTopEntryIndex) : [];
-    const peakCount = topConfirmedPeaks.length;
-    const holdDurationMs =
-      topConfirmedPeaks.length > 1
-        ? topConfirmedPeaks[topConfirmedPeaks.length - 1]!.timestampMs - topConfirmedPeaks[0]!.timestampMs
-        : 0;
+    const dwellResult = computeOverheadStableTopDwell(frames);
+    const holdDurationMs = dwellResult.holdDurationMs;
+    const peakCount = frames.filter((f) => f.phaseHint === 'peak').length;
+    const stableTopEntered = dwellResult.stableTopEnteredAtMs !== undefined;
 
     if (
       frames.length < 10 ||
-      peakElevation < ABSOLUTE_TOP_FLOOR_DEG ||
+      peakElevation < OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG ||
       raiseCount === 0 ||
       peakCount === 0 ||
-      stableTopEntryIndex < 0
+      !stableTopEntered
     ) {
       flags.add('rep_incomplete');
       return { score: clamp(peakElevation / 150), status: 'partial' };

@@ -100,7 +100,7 @@ export interface AttemptSnapshot {
       confidenceDowngradeReason?: string | null;
       insufficientSignalReason?: string | null;
     };
-    /** overhead — PR-C4 trace, PR overhead-hold */
+    /** overhead — PR-C4 trace, PR overhead-dwell */
     overhead?: {
       peakElevation?: number;
       peakCount?: number;
@@ -118,6 +118,13 @@ export interface AttemptSnapshot {
       successEligibleAtMs?: number;
       successTriggeredAtMs?: number;
       successBlockedReason?: string;
+      /** PR overhead-dwell: dwell vs legacy span 비교용 */
+      holdDurationMsLegacySpan?: number;
+      stableTopEnteredAtMs?: number;
+      stableTopExitedAtMs?: number;
+      stableTopDwellMs?: number;
+      stableTopSegmentCount?: number;
+      holdComputationMode?: string;
     };
     /** cue */
     cue?: {
@@ -315,6 +322,13 @@ function buildDiagnosisSummary(
             : !gate.passConfirmationSatisfied
               ? 'pass_confirmation_pending'
               : undefined;
+    const holdDurationMsLegacySpan = typeof hm?.holdDurationMsLegacySpan === 'number' ? hm.holdDurationMsLegacySpan : undefined;
+    const stableTopEnteredAtMs = typeof hm?.stableTopEnteredAtMs === 'number' ? hm.stableTopEnteredAtMs : undefined;
+    const stableTopExitedAtMs = typeof hm?.stableTopExitedAtMs === 'number' ? hm.stableTopExitedAtMs : undefined;
+    const stableTopDwellMs = typeof hm?.stableTopDwellMs === 'number' ? hm.stableTopDwellMs : undefined;
+    const stableTopSegmentCount = typeof hm?.stableTopSegmentCount === 'number' ? hm.stableTopSegmentCount : undefined;
+    const holdComputationMode = typeof hm?.holdComputationMode === 'string' ? hm.holdComputationMode : undefined;
+
     base.overhead = {
       peakElevation,
       peakCount,
@@ -332,6 +346,12 @@ function buildDiagnosisSummary(
       successEligibleAtMs: passLatched ? (options?.successTriggeredAtMs ?? Date.now()) : undefined,
       successTriggeredAtMs: options?.successTriggeredAtMs,
       successBlockedReason: successBlockedReason ?? undefined,
+      holdDurationMsLegacySpan,
+      stableTopEnteredAtMs,
+      stableTopExitedAtMs,
+      stableTopDwellMs,
+      stableTopSegmentCount,
+      holdComputationMode,
     };
   }
 

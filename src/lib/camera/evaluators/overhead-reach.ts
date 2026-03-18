@@ -1,6 +1,9 @@
 /**
  * 오버헤드 리치 evaluator
  * metrics: arm range, trunk compensation, asymmetry, top hold
+ *
+ * PR overhead-dwell: hold = 연속 stable-top dwell time (first~last peak span 아님).
+ * reach-only 차단, 흔들림 시 hold reset.
  */
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
 import { buildPoseFeaturesFrames } from '@/lib/camera/pose-features';
@@ -9,6 +12,105 @@ import { getOverheadPerStepDiagnostics } from '@/lib/camera/step-joint-spec';
 import type { EvaluatorResult, EvaluatorMetric } from './types';
 
 const MIN_VALID_FRAMES = 8;
+
+/** evaluator/guardrails 공용 상수 — delta/degree는 이번 PR에서 변경하지 않음 */
+export const OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG = 132;
+export const OVERHEAD_STABLE_TOP_DELTA_DEG = 2.6;
+export const OVERHEAD_STABLE_TOP_CONSECUTIVE = 3;
+
+export interface OverheadStableTopDwellResult {
+  holdDurationMs: number;
+  stableTopEnteredAtMs: number | undefined;
+  stableTopExitedAtMs: number | undefined;
+  stableTopDwellMs: number;
+  stableTopSegmentCount: number;
+  holdComputationMode: 'dwell';
+  /** trace: legacy first~last peak span (비교용) */
+  holdDurationMsLegacySpan: number;
+}
+
+/**
+ * 연속 stable-top dwell time 계산.
+ * stable top: elevation >= floor, |delta| < deltaMax.
+ * 3연속 진입 후 구간 시작, 깨지면 reset. 최장 구간 dwell = hold.
+ */
+export function computeOverheadStableTopDwell(
+  frames: PoseFeaturesFrame[],
+  floorDeg = OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG,
+  deltaMax = OVERHEAD_STABLE_TOP_DELTA_DEG,
+  consecutive = OVERHEAD_STABLE_TOP_CONSECUTIVE
+): OverheadStableTopDwellResult {
+  const valid = frames.filter((f) => f.isValid);
+  const legacySpan = (() => {
+    const peakFrames = valid.filter((f) => f.phaseHint === 'peak');
+    let stableIdx = -1;
+    for (let i = 0; i <= valid.length - consecutive; i++) {
+      let ok = true;
+      for (let k = 0; k < consecutive; k++) {
+        const e = valid[i + k]!.derived.armElevationAvg;
+        const prev = i + k > 0 ? valid[i + k - 1]!.derived.armElevationAvg : null;
+        const d = typeof e === 'number' && typeof prev === 'number' ? e - prev : 0;
+        if (typeof e !== 'number' || e < floorDeg || Math.abs(d) >= deltaMax) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) {
+        stableIdx = i;
+        break;
+      }
+    }
+    const confirmed = stableIdx >= 0 ? peakFrames.filter((f) => valid.indexOf(f) >= stableIdx) : [];
+    return confirmed.length > 1
+      ? (confirmed[confirmed.length - 1]!.timestampMs - confirmed[0]!.timestampMs)
+      : 0;
+  })();
+
+  let stableStreak = 0;
+  let segmentStartMs: number | null = null;
+  let bestDwellMs = 0;
+  let bestEnteredMs: number | undefined;
+  let bestExitedMs: number | undefined;
+  let segmentCount = 0;
+
+  for (let i = 0; i < valid.length; i++) {
+    const f = valid[i]!;
+    const e = f.derived.armElevationAvg;
+    const prev = i > 0 ? valid[i - 1]!.derived.armElevationAvg : null;
+    const delta = typeof e === 'number' && typeof prev === 'number' ? e - prev : 0;
+    const isStable =
+      typeof e === 'number' && e >= floorDeg && Math.abs(delta) < deltaMax;
+
+    if (isStable) {
+      stableStreak += 1;
+      if (stableStreak >= consecutive && segmentStartMs === null) {
+        segmentStartMs = f.timestampMs;
+        segmentCount += 1;
+      }
+      if (segmentStartMs !== null) {
+        const dwellMs = f.timestampMs - segmentStartMs;
+        if (dwellMs > bestDwellMs) {
+          bestDwellMs = dwellMs;
+          bestEnteredMs = segmentStartMs;
+          bestExitedMs = f.timestampMs;
+        }
+      }
+    } else {
+      stableStreak = 0;
+      segmentStartMs = null;
+    }
+  }
+
+  return {
+    holdDurationMs: bestDwellMs,
+    stableTopEnteredAtMs: bestEnteredMs,
+    stableTopExitedAtMs: bestExitedMs,
+    stableTopDwellMs: bestDwellMs,
+    stableTopSegmentCount: segmentCount,
+    holdComputationMode: 'dwell',
+    holdDurationMsLegacySpan: legacySpan,
+  };
+}
 
 function mean(values: number[]): number {
   if (values.length === 0) return 0;
@@ -70,19 +172,19 @@ export function evaluateOverheadReachFromPoseFrames(
   );
   const raiseCount = countPhases(valid, 'raise');
   const peakFrames = valid.filter((frame) => frame.phaseHint === 'peak');
-  /** PR overhead-hold: absolute top floor. Hold starts only after stable top entry. */
-  const ABSOLUTE_TOP_FLOOR_DEG = 132;
-  const STABLE_TOP_CONSECUTIVE = 3;
-
-  /** stable top entry: 3+ 연속 프레임이 132+ 이고 delta < 2.6. jitter/spike로 hold 누적 방지. */
+  /** stable top entry index: peakCount 등에 사용 */
   let stableTopEntryIndex = -1;
-  for (let i = 0; i <= valid.length - STABLE_TOP_CONSECUTIVE; i++) {
+  for (let i = 0; i <= valid.length - OVERHEAD_STABLE_TOP_CONSECUTIVE; i++) {
     let allStable = true;
-    for (let k = 0; k < STABLE_TOP_CONSECUTIVE; k++) {
+    for (let k = 0; k < OVERHEAD_STABLE_TOP_CONSECUTIVE; k++) {
       const e = valid[i + k]!.derived.armElevationAvg;
       const prev = i + k > 0 ? valid[i + k - 1]!.derived.armElevationAvg : null;
       const delta = typeof e === 'number' && typeof prev === 'number' ? e - prev : 0;
-      if (typeof e !== 'number' || e < ABSOLUTE_TOP_FLOOR_DEG || Math.abs(delta) >= 2.6) {
+      if (
+        typeof e !== 'number' ||
+        e < OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG ||
+        Math.abs(delta) >= OVERHEAD_STABLE_TOP_DELTA_DEG
+      ) {
         allStable = false;
         break;
       }
@@ -98,19 +200,18 @@ export function evaluateOverheadReachFromPoseFrames(
       ? peakFrames.filter((f) => valid.indexOf(f) >= stableTopEntryIndex)
       : [];
   const peakCount = topConfirmedPeaks.length;
-  /** hold accumulation: stable top 이후 peak 구간만. reach-only 차단. */
-  const holdDurationMs =
-    topConfirmedPeaks.length > 1
-      ? topConfirmedPeaks[topConfirmedPeaks.length - 1]!.timestampMs - topConfirmedPeaks[0]!.timestampMs
-      : 0;
+
+  /** PR overhead-dwell: 연속 stable-top dwell time. peak span 아님. */
+  const dwellResult = computeOverheadStableTopDwell(valid);
+  const holdDurationMs = dwellResult.holdDurationMs;
   const stableTopEntryAtMs =
     stableTopEntryIndex >= 0 && valid[stableTopEntryIndex]
       ? valid[stableTopEntryIndex]!.timestampMs
       : 0;
   const topEntryAtMs = stableTopEntryAtMs;
   const holdSatisfiedAtMs =
-    holdDurationMs >= 1200 && topConfirmedPeaks.length > 0
-      ? topConfirmedPeaks[0]!.timestampMs + 1200
+    holdDurationMs >= 1200 && dwellResult.stableTopEnteredAtMs !== undefined
+      ? dwellResult.stableTopEnteredAtMs + 1200
       : undefined;
 
   if (raiseCount === 0 || peakCount === 0) {
@@ -200,6 +301,13 @@ export function evaluateOverheadReachFromPoseFrames(
         holdSatisfiedAtMs,
         peakArmElevation:
           armElevationAvgValues.length > 0 ? Math.round(Math.max(...armElevationAvgValues)) : null,
+        /** PR overhead-dwell: trace fields */
+        stableTopEnteredAtMs: dwellResult.stableTopEnteredAtMs,
+        stableTopExitedAtMs: dwellResult.stableTopExitedAtMs,
+        stableTopDwellMs: dwellResult.stableTopDwellMs,
+        stableTopSegmentCount: dwellResult.stableTopSegmentCount,
+        holdComputationMode: dwellResult.holdComputationMode,
+        holdDurationMsLegacySpan: dwellResult.holdDurationMsLegacySpan,
       },
       perStepDiagnostics: perStepRecord,
     },
