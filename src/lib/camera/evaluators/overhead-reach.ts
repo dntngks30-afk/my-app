@@ -91,6 +91,11 @@ export function evaluateOverheadReachFromPoseFrames(
     topConfirmedPeaks.length > 1
       ? topConfirmedPeaks[topConfirmedPeaks.length - 1]!.timestampMs - topConfirmedPeaks[0]!.timestampMs
       : 0;
+  /** PR-C4: trace용 — true top-entry 첫 프레임 타임스탬프 */
+  const topEntryAtMs =
+    topEntryIndex >= 0 && valid[topEntryIndex]
+      ? valid[topEntryIndex]!.timestampMs
+      : 0;
 
   if (raiseCount === 0 || peakCount === 0) {
     completionHints.push('raise_peak_incomplete');
@@ -173,6 +178,7 @@ export function evaluateOverheadReachFromPoseFrames(
         raiseCount,
         peakCount,
         holdDurationMs,
+        topEntryAtMs,
         peakArmElevation:
           armElevationAvgValues.length > 0 ? Math.round(Math.max(...armElevationAvgValues)) : null,
       },

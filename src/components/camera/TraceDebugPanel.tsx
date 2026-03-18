@@ -187,7 +187,10 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
                   <p>peakDepth={d.squatCycle.peakDepth ?? 'n/a'} bottom={d.squatCycle.bottomDetected} recovery={d.squatCycle.recoveryDetected} startBeforeBottom={d.squatCycle.startBeforeBottom}</p>
                 )}
                 {d.overhead && (
-                  <p>peakElev={d.overhead.peakElevation ?? 'n/a'} peakCnt={d.overhead.peakCount} holdMs={d.overhead.holdDurationMs} holdTooShort={d.overhead.holdTooShort}</p>
+                  <>
+                    <p>peakElev={d.overhead.peakElevation ?? 'n/a'} peakCnt={d.overhead.peakCount} holdMs={d.overhead.holdDurationMs} holdTooShort={d.overhead.holdTooShort}</p>
+                    <p className="text-slate-500">PR-C4: topEntry={d.overhead.topEntryAtMs ?? 'n/a'} holdSat={d.overhead.holdSatisfiedAtMs ?? 'n/a'} holdRem={d.overhead.holdRemainingMsAtCue ?? 'n/a'} holdCuePlayed={d.overhead.holdCuePlayed ?? 'n/a'} holdSupp={d.overhead.holdCueSuppressedReason ?? 'n/a'} successTrig={d.overhead.successTriggeredAtMs ?? 'n/a'}</p>
+                  </>
                 )}
                 {d.cue && (
                   <p>cue={d.cue.chosenCueKey ?? 'none'} clip={d.cue.chosenClipKey ?? 'none'} liveCue={d.cue.liveCueingEnabled}</p>

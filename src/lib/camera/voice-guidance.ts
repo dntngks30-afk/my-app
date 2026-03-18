@@ -42,6 +42,8 @@ type VoiceGuidanceGate = {
   framingHint?: string | null;
   /** squat 전용: bottom-stall recovery cue 조건 판단 */
   squatCycleDebug?: SquatCycleDebug | null;
+  /** PR-C4: overhead hold cue suppress — holdDurationMs, topEntryAtMs 등 */
+  evaluatorResult?: { debug?: { highlightedMetrics?: { holdDurationMs?: number } } };
 };
 
 /** PR E: approved Korean phrases for TTS — internal/debug strings must never be spoken */
@@ -301,6 +303,10 @@ export interface CorrectiveCueOptions {
   now?: number;
   /** PR E: live cueing blocked during intro/countdown */
   liveCueingEnabled?: boolean;
+  /** PR-C4: overhead hold cue one-shot — 이번 시도에서 이미 재생했으면 true */
+  holdCuePlayedRef?: { current: boolean };
+  /** PR-C4: hold cue 재생/종료 시 overlap guard용 */
+  onHoldCueStateChange?: (active: boolean) => void;
 }
 
 /**
@@ -418,11 +424,28 @@ export function trySpeakCorrectiveCueWithAntiSpam(
     return { played: false, suppressedReason: decision.reason };
   }
 
+  /* PR-C4: overhead hold cue one-shot — 이미 재생했으면 suppress */
+  const isOverheadHoldCue = stepId === 'overhead-reach' && candidateKey === 'correction:hold:overhead-reach';
+  if (isOverheadHoldCue && options.holdCuePlayedRef?.current) {
+    correctiveAntiSpamState.lastObserved = {
+      cueCandidate: cue.dedupeKey,
+      suppressedReason: 'hold_cue_one_shot',
+      played: false,
+    };
+    return { played: false, suppressedReason: 'hold_cue_one_shot' };
+  }
+
   if (decision.interruptActive) {
     cancelVoiceGuidance();
   }
 
   void speakVoiceCue(cue);
+  if (isOverheadHoldCue) {
+    options.holdCuePlayedRef && (options.holdCuePlayedRef.current = true);
+    options.onHoldCueStateChange?.(true);
+    const HOLD_CUE_ESTIMATED_DURATION_MS = 3000;
+    setTimeout(() => options.onHoldCueStateChange?.(false), HOLD_CUE_ESTIMATED_DURATION_MS);
+  }
   correctiveAntiSpamState.correctiveLatchedKey = cue.dedupeKey;
   correctiveAntiSpamState.lastEmittedAtMs = now;
   correctiveAntiSpamState.lastObserved = {
@@ -769,6 +792,17 @@ export function getCorrectiveVoiceCue(
   }
 
   if (allReasons.includes('hold_too_short')) {
+    /* PR-C4: overhead hold cue contract — near-success suppress, cue eligibility delay */
+    if (stepId === 'overhead-reach') {
+      const REQUIRED_HOLD_MS = 1200;
+      const CUE_SUPPRESS_NEAR_SUCCESS_MS = 350;
+      const CUE_ELIGIBILITY_DELAY_MS = 400;
+      const holdDurationMs =
+        gate.evaluatorResult?.debug?.highlightedMetrics?.holdDurationMs ?? 0;
+      const remainingHoldMs = REQUIRED_HOLD_MS - holdDurationMs;
+      if (remainingHoldMs <= CUE_SUPPRESS_NEAR_SUCCESS_MS) return null;
+      if (holdDurationMs < CUE_ELIGIBILITY_DELAY_MS) return null;
+    }
     return {
       kind: 'correction',
       dedupeKey: `correction:hold:${stepId}`,

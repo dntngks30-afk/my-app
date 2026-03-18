@@ -181,6 +181,10 @@ export default function CameraOverheadReachPage() {
   const prevCapturingReadinessRef = useRef<LiveReadinessState | null>(null);
   /** PR HOTFIX-02: ready_to_shoot 시도 여부 — async IIFE 재진입 방지 */
   const readyToShootAttemptedRef = useRef(false);
+  /** PR-C4: hold cue one-shot — 이번 시도에서 1회만 재생 */
+  const holdCuePlayedRef = useRef(false);
+  /** PR-C4: hold cue 재생 중 success overlap 차단 */
+  const [holdCueActive, setHoldCueActive] = useState(false);
   const currentStepKey = `${STEP_ID}:${previewKey}`;
   const nextPath = getNextStepPath(STEP_ID) ?? '/movement-test/camera/complete';
   /** 마지막 단계(overhead-reach → complete): outro 재생 완료 후에만 이동 */
@@ -285,6 +289,8 @@ export default function CameraOverheadReachPage() {
     successCueAttemptedRef.current = false;
     prevCapturingReadinessRef.current = null;
     readyToShootAttemptedRef.current = false;
+    holdCuePlayedRef.current = false;
+    setHoldCueActive(false);
     setStartSequenceComplete(false);
     setCaptureCuingEnabled(false);
     setPassLatched(false);
@@ -301,6 +307,8 @@ export default function CameraOverheadReachPage() {
     recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
       liveCueingEnabled: startSequenceComplete,
       autoNextObservation: nextTriggerReason ?? 'pass_latched',
+      holdCuePlayed: holdCuePlayedRef.current,
+      successTriggeredAtMs: Date.now(),
     });
     const current = loadCameraTest();
     const completed = current.completedSteps?.includes(STEP_ID)
@@ -438,9 +446,12 @@ export default function CameraOverheadReachPage() {
         readinessState: liveReadiness,
         framingHint:
           liveReadiness === 'not_ready' ? liveReadinessSummary.framingHint ?? null : null,
+        evaluatorResult: gate.evaluatorResult,
       },
       passLatched: effectivePassLatched,
       liveCueingEnabled: startSequenceComplete,
+      holdCuePlayedRef,
+      onHoldCueStateChange: setHoldCueActive,
     });
   }, [
     captureCuingEnabled,
@@ -540,12 +551,14 @@ export default function CameraOverheadReachPage() {
   ]);
 
   /* PR G5: passConfirmed -> passLatched 공통 계약. effectivePassLatched(finalPassLatched || passLatched)로 latch. */
+  /* PR-C4: hold cue 재생 중에는 success overlap 방지를 위해 latch 지연 */
   useEffect(() => {
     if (permissionDenied || !cameraReady || passLatched || settledRef.current) {
       return;
     }
 
     if (effectivePassLatched) {
+      if (holdCueActive) return;
       latchPassEvent();
       return;
     }
@@ -576,6 +589,7 @@ export default function CameraOverheadReachPage() {
     gate.progressionState,
     gate.status,
     gate.uiMessage,
+    holdCueActive,
     latchPassEvent,
     passReady,
     passLatched,
@@ -588,6 +602,9 @@ export default function CameraOverheadReachPage() {
     if (!effectivePassLatched) {
       return;
     }
+
+    /* PR-C4: hold cue 재생 중 success overlap 방지 — latch 지연 */
+    if (holdCueActive) return;
 
     if (passLatchedStepKeyRef.current !== currentStepKey) {
       latchPassEvent();
@@ -720,6 +737,7 @@ export default function CameraOverheadReachPage() {
     currentStepKey,
     effectivePassLatched,
     gate.autoAdvanceDelayMs,
+    holdCueActive,
     isFinalStep,
     latchPassEvent,
     navigationTriggered,
@@ -751,6 +769,8 @@ export default function CameraOverheadReachPage() {
     hasStartedRef.current = false;
     prevCapturingReadinessRef.current = null;
     readyToShootAttemptedRef.current = false;
+    holdCuePlayedRef.current = false;
+    setHoldCueActive(false);
     setCameraReady(false);
     setPassLatched(false);
     setPassLatchedAt(null);

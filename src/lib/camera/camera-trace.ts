@@ -75,7 +75,7 @@ export interface AttemptSnapshot {
       cycleComplete: boolean;
       passBlockedReason: string | null;
     };
-    /** overhead */
+    /** overhead — PR-C4 trace */
     overhead?: {
       peakElevation?: number;
       peakCount?: number;
@@ -83,6 +83,13 @@ export interface AttemptSnapshot {
       holdTooShort: boolean;
       topReachDetected: boolean;
       upwardMotionDetected: boolean;
+      topEntryAtMs?: number;
+      holdSatisfiedAtMs?: number;
+      holdRemainingMsAtCue?: number;
+      holdCuePlayed?: boolean;
+      holdCueSuppressedReason?: string | null;
+      successEligibleAtMs?: number;
+      successTriggeredAtMs?: number;
     };
     /** cue */
     cue?: {
@@ -168,6 +175,10 @@ function extractPerStepSummary(gate: ExerciseGateResult): Record<string, unknown
 export interface RecordAttemptOptions {
   liveCueingEnabled?: boolean;
   autoNextObservation?: string;
+  /** PR-C4: overhead hold cue 재생 여부 */
+  holdCuePlayed?: boolean;
+  /** PR-C4: success latch 시점 (ms) */
+  successTriggeredAtMs?: number;
 }
 
 function buildDiagnosisSummary(
@@ -222,13 +233,17 @@ function buildDiagnosisSummary(
   }
 
   if (stepId === 'overhead-reach') {
+    const REQUIRED_HOLD_MS = 1200;
     const raiseCount = typeof hm?.raiseCount === 'number' ? hm.raiseCount : 0;
     const peakCount = typeof hm?.peakCount === 'number' ? hm.peakCount : 0;
     const holdDurationMs = typeof hm?.holdDurationMs === 'number' ? hm.holdDurationMs : 0;
+    const topEntryAtMs = typeof hm?.topEntryAtMs === 'number' ? hm.topEntryAtMs : undefined;
     const peakElevation =
       typeof hm?.peakArmElevation === 'number'
         ? hm.peakArmElevation
         : gate.evaluatorResult?.metrics?.find((m) => m.name === 'arm_range')?.value;
+    const holdSatisfied = holdDurationMs >= REQUIRED_HOLD_MS;
+    const isHoldCue = cueObs?.cueCandidate === 'correction:hold:overhead-reach';
     base.overhead = {
       peakElevation,
       peakCount,
@@ -236,6 +251,13 @@ function buildDiagnosisSummary(
       holdTooShort: gate.failureReasons?.includes('hold_too_short') ?? false,
       topReachDetected: peakCount > 0,
       upwardMotionDetected: raiseCount > 0,
+      topEntryAtMs,
+      holdSatisfiedAtMs: holdSatisfied && topEntryAtMs != null ? topEntryAtMs + REQUIRED_HOLD_MS : undefined,
+      holdRemainingMsAtCue: REQUIRED_HOLD_MS - holdDurationMs,
+      holdCuePlayed: options?.holdCuePlayed,
+      holdCueSuppressedReason: isHoldCue ? (cueObs?.suppressedReason ?? null) : undefined,
+      successEligibleAtMs: passLatched ? (options?.successTriggeredAtMs ?? Date.now()) : undefined,
+      successTriggeredAtMs: options?.successTriggeredAtMs,
     };
   }
 
