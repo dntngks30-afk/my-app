@@ -40,6 +40,7 @@ import {
 import {
   cancelCorrectiveCueForSuccess,
   cancelVoiceGuidance,
+  getFollowUpIntroVoiceCue,
   getReadyToShootVoiceCue,
   getStartVoiceCue,
   getSuccessVoiceCue,
@@ -328,7 +329,8 @@ export default function CameraOverheadReachPage() {
   );
 
   /* PR G4: funnel intro 중복 제거 — squat 이후 overhead 진입 시 "촬영이 시작됩니다" 재실행 금지.
-   * hasFunnelIntroPlayed()면 바로 motion-ready로 전환(800ms settle). */
+   * PR G2 follow-up intro: squat 성공 후 overhead 진입 시 "두번째 테스트입니다..." 필수 재생.
+   * intro 재생 완료 전까지 startSequenceComplete=false → readiness/평가/live cue 모두 비활성화. */
   useEffect(() => {
     if (!cameraReady || startCueAttemptedRef.current) {
       return;
@@ -336,12 +338,28 @@ export default function CameraOverheadReachPage() {
 
     startCueAttemptedRef.current = true;
     const alreadyPlayed = hasFunnelIntroPlayed();
-    if (!alreadyPlayed) {
-      void speakVoiceCue(getStartVoiceCue(STEP_ID));
-      setFunnelIntroPlayed();
+
+    if (alreadyPlayed) {
+      /* squat 이후 진입: follow-up intro 1회 재생, 완료 후에만 overhead evaluation 활성화 */
+      const cancelledRef = { current: false };
+      const idRef = { current: null as ReturnType<typeof setTimeout> | null };
+      void (async () => {
+        await speakVoiceCueAndWait(getFollowUpIntroVoiceCue());
+        if (cancelledRef.current) return;
+        idRef.current = window.setTimeout(() => {
+          if (cancelledRef.current) return;
+          setStartSequenceComplete(true);
+        }, 800);
+      })();
+      return () => {
+        cancelledRef.current = true;
+        if (idRef.current) window.clearTimeout(idRef.current);
+      };
     }
-    const settleMs = alreadyPlayed ? 800 : 3000;
-    const id = window.setTimeout(() => setStartSequenceComplete(true), settleMs);
+
+    void speakVoiceCue(getStartVoiceCue(STEP_ID));
+    setFunnelIntroPlayed();
+    const id = window.setTimeout(() => setStartSequenceComplete(true), 3000);
     return () => window.clearTimeout(id);
   }, [cameraReady]);
 

@@ -602,6 +602,19 @@ export function getStartVoiceCue(stepId: CameraStepId): VoiceCue {
   };
 }
 
+/** squat 성공 후 overhead 진입 시 필수 follow-up intro.
+ * "두번째 테스트입니다. 양 팔을 머리위로 끝까지 올려주세요" — Start follow-up testing.mp3 */
+export function getFollowUpIntroVoiceCue(): VoiceCue {
+  return {
+    kind: 'start',
+    dedupeKey: 'followup:intro',
+    text: '두번째 테스트입니다. 양 팔을 머리위로 끝까지 올려주세요',
+    priority: 2,
+    cooldownMs: 8000,
+    fallbackBeep: false,
+  };
+}
+
 /** red → white 전환 순간 1회 재생되는 상태 전이 cue.
  * interrupt: true — 재생 중인 framing cue(priority 5)를 중단하고 우선 발화한다.
  * (decideVoicePlayback의 lower_priority_active 차단을 우회하기 위해 필요) */
