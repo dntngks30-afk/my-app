@@ -219,12 +219,49 @@ export function getRecentSuccessSnapshots(): SuccessSnapshot[] {
 const FAILED_SHALLOW_SNAPSHOT_KEY = 'moveReCameraFailedShallowSnapshots:v1';
 const MAX_FAILED_SHALLOW_SNAPSHOTS = 10;
 
+/** relativeDepthPeak noise floor (0–1) — below this = standing/tiny sway, no real attempt */
+const SQUAT_ATTEMPT_RELATIVE_DEPTH_NOISE_FLOOR = 0.02;
+
+/**
+ * Attempt evidence: 실제 squat 시도가 있었는지.
+ * idle standing / tiny sway에서는 false.
+ */
+export function hasSquatAttemptEvidence(gate: ExerciseGateResult): boolean {
+  const hm = gate.evaluatorResult?.debug?.highlightedMetrics;
+  const firstDescentIdx = (hm?.firstDescentIdx as number) ?? -1;
+  const firstBottomIdx = (hm?.firstBottomIdx as number) ?? -1;
+  const relativeDepthPeak = (hm?.relativeDepthPeak as number) ?? 0;
+  const downwardCommitmentDelta = (hm?.downwardCommitmentDelta as number) ?? 0;
+  const descentCount = (hm?.descentCount as number) ?? 0;
+
+  const descendConfirmed = firstDescentIdx >= 0;
+  const downwardCommitmentReached =
+    firstBottomIdx >= 0 || downwardCommitmentDelta >= SQUAT_ATTEMPT_RELATIVE_DEPTH_NOISE_FLOOR;
+  const attemptStarted = descentCount > 0 || descendConfirmed;
+  const relativeDepthAboveNoise = relativeDepthPeak >= SQUAT_ATTEMPT_RELATIVE_DEPTH_NOISE_FLOOR;
+
+  return (
+    attemptStarted &&
+    descendConfirmed &&
+    (downwardCommitmentReached || relativeDepthAboveNoise)
+  );
+}
+
 export interface SquatFailedShallowSnapshot {
   id: string;
   ts: string;
   motionType: 'squat';
   currentRoute: string;
+  /** @deprecated use rawDepthPeak / baselineStandingDepth / relativeDepthPeak */
   depthPeak: number | null;
+  rawDepthPeak?: number | null;
+  baselineStandingDepth?: number | null;
+  relativeDepthPeak?: number | null;
+  attemptStarted?: boolean;
+  descendConfirmed?: boolean;
+  downwardCommitmentReached?: boolean;
+  failureOverlayArmed?: boolean;
+  failureOverlayBlockedReason?: string | null;
   guardrailCompletionStatus: string;
   autoProgressionCompletionSatisfied: boolean;
   completionPathUsed: string | undefined;
@@ -236,11 +273,29 @@ export interface SquatFailedShallowSnapshot {
   diagVersion: string;
 }
 
-export function recordSquatFailedShallowSnapshot(gate: ExerciseGateResult): void {
+export function recordSquatFailedShallowSnapshot(
+  gate: ExerciseGateResult,
+  options?: { failureOverlayArmed: boolean; failureOverlayBlockedReason: string | null }
+): void {
   try {
     const hm = gate.evaluatorResult?.debug?.highlightedMetrics;
     const sc = gate.squatCycleDebug;
     const depthPeak = typeof hm?.depthPeak === 'number' ? hm.depthPeak : null;
+    const rawDepthPeak = typeof hm?.rawDepthPeak === 'number' ? hm.rawDepthPeak : null;
+    const baselineStandingDepth =
+      typeof hm?.baselineStandingDepth === 'number' ? hm.baselineStandingDepth : null;
+    const relativeDepthPeak =
+      typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : null;
+    const firstDescentIdx = (hm?.firstDescentIdx as number) ?? -1;
+    const firstBottomIdx = (hm?.firstBottomIdx as number) ?? -1;
+    const descentCount = (hm?.descentCount as number) ?? 0;
+    const downwardCommitmentDelta = (hm?.downwardCommitmentDelta as number) ?? 0;
+
+    const descendConfirmed = firstDescentIdx >= 0;
+    const downwardCommitmentReached =
+      firstBottomIdx >= 0 || downwardCommitmentDelta >= SQUAT_ATTEMPT_RELATIVE_DEPTH_NOISE_FLOOR;
+    const attemptStarted = descentCount > 0 || descendConfirmed;
+
     const ascentRecoveredLowRom = (hm?.ascentRecoveredLowRom as number) ?? 0;
     const ascentRecoveredUltraLowRom = (hm?.ascentRecoveredUltraLowRom as number) ?? 0;
     const recoveryLowRomDetected = ascentRecoveredLowRom > 0;
@@ -250,12 +305,23 @@ export function recordSquatFailedShallowSnapshot(gate: ExerciseGateResult): void
     const ultraLowRomRecoveryConfirmed =
       depthPeak != null && depthPeak >= 2 && depthPeak < 7 && recoveryUltraLowRomDetected;
 
+    const failureOverlayArmed = options?.failureOverlayArmed ?? hasSquatAttemptEvidence(gate);
+    const failureOverlayBlockedReason = options?.failureOverlayBlockedReason ?? null;
+
     const snapshot: SquatFailedShallowSnapshot = {
       id: `sq-fail-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       ts: new Date().toISOString(),
       motionType: 'squat',
       currentRoute: typeof window !== 'undefined' ? window.location.pathname : '',
       depthPeak,
+      rawDepthPeak,
+      baselineStandingDepth,
+      relativeDepthPeak,
+      attemptStarted,
+      descendConfirmed,
+      downwardCommitmentReached,
+      failureOverlayArmed,
+      failureOverlayBlockedReason,
       guardrailCompletionStatus: gate.guardrail.completionStatus ?? 'unknown',
       autoProgressionCompletionSatisfied: gate.completionSatisfied,
       completionPathUsed: sc?.completionPathUsed,

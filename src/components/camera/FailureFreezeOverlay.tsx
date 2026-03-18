@@ -20,7 +20,14 @@ interface FailureFreezeOverlayProps {
 function SquatFailedFields({ s }: { s: SquatFailedShallowSnapshot }) {
   return (
     <div className="space-y-1 text-left">
-      <p><span className="text-slate-500">depthPeak</span> {s.depthPeak ?? 'n/a'}</p>
+      <p><span className="text-slate-500">rawDepthPeak</span> {s.rawDepthPeak ?? 'n/a'}</p>
+      <p><span className="text-slate-500">baselineStandingDepth</span> {s.baselineStandingDepth ?? 'n/a'}</p>
+      <p><span className="text-slate-500">relativeDepthPeak</span> {s.relativeDepthPeak ?? 'n/a'}</p>
+      <p><span className="text-slate-500">attemptStarted</span> {String(s.attemptStarted ?? false)}</p>
+      <p><span className="text-slate-500">descendConfirmed</span> {String(s.descendConfirmed ?? false)}</p>
+      <p><span className="text-slate-500">downwardCommitmentReached</span> {String(s.downwardCommitmentReached ?? false)}</p>
+      <p><span className="text-slate-500">failureOverlayArmed</span> {String(s.failureOverlayArmed ?? true)}</p>
+      <p><span className="text-slate-500">failureOverlayBlockedReason</span> {s.failureOverlayBlockedReason ?? 'n/a'}</p>
       <p><span className="text-slate-500">guardrailCompletionStatus</span> {s.guardrailCompletionStatus}</p>
       <p><span className="text-slate-500">autoProgressionCompletionSatisfied</span> {String(s.autoProgressionCompletionSatisfied)}</p>
       <p><span className="text-slate-500">completionPathUsed</span> {s.completionPathUsed ?? 'n/a'}</p>
@@ -58,7 +65,7 @@ export function FailureFreezeOverlay({ onClose }: FailureFreezeOverlayProps) {
     <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/90 p-4">
       <div className="w-full max-w-lg overflow-y-auto rounded-lg border border-rose-500/50 bg-slate-900 p-6 font-mono text-sm">
         <h2 className="mb-4 text-lg font-semibold text-rose-400">
-          Failed Shallow Freeze — Squat
+          Squat Attempt Failed (Shallow) — Diagnostic
         </h2>
         <div className="max-h-[60vh] overflow-y-auto text-slate-200">
           {snapshot ? (

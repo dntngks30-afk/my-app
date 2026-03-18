@@ -37,6 +37,7 @@ import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
 import {
   recordSquatSuccessSnapshot,
   recordSquatFailedShallowSnapshot,
+  hasSquatAttemptEvidence,
   isDiagnosticFreezeMode,
 } from '@/lib/camera/camera-success-diagnostic';
 import {
@@ -739,7 +740,14 @@ export default function CameraSquatPage() {
     failureFreezeTimerRef.current = window.setTimeout(() => {
       failureFreezeTimerRef.current = null;
       const g = gateRef.current;
-      if (g) recordSquatFailedShallowSnapshot(g);
+      if (!g) return;
+      if (!hasSquatAttemptEvidence(g)) {
+        return;
+      }
+      recordSquatFailedShallowSnapshot(g, {
+        failureOverlayArmed: true,
+        failureOverlayBlockedReason: null,
+      });
       setShowFailureFreezeOverlay(true);
     }, SQUAT_FAILURE_FREEZE_DELAY_MS);
 

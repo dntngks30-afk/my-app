@@ -6,7 +6,7 @@
 import type { ExerciseGateResult } from './auto-progression';
 import type { CaptureQuality } from './guardrails';
 import type { CameraStepId } from '@/lib/public/camera-test';
-import { CAMERA_DIAG_VERSION } from './camera-success-diagnostic';
+import { CAMERA_DIAG_VERSION, hasSquatAttemptEvidence } from './camera-success-diagnostic';
 import { isFinalPassLatched } from './auto-progression';
 import { getCorrectiveCueObservability } from './voice-guidance';
 import { getLastPlaybackObservability } from './korean-audio-pack';
@@ -105,6 +105,11 @@ export interface AttemptSnapshot {
       romBand?: string;
       confidenceDowngradeReason?: string | null;
       insufficientSignalReason?: string | null;
+      /** PR failure-freeze: overlay arming — attempt evidence 기반 */
+      failureOverlayArmed?: boolean;
+      failureOverlayBlockedReason?: string | null;
+      attemptStarted?: boolean;
+      downwardCommitmentReached?: boolean;
     };
     /** overhead — PR-C4 trace, PR overhead-dwell */
     overhead?: {
@@ -295,6 +300,12 @@ function buildDiagnosisSummary(
       baselineStandingDepth: typeof hm?.baselineStandingDepth === 'number' ? hm.baselineStandingDepth : undefined,
       rawDepthPeak: typeof hm?.rawDepthPeak === 'number' ? hm.rawDepthPeak : undefined,
       relativeDepthPeak: typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : undefined,
+      failureOverlayArmed: hasSquatAttemptEvidence(gate),
+      failureOverlayBlockedReason: hasSquatAttemptEvidence(gate) ? null : 'no_attempt_evidence',
+      attemptStarted: (sc.descendConfirmed ?? false) || (hm?.descentCount as number) > 0,
+      downwardCommitmentReached:
+        (sc.reversalConfirmedAfterDescend ?? false) ||
+        ((hm?.downwardCommitmentDelta as number) ?? 0) >= 0.02,
       ultraLowRomPathDisabledOrGuarded: sc.ultraLowRomPathDisabledOrGuarded,
       squatEvidenceLevel: sc.squatEvidenceLevel,
       squatEvidenceReasons: sc.squatEvidenceReasons,
