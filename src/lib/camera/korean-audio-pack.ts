@@ -39,6 +39,7 @@ const DEDUPE_KEY_TO_CLIP: Record<string, KoreanCueClipKey> = {
   'correction:step-back': 'framing_step_back',
   'correction:framing': 'framing_center_body',
   'correction:hold:overhead-reach': 'overhead_hold_top',
+  'correction:motion:overhead-reach': 'overhead_raise_higher',
   'success:generic': 'good_job',
 };
 

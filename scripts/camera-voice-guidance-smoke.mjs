@@ -20,6 +20,7 @@ const {
   trySpeakCorrectiveCueWithAntiSpam,
   unlockVoiceGuidance,
 } = await import('../src/lib/camera/voice-guidance.ts');
+const { resolveCueToClipKey } = await import('../src/lib/camera/korean-audio-pack.ts');
 
 let passed = 0;
 let failed = 0;
@@ -90,15 +91,32 @@ ok('AT4b: squat depth cue maps correctly', depthCue?.text === '조금 더 깊게
 
 const holdCue = getCorrectiveVoiceCue(
   'overhead-reach',
-  createGate({ failureReasons: ['hold_too_short'], readinessState: 'ready' })
+  createGate({
+    failureReasons: ['hold_too_short'],
+    guardrail: { captureQuality: 'valid', flags: ['hold_too_short'] },
+    readinessState: 'ready',
+  })
 );
 ok('AT4c: overhead hold cue maps correctly', holdCue?.text === '맨 위에서 잠깐 멈춰주세요');
+
+const raiseCue = getCorrectiveVoiceCue(
+  'overhead-reach',
+  createGate({
+    failureReasons: ['rep_incomplete'],
+    guardrail: { captureQuality: 'valid', flags: ['rep_incomplete'] },
+    readinessState: 'ready',
+  })
+);
+ok('AT4c-2: overhead raise cue maps correctly', raiseCue?.text === '양팔을 머리 위로 끝까지 올려주세요');
+
+ok('AT4c-3: overhead hold cue resolves to overhead_hold_top clip', holdCue && resolveCueToClipKey(holdCue) === 'overhead_hold_top');
+ok('AT4c-4: overhead raise cue resolves to overhead_raise_higher clip', raiseCue && resolveCueToClipKey(raiseCue) === 'overhead_raise_higher');
 
 const whiteHardPartialCue = getCorrectiveVoiceCue(
   'overhead-reach',
   createGate({ failureReasons: ['hard_partial'], readinessState: 'ready' })
 );
-ok('AT4c-2: white readiness blocks framing-only hard partial speech', whiteHardPartialCue === null);
+ok('AT4c-5: white readiness blocks framing-only hard partial speech', whiteHardPartialCue === null);
 
 const framingHintCue = getCorrectiveVoiceCue(
   'squat',
