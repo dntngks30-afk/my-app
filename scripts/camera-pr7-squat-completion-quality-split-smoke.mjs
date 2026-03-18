@@ -67,7 +67,7 @@ function squatStats(landmarks) {
 
 console.log('Camera PR-7 squat completion vs quality split smoke test\n');
 
-// A. Valid shallow squat cycle can pass (implementation allows; mock geometry may vary)
+// A. Valid shallow squat cycle can pass (PR G9: shallower real cycle)
 const shallowSquatPoses = [
   ...Array(4).fill(0).map((_, i) => squatPoseLandmarks(100 + i * 80, 0.05 + i * 0.05)),
   ...Array(5).fill(0).map((_, i) => squatPoseLandmarks(420 + i * 80, 0.22 + i * 0.01)),
@@ -75,7 +75,7 @@ const shallowSquatPoses = [
 ];
 const shallowLandmarks = toLandmarks(shallowSquatPoses);
 const shallowGate = evaluateExerciseAutoProgress('squat', shallowLandmarks, squatStats(shallowLandmarks));
-ok('A: shallow squat not blocked by depth-only (no depth>=45 gate)', !shallowGate.squatCycleDebug?.passBlockedReason?.includes('depth'));
+ok('A: shallow squat not blocked by depth-only (PR G9 shallower cycle)', !shallowGate.squatCycleDebug?.passBlockedReason?.includes('depth'));
 
 // B. Descend-only does not pass
 const descendOnlyPoses = [
@@ -134,7 +134,7 @@ const syntheticFrames = [0.03, 0.06, 0.1, 0.15, 0.18, 0.2, 0.18, 0.12, 0.08, 0.0
   isValid: true,
 }));
 const recovery = getSquatRecoverySignal(syntheticFrames);
-ok('H: recovery allows peakDepth >= 0.12 (was 0.15)', recovery.peakDepth >= 0.12 && recovery.recovered);
+ok('H: recovery allows peakDepth >= 0.10 (PR G9 shallower cycle)', recovery.peakDepth >= 0.1 && recovery.recovered);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

@@ -211,10 +211,9 @@ export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecove
   const tailDepth = mean(tailWindow);
   const recoveryDrop = peakSample.depth - tailDepth;
 
-  /** PR G7: completion bottom = valid downward excursion, NOT quality depth.
-   * Align with SQUAT_NOISE_FLOOR (0.12). 복귀: recoveryDrop >= peakDepth * 0.25 */
+  /** PR G9: allow shallower valid cycle. Min 10% depth (was 12%). 복귀: recoveryDrop >= peakDepth * 0.25 */
   const recovered =
-    peakSample.depth >= 0.12 && recoveryDrop >= peakSample.depth * 0.25;
+    peakSample.depth >= 0.1 && recoveryDrop >= peakSample.depth * 0.25;
 
   return {
     peakDepth: peakSample.depth,
@@ -602,8 +601,8 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
 
   if (stepId === 'squat') {
     const maxDepth = Math.max(...frames.map((frame) => frame.derived.squatDepthProxy ?? 0));
-    /** PR G7: completion bottom = 50% of excursion (was 66%). Quality depth band stays separate. */
-    const bottomThreshold = maxDepth * 0.5;
+    /** PR G9: bottom = 40% of excursion (was 50%). Shallower real cycle can pass. */
+    const bottomThreshold = maxDepth * 0.4;
     const candidates = frames.map((frame, index) => {
       const previousDepth = index > 0 ? frames[index - 1]!.derived.squatDepthProxy : null;
       const currentDepth = frame.derived.squatDepthProxy;
@@ -616,9 +615,9 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
           phaseHint = 'start';
         } else if (currentDepth >= bottomThreshold && Math.abs(depthDelta) < 0.018) {
           phaseHint = 'bottom';
-        } else if (depthDelta > 0.012) {
+        } else if (depthDelta > 0.008) {
           phaseHint = 'descent';
-        } else if (depthDelta < -0.01) {
+        } else if (depthDelta < -0.008) {
           phaseHint = 'ascent';
         }
       }

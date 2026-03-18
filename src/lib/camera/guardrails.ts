@@ -77,8 +77,8 @@ export interface StepGuardrailResult {
 }
 
 const MIN_VALID_FRAMES = 8;
-/** PR G6: noise floor — 이하만 partial. shallow(0.12~0.35) full cycle도 complete 허용 */
-const SQUAT_NOISE_FLOOR = 0.12;
+/** PR G9: noise floor 0.10 — 이하만 partial. shallower valid cycle complete 허용 */
+const SQUAT_NOISE_FLOOR = 0.1;
 const WARMUP_MS = 500;
 const BEST_WINDOW_MIN_MS = 800;
 const BEST_WINDOW_MAX_MS = 1200;
