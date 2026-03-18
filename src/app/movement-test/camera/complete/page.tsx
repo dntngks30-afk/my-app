@@ -44,6 +44,14 @@ export default function CameraCompletePage() {
     setAnalysis(normalized);
     if (process.env.NODE_ENV !== 'production') {
       console.info('[camera-guardrails]', normalized);
+      if (normalized.resultEvidenceLevel || normalized.resultToneMode) {
+        console.info('[camera-evidence]', {
+          resultEvidenceLevel: normalized.resultEvidenceLevel,
+          resultToneMode: normalized.resultToneMode,
+          interpretationDowngraded: normalized.debug?.interpretationDowngraded,
+          fallbackToRetryOrLowConfidence: normalized.debug?.fallbackToRetryOrLowConfidence,
+        });
+      }
     }
   }, []);
 

@@ -2,8 +2,13 @@
  * PR-6: 카메라 결과 → 사용자용 설명 브릿지
  * - 실제 신호 기반, 비의료 언어
  * - 1~2개 핵심 이유 + 다음 행동 제안
+ * PR evidence: evidence strength에 따라 tone 조절. action bridge 유지.
  */
-import type { NormalizedCameraResult } from './normalize';
+import type {
+  NormalizedCameraResult,
+  ResultEvidenceLevel,
+  ResultToneMode,
+} from './normalize';
 import type { EvaluatorMetric } from './evaluators/types';
 
 export interface ResultBridgeExplanation {
@@ -13,6 +18,9 @@ export interface ResultBridgeExplanation {
   action: string;
   primaryCtaLabel: string;
   primaryCtaPath: string;
+  /** PR evidence: observability */
+  resultEvidenceLevel?: ResultEvidenceLevel;
+  resultToneMode?: ResultToneMode;
 }
 
 const METRIC_TO_REASON: Record<string, string> = {
@@ -42,8 +50,10 @@ function getConcernReasons(metrics: EvaluatorMetric[]): string[] {
   return reasons.slice(0, 2);
 }
 
+/** PR evidence: tone에 따라 "확인" vs "경향이 보였다" 수준 조절 */
 function getExplanationFromResults(
-  result: NormalizedCameraResult
+  result: NormalizedCameraResult,
+  toneMode: ResultToneMode
 ): string {
   const valid = result.evaluatorResults?.filter((r) => !r.insufficientSignal) ?? [];
   if (valid.length === 0) return result.patternSummary;
@@ -71,10 +81,14 @@ function getExplanationFromResults(
   if (depth) parts.push('앉는 깊이');
   if (trunk) parts.push('상체 기울기');
   if (parts.length > 1) {
-    return `${parts.slice(0, 2).join('과 ')}이 함께 보였습니다.`;
+    return toneMode === 'confident'
+      ? `${parts.slice(0, 2).join('과 ')}이 함께 보였습니다.`
+      : `${parts.slice(0, 2).join('과 ')}에서 이런 경향이 보였어요.`;
   }
   if (parts.length === 1) {
-    return `${parts[0]}이 보였습니다.`;
+    return toneMode === 'confident'
+      ? `${parts[0]}이 보였습니다.`
+      : `${parts[0]}에서 경향이 보였어요.`;
   }
 
   return result.patternSummary;
@@ -82,10 +96,14 @@ function getExplanationFromResults(
 
 /**
  * NormalizedCameraResult → 사용자용 설명 브릿지
+ * PR evidence: evidence strength에 따라 headline/explanation/CTA tone 조절
  */
 export function getResultBridgeExplanation(
   result: NormalizedCameraResult
 ): ResultBridgeExplanation {
+  const toneMode = result.resultToneMode ?? 'confident';
+  const evidenceLevel = result.resultEvidenceLevel ?? 'strong_evidence';
+
   if (result.insufficientSignal || result.captureQuality === 'invalid') {
     return {
       headline: '촬영 신호가 충분하지 않았어요',
@@ -94,20 +112,42 @@ export function getResultBridgeExplanation(
       action: result.resetAction,
       primaryCtaLabel: '다시 촬영하기',
       primaryCtaPath: '/movement-test/camera',
+      resultEvidenceLevel: 'insufficient_signal',
+      resultToneMode: 'retry_or_reset',
     };
   }
 
   const allMetrics = (result.evaluatorResults ?? []).flatMap((r) => r.metrics ?? []);
   const reasons = getConcernReasons(allMetrics);
-  const headline = MOVEMENT_TYPE_HEADLINES[result.movementType] ?? '움직임 패턴이 확인되었어요';
-  const explanation = getExplanationFromResults(result);
+
+  /** PR evidence: tone별 headline — strong=확인, shallow/weak=경향, insufficient=재시도 */
+  const headline =
+    toneMode === 'confident'
+      ? (MOVEMENT_TYPE_HEADLINES[result.movementType] ?? '움직임 패턴이 확인되었어요')
+      : toneMode === 'conservative'
+        ? (MOVEMENT_TYPE_HEADLINES[result.movementType] ?? '움직임 패턴 경향이 보였어요')
+        : toneMode === 'cautious'
+          ? '움직임 경향이 일부 보였어요'
+          : '촬영 신호가 충분하지 않았어요';
+
+  const explanation = getExplanationFromResults(result, toneMode);
+
+  /** PR evidence: weak evidence일수록 CTA 표현 보수적으로 */
+  const primaryCtaLabel =
+    toneMode === 'confident' || toneMode === 'conservative'
+      ? '리셋부터 시작하기'
+      : toneMode === 'cautious'
+        ? '이 결과로 진행하기'
+        : '다시 촬영하기';
 
   return {
     headline,
     explanation,
     reasons,
     action: result.resetAction,
-    primaryCtaLabel: '리셋부터 시작하기',
-    primaryCtaPath: '/app/auth?next=/app/home',
+    primaryCtaLabel,
+    primaryCtaPath: toneMode === 'retry_or_reset' ? '/movement-test/camera' : '/app/auth?next=/app/home',
+    resultEvidenceLevel: evidenceLevel,
+    resultToneMode: toneMode,
   };
 }

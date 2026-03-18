@@ -638,7 +638,9 @@ export default function ResultPage() {
       ? '촬영 신호가 충분하지 않아 결과를 참고용으로만 보여주고 있어요. 다시 촬영하거나 설문형 테스트로 이어서 확인해 보세요.'
       : cameraResult.retryRecommended
         ? '일부 구간 신호가 약해 확인 가능한 범위만 반영되었어요. 다시 촬영하면 더 안정적인 결과를 볼 수 있어요.'
-        : null
+        : cameraResult.resultToneMode === 'cautious' || cameraResult.resultToneMode === 'conservative'
+          ? '촬영 신호가 제한적이어서 경향만 참고해 주세요. 다시 촬영하면 더 명확한 결과를 볼 수 있어요.'
+          : null
     : null;
   const cuteFontStyle = {
     fontFamily:

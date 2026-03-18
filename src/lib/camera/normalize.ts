@@ -12,7 +12,15 @@ import type {
 
 export interface CameraResultDebug {
   perExercise: StepGuardrailResult[];
+  /** PR evidence: result interpretation용 */
+  resultEvidenceLevel?: string;
+  resultToneMode?: string;
+  interpretationDowngraded?: boolean;
+  fallbackToRetryOrLowConfidence?: boolean;
 }
+
+export type ResultEvidenceLevel = 'strong_evidence' | 'shallow_evidence' | 'weak_evidence' | 'insufficient_signal';
+export type ResultToneMode = 'confident' | 'conservative' | 'cautious' | 'retry_or_reset';
 
 export interface NormalizedCameraResult {
   movementType: string;
@@ -27,6 +35,9 @@ export interface NormalizedCameraResult {
   insufficientSignal: boolean;
   evaluatorResults: EvaluatorResult[];
   debug: CameraResultDebug;
+  /** PR evidence: result layer가 tone 조절에 사용 */
+  resultEvidenceLevel?: ResultEvidenceLevel;
+  resultToneMode?: ResultToneMode;
 }
 
 const INSUFFICIENT_RESULT: NormalizedCameraResult = {
@@ -165,6 +176,55 @@ function toPatternSummary(
     : `${validResults.length}개 동작 분석 결과입니다.`;
 }
 
+const EVIDENCE_ORDER: ResultEvidenceLevel[] = [
+  'strong_evidence',
+  'shallow_evidence',
+  'weak_evidence',
+  'insufficient_signal',
+];
+
+function getWeakestEvidenceLevel(levels: ResultEvidenceLevel[]): ResultEvidenceLevel {
+  if (levels.length === 0) return 'strong_evidence';
+  let worstIdx = -1;
+  for (const level of levels) {
+    const idx = EVIDENCE_ORDER.indexOf(level);
+    if (idx >= 0 && (worstIdx < 0 || idx > worstIdx)) worstIdx = idx;
+  }
+  return worstIdx >= 0 ? EVIDENCE_ORDER[worstIdx]! : 'strong_evidence';
+}
+
+function getResultEvidenceFromEvaluators(
+  evaluatorResults: EvaluatorResult[]
+): {
+  resultEvidenceLevel: ResultEvidenceLevel;
+  resultToneMode: ResultToneMode;
+  interpretationDowngraded: boolean;
+  fallbackToRetryOrLowConfidence: boolean;
+} {
+  const levels: ResultEvidenceLevel[] = evaluatorResults
+    .map((r) => r.debug?.squatEvidenceLevel as ResultEvidenceLevel | undefined)
+    .filter((l): l is ResultEvidenceLevel => typeof l === 'string' && EVIDENCE_ORDER.includes(l));
+  const resultEvidenceLevel =
+    levels.length > 0 ? getWeakestEvidenceLevel(levels) : 'strong_evidence';
+  const resultToneMode: ResultToneMode =
+    resultEvidenceLevel === 'strong_evidence'
+      ? 'confident'
+      : resultEvidenceLevel === 'shallow_evidence'
+        ? 'conservative'
+        : resultEvidenceLevel === 'weak_evidence'
+          ? 'cautious'
+          : 'retry_or_reset';
+  const interpretationDowngraded =
+    resultEvidenceLevel === 'shallow_evidence' || resultEvidenceLevel === 'weak_evidence';
+  const fallbackToRetryOrLowConfidence = resultEvidenceLevel === 'insufficient_signal';
+  return {
+    resultEvidenceLevel,
+    resultToneMode,
+    interpretationDowngraded,
+    fallbackToRetryOrLowConfidence,
+  };
+}
+
 export function normalizeCameraResult(
   evaluatorResults: EvaluatorResult[],
   guardrailResults: StepGuardrailResult[] = []
@@ -194,8 +254,14 @@ export function normalizeCameraResult(
       confidence,
       flags: [...new Set([...INSUFFICIENT_RESULT.flags, ...flags])],
       evaluatorResults,
+      resultEvidenceLevel: 'insufficient_signal' as const,
+      resultToneMode: 'retry_or_reset' as const,
       debug: {
         perExercise: guardrailResults,
+        resultEvidenceLevel: 'insufficient_signal',
+        resultToneMode: 'retry_or_reset',
+        interpretationDowngraded: false,
+        fallbackToRetryOrLowConfidence: true,
       },
     };
   }
@@ -205,6 +271,7 @@ export function normalizeCameraResult(
   const resetAction = toResetAction(validResults);
   const patternSummary = toPatternSummary(validResults, captureQuality, flags);
   const retryRecommended = fallbackMode !== null;
+  const evidence = getResultEvidenceFromEvaluators(evaluatorResults);
 
   return {
     movementType,
@@ -218,8 +285,14 @@ export function normalizeCameraResult(
     fallbackMode,
     insufficientSignal: false,
     evaluatorResults,
+    resultEvidenceLevel: evidence.resultEvidenceLevel,
+    resultToneMode: evidence.resultToneMode,
     debug: {
       perExercise: guardrailResults,
+      resultEvidenceLevel: evidence.resultEvidenceLevel,
+      resultToneMode: evidence.resultToneMode,
+      interpretationDowngraded: evidence.interpretationDowngraded,
+      fallbackToRetryOrLowConfidence: evidence.fallbackToRetryOrLowConfidence,
     },
   };
 }
