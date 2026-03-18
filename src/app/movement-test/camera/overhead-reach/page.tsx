@@ -172,6 +172,8 @@ export default function CameraOverheadReachPage() {
   const triggeredAdvanceStepKeyRef = useRef<string | null>(null);
   const startCueAttemptedRef = useRef(false);
   const successCueAttemptedRef = useRef(false);
+  /** final step: outro가 navigation을 독점. 재진입 시 중복 async 방지 */
+  const finalStepOutroInProgressRef = useRef(false);
   const [startSequenceComplete, setStartSequenceComplete] = useState(false);
   /** PR G2: readiness phase 기반 큐잉 게이트 (ready_to_shoot 재생 중 = false) */
   const [captureCuingEnabled, setCaptureCuingEnabled] = useState(false);
@@ -596,6 +598,11 @@ export default function CameraOverheadReachPage() {
       return;
     }
 
+    /* final step: outro owner가 이미 처리 중이면 다른 경로 진입 차단 */
+    if (isFinalStep && finalStepOutroInProgressRef.current) {
+      return;
+    }
+
     if (!nextPath) {
       setNextTriggerReason('transition_not_triggered');
       setSuccessSnapshot((prev) =>
@@ -690,16 +697,20 @@ export default function CameraOverheadReachPage() {
     };
 
     if (isFinalStep) {
-      /* 마지막 단계: final outro 재생 완료 후에만 이동. 실패/타임아웃 시 fallback으로 이동 */
+      /* 마지막 단계: final outro가 navigation을 독점. 재진입 차단 */
+      finalStepOutroInProgressRef.current = true;
       void (async () => {
-        const timeout = new Promise<boolean>((r) =>
-          setTimeout(() => r(false), FINAL_OUTRO_FALLBACK_MS)
-        );
-        await Promise.race([
-          speakVoiceCueAndWait(getFinalSuccessVoiceCue()),
-          timeout,
-        ]);
-        doNavigate();
+        try {
+          const timeout = new Promise<boolean>((r) =>
+            setTimeout(() => r(false), FINAL_OUTRO_FALLBACK_MS)
+          );
+          await Promise.race([
+            speakVoiceCueAndWait(getFinalSuccessVoiceCue()),
+            timeout,
+          ]);
+        } finally {
+          doNavigate();
+        }
       })();
     } else {
       autoAdvanceTimerRef.current = window.setTimeout(doNavigate, gate.autoAdvanceDelayMs);
