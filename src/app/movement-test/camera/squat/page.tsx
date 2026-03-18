@@ -33,6 +33,7 @@ import {
   type LiveReadinessState,
 } from '@/lib/camera/live-readiness';
 import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
+import { recordSquatSuccessSnapshot } from '@/lib/camera/camera-success-diagnostic';
 import {
   getMovementSetupGuide,
   getPreCaptureGuidance,
@@ -538,6 +539,7 @@ export default function CameraSquatPage() {
     }
 
     const latchedAt = new Date().toISOString();
+    const passLatchedAtMs = Date.now();
     passLatchedStepKeyRef.current = currentStepKey;
     settledRef.current = true;
     advanceLockRef.current = true;
@@ -547,11 +549,20 @@ export default function CameraSquatPage() {
     setTransitionLocked(true);
     setNextTriggerReason('pass_latched');
     stop();
+    /** PR success-diagnostic: success snapshot 저장 */
+    recordSquatSuccessSnapshot({
+      gate,
+      successOpenedBy: 'effectivePassLatched',
+      currentRoute: '/movement-test/camera/squat',
+      passLatchedAtMs,
+      effectivePassLatched,
+      competingPaths: [],
+    });
     persistCurrentStep();
     setProgressionState('passed');
     setStatusMessage(gate.uiMessage);
     appendTransition('passed', 'pass_latched');
-  }, [appendTransition, currentStepKey, gate.uiMessage, passLatched, persistCurrentStep, stop]);
+  }, [appendTransition, currentStepKey, effectivePassLatched, gate, passLatched, persistCurrentStep, stop]);
 
   useEffect(() => {
     if (cameraPhase !== 'capturing') return;

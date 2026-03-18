@@ -33,6 +33,10 @@ import {
 } from '@/lib/camera/live-readiness';
 import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
 import {
+  recordOverheadSuccessSnapshot,
+  type SuccessOpenedBy,
+} from '@/lib/camera/camera-success-diagnostic';
+import {
   getMovementSetupGuide,
   getPreCaptureGuidance,
   getEffectiveRetryGuidance,
@@ -477,21 +481,33 @@ export default function CameraOverheadReachPage() {
     void speakVoiceCue(getFinalSuccessVoiceCue());
   }, [effectivePassLatched, isFinalStep]);
 
-  const latchPassEvent = useCallback(() => {
-    if (passLatchedStepKeyRef.current === currentStepKey || passLatched) {
-      return;
-    }
+  const latchPassEvent = useCallback(
+    (successOpenedBy: SuccessOpenedBy = 'effectivePassLatched', competingPaths: string[] = []) => {
+      if (passLatchedStepKeyRef.current === currentStepKey || passLatched) {
+        return;
+      }
 
-    const latchedAt = new Date().toISOString();
-    passLatchedStepKeyRef.current = currentStepKey;
-    settledRef.current = true;
-    advanceLockRef.current = true;
-    setPassLatched(true);
-    setPassLatchedAt(latchedAt);
-    setTransitionLocked(true);
-    setNextTriggerReason('pass_latched');
-    stop();
-    persistCurrentStep();
+      const latchedAt = new Date().toISOString();
+      const passLatchedAtMs = Date.now();
+      passLatchedStepKeyRef.current = currentStepKey;
+      settledRef.current = true;
+      advanceLockRef.current = true;
+      setPassLatched(true);
+      setPassLatchedAt(latchedAt);
+      setTransitionLocked(true);
+      setNextTriggerReason('pass_latched');
+      stop();
+      /** PR success-diagnostic: success snapshot 저장 */
+      recordOverheadSuccessSnapshot({
+        gate,
+        successOpenedBy,
+        currentRoute: '/movement-test/camera/overhead-reach',
+        passLatchedAtMs,
+        pagePassReady: passReady,
+        effectivePassLatched,
+        competingPaths,
+      });
+      persistCurrentStep();
     setProgressionState('passed');
     setStatusMessage(gate.uiMessage);
     setSuccessSnapshot({
@@ -526,29 +542,24 @@ export default function CameraOverheadReachPage() {
         autoAdvanceReason: 'pass_latched',
       },
     });
-  }, [
-    armElevation,
-    armRange,
-    compensation,
-    currentStepKey,
-    gate.completionSatisfied,
-    gate.confidence,
-    gate.failureReasons,
-    gate.flags,
-    gate.guardrail.captureQuality,
-    gate.nextAllowed,
-    gate.progressionState,
-    gate.status,
-    gate.uiMessage,
-    holdDurationMs,
-    nextPath,
-    passLatched,
-    peakCount,
-    persistCurrentStep,
-    raiseCount,
-    stop,
-    symmetry,
-  ]);
+    },
+    [
+      armElevation,
+      armRange,
+      compensation,
+      currentStepKey,
+      effectivePassLatched,
+      gate,
+      nextPath,
+      passLatched,
+      passReady,
+      peakCount,
+      persistCurrentStep,
+      raiseCount,
+      stop,
+      symmetry,
+    ]
+  );
 
   /* PR G5: passConfirmed -> passLatched 공통 계약. effectivePassLatched(finalPassLatched || passLatched)로 latch. */
   /* PR-C4: hold cue 재생 중에는 success overlap 방지를 위해 latch 지연 */
@@ -559,7 +570,7 @@ export default function CameraOverheadReachPage() {
 
     if (effectivePassLatched) {
       if (holdCueActive) return;
-      latchPassEvent();
+      latchPassEvent('effectivePassLatched', passReady ? ['passReady'] : []);
       return;
     }
 
@@ -573,7 +584,7 @@ export default function CameraOverheadReachPage() {
     setStatusMessage((prev) => (prev === gate.uiMessage ? prev : gate.uiMessage));
 
     if (passReady) {
-      latchPassEvent();
+      latchPassEvent('passReady', effectivePassLatched ? ['effectivePassLatched'] : []);
       return;
     }
 
@@ -607,7 +618,7 @@ export default function CameraOverheadReachPage() {
     if (holdCueActive) return;
 
     if (passLatchedStepKeyRef.current !== currentStepKey) {
-      latchPassEvent();
+      latchPassEvent('effectivePassLatched', []);
       return;
     }
 
@@ -815,7 +826,7 @@ export default function CameraOverheadReachPage() {
 
   const handleDevOverride = useCallback(() => {
     if (!IS_DEV) return;
-    latchPassEvent();
+    latchPassEvent('effectivePassLatched', []);
   }, [latchPassEvent]);
 
   const prevPath = getPrevStepPath(STEP_ID);

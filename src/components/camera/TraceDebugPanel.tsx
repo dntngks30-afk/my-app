@@ -11,6 +11,11 @@ import {
   getQuickStats,
   type AttemptSnapshot,
 } from '@/lib/camera/camera-trace';
+import {
+  getRecentSuccessSnapshots,
+  CAMERA_DIAG_VERSION,
+  type SuccessSnapshot,
+} from '@/lib/camera/camera-success-diagnostic';
 import { getCorrectiveCueObservability } from '@/lib/camera/voice-guidance';
 import { getLastPlaybackObservability } from '@/lib/camera/korean-audio-pack';
 
@@ -32,11 +37,14 @@ interface TraceDebugPanelProps {
 
 export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebugPanelProps) {
   const [attempts, setAttempts] = useState<AttemptSnapshot[]>([]);
+  const [successSnapshots, setSuccessSnapshots] = useState<SuccessSnapshot[]>([]);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     const list = getRecentAttempts();
+    const successList = getRecentSuccessSnapshots();
     setAttempts(list);
+    setSuccessSnapshots(successList);
     setRefreshedAt(new Date().toISOString());
   }, []);
 
@@ -46,8 +54,15 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
 
   const handleExport = useCallback(() => {
     const list = getRecentAttempts();
+    const successList = getRecentSuccessSnapshots();
     const stats = getQuickStats(list);
-    const payload = { attempts: list, quickStats: stats, exportedAt: new Date().toISOString() };
+    const payload = {
+      attempts: list,
+      successSnapshots: successList,
+      quickStats: stats,
+      diagVersion: CAMERA_DIAG_VERSION,
+      exportedAt: new Date().toISOString(),
+    };
     const json = JSON.stringify(payload, null, 2);
     if (typeof navigator?.clipboard?.writeText === 'function') {
       navigator.clipboard.writeText(json).then(
@@ -86,7 +101,7 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
   return (
     <div className="mt-3 rounded-lg border border-slate-600/50 bg-slate-900/50 p-3">
       <p className="text-[11px] text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-        PR-4 trace ({attempts.length} attempts)
+        PR-4 trace ({attempts.length} attempts) · success ({successSnapshots.length}) · diag={CAMERA_DIAG_VERSION}
         {refreshedAt && ` · refreshed ${refreshedAt.slice(11, 19)}`}
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -207,6 +222,30 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
           })()}
         </div>
       )}
+      {successSnapshots.length > 0 && (() => {
+        const latest = successSnapshots[successSnapshots.length - 1]!;
+        return (
+          <div className="mt-2 border-t border-slate-600/50 pt-2">
+            <p className="font-medium text-amber-400/90 text-[10px]">Success diagnostic (openedBy={latest.successOpenedBy})</p>
+            <p className="text-[10px] text-slate-500">
+              route={latest.currentRoute} ts={latest.ts.slice(11, 19)} diag={latest.diagVersion}
+            </p>
+            {latest.competingSuccessPathsDetected.length > 0 && (
+              <p className="text-[10px] text-amber-400/80">competing={latest.competingSuccessPathsDetected.join(',')}</p>
+            )}
+            {latest.motionType === 'overhead_reach' && (
+              <p className="text-[10px] text-slate-500">
+                holdMs={latest.evaluatorHoldDurationMs} guardrail={latest.guardrailCompletionStatus} compSat={latest.autoProgressionCompletionSatisfied} passConf={latest.passConfirmationSatisfied} passReady={latest.pagePassReady}
+              </p>
+            )}
+            {latest.motionType === 'squat' && (
+              <p className="text-[10px] text-slate-500">
+                depthPeak={latest.evaluatorDepthPeak} path={latest.completionPathUsed} guardrail={latest.guardrailCompletionStatus} compSat={latest.autoProgressionCompletionSatisfied}
+              </p>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

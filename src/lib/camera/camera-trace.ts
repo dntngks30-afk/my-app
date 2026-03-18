@@ -6,6 +6,7 @@
 import type { ExerciseGateResult } from './auto-progression';
 import type { CaptureQuality } from './guardrails';
 import type { CameraStepId } from '@/lib/public/camera-test';
+import { CAMERA_DIAG_VERSION } from './camera-success-diagnostic';
 import { isFinalPassLatched } from './auto-progression';
 import { getCorrectiveCueObservability } from './voice-guidance';
 import { getLastPlaybackObservability } from './korean-audio-pack';
@@ -396,7 +397,7 @@ export function buildAttemptSnapshot(
     readinessSummary: context,
     stabilitySummary: extractStabilitySummary(gate),
     diagnosisSummary: buildDiagnosisSummary(stepId, gate, context, options),
-    debugVersion: DEBUG_VERSION,
+    debugVersion: `${DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
   };
 }
 
