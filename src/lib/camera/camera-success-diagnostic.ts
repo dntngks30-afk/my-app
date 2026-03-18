@@ -214,3 +214,78 @@ export function getRecentSuccessSnapshots(): SuccessSnapshot[] {
     return [];
   }
 }
+
+/* --- Squat failed shallow attempt snapshot (diagnostic only) --- */
+const FAILED_SHALLOW_SNAPSHOT_KEY = 'moveReCameraFailedShallowSnapshots:v1';
+const MAX_FAILED_SHALLOW_SNAPSHOTS = 10;
+
+export interface SquatFailedShallowSnapshot {
+  id: string;
+  ts: string;
+  motionType: 'squat';
+  currentRoute: string;
+  depthPeak: number | null;
+  guardrailCompletionStatus: string;
+  autoProgressionCompletionSatisfied: boolean;
+  completionPathUsed: string | undefined;
+  completionRejectedReason: string | null | undefined;
+  lowRomRecoveryConfirmed: boolean;
+  ultraLowRomRecoveryConfirmed: boolean;
+  passConfirmationSatisfied: boolean;
+  cycleDurationMs: number | undefined;
+  diagVersion: string;
+}
+
+export function recordSquatFailedShallowSnapshot(gate: ExerciseGateResult): void {
+  try {
+    const hm = gate.evaluatorResult?.debug?.highlightedMetrics;
+    const sc = gate.squatCycleDebug;
+    const depthPeak = typeof hm?.depthPeak === 'number' ? hm.depthPeak : null;
+    const ascentRecoveredLowRom = (hm?.ascentRecoveredLowRom as number) ?? 0;
+    const ascentRecoveredUltraLowRom = (hm?.ascentRecoveredUltraLowRom as number) ?? 0;
+    const recoveryLowRomDetected = ascentRecoveredLowRom > 0;
+    const recoveryUltraLowRomDetected = ascentRecoveredUltraLowRom > 0;
+    const lowRomRecoveryConfirmed =
+      depthPeak != null && depthPeak >= 7 && depthPeak < 10 && recoveryLowRomDetected;
+    const ultraLowRomRecoveryConfirmed =
+      depthPeak != null && depthPeak >= 2 && depthPeak < 7 && recoveryUltraLowRomDetected;
+
+    const snapshot: SquatFailedShallowSnapshot = {
+      id: `sq-fail-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      ts: new Date().toISOString(),
+      motionType: 'squat',
+      currentRoute: typeof window !== 'undefined' ? window.location.pathname : '',
+      depthPeak,
+      guardrailCompletionStatus: gate.guardrail.completionStatus ?? 'unknown',
+      autoProgressionCompletionSatisfied: gate.completionSatisfied,
+      completionPathUsed: sc?.completionPathUsed,
+      completionRejectedReason: sc?.completionRejectedReason,
+      lowRomRecoveryConfirmed,
+      ultraLowRomRecoveryConfirmed,
+      passConfirmationSatisfied: gate.passConfirmationSatisfied ?? false,
+      cycleDurationMs: sc?.cycleDurationMs,
+      diagVersion: CAMERA_DIAG_VERSION,
+    };
+
+    if (typeof window === 'undefined') return;
+    const raw = localStorage.getItem(FAILED_SHALLOW_SNAPSHOT_KEY);
+    const list: SquatFailedShallowSnapshot[] = raw
+      ? (JSON.parse(raw) as SquatFailedShallowSnapshot[])
+      : [];
+    list.push(snapshot);
+    const trimmed = list.slice(-MAX_FAILED_SHALLOW_SNAPSHOTS);
+    localStorage.setItem(FAILED_SHALLOW_SNAPSHOT_KEY, JSON.stringify(trimmed));
+  } catch {
+    // ignore
+  }
+}
+
+export function getRecentFailedShallowSnapshots(): SquatFailedShallowSnapshot[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(FAILED_SHALLOW_SNAPSHOT_KEY);
+    return raw ? (JSON.parse(raw) as SquatFailedShallowSnapshot[]) : [];
+  } catch {
+    return [];
+  }
+}

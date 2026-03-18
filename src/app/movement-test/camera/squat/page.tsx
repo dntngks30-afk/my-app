@@ -23,6 +23,7 @@ import { getSetupFramingHint } from '@/lib/camera/setup-framing';
 import {
   evaluateExerciseAutoProgress,
   isFinalPassLatched,
+  type ExerciseGateResult,
   type ExerciseProgressionState,
 } from '@/lib/camera/auto-progression';
 import {
@@ -35,6 +36,7 @@ import {
 import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
 import {
   recordSquatSuccessSnapshot,
+  recordSquatFailedShallowSnapshot,
   isDiagnosticFreezeMode,
 } from '@/lib/camera/camera-success-diagnostic';
 import {
@@ -129,6 +131,8 @@ const COUNTDOWN_BETWEEN_GAP_MS = 600;
 const COUNTDOWN_VALUES = [3, 2, 1] as const;
 /** 통과 후 다음 단계로 전환 대기 (gate 의존성 제거로 effect 재실행 방지) */
 const SQUAT_AUTO_ADVANCE_MS = 700;
+/** diagnostic: capturing 4.5초 동안 pass 못 하면 failure freeze overlay */
+const SQUAT_FAILURE_FREEZE_DELAY_MS = 4500;
 
 export default function CameraSquatPage() {
   const router = useRouter();
@@ -146,6 +150,7 @@ export default function CameraSquatPage() {
   const [passLatchedAt, setPassLatchedAt] = useState<string | null>(null);
   const [navigationTriggered, setNavigationTriggered] = useState(false);
   const [showSuccessFreezeOverlay, setShowSuccessFreezeOverlay] = useState(false);
+  const [showFailureFreezeOverlay, setShowFailureFreezeOverlay] = useState(false);
   const [passDetectedAt, setPassDetectedAt] = useState<string | null>(null);
   const [nextScheduledAt, setNextScheduledAt] = useState<string | null>(null);
   const [nextTriggeredAt, setNextTriggeredAt] = useState<string | null>(null);
@@ -180,6 +185,8 @@ export default function CameraSquatPage() {
   const passLatchedStepKeyRef = useRef<string | null>(null);
   const scheduledAdvanceStepKeyRef = useRef<string | null>(null);
   const triggeredAdvanceStepKeyRef = useRef<string | null>(null);
+  const failureFreezeTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const gateRef = useRef<ExerciseGateResult | null>(null);
   const debugEnabled = IS_DEV;
   const currentStepKey = `${STEP_ID}:${previewKey}`;
   const nextPath = getNextStepPath(STEP_ID);
@@ -708,6 +715,46 @@ export default function CameraSquatPage() {
     };
   }, [clearAutoAdvanceTimer]);
 
+  useEffect(() => {
+    gateRef.current = gate;
+  }, [gate]);
+
+  /* diagnostic: capturing 4.5초 동안 pass 못 하면 failure freeze overlay */
+  useEffect(() => {
+    if (
+      cameraPhase !== 'capturing' ||
+      effectivePassLatched ||
+      !isDiagnosticFreezeMode() ||
+      showFailureFreezeOverlay ||
+      showSuccessFreezeOverlay
+    ) {
+      if (failureFreezeTimerRef.current) {
+        window.clearTimeout(failureFreezeTimerRef.current);
+        failureFreezeTimerRef.current = null;
+      }
+      return;
+    }
+
+    failureFreezeTimerRef.current = window.setTimeout(() => {
+      failureFreezeTimerRef.current = null;
+      const g = gateRef.current;
+      if (g) recordSquatFailedShallowSnapshot(g);
+      setShowFailureFreezeOverlay(true);
+    }, SQUAT_FAILURE_FREEZE_DELAY_MS);
+
+    return () => {
+      if (failureFreezeTimerRef.current) {
+        window.clearTimeout(failureFreezeTimerRef.current);
+        failureFreezeTimerRef.current = null;
+      }
+    };
+  }, [
+    cameraPhase,
+    effectivePassLatched,
+    showFailureFreezeOverlay,
+    showSuccessFreezeOverlay,
+  ]);
+
   const handleRetry = useCallback(() => {
     unlockVoiceGuidance();
     recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
@@ -753,12 +800,17 @@ export default function CameraSquatPage() {
     setTransitionHistory([]);
     setPermissionDenied(false);
     setShowSuccessFreezeOverlay(false);
+    setShowFailureFreezeOverlay(false);
     setPreviewKey((prev) => prev + 1);
     appendTransition('idle', 'manual_retry');
   }, [cameraPhase, clearAutoAdvanceTimer, gate, readinessTraceSummary, stop]);
 
   const handleCameraError = useCallback(() => {
     clearAutoAdvanceTimer();
+    if (failureFreezeTimerRef.current) {
+      window.clearTimeout(failureFreezeTimerRef.current);
+      failureFreezeTimerRef.current = null;
+    }
     cancelVoiceGuidance();
     settledRef.current = false;
     advanceLockRef.current = false;
@@ -771,6 +823,7 @@ export default function CameraSquatPage() {
     setTransitionLocked(false);
     setCameraReady(false);
     setPermissionDenied(true);
+    setShowFailureFreezeOverlay(false);
   }, [clearAutoAdvanceTimer]);
 
   const handleSurveyFallback = useCallback(() => {
@@ -857,6 +910,9 @@ export default function CameraSquatPage() {
           motionType="squat"
           onContinue={handleSuccessFreezeContinue}
         />
+      )}
+      {showFailureFreezeOverlay && (
+        <FailureFreezeOverlay onClose={handleFailureFreezeClose} />
       )}
       <Starfield />
 
