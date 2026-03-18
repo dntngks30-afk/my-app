@@ -1,5 +1,5 @@
 import type { CameraStepId } from '@/lib/public/camera-test';
-import type { ExerciseGateResult } from './auto-progression';
+import type { ExerciseGateResult, SquatCycleDebug } from './auto-progression';
 import { getEffectiveRetryGuidance } from './camera-guidance';
 import type { LiveReadinessState } from './live-readiness';
 import {
@@ -37,9 +37,11 @@ type VoiceGuidanceGate = {
   failureReasons: ExerciseGateResult['failureReasons'];
   userGuidance: ExerciseGateResult['userGuidance'];
   progressionState: ExerciseGateResult['progressionState'];
-  guardrail: Pick<ExerciseGateResult['guardrail'], 'captureQuality' | 'flags'>;
+  guardrail: Pick<ExerciseGateResult['guardrail'], 'captureQuality' | 'flags' | 'debug'>;
   readinessState?: LiveReadinessState;
   framingHint?: string | null;
+  /** squat 전용: bottom-stall recovery cue 조건 판단 */
+  squatCycleDebug?: SquatCycleDebug | null;
 };
 
 /** PR E: approved Korean phrases for TTS — internal/debug strings must never be spoken */
@@ -748,6 +750,30 @@ export function getCorrectiveVoiceCue(
       priority: 3,
       cooldownMs: 4200,
     };
+  }
+
+  if (
+    stepId === 'squat' &&
+    gate.readinessState === 'ready' &&
+    !isNotReady &&
+    hasAny(allReasons, MOTION_REASONS)
+  ) {
+    const sc = gate.squatCycleDebug;
+    const bottomStall =
+      sc?.bottomDetected &&
+      !sc.recoveryDetected &&
+      sc.startBeforeBottom &&
+      sc.descendDetected &&
+      (sc.armingSatisfied ?? true);
+    if (bottomStall) {
+      return {
+        kind: 'correction',
+        dedupeKey: 'correction:squat:bottom-stall',
+        text: '발로 바닥을 밀며 일어나주세요',
+        priority: 3,
+        cooldownMs: 4200,
+      };
+    }
   }
 
   if (hasAny(allReasons, MOTION_REASONS)) {

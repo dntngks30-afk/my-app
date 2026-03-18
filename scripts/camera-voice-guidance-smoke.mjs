@@ -168,5 +168,84 @@ const immediateResult = trySpeakCorrectiveCueWithAntiSpam({
 });
 ok('AT8: stable hold or cooldown suppresses rapid cue', immediateResult.suppressedReason === 'stable_hold' || immediateResult.played === false);
 
+// AT9: squat bottom-stall recovery cue
+const bottomStallCue = getCorrectiveVoiceCue(
+  'squat',
+  createGate({
+    failureReasons: ['rep_incomplete'],
+    guardrail: { captureQuality: 'valid', flags: ['rep_incomplete'] },
+    readinessState: 'ready',
+    squatCycleDebug: {
+      armingSatisfied: true,
+      startPoseSatisfied: true,
+      startBeforeBottom: true,
+      descendDetected: true,
+      bottomDetected: true,
+      bottomTurningPointDetected: true,
+      ascendDetected: false,
+      recoveryDetected: false,
+      cycleComplete: false,
+      completionStatus: 'partial',
+      depthBand: 'shallow',
+      passBlockedReason: 'recovery_not_confirmed',
+      qualityInterpretationReason: null,
+    },
+  })
+);
+ok('AT9a: bottom-stall cue exists with approved text', bottomStallCue?.text === '발로 바닥을 밀며 일어나주세요');
+ok('AT9b: bottom-stall cue maps to push_floor_with_foot clip', bottomStallCue && resolveCueToClipKey(bottomStallCue) === 'push_floor_with_foot');
+
+// AT10: setup crouch does NOT trigger bottom-stall (startBeforeBottom false)
+const setupCrouchCue = getCorrectiveVoiceCue(
+  'squat',
+  createGate({
+    failureReasons: ['rep_incomplete'],
+    guardrail: { captureQuality: 'valid', flags: ['rep_incomplete'] },
+    readinessState: 'ready',
+    squatCycleDebug: {
+      armingSatisfied: true,
+      startPoseSatisfied: false,
+      startBeforeBottom: false,
+      descendDetected: false,
+      bottomDetected: true,
+      bottomTurningPointDetected: true,
+      ascendDetected: false,
+      recoveryDetected: false,
+      cycleComplete: false,
+      completionStatus: 'partial',
+      depthBand: 'shallow',
+      passBlockedReason: 'bottom_from_start',
+      qualityInterpretationReason: null,
+    },
+  })
+);
+ok('AT10: setup crouch does not get bottom-stall cue', setupCrouchCue?.dedupeKey !== 'correction:squat:bottom-stall');
+
+// AT11: tiny dip (no bottom) does not get bottom-stall
+const tinyDipCue = getCorrectiveVoiceCue(
+  'squat',
+  createGate({
+    failureReasons: ['rep_incomplete'],
+    guardrail: { captureQuality: 'valid', flags: ['rep_incomplete'] },
+    readinessState: 'ready',
+    squatCycleDebug: {
+      armingSatisfied: true,
+      startPoseSatisfied: true,
+      startBeforeBottom: true,
+      descendDetected: true,
+      bottomDetected: false,
+      bottomTurningPointDetected: false,
+      ascendDetected: false,
+      recoveryDetected: false,
+      cycleComplete: false,
+      completionStatus: 'partial',
+      depthBand: 'shallow',
+      passBlockedReason: 'bottom_not_detected',
+      qualityInterpretationReason: null,
+    },
+  })
+);
+ok('AT11: tiny dip does not get bottom-stall cue', tinyDipCue?.dedupeKey !== 'correction:squat:bottom-stall');
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

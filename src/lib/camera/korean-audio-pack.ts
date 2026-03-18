@@ -21,6 +21,7 @@ export type KoreanCueClipKey =
   | 'framing_step_back'
   | 'move_slowly'
   | 'squat_go_deeper'
+  | 'push_floor_with_foot'
   | 'overhead_raise_higher'
   | 'overhead_hold_top'
   | 'good_job'
@@ -40,6 +41,7 @@ const DEDUPE_KEY_TO_CLIP: Record<string, KoreanCueClipKey> = {
   'correction:framing': 'framing_center_body',
   'correction:hold:overhead-reach': 'overhead_hold_top',
   'correction:motion:overhead-reach': 'overhead_raise_higher',
+  'correction:squat:bottom-stall': 'push_floor_with_foot',
   'success:generic': 'good_job',
 };
 
@@ -51,6 +53,7 @@ const TEXT_TO_CLIP: Record<string, KoreanCueClipKey> = {
   '조금 더 앉았다가 다시 올라와주세요': 'squat_go_deeper',
   '양팔을 머리 위로 끝까지 올려주세요': 'overhead_raise_higher',
   '맨 위에서 잠깐 멈춰주세요': 'overhead_hold_top',
+  '발로 바닥을 밀며 일어나주세요': 'push_floor_with_foot',
   '자세를 잠깐 고정한 뒤 다시 해주세요': 'framing_hold_still',
   '전신이 화면에 들어오게 맞춰주세요': 'framing_center_body',
 };
@@ -70,11 +73,17 @@ export function resolveCueToClipKey(cue: VoiceCue): KoreanCueClipKey | null {
   return null;
 }
 
+/** clip key → 실제 파일명 (공백 등 포함, 기본은 key.mp3) */
+const CLIP_KEY_TO_FILENAME: Partial<Record<KoreanCueClipKey, string>> = {
+  push_floor_with_foot: 'Push the floor with your foot.mp3',
+};
+
 /**
  * clip key → public 경로
  */
 export function getClipPath(clipKey: KoreanCueClipKey): string {
-  return `${AUDIO_BASE}/${clipKey}.mp3`;
+  const filename = CLIP_KEY_TO_FILENAME[clipKey] ?? `${clipKey}.mp3`;
+  return `${AUDIO_BASE}/${filename}`;
 }
 
 /** PR D: playback observability */
