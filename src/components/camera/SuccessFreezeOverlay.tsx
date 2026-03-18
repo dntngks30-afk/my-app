@@ -42,11 +42,19 @@ function SquatFields({ s }: { s: SquatSuccessSnapshot }) {
     <div className="space-y-1 text-left">
       <p><span className="text-slate-500">successOpenedBy</span> {s.successOpenedBy}</p>
       <p><span className="text-slate-500">evaluatorDepthPeak</span> {s.evaluatorDepthPeak ?? 'n/a'}</p>
+      <p><span className="text-slate-500">baselineStandingDepth</span> {s.baselineStandingDepth ?? 'n/a'}</p>
+      <p><span className="text-slate-500">rawDepthPeak</span> {s.rawDepthPeak ?? 'n/a'}</p>
+      <p><span className="text-slate-500">relativeDepthPeak</span> {s.relativeDepthPeak ?? 'n/a'}</p>
       <p><span className="text-slate-500">guardrailCompletionStatus</span> {s.guardrailCompletionStatus}</p>
       <p><span className="text-slate-500">autoProgressionCompletionSatisfied</span> {String(s.autoProgressionCompletionSatisfied)}</p>
+      <p><span className="text-slate-500">currentSquatPhase</span> {s.currentSquatPhase ?? 'n/a'}</p>
       <p><span className="text-slate-500">completionPathUsed</span> {s.completionPathUsed ?? 'n/a'}</p>
+      <p><span className="text-slate-500">evidenceLabel</span> {s.evidenceLabel ?? 'n/a'}</p>
+      <p><span className="text-slate-500">successPhaseAtOpen</span> {s.successPhaseAtOpen ?? 'n/a'}</p>
       <p><span className="text-slate-500">passConfirmationSatisfied</span> {String(s.passConfirmationSatisfied)}</p>
       <p><span className="text-slate-500">effectivePassLatched</span> {String(s.effectivePassLatched)}</p>
+      <p><span className="text-slate-500">standingRecoveredAtMs</span> {s.standingRecoveredAtMs ?? 'n/a'}</p>
+      <p><span className="text-slate-500">standingRecoveryHoldMs</span> {s.standingRecoveryHoldMs ?? 'n/a'}</p>
       <p><span className="text-slate-500">cycleDurationMs</span> {s.cycleDurationMs ?? 'n/a'}</p>
       <p><span className="text-slate-500">diagVersion</span> {s.diagVersion}</p>
     </div>

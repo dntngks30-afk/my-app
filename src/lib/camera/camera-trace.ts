@@ -69,6 +69,7 @@ export interface AttemptSnapshot {
     squatCycle?: {
       peakDepth?: number;
       depthBand?: string;
+      currentSquatPhase?: string;
       descendDetected: boolean;
       bottomDetected: boolean;
       recoveryDetected: boolean;
@@ -79,9 +80,13 @@ export interface AttemptSnapshot {
       completionRejectedReason?: string | null;
       descendStartAtMs?: number;
       downwardCommitmentAtMs?: number;
+      committedAtMs?: number;
       reversalAtMs?: number;
       ascendStartAtMs?: number;
       recoveryAtMs?: number;
+      standingRecoveredAtMs?: number;
+      standingRecoveryHoldMs?: number;
+      successPhaseAtOpen?: string;
       cycleDurationMs?: number;
       downwardCommitmentDelta?: number;
       ultraLowRomCandidate?: boolean;
@@ -90,6 +95,7 @@ export interface AttemptSnapshot {
       standingStillRejected?: boolean;
       falsePositiveBlockReason?: string | null;
       descendConfirmed?: boolean;
+      ascendConfirmed?: boolean;
       reversalConfirmedAfterDescend?: boolean;
       recoveryConfirmedAfterReversal?: boolean;
       minimumCycleDurationSatisfied?: boolean;
@@ -110,6 +116,8 @@ export interface AttemptSnapshot {
       failureOverlayBlockedReason?: string | null;
       attemptStarted?: boolean;
       downwardCommitmentReached?: boolean;
+      evidenceLabel?: string;
+      completionBlockedReason?: string | null;
       /** PR shallow: guardrail partial 시 이유 */
       guardrailPartialReason?: string;
       /** PR shallow: guardrail complete 시 경로 */
@@ -283,6 +291,7 @@ function buildDiagnosisSummary(
     base.squatCycle = {
       peakDepth,
       depthBand: sc.depthBand,
+      currentSquatPhase: sc.currentSquatPhase,
       descendDetected: sc.descendDetected,
       bottomDetected: sc.bottomDetected,
       recoveryDetected: sc.recoveryDetected,
@@ -293,9 +302,13 @@ function buildDiagnosisSummary(
       completionRejectedReason: sc.completionRejectedReason,
       descendStartAtMs: sc.descendStartAtMs,
       downwardCommitmentAtMs: sc.downwardCommitmentAtMs,
+      committedAtMs: sc.committedAtMs,
       reversalAtMs: sc.reversalAtMs,
       ascendStartAtMs: sc.ascendStartAtMs,
       recoveryAtMs: sc.recoveryAtMs,
+      standingRecoveredAtMs: sc.standingRecoveredAtMs,
+      standingRecoveryHoldMs: sc.standingRecoveryHoldMs,
+      successPhaseAtOpen: sc.successPhaseAtOpen,
       cycleDurationMs: sc.cycleDurationMs,
       downwardCommitmentDelta: sc.downwardCommitmentDelta,
       ultraLowRomCandidate: sc.ultraLowRomCandidate,
@@ -304,6 +317,7 @@ function buildDiagnosisSummary(
       standingStillRejected: sc.standingStillRejected,
       falsePositiveBlockReason: sc.falsePositiveBlockReason,
       descendConfirmed: sc.descendConfirmed,
+      ascendConfirmed: sc.ascendConfirmed,
       reversalConfirmedAfterDescend: sc.reversalConfirmedAfterDescend,
       recoveryConfirmedAfterReversal: sc.recoveryConfirmedAfterReversal,
       minimumCycleDurationSatisfied: sc.minimumCycleDurationSatisfied,
@@ -313,10 +327,12 @@ function buildDiagnosisSummary(
       relativeDepthPeak: typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : undefined,
       failureOverlayArmed: hasSquatAttemptEvidence(gate),
       failureOverlayBlockedReason: hasSquatAttemptEvidence(gate) ? null : 'no_attempt_evidence',
-      attemptStarted: (sc.descendConfirmed ?? false) || (hm?.descentCount as number) > 0,
+      attemptStarted: sc.attemptStarted ?? ((sc.descendConfirmed ?? false) || (hm?.descentCount as number) > 0),
       downwardCommitmentReached:
         (sc.reversalConfirmedAfterDescend ?? false) ||
         ((hm?.downwardCommitmentDelta as number) ?? 0) >= 0.02,
+      evidenceLabel: sc.evidenceLabel,
+      completionBlockedReason: sc.completionBlockedReason,
       ultraLowRomPathDisabledOrGuarded: sc.ultraLowRomPathDisabledOrGuarded,
       squatEvidenceLevel: sc.squatEvidenceLevel,
       squatEvidenceReasons: sc.squatEvidenceReasons,

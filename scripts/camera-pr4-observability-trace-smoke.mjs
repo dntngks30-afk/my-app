@@ -105,6 +105,8 @@ ok('AT1b: squat snapshot has movementType squat', squatSnapshot?.movementType ==
 ok('AT1c: squat snapshot has required fields', !!squatSnapshot?.id && !!squatSnapshot?.ts);
 ok('AT1d: per-step summary included without raw frame dumps', !Array.isArray(squatSnapshot?.perStepSummary));
 ok('AT1e: no raw landmark arrays in snapshot', !('landmarks' in (squatSnapshot ?? {})));
+ok('AT1f: squat trace includes current phase', typeof squatSnapshot?.diagnosisSummary?.squatCycle?.currentSquatPhase === 'string');
+ok('AT1g: squat trace includes completion blocked reason field', 'completionBlockedReason' in (squatSnapshot?.diagnosisSummary?.squatCycle ?? {}));
 
 // AT2: Snapshot creation works for overhead reach
 const ohLandmarks = overheadLandmarks();

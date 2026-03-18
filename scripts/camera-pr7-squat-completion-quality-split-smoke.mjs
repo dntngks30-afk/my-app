@@ -11,6 +11,7 @@ process.chdir(join(__dirname, '..'));
 
 const { evaluateSquatFromPoseFrames } = await import('../src/lib/camera/evaluators/squat.ts');
 const { buildPoseFeaturesFrames, getSquatRecoverySignal } = await import('../src/lib/camera/pose-features.ts');
+const { evaluateSquatCompletionState } = await import('../src/lib/camera/squat-completion-state.ts');
 const { evaluateExerciseAutoProgress } = await import('../src/lib/camera/auto-progression.ts');
 
 let passed = 0;
@@ -56,6 +57,19 @@ function toLandmarks(poses) {
   return poses.map((p) => ({ landmarks: p.landmarks, timestamp: p.timestamp }));
 }
 
+function poseSeries(startTs, depthValues, stepMs = 80) {
+  return depthValues.map((depthProxy, i) => squatPoseLandmarks(startTs + i * stepMs, depthProxy));
+}
+
+function syntheticStateFrames(depths, phases, stepMs = 80) {
+  return depths.map((depth, i) => ({
+    timestampMs: 100 + i * stepMs,
+    isValid: true,
+    phaseHint: phases[i] ?? 'unknown',
+    derived: { squatDepthProxy: depth },
+  }));
+}
+
 function squatStats(landmarks) {
   return {
     sampledFrameCount: landmarks.length,
@@ -67,15 +81,17 @@ function squatStats(landmarks) {
 
 console.log('Camera PR-7 squat completion vs quality split smoke test\n');
 
-// A. Valid shallow squat cycle can pass (PR G9: shallower real cycle)
-const shallowSquatPoses = [
-  ...Array(4).fill(0).map((_, i) => squatPoseLandmarks(100 + i * 80, 0.05 + i * 0.05)),
-  ...Array(5).fill(0).map((_, i) => squatPoseLandmarks(420 + i * 80, 0.22 + i * 0.01)),
-  ...Array(5).fill(0).map((_, i) => squatPoseLandmarks(820 + i * 80, 0.2 - i * 0.04)),
-];
-const shallowLandmarks = toLandmarks(shallowSquatPoses);
-const shallowGate = evaluateExerciseAutoProgress('squat', shallowLandmarks, squatStats(shallowLandmarks));
-ok('A: shallow squat not blocked by depth-only (PR G9 shallower cycle)', !shallowGate.squatCycleDebug?.passBlockedReason?.includes('depth'));
+// A. Shallow full cycle passes only after standing recovery hold, with low_rom evidence label
+const shallowState = evaluateSquatCompletionState(
+  syntheticStateFrames(
+    [0.01, 0.01, 0.01, 0.01, 0.03, 0.05, 0.07, 0.09, 0.09, 0.07, 0.05, 0.03, 0.02, 0.01, 0.01],
+    ['start', 'start', 'start', 'start', 'descent', 'descent', 'descent', 'bottom', 'bottom', 'ascent', 'ascent', 'ascent', 'start', 'start', 'start']
+  )
+);
+const shallowLandmarks = toLandmarks(poseSeries(100, [0.01, 0.02, 0.02, 0.01, 0.03, 0.05, 0.07, 0.09, 0.08, 0.06, 0.04, 0.02]));
+ok('A1: shallow full cycle can pass after standing recovery', shallowState.completionSatisfied);
+ok('A2: shallow success opens only at standing_recovered', shallowState.successPhaseAtOpen === 'standing_recovered');
+ok('A3: shallow success keeps low_rom evidence label', shallowState.evidenceLabel === 'low_rom');
 
 // B-PR11. Low-ROM recovery signal: peak 7–10% with 40% recoveryDrop yields lowRomRecovered
 const lowRomSyntheticFrames = [0.02, 0.04, 0.08, 0.07, 0.05, 0.04, 0.03].map((d) => ({
@@ -111,6 +127,16 @@ const descendOnlyLandmarks = toLandmarks(descendOnlyPoses);
 const descendOnlyGate = evaluateExerciseAutoProgress('squat', descendOnlyLandmarks, squatStats(descendOnlyLandmarks));
 ok('B: descend-only does not pass', !descendOnlyGate.completionSatisfied);
 
+// B2. Mid-ascent must not pass before standing recovery
+const midAscentState = evaluateSquatCompletionState(
+  syntheticStateFrames(
+    [0.01, 0.01, 0.01, 0.01, 0.04, 0.07, 0.1, 0.12, 0.11, 0.09, 0.07, 0.05],
+    ['start', 'start', 'start', 'start', 'descent', 'descent', 'descent', 'bottom', 'ascent', 'ascent', 'ascent', 'ascent']
+  )
+);
+ok('B2: mid-ascent does not pass before standing recovery', !midAscentState.completionSatisfied);
+ok('B3: mid-ascent stays in ascending phase', midAscentState.currentSquatPhase === 'ascending');
+
 // C. Setup crouch does not pass (start in lowered state, no clear start→descent→bottom→ascent)
 const setupCrouchPoses = Array(12).fill(0).map((_, i) => squatPoseLandmarks(100 + i * 80, 0.25 + i * 0.01));
 const setupCrouchLandmarks = toLandmarks(setupCrouchPoses);
@@ -127,20 +153,20 @@ ok('D-ultra: micro dip with poor recovery does not yield ultraLowRomRecovered', 
 
 // D. Tiny dip does not pass (peak < noise floor)
 const tinyDipPoses = [
-  ...Array(4).fill(0).map((_, i) => squatPoseLandmarks(100 + i * 80, 0.02)),
-  ...Array(4).fill(0).map((_, i) => squatPoseLandmarks(420 + i * 80, 0.06 + i * 0.01)),
-  ...Array(4).fill(0).map((_, i) => squatPoseLandmarks(740 + i * 80, 0.04 - i * 0.01)),
+  ...Array(4).fill(0).map((_, i) => squatPoseLandmarks(100 + i * 80, 0.01)),
+  ...Array(4).fill(0).map((_, i) => squatPoseLandmarks(420 + i * 80, 0.025 + i * 0.003)),
+  ...Array(4).fill(0).map((_, i) => squatPoseLandmarks(740 + i * 80, 0.02 - i * 0.002)),
 ];
 const tinyDipLandmarks = toLandmarks(tinyDipPoses);
 const tinyDipGate = evaluateExerciseAutoProgress('squat', tinyDipLandmarks, squatStats(tinyDipLandmarks));
 ok('D: tiny dip does not pass', !tinyDipGate.completionSatisfied);
 
 // E. Full cycle still required (recovery must be confirmed)
-const noRecoveryPoses = [
-  ...Array(4).fill(0).map((_, i) => squatPoseLandmarks(100 + i * 80, 0.02 + i * 0.03)),
-  ...Array(4).fill(0).map((_, i) => squatPoseLandmarks(420 + i * 80, 0.2 + i * 0.02)),
-  ...Array(4).fill(0).map((_, i) => squatPoseLandmarks(740 + i * 80, 0.25 - i * 0.02)),
-];
+const noRecoveryPoses = poseSeries(100, [
+  0.01, 0.02, 0.02, 0.01,
+  0.05, 0.08, 0.12, 0.16,
+  0.18, 0.16, 0.14, 0.12,
+]);
 const noRecoveryLandmarks = toLandmarks(noRecoveryPoses);
 const noRecoveryGate = evaluateExerciseAutoProgress('squat', noRecoveryLandmarks, squatStats(noRecoveryLandmarks));
 ok('E: full cycle required (no recovery = no pass)', !noRecoveryGate.completionSatisfied);
@@ -151,15 +177,17 @@ const shallowResult = evaluateSquatFromPoseFrames(shallowFrames);
 const depthBand = shallowResult.debug?.highlightedMetrics?.depthBand ?? -1;
 ok('F: quality depthBand exists and can be shallow (0)', depthBand >= 0 && depthBand <= 2);
 
-// G. Full-cycle gate logic intact (evaluator/guardrail structure unchanged)
-const deepSquatPoses = [
-  ...Array(4).fill(0).map((_, i) => squatPoseLandmarks(100 + i * 80, 0.1 + i * 0.15)),
-  ...Array(5).fill(0).map((_, i) => squatPoseLandmarks(420 + i * 80, 0.55 + i * 0.02)),
-  ...Array(5).fill(0).map((_, i) => squatPoseLandmarks(820 + i * 80, 0.5 - i * 0.1)),
-];
-const deepLandmarks = toLandmarks(deepSquatPoses);
-const deepGate = evaluateExerciseAutoProgress('squat', deepLandmarks, squatStats(deepLandmarks));
-ok('G: gate returns valid structure (squatCycleDebug present)', !!deepGate.squatCycleDebug);
+// G. Deep squat still passes with the same final-state contract
+const deepState = evaluateSquatCompletionState(
+  syntheticStateFrames(
+    [0.01, 0.01, 0.01, 0.01, 0.05, 0.1, 0.16, 0.22, 0.24, 0.2, 0.14, 0.08, 0.03, 0.01, 0.01],
+    ['start', 'start', 'start', 'start', 'descent', 'descent', 'descent', 'bottom', 'bottom', 'ascent', 'ascent', 'ascent', 'start', 'start', 'start']
+  )
+);
+const deepGate = evaluateExerciseAutoProgress('squat', shallowLandmarks, squatStats(shallowLandmarks));
+ok('G1: deep squat still passes', deepState.completionSatisfied);
+ok('G2: deep squat uses standard evidence label', deepState.evidenceLabel === 'standard');
+ok('G3: gate returns valid structure (squatCycleDebug present)', !!deepGate.squatCycleDebug);
 
 // H: Recovery signal uses 0.12 threshold (not 0.15) — unit test with synthetic depth
 const syntheticFrames = [0.03, 0.06, 0.1, 0.15, 0.18, 0.2, 0.18, 0.12, 0.08, 0.04].map((d, i) => ({

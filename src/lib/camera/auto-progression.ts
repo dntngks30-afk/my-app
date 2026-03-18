@@ -21,12 +21,20 @@ export type ExerciseGateStatus = 'pass' | 'retry' | 'fail' | 'detecting';
 export type CameraGuideTone = 'neutral' | 'warning' | 'success';
 
 /** PR G3: squat full-cycle observability (dev/debug only) */
-/** PR-A4: completionPathUsed, completionRejectedReason, cycle timing */
+/** PR-A4: squat completion trace + unified standing-recovered final state */
 /** PR evidence: completion과 evidence strength 분리 — result layer가 입력 품질 읽기 */
 export type SquatEvidenceLevel = 'strong_evidence' | 'shallow_evidence' | 'weak_evidence' | 'insufficient_signal';
 
 export interface SquatCycleDebug {
   armingSatisfied: boolean;
+  currentSquatPhase?:
+    | 'idle'
+    | 'armed'
+    | 'descending'
+    | 'committed_bottom_or_downward_commitment'
+    | 'ascending'
+    | 'standing_recovered';
+  attemptStarted?: boolean;
   startPoseSatisfied: boolean;
   startBeforeBottom: boolean;
   descendDetected: boolean;
@@ -40,8 +48,10 @@ export interface SquatCycleDebug {
   passBlockedReason: string | null;
   qualityInterpretationReason: string | null;
   passTriggeredAtPhase?: string;
-  completionPathUsed?: 'standard' | 'low_rom_reversal' | 'ultra_low_rom_reversal' | 'ultra_low_rom_guarded';
+  completionPathUsed?: 'standard' | 'low_rom' | 'ultra_low_rom' | 'insufficient_signal';
   completionRejectedReason?: string | null;
+  completionBlockedReason?: string | null;
+  evidenceLabel?: 'standard' | 'low_rom' | 'ultra_low_rom' | 'insufficient_signal';
   ultraLowRomCandidate?: boolean;
   ultraLowRomGuardPassed?: boolean;
   ultraLowRomRejectReason?: string | null;
@@ -49,6 +59,7 @@ export interface SquatCycleDebug {
   standingStillRejected?: boolean;
   falsePositiveBlockReason?: string | null;
   descendConfirmed?: boolean;
+  ascendConfirmed?: boolean;
   reversalConfirmedAfterDescend?: boolean;
   recoveryConfirmedAfterReversal?: boolean;
   minimumCycleDurationSatisfied?: boolean;
@@ -56,9 +67,13 @@ export interface SquatCycleDebug {
   ultraLowRomPathDisabledOrGuarded?: boolean;
   descendStartAtMs?: number;
   downwardCommitmentAtMs?: number;
+  committedAtMs?: number;
   reversalAtMs?: number;
   ascendStartAtMs?: number;
   recoveryAtMs?: number;
+  standingRecoveredAtMs?: number;
+  standingRecoveryHoldMs?: number;
+  successPhaseAtOpen?: 'standing_recovered';
   cycleDurationMs?: number;
   downwardCommitmentDelta?: number;
   /** PR evidence: completion과 분리된 evidence layer */
@@ -584,86 +599,74 @@ function getSquatProgressionCompletionSatisfied(
   const bottomCount = getHighlightedMetric(result, 'bottomCount');
   const ascentCount = getHighlightedMetric(result, 'ascentCount');
   const ascentRecovered = getHighlightedMetric(result, 'ascentRecovered');
-  const ascentRecoveredLowRom = getHighlightedMetric(result, 'ascentRecoveredLowRom');
-  const ascentRecoveredUltraLowRom = getHighlightedMetric(result, 'ascentRecoveredUltraLowRom');
-  const ascentRecoveredUltraLowRomGuarded = getHighlightedMetric(
-    result,
-    'ascentRecoveredUltraLowRomGuarded'
-  ) > 0;
   const cycleComplete = getHighlightedMetric(result, 'cycleComplete') > 0;
   const depthPeak = getHighlightedMetric(result, 'depthPeak');
   const depthBand = getHighlightedMetric(result, 'depthBand'); /* 0=shallow, 1=moderate, 2=deep */
-  const lowRomRecoveryReason = (result.debug?.highlightedMetrics?.lowRomRecoveryReason as string) ?? null;
-  const ultraLowRomRecoveryReason = (result.debug?.highlightedMetrics?.ultraLowRomRecoveryReason as string) ?? null;
+  const currentSquatPhase =
+    (result.debug?.highlightedMetrics?.currentSquatPhase as SquatCycleDebug['currentSquatPhase']) ??
+    'idle';
+  const evidenceLabel =
+    (result.debug?.highlightedMetrics?.evidenceLabel as SquatCycleDebug['evidenceLabel']) ??
+    'insufficient_signal';
+  const completionBlockedReason =
+    (result.debug?.highlightedMetrics?.completionBlockedReason as string | null) ?? null;
+  const lowRomRecoveryReason =
+    (result.debug?.highlightedMetrics?.lowRomRecoveryReason as string) ?? null;
+  const ultraLowRomRecoveryReason =
+    (result.debug?.highlightedMetrics?.ultraLowRomRecoveryReason as string) ?? null;
   const recoveryReturnContinuityFrames = (result.debug?.highlightedMetrics?.recoveryReturnContinuityFrames as number) ?? undefined;
   const recoveryTrailingDepthCount = (result.debug?.highlightedMetrics?.recoveryTrailingDepthCount as number) ?? undefined;
   const recoveryDropRatio = (result.debug?.highlightedMetrics?.recoveryDropRatio as number) ?? undefined;
   const downwardCommitmentDelta =
     (getHighlightedMetric(result, 'downwardCommitmentDelta') ?? 0) / 100;
-  const firstDescentIdx = (result.debug?.highlightedMetrics?.firstDescentIdx as number) ?? -1;
-  const firstBottomIdx = (result.debug?.highlightedMetrics?.firstBottomIdx as number) ?? -1;
-  const firstAscentIdx = (result.debug?.highlightedMetrics?.firstAscentIdx as number) ?? -1;
   const cycleDurationMs = getHighlightedMetric(result, 'cycleDurationMs') ?? 0;
   const relativeDepthPeak = (result.debug?.highlightedMetrics?.relativeDepthPeak as number) ?? 0;
   const baselineStandingDepth = (result.debug?.highlightedMetrics?.baselineStandingDepth as number) ?? 0;
   const rawDepthPeak = (result.debug?.highlightedMetrics?.rawDepthPeak as number) ?? 0;
-
-  const armingSatisfied = stats.captureDurationMs >= SQUAT_ARMING_MS;
+  const attemptStarted =
+    result.debug?.highlightedMetrics?.attemptStarted === true ||
+    result.debug?.highlightedMetrics?.attemptStarted === 1;
+  const descendConfirmed =
+    result.debug?.highlightedMetrics?.descendConfirmed === true ||
+    result.debug?.highlightedMetrics?.descendConfirmed === 1;
+  const ascendConfirmed =
+    result.debug?.highlightedMetrics?.ascendConfirmed === true ||
+    result.debug?.highlightedMetrics?.ascendConfirmed === 1;
+  const standingRecoveredAtMs =
+    (result.debug?.highlightedMetrics?.standingRecoveredAtMs as number | null) ?? undefined;
+  const standingRecoveryHoldMs =
+    (result.debug?.highlightedMetrics?.standingRecoveryHoldMs as number) ?? 0;
+  const committedAtMs =
+    (result.debug?.highlightedMetrics?.committedAtMs as number | null) ?? undefined;
   const startBeforeBottom = getHighlightedMetric(result, 'startBeforeBottom') > 0;
-  const startPoseSatisfied = startCount > 0 && startBeforeBottom;
-  const descendDetected = descentCount > 0;
+  const armingSatisfied = currentSquatPhase !== 'idle';
+  const startPoseSatisfied = currentSquatPhase !== 'idle' && startBeforeBottom;
+  const descendDetected = descentCount > 0 || currentSquatPhase !== 'idle';
   const bottomDetected = bottomCount > 0;
-  const ascendDetected = ascentCount > 0;
-  const recoveryDetected = ascentRecovered > 0;
-  const recoveryLowRomDetected = ascentRecoveredLowRom > 0;
-  const recoveryUltraLowRomDetected = ascentRecoveredUltraLowRom > 0;
-  /** PR G11: low-ROM path — peak 7–10%, stricter recovery. */
-  const lowRomRecoveryConfirmed =
-    depthPeak >= 7 && depthPeak < 10 && recoveryLowRomDetected;
-  /** Ultra-low-ROM path — peak 2–7%, very strict recovery. Real cycle proof. */
-  const ultraLowRomRecoveryConfirmed =
-    depthPeak >= 2 && depthPeak < 7 && recoveryUltraLowRomDetected;
-  /** PR-A5: guarded ultra-low-ROM — peak 1–2%. PR-A6: emergency disabled (standing false positive). */
-  const ULTRA_LOW_ROM_GUARDED_DISABLED = true;
-  const ultraLowRomGuardedCandidate =
-    !ULTRA_LOW_ROM_GUARDED_DISABLED &&
-    depthPeak >= 1 &&
-    depthPeak < 2 &&
-    ascentRecoveredUltraLowRomGuarded;
-  const ultraLowRomGuardPassed = false; /* PR-A6: path disabled */
-  /** PR G10: recovery proves meaningful excursion (peak>=10%, came back). Allow completion without bottom phase. */
-  const excursionOrBottomConfirmed =
-    bottomDetected ||
-    recoveryDetected ||
-    lowRomRecoveryConfirmed ||
-    ultraLowRomRecoveryConfirmed;
-  const recoveryOrLowRom =
-    recoveryDetected ||
-    lowRomRecoveryConfirmed ||
-    ultraLowRomRecoveryConfirmed;
-
-  const bottomTurningPointDetected = bottomDetected;
+  const ascendDetected = ascentCount > 0 || currentSquatPhase === 'ascending' || currentSquatPhase === 'standing_recovered';
+  const recoveryDetected = standingRecoveredAtMs != null;
+  const bottomTurningPointDetected = bottomDetected || committedAtMs != null;
   const depthBandLabel: 'shallow' | 'moderate' | 'deep' =
     depthBand === 2 ? 'deep' : depthBand === 1 ? 'moderate' : 'shallow';
 
-  /** PR evidence: cycle proof와 ROM band로 evidence level 분리. completion gate와 독립. */
-  const cycleProofPassed = excursionOrBottomConfirmed && recoveryOrLowRom;
+  /** PR evidence: completion owner와 분리된 evidence label */
+  const cycleProofPassed = currentSquatPhase === 'standing_recovered';
   const squatEvidenceLevel: SquatEvidenceLevel =
-    !cycleProofPassed || depthPeak < 2
+    !cycleProofPassed || evidenceLabel === 'insufficient_signal'
       ? 'insufficient_signal'
-      : depthPeak >= 10
+      : evidenceLabel === 'standard'
         ? 'strong_evidence'
-        : depthPeak >= 7
+        : evidenceLabel === 'low_rom'
           ? 'shallow_evidence'
           : 'weak_evidence';
   const squatEvidenceReasons: string[] =
     squatEvidenceLevel === 'insufficient_signal'
-      ? cycleProofPassed ? ['standing_or_tiny_dip_rejected'] : ['cycle_proof_insufficient']
+      ? completionBlockedReason != null ? [completionBlockedReason] : ['cycle_proof_insufficient']
       : squatEvidenceLevel === 'strong_evidence'
-        ? ['sufficient_depth', 'cycle_complete']
+        ? ['standard', 'standing_recovered']
         : squatEvidenceLevel === 'shallow_evidence'
-          ? ['low_rom', 'cycle_complete']
-          : ['ultra_low_rom', 'cycle_complete'];
+          ? ['low_rom', 'standing_recovered']
+          : ['ultra_low_rom', 'standing_recovered'];
   const confidenceDowngradeReason: string | null =
     squatEvidenceLevel === 'shallow_evidence'
       ? 'shallow_depth'
@@ -672,17 +675,19 @@ function getSquatProgressionCompletionSatisfied(
         : null;
   const insufficientSignalReason: string | null =
     squatEvidenceLevel === 'insufficient_signal'
-      ? (cycleProofPassed ? 'standing_tiny_dip' : 'cycle_proof_insufficient')
+      ? (completionBlockedReason ?? 'cycle_proof_insufficient')
       : null;
 
   const descendStartAtMs = getHighlightedMetric(result, 'descendStartAtMs') || undefined;
   const peakAtMs = getHighlightedMetric(result, 'peakAtMs') || undefined;
   const reversalAtMs = getHighlightedMetric(result, 'reversalAtMs') || undefined;
   const ascendStartAtMs = getHighlightedMetric(result, 'ascendStartAtMs') || undefined;
-  const recoveryAtMs = getHighlightedMetric(result, 'recoveryAtMs') || undefined;
+  const recoveryAtMs = standingRecoveredAtMs;
 
   const squatCycleDebug: SquatCycleDebug = {
     armingSatisfied,
+    currentSquatPhase,
+    attemptStarted,
     startPoseSatisfied,
     startBeforeBottom,
     descendDetected,
@@ -695,35 +700,26 @@ function getSquatProgressionCompletionSatisfied(
     depthBand: depthBandLabel,
     passBlockedReason: null,
     qualityInterpretationReason: null,
+    completionBlockedReason,
+    evidenceLabel,
     descendStartAtMs,
     downwardCommitmentAtMs: peakAtMs,
+    committedAtMs,
     reversalAtMs,
     ascendStartAtMs,
     recoveryAtMs,
+    standingRecoveredAtMs,
+    standingRecoveryHoldMs,
     cycleDurationMs,
     downwardCommitmentDelta,
-    ultraLowRomCandidate: ultraLowRomGuardedCandidate,
-    ultraLowRomGuardPassed: ultraLowRomGuardPassed,
-    ultraLowRomRejectReason: ultraLowRomGuardedCandidate && !ultraLowRomGuardPassed
-      ? (stats.captureDurationMs < 1000
-          ? 'cycle_duration_short'
-          : downwardCommitmentDelta < 0.01
-            ? 'commitment_too_low'
-            : descentCount < 3
-              ? 'descend_frames_insufficient'
-              : 'guard_not_passed')
-      : undefined,
-    standingStillRejected: depthPeak < 2,
+    standingStillRejected: evidenceLabel === 'insufficient_signal',
     falsePositiveBlockReason: null,
-    /** PR standing-fp: explicit sequence — descend before reversal before recovery */
-    descendConfirmed: firstDescentIdx >= 0,
-    reversalConfirmedAfterDescend:
-      firstBottomIdx >= 0 && firstBottomIdx > firstDescentIdx,
-    recoveryConfirmedAfterReversal:
-      (recoveryDetected || recoveryLowRomDetected || recoveryUltraLowRomDetected) &&
-      firstAscentIdx > firstBottomIdx,
-    minimumCycleDurationSatisfied: (cycleDurationMs ?? 0) >= 1200,
-    ultraLowRomPathDisabledOrGuarded: ULTRA_LOW_ROM_GUARDED_DISABLED,
+    descendConfirmed,
+    ascendConfirmed,
+    reversalConfirmedAfterDescend: committedAtMs != null && reversalAtMs != null,
+    recoveryConfirmedAfterReversal: standingRecoveredAtMs != null && reversalAtMs != null,
+    minimumCycleDurationSatisfied: cycleDurationMs >= SQUAT_ARMING_MS,
+    ultraLowRomPathDisabledOrGuarded: false,
     squatEvidenceLevel,
     squatEvidenceReasons,
     cycleProofPassed,
@@ -731,9 +727,9 @@ function getSquatProgressionCompletionSatisfied(
     confidenceDowngradeReason,
     insufficientSignalReason,
     lowRomRejectionReason:
-      depthPeak >= 7 && depthPeak < 10 && !recoveryLowRomDetected ? lowRomRecoveryReason : null,
+      evidenceLabel === 'low_rom' && !cycleProofPassed ? lowRomRecoveryReason : null,
     ultraLowRomRejectionReason:
-      depthPeak >= 2 && depthPeak < 7 && !recoveryUltraLowRomDetected ? ultraLowRomRecoveryReason : null,
+      evidenceLabel === 'ultra_low_rom' && !cycleProofPassed ? ultraLowRomRecoveryReason : null,
     recoveryReturnContinuityFrames,
     recoveryTrailingDepthCount,
     recoveryDropRatio,
@@ -749,126 +745,27 @@ function getSquatProgressionCompletionSatisfied(
     squatCycleDebug.guardrailPartialReason = guardrail.debug?.guardrailPartialReason;
     return { satisfied: false, squatCycleDebug };
   }
-  if (!armingSatisfied) {
-    squatCycleDebug.passBlockedReason = 'arming_window';
-    squatCycleDebug.completionRejectedReason = 'arming_window';
-    squatCycleDebug.falsePositiveBlockReason = 'arming_window';
-    squatCycleDebug.insufficientSignalReason = 'arming_window';
-    squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
-    squatCycleDebug.squatEvidenceReasons = ['arming_window'];
-    return { satisfied: false, squatCycleDebug };
-  }
-  if (!startPoseSatisfied) {
-    squatCycleDebug.passBlockedReason =
-      startCount > 0 && !startBeforeBottom ? 'bottom_from_start' : 'start_pose_missing';
-    squatCycleDebug.completionRejectedReason = squatCycleDebug.passBlockedReason;
-    squatCycleDebug.falsePositiveBlockReason = squatCycleDebug.passBlockedReason;
-    squatCycleDebug.insufficientSignalReason = squatCycleDebug.passBlockedReason;
-    squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
-    squatCycleDebug.squatEvidenceReasons = [squatCycleDebug.passBlockedReason ?? 'start_pose'];
-    return { satisfied: false, squatCycleDebug };
-  }
-  if (!descendDetected) {
-    squatCycleDebug.passBlockedReason = 'descend_not_detected';
-    squatCycleDebug.completionRejectedReason = 'descend_not_detected';
-    squatCycleDebug.falsePositiveBlockReason = 'descend_not_detected';
-    squatCycleDebug.insufficientSignalReason = 'descend_not_detected';
-    squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
-    squatCycleDebug.squatEvidenceReasons = ['descend_not_detected'];
-    return { satisfied: false, squatCycleDebug };
-  }
-  if (!excursionOrBottomConfirmed) {
-    squatCycleDebug.passBlockedReason = 'excursion_not_confirmed';
+  if (currentSquatPhase !== 'standing_recovered' || completionBlockedReason != null) {
+    squatCycleDebug.passBlockedReason = completionBlockedReason ?? 'not_standing_recovered';
     squatCycleDebug.completionRejectedReason =
-      depthPeak >= 7 && depthPeak < 10 && !recoveryLowRomDetected
-        ? `excursion_low_rom:${lowRomRecoveryReason ?? 'unknown'}`
-        : depthPeak >= 2 && depthPeak < 7 && !recoveryUltraLowRomDetected
-          ? `excursion_ultra_low_rom:${ultraLowRomRecoveryReason ?? 'unknown'}`
-          : 'excursion_not_confirmed';
-    squatCycleDebug.falsePositiveBlockReason = 'excursion_not_confirmed';
-    squatCycleDebug.insufficientSignalReason = 'excursion_not_confirmed';
-    squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
-    squatCycleDebug.squatEvidenceReasons = ['excursion_not_confirmed'];
+      completionBlockedReason ?? 'not_standing_recovered';
+    squatCycleDebug.falsePositiveBlockReason =
+      completionBlockedReason ?? 'not_standing_recovered';
+    squatCycleDebug.insufficientSignalReason =
+      completionBlockedReason ?? 'not_standing_recovered';
+    squatCycleDebug.squatEvidenceLevel =
+      evidenceLabel === 'insufficient_signal' ? 'insufficient_signal' : squatEvidenceLevel;
+    squatCycleDebug.squatEvidenceReasons = [
+      completionBlockedReason ?? 'not_standing_recovered',
+    ];
     return { satisfied: false, squatCycleDebug };
   }
-  if (!ascendDetected && !recoveryOrLowRom) {
-    squatCycleDebug.passBlockedReason = 'ascent_recovery_missing';
-    squatCycleDebug.completionRejectedReason = 'ascent_recovery_missing';
-    squatCycleDebug.falsePositiveBlockReason = 'ascent_recovery_missing';
-    squatCycleDebug.insufficientSignalReason = 'ascent_recovery_missing';
-    squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
-    squatCycleDebug.squatEvidenceReasons = ['ascent_recovery_missing'];
-    return { satisfied: false, squatCycleDebug };
-  }
-  if (!recoveryOrLowRom) {
-    squatCycleDebug.passBlockedReason = 'recovery_not_confirmed';
-    squatCycleDebug.completionRejectedReason =
-      depthPeak >= 7 && depthPeak < 10
-        ? `recovery_low_rom:${lowRomRecoveryReason ?? 'unknown'}`
-        : depthPeak >= 2 && depthPeak < 7
-          ? `recovery_ultra_low_rom:${ultraLowRomRecoveryReason ?? 'unknown'}`
-          : 'recovery_not_confirmed';
-    squatCycleDebug.falsePositiveBlockReason = 'recovery_not_confirmed';
-    squatCycleDebug.insufficientSignalReason = 'recovery_not_confirmed';
-    squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
-    squatCycleDebug.squatEvidenceReasons = ['recovery_not_confirmed'];
-    return { satisfied: false, squatCycleDebug };
-  }
-  /* PR G6: depth는 completion gate에서 제거. quality band로만 해석. */
-  /* PR-A4/A5: completionPathUsed for trace */
-  const wouldBeStandard =
-    !ultraLowRomRecoveryConfirmed && !lowRomRecoveryConfirmed;
-  squatCycleDebug.completionPathUsed = ultraLowRomRecoveryConfirmed
-    ? 'ultra_low_rom_reversal'
-    : lowRomRecoveryConfirmed
-      ? 'low_rom_reversal'
-      : 'standard';
 
-  /** PR standing-fp: standard path hard gate — explicit sequence + relative depth + min cycle */
-  const MIN_STANDARD_RELATIVE_DEPTH = 0.10;
-  const MIN_STANDARD_CYCLE_DURATION_MS = 1200;
-  const standardDescendOk = squatCycleDebug.descendConfirmed === true;
-  const standardReversalOk = squatCycleDebug.reversalConfirmedAfterDescend === true;
-  const standardRecoveryOk = squatCycleDebug.recoveryConfirmedAfterReversal === true;
-  const standardDurationOk = squatCycleDebug.minimumCycleDurationSatisfied === true;
-  const standardRelativeDepthOk = relativeDepthPeak >= MIN_STANDARD_RELATIVE_DEPTH;
-
-  if (wouldBeStandard && squatCycleDebug.completionPathUsed === 'standard') {
-    if (!standardDescendOk) {
-      squatCycleDebug.standardPathBlockedReason = 'descend_not_confirmed';
-      squatCycleDebug.completionRejectedReason = 'standard_path:descend_not_confirmed';
-      squatCycleDebug.passBlockedReason = 'standard_path:descend_not_confirmed';
-      return { satisfied: false, squatCycleDebug };
-    }
-    if (!standardReversalOk) {
-      squatCycleDebug.standardPathBlockedReason = 'reversal_not_after_descend';
-      squatCycleDebug.completionRejectedReason = 'standard_path:reversal_not_after_descend';
-      squatCycleDebug.passBlockedReason = 'standard_path:reversal_not_after_descend';
-      return { satisfied: false, squatCycleDebug };
-    }
-    if (!standardRecoveryOk) {
-      squatCycleDebug.standardPathBlockedReason = 'recovery_not_after_reversal';
-      squatCycleDebug.completionRejectedReason = 'standard_path:recovery_not_after_reversal';
-      squatCycleDebug.passBlockedReason = 'standard_path:recovery_not_after_reversal';
-      return { satisfied: false, squatCycleDebug };
-    }
-    if (!standardDurationOk) {
-      squatCycleDebug.standardPathBlockedReason = 'cycle_duration_short';
-      squatCycleDebug.completionRejectedReason = 'standard_path:cycle_duration_short';
-      squatCycleDebug.passBlockedReason = 'standard_path:cycle_duration_short';
-      return { satisfied: false, squatCycleDebug };
-    }
-    if (!standardRelativeDepthOk) {
-      squatCycleDebug.standardPathBlockedReason = 'relative_depth_insufficient';
-      squatCycleDebug.completionRejectedReason = 'standard_path:relative_depth_insufficient';
-      squatCycleDebug.passBlockedReason = 'standard_path:relative_depth_insufficient';
-      return { satisfied: false, squatCycleDebug };
-    }
-  }
-
-  squatCycleDebug.passTriggeredAtPhase = 'recovery';
+  squatCycleDebug.completionPathUsed = evidenceLabel;
+  squatCycleDebug.successPhaseAtOpen = 'standing_recovered';
+  squatCycleDebug.passTriggeredAtPhase = 'standing_recovered';
   squatCycleDebug.qualityInterpretationReason =
-    depthBand === 0 ? 'valid_limited_shallow' : 'valid_strong';
+    evidenceLabel === 'standard' ? 'valid_strong' : 'valid_limited_shallow';
   squatCycleDebug.guardrailCompletePath = guardrail.debug?.guardrailCompletePath;
   return { satisfied: true, squatCycleDebug };
 }
@@ -921,10 +818,8 @@ function getSquatFailureReasons(
   confidence: number
 ): string[] {
   const failureReasons = new Set<string>();
-  const descentCount = getHighlightedMetric(result, 'descentCount');
-  const bottomCount = getHighlightedMetric(result, 'bottomCount');
-  const ascentCount = getHighlightedMetric(result, 'ascentCount');
-  const ascentRecovered = getHighlightedMetric(result, 'ascentRecovered');
+  const completionBlockedReason =
+    (result.debug?.highlightedMetrics?.completionBlockedReason as string | null) ?? null;
 
   if (guardrail.flags.includes('insufficient_signal')) {
     failureReasons.add('insufficient_signal');
@@ -946,20 +841,21 @@ function getSquatFailureReasons(
   if (confidence < BASIC_PASS_CONFIDENCE_THRESHOLD.squat) {
     failureReasons.add('confidence_too_low');
   }
-  /* PR G6: depth는 completion 실패 사유가 아님. quality band로만 해석. */
   if (
-    ascentCount === 0 &&
-    ascentRecovered === 0 &&
-    (descentCount === 0 || bottomCount === 0 || ascentCount === 0)
+    completionBlockedReason === 'no_reversal' ||
+    completionBlockedReason === 'no_ascend' ||
+    completionBlockedReason === 'not_standing_recovered' ||
+    completionBlockedReason === 'recovery_hold_too_short'
   ) {
     failureReasons.add('ascent_not_detected');
   }
   if (
-    (descentCount > 0 && bottomCount > 0) &&
-    ascentRecovered === 0 &&
-    result.completionHints?.includes('recovery_not_confirmed')
+    completionBlockedReason === 'no_descend' ||
+    completionBlockedReason === 'no_commitment' ||
+    completionBlockedReason === 'insufficient_relative_depth' ||
+    completionBlockedReason === 'not_armed'
   ) {
-    failureReasons.add('ascent_not_detected');
+    failureReasons.add('rep_incomplete');
   }
   if (guardrail.flags.includes('left_side_missing')) {
     failureReasons.add('left_side_missing');

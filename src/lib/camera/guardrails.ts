@@ -7,7 +7,7 @@ import {
   computeOverheadStableTopDwell,
   OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG,
 } from './evaluators/overhead-reach';
-import { buildPoseFeaturesFrames, getSquatRecoverySignal } from './pose-features';
+import { buildPoseFeaturesFrames } from './pose-features';
 import type { PoseFeaturesFrame } from './pose-features';
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
 import type { EvaluatorResult } from './evaluators/types';
@@ -69,7 +69,7 @@ export interface StepGuardrailDebug extends StepMetrics {
   ankleYMean?: number | null;
   /** PR shallow: guardrail partial 시 이유 */
   guardrailPartialReason?: string;
-  /** PR shallow: guardrail complete 시 경로 (standard | low_rom_reversal | ultra_low_rom_reversal) */
+  /** PR squat-state: guardrail complete 시 evidence label (standard | low_rom | ultra_low_rom) */
   guardrailCompletePath?: string;
 }
 
@@ -187,7 +187,8 @@ function getMotionCompleteness(
   stepId: CameraStepId,
   frames: PoseFeaturesFrame[],
   stats: PoseCaptureStats,
-  flags: Set<CameraGuardrailFlag>
+  flags: Set<CameraGuardrailFlag>,
+  evaluatorResult?: EvaluatorResult
 ): { score: number; status: CompletionStatus; partialReason?: string; completePath?: string } {
   if (frames.length < MIN_VALID_FRAMES) {
     flags.add('insufficient_signal');
@@ -196,151 +197,40 @@ function getMotionCompleteness(
   }
 
   if (stepId === 'squat') {
-    /** PR-A4: cycle-proof-first — depth는 anti-noise 보조, completion은 cycle proof 중심 */
-    const MIN_CYCLE_DURATION_MS = 1200;
-    const MIN_DOWNWARD_COMMITMENT = 0.02;
-    /** PR-A5: guarded ultra-low-ROM — relaxed only when extra cycle proof */
-    const MIN_CYCLE_DURATION_MS_GUARDED = 1000;
-    const MIN_DOWNWARD_COMMITMENT_GUARDED = 0.01;
-    const MIN_DESCEND_FRAMES_GUARDED = 3;
     const depthWithIndex = frames
       .map((f, i) => ({ i, d: f.derived.squatDepthProxy }))
       .filter((x): x is { i: number; d: number } => typeof x.d === 'number');
     const depthValues = depthWithIndex.map((x) => x.d);
-    const descentCount = frames.filter((frame) => frame.phaseHint === 'descent').length;
-    const bottomCount = frames.filter((frame) => frame.phaseHint === 'bottom').length;
-    const ascentCount = frames.filter((frame) => frame.phaseHint === 'ascent').length;
-    const recovery = getSquatRecoverySignal(frames);
-    const ascentSatisfied =
-      ascentCount > 0 ||
-      recovery.recovered ||
-      recovery.lowRomRecovered ||
-      recovery.ultraLowRomRecovered ||
-      recovery.ultraLowRomGuardedRecovered;
-    const firstStartIdx = frames.findIndex((f) => f.phaseHint === 'start');
-    const firstDescentIdx = frames.findIndex((f) => f.phaseHint === 'descent');
-    const firstBottomIdx = frames.findIndex((f) => f.phaseHint === 'bottom');
-    const firstAscentIdx = frames.findIndex((f) => f.phaseHint === 'ascent');
-    const startBeforeBottom =
-      firstStartIdx >= 0 && (firstBottomIdx < 0 || firstStartIdx < firstBottomIdx);
-    const descendBeforeReversal = firstDescentIdx >= 0 && firstBottomIdx > firstDescentIdx;
-    const reversalBeforeRecovery = firstBottomIdx >= 0 && firstAscentIdx > firstBottomIdx;
 
     if (depthValues.length < MIN_VALID_FRAMES) {
       flags.add('rep_incomplete');
       return { score: 0.2, status: 'partial', partialReason: 'depth_values_too_few' };
     }
-    const peakSample = depthWithIndex.reduce((best, x) => (x.d > best.d ? x : best), {
-      i: -1,
-      d: 0,
-    });
-    const peakDepth = peakSample.d;
-    const prePeakDepths = depthWithIndex.filter((x) => x.i < peakSample.i).map((x) => x.d);
-    const minPrePeakDepth = prePeakDepths.length > 0 ? Math.min(...prePeakDepths) : 0;
-    const downwardCommitment = peakDepth - minPrePeakDepth;
+    const peakDepth = depthValues.length > 0 ? Math.max(...depthValues) : 0;
+    const hm = evaluatorResult?.debug?.highlightedMetrics;
+    const completionSatisfied =
+      hm?.completionSatisfied === true || hm?.completionSatisfied === 1;
+    const completionBlockedReason =
+      typeof hm?.completionBlockedReason === 'string'
+        ? hm.completionBlockedReason
+        : 'completion_not_satisfied';
+    const evidenceLabel =
+      typeof hm?.evidenceLabel === 'string' ? hm.evidenceLabel : 'insufficient_signal';
 
-    /** PR standing-fp: baseline from first 6 frames for standard path */
-    const BASELINE_WINDOW = 6;
-    const baselineDepths = depthWithIndex
-      .filter((x) => x.i < BASELINE_WINDOW)
-      .map((x) => x.d);
-    const baselineStandingDepth = baselineDepths.length > 0 ? Math.min(...baselineDepths) : 0;
-    const relativeDepthPeak = Math.max(0, peakDepth - baselineStandingDepth);
-    const MIN_STANDARD_RELATIVE_DEPTH = 0.10;
-
-    if (descentCount === 0) {
-      flags.add('rep_incomplete');
-      return { score: clamp(peakDepth), status: 'partial', partialReason: 'descent_count_zero' };
-    }
-    if (!startBeforeBottom) {
-      flags.add('rep_incomplete');
-      return { score: clamp(peakDepth), status: 'partial', partialReason: 'start_not_before_bottom' };
+    if (completionSatisfied) {
+      return {
+        score: clamp(0.45 + peakDepth * 0.55),
+        status: 'complete',
+        completePath: evidenceLabel,
+      };
     }
 
-    /** PR-A6: guarded path 임시 비활성화 — standing false positive emergency hotfix */
-    if (!ULTRA_LOW_ROM_GUARDED_DISABLED) {
-      const ultraLowRomGuardedCandidate =
-        peakDepth >= SQUAT_ULTRA_LOW_ROM_GUARDED_FLOOR &&
-        peakDepth < SQUAT_ULTRA_LOW_ROM_FLOOR &&
-        recovery.ultraLowRomGuardedRecovered;
-      const ultraLowRomGuardPassed =
-        ultraLowRomGuardedCandidate &&
-        stats.captureDurationMs >= MIN_CYCLE_DURATION_MS_GUARDED &&
-        downwardCommitment >= MIN_DOWNWARD_COMMITMENT_GUARDED &&
-        descentCount >= MIN_DESCEND_FRAMES_GUARDED;
-      if (ultraLowRomGuardPassed) {
-        return { score: clamp(0.45 + peakDepth * 0.55), status: 'complete' };
-      }
-    }
-
-    if (stats.captureDurationMs < MIN_CYCLE_DURATION_MS) {
-      flags.add('rep_incomplete');
-      return { score: clamp(peakDepth), status: 'partial', partialReason: 'cycle_duration_short' };
-    }
-    if (downwardCommitment < MIN_DOWNWARD_COMMITMENT) {
-      flags.add('rep_incomplete');
-      return { score: clamp(peakDepth), status: 'partial', partialReason: 'downward_commitment_low' };
-    }
-
-    /** PR G10: recovery proves meaningful excursion. Allow complete without bottom phase. */
-    const standardExcursion = bottomCount > 0 || recovery.recovered;
-    /** PR G11: low-ROM path — peak 7–10%, stricter recovery proof. */
-    const lowRomExcursion =
-      peakDepth >= SQUAT_LOW_ROM_FLOOR &&
-      peakDepth < SQUAT_NOISE_FLOOR &&
-      recovery.lowRomRecovered;
-    /** Ultra-low-ROM path — peak 2–7%, very strict recovery. PR real-device: descent >= 3, ascent >= 2 (standing sway 차단, 실기기 false-negative 완화) */
-    const ultraLowRomExcursion =
-      peakDepth >= SQUAT_ULTRA_LOW_ROM_FLOOR &&
-      peakDepth < SQUAT_LOW_ROM_FLOOR &&
-      recovery.ultraLowRomRecovered &&
-      descentCount >= 3 &&
-      ascentCount >= 2;
-    const excursionOrBottom = standardExcursion || lowRomExcursion || ultraLowRomExcursion;
-
-    if (!excursionOrBottom || !ascentSatisfied) {
-      flags.add('rep_incomplete');
-      const excReason = !excursionOrBottom
-        ? (peakDepth >= SQUAT_LOW_ROM_FLOOR && peakDepth < SQUAT_NOISE_FLOOR
-            ? `low_rom:${recovery.lowRomRecoveryReason ?? 'recovery_fail'}`
-            : peakDepth >= SQUAT_ULTRA_LOW_ROM_FLOOR && peakDepth < SQUAT_LOW_ROM_FLOOR
-              ? `ultra_low_rom:${recovery.ultraLowRomRecoveryReason ?? 'recovery_fail'}`
-              : 'excursion_or_ascent_not_satisfied')
-        : 'ascent_not_satisfied';
-      return { score: clamp(peakDepth), status: 'partial', partialReason: excReason };
-    }
-    if (peakDepth < SQUAT_ULTRA_LOW_ROM_FLOOR) {
-      flags.add('rep_incomplete');
-      return { score: clamp(peakDepth), status: 'partial', partialReason: 'peak_below_ultra_low_floor' };
-    }
-    /** PR standing-fp: standard path requires sequence + relative depth + min cycle */
-    const isStandardPath =
-      !lowRomExcursion && !ultraLowRomExcursion && (bottomCount > 0 || recovery.recovered);
-    if (isStandardPath) {
-      if (!descendBeforeReversal || !reversalBeforeRecovery) {
-        flags.add('rep_incomplete');
-        return { score: clamp(peakDepth), status: 'partial', partialReason: 'standard_sequence_fail' };
-      }
-      if (relativeDepthPeak < MIN_STANDARD_RELATIVE_DEPTH) {
-        flags.add('rep_incomplete');
-        return { score: clamp(peakDepth), status: 'partial', partialReason: 'standard_relative_depth_insufficient' };
-      }
-      const cycleDurationMs =
-        firstDescentIdx >= 0 && frames.length > 0
-          ? (frames[frames.length - 1]!.timestampMs ?? 0) -
-            (frames[firstDescentIdx]!.timestampMs ?? 0)
-          : 0;
-      if (cycleDurationMs < MIN_CYCLE_DURATION_MS) {
-        flags.add('rep_incomplete');
-        return { score: clamp(peakDepth), status: 'partial', partialReason: 'standard_cycle_duration_short' };
-      }
-    }
-    const completePath = ultraLowRomExcursion
-      ? 'ultra_low_rom_reversal'
-      : lowRomExcursion
-        ? 'low_rom_reversal'
-        : 'standard';
-    return { score: clamp(0.45 + peakDepth * 0.55), status: 'complete', completePath };
+    flags.add('rep_incomplete');
+    return {
+      score: clamp(peakDepth),
+      status: 'partial',
+      partialReason: completionBlockedReason,
+    };
   }
 
   if (stepId === 'wall-angel') {
@@ -509,7 +399,7 @@ export function assessStepGuardrail(
   if (bboxSizeStability < 0.45) flags.add('unstable_bbox');
   if (noisyFrameRatio > 0.35) flags.add('unstable_landmarks');
 
-  const motion = getMotionCompleteness(stepId, validFrames, stats, flags);
+  const motion = getMotionCompleteness(stepId, validFrames, stats, flags, evaluatorResult);
   const metricSufficiency = getMetricSufficiency(stepId, evaluatorResult);
 
   let captureQuality: CaptureQuality = 'ok';

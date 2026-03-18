@@ -201,7 +201,8 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
                 {d.squatCycle && (
                   <>
                     <p>peakDepth={d.squatCycle.peakDepth ?? 'n/a'} bottom={d.squatCycle.bottomDetected} recovery={d.squatCycle.recoveryDetected} startBeforeBottom={d.squatCycle.startBeforeBottom}</p>
-                    <p className="text-slate-500">PR-A4: path={d.squatCycle.completionPathUsed ?? 'n/a'} rejected={d.squatCycle.completionRejectedReason ?? 'n/a'} cycleMs={d.squatCycle.cycleDurationMs ?? 'n/a'}</p>
+                    <p className="text-slate-500">phase={d.squatCycle.currentSquatPhase ?? 'n/a'} successPhase={d.squatCycle.successPhaseAtOpen ?? 'n/a'} path={d.squatCycle.completionPathUsed ?? 'n/a'} label={d.squatCycle.evidenceLabel ?? 'n/a'}</p>
+                    <p className="text-slate-500">blocked={d.squatCycle.completionBlockedReason ?? 'n/a'} rejected={d.squatCycle.completionRejectedReason ?? 'n/a'} cycleMs={d.squatCycle.cycleDurationMs ?? 'n/a'} holdMs={d.squatCycle.standingRecoveryHoldMs ?? 'n/a'}</p>
                     <p className="text-slate-500">PR-A5: ultraCand={d.squatCycle.ultraLowRomCandidate ?? 'n/a'} ultraPass={d.squatCycle.ultraLowRomGuardPassed ?? 'n/a'} ultraRej={d.squatCycle.ultraLowRomRejectReason ?? 'n/a'} commitDelta={d.squatCycle.downwardCommitmentDelta ?? 'n/a'}</p>
                     <p className="text-slate-500">PR-A6: standingRej={d.squatCycle.standingStillRejected ?? 'n/a'} fpBlock={d.squatCycle.falsePositiveBlockReason ?? 'n/a'} ultraDisabled={d.squatCycle.ultraLowRomPathDisabledOrGuarded ?? 'n/a'}</p>
                     <p className="text-slate-500">PR evidence: level={d.squatCycle.squatEvidenceLevel ?? 'n/a'} cycleProof={d.squatCycle.cycleProofPassed ?? 'n/a'} romBand={d.squatCycle.romBand ?? 'n/a'} downgrade={d.squatCycle.confidenceDowngradeReason ?? 'n/a'} insufficient={d.squatCycle.insufficientSignalReason ?? 'n/a'}</p>
@@ -240,7 +241,7 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
             )}
             {latest.motionType === 'squat' && (
               <p className="text-[10px] text-slate-500">
-                depthPeak={latest.evaluatorDepthPeak} path={latest.completionPathUsed} guardrail={latest.guardrailCompletionStatus} compSat={latest.autoProgressionCompletionSatisfied}
+                depthPeak={latest.evaluatorDepthPeak} path={latest.completionPathUsed} phase={latest.currentSquatPhase ?? 'n/a'} successPhase={latest.successPhaseAtOpen ?? 'n/a'} guardrail={latest.guardrailCompletionStatus} compSat={latest.autoProgressionCompletionSatisfied}
               </p>
             )}
           </div>

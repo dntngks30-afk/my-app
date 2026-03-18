@@ -5,6 +5,7 @@
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
 import { buildPoseFeaturesFrames, getSquatRecoverySignal } from '@/lib/camera/pose-features';
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
+import { evaluateSquatCompletionState } from '@/lib/camera/squat-completion-state';
 import { getSquatPerStepDiagnostics } from '@/lib/camera/step-joint-spec';
 import type { EvaluatorResult, EvaluatorMetric } from './types';
 
@@ -82,73 +83,19 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const ascentCount = countPhases(valid, 'ascent');
   const recovery = getSquatRecoverySignal(valid);
   const ascentSatisfied = ascentCount > 0 || recovery.recovered;
-  /** PR G3: full cycle = start → descend → bottom → ascend → recovery */
-  const cycleComplete =
-    startCount > 0 &&
-    descentCount > 0 &&
-    bottomCount > 0 &&
-    (ascentCount > 0 || recovery.recovered) &&
-    recovery.recovered;
-  /** PR G5: bottom-from-start 차단 — start가 bottom보다 먼저 나와야 함 (설치 자세 false positive 방지) */
+  const state = evaluateSquatCompletionState(valid);
   const firstStartIdx = valid.findIndex((f) => f.phaseHint === 'start');
-  const firstBottomIdx = valid.findIndex((f) => f.phaseHint === 'bottom');
-  const startBeforeBottom = firstStartIdx >= 0 && (firstBottomIdx < 0 || firstStartIdx < firstBottomIdx);
-  const repCountEstimate = cycleComplete ? 1 : 0;
-
-  /** PR-A4: cycle timing for trace — descendStartAt, reversalAt, ascendStartAt, recoveryAt, cycleDurationMs */
   const firstDescentIdx = valid.findIndex((f) => f.phaseHint === 'descent');
+  const firstBottomIdx = valid.findIndex((f) => f.phaseHint === 'bottom');
   const firstAscentIdx = valid.findIndex((f) => f.phaseHint === 'ascent');
-  const descendStartAtMs = firstDescentIdx >= 0 ? valid[firstDescentIdx]!.timestampMs : 0;
-  const ascendStartAtMs = firstAscentIdx >= 0 ? valid[firstAscentIdx]!.timestampMs : 0;
-  const reversalAtMs =
-    firstBottomIdx >= 0
-      ? valid[firstBottomIdx]!.timestampMs
-      : firstAscentIdx >= 0
-        ? ascendStartAtMs
-        : 0;
-  const peakIdx =
-    depthValues.length > 0
-      ? valid.reduce((bestIdx, f, i) => {
-          const d = f.derived.squatDepthProxy;
-          if (typeof d !== 'number') return bestIdx;
-          if (bestIdx < 0) return i;
-          const bestD = valid[bestIdx]!.derived.squatDepthProxy;
-          return typeof bestD === 'number' && d > bestD ? i : bestIdx;
-        }, -1)
-      : -1;
-  const peakAtMs = peakIdx >= 0 ? valid[peakIdx]!.timestampMs : 0;
-  const lastFrameMs = valid.length > 0 ? valid[valid.length - 1]!.timestampMs : 0;
-  const recoveryAtMs = peakIdx >= 0 && valid.length > peakIdx + 3 ? lastFrameMs : 0;
-  const cycleDurationMs =
-    descendStartAtMs > 0 && recoveryAtMs > 0 ? recoveryAtMs - descendStartAtMs : 0;
-  const prePeakDepths =
-    peakIdx > 0
-      ? valid
-          .slice(0, peakIdx)
-          .map((f) => f.derived.squatDepthProxy)
-          .filter((d): d is number => typeof d === 'number')
-      : [];
-  const minPrePeakDepth = prePeakDepths.length > 0 ? Math.min(...prePeakDepths) : 0;
-  const peakDepthVal = depthValues.length > 0 ? Math.max(...depthValues) : 0;
-  const downwardCommitmentDelta = peakDepthVal - minPrePeakDepth;
+  const repCountEstimate = state.completionSatisfied ? 1 : 0;
 
-  /** PR standing-fp: baseline from arming/start — first 6 frames capture standing level */
-  const BASELINE_WINDOW = 6;
-  const baselineDepths = valid
-    .slice(0, BASELINE_WINDOW)
-    .map((f) => f.derived.squatDepthProxy)
-    .filter((d): d is number => typeof d === 'number');
-  const baselineStandingDepth =
-    baselineDepths.length > 0 ? Math.min(...baselineDepths) : 0;
-  const rawDepthPeak = peakDepthVal;
-  const relativeDepthPeak = Math.max(0, rawDepthPeak - baselineStandingDepth);
-
-  if (descentCount === 0 || bottomCount === 0 || !ascentSatisfied) {
+  if (!state.attemptStarted || !ascentSatisfied) {
     completionHints.push('rep_phase_incomplete');
-  } else if (!recovery.recovered) {
-    completionHints.push('recovery_not_confirmed');
+  } else if (!state.completionSatisfied) {
+    completionHints.push(state.completionBlockedReason ?? 'recovery_not_confirmed');
   } else {
-    interpretedSignals.push('descent-bottom-ascent-recovery pattern detected');
+    interpretedSignals.push('descend-commit-ascend-standing_recovered pattern detected');
   }
 
   /** PR G6: depthBand — completion과 분리된 quality 해석. shallow(<35%), moderate(35-55%), deep(>=55%) */
@@ -237,9 +184,9 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       highlightedMetrics: {
         depthPeak: depthValues.length > 0 ? Math.round(Math.max(...depthValues) * 100) : null,
         /** PR standing-fp: baseline-relative depth for standard path gate */
-        baselineStandingDepth: Math.round(baselineStandingDepth * 100) / 100,
-        rawDepthPeak: Math.round(rawDepthPeak * 100) / 100,
-        relativeDepthPeak: Math.round(relativeDepthPeak * 100) / 100,
+        baselineStandingDepth: Math.round(state.baselineStandingDepth * 100) / 100,
+        rawDepthPeak: Math.round(state.rawDepthPeak * 100) / 100,
+        relativeDepthPeak: Math.round(state.relativeDepthPeak * 100) / 100,
         firstDescentIdx,
         firstBottomIdx,
         firstAscentIdx,
@@ -254,22 +201,36 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         ascentRecoveredUltraLowRom: recovery.ultraLowRomRecovered ? 1 : 0,
         ascentRecoveredUltraLowRomGuarded: recovery.ultraLowRomGuardedRecovered ? 1 : 0,
         recoveryDrop: Math.round(recovery.recoveryDrop * 100),
+        attemptStarted: state.attemptStarted,
+        currentSquatPhase: state.currentSquatPhase,
+        descendConfirmed: state.descendConfirmed,
+        committedAtMs: state.committedAtMs ?? null,
+        ascendConfirmed: state.ascendConfirmed,
+        standingRecoveredAtMs: state.standingRecoveredAtMs ?? null,
+        standingRecoveryHoldMs: state.standingRecoveryHoldMs,
+        standingRecoveryFrameCount: state.standingRecoveryFrameCount,
+        standingRecoveryThreshold: Math.round(state.standingRecoveryThreshold * 100) / 100,
+        successPhaseAtOpen: state.successPhaseAtOpen ?? null,
+        evidenceLabel: state.evidenceLabel,
+        completionBlockedReason: state.completionBlockedReason,
+        completionSatisfied: state.completionSatisfied,
         /** PR squat-low-rom: trace */
-        recoveryReturnContinuityFrames: recovery.returnContinuityFrames,
-        recoveryTrailingDepthCount: recovery.trailingDepthCount,
-        recoveryDropRatio: recovery.recoveryDropRatio != null ? Math.round(recovery.recoveryDropRatio * 100) / 100 : undefined,
-        lowRomRecoveryReason: recovery.lowRomRecoveryReason,
-        ultraLowRomRecoveryReason: recovery.ultraLowRomRecoveryReason,
+        recoveryReturnContinuityFrames: state.recoveryReturnContinuityFrames,
+        recoveryTrailingDepthCount: state.recoveryTrailingDepthCount,
+        recoveryDropRatio: state.recoveryDropRatio != null ? Math.round(state.recoveryDropRatio * 100) / 100 : undefined,
+        lowRomRecoveryReason: state.lowRomRecoveryReason,
+        ultraLowRomRecoveryReason: state.ultraLowRomRecoveryReason,
         repCount: repCountEstimate,
-        cycleComplete: cycleComplete ? 1 : 0,
-        startBeforeBottom: startBeforeBottom ? 1 : 0,
-        descendStartAtMs: descendStartAtMs || undefined,
-        peakAtMs: peakAtMs || undefined,
-        reversalAtMs: reversalAtMs || undefined,
-        ascendStartAtMs: ascendStartAtMs || undefined,
-        recoveryAtMs: recoveryAtMs || undefined,
-        cycleDurationMs: cycleDurationMs || undefined,
-        downwardCommitmentDelta: Math.round(downwardCommitmentDelta * 100) / 100,
+        cycleComplete: state.cycleComplete ? 1 : 0,
+        startBeforeBottom: state.startBeforeBottom ? 1 : 0,
+        descendStartAtMs: state.descendStartAtMs,
+        peakAtMs: state.peakAtMs,
+        committedAtMs: state.committedAtMs ?? null,
+        reversalAtMs: state.reversalAtMs ?? null,
+        ascendStartAtMs: state.ascendStartAtMs,
+        recoveryAtMs: state.standingRecoveredAtMs ?? null,
+        cycleDurationMs: state.cycleDurationMs,
+        downwardCommitmentDelta: Math.round(state.downwardCommitmentDelta * 100) / 100,
       },
       perStepDiagnostics: perStepRecord,
     },

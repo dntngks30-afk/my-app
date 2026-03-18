@@ -87,6 +87,9 @@ export interface OverheadSuccessSnapshot extends SuccessSnapshotBase {
 export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   motionType: 'squat';
   evaluatorDepthPeak: number | null;
+  baselineStandingDepth?: number | null;
+  rawDepthPeak?: number | null;
+  relativeDepthPeak?: number | null;
   evaluatorRecoverySignals: {
     recovered: boolean;
     lowRomRecovered: boolean;
@@ -98,9 +101,19 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   passConfirmationSatisfied: boolean;
   effectivePassLatched: boolean;
   successOpenedBySquat: SuccessOpenedBy;
+  attemptStarted?: boolean;
+  currentSquatPhase?: string | null;
+  descendConfirmed?: boolean;
+  committedAtMs?: number;
   descendStartAtMs: number | undefined;
   reversalAtMs: number | undefined;
+  ascendConfirmed?: boolean;
   recoveryAtMs: number | undefined;
+  standingRecoveredAtMs?: number;
+  standingRecoveryHoldMs?: number;
+  successPhaseAtOpen?: string | null;
+  evidenceLabel?: string | null;
+  completionBlockedReason?: string | null;
   cycleDurationMs: number | undefined;
 }
 
@@ -192,6 +205,11 @@ export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): 
       diagVersion: CAMERA_DIAG_VERSION,
       sourceFileMarkers: [SUCCESS_DIAG_SOURCE_MARKER, 'squat-page'],
       evaluatorDepthPeak: typeof hm?.depthPeak === 'number' ? hm.depthPeak : null,
+      baselineStandingDepth:
+        typeof hm?.baselineStandingDepth === 'number' ? hm.baselineStandingDepth : null,
+      rawDepthPeak: typeof hm?.rawDepthPeak === 'number' ? hm.rawDepthPeak : null,
+      relativeDepthPeak:
+        typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : null,
       evaluatorRecoverySignals: {
         recovered: (hm?.ascentRecovered as number) > 0,
         lowRomRecovered: (hm?.ascentRecoveredLowRom as number) > 0,
@@ -203,9 +221,19 @@ export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): 
       passConfirmationSatisfied: options.gate.passConfirmationSatisfied ?? false,
       effectivePassLatched: options.effectivePassLatched,
       successOpenedBySquat: options.successOpenedBy,
+      attemptStarted: squatDebug?.attemptStarted,
+      currentSquatPhase: squatDebug?.currentSquatPhase ?? null,
+      descendConfirmed: squatDebug?.descendConfirmed,
+      committedAtMs: squatDebug?.committedAtMs,
       descendStartAtMs: squatDebug?.descendStartAtMs,
       reversalAtMs: squatDebug?.reversalAtMs,
+      ascendConfirmed: squatDebug?.ascendConfirmed,
       recoveryAtMs: squatDebug?.recoveryAtMs,
+      standingRecoveredAtMs: squatDebug?.standingRecoveredAtMs,
+      standingRecoveryHoldMs: squatDebug?.standingRecoveryHoldMs,
+      successPhaseAtOpen: squatDebug?.successPhaseAtOpen ?? null,
+      evidenceLabel: squatDebug?.evidenceLabel ?? null,
+      completionBlockedReason: squatDebug?.completionBlockedReason ?? null,
       cycleDurationMs: squatDebug?.cycleDurationMs,
     };
     pushSuccessSnapshot(snapshot);
@@ -237,19 +265,24 @@ const SQUAT_ATTEMPT_RELATIVE_DEPTH_NOISE_FLOOR = 0.02;
  */
 export function hasSquatAttemptEvidence(gate: ExerciseGateResult): boolean {
   const hm = gate.evaluatorResult?.debug?.highlightedMetrics;
+  const attemptStarted =
+    hm?.attemptStarted === true ||
+    hm?.attemptStarted === 1 ||
+    gate.squatCycleDebug?.attemptStarted === true;
+  const currentSquatPhase =
+    (hm?.currentSquatPhase as string | undefined) ?? gate.squatCycleDebug?.currentSquatPhase;
   const firstDescentIdx = (hm?.firstDescentIdx as number) ?? -1;
   const firstBottomIdx = (hm?.firstBottomIdx as number) ?? -1;
   const relativeDepthPeak = (hm?.relativeDepthPeak as number) ?? 0;
   const downwardCommitmentDelta = (hm?.downwardCommitmentDelta as number) ?? 0;
-  const descentCount = (hm?.descentCount as number) ?? 0;
 
   const descendConfirmed = firstDescentIdx >= 0;
   const downwardCommitmentReached =
     firstBottomIdx >= 0 || downwardCommitmentDelta >= SQUAT_ATTEMPT_RELATIVE_DEPTH_NOISE_FLOOR;
-  const attemptStarted = descentCount > 0 || descendConfirmed;
   const relativeDepthAboveNoise = relativeDepthPeak >= SQUAT_ATTEMPT_RELATIVE_DEPTH_NOISE_FLOOR;
 
   return (
+    currentSquatPhase !== 'idle' &&
     attemptStarted &&
     descendConfirmed &&
     (downwardCommitmentReached || relativeDepthAboveNoise)
@@ -267,8 +300,11 @@ export interface SquatFailedShallowSnapshot {
   baselineStandingDepth?: number | null;
   relativeDepthPeak?: number | null;
   attemptStarted?: boolean;
+  currentSquatPhase?: string | null;
   descendConfirmed?: boolean;
   downwardCommitmentReached?: boolean;
+  committedAtMs?: number;
+  ascendConfirmed?: boolean;
   failureOverlayArmed?: boolean;
   failureOverlayBlockedReason?: string | null;
   guardrailCompletionStatus: string;
@@ -278,6 +314,11 @@ export interface SquatFailedShallowSnapshot {
   lowRomRecoveryConfirmed: boolean;
   ultraLowRomRecoveryConfirmed: boolean;
   passConfirmationSatisfied: boolean;
+  standingRecoveredAtMs?: number;
+  standingRecoveryHoldMs?: number;
+  successPhaseAtOpen?: string | null;
+  evidenceLabel?: string | null;
+  completionBlockedReason?: string | null;
   cycleDurationMs: number | undefined;
   guardrailPartialReason?: string | null;
   lowRomRecoveredReason?: string | null;
@@ -330,8 +371,11 @@ export function recordSquatFailedShallowSnapshot(
       baselineStandingDepth,
       relativeDepthPeak,
       attemptStarted,
+      currentSquatPhase: sc?.currentSquatPhase ?? null,
       descendConfirmed,
       downwardCommitmentReached,
+      committedAtMs: sc?.committedAtMs,
+      ascendConfirmed: sc?.ascendConfirmed,
       failureOverlayArmed,
       failureOverlayBlockedReason,
       guardrailCompletionStatus: gate.guardrail.completionStatus ?? 'unknown',
@@ -341,6 +385,11 @@ export function recordSquatFailedShallowSnapshot(
       lowRomRecoveryConfirmed,
       ultraLowRomRecoveryConfirmed,
       passConfirmationSatisfied: gate.passConfirmationSatisfied ?? false,
+      standingRecoveredAtMs: sc?.standingRecoveredAtMs,
+      standingRecoveryHoldMs: sc?.standingRecoveryHoldMs,
+      successPhaseAtOpen: sc?.successPhaseAtOpen ?? null,
+      evidenceLabel: sc?.evidenceLabel ?? null,
+      completionBlockedReason: sc?.completionBlockedReason ?? null,
       cycleDurationMs: sc?.cycleDurationMs,
       guardrailPartialReason: gate.guardrail.debug?.guardrailPartialReason ?? null,
       lowRomRecoveredReason: sc?.lowRomRejectionReason ?? (hm?.lowRomRecoveryReason as string) ?? null,
