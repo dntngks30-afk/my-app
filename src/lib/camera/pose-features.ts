@@ -671,7 +671,8 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
 
   if (stepId === 'overhead-reach') {
     const maxElevation = Math.max(...frames.map((frame) => frame.derived.armElevationAvg ?? 0));
-    const peakThreshold = maxElevation * 0.88;
+    /** PR G8: peak requires both relative (88% of max) and absolute (118°) — blocks weak raise. */
+    const peakThreshold = Math.max(maxElevation * 0.88, 118);
     const candidates = frames.map((frame, index) => {
       const previousElevation = index > 0 ? frames[index - 1]!.derived.armElevationAvg : null;
       const currentElevation = frame.derived.armElevationAvg;

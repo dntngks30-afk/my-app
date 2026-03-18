@@ -222,7 +222,7 @@ function getMotionCompleteness(
     return { score: clamp(peakElevation / 155), status: 'complete' };
   }
 
-  /* PR G4: overhead reach — usable signal capture. peak 110°, hold 600ms 완화. */
+  /* PR G8: overhead reach — real attempt. peak 120°, hold 700ms (was 110°/600ms). */
   if (stepId === 'overhead-reach') {
     const armElevations = frames
       .map((frame) => frame.derived.armElevationAvg)
@@ -236,11 +236,11 @@ function getMotionCompleteness(
         ? peakFrames[peakFrames.length - 1]!.timestampMs - peakFrames[0]!.timestampMs
         : 0;
 
-    if (frames.length < 10 || peakElevation < 110 || raiseCount === 0 || peakCount === 0) {
+    if (frames.length < 10 || peakElevation < 120 || raiseCount === 0 || peakCount === 0) {
       flags.add('rep_incomplete');
       return { score: clamp(peakElevation / 150), status: 'partial' };
     }
-    if (holdDurationMs < 600) {
+    if (holdDurationMs < 700) {
       flags.add('hold_too_short');
       return { score: clamp(Math.max(peakElevation / 155, holdDurationMs / 900)), status: 'partial' };
     }

@@ -277,7 +277,7 @@ function evaluateWallAngelCompletion(result: EvaluatorResult, guardrail: StepGua
   );
 }
 
-/** PR G4: overhead reach pass — usable signal capture. peak 기반 elevation 사용, threshold 완화. */
+/** PR G8: overhead reach — real attempt required. Was 110°/600ms (too easy). */
 function evaluateOverheadReachCompletion(
   result: EvaluatorResult,
   guardrail: StepGuardrailResult
@@ -291,8 +291,8 @@ function evaluateOverheadReachCompletion(
 
   return (
     guardrail.completionStatus === 'complete' &&
-    effectiveArm >= 110 &&
-    holdDuration >= 600 &&
+    effectiveArm >= 120 &&
+    holdDuration >= 700 &&
     raiseCount > 0 &&
     peakCount > 0
   );
