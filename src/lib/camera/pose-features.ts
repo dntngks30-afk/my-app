@@ -211,10 +211,10 @@ export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecove
   const tailDepth = mean(tailWindow);
   const recoveryDrop = peakSample.depth - tailDepth;
 
-  /** PR G6: shallow squat completion — 얕아도 full return이면 recovered.
-   * noise 방지: peakDepth >= 0.15. 복귀: recoveryDrop >= peakDepth * 0.25 */
+  /** PR G7: completion bottom = valid downward excursion, NOT quality depth.
+   * Align with SQUAT_NOISE_FLOOR (0.12). 복귀: recoveryDrop >= peakDepth * 0.25 */
   const recovered =
-    peakSample.depth >= 0.15 && recoveryDrop >= peakSample.depth * 0.25;
+    peakSample.depth >= 0.12 && recoveryDrop >= peakSample.depth * 0.25;
 
   return {
     peakDepth: peakSample.depth,
@@ -602,7 +602,8 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
 
   if (stepId === 'squat') {
     const maxDepth = Math.max(...frames.map((frame) => frame.derived.squatDepthProxy ?? 0));
-    const bottomThreshold = maxDepth * 0.66;
+    /** PR G7: completion bottom = 50% of excursion (was 66%). Quality depth band stays separate. */
+    const bottomThreshold = maxDepth * 0.5;
     const candidates = frames.map((frame, index) => {
       const previousDepth = index > 0 ? frames[index - 1]!.derived.squatDepthProxy : null;
       const currentDepth = frame.derived.squatDepthProxy;

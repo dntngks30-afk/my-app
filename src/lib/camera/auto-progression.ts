@@ -242,25 +242,19 @@ function getCommonReasons(result: EvaluatorResult, guardrail: StepGuardrailResul
   ];
 }
 
+/** PR G7: depth = quality only. Completion = full cycle + recovery. */
 function evaluateSquatCompletion(result: EvaluatorResult, guardrail: StepGuardrailResult) {
-  const depth = getMetricValue(result.metrics, 'depth') ?? 0;
-  const trunkLean = getMetricValue(result.metrics, 'trunk_lean') ?? 999;
-  const kneeTracking = getMetricValue(result.metrics, 'knee_alignment_trend') ?? 0;
-  const bottomStability = getMetricValue(result.rawMetrics, 'bottom_stability_proxy') ?? 0;
   const descentCount = getHighlightedMetric(result, 'descentCount');
   const bottomCount = getHighlightedMetric(result, 'bottomCount');
   const ascentCount = getHighlightedMetric(result, 'ascentCount');
+  const ascentRecovered = getHighlightedMetric(result, 'ascentRecovered');
 
   return (
     guardrail.completionStatus === 'complete' &&
-    depth >= 45 &&
-    trunkLean < 24 &&
-    kneeTracking >= 0.82 &&
-    kneeTracking <= 1.18 &&
-    bottomStability >= 40 &&
     descentCount > 0 &&
     bottomCount > 0 &&
-    ascentCount > 0
+    (ascentCount > 0 || ascentRecovered > 0) &&
+    ascentRecovered > 0
   );
 }
 

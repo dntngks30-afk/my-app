@@ -21,6 +21,7 @@
     "test:camera-pr4-trace": "npx tsx scripts/camera-pr4-observability-trace-smoke.mjs",
     "test:camera-pr5-guidance": "npx tsx scripts/camera-pr5-guidance-recovery-smoke.mjs",
     "test:camera-pr6-bridge": "npx tsx scripts/camera-pr6-result-bridge-smoke.mjs",
+    "test:camera-pr7-squat-completion": "npx tsx scripts/camera-pr7-squat-completion-quality-split-smoke.mjs",
     "test:camera-setup-screen": "npx tsx scripts/camera-setup-screen-smoke.mjs",
     "test:session-feedback": "npx tsx scripts/session-feedback-smoke.mjs",
     "test:progress-report": "npx tsx scripts/progress-report-smoke.mjs",
