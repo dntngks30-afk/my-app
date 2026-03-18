@@ -310,9 +310,24 @@ export default function CameraSquatPage() {
     const completed = current.completedSteps?.includes(STEP_ID)
       ? current.completedSteps
       : [...(current.completedSteps ?? []), STEP_ID];
+    const sc = gate.squatCycleDebug;
+    const evaluatorResultWithEvidence = sc
+      ? {
+          ...gate.evaluatorResult,
+          debug: {
+            ...(gate.evaluatorResult.debug ?? {}),
+            squatEvidenceLevel: sc.squatEvidenceLevel,
+            squatEvidenceReasons: sc.squatEvidenceReasons,
+            cycleProofPassed: sc.cycleProofPassed,
+            romBand: sc.romBand,
+            confidenceDowngradeReason: sc.confidenceDowngradeReason,
+            insufficientSignalReason: sc.insufficientSignalReason,
+          },
+        }
+      : gate.evaluatorResult;
     const evaluatorResults = {
       ...(current.evaluatorResults ?? {}),
-      [STEP_ID]: gate.evaluatorResult,
+      [STEP_ID]: evaluatorResultWithEvidence,
     };
     const guardrailResults = {
       ...(current.guardrailResults ?? {}),

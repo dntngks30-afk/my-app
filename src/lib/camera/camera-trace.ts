@@ -92,6 +92,13 @@ export interface AttemptSnapshot {
       reversalConfirmedAfterDescend?: boolean;
       recoveryConfirmedAfterReversal?: boolean;
       ultraLowRomPathDisabledOrGuarded?: boolean;
+      /** PR evidence: completion과 분리된 evidence layer */
+      squatEvidenceLevel?: string;
+      squatEvidenceReasons?: string[];
+      cycleProofPassed?: boolean;
+      romBand?: string;
+      confidenceDowngradeReason?: string | null;
+      insufficientSignalReason?: string | null;
     };
     /** overhead — PR-C4 trace, PR overhead-hold */
     overhead?: {
@@ -268,6 +275,12 @@ function buildDiagnosisSummary(
       reversalConfirmedAfterDescend: sc.reversalConfirmedAfterDescend,
       recoveryConfirmedAfterReversal: sc.recoveryConfirmedAfterReversal,
       ultraLowRomPathDisabledOrGuarded: sc.ultraLowRomPathDisabledOrGuarded,
+      squatEvidenceLevel: sc.squatEvidenceLevel,
+      squatEvidenceReasons: sc.squatEvidenceReasons,
+      cycleProofPassed: sc.cycleProofPassed,
+      romBand: sc.romBand,
+      confidenceDowngradeReason: sc.confidenceDowngradeReason,
+      insufficientSignalReason: sc.insufficientSignalReason,
     };
   }
 

@@ -19,6 +19,13 @@ export interface EvaluatorDebugSummary {
   highlightedMetrics: Record<string, number | string | boolean | null>;
   /** PR-2: per-step 진단 (additive, backward-compatible) */
   perStepDiagnostics?: Record<string, PerStepDiagnostic>;
+  /** PR evidence: squat completion과 분리된 evidence layer (result layer용) */
+  squatEvidenceLevel?: string;
+  squatEvidenceReasons?: string[];
+  cycleProofPassed?: boolean;
+  romBand?: string;
+  confidenceDowngradeReason?: string | null;
+  insufficientSignalReason?: string | null;
 }
 
 export interface EvaluatorResult {

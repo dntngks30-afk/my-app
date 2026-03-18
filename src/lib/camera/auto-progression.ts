@@ -22,6 +22,9 @@ export type CameraGuideTone = 'neutral' | 'warning' | 'success';
 
 /** PR G3: squat full-cycle observability (dev/debug only) */
 /** PR-A4: completionPathUsed, completionRejectedReason, cycle timing */
+/** PR evidence: completion과 evidence strength 분리 — result layer가 입력 품질 읽기 */
+export type SquatEvidenceLevel = 'strong_evidence' | 'shallow_evidence' | 'weak_evidence' | 'insufficient_signal';
+
 export interface SquatCycleDebug {
   armingSatisfied: boolean;
   startPoseSatisfied: boolean;
@@ -56,6 +59,13 @@ export interface SquatCycleDebug {
   recoveryAtMs?: number;
   cycleDurationMs?: number;
   downwardCommitmentDelta?: number;
+  /** PR evidence: completion과 분리된 evidence layer */
+  squatEvidenceLevel?: SquatEvidenceLevel;
+  squatEvidenceReasons?: string[];
+  cycleProofPassed?: boolean;
+  romBand?: 'shallow' | 'moderate' | 'deep';
+  confidenceDowngradeReason?: string | null;
+  insufficientSignalReason?: string | null;
 }
 
 export interface ExerciseGateResult {
@@ -612,6 +622,35 @@ function getSquatProgressionCompletionSatisfied(
   const depthBandLabel: 'shallow' | 'moderate' | 'deep' =
     depthBand === 2 ? 'deep' : depthBand === 1 ? 'moderate' : 'shallow';
 
+  /** PR evidence: cycle proof와 ROM band로 evidence level 분리. completion gate와 독립. */
+  const cycleProofPassed = excursionOrBottomConfirmed && recoveryOrLowRom;
+  const squatEvidenceLevel: SquatEvidenceLevel =
+    !cycleProofPassed || depthPeak < 2
+      ? 'insufficient_signal'
+      : depthPeak >= 10
+        ? 'strong_evidence'
+        : depthPeak >= 7
+          ? 'shallow_evidence'
+          : 'weak_evidence';
+  const squatEvidenceReasons: string[] =
+    squatEvidenceLevel === 'insufficient_signal'
+      ? cycleProofPassed ? ['standing_or_tiny_dip_rejected'] : ['cycle_proof_insufficient']
+      : squatEvidenceLevel === 'strong_evidence'
+        ? ['sufficient_depth', 'cycle_complete']
+        : squatEvidenceLevel === 'shallow_evidence'
+          ? ['low_rom', 'cycle_complete']
+          : ['ultra_low_rom', 'cycle_complete'];
+  const confidenceDowngradeReason: string | null =
+    squatEvidenceLevel === 'shallow_evidence'
+      ? 'shallow_depth'
+      : squatEvidenceLevel === 'weak_evidence'
+        ? 'ultra_low_rom_cycle'
+        : null;
+  const insufficientSignalReason: string | null =
+    squatEvidenceLevel === 'insufficient_signal'
+      ? (cycleProofPassed ? 'standing_tiny_dip' : 'cycle_proof_insufficient')
+      : null;
+
   const descendStartAtMs = getHighlightedMetric(result, 'descendStartAtMs') || undefined;
   const peakAtMs = getHighlightedMetric(result, 'peakAtMs') || undefined;
   const reversalAtMs = getHighlightedMetric(result, 'reversalAtMs') || undefined;
@@ -657,18 +696,30 @@ function getSquatProgressionCompletionSatisfied(
     reversalConfirmedAfterDescend: bottomDetected || ascendDetected || recoveryDetected,
     recoveryConfirmedAfterReversal: recoveryDetected || recoveryLowRomDetected || recoveryUltraLowRomDetected,
     ultraLowRomPathDisabledOrGuarded: ULTRA_LOW_ROM_GUARDED_DISABLED,
+    squatEvidenceLevel,
+    squatEvidenceReasons,
+    cycleProofPassed,
+    romBand: depthBandLabel,
+    confidenceDowngradeReason,
+    insufficientSignalReason,
   };
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';
     squatCycleDebug.completionRejectedReason = 'guardrail_not_complete';
     squatCycleDebug.falsePositiveBlockReason = 'guardrail_not_complete';
+    squatCycleDebug.insufficientSignalReason = 'guardrail_not_complete';
+    squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
+    squatCycleDebug.squatEvidenceReasons = ['guardrail_not_complete'];
     return { satisfied: false, squatCycleDebug };
   }
   if (!armingSatisfied) {
     squatCycleDebug.passBlockedReason = 'arming_window';
     squatCycleDebug.completionRejectedReason = 'arming_window';
     squatCycleDebug.falsePositiveBlockReason = 'arming_window';
+    squatCycleDebug.insufficientSignalReason = 'arming_window';
+    squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
+    squatCycleDebug.squatEvidenceReasons = ['arming_window'];
     return { satisfied: false, squatCycleDebug };
   }
   if (!startPoseSatisfied) {
@@ -676,30 +727,45 @@ function getSquatProgressionCompletionSatisfied(
       startCount > 0 && !startBeforeBottom ? 'bottom_from_start' : 'start_pose_missing';
     squatCycleDebug.completionRejectedReason = squatCycleDebug.passBlockedReason;
     squatCycleDebug.falsePositiveBlockReason = squatCycleDebug.passBlockedReason;
+    squatCycleDebug.insufficientSignalReason = squatCycleDebug.passBlockedReason;
+    squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
+    squatCycleDebug.squatEvidenceReasons = [squatCycleDebug.passBlockedReason ?? 'start_pose'];
     return { satisfied: false, squatCycleDebug };
   }
   if (!descendDetected) {
     squatCycleDebug.passBlockedReason = 'descend_not_detected';
     squatCycleDebug.completionRejectedReason = 'descend_not_detected';
     squatCycleDebug.falsePositiveBlockReason = 'descend_not_detected';
+    squatCycleDebug.insufficientSignalReason = 'descend_not_detected';
+    squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
+    squatCycleDebug.squatEvidenceReasons = ['descend_not_detected'];
     return { satisfied: false, squatCycleDebug };
   }
   if (!excursionOrBottomConfirmed) {
     squatCycleDebug.passBlockedReason = 'excursion_not_confirmed';
     squatCycleDebug.completionRejectedReason = 'excursion_not_confirmed';
     squatCycleDebug.falsePositiveBlockReason = 'excursion_not_confirmed';
+    squatCycleDebug.insufficientSignalReason = 'excursion_not_confirmed';
+    squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
+    squatCycleDebug.squatEvidenceReasons = ['excursion_not_confirmed'];
     return { satisfied: false, squatCycleDebug };
   }
   if (!ascendDetected && !recoveryOrLowRom) {
     squatCycleDebug.passBlockedReason = 'ascent_recovery_missing';
     squatCycleDebug.completionRejectedReason = 'ascent_recovery_missing';
     squatCycleDebug.falsePositiveBlockReason = 'ascent_recovery_missing';
+    squatCycleDebug.insufficientSignalReason = 'ascent_recovery_missing';
+    squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
+    squatCycleDebug.squatEvidenceReasons = ['ascent_recovery_missing'];
     return { satisfied: false, squatCycleDebug };
   }
   if (!recoveryOrLowRom) {
     squatCycleDebug.passBlockedReason = 'recovery_not_confirmed';
     squatCycleDebug.completionRejectedReason = 'recovery_not_confirmed';
     squatCycleDebug.falsePositiveBlockReason = 'recovery_not_confirmed';
+    squatCycleDebug.insufficientSignalReason = 'recovery_not_confirmed';
+    squatCycleDebug.squatEvidenceLevel = 'insufficient_signal';
+    squatCycleDebug.squatEvidenceReasons = ['recovery_not_confirmed'];
     return { satisfied: false, squatCycleDebug };
   }
   /* PR G6: depth는 completion gate에서 제거. quality band로만 해석. */
