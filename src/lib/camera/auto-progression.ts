@@ -539,6 +539,7 @@ function getSquatProgressionCompletionSatisfied(
   const bottomCount = getHighlightedMetric(result, 'bottomCount');
   const ascentCount = getHighlightedMetric(result, 'ascentCount');
   const ascentRecovered = getHighlightedMetric(result, 'ascentRecovered');
+  const ascentRecoveredLowRom = getHighlightedMetric(result, 'ascentRecoveredLowRom');
   const cycleComplete = getHighlightedMetric(result, 'cycleComplete') > 0;
   const depthPeak = getHighlightedMetric(result, 'depthPeak');
   const depthBand = getHighlightedMetric(result, 'depthBand'); /* 0=shallow, 1=moderate, 2=deep */
@@ -550,8 +551,16 @@ function getSquatProgressionCompletionSatisfied(
   const bottomDetected = bottomCount > 0;
   const ascendDetected = ascentCount > 0;
   const recoveryDetected = ascentRecovered > 0;
+  const recoveryLowRomDetected = ascentRecoveredLowRom > 0;
+  /** PR G11: low-ROM path — peak 7–10%, stricter recovery. */
+  const lowRomRecoveryConfirmed =
+    depthPeak >= 7 && depthPeak < 10 && recoveryLowRomDetected;
   /** PR G10: recovery proves meaningful excursion (peak>=10%, came back). Allow completion without bottom phase. */
-  const excursionOrBottomConfirmed = bottomDetected || recoveryDetected;
+  const excursionOrBottomConfirmed =
+    bottomDetected ||
+    recoveryDetected ||
+    lowRomRecoveryConfirmed;
+  const recoveryOrLowRom = recoveryDetected || lowRomRecoveryConfirmed;
 
   const bottomTurningPointDetected = bottomDetected;
   const depthBandLabel: 'shallow' | 'moderate' | 'deep' =
@@ -593,11 +602,11 @@ function getSquatProgressionCompletionSatisfied(
     squatCycleDebug.passBlockedReason = 'excursion_not_confirmed';
     return { satisfied: false, squatCycleDebug };
   }
-  if (!ascendDetected && !recoveryDetected) {
+  if (!ascendDetected && !recoveryOrLowRom) {
     squatCycleDebug.passBlockedReason = 'ascent_recovery_missing';
     return { satisfied: false, squatCycleDebug };
   }
-  if (!recoveryDetected) {
+  if (!recoveryOrLowRom) {
     squatCycleDebug.passBlockedReason = 'recovery_not_confirmed';
     return { satisfied: false, squatCycleDebug };
   }

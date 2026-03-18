@@ -195,6 +195,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         bottomCount,
         ascentCount,
         ascentRecovered: recovery.recovered ? 1 : 0,
+        ascentRecoveredLowRom: recovery.lowRomRecovered ? 1 : 0,
         recoveryDrop: Math.round(recovery.recoveryDrop * 100),
         repCount: repCountEstimate,
         cycleComplete: cycleComplete ? 1 : 0,

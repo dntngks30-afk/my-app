@@ -79,6 +79,8 @@ export interface StepGuardrailResult {
 const MIN_VALID_FRAMES = 8;
 /** PR G9: noise floor 0.10 — 이하만 partial. shallower valid cycle complete 허용 */
 const SQUAT_NOISE_FLOOR = 0.1;
+/** PR G11: low-ROM floor 0.07 — 7–10% excursion with strict recovery can complete */
+const SQUAT_LOW_ROM_FLOOR = 0.07;
 const WARMUP_MS = 500;
 const BEST_WINDOW_MIN_MS = 800;
 const BEST_WINDOW_MAX_MS = 1200;
@@ -187,7 +189,7 @@ function getMotionCompleteness(
     const bottomCount = frames.filter((frame) => frame.phaseHint === 'bottom').length;
     const ascentCount = frames.filter((frame) => frame.phaseHint === 'ascent').length;
     const recovery = getSquatRecoverySignal(frames);
-    const ascentSatisfied = ascentCount > 0 || recovery.recovered;
+    const ascentSatisfied = ascentCount > 0 || recovery.recovered || recovery.lowRomRecovered;
 
     if (depthValues.length < MIN_VALID_FRAMES) {
       flags.add('rep_incomplete');
@@ -195,9 +197,15 @@ function getMotionCompleteness(
     }
     const peakDepth = Math.max(...depthValues);
     /** PR G10: recovery proves meaningful excursion. Allow complete without bottom phase. */
-    const excursionOrBottom = bottomCount > 0 || recovery.recovered;
+    const standardExcursion = bottomCount > 0 || recovery.recovered;
+    /** PR G11: low-ROM path — peak 7–10%, stricter recovery proof. */
+    const lowRomExcursion =
+      peakDepth >= SQUAT_LOW_ROM_FLOOR &&
+      peakDepth < SQUAT_NOISE_FLOOR &&
+      recovery.lowRomRecovered;
+    const excursionOrBottom = standardExcursion || lowRomExcursion;
     if (
-      peakDepth < SQUAT_NOISE_FLOOR ||
+      peakDepth < SQUAT_LOW_ROM_FLOOR ||
       descentCount === 0 ||
       !excursionOrBottom ||
       !ascentSatisfied

@@ -77,6 +77,14 @@ const shallowLandmarks = toLandmarks(shallowSquatPoses);
 const shallowGate = evaluateExerciseAutoProgress('squat', shallowLandmarks, squatStats(shallowLandmarks));
 ok('A: shallow squat not blocked by depth-only (PR G9 shallower cycle)', !shallowGate.squatCycleDebug?.passBlockedReason?.includes('depth'));
 
+// B-PR11. Low-ROM recovery signal: peak 7–10% with 40% recoveryDrop yields lowRomRecovered
+const lowRomSyntheticFrames = [0.02, 0.04, 0.08, 0.07, 0.05, 0.04, 0.03].map((d) => ({
+  derived: { squatDepthProxy: d },
+  isValid: true,
+}));
+const lowRomRecovery = getSquatRecoverySignal(lowRomSyntheticFrames);
+ok('B-PR11: low-ROM recovery signal (peak 8%, recovery 40%) yields lowRomRecovered', lowRomRecovery.lowRomRecovered && lowRomRecovery.peakDepth >= 0.07 && lowRomRecovery.peakDepth < 0.1);
+
 // B. Descend-only does not pass
 const descendOnlyPoses = [
   ...Array(4).fill(0).map((_, i) => squatPoseLandmarks(100 + i * 80, 0.02 + i * 0.02)),
