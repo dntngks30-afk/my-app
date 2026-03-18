@@ -62,6 +62,7 @@ import {
 } from '@/lib/camera/voice-guidance';
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 import { SuccessFreezeOverlay } from '@/components/camera/SuccessFreezeOverlay';
+import { FailureFreezeOverlay } from '@/components/camera/FailureFreezeOverlay';
 
 const BG = '#0d161f';
 const ACCENT = '#ff7b00';
