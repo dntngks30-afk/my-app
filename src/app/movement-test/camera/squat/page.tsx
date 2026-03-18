@@ -845,6 +845,10 @@ export default function CameraSquatPage() {
     if (path) router.push(path);
   }, [router]);
 
+  const handleFailureFreezeClose = useCallback(() => {
+    setShowFailureFreezeOverlay(false);
+  }, []);
+
   const prevPath = getPrevStepPath(STEP_ID);
   const showRetryActions =
     progressionState === 'retry_required' ||
