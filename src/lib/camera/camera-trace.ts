@@ -92,6 +92,11 @@ export interface AttemptSnapshot {
       descendConfirmed?: boolean;
       reversalConfirmedAfterDescend?: boolean;
       recoveryConfirmedAfterReversal?: boolean;
+      minimumCycleDurationSatisfied?: boolean;
+      standardPathBlockedReason?: string | null;
+      baselineStandingDepth?: number;
+      rawDepthPeak?: number;
+      relativeDepthPeak?: number;
       ultraLowRomPathDisabledOrGuarded?: boolean;
       /** PR evidence: completion과 분리된 evidence layer */
       squatEvidenceLevel?: string;
@@ -284,6 +289,11 @@ function buildDiagnosisSummary(
       descendConfirmed: sc.descendConfirmed,
       reversalConfirmedAfterDescend: sc.reversalConfirmedAfterDescend,
       recoveryConfirmedAfterReversal: sc.recoveryConfirmedAfterReversal,
+      minimumCycleDurationSatisfied: sc.minimumCycleDurationSatisfied,
+      standardPathBlockedReason: sc.standardPathBlockedReason,
+      baselineStandingDepth: typeof hm?.baselineStandingDepth === 'number' ? hm.baselineStandingDepth : undefined,
+      rawDepthPeak: typeof hm?.rawDepthPeak === 'number' ? hm.rawDepthPeak : undefined,
+      relativeDepthPeak: typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : undefined,
       ultraLowRomPathDisabledOrGuarded: sc.ultraLowRomPathDisabledOrGuarded,
       squatEvidenceLevel: sc.squatEvidenceLevel,
       squatEvidenceReasons: sc.squatEvidenceReasons,

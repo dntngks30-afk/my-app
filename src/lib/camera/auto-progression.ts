@@ -51,6 +51,8 @@ export interface SquatCycleDebug {
   descendConfirmed?: boolean;
   reversalConfirmedAfterDescend?: boolean;
   recoveryConfirmedAfterReversal?: boolean;
+  minimumCycleDurationSatisfied?: boolean;
+  standardPathBlockedReason?: string | null;
   ultraLowRomPathDisabledOrGuarded?: boolean;
   descendStartAtMs?: number;
   downwardCommitmentAtMs?: number;
@@ -594,6 +596,13 @@ function getSquatProgressionCompletionSatisfied(
   const recoveryDropRatio = (result.debug?.highlightedMetrics?.recoveryDropRatio as number) ?? undefined;
   const downwardCommitmentDelta =
     (getHighlightedMetric(result, 'downwardCommitmentDelta') ?? 0) / 100;
+  const firstDescentIdx = (result.debug?.highlightedMetrics?.firstDescentIdx as number) ?? -1;
+  const firstBottomIdx = (result.debug?.highlightedMetrics?.firstBottomIdx as number) ?? -1;
+  const firstAscentIdx = (result.debug?.highlightedMetrics?.firstAscentIdx as number) ?? -1;
+  const cycleDurationMs = getHighlightedMetric(result, 'cycleDurationMs') ?? 0;
+  const relativeDepthPeak = (result.debug?.highlightedMetrics?.relativeDepthPeak as number) ?? 0;
+  const baselineStandingDepth = (result.debug?.highlightedMetrics?.baselineStandingDepth as number) ?? 0;
+  const rawDepthPeak = (result.debug?.highlightedMetrics?.rawDepthPeak as number) ?? 0;
 
   const armingSatisfied = stats.captureDurationMs >= SQUAT_ARMING_MS;
   const startBeforeBottom = getHighlightedMetric(result, 'startBeforeBottom') > 0;
@@ -667,7 +676,6 @@ function getSquatProgressionCompletionSatisfied(
   const reversalAtMs = getHighlightedMetric(result, 'reversalAtMs') || undefined;
   const ascendStartAtMs = getHighlightedMetric(result, 'ascendStartAtMs') || undefined;
   const recoveryAtMs = getHighlightedMetric(result, 'recoveryAtMs') || undefined;
-  const cycleDurationMs = getHighlightedMetric(result, 'cycleDurationMs') || undefined;
 
   const squatCycleDebug: SquatCycleDebug = {
     armingSatisfied,
@@ -703,9 +711,14 @@ function getSquatProgressionCompletionSatisfied(
       : undefined,
     standingStillRejected: depthPeak < 2,
     falsePositiveBlockReason: null,
-    descendConfirmed: descendDetected,
-    reversalConfirmedAfterDescend: bottomDetected || ascendDetected || recoveryDetected,
-    recoveryConfirmedAfterReversal: recoveryDetected || recoveryLowRomDetected || recoveryUltraLowRomDetected,
+    /** PR standing-fp: explicit sequence — descend before reversal before recovery */
+    descendConfirmed: firstDescentIdx >= 0,
+    reversalConfirmedAfterDescend:
+      firstBottomIdx >= 0 && firstBottomIdx > firstDescentIdx,
+    recoveryConfirmedAfterReversal:
+      (recoveryDetected || recoveryLowRomDetected || recoveryUltraLowRomDetected) &&
+      firstAscentIdx > firstBottomIdx,
+    minimumCycleDurationSatisfied: (cycleDurationMs ?? 0) >= 1200,
     ultraLowRomPathDisabledOrGuarded: ULTRA_LOW_ROM_GUARDED_DISABLED,
     squatEvidenceLevel,
     squatEvidenceReasons,
@@ -798,11 +811,56 @@ function getSquatProgressionCompletionSatisfied(
   }
   /* PR G6: depth는 completion gate에서 제거. quality band로만 해석. */
   /* PR-A4/A5: completionPathUsed for trace */
+  const wouldBeStandard =
+    !ultraLowRomRecoveryConfirmed && !lowRomRecoveryConfirmed;
   squatCycleDebug.completionPathUsed = ultraLowRomRecoveryConfirmed
     ? 'ultra_low_rom_reversal'
     : lowRomRecoveryConfirmed
       ? 'low_rom_reversal'
       : 'standard';
+
+  /** PR standing-fp: standard path hard gate — explicit sequence + relative depth + min cycle */
+  const MIN_STANDARD_RELATIVE_DEPTH = 0.10;
+  const MIN_STANDARD_CYCLE_DURATION_MS = 1200;
+  const standardDescendOk = squatCycleDebug.descendConfirmed === true;
+  const standardReversalOk = squatCycleDebug.reversalConfirmedAfterDescend === true;
+  const standardRecoveryOk = squatCycleDebug.recoveryConfirmedAfterReversal === true;
+  const standardDurationOk = squatCycleDebug.minimumCycleDurationSatisfied === true;
+  const standardRelativeDepthOk = relativeDepthPeak >= MIN_STANDARD_RELATIVE_DEPTH;
+
+  if (wouldBeStandard && squatCycleDebug.completionPathUsed === 'standard') {
+    if (!standardDescendOk) {
+      squatCycleDebug.standardPathBlockedReason = 'descend_not_confirmed';
+      squatCycleDebug.completionRejectedReason = 'standard_path:descend_not_confirmed';
+      squatCycleDebug.passBlockedReason = 'standard_path:descend_not_confirmed';
+      return { satisfied: false, squatCycleDebug };
+    }
+    if (!standardReversalOk) {
+      squatCycleDebug.standardPathBlockedReason = 'reversal_not_after_descend';
+      squatCycleDebug.completionRejectedReason = 'standard_path:reversal_not_after_descend';
+      squatCycleDebug.passBlockedReason = 'standard_path:reversal_not_after_descend';
+      return { satisfied: false, squatCycleDebug };
+    }
+    if (!standardRecoveryOk) {
+      squatCycleDebug.standardPathBlockedReason = 'recovery_not_after_reversal';
+      squatCycleDebug.completionRejectedReason = 'standard_path:recovery_not_after_reversal';
+      squatCycleDebug.passBlockedReason = 'standard_path:recovery_not_after_reversal';
+      return { satisfied: false, squatCycleDebug };
+    }
+    if (!standardDurationOk) {
+      squatCycleDebug.standardPathBlockedReason = 'cycle_duration_short';
+      squatCycleDebug.completionRejectedReason = 'standard_path:cycle_duration_short';
+      squatCycleDebug.passBlockedReason = 'standard_path:cycle_duration_short';
+      return { satisfied: false, squatCycleDebug };
+    }
+    if (!standardRelativeDepthOk) {
+      squatCycleDebug.standardPathBlockedReason = 'relative_depth_insufficient';
+      squatCycleDebug.completionRejectedReason = 'standard_path:relative_depth_insufficient';
+      squatCycleDebug.passBlockedReason = 'standard_path:relative_depth_insufficient';
+      return { satisfied: false, squatCycleDebug };
+    }
+  }
+
   squatCycleDebug.passTriggeredAtPhase = 'recovery';
   squatCycleDebug.qualityInterpretationReason =
     depthBand === 0 ? 'valid_limited_shallow' : 'valid_strong';

@@ -132,6 +132,17 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const peakDepthVal = depthValues.length > 0 ? Math.max(...depthValues) : 0;
   const downwardCommitmentDelta = peakDepthVal - minPrePeakDepth;
 
+  /** PR standing-fp: baseline from arming/start — first 6 frames capture standing level */
+  const BASELINE_WINDOW = 6;
+  const baselineDepths = valid
+    .slice(0, BASELINE_WINDOW)
+    .map((f) => f.derived.squatDepthProxy)
+    .filter((d): d is number => typeof d === 'number');
+  const baselineStandingDepth =
+    baselineDepths.length > 0 ? Math.min(...baselineDepths) : 0;
+  const rawDepthPeak = peakDepthVal;
+  const relativeDepthPeak = Math.max(0, rawDepthPeak - baselineStandingDepth);
+
   if (descentCount === 0 || bottomCount === 0 || !ascentSatisfied) {
     completionHints.push('rep_phase_incomplete');
   } else if (!recovery.recovered) {
@@ -225,6 +236,13 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       phaseHints: Array.from(new Set(valid.map((frame) => frame.phaseHint))),
       highlightedMetrics: {
         depthPeak: depthValues.length > 0 ? Math.round(Math.max(...depthValues) * 100) : null,
+        /** PR standing-fp: baseline-relative depth for standard path gate */
+        baselineStandingDepth: Math.round(baselineStandingDepth * 100) / 100,
+        rawDepthPeak: Math.round(rawDepthPeak * 100) / 100,
+        relativeDepthPeak: Math.round(relativeDepthPeak * 100) / 100,
+        firstDescentIdx,
+        firstBottomIdx,
+        firstAscentIdx,
         depthBand,
         bottomStability: Math.round(bottomStability * 100),
         startCount,

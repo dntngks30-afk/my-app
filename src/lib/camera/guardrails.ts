@@ -214,9 +214,13 @@ function getMotionCompleteness(
       recovery.ultraLowRomRecovered ||
       recovery.ultraLowRomGuardedRecovered;
     const firstStartIdx = frames.findIndex((f) => f.phaseHint === 'start');
+    const firstDescentIdx = frames.findIndex((f) => f.phaseHint === 'descent');
     const firstBottomIdx = frames.findIndex((f) => f.phaseHint === 'bottom');
+    const firstAscentIdx = frames.findIndex((f) => f.phaseHint === 'ascent');
     const startBeforeBottom =
       firstStartIdx >= 0 && (firstBottomIdx < 0 || firstStartIdx < firstBottomIdx);
+    const descendBeforeReversal = firstDescentIdx >= 0 && firstBottomIdx > firstDescentIdx;
+    const reversalBeforeRecovery = firstBottomIdx >= 0 && firstAscentIdx > firstBottomIdx;
 
     if (depthValues.length < MIN_VALID_FRAMES) {
       flags.add('rep_incomplete');
@@ -230,6 +234,15 @@ function getMotionCompleteness(
     const prePeakDepths = depthWithIndex.filter((x) => x.i < peakSample.i).map((x) => x.d);
     const minPrePeakDepth = prePeakDepths.length > 0 ? Math.min(...prePeakDepths) : 0;
     const downwardCommitment = peakDepth - minPrePeakDepth;
+
+    /** PR standing-fp: baseline from first 6 frames for standard path */
+    const BASELINE_WINDOW = 6;
+    const baselineDepths = depthWithIndex
+      .filter((x) => x.i < BASELINE_WINDOW)
+      .map((x) => x.d);
+    const baselineStandingDepth = baselineDepths.length > 0 ? Math.min(...baselineDepths) : 0;
+    const relativeDepthPeak = Math.max(0, peakDepth - baselineStandingDepth);
+    const MIN_STANDARD_RELATIVE_DEPTH = 0.10;
 
     if (descentCount === 0) {
       flags.add('rep_incomplete');
@@ -288,6 +301,28 @@ function getMotionCompleteness(
     if (peakDepth < SQUAT_ULTRA_LOW_ROM_FLOOR) {
       flags.add('rep_incomplete');
       return { score: clamp(peakDepth), status: 'partial' };
+    }
+    /** PR standing-fp: standard path requires sequence + relative depth + min cycle */
+    const isStandardPath =
+      !lowRomExcursion && !ultraLowRomExcursion && (bottomCount > 0 || recovery.recovered);
+    if (isStandardPath) {
+      if (!descendBeforeReversal || !reversalBeforeRecovery) {
+        flags.add('rep_incomplete');
+        return { score: clamp(peakDepth), status: 'partial' };
+      }
+      if (relativeDepthPeak < MIN_STANDARD_RELATIVE_DEPTH) {
+        flags.add('rep_incomplete');
+        return { score: clamp(peakDepth), status: 'partial' };
+      }
+      const cycleDurationMs =
+        firstDescentIdx >= 0 && frames.length > 0
+          ? (frames[frames.length - 1]!.timestampMs ?? 0) -
+            (frames[firstDescentIdx]!.timestampMs ?? 0)
+          : 0;
+      if (cycleDurationMs < MIN_CYCLE_DURATION_MS) {
+        flags.add('rep_incomplete');
+        return { score: clamp(peakDepth), status: 'partial' };
+      }
     }
     return { score: clamp(0.45 + peakDepth * 0.55), status: 'complete' };
   }
