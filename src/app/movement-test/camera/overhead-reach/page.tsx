@@ -292,7 +292,10 @@ export default function CameraOverheadReachPage() {
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
   const persistCurrentStep = useCallback(() => {
-    recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary);
+    recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
+      liveCueingEnabled: startSequenceComplete,
+      autoNextObservation: nextTriggerReason ?? 'pass_latched',
+    });
     const current = loadCameraTest();
     const completed = current.completedSteps?.includes(STEP_ID)
       ? current.completedSteps
@@ -312,7 +315,7 @@ export default function CameraOverheadReachPage() {
       evaluatorResults,
       guardrailResults,
     });
-  }, [gate, readinessTraceSummary]);
+  }, [gate, nextTriggerReason, readinessTraceSummary, startSequenceComplete]);
 
   const handleVideoReady = useCallback(
     (video: HTMLVideoElement) => {
@@ -699,7 +702,10 @@ export default function CameraOverheadReachPage() {
 
   const handleRetry = useCallback(() => {
     unlockVoiceGuidance();
-    recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary);
+    recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
+      liveCueingEnabled: startSequenceComplete,
+      autoNextObservation: 'retry',
+    });
     clearAutoAdvanceTimer();
     resetVoiceGuidanceSession();
     stop();
@@ -724,7 +730,7 @@ export default function CameraOverheadReachPage() {
     setSuccessSnapshot(null);
     setPermissionDenied(false);
     setPreviewKey((prev) => prev + 1);
-  }, [clearAutoAdvanceTimer, gate, readinessTraceSummary, stop]);
+  }, [clearAutoAdvanceTimer, gate, readinessTraceSummary, startSequenceComplete, stop]);
 
   const handleCameraError = useCallback(() => {
     clearAutoAdvanceTimer();
@@ -948,6 +954,7 @@ export default function CameraOverheadReachPage() {
                     <span>upwardMotionDetected: {String(raiseCount > 0)}</span>
                     <span>topReachDetected: {String(peakCount > 0)}</span>
                     <span>holdSatisfied: {String(holdDurationMs >= 600)}</span>
+                    <span>holdTooShort: {String(gate.failureReasons?.includes('hold_too_short') ?? false)}</span>
                     <span>passBlockedReason: {gate.completionSatisfied ? 'n/a' : (stats.captureDurationMs < 800 ? 'arming_window' : gate.guardrail.completionStatus !== 'complete' ? 'guardrail_not_complete' : 'metrics')}</span>
                     <span>latchBlockedReason: {effectivePassLatched ? 'n/a' : (!gate.completionSatisfied ? 'completion' : !gate.passConfirmationSatisfied ? 'passConfirmation' : gate.guardrail.captureQuality === 'invalid' ? 'captureQuality' : gate.confidence < 0.72 ? 'confidence' : 'passFrames')}</span>
                     <span>passConfirmed: {String(gate.passConfirmationSatisfied)}</span>
@@ -983,6 +990,7 @@ export default function CameraOverheadReachPage() {
                       ...readinessTraceSummary,
                       finalPassLatched: effectivePassLatched,
                     }}
+                    liveCueingEnabled={startSequenceComplete}
                   />
                 </div>
               )}

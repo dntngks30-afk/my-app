@@ -302,7 +302,10 @@ export default function CameraSquatPage() {
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
   const persistCurrentStep = useCallback(() => {
-    recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary);
+    recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
+      liveCueingEnabled: cameraPhase === 'capturing',
+      autoNextObservation: nextTriggerReason ?? 'pass_latched',
+    });
     const current = loadCameraTest();
     const completed = current.completedSteps?.includes(STEP_ID)
       ? current.completedSteps
@@ -322,7 +325,7 @@ export default function CameraSquatPage() {
       evaluatorResults,
       guardrailResults,
     });
-  }, [gate, readinessTraceSummary]);
+  }, [cameraPhase, gate, nextTriggerReason, readinessTraceSummary]);
 
   const handleVideoReady = useCallback(
     (video: HTMLVideoElement) => {
@@ -670,7 +673,10 @@ export default function CameraSquatPage() {
 
   const handleRetry = useCallback(() => {
     unlockVoiceGuidance();
-    recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary);
+    recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
+      liveCueingEnabled: cameraPhase === 'capturing',
+      autoNextObservation: 'retry',
+    });
     clearAutoAdvanceTimer();
     resetVoiceGuidanceSession();
     stop();
@@ -711,7 +717,7 @@ export default function CameraSquatPage() {
     setPermissionDenied(false);
     setPreviewKey((prev) => prev + 1);
     appendTransition('idle', 'manual_retry');
-  }, [clearAutoAdvanceTimer, gate, readinessTraceSummary, stop]);
+  }, [cameraPhase, clearAutoAdvanceTimer, gate, readinessTraceSummary, stop]);
 
   const handleCameraError = useCallback(() => {
     clearAutoAdvanceTimer();
@@ -1024,7 +1030,7 @@ export default function CameraSquatPage() {
                     <span>passFrames: {gate.passConfirmationFrameCount}/{gate.passConfirmationWindowCount}</span>
                     <span>repCount: {repCount}</span>
                     <span>retryRecommended: {String(gate.retryRecommended)}</span>
-                    <span>depthProxy: {depthProxy ?? 'n/a'}</span>
+                    <span>peakDepth: {depthProxy ?? 'n/a'}</span>
                     <span>trunkLean: {trunkLeanProxy ?? 'n/a'}</span>
                     <span>kneeTracking: {kneeTrackingProxy ?? 'n/a'}</span>
                     <span>validFrames: {gate.guardrail.debug.validFrameCount}</span>
@@ -1094,6 +1100,7 @@ export default function CameraSquatPage() {
                       ...readinessTraceSummary,
                       finalPassLatched,
                     }}
+                    liveCueingEnabled={cameraPhase === 'capturing'}
                   />
                 </div>
               )}

@@ -7,6 +7,8 @@ import type { ExerciseGateResult } from './auto-progression';
 import type { CaptureQuality } from './guardrails';
 import type { CameraStepId } from '@/lib/public/camera-test';
 import { isFinalPassLatched } from './auto-progression';
+import { getCorrectiveCueObservability } from './voice-guidance';
+import { getLastPlaybackObservability } from './korean-audio-pack';
 
 /** PR-4: movement type (squat, overhead_reach만 지원) */
 export type TraceMovementType = 'squat' | 'overhead_reach';
@@ -52,12 +54,50 @@ export interface AttemptSnapshot {
     selectedWindowEndMs?: number | null;
     selectedWindowScore?: number | null;
   };
+  /** dev-only: real-device diagnosis — pass/cue/latch 직결 런타임 값 */
+  diagnosisSummary?: {
+    stepId: string;
+    readinessState?: string;
+    captureQuality: CaptureQuality;
+    completionSatisfied: boolean;
+    passConfirmed: boolean;
+    passLatched: boolean;
+    autoNextObservation?: string;
+    sampledFrameCount?: number;
+    /** squat */
+    squatCycle?: {
+      peakDepth?: number;
+      depthBand?: string;
+      descendDetected: boolean;
+      bottomDetected: boolean;
+      recoveryDetected: boolean;
+      startBeforeBottom: boolean;
+      cycleComplete: boolean;
+      passBlockedReason: string | null;
+    };
+    /** overhead */
+    overhead?: {
+      peakElevation?: number;
+      peakCount?: number;
+      holdDurationMs?: number;
+      holdTooShort: boolean;
+      topReachDetected: boolean;
+      upwardMotionDetected: boolean;
+    };
+    /** cue */
+    cue?: {
+      chosenCueKey: string | null;
+      chosenClipKey: string | null;
+      suppressedReason: string | null;
+      liveCueingEnabled: boolean;
+    };
+  };
   debugVersion: string;
 }
 
 const TRACE_STORAGE_KEY = 'moveReCameraTrace:v1';
 const MAX_ATTEMPTS = 50;
-const DEBUG_VERSION = 'pr4-1';
+const DEBUG_VERSION = 'pr4-2';
 
 function stepIdToMovementType(stepId: CameraStepId): TraceMovementType | null {
   if (stepId === 'squat') return 'squat';
@@ -125,13 +165,91 @@ function extractPerStepSummary(gate: ExerciseGateResult): Record<string, unknown
   } as Record<string, unknown>;
 }
 
+export interface RecordAttemptOptions {
+  liveCueingEnabled?: boolean;
+  autoNextObservation?: string;
+}
+
+function buildDiagnosisSummary(
+  stepId: CameraStepId,
+  gate: ExerciseGateResult,
+  context: AttemptSnapshot['readinessSummary'] | undefined,
+  options?: RecordAttemptOptions
+): AttemptSnapshot['diagnosisSummary'] {
+  const hm = gate.evaluatorResult?.debug?.highlightedMetrics;
+  const passLatched = isFinalPassLatched(stepId, gate);
+
+  let cueObs: ReturnType<typeof getCorrectiveCueObservability> = null;
+  let playbackObs: ReturnType<typeof getLastPlaybackObservability> = null;
+  if (typeof window !== 'undefined') {
+    cueObs = getCorrectiveCueObservability();
+    playbackObs = getLastPlaybackObservability();
+  }
+
+  const base: NonNullable<AttemptSnapshot['diagnosisSummary']> = {
+    stepId,
+    readinessState: context?.state,
+    captureQuality: gate.guardrail.captureQuality,
+    completionSatisfied: gate.completionSatisfied,
+    passConfirmed: gate.passConfirmationSatisfied,
+    passLatched,
+    autoNextObservation: options?.autoNextObservation,
+    sampledFrameCount: gate.guardrail.debug?.sampledFrameCount,
+    cue: {
+      chosenCueKey: cueObs?.cueCandidate ?? null,
+      chosenClipKey: playbackObs?.clipKey ?? null,
+      suppressedReason: cueObs?.suppressedReason ?? null,
+      liveCueingEnabled: options?.liveCueingEnabled ?? false,
+    },
+  };
+
+  if (stepId === 'squat' && gate.squatCycleDebug) {
+    const sc = gate.squatCycleDebug;
+    const peakDepth =
+      typeof hm?.depthPeak === 'number'
+        ? hm.depthPeak
+        : gate.evaluatorResult?.metrics?.find((m) => m.name === 'depth')?.value;
+    base.squatCycle = {
+      peakDepth,
+      depthBand: sc.depthBand,
+      descendDetected: sc.descendDetected,
+      bottomDetected: sc.bottomDetected,
+      recoveryDetected: sc.recoveryDetected,
+      startBeforeBottom: sc.startBeforeBottom,
+      cycleComplete: sc.cycleComplete,
+      passBlockedReason: sc.passBlockedReason,
+    };
+  }
+
+  if (stepId === 'overhead-reach') {
+    const raiseCount = typeof hm?.raiseCount === 'number' ? hm.raiseCount : 0;
+    const peakCount = typeof hm?.peakCount === 'number' ? hm.peakCount : 0;
+    const holdDurationMs = typeof hm?.holdDurationMs === 'number' ? hm.holdDurationMs : 0;
+    const peakElevation =
+      typeof hm?.peakArmElevation === 'number'
+        ? hm.peakArmElevation
+        : gate.evaluatorResult?.metrics?.find((m) => m.name === 'arm_range')?.value;
+    base.overhead = {
+      peakElevation,
+      peakCount,
+      holdDurationMs,
+      holdTooShort: gate.failureReasons?.includes('hold_too_short') ?? false,
+      topReachDetected: peakCount > 0,
+      upwardMotionDetected: raiseCount > 0,
+    };
+  }
+
+  return base;
+}
+
 /**
  * gate 결과로부터 compact attempt snapshot 생성
  */
 export function buildAttemptSnapshot(
   stepId: CameraStepId,
   gate: ExerciseGateResult,
-  context?: AttemptSnapshot['readinessSummary']
+  context?: AttemptSnapshot['readinessSummary'],
+  options?: RecordAttemptOptions
 ): AttemptSnapshot | null {
   const movementType = stepIdToMovementType(stepId);
   if (!movementType) return null;
@@ -161,6 +279,7 @@ export function buildAttemptSnapshot(
     perStepSummary: extractPerStepSummary(gate),
     readinessSummary: context,
     stabilitySummary: extractStabilitySummary(gate),
+    diagnosisSummary: buildDiagnosisSummary(stepId, gate, context, options),
     debugVersion: DEBUG_VERSION,
   };
 }
@@ -291,10 +410,11 @@ export function getQuickStats(snapshots: AttemptSnapshot[]): TraceQuickStats {
 export function recordAttemptSnapshot(
   stepId: CameraStepId,
   gate: ExerciseGateResult,
-  context?: AttemptSnapshot['readinessSummary']
+  context?: AttemptSnapshot['readinessSummary'],
+  options?: RecordAttemptOptions
 ): void {
   try {
-    const snapshot = buildAttemptSnapshot(stepId, gate, context);
+    const snapshot = buildAttemptSnapshot(stepId, gate, context, options);
     if (snapshot) pushAttemptSnapshot(snapshot);
   } catch {
     // trace 실패 시 카메라 플로우는 정상 동작해야 함

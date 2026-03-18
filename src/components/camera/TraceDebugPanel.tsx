@@ -26,9 +26,11 @@ interface TraceDebugPanelProps {
     visibleJointsRatio?: number;
     criticalJointsAvailability?: number;
   };
+  /** dev-only: live cueing 활성화 여부 (bottom-stall / overhead cue 진단용) */
+  liveCueingEnabled?: boolean;
 }
 
-export function TraceDebugPanel({ liveReadiness }: TraceDebugPanelProps) {
+export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebugPanelProps) {
   const [attempts, setAttempts] = useState<AttemptSnapshot[]>([]);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
 
@@ -141,12 +143,16 @@ export function TraceDebugPanel({ liveReadiness }: TraceDebugPanelProps) {
       )}
       {(() => {
         const cueObs = getCorrectiveCueObservability();
-        if (!cueObs) return null;
         return (
           <div className="mt-2 text-[10px] text-slate-500">
-            <p>cue={cueObs.cueCandidate ?? 'none'} latched={cueObs.latchedKey ?? 'none'}</p>
-            <p>suppressed={cueObs.suppressedReason ?? 'none'} played={String(cueObs.played)}</p>
-            <p>lastReadiness={cueObs.lastReadiness ?? 'n/a'}</p>
+            <p>liveCueingEnabled={String(liveCueingEnabled ?? false)}</p>
+            {cueObs && (
+              <>
+                <p>cue={cueObs.cueCandidate ?? 'none'} latched={cueObs.latchedKey ?? 'none'}</p>
+                <p>suppressed={cueObs.suppressedReason ?? 'none'} played={String(cueObs.played)}</p>
+                <p>lastReadiness={cueObs.lastReadiness ?? 'n/a'}</p>
+              </>
+            )}
           </div>
         );
       })()}
@@ -169,6 +175,26 @@ export function TraceDebugPanel({ liveReadiness }: TraceDebugPanelProps) {
           <p>
             ok={okCount} low={lowCount} invalid={invalidCount}
           </p>
+          {(() => {
+            const latest = attempts[attempts.length - 1];
+            const d = latest?.diagnosisSummary;
+            if (!d) return null;
+            return (
+              <div className="mt-1 border-t border-slate-600/50 pt-1">
+                <p className="font-medium text-slate-400">Latest diagnosis</p>
+                <p>comp={d.completionSatisfied} passConf={d.passConfirmed} latched={d.passLatched}</p>
+                {d.squatCycle && (
+                  <p>peakDepth={d.squatCycle.peakDepth ?? 'n/a'} bottom={d.squatCycle.bottomDetected} recovery={d.squatCycle.recoveryDetected} startBeforeBottom={d.squatCycle.startBeforeBottom}</p>
+                )}
+                {d.overhead && (
+                  <p>peakElev={d.overhead.peakElevation ?? 'n/a'} peakCnt={d.overhead.peakCount} holdMs={d.overhead.holdDurationMs} holdTooShort={d.overhead.holdTooShort}</p>
+                )}
+                {d.cue && (
+                  <p>cue={d.cue.chosenCueKey ?? 'none'} clip={d.cue.chosenClipKey ?? 'none'} liveCue={d.cue.liveCueingEnabled}</p>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
