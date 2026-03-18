@@ -99,6 +99,8 @@ export interface SquatRecoverySignal {
   lowRomRecovered: boolean;
   /** Ultra-low-ROM path — peak 2–7%, very strict recovery (50%). Real cycle proof, blocks micro bend. */
   ultraLowRomRecovered: boolean;
+  /** PR-A5: guarded ultra-low-ROM — peak 1–2%, 60% recovery, 5+ trailing frames. Stricter than ultraLowRom. */
+  ultraLowRomGuardedRecovered: boolean;
 }
 
 const VISIBILITY_THRESHOLD = 0.45;
@@ -196,6 +198,7 @@ export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecove
       recovered: false,
       lowRomRecovered: false,
       ultraLowRomRecovered: false,
+      ultraLowRomGuardedRecovered: false,
     };
   }
 
@@ -212,6 +215,7 @@ export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecove
       recovered: false,
       lowRomRecovered: false,
       ultraLowRomRecovered: false,
+      ultraLowRomGuardedRecovered: false,
     };
   }
 
@@ -234,6 +238,13 @@ export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecove
     peakSample.depth < 0.07 &&
     recoveryDrop >= peakSample.depth * 0.5;
 
+  /** PR-A5: guarded ultra-low-ROM — peak 1–2%, 60% recovery, 5+ trailing frames. Anti-tiny-dip. */
+  const ultraLowRomGuardedRecovered =
+    peakSample.depth >= 0.01 &&
+    peakSample.depth < 0.02 &&
+    recoveryDrop >= peakSample.depth * 0.6 &&
+    trailingDepths.length >= 5;
+
   return {
     peakDepth: peakSample.depth,
     tailDepth,
@@ -241,6 +252,7 @@ export function getSquatRecoverySignal(frames: PoseFeaturesFrame[]): SquatRecove
     recovered,
     lowRomRecovered,
     ultraLowRomRecovered,
+    ultraLowRomGuardedRecovered,
   };
 }
 
@@ -690,9 +702,8 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
   }
 
   if (stepId === 'overhead-reach') {
-    const maxElevation = Math.max(...frames.map((frame) => frame.derived.armElevationAvg ?? 0));
-    /** PR G8: peak requires both relative (88% of max) and absolute (118°) — blocks weak raise. */
-    const peakThreshold = Math.max(maxElevation * 0.88, 118);
+    /** PR overhead-hold: absolute top floor only. relative max 회귀 금지 — reach-only pass 차단. */
+    const ABSOLUTE_TOP_FLOOR_DEG = 132;
     const candidates = frames.map((frame, index) => {
       const previousElevation = index > 0 ? frames[index - 1]!.derived.armElevationAvg : null;
       const currentElevation = frame.derived.armElevationAvg;
@@ -703,7 +714,7 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
 
         if (currentElevation < 40) {
           phaseHint = 'start';
-        } else if (currentElevation >= peakThreshold && Math.abs(delta) < 2.6) {
+        } else if (currentElevation >= ABSOLUTE_TOP_FLOOR_DEG && Math.abs(delta) < 2.6) {
           phaseHint = 'peak';
         } else if (delta > 2.2) {
           phaseHint = 'raise';

@@ -194,7 +194,8 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
                 {d.overhead && (
                   <>
                     <p>peakElev={d.overhead.peakElevation ?? 'n/a'} peakCnt={d.overhead.peakCount} holdMs={d.overhead.holdDurationMs} holdTooShort={d.overhead.holdTooShort}</p>
-                    <p className="text-slate-500">PR-C4: topEntry={d.overhead.topEntryAtMs ?? 'n/a'} holdSat={d.overhead.holdSatisfiedAtMs ?? 'n/a'} holdRem={d.overhead.holdRemainingMsAtCue ?? 'n/a'} holdCuePlayed={d.overhead.holdCuePlayed ?? 'n/a'} holdSupp={d.overhead.holdCueSuppressedReason ?? 'n/a'} successTrig={d.overhead.successTriggeredAtMs ?? 'n/a'}</p>
+                    <p className="text-slate-500">topEntry={d.overhead.topEntryAtMs ?? 'n/a'} stableTop={d.overhead.stableTopEntryAtMs ?? 'n/a'} holdAcc={d.overhead.holdAccumulationMs ?? 'n/a'} holdSat={d.overhead.holdSatisfiedAtMs ?? 'n/a'} holdRem={d.overhead.holdRemainingMsAtCue ?? 'n/a'}</p>
+                    <p className="text-slate-500">holdCuePlayed={d.overhead.holdCuePlayed ?? 'n/a'} holdSupp={d.overhead.holdCueSuppressedReason ?? 'n/a'} successTrig={d.overhead.successTriggeredAtMs ?? 'n/a'} successBlocked={d.overhead.successBlockedReason ?? 'n/a'}</p>
                   </>
                 )}
                 {d.cue && (

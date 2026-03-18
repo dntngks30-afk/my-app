@@ -70,32 +70,48 @@ export function evaluateOverheadReachFromPoseFrames(
   );
   const raiseCount = countPhases(valid, 'raise');
   const peakFrames = valid.filter((frame) => frame.phaseHint === 'peak');
-  /** PR G11: absolute top floor — relative max alone is never sufficient. Hold starts only after true top. */
+  /** PR overhead-hold: absolute top floor. Hold starts only after stable top entry. */
   const ABSOLUTE_TOP_FLOOR_DEG = 132;
-  let topEntryIndex = -1;
-  for (let i = 0; i < valid.length; i++) {
-    const e = valid[i]!.derived.armElevationAvg;
-    const prev = i > 0 ? valid[i - 1]!.derived.armElevationAvg : null;
-    const delta = typeof e === 'number' && typeof prev === 'number' ? e - prev : 0;
-    if (typeof e === 'number' && e >= ABSOLUTE_TOP_FLOOR_DEG && Math.abs(delta) < 2.6) {
-      topEntryIndex = i;
+  const STABLE_TOP_CONSECUTIVE = 3;
+
+  /** stable top entry: 3+ 연속 프레임이 132+ 이고 delta < 2.6. jitter/spike로 hold 누적 방지. */
+  let stableTopEntryIndex = -1;
+  for (let i = 0; i <= valid.length - STABLE_TOP_CONSECUTIVE; i++) {
+    let allStable = true;
+    for (let k = 0; k < STABLE_TOP_CONSECUTIVE; k++) {
+      const e = valid[i + k]!.derived.armElevationAvg;
+      const prev = i + k > 0 ? valid[i + k - 1]!.derived.armElevationAvg : null;
+      const delta = typeof e === 'number' && typeof prev === 'number' ? e - prev : 0;
+      if (typeof e !== 'number' || e < ABSOLUTE_TOP_FLOOR_DEG || Math.abs(delta) >= 2.6) {
+        allStable = false;
+        break;
+      }
+    }
+    if (allStable) {
+      stableTopEntryIndex = i;
       break;
     }
   }
+
   const topConfirmedPeaks =
-    topEntryIndex >= 0
-      ? peakFrames.filter((f) => valid.indexOf(f) >= topEntryIndex)
+    stableTopEntryIndex >= 0
+      ? peakFrames.filter((f) => valid.indexOf(f) >= stableTopEntryIndex)
       : [];
   const peakCount = topConfirmedPeaks.length;
+  /** hold accumulation: stable top 이후 peak 구간만. reach-only 차단. */
   const holdDurationMs =
     topConfirmedPeaks.length > 1
       ? topConfirmedPeaks[topConfirmedPeaks.length - 1]!.timestampMs - topConfirmedPeaks[0]!.timestampMs
       : 0;
-  /** PR-C4: trace용 — true top-entry 첫 프레임 타임스탬프 */
-  const topEntryAtMs =
-    topEntryIndex >= 0 && valid[topEntryIndex]
-      ? valid[topEntryIndex]!.timestampMs
+  const stableTopEntryAtMs =
+    stableTopEntryIndex >= 0 && valid[stableTopEntryIndex]
+      ? valid[stableTopEntryIndex]!.timestampMs
       : 0;
+  const topEntryAtMs = stableTopEntryAtMs;
+  const holdSatisfiedAtMs =
+    holdDurationMs >= 1200 && topConfirmedPeaks.length > 0
+      ? topConfirmedPeaks[0]!.timestampMs + 1200
+      : undefined;
 
   if (raiseCount === 0 || peakCount === 0) {
     completionHints.push('raise_peak_incomplete');
@@ -179,6 +195,9 @@ export function evaluateOverheadReachFromPoseFrames(
         peakCount,
         holdDurationMs,
         topEntryAtMs,
+        stableTopEntryAtMs: stableTopEntryAtMs || undefined,
+        holdAccumulationMs: holdDurationMs,
+        holdSatisfiedAtMs,
         peakArmElevation:
           armElevationAvgValues.length > 0 ? Math.round(Math.max(...armElevationAvgValues)) : null,
       },

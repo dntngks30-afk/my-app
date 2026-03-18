@@ -304,9 +304,8 @@ function getMotionCompleteness(
     return { score: clamp(peakElevation / 155), status: 'complete' };
   }
 
-  /* PR G8/G9: overhead reach — hold_too_short until explicit top-hold window satisfied.
-   * Product: ~1–2s hold at true top required. hold_too_short threshold slightly below completion. */
-  const OVERHEAD_HOLD_TOO_SHORT_MS = 1100;
+  /* PR overhead-hold: stable top entry + explicit hold window. reach-only 차단. */
+  const OVERHEAD_HOLD_COMPLETE_MS = 1200;
   if (stepId === 'overhead-reach') {
     const armElevations = frames
       .map((frame) => frame.derived.armElevationAvg)
@@ -315,18 +314,27 @@ function getMotionCompleteness(
     const raiseCount = frames.filter((frame) => frame.phaseHint === 'raise').length;
     const peakElevation = armElevations.length > 0 ? Math.max(...armElevations) : 0;
     const ABSOLUTE_TOP_FLOOR_DEG = 132;
-    let topEntryIndex = -1;
-    for (let i = 0; i < frames.length; i++) {
-      const e = frames[i]!.derived.armElevationAvg;
-      const prev = i > 0 ? frames[i - 1]!.derived.armElevationAvg : null;
-      const delta = typeof e === 'number' && typeof prev === 'number' ? e - prev : 0;
-      if (typeof e === 'number' && e >= ABSOLUTE_TOP_FLOOR_DEG && Math.abs(delta) < 2.6) {
-        topEntryIndex = i;
+    const STABLE_TOP_CONSECUTIVE = 3;
+
+    let stableTopEntryIndex = -1;
+    for (let i = 0; i <= frames.length - STABLE_TOP_CONSECUTIVE; i++) {
+      let allStable = true;
+      for (let k = 0; k < STABLE_TOP_CONSECUTIVE; k++) {
+        const e = frames[i + k]!.derived.armElevationAvg;
+        const prev = i + k > 0 ? frames[i + k - 1]!.derived.armElevationAvg : null;
+        const delta = typeof e === 'number' && typeof prev === 'number' ? e - prev : 0;
+        if (typeof e !== 'number' || e < ABSOLUTE_TOP_FLOOR_DEG || Math.abs(delta) >= 2.6) {
+          allStable = false;
+          break;
+        }
+      }
+      if (allStable) {
+        stableTopEntryIndex = i;
         break;
       }
     }
     const topConfirmedPeaks =
-      topEntryIndex >= 0 ? peakFrames.filter((f) => frames.indexOf(f) >= topEntryIndex) : [];
+      stableTopEntryIndex >= 0 ? peakFrames.filter((f) => frames.indexOf(f) >= stableTopEntryIndex) : [];
     const peakCount = topConfirmedPeaks.length;
     const holdDurationMs =
       topConfirmedPeaks.length > 1
@@ -337,12 +345,13 @@ function getMotionCompleteness(
       frames.length < 10 ||
       peakElevation < ABSOLUTE_TOP_FLOOR_DEG ||
       raiseCount === 0 ||
-      peakCount === 0
+      peakCount === 0 ||
+      stableTopEntryIndex < 0
     ) {
       flags.add('rep_incomplete');
       return { score: clamp(peakElevation / 150), status: 'partial' };
     }
-    if (holdDurationMs < OVERHEAD_HOLD_TOO_SHORT_MS) {
+    if (holdDurationMs < OVERHEAD_HOLD_COMPLETE_MS) {
       flags.add('hold_too_short');
       return { score: clamp(Math.max(peakElevation / 155, holdDurationMs / 1400)), status: 'partial' };
     }
