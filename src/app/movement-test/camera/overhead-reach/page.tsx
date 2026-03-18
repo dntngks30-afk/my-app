@@ -43,7 +43,7 @@ import {
   getFollowUpIntroVoiceCue,
   getReadyToShootVoiceCue,
   getStartVoiceCue,
-  getSuccessVoiceCue,
+  getFinalSuccessVoiceCue,
   hasFunnelIntroPlayed,
   hasReadyToShootPlayedThisSession,
   markReadyToShootPlayed,
@@ -450,7 +450,7 @@ export default function CameraOverheadReachPage() {
 
     successCueAttemptedRef.current = true;
     cancelCorrectiveCueForSuccess();
-    void speakVoiceCue(getSuccessVoiceCue());
+    void speakVoiceCue(getFinalSuccessVoiceCue());
   }, [effectivePassLatched]);
 
   const latchPassEvent = useCallback(() => {

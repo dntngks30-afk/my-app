@@ -26,6 +26,7 @@ export type KoreanCueClipKey =
   | 'overhead_raise_higher'
   | 'overhead_hold_top'
   | 'good_job'
+  | 'test_complete'
   | 'success'
   | 'ready_to_shoot';
 
@@ -44,6 +45,7 @@ const DEDUPE_KEY_TO_CLIP: Record<string, KoreanCueClipKey> = {
   'correction:motion:overhead-reach': 'overhead_raise_higher',
   'correction:squat:bottom-stall': 'push_floor_with_foot',
   'success:generic': 'good_job',
+  'success:final': 'test_complete',
 };
 
 /** recovery.primary 텍스트 → clip key (동적 cue, 실제 파일명 사용) */
@@ -58,6 +60,7 @@ const TEXT_TO_CLIP: Record<string, KoreanCueClipKey> = {
   '발로 바닥을 밀며 일어나주세요': 'push_floor_with_foot',
   '자세를 잠깐 고정한 뒤 다시 해주세요': 'framing_hold_still',
   '전신이 화면에 들어오게 맞춰주세요': 'framing_center_body',
+  '테스트 완료. 잠시 후 결과가 나옵니다': 'test_complete',
 };
 
 const AUDIO_BASE = '/audio/cues/ko';
@@ -79,6 +82,7 @@ export function resolveCueToClipKey(cue: VoiceCue): KoreanCueClipKey | null {
 const CLIP_KEY_TO_FILENAME: Partial<Record<KoreanCueClipKey, string>> = {
   push_floor_with_foot: 'Push the floor with your foot.mp3',
   start_follow_up_testing: 'Start follow-up testing.mp3',
+  test_complete: 'Test complete.mp3',
 };
 
 /**

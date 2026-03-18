@@ -654,6 +654,19 @@ export function getSuccessVoiceCue(): VoiceCue {
   };
 }
 
+/** 마지막 성공(전체 퍼널 완료) 시 outro cue. "테스트 완료. 잠시 후 결과가 나옵니다" — Test complete.mp3 */
+export function getFinalSuccessVoiceCue(): VoiceCue {
+  return {
+    kind: 'success',
+    dedupeKey: 'success:final',
+    text: '테스트 완료. 잠시 후 결과가 나옵니다',
+    priority: 6,
+    cooldownMs: 2000,
+    interrupt: true,
+    fallbackBeep: true,
+  };
+}
+
 export function getCorrectiveVoiceCue(
   stepId: CameraStepId,
   gate: VoiceGuidanceGate
