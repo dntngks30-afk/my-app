@@ -121,6 +121,8 @@ export interface AttemptSnapshot {
       successBlockedReason?: string;
       /** PR overhead-dwell: dwell vs legacy span 비교용 */
       holdDurationMsLegacySpan?: number;
+      dwellHoldDurationMs?: number;
+      legacyHoldDurationMs?: number;
       stableTopEnteredAtMs?: number;
       stableTopExitedAtMs?: number;
       stableTopDwellMs?: number;
@@ -324,6 +326,8 @@ function buildDiagnosisSummary(
               ? 'pass_confirmation_pending'
               : undefined;
     const holdDurationMsLegacySpan = typeof hm?.holdDurationMsLegacySpan === 'number' ? hm.holdDurationMsLegacySpan : undefined;
+    const dwellHoldDurationMs = typeof hm?.dwellHoldDurationMs === 'number' ? hm.dwellHoldDurationMs : holdDurationMs;
+    const legacyHoldDurationMs = typeof hm?.legacyHoldDurationMs === 'number' ? hm.legacyHoldDurationMs : holdDurationMsLegacySpan;
     const stableTopEnteredAtMs = typeof hm?.stableTopEnteredAtMs === 'number' ? hm.stableTopEnteredAtMs : undefined;
     const stableTopExitedAtMs = typeof hm?.stableTopExitedAtMs === 'number' ? hm.stableTopExitedAtMs : undefined;
     const stableTopDwellMs = typeof hm?.stableTopDwellMs === 'number' ? hm.stableTopDwellMs : undefined;
@@ -348,6 +352,8 @@ function buildDiagnosisSummary(
       successTriggeredAtMs: options?.successTriggeredAtMs,
       successBlockedReason: successBlockedReason ?? undefined,
       holdDurationMsLegacySpan,
+      dwellHoldDurationMs,
+      legacyHoldDurationMs,
       stableTopEnteredAtMs,
       stableTopExitedAtMs,
       stableTopDwellMs,

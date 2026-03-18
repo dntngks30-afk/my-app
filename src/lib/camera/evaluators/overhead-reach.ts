@@ -29,10 +29,16 @@ export interface OverheadStableTopDwellResult {
   holdDurationMsLegacySpan: number;
 }
 
+/** timestamp gap > 이 값이면 segment break — 프레임 누락 시 누적 불가 */
+const MAX_DWELL_DELTA_MS = 120;
+
 /**
  * 연속 stable-top dwell time 계산.
  * stable top: elevation >= floor, |delta| < deltaMax.
  * 3연속 진입 후 구간 시작, 깨지면 reset. 최장 구간 dwell = hold.
+ *
+ * PR fix: hold = frame-to-frame delta 누적만. segment span 대신 실제 연속 프레임 시간만 합산.
+ * timestamp gap > MAX_DWELL_DELTA_MS 이면 segment break.
  */
 export function computeOverheadStableTopDwell(
   frames: PoseFeaturesFrame[],
@@ -68,6 +74,8 @@ export function computeOverheadStableTopDwell(
 
   let stableStreak = 0;
   let segmentStartMs: number | null = null;
+  let segmentDwellMs = 0;
+  let prevStableTimestampMs: number | null = null;
   let bestDwellMs = 0;
   let bestEnteredMs: number | undefined;
   let bestExitedMs: number | undefined;
@@ -81,23 +89,38 @@ export function computeOverheadStableTopDwell(
     const isStable =
       typeof e === 'number' && e >= floorDeg && Math.abs(delta) < deltaMax;
 
+    const timestampDeltaMs =
+      prevStableTimestampMs !== null ? f.timestampMs - prevStableTimestampMs : 0;
+
     if (isStable) {
       stableStreak += 1;
       if (stableStreak >= consecutive && segmentStartMs === null) {
         segmentStartMs = f.timestampMs;
+        segmentDwellMs = 0;
+        prevStableTimestampMs = f.timestampMs;
         segmentCount += 1;
       }
       if (segmentStartMs !== null) {
-        const dwellMs = f.timestampMs - segmentStartMs;
-        if (dwellMs > bestDwellMs) {
-          bestDwellMs = dwellMs;
-          bestEnteredMs = segmentStartMs;
-          bestExitedMs = f.timestampMs;
+        if (timestampDeltaMs > MAX_DWELL_DELTA_MS) {
+          segmentStartMs = f.timestampMs;
+          segmentDwellMs = 0;
+          prevStableTimestampMs = f.timestampMs;
+          segmentCount += 1;
+        } else {
+          segmentDwellMs += timestampDeltaMs;
+          prevStableTimestampMs = f.timestampMs;
+          if (segmentDwellMs > bestDwellMs) {
+            bestDwellMs = segmentDwellMs;
+            bestEnteredMs = segmentStartMs;
+            bestExitedMs = f.timestampMs;
+          }
         }
       }
     } else {
       stableStreak = 0;
       segmentStartMs = null;
+      segmentDwellMs = 0;
+      prevStableTimestampMs = null;
     }
   }
 
@@ -308,6 +331,8 @@ export function evaluateOverheadReachFromPoseFrames(
         stableTopSegmentCount: dwellResult.stableTopSegmentCount,
         holdComputationMode: dwellResult.holdComputationMode,
         holdDurationMsLegacySpan: dwellResult.holdDurationMsLegacySpan,
+        dwellHoldDurationMs: dwellResult.holdDurationMs,
+        legacyHoldDurationMs: dwellResult.holdDurationMsLegacySpan,
       },
       perStepDiagnostics: perStepRecord,
     },
