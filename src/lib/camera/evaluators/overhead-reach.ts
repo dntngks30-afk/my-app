@@ -34,10 +34,12 @@ export interface OverheadStableTopDwellResult {
 const MAX_DWELL_DELTA_MS = 120;
 /** hold clock: ascent 제외 — delta >= 이 값이면 상승 중으로 간주, hold에 포함 안 함 */
 const ASCENT_DELTA_THRESHOLD_DEG = 1.0;
-/** dwell arming: arm이 settle된 후에만 hold clock 시작. |delta| < 이 값이어야 hold 누적 */
-const HOLD_ARMED_DELTA_MAX_DEG = 0.8;
-/** arming: hold clock 시작 전 필요한 연속 settle 프레임 수 */
-const HOLD_ARMING_CONSECUTIVE = 2;
+/** dwell arming: arm이 settle된 후에만 hold clock 시작. |delta| < 이 값이어야 hold 누적 (완화: 0.8→1.5) */
+const HOLD_ARMED_DELTA_MAX_DEG = 1.5;
+/** arming: hold clock 시작 전 필요한 연속 settle 프레임 수 (완화: 2→1) */
+const HOLD_ARMING_CONSECUTIVE = 1;
+/** jitter grace: !isSettled 연속 이 프레임 수 이내면 holdArmed 유지 */
+const HOLD_GRACE_FRAMES = 2;
 
 /**
  * 연속 stable-top dwell time 계산.
@@ -46,8 +48,9 @@ const HOLD_ARMING_CONSECUTIVE = 2;
  *
  * PR fix: hold = armed stable-top dwell만. 상승 중 프레임 제외, arming 후에만 hold clock 시작.
  * - ascent (delta >= 1.0) 제외
- * - hold clock은 |delta| < 0.8 인 settle 상태에서만 누적
- * - segment 진입 후 2연속 settle 되어야 hold clock 시작 (holdArmedAtMs)
+ * - hold clock은 |delta| < 1.5 인 settle 상태에서만 누적 (완화)
+ * - segment 진입 후 1연속 settle이면 hold clock 시작 (holdArmedAtMs)
+ * - jitter grace: !isSettled 연속 2프레임 이내면 holdArmed 유지
  */
 export function computeOverheadStableTopDwell(
   frames: PoseFeaturesFrame[],
@@ -87,6 +90,7 @@ export function computeOverheadStableTopDwell(
   let prevStableTimestampMs: number | null = null;
   let holdArmed = false;
   let armedStreak = 0;
+  let graceFramesRemaining = HOLD_GRACE_FRAMES;
   let holdArmedAtMs: number | undefined;
   let bestDwellMs = 0;
   let bestEnteredMs: number | undefined;
@@ -103,7 +107,7 @@ export function computeOverheadStableTopDwell(
       typeof e === 'number' && e >= floorDeg && Math.abs(delta) < deltaMax;
     /** ascent 제외: delta >= 1.0 이면 상승 중 */
     const isNotAscent = delta < ASCENT_DELTA_THRESHOLD_DEG;
-    /** arm settled: |delta| < 0.8 — hold clock 누적 조건 */
+    /** arm settled: |delta| < 1.5 — hold clock 누적 조건 (완화) */
     const isSettled =
       typeof e === 'number' &&
       e >= floorDeg &&
@@ -121,6 +125,7 @@ export function computeOverheadStableTopDwell(
         prevStableTimestampMs = f.timestampMs;
         holdArmed = false;
         armedStreak = 0;
+        graceFramesRemaining = HOLD_GRACE_FRAMES;
         holdArmedAtMs = undefined;
         segmentCount += 1;
       }
@@ -131,9 +136,11 @@ export function computeOverheadStableTopDwell(
           prevStableTimestampMs = f.timestampMs;
           holdArmed = false;
           armedStreak = 0;
+          graceFramesRemaining = HOLD_GRACE_FRAMES;
           holdArmedAtMs = undefined;
           segmentCount += 1;
         } else if (isSettled) {
+          graceFramesRemaining = HOLD_GRACE_FRAMES;
           if (!holdArmed) {
             armedStreak += 1;
             if (armedStreak >= HOLD_ARMING_CONSECUTIVE) {
@@ -154,7 +161,13 @@ export function computeOverheadStableTopDwell(
           }
         } else {
           armedStreak = 0;
-          holdArmed = false;
+          if (holdArmed) {
+            graceFramesRemaining -= 1;
+            if (graceFramesRemaining <= 0) {
+              holdArmed = false;
+              holdArmedAtMs = undefined;
+            }
+          }
           prevStableTimestampMs = f.timestampMs;
         }
       }
@@ -165,6 +178,7 @@ export function computeOverheadStableTopDwell(
       prevStableTimestampMs = null;
       holdArmed = false;
       armedStreak = 0;
+      graceFramesRemaining = HOLD_GRACE_FRAMES;
       holdArmedAtMs = undefined;
     }
   }
