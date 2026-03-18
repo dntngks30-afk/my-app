@@ -141,5 +141,15 @@ const shortTopHoldStats = { ...OH_STATS, captureDurationMs: 1500 };
 const shortTopHoldGate = evaluateExerciseAutoProgress('overhead-reach', shortTopHoldLandmarks, shortTopHoldStats);
 ok('L: short top hold (< 1.2s) does not satisfy completion', !shortTopHoldGate.completionSatisfied);
 
+// M. PR state-separation: topDetectedAtMs and holdArmedAtMs exist when hold > 0
+const realHm = realResult.debug?.highlightedMetrics;
+const realTopDet = realHm?.topDetectedAtMs;
+const realHoldArm = realHm?.holdArmedAtMs;
+const realHoldMs = realResult.rawMetrics?.find((m) => m.name === 'hold_duration')?.value ?? 0;
+ok(
+  'M: topDetectedAtMs and holdArmedAtMs exist when hold > 0 (state separation)',
+  realHoldMs <= 0 || (realTopDet != null && realHoldArm != null && realTopDet <= realHoldArm)
+);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

@@ -74,9 +74,13 @@ export interface OverheadSuccessSnapshot extends SuccessSnapshotBase {
   pagePassReady: boolean;
   effectivePassLatched: boolean;
   successOpenedByOverhead: SuccessOpenedBy;
+  topDetectedAtMs: number | undefined;
   topEntryAtMs: number | undefined;
   stableTopEntryAtMs: number | undefined;
+  holdArmedAtMs: number | undefined;
+  holdAccumulationStartedAtMs: number | undefined;
   holdSatisfiedAtMs: number | undefined;
+  holdArmingBlockedReason: string | null;
   successTriggeredAtMs: number;
 }
 
@@ -156,9 +160,14 @@ export function recordOverheadSuccessSnapshot(options: RecordOverheadSuccessOpti
       pagePassReady: options.pagePassReady,
       effectivePassLatched: options.effectivePassLatched,
       successOpenedByOverhead: options.successOpenedBy,
+      topDetectedAtMs: typeof hm?.topDetectedAtMs === 'number' ? hm.topDetectedAtMs : undefined,
       topEntryAtMs: typeof hm?.topEntryAtMs === 'number' ? hm.topEntryAtMs : undefined,
       stableTopEntryAtMs: typeof hm?.stableTopEntryAtMs === 'number' ? hm.stableTopEntryAtMs : undefined,
+      holdArmedAtMs: typeof hm?.holdArmedAtMs === 'number' ? hm.holdArmedAtMs : undefined,
+      holdAccumulationStartedAtMs:
+        typeof hm?.holdAccumulationStartedAtMs === 'number' ? hm.holdAccumulationStartedAtMs : undefined,
       holdSatisfiedAtMs: typeof hm?.holdSatisfiedAtMs === 'number' ? hm.holdSatisfiedAtMs : undefined,
+      holdArmingBlockedReason: hm?.holdArmingBlockedReason ?? null,
       successTriggeredAtMs: options.passLatchedAtMs,
     };
     pushSuccessSnapshot(snapshot);

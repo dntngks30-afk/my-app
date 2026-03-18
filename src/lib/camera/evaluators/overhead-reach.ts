@@ -20,14 +20,19 @@ export const OVERHEAD_STABLE_TOP_CONSECUTIVE = 3;
 
 export interface OverheadStableTopDwellResult {
   holdDurationMs: number;
+  /** first frame at top (e >= floor) — top 도달 신호 */
+  topDetectedAtMs: number | undefined;
+  /** first frame of settled segment — top에서 움직임 안정 후 */
   stableTopEnteredAtMs: number | undefined;
   holdArmedAtMs: number | undefined;
+  holdAccumulationStartedAtMs: number | undefined;
   stableTopExitedAtMs: number | undefined;
   stableTopDwellMs: number;
   stableTopSegmentCount: number;
   holdComputationMode: 'dwell';
   /** trace: legacy first~last peak span (비교용) */
   holdDurationMsLegacySpan: number;
+  holdArmingBlockedReason: string | null;
 }
 
 /** timestamp gap > 이 값이면 segment break — 프레임 누락 시 누적 불가 */
@@ -36,21 +41,21 @@ const MAX_DWELL_DELTA_MS = 120;
 const ASCENT_DELTA_THRESHOLD_DEG = 1.0;
 /** dwell arming: arm이 settle된 후에만 hold clock 시작. |delta| < 이 값이어야 hold 누적 (완화: 0.8→1.5) */
 const HOLD_ARMED_DELTA_MAX_DEG = 1.5;
-/** arming: hold clock 시작 전 필요한 연속 settle 프레임 수 (완화: 2→1) */
+/** segment 진입: top 도달 후 N연속 settled 필요 — topDetected와 holdArmed 분리 */
+const STABLE_TOP_SETTLE_CONSECUTIVE = 2;
+/** hold clock: segment 진입 후 즉시 armed (segment = settled run) */
 const HOLD_ARMING_CONSECUTIVE = 1;
 /** jitter grace: !isSettled 연속 이 프레임 수 이내면 holdArmed 유지 */
 const HOLD_GRACE_FRAMES = 2;
 
 /**
  * 연속 stable-top dwell time 계산.
- * stable top: elevation >= floor, |delta| < deltaMax.
- * 3연속 진입 후 구간 시작, 깨지면 reset. 최장 구간 dwell = hold.
  *
- * PR fix: hold = armed stable-top dwell만. 상승 중 프레임 제외, arming 후에만 hold clock 시작.
- * - ascent (delta >= 1.0) 제외
- * - hold clock은 |delta| < 1.5 인 settle 상태에서만 누적 (완화)
- * - segment 진입 후 1연속 settle이면 hold clock 시작 (holdArmedAtMs)
- * - jitter grace: !isSettled 연속 2프레임 이내면 holdArmed 유지
+ * PR state-separation: topDetected ≠ holdArmed.
+ * - topDetectedAtMs: first frame e >= floor (top 도달)
+ * - stableTopEntryAtMs: first frame of N consecutive settled (움직임 안정 후)
+ * - holdArmedAtMs: stableTopEntryAtMs (hold clock 시작)
+ * - hold = armed 이후 연속 dwell만 누적
  */
 export function computeOverheadStableTopDwell(
   frames: PoseFeaturesFrame[],
@@ -84,7 +89,9 @@ export function computeOverheadStableTopDwell(
       : 0;
   })();
 
-  let stableStreak = 0;
+  let topDetectedAtMs: number | undefined;
+  let settledStreak = 0;
+  let settledRunStartMs: number | null = null;
   let segmentStartMs: number | null = null;
   let segmentDwellMs = 0;
   let prevStableTimestampMs: number | null = null;
@@ -92,106 +99,139 @@ export function computeOverheadStableTopDwell(
   let armedStreak = 0;
   let graceFramesRemaining = HOLD_GRACE_FRAMES;
   let holdArmedAtMs: number | undefined;
+  let holdAccumulationStartedAtMs: number | undefined;
   let bestDwellMs = 0;
   let bestEnteredMs: number | undefined;
   let bestExitedMs: number | undefined;
   let bestHoldArmedMs: number | undefined;
+  let bestAccumulationStartedMs: number | undefined;
   let segmentCount = 0;
+  let holdArmingBlockedReason: string | null = null;
 
   for (let i = 0; i < valid.length; i++) {
     const f = valid[i]!;
     const e = f.derived.armElevationAvg;
     const prev = i > 0 ? valid[i - 1]!.derived.armElevationAvg : null;
     const delta = typeof e === 'number' && typeof prev === 'number' ? e - prev : 0;
-    const isStable =
-      typeof e === 'number' && e >= floorDeg && Math.abs(delta) < deltaMax;
+    const atTop = typeof e === 'number' && e >= floorDeg;
+    const isStable = atTop && Math.abs(delta) < deltaMax;
     /** ascent 제외: delta >= 1.0 이면 상승 중 */
     const isNotAscent = delta < ASCENT_DELTA_THRESHOLD_DEG;
-    /** arm settled: |delta| < 1.5 — hold clock 누적 조건 (완화) */
+    /** arm settled: |delta| < 1.5 — hold clock 누적 조건 */
     const isSettled =
-      typeof e === 'number' &&
-      e >= floorDeg &&
+      atTop &&
       Math.abs(delta) < HOLD_ARMED_DELTA_MAX_DEG &&
       isNotAscent;
+
+    if (atTop && topDetectedAtMs === undefined) {
+      topDetectedAtMs = f.timestampMs;
+    }
 
     const timestampDeltaMs =
       prevStableTimestampMs !== null ? f.timestampMs - prevStableTimestampMs : 0;
 
-    if (isStable) {
-      stableStreak += 1;
-      if (stableStreak >= consecutive && segmentStartMs === null) {
-        segmentStartMs = f.timestampMs;
-        segmentDwellMs = 0;
+    if (isSettled) {
+      if (settledStreak === 0) settledRunStartMs = f.timestampMs;
+      settledStreak += 1;
+      if (
+        settledStreak >= STABLE_TOP_SETTLE_CONSECUTIVE &&
+        topDetectedAtMs !== undefined &&
+        segmentStartMs === null &&
+        settledRunStartMs !== null
+      ) {
+        segmentStartMs = settledRunStartMs;
+        holdArmed = true;
+        holdArmedAtMs = settledRunStartMs;
+        holdAccumulationStartedAtMs = settledRunStartMs;
         prevStableTimestampMs = f.timestampMs;
+        segmentCount += 1;
+        holdArmingBlockedReason = null;
+      }
+      if (segmentStartMs !== null) {
+        if (timestampDeltaMs > MAX_DWELL_DELTA_MS) {
+          segmentStartMs = null;
+          segmentDwellMs = 0;
+          prevStableTimestampMs = f.timestampMs;
+          holdArmed = false;
+          holdArmedAtMs = undefined;
+          holdAccumulationStartedAtMs = undefined;
+          graceFramesRemaining = HOLD_GRACE_FRAMES;
+          armedStreak = 0;
+        }
+        if (
+          segmentStartMs === null &&
+          settledStreak >= STABLE_TOP_SETTLE_CONSECUTIVE &&
+          topDetectedAtMs !== undefined &&
+          settledRunStartMs !== null
+        ) {
+          segmentStartMs = settledRunStartMs;
+          holdArmed = true;
+          holdArmedAtMs = settledRunStartMs;
+          holdAccumulationStartedAtMs = settledRunStartMs;
+          prevStableTimestampMs = f.timestampMs;
+          segmentCount += 1;
+          holdArmingBlockedReason = null;
+        }
+        if (holdArmed) {
+          graceFramesRemaining = HOLD_GRACE_FRAMES;
+          armedStreak = 0;
+          segmentDwellMs += timestampDeltaMs;
+          prevStableTimestampMs = f.timestampMs;
+          if (segmentDwellMs > bestDwellMs) {
+            bestDwellMs = segmentDwellMs;
+            bestEnteredMs = segmentStartMs;
+            bestExitedMs = f.timestampMs;
+            bestHoldArmedMs = holdArmedAtMs;
+            bestAccumulationStartedMs = holdAccumulationStartedAtMs;
+          }
+        }
+      }
+    } else {
+      settledStreak = 0;
+      settledRunStartMs = null;
+      if (segmentStartMs !== null) {
+        armedStreak = 0;
+        if (holdArmed) {
+          graceFramesRemaining -= 1;
+          if (graceFramesRemaining <= 0) {
+            holdArmed = false;
+            holdArmedAtMs = undefined;
+            holdAccumulationStartedAtMs = undefined;
+          }
+        }
+        if (atTop) prevStableTimestampMs = f.timestampMs;
+      }
+      if (!atTop) {
+        segmentStartMs = null;
+        segmentDwellMs = 0;
+        prevStableTimestampMs = null;
         holdArmed = false;
         armedStreak = 0;
         graceFramesRemaining = HOLD_GRACE_FRAMES;
         holdArmedAtMs = undefined;
-        segmentCount += 1;
+        holdAccumulationStartedAtMs = undefined;
       }
-      if (segmentStartMs !== null) {
-        if (timestampDeltaMs > MAX_DWELL_DELTA_MS) {
-          segmentStartMs = f.timestampMs;
-          segmentDwellMs = 0;
-          prevStableTimestampMs = f.timestampMs;
-          holdArmed = false;
-          armedStreak = 0;
-          graceFramesRemaining = HOLD_GRACE_FRAMES;
-          holdArmedAtMs = undefined;
-          segmentCount += 1;
-        } else if (isSettled) {
-          graceFramesRemaining = HOLD_GRACE_FRAMES;
-          if (!holdArmed) {
-            armedStreak += 1;
-            if (armedStreak >= HOLD_ARMING_CONSECUTIVE) {
-              holdArmed = true;
-              holdArmedAtMs = f.timestampMs;
-              prevStableTimestampMs = f.timestampMs;
-            }
-          }
-          if (holdArmed) {
-            segmentDwellMs += timestampDeltaMs;
-            prevStableTimestampMs = f.timestampMs;
-            if (segmentDwellMs > bestDwellMs) {
-              bestDwellMs = segmentDwellMs;
-              bestEnteredMs = segmentStartMs;
-              bestExitedMs = f.timestampMs;
-              bestHoldArmedMs = holdArmedAtMs;
-            }
-          }
-        } else {
-          armedStreak = 0;
-          if (holdArmed) {
-            graceFramesRemaining -= 1;
-            if (graceFramesRemaining <= 0) {
-              holdArmed = false;
-              holdArmedAtMs = undefined;
-            }
-          }
-          prevStableTimestampMs = f.timestampMs;
-        }
-      }
-    } else {
-      stableStreak = 0;
-      segmentStartMs = null;
-      segmentDwellMs = 0;
-      prevStableTimestampMs = null;
-      holdArmed = false;
-      armedStreak = 0;
-      graceFramesRemaining = HOLD_GRACE_FRAMES;
-      holdArmedAtMs = undefined;
     }
+  }
+
+  if (holdArmingBlockedReason === null && bestDwellMs === 0 && topDetectedAtMs !== undefined) {
+    holdArmingBlockedReason = 'settle_not_reached';
+  } else if (topDetectedAtMs === undefined) {
+    holdArmingBlockedReason = 'no_top_detected';
   }
 
   return {
     holdDurationMs: bestDwellMs,
+    topDetectedAtMs,
     stableTopEnteredAtMs: bestEnteredMs,
     holdArmedAtMs: bestHoldArmedMs,
+    holdAccumulationStartedAtMs: bestAccumulationStartedMs,
     stableTopExitedAtMs: bestExitedMs,
     stableTopDwellMs: bestDwellMs,
     stableTopSegmentCount: segmentCount,
     holdComputationMode: 'dwell',
     holdDurationMsLegacySpan: legacySpan,
+    holdArmingBlockedReason,
   };
 }
 
@@ -278,23 +318,27 @@ export function evaluateOverheadReachFromPoseFrames(
     }
   }
 
+  const topDetectedIdx = valid.findIndex(
+    (f) =>
+      typeof f.derived.armElevationAvg === 'number' &&
+      f.derived.armElevationAvg >= OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG
+  );
   const topConfirmedPeaks =
-    stableTopEntryIndex >= 0
-      ? peakFrames.filter((f) => valid.indexOf(f) >= stableTopEntryIndex)
-      : [];
+    topDetectedIdx >= 0
+      ? peakFrames.filter((f) => valid.indexOf(f) >= topDetectedIdx)
+      : stableTopEntryIndex >= 0
+        ? peakFrames.filter((f) => valid.indexOf(f) >= stableTopEntryIndex)
+        : [];
   const peakCount = topConfirmedPeaks.length;
 
   /** PR overhead-dwell: 연속 stable-top dwell time. peak span 아님. */
   const dwellResult = computeOverheadStableTopDwell(valid);
   const holdDurationMs = dwellResult.holdDurationMs;
-  const stableTopEntryAtMs =
-    stableTopEntryIndex >= 0 && valid[stableTopEntryIndex]
-      ? valid[stableTopEntryIndex]!.timestampMs
-      : 0;
-  const topEntryAtMs = stableTopEntryAtMs;
+  const topEntryAtMs = dwellResult.topDetectedAtMs;
+  const stableTopEntryAtMs = dwellResult.stableTopEnteredAtMs;
   const holdSatisfiedAtMs =
-    holdDurationMs >= 1200 && dwellResult.stableTopEnteredAtMs !== undefined
-      ? dwellResult.stableTopEnteredAtMs + 1200
+    holdDurationMs >= 1200 && dwellResult.holdArmedAtMs !== undefined
+      ? dwellResult.holdArmedAtMs + 1200
       : undefined;
 
   if (raiseCount === 0 || peakCount === 0) {
@@ -378,15 +422,18 @@ export function evaluateOverheadReachFromPoseFrames(
         raiseCount,
         peakCount,
         holdDurationMs,
-        topEntryAtMs,
-        stableTopEntryAtMs: stableTopEntryAtMs || undefined,
+        topDetectedAtMs: dwellResult.topDetectedAtMs,
+        topEntryAtMs: topEntryAtMs ?? undefined,
+        stableTopEntryAtMs: stableTopEntryAtMs ?? undefined,
+        holdArmedAtMs: dwellResult.holdArmedAtMs,
+        holdAccumulationStartedAtMs: dwellResult.holdAccumulationStartedAtMs,
         holdAccumulationMs: holdDurationMs,
         holdSatisfiedAtMs,
+        holdArmingBlockedReason: dwellResult.holdArmingBlockedReason,
         peakArmElevation:
           armElevationAvgValues.length > 0 ? Math.round(Math.max(...armElevationAvgValues)) : null,
         /** PR overhead-dwell: trace fields */
         stableTopEnteredAtMs: dwellResult.stableTopEnteredAtMs,
-        holdArmedAtMs: dwellResult.holdArmedAtMs,
         stableTopExitedAtMs: dwellResult.stableTopExitedAtMs,
         stableTopDwellMs: dwellResult.stableTopDwellMs,
         stableTopSegmentCount: dwellResult.stableTopSegmentCount,

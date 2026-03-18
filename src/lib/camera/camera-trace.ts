@@ -120,9 +120,13 @@ export interface AttemptSnapshot {
       holdTooShort: boolean;
       topReachDetected: boolean;
       upwardMotionDetected: boolean;
+      topDetectedAtMs?: number;
       topEntryAtMs?: number;
       stableTopEntryAtMs?: number;
+      holdArmedAtMs?: number;
+      holdAccumulationStartedAtMs?: number;
       holdSatisfiedAtMs?: number;
+      holdArmingBlockedReason?: string | null;
       holdRemainingMsAtCue?: number;
       holdCuePlayed?: boolean;
       holdCueSuppressedReason?: string | null;
@@ -134,7 +138,6 @@ export interface AttemptSnapshot {
       dwellHoldDurationMs?: number;
       legacyHoldDurationMs?: number;
       stableTopEnteredAtMs?: number;
-      holdArmedAtMs?: number;
       stableTopExitedAtMs?: number;
       stableTopDwellMs?: number;
       stableTopSegmentCount?: number;
@@ -321,9 +324,14 @@ function buildDiagnosisSummary(
     const raiseCount = typeof hm?.raiseCount === 'number' ? hm.raiseCount : 0;
     const peakCount = typeof hm?.peakCount === 'number' ? hm.peakCount : 0;
     const holdDurationMs = typeof hm?.holdDurationMs === 'number' ? hm.holdDurationMs : 0;
+    const topDetectedAtMs = typeof hm?.topDetectedAtMs === 'number' ? hm.topDetectedAtMs : undefined;
     const topEntryAtMs = typeof hm?.topEntryAtMs === 'number' ? hm.topEntryAtMs : undefined;
     const stableTopEntryAtMs =
       typeof hm?.stableTopEntryAtMs === 'number' ? hm.stableTopEntryAtMs : undefined;
+    const holdArmedAtMs = typeof hm?.holdArmedAtMs === 'number' ? hm.holdArmedAtMs : undefined;
+    const holdAccumulationStartedAtMs =
+      typeof hm?.holdAccumulationStartedAtMs === 'number' ? hm.holdAccumulationStartedAtMs : undefined;
+    const holdArmingBlockedReason = hm?.holdArmingBlockedReason ?? undefined;
     const holdAccumulationMs = typeof hm?.holdAccumulationMs === 'number' ? hm.holdAccumulationMs : holdDurationMs;
     const holdSatisfiedAtMs = typeof hm?.holdSatisfiedAtMs === 'number' ? hm.holdSatisfiedAtMs : undefined;
     const peakElevation =
@@ -351,7 +359,6 @@ function buildDiagnosisSummary(
     const dwellHoldDurationMs = typeof hm?.dwellHoldDurationMs === 'number' ? hm.dwellHoldDurationMs : holdDurationMs;
     const legacyHoldDurationMs = typeof hm?.legacyHoldDurationMs === 'number' ? hm.legacyHoldDurationMs : holdDurationMsLegacySpan;
     const stableTopEnteredAtMs = typeof hm?.stableTopEnteredAtMs === 'number' ? hm.stableTopEnteredAtMs : undefined;
-    const holdArmedAtMs = typeof hm?.holdArmedAtMs === 'number' ? hm.holdArmedAtMs : undefined;
     const stableTopExitedAtMs = typeof hm?.stableTopExitedAtMs === 'number' ? hm.stableTopExitedAtMs : undefined;
     const stableTopDwellMs = typeof hm?.stableTopDwellMs === 'number' ? hm.stableTopDwellMs : undefined;
     const stableTopSegmentCount = typeof hm?.stableTopSegmentCount === 'number' ? hm.stableTopSegmentCount : undefined;
@@ -365,9 +372,15 @@ function buildDiagnosisSummary(
       holdTooShort: gate.failureReasons?.includes('hold_too_short') ?? false,
       topReachDetected: peakCount > 0,
       upwardMotionDetected: raiseCount > 0,
+      topDetectedAtMs,
       topEntryAtMs,
       stableTopEntryAtMs,
-      holdSatisfiedAtMs: holdSatisfiedAtMs ?? (holdSatisfied && topEntryAtMs != null ? topEntryAtMs + REQUIRED_HOLD_MS : undefined),
+      holdArmedAtMs,
+      holdAccumulationStartedAtMs,
+      holdSatisfiedAtMs:
+        holdSatisfiedAtMs ??
+        (holdSatisfied && holdArmedAtMs != null ? holdArmedAtMs + REQUIRED_HOLD_MS : undefined),
+      holdArmingBlockedReason: holdArmingBlockedReason ?? undefined,
       holdRemainingMsAtCue: REQUIRED_HOLD_MS - holdDurationMs,
       holdCuePlayed: options?.holdCuePlayed,
       holdCueSuppressedReason: isHoldCue ? (cueObs?.suppressedReason ?? null) : undefined,
