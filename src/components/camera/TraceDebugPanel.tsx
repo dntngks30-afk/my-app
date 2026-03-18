@@ -184,7 +184,10 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
                 <p className="font-medium text-slate-400">Latest diagnosis</p>
                 <p>comp={d.completionSatisfied} passConf={d.passConfirmed} latched={d.passLatched}</p>
                 {d.squatCycle && (
-                  <p>peakDepth={d.squatCycle.peakDepth ?? 'n/a'} bottom={d.squatCycle.bottomDetected} recovery={d.squatCycle.recoveryDetected} startBeforeBottom={d.squatCycle.startBeforeBottom}</p>
+                  <>
+                    <p>peakDepth={d.squatCycle.peakDepth ?? 'n/a'} bottom={d.squatCycle.bottomDetected} recovery={d.squatCycle.recoveryDetected} startBeforeBottom={d.squatCycle.startBeforeBottom}</p>
+                    <p className="text-slate-500">PR-A4: path={d.squatCycle.completionPathUsed ?? 'n/a'} rejected={d.squatCycle.completionRejectedReason ?? 'n/a'} cycleMs={d.squatCycle.cycleDurationMs ?? 'n/a'}</p>
+                  </>
                 )}
                 {d.overhead && (
                   <>

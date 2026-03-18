@@ -95,6 +95,43 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const startBeforeBottom = firstStartIdx >= 0 && (firstBottomIdx < 0 || firstStartIdx < firstBottomIdx);
   const repCountEstimate = cycleComplete ? 1 : 0;
 
+  /** PR-A4: cycle timing for trace — descendStartAt, reversalAt, ascendStartAt, recoveryAt, cycleDurationMs */
+  const firstDescentIdx = valid.findIndex((f) => f.phaseHint === 'descent');
+  const firstAscentIdx = valid.findIndex((f) => f.phaseHint === 'ascent');
+  const descendStartAtMs = firstDescentIdx >= 0 ? valid[firstDescentIdx]!.timestampMs : 0;
+  const ascendStartAtMs = firstAscentIdx >= 0 ? valid[firstAscentIdx]!.timestampMs : 0;
+  const reversalAtMs =
+    firstBottomIdx >= 0
+      ? valid[firstBottomIdx]!.timestampMs
+      : firstAscentIdx >= 0
+        ? ascendStartAtMs
+        : 0;
+  const peakIdx =
+    depthValues.length > 0
+      ? valid.reduce((bestIdx, f, i) => {
+          const d = f.derived.squatDepthProxy;
+          if (typeof d !== 'number') return bestIdx;
+          if (bestIdx < 0) return i;
+          const bestD = valid[bestIdx]!.derived.squatDepthProxy;
+          return typeof bestD === 'number' && d > bestD ? i : bestIdx;
+        }, -1)
+      : -1;
+  const peakAtMs = peakIdx >= 0 ? valid[peakIdx]!.timestampMs : 0;
+  const lastFrameMs = valid.length > 0 ? valid[valid.length - 1]!.timestampMs : 0;
+  const recoveryAtMs = peakIdx >= 0 && valid.length > peakIdx + 3 ? lastFrameMs : 0;
+  const cycleDurationMs =
+    descendStartAtMs > 0 && recoveryAtMs > 0 ? recoveryAtMs - descendStartAtMs : 0;
+  const prePeakDepths =
+    peakIdx > 0
+      ? valid
+          .slice(0, peakIdx)
+          .map((f) => f.derived.squatDepthProxy)
+          .filter((d): d is number => typeof d === 'number')
+      : [];
+  const minPrePeakDepth = prePeakDepths.length > 0 ? Math.min(...prePeakDepths) : 0;
+  const peakDepthVal = depthValues.length > 0 ? Math.max(...depthValues) : 0;
+  const downwardCommitmentDelta = peakDepthVal - minPrePeakDepth;
+
   if (descentCount === 0 || bottomCount === 0 || !ascentSatisfied) {
     completionHints.push('rep_phase_incomplete');
   } else if (!recovery.recovered) {
@@ -201,6 +238,13 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         repCount: repCountEstimate,
         cycleComplete: cycleComplete ? 1 : 0,
         startBeforeBottom: startBeforeBottom ? 1 : 0,
+        descendStartAtMs: descendStartAtMs || undefined,
+        peakAtMs: peakAtMs || undefined,
+        reversalAtMs: reversalAtMs || undefined,
+        ascendStartAtMs: ascendStartAtMs || undefined,
+        recoveryAtMs: recoveryAtMs || undefined,
+        cycleDurationMs: cycleDurationMs || undefined,
+        downwardCommitmentDelta: Math.round(downwardCommitmentDelta * 100) / 100,
       },
       perStepDiagnostics: perStepRecord,
     },

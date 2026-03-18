@@ -21,6 +21,7 @@ export type ExerciseGateStatus = 'pass' | 'retry' | 'fail' | 'detecting';
 export type CameraGuideTone = 'neutral' | 'warning' | 'success';
 
 /** PR G3: squat full-cycle observability (dev/debug only) */
+/** PR-A4: completionPathUsed, completionRejectedReason, cycle timing */
 export interface SquatCycleDebug {
   armingSatisfied: boolean;
   startPoseSatisfied: boolean;
@@ -36,6 +37,14 @@ export interface SquatCycleDebug {
   passBlockedReason: string | null;
   qualityInterpretationReason: string | null;
   passTriggeredAtPhase?: string;
+  completionPathUsed?: 'standard' | 'low_rom_reversal' | 'ultra_low_rom_reversal';
+  completionRejectedReason?: string | null;
+  descendStartAtMs?: number;
+  downwardCommitmentAtMs?: number;
+  reversalAtMs?: number;
+  ascendStartAtMs?: number;
+  recoveryAtMs?: number;
+  cycleDurationMs?: number;
 }
 
 export interface ExerciseGateResult {
@@ -576,6 +585,13 @@ function getSquatProgressionCompletionSatisfied(
   const depthBandLabel: 'shallow' | 'moderate' | 'deep' =
     depthBand === 2 ? 'deep' : depthBand === 1 ? 'moderate' : 'shallow';
 
+  const descendStartAtMs = getHighlightedMetric(result, 'descendStartAtMs') || undefined;
+  const peakAtMs = getHighlightedMetric(result, 'peakAtMs') || undefined;
+  const reversalAtMs = getHighlightedMetric(result, 'reversalAtMs') || undefined;
+  const ascendStartAtMs = getHighlightedMetric(result, 'ascendStartAtMs') || undefined;
+  const recoveryAtMs = getHighlightedMetric(result, 'recoveryAtMs') || undefined;
+  const cycleDurationMs = getHighlightedMetric(result, 'cycleDurationMs') || undefined;
+
   const squatCycleDebug: SquatCycleDebug = {
     armingSatisfied,
     startPoseSatisfied,
@@ -590,38 +606,57 @@ function getSquatProgressionCompletionSatisfied(
     depthBand: depthBandLabel,
     passBlockedReason: null,
     qualityInterpretationReason: null,
+    descendStartAtMs,
+    downwardCommitmentAtMs: peakAtMs,
+    reversalAtMs,
+    ascendStartAtMs,
+    recoveryAtMs,
+    cycleDurationMs,
   };
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';
+    squatCycleDebug.completionRejectedReason = 'guardrail_not_complete';
     return { satisfied: false, squatCycleDebug };
   }
   if (!armingSatisfied) {
     squatCycleDebug.passBlockedReason = 'arming_window';
+    squatCycleDebug.completionRejectedReason = 'arming_window';
     return { satisfied: false, squatCycleDebug };
   }
   if (!startPoseSatisfied) {
-    squatCycleDebug.passBlockedReason = startCount > 0 && !startBeforeBottom ? 'bottom_from_start' : 'start_pose_missing';
+    squatCycleDebug.passBlockedReason =
+      startCount > 0 && !startBeforeBottom ? 'bottom_from_start' : 'start_pose_missing';
+    squatCycleDebug.completionRejectedReason = squatCycleDebug.passBlockedReason;
     return { satisfied: false, squatCycleDebug };
   }
   if (!descendDetected) {
     squatCycleDebug.passBlockedReason = 'descend_not_detected';
+    squatCycleDebug.completionRejectedReason = 'descend_not_detected';
     return { satisfied: false, squatCycleDebug };
   }
   if (!excursionOrBottomConfirmed) {
     squatCycleDebug.passBlockedReason = 'excursion_not_confirmed';
+    squatCycleDebug.completionRejectedReason = 'excursion_not_confirmed';
     return { satisfied: false, squatCycleDebug };
   }
   if (!ascendDetected && !recoveryOrLowRom) {
     squatCycleDebug.passBlockedReason = 'ascent_recovery_missing';
+    squatCycleDebug.completionRejectedReason = 'ascent_recovery_missing';
     return { satisfied: false, squatCycleDebug };
   }
   if (!recoveryOrLowRom) {
     squatCycleDebug.passBlockedReason = 'recovery_not_confirmed';
+    squatCycleDebug.completionRejectedReason = 'recovery_not_confirmed';
     return { satisfied: false, squatCycleDebug };
   }
   /* PR G6: depth는 completion gate에서 제거. quality band로만 해석. */
-
+  /* PR-A4: completionPathUsed for trace */
+  squatCycleDebug.completionPathUsed = ultraLowRomRecoveryConfirmed
+    ? 'ultra_low_rom_reversal'
+    : lowRomRecoveryConfirmed
+      ? 'low_rom_reversal'
+      : 'standard';
   squatCycleDebug.passTriggeredAtPhase = 'recovery';
   squatCycleDebug.qualityInterpretationReason =
     depthBand === 0 ? 'valid_limited_shallow' : 'valid_strong';

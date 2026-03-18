@@ -64,7 +64,7 @@ export interface AttemptSnapshot {
     passLatched: boolean;
     autoNextObservation?: string;
     sampledFrameCount?: number;
-    /** squat */
+    /** squat — PR-A4 cycle trace */
     squatCycle?: {
       peakDepth?: number;
       depthBand?: string;
@@ -74,6 +74,14 @@ export interface AttemptSnapshot {
       startBeforeBottom: boolean;
       cycleComplete: boolean;
       passBlockedReason: string | null;
+      completionPathUsed?: string;
+      completionRejectedReason?: string | null;
+      descendStartAtMs?: number;
+      downwardCommitmentAtMs?: number;
+      reversalAtMs?: number;
+      ascendStartAtMs?: number;
+      recoveryAtMs?: number;
+      cycleDurationMs?: number;
     };
     /** overhead — PR-C4 trace */
     overhead?: {
@@ -229,6 +237,14 @@ function buildDiagnosisSummary(
       startBeforeBottom: sc.startBeforeBottom,
       cycleComplete: sc.cycleComplete,
       passBlockedReason: sc.passBlockedReason,
+      completionPathUsed: sc.completionPathUsed,
+      completionRejectedReason: sc.completionRejectedReason,
+      descendStartAtMs: sc.descendStartAtMs,
+      downwardCommitmentAtMs: sc.downwardCommitmentAtMs,
+      reversalAtMs: sc.reversalAtMs,
+      ascendStartAtMs: sc.ascendStartAtMs,
+      recoveryAtMs: sc.recoveryAtMs,
+      cycleDurationMs: sc.cycleDurationMs,
     };
   }
 

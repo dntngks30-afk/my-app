@@ -184,9 +184,13 @@ function getMotionCompleteness(
   }
 
   if (stepId === 'squat') {
-    const depthValues = frames
-      .map((frame) => frame.derived.squatDepthProxy)
-      .filter((value): value is number => typeof value === 'number');
+    /** PR-A4: cycle-proof-first — depth는 anti-noise 보조, completion은 cycle proof 중심 */
+    const MIN_CYCLE_DURATION_MS = 1200;
+    const MIN_DOWNWARD_COMMITMENT = 0.02;
+    const depthWithIndex = frames
+      .map((f, i) => ({ i, d: f.derived.squatDepthProxy }))
+      .filter((x): x is { i: number; d: number } => typeof x.d === 'number');
+    const depthValues = depthWithIndex.map((x) => x.d);
     const descentCount = frames.filter((frame) => frame.phaseHint === 'descent').length;
     const bottomCount = frames.filter((frame) => frame.phaseHint === 'bottom').length;
     const ascentCount = frames.filter((frame) => frame.phaseHint === 'ascent').length;
@@ -196,12 +200,41 @@ function getMotionCompleteness(
       recovery.recovered ||
       recovery.lowRomRecovered ||
       recovery.ultraLowRomRecovered;
+    const firstStartIdx = frames.findIndex((f) => f.phaseHint === 'start');
+    const firstBottomIdx = frames.findIndex((f) => f.phaseHint === 'bottom');
+    const startBeforeBottom =
+      firstStartIdx >= 0 && (firstBottomIdx < 0 || firstStartIdx < firstBottomIdx);
 
     if (depthValues.length < MIN_VALID_FRAMES) {
       flags.add('rep_incomplete');
       return { score: 0.2, status: 'partial' };
     }
-    const peakDepth = Math.max(...depthValues);
+    const peakSample = depthWithIndex.reduce((best, x) => (x.d > best.d ? x : best), {
+      i: -1,
+      d: 0,
+    });
+    const peakDepth = peakSample.d;
+    const prePeakDepths = depthWithIndex.filter((x) => x.i < peakSample.i).map((x) => x.d);
+    const minPrePeakDepth = prePeakDepths.length > 0 ? Math.min(...prePeakDepths) : 0;
+    const downwardCommitment = peakDepth - minPrePeakDepth;
+
+    if (descentCount === 0) {
+      flags.add('rep_incomplete');
+      return { score: clamp(peakDepth), status: 'partial' };
+    }
+    if (!startBeforeBottom) {
+      flags.add('rep_incomplete');
+      return { score: clamp(peakDepth), status: 'partial' };
+    }
+    if (stats.captureDurationMs < MIN_CYCLE_DURATION_MS) {
+      flags.add('rep_incomplete');
+      return { score: clamp(peakDepth), status: 'partial' };
+    }
+    if (downwardCommitment < MIN_DOWNWARD_COMMITMENT) {
+      flags.add('rep_incomplete');
+      return { score: clamp(peakDepth), status: 'partial' };
+    }
+
     /** PR G10: recovery proves meaningful excursion. Allow complete without bottom phase. */
     const standardExcursion = bottomCount > 0 || recovery.recovered;
     /** PR G11: low-ROM path — peak 7–10%, stricter recovery proof. */
@@ -215,12 +248,12 @@ function getMotionCompleteness(
       peakDepth < SQUAT_LOW_ROM_FLOOR &&
       recovery.ultraLowRomRecovered;
     const excursionOrBottom = standardExcursion || lowRomExcursion || ultraLowRomExcursion;
-    if (
-      peakDepth < SQUAT_ULTRA_LOW_ROM_FLOOR ||
-      descentCount === 0 ||
-      !excursionOrBottom ||
-      !ascentSatisfied
-    ) {
+
+    if (!excursionOrBottom || !ascentSatisfied) {
+      flags.add('rep_incomplete');
+      return { score: clamp(peakDepth), status: 'partial' };
+    }
+    if (peakDepth < SQUAT_ULTRA_LOW_ROM_FLOOR) {
       flags.add('rep_incomplete');
       return { score: clamp(peakDepth), status: 'partial' };
     }
