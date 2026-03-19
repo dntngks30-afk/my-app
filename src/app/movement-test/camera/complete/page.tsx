@@ -56,7 +56,8 @@ export default function CameraCompletePage() {
   }, []);
 
   const handleViewResult = () => {
-    router.push('/movement-test/result');
+    // V2-05: 성공적 카메라 완료 → refined Deep Result V2 경로
+    router.push('/movement-test/refined');
   };
 
   const handleRetry = () => {
