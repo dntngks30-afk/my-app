@@ -11,18 +11,26 @@ import Link from 'next/link';
 import { supabaseBrowser } from '@/lib/supabase';
 
 /** 오픈 리다이렉트 방지 - 허용 prefix만 redirect에 사용 */
+/** FLOW-03: /onboarding-prep — public-first 결제 후 onboarding/claim 준비 진입 */
 const ALLOWED_NEXT_PREFIXES = [
   '/app/deep-test',
   '/app/home',
   '/app/deep-test/run',
   '/app/deep-test/result',
   '/app/reports',
+  '/onboarding-prep',
 ];
 
 function isValidNextForRedirect(next: string | undefined | null): boolean {
   if (!next || typeof next !== 'string') return false;
   if (!next.startsWith('/') || next.includes('//')) return false;
-  return ALLOWED_NEXT_PREFIXES.some((p) => next === p || next.startsWith(`${p}/`));
+  return ALLOWED_NEXT_PREFIXES.some(
+    (p) =>
+      next === p ||
+      next.startsWith(`${p}/`) ||
+      next.startsWith(`${p}?`) ||
+      next.startsWith(`${p}#`)
+  );
 }
 
 interface PaymentInfo {

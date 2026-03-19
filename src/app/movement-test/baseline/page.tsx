@@ -28,6 +28,7 @@ import { PublicResultRenderer } from '@/components/public-result/PublicResultRen
 import { persistPublicResult } from '@/lib/public-results/persistPublicResult';
 import { loadPublicResultHandoff } from '@/lib/public-results/public-result-handoff';
 import { loadPublicResult } from '@/lib/public-results/loadPublicResult';
+import { useExecutionStartBridge } from '@/lib/public-results/useExecutionStartBridge';
 import {
   PRIMARY_TYPE_LABELS,
   PRIMARY_TYPE_BRIEF,
@@ -187,8 +188,15 @@ export default function BaselinePage() {
   const router = useRouter();
   const [view, setView] = useState<BaselineView>('gate');
   const [baseline, setBaseline] = useState<FreeSurveyBaselineResult | null>(null);
+  const [publicResultIdForBridge, setPublicResultIdForBridge] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const { handleExecutionStart, isPending: bridgePending, error: bridgeError } = useExecutionStartBridge({
+    publicResultId: publicResultIdForBridge ?? loadPublicResultHandoff('baseline'),
+    stage: 'baseline',
+    returnPath: '/movement-test/baseline',
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -202,7 +210,7 @@ export default function BaselinePage() {
         if (handoffId) {
           const recovered = await loadPublicResult(handoffId);
           if (!cancelled && recovered && recovered.stage === 'baseline') {
-            // DB 복구 성공 → survey 재분석 없이 바로 렌더
+            setPublicResultIdForBridge(handoffId);
             setBaseline({
               result: recovered.result,
               baseline_meta: {
@@ -239,6 +247,7 @@ export default function BaselinePage() {
             stage: 'baseline',
             sourceInputs: Array.from(result.baseline_meta.source_inputs),
           }).then((r) => {
+            if (r.ok && !cancelled) setPublicResultIdForBridge(r.id);
             if (process.env.NODE_ENV !== 'production') {
               if (r.ok) console.info('[public-result] baseline saved:', r.id);
               else console.warn('[public-result] baseline save skipped:', r.reason);
@@ -304,25 +313,37 @@ export default function BaselinePage() {
             onCamera={handleCamera}
           />
         ) : (
-          /* V2-06: shared renderer 사용 */
-          <PublicResultRenderer
-            result={baseline.result}
-            stage="baseline"
-            onBack={handleBackToGate}
-            confidenceNote="설문 응답 완성도 및 축별 신호 격차 기반 계산"
-            actions={[
-              {
-                label: '카메라로 더 정밀하게 분석하기',
-                onClick: handleCamera,
-                variant: 'primary',
-              },
-              {
-                label: '설문 다시 하기',
-                onClick: handleRetake,
-                variant: 'ghost',
-              },
-            ]}
-          />
+          /* V2-06: shared renderer 사용 | FLOW-03: 실행 시작 CTA */
+          <div className="space-y-3 w-full max-w-md">
+            <PublicResultRenderer
+              result={baseline.result}
+              stage="baseline"
+              onBack={handleBackToGate}
+              confidenceNote="설문 응답 완성도 및 축별 신호 격차 기반 계산"
+              actions={[
+                {
+                  label: bridgePending ? '처리 중...' : '실행 시작하기',
+                  onClick: handleExecutionStart,
+                  variant: 'primary',
+                },
+                {
+                  label: '카메라로 더 정밀하게 분석하기',
+                  onClick: handleCamera,
+                  variant: 'secondary',
+                },
+                {
+                  label: '설문 다시 하기',
+                  onClick: handleRetake,
+                  variant: 'ghost',
+                },
+              ]}
+            />
+            {bridgeError && (
+              <p className="text-sm text-amber-400 text-center" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+                {bridgeError}
+              </p>
+            )}
+          </div>
         )}
       </main>
     </div>

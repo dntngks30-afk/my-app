@@ -21,19 +21,28 @@ function genRequestId(): string {
 }
 
 /** 오픈 리다이렉트 방지: 허용 prefix만 success_url next로 사용 */
+/** FLOW-03: /onboarding-prep, /movement-test — public-first 결제/취소 경로 */
 const ALLOWED_NEXT_PREFIXES = [
   '/app/deep-test',
   '/app/home',
   '/app/deep-test/run',
   '/app/deep-test/result',
   '/app/reports',
+  '/onboarding-prep',
+  '/movement-test',
 ] as const;
 
 function isValidNextPath(next: unknown): next is string {
   if (typeof next !== 'string' || next.length === 0) return false;
   if (!next.startsWith('/')) return false;
   if (next.includes('//')) return false;
-  return ALLOWED_NEXT_PREFIXES.some((p) => next === p || next.startsWith(`${p}/`));
+  return ALLOWED_NEXT_PREFIXES.some(
+    (p) =>
+      next === p ||
+      next.startsWith(`${p}/`) ||
+      next.startsWith(`${p}?`) ||
+      next.startsWith(`${p}#`)
+  );
 }
 
 async function getRequestOrigin() {
@@ -83,7 +92,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const { productId, planId: planIdFromBody, next, consent } = body;
+    const { productId, planId: planIdFromBody, next, cancelNext: cancelNextFromBody, consent } = body;
     const productIdStr = typeof productId === 'string' ? productId : '';
     const planIdStr = typeof planIdFromBody === 'string' ? planIdFromBody : '';
 
@@ -141,7 +150,11 @@ export async function POST(req: NextRequest) {
 
         const origin = await getRequestOrigin();
         const successNext = isValidNextPath(next) ? next : '/app/deep-test';
-        const cancelNext = isValidNextPath(next) ? next : '/app';
+        const cancelNext = isValidNextPath(cancelNextFromBody)
+          ? cancelNextFromBody
+          : isValidNextPath(next)
+            ? next
+            : '/app';
         const successUrl = `${origin}/payments/stripe-success?session_id={CHECKOUT_SESSION_ID}&next=${encodeURIComponent(successNext)}`;
         const cancelUrl = `${origin}/payments/stripe-cancel?next=${encodeURIComponent(cancelNext)}`;
 

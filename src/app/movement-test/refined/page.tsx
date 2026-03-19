@@ -30,6 +30,7 @@ import { PublicResultRenderer } from '@/components/public-result/PublicResultRen
 import { persistPublicResult } from '@/lib/public-results/persistPublicResult';
 import { loadPublicResultHandoff } from '@/lib/public-results/public-result-handoff';
 import { loadPublicResult } from '@/lib/public-results/loadPublicResult';
+import { useExecutionStartBridge } from '@/lib/public-results/useExecutionStartBridge';
 import type { FreeSurveyBaselineResult } from '@/lib/deep-v2/types';
 import type { UnifiedDeepResultV2 } from '@/lib/result/deep-result-v2-contract';
 import type { TestAnswerValue } from '@/features/movement-test/v2';
@@ -61,10 +62,17 @@ export default function RefinedResultPage() {
   const router = useRouter();
   const [refined, setRefined] = useState<CameraRefinedResult | null>(null);
   const [baselineFallback, setBaselineFallback] = useState<FreeSurveyBaselineResult | null>(null);
+  const [publicResultIdForBridge, setPublicResultIdForBridge] = useState<string | null>(null);
   // FLOW-02: DB에서 복구된 refined result (CameraRefinedResult 래퍼 없이 직접 렌더용)
   const [recoveredRefined, setRecoveredRefined] = useState<UnifiedDeepResultV2 | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const { handleExecutionStart, isPending: bridgePending, error: bridgeError } = useExecutionStartBridge({
+    publicResultId: publicResultIdForBridge ?? loadPublicResultHandoff('refined'),
+    stage: 'refined',
+    returnPath: '/movement-test/refined',
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +86,7 @@ export default function RefinedResultPage() {
         if (handoffId) {
           const recovered = await loadPublicResult(handoffId);
           if (!cancelled && recovered && recovered.stage === 'refined') {
+            setPublicResultIdForBridge(handoffId);
             setRecoveredRefined(recovered.result);
             if (process.env.NODE_ENV !== 'production') {
               console.info('[public-result] refined recovered from DB:', handoffId);
@@ -118,6 +127,7 @@ export default function RefinedResultPage() {
               stage: 'refined',
               sourceInputs: Array.from(refinedResult.refined_meta.source_inputs),
             }).then((r) => {
+              if (r.ok && !cancelled) setPublicResultIdForBridge(r.id);
               if (process.env.NODE_ENV !== 'production') {
                 if (r.ok) console.info('[public-result] refined saved:', r.id);
                 else console.warn('[public-result] refined save skipped:', r.reason);
@@ -142,6 +152,7 @@ export default function RefinedResultPage() {
 
   const handleRetake = useCallback(() => router.push('/'), [router]);
   const handleBack = useCallback(() => router.back(), [router]);
+  const handleCameraRetake = useCallback(() => router.push('/movement-test/camera'), [router]);
 
   if (loading) {
     return (
@@ -175,53 +186,77 @@ export default function RefinedResultPage() {
 
       <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-6 py-4">
         {recoveredRefined ? (
-          /* FLOW-02: DB에서 복구된 refined result (cameraEvidenceQuality 없음) */
-          <PublicResultRenderer
-            result={recoveredRefined}
-            stage="refined"
-            onBack={handleBack}
-            actions={[
-              {
-                label: '처음부터 다시 하기',
-                onClick: handleRetake,
-                variant: 'ghost',
-              },
-            ]}
-          />
+          /* FLOW-02: DB에서 복구된 refined | FLOW-03: 실행 시작 CTA */
+          <div className="space-y-3 w-full max-w-md">
+            <PublicResultRenderer
+              result={recoveredRefined}
+              stage="refined"
+              onBack={handleBack}
+              actions={[
+                {
+                  label: bridgePending ? '처리 중...' : '실행 시작하기',
+                  onClick: handleExecutionStart,
+                  variant: 'primary',
+                },
+                {
+                  label: '처음부터 다시 하기',
+                  onClick: handleRetake,
+                  variant: 'ghost',
+                },
+              ]}
+            />
+            {bridgeError && <p className="text-sm text-amber-400 text-center">{bridgeError}</p>}
+          </div>
         ) : refined ? (
-          /* V2-06: shared renderer — refined stage */
-          <PublicResultRenderer
-            result={refined.result}
-            stage="refined"
-            cameraEvidenceQuality={refined.refined_meta.camera_evidence_quality}
-            onBack={handleBack}
-            actions={[
-              {
-                label: '처음부터 다시 하기',
-                onClick: handleRetake,
-                variant: 'ghost',
-              },
-            ]}
-          />
+          /* V2-06: shared renderer — refined stage | FLOW-03: 실행 시작 CTA */
+          <div className="space-y-3 w-full max-w-md">
+            <PublicResultRenderer
+              result={refined.result}
+              stage="refined"
+              cameraEvidenceQuality={refined.refined_meta.camera_evidence_quality}
+              onBack={handleBack}
+              actions={[
+                {
+                  label: bridgePending ? '처리 중...' : '실행 시작하기',
+                  onClick: handleExecutionStart,
+                  variant: 'primary',
+                },
+                {
+                  label: '처음부터 다시 하기',
+                  onClick: handleRetake,
+                  variant: 'ghost',
+                },
+              ]}
+            />
+            {bridgeError && <p className="text-sm text-amber-400 text-center">{bridgeError}</p>}
+          </div>
         ) : baselineFallback ? (
-          /* V2-06: shared renderer — fallback stage (camera 신호 불충분) */
-          <PublicResultRenderer
-            result={baselineFallback.result}
-            stage="fallback"
-            onBack={handleBack}
-            actions={[
-              {
-                label: '카메라 다시 촬영하기',
-                onClick: () => router.push('/movement-test/camera'),
-                variant: 'secondary',
-              },
-              {
-                label: '처음부터 다시 하기',
-                onClick: handleRetake,
-                variant: 'ghost',
-              },
-            ]}
-          />
+          /* V2-06: shared renderer — fallback stage | FLOW-03: 실행 시작 CTA */
+          <div className="space-y-3 w-full max-w-md">
+            <PublicResultRenderer
+              result={baselineFallback.result}
+              stage="fallback"
+              onBack={handleBack}
+              actions={[
+                {
+                  label: bridgePending ? '처리 중...' : '실행 시작하기',
+                  onClick: handleExecutionStart,
+                  variant: 'primary',
+                },
+                {
+                  label: '카메라 다시 촬영하기',
+                  onClick: handleCameraRetake,
+                  variant: 'secondary',
+                },
+                {
+                  label: '처음부터 다시 하기',
+                  onClick: handleRetake,
+                  variant: 'ghost',
+                },
+              ]}
+            />
+            {bridgeError && <p className="text-sm text-amber-400 text-center">{bridgeError}</p>}
+          </div>
         ) : null}
       </main>
     </div>
