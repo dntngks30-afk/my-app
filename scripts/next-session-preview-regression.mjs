@@ -36,7 +36,7 @@ const bootstrapPreview = resolveBootstrapNextSessionPreview({
     estimated_duration: 780,
     segments: [
       { items: [{ name: '벽 슬라이드' }] },
-      { items: [{ name: '밴드 풀어파트' }, { name: '흉추 회전' }] },
+      { items: [{ name: '스탠딩 W 리트랙션' }, { name: '흉추 회전' }] },
     ],
   },
 })
@@ -67,7 +67,7 @@ const staleActiveAfterCompletion = resolveBootstrapNextSessionPreview({
     estimated_duration: 780,
     segments: [
       { items: [{ name: '벽 슬라이드' }] },
-      { items: [{ name: '밴드 풀어파트' }, { name: '흉추 회전' }] },
+      { items: [{ name: '스탠딩 W 리트랙션' }, { name: '흉추 회전' }] },
     ],
   },
 })
@@ -247,7 +247,7 @@ const lockedFromBootstrap = buildLockedNextPreviewFromBootstrapResponse({
   estimated_duration: 720,
   segments: [
     { items: [{ name: '벽 슬라이드' }] },
-    { items: [{ name: '밴드 풀어파트' }, { name: '흉추 회전' }] },
+    { items: [{ name: '스탠딩 W 리트랙션' }, { name: '흉추 회전' }] },
   ],
 })
 ok('buildLockedNextPreviewFromBootstrapResponse는 유효 payload 반환', lockedFromBootstrap.session_number === 4)

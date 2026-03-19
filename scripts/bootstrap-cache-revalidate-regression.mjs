@@ -56,7 +56,7 @@ function buildNextSessionPreview(sessionNumber = 4) {
     estimated_time: 13,
     exercise_count: 3,
     session_rationale: '상체 가동성과 몸통 정렬을 이어가는 다음 세션입니다',
-    exercises_preview: ['벽 슬라이드', '밴드 풀어파트', '흉추 회전'],
+    exercises_preview: ['벽 슬라이드', '스탠딩 W 리트랙션', '흉추 회전'],
   }
 }
 

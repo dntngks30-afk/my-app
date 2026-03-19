@@ -50,7 +50,7 @@ const templates = [
   },
   {
     id: 'main-2',
-    name: '밴드 풀어파트',
+    name: '스탠딩 W 리트랙션',
     level: 1,
     focus_tags: ['upper_back_activation'],
     contraindications: [],

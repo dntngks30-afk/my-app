@@ -219,7 +219,7 @@ export const EXERCISE_TEMPLATES: ReadonlyArray<ExerciseTemplate> = [
   },
   {
     id: 'M16',
-    name: '스텝다운',
+    name: '벽 짚고 스플릿 스쿼트',
     level: 3,
     focus_tags: ['lower_chain_stability', 'ankle_mobility'],
     avoid_tags: ['knee_load'],
@@ -227,7 +227,7 @@ export const EXERCISE_TEMPLATES: ReadonlyArray<ExerciseTemplate> = [
   },
   {
     id: 'M17',
-    name: '사이드 스텝',
+    name: '벽 짚고 스탠딩 힙 어브덕션',
     level: 2,
     focus_tags: ['glute_medius', 'glute_activation'],
     avoid_tags: [],
@@ -235,7 +235,7 @@ export const EXERCISE_TEMPLATES: ReadonlyArray<ExerciseTemplate> = [
   },
   {
     id: 'M18',
-    name: '숏풋 / 트라이포드 풋',
+    name: '양발 카프 레이즈',
     level: 1,
     focus_tags: ['ankle_mobility', 'basic_balance'],
     avoid_tags: [],

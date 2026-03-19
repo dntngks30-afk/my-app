@@ -85,7 +85,7 @@
       "title": "Release",
       "duration_sec": 60,
       "items": [
-        { "order": 1, "templateId": "M18", "name": "숏풋 / 트라이포드 풋", "sets": 1, "hold_seconds": 30 }
+        { "order": 1, "templateId": "M18", "name": "양발 카프 레이즈", "sets": 1, "hold_seconds": 30 }
       ]
     }
   ]
