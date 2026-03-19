@@ -24,7 +24,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { loadBridgeContext, clearBridgeContext } from '@/lib/public-results/public-result-bridge';
+import { loadBridgeContext } from '@/lib/public-results/public-result-bridge';
 
 const BG = '#0d161f';
 const ACCENT = '#ff7b00';
@@ -43,8 +43,7 @@ export default function OnboardingPrepPage() {
   }, [searchParams]);
 
   const handleContinue = () => {
-    clearBridgeContext();
-    router.push('/app/home');
+    router.push('/onboarding');
   };
 
   if (hasContext === null) {
@@ -83,14 +82,14 @@ export default function OnboardingPrepPage() {
             className="w-full min-h-[52px] rounded-2xl font-bold text-slate-900 transition-colors"
             style={{ backgroundColor: ACCENT, fontFamily: 'var(--font-sans-noto)' }}
           >
-            앱으로 이동하기
+            실행 준비하기
           </button>
           <Link
-            href="/my-routine"
+            href="/app/home"
             className="block w-full min-h-[48px] rounded-2xl font-medium text-slate-300 border border-white/20 hover:bg-white/5 transition-colors flex items-center justify-center"
             style={{ fontFamily: 'var(--font-sans-noto)' }}
           >
-            내 루틴 보기
+            나중에 하기
           </Link>
         </div>
 

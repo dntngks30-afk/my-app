@@ -17,6 +17,14 @@ export const FREQUENCY_TO_TOTAL: Record<number, number> = {
 export const VALID_FREQUENCIES = [2, 3, 4, 5] as const;
 export type TargetFrequency = (typeof VALID_FREQUENCIES)[number];
 
+/** FLOW-04: 운동 경험 수준 */
+export const VALID_EXPERIENCE_LEVELS = ['beginner', 'intermediate', 'advanced'] as const;
+export type ExerciseExperienceLevel = (typeof VALID_EXPERIENCE_LEVELS)[number];
+
+export function isValidExerciseExperienceLevel(v: unknown): v is ExerciseExperienceLevel {
+  return typeof v === 'string' && VALID_EXPERIENCE_LEVELS.includes(v as ExerciseExperienceLevel);
+}
+
 export function isValidTargetFrequency(
   v: unknown
 ): v is TargetFrequency {
@@ -39,11 +47,19 @@ export type ApplyTargetFrequencyResult =
  * target_frequency를 session_user_profile + session_program_progress에 적용.
  * profile API와 동일한 로직. 실패 시 ok:false 반환.
  */
+export type OnboardingProfileOptions = {
+  lifestyleTag?: string | null;
+  /** FLOW-04: 운동 경험 수준 */
+  exerciseExperienceLevel?: ExerciseExperienceLevel | null;
+  /** FLOW-04: 통증/불편감 유무 */
+  painOrDiscomfortPresent?: boolean | null;
+};
+
 export async function applyTargetFrequency(
   supabase: SupabaseClient,
   userId: string,
   targetFrequency: TargetFrequency,
-  options?: { lifestyleTag?: string | null }
+  options?: OnboardingProfileOptions
 ): Promise<ApplyTargetFrequencyResult> {
   const totalSessions = FREQUENCY_TO_TOTAL[targetFrequency];
 
@@ -62,16 +78,21 @@ export async function applyTargetFrequency(
     };
   }
 
+  const upsertPayload: Record<string, unknown> = {
+    user_id: userId,
+    target_frequency: targetFrequency,
+    lifestyle_tag: options?.lifestyleTag ?? null,
+  };
+  if (options?.exerciseExperienceLevel != null) {
+    upsertPayload.exercise_experience_level = options.exerciseExperienceLevel;
+  }
+  if (options?.painOrDiscomfortPresent != null) {
+    upsertPayload.pain_or_discomfort_present = options.painOrDiscomfortPresent;
+  }
+
   const { data: profile, error: profileErr } = await supabase
     .from('session_user_profile')
-    .upsert(
-      {
-        user_id: userId,
-        target_frequency: targetFrequency,
-        lifestyle_tag: options?.lifestyleTag ?? null,
-      },
-      { onConflict: 'user_id' }
-    )
+    .upsert(upsertPayload, { onConflict: 'user_id' })
     .select()
     .single();
 

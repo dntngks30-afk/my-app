@@ -20,6 +20,7 @@ import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import {
   applyTargetFrequency,
   isValidTargetFrequency,
+  isValidExerciseExperienceLevel,
 } from '@/lib/session/profile';
 
 export const dynamic = 'force-dynamic';
@@ -42,9 +43,19 @@ export async function POST(req: NextRequest) {
       ? body.lifestyle_tag.trim() || null
       : null;
 
+    const exerciseExperienceLevel = isValidExerciseExperienceLevel(body.exercise_experience_level)
+      ? body.exercise_experience_level
+      : undefined;
+    const painOrDiscomfortPresent =
+      typeof body.pain_or_discomfort_present === 'boolean'
+        ? body.pain_or_discomfort_present
+        : undefined;
+
     const supabase = getServerSupabaseAdmin();
     const result = await applyTargetFrequency(supabase, userId, rawFreq, {
       lifestyleTag,
+      exerciseExperienceLevel: exerciseExperienceLevel ?? null,
+      painOrDiscomfortPresent: painOrDiscomfortPresent ?? null,
     });
 
     if (!result.ok) {
