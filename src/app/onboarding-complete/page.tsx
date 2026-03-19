@@ -1,27 +1,72 @@
 'use client';
 
 /**
- * FLOW-04 — Onboarding Complete (Placeholder)
+ * FLOW-05 — Onboarding Complete (Claim Integration)
  *
  * 온보딩 저장 완료 후 진입점.
- * FLOW-05 claim, FLOW-06 session create 준비가 되면 이 페이지에서 연결.
+ * - mount 시 bridge context의 publicResultId로 claim을 best-effort 시도
+ * - claim 성공/실패 여부와 관계없이 UX 차단 없이 계속 진행
+ * - claim 완료 후 bridge context 삭제
+ * - FLOW-06 session create 준비가 되면 이 페이지에서 추가 연결
  *
- * 현재: /app/home으로 이동하는 bridge.
+ * ─── claim 통합 포인트 ────────────────────────────────────────────────────────
+ * - bridge context에서 publicResultId, anonId 읽음
+ * - claimPublicResultClient로 best-effort POST
+ * - 성공: 'claimed' 또는 'already_owned' → 계속
+ * - 실패: warn 로그만, UX 블로킹 없음
+ * - clearBridgeContext는 claim 시도 후 호출
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { clearBridgeContext } from '@/lib/public-results/public-result-bridge';
+import {
+  clearBridgeContext,
+  loadBridgeContext,
+} from '@/lib/public-results/public-result-bridge';
+import { claimPublicResultClient } from '@/lib/public-results/useClaimPublicResult';
 
 const BG = '#0d161f';
 const ACCENT = '#ff7b00';
 
 export default function OnboardingCompletePage() {
   const router = useRouter();
+  const [claimDone, setClaimDone] = useState(false);
 
   useEffect(() => {
-    clearBridgeContext();
+    let cancelled = false;
+
+    async function runClaim() {
+      const ctx = loadBridgeContext();
+
+      if (ctx?.publicResultId) {
+        const result = await claimPublicResultClient(
+          ctx.publicResultId,
+          ctx.anonId ?? null
+        );
+        if (!cancelled) {
+          if (!result.ok) {
+            console.warn(
+              '[onboarding-complete] claim best-effort failed:',
+              result.reason,
+              result.status ?? ''
+            );
+          }
+        }
+      }
+
+      // bridge context 정리 (claim 성공/실패 무관)
+      clearBridgeContext();
+      if (!cancelled) setClaimDone(true);
+    }
+
+    runClaim().catch((err) => {
+      console.warn('[onboarding-complete] claim unexpected error:', err);
+      clearBridgeContext();
+      if (!cancelled) setClaimDone(true);
+    });
+
+    return () => { cancelled = true; };
   }, []);
 
   return (
@@ -57,6 +102,9 @@ export default function OnboardingCompletePage() {
             내 루틴 보기
           </Link>
         </div>
+
+        {/* claim 상태는 사용자에게 노출하지 않음 (best-effort) */}
+        <span className="sr-only">{claimDone ? 'ready' : 'preparing'}</span>
       </div>
     </div>
   );
