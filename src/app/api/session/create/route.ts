@@ -24,6 +24,8 @@ import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
+import { getLatestClaimedPublicResultForUser } from '@/lib/public-results/getLatestClaimedPublicResultForUser';
+import { buildSessionDeepSummaryFromPublicResult } from '@/lib/deep-result/buildSessionDeepSummaryFromPublicResult';
 import { buildSessionPlanJson } from '@/lib/session/plan-generator';
 import {
   computeAdaptiveModifier,
@@ -441,22 +443,50 @@ export async function POST(req: NextRequest) {
       return fail(409, ApiErrorCode.PROGRAM_FINISHED, '모든 세션을 완료했습니다');
     }
 
-    // ── [NEW] Deep Result 요약 로드 (next 생성 시점에만) ──────────────────────
-    // 성능 가드: SELECT 5개 컬럼, LIMIT 1, 재계산 없음
+    // ── [FLOW-06] Analysis Input 해결 ─────────────────────────────────────────
+    // 우선순위 1: claimed public result (public-first 경로)
+    // 우선순위 2: legacy paid deep_test_attempts final (backward compatibility)
+    // 둘 다 없으면: ANALYSIS_INPUT_UNAVAILABLE
     const tDeep = performance.now();
-    const deepSummary = await loadSessionDeepSummary(userId);
+
+    let deepSummary = null as Awaited<ReturnType<typeof loadSessionDeepSummary>>;
+    let analysisSourceMode: 'public_result' | 'legacy_paid_deep' | null = null;
+    let sourcePublicResultId: string | null = null;
+
+    // 1. 공개 결과 경로 시도 (claim 완료된 public result)
+    const claimedPublicResult = await getLatestClaimedPublicResultForUser(userId);
+    if (claimedPublicResult) {
+      const adapted = buildSessionDeepSummaryFromPublicResult(claimedPublicResult);
+      deepSummary = adapted;
+      analysisSourceMode = 'public_result';
+      sourcePublicResultId = claimedPublicResult.id;
+    }
+
+    // 2. Legacy fallback: paid deep_test_attempts
+    if (!deepSummary) {
+      deepSummary = await loadSessionDeepSummary(userId);
+      if (deepSummary) {
+        analysisSourceMode = 'legacy_paid_deep';
+      }
+    }
+
     timings.deep_profile_ms = Math.round(performance.now() - tDeep);
     timings.deep_load_ms = timings.deep_profile_ms;
 
+    // 3. 입력 없음 → 명시적 에러
     if (!deepSummary) {
       void logSessionEvent(supabase, {
         userId,
         eventType: 'session_create_blocked',
         status: 'blocked',
-        code: 'DEEP_RESULT_MISSING',
-        meta: {},
+        code: 'ANALYSIS_INPUT_UNAVAILABLE',
+        meta: { public_result_found: false, legacy_deep_found: false },
       });
-      return fail(404, ApiErrorCode.DEEP_RESULT_MISSING, '심층 결과가 없습니다');
+      return fail(
+        404,
+        ApiErrorCode.ANALYSIS_INPUT_UNAVAILABLE,
+        '분석 결과가 없습니다. 무료 테스트를 완료하거나 심층 테스트를 먼저 진행해 주세요.'
+      );
     }
 
     const totalSessionsForPhase = progress.total_sessions ?? DEFAULT_TOTAL_SESSIONS;
@@ -743,10 +773,16 @@ export async function POST(req: NextRequest) {
       plan_json: planJson,
       condition,
       plan_version: PLAN_VERSION,
+      // FLOW-06: public result 경로면 source_deep_attempt_id는 null, public result id는 trace에 기록
       source_deep_attempt_id: deepSummary.source_deep_attempt_id ?? null,
       deep_summary_snapshot_json: deepSummarySnapshot,
       profile_snapshot_json: profileSnapshot,
-      generation_trace_json: generationTrace,
+      generation_trace_json: {
+        ...generationTrace,
+        // FLOW-06 관찰가능성: 분석 입력 소스 기록
+        analysis_source_mode: analysisSourceMode,
+        ...(sourcePublicResultId && { source_public_result_id: sourcePublicResultId }),
+      },
     };
 
     const tPlanWrite = performance.now();
@@ -863,6 +899,9 @@ export async function POST(req: NextRequest) {
       meta: {
         total_sessions: finalProgress.total_sessions,
         completed_sessions_before: progress.completed_sessions,
+        // FLOW-06: 입력 소스 관찰가능성
+        analysis_source_mode: analysisSourceMode,
+        ...(sourcePublicResultId && { source_public_result_id: sourcePublicResultId }),
       },
     });
 

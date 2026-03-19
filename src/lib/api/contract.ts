@@ -37,6 +37,8 @@ export const ApiErrorCode = {
   FREQUENCY_REQUIRED: 'FREQUENCY_REQUIRED',
   ONBOARDING_INCOMPLETE: 'ONBOARDING_INCOMPLETE',
   RAIL_NOT_READY: 'RAIL_NOT_READY',
+  /** FLOW-06: session create 분석 입력 소스를 특정할 수 없을 때 */
+  ANALYSIS_INPUT_UNAVAILABLE: 'ANALYSIS_INPUT_UNAVAILABLE',
 } as const;
 
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];
