@@ -27,6 +27,7 @@ import { Starfield } from '@/components/landing/Starfield';
 import { buildFreeSurveyBaselineResult } from '@/lib/deep-v2/builders/build-free-survey-baseline';
 import { buildCameraRefinedResult, type CameraRefinedResult } from '@/lib/deep-v2/builders/build-camera-refined-result';
 import { PublicResultRenderer } from '@/components/public-result/PublicResultRenderer';
+import { persistPublicResult } from '@/lib/public-results/persistPublicResult';
 import type { FreeSurveyBaselineResult } from '@/lib/deep-v2/types';
 import type { TestAnswerValue } from '@/features/movement-test/v2';
 import { loadCameraResult } from '@/lib/camera/camera-result';
@@ -82,6 +83,18 @@ export default function RefinedResultPage() {
           cameraStorage.result
         );
         setRefined(refinedResult);
+
+        // FLOW-01: best-effort persistence — refined result
+        persistPublicResult({
+          result: refinedResult.result,
+          stage: 'refined',
+          sourceInputs: Array.from(refinedResult.refined_meta.source_inputs),
+        }).then((r) => {
+          if (process.env.NODE_ENV !== 'production') {
+            if (r.ok) console.info('[public-result] refined saved:', r.id);
+            else console.warn('[public-result] refined save skipped:', r.reason);
+          }
+        }).catch(() => { /* best-effort: ignore */ });
       } catch {
         setBaselineFallback(baselineResult);
       }

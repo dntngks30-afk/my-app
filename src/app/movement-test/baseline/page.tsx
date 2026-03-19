@@ -25,6 +25,7 @@ import { useRouter } from 'next/navigation';
 import { Starfield } from '@/components/landing/Starfield';
 import { buildFreeSurveyBaselineResult } from '@/lib/deep-v2/builders/build-free-survey-baseline';
 import { PublicResultRenderer } from '@/components/public-result/PublicResultRenderer';
+import { persistPublicResult } from '@/lib/public-results/persistPublicResult';
 import {
   PRIMARY_TYPE_LABELS,
   PRIMARY_TYPE_BRIEF,
@@ -196,6 +197,18 @@ export default function BaselinePage() {
       }
       const result = buildFreeSurveyBaselineResult(answers);
       setBaseline(result);
+
+      // FLOW-01: best-effort persistence (실패해도 UX 블로킹 없음)
+      persistPublicResult({
+        result: result.result,
+        stage: 'baseline',
+        sourceInputs: Array.from(result.baseline_meta.source_inputs),
+      }).then((r) => {
+        if (process.env.NODE_ENV !== 'production') {
+          if (r.ok) console.info('[public-result] baseline saved:', r.id);
+          else console.warn('[public-result] baseline save skipped:', r.reason);
+        }
+      }).catch(() => { /* best-effort: ignore */ });
     } catch (e) {
       setError(e instanceof Error ? e.message : '분석 중 오류가 발생했습니다.');
     } finally {
