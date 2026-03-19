@@ -26,6 +26,8 @@ import { Starfield } from '@/components/landing/Starfield';
 import { buildFreeSurveyBaselineResult } from '@/lib/deep-v2/builders/build-free-survey-baseline';
 import { PublicResultRenderer } from '@/components/public-result/PublicResultRenderer';
 import { persistPublicResult } from '@/lib/public-results/persistPublicResult';
+import { loadPublicResultHandoff } from '@/lib/public-results/public-result-handoff';
+import { loadPublicResult } from '@/lib/public-results/loadPublicResult';
 import {
   PRIMARY_TYPE_LABELS,
   PRIMARY_TYPE_BRIEF,
@@ -189,31 +191,71 @@ export default function BaselinePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const answers = loadSurveyAnswers();
-      if (!answers) {
-        router.replace('/movement-test/survey');
-        return;
-      }
-      const result = buildFreeSurveyBaselineResult(answers);
-      setBaseline(result);
+    let cancelled = false;
 
-      // FLOW-01: best-effort persistence (실패해도 UX 블로킹 없음)
-      persistPublicResult({
-        result: result.result,
-        stage: 'baseline',
-        sourceInputs: Array.from(result.baseline_meta.source_inputs),
-      }).then((r) => {
-        if (process.env.NODE_ENV !== 'production') {
-          if (r.ok) console.info('[public-result] baseline saved:', r.id);
-          else console.warn('[public-result] baseline save skipped:', r.reason);
+    async function init() {
+      try {
+        // FLOW-02: DB recovery 시도 (refresh 복구)
+        // localStorage에 handoff id가 있으면 DB에서 직접 결과를 읽는다.
+        // 성공하면 survey 재분석 없이 즉시 결과를 복구한다.
+        const handoffId = loadPublicResultHandoff('baseline');
+        if (handoffId) {
+          const recovered = await loadPublicResult(handoffId);
+          if (!cancelled && recovered && recovered.stage === 'baseline') {
+            // DB 복구 성공 → survey 재분석 없이 바로 렌더
+            setBaseline({
+              result: recovered.result,
+              baseline_meta: {
+                result_stage: 'baseline',
+                source_inputs: ['free_survey'] as const,
+                refinement_available: true,
+                generated_at: recovered.createdAt,
+                scoring_version: 'free_survey_v2_core',
+              },
+            });
+            if (process.env.NODE_ENV !== 'production') {
+              console.info('[public-result] baseline recovered from DB:', handoffId);
+            }
+            return;
+          }
         }
-      }).catch(() => { /* best-effort: ignore */ });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '분석 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(false);
+
+        if (cancelled) return;
+
+        // FLOW-02 DB 복구 실패 → 기존 local 계산 경로
+        const answers = loadSurveyAnswers();
+        if (!answers) {
+          router.replace('/movement-test/survey');
+          return;
+        }
+        const result = buildFreeSurveyBaselineResult(answers);
+        if (!cancelled) {
+          setBaseline(result);
+
+          // FLOW-01: best-effort persistence (실패해도 UX 블로킹 없음)
+          // FLOW-02: 성공 시 savePublicResultHandoff가 내부에서 자동 호출됨
+          persistPublicResult({
+            result: result.result,
+            stage: 'baseline',
+            sourceInputs: Array.from(result.baseline_meta.source_inputs),
+          }).then((r) => {
+            if (process.env.NODE_ENV !== 'production') {
+              if (r.ok) console.info('[public-result] baseline saved:', r.id);
+              else console.warn('[public-result] baseline save skipped:', r.reason);
+            }
+          }).catch(() => { /* best-effort: ignore */ });
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : '분석 중 오류가 발생했습니다.');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
+
+    init();
+    return () => { cancelled = true; };
   }, [router]);
 
   const handleViewResult = useCallback(() => setView('result'), []);

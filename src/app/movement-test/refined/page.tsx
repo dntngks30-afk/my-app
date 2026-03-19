@@ -28,7 +28,10 @@ import { buildFreeSurveyBaselineResult } from '@/lib/deep-v2/builders/build-free
 import { buildCameraRefinedResult, type CameraRefinedResult } from '@/lib/deep-v2/builders/build-camera-refined-result';
 import { PublicResultRenderer } from '@/components/public-result/PublicResultRenderer';
 import { persistPublicResult } from '@/lib/public-results/persistPublicResult';
+import { loadPublicResultHandoff } from '@/lib/public-results/public-result-handoff';
+import { loadPublicResult } from '@/lib/public-results/loadPublicResult';
 import type { FreeSurveyBaselineResult } from '@/lib/deep-v2/types';
+import type { UnifiedDeepResultV2 } from '@/lib/result/deep-result-v2-contract';
 import type { TestAnswerValue } from '@/features/movement-test/v2';
 import { loadCameraResult } from '@/lib/camera/camera-result';
 
@@ -58,51 +61,83 @@ export default function RefinedResultPage() {
   const router = useRouter();
   const [refined, setRefined] = useState<CameraRefinedResult | null>(null);
   const [baselineFallback, setBaselineFallback] = useState<FreeSurveyBaselineResult | null>(null);
+  // FLOW-02: DB에서 복구된 refined result (CameraRefinedResult 래퍼 없이 직접 렌더용)
+  const [recoveredRefined, setRecoveredRefined] = useState<UnifiedDeepResultV2 | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const surveyAnswers = loadSurveyAnswers();
-      const cameraStorage = loadCameraResult();
+    let cancelled = false;
 
-      if (!surveyAnswers) {
-        router.replace('/movement-test/survey');
-        return;
-      }
-      if (!cameraStorage) {
-        router.replace('/movement-test/baseline');
-        return;
-      }
-
-      const baselineResult = buildFreeSurveyBaselineResult(surveyAnswers);
-
+    async function init() {
       try {
-        const refinedResult = buildCameraRefinedResult(
-          baselineResult.result,
-          cameraStorage.result
-        );
-        setRefined(refinedResult);
-
-        // FLOW-01: best-effort persistence — refined result
-        persistPublicResult({
-          result: refinedResult.result,
-          stage: 'refined',
-          sourceInputs: Array.from(refinedResult.refined_meta.source_inputs),
-        }).then((r) => {
-          if (process.env.NODE_ENV !== 'production') {
-            if (r.ok) console.info('[public-result] refined saved:', r.id);
-            else console.warn('[public-result] refined save skipped:', r.reason);
+        // FLOW-02: DB recovery 시도 (refined 결과)
+        // localStorage에 handoff id가 있으면 DB에서 직접 결과를 읽는다.
+        // 성공하면 camera/survey 재분석 없이 결과를 복구한다.
+        const handoffId = loadPublicResultHandoff('refined');
+        if (handoffId) {
+          const recovered = await loadPublicResult(handoffId);
+          if (!cancelled && recovered && recovered.stage === 'refined') {
+            setRecoveredRefined(recovered.result);
+            if (process.env.NODE_ENV !== 'production') {
+              console.info('[public-result] refined recovered from DB:', handoffId);
+            }
+            return;
           }
-        }).catch(() => { /* best-effort: ignore */ });
-      } catch {
-        setBaselineFallback(baselineResult);
+        }
+
+        if (cancelled) return;
+
+        // FLOW-02 DB 복구 실패 → 기존 local 계산 경로
+        const surveyAnswers = loadSurveyAnswers();
+        const cameraStorage = loadCameraResult();
+
+        if (!surveyAnswers) {
+          router.replace('/movement-test/survey');
+          return;
+        }
+        if (!cameraStorage) {
+          router.replace('/movement-test/baseline');
+          return;
+        }
+
+        const baselineResult = buildFreeSurveyBaselineResult(surveyAnswers);
+
+        try {
+          const refinedResult = buildCameraRefinedResult(
+            baselineResult.result,
+            cameraStorage.result
+          );
+          if (!cancelled) {
+            setRefined(refinedResult);
+
+            // FLOW-01: best-effort persistence — refined result
+            // FLOW-02: 성공 시 savePublicResultHandoff가 내부에서 자동 호출됨
+            persistPublicResult({
+              result: refinedResult.result,
+              stage: 'refined',
+              sourceInputs: Array.from(refinedResult.refined_meta.source_inputs),
+            }).then((r) => {
+              if (process.env.NODE_ENV !== 'production') {
+                if (r.ok) console.info('[public-result] refined saved:', r.id);
+                else console.warn('[public-result] refined save skipped:', r.reason);
+              }
+            }).catch(() => { /* best-effort: ignore */ });
+          }
+        } catch {
+          if (!cancelled) setBaselineFallback(baselineResult);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : '분석 중 오류가 발생했습니다.');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '분석 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(false);
     }
+
+    init();
+    return () => { cancelled = true; };
   }, [router]);
 
   const handleRetake = useCallback(() => router.push('/'), [router]);
@@ -139,7 +174,21 @@ export default function RefinedResultPage() {
       <Starfield />
 
       <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-6 py-4">
-        {refined ? (
+        {recoveredRefined ? (
+          /* FLOW-02: DB에서 복구된 refined result (cameraEvidenceQuality 없음) */
+          <PublicResultRenderer
+            result={recoveredRefined}
+            stage="refined"
+            onBack={handleBack}
+            actions={[
+              {
+                label: '처음부터 다시 하기',
+                onClick: handleRetake,
+                variant: 'ghost',
+              },
+            ]}
+          />
+        ) : refined ? (
           /* V2-06: shared renderer — refined stage */
           <PublicResultRenderer
             result={refined.result}

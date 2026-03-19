@@ -19,6 +19,7 @@
  */
 
 import { getOrCreateAnonId } from './anon-id';
+import { savePublicResultHandoff } from './public-result-handoff';
 import type { UnifiedDeepResultV2 } from '@/lib/result/deep-result-v2-contract';
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
@@ -112,6 +113,9 @@ export async function persistPublicResult(
 
     // 저장 성공 → 중복 방지 등록
     savedResultIds.add(result as object);
+
+    // FLOW-02: handoff id를 localStorage에 기록 (refresh recovery용)
+    savePublicResultHandoff(stage, data.id);
 
     return {
       ok: true,
