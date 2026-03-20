@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import SignupClient from './SignupClient';
 
-type SearchParams = Promise<{ error?: string }>;
+type SearchParams = Promise<{ error?: string; next?: string }>;
 
 export default async function SignupPage({
   searchParams,
@@ -9,6 +9,7 @@ export default async function SignupPage({
   searchParams: SearchParams;
 }) {
   const params = await searchParams;
+  const next = typeof params?.next === 'string' ? params.next : undefined;
   return (
       <Suspense
       fallback={
@@ -17,7 +18,7 @@ export default async function SignupPage({
         </div>
       }
     >
-      <SignupClient errorParam={params?.error} />
+      <SignupClient errorParam={params?.error} next={next} />
     </Suspense>
   );
 }

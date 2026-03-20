@@ -5,7 +5,7 @@
  * mode="login" | "signup"
  * signup: signInWithOtp → 메일 확인 UI (프로덕션)
  * signup (개발): signUp → 이메일 인증 없이 바로 가입
- * login: signInWithPassword → / 리다이렉트
+ * login: signInWithPassword → redirectTo(기본 /app/home)
  * errorParam: searchParams.error (auth_failed 등) — 서버에서 props로 전달
  */
 import { useEffect, useState } from 'react';
@@ -23,13 +23,16 @@ interface AuthCardProps {
   mode: 'login' | 'signup';
   /** searchParams.error — 서버에서 전달 (예: auth_failed) */
   errorParam?: string | null;
-  /** 로그인 성공 시 리다이렉트 경로 (미지정 시 /) */
+  /** 로그인·회원가입 완료 후 리다이렉트 경로 (미지정 시 /app/home) */
   redirectTo?: string;
 }
 
 const isDevSignup = process.env.NODE_ENV === 'development';
 
-export default function AuthCard({ mode, errorParam, redirectTo = '/' }: AuthCardProps) {
+/** signup/complete 등으로 전달할 안전한 복귀 경로 */
+const DEFAULT_POST_AUTH_PATH = '/app/home';
+
+export default function AuthCard({ mode, errorParam, redirectTo = DEFAULT_POST_AUTH_PATH }: AuthCardProps) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -51,10 +54,11 @@ export default function AuthCard({ mode, errorParam, redirectTo = '/' }: AuthCar
     try {
       if (mode === 'signup') {
         if (isDevSignup) {
+          const completeUrl = `${window.location.origin}/signup/complete?next=${encodeURIComponent(redirectTo)}`;
           const { data, error: err } = await supabaseBrowser.auth.signUp({
             email: email.trim(),
             password: password || 'dev1234',
-            options: { emailRedirectTo: `${window.location.origin}/signup/complete` },
+            options: { emailRedirectTo: completeUrl },
           });
           if (err) {
             setError(err.message);
@@ -69,10 +73,11 @@ export default function AuthCard({ mode, errorParam, redirectTo = '/' }: AuthCar
           );
           return;
         }
+        const completeUrl = `${window.location.origin}/signup/complete?next=${encodeURIComponent(redirectTo)}`;
         const { error: err } = await supabaseBrowser.auth.signInWithOtp({
           email: email.trim(),
           options: {
-            emailRedirectTo: `${window.location.origin}/signup/complete`,
+            emailRedirectTo: completeUrl,
             shouldCreateUser: true,
           },
         });
@@ -112,7 +117,7 @@ export default function AuthCard({ mode, errorParam, redirectTo = '/' }: AuthCar
         <div className="mt-6 space-y-3 text-center">
           <p className="text-sm text-slate-600">
             이미 계정이 있으신가요?{' '}
-            <Link href={`/app/auth?next=${encodeURIComponent(redirectTo || '/')}`} className="text-orange-600 font-semibold underline-offset-4 hover:underline">
+            <Link href={`/app/auth?next=${encodeURIComponent(redirectTo || DEFAULT_POST_AUTH_PATH)}`} className="text-orange-600 font-semibold underline-offset-4 hover:underline">
               로그인
             </Link>
           </p>
@@ -208,14 +213,14 @@ export default function AuthCard({ mode, errorParam, redirectTo = '/' }: AuthCar
           {isLogin ? (
             <>
               계정이 없으신가요?{' '}
-              <Link href="/signup" className="text-orange-600 font-semibold underline-offset-4 hover:underline">
+              <Link href={`/signup?next=${encodeURIComponent(redirectTo)}`} className="text-orange-600 font-semibold underline-offset-4 hover:underline">
                 회원가입
               </Link>
             </>
           ) : (
             <>
               이미 계정이 있으신가요?{' '}
-              <Link href={`/app/auth?next=${encodeURIComponent(redirectTo || '/')}`} className="text-orange-600 font-semibold underline-offset-4 hover:underline">
+              <Link href={`/app/auth?next=${encodeURIComponent(redirectTo || DEFAULT_POST_AUTH_PATH)}`} className="text-orange-600 font-semibold underline-offset-4 hover:underline">
                 로그인
               </Link>
             </>

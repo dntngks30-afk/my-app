@@ -10,12 +10,22 @@ import { NeoButton } from '@/components/neobrutalism';
 const NEO_INPUT =
   'rounded-2xl border-2 border-slate-900 bg-white h-11 px-3 shadow-[2px_2px_0_0_rgba(15,23,42,1)] focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-0 text-slate-800 placeholder:text-slate-400';
 
+/** auth/callback과 동일한 계약: 상대 경로만 허용, 없으면 앱 홈 */
+function resolvePostAuthPath(next: string | null | undefined): string {
+  if (!next || typeof next !== 'string') return '/app/home';
+  const t = next.trim();
+  if (!t.startsWith('/') || t.startsWith('//')) return '/app/home';
+  return t;
+}
+
 interface CompleteClientProps {
   /** searchParams.code — OAuth code, 서버에서 전달 */
   codeParam?: string | null;
+  /** 설문·결과 퍼널 복귀용. 이메일 링크 query로 전달 */
+  nextParam?: string | null;
 }
 
-export default function CompleteClient({ codeParam }: CompleteClientProps) {
+export default function CompleteClient({ codeParam, nextParam }: CompleteClientProps) {
   const router = useRouter();
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState('');
@@ -24,20 +34,22 @@ export default function CompleteClient({ codeParam }: CompleteClientProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const safeNext = resolvePostAuthPath(nextParam);
+
   useEffect(() => {
     const run = async () => {
       const code = codeParam ?? null;
       if (code) {
         const { error: exchangeErr } = await supabaseBrowser.auth.exchangeCodeForSession(code);
         if (exchangeErr) {
-          router.replace('/signup?error=auth_failed');
+          router.replace(`/signup?error=auth_failed&next=${encodeURIComponent(safeNext)}`);
           return;
         }
       }
 
       const { data: { user } } = await supabaseBrowser.auth.getUser();
       if (!user) {
-        router.replace('/signup');
+        router.replace(`/signup?next=${encodeURIComponent(safeNext)}`);
         return;
       }
 
@@ -48,7 +60,7 @@ export default function CompleteClient({ codeParam }: CompleteClientProps) {
         .single();
 
       if (profile?.birthdate) {
-        router.replace('/');
+        router.replace(safeNext);
         return;
       }
 
@@ -56,7 +68,7 @@ export default function CompleteClient({ codeParam }: CompleteClientProps) {
       setLoading(false);
     };
     run();
-  }, [router, codeParam]);
+  }, [router, codeParam, safeNext]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +78,7 @@ export default function CompleteClient({ codeParam }: CompleteClientProps) {
     const { data: { user } } = await supabaseBrowser.auth.getUser();
     if (!user) {
       setSubmitting(false);
-      router.replace('/signup');
+      router.replace(`/signup?next=${encodeURIComponent(safeNext)}`);
       return;
     }
 
@@ -102,7 +114,7 @@ export default function CompleteClient({ codeParam }: CompleteClientProps) {
         return;
       }
 
-      router.replace('/');
+      router.replace(safeNext);
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다.');
       setSubmitting(false);

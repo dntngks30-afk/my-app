@@ -97,7 +97,7 @@ export default function AppAuthClient({ next, errorParam }: AppAuthClientProps) 
           <AuthCard
             mode={mode}
             errorParam={errorParam}
-            redirectTo={mode === 'login' ? next : '/'}
+            redirectTo={next}
           />
         </div>
       </NeoPageLayout>
