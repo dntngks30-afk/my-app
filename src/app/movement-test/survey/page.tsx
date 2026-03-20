@@ -211,7 +211,7 @@ export default function MovementTestSurveyPage() {
           finalType: topScore <= 30 ? 'monkey' : undefined,
         };
         saveSession(final);
-        router.push('/movement-test/baseline');
+        router.push('/movement-test/refine-bridge');
       } else {
         setStep((s) => s + 1);
       }
@@ -257,7 +257,7 @@ export default function MovementTestSurveyPage() {
     };
     saveSession(final);
     setShowSelfTestModal(false);
-    router.push('/movement-test/baseline');
+    router.push('/movement-test/refine-bridge');
   }, [answersById, router]);
 
   const handleGoToSelfTest = useCallback(() => {

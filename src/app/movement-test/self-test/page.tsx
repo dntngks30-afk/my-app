@@ -225,7 +225,7 @@ export default function SelfTestPage() {
       finalType,
     };
     saveSession(session);
-    router.push('/movement-test/baseline');
+    router.push('/movement-test/refine-bridge');
   }, [allAnswered, answersById, router]);
 
   if (!ready) {

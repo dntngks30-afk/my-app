@@ -426,10 +426,10 @@ async function main() {
     return [];
   });
 
-  run('survey/page routing → /movement-test/baseline 여전히 유효', () => {
+  run('survey/page routing → /movement-test/refine-bridge (PR-PUBLIC-BRIDGE-01)', () => {
     const surveyContent = readFile('src/app/movement-test/survey/page.tsx');
-    if (!surveyContent.includes("'/movement-test/baseline'"))
-      return ['survey page should still route to /movement-test/baseline'];
+    if (!surveyContent.includes("'/movement-test/refine-bridge'"))
+      return ['survey page should route to /movement-test/refine-bridge'];
     return [];
   });
 

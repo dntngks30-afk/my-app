@@ -94,7 +94,8 @@ const STAGE_META: Record<PublicResultStage, {
 }> = {
   baseline: {
     titlePrefix:   '기초 분석 결과',
-    provenanceCopy: '설문 기반 기초 분석입니다. 카메라 동작 분석으로 정밀도를 높일 수 있습니다.',
+    provenanceCopy:
+      '설문 기반 기초 분석입니다. 원하시면 짧은 동작 체크로 움직임 신호를 조금 더 반영할 수 있어요(선택).',
   },
   refined: {
     titlePrefix:   '동작 분석 포함 결과',

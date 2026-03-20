@@ -277,10 +277,10 @@ async function main() {
     return [];
   });
 
-  run('survey/page.tsx: /movement-test/baseline으로 이동', () => {
+  run('survey/page.tsx: PR-PUBLIC-BRIDGE-01 — /movement-test/refine-bridge로 이동', () => {
     const content = readFile('src/app/movement-test/survey/page.tsx');
-    if (!content.includes("router.push('/movement-test/baseline')"))
-      return ['survey/page.tsx should route to /movement-test/baseline'];
+    if (!content.includes("router.push('/movement-test/refine-bridge')"))
+      return ['survey/page.tsx should route to /movement-test/refine-bridge'];
     return [];
   });
 
@@ -291,17 +291,17 @@ async function main() {
     return [];
   });
 
-  run('self-test/page.tsx: /movement-test/baseline으로 이동', () => {
+  run('self-test/page.tsx: /movement-test/refine-bridge로 이동', () => {
     const content = readFile('src/app/movement-test/self-test/page.tsx');
-    if (!content.includes("router.push('/movement-test/baseline')"))
-      return ['self-test/page.tsx should route to /movement-test/baseline'];
+    if (!content.includes("router.push('/movement-test/refine-bridge')"))
+      return ['self-test/page.tsx should route to /movement-test/refine-bridge'];
     return [];
   });
 
-  run('camera/complete: 여전히 /movement-test/result로 이동 (변경 안 함)', () => {
+  run('camera/complete: /movement-test/refined로 이동', () => {
     const content = readFile('src/app/movement-test/camera/complete/page.tsx');
-    if (!content.includes("router.push('/movement-test/result')"))
-      return ['camera/complete should still route to /movement-test/result'];
+    if (!content.includes("'/movement-test/refined'"))
+      return ['camera/complete should route to /movement-test/refined'];
     return [];
   });
 
@@ -326,21 +326,19 @@ async function main() {
     return [];
   });
 
-  run('baseline/page.tsx: UnifiedPrimaryType 어휘 사용 (PRIMARY_TYPE_LABELS)', () => {
+  run('baseline/page.tsx: PublicResultRenderer 사용 (V2 어휘는 renderer에 위임)', () => {
     const content = readFile('src/app/movement-test/baseline/page.tsx');
-    if (!content.includes('PRIMARY_TYPE_LABELS'))
-      return ['baseline page should use PRIMARY_TYPE_LABELS (Deep Result V2 vocabulary)'];
+    if (!content.includes('PublicResultRenderer'))
+      return ['baseline page should render PublicResultRenderer'];
     return [];
   });
 
-  run('baseline/page.tsx: 동물 이름이 headline label에 포함되지 않음', () => {
+  run('baseline/page.tsx: 동물 이름 직접 headline 금지 — 페이지에 동물 키워드 미사용', () => {
     const content = readFile('src/app/movement-test/baseline/page.tsx');
-    // PRIMARY_TYPE_LABELS 값들에 동물 이름이 포함되어서는 안 됨
-    const labelSection = content.match(/PRIMARY_TYPE_LABELS[^}]*}/s)?.[0] ?? '';
     const errors = [];
     for (const animal of ['kangaroo', 'hedgehog', 'turtle', 'penguin', 'crab', 'meerkat', 'armadillo', 'sloth']) {
-      if (labelSection.toLowerCase().includes(animal))
-        errors.push(`PRIMARY_TYPE_LABELS contains animal name: ${animal}`);
+      if (content.toLowerCase().includes(animal))
+        errors.push(`baseline page should not embed animal name: ${animal}`);
     }
     return errors;
   });
@@ -352,19 +350,24 @@ async function main() {
     return [];
   });
 
-  run('baseline/page.tsx: gate와 result view 두 가지 분기 존재', () => {
+  run('baseline/page.tsx: PR-PUBLIC-BRIDGE-01 — gate 분기 제거, 단일 결과 뷰', () => {
     const content = readFile('src/app/movement-test/baseline/page.tsx');
     const errors = [];
-    if (!content.includes("'gate'")) errors.push('gate view state missing');
-    if (!content.includes("'result'")) errors.push('result view state missing');
+    if (content.includes("'gate'") || content.includes('"gate"'))
+      errors.push('legacy gate view should be removed (use refine-bridge)');
+    if (!content.includes('PublicResultRenderer')) errors.push('expected PublicResultRenderer');
     return errors;
   });
 
-  run('baseline/page.tsx: result_stage baseline 안내 표시', () => {
-    const content = readFile('src/app/movement-test/baseline/page.tsx');
-    if (!content.includes('baseline_meta.result_stage'))
-      return ['baseline page should display result_stage from baseline_meta'];
-    return [];
+  run('refine-bridge/page.tsx 존재 (설문 완료 후 선택 브리지)', () => {
+    try {
+      const content = readFile('src/app/movement-test/refine-bridge/page.tsx');
+      if (!content.includes('결과 먼저 보기')) return ['refine-bridge should offer 결과 먼저 보기'];
+      if (!content.includes('/movement-test/baseline')) return ['refine-bridge should link to baseline'];
+      return [];
+    } catch {
+      return ['refine-bridge/page.tsx missing'];
+    }
   });
 
   // ──────────────────────────────────────────────────────────────────────────

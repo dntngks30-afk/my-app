@@ -1,20 +1,11 @@
 'use client';
 
 /**
- * PR-V2-04 — Baseline Summary Gate + Baseline-Only Renderer
- * PR-V2-06 — Refactored: result view uses PublicResultRenderer
+ * PR-V2-04 / PR-V2-06 — Baseline 결과 (PublicResultRenderer)
+ * PR-PUBLIC-BRIDGE-01 — 설문 완료 후 선택 브리지(/movement-test/refine-bridge) 다음에 진입.
  *
- * Survey 완료 후 old free result 직행 경로 대신 이 페이지로 진입한다.
- *
- * 두 단계(view):
- *   1. 'gate'   — 기본 분석 요약 + CTA 분기
- *                 A. 기본 결과 보기 → view='result'
- *                 B. 카메라로 정밀 분석 → /movement-test/camera
- *   2. 'result' — PublicResultRenderer (stage='baseline')
- *
- * ─── 결과 타입 표시 규칙 ────────────────────────────────────────────────────
- * 표시 타입은 반드시 UnifiedDeepResultV2 기반 어휘 사용.
- * legacy animal type(거북이/캥거루 등)은 절대 headline identity로 사용 안 함.
+ * 이전에 이 페이지에 있던 'gate'(요약 카드 + 신뢰도 바)는 브리지로 분리됨.
+ * 카메라 refine은 optional이며, /movement-test/camera → /movement-test/refined 경로 유지.
  *
  * @see src/lib/deep-v2/builders/build-free-survey-baseline.ts (V2-03 builder)
  * @see src/components/public-result/PublicResultRenderer.tsx (V2-06 shared renderer)
@@ -29,21 +20,13 @@ import { persistPublicResult } from '@/lib/public-results/persistPublicResult';
 import { loadPublicResultHandoff } from '@/lib/public-results/public-result-handoff';
 import { loadPublicResult } from '@/lib/public-results/loadPublicResult';
 import { useExecutionStartBridge } from '@/lib/public-results/useExecutionStartBridge';
-import {
-  PRIMARY_TYPE_LABELS,
-  PRIMARY_TYPE_BRIEF,
-  PRIMARY_TYPE_COLOR,
-  EVIDENCE_LEVEL_LABELS,
-} from '@/components/public-result/public-result-labels';
 import type { FreeSurveyBaselineResult } from '@/lib/deep-v2/types';
-import type { UnifiedPrimaryType } from '@/lib/result/deep-result-v2-contract';
 import type { TestAnswerValue } from '@/features/movement-test/v2';
 
 // ─── 상수 ─────────────────────────────────────────────────────────────────────
 
 const SESSION_KEY = 'movementTestSession:v2';
 const BG = '#0d161f';
-const ACCENT = '#ff7b00';
 
 // ─── localStorage 헬퍼 ───────────────────────────────────────────────────────
 
@@ -66,129 +49,13 @@ function loadSurveyAnswers(): Record<string, TestAnswerValue> | null {
   }
 }
 
-// ─── Baseline Gate 뷰 ────────────────────────────────────────────────────────
-
-function BaselineGateView({
-  baseline,
-  onViewResult,
-  onCamera,
-}: {
-  baseline: FreeSurveyBaselineResult;
-  onViewResult: () => void;
-  onCamera: () => void;
-}) {
-  const { result, baseline_meta } = baseline;
-  const typeLabel = PRIMARY_TYPE_LABELS[result.primary_type as UnifiedPrimaryType] ?? result.primary_type;
-  const typeBrief = PRIMARY_TYPE_BRIEF[result.primary_type as UnifiedPrimaryType] ?? '';
-  const typeColor = PRIMARY_TYPE_COLOR[result.primary_type as UnifiedPrimaryType] ?? ACCENT;
-  const evidenceLabel = EVIDENCE_LEVEL_LABELS[result.evidence_level] ?? result.evidence_level;
-
-  const pct = Math.round(result.confidence * 100);
-  const barColor = pct >= 80 ? '#4ade80' : pct >= 60 ? '#facc15' : '#f97316';
-
-  return (
-    <div className="w-full max-w-md space-y-6 animate-in fade-in">
-      {/* 헤더 */}
-      <div className="text-center space-y-1">
-        <p
-          className="text-xs text-slate-500 uppercase tracking-widest"
-          style={{ fontFamily: 'var(--font-sans-noto)' }}
-        >
-          {evidenceLabel} · {baseline_meta.result_stage}
-        </p>
-        <h1
-          className="text-2xl font-bold text-slate-100 break-keep"
-          style={{ fontFamily: 'var(--font-sans-noto)' }}
-        >
-          기본 분석이 준비되었습니다
-        </h1>
-      </div>
-
-      {/* 타입 카드 */}
-      <div
-        className="rounded-2xl border p-5 space-y-3"
-        style={{ borderColor: `${typeColor}40`, backgroundColor: `${typeColor}08` }}
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-xs text-slate-500 mb-1">주요 패턴</p>
-            <p
-              className="text-xl font-bold break-keep"
-              style={{ color: typeColor, fontFamily: 'var(--font-sans-noto)' }}
-            >
-              {typeLabel}
-            </p>
-          </div>
-          {result.secondary_type && result.secondary_type !== result.primary_type && (
-            <div className="text-right shrink-0">
-              <p className="text-xs text-slate-500 mb-1">보조</p>
-              <p className="text-sm text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                {PRIMARY_TYPE_LABELS[result.secondary_type as UnifiedPrimaryType] ?? result.secondary_type}
-              </p>
-            </div>
-          )}
-        </div>
-        <p className="text-sm text-slate-300 leading-relaxed break-keep" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-          {typeBrief}
-        </p>
-        <div className="pt-1">
-          <p className="text-xs text-slate-500 mb-1.5">분석 신뢰도</p>
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{ width: `${pct}%`, backgroundColor: barColor }}
-              />
-            </div>
-            <span className="text-xs text-slate-400 shrink-0">{pct}%</span>
-          </div>
-        </div>
-      </div>
-
-      {/* 요약 문구 */}
-      <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-        <p className="text-sm text-slate-300 leading-relaxed break-keep" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-          {result.summary_copy}
-        </p>
-      </div>
-
-      {/* baseline 안내 */}
-      <p className="text-xs text-slate-500 text-center break-keep" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-        설문 기반 기초 분석입니다. 카메라 동작 테스트로 더 정밀하게 확인할 수 있습니다.
-      </p>
-
-      {/* CTA 버튼 */}
-      <div className="space-y-3">
-        <button
-          type="button"
-          onClick={onCamera}
-          className="w-full min-h-[52px] rounded-2xl font-bold text-slate-900 transition-colors"
-          style={{ backgroundColor: ACCENT, fontFamily: 'var(--font-sans-noto)' }}
-        >
-          카메라로 더 정밀하게 분석하기
-        </button>
-        <button
-          type="button"
-          onClick={onViewResult}
-          className="w-full min-h-[48px] rounded-2xl font-medium text-slate-300 border border-white/20 hover:bg-white/5 transition-colors"
-          style={{ fontFamily: 'var(--font-sans-noto)' }}
-        >
-          지금 기본 결과 보기
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── 페이지 메인 ─────────────────────────────────────────────────────────────
-
-type BaselineView = 'gate' | 'result';
 
 export default function BaselinePage() {
   const router = useRouter();
-  const [view, setView] = useState<BaselineView>('gate');
   const [baseline, setBaseline] = useState<FreeSurveyBaselineResult | null>(null);
   const [publicResultIdForBridge, setPublicResultIdForBridge] = useState<string | null>(null);
+  const [recoveredFromDb, setRecoveredFromDb] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -203,13 +70,11 @@ export default function BaselinePage() {
 
     async function init() {
       try {
-        // FLOW-02: DB recovery 시도 (refresh 복구)
-        // localStorage에 handoff id가 있으면 DB에서 직접 결과를 읽는다.
-        // 성공하면 survey 재분석 없이 즉시 결과를 복구한다.
         const handoffId = loadPublicResultHandoff('baseline');
         if (handoffId) {
           const recovered = await loadPublicResult(handoffId);
           if (!cancelled && recovered && recovered.stage === 'baseline') {
+            setRecoveredFromDb(true);
             setPublicResultIdForBridge(handoffId);
             setBaseline({
               result: recovered.result,
@@ -230,7 +95,6 @@ export default function BaselinePage() {
 
         if (cancelled) return;
 
-        // FLOW-02 DB 복구 실패 → 기존 local 계산 경로
         const answers = loadSurveyAnswers();
         if (!answers) {
           router.replace('/movement-test/survey');
@@ -240,19 +104,21 @@ export default function BaselinePage() {
         if (!cancelled) {
           setBaseline(result);
 
-          // FLOW-01: best-effort persistence (실패해도 UX 블로킹 없음)
-          // FLOW-02: 성공 시 savePublicResultHandoff가 내부에서 자동 호출됨
           persistPublicResult({
             result: result.result,
             stage: 'baseline',
             sourceInputs: Array.from(result.baseline_meta.source_inputs),
-          }).then((r) => {
-            if (r.ok && !cancelled) setPublicResultIdForBridge(r.id);
-            if (process.env.NODE_ENV !== 'production') {
-              if (r.ok) console.info('[public-result] baseline saved:', r.id);
-              else console.warn('[public-result] baseline save skipped:', r.reason);
-            }
-          }).catch(() => { /* best-effort: ignore */ });
+          })
+            .then((r) => {
+              if (r.ok && !cancelled) setPublicResultIdForBridge(r.id);
+              if (process.env.NODE_ENV !== 'production') {
+                if (r.ok) console.info('[public-result] baseline saved:', r.id);
+                else console.warn('[public-result] baseline save skipped:', r.reason);
+              }
+            })
+            .catch(() => {
+              /* best-effort */
+            });
         }
       } catch (e) {
         if (!cancelled) {
@@ -264,18 +130,21 @@ export default function BaselinePage() {
     }
 
     init();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
-  const handleViewResult = useCallback(() => setView('result'), []);
-  const handleBackToGate = useCallback(() => setView('gate'), []);
-  const handleCamera = useCallback(() => router.push('/movement-test/camera'), [router]);
+  const handleCameraRefine = useCallback(() => router.push('/movement-test/camera'), [router]);
   const handleRetake = useCallback(() => router.push('/movement-test/survey'), [router]);
+  const handleBackToBridge = useCallback(() => router.push('/movement-test/refine-bridge'), [router]);
 
   if (loading) {
     return (
       <div className="min-h-[100svh] flex items-center justify-center" style={{ backgroundColor: BG }}>
-        <p className="text-slate-400 text-sm" style={{ fontFamily: 'var(--font-sans-noto)' }}>분석 중...</p>
+        <p className="text-slate-400 text-sm" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+          분석 중...
+        </p>
       </div>
     );
   }
@@ -299,52 +168,40 @@ export default function BaselinePage() {
   }
 
   return (
-    <div
-      className="relative min-h-[100svh] overflow-hidden flex flex-col"
-      style={{ backgroundColor: BG }}
-    >
+    <div className="relative min-h-[100svh] overflow-hidden flex flex-col" style={{ backgroundColor: BG }}>
       <Starfield />
 
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 py-8">
-        {view === 'gate' ? (
-          <BaselineGateView
-            baseline={baseline}
-            onViewResult={handleViewResult}
-            onCamera={handleCamera}
+        <div className="space-y-3 w-full max-w-md">
+          <PublicResultRenderer
+            result={baseline.result}
+            stage="baseline"
+            onBack={recoveredFromDb ? undefined : handleBackToBridge}
+            confidenceNote="설문 응답을 바탕으로 한 요약입니다."
+            actions={[
+              {
+                label: bridgePending ? '처리 중...' : '실행 시작하기',
+                onClick: handleExecutionStart,
+                variant: 'primary',
+              },
+              {
+                label: '카메라로 움직임 체크하기',
+                onClick: handleCameraRefine,
+                variant: 'secondary',
+              },
+              {
+                label: '설문 다시 하기',
+                onClick: handleRetake,
+                variant: 'ghost',
+              },
+            ]}
           />
-        ) : (
-          /* V2-06: shared renderer 사용 | FLOW-03: 실행 시작 CTA */
-          <div className="space-y-3 w-full max-w-md">
-            <PublicResultRenderer
-              result={baseline.result}
-              stage="baseline"
-              onBack={handleBackToGate}
-              confidenceNote="설문 응답 완성도 및 축별 신호 격차 기반 계산"
-              actions={[
-                {
-                  label: bridgePending ? '처리 중...' : '실행 시작하기',
-                  onClick: handleExecutionStart,
-                  variant: 'primary',
-                },
-                {
-                  label: '카메라로 더 정밀하게 분석하기',
-                  onClick: handleCamera,
-                  variant: 'secondary',
-                },
-                {
-                  label: '설문 다시 하기',
-                  onClick: handleRetake,
-                  variant: 'ghost',
-                },
-              ]}
-            />
-            {bridgeError && (
-              <p className="text-sm text-amber-400 text-center" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                {bridgeError}
-              </p>
-            )}
-          </div>
-        )}
+          {bridgeError && (
+            <p className="text-sm text-amber-400 text-center" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+              {bridgeError}
+            </p>
+          )}
+        </div>
       </main>
     </div>
   );
