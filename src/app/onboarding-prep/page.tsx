@@ -2,6 +2,7 @@
 
 /**
  * FLOW-03 — Post-Pay Bridge Destination
+ * PR-ONBOARDING-MIN-06 — 짧은 실행 준비 단계로 이어진다는 메시지 정리
  *
  * 결제 성공 후 public-first 흐름의 다음 단계 진입점.
  * deep-test 재진입이 아닌 onboarding/claim 준비 단계로 안내.
@@ -67,12 +68,12 @@ export default function OnboardingPrepPage() {
           <span className="text-4xl">✓</span>
         </div>
         <h1 className="text-2xl font-bold text-slate-100" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-          실행 준비로 이어가요
+          이제 짧게만 확인할게요
         </h1>
-        <p className="text-slate-400 text-sm" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+        <p className="text-slate-400 text-sm leading-relaxed" style={{ fontFamily: 'var(--font-sans-noto)' }}>
           {hasContext
-            ? '방금 정리한 시작점을 바탕으로 다음 단계로 진행합니다. 결제를 마친 경우에도, 이미 활성 회원인 경우에도 여기서 실행 흐름을 이어갈 수 있어요.'
-            : '맞춤 운동 루틴을 시작하려면 다음 단계로 진행하세요.'}
+            ? '설문·결과는 이미 반영됐어요. 다음 화면에서는 주당 횟수와 안전에 필요한 것만 고르고 바로 루틴으로 이어져요.'
+            : '다음에서 주당 횟수와 실행에 필요한 최소 정보만 확인합니다.'}
         </p>
 
         <div className="space-y-3 pt-4">
@@ -82,7 +83,7 @@ export default function OnboardingPrepPage() {
             className="w-full min-h-[52px] rounded-2xl font-bold text-slate-900 transition-colors"
             style={{ backgroundColor: ACCENT, fontFamily: 'var(--font-sans-noto)' }}
           >
-            실행 준비하기
+            실행 설정으로
           </button>
           <Link
             href="/app/home"

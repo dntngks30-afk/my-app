@@ -21,6 +21,7 @@ import {
   applyTargetFrequency,
   isValidTargetFrequency,
   isValidExerciseExperienceLevel,
+  type ExerciseExperienceLevel,
 } from '@/lib/session/profile';
 
 export const dynamic = 'force-dynamic';
@@ -39,23 +40,41 @@ export async function POST(req: NextRequest) {
       return fail(400, ApiErrorCode.VALIDATION_FAILED, 'target_frequency는 2, 3, 4, 5 중 하나여야 합니다.');
     }
 
-    const lifestyleTag = typeof body.lifestyle_tag === 'string'
-      ? body.lifestyle_tag.trim() || null
-      : null;
-
-    const exerciseExperienceLevel = isValidExerciseExperienceLevel(body.exercise_experience_level)
-      ? body.exercise_experience_level
-      : undefined;
-    const painOrDiscomfortPresent =
-      typeof body.pain_or_discomfort_present === 'boolean'
-        ? body.pain_or_discomfort_present
+    /** 본문에 키가 없으면 undefined — applyTargetFrequency에서 해당 컬럼 미변경(다른 호출이 빈도만 바꿀 때 경험·통증 유지) */
+    const lifestyleTag: string | null | undefined =
+      'lifestyle_tag' in body
+        ? typeof body.lifestyle_tag === 'string'
+          ? body.lifestyle_tag.trim() || null
+          : null
         : undefined;
+
+    let exerciseExperienceLevel: ExerciseExperienceLevel | null | undefined;
+    if ('exercise_experience_level' in body) {
+      if (isValidExerciseExperienceLevel(body.exercise_experience_level)) {
+        exerciseExperienceLevel = body.exercise_experience_level;
+      } else {
+        return fail(400, ApiErrorCode.VALIDATION_FAILED, 'exercise_experience_level이 올바르지 않습니다.');
+      }
+    } else {
+      exerciseExperienceLevel = undefined;
+    }
+
+    let painOrDiscomfortPresent: boolean | null | undefined;
+    if ('pain_or_discomfort_present' in body) {
+      if (typeof body.pain_or_discomfort_present === 'boolean') {
+        painOrDiscomfortPresent = body.pain_or_discomfort_present;
+      } else {
+        return fail(400, ApiErrorCode.VALIDATION_FAILED, 'pain_or_discomfort_present는 boolean 이어야 합니다.');
+      }
+    } else {
+      painOrDiscomfortPresent = undefined;
+    }
 
     const supabase = getServerSupabaseAdmin();
     const result = await applyTargetFrequency(supabase, userId, rawFreq, {
-      lifestyleTag,
-      exerciseExperienceLevel: exerciseExperienceLevel ?? null,
-      painOrDiscomfortPresent: painOrDiscomfortPresent ?? null,
+      ...(lifestyleTag !== undefined ? { lifestyleTag } : {}),
+      ...(exerciseExperienceLevel !== undefined ? { exerciseExperienceLevel } : {}),
+      ...(painOrDiscomfortPresent !== undefined ? { painOrDiscomfortPresent } : {}),
     });
 
     if (!result.ok) {

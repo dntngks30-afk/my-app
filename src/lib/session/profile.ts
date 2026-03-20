@@ -81,12 +81,15 @@ export async function applyTargetFrequency(
   const upsertPayload: Record<string, unknown> = {
     user_id: userId,
     target_frequency: targetFrequency,
-    lifestyle_tag: options?.lifestyleTag ?? null,
   };
-  if (options?.exerciseExperienceLevel != null) {
+  // PR-ONBOARDING-MIN-06: 키가 없으면 컬럼을 건드리지 않음(빈도만 저장하는 호출이 경험·통증을 지우지 않게)
+  if (options?.lifestyleTag !== undefined) {
+    upsertPayload.lifestyle_tag = options.lifestyleTag;
+  }
+  if (options?.exerciseExperienceLevel !== undefined) {
     upsertPayload.exercise_experience_level = options.exerciseExperienceLevel;
   }
-  if (options?.painOrDiscomfortPresent != null) {
+  if (options?.painOrDiscomfortPresent !== undefined) {
     upsertPayload.pain_or_discomfort_present = options.painOrDiscomfortPresent;
   }
 

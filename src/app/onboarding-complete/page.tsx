@@ -83,10 +83,10 @@ export default function OnboardingCompletePage() {
           <span className="text-4xl">✓</span>
         </div>
         <h1 className="text-2xl font-bold text-slate-100" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-          준비가 완료되었습니다
+          루틴에 연결됐어요
         </h1>
-        <p className="text-slate-400 text-sm" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-          맞춤 운동 루틴을 시작하세요.
+        <p className="text-slate-400 text-sm leading-relaxed" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+          홈에서 세션을 만들면 바로 실행 화면으로 이어집니다.
         </p>
 
         <div className="space-y-3 pt-4">
