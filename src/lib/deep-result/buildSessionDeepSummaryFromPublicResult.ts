@@ -19,8 +19,7 @@
  *   우선순위 2: primary_type (UnifiedPrimaryType)
  *
  * scoring_version:
- *   우선순위 1: _compat.scoring_version
- *   우선순위 2: 'public_result_v2' (public-first 경로 식별)
+ *   템플릿 풀 조회 키로 정규화. deep_v3만 유지, 나머지는 deep_v2.
  *
  * deep_level: evidence_level → 1(lite) / 2(partial) / 3(full)
  *
@@ -123,8 +122,9 @@ export function buildSessionDeepSummaryFromPublicResult(
   // result_type: _compat 원본 → unified type fallback
   const result_type: string = compat?.result_type ?? primaryType ?? 'UNKNOWN';
 
-  // scoring_version
-  const scoring_version: string = compat?.scoring_version ?? 'public_result_v2';
+  // scoring_version: 템플릿 풀 조회 키로 정규화. analysis 엔진 식별자는 그대로 쓰지 않음
+  const rawScoringVersion = compat?.scoring_version;
+  const scoring_version: string = rawScoringVersion === 'deep_v3' ? 'deep_v3' : 'deep_v2';
 
   // deep_level from evidence_level
   const deep_level = evidenceLevelToDeepLevel(v2.evidence_level);
