@@ -175,6 +175,8 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   const [pastSessionInitialLogs, setPastSessionInitialLogs] = useState<Record<string, ExerciseLogItem>>({})
   const [currentSessionServerLogs, setCurrentSessionServerLogs] = useState<Record<string, ExerciseLogItem>>({})
   const [planLoading, setPlanLoading] = useState(false)
+  /** createSession 실패 원인 표면화 (침묵 → 구체적 안내) */
+  const [createSessionError, setCreateSessionError] = useState<{ code: string; message: string } | null>(null)
   const createCalledRef = useRef(false)
   const summaryCacheRef = useRef(new Map<number, PanelPlanSummaryResponse>())
   const summaryRequestRef = useRef(new Map<number, Promise<PanelPlanSummaryResponse | null>>())
@@ -419,6 +421,13 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     return 'locked' as const
   }, [selectedSessionId, effectiveCurrentSession, completed])
 
+  // createSessionError: current 세션에서만 유효, 패널 닫기/다른 세션 선택 시 clear
+  useEffect(() => {
+    if (selectedStatus !== 'current' || selectedSessionId === null) {
+      setCreateSessionError(null)
+    }
+  }, [selectedStatus, selectedSessionId])
+
   // 과거 세션 클릭 시 plan-summary 조회 (패널 첫 렌더용 경량). prefetch 캐시 있으면 즉시 사용
   useEffect(() => {
     if (selectedStatus !== 'completed' || selectedSessionId === null) {
@@ -597,7 +606,9 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   useEffect(() => {
     if (selectedStatus !== 'current') return
     if (selectedSessionId === null) return
-    if (fullPlan !== null) return
+    // lite activePlan(plan_json 없음)이어도 fullPlan !== null이 되므로, usable plan 여부로 판단
+    const hasUsablePlan = fullPlan != null && 'plan_json' in fullPlan && !!fullPlan.plan_json
+    if (hasUsablePlan) return
     if (createCalledRef.current) return
 
     createCalledRef.current = true
@@ -608,6 +619,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         if (!cancelled) setPlanLoading(false)
         return
       }
+      setCreateSessionError(null)
       if (typeof performance !== 'undefined' && performance.mark) {
         performance.mark('createSession-start')
       }
@@ -617,21 +629,34 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         summary: true,
         ...(debug && { debug: true }),
       })
-      if (cancelled) return
       if (typeof performance !== 'undefined' && performance.mark) {
         performance.mark('createSession-end')
       }
       if (!result.ok) {
         // 하루 1세션 cap 초과 시 로컬 상태 즉시 반영 → locked 패널 표시
         if (result.error.code === 'DAILY_LIMIT_REACHED') {
-          setLocalDailyCapActive(true)
-          createCalledRef.current = false
+          if (!cancelled) {
+            setLocalDailyCapActive(true)
+            createCalledRef.current = false
+          }
+        } else {
+          // createSession 실패 원인 표면화 — cancelled여도 표면화 (Strict Mode remount 대응)
+          const code = result.error.code ?? 'UNKNOWN'
+          const msg =
+            code === 'ANALYSIS_INPUT_UNAVAILABLE'
+              ? '분석 결과를 불러오지 못해 세션을 만들 수 없습니다.'
+              : code === 'FREQUENCY_REQUIRED'
+                ? '운동 빈도 설정이 필요합니다. 심층 테스트 결과 보기에서 빈도를 선택해 주세요.'
+                : '세션 생성 중 문제가 발생했습니다.'
+          setCreateSessionError({ code, message: msg })
         }
-        if (!bootstrapPlan) setPlanLoading(false)
+        if (!cancelled && !bootstrapPlan) setPlanLoading(false)
         return
       }
+      if (cancelled) return
       if ('active' in result.data && result.data.active) {
         const plan = result.data.active as SessionPlan
+        setCreateSessionError(null)
         setFullPlan(plan)
         setBootstrapPlan((prev) => (prev?.session_number === plan.session_number ? null : prev))
         setPlanLoading(false)
@@ -829,6 +854,20 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         />
       )}
 
+      {/* createSession 실패 시 원인 표면화 (current 세션에서만) */}
+      {createSessionError && selectedStatus === 'current' && selectedSessionId !== null && (
+        <div
+          className={`mx-4 mt-3 rounded-xl border px-4 py-3 text-sm ${
+            isDonorCard ? 'border-amber-500/40 bg-amber-500/10 text-amber-200' : 'border-amber-300 bg-amber-50 text-amber-800'
+          }`}
+        >
+          <p>{createSessionError.message}</p>
+          {process.env.NODE_ENV !== 'production' && (
+            <p className="mt-1 text-xs opacity-70">code: {createSessionError.code}</p>
+          )}
+        </div>
+      )}
+
       {/* 하단 패널 — plan_json 운동 목록 + 세션 종료 */}
       <SessionPanelV2
         sessionId={selectedSessionId}
@@ -837,6 +876,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         status={selectedStatus}
         exercises={exercises}
         activePlan={selectedStatus === 'current' ? (currentRenderablePlan ?? fullPlan) : pastSessionPlan}
+        createSessionError={createSessionError}
         initialLogs={selectedStatus === 'completed' ? pastSessionInitialLogs : selectedStatus === 'current' ? currentSessionServerLogs : undefined}
         isLockedNext={selectedStatus === 'locked' && isLockedNext && selectedSessionId === nextSessionNum}
         nextUnlockAt={nextUnlockAt ?? undefined}

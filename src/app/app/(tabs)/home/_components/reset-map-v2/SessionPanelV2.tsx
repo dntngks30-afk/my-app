@@ -59,6 +59,8 @@ interface SessionPanelV2Props {
     sessionNumber: number,
     options?: { forceRefresh?: boolean }
   ) => Promise<NextSessionPreviewPayload | null>
+  /** createSession 실패 시 구체적 원인 (패널 내 표면화용) */
+  createSessionError?: { code: string; message: string } | null
 }
 
 const STATUS_LABEL: Record<SessionStatus, string> = {
@@ -133,6 +135,7 @@ export function SessionPanelV2({
   adaptiveExplanation,
   nextSession,
   onFetchLockedPreview,
+  createSessionError,
 }: SessionPanelV2Props) {
   if (sessionId === null) return null
 
@@ -153,6 +156,7 @@ export function SessionPanelV2({
       adaptiveExplanation={adaptiveExplanation}
       nextSession={nextSession}
       onFetchLockedPreview={onFetchLockedPreview}
+      createSessionError={createSessionError}
     />
   )
 }
@@ -175,6 +179,7 @@ function PanelInner({
   adaptiveExplanation,
   nextSession,
   onFetchLockedPreview,
+  createSessionError,
 }: Required<Omit<SessionPanelV2Props, 'onSessionCompleted' | 'onRequestNextSession'>> & {
   onSessionCompleted?: (completedSessions: number) => void
   onRequestNextSession?: (nextSessionNumber: number) => void
@@ -492,6 +497,7 @@ function PanelInner({
                 isLockedNext={isLockedNext}
                 nextUnlockAt={nextUnlockAt}
                 onPlay={(item, idx) => setExerciseIndex(idx)}
+                createSessionError={createSessionError}
               />
             )}
           </div>
@@ -604,6 +610,7 @@ function ExerciseList({
   isLockedNext,
   nextUnlockAt,
   onPlay,
+  createSessionError,
 }: {
   exercises: ExerciseItem[] | undefined
   status: SessionStatus
@@ -611,6 +618,7 @@ function ExerciseList({
   isLockedNext?: boolean
   nextUnlockAt?: string
   onPlay: (item: ExerciseItem, index: number) => void
+  createSessionError?: { code: string; message: string } | null
 }) {
   if (status === 'locked') {
     return (
@@ -645,9 +653,13 @@ function ExerciseList({
   }
   // [] = 데이터 없음 (createSession 실패 등)
   if (exercises.length === 0) {
+    const message = createSessionError?.message ?? '운동 구성을 불러올 수 없습니다.'
     return (
       <div className="space-y-1 rounded-xl bg-slate-50 px-4 py-5 text-center">
-        <p className="text-sm text-slate-500">운동 구성을 불러올 수 없습니다.</p>
+        <p className="text-sm text-slate-500">{message}</p>
+        {process.env.NODE_ENV !== 'production' && createSessionError?.code && (
+          <p className="text-xs text-slate-400">code: {createSessionError.code}</p>
+        )}
         <p className="text-xs text-slate-400">페이지를 새로고침하면 다시 시도할 수 있습니다.</p>
       </div>
     )
