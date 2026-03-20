@@ -25,6 +25,7 @@ import {
   loadBridgeContext,
 } from '@/lib/public-results/public-result-bridge';
 import { claimPublicResultClient } from '@/lib/public-results/useClaimPublicResult';
+import { clearReadinessCheck } from '@/app/app/_components/ReadinessEntryGate';
 
 const BG = '#0d161f';
 const ACCENT = '#ff7b00';
@@ -57,12 +58,15 @@ export default function OnboardingCompletePage() {
 
       // bridge context 정리 (claim 성공/실패 무관)
       clearBridgeContext();
+      // FLOW-08: 다음 /app/home 진입 시 readiness를 새로 체크하게 초기화
+      clearReadinessCheck();
       if (!cancelled) setClaimDone(true);
     }
 
     runClaim().catch((err) => {
       console.warn('[onboarding-complete] claim unexpected error:', err);
       clearBridgeContext();
+      clearReadinessCheck();
       if (!cancelled) setClaimDone(true);
     });
 

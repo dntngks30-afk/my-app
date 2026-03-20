@@ -137,18 +137,19 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
   }
 
   if (status === 'paywall') {
+    // FLOW-08: public-first 전환 - 분석 결과 → 결제 경로로 안내
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-[var(--bg)] px-4">
-        <h2 className="text-lg font-semibold text-[var(--text)]">유료 권한이 필요해요</h2>
+        <h2 className="text-lg font-semibold text-[var(--text)]">실행 권한이 필요해요</h2>
         <p className="max-w-sm text-center text-sm text-[var(--muted)]">
-          7일 루틴 이용 권한이 활성화되어야 앱을 사용할 수 있어요.
+          분석 결과를 먼저 확인하고, 맞춤 루틴 실행을 시작할 수 있어요.
         </p>
         <div className="flex flex-col gap-2 w-full max-w-xs">
           <Link
-            href="/deep-analysis?pay=1"
+            href="/movement-test/baseline"
             className="rounded-lg bg-[var(--brand)] px-6 py-3 text-center text-sm font-semibold text-white hover:opacity-90"
           >
-            7일 심층 분석 시작하기
+            분석 결과 확인하기
           </Link>
           <Link
             href="/pricing"
