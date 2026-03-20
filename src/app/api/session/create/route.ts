@@ -386,17 +386,34 @@ export async function POST(req: NextRequest) {
         .eq('session_number', progress.active_session_number)
         .maybeSingle();
 
+      // empty draft 판정: 과거 버그로 segments=[] 로 저장된 plan은 재생성 허용
+      const pj = existingPlan?.plan_json as { segments?: unknown[] } | null | undefined;
+      const isEmptyDraft =
+        existingPlan?.status === 'draft' &&
+        (!Array.isArray(pj?.segments) || (pj?.segments as unknown[]).length === 0);
+
+      if (!isEmptyDraft) {
+        void logSessionEvent(supabase, {
+          userId,
+          eventType: 'session_create_idempotent',
+          status: 'ok',
+          sessionNumber: progress.active_session_number,
+          meta: { reason: 'active_exists' },
+        });
+        const active = existingPlan ? toSummaryPlan(existingPlan) : null;
+        const data = { progress, active, idempotent: true, today_completed: todayCompleted, ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }) };
+        return ok(data, data);
+      }
+
+      // empty draft → 재생성 경로로 fall-through (active_session_number 로컬 클리어)
       void logSessionEvent(supabase, {
         userId,
-        eventType: 'session_create_idempotent',
+        eventType: 'session_create',
         status: 'ok',
         sessionNumber: progress.active_session_number,
-        meta: { reason: 'active_exists' },
+        meta: { reason: 'empty_draft_recovery' },
       });
-
-      const active = existingPlan ? toSummaryPlan(existingPlan) : null;
-      const data = { progress, active, idempotent: true, today_completed: todayCompleted, ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }) };
-      return ok(data, data);
+      progress = { ...progress, active_session_number: null };
     }
 
     // BE-ONB-02: progress 있음 + active 없음 → profile 기반 sync (안전 조건 시)
