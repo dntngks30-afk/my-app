@@ -1,407 +1,271 @@
-목적 (Purpose)
+역할: Cursor/에이전트가 작업 전에 가장 먼저 읽어야 하는 **가드레일 문서**(문서 스택 2순위). 짧고 강하게 현재 truth·작업 금지선·보호 영역을 명시한다.
 
-This file defines operational rules for AI coding agents working in the MOVE RE repository.
+# AGENTS.md
 
-이 문서는 MOVE RE 저장소에서 작업하는 AI 코딩 에이전트의 행동 규칙을 정의한다.
-목표는 그럴듯한 답변이 아니라 실제로 안전하고 검증된 코드 수정이다.
+---
 
-1. Role
+## Documentation precedence (문서 7종)
 
-Act as a practical senior engineer working inside this repository.
+충돌 시 **번호가 작을수록 우선**한다.
 
-AI는 이 프로젝트에서 실무 시니어 개발자처럼 행동한다.
+1. `docs/SSOT_PUBLIC_FIRST_2026_03.md` — canonical 제품 방향·구현 truth·남은 과제
+2. `AGENTS.md` — 본 문서 (가드레일·보호 영역)
+3. `ARCHITECTURE.md` — 계층·소유권·anti-drift
+4. `SYSTEM_FLOW.md` — end-to-end 흐름·continuity 계약
+5. `DEVELOPMENT_RULES.md` — PR·상태 분리·모델 선택
+6. `docs/REGRESSION_MATRIX.md` — 병합 전 시나리오 검증
+7. `docs/KNOWN_RISKS_AND_OPEN_ITEMS.md` — 열린 리스크·출구 기준
 
-Requirements
+**운영 SSOT**(코드/배포/DB): `origin/main` + Vercel 프로덕션 + Supabase 운영 DB. 제품·퍼널 의사결정은 위 **문서 스택**이 우선한다.
 
-Communicate directly
+---
 
-Stay calm and collaborative
+## Must-read order before any task
 
-Prefer execution over explanation
+작업 제안·적용 전 **아래 순서로 읽는다** (7문서 = SSOT 체계 전체).
 
-Do not invent information
+1. `docs/SSOT_PUBLIC_FIRST_2026_03.md`
+2. `AGENTS.md`
+3. `ARCHITECTURE.md`
+4. `SYSTEM_FLOW.md`
+5. `DEVELOPMENT_RULES.md`
+6. `docs/REGRESSION_MATRIX.md`
+7. `docs/KNOWN_RISKS_AND_OPEN_ITEMS.md`
 
-Verify before claiming completion
+---
 
-설명
+## Status labeling rule (필수)
 
-장황한 설명보다 실제 작업 중심
+제안·PR·설명 시 항상 분리한다.
 
-근거 없는 주장 금지
+- **CURRENT_IMPLEMENTED** — 배포·코드에 반영된 동작 또는 디버깅으로 확정된 사실
+- **LOCKED_DIRECTION** — 아직 전부 구현되지 않았을 수 있으나 **제품 방향으로 고정**된 원칙
+- **NOT_YET_IMPLEMENTED** — 명시적 남은 구현·정합화
 
-완료 주장 전에 검증 필요
+이 세 가지를 **한 문단에서 섞어 “이미 다 된 것처럼” 쓰지 않는다.**
 
-2. System Overview (MOVE RE)
+---
 
-MOVE RE is a PWA fitness platform that generates personalized training sessions from movement tests.
+## Current product identity
 
-MOVE RE는 사용자의 움직임 테스트를 기반으로 운동 세션을 생성하는 PWA 서비스다.
+MOVE RE는 운동 콘텐츠 앱이 아니다.  
+MOVE RE는 **상태 기반 운동 실행 시스템**이다.
 
-Core Stack
+Core loop:
 
-Next.js App Router
+`analysis → interpretation → readiness → session creation → execution → logging → adaptation → next session`
 
-Supabase (Auth + Database)
+---
 
-Stripe
+## Current implemented truth (요약)
 
-PWA
+- public-first 전환 **골격**은 구조적으로 완료된 단계에 있음
+- **Deep Result V2**가 단일 분석 truth
+- 카메라는 설문 baseline 위 **optional refine evidence** (독립 canonical truth 아님)
+- 세션 생성의 1차 source는 **claimed public result**; legacy paid deep는 **fallback only**
+- **readiness**가 `next_action` 소유
+- login / signup / signup-complete 구간 **next·intent continuity** 강화됨 (기본 복귀는 마케팅 루트 `/`가 아닌 계약된 경로 — SSOT §3-7)
+- empty plan: `scoring_version`(분석 엔진 식별자)이 템플릿 풀 키로 새는 문제 **완화됨** (`deep_v3` → 풀 조회 시 `deep_v2` 정규화)
+- segments 없는 empty draft **idempotent 재사용 금지** 경로
 
-Session-based training system
+---
 
-설명
+## Locked product direction (요약 — 상세는 SSOT)
 
-현재 서비스 구조
+- **단일 public entry** — 설문·카메라를 동등한 두 입구로 두지 않음
+- **설문 = baseline**
+- **카메라 = 최종 결과 직전 optional refine** (별도 동등 진입 아님)
+- **결과 = 2~3 화면, 행동 중심** (내부 축·raw score 중심 공개 UX 금지)
+- **결제 = 실행 unlock**, 분석 unlock 아님
+- **auth/pay 후에도** 방금 본 결과·intent·bridge **연속성 유지**
+- **결제 후 온보딩 최소**
+- **짧고 믿을 수 있는 staged 세션 생성 UX**
+- **세션 생성 직후 PWA 설치 안내**
+- **첫 앱 경험 = 실행 우선**, 튜토리얼 최소
 
-Next.js 기반 웹앱
+---
 
-Supabase 인증 및 데이터베이스
+## Deprecated product narratives (문서·카피에서 되돌리지 말 것)
 
-Stripe 결제
+아래는 **과거 서술**로만 구분한다. 신규 설계의 기본 전제로 복귀하지 않는다.
 
-PWA 앱 구조
+| Deprecated | 대체 canonical |
+|-------------|----------------|
+| paid-first 퍼널 (`payment → in-app deep → …`) | public analysis → result → auth/pay → … → execution |
+| “결제로 분석을 연다” | 분석은 public에서 끝; **결제는 실행을 연다** |
+| 설문 vs 카메라 **동등한 두 public 진입** | **단일 입구**; 카메라는 결과 직전 optional refine |
+| auth 성공 후 **의도 없이 `/`(마케팅 루트)로만 복귀** | `next`·bridge·`/app/home` 등 **계약된 경로** (SSOT SYSTEM_FLOW 참고) |
 
-세션 기반 운동 시스템
+---
 
-3. SSOT (Single Source of Truth)
+## Hard boundaries
 
-The official state of the system is defined by:
+- **paid-first**로 제품을 재정의하지 않는다.
+- **결제를 분석 unlock**으로 서술·구현하지 않는다 (실행 unlock).
+- 카메라만의 **별도 canonical truth 모델**을 만들지 않는다.
+- public-result **호환 필드**를 템플릿 풀 선택 키처럼 **직접** 쓰지 않는다.
+- **분석 엔진 식별자**와 **세션/템플릿 선택 식별자**를 같은 의미로 섞지 않는다.
+- public-entry/handoff 수정 시 **`/app` 실행 코어**를 불필요하게 흔들지 않는다.
+- **내부 raw scoring / priority 축**을 사용자 대면 UX의 중심에 두지 않는다 (디버그/어드민 예외는 별도).
+- 기본 UX로 **두 개의 평행한 public entry**를 다시 만들지 않는다.
 
-origin/main
+---
 
-Vercel production deployment
+## Current highest priorities (SSOT와 정렬)
 
-Supabase production database
+**P0:** 단일 public entry, 결과 직전 optional camera bridge, 결과 단순화, auth/pay/result continuity 봉인, regression lock  
 
-설명
+**P1:** preview_ready semantics, bootstrap/public-result source alignment, post-pay onboarding 축소, staged generation UX, PWA install polish, 첫 튜토리얼 최소화  
 
-MOVE RE의 실제 기준 상태(SSOT) 는 다음 세 가지다.
+**P2:** conversion preview, camera refine 카피, 과거 오염 empty draft 운영 정리  
 
-GitHub origin/main
+---
 
-Vercel 프로덕션 배포
+## Required output format for implementation tasks
 
-Supabase 운영 DB
+항상 포함:
 
-Rules
+1. assumptions  
+2. findings  
+3. files to change  
+4. why this is safe relative to SSOT  
+5. acceptance test checklist  
+6. explicit non-goals  
 
-Local environment is NOT SSOT
+---
 
-Migration files alone are NOT SSOT
+## Protected areas (수정 시 매우 주의)
 
-A feature exists only when all three match
+- `/app/home`, `/app/checkin`, `/app/profile`
+- `AppShell`, persistent tab shell
+- `SessionPanelV2`, `ExercisePlayerModal`
+- execution / auth / completion / adaptive core
 
-4. PR Separation Rules
+---
 
-Never mix unrelated changes in one PR.
+## Product identity lock
 
-서로 다른 종류의 수정은 한 PR에 섞지 않는다.
+MOVE RE는 상태 기반 운동 실행 시스템이다. 콘텐츠 앱이나 **의학 진단 도구**가 아니다.
 
-UI PR
+---
 
-Allowed
+## Camera funnel lock (in-session capture UX)
 
-components
+**중요:** 아래 “카메라 퍼널/래치” 규칙은 **세션 내 캡처 UX**(설정·스쿼트·리치 등)에 대한 것이다. **두 번째 public 마케팅 입구**를 정당화하지 않는다. Public 입구는 SSOT대로 **단일**이며, 카메라는 **최종 결과 전 optional refine**이다.
 
-layout
+Public camera funnel은 self-serve **usable-signal capture** 입력 채널이자 액션 브리지다.
 
-styles
+Default funnel: `Setup → Squat → Overhead Reach → Result`
 
-visual structure
+Locked camera laws:
 
-설명
-UI PR은 디자인 및 화면 구조 수정만 허용
+- completion-first, execution-first  
+- pass = progression gate, quality = interpretation signal  
+- setup = reading phase, capture = listening phase  
+- capture는 거의 텍스트 없이  
+- red = not-ready, white = analyzable readiness, green = final success  
+- voice = Korean-first, state-transition/latch-driven  
+- internal/debug/English 문자열은 **발화 금지**
 
-Not allowed
+---
 
-API routes
+## Motion contract lock
 
-database queries
+모든 동작은 공통 progression contract를 따른다:  
+`start pose → action event → completionSatisfied → passConfirmed → passLatched → auto progression`
 
-authentication logic
+동작별 감지는 다를 수 있으나 **최종 latch 의미**는 일관되어야 한다.
 
-payment logic
+---
 
-Backend PR
+## Squat lock
 
-Allowed
+스쿼트 완료는 full cycle: `descend → bottom → ascend → recovery`  
+깊이는 quality이지 completion이 아니다.
 
-API routes
+---
 
-database queries
+## Overhead reach lock
 
-session logic
+핵심 이슈는 최종 progression 정렬: `passConfirmed → passLatched`  
+raw detection만의 문제로 먼저 치부하지 않는다.
 
-authentication logic
+---
 
-설명
-백엔드 PR에서는 API 및 서버 로직 수정만 수행
+## Validation rule
 
-Not allowed
+카메라·실행 UX의 1차 검증은 **실제 기기 dogfooding**이다.
 
-UI layout
+---
 
-component design
+# Part 2 — Operational rules (에이전트 행동 규칙)
 
-Payment / Auth PR
+목적: MOVE RE 저장소에서 AI 코딩 에이전트의 실무 규칙을 정의한다. **그럴듯한 답변이 아니라 검증된 코드 수정**을 목표로 한다.
 
-Allowed
+## 1. Role
 
-Stripe integration
+실무 시니어 엔지니어처럼 행동한다. 직접적으로 소통하고, 실행을 설명보다 우선하며, **근거 없는 주장 금지**, 완료 주장 전 **검증**.
 
-webhooks
+## 2. System overview (MOVE RE)
 
-plan_status updates
+PWA 피트니스 플랫폼 — 움직임 테스트 기반 개인화 세션. **Core Stack:** Next.js App Router, Supabase (Auth + DB), Stripe, PWA, 세션 기반 운동.
 
-user activation
+## 3. SSOT (운영 상태)
 
-authentication flows
+공식 시스템 상태는 **GitHub origin/main**, **Vercel 프로덕션**, **Supabase 운영 DB**의 일치로 정의된다. 로컬 환경·마이그레이션 파일만으로는 SSOT가 아니다. 기능은 **세 가지가 맞을 때** 존재한다.
 
-설명
-결제 및 인증 로직은 항상 별도 PR로 관리
+## 4. PR separation rules
 
-5. Database Rules
+관련 없는 변경을 한 PR에 섞지 않는다.
 
-Supabase database changes must be handled carefully.
+- **UI PR:** 컴포넌트·레이아웃·스타일·시각 구조만. API/DB/인증/결제 로직 금지.  
+- **Backend PR:** API·DB·세션·인증 로직. UI 레이아웃·컴포넌트 디자인 금지.  
+- **Payment/Auth PR:** Stripe·웹훅·plan_status·가입 플로우 등. 별도 PR로 관리.
 
-Supabase DB 수정은 매우 신중하게 수행해야 한다.
+## 5. Database rules
 
-Rules
+테이블 존재를 가정하지 말 것. 스키마 확인 후 쿼리. 파괴적 변경 지양, **가산적 마이그레이션** 선호. DROP/ALTER TYPE 등은 사용자 확인.
 
-Never assume tables exist
+## 6. Authentication rules
 
-Verify schema before queries
+세션 쿠키·Bearer·Supabase 등 **패턴이 혼재**할 수 있다. 사용 중인 방식을 감지하고 **조용히 바꾸지 말 것**. 상세: `docs/AUTH_CONTRACT.md`.
 
-Avoid destructive changes
+## 7. API safety rules
 
-Prefer additive migrations
+API 라우트 수정 전: 호출자 전부, 프론트 사용처, 인증 방식, 응답 형식 확인. 예: `/api/media/sign`은 재생·세션 플레이어·캐시·PWA에 광범위하게 영향.
 
-Safe changes
+## 8. File modification rules
 
-ADD COLUMN
+파일 수정 전 **파일 전체** 읽기, 의존성·참조 검색. 부분만 보고 수정·무분별 리네이밍·대규모 구조 재작성 금지.
 
-ADD INDEX
+## 9. Coding rules
 
-ADD CONSTRAINT
+작은 변경, 최소 diff, 검증 가능한 동작. 대규모 리팩터·추측 최적화 지양.
 
-Dangerous changes (require confirmation)
+## 10. Completeness contract
 
-DROP TABLE
+완료 = 요청 산출물 존재, TODO 없음, 핵심 로직 구현, **주장이 검증됨**.
 
-DROP COLUMN
+## 11. Verification loop
 
-ALTER TYPE
+마무리 전: 요구사항 충족? 형식 준수? 근거? 검증 수행? 불완전한데 완료라고 했는지?
 
-6. Authentication Rules
+## 12. Grounding rules
 
-MOVE RE currently contains multiple authentication patterns.
+저장소 코드·도구 출력·사용자 제공 정보만. 모르면 추측하지 말고 질문.
 
-MOVE RE는 현재 여러 인증 방식이 혼재되어 있다.
+## 13. Research behavior
 
-Examples
+디버깅은 질문 쪼개기 → 관련 파일 → 데이터 흐름 → 가정 검증.
 
-session cookies
+## 14. Default close-out
 
-Bearer tokens
+완료 시: 무엇을 했는지, 변경 파일, 검증, 남은 리스크.
 
-Supabase sessions
+## 15. Critical MOVE RE risk areas
 
-Rules
+특히 주의: **미디어 서명**, **세션 레일**, **운동 로그**, **PWA 캐싱**, **인증 미들웨어**, **Stripe 결제 플로우**.
 
-Detect which authentication method is used
+---
 
-Preserve that authentication model
-
-Do not silently switch authentication methods
-
-설명
-인증 방식 변경은 사용자 확인 없이 수행하지 않는다.
-Auth 모델·라우트 인벤토리: docs/AUTH_CONTRACT.md 참조.
-
-7. API Safety Rules
-
-Before editing an API route:
-
-Identify all callers
-
-Check frontend usage
-
-Verify authentication method
-
-Confirm response format
-
-Example risk
-
-/api/media/sign
-
-This route affects
-
-video playback
-
-session player
-
-media caching
-
-PWA behavior
-
-설명
-이 API는 여러 기능에 연결되어 있어 수정 시 서비스 전체에 영향 가능
-
-8. File Modification Rules
-
-Before editing any file:
-
-Read the entire file
-
-Identify dependencies
-
-Search for references
-
-Avoid
-
-blind refactors
-
-global renaming
-
-large structural rewrites
-
-설명
-파일 일부만 보고 수정하는 행동 금지.
-
-9. Coding Rules
-
-Preferred development style
-
-small changes
-
-minimal diff
-
-verified behavior
-
-Avoid
-
-large refactors
-
-speculative optimization
-
-설명
-
-작은 수정
-
-최소 변경
-
-검증 가능한 코드
-
-10. Completeness Contract
-
-A task is complete only when:
-
-every deliverable exists
-
-no TODO markers remain
-
-core logic is implemented
-
-claims are verified
-
-설명
-작업 완료 기준
-
-요청 결과 존재
-
-TODO 없음
-
-핵심 로직 구현
-
-검증 완료
-
-11. Verification Loop
-
-Before finishing work:
-
-Are all requirements satisfied?
-
-Was the requested format followed?
-
-Are claims grounded in evidence?
-
-Was verification performed?
-
-Is anything incomplete but claimed complete?
-
-12. Grounding Rules
-
-Only rely on:
-
-repository code
-
-verified tool output
-
-user-provided context
-
-설명
-
-저장소 코드
-
-실제 도구 결과
-
-사용자 제공 정보
-
-모르면 추측하지 말고 질문한다.
-
-13. Research Behavior
-
-When debugging problems:
-
-Break the problem into smaller questions
-
-Inspect relevant files
-
-Trace data flow
-
-Validate assumptions
-
-14. Default Close-Out
-
-Every completed task must include:
-
-what was done
-
-files changed
-
-verification performed
-
-remaining risks
-
-15. Critical MOVE RE Risk Areas
-
-Agents must be careful when modifying:
-
-media signing
-
-session rail logic
-
-exercise logs
-
-PWA caching
-
-authentication middleware
-
-Stripe payment flow
-
-설명
-이 영역은 MOVE RE 핵심 시스템이므로 수정 시 매우 주의
-
-Agent Instruction Example
-
-Follow AGENTS.md before making changes.
-
-Respect
-
-SSOT rules
-
-PR separation rules
-
-Completeness contract
-
-Do not modify unrelated files.
+**Agent instruction:** 변경 전 본 문서와 SSOT를 따른다. SSOT·PR 분리·완전성 계약을 존중하고, 무관한 파일을 수정하지 않는다.
