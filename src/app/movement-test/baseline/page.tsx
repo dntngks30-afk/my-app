@@ -177,7 +177,6 @@ export default function BaselinePage() {
             result={baseline.result}
             stage="baseline"
             onBack={recoveredFromDb ? undefined : handleBackToBridge}
-            confidenceNote="설문 응답을 바탕으로 한 요약입니다."
             actions={[
               {
                 label: bridgePending ? '처리 중...' : '실행 시작하기',
