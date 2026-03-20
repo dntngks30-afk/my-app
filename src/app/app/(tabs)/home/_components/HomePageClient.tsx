@@ -256,7 +256,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
 
     if (recheckTrigger === 0 && hasBootstrapResetMap) {
       const rm = bootstrap!.reset_map!;
-      if (rm.active_flow) {
+      if (rm.active_flow && rm.active_flow.state === 'started') {
         setResetMapFlowId(rm.active_flow.id);
         setResetMapClientState({
           flow_id: rm.active_flow.id,
@@ -307,7 +307,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
           : null;
       const result = reconcileResetMapClientState(latestFlow, local);
 
-      if (result.action === 'repair') {
+      if (result.action === 'repair' && latestFlow.state === 'started') {
         setResetMapFlowId(result.flow_id);
         if (result.clearApplyKey) clearApplyKey();
         setResetMapClientState({
@@ -318,7 +318,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         return;
       }
 
-      if (result.action === 'none') {
+      if (result.action === 'none' && latestFlow.state === 'started') {
         setResetMapFlowId(result.flow_id);
         return;
       }
