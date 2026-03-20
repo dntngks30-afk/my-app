@@ -5,6 +5,7 @@
 
 export const FUNNEL_KEY = 'moveRePublicFunnel:v1';
 
+/** 첫 공개 진입은 PR-PUBLIC-ENTRY-02 이후 항상 survey. `camera` 값은 과거 localStorage 호환용으로만 남을 수 있음. */
 export type EntryMode = 'survey' | 'camera';
 
 export interface FunnelData {

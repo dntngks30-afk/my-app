@@ -2,22 +2,18 @@
 
 /**
  * Public 메인 랜딩 페이지
- * 모바일 우선 100svh 풀스크린 story-style.
- * 설문형/동작형 CTA 클릭 시 localStorage 저장 후 /intro/welcome으로 이동.
+ * PR-PUBLIC-ENTRY-02 — 단일 primary CTA → intro funnel → 설문 baseline.
+ * 카메라는 첫 화면 동등 선택이 아니라 refine-bridge 이후 optional 경로로만 유지.
  */
 
 import { useRouter } from 'next/navigation';
-import { ChevronRight } from 'lucide-react';
 import { Starfield } from '@/components/landing/Starfield';
+import { FUNNEL_KEY } from '@/lib/public/intro-funnel';
 
-const FUNNEL_KEY = 'moveRePublicFunnel:v1';
-type EntryMode = 'survey' | 'camera';
-
-function saveEntryMode(mode: EntryMode) {
+function saveSurveyEntryMode() {
   if (typeof window === 'undefined') return;
   try {
-    const data = { entryMode: mode };
-    localStorage.setItem(FUNNEL_KEY, JSON.stringify(data));
+    localStorage.setItem(FUNNEL_KEY, JSON.stringify({ entryMode: 'survey' as const }));
   } catch {
     // ignore
   }
@@ -26,8 +22,8 @@ function saveEntryMode(mode: EntryMode) {
 export default function LandingPage() {
   const router = useRouter();
 
-  const handleCta = (mode: EntryMode) => {
-    saveEntryMode(mode);
+  const handleStart = () => {
+    saveSurveyEntryMode();
     router.push('/intro/welcome');
   };
 
@@ -59,51 +55,35 @@ export default function LandingPage() {
                 당신의 움직임은 안녕하신가요?
               </p>
               <p
-                className="text-slate-400 text-sm md:text-base font-medium tracking-wide"
+                className="text-slate-400 text-sm md:text-base font-medium tracking-wide break-keep"
                 style={{ fontFamily: 'var(--font-sans-noto)' }}
               >
-                AI가 분석하는 정밀 체형 및 움직임 밸런스 측정
+                짧은 체크로 패턴을 정리하고, 실행까지 이어질 수 있게 도와드려요
               </p>
             </div>
           </div>
 
-          <p
-            className="text-slate-400 text-sm font-medium mt-2 mb-4"
-            style={{ fontFamily: 'var(--font-sans-noto)' }}
-          >
-            분석을 시작할 방식을 선택해주세요.
-          </p>
-
-          {/* 2-CTA cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-xl">
+          {/* 단일 primary CTA — 설문 baseline이 기본 경로 */}
+          <div className="w-full max-w-md space-y-3 pt-2">
             <button
               type="button"
-              onClick={() => handleCta('survey')}
-              className="group relative flex flex-col items-start justify-center gap-1 p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-[#ff7b00]/50 hover:bg-white/10 transition-all duration-300 min-h-[100px] text-left focus:outline-none focus:ring-2 focus:ring-[#ff7b00] focus:ring-offset-2 focus:ring-offset-[#0d161f]"
-              aria-label="설문형 - 생활습관 추적 분석으로 시작"
+              onClick={handleStart}
+              className="w-full min-h-[56px] rounded-2xl font-bold text-slate-900 bg-[#ff7b00] hover:bg-[#ff8f26] transition-colors text-base md:text-lg shadow-lg shadow-black/25 focus:outline-none focus:ring-2 focus:ring-[#ff7b00] focus:ring-offset-2 focus:ring-offset-[#0d161f]"
+              style={{ fontFamily: 'var(--font-sans-noto)' }}
+              aria-label="내 몸 상태 1분 체크하기 — 설문으로 시작"
             >
-              <span className="text-[#ff7b00] text-xs font-bold uppercase tracking-wider">
-                설문형
-              </span>
-              <span className="text-white text-lg font-bold">생활습관 추적 분석</span>
-              <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 size-5 text-slate-500 group-hover:text-slate-400" aria-hidden />
+              내 몸 상태 1분 체크하기
             </button>
-            <button
-              type="button"
-              onClick={() => handleCta('camera')}
-              className="group relative flex flex-col items-start justify-center gap-1 p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-[#ff7b00]/50 hover:bg-white/10 transition-all duration-300 min-h-[100px] text-left focus:outline-none focus:ring-2 focus:ring-[#ff7b00] focus:ring-offset-2 focus:ring-offset-[#0d161f]"
-              aria-label="동작형 - AI기반 카메라 분석으로 시작"
+            <p
+              className="text-slate-500 text-xs md:text-sm font-medium break-keep leading-relaxed"
+              style={{ fontFamily: 'var(--font-sans-noto)' }}
             >
-              <span className="text-[#ff7b00] text-xs font-bold uppercase tracking-wider">
-                동작형
-              </span>
-              <span className="text-white text-lg font-bold">AI기반 카메라 분석</span>
-              <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 size-5 text-slate-500 group-hover:text-slate-400" aria-hidden />
-            </button>
+              짧은 질문으로 시작해요. 원하시면 결과를 보기 직전에 짧은 동작 확인을 더할 수 있어요.
+            </p>
           </div>
 
           <p
-            className="text-slate-500 text-[11px] font-medium mt-6"
+            className="text-slate-500 text-[11px] font-medium mt-4"
             style={{ fontFamily: 'var(--font-sans-noto)' }}
           >
             Professional Motion Intelligence Engine

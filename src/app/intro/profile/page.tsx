@@ -2,7 +2,8 @@
 
 /**
  * intro profile: age + gender 입력 후 localStorage 저장
- * entryMode 기준 분기 준비 (실제 push는 다음 PR)
+ * PR-PUBLIC-ENTRY-02 — 완료 시 항상 설문 baseline(/movement-test/survey)으로 진입.
+ * 카메라 first-entry 분기 제거 (refine-bridge에서만 optional 제공).
  */
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -57,15 +58,8 @@ export default function IntroProfilePage() {
       introCompletedAt: new Date().toISOString(),
     });
     if (typeof window !== 'undefined') {
-      const d = loadFunnel() as FunnelData;
-      if (d.entryMode === 'survey') {
-        mergeIntroProfileIntoSurveySession();
-        router.push('/movement-test/survey');
-      } else if (d.entryMode === 'camera') {
-        router.push('/movement-test/camera');
-      } else {
-        router.push('/movement-test/precheck');
-      }
+      mergeIntroProfileIntoSurveySession();
+      router.push('/movement-test/survey');
     }
   }, [age, gender, router]);
 
