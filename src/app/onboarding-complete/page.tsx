@@ -92,8 +92,9 @@ export default function OnboardingCompletePage() {
         <div className="space-y-3 pt-4">
           <button
             type="button"
+            disabled={!claimDone}
             onClick={() => router.push('/app/home')}
-            className="w-full min-h-[52px] rounded-2xl font-bold text-slate-900 transition-colors"
+            className="w-full min-h-[52px] rounded-2xl font-bold text-slate-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             style={{ backgroundColor: ACCENT, fontFamily: 'var(--font-sans-noto)' }}
           >
             앱으로 이동하기
