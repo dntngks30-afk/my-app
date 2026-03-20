@@ -18,6 +18,11 @@ export default function AppAuthClient({ next, errorParam }: AppAuthClientProps) 
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [oauthError, setOauthError] = useState<string | null>(null);
 
+  /** PR-PAY-CONTINUITY-05 — movement-test 결과에서 온 경우, 로그인이 “처음으로 리셋”이 아님을 짧게 안내 */
+  const continuityFromPublicResult =
+    typeof next === 'string' &&
+    (next.includes('/movement-test/') || next.includes('continue=execution'));
+
   useEffect(() => {
     if (errorParam === 'oauth') {
       setOauthError('OAuth 로그인에 실패했습니다. 다시 시도해 주세요.');
@@ -55,6 +60,14 @@ export default function AppAuthClient({ next, errorParam }: AppAuthClientProps) 
     <div className="min-h-screen bg-[#F8F6F0] py-12">
       <NeoPageLayout maxWidth="md">
         <div className="space-y-6">
+          {continuityFromPublicResult && (
+            <p
+              className="text-center text-sm text-slate-600 rounded-2xl border-2 border-slate-900 bg-white px-4 py-3 shadow-[2px_2px_0_0_rgba(15,23,42,1)]"
+              style={{ fontFamily: 'var(--font-sans-noto)' }}
+            >
+              방금 본 결과로 돌아가 실행을 이어갑니다. 로그인만 마치면 됩니다.
+            </p>
+          )}
           <div className="flex gap-3 justify-center">
             <NeoButton
               variant={mode === 'login' ? 'orange' : 'secondary'}

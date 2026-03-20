@@ -1,14 +1,18 @@
 /**
  * FLOW-03 — 실행 시작 CTA Bridge 훅
+ * PR-PAY-CONTINUITY-05 — 미로그인 시 `next`에 `?continue=execution`을 붙여
+ * 인증 후 결과 페이지에서 실행 분기(결제/온보딩)를 한 번 자동 이어갈 수 있게 함.
  *
  * public result 페이지에서 "실행 시작" 클릭 시:
- * - 미로그인 → login (next=현재 결과 페이지)
- * - 로그인 + inactive → checkout (success next=onboarding-prep)
+ * - 미로그인 → login (next=현재 결과 페이지 + continue=execution)
+ * - 로그인 + inactive → checkout (success next=onboarding-prep, cancel=쿼리 제거 경로)
  * - 로그인 + active → onboarding-prep 또는 /app/home
  *
  * bridge context는 localStorage에 저장되어 login/pay 후에도 복구 가능.
+ * public result id는 state·bridge context·handoff 순으로 해석(resolvePublicResultIdForBridgeStage).
  *
  * @see src/lib/public-results/public-result-bridge.ts
+ * @see useResumeExecutionAfterAuth
  */
 
 'use client';
@@ -16,7 +20,13 @@
 import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase';
-import { saveBridgeContext, buildOnboardingPrepUrl } from './public-result-bridge';
+import {
+  saveBridgeContext,
+  buildOnboardingPrepUrl,
+  appendContinueExecutionParam,
+  stripContinueExecutionParam,
+  resolvePublicResultIdForBridgeStage,
+} from './public-result-bridge';
 import type { BridgeResultStage } from './public-result-bridge';
 import { readAnonId } from './anon-id';
 
@@ -45,6 +55,9 @@ export function useExecutionStartBridge(
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** persist 직후·로그인 직후 타이밍에서도 bridge / handoff와 맞춘 id */
+  const resolvedId = resolvePublicResultIdForBridgeStage(publicResultId, stage);
+  const returnPathForCancel = stripContinueExecutionParam(returnPath);
 
   const handleExecutionStart = useCallback(async () => {
     if (isPending) return;
@@ -54,16 +67,17 @@ export function useExecutionStartBridge(
     try {
       const { data: { session } } = await supabaseBrowser.auth.getSession();
 
-      // 1. 미로그인 → login
+      // 1. 미로그인 → login (next에 continue=execution — PR-PAY-CONTINUITY-05)
       if (!session) {
-        if (publicResultId) {
+        if (resolvedId) {
           saveBridgeContext({
-            publicResultId,
+            publicResultId: resolvedId,
             resultStage: stage,
             anonId: readAnonId(),
           });
         }
-        const authNext = `/app/auth?next=${encodeURIComponent(returnPath)}`;
+        const nextAfterAuth = appendContinueExecutionParam(returnPath);
+        const authNext = `/app/auth?next=${encodeURIComponent(nextAfterAuth)}`;
         router.push(authNext);
         return;
       }
@@ -80,8 +94,8 @@ export function useExecutionStartBridge(
 
       // 3. active → onboarding-prep 또는 /app/home
       if (isActive) {
-        if (publicResultId) {
-          router.push(buildOnboardingPrepUrl(publicResultId, stage, readAnonId()));
+        if (resolvedId) {
+          router.push(buildOnboardingPrepUrl(resolvedId, stage, readAnonId()));
         } else {
           router.push('/app/home');
         }
@@ -89,13 +103,13 @@ export function useExecutionStartBridge(
       }
 
       // 4. inactive → checkout
-      const successNext = publicResultId
-        ? buildOnboardingPrepUrl(publicResultId, stage, readAnonId())
+      const successNext = resolvedId
+        ? buildOnboardingPrepUrl(resolvedId, stage, readAnonId())
         : '/onboarding-prep';
 
-      if (publicResultId) {
+      if (resolvedId) {
         saveBridgeContext({
-          publicResultId,
+          publicResultId: resolvedId,
           resultStage: stage,
           anonId: readAnonId(),
         });
@@ -110,7 +124,7 @@ export function useExecutionStartBridge(
         body: JSON.stringify({
           productId: 'move-re-7d',
           next: successNext,
-          cancelNext: returnPath,
+          cancelNext: returnPathForCancel,
           consent: true,
         }),
       });
@@ -121,7 +135,7 @@ export function useExecutionStartBridge(
         const code = json?.code ?? '';
         if (checkoutRes.status === 409 && code === 'ALREADY_ACTIVE') {
           // 결제 완료 직후 plan_status 갱신 전 재진입 등
-          router.push(publicResultId ? buildOnboardingPrepUrl(publicResultId, stage) : '/app/home');
+          router.push(resolvedId ? buildOnboardingPrepUrl(resolvedId, stage) : '/app/home');
           return;
         }
         setError(json?.error || json?.message || '결제 세션 생성에 실패했습니다.');
@@ -139,7 +153,7 @@ export function useExecutionStartBridge(
     } finally {
       setIsPending(false);
     }
-  }, [publicResultId, stage, returnPath, router, isPending]);
+  }, [resolvedId, stage, returnPath, returnPathForCancel, router, isPending]);
 
   return { handleExecutionStart, isPending, error };
 }

@@ -21,9 +21,19 @@
  * @see src/app/onboarding-prep/page.tsx (FLOW-03 bridge destination)
  */
 
+import { loadPublicResultHandoff } from './public-result-handoff';
+
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
 
 export type BridgeResultStage = 'baseline' | 'refined';
+
+/**
+ * PR-PAY-CONTINUITY-05 — 로그인/회원가입 후 결과 페이지로 돌아올 때
+ * "실행 시작"을 한 번 더 누르지 않도록 URL에 붙이는 쿼리.
+ * @see useResumeExecutionAfterAuth
+ */
+export const CONTINUE_EXECUTION_QUERY = 'continue' as const;
+export const CONTINUE_EXECUTION_VALUE = 'execution' as const;
 
 export interface PublicResultBridgeContext {
   publicResultId: string;
@@ -113,4 +123,44 @@ export function buildOnboardingPrepUrl(
     params.set('anonId', anonId);
   }
   return `/onboarding-prep?${params.toString()}`;
+}
+
+/**
+ * 실행 시작 CTA → 로그인으로 갈 때 `next`에 붙여, 인증 후 같은 결과 페이지에서
+ * bridge 컨텍스트가 있으면 실행 분기(결제/온보딩)를 자동으로 한 번 이어준다.
+ */
+export function appendContinueExecutionParam(path: string): string {
+  if (path.includes(`${CONTINUE_EXECUTION_QUERY}=`)) return path;
+  return path.includes('?')
+    ? `${path}&${CONTINUE_EXECUTION_QUERY}=${CONTINUE_EXECUTION_VALUE}`
+    : `${path}?${CONTINUE_EXECUTION_QUERY}=${CONTINUE_EXECUTION_VALUE}`;
+}
+
+/**
+ * URL에서 continue=execution 제거 (자동 이어가기 후 주소 정리용).
+ */
+export function stripContinueExecutionParam(fullPath: string): string {
+  const qIndex = fullPath.indexOf('?');
+  if (qIndex < 0) return fullPath;
+  const pathname = fullPath.slice(0, qIndex);
+  const qs = fullPath.slice(qIndex + 1);
+  const sp = new URLSearchParams(qs);
+  if (sp.get(CONTINUE_EXECUTION_QUERY) !== CONTINUE_EXECUTION_VALUE) return fullPath;
+  sp.delete(CONTINUE_EXECUTION_QUERY);
+  const next = sp.toString();
+  return next ? `${pathname}?${next}` : pathname;
+}
+
+/**
+ * 페이지 state·핸드오프·bridge context 순으로 public result id를 해석한다.
+ * (로그인 직후 persist 비동기 타이밍에서도 bridge에 저장된 id로 이어갈 수 있게)
+ */
+export function resolvePublicResultIdForBridgeStage(
+  explicit: string | null,
+  stage: BridgeResultStage
+): string | null {
+  if (explicit) return explicit;
+  const ctx = loadBridgeContext();
+  if (ctx && ctx.resultStage === stage && ctx.publicResultId) return ctx.publicResultId;
+  return loadPublicResultHandoff(stage);
 }

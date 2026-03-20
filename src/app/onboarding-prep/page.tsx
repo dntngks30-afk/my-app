@@ -67,12 +67,12 @@ export default function OnboardingPrepPage() {
           <span className="text-4xl">✓</span>
         </div>
         <h1 className="text-2xl font-bold text-slate-100" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-          결제가 완료되었습니다
+          실행 준비로 이어가요
         </h1>
         <p className="text-slate-400 text-sm" style={{ fontFamily: 'var(--font-sans-noto)' }}>
           {hasContext
-            ? '분석 결과가 저장되었습니다. 이제 맞춤 운동 루틴을 시작하세요.'
-            : '맞춤 운동 루틴을 시작하세요.'}
+            ? '방금 정리한 시작점을 바탕으로 다음 단계로 진행합니다. 결제를 마친 경우에도, 이미 활성 회원인 경우에도 여기서 실행 흐름을 이어갈 수 있어요.'
+            : '맞춤 운동 루틴을 시작하려면 다음 단계로 진행하세요.'}
         </p>
 
         <div className="space-y-3 pt-4">

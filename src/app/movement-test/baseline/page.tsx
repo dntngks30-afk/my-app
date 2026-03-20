@@ -11,7 +11,7 @@
  * @see src/components/public-result/PublicResultRenderer.tsx (V2-06 shared renderer)
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Starfield } from '@/components/landing/Starfield';
 import { buildFreeSurveyBaselineResult } from '@/lib/deep-v2/builders/build-free-survey-baseline';
@@ -20,6 +20,7 @@ import { persistPublicResult } from '@/lib/public-results/persistPublicResult';
 import { loadPublicResultHandoff } from '@/lib/public-results/public-result-handoff';
 import { loadPublicResult } from '@/lib/public-results/loadPublicResult';
 import { useExecutionStartBridge } from '@/lib/public-results/useExecutionStartBridge';
+import { ResumeExecutionGate } from '@/components/public-result/ResumeExecutionGate';
 import type { FreeSurveyBaselineResult } from '@/lib/deep-v2/types';
 import type { TestAnswerValue } from '@/features/movement-test/v2';
 
@@ -60,7 +61,7 @@ export default function BaselinePage() {
   const [loading, setLoading] = useState(true);
 
   const { handleExecutionStart, isPending: bridgePending, error: bridgeError } = useExecutionStartBridge({
-    publicResultId: publicResultIdForBridge ?? loadPublicResultHandoff('baseline'),
+    publicResultId: publicResultIdForBridge,
     stage: 'baseline',
     returnPath: '/movement-test/baseline',
   });
@@ -172,6 +173,13 @@ export default function BaselinePage() {
       <Starfield />
 
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 py-8">
+        <Suspense fallback={null}>
+          <ResumeExecutionGate
+            enabled={!loading && !!baseline}
+            returnPathClean="/movement-test/baseline"
+            handleExecutionStart={handleExecutionStart}
+          />
+        </Suspense>
         <div className="space-y-3 w-full max-w-md">
           <PublicResultRenderer
             result={baseline.result}
