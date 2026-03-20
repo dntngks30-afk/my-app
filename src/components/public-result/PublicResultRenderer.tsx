@@ -3,6 +3,7 @@
 /**
  * PR-V2-06 — Unified Public Result Renderer
  * PR-RESULT-IA-03 — 2~3단(3 step) 액션 지향 UI: 타입 → 이유·조심 → 지금 할 일 + 실행 CTA
+ * PR-CONVERSION-PREVIEW-04 — Step 3: 시작 순서 미리보기·실행 unlock 가치 정렬
  *
  * - 계약(UnifiedDeepResultV2)은 변경하지 않고 표현만 단순화.
  * - 신뢰도 바·축별 벡터·분류 근거 칩 등 분석 대시보드형 요소는 본문에서 제거.
@@ -25,6 +26,13 @@ import {
   PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW,
   PRIMARY_TYPE_START_HOOK,
   stripSummaryMetaSuffix,
+  STEP3_HEADLINE,
+  EXECUTION_ORDER_PHASE_TITLES,
+  STEP3_PREVIEW_DISCLAIMER,
+  STEP3_VALUE_PILLARS,
+  STEP3_REFINED_CONTEXT_LINE,
+  STEP3_RECOMMENDED_SECTION_TITLE,
+  STEP3_LIFESTYLE_SECTION_TITLE,
 } from './public-result-labels';
 
 const ACCENT = '#ff7b00';
@@ -258,27 +266,85 @@ export function PublicResultRenderer({
               className="flex-1 min-h-[44px] rounded-2xl font-bold text-slate-900 bg-[#ff7b00] text-sm"
               style={{ fontFamily: 'var(--font-sans-noto)' }}
             >
-              다음 — 지금 할 일
+              다음 — 시작 순서 보기
             </button>
           </div>
         </div>
       )}
 
-      {/* ── Step 3: 지금 시작 + 순서 프리뷰 + CTA ── */}
+      {/* ── Step 3: 시작 순서 미리보기 + 실행 가치 + 보조 팁 + CTA (PR-CONVERSION-PREVIEW-04) ── */}
       {step === 3 && (
         <div className="space-y-4 pt-1">
           <h2 className="text-lg font-bold text-slate-100 break-keep" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-            지금 바로 시작하기
+            {STEP3_HEADLINE}
           </h2>
-          <p className="text-sm text-slate-300" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+          {stage === 'refined' && (
+            <p className="text-xs text-slate-400 break-keep" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+              {STEP3_REFINED_CONTEXT_LINE}
+            </p>
+          )}
+          <p className="text-sm text-slate-300 leading-relaxed break-keep" style={{ fontFamily: 'var(--font-sans-noto)' }}>
             {hook}
           </p>
 
+          {/* 시작 순서 미리보기 — 1·2·3 단계 의미 + 타입별 한 줄 */}
+          <div className="rounded-2xl border border-[#ff7b00]/35 bg-[#ff7b00]/10 p-4 space-y-3">
+            <div>
+              <p className="text-sm font-bold text-[#ff7b00]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+                시작 순서 미리보기
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed break-keep" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+                {STEP3_PREVIEW_DISCLAIMER}
+              </p>
+            </div>
+            <ol className="space-y-3 list-none">
+              {([0, 1, 2] as const).map((i) => (
+                <li key={i} className="flex gap-3">
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-slate-900"
+                    style={{ backgroundColor: ACCENT }}
+                  >
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+                      {EXECUTION_ORDER_PHASE_TITLES[i]}
+                    </p>
+                    <p className="text-sm text-slate-100 mt-0.5 leading-relaxed break-keep" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+                      {order[i]}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          {/* 실행 이어가기 — 결제=실행 unlock */}
           <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 space-y-2">
             <p className="text-xs text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              추천 운동 (예시)
+              실행을 시작하면
             </p>
-            <ul className="text-sm text-slate-200 space-y-1" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+            <ul className="space-y-2">
+              {STEP3_VALUE_PILLARS.map((line, i) => (
+                <li
+                  key={i}
+                  className="text-sm text-slate-300 leading-relaxed break-keep flex gap-2.5"
+                  style={{ fontFamily: 'var(--font-sans-noto)' }}
+                >
+                  <span className="text-[#ff7b00] shrink-0" aria-hidden>
+                    ·
+                  </span>
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 space-y-2">
+            <p className="text-xs text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+              {STEP3_RECOMMENDED_SECTION_TITLE}
+            </p>
+            <ul className="text-sm text-slate-200 space-y-1.5" style={{ fontFamily: 'var(--font-sans-noto)' }}>
               <li>· {rec[0]}</li>
               <li>· {rec[1]}</li>
             </ul>
@@ -286,24 +352,13 @@ export function PublicResultRenderer({
 
           <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 space-y-2">
             <p className="text-xs text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              생활에서 챙기면 좋은 점
+              {STEP3_LIFESTYLE_SECTION_TITLE}
             </p>
             <ul className="text-sm text-slate-300 space-y-1.5" style={{ fontFamily: 'var(--font-sans-noto)' }}>
               <li>· {life[0]}</li>
               <li>· {life[1]}</li>
               <li>· {life[2]}</li>
             </ul>
-          </div>
-
-          <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 space-y-2">
-            <p className="text-xs text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              운동 순서 프리뷰
-            </p>
-            <ol className="text-sm text-slate-300 space-y-1.5 list-decimal list-inside" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              <li>{order[0]}</li>
-              <li>{order[1]}</li>
-              <li>{order[2]}</li>
-            </ol>
           </div>
 
           <button

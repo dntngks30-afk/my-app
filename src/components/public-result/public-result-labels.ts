@@ -317,3 +317,38 @@ export const PRIMARY_TYPE_START_HOOK: Record<UnifiedPrimaryType, string> = {
 export function stripSummaryMetaSuffix(summary: string): string {
   return summary.replace(/\s*[\(（][^)）]*[)）]\s*$/u, '').trim();
 }
+
+// ─── PR-CONVERSION-PREVIEW-04 — Step 3 실행 순서·전환 가치 (표현 전용) ─
+
+/** Step 3 메인 헤드라인 */
+export const STEP3_HEADLINE = '지금 이렇게 시작하는 게 좋아요';
+
+/**
+ * 시작 순서 3단계 — 단계 이름(고정).
+ * PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW의 한 줄과 짝을 이룸.
+ */
+export const EXECUTION_ORDER_PHASE_TITLES = [
+  '가볍게 풀기 · 호흡·이동',
+  '준비 · 스트레칭·가동성',
+  '활성화 · 패턴에 맞춘 동작',
+] as const;
+
+/** 순서 블록 직후 — 사실 안전한 면책(과장 금지) */
+export const STEP3_PREVIEW_DISCLAIMER =
+  '아래 순서는 지금 결과를 바탕으로 한 시작 흐름 예시예요. 실제 루틴은 실행 단계에서 자동으로 이어져요.';
+
+/** 실행 이어가기 가치 — 결제=실행 unlock 정렬 */
+export const STEP3_VALUE_PILLARS: readonly string[] = [
+  '결제 후 바로 실행 화면으로 이어져요',
+  '오늘 정리한 상태를 반영해 순서가 자동으로 잡혀요',
+  '분석을 열기 위한 결제가 아니라, 실행을 시작하기 위한 단계예요',
+];
+
+/** refined일 때만 Step 3 상단에 덧붙이는 한 줄 */
+export const STEP3_REFINED_CONTEXT_LINE = '짧은 동작 체크를 반영한 시작 순서예요.';
+
+/** 추천 동작 카드 소제목 — 순서 예시에 붙는 동작 힌트 */
+export const STEP3_RECOMMENDED_SECTION_TITLE = '이 흐름에 들어갈 수 있는 동작 예시';
+
+/** 생활 습관 카드 소제목 */
+export const STEP3_LIFESTYLE_SECTION_TITLE = '짧게 챙기면 좋은 생활 팁';
