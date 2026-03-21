@@ -8,11 +8,8 @@
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronLeft } from 'lucide-react';
-import {
-  QUESTIONS_V2,
-  ANSWER_CHOICES_V2,
-  calculateScoresV2,
-} from '@/features/movement-test/v2';
+import { QUESTIONS_V2, ANSWER_CHOICES_V2 } from '@/features/movement-test/v2';
+import { getSurveyUiAxisSummary } from '@/lib/deep-v2/adapters/free-survey-to-evidence';
 import { Starfield } from '@/components/landing/Starfield';
 import type { AnimalAxis } from '@/features/movement-test/v2';
 import type { TestAnswerValue } from '@/features/movement-test/v2';
@@ -88,21 +85,12 @@ function saveSession(session: SessionV2) {
   }
 }
 
-function normalizePercent(value: number): number {
-  return value <= 1 ? value * 100 : value;
-}
-
+/**
+ * PR-UI-SUMMARY-SCORING-ALIGN: 도메인 점수 SSOT는 `free-survey-to-evidence`의
+ * `computeDomainScoresAndPattern`과 동일 — baseline evidence와 drift 없음.
+ */
 function getAxisSummary(answersById: Record<string, TestAnswerValue>) {
-  const scored = calculateScoresV2(answersById);
-  const axisEntries = Object.entries(scored.axisScores).map(([axis, score]) => ({
-    axis: axis as AnimalAxis,
-    score: normalizePercent(score),
-  }));
-  const sorted = [...axisEntries].sort((a, b) => b.score - a.score);
-  return {
-    topAxis: sorted[0]?.axis ?? 'turtle',
-    topScore: sorted[0]?.score ?? 0,
-  };
+  return getSurveyUiAxisSummary(answersById);
 }
 
 /** 첫 미응답 문항 인덱스. 모두 응답 시 TOTAL 반환 */

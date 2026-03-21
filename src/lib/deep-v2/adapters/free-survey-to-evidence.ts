@@ -288,6 +288,26 @@ export function freeSurveyAnswersToEvidence(
   };
 }
 
+// ─── 설문 UI 요약 (PR-UI-SUMMARY-SCORING-ALIGN) ───────────────────────────────
+
+/**
+ * 설문 페이지 UI/세션 보조용 — 6도메인 점수(0~100) 중 최고 축.
+ * `computeDomainScoresAndPattern`과 동일 SSOT → baseline `freeSurveyAnswersToEvidence`와 drift 없음.
+ * (`calculateScoresV2` 직접 호출 금지 — 07C 이후 canonical truth와 정렬)
+ */
+export function getSurveyUiAxisSummary(
+  answers: Record<string, TestAnswerValue | undefined>
+): { topAxis: AnimalAxis; topScore: number } {
+  const { axisScores } = computeDomainScoresAndPattern(answers);
+  const sorted = (Object.entries(axisScores) as [AnimalAxis, number][]).sort(
+    (a, b) => b[1] - a[1]
+  );
+  return {
+    topAxis: sorted[0]?.[0] ?? 'turtle',
+    topScore: sorted[0]?.[1] ?? 0,
+  };
+}
+
 // ─── 회귀/스모크 전용 (제품 경로에서 사용하지 않음) ─────────────────────────────
 
 /**
