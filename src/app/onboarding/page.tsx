@@ -13,6 +13,7 @@
  *
  * @see src/app/api/session/profile/route.ts
  * @see src/lib/onboarding/surveyOnboardingHints.ts
+ * @see src/app/session-preparing/page.tsx (PR-GENERATION-STAGE-07 짧은 스테이징 후 onboarding-complete)
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -113,7 +114,7 @@ export default function OnboardingPage() {
         return;
       }
 
-      router.push('/onboarding-complete');
+      router.push('/session-preparing');
     } catch (err) {
       setError(err instanceof Error ? err.message : '저장 중 오류가 발생했습니다.');
       setSaving(false);
