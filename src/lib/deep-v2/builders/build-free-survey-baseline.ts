@@ -5,7 +5,7 @@
  * → UnifiedDeepResultV2 (baseline) 생성 파이프라인.
  *
  * 파이프라인:
- *   1. freeSurveyAnswersToEvidence()   : 답변 → 채널 독립 evidence
+ *   1. freeSurveyAnswersToEvidence()   : 답변 → 채널 독립 evidence (PR-07C: calculateScoresV2 브리지 제거)
  *   2. runDeepScoringCore()            : evidence → DeepScoringCoreResult
  *   3. coreResultToUnifiedV2()         : core 결과 → UnifiedDeepResultV2
  *   4. validateUnifiedDeepResultV2()   : 계약 검증 (실패 시 throw)

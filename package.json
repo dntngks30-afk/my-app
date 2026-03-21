@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:deep-golden": "npx tsx scripts/deep-v2-golden.mjs",
+    "test:free-survey-evidence-parity": "npx tsx scripts/free-survey-evidence-parity-smoke.mjs",
     "test:deep-v3-smoke": "npx tsx scripts/deep-v3-smoke.mjs",
     "test:deep-id-check": "npx tsx scripts/deep-question-id-validate.mjs",
     "test:deep-p1-effective": "npx tsx scripts/deep-p1-effective-confidence.mjs",
