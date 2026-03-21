@@ -84,7 +84,11 @@ export default function BaselinePage() {
                 source_inputs: ['free_survey'] as const,
                 refinement_available: true,
                 generated_at: recovered.createdAt,
-                scoring_version: 'free_survey_v2_core',
+                // PR-SCORING-META-ALIGN: canonical deep family 기준.
+                // DB에서 복구 시 과거 'free_survey_v2_core' 스탬프가 저장되어 있을 수 있으나,
+                // page state은 canonical 값으로 정렬한다.
+                // 실제 result._compat.scoring_version은 그대로 보존됨.
+                scoring_version: 'deep_v2',
               },
             });
             if (process.env.NODE_ENV !== 'production') {

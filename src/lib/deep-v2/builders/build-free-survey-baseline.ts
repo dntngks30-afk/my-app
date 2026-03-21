@@ -116,7 +116,11 @@ function coreResultToUnifiedV2(
     summary_copy: buildBaselineSummaryCopy(coreResult.primary_type),
     _compat: {
       mainType: originalAnimalType,
-      scoring_version: 'free_survey_v2_core',
+      // PR-SCORING-META-ALIGN: canonical deep family 기준 = 'deep_v2'.
+      // 과거 'free_survey_v2_core' 스탬프는 compat/historical 용도였으나,
+      // buildSessionDeepSummaryFromPublicResult의 normalization guard와 정렬하여
+      // 이제부터 canonical 값을 직접 씁니다.
+      scoring_version: 'deep_v2',
     },
   };
 }
@@ -179,7 +183,9 @@ export function buildFreeSurveyBaselineResult(
       source_inputs: ['free_survey'],
       refinement_available: true,
       generated_at: new Date().toISOString(),
-      scoring_version: 'free_survey_v2_core',
+      // PR-SCORING-META-ALIGN: canonical deep family 기준.
+      // 과거 'free_survey_v2_core'에서 'deep_v2'로 정렬됨.
+      scoring_version: 'deep_v2',
     },
   };
 

@@ -122,7 +122,18 @@ export function buildSessionDeepSummaryFromPublicResult(
   // result_type: _compat 원본 → unified type fallback
   const result_type: string = compat?.result_type ?? primaryType ?? 'UNKNOWN';
 
-  // scoring_version: 템플릿 풀 조회 키로 정규화. analysis 엔진 식별자는 그대로 쓰지 않음
+  // scoring_version: 템플릿 풀 조회 키로 정규화.
+  // ─── 정규화 규칙 (PR-SCORING-META-ALIGN) ────────────────────────────────────
+  // canonical 값: 'deep_v2' (기본), 'deep_v3' (명시된 경우만)
+  // 알려진 legacy public stamp → deep_v2로 normalize:
+  //   'free_survey_v2_core'  (구 baseline builder 스탬프, < PR-SCORING-META-ALIGN)
+  //   'camera_fusion_v2'     (구 camera refined builder 스탬프, < PR-SCORING-META-ALIGN)
+  //   'free_v2'              (구 free-survey-adapter 스탬프)
+  //   'camera_v1'            (구 camera-adapter 스탬프)
+  //   undefined / 알 수 없는 값 → deep_v2 안전 기본값
+  // 이 규칙은 old persisted payload를 깨뜨리지 않으면서
+  // template pool 조회 키가 legacy analysis-engine 식별자로 오염되는 것을 방지한다.
+  // ─────────────────────────────────────────────────────────────────────────────
   const rawScoringVersion = compat?.scoring_version;
   const scoring_version: string = rawScoringVersion === 'deep_v3' ? 'deep_v3' : 'deep_v2';
 

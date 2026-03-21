@@ -61,7 +61,14 @@ export interface CameraRefinedResult {
     /** 추가 refinement 가능 여부 (유료 딥테스트) */
     refinement_available: true;
     generated_at: string;
-    scoring_version: 'camera_fusion_v2';
+    /**
+     * Canonical scoring family 식별자.
+     * 'deep_v2' = canonical deep family (template pool 조회 키와 정렬됨).
+     * PR-SCORING-META-ALIGN: 과거 'camera_fusion_v2' 스탬프에서 canonical 정렬.
+     * 하위 호환: 과거 'camera_fusion_v2' 값을 읽는 경우는
+     * buildSessionDeepSummaryFromPublicResult에서 자동 normalize된다.
+     */
+    scoring_version: 'deep_v2';
     /** camera evidence quality */
     camera_evidence_quality: 'strong' | 'partial' | 'minimal';
     /** camera pass 여부 */
@@ -261,7 +268,10 @@ export function buildCameraRefinedResult(
     reason_codes: [...coreResult.reason_codes, ...extraReasonCodes],
     summary_copy: buildRefinedSummaryCopy(coreResult.primary_type, cameraQuality),
     _compat: {
-      scoring_version: 'camera_fusion_v2',
+      // PR-SCORING-META-ALIGN: canonical deep family 기준 = 'deep_v2'.
+      // 과거 'camera_fusion_v2' 스탬프는 compat/historical 용도였으나,
+      // buildSessionDeepSummaryFromPublicResult의 normalization guard와 정렬.
+      scoring_version: 'deep_v2',
     },
   };
 
@@ -281,7 +291,9 @@ export function buildCameraRefinedResult(
       source_inputs: ['free_survey', 'camera'],
       refinement_available: true,
       generated_at: new Date().toISOString(),
-      scoring_version: 'camera_fusion_v2',
+      // PR-SCORING-META-ALIGN: canonical deep family 기준.
+      // 과거 'camera_fusion_v2'에서 'deep_v2'로 정렬됨.
+      scoring_version: 'deep_v2',
       camera_evidence_quality: cameraQuality,
       camera_pass: cameraPass,
       baseline_confidence: baseline.confidence,

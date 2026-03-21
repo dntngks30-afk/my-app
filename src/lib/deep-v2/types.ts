@@ -18,6 +18,9 @@ import type { UnifiedDeepResultV2 } from '@/lib/result/deep-result-v2-contract';
  * `result_stage = 'baseline'`이면 아직 최종 결과가 아님을 명시한다.
  *
  * V2-04 이후 camera / paid 보강을 통해 `result_stage = 'refined' | 'final'`로 승급한다.
+ *
+ * PR-SCORING-META-ALIGN: scoring_version canonical family = 'deep_v2'.
+ * 과거 'free_survey_v2_core' 값은 compat/historical 용도로만 존재한다.
  */
 export interface FreeSurveyBaselineMeta {
   /** 이 결과는 baseline 전용 — 설문 기반 초기 해석 */
@@ -28,8 +31,13 @@ export interface FreeSurveyBaselineMeta {
   refinement_available: true;
   /** 생성 시각 (ISO 8601) */
   generated_at: string;
-  /** 스코어링 파이프라인 버전 */
-  scoring_version: 'free_survey_v2_core';
+  /**
+   * Canonical scoring family 식별자.
+   * 'deep_v2' = canonical deep family (template pool 조회 키와 정렬됨).
+   * 하위 호환: 과거 'free_survey_v2_core' 값을 읽는 경우는
+   * buildSessionDeepSummaryFromPublicResult에서 자동 normalize된다.
+   */
+  scoring_version: 'deep_v2';
 }
 
 // ─── Baseline 결과 래퍼 ───────────────────────────────────────────────────────
