@@ -258,11 +258,13 @@ export default function SurveyForm() {
   };
 
   // 테스트 완료 처리
+  // PR-LEGACY-RESULT-CLEANUP: v1 설문 완료는 /movement-test/result(레거시) 대신 공개 진입으로 수렴.
+  // canonical v2 funnel은 /movement-test/survey → refine-bridge.
   const handleComplete = () => {
     saveSession({
       isCompleted: true,
     });
-    router.push('/movement-test/result');
+    router.push('/movement-test');
   };
 
   if (pageQuestions.length === 0) {

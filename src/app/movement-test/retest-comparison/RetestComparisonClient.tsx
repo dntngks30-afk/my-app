@@ -408,11 +408,11 @@ export default function RetestComparisonClient({
             내 루틴 보기
           </Button>
           <Button
-            onClick={() => router.push('/movement-test/result')}
+            onClick={() => router.push('/movement-test/refine-bridge')}
             variant="outline"
             className="flex-1"
           >
-            재검사 결과 상세보기
+            움직임 테스트 결과 보기
           </Button>
         </div>
       </div>
