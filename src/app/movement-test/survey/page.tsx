@@ -98,10 +98,8 @@ function getAxisSummary(answersById: Record<string, TestAnswerValue>) {
     axis: axis as AnimalAxis,
     score: normalizePercent(score),
   }));
-  const avg = axisEntries.reduce((sum, item) => sum + item.score, 0) / axisEntries.length;
   const sorted = [...axisEntries].sort((a, b) => b.score - a.score);
   return {
-    avg,
     topAxis: sorted[0]?.axis ?? 'turtle',
     topScore: sorted[0]?.score ?? 0,
   };
@@ -120,7 +118,6 @@ export default function MovementTestSurveyPage() {
   const [step, setStep] = useState(0);
   const [answersById, setAnswersById] = useState<AnswersById>({});
   const [ready, setReady] = useState(false);
-  const [showSelfTestModal, setShowSelfTestModal] = useState(false);
   const isTransitioningRef = useRef(false);
 
   const initFromSession = useCallback(() => {
@@ -194,11 +191,7 @@ export default function MovementTestSurveyPage() {
   const advanceOrComplete = useCallback(
     (next: Record<string, TestAnswerValue>) => {
       if (step >= TOTAL - 1) {
-        const { avg, topScore } = getAxisSummary(next);
-        if (avg >= 35 && avg <= 49) {
-          setShowSelfTestModal(true);
-          return;
-        }
+        const { topScore } = getAxisSummary(next);
         const s = loadSession();
         const final: SessionV2 = {
           version: 'v2',
@@ -239,59 +232,6 @@ export default function MovementTestSurveyPage() {
   const handlePrev = useCallback(() => {
     if (step > 0 && !isTransitioningRef.current) setStep((s) => s - 1);
   }, [step]);
-
-  const handleSkipToResult = useCallback(() => {
-    const next = { ...answersById } as Record<string, TestAnswerValue>;
-    const s = loadSession();
-    const { topAxis, topScore } = getAxisSummary(next);
-    const finalType: SessionV2['finalType'] = topScore <= 30 ? 'monkey' : topAxis;
-    const final: SessionV2 = {
-      version: 'v2',
-      isCompleted: true,
-      startedAt: s?.startedAt ?? new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-      profile: s?.profile ?? {},
-      answersById: next,
-      selfTest: s?.selfTest,
-      finalType,
-    };
-    saveSession(final);
-    setShowSelfTestModal(false);
-    router.push('/movement-test/refine-bridge');
-  }, [answersById, router]);
-
-  const handleGoToSelfTest = useCallback(() => {
-    const next = { ...answersById } as Record<string, TestAnswerValue>;
-    const s = loadSession();
-    const session: SessionV2 = {
-      version: 'v2',
-      isCompleted: false,
-      startedAt: s?.startedAt ?? new Date().toISOString(),
-      profile: s?.profile ?? {},
-      answersById: next,
-      selfTest: { isCompleted: false, answersById: {} },
-      finalType: undefined,
-    };
-    saveSession(session);
-    setShowSelfTestModal(false);
-    router.push('/movement-test/self-test');
-  }, [answersById, router]);
-
-  useEffect(() => {
-    if (!showSelfTestModal) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [showSelfTestModal]);
-
-  useEffect(() => {
-    if (!showSelfTestModal) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowSelfTestModal(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [showSelfTestModal]);
 
   if (!ready || !question) {
     return (
@@ -401,62 +341,6 @@ export default function MovementTestSurveyPage() {
           </div>
         </div>
       </main>
-
-      {/* 자가테스트 모달 */}
-      {showSelfTestModal && (
-        <>
-          <div
-            role="button"
-            tabIndex={0}
-            aria-label="닫기"
-            className="fixed inset-0 bg-black/50 z-40"
-            onClick={() => setShowSelfTestModal(false)}
-            onKeyDown={(e) => e.key === 'Enter' && setShowSelfTestModal(false)}
-          />
-          <div
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-            aria-modal
-            aria-labelledby="self-test-modal-title"
-          >
-            <div
-              className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0d161f] p-6 shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h2
-                id="self-test-modal-title"
-                className="text-lg font-bold text-slate-100 mb-2 break-keep"
-                style={{ fontFamily: 'var(--font-sans-noto)' }}
-              >
-                더 정확한 분석을 위해 1분 자가테스트를 진행하시겠어요?
-              </h2>
-              <p
-                className="text-sm text-slate-400 mb-6 break-keep"
-                style={{ fontFamily: 'var(--font-sans-noto)' }}
-              >
-                간단한 3가지 체크로 결과의 신뢰도를 높일 수 있어요.
-              </p>
-              <div className="flex flex-col gap-3">
-                <button
-                  type="button"
-                  onClick={handleGoToSelfTest}
-                  className="w-full min-h-[48px] rounded-xl font-bold text-slate-900 bg-white hover:bg-slate-100 transition-colors"
-                  style={{ fontFamily: 'var(--font-sans-noto)' }}
-                >
-                  자가테스트 하기
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSkipToResult}
-                  className="w-full min-h-[48px] rounded-xl font-medium text-slate-300 border border-white/20 hover:bg-white/5 transition-colors"
-                  style={{ fontFamily: 'var(--font-sans-noto)' }}
-                >
-                  건너뛰기
-                </button>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 }
