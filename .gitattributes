@@ -1,0 +1,20 @@
+# MOVE RE — Git 줄바꿈·텍스트 정규화
+# - text=auto: Git이 텍스트 파일을 판별하고 저장소에는 일관되게 맞춤 (팀/ OS 간 CRLF·LF 혼선 완화)
+# - Windows에서 core.autocrlf=true 를 쓰는 경우에도 인덱스·워킹트리 불일치(수정인데 diff 없음)를 줄이는 데 도움이 됨
+* text=auto
+
+# 바이너리는 줄바꿈 변환 금지
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.pdf binary
+*.zip binary
+*.mp4 binary
+*.webm binary
