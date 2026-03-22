@@ -1,5 +1,6 @@
 /**
  * FLOW-06 — Public Result → SessionDeepSummary 어댑터
+ * FLOW-07 — Result-aware Session Create Bridge (result_type 정렬 추가)
  *
  * UnifiedDeepResultV2를 session create가 소비하는 SessionDeepSummary로 변환한다.
  * 순수 함수. DB 접근 없음.
@@ -14,9 +15,11 @@
  *   우선순위 1: _compat.focus_tags / _compat.avoid_tags (legacy paid deep 계열 호환)
  *   우선순위 2: primary_type 기반 파생 (free_survey / camera 계열)
  *
- * result_type:
- *   우선순위 1: _compat.result_type (legacy 원본 타입 문자열)
- *   우선순위 2: primary_type (UnifiedPrimaryType)
+ * result_type (FLOW-07 정렬):
+ *   우선순위 1: _compat.result_type (legacy 원본 타입 문자열 — backward compat 유지)
+ *   우선순위 2: PRIMARY_TYPE_TO_SESSION_BAND[primary_type]
+ *               (Unified → session band 변환; resolveFirstSessionIntent 정렬용)
+ *   우선순위 3: primary_type 원문 (최후 fallback)
  *
  * scoring_version:
  *   템플릿 풀 조회 키로 정규화. deep_v3만 유지, 나머지는 deep_v2.
@@ -36,6 +39,25 @@
 import type { SessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import type { UnifiedDeepResultV2, UnifiedPrimaryType } from '@/lib/result/deep-result-v2-contract';
 import type { ClaimedPublicResultRow } from '@/lib/public-results/getLatestClaimedPublicResultForUser';
+
+// ─── PR-FLOW-07: primary_type → session band (first-session alignment) ──────
+// resolveFirstSessionIntent(priority-layer.ts)는 legacy band 키로 첫 세션 정책을
+// 결정한다 (UPPER-LIMB / LOWER-LIMB / LUMBO-PELVIS / DECONDITIONED / STABLE).
+// _compat.result_type이 없는 Unified-only public result는 이 맵으로
+// session-consumable band로 변환되어 firstSessionIntent가 null로 떨어지는
+// 문제를 방지한다.
+// - _compat.result_type이 있으면 항상 그쪽이 우선 (backward compat 유지).
+// - UNKNOWN은 null → 기존처럼 primaryType 원문 사용 (intent 없음은 의도된 동작).
+
+const PRIMARY_TYPE_TO_SESSION_BAND: Record<UnifiedPrimaryType, string | null> = {
+  LOWER_INSTABILITY:          'LOWER-LIMB',
+  LOWER_MOBILITY_RESTRICTION: 'LOWER-LIMB',
+  UPPER_IMMOBILITY:           'UPPER-LIMB',
+  CORE_CONTROL_DEFICIT:       'LUMBO-PELVIS',
+  DECONDITIONED:              'DECONDITIONED',
+  STABLE:                     'STABLE',
+  UNKNOWN:                    null,
+};
 
 // ─── primary_type → focus/avoid 파생 매핑 ────────────────────────────────────
 // plan generator의 focus scoring 체계와 호환되는 태그 집합.
@@ -119,8 +141,15 @@ export function buildSessionDeepSummaryFromPublicResult(
       ? (compat.avoid_tags as string[]).filter((x): x is string => typeof x === 'string')
       : (PRIMARY_TYPE_AVOID_MAP[primaryType] ?? []);
 
-  // result_type: _compat 원본 → unified type fallback
-  const result_type: string = compat?.result_type ?? primaryType ?? 'UNKNOWN';
+  // result_type: _compat 원본 → session band fallback → primary_type 원문
+  // FLOW-07: _compat.result_type 없이 Unified-only payload가 들어와도
+  // PRIMARY_TYPE_TO_SESSION_BAND가 session-consumable legacy band로 변환해
+  // resolveFirstSessionIntent가 null로 떨어지지 않도록 한다.
+  const result_type: string =
+    compat?.result_type ??
+    PRIMARY_TYPE_TO_SESSION_BAND[primaryType] ??
+    primaryType ??
+    'UNKNOWN';
 
   // scoring_version: 템플릿 풀 조회 키로 정규화.
   // ─── 정규화 규칙 (PR-SCORING-META-ALIGN) ────────────────────────────────────
