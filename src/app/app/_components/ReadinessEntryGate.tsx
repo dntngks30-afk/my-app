@@ -12,14 +12,13 @@
  * - session create / claim / onboarding 로직 변경 없음.
  * - AppShell / execution core 변경 없음.
  *
- * ─── next_action 매핑 ─────────────────────────────────────────────────────────
- * 'login'              → /app/auth (AppAuthGate가 이미 처리; 안전 fallback)
- * 'pay'                → /app/auth?next=/app/home (AppAuthGate가 이미 처리; 안전 fallback)
- * 'claim_result'       → /movement-test/baseline (public result 복구 경로)
- * 'complete_onboarding'→ /onboarding (onboarding 완성 경로)
- * 'create_session'     → pass-through (HomePageClient가 세션 생성 처리)
- * 'open_app'           → pass-through (HomePageClient가 active session 처리)
- * 'blocked'            → pass-through (HomePageClient가 차단 상태 처리)
+ * ─── next_action 매핑 (PR-FLOW-06 SessionReadinessNextAction) ─────────────────
+ * GO_AUTH              → /app/auth
+ * GO_PAYMENT           → pass-through (AppAuthGate)
+ * GO_RESULT            → /movement-test/baseline
+ * GO_ONBOARDING        → /onboarding
+ * GO_SESSION_CREATE    → pass-through
+ * GO_APP_HOME          → pass-through
  * fetch 실패 / null    → pass-through (safe fallback, execution core 차단 없음)
  *
  * ─── 반복 리다이렉트 방지 ────────────────────────────────────────────────────
@@ -36,7 +35,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchReadinessClient } from '@/lib/readiness/fetchReadinessClient';
-import type { NextActionCode } from '@/lib/readiness/getCanonicalUserReadiness';
+import type { SessionReadinessNextAction } from '@/lib/readiness/types';
 
 const READINESS_CHECKED_KEY = 'move-re-readiness-checked:v1';
 
@@ -96,30 +95,27 @@ export default function ReadinessEntryGate({ children }: ReadinessEntryGateProps
         return;
       }
 
-      const code: NextActionCode = readiness.next_action.code;
+      const code: SessionReadinessNextAction = readiness.next_action.code;
 
-      // 리다이렉트가 필요한 상태만 처리
-      if (code === 'claim_result') {
+      if (code === 'GO_RESULT') {
         markReadinessChecked();
         router.replace('/movement-test/baseline');
         return;
       }
 
-      if (code === 'complete_onboarding') {
+      if (code === 'GO_ONBOARDING') {
         markReadinessChecked();
         router.replace('/onboarding');
         return;
       }
 
-      // 'login', 'pay' → AppAuthGate가 이미 처리했어야 하는 케이스
-      // 안전 fallback: pass-through
-      if (code === 'login') {
+      if (code === 'GO_AUTH') {
         markReadinessChecked();
         router.replace('/app/auth');
         return;
       }
 
-      // 'create_session', 'open_app', 'blocked', 'pay' → pass-through
+      // GO_PAYMENT, GO_SESSION_CREATE, GO_APP_HOME → pass-through
       markReadinessChecked();
       setGating(false);
     })().catch(() => {

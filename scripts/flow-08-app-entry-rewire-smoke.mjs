@@ -46,9 +46,9 @@ console.log('\n[2] ReadinessEntryGate 검증');
 const gate = readSrc('src/app/app/_components/ReadinessEntryGate.tsx');
 assert('ReadinessEntryGate export', gate?.includes('export default function ReadinessEntryGate'));
 assert('clearReadinessCheck export', gate?.includes('export function clearReadinessCheck'));
-assert('claim_result → /movement-test/baseline', gate?.includes('/movement-test/baseline'));
-assert("complete_onboarding → /onboarding", gate?.includes("'/onboarding'"));
-assert("login → /app/auth", gate?.includes("'/app/auth'"));
+assert('GO_RESULT → /movement-test/baseline', gate?.includes('/movement-test/baseline'));
+assert("GO_ONBOARDING → /onboarding", gate?.includes("'/onboarding'"));
+assert("GO_AUTH → /app/auth", gate?.includes("'/app/auth'"));
 assert('sessionStorage 중복 체크 방지', gate?.includes('READINESS_CHECKED_KEY'));
 assert('fetchReadinessClient 사용', gate?.includes('fetchReadinessClient'));
 assert('pass-through fallback (create_session, open_app, blocked)', gate?.includes('markReadinessChecked'));
@@ -58,7 +58,7 @@ assert('fetch 실패 시 pass-through', gate?.includes('return null'));
 console.log('\n[3] fetchReadinessClient 검증');
 const fetcher = readSrc('src/lib/readiness/fetchReadinessClient.ts');
 assert('fetchReadinessClient export', fetcher?.includes('export async function fetchReadinessClient'));
-assert('CanonicalUserReadiness 타입 re-export', fetcher?.includes('export type { CanonicalUserReadiness }'));
+assert('SessionReadinessV1 타입 re-export', fetcher?.includes('export type { SessionReadinessV1 }'));
 assert('Bearer token 사용', fetcher?.includes('Bearer'));
 assert('실패 시 null 반환 (best-effort)', fetcher?.includes('return null'));
 
@@ -96,7 +96,7 @@ assert('router.replace auth?next redirect 유지', authGate?.includes('router.re
 // 9. FLOW-07 readiness API 연결 확인
 console.log('\n[9] readiness API 연결 확인');
 assert('fetchReadinessClient가 /api/readiness 호출', fetcher?.includes("'/api/readiness'"));
-assert('ReadinessEntryGate가 FLOW-07 타입 사용', gate?.includes('NextActionCode'));
+assert('ReadinessEntryGate가 PR-FLOW-06 next_action 사용', gate?.includes('SessionReadinessNextAction'));
 
 // 10. deep-test rerun 기본 경로 없음 확인
 console.log('\n[10] deep-test rerun 기본 경로 없음 확인');
