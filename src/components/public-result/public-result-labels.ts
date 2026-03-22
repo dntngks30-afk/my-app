@@ -10,7 +10,14 @@
  * @see src/lib/result/deep-result-v2-contract.ts (타입 SSOT)
  */
 
-import type { UnifiedPrimaryType } from '@/lib/result/deep-result-v2-contract';
+import type {
+  EvidenceLevel,
+  SourceMode,
+  UnifiedPrimaryType,
+} from '@/lib/result/deep-result-v2-contract';
+
+// ─── PR-RESULT-EXPLANATION-UPGRADE-01 — 이유 기반 보조 설명 (표현 전용) ─
+// 계약/스코어링 불변. 숫자·벡터·raw 코드 노출 금지.
 
 // ─── Primary Type ─────────────────────────────────────────────────────────────
 
@@ -101,6 +108,196 @@ export const REASON_CODE_LABELS: Record<string, string> = {
   balanced_movement_pattern:      '균형 움직임 패턴',
   composite_pattern:              '복합 패턴 감지',
   camera_evidence_partial:        '카메라 일부 신호 기반',
+};
+
+/**
+ * reason_code → 분석 근거를 사람 말로 풀어 쓴 짧은 문장 (Step 2 보조 불릿용).
+ * REASON_CODE_LABELS(짧은 라벨)보다 한 줄 설명에 가깝게 — 중복 키는 동일 의미로 유지.
+ */
+export const REASON_CODE_INSIGHT_PHRASES: Record<string, string> = {
+  top_axis_lower_stability:
+    '정리해 보면 하체 쪽 안정성 신호가 가장 앞에 서 있어요.',
+  top_axis_lower_mobility:
+    '하체 가동 범위 쪽 신호가 먼저 눈에 띄는 편이에요.',
+  top_axis_upper_mobility:
+    '상체·어깨 쪽 가동성 신호가 두드러져요.',
+  top_axis_trunk_control:
+    '허리·골반 주변 ‘조절’ 쪽 신호가 강하게 잡혀요.',
+  top_axis_asymmetry:
+    '좌우 차이가 함께 읽혀요.',
+  secondary_axis_lower_stability: '하체 안정성 쪽 보조 신호도 겹쳐 보여요.',
+  secondary_axis_lower_mobility: '하체 가동성 쪽 보조 신호도 겹쳐 보여요.',
+  secondary_axis_upper_mobility: '상체 가동성 쪽 보조 신호도 겹쳐 보여요.',
+  secondary_axis_trunk_control: '체간 조절 쪽 보조 신호도 겹쳐 보여요.',
+  secondary_axis_asymmetry: '비대칭 쪽 보조 신호도 겹쳐 보여요.',
+  stable_gate: '전반적으로 균형 쪽으로 묶이는 판정이에요.',
+  deconditioned_gate: '여러 축이 동시에 올라와 복합적으로 읽혀요.',
+  asymmetry_detected: '좌우 사용감 차이가 함께 포착됐어요.',
+  composite_pattern: '한 가지 축만이 아니라 겹치는 패턴으로 읽혀요.',
+  camera_evidence_partial: '동작 영상에서는 일부 구간만 또렷해서, 그 범위 안에서 보완했어요.',
+  balanced_movement_pattern: '전반적인 움직임 균형 쪽으로 정리돼요.',
+};
+
+/** reason_codes 정렬 시 우선 노출할 코드(앞쪽일수록 먼저). */
+const REASON_INSIGHT_PRIORITY: string[] = [
+  'top_axis_lower_stability',
+  'top_axis_lower_mobility',
+  'top_axis_upper_mobility',
+  'top_axis_trunk_control',
+  'top_axis_asymmetry',
+  'stable_gate',
+  'deconditioned_gate',
+  'asymmetry_detected',
+  'composite_pattern',
+  'lumbar_dominant_pattern',
+  'thoracic_closure_pattern',
+  'lateral_imbalance_pattern',
+  'anterior_head_pattern',
+  'ankle_mobility_restriction',
+  'global_bracing_pattern',
+  'balanced_movement_pattern',
+  'secondary_axis_lower_stability',
+  'secondary_axis_lower_mobility',
+  'secondary_axis_upper_mobility',
+  'secondary_axis_trunk_control',
+  'secondary_axis_asymmetry',
+  'camera_evidence_partial',
+];
+
+function priorityIndex(code: string): number {
+  const i = REASON_INSIGHT_PRIORITY.indexOf(code);
+  return i === -1 ? 999 : i;
+}
+
+/** 동작 refine 직전·직후 비교를 반영한 코드(baseline_was_*)가 있는지 */
+export function hasBaselineShiftReason(reasonCodes: readonly string[]): boolean {
+  return reasonCodes.some((c) => c.startsWith('baseline_was_'));
+}
+
+/**
+ * Step 2: 분석 근거에서 짧은 불릿 1~2개(사람이 읽기 좋은 문장).
+ * raw reason_code 문자열은 화면에 찍지 않는다.
+ */
+export function pickReasonInsightBullets(
+  reasonCodes: readonly string[],
+  max = 2
+): string[] {
+  const seen = new Set<string>();
+  const ordered = [...reasonCodes].filter((c) => !c.startsWith('baseline_was_'));
+  ordered.sort((a, b) => priorityIndex(a) - priorityIndex(b));
+
+  const out: string[] = [];
+  for (const code of ordered) {
+    const phrase = REASON_CODE_INSIGHT_PHRASES[code] ?? REASON_CODE_LABELS[code];
+    if (!phrase || seen.has(phrase)) continue;
+    seen.add(phrase);
+    out.push(phrase);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/**
+ * Step 2(refined): 타입이 바뀌었을 때만 쓰는 한 줄 — 디버그 느낌 나지 않게 일반화.
+ */
+export function buildRefinementShiftSupportLine(
+  reasonCodes: readonly string[],
+  stage: 'baseline' | 'refined' | 'fallback'
+): string | null {
+  if (stage !== 'refined' || !hasBaselineShiftReason(reasonCodes)) return null;
+  return '짧은 동작 체크를 더하면서, 처음 설문만으로 보이던 경향과 겹치는 부분을 다시 맞춰 봤어요.';
+}
+
+/**
+ * Step 1: 보조 패턴을 라벨 나열 대신 한 문장으로 (primary_type은 이미 제목에 있음).
+ */
+export function buildSecondaryTendencySentence(
+  secondary: UnifiedPrimaryType | null | undefined,
+  primary: UnifiedPrimaryType
+): string | null {
+  if (secondary == null || secondary === primary) return null;
+  const sec = PRIMARY_TYPE_LABELS[secondary] ?? String(secondary);
+  return `같은 결과 안에서 ${sec} 쪽 경향도 함께 겹쳐 보여요.`;
+}
+
+/**
+ * 헤더 우측 한 줄: 출처·정밀도 느낌만 살짝 (숫자·배지 과다 금지).
+ */
+export function buildPublicResultHeaderHint(params: {
+  stage: 'baseline' | 'refined' | 'fallback';
+  cameraEvidenceQuality?: 'strong' | 'partial' | 'minimal';
+  sourceMode: SourceMode;
+  evidenceLevel: EvidenceLevel;
+}): string {
+  const { stage, cameraEvidenceQuality, sourceMode, evidenceLevel } = params;
+  if (stage === 'fallback') return '설문 기준 안내';
+
+  if (stage === 'baseline') {
+    return evidenceLevel === 'lite' ? '설문 기초 분석 · 시작점' : '설문 분석 · 시작점';
+  }
+
+  if (sourceMode === 'camera') {
+    if (cameraEvidenceQuality === 'partial') return '설문+동작(일부) · 조정';
+    return '설문+동작 반영 · 조정';
+  }
+  return '설문+동작 반영';
+}
+
+/**
+ * missing_signals 중 1개만, 가벼운 안내(선택).
+ */
+export function pickLightMissingHintLine(signals: readonly string[]): string | null {
+  const displayable = filterDisplayableMissingSignals([...signals]);
+  if (displayable.length === 0) return null;
+  const first = displayable[0];
+  if (first === 'objective_movement_test_missing') {
+    return '객관 동작 측정은 다음에 더 붙이면 시작점을 더 맞출 수 있어요.';
+  }
+  if (first === 'camera_evidence_partial') {
+    return '동작 영상 신호가 일부만 또렷해서, 그 범위 안에서 정리했어요.';
+  }
+  if (first === 'pain_intensity_missing' || first === 'pain_location_missing') {
+    return '통증 정보는 아직 넣지 않았어요. 나중에 더하면 보호에 맞출 수 있어요.';
+  }
+  return null;
+}
+
+/** Step 3: 순서 제안이 이 패턴에 왜 맞는지 한 줄 (타입 기반, 숫자 없음) */
+export const STEP3_ORDER_FIT_BY_PRIMARY: Record<UnifiedPrimaryType, string> = {
+  LOWER_INSTABILITY:
+    '지금은 부담을 한 번에 주지 않고, 풀기→준비→활성화로 나누는 흐름이 이 패턴에 잘 맞아요.',
+  LOWER_MOBILITY_RESTRICTION:
+    '가동성이 묶여 있을 때는 무리한 깊이보다, 단계적으로 몸을 깨우는 순서가 안전해요.',
+  UPPER_IMMOBILITY:
+    '목·어깨 부담이 있을 때는 호흡과 가동을 먼저 열고 나서 움직임을 붙이는 순서가 잘 맞아요.',
+  CORE_CONTROL_DEFICIT:
+    '호흡·체간 연결을 먼저 잡고 나서 동작을 얹는 순서가 이 패턴에 잘 맞아요.',
+  DECONDITIONED:
+    '여러 신호가 겹칠 때는 짧게 순환하고, 다음 날 부담을 보는 순서가 잘 맞아요.',
+  STABLE:
+    '컨디션을 해치지 않는 선에서 순환·유지를 이어가는 순서가 잘 맞아요.',
+  UNKNOWN:
+    '아직 신호가 부족할 때는 가볍게 범위를 확인하는 짧은 순서부터가 잘 맞아요.',
+};
+
+/**
+ * Step 2: 조심 권장이 왜 이 결과와 연결되는지 — 타입별 한 줄(정적이되 ‘이유’ 톤).
+ */
+export const CAREFUL_FIT_BY_PRIMARY: Record<UnifiedPrimaryType, string> = {
+  LOWER_INSTABILITY:
+    '위 조심 포인트는 “한 번에 부담이 몰리기 쉬운” 하체 패턴을 덜 부담스럽게 가져가기 위한 거예요.',
+  LOWER_MOBILITY_RESTRICTION:
+    '위 조심 포인트는 가동이 묶였을 때 무리한 범위·강도를 피하려는 거예요.',
+  UPPER_IMMOBILITY:
+    '위 조심 포인트는 목·어깨에 부담이 쌓이기 쉬운 자세를 줄이려는 거예요.',
+  CORE_CONTROL_DEFICIT:
+    '위 조심 포인트는 허리만 버티거나 숨을 참는 패턴을 덜 만들기 위한 거예요.',
+  DECONDITIONED:
+    '위 조심 포인트는 여러 부위에 부담이 동시에 올라가지 않게 나누려는 거예요.',
+  STABLE:
+    '위 조심 포인트는 괜찮은 날에도 강도를 한 번에 올리지 않게 완충하려는 거예요.',
+  UNKNOWN:
+    '위 조심 포인트는 아직 신호가 부족할 때 무리한 시도를 줄이려는 거예요.',
 };
 
 // ─── Missing Signals ──────────────────────────────────────────────────────────

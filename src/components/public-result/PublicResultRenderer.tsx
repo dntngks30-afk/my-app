@@ -4,6 +4,7 @@
  * PR-V2-06 — Unified Public Result Renderer
  * PR-RESULT-IA-03 — 2~3단(3 step) 액션 지향 UI: 타입 → 이유·조심 → 지금 할 일 + 실행 CTA
  * PR-CONVERSION-PREVIEW-04 — Step 3: 시작 순서 미리보기·실행 unlock 가치 정렬
+ * PR-RESULT-EXPLANATION-UPGRADE-01 — reason_codes·출처 필드 기반 보조 설명(표현만)
  *
  * - 계약(UnifiedDeepResultV2)은 변경하지 않고 표현만 단순화.
  * - 신뢰도 바·축별 벡터·분류 근거 칩 등 분석 대시보드형 요소는 본문에서 제거.
@@ -33,6 +34,13 @@ import {
   STEP3_REFINED_CONTEXT_LINE,
   STEP3_RECOMMENDED_SECTION_TITLE,
   STEP3_LIFESTYLE_SECTION_TITLE,
+  buildPublicResultHeaderHint,
+  pickReasonInsightBullets,
+  buildRefinementShiftSupportLine,
+  buildSecondaryTendencySentence,
+  pickLightMissingHintLine,
+  STEP3_ORDER_FIT_BY_PRIMARY,
+  CAREFUL_FIT_BY_PRIMARY,
 } from './public-result-labels';
 
 const ACCENT = '#ff7b00';
@@ -137,14 +145,22 @@ export function PublicResultRenderer({
   const hook = PRIMARY_TYPE_START_HOOK[pt] ?? PRIMARY_TYPE_START_HOOK.UNKNOWN;
   const summaryBody = stripSummaryMetaSuffix(result.summary_copy);
 
-  const headerHint =
-    stage === 'baseline'
-      ? '설문으로 시작점 정리'
-      : stage === 'refined'
-        ? cameraEvidenceQuality === 'partial'
-          ? '설문 + 동작(일부 반영)'
-          : '설문 + 동작 반영'
-        : '설문 기준 안내';
+  const headerHint = buildPublicResultHeaderHint({
+    stage,
+    cameraEvidenceQuality,
+    sourceMode: result.source_mode,
+    evidenceLevel: result.evidence_level,
+  });
+
+  const reasonInsightLines = pickReasonInsightBullets(result.reason_codes, 2);
+  const refinementShiftLine = buildRefinementShiftSupportLine(result.reason_codes, stage);
+  const missingHintLine = pickLightMissingHintLine(result.missing_signals);
+  const secondaryTendencyLine = buildSecondaryTendencySentence(
+    result.secondary_type,
+    pt
+  );
+  const step3OrderFitLine = STEP3_ORDER_FIT_BY_PRIMARY[pt] ?? STEP3_ORDER_FIT_BY_PRIMARY.UNKNOWN;
+  const carefulFitLine = CAREFUL_FIT_BY_PRIMARY[pt] ?? CAREFUL_FIT_BY_PRIMARY.UNKNOWN;
 
   return (
     <div className="w-full max-w-md space-y-4 animate-in fade-in pb-4">
@@ -194,10 +210,9 @@ export function PublicResultRenderer({
             >
               {typeLabel}
             </h1>
-            {result.secondary_type && result.secondary_type !== result.primary_type && (
+            {secondaryTendencyLine && (
               <p className="text-sm text-slate-500 mt-1" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                함께 보이는 보조 패턴:{' '}
-                {PRIMARY_TYPE_LABELS[result.secondary_type as UnifiedPrimaryType] ?? result.secondary_type}
+                {secondaryTendencyLine}
               </p>
             )}
           </div>
@@ -235,6 +250,29 @@ export function PublicResultRenderer({
           <p className="text-sm text-slate-300 leading-relaxed break-keep" style={{ fontFamily: 'var(--font-sans-noto)' }}>
             {summaryBody}
           </p>
+          {reasonInsightLines.length > 0 && (
+            <ul className="space-y-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
+              {reasonInsightLines.map((line, i) => (
+                <li
+                  key={i}
+                  className="text-xs text-slate-400 leading-relaxed break-keep pl-3 relative before:content-['·'] before:absolute before:left-0 before:text-[#ff7b00]"
+                  style={{ fontFamily: 'var(--font-sans-noto)' }}
+                >
+                  {line}
+                </li>
+              ))}
+            </ul>
+          )}
+          {refinementShiftLine && (
+            <p className="text-xs text-slate-400 leading-relaxed break-keep" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+              {refinementShiftLine}
+            </p>
+          )}
+          {missingHintLine && (
+            <p className="text-[11px] text-slate-500 leading-relaxed break-keep" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+              {missingHintLine}
+            </p>
+          )}
           <div>
             <h3 className="text-sm font-semibold text-slate-200 mb-2" style={{ fontFamily: 'var(--font-sans-noto)' }}>
               일상에서 조심하면 좋은 점
@@ -250,6 +288,9 @@ export function PublicResultRenderer({
                 </li>
               ))}
             </ul>
+            <p className="text-[11px] text-slate-500 mt-2 leading-relaxed break-keep" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+              {carefulFitLine}
+            </p>
           </div>
           <div className="flex gap-2">
             <button
@@ -285,6 +326,9 @@ export function PublicResultRenderer({
           )}
           <p className="text-sm text-slate-300 leading-relaxed break-keep" style={{ fontFamily: 'var(--font-sans-noto)' }}>
             {hook}
+          </p>
+          <p className="text-[11px] text-slate-500 leading-relaxed break-keep" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+            {step3OrderFitLine}
           </p>
 
           {/* 시작 순서 미리보기 — 1·2·3 단계 의미 + 타입별 한 줄 */}
