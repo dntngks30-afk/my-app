@@ -9,8 +9,7 @@
  * - 설문 답변이 있으면(완료 여부 무관) → /movement-test/refine-bridge
  * - 없으면 → /movement-test/survey
  *
- * 채점 로직, selfTest 세션 필드, finalType 은 이 파일에서 더 이상 쓰지 않는다.
- * (기존 세션에 selfTest/finalType이 남아 있어도 현대 경로는 그 값을 읽지 않는다.)
+ * 리디렉트만 수행하며 movementTestSession:v2의 answersById 유무만 본다.
  */
 
 import { useEffect } from 'react';

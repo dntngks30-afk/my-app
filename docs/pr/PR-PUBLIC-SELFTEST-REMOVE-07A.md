@@ -8,9 +8,8 @@
 
 ## 1. Assumptions
 
-- `selfTest` 필드와 `finalType` 필드는 `movementTestSession:v2` 세션에 저장되지만,
-  현대 공개 결과 경로(`refine-bridge` → `baseline` / `refined` → `PublicResultRenderer`)는
-  두 필드를 **읽지 않는다**. (grep 추적 확인)
+- **후속(`PR-SESSION-SCHEMA-CLEANUP`):** 설문이 `selfTest`/`finalType`을 더 이상 저장하지 않음. 과거 문서 기준으로는 두 필드가 세션에 남을 수 있었으나,
+  현대 공개 결과 경로는 원래부터 **읽지 않았다**. (grep 추적 확인)
 - `baseline/page.tsx`, `refined/page.tsx`, `refine-bridge/page.tsx`는 오직 `answersById`와 `isCompleted`를 소비한다.
 - `SurveyForm` → `/movement-test/result` 경로는 v1 레거시 flow (`(main)/test/page.tsx` + `movementTestSession:v1`)이며,
   이번 PR 범위에 포함되지 않는다.
@@ -46,7 +45,7 @@
 - `/movement-test/result` 레거시 페이지 자체의 폐기 / 모던 경로로의 완전 대체 (별도 PR)
 - `SurveyForm` (v1, `/test` 경로)의 v2 경로 통일 (별도 PR)
 - `retest-comparison` 내 `/movement-test/result` 링크의 현대 경로 교체 (별도 PR)
-- `SessionV2` 인터페이스의 `selfTest`/`finalType` 타입 필드 정리 (별도 PR — 안전 여부 재확인 후)
+- ~~`SessionV2` 인터페이스의 `selfTest`/`finalType` 타입 필드 정리~~ → **`PR-SESSION-SCHEMA-CLEANUP`에서 처리**
 - `_compat.scoring_version: 'free_survey_v2_core'` vs 유료 deep 메타 정렬 (별도 PR)
 
 ---
@@ -63,7 +62,7 @@
 | `build-free-survey-baseline.ts` | 읽지 않음 | 읽지 않음 | 영향 없음 |
 | `free-survey-to-evidence.ts` | 읽지 않음 | 읽지 않음 | 영향 없음 |
 | `PublicResultRenderer.tsx` | 읽지 않음 | 읽지 않음 | 영향 없음 |
-| `movement-test/result/page.tsx` | finalType 사용 | finalType 사용 | 레거시 전용; 공개 메인 퍼널 아님 |
+| `movement-test/result/page.tsx` | 사용 안 함 | 사용 안 함 | compat redirect만 (`PR-LEGACY-RESULT-CLEANUP` 이후) |
 
 ### 5-2. 활성 공개 플로우에서 self-test가 남아 있던 이유
 
@@ -98,7 +97,7 @@
 - 모달 JSX 블록 전체 제거
 - `advanceOrComplete`에서 `avg >= 35 && avg <= 49` 분기 제거 → 마지막 문항 완료 시 **항상 refine-bridge 이동**
 - `getAxisSummary` 에서 `avg` 계산 제거 (더 이상 필요 없음)
-- `selfTest`/`finalType` 세션 필드는 passthrough 유지 (기존 세션 하위 호환)
+- ~~`selfTest`/`finalType` 세션 필드는 passthrough 유지~~ → 후속 `PR-SESSION-SCHEMA-CLEANUP`에서 설문 측 residue 제거
 
 ### self-test/page.tsx 상세 변경
 
@@ -135,7 +134,7 @@
 - `PublicResultRenderer` 변경
 - auth/pay/onboarding/session-create/bootstrap 계약 변경
 - `/app` 실행 코어 변경
-- `SessionV2` 인터페이스에서 `selfTest`/`finalType` 타입 제거
+- ~~`SessionV2` 인터페이스에서 `selfTest`/`finalType` 타입 제거~~ → `PR-SESSION-SCHEMA-CLEANUP`에서 처리
 - `SurveyForm` v1 → v2 마이그레이션
 - `retest-comparison` 수정
 - `/movement-test/result` 레거시 페이지 제거
@@ -145,5 +144,5 @@
 ## 9. Follow-up PRs (이 PR로 인해 식별된 후속 과제)
 
 1. **PR-LEGACY-RESULT-CLEANUP**: `/movement-test/result` 레거시 페이지 및 `SurveyForm` v1 경로 처리
-2. **PR-SESSION-SCHEMA-CLEANUP**: `SessionV2.selfTest`/`SessionV2.finalType` 타입 필드 정리 (다운스트림 재확인 후)
+2. ~~**PR-SESSION-SCHEMA-CLEANUP**~~: 완료 — `docs/pr/PR-SESSION-SCHEMA-CLEANUP.md` 참고
 3. **PR-SCORING-META-ALIGN**: `free_survey_v2_core` → 유료 파이프라인 메타 정렬 (SSOT §6 P0)

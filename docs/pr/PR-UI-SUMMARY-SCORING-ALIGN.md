@@ -6,7 +6,8 @@
 
 ## 1. Findings
 
-- **사용처:** `getAxisSummary` → 마지막 문항 완료 시 `finalType: topScore <= 30 ? 'monkey' : undefined` 만 (화면에 별도 summary 텍스트 없음).
+- **이 PR 당시:** `survey/page.tsx`가 `calculateScoresV2` 대신 `getSurveyUiAxisSummary`를 쓰도록 정렬 (마지막 문항에서 `topScore`는 레거시 세션 `finalType` 스탬프용으로만 사용).
+- **후속 `PR-SESSION-SCHEMA-CLEANUP`:** 설문에서 `finalType` 제거와 함께 `getSurveyUiAxisSummary` 호출도 제거됨. 어댑터의 `getSurveyUiAxisSummary` export는 유지(다른 경로·테스트용).
 - **기존:** `calculateScoresV2` → 6도메인 0~100 → 최고 축 `topScore`.
 - **공유 SSOT:** `free-survey-to-evidence.ts`의 `computeDomainScoresAndPattern` (07C와 동일 수식).
 
@@ -17,7 +18,7 @@
 | 파일 | 내용 |
 |------|------|
 | `src/lib/deep-v2/adapters/free-survey-to-evidence.ts` | `getSurveyUiAxisSummary()` export — domain scores에서 topAxis/topScore |
-| `src/app/movement-test/survey/page.tsx` | `calculateScoresV2` import 제거, `getSurveyUiAxisSummary` 사용 |
+| `src/app/movement-test/survey/page.tsx` | `calculateScoresV2` import 제거, `getSurveyUiAxisSummary` 사용 (후속 PR에서 설문 측 호출 제거) |
 
 ---
 
@@ -36,4 +37,4 @@
 
 ### Known risk
 
-- `finalType` 세션 필드는 레거시 `/movement-test/result` 등에서만 의미 있음; deep baseline과 무관.
+- (후속) `PR-SESSION-SCHEMA-CLEANUP`에서 설문이 세션 `finalType`을 쓰지 않도록 정리함. deep baseline과 무관했던 점은 동일.

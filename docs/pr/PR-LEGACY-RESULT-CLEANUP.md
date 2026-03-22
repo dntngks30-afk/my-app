@@ -31,7 +31,7 @@
 - **`/movement-test/result`:** 렌더 없음; redirect만 (호환 URL 유지).
 - **데이터 없음:** → `/movement-test`.
 - **v2 완료+답변:** → `/movement-test/refine-bridge`.
-- **schema/finalType/RESULT_CONTENT:** 이번 PR에서 삭제하지 않음 (라우트만 정리).
+- **schema/finalType/RESULT_CONTENT:** 당시 라우트만 정리; 세션 필드·`RESULT_CONTENT` 맵 제거는 `PR-SESSION-SCHEMA-CLEANUP` 등 별도 PR.
 
 ---
 

@@ -1,4 +1,9 @@
-# 자가테스트 플로우 (Self-Test v3)
+# 자가테스트 플로우 (Self-Test) — 역사적 참고
+
+> **현재 제품 진실:** 공개 무료 테스트는 `설문 → refine-bridge → baseline/refined` 만 사용한다.
+> 활성 UI에서 자가테스트·`selfTest`·세션 `finalType` 필드는 사용하지 않는다. (`PR-PUBLIC-SELFTEST-REMOVE-07A`, `PR-SESSION-SCHEMA-CLEANUP`)
+>
+> 아래는 과거 스펙/문항을 보존한 참고 문서이다.
 
 ## 팝업 노출 조건
 
@@ -6,14 +11,14 @@
 - 평균이 범위를 벗어나면 팝업 없이 기존 흐름으로 결과 확정
 - 축 점수 스케일이 0~1이면 내부에서 100 배율로 보정 후 평균 계산
 
-## 팝업 분기
+## 팝업 분기 (과거)
 
-| 선택 | 동작 |
+| 선택 | 동작 (과거) |
 |------|------|
-| **자가테스트 하기** | 설문 답변 저장 + `selfTest.isCompleted=false` 저장 후 `/movement-test/self-test` 이동 |
-| **건너뛰기** | 설문 답변 저장 후 즉시 결과 확정. Top1 축 점수가 30% 이하이면 `monkey`, 아니면 Top1 축 동물로 확정 |
+| **자가테스트 하기** | 설문 답변 저장 + self-test 진행 후 합류 |
+| **건너뛰기** | 설문 답변 저장 후 결과 확정 분기 등 (레거시) |
 
-## 전역 안전장치
+## 전역 안전장치 (과거 서술)
 
 - 무료테스트 결과 확정 시점에 **Top1 축 점수 <= 30%** 이면 `monkey`로 확정
 - 단, 자가테스트를 완료하여 최종 타입이 이미 정해진 경우에는 이 안전장치로 덮어쓰지 않음
@@ -47,28 +52,19 @@
   - 좌우 차이 뚜렷 -> `crab`
   - 해당사항 없음 -> `monkey`
 
-## 자가테스트 확정 로직
+## 자가테스트 확정 로직 (과거)
 
 - 3문항에서 선택된 타입에 각 1점
 - 최고점 타입을 최종 타입으로 확정
 - 동점 우선순위: **한발서기(self3) > 스쿼트(self2) > 벽천사(self1)**
 - 최종 타입 후보: `turtle | kangaroo | penguin | crab | monkey`
 
-## 세션 저장 필드
+## 세션 / 스키마 (현재)
 
-`movementTestSession:v2`에 다음 필드를 사용:
-
-```ts
-selfTest?: {
-  isCompleted: boolean;
-  answersById: Record<'self1'|'self2'|'self3', 0|1|2|3|4> | Record<string, never>;
-  finalType?: 'turtle' | 'kangaroo' | 'penguin' | 'crab' | 'monkey';
-  completedAt?: string;
-};
-finalType?: 'turtle' | 'hedgehog' | 'kangaroo' | 'penguin' | 'crab' | 'meerkat' | 'armadillo' | 'sloth' | 'monkey';
-```
+- `movementTestSession:v2`의 **캐논 필드**는 `version`, `isCompleted`, `answersById`, `profile`, 타임스탬프 등이다.
+- 과거에 쓰이던 `selfTest` / `finalType` 같은 레거시 키는 제품 코드에서 읽거나 쓰지 않는다. 브라우저에 남아 있어도 무시된다.
 
 ## monkey 타입
 
-- `monkey`는 축(axisScores) 타입이 아니라 **최종 결과 타입 전용**
+- `monkey`는 축(axisScores) 타입이 아니라 **최종 결과 타입 전용** (스코어링 타입 정의는 `features/movement-test/v2/scoring` 참고)
 - 이미지 매핑: `/animals/monkey.png`

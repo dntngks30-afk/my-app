@@ -37,9 +37,6 @@ export type ResultTypeV2 =
   | 'COMPOSITE_SLOTH'
   | 'BASIC';
 
-/** 최종 표시 타입 (monkey는 축이 아닌 결과 타입 전용) */
-export type FinalTypeV2 = AnimalAxis | 'armadillo' | 'sloth' | 'monkey';
-
 export interface ScoreResultV2 {
   axisScores: Record<AnimalAxis, number>; // 0~100
   tension: number; // 0~100

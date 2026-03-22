@@ -4,14 +4,15 @@
  * movement-test survey 페이지
  * 18문항 1문항씩 full-screen, 원형 5개 탭 시 즉시 저장 후 자동 다음
  * QUESTIONS_V2/answersById/movementTestSession:v2 계약 유지
+ *
+ * PR-SESSION-SCHEMA-CLEANUP: 레거시 selfTest/finalType 세션 필드는 저장하지 않는다.
+ * (옛 JSON에 키가 남아 있어도 무시 — 마이그레이션 없음)
  */
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { QUESTIONS_V2, ANSWER_CHOICES_V2 } from '@/features/movement-test/v2';
-import { getSurveyUiAxisSummary } from '@/lib/deep-v2/adapters/free-survey-to-evidence';
 import { Starfield } from '@/components/landing/Starfield';
-import type { AnimalAxis } from '@/features/movement-test/v2';
 import type { TestAnswerValue } from '@/features/movement-test/v2';
 
 type AnswerValue = 0 | 1 | 2 | 3 | 4;
@@ -30,8 +31,6 @@ interface SessionV2 {
   completedAt?: string;
   profile?: Record<string, unknown>;
   answersById: Record<string, TestAnswerValue>;
-  selfTest?: { isCompleted: boolean; answersById: Record<string, 0 | 1 | 2 | 3 | 4> };
-  finalType?: AnimalAxis | 'armadillo' | 'sloth' | 'monkey';
 }
 
 function loadSession(): SessionV2 | null {
@@ -48,8 +47,6 @@ function loadSession(): SessionV2 | null {
         completedAt: data.completedAt,
         profile: data.profile,
         answersById: {},
-        selfTest: data.selfTest,
-        finalType: data.finalType,
       };
     }
     const rawById = data.answersById ?? {};
@@ -69,8 +66,6 @@ function loadSession(): SessionV2 | null {
       completedAt: data.completedAt,
       profile: data.profile,
       answersById: safeById,
-      selfTest: data.selfTest,
-      finalType: data.finalType,
     };
   } catch {
     return null;
@@ -83,14 +78,6 @@ function saveSession(session: SessionV2) {
   } catch (e) {
     console.error('session save failed:', e);
   }
-}
-
-/**
- * PR-UI-SUMMARY-SCORING-ALIGN: 도메인 점수 SSOT는 `free-survey-to-evidence`의
- * `computeDomainScoresAndPattern`과 동일 — baseline evidence와 drift 없음.
- */
-function getAxisSummary(answersById: Record<string, TestAnswerValue>) {
-  return getSurveyUiAxisSummary(answersById);
 }
 
 /** 첫 미응답 문항 인덱스. 모두 응답 시 TOTAL 반환 */
@@ -117,7 +104,6 @@ export default function MovementTestSurveyPage() {
         startedAt: new Date().toISOString(),
         profile: current.profile ?? {},
         answersById: {},
-        selfTest: undefined,
       };
       saveSession(fresh);
       setStep(0);
@@ -133,7 +119,6 @@ export default function MovementTestSurveyPage() {
         startedAt: new Date().toISOString(),
         profile: current?.profile ?? {},
         answersById: {},
-        selfTest: undefined,
       };
       saveSession(fresh);
       setStep(0);
@@ -167,8 +152,6 @@ export default function MovementTestSurveyPage() {
         completedAt: current?.completedAt,
         profile: current?.profile ?? {},
         answersById: { ...(current?.answersById ?? {}), ...answersById },
-        selfTest: current?.selfTest,
-        finalType: current?.finalType,
         ...updates,
       };
       saveSession(merged);
@@ -179,7 +162,6 @@ export default function MovementTestSurveyPage() {
   const advanceOrComplete = useCallback(
     (next: Record<string, TestAnswerValue>) => {
       if (step >= TOTAL - 1) {
-        const { topScore } = getAxisSummary(next);
         const s = loadSession();
         const final: SessionV2 = {
           version: 'v2',
@@ -188,8 +170,6 @@ export default function MovementTestSurveyPage() {
           completedAt: new Date().toISOString(),
           profile: s?.profile ?? {},
           answersById: next,
-          selfTest: s?.selfTest,
-          finalType: topScore <= 30 ? 'monkey' : undefined,
         };
         saveSession(final);
         router.push('/movement-test/refine-bridge');

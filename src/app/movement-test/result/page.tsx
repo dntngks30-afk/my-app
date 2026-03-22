@@ -7,6 +7,7 @@
  * 현재: canonical public funnel은 survey → refine-bridge → baseline/refined (PublicResultRenderer).
  *
  * 이 라우트는 북마크·옛 링크 호환용으로만 유지하며, 실제 렌더 없이 canonical 경로로 수렴한다.
+ * 리다이렉트 판단은 version / isCompleted / answersById 만 사용한다(레거시 세션 키 무시).
  *
  * Fallback 규칙:
  * - movementTestSession:v2 완료 + 답변 있음 → /movement-test/refine-bridge
