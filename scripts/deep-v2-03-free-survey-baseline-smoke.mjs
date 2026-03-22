@@ -336,10 +336,10 @@ async function main() {
     return [];
   });
 
-  run('scoring_version = "free_survey_v2_core"', () => {
+  run('scoring_version = "deep_v2" (PR-SCORING-META-ALIGN canonical)', () => {
     const baseline = buildFreeSurveyBaselineResult(makeKangarooDominantAnswers());
-    if (baseline.baseline_meta.scoring_version !== 'free_survey_v2_core')
-      return [`expected 'free_survey_v2_core', got '${baseline.baseline_meta.scoring_version}'`];
+    if (baseline.baseline_meta.scoring_version !== 'deep_v2')
+      return [`expected 'deep_v2', got '${baseline.baseline_meta.scoring_version}'`];
     return [];
   });
 
