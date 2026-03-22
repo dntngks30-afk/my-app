@@ -166,6 +166,22 @@ export function buildFreeSurveyBaselineResult(
     originalAnimalType
   );
 
+  // Step 3-B: PR-BASELINE-RAW-AXIS-SNAPSHOT-03
+  // baseline evidence snapshot을 _compat에 부착.
+  // build-camera-refined-result.ts가 priority_vector * 5 proxy 대신 이 값을 우선 소비한다.
+  // validateUnifiedDeepResultV2는 _compat 내부를 검사하지 않으므로 계약 변경 없음.
+  unifiedResult._compat = {
+    ...unifiedResult._compat,
+    baseline_deep_evidence_snapshot: {
+      schema_version: 'free_survey_baseline_evidence_v1',
+      axis_scores: { ...evidence.axis_scores },
+      movement_quality: { all_good: evidence.movement_quality.all_good },
+      answered_count: evidence.answered_count,
+      total_count: evidence.total_count,
+      missing_signals: [...evidence.missing_signals],
+    },
+  };
+
   // Step 4: 계약 검증 (실패 시 throw — 테스트에서 명확히 포착)
   const validation = validateUnifiedDeepResultV2(unifiedResult);
   if (!validation.valid) {

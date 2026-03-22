@@ -146,6 +146,35 @@ export interface UnifiedDeepResultV2 {
     subType?: string;
     /** 기존 scoring_version */
     scoring_version?: string;
+    /**
+     * PR-BASELINE-RAW-AXIS-SNAPSHOT-03: Free survey baseline evidence snapshot.
+     * Camera refine가 priority_vector * 5 proxy 대신 더 정확한 baseline axis를 읽기 위해 저장.
+     *
+     * - 엄격한 런타임 검증 없음: _compat 내부는 validateUnifiedDeepResultV2 미검사.
+     * - 소비: build-camera-refined-result.ts에서 snapshot 우선, 없으면 proxy fallback.
+     * - 하위 호환: 이전에 생성된 payload에는 이 필드가 없으므로 optional.
+     */
+    baseline_deep_evidence_snapshot?: {
+      /** 스냅샷 버전 식별자 (마이그레이션/디버깅용) */
+      schema_version: 'free_survey_baseline_evidence_v1';
+      /** 6축 raw evidence scores (DeepScoringEvidence.axis_scores와 동일 스케일) */
+      axis_scores: {
+        lower_stability: number;
+        lower_mobility: number;
+        upper_mobility: number;
+        trunk_control: number;
+        asymmetry: number;
+        deconditioned: number;
+      };
+      /** movement_quality: stable 판정에서 core와 정렬하기 위한 플래그 */
+      movement_quality: { all_good: boolean };
+      /** 응답된 문항 수 */
+      answered_count: number;
+      /** 전체 문항 수 */
+      total_count: number;
+      /** 누락 신호 목록 */
+      missing_signals: string[];
+    };
   };
 }
 

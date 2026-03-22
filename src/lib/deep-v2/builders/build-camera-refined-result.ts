@@ -182,16 +182,27 @@ export function buildCameraRefinedResult(
     cameraQuality === 'partial' ? 0.4 :
     0.0; // minimal: baseline 그대로
 
-  // baseline axis_scores는 priority_vector에서 역산하거나
-  // (V2-03 builder가 axis_scores_raw를 UnifiedDeepResultV2에 포함하지 않으므로)
-  // camera evidence를 단독으로 사용하되 baseline의 primary_type 의도를 보존하는 방식 채택.
+  // baseline axis_scores 결정.
+  // PR-BASELINE-RAW-AXIS-SNAPSHOT-03:
+  //   우선순위 1 — baseline._compat.baseline_deep_evidence_snapshot.axis_scores (PR-03에서 저장)
+  //   우선순위 2 — baseline.priority_vector * 5 proxy (이전 payload / snapshot 없는 경우 fallback)
   //
-  // 전략: camera evidence를 base로 fuse (baseline axis는 priority_vector로부터 복원 불가)
-  // 대신 baseline의 결론(primary_type)을 tiebreak로 활용한다 (reason_codes에 기록).
-  //
-  // baseline priority_vector가 있으면 그것을 axis proxy로 사용.
-  const baselineAxes: AxisScores | null =
-    baseline.priority_vector
+  // 왜 fallback이 필요한가:
+  //   이전에 생성된 baseline payload에는 snapshot이 없다.
+  //   proxy는 정밀도가 낮지만(priority_vector는 0~1 정규화 후 역산 불가),
+  //   regression 없이 기존 동작을 유지하기 위해 보존한다.
+
+  const snapshotAxes = baseline._compat?.baseline_deep_evidence_snapshot?.axis_scores;
+  const baselineAxes: AxisScores | null = snapshotAxes
+    ? {
+        lower_stability: snapshotAxes.lower_stability,
+        lower_mobility:  snapshotAxes.lower_mobility,
+        upper_mobility:  snapshotAxes.upper_mobility,
+        trunk_control:   snapshotAxes.trunk_control,
+        asymmetry:       snapshotAxes.asymmetry,
+        deconditioned:   snapshotAxes.deconditioned,
+      }
+    : baseline.priority_vector
       ? {
           lower_stability: (baseline.priority_vector['lower_stability'] ?? 0) * 5,
           lower_mobility:  (baseline.priority_vector['lower_mobility']  ?? 0) * 5,
