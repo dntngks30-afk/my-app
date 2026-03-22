@@ -51,7 +51,9 @@
  *   → deconditioned = 7.0 강제 (구 COMPOSITE forced 값과 동일)
  *   → core의 DECONDITIONED gate: decond ≥ 6 && maxPart ≤ decond−1 충족
  *
- * COMPOSITE_SLOTH 대응은 이번 PR 범위 밖 (follow-up 예정).
+ * applyDiffuseDeconditionedRule (DIFFUSE_CONCERN — 구 COMPOSITE_SLOTH 대응):
+ *   maxM < 0.68 AND 0.52 ≤ avgM ≤ 0.62 AND stdM < 0.10 AND asymmetry ≥ 0.55 AND decond ≤ 0.55
+ *   → deconditioned = 7.0 강제 (BROAD가 발동하지 않은 경우에만)
  *
  * ─── q1≤2 캡 대체 ──────────────────────────────────────────────────────────────
  * 각 family의 q1 ≤ 2이면 해당 family의 축 기여를 75% family-max로 상한 clamp.
@@ -245,9 +247,50 @@ const DECONDITIONED_BOOST_DECOND_THRESHOLD = 0.50;
  * 부스트 시 deconditioned에 강제 설정할 값.
  * core의 DECONDITIONED gate: decond >= 6 && maxPart <= decond-1
  * 7.0이면 maxPart가 최대 2.5여도 게이트 통과 (7-1=6 > 2.5).
- * 구 COMPOSITE path의 forced 7.0과 동일.
+ * 구 COMPOSITE path의 forced 7.0과 동일. BROAD / DIFFUSE 공용.
  */
 const DECONDITIONED_BOOST_VALUE = 7.0;
+
+// ─── 확산형 deconditioned (DIFFUSE_CONCERN — 구 COMPOSITE_SLOTH 대응) 상수 ────
+
+/**
+ * DIFFUSE_CONCERN: movement 최고 축 normalized 상한.
+ * 구 sloth 조건 top1 < 68 (0~100) → 0.68로 직접 대응.
+ * 이 값 이상이면 단일 지배 축이 있으므로 diffuse 패턴 아님.
+ */
+const DIFFUSE_MAX_TOP_THRESHOLD = 0.68;
+
+/**
+ * DIFFUSE_CONCERN: movement 5축 normalized 평균 최솟값.
+ * 구 avg >= 52 (0~100) → 0.52.
+ */
+const DIFFUSE_AVG_MIN = 0.52;
+
+/**
+ * DIFFUSE_CONCERN: movement 5축 normalized 평균 최댓값.
+ * 구 avg <= 62 (0~100) → 0.62.
+ */
+const DIFFUSE_AVG_MAX = 0.62;
+
+/**
+ * DIFFUSE_CONCERN: movement 5축 normalized 표준편차 상한.
+ * 구 std < 10 (0~100) → 0.10.
+ * 좁은 분산 = 한 축이 압도하지 않는 확산형 패턴.
+ */
+const DIFFUSE_STD_MAX = 0.10;
+
+/**
+ * DIFFUSE_CONCERN: asymmetry normalized 최솟값 (비대칭 신호 존재).
+ * 구 crab >= 55 (0~100) → 0.55.
+ */
+const DIFFUSE_ASYMMETRY_MIN = 0.55;
+
+/**
+ * DIFFUSE_CONCERN: deconditioned normalized 최댓값 (독립 우세 아님).
+ * 구 meerkat <= 55 (0~100) → 0.55.
+ * deconditioned 단독 강함이면 BROAD 또는 일반 분류로 처리.
+ */
+const DIFFUSE_DECOND_CEIL = 0.55;
 
 // ─── 미응답 처리 헬퍼 ─────────────────────────────────────────────────────────
 
@@ -479,7 +522,7 @@ export function applyStableCandidateRule(
  * 부스트가 발동되지 않는다. 단순 전신 긴장(G만 높음)은 DECONDITIONED가 아니다.
  *
  * COMPOSITE_SLOTH 대응(확산 패턴):
- * 이번 PR에서는 구현하지 않음. Follow-up PR 예정.
+ * PR-FREE-SURVEY-MULTI-AXIS-DECONDITIONED-PATTERN-02에서 별도 `applyDiffuseDeconditionedRule`로 구현.
  *
  * 구 forced value와의 관계:
  * 구 COMPOSITE → deconditioned = 7.0 강제.
@@ -512,7 +555,77 @@ export function applyDeconditionedBoostRule(normalized: AxisScores): number | nu
   return null;
 }
 
-// ─── 6단계: missing signals ────────────────────────────────────────────────────
+// ─── 5단계-B: Diffuse deconditioned rule ─────────────────────────────────────
+
+/**
+ * 통계 헬퍼: 숫자 배열의 모집단 표준편차 (0으로 나누기 방지).
+ */
+function populationStd(values: number[]): number {
+  if (values.length === 0) return 0;
+  const avg = values.reduce((s, v) => s + v, 0) / values.length;
+  const sumSq = values.reduce((s, v) => s + (v - avg) ** 2, 0);
+  return Math.sqrt(sumSq / values.length);
+}
+
+/**
+ * applyDiffuseDeconditionedRule — COMPOSITE_SLOTH 분기 대체
+ *
+ * 확산형(diffuse) 중간 부하 패턴 감지 (구 sloth semantics).
+ * BROAD_CONCERN(고부하 4+ 축)와 달리 **최고 축도 두드러지지 않고**,
+ * **전체 5축이 중간대에 좁게 모여 있으며**, **비대칭 신호가 존재**하는 패턴.
+ *
+ * 구 슬로스 조건 → 정규화 대응:
+ *   top1 < 68       → maxM < DIFFUSE_MAX_TOP_THRESHOLD (0.68)
+ *   52 ≤ avg ≤ 62  → DIFFUSE_AVG_MIN(0.52) ≤ avgM ≤ DIFFUSE_AVG_MAX(0.62)
+ *   std < 10        → stdM < DIFFUSE_STD_MAX (0.10)
+ *   crab >= 55      → asymmetry_norm ≥ DIFFUSE_ASYMMETRY_MIN (0.55)
+ *   meerkat <= 55   → deconditioned_norm ≤ DIFFUSE_DECOND_CEIL (0.55)
+ *   (top1 >= 55 implied — stable이 아닌 path에서만 호출되므로 별도 체크 불필요)
+ *
+ * 적용 규칙:
+ * - BROAD(strong) rule이 이미 발동했으면 이 규칙은 발동하지 않는다.
+ * - 발동 시: deconditioned = DECONDITIONED_BOOST_VALUE(7.0) 강제
+ *   → core gate: decond(7.0) ≥ 6 ✓, maxPart 최대 2.5 ≤ 6 ✓ → DECONDITIONED.
+ *
+ * BROAD vs DIFFUSE 구분:
+ *   BROAD  = armadillo-like: 다축 고부하(4+ 축 ≥ 0.65) + decond 신호 충분
+ *   DIFFUSE = sloth-like:   전체 중간 + 좁은 분산 + 비대칭 + decond 독립 우세 아님
+ *
+ * @param normalized 정규화된 0~1 축 점수 (family cap 적용 후)
+ * @param broadAlreadyFired 이미 BROAD 부스트가 발동했으면 true
+ * @returns 부스트할 deconditioned 값, 또는 null (부스트 없음)
+ */
+export function applyDiffuseDeconditionedRule(
+  normalized: AxisScores,
+  broadAlreadyFired: boolean
+): number | null {
+  if (broadAlreadyFired) return null;
+
+  const movementNorms = [
+    normalized.lower_stability,
+    normalized.lower_mobility,
+    normalized.upper_mobility,
+    normalized.trunk_control,
+    normalized.asymmetry,
+  ];
+
+  const maxM = Math.max(...movementNorms);
+  const avgM = movementNorms.reduce((s, v) => s + v, 0) / movementNorms.length;
+  const stdM = populationStd(movementNorms);
+
+  if (
+    maxM < DIFFUSE_MAX_TOP_THRESHOLD &&
+    avgM >= DIFFUSE_AVG_MIN &&
+    avgM <= DIFFUSE_AVG_MAX &&
+    stdM < DIFFUSE_STD_MAX &&
+    normalized.asymmetry >= DIFFUSE_ASYMMETRY_MIN &&
+    normalized.deconditioned <= DIFFUSE_DECOND_CEIL
+  ) {
+    return DECONDITIONED_BOOST_VALUE;
+  }
+
+  return null;
+}
 
 /**
  * buildMissingSignalsFromSurveyAnswers
@@ -567,11 +680,12 @@ export function buildMissingSignalsFromSurveyAnswers(
  * 18문항 → direct multi-axis DeepScoringEvidence (신규 active path).
  *
  * Pipeline:
- * 1. applyFamilyCapRules           → capped raw scores (미응답=2 치환, q1≤2 cap)
- * 2. normalizeSurveyAxisScores     → 0~1 normalized
- * 3. applyStableCandidateRule      → stable 판정 (movement zeroing + all_good)
- * 4. applyDeconditionedBoostRule   → 복합 고부하 판정 (decond=7.0 강제)
- * 5. AXIS_TARGET_SCALE 곱          → 최종 evidence axis_scores
+ * 1. applyFamilyCapRules              → capped raw scores (미응답=2 치환, q1≤2 cap)
+ * 2. normalizeSurveyAxisScores        → 0~1 normalized
+ * 3. applyStableCandidateRule         → stable 판정 (movement zeroing + all_good)
+ * 4a. applyDeconditionedBoostRule     → BROAD(armadillo-like) 고부하 판정 (decond=7.0)
+ * 4b. applyDiffuseDeconditionedRule   → DIFFUSE(sloth-like) 확산형 판정 (decond=7.0)
+ * 5. AXIS_TARGET_SCALE 곱             → 최종 evidence axis_scores
  * 6. buildMissingSignalsFromSurveyAnswers → missing_signals
  * 7. DeepScoringEvidence 조립
  */
@@ -590,9 +704,17 @@ export function buildFreeSurveyDeepEvidence(
   const stableResult = applyStableCandidateRule(rawAnswers, normalized);
 
   // 4. deconditioned boost 판정 (stable이면 boost 불필요)
-  const boostDeconditioned = stableResult.isStableCandidate
+  //    Step 4-A: BROAD (armadillo-like) — 다축 고부하
+  const broadBoost = stableResult.isStableCandidate
     ? null
     : applyDeconditionedBoostRule(normalized);
+
+  //    Step 4-B: DIFFUSE (sloth-like) — 확산형 중간 부하 (BROAD가 없을 때만)
+  const diffuseBoost = stableResult.isStableCandidate
+    ? null
+    : applyDiffuseDeconditionedRule(normalized, broadBoost !== null);
+
+  const boostDeconditioned = broadBoost ?? diffuseBoost;
 
   // 5. 최종 axis_scores 결정
   let axis_scores: AxisScores;
