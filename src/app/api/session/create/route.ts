@@ -72,7 +72,17 @@ function toSummaryPlan(
   adaptationTrace?: { reason_summary?: string } | null
 ): typeof plan {
   const pj = plan.plan_json as {
-    meta?: { focus?: string[]; priority_vector?: Record<string, number>; pain_mode?: 'none' | 'caution' | 'protected' };
+    meta?: {
+      focus?: string[];
+      priority_vector?: Record<string, number>;
+      pain_mode?: 'none' | 'caution' | 'protected';
+      /** PR-FIRST-SESSION-EXPLANATION-01: plan-generator 산출 — summary 응답에서도 패널 rationale에 전달 */
+      session_rationale?: string | null;
+      session_focus_axes?: string[];
+      primary_type?: string;
+      result_type?: string;
+      constraint_flags?: { first_session_guardrail_applied?: boolean };
+    };
     segments?: Array<{ title?: string; items?: Array<{ templateId?: string; name?: string; order?: number; sets?: number; reps?: number; hold_seconds?: number }> }>
   } | null;
   const segments = (pj?.segments ?? []).map((seg) => ({
@@ -91,6 +101,23 @@ function toSummaryPlan(
     if (Array.isArray(pj.meta.focus)) meta.focus = pj.meta.focus.slice(0, 3);
     if (pj.meta.priority_vector) meta.priority_vector = pj.meta.priority_vector;
     if (pj.meta.pain_mode) meta.pain_mode = pj.meta.pain_mode;
+    // PR-FIRST-SESSION-EXPLANATION-01: 생성기가 이미 넣은 설명 메타만 통과 (재생성 없음)
+    if (typeof pj.meta.session_rationale === 'string') {
+      meta.session_rationale = pj.meta.session_rationale;
+    }
+    if (Array.isArray(pj.meta.session_focus_axes) && pj.meta.session_focus_axes.length > 0) {
+      meta.session_focus_axes = pj.meta.session_focus_axes.slice(0, 8);
+    }
+    if (typeof pj.meta.primary_type === 'string' && pj.meta.primary_type.length > 0) {
+      meta.primary_type = pj.meta.primary_type;
+    }
+    if (typeof pj.meta.result_type === 'string' && pj.meta.result_type.length > 0) {
+      meta.result_type = pj.meta.result_type;
+    }
+    const cf = pj.meta.constraint_flags;
+    if (cf && typeof cf === 'object' && typeof cf.first_session_guardrail_applied === 'boolean') {
+      meta.constraint_flags = { first_session_guardrail_applied: cf.first_session_guardrail_applied };
+    }
   }
   if (adaptationTrace?.reason_summary) meta.adaptation_summary = adaptationTrace.reason_summary;
 
