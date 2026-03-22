@@ -1,19 +1,15 @@
 'use client';
 
 /**
- * FLOW-04 — Post-Pay Onboarding (PR-ONBOARDING-MIN-06 최소 실행 준비)
+ * FLOW-04 — Post-Pay Onboarding
+ * PR-ONBOARDING-01 — 표현만 최소화: 실행 시작 설정(빈도·경험·안전 신호) 3필드 중심.
  *
- * 결제 후 실행 준비 입력 수집.
- * session_user_profile에 저장 (target_frequency, exercise_experience_level,
- * pain_or_discomfort_present, 선택 lifestyle_tag).
- *
- * - 설문에서 이미 패턴·체감은 반영됨 → 여기서는 주당 횟수·경험·안전 신호만.
- * - 통증 여부는 설문 q2(불편 슬롯) 평균으로 보수적 프리필(없으면 사용자 선택).
- * - 연령/성별은 회원가입·프로필 경로에서 수집 — 본 화면에서 재질문하지 않음.
+ * session_user_profile: target_frequency, exercise_experience_level,
+ * pain_or_discomfort_present, 선택 lifestyle_tag(POST body 키 생략 가능).
  *
  * @see src/app/api/session/profile/route.ts
  * @see src/lib/onboarding/surveyOnboardingHints.ts
- * @see src/app/session-preparing/page.tsx (PR-GENERATION-STAGE-07 짧은 스테이징 후 onboarding-complete)
+ * @see src/app/session-preparing/page.tsx
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -75,7 +71,7 @@ export default function OnboardingPage() {
 
   const handleSubmit = useCallback(async () => {
     if (targetFrequency == null || exerciseExperienceLevel == null || painOrDiscomfortPresent == null) {
-      setError('위 세 가지를 선택해 주세요.');
+      setError('주간 횟수·경험·불편 여부 세 가지를 선택해 주세요.');
       return;
     }
 
@@ -143,21 +139,22 @@ export default function OnboardingPage() {
       <div className="w-full max-w-md space-y-5">
         <div className="text-center space-y-2">
           <p className="text-[11px] uppercase tracking-wide text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-            마지막 실행 준비
+            실행 시작 설정
           </p>
           <h1 className="text-xl font-bold text-slate-100 leading-snug" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-            결제는 끝났어요. 이제 루틴만 맞출게요
+            첫 세션 바로 앞이에요
           </h1>
           <p className="text-sm text-slate-400 leading-relaxed" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-            설문·결과로 <span className="text-slate-300">패턴은 이미 반영</span>되어 있어요. 여기서는{' '}
-            <span className="text-slate-300">주당 횟수·운동 경험·안전 신호</span>만 확인하면 바로 이어갑니다.
+            분석은 이미 끝났어요. 지금은{' '}
+            <span className="text-slate-300">한 주에 몇 번 돌릴지·시작 강도·몸의 불편 신호</span>만 맞추면
+            실행 루틴으로 이어져요.
           </p>
         </div>
 
         <div className="space-y-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
           <div>
             <label className="block text-slate-300 text-xs font-medium mb-2" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              1. 이번 루틴에서 목표로 할 주당 횟수
+              1. 이번 주기에 맞출 주간 횟수
             </label>
             <div className="flex flex-wrap gap-2">
               {FREQUENCY_OPTIONS.map((opt) => (
@@ -180,7 +177,7 @@ export default function OnboardingPage() {
 
           <div>
             <label className="block text-slate-300 text-xs font-medium mb-2" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              2. 최근 운동·움직임 경험
+              2. 최근 운동·움직임 경험 (시작 강도에 씀)
             </label>
             <div className="flex flex-wrap gap-2">
               {EXPERIENCE_OPTIONS.map((opt) => (
@@ -203,10 +200,10 @@ export default function OnboardingPage() {
 
           <div>
             <label className="block text-slate-300 text-xs font-medium mb-2" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              3. 지금 뻐근함·통증이 자주 느껴지나요?
+              3. 지금 뻐근함·불편이 자주 느껴지나요? (안전 쪽 맞춤)
             </label>
             <p className="text-[11px] text-slate-500 mb-2 leading-relaxed" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              설문에서 불편이 크게 잡힌 경우 자동으로 하나가 선택될 수 있어요. 필요하면 바꿔 주세요.
+              이전에 답하신 내용을 참고해 제안할 수 있어요. 필요하면 바꿔 주세요.
             </p>
             <div className="flex gap-3">
               <button
@@ -236,26 +233,31 @@ export default function OnboardingPage() {
             </div>
           </div>
 
-          <div>
-            <label
-              htmlFor="lifestyle-note"
-              className="block text-slate-300 text-xs font-medium mb-2"
+          {/* 선택 필드: 메인 3필드와 분리해 부담 최소화 (readiness 미사용) */}
+          <details className="rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-left">
+            <summary
+              className="text-[11px] text-slate-500 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden"
               style={{ fontFamily: 'var(--font-sans-noto)' }}
             >
-              4. 수술·부상·의사가 제한한 동작 등, 특히 조심할 점{' '}
-              <span className="text-slate-500 font-normal">(선택)</span>
-            </label>
-            <textarea
-              id="lifestyle-note"
-              value={lifestyleNote}
-              onChange={(e) => setLifestyleNote(e.target.value.slice(0, LIFESTYLE_MAX))}
-              rows={2}
-              placeholder="없으면 비워 두셔도 돼요."
-              className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-orange-500/40"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
-            />
-            <p className="text-[10px] text-slate-600 mt-1 text-right">{lifestyleNote.length}/{LIFESTYLE_MAX}</p>
-          </div>
+              더 적어 두기 (선택) — 수술·부상 등 실행 시 조심할 점{' '}
+              <span className="text-slate-600">▼</span>
+            </summary>
+            <div className="pt-3 pb-1">
+              <label htmlFor="lifestyle-note" className="sr-only">
+                실행 시 조심할 점 (선택)
+              </label>
+              <textarea
+                id="lifestyle-note"
+                value={lifestyleNote}
+                onChange={(e) => setLifestyleNote(e.target.value.slice(0, LIFESTYLE_MAX))}
+                rows={2}
+                placeholder="없으면 비워 두셔도 돼요."
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                style={{ fontFamily: 'var(--font-sans-noto)' }}
+              />
+              <p className="text-[10px] text-slate-600 mt-1 text-right">{lifestyleNote.length}/{LIFESTYLE_MAX}</p>
+            </div>
+          </details>
         </div>
 
         {error && (
@@ -271,7 +273,7 @@ export default function OnboardingPage() {
           className="w-full min-h-[52px] rounded-2xl font-bold text-slate-900 transition-colors disabled:opacity-50"
           style={{ backgroundColor: ACCENT, fontFamily: 'var(--font-sans-noto)' }}
         >
-          {saving ? '저장 중...' : '저장하고 루틴 연결하기'}
+          {saving ? '저장 중...' : '설정 저장하고 이어가기'}
         </button>
       </div>
     </div>
