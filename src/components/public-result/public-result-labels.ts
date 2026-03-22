@@ -17,6 +17,7 @@ import type {
 } from '@/lib/result/deep-result-v2-contract';
 
 // ─── PR-RESULT-EXPLANATION-UPGRADE-01 — 이유 기반 보조 설명 (표현 전용) ─
+// PR-RESULT-EXPLANATION-COVERAGE-02 — reason/missing 카피·선택 우선순위 보강 (표현 전용)
 // 계약/스코어링 불변. 숫자·벡터·raw 코드 노출 금지.
 
 // ─── Primary Type ─────────────────────────────────────────────────────────────
@@ -108,6 +109,8 @@ export const REASON_CODE_LABELS: Record<string, string> = {
   balanced_movement_pattern:      '균형 움직임 패턴',
   composite_pattern:              '복합 패턴 감지',
   camera_evidence_partial:        '카메라 일부 신호 기반',
+  pain_protected_mode:            '통증 보호 모드 반영',
+  pain_caution_mode:              '통증 주의 신호 반영',
 };
 
 /**
@@ -124,15 +127,17 @@ export const REASON_CODE_INSIGHT_PHRASES: Record<string, string> = {
   top_axis_trunk_control:
     '허리·골반 주변 ‘조절’ 쪽 신호가 강하게 잡혀요.',
   top_axis_asymmetry:
-    '좌우 차이가 함께 읽혀요.',
+    '이번 판정에서 좌우 균형 차이가 가장 앞에 서 있어요.',
   secondary_axis_lower_stability: '하체 안정성 쪽 보조 신호도 겹쳐 보여요.',
   secondary_axis_lower_mobility: '하체 가동성 쪽 보조 신호도 겹쳐 보여요.',
   secondary_axis_upper_mobility: '상체 가동성 쪽 보조 신호도 겹쳐 보여요.',
   secondary_axis_trunk_control: '체간 조절 쪽 보조 신호도 겹쳐 보여요.',
   secondary_axis_asymmetry: '비대칭 쪽 보조 신호도 겹쳐 보여요.',
-  stable_gate: '전반적으로 균형 쪽으로 묶이는 판정이에요.',
+  stable_gate: '큰 부담 신호 없이 균형형에 가깝게 묶이는 판정이에요.',
   deconditioned_gate: '여러 축이 동시에 올라와 복합적으로 읽혀요.',
-  asymmetry_detected: '좌우 사용감 차이가 함께 포착됐어요.',
+  asymmetry_detected: '좌우 차이는 다른 축과 함께 덧붙여 읽혔어요.',
+  pain_protected_mode: '통증이 강하게 잡혀서 보호 쪽으로 안전하게 묶었어요.',
+  pain_caution_mode: '통증 신호가 있어서 무리하지 않게 짚는 쪽으로 맞췄어요.',
   composite_pattern: '한 가지 축만이 아니라 겹치는 패턴으로 읽혀요.',
   camera_evidence_partial: '동작 영상에서는 일부 구간만 또렷해서, 그 범위 안에서 보완했어요.',
   balanced_movement_pattern: '전반적인 움직임 균형 쪽으로 정리돼요.',
@@ -140,6 +145,8 @@ export const REASON_CODE_INSIGHT_PHRASES: Record<string, string> = {
 
 /** reason_codes 정렬 시 우선 노출할 코드(앞쪽일수록 먼저). */
 const REASON_INSIGHT_PRIORITY: string[] = [
+  'pain_protected_mode',
+  'pain_caution_mode',
   'top_axis_lower_stability',
   'top_axis_lower_mobility',
   'top_axis_upper_mobility',
@@ -245,19 +252,38 @@ export function buildPublicResultHeaderHint(params: {
 
 /**
  * missing_signals 중 1개만, 가벼운 안내(선택).
+ * PR-RESULT-EXPLANATION-COVERAGE-02: 배열 앞 순서가 아니라 공개 흐름에 의미 있는 우선순위로 뽑아요.
  */
+const MISSING_HINT_PRIORITY: readonly string[] = [
+  'camera_evidence_partial',
+  'camera_evidence_minimal',
+  'objective_movement_test_missing',
+  'subjective_fatigue_missing',
+  'pain_intensity_missing',
+  'pain_location_missing',
+];
+
 export function pickLightMissingHintLine(signals: readonly string[]): string | null {
   const displayable = filterDisplayableMissingSignals([...signals]);
   if (displayable.length === 0) return null;
-  const first = displayable[0];
-  if (first === 'objective_movement_test_missing') {
-    return '객관 동작 측정은 다음에 더 붙이면 시작점을 더 맞출 수 있어요.';
-  }
-  if (first === 'camera_evidence_partial') {
-    return '동작 영상 신호가 일부만 또렷해서, 그 범위 안에서 정리했어요.';
-  }
-  if (first === 'pain_intensity_missing' || first === 'pain_location_missing') {
-    return '통증 정보는 아직 넣지 않았어요. 나중에 더하면 보호에 맞출 수 있어요.';
+  const present = new Set(displayable);
+  for (const key of MISSING_HINT_PRIORITY) {
+    if (!present.has(key)) continue;
+    if (key === 'camera_evidence_partial') {
+      return '동작 영상 신호가 일부만 또렷해서, 그 범위 안에서 정리했어요.';
+    }
+    if (key === 'camera_evidence_minimal') {
+      return '동작 영상 신호가 매우 제한적이라, 설문 쪽 비중을 더 두고 정리했어요.';
+    }
+    if (key === 'objective_movement_test_missing') {
+      return '객관 동작 측정은 다음에 더 붙이면 시작점을 더 맞출 수 있어요.';
+    }
+    if (key === 'subjective_fatigue_missing') {
+      return '피로·컨디션 정보는 아직 없어요. 나중에 맞추면 더 안전해져요.';
+    }
+    if (key === 'pain_intensity_missing' || key === 'pain_location_missing') {
+      return '통증 정보는 아직 넣지 않았어요. 나중에 더하면 보호에 맞출 수 있어요.';
+    }
   }
   return null;
 }
@@ -308,6 +334,7 @@ export const MISSING_SIGNAL_LABELS: Record<string, string> = {
   pain_location_missing:               '통증 위치 정보 (유료 딥테스트에서 측정)',
   objective_movement_test_missing:     '객관 동작 테스트 (카메라 분석에서 측정)',
   camera_evidence_partial:             '카메라 신호 일부 제한 (재촬영 시 개선 가능)',
+  camera_evidence_minimal:             '동작 영상 신호 매우 제한 (재시도 시 개선 가능)',
   subjective_fatigue_missing:          '주관적 피로도 (설문 항목에 없음)',
 };
 
