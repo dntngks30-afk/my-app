@@ -160,6 +160,21 @@ const FIRST_SESSION_LIMITS: Record<FirstSessionTier, { maxMain: number; maxTotal
   normal: { maxMain: 2, maxTotal: 6 },
 };
 
+/**
+ * PR-FIRST-SESSION-QUALITY-02A: 온보딩 beginner → 첫 세션 티어 한 단계 보수적으로 (볼륨·toPlanItem 단일 세트 경향).
+ * pain_mode/safety 기반 티어가 우선 계산된 뒤 적용. intermediate/advanced는 변경 없음.
+ */
+function adjustFirstSessionTierForOnboardingExperience(
+  tier: FirstSessionTier,
+  input: PlanGeneratorInput
+): FirstSessionTier {
+  if (input.sessionNumber !== 1) return tier;
+  if (input.exercise_experience_level !== 'beginner') return tier;
+  if (tier === 'normal') return 'moderate';
+  if (tier === 'moderate') return 'conservative';
+  return 'conservative';
+}
+
 /** PR-ALG-05: difficulty order for cap (low < medium < high) */
 const DIFFICULTY_ORDER: Record<string, number> = { low: 1, medium: 2, high: 3 };
 
@@ -265,6 +280,8 @@ export type PlanGeneratorInput = {
   secondary_type?: string | null;
   priority_vector?: Record<string, number>;
   pain_mode?: 'none' | 'caution' | 'protected';
+  /** PR-FIRST-SESSION-QUALITY-02A: 온보딩 exercise_experience_level — 세션 1만 반영 */
+  exercise_experience_level?: 'beginner' | 'intermediate' | 'advanced';
 };
 
 export type PlanItem = {
@@ -827,7 +844,10 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const isShort = overlay?.forceShort ?? input.timeBudget === 'short';
   const isRecovery = overlay?.forceRecovery ?? input.conditionMood === 'bad';
   const isFirstSession = input.sessionNumber === 1;
-  const firstSessionTier = getFirstSessionTier(input);
+  const firstSessionTier = adjustFirstSessionTierForOnboardingExperience(
+    getFirstSessionTier(input),
+    input
+  );
   const firstSessionLimits = FIRST_SESSION_LIMITS[firstSessionTier];
   /** PR-SESSION-BASELINE-01: main 2~3 baseline. red=1, yellow=2, else 3 */
   let mainCount = isShort ? 1 : isRecovery ? 1 : 3;

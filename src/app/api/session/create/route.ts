@@ -60,6 +60,7 @@ import {
   type PhasePolicyOptions,
 } from '@/lib/session/phase';
 import { getCachedPlan, setCachedPlan } from '@/lib/session-gen-cache';
+import { isValidExerciseExperienceLevel } from '@/lib/session/profile';
 
 const ROUTE_CREATE = '/api/session/create';
 
@@ -143,13 +144,18 @@ const FREQUENCY_TO_TOTAL: Record<number, number> = {
 };
 
 /** BE-ONB-02: profile.target_frequency → total_sessions. 없으면 16. */
+/** PR-FIRST-SESSION-QUALITY-02A: exercise_experience_level 동행 조회(세션 1 품질만). */
 async function resolveTotalSessions(
   supabase: Awaited<ReturnType<typeof getServerSupabaseAdmin>>,
   userId: string
-): Promise<{ totalSessions: number; source: 'profile' | 'default'; profile: { target_frequency?: number } | null }> {
+): Promise<{
+  totalSessions: number;
+  source: 'profile' | 'default';
+  profile: { target_frequency?: number; exercise_experience_level?: string | null } | null;
+}> {
   const { data } = await supabase
     .from('session_user_profile')
-    .select('target_frequency')
+    .select('target_frequency, exercise_experience_level')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -668,6 +674,14 @@ export async function POST(req: NextRequest) {
     const mergedVolume = mergedControls.volumeModifier;
     timings.adaptive_modifier_ms = Math.round(performance.now() - tAdaptiveMod);
 
+    /** 세션 1만: 온보딩 운동 경험 → plan-generator 보수 티어 (유효 값만). */
+    const exerciseExperienceForSession1 =
+      nextSessionNumber === 1 &&
+      resolved.profile &&
+      isValidExerciseExperienceLevel(resolved.profile.exercise_experience_level)
+        ? resolved.profile.exercise_experience_level
+        : undefined;
+
     const cacheInput = {
       userId,
       sessionNumber: nextSessionNumber,
@@ -684,6 +698,7 @@ export async function POST(req: NextRequest) {
       volumeModifier: mergedVolume,
       priority_vector: deepSummary.priority_vector ?? undefined,
       pain_mode: deepSummary.pain_mode ?? undefined,
+      exercise_experience_level: exerciseExperienceForSession1,
     };
 
     const tGen = performance.now();
@@ -713,6 +728,7 @@ export async function POST(req: NextRequest) {
         pain_mode: deepSummary.pain_mode,
         adaptiveOverlay,
         volumeModifier: mergedVolume,
+        exercise_experience_level: exerciseExperienceForSession1,
       });
       setCachedPlan(cacheInput, planJson as Record<string, unknown>);
     }

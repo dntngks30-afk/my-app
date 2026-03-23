@@ -47,6 +47,8 @@ export type GenCacheInput = {
   /** PR-ALG-03: deep_v3 priority/pain (cache key에 포함) */
   priority_vector?: Record<string, number> | null;
   pain_mode?: string | null;
+  /** PR-FIRST-SESSION-QUALITY-02A: session 1 onboarding experience — cache 분리 */
+  exercise_experience_level?: string | null;
 };
 
 /**
@@ -74,6 +76,7 @@ function buildKey(input: GenCacheInput): string {
     vm: input.volumeModifier ?? '',
     pv: canonicalizeObject(input.priority_vector ?? undefined),
     pm: input.pain_mode ?? '',
+    eel: input.exercise_experience_level ?? '',
   });
   return simpleHash(canonical);
 }
