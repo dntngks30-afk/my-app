@@ -4,7 +4,6 @@
  * FLOW-03 bridge — stitch zip: check + vertical rail + copper primary + ghost secondary
  * 카피는 기존 OnboardingPrepClient truth 유지
  */
-import { TextMaskReveal } from '@/components/public/text-mask';
 import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
 import { PostpayChapterShell, PostpayBrandHeader, PostpayVerticalRail } from './shared';
@@ -52,9 +51,7 @@ export default function StitchOnboardingPrepScene({ loading, hasContext, onConti
 
           <div className="relative z-10 w-full max-w-md flex-1 space-y-8 text-center">
             <h1 className="text-3xl font-light leading-snug tracking-tight text-[#dce1fb] md:text-4xl [font-family:var(--font-display)]">
-              <TextMaskReveal delaySec={0.16} durationSec={0.75}>
-                이제 짧게만 확인할게요
-              </TextMaskReveal>
+              이제 짧게만 확인할게요
             </h1>
             <p
               className="px-2 text-base font-light leading-relaxed text-[#c6c6cd]/90 md:text-lg"

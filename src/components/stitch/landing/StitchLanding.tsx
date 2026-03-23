@@ -1,7 +1,5 @@
 'use client';
 
-import { TextMaskReveal } from '@/components/public/text-mask';
-
 type StitchLandingProps = {
   onStart: () => void;
 };
@@ -55,9 +53,7 @@ export default function StitchLanding({ onStart }: StitchLandingProps) {
               className="text-4xl font-bold leading-tight tracking-tight text-[#dce1fb] md:text-6xl"
               style={{ fontFamily: 'var(--font-sans-noto)' }}
             >
-              <TextMaskReveal delaySec={0.22} durationSec={0.78}>
-                당신의 움직임은 안녕하신가요?
-              </TextMaskReveal>
+              당신의 움직임은 안녕하신가요?
             </h1>
 
             <p

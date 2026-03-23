@@ -3,7 +3,6 @@
 /**
  * stitch code.html Screen 2 — Welcome
  */
-import { TextMaskReveal } from '@/components/public/text-mask';
 import { IntroSceneShell, IntroStepIndicator } from './IntroSceneShell';
 
 export default function IntroWelcome() {
@@ -18,11 +17,9 @@ export default function IntroWelcome() {
         </span>
 
         <h1 className="mb-8 text-4xl font-extralight leading-tight tracking-tight text-[#dce1fb] md:text-5xl lg:text-6xl [font-family:var(--font-display)]">
-          <TextMaskReveal delaySec={0.14} durationSec={0.72}>
-            MOVE RE가 당신의
-            <br />
-            <span className="italic text-[#ffb77d]">움직임 패턴</span>을 분석해드립니다
-          </TextMaskReveal>
+          MOVE RE가 당신의
+          <br />
+          <span className="italic text-[#ffb77d]">움직임 패턴</span>을 분석해드립니다
         </h1>
 
         <p
