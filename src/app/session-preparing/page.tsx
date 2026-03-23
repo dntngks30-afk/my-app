@@ -12,6 +12,8 @@ import { useRouter } from 'next/navigation';
 import {
   MoveReFullscreenScreen,
   MoveReProgressRail,
+  MoveReSecondaryCTA,
+  MoveReStepNavRow,
   MoveReSurfaceCard,
 } from '@/components/public-brand';
 
@@ -50,8 +52,9 @@ export default function SessionPreparingPage() {
   return (
     <MoveReFullscreenScreen>
       <MoveReProgressRail current={stageIndex + 1} total={STAGE_LINES.length} />
-      <div className="flex flex-1 flex-col items-center justify-center px-6">
-        <div className="w-full max-w-md space-y-8 text-center">
+      <div className="flex min-h-0 flex-1 flex-col px-6">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
+          <div className="w-full max-w-md space-y-8 text-center">
           <div className="space-y-2">
             <p
               className="text-[11px] font-medium uppercase tracking-widest text-slate-500"
@@ -90,15 +93,17 @@ export default function SessionPreparingPage() {
           <p className="text-[11px] leading-relaxed text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
             분석 결과를 다시 묻는 단계가 아니라, 방금 맞춘 실행 설정을 세션에 반영하는 짧은 준비예요.
           </p>
+          </div>
+        </div>
 
-          <button
-            type="button"
-            onClick={goNext}
-            className="text-sm text-slate-400 underline underline-offset-2 transition-colors hover:text-slate-200"
-            style={{ fontFamily: 'var(--font-sans-noto)' }}
-          >
-            바로 다음으로
-          </button>
+        <div className="mx-auto w-full max-w-md shrink-0 border-t border-white/[0.06] pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-5">
+          <MoveReStepNavRow
+            right={
+              <MoveReSecondaryCTA type="button" onClick={goNext} className="min-h-[48px] w-full">
+                바로 다음으로
+              </MoveReSecondaryCTA>
+            }
+          />
         </div>
       </div>
     </MoveReFullscreenScreen>

@@ -2,13 +2,18 @@
 
 /**
  * 공통 intro 스토리 슬라이드 래퍼
- * 100svh, 별 배경, 진행 표시, prev/next 내비게이션
+ * 100svh, 별 배경, 진행 표시, 하단 좌우 이전/다음
  * 브랜드: docs/BRAND_UI_SSOT_MOVE_RE.md — 토큰만 사용
  */
 import Link from 'next/link';
-import { ChevronLeft, ChevronDown } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { Starfield } from '@/components/landing/Starfield';
-import { MoveReFullscreenScreen } from '@/components/public-brand';
+import {
+  MoveReFullscreenScreen,
+  MoveRePrimaryCTA,
+  MoveReSecondaryCTA,
+  MoveReStepNavRow,
+} from '@/components/public-brand';
 import {
   TOTAL_STEPS,
   getStepIndex,
@@ -21,6 +26,8 @@ interface IntroSlideProps {
   children: React.ReactNode;
   tapLabel?: string;
   footer?: React.ReactNode;
+  /** true면 하단 이전/다음(또는 커스텀 푸터) 바를 렌더하지 않음 — profile 등 본문에 폼이 있을 때 */
+  hideBottomBar?: boolean;
 }
 
 export function IntroSlide({
@@ -28,6 +35,7 @@ export function IntroSlide({
   children,
   tapLabel = 'TAP TO CONTINUE',
   footer,
+  hideBottomBar = false,
 }: IntroSlideProps) {
   const stepIndex = getStepIndex(currentPath);
   const prevPath = getPrevPath(currentPath);
@@ -50,11 +58,11 @@ export function IntroSlide({
               <span />
             )}
           </div>
-          <div className="flex gap-1.5" aria-hidden>
+          <div className="flex max-w-[220px] flex-1 justify-center gap-1.5 px-2" aria-hidden>
             {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
               <div
                 key={i}
-                className={`h-0.5 w-6 rounded-full transition-colors ${
+                className={`h-0.5 w-6 shrink-0 rounded-full transition-colors ${
                   i <= stepIndex ? 'bg-[var(--mr-public-accent)]' : 'bg-white/20'
                 }`}
               />
@@ -63,25 +71,44 @@ export function IntroSlide({
           <div className="w-10" />
         </header>
 
-        <main className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center px-6">
-          {children}
-        </main>
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col px-5">
+          <main
+            className={`relative z-10 flex min-h-0 flex-1 flex-col items-center px-1 ${
+              hideBottomBar
+                ? 'justify-center pb-[max(1.25rem,env(safe-area-inset-bottom))]'
+                : 'justify-center'
+            }`}
+          >
+            {children}
+          </main>
 
-        <footer className="relative z-20 flex flex-col items-center gap-2 pb-8">
-          {footer ?? (
-            nextPath && (
-              <Link
-                href={nextPath}
-                className="flex flex-col items-center gap-1 text-slate-400 transition-colors hover:text-slate-300"
-              >
-                <span className="text-[11px] font-medium uppercase tracking-widest">
-                  {tapLabel}
-                </span>
-                <ChevronDown className="size-4" />
-              </Link>
-            )
-          )}
-        </footer>
+          {!hideBottomBar &&
+            (footer ? (
+              <div className="shrink-0 w-full border-t border-white/[0.06] pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4">
+                {/* 커스텀 푸터(예: profile 폼): max-w-md 블록이 화면 중앙에 오도록 */}
+                <div className="mx-auto w-full max-w-md px-4">{footer}</div>
+              </div>
+            ) : (
+              <div className="shrink-0 border-t border-white/[0.06] pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4">
+                <MoveReStepNavRow
+                  left={
+                    prevPath ? (
+                      <MoveReSecondaryCTA href={prevPath} className="min-h-[52px] w-full">
+                        이전
+                      </MoveReSecondaryCTA>
+                    ) : undefined
+                  }
+                  right={
+                    nextPath ? (
+                      <MoveRePrimaryCTA href={nextPath} className="w-full">
+                        {tapLabel}
+                      </MoveRePrimaryCTA>
+                    ) : undefined
+                  }
+                />
+              </div>
+            ))}
+        </div>
       </div>
     </MoveReFullscreenScreen>
   );

@@ -26,3 +26,6 @@ export type { MoveReSecondaryCTAProps } from './MoveReSecondaryCTA';
 
 export { MoveReChoiceChip } from './MoveReChoiceChip';
 export type { MoveReChoiceChipProps } from './MoveReChoiceChip';
+
+export { MoveReStepNavRow } from './MoveReStepNavRow';
+export type { MoveReStepNavRowProps } from './MoveReStepNavRow';

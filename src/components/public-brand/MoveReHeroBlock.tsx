@@ -5,9 +5,11 @@ import { cn } from '@/lib/utils';
 
 export interface MoveReHeroBlockProps {
   eyebrow?: string;
+  /** eyebrow 전용 클래스(액센트 톤 등) */
+  eyebrowClassName?: string;
   title: ReactNode;
   subtitle?: ReactNode;
-  /** 앰버 짧은 구분선 */
+  /** 앰버 얇은 구분선 */
   showAccentDivider?: boolean;
   className?: string;
 }
@@ -17,6 +19,7 @@ export interface MoveReHeroBlockProps {
  */
 export function MoveReHeroBlock({
   eyebrow,
+  eyebrowClassName,
   title,
   subtitle,
   showAccentDivider = true,
@@ -26,7 +29,10 @@ export function MoveReHeroBlock({
     <div className={cn('flex flex-col items-center text-center', className)}>
       {eyebrow ? (
         <p
-          className="mb-2 text-[11px] font-medium uppercase tracking-widest text-slate-500"
+          className={cn(
+            'mb-2 text-[11px] font-medium uppercase tracking-widest text-slate-500',
+            eyebrowClassName
+          )}
           style={{ fontFamily: 'var(--font-sans-noto)' }}
         >
           {eyebrow}
@@ -40,7 +46,7 @@ export function MoveReHeroBlock({
       </div>
       {showAccentDivider ? (
         <div
-          className="my-4 h-1 w-12 rounded-full bg-[var(--mr-public-accent)] opacity-80 md:my-6"
+          className="my-5 h-px w-14 bg-[var(--mr-public-accent)] opacity-90 md:my-6"
           aria-hidden
         />
       ) : null}

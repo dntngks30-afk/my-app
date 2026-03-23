@@ -139,16 +139,20 @@ export default function OnboardingPage() {
 
   return (
     <MoveReFullscreenScreen>
-      <div className="flex flex-1 flex-col items-center px-6 py-8">
-      <div className="w-full max-w-md space-y-5">
-        <div className="text-center space-y-2">
-          <p className="text-[11px] uppercase tracking-wide text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+      <div className="flex flex-1 flex-col px-6 py-8">
+      <div className="mx-auto w-full max-w-md space-y-6">
+        <div className="space-y-3 text-left">
+          <p
+            className="text-[11px] font-medium uppercase tracking-widest text-[var(--mr-public-accent)] opacity-90"
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
+          >
             실행 시작 설정
           </p>
-          <h1 className="text-xl font-bold text-slate-100 leading-snug" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+          <div className="h-px w-12 bg-[var(--mr-public-accent)] opacity-90" aria-hidden />
+          <h1 className="text-xl font-bold leading-snug text-slate-100" style={{ fontFamily: 'var(--font-sans-noto)' }}>
             첫 세션 바로 앞이에요
           </h1>
-          <p className="text-sm text-slate-400 leading-relaxed" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+          <p className="text-sm leading-relaxed text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
             분석은 이미 끝났어요. 지금은{' '}
             <span className="text-slate-300">한 주에 몇 번 돌릴지·시작 강도·몸의 불편 신호</span>만 맞추면
             실행 루틴으로 이어져요.
@@ -238,7 +242,7 @@ export default function OnboardingPage() {
                 onChange={(e) => setLifestyleNote(e.target.value.slice(0, LIFESTYLE_MAX))}
                 rows={2}
                 placeholder="없으면 비워 두셔도 돼요."
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-[var(--mr-public-accent)]/35"
                 style={{ fontFamily: 'var(--font-sans-noto)' }}
               />
               <p className="text-[10px] text-slate-600 mt-1 text-right">{lifestyleNote.length}/{LIFESTYLE_MAX}</p>

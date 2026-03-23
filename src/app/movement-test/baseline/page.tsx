@@ -177,7 +177,7 @@ export default function BaselinePage() {
 
   return (
     <MoveReFullscreenScreen backgroundSlot={<Starfield />}>
-      <main className="flex flex-1 flex-col items-center justify-center px-6 py-8">
+      <main className="flex min-h-0 flex-1 flex-col px-5 py-6">
         <Suspense fallback={null}>
           <ResumeExecutionGate
             enabled={!loading && !!baseline}
@@ -185,7 +185,7 @@ export default function BaselinePage() {
             handleExecutionStart={handleExecutionStart}
           />
         </Suspense>
-        <div className="space-y-3 w-full max-w-md">
+        <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col space-y-3">
           <PublicResultRenderer
             result={baseline.result}
             stage="baseline"

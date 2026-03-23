@@ -38,6 +38,7 @@ export default function LandingPage() {
         <div className="flex w-full max-w-3xl flex-col items-center gap-6 md:gap-8">
           <MoveReHeroBlock
             eyebrow="Movement Type Analysis"
+            eyebrowClassName="text-[var(--mr-public-accent)] opacity-90"
             title={
               <div className="flex flex-col items-center">
                 <h1 className="mr-public-brand-serif text-5xl font-black leading-tight text-slate-100 md:text-7xl">

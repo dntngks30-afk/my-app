@@ -14,6 +14,7 @@ import {
   MoveReHeroBlock,
   MoveRePrimaryCTA,
   MoveReSecondaryCTA,
+  MoveReSurfaceCard,
 } from '@/components/public-brand';
 
 const SESSION_KEY = 'movementTestSession:v2';
@@ -72,16 +73,18 @@ export default function RefineBridgePage() {
 
   return (
     <MoveReFullscreenScreen backgroundSlot={<Starfield />}>
-      <main className="flex flex-1 flex-col items-center justify-center px-6 py-10">
-        <div className="animate-in fade-in w-full max-w-md space-y-6">
+      <main className="flex min-h-0 flex-1 flex-col justify-center px-6 py-10">
+        <div className="animate-in fade-in mx-auto w-full max-w-md space-y-8">
           <MoveReHeroBlock
+            className="items-start text-left"
             eyebrow="다음 단계"
+            eyebrowClassName="text-[var(--mr-public-accent)] opacity-90"
             title={
               <h1 className="text-2xl font-bold leading-snug break-keep text-slate-100">
                 설문 결과는 준비됐어요
               </h1>
             }
-            showAccentDivider={false}
+            showAccentDivider
             subtitle={
               <p className="pt-1 text-sm leading-relaxed break-keep text-slate-400">
                 원하시면 20~30초 동작 체크로 움직임 신호를 조금 더 반영할 수 있어요. 진단이 아니라, 더 맞는 운동
@@ -90,21 +93,27 @@ export default function RefineBridgePage() {
             }
           />
 
-          <div className="space-y-3 pt-2">
-            <MoveRePrimaryCTA onClick={handleResultFirst} className="min-h-[52px]">
-              결과 먼저 보기
-            </MoveRePrimaryCTA>
-            <MoveReSecondaryCTA onClick={handleCameraRefine} className="min-h-[48px]">
-              카메라로 움직임 체크하기
-            </MoveReSecondaryCTA>
-          </div>
+          <div className="space-y-4">
+            <MoveReSurfaceCard className="overflow-hidden p-0">
+              <div className="border-b border-white/[0.06] px-4 py-4">
+                <MoveRePrimaryCTA type="button" onClick={handleResultFirst} className="w-full shadow-md">
+                  결과 먼저 보기
+                </MoveRePrimaryCTA>
+              </div>
+              <div className="px-4 py-4">
+                <MoveReSecondaryCTA type="button" onClick={handleCameraRefine} className="min-h-[52px] w-full">
+                  카메라로 움직임 체크하기
+                </MoveReSecondaryCTA>
+              </div>
+            </MoveReSurfaceCard>
 
-          <p
-            className="text-center text-xs break-keep text-slate-500"
-            style={{ fontFamily: 'var(--font-sans-noto)' }}
-          >
-            동작 체크 없이도 결과와 이후 단계를 모두 이용할 수 있어요.
-          </p>
+            <p
+              className="text-center text-xs break-keep text-slate-500"
+              style={{ fontFamily: 'var(--font-sans-noto)' }}
+            >
+              동작 체크 없이도 결과와 이후 단계를 모두 이용할 수 있어요.
+            </p>
+          </div>
         </div>
       </main>
     </MoveReFullscreenScreen>

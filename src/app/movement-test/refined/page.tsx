@@ -189,7 +189,7 @@ export default function RefinedResultPage() {
 
   return (
     <MoveReFullscreenScreen backgroundSlot={<Starfield />}>
-      <main className="flex flex-1 flex-col items-center justify-start px-6 py-4">
+      <main className="flex min-h-0 flex-1 flex-col px-5 py-6">
         <Suspense fallback={null}>
           <ResumeExecutionGate
             enabled={resumeEnabled}
@@ -199,7 +199,7 @@ export default function RefinedResultPage() {
         </Suspense>
         {recoveredRefined ? (
           /* FLOW-02: DB에서 복구된 refined | FLOW-03: 실행 시작 CTA */
-          <div className="space-y-3 w-full max-w-md">
+          <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col space-y-3">
             <PublicResultRenderer
               result={recoveredRefined}
               stage="refined"
@@ -221,7 +221,7 @@ export default function RefinedResultPage() {
           </div>
         ) : refined ? (
           /* V2-06: shared renderer — refined stage | FLOW-03: 실행 시작 CTA */
-          <div className="space-y-3 w-full max-w-md">
+          <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col space-y-3">
             <PublicResultRenderer
               result={refined.result}
               stage="refined"
@@ -244,7 +244,7 @@ export default function RefinedResultPage() {
           </div>
         ) : baselineFallback ? (
           /* V2-06: shared renderer — fallback stage | FLOW-03: 실행 시작 CTA */
-          <div className="space-y-3 w-full max-w-md">
+          <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col space-y-3">
             <PublicResultRenderer
               result={baselineFallback.result}
               stage="fallback"
