@@ -15,11 +15,9 @@ import { BaselineResultStep1 } from '@/components/stitch/result/BaselineResultSt
 import { BaselineResultStep2 } from '@/components/stitch/result/BaselineResultStep2';
 import { BaselineResultStep3 } from '@/components/stitch/result/BaselineResultStep3';
 import {
-  PRIMARY_TYPE_LABELS,
-  PRIMARY_TYPE_DISPLAY_NAMES,
   PRIMARY_TYPE_COLOR,
-  PRIMARY_TYPE_BRIEF,
   PRIMARY_TYPE_CAREFUL_MOVEMENTS,
+  getBaselineStep1ResultSlots,
   PRIMARY_TYPE_RECOMMENDED_MOVES,
   PRIMARY_TYPE_LIFESTYLE_HABITS,
   PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW,
@@ -126,11 +124,9 @@ export function PublicResultRenderer({
 }: PublicResultRendererProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const pt = result.primary_type as UnifiedPrimaryType;
-  // 화면 헤드라인에는 사용자 친화적 표시명, 내부 비교/로깅에는 PRIMARY_TYPE_LABELS 유지
-  const typeLabel = PRIMARY_TYPE_DISPLAY_NAMES[pt] ?? PRIMARY_TYPE_LABELS[pt] ?? result.primary_type;
   const typeColor = PRIMARY_TYPE_COLOR[pt] ?? 'var(--mr-public-accent)';
   const stageMeta = STAGE_META[stage];
-  const brief = PRIMARY_TYPE_BRIEF[pt] ?? '';
+  const step1Slots = getBaselineStep1ResultSlots(pt);
   const careful = PRIMARY_TYPE_CAREFUL_MOVEMENTS[pt] ?? PRIMARY_TYPE_CAREFUL_MOVEMENTS.UNKNOWN;
   const rec = PRIMARY_TYPE_RECOMMENDED_MOVES[pt] ?? PRIMARY_TYPE_RECOMMENDED_MOVES.UNKNOWN;
   const life = PRIMARY_TYPE_LIFESTYLE_HABITS[pt] ?? PRIMARY_TYPE_LIFESTYLE_HABITS.UNKNOWN;
@@ -191,12 +187,13 @@ export function PublicResultRenderer({
       {step === 1 && (
         <BaselineResultStep1
           titlePrefix={stageMeta.titlePrefix}
-          typeLabel={typeLabel}
-          typeColor={typeColor}
+          typeName={step1Slots.typeName}
+          typeAccentColor={typeColor}
           secondaryTendencyLine={secondaryTendencyLine}
-          brief={brief}
-          carefulItems={[careful[0], careful[1]].filter(Boolean) as string[]}
-          hook={hook}
+          summary={step1Slots.summary}
+          patternToWatch={step1Slots.patternToWatch}
+          todayCaution={step1Slots.todayCaution}
+          firstResetDirection={step1Slots.firstResetDirection}
           onNext={() => setStep(2)}
         />
       )}

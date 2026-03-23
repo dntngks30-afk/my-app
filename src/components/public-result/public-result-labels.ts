@@ -5,7 +5,8 @@
  * 이 파일이 baseline/refined/future-loaded 모든 공개 결과 표면의 레이블 SSOT다.
  *
  * ⚠️ 이 파일에 동물 이름(kangaroo, hedgehog 등)을 headline label로 추가 금지.
- * PR-BASELINE-COPY-REWRITE-06: 사용자 대면 카피는 실행 직전 이해 톤(비진단·비내부용어).
+ * PR-BASELINE-COPY-REWRITE-06 / PR-BASELINE-TYPE-UI-AND-COPY-07:
+ * 사용자 대면 카피는 실행 직전 이해 톤(비진단·비내부용어). Step1 슬롯은 07 정본.
  *
  * @see src/lib/result/deep-result-v2-contract.ts (타입 SSOT)
  */
@@ -80,6 +81,83 @@ export const PRIMARY_TYPE_COLOR: Record<UnifiedPrimaryType, string> = {
   STABLE:                     '#4ade80',
   UNKNOWN:                    '#94a3b8',
 };
+
+// ─── PR-BASELINE-TYPE-UI-AND-COPY-07 — Step1 고정 5슬롯(타입명·요약·3블록) ─
+// 스코어링·계약 불변. 표시 전용. Stitch baseline type-result 카피 정본.
+
+export type BaselineStep1ResultSlots = {
+  typeName: string;
+  summary: string;
+  patternToWatch: string;
+  todayCaution: string;
+  firstResetDirection: string;
+};
+
+export const BASELINE_STEP1_RESULT_SLOTS: Record<UnifiedPrimaryType, BaselineStep1ResultSlots> = {
+  LOWER_INSTABILITY: {
+    typeName: '안정성 회복형',
+    summary:
+      '지금은 하체를 더 강하게 쓰기보다, 흔들리지 않게 중심을 잡아주는 게 먼저예요. 무릎이나 발목이 버티는 느낌이 들기 쉬운 상태예요.',
+    patternToWatch: '한쪽 다리에 기대거나 내려앉을 때 무릎이 안쪽으로 모이기 쉬워요.',
+    todayCaution:
+      '무거운 중량·점프부터 시작하지 말고, 양발에 체중을 고르게 싣는 감각부터 확인해 보세요.',
+    firstResetDirection: '하체에 힘을 몰기보다 발목·고관절을 풀고 중심을 다시 잡는 방향으로 시작해요.',
+  },
+  LOWER_MOBILITY_RESTRICTION: {
+    typeName: '가동성 회복형',
+    summary: '지금은 더 버티는 것보다, 발목과 고관절의 굳은 범위를 먼저 풀어주는 게 중요한 상태예요.',
+    patternToWatch:
+      '스쿼트나 런지에서 깊이가 잘 안 나오고, 앉았다 일어날 때 하체가 뻣뻣하게 느껴질 수 있어요.',
+    todayCaution: '오래 앉아 있었다면 바로 깊은 동작부터 하지 말고, 짧게 풀어준 뒤 시작해 보세요.',
+    firstResetDirection: '깊이를 억지로 늘리기보다 발목·고관절 움직임을 부드럽게 여는 방향으로 시작해요.',
+  },
+  UPPER_IMMOBILITY: {
+    typeName: '상체 이완 필요형',
+    summary:
+      '상체를 더 세게 세우기보다, 목·어깨·가슴 앞쪽의 긴장을 먼저 풀어줘야 움직임이 편해지는 상태예요.',
+    patternToWatch: '팔을 올릴 때 어깨가 먼저 답답하고, 오래 앉아 있으면 목과 어깨가 쉽게 무거워져요.',
+    todayCaution:
+      '어깨를 억지로 내리거나 강하게 스트레칭하기보다, 숨을 내쉬며 상체 긴장을 먼저 줄여보세요.',
+    firstResetDirection: '자세 교정보다 호흡과 함께 목·어깨·흉추를 풀어주는 방향으로 시작해요.',
+  },
+  CORE_CONTROL_DEFICIT: {
+    typeName: '중심 재정렬형',
+    summary: '배에 힘을 더 주는 것보다, 숨과 몸통이 자연스럽게 연결되도록 다시 정리하는 게 먼저인 상태예요.',
+    patternToWatch: '허리나 골반이 먼저 버티고, 움직일수록 몸통보다 허리에 힘이 몰리기 쉬워요.',
+    todayCaution:
+      '숨을 참은 채 버티는 운동부터 몰아 하지 말고, 편하게 내쉬며 중심 감각부터 확인해 보세요.',
+    firstResetDirection: '강한 코어 운동보다 호흡·골반·갈비를 다시 연결하는 방향으로 시작해요.',
+  },
+  DECONDITIONED: {
+    typeName: '기본 체력 회복형',
+    summary: '특정 한 부위보다 전체 컨디션과 움직임 리듬을 천천히 끌어올리는 게 먼저인 상태예요.',
+    patternToWatch:
+      '여러 부위가 함께 무겁게 느껴지거나, 쉬었다가 다시 시작할 때 피로가 크게 올라오기 쉬워요.',
+    todayCaution: '예전 강도로 바로 돌아가려 하지 말고, 짧게 끝까지 해내는 흐름을 먼저 만들어 보세요.',
+    firstResetDirection: '강도보다 꾸준함을 우선하고, 전신을 가볍게 깨우는 방향으로 시작해요.',
+  },
+  STABLE: {
+    typeName: '균형 유지형',
+    summary:
+      '전반적인 흐름은 안정적인 편이라, 지금 균형을 해치지 않으면서 천천히 발전시키는 방식이 잘 맞아요.',
+    patternToWatch:
+      '큰 불균형보다는 수면·스트레스·피로에 따라 컨디션이 흔들릴 때 운동 감각이 달라질 수 있어요.',
+    todayCaution: '괜찮은 날에도 강도를 한 번에 올리지 말고, 몸 상태를 보며 조금씩 조절해 보세요.',
+    firstResetDirection: '지금 균형을 유지하면서 전신 리듬과 회복을 함께 챙기는 방향으로 시작해요.',
+  },
+  UNKNOWN: {
+    typeName: '가볍게 확인하며 시작해요',
+    summary:
+      '아직 오늘의 시작점을 한 가지 이름으로 단정하기엔 정보가 부족해요. 불편 없는 범위에서 가볍게 움직이며 반응을 살펴보는 것부터 좋아요.',
+    patternToWatch: '한꺼번에 깊게 해석하려 하기보다, 조금씩 몸의 느낌을 쌓아가는 편이 좋아요.',
+    todayCaution: '오늘은 짧게 끝내는 것만 목표로 잡아도 충분해요.',
+    firstResetDirection: '편한 범위에서 호흡과 가벼운 움직임으로 몸을 깨우는 방향으로 시작해요.',
+  },
+};
+
+export function getBaselineStep1ResultSlots(pt: UnifiedPrimaryType): BaselineStep1ResultSlots {
+  return BASELINE_STEP1_RESULT_SLOTS[pt];
+}
 
 // ─── Evidence & Stage ────────────────────────────────────────────────────────
 
