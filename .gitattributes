@@ -1,7 +1,17 @@
 # MOVE RE — Git 줄바꿈·텍스트 정규화
-# - text=auto: Git이 텍스트 파일을 판별하고 저장소에는 일관되게 맞춤 (팀/ OS 간 CRLF·LF 혼선 완화)
-# - Windows에서 core.autocrlf=true 를 쓰는 경우에도 인덱스·워킹트리 불일치(수정인데 diff 없음)를 줄이는 데 도움이 됨
-* text=auto
+#
+# - text=auto: Git이 텍스트/바이너리를 구분
+# - eol=lf: 인덱스·원격 저장소에는 LF로 통일 (Next/TS 생태계·CI·맥/리눅스와 정합)
+#   → Windows에서도 워킹 트리는 LF로 맞춰져, CRLF/LF 혼선·가짜 modified 완화에 유리
+#
+# 권장: 로컬 Git에서 `git config core.autocrlf false` (또는 global)
+#      .gitattributes가 줄바꿈을 관리하므로 autocrlf=true와 겹치면 혼란이 생기기 쉬움
+#
+# 최초 적용 후 한 번(또는 기존 혼선 정리 시):
+#   git add --renormalize .
+#   git status
+#
+* text=auto eol=lf
 
 # 바이너리는 줄바꿈 변환 금지
 *.png binary
