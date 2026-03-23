@@ -16,9 +16,9 @@ import { BaselineResultStep2 } from '@/components/stitch/result/BaselineResultSt
 import { BaselineResultStep3 } from '@/components/stitch/result/BaselineResultStep3';
 import {
   PRIMARY_TYPE_LABELS,
+  PRIMARY_TYPE_DISPLAY_NAMES,
   PRIMARY_TYPE_COLOR,
   PRIMARY_TYPE_BRIEF,
-  PRIMARY_TYPE_SCREEN1_BULLETS,
   PRIMARY_TYPE_CAREFUL_MOVEMENTS,
   PRIMARY_TYPE_RECOMMENDED_MOVES,
   PRIMARY_TYPE_LIFESTYLE_HABITS,
@@ -125,10 +125,10 @@ export function PublicResultRenderer({
 }: PublicResultRendererProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const pt = result.primary_type as UnifiedPrimaryType;
-  const typeLabel = PRIMARY_TYPE_LABELS[pt] ?? result.primary_type;
+  // 화면 헤드라인에는 사용자 친화적 표시명, 내부 비교/로깅에는 PRIMARY_TYPE_LABELS 유지
+  const typeLabel = PRIMARY_TYPE_DISPLAY_NAMES[pt] ?? PRIMARY_TYPE_LABELS[pt] ?? result.primary_type;
   const typeColor = PRIMARY_TYPE_COLOR[pt] ?? 'var(--mr-public-accent)';
   const stageMeta = STAGE_META[stage];
-  const bullets = PRIMARY_TYPE_SCREEN1_BULLETS[pt] ?? PRIMARY_TYPE_SCREEN1_BULLETS.UNKNOWN;
   const brief = PRIMARY_TYPE_BRIEF[pt] ?? '';
   const careful = PRIMARY_TYPE_CAREFUL_MOVEMENTS[pt] ?? PRIMARY_TYPE_CAREFUL_MOVEMENTS.UNKNOWN;
   const rec = PRIMARY_TYPE_RECOMMENDED_MOVES[pt] ?? PRIMARY_TYPE_RECOMMENDED_MOVES.UNKNOWN;
@@ -194,7 +194,8 @@ export function PublicResultRenderer({
           typeColor={typeColor}
           secondaryTendencyLine={secondaryTendencyLine}
           brief={brief}
-          bullets={bullets}
+          carefulItems={[careful[0], careful[1]].filter(Boolean) as string[]}
+          hook={hook}
           onNext={() => setStep(2)}
         />
       )}

@@ -22,7 +22,7 @@ import type {
 
 // ─── Primary Type ─────────────────────────────────────────────────────────────
 
-/** UnifiedPrimaryType → 간결 표시 레이블 */
+/** UnifiedPrimaryType → 간결 표시 레이블 (내부 참조용, 분기·비교 로직에서 사용) */
 export const PRIMARY_TYPE_LABELS: Record<UnifiedPrimaryType, string> = {
   LOWER_INSTABILITY:          '하체 안정성 패턴',
   LOWER_MOBILITY_RESTRICTION: '하체 가동성 제한',
@@ -33,15 +33,40 @@ export const PRIMARY_TYPE_LABELS: Record<UnifiedPrimaryType, string> = {
   UNKNOWN:                    '분석 정보 부족',
 };
 
-/** UnifiedPrimaryType → 간략 설명 (gate/card용) */
+/**
+ * UnifiedPrimaryType → 사용자 대면 표시명 (표현 전용, 결과 truth 불변).
+ * 화면 헤드라인·UI 사본에서 PRIMARY_TYPE_LABELS 대신 사용한다.
+ * 내부 classifier 어휘가 아닌 현재 몸 상태를 행동 언어로 설명한다.
+ */
+export const PRIMARY_TYPE_DISPLAY_NAMES: Record<UnifiedPrimaryType, string> = {
+  LOWER_INSTABILITY:          '하체 안정을 먼저 챙겨요',
+  LOWER_MOBILITY_RESTRICTION: '하체 가동성을 먼저 열어요',
+  UPPER_IMMOBILITY:           '상체 가동성을 먼저 열어요',
+  CORE_CONTROL_DEFICIT:       '중심 조절을 먼저 잡아요',
+  DECONDITIONED:              '단계적으로 다시 맞춰요',
+  STABLE:                     '균형이 잘 잡혀 있어요',
+  UNKNOWN:                    '좀 더 확인이 필요해요',
+};
+
+/**
+ * UnifiedPrimaryType → 간략 설명 (Step 1 Primary Insight 블록).
+ * 사용자가 읽을 수 있는 온기 있는 문장 — 내부 신호·분류 어휘 노출 금지.
+ */
 export const PRIMARY_TYPE_BRIEF: Record<UnifiedPrimaryType, string> = {
-  LOWER_INSTABILITY:          '하체의 안정성 신호가 가장 두드러집니다.',
-  LOWER_MOBILITY_RESTRICTION: '발목·고관절의 가동 범위 제한 신호가 나타납니다.',
-  UPPER_IMMOBILITY:           '흉추·어깨의 가동성 제한 신호가 나타납니다.',
-  CORE_CONTROL_DEFICIT:       '허리·골반 조절 패턴 신호가 가장 두드러집니다.',
-  DECONDITIONED:              '복수 부위에서 동시에 신호가 나타납니다.',
-  STABLE:                     '전반적으로 균형이 잡힌 움직임 패턴입니다.',
-  UNKNOWN:                    '충분한 신호를 얻지 못했습니다.',
+  LOWER_INSTABILITY:
+    '하체에서 흔들리거나 버티는 느낌이 자주 올라오는 시기예요. 더 세게 쓰기 전에 먼저 안정감을 쌓는 방향이 맞아요.',
+  LOWER_MOBILITY_RESTRICTION:
+    '발목과 고관절이 평소보다 뻑뻑하게 느껴지는 시기예요. 무리하기 전에 가동성을 조금씩 열어 주는 게 먼저예요.',
+  UPPER_IMMOBILITY:
+    '목과 어깨 쪽이 닫혀 있는 상태예요. 무리하게 올리거나 버티기 전에 가볍게 먼저 열어 주는 순서가 맞아요.',
+  CORE_CONTROL_DEFICIT:
+    '허리와 골반 주변에서 버티는 패턴이 먼저 오고 있어요. 힘을 주기 전에 호흡과 중심을 연결하는 방향이 맞아요.',
+  DECONDITIONED:
+    '여러 곳에서 동시에 신호가 올라오는 시기예요. 한꺼번에 잡으려 하기보다 단계적으로 다시 맞춰 가는 방향이 맞아요.',
+  STABLE:
+    '전반적으로 균형이 잘 잡혀 있어요. 이 상태를 유지하면서 점진적으로 발전시키는 방향이 맞아요.',
+  UNKNOWN:
+    '아직 신호가 충분하지 않아 조심스럽게 시작하는 게 좋아요. 가볍게 범위를 확인하며 맞춰 가는 게 첫 방향이에요.',
 };
 
 /** UnifiedPrimaryType → accent 색상 */
@@ -215,6 +240,16 @@ export function buildRefinementShiftSupportLine(
   return '짧은 동작 체크를 더하면서, 처음 설문만으로 보이던 경향과 겹치는 부분을 다시 맞춰 봤어요.';
 }
 
+/** 보조 경향 문장에서 쓸 짧은 명사 (PRIMARY_TYPE_LABELS 직접 노출 방지) */
+const SECONDARY_TENDENCY_NOUNS: Partial<Record<UnifiedPrimaryType, string>> = {
+  LOWER_INSTABILITY:          '하체 안정',
+  LOWER_MOBILITY_RESTRICTION: '하체 가동성',
+  UPPER_IMMOBILITY:           '상체 가동성',
+  CORE_CONTROL_DEFICIT:       '중심 조절',
+  DECONDITIONED:              '전반 조정',
+  STABLE:                     '균형 유지',
+};
+
 /**
  * Step 1: 보조 패턴을 라벨 나열 대신 한 문장으로 (primary_type은 이미 제목에 있음).
  */
@@ -223,8 +258,8 @@ export function buildSecondaryTendencySentence(
   primary: UnifiedPrimaryType
 ): string | null {
   if (secondary == null || secondary === primary) return null;
-  const sec = PRIMARY_TYPE_LABELS[secondary] ?? String(secondary);
-  return `같은 결과 안에서 ${sec} 쪽 경향도 함께 겹쳐 보여요.`;
+  const noun = SECONDARY_TENDENCY_NOUNS[secondary] ?? PRIMARY_TYPE_LABELS[secondary] ?? String(secondary);
+  return `${noun} 쪽 경향도 함께 겹쳐 보여요.`;
 }
 
 /**
