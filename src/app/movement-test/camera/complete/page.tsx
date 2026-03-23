@@ -8,6 +8,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Starfield } from '@/components/landing/Starfield';
 import {
+  MoveReFullscreenScreen,
+  MoveReHeroBlock,
+  MoveRePrimaryCTA,
+  MoveReSecondaryCTA,
+  MoveReSurfaceCard,
+} from '@/components/public-brand';
+import {
   loadCameraTest,
   CAMERA_STEPS,
   resetCameraTest,
@@ -15,7 +22,6 @@ import {
 import { normalizeCameraResult, type NormalizedCameraResult } from '@/lib/camera/normalize';
 import { clearCameraResult, saveCameraResult } from '@/lib/camera/camera-result';
 
-const BG = '#0d161f';
 const ACTIVE_STEP_COUNT = CAMERA_STEPS.length;
 
 export default function CameraCompletePage() {
@@ -99,83 +105,55 @@ export default function CameraCompletePage() {
   }, [analysis]);
 
   return (
-    <div
-      className="relative min-h-[100svh] overflow-hidden flex flex-col"
-      style={{ backgroundColor: BG }}
-    >
-      <Starfield />
-
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-6">
-        <div className="max-w-md w-full text-center space-y-6">
-          <h1
-            className="text-2xl md:text-3xl font-bold text-slate-100"
-            style={{ fontFamily: 'var(--font-serif-noto)' }}
-          >
-            {uiState.title}
-          </h1>
-          <p
-            className="text-slate-400 text-sm leading-relaxed break-keep"
-            style={{ fontFamily: 'var(--font-sans-noto)' }}
-          >
-            {uiState.description}
-          </p>
-          {analysis && (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-left">
+    <MoveReFullscreenScreen backgroundSlot={<Starfield />}>
+      <main className="flex flex-1 flex-col items-center justify-center px-6 pb-8">
+        <div className="flex w-full max-w-md flex-col gap-6">
+          <MoveReHeroBlock
+            title={
+              <span
+                className="block text-2xl font-bold md:text-3xl"
+                style={{ fontFamily: 'var(--font-serif-noto)' }}
+              >
+                {uiState.title}
+              </span>
+            }
+            subtitle={<p className="break-keep">{uiState.description}</p>}
+          />
+          {analysis ? (
+            <MoveReSurfaceCard className="p-4 text-left">
               <p className="text-xs text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                촬영 신호: {uiState.allowContinue
+                촬영 신호:{' '}
+                {uiState.allowContinue
                   ? '확인됨'
                   : analysis.captureQuality === 'invalid'
                     ? '재촬영 권장'
                     : '안정적'}
               </p>
-              {process.env.NODE_ENV !== 'production' && analysis.flags.length > 0 && (
+              {process.env.NODE_ENV !== 'production' && analysis.flags.length > 0 ? (
                 <p
-                  className="mt-2 text-xs text-slate-500 break-keep"
+                  className="mt-2 break-keep text-xs text-slate-500"
                   style={{ fontFamily: 'var(--font-sans-noto)' }}
                 >
-                  debug: quality={analysis.captureQuality}, confidence={analysis.confidence}, flags={analysis.flags.join(', ')}
+                  debug: quality={analysis.captureQuality}, confidence={analysis.confidence}, flags=
+                  {analysis.flags.join(', ')}
                 </p>
-              )}
-            </div>
-          )}
+              ) : null}
+            </MoveReSurfaceCard>
+          ) : null}
           <div className="flex flex-col gap-3">
-            {uiState.allowContinue && (
-              <button
-                type="button"
-                onClick={handleViewResult}
-                className="w-full min-h-[48px] rounded-xl font-bold text-slate-900 bg-white hover:bg-slate-100"
-                style={{ fontFamily: 'var(--font-sans-noto)' }}
-              >
-                결과 보기
-              </button>
+            {uiState.allowContinue ? (
+              <MoveRePrimaryCTA onClick={handleViewResult}>결과 보기</MoveRePrimaryCTA>
+            ) : null}
+            {uiState.allowContinue ? (
+              <MoveReSecondaryCTA onClick={handleRetry}>다시 촬영하기</MoveReSecondaryCTA>
+            ) : (
+              <MoveRePrimaryCTA onClick={handleRetry}>다시 촬영하기</MoveRePrimaryCTA>
             )}
-            <button
-              type="button"
-              onClick={handleRetry}
-              className="w-full min-h-[48px] rounded-xl font-bold text-slate-900 bg-white hover:bg-slate-100"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
-            >
-              다시 촬영하기
-            </button>
-            <button
-              type="button"
-              onClick={handleSurveyFallback}
-              className="w-full min-h-[48px] rounded-xl font-medium text-slate-300 border border-white/20 hover:bg-white/5"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
-            >
-              설문형 테스트로 전환
-            </button>
-            <button
-              type="button"
-              onClick={handleHome}
-              className="w-full min-h-[48px] rounded-xl font-medium text-slate-300 border border-white/20 hover:bg-white/5"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
-            >
-              홈으로
-            </button>
+            <MoveReSecondaryCTA onClick={handleSurveyFallback}>설문형 테스트로 전환</MoveReSecondaryCTA>
+            <MoveReSecondaryCTA onClick={handleHome}>홈으로</MoveReSecondaryCTA>
           </div>
         </div>
       </main>
-    </div>
+    </MoveReFullscreenScreen>
   );
 }

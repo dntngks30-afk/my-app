@@ -45,10 +45,7 @@ export default function SelfTestRedirectPage() {
   }, [router]);
 
   return (
-    <div
-      className="min-h-[100svh] flex items-center justify-center"
-      style={{ backgroundColor: '#0d161f' }}
-    >
+    <div className="mr-public-funnel-shell flex min-h-[100svh] items-center justify-center">
       <p
         className="text-slate-400 text-sm"
         style={{ fontFamily: 'var(--font-sans-noto)' }}

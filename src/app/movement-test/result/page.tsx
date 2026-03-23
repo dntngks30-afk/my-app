@@ -57,7 +57,7 @@ export default function LegacyMovementTestResultRedirectPage() {
 
   return (
     <div
-      className="min-h-[100svh] flex flex-col items-center justify-center gap-2 px-6 bg-[#0d161f]"
+      className="mr-public-funnel-shell min-h-[100svh] flex flex-col items-center justify-center gap-2 px-6"
       style={{ fontFamily: 'var(--font-sans-noto)' }}
     >
       <p className="text-slate-400 text-sm text-center">최신 결과 화면으로 이동 중...</p>

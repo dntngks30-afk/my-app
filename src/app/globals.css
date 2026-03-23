@@ -285,3 +285,9 @@ nextjs-portal {
 .mr-public-text-accent {
   color: var(--mr-public-accent);
 }
+
+/* 설문 원형 선택 — selected fill (토큰만) */
+.mr-public-survey-choice-selected {
+  border-color: var(--mr-public-accent);
+  background-color: color-mix(in srgb, var(--mr-public-accent) 30%, transparent);
+}

@@ -65,8 +65,6 @@ import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 import { SuccessFreezeOverlay } from '@/components/camera/SuccessFreezeOverlay';
 import { FailureFreezeOverlay } from '@/components/camera/FailureFreezeOverlay';
 
-const BG = '#0d161f';
-const ACCENT = '#ff7b00';
 const STEP_ID: CameraStepId = 'squat';
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
@@ -914,10 +912,7 @@ export default function CameraSquatPage() {
       (typeof window !== 'undefined' && window.location.search.includes('debug=1')));
 
   return (
-    <div
-      className="relative min-h-[100svh] overflow-hidden flex flex-col"
-      style={{ backgroundColor: BG }}
-    >
+    <div className="relative flex min-h-[100svh] flex-col overflow-hidden mr-public-funnel-shell">
       {showSuccessFreezeOverlay && (
         <SuccessFreezeOverlay
           motionType="squat"
@@ -937,7 +932,7 @@ export default function CameraSquatPage() {
               className="inline-flex items-center justify-center size-10 rounded-full hover:bg-white/10 transition-colors min-h-[44px] min-w-[44px]"
               aria-label="이전"
             >
-              <ChevronLeft className="size-6" style={{ color: ACCENT }} />
+              <ChevronLeft className="size-6 text-[var(--mr-public-accent)]" />
             </Link>
           ) : (
             <Link
@@ -945,7 +940,7 @@ export default function CameraSquatPage() {
               className="inline-flex items-center justify-center size-10 rounded-full hover:bg-white/10 transition-colors min-h-[44px] min-w-[44px]"
               aria-label="이전"
             >
-              <ChevronLeft className="size-6" style={{ color: ACCENT }} />
+              <ChevronLeft className="size-6 text-[var(--mr-public-accent)]" />
             </Link>
           )}
         </div>

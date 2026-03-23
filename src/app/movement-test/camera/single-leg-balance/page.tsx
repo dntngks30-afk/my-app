@@ -25,8 +25,6 @@ import {
   type ExerciseProgressionState,
 } from '@/lib/camera/auto-progression';
 
-const BG = '#0d161f';
-const ACCENT = '#ff7b00';
 const STEP_ID: CameraStepId = 'single-leg-balance';
 const IS_DEV = process.env.NODE_ENV !== 'production';
 const DEBUG_SESSION_KEY = `move-re-camera-debug:${STEP_ID}`;
@@ -551,10 +549,7 @@ export default function CameraSingleLegBalancePage() {
   });
 
   return (
-    <div
-      className="relative min-h-[100svh] overflow-hidden flex flex-col"
-      style={{ backgroundColor: BG }}
-    >
+    <div className="relative min-h-[100svh] overflow-hidden flex flex-col mr-public-funnel-shell">
       <Starfield />
 
       <header className="relative z-20 flex items-center justify-between px-4 pt-4 pb-2">
@@ -565,7 +560,7 @@ export default function CameraSingleLegBalancePage() {
               className="inline-flex items-center justify-center size-10 rounded-full hover:bg-white/10 transition-colors min-h-[44px] min-w-[44px]"
               aria-label="이전"
             >
-              <ChevronLeft className="size-6" style={{ color: ACCENT }} />
+              <ChevronLeft className="size-6 text-[var(--mr-public-accent)]" />
             </Link>
           ) : (
             <span />

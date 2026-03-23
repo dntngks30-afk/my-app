@@ -63,8 +63,6 @@ import { getSetupFramingHint } from '@/lib/camera/setup-framing';
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 import { SuccessFreezeOverlay } from '@/components/camera/SuccessFreezeOverlay';
 
-const BG = '#0d161f';
-const ACCENT = '#ff7b00';
 const STEP_ID: CameraStepId = 'overhead-reach';
 const IS_DEV = process.env.NODE_ENV !== 'production';
 /** final outro 재생 실패 시 fallback 대기 시간 (ms) */
@@ -896,10 +894,7 @@ export default function CameraOverheadReachPage() {
     : getGuideToneFromLiveReadiness(liveReadiness);
 
   return (
-    <div
-      className="relative min-h-[100svh] overflow-hidden flex flex-col"
-      style={{ backgroundColor: BG }}
-    >
+    <div className="relative min-h-[100svh] overflow-hidden flex flex-col mr-public-funnel-shell">
       {showSuccessFreezeOverlay && (
         <SuccessFreezeOverlay
           motionType="overhead_reach"
@@ -916,7 +911,7 @@ export default function CameraOverheadReachPage() {
               className="inline-flex items-center justify-center size-10 rounded-full hover:bg-white/10 transition-colors min-h-[44px] min-w-[44px]"
               aria-label="이전"
             >
-              <ChevronLeft className="size-6" style={{ color: ACCENT }} />
+              <ChevronLeft className="size-6 text-[var(--mr-public-accent)]" />
             </Link>
           ) : (
             <span />
