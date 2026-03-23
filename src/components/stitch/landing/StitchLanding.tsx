@@ -36,23 +36,6 @@ export default function StitchLanding({ onStart }: StitchLandingProps) {
         <div className="absolute left-1/2 top-1/2 h-[70vw] w-[70vw] max-h-[820px] max-w-[820px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ffb77d]/6 blur-[140px]" />
       </div>
 
-      <header className="fixed inset-x-0 top-0 z-20 mx-auto flex w-full max-w-screen-2xl items-center justify-between px-6 py-6 md:px-8">
-        <div className="flex items-center gap-4">
-          <span className="text-xl italic tracking-tighter text-[#ffb77d] [font-family:var(--font-display)]">
-            Move Re
-          </span>
-        </div>
-
-        <div className="hidden items-center gap-8 md:flex">
-          <span className="text-xs font-light uppercase tracking-[0.2em] text-slate-400/70">
-            Methodology
-          </span>
-          <span className="text-xs font-light uppercase tracking-[0.2em] text-slate-400/70">
-            Journal
-          </span>
-        </div>
-      </header>
-
       <main className="relative z-10 flex min-h-[100svh] flex-col items-center justify-center px-6 text-center">
         <div className="w-full max-w-3xl space-y-12">
           <div className="space-y-4">
