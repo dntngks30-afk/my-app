@@ -107,7 +107,7 @@ export default function OnboardingPage() {
 
   if (!authChecked) {
     return (
-      <StitchSceneShell>
+      <StitchSceneShell contentEnter="off">
         <div className="flex flex-1 items-center justify-center">
           <p className="text-sm text-slate-400">확인 중...</p>
         </div>

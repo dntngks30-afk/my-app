@@ -1,5 +1,2 @@
-export { publicChapterEnterClass } from './enterClass';
-export {
-  PUBLIC_CHAPTER_PRESETS,
-  type PublicChapterVariant,
-} from './presets';
+export { publicChapterContentClass } from './enterClass';
+export type { PublicChapterVariant } from './presets';

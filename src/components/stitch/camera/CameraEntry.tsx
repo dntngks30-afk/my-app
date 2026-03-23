@@ -12,9 +12,9 @@ export type CameraEntryProps = {
 
 export default function CameraEntry({ onStart }: CameraEntryProps) {
   return (
-    <StitchSceneShell>
+    <StitchSceneShell contentEnter="off">
       <main className="flex min-h-0 flex-1 flex-col items-center justify-center px-8 py-12 text-center">
-        <div className="animate-in fade-in mx-auto w-full max-w-md space-y-10 duration-500">
+        <div className="mx-auto w-full max-w-md space-y-10">
           <div className="mx-auto flex h-32 w-32 items-center justify-center rounded-full border border-[#ffb77d]/30 bg-[#151b2d]/60">
             <Camera className="size-14 text-[#ffb77d]" strokeWidth={1.25} aria-hidden />
           </div>

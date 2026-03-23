@@ -27,8 +27,7 @@ export default function StitchSurveyQuestion({
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto overflow-x-hidden px-6 pb-10">
       <div
         key={stepIndex}
-        className="animate-in fade-in w-full max-w-2xl space-y-12 py-4 text-center duration-300"
-        style={{ animationDuration: '220ms' }}
+        className="public-survey-question-swap w-full max-w-2xl space-y-12 py-4 text-center"
       >
         <div className="space-y-6">
           <span className="block text-lg italic text-[#ffb77d]/60 [font-family:var(--font-display)]">

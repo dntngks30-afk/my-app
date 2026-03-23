@@ -155,7 +155,7 @@ export function PublicResultRenderer({
   const restActions = actions.slice(1);
 
   return (
-    <div className="flex min-h-0 w-full max-w-md flex-1 flex-col animate-in fade-in">
+    <div className="flex min-h-0 w-full max-w-md flex-1 flex-col">
       <div className="flex shrink-0 items-center justify-between gap-2 pb-1">
         {onBack ? (
           <button

@@ -36,7 +36,7 @@ export default function StitchLanding({ onStart }: StitchLandingProps) {
         <div className="absolute left-1/2 top-1/2 h-[70vw] w-[70vw] max-h-[820px] max-w-[820px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ffb77d]/6 blur-[140px]" />
       </div>
 
-      <main className="relative z-10 flex min-h-[100svh] flex-col items-center justify-center px-6 text-center">
+      <main className="public-chapter-content-default relative z-10 flex min-h-[100svh] flex-col items-center justify-center px-6 text-center">
         <div className="w-full max-w-3xl space-y-12">
           <div className="space-y-4">
             <span className="inline-block rounded-full border border-[#ffb77d]/20 px-4 py-1 text-[10px] uppercase tracking-[0.3em] text-[#ffb77d]">

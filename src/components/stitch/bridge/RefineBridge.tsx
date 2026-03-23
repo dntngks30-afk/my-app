@@ -14,7 +14,7 @@ export type RefineBridgeProps = {
 export default function RefineBridge({ loading, onResultFirst, onCameraRefine }: RefineBridgeProps) {
   if (loading) {
     return (
-      <StitchSceneShell>
+      <StitchSceneShell contentEnter="off">
         <div className="flex flex-1 items-center justify-center px-6">
           <p className="text-sm text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
             준비 중...
@@ -27,7 +27,7 @@ export default function RefineBridge({ loading, onResultFirst, onCameraRefine }:
   return (
     <StitchSceneShell>
       <main className="flex min-h-0 flex-1 flex-col justify-center px-6 py-12 md:px-10">
-        <div className="animate-in fade-in mx-auto w-full max-w-md space-y-10 duration-500">
+        <div className="mx-auto w-full max-w-md space-y-10">
           <div className="space-y-4 text-center">
             <p
               className="text-[10px] font-light uppercase tracking-[0.35em] text-[#ffb77d]/80"

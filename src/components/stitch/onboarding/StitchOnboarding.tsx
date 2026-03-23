@@ -58,7 +58,7 @@ export default function StitchOnboarding({
     }`;
 
   return (
-    <StitchSceneShell>
+    <StitchSceneShell contentEnter="calm">
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-10">
         <div className="mx-auto w-full max-w-md space-y-8">
           <div className="space-y-3 text-left">

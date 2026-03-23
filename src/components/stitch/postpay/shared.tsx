@@ -6,7 +6,7 @@
 import { StitchSceneShell } from '@/components/stitch/shared/SceneShell';
 
 export function PostpayChapterShell({ children }: { children: React.ReactNode }) {
-  return <StitchSceneShell>{children}</StitchSceneShell>;
+  return <StitchSceneShell contentEnter="calm">{children}</StitchSceneShell>;
 }
 
 /** stitch zip: 얇은 수직 시네마틱 레일 (0~1 채움) */

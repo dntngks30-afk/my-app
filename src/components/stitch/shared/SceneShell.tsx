@@ -1,5 +1,8 @@
 'use client';
 
+import { cn } from '@/lib/utils';
+import { publicChapterContentClass, type PublicChapterVariant } from '@/lib/public/chapter';
+
 /**
  * landing / survey / bridge / onboarding 공용 풀스크린 배경
  */
@@ -42,18 +45,43 @@ export type StitchSceneShellProps = {
   children: React.ReactNode;
   /** 카메라 등 어두운 씬 — 배경만 살짝 다름 */
   variant?: 'cosmic' | 'camera';
+  /**
+   * 배경·글로우는 고정, z-10 콘텐츠 컬럼만 챕터 진입 연출.
+   * `camera` 변형이면 항상 끔(캡처 씬 저모션).
+   */
+  contentEnter?: PublicChapterVariant | 'off';
 };
 
-export function StitchSceneShell({ children, variant = 'cosmic' }: StitchSceneShellProps) {
+function contentEnterLayerClass(
+  variant: 'cosmic' | 'camera',
+  contentEnter?: StitchSceneShellProps['contentEnter']
+): string | undefined {
+  if (variant === 'camera') return undefined;
+  if (contentEnter === 'off') return undefined;
+  const preset = contentEnter ?? 'default';
+  return publicChapterContentClass(preset);
+}
+
+export function StitchSceneShell({
+  children,
+  variant = 'cosmic',
+  contentEnter,
+}: StitchSceneShellProps) {
   const bg =
     variant === 'camera'
       ? 'bg-black'
       : 'bg-[#0c1324]';
 
+  const enterClass = contentEnterLayerClass(variant, contentEnter);
+
   return (
     <div className={`relative min-h-[100svh] overflow-hidden text-[#dce1fb] ${bg}`}>
       {variant === 'cosmic' ? <StitchSceneBackdrop /> : <StitchCameraBackdrop />}
-      <div className="relative z-10 flex min-h-[100svh] flex-col">{children}</div>
+      <div
+        className={cn('relative z-10 flex min-h-[100svh] flex-col', enterClass)}
+      >
+        {children}
+      </div>
     </div>
   );
 }

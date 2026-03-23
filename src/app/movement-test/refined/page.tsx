@@ -189,7 +189,7 @@ export default function RefinedResultPage() {
 
   return (
     <MoveReFullscreenScreen backgroundSlot={<Starfield />}>
-      <main className="flex min-h-0 flex-1 flex-col px-5 py-6">
+      <main className="public-chapter-content-default flex min-h-0 flex-1 flex-col px-5 py-6">
         <Suspense fallback={null}>
           <ResumeExecutionGate
             enabled={resumeEnabled}

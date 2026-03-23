@@ -47,7 +47,7 @@ export default function StitchSessionPreparingScene({
               <div className="rounded-xl bg-[rgba(46,52,71,0.45)] px-5 py-8 backdrop-blur-xl">
                 <p
                   key={stageIndex}
-                  className="animate-in fade-in text-sm leading-relaxed text-[#c6c6cd] duration-300"
+                  className="public-survey-question-swap text-sm leading-relaxed text-[#c6c6cd]"
                   style={{ fontFamily: 'var(--font-sans-noto)' }}
                   aria-live="polite"
                 >
