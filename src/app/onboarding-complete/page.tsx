@@ -4,17 +4,15 @@
  * FLOW-05 — Onboarding Complete (Claim Integration)
  *
  * 온보딩 저장 완료 후 진입점.
- * - mount 시 bridge context의 publicResultId로 claim을 best-effort 시도
- * - claim 성공/실패 여부와 관계없이 UX 차단 없이 계속 진행
- * - claim 완료 후 bridge context 삭제
- * - FLOW-06 session create 준비가 되면 이 페이지에서 추가 연결
+ * - mount 시 bridge context의 publicResultId로 claim 시도 (PR-CLAIM-FLOW-HARDENING-01: 일시 오류 재시도)
+ * - claim이 confirmed 성공(claimed | already_owned)일 때만 bridge 삭제 — 실패 시 복구용 bridge 유지
+ * - UX는 차단하지 않음 (앱으로 이동 가능)
  *
  * ─── claim 통합 포인트 ────────────────────────────────────────────────────────
  * - bridge context에서 publicResultId, anonId 읽음
- * - claimPublicResultClient로 best-effort POST
- * - 성공: 'claimed' 또는 'already_owned' → 계속
- * - 실패: warn 로그만, UX 블로킹 없음
- * - clearBridgeContext는 claim 시도 후 호출
+ * - claimPublicResultClient (bounded retry 내장)
+ * - 성공 시에만 clearBridgeContext
+ * - FLOW-08: 진입 완료 시 clearReadinessCheck로 다음 /app/home에서 readiness 재조회
  */
 
 import { useEffect, useState } from 'react';
@@ -29,6 +27,7 @@ import { clearReadinessCheck } from '@/app/app/_components/ReadinessEntryGate';
 
 const BG = '#0d161f';
 const ACCENT = '#ff7b00';
+const PAGE_LOG = '[onboarding-complete]';
 
 export default function OnboardingCompletePage() {
   const router = useRouter();
@@ -40,32 +39,44 @@ export default function OnboardingCompletePage() {
     async function runClaim() {
       const ctx = loadBridgeContext();
 
-      if (ctx?.publicResultId) {
+      if (!ctx?.publicResultId) {
+        console.info(PAGE_LOG, {
+          phase: 'claim_skipped',
+          reason: 'no_public_result_id_in_bridge',
+        });
+      } else {
         const result = await claimPublicResultClient(
           ctx.publicResultId,
           ctx.anonId ?? null
         );
         if (!cancelled) {
-          if (!result.ok) {
-            console.warn(
-              '[onboarding-complete] claim best-effort failed:',
-              result.reason,
-              result.status ?? ''
-            );
+          if (result.ok) {
+            clearBridgeContext();
+            console.info(PAGE_LOG, {
+              phase: 'bridge_cleared_after_claim',
+              outcome: result.outcome,
+              id: result.id,
+            });
+          } else {
+            console.warn(PAGE_LOG, {
+              phase: 'bridge_retained_after_claim_failure',
+              reason: result.reason,
+              status: result.status,
+              attempts: result.attempts,
+            });
           }
         }
       }
 
-      // bridge context 정리 (claim 성공/실패 무관)
-      clearBridgeContext();
-      // FLOW-08: 다음 /app/home 진입 시 readiness를 새로 체크하게 초기화
+      if (cancelled) return;
+      // bridge 유지 여부와 무관하게 readiness 캐시는 초기화 (다음 앱 진입 시 서버 기준 재조회)
       clearReadinessCheck();
-      if (!cancelled) setClaimDone(true);
+      setClaimDone(true);
     }
 
     runClaim().catch((err) => {
-      console.warn('[onboarding-complete] claim unexpected error:', err);
-      clearBridgeContext();
+      console.warn(PAGE_LOG, { phase: 'claim_unexpected_error', err });
+      // 복구 가능성을 위해 bridge는 지우지 않음 (PR-CLAIM-FLOW-HARDENING-01)
       clearReadinessCheck();
       if (!cancelled) setClaimDone(true);
     });
@@ -108,7 +119,6 @@ export default function OnboardingCompletePage() {
           </Link>
         </div>
 
-        {/* claim 상태는 사용자에게 노출하지 않음 (best-effort) */}
         <span className="sr-only">{claimDone ? 'ready' : 'preparing'}</span>
       </div>
     </div>
