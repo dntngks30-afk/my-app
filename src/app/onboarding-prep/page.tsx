@@ -1,21 +1,20 @@
 /**
  * FLOW-03 — Post-Pay Bridge Destination
- *
- * 결제 성공 후 public-first 흐름의 다음 단계 진입점.
- * useSearchParams는 클라이언트 하위 컴포넌트에서만 사용하고 Suspense로 감싸
- * Next.js 정적 prerender 오류를 방지한다.
- *
- * @see src/app/onboarding-prep/_components/OnboardingPrepClient.tsx
  */
 
 import { Suspense } from 'react';
 import OnboardingPrepClient from './_components/OnboardingPrepClient';
+import { PostpayChapterShell } from '@/components/stitch/postpay/shared';
 
 function OnboardingPrepFallback() {
   return (
-    <div className="mr-public-funnel-shell flex min-h-[100svh] items-center justify-center">
-      <p className="text-slate-400 text-sm">준비 중...</p>
-    </div>
+    <PostpayChapterShell>
+      <div className="flex min-h-[100svh] flex-1 items-center justify-center px-6">
+        <p className="text-sm text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+          준비 중...
+        </p>
+      </div>
+    </PostpayChapterShell>
   );
 }
 
