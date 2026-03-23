@@ -3,15 +3,14 @@
 /**
  * movement-test survey 페이지
  * 18문항 1문항씩 full-screen, 원형 5개 탭 시 즉시 저장 후 자동 다음
- * 브랜드: docs/BRAND_UI_SSOT_MOVE_RE.md + public-brand primitives
+ * 시각: stitch survey scene (로직은 기존 truth 유지)
  */
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft } from 'lucide-react';
-import { QUESTIONS_V2, ANSWER_CHOICES_V2 } from '@/features/movement-test/v2';
-import { Starfield } from '@/components/landing/Starfield';
+import { QUESTIONS_V2 } from '@/features/movement-test/v2';
 import type { TestAnswerValue } from '@/features/movement-test/v2';
-import { MoveReFullscreenScreen, MoveReProgressRail } from '@/components/public-brand';
+import { StitchSurveyShell } from '@/components/stitch/survey/StitchSurveyShell';
+import StitchSurveyQuestion from '@/components/stitch/survey/StitchSurveyQuestion';
 
 type AnswerValue = 0 | 1 | 2 | 3 | 4;
 type AnswersById = Record<string, AnswerValue | undefined>;
@@ -197,89 +196,22 @@ export default function MovementTestSurveyPage() {
   }, [step]);
 
   if (!ready || !question) {
-    return (
-      <MoveReFullscreenScreen showCosmicGlow={false}>
-        <div className="flex flex-1 items-center justify-center">
-          <p className="text-sm text-slate-400">로딩 중...</p>
-        </div>
-      </MoveReFullscreenScreen>
-    );
+    return <StitchSurveyShell currentIndex={0} total={TOTAL} showBack={false} onBack={handlePrev} loading />;
   }
 
   return (
-    <MoveReFullscreenScreen backgroundSlot={<Starfield />}>
-      <div className="flex min-h-0 flex-1 flex-col">
-        <header className="relative z-20 flex items-center justify-between px-4 pb-2 pt-4">
-          <div className="w-12">
-            {step > 0 ? (
-              <button
-                type="button"
-                onClick={handlePrev}
-                className="inline-flex size-10 min-h-[44px] min-w-[44px] items-center justify-center rounded-full transition-colors hover:bg-white/10"
-                aria-label="이전"
-              >
-                <ChevronLeft className="size-6 text-[var(--mr-public-accent)]" />
-              </button>
-            ) : (
-              <span />
-            )}
-          </div>
-          <p className="text-sm text-slate-400">
-            {step + 1} / {TOTAL}
-          </p>
-          <div className="w-12" />
-        </header>
-
-        <MoveReProgressRail current={step + 1} total={TOTAL} className="pt-0" />
-
-        <main className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center px-6">
-          <div key={step} className="animate-in fade-in w-full max-w-md space-y-8">
-            <p className="break-keep text-lg leading-relaxed text-slate-100 sm:text-xl">
-              {question.text}
-            </p>
-
-            <div className="flex flex-col items-center gap-4">
-              <div
-                className="flex min-w-0 w-full items-center justify-center gap-2 sm:gap-3"
-                role="group"
-                aria-label="응답 선택"
-              >
-                {ANSWER_CHOICES_V2.map((choice) => {
-                  const selected = currentAnswer === choice.value;
-                  const label = choice.label;
-                  return (
-                    <button
-                      key={choice.value}
-                      type="button"
-                      onClick={() => handleAnswer(choice.value)}
-                      aria-label={label}
-                      aria-pressed={selected}
-                      className={`
-                      flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border-2
-                      transition-all duration-150 sm:h-12 sm:w-12
-                      focus:outline-none focus:ring-2 focus:ring-[var(--mr-public-accent)] focus:ring-offset-2 focus:ring-offset-[var(--mr-public-bg-base)]
-                      ${
-                        selected
-                          ? 'mr-public-survey-choice-selected'
-                          : 'border-white/20 bg-white/5 hover:border-white/30 hover:bg-white/10'
-                      }
-                    `}
-                    >
-                      {selected && (
-                        <span
-                          className="rounded-full bg-white"
-                          style={{ width: choice.value === 2 ? 8 : 10, height: choice.value === 2 ? 8 : 10 }}
-                        />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-xs text-slate-500">전혀 아니다 ← → 거의 항상</p>
-            </div>
-          </div>
-        </main>
-      </div>
-    </MoveReFullscreenScreen>
+    <StitchSurveyShell
+      currentIndex={step}
+      total={TOTAL}
+      showBack={step > 0}
+      onBack={handlePrev}
+    >
+      <StitchSurveyQuestion
+        stepIndex={step}
+        questionText={question.text}
+        currentAnswer={currentAnswer}
+        onSelect={handleAnswer}
+      />
+    </StitchSurveyShell>
   );
 }
