@@ -2,27 +2,18 @@
 
 /**
  * PR-V2-06 — Unified Public Result Renderer
- * PR-RESULT-IA-03 — 2~3단(3 step) 액션 지향 UI: 타입 → 이유·조심 → 지금 할 일 + 실행 CTA
- * PR-CONVERSION-PREVIEW-04 — Step 3: 시작 순서 미리보기·실행 unlock 가치 정렬
- * PR-RESULT-EXPLANATION-UPGRADE-01 — reason_codes·출처 필드 기반 보조 설명(표현만)
- *
- * - 계약(UnifiedDeepResultV2)은 변경하지 않고 표현만 단순화.
- * - 신뢰도 바·축별 벡터·분류 근거 칩 등 분석 대시보드형 요소는 본문에서 제거.
- *
- * @see src/components/public-result/public-result-labels.ts
- * @see src/lib/result/deep-result-v2-contract.ts
+ * 시각: stitch result family (로직·카피·단계 의미 동일)
  */
 
 import { useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import type { UnifiedDeepResultV2, UnifiedPrimaryType } from '@/lib/result/deep-result-v2-contract';
-import {
-  MoveRePrimaryCTA,
-  MoveReProgressRail,
-  MoveReSecondaryCTA,
-  MoveReStepNavRow,
-  MoveReSurfaceCard,
-} from '@/components/public-brand';
+import { MoveReStepNavRow } from '@/components/public-brand';
+import { StitchSceneProgressRail } from '@/components/stitch/shared/SceneProgressRail';
+import { StitchBottomNavRow } from '@/components/stitch/shared/BottomNavRow';
+import { BaselineResultStep1 } from '@/components/stitch/result/BaselineResultStep1';
+import { BaselineResultStep2 } from '@/components/stitch/result/BaselineResultStep2';
+import { BaselineResultStep3 } from '@/components/stitch/result/BaselineResultStep3';
 import {
   PRIMARY_TYPE_LABELS,
   PRIMARY_TYPE_COLOR,
@@ -64,14 +55,10 @@ export interface PublicResultRendererProps {
   cameraEvidenceQuality?: 'strong' | 'partial' | 'minimal';
   onBack?: () => void;
   actions?: PublicResultAction[];
-  /** @deprecated PR-RESULT-IA-03 — 표시하지 않음(호환만 유지) */
   confidenceNote?: string;
 }
 
-const STAGE_META: Record<
-  PublicResultStage,
-  { titlePrefix: string; provenanceCopy: string }
-> = {
+const STAGE_META: Record<PublicResultStage, { titlePrefix: string; provenanceCopy: string }> = {
   baseline: {
     titlePrefix: '지금의 시작점',
     provenanceCopy:
@@ -89,35 +76,45 @@ const STAGE_META: Record<
 };
 
 function ActionButton({ action }: { action: PublicResultAction }) {
-  const base = 'w-full min-h-[48px] rounded-[var(--mr-public-radius-cta)] font-medium transition-colors text-sm';
-  const styles: Record<NonNullable<PublicResultAction['variant']>, string> = {
-    primary: `${base} font-bold text-slate-900`,
-    secondary: `${base} text-slate-300 border border-white/20 hover:bg-white/5`,
-    ghost: `${base} text-slate-400 border border-white/10 hover:bg-white/5`,
-  };
   const variant = action.variant ?? 'ghost';
-  const className = styles[variant];
-  const inlineStyle = variant === 'primary' ? { backgroundColor: 'var(--mr-public-accent)' } : undefined;
-
+  const base = 'w-full min-h-[48px] rounded-lg text-sm font-medium transition-all';
+  if (variant === 'primary') {
+    return (
+      <button
+        type="button"
+        onClick={action.onClick}
+        className={`${base} bg-gradient-to-br from-[#ffb77d] to-[#ab4c00] font-semibold text-[#4d2600] shadow-[0_20px_40px_rgba(2,6,23,0.06)] hover:brightness-110`}
+        style={{ fontFamily: 'var(--font-sans-noto)' }}
+      >
+        {action.label}
+      </button>
+    );
+  }
+  if (variant === 'secondary') {
+    return (
+      <button
+        type="button"
+        onClick={action.onClick}
+        className={`${base} border border-[#ffb77d]/30 text-[#c6c6cd] hover:bg-white/5`}
+        style={{ fontFamily: 'var(--font-sans-noto)' }}
+      >
+        {action.label}
+      </button>
+    );
+  }
   return (
     <button
       type="button"
       onClick={action.onClick}
-      className={className}
-      style={{ fontFamily: 'var(--font-sans-noto)', ...inlineStyle }}
+      className={`${base} border border-white/10 text-slate-400 hover:bg-white/5`}
+      style={{ fontFamily: 'var(--font-sans-noto)' }}
     >
       {action.label}
     </button>
   );
 }
 
-function ResultStepFooter({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="shrink-0 border-t border-white/[0.06] bg-[var(--mr-public-bg-base)]/95 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur-md">
-      {children}
-    </div>
-  );
-}
+const stitchGlassCard = 'rounded-2xl border border-white/[0.06] bg-[#151b2d]/45 px-4 py-3 backdrop-blur-sm';
 
 export function PublicResultRenderer({
   result,
@@ -150,10 +147,7 @@ export function PublicResultRenderer({
   const reasonInsightLines = pickReasonInsightBullets(result.reason_codes, 2);
   const refinementShiftLine = buildRefinementShiftSupportLine(result.reason_codes, stage);
   const missingHintLine = pickLightMissingHintLine(result.missing_signals);
-  const secondaryTendencyLine = buildSecondaryTendencySentence(
-    result.secondary_type,
-    pt
-  );
+  const secondaryTendencyLine = buildSecondaryTendencySentence(result.secondary_type, pt);
   const step3OrderFitLine = STEP3_ORDER_FIT_BY_PRIMARY[pt] ?? STEP3_ORDER_FIT_BY_PRIMARY.UNKNOWN;
   const carefulFitLine = CAREFUL_FIT_BY_PRIMARY[pt] ?? CAREFUL_FIT_BY_PRIMARY.UNKNOWN;
 
@@ -162,16 +156,15 @@ export function PublicResultRenderer({
 
   return (
     <div className="flex min-h-0 w-full max-w-md flex-1 flex-col animate-in fade-in">
-      {/* 상단: 뒤로 · 힌트 */}
       <div className="flex shrink-0 items-center justify-between gap-2 pb-1">
         {onBack ? (
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-200"
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white/10 hover:text-[#ffb77d]"
             aria-label="뒤로"
           >
-            <ChevronLeft className="size-6 text-[var(--mr-public-accent)]" />
+            <ChevronLeft className="size-6 text-[#ffb77d]" />
           </button>
         ) : (
           <span className="w-10 shrink-0" />
@@ -184,269 +177,67 @@ export function PublicResultRenderer({
         </p>
       </div>
 
-      <MoveReProgressRail current={step} total={3} className="px-0 pt-0 pb-3" weight="micro" />
+      <StitchSceneProgressRail current={step} total={3} className="pb-3 pt-0" />
 
       {stage === 'fallback' && (
-        <div className="mb-3 shrink-0 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
-          <p className="break-keep text-xs text-amber-100" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+        <div className="mb-3 shrink-0 rounded-xl border border-[#ffb77d]/25 bg-[#ffb77d]/10 px-3 py-2">
+          <p className="break-keep text-xs text-[#fce9dc]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
             {STAGE_META.fallback.provenanceCopy}
           </p>
         </div>
       )}
 
-      {/* ── Step 1 ── */}
       {step === 1 && (
-        <>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3 pt-1">
-            <MoveReSurfaceCard className="space-y-4 p-4">
-              <div>
-                <p className="mb-1 text-xs text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                  {stageMeta.titlePrefix}
-                </p>
-                <h1
-                  className="break-keep text-2xl font-bold"
-                  style={{ color: typeColor, fontFamily: 'var(--font-sans-noto)' }}
-                >
-                  {typeLabel}
-                </h1>
-                {secondaryTendencyLine ? (
-                  <p className="mt-1 text-sm text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                    {secondaryTendencyLine}
-                  </p>
-                ) : null}
-              </div>
-              <p
-                className="break-keep text-sm leading-relaxed text-slate-300"
-                style={{ fontFamily: 'var(--font-sans-noto)' }}
-              >
-                {brief}
-              </p>
-            </MoveReSurfaceCard>
-            <MoveReSurfaceCard className="px-4 py-3">
-              <ul className="space-y-2.5">
-                {bullets.map((line, i) => (
-                  <li
-                    key={i}
-                    className="relative break-keep pl-3 text-sm leading-relaxed text-slate-300 before:absolute before:left-0 before:text-[var(--mr-public-accent)] before:content-['•']"
-                    style={{ fontFamily: 'var(--font-sans-noto)' }}
-                  >
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            </MoveReSurfaceCard>
-          </div>
-          <ResultStepFooter>
-            <MoveReStepNavRow
-              right={
-                <MoveRePrimaryCTA type="button" onClick={() => setStep(2)} className="w-full">
-                  다음 — 왜 이런 패턴인지 보기
-                </MoveRePrimaryCTA>
-              }
-            />
-          </ResultStepFooter>
-        </>
+        <BaselineResultStep1
+          titlePrefix={stageMeta.titlePrefix}
+          typeLabel={typeLabel}
+          typeColor={typeColor}
+          secondaryTendencyLine={secondaryTendencyLine}
+          brief={brief}
+          bullets={bullets}
+          onNext={() => setStep(2)}
+        />
       )}
 
-      {/* ── Step 2 ── */}
       {step === 2 && (
-        <>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3 pt-1">
-            <h2 className="break-keep text-lg font-bold text-slate-100" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              왜 이런 패턴이 보이기 쉬운가요?
-            </h2>
-            <p
-              className="break-keep text-sm leading-relaxed text-slate-300"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
-            >
-              {summaryBody}
-            </p>
-            {reasonInsightLines.length > 0 ? (
-              <MoveReSurfaceCard className="px-3 py-2.5">
-                <ul className="space-y-1.5">
-                  {reasonInsightLines.map((line, i) => (
-                    <li
-                      key={i}
-                      className="relative break-keep pl-3 text-xs leading-relaxed text-slate-400 before:absolute before:left-0 before:text-[var(--mr-public-accent)] before:content-['·']"
-                      style={{ fontFamily: 'var(--font-sans-noto)' }}
-                    >
-                      {line}
-                    </li>
-                  ))}
-                </ul>
-              </MoveReSurfaceCard>
-            ) : null}
-            {refinementShiftLine ? (
-              <p className="break-keep text-xs leading-relaxed text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                {refinementShiftLine}
-              </p>
-            ) : null}
-            {missingHintLine ? (
-              <p
-                className="break-keep text-[11px] leading-relaxed text-slate-500"
-                style={{ fontFamily: 'var(--font-sans-noto)' }}
-              >
-                {missingHintLine}
-              </p>
-            ) : null}
-            <MoveReSurfaceCard className="space-y-2 p-4">
-              <h3 className="text-sm font-semibold text-slate-200" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                일상에서 조심하면 좋은 점
-              </h3>
-              <ul className="space-y-2">
-                {careful.slice(0, 4).map((line, i) => (
-                  <li
-                    key={i}
-                    className="break-keep border-l-2 border-white/15 pl-3 text-sm leading-relaxed text-slate-400"
-                    style={{ fontFamily: 'var(--font-sans-noto)' }}
-                  >
-                    {line}
-                  </li>
-                ))}
-              </ul>
-              <p className="break-keep text-[11px] leading-relaxed text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                {carefulFitLine}
-              </p>
-            </MoveReSurfaceCard>
-          </div>
-          <ResultStepFooter>
-            <MoveReStepNavRow
-              left={
-                <MoveReSecondaryCTA type="button" onClick={() => setStep(1)} className="w-full min-h-[52px]">
-                  이전
-                </MoveReSecondaryCTA>
-              }
-              right={
-                <MoveRePrimaryCTA type="button" onClick={() => setStep(3)} className="w-full">
-                  다음 — 시작 순서 보기
-                </MoveRePrimaryCTA>
-              }
-            />
-          </ResultStepFooter>
-        </>
+        <BaselineResultStep2
+          summaryBody={summaryBody}
+          reasonInsightLines={reasonInsightLines}
+          refinementShiftLine={refinementShiftLine}
+          missingHintLine={missingHintLine}
+          careful={careful}
+          carefulHeading="일상에서 조심하면 좋은 점"
+          carefulFitLine={carefulFitLine}
+          onBack={() => setStep(1)}
+          onNext={() => setStep(3)}
+        />
       )}
 
-      {/* ── Step 3 ── */}
       {step === 3 && (
-        <>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3 pt-1">
-            <h2 className="break-keep text-lg font-bold text-slate-100" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              {STEP3_HEADLINE}
-            </h2>
-            {stage === 'refined' ? (
-              <p className="break-keep text-xs text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                {STEP3_REFINED_CONTEXT_LINE}
-              </p>
-            ) : null}
-            <p className="break-keep text-sm leading-relaxed text-slate-300" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              {hook}
-            </p>
-            <p
-              className="break-keep text-[11px] leading-relaxed text-slate-500"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
-            >
-              {step3OrderFitLine}
-            </p>
-
-            <div className="mr-public-panel-accent space-y-3 rounded-[var(--mr-public-radius-card)] p-4">
-              <div>
-                <p className="text-sm font-bold mr-public-text-accent" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                  시작 순서 미리보기
-                </p>
-                <p
-                  className="mt-1.5 break-keep text-[11px] leading-relaxed text-slate-500"
-                  style={{ fontFamily: 'var(--font-sans-noto)' }}
-                >
-                  {STEP3_PREVIEW_DISCLAIMER}
-                </p>
-              </div>
-              <ol className="list-none space-y-3">
-                {([0, 1, 2] as const).map((i) => (
-                  <li key={i} className="flex gap-3">
-                    <span
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-slate-900"
-                      style={{ backgroundColor: 'var(--mr-public-accent)' }}
-                    >
-                      {i + 1}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-[11px] text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                        {EXECUTION_ORDER_PHASE_TITLES[i]}
-                      </p>
-                      <p
-                        className="mt-0.5 break-keep text-sm leading-relaxed text-slate-100"
-                        style={{ fontFamily: 'var(--font-sans-noto)' }}
-                      >
-                        {order[i]}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-
-            <MoveReSurfaceCard className="space-y-2 px-4 py-3">
-              <p className="text-xs text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                실행을 시작하면
-              </p>
-              <ul className="space-y-2">
-                {STEP3_VALUE_PILLARS.map((line, i) => (
-                  <li
-                    key={i}
-                    className="flex gap-2.5 break-keep text-sm leading-relaxed text-slate-300"
-                    style={{ fontFamily: 'var(--font-sans-noto)' }}
-                  >
-                    <span className="mr-public-text-accent shrink-0" aria-hidden>
-                      ·
-                    </span>
-                    <span>{line}</span>
-                  </li>
-                ))}
-              </ul>
-            </MoveReSurfaceCard>
-
-            <MoveReSurfaceCard className="space-y-2 px-4 py-3">
-              <p className="text-xs text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                {STEP3_RECOMMENDED_SECTION_TITLE}
-              </p>
-              <ul className="space-y-1.5 text-sm text-slate-200" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                <li>· {rec[0]}</li>
-                <li>· {rec[1]}</li>
-              </ul>
-            </MoveReSurfaceCard>
-
-            <MoveReSurfaceCard className="space-y-2 px-4 py-3">
-              <p className="text-xs text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                {STEP3_LIFESTYLE_SECTION_TITLE}
-              </p>
-              <ul className="space-y-1.5 text-sm text-slate-300" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                <li>· {life[0]}</li>
-                <li>· {life[1]}</li>
-                <li>· {life[2]}</li>
-              </ul>
-            </MoveReSurfaceCard>
-
-            <p
-              className="break-keep px-1 text-center text-[10px] text-slate-600"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
-            >
-              {stageMeta.provenanceCopy}
-            </p>
-          </div>
-
-          <ResultStepFooter>
+        <BaselineResultStep3
+          footer={
             <div className="space-y-3">
               <MoveReStepNavRow
                 left={
-                  <MoveReSecondaryCTA type="button" onClick={() => setStep(2)} className="w-full min-h-[52px]">
+                  <button
+                    type="button"
+                    onClick={() => setStep(2)}
+                    className="flex h-[52px] w-full items-center justify-center rounded-lg border border-[#ffb77d]/25 text-sm font-medium text-[#c6c6cd] transition-colors hover:bg-white/5"
+                    style={{ fontFamily: 'var(--font-sans-noto)' }}
+                  >
                     이전
-                  </MoveReSecondaryCTA>
+                  </button>
                 }
                 right={
                   primaryAction ? (
-                    <MoveRePrimaryCTA type="button" onClick={primaryAction.onClick} className="w-full">
+                    <button
+                      type="button"
+                      onClick={primaryAction.onClick}
+                      className="flex h-[52px] w-full items-center justify-center rounded-lg bg-gradient-to-br from-[#ffb77d] to-[#ab4c00] text-sm font-semibold text-[#4d2600] shadow-[0_20px_40px_rgba(2,6,23,0.08)] transition-all hover:brightness-110"
+                      style={{ fontFamily: 'var(--font-sans-noto)' }}
+                    >
                       {primaryAction.label}
-                    </MoveRePrimaryCTA>
+                    </button>
                   ) : (
                     <span className="min-h-[52px] w-full" aria-hidden />
                   )
@@ -460,8 +251,111 @@ export function PublicResultRenderer({
                 </div>
               ) : null}
             </div>
-          </ResultStepFooter>
-        </>
+          }
+        >
+          <h2
+            className="break-keep text-lg font-semibold text-[#dce1fb]"
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
+          >
+            {STEP3_HEADLINE}
+          </h2>
+          {stage === 'refined' ? (
+            <p className="break-keep text-xs text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+              {STEP3_REFINED_CONTEXT_LINE}
+            </p>
+          ) : null}
+          <p className="break-keep text-sm leading-relaxed text-[#c6c6cd]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+            {hook}
+          </p>
+          <p
+            className="break-keep text-[11px] leading-relaxed text-slate-500"
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
+          >
+            {step3OrderFitLine}
+          </p>
+
+          <div className="space-y-3 rounded-2xl border border-[#ffb77d]/25 bg-[#151b2d]/50 p-4 backdrop-blur-md">
+            <div>
+              <p className="text-sm font-bold text-[#ffb77d]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+                시작 순서 미리보기
+              </p>
+              <p
+                className="mt-1.5 break-keep text-[11px] leading-relaxed text-slate-500"
+                style={{ fontFamily: 'var(--font-sans-noto)' }}
+              >
+                {STEP3_PREVIEW_DISCLAIMER}
+              </p>
+            </div>
+            <ol className="list-none space-y-3">
+              {([0, 1, 2] as const).map((i) => (
+                <li key={i} className="flex gap-3">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ffb77d] to-[#ab4c00] text-xs font-bold text-[#4d2600]">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+                      {EXECUTION_ORDER_PHASE_TITLES[i]}
+                    </p>
+                    <p
+                      className="mt-0.5 break-keep text-sm leading-relaxed text-[#dce1fb]"
+                      style={{ fontFamily: 'var(--font-sans-noto)' }}
+                    >
+                      {order[i]}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          <div className={stitchGlassCard}>
+            <p className="text-xs text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+              실행을 시작하면
+            </p>
+            <ul className="mt-2 space-y-2">
+              {STEP3_VALUE_PILLARS.map((line, i) => (
+                <li
+                  key={i}
+                  className="flex gap-2.5 break-keep text-sm leading-relaxed text-[#c6c6cd]"
+                  style={{ fontFamily: 'var(--font-sans-noto)' }}
+                >
+                  <span className="shrink-0 text-[#ffb77d]" aria-hidden>
+                    ·
+                  </span>
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className={stitchGlassCard}>
+            <p className="text-xs text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+              {STEP3_RECOMMENDED_SECTION_TITLE}
+            </p>
+            <ul className="mt-2 space-y-1.5 text-sm text-[#dce1fb]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+              <li>· {rec[0]}</li>
+              <li>· {rec[1]}</li>
+            </ul>
+          </div>
+
+          <div className={stitchGlassCard}>
+            <p className="text-xs text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+              {STEP3_LIFESTYLE_SECTION_TITLE}
+            </p>
+            <ul className="mt-2 space-y-1.5 text-sm text-[#c6c6cd]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+              <li>· {life[0]}</li>
+              <li>· {life[1]}</li>
+              <li>· {life[2]}</li>
+            </ul>
+          </div>
+
+          <p
+            className="break-keep px-1 text-center text-[10px] text-slate-600"
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
+          >
+            {stageMeta.provenanceCopy}
+          </p>
+        </BaselineResultStep3>
       )}
     </div>
   );

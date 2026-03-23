@@ -8,7 +8,13 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
-import { Starfield } from '@/components/landing/Starfield';
+import {
+  StitchCameraGlassPanel,
+  StitchCameraPrimaryButton,
+  StitchCameraSquatHeader,
+  StitchCameraSquatHeaderCenter,
+  StitchCameraSquatRoot,
+} from '@/components/stitch/camera/CameraSquat';
 import { CameraPreview } from '@/components/public/CameraPreview';
 import {
   saveCameraTest,
@@ -912,7 +918,7 @@ export default function CameraSquatPage() {
       (typeof window !== 'undefined' && window.location.search.includes('debug=1')));
 
   return (
-    <div className="relative flex min-h-[100svh] flex-col overflow-hidden mr-public-funnel-shell">
+    <StitchCameraSquatRoot>
       {showSuccessFreezeOverlay && (
         <SuccessFreezeOverlay
           motionType="squat"
@@ -922,33 +928,30 @@ export default function CameraSquatPage() {
       {showFailureFreezeOverlay && (
         <FailureFreezeOverlay onClose={handleFailureFreezeClose} />
       )}
-      <Starfield />
-
-      <header className="relative z-20 flex items-center justify-between px-4 pt-4 pb-2">
-        <div className="w-12">
-          {prevPath ? (
-            <Link
-              href={prevPath}
-              className="inline-flex items-center justify-center size-10 rounded-full hover:bg-white/10 transition-colors min-h-[44px] min-w-[44px]"
-              aria-label="이전"
-            >
-              <ChevronLeft className="size-6 text-[var(--mr-public-accent)]" />
-            </Link>
-          ) : (
-            <Link
-              href="/movement-test/camera"
-              className="inline-flex items-center justify-center size-10 rounded-full hover:bg-white/10 transition-colors min-h-[44px] min-w-[44px]"
-              aria-label="이전"
-            >
-              <ChevronLeft className="size-6 text-[var(--mr-public-accent)]" />
-            </Link>
-          )}
-        </div>
-        <p className="text-slate-400 text-sm" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-          1 / 2
-        </p>
-        <div className="w-12" />
-      </header>
+      <StitchCameraSquatHeader
+        left={
+          <div className="w-12">
+            {prevPath ? (
+              <Link
+                href={prevPath}
+                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full transition-colors hover:bg-white/10"
+                aria-label="이전"
+              >
+                <ChevronLeft className="size-6 text-[#ffb77d]" />
+              </Link>
+            ) : (
+              <Link
+                href="/movement-test/camera"
+                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full transition-colors hover:bg-white/10"
+                aria-label="이전"
+              >
+                <ChevronLeft className="size-6 text-[#ffb77d]" />
+              </Link>
+            )}
+          </div>
+        }
+        center={<StitchCameraSquatHeaderCenter stepLabel="1 / 2" />}
+      />
 
       <main className="relative z-10 flex-1 flex flex-col items-center px-6 py-4 overflow-hidden">
         {!isMinimalCapture && (
@@ -983,29 +986,17 @@ export default function CameraSquatPage() {
         )}
 
         {permissionDenied ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 w-full max-w-md">
-            <p className="text-slate-400 text-sm text-center">
+            <div className="flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4">
+            <p className="text-center text-sm text-slate-400">
               카메라 접근이 거부되었습니다.
               <br />
               브라우저 설정에서 카메라 권한을 허용해 주세요.
             </p>
-            <div className="flex flex-col gap-3 w-full">
-              <button
-                type="button"
-                onClick={handleRetry}
-                className="w-full min-h-[48px] rounded-xl font-bold text-slate-900 bg-white hover:bg-slate-100"
-                style={{ fontFamily: 'var(--font-sans-noto)' }}
-              >
-                다시 시도
-              </button>
-              <button
-                type="button"
-                onClick={handleSurveyFallback}
-                className="w-full min-h-[48px] rounded-xl font-medium text-slate-300 border border-white/20 hover:bg-white/5"
-                style={{ fontFamily: 'var(--font-sans-noto)' }}
-              >
+            <div className="flex w-full flex-col gap-3">
+              <StitchCameraPrimaryButton onClick={handleRetry}>다시 시도</StitchCameraPrimaryButton>
+              <StitchCameraPrimaryButton variant="outline" onClick={handleSurveyFallback}>
                 설문형으로 전환
-              </button>
+              </StitchCameraPrimaryButton>
             </div>
           </div>
         ) : (
@@ -1056,38 +1047,19 @@ export default function CameraSquatPage() {
                         : setupFramingHint ?? '준비가 되면 다음으로 넘어가세요'}
                   </p>
                   {cameraPhase === 'setup' && (
-                    <button
-                      type="button"
-                      onClick={handleSetupReady}
-                      className="w-full min-h-[48px] rounded-xl font-bold text-slate-900 bg-white hover:bg-slate-100 transition-colors"
-                      style={{ fontFamily: 'var(--font-sans-noto)' }}
-                    >
-                      준비됐어요
-                    </button>
+                    <StitchCameraPrimaryButton onClick={handleSetupReady}>준비됐어요</StitchCameraPrimaryButton>
                   )}
                 </div>
               ) : showRetryActions ? (
                 <div className="flex flex-col gap-3">
-                  <button
-                    type="button"
-                    onClick={handleRetry}
-                    className="w-full min-h-[48px] rounded-xl font-bold text-slate-900 bg-white hover:bg-slate-100 transition-colors"
-                    style={{ fontFamily: 'var(--font-sans-noto)' }}
-                  >
-                    다시 해주세요
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSurveyFallback}
-                    className="w-full min-h-[48px] rounded-xl font-medium text-slate-300 border border-white/20 hover:bg-white/5"
-                    style={{ fontFamily: 'var(--font-sans-noto)' }}
-                  >
+                  <StitchCameraPrimaryButton onClick={handleRetry}>다시 해주세요</StitchCameraPrimaryButton>
+                  <StitchCameraPrimaryButton variant="outline" onClick={handleSurveyFallback}>
                     설문형으로 전환
-                  </button>
+                  </StitchCameraPrimaryButton>
                 </div>
               ) : (
                 <>
-              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-center">
+              <StitchCameraGlassPanel>
                 <p
                   className="text-sm text-slate-200"
                   style={{ fontFamily: 'var(--font-sans-noto)' }}
@@ -1121,7 +1093,7 @@ export default function CameraSquatPage() {
                     quality={gate.guardrail.captureQuality}
                   </p>
                 )}
-              </div>
+              </StitchCameraGlassPanel>
 
               {showDebugPanel && (
                 <div className="rounded-2xl border border-amber-500/20 bg-black/30 p-4 text-left">
@@ -1236,7 +1208,7 @@ export default function CameraSquatPage() {
           </>
         )}
       </main>
-    </div>
+    </StitchCameraSquatRoot>
   );
 }
 

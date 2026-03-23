@@ -2,19 +2,11 @@
 
 /**
  * PR-V2-04 / PR-V2-06 — Baseline 결과 (PublicResultRenderer)
- * PR-PUBLIC-BRIDGE-01 — 설문 완료 후 선택 브리지(/movement-test/refine-bridge) 다음에 진입.
- *
- * 이전에 이 페이지에 있던 'gate'(요약 카드 + 신뢰도 바)는 브리지로 분리됨.
- * 카메라 refine은 optional이며, /movement-test/camera → /movement-test/refined 경로 유지.
- *
- * @see src/lib/deep-v2/builders/build-free-survey-baseline.ts (V2-03 builder)
- * @see src/components/public-result/PublicResultRenderer.tsx (V2-06 shared renderer)
  */
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Starfield } from '@/components/landing/Starfield';
-import { MoveReFullscreenScreen } from '@/components/public-brand';
+import { StitchSceneShell } from '@/components/stitch/shared/SceneShell';
 import { buildFreeSurveyBaselineResult } from '@/lib/deep-v2/builders/build-free-survey-baseline';
 import { PublicResultRenderer } from '@/components/public-result/PublicResultRenderer';
 import { persistPublicResult } from '@/lib/public-results/persistPublicResult';
@@ -25,10 +17,7 @@ import { ResumeExecutionGate } from '@/components/public-result/ResumeExecutionG
 import type { FreeSurveyBaselineResult } from '@/lib/deep-v2/types';
 import type { TestAnswerValue } from '@/features/movement-test/v2';
 
-// ─── 상수 ─────────────────────────────────────────────────────────────────────
-
 const SESSION_KEY = 'movementTestSession:v2';
-// ─── localStorage 헬퍼 ───────────────────────────────────────────────────────
 
 interface StoredSessionV2 {
   version: string;
@@ -48,8 +37,6 @@ function loadSurveyAnswers(): Record<string, TestAnswerValue> | null {
     return null;
   }
 }
-
-// ─── 페이지 메인 ─────────────────────────────────────────────────────────────
 
 export default function BaselinePage() {
   const router = useRouter();
@@ -83,10 +70,6 @@ export default function BaselinePage() {
                 source_inputs: ['free_survey'] as const,
                 refinement_available: true,
                 generated_at: recovered.createdAt,
-                // PR-SCORING-META-ALIGN: canonical deep family 기준.
-                // DB에서 복구 시 과거 'free_survey_v2_core' 스탬프가 저장되어 있을 수 있으나,
-                // page state은 canonical 값으로 정렬한다.
-                // 실제 result._compat.scoring_version은 그대로 보존됨.
                 scoring_version: 'deep_v2',
               },
             });
@@ -145,19 +128,19 @@ export default function BaselinePage() {
 
   if (loading) {
     return (
-      <MoveReFullscreenScreen showCosmicGlow={false}>
-        <div className="flex flex-1 items-center justify-center">
+      <StitchSceneShell>
+        <div className="flex flex-1 items-center justify-center px-6">
           <p className="text-sm text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
             분석 중...
           </p>
         </div>
-      </MoveReFullscreenScreen>
+      </StitchSceneShell>
     );
   }
 
   if (error || !baseline) {
     return (
-      <MoveReFullscreenScreen showCosmicGlow={false}>
+      <StitchSceneShell>
         <div className="flex flex-1 flex-col items-center justify-center px-6">
           <p className="mb-4 text-center text-sm text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
             {error ?? '결과를 불러오지 못했습니다.'}
@@ -165,18 +148,18 @@ export default function BaselinePage() {
           <button
             type="button"
             onClick={() => router.push('/movement-test/survey')}
-            className="text-sm text-slate-300 underline"
+            className="text-sm text-[#c6c6cd] underline"
             style={{ fontFamily: 'var(--font-sans-noto)' }}
           >
             설문으로 돌아가기
           </button>
         </div>
-      </MoveReFullscreenScreen>
+      </StitchSceneShell>
     );
   }
 
   return (
-    <MoveReFullscreenScreen backgroundSlot={<Starfield />}>
+    <StitchSceneShell>
       <main className="flex min-h-0 flex-1 flex-col px-5 py-6">
         <Suspense fallback={null}>
           <ResumeExecutionGate
@@ -209,12 +192,12 @@ export default function BaselinePage() {
             ]}
           />
           {bridgeError && (
-            <p className="text-sm text-amber-400 text-center" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+            <p className="text-center text-sm text-[#fcb973]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
               {bridgeError}
             </p>
           )}
         </div>
       </main>
-    </MoveReFullscreenScreen>
+    </StitchSceneShell>
   );
 }
