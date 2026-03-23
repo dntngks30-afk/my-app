@@ -13,7 +13,9 @@ export type BaselineResultStep1Props = {
 };
 
 /**
- * stitch screen 28 — 시작점 / 타입 영웅 씬
+ * stitch screen 28 — 시작점 타입 영웅 씬 (PR-UI-RESULT-BENTO-05)
+ * 동심원 차트 제거, 히어로 아이덴티티 블록 + 벤토 신호 타일로 개편.
+ * 단계 계약·동적 슬롯 의미 유지.
  */
 export function BaselineResultStep1({
   titlePrefix,
@@ -24,20 +26,35 @@ export function BaselineResultStep1({
   bullets,
   onNext,
 }: BaselineResultStep1Props) {
+  const [tile0, tile1, tile2] = bullets;
+
   return (
     <>
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto pb-3 pt-1">
-        <div className="flex flex-col items-center text-center">
-          <span className="text-xl italic text-[#ffb77d]/90 [font-family:var(--font-display)]">{titlePrefix}</span>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3 pt-1">
+
+        {/* ── 히어로 아이덴티티 블록 ── */}
+        <div className="rounded-2xl border border-white/[0.07] bg-[#0d1520]/70 px-5 py-6 backdrop-blur-sm">
+          <span
+            className="block text-[10px] font-light uppercase tracking-[0.28em] text-[#ffb77d]/70"
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
+          >
+            {titlePrefix}
+          </span>
           <h2
-            className="mt-2 break-keep text-4xl font-light tracking-wide md:text-5xl [font-family:var(--font-display)]"
-            style={{ color: typeColor }}
+            className="mt-3 break-keep text-[2.1rem] font-light leading-[1.18] tracking-wide md:text-[2.6rem]"
+            style={{ color: typeColor, fontFamily: 'var(--font-display)' }}
           >
             {typeLabel}
           </h2>
+          <p
+            className="mt-3 break-keep text-sm leading-relaxed text-[#c6c6cd]"
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
+          >
+            {brief}
+          </p>
           {secondaryTendencyLine ? (
             <p
-              className="mt-2 max-w-md text-sm text-slate-500"
+              className="mt-2 break-keep text-xs text-slate-500"
               style={{ fontFamily: 'var(--font-sans-noto)' }}
             >
               {secondaryTendencyLine}
@@ -45,35 +62,27 @@ export function BaselineResultStep1({
           ) : null}
         </div>
 
-        <div className="relative mx-auto flex w-full max-w-sm aspect-square items-center justify-center">
-          <div className="absolute inset-0 rounded-full border border-[#ffb77d]/10" />
-          <div className="absolute inset-6 rounded-full border border-[#ffb77d]/30" />
-          <div className="absolute inset-12 flex flex-col items-center justify-center rounded-full border border-white/[0.06] bg-[rgba(46,52,71,0.45)] p-8 text-center backdrop-blur-xl">
-            <p
-              className="break-keep text-sm font-light leading-relaxed text-[#c6c6cd]"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
-            >
-              {brief}
-            </p>
+        {/* ── 벤토 신호 타일 ── */}
+        {bullets.length > 0 && (
+          <div className="space-y-2.5">
+            {/* 첫 두 타일: 2열 사이드-바이-사이드 */}
+            {tile0 && tile1 ? (
+              <div className="grid grid-cols-2 gap-2.5">
+                <BentoSignalTile accent>{tile0}</BentoSignalTile>
+                <BentoSignalTile>{tile1}</BentoSignalTile>
+              </div>
+            ) : tile0 ? (
+              <BentoSignalTile accent>{tile0}</BentoSignalTile>
+            ) : null}
+            {/* 세 번째 타일: 전폭 스트립 */}
+            {tile2 ? (
+              <BentoSignalTile>{tile2}</BentoSignalTile>
+            ) : null}
           </div>
-        </div>
-
-        <div className="rounded-2xl border border-white/[0.06] bg-[#151b2d]/50 px-4 py-4 backdrop-blur-sm">
-          <ul className="space-y-2.5">
-            {bullets.map((line, i) => (
-              <li
-                key={i}
-                className="relative break-keep pl-3 text-sm leading-relaxed text-[#c6c6cd] before:absolute before:left-0 before:text-[#ffb77d] before:content-['•']"
-                style={{ fontFamily: 'var(--font-sans-noto)' }}
-              >
-                {line}
-              </li>
-            ))}
-          </ul>
-        </div>
+        )}
       </div>
 
-      <ResultStitchFooter>
+      <div className="shrink-0 border-t border-white/[0.06] bg-[#0c1324]/95 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur-md">
         <StitchBottomNavRow
           right={
             <button
@@ -86,15 +95,33 @@ export function BaselineResultStep1({
             </button>
           }
         />
-      </ResultStitchFooter>
+      </div>
     </>
   );
 }
 
-function ResultStitchFooter({ children }: { children: React.ReactNode }) {
+type BentoSignalTileProps = {
+  children: string;
+  accent?: boolean;
+};
+
+function BentoSignalTile({ children, accent }: BentoSignalTileProps) {
   return (
-    <div className="shrink-0 border-t border-white/[0.06] bg-[#0c1324]/95 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur-md">
-      {children}
+    <div
+      className={`rounded-xl border px-3.5 py-3.5 backdrop-blur-sm ${
+        accent
+          ? 'border-[#ffb77d]/18 bg-[#ffb77d]/[0.07]'
+          : 'border-white/[0.06] bg-[#151b2d]/45'
+      }`}
+    >
+      <p
+        className={`break-keep text-sm leading-relaxed ${
+          accent ? 'text-[#fce9dc]' : 'text-[#c6c6cd]'
+        }`}
+        style={{ fontFamily: 'var(--font-sans-noto)' }}
+      >
+        {children}
+      </p>
     </div>
   );
 }

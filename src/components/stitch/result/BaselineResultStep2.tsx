@@ -15,7 +15,9 @@ export type BaselineResultStep2Props = {
 };
 
 /**
- * stitch screen 29 — 인사이트 번호 리스트
+ * stitch screen 29 — 인사이트 씬 (PR-UI-RESULT-BENTO-05)
+ * 넘버드 리스트 → 벤토 인사이트 타일, 주의 섹션 에디토리얼 스트립.
+ * 동적 슬롯 의미·reason_code 계약 유지.
  */
 export function BaselineResultStep2({
   summaryBody,
@@ -33,11 +35,17 @@ export function BaselineResultStep2({
 
   return (
     <>
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto pb-3 pt-1">
-        <h2 className="break-keep text-left text-2xl font-light text-[#dce1fb] [font-family:var(--font-display)]">
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pb-3 pt-1">
+
+        {/* ── 섹션 타이틀 ── */}
+        <h2
+          className="break-keep text-left text-xl font-light text-[#dce1fb]"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
           왜 이런 패턴이 보이기 쉬운가요?
         </h2>
 
+        {/* ── 요약 본문 ── */}
         <p
           className="break-keep text-sm leading-relaxed text-[#c6c6cd]"
           style={{ fontFamily: 'var(--font-sans-noto)' }}
@@ -45,15 +53,23 @@ export function BaselineResultStep2({
           {summaryBody}
         </p>
 
+        {/* ── 벤토 인사이트 타일 ── */}
         {insightRows.length > 0 ? (
-          <div className="space-y-6">
+          <div className="space-y-2.5">
             {insightRows.map((line, i) => (
-              <div key={i} className="flex gap-4">
-                <span className="text-2xl italic text-[#ffb77d] [font-family:var(--font-display)]">
+              <div
+                key={i}
+                className="flex gap-4 rounded-xl border border-white/[0.06] bg-[#151b2d]/45 px-4 py-4 backdrop-blur-sm"
+              >
+                <span
+                  className="shrink-0 text-xl italic leading-none text-[#ffb77d]/60"
+                  style={{ fontFamily: 'var(--font-display)' }}
+                  aria-hidden
+                >
                   {String(i + 1).padStart(2, '0')}
                 </span>
                 <p
-                  className="min-w-0 flex-1 pt-1 text-sm leading-relaxed text-[#c6c6cd]"
+                  className="min-w-0 flex-1 break-keep text-sm leading-relaxed text-[#c6c6cd]"
                   style={{ fontFamily: 'var(--font-sans-noto)' }}
                 >
                   {line}
@@ -64,7 +80,10 @@ export function BaselineResultStep2({
         ) : null}
 
         {refinementShiftLine ? (
-          <p className="break-keep text-xs leading-relaxed text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+          <p
+            className="break-keep text-xs leading-relaxed text-slate-500"
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
+          >
             {refinementShiftLine}
           </p>
         ) : null}
@@ -77,34 +96,44 @@ export function BaselineResultStep2({
           </p>
         ) : null}
 
-        <div className="rounded-2xl border border-white/[0.06] bg-[#151b2d]/45 px-4 py-4 backdrop-blur-sm">
-          <h3 className="mb-3 text-sm font-medium text-[#dce1fb]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+        {/* ── 주의 동작 에디토리얼 스트립 ── */}
+        <div className="rounded-2xl border border-white/[0.06] bg-[#0d1520]/70 px-4 py-5 backdrop-blur-sm">
+          <h3
+            className="mb-4 break-keep text-sm font-medium text-[#dce1fb]"
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
+          >
             {carefulHeading}
           </h3>
           <ul className="space-y-3">
             {carefulRows.map((line, i) => (
               <li
                 key={i}
-                className="break-keep border-l-2 border-[#ffb77d]/25 pl-3 text-sm leading-relaxed text-slate-400"
-                style={{ fontFamily: 'var(--font-sans-noto)' }}
+                className="flex gap-3"
               >
-                {line}
+                <span
+                  className="mt-0.5 shrink-0 text-[10px] font-light uppercase tracking-[0.25em] text-[#ffb77d]/50"
+                  style={{ fontFamily: 'var(--font-sans-noto)' }}
+                  aria-hidden
+                >
+                  {String(i + 1).padStart(2, '0')}
+                </span>
+                <p
+                  className="min-w-0 flex-1 break-keep text-sm leading-relaxed text-slate-400"
+                  style={{ fontFamily: 'var(--font-sans-noto)' }}
+                >
+                  {line}
+                </p>
               </li>
             ))}
           </ul>
           <p
-            className="mt-3 break-keep text-[11px] leading-relaxed text-slate-500"
+            className="mt-4 break-keep text-[11px] leading-relaxed text-slate-500"
             style={{ fontFamily: 'var(--font-sans-noto)' }}
           >
             {carefulFitLine}
           </p>
         </div>
 
-        <div className="flex justify-center gap-2 pt-2">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#46464c]" />
-          <span className="h-1.5 w-1.5 rounded-full bg-[#ffb77d]" />
-          <span className="h-1.5 w-1.5 rounded-full bg-[#46464c]" />
-        </div>
       </div>
 
       <div className="shrink-0 border-t border-white/[0.06] bg-[#0c1324]/95 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur-md">
