@@ -9,7 +9,7 @@
 
 import { useRouter } from 'next/navigation';
 import { FUNNEL_KEY } from '@/lib/public/intro-funnel';
-import { StitchLanding } from '@/components/stitch/landing/StitchLanding';
+import StitchLanding from '@/components/stitch/landing/StitchLanding';
 
 function saveSurveyEntryMode() {
   if (typeof window === 'undefined') return;
