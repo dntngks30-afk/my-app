@@ -17,9 +17,13 @@ import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase';
 import type { TargetFrequency, ExerciseExperienceLevel } from '@/lib/session/profile';
 import { inferPainHintFromSurveyV2 } from '@/lib/onboarding/surveyOnboardingHints';
+import {
+  MoveReChoiceChip,
+  MoveReFullscreenScreen,
+  MoveRePrimaryCTA,
+  MoveReSurfaceCard,
+} from '@/components/public-brand';
 
-const BG = '#0d161f';
-const ACCENT = '#ff7b00';
 const LIFESTYLE_MAX = 200;
 
 const FREQUENCY_OPTIONS: { value: TargetFrequency; label: string }[] = [
@@ -125,17 +129,17 @@ export default function OnboardingPage() {
 
   if (!authChecked) {
     return (
-      <div className="min-h-[100svh] flex items-center justify-center" style={{ backgroundColor: BG }}>
-        <p className="text-slate-400 text-sm">확인 중...</p>
-      </div>
+      <MoveReFullscreenScreen showCosmicGlow={false}>
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-sm text-slate-400">확인 중...</p>
+        </div>
+      </MoveReFullscreenScreen>
     );
   }
 
   return (
-    <div
-      className="min-h-[100svh] flex flex-col items-center px-6 py-8"
-      style={{ backgroundColor: BG }}
-    >
+    <MoveReFullscreenScreen>
+      <div className="flex flex-1 flex-col items-center px-6 py-8">
       <div className="w-full max-w-md space-y-5">
         <div className="text-center space-y-2">
           <p className="text-[11px] uppercase tracking-wide text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
@@ -151,85 +155,67 @@ export default function OnboardingPage() {
           </p>
         </div>
 
-        <div className="space-y-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+        <MoveReSurfaceCard className="space-y-5 p-4">
           <div>
-            <label className="block text-slate-300 text-xs font-medium mb-2" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+            <label className="mb-2 block text-xs font-medium text-slate-300" style={{ fontFamily: 'var(--font-sans-noto)' }}>
               1. 이번 주기에 맞출 주간 횟수
             </label>
             <div className="flex flex-wrap gap-2">
               {FREQUENCY_OPTIONS.map((opt) => (
-                <button
+                <MoveReChoiceChip
                   key={opt.value}
                   type="button"
                   onClick={() => setTargetFrequency(opt.value)}
-                  className="px-3 py-2 rounded-xl text-sm font-medium transition-colors"
-                  style={{
-                    backgroundColor: targetFrequency === opt.value ? ACCENT : 'rgba(255,255,255,0.08)',
-                    color: targetFrequency === opt.value ? '#0d161f' : '#94a3b8',
-                    fontFamily: 'var(--font-sans-noto)',
-                  }}
+                  selected={targetFrequency === opt.value}
                 >
                   {opt.label}
-                </button>
+                </MoveReChoiceChip>
               ))}
             </div>
           </div>
 
           <div>
-            <label className="block text-slate-300 text-xs font-medium mb-2" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+            <label className="mb-2 block text-xs font-medium text-slate-300" style={{ fontFamily: 'var(--font-sans-noto)' }}>
               2. 최근 운동·움직임 경험 (시작 강도에 씀)
             </label>
             <div className="flex flex-wrap gap-2">
               {EXPERIENCE_OPTIONS.map((opt) => (
-                <button
+                <MoveReChoiceChip
                   key={opt.value}
                   type="button"
                   onClick={() => setExerciseExperienceLevel(opt.value)}
-                  className="px-3 py-2 rounded-xl text-sm font-medium transition-colors"
-                  style={{
-                    backgroundColor: exerciseExperienceLevel === opt.value ? ACCENT : 'rgba(255,255,255,0.08)',
-                    color: exerciseExperienceLevel === opt.value ? '#0d161f' : '#94a3b8',
-                    fontFamily: 'var(--font-sans-noto)',
-                  }}
+                  selected={exerciseExperienceLevel === opt.value}
                 >
                   {opt.label}
-                </button>
+                </MoveReChoiceChip>
               ))}
             </div>
           </div>
 
           <div>
-            <label className="block text-slate-300 text-xs font-medium mb-2" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+            <label className="mb-2 block text-xs font-medium text-slate-300" style={{ fontFamily: 'var(--font-sans-noto)' }}>
               3. 지금 뻐근함·불편이 자주 느껴지나요? (안전 쪽 맞춤)
             </label>
-            <p className="text-[11px] text-slate-500 mb-2 leading-relaxed" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+            <p className="mb-2 text-[11px] leading-relaxed text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
               이전에 답하신 내용을 참고해 제안할 수 있어요. 필요하면 바꿔 주세요.
             </p>
             <div className="flex gap-3">
-              <button
+              <MoveReChoiceChip
                 type="button"
+                className="flex-1 px-4 py-3"
                 onClick={() => setPainOrDiscomfortPresent(false)}
-                className="flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-colors"
-                style={{
-                  backgroundColor: painOrDiscomfortPresent === false ? ACCENT : 'rgba(255,255,255,0.08)',
-                  color: painOrDiscomfortPresent === false ? '#0d161f' : '#94a3b8',
-                  fontFamily: 'var(--font-sans-noto)',
-                }}
+                selected={painOrDiscomfortPresent === false}
               >
                 거의 없음
-              </button>
-              <button
+              </MoveReChoiceChip>
+              <MoveReChoiceChip
                 type="button"
+                className="flex-1 px-4 py-3"
                 onClick={() => setPainOrDiscomfortPresent(true)}
-                className="flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-colors"
-                style={{
-                  backgroundColor: painOrDiscomfortPresent === true ? ACCENT : 'rgba(255,255,255,0.08)',
-                  color: painOrDiscomfortPresent === true ? '#0d161f' : '#94a3b8',
-                  fontFamily: 'var(--font-sans-noto)',
-                }}
+                selected={painOrDiscomfortPresent === true}
               >
                 자주 있음
-              </button>
+              </MoveReChoiceChip>
             </div>
           </div>
 
@@ -258,24 +244,19 @@ export default function OnboardingPage() {
               <p className="text-[10px] text-slate-600 mt-1 text-right">{lifestyleNote.length}/{LIFESTYLE_MAX}</p>
             </div>
           </details>
-        </div>
+        </MoveReSurfaceCard>
 
         {error && (
-          <p className="text-sm text-amber-400 text-center" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+          <p className="text-center text-sm text-amber-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
             {error}
           </p>
         )}
 
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={!canSubmit}
-          className="w-full min-h-[52px] rounded-2xl font-bold text-slate-900 transition-colors disabled:opacity-50"
-          style={{ backgroundColor: ACCENT, fontFamily: 'var(--font-sans-noto)' }}
-        >
+        <MoveRePrimaryCTA onClick={handleSubmit} disabled={!canSubmit}>
           {saving ? '저장 중...' : '설정 저장하고 이어가기'}
-        </button>
+        </MoveRePrimaryCTA>
       </div>
-    </div>
+      </div>
+    </MoveReFullscreenScreen>
   );
 }

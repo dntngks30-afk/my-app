@@ -43,8 +43,6 @@ import {
   CAREFUL_FIT_BY_PRIMARY,
 } from './public-result-labels';
 
-const ACCENT = '#ff7b00';
-
 export type PublicResultStage = 'baseline' | 'refined' | 'fallback';
 
 export interface PublicResultAction {
@@ -92,7 +90,7 @@ function ActionButton({ action }: { action: PublicResultAction }) {
   };
   const variant = action.variant ?? 'ghost';
   const className = styles[variant];
-  const inlineStyle = variant === 'primary' ? { backgroundColor: ACCENT } : undefined;
+  const inlineStyle = variant === 'primary' ? { backgroundColor: 'var(--mr-public-accent)' } : undefined;
 
   return (
     <button
@@ -114,7 +112,7 @@ function StepDots({ step }: { step: 1 | 2 | 3 }) {
         <span
           key={n}
           className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
-            step === n ? 'bg-[#ff7b00] text-slate-900' : 'bg-white/10 text-slate-500'
+            step === n ? 'bg-[var(--mr-public-accent)] text-slate-900' : 'bg-white/10 text-slate-500'
           }`}
         >
           {n}
@@ -134,7 +132,7 @@ export function PublicResultRenderer({
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const pt = result.primary_type as UnifiedPrimaryType;
   const typeLabel = PRIMARY_TYPE_LABELS[pt] ?? result.primary_type;
-  const typeColor = PRIMARY_TYPE_COLOR[pt] ?? ACCENT;
+  const typeColor = PRIMARY_TYPE_COLOR[pt] ?? 'var(--mr-public-accent)';
   const stageMeta = STAGE_META[stage];
   const bullets = PRIMARY_TYPE_SCREEN1_BULLETS[pt] ?? PRIMARY_TYPE_SCREEN1_BULLETS.UNKNOWN;
   const brief = PRIMARY_TYPE_BRIEF[pt] ?? '';
@@ -223,7 +221,7 @@ export function PublicResultRenderer({
             {bullets.map((line, i) => (
               <li
                 key={i}
-                className="text-sm text-slate-300 leading-relaxed break-keep pl-3 relative before:content-['•'] before:absolute before:left-0 before:text-[#ff7b00]"
+                className="text-sm text-slate-300 leading-relaxed break-keep pl-3 relative before:content-['•'] before:absolute before:left-0 before:text-[var(--mr-public-accent)]"
                 style={{ fontFamily: 'var(--font-sans-noto)' }}
               >
                 {line}
@@ -233,7 +231,7 @@ export function PublicResultRenderer({
           <button
             type="button"
             onClick={() => setStep(2)}
-            className="w-full min-h-[48px] rounded-2xl font-bold text-slate-900 bg-[#ff7b00] hover:bg-[#ff8f26] transition-colors text-sm"
+            className="w-full min-h-[48px] rounded-2xl font-bold text-slate-900 bg-[var(--mr-public-accent)] hover:bg-[var(--mr-public-accent-hover)] transition-colors text-sm"
             style={{ fontFamily: 'var(--font-sans-noto)' }}
           >
             다음 — 왜 이런 패턴인지 보기
@@ -255,7 +253,7 @@ export function PublicResultRenderer({
               {reasonInsightLines.map((line, i) => (
                 <li
                   key={i}
-                  className="text-xs text-slate-400 leading-relaxed break-keep pl-3 relative before:content-['·'] before:absolute before:left-0 before:text-[#ff7b00]"
+                  className="text-xs text-slate-400 leading-relaxed break-keep pl-3 relative before:content-['·'] before:absolute before:left-0 before:text-[var(--mr-public-accent)]"
                   style={{ fontFamily: 'var(--font-sans-noto)' }}
                 >
                   {line}
@@ -304,7 +302,7 @@ export function PublicResultRenderer({
             <button
               type="button"
               onClick={() => setStep(3)}
-              className="flex-1 min-h-[44px] rounded-2xl font-bold text-slate-900 bg-[#ff7b00] text-sm"
+              className="flex-1 min-h-[44px] rounded-2xl font-bold text-slate-900 bg-[var(--mr-public-accent)] text-sm"
               style={{ fontFamily: 'var(--font-sans-noto)' }}
             >
               다음 — 시작 순서 보기
@@ -332,9 +330,9 @@ export function PublicResultRenderer({
           </p>
 
           {/* 시작 순서 미리보기 — 1·2·3 단계 의미 + 타입별 한 줄 */}
-          <div className="rounded-2xl border border-[#ff7b00]/35 bg-[#ff7b00]/10 p-4 space-y-3">
+          <div className="mr-public-panel-accent rounded-2xl p-4 space-y-3">
             <div>
-              <p className="text-sm font-bold text-[#ff7b00]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+              <p className="text-sm font-bold mr-public-text-accent" style={{ fontFamily: 'var(--font-sans-noto)' }}>
                 시작 순서 미리보기
               </p>
               <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed break-keep" style={{ fontFamily: 'var(--font-sans-noto)' }}>
@@ -346,7 +344,7 @@ export function PublicResultRenderer({
                 <li key={i} className="flex gap-3">
                   <span
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-slate-900"
-                    style={{ backgroundColor: ACCENT }}
+                    style={{ backgroundColor: 'var(--mr-public-accent)' }}
                   >
                     {i + 1}
                   </span>
@@ -375,7 +373,7 @@ export function PublicResultRenderer({
                   className="text-sm text-slate-300 leading-relaxed break-keep flex gap-2.5"
                   style={{ fontFamily: 'var(--font-sans-noto)' }}
                 >
-                  <span className="text-[#ff7b00] shrink-0" aria-hidden>
+                  <span className="mr-public-text-accent shrink-0" aria-hidden>
                     ·
                   </span>
                   <span>{line}</span>

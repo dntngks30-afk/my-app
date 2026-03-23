@@ -238,3 +238,50 @@ nextjs-portal {
   left: 1px;
   top: unset;
 }
+
+/* ── MOVE RE Public Funnel Brand (SSOT) — docs/BRAND_UI_SSOT_MOVE_RE.md ── */
+:root {
+  --mr-public-bg-base: #0d161f;
+  --mr-public-bg-deep: #070b11;
+  --mr-public-accent: #ff7b00;
+  --mr-public-accent-hover: #ff8f26;
+  --mr-public-accent-soft: rgba(255, 123, 0, 0.12);
+  --mr-public-fg: #f1f5f9;
+  --mr-public-fg-muted: #94a3b8;
+  --mr-public-surface: rgba(255, 255, 255, 0.04);
+  --mr-public-border: rgba(255, 255, 255, 0.1);
+  --mr-public-radius-cta: 1rem;
+  --mr-public-radius-card: 1rem;
+  --mr-public-chip-radius: 0.75rem;
+}
+
+.mr-public-funnel-shell {
+  background-color: var(--mr-public-bg-base);
+  color: var(--mr-public-fg);
+  font-family: var(--font-sans-noto), system-ui, sans-serif;
+}
+
+.mr-public-cosmic-glow {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 120% 70% at 50% -25%, var(--mr-public-accent-soft), transparent 55%),
+    radial-gradient(ellipse 55% 45% at 100% 0%, rgba(59, 130, 246, 0.07), transparent 48%),
+    radial-gradient(ellipse 50% 50% at 0% 100%, rgba(255, 123, 0, 0.06), transparent 52%);
+}
+
+.mr-public-brand-serif {
+  font-family: var(--font-serif-noto), var(--font-sans-noto), serif;
+}
+
+/* Public 결과 패널 — 액센트 보더/필 (hex 대신 토큰만) */
+.mr-public-panel-accent {
+  border: 1px solid color-mix(in srgb, var(--mr-public-accent) 35%, transparent);
+  background-color: color-mix(in srgb, var(--mr-public-accent) 10%, transparent);
+}
+
+.mr-public-text-accent {
+  color: var(--mr-public-accent);
+}

@@ -24,6 +24,7 @@
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Starfield } from '@/components/landing/Starfield';
+import { MoveReFullscreenScreen } from '@/components/public-brand';
 import { buildFreeSurveyBaselineResult } from '@/lib/deep-v2/builders/build-free-survey-baseline';
 import { buildCameraRefinedResult, type CameraRefinedResult } from '@/lib/deep-v2/builders/build-camera-refined-result';
 import { PublicResultRenderer } from '@/components/public-result/PublicResultRenderer';
@@ -40,7 +41,6 @@ import { loadCameraResult } from '@/lib/camera/camera-result';
 // ─── 상수 ─────────────────────────────────────────────────────────────────────
 
 const SESSION_KEY = 'movementTestSession:v2';
-const BG = '#0d161f';
 
 // ─── localStorage 헬퍼 ────────────────────────────────────────────────────────
 
@@ -162,35 +162,34 @@ export default function RefinedResultPage() {
 
   if (loading) {
     return (
-      <div className="min-h-[100svh] flex items-center justify-center" style={{ backgroundColor: BG }}>
-        <p className="text-slate-400 text-sm">분석 중...</p>
-      </div>
+      <MoveReFullscreenScreen showCosmicGlow={false}>
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-sm text-slate-400">분석 중...</p>
+        </div>
+      </MoveReFullscreenScreen>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-[100svh] flex flex-col items-center justify-center px-6" style={{ backgroundColor: BG }}>
-        <p className="text-slate-400 text-sm mb-4 text-center">{error}</p>
-        <button
-          type="button"
-          onClick={() => router.push('/movement-test/survey')}
-          className="text-sm text-slate-300 underline"
-        >
-          설문으로 돌아가기
-        </button>
-      </div>
+      <MoveReFullscreenScreen showCosmicGlow={false}>
+        <div className="flex flex-1 flex-col items-center justify-center px-6">
+          <p className="mb-4 text-center text-sm text-slate-400">{error}</p>
+          <button
+            type="button"
+            onClick={() => router.push('/movement-test/survey')}
+            className="text-sm text-slate-300 underline"
+          >
+            설문으로 돌아가기
+          </button>
+        </div>
+      </MoveReFullscreenScreen>
     );
   }
 
   return (
-    <div
-      className="relative min-h-[100svh] overflow-hidden flex flex-col"
-      style={{ backgroundColor: BG }}
-    >
-      <Starfield />
-
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-6 py-4">
+    <MoveReFullscreenScreen backgroundSlot={<Starfield />}>
+      <main className="flex flex-1 flex-col items-center justify-start px-6 py-4">
         <Suspense fallback={null}>
           <ResumeExecutionGate
             enabled={resumeEnabled}
@@ -272,6 +271,6 @@ export default function RefinedResultPage() {
           </div>
         ) : null}
       </main>
-    </div>
+    </MoveReFullscreenScreen>
   );
 }

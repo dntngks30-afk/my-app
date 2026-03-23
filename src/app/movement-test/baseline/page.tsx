@@ -14,6 +14,7 @@
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Starfield } from '@/components/landing/Starfield';
+import { MoveReFullscreenScreen } from '@/components/public-brand';
 import { buildFreeSurveyBaselineResult } from '@/lib/deep-v2/builders/build-free-survey-baseline';
 import { PublicResultRenderer } from '@/components/public-result/PublicResultRenderer';
 import { persistPublicResult } from '@/lib/public-results/persistPublicResult';
@@ -27,8 +28,6 @@ import type { TestAnswerValue } from '@/features/movement-test/v2';
 // ─── 상수 ─────────────────────────────────────────────────────────────────────
 
 const SESSION_KEY = 'movementTestSession:v2';
-const BG = '#0d161f';
-
 // ─── localStorage 헬퍼 ───────────────────────────────────────────────────────
 
 interface StoredSessionV2 {
@@ -146,37 +145,39 @@ export default function BaselinePage() {
 
   if (loading) {
     return (
-      <div className="min-h-[100svh] flex items-center justify-center" style={{ backgroundColor: BG }}>
-        <p className="text-slate-400 text-sm" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-          분석 중...
-        </p>
-      </div>
+      <MoveReFullscreenScreen showCosmicGlow={false}>
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-sm text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+            분석 중...
+          </p>
+        </div>
+      </MoveReFullscreenScreen>
     );
   }
 
   if (error || !baseline) {
     return (
-      <div className="min-h-[100svh] flex flex-col items-center justify-center px-6" style={{ backgroundColor: BG }}>
-        <p className="text-slate-400 text-sm mb-4 text-center" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-          {error ?? '결과를 불러오지 못했습니다.'}
-        </p>
-        <button
-          type="button"
-          onClick={() => router.push('/movement-test/survey')}
-          className="text-sm text-slate-300 underline"
-          style={{ fontFamily: 'var(--font-sans-noto)' }}
-        >
-          설문으로 돌아가기
-        </button>
-      </div>
+      <MoveReFullscreenScreen showCosmicGlow={false}>
+        <div className="flex flex-1 flex-col items-center justify-center px-6">
+          <p className="mb-4 text-center text-sm text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+            {error ?? '결과를 불러오지 못했습니다.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => router.push('/movement-test/survey')}
+            className="text-sm text-slate-300 underline"
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
+          >
+            설문으로 돌아가기
+          </button>
+        </div>
+      </MoveReFullscreenScreen>
     );
   }
 
   return (
-    <div className="relative min-h-[100svh] overflow-hidden flex flex-col" style={{ backgroundColor: BG }}>
-      <Starfield />
-
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 py-8">
+    <MoveReFullscreenScreen backgroundSlot={<Starfield />}>
+      <main className="flex flex-1 flex-col items-center justify-center px-6 py-8">
         <Suspense fallback={null}>
           <ResumeExecutionGate
             enabled={!loading && !!baseline}
@@ -214,6 +215,6 @@ export default function BaselinePage() {
           )}
         </div>
       </main>
-    </div>
+    </MoveReFullscreenScreen>
   );
 }
