@@ -26,6 +26,7 @@ import {
   PRIMARY_TYPE_START_HOOK,
   stripSummaryMetaSuffix,
   STEP3_HEADLINE,
+  STEP3_ORDER_PREVIEW_SECTION_TITLE,
   EXECUTION_ORDER_PHASE_TITLES,
   STEP3_PREVIEW_DISCLAIMER,
   STEP3_VALUE_PILLARS,
@@ -278,7 +279,7 @@ export function PublicResultRenderer({
           <div className="space-y-3 rounded-2xl border border-[#ffb77d]/25 bg-[#151b2d]/50 p-4 backdrop-blur-md">
             <div>
               <p className="text-sm font-bold text-[#ffb77d]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                시작 순서 미리보기
+                {STEP3_ORDER_PREVIEW_SECTION_TITLE}
               </p>
               <p
                 className="mt-1.5 break-keep text-[11px] leading-relaxed text-slate-500"
