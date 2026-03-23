@@ -28,7 +28,7 @@ export default function StitchSurveyQuestion({
       <div
         key={stepIndex}
         className="animate-in fade-in w-full max-w-2xl space-y-12 py-4 text-center duration-300"
-        style={{ animationDuration: '280ms' }}
+        style={{ animationDuration: '220ms' }}
       >
         <div className="space-y-6">
           <span className="block text-lg italic text-[#ffb77d]/60 [font-family:var(--font-display)]">

@@ -216,6 +216,54 @@ h1, h2, h3 {
 .slide-in-from-bottom  { animation-name: movere_slideInFromBottom; }
 .slide-in-from-bottom-4 { animation-name: movere_slideInFromBottom; }
 
+/* ── Public funnel chapter enter (PR-UI-CHAPTER-TRANSITION-02) — SSR-safe, no JS hook ── */
+@keyframes publicChapterEnterDefault {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes publicChapterEnterLight {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes publicChapterEnterCalm {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.public-chapter-enter-default {
+  animation: publicChapterEnterDefault 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.public-chapter-enter-light {
+  animation: publicChapterEnterLight 220ms cubic-bezier(0.25, 0.9, 0.3, 1) both;
+}
+.public-chapter-enter-calm {
+  animation: publicChapterEnterCalm 380ms cubic-bezier(0.2, 0.85, 0.35, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .public-chapter-enter-default,
+  .public-chapter-enter-light,
+  .public-chapter-enter-calm {
+    animation: none;
+  }
+}
+
 /* BootSplash shimmer bar */
 @keyframes boot-shimmer {
   0%, 100% { transform: translateX(-100%); }
