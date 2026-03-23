@@ -3,6 +3,7 @@
 /**
  * FLOW-05 — 온보딩 완료 / 앱 진입 (stitch completion chapter)
  */
+import { TextMaskReveal } from '@/components/public/text-mask';
 import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
 import { PostpayChapterShell, PostpayBrandHeader } from './shared';
@@ -28,7 +29,9 @@ export default function StitchOnboardingCompleteScene({ claimDone, onGoApp }: St
                 <h1
                   className="text-2xl font-light leading-snug text-[#dce1fb] md:text-3xl [font-family:var(--font-display)]"
                 >
-                  루틴에 연결됐어요
+                  <TextMaskReveal delaySec={0.14} durationSec={0.72}>
+                    루틴에 연결됐어요
+                  </TextMaskReveal>
                 </h1>
                 <p
                   className="text-sm font-light leading-relaxed text-[#c6c6cd]"

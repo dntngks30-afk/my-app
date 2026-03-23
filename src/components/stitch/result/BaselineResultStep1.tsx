@@ -1,5 +1,6 @@
 'use client';
 
+import { TextMaskReveal } from '@/components/public/text-mask';
 import { StitchBottomNavRow } from '@/components/stitch/shared/BottomNavRow';
 
 export type BaselineResultStep1Props = {
@@ -33,7 +34,9 @@ export function BaselineResultStep1({
             className="mt-2 break-keep text-4xl font-light tracking-wide md:text-5xl [font-family:var(--font-display)]"
             style={{ color: typeColor }}
           >
-            {typeLabel}
+            <TextMaskReveal delaySec={0.12} durationSec={0.68}>
+              {typeLabel}
+            </TextMaskReveal>
           </h2>
           {secondaryTendencyLine ? (
             <p
