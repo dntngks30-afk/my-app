@@ -5,6 +5,9 @@
  * - zip(9) 계열 UI는 StitchSessionPreparingScene
  * - 세션 생성 API는 마운트 직후 즉시 1회(모듈 in-flight로 중복 방지)
  * - 성공 시 리다이렉트: max(실제 완료 시각, 체류 플로어) — API를 sleep 하지 않음
+ *
+ * PR-SESSION-PREPARING-PROGRESS-PACING-04
+ * - 가로 바: dwell 동안 0→~92%만 점진, 준비 완료+dwell 충족 후에만 100% → 짧게 뒤 이동
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -45,6 +48,12 @@ function runSessionPreparingCreateOnce(accessToken: string): Promise<SessionCrea
 function resetSessionPreparingCreateInflight() {
   sessionPreparingCreateInflight = null;
 }
+
+/** dwell 구간에서 채울 수 있는 최대 비율(100%는 준비+dwell 동시 충족 시에만) */
+const PRE_COMPLETE_PROGRESS_CAP = 0.92;
+
+/** 100% 표시 후 CSS transition·한 프레임 여유 */
+const REDIRECT_AFTER_FULL_MS = 80;
 
 export default function SessionPreparingPage() {
   const router = useRouter();
@@ -89,16 +98,18 @@ export default function SessionPreparingPage() {
       const t0 = startPerfRef.current ?? performance.now();
       const now = performance.now();
       const elapsed = now - t0;
-      const readyAt = sessionReadyPerfRef.current;
+      const sessionReady = sessionReadyPerfRef.current != null;
+      const dwellComplete = elapsed >= floorMs;
+
+      const dwellPhase = Math.min(1, elapsed / floorMs);
+      const dwellBacked = dwellPhase * PRE_COMPLETE_PROGRESS_CAP;
 
       let next: number;
-      if (readyAt != null) {
-        const afterReady = now - readyAt;
-        const finishBlendMs = 450;
-        next = Math.min(1, 0.9 + Math.min(1, afterReady / finishBlendMs) * 0.1);
+      if (sessionReady && dwellComplete) {
+        next = 1;
       } else {
-        const slowExtra = elapsed > floorMs ? Math.min(0.08, (elapsed - floorMs) / 15000) : 0;
-        next = Math.min(0.9, (elapsed / floorMs) * 0.88 + slowExtra);
+        // 준비가 먼저 끝나도 dwell 전에는 시간 기준만큼만 채움. dwell 끝났는데 준비 전이면 ~92%에서 대기
+        next = Math.min(PRE_COMPLETE_PROGRESS_CAP, dwellBacked);
       }
       setVisualProgress((prev) => (Math.abs(prev - next) < 0.002 ? prev : next));
     }, 120);
@@ -141,8 +152,12 @@ export default function SessionPreparingPage() {
       clearRedirectTimer();
       redirectTimeoutRef.current = window.setTimeout(() => {
         if (dead) return;
-        resetSessionPreparingCreateInflight();
-        router.replace('/onboarding-complete');
+        setVisualProgress(1);
+        window.setTimeout(() => {
+          if (dead) return;
+          resetSessionPreparingCreateInflight();
+          router.replace('/onboarding-complete');
+        }, REDIRECT_AFTER_FULL_MS);
       }, remaining);
     }
 
