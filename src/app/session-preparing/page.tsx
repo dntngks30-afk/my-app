@@ -13,11 +13,11 @@ import { supabaseBrowser } from '@/lib/supabase';
 import { createSession } from '@/lib/session/client';
 import StitchSessionPreparingScene from '@/components/stitch/postpay/StitchSessionPreparingScene';
 
-/** 성공 경로 최소 체류(ms). env로 조정 가능, 기본 6초. */
+/** 성공 경로 최소 체류(ms). env로 조정 가능, 기본 10초. PR-SESSION-PREPARING-DWELL-10S-03 */
 export const SESSION_PREPARING_DWELL_FLOOR_MS =
   Number(process.env.NEXT_PUBLIC_SESSION_PREPARING_DWELL_MS) > 0
     ? Number(process.env.NEXT_PUBLIC_SESSION_PREPARING_DWELL_MS)
-    : 6000;
+    : 10000;
 
 const STAGE_LINES = [
   '지금 정리된 상태를 반영해, 운동 시작점을 맞추고 있어요.',
