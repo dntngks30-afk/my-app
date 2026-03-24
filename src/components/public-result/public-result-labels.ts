@@ -82,15 +82,16 @@ export const PRIMARY_TYPE_COLOR: Record<UnifiedPrimaryType, string> = {
   UNKNOWN:                    '#94a3b8',
 };
 
-// ─── PR-BASELINE-STEP-IA-09 — Step1 히어로 + Step3 요약 슬롯 (표시 전용) ─
-// Step1: 타입명·상태 요약·보상 경향만. pattern/today/reset은 Step3 카드.
+// ─── PR-BASELINE-STEP1-COPY-REFRAME-10 — Step1: 생활 맥락 → 상태 → 보상 (3~4줄) ─
+// Step3 슬롯(pattern/today/reset)은 그대로.
+
+/** Step1 맨 위 한 줄(스테이지 eyebrow 제거 후 고정) */
+export const BASELINE_STEP1_HERO_OVERLINE = '당신의 움직임 타입';
 
 export type BaselineStep1ResultSlots = {
   typeName: string;
-  /** Step1 히어로: 지금 움직임 상태(짧게 1~2문장 분량) */
-  heroStateSummary: string;
-  /** Step1 히어로: 자주 붙는 보상·대체 움직임 경향 한 덩어리 */
-  heroCompensationLine: string;
+  /** Step1 본문: 6형 3~4줄, UNKNOWN은 짧은 안내 2~3줄 */
+  heroCoreLines: readonly string[];
   patternToWatch: string;
   todayCaution: string;
   firstResetDirection: string;
@@ -99,10 +100,12 @@ export type BaselineStep1ResultSlots = {
 export const BASELINE_STEP1_RESULT_SLOTS: Record<UnifiedPrimaryType, BaselineStep1ResultSlots> = {
   LOWER_INSTABILITY: {
     typeName: PRIMARY_TYPE_LABELS.LOWER_INSTABILITY,
-    heroStateSummary:
-      '지금은 하체를 더 세게 밀기보다, 흔들리지 않게 중심을 잡는 쪽이 먼저인 상태예요.',
-    heroCompensationLine:
-      '무릎·발목이 먼저 버티거나, 한쪽 다리에 체중이 쏠리는 보상이 나타나기 쉬워요.',
+    heroCoreLines: [
+      '오래 앉거나 한쪽 다리에 체중을 실는 습관, 갑자기 힘을 주며 움직이기 시작하는 패턴이 반복되면 하체 조절에 부담이 쌓이기 쉬워요.',
+      '그러면 서 있거나 걸을 때 다리가 먼저 지탱하려 하고, 작은 흔들림도 크게 느껴질 수 있어요.',
+      '무릎·발목이 먼저 버티거나, 한쪽으로 체중이 쏠리는 보상 움직임이 잘 붙어요.',
+      '힘을 더 주기보다, 양발에 체중을 고르게 싣는 감각부터 보면 덜 지치기 쉬워요.',
+    ],
     patternToWatch: '한쪽 다리에 기대거나 내려앉을 때 무릎이 안쪽으로 모이기 쉬워요.',
     todayCaution:
       '무거운 중량·점프부터 시작하지 말고, 양발에 체중을 고르게 싣는 감각부터 확인해 보세요.',
@@ -110,10 +113,12 @@ export const BASELINE_STEP1_RESULT_SLOTS: Record<UnifiedPrimaryType, BaselineSte
   },
   LOWER_MOBILITY_RESTRICTION: {
     typeName: PRIMARY_TYPE_LABELS.LOWER_MOBILITY_RESTRICTION,
-    heroStateSummary:
-      '발목·고관절이 굳게 느껴질 수 있어요. 깊이부터 억지로 내기보다 범위를 먼저 풀어주는 쪽이 편해요.',
-    heroCompensationLine:
-      '앉았다 일어날 때 하체로 버티려 하거나, 깊이 대신 허리로 대신 움직이려는 식이 생기기 쉬워요.',
+    heroCoreLines: [
+      '오래 앉고 발목·엉덩이를 거의 펴지 않는 날이 많으면, 하체를 쓰는 범위가 좁아지기 쉬워요.',
+      '그 상태에서는 깊게 앉거나 굽히는 동작이 처음부터 잘 안 나오고, 하체가 뻣뻣하게 느껴질 수 있어요.',
+      '범위가 부족할 때 몸은 허리에 힘을 더 쓰거나, 무릎만으로 버티려는 움직임으로 보완하려는 경향이 생기기 쉬워요.',
+      '깊이를 억지로 내기보다, 먼저 발목·고관절을 가볍게 풀어 주는 쪽이 부담이 적어요.',
+    ],
     patternToWatch:
       '스쿼트나 런지에서 깊이가 잘 안 나오고, 앉았다 일어날 때 하체가 뻣뻣하게 느껴질 수 있어요.',
     todayCaution: '오래 앉아 있었다면 바로 깊은 동작부터 하지 말고, 짧게 풀어준 뒤 시작해 보세요.',
@@ -121,10 +126,12 @@ export const BASELINE_STEP1_RESULT_SLOTS: Record<UnifiedPrimaryType, BaselineSte
   },
   UPPER_IMMOBILITY: {
     typeName: PRIMARY_TYPE_LABELS.UPPER_IMMOBILITY,
-    heroStateSummary:
-      '목·어깨·앞가슴이 먼저 조여 오는 상태예요. 세우기보다 풀어주는 쪽이 먼저예요.',
-    heroCompensationLine:
-      '어깨만으로 팔을 올리거나, 턱을 내밀어 목 긴장을 덜어내려는 움직임이 자주 붙기 쉬워요.',
+    heroCoreLines: [
+      '책상·모니터·휴대폰을 오래 보고 턱을 앞으로 내민 채, 숨이 얕게 위쪽 가슴만 쓰이는 경우가 많으면 목·어깨 긴장이 쌓이기 쉬워요.',
+      '그러면 상체가 먼저 조이고, 팔을 올릴 때도 몸통과 이어지기보다 어깨·목이 먼저 반응하기 쉬워요.',
+      '턱을 더 내밀거나 어깨만으로 팔을 올리는 식의 보상이 붙으면, 긴장이 더 쌓이기도 해요.',
+      '자세를 세게 펴려 하기보다, 숨을 내쉬며 목·어깨·앞가슴을 가볍게 풀어 주는 쪽이 먼저예요.',
+    ],
     patternToWatch: '팔을 올릴 때 어깨가 먼저 답답하고, 오래 앉아 있으면 목과 어깨가 쉽게 무거워져요.',
     todayCaution:
       '어깨를 억지로 내리거나 강하게 스트레칭하기보다, 숨을 내쉬며 상체 긴장을 먼저 줄여보세요.',
@@ -132,21 +139,25 @@ export const BASELINE_STEP1_RESULT_SLOTS: Record<UnifiedPrimaryType, BaselineSte
   },
   CORE_CONTROL_DEFICIT: {
     typeName: PRIMARY_TYPE_LABELS.CORE_CONTROL_DEFICIT,
-    heroStateSummary:
-      '숨과 몸통이 한 덩어리로 이어지기보다, 허리·배만 먼저 쓰기 쉬운 상태예요.',
-    heroCompensationLine:
-      '숨을 참고 버티거나, 움직일수록 허리에 힘이 먼저 몰리는 보상이 나타나기 쉬워요.',
+    heroCoreLines: [
+      '오래 앉고, 가슴·배·골반이 함께 쓰이기보다 허리에만 기대어 버티거나 숨이 얕게 유지되는 날이 많으면, 몸통 가운데가 덜 정리된 느낌이 들기 쉬워요.',
+      '움직일 때 배·갈비·골반이 한 덩어리로 이어지기보다, 허리와 골반이 먼저 조여지거나 버티는 느낌이 앞서기 쉬워요.',
+      '숨을 참거나 더 세게 조이려 할수록 허리·골반에 힘이 먼저 몰리는 보상 패턴이 잘 붙어요.',
+      '힘을 더 주기보다, 호흡과 함께 몸통이 자연스럽게 이어지게 만드는 쪽이 먼저 도움이 돼요.',
+    ],
     patternToWatch: '허리나 골반이 먼저 버티고, 움직일수록 몸통보다 허리에 힘이 몰리기 쉬워요.',
     todayCaution:
       '숨을 참은 채 버티는 운동부터 몰아 하지 말고, 편하게 내쉬며 중심 감각부터 확인해 보세요.',
-    firstResetDirection: '강한 코어 운동보다 호흡·골반·갈비를 다시 연결하는 방향으로 시작해요.',
+    firstResetDirection: '강한 복근만 반복하기보다 호흡·골반·갈비를 다시 연결하는 방향으로 시작해요.',
   },
   DECONDITIONED: {
     typeName: PRIMARY_TYPE_LABELS.DECONDITIONED,
-    heroStateSummary:
-      '한 부위보다 몸 전체가 한꺼번에 무겁게 느껴지기 쉬운 상태예요.',
-    heroCompensationLine:
-      '숨이 빨리 차거나, 다음 날까지 피로가 남도록 한 번에 밀어붙이려는 경향이 생기기 쉬워요.',
+    heroCoreLines: [
+      '운동이 끊기거나 일과 피로가 쌓이고 회복이 들쭉날쭉한 시기가 길면, 몸 전체 리듬이 가볍게 돌아가기 어려워요.',
+      '한 부위만이 아니라 여러 곳이 함께 무겁게 느껴지고, 조금만 움직여도 숨이 빨리 차기 쉬워요.',
+      '‘한 번에 만회하자’는 식으로 강도를 올리면 다음 날까지 피로가 남기 쉬운 보상이 생기기도 해요.',
+      '세게 밀기보다 짧게 자주, 오늘 컨디션에 맞춰 나누는 쪽이 다시 시작하기에 잘 맞아요.',
+    ],
     patternToWatch:
       '여러 부위가 함께 무겁게 느껴지거나, 쉬었다가 다시 시작할 때 피로가 크게 올라오기 쉬워요.',
     todayCaution: '예전 강도로 바로 돌아가려 하지 말고, 짧게 끝까지 해내는 흐름을 먼저 만들어 보세요.',
@@ -154,10 +165,12 @@ export const BASELINE_STEP1_RESULT_SLOTS: Record<UnifiedPrimaryType, BaselineSte
   },
   STABLE: {
     typeName: PRIMARY_TYPE_LABELS.STABLE,
-    heroStateSummary:
-      '전반적인 움직임 균형은 괜찮은 편이에요. 지금 흐름을 해치지 않게 가져가면 돼요.',
-    heroCompensationLine:
-      '피로·수면·스트레스에 따라 그날 감각만 달라질 수 있어요. 과한 자극으로 흔들리지 않게만 보면 돼요.',
+    heroCoreLines: [
+      '지금 흐름은 전반적으로 균형이 잘 잡힌 편이에요. 완벽한 몸이라는 뜻은 아니에요.',
+      '수면·스트레스·일정에 따라 그날 감각은 달라질 수 있어요.',
+      '컨디션이 조금 흐트러질 때는 무리한 자극보다, 지금 강도를 유지하며 회복과 순환을 같이 보는 편이 좋아요.',
+      '조금씩만 키우고, 불편이 생기면 그날은 한 단계만 낮추면 충분해요.',
+    ],
     patternToWatch:
       '큰 불균형보다는 수면·스트레스·피로에 따라 컨디션이 흔들릴 때 운동 감각이 달라질 수 있어요.',
     todayCaution: '괜찮은 날에도 강도를 한 번에 올리지 말고, 몸 상태를 보며 조금씩 조절해 보세요.',
@@ -165,10 +178,11 @@ export const BASELINE_STEP1_RESULT_SLOTS: Record<UnifiedPrimaryType, BaselineSte
   },
   UNKNOWN: {
     typeName: PRIMARY_TYPE_LABELS.UNKNOWN,
-    heroStateSummary:
-      '아직 오늘의 시작점을 한 가지로 단정하기엔 정보가 부족해요. 불편 없는 범위에서 반응을 살보면 돼요.',
-    heroCompensationLine:
-      '한꺼번에 깊게 해석하기보다, 짧게 움직이며 느낌을 쌓아가는 편이 좋아요.',
+    heroCoreLines: [
+      '지금은 정보가 부족해 한 가지 타입으로 딱 자르기 어려워요. 불편 없는 범위에서 가볍게 움직이며 반응만 보면 돼요.',
+      '오늘은 짧게 끝내고, 내일 이어서 조정해도 괜찮아요.',
+      '깊게 해석하려 하기보다, 오늘 느낀 범위만 기억해 두면 다음에 더 맞출 수 있어요.',
+    ],
     patternToWatch: '한꺼번에 깊게 해석하려 하기보다, 조금씩 몸의 느낌을 쌓아가는 편이 좋아요.',
     todayCaution: '오늘은 짧게 끝내는 것만 목표로 잡아도 충분해요.',
     firstResetDirection: '편한 범위에서 호흡과 가벼운 움직임으로 몸을 깨우는 방향으로 시작해요.',

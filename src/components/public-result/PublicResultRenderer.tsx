@@ -186,11 +186,9 @@ export function PublicResultRenderer({
 
       {step === 1 && (
         <BaselineResultStep1
-          titlePrefix={stageMeta.titlePrefix}
           typeName={step1Slots.typeName}
           typeAccentColor={typeColor}
-          heroStateSummary={step1Slots.heroStateSummary}
-          heroCompensationLine={step1Slots.heroCompensationLine}
+          heroCoreLines={step1Slots.heroCoreLines}
           onNext={() => setStep(2)}
         />
       )}
