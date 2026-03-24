@@ -630,15 +630,15 @@ export const PRIMARY_TYPE_CAREFUL_MOVEMENTS: Record<UnifiedPrimaryType, readonly
   ],
 };
 
-/** 실행 예시 동작 2가지 */
+/** 실행 예시 동작 2가지 — Step3 순서 예시와 톤 정합(PR-14, 짧게) */
 export const PRIMARY_TYPE_RECOMMENDED_MOVES: Record<UnifiedPrimaryType, readonly [string, string]> = {
-  LOWER_INSTABILITY: ['맨몸 미니 스쿼트·힙 힌지(가볍게)', '짧은 한 발 서기·균형 잡기'],
-  LOWER_MOBILITY_RESTRICTION: ['발목·엉덩이 가볍게 풀기', '짧은 걷기 후 가벼운 하체 풀기'],
-  UPPER_IMMOBILITY: ['벽에 기대 숨 쉬며 팔 올리기', '가볍게 목·어깨 원 그리기'],
-  CORE_CONTROL_DEFICIT: ['누워서 복식 호흡·짧은 다리 움직임', '엉덩이·배 함께 쓰는 낮은 브릿지·버드독'],
-  DECONDITIONED: ['천천히 걷기·가벼운 자전거', '상체·하체 나눠 짧게 돌리기'],
-  STABLE: ['전신 가볍게 순환하기', '호흡·유연성 보조 동작'],
-  UNKNOWN: ['가벼운 걷기·워밍업', '불편 없는 범위 관절 풀기'],
+  LOWER_INSTABILITY: ['글루트 브리지 · 숏풋(Short Foot) 훈련', 'Sit-to-Stand · 박스 스쿼트'],
+  LOWER_MOBILITY_RESTRICTION: ['장요근 스트레칭 · 햄스트링 다이내믹 스트레칭', '힙 힌지 패턴 연습'],
+  UPPER_IMMOBILITY: ['밴드 풀어파트 · 월 슬라이드', '벽 기대 오버헤드 리치'],
+  CORE_CONTROL_DEFICIT: ['복식호흡 · 데드버그', 'Sit-to-Stand · 힙 힌지 패턴 연습'],
+  DECONDITIONED: ['글루트 브리지 · 벽 밀기 Wall Push', '제자리 체중 이동'],
+  STABLE: ['글루트 브리지 · 밴드 풀어파트', '스플릿 스탠스 체중 이동'],
+  UNKNOWN: ['전신 가벼운 스트레칭', '복식호흡 · 글루트 브리지'],
 };
 
 /** 오늘부터 바꿔볼 습관 3가지 */
@@ -680,42 +680,111 @@ export const PRIMARY_TYPE_LIFESTYLE_HABITS: Record<UnifiedPrimaryType, readonly 
   ],
 };
 
-/** 시작 순서 예시 3단(몸 풀기 → 범위 → 움직임 붙이기 흐름과 짝) */
-export const PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW: Record<UnifiedPrimaryType, readonly [string, string, string]> = {
+/** Step3 순서 예시 한 칸: 짧은 목적 + 구체적 운동명 (PR-BASELINE-STEP3-PRECISE-EXERCISE-NAMES-14) */
+export type BaselineStep3OrderSlot = { purpose: string; examples: string };
+
+/** 시작 순서 예시 3단 — EXECUTION_ORDER_PHASE_TITLES와 1:1 짝 */
+export const PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW: Record<
+  UnifiedPrimaryType,
+  readonly [BaselineStep3OrderSlot, BaselineStep3OrderSlot, BaselineStep3OrderSlot]
+> = {
   LOWER_INSTABILITY: [
-    '숨 정리하며 몸 가볍게 깨우기',
-    '발목·골반 주변 부드럽게 풀기',
-    '짧은 스쿼트·균형으로 마무리',
+    {
+      purpose: '무릎·발목이 먼저 버티지 않게 하체 앞쪽 긴장을 먼저 낮춰요.',
+      examples: '비복근·가자미근 폼롤링 · 대퇴사두근 폼롤링',
+    },
+    {
+      purpose: '엉덩이와 발바닥 지지 감각을 먼저 깨워요.',
+      examples: '글루트 브리지 · 숏풋(Short Foot) 훈련',
+    },
+    {
+      purpose: '양발에 고르게 체중을 싣고 일어나고 내려가는 움직임을 다시 연결해요.',
+      examples: 'Sit-to-Stand · 박스 스쿼트',
+    },
   ],
   LOWER_MOBILITY_RESTRICTION: [
-    '호흡과 함께 전신 가볍게 깨우기',
-    '발목·엉덩이 천천히 풀기',
-    '편한 범위에서 스쿼트·런지 느낌만 잡기',
+    {
+      purpose: '굳은 발목·고관절 주변을 먼저 부드럽게 열어요.',
+      examples: '비복근·가자미근 폼롤링 · 장요근 스트레칭',
+    },
+    {
+      purpose: '엉덩이와 뒤 허벅지가 다시 접히고 펴지는 감각을 깨워요.',
+      examples: '글루트 브리지 · 햄스트링 다이내믹 스트레칭',
+    },
+    {
+      purpose: '허리 대신 하체가 접히는 움직임을 다시 연결해요.',
+      examples: '힙 힌지 패턴 연습 · Sit-to-Stand',
+    },
   ],
   UPPER_IMMOBILITY: [
-    '숨과 함께 가슴·어깨 가볍게 깨우기',
-    '목·어깨 돌리고 팔 범위 넓히기',
-    '팔 올리기·자세는 가볍게만 연결하기',
+    {
+      purpose: '목·가슴 앞쪽 긴장을 먼저 줄여 상체가 편하게 열리게 해요.',
+      examples: '대흉근 스트레칭 · 상부승모근 스트레칭',
+    },
+    {
+      purpose: '등과 어깨 뒤쪽이 같이 받쳐주는 감각을 깨워요.',
+      examples: '밴드 풀어파트 · 월 슬라이드',
+    },
+    {
+      purpose: '숨과 함께 팔과 상체가 자연스럽게 이어지도록 연결해요.',
+      examples: '벽 기대 오버헤드 리치 · 스탠딩 리치',
+    },
   ],
   CORE_CONTROL_DEFICIT: [
-    '복식 호흡으로 몸통 이어 느끼기',
-    '낮은 부하로 몸통·골반 같이 움직이기',
-    '일어서기·앉기에 옮겨 쓰기',
+    {
+      purpose: '허리·골반 주변이 먼저 긴장하는 패턴을 낮춰 몸통이 편하게 이어지게 해요.',
+      examples: '장요근 스트레칭 · 요방형근 주변 가벼운 이완',
+    },
+    {
+      purpose: '배와 엉덩이가 같이 중심을 잡는 감각을 깨워요.',
+      examples: '복식호흡 · 데드버그 · 글루트 브리지',
+    },
+    {
+      purpose: '호흡과 몸통 중심을 유지한 채 앉고 서는 움직임으로 연결해요.',
+      examples: 'Sit-to-Stand · 힙 힌지 패턴 연습',
+    },
   ],
   DECONDITIONED: [
-    '짧게 워밍업하고 순환하기',
-    '위·아래 나눠 가볍게 돌리기',
-    '내일 컨디션 보며 마무리',
+    {
+      purpose: '전신이 무겁게 느껴질 때 굳은 부위를 짧게 풀어 몸을 깨워요.',
+      examples: '비복근 폼롤링 · 대흉근 스트레칭',
+    },
+    {
+      purpose: '엉덩이·등·몸통이 조금씩 다시 반응하도록 깨워요.',
+      examples: '글루트 브리지 · 벽 밀기 Wall Push',
+    },
+    {
+      purpose: '과하게 힘들이지 않고 몸 전체를 같이 쓰는 움직임으로 마무리해요.',
+      examples: '제자리 체중 이동 · Sit-to-Stand',
+    },
   ],
   STABLE: [
-    '가볍게 순환 워밍업',
-    '전신 밸런스 유지 동작',
-    '유연성·호흡으로 정리',
+    {
+      purpose: '자주 쓰는 부위의 긴장을 짧게 풀어 지금 균형을 무너뜨리지 않게 해요.',
+      examples: '비복근 폼롤링 · 대흉근 스트레칭',
+    },
+    {
+      purpose: '엉덩이·등·몸통이 고르게 반응하도록 가볍게 깨워요.',
+      examples: '글루트 브리지 · 밴드 풀어파트 · 복식호흡',
+    },
+    {
+      purpose: '지금의 균형을 유지한 채 전신 움직임으로 자연스럽게 이어가요.',
+      examples: '스플릿 스탠스 체중 이동 · 스쿼트 투 리치',
+    },
   ],
   UNKNOWN: [
-    '가벼운 워밍업',
-    '불편 없는 범위 관절 풀기',
-    '짧게 마무리 스트레칭',
+    {
+      purpose: '불편 없는 범위에서 몸을 가볍게 풀어 시작해요.',
+      examples: '전신 가벼운 스트레칭',
+    },
+    {
+      purpose: '호흡과 엉덩이 감각을 짧게 깨워요.',
+      examples: '복식호흡 · 글루트 브리지',
+    },
+    {
+      purpose: '일상 동작으로 움직임을 한 번 연결해요.',
+      examples: 'Sit-to-Stand',
+    },
   ],
 };
 
@@ -746,10 +815,10 @@ export const STEP3_HEADLINE = '지금 몸 상태로 이렇게 시작해요';
 export const STEP3_ORDER_PREVIEW_SECTION_TITLE = '지금 시작 순서 예시';
 
 /**
- * 시작 순서 3단계 — 단계 이름(고정).
- * PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW의 한 줄과 짝을 이룸.
+ * 시작 순서 3단계 — 단계 이름(고정). PR-14: 먼저 풀기 → 깨우기 → 연결.
+ * PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW 슬롯과 1:1 짝.
  */
-export const EXECUTION_ORDER_PHASE_TITLES = ['몸 풀기', '범위 열기', '움직임 붙이기'] as const;
+export const EXECUTION_ORDER_PHASE_TITLES = ['먼저 풀기', '그다음 깨우기', '마지막 연결하기'] as const;
 
 /** 순서 블록 직후 — 사실 안전한 면책(과장 금지) */
 export const STEP3_PREVIEW_DISCLAIMER =

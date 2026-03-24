@@ -304,10 +304,16 @@ export function PublicResultRenderer({
                       {EXECUTION_ORDER_PHASE_TITLES[i]}
                     </p>
                     <p
-                      className="mt-0.5 break-keep text-sm leading-relaxed text-[#dce1fb]"
+                      className="mt-0.5 break-keep text-[11px] leading-relaxed text-slate-500"
                       style={{ fontFamily: 'var(--font-sans-noto)' }}
                     >
-                      {order[i]}
+                      {order[i].purpose}
+                    </p>
+                    <p
+                      className="mt-1 break-keep text-sm leading-relaxed text-[#dce1fb]"
+                      style={{ fontFamily: 'var(--font-sans-noto)' }}
+                    >
+                      {order[i].examples}
                     </p>
                   </div>
                 </li>
