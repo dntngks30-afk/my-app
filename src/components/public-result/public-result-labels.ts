@@ -27,14 +27,14 @@ import type {
  * UnifiedPrimaryType → 사용자에게 보여줄 타입 이름(짧은 호칭, 표현 전용).
  * 폴백·로깅·DISPLAY_NAMES 미적용 시에도 동일 톤 유지.
  */
+/** PR-BASELINE-STEP-IA-09 — 사용자 대면 타입 호칭(6형 + UNKNOWN 안내) */
 export const PRIMARY_TYPE_LABELS: Record<UnifiedPrimaryType, string> = {
-  LOWER_INSTABILITY:          '안정성 회복형',
-  LOWER_MOBILITY_RESTRICTION: '가동성 회복형',
-  UPPER_IMMOBILITY:           '상체 이완 필요형',
-  CORE_CONTROL_DEFICIT:       '중심 재정렬형',
-  DECONDITIONED:              '기본 체력 회복형',
-  STABLE:                     '균형 유지형',
-  /** “-형” 강제 없이 안내형(UNKNOWN은 타입 정체성이 아님) */
+  LOWER_INSTABILITY:          '하체 불안정형',
+  LOWER_MOBILITY_RESTRICTION: '하체 경직형',
+  UPPER_IMMOBILITY:           '상체 긴장형',
+  CORE_CONTROL_DEFICIT:       '중심 흐트러짐형',
+  DECONDITIONED:              '전신 무거움형',
+  STABLE:                     '균형형',
   UNKNOWN:                    '가볍게 확인하며 시작해요',
 };
 
@@ -45,9 +45,9 @@ export const PRIMARY_TYPE_DISPLAY_NAMES: Record<UnifiedPrimaryType, string> = {
   LOWER_INSTABILITY:          '하체 균형을 먼저 잡아요',
   LOWER_MOBILITY_RESTRICTION: '굳은 하체를 먼저 풀어요',
   UPPER_IMMOBILITY:           '목·어깨 긴장을 먼저 풀어요',
-  CORE_CONTROL_DEFICIT:       '몸통 중심을 먼저 연결해요',
+  CORE_CONTROL_DEFICIT:       '몸통 중심을 먼저 이어요',
   DECONDITIONED:              '천천히 컨디션을 올려가요',
-  STABLE:                     '지금 흐름을 잘 유지하고 있어요',
+  STABLE:                     '지금 균형을 유지해요',
   UNKNOWN:                    '가볍게 확인하며 시작해요',
 };
 
@@ -82,12 +82,15 @@ export const PRIMARY_TYPE_COLOR: Record<UnifiedPrimaryType, string> = {
   UNKNOWN:                    '#94a3b8',
 };
 
-// ─── PR-BASELINE-TYPE-UI-AND-COPY-07 — Step1 고정 5슬롯(타입명·요약·3블록) ─
-// 스코어링·계약 불변. 표시 전용. Stitch baseline type-result 카피 정본.
+// ─── PR-BASELINE-STEP-IA-09 — Step1 히어로 + Step3 요약 슬롯 (표시 전용) ─
+// Step1: 타입명·상태 요약·보상 경향만. pattern/today/reset은 Step3 카드.
 
 export type BaselineStep1ResultSlots = {
   typeName: string;
-  summary: string;
+  /** Step1 히어로: 지금 움직임 상태(짧게 1~2문장 분량) */
+  heroStateSummary: string;
+  /** Step1 히어로: 자주 붙는 보상·대체 움직임 경향 한 덩어리 */
+  heroCompensationLine: string;
   patternToWatch: string;
   todayCaution: string;
   firstResetDirection: string;
@@ -95,60 +98,77 @@ export type BaselineStep1ResultSlots = {
 
 export const BASELINE_STEP1_RESULT_SLOTS: Record<UnifiedPrimaryType, BaselineStep1ResultSlots> = {
   LOWER_INSTABILITY: {
-    typeName: '안정성 회복형',
-    summary:
-      '지금은 하체를 더 강하게 쓰기보다, 흔들리지 않게 중심을 잡아주는 게 먼저예요. 무릎이나 발목이 버티는 느낌이 들기 쉬운 상태예요.',
+    typeName: PRIMARY_TYPE_LABELS.LOWER_INSTABILITY,
+    heroStateSummary:
+      '지금은 하체를 더 세게 밀기보다, 흔들리지 않게 중심을 잡는 쪽이 먼저인 상태예요.',
+    heroCompensationLine:
+      '무릎·발목이 먼저 버티거나, 한쪽 다리에 체중이 쏠리는 보상이 나타나기 쉬워요.',
     patternToWatch: '한쪽 다리에 기대거나 내려앉을 때 무릎이 안쪽으로 모이기 쉬워요.',
     todayCaution:
       '무거운 중량·점프부터 시작하지 말고, 양발에 체중을 고르게 싣는 감각부터 확인해 보세요.',
     firstResetDirection: '하체에 힘을 몰기보다 발목·고관절을 풀고 중심을 다시 잡는 방향으로 시작해요.',
   },
   LOWER_MOBILITY_RESTRICTION: {
-    typeName: '가동성 회복형',
-    summary: '지금은 더 버티는 것보다, 발목과 고관절의 굳은 범위를 먼저 풀어주는 게 중요한 상태예요.',
+    typeName: PRIMARY_TYPE_LABELS.LOWER_MOBILITY_RESTRICTION,
+    heroStateSummary:
+      '발목·고관절이 굳게 느껴질 수 있어요. 깊이부터 억지로 내기보다 범위를 먼저 풀어주는 쪽이 편해요.',
+    heroCompensationLine:
+      '앉았다 일어날 때 하체로 버티려 하거나, 깊이 대신 허리로 대신 움직이려는 식이 생기기 쉬워요.',
     patternToWatch:
       '스쿼트나 런지에서 깊이가 잘 안 나오고, 앉았다 일어날 때 하체가 뻣뻣하게 느껴질 수 있어요.',
     todayCaution: '오래 앉아 있었다면 바로 깊은 동작부터 하지 말고, 짧게 풀어준 뒤 시작해 보세요.',
     firstResetDirection: '깊이를 억지로 늘리기보다 발목·고관절 움직임을 부드럽게 여는 방향으로 시작해요.',
   },
   UPPER_IMMOBILITY: {
-    typeName: '상체 이완 필요형',
-    summary:
-      '상체를 더 세게 세우기보다, 목·어깨·가슴 앞쪽의 긴장을 먼저 풀어줘야 움직임이 편해지는 상태예요.',
+    typeName: PRIMARY_TYPE_LABELS.UPPER_IMMOBILITY,
+    heroStateSummary:
+      '목·어깨·앞가슴이 먼저 조여 오는 상태예요. 세우기보다 풀어주는 쪽이 먼저예요.',
+    heroCompensationLine:
+      '어깨만으로 팔을 올리거나, 턱을 내밀어 목 긴장을 덜어내려는 움직임이 자주 붙기 쉬워요.',
     patternToWatch: '팔을 올릴 때 어깨가 먼저 답답하고, 오래 앉아 있으면 목과 어깨가 쉽게 무거워져요.',
     todayCaution:
       '어깨를 억지로 내리거나 강하게 스트레칭하기보다, 숨을 내쉬며 상체 긴장을 먼저 줄여보세요.',
     firstResetDirection: '자세 교정보다 호흡과 함께 목·어깨·흉추를 풀어주는 방향으로 시작해요.',
   },
   CORE_CONTROL_DEFICIT: {
-    typeName: '중심 재정렬형',
-    summary: '배에 힘을 더 주는 것보다, 숨과 몸통이 자연스럽게 연결되도록 다시 정리하는 게 먼저인 상태예요.',
+    typeName: PRIMARY_TYPE_LABELS.CORE_CONTROL_DEFICIT,
+    heroStateSummary:
+      '숨과 몸통이 한 덩어리로 이어지기보다, 허리·배만 먼저 쓰기 쉬운 상태예요.',
+    heroCompensationLine:
+      '숨을 참고 버티거나, 움직일수록 허리에 힘이 먼저 몰리는 보상이 나타나기 쉬워요.',
     patternToWatch: '허리나 골반이 먼저 버티고, 움직일수록 몸통보다 허리에 힘이 몰리기 쉬워요.',
     todayCaution:
       '숨을 참은 채 버티는 운동부터 몰아 하지 말고, 편하게 내쉬며 중심 감각부터 확인해 보세요.',
     firstResetDirection: '강한 코어 운동보다 호흡·골반·갈비를 다시 연결하는 방향으로 시작해요.',
   },
   DECONDITIONED: {
-    typeName: '기본 체력 회복형',
-    summary: '특정 한 부위보다 전체 컨디션과 움직임 리듬을 천천히 끌어올리는 게 먼저인 상태예요.',
+    typeName: PRIMARY_TYPE_LABELS.DECONDITIONED,
+    heroStateSummary:
+      '한 부위보다 몸 전체가 한꺼번에 무겁게 느껴지기 쉬운 상태예요.',
+    heroCompensationLine:
+      '숨이 빨리 차거나, 다음 날까지 피로가 남도록 한 번에 밀어붙이려는 경향이 생기기 쉬워요.',
     patternToWatch:
       '여러 부위가 함께 무겁게 느껴지거나, 쉬었다가 다시 시작할 때 피로가 크게 올라오기 쉬워요.',
     todayCaution: '예전 강도로 바로 돌아가려 하지 말고, 짧게 끝까지 해내는 흐름을 먼저 만들어 보세요.',
     firstResetDirection: '강도보다 꾸준함을 우선하고, 전신을 가볍게 깨우는 방향으로 시작해요.',
   },
   STABLE: {
-    typeName: '균형 유지형',
-    summary:
-      '전반적인 흐름은 안정적인 편이라, 지금 균형을 해치지 않으면서 천천히 발전시키는 방식이 잘 맞아요.',
+    typeName: PRIMARY_TYPE_LABELS.STABLE,
+    heroStateSummary:
+      '전반적인 움직임 균형은 괜찮은 편이에요. 지금 흐름을 해치지 않게 가져가면 돼요.',
+    heroCompensationLine:
+      '피로·수면·스트레스에 따라 그날 감각만 달라질 수 있어요. 과한 자극으로 흔들리지 않게만 보면 돼요.',
     patternToWatch:
       '큰 불균형보다는 수면·스트레스·피로에 따라 컨디션이 흔들릴 때 운동 감각이 달라질 수 있어요.',
     todayCaution: '괜찮은 날에도 강도를 한 번에 올리지 말고, 몸 상태를 보며 조금씩 조절해 보세요.',
     firstResetDirection: '지금 균형을 유지하면서 전신 리듬과 회복을 함께 챙기는 방향으로 시작해요.',
   },
   UNKNOWN: {
-    typeName: '가볍게 확인하며 시작해요',
-    summary:
-      '아직 오늘의 시작점을 한 가지 이름으로 단정하기엔 정보가 부족해요. 불편 없는 범위에서 가볍게 움직이며 반응을 살펴보는 것부터 좋아요.',
+    typeName: PRIMARY_TYPE_LABELS.UNKNOWN,
+    heroStateSummary:
+      '아직 오늘의 시작점을 한 가지로 단정하기엔 정보가 부족해요. 불편 없는 범위에서 반응을 살보면 돼요.',
+    heroCompensationLine:
+      '한꺼번에 깊게 해석하기보다, 짧게 움직이며 느낌을 쌓아가는 편이 좋아요.',
     patternToWatch: '한꺼번에 깊게 해석하려 하기보다, 조금씩 몸의 느낌을 쌓아가는 편이 좋아요.',
     todayCaution: '오늘은 짧게 끝내는 것만 목표로 잡아도 충분해요.',
     firstResetDirection: '편한 범위에서 호흡과 가벼운 움직임으로 몸을 깨우는 방향으로 시작해요.',
@@ -157,6 +177,79 @@ export const BASELINE_STEP1_RESULT_SLOTS: Record<UnifiedPrimaryType, BaselineSte
 
 export function getBaselineStep1ResultSlots(pt: UnifiedPrimaryType): BaselineStep1ResultSlots {
   return BASELINE_STEP1_RESULT_SLOTS[pt];
+}
+
+/** Step2 요약 카드(제목 고정 + 타입별 짧은 본문). 동적 reason/보조는 3번째 카드에 합성. */
+export type ResultMiniCard = { title: string; body: string };
+
+const BASELINE_STEP2_CARD_TITLES = [
+  '몸이 먼저 반응하기 쉬운 부위',
+  '자주 나타나는 보상 움직임',
+  '함께 겹쳐 보이기 쉬운 경향',
+] as const;
+
+export const BASELINE_STEP2_CARD_BODIES: Record<
+  UnifiedPrimaryType,
+  readonly [string, string, string]
+> = {
+  LOWER_INSTABILITY: [
+    '서 있거나 걸을 때 다리·발목이 먼저 긴장하기 쉬워요.',
+    '한쪽으로 체중이 기우는 느낌, 무릎이 안으로 모이려는 움직임이 자주 붙어요.',
+    '하체 쪽 신호가 여러 갈래로 겹쳐 읽힐 수 있어요.',
+  ],
+  LOWER_MOBILITY_RESTRICTION: [
+    '발목·엉덩이 주변이 먼저 뻣뻣하게 느껴지기 쉬워요.',
+    '깊게 앉기 전에 몸이 먼저 버티려 하거나 범위를 줄이려 해요.',
+    '가동성과 안정 신호가 함께 겹쳐 보일 수 있어요.',
+  ],
+  UPPER_IMMOBILITY: [
+    '목·어깨·앞가슴이 먼저 당겨지거나 뭉치기 쉬워요.',
+    '팔을 올릴 때 어깨만 먼저 올라가거나 턱을 내밀기 쉬워요.',
+    '상체 쪽 신호가 겹쳐 읽힐 수 있어요.',
+  ],
+  CORE_CONTROL_DEFICIT: [
+    '숨이 얕아지거나 배·허리가 먼저 조여지기 쉬워요.',
+    '움직일수록 몸통보다 허리에 힘이 먼저 실리려 해요.',
+    '체간 조절과 다른 축이 함께 겹쳐 보일 수 있어요.',
+  ],
+  DECONDITIONED: [
+    '여러 부위가 동시에 무겁게 느껴지는 날이 있어요.',
+    '한 번에 세게 하려는 순간이 오기 쉬워요.',
+    '전신 컨디션 신호가 한꺼번에 올라와 보일 수 있어요.',
+  ],
+  STABLE: [
+    '전반적으로 움직임은 무난한 편이에요.',
+    '그날 컨디션에 따라 감각만 달라질 수 있어요.',
+    '큰 부담 신호 없이 균형 쪽으로 정리돼 보일 수 있어요.',
+  ],
+  UNKNOWN: [
+    '아직 어디가 먼저인지 한 줄로 고정하기 어려워요.',
+    '가볍게 움직이며 반응을 살피는 게 먼저예요.',
+    '정보가 더 쌓이면 시작점을 더 맞출 수 있어요.',
+  ],
+};
+
+/**
+ * Step2 카드 3장. 보조 경향 문장·reason 불릿이 있으면 3번째 카드 본문을 그쪽으로 대체(중복 최소화).
+ */
+export function buildBaselineStep2Cards(
+  pt: UnifiedPrimaryType,
+  reasonInsightLines: string[],
+  secondaryTendencyLine: string | null
+): ResultMiniCard[] {
+  const bodies = BASELINE_STEP2_CARD_BODIES[pt];
+  const titles = BASELINE_STEP2_CARD_TITLES;
+  const cards: ResultMiniCard[] = titles.map((title, i) => ({ title, body: bodies[i] }));
+
+  const dynamicParts: string[] = [];
+  if (secondaryTendencyLine) dynamicParts.push(secondaryTendencyLine);
+  for (const line of reasonInsightLines.slice(0, 2)) {
+    if (line?.trim()) dynamicParts.push(line.trim());
+  }
+  if (dynamicParts.length > 0) {
+    cards[2] = { title: titles[2], body: dynamicParts.join(' ') };
+  }
+  return cards;
 }
 
 // ─── Evidence & Stage ────────────────────────────────────────────────────────
@@ -321,12 +414,12 @@ export function buildRefinementShiftSupportLine(
 
 /** 보조 경향 문장에서 쓸 짧은 명사 (PRIMARY_TYPE_LABELS 직접 노출 방지) */
 const SECONDARY_TENDENCY_NOUNS: Partial<Record<UnifiedPrimaryType, string>> = {
-  LOWER_INSTABILITY:          '하체 균형',
-  LOWER_MOBILITY_RESTRICTION: '하체 움직임',
-  UPPER_IMMOBILITY:           '상체 움직임',
+  LOWER_INSTABILITY:          '하체 쪽',
+  LOWER_MOBILITY_RESTRICTION: '하체 가동',
+  UPPER_IMMOBILITY:           '상체 쪽',
   CORE_CONTROL_DEFICIT:       '몸통 중심',
   DECONDITIONED:              '전반 컨디션',
-  STABLE:                     '균형 유지',
+  STABLE:                     '균형 쪽',
   UNKNOWN:                    '다른 쪽 움직임',
 };
 

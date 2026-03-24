@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react';
-import { ChevronLeft } from 'lucide-react';
+import { AlertCircle, ChevronLeft, Compass, Sparkles } from 'lucide-react';
 import type { UnifiedDeepResultV2, UnifiedPrimaryType } from '@/lib/result/deep-result-v2-contract';
 import { MoveReStepNavRow } from '@/components/public-brand';
 import { StitchSceneProgressRail } from '@/components/stitch/shared/SceneProgressRail';
@@ -14,15 +14,15 @@ import { StitchBottomNavRow } from '@/components/stitch/shared/BottomNavRow';
 import { BaselineResultStep1 } from '@/components/stitch/result/BaselineResultStep1';
 import { BaselineResultStep2 } from '@/components/stitch/result/BaselineResultStep2';
 import { BaselineResultStep3 } from '@/components/stitch/result/BaselineResultStep3';
+import { ResultInsightCard } from '@/components/stitch/result/ResultInsightCard';
 import {
   PRIMARY_TYPE_COLOR,
-  PRIMARY_TYPE_CAREFUL_MOVEMENTS,
   getBaselineStep1ResultSlots,
+  buildBaselineStep2Cards,
   PRIMARY_TYPE_RECOMMENDED_MOVES,
   PRIMARY_TYPE_LIFESTYLE_HABITS,
   PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW,
   PRIMARY_TYPE_START_HOOK,
-  stripSummaryMetaSuffix,
   STEP3_HEADLINE,
   STEP3_ORDER_PREVIEW_SECTION_TITLE,
   EXECUTION_ORDER_PHASE_TITLES,
@@ -37,7 +37,6 @@ import {
   buildSecondaryTendencySentence,
   pickLightMissingHintLine,
   STEP3_ORDER_FIT_BY_PRIMARY,
-  CAREFUL_FIT_BY_PRIMARY,
 } from './public-result-labels';
 
 export type PublicResultStage = 'baseline' | 'refined' | 'fallback';
@@ -127,12 +126,10 @@ export function PublicResultRenderer({
   const typeColor = PRIMARY_TYPE_COLOR[pt] ?? 'var(--mr-public-accent)';
   const stageMeta = STAGE_META[stage];
   const step1Slots = getBaselineStep1ResultSlots(pt);
-  const careful = PRIMARY_TYPE_CAREFUL_MOVEMENTS[pt] ?? PRIMARY_TYPE_CAREFUL_MOVEMENTS.UNKNOWN;
   const rec = PRIMARY_TYPE_RECOMMENDED_MOVES[pt] ?? PRIMARY_TYPE_RECOMMENDED_MOVES.UNKNOWN;
   const life = PRIMARY_TYPE_LIFESTYLE_HABITS[pt] ?? PRIMARY_TYPE_LIFESTYLE_HABITS.UNKNOWN;
   const order = PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW[pt] ?? PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW.UNKNOWN;
   const hook = PRIMARY_TYPE_START_HOOK[pt] ?? PRIMARY_TYPE_START_HOOK.UNKNOWN;
-  const summaryBody = stripSummaryMetaSuffix(result.summary_copy);
 
   const headerHint = buildPublicResultHeaderHint({
     stage,
@@ -146,7 +143,7 @@ export function PublicResultRenderer({
   const missingHintLine = pickLightMissingHintLine(result.missing_signals);
   const secondaryTendencyLine = buildSecondaryTendencySentence(result.secondary_type, pt);
   const step3OrderFitLine = STEP3_ORDER_FIT_BY_PRIMARY[pt] ?? STEP3_ORDER_FIT_BY_PRIMARY.UNKNOWN;
-  const carefulFitLine = CAREFUL_FIT_BY_PRIMARY[pt] ?? CAREFUL_FIT_BY_PRIMARY.UNKNOWN;
+  const step2Cards = buildBaselineStep2Cards(pt, reasonInsightLines, secondaryTendencyLine);
 
   const primaryAction = actions[0];
   const restActions = actions.slice(1);
@@ -189,24 +186,17 @@ export function PublicResultRenderer({
           titlePrefix={stageMeta.titlePrefix}
           typeName={step1Slots.typeName}
           typeAccentColor={typeColor}
-          secondaryTendencyLine={secondaryTendencyLine}
-          summary={step1Slots.summary}
-          patternToWatch={step1Slots.patternToWatch}
-          todayCaution={step1Slots.todayCaution}
-          firstResetDirection={step1Slots.firstResetDirection}
+          heroStateSummary={step1Slots.heroStateSummary}
+          heroCompensationLine={step1Slots.heroCompensationLine}
           onNext={() => setStep(2)}
         />
       )}
 
       {step === 2 && (
         <BaselineResultStep2
-          summaryBody={summaryBody}
-          reasonInsightLines={reasonInsightLines}
+          cards={step2Cards}
           refinementShiftLine={refinementShiftLine}
           missingHintLine={missingHintLine}
-          careful={careful}
-          carefulHeading="일상에서 조심하면 좋은 점"
-          carefulFitLine={carefulFitLine}
           onBack={() => setStep(1)}
           onNext={() => setStep(3)}
         />
@@ -263,6 +253,22 @@ export function PublicResultRenderer({
               {STEP3_REFINED_CONTEXT_LINE}
             </p>
           ) : null}
+
+          <div className="space-y-3">
+            <ResultInsightCard
+              icon={AlertCircle}
+              title="주의할 패턴"
+              body={step1Slots.patternToWatch}
+            />
+            <ResultInsightCard icon={Sparkles} title="오늘의 조심" body={step1Slots.todayCaution} />
+            <ResultInsightCard
+              icon={Compass}
+              title="첫 리셋 방향"
+              body={step1Slots.firstResetDirection}
+              quote
+            />
+          </div>
+
           <p className="break-keep text-sm leading-relaxed text-[#c6c6cd]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
             {hook}
           </p>

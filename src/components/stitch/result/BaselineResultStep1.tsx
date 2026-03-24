@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { AlertCircle, Sparkles } from 'lucide-react';
+import { UserRound } from 'lucide-react';
 import { StitchBottomNavRow } from '@/components/stitch/shared/BottomNavRow';
 
 export type BaselineResultStep1Props = {
@@ -11,129 +11,97 @@ export type BaselineResultStep1Props = {
   typeName: string;
   /** 히어로 타입명 강조색 */
   typeAccentColor: string;
-  /** 보조 경향 한 줄(있을 때만) */
-  secondaryTendencyLine: string | null;
-  /** 짧은 요약(타입명 바로 아래) */
-  summary: string;
-  /** 주의할 패턴(한 블록) */
-  patternToWatch: string;
-  /** 오늘의 조심(한 블록) */
-  todayCaution: string;
-  /** 첫 리셋 방향(한 블록) */
-  firstResetDirection: string;
+  /** 움직임 상태 요약(짧게) */
+  heroStateSummary: string;
+  /** 보상·대체 움직임 경향 한 줄 */
+  heroCompensationLine: string;
   onNext: () => void;
 };
 
 /**
- * stitch baseline type-result — PR-BASELINE-TYPE-UI-AND-COPY-07
- * Stitch 패키지 시각 SSOT: 톤 서피스·에디토리얼 계층·tertiary 아이콘·no-line(미세 border-l 만 오늘 블록).
+ * PR-BASELINE-STEP-IA-09 — zip(7) 히어로: 타입 reveal + 상태 + 보상 경향만.
+ * 가짜 점수·진행 바 없음.
  */
 export function BaselineResultStep1({
   titlePrefix,
   typeName,
   typeAccentColor,
-  secondaryTendencyLine,
-  summary,
-  patternToWatch,
-  todayCaution,
-  firstResetDirection,
+  heroStateSummary,
+  heroCompensationLine,
   onNext,
 }: BaselineResultStep1Props) {
   return (
     <>
-      <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto pb-3 pt-1">
-        {/* A. Hero */}
-        <section className="text-center">
+      <div className="relative min-h-0 flex-1 overflow-y-auto pb-3 pt-1">
+        {/* 배경 글로우 — 측정 UI 아닌 분위기용 */}
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 mx-auto h-48 max-w-sm rounded-full opacity-40 blur-3xl"
+          style={{
+            background: `radial-gradient(circle, ${typeAccentColor}33 0%, transparent 70%)`,
+          }}
+          aria-hidden
+        />
+
+        <section className="relative flex flex-col items-center px-1 text-center">
           <span
-            className="block text-sm italic text-[#ffb77d]/80 tracking-wide [font-family:var(--font-display)]"
+            className="text-[11px] font-medium uppercase tracking-[0.28em] text-[#ffb77d]/75"
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
           >
             {titlePrefix}
           </span>
+          <p
+            className="mt-2 text-xs italic text-[#c6c6cd]/80 [font-family:var(--font-display)]"
+          >
+            오늘의 움직임 타입
+          </p>
+
+          <div className="relative mt-6 flex size-28 items-center justify-center">
+            <div
+              className="absolute inset-0 rounded-full opacity-30 blur-md"
+              style={{ background: typeAccentColor }}
+              aria-hidden
+            />
+            <div
+              className="relative flex size-24 items-center justify-center rounded-full border border-white/10 bg-[#151b2d]/90 shadow-inner"
+              style={{ boxShadow: `0 0 0 1px ${typeAccentColor}40 inset` }}
+            >
+              <UserRound className="size-11" style={{ color: typeAccentColor }} strokeWidth={1.25} aria-hidden />
+            </div>
+          </div>
+
           <h2
-            className="mt-2.5 break-keep text-[1.85rem] font-light italic leading-[1.2] tracking-tight [font-family:var(--font-display)] md:text-[2rem]"
+            className="mt-6 max-w-[20rem] break-keep text-[1.75rem] font-light italic leading-[1.15] tracking-tight [font-family:var(--font-display)] md:text-[2rem]"
             style={{ color: typeAccentColor }}
           >
             {typeName}
           </h2>
+
           <p
-            className="mx-auto mt-3 max-w-[22rem] break-keep text-sm leading-relaxed text-[#c6c6cd]"
+            className="mx-auto mt-4 max-w-[22rem] break-keep text-sm leading-relaxed text-[#c6c6cd]"
             style={{ fontFamily: 'var(--font-sans-noto)' }}
           >
-            {summary}
+            {heroStateSummary}
           </p>
-          {secondaryTendencyLine ? (
+
+          <div
+            className="mx-auto mt-5 w-full max-w-[22rem] rounded-xl border border-[#ffb77d]/15 bg-[#151b2d]/80 px-4 py-3 text-left"
+          >
             <p
-              className="mt-2 break-keep text-xs text-slate-500"
+              className="text-[10px] uppercase tracking-[0.2em] text-[#fcb973]/90"
               style={{ fontFamily: 'var(--font-sans-noto)' }}
             >
-              {secondaryTendencyLine}
+              자주 붙는 움직임 경향
             </p>
-          ) : null}
-          <div className="mx-auto mt-5 h-px w-12 bg-[#ffb77d]/30" />
+            <p
+              className="mt-2 break-keep text-sm leading-relaxed text-[#dce1fb]/95"
+              style={{ fontFamily: 'var(--font-sans-noto)' }}
+            >
+              {heroCompensationLine}
+            </p>
+          </div>
+
+          <div className="mx-auto mt-8 h-px w-14 bg-[#ffb77d]/35" aria-hidden />
         </section>
-
-        {/* 1. 주의할 패턴 — surface-container-highest, tertiary 아이콘 */}
-        <div className="rounded-xl bg-[#2e3447] px-5 py-5">
-          <p
-            className="mb-3 text-[10px] uppercase tracking-[0.2em] text-[#fcb973]"
-            style={{ fontFamily: 'var(--font-sans-noto)' }}
-          >
-            주의할 패턴
-          </p>
-          <div className="flex gap-3 break-keep text-sm leading-relaxed text-[#c6c6cd]">
-            <AlertCircle
-              className="mt-0.5 size-[1.15rem] shrink-0 text-[#fcb973]/65"
-              strokeWidth={1.5}
-              aria-hidden
-            />
-            <p style={{ fontFamily: 'var(--font-sans-noto)' }}>{patternToWatch}</p>
-          </div>
-        </div>
-
-        {/* 2. 오늘의 조심 — surface-container-low + 좌측 앰버 라인, 원형 아이콘 */}
-        <div className="rounded-xl border-l border-[#ffb77d]/10 bg-[#151b2d] px-5 py-5 pl-4">
-          <p
-            className="mb-4 text-[10px] uppercase tracking-[0.2em] text-[#ffb77d]"
-            style={{ fontFamily: 'var(--font-sans-noto)' }}
-          >
-            오늘의 조심
-          </p>
-          <div className="flex items-start gap-4">
-            <div
-              className="flex size-14 shrink-0 items-center justify-center rounded-full bg-[#2e3447]"
-              aria-hidden
-            >
-              <Sparkles className="size-7 text-[#ffb77d]" strokeWidth={1.25} />
-            </div>
-            <p
-              className="min-w-0 flex-1 break-keep text-sm leading-relaxed text-[#c6c6cd]"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
-            >
-              {todayCaution}
-            </p>
-          </div>
-        </div>
-
-        {/* 3. 첫 리셋 방향 — surface-container-high, bento-glow 느낌 */}
-        <div
-          className="relative overflow-hidden rounded-xl px-5 py-5"
-          style={{
-            background:
-              'radial-gradient(circle at top right, rgba(255,183,125,0.07), transparent 68%), #23293c',
-          }}
-        >
-          <p
-            className="mb-3 text-[10px] uppercase tracking-[0.2em] text-[#ffb68e]"
-            style={{ fontFamily: 'var(--font-sans-noto)' }}
-          >
-            첫 리셋 방향
-          </p>
-          <p
-            className="break-keep text-base italic leading-relaxed text-[#dce1fb] [font-family:var(--font-display)]"
-          >
-            &ldquo;{firstResetDirection}&rdquo;
-          </p>
-        </div>
       </div>
 
       <ResultStitchFooter>
