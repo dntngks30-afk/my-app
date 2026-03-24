@@ -11,11 +11,13 @@
  *
  * PR-SURVEY-02: 무료 설문이 `survey_axis_interaction_hints`를 넘기면 비-STABLE 에서만
  *               보수적 축 조정 1패스 적용(카메라/유료는 hints 없음 → 동일 동작).
+ * PR-SURVEY-03: deconditioned 유사 패턴 내부 해석 + reason_codes / priority 소폭 보정.
  *
  * @see src/lib/deep-test/scoring/deep_v3.ts (원본 참조)
  */
 
 import { getFocusToTags, getAxisToAvoid } from '@/lib/deep-test/config';
+import { evaluateDeconditionedInterpretation } from './deconditioned-interpretation';
 import { applySurveyAxisInteractionAdjustments } from './survey-axis-interactions';
 import type {
   DeepScoringEvidence,
@@ -294,6 +296,16 @@ export function runDeepScoringCore(
     secondary_type = classified.secondary_type;
   }
 
+  const deconditioned_interpretation = stable
+    ? 'none'
+    : evaluateDeconditionedInterpretation(
+        sv,
+        primary_type,
+        secondary_type,
+        pain_mode,
+        evidence
+      );
+
   // Confidence 계산
   const confidence_base = evidence.total_count > 0
     ? evidence.answered_count / evidence.total_count
@@ -309,15 +321,28 @@ export function runDeepScoringCore(
   const confidence = Math.min(1, Math.max(0, confidence_base + confidence_gap_bonus));
 
   // Priority vector (0~1 정규화)
-  const priority_vector = normalizePriorityVector(sv);
+  let priority_vector = normalizePriorityVector(sv);
+  // PR-SURVEY-03: low_confidence일 때 decond 우선순위만 살짝 낮춤(타입 분류 불변)
+  if (deconditioned_interpretation === 'low_confidence') {
+    priority_vector = {
+      ...priority_vector,
+      deconditioned: Math.min(1, priority_vector.deconditioned * 0.93),
+    };
+  }
 
   // Derived (tags, level, algorithm_scores)
   const derived = buildDerived(primary_type, secondary_type, pain_mode, sv, confidence);
 
-  // Reason codes + interaction audit tags
+  const interpReason =
+    deconditioned_interpretation === 'none'
+      ? []
+      : [`decond_interp_${deconditioned_interpretation}`];
+
+  // Reason codes + interaction audit tags + decond 해석
   const reason_codes = [
     ...buildReasonCodes(sv, pain_mode, primary_type),
     ...fired_rule_ids.map((id) => `interaction_${id}`),
+    ...interpReason,
   ];
 
   // missing_signals 전달 (evidence에서)
@@ -335,5 +360,6 @@ export function runDeepScoringCore(
     missing_signals,
     derived,
     axis_scores_raw: { ...sv },
+    deconditioned_interpretation,
   };
 }

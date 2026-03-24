@@ -121,6 +121,7 @@ function coreResultToUnifiedV2(
       // buildSessionDeepSummaryFromPublicResult의 normalization guard와 정렬하여
       // 이제부터 canonical 값을 직접 씁니다.
       scoring_version: 'deep_v2',
+      survey_deconditioned_interpretation: coreResult.deconditioned_interpretation,
     },
   };
 }

@@ -154,6 +154,10 @@ export interface UnifiedDeepResultV2 {
      * - 소비: build-camera-refined-result.ts에서 snapshot 우선, 없으면 proxy fallback.
      * - 하위 호환: 이전에 생성된 payload에는 이 필드가 없으므로 optional.
      */
+    /**
+     * PR-SURVEY-03: 무료 설문 baseline에서만 채움. deconditioned “형태” 내부 레이블(카피/IA 비노출).
+     */
+    survey_deconditioned_interpretation?: 'broad' | 'hybrid' | 'low_confidence' | 'none';
     baseline_deep_evidence_snapshot?: {
       /** 스냅샷 버전 식별자 (마이그레이션/디버깅용) */
       schema_version: 'free_survey_baseline_evidence_v1';

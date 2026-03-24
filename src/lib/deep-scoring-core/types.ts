@@ -140,6 +140,15 @@ export type ScoringPrimaryType =
 
 export type ScoringSecondaryType = ScoringPrimaryType | null;
 
+/**
+ * PR-SURVEY-03: deconditioned 유사 패턴 내부 해석(공개 primary_type과 별개).
+ * - broad: 다축이 둔탁하게 함께 올라간 전반 저컨디션 뉘앙스
+ * - hybrid: 특정 축 우세 + decond가 의미 있게 같이 깔림
+ * - low_confidence: 지지 신호는 있으나 주도하기엔 약함
+ * - none: 해당 없음
+ */
+export type DeconditionedInterpretation = 'broad' | 'hybrid' | 'low_confidence' | 'none';
+
 /** 통증/보호 모드 */
 export type ScoringPainMode = 'none' | 'caution' | 'protected';
 
@@ -195,4 +204,8 @@ export interface DeepScoringCoreResult {
    * deep_v2/v3 objectiveScores/finalScores 재구성에 사용
    */
   axis_scores_raw: AxisScores;
+  /**
+   * PR-SURVEY-03: decond 형태 내부 레이블(렌더러/카피 미사용).
+   */
+  deconditioned_interpretation: DeconditionedInterpretation;
 }
