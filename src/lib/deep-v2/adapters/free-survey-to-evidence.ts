@@ -65,6 +65,9 @@
  *
  * @see src/lib/deep-scoring-core/core.ts
  * @see src/lib/deep-scoring-core/types.ts
+ *
+ * PR-SURVEY-01: 18문항 기여를 QuestionContribution 맵으로 단일화(axis·가중치·signalType).
+ *               수치는 PR-FREE-SURVEY-MULTI-AXIS-DEEP-MAPPING-01과 동치(slot×share).
  */
 
 import type { AnimalAxis, TestAnswerValue } from '@/features/movement-test/v2';
@@ -88,6 +91,141 @@ const FREE_SURVEY_QUESTION_IDS = [
 
 const FREE_SURVEY_TOTAL_COUNT = FREE_SURVEY_QUESTION_IDS.length; // 18
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// PR-SURVEY-01 — Question contribution map (typed, single source of truth)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 문항 응답이 해당 축 raw에 더해질 때의 신뢰/성격 메타.
+ * - direct: 하체 불안정·비대칭 등 자기보고와 축 의미가 직접 맞닿은 기여
+ * - contextual: 둘 이상 축에 흩어지거나 상부 전방/체간 등 맥락적 해석이 큰 기여
+ * - noise_prone: 전신 긴장·guarding 등 deconditioned 프록시로 오판 가능성이 높은 기여
+ *
+ * signalType은 현재 스코어링 수식에 들어가지 않음(PR-SURVEY-02+ 튜닝·감사용).
+ */
+export type QuestionSignalType = 'direct' | 'contextual' | 'noise_prone';
+
+export type QuestionContribution = {
+  axis: keyof AxisScores;
+  /**
+   * 축 raw 누적 시 계수: `axis_raw[axis] += answerValue * weight`
+   * (= 구 QUESTION_SLOT_WEIGHT[q] × axisShare[q,axis])
+   */
+  weight: number;
+  signalType: QuestionSignalType;
+};
+
+/** 슬롯 가중(W1/W2/W3) × 축 share → QuestionContribution[] */
+function buildQuestionContributions(
+  slotWeight: number,
+  parts: readonly { axis: keyof AxisScores; share: number; signalType: QuestionSignalType }[]
+): QuestionContribution[] {
+  return parts.map((p) => ({
+    axis: p.axis,
+    weight: slotWeight * p.share,
+    signalType: p.signalType,
+  }));
+}
+
+/**
+ * 무료 설문 18문항 각각의 축 기여 목록(합산 시 구 다축 테이블과 동일).
+ *
+ * 그룹별 signalType 요약:
+ *   A — 경추·어깨 전방: contextual
+ *   B — 흉추/가슴: upper 직접성 강함 → upper direct, trunk contextual
+ *   C — 허리·골반: trunk direct, lower contextual, C2 deconditioned만 noise_prone
+ *   D — 무릎·발목: 전부 direct
+ *   F — 비대칭: asymmetry direct, 나머지 contextual
+ *   G — guarding/긴장: upper·trunk contextual, deconditioned noise_prone
+ */
+export const FREE_SURVEY_QUESTION_CONTRIBUTION_MAP: Record<
+  (typeof FREE_SURVEY_QUESTION_IDS)[number],
+  QuestionContribution[]
+> = {
+  v2_A1: buildQuestionContributions(1.4, [
+    { axis: 'upper_mobility', share: 0.4, signalType: 'contextual' },
+    { axis: 'trunk_control', share: 0.6, signalType: 'contextual' },
+  ]),
+  v2_A2: buildQuestionContributions(1.2, [
+    { axis: 'upper_mobility', share: 0.45, signalType: 'contextual' },
+    { axis: 'trunk_control', share: 0.55, signalType: 'contextual' },
+  ]),
+  v2_A3: buildQuestionContributions(1.0, [
+    { axis: 'upper_mobility', share: 0.35, signalType: 'contextual' },
+    { axis: 'trunk_control', share: 0.65, signalType: 'contextual' },
+  ]),
+  v2_B1: buildQuestionContributions(1.4, [
+    { axis: 'upper_mobility', share: 0.75, signalType: 'direct' },
+    { axis: 'trunk_control', share: 0.25, signalType: 'contextual' },
+  ]),
+  v2_B2: buildQuestionContributions(1.2, [
+    { axis: 'upper_mobility', share: 0.85, signalType: 'direct' },
+    { axis: 'trunk_control', share: 0.15, signalType: 'contextual' },
+  ]),
+  v2_B3: buildQuestionContributions(1.0, [
+    { axis: 'upper_mobility', share: 0.55, signalType: 'direct' },
+    { axis: 'trunk_control', share: 0.45, signalType: 'contextual' },
+  ]),
+  v2_C1: buildQuestionContributions(1.4, [
+    { axis: 'lower_stability', share: 0.1, signalType: 'contextual' },
+    { axis: 'lower_mobility', share: 0.3, signalType: 'contextual' },
+    { axis: 'trunk_control', share: 0.6, signalType: 'direct' },
+  ]),
+  v2_C2: buildQuestionContributions(1.2, [
+    { axis: 'lower_stability', share: 0.15, signalType: 'contextual' },
+    { axis: 'lower_mobility', share: 0.15, signalType: 'contextual' },
+    { axis: 'trunk_control', share: 0.55, signalType: 'direct' },
+    { axis: 'deconditioned', share: 0.15, signalType: 'noise_prone' },
+  ]),
+  v2_C3: buildQuestionContributions(1.0, [
+    { axis: 'lower_stability', share: 0.2, signalType: 'contextual' },
+    { axis: 'lower_mobility', share: 0.25, signalType: 'contextual' },
+    { axis: 'trunk_control', share: 0.55, signalType: 'direct' },
+  ]),
+  v2_D1: buildQuestionContributions(1.4, [
+    { axis: 'lower_stability', share: 0.7, signalType: 'direct' },
+    { axis: 'lower_mobility', share: 0.3, signalType: 'direct' },
+  ]),
+  v2_D2: buildQuestionContributions(1.2, [
+    { axis: 'lower_stability', share: 0.45, signalType: 'direct' },
+    { axis: 'lower_mobility', share: 0.55, signalType: 'direct' },
+  ]),
+  v2_D3: buildQuestionContributions(1.0, [
+    { axis: 'lower_stability', share: 0.8, signalType: 'direct' },
+    { axis: 'lower_mobility', share: 0.2, signalType: 'direct' },
+  ]),
+  v2_F1: buildQuestionContributions(1.4, [
+    { axis: 'lower_stability', share: 0.15, signalType: 'contextual' },
+    { axis: 'trunk_control', share: 0.2, signalType: 'contextual' },
+    { axis: 'asymmetry', share: 0.65, signalType: 'direct' },
+  ]),
+  v2_F2: buildQuestionContributions(1.2, [
+    { axis: 'lower_stability', share: 0.1, signalType: 'contextual' },
+    { axis: 'trunk_control', share: 0.1, signalType: 'contextual' },
+    { axis: 'asymmetry', share: 0.8, signalType: 'direct' },
+  ]),
+  v2_F3: buildQuestionContributions(1.0, [
+    { axis: 'lower_stability', share: 0.1, signalType: 'contextual' },
+    { axis: 'trunk_control', share: 0.15, signalType: 'contextual' },
+    { axis: 'asymmetry', share: 0.75, signalType: 'direct' },
+  ]),
+  v2_G1: buildQuestionContributions(1.4, [
+    { axis: 'upper_mobility', share: 0.35, signalType: 'contextual' },
+    { axis: 'trunk_control', share: 0.35, signalType: 'contextual' },
+    { axis: 'deconditioned', share: 0.3, signalType: 'noise_prone' },
+  ]),
+  v2_G2: buildQuestionContributions(1.2, [
+    { axis: 'upper_mobility', share: 0.55, signalType: 'contextual' },
+    { axis: 'trunk_control', share: 0.35, signalType: 'contextual' },
+    { axis: 'deconditioned', share: 0.1, signalType: 'noise_prone' },
+  ]),
+  v2_G3: buildQuestionContributions(1.0, [
+    { axis: 'upper_mobility', share: 0.5, signalType: 'contextual' },
+    { axis: 'trunk_control', share: 0.35, signalType: 'contextual' },
+    { axis: 'deconditioned', share: 0.15, signalType: 'noise_prone' },
+  ]),
+};
+
 /**
  * 응답된 문항 수 계산.
  * undefined / null 은 미응답으로 취급한다.
@@ -99,64 +237,8 @@ function countAnswered(answers: Record<string, TestAnswerValue | undefined>): nu
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SECTION A: 신규 다축 매핑 (PR-FREE-SURVEY-MULTI-AXIS-DEEP-MAPPING-01)
+// SECTION A: 다축 매핑 (축 share·슬롯 가중은 FREE_SURVEY_QUESTION_CONTRIBUTION_MAP)
 // ═══════════════════════════════════════════════════════════════════════════════
-
-// ─── 다축 매핑 테이블 ──────────────────────────────────────────────────────────
-
-/**
- * 문항별 deep axis 기여 비율 (sparse multi-axis mapping v1).
- * 각 행의 share 합 = 1.0.
- *
- * 그룹별 의미:
- *   A: 경추·어깨 전방화 (상부 전방 → upper_mobility + trunk_control)
- *   B: 가슴 닫힘·등 굽음 (흉추 제한 → upper_mobility 강함)
- *   C: 허리 과부하·골반 지지 부족 (trunk_control 주, lower 보조)
- *   D: 무릎·발목 불안정 (lower_stability / lower_mobility 직접)
- *   F: 편측 의존·비대칭 (asymmetry 주)
- *   G: 전신 긴장·guarding (upper_mobility + trunk_control, deconditioned 보조)
- *      주의: G군은 디컨디셔닝보다 guarding/tension 성격이 강하므로
- *            deconditioned 비율을 낮게(0.10~0.30) 설정.
- */
-const QUESTION_AXIS_SHARES: Record<string, Partial<Record<keyof AxisScores, number>>> = {
-  // A 그룹 — 경추·어깨 전방화
-  v2_A1: { upper_mobility: 0.40, trunk_control: 0.60 },
-  v2_A2: { upper_mobility: 0.45, trunk_control: 0.55 },
-  v2_A3: { upper_mobility: 0.35, trunk_control: 0.65 },
-  // B 그룹 — 가슴 닫힘·흉추 굴곡
-  v2_B1: { upper_mobility: 0.75, trunk_control: 0.25 },
-  v2_B2: { upper_mobility: 0.85, trunk_control: 0.15 },
-  v2_B3: { upper_mobility: 0.55, trunk_control: 0.45 },
-  // C 그룹 — 허리 과부하
-  v2_C1: { lower_stability: 0.10, lower_mobility: 0.30, trunk_control: 0.60 },
-  v2_C2: { lower_stability: 0.15, lower_mobility: 0.15, trunk_control: 0.55, deconditioned: 0.15 },
-  v2_C3: { lower_stability: 0.20, lower_mobility: 0.25, trunk_control: 0.55 },
-  // D 그룹 — 무릎·발목 불안정
-  v2_D1: { lower_stability: 0.70, lower_mobility: 0.30 },
-  v2_D2: { lower_stability: 0.45, lower_mobility: 0.55 },
-  v2_D3: { lower_stability: 0.80, lower_mobility: 0.20 },
-  // F 그룹 — 편측 의존·비대칭
-  v2_F1: { lower_stability: 0.15, trunk_control: 0.20, asymmetry: 0.65 },
-  v2_F2: { lower_stability: 0.10, trunk_control: 0.10, asymmetry: 0.80 },
-  v2_F3: { lower_stability: 0.10, trunk_control: 0.15, asymmetry: 0.75 },
-  // G 그룹 — 전신 긴장·guarding
-  v2_G1: { upper_mobility: 0.35, trunk_control: 0.35, deconditioned: 0.30 },
-  v2_G2: { upper_mobility: 0.55, trunk_control: 0.35, deconditioned: 0.10 },
-  v2_G3: { upper_mobility: 0.50, trunk_control: 0.35, deconditioned: 0.15 },
-};
-
-/**
- * 문항별 슬롯 가중치 (가족 내 순서: q1=1.4, q2=1.2, q3=1.0).
- * scoring.v2.ts의 W1/W2/W3와 동일.
- */
-const QUESTION_SLOT_WEIGHT: Record<string, number> = {
-  v2_A1: 1.4, v2_A2: 1.2, v2_A3: 1.0,
-  v2_B1: 1.4, v2_B2: 1.2, v2_B3: 1.0,
-  v2_C1: 1.4, v2_C2: 1.2, v2_C3: 1.0,
-  v2_D1: 1.4, v2_D2: 1.2, v2_D3: 1.0,
-  v2_F1: 1.4, v2_F2: 1.2, v2_F3: 1.0,
-  v2_G1: 1.4, v2_G2: 1.2, v2_G3: 1.0,
-};
 
 /** 3문항 가족 묶음 (q1 캡 적용 단위) */
 const SURVEY_FAMILIES: { q1: string; q2: string; q3: string }[] = [
@@ -315,7 +397,7 @@ function resolveAnswerValue(
  *
  * 18문항 답변 → 6축 raw 누적값 (cap 미적용, 미응답=2 치환).
  *
- * axis_raw[a] = Σ_q answer[q] * slotWeight[q] * axisShare[q,a]
+ * axis_raw[a] = Σ_q Σ_contrib answer[q] * weight (weight = slot × share, PR-SURVEY-01)
  *
  * 이 함수는 회귀 비교 및 단위 테스트용.
  * 실제 파이프라인은 applyFamilyCapRules를 직접 사용.
@@ -327,11 +409,12 @@ export function computeSurveyAxisRawScoresFromAnswers(
     lower_stability: 0, lower_mobility: 0, upper_mobility: 0,
     trunk_control: 0, asymmetry: 0, deconditioned: 0,
   };
-  for (const [qId, shares] of Object.entries(QUESTION_AXIS_SHARES)) {
+  for (const qId of FREE_SURVEY_QUESTION_IDS) {
     const v = resolveAnswerValue(answers, qId);
-    const w = QUESTION_SLOT_WEIGHT[qId] ?? 1.0;
-    for (const [axis, share] of Object.entries(shares)) {
-      (raw as Record<string, number>)[axis] += v * w * (share ?? 0);
+    for (const c of FREE_SURVEY_QUESTION_CONTRIBUTION_MAP[qId]) {
+      if (c.weight > 0) {
+        raw[c.axis] += v * c.weight;
+      }
     }
   }
   return raw;
@@ -378,11 +461,13 @@ export function applyFamilyCapRules(
 
     for (const qId of questions) {
       const v = resolveAnswerValue(answers, qId);
-      const w = QUESTION_SLOT_WEIGHT[qId] ?? 1.0;
-      const shares = QUESTION_AXIS_SHARES[qId] ?? {};
-      for (const [axis, share] of Object.entries(shares)) {
-        (familyContrib as Record<string, number>)[axis] += v * w * (share ?? 0);
-        (familyMax as Record<string, number>)[axis] += 4 * w * (share ?? 0);
+      const contribs =
+        FREE_SURVEY_QUESTION_CONTRIBUTION_MAP[qId as (typeof FREE_SURVEY_QUESTION_IDS)[number]];
+      for (const c of contribs) {
+        if (c.weight > 0) {
+          familyContrib[c.axis] += v * c.weight;
+          familyMax[c.axis] += 4 * c.weight;
+        }
       }
     }
 
