@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react';
-import { AlertCircle, ChevronLeft, Compass, Sparkles } from 'lucide-react';
+import { ChevronLeft, Link2, Wind, Zap } from 'lucide-react';
 import type { UnifiedDeepResultV2, UnifiedPrimaryType } from '@/lib/result/deep-result-v2-contract';
 import { MoveReStepNavRow } from '@/components/public-brand';
 import { StitchSceneProgressRail } from '@/components/stitch/shared/SceneProgressRail';
@@ -19,24 +19,17 @@ import {
   PRIMARY_TYPE_COLOR,
   getBaselineStep1ResultSlots,
   buildBaselineStep2Cards,
-  PRIMARY_TYPE_RECOMMENDED_MOVES,
   PRIMARY_TYPE_LIFESTYLE_HABITS,
   PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW,
-  PRIMARY_TYPE_START_HOOK,
   STEP3_HEADLINE,
-  STEP3_ORDER_PREVIEW_SECTION_TITLE,
   EXECUTION_ORDER_PHASE_TITLES,
-  STEP3_PREVIEW_DISCLAIMER,
-  STEP3_VALUE_PILLARS,
   STEP3_REFINED_CONTEXT_LINE,
-  STEP3_RECOMMENDED_SECTION_TITLE,
   STEP3_LIFESTYLE_SECTION_TITLE,
   buildPublicResultHeaderHint,
   pickReasonInsightBullets,
   buildRefinementShiftSupportLine,
   buildSecondaryTendencySentence,
   pickLightMissingHintLine,
-  STEP3_ORDER_FIT_BY_PRIMARY,
   stripSummaryMetaSuffix,
 } from './public-result-labels';
 
@@ -115,6 +108,9 @@ function ActionButton({ action }: { action: PublicResultAction }) {
 
 const stitchGlassCard = 'rounded-2xl border border-white/[0.06] bg-[#151b2d]/45 px-4 py-3 backdrop-blur-sm';
 
+/** PR-15 Step3 상단 3액션 카드 아이콘(풀기 → 깨우기 → 연결) */
+const STEP3_ACTION_ICONS = [Wind, Zap, Link2] as const;
+
 export function PublicResultRenderer({
   result,
   stage,
@@ -127,10 +123,8 @@ export function PublicResultRenderer({
   const typeColor = PRIMARY_TYPE_COLOR[pt] ?? 'var(--mr-public-accent)';
   const stageMeta = STAGE_META[stage];
   const step1Slots = getBaselineStep1ResultSlots(pt);
-  const rec = PRIMARY_TYPE_RECOMMENDED_MOVES[pt] ?? PRIMARY_TYPE_RECOMMENDED_MOVES.UNKNOWN;
   const life = PRIMARY_TYPE_LIFESTYLE_HABITS[pt] ?? PRIMARY_TYPE_LIFESTYLE_HABITS.UNKNOWN;
   const order = PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW[pt] ?? PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW.UNKNOWN;
-  const hook = PRIMARY_TYPE_START_HOOK[pt] ?? PRIMARY_TYPE_START_HOOK.UNKNOWN;
   /** summary_copy 계약 필드 — 괄호 메타 제거본 (표시는 카드 슬롯 우선, a11y·심볼 정합용) */
   const summaryCopyPlain = stripSummaryMetaSuffix(result.summary_copy);
 
@@ -145,7 +139,6 @@ export function PublicResultRenderer({
   const refinementShiftLine = buildRefinementShiftSupportLine(result.reason_codes, stage);
   const missingHintLine = pickLightMissingHintLine(result.missing_signals);
   const secondaryTendencyLine = buildSecondaryTendencySentence(result.secondary_type, pt);
-  const step3OrderFitLine = STEP3_ORDER_FIT_BY_PRIMARY[pt] ?? STEP3_ORDER_FIT_BY_PRIMARY.UNKNOWN;
   const step2Cards = buildBaselineStep2Cards(pt, reasonInsightLines, secondaryTendencyLine);
 
   const primaryAction = actions[0];
@@ -256,99 +249,21 @@ export function PublicResultRenderer({
             </p>
           ) : null}
 
-          <div className="space-y-3">
-            <ResultInsightCard
-              icon={AlertCircle}
-              title="주의할 패턴"
-              body={step1Slots.patternToWatch}
-            />
-            <ResultInsightCard icon={Sparkles} title="오늘의 조심" body={step1Slots.todayCaution} />
-            <ResultInsightCard
-              icon={Compass}
-              title="첫 리셋 방향"
-              body={step1Slots.firstResetDirection}
-              quote
-            />
-          </div>
-
-          <p className="break-keep text-sm leading-relaxed text-[#c6c6cd]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-            {hook}
-          </p>
-          <p
-            className="break-keep text-[11px] leading-relaxed text-slate-500"
-            style={{ fontFamily: 'var(--font-sans-noto)' }}
-          >
-            {step3OrderFitLine}
-          </p>
-
-          <div className="space-y-3 rounded-2xl border border-[#ffb77d]/25 bg-[#151b2d]/50 p-4 backdrop-blur-md">
-            <div>
-              <p className="text-sm font-bold text-[#ffb77d]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                {STEP3_ORDER_PREVIEW_SECTION_TITLE}
-              </p>
-              <p
-                className="mt-1.5 break-keep text-[11px] leading-relaxed text-slate-500"
-                style={{ fontFamily: 'var(--font-sans-noto)' }}
-              >
-                {STEP3_PREVIEW_DISCLAIMER}
-              </p>
-            </div>
-            <ol className="list-none space-y-3">
-              {([0, 1, 2] as const).map((i) => (
-                <li key={i} className="flex gap-3">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ffb77d] to-[#ab4c00] text-xs font-bold text-[#4d2600]">
-                    {i + 1}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-[11px] text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                      {EXECUTION_ORDER_PHASE_TITLES[i]}
-                    </p>
-                    <p
-                      className="mt-0.5 break-keep text-[11px] leading-relaxed text-slate-500"
-                      style={{ fontFamily: 'var(--font-sans-noto)' }}
-                    >
-                      {order[i].purpose}
-                    </p>
-                    <p
-                      className="mt-1 break-keep text-sm leading-relaxed text-[#dce1fb]"
-                      style={{ fontFamily: 'var(--font-sans-noto)' }}
-                    >
-                      {order[i].examples}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </div>
-
-          <div className={stitchGlassCard}>
-            <p className="text-xs text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              실행을 시작하면
-            </p>
-            <ul className="mt-2 space-y-2">
-              {STEP3_VALUE_PILLARS.map((line, i) => (
-                <li
-                  key={i}
-                  className="flex gap-2.5 break-keep text-sm leading-relaxed text-[#c6c6cd]"
-                  style={{ fontFamily: 'var(--font-sans-noto)' }}
-                >
-                  <span className="shrink-0 text-[#ffb77d]" aria-hidden>
-                    ·
-                  </span>
-                  <span>{line}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className={stitchGlassCard}>
-            <p className="text-xs text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              {STEP3_RECOMMENDED_SECTION_TITLE}
-            </p>
-            <ul className="mt-2 space-y-1.5 text-sm text-[#dce1fb]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              <li>· {rec[0]}</li>
-              <li>· {rec[1]}</li>
-            </ul>
+          {/* PR-15: Step3 = 시작 플랜 — 패턴/조심/리셋 카드 제거, 순서 예시 박스 제거, 액션 카드 3장만 상단 */}
+          <div className="space-y-2.5">
+            {([0, 1, 2] as const).map((i) => {
+              const Icon = STEP3_ACTION_ICONS[i];
+              return (
+                <ResultInsightCard
+                  key={EXECUTION_ORDER_PHASE_TITLES[i]}
+                  icon={Icon}
+                  title={EXECUTION_ORDER_PHASE_TITLES[i]}
+                  body={order[i].purpose}
+                  examplesLine={order[i].examples}
+                  compact
+                />
+              );
+            })}
           </div>
 
           <div className={stitchGlassCard}>

@@ -11,9 +11,18 @@ export type ResultInsightCardProps = {
   quote?: boolean;
   /** Step2 등 짧은 카드용 — 패딩·아이콘 소폭 축소 */
   compact?: boolean;
+  /** Step3 액션 카드: body=목적 한 줄, 여기=운동 예시(구체 명칭) */
+  examplesLine?: string;
 };
 
-export function ResultInsightCard({ icon: Icon, title, body, quote, compact }: ResultInsightCardProps) {
+export function ResultInsightCard({
+  icon: Icon,
+  title,
+  body,
+  quote,
+  compact,
+  examplesLine,
+}: ResultInsightCardProps) {
   const pad = compact ? 'px-4 py-3.5' : 'p-5';
   const iconCls = compact ? 'mb-1.5 size-6' : 'mb-2 size-7';
   const titleCls = compact
@@ -33,6 +42,21 @@ export function ResultInsightCard({ icon: Icon, title, body, quote, compact }: R
         >
           &ldquo;{body}&rdquo;
         </p>
+      ) : examplesLine ? (
+        <>
+          <p
+            className={`${compact ? 'mt-1' : 'mt-1.5'} break-keep text-[11px] leading-relaxed text-slate-500`}
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
+          >
+            {body}
+          </p>
+          <p
+            className={`mt-1 break-keep ${compact ? 'text-[13px]' : 'text-sm'} leading-relaxed text-[#dce1fb]`}
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
+          >
+            {examplesLine}
+          </p>
+        </>
       ) : (
         <p
           className={`${bodyCls} break-keep text-[#c6c6cd]`}

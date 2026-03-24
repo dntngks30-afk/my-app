@@ -806,19 +806,19 @@ export function stripSummaryMetaSuffix(summary: string): string {
   return summary.replace(/\s*[\(（][^)）]*[)）]\s*$/u, '').trim();
 }
 
-// ─── PR-CONVERSION-PREVIEW-04 — Step 3 실행 순서·전환 가치 (표현 전용) ─
+// ─── PR-CONVERSION-PREVIEW-04 — Step 3 실행 순서·전환 가치 (표시 전용) ─
+// PR-15: Step3 UI에서는 일부 상수만 사용. 아래 블록 제목/필러 등은 export 유지(문서·향후용).
 
 /** Step 3 메인 헤드라인 */
 export const STEP3_HEADLINE = '지금 몸 상태로 이렇게 시작해요';
 
-/** Step 3 순서 예시 카드 제목 */
+/** @deprecated Step3 화면에서 미사용(PR-15). 순서는 상단 액션 카드로만 표시. */
 export const STEP3_ORDER_PREVIEW_SECTION_TITLE = '지금 시작 순서 예시';
 
 /**
- * 시작 순서 3단계 — 단계 이름(고정). PR-14: 먼저 풀기 → 깨우기 → 연결.
- * PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW 슬롯과 1:1 짝.
+ * Step3 상단 액션 카드 제목(고정). PR-15 구조 리셋 — PR-14 슬롯과 1:1 짝.
  */
-export const EXECUTION_ORDER_PHASE_TITLES = ['먼저 풀기', '그다음 깨우기', '마지막 연결하기'] as const;
+export const EXECUTION_ORDER_PHASE_TITLES = ['먼저 풀기', '그다음 깨우기', '움직임 연결하기'] as const;
 
 /** 순서 블록 직후 — 사실 안전한 면책(과장 금지) */
 export const STEP3_PREVIEW_DISCLAIMER =
