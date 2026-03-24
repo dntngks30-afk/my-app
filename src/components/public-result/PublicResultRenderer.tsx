@@ -37,6 +37,7 @@ import {
   buildSecondaryTendencySentence,
   pickLightMissingHintLine,
   STEP3_ORDER_FIT_BY_PRIMARY,
+  stripSummaryMetaSuffix,
 } from './public-result-labels';
 
 export type PublicResultStage = 'baseline' | 'refined' | 'fallback';
@@ -130,6 +131,8 @@ export function PublicResultRenderer({
   const life = PRIMARY_TYPE_LIFESTYLE_HABITS[pt] ?? PRIMARY_TYPE_LIFESTYLE_HABITS.UNKNOWN;
   const order = PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW[pt] ?? PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW.UNKNOWN;
   const hook = PRIMARY_TYPE_START_HOOK[pt] ?? PRIMARY_TYPE_START_HOOK.UNKNOWN;
+  /** summary_copy 계약 필드 — 괄호 메타 제거본 (표시는 카드 슬롯 우선, a11y·심볼 정합용) */
+  const summaryCopyPlain = stripSummaryMetaSuffix(result.summary_copy);
 
   const headerHint = buildPublicResultHeaderHint({
     stage,
@@ -197,6 +200,7 @@ export function PublicResultRenderer({
           cards={step2Cards}
           refinementShiftLine={refinementShiftLine}
           missingHintLine={missingHintLine}
+          a11ySummaryPlain={summaryCopyPlain}
           onBack={() => setStep(1)}
           onNext={() => setStep(3)}
         />

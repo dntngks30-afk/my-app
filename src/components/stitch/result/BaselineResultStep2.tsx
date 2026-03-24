@@ -11,6 +11,8 @@ export type BaselineResultStep2Props = {
   cards: ResultMiniCard[];
   refinementShiftLine: string | null;
   missingHintLine: string | null;
+  /** 서버 summary_copy(메타 제거) — 시각 카드와 별도로 보조 기술용 짧은 제공 */
+  a11ySummaryPlain?: string;
   onBack: () => void;
   onNext: () => void;
 };
@@ -23,10 +25,17 @@ export function BaselineResultStep2({
   cards,
   refinementShiftLine,
   missingHintLine,
+  a11ySummaryPlain,
   onBack,
   onNext,
 }: BaselineResultStep2Props) {
   const row = cards.slice(0, 3);
+  const a11yText =
+    a11ySummaryPlain && a11ySummaryPlain.trim().length > 0
+      ? a11ySummaryPlain.trim().length > 500
+        ? `${a11ySummaryPlain.trim().slice(0, 497)}…`
+        : a11ySummaryPlain.trim()
+      : null;
 
   return (
     <>
@@ -34,9 +43,15 @@ export function BaselineResultStep2({
         <h2
           className="break-keep text-left text-xl font-light text-[#dce1fb]"
           style={{ fontFamily: 'var(--font-display)' }}
+          aria-describedby={a11yText ? 'baseline-step2-summary-plain' : undefined}
         >
           왜 이런 패턴이 보이기 쉬운가요?
         </h2>
+        {a11yText ? (
+          <span id="baseline-step2-summary-plain" className="sr-only">
+            {a11yText}
+          </span>
+        ) : null}
         <p
           className="break-keep text-xs leading-relaxed text-slate-500"
           style={{ fontFamily: 'var(--font-sans-noto)' }}
