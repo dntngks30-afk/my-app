@@ -25,6 +25,27 @@ export function PostpayVerticalRail({ fraction }: { fraction: number }) {
   );
 }
 
+/**
+ * PR-SESSION-PREPARING-TRANSPLANT-MIN-DWELL-02 — 가로 준비 바(0~1).
+ * 백엔드 단계 정확도를 주장하지 않고, 체류·메시지 페이싱용 시각 신호만.
+ */
+export function PostpayHorizontalPreparingBar({ fraction }: { fraction: number }) {
+  const pct = Math.min(100, Math.max(0, fraction * 100));
+  return (
+    <div
+      className="relative h-[3px] w-full max-w-[13.5rem] overflow-hidden rounded-full bg-[#2e3447]/35"
+      role="status"
+      aria-live="polite"
+      aria-label="세션 준비 중"
+    >
+      <div
+        className="h-full rounded-full bg-gradient-to-r from-[#ffb77d] via-[#fcb973] to-[#ab4c00] transition-[width] duration-500 ease-out"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
 /** 상단 Move Re 워드마크 (zip header 정렬감) */
 export function PostpayBrandHeader() {
   return (
