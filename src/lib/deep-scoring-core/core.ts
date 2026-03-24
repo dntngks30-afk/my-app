@@ -9,10 +9,14 @@
  *
  * deep_v3 `classifyDeepV3` + `buildDeepV3Derived` 로직을 채널 독립적으로 추출.
  *
+ * PR-SURVEY-02: 무료 설문이 `survey_axis_interaction_hints`를 넘기면 비-STABLE 에서만
+ *               보수적 축 조정 1패스 적용(카메라/유료는 hints 없음 → 동일 동작).
+ *
  * @see src/lib/deep-test/scoring/deep_v3.ts (원본 참조)
  */
 
 import { getFocusToTags, getAxisToAvoid } from '@/lib/deep-test/config';
+import { applySurveyAxisInteractionAdjustments } from './survey-axis-interactions';
 import type {
   DeepScoringEvidence,
   DeepScoringCoreResult,
@@ -267,16 +271,21 @@ function isStableEvidence(evidence: DeepScoringEvidence): boolean {
 export function runDeepScoringCore(
   evidence: DeepScoringEvidence
 ): DeepScoringCoreResult {
-  const sv = evidence.axis_scores;
-
   // Pain mode 결정
   const pain_mode = resolvePainMode(evidence);
+
+  const stable = isStableEvidence(evidence);
+
+  // PR-SURVEY-02: STABLE 후보는 interaction 미적용(기존 zeroing·게이트 유지)
+  const { axis_scores: sv, fired_rule_ids } = stable
+    ? { axis_scores: evidence.axis_scores, fired_rule_ids: [] as string[] }
+    : applySurveyAxisInteractionAdjustments(evidence);
 
   // Primary/Secondary type 분류
   let primary_type: ScoringPrimaryType;
   let secondary_type: ScoringSecondaryType;
 
-  if (isStableEvidence(evidence)) {
+  if (stable) {
     primary_type = 'STABLE';
     secondary_type = null;
   } else {
@@ -305,8 +314,11 @@ export function runDeepScoringCore(
   // Derived (tags, level, algorithm_scores)
   const derived = buildDerived(primary_type, secondary_type, pain_mode, sv, confidence);
 
-  // Reason codes
-  const reason_codes = buildReasonCodes(sv, pain_mode, primary_type);
+  // Reason codes + interaction audit tags
+  const reason_codes = [
+    ...buildReasonCodes(sv, pain_mode, primary_type),
+    ...fired_rule_ids.map((id) => `interaction_${id}`),
+  ];
 
   // missing_signals 전달 (evidence에서)
   const missing_signals = [...evidence.missing_signals];

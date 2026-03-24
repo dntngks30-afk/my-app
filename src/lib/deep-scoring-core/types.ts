@@ -76,6 +76,23 @@ export interface MovementQuality {
   all_good: boolean;
 }
 
+// ─── PR-SURVEY-02: 무료 설문 조합 힌트 (core interaction rules 전용) ─────────
+
+/**
+ * 무료 설문 18문항에서만 채워짐. 카메라/유료는 undefined → interaction 규칙 비활성.
+ * UnifiedDeepResultV2 계약이 아닌 DeepScoringEvidence 내부 입력 확장.
+ */
+export interface SurveyAxisInteractionHints {
+  /** C군(허리·골반 부하) 평균이 높음 → 보호·통증 맥락 프록시(임상 통증 아님) */
+  trunk_load_pain_proxy: boolean;
+  /** F군(비대칭) 문항 평균이 높음 */
+  f_asymmetry_cluster: boolean;
+  /** G군(긴장·guarding) 평균이 높음 */
+  g_guarding_cluster: boolean;
+  /** 18문항 전체 평균이 낮음 → 전반적 낮은 자기평가·익숙도 프록시 */
+  low_global_movement_confidence: boolean;
+}
+
 // ─── 핵심 입력 타입 ───────────────────────────────────────────────────────────
 
 /**
@@ -101,6 +118,10 @@ export interface DeepScoringEvidence {
    * 예: ['sls_quality_missing', 'pain_location_missing']
    */
   missing_signals: string[];
+  /**
+   * PR-SURVEY-02: 무료 설문 baseline 전용. 있으면 core에서 보수적 축 조정 1패스 적용.
+   */
+  survey_axis_interaction_hints?: SurveyAxisInteractionHints;
 }
 
 // ─── 핵심 출력 타입 ───────────────────────────────────────────────────────────

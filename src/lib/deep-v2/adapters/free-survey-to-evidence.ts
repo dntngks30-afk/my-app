@@ -73,7 +73,11 @@
 import type { AnimalAxis, TestAnswerValue } from '@/features/movement-test/v2';
 import { ANIMAL_AXES } from '@/features/movement-test/v2';
 import { getCompositeTagV2 } from '@/features/movement-test/v2/scoring/composite.rules';
-import type { DeepScoringEvidence, AxisScores } from '@/lib/deep-scoring-core/types';
+import type {
+  DeepScoringEvidence,
+  AxisScores,
+  SurveyAxisInteractionHints,
+} from '@/lib/deep-scoring-core/types';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 공통 상수
@@ -388,6 +392,37 @@ function resolveAnswerValue(
   const v = answers[qId];
   if (v === undefined || v === null) return 2;
   return v as number;
+}
+
+/** PR-SURVEY-02: C/F/G군 및 전체 평균 — interaction hints 전용 */
+const HINT_IDS_C = ['v2_C1', 'v2_C2', 'v2_C3'] as const;
+const HINT_IDS_F = ['v2_F1', 'v2_F2', 'v2_F3'] as const;
+const HINT_IDS_G = ['v2_G1', 'v2_G2', 'v2_G3'] as const;
+
+/**
+ * PR-SURVEY-02 — 설문 답변에서 조합 힌트만 추출(runDeepScoringCore interaction 입력).
+ * 통증 문항이 없는 무료 설문에서 C군을 “허리·부하” 맥락 프록시로만 사용한다.
+ */
+export function buildSurveyAxisInteractionHints(
+  rawAnswers: Record<string, TestAnswerValue | undefined>
+): SurveyAxisInteractionHints {
+  const avg = (ids: readonly string[]) => {
+    let s = 0;
+    for (const id of ids) s += resolveAnswerValue(rawAnswers, id);
+    return s / ids.length;
+  };
+  const globalAvg =
+    FREE_SURVEY_QUESTION_IDS.reduce(
+      (acc, id) => acc + resolveAnswerValue(rawAnswers, id),
+      0
+    ) / FREE_SURVEY_QUESTION_IDS.length;
+
+  return {
+    trunk_load_pain_proxy: avg(HINT_IDS_C) >= 2.5,
+    f_asymmetry_cluster: avg(HINT_IDS_F) >= 2.5,
+    g_guarding_cluster: avg(HINT_IDS_G) >= 2.5,
+    low_global_movement_confidence: globalAvg <= 2.25,
+  };
 }
 
 // ─── 1단계: 축별 raw 누적 ─────────────────────────────────────────────────────
@@ -772,7 +807,8 @@ export function buildMissingSignalsFromSurveyAnswers(
  * 4b. applyDiffuseDeconditionedRule   → DIFFUSE(sloth-like) 확산형 판정 (decond=7.0)
  * 5. AXIS_TARGET_SCALE 곱             → 최종 evidence axis_scores
  * 6. buildMissingSignalsFromSurveyAnswers → missing_signals
- * 7. DeepScoringEvidence 조립
+ * 7. survey_axis_interaction_hints (PR-SURVEY-02, core에서만 소비)
+ * 8. DeepScoringEvidence 조립
  */
 export function buildFreeSurveyDeepEvidence(
   rawAnswers: Record<string, TestAnswerValue | undefined>
@@ -848,6 +884,7 @@ export function buildFreeSurveyDeepEvidence(
     answered_count: answeredCount,
     total_count:    FREE_SURVEY_TOTAL_COUNT,
     missing_signals,
+    survey_axis_interaction_hints: buildSurveyAxisInteractionHints(rawAnswers),
   };
 }
 
