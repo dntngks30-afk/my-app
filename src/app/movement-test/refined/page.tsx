@@ -206,7 +206,7 @@ export default function RefinedResultPage() {
               onBack={handleBack}
               actions={[
                 {
-                  label: bridgePending ? '처리 중...' : '실행 시작하기',
+                  label: bridgePending ? '처리 중...' : '움직임 리셋 시작하기',
                   onClick: handleExecutionStart,
                   variant: 'primary',
                 },
@@ -229,7 +229,7 @@ export default function RefinedResultPage() {
               onBack={handleBack}
               actions={[
                 {
-                  label: bridgePending ? '처리 중...' : '실행 시작하기',
+                  label: bridgePending ? '처리 중...' : '움직임 리셋 시작하기',
                   onClick: handleExecutionStart,
                   variant: 'primary',
                 },
@@ -251,7 +251,7 @@ export default function RefinedResultPage() {
               onBack={handleBack}
               actions={[
                 {
-                  label: bridgePending ? '처리 중...' : '실행 시작하기',
+                  label: bridgePending ? '처리 중...' : '움직임 리셋 시작하기',
                   onClick: handleExecutionStart,
                   variant: 'primary',
                 },

@@ -6,15 +6,14 @@
  */
 
 import { useState } from 'react';
-import { ChevronLeft, Link2, Wind, Zap } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import type { UnifiedDeepResultV2, UnifiedPrimaryType } from '@/lib/result/deep-result-v2-contract';
 import { MoveReStepNavRow } from '@/components/public-brand';
 import { StitchSceneProgressRail } from '@/components/stitch/shared/SceneProgressRail';
-import { StitchBottomNavRow } from '@/components/stitch/shared/BottomNavRow';
 import { BaselineResultStep1 } from '@/components/stitch/result/BaselineResultStep1';
 import { BaselineResultStep2 } from '@/components/stitch/result/BaselineResultStep2';
 import { BaselineResultStep3 } from '@/components/stitch/result/BaselineResultStep3';
-import { ResultInsightCard } from '@/components/stitch/result/ResultInsightCard';
+import { BaselineResultStep3ScrollScene } from '@/components/stitch/result/BaselineResultStep3ScrollScene';
 import {
   PRIMARY_TYPE_COLOR,
   getBaselineStep1ResultSlots,
@@ -106,11 +105,6 @@ function ActionButton({ action }: { action: PublicResultAction }) {
   );
 }
 
-const stitchGlassCard = 'rounded-2xl border border-white/[0.06] bg-[#151b2d]/45 px-4 py-3 backdrop-blur-sm';
-
-/** PR-15 Step3 상단 3액션 카드 아이콘(풀기 → 깨우기 → 연결) */
-const STEP3_ACTION_ICONS = [Wind, Zap, Link2] as const;
-
 export function PublicResultRenderer({
   result,
   stage,
@@ -140,6 +134,27 @@ export function PublicResultRenderer({
   const missingHintLine = pickLightMissingHintLine(result.missing_signals);
   const secondaryTendencyLine = buildSecondaryTendencySentence(result.secondary_type, pt);
   const step2Cards = buildBaselineStep2Cards(pt, reasonInsightLines, secondaryTendencyLine);
+
+  const step3Stages = [
+    {
+      stageLabel: '1 / 3',
+      title: EXECUTION_ORDER_PHASE_TITLES[0],
+      purpose: order[0].purpose,
+      examples: order[0].examples,
+    },
+    {
+      stageLabel: '2 / 3',
+      title: EXECUTION_ORDER_PHASE_TITLES[1],
+      purpose: order[1].purpose,
+      examples: order[1].examples,
+    },
+    {
+      stageLabel: '3 / 3',
+      title: EXECUTION_ORDER_PHASE_TITLES[2],
+      purpose: order[2].purpose,
+      examples: order[2].examples,
+    },
+  ] as const;
 
   const primaryAction = actions[0];
   const restActions = actions.slice(1);
@@ -237,52 +252,14 @@ export function PublicResultRenderer({
             </div>
           }
         >
-          <h2
-            className="break-keep text-lg font-semibold text-[#dce1fb]"
-            style={{ fontFamily: 'var(--font-sans-noto)' }}
-          >
-            {STEP3_HEADLINE}
-          </h2>
-          {stage === 'refined' ? (
-            <p className="break-keep text-xs text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              {STEP3_REFINED_CONTEXT_LINE}
-            </p>
-          ) : null}
-
-          {/* PR-15: Step3 = 시작 플랜 — 패턴/조심/리셋 카드 제거, 순서 예시 박스 제거, 액션 카드 3장만 상단 */}
-          <div className="space-y-2.5">
-            {([0, 1, 2] as const).map((i) => {
-              const Icon = STEP3_ACTION_ICONS[i];
-              return (
-                <ResultInsightCard
-                  key={EXECUTION_ORDER_PHASE_TITLES[i]}
-                  icon={Icon}
-                  title={EXECUTION_ORDER_PHASE_TITLES[i]}
-                  body={order[i].purpose}
-                  examplesLine={order[i].examples}
-                  compact
-                />
-              );
-            })}
-          </div>
-
-          <div className={stitchGlassCard}>
-            <p className="text-xs text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              {STEP3_LIFESTYLE_SECTION_TITLE}
-            </p>
-            <ul className="mt-2 space-y-1.5 text-sm text-[#c6c6cd]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-              <li>· {life[0]}</li>
-              <li>· {life[1]}</li>
-              <li>· {life[2]}</li>
-            </ul>
-          </div>
-
-          <p
-            className="break-keep px-1 text-center text-[10px] text-slate-600"
-            style={{ fontFamily: 'var(--font-sans-noto)' }}
-          >
-            {stageMeta.provenanceCopy}
-          </p>
+          <BaselineResultStep3ScrollScene
+            headline={STEP3_HEADLINE}
+            refinedContextLine={stage === 'refined' ? STEP3_REFINED_CONTEXT_LINE : null}
+            stages={step3Stages}
+            habitSectionTitle={STEP3_LIFESTYLE_SECTION_TITLE}
+            habits={life}
+            provenanceLine={stageMeta.provenanceCopy}
+          />
         </BaselineResultStep3>
       )}
     </div>
