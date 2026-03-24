@@ -31,6 +31,8 @@
  * @see src/lib/deep-v2/adapters/free-survey-to-evidence.ts
  * @see src/lib/deep-scoring-core/core.ts
  * @see src/lib/result/deep-result-v2-contract.ts
+ *
+ * PR-SURVEY-04: 설문 해석 → 첫 세션 힌트(`_compat.survey_session_hints`) 부착(내부 전용).
  */
 
 import type { TestAnswerValue } from '@/features/movement-test/v2';
@@ -43,6 +45,7 @@ import {
   type PainMode,
 } from '@/lib/result/deep-result-v2-contract';
 import { freeSurveyAnswersToEvidence } from '../adapters/free-survey-to-evidence';
+import { deriveSurveySessionHints } from '../session/derive-survey-session-hints';
 import type { FreeSurveyBaselineResult } from '../types';
 
 // ─── 내부 헬퍼 ───────────────────────────────────────────────────────────────
@@ -167,7 +170,25 @@ export function buildFreeSurveyBaselineResult(
     originalAnimalType
   );
 
-  // Step 3-B: PR-BASELINE-RAW-AXIS-SNAPSHOT-03
+  // Step 3-B: PR-SURVEY-04 — session-oriented hints (렌더/카피 미사용)
+  const pv = unifiedResult.priority_vector;
+  if (pv !== null && typeof pv === 'object' && !Array.isArray(pv)) {
+    unifiedResult._compat = {
+      ...unifiedResult._compat,
+      survey_session_hints: deriveSurveySessionHints({
+        primary_type: unifiedResult.primary_type,
+        secondary_type: unifiedResult.secondary_type,
+        priority_vector: pv,
+        pain_mode: unifiedResult.pain_mode,
+        deconditioned_interpretation: coreResult.deconditioned_interpretation,
+        reason_codes: unifiedResult.reason_codes,
+        evidence_level: unifiedResult.evidence_level,
+        confidence: unifiedResult.confidence,
+      }),
+    };
+  }
+
+  // Step 3-C: PR-BASELINE-RAW-AXIS-SNAPSHOT-03
   // baseline evidence snapshot을 _compat에 부착.
   // build-camera-refined-result.ts가 priority_vector * 5 proxy 대신 이 값을 우선 소비한다.
   // validateUnifiedDeepResultV2는 _compat 내부를 검사하지 않으므로 계약 변경 없음.

@@ -64,6 +64,46 @@ export type UnifiedSecondaryType = UnifiedPrimaryType | null;
 /** 6축 상태벡터 (deep_paid v3 전용, 다른 채널은 null) */
 export type PriorityVector = Record<string, number> | null;
 
+// ─── PR-SURVEY-04: 설문 baseline → 첫 세션 내부 힌트 (카피/렌더 비노출) ─────
+
+/** 첫 세션에서 워밍업·진입 강도 허용치 */
+export type SurveySessionIntroToleranceHint = 'open' | 'standard' | 'guarded';
+
+/** 첫 세션 전반 보수성 */
+export type SurveySessionConservativenessLevel = 'low' | 'moderate' | 'high';
+
+/** 준비 단계에서 가동성 vs 안정·조절 우선 */
+export type SurveySessionMovementPreferenceHint = 'mobility_first' | 'control_first' | 'mixed';
+
+/** 편측·비대칭 선택·진행 시 보수 정도 */
+export type SurveySessionAsymmetryCautionHint = 'none' | 'moderate' | 'elevated';
+
+/** 전신 저컨디션 신호를 세션 설계에 얼마나 반영할지 */
+export type SurveySessionDeconditionedSupportHint = 'none' | 'light' | 'strong';
+
+/** 초기 볼륨(세트·시간) 상한 힌트 */
+export type SurveySessionVolumeCapHint = 'standard' | 'reduced' | 'minimal';
+
+/** 첫 세션 이후 진행(프로그레션) 신뢰 — 설문만일 때 과신 방지 */
+export type SurveySessionProgressionConfidenceHint = 'cautious' | 'standard' | 'steady';
+
+/**
+ * 무료 설문 baseline 전용. session-create/첫 세션 품질 PR에서 소비 예정.
+ * validateUnifiedDeepResultV2는 본 블록을 검사하지 않음.
+ */
+export interface SurveySessionHints {
+  schema_version: 'survey_session_hints_v1';
+  intro_tolerance_hint: SurveySessionIntroToleranceHint;
+  first_session_conservativeness: SurveySessionConservativenessLevel;
+  movement_preference_hint: SurveySessionMovementPreferenceHint;
+  asymmetry_caution_hint: SurveySessionAsymmetryCautionHint;
+  deconditioned_support_hint: SurveySessionDeconditionedSupportHint;
+  volume_cap_hint: SurveySessionVolumeCapHint;
+  progression_confidence_hint: SurveySessionProgressionConfidenceHint;
+  /** 짧은 내부 태그(감사·세션 규칙 매핑용) */
+  first_session_bias_tags: string[];
+}
+
 // ─── 핵심 계약 인터페이스 ─────────────────────────────────────────────────────
 
 /**
@@ -158,6 +198,10 @@ export interface UnifiedDeepResultV2 {
      * PR-SURVEY-03: 무료 설문 baseline에서만 채움. deconditioned “형태” 내부 레이블(카피/IA 비노출).
      */
     survey_deconditioned_interpretation?: 'broad' | 'hybrid' | 'low_confidence' | 'none';
+    /**
+     * PR-SURVEY-04: 설문 해석 → 첫 세션 보수성/초점 힌트. 렌더러 미사용.
+     */
+    survey_session_hints?: SurveySessionHints;
     baseline_deep_evidence_snapshot?: {
       /** 스냅샷 버전 식별자 (마이그레이션/디버깅용) */
       schema_version: 'free_survey_baseline_evidence_v1';
