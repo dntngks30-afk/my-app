@@ -10,14 +10,14 @@ export type BaselineResultStep1Props = {
   typeName: string;
   /** 히어로 타입명 강조색 */
   typeAccentColor: string;
-  /** 생활 맥락 → 지금 상태 → 보상 (3~4줄, UNKNOWN은 짧게) */
+  /** 6형: 확정 문단(1블록 또는 여러 문단), UNKNOWN: 짧은 안내 */
   heroCoreLines: readonly string[];
   onNext: () => void;
 };
 
 /**
- * PR-BASELINE-STEP1-COPY-REFRAME-10 — 상단 고정 문구 + 타입명 + 다줄 핵심 설명.
- * 스테이지별 eyebrow(지금의 시작점 등) 없음. 가짜 점수·진행 바 없음.
+ * PR-BASELINE-STEP1-FINAL-COPY-11 — 상단 고정 문구 + 타입명 + 본문(문단형 카피).
+ * 스테이지별 eyebrow 없음. 가짜 점수·진행 바 없음.
  */
 export function BaselineResultStep1({
   typeName,
@@ -72,7 +72,10 @@ export function BaselineResultStep1({
             style={{ fontFamily: 'var(--font-sans-noto)' }}
           >
             {lines.map((line, i) => (
-              <p key={i} className="break-keep text-sm leading-relaxed text-[#c6c6cd]">
+              <p
+                key={i}
+                className="break-keep text-[14px] leading-[1.65] text-[#c6c6cd] sm:text-[15px]"
+              >
                 {line}
               </p>
             ))}
