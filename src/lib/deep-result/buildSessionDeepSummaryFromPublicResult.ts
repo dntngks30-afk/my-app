@@ -39,6 +39,7 @@
 import type { SessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import type { UnifiedDeepResultV2, UnifiedPrimaryType } from '@/lib/result/deep-result-v2-contract';
 import type { ClaimedPublicResultRow } from '@/lib/public-results/getLatestClaimedPublicResultForUser';
+import { isUsableSurveySessionHints } from '@/lib/deep-v2/session/survey-session-hints-first-session';
 
 // ─── PR-FLOW-07: primary_type → session band (first-session alignment) ──────
 // resolveFirstSessionIntent(priority-layer.ts)는 legacy band 키로 첫 세션 정책을
@@ -215,6 +216,10 @@ export function buildSessionDeepSummaryFromPublicResult(
     ...(v2.secondary_type !== undefined && { secondary_type: v2.secondary_type }),
     ...(priority_vector && { priority_vector }),
     ...(pain_mode && { pain_mode }),
+    ...(compat?.survey_session_hints &&
+      isUsableSurveySessionHints(compat.survey_session_hints) && {
+        survey_session_hints: compat.survey_session_hints,
+      }),
     // ── FLOW-06 관찰가능성 ────────────────────────────────────────────
     source_mode: 'public_result' as const,
     source_public_result_id: row.id,

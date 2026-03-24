@@ -29,6 +29,8 @@ export interface DeepSummarySnapshot {
   secondary_type?: string | null;
   priority_vector?: Record<string, number>;
   pain_mode?: 'none' | 'caution' | 'protected';
+  /** PR-SURVEY-05: 세션 생성 시 설문 힌트가 deep summary에 있었는지(내용은 plan meta trace로) */
+  survey_session_hints_present?: boolean;
 }
 
 export interface ProfileSnapshot {
@@ -82,6 +84,7 @@ export function buildDeepSummarySnapshot(summary: SessionDeepSummary): DeepSumma
   if (summary.secondary_type !== undefined) base.secondary_type = summary.secondary_type;
   if (summary.priority_vector) base.priority_vector = summary.priority_vector;
   if (summary.pain_mode) base.pain_mode = summary.pain_mode;
+  if (summary.survey_session_hints) base.survey_session_hints_present = true;
   return base;
 }
 

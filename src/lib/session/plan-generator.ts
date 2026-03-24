@@ -27,6 +27,15 @@ import { applyCandidateCompetition } from './candidate-competition';
 import type { CandidateCompetitionMeta } from './candidate-competition';
 import { auditPlanQuality } from './plan-quality-audit';
 import type { PlanQualityAuditMeta } from './plan-quality-audit';
+import type { SurveySessionHints } from '@/lib/result/deep-result-v2-contract';
+import {
+  bumpFirstSessionTierForSurveyHints,
+  clampTargetLevelForSurveyIntro,
+  mergeSurveyHintMaxDifficultyCap,
+  surveyHintGoldPathSegmentScoreAdjust,
+  surveyHintVolumeDelta,
+  surveyHintsDominatedByHardGuardrails,
+} from '@/lib/deep-v2/session/survey-session-hints-first-session';
 
 const REPETITION_PENALTY = 100;
 const CONTRAINDICATION_PENALTY = 100;
@@ -282,6 +291,8 @@ export type PlanGeneratorInput = {
   pain_mode?: 'none' | 'caution' | 'protected';
   /** PR-FIRST-SESSION-QUALITY-02A: 온보딩 exercise_experience_level — 세션 1만 반영 */
   exercise_experience_level?: 'beginner' | 'intermediate' | 'advanced';
+  /** PR-SURVEY-05: 무료 설문 baseline `_compat` (세션 1에서만 소비) */
+  survey_session_hints?: SurveySessionHints;
 };
 
 export type PlanItem = {
@@ -343,6 +354,9 @@ export type PlanJsonOutput = {
       pain_gate_applied?: boolean;
       /** PR-SESSION-QUALITY-01 */
       first_session_guardrail_applied?: boolean;
+      /** PR-SURVEY-05: 설문 힌트가 세션 1에 반영됐을 때만 */
+      survey_session_hints_applied?: boolean;
+      survey_session_hints_trace?: string[];
     };
     /** PR-ALG-16A: additive, explainable constraint engine meta */
     constraint_engine?: ConstraintEngineMeta;
@@ -507,7 +521,12 @@ function selectTemplatesWithConstraints(
 function scoreGoldPathSegmentFit(
   template: SessionTemplateRow,
   rule: GoldPathSegmentRule,
-  painMode?: 'none' | 'caution' | 'protected'
+  painMode?: 'none' | 'caution' | 'protected',
+  surveyAdjust?: {
+    sessionNumber: number;
+    hints?: SurveySessionHints;
+    hardDominated: boolean;
+  }
 ): number {
   let score = 0;
 
@@ -549,6 +568,14 @@ function scoreGoldPathSegmentFit(
     else if (difficultyRank === 1) score += 2;
   }
 
+  score += surveyHintGoldPathSegmentScoreAdjust(
+    surveyAdjust?.hints,
+    surveyAdjust?.sessionNumber ?? 0,
+    rule.kind,
+    template,
+    surveyAdjust?.hardDominated ?? true
+  );
+
   return score;
 }
 
@@ -584,7 +611,8 @@ function selectGoldPathTemplates(
   vector: GoldPathVector,
   mainCount: number,
   onDuplicateFiltered: (count: number) => void,
-  firstSessionIntent?: FirstSessionIntentSSOT | null
+  firstSessionIntent?: FirstSessionIntentSSOT | null,
+  surveyAdjust?: { sessionNumber: number; hints?: SurveySessionHints; hardDominated: boolean }
 ): Array<{ rule: GoldPathSegmentRule; items: SessionTemplateRow[] }> {
   const used = new Set<string>(input.usedTemplateIds);
   const duplicateSeen = new Set<string>();
@@ -598,7 +626,7 @@ function selectGoldPathTemplates(
         template,
         score:
           score +
-          scoreGoldPathSegmentFit(template, rule, input.pain_mode) +
+          scoreGoldPathSegmentFit(template, rule, input.pain_mode, surveyAdjust) +
           scoreFirstSessionIntentFit(template, rule, firstSessionIntent),
       }))
       .sort((a, b) => {
@@ -780,7 +808,39 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     scoringVersion: input.scoringVersion ?? 'deep_v2',
   });
 
-  const { finalTargetLevel, maxLevel } = computeTargetLevel(input);
+  const surveyHintTrace: string[] = [];
+  const hardDominated = surveyHintsDominatedByHardGuardrails({
+    pain_mode: input.pain_mode,
+    safety_mode: input.safety_mode,
+  });
+  const surveySessionHints = input.survey_session_hints;
+  const surveyGoldPathAdjust = {
+    sessionNumber: input.sessionNumber,
+    hints: surveySessionHints,
+    hardDominated,
+  };
+
+  const { finalTargetLevel: rawFinal, maxLevel: rawMax } = computeTargetLevel(input);
+  const introClamped = clampTargetLevelForSurveyIntro(
+    rawFinal,
+    rawMax,
+    surveySessionHints,
+    input.sessionNumber,
+    hardDominated
+  );
+  let finalTargetLevel = introClamped.finalTargetLevel;
+  let maxLevel = introClamped.maxLevel;
+  surveyHintTrace.push(...introClamped.trace);
+
+  const capMerged = mergeSurveyHintMaxDifficultyCap(
+    input.adaptiveOverlay?.maxDifficultyCap,
+    surveySessionHints,
+    hardDominated,
+    input.sessionNumber
+  );
+  const maxDifficultyCap = capMerged.cap;
+  surveyHintTrace.push(...capMerged.trace);
+
   const firstSessionIntent = resolveFirstSessionIntent({
     resultType: input.resultType,
     primaryType: input.primary_type,
@@ -798,7 +858,6 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const extendedPainFlags = [...input.painFlags, ...painExtraAvoid];
   const excludeSet = buildExcludeSet(input.avoid, extendedPainFlags);
   const avoidIds = new Set(input.adaptiveOverlay?.avoidTemplateIds ?? []);
-  const maxDifficultyCap = input.adaptiveOverlay?.maxDifficultyCap;
 
   const preFiltered = templates.filter(
     (t) =>
@@ -844,10 +903,23 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const isShort = overlay?.forceShort ?? input.timeBudget === 'short';
   const isRecovery = overlay?.forceRecovery ?? input.conditionMood === 'bad';
   const isFirstSession = input.sessionNumber === 1;
-  const firstSessionTier = adjustFirstSessionTierForOnboardingExperience(
-    getFirstSessionTier(input),
-    input
+  const tierSurvey = bumpFirstSessionTierForSurveyHints(
+    adjustFirstSessionTierForOnboardingExperience(getFirstSessionTier(input), input),
+    input.sessionNumber,
+    surveySessionHints,
+    hardDominated
   );
+  const firstSessionTier = tierSurvey.tier;
+  surveyHintTrace.push(...tierSurvey.trace);
+
+  let volumeModForMainCount = input.volumeModifier ?? 0;
+  if (isFirstSession && surveySessionHints && !hardDominated) {
+    const vol = surveyHintVolumeDelta(surveySessionHints, hardDominated, input.sessionNumber);
+    volumeModForMainCount += vol.delta;
+    volumeModForMainCount = Math.max(-0.45, volumeModForMainCount);
+    surveyHintTrace.push(...vol.trace);
+  }
+
   const firstSessionLimits = FIRST_SESSION_LIMITS[firstSessionTier];
   /** PR-SESSION-BASELINE-01: main 2~3 baseline. red=1, yellow=2, else 3 */
   let mainCount = isShort ? 1 : isRecovery ? 1 : 3;
@@ -859,8 +931,8 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   if (isFirstSession && mainCount > firstSessionLimits.maxMain) {
     mainCount = firstSessionLimits.maxMain;
   }
-  if (typeof input.volumeModifier === 'number' && input.volumeModifier < 0) {
-    mainCount = Math.max(1, Math.floor(mainCount * (1 + input.volumeModifier)));
+  if (typeof volumeModForMainCount === 'number' && volumeModForMainCount < 0) {
+    mainCount = Math.max(1, Math.floor(mainCount * (1 + volumeModForMainCount)));
   }
   if (typeof input.volumeModifier === 'number' && input.volumeModifier > 0 && !isFirstSession) {
     mainCount = Math.min(3, Math.ceil(mainCount * (1 + input.volumeModifier)));
@@ -881,6 +953,16 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   let duplicateFilteredCount = 0;
 
   const goldPathVector = resolveGoldPathVector(input, firstSessionIntent);
+  if (
+    isFirstSession &&
+    surveySessionHints &&
+    !hardDominated &&
+    goldPathVector &&
+    (surveySessionHints.movement_preference_hint !== 'mixed' ||
+      surveySessionHints.asymmetry_caution_hint === 'elevated')
+  ) {
+    surveyHintTrace.push('selection:survey_gold_path_bias');
+  }
   let selected: SessionTemplateRow[] = [];
   let selectedSegments: Array<{ title: string; items: SessionTemplateRow[] }> | null = null;
 
@@ -891,7 +973,8 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       goldPathVector,
       mainCount,
       (d) => { duplicateFilteredCount = d; },
-      firstSessionIntent
+      firstSessionIntent,
+      surveyGoldPathAdjust
     );
     selectedSegments = goldSegments.map((segment) => ({
       title: segment.rule.title,
@@ -917,7 +1000,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     );
     const relaxedSorted = relaxedCandidates.map((t) => ({ template: t, score: 0 }));
     const relaxedSelected = goldPathVector
-      ? selectGoldPathTemplates(relaxedSorted, input, goldPathVector, mainCount, () => {}, firstSessionIntent)
+      ? selectGoldPathTemplates(relaxedSorted, input, goldPathVector, mainCount, () => {}, firstSessionIntent, surveyGoldPathAdjust)
       : [{
           rule: { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: [] as GoldPathVector[], fallbackVectors: [] as GoldPathVector[], preferredProgression: [1], count: 0 },
           items: selectTemplatesWithConstraints(
@@ -1034,6 +1117,10 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
         priority_applied: !!input.priority_vector,
         pain_gate_applied: !!input.pain_mode && input.pain_mode !== 'none',
         first_session_guardrail_applied: isFirstSession,
+        ...(surveyHintTrace.length > 0 && {
+          survey_session_hints_applied: true,
+          survey_session_hints_trace: [...surveyHintTrace],
+        }),
       },
       policy_registry: {
         version: 'session_policy_registry_v1',

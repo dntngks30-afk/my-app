@@ -49,6 +49,8 @@ export type GenCacheInput = {
   pain_mode?: string | null;
   /** PR-FIRST-SESSION-QUALITY-02A: session 1 onboarding experience — cache 분리 */
   exercise_experience_level?: string | null;
+  /** PR-SURVEY-05: 설문 힌트(세션 1 bias) — 없으면 null/undefined */
+  survey_session_hints?: Record<string, unknown> | null;
 };
 
 /**
@@ -77,6 +79,10 @@ function buildKey(input: GenCacheInput): string {
     pv: canonicalizeObject(input.priority_vector ?? undefined),
     pm: input.pain_mode ?? '',
     eel: input.exercise_experience_level ?? '',
+    ssh:
+      input.survey_session_hints != null
+        ? canonicalizeObject(input.survey_session_hints as Record<string, unknown>)
+        : '',
   });
   return simpleHash(canonical);
 }

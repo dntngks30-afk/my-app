@@ -699,6 +699,8 @@ export async function POST(req: NextRequest) {
       priority_vector: deepSummary.priority_vector ?? undefined,
       pain_mode: deepSummary.pain_mode ?? undefined,
       exercise_experience_level: exerciseExperienceForSession1,
+      /** PR-SURVEY-05: 세션 1 설문 힌트가 캐시 키에 포함되어야 동일 입력 동일 플랜 */
+      survey_session_hints: deepSummary.survey_session_hints ?? null,
     };
 
     const tGen = performance.now();
@@ -729,6 +731,7 @@ export async function POST(req: NextRequest) {
         adaptiveOverlay,
         volumeModifier: mergedVolume,
         exercise_experience_level: exerciseExperienceForSession1,
+        survey_session_hints: deepSummary.survey_session_hints,
       });
       setCachedPlan(cacheInput, planJson as Record<string, unknown>);
     }
