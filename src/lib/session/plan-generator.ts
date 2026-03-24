@@ -29,12 +29,17 @@ import { auditPlanQuality } from './plan-quality-audit';
 import type { PlanQualityAuditMeta } from './plan-quality-audit';
 import type { SurveySessionHints } from '@/lib/result/deep-result-v2-contract';
 import {
+  buildSurveySessionHintsObservability,
   bumpFirstSessionTierForSurveyHints,
   clampTargetLevelForSurveyIntro,
   mergeSurveyHintMaxDifficultyCap,
   surveyHintGoldPathSegmentScoreAdjust,
   surveyHintVolumeDelta,
   surveyHintsDominatedByHardGuardrails,
+} from '@/lib/deep-v2/session/survey-session-hints-first-session';
+import type {
+  SurveySessionHintBlockedBy,
+  SurveySessionHintsObservabilityV1,
 } from '@/lib/deep-v2/session/survey-session-hints-first-session';
 
 const REPETITION_PENALTY = 100;
@@ -341,6 +346,13 @@ export type PlanJsonOutput = {
     session_focus_axes?: string[];
     /** PR-SESSION-QUALITY-01: rationale for session composition */
     session_rationale?: string | null;
+    /**
+     * PR-SURVEY-06: UI 카피용 아님. 설문 힌트 기반 세션 구성 태그(디버그·감사).
+     * session_rationale 문자열을 바꾸지 않는다.
+     */
+    survey_session_rationale_tags?: string[];
+    /** PR-SURVEY-06: 설문 힌트 관찰성(세션 1 중심) */
+    survey_session_hints_observability?: SurveySessionHintsObservabilityV1;
     /** PR-P2-4: constraint trace */
     constraint_flags?: {
       avoid_filter_applied: boolean;
@@ -354,8 +366,13 @@ export type PlanJsonOutput = {
       pain_gate_applied?: boolean;
       /** PR-SESSION-QUALITY-01 */
       first_session_guardrail_applied?: boolean;
-      /** PR-SURVEY-05: 설문 힌트가 세션 1에 반영됐을 때만 */
+      /** PR-SURVEY-05~06: 세션 1에서 힌트 존재·적격·적용·차단 구분 */
+      survey_session_hints_present?: boolean;
+      survey_session_hints_eligible?: boolean;
       survey_session_hints_applied?: boolean;
+      /** blocked_by가 null이 아닐 때 true (session_not_1 포함) */
+      survey_session_hints_blocked?: boolean;
+      survey_session_hints_blocked_by?: SurveySessionHintBlockedBy;
       survey_session_hints_trace?: string[];
     };
     /** PR-ALG-16A: additive, explainable constraint engine meta */
@@ -1080,6 +1097,16 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     firstSessionIntent?.rationale ??
     resolveSessionRationale(input.priority_vector, input.pain_mode);
 
+  const surveyHintsObservability = buildSurveySessionHintsObservability({
+    sessionNumber: input.sessionNumber,
+    hints: surveySessionHints,
+    pain_mode: input.pain_mode,
+    safety_mode: input.safety_mode,
+    flatTrace: surveyHintTrace,
+    exercise_experience_level: input.exercise_experience_level,
+    hasGoldPathVector: !!goldPathVector,
+  });
+
   const basePlan: PlanJsonOutput = {
     version: 'session_plan_v1',
     meta: {
@@ -1105,6 +1132,12 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       ...((effectiveRationale != null || input.priority_vector != null) && {
         session_rationale: effectiveRationale ?? resolveSessionRationale(input.priority_vector, input.pain_mode),
       }),
+      ...(isFirstSession && {
+        survey_session_hints_observability: surveyHintsObservability,
+        ...(surveyHintsObservability.rationale_tags.length > 0 && {
+          survey_session_rationale_tags: surveyHintsObservability.rationale_tags,
+        }),
+      }),
       finalTargetLevel,
       maxLevel,
       constraint_flags: {
@@ -1117,9 +1150,15 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
         priority_applied: !!input.priority_vector,
         pain_gate_applied: !!input.pain_mode && input.pain_mode !== 'none',
         first_session_guardrail_applied: isFirstSession,
-        ...(surveyHintTrace.length > 0 && {
-          survey_session_hints_applied: true,
-          survey_session_hints_trace: [...surveyHintTrace],
+        ...(isFirstSession && {
+          survey_session_hints_present: surveyHintsObservability.present,
+          survey_session_hints_eligible: surveyHintsObservability.eligible,
+          survey_session_hints_applied: surveyHintsObservability.applied,
+          survey_session_hints_blocked: surveyHintsObservability.blocked,
+          survey_session_hints_blocked_by: surveyHintsObservability.blocked_by,
+          ...(surveyHintsObservability.trace.length > 0 && {
+            survey_session_hints_trace: [...surveyHintsObservability.trace],
+          }),
         }),
       },
       policy_registry: {
