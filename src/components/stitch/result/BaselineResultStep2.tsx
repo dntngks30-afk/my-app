@@ -18,8 +18,7 @@ export type BaselineResultStep2Props = {
 };
 
 /**
- * PR-BASELINE-STEP-IA-09 — zip(6) 카드형: 패턴 이해 단계(짧은 헤드라인 + 카드).
- * reason/보조는 labels 빌더에서 3번째 카드에 합성.
+ * PR-BASELINE-STEP2-CARD-REFINE-12 — 짧은 3카드 요약(부위·보상·관찰). Step1 서술과 중복 최소화.
  */
 export function BaselineResultStep2({
   cards,
@@ -39,7 +38,7 @@ export function BaselineResultStep2({
 
   return (
     <>
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pb-3 pt-1">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3 pt-1">
         <h2
           className="break-keep text-left text-xl font-light text-[#dce1fb]"
           style={{ fontFamily: 'var(--font-display)' }}
@@ -56,14 +55,20 @@ export function BaselineResultStep2({
           className="break-keep text-xs leading-relaxed text-slate-500"
           style={{ fontFamily: 'var(--font-sans-noto)' }}
         >
-          아래는 지금 읽힌 움직임 경향을 짧게 나눈 설명이에요.
+          부위와 보상 움직임을 짧게만 정리했어요.
         </p>
 
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {row.map((card, i) => {
             const Icon = STEP2_CARD_ICONS[i] ?? Layers;
             return (
-              <ResultInsightCard key={`${card.title}-${i}`} icon={Icon} title={card.title} body={card.body} />
+              <ResultInsightCard
+                key={`${card.title}-${i}`}
+                icon={Icon}
+                title={card.title}
+                body={card.body}
+                compact
+              />
             );
           })}
         </div>

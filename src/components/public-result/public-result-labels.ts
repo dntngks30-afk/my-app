@@ -175,13 +175,14 @@ export function getBaselineStep1ResultSlots(pt: UnifiedPrimaryType): BaselineSte
   return BASELINE_STEP1_RESULT_SLOTS[pt];
 }
 
-/** Step2 요약 카드(제목 고정 + 타입별 짧은 본문). 동적 reason/보조는 3번째 카드에 합성. */
+/** Step2 요약 카드(제목·본문 표시 전용). PR-BASELINE-STEP2-CARD-REFINE-12 확정본. */
 export type ResultMiniCard = { title: string; body: string };
 
+/** Step2 카드 제목(6형·UNKNOWN 공통 프레임) */
 const BASELINE_STEP2_CARD_TITLES = [
-  '몸이 먼저 반응하기 쉬운 부위',
-  '자주 나타나는 보상 움직임',
-  '함께 겹쳐 보이기 쉬운 경향',
+  '먼저 굳거나 덜 쓰이는 부위',
+  '대신 버티는 부위와 움직임',
+  '함께 관찰된 움직임',
 ] as const;
 
 export const BASELINE_STEP2_CARD_BODIES: Record<
@@ -189,63 +190,53 @@ export const BASELINE_STEP2_CARD_BODIES: Record<
   readonly [string, string, string]
 > = {
   LOWER_INSTABILITY: [
-    '서 있거나 걸을 때 다리·발목이 먼저 긴장하기 쉬워요.',
-    '한쪽으로 체중이 기우는 느낌, 무릎이 안으로 모이려는 움직임이 자주 붙어요.',
-    '하체 쪽 신호가 여러 갈래로 겹쳐 읽힐 수 있어요.',
+    '엉덩이 근육은 덜 쓰이고, 발목 주변은 굳어 있어 중심을 고르게 받치기 어려워요.',
+    '앞 허벅지와 종아리가 먼저 긴장해, 앉았다 일어나거나 계단에서 무릎·발목이 먼저 버텨요.',
+    '한쪽 다리로 체중이 더 실리거나, 내려갈 때 무릎이 안쪽으로 모이기 쉬워요.',
   ],
   LOWER_MOBILITY_RESTRICTION: [
-    '발목·엉덩이 주변이 먼저 뻣뻣하게 느껴지기 쉬워요.',
-    '깊게 앉기 전에 몸이 먼저 버티려 하거나 범위를 줄이려 해요.',
-    '가동성과 안정 신호가 함께 겹쳐 보일 수 있어요.',
+    '발목 뒤쪽과 고관절 주변이 굳고, 엉덩이와 뒤 허벅지는 충분히 늘어나기 어려워요.',
+    '허리와 무릎이 대신 움직여, 낮게 앉거나 몸을 숙일 때 하체보다 허리가 먼저 힘들어져요.',
+    '쪼그려 앉기 어렵고, 몸을 내릴수록 상체가 과하게 앞으로 숙여지기 쉬워요.',
   ],
   UPPER_IMMOBILITY: [
-    '목·어깨·앞가슴이 먼저 당겨지거나 뭉치기 쉬워요.',
-    '팔을 올릴 때 어깨만 먼저 올라가거나 턱을 내밀기 쉬워요.',
-    '상체 쪽 신호가 겹쳐 읽힐 수 있어요.',
+    '가슴 근육은 짧아지고, 등과 견갑 주변 근육은 충분히 받쳐주기 어려워요.',
+    '목과 어깨 윗부분이 먼저 긴장해, 팔을 들거나 오래 앉아 있을 때 상체가 쉽게 뻣뻣해져요.',
+    '고개가 앞으로 빠지고, 팔을 올릴 때 어깨가 먼저 올라가는 움직임이 자주 보여요.',
   ],
   CORE_CONTROL_DEFICIT: [
-    '숨이 얕아지거나 배·허리가 먼저 조여지기 쉬워요.',
-    '움직일수록 몸통보다 허리에 힘이 먼저 실리려 해요.',
-    '체간 조절과 다른 축이 함께 겹쳐 보일 수 있어요.',
+    '배 깊은 근육과 엉덩이는 덜 쓰이고, 허리와 골반 주변만 먼저 긴장하기 쉬워요.',
+    '허리 주변 근육이 과하게 쓰여, 몸을 숙이거나 방향을 바꿀 때 몸통보다 허리가 먼저 버텨요.',
+    '숨을 참거나 배를 과하게 조인 채 버티고, 움직일수록 허리·골반이 먼저 굳어지기 쉬워요.',
   ],
   DECONDITIONED: [
-    '여러 부위가 동시에 무겁게 느껴지는 날이 있어요.',
-    '한 번에 세게 하려는 순간이 오기 쉬워요.',
-    '전신 컨디션 신호가 한꺼번에 올라와 보일 수 있어요.',
+    '엉덩이·등·몸통이 고르게 쓰이기보다, 전반적으로 몸이 둔하고 반응이 느린 편이에요.',
+    '앞 허벅지·종아리·허리가 먼저 지쳐, 조금만 움직여도 여러 부위가 함께 버티기 시작해요.',
+    '처음엔 괜찮아도 금방 자세가 흐트러지고, 움직일수록 몸 전체가 무거워지기 쉬워요.',
   ],
   STABLE: [
-    '전반적으로 움직임은 무난한 편이에요.',
-    '그날 컨디션에 따라 감각만 달라질 수 있어요.',
-    '큰 부담 신호 없이 균형 쪽으로 정리돼 보일 수 있어요.',
+    '한 부위가 뚜렷하게 약하거나 굳었다기보다, 전반적인 사용 균형이 비교적 잘 유지되고 있어요.',
+    '큰 보상은 적지만, 피로가 쌓이면 목·어깨나 앞 허벅지처럼 자주 쓰는 부위가 먼저 긴장할 수 있어요.',
+    '평소엔 안정적이지만, 수면·스트레스·피로가 쌓인 날엔 일부 부위가 먼저 뻣뻣해질 수 있어요.',
   ],
   UNKNOWN: [
-    '아직 어디가 먼저인지 한 줄로 고정하기 어려워요.',
-    '가볍게 움직이며 반응을 살피는 게 먼저예요.',
-    '정보가 더 쌓이면 시작점을 더 맞출 수 있어요.',
+    '아직 어떤 부위가 먼저인지 한 가지로 정하기 어려워요.',
+    '불편 없는 범위에서 짧게 움직이며 반응만 보면 돼요.',
+    '다음에 정보가 더 붙으면 패턴을 더 맞출 수 있어요.',
   ],
 };
 
 /**
- * Step2 카드 3장. 보조 경향 문장·reason 불릿이 있으면 3번째 카드 본문을 그쪽으로 대체(중복 최소화).
+ * Step2 카드 3장(확정 카피). reason/보조는 카드 본문에 합치지 않음 — refined는 아래 한 줄(refinementShiftLine)로만 보완.
  */
 export function buildBaselineStep2Cards(
   pt: UnifiedPrimaryType,
-  reasonInsightLines: string[],
-  secondaryTendencyLine: string | null
+  _reasonInsightLines: string[],
+  _secondaryTendencyLine: string | null
 ): ResultMiniCard[] {
   const bodies = BASELINE_STEP2_CARD_BODIES[pt];
   const titles = BASELINE_STEP2_CARD_TITLES;
-  const cards: ResultMiniCard[] = titles.map((title, i) => ({ title, body: bodies[i] }));
-
-  const dynamicParts: string[] = [];
-  if (secondaryTendencyLine) dynamicParts.push(secondaryTendencyLine);
-  for (const line of reasonInsightLines.slice(0, 2)) {
-    if (line?.trim()) dynamicParts.push(line.trim());
-  }
-  if (dynamicParts.length > 0) {
-    cards[2] = { title: titles[2], body: dynamicParts.join(' ') };
-  }
-  return cards;
+  return titles.map((title, i) => ({ title, body: bodies[i] }));
 }
 
 // ─── Evidence & Stage ────────────────────────────────────────────────────────
