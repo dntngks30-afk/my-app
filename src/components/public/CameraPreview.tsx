@@ -464,12 +464,8 @@ export function CameraPreview({
           const now = performance.now();
           if (now - lastAnalyzedAt >= ANALYSIS_INTERVAL_MS) {
             lastAnalyzedAt = now;
-            /** 재생 중이면 미디어 시계를 우선(VIDEO landmarker와 정합), 그 외는 rAF 시계 */
-            const mediaMs =
-              Number.isFinite(currentVideo.currentTime) && currentVideo.currentTime > 0.02
-                ? Math.round(currentVideo.currentTime * 1000)
-                : now;
-            const frame = analyzer.analyze(currentVideo, mediaMs);
+            /** PR-HOTFIX-03: timestamp는 mediapipe-pose에서 video.currentTime만 사용·전역 단조 보정 */
+            const frame = analyzer.analyze(currentVideo, 0);
 
             onPoseFrameRef.current?.(frame);
 

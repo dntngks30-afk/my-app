@@ -32,11 +32,36 @@ const POSE_CONNECTIONS: Array<[number, number]> = [
 ];
 
 export interface LivePoseAnalyzer {
-  analyze(video: HTMLVideoElement, timestampMs: number): PoseFrame;
+  /**
+   * @param _timestampMsIgnored PR-HOTFIX-03: 타임스탬프는 `video.currentTime`에서만 유도한다(호환용 인자).
+   */
+  analyze(video: HTMLVideoElement, _timestampMsIgnored?: number): PoseFrame;
   close(): void;
 }
 
 let sharedPoseLandmarkerPromise: Promise<PoseLandmarker> | null = null;
+
+/**
+ * 공유 VIDEO PoseLandmarker는 전역적으로 단조 증가하는 timestamp만 허용한다.
+ * analyzer 인스턴스마다 lastTs를 두면 페이지 전환·remount 시 역행이 들어가 런타임 예외가 날 수 있다.
+ */
+let globalLastDetectTimestampMs = -1;
+
+function bumpMonotonicTimestampMs(candidateMs: number): number {
+  let c = candidateMs;
+  if (!Number.isFinite(c) || c < 0) {
+    c = 0;
+  }
+  if (globalLastDetectTimestampMs >= 0 && c <= globalLastDetectTimestampMs) {
+    c = globalLastDetectTimestampMs + 1;
+  }
+  globalLastDetectTimestampMs = c;
+  return c;
+}
+
+function mediaTimestampMsFromVideo(video: HTMLVideoElement): number {
+  return Number.isFinite(video.currentTime) ? Math.round(video.currentTime * 1000) : NaN;
+}
 
 function createEmptyPoseFrame(video: HTMLVideoElement, timestampMs: number): PoseFrame {
   return {
@@ -86,14 +111,12 @@ async function getSharedPoseLandmarker(): Promise<PoseLandmarker> {
 
 export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
   const landmarker = await getSharedPoseLandmarker();
-  /** VIDEO 모드: 타임스탬프는 단조 증가해야 함(역행·동일값 시 런타임 예외/불안정) */
-  let lastDetectTimestampMs = -1;
 
   return {
-    analyze(video, timestampMs) {
+    analyze(video, _timestampMsIgnored) {
       if (!video) {
         return {
-          timestampMs: Number.isFinite(timestampMs) ? timestampMs : 0,
+          timestampMs: 0,
           landmarks: null,
           source: 'mediapipe',
           width: 0,
@@ -101,23 +124,39 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
         };
       }
 
-      if (!landmarker) {
-        return createEmptyPoseFrame(video, Number.isFinite(timestampMs) ? timestampMs : 0);
-      }
+      const rawMediaMs = mediaTimestampMsFromVideo(video);
 
-      if (!Number.isFinite(timestampMs)) {
-        return createEmptyPoseFrame(video, 0);
+      if (!landmarker) {
+        return createEmptyPoseFrame(
+          video,
+          Number.isFinite(rawMediaMs) ? rawMediaMs : 0
+        );
       }
 
       if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
-        return createEmptyPoseFrame(video, timestampMs);
+        return createEmptyPoseFrame(
+          video,
+          Number.isFinite(rawMediaMs) ? rawMediaMs : 0
+        );
       }
 
-      let ts = timestampMs;
-      if (lastDetectTimestampMs >= 0 && ts <= lastDetectTimestampMs) {
-        ts = lastDetectTimestampMs + 1;
+      if (!Number.isFinite(rawMediaMs)) {
+        return createEmptyPoseFrame(video, 0);
       }
-      lastDetectTimestampMs = ts;
+
+      const ts = bumpMonotonicTimestampMs(rawMediaMs);
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[mediapipe-pose] detectForVideo', {
+          readyState: video.readyState,
+          currentTime: video.currentTime,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          rawMediaMs,
+          ts,
+          globalLast: globalLastDetectTimestampMs,
+        });
+      }
 
       try {
         const result = landmarker.detectForVideo(video, ts);
