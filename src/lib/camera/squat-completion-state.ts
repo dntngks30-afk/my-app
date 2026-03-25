@@ -48,6 +48,14 @@ export interface SquatCompletionState {
   recoveryReturnContinuityFrames?: number;
   recoveryTrailingDepthCount?: number;
   recoveryDropRatio?: number;
+  /** PR-CAM-02: 역전에 요구된 depth 하락량( squatDepthProxy 단위 ) */
+  squatReversalDropRequired?: number;
+  /** PR-CAM-02: 피크 이후 실제 관측 최대 하락량 */
+  squatReversalDropAchieved?: number;
+  /** PR-CAM-02: 첫 하강~피크 시간 */
+  squatDescentToPeakMs?: number;
+  /** PR-CAM-02: 역전(피크) 시각~서 있기 복귀 시각 */
+  squatReversalToStandingMs?: number;
 }
 
 const BASELINE_WINDOW = 6;
@@ -59,7 +67,21 @@ const STANDING_RECOVERY_TOLERANCE_FLOOR = 0.015;
 const STANDING_RECOVERY_TOLERANCE_RATIO = 0.18;
 const MIN_STANDING_RECOVERY_FRAMES = 2;
 const MIN_STANDING_RECOVERY_HOLD_MS = 160;
-const REVERSAL_DROP_EPSILON = 0.005;
+/** PR-CAM-02: 절대 최소 되돌림(미세 노이즈 역전 차단) */
+const REVERSAL_DROP_MIN_ABS = 0.007;
+/** PR-CAM-02: 상대 피크 대비 최소 되돌림 비율 — 깊은 스쿼트에서 0.005만으로 조기 역전 되는 것 방지 */
+const REVERSAL_DROP_MIN_FRAC_OF_REL_PEAK = 0.13;
+/**
+ * PR-CAM-02: relativeDepthPeak < 이 값이면 하강→피크 최소 시간 요구(스파이크/미세 딥 차단).
+ * 저ROM 유효 사이클은 유지하되 너무 짧은 excursion은 거부.
+ */
+const LOW_ROM_TIMING_PEAK_MAX = 0.1;
+const MIN_DESCENT_TO_PEAK_MS_LOW_ROM = 200;
+/**
+ * PR-CAM-02: 얕은 ROM에서 피크(역전 시점) 이후 서 있기까지 최소 시간 — 미드 라이즈 조기 pass 완화.
+ */
+const SHALLOW_REVERSAL_TIMING_PEAK_MAX = 0.11;
+const MIN_REVERSAL_TO_STANDING_MS_SHALLOW = 200;
 
 function getStandingRecoveryWindow(
   frames: Array<{ index: number; depth: number; timestampMs: number }>,
@@ -206,10 +228,22 @@ export function evaluateSquatCompletionState(
         frame.depth - baselineStandingDepth >= MIN_RELATIVE_DEPTH_FOR_ATTEMPT
     );
 
+  /** 피크 대비 되돌림 요구량: 깊을수록 큰 상승 구간을 요구해 조기 역전·미드라이즈 오판 감소 */
+  const squatReversalDropRequired = Math.max(
+    REVERSAL_DROP_MIN_ABS,
+    relativeDepthPeak * REVERSAL_DROP_MIN_FRAC_OF_REL_PEAK
+  );
+  const postPeakDepths = depthFrames
+    .filter((frame) => frame.index > peakFrame.index)
+    .map((frame) => frame.depth);
+  const minPostPeakDepth =
+    postPeakDepths.length > 0 ? Math.min(...postPeakDepths) : peakFrame.depth;
+  const squatReversalDropAchieved = Math.max(0, peakFrame.depth - minPostPeakDepth);
+
   const hasPostPeakDrop = depthFrames.some(
     (frame) =>
       frame.index > peakFrame.index &&
-      frame.depth <= peakFrame.depth - REVERSAL_DROP_EPSILON
+      frame.depth <= peakFrame.depth - squatReversalDropRequired
   );
   const reversalFrame =
     committedFrame != null && hasPostPeakDrop ? peakFrame : undefined;
@@ -219,7 +253,7 @@ export function evaluateSquatCompletionState(
       depthFrames.some(
         (frame) =>
           frame.index > reversalFrame.index &&
-          frame.depth < peakFrame.depth - REVERSAL_DROP_EPSILON
+          frame.depth < peakFrame.depth - squatReversalDropRequired
       ));
 
   const recovery = getSquatRecoverySignal(validFrames);
@@ -285,7 +319,28 @@ export function evaluateSquatCompletionState(
     standingRecovery.standingRecoveryHoldMs < MIN_STANDING_RECOVERY_HOLD_MS
   ) {
     completionBlockedReason = 'recovery_hold_too_short';
+  } else if (
+    relativeDepthPeak < LOW_ROM_TIMING_PEAK_MAX &&
+    descentFrame != null &&
+    peakFrame.timestampMs - descentFrame.timestampMs < MIN_DESCENT_TO_PEAK_MS_LOW_ROM
+  ) {
+    completionBlockedReason = 'descent_span_too_short';
+  } else if (
+    relativeDepthPeak < SHALLOW_REVERSAL_TIMING_PEAK_MAX &&
+    reversalFrame != null &&
+    standingRecovery.standingRecoveredAtMs != null &&
+    standingRecovery.standingRecoveredAtMs - reversalFrame.timestampMs <
+      MIN_REVERSAL_TO_STANDING_MS_SHALLOW
+  ) {
+    completionBlockedReason = 'ascent_recovery_span_too_short';
   }
+
+  const squatDescentToPeakMs =
+    descentFrame != null ? peakFrame.timestampMs - descentFrame.timestampMs : undefined;
+  const squatReversalToStandingMs =
+    reversalFrame != null && standingRecovery.standingRecoveredAtMs != null
+      ? standingRecovery.standingRecoveredAtMs - reversalFrame.timestampMs
+      : undefined;
 
   const completionSatisfied = completionBlockedReason == null;
 
@@ -325,5 +380,9 @@ export function evaluateSquatCompletionState(
     recoveryReturnContinuityFrames: recovery.returnContinuityFrames,
     recoveryTrailingDepthCount: recovery.trailingDepthCount,
     recoveryDropRatio: recovery.recoveryDropRatio,
+    squatReversalDropRequired,
+    squatReversalDropAchieved,
+    squatDescentToPeakMs,
+    squatReversalToStandingMs,
   };
 }

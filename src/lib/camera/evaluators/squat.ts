@@ -231,6 +231,17 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         recoveryAtMs: state.standingRecoveredAtMs ?? null,
         cycleDurationMs: state.cycleDurationMs,
         downwardCommitmentDelta: Math.round(state.downwardCommitmentDelta * 100) / 100,
+        /** PR-CAM-02: 역전/타이밍 관측(기기 트레이스·디버그) */
+        squatReversalDropRequiredPct:
+          state.squatReversalDropRequired != null
+            ? Math.round(state.squatReversalDropRequired * 1000) / 10
+            : null,
+        squatReversalDropAchievedPct:
+          state.squatReversalDropAchieved != null
+            ? Math.round(state.squatReversalDropAchieved * 1000) / 10
+            : null,
+        squatDescentToPeakMs: state.squatDescentToPeakMs ?? null,
+        squatReversalToStandingMs: state.squatReversalToStandingMs ?? null,
       },
       perStepDiagnostics: perStepRecord,
     },

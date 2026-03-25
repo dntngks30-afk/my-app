@@ -764,8 +764,38 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.completionPathUsed = evidenceLabel;
   squatCycleDebug.successPhaseAtOpen = 'standing_recovered';
   squatCycleDebug.passTriggeredAtPhase = 'standing_recovered';
-  squatCycleDebug.qualityInterpretationReason =
+
+  /** PR-CAM-02: 통과(사이클)는 유지하되 planning용 evidence는 폼·신뢰 신호로 보수적으로 캡 */
+  const quality = getSquatQualitySignals(result, guardrail.confidence);
+  let finalEvidenceLevel = squatEvidenceLevel;
+  let finalReasons = [...squatEvidenceReasons];
+  let qualityInterpretationReason: string | null =
     evidenceLabel === 'standard' ? 'valid_strong' : 'valid_limited_shallow';
+
+  if (finalEvidenceLevel === 'strong_evidence' && !quality.strongQuality) {
+    finalEvidenceLevel = 'shallow_evidence';
+    finalReasons = ['cam02_standard_quality_capped', ...finalReasons];
+    qualityInterpretationReason = 'cam02_standard_capped_to_shallow';
+    squatCycleDebug.confidenceDowngradeReason = 'cam02_standard_cycle_quality_capped';
+  }
+  if (finalEvidenceLevel === 'shallow_evidence') {
+    const concernCount = [
+      quality.bottomStabilityLow,
+      quality.kneeTrackingOff,
+      quality.trunkLeanHigh,
+    ].filter(Boolean).length;
+    if (concernCount >= 2) {
+      finalEvidenceLevel = 'weak_evidence';
+      finalReasons = ['cam02_low_rom_multi_concern', ...finalReasons];
+      qualityInterpretationReason = 'cam02_shallow_capped_to_weak';
+      squatCycleDebug.confidenceDowngradeReason =
+        squatCycleDebug.confidenceDowngradeReason ?? 'cam02_low_rom_quality_capped';
+    }
+  }
+
+  squatCycleDebug.squatEvidenceLevel = finalEvidenceLevel;
+  squatCycleDebug.squatEvidenceReasons = finalReasons;
+  squatCycleDebug.qualityInterpretationReason = qualityInterpretationReason;
   squatCycleDebug.guardrailCompletePath = guardrail.debug?.guardrailCompletePath;
   return { satisfied: true, squatCycleDebug };
 }
@@ -845,7 +875,8 @@ function getSquatFailureReasons(
     completionBlockedReason === 'no_reversal' ||
     completionBlockedReason === 'no_ascend' ||
     completionBlockedReason === 'not_standing_recovered' ||
-    completionBlockedReason === 'recovery_hold_too_short'
+    completionBlockedReason === 'recovery_hold_too_short' ||
+    completionBlockedReason === 'ascent_recovery_span_too_short'
   ) {
     failureReasons.add('ascent_not_detected');
   }
@@ -853,7 +884,8 @@ function getSquatFailureReasons(
     completionBlockedReason === 'no_descend' ||
     completionBlockedReason === 'no_commitment' ||
     completionBlockedReason === 'insufficient_relative_depth' ||
-    completionBlockedReason === 'not_armed'
+    completionBlockedReason === 'not_armed' ||
+    completionBlockedReason === 'descent_span_too_short'
   ) {
     failureReasons.add('rep_incomplete');
   }
