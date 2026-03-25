@@ -15,6 +15,10 @@ export interface PoseFrame {
   source: 'mediapipe';
   width: number;
   height: number;
+  /**
+   * 내부용: `detectForVideo` 예외 시 true. 캡처 루프 백오프만을 위한 힌트(공개 결과 스키마 아님).
+   */
+  _mediapipeDetectFailed?: boolean;
 }
 
 export interface PoseLandmarks {

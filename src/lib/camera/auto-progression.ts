@@ -7,6 +7,10 @@ import { buildPoseFeaturesFrames } from './pose-features';
 import { runEvaluator } from './run-evaluators';
 import { assessStepGuardrail } from './guardrails';
 import type { SquatInternalQuality } from './squat/squat-internal-quality';
+import {
+  OVERHEAD_MIN_PEAK_FRAMES,
+  OVERHEAD_REQUIRED_HOLD_MS,
+} from '@/lib/camera/overhead/overhead-constants';
 
 export type ExerciseProgressionState =
   | 'idle'
@@ -251,7 +255,11 @@ function getStableSignalBonus(stepId: CameraStepId, result: EvaluatorResult): nu
     const raiseCount = getHighlightedMetric(result, 'raiseCount');
     const peakCount = getHighlightedMetric(result, 'peakCount');
     const holdDurationMs = getHighlightedMetric(result, 'holdDurationMs');
-    return raiseCount > 0 && peakCount >= OVERHEAD_MIN_PEAK_FRAMES && holdDurationMs >= OVERHEAD_HOLD_COMPLETION_MS ? 0.04 : 0;
+    return raiseCount > 0 &&
+      peakCount >= OVERHEAD_MIN_PEAK_FRAMES &&
+      holdDurationMs >= OVERHEAD_REQUIRED_HOLD_MS
+      ? 0.04
+      : 0;
   }
 
   const holdOngoingCount = getHighlightedMetric(result, 'holdOngoingCount');

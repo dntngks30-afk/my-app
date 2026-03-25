@@ -53,7 +53,15 @@ interface CameraPreviewProps {
   guideReadinessLabel?: string | null;
   /** PR-CAM-UX-02: 캡처 중 클러터 숨김 (배지/힌트/가이드/개발 오버레이) */
   minimalCaptureMode?: boolean;
+  /** MediaPipe 실패 로그에 붙일 모션 라벨(예: overhead-reach). 공개 스키마와 무관 */
+  poseDiagnosticsMotionType?: string | null;
   className?: string;
+}
+
+function streamHasLiveVideoTrack(stream: MediaStream | null | undefined): boolean {
+  if (!stream) return false;
+  if (typeof stream.active === 'boolean' && !stream.active) return false;
+  return stream.getVideoTracks().some((t) => t.readyState === 'live');
 }
 
 function renderDefaultSilhouette(palette: ReturnType<typeof getGuidePalette>) {
@@ -274,6 +282,7 @@ export function CameraPreview({
   guideInstructions = [],
   guideReadinessLabel = null,
   minimalCaptureMode = false,
+  poseDiagnosticsMotionType = null,
   className = '',
 }: CameraPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -310,6 +319,11 @@ export function CameraPreview({
   useEffect(() => {
     onErrorRef.current = onError;
   }, [onError]);
+
+  const poseDiagnosticsMotionTypeRef = useRef<string | null>(null);
+  useEffect(() => {
+    poseDiagnosticsMotionTypeRef.current = poseDiagnosticsMotionType;
+  }, [poseDiagnosticsMotionType]);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production') {
@@ -428,6 +442,8 @@ export function CameraPreview({
 
     let cancelled = false;
     let lastAnalyzedAt = 0;
+    let consecutiveDetectFailures = 0;
+    let detectBackoffUntilMs = 0;
 
     const startAnalyzer = async () => {
       try {
@@ -447,10 +463,18 @@ export function CameraPreview({
         const loop = () => {
           if (cancelled) return;
 
+          const tick = performance.now();
+          if (tick < detectBackoffUntilMs) {
+            analysisRafRef.current = requestAnimationFrame(loop);
+            return;
+          }
+
           const currentVideo = videoRef.current;
+          const activeStream = streamRef.current;
           if (
             !currentVideo ||
-            !streamRef.current ||
+            !activeStream ||
+            !streamHasLiveVideoTrack(activeStream) ||
             currentVideo.readyState < 2 ||
             currentVideo.paused ||
             currentVideo.ended ||
@@ -461,11 +485,25 @@ export function CameraPreview({
             return;
           }
 
-          const now = performance.now();
-          if (now - lastAnalyzedAt >= ANALYSIS_INTERVAL_MS) {
-            lastAnalyzedAt = now;
-            /** PR-HOTFIX-03: timestamp는 mediapipe-pose에서 video.currentTime만 사용·전역 단조 보정 */
-            const frame = analyzer.analyze(currentVideo, 0);
+          if (tick - lastAnalyzedAt >= ANALYSIS_INTERVAL_MS) {
+            lastAnalyzedAt = tick;
+            /** timestamp·단조 보정은 mediapipe-pose 내부; 진단 라벨만 전달 */
+            const frame = analyzer.analyze(currentVideo, 0, {
+              motionType: poseDiagnosticsMotionTypeRef.current ?? undefined,
+            });
+
+            if (frame._mediapipeDetectFailed) {
+              consecutiveDetectFailures += 1;
+              if (consecutiveDetectFailures >= 8) {
+                detectBackoffUntilMs = tick + 1500;
+                consecutiveDetectFailures = 0;
+                if (process.env.NODE_ENV !== 'production') {
+                  console.warn('[CameraPreview] mediapipe detect backoff 1.5s after repeated failures');
+                }
+              }
+            } else {
+              consecutiveDetectFailures = 0;
+            }
 
             onPoseFrameRef.current?.(frame);
 

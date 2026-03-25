@@ -31,11 +31,21 @@ const POSE_CONNECTIONS: Array<[number, number]> = [
   [30, 32],
 ];
 
+/** `detectForVideo` 실패 시 console 진단용(프레임당 로그 스팸 방지 — rate-limit 적용) */
+export type PoseDetectDiagnosticsContext = {
+  motionType?: string;
+};
+
 export interface LivePoseAnalyzer {
   /**
-   * @param _timestampMsIgnored PR-HOTFIX-03: 타임스탬프는 `video.currentTime`에서만 유도한다(호환용 인자).
+   * @param _timestampMsIgnored 타임스탬프는 `video.currentTime`에서만 유도한다(호환용).
+   * @param diagnostics 선택: 실패 로그에 `motionType` 등 부착
    */
-  analyze(video: HTMLVideoElement, _timestampMsIgnored?: number): PoseFrame;
+  analyze(
+    video: HTMLVideoElement,
+    _timestampMsIgnored?: number,
+    diagnostics?: PoseDetectDiagnosticsContext
+  ): PoseFrame;
   close(): void;
 }
 
@@ -61,6 +71,60 @@ function bumpMonotonicTimestampMs(candidateMs: number): number {
 
 function mediaTimestampMsFromVideo(video: HTMLVideoElement): number {
   return Number.isFinite(video.currentTime) ? Math.round(video.currentTime * 1000) : NaN;
+}
+
+/** 스트림이 끊기면 detect 호출을 건너뛴다(전역 timestamp는 증가시키지 않음). */
+function isVideoStreamDecodable(video: HTMLVideoElement): boolean {
+  const so = video.srcObject;
+  if (so == null) return false;
+  if (so instanceof MediaStream) {
+    if (typeof so.active === 'boolean' && !so.active) return false;
+    const tracks = so.getVideoTracks();
+    if (tracks.length === 0) return false;
+    return tracks.some((t) => t.readyState === 'live');
+  }
+  return true;
+}
+
+let detectErrorLogWindowStartMs = 0;
+let detectErrorLogCountInWindow = 0;
+const DETECT_ERROR_LOG_WINDOW_MS = 30_000;
+const DETECT_ERROR_LOG_MAX_PER_WINDOW = 8;
+
+function shouldLogDetectVideoError(): boolean {
+  const now = Date.now();
+  if (now - detectErrorLogWindowStartMs > DETECT_ERROR_LOG_WINDOW_MS) {
+    detectErrorLogWindowStartMs = now;
+    detectErrorLogCountInWindow = 0;
+  }
+  if (detectErrorLogCountInWindow >= DETECT_ERROR_LOG_MAX_PER_WINDOW) return false;
+  detectErrorLogCountInWindow += 1;
+  return true;
+}
+
+function logDetectVideoFailure(
+  err: unknown,
+  video: HTMLVideoElement,
+  ts: number,
+  context?: PoseDetectDiagnosticsContext
+): void {
+  if (!shouldLogDetectVideoError()) return;
+  const stream = video.srcObject instanceof MediaStream ? video.srcObject : null;
+  console.error('[pose.detectForVideo] failed', {
+    err,
+    ts,
+    readyState: video.readyState,
+    videoWidth: video.videoWidth,
+    videoHeight: video.videoHeight,
+    currentTime: video.currentTime,
+    paused: video.paused,
+    ended: video.ended,
+    hasSrcObject: Boolean(video.srcObject),
+    streamActive: stream != null && typeof stream.active === 'boolean' ? stream.active : undefined,
+    videoTrackStates:
+      stream?.getVideoTracks().map((t) => ({ id: t.id, readyState: t.readyState })) ?? undefined,
+    motionType: context?.motionType,
+  });
 }
 
 function createEmptyPoseFrame(video: HTMLVideoElement, timestampMs: number): PoseFrame {
@@ -113,7 +177,7 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
   const landmarker = await getSharedPoseLandmarker();
 
   return {
-    analyze(video, _timestampMsIgnored) {
+    analyze(video, _timestampMsIgnored, diagnostics) {
       if (!video) {
         return {
           timestampMs: 0,
@@ -133,6 +197,20 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
         );
       }
 
+      if (video.paused || video.ended) {
+        return createEmptyPoseFrame(
+          video,
+          Number.isFinite(rawMediaMs) ? rawMediaMs : 0
+        );
+      }
+
+      if (!isVideoStreamDecodable(video)) {
+        return createEmptyPoseFrame(
+          video,
+          Number.isFinite(rawMediaMs) ? rawMediaMs : 0
+        );
+      }
+
       if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
         return createEmptyPoseFrame(
           video,
@@ -145,18 +223,6 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
       }
 
       const ts = bumpMonotonicTimestampMs(rawMediaMs);
-
-      if (process.env.NODE_ENV !== 'production') {
-        console.debug('[mediapipe-pose] detectForVideo', {
-          readyState: video.readyState,
-          currentTime: video.currentTime,
-          videoWidth: video.videoWidth,
-          videoHeight: video.videoHeight,
-          rawMediaMs,
-          ts,
-          globalLast: globalLastDetectTimestampMs,
-        });
-      }
 
       try {
         const result = landmarker.detectForVideo(video, ts);
@@ -177,10 +243,11 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
           }))
         );
       } catch (error) {
-        if (process.env.NODE_ENV !== 'production') {
-          console.warn('[mediapipe-pose] detectForVideo failed', error);
-        }
-        return createEmptyPoseFrame(video, ts);
+        logDetectVideoFailure(error, video, ts, diagnostics);
+        return {
+          ...createEmptyPoseFrame(video, ts),
+          _mediapipeDetectFailed: true,
+        };
       }
     },
     close() {
