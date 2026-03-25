@@ -11,6 +11,14 @@ import {
   OVERHEAD_MIN_PEAK_FRAMES,
   OVERHEAD_REQUIRED_HOLD_MS,
 } from '@/lib/camera/overhead/overhead-constants';
+import {
+  type SquatEvidenceLevel,
+  evidenceLabelToSquatEvidenceLevel,
+  squatEvidenceLevelToReasons,
+  squatEvidenceLevelToConfidenceDowngradeReason,
+  applySquatQualityCap,
+} from './squat-evidence';
+import { completionBlockedReasonToFailureTags } from './squat-retry-reason';
 
 export type ExerciseProgressionState =
   | 'idle'
@@ -28,7 +36,8 @@ export type CameraGuideTone = 'neutral' | 'warning' | 'success';
 /** PR G3: squat full-cycle observability (dev/debug only) */
 /** PR-A4: squat completion trace + unified standing-recovered final state */
 /** PR evidence: completion과 evidence strength 분리 — result layer가 입력 품질 읽기 */
-export type SquatEvidenceLevel = 'strong_evidence' | 'shallow_evidence' | 'weak_evidence' | 'insufficient_signal';
+/** PR-CAM-09: SquatEvidenceLevel 은 squat-evidence.ts 에 정의. 타입 re-export */
+export type { SquatEvidenceLevel };
 
 export interface SquatCycleDebug {
   armingSatisfied: boolean;
@@ -239,8 +248,8 @@ function hasAnyReason(reasons: string[], includes: string[]): boolean {
 
 function getStableSignalBonus(stepId: CameraStepId, result: EvaluatorResult): number {
   if (stepId === 'squat') {
-    const hm = result.debug?.highlightedMetrics;
-    const cycleDone = hm?.completionSatisfied === true || hm?.completionSatisfied === 1;
+    // PR-CAM-09: squatCompletionState 에서 typed 로 읽기
+    const cycleDone = result.debug?.squatCompletionState?.completionSatisfied === true;
     return cycleDone ? 0.04 : 0;
   }
 
@@ -315,11 +324,10 @@ function getCommonReasons(result: EvaluatorResult, guardrail: StepGuardrailResul
 
 /**
  * PR G7 / PR-COMP-01: completion = `squat-completion-state` 단일 truth.
- * 레거시 phase-count 병렬 조건 제거 — evaluator `completionSatisfied` + guardrail complete만 사용.
+ * PR-CAM-09: squatCompletionState 에서 typed 로 읽는다.
  */
 function evaluateSquatCompletion(result: EvaluatorResult, guardrail: StepGuardrailResult) {
-  const hm = result.debug?.highlightedMetrics;
-  const cycleDone = hm?.completionSatisfied === true || hm?.completionSatisfied === 1;
+  const cycleDone = result.debug?.squatCompletionState?.completionSatisfied === true;
   return guardrail.completionStatus === 'complete' && cycleDone;
 }
 
@@ -584,104 +592,78 @@ function getSquatProgressionCompletionSatisfied(
   guardrail: StepGuardrailResult,
   stats: PoseCaptureStats
 ): { satisfied: boolean; squatCycleDebug: SquatCycleDebug } {
+  // ── 평가자 레이어 신호: phase counts + depth band (highlightedMetrics 유지) ──
   const startCount = getHighlightedMetric(result, 'startCount');
   const descentCount = getHighlightedMetric(result, 'descentCount');
   const bottomCount = getHighlightedMetric(result, 'bottomCount');
   const ascentCount = getHighlightedMetric(result, 'ascentCount');
-  const ascentRecovered = getHighlightedMetric(result, 'ascentRecovered');
   const cycleComplete = getHighlightedMetric(result, 'cycleComplete') > 0;
-  const depthPeak = getHighlightedMetric(result, 'depthPeak');
   const depthBand = getHighlightedMetric(result, 'depthBand'); /* 0=shallow, 1=moderate, 2=deep */
-  const currentSquatPhase =
-    (result.debug?.highlightedMetrics?.currentSquatPhase as SquatCycleDebug['currentSquatPhase']) ??
-    'idle';
-  const evidenceLabel =
-    (result.debug?.highlightedMetrics?.evidenceLabel as SquatCycleDebug['evidenceLabel']) ??
-    'insufficient_signal';
-  const completionBlockedReason =
-    (result.debug?.highlightedMetrics?.completionBlockedReason as string | null) ?? null;
-  const lowRomRecoveryReason =
-    (result.debug?.highlightedMetrics?.lowRomRecoveryReason as string) ?? null;
-  const ultraLowRomRecoveryReason =
-    (result.debug?.highlightedMetrics?.ultraLowRomRecoveryReason as string) ?? null;
-  const recoveryReturnContinuityFrames = (result.debug?.highlightedMetrics?.recoveryReturnContinuityFrames as number) ?? undefined;
-  const recoveryTrailingDepthCount = (result.debug?.highlightedMetrics?.recoveryTrailingDepthCount as number) ?? undefined;
-  const recoveryDropRatio = (result.debug?.highlightedMetrics?.recoveryDropRatio as number) ?? undefined;
-  const downwardCommitmentDelta =
-    (getHighlightedMetric(result, 'downwardCommitmentDelta') ?? 0) / 100;
-  const cycleDurationMs = getHighlightedMetric(result, 'cycleDurationMs') ?? 0;
-  const relativeDepthPeak = (result.debug?.highlightedMetrics?.relativeDepthPeak as number) ?? 0;
-  const baselineStandingDepth = (result.debug?.highlightedMetrics?.baselineStandingDepth as number) ?? 0;
-  const rawDepthPeak = (result.debug?.highlightedMetrics?.rawDepthPeak as number) ?? 0;
-  const attemptStarted =
-    result.debug?.highlightedMetrics?.attemptStarted === true ||
-    result.debug?.highlightedMetrics?.attemptStarted === 1;
-  const descendConfirmed =
-    result.debug?.highlightedMetrics?.descendConfirmed === true ||
-    result.debug?.highlightedMetrics?.descendConfirmed === 1;
-  const ascendConfirmed =
-    result.debug?.highlightedMetrics?.ascendConfirmed === true ||
-    result.debug?.highlightedMetrics?.ascendConfirmed === 1;
-  const standingRecoveredAtMs =
-    (result.debug?.highlightedMetrics?.standingRecoveredAtMs as number | null) ?? undefined;
-  const standingRecoveryHoldMs =
-    (result.debug?.highlightedMetrics?.standingRecoveryHoldMs as number) ?? 0;
-  const committedAtMs =
-    (result.debug?.highlightedMetrics?.committedAtMs as number | null) ?? undefined;
-  const startBeforeBottom = getHighlightedMetric(result, 'startBeforeBottom') > 0;
+
+  // ── completion truth: squatCompletionState (typed) 우선, highlightedMetrics fallback ──
+  // PR-CAM-09: evaluators/squat.ts 가 squatCompletionState 를 직접 설정하므로
+  // highlightedMetrics 캐스팅 roundtrip 없이 타입 안전하게 읽는다.
+  const cs = result.debug?.squatCompletionState;
+
+  const currentSquatPhase: SquatCycleDebug['currentSquatPhase'] =
+    cs?.currentSquatPhase ??
+    ((result.debug?.highlightedMetrics?.currentSquatPhase as SquatCycleDebug['currentSquatPhase']) ?? 'idle');
+  const evidenceLabel: SquatCycleDebug['evidenceLabel'] =
+    cs?.evidenceLabel ??
+    ((result.debug?.highlightedMetrics?.evidenceLabel as SquatCycleDebug['evidenceLabel']) ?? 'insufficient_signal');
+  const completionBlockedReason: string | null =
+    cs?.completionBlockedReason ?? null;
+  const attemptStarted = cs?.attemptStarted ?? false;
+  const descendConfirmed = cs?.descendConfirmed ?? false;
+  const ascendConfirmed = cs?.ascendConfirmed ?? false;
+  const standingRecoveredAtMs = cs?.standingRecoveredAtMs ?? undefined;
+  const standingRecoveryHoldMs = cs?.standingRecoveryHoldMs ?? 0;
+  const committedAtMs = cs?.committedAtMs ?? undefined;
+  const startBeforeBottom = cs?.startBeforeBottom ?? false;
+  /** PR-CAM-09: downwardCommitmentDelta 는 squatCompletionState 에서 원본값으로 읽는다 */
+  const downwardCommitmentDelta = cs?.downwardCommitmentDelta ?? 0;
+  const cycleDurationMs = cs?.cycleDurationMs ?? 0;
+  const lowRomRecoveryReason = cs?.lowRomRecoveryReason ?? null;
+  const ultraLowRomRecoveryReason = cs?.ultraLowRomRecoveryReason ?? null;
+  const recoveryReturnContinuityFrames = cs?.recoveryReturnContinuityFrames ?? undefined;
+  const recoveryTrailingDepthCount = cs?.recoveryTrailingDepthCount ?? undefined;
+  const recoveryDropRatio = cs?.recoveryDropRatio ?? undefined;
+  const completionMachinePhase = cs?.completionMachinePhase ?? undefined;
+  const completionPassReason = cs?.completionPassReason ?? undefined;
+
+  // ── 파생 플래그 ──
+  const cycleProofPassed = currentSquatPhase === 'standing_recovered';
   const armingSatisfied = currentSquatPhase !== 'idle';
   const startPoseSatisfied = currentSquatPhase !== 'idle' && startBeforeBottom;
   const descendDetected = descentCount > 0 || currentSquatPhase !== 'idle';
   const bottomDetected = bottomCount > 0;
-  const ascendDetected = ascentCount > 0 || currentSquatPhase === 'ascending' || currentSquatPhase === 'standing_recovered';
+  const ascendDetected =
+    ascentCount > 0 ||
+    currentSquatPhase === 'ascending' ||
+    currentSquatPhase === 'standing_recovered';
   const recoveryDetected = standingRecoveredAtMs != null;
   const bottomTurningPointDetected = bottomDetected || committedAtMs != null;
   const depthBandLabel: 'shallow' | 'moderate' | 'deep' =
     depthBand === 2 ? 'deep' : depthBand === 1 ? 'moderate' : 'shallow';
 
-  /** PR evidence: completion owner와 분리된 evidence label */
-  const cycleProofPassed = currentSquatPhase === 'standing_recovered';
-  const squatEvidenceLevel: SquatEvidenceLevel =
-    !cycleProofPassed || evidenceLabel === 'insufficient_signal'
-      ? 'insufficient_signal'
-      : evidenceLabel === 'standard'
-        ? 'strong_evidence'
-        : evidenceLabel === 'low_rom'
-          ? 'shallow_evidence'
-          : 'weak_evidence';
-  const squatEvidenceReasons: string[] =
-    squatEvidenceLevel === 'insufficient_signal'
-      ? completionBlockedReason != null ? [completionBlockedReason] : ['cycle_proof_insufficient']
-      : squatEvidenceLevel === 'strong_evidence'
-        ? ['standard', 'standing_recovered']
-        : squatEvidenceLevel === 'shallow_evidence'
-          ? ['low_rom', 'standing_recovered']
-          : ['ultra_low_rom', 'standing_recovered'];
-  const confidenceDowngradeReason: string | null =
-    squatEvidenceLevel === 'shallow_evidence'
-      ? 'shallow_depth'
-      : squatEvidenceLevel === 'weak_evidence'
-        ? 'ultra_low_rom_cycle'
-        : null;
+  // ── 타이밍 (squatCompletionState 에서 직접) ──
+  const descendStartAtMs = cs?.descendStartAtMs ?? undefined;
+  const peakAtMs = cs?.peakAtMs ?? undefined;
+  const reversalAtMs = cs?.reversalAtMs ?? undefined;
+  const ascendStartAtMs = cs?.ascendStartAtMs ?? undefined;
+  const recoveryAtMs = standingRecoveredAtMs;
+
+  // ── PR-CAM-09: evidence 매핑은 squat-evidence.ts 헬퍼로 위임 ──
+  const squatEvidenceLevel = evidenceLabelToSquatEvidenceLevel(
+    evidenceLabel ?? 'insufficient_signal',
+    cycleProofPassed
+  );
+  const squatEvidenceReasons = squatEvidenceLevelToReasons(squatEvidenceLevel, completionBlockedReason);
+  const confidenceDowngradeReason = squatEvidenceLevelToConfidenceDowngradeReason(squatEvidenceLevel);
   const insufficientSignalReason: string | null =
     squatEvidenceLevel === 'insufficient_signal'
       ? (completionBlockedReason ?? 'cycle_proof_insufficient')
       : null;
-
-  const descendStartAtMs = getHighlightedMetric(result, 'descendStartAtMs') || undefined;
-  const peakAtMs = getHighlightedMetric(result, 'peakAtMs') || undefined;
-  const reversalAtMs = getHighlightedMetric(result, 'reversalAtMs') || undefined;
-  const ascendStartAtMs = getHighlightedMetric(result, 'ascendStartAtMs') || undefined;
-  const recoveryAtMs = standingRecoveredAtMs;
-
-  const completionMachinePhase =
-    typeof result.debug?.highlightedMetrics?.completionMachinePhase === 'string'
-      ? result.debug.highlightedMetrics.completionMachinePhase
-      : undefined;
-  const completionPassReason =
-    typeof result.debug?.highlightedMetrics?.completionPassReason === 'string'
-      ? result.debug.highlightedMetrics.completionPassReason
-      : undefined;
 
   const squatCycleDebug: SquatCycleDebug = {
     armingSatisfied,
@@ -767,37 +749,19 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.successPhaseAtOpen = 'standing_recovered';
   squatCycleDebug.passTriggeredAtPhase = 'standing_recovered';
 
-  /** PR-CAM-02: 통과(사이클)는 유지하되 planning용 evidence는 폼·신뢰 신호로 보수적으로 캡 */
+  // PR-CAM-09: quality cap 로직은 applySquatQualityCap 헬퍼로 위임
   const quality = getSquatQualitySignals(result, guardrail.confidence);
-  let finalEvidenceLevel = squatEvidenceLevel;
-  let finalReasons = [...squatEvidenceReasons];
-  let qualityInterpretationReason: string | null =
-    evidenceLabel === 'standard' ? 'valid_strong' : 'valid_limited_shallow';
+  const capResult = applySquatQualityCap(
+    squatEvidenceLevel,
+    squatEvidenceReasons,
+    evidenceLabel ?? 'insufficient_signal',
+    quality
+  );
 
-  if (finalEvidenceLevel === 'strong_evidence' && !quality.strongQuality) {
-    finalEvidenceLevel = 'shallow_evidence';
-    finalReasons = ['cam02_standard_quality_capped', ...finalReasons];
-    qualityInterpretationReason = 'cam02_standard_capped_to_shallow';
-    squatCycleDebug.confidenceDowngradeReason = 'cam02_standard_cycle_quality_capped';
-  }
-  if (finalEvidenceLevel === 'shallow_evidence') {
-    const concernCount = [
-      quality.bottomStabilityLow,
-      quality.kneeTrackingOff,
-      quality.trunkLeanHigh,
-    ].filter(Boolean).length;
-    if (concernCount >= 2) {
-      finalEvidenceLevel = 'weak_evidence';
-      finalReasons = ['cam02_low_rom_multi_concern', ...finalReasons];
-      qualityInterpretationReason = 'cam02_shallow_capped_to_weak';
-      squatCycleDebug.confidenceDowngradeReason =
-        squatCycleDebug.confidenceDowngradeReason ?? 'cam02_low_rom_quality_capped';
-    }
-  }
-
-  squatCycleDebug.squatEvidenceLevel = finalEvidenceLevel;
-  squatCycleDebug.squatEvidenceReasons = finalReasons;
-  squatCycleDebug.qualityInterpretationReason = qualityInterpretationReason;
+  squatCycleDebug.squatEvidenceLevel = capResult.level;
+  squatCycleDebug.squatEvidenceReasons = capResult.reasons;
+  squatCycleDebug.qualityInterpretationReason = capResult.qualityInterpretationReason;
+  squatCycleDebug.confidenceDowngradeReason = capResult.confidenceDowngradeReason;
   squatCycleDebug.guardrailCompletePath = guardrail.debug?.guardrailCompletePath;
   return { satisfied: true, squatCycleDebug };
 }
@@ -850,8 +814,9 @@ function getSquatFailureReasons(
   confidence: number
 ): string[] {
   const failureReasons = new Set<string>();
+  // PR-CAM-09: squatCompletionState 에서 typed 로 읽기
   const completionBlockedReason =
-    (result.debug?.highlightedMetrics?.completionBlockedReason as string | null) ?? null;
+    result.debug?.squatCompletionState?.completionBlockedReason ?? null;
 
   if (guardrail.flags.includes('insufficient_signal')) {
     failureReasons.add('insufficient_signal');
@@ -873,23 +838,9 @@ function getSquatFailureReasons(
   if (confidence < BASIC_PASS_CONFIDENCE_THRESHOLD.squat) {
     failureReasons.add('confidence_too_low');
   }
-  if (
-    completionBlockedReason === 'no_reversal' ||
-    completionBlockedReason === 'no_ascend' ||
-    completionBlockedReason === 'not_standing_recovered' ||
-    completionBlockedReason === 'recovery_hold_too_short' ||
-    completionBlockedReason === 'ascent_recovery_span_too_short'
-  ) {
-    failureReasons.add('ascent_not_detected');
-  }
-  if (
-    completionBlockedReason === 'no_descend' ||
-    completionBlockedReason === 'no_commitment' ||
-    completionBlockedReason === 'insufficient_relative_depth' ||
-    completionBlockedReason === 'not_armed' ||
-    completionBlockedReason === 'descent_span_too_short'
-  ) {
-    failureReasons.add('rep_incomplete');
+  // PR-CAM-09: blocked reason → failure tag 매핑은 squat-retry-reason.ts 헬퍼로 위임
+  for (const tag of completionBlockedReasonToFailureTags(completionBlockedReason)) {
+    failureReasons.add(tag);
   }
   if (guardrail.flags.includes('left_side_missing')) {
     failureReasons.add('left_side_missing');

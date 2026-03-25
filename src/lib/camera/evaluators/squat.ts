@@ -231,6 +231,8 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       phaseHints: Array.from(new Set(valid.map((frame) => frame.phaseHint))),
       squatCompletionArming: completionArming,
       squatInternalQuality,
+      /** PR-CAM-09: typed completion state — auto-progression 이 highlightedMetrics 캐스팅 없이 읽는다 */
+      squatCompletionState: state,
       highlightedMetrics: {
         depthPeak: depthValues.length > 0 ? Math.round(Math.max(...depthValues) * 100) : null,
         /** PR standing-fp: baseline-relative depth for standard path gate */

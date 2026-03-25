@@ -7,6 +7,7 @@ import type { PerStepDiagnostic } from '@/lib/camera/step-joint-spec';
 import type { SquatInternalQuality } from '@/lib/camera/squat/squat-internal-quality';
 import type { OverheadInternalQuality } from '@/lib/camera/overhead/overhead-internal-quality';
 import type { CompletionArmingState } from '@/lib/camera/squat/squat-completion-arming';
+import type { SquatCompletionState } from '@/lib/camera/squat-completion-state';
 
 export interface EvaluatorMetric {
   name: string;
@@ -38,6 +39,12 @@ export interface EvaluatorDebugSummary {
   overheadInternalQuality?: OverheadInternalQuality;
   /** PR-HOTFIX-02: 스쿼트 completion 평가 무장(서 있기 안정 후에만 평가) */
   squatCompletionArming?: CompletionArmingState;
+  /**
+   * PR-CAM-09: 스쿼트 completion 상태 전체(typed).
+   * highlightedMetrics 의 개별 필드와 동일 데이터를 타입 안전하게 노출한다.
+   * auto-progression 이 highlightedMetrics 캐스팅 없이 직접 읽을 수 있다.
+   */
+  squatCompletionState?: SquatCompletionState;
 }
 
 export interface EvaluatorResult {
