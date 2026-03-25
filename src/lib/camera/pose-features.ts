@@ -712,19 +712,31 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
     const isShallowRange = maxDepth >= 0.05 && maxDepth < 0.12;
     const descentDelta = isShallowRange ? 0.006 : 0.008;
     const ascentDelta = isShallowRange ? 0.006 : 0.008;
+    /**
+     * PR-HOTFIX-01: 버퍼 시작~현재 프레임 최소 depth 대비 굴곡이 이 값 미만이면 descent 라벨 불가.
+     * completion 상태기는 그대로 두고, 조기 `descent` 오탐(실제 하강 없이 통과)만 차단한다.
+     */
+    const MIN_EXCURSION_FOR_DESCENT_LABEL = 0.022;
     const candidates = frames.map((frame, index) => {
       const previousDepth = index > 0 ? frames[index - 1]!.derived.squatDepthProxy : null;
       const currentDepth = frame.derived.squatDepthProxy;
       let phaseHint: PosePhaseHint = 'unknown';
 
       if (typeof currentDepth === 'number') {
+        const depthSlice = frames
+          .slice(0, index + 1)
+          .map((f) => f.derived.squatDepthProxy)
+          .filter((d): d is number => typeof d === 'number');
+        const sessionMinDepth = depthSlice.length > 0 ? Math.min(...depthSlice) : currentDepth;
+        const excursion = currentDepth - sessionMinDepth;
+
         const depthDelta = typeof previousDepth === 'number' ? currentDepth - previousDepth : 0;
 
         if (currentDepth < 0.08) {
           phaseHint = 'start';
         } else if (currentDepth >= bottomThreshold && Math.abs(depthDelta) < 0.022) {
           phaseHint = 'bottom';
-        } else if (depthDelta > descentDelta) {
+        } else if (depthDelta > descentDelta && excursion >= MIN_EXCURSION_FOR_DESCENT_LABEL) {
           phaseHint = 'descent';
         } else if (depthDelta < -ascentDelta) {
           phaseHint = 'ascent';

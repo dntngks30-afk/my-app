@@ -86,24 +86,50 @@ async function getSharedPoseLandmarker(): Promise<PoseLandmarker> {
 
 export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
   const landmarker = await getSharedPoseLandmarker();
+  /** VIDEO 모드: 타임스탬프는 단조 증가해야 함(역행·동일값 시 런타임 예외/불안정) */
+  let lastDetectTimestampMs = -1;
 
   return {
     analyze(video, timestampMs) {
+      if (!video) {
+        return {
+          timestampMs: Number.isFinite(timestampMs) ? timestampMs : 0,
+          landmarks: null,
+          source: 'mediapipe',
+          width: 0,
+          height: 0,
+        };
+      }
+
+      if (!landmarker) {
+        return createEmptyPoseFrame(video, Number.isFinite(timestampMs) ? timestampMs : 0);
+      }
+
+      if (!Number.isFinite(timestampMs)) {
+        return createEmptyPoseFrame(video, 0);
+      }
+
       if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
         return createEmptyPoseFrame(video, timestampMs);
       }
 
+      let ts = timestampMs;
+      if (lastDetectTimestampMs >= 0 && ts <= lastDetectTimestampMs) {
+        ts = lastDetectTimestampMs + 1;
+      }
+      lastDetectTimestampMs = ts;
+
       try {
-        const result = landmarker.detectForVideo(video, timestampMs);
+        const result = landmarker.detectForVideo(video, ts);
         const firstPose = result.landmarks?.[0];
 
         if (!firstPose || firstPose.length === 0) {
-          return createEmptyPoseFrame(video, timestampMs);
+          return createEmptyPoseFrame(video, ts);
         }
 
         return toPoseFrame(
           video,
-          timestampMs,
+          ts,
           firstPose.map((landmark) => ({
             x: landmark.x,
             y: landmark.y,
@@ -115,7 +141,7 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
         if (process.env.NODE_ENV !== 'production') {
           console.warn('[mediapipe-pose] detectForVideo failed', error);
         }
-        return createEmptyPoseFrame(video, timestampMs);
+        return createEmptyPoseFrame(video, ts);
       }
     },
     close() {

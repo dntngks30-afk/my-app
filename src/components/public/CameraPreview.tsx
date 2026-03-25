@@ -453,7 +453,9 @@ export function CameraPreview({
             !streamRef.current ||
             currentVideo.readyState < 2 ||
             currentVideo.paused ||
-            currentVideo.ended
+            currentVideo.ended ||
+            currentVideo.videoWidth === 0 ||
+            currentVideo.videoHeight === 0
           ) {
             analysisRafRef.current = requestAnimationFrame(loop);
             return;
@@ -462,7 +464,12 @@ export function CameraPreview({
           const now = performance.now();
           if (now - lastAnalyzedAt >= ANALYSIS_INTERVAL_MS) {
             lastAnalyzedAt = now;
-            const frame = analyzer.analyze(currentVideo, now);
+            /** 재생 중이면 미디어 시계를 우선(VIDEO landmarker와 정합), 그 외는 rAF 시계 */
+            const mediaMs =
+              Number.isFinite(currentVideo.currentTime) && currentVideo.currentTime > 0.02
+                ? Math.round(currentVideo.currentTime * 1000)
+                : now;
+            const frame = analyzer.analyze(currentVideo, mediaMs);
 
             onPoseFrameRef.current?.(frame);
 
