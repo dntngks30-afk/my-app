@@ -4,7 +4,7 @@
  * 카메라 테스트 - 스쿼트
  * AI gate가 pass / retry / fail을 판단하고 자동 진행한다.
  */
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
@@ -56,6 +56,7 @@ import {
   cancelVoiceGuidance,
   getCountdownVoiceCue,
   getReadyToShootVoiceCue,
+  getSquatAmbiguousRetryVoiceCue,
   getStartVoiceCue,
   getSuccessVoiceCue,
   hasReadyToShootPlayedThisSession,
@@ -67,6 +68,7 @@ import {
   trySpeakCorrectiveCueWithAntiSpam,
   unlockVoiceGuidance,
 } from '@/lib/camera/voice-guidance';
+import { deriveSquatAmbiguousRetryReason } from '@/lib/camera/squat-ambiguous-retry';
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 import { SuccessFreezeOverlay } from '@/components/camera/SuccessFreezeOverlay';
 import { FailureFreezeOverlay } from '@/components/camera/FailureFreezeOverlay';
@@ -193,9 +195,20 @@ export default function CameraSquatPage() {
   const triggeredAdvanceStepKeyRef = useRef<string | null>(null);
   const failureFreezeTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const gateRef = useRef<ExerciseGateResult | null>(null);
+  /** PR-COMP-02: 애매 재시도 음성 후 diagnostic failure-freeze 4.5s 타이머 재시작 */
+  const [failureFreezeRetryEpoch, setFailureFreezeRetryEpoch] = useState(0);
   const debugEnabled = IS_DEV;
   const currentStepKey = `${STEP_ID}:${previewKey}`;
+  const ambiguousRetryPlayedForStepRef = useRef<string | null>(null);
+  const prevStepKeyForAmbiguousRef = useRef(currentStepKey);
   const nextPath = getNextStepPath(STEP_ID);
+
+  useLayoutEffect(() => {
+    if (prevStepKeyForAmbiguousRef.current !== currentStepKey) {
+      ambiguousRetryPlayedForStepRef.current = null;
+      prevStepKeyForAmbiguousRef.current = currentStepKey;
+    }
+  }, [currentStepKey]);
 
   const gate = useMemo(
     () => evaluateExerciseAutoProgress(STEP_ID, landmarks, stats),
@@ -537,6 +550,42 @@ export default function CameraSquatPage() {
     permissionDenied,
   ]);
 
+  /* PR-COMP-02: completion phase·blockedReason 기반 애매 사이클 — 스텝당 음성 재시도 1회.
+   * 짧은 지연으로 trySpeakCorrectiveCue와 같은 틱 경합을 줄인 뒤 gateRef로 최신 gate를 다시 본다. */
+  useEffect(() => {
+    if (cameraPhase !== 'capturing' || effectivePassLatched || permissionDenied) {
+      return;
+    }
+    if (!captureCuingEnabled) return;
+    if (liveReadiness !== 'ready') return;
+    if (readyToShootAttemptedRef.current && !hasReadyToShootPlayedThisSession()) return;
+
+    if (!deriveSquatAmbiguousRetryReason(gate)) return;
+    if (ambiguousRetryPlayedForStepRef.current === currentStepKey) return;
+
+    const stepKeyAtSchedule = currentStepKey;
+    const t = window.setTimeout(() => {
+      if (ambiguousRetryPlayedForStepRef.current === stepKeyAtSchedule) return;
+      const g = gateRef.current;
+      if (!g || isFinalPassLatched(STEP_ID, g)) return;
+      const reason = deriveSquatAmbiguousRetryReason(g);
+      if (!reason) return;
+      ambiguousRetryPlayedForStepRef.current = stepKeyAtSchedule;
+      setFailureFreezeRetryEpoch((n) => n + 1);
+      void speakVoiceCue(getSquatAmbiguousRetryVoiceCue(reason));
+    }, 120);
+
+    return () => window.clearTimeout(t);
+  }, [
+    cameraPhase,
+    captureCuingEnabled,
+    currentStepKey,
+    effectivePassLatched,
+    gate,
+    liveReadiness,
+    permissionDenied,
+  ]);
+
   useEffect(() => {
     if (
       !effectivePassLatched ||
@@ -764,6 +813,7 @@ export default function CameraSquatPage() {
   }, [
     cameraPhase,
     effectivePassLatched,
+    failureFreezeRetryEpoch,
     showFailureFreezeOverlay,
     showSuccessFreezeOverlay,
   ]);
@@ -1159,6 +1209,18 @@ export default function CameraSquatPage() {
                         <span>passBlockedReason: {gate.squatCycleDebug.passBlockedReason ?? 'none'}</span>
                         <span>qualityInterpretationReason: {gate.squatCycleDebug.qualityInterpretationReason ?? 'n/a'}</span>
                         <span>passTriggeredAtPhase: {gate.squatCycleDebug.passTriggeredAtPhase ?? 'n/a'}</span>
+                        <span>
+                          completionMachinePhase:{' '}
+                          {gate.squatCycleDebug.completionMachinePhase ?? 'n/a'}
+                        </span>
+                        <span>
+                          completionBlockedReason:{' '}
+                          {gate.squatCycleDebug.completionBlockedReason ?? 'none'}
+                        </span>
+                        <span>
+                          ambiguousRetryReason:{' '}
+                          {deriveSquatAmbiguousRetryReason(gate) ?? '—'}
+                        </span>
                       </>
                     )}
                   </div>

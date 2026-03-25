@@ -1,5 +1,6 @@
 import type { CameraStepId } from '@/lib/public/camera-test';
 import type { ExerciseGateResult, SquatCycleDebug } from './auto-progression';
+import type { SquatAmbiguousRetryReason } from './squat-ambiguous-retry';
 import { getEffectiveRetryGuidance } from './camera-guidance';
 import type { LiveReadinessState } from './live-readiness';
 import {
@@ -674,6 +675,25 @@ export function getSuccessVoiceCue(): VoiceCue {
     cooldownMs: 1500,
     interrupt: true,
     fallbackBeep: true,
+  };
+}
+
+/** PR-COMP-02: 애매한 사이클 1회 재시도용 교정 문구(텍스트 TTS, mp3는 후속) */
+export function getSquatAmbiguousRetryVoiceCue(reason: SquatAmbiguousRetryReason): VoiceCue {
+  const textByReason: Record<SquatAmbiguousRetryReason, string> = {
+    no_descent: '천천히 엉덩이를 뒤로 빼며 조금 더 내려가 보세요.',
+    no_reversal: '최저점에서 잠깐 멈춘 뒤, 다시 위로 올라오세요.',
+    no_recovery: '끝까지 편히 서서 자세를 마무리하세요.',
+    partial_cycle: '처음 자세부터 천천히 한 번에 앉았다 일어나 보세요.',
+  };
+  return {
+    kind: 'correction',
+    dedupeKey: `correction:squat:ambiguous-retry:${reason}`,
+    text: textByReason[reason],
+    priority: 4,
+    cooldownMs: 20000,
+    interrupt: true,
+    fallbackBeep: false,
   };
 }
 
