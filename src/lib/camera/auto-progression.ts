@@ -113,6 +113,11 @@ export interface SquatCycleDebug {
   completionPassReason?: string;
   /** PR-COMP-03: completion·pass와 무관한 strict 내부 해석(트레이스 전용) */
   squatInternalQuality?: SquatInternalQuality;
+  /** PR-CAM-10: ambiguous retry / severe-fail 완화 계약 관측 */
+  squatRetryContractObservation?: {
+    severeFailSoftenedToRetry?: boolean;
+    fallbackUsed?: 'weak_cycle_retry_instead_of_survey_fail';
+  };
 }
 
 export interface ExerciseGateResult {
@@ -901,6 +906,20 @@ function getFailureReasons(
   return Array.from(reasons);
 }
 
+/**
+ * PR-CAM-10: 장시간 invalid( severeFail ) 직전에도 “의미 있는” 하강+상승/복귀 신호가 있으면
+ * 설문 유도 fail 대신 retry 로 한 번 더 기회를 준다. (임계값·completion 로직 변경 없음)
+ */
+function squatMeaningfulAttemptAllowsRetryInsteadOfSevereFail(
+  d: SquatCycleDebug | undefined
+): boolean {
+  if (!d) return false;
+  if (d.evidenceLabel === 'insufficient_signal') return false;
+  if (!d.descendDetected) return false;
+  if (!d.ascendDetected && !d.recoveryDetected) return false;
+  return true;
+}
+
 export function evaluateExerciseAutoProgress(
   stepId: CameraStepId,
   landmarks: PoseLandmarks[],
@@ -1006,6 +1025,39 @@ export function evaluateExerciseAutoProgress(
   }
 
   if (severeFail) {
+    const squatSoftRetry =
+      stepId === 'squat' &&
+      squatCycleDebug &&
+      squatMeaningfulAttemptAllowsRetryInsteadOfSevereFail(squatCycleDebug);
+    if (squatSoftRetry) {
+      const enrichedSquatDebug: SquatCycleDebug = {
+        ...squatCycleDebug,
+        squatRetryContractObservation: {
+          severeFailSoftenedToRetry: true,
+          fallbackUsed: 'weak_cycle_retry_instead_of_survey_fail',
+        },
+      };
+      return {
+        status: 'retry',
+        progressionState: 'retry_required',
+        confidence,
+        completionSatisfied,
+        nextAllowed: false,
+        flags: guardrail.flags,
+        reasons,
+        failureReasons,
+        userGuidance,
+        retryRecommended: true,
+        evaluatorResult,
+        guardrail,
+        uiMessage: getRetryMessage(guardrail),
+        autoAdvanceDelayMs,
+        passConfirmationSatisfied: passConfirmation.satisfied,
+        passConfirmationFrameCount: passConfirmation.stableFrameCount,
+        passConfirmationWindowCount: passConfirmation.windowFrameCount,
+        squatCycleDebug: enrichedSquatDebug,
+      };
+    }
     return {
       status: 'fail',
       progressionState: 'failed',

@@ -68,7 +68,10 @@ import {
   trySpeakCorrectiveCueWithAntiSpam,
   unlockVoiceGuidance,
 } from '@/lib/camera/voice-guidance';
-import { deriveSquatAmbiguousRetryReason } from '@/lib/camera/squat-ambiguous-retry';
+import {
+  deriveSquatAmbiguousRetryReason,
+  SQUAT_AMBIGUOUS_RETRY_MIN_CAPTURE_MS,
+} from '@/lib/camera/squat-ambiguous-retry';
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 import { SuccessFreezeOverlay } from '@/components/camera/SuccessFreezeOverlay';
 import { FailureFreezeOverlay } from '@/components/camera/FailureFreezeOverlay';
@@ -195,12 +198,19 @@ export default function CameraSquatPage() {
   const triggeredAdvanceStepKeyRef = useRef<string | null>(null);
   const failureFreezeTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const gateRef = useRef<ExerciseGateResult | null>(null);
+  const statsRef = useRef(stats);
   /** PR-COMP-02: 애매 재시도 음성 후 diagnostic failure-freeze 4.5s 타이머 재시작 */
   const [failureFreezeRetryEpoch, setFailureFreezeRetryEpoch] = useState(0);
   const debugEnabled = IS_DEV;
   const currentStepKey = `${STEP_ID}:${previewKey}`;
   const ambiguousRetryPlayedForStepRef = useRef<string | null>(null);
   const prevStepKeyForAmbiguousRef = useRef(currentStepKey);
+  /** PR-CAM-10: 애매 재시도 음성 1회 + 이후 completion 관측(디버그) */
+  const [squatAmbiguousRetryHud, setSquatAmbiguousRetryHud] = useState<{
+    voicePlayed: boolean;
+    reason: string | null;
+    secondChanceCompletionSatisfied: boolean;
+  }>({ voicePlayed: false, reason: null, secondChanceCompletionSatisfied: false });
   const nextPath = getNextStepPath(STEP_ID);
 
   useLayoutEffect(() => {
@@ -331,6 +341,11 @@ export default function CameraSquatPage() {
     setNextTriggeredAt(null);
     setNextTriggerReason(null);
     setTransitionHistory([]);
+    setSquatAmbiguousRetryHud({
+      voicePlayed: false,
+      reason: null,
+      secondChanceCompletionSatisfied: false,
+    });
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
   const persistCurrentStep = useCallback(() => {
@@ -560,7 +575,7 @@ export default function CameraSquatPage() {
     if (liveReadiness !== 'ready') return;
     if (readyToShootAttemptedRef.current && !hasReadyToShootPlayedThisSession()) return;
 
-    if (!deriveSquatAmbiguousRetryReason(gate)) return;
+    if (!deriveSquatAmbiguousRetryReason(gate, stats.captureDurationMs)) return;
     if (ambiguousRetryPlayedForStepRef.current === currentStepKey) return;
 
     const stepKeyAtSchedule = currentStepKey;
@@ -568,10 +583,15 @@ export default function CameraSquatPage() {
       if (ambiguousRetryPlayedForStepRef.current === stepKeyAtSchedule) return;
       const g = gateRef.current;
       if (!g || isFinalPassLatched(STEP_ID, g)) return;
-      const reason = deriveSquatAmbiguousRetryReason(g);
+      const reason = deriveSquatAmbiguousRetryReason(g, statsRef.current.captureDurationMs);
       if (!reason) return;
       ambiguousRetryPlayedForStepRef.current = stepKeyAtSchedule;
       setFailureFreezeRetryEpoch((n) => n + 1);
+      setSquatAmbiguousRetryHud({
+        voicePlayed: true,
+        reason,
+        secondChanceCompletionSatisfied: false,
+      });
       void speakVoiceCue(getSquatAmbiguousRetryVoiceCue(reason));
     }, 120);
 
@@ -584,6 +604,27 @@ export default function CameraSquatPage() {
     gate,
     liveReadiness,
     permissionDenied,
+    stats.captureDurationMs,
+  ]);
+
+  /* PR-CAM-10: 애매 재시도 음성 이후 completion 이 채워지면 second-chance 관측(스팸 없음, 1회) */
+  useEffect(() => {
+    if (!squatAmbiguousRetryHud.voicePlayed || squatAmbiguousRetryHud.secondChanceCompletionSatisfied) {
+      return;
+    }
+    if (!gate.completionSatisfied) return;
+    setSquatAmbiguousRetryHud((h) => ({ ...h, secondChanceCompletionSatisfied: true }));
+    if (IS_DEV) {
+      console.info('[camera:squat-second-chance]', {
+        ambiguousRetryReason: squatAmbiguousRetryHud.reason,
+        completionSatisfied: gate.completionSatisfied,
+      });
+    }
+  }, [
+    gate.completionSatisfied,
+    squatAmbiguousRetryHud.reason,
+    squatAmbiguousRetryHud.secondChanceCompletionSatisfied,
+    squatAmbiguousRetryHud.voicePlayed,
   ]);
 
   useEffect(() => {
@@ -1218,8 +1259,27 @@ export default function CameraSquatPage() {
                           {gate.squatCycleDebug.completionBlockedReason ?? 'none'}
                         </span>
                         <span>
+                          ambiguousRetryMinMs: {SQUAT_AMBIGUOUS_RETRY_MIN_CAPTURE_MS}
+                        </span>
+                        <span>
                           ambiguousRetryReason:{' '}
-                          {deriveSquatAmbiguousRetryReason(gate) ?? '—'}
+                          {deriveSquatAmbiguousRetryReason(gate, stats.captureDurationMs) ?? '—'}
+                        </span>
+                        <span>
+                          ambiguousVoicePlayed: {String(squatAmbiguousRetryHud.voicePlayed)}
+                        </span>
+                        <span>
+                          ambiguousVoiceReason: {squatAmbiguousRetryHud.reason ?? '—'}
+                        </span>
+                        <span>
+                          secondChanceSatisfied:{' '}
+                          {String(squatAmbiguousRetryHud.secondChanceCompletionSatisfied)}
+                        </span>
+                        <span className="col-span-2">
+                          retryContractObs:{' '}
+                          {gate.squatCycleDebug?.squatRetryContractObservation
+                            ? JSON.stringify(gate.squatCycleDebug.squatRetryContractObservation)
+                            : '—'}
                         </span>
                         {gate.squatCycleDebug.squatInternalQuality && (
                           <>
