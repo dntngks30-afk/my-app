@@ -93,6 +93,10 @@ export interface SquatCycleDebug {
   guardrailPartialReason?: string;
   /** PR shallow: guardrail complete 시 경로 */
   guardrailCompletePath?: string;
+  /** PR-COMP-01: 명시적 completion 상태기계 단계(트레이스) */
+  completionMachinePhase?: string;
+  /** PR-COMP-01: 통과 ROM 사이클 분류 */
+  completionPassReason?: string;
 }
 
 export interface ExerciseGateResult {
@@ -228,10 +232,9 @@ function hasAnyReason(reasons: string[], includes: string[]): boolean {
 
 function getStableSignalBonus(stepId: CameraStepId, result: EvaluatorResult): number {
   if (stepId === 'squat') {
-    const descentCount = getHighlightedMetric(result, 'descentCount');
-    const bottomCount = getHighlightedMetric(result, 'bottomCount');
-    const ascentCount = getHighlightedMetric(result, 'ascentCount');
-    return descentCount > 1 && bottomCount > 0 && ascentCount > 1 ? 0.04 : 0;
+    const hm = result.debug?.highlightedMetrics;
+    const cycleDone = hm?.completionSatisfied === true || hm?.completionSatisfied === 1;
+    return cycleDone ? 0.04 : 0;
   }
 
   if (stepId === 'wall-angel') {
@@ -299,20 +302,14 @@ function getCommonReasons(result: EvaluatorResult, guardrail: StepGuardrailResul
   ];
 }
 
-/** PR G7: depth = quality only. Completion = full cycle + recovery. */
+/**
+ * PR G7 / PR-COMP-01: completion = `squat-completion-state` 단일 truth.
+ * 레거시 phase-count 병렬 조건 제거 — evaluator `completionSatisfied` + guardrail complete만 사용.
+ */
 function evaluateSquatCompletion(result: EvaluatorResult, guardrail: StepGuardrailResult) {
-  const descentCount = getHighlightedMetric(result, 'descentCount');
-  const bottomCount = getHighlightedMetric(result, 'bottomCount');
-  const ascentCount = getHighlightedMetric(result, 'ascentCount');
-  const ascentRecovered = getHighlightedMetric(result, 'ascentRecovered');
-
-  return (
-    guardrail.completionStatus === 'complete' &&
-    descentCount > 0 &&
-    bottomCount > 0 &&
-    (ascentCount > 0 || ascentRecovered > 0) &&
-    ascentRecovered > 0
-  );
+  const hm = result.debug?.highlightedMetrics;
+  const cycleDone = hm?.completionSatisfied === true || hm?.completionSatisfied === 1;
+  return guardrail.completionStatus === 'complete' && cycleDone;
 }
 
 function evaluateWallAngelCompletion(result: EvaluatorResult, guardrail: StepGuardrailResult) {
@@ -684,6 +681,15 @@ function getSquatProgressionCompletionSatisfied(
   const ascendStartAtMs = getHighlightedMetric(result, 'ascendStartAtMs') || undefined;
   const recoveryAtMs = standingRecoveredAtMs;
 
+  const completionMachinePhase =
+    typeof result.debug?.highlightedMetrics?.completionMachinePhase === 'string'
+      ? result.debug.highlightedMetrics.completionMachinePhase
+      : undefined;
+  const completionPassReason =
+    typeof result.debug?.highlightedMetrics?.completionPassReason === 'string'
+      ? result.debug.highlightedMetrics.completionPassReason
+      : undefined;
+
   const squatCycleDebug: SquatCycleDebug = {
     armingSatisfied,
     currentSquatPhase,
@@ -733,6 +739,8 @@ function getSquatProgressionCompletionSatisfied(
     recoveryReturnContinuityFrames,
     recoveryTrailingDepthCount,
     recoveryDropRatio,
+    completionMachinePhase,
+    completionPassReason,
   };
 
   if (guardrail.completionStatus !== 'complete') {

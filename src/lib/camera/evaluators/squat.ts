@@ -52,7 +52,12 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         frameCount: frames.length,
         validFrameCount: valid.length,
         phaseHints: Array.from(new Set(frames.map((frame) => frame.phaseHint))),
-        highlightedMetrics: { validFrameCount: valid.length },
+        highlightedMetrics: {
+          validFrameCount: valid.length,
+          completionMachinePhase: 'idle',
+          completionPassReason: 'not_confirmed',
+          completionSatisfied: false,
+        },
         perStepDiagnostics: { descent: emptyDiag, bottom: emptyDiag, ascent: emptyDiag },
       },
     };
@@ -214,6 +219,9 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         evidenceLabel: state.evidenceLabel,
         completionBlockedReason: state.completionBlockedReason,
         completionSatisfied: state.completionSatisfied,
+        /** PR-COMP-01: completion gate 전용(품질·depthBand와 분리) */
+        completionMachinePhase: state.completionMachinePhase,
+        completionPassReason: state.completionPassReason,
         /** PR squat-low-rom: trace */
         recoveryReturnContinuityFrames: state.recoveryReturnContinuityFrames,
         recoveryTrailingDepthCount: state.recoveryTrailingDepthCount,

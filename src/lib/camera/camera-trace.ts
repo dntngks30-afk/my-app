@@ -126,6 +126,9 @@ export interface AttemptSnapshot {
       lowRomRejectionReason?: string | null;
       /** PR shallow: ultra-low-ROM recovery 미확인 이유 */
       ultraLowRomRejectionReason?: string | null;
+      /** PR-COMP-01 */
+      completionMachinePhase?: string;
+      completionPassReason?: string;
     };
     /** overhead — PR-C4 trace, PR overhead-dwell */
     overhead?: {
@@ -344,6 +347,8 @@ function buildDiagnosisSummary(
       guardrailCompletePath: sc.guardrailCompletePath,
       lowRomRejectionReason: sc.lowRomRejectionReason,
       ultraLowRomRejectionReason: sc.ultraLowRomRejectionReason,
+      completionMachinePhase: sc.completionMachinePhase,
+      completionPassReason: sc.completionPassReason,
     };
   }
 

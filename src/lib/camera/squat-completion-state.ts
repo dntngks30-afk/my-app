@@ -1,5 +1,11 @@
 import type { PoseFeaturesFrame } from './pose-features';
 import { getSquatRecoverySignal } from './pose-features';
+import {
+  deriveSquatCompletionMachinePhase,
+  deriveSquatCompletionPassReason,
+  type SquatCompletionMachinePhase,
+  type SquatCompletionPassReason,
+} from '@/lib/camera/squat-completion-machine';
 
 export type SquatCompletionPhase =
   | 'idle'
@@ -56,6 +62,10 @@ export interface SquatCompletionState {
   squatDescentToPeakMs?: number;
   /** PR-CAM-02: 역전(피크) 시각~서 있기 복귀 시각 */
   squatReversalToStandingMs?: number;
+  /** PR-COMP-01: 트레이스용 completion 상태기계 단계 */
+  completionMachinePhase: SquatCompletionMachinePhase;
+  /** PR-COMP-01: 통과 시 ROM 사이클 분류 / 미통과 not_confirmed */
+  completionPassReason: SquatCompletionPassReason;
 }
 
 const BASELINE_WINDOW = 6;
@@ -162,17 +172,17 @@ export function evaluateSquatCompletionState(
     );
 
   if (depthFrames.length === 0) {
-    return {
+    const emptyBase = {
       baselineStandingDepth: 0,
       rawDepthPeak: 0,
       relativeDepthPeak: 0,
-      currentSquatPhase: 'idle',
+      currentSquatPhase: 'idle' as const,
       attemptStarted: false,
       descendConfirmed: false,
       downwardCommitmentReached: false,
       ascendConfirmed: false,
       standingRecoveryHoldMs: 0,
-      evidenceLabel: 'insufficient_signal',
+      evidenceLabel: 'insufficient_signal' as const,
       completionBlockedReason: 'not_armed',
       completionSatisfied: false,
       startBeforeBottom: false,
@@ -184,6 +194,11 @@ export function evaluateSquatCompletionState(
       standingRecoveryThreshold: STANDING_RECOVERY_TOLERANCE_FLOOR,
       lowRomRecoveryReason: null,
       ultraLowRomRecoveryReason: null,
+    };
+    return {
+      ...emptyBase,
+      completionMachinePhase: deriveSquatCompletionMachinePhase(emptyBase),
+      completionPassReason: deriveSquatCompletionPassReason(emptyBase),
     };
   }
 
@@ -384,5 +399,14 @@ export function evaluateSquatCompletionState(
     squatReversalDropAchieved,
     squatDescentToPeakMs,
     squatReversalToStandingMs,
+    completionMachinePhase: deriveSquatCompletionMachinePhase({
+      completionSatisfied,
+      currentSquatPhase,
+      downwardCommitmentReached,
+    }),
+    completionPassReason: deriveSquatCompletionPassReason({
+      completionSatisfied,
+      evidenceLabel,
+    }),
   };
 }
