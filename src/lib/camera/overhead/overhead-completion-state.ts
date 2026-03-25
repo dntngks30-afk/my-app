@@ -11,6 +11,7 @@ import {
   OVERHEAD_COMPLETION_MAX_MEAN_ASYM_DEG,
   OVERHEAD_COMPLETION_MAX_PEAK_ASYM_DEG,
 } from './overhead-constants';
+import type { MotionCompletionResult } from '@/lib/camera/types/motion-completion';
 
 export type OverheadCompletionMachinePhase =
   | 'idle'
@@ -37,7 +38,7 @@ export interface OverheadCompletionInput {
   maxAsymmetryDeg: number | null;
 }
 
-export interface OverheadCompletionState {
+export interface OverheadCompletionState extends MotionCompletionResult {
   topDetected: boolean;
   stableTopEntry: boolean;
   holdStarted: boolean;
@@ -45,8 +46,6 @@ export interface OverheadCompletionState {
   holdSatisfied: boolean;
   /** 모션 기준 통과 후보 — 가드레일·신뢰도와 결합 전 */
   passLatchedCandidate: boolean;
-  completionSatisfied: boolean;
-  completionBlockedReason: string | null;
   completionMachinePhase: OverheadCompletionMachinePhase;
   completionPassReason: OverheadCompletionPassReason;
 }

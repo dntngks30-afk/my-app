@@ -1,16 +1,14 @@
 /**
  * PR-COMP-04 — 오버헤드 **내부 해석** 레이어 (completion·pass와 무관).
  */
+import type { MotionInternalQualityBase } from '@/lib/camera/types/motion-completion';
 import { OVERHEAD_REQUIRED_HOLD_MS, OVERHEAD_TOP_FLOOR_DEG } from './overhead-constants';
 
-export type OverheadInternalQuality = {
+export type OverheadInternalQuality = MotionInternalQualityBase & {
   mobilityScore: number;
   controlScore: number;
   symmetryScore: number;
   holdStabilityScore: number;
-  confidence: number;
-  qualityTier: 'high' | 'medium' | 'low';
-  limitations: string[];
 };
 
 export type OverheadInternalQualityInput = {

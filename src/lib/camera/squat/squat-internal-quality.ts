@@ -5,15 +5,13 @@
  * - 포즈·프레임에서 파생된 **숫자 신호만** 입력으로 받는다 (completionSatisfied 등 금지).
  * - 퍼블릭 UX·트렌드 라벨보다 **보수적(strict)** 인 0–1 스코어와 tier를 만든다.
  */
+import type { MotionInternalQualityBase } from '@/lib/camera/types/motion-completion';
 
-export type SquatInternalQuality = {
+export type SquatInternalQuality = MotionInternalQualityBase & {
   depthScore: number;
   controlScore: number;
   symmetryScore: number;
   recoveryScore: number;
-  confidence: number;
-  qualityTier: 'high' | 'medium' | 'low';
-  limitations: string[];
 };
 
 /**

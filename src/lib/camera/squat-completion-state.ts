@@ -6,6 +6,7 @@ import {
   type SquatCompletionMachinePhase,
   type SquatCompletionPassReason,
 } from '@/lib/camera/squat-completion-machine';
+import type { MotionCompletionResult } from '@/lib/camera/types/motion-completion';
 
 export type SquatCompletionPhase =
   | 'idle'
@@ -21,7 +22,7 @@ export type SquatEvidenceLabel =
   | 'ultra_low_rom'
   | 'insufficient_signal';
 
-export interface SquatCompletionState {
+export interface SquatCompletionState extends MotionCompletionResult {
   baselineStandingDepth: number;
   rawDepthPeak: number;
   relativeDepthPeak: number;
@@ -36,8 +37,6 @@ export interface SquatCompletionState {
   standingRecoveryHoldMs: number;
   successPhaseAtOpen?: 'standing_recovered';
   evidenceLabel: SquatEvidenceLabel;
-  completionBlockedReason: string | null;
-  completionSatisfied: boolean;
   startBeforeBottom: boolean;
   bottomDetected: boolean;
   recoveryDetected: boolean;
