@@ -615,13 +615,14 @@ export default function CameraOverheadReachPage() {
 
   /* PR G5: passConfirmed -> passLatched 공통 계약. effectivePassLatched(finalPassLatched || passLatched)로 latch. */
   /* PR-C4: hold cue 재생 중에는 success overlap 방지를 위해 latch 지연 */
+  /* PR-CAM-11A: finalPassLatched(게이트 통과)이면 holdCueActive 대기 우회 — 데드락 방지 */
   useEffect(() => {
     if (permissionDenied || !cameraReady || passLatched || settledRef.current) {
       return;
     }
 
     if (effectivePassLatched) {
-      if (holdCueActive) return;
+      if (holdCueActive && !finalPassLatched) return;
       latchPassEvent('effectivePassLatched', passReady ? ['passReady'] : []);
       return;
     }
@@ -667,7 +668,8 @@ export default function CameraOverheadReachPage() {
     }
 
     /* PR-C4: hold cue 재생 중 success overlap 방지 — latch 지연 */
-    if (holdCueActive) return;
+    /* PR-CAM-11A: finalPassLatched이면 holdCue 대기 우회 (데드락 방지) */
+    if (holdCueActive && !finalPassLatched) return;
 
     if (passLatchedStepKeyRef.current !== currentStepKey) {
       latchPassEvent('effectivePassLatched', []);

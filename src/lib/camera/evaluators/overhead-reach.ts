@@ -21,6 +21,7 @@ import {
   computeOverheadInternalQuality,
   overheadInternalQualityInsufficientSignal,
 } from '@/lib/camera/overhead/overhead-internal-quality';
+import { computeOverheadTopHoldFallback } from '@/lib/camera/overhead/overhead-top-hold-fallback';
 
 const MIN_VALID_FRAMES = 8;
 
@@ -477,6 +478,28 @@ export function evaluateOverheadReachFromPoseFrames(
   const armRangeAvgDeg =
     armElevationAvgValues.length > 0 ? mean(armElevationAvgValues) : 0;
 
+  /**
+   * PR-CAM-11A: top-zone 프레임 수집 (e >= floor 인 valid 프레임만).
+   * fallback top-hold 계산에 사용; strict dwell 계산과 무관.
+   */
+  const topZoneFrames = valid
+    .filter(
+      (f) =>
+        typeof f.derived.armElevationAvg === 'number' &&
+        f.derived.armElevationAvg >= OVERHEAD_TOP_FLOOR_DEG
+    )
+    .map((f) => ({ timestampMs: f.timestampMs }));
+
+  // PR-CAM-11A: jitter-tolerant fallback 계산 (strict 경로 보완용)
+  const fallbackTopHold = computeOverheadTopHoldFallback({
+    topZoneFrames,
+    raiseCount,
+    peakCount,
+    effectiveArmDeg: peakArmForCompletion,
+    meanAsymmetryDeg,
+    maxAsymmetryDeg,
+  });
+
   const overheadCompletion = evaluateOverheadCompletionState({
     raiseCount,
     peakCount,
@@ -490,6 +513,7 @@ export function evaluateOverheadReachFromPoseFrames(
     holdArmingBlockedReason: dwellResult.holdArmingBlockedReason,
     meanAsymmetryDeg,
     maxAsymmetryDeg,
+    fallbackTopHold,
   });
 
   if (!overheadCompletion.completionSatisfied) {
@@ -651,6 +675,14 @@ export function evaluateOverheadReachFromPoseFrames(
         holdSatisfied: overheadCompletion.holdSatisfied ? 1 : 0,
         passLatchedCandidate: overheadCompletion.passLatchedCandidate ? 1 : 0,
         overheadTopDetected: overheadCompletion.topDetected ? 1 : 0,
+        /** PR-CAM-11A: fallback top-hold 경로 트레이스 */
+        completionPath: overheadCompletion.completionPath,
+        fallbackTopHoldSatisfied: overheadCompletion.fallbackTopHoldSatisfied ? 1 : 0,
+        fallbackTopHoldBestRunMs: fallbackTopHold.bestTopRunMs,
+        fallbackTopHoldBestRunFrames: fallbackTopHold.bestTopRunFrameCount,
+        fallbackTopHoldEligible: fallbackTopHold.fallbackEligible ? 1 : 0,
+        fallbackTopHoldBlockedReason: fallbackTopHold.fallbackBlockedReason,
+        topZoneFrameCount: topZoneFrames.length,
       },
       perStepDiagnostics: perStepRecord,
     },
