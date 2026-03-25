@@ -1,6 +1,7 @@
 import type { CameraStepId } from '@/lib/public/camera-test';
 import type { ExerciseGateResult, SquatCycleDebug } from './auto-progression';
 import type { SquatAmbiguousRetryReason } from './squat-ambiguous-retry';
+import type { OverheadAmbiguousRetryReason } from './overhead/overhead-ambiguous-retry';
 import { getEffectiveRetryGuidance } from './camera-guidance';
 import type { LiveReadinessState } from './live-readiness';
 import {
@@ -689,6 +690,25 @@ export function getSquatAmbiguousRetryVoiceCue(reason: SquatAmbiguousRetryReason
   return {
     kind: 'correction',
     dedupeKey: `correction:squat:ambiguous-retry:${reason}`,
+    text: textByReason[reason],
+    priority: 4,
+    cooldownMs: 20000,
+    interrupt: true,
+    fallbackBeep: false,
+  };
+}
+
+/** PR-COMP-04: 오버헤드 애매 재시도 1회용 (텍스트 TTS) */
+export function getOverheadAmbiguousRetryVoiceCue(reason: OverheadAmbiguousRetryReason): VoiceCue {
+  const textByReason: Record<OverheadAmbiguousRetryReason, string> = {
+    insufficient_height: '팔을 끝까지 더 들어볼게요.',
+    unstable_top: '위에서 잠깐 멈춰볼게요.',
+    no_hold: '좋아요, 위에서 1초만 유지해볼게요.',
+    partial_raise: '동작이 조금 애매했어요. 다시 해볼게요.',
+  };
+  return {
+    kind: 'correction',
+    dedupeKey: `correction:overhead:ambiguous-retry:${reason}`,
     text: textByReason[reason],
     priority: 4,
     cooldownMs: 20000,

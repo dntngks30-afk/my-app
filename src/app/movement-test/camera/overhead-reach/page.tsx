@@ -4,7 +4,7 @@
  * 카메라 테스트 - 오버헤드 리치
  * AI gate가 pass / retry / fail을 판단하고 자동 진행한다.
  */
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
@@ -22,6 +22,7 @@ import {
   evaluateExerciseAutoProgress,
   isFinalPassLatched,
   isGatePassReady,
+  type ExerciseGateResult,
   type ExerciseProgressionState,
 } from '@/lib/camera/auto-progression';
 import {
@@ -46,6 +47,7 @@ import {
   cancelCorrectiveCueForSuccess,
   cancelVoiceGuidance,
   getFollowUpIntroVoiceCue,
+  getOverheadAmbiguousRetryVoiceCue,
   getReadyToShootVoiceCue,
   getStartVoiceCue,
   getFinalSuccessVoiceCue,
@@ -59,6 +61,7 @@ import {
   trySpeakCorrectiveCueWithAntiSpam,
   unlockVoiceGuidance,
 } from '@/lib/camera/voice-guidance';
+import { deriveOverheadAmbiguousRetryReason } from '@/lib/camera/overhead/overhead-ambiguous-retry';
 import { getSetupFramingHint } from '@/lib/camera/setup-framing';
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 import { SuccessFreezeOverlay } from '@/components/camera/SuccessFreezeOverlay';
@@ -191,6 +194,9 @@ export default function CameraOverheadReachPage() {
   /** PR-C4: hold cue 재생 중 success overlap 차단 */
   const [holdCueActive, setHoldCueActive] = useState(false);
   const currentStepKey = `${STEP_ID}:${previewKey}`;
+  const ambiguousRetryPlayedForStepRef = useRef<string | null>(null);
+  const prevStepKeyForAmbiguousRef = useRef(currentStepKey);
+  const gateRef = useRef<ExerciseGateResult | null>(null);
   const nextPath = getNextStepPath(STEP_ID) ?? '/movement-test/camera/complete';
   /** 마지막 단계(overhead-reach → complete): outro 재생 완료 후에만 이동 */
   const isFinalStep = getNextStepPath(STEP_ID) === null;
@@ -200,6 +206,17 @@ export default function CameraOverheadReachPage() {
     () => evaluateExerciseAutoProgress(STEP_ID, landmarks, stats),
     [landmarks, stats]
   );
+
+  useLayoutEffect(() => {
+    if (prevStepKeyForAmbiguousRef.current !== currentStepKey) {
+      ambiguousRetryPlayedForStepRef.current = null;
+      prevStepKeyForAmbiguousRef.current = currentStepKey;
+    }
+  }, [currentStepKey]);
+
+  useEffect(() => {
+    gateRef.current = gate;
+  }, [gate]);
   const passReady = isGatePassReady(gate);
   const finalPassLatched = isFinalPassLatched(STEP_ID, gate);
   const effectivePassLatched = finalPassLatched || passLatched;
@@ -464,6 +481,40 @@ export default function CameraOverheadReachPage() {
     gate,
     liveReadiness,
     liveReadinessSummary.framingHint,
+    permissionDenied,
+    startSequenceComplete,
+  ]);
+
+  /* PR-COMP-04: 애매 재시도 음성 1회 — startSequenceComplete ≈ squat capturing */
+  useEffect(() => {
+    if (!startSequenceComplete || effectivePassLatched || permissionDenied) {
+      return;
+    }
+    if (!captureCuingEnabled) return;
+    if (liveReadiness !== 'ready') return;
+    if (readyToShootAttemptedRef.current && !hasReadyToShootPlayedThisSession()) return;
+
+    if (!deriveOverheadAmbiguousRetryReason(gate)) return;
+    if (ambiguousRetryPlayedForStepRef.current === currentStepKey) return;
+
+    const stepKeyAtSchedule = currentStepKey;
+    const t = window.setTimeout(() => {
+      if (ambiguousRetryPlayedForStepRef.current === stepKeyAtSchedule) return;
+      const g = gateRef.current;
+      if (!g || isFinalPassLatched(STEP_ID, g)) return;
+      const reason = deriveOverheadAmbiguousRetryReason(g);
+      if (!reason) return;
+      ambiguousRetryPlayedForStepRef.current = stepKeyAtSchedule;
+      void speakVoiceCue(getOverheadAmbiguousRetryVoiceCue(reason));
+    }, 120);
+
+    return () => window.clearTimeout(t);
+  }, [
+    captureCuingEnabled,
+    currentStepKey,
+    effectivePassLatched,
+    gate,
+    liveReadiness,
     permissionDenied,
     startSequenceComplete,
   ]);
@@ -1036,7 +1087,52 @@ export default function CameraOverheadReachPage() {
                     <span>startPoseSatisfied: {String(stats.sampledFrameCount >= 8)}</span>
                     <span>upwardMotionDetected: {String(raiseCount > 0)}</span>
                     <span>topReachDetected: {String(peakCount > 0)}</span>
-                    <span>holdSatisfied: {String(holdDurationMs >= 600)}</span>
+                    <span>
+                      holdSatisfied:{' '}
+                      {String(gate.evaluatorResult.debug?.highlightedMetrics?.holdSatisfied === 1)}
+                    </span>
+                    <span>
+                      completionPhase:{' '}
+                      {String(
+                        gate.evaluatorResult.debug?.highlightedMetrics?.completionMachinePhase ??
+                          'n/a'
+                      )}
+                    </span>
+                    <span>
+                      completionBlocked:{' '}
+                      {String(
+                        gate.evaluatorResult.debug?.highlightedMetrics?.completionBlockedReason ??
+                          'none'
+                      )}
+                    </span>
+                    <span>
+                      ambiguousRetryReason: {deriveOverheadAmbiguousRetryReason(gate) ?? '—'}
+                    </span>
+                    {gate.evaluatorResult.debug?.overheadInternalQuality && (
+                      <>
+                        <span>
+                          internalQ tier:{' '}
+                          {gate.evaluatorResult.debug.overheadInternalQuality.qualityTier}
+                        </span>
+                        <span className="col-span-2">
+                          internalQ mob/ctl/sym/hold/conf:{' '}
+                          {[
+                            gate.evaluatorResult.debug.overheadInternalQuality.mobilityScore,
+                            gate.evaluatorResult.debug.overheadInternalQuality.controlScore,
+                            gate.evaluatorResult.debug.overheadInternalQuality.symmetryScore,
+                            gate.evaluatorResult.debug.overheadInternalQuality.holdStabilityScore,
+                            gate.evaluatorResult.debug.overheadInternalQuality.confidence,
+                          ]
+                            .map((n) => n.toFixed(2))
+                            .join(' / ')}
+                        </span>
+                        <span className="col-span-2">
+                          internalQ lim:{' '}
+                          {gate.evaluatorResult.debug.overheadInternalQuality.limitations.join(', ') ||
+                            'none'}
+                        </span>
+                      </>
+                    )}
                     <span>holdTooShort: {String(gate.failureReasons?.includes('hold_too_short') ?? false)}</span>
                     <span>passBlockedReason: {gate.completionSatisfied ? 'n/a' : (stats.captureDurationMs < 800 ? 'arming_window' : gate.guardrail.completionStatus !== 'complete' ? 'guardrail_not_complete' : 'metrics')}</span>
                     <span>latchBlockedReason: {effectivePassLatched ? 'n/a' : (!gate.completionSatisfied ? 'completion' : !gate.passConfirmationSatisfied ? 'passConfirmation' : gate.guardrail.captureQuality === 'invalid' ? 'captureQuality' : gate.confidence < 0.72 ? 'confidence' : 'passFrames')}</span>

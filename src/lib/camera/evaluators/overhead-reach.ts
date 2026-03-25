@@ -10,13 +10,26 @@ import { buildPoseFeaturesFrames } from '@/lib/camera/pose-features';
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 import { getOverheadPerStepDiagnostics } from '@/lib/camera/step-joint-spec';
 import type { EvaluatorResult, EvaluatorMetric } from './types';
+import {
+  OVERHEAD_TOP_FLOOR_DEG,
+  OVERHEAD_REQUIRED_HOLD_MS,
+  OVERHEAD_STABLE_TOP_DELTA_DEG,
+  OVERHEAD_STABLE_TOP_CONSECUTIVE,
+} from '@/lib/camera/overhead/overhead-constants';
+import { evaluateOverheadCompletionState } from '@/lib/camera/overhead/overhead-completion-state';
+import {
+  computeOverheadInternalQuality,
+  overheadInternalQualityInsufficientSignal,
+} from '@/lib/camera/overhead/overhead-internal-quality';
 
 const MIN_VALID_FRAMES = 8;
 
-/** evaluator/guardrails 공용 상수 — delta/degree는 이번 PR에서 변경하지 않음 */
-export const OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG = 132;
-export const OVERHEAD_STABLE_TOP_DELTA_DEG = 2.6;
-export const OVERHEAD_STABLE_TOP_CONSECUTIVE = 3;
+/** 가드레일 등 레거시 import 경로 유지 — 값은 `overhead-constants` 단일 소스 */
+export {
+  OVERHEAD_TOP_FLOOR_DEG as OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG,
+  OVERHEAD_STABLE_TOP_DELTA_DEG,
+  OVERHEAD_STABLE_TOP_CONSECUTIVE,
+} from '@/lib/camera/overhead/overhead-constants';
 
 export interface OverheadStableTopDwellResult {
   holdDurationMs: number;
@@ -59,7 +72,7 @@ const HOLD_GRACE_FRAMES = 2;
  */
 export function computeOverheadStableTopDwell(
   frames: PoseFeaturesFrame[],
-  floorDeg = OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG,
+  floorDeg = OVERHEAD_TOP_FLOOR_DEG,
   deltaMax = OVERHEAD_STABLE_TOP_DELTA_DEG,
   consecutive = OVERHEAD_STABLE_TOP_CONSECUTIVE
 ): OverheadStableTopDwellResult {
@@ -262,7 +275,7 @@ export function computeOverheadPlanningEvidenceLevel(input: {
   reasons: string[];
   dwellCoherent: boolean;
 } {
-  const REQUIRED_PASS_HOLD_MS = 1200;
+  const REQUIRED_PASS_HOLD_MS = OVERHEAD_REQUIRED_HOLD_MS;
   const STRONG_HOLD_MS = 1520;
   const PEAK_DEG_FOR_STRONG = 135;
 
@@ -373,10 +386,23 @@ export function evaluateOverheadReachFromPoseFrames(
         frameCount: frames.length,
         validFrameCount: valid.length,
         phaseHints: Array.from(new Set(frames.map((frame) => frame.phaseHint))),
-        highlightedMetrics: { validFrameCount: valid.length },
+        highlightedMetrics: {
+          validFrameCount: valid.length,
+          completionSatisfied: false,
+          completionBlockedReason: 'raise_peak_incomplete',
+          completionMachinePhase: 'idle',
+          completionPassReason: 'not_confirmed',
+          topDetected: 0,
+          stableTopEntry: 0,
+          holdStarted: 0,
+          holdSatisfied: 0,
+          passLatchedCandidate: 0,
+          overheadTopDetected: 0,
+        },
         perStepDiagnostics: { raise: emptyDiag, hold: emptyDiag },
         overheadEvidenceLevel: 'insufficient_signal',
         overheadEvidenceReasons: ['valid_frames_too_few'],
+        overheadInternalQuality: overheadInternalQualityInsufficientSignal(),
       },
     };
   }
@@ -406,7 +432,7 @@ export function evaluateOverheadReachFromPoseFrames(
       const delta = typeof e === 'number' && typeof prev === 'number' ? e - prev : 0;
       if (
         typeof e !== 'number' ||
-        e < OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG ||
+        e < OVERHEAD_TOP_FLOOR_DEG ||
         Math.abs(delta) >= OVERHEAD_STABLE_TOP_DELTA_DEG
       ) {
         allStable = false;
@@ -422,7 +448,7 @@ export function evaluateOverheadReachFromPoseFrames(
   const topDetectedIdx = valid.findIndex(
     (f) =>
       typeof f.derived.armElevationAvg === 'number' &&
-      f.derived.armElevationAvg >= OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG
+      f.derived.armElevationAvg >= OVERHEAD_TOP_FLOOR_DEG
   );
   const topConfirmedPeaks =
     topDetectedIdx >= 0
@@ -438,20 +464,42 @@ export function evaluateOverheadReachFromPoseFrames(
   const topEntryAtMs = dwellResult.topDetectedAtMs;
   const stableTopEntryAtMs = dwellResult.stableTopEnteredAtMs;
   const holdSatisfiedAtMs =
-    holdDurationMs >= 1200 && dwellResult.holdArmedAtMs !== undefined
-      ? dwellResult.holdArmedAtMs + 1200
+    holdDurationMs >= OVERHEAD_REQUIRED_HOLD_MS && dwellResult.holdArmedAtMs !== undefined
+      ? dwellResult.holdArmedAtMs + OVERHEAD_REQUIRED_HOLD_MS
       : undefined;
 
-  if (raiseCount === 0 || peakCount === 0) {
-    completionHints.push('raise_peak_incomplete');
+  const meanAsymmetryDeg =
+    armElevationGapValues.length > 0 ? mean(armElevationGapValues) : null;
+  const maxAsymmetryDeg =
+    armElevationGapValues.length > 0 ? Math.max(...armElevationGapValues) : null;
+  const peakArmForCompletion =
+    armElevationAvgValues.length > 0 ? Math.max(...armElevationAvgValues) : 0;
+  const armRangeAvgDeg =
+    armElevationAvgValues.length > 0 ? mean(armElevationAvgValues) : 0;
+
+  const overheadCompletion = evaluateOverheadCompletionState({
+    raiseCount,
+    peakCount,
+    peakArmElevationDeg: peakArmForCompletion,
+    armRangeAvgDeg,
+    holdDurationMs,
+    topDetectedAtMs: dwellResult.topDetectedAtMs,
+    stableTopEnteredAtMs: dwellResult.stableTopEnteredAtMs,
+    holdArmedAtMs: dwellResult.holdArmedAtMs,
+    holdAccumulationStartedAtMs: dwellResult.holdAccumulationStartedAtMs,
+    holdArmingBlockedReason: dwellResult.holdArmingBlockedReason,
+    meanAsymmetryDeg,
+    maxAsymmetryDeg,
+  });
+
+  if (!overheadCompletion.completionSatisfied) {
+    if (overheadCompletion.completionBlockedReason === 'hold_short') {
+      completionHints.push('top_hold_short');
+    } else {
+      completionHints.push('raise_peak_incomplete');
+    }
   } else {
     interpretedSignals.push('raise-peak cycle detected');
-  }
-
-  /** Product: explicit top-hold window ~1–2s. Hold starts only after true top entry. */
-  const REQUIRED_TOP_HOLD_MS = 1200;
-  if (holdDurationMs < REQUIRED_TOP_HOLD_MS) {
-    completionHints.push('top_hold_short');
   }
 
   if (armElevationAvgValues.length > 0) {
@@ -498,7 +546,12 @@ export function evaluateOverheadReachFromPoseFrames(
     name: 'hold_duration',
     value: holdDurationMs,
     unit: 'ms',
-    trend: holdDurationMs >= 1200 ? 'good' : holdDurationMs >= 1000 ? 'neutral' : 'concern',
+    trend:
+      holdDurationMs >= OVERHEAD_REQUIRED_HOLD_MS
+        ? 'good'
+        : holdDurationMs >= 1000
+          ? 'neutral'
+          : 'concern',
   });
 
   const perStepDiagnostics = getOverheadPerStepDiagnostics(valid, metrics.length);
@@ -524,6 +577,27 @@ export function evaluateOverheadReachFromPoseFrames(
     asymTrend,
   });
 
+  const unstableHintHits = qualityHints.filter((h) =>
+    ['unstable_bbox', 'unstable_landmarks', 'timestamp_gap'].includes(h)
+  ).length;
+  const signalIntegrityMultiplier = Math.max(0.55, 1 - unstableHintHits * 0.14);
+
+  /** PR-COMP-04: completion과 무관한 strict 내부 해석 */
+  const overheadInternalQuality = computeOverheadInternalQuality({
+    peakArmElevationDeg: peakArmForCompletion,
+    meanAsymmetryDeg,
+    lumbarExtensionDeviationDeg:
+      torsoExtensionDeviation.length > 0 ? mean(torsoExtensionDeviation) : null,
+    holdDurationMs,
+    stableTopDwellMs: dwellResult.stableTopDwellMs,
+    stableTopSegmentCount: dwellResult.stableTopSegmentCount,
+    dwellCoherent: overheadPlanning.dwellCoherent,
+    validFrameRatio: frames.length > 0 ? valid.length / frames.length : 0,
+    signalIntegrityMultiplier,
+    raiseCount,
+    peakCount,
+  });
+
   return {
     stepId: 'overhead-reach',
     metrics,
@@ -539,6 +613,7 @@ export function evaluateOverheadReachFromPoseFrames(
       /** PR-CAM-03: normalize가 step별로 weakest 병합 */
       overheadEvidenceLevel: overheadPlanning.level,
       overheadEvidenceReasons: overheadPlanning.reasons,
+      overheadInternalQuality,
       highlightedMetrics: {
         raiseCount,
         peakCount,
@@ -565,6 +640,17 @@ export function evaluateOverheadReachFromPoseFrames(
         /** PR-CAM-03: 기기 트레이스 — dwell 일관성·planning 등급 */
         cam03DwellCoherent: overheadPlanning.dwellCoherent ? 1 : 0,
         cam03OverheadPlanningLevel: overheadPlanning.level,
+        /** PR-COMP-04: completion SSOT (모션) — auto-progression이 guardrail과 결합 */
+        completionSatisfied: overheadCompletion.completionSatisfied,
+        completionBlockedReason: overheadCompletion.completionBlockedReason,
+        completionMachinePhase: overheadCompletion.completionMachinePhase,
+        completionPassReason: overheadCompletion.completionPassReason,
+        topDetected: overheadCompletion.topDetected ? 1 : 0,
+        stableTopEntry: overheadCompletion.stableTopEntry ? 1 : 0,
+        holdStarted: overheadCompletion.holdStarted ? 1 : 0,
+        holdSatisfied: overheadCompletion.holdSatisfied ? 1 : 0,
+        passLatchedCandidate: overheadCompletion.passLatchedCandidate ? 1 : 0,
+        overheadTopDetected: overheadCompletion.topDetected ? 1 : 0,
       },
       perStepDiagnostics: perStepRecord,
     },

@@ -5,6 +5,7 @@ import type { PoseLandmarks } from '@/lib/motion/pose-types';
 import type { PoseFeaturesFrame, PosePhaseHint } from '@/lib/camera/pose-features';
 import type { PerStepDiagnostic } from '@/lib/camera/step-joint-spec';
 import type { SquatInternalQuality } from '@/lib/camera/squat/squat-internal-quality';
+import type { OverheadInternalQuality } from '@/lib/camera/overhead/overhead-internal-quality';
 
 export interface EvaluatorMetric {
   name: string;
@@ -32,6 +33,8 @@ export interface EvaluatorDebugSummary {
   insufficientSignalReason?: string | null;
   /** PR-COMP-03: completion과 무관한 strict 내부 해석 레이어 */
   squatInternalQuality?: SquatInternalQuality;
+  /** PR-COMP-04: 오버헤드 내부 해석 레이어 */
+  overheadInternalQuality?: OverheadInternalQuality;
 }
 
 export interface EvaluatorResult {

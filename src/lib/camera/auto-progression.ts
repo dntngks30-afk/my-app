@@ -334,32 +334,14 @@ function evaluateWallAngelCompletion(result: EvaluatorResult, guardrail: StepGua
   );
 }
 
-/** PR G8/G9: overhead reach — real attempt + explicit top-hold window before success.
- * PR G11: absolute top floor — effectiveArm must reach true overhead level.
- * Product: user must hold at top ~1–2s before final success. */
-const REQUIRED_TOP_HOLD_MS = 1200;
-const OVERHEAD_HOLD_COMPLETION_MS = REQUIRED_TOP_HOLD_MS;
-const OVERHEAD_MIN_PEAK_FRAMES = 3;
-const OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG = 132;
-
+/** PR G8/G9 + PR-COMP-04: overhead completion = `overhead-completion-state` → evaluator highlightedMetrics */
 function evaluateOverheadReachCompletion(
   result: EvaluatorResult,
   guardrail: StepGuardrailResult
 ) {
-  const peakArm = getHighlightedMetric(result, 'peakArmElevation');
-  const armRange = getMetricValue(result.metrics, 'arm_range') ?? 0;
-  const effectiveArm = peakArm > 0 ? peakArm : armRange;
-  const holdDuration = getMetricValue(result.rawMetrics, 'hold_duration') ?? 0;
-  const raiseCount = getHighlightedMetric(result, 'raiseCount');
-  const peakCount = getHighlightedMetric(result, 'peakCount');
-
-  return (
-    guardrail.completionStatus === 'complete' &&
-    effectiveArm >= OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG &&
-    holdDuration >= OVERHEAD_HOLD_COMPLETION_MS &&
-    raiseCount > 0 &&
-    peakCount >= OVERHEAD_MIN_PEAK_FRAMES
-  );
+  const hm = result.debug?.highlightedMetrics;
+  const done = hm?.completionSatisfied === true || hm?.completionSatisfied === 1;
+  return guardrail.completionStatus === 'complete' && done;
 }
 
 function evaluateBalanceCompletion(result: EvaluatorResult, guardrail: StepGuardrailResult) {

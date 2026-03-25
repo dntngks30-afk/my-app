@@ -11,6 +11,7 @@ import { isFinalPassLatched } from './auto-progression';
 import { getCorrectiveCueObservability } from './voice-guidance';
 import { getLastPlaybackObservability } from './korean-audio-pack';
 import type { SquatInternalQuality } from './squat/squat-internal-quality';
+import type { OverheadInternalQuality } from './overhead/overhead-internal-quality';
 
 /** PR-4: movement type (squat, overhead_reach만 지원) */
 export type TraceMovementType = 'squat' | 'overhead_reach';
@@ -164,6 +165,10 @@ export interface AttemptSnapshot {
       stableTopDwellMs?: number;
       stableTopSegmentCount?: number;
       holdComputationMode?: string;
+      /** PR-COMP-04 */
+      completionMachinePhase?: string;
+      completionBlockedReason?: string | null;
+      overheadInternalQuality?: OverheadInternalQuality;
     };
     /** cue */
     cue?: {
@@ -433,6 +438,11 @@ function buildDiagnosisSummary(
       stableTopDwellMs,
       stableTopSegmentCount,
       holdComputationMode,
+      completionMachinePhase:
+        typeof hm?.completionMachinePhase === 'string' ? hm.completionMachinePhase : undefined,
+      completionBlockedReason:
+        typeof hm?.completionBlockedReason === 'string' ? hm.completionBlockedReason : undefined,
+      overheadInternalQuality: gate.evaluatorResult.debug?.overheadInternalQuality,
     };
   }
 
