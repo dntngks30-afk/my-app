@@ -10,6 +10,7 @@ import { CAMERA_DIAG_VERSION, hasSquatAttemptEvidence } from './camera-success-d
 import { isFinalPassLatched } from './auto-progression';
 import { getCorrectiveCueObservability } from './voice-guidance';
 import { getLastPlaybackObservability } from './korean-audio-pack';
+import type { SquatInternalQuality } from './squat/squat-internal-quality';
 
 /** PR-4: movement type (squat, overhead_reach만 지원) */
 export type TraceMovementType = 'squat' | 'overhead_reach';
@@ -129,6 +130,8 @@ export interface AttemptSnapshot {
       /** PR-COMP-01 */
       completionMachinePhase?: string;
       completionPassReason?: string;
+      /** PR-COMP-03 */
+      squatInternalQuality?: SquatInternalQuality;
     };
     /** overhead — PR-C4 trace, PR overhead-dwell */
     overhead?: {
@@ -349,6 +352,7 @@ function buildDiagnosisSummary(
       ultraLowRomRejectionReason: sc.ultraLowRomRejectionReason,
       completionMachinePhase: sc.completionMachinePhase,
       completionPassReason: sc.completionPassReason,
+      squatInternalQuality: gate.evaluatorResult.debug?.squatInternalQuality,
     };
   }
 

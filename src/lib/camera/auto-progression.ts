@@ -6,6 +6,7 @@ import type { CameraStepId } from '@/lib/public/camera-test';
 import { buildPoseFeaturesFrames } from './pose-features';
 import { runEvaluator } from './run-evaluators';
 import { assessStepGuardrail } from './guardrails';
+import type { SquatInternalQuality } from './squat/squat-internal-quality';
 
 export type ExerciseProgressionState =
   | 'idle'
@@ -97,6 +98,8 @@ export interface SquatCycleDebug {
   completionMachinePhase?: string;
   /** PR-COMP-01: 통과 ROM 사이클 분류 */
   completionPassReason?: string;
+  /** PR-COMP-03: completion·pass와 무관한 strict 내부 해석(트레이스 전용) */
+  squatInternalQuality?: SquatInternalQuality;
 }
 
 export interface ExerciseGateResult {
@@ -741,6 +744,7 @@ function getSquatProgressionCompletionSatisfied(
     recoveryDropRatio,
     completionMachinePhase,
     completionPassReason,
+    squatInternalQuality: result.debug?.squatInternalQuality,
   };
 
   if (guardrail.completionStatus !== 'complete') {

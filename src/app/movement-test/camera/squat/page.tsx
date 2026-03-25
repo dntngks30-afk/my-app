@@ -1221,6 +1221,30 @@ export default function CameraSquatPage() {
                           ambiguousRetryReason:{' '}
                           {deriveSquatAmbiguousRetryReason(gate) ?? '—'}
                         </span>
+                        {gate.squatCycleDebug.squatInternalQuality && (
+                          <>
+                            <span>
+                              internalQ tier: {gate.squatCycleDebug.squatInternalQuality.qualityTier}
+                            </span>
+                            <span className="col-span-2">
+                              internalQ d/c/s/r/conf:{' '}
+                              {[
+                                gate.squatCycleDebug.squatInternalQuality.depthScore,
+                                gate.squatCycleDebug.squatInternalQuality.controlScore,
+                                gate.squatCycleDebug.squatInternalQuality.symmetryScore,
+                                gate.squatCycleDebug.squatInternalQuality.recoveryScore,
+                                gate.squatCycleDebug.squatInternalQuality.confidence,
+                              ]
+                                .map((n) => n.toFixed(2))
+                                .join(' / ')}
+                            </span>
+                            <span className="col-span-2">
+                              internalQ lim:{' '}
+                              {gate.squatCycleDebug.squatInternalQuality.limitations.join(', ') ||
+                                'none'}
+                            </span>
+                          </>
+                        )}
                       </>
                     )}
                   </div>

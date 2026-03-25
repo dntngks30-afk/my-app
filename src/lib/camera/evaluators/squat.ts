@@ -6,6 +6,10 @@ import type { PoseLandmarks } from '@/lib/motion/pose-types';
 import { buildPoseFeaturesFrames, getSquatRecoverySignal } from '@/lib/camera/pose-features';
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 import { evaluateSquatCompletionState } from '@/lib/camera/squat-completion-state';
+import {
+  computeSquatInternalQuality,
+  squatInternalQualityInsufficientSignal,
+} from '@/lib/camera/squat/squat-internal-quality';
 import { getSquatPerStepDiagnostics } from '@/lib/camera/step-joint-spec';
 import type { EvaluatorResult, EvaluatorMetric } from './types';
 
@@ -59,6 +63,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
           completionSatisfied: false,
         },
         perStepDiagnostics: { descent: emptyDiag, bottom: emptyDiag, ascent: emptyDiag },
+        squatInternalQuality: squatInternalQualityInsufficientSignal(),
       },
     };
   }
@@ -88,6 +93,30 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const ascentCount = countPhases(valid, 'ascent');
   const recovery = getSquatRecoverySignal(valid);
   const ascentSatisfied = ascentCount > 0 || recovery.recovered;
+
+  const unstableHintHits = qualityHints.filter((h) =>
+    ['unstable_bbox', 'unstable_landmarks', 'timestamp_gap'].includes(h)
+  ).length;
+  const signalIntegrityMultiplier = Math.max(0.55, 1 - unstableHintHits * 0.14);
+
+  /** PR-COMP-03: completion 상태 **이전**에 계산 — gate·completion과 무관 */
+  const squatInternalQuality = computeSquatInternalQuality({
+    peakDepthProxy: depthValues.length > 0 ? Math.max(...depthValues) : 0,
+    meanDepthProxy: depthValues.length > 0 ? mean(depthValues) : 0,
+    bottomStability,
+    trunkLeanDegMeanAbs: trunkLeanValues.length > 0 ? mean(trunkLeanValues) : null,
+    kneeTrackingMean: kneeTracking.length > 0 ? mean(kneeTracking) : null,
+    asymmetryDegMean: asymmetryValues.length > 0 ? mean(asymmetryValues) : null,
+    weightShiftMean: weightShiftValues.length > 0 ? mean(weightShiftValues) : null,
+    validFrameRatio: frames.length > 0 ? valid.length / frames.length : 0,
+    descentCount,
+    bottomCount,
+    ascentCount,
+    recoveryDropRatio: recovery.recoveryDropRatio,
+    returnContinuityFrames: recovery.returnContinuityFrames,
+    signalIntegrityMultiplier,
+  });
+
   const state = evaluateSquatCompletionState(valid);
   const firstStartIdx = valid.findIndex((f) => f.phaseHint === 'start');
   const firstDescentIdx = valid.findIndex((f) => f.phaseHint === 'descent');
@@ -186,6 +215,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       frameCount: frames.length,
       validFrameCount: valid.length,
       phaseHints: Array.from(new Set(valid.map((frame) => frame.phaseHint))),
+      squatInternalQuality,
       highlightedMetrics: {
         depthPeak: depthValues.length > 0 ? Math.round(Math.max(...depthValues) * 100) : null,
         /** PR standing-fp: baseline-relative depth for standard path gate */
