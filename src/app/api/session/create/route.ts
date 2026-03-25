@@ -701,6 +701,7 @@ export async function POST(req: NextRequest) {
       exercise_experience_level: exerciseExperienceForSession1,
       /** PR-SURVEY-05: 세션 1 설문 힌트가 캐시 키에 포함되어야 동일 입력 동일 플랜 */
       survey_session_hints: deepSummary.survey_session_hints ?? null,
+      session_camera_translation: deepSummary.session_camera_translation ?? null,
     };
 
     const tGen = performance.now();
@@ -732,6 +733,7 @@ export async function POST(req: NextRequest) {
         volumeModifier: mergedVolume,
         exercise_experience_level: exerciseExperienceForSession1,
         survey_session_hints: deepSummary.survey_session_hints,
+        session_camera_translation: deepSummary.session_camera_translation,
       });
       setCachedPlan(cacheInput, planJson as Record<string, unknown>);
     }

@@ -41,6 +41,7 @@ import type {
   SurveySessionHintBlockedBy,
   SurveySessionHintsObservabilityV1,
 } from '@/lib/deep-v2/session/survey-session-hints-first-session';
+import type { SessionCameraTranslationMetaV1 } from '@/lib/deep-v2/session/merge-survey-camera-session-hints';
 
 const REPETITION_PENALTY = 100;
 const CONTRAINDICATION_PENALTY = 100;
@@ -298,6 +299,8 @@ export type PlanGeneratorInput = {
   exercise_experience_level?: 'beginner' | 'intermediate' | 'advanced';
   /** PR-SURVEY-05: 무료 설문 baseline `_compat` (세션 1에서만 소비) */
   survey_session_hints?: SurveySessionHints;
+  /** PR-SURVEY-07: refined 행 설문+카메라 병합 메타(관찰성) */
+  session_camera_translation?: SessionCameraTranslationMetaV1;
 };
 
 export type PlanItem = {
@@ -1105,6 +1108,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     flatTrace: surveyHintTrace,
     exercise_experience_level: input.exercise_experience_level,
     hasGoldPathVector: !!goldPathVector,
+    session_camera_translation: input.session_camera_translation ?? null,
   });
 
   const basePlan: PlanJsonOutput = {

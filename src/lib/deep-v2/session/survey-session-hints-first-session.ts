@@ -7,6 +7,7 @@
  */
 
 import type { SurveySessionHints } from '@/lib/result/deep-result-v2-contract';
+import type { SessionCameraTranslationMetaV1 } from '@/lib/deep-v2/session/merge-survey-camera-session-hints';
 
 export type FirstSessionTierId = 'conservative' | 'moderate' | 'normal';
 
@@ -232,6 +233,10 @@ export type SurveySessionHintsObservabilityV1 = {
   /** 세션 1에서 힌트 객체가 평가 대상이었을 때 축 목록(하드 가드 시에도 동일 — 읽혔으나 적용 안 됨) */
   considered_hint_axes: string[];
   changed_fields: SurveySessionHintChangedField[];
+  /** PR-SURVEY-07: 카메라 병합으로 조정된 힌트 필드명(plan trace와 별도) */
+  camera_merged_hint_fields?: string[];
+  /** PR-SURVEY-07: refined 단계 카메라 병합 메타(없으면 설문-only 또는 baseline-only) */
+  camera_session_translation?: SessionCameraTranslationMetaV1;
   /** UI 카피용 아님: 디버그·감사·분석용 짧은 태그 */
   rationale_tags: string[];
   trace: string[];
@@ -271,12 +276,22 @@ function deriveSurveyRationaleTags(
     blocked_by: SurveySessionHintBlockedBy;
     hasGoldPathVector: boolean;
     changed_fields: SurveySessionHintChangedField[];
+    camera_translation?: SessionCameraTranslationMetaV1 | null;
   }
 ): string[] {
   if (!ctx.applied || ctx.blocked_by) return [];
   const tags: string[] = [];
   const { hasGoldPathVector } = ctx;
   const cf = ctx.changed_fields;
+  const cam = ctx.camera_translation;
+
+  if (cam) {
+    tags.push('camera_session_translation_present');
+    tags.push(`camera_influence_${cam.influence_level}`);
+    if (cam.changed_hint_fields_from_camera.length > 0) {
+      tags.push('camera_merged_survey_hints');
+    }
+  }
 
   if (hints.movement_preference_hint === 'mobility_first' && hasGoldPathVector) {
     tags.push('survey_bias_mobility_first');
@@ -331,6 +346,8 @@ export function buildSurveySessionHintsObservability(input: {
   flatTrace: string[];
   exercise_experience_level?: 'beginner' | 'intermediate' | 'advanced';
   hasGoldPathVector: boolean;
+  /** PR-SURVEY-07: public summary → plan 입력에 실린 카메라 병합 메타 */
+  session_camera_translation?: SessionCameraTranslationMetaV1 | null;
 }): SurveySessionHintsObservabilityV1 {
   const present = !!input.hints;
   const eligible = present && input.sessionNumber === 1;
@@ -341,11 +358,17 @@ export function buildSurveySessionHintsObservability(input: {
     input.safety_mode
   );
   const blocked = blocked_by !== null;
-  const trace = [...input.flatTrace];
-  const applied = eligible && !blocked && trace.length > 0;
+  const cam = input.session_camera_translation ?? null;
+  const cameraMergedFields = cam?.changed_hint_fields_from_camera ?? [];
+  const planTrace = [...input.flatTrace];
+  const trace = [...(cam?.merge_trace ?? []), ...planTrace];
+  const applied =
+    eligible &&
+    !blocked &&
+    (planTrace.length > 0 || cameraMergedFields.length > 0);
   const considered_hint_axes =
     eligible && input.hints ? [...CONSIDERED_HINT_AXES] : [];
-  const changed_fields = classifySurveyHintChangedFields(trace);
+  const changed_fields = classifySurveyHintChangedFields(planTrace);
   const beginner_guardrail_before_survey_tier =
     input.sessionNumber === 1 && input.exercise_experience_level === 'beginner';
 
@@ -356,6 +379,7 @@ export function buildSurveySessionHintsObservability(input: {
           blocked_by,
           hasGoldPathVector: input.hasGoldPathVector,
           changed_fields,
+          camera_translation: cam,
         })
       : [];
 
@@ -377,6 +401,8 @@ export function buildSurveySessionHintsObservability(input: {
     precedence,
     considered_hint_axes,
     changed_fields,
+    ...(cameraMergedFields.length > 0 && { camera_merged_hint_fields: [...cameraMergedFields] }),
+    ...(cam && { camera_session_translation: cam }),
     rationale_tags,
     trace,
     beginner_guardrail_before_survey_tier,

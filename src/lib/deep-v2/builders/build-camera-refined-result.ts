@@ -283,6 +283,18 @@ export function buildCameraRefinedResult(
       // 과거 'camera_fusion_v2' 스탬프는 compat/historical 용도였으나,
       // buildSessionDeepSummaryFromPublicResult의 normalization guard와 정렬.
       scoring_version: 'deep_v2',
+      // PR-SURVEY-07: baseline 설문 힌트·스냅샷을 refined payload에 보존 → session-create 병합 가능
+      ...(baseline._compat?.survey_session_hints != null && {
+        survey_session_hints: baseline._compat.survey_session_hints,
+      }),
+      ...(baseline._compat?.survey_deconditioned_interpretation != null && {
+        survey_deconditioned_interpretation: baseline._compat.survey_deconditioned_interpretation,
+      }),
+      ...(baseline._compat?.baseline_deep_evidence_snapshot != null && {
+        baseline_deep_evidence_snapshot: baseline._compat.baseline_deep_evidence_snapshot,
+      }),
+      camera_evidence_quality: cameraQuality,
+      camera_pass: cameraPass,
     },
   };
 

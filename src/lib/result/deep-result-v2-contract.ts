@@ -202,6 +202,12 @@ export interface UnifiedDeepResultV2 {
      * PR-SURVEY-04: 설문 해석 → 첫 세션 보수성/초점 힌트. 렌더러 미사용.
      */
     survey_session_hints?: SurveySessionHints;
+    /**
+     * PR-SURVEY-07: 카메라 refined 빌더가 저장. 세션 힌트·카메라 병합 정책·감사용(선택).
+     */
+    camera_evidence_quality?: 'strong' | 'partial' | 'minimal';
+    /** 카메라 funnel pass 완료 여부(refined 저장 시). */
+    camera_pass?: boolean;
     baseline_deep_evidence_snapshot?: {
       /** 스냅샷 버전 식별자 (마이그레이션/디버깅용) */
       schema_version: 'free_survey_baseline_evidence_v1';

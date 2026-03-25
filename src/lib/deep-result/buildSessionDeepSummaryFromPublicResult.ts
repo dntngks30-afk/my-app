@@ -39,6 +39,10 @@
 import type { SessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import type { UnifiedDeepResultV2, UnifiedPrimaryType } from '@/lib/result/deep-result-v2-contract';
 import type { ClaimedPublicResultRow } from '@/lib/public-results/getLatestClaimedPublicResultForUser';
+import {
+  mergeSurveyAndCameraSessionHintsForFirstSession,
+  type SessionCameraTranslationMetaV1,
+} from '@/lib/deep-v2/session/merge-survey-camera-session-hints';
 import { isUsableSurveySessionHints } from '@/lib/deep-v2/session/survey-session-hints-first-session';
 
 // ─── PR-FLOW-07: primary_type → session band (first-session alignment) ──────
@@ -198,6 +202,24 @@ export function buildSessionDeepSummaryFromPublicResult(
   const pain_mode: 'none' | 'caution' | 'protected' | undefined =
     v2.pain_mode != null ? v2.pain_mode : undefined;
 
+  const rawSurveyHints =
+    compat?.survey_session_hints && isUsableSurveySessionHints(compat.survey_session_hints)
+      ? compat.survey_session_hints
+      : undefined;
+
+  let survey_session_hints = rawSurveyHints;
+  let session_camera_translation: SessionCameraTranslationMetaV1 | undefined;
+
+  if (rawSurveyHints && row.stage === 'refined') {
+    const { mergedHints, translationMeta } = mergeSurveyAndCameraSessionHintsForFirstSession({
+      baselineHints: rawSurveyHints,
+      v2,
+      publicStage: row.stage,
+    });
+    survey_session_hints = mergedHints;
+    if (translationMeta) session_camera_translation = translationMeta;
+  }
+
   return {
     // ── SessionDeepSummary fields ───────────────────────────────────────
     result_type,
@@ -216,10 +238,8 @@ export function buildSessionDeepSummaryFromPublicResult(
     ...(v2.secondary_type !== undefined && { secondary_type: v2.secondary_type }),
     ...(priority_vector && { priority_vector }),
     ...(pain_mode && { pain_mode }),
-    ...(compat?.survey_session_hints &&
-      isUsableSurveySessionHints(compat.survey_session_hints) && {
-        survey_session_hints: compat.survey_session_hints,
-      }),
+    ...(survey_session_hints && { survey_session_hints }),
+    ...(session_camera_translation && { session_camera_translation }),
     // ── FLOW-06 관찰가능성 ────────────────────────────────────────────
     source_mode: 'public_result' as const,
     source_public_result_id: row.id,

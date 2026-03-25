@@ -10,6 +10,7 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { getEffectiveConfidence, toConfidenceSource } from './effective-confidence';
 import type { ConfidenceBreakdown, EvidenceQuality, Rationale, DecisionTrace } from '@/lib/deep-test/types';
 import type { SurveySessionHints } from '@/lib/result/deep-result-v2-contract';
+import type { SessionCameraTranslationMetaV1 } from '@/lib/deep-v2/session/merge-survey-camera-session-hints';
 
 /** pain_risk thresholds (0~10+ scale, matches deep_v2 D) */
 const PAIN_RISK_RED = 7;
@@ -45,6 +46,8 @@ export interface SessionDeepSummary {
   pain_mode?: 'none' | 'caution' | 'protected';
   /** PR-SURVEY-05: claimed public 설문 baseline에만 존재할 수 있음. 세션 1 plan bias용(optional). */
   survey_session_hints?: SurveySessionHints;
+  /** PR-SURVEY-07: refined 행에서 설문 힌트+카메라 병합 메타(세션 1 관찰성). */
+  session_camera_translation?: SessionCameraTranslationMetaV1;
 }
 
 /**

@@ -51,6 +51,8 @@ export type GenCacheInput = {
   exercise_experience_level?: string | null;
   /** PR-SURVEY-05: 설문 힌트(세션 1 bias) — 없으면 null/undefined */
   survey_session_hints?: Record<string, unknown> | null;
+  /** PR-SURVEY-07: 카메라 병합 메타(관찰성·힌트와 함께 캐시 키) */
+  session_camera_translation?: Record<string, unknown> | null;
 };
 
 /**
@@ -82,6 +84,10 @@ function buildKey(input: GenCacheInput): string {
     ssh:
       input.survey_session_hints != null
         ? canonicalizeObject(input.survey_session_hints as Record<string, unknown>)
+        : '',
+    sct:
+      input.session_camera_translation != null
+        ? canonicalizeObject(input.session_camera_translation as Record<string, unknown>)
         : '',
   });
   return simpleHash(canonical);
