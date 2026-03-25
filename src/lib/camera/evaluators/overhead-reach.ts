@@ -235,6 +235,105 @@ export function computeOverheadStableTopDwell(
   };
 }
 
+/** PR-CAM-03: 통과(1200ms 홀드)와 별개로 normalize·planning tier에 쓸 evidence 등급 */
+export type OverheadPlanningEvidenceLevel =
+  | 'strong_evidence'
+  | 'shallow_evidence'
+  | 'weak_evidence'
+  | 'insufficient_signal';
+
+/**
+ * top-zone dwell + 짧은 안정 구간 + 홀드 길이·보상 메트릭으로 planning-safe 등급.
+ * - 짧은 스침/단편 dwell → strong 금지
+ * - 최소 통과 홀드(1200ms)만으로는 기본 shallow
+ */
+export function computeOverheadPlanningEvidenceLevel(input: {
+  holdDurationMs: number;
+  stableTopDwellMs: number;
+  stableTopSegmentCount: number;
+  peakArmElevation: number | null;
+  raiseCount: number;
+  peakCount: number;
+  holdArmingBlockedReason: string | null;
+  lumbarTrend?: 'good' | 'neutral' | 'concern';
+  asymTrend?: 'good' | 'neutral' | 'concern';
+}): {
+  level: OverheadPlanningEvidenceLevel;
+  reasons: string[];
+  dwellCoherent: boolean;
+} {
+  const REQUIRED_PASS_HOLD_MS = 1200;
+  const STRONG_HOLD_MS = 1520;
+  const PEAK_DEG_FOR_STRONG = 135;
+
+  const {
+    holdDurationMs,
+    stableTopDwellMs,
+    stableTopSegmentCount,
+    peakArmElevation,
+    raiseCount,
+    peakCount,
+    holdArmingBlockedReason,
+    lumbarTrend,
+    asymTrend,
+  } = input;
+
+  if (raiseCount === 0 || peakCount === 0 || holdDurationMs < REQUIRED_PASS_HOLD_MS) {
+    return {
+      level: 'insufficient_signal',
+      reasons: ['cam03_top_hold_or_phases_incomplete'],
+      dwellCoherent: false,
+    };
+  }
+
+  const concernCount = [lumbarTrend === 'concern', asymTrend === 'concern'].filter(Boolean).length;
+  const peak = peakArmElevation ?? 0;
+
+  const dwellCoherent =
+    stableTopSegmentCount >= 1 &&
+    stableTopDwellMs >= Math.min(holdDurationMs * 0.85, holdDurationMs - 100);
+
+  const canBeStrong =
+    holdDurationMs >= STRONG_HOLD_MS &&
+    dwellCoherent &&
+    concernCount === 0 &&
+    peak >= PEAK_DEG_FOR_STRONG &&
+    holdArmingBlockedReason == null;
+
+  if (canBeStrong) {
+    return {
+      level: 'strong_evidence',
+      reasons: ['cam03_stable_top_hold_strong'],
+      dwellCoherent,
+    };
+  }
+
+  if (!dwellCoherent) {
+    return {
+      level: 'weak_evidence',
+      reasons: ['cam03_dwell_fragmented_or_transient_top'],
+      dwellCoherent,
+    };
+  }
+
+  if (concernCount >= 2 || (holdDurationMs < 1320 && concernCount >= 1)) {
+    return {
+      level: 'weak_evidence',
+      reasons:
+        concernCount >= 2
+          ? ['cam03_compensation_multi_concern']
+          : ['cam03_borderline_hold_with_concern'],
+      dwellCoherent,
+    };
+  }
+
+  return {
+    level: 'shallow_evidence',
+    reasons: ['cam03_usable_hold_planning_limited'],
+    dwellCoherent,
+  };
+}
+
 function mean(values: number[]): number {
   if (values.length === 0) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -276,6 +375,8 @@ export function evaluateOverheadReachFromPoseFrames(
         phaseHints: Array.from(new Set(frames.map((frame) => frame.phaseHint))),
         highlightedMetrics: { validFrameCount: valid.length },
         perStepDiagnostics: { raise: emptyDiag, hold: emptyDiag },
+        overheadEvidenceLevel: 'insufficient_signal',
+        overheadEvidenceReasons: ['valid_frames_too_few'],
       },
     };
   }
@@ -406,6 +507,23 @@ export function evaluateOverheadReachFromPoseFrames(
     hold: perStepDiagnostics.hold,
   };
 
+  const lumbarTrend = metrics.find((m) => m.name === 'lumbar_extension')?.trend;
+  const asymTrend = metrics.find((m) => m.name === 'asymmetry')?.trend;
+  const peakArmForPlanning =
+    armElevationAvgValues.length > 0 ? Math.max(...armElevationAvgValues) : null;
+
+  const overheadPlanning = computeOverheadPlanningEvidenceLevel({
+    holdDurationMs,
+    stableTopDwellMs: dwellResult.stableTopDwellMs,
+    stableTopSegmentCount: dwellResult.stableTopSegmentCount,
+    peakArmElevation: peakArmForPlanning,
+    raiseCount,
+    peakCount,
+    holdArmingBlockedReason: dwellResult.holdArmingBlockedReason,
+    lumbarTrend,
+    asymTrend,
+  });
+
   return {
     stepId: 'overhead-reach',
     metrics,
@@ -418,6 +536,9 @@ export function evaluateOverheadReachFromPoseFrames(
       frameCount: frames.length,
       validFrameCount: valid.length,
       phaseHints: Array.from(new Set(valid.map((frame) => frame.phaseHint))),
+      /** PR-CAM-03: normalize가 step별로 weakest 병합 */
+      overheadEvidenceLevel: overheadPlanning.level,
+      overheadEvidenceReasons: overheadPlanning.reasons,
       highlightedMetrics: {
         raiseCount,
         peakCount,
@@ -441,6 +562,9 @@ export function evaluateOverheadReachFromPoseFrames(
         holdDurationMsLegacySpan: dwellResult.holdDurationMsLegacySpan,
         dwellHoldDurationMs: dwellResult.holdDurationMs,
         legacyHoldDurationMs: dwellResult.holdDurationMsLegacySpan,
+        /** PR-CAM-03: 기기 트레이스 — dwell 일관성·planning 등급 */
+        cam03DwellCoherent: overheadPlanning.dwellCoherent ? 1 : 0,
+        cam03OverheadPlanningLevel: overheadPlanning.level,
       },
       perStepDiagnostics: perStepRecord,
     },

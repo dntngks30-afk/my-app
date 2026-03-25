@@ -22,6 +22,9 @@ export interface EvaluatorDebugSummary {
   /** PR evidence: squat completion과 분리된 evidence layer (result layer용) */
   squatEvidenceLevel?: string;
   squatEvidenceReasons?: string[];
+  /** PR-CAM-03: 오버헤드 top-hold 품질 → normalize / planning tier 입력 */
+  overheadEvidenceLevel?: string;
+  overheadEvidenceReasons?: string[];
   cycleProofPassed?: boolean;
   romBand?: string;
   confidenceDowngradeReason?: string | null;

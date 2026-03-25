@@ -151,5 +151,18 @@ ok(
   realHoldMs <= 0 || (realTopDet != null && realHoldArm != null && realTopDet <= realHoldArm)
 );
 
+const OH_LEVELS = new Set(['strong_evidence', 'shallow_evidence', 'weak_evidence', 'insufficient_signal']);
+const realOhLevel = realResult.debug?.overheadEvidenceLevel;
+ok(
+  'N: PR-CAM-03 overheadEvidenceLevel is a valid planning label',
+  typeof realOhLevel === 'string' && OH_LEVELS.has(realOhLevel)
+);
+const weakFrames = buildPoseFeaturesFrames('overhead-reach', weakLandmarks);
+const weakEval = evaluateOverheadReachFromPoseFrames(weakFrames);
+ok(
+  'O: weak raise yields insufficient_signal planning level',
+  weakEval.debug?.overheadEvidenceLevel === 'insufficient_signal'
+);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

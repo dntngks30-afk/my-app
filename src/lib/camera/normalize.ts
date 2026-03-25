@@ -201,9 +201,14 @@ function getResultEvidenceFromEvaluators(
   interpretationDowngraded: boolean;
   fallbackToRetryOrLowConfidence: boolean;
 } {
-  const levels: ResultEvidenceLevel[] = evaluatorResults
-    .map((r) => r.debug?.squatEvidenceLevel as ResultEvidenceLevel | undefined)
-    .filter((l): l is ResultEvidenceLevel => typeof l === 'string' && EVIDENCE_ORDER.includes(l));
+  /** PR-CAM-03: 스텝별 planning evidence(squat / overhead)를 모아 가장 보수적인 값 사용 */
+  const levels: ResultEvidenceLevel[] = [];
+  for (const r of evaluatorResults) {
+    const sq = r.debug?.squatEvidenceLevel as ResultEvidenceLevel | undefined;
+    const oh = r.debug?.overheadEvidenceLevel as ResultEvidenceLevel | undefined;
+    if (typeof sq === 'string' && EVIDENCE_ORDER.includes(sq)) levels.push(sq);
+    if (typeof oh === 'string' && EVIDENCE_ORDER.includes(oh)) levels.push(oh);
+  }
   const resultEvidenceLevel =
     levels.length > 0 ? getWeakestEvidenceLevel(levels) : 'strong_evidence';
   const resultToneMode: ResultToneMode =
