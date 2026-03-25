@@ -48,6 +48,10 @@ import {
   type PainMode,
 } from '@/lib/result/deep-result-v2-contract';
 import { cameraToEvidence, getCameraEvidenceQuality, isCameraPassCompleted } from '../adapters/camera-to-evidence';
+import {
+  computeCameraPlanningEvidenceTier,
+  type CameraPlanningEvidenceTier,
+} from '../session/camera-planning-evidence-tier';
 
 // ─── 공개 타입 ───────────────────────────────────────────────────────────────
 
@@ -71,6 +75,8 @@ export interface CameraRefinedResult {
     scoring_version: 'deep_v2';
     /** camera evidence quality */
     camera_evidence_quality: 'strong' | 'partial' | 'minimal';
+    /** PR-CAM-01: 세션 병합 정책용 planning-safe 티어 */
+    camera_planning_evidence_tier: CameraPlanningEvidenceTier;
     /** camera pass 여부 */
     camera_pass: boolean;
     /** 기존 baseline confidence */
@@ -172,6 +178,7 @@ export function buildCameraRefinedResult(
 ): CameraRefinedResult {
   const cameraPass = isCameraPassCompleted(cameraResult);
   const cameraQuality = getCameraEvidenceQuality(cameraResult);
+  const cameraPlanningTier = computeCameraPlanningEvidenceTier(cameraPass, cameraQuality);
 
   // Step 1: camera → evidence
   const cameraEvidence = cameraToEvidence(cameraResult);
@@ -294,6 +301,7 @@ export function buildCameraRefinedResult(
         baseline_deep_evidence_snapshot: baseline._compat.baseline_deep_evidence_snapshot,
       }),
       camera_evidence_quality: cameraQuality,
+      camera_planning_evidence_tier: cameraPlanningTier,
       camera_pass: cameraPass,
     },
   };
@@ -318,6 +326,7 @@ export function buildCameraRefinedResult(
       // 과거 'camera_fusion_v2'에서 'deep_v2'로 정렬됨.
       scoring_version: 'deep_v2',
       camera_evidence_quality: cameraQuality,
+      camera_planning_evidence_tier: cameraPlanningTier,
       camera_pass: cameraPass,
       baseline_confidence: baseline.confidence,
     },

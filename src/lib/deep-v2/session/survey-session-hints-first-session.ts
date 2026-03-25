@@ -288,6 +288,7 @@ function deriveSurveyRationaleTags(
   if (cam) {
     tags.push('camera_session_translation_present');
     tags.push(`camera_influence_${cam.influence_level}`);
+    tags.push(`camera_planning_tier_${cam.camera_planning_evidence_tier}`);
     if (cam.changed_hint_fields_from_camera.length > 0) {
       tags.push('camera_merged_survey_hints');
     }

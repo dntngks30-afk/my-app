@@ -58,8 +58,9 @@ export function isCameraPassCompleted(cameraResult: NormalizedCameraResult): boo
 }
 
 /**
- * Camera evidence quality 수준.
+ * Camera evidence quality 수준(어댑터 분석 신호 강도).
  * pass와 별개로 analysis confidence를 나타낸다.
+ * PR-CAM-01: 세션 병합은 `computeCameraPlanningEvidenceTier`(none/limited/standard)로 별도 정규화한다.
  *
  * 'strong'  → resultEvidenceLevel=strong_evidence, captureQuality='ok'
  * 'partial' → resultEvidenceLevel=shallow/weak, captureQuality='low'

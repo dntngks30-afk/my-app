@@ -204,8 +204,14 @@ export interface UnifiedDeepResultV2 {
     survey_session_hints?: SurveySessionHints;
     /**
      * PR-SURVEY-07: 카메라 refined 빌더가 저장. 세션 힌트·카메라 병합 정책·감사용(선택).
+     * PR-CAM-01: 분석 신호 강도(어댑터); planning 티어와 별개로 보존.
      */
     camera_evidence_quality?: 'strong' | 'partial' | 'minimal';
+    /**
+     * PR-CAM-01: 세션 계획 병합에 쓰는 planning-safe 티어(none / limited / standard).
+     * 없으면 `resolveCameraPlanningTierForSessionMerge`가 legacy 필드로 역추정.
+     */
+    camera_planning_evidence_tier?: 'none' | 'limited' | 'standard';
     /** 카메라 funnel pass 완료 여부(refined 저장 시). */
     camera_pass?: boolean;
     baseline_deep_evidence_snapshot?: {
