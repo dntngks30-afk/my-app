@@ -135,6 +135,99 @@ function makeInsufficientCameraResult() {
 }
 
 /** 카메라에 concern 없음 (STABLE 후보) */
+/** PR-COMP-06: 레거시 strong_evidence + 스쿼트 내부 품질 저하 → refinement에서 minimal로 보수화 */
+function makeStrongCameraWithLowInternalSquat() {
+  const base = makeStrongCameraResult();
+  const squat = base.evaluatorResults[0];
+  const overhead = base.evaluatorResults[1];
+  return {
+    ...base,
+    evaluatorResults: [
+      {
+        ...squat,
+        debug: {
+          frameCount: 120,
+          validFrameCount: 100,
+          phaseHints: [],
+          highlightedMetrics: {
+            completionSatisfied: 1,
+            completionMachinePhase: 'completed',
+          },
+          squatInternalQuality: {
+            depthScore: 0.25,
+            controlScore: 0.25,
+            symmetryScore: 0.25,
+            recoveryScore: 0.25,
+            confidence: 0.35,
+            qualityTier: 'low',
+            limitations: [
+              'depth_limited',
+              'unstable_control',
+              'low_tracking_confidence',
+              'recovery_trajectory_weak',
+            ],
+          },
+        },
+      },
+      overhead,
+    ],
+  };
+}
+
+/** PR-COMP-06: 양쪽 medium internal → strong 베이스를 partial로 한 단계 다운 */
+function makeStrongCameraWithMediumInternalBoth() {
+  const base = makeStrongCameraResult();
+  const squat = base.evaluatorResults[0];
+  const overhead = base.evaluatorResults[1];
+  return {
+    ...base,
+    evaluatorResults: [
+      {
+        ...squat,
+        debug: {
+          frameCount: 120,
+          validFrameCount: 100,
+          phaseHints: [],
+          highlightedMetrics: {
+            completionSatisfied: 1,
+            completionMachinePhase: 'completed',
+          },
+          squatInternalQuality: {
+            depthScore: 0.5,
+            controlScore: 0.5,
+            symmetryScore: 0.5,
+            recoveryScore: 0.5,
+            confidence: 0.5,
+            qualityTier: 'medium',
+            limitations: ['depth_limited'],
+          },
+        },
+      },
+      {
+        ...overhead,
+        debug: {
+          frameCount: 120,
+          validFrameCount: 100,
+          phaseHints: [],
+          highlightedMetrics: {
+            completionSatisfied: 1,
+            completionMachinePhase: 'completed',
+          },
+          overheadInternalQuality: {
+            mobilityScore: 0.5,
+            controlScore: 0.5,
+            symmetryScore: 0.5,
+            holdStabilityScore: 0.5,
+            confidence: 0.5,
+            qualityTier: 'medium',
+            limitations: ['hold_stability_weak'],
+          },
+        },
+      },
+    ],
+  };
+}
+
 function makeGoodCameraResult() {
   return {
     movementType: 'monkey',
@@ -239,6 +332,18 @@ async function main() {
   run('insufficient → getCameraEvidenceQuality = minimal', () => {
     const q = getCameraEvidenceQuality(makeInsufficientCameraResult());
     if (q !== 'minimal') return [`expected minimal, got ${q}`];
+    return [];
+  });
+
+  run('PR-COMP-06: strong legacy + low internal squat → getCameraEvidenceQuality = minimal', () => {
+    const q = getCameraEvidenceQuality(makeStrongCameraWithLowInternalSquat());
+    if (q !== 'minimal') return [`expected minimal, got ${q}`];
+    return [];
+  });
+
+  run('PR-COMP-06: strong legacy + medium internal both → getCameraEvidenceQuality = partial', () => {
+    const q = getCameraEvidenceQuality(makeStrongCameraWithMediumInternalBoth());
+    if (q !== 'partial') return [`expected partial, got ${q}`];
     return [];
   });
 

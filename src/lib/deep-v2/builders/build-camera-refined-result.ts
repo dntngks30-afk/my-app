@@ -39,6 +39,12 @@
  */
 
 import type { NormalizedCameraResult } from '@/lib/camera/normalize';
+import {
+  aggregateRefinementEvidenceStrength,
+  buildCameraMotionEvidenceSummaries,
+  type CameraMotionEvidenceSummary,
+  type RefinementEvidenceStrength,
+} from '@/lib/camera/camera-evidence-summary';
 import { runDeepScoringCore } from '@/lib/deep-scoring-core/core';
 import type { DeepScoringEvidence, AxisScores } from '@/lib/deep-scoring-core/types';
 import {
@@ -179,6 +185,9 @@ export function buildCameraRefinedResult(
   const cameraPass = isCameraPassCompleted(cameraResult);
   const cameraQuality = getCameraEvidenceQuality(cameraResult);
   const cameraPlanningTier = computeCameraPlanningEvidenceTier(cameraPass, cameraQuality);
+  const motionEvidenceSummaries = buildCameraMotionEvidenceSummaries(cameraResult.evaluatorResults);
+  const refinementEvidenceStrength =
+    aggregateRefinementEvidenceStrength(cameraResult.evaluatorResults) ?? undefined;
 
   // Step 1: camera → evidence
   const cameraEvidence = cameraToEvidence(cameraResult);
@@ -329,6 +338,12 @@ export function buildCameraRefinedResult(
       camera_planning_evidence_tier: cameraPlanningTier,
       camera_pass: cameraPass,
       baseline_confidence: baseline.confidence,
+      ...(motionEvidenceSummaries.length > 0 && {
+        camera_motion_evidence_summaries: motionEvidenceSummaries,
+      }),
+      ...(refinementEvidenceStrength != null && {
+        camera_refinement_evidence_strength: refinementEvidenceStrength,
+      }),
     },
   };
 }

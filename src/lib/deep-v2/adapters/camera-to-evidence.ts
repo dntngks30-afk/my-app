@@ -42,6 +42,10 @@
 import type { NormalizedCameraResult, ResultEvidenceLevel } from '@/lib/camera/normalize';
 import type { EvaluatorMetric, EvaluatorResult } from '@/lib/camera/evaluators/types';
 import type { DeepScoringEvidence, AxisScores } from '@/lib/deep-scoring-core/types';
+import {
+  aggregateRefinementEvidenceStrength,
+  applyRefinementStrengthToCameraEvidenceQuality,
+} from '@/lib/camera/camera-evidence-summary';
 
 // ─── Pass/Analysis 분리 ────────────────────────────────────────────────────────
 
@@ -69,14 +73,29 @@ export function isCameraPassCompleted(cameraResult: NormalizedCameraResult): boo
  */
 export type CameraEvidenceQuality = 'strong' | 'partial' | 'minimal';
 
-export function getCameraEvidenceQuality(
+/**
+ * PR-COMP-06 이전: `resultEvidenceLevel`(squat/overhead planning evidence 병합)만으로 3단계 매핑.
+ */
+function getCameraEvidenceQualityFromResultEvidenceLevel(
   cameraResult: NormalizedCameraResult
 ): CameraEvidenceQuality {
-  if (!isCameraPassCompleted(cameraResult)) return 'minimal';
   const level: ResultEvidenceLevel = cameraResult.resultEvidenceLevel ?? 'strong_evidence';
   if (level === 'strong_evidence') return 'strong';
   if (level === 'shallow_evidence') return 'partial';
   return 'minimal';
+}
+
+/**
+ * Camera evidence quality — 레거시 evidence level + PR-COMP-06 모션 요약(완료/품질/limitation) 보정.
+ * 업그레이드는 하지 않고, 내부 품질이 낮거나 부분 시도만 있으면 한 단계씩 보수적으로 내린다.
+ */
+export function getCameraEvidenceQuality(
+  cameraResult: NormalizedCameraResult
+): CameraEvidenceQuality {
+  if (!isCameraPassCompleted(cameraResult)) return 'minimal';
+  const base = getCameraEvidenceQualityFromResultEvidenceLevel(cameraResult);
+  const motionAgg = aggregateRefinementEvidenceStrength(cameraResult.evaluatorResults);
+  return applyRefinementStrengthToCameraEvidenceQuality(base, motionAgg);
 }
 
 // ─── 메트릭 → evidence 축 매핑 ──────────────────────────────────────────────
