@@ -88,7 +88,13 @@ const shallowState = evaluateSquatCompletionState(
     ['start', 'start', 'start', 'start', 'descent', 'descent', 'descent', 'bottom', 'bottom', 'ascent', 'ascent', 'ascent', 'start', 'start', 'start']
   )
 );
-const shallowLandmarks = toLandmarks(poseSeries(100, [0.01, 0.02, 0.02, 0.01, 0.03, 0.05, 0.07, 0.09, 0.08, 0.06, 0.04, 0.02]));
+/** PR-HOTFIX-02: 무장용 연속 서 있기 안정 구간(10프레임) 후 스쿼트 궤적 */
+const shallowLandmarks = toLandmarks(
+  poseSeries(100, [
+    ...Array(10).fill(0.015),
+    0.01, 0.02, 0.02, 0.01, 0.03, 0.05, 0.07, 0.09, 0.08, 0.06, 0.04, 0.02,
+  ])
+);
 ok('A1: shallow full cycle can pass after standing recovery', shallowState.completionSatisfied);
 ok('A2: shallow success opens only at standing_recovered', shallowState.successPhaseAtOpen === 'standing_recovered');
 ok('A3: shallow success keeps low_rom evidence label', shallowState.evidenceLabel === 'low_rom');

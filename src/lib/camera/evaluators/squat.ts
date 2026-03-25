@@ -6,6 +6,7 @@ import type { PoseLandmarks } from '@/lib/motion/pose-types';
 import { buildPoseFeaturesFrames, getSquatRecoverySignal } from '@/lib/camera/pose-features';
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 import { evaluateSquatCompletionState } from '@/lib/camera/squat-completion-state';
+import { computeSquatCompletionArming } from '@/lib/camera/squat/squat-completion-arming';
 import {
   computeSquatInternalQuality,
   squatInternalQualityInsufficientSignal,
@@ -117,12 +118,25 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     signalIntegrityMultiplier,
   });
 
-  const state = evaluateSquatCompletionState(valid);
-  const firstStartIdx = valid.findIndex((f) => f.phaseHint === 'start');
-  const firstDescentIdx = valid.findIndex((f) => f.phaseHint === 'descent');
-  const firstBottomIdx = valid.findIndex((f) => f.phaseHint === 'bottom');
-  const firstAscentIdx = valid.findIndex((f) => f.phaseHint === 'ascent');
+  /** PR-HOTFIX-02: 서 있기 안정 구간 이후에만 completion 상태기에 프레임 전달 */
+  const { arming: completionArming, completionFrames } = computeSquatCompletionArming(valid);
+  const state = evaluateSquatCompletionState(
+    completionArming.armed ? completionFrames : []
+  );
+
+  const phaseScan = completionArming.armed ? completionFrames : [];
+  const offset = completionArming.completionSliceStartIndex;
+  const toGlobalIdx = (idxInSlice: number) =>
+    idxInSlice >= 0 ? offset + idxInSlice : -1;
+  const firstStartIdx = toGlobalIdx(phaseScan.findIndex((f) => f.phaseHint === 'start'));
+  const firstDescentIdx = toGlobalIdx(phaseScan.findIndex((f) => f.phaseHint === 'descent'));
+  const firstBottomIdx = toGlobalIdx(phaseScan.findIndex((f) => f.phaseHint === 'bottom'));
+  const firstAscentIdx = toGlobalIdx(phaseScan.findIndex((f) => f.phaseHint === 'ascent'));
   const repCountEstimate = state.completionSatisfied ? 1 : 0;
+
+  if (!completionArming.armed) {
+    completionHints.push('completion_not_armed');
+  }
 
   if (!state.attemptStarted || !ascentSatisfied) {
     completionHints.push('rep_phase_incomplete');
@@ -215,10 +229,15 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       frameCount: frames.length,
       validFrameCount: valid.length,
       phaseHints: Array.from(new Set(valid.map((frame) => frame.phaseHint))),
+      squatCompletionArming: completionArming,
       squatInternalQuality,
       highlightedMetrics: {
         depthPeak: depthValues.length > 0 ? Math.round(Math.max(...depthValues) * 100) : null,
         /** PR standing-fp: baseline-relative depth for standard path gate */
+        completionArmingArmed: completionArming.armed ? 1 : 0,
+        completionArmingBaselineCaptured: completionArming.baselineCaptured ? 1 : 0,
+        completionArmingStableFrames: completionArming.stableFrames,
+        completionArmingSliceStart: completionArming.completionSliceStartIndex,
         baselineStandingDepth: Math.round(state.baselineStandingDepth * 100) / 100,
         rawDepthPeak: Math.round(state.rawDepthPeak * 100) / 100,
         relativeDepthPeak: Math.round(state.relativeDepthPeak * 100) / 100,

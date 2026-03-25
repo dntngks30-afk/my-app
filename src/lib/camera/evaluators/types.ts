@@ -6,6 +6,7 @@ import type { PoseFeaturesFrame, PosePhaseHint } from '@/lib/camera/pose-feature
 import type { PerStepDiagnostic } from '@/lib/camera/step-joint-spec';
 import type { SquatInternalQuality } from '@/lib/camera/squat/squat-internal-quality';
 import type { OverheadInternalQuality } from '@/lib/camera/overhead/overhead-internal-quality';
+import type { CompletionArmingState } from '@/lib/camera/squat/squat-completion-arming';
 
 export interface EvaluatorMetric {
   name: string;
@@ -35,6 +36,8 @@ export interface EvaluatorDebugSummary {
   squatInternalQuality?: SquatInternalQuality;
   /** PR-COMP-04: 오버헤드 내부 해석 레이어 */
   overheadInternalQuality?: OverheadInternalQuality;
+  /** PR-HOTFIX-02: 스쿼트 completion 평가 무장(서 있기 안정 후에만 평가) */
+  squatCompletionArming?: CompletionArmingState;
 }
 
 export interface EvaluatorResult {
