@@ -301,6 +301,12 @@ export function CameraPreview({
   const analyzerRef = useRef<LivePoseAnalyzer | null>(null);
   const analyzerInitRef = useRef<Promise<LivePoseAnalyzer> | null>(null);
   const analysisRafRef = useRef<number | null>(null);
+  /**
+   * stale loop 차단용 세대 카운터. startAnalyzer가 시작될 때마다 +1.
+   * RAF loop는 자신이 캡처한 세대 번호를 현재 값과 비교해 불일치하면 즉시 종료한다.
+   * HMR/remount 시 이전 loop가 살아남는 경우를 구조적으로 차단한다.
+   */
+  const loopGenerationRef = useRef(0);
   const [poseStatus, setPoseStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [poseErrorMessage, setPoseErrorMessage] = useState<string | null>(null);
 
@@ -454,14 +460,23 @@ export function CameraPreview({
           analyzerInitRef.current = createLivePoseAnalyzer();
         }
 
+        // 세대 번호를 async 대기 전에 캡처한다.
+        // 대기 중 새 startAnalyzer가 실행되면 세대가 바뀌어 이 loop는 종료된다.
+        loopGenerationRef.current += 1;
+        const myGeneration = loopGenerationRef.current;
+
         const analyzer = await analyzerInitRef.current;
+        // await 이후: 취소 또는 새 세대 확인
         if (cancelled) return;
+        if (loopGenerationRef.current !== myGeneration) return;
 
         analyzerRef.current = analyzer;
         setPoseStatus('ready');
 
         const loop = () => {
           if (cancelled) return;
+          // 새 세대가 시작됐으면 이 루프는 stale — 즉시 종료
+          if (loopGenerationRef.current !== myGeneration) return;
 
           const tick = performance.now();
           if (tick < detectBackoffUntilMs) {

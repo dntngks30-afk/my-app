@@ -49,56 +49,108 @@ export interface LivePoseAnalyzer {
   close(): void;
 }
 
-let sharedPoseLandmarkerPromise: Promise<PoseLandmarker> | null = null;
+// ---------------------------------------------------------------------------
+// Runtime singleton — globalThis에 보존하여 HMR/module-re-evaluate 시에도
+// landmarkerPromise와 monotonic timestamp 상태가 유지된다.
+// ---------------------------------------------------------------------------
+
+interface MpRuntimeSingleton {
+  /** 공유 PoseLandmarker 초기화 Promise. null이면 아직 생성 전 또는 fatal reset 후. */
+  landmarkerPromise: Promise<PoseLandmarker> | null;
+  /** 마지막으로 detectForVideo에 넘긴 타임스탬프(ms). 단조 증가 보장. */
+  lastDetectTimestampMs: number;
+  /** detectForVideo 호출이 진행 중인지 여부. 중첩 호출을 방지한다. */
+  detectInFlight: boolean;
+  /**
+   * fatal 오류(timestamp mismatch / CalculatorGraph) 발생 후 재시도를 막는
+   * 쿨다운 종료 시각(Date.now() 기준 ms).
+   */
+  fatalCooldownUntilMs: number;
+  /** fatal reset 누적 횟수 (진단용). */
+  fatalResetCount: number;
+  /** 오류 로그 rate-limit 윈도우 시작 시각. */
+  logWindowStartMs: number;
+  /** 현재 윈도우 내 오류 로그 출력 횟수. */
+  logCountInWindow: number;
+}
 
 /**
- * 공유 VIDEO PoseLandmarker는 전역적으로 단조 증가하는 timestamp만 허용한다.
- * analyzer 인스턴스마다 lastTs를 두면 페이지 전환·remount 시 역행이 들어가 런타임 예외가 날 수 있다.
+ * key 버전 bump: 구 key에 남아 있는 stale 상태와 충돌하지 않도록
+ * 구조가 변경될 때마다 버전 suffix를 올린다.
  */
-let globalLastDetectTimestampMs = -1;
+const RUNTIME_KEY = '__moveReMpRuntime_v3';
 
-function bumpMonotonicTimestampMs(candidateMs: number): number {
-  let c = candidateMs;
-  if (!Number.isFinite(c) || c < 0) {
-    c = 0;
+function getRuntime(): MpRuntimeSingleton {
+  const g = globalThis as Record<string, unknown>;
+  if (typeof g[RUNTIME_KEY] !== 'object' || g[RUNTIME_KEY] === null) {
+    g[RUNTIME_KEY] = {
+      landmarkerPromise: null,
+      lastDetectTimestampMs: -1,
+      detectInFlight: false,
+      fatalCooldownUntilMs: 0,
+      fatalResetCount: 0,
+      logWindowStartMs: 0,
+      logCountInWindow: 0,
+    } satisfies MpRuntimeSingleton;
   }
-  if (globalLastDetectTimestampMs >= 0 && c <= globalLastDetectTimestampMs) {
-    c = globalLastDetectTimestampMs + 1;
-  }
-  globalLastDetectTimestampMs = c;
-  return c;
+  return g[RUNTIME_KEY] as MpRuntimeSingleton;
 }
 
-function mediaTimestampMsFromVideo(video: HTMLVideoElement): number {
-  return Number.isFinite(video.currentTime) ? Math.round(video.currentTime * 1000) : NaN;
+// ---------------------------------------------------------------------------
+// Fatal error detection & recovery
+// ---------------------------------------------------------------------------
+
+const FATAL_DETECT_PATTERNS = [
+  'packet timestamp mismatch',
+  'calculatorgraph',
+  'graph error',
+  'bad timestamp',
+];
+const FATAL_COOLDOWN_MS = 2_000;
+
+function isFatalDetectError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return FATAL_DETECT_PATTERNS.some((p) => msg.includes(p));
 }
 
-/** 스트림이 끊기면 detect 호출을 건너뛴다(전역 timestamp는 증가시키지 않음). */
-function isVideoStreamDecodable(video: HTMLVideoElement): boolean {
-  const so = video.srcObject;
-  if (so == null) return false;
-  if (so instanceof MediaStream) {
-    if (typeof so.active === 'boolean' && !so.active) return false;
-    const tracks = so.getVideoTracks();
-    if (tracks.length === 0) return false;
-    return tracks.some((t) => t.readyState === 'live');
-  }
-  return true;
+/**
+ * fatal reset: landmarker 참조를 버리고, 단조 타임스탬프를 초기화하며,
+ * FATAL_COOLDOWN_MS 동안 detect 시도를 차단한다.
+ * 무한 루프 방지: fatalResetCount가 과도하게 높아지면 console에 경고를 남기되
+ * 동일한 cooldown을 적용한다(재귀 reset 없음).
+ */
+function applyFatalReset(err: unknown): void {
+  const rt = getRuntime();
+  rt.landmarkerPromise = null;
+  rt.lastDetectTimestampMs = -1;
+  rt.detectInFlight = false;
+  rt.fatalCooldownUntilMs = Date.now() + FATAL_COOLDOWN_MS;
+  rt.fatalResetCount += 1;
+
+  console.error('[pose] fatal detect error — runtime reset', {
+    err: err instanceof Error ? err.message : String(err),
+    resetCount: rt.fatalResetCount,
+    cooldownMs: FATAL_COOLDOWN_MS,
+  });
 }
 
-let detectErrorLogWindowStartMs = 0;
-let detectErrorLogCountInWindow = 0;
+// ---------------------------------------------------------------------------
+// Log rate-limiting
+// ---------------------------------------------------------------------------
+
 const DETECT_ERROR_LOG_WINDOW_MS = 30_000;
 const DETECT_ERROR_LOG_MAX_PER_WINDOW = 8;
 
 function shouldLogDetectVideoError(): boolean {
+  const rt = getRuntime();
   const now = Date.now();
-  if (now - detectErrorLogWindowStartMs > DETECT_ERROR_LOG_WINDOW_MS) {
-    detectErrorLogWindowStartMs = now;
-    detectErrorLogCountInWindow = 0;
+  if (now - rt.logWindowStartMs > DETECT_ERROR_LOG_WINDOW_MS) {
+    rt.logWindowStartMs = now;
+    rt.logCountInWindow = 0;
   }
-  if (detectErrorLogCountInWindow >= DETECT_ERROR_LOG_MAX_PER_WINDOW) return false;
-  detectErrorLogCountInWindow += 1;
+  if (rt.logCountInWindow >= DETECT_ERROR_LOG_MAX_PER_WINDOW) return false;
+  rt.logCountInWindow += 1;
   return true;
 }
 
@@ -127,6 +179,78 @@ function logDetectVideoFailure(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Monotonic timestamp — 실제 detect 직전에만 bump
+// ---------------------------------------------------------------------------
+
+/**
+ * candidateMs를 단조 증가하는 timestamp로 보정해 반환한다.
+ * 이 함수는 반드시 실제 detect 직전에만 호출해야 한다(skip 경로에서는 호출 금지).
+ */
+function bumpMonotonicTimestampMs(candidateMs: number): number {
+  const rt = getRuntime();
+  let c = candidateMs;
+  if (!Number.isFinite(c) || c < 0) {
+    c = 0;
+  }
+  if (rt.lastDetectTimestampMs >= 0 && c <= rt.lastDetectTimestampMs) {
+    c = rt.lastDetectTimestampMs + 1;
+  }
+  rt.lastDetectTimestampMs = c;
+  return c;
+}
+
+function mediaTimestampMsFromVideo(video: HTMLVideoElement): number {
+  return Number.isFinite(video.currentTime) ? Math.round(video.currentTime * 1000) : NaN;
+}
+
+/** 스트림이 끊기면 detect 호출을 건너뛴다(전역 timestamp는 증가시키지 않음). */
+function isVideoStreamDecodable(video: HTMLVideoElement): boolean {
+  const so = video.srcObject;
+  if (so == null) return false;
+  if (so instanceof MediaStream) {
+    if (typeof so.active === 'boolean' && !so.active) return false;
+    const tracks = so.getVideoTracks();
+    if (tracks.length === 0) return false;
+    return tracks.some((t) => t.readyState === 'live');
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Shared PoseLandmarker — runtime singleton 안에 보관
+// ---------------------------------------------------------------------------
+
+async function getSharedPoseLandmarker(): Promise<PoseLandmarker> {
+  const rt = getRuntime();
+  if (!rt.landmarkerPromise) {
+    rt.landmarkerPromise = (async () => {
+      const { FilesetResolver, PoseLandmarker } = await import('@mediapipe/tasks-vision');
+      const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_URL);
+
+      return PoseLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: POSE_MODEL_URL,
+        },
+        runningMode: 'VIDEO',
+        numPoses: 1,
+        minPoseDetectionConfidence: 0.5,
+        minPosePresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+    })().catch((error) => {
+      rt.landmarkerPromise = null;
+      throw error;
+    });
+  }
+
+  return rt.landmarkerPromise;
+}
+
+// ---------------------------------------------------------------------------
+// Frame helpers
+// ---------------------------------------------------------------------------
+
 function createEmptyPoseFrame(video: HTMLVideoElement, timestampMs: number): PoseFrame {
   return {
     timestampMs,
@@ -148,30 +272,9 @@ function toPoseFrame(
   };
 }
 
-async function getSharedPoseLandmarker(): Promise<PoseLandmarker> {
-  if (!sharedPoseLandmarkerPromise) {
-    sharedPoseLandmarkerPromise = (async () => {
-      const { FilesetResolver, PoseLandmarker } = await import('@mediapipe/tasks-vision');
-      const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_URL);
-
-      return PoseLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: POSE_MODEL_URL,
-        },
-        runningMode: 'VIDEO',
-        numPoses: 1,
-        minPoseDetectionConfidence: 0.5,
-        minPosePresenceConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-      });
-    })().catch((error) => {
-      sharedPoseLandmarkerPromise = null;
-      throw error;
-    });
-  }
-
-  return sharedPoseLandmarkerPromise;
-}
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
 export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
   const landmarker = await getSharedPoseLandmarker();
@@ -189,43 +292,47 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
       }
 
       const rawMediaMs = mediaTimestampMsFromVideo(video);
+      const fallbackTs = Number.isFinite(rawMediaMs) ? rawMediaMs : 0;
 
       if (!landmarker) {
-        return createEmptyPoseFrame(
-          video,
-          Number.isFinite(rawMediaMs) ? rawMediaMs : 0
-        );
+        return createEmptyPoseFrame(video, fallbackTs);
+      }
+
+      // --- fatal cooldown 중이면 skip (timestamp 증가 없음) ---
+      const rt = getRuntime();
+      if (Date.now() < rt.fatalCooldownUntilMs) {
+        return { ...createEmptyPoseFrame(video, fallbackTs), _mediapipeDetectFailed: true };
+      }
+
+      // --- detect 직렬화: 이전 호출이 아직 진행 중이면 이번 프레임은 건너뜀 ---
+      if (rt.detectInFlight) {
+        return createEmptyPoseFrame(video, fallbackTs);
       }
 
       if (video.paused || video.ended) {
-        return createEmptyPoseFrame(
-          video,
-          Number.isFinite(rawMediaMs) ? rawMediaMs : 0
-        );
+        return createEmptyPoseFrame(video, fallbackTs);
       }
 
       if (!isVideoStreamDecodable(video)) {
-        return createEmptyPoseFrame(
-          video,
-          Number.isFinite(rawMediaMs) ? rawMediaMs : 0
-        );
+        return createEmptyPoseFrame(video, fallbackTs);
       }
 
       if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
-        return createEmptyPoseFrame(
-          video,
-          Number.isFinite(rawMediaMs) ? rawMediaMs : 0
-        );
+        return createEmptyPoseFrame(video, fallbackTs);
       }
 
       if (!Number.isFinite(rawMediaMs)) {
         return createEmptyPoseFrame(video, 0);
       }
 
+      // --- 실제 detect 직전에만 timestamp bump ---
       const ts = bumpMonotonicTimestampMs(rawMediaMs);
+      rt.detectInFlight = true;
 
       try {
         const result = landmarker.detectForVideo(video, ts);
+        rt.detectInFlight = false;
+
         const firstPose = result.landmarks?.[0];
 
         if (!firstPose || firstPose.length === 0) {
@@ -243,7 +350,15 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
           }))
         );
       } catch (error) {
-        logDetectVideoFailure(error, video, ts, diagnostics);
+        rt.detectInFlight = false;
+
+        if (isFatalDetectError(error)) {
+          // fatal: runtime을 완전히 초기화하고 쿨다운 적용
+          applyFatalReset(error);
+        } else {
+          logDetectVideoFailure(error, video, ts, diagnostics);
+        }
+
         return {
           ...createEmptyPoseFrame(video, ts),
           _mediapipeDetectFailed: true,
@@ -255,6 +370,10 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Canvas drawing utilities (변경 없음)
+// ---------------------------------------------------------------------------
 
 function clearCanvas(canvas: HTMLCanvasElement) {
   const context = canvas.getContext('2d');
@@ -332,4 +451,27 @@ export function drawPoseFrameToCanvas(
 export function clearPoseOverlay(canvas: HTMLCanvasElement | null) {
   if (!canvas) return;
   clearCanvas(canvas);
+}
+
+// ---------------------------------------------------------------------------
+// Dev/test utility — 테스트에서 런타임 상태를 직접 검사·조작할 때만 사용
+// ---------------------------------------------------------------------------
+
+/** @internal 테스트 전용 */
+export function _getMpRuntimeForTest(): MpRuntimeSingleton {
+  return getRuntime();
+}
+
+/** @internal 테스트 전용: runtime을 완전 초기화 */
+export function _resetMpRuntimeForTest(): void {
+  const g = globalThis as Record<string, unknown>;
+  g[RUNTIME_KEY] = {
+    landmarkerPromise: null,
+    lastDetectTimestampMs: -1,
+    detectInFlight: false,
+    fatalCooldownUntilMs: 0,
+    fatalResetCount: 0,
+    logWindowStartMs: 0,
+    logCountInWindow: 0,
+  } satisfies MpRuntimeSingleton;
 }
