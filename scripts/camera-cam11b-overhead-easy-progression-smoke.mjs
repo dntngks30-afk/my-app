@@ -146,13 +146,21 @@ const weakFrames = [
 const e3 = evaluateOverheadReachFromPoseFrames(weakFrames);
 ok('E3: weak raise only → no pass', e3.debug?.highlightedMetrics?.completionSatisfied === false);
 
-// E4: below easy floor (120°)
+// E4: below easy floor (120°) — PR-CAM-15 후 low-ROM 경로로 통과
+// - baseline(70°) 대비 50° 개선, 120° ≥ 110°, 660ms zone hold
+// - 제한적 ROM 사용자 접근성 향상 — 의도된 변경
 const belowEasyFrames = [
   ...Array.from({ length: 6 }, (_, i) => makePoseFrame(100 + i * 70, 50 + i * 8, 'raise')),
   ...Array.from({ length: 12 }, (_, i) => makePoseFrame(520 + i * 60, 120, 'peak')),
 ];
 const e4 = evaluateOverheadReachFromPoseFrames(belowEasyFrames);
-ok('E4: 120° peak → no pass', e4.debug?.highlightedMetrics?.completionSatisfied === false);
+// PR-CAM-15: 120° + 660ms hold → low-ROM 통과 (easy 126° floor 미달이어도 low-ROM 110° floor 충족)
+ok(
+  'E4: 120° peak → passes via low-ROM (PR-CAM-15 intended change for limited-ROM users)',
+  e4.debug?.highlightedMetrics?.completionSatisfied === true &&
+    e4.debug?.highlightedMetrics?.lowRomProgressionSatisfied === 1,
+  `completionSatisfied=${e4.debug?.highlightedMetrics?.completionSatisfied} lowRom=${e4.debug?.highlightedMetrics?.lowRomProgressionSatisfied}`
+);
 
 // E5: easy unit — 126° floor
 const ez = computeOverheadEasyProgressionHold({

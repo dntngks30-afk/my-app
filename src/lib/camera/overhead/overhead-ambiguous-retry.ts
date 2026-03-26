@@ -27,12 +27,14 @@ const FRAMING_HARD = new Set<string>([
 
 /** strict 머신 기반 retry 허용 phase (기존 동작 유지) */
 const STRICT_RETRY_PHASES = new Set<string>(['raising', 'top_unstable', 'stable_top', 'holding']);
-/** PR-CAM-13: progression 관점 retry 허용 phase — easy 구간 포함 */
+/** PR-CAM-13/15: progression 관점 retry 허용 phase — easy·low-ROM 구간 포함 */
 const PROGRESSION_RETRY_PHASES = new Set<string>([
   'raising',
   'easy_top',
   'easy_building_hold',
   'strict_top_unstable',
+  'low_rom_top',
+  'low_rom_building_hold',
   'stable_top',
   'holding',
 ]);
@@ -63,7 +65,10 @@ export function isOverheadAmbiguousRetryEligible(gate: ExerciseGateResult): bool
   // PR-CAM-13: easy top zone 도달도 top evidence로 인정 (strict 132° 미달 구간 포함)
   const easyTopZoneFrameCount =
     typeof m?.easyTopZoneFrameCount === 'number' ? m.easyTopZoneFrameCount : 0;
-  if (raiseCount <= 0 && !topDetected && easyTopZoneFrameCount === 0) return false;
+  // PR-CAM-15: low-ROM zone 도달도 top evidence로 인정 (easy zone 미달 구간 포함)
+  const lowRomZoneFrameCount =
+    typeof m?.lowRomZoneFrameCount === 'number' ? m.lowRomZoneFrameCount : 0;
+  if (raiseCount <= 0 && !topDetected && easyTopZoneFrameCount === 0 && lowRomZoneFrameCount === 0) return false;
 
   // PR-CAM-13: progression phase 우선, strict 머신 phase 는 progression state 부재 시 fallback
   const progressionPhase = ps(gate)?.progressionPhase;
@@ -87,6 +92,8 @@ export function deriveOverheadAmbiguousRetryReason(
   const progressionPhase = progression?.progressionPhase ?? null;
 
   if (progressionBlocked === 'easy_hold_short') return 'no_hold';
+  // PR-CAM-15: low-ROM hold 부족 → no_hold
+  if (progressionBlocked === 'low_rom_hold_short') return 'no_hold';
   if (
     progressionBlocked === 'easy_top_not_reached' ||
     progressionBlocked === 'easy_raise_incomplete'
@@ -95,6 +102,9 @@ export function deriveOverheadAmbiguousRetryReason(
   }
   // easy zone에 진입했으나 hold를 시작 못 한 상태 — top 불안정으로 안내
   if (progressionPhase === 'easy_top') return 'unstable_top';
+  // PR-CAM-15: low-ROM top 진입했으나 hold 시작 못 한 상태
+  if (progressionPhase === 'low_rom_top') return 'unstable_top';
+  if (progressionPhase === 'low_rom_building_hold') return 'no_hold';
   if (progressionBlocked === 'asymmetry_unacceptable') return 'partial_raise';
 
   // fallback: strict 머신 signals (progression state 부재 또는 매핑 불가 케이스)

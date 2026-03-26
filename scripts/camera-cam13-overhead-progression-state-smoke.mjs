@@ -217,9 +217,10 @@ console.log('\n[Scenario B] Easy short hold — progressionBlockedReason=easy_ho
 }
 
 // ---------------------------------------------------------------------------
-// Scenario C: Below easy floor → progressionBlockedReason='easy_top_not_reached'
+// Scenario C: Below easy floor (120°) — PR-CAM-15 후 low-ROM 경로로 통과 (의도된 변경)
+// 120° ≥ low-ROM floor(110°), baseline(80°) 대비 40° 개선, 10프레임 at 120° = 630ms ≥ 350ms
 // ---------------------------------------------------------------------------
-console.log('\n[Scenario C] Below easy floor (120°) — easy_top_not_reached');
+console.log('\n[Scenario C] Below easy floor (120°) — now passes via low-ROM (PR-CAM-15)');
 {
   const frames = [
     ...Array.from({ length: 6 }, (_, i) => makeFrame(100 + i * 70, 60 + i * 8, 'raise')),
@@ -228,29 +229,27 @@ console.log('\n[Scenario C] Below easy floor (120°) — easy_top_not_reached');
   const result = evaluateOverheadReachFromPoseFrames(frames);
   const prog = result.debug?.overheadProgressionState;
 
+  // PR-CAM-15: 120° + 630ms hold → low-ROM 통과 (제한적 ROM 사용자 의도된 접근성 개선)
   ok(
-    'C1: progressionSatisfied = false',
-    prog?.progressionSatisfied === false,
+    'C1: progressionSatisfied = true (low-ROM path — PR-CAM-15 intended change)',
+    prog?.progressionSatisfied === true,
     `sat=${prog?.progressionSatisfied}`,
   );
   ok(
-    'C2: progressionBlockedReason = easy_top_not_reached',
-    prog?.progressionBlockedReason === 'easy_top_not_reached',
-    `blocked=${prog?.progressionBlockedReason}`,
+    'C2: progressionPath = low_rom',
+    prog?.progressionPath === 'low_rom',
+    `path=${prog?.progressionPath}`,
   );
   ok(
-    'C3: progressionPhase = raising (no easy zone frames)',
-    prog?.progressionPhase === 'raising',
+    'C3: progressionPhase = completed',
+    prog?.progressionPhase === 'completed',
     `phase=${prog?.progressionPhase}`,
   );
-
-  // ambiguous retry reason
-  const gate = makeGateMock(result, { completionSatisfied: false, captureQuality: 'valid', failureReasons: [] });
-  const reason = deriveOverheadAmbiguousRetryReason(gate);
+  // strict quality 기준 변경 없음 — 120° < 132° → strict remains false
   ok(
-    'C4: ambiguous retry reason = insufficient_height',
-    reason === 'insufficient_height',
-    `reason=${reason}`,
+    'C4: strictMotionCompletionSatisfied = false (strict unchanged)',
+    prog?.strictMotionCompletionSatisfied === false,
+    `strict=${prog?.strictMotionCompletionSatisfied}`,
   );
 }
 

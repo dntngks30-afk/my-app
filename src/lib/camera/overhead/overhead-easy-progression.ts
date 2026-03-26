@@ -4,6 +4,9 @@
  * - strict / 11A fallback 은 `evaluateOverheadCompletionState` + dwell 그대로 (해석·플래닝용).
  * - 본 모듈은 "팔을 귀/머리 위 근처까지 올리고 잠깐만 멈춤"이면 진행 통과 허용.
  * - 비대칭·약한 들기·프레이밍 invalid 는 여기서도 차단하지 않음 (evaluator 입력 전제).
+ *
+ * PR-CAM-15 — low-ROM 진행 경로(제한적 ROM 사용자용) 추가.
+ * - 귀 높이(126°)에 미치지 못하는 사용자도 개인 baseline 대비 실질적 거상 노력 + 짧은 안정이면 통과.
  */
 
 import {
@@ -146,5 +149,210 @@ export function computeOverheadEasyProgressionHold(
     easyCompletionBlockedReason: null,
     easyBestRunMs: bestRunMs,
     easyBestRunFrameCount: bestRunFrameCount,
+  };
+}
+
+// ============================================================================
+// PR-CAM-15: Low-ROM 진행 경로 (제한적 ROM 사용자용)
+// ============================================================================
+
+/**
+ * 절대 하한선 — easy floor 126° 미만.
+ * 어깨 쉬러그(≈ 60-90°)·하프레이즈 노이즈를 제거하면서 제한적 ROM 사용자에게 접근성 제공.
+ * evaluator·guardrails.ts 에서 공유하기 위해 export.
+ */
+export const OVERHEAD_LOW_ROM_ABSOLUTE_FLOOR_DEG = 110;
+
+/** 개인 baseline 대비 최소 거상 개선량 — 20° 미만은 노이즈·미세 흔들림으로 간주. */
+const LOW_ROM_REQUIRED_DELTA_FROM_BASELINE_DEG = 20;
+/** 최소 안정 홀드 — 350ms ≈ 5 프레임@70ms. 순간 스윙-스루 차단. */
+const LOW_ROM_REQUIRED_HOLD_MS = 350;
+/** low-ROM zone 진입 최소 프레임 수 (피크 카운트 기준). */
+const LOW_ROM_MIN_PEAK_FRAMES = 3;
+/** run 사이 간격 허용 (easy와 동일). */
+const LOW_ROM_GAP_TOLERANCE_MS = 200;
+/** 연속 run 최소 프레임 수 (단발성 스파이크 차단). */
+const LOW_ROM_MIN_RUN_FRAMES = 3;
+/** 비대칭 최대 허용 — easy(22°)보다 약간 완화. 편측 불가 사용자 배려. */
+const LOW_ROM_MAX_MEAN_ASYM_DEG = 26;
+/** 비대칭 피크 최대 허용 — easy(36°)보다 약간 완화. */
+const LOW_ROM_MAX_PEAK_ASYM_DEG = 40;
+
+export interface OverheadLowRomProgressionInput {
+  /** armElevationAvg >= OVERHEAD_LOW_ROM_ABSOLUTE_FLOOR_DEG 인 유효 프레임 */
+  lowRomZoneFrames: ReadonlyArray<{ readonly timestampMs: number }>;
+  raiseCount: number;
+  /** lowRomZoneFrames.length (evaluator에서 공급). */
+  peakCountAtLowRomFloor: number;
+  /** 세션 내 최대 팔 거상 각도. */
+  effectiveArmDeg: number;
+  /**
+   * 개인 시작 포지션 추정치 — evaluator 초기 N프레임 평균.
+   * 팔을 내린 상태에서 시작하면 자연스럽게 낮은 값이 된다.
+   */
+  baselineArmDeg: number;
+  meanAsymmetryDeg: number | null;
+  maxAsymmetryDeg: number | null;
+}
+
+export interface OverheadLowRomProgressionResult {
+  lowRomProgressionSatisfied: boolean;
+  lowRomBlockedReason: string | null;
+  lowRomBestRunMs: number;
+  lowRomBestRunFrameCount: number;
+  lowRomElevationDeltaFromBaseline: number;
+  /** effectiveArmDeg 그대로 (trace용). */
+  lowRomBestElevation: number;
+}
+
+function lowRomAsymmetryFails(meanDeg: number | null, peakDeg: number | null): boolean {
+  if (peakDeg != null && peakDeg > LOW_ROM_MAX_PEAK_ASYM_DEG) return true;
+  if (meanDeg != null && meanDeg > LOW_ROM_MAX_MEAN_ASYM_DEG) return true;
+  return false;
+}
+
+/**
+ * PR-CAM-15: 제한적 ROM 사용자 전용 진행 완화 경로.
+ *
+ * easy path(126°)에 도달하지 못하는 사용자가 아래 조건을 모두 충족하면 진행 통과:
+ *   1) raiseCount > 0 + low-ROM zone 최소 3프레임  (실질적 들기 동작 확인)
+ *   2) effectiveArmDeg >= 110°                     (절대 하한 — 쉬러그·노이즈 제거)
+ *   3) delta from baseline >= 20°                  (개인 시작점 대비 실질적 개선)
+ *   4) 연속 run >= 350ms + 최소 3프레임             (순간 스윙-스루 차단)
+ *
+ * 판단·플래닝·internal quality 는 변경하지 않는다 (strict 기준 별도 유지).
+ */
+export function computeOverheadLowRomProgression(
+  input: OverheadLowRomProgressionInput
+): OverheadLowRomProgressionResult {
+  const {
+    lowRomZoneFrames,
+    raiseCount,
+    peakCountAtLowRomFloor,
+    effectiveArmDeg,
+    baselineArmDeg,
+    meanAsymmetryDeg,
+    maxAsymmetryDeg,
+  } = input;
+
+  const elevationDelta = effectiveArmDeg - baselineArmDeg;
+
+  // 1. 들기 동작 확인 (raiseCount 및 최소 프레임)
+  if (raiseCount === 0 || peakCountAtLowRomFloor < LOW_ROM_MIN_PEAK_FRAMES) {
+    return {
+      lowRomProgressionSatisfied: false,
+      lowRomBlockedReason: 'low_rom_raise_incomplete',
+      lowRomBestRunMs: 0,
+      lowRomBestRunFrameCount: 0,
+      lowRomElevationDeltaFromBaseline: elevationDelta,
+      lowRomBestElevation: effectiveArmDeg,
+    };
+  }
+
+  // 2. 절대 하한 확인
+  if (effectiveArmDeg < OVERHEAD_LOW_ROM_ABSOLUTE_FLOOR_DEG) {
+    return {
+      lowRomProgressionSatisfied: false,
+      lowRomBlockedReason: 'low_rom_insufficient_elevation',
+      lowRomBestRunMs: 0,
+      lowRomBestRunFrameCount: 0,
+      lowRomElevationDeltaFromBaseline: elevationDelta,
+      lowRomBestElevation: effectiveArmDeg,
+    };
+  }
+
+  // 3. 개인 baseline 대비 실질적 개선 확인
+  if (elevationDelta < LOW_ROM_REQUIRED_DELTA_FROM_BASELINE_DEG) {
+    return {
+      lowRomProgressionSatisfied: false,
+      lowRomBlockedReason: 'low_rom_insufficient_delta',
+      lowRomBestRunMs: 0,
+      lowRomBestRunFrameCount: 0,
+      lowRomElevationDeltaFromBaseline: elevationDelta,
+      lowRomBestElevation: effectiveArmDeg,
+    };
+  }
+
+  // 4. 비대칭 확인 (완화된 임계)
+  if (lowRomAsymmetryFails(meanAsymmetryDeg, maxAsymmetryDeg)) {
+    return {
+      lowRomProgressionSatisfied: false,
+      lowRomBlockedReason: 'asymmetry_unacceptable',
+      lowRomBestRunMs: 0,
+      lowRomBestRunFrameCount: 0,
+      lowRomElevationDeltaFromBaseline: elevationDelta,
+      lowRomBestElevation: effectiveArmDeg,
+    };
+  }
+
+  if (lowRomZoneFrames.length === 0) {
+    return {
+      lowRomProgressionSatisfied: false,
+      lowRomBlockedReason: 'low_rom_no_zone_frames',
+      lowRomBestRunMs: 0,
+      lowRomBestRunFrameCount: 0,
+      lowRomElevationDeltaFromBaseline: elevationDelta,
+      lowRomBestElevation: effectiveArmDeg,
+    };
+  }
+
+  // 5. 연속 run 계산 (easy와 동일 알고리즘, 완화된 상수)
+  let bestRunMs = 0;
+  let bestRunFrameCount = 0;
+  let runStartMs = lowRomZoneFrames[0]!.timestampMs;
+  let runEndMs = lowRomZoneFrames[0]!.timestampMs;
+  let runFrames = 1;
+
+  for (let i = 1; i < lowRomZoneFrames.length; i++) {
+    const gap = lowRomZoneFrames[i]!.timestampMs - lowRomZoneFrames[i - 1]!.timestampMs;
+    if (gap <= LOW_ROM_GAP_TOLERANCE_MS) {
+      runEndMs = lowRomZoneFrames[i]!.timestampMs;
+      runFrames += 1;
+    } else {
+      const runMs = runEndMs - runStartMs;
+      if (runMs > bestRunMs || (runMs === bestRunMs && runFrames > bestRunFrameCount)) {
+        bestRunMs = runMs;
+        bestRunFrameCount = runFrames;
+      }
+      runStartMs = lowRomZoneFrames[i]!.timestampMs;
+      runEndMs = lowRomZoneFrames[i]!.timestampMs;
+      runFrames = 1;
+    }
+  }
+  const lastRunMs = runEndMs - runStartMs;
+  if (lastRunMs > bestRunMs || (lastRunMs === bestRunMs && runFrames > bestRunFrameCount)) {
+    bestRunMs = lastRunMs;
+    bestRunFrameCount = runFrames;
+  }
+
+  if (bestRunMs < LOW_ROM_REQUIRED_HOLD_MS) {
+    return {
+      lowRomProgressionSatisfied: false,
+      lowRomBlockedReason: 'low_rom_hold_short',
+      lowRomBestRunMs: bestRunMs,
+      lowRomBestRunFrameCount: bestRunFrameCount,
+      lowRomElevationDeltaFromBaseline: elevationDelta,
+      lowRomBestElevation: effectiveArmDeg,
+    };
+  }
+
+  if (bestRunFrameCount < LOW_ROM_MIN_RUN_FRAMES) {
+    return {
+      lowRomProgressionSatisfied: false,
+      lowRomBlockedReason: 'low_rom_frames_too_few',
+      lowRomBestRunMs: bestRunMs,
+      lowRomBestRunFrameCount: bestRunFrameCount,
+      lowRomElevationDeltaFromBaseline: elevationDelta,
+      lowRomBestElevation: effectiveArmDeg,
+    };
+  }
+
+  return {
+    lowRomProgressionSatisfied: true,
+    lowRomBlockedReason: null,
+    lowRomBestRunMs: bestRunMs,
+    lowRomBestRunFrameCount: bestRunFrameCount,
+    lowRomElevationDeltaFromBaseline: elevationDelta,
+    lowRomBestElevation: effectiveArmDeg,
   };
 }

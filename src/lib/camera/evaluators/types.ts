@@ -61,15 +61,29 @@ export interface EvaluatorDebugSummary {
  */
 export interface OverheadProgressionState {
   progressionSatisfied: boolean;
-  progressionPath: 'strict' | 'fallback' | 'easy' | 'none';
+  /** PR-CAM-15: 'low_rom' 경로 추가 */
+  progressionPath: 'strict' | 'fallback' | 'easy' | 'low_rom' | 'none';
   /** 진행 관점 차단 사유 — easy-facing 우선, strict fallback. retry·hold cue 단일 진입점. */
   progressionBlockedReason: string | null;
-  /** 진행 관점 단계 — 음성·retry·UI 상태 표현용. */
-  progressionPhase: 'idle' | 'raising' | 'easy_top' | 'easy_building_hold' | 'strict_top_unstable' | 'completed';
+  /** 진행 관점 단계 — 음성·retry·UI 상태 표현용. PR-CAM-15: low_rom_top, low_rom_building_hold 추가. */
+  progressionPhase:
+    | 'idle'
+    | 'raising'
+    | 'easy_top'
+    | 'easy_building_hold'
+    | 'strict_top_unstable'
+    | 'low_rom_top'
+    | 'low_rom_building_hold'
+    | 'completed';
   easyCompletionSatisfied: boolean;
   easyCompletionBlockedReason: string | null;
   easyBestRunMs: number;
   easyPeakCountAtFloor: number;
+  /** PR-CAM-15: low-ROM 진행 필드 */
+  lowRomProgressionSatisfied: boolean;
+  lowRomBlockedReason: string | null;
+  lowRomBestRunMs: number;
+  lowRomElevationDeltaFromBaseline: number;
   /** strict completion 그대로 보존 — planning / internal quality 기준 유지 */
   strictMotionCompletionSatisfied: boolean;
   strictCompletionBlockedReason: string | null;
