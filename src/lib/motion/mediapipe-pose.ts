@@ -38,7 +38,8 @@ export type PoseDetectDiagnosticsContext = {
 
 export interface LivePoseAnalyzer {
   /**
-   * @param _timestampMsIgnored 타임스탬프는 `video.currentTime`에서만 유도한다(호환용).
+   * @param _timestampMsIgnored 외부 타임스탬프는 무시된다. detect ts는 analyzer 생성 시점
+   *   기준의 performance.now() 오프셋으로 계산된 analyzer-local 단조값을 사용한다.
    * @param diagnostics 선택: 실패 로그에 `motionType` 등 부착
    */
   analyze(
@@ -114,27 +115,21 @@ function logDetectVideoFailure(
 // ---------------------------------------------------------------------------
 
 /**
- * candidateMs를 단조 증가하는 timestamp로 보정해 반환한다.
- * 이 함수는 반드시 실제 detect 직전에만 호출해야 한다(skip 경로에서는 호출 금지).
+ * analyzer-local performance.now() 오프셋을 단조 증가 detect timestamp로 보정한다.
+ * candidateMs는 항상 `performance.now() - analyzerStartedAtMs` 이어야 한다.
+ * - video.currentTime은 모바일에서 0, 포화(2147483647), NaN 등 이상값을 반환할 수 있어
+ *   detect ts 소스로 사용하지 않는다.
+ * - 이 함수는 반드시 실제 detect 직전에만 호출해야 한다(skip 경로에서는 호출 금지).
  */
-function bumpMonotonicTimestampMs(candidateMs: number): number {
+function bumpAnalyzerTimestampMs(lastDetectTimestampMs: number, candidateMs: number): number {
   let c = candidateMs;
   if (!Number.isFinite(c) || c < 0) {
     c = 0;
   }
-  return c;
-}
-
-function bumpAnalyzerTimestampMs(lastDetectTimestampMs: number, candidateMs: number): number {
-  let c = bumpMonotonicTimestampMs(candidateMs);
   if (lastDetectTimestampMs >= 0 && c <= lastDetectTimestampMs) {
     c = lastDetectTimestampMs + 1;
   }
   return c;
-}
-
-function mediaTimestampMsFromVideo(video: HTMLVideoElement): number {
-  return Number.isFinite(video.currentTime) ? Math.round(video.currentTime * 1000) : NaN;
 }
 
 /** 스트림이 끊기면 detect 호출을 건너뛴다(전역 timestamp는 증가시키지 않음). */
@@ -212,6 +207,13 @@ function createAnalyzerFatalFrame(
 export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
   let landmarker: PoseLandmarker | null = await createPoseLandmarker();
   const analyzerId = nextAnalyzerId++;
+  /**
+   * analyzer 생성 시점의 performance.now() 기준값.
+   * detect timestamp는 `performance.now() - analyzerStartedAtMs` 오프셋을 사용한다.
+   * video.currentTime은 모바일에서 포화(INT32_MAX × 1000) 또는 0을 반환해 mismatch를
+   * 일으키므로 detect ts 소스로 절대 사용하지 않는다.
+   */
+  const analyzerStartedAtMs = performance.now();
   let lastDetectTimestampMs = -1;
   let detectInFlight = false;
   let closed = false;
@@ -253,8 +255,11 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
         };
       }
 
-      const rawMediaMs = mediaTimestampMsFromVideo(video);
-      const fallbackTs = Number.isFinite(rawMediaMs) ? rawMediaMs : 0;
+      // detect ts는 항상 analyzer 생성 기준 performance.now() 오프셋을 사용한다.
+      // video.currentTime은 모바일에서 INT32_MAX(2147483647) 등 이상값을 반환하므로
+      // detect timestamp 소스로 사용하지 않는다.
+      const rawNowMs = performance.now() - analyzerStartedAtMs;
+      const fallbackTs = rawNowMs;
 
       if (closed) {
         return createEmptyPoseFrame(video, fallbackTs);
@@ -280,11 +285,7 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
         return createEmptyPoseFrame(video, fallbackTs);
       }
 
-      if (!Number.isFinite(rawMediaMs)) {
-        return createEmptyPoseFrame(video, 0);
-      }
-
-      const ts = bumpAnalyzerTimestampMs(lastDetectTimestampMs, rawMediaMs);
+      const ts = bumpAnalyzerTimestampMs(lastDetectTimestampMs, rawNowMs);
       lastDetectTimestampMs = ts;
       detectInFlight = true;
 

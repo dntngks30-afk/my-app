@@ -512,19 +512,13 @@ export function CameraPreview({
 
           if (tick - lastAnalyzedAt >= ANALYSIS_INTERVAL_MS) {
             lastAnalyzedAt = tick;
-            /** timestamp·단조 보정은 mediapipe-pose 내부; 진단 라벨만 전달 */
+            /** detect ts는 mediapipe-pose 내부의 performance.now() 오프셋 사용; 진단 라벨만 전달 */
             const frame = analyzer.analyze(currentVideo, 0, {
               motionType: poseDiagnosticsMotionTypeRef.current ?? undefined,
             });
 
-            onPoseFrameRef.current?.(frame);
-
-            if (showPoseDebugOverlay && overlayCanvasRef.current) {
-              drawPoseFrameToCanvas(overlayCanvasRef.current, frame, { mirrored });
-            } else {
-              clearPoseOverlay(overlayCanvasRef.current);
-            }
-
+            // fatal frame 인터셉트 — onPoseFrame / overlay draw 호출 전에 처리해야
+            // 빈 frame이 평가기·UI로 전파되지 않아 skeleton/각도 깜빡임을 막는다.
             if (
               frame._mediapipeAnalyzerFatal &&
               frame._mediapipeAnalyzerNeedsRecreate &&
@@ -560,7 +554,17 @@ export function CameraPreview({
                 startAnalyzerRef.current?.();
               }, ANALYZER_FATAL_RECREATE_DELAY_MS);
 
+              // fatal frame은 onPoseFrame / overlay draw로 전파하지 않는다.
               return;
+            }
+
+            // 정상 frame만 여기까지 도달한다.
+            onPoseFrameRef.current?.(frame);
+
+            if (showPoseDebugOverlay && overlayCanvasRef.current) {
+              drawPoseFrameToCanvas(overlayCanvasRef.current, frame, { mirrored });
+            } else {
+              clearPoseOverlay(overlayCanvasRef.current);
             }
           }
 
