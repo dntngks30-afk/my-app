@@ -15,6 +15,7 @@ import {
   OVERHEAD_REQUIRED_HOLD_MS,
   OVERHEAD_STABLE_TOP_DELTA_DEG,
   OVERHEAD_STABLE_TOP_CONSECUTIVE,
+  OVERHEAD_EASY_ELEVATION_FLOOR_DEG,
 } from '@/lib/camera/overhead/overhead-constants';
 import { evaluateOverheadCompletionState } from '@/lib/camera/overhead/overhead-completion-state';
 import {
@@ -22,6 +23,7 @@ import {
   overheadInternalQualityInsufficientSignal,
 } from '@/lib/camera/overhead/overhead-internal-quality';
 import { computeOverheadTopHoldFallback } from '@/lib/camera/overhead/overhead-top-hold-fallback';
+import { computeOverheadEasyProgressionHold } from '@/lib/camera/overhead/overhead-easy-progression';
 
 const MIN_VALID_FRAMES = 8;
 
@@ -389,7 +391,12 @@ export function evaluateOverheadReachFromPoseFrames(
         phaseHints: Array.from(new Set(frames.map((frame) => frame.phaseHint))),
         highlightedMetrics: {
           validFrameCount: valid.length,
+          strictMotionCompletionSatisfied: 0,
           completionSatisfied: false,
+          completionPath: 'not_confirmed' as const,
+          strictMotionCompletionPath: null,
+          easyCompletionSatisfied: 0,
+          easyCompletionBlockedReason: 'raise_peak_incomplete',
           completionBlockedReason: 'raise_peak_incomplete',
           completionMachinePhase: 'idle',
           completionPassReason: 'not_confirmed',
@@ -490,6 +497,21 @@ export function evaluateOverheadReachFromPoseFrames(
     )
     .map((f) => ({ timestampMs: f.timestampMs }));
 
+  /** PR-CAM-11B: easy 진행용 top-zone (strict floor 132°보다 낮은 귀/머리 위 근처) */
+  const easyTopZoneFrames = valid
+    .filter(
+      (f) =>
+        typeof f.derived.armElevationAvg === 'number' &&
+        f.derived.armElevationAvg >= OVERHEAD_EASY_ELEVATION_FLOOR_DEG
+    )
+    .map((f) => ({ timestampMs: f.timestampMs }));
+  const peakCountAtEasyFloor = valid.filter(
+    (f) =>
+      f.phaseHint === 'peak' &&
+      typeof f.derived.armElevationAvg === 'number' &&
+      f.derived.armElevationAvg >= OVERHEAD_EASY_ELEVATION_FLOOR_DEG
+  ).length;
+
   // PR-CAM-11A: jitter-tolerant fallback 계산 (strict 경로 보완용)
   const fallbackTopHold = computeOverheadTopHoldFallback({
     topZoneFrames,
@@ -516,7 +538,31 @@ export function evaluateOverheadReachFromPoseFrames(
     fallbackTopHold,
   });
 
-  if (!overheadCompletion.completionSatisfied) {
+  // PR-CAM-11B: 진행 전용 easy 홀드 (해석·overheadPlanning 은 strict dwell 기준 유지)
+  const easyProgression = computeOverheadEasyProgressionHold({
+    easyTopZoneFrames,
+    raiseCount,
+    peakCountAtEasyFloor,
+    effectiveArmDeg: peakArmForCompletion,
+    meanAsymmetryDeg,
+    maxAsymmetryDeg,
+  });
+
+  const strictMotionCompletionSatisfied = overheadCompletion.completionSatisfied;
+  const progressionCompletionSatisfied =
+    strictMotionCompletionSatisfied || easyProgression.easyCompletionSatisfied;
+
+  let progressionCompletionPath: 'strict' | 'fallback' | 'easy' | 'not_confirmed';
+  if (strictMotionCompletionSatisfied) {
+    progressionCompletionPath =
+      overheadCompletion.completionPath === 'fallback' ? 'fallback' : 'strict';
+  } else if (easyProgression.easyCompletionSatisfied) {
+    progressionCompletionPath = 'easy';
+  } else {
+    progressionCompletionPath = 'not_confirmed';
+  }
+
+  if (!progressionCompletionSatisfied) {
     if (overheadCompletion.completionBlockedReason === 'hold_short') {
       completionHints.push('top_hold_short');
     } else {
@@ -664,8 +710,10 @@ export function evaluateOverheadReachFromPoseFrames(
         /** PR-CAM-03: 기기 트레이스 — dwell 일관성·planning 등급 */
         cam03DwellCoherent: overheadPlanning.dwellCoherent ? 1 : 0,
         cam03OverheadPlanningLevel: overheadPlanning.level,
-        /** PR-COMP-04: completion SSOT (모션) — auto-progression이 guardrail과 결합 */
-        completionSatisfied: overheadCompletion.completionSatisfied,
+        /** PR-COMP-04: strict 모션 completion (strict+fallback) — 해석·플래닝 기준 */
+        strictMotionCompletionSatisfied: strictMotionCompletionSatisfied ? 1 : 0,
+        /** PR-CAM-11B: 진행 게이트 truth = strict | easy */
+        completionSatisfied: progressionCompletionSatisfied,
         completionBlockedReason: overheadCompletion.completionBlockedReason,
         completionMachinePhase: overheadCompletion.completionMachinePhase,
         completionPassReason: overheadCompletion.completionPassReason,
@@ -673,10 +721,19 @@ export function evaluateOverheadReachFromPoseFrames(
         stableTopEntry: overheadCompletion.stableTopEntry ? 1 : 0,
         holdStarted: overheadCompletion.holdStarted ? 1 : 0,
         holdSatisfied: overheadCompletion.holdSatisfied ? 1 : 0,
-        passLatchedCandidate: overheadCompletion.passLatchedCandidate ? 1 : 0,
+        passLatchedCandidate: progressionCompletionSatisfied ? 1 : 0,
         overheadTopDetected: overheadCompletion.topDetected ? 1 : 0,
+        /** PR-CAM-11B: 진행 경로 (strict|fallback|easy|not_confirmed) */
+        completionPath: progressionCompletionPath,
+        strictMotionCompletionPath: overheadCompletion.completionPath,
+        /** PR-CAM-11B: easy 진행 전용 */
+        easyCompletionSatisfied: easyProgression.easyCompletionSatisfied ? 1 : 0,
+        easyCompletionBlockedReason: easyProgression.easyCompletionBlockedReason,
+        easyBestRunMs: easyProgression.easyBestRunMs,
+        easyBestRunFrameCount: easyProgression.easyBestRunFrameCount,
+        peakCountAtEasyFloor,
+        easyTopZoneFrameCount: easyTopZoneFrames.length,
         /** PR-CAM-11A: fallback top-hold 경로 트레이스 */
-        completionPath: overheadCompletion.completionPath,
         fallbackTopHoldSatisfied: overheadCompletion.fallbackTopHoldSatisfied ? 1 : 0,
         fallbackTopHoldBestRunMs: fallbackTopHold.bestTopRunMs,
         fallbackTopHoldBestRunFrames: fallbackTopHold.bestTopRunFrameCount,

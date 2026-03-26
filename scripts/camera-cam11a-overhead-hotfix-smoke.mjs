@@ -306,20 +306,19 @@ ok(
 );
 ok(
   'C1c: completionPath debug field present',
-  jitterHm?.completionPath === 'strict' || jitterHm?.completionPath === 'fallback' || jitterHm?.completionPath === null
+  ['strict', 'fallback', 'easy', 'not_confirmed', null].includes(jitterHm?.completionPath ?? null)
 );
 
-// C2: 짧은 top hold (< 1200ms) — strict AND fallback 모두 실패
+// C2: 짧은 top hold — strict·fallback·easy(520ms) 모두 미달 (6프레임≈300ms 스팬)
 const shortTopFrames = [
   ...Array.from({ length: 6 }, (_, i) => makePoseFrame(100 + i * 70, 80 + i * 10, 'raise')),
-  // top 700ms만 유지 (11 frames, delta=0 — strict 누적 가능하지만 < 1200ms)
-  ...Array.from({ length: 11 }, (_, i) => makePoseFrame(520 + i * 60, 140, 'peak')),
+  ...Array.from({ length: 6 }, (_, i) => makePoseFrame(520 + i * 60, 140, 'peak')),
 ];
 const shortResult = evaluateOverheadReachFromPoseFrames(shortTopFrames);
 ok(
-  'C2: short top hold (700ms) → completionSatisfied=false',
+  'C2: short top hold (< easy 520ms span) → completionSatisfied=false',
   shortResult.debug?.highlightedMetrics?.completionSatisfied === false,
-  `strictHold=${shortResult.debug?.highlightedMetrics?.holdDurationMs}ms fallbackRun=${shortResult.debug?.highlightedMetrics?.fallbackTopHoldBestRunMs}ms`
+  `strictHold=${shortResult.debug?.highlightedMetrics?.holdDurationMs}ms easyRun=${shortResult.debug?.highlightedMetrics?.easyBestRunMs}ms`
 );
 
 // C3: elevation below floor (125°) — fallbackEligible=false
@@ -352,9 +351,7 @@ ok(
   typeof jitterHm?.fallbackTopHoldBestRunMs === 'number' &&
     typeof jitterHm?.fallbackTopHoldBestRunFrames === 'number' &&
     typeof jitterHm?.topZoneFrameCount === 'number' &&
-    (jitterHm?.completionPath === 'strict' ||
-      jitterHm?.completionPath === 'fallback' ||
-      jitterHm?.completionPath === null)
+    ['strict', 'fallback', 'easy', 'not_confirmed', null].includes(jitterHm?.completionPath ?? null)
 );
 
 // ── D. evaluateExerciseAutoProgress 통합 (gate 레벨) ────────────────────────

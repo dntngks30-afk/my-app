@@ -7,6 +7,10 @@ import {
   computeOverheadStableTopDwell,
   OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG,
 } from './evaluators/overhead-reach';
+import {
+  OVERHEAD_EASY_ELEVATION_FLOOR_DEG,
+  OVERHEAD_EASY_MIN_PEAK_FRAMES,
+} from './overhead/overhead-constants';
 import { buildPoseFeaturesFrames } from './pose-features';
 import type { PoseFeaturesFrame } from './pose-features';
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
@@ -252,6 +256,9 @@ function getMotionCompleteness(
   /* PR overhead-dwell: evaluator와 동일한 hold truth — 연속 stable-top dwell time. */
   const OVERHEAD_HOLD_COMPLETE_MS = 1200;
   if (stepId === 'overhead-reach') {
+    const hm = evaluatorResult?.debug?.highlightedMetrics;
+    const easySatisfied = hm?.easyCompletionSatisfied === true || hm?.easyCompletionSatisfied === 1;
+
     const armElevations = frames
       .map((frame) => frame.derived.armElevationAvg)
       .filter((value): value is number => typeof value === 'number');
@@ -260,7 +267,31 @@ function getMotionCompleteness(
     const dwellResult = computeOverheadStableTopDwell(frames);
     const holdDurationMs = dwellResult.holdDurationMs;
     const peakCount = frames.filter((f) => f.phaseHint === 'peak').length;
+    const peakCountAtEasyFloor =
+      typeof hm?.peakCountAtEasyFloor === 'number' ? hm.peakCountAtEasyFloor : 0;
     const stableTopEntered = dwellResult.stableTopEnteredAtMs !== undefined;
+
+    /* PR-CAM-11B: evaluator easy 진행이 true면 긴 홀드·stableTop 미요구 */
+    if (easySatisfied) {
+      if (
+        frames.length < MIN_VALID_FRAMES ||
+        peakElevation < OVERHEAD_EASY_ELEVATION_FLOOR_DEG ||
+        raiseCount === 0 ||
+        peakCountAtEasyFloor < OVERHEAD_EASY_MIN_PEAK_FRAMES
+      ) {
+        flags.add('rep_incomplete');
+        return {
+          score: clamp(peakElevation / 150),
+          status: 'partial',
+          partialReason: 'easy_progression_guard_failed',
+        };
+      }
+      return {
+        score: clamp(Math.min(peakElevation / 165, 0.72)),
+        status: 'complete',
+        completePath: 'easy',
+      };
+    }
 
     if (
       frames.length < 10 ||

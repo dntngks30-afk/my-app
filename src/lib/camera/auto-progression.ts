@@ -10,6 +10,9 @@ import type { SquatInternalQuality } from './squat/squat-internal-quality';
 import {
   OVERHEAD_MIN_PEAK_FRAMES,
   OVERHEAD_REQUIRED_HOLD_MS,
+  OVERHEAD_EASY_PASS_CONFIDENCE,
+  OVERHEAD_EASY_LATCH_STABLE_FRAMES,
+  OVERHEAD_EASY_MIN_PEAK_FRAMES,
 } from '@/lib/camera/overhead/overhead-constants';
 import {
   type SquatEvidenceLevel,
@@ -172,8 +175,29 @@ export function isFinalPassLatched(
     | 'passConfirmationSatisfied'
     | 'passConfirmationFrameCount'
     | 'guardrail'
+    | 'evaluatorResult'
   >
 ): boolean {
+  if (stepId === 'overhead-reach') {
+    const hm = gate.evaluatorResult.debug?.highlightedMetrics;
+    const strictMotion =
+      hm?.strictMotionCompletionSatisfied === true || hm?.strictMotionCompletionSatisfied === 1;
+    const easySat =
+      hm?.easyCompletionSatisfied === true || hm?.easyCompletionSatisfied === 1;
+    const easyOnly = Boolean(easySat && !strictMotion);
+    const confTh = easyOnly
+      ? OVERHEAD_EASY_PASS_CONFIDENCE
+      : BASIC_PASS_CONFIDENCE_THRESHOLD['overhead-reach'];
+    const framesReq = easyOnly ? OVERHEAD_EASY_LATCH_STABLE_FRAMES : REQUIRED_STABLE_FRAMES;
+    return (
+      gate.completionSatisfied === true &&
+      gate.guardrail.captureQuality !== 'invalid' &&
+      gate.confidence >= confTh &&
+      gate.passConfirmationSatisfied === true &&
+      gate.passConfirmationFrameCount >= framesReq
+    );
+  }
+
   const passThreshold = BASIC_PASS_CONFIDENCE_THRESHOLD[stepId];
   return (
     gate.completionSatisfied === true &&
@@ -268,12 +292,13 @@ function getStableSignalBonus(stepId: CameraStepId, result: EvaluatorResult): nu
   if (stepId === 'overhead-reach') {
     const raiseCount = getHighlightedMetric(result, 'raiseCount');
     const peakCount = getHighlightedMetric(result, 'peakCount');
-    const holdDurationMs = getHighlightedMetric(result, 'holdDurationMs');
-    return raiseCount > 0 &&
-      peakCount >= OVERHEAD_MIN_PEAK_FRAMES &&
-      holdDurationMs >= OVERHEAD_REQUIRED_HOLD_MS
-      ? 0.04
-      : 0;
+    const peakEasy = getHighlightedMetric(result, 'peakCountAtEasyFloor');
+    const hm = result.debug?.highlightedMetrics;
+    const progDone =
+      hm?.completionSatisfied === true || hm?.completionSatisfied === 1;
+    const peakOk =
+      peakCount >= OVERHEAD_MIN_PEAK_FRAMES || peakEasy >= OVERHEAD_EASY_MIN_PEAK_FRAMES;
+    return raiseCount > 0 && peakOk && progDone ? 0.04 : 0;
   }
 
   const holdOngoingCount = getHighlightedMetric(result, 'holdOngoingCount');
@@ -773,7 +798,9 @@ function getSquatProgressionCompletionSatisfied(
 
 function getPassConfirmation(
   stepId: CameraStepId,
-  landmarks: PoseLandmarks[]
+  landmarks: PoseLandmarks[],
+  /** PR-CAM-11B: overhead easy 진행 시 2프레임으로 완화 가능 */
+  minStableFrames: number = REQUIRED_STABLE_FRAMES
 ): {
   satisfied: boolean;
   stableFrameCount: number;
@@ -804,7 +831,7 @@ function getPassConfirmation(
     stableFrames.length > 0
       ? mean(stableFrames.map((frame) => frame.visibilitySummary.visibleLandmarkRatio))
       : 0;
-  const satisfied = stableFrameCount >= 3 && recentVisibility >= 0.52;
+  const satisfied = stableFrameCount >= minStableFrames && recentVisibility >= 0.52;
 
   return {
     satisfied,
@@ -891,7 +918,15 @@ function getFailureReasons(
   if (guardrail.captureQuality !== 'ok') {
     reasons.add(guardrail.captureQuality === 'low' ? 'capture_quality_low' : 'capture_quality_invalid');
   }
-  if (confidence < BASIC_PASS_CONFIDENCE_THRESHOLD[stepId]) {
+  const ohm = stepId === 'overhead-reach' ? result.debug?.highlightedMetrics : undefined;
+  const overheadEasyOnly =
+    stepId === 'overhead-reach' &&
+    (ohm?.easyCompletionSatisfied === true || ohm?.easyCompletionSatisfied === 1) &&
+    !(ohm?.strictMotionCompletionSatisfied === true || ohm?.strictMotionCompletionSatisfied === 1);
+  const confFloor = overheadEasyOnly
+    ? OVERHEAD_EASY_PASS_CONFIDENCE
+    : BASIC_PASS_CONFIDENCE_THRESHOLD[stepId];
+  if (confidence < confFloor) {
     reasons.add('confidence_too_low');
   }
   if (guardrail.flags.includes('left_side_missing')) {
@@ -930,7 +965,21 @@ export function evaluateExerciseAutoProgress(
   const confidence = getEffectiveConfidence(stepId, evaluatorResult, guardrail);
   const reasons = getCommonReasons(evaluatorResult, guardrail);
   const passThreshold = BASIC_PASS_CONFIDENCE_THRESHOLD[stepId];
-  const passConfirmation = getPassConfirmation(stepId, landmarks);
+  const overheadEasyOnly =
+    stepId === 'overhead-reach' &&
+    (() => {
+      const hm = evaluatorResult.debug?.highlightedMetrics;
+      const strict =
+        hm?.strictMotionCompletionSatisfied === true || hm?.strictMotionCompletionSatisfied === 1;
+      const easy = hm?.easyCompletionSatisfied === true || hm?.easyCompletionSatisfied === 1;
+      return Boolean(easy && !strict);
+    })();
+  const passThresholdEffective = overheadEasyOnly ? OVERHEAD_EASY_PASS_CONFIDENCE : passThreshold;
+  const passConfirmation = getPassConfirmation(
+    stepId,
+    landmarks,
+    overheadEasyOnly ? OVERHEAD_EASY_LATCH_STABLE_FRAMES : REQUIRED_STABLE_FRAMES
+  );
   let completionSatisfied: boolean;
   let squatCycleDebug: SquatCycleDebug | undefined;
   if (stepId === 'squat') {
@@ -990,13 +1039,21 @@ export function evaluateExerciseAutoProgress(
     };
   }
 
+  /** PR-CAM-11B: easy 진행 통과 시 reasons에 남은 hold_too_short/rep_incomplete 로 pass를 막지 않음 */
+  const hasHoldOrRepReason = hasAnyReason(reasons, ['rep_incomplete', 'hold_too_short']);
+  const overheadEasySat =
+    stepId === 'overhead-reach' &&
+    (evaluatorResult.debug?.highlightedMetrics?.easyCompletionSatisfied === true ||
+      evaluatorResult.debug?.highlightedMetrics?.easyCompletionSatisfied === 1);
+  const overheadRepHoldBlocks = overheadEasySat ? false : hasHoldOrRepReason;
+
   const progressionPassed =
     completionSatisfied &&
     guardrail.captureQuality !== 'invalid' &&
-    confidence >= passThreshold &&
+    confidence >= passThresholdEffective &&
     effectivePassConfirmation &&
     !hasAnyReason(reasons, hardBlockerReasons) &&
-    !hasAnyReason(reasons, ['rep_incomplete', 'hold_too_short']);
+    !overheadRepHoldBlocks;
 
   if (progressionPassed) {
     return {
