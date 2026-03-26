@@ -93,11 +93,15 @@ const REVERSAL_DROP_MIN_FRAC_OF_REL_PEAK = 0.13;
  */
 const LOW_ROM_TIMING_PEAK_MAX = 0.1;
 const MIN_DESCENT_TO_PEAK_MS_LOW_ROM = 200;
+const RELAXED_MIN_DESCENT_TO_PEAK_MS_LOW_ROM = 120;
 /**
  * PR-CAM-02: 얕은 ROM에서 피크(역전 시점) 이후 서 있기까지 최소 시간 — 미드 라이즈 조기 pass 완화.
  */
 const SHALLOW_REVERSAL_TIMING_PEAK_MAX = 0.11;
 const MIN_REVERSAL_TO_STANDING_MS_SHALLOW = 200;
+const RELAXED_MIN_REVERSAL_TO_STANDING_MS_SHALLOW = 140;
+const RELAXED_LOW_ROM_MIN_CONTINUITY_FRAMES = 4;
+const RELAXED_LOW_ROM_MIN_DROP_RATIO = 0.45;
 
 function getStandingRecoveryWindow(
   frames: Array<{ index: number; depth: number; timestampMs: number }>,
@@ -314,6 +318,17 @@ export function evaluateSquatCompletionState(
     baselineStandingDepth,
     relativeDepthPeak
   );
+  const qualifiesForRelaxedLowRomTiming =
+    (recovery.returnContinuityFrames ?? 0) >= RELAXED_LOW_ROM_MIN_CONTINUITY_FRAMES &&
+    (recovery.recoveryDropRatio ?? 0) >= RELAXED_LOW_ROM_MIN_DROP_RATIO &&
+    standingRecovery.standingRecoveryFrameCount >= MIN_STANDING_RECOVERY_FRAMES &&
+    standingRecovery.standingRecoveryHoldMs >= MIN_STANDING_RECOVERY_HOLD_MS;
+  const minDescentToPeakMsForLowRom = qualifiesForRelaxedLowRomTiming
+    ? RELAXED_MIN_DESCENT_TO_PEAK_MS_LOW_ROM
+    : MIN_DESCENT_TO_PEAK_MS_LOW_ROM;
+  const minReversalToStandingMsForShallow = qualifiesForRelaxedLowRomTiming
+    ? RELAXED_MIN_REVERSAL_TO_STANDING_MS_SHALLOW
+    : MIN_REVERSAL_TO_STANDING_MS_SHALLOW;
 
   const armed =
     baselineDepths.length >= MIN_BASELINE_FRAMES &&
@@ -375,7 +390,7 @@ export function evaluateSquatCompletionState(
   } else if (
     relativeDepthPeak < LOW_ROM_TIMING_PEAK_MAX &&
     effectiveDescentStartFrame != null &&
-    peakFrame.timestampMs - effectiveDescentStartFrame.timestampMs < MIN_DESCENT_TO_PEAK_MS_LOW_ROM
+    peakFrame.timestampMs - effectiveDescentStartFrame.timestampMs < minDescentToPeakMsForLowRom
   ) {
     completionBlockedReason = 'descent_span_too_short';
   } else if (
@@ -383,7 +398,7 @@ export function evaluateSquatCompletionState(
     reversalFrame != null &&
     standingRecovery.standingRecoveredAtMs != null &&
     standingRecovery.standingRecoveredAtMs - reversalFrame.timestampMs <
-      MIN_REVERSAL_TO_STANDING_MS_SHALLOW
+      minReversalToStandingMsForShallow
   ) {
     completionBlockedReason = 'ascent_recovery_span_too_short';
   }
