@@ -4,7 +4,6 @@
  * threshold/contract 변경 없음, 진단 전용.
  */
 import type { ExerciseGateResult } from './auto-progression';
-import type { CameraStepId } from '@/lib/public/camera-test';
 
 /** build/runtime diagnostic version — 실기기 bundle 확인용 */
 export const CAMERA_DIAG_VERSION = 'success-diagnostic-2025-03-18';
@@ -115,6 +114,24 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   evidenceLabel?: string | null;
   completionBlockedReason?: string | null;
   cycleDurationMs: number | undefined;
+  /** CAM-OBS: 모바일 진단 패널용 게이트 요약(통과 시점 스냅샷) */
+  gateStatus?: string;
+  progressionState?: string;
+  finalPassLatched?: boolean;
+  confidence?: number;
+  captureQuality?: string;
+  failureReasonsSnapshot?: string[];
+  flagsSnapshot?: string[];
+  finalPassBlockedReason?: string | null;
+  finalPassEligible?: boolean;
+  depthBand?: string;
+  romBand?: string;
+  completionPassReason?: string | null;
+  cycleProofPassed?: boolean;
+  reversalConfirmedAfterDescend?: boolean;
+  recoveryConfirmedAfterReversal?: boolean;
+  squatDescentToPeakMs?: number;
+  squatReversalToStandingMs?: number;
 }
 
 export type SuccessSnapshot = OverheadSuccessSnapshot | SquatSuccessSnapshot;
@@ -180,7 +197,8 @@ export function recordOverheadSuccessSnapshot(options: RecordOverheadSuccessOpti
       holdAccumulationStartedAtMs:
         typeof hm?.holdAccumulationStartedAtMs === 'number' ? hm.holdAccumulationStartedAtMs : undefined,
       holdSatisfiedAtMs: typeof hm?.holdSatisfiedAtMs === 'number' ? hm.holdSatisfiedAtMs : undefined,
-      holdArmingBlockedReason: hm?.holdArmingBlockedReason ?? null,
+      holdArmingBlockedReason:
+        hm?.holdArmingBlockedReason == null ? null : String(hm.holdArmingBlockedReason),
       successTriggeredAtMs: options.passLatchedAtMs,
     };
     pushSuccessSnapshot(snapshot);
@@ -189,10 +207,59 @@ export function recordOverheadSuccessSnapshot(options: RecordOverheadSuccessOpti
   }
 }
 
+function extractSquatMobileObsFieldsFromGate(
+  gate: ExerciseGateResult,
+  effectivePassLatched: boolean
+): Pick<
+  SquatSuccessSnapshot,
+  | 'gateStatus'
+  | 'progressionState'
+  | 'finalPassLatched'
+  | 'confidence'
+  | 'captureQuality'
+  | 'failureReasonsSnapshot'
+  | 'flagsSnapshot'
+  | 'finalPassBlockedReason'
+  | 'finalPassEligible'
+  | 'depthBand'
+  | 'romBand'
+  | 'completionPassReason'
+  | 'cycleProofPassed'
+  | 'reversalConfirmedAfterDescend'
+  | 'recoveryConfirmedAfterReversal'
+  | 'squatDescentToPeakMs'
+  | 'squatReversalToStandingMs'
+> {
+  const sc = gate.squatCycleDebug;
+  const cs = gate.evaluatorResult?.debug?.squatCompletionState as
+    | { squatDescentToPeakMs?: number; squatReversalToStandingMs?: number; completionPassReason?: string }
+    | undefined;
+  return {
+    gateStatus: gate.status,
+    progressionState: gate.progressionState,
+    finalPassLatched: effectivePassLatched,
+    confidence: gate.confidence,
+    captureQuality: gate.guardrail.captureQuality,
+    failureReasonsSnapshot: [...gate.failureReasons],
+    flagsSnapshot: [...gate.flags],
+    finalPassBlockedReason: gate.finalPassBlockedReason,
+    finalPassEligible: gate.finalPassEligible,
+    depthBand: sc?.depthBand,
+    romBand: sc?.romBand,
+    completionPassReason: sc?.completionPassReason ?? cs?.completionPassReason ?? null,
+    cycleProofPassed: sc?.cycleProofPassed,
+    reversalConfirmedAfterDescend: sc?.reversalConfirmedAfterDescend,
+    recoveryConfirmedAfterReversal: sc?.recoveryConfirmedAfterReversal,
+    squatDescentToPeakMs: cs?.squatDescentToPeakMs,
+    squatReversalToStandingMs: cs?.squatReversalToStandingMs,
+  };
+}
+
 export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): void {
   try {
     const hm = options.gate.evaluatorResult?.debug?.highlightedMetrics;
     const squatDebug = options.gate.squatCycleDebug;
+    const mobileObs = extractSquatMobileObsFieldsFromGate(options.gate, options.effectivePassLatched);
     const snapshot: SquatSuccessSnapshot = {
       id: `sq-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       ts: new Date().toISOString(),
@@ -235,6 +302,7 @@ export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): 
       evidenceLabel: squatDebug?.evidenceLabel ?? null,
       completionBlockedReason: squatDebug?.completionBlockedReason ?? null,
       cycleDurationMs: squatDebug?.cycleDurationMs,
+      ...mobileObs,
     };
     pushSuccessSnapshot(snapshot);
   } catch {
@@ -254,7 +322,8 @@ export function getRecentSuccessSnapshots(): SuccessSnapshot[] {
 
 /* --- Squat failed shallow attempt snapshot (diagnostic only) --- */
 const FAILED_SHALLOW_SNAPSHOT_KEY = 'moveReCameraFailedShallowSnapshots:v1';
-const MAX_FAILED_SHALLOW_SNAPSHOTS = 10;
+/** CAM-OBS: 모바일 링 버퍼 상한(과도한 localStorage 증가 방지) */
+const MAX_FAILED_SHALLOW_SNAPSHOTS = 5;
 
 /** relativeDepthPeak noise floor (0–1) — below this = standing/tiny sway, no real attempt */
 const SQUAT_ATTEMPT_RELATIVE_DEPTH_NOISE_FLOOR = 0.02;
@@ -324,11 +393,39 @@ export interface SquatFailedShallowSnapshot {
   lowRomRecoveredReason?: string | null;
   ultraLowRomRecoveredReason?: string | null;
   diagVersion: string;
+  /** CAM-OBS: 일반 retry/fail 경로에서 게이트 종료 유형 */
+  attemptOutcome?: 'retry' | 'fail';
+  gateStatus?: string;
+  progressionState?: string;
+  finalPassLatched?: boolean;
+  confidence?: number;
+  captureQuality?: string;
+  failureReasons?: string[];
+  flags?: string[];
+  finalPassBlockedReason?: string | null;
+  finalPassEligible?: boolean;
+  depthBand?: string;
+  romBand?: string;
+  completionPassReason?: string | null;
+  cycleProofPassed?: boolean;
+  reversalConfirmedAfterDescend?: boolean;
+  recoveryConfirmedAfterReversal?: boolean;
+  squatDescentToPeakMs?: number;
+  squatReversalToStandingMs?: number;
+}
+
+/** CAM-OBS: 실패 스냅샷 기록 옵션(진단 전용, pass 로직 무관) */
+export interface RecordSquatFailedShallowOptions {
+  failureOverlayArmed?: boolean;
+  failureOverlayBlockedReason?: string | null;
+  attemptOutcome?: 'retry' | 'fail';
+  /** 페이지에서 isFinalPassLatched 결과를 넘겨 최종 래치 여부를 스냅샷에 남김 */
+  finalPassLatched?: boolean;
 }
 
 export function recordSquatFailedShallowSnapshot(
   gate: ExerciseGateResult,
-  options?: { failureOverlayArmed: boolean; failureOverlayBlockedReason: string | null }
+  options?: RecordSquatFailedShallowOptions
 ): void {
   try {
     const hm = gate.evaluatorResult?.debug?.highlightedMetrics;
@@ -360,6 +457,10 @@ export function recordSquatFailedShallowSnapshot(
 
     const failureOverlayArmed = options?.failureOverlayArmed ?? hasSquatAttemptEvidence(gate);
     const failureOverlayBlockedReason = options?.failureOverlayBlockedReason ?? null;
+
+    const cs = gate.evaluatorResult?.debug?.squatCompletionState as
+      | { squatDescentToPeakMs?: number; squatReversalToStandingMs?: number; completionPassReason?: string }
+      | undefined;
 
     const snapshot: SquatFailedShallowSnapshot = {
       id: `sq-fail-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -395,6 +496,24 @@ export function recordSquatFailedShallowSnapshot(
       lowRomRecoveredReason: sc?.lowRomRejectionReason ?? (hm?.lowRomRecoveryReason as string) ?? null,
       ultraLowRomRecoveredReason: sc?.ultraLowRomRejectionReason ?? (hm?.ultraLowRomRecoveryReason as string) ?? null,
       diagVersion: CAMERA_DIAG_VERSION,
+      attemptOutcome: options?.attemptOutcome ?? 'fail',
+      gateStatus: gate.status,
+      progressionState: gate.progressionState,
+      finalPassLatched: options?.finalPassLatched,
+      confidence: gate.confidence,
+      captureQuality: gate.guardrail.captureQuality,
+      failureReasons: [...gate.failureReasons],
+      flags: [...gate.flags],
+      finalPassBlockedReason: gate.finalPassBlockedReason,
+      finalPassEligible: gate.finalPassEligible,
+      depthBand: sc?.depthBand,
+      romBand: sc?.romBand,
+      completionPassReason: sc?.completionPassReason ?? cs?.completionPassReason ?? null,
+      cycleProofPassed: sc?.cycleProofPassed,
+      reversalConfirmedAfterDescend: sc?.reversalConfirmedAfterDescend,
+      recoveryConfirmedAfterReversal: sc?.recoveryConfirmedAfterReversal,
+      squatDescentToPeakMs: cs?.squatDescentToPeakMs,
+      squatReversalToStandingMs: cs?.squatReversalToStandingMs,
     };
 
     if (typeof window === 'undefined') return;
@@ -418,4 +537,31 @@ export function getRecentFailedShallowSnapshots(): SquatFailedShallowSnapshot[] 
   } catch {
     return [];
   }
+}
+
+/** CAM-OBS: 성공·실패 스냅샷을 시간순으로 합쳐 모바일 진단 패널에 표시 */
+export type SquatMobileDiagEntry =
+  | { attemptType: 'success'; ts: string; payload: SquatSuccessSnapshot }
+  | { attemptType: 'retry' | 'fail'; ts: string; payload: SquatFailedShallowSnapshot };
+
+export function getSquatMobileDiagAttempts(maxEntries = 8): SquatMobileDiagEntry[] {
+  const failures = getRecentFailedShallowSnapshots();
+  const successes = getRecentSuccessSnapshots().filter(
+    (s): s is SquatSuccessSnapshot => s.motionType === 'squat'
+  );
+  const entries: SquatMobileDiagEntry[] = [
+    ...failures.map((p) => ({
+      attemptType: (p.attemptOutcome === 'retry' ? 'retry' : 'fail') as 'retry' | 'fail',
+      ts: p.ts,
+      payload: p,
+    })),
+    ...successes.map((p) => ({ attemptType: 'success' as const, ts: p.ts, payload: p })),
+  ];
+  entries.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+  return entries.slice(-maxEntries);
+}
+
+export function getLatestSquatMobileDiagAttempt(): SquatMobileDiagEntry | null {
+  const list = getSquatMobileDiagAttempts(64);
+  return list.length > 0 ? list[list.length - 1]! : null;
 }

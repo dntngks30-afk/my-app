@@ -46,6 +46,7 @@ import {
   hasSquatAttemptEvidence,
   isDiagnosticFreezeMode,
 } from '@/lib/camera/camera-success-diagnostic';
+import { SquatMobileDiagPanel } from '@/components/camera/SquatMobileDiagPanel';
 import {
   getMovementSetupGuide,
   getPreCaptureGuidance,
@@ -204,6 +205,11 @@ export default function CameraSquatPage() {
   const triggeredAdvanceStepKeyRef = useRef<string | null>(null);
   const failureFreezeTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const gateRef = useRef<ExerciseGateResult | null>(null);
+  /** CAM-OBS: failure freeze 타이머가 최신 previewKey·finalPassLatched를 읽기 위한 ref */
+  const previewKeyRef = useRef(previewKey);
+  const finalPassLatchedRef = useRef(false);
+  /** CAM-OBS: 동일 캡처 세션(previewKey)당 실패 스냅샷 1회만 저장 — 일반 retry/fail 과 freeze 중복 방지 */
+  const failedSnapshotRecordedForPreviewKeyRef = useRef<number | null>(null);
   const statsRef = useRef(stats);
   /** PR-COMP-02: 애매 재시도 음성 후 diagnostic failure-freeze 4.5s 타이머 재시작 */
   const [failureFreezeRetryEpoch, setFailureFreezeRetryEpoch] = useState(0);
@@ -231,6 +237,8 @@ export default function CameraSquatPage() {
     [landmarks, stats]
   );
   const finalPassLatched = isFinalPassLatched(STEP_ID, gate);
+  previewKeyRef.current = previewKey;
+  finalPassLatchedRef.current = finalPassLatched;
   const effectivePassLatched = finalPassLatched || passLatched;
   const setupFramingHint = useMemo(() => getSetupFramingHint(landmarks), [landmarks]);
   const liveReadinessSummary = useMemo(
@@ -356,7 +364,31 @@ export default function CameraSquatPage() {
     setShowSquatDebugModal(false);
     setDebugModalGate(null);
     debugModalHoldRef.current = false;
+    failedSnapshotRecordedForPreviewKeyRef.current = null;
   }, [clearAutoAdvanceTimer, currentStepKey]);
+
+  /** CAM-OBS: ?diag=1 이면 모바일 진단 패널 노출 허용(프로덕션 포함) */
+  const [diagQueryEnabled, setDiagQueryEnabled] = useState(false);
+  useEffect(() => {
+    try {
+      setDiagQueryEnabled(new URLSearchParams(window.location.search).get('diag') === '1');
+    } catch {
+      setDiagQueryEnabled(false);
+    }
+  }, []);
+
+  const [headerDiagTapCount, setHeaderDiagTapCount] = useState(0);
+  const headerDiagTapResetRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const onHeaderAreaTapForDiag = useCallback(() => {
+    if (headerDiagTapResetRef.current) window.clearTimeout(headerDiagTapResetRef.current);
+    setHeaderDiagTapCount((c) => {
+      const n = c + 1;
+      headerDiagTapResetRef.current = window.setTimeout(() => setHeaderDiagTapCount(0), 2200);
+      return n;
+    });
+  }, []);
+
+  const mobileDiagUnlocked = diagQueryEnabled || headerDiagTapCount >= 5;
 
   const persistCurrentStep = useCallback(() => {
     recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
@@ -711,6 +743,16 @@ export default function CameraSquatPage() {
     if (gate.status === 'retry' || gate.status === 'fail') {
       settledRef.current = true;
       stop();
+      /* CAM-OBS: 진단 freeze 없이도 실제 시도 후 retry/fail이면 shallow 실패 스냅샷 1회 저장 */
+      if (hasSquatAttemptEvidence(gate) && failedSnapshotRecordedForPreviewKeyRef.current !== previewKey) {
+        recordSquatFailedShallowSnapshot(gate, {
+          failureOverlayArmed: true,
+          failureOverlayBlockedReason: null,
+          attemptOutcome: gate.status === 'retry' ? 'retry' : 'fail',
+          finalPassLatched,
+        });
+        failedSnapshotRecordedForPreviewKeyRef.current = previewKey;
+      }
       setProgressionState((prev) => (prev === gate.progressionState ? prev : gate.progressionState));
       setStatusMessage((prev) => (prev === gate.uiMessage ? prev : gate.uiMessage));
       appendTransition(
@@ -729,7 +771,9 @@ export default function CameraSquatPage() {
     gate.uiMessage,
     latchPassEvent,
     effectivePassLatched,
+    finalPassLatched,
     permissionDenied,
+    previewKey,
     stats.sampledFrameCount,
     stop,
   ]);
@@ -858,10 +902,18 @@ export default function CameraSquatPage() {
       if (!hasSquatAttemptEvidence(g)) {
         return;
       }
+      const pk = previewKeyRef.current;
+      if (failedSnapshotRecordedForPreviewKeyRef.current === pk) {
+        setShowFailureFreezeOverlay(true);
+        return;
+      }
       recordSquatFailedShallowSnapshot(g, {
         failureOverlayArmed: true,
         failureOverlayBlockedReason: null,
+        attemptOutcome: 'fail',
+        finalPassLatched: finalPassLatchedRef.current,
       });
+      failedSnapshotRecordedForPreviewKeyRef.current = pk;
       setShowFailureFreezeOverlay(true);
     }, SQUAT_FAILURE_FREEZE_DELAY_MS);
 
@@ -1060,6 +1112,7 @@ export default function CameraSquatPage() {
 
   return (
     <StitchCameraSquatRoot>
+      <SquatMobileDiagPanel unlocked={mobileDiagUnlocked} />
       {/* PR-DBG-01: dev-only 통과 후 debug modal — finalPassLatched 이후에만 렌더링 */}
       {IS_DEV && showSquatDebugModal && debugModalGate && (
         <SquatPostPassDebugModal
@@ -1099,15 +1152,20 @@ export default function CameraSquatPage() {
             )}
           </div>
         }
-        center={<StitchCameraSquatHeaderCenter stepLabel="1 / 2" />}
+        center={
+          <span className="inline-flex touch-manipulation" onClick={onHeaderAreaTapForDiag}>
+            <StitchCameraSquatHeaderCenter stepLabel="1 / 2" />
+          </span>
+        }
       />
 
       <main className="relative z-10 flex-1 flex flex-col items-center px-6 py-4 overflow-hidden">
         {!isMinimalCapture && (
           <>
             <h1
-              className="text-xl font-bold text-slate-100 mb-2 shrink-0"
+              className="text-xl font-bold text-slate-100 mb-2 shrink-0 touch-manipulation"
               style={{ fontFamily: 'var(--font-sans-noto)' }}
+              onClick={onHeaderAreaTapForDiag}
             >
               스쿼트
             </h1>
