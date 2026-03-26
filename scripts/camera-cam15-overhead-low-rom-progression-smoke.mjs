@@ -520,21 +520,24 @@ console.log('\n[Scenario I] Low-ROM phase transitions');
     `lowRom=${tooFewProg?.lowRomProgressionSatisfied} blocked=${tooFewProg?.lowRomBlockedReason}`,
   );
 
-  // phase: low_rom_building_hold — 3 frames (≥MIN), hold span < 350ms
+  // PR-CAM-16 의도적 변경: 4 frames at 112° (span=210ms)는 이제 humane_low_rom 경로로 통과한다.
+  // humane path: floor=100° ✓, delta=42°≥15° ✓, hold=210ms≥200ms ✓ → PASS.
+  // low_rom path: hold=210ms < 350ms → still 'low_rom_hold_short' (unchanged).
   const buildingFrames = [
     ...Array.from({ length: 6 }, (_, i) => makeFrame(100 + i * 70, 70, 'raise')),
-    // 4 frames at 112° (span=3*70=210ms < 350ms), > MIN_PEAK_FRAMES=3
+    // 4 frames at 112° (span=3*70=210ms ≥ 200ms humane threshold)
     ...Array.from({ length: 4 }, (_, i) => makeFrame(520 + i * 70, 112, 'raise')),
   ];
   const buildingResult = evaluateOverheadReachFromPoseFrames(buildingFrames);
   const buildingProg = buildingResult.debug?.overheadProgressionState;
   ok(
-    'I2: 4 frames/210ms → phase=low_rom_building_hold',
-    buildingProg?.progressionPhase === 'low_rom_building_hold',
-    `phase=${buildingProg?.progressionPhase} bestRunMs=${buildingProg?.lowRomBestRunMs}`,
+    'I2: 4 frames/210ms → now PASS via humane_low_rom (CAM-16 intentional: humane hold=200ms ≤ 210ms)',
+    buildingProg?.progressionSatisfied === true &&
+      (buildingProg?.progressionPath === 'humane_low_rom' || buildingProg?.progressionPath === 'low_rom'),
+    `path=${buildingProg?.progressionPath} phase=${buildingProg?.progressionPhase}`,
   );
   ok(
-    'I3: low_rom_hold_short blocked',
+    'I3: low_rom_hold_short still blocked at low_rom level (low_rom path unaffected)',
     buildingProg?.lowRomBlockedReason === 'low_rom_hold_short',
     `blocked=${buildingProg?.lowRomBlockedReason}`,
   );

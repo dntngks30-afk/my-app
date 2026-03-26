@@ -2,6 +2,7 @@ import type { CameraStepId } from '@/lib/public/camera-test';
 import type { ExerciseGateResult, SquatCycleDebug } from './auto-progression';
 import type { SquatAmbiguousRetryReason } from './squat-ambiguous-retry';
 import type { OverheadAmbiguousRetryReason } from './overhead/overhead-ambiguous-retry';
+import type { OverheadProgressionState } from './evaluators/types';
 import { getEffectiveRetryGuidance } from './camera-guidance';
 import type { LiveReadinessState } from './live-readiness';
 import {
@@ -44,8 +45,13 @@ type VoiceGuidanceGate = {
   framingHint?: string | null;
   /** squat 전용: bottom-stall recovery cue 조건 판단 */
   squatCycleDebug?: SquatCycleDebug | null;
-  /** PR-C4: overhead hold cue suppress — holdDurationMs, topEntryAtMs 등 */
-  evaluatorResult?: { debug?: { highlightedMetrics?: { holdDurationMs?: number } } };
+  /** PR-C4: overhead hold cue suppress — holdDurationMs, topEntryAtMs 등. PR-CAM-16: overheadProgressionState 타입 포함. */
+  evaluatorResult?: {
+    debug?: {
+      highlightedMetrics?: { holdDurationMs?: number };
+      overheadProgressionState?: OverheadProgressionState;
+    };
+  };
 };
 
 /** PR E: approved Korean phrases for TTS — internal/debug strings must never be spoken */
@@ -856,6 +862,7 @@ export function getCorrectiveVoiceCue(
    * 사용자가 easy top zone(126°)에서 hold를 쌓고 있으나 strict 132° dwell은 미형성 —
    * 이 경우 guardrail은 hold_too_short 대신 rep_incomplete를 세팅해 위 블록이 동작 안 함.
    * progressionPhase === 'easy_building_hold' 구간에서만 hold 안내를 보완한다.
+   * PR-CAM-16: low_rom_building_hold / humane_building_hold 구간에도 동일하게 확장.
    */
   if (stepId === 'overhead-reach') {
     const progState = gate.evaluatorResult?.debug?.overheadProgressionState;
@@ -866,6 +873,32 @@ export function getCorrectiveVoiceCue(
       const easyBestRunMs = progState.easyBestRunMs;
       if (easyBestRunMs >= CUE_MIN_BUILDUP_MS) {
         const remaining = EASY_REQUIRED_HOLD_MS - easyBestRunMs;
+        if (remaining > CUE_SUPPRESS_NEAR_SUCCESS_MS) {
+          return {
+            kind: 'correction',
+            dedupeKey: 'correction:hold:overhead-reach',
+            text: '맨 위에서 잠깐 멈춰주세요',
+            priority: 3,
+            cooldownMs: 4200,
+          };
+        }
+      }
+    }
+    /* PR-CAM-16: low-ROM / humane hold buildup cue — 낮은 top zone에서 hold 쌓는 중 */
+    if (
+      (progState?.progressionPhase === 'low_rom_building_hold' ||
+        progState?.progressionPhase === 'humane_building_hold') &&
+      !progState.progressionSatisfied
+    ) {
+      const isHumane = progState.progressionPhase === 'humane_building_hold';
+      const REQUIRED_HOLD_MS = isHumane ? 200 : 350;
+      const CUE_MIN_BUILDUP_MS = 100;
+      const CUE_SUPPRESS_NEAR_SUCCESS_MS = 50;
+      const bestRunMs = isHumane
+        ? (progState.humaneLowRomBestRunMs ?? 0)
+        : (progState.lowRomBestRunMs ?? 0);
+      if (bestRunMs >= CUE_MIN_BUILDUP_MS) {
+        const remaining = REQUIRED_HOLD_MS - bestRunMs;
         if (remaining > CUE_SUPPRESS_NEAR_SUCCESS_MS) {
           return {
             kind: 'correction',

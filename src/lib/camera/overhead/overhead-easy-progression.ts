@@ -7,6 +7,10 @@
  *
  * PR-CAM-15 — low-ROM 진행 경로(제한적 ROM 사용자용) 추가.
  * - 귀 높이(126°)에 미치지 못하는 사용자도 개인 baseline 대비 실질적 거상 노력 + 짧은 안정이면 통과.
+ *
+ * PR-CAM-16 — humane low-ROM 진행 경로 (더 낮은 절대 하한 + lower-envelope baseline).
+ * - 어깨 ROM이 매우 제한된 사용자(어깨 손상·고령)도 진짜 거상 의도 + 짧은 안정이면 통과.
+ * - 판단·플래닝·internal quality 기준은 변경하지 않는다.
  */
 
 import {
@@ -354,5 +358,224 @@ export function computeOverheadLowRomProgression(
     lowRomBestRunFrameCount: bestRunFrameCount,
     lowRomElevationDeltaFromBaseline: elevationDelta,
     lowRomBestElevation: effectiveArmDeg,
+  };
+}
+
+// ============================================================================
+// PR-CAM-16: Humane Low-ROM 진행 경로 (very limited ROM tolerant)
+// ============================================================================
+
+/**
+ * 절대 하한선 — low-ROM floor 110° 미만.
+ * 어깨 가동성이 매우 제한된 사용자(고령·부상)도 100° 이상 올리면 진짜 거상 의도로 인정.
+ * 쉬러그(≈ 60-90°)는 여전히 차단. evaluator·guardrails.ts 에서 공유하기 위해 export.
+ */
+export const OVERHEAD_HUMANE_ABSOLUTE_FLOOR_DEG = 100;
+
+/** 개인 baseline 대비 최소 거상 개선량 — 15°. 10° 미만은 측정 노이즈·자세 흔들림 수준. */
+const HUMANE_REQUIRED_DELTA_DEG = 15;
+/**
+ * 최소 안정 홀드 — 200ms. 순간 스윙-스루(< 100ms)와 의도적 안정(> 150ms)을 구분.
+ * at 70ms cadence: 4프레임 span = 3×70=210ms ≥ 200ms → 통과.
+ */
+const HUMANE_REQUIRED_HOLD_MS = 200;
+/** humane zone 진입 최소 프레임 수. */
+const HUMANE_MIN_PEAK_FRAMES = 2;
+/** run 사이 간격 허용 (다른 경로와 동일). */
+const HUMANE_GAP_TOLERANCE_MS = 200;
+/** 연속 run 최소 프레임 수 (단발 스파이크 차단). */
+const HUMANE_MIN_RUN_FRAMES = 2;
+/** 비대칭 허용 — 가장 완화된 임계; 아주 심한 편측성만 차단. */
+const HUMANE_MAX_MEAN_ASYM_DEG = 28;
+const HUMANE_MAX_PEAK_ASYM_DEG = 44;
+
+export interface OverheadHumaneLowRomProgressionInput {
+  /** armElevationAvg >= OVERHEAD_HUMANE_ABSOLUTE_FLOOR_DEG 인 유효 프레임. */
+  humaneZoneFrames: ReadonlyArray<{ readonly timestampMs: number }>;
+  raiseCount: number;
+  /** humaneZoneFrames.length (evaluator에서 공급). */
+  peakCountAtHumaneFloor: number;
+  /** 세션 내 최대 팔 거상 각도. */
+  effectiveArmDeg: number;
+  /**
+   * Lower-envelope baseline — 초기 N프레임의 최솟값.
+   * 평균(mean)보다 강건: 사용자가 이미 팔을 약간 올린 상태로 시작해도
+   * 가장 낮은 초기 포지션을 baseline으로 사용해 delta 계산이 관대해진다.
+   */
+  humaneBaselineArmDeg: number;
+  meanAsymmetryDeg: number | null;
+  maxAsymmetryDeg: number | null;
+}
+
+export interface OverheadHumaneLowRomProgressionResult {
+  humaneLowRomProgressionSatisfied: boolean;
+  humaneLowRomBlockedReason: string | null;
+  humaneLowRomBestRunMs: number;
+  humaneLowRomBestRunFrameCount: number;
+  humaneLowRomPeakElevation: number;
+  humaneLowRomBaselineElevation: number;
+  humaneLowRomElevationDeltaFromBaseline: number;
+}
+
+function humaneAsymmetryFails(meanDeg: number | null, peakDeg: number | null): boolean {
+  if (peakDeg != null && peakDeg > HUMANE_MAX_PEAK_ASYM_DEG) return true;
+  if (meanDeg != null && meanDeg > HUMANE_MAX_MEAN_ASYM_DEG) return true;
+  return false;
+}
+
+/**
+ * PR-CAM-16: 매우 제한적 ROM 사용자 전용 진행 경로 (humane low-ROM).
+ *
+ * easy(126°)·low-ROM(110°)보다 더 낮은 하한(100°)으로,
+ * 개인 baseline 대비 15° 이상 거상 + 200ms 이상 안정이면 통과.
+ *
+ * 복합 anti-noise 조건:
+ *   1) raiseCount > 0 + 최소 2프레임 zone 진입  — 실질적 들기 동작
+ *   2) effectiveArmDeg >= 100°                  — 쉬러그(90°이하)·측면 흔들림 차단
+ *   3) delta from lower-envelope baseline >= 15° — 시작 포지션 대비 실질적 개선
+ *   4) 연속 run >= 200ms + 최소 2프레임          — 순간 스윙-스루 차단
+ *
+ * 판단·플래닝·internal quality 는 변경하지 않음.
+ */
+export function computeOverheadHumaneLowRomProgression(
+  input: OverheadHumaneLowRomProgressionInput
+): OverheadHumaneLowRomProgressionResult {
+  const {
+    humaneZoneFrames,
+    raiseCount,
+    peakCountAtHumaneFloor,
+    effectiveArmDeg,
+    humaneBaselineArmDeg,
+    meanAsymmetryDeg,
+    maxAsymmetryDeg,
+  } = input;
+
+  const elevationDelta = effectiveArmDeg - humaneBaselineArmDeg;
+
+  // 1. 들기 동작 확인
+  if (raiseCount === 0 || peakCountAtHumaneFloor < HUMANE_MIN_PEAK_FRAMES) {
+    return {
+      humaneLowRomProgressionSatisfied: false,
+      humaneLowRomBlockedReason: 'humane_raise_incomplete',
+      humaneLowRomBestRunMs: 0,
+      humaneLowRomBestRunFrameCount: 0,
+      humaneLowRomPeakElevation: effectiveArmDeg,
+      humaneLowRomBaselineElevation: humaneBaselineArmDeg,
+      humaneLowRomElevationDeltaFromBaseline: elevationDelta,
+    };
+  }
+
+  // 2. 절대 하한 확인 (100°)
+  if (effectiveArmDeg < OVERHEAD_HUMANE_ABSOLUTE_FLOOR_DEG) {
+    return {
+      humaneLowRomProgressionSatisfied: false,
+      humaneLowRomBlockedReason: 'humane_insufficient_elevation',
+      humaneLowRomBestRunMs: 0,
+      humaneLowRomBestRunFrameCount: 0,
+      humaneLowRomPeakElevation: effectiveArmDeg,
+      humaneLowRomBaselineElevation: humaneBaselineArmDeg,
+      humaneLowRomElevationDeltaFromBaseline: elevationDelta,
+    };
+  }
+
+  // 3. baseline 대비 실질적 개선 확인 (15°)
+  if (elevationDelta < HUMANE_REQUIRED_DELTA_DEG) {
+    return {
+      humaneLowRomProgressionSatisfied: false,
+      humaneLowRomBlockedReason: 'humane_insufficient_delta',
+      humaneLowRomBestRunMs: 0,
+      humaneLowRomBestRunFrameCount: 0,
+      humaneLowRomPeakElevation: effectiveArmDeg,
+      humaneLowRomBaselineElevation: humaneBaselineArmDeg,
+      humaneLowRomElevationDeltaFromBaseline: elevationDelta,
+    };
+  }
+
+  // 4. 비대칭 확인 (가장 완화된 임계)
+  if (humaneAsymmetryFails(meanAsymmetryDeg, maxAsymmetryDeg)) {
+    return {
+      humaneLowRomProgressionSatisfied: false,
+      humaneLowRomBlockedReason: 'asymmetry_unacceptable',
+      humaneLowRomBestRunMs: 0,
+      humaneLowRomBestRunFrameCount: 0,
+      humaneLowRomPeakElevation: effectiveArmDeg,
+      humaneLowRomBaselineElevation: humaneBaselineArmDeg,
+      humaneLowRomElevationDeltaFromBaseline: elevationDelta,
+    };
+  }
+
+  if (humaneZoneFrames.length === 0) {
+    return {
+      humaneLowRomProgressionSatisfied: false,
+      humaneLowRomBlockedReason: 'humane_no_zone_frames',
+      humaneLowRomBestRunMs: 0,
+      humaneLowRomBestRunFrameCount: 0,
+      humaneLowRomPeakElevation: effectiveArmDeg,
+      humaneLowRomBaselineElevation: humaneBaselineArmDeg,
+      humaneLowRomElevationDeltaFromBaseline: elevationDelta,
+    };
+  }
+
+  // 5. 연속 run 계산 (동일 알고리즘, 완화된 상수)
+  let bestRunMs = 0;
+  let bestRunFrameCount = 0;
+  let runStartMs = humaneZoneFrames[0]!.timestampMs;
+  let runEndMs = humaneZoneFrames[0]!.timestampMs;
+  let runFrames = 1;
+
+  for (let i = 1; i < humaneZoneFrames.length; i++) {
+    const gap = humaneZoneFrames[i]!.timestampMs - humaneZoneFrames[i - 1]!.timestampMs;
+    if (gap <= HUMANE_GAP_TOLERANCE_MS) {
+      runEndMs = humaneZoneFrames[i]!.timestampMs;
+      runFrames += 1;
+    } else {
+      const runMs = runEndMs - runStartMs;
+      if (runMs > bestRunMs || (runMs === bestRunMs && runFrames > bestRunFrameCount)) {
+        bestRunMs = runMs;
+        bestRunFrameCount = runFrames;
+      }
+      runStartMs = humaneZoneFrames[i]!.timestampMs;
+      runEndMs = humaneZoneFrames[i]!.timestampMs;
+      runFrames = 1;
+    }
+  }
+  const lastRunMs = runEndMs - runStartMs;
+  if (lastRunMs > bestRunMs || (lastRunMs === bestRunMs && runFrames > bestRunFrameCount)) {
+    bestRunMs = lastRunMs;
+    bestRunFrameCount = runFrames;
+  }
+
+  if (bestRunMs < HUMANE_REQUIRED_HOLD_MS) {
+    return {
+      humaneLowRomProgressionSatisfied: false,
+      humaneLowRomBlockedReason: 'humane_hold_short',
+      humaneLowRomBestRunMs: bestRunMs,
+      humaneLowRomBestRunFrameCount: bestRunFrameCount,
+      humaneLowRomPeakElevation: effectiveArmDeg,
+      humaneLowRomBaselineElevation: humaneBaselineArmDeg,
+      humaneLowRomElevationDeltaFromBaseline: elevationDelta,
+    };
+  }
+
+  if (bestRunFrameCount < HUMANE_MIN_RUN_FRAMES) {
+    return {
+      humaneLowRomProgressionSatisfied: false,
+      humaneLowRomBlockedReason: 'humane_frames_too_few',
+      humaneLowRomBestRunMs: bestRunMs,
+      humaneLowRomBestRunFrameCount: bestRunFrameCount,
+      humaneLowRomPeakElevation: effectiveArmDeg,
+      humaneLowRomBaselineElevation: humaneBaselineArmDeg,
+      humaneLowRomElevationDeltaFromBaseline: elevationDelta,
+    };
+  }
+
+  return {
+    humaneLowRomProgressionSatisfied: true,
+    humaneLowRomBlockedReason: null,
+    humaneLowRomBestRunMs: bestRunMs,
+    humaneLowRomBestRunFrameCount: bestRunFrameCount,
+    humaneLowRomPeakElevation: effectiveArmDeg,
+    humaneLowRomBaselineElevation: humaneBaselineArmDeg,
+    humaneLowRomElevationDeltaFromBaseline: elevationDelta,
   };
 }

@@ -171,47 +171,50 @@ console.log('\n[Scenario A] Easy pass preserved — 128° + raise + sufficient e
 }
 
 // ---------------------------------------------------------------------------
-// Scenario B: Easy short hold → progressionBlockedReason='easy_hold_short', retry='no_hold'
+// Scenario B: Easy short hold
+// PR-CAM-16 의도적 변경: 상승 중 프레임(102°, 110°)이 humane zone(≥100°)에 포함돼
+// humane zone run = [380, 450, 520, 590, 660ms] → span=280ms ≥ 200ms → humane_low_rom PASS.
+// B1-B5 assertions를 새로운 PASS 동작을 반영하도록 업데이트.
 // ---------------------------------------------------------------------------
-console.log('\n[Scenario B] Easy short hold — progressionBlockedReason=easy_hold_short, retry=no_hold');
+console.log('\n[Scenario B] Easy short hold — now PASS via humane_low_rom (CAM-16 intentional change)');
 {
   const frames = [
     ...Array.from({ length: 6 }, (_, i) => makeFrame(100 + i * 70, 70 + i * 8, 'raise')),
-    // 3프레임(210ms span) — easy hold 520ms 미달
+    // 3프레임(span=140ms) at 128° — easy hold 미달이지만 상승 중 humane zone 포함으로 280ms+ → 통과
     ...Array.from({ length: 3 }, (_, i) => makeFrame(520 + i * 70, 128, 'raise')),
   ];
   const result = evaluateOverheadReachFromPoseFrames(frames);
   const prog = result.debug?.overheadProgressionState;
 
   ok(
-    'B1: progressionSatisfied = false',
-    prog?.progressionSatisfied === false,
+    'B1: progressionSatisfied = true (CAM-16: humane_low_rom passes via rise+hold span)',
+    prog?.progressionSatisfied === true,
     `sat=${prog?.progressionSatisfied}`,
   );
   ok(
-    'B2: progressionBlockedReason = easy_hold_short',
-    prog?.progressionBlockedReason === 'easy_hold_short',
+    'B2: progressionBlockedReason = null (satisfied)',
+    prog?.progressionBlockedReason === null,
     `blocked=${prog?.progressionBlockedReason}`,
   );
   ok(
-    'B3: progressionPhase = easy_building_hold',
-    prog?.progressionPhase === 'easy_building_hold',
+    'B3: progressionPhase = completed',
+    prog?.progressionPhase === 'completed',
     `phase=${prog?.progressionPhase}`,
   );
 
-  // ambiguous retry
+  // ambiguous retry: already complete → not eligible
   const gate = makeGateMock(result, {
-    completionSatisfied: false,
+    completionSatisfied: true,
     captureQuality: 'valid',
     failureReasons: [],
   });
   const eligible = isOverheadAmbiguousRetryEligible(gate);
   const reason = deriveOverheadAmbiguousRetryReason(gate);
 
-  ok('B4: ambiguous retry eligible', eligible, `eligible=${eligible}`);
+  ok('B4: ambiguous retry NOT eligible (already complete via humane)', eligible === false, `eligible=${eligible}`);
   ok(
-    'B5: ambiguous retry reason = no_hold (easy_hold_short → no_hold)',
-    reason === 'no_hold',
+    'B5: ambiguous retry reason = null (complete → no retry needed)',
+    reason === null,
     `reason=${reason}`,
   );
 }
@@ -371,8 +374,9 @@ console.log('\n[Scenario G] Voice eligibility — progressionPhase signals for h
   const buildingProg = buildingResult.debug?.overheadProgressionState;
 
   ok(
-    'G1: easy_building_hold phase when hold building (< 520ms)',
-    buildingProg?.progressionPhase === 'easy_building_hold',
+    // PR-CAM-16 의도적 변경: humane zone run이 rise+hold을 포함해 280ms+ → completed
+    'G1: phase = completed (CAM-16: humane_low_rom passes via rise+hold span)',
+    buildingProg?.progressionPhase === 'completed',
     `phase=${buildingProg?.progressionPhase}`,
   );
   ok(
@@ -381,8 +385,8 @@ console.log('\n[Scenario G] Voice eligibility — progressionPhase signals for h
     `easyBestRunMs=${buildingProg?.easyBestRunMs}`,
   );
   ok(
-    'G3: progressionSatisfied = false (not yet complete)',
-    buildingProg?.progressionSatisfied === false,
+    'G3: progressionSatisfied = true (CAM-16: humane_low_rom passes)',
+    buildingProg?.progressionSatisfied === true,
     `sat=${buildingProg?.progressionSatisfied}`,
   );
 

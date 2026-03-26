@@ -11,7 +11,10 @@ import {
   OVERHEAD_EASY_ELEVATION_FLOOR_DEG,
   OVERHEAD_EASY_MIN_PEAK_FRAMES,
 } from './overhead/overhead-constants';
-import { OVERHEAD_LOW_ROM_ABSOLUTE_FLOOR_DEG } from './overhead/overhead-easy-progression';
+import {
+  OVERHEAD_LOW_ROM_ABSOLUTE_FLOOR_DEG,
+  OVERHEAD_HUMANE_ABSOLUTE_FLOOR_DEG,
+} from './overhead/overhead-easy-progression';
 import { buildPoseFeaturesFrames } from './pose-features';
 import type { PoseFeaturesFrame } from './pose-features';
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
@@ -261,6 +264,8 @@ function getMotionCompleteness(
     const easySatisfied = hm?.easyCompletionSatisfied === true || hm?.easyCompletionSatisfied === 1;
     const lowRomSatisfied =
       hm?.lowRomProgressionSatisfied === true || hm?.lowRomProgressionSatisfied === 1;
+    const humaneLowRomSatisfied =
+      hm?.humaneLowRomProgressionSatisfied === true || hm?.humaneLowRomProgressionSatisfied === 1;
 
     const armElevations = frames
       .map((frame) => frame.derived.armElevationAvg)
@@ -314,6 +319,27 @@ function getMotionCompleteness(
         score: clamp(Math.min(peakElevation / 155, 0.62)),
         status: 'complete',
         completePath: 'low_rom',
+      };
+    }
+
+    /* PR-CAM-16: humane low-ROM 진행이 true면 가장 낮은 absolute floor 확인만 요구 */
+    if (!easySatisfied && !lowRomSatisfied && humaneLowRomSatisfied) {
+      if (
+        frames.length < MIN_VALID_FRAMES ||
+        peakElevation < OVERHEAD_HUMANE_ABSOLUTE_FLOOR_DEG ||
+        raiseCount === 0
+      ) {
+        flags.add('rep_incomplete');
+        return {
+          score: clamp(peakElevation / 150),
+          status: 'partial',
+          partialReason: 'humane_guard_failed',
+        };
+      }
+      return {
+        score: clamp(Math.min(peakElevation / 160, 0.55)),
+        status: 'complete',
+        completePath: 'humane_low_rom',
       };
     }
 

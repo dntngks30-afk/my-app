@@ -61,11 +61,15 @@ export interface EvaluatorDebugSummary {
  */
 export interface OverheadProgressionState {
   progressionSatisfied: boolean;
-  /** PR-CAM-15: 'low_rom' 경로 추가 */
-  progressionPath: 'strict' | 'fallback' | 'easy' | 'low_rom' | 'none';
+  /** PR-CAM-15: 'low_rom' 경로. PR-CAM-16: 'humane_low_rom' 경로 추가. */
+  progressionPath: 'strict' | 'fallback' | 'easy' | 'low_rom' | 'humane_low_rom' | 'none';
   /** 진행 관점 차단 사유 — easy-facing 우선, strict fallback. retry·hold cue 단일 진입점. */
   progressionBlockedReason: string | null;
-  /** 진행 관점 단계 — 음성·retry·UI 상태 표현용. PR-CAM-15: low_rom_top, low_rom_building_hold 추가. */
+  /**
+   * 진행 관점 단계 — 음성·retry·UI 상태 표현용.
+   * PR-CAM-15: low_rom_top, low_rom_building_hold 추가.
+   * PR-CAM-16: humane_top, humane_building_hold 추가.
+   */
   progressionPhase:
     | 'idle'
     | 'raising'
@@ -74,6 +78,8 @@ export interface OverheadProgressionState {
     | 'strict_top_unstable'
     | 'low_rom_top'
     | 'low_rom_building_hold'
+    | 'humane_top'
+    | 'humane_building_hold'
     | 'completed';
   easyCompletionSatisfied: boolean;
   easyCompletionBlockedReason: string | null;
@@ -84,6 +90,13 @@ export interface OverheadProgressionState {
   lowRomBlockedReason: string | null;
   lowRomBestRunMs: number;
   lowRomElevationDeltaFromBaseline: number;
+  /** PR-CAM-16: humane low-ROM 진행 필드 */
+  humaneLowRomProgressionSatisfied: boolean;
+  humaneLowRomBlockedReason: string | null;
+  humaneLowRomBestRunMs: number;
+  humaneLowRomPeakElevation: number;
+  humaneLowRomBaselineElevation: number;
+  humaneLowRomElevationDeltaFromBaseline: number;
   /** strict completion 그대로 보존 — planning / internal quality 기준 유지 */
   strictMotionCompletionSatisfied: boolean;
   strictCompletionBlockedReason: string | null;

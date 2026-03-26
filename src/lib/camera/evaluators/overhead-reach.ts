@@ -26,7 +26,9 @@ import { computeOverheadTopHoldFallback } from '@/lib/camera/overhead/overhead-t
 import {
   computeOverheadEasyProgressionHold,
   computeOverheadLowRomProgression,
+  computeOverheadHumaneLowRomProgression,
   OVERHEAD_LOW_ROM_ABSOLUTE_FLOOR_DEG,
+  OVERHEAD_HUMANE_ABSOLUTE_FLOOR_DEG,
 } from '@/lib/camera/overhead/overhead-easy-progression';
 
 const MIN_VALID_FRAMES = 8;
@@ -403,6 +405,8 @@ export function evaluateOverheadReachFromPoseFrames(
           easyCompletionBlockedReason: 'raise_peak_incomplete',
           lowRomProgressionSatisfied: 0,
           lowRomBlockedReason: 'raise_peak_incomplete',
+          humaneLowRomProgressionSatisfied: 0,
+          humaneLowRomBlockedReason: 'raise_peak_incomplete',
           completionBlockedReason: 'raise_peak_incomplete',
           completionMachinePhase: 'idle',
           completionPassReason: 'not_confirmed',
@@ -538,6 +542,26 @@ export function evaluateOverheadReachFromPoseFrames(
     .map((f) => ({ timestampMs: f.timestampMs }));
   const peakCountAtLowRomFloor = lowRomZoneFrames.length;
 
+  // PR-CAM-16: humane low-ROM 준비 — low-ROM floor(110°) 미달 사용자용
+  // baseline: 초기 16프레임의 최솟값 (lower-envelope) — 사용자가 약간 팔을 올린 채로
+  // 시작해도 가장 낮은 초기 포지션을 baseline으로 사용해 delta 계산이 더 관대해진다.
+  const HUMANE_BASELINE_WINDOW = 16;
+  const humaneBaselineValues = valid
+    .slice(0, HUMANE_BASELINE_WINDOW)
+    .map((f) => f.derived.armElevationAvg)
+    .filter((v): v is number => typeof v === 'number');
+  const humaneBaselineArmDeg =
+    humaneBaselineValues.length > 0 ? Math.min(...humaneBaselineValues) : 0;
+
+  const humaneZoneFrames = valid
+    .filter(
+      (f) =>
+        typeof f.derived.armElevationAvg === 'number' &&
+        f.derived.armElevationAvg >= OVERHEAD_HUMANE_ABSOLUTE_FLOOR_DEG
+    )
+    .map((f) => ({ timestampMs: f.timestampMs }));
+  const peakCountAtHumaneFloor = humaneZoneFrames.length;
+
   // PR-CAM-11A: jitter-tolerant fallback 계산 (strict 경로 보완용)
   const fallbackTopHold = computeOverheadTopHoldFallback({
     topZoneFrames,
@@ -585,13 +609,31 @@ export function evaluateOverheadReachFromPoseFrames(
     maxAsymmetryDeg,
   });
 
+  // PR-CAM-16: humane low-ROM 진행 경로 (low-ROM floor 미달 사용자 — lower-envelope baseline + 완화된 임계)
+  const humaneLowRomProgression = computeOverheadHumaneLowRomProgression({
+    humaneZoneFrames,
+    raiseCount,
+    peakCountAtHumaneFloor,
+    effectiveArmDeg: peakArmForCompletion,
+    humaneBaselineArmDeg,
+    meanAsymmetryDeg,
+    maxAsymmetryDeg,
+  });
+
   const strictMotionCompletionSatisfied = overheadCompletion.completionSatisfied;
   const progressionCompletionSatisfied =
     strictMotionCompletionSatisfied ||
     easyProgression.easyCompletionSatisfied ||
-    lowRomProgression.lowRomProgressionSatisfied;
+    lowRomProgression.lowRomProgressionSatisfied ||
+    humaneLowRomProgression.humaneLowRomProgressionSatisfied;
 
-  let progressionCompletionPath: 'strict' | 'fallback' | 'easy' | 'low_rom' | 'not_confirmed';
+  let progressionCompletionPath:
+    | 'strict'
+    | 'fallback'
+    | 'easy'
+    | 'low_rom'
+    | 'humane_low_rom'
+    | 'not_confirmed';
   if (strictMotionCompletionSatisfied) {
     progressionCompletionPath =
       overheadCompletion.completionPath === 'fallback' ? 'fallback' : 'strict';
@@ -599,23 +641,37 @@ export function evaluateOverheadReachFromPoseFrames(
     progressionCompletionPath = 'easy';
   } else if (lowRomProgression.lowRomProgressionSatisfied) {
     progressionCompletionPath = 'low_rom';
+  } else if (humaneLowRomProgression.humaneLowRomProgressionSatisfied) {
+    progressionCompletionPath = 'humane_low_rom';
   } else {
     progressionCompletionPath = 'not_confirmed';
   }
 
-  // PR-CAM-13/15: 진행 전용 blocked reason — raw 데이터 기반, easy/low-rom-facing 우선 결정.
+  // PR-CAM-13/15/16: 진행 전용 blocked reason — raw 데이터 기반, 접근성 높은 경로 우선 결정.
   const progressionBlockedReason: string | null = (() => {
     if (progressionCompletionSatisfied) return null;
     // Level 1: raise 동작 자체가 없음
     if (raiseCount === 0) return 'easy_raise_incomplete';
-    // Level 2: easy top zone(>= 126°) 미달 — low-ROM 상태를 먼저 보고함 (더 접근성 있는 경로)
+    // Level 2: easy top zone(>= 126°) 미달
     if (easyTopZoneFrames.length === 0) {
-      const lowRomBlocked = lowRomProgression.lowRomBlockedReason;
-      if (lowRomBlocked === 'low_rom_hold_short') return 'low_rom_hold_short';
-      if (lowRomBlocked === 'low_rom_frames_too_few') return 'low_rom_hold_short';
-      if (lowRomBlocked === 'asymmetry_unacceptable') return 'asymmetry_unacceptable';
-      // elevation/delta/raise 불충분 → 높이 더 필요
-      if (lowRomBlocked != null) return 'easy_top_not_reached';
+      if (lowRomZoneFrames.length > 0) {
+        // low-ROM zone(>= 110°)에 진입 — low-ROM 차단 이유 우선 보고
+        const lowRomBlocked = lowRomProgression.lowRomBlockedReason;
+        if (lowRomBlocked === 'low_rom_hold_short') return 'low_rom_hold_short';
+        if (lowRomBlocked === 'low_rom_frames_too_few') return 'low_rom_hold_short';
+        if (lowRomBlocked === 'asymmetry_unacceptable') return 'asymmetry_unacceptable';
+        if (lowRomBlocked != null) return 'easy_top_not_reached';
+      } else if (humaneZoneFrames.length > 0) {
+        // PR-CAM-16: humane zone(>= 100°)에 진입 — humane 차단 이유 보고
+        const humaneBlocked = humaneLowRomProgression.humaneLowRomBlockedReason;
+        if (humaneBlocked === 'humane_hold_short') return 'humane_hold_short';
+        if (humaneBlocked === 'humane_frames_too_few') return 'humane_hold_short';
+        if (humaneBlocked === 'asymmetry_unacceptable') return 'asymmetry_unacceptable';
+        if (humaneBlocked != null) return 'easy_top_not_reached';
+      } else {
+        // 100° 미만 — 높이 자체가 부족
+        return 'easy_top_not_reached';
+      }
     }
     // Level 3: easy top zone 진입 후 차단 사유
     const easyBlocked = easyProgression.easyCompletionBlockedReason;
@@ -626,7 +682,7 @@ export function evaluateOverheadReachFromPoseFrames(
     return overheadCompletion.completionBlockedReason;
   })();
 
-  // PR-CAM-13/15: 진행 전용 phase (easy/low-rom-facing 우선, strict top-unstable fallback)
+  // PR-CAM-13/15/16: 진행 전용 phase (접근성 높은 경로 우선, strict top-unstable fallback)
   const progressionPhase: OverheadProgressionState['progressionPhase'] = (() => {
     if (progressionCompletionSatisfied) return 'completed';
     if (raiseCount === 0) return 'idle';
@@ -639,6 +695,20 @@ export function evaluateOverheadReachFromPoseFrames(
         return 'low_rom_building_hold';
       }
       return 'low_rom_top';
+    }
+    // PR-CAM-16: humane zone 진입 (easy·low-ROM 미달) — humane 단계 보고
+    if (
+      easyTopZoneFrames.length === 0 &&
+      lowRomZoneFrames.length === 0 &&
+      humaneZoneFrames.length > 0
+    ) {
+      if (
+        humaneLowRomProgression.humaneLowRomBlockedReason === 'humane_hold_short' &&
+        humaneLowRomProgression.humaneLowRomBestRunMs > 0
+      ) {
+        return 'humane_building_hold';
+      }
+      return 'humane_top';
     }
     // Easy zone 진입
     if (easyTopZoneFrames.length > 0) {
@@ -654,7 +724,7 @@ export function evaluateOverheadReachFromPoseFrames(
     return 'raising';
   })();
 
-  // PR-CAM-13/15: typed progression state (squat-style 소유권 분리 + low-ROM 경로 추가)
+  // PR-CAM-13/15/16: typed progression state (squat-style 소유권 분리 + humane_low_rom 추가)
   const overheadProgressionState: OverheadProgressionState = {
     progressionSatisfied: progressionCompletionSatisfied,
     progressionPath: progressionCompletionPath === 'not_confirmed' ? 'none' : progressionCompletionPath,
@@ -669,6 +739,14 @@ export function evaluateOverheadReachFromPoseFrames(
     lowRomBlockedReason: lowRomProgression.lowRomBlockedReason,
     lowRomBestRunMs: lowRomProgression.lowRomBestRunMs,
     lowRomElevationDeltaFromBaseline: lowRomProgression.lowRomElevationDeltaFromBaseline,
+    /** PR-CAM-16: humane low-ROM 경로 */
+    humaneLowRomProgressionSatisfied: humaneLowRomProgression.humaneLowRomProgressionSatisfied,
+    humaneLowRomBlockedReason: humaneLowRomProgression.humaneLowRomBlockedReason,
+    humaneLowRomBestRunMs: humaneLowRomProgression.humaneLowRomBestRunMs,
+    humaneLowRomPeakElevation: humaneLowRomProgression.humaneLowRomPeakElevation,
+    humaneLowRomBaselineElevation: humaneLowRomProgression.humaneLowRomBaselineElevation,
+    humaneLowRomElevationDeltaFromBaseline:
+      humaneLowRomProgression.humaneLowRomElevationDeltaFromBaseline,
     strictMotionCompletionSatisfied,
     strictCompletionBlockedReason: overheadCompletion.completionBlockedReason,
     strictCompletionMachinePhase: overheadCompletion.completionMachinePhase,
@@ -856,6 +934,18 @@ export function evaluateOverheadReachFromPoseFrames(
         lowRomZoneFrameCount: lowRomZoneFrames.length,
         peakCountAtLowRomFloor,
         baselineArmDeg,
+        /** PR-CAM-16: humane low-ROM 진행 전용 */
+        humaneLowRomProgressionSatisfied:
+          humaneLowRomProgression.humaneLowRomProgressionSatisfied ? 1 : 0,
+        humaneLowRomBlockedReason: humaneLowRomProgression.humaneLowRomBlockedReason,
+        humaneLowRomBestRunMs: humaneLowRomProgression.humaneLowRomBestRunMs,
+        humaneLowRomPeakElevation: humaneLowRomProgression.humaneLowRomPeakElevation,
+        humaneLowRomBaselineElevation: humaneLowRomProgression.humaneLowRomBaselineElevation,
+        humaneLowRomElevationDeltaFromBaseline:
+          humaneLowRomProgression.humaneLowRomElevationDeltaFromBaseline,
+        humaneZoneFrameCount: humaneZoneFrames.length,
+        peakCountAtHumaneFloor,
+        humaneBaselineArmDeg,
         /** PR-CAM-11A: fallback top-hold 경로 트레이스 */
         fallbackTopHoldSatisfied: overheadCompletion.fallbackTopHoldSatisfied ? 1 : 0,
         fallbackTopHoldBestRunMs: fallbackTopHold.bestTopRunMs,

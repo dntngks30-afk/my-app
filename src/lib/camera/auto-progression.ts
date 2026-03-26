@@ -921,7 +921,14 @@ function getFailureReasons(
   const ohm = stepId === 'overhead-reach' ? result.debug?.highlightedMetrics : undefined;
   const overheadEasyOnly =
     stepId === 'overhead-reach' &&
-    (ohm?.easyCompletionSatisfied === true || ohm?.easyCompletionSatisfied === 1) &&
+    (ohm?.easyCompletionSatisfied === true ||
+      ohm?.easyCompletionSatisfied === 1 ||
+      // PR-CAM-15: low-ROM path
+      ohm?.lowRomProgressionSatisfied === true ||
+      ohm?.lowRomProgressionSatisfied === 1 ||
+      // PR-CAM-16: humane low-ROM path
+      ohm?.humaneLowRomProgressionSatisfied === true ||
+      ohm?.humaneLowRomProgressionSatisfied === 1) &&
     !(ohm?.strictMotionCompletionSatisfied === true || ohm?.strictMotionCompletionSatisfied === 1);
   const confFloor = overheadEasyOnly
     ? OVERHEAD_EASY_PASS_CONFIDENCE
@@ -975,7 +982,11 @@ export function evaluateExerciseAutoProgress(
       // PR-CAM-15: low-ROM path도 easy-only 완화 적용 (동일 confidence·latch 임계)
       const lowRom =
         hm?.lowRomProgressionSatisfied === true || hm?.lowRomProgressionSatisfied === 1;
-      return Boolean((easy || lowRom) && !strict);
+      // PR-CAM-16: humane low-ROM path도 동일하게 easy-only 완화 적용
+      const humaneLowRom =
+        hm?.humaneLowRomProgressionSatisfied === true ||
+        hm?.humaneLowRomProgressionSatisfied === 1;
+      return Boolean((easy || lowRom || humaneLowRom) && !strict);
     })();
   const passThresholdEffective = overheadEasyOnly ? OVERHEAD_EASY_PASS_CONFIDENCE : passThreshold;
   const passConfirmation = getPassConfirmation(
@@ -1042,7 +1053,7 @@ export function evaluateExerciseAutoProgress(
     };
   }
 
-  /** PR-CAM-11B/15: easy/low-ROM 진행 통과 시 reasons에 남은 hold_too_short/rep_incomplete 로 pass를 막지 않음 */
+  /** PR-CAM-11B/15/16: easy/low-ROM/humane 진행 통과 시 reasons에 남은 hold_too_short/rep_incomplete 로 pass를 막지 않음 */
   const hasHoldOrRepReason = hasAnyReason(reasons, ['rep_incomplete', 'hold_too_short']);
   const overheadEasySat =
     stepId === 'overhead-reach' &&
@@ -1050,7 +1061,10 @@ export function evaluateExerciseAutoProgress(
       evaluatorResult.debug?.highlightedMetrics?.easyCompletionSatisfied === 1 ||
       // PR-CAM-15: low-ROM 통과 시도 동일하게 hold/rep 차단 해제
       evaluatorResult.debug?.highlightedMetrics?.lowRomProgressionSatisfied === true ||
-      evaluatorResult.debug?.highlightedMetrics?.lowRomProgressionSatisfied === 1);
+      evaluatorResult.debug?.highlightedMetrics?.lowRomProgressionSatisfied === 1 ||
+      // PR-CAM-16: humane low-ROM 통과 시도 동일하게 hold/rep 차단 해제
+      evaluatorResult.debug?.highlightedMetrics?.humaneLowRomProgressionSatisfied === true ||
+      evaluatorResult.debug?.highlightedMetrics?.humaneLowRomProgressionSatisfied === 1);
   const overheadRepHoldBlocks = overheadEasySat ? false : hasHoldOrRepReason;
 
   const progressionPassed =
