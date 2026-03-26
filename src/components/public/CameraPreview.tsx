@@ -312,14 +312,14 @@ export function CameraPreview({
    * useEffect cleanup 시 null로 초기화.
    */
   const startAnalyzerRef = useRef<(() => void) | null>(null);
-  /**
-   * 마지막으로 처리한 fatalResetCount. 동일 resetCount에 대한 중복 재생성을 방지한다.
-   */
-  const lastHandledFatalResetCountRef = useRef(-1);
-  /** recreate 예약 중 여부. 한 reset 이벤트당 하나의 recreate만 스케줄된다. */
+  /** 마지막으로 처리한 fatal analyzer id. 동일 analyzer에 대한 중복 재생성을 막는다. */
+  const lastHandledFatalAnalyzerIdRef = useRef<number | null>(null);
+  /** recreate 예약 중 여부. 한 analyzer 장애당 하나의 recreate만 스케줄된다. */
   const recreateScheduledRef = useRef(false);
   /** 진단: analyzer 재생성 누적 횟수 */
   const analyzerRecreateCountRef = useRef(0);
+  /** recreate 예약 timeout id. cleanup 시 반드시 해제한다. */
+  const recreateTimeoutRef = useRef<number | null>(null);
   const [poseStatus, setPoseStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [poseErrorMessage, setPoseErrorMessage] = useState<string | null>(null);
 
@@ -461,8 +461,7 @@ export function CameraPreview({
 
     let cancelled = false;
     let lastAnalyzedAt = 0;
-    let consecutiveDetectFailures = 0;
-    let detectBackoffUntilMs = 0;
+    const ANALYZER_FATAL_RECREATE_DELAY_MS = 120;
 
     const startAnalyzer = async () => {
       // startAnalyzer 자신을 ref에 보관 → RAF loop 내부 setTimeout에서 재호출 가능
@@ -495,11 +494,6 @@ export function CameraPreview({
           if (loopGenerationRef.current !== myGeneration) return;
 
           const tick = performance.now();
-          if (tick < detectBackoffUntilMs) {
-            analysisRafRef.current = requestAnimationFrame(loop);
-            return;
-          }
-
           const currentVideo = videoRef.current;
           const activeStream = streamRef.current;
           if (
@@ -523,72 +517,50 @@ export function CameraPreview({
               motionType: poseDiagnosticsMotionTypeRef.current ?? undefined,
             });
 
-            // ---------------------------------------------------------------
-            // Fatal reset 감지: analyzer가 stale 신호를 포함한 프레임을 반환한 경우.
-            // 동일 resetCount에 대한 중복 처리를 방지하고, 한 번에 하나의 recreate만 예약한다.
-            // ---------------------------------------------------------------
-            if (
-              frame._mediapipeFatalResetTriggered &&
-              typeof frame._mediapipeFatalResetCount === 'number' &&
-              frame._mediapipeFatalResetCount > lastHandledFatalResetCountRef.current &&
-              !recreateScheduledRef.current
-            ) {
-              const resetCount = frame._mediapipeFatalResetCount;
-              const cooldownMs = frame._mediapipeRecoveryCooldownMs ?? 2_000;
-
-              lastHandledFatalResetCountRef.current = resetCount;
-              recreateScheduledRef.current = true;
-
-              // 세대 전진: 현재 루프와 이후 진입 시도를 모두 차단한다.
-              loopGenerationRef.current += 1;
-              // stale analyzer 참조를 완전히 제거한다.
-              analyzerRef.current = null;
-              analyzerInitRef.current = null;
-
-              analyzerRecreateCountRef.current += 1;
-              if (process.env.NODE_ENV !== 'production') {
-                console.warn('[CameraPreview] fatal reset detected — invalidating analyzer, scheduling recreate', {
-                  resetCount,
-                  cooldownMs,
-                  recreateCount: analyzerRecreateCountRef.current,
-                  runtimeGeneration: frame._mediapipeRuntimeGeneration,
-                });
-              }
-
-              // 쿨다운 + 여유 시간 이후 analyzer 재생성.
-              // cancelled를 클로저로 체크하므로 컴포넌트 언마운트 시 자동으로 중단된다.
-              setTimeout(() => {
-                if (cancelled) return;
-                recreateScheduledRef.current = false;
-                startAnalyzerRef.current?.();
-              }, cooldownMs + 300);
-
-              // 현재 RAF loop를 종료 (다음 RAF 예약 없이 return).
-              return;
-            }
-
-            // ---------------------------------------------------------------
-            // 일반 detect 실패 백오프 (non-fatal 오류)
-            // ---------------------------------------------------------------
-            if (frame._mediapipeDetectFailed) {
-              consecutiveDetectFailures += 1;
-              if (consecutiveDetectFailures >= 8) {
-                detectBackoffUntilMs = tick + 1500;
-                consecutiveDetectFailures = 0;
-                if (process.env.NODE_ENV !== 'production') {
-                  console.warn('[CameraPreview] mediapipe detect backoff 1.5s after repeated failures');
-                }
-              }
-            } else {
-              consecutiveDetectFailures = 0;
-            }
-
             onPoseFrameRef.current?.(frame);
 
             if (showPoseDebugOverlay && overlayCanvasRef.current) {
               drawPoseFrameToCanvas(overlayCanvasRef.current, frame, { mirrored });
             } else {
               clearPoseOverlay(overlayCanvasRef.current);
+            }
+
+            if (
+              frame._mediapipeAnalyzerFatal &&
+              frame._mediapipeAnalyzerNeedsRecreate &&
+              typeof frame._mediapipeAnalyzerId === 'number' &&
+              frame._mediapipeAnalyzerId !== lastHandledFatalAnalyzerIdRef.current &&
+              !recreateScheduledRef.current
+            ) {
+              const analyzerId = frame._mediapipeAnalyzerId;
+              lastHandledFatalAnalyzerIdRef.current = analyzerId;
+              recreateScheduledRef.current = true;
+
+              loopGenerationRef.current += 1;
+              analyzerRef.current?.close();
+              analyzerRef.current = null;
+              analyzerInitRef.current = null;
+
+              analyzerRecreateCountRef.current += 1;
+              if (process.env.NODE_ENV !== 'production') {
+                console.warn('[CameraPreview] analyzer fatal detected — scheduling recreate', {
+                  analyzerId,
+                  recreateDelayMs: ANALYZER_FATAL_RECREATE_DELAY_MS,
+                  recreateCount: analyzerRecreateCountRef.current,
+                });
+              }
+
+              if (recreateTimeoutRef.current != null) {
+                window.clearTimeout(recreateTimeoutRef.current);
+              }
+              recreateTimeoutRef.current = window.setTimeout(() => {
+                if (cancelled) return;
+                recreateScheduledRef.current = false;
+                recreateTimeoutRef.current = null;
+                startAnalyzerRef.current?.();
+              }, ANALYZER_FATAL_RECREATE_DELAY_MS);
+
+              return;
             }
           }
 
@@ -615,8 +587,12 @@ export function CameraPreview({
 
     return () => {
       cancelled = true;
-      // startAnalyzer ref를 null로 만들어 setTimeout 콜백이 호출해도 아무 일도 일어나지 않게 한다.
       startAnalyzerRef.current = null;
+      recreateScheduledRef.current = false;
+      if (recreateTimeoutRef.current != null) {
+        window.clearTimeout(recreateTimeoutRef.current);
+        recreateTimeoutRef.current = null;
+      }
       if (analysisRafRef.current != null) {
         cancelAnimationFrame(analysisRafRef.current);
         analysisRafRef.current = null;
