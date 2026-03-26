@@ -24,6 +24,9 @@ export type SquatCompletionPassReason =
   | 'standard_cycle'
   | 'low_rom_cycle'
   | 'ultra_low_rom_cycle'
+  /** PR-CAM-18: phaseHint='descent'이 'start' 우선에 의해 억제된 경우 trajectory 기반 이벤트 사이클 경로 */
+  | 'low_rom_event_cycle'
+  | 'ultra_low_rom_event_cycle'
   | 'not_confirmed';
 
 export function deriveSquatCompletionMachinePhase(s: {
@@ -50,15 +53,17 @@ export function deriveSquatCompletionMachinePhase(s: {
 export function deriveSquatCompletionPassReason(s: {
   completionSatisfied: boolean;
   evidenceLabel: string;
+  /** PR-CAM-18: phaseHint 기반 descent 미탐지 → trajectory 이벤트 사이클 경로 여부 */
+  eventBasedDescentPath?: boolean;
 }): SquatCompletionPassReason {
   if (!s.completionSatisfied) return 'not_confirmed';
   switch (s.evidenceLabel) {
     case 'standard':
       return 'standard_cycle';
     case 'low_rom':
-      return 'low_rom_cycle';
+      return s.eventBasedDescentPath ? 'low_rom_event_cycle' : 'low_rom_cycle';
     case 'ultra_low_rom':
-      return 'ultra_low_rom_cycle';
+      return s.eventBasedDescentPath ? 'ultra_low_rom_event_cycle' : 'ultra_low_rom_cycle';
     default:
       return 'not_confirmed';
   }

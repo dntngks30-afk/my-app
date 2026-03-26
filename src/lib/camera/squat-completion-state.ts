@@ -223,6 +223,37 @@ export function evaluateSquatCompletionState(
     startFrame != null &&
     (bottomFrame == null || startFrame.index < bottomFrame.index);
 
+  /**
+   * PR-CAM-18: event-cycle descent 탐지 — low/ultra-low ROM에서 phaseHint='start'가 우선해
+   * 'descent'가 절대 배정되지 않는 경우(모든 프레임 depth < 0.08)를 위한 trajectory 기반 폴백.
+   *
+   * phaseHints 우선순위 구조: `if (currentDepth < 0.08) → 'start'` 가 먼저 평가되므로
+   * ultra-low-ROM 사용자(peak depth < 0.08)의 모든 프레임은 'start'만 받고
+   * 'descent'/'ascent'/'bottom'이 배정되지 않는다.
+   *
+   * 수정 범위: 이 변수 쌍 + descendConfirmed + 타이밍 체크 + squatDescentToPeakMs 만.
+   * 그 외 evaluator, guardrail, auto-progression, threshold는 일절 변경하지 않는다.
+   */
+  const effectiveDescentStartFrame: {
+    index: number;
+    depth: number;
+    timestampMs: number;
+    phaseHint: PoseFeaturesFrame['phaseHint'];
+  } | undefined =
+    descentFrame ??
+    (relativeDepthPeak >= MIN_RELATIVE_DEPTH_FOR_ATTEMPT
+      ? depthFrames.find(
+          (f) =>
+            f.depth - baselineStandingDepth >= MIN_RELATIVE_DEPTH_FOR_ATTEMPT * 0.4
+        )
+      : undefined);
+
+  /** phaseHint 기반 descent가 없으면 true — completionPassReason 구분용 */
+  const eventBasedDescentPath =
+    descentFrame == null &&
+    relativeDepthPeak >= MIN_RELATIVE_DEPTH_FOR_ATTEMPT &&
+    effectiveDescentStartFrame != null;
+
   const prePeakDepths = depthFrames
     .filter((frame) => frame.index < peakFrame.index)
     .map((frame) => frame.depth);
@@ -281,7 +312,8 @@ export function evaluateSquatCompletionState(
     baselineDepths.length >= MIN_BASELINE_FRAMES &&
     startFrame != null &&
     startBeforeBottom;
-  const descendConfirmed = descentFrame != null && armed;
+  /** PR-CAM-18: phaseHint 'descent' 미탐지 시 trajectory 폴백 허용 */
+  const descendConfirmed = (descentFrame != null || eventBasedDescentPath) && armed;
   const attemptStarted = descendConfirmed && downwardCommitmentReached;
   const bottomDetected = bottomFrame != null;
   const recoveryDetected = standingRecovery.standingRecoveredAtMs != null;
@@ -335,8 +367,8 @@ export function evaluateSquatCompletionState(
     completionBlockedReason = 'recovery_hold_too_short';
   } else if (
     relativeDepthPeak < LOW_ROM_TIMING_PEAK_MAX &&
-    descentFrame != null &&
-    peakFrame.timestampMs - descentFrame.timestampMs < MIN_DESCENT_TO_PEAK_MS_LOW_ROM
+    effectiveDescentStartFrame != null &&
+    peakFrame.timestampMs - effectiveDescentStartFrame.timestampMs < MIN_DESCENT_TO_PEAK_MS_LOW_ROM
   ) {
     completionBlockedReason = 'descent_span_too_short';
   } else if (
@@ -349,8 +381,11 @@ export function evaluateSquatCompletionState(
     completionBlockedReason = 'ascent_recovery_span_too_short';
   }
 
+  /** PR-CAM-18: phaseHint 기반 descentFrame이 없을 때 effectiveDescentStartFrame으로 폴백 */
   const squatDescentToPeakMs =
-    descentFrame != null ? peakFrame.timestampMs - descentFrame.timestampMs : undefined;
+    effectiveDescentStartFrame != null
+      ? peakFrame.timestampMs - effectiveDescentStartFrame.timestampMs
+      : undefined;
   const squatReversalToStandingMs =
     reversalFrame != null && standingRecovery.standingRecoveredAtMs != null
       ? standingRecovery.standingRecoveredAtMs - reversalFrame.timestampMs
@@ -379,12 +414,13 @@ export function evaluateSquatCompletionState(
     bottomDetected,
     recoveryDetected,
     cycleComplete: completionSatisfied,
-    descendStartAtMs: descentFrame?.timestampMs,
+    /** PR-CAM-18: phaseHint 'descent' 없는 경우 effectiveDescentStartFrame 타임스탬프로 폴백 */
+    descendStartAtMs: effectiveDescentStartFrame?.timestampMs,
     peakAtMs: peakFrame.timestampMs,
     ascendStartAtMs: ascentFrame?.timestampMs,
     cycleDurationMs:
-      descentFrame != null && standingRecovery.standingRecoveredAtMs != null
-        ? standingRecovery.standingRecoveredAtMs - descentFrame.timestampMs
+      effectiveDescentStartFrame != null && standingRecovery.standingRecoveredAtMs != null
+        ? standingRecovery.standingRecoveredAtMs - effectiveDescentStartFrame.timestampMs
         : undefined,
     downwardCommitmentDelta,
     standingRecoveryFrameCount: standingRecovery.standingRecoveryFrameCount,
@@ -406,6 +442,7 @@ export function evaluateSquatCompletionState(
     completionPassReason: deriveSquatCompletionPassReason({
       completionSatisfied,
       evidenceLabel,
+      eventBasedDescentPath,
     }),
   };
 }
