@@ -9,7 +9,7 @@ import type { PoseLandmarks } from '@/lib/motion/pose-types';
 import { buildPoseFeaturesFrames } from '@/lib/camera/pose-features';
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 import { getOverheadPerStepDiagnostics } from '@/lib/camera/step-joint-spec';
-import type { EvaluatorResult, EvaluatorMetric } from './types';
+import type { EvaluatorResult, EvaluatorMetric, OverheadProgressionState } from './types';
 import {
   OVERHEAD_TOP_FLOOR_DEG,
   OVERHEAD_REQUIRED_HOLD_MS,
@@ -564,6 +564,57 @@ export function evaluateOverheadReachFromPoseFrames(
     progressionCompletionPath = 'not_confirmed';
   }
 
+  // PR-CAM-13: 진행 전용 blocked reason — raw 데이터 기반으로 easy-facing 우선 결정.
+  // easy progression 내부 check 순서(peakCountAtEasyFloor < MIN이 elevation 전에 체크)에
+  // 의존하지 않아 의미가 더 명확하다.
+  const progressionBlockedReason: string | null = (() => {
+    if (progressionCompletionSatisfied) return null;
+    // Level 1: raise 동작 자체가 없음
+    if (raiseCount === 0) return 'easy_raise_incomplete';
+    // Level 2: raise는 있으나 easy top zone(>= 126°)에 도달하지 못함
+    if (easyTopZoneFrames.length === 0) return 'easy_top_not_reached';
+    // Level 3: easy top zone 진입 후 차단 사유
+    const easyBlocked = easyProgression.easyCompletionBlockedReason;
+    if (easyBlocked === 'easy_hold_short') return 'easy_hold_short';
+    if (easyBlocked === 'asymmetry_unacceptable') return 'asymmetry_unacceptable';
+    // 나머지 easy 차단(frames_too_few 등) → top 도달 불충분으로 분류
+    if (easyBlocked != null) return 'easy_top_not_reached';
+    // strict 머신 차단 사유로 fallback
+    return overheadCompletion.completionBlockedReason;
+  })();
+
+  // PR-CAM-13: 진행 전용 phase (easy-facing 우선, strict top-unstable fallback)
+  const progressionPhase: OverheadProgressionState['progressionPhase'] = (() => {
+    if (progressionCompletionSatisfied) return 'completed';
+    if (raiseCount === 0) return 'idle';
+    if (easyTopZoneFrames.length > 0) {
+      if (
+        easyProgression.easyCompletionBlockedReason === 'easy_hold_short' &&
+        easyProgression.easyBestRunMs > 0
+      ) {
+        return 'easy_building_hold';
+      }
+      return 'easy_top';
+    }
+    if (overheadCompletion.completionMachinePhase === 'top_unstable') return 'strict_top_unstable';
+    return 'raising';
+  })();
+
+  // PR-CAM-13: typed progression state (squat-style 소유권 분리)
+  const overheadProgressionState: OverheadProgressionState = {
+    progressionSatisfied: progressionCompletionSatisfied,
+    progressionPath: progressionCompletionPath === 'not_confirmed' ? 'none' : progressionCompletionPath,
+    progressionBlockedReason,
+    progressionPhase,
+    easyCompletionSatisfied: easyProgression.easyCompletionSatisfied,
+    easyCompletionBlockedReason: easyProgression.easyCompletionBlockedReason,
+    easyBestRunMs: easyProgression.easyBestRunMs,
+    easyPeakCountAtFloor: peakCountAtEasyFloor,
+    strictMotionCompletionSatisfied,
+    strictCompletionBlockedReason: overheadCompletion.completionBlockedReason,
+    strictCompletionMachinePhase: overheadCompletion.completionMachinePhase,
+  };
+
   if (!progressionCompletionSatisfied) {
     if (overheadCompletion.completionBlockedReason === 'hold_short') {
       completionHints.push('top_hold_short');
@@ -686,6 +737,8 @@ export function evaluateOverheadReachFromPoseFrames(
       overheadEvidenceLevel: overheadPlanning.level,
       overheadEvidenceReasons: overheadPlanning.reasons,
       overheadInternalQuality,
+      /** PR-CAM-13: typed progression state — retry·voice·UI가 progression truth를 타입 안전하게 읽는다 */
+      overheadProgressionState,
       highlightedMetrics: {
         raiseCount,
         peakCount,

@@ -852,6 +852,33 @@ export function getCorrectiveVoiceCue(
     };
   }
 
+  /* PR-CAM-13: overhead easy hold buildup cue.
+   * 사용자가 easy top zone(126°)에서 hold를 쌓고 있으나 strict 132° dwell은 미형성 —
+   * 이 경우 guardrail은 hold_too_short 대신 rep_incomplete를 세팅해 위 블록이 동작 안 함.
+   * progressionPhase === 'easy_building_hold' 구간에서만 hold 안내를 보완한다.
+   */
+  if (stepId === 'overhead-reach') {
+    const progState = gate.evaluatorResult?.debug?.overheadProgressionState;
+    if (progState?.progressionPhase === 'easy_building_hold' && !progState.progressionSatisfied) {
+      const EASY_REQUIRED_HOLD_MS = 520;
+      const CUE_SUPPRESS_NEAR_SUCCESS_MS = 200;
+      const CUE_MIN_BUILDUP_MS = 150;
+      const easyBestRunMs = progState.easyBestRunMs;
+      if (easyBestRunMs >= CUE_MIN_BUILDUP_MS) {
+        const remaining = EASY_REQUIRED_HOLD_MS - easyBestRunMs;
+        if (remaining > CUE_SUPPRESS_NEAR_SUCCESS_MS) {
+          return {
+            kind: 'correction',
+            dedupeKey: 'correction:hold:overhead-reach',
+            text: '맨 위에서 잠깐 멈춰주세요',
+            priority: 3,
+            cooldownMs: 4200,
+          };
+        }
+      }
+    }
+  }
+
   if (
     stepId === 'squat' &&
     gate.readinessState === 'ready' &&

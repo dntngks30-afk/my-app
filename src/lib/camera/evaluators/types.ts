@@ -45,6 +45,35 @@ export interface EvaluatorDebugSummary {
    * auto-progression 이 highlightedMetrics 캐스팅 없이 직접 읽을 수 있다.
    */
   squatCompletionState?: SquatCompletionState;
+  /**
+   * PR-CAM-13: 오버헤드 진행 상태 전체(typed) — squat-style 소유권 분리.
+   * - progressionSatisfied: 진행 gate truth (strict | fallback | easy 통합).
+   * - progressionBlockedReason / progressionPhase: 사용자 대면 retry·hold cue 진입점.
+   * - strict 필드는 별도 보존; planning / internal quality 는 strict dwell 기준 유지.
+   * - highlightedMetrics.completionSatisfied 하위 호환 유지.
+   */
+  overheadProgressionState?: OverheadProgressionState;
+}
+
+/**
+ * PR-CAM-13: 오버헤드 진행 상태 typed interface.
+ * evaluators/types.ts 에 정의해 circular import 없이 overhead-reach.ts · consumers 가 공유.
+ */
+export interface OverheadProgressionState {
+  progressionSatisfied: boolean;
+  progressionPath: 'strict' | 'fallback' | 'easy' | 'none';
+  /** 진행 관점 차단 사유 — easy-facing 우선, strict fallback. retry·hold cue 단일 진입점. */
+  progressionBlockedReason: string | null;
+  /** 진행 관점 단계 — 음성·retry·UI 상태 표현용. */
+  progressionPhase: 'idle' | 'raising' | 'easy_top' | 'easy_building_hold' | 'strict_top_unstable' | 'completed';
+  easyCompletionSatisfied: boolean;
+  easyCompletionBlockedReason: string | null;
+  easyBestRunMs: number;
+  easyPeakCountAtFloor: number;
+  /** strict completion 그대로 보존 — planning / internal quality 기준 유지 */
+  strictMotionCompletionSatisfied: boolean;
+  strictCompletionBlockedReason: string | null;
+  strictCompletionMachinePhase: string | null;
 }
 
 export interface EvaluatorResult {
