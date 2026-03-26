@@ -2,7 +2,6 @@ import type { PoseFeaturesFrame } from './pose-features';
 import { getSquatRecoverySignal } from './pose-features';
 import {
   deriveSquatCompletionMachinePhase,
-  deriveSquatCompletionPassReason,
   type SquatCompletionMachinePhase,
   type SquatCompletionPassReason,
 } from '@/lib/camera/squat-completion-machine';
@@ -197,7 +196,7 @@ export function evaluateSquatCompletionState(
     return {
       ...emptyBase,
       completionMachinePhase: deriveSquatCompletionMachinePhase(emptyBase),
-      completionPassReason: deriveSquatCompletionPassReason(emptyBase),
+      completionPassReason: 'not_confirmed' as const,
     };
   }
 
@@ -391,7 +390,34 @@ export function evaluateSquatCompletionState(
       ? standingRecovery.standingRecoveredAtMs - reversalFrame.timestampMs
       : undefined;
 
-  const completionSatisfied = completionBlockedReason == null;
+  /**
+   * PR-CAM-20: owner-first 구조.
+   *
+   * 이전: completionSatisfied = completionBlockedReason == null → 이후 evidenceLabel에서 post-hoc 레이블.
+   * 신규: completionPassReason이 실제 성공 오너. completionSatisfied는 오너에서 파생.
+   *
+   * "won" 판정 기준:
+   * - completionBlockedReason != null → 블로킹됨: not_confirmed
+   * - evidenceLabel === 'standard' → 깊은 사이클이 won: standard_cycle
+   * - evidenceLabel === 'low_rom' → 얕은 사이클이 won: low_rom_event_cycle
+   * - evidenceLabel === 'ultra_low_rom' → 극소 사이클이 won: ultra_low_rom_event_cycle
+   * - evidenceLabel === 'insufficient_signal' → relativeDepthPeak < MIN_RELATIVE_DEPTH_FOR_ATTEMPT,
+   *   이 경우 completionBlockedReason은 항상 'insufficient_relative_depth'라 not_confirmed 경로에서 처리됨.
+   *
+   * auto-progression.ts의 completionPathUsed는 이 completionPassReason에서 파생된다.
+   */
+  const completionPassReason: SquatCompletionPassReason =
+    completionBlockedReason != null
+      ? 'not_confirmed'
+      : evidenceLabel === 'standard'
+        ? 'standard_cycle'
+        : evidenceLabel === 'low_rom'
+          ? 'low_rom_event_cycle'
+          : evidenceLabel === 'ultra_low_rom'
+            ? 'ultra_low_rom_event_cycle'
+            : 'not_confirmed'; // insufficient_signal — 항상 blocked 경로에서 처리됨
+
+  const completionSatisfied = completionPassReason !== 'not_confirmed';
 
   return {
     baselineStandingDepth,
@@ -439,10 +465,6 @@ export function evaluateSquatCompletionState(
       currentSquatPhase,
       downwardCommitmentReached,
     }),
-    completionPassReason: deriveSquatCompletionPassReason({
-      completionSatisfied,
-      evidenceLabel,
-      eventBasedDescentPath,
-    }),
+    completionPassReason,
   };
 }

@@ -794,7 +794,18 @@ function getSquatProgressionCompletionSatisfied(
     return { satisfied: false, squatCycleDebug };
   }
 
-  squatCycleDebug.completionPathUsed = evidenceLabel;
+  /**
+   * PR-CAM-20: completionPathUsed는 evidenceLabel이 아닌 completionPassReason(성공 오너)에서 파생.
+   * evidenceLabel은 품질/해석 레이블로만 유지. 경로 소유권은 상태기계 결과에서 온다.
+   */
+  squatCycleDebug.completionPathUsed =
+    completionPassReason === 'standard_cycle'
+      ? 'standard'
+      : completionPassReason === 'low_rom_event_cycle'
+        ? 'low_rom'
+        : completionPassReason === 'ultra_low_rom_event_cycle'
+          ? 'ultra_low_rom'
+          : undefined;
   squatCycleDebug.successPhaseAtOpen = 'standing_recovered';
   squatCycleDebug.passTriggeredAtPhase = 'standing_recovered';
 
