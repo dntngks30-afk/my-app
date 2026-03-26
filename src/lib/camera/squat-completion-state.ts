@@ -71,6 +71,14 @@ const MIN_BASELINE_FRAMES = 4;
 const MIN_RELATIVE_DEPTH_FOR_ATTEMPT = 0.02;
 const LOW_ROM_LABEL_FLOOR = 0.07;
 const STANDARD_LABEL_FLOOR = 0.1;
+/**
+ * PR-CAM-22: standard owner는 evidence label보다 더 깊은 성공에만 부여한다.
+ *
+ * evidenceLabel 은 interpretation/quality 범주라 0.10부터 broad하게 standard를 허용하지만,
+ * pass owner는 더 보수적으로 잡아 observed shallow/moderate success(relativeDepthPeak ~0.30)가
+ * standard_cycle을 너무 일찍 먹지 않게 한다.
+ */
+const STANDARD_OWNER_FLOOR = 0.4;
 const STANDING_RECOVERY_TOLERANCE_FLOOR = 0.015;
 const STANDING_RECOVERY_TOLERANCE_RATIO = 0.18;
 const MIN_STANDING_RECOVERY_FRAMES = 2;
@@ -397,7 +405,7 @@ export function evaluateSquatCompletionState(
    * - blocked → not_confirmed
    * - standard path:
    *   - phaseHint descent 경로를 실제로 탔고(eventBasedDescentPath === false)
-   *   - relativeDepthPeak 가 deep/standard 밴드에 도달한 경우
+   *   - owner 전용 cutoff(STANDARD_OWNER_FLOOR) 이상으로 충분히 깊은 경우
    * - 그 외 성공은 event-cycle owner:
    *   - low_rom_event_cycle / ultra_low_rom_event_cycle
    *
@@ -407,7 +415,7 @@ export function evaluateSquatCompletionState(
   const standardPathWon =
     completionBlockedReason == null &&
     eventBasedDescentPath === false &&
-    relativeDepthPeak >= STANDARD_LABEL_FLOOR;
+    relativeDepthPeak >= STANDARD_OWNER_FLOOR;
 
   const completionPassReason: SquatCompletionPassReason =
     completionBlockedReason != null
