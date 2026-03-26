@@ -101,6 +101,12 @@ export interface OverheadProgressionState {
   strictMotionCompletionSatisfied: boolean;
   strictCompletionBlockedReason: string | null;
   strictCompletionMachinePhase: string | null;
+  /**
+   * PR-CAM-17: final pass 체인 신호 — auto-progression·isFinalPassLatched 가
+   * easy/low_rom/humane 경로에서 완화 임계(0.58)를 적용해야 하는지 명시.
+   * true이면 이미 elev progression이 엄격 경로 없이 충족됨을 뜻한다.
+   */
+  requiresEasyFinalPassThreshold: boolean;
 }
 
 export interface EvaluatorResult {

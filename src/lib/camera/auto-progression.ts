@@ -143,6 +143,13 @@ export interface ExerciseGateResult {
   passConfirmationWindowCount: number;
   /** PR G3: squat cycle state (set only when stepId === 'squat') */
   squatCycleDebug?: SquatCycleDebug;
+  /**
+   * PR-CAM-17: final pass 체인 가시성.
+   * - finalPassEligible: 현재 프레임에서 final pass가 허용되는지 여부.
+   * - finalPassBlockedReason: null이면 pass 가능. 아니면 pass를 막는 단계 이름.
+   */
+  finalPassEligible: boolean;
+  finalPassBlockedReason: string | null;
 }
 
 const REQUIRED_STABLE_FRAMES = 3;
@@ -180,11 +187,23 @@ export function isFinalPassLatched(
 ): boolean {
   if (stepId === 'overhead-reach') {
     const hm = gate.evaluatorResult.debug?.highlightedMetrics;
+    const ops = gate.evaluatorResult.debug?.overheadProgressionState;
     const strictMotion =
       hm?.strictMotionCompletionSatisfied === true || hm?.strictMotionCompletionSatisfied === 1;
     const easySat =
       hm?.easyCompletionSatisfied === true || hm?.easyCompletionSatisfied === 1;
-    const easyOnly = Boolean(easySat && !strictMotion);
+    /* PR-CAM-17: low_rom·humane_low_rom 경로도 easy-only 임계 적용.
+     * 이전 구현은 easySat만 확인해 low_rom/humane pass 시 0.72 엄격 임계가 적용됐음.
+     * 이로 인해 confidence 0.58~0.71 구간의 humane/low_rom pass가 isFinalPassLatched=false → 
+     * effectivePassLatched=false가 되어 성공 음성 누락·애매 재시도 오발화가 발생. */
+    const lowRomSat =
+      hm?.lowRomProgressionSatisfied === true || hm?.lowRomProgressionSatisfied === 1;
+    const humaneLowRomSat =
+      hm?.humaneLowRomProgressionSatisfied === true || hm?.humaneLowRomProgressionSatisfied === 1;
+    /** ops.requiresEasyFinalPassThreshold(PR-CAM-17 신규 필드) 또는 개별 필드 조합으로 판단 */
+    const easyOnly =
+      ops?.requiresEasyFinalPassThreshold === true ||
+      Boolean((easySat || lowRomSat || humaneLowRomSat) && !strictMotion);
     const confTh = easyOnly
       ? OVERHEAD_EASY_PASS_CONFIDENCE
       : BASIC_PASS_CONFIDENCE_THRESHOLD['overhead-reach'];
@@ -1012,8 +1031,10 @@ export function evaluateExerciseAutoProgress(
     stepId === 'squat' ? getSquatQualitySignals(evaluatorResult, confidence) : null;
   const severeFail = isSevereInvalid(guardrail) && stats.captureDurationMs >= 4500;
   const autoAdvanceDelayMs = AUTO_ADVANCE_DELAY_MS[stepId];
+  /* PR-CAM-17: easy/low_rom/humane 경로는 완화 임계(0.58) 사용 — 이전 구현은 엄격 0.72를 써서
+   * 2200ms 초과 세션에서 completionSatisfied=false 구간에 조기 retry를 유발할 수 있었음. */
   const lowConfidenceRetry =
-    guardrail.retryRecommended && confidence < passThreshold;
+    guardrail.retryRecommended && confidence < passThresholdEffective;
   const hardBlockerReasons = getHardBlockerReasons(stepId, guardrail);
   const noNextAllowed = false;
   const failureReasons = getFailureReasons(
@@ -1075,6 +1096,20 @@ export function evaluateExerciseAutoProgress(
     !hasAnyReason(reasons, hardBlockerReasons) &&
     !overheadRepHoldBlocks;
 
+  /* PR-CAM-17: final pass 체인 가시성 — 어느 단계에서 pass가 막히는지 즉시 확인 가능. */
+  const finalPassBlockedReason: string | null = (() => {
+    if (!completionSatisfied) return 'completion_not_satisfied';
+    if (guardrail.captureQuality === 'invalid') return 'capture_quality_invalid';
+    if (confidence < passThresholdEffective)
+      return `confidence_too_low:${confidence.toFixed(2)}<${passThresholdEffective.toFixed(2)}`;
+    if (!effectivePassConfirmation) return 'pass_confirmation_not_ready';
+    const blocker = hardBlockerReasons.find((r) => reasons.includes(r));
+    if (blocker) return `hard_blocker:${blocker}`;
+    if (overheadRepHoldBlocks) return 'overhead_rep_hold_blocked';
+    return null;
+  })();
+  const finalPassEligible = progressionPassed; // = finalPassBlockedReason === null
+
   if (progressionPassed) {
     return {
       status: 'pass',
@@ -1098,6 +1133,8 @@ export function evaluateExerciseAutoProgress(
       passConfirmationFrameCount: passConfirmation.stableFrameCount,
       passConfirmationWindowCount: passConfirmation.windowFrameCount,
       ...(squatCycleDebug && { squatCycleDebug }),
+      finalPassEligible,
+      finalPassBlockedReason,
     };
   }
 
@@ -1133,6 +1170,8 @@ export function evaluateExerciseAutoProgress(
         passConfirmationFrameCount: passConfirmation.stableFrameCount,
         passConfirmationWindowCount: passConfirmation.windowFrameCount,
         squatCycleDebug: enrichedSquatDebug,
+        finalPassEligible,
+        finalPassBlockedReason,
       };
     }
     return {
@@ -1154,6 +1193,8 @@ export function evaluateExerciseAutoProgress(
       passConfirmationFrameCount: passConfirmation.stableFrameCount,
       passConfirmationWindowCount: passConfirmation.windowFrameCount,
       ...(squatCycleDebug && { squatCycleDebug }),
+      finalPassEligible,
+      finalPassBlockedReason,
     };
   }
 
@@ -1196,6 +1237,8 @@ export function evaluateExerciseAutoProgress(
       passConfirmationFrameCount: passConfirmation.stableFrameCount,
       passConfirmationWindowCount: passConfirmation.windowFrameCount,
       ...(squatCycleDebug && { squatCycleDebug }),
+      finalPassEligible,
+      finalPassBlockedReason,
     };
   }
 
@@ -1218,5 +1261,7 @@ export function evaluateExerciseAutoProgress(
     passConfirmationFrameCount: passConfirmation.stableFrameCount,
     passConfirmationWindowCount: passConfirmation.windowFrameCount,
     ...(squatCycleDebug && { squatCycleDebug }),
+    finalPassEligible,
+    finalPassBlockedReason,
   };
 }

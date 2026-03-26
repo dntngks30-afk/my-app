@@ -750,6 +750,12 @@ export function evaluateOverheadReachFromPoseFrames(
     strictMotionCompletionSatisfied,
     strictCompletionBlockedReason: overheadCompletion.completionBlockedReason,
     strictCompletionMachinePhase: overheadCompletion.completionMachinePhase,
+    /**
+     * PR-CAM-17: easy/low_rom/humane 중 하나만으로 progression이 충족됐고
+     * strict 경로는 실패했을 때 true — isFinalPassLatched가 완화 임계(0.58)를 쓰도록 신호.
+     */
+    requiresEasyFinalPassThreshold:
+      progressionCompletionSatisfied && !strictMotionCompletionSatisfied,
   };
 
   if (!progressionCompletionSatisfied) {

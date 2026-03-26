@@ -279,12 +279,14 @@ function getMotionCompleteness(
       typeof hm?.peakCountAtEasyFloor === 'number' ? hm.peakCountAtEasyFloor : 0;
     const stableTopEntered = dwellResult.stableTopEnteredAtMs !== undefined;
 
-    /* PR-CAM-11B: evaluator easy 진행이 true면 긴 홀드·stableTop 미요구 */
+    /* PR-CAM-11B: evaluator easy 진행이 true면 긴 홀드·stableTop 미요구.
+     * PR-CAM-17: raiseCount === 0 체크를 soft guard로 전환 — 느린 팔 올리기에서
+     * phaseHint='raise' 감지가 실패해도 elev 조건이 충족되면 pass 허용.
+     * frames·peakElevation 하드 조건만 유지; raiseCount 0이면 점수 소폭 감점만 적용. */
     if (easySatisfied) {
       if (
         frames.length < MIN_VALID_FRAMES ||
         peakElevation < OVERHEAD_EASY_ELEVATION_FLOOR_DEG ||
-        raiseCount === 0 ||
         peakCountAtEasyFloor < OVERHEAD_EASY_MIN_PEAK_FRAMES
       ) {
         flags.add('rep_incomplete');
@@ -294,19 +296,20 @@ function getMotionCompleteness(
           partialReason: 'easy_progression_guard_failed',
         };
       }
+      const easyScoreMul = raiseCount === 0 ? 0.95 : 1.0;
       return {
-        score: clamp(Math.min(peakElevation / 165, 0.72)),
+        score: clamp(Math.min(peakElevation / 165, 0.72) * easyScoreMul),
         status: 'complete',
         completePath: 'easy',
       };
     }
 
-    /* PR-CAM-15: low-ROM 진행이 true면 easy보다 낮은 absolute floor 확인만 요구 */
+    /* PR-CAM-15: low-ROM 진행이 true면 easy보다 낮은 absolute floor 확인만 요구.
+     * PR-CAM-17: raiseCount soft guard — 느린 low-ROM 사용자 차단 방지. */
     if (!easySatisfied && lowRomSatisfied) {
       if (
         frames.length < MIN_VALID_FRAMES ||
-        peakElevation < OVERHEAD_LOW_ROM_ABSOLUTE_FLOOR_DEG ||
-        raiseCount === 0
+        peakElevation < OVERHEAD_LOW_ROM_ABSOLUTE_FLOOR_DEG
       ) {
         flags.add('rep_incomplete');
         return {
@@ -315,19 +318,20 @@ function getMotionCompleteness(
           partialReason: 'low_rom_guard_failed',
         };
       }
+      const lowRomScoreMul = raiseCount === 0 ? 0.95 : 1.0;
       return {
-        score: clamp(Math.min(peakElevation / 155, 0.62)),
+        score: clamp(Math.min(peakElevation / 155, 0.62) * lowRomScoreMul),
         status: 'complete',
         completePath: 'low_rom',
       };
     }
 
-    /* PR-CAM-16: humane low-ROM 진행이 true면 가장 낮은 absolute floor 확인만 요구 */
+    /* PR-CAM-16: humane low-ROM 진행이 true면 가장 낮은 absolute floor 확인만 요구.
+     * PR-CAM-17: raiseCount soft guard — humane 진행 충족 시 raiseCount=0이어도 통과. */
     if (!easySatisfied && !lowRomSatisfied && humaneLowRomSatisfied) {
       if (
         frames.length < MIN_VALID_FRAMES ||
-        peakElevation < OVERHEAD_HUMANE_ABSOLUTE_FLOOR_DEG ||
-        raiseCount === 0
+        peakElevation < OVERHEAD_HUMANE_ABSOLUTE_FLOOR_DEG
       ) {
         flags.add('rep_incomplete');
         return {
@@ -336,8 +340,9 @@ function getMotionCompleteness(
           partialReason: 'humane_guard_failed',
         };
       }
+      const humaneScoreMul = raiseCount === 0 ? 0.92 : 1.0;
       return {
-        score: clamp(Math.min(peakElevation / 160, 0.55)),
+        score: clamp(Math.min(peakElevation / 160, 0.55) * humaneScoreMul),
         status: 'complete',
         completePath: 'humane_low_rom',
       };
