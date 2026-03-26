@@ -307,6 +307,19 @@ export function CameraPreview({
    * HMR/remount 시 이전 loop가 살아남는 경우를 구조적으로 차단한다.
    */
   const loopGenerationRef = useRef(0);
+  /**
+   * startAnalyzer를 RAF loop 내부 setTimeout에서도 호출할 수 있도록 ref에 보관한다.
+   * useEffect cleanup 시 null로 초기화.
+   */
+  const startAnalyzerRef = useRef<(() => void) | null>(null);
+  /**
+   * 마지막으로 처리한 fatalResetCount. 동일 resetCount에 대한 중복 재생성을 방지한다.
+   */
+  const lastHandledFatalResetCountRef = useRef(-1);
+  /** recreate 예약 중 여부. 한 reset 이벤트당 하나의 recreate만 스케줄된다. */
+  const recreateScheduledRef = useRef(false);
+  /** 진단: analyzer 재생성 누적 횟수 */
+  const analyzerRecreateCountRef = useRef(0);
   const [poseStatus, setPoseStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [poseErrorMessage, setPoseErrorMessage] = useState<string | null>(null);
 
@@ -452,6 +465,9 @@ export function CameraPreview({
     let detectBackoffUntilMs = 0;
 
     const startAnalyzer = async () => {
+      // startAnalyzer 자신을 ref에 보관 → RAF loop 내부 setTimeout에서 재호출 가능
+      startAnalyzerRef.current = startAnalyzer;
+
       try {
         setPoseStatus('loading');
         setPoseErrorMessage(null);
@@ -507,6 +523,53 @@ export function CameraPreview({
               motionType: poseDiagnosticsMotionTypeRef.current ?? undefined,
             });
 
+            // ---------------------------------------------------------------
+            // Fatal reset 감지: analyzer가 stale 신호를 포함한 프레임을 반환한 경우.
+            // 동일 resetCount에 대한 중복 처리를 방지하고, 한 번에 하나의 recreate만 예약한다.
+            // ---------------------------------------------------------------
+            if (
+              frame._mediapipeFatalResetTriggered &&
+              typeof frame._mediapipeFatalResetCount === 'number' &&
+              frame._mediapipeFatalResetCount > lastHandledFatalResetCountRef.current &&
+              !recreateScheduledRef.current
+            ) {
+              const resetCount = frame._mediapipeFatalResetCount;
+              const cooldownMs = frame._mediapipeRecoveryCooldownMs ?? 2_000;
+
+              lastHandledFatalResetCountRef.current = resetCount;
+              recreateScheduledRef.current = true;
+
+              // 세대 전진: 현재 루프와 이후 진입 시도를 모두 차단한다.
+              loopGenerationRef.current += 1;
+              // stale analyzer 참조를 완전히 제거한다.
+              analyzerRef.current = null;
+              analyzerInitRef.current = null;
+
+              analyzerRecreateCountRef.current += 1;
+              if (process.env.NODE_ENV !== 'production') {
+                console.warn('[CameraPreview] fatal reset detected — invalidating analyzer, scheduling recreate', {
+                  resetCount,
+                  cooldownMs,
+                  recreateCount: analyzerRecreateCountRef.current,
+                  runtimeGeneration: frame._mediapipeRuntimeGeneration,
+                });
+              }
+
+              // 쿨다운 + 여유 시간 이후 analyzer 재생성.
+              // cancelled를 클로저로 체크하므로 컴포넌트 언마운트 시 자동으로 중단된다.
+              setTimeout(() => {
+                if (cancelled) return;
+                recreateScheduledRef.current = false;
+                startAnalyzerRef.current?.();
+              }, cooldownMs + 300);
+
+              // 현재 RAF loop를 종료 (다음 RAF 예약 없이 return).
+              return;
+            }
+
+            // ---------------------------------------------------------------
+            // 일반 detect 실패 백오프 (non-fatal 오류)
+            // ---------------------------------------------------------------
             if (frame._mediapipeDetectFailed) {
               consecutiveDetectFailures += 1;
               if (consecutiveDetectFailures >= 8) {
@@ -552,6 +615,8 @@ export function CameraPreview({
 
     return () => {
       cancelled = true;
+      // startAnalyzer ref를 null로 만들어 setTimeout 콜백이 호출해도 아무 일도 일어나지 않게 한다.
+      startAnalyzerRef.current = null;
       if (analysisRafRef.current != null) {
         cancelAnimationFrame(analysisRafRef.current);
         analysisRafRef.current = null;

@@ -51,7 +51,7 @@ export interface LivePoseAnalyzer {
 
 // ---------------------------------------------------------------------------
 // Runtime singleton — globalThis에 보존하여 HMR/module-re-evaluate 시에도
-// landmarkerPromise와 monotonic timestamp 상태가 유지된다.
+// landmarkerPromise·단조 timestamp·generation 상태가 유지된다.
 // ---------------------------------------------------------------------------
 
 interface MpRuntimeSingleton {
@@ -66,8 +66,13 @@ interface MpRuntimeSingleton {
    * 쿨다운 종료 시각(Date.now() 기준 ms).
    */
   fatalCooldownUntilMs: number;
-  /** fatal reset 누적 횟수 (진단용). */
+  /** fatal reset 누적 횟수 (진단용). CameraPreview가 동일 resetCount 중복 처리를 막는 데 사용. */
   fatalResetCount: number;
+  /**
+   * fatal reset 시마다 +1되는 세대 번호.
+   * analyzer는 자신의 생성 시점 세대를 기억하고, 불일치 시 stale로 판단한다.
+   */
+  runtimeGeneration: number;
   /** 오류 로그 rate-limit 윈도우 시작 시각. */
   logWindowStartMs: number;
   /** 현재 윈도우 내 오류 로그 출력 횟수. */
@@ -77,8 +82,9 @@ interface MpRuntimeSingleton {
 /**
  * key 버전 bump: 구 key에 남아 있는 stale 상태와 충돌하지 않도록
  * 구조가 변경될 때마다 버전 suffix를 올린다.
+ * v4: runtimeGeneration 필드 추가 (HOTFIX-05)
  */
-const RUNTIME_KEY = '__moveReMpRuntime_v3';
+const RUNTIME_KEY = '__moveReMpRuntime_v4';
 
 function getRuntime(): MpRuntimeSingleton {
   const g = globalThis as Record<string, unknown>;
@@ -89,6 +95,7 @@ function getRuntime(): MpRuntimeSingleton {
       detectInFlight: false,
       fatalCooldownUntilMs: 0,
       fatalResetCount: 0,
+      runtimeGeneration: 0,
       logWindowStartMs: 0,
       logCountInWindow: 0,
     } satisfies MpRuntimeSingleton;
@@ -106,7 +113,7 @@ const FATAL_DETECT_PATTERNS = [
   'graph error',
   'bad timestamp',
 ];
-const FATAL_COOLDOWN_MS = 2_000;
+export const FATAL_COOLDOWN_MS = 2_000;
 
 function isFatalDetectError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
@@ -115,10 +122,11 @@ function isFatalDetectError(err: unknown): boolean {
 }
 
 /**
- * fatal reset: landmarker 참조를 버리고, 단조 타임스탬프를 초기화하며,
- * FATAL_COOLDOWN_MS 동안 detect 시도를 차단한다.
- * 무한 루프 방지: fatalResetCount가 과도하게 높아지면 console에 경고를 남기되
- * 동일한 cooldown을 적용한다(재귀 reset 없음).
+ * fatal reset:
+ * - landmarkerPromise를 null로 해 다음 getSharedPoseLandmarker()가 새 인스턴스를 생성하게 한다.
+ * - runtimeGeneration을 +1 하여 기존 모든 analyzer가 stale로 판단되도록 한다.
+ * - FATAL_COOLDOWN_MS 동안 detect 시도를 차단한다.
+ * - 무한 루프 방지: fatalResetCount 확인 후 동일 cooldown 적용.
  */
 function applyFatalReset(err: unknown): void {
   const rt = getRuntime();
@@ -127,10 +135,12 @@ function applyFatalReset(err: unknown): void {
   rt.detectInFlight = false;
   rt.fatalCooldownUntilMs = Date.now() + FATAL_COOLDOWN_MS;
   rt.fatalResetCount += 1;
+  rt.runtimeGeneration += 1;
 
   console.error('[pose] fatal detect error — runtime reset', {
     err: err instanceof Error ? err.message : String(err),
     resetCount: rt.fatalResetCount,
+    runtimeGeneration: rt.runtimeGeneration,
     cooldownMs: FATAL_COOLDOWN_MS,
   });
 }
@@ -272,12 +282,33 @@ function toPoseFrame(
   };
 }
 
+/** fatal reset 메타데이터가 포함된 빈 프레임. CameraPreview가 이 신호로 재생성을 트리거한다. */
+function createFatalResetFrame(video: HTMLVideoElement, timestampMs: number): PoseFrame {
+  const rt = getRuntime();
+  return {
+    ...createEmptyPoseFrame(video, timestampMs),
+    _mediapipeDetectFailed: true,
+    _mediapipeFatalResetTriggered: true,
+    _mediapipeRuntimeGeneration: rt.runtimeGeneration,
+    _mediapipeFatalResetCount: rt.fatalResetCount,
+    _mediapipeRecoveryCooldownMs: Math.max(0, rt.fatalCooldownUntilMs - Date.now()),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
   const landmarker = await getSharedPoseLandmarker();
+
+  /**
+   * analyzer 생성 시점의 runtimeGeneration을 캡처한다.
+   * analyze() 호출 시 현재 세대와 다르면 이 analyzer는 stale이며
+   * fatal reset이 발생했다는 신호를 포함한 프레임을 반환한다.
+   * CameraPreview는 이 신호로 analyzer를 재생성해야 한다.
+   */
+  const creationRuntimeGeneration = getRuntime().runtimeGeneration;
 
   return {
     analyze(video, _timestampMsIgnored, diagnostics) {
@@ -298,8 +329,16 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
         return createEmptyPoseFrame(video, fallbackTs);
       }
 
-      // --- fatal cooldown 중이면 skip (timestamp 증가 없음) ---
       const rt = getRuntime();
+
+      // --- stale analyzer 감지: fatal reset으로 세대가 바뀐 경우 ---
+      // 이 analyzer가 캡처한 landmarker는 더 이상 유효하지 않다.
+      // detect를 시도하지 않고 fatal 신호를 포함한 프레임을 반환한다.
+      if (rt.runtimeGeneration !== creationRuntimeGeneration) {
+        return createFatalResetFrame(video, fallbackTs);
+      }
+
+      // --- fatal cooldown 중이면 skip (timestamp 증가 없음) ---
       if (Date.now() < rt.fatalCooldownUntilMs) {
         return { ...createEmptyPoseFrame(video, fallbackTs), _mediapipeDetectFailed: true };
       }
@@ -353,8 +392,11 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
         rt.detectInFlight = false;
 
         if (isFatalDetectError(error)) {
-          // fatal: runtime을 완전히 초기화하고 쿨다운 적용
+          // fatal: runtime을 완전히 초기화하고 쿨다운 적용.
+          // runtimeGeneration이 증가하므로 이 analyzer는 다음 호출부터 stale로 판단된다.
           applyFatalReset(error);
+          // 이 프레임 자체에도 fatal 신호를 포함해 CameraPreview가 즉시 재생성 경로를 밟을 수 있게 한다.
+          return createFatalResetFrame(video, ts);
         } else {
           logDetectVideoFailure(error, video, ts, diagnostics);
         }
@@ -471,7 +513,13 @@ export function _resetMpRuntimeForTest(): void {
     detectInFlight: false,
     fatalCooldownUntilMs: 0,
     fatalResetCount: 0,
+    runtimeGeneration: 0,
     logWindowStartMs: 0,
     logCountInWindow: 0,
   } satisfies MpRuntimeSingleton;
+}
+
+/** @internal 테스트 전용: 강제로 fatal reset을 발생시켜 runtimeGeneration을 올린다 */
+export function _triggerFatalResetForTest(message = 'Packet timestamp mismatch (test)'): void {
+  applyFatalReset(new Error(message));
 }

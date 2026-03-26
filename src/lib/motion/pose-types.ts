@@ -19,6 +19,17 @@ export interface PoseFrame {
    * 내부용: `detectForVideo` 예외 시 true. 캡처 루프 백오프만을 위한 힌트(공개 결과 스키마 아님).
    */
   _mediapipeDetectFailed?: boolean;
+  /**
+   * 내부용: fatal runtime reset(timestamp mismatch / CalculatorGraph 등)이 발생한 프레임.
+   * CameraPreview가 이 신호를 받으면 현재 analyzer를 무효화하고 재생성해야 한다.
+   */
+  _mediapipeFatalResetTriggered?: boolean;
+  /** fatal reset 이후의 runtime 세대 번호 (단조 증가). */
+  _mediapipeRuntimeGeneration?: number;
+  /** 누적 fatal reset 횟수. 동일 resetCount에 대한 재처리를 방지하는 용도. */
+  _mediapipeFatalResetCount?: number;
+  /** 쿨다운 잔여 시간(ms). CameraPreview가 recreate 타이밍에 참고한다. */
+  _mediapipeRecoveryCooldownMs?: number;
 }
 
 export interface PoseLandmarks {
