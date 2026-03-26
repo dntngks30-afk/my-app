@@ -391,31 +391,32 @@ export function evaluateSquatCompletionState(
       : undefined;
 
   /**
-   * PR-CAM-20: owner-first 구조.
+   * PR-CAM-21: completion owner는 evidenceLabel이 아니라 "실제 통과 경로"에서 고른다.
    *
-   * 이전: completionSatisfied = completionBlockedReason == null → 이후 evidenceLabel에서 post-hoc 레이블.
-   * 신규: completionPassReason이 실제 성공 오너. completionSatisfied는 오너에서 파생.
+   * 구분 원칙:
+   * - blocked → not_confirmed
+   * - standard path:
+   *   - phaseHint descent 경로를 실제로 탔고(eventBasedDescentPath === false)
+   *   - relativeDepthPeak 가 deep/standard 밴드에 도달한 경우
+   * - 그 외 성공은 event-cycle owner:
+   *   - low_rom_event_cycle / ultra_low_rom_event_cycle
    *
-   * "won" 판정 기준:
-   * - completionBlockedReason != null → 블로킹됨: not_confirmed
-   * - evidenceLabel === 'standard' → 깊은 사이클이 won: standard_cycle
-   * - evidenceLabel === 'low_rom' → 얕은 사이클이 won: low_rom_event_cycle
-   * - evidenceLabel === 'ultra_low_rom' → 극소 사이클이 won: ultra_low_rom_event_cycle
-   * - evidenceLabel === 'insufficient_signal' → relativeDepthPeak < MIN_RELATIVE_DEPTH_FOR_ATTEMPT,
-   *   이 경우 completionBlockedReason은 항상 'insufficient_relative_depth'라 not_confirmed 경로에서 처리됨.
-   *
-   * auto-progression.ts의 completionPathUsed는 이 completionPassReason에서 파생된다.
+   * 즉 evidenceLabel은 여전히 quality/interpretation label이지만,
+   * completionPassReason 자체를 결정하는 source-of-truth 는 아니다.
    */
+  const standardPathWon =
+    completionBlockedReason == null &&
+    eventBasedDescentPath === false &&
+    relativeDepthPeak >= STANDARD_LABEL_FLOOR;
+
   const completionPassReason: SquatCompletionPassReason =
     completionBlockedReason != null
       ? 'not_confirmed'
-      : evidenceLabel === 'standard'
+      : standardPathWon
         ? 'standard_cycle'
-        : evidenceLabel === 'low_rom'
+        : relativeDepthPeak >= LOW_ROM_LABEL_FLOOR
           ? 'low_rom_event_cycle'
-          : evidenceLabel === 'ultra_low_rom'
-            ? 'ultra_low_rom_event_cycle'
-            : 'not_confirmed'; // insufficient_signal — 항상 blocked 경로에서 처리됨
+          : 'ultra_low_rom_event_cycle';
 
   const completionSatisfied = completionPassReason !== 'not_confirmed';
 

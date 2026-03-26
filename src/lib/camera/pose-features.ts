@@ -190,6 +190,33 @@ function mean(values: number[]): number {
 }
 
 /**
+ * PR-CAM-21: on-device knee angle 기반 squat depth proxy 재보정.
+ *
+ * 기존 선형식 `(175 - kneeAngleAvg) / 85` 는 90도 전후의 "보통 깊이" 스쿼트도
+ * 너무 빨리 1에 가까워져 moderate 시도가 deep/standard로 과분류됐다.
+ *
+ * 이번 식은 입력은 그대로 kneeAngleAvg 하나만 쓰되, 늦게 올라가는 S-curve로 바꿔
+ * 중간 ROM 포화를 늦춘다.
+ *
+ * 기준점:
+ * - standing (~170도): 거의 0
+ * - moderate (~90도): 0.09 전후
+ * - deep (~60도): 0.9 전후
+ *
+ * 이렇게 하면 standing/sway baseline 은 낮게 유지되고, 실기기 moderate squat 이
+ * relativeDepthPeak ~= 1로 포화되는 문제를 줄이면서, 진짜 deep squat 은 여전히
+ * deep band까지 도달할 수 있다.
+ */
+const SQUAT_DEPTH_LOGISTIC_MID_KNEE_ANGLE_DEG = 75;
+const SQUAT_DEPTH_LOGISTIC_SCALE_DEG = 6.5;
+
+function toSquatDepthProxy(kneeAngleAvg: number | null): number | null {
+  if (typeof kneeAngleAvg !== 'number') return null;
+  const logistic = 1 / (1 + Math.exp((kneeAngleAvg - SQUAT_DEPTH_LOGISTIC_MID_KNEE_ANGLE_DEG) / SQUAT_DEPTH_LOGISTIC_SCALE_DEG));
+  return clamp(logistic);
+}
+
+/**
  * PR squat-low-rom: return-to-standing continuity.
  * Count consecutive frames at tail where depth <= peak * (1 - minRecoveryRatio).
  * When continuity >= 3, accept slightly relaxed recoveryDrop for low/ultra-low.
@@ -510,8 +537,7 @@ function buildDerivedMetrics(
   const kneeWidth =
     joints.leftKnee && joints.rightKnee ? Math.abs(joints.leftKnee.x - joints.rightKnee.x) : null;
 
-  const squatDepthProxy =
-    typeof kneeAngleAvg === 'number' ? clamp((175 - kneeAngleAvg) / 85) : null;
+  const squatDepthProxy = toSquatDepthProxy(kneeAngleAvg);
   const kneeTrackingRatio =
     typeof hipWidth === 'number' && typeof kneeWidth === 'number' && hipWidth > 0 ? kneeWidth / hipWidth : null;
   const trunkLeanDeg = toTrunkLeanDeg(joints.shoulderCenter, joints.hipCenter);
