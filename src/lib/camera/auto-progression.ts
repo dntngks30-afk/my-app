@@ -217,6 +217,31 @@ export function isFinalPassLatched(
     );
   }
 
+  /**
+   * CAM-25: squat low_rom_event_cycle / ultra_low_rom_event_cycle 완료는 easy-only 완화 branch 사용.
+   * currentSquatPhase === 'standing_recovered' 는 reversal·ascend·recovery 전체를 함의한다.
+   * standard_cycle(깊은 스쿼트)은 기존 임계(0.62)를 그대로 사용.
+   */
+  if (stepId === 'squat') {
+    const cs = gate.evaluatorResult.debug?.squatCompletionState;
+    const passReason = cs?.completionPassReason;
+    const isSquatEasyOnly =
+      gate.completionSatisfied === true &&
+      (passReason === 'low_rom_event_cycle' || passReason === 'ultra_low_rom_event_cycle') &&
+      cs?.currentSquatPhase === 'standing_recovered';
+    const confTh = isSquatEasyOnly
+      ? SQUAT_EASY_PASS_CONFIDENCE
+      : BASIC_PASS_CONFIDENCE_THRESHOLD.squat;
+    const framesReq = isSquatEasyOnly ? SQUAT_EASY_LATCH_STABLE_FRAMES : REQUIRED_STABLE_FRAMES;
+    return (
+      gate.completionSatisfied === true &&
+      gate.guardrail.captureQuality !== 'invalid' &&
+      gate.confidence >= confTh &&
+      gate.passConfirmationSatisfied === true &&
+      gate.passConfirmationFrameCount >= framesReq
+    );
+  }
+
   const passThreshold = BASIC_PASS_CONFIDENCE_THRESHOLD[stepId];
   return (
     gate.completionSatisfied === true &&
@@ -634,6 +659,17 @@ function getHardBlockerReasons(
 
 /** PR G3: arming window — countdown 직후 즉시 pass되지 않도록 최소 캡처 시간 */
 const SQUAT_ARMING_MS = 1500;
+/**
+ * CAM-25: low_rom_event_cycle / ultra_low_rom_event_cycle 완료 경로 전용 완화 confidence 임계.
+ * standard pass chain(0.62)보다 낮게 설정해 매우 얕은 사이클도 final gate를 통과할 수 있게 한다.
+ * 단, hard blocker · captureQuality invalid · 사이클 증명 부재 시는 여전히 차단된다.
+ */
+const SQUAT_EASY_PASS_CONFIDENCE = 0.56;
+/**
+ * CAM-25: easy-only branch의 passConfirmation latch 요건.
+ * overhead easy와 동일하게 2프레임으로 완화 (standard 3프레임 대비).
+ */
+const SQUAT_EASY_LATCH_STABLE_FRAMES = 2;
 /** PR G6: depth는 completion이 아니라 quality band. completion은 full cycle만 요구. */
 
 function getSquatProgressionCompletionSatisfied(
@@ -880,6 +916,17 @@ function getSquatFailureReasons(
   const completionBlockedReason =
     result.debug?.squatCompletionState?.completionBlockedReason ?? null;
 
+  // CAM-25: low_rom / ultra_low_rom event-cycle 통과 경로는 완화 임계로 confidence 진단
+  const sqCs = result.debug?.squatCompletionState;
+  const sqPassReason = sqCs?.completionPassReason;
+  const squatIsEasyPath =
+    sqCs?.completionSatisfied === true &&
+    (sqPassReason === 'low_rom_event_cycle' || sqPassReason === 'ultra_low_rom_event_cycle') &&
+    sqCs?.currentSquatPhase === 'standing_recovered';
+  const squatConfFloor = squatIsEasyPath
+    ? SQUAT_EASY_PASS_CONFIDENCE
+    : BASIC_PASS_CONFIDENCE_THRESHOLD.squat;
+
   if (guardrail.flags.includes('insufficient_signal')) {
     failureReasons.add('insufficient_signal');
   }
@@ -897,7 +944,7 @@ function getSquatFailureReasons(
       guardrail.captureQuality === 'low' ? 'capture_quality_low' : 'capture_quality_invalid'
     );
   }
-  if (confidence < BASIC_PASS_CONFIDENCE_THRESHOLD.squat) {
+  if (confidence < squatConfFloor) {
     failureReasons.add('confidence_too_low');
   }
   // PR-CAM-09: blocked reason → failure tag 매핑은 squat-retry-reason.ts 헬퍼로 위임
@@ -1018,11 +1065,35 @@ export function evaluateExerciseAutoProgress(
         hm?.humaneLowRomProgressionSatisfied === 1;
       return Boolean((easy || lowRom || humaneLowRom) && !strict);
     })();
-  const passThresholdEffective = overheadEasyOnly ? OVERHEAD_EASY_PASS_CONFIDENCE : passThreshold;
+  /**
+   * CAM-25: low_rom_event_cycle / ultra_low_rom_event_cycle 완료 경로는 squat easy-only branch.
+   * evaluatorResult.debug.squatCompletionState 는 runEvaluator() 직후 이미 확정된 값이므로
+   * getSquatProgressionCompletionSatisfied() 호출 전에도 안전하게 읽을 수 있다.
+   */
+  const squatEasyOnly =
+    stepId === 'squat' &&
+    (() => {
+      const cs = evaluatorResult.debug?.squatCompletionState;
+      const passReason = cs?.completionPassReason;
+      return (
+        cs?.completionSatisfied === true &&
+        (passReason === 'low_rom_event_cycle' || passReason === 'ultra_low_rom_event_cycle') &&
+        cs?.currentSquatPhase === 'standing_recovered'
+      );
+    })();
+  const passThresholdEffective = overheadEasyOnly
+    ? OVERHEAD_EASY_PASS_CONFIDENCE
+    : squatEasyOnly
+      ? SQUAT_EASY_PASS_CONFIDENCE
+      : passThreshold;
   const passConfirmation = getPassConfirmation(
     stepId,
     landmarks,
-    overheadEasyOnly ? OVERHEAD_EASY_LATCH_STABLE_FRAMES : REQUIRED_STABLE_FRAMES
+    overheadEasyOnly
+      ? OVERHEAD_EASY_LATCH_STABLE_FRAMES
+      : squatEasyOnly
+        ? SQUAT_EASY_LATCH_STABLE_FRAMES
+        : REQUIRED_STABLE_FRAMES
   );
   let completionSatisfied: boolean;
   let squatCycleDebug: SquatCycleDebug | undefined;
