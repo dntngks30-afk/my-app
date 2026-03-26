@@ -505,12 +505,14 @@ export function evaluateOverheadReachFromPoseFrames(
         f.derived.armElevationAvg >= OVERHEAD_EASY_ELEVATION_FLOOR_DEG
     )
     .map((f) => ({ timestampMs: f.timestampMs }));
-  const peakCountAtEasyFloor = valid.filter(
-    (f) =>
-      f.phaseHint === 'peak' &&
-      typeof f.derived.armElevationAvg === 'number' &&
-      f.derived.armElevationAvg >= OVERHEAD_EASY_ELEVATION_FLOOR_DEG
-  ).length;
+  /**
+   * PR-CAM-12: easy top-zone(e >= 126°) 내 유효 프레임 수로 정의.
+   * 이전 구현은 phaseHint==='peak'(실기기에서 132°+저지터 필요)에 의존해
+   * easy 전용 floor(126°)에서 항상 0을 반환하는 숨겨진 버그가 있었음.
+   * easyTopZoneFrames는 이미 e >= OVERHEAD_EASY_ELEVATION_FLOOR_DEG 기준이므로
+   * 해당 길이를 직접 사용한다.
+   */
+  const peakCountAtEasyFloor = easyTopZoneFrames.length;
 
   // PR-CAM-11A: jitter-tolerant fallback 계산 (strict 경로 보완용)
   const fallbackTopHold = computeOverheadTopHoldFallback({

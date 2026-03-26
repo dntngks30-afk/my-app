@@ -19,7 +19,11 @@ import {
 export interface OverheadEasyProgressionInput {
   easyTopZoneFrames: ReadonlyArray<{ readonly timestampMs: number }>;
   raiseCount: number;
-  /** phaseHint===peak 이고 e >= easy floor 인 프레임 수 */
+  /**
+   * easy top-zone(e >= easy floor) 내 유효 프레임 수.
+   * PR-CAM-12: strict phaseHint==='peak'(132°+저지터) 비의존 —
+   * evaluator에서 easyTopZoneFrames.length로 공급된다.
+   */
   peakCountAtEasyFloor: number;
   effectiveArmDeg: number;
   meanAsymmetryDeg: number | null;
