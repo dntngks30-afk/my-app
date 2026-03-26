@@ -68,7 +68,8 @@ export interface SquatCompletionState extends MotionCompletionResult {
 
 const BASELINE_WINDOW = 6;
 const MIN_BASELINE_FRAMES = 4;
-const MIN_RELATIVE_DEPTH_FOR_ATTEMPT = 0.02;
+const LEGACY_ATTEMPT_FLOOR = 0.02;
+const GUARDED_ULTRA_LOW_ROM_FLOOR = 0.01;
 const LOW_ROM_LABEL_FLOOR = 0.07;
 const STANDARD_LABEL_FLOOR = 0.1;
 /**
@@ -223,6 +224,16 @@ export function evaluateSquatCompletionState(
   );
   const rawDepthPeak = peakFrame.depth;
   const relativeDepthPeak = Math.max(0, rawDepthPeak - baselineStandingDepth);
+  const recovery = getSquatRecoverySignal(validFrames);
+  const guardedUltraLowAttemptEligible =
+    relativeDepthPeak >= GUARDED_ULTRA_LOW_ROM_FLOOR &&
+    relativeDepthPeak < LEGACY_ATTEMPT_FLOOR &&
+    recovery.ultraLowRomGuardedRecovered === true;
+  const attemptAdmissionSatisfied =
+    relativeDepthPeak >= LEGACY_ATTEMPT_FLOOR || guardedUltraLowAttemptEligible;
+  const attemptAdmissionFloor = guardedUltraLowAttemptEligible
+    ? GUARDED_ULTRA_LOW_ROM_FLOOR
+    : LEGACY_ATTEMPT_FLOOR;
 
   const descentFrame = depthFrames.find((frame) => frame.phaseHint === 'descent');
   const bottomFrame = depthFrames.find((frame) => frame.phaseHint === 'bottom');
@@ -252,17 +263,17 @@ export function evaluateSquatCompletionState(
     phaseHint: PoseFeaturesFrame['phaseHint'];
   } | undefined =
     descentFrame ??
-    (relativeDepthPeak >= MIN_RELATIVE_DEPTH_FOR_ATTEMPT
+    (attemptAdmissionSatisfied
       ? depthFrames.find(
           (f) =>
-            f.depth - baselineStandingDepth >= MIN_RELATIVE_DEPTH_FOR_ATTEMPT * 0.4
+            f.depth - baselineStandingDepth >= attemptAdmissionFloor * 0.4
         )
       : undefined);
 
   /** phaseHint 기반 descent가 없으면 true — completionPassReason 구분용 */
   const eventBasedDescentPath =
     descentFrame == null &&
-    relativeDepthPeak >= MIN_RELATIVE_DEPTH_FOR_ATTEMPT &&
+    attemptAdmissionSatisfied &&
     effectiveDescentStartFrame != null;
 
   const prePeakDepths = depthFrames
@@ -272,8 +283,8 @@ export function evaluateSquatCompletionState(
     prePeakDepths.length > 0 ? Math.min(...prePeakDepths) : baselineStandingDepth;
   const downwardCommitmentDelta = Math.max(0, rawDepthPeak - minPrePeakDepth);
   const downwardCommitmentReached =
-    relativeDepthPeak >= MIN_RELATIVE_DEPTH_FOR_ATTEMPT ||
-    downwardCommitmentDelta >= MIN_RELATIVE_DEPTH_FOR_ATTEMPT ||
+    relativeDepthPeak >= attemptAdmissionFloor ||
+    downwardCommitmentDelta >= attemptAdmissionFloor ||
     bottomFrame != null;
 
   const committedFrame =
@@ -281,7 +292,7 @@ export function evaluateSquatCompletionState(
     depthFrames.find(
       (frame) =>
         frame.index >= (descentFrame?.index ?? 0) &&
-        frame.depth - baselineStandingDepth >= MIN_RELATIVE_DEPTH_FOR_ATTEMPT
+        frame.depth - baselineStandingDepth >= attemptAdmissionFloor
     );
 
   /** 피크 대비 되돌림 요구량: 깊을수록 큰 상승 구간을 요구해 조기 역전·미드라이즈 오판 감소 */
@@ -312,7 +323,6 @@ export function evaluateSquatCompletionState(
           frame.depth < peakFrame.depth - squatReversalDropRequired
       ));
 
-  const recovery = getSquatRecoverySignal(validFrames);
   const standingRecovery = getStandingRecoveryWindow(
     depthFrames.filter((frame) => frame.index > peakFrame.index),
     baselineStandingDepth,
@@ -363,7 +373,7 @@ export function evaluateSquatCompletionState(
       ? 'standard'
       : relativeDepthPeak >= LOW_ROM_LABEL_FLOOR
         ? 'low_rom'
-        : relativeDepthPeak >= MIN_RELATIVE_DEPTH_FOR_ATTEMPT
+        : attemptAdmissionSatisfied
           ? 'ultra_low_rom'
           : 'insufficient_signal';
 
@@ -372,7 +382,7 @@ export function evaluateSquatCompletionState(
     completionBlockedReason = 'not_armed';
   } else if (!descendConfirmed) {
     completionBlockedReason = 'no_descend';
-  } else if (relativeDepthPeak < MIN_RELATIVE_DEPTH_FOR_ATTEMPT) {
+  } else if (!attemptAdmissionSatisfied) {
     completionBlockedReason = 'insufficient_relative_depth';
   } else if (!downwardCommitmentReached || committedFrame == null) {
     completionBlockedReason = 'no_commitment';
