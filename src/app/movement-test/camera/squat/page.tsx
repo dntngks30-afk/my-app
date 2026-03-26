@@ -75,6 +75,7 @@ import {
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 import { SuccessFreezeOverlay } from '@/components/camera/SuccessFreezeOverlay';
 import { FailureFreezeOverlay } from '@/components/camera/FailureFreezeOverlay';
+import { SquatPostPassDebugModal } from '@/components/public/camera/SquatPostPassDebugModal';
 
 const STEP_ID: CameraStepId = 'squat';
 const IS_DEV = process.env.NODE_ENV !== 'production';
@@ -162,6 +163,11 @@ export default function CameraSquatPage() {
   const [navigationTriggered, setNavigationTriggered] = useState(false);
   const [showSuccessFreezeOverlay, setShowSuccessFreezeOverlay] = useState(false);
   const [showFailureFreezeOverlay, setShowFailureFreezeOverlay] = useState(false);
+  /** PR-DBG-01: dev-only 통과 후 debug modal */
+  const [showSquatDebugModal, setShowSquatDebugModal] = useState(false);
+  const [debugModalGate, setDebugModalGate] = useState<ExerciseGateResult | null>(null);
+  /** 모달이 열려 있는 동안 navigation을 hold — setTimeout callback 내부에서 읽어야 하므로 ref */
+  const debugModalHoldRef = useRef(false);
   const [passDetectedAt, setPassDetectedAt] = useState<string | null>(null);
   const [nextScheduledAt, setNextScheduledAt] = useState<string | null>(null);
   const [nextTriggeredAt, setNextTriggeredAt] = useState<string | null>(null);
@@ -346,6 +352,10 @@ export default function CameraSquatPage() {
       reason: null,
       secondChanceCompletionSatisfied: false,
     });
+    /* PR-DBG-01: 스텝 리셋 시 debug modal 상태도 초기화 */
+    setShowSquatDebugModal(false);
+    setDebugModalGate(null);
+    debugModalHoldRef.current = false;
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
   const persistCurrentStep = useCallback(() => {
@@ -670,6 +680,12 @@ export default function CameraSquatPage() {
     setProgressionState('passed');
     setStatusMessage(gate.uiMessage);
     appendTransition('passed', 'pass_latched');
+    /* PR-DBG-01: dev-only — 통과 직후 debug modal 오픈. navigation은 modal 닫힌 후 진행. */
+    if (IS_DEV) {
+      debugModalHoldRef.current = true;
+      setDebugModalGate(gate);
+      setShowSquatDebugModal(true);
+    }
   }, [appendTransition, currentStepKey, effectivePassLatched, gate, passLatched, persistCurrentStep, stop]);
 
   useEffect(() => {
@@ -769,6 +785,10 @@ export default function CameraSquatPage() {
         triggeredAdvanceStepKeyRef.current === currentStepKey ||
         passLatchedStepKeyRef.current !== currentStepKey
       ) {
+        return;
+      }
+      /* PR-DBG-01: dev modal이 열려 있으면 navigation hold — modal close 핸들러가 진행 */
+      if (IS_DEV && debugModalHoldRef.current) {
         return;
       }
 
@@ -905,6 +925,10 @@ export default function CameraSquatPage() {
     setPermissionDenied(false);
     setShowSuccessFreezeOverlay(false);
     setShowFailureFreezeOverlay(false);
+    /* PR-DBG-01: 재시도 시 debug modal 상태 초기화 */
+    setShowSquatDebugModal(false);
+    setDebugModalGate(null);
+    debugModalHoldRef.current = false;
     setPreviewKey((prev) => prev + 1);
     appendTransition('idle', 'manual_retry');
   }, [cameraPhase, clearAutoAdvanceTimer, gate, readinessTraceSummary, stop]);
@@ -941,6 +965,32 @@ export default function CameraSquatPage() {
     if (!IS_DEV) return;
     latchPassEvent();
   }, [latchPassEvent]);
+
+  /** PR-DBG-01: debug modal 닫기 → modal hold 해제 → navigation 이어서 실행 */
+  const handleDebugModalClose = useCallback(() => {
+    debugModalHoldRef.current = false;
+    setShowSquatDebugModal(false);
+    setDebugModalGate(null);
+    /* 타이머가 이미 만료되어 hold로 중단됐거나, 아직 실행 전인 경우 모두 커버:
+     * triggeredAdvanceStepKeyRef를 확인해 이미 navigation이 나간 경우 중복 방지 */
+    if (
+      nextPath &&
+      passLatchedStepKeyRef.current === currentStepKey &&
+      triggeredAdvanceStepKeyRef.current !== currentStepKey
+    ) {
+      triggeredAdvanceStepKeyRef.current = currentStepKey;
+      setNavigationTriggered(true);
+      setNextTriggeredAt(new Date().toISOString());
+      setNextTriggerReason('debug_modal_closed');
+      console.info('[camera:squat-next]', {
+        currentStepKey,
+        nextPath,
+        triggeredAt: new Date().toISOString(),
+        reason: 'debug_modal_closed',
+      });
+      router.push(nextPath);
+    }
+  }, [currentStepKey, nextPath, router]);
 
   const handleSuccessFreezeContinue = useCallback(() => {
     setShowSuccessFreezeOverlay(false);
@@ -1010,6 +1060,14 @@ export default function CameraSquatPage() {
 
   return (
     <StitchCameraSquatRoot>
+      {/* PR-DBG-01: dev-only 통과 후 debug modal — finalPassLatched 이후에만 렌더링 */}
+      {IS_DEV && showSquatDebugModal && debugModalGate && (
+        <SquatPostPassDebugModal
+          gate={debugModalGate}
+          finalPassLatched={finalPassLatched}
+          onClose={handleDebugModalClose}
+        />
+      )}
       {showSuccessFreezeOverlay && (
         <SuccessFreezeOverlay
           motionType="squat"
