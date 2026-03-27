@@ -9,7 +9,9 @@ import {
   getRecentAttempts,
   clearAttempts,
   getQuickStats,
+  getRecentSquatObservations,
   type AttemptSnapshot,
+  type SquatAttemptObservation,
 } from '@/lib/camera/camera-trace';
 import {
   getRecentSuccessSnapshots,
@@ -37,13 +39,16 @@ interface TraceDebugPanelProps {
 
 export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebugPanelProps) {
   const [attempts, setAttempts] = useState<AttemptSnapshot[]>([]);
+  const [squatObservations, setSquatObservations] = useState<SquatAttemptObservation[]>([]);
   const [successSnapshots, setSuccessSnapshots] = useState<SuccessSnapshot[]>([]);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     const list = getRecentAttempts();
+    const obs = getRecentSquatObservations();
     const successList = getRecentSuccessSnapshots();
     setAttempts(list);
+    setSquatObservations(obs);
     setSuccessSnapshots(successList);
     setRefreshedAt(new Date().toISOString());
   }, []);
@@ -54,10 +59,12 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
 
   const handleExport = useCallback(() => {
     const list = getRecentAttempts();
+    const obs = getRecentSquatObservations();
     const successList = getRecentSuccessSnapshots();
     const stats = getQuickStats(list);
     const payload = {
       attempts: list,
+      squatAttemptObservations: obs,
       successSnapshots: successList,
       quickStats: stats,
       diagVersion: CAMERA_DIAG_VERSION,
@@ -87,6 +94,7 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
   const handleClear = useCallback(() => {
     clearAttempts();
     setAttempts([]);
+    setSquatObservations([]);
     setRefreshedAt(null);
   }, []);
 
@@ -101,7 +109,8 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
   return (
     <div className="mt-3 rounded-lg border border-slate-600/50 bg-slate-900/50 p-3">
       <p className="text-[11px] text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-        PR-4 trace ({attempts.length} attempts) · success ({successSnapshots.length}) · diag={CAMERA_DIAG_VERSION}
+        PR-4 trace ({attempts.length} attempt_snapshots, {squatObservations.length} squat_observations) · success (
+        {successSnapshots.length}) · diag={CAMERA_DIAG_VERSION}
         {refreshedAt && ` · refreshed ${refreshedAt.slice(11, 19)}`}
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -181,6 +190,43 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
               clipPath={pb.clipPath ?? 'none'} clipKey={pb.clipKey ?? 'none'}{' '}
               {pb.clipMissing ? 'clipMissing' : ''}
               {pb.clipFailed ? ' clipFailed' : ''} success={String(pb.success)}
+            </p>
+          </div>
+        );
+      })()}
+      {squatObservations.length > 0 && (() => {
+        const latestObs = squatObservations[squatObservations.length - 1]!;
+        const terminalCount = squatObservations.filter((o) => o.eventType === 'capture_session_terminal').length;
+        const shallowSeenCount = squatObservations.filter((o) => o.eventType === 'shallow_observed').length;
+        return (
+          <div className="mt-2 border-t border-emerald-900/40 pt-2 text-[10px] text-emerald-200/90">
+            <p className="font-medium text-emerald-300/90">Squat observation (pre-attempt / terminal)</p>
+            <p>
+              total={squatObservations.length} terminal_events={terminalCount} shallow_observed={shallowSeenCount}
+            </p>
+            <p>
+              latest_event={latestObs.eventType} terminalKind={latestObs.captureTerminalKind ?? 'n/a'} contract=
+              {String(latestObs.shallowObservationContract ?? false)}
+            </p>
+            <p>
+              shallowCand={String(latestObs.shallowCandidateObserved ?? false)} attemptLike=
+              {String(latestObs.attemptLikeMotionObserved ?? false)}
+            </p>
+            <p className="text-slate-500">
+              evidence={latestObs.evidenceLabel ?? 'n/a'} blocked={latestObs.completionBlockedReason ?? 'n/a'} std=
+              {latestObs.standardPathBlockedReason ?? 'n/a'}
+            </p>
+            <p className="text-slate-500">
+              relPeak={latestObs.relativeDepthPeak ?? 'n/a'} rawPeak={latestObs.rawDepthPeak ?? 'n/a'} baseline=
+              {latestObs.baselineStandingDepth ?? 'n/a'}
+            </p>
+            <p className="text-slate-500">
+              phase={latestObs.phaseHint ?? 'n/a'} compMachine={latestObs.completionMachinePhase ?? 'n/a'} gate=
+              {latestObs.gateStatusSnapshot ?? 'n/a'}/{latestObs.progressionStateSnapshot ?? 'n/a'}
+            </p>
+            <p className="text-slate-500">
+              motion d/b/r={String(latestObs.motionDescendDetected ?? false)}/
+              {String(latestObs.motionBottomDetected ?? false)}/{String(latestObs.motionRecoveryDetected ?? false)}
             </p>
           </div>
         );

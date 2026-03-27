@@ -368,6 +368,57 @@ export function hasSquatAttemptEvidence(gate: ExerciseGateResult): boolean {
   );
 }
 
+/**
+ * 얕은 스쿼트 관측 전용 — `hasSquatAttemptEvidence`보다 약함 (통과·freeze arming과 무관).
+ * 실제 얕은 동작(descend/recovery 플래그, 다중 하강 프레임 등)이 있었는지 로컬 trace 저장 판단에만 사용.
+ */
+export function hasShallowSquatObservation(gate: ExerciseGateResult): boolean {
+  if (gate.evaluatorResult?.stepId !== 'squat') return false;
+  const sc = gate.squatCycleDebug;
+  const hm = gate.evaluatorResult?.debug?.highlightedMetrics as Record<string, unknown> | undefined;
+  if (!sc && !hm) return false;
+
+  const phase = (sc?.currentSquatPhase ?? hm?.currentSquatPhase) as string | undefined;
+  const descendDetected = !!sc?.descendDetected;
+  const recoveryDetected = !!sc?.recoveryDetected;
+  const bottomDetected = !!sc?.bottomDetected;
+  const descentCount = typeof hm?.descentCount === 'number' ? hm.descentCount : 0;
+  const firstDescentIdx = typeof hm?.firstDescentIdx === 'number' ? hm.firstDescentIdx : -1;
+  const relPeak = typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : 0;
+  const rawPeak = typeof hm?.rawDepthPeak === 'number' ? hm.rawDepthPeak : 0;
+  const ascRec = typeof hm?.ascentRecovered === 'number' ? hm.ascentRecovered > 0 : false;
+  const cmp = typeof hm?.completionMachinePhase === 'string' ? hm.completionMachinePhase : '';
+
+  if (descendDetected && recoveryDetected) return true;
+  if (descendDetected && (ascRec || recoveryDetected)) return true;
+  if (bottomDetected && (recoveryDetected || ascRec)) return true;
+  if (descentCount >= 2) return true;
+  if (firstDescentIdx >= 0 && (recoveryDetected || ascRec)) return true;
+
+  if (
+    cmp &&
+    /descend|bottom|ascend|recovery/i.test(cmp) &&
+    (descentCount >= 1 || firstDescentIdx >= 0 || descendDetected)
+  ) {
+    return true;
+  }
+
+  if ((relPeak >= 0.015 || rawPeak >= 0.02) && (descentCount >= 1 || descendDetected || firstDescentIdx >= 0)) {
+    return true;
+  }
+
+  if (
+    phase &&
+    phase !== 'idle' &&
+    phase !== 'armed' &&
+    (descendDetected || descentCount >= 1)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export interface SquatFailedShallowSnapshot {
   id: string;
   ts: string;

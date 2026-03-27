@@ -11,10 +11,54 @@ import {
   setDiagnosticFreezeMode,
   type SquatFailedShallowSnapshot,
 } from '@/lib/camera/camera-success-diagnostic';
+import { getRecentSquatObservations, type SquatAttemptObservation } from '@/lib/camera/camera-trace';
 
 interface FailureFreezeOverlayProps {
   /** overlay 닫기 시 호출 (Continue 누르면 onClose) */
   onClose: () => void;
+}
+
+function SquatObservationFallback({ o }: { o: SquatAttemptObservation }) {
+  return (
+    <div className="space-y-1 text-left text-slate-300">
+      <p className="text-amber-400/90">No failed shallow snapshot — latest pre-attempt observation</p>
+      <p>
+        <span className="text-slate-500">eventType</span> {o.eventType}
+      </p>
+      <p>
+        <span className="text-slate-500">shallowCandidate</span> {String(o.shallowCandidateObserved ?? false)}
+      </p>
+      <p>
+        <span className="text-slate-500">attemptLike</span> {String(o.attemptLikeMotionObserved ?? false)}
+      </p>
+      <p>
+        <span className="text-slate-500">evidenceLabel</span> {o.evidenceLabel ?? 'n/a'}
+      </p>
+      <p>
+        <span className="text-slate-500">completionBlocked</span> {o.completionBlockedReason ?? 'n/a'}
+      </p>
+      <p>
+        <span className="text-slate-500">relativeDepthPeak</span> {o.relativeDepthPeak ?? 'n/a'}
+      </p>
+      <p>
+        <span className="text-slate-500">phaseHint</span> {o.phaseHint ?? 'n/a'}
+      </p>
+      <p>
+        <span className="text-slate-500">completionMachinePhase</span> {o.completionMachinePhase ?? 'n/a'}
+      </p>
+      <p>
+        <span className="text-slate-500">terminalKind</span> {o.captureTerminalKind ?? 'n/a'}
+      </p>
+      <p>
+        <span className="text-slate-500">motion d/b/r</span>{' '}
+        {String(o.motionDescendDetected ?? false)}/{String(o.motionBottomDetected ?? false)}/
+        {String(o.motionRecoveryDetected ?? false)}
+      </p>
+      <p>
+        <span className="text-slate-500">diag</span> {o.debugVersion}
+      </p>
+    </div>
+  );
 }
 
 function SquatFailedFields({ s }: { s: SquatFailedShallowSnapshot }) {
@@ -54,23 +98,32 @@ function SquatFailedFields({ s }: { s: SquatFailedShallowSnapshot }) {
 
 export function FailureFreezeOverlay({ onClose }: FailureFreezeOverlayProps) {
   const [snapshot, setSnapshot] = useState<SquatFailedShallowSnapshot | null>(null);
+  const [fallbackObs, setFallbackObs] = useState<SquatAttemptObservation | null>(null);
 
   useEffect(() => {
     const list = getRecentFailedShallowSnapshots();
     const latest = list.length > 0 ? list[list.length - 1]! : null;
     setSnapshot(latest);
+    if (latest) {
+      setFallbackObs(null);
+      return;
+    }
+    const obsList = getRecentSquatObservations();
+    const lastObs = obsList.length > 0 ? obsList[obsList.length - 1]! : null;
+    setFallbackObs(lastObs);
   }, []);
 
   const handleCopyJson = useCallback(() => {
-    if (!snapshot) return;
-    const json = JSON.stringify(snapshot, null, 2);
+    const payload = snapshot ?? fallbackObs;
+    if (!payload) return;
+    const json = JSON.stringify(payload, null, 2);
     if (typeof navigator?.clipboard?.writeText === 'function') {
       navigator.clipboard.writeText(json).then(
         () => console.info('[camera:failure-freeze] copied to clipboard'),
         () => console.warn('[camera:failure-freeze] clipboard write failed')
       );
     }
-  }, [snapshot]);
+  }, [snapshot, fallbackObs]);
 
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/90 p-4">
@@ -81,6 +134,8 @@ export function FailureFreezeOverlay({ onClose }: FailureFreezeOverlayProps) {
         <div className="max-h-[60vh] overflow-y-auto text-slate-200">
           {snapshot ? (
             <SquatFailedFields s={snapshot} />
+          ) : fallbackObs ? (
+            <SquatObservationFallback o={fallbackObs} />
           ) : (
             <p className="text-slate-400">No snapshot. Continue to retry.</p>
           )}
@@ -93,7 +148,7 @@ export function FailureFreezeOverlay({ onClose }: FailureFreezeOverlayProps) {
           >
             Continue
           </button>
-          {snapshot && (
+          {(snapshot || fallbackObs) && (
             <button
               type="button"
               onClick={handleCopyJson}

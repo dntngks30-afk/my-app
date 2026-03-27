@@ -6,7 +6,11 @@
 import type { ExerciseGateResult } from './auto-progression';
 import type { CaptureQuality } from './guardrails';
 import type { CameraStepId } from '@/lib/public/camera-test';
-import { CAMERA_DIAG_VERSION, hasSquatAttemptEvidence } from './camera-success-diagnostic';
+import {
+  CAMERA_DIAG_VERSION,
+  hasShallowSquatObservation,
+  hasSquatAttemptEvidence,
+} from './camera-success-diagnostic';
 import { isFinalPassLatched } from './auto-progression';
 import { getCorrectiveCueObservability } from './voice-guidance';
 import { getLastPlaybackObservability } from './korean-audio-pack';
@@ -133,6 +137,8 @@ export interface AttemptSnapshot {
       completionPassReason?: string;
       /** PR-COMP-03 */
       squatInternalQuality?: SquatInternalQuality;
+      /** CAM-shallow-obs: attempt-evidence보다 약한 관측 계약(저장·진단 전용) */
+      shallowObservationEligible?: boolean;
     };
     /** overhead — PR-C4 trace, PR overhead-dwell */
     overhead?: {
@@ -181,9 +187,309 @@ export interface AttemptSnapshot {
   debugVersion: string;
 }
 
+/** CAM-27: 스쿼트 사전 관측(통과/재시도/최종 스냅샷과 분리). landmark·프레임 배열·blob 없음. */
+export type SquatObservationEventType =
+  | 'pre_attempt_candidate'
+  | 'attempt_started'
+  | 'downward_commitment_reached'
+  | 'descent_detected'
+  | 'reversal_detected'
+  | 'recovery_detected'
+  | 'attempt_stalled'
+  | 'attempt_abandoned'
+  | 'evidence_label_changed'
+  | 'completion_blocked_changed'
+  | 'standard_path_blocked_changed'
+  | 'relative_depth_bucket_changed'
+  /** 얕은 동작 계약 충족 시 1회(세션당 엣지) */
+  | 'shallow_observed'
+  /** 캡처 세션 종료(retry/fail/insufficient 등) 시 1회 */
+  | 'capture_session_terminal';
+
+export interface SquatAttemptObservation {
+  traceKind: 'attempt_observation';
+  id: string;
+  ts: string;
+  movementType: 'squat';
+  eventType: SquatObservationEventType;
+  captureQuality: CaptureQuality;
+  confidence: number;
+  phaseHint?: string;
+  attemptStarted?: boolean;
+  downwardCommitmentReached?: boolean;
+  descendConfirmed?: boolean;
+  reversalConfirmedAfterDescend?: boolean;
+  recoveryConfirmedAfterReversal?: boolean;
+  evidenceLabel?: string;
+  completionBlockedReason?: string | null;
+  standardPathBlockedReason?: string | null;
+  relativeDepthPeak?: number;
+  rawDepthPeak?: number;
+  currentDepth?: number;
+  relativeDepthPeakBucket?: string | null;
+  shallowCandidateObserved?: boolean;
+  attemptLikeMotionObserved?: boolean;
+  shallowCandidateReasons?: string[];
+  attemptLikeReasons?: string[];
+  flags?: string[];
+  topReasons?: string[];
+  priorEvidenceLabel?: string;
+  priorCompletionBlockedReason?: string | null;
+  priorStandardPathBlockedReason?: string | null;
+  priorRelativeDepthPeakBucket?: string | null;
+  /** capture_session_terminal 전용 */
+  captureTerminalKind?: string | null;
+  progressionStateSnapshot?: string;
+  gateStatusSnapshot?: string;
+  completionMachinePhase?: string | null;
+  baselineStandingDepth?: number;
+  motionDescendDetected?: boolean;
+  motionBottomDetected?: boolean;
+  motionRecoveryDetected?: boolean;
+  /** 기록 시점 hasShallowSquatObservation(gate) */
+  shallowObservationContract?: boolean;
+  debugVersion: string;
+}
+
 const TRACE_STORAGE_KEY = 'moveReCameraTrace:v1';
+const OBSERVATION_STORAGE_KEY = 'moveReCameraSquatObservation:v1';
 const MAX_ATTEMPTS = 50;
+const MAX_SQUAT_OBSERVATIONS = 80;
 const DEBUG_VERSION = 'pr4-2';
+const OBS_DEBUG_VERSION = 'cam27-obs-1';
+
+/** 관측 전용: 얕은 후보 depth 구간 버킷(임계 통과와 무관). */
+export function relativeDepthPeakBucket(relativeDepthPeak: number | undefined | null): string | null {
+  if (relativeDepthPeak == null || Number.isNaN(relativeDepthPeak)) return null;
+  if (relativeDepthPeak < 0.02) return 'lt_0.02';
+  if (relativeDepthPeak < 0.04) return '0.02_0.04';
+  if (relativeDepthPeak < 0.07) return '0.04_0.07';
+  if (relativeDepthPeak < 0.1) return '0.07_0.10';
+  return 'ge_0.10';
+}
+
+function readHighlighted(gate: ExerciseGateResult): Record<string, unknown> | undefined {
+  return gate.evaluatorResult?.debug?.highlightedMetrics as Record<string, unknown> | undefined;
+}
+
+/**
+ * 통과/재시도 판정과 분리된 얕은 움직임 관측 신호(디버그·트레이스 전용).
+ * — shallowCandidate: 초기 얕은 움직임 후보
+ * — attemptLike: 하강 확정·attempt 플래그 등 더 강한 시도 흔적
+ */
+export function deriveSquatObservabilitySignals(gate: ExerciseGateResult): {
+  shallowCandidateObserved: boolean;
+  attemptLikeMotionObserved: boolean;
+  shallowCandidateReasons: string[];
+  attemptLikeReasons: string[];
+} {
+  const sc = gate.squatCycleDebug;
+  const hm = readHighlighted(gate);
+  const relPeak = typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : undefined;
+  const descentCount = typeof hm?.descentCount === 'number' ? hm.descentCount : 0;
+  const shallowReasons: string[] = [];
+  const attemptReasons: string[] = [];
+
+  const SHALLOW_FLOOR = 0.02;
+  const SHALLOW_CEIL = 0.14;
+  /** 관측 전용: evaluator 단일 플래그만으로 스탠딩 노이즈를 얕은 후보로 올리지 않음(통과와 무관). */
+  const quietEvaluatorShallow = relPeak != null && relPeak >= SHALLOW_FLOOR;
+  if (relPeak != null && relPeak >= SHALLOW_FLOOR && relPeak < SHALLOW_CEIL) {
+    shallowReasons.push('relative_depth_shallow_band');
+  }
+  if (sc?.depthBand === 'shallow' && quietEvaluatorShallow) shallowReasons.push('depth_band_shallow');
+  if (sc?.descendDetected && quietEvaluatorShallow) shallowReasons.push('descend_detected_flag');
+  const phase = sc?.currentSquatPhase ?? (hm?.currentSquatPhase as string | undefined);
+  if (
+    (phase === 'descending' || phase === 'committed_bottom_or_downward_commitment') &&
+    quietEvaluatorShallow
+  ) {
+    shallowReasons.push('phase_descent_related');
+  }
+  if (descentCount > 0 && (quietEvaluatorShallow || descentCount >= 2)) {
+    shallowReasons.push('descent_count_positive');
+  }
+  const commitDelta = typeof hm?.downwardCommitmentDelta === 'number' ? hm.downwardCommitmentDelta : 0;
+  if (commitDelta >= 0.012 && quietEvaluatorShallow) shallowReasons.push('downward_commitment_delta');
+
+  if (
+    sc?.descendDetected &&
+    sc?.recoveryDetected &&
+    (quietEvaluatorShallow || descentCount >= 2 || (typeof hm?.firstDescentIdx === 'number' && hm.firstDescentIdx >= 0))
+  ) {
+    shallowReasons.push('descend_and_recovery_cycle');
+  }
+
+  if (sc?.attemptStarted === true || hm?.attemptStarted === true) attemptReasons.push('attempt_started_flag');
+  if (sc?.descendConfirmed === true || hm?.descendConfirmed === true) attemptReasons.push('descend_confirmed');
+  if (descentCount >= 2) attemptReasons.push('descent_count_2plus');
+  if (relPeak != null && relPeak >= 0.035) attemptReasons.push('relative_depth_ge_0.035');
+
+  return {
+    shallowCandidateObserved: shallowReasons.length > 0,
+    attemptLikeMotionObserved: attemptReasons.length > 0,
+    shallowCandidateReasons: shallowReasons.slice(0, 8),
+    attemptLikeReasons: attemptReasons.slice(0, 8),
+  };
+}
+
+/** 페이지 관측 엣지용 — 통과 로직과 동일한 산식을 쓰지 않고 “관측 가능한 하향 확약” 근사만 표시 */
+export function squatDownwardCommitmentReachedObservable(gate: ExerciseGateResult): boolean {
+  const sc = gate.squatCycleDebug;
+  const hm = readHighlighted(gate);
+  if (sc?.reversalConfirmedAfterDescend) return true;
+  if (sc?.downwardCommitmentAtMs != null && sc.downwardCommitmentAtMs > 0) return true;
+  const d = typeof hm?.downwardCommitmentDelta === 'number' ? hm.downwardCommitmentDelta : 0;
+  return d >= 0.02;
+}
+
+/**
+ * 현재 gate 스냅샷으로 compact observation 레코드 생성(squat 단계만).
+ */
+export function buildSquatAttemptObservation(
+  gate: ExerciseGateResult,
+  eventType: SquatObservationEventType,
+  options?: {
+    priorEvidenceLabel?: string;
+    priorCompletionBlockedReason?: string | null;
+    priorStandardPathBlockedReason?: string | null;
+    priorRelativeDepthPeakBucket?: string | null;
+    captureTerminalKind?: string | null;
+    shallowObservationContract?: boolean;
+  }
+): SquatAttemptObservation | null {
+  if (gate.evaluatorResult?.stepId !== 'squat') return null;
+
+  const sc = gate.squatCycleDebug;
+  const hm = readHighlighted(gate);
+  const signals = deriveSquatObservabilitySignals(gate);
+  const relPeak = typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : undefined;
+  const rawPeak = typeof hm?.rawDepthPeak === 'number' ? hm.rawDepthPeak : undefined;
+  const depthPeakMetric = gate.evaluatorResult?.metrics?.find((m) => m.name === 'depth')?.value;
+  const currentDepth =
+    typeof depthPeakMetric === 'number'
+      ? depthPeakMetric
+      : typeof hm?.depthPeak === 'number'
+        ? hm.depthPeak
+        : undefined;
+
+  const evidenceLabel =
+    (sc?.evidenceLabel as string | undefined) ?? (hm?.evidenceLabel as string | undefined);
+  const completionBlocked =
+    sc?.completionBlockedReason ?? (hm?.completionBlockedReason as string | null | undefined) ?? null;
+  const standardBlocked = sc?.standardPathBlockedReason ?? null;
+  const phaseHint =
+    (sc?.currentSquatPhase as string | undefined) ?? (hm?.currentSquatPhase as string | undefined);
+  const completionMachinePhase =
+    (typeof hm?.completionMachinePhase === 'string' ? hm.completionMachinePhase : null) ??
+    (typeof sc?.completionMachinePhase === 'string' ? sc.completionMachinePhase : null);
+  const baselineStandingDepth =
+    typeof hm?.baselineStandingDepth === 'number' ? hm.baselineStandingDepth : undefined;
+  const shallowContract =
+    options?.shallowObservationContract ?? hasShallowSquatObservation(gate);
+
+  return {
+    traceKind: 'attempt_observation',
+    id: `obs-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    ts: new Date().toISOString(),
+    movementType: 'squat',
+    eventType,
+    captureQuality: gate.guardrail.captureQuality,
+    confidence: gate.confidence,
+    phaseHint,
+    attemptStarted: !!(sc?.attemptStarted ?? hm?.attemptStarted),
+    downwardCommitmentReached: squatDownwardCommitmentReachedObservable(gate),
+    descendConfirmed: !!(sc?.descendConfirmed ?? hm?.descendConfirmed),
+    reversalConfirmedAfterDescend: !!sc?.reversalConfirmedAfterDescend,
+    recoveryConfirmedAfterReversal: !!sc?.recoveryConfirmedAfterReversal,
+    evidenceLabel,
+    completionBlockedReason: completionBlocked,
+    standardPathBlockedReason: standardBlocked,
+    relativeDepthPeak: relPeak,
+    rawDepthPeak: rawPeak,
+    currentDepth,
+    relativeDepthPeakBucket: relativeDepthPeakBucket(relPeak ?? null),
+    shallowCandidateObserved: signals.shallowCandidateObserved,
+    attemptLikeMotionObserved: signals.attemptLikeMotionObserved,
+    shallowCandidateReasons: signals.shallowCandidateReasons,
+    attemptLikeReasons: signals.attemptLikeReasons,
+    flags: [...(gate.flags ?? []), ...(gate.guardrail.flags ?? [])].filter(
+      (f, i, arr) => f && arr.indexOf(f) === i
+    ) as string[],
+    topReasons: buildTopReasons(gate).slice(0, 8),
+    priorEvidenceLabel: options?.priorEvidenceLabel,
+    priorCompletionBlockedReason: options?.priorCompletionBlockedReason,
+    priorStandardPathBlockedReason: options?.priorStandardPathBlockedReason,
+    priorRelativeDepthPeakBucket: options?.priorRelativeDepthPeakBucket,
+    captureTerminalKind: options?.captureTerminalKind ?? null,
+    progressionStateSnapshot: gate.progressionState,
+    gateStatusSnapshot: gate.status,
+    completionMachinePhase,
+    baselineStandingDepth,
+    motionDescendDetected: !!sc?.descendDetected,
+    motionBottomDetected: !!sc?.bottomDetected,
+    motionRecoveryDetected: !!sc?.recoveryDetected,
+    shallowObservationContract: shallowContract,
+    debugVersion: `${OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
+  };
+}
+
+function observationDedupSkip(list: SquatAttemptObservation[], next: SquatAttemptObservation): boolean {
+  if (next.eventType === 'capture_session_terminal' || next.eventType === 'shallow_observed') return false;
+  const last = list[list.length - 1];
+  if (!last || last.eventType !== next.eventType) return false;
+  const prevMs = Date.parse(last.ts);
+  if (Number.isNaN(prevMs)) return false;
+  return Date.now() - prevMs < 140;
+}
+
+/** bounded localStorage — 실패 시 무시 */
+export function pushSquatObservation(obs: SquatAttemptObservation): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(OBSERVATION_STORAGE_KEY);
+    const list: SquatAttemptObservation[] = raw ? (JSON.parse(raw) as SquatAttemptObservation[]) : [];
+    if (observationDedupSkip(list, obs)) return;
+    list.push(obs);
+    const trimmed = list.slice(-MAX_SQUAT_OBSERVATIONS);
+    localStorage.setItem(OBSERVATION_STORAGE_KEY, JSON.stringify(trimmed));
+  } catch {
+    // ignore
+  }
+}
+
+export function getRecentSquatObservations(): SquatAttemptObservation[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(OBSERVATION_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as SquatAttemptObservation[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function clearSquatObservations(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(OBSERVATION_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** 스쿼트 관측 1건 기록(페이지 effect에서 호출). 통과 임계·해석 변경 없음. */
+export function recordSquatObservationEvent(
+  gate: ExerciseGateResult,
+  eventType: SquatObservationEventType,
+  options?: Parameters<typeof buildSquatAttemptObservation>[2]
+): void {
+  try {
+    const obs = buildSquatAttemptObservation(gate, eventType, options);
+    if (obs) pushSquatObservation(obs);
+  } catch {
+    // ignore
+  }
+}
 
 function stepIdToMovementType(stepId: CameraStepId): TraceMovementType | null {
   if (stepId === 'squat') return 'squat';
@@ -337,7 +643,12 @@ function buildDiagnosisSummary(
       rawDepthPeak: typeof hm?.rawDepthPeak === 'number' ? hm.rawDepthPeak : undefined,
       relativeDepthPeak: typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : undefined,
       failureOverlayArmed: hasSquatAttemptEvidence(gate),
-      failureOverlayBlockedReason: hasSquatAttemptEvidence(gate) ? null : 'no_attempt_evidence',
+      failureOverlayBlockedReason: hasSquatAttemptEvidence(gate)
+        ? null
+        : hasShallowSquatObservation(gate)
+          ? 'no_attempt_evidence_shallow_observed'
+          : 'no_attempt_evidence',
+      shallowObservationEligible: hasShallowSquatObservation(gate),
       attemptStarted: sc.attemptStarted ?? ((sc.descendConfirmed ?? false) || (hm?.descentCount as number) > 0),
       downwardCommitmentReached:
         (sc.reversalConfirmedAfterDescend ?? false) ||
@@ -527,6 +838,7 @@ export function clearAttempts(): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.removeItem(TRACE_STORAGE_KEY);
+    localStorage.removeItem(OBSERVATION_STORAGE_KEY);
   } catch {
     // ignore
   }

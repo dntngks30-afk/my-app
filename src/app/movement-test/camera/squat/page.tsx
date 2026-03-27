@@ -39,10 +39,17 @@ import {
   useStabilizedLiveReadiness,
   type LiveReadinessState,
 } from '@/lib/camera/live-readiness';
-import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
+import {
+  deriveSquatObservabilitySignals,
+  recordAttemptSnapshot,
+  recordSquatObservationEvent,
+  relativeDepthPeakBucket,
+  squatDownwardCommitmentReachedObservable,
+} from '@/lib/camera/camera-trace';
 import {
   recordSquatSuccessSnapshot,
   recordSquatFailedShallowSnapshot,
+  hasShallowSquatObservation,
   hasSquatAttemptEvidence,
   isDiagnosticFreezeMode,
 } from '@/lib/camera/camera-success-diagnostic';
@@ -146,6 +153,8 @@ const COUNTDOWN_VALUES = [3, 2, 1] as const;
 const SQUAT_AUTO_ADVANCE_MS = 700;
 /** diagnostic: capturing 4.5초 동안 pass 못 하면 failure freeze overlay */
 const SQUAT_FAILURE_FREEZE_DELAY_MS = 4500;
+/** CAM-27: 얕은 후보 후 attempt 마일스톤 없을 때 관측용 stall(스팸 방지 단발) */
+const SQUAT_OBS_STALL_AFTER_MS = 3800;
 
 export default function CameraSquatPage() {
   const router = useRouter();
@@ -217,6 +226,29 @@ export default function CameraSquatPage() {
   const currentStepKey = `${STEP_ID}:${previewKey}`;
   const ambiguousRetryPlayedForStepRef = useRef<string | null>(null);
   const prevStepKeyForAmbiguousRef = useRef(currentStepKey);
+  /** CAM-27: capturing 중 스쿼트 사전 관측 엣지(프레임당 기록 금지) */
+  const squatObsEdgeRef = useRef({
+    preAttemptRecorded: false,
+    attemptStarted: false,
+    downwardCommitment: false,
+    descendConfirmed: false,
+    reversal: false,
+    recovery: false,
+    evidenceLabel: null as string | null,
+    completionBlocked: null as string | null,
+    standardBlocked: null as string | null,
+    depthBucket: null as string | null,
+    stallTimer: null as ReturnType<typeof window.setTimeout> | null,
+    stallRecorded: false,
+  });
+  /** CAM-27: 이번 capturing 세션에서 얕은 관측 신호가 있었는지(abandon 스팸 방지) */
+  const squatObsHadShallowThisCaptureRef = useRef(false);
+  /** 캡처 terminal 구간에서 attempt snapshot 1회 */
+  const squatTerminalAttemptSnapshotRef = useRef<string | null>(null);
+  /** capture_session_terminal 관측 이벤트 1회(shallow가 늦게 true여도 1회 기록) */
+  const squatTerminalObservationRef = useRef<string | null>(null);
+  /** hasShallowSquatObservation 최초 충족 엣지 — shallow_observed 이벤트 1회 */
+  const squatShallowObservedEdgeRef = useRef(false);
   /** PR-CAM-10: 애매 재시도 음성 1회 + 이후 completion 관측(디버그) */
   const [squatAmbiguousRetryHud, setSquatAmbiguousRetryHud] = useState<{
     voicePlayed: boolean;
@@ -365,6 +397,26 @@ export default function CameraSquatPage() {
     setDebugModalGate(null);
     debugModalHoldRef.current = false;
     failedSnapshotRecordedForPreviewKeyRef.current = null;
+    const o = squatObsEdgeRef.current;
+    if (o.stallTimer) window.clearTimeout(o.stallTimer);
+    squatObsEdgeRef.current = {
+      preAttemptRecorded: false,
+      attemptStarted: false,
+      downwardCommitment: false,
+      descendConfirmed: false,
+      reversal: false,
+      recovery: false,
+      evidenceLabel: null,
+      completionBlocked: null,
+      standardBlocked: null,
+      depthBucket: null,
+      stallTimer: null,
+      stallRecorded: false,
+    };
+    squatObsHadShallowThisCaptureRef.current = false;
+    squatTerminalAttemptSnapshotRef.current = null;
+    squatTerminalObservationRef.current = null;
+    squatShallowObservedEdgeRef.current = false;
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
   /** CAM-OBS: URL 진단 플래그 (?diag=1, ?debug=1, ?diag_modal=1) */
@@ -754,6 +806,45 @@ export default function CameraSquatPage() {
     setProgressionState((prev) => (prev === gate.progressionState ? prev : gate.progressionState));
     setStatusMessage((prev) => (prev === gate.uiMessage ? prev : gate.uiMessage));
 
+    const captureTerminal =
+      gate.status === 'retry' ||
+      gate.status === 'fail' ||
+      gate.progressionState === 'insufficient_signal' ||
+      gate.progressionState === 'retry_required' ||
+      gate.progressionState === 'failed';
+
+    if (captureTerminal) {
+      const shallowObs = hasShallowSquatObservation(gate);
+      const attemptEv = hasSquatAttemptEvidence(gate);
+      const terminalKind =
+        gate.status === 'retry'
+          ? 'gate_retry'
+          : gate.status === 'fail'
+            ? 'gate_fail'
+            : gate.progressionState;
+
+      if (
+        shallowObs &&
+        squatTerminalObservationRef.current !== currentStepKey
+      ) {
+        squatTerminalObservationRef.current = currentStepKey;
+        recordSquatObservationEvent(gate, 'capture_session_terminal', {
+          captureTerminalKind: terminalKind,
+          shallowObservationContract: true,
+        });
+      }
+      if (
+        (shallowObs || attemptEv) &&
+        squatTerminalAttemptSnapshotRef.current !== currentStepKey
+      ) {
+        squatTerminalAttemptSnapshotRef.current = currentStepKey;
+        recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
+          liveCueingEnabled: true,
+          autoNextObservation: `capture_terminal:${gate.progressionState}:${gate.status}`,
+        });
+      }
+    }
+
     if (gate.status === 'retry' || gate.status === 'fail') {
       settledRef.current = true;
       stop();
@@ -765,6 +856,17 @@ export default function CameraSquatPage() {
             gate.squatCycleDebug?.completionBlockedReason ??
             gate.failureReasons[0] ??
             null,
+          attemptOutcome: gate.status === 'retry' ? 'retry' : 'fail',
+          finalPassLatched,
+        });
+        failedSnapshotRecordedForPreviewKeyRef.current = previewKey;
+      } else if (
+        hasShallowSquatObservation(gate) &&
+        failedSnapshotRecordedForPreviewKeyRef.current !== previewKey
+      ) {
+        recordSquatFailedShallowSnapshot(gate, {
+          failureOverlayArmed: false,
+          failureOverlayBlockedReason: 'shallow_observed_below_attempt_evidence',
           attemptOutcome: gate.status === 'retry' ? 'retry' : 'fail',
           finalPassLatched,
         });
@@ -793,6 +895,7 @@ export default function CameraSquatPage() {
     previewKey,
     stats.sampledFrameCount,
     stop,
+    readinessTraceSummary,
   ]);
 
   useEffect(() => {
@@ -895,6 +998,186 @@ export default function CameraSquatPage() {
   useEffect(() => {
     gateRef.current = gate;
   }, [gate]);
+
+  const prevCameraPhaseForShallowResetRef = useRef(cameraPhase);
+  useEffect(() => {
+    const prev = prevCameraPhaseForShallowResetRef.current;
+    prevCameraPhaseForShallowResetRef.current = cameraPhase;
+    if (cameraPhase === 'capturing' && prev !== 'capturing') {
+      squatObsHadShallowThisCaptureRef.current = false;
+    }
+  }, [cameraPhase]);
+
+  /* CAM-27: capturing 중 스쿼트 사전 관측 — 엣지·의미 있는 필드 변경만 기록(프레임 스팸 없음) */
+  useEffect(() => {
+    if (cameraPhase !== 'capturing' || effectivePassLatched || permissionDenied) {
+      const o = squatObsEdgeRef.current;
+      if (o.stallTimer) {
+        window.clearTimeout(o.stallTimer);
+        o.stallTimer = null;
+      }
+      return;
+    }
+    if (stats.sampledFrameCount < 1) return;
+
+    const sc = gate.squatCycleDebug;
+    const hm = gate.evaluatorResult?.debug?.highlightedMetrics as Record<string, unknown> | undefined;
+    if (!sc && !hm) return;
+
+    if (hasShallowSquatObservation(gate) && !squatShallowObservedEdgeRef.current) {
+      squatShallowObservedEdgeRef.current = true;
+      recordSquatObservationEvent(gate, 'shallow_observed', { shallowObservationContract: true });
+    }
+
+    const ref = squatObsEdgeRef.current;
+    const signals = deriveSquatObservabilitySignals(gate);
+    const relPeak = typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : undefined;
+    const bucket = relativeDepthPeakBucket(relPeak ?? null);
+    const attemptStarted = !!(sc?.attemptStarted ?? hm?.attemptStarted);
+    const downward = squatDownwardCommitmentReachedObservable(gate);
+    const descendOk = !!(sc?.descendConfirmed ?? hm?.descendConfirmed);
+    const reversalOk = !!sc?.reversalConfirmedAfterDescend;
+    const recoveryOk = !!sc?.recoveryConfirmedAfterReversal;
+    const evidenceLabel =
+      (sc?.evidenceLabel as string | undefined) ?? (hm?.evidenceLabel as string | undefined) ?? null;
+    const completionBlocked =
+      sc?.completionBlockedReason ?? (hm?.completionBlockedReason as string | null | undefined) ?? null;
+    const standardBlocked = sc?.standardPathBlockedReason ?? null;
+
+    const scheduleStallIfNeeded = () => {
+      if (ref.stallRecorded || ref.stallTimer) return;
+      if (!ref.preAttemptRecorded) return;
+      if (ref.attemptStarted || ref.descendConfirmed) return;
+      ref.stallTimer = window.setTimeout(() => {
+        ref.stallTimer = null;
+        const g = gateRef.current;
+        if (!g || isFinalPassLatched(STEP_ID, g)) return;
+        const inner = squatObsEdgeRef.current;
+        if (inner.stallRecorded) return;
+        if (inner.descendConfirmed || inner.attemptStarted) return;
+        if (!deriveSquatObservabilitySignals(g).shallowCandidateObserved) return;
+        recordSquatObservationEvent(g, 'attempt_stalled');
+        inner.stallRecorded = true;
+      }, SQUAT_OBS_STALL_AFTER_MS);
+    };
+
+    if (signals.shallowCandidateObserved && !ref.preAttemptRecorded) {
+      recordSquatObservationEvent(gate, 'pre_attempt_candidate');
+      ref.preAttemptRecorded = true;
+      squatObsHadShallowThisCaptureRef.current = true;
+      scheduleStallIfNeeded();
+    }
+
+    const prevBucket = ref.depthBucket;
+    if (bucket != null) {
+      if (
+        prevBucket != null &&
+        bucket !== prevBucket &&
+        relPeak != null &&
+        relPeak >= 0.02
+      ) {
+        recordSquatObservationEvent(gate, 'relative_depth_bucket_changed', {
+          priorRelativeDepthPeakBucket: prevBucket,
+        });
+        squatObsHadShallowThisCaptureRef.current = true;
+      }
+      ref.depthBucket = bucket;
+      if (!ref.preAttemptRecorded && signals.shallowCandidateObserved) {
+        ref.preAttemptRecorded = true;
+        squatObsHadShallowThisCaptureRef.current = true;
+        scheduleStallIfNeeded();
+      }
+    }
+
+    if (attemptStarted && !ref.attemptStarted) {
+      recordSquatObservationEvent(gate, 'attempt_started');
+      ref.attemptStarted = true;
+      if (ref.stallTimer) {
+        window.clearTimeout(ref.stallTimer);
+        ref.stallTimer = null;
+      }
+    }
+    if (downward && !ref.downwardCommitment) {
+      recordSquatObservationEvent(gate, 'downward_commitment_reached');
+      ref.downwardCommitment = true;
+    }
+    if (descendOk && !ref.descendConfirmed) {
+      recordSquatObservationEvent(gate, 'descent_detected');
+      ref.descendConfirmed = true;
+      if (ref.stallTimer) {
+        window.clearTimeout(ref.stallTimer);
+        ref.stallTimer = null;
+      }
+    }
+    if (reversalOk && !ref.reversal) {
+      recordSquatObservationEvent(gate, 'reversal_detected');
+      ref.reversal = true;
+    }
+    if (recoveryOk && !ref.recovery) {
+      recordSquatObservationEvent(gate, 'recovery_detected');
+      ref.recovery = true;
+    }
+
+    const motionContext =
+      signals.shallowCandidateObserved || descendOk || (relPeak != null && relPeak >= 0.02);
+
+    if (evidenceLabel != null && evidenceLabel !== ref.evidenceLabel && ref.evidenceLabel != null) {
+      if (motionContext) {
+        recordSquatObservationEvent(gate, 'evidence_label_changed', {
+          priorEvidenceLabel: ref.evidenceLabel ?? undefined,
+        });
+      }
+    }
+    if (evidenceLabel != null) ref.evidenceLabel = evidenceLabel;
+
+    const meaningfulBlocked =
+      completionBlocked != null && completionBlocked !== 'guardrail_not_complete';
+    if (meaningfulBlocked && completionBlocked !== ref.completionBlocked && ref.completionBlocked != null) {
+      if (motionContext) {
+        recordSquatObservationEvent(gate, 'completion_blocked_changed', {
+          priorCompletionBlockedReason: ref.completionBlocked,
+        });
+      }
+    }
+    if (completionBlocked !== ref.completionBlocked) {
+      ref.completionBlocked = completionBlocked;
+    }
+
+    if (
+      standardBlocked != null &&
+      standardBlocked !== ref.standardBlocked &&
+      ref.standardBlocked != null
+    ) {
+      if (motionContext) {
+        recordSquatObservationEvent(gate, 'standard_path_blocked_changed', {
+          priorStandardPathBlockedReason: ref.standardBlocked,
+        });
+      }
+    }
+    if (standardBlocked !== ref.standardBlocked) {
+      ref.standardBlocked = standardBlocked;
+    }
+  }, [
+    cameraPhase,
+    effectivePassLatched,
+    permissionDenied,
+    gate,
+    stats.sampledFrameCount,
+  ]);
+
+  const prevCameraPhaseForObsRef = useRef(cameraPhase);
+  useEffect(() => {
+    const prev = prevCameraPhaseForObsRef.current;
+    prevCameraPhaseForObsRef.current = cameraPhase;
+    if (prev !== 'capturing' || cameraPhase === 'capturing' || effectivePassLatched) return;
+
+    const g = gateRef.current;
+    const ref = squatObsEdgeRef.current;
+    if (!g || ref.stallRecorded) return;
+    if (!squatObsHadShallowThisCaptureRef.current) return;
+    if (ref.descendConfirmed || ref.attemptStarted) return;
+    recordSquatObservationEvent(g, 'attempt_abandoned');
+  }, [cameraPhase, effectivePassLatched]);
 
   /* diagnostic: capturing 4.5초 동안 pass 못 하면 failure freeze overlay */
   useEffect(() => {
