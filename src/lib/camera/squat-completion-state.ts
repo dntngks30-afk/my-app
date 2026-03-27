@@ -47,6 +47,10 @@ export interface SquatCompletionState extends MotionCompletionResult {
   downwardCommitmentDelta: number;
   standingRecoveryFrameCount: number;
   standingRecoveryThreshold: number;
+  standingRecoveryMinFramesUsed: number;
+  standingRecoveryMinHoldMsUsed: number;
+  standingRecoveryBand: SquatEvidenceLabel;
+  standingRecoveryFinalizeReason: string | null;
   lowRomRecoveryReason: string | null;
   ultraLowRomRecoveryReason: string | null;
   recoveryReturnContinuityFrames?: number;
@@ -84,6 +88,10 @@ const STANDING_RECOVERY_TOLERANCE_FLOOR = 0.015;
 const STANDING_RECOVERY_TOLERANCE_RATIO = 0.18;
 const MIN_STANDING_RECOVERY_FRAMES = 2;
 const MIN_STANDING_RECOVERY_HOLD_MS = 160;
+const LOW_ROM_STANDING_RECOVERY_MIN_FRAMES = 2;
+const LOW_ROM_STANDING_RECOVERY_MIN_HOLD_MS = 60;
+const LOW_ROM_STANDING_FINALIZE_MIN_RETURN_CONTINUITY_FRAMES = 3;
+const LOW_ROM_STANDING_FINALIZE_MIN_DROP_RATIO = 0.45;
 /** PR-CAM-02: 절대 최소 되돌림(미세 노이즈 역전 차단) */
 const REVERSAL_DROP_MIN_ABS = 0.007;
 /** PR-CAM-02: 상대 피크 대비 최소 되돌림 비율 — 깊은 스쿼트에서 0.005만으로 조기 역전 되는 것 방지 */
@@ -160,6 +168,102 @@ function getStandingRecoveryWindow(
   };
 }
 
+function getSquatEvidenceLabel(
+  relativeDepthPeak: number,
+  attemptAdmissionSatisfied: boolean
+): SquatEvidenceLabel {
+  if (relativeDepthPeak >= STANDARD_LABEL_FLOOR) return 'standard';
+  if (relativeDepthPeak >= LOW_ROM_LABEL_FLOOR) return 'low_rom';
+  if (attemptAdmissionSatisfied) return 'ultra_low_rom';
+  return 'insufficient_signal';
+}
+
+function getStandingRecoveryFinalizeGate(
+  evidenceLabel: SquatEvidenceLabel,
+  standingRecovery: {
+    standingRecoveredAtMs?: number;
+    standingRecoveryHoldMs: number;
+    standingRecoveryFrameCount: number;
+  },
+  recovery: Pick<SquatCompletionState, 'recoveryReturnContinuityFrames' | 'recoveryDropRatio'>
+): {
+  minFramesUsed: number;
+  minHoldMsUsed: number;
+  finalizeSatisfied: boolean;
+  finalizeReason: string | null;
+} {
+  const minFramesUsed =
+    evidenceLabel === 'low_rom'
+      ? LOW_ROM_STANDING_RECOVERY_MIN_FRAMES
+      : MIN_STANDING_RECOVERY_FRAMES;
+  const minHoldMsUsed =
+    evidenceLabel === 'low_rom'
+      ? LOW_ROM_STANDING_RECOVERY_MIN_HOLD_MS
+      : MIN_STANDING_RECOVERY_HOLD_MS;
+
+  if (evidenceLabel === 'insufficient_signal') {
+    return {
+      minFramesUsed,
+      minHoldMsUsed,
+      finalizeSatisfied: false,
+      finalizeReason: 'insufficient_signal',
+    };
+  }
+
+  if (standingRecovery.standingRecoveredAtMs == null) {
+    return {
+      minFramesUsed,
+      minHoldMsUsed,
+      finalizeSatisfied: false,
+      finalizeReason: 'not_standing_recovered',
+    };
+  }
+
+  if (standingRecovery.standingRecoveryFrameCount < minFramesUsed) {
+    return {
+      minFramesUsed,
+      minHoldMsUsed,
+      finalizeSatisfied: false,
+      finalizeReason: 'tail_frames_below_min',
+    };
+  }
+
+  if (standingRecovery.standingRecoveryHoldMs < minHoldMsUsed) {
+    return {
+      minFramesUsed,
+      minHoldMsUsed,
+      finalizeSatisfied: false,
+      finalizeReason: 'tail_hold_below_min',
+    };
+  }
+
+  if (evidenceLabel === 'low_rom') {
+    if ((recovery.recoveryReturnContinuityFrames ?? 0) < LOW_ROM_STANDING_FINALIZE_MIN_RETURN_CONTINUITY_FRAMES) {
+      return {
+        minFramesUsed,
+        minHoldMsUsed,
+        finalizeSatisfied: false,
+        finalizeReason: 'return_continuity_below_min',
+      };
+    }
+    if ((recovery.recoveryDropRatio ?? 0) < LOW_ROM_STANDING_FINALIZE_MIN_DROP_RATIO) {
+      return {
+        minFramesUsed,
+        minHoldMsUsed,
+        finalizeSatisfied: false,
+        finalizeReason: 'recovery_drop_ratio_below_min',
+      };
+    }
+  }
+
+  return {
+    minFramesUsed,
+    minHoldMsUsed,
+    finalizeSatisfied: true,
+    finalizeReason: evidenceLabel === 'low_rom' ? 'low_rom_guarded_finalize' : 'standing_hold_met',
+  };
+}
+
 export function evaluateSquatCompletionState(
   frames: PoseFeaturesFrame[]
 ): SquatCompletionState {
@@ -203,6 +307,10 @@ export function evaluateSquatCompletionState(
       downwardCommitmentDelta: 0,
       standingRecoveryFrameCount: 0,
       standingRecoveryThreshold: STANDING_RECOVERY_TOLERANCE_FLOOR,
+      standingRecoveryMinFramesUsed: MIN_STANDING_RECOVERY_FRAMES,
+      standingRecoveryMinHoldMsUsed: MIN_STANDING_RECOVERY_HOLD_MS,
+      standingRecoveryBand: 'insufficient_signal' as const,
+      standingRecoveryFinalizeReason: 'insufficient_signal' as const,
       lowRomRecoveryReason: null,
       ultraLowRomRecoveryReason: null,
     };
@@ -339,11 +447,20 @@ export function evaluateSquatCompletionState(
     baselineStandingDepth,
     relativeDepthPeak
   );
+  const evidenceLabel = getSquatEvidenceLabel(relativeDepthPeak, attemptAdmissionSatisfied);
+  const standingRecoveryFinalize = getStandingRecoveryFinalizeGate(
+    evidenceLabel,
+    standingRecovery,
+    {
+      recoveryReturnContinuityFrames: recovery.returnContinuityFrames,
+      recoveryDropRatio: recovery.recoveryDropRatio,
+    }
+  );
   const qualifiesForRelaxedLowRomTiming =
+    (evidenceLabel === 'low_rom' || evidenceLabel === 'ultra_low_rom') &&
+    standingRecoveryFinalize.finalizeSatisfied &&
     (recovery.returnContinuityFrames ?? 0) >= RELAXED_LOW_ROM_MIN_CONTINUITY_FRAMES &&
-    (recovery.recoveryDropRatio ?? 0) >= RELAXED_LOW_ROM_MIN_DROP_RATIO &&
-    standingRecovery.standingRecoveryFrameCount >= MIN_STANDING_RECOVERY_FRAMES &&
-    standingRecovery.standingRecoveryHoldMs >= MIN_STANDING_RECOVERY_HOLD_MS;
+    (recovery.recoveryDropRatio ?? 0) >= RELAXED_LOW_ROM_MIN_DROP_RATIO;
   const minDescentToPeakMsForLowRom = qualifiesForRelaxedLowRomTiming
     ? RELAXED_MIN_DESCENT_TO_PEAK_MS_LOW_ROM
     : MIN_DESCENT_TO_PEAK_MS_LOW_ROM;
@@ -372,21 +489,10 @@ export function evaluateSquatCompletionState(
   }
   if (
     ascendConfirmed &&
-    standingRecovery.standingRecoveredAtMs != null &&
-    standingRecovery.standingRecoveryFrameCount >= MIN_STANDING_RECOVERY_FRAMES &&
-    standingRecovery.standingRecoveryHoldMs >= MIN_STANDING_RECOVERY_HOLD_MS
+    standingRecoveryFinalize.finalizeSatisfied
   ) {
     currentSquatPhase = 'standing_recovered';
   }
-
-  const evidenceLabel: SquatEvidenceLabel =
-    relativeDepthPeak >= STANDARD_LABEL_FLOOR
-      ? 'standard'
-      : relativeDepthPeak >= LOW_ROM_LABEL_FLOOR
-        ? 'low_rom'
-        : attemptAdmissionSatisfied
-          ? 'ultra_low_rom'
-          : 'insufficient_signal';
 
   let completionBlockedReason: string | null = null;
   if (!armed) {
@@ -403,11 +509,11 @@ export function evaluateSquatCompletionState(
     completionBlockedReason = 'no_ascend';
   } else if (standingRecovery.standingRecoveredAtMs == null) {
     completionBlockedReason = 'not_standing_recovered';
-  } else if (
-    standingRecovery.standingRecoveryFrameCount < MIN_STANDING_RECOVERY_FRAMES ||
-    standingRecovery.standingRecoveryHoldMs < MIN_STANDING_RECOVERY_HOLD_MS
-  ) {
-    completionBlockedReason = 'recovery_hold_too_short';
+  } else if (!standingRecoveryFinalize.finalizeSatisfied) {
+    completionBlockedReason =
+      evidenceLabel === 'low_rom'
+        ? 'low_rom_standing_finalize_not_satisfied'
+        : 'recovery_hold_too_short';
   } else if (
     relativeDepthPeak < LOW_ROM_TIMING_PEAK_MAX &&
     effectiveDescentStartFrame != null &&
@@ -496,6 +602,10 @@ export function evaluateSquatCompletionState(
     downwardCommitmentDelta,
     standingRecoveryFrameCount: standingRecovery.standingRecoveryFrameCount,
     standingRecoveryThreshold: standingRecovery.standingRecoveryThreshold,
+    standingRecoveryMinFramesUsed: standingRecoveryFinalize.minFramesUsed,
+    standingRecoveryMinHoldMsUsed: standingRecoveryFinalize.minHoldMsUsed,
+    standingRecoveryBand: evidenceLabel,
+    standingRecoveryFinalizeReason: standingRecoveryFinalize.finalizeReason,
     lowRomRecoveryReason: recovery.lowRomRecoveryReason ?? null,
     ultraLowRomRecoveryReason: recovery.ultraLowRomRecoveryReason ?? null,
     recoveryReturnContinuityFrames: recovery.returnContinuityFrames,

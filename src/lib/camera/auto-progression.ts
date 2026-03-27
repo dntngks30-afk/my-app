@@ -90,6 +90,11 @@ export interface SquatCycleDebug {
   recoveryAtMs?: number;
   standingRecoveredAtMs?: number;
   standingRecoveryHoldMs?: number;
+  standingRecoveryFrameCount?: number;
+  standingRecoveryMinFramesUsed?: number;
+  standingRecoveryMinHoldMsUsed?: number;
+  standingRecoveryBand?: 'standard' | 'low_rom' | 'ultra_low_rom' | 'insufficient_signal';
+  standingRecoveryFinalizeReason?: string | null;
   successPhaseAtOpen?: 'standing_recovered';
   cycleDurationMs?: number;
   downwardCommitmentDelta?: number;
@@ -737,6 +742,11 @@ function getSquatProgressionCompletionSatisfied(
   const ascendConfirmed = cs?.ascendConfirmed ?? false;
   const standingRecoveredAtMs = cs?.standingRecoveredAtMs ?? undefined;
   const standingRecoveryHoldMs = cs?.standingRecoveryHoldMs ?? 0;
+  const standingRecoveryFrameCount = cs?.standingRecoveryFrameCount ?? 0;
+  const standingRecoveryMinFramesUsed = cs?.standingRecoveryMinFramesUsed ?? undefined;
+  const standingRecoveryMinHoldMsUsed = cs?.standingRecoveryMinHoldMsUsed ?? undefined;
+  const standingRecoveryBand = cs?.standingRecoveryBand ?? undefined;
+  const standingRecoveryFinalizeReason = cs?.standingRecoveryFinalizeReason ?? null;
   const committedAtMs = cs?.committedAtMs ?? undefined;
   const startBeforeBottom = cs?.startBeforeBottom ?? false;
   /** PR-CAM-09: downwardCommitmentDelta 는 squatCompletionState 에서 원본값으로 읽는다 */
@@ -810,6 +820,11 @@ function getSquatProgressionCompletionSatisfied(
     recoveryAtMs,
     standingRecoveredAtMs,
     standingRecoveryHoldMs,
+    standingRecoveryFrameCount,
+    standingRecoveryMinFramesUsed,
+    standingRecoveryMinHoldMsUsed,
+    standingRecoveryBand,
+    standingRecoveryFinalizeReason,
     cycleDurationMs,
     downwardCommitmentDelta,
     standingStillRejected: evidenceLabel === 'insufficient_signal',

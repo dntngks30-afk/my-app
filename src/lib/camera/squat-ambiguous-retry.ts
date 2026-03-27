@@ -113,6 +113,7 @@ export function deriveSquatAmbiguousRetryReason(
   if (
     blocked === 'not_standing_recovered' ||
     blocked === 'recovery_hold_too_short' ||
+    blocked === 'low_rom_standing_finalize_not_satisfied' ||
     blocked === 'ascent_recovery_span_too_short'
   ) {
     return 'no_recovery';

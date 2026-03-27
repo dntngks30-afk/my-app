@@ -110,6 +110,11 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   recoveryAtMs: number | undefined;
   standingRecoveredAtMs?: number;
   standingRecoveryHoldMs?: number;
+  standingRecoveryFrameCount?: number;
+  standingRecoveryMinFramesUsed?: number;
+  standingRecoveryMinHoldMsUsed?: number;
+  standingRecoveryBand?: string | null;
+  standingRecoveryFinalizeReason?: string | null;
   successPhaseAtOpen?: string | null;
   evidenceLabel?: string | null;
   completionBlockedReason?: string | null;
@@ -298,6 +303,11 @@ export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): 
       recoveryAtMs: squatDebug?.recoveryAtMs,
       standingRecoveredAtMs: squatDebug?.standingRecoveredAtMs,
       standingRecoveryHoldMs: squatDebug?.standingRecoveryHoldMs,
+      standingRecoveryFrameCount: squatDebug?.standingRecoveryFrameCount,
+      standingRecoveryMinFramesUsed: squatDebug?.standingRecoveryMinFramesUsed,
+      standingRecoveryMinHoldMsUsed: squatDebug?.standingRecoveryMinHoldMsUsed,
+      standingRecoveryBand: squatDebug?.standingRecoveryBand ?? null,
+      standingRecoveryFinalizeReason: squatDebug?.standingRecoveryFinalizeReason ?? null,
       successPhaseAtOpen: squatDebug?.successPhaseAtOpen ?? null,
       evidenceLabel: squatDebug?.evidenceLabel ?? null,
       completionBlockedReason: squatDebug?.completionBlockedReason ?? null,
@@ -385,6 +395,11 @@ export interface SquatFailedShallowSnapshot {
   passConfirmationSatisfied: boolean;
   standingRecoveredAtMs?: number;
   standingRecoveryHoldMs?: number;
+  standingRecoveryFrameCount?: number;
+  standingRecoveryMinFramesUsed?: number;
+  standingRecoveryMinHoldMsUsed?: number;
+  standingRecoveryBand?: string | null;
+  standingRecoveryFinalizeReason?: string | null;
   successPhaseAtOpen?: string | null;
   evidenceLabel?: string | null;
   completionBlockedReason?: string | null;
@@ -488,6 +503,11 @@ export function recordSquatFailedShallowSnapshot(
       passConfirmationSatisfied: gate.passConfirmationSatisfied ?? false,
       standingRecoveredAtMs: sc?.standingRecoveredAtMs,
       standingRecoveryHoldMs: sc?.standingRecoveryHoldMs,
+      standingRecoveryFrameCount: sc?.standingRecoveryFrameCount,
+      standingRecoveryMinFramesUsed: sc?.standingRecoveryMinFramesUsed,
+      standingRecoveryMinHoldMsUsed: sc?.standingRecoveryMinHoldMsUsed,
+      standingRecoveryBand: sc?.standingRecoveryBand ?? null,
+      standingRecoveryFinalizeReason: sc?.standingRecoveryFinalizeReason ?? null,
       successPhaseAtOpen: sc?.successPhaseAtOpen ?? null,
       evidenceLabel: sc?.evidenceLabel ?? null,
       completionBlockedReason: sc?.completionBlockedReason ?? null,

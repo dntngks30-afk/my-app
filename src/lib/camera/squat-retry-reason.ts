@@ -23,6 +23,7 @@ export function completionBlockedReasonToFailureTags(
     case 'no_ascend':
     case 'not_standing_recovered':
     case 'recovery_hold_too_short':
+    case 'low_rom_standing_finalize_not_satisfied':
     case 'ascent_recovery_span_too_short':
       return ['ascent_not_detected'];
 
