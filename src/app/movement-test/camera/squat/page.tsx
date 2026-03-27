@@ -367,13 +367,18 @@ export default function CameraSquatPage() {
     failedSnapshotRecordedForPreviewKeyRef.current = null;
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
-  /** CAM-OBS: ?diag=1 이면 모바일 진단 패널 노출 허용(프로덕션 포함) */
-  const [diagQueryEnabled, setDiagQueryEnabled] = useState(false);
+  /** CAM-OBS: URL 진단 플래그 (?diag=1, ?debug=1, ?diag_modal=1) */
+  const [urlDebugFlags, setUrlDebugFlags] = useState({ diag: false, debug: false, diagModal: false });
   useEffect(() => {
     try {
-      setDiagQueryEnabled(new URLSearchParams(window.location.search).get('diag') === '1');
+      const p = new URLSearchParams(window.location.search);
+      setUrlDebugFlags({
+        diag: p.get('diag') === '1',
+        debug: p.get('debug') === '1',
+        diagModal: p.get('diag_modal') === '1',
+      });
     } catch {
-      setDiagQueryEnabled(false);
+      setUrlDebugFlags({ diag: false, debug: false, diagModal: false });
     }
   }, []);
 
@@ -388,7 +393,7 @@ export default function CameraSquatPage() {
     });
   }, []);
 
-  const mobileDiagUnlocked = diagQueryEnabled || headerDiagTapCount >= 5;
+  const mobileDiagUnlocked = urlDebugFlags.diag || urlDebugFlags.debug || headerDiagTapCount >= 5;
 
   const persistCurrentStep = useCallback(() => {
     recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
@@ -712,13 +717,22 @@ export default function CameraSquatPage() {
     setProgressionState('passed');
     setStatusMessage(gate.uiMessage);
     appendTransition('passed', 'pass_latched');
-    /* PR-DBG-01: dev-only — 통과 직후 debug modal 오픈. navigation은 modal 닫힌 후 진행. */
-    if (IS_DEV) {
+    /* 통과 직후 dev modal은 diag_modal=1 일 때만 자동 오픈(?debug=1 만으로는 모달 없음). */
+    if (IS_DEV && urlDebugFlags.diagModal) {
       debugModalHoldRef.current = true;
       setDebugModalGate(gate);
       setShowSquatDebugModal(true);
     }
-  }, [appendTransition, currentStepKey, effectivePassLatched, gate, passLatched, persistCurrentStep, stop]);
+  }, [
+    appendTransition,
+    currentStepKey,
+    effectivePassLatched,
+    gate,
+    passLatched,
+    persistCurrentStep,
+    stop,
+    urlDebugFlags.diagModal,
+  ]);
 
   useEffect(() => {
     if (cameraPhase !== 'capturing') return;
@@ -743,11 +757,14 @@ export default function CameraSquatPage() {
     if (gate.status === 'retry' || gate.status === 'fail') {
       settledRef.current = true;
       stop();
-      /* CAM-OBS: 진단 freeze 없이도 실제 시도 후 retry/fail이면 shallow 실패 스냅샷 1회 저장 */
+      /* 일반 retry/fail: freeze 없이도 실제 시도면 shallow 실패 스냅샷 1회(overlay 아님·차단 사유 기록) */
       if (hasSquatAttemptEvidence(gate) && failedSnapshotRecordedForPreviewKeyRef.current !== previewKey) {
         recordSquatFailedShallowSnapshot(gate, {
-          failureOverlayArmed: true,
-          failureOverlayBlockedReason: null,
+          failureOverlayArmed: false,
+          failureOverlayBlockedReason:
+            gate.squatCycleDebug?.completionBlockedReason ??
+            gate.failureReasons[0] ??
+            null,
           attemptOutcome: gate.status === 'retry' ? 'retry' : 'fail',
           finalPassLatched,
         });
@@ -1104,11 +1121,13 @@ export default function CameraSquatPage() {
     cameraPhase === 'setup' || cameraPhase === 'arming' || cameraPhase === 'countdown';
   const isMinimalCapture =
     cameraPhase === 'capturing' && !showRetryActions;
+  const hasDebugQuery = urlDebugFlags.debug;
   const showDebugPanel =
     debugEnabled &&
-    (isPreCapturePhase ||
-      showRetryActions ||
-      (typeof window !== 'undefined' && window.location.search.includes('debug=1')));
+    (isPreCapturePhase || showRetryActions || hasDebugQuery);
+  /** ?debug=1: minimal 캡처·재시도 중에도 모바일에서 볼 수 있는 컴팩트 스트립 */
+  const showCompactMobileDebugStrip =
+    hasDebugQuery && (isMinimalCapture || showRetryActions) && !permissionDenied;
 
   return (
     <StitchCameraSquatRoot>
@@ -1239,6 +1258,37 @@ export default function CameraSquatPage() {
                 </div>
               )}
             </div>
+
+            {showCompactMobileDebugStrip && (
+              <div
+                className="w-full max-w-md mt-2 shrink-0 rounded-xl border border-cyan-500/30 bg-black/55 px-3 py-2 text-[11px] text-slate-200"
+                style={{ fontFamily: 'var(--font-sans-noto)' }}
+              >
+                <p className="mb-1 font-medium text-cyan-200/90">debug (캡처)</p>
+                <p className="break-all">gate: {gate.status}</p>
+                <p className="break-all">
+                  completionBlocked: {gate.squatCycleDebug?.completionBlockedReason ?? '—'}
+                </p>
+                <p className="break-all">
+                  completionPassReason: {gate.squatCycleDebug?.completionPassReason ?? '—'}
+                </p>
+                <p className="break-all">
+                  completionPathUsed: {gate.squatCycleDebug?.completionPathUsed ?? '—'}
+                </p>
+                <p>confidence: {gate.confidence}</p>
+                <p>captureQuality: {gate.guardrail.captureQuality}</p>
+                <p className="break-all">
+                  failureReasons: {gate.failureReasons.join(', ') || '—'}
+                </p>
+                <p>
+                  relativeDepthPeak:{' '}
+                  {typeof gate.evaluatorResult.debug?.highlightedMetrics?.relativeDepthPeak === 'number'
+                    ? gate.evaluatorResult.debug.highlightedMetrics.relativeDepthPeak
+                    : '—'}
+                </p>
+              </div>
+            )}
+
             {!isMinimalCapture && (
             <div className="w-full max-w-md mt-4 space-y-3 shrink-0">
               {isPreCapturePhase ? (
@@ -1302,7 +1352,23 @@ export default function CameraSquatPage() {
                 )}
               </StitchCameraGlassPanel>
 
-              {showDebugPanel && (
+              {!showRetryActions && IS_DEV && !advanceLockRef.current && (
+                <button
+                  type="button"
+                  onClick={handleDevOverride}
+                  className="w-full min-h-[44px] rounded-xl border border-amber-500/30 text-amber-200 hover:bg-amber-500/10 transition-colors"
+                  style={{ fontFamily: 'var(--font-sans-noto)' }}
+                >
+                  강제 다음
+                </button>
+              )}
+          </>
+        )}
+            </div>
+            )}
+
+            {IS_DEV && showDebugPanel && !isMinimalCapture && (
+              <div className="w-full max-w-md mt-2 space-y-3 shrink-0">
                 <div className="rounded-2xl border border-amber-500/20 bg-black/30 p-4 text-left">
                   <p className="text-xs text-amber-200" style={{ fontFamily: 'var(--font-sans-noto)' }}>
                     squat debug
@@ -1451,21 +1517,7 @@ export default function CameraSquatPage() {
                     liveCueingEnabled={cameraPhase === 'capturing'}
                   />
                 </div>
-              )}
-
-              {!showRetryActions && IS_DEV && !advanceLockRef.current && (
-                <button
-                  type="button"
-                  onClick={handleDevOverride}
-                  className="w-full min-h-[44px] rounded-xl border border-amber-500/30 text-amber-200 hover:bg-amber-500/10 transition-colors"
-                  style={{ fontFamily: 'var(--font-sans-noto)' }}
-                >
-                  강제 다음
-                </button>
-              )}
-          </>
-        )}
-            </div>
+              </div>
             )}
           </>
         )}
