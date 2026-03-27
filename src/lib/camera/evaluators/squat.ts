@@ -12,6 +12,7 @@ import {
   squatInternalQualityInsufficientSignal,
 } from '@/lib/camera/squat/squat-internal-quality';
 import { getSquatPerStepDiagnostics } from '@/lib/camera/step-joint-spec';
+import { decodeSquatHmm } from '@/lib/camera/squat/squat-hmm';
 import type { EvaluatorResult, EvaluatorMetric } from './types';
 
 const MIN_VALID_FRAMES = 8;
@@ -123,6 +124,14 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const state = evaluateSquatCompletionState(
     completionArming.armed ? completionFrames : []
   );
+
+  /**
+   * PR-HMM-01B: shadow decoder — rule-based completion truth와 독립.
+   * arming 완료 시 completionFrames로, 미완료 시 valid 전체로 decode.
+   * pass/retry/fail gate에 사용 금지 — debug/observability 전용.
+   */
+  const hmmInput = completionArming.armed ? completionFrames : valid;
+  const squatHmm = decodeSquatHmm(hmmInput);
 
   const globalMaxDepthProxy = depthValues.length > 0 ? Math.max(...depthValues) : 0;
   const completionSliceDepthValues = getNumbers(
@@ -359,8 +368,18 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
             : null,
         squatDescentToPeakMs: state.squatDescentToPeakMs ?? null,
         squatReversalToStandingMs: state.squatReversalToStandingMs ?? null,
+        /** PR-HMM-01B: shadow decoder 스칼라 — pass gate에 사용 금지 */
+        hmmConfidence: squatHmm.confidence,
+        hmmCompletionCandidate: squatHmm.completionCandidate ? 1 : 0,
+        hmmStandingCount: squatHmm.dominantStateCounts.standing,
+        hmmDescentCount: squatHmm.dominantStateCounts.descent,
+        hmmBottomCount: squatHmm.dominantStateCounts.bottom,
+        hmmAscentCount: squatHmm.dominantStateCounts.ascent,
+        hmmExcursion: squatHmm.effectiveExcursion,
       },
       perStepDiagnostics: perStepRecord,
+      /** PR-HMM-01B: shadow decoder 전체 결과 — debug 전용 */
+      squatHmm,
     },
   };
 }

@@ -126,6 +126,13 @@ export interface SquatCycleDebug {
     severeFailSoftenedToRetry?: boolean;
     fallbackUsed?: 'weak_cycle_retry_instead_of_survey_fail';
   };
+  /**
+   * PR-HMM-01B: shadow decoder trace — debug/observability only.
+   * pass/retry/fail gate에 사용 금지.
+   */
+  hmmConfidence?: number;
+  hmmCompletionCandidate?: boolean;
+  hmmDominantPath?: string;
 }
 
 export interface ExerciseGateResult {
@@ -852,6 +859,20 @@ function getSquatProgressionCompletionSatisfied(
     completionPassReason,
     squatInternalQuality: result.debug?.squatInternalQuality,
   };
+
+  // PR-HMM-01B: shadow decoder trace 전용 — pass/retry/fail gate에 사용 금지
+  const squatHmm = result.debug?.squatHmm;
+  if (squatHmm != null) {
+    squatCycleDebug.hmmConfidence = squatHmm.confidence;
+    squatCycleDebug.hmmCompletionCandidate = squatHmm.completionCandidate;
+    squatCycleDebug.hmmDominantPath = squatHmm.completionCandidate
+      ? squatHmm.dominantStateCounts.descent >= 2 &&
+        squatHmm.dominantStateCounts.bottom >= 1 &&
+        squatHmm.dominantStateCounts.ascent >= 2
+        ? 'standing→descent→bottom→ascent→standing'
+        : 'partial_cycle'
+      : 'no_cycle';
+  }
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';

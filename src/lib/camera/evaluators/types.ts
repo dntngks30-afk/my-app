@@ -8,6 +8,7 @@ import type { SquatInternalQuality } from '@/lib/camera/squat/squat-internal-qua
 import type { OverheadInternalQuality } from '@/lib/camera/overhead/overhead-internal-quality';
 import type { CompletionArmingState } from '@/lib/camera/squat/squat-completion-arming';
 import type { SquatCompletionState } from '@/lib/camera/squat-completion-state';
+import type { SquatHmmDecodeResult } from '@/lib/camera/squat/squat-hmm';
 
 export interface EvaluatorMetric {
   name: string;
@@ -45,6 +46,12 @@ export interface EvaluatorDebugSummary {
    * auto-progression 이 highlightedMetrics 캐스팅 없이 직접 읽을 수 있다.
    */
   squatCompletionState?: SquatCompletionState;
+  /**
+   * PR-HMM-01B: 스쿼트 시간 기반 HMM shadow decoder 결과.
+   * completionSatisfied semantics를 변경하지 않으며, debug / observability 전용.
+   * pass/retry/fail gate에 사용 금지.
+   */
+  squatHmm?: SquatHmmDecodeResult;
   /**
    * PR-CAM-13: 오버헤드 진행 상태 전체(typed) — squat-style 소유권 분리.
    * - progressionSatisfied: 진행 gate truth (strict | fallback | easy 통합).

@@ -697,6 +697,30 @@ function buildDiagnosisSummary(
       completionPassReason: sc.completionPassReason,
       squatInternalQuality: gate.evaluatorResult.debug?.squatInternalQuality,
     };
+
+    // PR-HMM-01B: shadow decoder compact summary — snapshot payload 과대화 방지
+    const squatHmm = gate.evaluatorResult.debug?.squatHmm;
+    if (squatHmm != null && diagnosisSummary?.squatCycle != null) {
+      const squatCycleExt = diagnosisSummary.squatCycle as typeof diagnosisSummary.squatCycle & {
+        hmmShadow?: {
+          confidence: number;
+          completionCandidate: boolean;
+          counts: Record<string, number>;
+          excursion: number;
+        };
+      };
+      squatCycleExt.hmmShadow = {
+        confidence: squatHmm.confidence,
+        completionCandidate: squatHmm.completionCandidate,
+        counts: {
+          standing: squatHmm.dominantStateCounts.standing,
+          descent: squatHmm.dominantStateCounts.descent,
+          bottom: squatHmm.dominantStateCounts.bottom,
+          ascent: squatHmm.dominantStateCounts.ascent,
+        },
+        excursion: squatHmm.effectiveExcursion,
+      };
+    }
   }
 
   if (stepId === 'overhead-reach') {
