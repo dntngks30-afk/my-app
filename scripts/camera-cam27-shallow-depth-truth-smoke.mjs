@@ -191,13 +191,23 @@ console.log('\nB. secondary arm 단위 테스트 (mock PoseFeaturesFrame)');
   info('B unit test arming', {
     armed: arming.armed,
     fallback: arming.armingFallbackUsed,
+    peakAnchored: arming.armingPeakAnchored,
     stableFrames: arming.stableFrames,
     sliceStart: arming.completionSliceStartIndex,
   });
 
-  ok('B: arming = true (secondary fired)', arming.armed === true, arming.armed);
-  ok('B: armingFallbackUsed = true', arming.armingFallbackUsed === true, arming.armingFallbackUsed);
-  ok('B: stableFrames = 4 (secondary baseline)', arming.stableFrames === 4, arming.stableFrames);
+  ok('B: arming = true', arming.armed === true, arming.armed);
+  // PR-CAM-28: peak-anchored가 secondary보다 먼저 잡을 수 있음(동일 버그 클래스 해결)
+  ok(
+    'B: peakAnchored OR fallbackUsed (slice aligned to squat, not post-squat tail)',
+    arming.armingPeakAnchored === true || arming.armingFallbackUsed === true,
+    { peakAnchored: arming.armingPeakAnchored, fallback: arming.armingFallbackUsed }
+  );
+  ok(
+    'B: stableFrames = 4 (peak-anchor or secondary 4-frame baseline)',
+    arming.stableFrames === 4,
+    arming.stableFrames
+  );
   ok('B: completionFrames includes squat', result.completionFrames.length > 0, result.completionFrames.length);
   const maxDepthInCompletion = Math.max(...result.completionFrames.map(f => f.derived.squatDepthProxy));
   ok('B: completionFrames max depth > 0 (squat captured)', maxDepthInCompletion > 0.04, maxDepthInCompletion);
@@ -287,7 +297,7 @@ console.log('\nE. 깊은 스쿼트 — 기존 동작 보존');
 
   ok('E: arming = 1 (primary arm)', hm.completionArmingArmed === 1, hm.completionArmingArmed);
   ok('E: rawDepthPeak > 0 (deep squat depth)', hm.rawDepthPeak > 0, hm.rawDepthPeak);
-  ok('E: fallbackUsed = 0 (primary arm sufficient)', hm.completionArmingFallbackUsed === 0, hm.completionArmingFallbackUsed);
+  ok('E: fallbackUsed = 0 (no 4-frame secondary)', hm.completionArmingFallbackUsed === 0, hm.completionArmingFallbackUsed);
 }
 
 // ── Summary ──

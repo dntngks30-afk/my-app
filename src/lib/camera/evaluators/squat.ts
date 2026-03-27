@@ -124,6 +124,24 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     completionArming.armed ? completionFrames : []
   );
 
+  const globalMaxDepthProxy = depthValues.length > 0 ? Math.max(...depthValues) : 0;
+  const completionSliceDepthValues = getNumbers(
+    completionFrames.map((frame) => frame.derived.squatDepthProxy)
+  );
+  const completionSliceMaxDepthProxy =
+    completionSliceDepthValues.length > 0 ? Math.max(...completionSliceDepthValues) : 0;
+  /** PR-CAM-28: 슬라이스 최댓값이 전역 피크보다 유의하게 낮으면 tail-only 등 mismatch */
+  const DEPTH_TRUTH_MISMATCH_EPS = 0.015;
+  const depthTruthWindowMismatch =
+    completionArming.armed && globalMaxDepthProxy - completionSliceMaxDepthProxy > DEPTH_TRUTH_MISMATCH_EPS
+      ? 1
+      : 0;
+  const sliceMissedMotionCode = !completionArming.armed
+    ? 2
+    : depthTruthWindowMismatch === 1
+      ? 1
+      : 0;
+
   const phaseScan = completionArming.armed ? completionFrames : [];
   const offset = completionArming.completionSliceStartIndex;
   const toGlobalIdx = (idxInSlice: number) =>
@@ -132,6 +150,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const firstDescentIdx = toGlobalIdx(phaseScan.findIndex((f) => f.phaseHint === 'descent'));
   const firstBottomIdx = toGlobalIdx(phaseScan.findIndex((f) => f.phaseHint === 'bottom'));
   const firstAscentIdx = toGlobalIdx(phaseScan.findIndex((f) => f.phaseHint === 'ascent'));
+  const firstDescentIdxGlobal = valid.findIndex((f) => f.phaseHint === 'descent');
   const repCountEstimate = state.completionSatisfied ? 1 : 0;
 
   if (!completionArming.armed) {
@@ -240,8 +259,19 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         completionArmingBaselineCaptured: completionArming.baselineCaptured ? 1 : 0,
         completionArmingStableFrames: completionArming.stableFrames,
         completionArmingSliceStart: completionArming.completionSliceStartIndex,
+        /** PR-CAM-28: valid 내 마지막 인덱스(슬라이스는 항상 버퍼 끝까지) */
+        completionSliceEndIndex: completionArming.armed ? valid.length - 1 : -1,
+        /** PR-CAM-28: 전역 vs completion 슬라이스 최대 squatDepthProxy (0–1) */
+        globalDepthPeak: Math.round(globalMaxDepthProxy * 1000) / 1000,
+        completionSliceDepthPeak: Math.round(completionSliceMaxDepthProxy * 1000) / 1000,
+        firstDescentIdxGlobal: firstDescentIdxGlobal >= 0 ? firstDescentIdxGlobal : -1,
+        depthTruthWindowMismatch,
+        /** 0=slice OK, 1=armed but slice missed global peak, 2=not armed */
+        sliceMissedMotionCode,
         /** PR-CAM-27: 폴백 arm 사용 여부 — depth-truth source chain 추적용 */
         completionArmingFallbackUsed: completionArming.armingFallbackUsed ? 1 : 0,
+        /** PR-CAM-28: 글로벌 피크 앞 standing 앵커 */
+        completionArmingPeakAnchored: completionArming.armingPeakAnchored ? 1 : 0,
         baselineStandingDepth: Math.round(state.baselineStandingDepth * 100) / 100,
         rawDepthPeak: Math.round(state.rawDepthPeak * 100) / 100,
         relativeDepthPeak: Math.round(state.relativeDepthPeak * 100) / 100,

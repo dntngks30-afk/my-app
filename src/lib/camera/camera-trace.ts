@@ -286,14 +286,41 @@ export function deriveSquatObservabilitySignals(gate: ExerciseGateResult): {
   const sc = gate.squatCycleDebug;
   const hm = readHighlighted(gate);
   const relPeak = typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : undefined;
+  const globalDepthPeak =
+    typeof hm?.globalDepthPeak === 'number' ? hm.globalDepthPeak : undefined;
   const descentCount = typeof hm?.descentCount === 'number' ? hm.descentCount : 0;
   const shallowReasons: string[] = [];
   const attemptReasons: string[] = [];
 
   const SHALLOW_FLOOR = 0.02;
   const SHALLOW_CEIL = 0.14;
-  /** 관측 전용: evaluator 단일 플래그만으로 스탠딩 노이즈를 얕은 후보로 올리지 않음(통과와 무관). */
-  const quietEvaluatorShallow = relPeak != null && relPeak >= SHALLOW_FLOOR;
+  /**
+   * 관측 전용: completion 슬라이스 relativePeak가 낮아도 전역 depth 피크와 하강/무장 신호가 있으면 얕은 후보 허용.
+   * - descentCount: phaseHint descent 다수
+   * - descendDetected: squatCycleDebug( phase !== idle 등 ) — 미완 시퀀스에서 relPeak만으로 누락 방지
+   * standing-only는 보통 미무장·descendDetected false → 여기 걸리지 않음.
+   */
+  const relBelowSlice = relPeak == null || relPeak < SHALLOW_FLOOR;
+  /** evaluator highlighted: `depthPeak` = round(max squatDepthProxy * 100) */
+  const depthPeakPct = typeof hm?.depthPeak === 'number' ? hm.depthPeak : null;
+  const completionArmingArmed = hm?.completionArmingArmed === 1;
+  const quietEvaluatorShallow =
+    (relPeak != null && relPeak >= SHALLOW_FLOOR) ||
+    (globalDepthPeak != null &&
+      globalDepthPeak >= SHALLOW_FLOOR &&
+      descentCount > 0 &&
+      relBelowSlice) ||
+    (globalDepthPeak != null &&
+      globalDepthPeak >= SHALLOW_FLOOR &&
+      sc?.descendDetected === true &&
+      relBelowSlice) ||
+    // 슬라이스 relative는 0이어도 전역 피크·무장·최대%가 얕은 밴드면 관측 허용(통과와 무관)
+    (globalDepthPeak != null &&
+      globalDepthPeak >= SHALLOW_FLOOR &&
+      completionArmingArmed &&
+      depthPeakPct != null &&
+      depthPeakPct >= SHALLOW_FLOOR * 100 &&
+      relBelowSlice);
   if (relPeak != null && relPeak >= SHALLOW_FLOOR && relPeak < SHALLOW_CEIL) {
     shallowReasons.push('relative_depth_shallow_band');
   }

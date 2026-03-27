@@ -5,10 +5,9 @@
  * - 서 있기 안정 구간이 쌓인 뒤에만 completion용 프레임 슬라이스를 넘긴다.
  *
  * PR-CAM-27: 얕은 스쿼트 depth-truth 정렬 (secondary arm)
- * - 1차 10프레임 arm 이후 completionFrames에 실질 motion이 없으면(예: 스쿼트가 standing 구간 이전에
- *   일어난 경우) 4프레임 축소 arm 폴백을 시도한다.
- * - 폴백 조건: 4프레임 안정 standing baseline 직후 depth 상승 excursion ≥ SHALLOW_FALLBACK_EVIDENCE_MIN.
- * - noisy standing sway(excursion < SHALLOW_FALLBACK_EVIDENCE_MIN)는 폴백 미작동 → 오탐 방지 유지.
+ * PR-CAM-28: **피크 앵커 arm** — 버퍼 내 `squatDepthProxy` 최댓값 직전의 마지막 안정 standing을
+ *   기준으로 슬라이스를 잡아, “선행 스쿼트 + 긴 사후 standing”에서 첫 10프레임이 tail만 보는
+ *   source-chain mismatch를 제거한다.
  */
 
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
@@ -24,6 +23,8 @@ export type CompletionArmingState = {
   completionSliceStartIndex: number;
   /** PR-CAM-27: 1차 arm이 motion을 포함하지 않아 폴백 arm을 사용했는지 */
   armingFallbackUsed?: boolean;
+  /** PR-CAM-28: 글로벌 depth 피크 직전 standing에 슬라이스를 앵커했는지 */
+  armingPeakAnchored?: boolean;
 };
 
 /** pose-features `start` 밴드와 정렬 (약간 여유로 초기 캘리브레이션 허용) */
@@ -65,12 +66,84 @@ function isStableStandingRun(frames: PoseFeaturesFrame[], start: number, len: nu
   return true;
 }
 
+/** valid 내 첫 번째 전역 최대 squatDepthProxy 인덱스 (동률 시 앞쪽) */
+function findGlobalSquatDepthPeakIndex(valid: PoseFeaturesFrame[]): number | null {
+  let bestIdx: number | null = null;
+  let bestD = -Infinity;
+  for (let i = 0; i < valid.length; i++) {
+    const d = readSquatDepth(valid[i]!);
+    if (d == null) continue;
+    if (d > bestD) {
+      bestD = d;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
+/**
+ * PR-CAM-28: 글로벌 피크 **바로 앞**에서 끝나는 가장 가까운 안정 standing 구간을 찾는다.
+ * end는 peakIdx-1 이하이며, [end-len+1, end]가 안정 standing이면 슬라이스는 end+1부터.
+ */
+function tryPeakAnchoredArming(valid: PoseFeaturesFrame[]): {
+  arming: CompletionArmingState;
+  completionFrames: PoseFeaturesFrame[];
+} | null {
+  const peakIdx = findGlobalSquatDepthPeakIndex(valid);
+  if (peakIdx == null || peakIdx < 1) return null;
+
+  const peakDepth = readSquatDepth(valid[peakIdx]!);
+  if (peakDepth == null) return null;
+
+  const stableLens = [MIN_STABLE_STANDING_FRAMES, SECONDARY_STABLE_MIN_FRAMES] as const;
+
+  for (const stableLen of stableLens) {
+    for (let end = peakIdx - 1; end >= stableLen - 1; end--) {
+      const start = end - stableLen + 1;
+      if (!isStableStandingRun(valid, start, stableLen)) continue;
+
+      const completionSliceStartIndex = end + 1;
+      if (completionSliceStartIndex > peakIdx) continue;
+
+      const completionFrames = valid.slice(completionSliceStartIndex);
+      const baselineDepths = valid
+        .slice(start, end + 1)
+        .map(readSquatDepth)
+        .filter((d): d is number => d != null);
+      const completionDepths = completionFrames.map(readSquatDepth).filter((d): d is number => d != null);
+
+      if (baselineDepths.length < stableLen || completionDepths.length === 0) continue;
+
+      const baseMin = Math.min(...baselineDepths);
+      const completionMax = Math.max(...completionDepths);
+
+      if (completionMax - baseMin < SHALLOW_FALLBACK_EVIDENCE_MIN) continue;
+
+      // 피크가 슬라이스 안에 있고, 슬라이스 최댓값이 전역 피크와 일치(부동 소수 허용)
+      if (peakIdx >= completionSliceStartIndex && completionMax + 1e-9 >= peakDepth) {
+        return {
+          arming: {
+            armed: true,
+            baselineCaptured: completionFrames.length >= MIN_FRAMES_FOR_BASELINE_CAPTURE,
+            stableFrames: stableLen,
+            completionSliceStartIndex,
+            armingPeakAnchored: true,
+          },
+          completionFrames,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
 /**
  * 첫 번째로 나타나는 "연속 서 있기 안정" 구간 직후부터 completion 평가용 프레임을 자른다.
  * 해당 구간이 없으면 `armed: false`이고 completion 프레임은 빈 배열.
  *
- * PR-CAM-27: 1차 arm 이후 completionFrames에 motion이 없을 경우
- * 4프레임 축소 arm으로 폴백해 얕은 스쿼트 depth-truth 체인을 복구한다.
+ * PR-CAM-28: **피크 앵커**를 먼저 시도해, 사후 standing tail만 보는 슬라이스를 피한다.
+ * PR-CAM-27: 1차 arm 이후 completionFrames에 motion이 없을 경우 4프레임 축소 arm 폴백.
  */
 export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
   arming: CompletionArmingState;
@@ -83,6 +156,11 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
     completionSliceStartIndex: 0,
   };
 
+  const peakAnchored = tryPeakAnchoredArming(valid);
+  if (peakAnchored != null) {
+    return peakAnchored;
+  }
+
   if (valid.length >= MIN_STABLE_STANDING_FRAMES) {
     for (let i = 0; i <= valid.length - MIN_STABLE_STANDING_FRAMES; i++) {
       if (!isStableStandingRun(valid, i, MIN_STABLE_STANDING_FRAMES)) continue;
@@ -90,9 +168,6 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
       const completionSliceStartIndex = i + MIN_STABLE_STANDING_FRAMES;
       const completionFrames = valid.slice(completionSliceStartIndex);
 
-      // PR-CAM-27: verify completionFrames actually contain motion.
-      // If the 10-frame stable window landed on post-squat standing, completionFrames
-      // will be near-empty and rawDepthPeak stays zero even though the squat already occurred.
       const completionDepths = completionFrames
         .map(readSquatDepth)
         .filter((d): d is number => d != null);
@@ -114,16 +189,10 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
           completionFrames,
         };
       }
-      // Primary arm found but no motion in completionFrames (post-squat standing window).
-      // Break and fall through to secondary arm which scans from the beginning.
       break;
     }
   }
 
-  // PR-CAM-27: Secondary arm — 4-frame baseline + motion evidence guard.
-  // Fires when primary arm missed the squat (user squatted before 10-frame baseline could form,
-  // or natural standing fidget broke the 10-frame stable run).
-  // noisy sway (excursion < SHALLOW_FALLBACK_EVIDENCE_MIN) cannot arm → false-positive guard preserved.
   if (valid.length < SECONDARY_STABLE_MIN_FRAMES + 4) {
     return { arming: idle, completionFrames: [] };
   }
