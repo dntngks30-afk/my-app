@@ -133,6 +133,10 @@ export interface SquatCycleDebug {
   hmmConfidence?: number;
   hmmCompletionCandidate?: boolean;
   hmmDominantPath?: string;
+  /** PR-HMM-02B: HMM blocked-reason assist — trace only, pass gate 변경 없음 */
+  hmmAssistEligible?: boolean;
+  hmmAssistApplied?: boolean;
+  hmmAssistReason?: string | null;
 }
 
 export interface ExerciseGateResult {
@@ -873,6 +877,9 @@ function getSquatProgressionCompletionSatisfied(
         : 'partial_cycle'
       : 'no_cycle';
   }
+  squatCycleDebug.hmmAssistEligible = cs?.hmmAssistEligible;
+  squatCycleDebug.hmmAssistApplied = cs?.hmmAssistApplied;
+  squatCycleDebug.hmmAssistReason = cs?.hmmAssistReason ?? null;
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';

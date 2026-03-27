@@ -121,17 +121,17 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
 
   /** PR-HOTFIX-02: 서 있기 안정 구간 이후에만 completion 상태기에 프레임 전달 */
   const { arming: completionArming, completionFrames } = computeSquatCompletionArming(valid);
-  const state = evaluateSquatCompletionState(
-    completionArming.armed ? completionFrames : []
-  );
 
   /**
-   * PR-HMM-01B: shadow decoder — rule-based completion truth와 독립.
-   * arming 완료 시 completionFrames로, 미완료 시 valid 전체로 decode.
-   * pass/retry/fail gate에 사용 금지 — debug/observability 전용.
+   * PR-HMM-01B/02B: shadow decoder — completionFrames(또는 valid)로 먼저 decode 후
+   * PR-HMM-02B: evaluateSquatCompletionState에 HMM 전달(blocked-reason assist 전용).
    */
   const hmmInput = completionArming.armed ? completionFrames : valid;
   const squatHmm = decodeSquatHmm(hmmInput);
+
+  const state = evaluateSquatCompletionState(completionArming.armed ? completionFrames : [], {
+    hmm: squatHmm,
+  });
 
   const globalMaxDepthProxy = depthValues.length > 0 ? Math.max(...depthValues) : 0;
   const completionSliceDepthValues = getNumbers(
@@ -376,6 +376,9 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         hmmBottomCount: squatHmm.dominantStateCounts.bottom,
         hmmAscentCount: squatHmm.dominantStateCounts.ascent,
         hmmExcursion: squatHmm.effectiveExcursion,
+        /** PR-HMM-02B: blocked-reason assist trace (1/0) */
+        hmmAssistEligible: state.hmmAssistEligible ? 1 : 0,
+        hmmAssistApplied: state.hmmAssistApplied ? 1 : 0,
       },
       perStepDiagnostics: perStepRecord,
       /** PR-HMM-01B: shadow decoder 전체 결과 — debug 전용 */

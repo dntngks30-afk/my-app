@@ -6,6 +6,8 @@ import {
   type SquatCompletionPassReason,
 } from '@/lib/camera/squat-completion-machine';
 import type { MotionCompletionResult } from '@/lib/camera/types/motion-completion';
+import type { SquatHmmDecodeResult } from '@/lib/camera/squat/squat-hmm';
+import { getHmmAssistDecision } from '@/lib/camera/squat/squat-hmm-assist';
 
 export type SquatCompletionPhase =
   | 'idle'
@@ -68,7 +70,16 @@ export interface SquatCompletionState extends MotionCompletionResult {
   completionMachinePhase: SquatCompletionMachinePhase;
   /** PR-COMP-01: 통과 시 ROM 사이클 분류 / 미통과 not_confirmed */
   completionPassReason: SquatCompletionPassReason;
+  /** PR-HMM-02B: HMM blocked-reason assist trace (pass gate 소유권은 rule 유지) */
+  hmmAssistEligible?: boolean;
+  hmmAssistApplied?: boolean;
+  hmmAssistReason?: string | null;
 }
+
+/** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
+export type EvaluateSquatCompletionStateOptions = {
+  hmm?: SquatHmmDecodeResult;
+};
 
 const BASELINE_WINDOW = 6;
 const MIN_BASELINE_FRAMES = 4;
@@ -287,7 +298,8 @@ function getStandingRecoveryFinalizeGate(
 }
 
 export function evaluateSquatCompletionState(
-  frames: PoseFeaturesFrame[]
+  frames: PoseFeaturesFrame[],
+  options?: EvaluateSquatCompletionStateOptions
 ): SquatCompletionState {
   const validFrames = frames.filter((frame) => frame.isValid);
   const depthFrames = validFrames
@@ -340,6 +352,9 @@ export function evaluateSquatCompletionState(
       ...emptyBase,
       completionMachinePhase: deriveSquatCompletionMachinePhase(emptyBase),
       completionPassReason: 'not_confirmed' as const,
+      hmmAssistEligible: false,
+      hmmAssistApplied: false,
+      hmmAssistReason: null,
     };
   }
 
@@ -516,23 +531,23 @@ export function evaluateSquatCompletionState(
     currentSquatPhase = 'standing_recovered';
   }
 
-  let completionBlockedReason: string | null = null;
+  let ruleCompletionBlockedReason: string | null = null;
   if (!armed) {
-    completionBlockedReason = 'not_armed';
+    ruleCompletionBlockedReason = 'not_armed';
   } else if (!descendConfirmed) {
-    completionBlockedReason = 'no_descend';
+    ruleCompletionBlockedReason = 'no_descend';
   } else if (!attemptAdmissionSatisfied) {
-    completionBlockedReason = 'insufficient_relative_depth';
+    ruleCompletionBlockedReason = 'insufficient_relative_depth';
   } else if (!downwardCommitmentReached || committedFrame == null) {
-    completionBlockedReason = 'no_commitment';
+    ruleCompletionBlockedReason = 'no_commitment';
   } else if (reversalFrame == null) {
-    completionBlockedReason = 'no_reversal';
+    ruleCompletionBlockedReason = 'no_reversal';
   } else if (!ascendConfirmed) {
-    completionBlockedReason = 'no_ascend';
+    ruleCompletionBlockedReason = 'no_ascend';
   } else if (standingRecovery.standingRecoveredAtMs == null) {
-    completionBlockedReason = 'not_standing_recovered';
+    ruleCompletionBlockedReason = 'not_standing_recovered';
   } else if (!standingRecoveryFinalize.finalizeSatisfied) {
-    completionBlockedReason =
+    ruleCompletionBlockedReason =
       evidenceLabel === 'low_rom'
         ? 'low_rom_standing_finalize_not_satisfied'
         : evidenceLabel === 'ultra_low_rom'
@@ -543,7 +558,7 @@ export function evaluateSquatCompletionState(
     effectiveDescentStartFrame != null &&
     peakFrame.timestampMs - effectiveDescentStartFrame.timestampMs < minDescentToPeakMsForLowRom
   ) {
-    completionBlockedReason = 'descent_span_too_short';
+    ruleCompletionBlockedReason = 'descent_span_too_short';
   } else if (
     relativeDepthPeak < SHALLOW_REVERSAL_TIMING_PEAK_MAX &&
     reversalFrame != null &&
@@ -551,8 +566,23 @@ export function evaluateSquatCompletionState(
     standingRecovery.standingRecoveredAtMs - reversalFrame.timestampMs <
       minReversalToStandingMsForShallow
   ) {
-    completionBlockedReason = 'ascent_recovery_span_too_short';
+    ruleCompletionBlockedReason = 'ascent_recovery_span_too_short';
   }
+
+  /** PR-HMM-02B: rule blocked reason만 HMM으로 완화 — recovery/finalize는 비터치 */
+  const hmmAssistDecision = getHmmAssistDecision(options?.hmm, {
+    completionBlockedReason: ruleCompletionBlockedReason,
+    relativeDepthPeak,
+    standingRecoveredAtMs: standingRecovery.standingRecoveredAtMs,
+    standingRecoveryFinalizeSatisfied: standingRecoveryFinalize.finalizeSatisfied,
+    ascendConfirmed,
+    downwardCommitmentReached,
+    attemptAdmissionSatisfied,
+    committedFrameExists: committedFrame != null,
+  });
+  const completionBlockedReason = hmmAssistDecision.assistApplied
+    ? null
+    : ruleCompletionBlockedReason;
 
   /** PR-CAM-18: phaseHint 기반 descentFrame이 없을 때 effectiveDescentStartFrame으로 폴백 */
   const squatDescentToPeakMs =
@@ -645,5 +675,8 @@ export function evaluateSquatCompletionState(
       downwardCommitmentReached,
     }),
     completionPassReason,
+    hmmAssistEligible: hmmAssistDecision.assistEligible,
+    hmmAssistApplied: hmmAssistDecision.assistApplied,
+    hmmAssistReason: hmmAssistDecision.assistReason,
   };
 }
