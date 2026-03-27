@@ -240,6 +240,8 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         completionArmingBaselineCaptured: completionArming.baselineCaptured ? 1 : 0,
         completionArmingStableFrames: completionArming.stableFrames,
         completionArmingSliceStart: completionArming.completionSliceStartIndex,
+        /** PR-CAM-27: 폴백 arm 사용 여부 — depth-truth source chain 추적용 */
+        completionArmingFallbackUsed: completionArming.armingFallbackUsed ? 1 : 0,
         baselineStandingDepth: Math.round(state.baselineStandingDepth * 100) / 100,
         rawDepthPeak: Math.round(state.rawDepthPeak * 100) / 100,
         relativeDepthPeak: Math.round(state.relativeDepthPeak * 100) / 100,
