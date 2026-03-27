@@ -727,6 +727,49 @@ function stabilizeDerivedSignals(frames: PoseFeaturesFrame[]): PoseFeaturesFrame
   });
 }
 
+const SHALLOW_DESCENT_DEPTH_MIN = 0.03;
+const SHALLOW_DESCENT_DEPTH_MAX = 0.08;
+const SHALLOW_DESCENT_EXCURSION_MIN = 0.015;
+const SHALLOW_DESCENT_MIN_CONSECUTIVE_FRAMES = 3;
+const SHALLOW_DESCENT_MIN_DELTA_PER_FRAME = 0.003;
+
+/**
+ * Very shallow squat은 절대 depth band 대신 짧은 하강 연속성으로 관측한다.
+ * 단일 프레임 스파이크를 막기 위해 연속 frame trend + excursion 둘 다 요구한다.
+ */
+function hasGuardedShallowSquatDescent(
+  frames: PoseFeaturesFrame[],
+  index: number,
+  sessionMinDepth: number
+): boolean {
+  if (index < SHALLOW_DESCENT_MIN_CONSECUTIVE_FRAMES) return false;
+  const recentDepths: number[] = [];
+
+  for (let i = index - SHALLOW_DESCENT_MIN_CONSECUTIVE_FRAMES; i <= index; i += 1) {
+    const depth = frames[i]!.derived.squatDepthProxy;
+    if (typeof depth !== 'number') return false;
+    recentDepths.push(depth);
+  }
+
+  const currentDepth = recentDepths[recentDepths.length - 1]!;
+  if (currentDepth < SHALLOW_DESCENT_DEPTH_MIN || currentDepth >= SHALLOW_DESCENT_DEPTH_MAX) {
+    return false;
+  }
+
+  const deltas = recentDepths.slice(1).map((depth, depthIndex) => depth - recentDepths[depthIndex]!);
+  const hasConsistentDownwardTrend = deltas.every(
+    (delta) => delta >= SHALLOW_DESCENT_MIN_DELTA_PER_FRAME
+  );
+  if (!hasConsistentDownwardTrend) return false;
+
+  const excursion = currentDepth - sessionMinDepth;
+  const totalTrendDelta = currentDepth - recentDepths[0]!;
+  return (
+    excursion >= SHALLOW_DESCENT_EXCURSION_MIN &&
+    totalTrendDelta >= SHALLOW_DESCENT_EXCURSION_MIN
+  );
+}
+
 function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): PoseFeaturesFrame[] {
   if (frames.length === 0) return frames;
 
@@ -757,9 +800,16 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
         const excursion = currentDepth - sessionMinDepth;
 
         const depthDelta = typeof previousDepth === 'number' ? currentDepth - previousDepth : 0;
+        const guardedShallowDescent = hasGuardedShallowSquatDescent(
+          frames,
+          index,
+          sessionMinDepth
+        );
 
-        if (currentDepth < 0.08) {
+        if (currentDepth < SHALLOW_DESCENT_DEPTH_MAX && !guardedShallowDescent) {
           phaseHint = 'start';
+        } else if (guardedShallowDescent) {
+          phaseHint = 'descent';
         } else if (currentDepth >= bottomThreshold && Math.abs(depthDelta) < 0.022) {
           phaseHint = 'bottom';
         } else if (depthDelta > descentDelta && excursion >= MIN_EXCURSION_FOR_DESCENT_LABEL) {

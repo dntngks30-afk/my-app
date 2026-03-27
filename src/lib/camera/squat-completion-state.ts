@@ -256,19 +256,30 @@ export function evaluateSquatCompletionState(
    * 수정 범위: 이 변수 쌍 + descendConfirmed + 타이밍 체크 + squatDescentToPeakMs 만.
    * 그 외 evaluator, guardrail, auto-progression, threshold는 일절 변경하지 않는다.
    */
+  const trajectoryDescentStartFrame: {
+    index: number;
+    depth: number;
+    timestampMs: number;
+    phaseHint: PoseFeaturesFrame['phaseHint'];
+  } | undefined =
+    attemptAdmissionSatisfied
+      ? depthFrames.find(
+          (f) =>
+            f.depth - baselineStandingDepth >= attemptAdmissionFloor * 0.4
+        )
+      : undefined;
+
   const effectiveDescentStartFrame: {
     index: number;
     depth: number;
     timestampMs: number;
     phaseHint: PoseFeaturesFrame['phaseHint'];
   } | undefined =
-    descentFrame ??
-    (attemptAdmissionSatisfied
-      ? depthFrames.find(
-          (f) =>
-            f.depth - baselineStandingDepth >= attemptAdmissionFloor * 0.4
-        )
-      : undefined);
+    descentFrame != null && trajectoryDescentStartFrame != null
+      ? descentFrame.index <= trajectoryDescentStartFrame.index
+        ? descentFrame
+        : trajectoryDescentStartFrame
+      : descentFrame ?? trajectoryDescentStartFrame;
 
   /** phaseHint 기반 descent가 없으면 true — completionPassReason 구분용 */
   const eventBasedDescentPath =
