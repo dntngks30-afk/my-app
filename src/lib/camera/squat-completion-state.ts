@@ -112,6 +112,19 @@ const RELAXED_MIN_REVERSAL_TO_STANDING_MS_SHALLOW = 140;
 const RELAXED_LOW_ROM_MIN_CONTINUITY_FRAMES = 4;
 const RELAXED_LOW_ROM_MIN_DROP_RATIO = 0.45;
 
+/**
+ * PR-C: low_ROM finalize와 동일한 “복귀 증거” — ultra_low_rom 에서만 짧은 standing hold(60ms)를 허용할 때 사용.
+ * pose-features `getSquatRecoverySignal` 과 같은 continuity/drop 기준으로 shallow 오탐 없이 false negative만 줄인다.
+ */
+function recoveryMeetsLowRomStyleFinalizeProof(
+  recovery: Pick<SquatCompletionState, 'recoveryReturnContinuityFrames' | 'recoveryDropRatio'>
+): boolean {
+  return (
+    (recovery.recoveryReturnContinuityFrames ?? 0) >= LOW_ROM_STANDING_FINALIZE_MIN_RETURN_CONTINUITY_FRAMES &&
+    (recovery.recoveryDropRatio ?? 0) >= LOW_ROM_STANDING_FINALIZE_MIN_DROP_RATIO
+  );
+}
+
 function getStandingRecoveryWindow(
   frames: Array<{ index: number; depth: number; timestampMs: number }>,
   baselineStandingDepth: number,
@@ -192,12 +205,15 @@ function getStandingRecoveryFinalizeGate(
   finalizeSatisfied: boolean;
   finalizeReason: string | null;
 } {
+  const ultraLowRomUsesGuardedFinalize =
+    evidenceLabel === 'ultra_low_rom' && recoveryMeetsLowRomStyleFinalizeProof(recovery);
+
   const minFramesUsed =
-    evidenceLabel === 'low_rom'
+    evidenceLabel === 'low_rom' || ultraLowRomUsesGuardedFinalize
       ? LOW_ROM_STANDING_RECOVERY_MIN_FRAMES
       : MIN_STANDING_RECOVERY_FRAMES;
   const minHoldMsUsed =
-    evidenceLabel === 'low_rom'
+    evidenceLabel === 'low_rom' || ultraLowRomUsesGuardedFinalize
       ? LOW_ROM_STANDING_RECOVERY_MIN_HOLD_MS
       : MIN_STANDING_RECOVERY_HOLD_MS;
 
@@ -237,7 +253,8 @@ function getStandingRecoveryFinalizeGate(
     };
   }
 
-  if (evidenceLabel === 'low_rom') {
+  const needsLowRomStyleProof = evidenceLabel === 'low_rom' || ultraLowRomUsesGuardedFinalize;
+  if (needsLowRomStyleProof) {
     if ((recovery.recoveryReturnContinuityFrames ?? 0) < LOW_ROM_STANDING_FINALIZE_MIN_RETURN_CONTINUITY_FRAMES) {
       return {
         minFramesUsed,
@@ -260,7 +277,12 @@ function getStandingRecoveryFinalizeGate(
     minFramesUsed,
     minHoldMsUsed,
     finalizeSatisfied: true,
-    finalizeReason: evidenceLabel === 'low_rom' ? 'low_rom_guarded_finalize' : 'standing_hold_met',
+    finalizeReason:
+      evidenceLabel === 'low_rom'
+        ? 'low_rom_guarded_finalize'
+        : ultraLowRomUsesGuardedFinalize
+          ? 'ultra_low_rom_guarded_finalize'
+          : 'standing_hold_met',
   };
 }
 
@@ -513,7 +535,9 @@ export function evaluateSquatCompletionState(
     completionBlockedReason =
       evidenceLabel === 'low_rom'
         ? 'low_rom_standing_finalize_not_satisfied'
-        : 'recovery_hold_too_short';
+        : evidenceLabel === 'ultra_low_rom'
+          ? 'ultra_low_rom_standing_finalize_not_satisfied'
+          : 'recovery_hold_too_short';
   } else if (
     relativeDepthPeak < LOW_ROM_TIMING_PEAK_MAX &&
     effectiveDescentStartFrame != null &&

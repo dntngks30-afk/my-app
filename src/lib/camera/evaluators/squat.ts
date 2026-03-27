@@ -310,6 +310,20 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         standingRecoveryMinHoldMsUsed: state.standingRecoveryMinHoldMsUsed,
         standingRecoveryBand: state.standingRecoveryBand,
         standingRecoveryFinalizeReason: state.standingRecoveryFinalizeReason,
+        /**
+         * PR-C: post-peak standing 밴드(상대 깊이 임계 이하) 진입 시각이 잡혔는지(1/0).
+         * standing_recovered 와는 별개 — finalize 전 단계 관측.
+         */
+        squatStandingBandHit: state.standingRecoveredAtMs != null ? 1 : 0,
+        /**
+         * PR-C: standing recovery finalize 통과(1). tail_hold/continuity/drop 미충족 시 0.
+         */
+        squatFinalizeGateOk:
+          state.standingRecoveryFinalizeReason === 'standing_hold_met' ||
+          state.standingRecoveryFinalizeReason === 'low_rom_guarded_finalize' ||
+          state.standingRecoveryFinalizeReason === 'ultra_low_rom_guarded_finalize'
+            ? 1
+            : 0,
         successPhaseAtOpen: state.successPhaseAtOpen ?? null,
         evidenceLabel: state.evidenceLabel,
         completionBlockedReason: state.completionBlockedReason,

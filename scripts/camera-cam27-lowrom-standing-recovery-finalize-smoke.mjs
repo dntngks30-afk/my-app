@@ -199,7 +199,7 @@ console.log('\nD. standard path stays strict');
   );
 }
 
-console.log('\nE. ultra-low-ROM is not accidentally widened');
+console.log('\nE. ultra-low-ROM: guarded finalize only when recovery proof matches low-ROM gate');
 {
   const failState = evaluateSquatCompletionState(
     frames(
@@ -227,16 +227,60 @@ console.log('\nE. ultra-low-ROM is not accidentally widened');
     )
   );
   ok(
-    'E2: ultra-low stays on strict standing-recovery band',
+    'E2: ultra-low completes with PR-C guarded finalize (60ms min hold + proof)',
     preservedState.standingRecoveryBand === 'ultra_low_rom' &&
-      preservedState.standingRecoveryMinHoldMsUsed === 160 &&
-      preservedState.completionSatisfied === true,
+      preservedState.completionSatisfied === true &&
+      preservedState.standingRecoveryMinHoldMsUsed === 60 &&
+      preservedState.standingRecoveryFinalizeReason === 'ultra_low_rom_guarded_finalize',
     {
       standingRecoveryBand: preservedState.standingRecoveryBand,
       standingRecoveryMinHoldMsUsed: preservedState.standingRecoveryMinHoldMsUsed,
+      standingRecoveryFinalizeReason: preservedState.standingRecoveryFinalizeReason,
       completionBlockedReason: preservedState.completionBlockedReason,
       completionSatisfied: preservedState.completionSatisfied,
     }
+  );
+}
+
+console.log('\nG. ultra-low tail 80ms: would fail 160ms strict finalize, passes guarded (PR-C)');
+{
+  /** Peak ~0.05, baseline 0.01; post-peak standing tail = 3×40ms = 80ms (< 160ms, ≥ 60ms). */
+  const depthsG = [
+    0.01, 0.01, 0.01, 0.01,
+    0.02, 0.035, 0.048, 0.05,
+    0.05,
+    0.045, 0.038, 0.03, 0.025,
+    0.027,
+    0.022, 0.021, 0.02,
+  ];
+  const phasesG = [
+    'start', 'start', 'start', 'start',
+    'descent', 'descent', 'descent', 'bottom',
+    'bottom',
+    'ascent', 'ascent', 'ascent', 'ascent',
+    'ascent',
+    'start', 'start', 'start',
+  ];
+  const stateG = evaluateSquatCompletionState(frames(depthsG, phasesG, 40));
+
+  ok(
+    'G1: completion with 80ms standing tail (guarded ultra-low)',
+    stateG.completionSatisfied === true &&
+      stateG.standingRecoveryBand === 'ultra_low_rom' &&
+      stateG.standingRecoveryHoldMs >= 60 &&
+      stateG.standingRecoveryHoldMs < 160 &&
+      stateG.standingRecoveryMinHoldMsUsed === 60,
+    {
+      holdMs: stateG.standingRecoveryHoldMs,
+      minHold: stateG.standingRecoveryMinHoldMsUsed,
+      blocked: stateG.completionBlockedReason,
+      finalize: stateG.standingRecoveryFinalizeReason,
+    }
+  );
+  ok(
+    'G2: finalize reason is ultra_low_rom_guarded_finalize',
+    stateG.standingRecoveryFinalizeReason === 'ultra_low_rom_guarded_finalize',
+    stateG.standingRecoveryFinalizeReason
   );
 }
 
