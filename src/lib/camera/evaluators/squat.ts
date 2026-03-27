@@ -272,6 +272,14 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         completionArmingFallbackUsed: completionArming.armingFallbackUsed ? 1 : 0,
         /** PR-CAM-28: 글로벌 피크 앞 standing 앵커 */
         completionArmingPeakAnchored: completionArming.armingPeakAnchored ? 1 : 0,
+        /**
+         * PR-B: 선택된 standing 윈도우 내부 depth range.
+         * 0에 가까울수록 진짜 flat standing. 높으면 arming이 하강 구간을 잘못 선택한 것.
+         */
+        completionArmingStandingWindowRange:
+          completionArming.armingStandingWindowRange != null
+            ? Math.round(completionArming.armingStandingWindowRange * 1000) / 1000
+            : null,
         baselineStandingDepth: Math.round(state.baselineStandingDepth * 100) / 100,
         rawDepthPeak: Math.round(state.rawDepthPeak * 100) / 100,
         relativeDepthPeak: Math.round(state.relativeDepthPeak * 100) / 100,

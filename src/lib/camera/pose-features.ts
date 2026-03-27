@@ -732,6 +732,13 @@ const SHALLOW_DESCENT_DEPTH_MAX = 0.08;
 const SHALLOW_DESCENT_EXCURSION_MIN = 0.015;
 const SHALLOW_DESCENT_MIN_CONSECUTIVE_FRAMES = 3;
 const SHALLOW_DESCENT_MIN_DELTA_PER_FRAME = 0.003;
+/**
+ * PR-B: ultra-shallow 사이클(peak < SHALLOW_DESCENT_DEPTH_MAX)에서 피크 근방 프레임에
+ * 'bottom' 레이블을 부여하기 위한 비율.
+ * 글로벌 maxDepth의 이 비율 이상인 프레임 = "사이클 최저점 근방"으로 판단.
+ * sway/noise 차단: maxDepth >= SHALLOW_DESCENT_DEPTH_MIN 조건 아래서만 적용.
+ */
+const ULTRA_SHALLOW_BOTTOM_RATIO = 0.78;
 
 /**
  * Very shallow squat은 절대 depth band 대신 짧은 하강 연속성으로 관측한다.
@@ -807,7 +814,17 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
         );
 
         if (currentDepth < SHALLOW_DESCENT_DEPTH_MAX && !guardedShallowDescent) {
-          phaseHint = 'start';
+          // PR-B: ultra-shallow 사이클(peak >= 0.03, peak < 0.08)에서
+          // 피크 근방 프레임은 'start' 대신 'bottom'으로 레이블해 cycleDetection truth 개선.
+          // sway/jitter 보호: maxDepth < SHALLOW_DESCENT_DEPTH_MIN이면 적용하지 않는다.
+          if (
+            maxDepth >= SHALLOW_DESCENT_DEPTH_MIN &&
+            currentDepth >= maxDepth * ULTRA_SHALLOW_BOTTOM_RATIO
+          ) {
+            phaseHint = 'bottom';
+          } else {
+            phaseHint = 'start';
+          }
         } else if (guardedShallowDescent) {
           phaseHint = 'descent';
         } else if (currentDepth >= bottomThreshold && Math.abs(depthDelta) < 0.022) {

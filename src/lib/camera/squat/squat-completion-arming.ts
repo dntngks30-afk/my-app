@@ -25,12 +25,29 @@ export type CompletionArmingState = {
   armingFallbackUsed?: boolean;
   /** PR-CAM-28: 글로벌 depth 피크 직전 standing에 슬라이스를 앵커했는지 */
   armingPeakAnchored?: boolean;
+  /**
+   * PR-B: 선택된 standing 윈도우 내부 depth range (max-min).
+   * 높으면 arming이 진짜 standing이 아닌 하강 구간을 선택했을 가능성이 있다.
+   */
+  armingStandingWindowRange?: number;
 };
 
 /** pose-features `start` 밴드와 정렬 (약간 여유로 초기 캘리브레이션 허용) */
 const STANDING_DEPTH_MAX = 0.085;
 /** 인접 프레임 깊이 변화가 이 값 이하여야 "서 있기 안정"으로 친다 */
 const STABLE_ADJACENT_DELTA_MAX = 0.018;
+/**
+ * PR-B: 윈도우 내부 max-min 범위 상한.
+ *
+ * ultra-shallow 스쿼트(peak < 0.085)에서 하강 구간 전체가 STANDING_DEPTH_MAX 미만이고
+ * 인접 델타도 작아서 isStableStandingRun이 하강 구간을 "standing"으로 오인하는 버그를 막는다.
+ *
+ * 기준:
+ * - 진짜 서 있기 윈도우 내부 range: ≈ 0.000–0.008 (자연 자세 변화 포함)
+ * - early-descent 구간(서서히 오름): range ≈ 0.010–0.030
+ * → 0.010 컷오프로 descent ramp를 안전하게 차단하면서 standing 사소한 흔들림은 허용한다.
+ */
+const STANDING_INTERNAL_RANGE_MAX = 0.010;
 /** 연속 안정 서 있기 프레임 수 — 짧은 지터만으로 descent가 열리지 않게 */
 const MIN_STABLE_STANDING_FRAMES = 10;
 /** squat-completion-state baseline 윈도우와 정합(슬라이스만 넘기므로 최소 길이 힌트) */
@@ -55,6 +72,8 @@ function readSquatDepth(frame: PoseFeaturesFrame): number | null {
 }
 
 function isStableStandingRun(frames: PoseFeaturesFrame[], start: number, len: number): boolean {
+  let dMin = Infinity;
+  let dMax = -Infinity;
   for (let k = 0; k < len; k++) {
     const d = readSquatDepth(frames[start + k]!);
     if (d == null || d >= STANDING_DEPTH_MAX) return false;
@@ -62,8 +81,12 @@ function isStableStandingRun(frames: PoseFeaturesFrame[], start: number, len: nu
       const prev = readSquatDepth(frames[start + k - 1]!);
       if (prev == null || Math.abs(d - prev) > STABLE_ADJACENT_DELTA_MAX) return false;
     }
+    if (d < dMin) dMin = d;
+    if (d > dMax) dMax = d;
   }
-  return true;
+  // PR-B: 윈도우 내부 범위가 크면 하강 구간(낮은 델타의 ramp)을 standing으로 오인한 것.
+  // ultra-shallow 스쿼트 전체가 STANDING_DEPTH_MAX 미만이므로 내부 범위로 구분한다.
+  return dMax - dMin <= STANDING_INTERNAL_RANGE_MAX;
 }
 
 /** valid 내 첫 번째 전역 최대 squatDepthProxy 인덱스 (동률 시 앞쪽) */
@@ -115,6 +138,7 @@ function tryPeakAnchoredArming(valid: PoseFeaturesFrame[]): {
       if (baselineDepths.length < stableLen || completionDepths.length === 0) continue;
 
       const baseMin = Math.min(...baselineDepths);
+      const baseMax = Math.max(...baselineDepths);
       const completionMax = Math.max(...completionDepths);
 
       if (completionMax - baseMin < SHALLOW_FALLBACK_EVIDENCE_MIN) continue;
@@ -128,6 +152,7 @@ function tryPeakAnchoredArming(valid: PoseFeaturesFrame[]): {
             stableFrames: stableLen,
             completionSliceStartIndex,
             armingPeakAnchored: true,
+            armingStandingWindowRange: Math.round((baseMax - baseMin) * 1000) / 1000,
           },
           completionFrames,
         };
@@ -176,6 +201,7 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
         .map(readSquatDepth)
         .filter((d): d is number => d != null);
       const baseMin = baselineDepths.length > 0 ? Math.min(...baselineDepths) : 0;
+      const baseMax = baselineDepths.length > 0 ? Math.max(...baselineDepths) : 0;
       const completionMax = completionDepths.length > 0 ? Math.max(...completionDepths) : 0;
 
       if (completionMax - baseMin >= SHALLOW_FALLBACK_EVIDENCE_MIN) {
@@ -185,6 +211,7 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
             baselineCaptured: completionFrames.length >= MIN_FRAMES_FOR_BASELINE_CAPTURE,
             stableFrames: MIN_STABLE_STANDING_FRAMES,
             completionSliceStartIndex,
+            armingStandingWindowRange: Math.round((baseMax - baseMin) * 1000) / 1000,
           },
           completionFrames,
         };
@@ -212,6 +239,7 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
     if (baselineDepths.length < SECONDARY_STABLE_MIN_FRAMES || motionDepths.length === 0) continue;
 
     const baseMin = Math.min(...baselineDepths);
+    const baseMax = Math.max(...baselineDepths);
     const motionMax = Math.max(...motionDepths);
 
     if (motionMax - baseMin < SHALLOW_FALLBACK_EVIDENCE_MIN) continue;
@@ -223,6 +251,7 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
         stableFrames: SECONDARY_STABLE_MIN_FRAMES,
         completionSliceStartIndex,
         armingFallbackUsed: true,
+        armingStandingWindowRange: Math.round((baseMax - baseMin) * 1000) / 1000,
       },
       completionFrames,
     };
