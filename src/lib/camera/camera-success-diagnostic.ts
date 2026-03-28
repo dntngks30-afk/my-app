@@ -187,6 +187,9 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   successUiSettledAt?: string | null;
   successUiSettleMsUsed?: number | null;
   successUiSettlePath?: string | null;
+  /** CAM-PASS-LATCH-DIAG: 래치 시점 직전 구간(옵션·export 가시성) */
+  passVisibleButNotLatched?: boolean;
+  passVisibleWithoutSuccessSnapshot?: boolean;
 }
 
 export type SuccessSnapshot = OverheadSuccessSnapshot | SquatSuccessSnapshot;
@@ -213,6 +216,10 @@ export interface RecordSquatSuccessOptions {
   successUiSettledAt?: string | null;
   successUiSettleMsUsed?: number | null;
   successUiSettlePath?: string | null;
+  /** CAM-PASS-LATCH-DIAG: 래치 직전 엔진 pass vs UI 래치 간극이 있었는지(선택) */
+  passVisibleButNotLatchedPrior?: boolean;
+  /** CAM-PASS-LATCH-DIAG: 이 스냅 직전 success 스냅 부재 구간 표시(선택) */
+  passVisibleWithoutSuccessSnapshotPrior?: boolean;
 }
 
 function pushSuccessSnapshot(snapshot: SuccessSnapshot): void {
@@ -435,6 +442,8 @@ export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): 
         typeof options.successUiSettleMsUsed === 'number' ? options.successUiSettleMsUsed : null,
       successUiSettlePath: options.successUiSettlePath ?? null,
       ...mobileObs,
+      passVisibleButNotLatched: options.passVisibleButNotLatchedPrior ?? false,
+      passVisibleWithoutSuccessSnapshot: options.passVisibleWithoutSuccessSnapshotPrior ?? false,
     };
     pushSuccessSnapshot(snapshot);
   } catch {
