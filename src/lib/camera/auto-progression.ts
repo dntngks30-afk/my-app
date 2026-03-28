@@ -169,7 +169,15 @@ export interface SquatCycleDebug {
   /** PR-04D1: pass vs capture-quality 분리 관측 (completion 계산 변경 없음) */
   completionTruthPassed?: boolean;
   qualityOnlyWarnings?: string[];
+  /** PR-CAM-OWNER-FREEZE-01: resolveSquatPassOwner 와 동일(레거시 필드명 유지) */
   passOwner?: SquatPassOwner;
+  /** PR-CAM-OWNER-FREEZE-01: 최종 성공 오너 — passOwner 와 동일 값 */
+  finalSuccessOwner?: SquatPassOwner;
+  /** completion truth 가 standard_cycle 인 경우(디커플·gate와 무관한 밴드 관측) */
+  standardOwnerEligible?: boolean;
+  /** completion truth 가 low/ultra_low event cycle 인 경우(shadow promote 와 별개) */
+  shadowEventOwnerEligible?: boolean;
+  ownerFreezeVersion?: string;
   lowQualityPassAllowed?: boolean;
   /** PR-04E1: depth/arming 입력 관측 */
   armingDepthSource?: string | null;
@@ -1343,17 +1351,28 @@ export function evaluateExerciseAutoProgress(
       rawIntegrityBlock: squatRawIntegrityBlock,
       decoupleEligible: squatDecoupleEligible,
     });
+    const cpr = squatCs?.completionPassReason;
+    const standardOwnerEligible = completionSatisfied === true && cpr === 'standard_cycle';
+    const shadowEventOwnerEligible =
+      completionSatisfied === true &&
+      (cpr === 'low_rom_event_cycle' || cpr === 'ultra_low_rom_event_cycle');
+    const finalSuccessOwner = resolveSquatPassOwner({
+      guardrail,
+      severeInvalid: severeInvalidForSquat,
+      decoupleEligible: squatDecoupleEligible,
+      completionSatisfied,
+      completionPassReason: cpr,
+    });
     squatCycleDebug = {
       ...squatCycleDebug,
-      completionTruthPassed: squatCompletionTruthPassed(completionSatisfied, squatCs?.completionPassReason),
+      completionTruthPassed: squatCompletionTruthPassed(completionSatisfied, cpr),
       qualityOnlyWarnings: qWarn.length > 0 ? qWarn : undefined,
       lowQualityPassAllowed: squatDecoupleEligible,
-      passOwner: resolveSquatPassOwner({
-        guardrail,
-        severeInvalid: severeInvalidForSquat,
-        decoupleEligible: squatDecoupleEligible,
-        completionSatisfied,
-      }),
+      passOwner: finalSuccessOwner,
+      finalSuccessOwner,
+      standardOwnerEligible,
+      shadowEventOwnerEligible,
+      ownerFreezeVersion: 'cam-owner-freeze-01',
     };
   }
 

@@ -142,6 +142,11 @@ export interface AttemptSnapshot {
       completionTruthPassed?: boolean;
       lowQualityPassAllowed?: boolean;
       passOwner?: string;
+      /** PR-CAM-OWNER-FREEZE-01: success 스냅샷에서 final vs shadow event 밴드 분리 */
+      finalSuccessOwner?: string;
+      standardOwnerEligible?: boolean;
+      shadowEventOwnerEligible?: boolean;
+      ownerFreezeVersion?: string;
       qualityOnlyWarnings?: string[];
       /** PR-04E1: depth/arming 입력 trace */
       armingDepthSource?: string | null;
@@ -755,6 +760,10 @@ function buildDiagnosisSummary(
       completionTruthPassed: sc.completionTruthPassed,
       lowQualityPassAllowed: sc.lowQualityPassAllowed,
       passOwner: sc.passOwner,
+      finalSuccessOwner: sc.finalSuccessOwner,
+      standardOwnerEligible: sc.standardOwnerEligible,
+      shadowEventOwnerEligible: sc.shadowEventOwnerEligible,
+      ownerFreezeVersion: sc.ownerFreezeVersion,
       qualityOnlyWarnings: sc.qualityOnlyWarnings,
       armingDepthSource: sc.armingDepthSource,
       armingDepthPeak: sc.armingDepthPeak,

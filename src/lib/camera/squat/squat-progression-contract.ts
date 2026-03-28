@@ -17,7 +17,15 @@ export const SQUAT_STANDARD_SIGNAL_INTEGRITY_FLAGS = [
   'right_side_missing',
 ] as const;
 
-export type SquatPassOwner = 'completion_truth' | 'blocked_by_invalid_capture' | 'other';
+/**
+ * PR-CAM-OWNER-FREEZE-01: 디버그/스냅샷용 — final 성공 오너를 standard vs event completion truth 로 분리.
+ * gate progression 산식과 무관(문자열 관측만).
+ */
+export type SquatPassOwner =
+  | 'completion_truth_standard'
+  | 'completion_truth_event'
+  | 'blocked_by_invalid_capture'
+  | 'other';
 
 /**
  * Raw integrity block: 기존 getSquatStandardPassIntegrityBlock 와 동일 산식.
@@ -115,11 +123,20 @@ export function resolveSquatPassOwner(input: {
   severeInvalid: boolean;
   decoupleEligible: boolean;
   completionSatisfied: boolean;
+  completionPassReason: string | undefined;
 }): SquatPassOwner {
   if (input.guardrail.captureQuality === 'invalid' || input.severeInvalid) {
     return 'blocked_by_invalid_capture';
   }
-  if (input.decoupleEligible && input.completionSatisfied) return 'completion_truth';
+  if (input.decoupleEligible && input.completionSatisfied) {
+    if (input.completionPassReason === 'standard_cycle') return 'completion_truth_standard';
+    if (
+      input.completionPassReason === 'low_rom_event_cycle' ||
+      input.completionPassReason === 'ultra_low_rom_event_cycle'
+    ) {
+      return 'completion_truth_event';
+    }
+  }
   return 'other';
 }
 
