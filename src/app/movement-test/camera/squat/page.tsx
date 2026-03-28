@@ -1597,6 +1597,11 @@ export default function CameraSquatPage() {
                     ? gate.evaluatorResult.debug.highlightedMetrics.relativeDepthPeak
                     : '—'}
                 </p>
+                <p className="break-all">
+                  PR-04E3A rel source: {gate.squatCycleDebug?.relativeDepthPeakSource ?? '—'} | rawPeak
+                  primary: {gate.squatCycleDebug?.rawDepthPeakPrimary ?? '—'} | rawPeak blended:{' '}
+                  {gate.squatCycleDebug?.rawDepthPeakBlended ?? '—'}
+                </p>
                 {/* PR-HMM-03A: dev-only calibration strip — production UX unchanged */}
                 <p className="mt-2 font-medium text-cyan-200/80">calibration (dev)</p>
                 <p className="break-all">

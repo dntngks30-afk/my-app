@@ -9,7 +9,15 @@ import type { MotionCompletionResult } from '@/lib/camera/types/motion-completio
 import type { SquatHmmDecodeResult } from '@/lib/camera/squat/squat-hmm';
 import { getHmmAssistDecision, hmmMeetsStrongAssistEvidence } from '@/lib/camera/squat/squat-hmm-assist';
 import { getSquatHmmReversalAssistDecision } from '@/lib/camera/squat/squat-reversal-assist';
-import { detectSquatReversalConfirmation } from '@/lib/camera/squat/squat-reversal-confirmation';
+import {
+  detectSquatReversalConfirmation,
+  readSquatCompletionDepthForReversal,
+} from '@/lib/camera/squat/squat-reversal-confirmation';
+
+/** PR-04E3A: completion peak / relative depth / 밴드 — PR-04E1 blended 우선 (arming·reversal 과 동일 read) */
+export function readSquatCompletionDepth(frame: PoseFeaturesFrame): number | null {
+  return readSquatCompletionDepthForReversal(frame);
+}
 
 export type SquatCompletionPhase =
   | 'idle'
@@ -93,6 +101,11 @@ export interface SquatCompletionState extends MotionCompletionResult {
   reversalConfirmedBy?: 'rule' | 'rule_plus_hmm' | null;
   reversalDepthDrop?: number | null;
   reversalFrameCount?: number | null;
+  /** PR-04E3A: primary 스트림 피크(관측) — relative 선택과 독립 */
+  rawDepthPeakPrimary?: number;
+  rawDepthPeakBlended?: number;
+  /** PR-04E3A: relativeDepthPeak·rawDepthPeak 계산에 쓴 스트림 */
+  relativeDepthPeakSource?: 'primary' | 'blended';
 }
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
@@ -177,6 +190,11 @@ const MIN_REVERSAL_TO_STANDING_MS_SHALLOW = 200;
 const RELAXED_MIN_REVERSAL_TO_STANDING_MS_SHALLOW = 140;
 const RELAXED_LOW_ROM_MIN_CONTINUITY_FRAMES = 4;
 const RELAXED_LOW_ROM_MIN_DROP_RATIO = 0.45;
+/**
+ * PR-04E3A: 이 이상이면 primary relative 를 completion truth 로 유지 (깊은 스쿼트·표준 경로 primary 의미 보존).
+ * 그 미만에서 blended 가 시도 플로어를 넘기면 blended 스트림으로 정렬.
+ */
+const COMPLETION_PRIMARY_DOMINANT_REL_PEAK = 0.12;
 
 /**
  * PR-C: low_ROM finalize와 동일한 “복귀 증거” — ultra_low_rom 에서만 짧은 standing hold(60ms)를 허용할 때 사용.
@@ -357,25 +375,30 @@ export function evaluateSquatCompletionState(
   options?: EvaluateSquatCompletionStateOptions
 ): SquatCompletionState {
   const validFrames = frames.filter((frame) => frame.isValid);
-  const depthFrames = validFrames
-    .map((frame, index) => ({
-      index,
-      depth: frame.derived.squatDepthProxy,
+
+  const depthRows: Array<{
+    index: number;
+    depthPrimary: number;
+    depthCompletion: number;
+    timestampMs: number;
+    phaseHint: PoseFeaturesFrame['phaseHint'];
+  }> = [];
+  for (let vi = 0; vi < validFrames.length; vi++) {
+    const frame = validFrames[vi]!;
+    const p = frame.derived.squatDepthProxy;
+    if (typeof p !== 'number' || !Number.isFinite(p)) continue;
+    const cRead = readSquatCompletionDepth(frame);
+    const depthCompletion = cRead != null && Number.isFinite(cRead) ? cRead : p;
+    depthRows.push({
+      index: vi,
+      depthPrimary: p,
+      depthCompletion,
       timestampMs: frame.timestampMs,
       phaseHint: frame.phaseHint,
-    }))
-    .filter(
-      (
-        frame
-      ): frame is {
-        index: number;
-        depth: number;
-        timestampMs: number;
-        phaseHint: PoseFeaturesFrame['phaseHint'];
-      } => typeof frame.depth === 'number'
-    );
+    });
+  }
 
-  if (depthFrames.length === 0) {
+  if (depthRows.length === 0) {
     const emptyBase = {
       baselineStandingDepth: 0,
       rawDepthPeak: 0,
@@ -419,20 +442,52 @@ export function evaluateSquatCompletionState(
       reversalConfirmedBy: null,
       reversalDepthDrop: null,
       reversalFrameCount: null,
+      rawDepthPeakPrimary: 0,
+      rawDepthPeakBlended: 0,
+      relativeDepthPeakSource: 'primary',
     };
   }
 
-  const baselineDepths = depthFrames
-    .slice(0, BASELINE_WINDOW)
-    .map((frame) => frame.depth);
-  const baselineStandingDepth =
-    baselineDepths.length > 0 ? Math.min(...baselineDepths) : 0;
+  const windowRows = depthRows.slice(0, BASELINE_WINDOW);
+  const baselinePrimary =
+    windowRows.length > 0 ? Math.min(...windowRows.map((r) => r.depthPrimary)) : 0;
+  const baselineBlended =
+    windowRows.length > 0
+      ? Math.min(...windowRows.map((r) => r.depthCompletion))
+      : baselinePrimary;
+
+  const rawDepthPeakPrimary = Math.max(...depthRows.map((r) => r.depthPrimary));
+  const rawDepthPeakBlended = Math.max(...depthRows.map((r) => r.depthCompletion));
+  const relativePrimary = Math.max(0, rawDepthPeakPrimary - baselinePrimary);
+  const relativeBlended = Math.max(0, rawDepthPeakBlended - baselineBlended);
+
+  const relativeDepthPeakSource: 'primary' | 'blended' =
+    relativePrimary >= COMPLETION_PRIMARY_DOMINANT_REL_PEAK
+      ? 'primary'
+      : relativeBlended >= LEGACY_ATTEMPT_FLOOR && relativeBlended > relativePrimary
+        ? 'blended'
+        : 'primary';
+
+  const depthFrames = depthRows.map((r) => ({
+    index: r.index,
+    depth: relativeDepthPeakSource === 'blended' ? r.depthCompletion : r.depthPrimary,
+    timestampMs: r.timestampMs,
+    phaseHint: r.phaseHint,
+  }));
 
   const peakFrame = depthFrames.reduce((best, frame) =>
     frame.depth > best.depth ? frame : best
   );
+  const peakRowPrimary = depthRows.reduce((best, row) =>
+    row.depthPrimary > best.depthPrimary ? row : best
+  );
+
   const rawDepthPeak = peakFrame.depth;
+  const baselineStandingDepth =
+    relativeDepthPeakSource === 'blended' ? baselineBlended : baselinePrimary;
   const relativeDepthPeak = Math.max(0, rawDepthPeak - baselineStandingDepth);
+
+  const baselineDepths = depthFrames.slice(0, BASELINE_WINDOW).map((frame) => frame.depth);
   const recovery = getSquatRecoverySignal(validFrames);
   const guardedUltraLowAttemptEligible =
     relativeDepthPeak >= GUARDED_ULTRA_LOW_ROM_FLOOR &&
@@ -520,17 +575,23 @@ export function evaluateSquatCompletionState(
     REVERSAL_DROP_MIN_ABS,
     relativeDepthPeak * REVERSAL_DROP_MIN_FRAC_OF_REL_PEAK
   );
-  const postPeakDepths = depthFrames
-    .filter((frame) => frame.index > peakFrame.index)
-    .map((frame) => frame.depth);
-  const minPostPeakDepth =
-    postPeakDepths.length > 0 ? Math.min(...postPeakDepths) : peakFrame.depth;
-  const squatReversalDropAchieved = Math.max(0, peakFrame.depth - minPostPeakDepth);
+  /** PR-04E2: 역전 달성량은 primary 기하만 사용 (reversal 모듈 계약 유지) */
+  const postPeakPrimaryDepths = depthRows
+    .filter((row) => row.index > peakRowPrimary.index)
+    .map((row) => row.depthPrimary);
+  const minPostPeakPrimary =
+    postPeakPrimaryDepths.length > 0
+      ? Math.min(...postPeakPrimaryDepths)
+      : peakRowPrimary.depthPrimary;
+  const squatReversalDropAchieved = Math.max(
+    0,
+    peakRowPrimary.depthPrimary - minPostPeakPrimary
+  );
 
   const revConf = detectSquatReversalConfirmation({
     validFrames,
-    peakValidIndex: peakFrame.index,
-    peakPrimaryDepth: peakFrame.depth,
+    peakValidIndex: peakRowPrimary.index,
+    peakPrimaryDepth: peakRowPrimary.depthPrimary,
     relativeDepthPeak,
     reversalDropRequired: squatReversalDropRequired,
     hmm: options?.hmm ?? null,
@@ -810,5 +871,8 @@ export function evaluateSquatCompletionState(
     reversalConfirmedBy,
     reversalDepthDrop,
     reversalFrameCount,
+    rawDepthPeakPrimary,
+    rawDepthPeakBlended,
+    relativeDepthPeakSource,
   };
 }

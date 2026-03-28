@@ -16,6 +16,10 @@ export interface SquatDepthCalibrationDebug {
   maxBlendedDepth: number;
   blendedDepthUsed: boolean;
   armingDepthSource: string | null;
+  /** PR-04E3A: completion 슬라이스 피크(primary / blended 스트림) */
+  rawDepthPeakPrimary?: number;
+  rawDepthPeakBlended?: number;
+  relativeDepthPeakSource?: 'primary' | 'blended' | null;
 }
 
 /** PR-04E2: completion-state reversal 확인 calibration — gate 미사용 */

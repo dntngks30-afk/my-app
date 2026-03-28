@@ -179,6 +179,10 @@ export interface SquatCycleDebug {
   armingDepthBlendAssisted?: boolean;
   /** PR-CAM-27 폴백 arm — completion arming contract */
   armingFallbackUsed?: boolean;
+  /** PR-04E3A: completion relative depth 스트림 — trace only */
+  relativeDepthPeakSource?: string | null;
+  rawDepthPeakPrimary?: number | null;
+  rawDepthPeakBlended?: number | null;
 }
 
 export interface ExerciseGateResult {
@@ -942,6 +946,11 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.reversalConfirmedBy = cs?.reversalConfirmedBy ?? null;
   squatCycleDebug.reversalDepthDrop = cs?.reversalDepthDrop ?? null;
   squatCycleDebug.reversalFrameCount = cs?.reversalFrameCount ?? null;
+  squatCycleDebug.relativeDepthPeakSource = cs?.relativeDepthPeakSource ?? null;
+  squatCycleDebug.rawDepthPeakPrimary =
+    typeof cs?.rawDepthPeakPrimary === 'number' ? cs.rawDepthPeakPrimary : null;
+  squatCycleDebug.rawDepthPeakBlended =
+    typeof cs?.rawDepthPeakBlended === 'number' ? cs.rawDepthPeakBlended : null;
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';

@@ -25,7 +25,10 @@ import type {
   SquatDepthCalibrationDebug,
   SquatReversalCalibrationDebug,
 } from './types';
-import { squatCompletionBlockedReasonToCode } from '@/lib/camera/squat-completion-state';
+import {
+  readSquatCompletionDepth,
+  squatCompletionBlockedReasonToCode,
+} from '@/lib/camera/squat-completion-state';
 
 const MIN_VALID_FRAMES = 8;
 
@@ -176,24 +179,60 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   );
   const maxPrimaryCalib = primaryDepthCalib.length > 0 ? Math.max(...primaryDepthCalib) : 0;
   const maxBlendedCalib = blendedDepthCalib.length > 0 ? Math.max(...blendedDepthCalib) : 0;
-  const squatDepthCalibration: SquatDepthCalibrationDebug = {
-    maxPrimaryDepth: Math.round(maxPrimaryCalib * 1000) / 1000,
-    maxBlendedDepth: Math.round(maxBlendedCalib * 1000) / 1000,
-    blendedDepthUsed: maxBlendedCalib > maxPrimaryCalib + 0.006,
-    armingDepthSource: completionArming.armingDepthSource ?? null,
-  };
 
   const state = evaluateSquatCompletionState(completionFrames, {
     hmm: squatHmm,
     hmmArmingAssistApplied: armingAssistDec.assistApplied,
   });
 
+  const squatDepthCalibration: SquatDepthCalibrationDebug = {
+    maxPrimaryDepth: Math.round(maxPrimaryCalib * 1000) / 1000,
+    maxBlendedDepth: Math.round(maxBlendedCalib * 1000) / 1000,
+    blendedDepthUsed: maxBlendedCalib > maxPrimaryCalib + 0.006,
+    armingDepthSource: completionArming.armingDepthSource ?? null,
+    rawDepthPeakPrimary:
+      state.rawDepthPeakPrimary != null
+        ? Math.round(state.rawDepthPeakPrimary * 1000) / 1000
+        : undefined,
+    rawDepthPeakBlended:
+      state.rawDepthPeakBlended != null
+        ? Math.round(state.rawDepthPeakBlended * 1000) / 1000
+        : undefined,
+    relativeDepthPeakSource: state.relativeDepthPeakSource ?? null,
+  };
+
+  const BASELINE_WINDOW_EVAL = 6;
+  const compWin = completionFrames.slice(0, BASELINE_WINDOW_EVAL);
+  const primBs = getNumbers(compWin.map((f) => f.derived.squatDepthProxy));
+  const minPrimB = primBs.length > 0 ? Math.min(...primBs) : 0;
+  const blendBaselineCandidates = compWin.map((f) => {
+    const r = readSquatCompletionDepth(f);
+    const p = f.derived.squatDepthProxy;
+    if (r != null && Number.isFinite(r)) return r;
+    if (typeof p === 'number' && Number.isFinite(p)) return p;
+    return Number.NaN;
+  });
+  const blendMins = blendBaselineCandidates.filter((x) => Number.isFinite(x));
+  const minBlendB = blendMins.length > 0 ? Math.min(...blendMins) : minPrimB;
+  const relPeakPrimPct =
+    state.rawDepthPeakPrimary != null && Number.isFinite(minPrimB)
+      ? Math.max(0, state.rawDepthPeakPrimary - minPrimB) * 100
+      : null;
+  const relPeakBlendPct =
+    state.rawDepthPeakBlended != null && Number.isFinite(minBlendB)
+      ? Math.max(0, state.rawDepthPeakBlended - minBlendB) * 100
+      : null;
+
   let squatCompletionPeakIndex: number | null = null;
   let completionPeakDepthScan = -Infinity;
+  const depthSrc = state.relativeDepthPeakSource ?? 'primary';
   for (let i = 0; i < completionFrames.length; i++) {
-    const d = completionFrames[i]!.derived.squatDepthProxy;
-    if (typeof d === 'number' && Number.isFinite(d) && d > completionPeakDepthScan) {
-      completionPeakDepthScan = d;
+    const f = completionFrames[i]!;
+    const p = f.derived.squatDepthProxy;
+    if (typeof p !== 'number' || !Number.isFinite(p)) continue;
+    const off = depthSrc === 'blended' ? (readSquatCompletionDepth(f) ?? p) : p;
+    if (off > completionPeakDepthScan) {
+      completionPeakDepthScan = off;
       squatCompletionPeakIndex = i;
     }
   }
@@ -395,6 +434,18 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         baselineStandingDepth: Math.round(state.baselineStandingDepth * 100) / 100,
         rawDepthPeak: Math.round(state.rawDepthPeak * 100) / 100,
         relativeDepthPeak: Math.round(state.relativeDepthPeak * 100) / 100,
+        /** PR-04E3A: primary vs blended 상대 피크(%), completion 슬라이스 앞 윈도우 baseline */
+        squatRelativeDepthPeakPrimary:
+          relPeakPrimPct != null ? Math.round(relPeakPrimPct * 10) / 10 : null,
+        squatRelativeDepthPeakBlended:
+          relPeakBlendPct != null ? Math.round(relPeakBlendPct * 10) / 10 : null,
+        /** 0=unset, 1=primary, 2=blended */
+        squatRelativeDepthSourceCode:
+          state.relativeDepthPeakSource === 'primary'
+            ? 1
+            : state.relativeDepthPeakSource === 'blended'
+              ? 2
+              : 0,
         firstDescentIdx,
         firstBottomIdx,
         firstAscentIdx,

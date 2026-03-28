@@ -154,6 +154,10 @@ export interface AttemptSnapshot {
       reversalConfirmedBy?: string | null;
       reversalDepthDrop?: number | null;
       reversalFrameCount?: number | null;
+      /** PR-04E3A: relative depth truth */
+      relativeDepthPeakSource?: string | null;
+      rawDepthPeakPrimary?: number | null;
+      rawDepthPeakBlended?: number | null;
       /** PR-COMP-03 */
       squatInternalQuality?: SquatInternalQuality;
       /** CAM-shallow-obs: attempt-evidence보다 약한 관측 계약(저장·진단 전용) */
@@ -743,6 +747,11 @@ function buildDiagnosisSummary(
       reversalConfirmedBy: sc.reversalConfirmedBy ?? null,
       reversalDepthDrop: sc.reversalDepthDrop ?? null,
       reversalFrameCount: sc.reversalFrameCount ?? null,
+      relativeDepthPeakSource: sc.relativeDepthPeakSource ?? null,
+      rawDepthPeakPrimary:
+        typeof sc.rawDepthPeakPrimary === 'number' ? sc.rawDepthPeakPrimary : null,
+      rawDepthPeakBlended:
+        typeof sc.rawDepthPeakBlended === 'number' ? sc.rawDepthPeakBlended : null,
       squatInternalQuality: gate.evaluatorResult.debug?.squatInternalQuality,
     };
 

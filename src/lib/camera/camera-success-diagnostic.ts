@@ -156,6 +156,10 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   reversalConfirmedBy?: string | null;
   reversalDepthDrop?: number | null;
   reversalFrameCount?: number | null;
+  /** PR-04E3A */
+  relativeDepthPeakSource?: string | null;
+  rawDepthPeakPrimary?: number | null;
+  rawDepthPeakBlended?: number | null;
   cycleProofPassed?: boolean;
   reversalConfirmedAfterDescend?: boolean;
   recoveryConfirmedAfterReversal?: boolean;
@@ -275,6 +279,9 @@ function extractSquatMobileObsFieldsFromGate(
   | 'reversalConfirmedBy'
   | 'reversalDepthDrop'
   | 'reversalFrameCount'
+  | 'relativeDepthPeakSource'
+  | 'rawDepthPeakPrimary'
+  | 'rawDepthPeakBlended'
 > {
   const sc = gate.squatCycleDebug;
   const cs = gate.evaluatorResult?.debug?.squatCompletionState as
@@ -306,6 +313,9 @@ function extractSquatMobileObsFieldsFromGate(
     reversalConfirmedBy: sc?.reversalConfirmedBy ?? null,
     reversalDepthDrop: sc?.reversalDepthDrop ?? null,
     reversalFrameCount: sc?.reversalFrameCount ?? null,
+    relativeDepthPeakSource: sc?.relativeDepthPeakSource ?? null,
+    rawDepthPeakPrimary: sc?.rawDepthPeakPrimary ?? null,
+    rawDepthPeakBlended: sc?.rawDepthPeakBlended ?? null,
     cycleProofPassed: sc?.cycleProofPassed,
     reversalConfirmedAfterDescend: sc?.reversalConfirmedAfterDescend,
     recoveryConfirmedAfterReversal: sc?.recoveryConfirmedAfterReversal,
@@ -545,6 +555,10 @@ export interface SquatFailedShallowSnapshot {
   reversalConfirmedBy?: string | null;
   reversalDepthDrop?: number | null;
   reversalFrameCount?: number | null;
+  /** PR-04E3A */
+  relativeDepthPeakSource?: string | null;
+  rawDepthPeakPrimary?: number | null;
+  rawDepthPeakBlended?: number | null;
 }
 
 /** CAM-OBS: 실패 스냅샷 기록 옵션(진단 전용, pass 로직 무관) */
@@ -660,6 +674,9 @@ export function recordSquatFailedShallowSnapshot(
       reversalConfirmedBy: sc?.reversalConfirmedBy ?? null,
       reversalDepthDrop: sc?.reversalDepthDrop ?? null,
       reversalFrameCount: sc?.reversalFrameCount ?? null,
+      relativeDepthPeakSource: sc?.relativeDepthPeakSource ?? null,
+      rawDepthPeakPrimary: sc?.rawDepthPeakPrimary ?? null,
+      rawDepthPeakBlended: sc?.rawDepthPeakBlended ?? null,
     };
 
     if (typeof window === 'undefined') return;
