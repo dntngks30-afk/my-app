@@ -240,7 +240,13 @@ const MIN_STANDING_RECOVERY_HOLD_MS = 160;
 const LOW_ROM_STANDING_RECOVERY_MIN_FRAMES = 2;
 const LOW_ROM_STANDING_RECOVERY_MIN_HOLD_MS = 60;
 const LOW_ROM_STANDING_FINALIZE_MIN_RETURN_CONTINUITY_FRAMES = 3;
+/** Ultra guarded 진입·기타 0.45 계약 유지용 (pose `getSquatRecoverySignal` ultra continuity 경로) */
 const LOW_ROM_STANDING_FINALIZE_MIN_DROP_RATIO = 0.45;
+/**
+ * PR-04E4: continuity 게이트 통과 후 finalize drop 하한 — pose `lowRomContinuityOk`(≥3 프레임·≥0.35) 와 정렬.
+ * `getStandingRecoveryFinalizeGate` 의 low-rom-style 분기에서만 사용.
+ */
+const LOW_ROM_STANDING_FINALIZE_MIN_DROP_RATIO_WITH_CONTINUITY = 0.35;
 /** PR-CAM-02: 절대 최소 되돌림(미세 노이즈 역전 차단) */
 const REVERSAL_DROP_MIN_ABS = 0.007;
 /** PR-CAM-02: 상대 피크 대비 최소 되돌림 비율 — 깊은 스쿼트에서 0.005만으로 조기 역전 되는 것 방지 */
@@ -417,7 +423,8 @@ function getStandingRecoveryFinalizeGate(
         finalizeReason: 'return_continuity_below_min',
       };
     }
-    if ((recovery.recoveryDropRatio ?? 0) < LOW_ROM_STANDING_FINALIZE_MIN_DROP_RATIO) {
+    // PR-04E4: continuity ≥3 이미 충족 — drop 은 pose low-ROM continuity 보너스(0.35)와 동일 하한
+    if ((recovery.recoveryDropRatio ?? 0) < LOW_ROM_STANDING_FINALIZE_MIN_DROP_RATIO_WITH_CONTINUITY) {
       return {
         minFramesUsed,
         minHoldMsUsed,
