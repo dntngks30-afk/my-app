@@ -1,5 +1,6 @@
 /**
  * PR-HMM-02B — HMM shadow evidence를 blocked-reason assist로만 사용.
+ * PR-HMM-04 — reason별 assist threshold 분리 (finalize·completion 소유권 불변).
  *
  * - completionSatisfied 최종 소유권은 rule/state machine 유지
  * - HMM은 no_descend / descent_span_too_short / no_reversal 에 한해 blocked reason 완화만
@@ -29,6 +30,48 @@ const NON_ASSIST_RECOVERY_OR_FINALIZE: readonly string[] = [
   'ultra_low_rom_standing_finalize_not_satisfied',
 ];
 
+/** PR-HMM-04: assist 정책 임계 — reason별 분기, magic number 분산 금지 */
+export interface SquatHmmAssistThresholds {
+  minHmmConfidence: number;
+  minHmmExcursion: number;
+  minDescentCount: number;
+  minAscentCount: number;
+}
+
+/**
+ * descent_span: timing-only shallow에서 HMM이 약간 낮아도 사이클 후보는 살림 (false negative 완화).
+ * no_reversal: phase/rule 불일치 시 오개방 방지 — confidence·excursion 약간 상향.
+ * no_descend: PR-HMM-02B 기본 바와 동일.
+ */
+export const SQUAT_HMM_ASSIST_THRESHOLDS: Record<HmmAssistableBlockedReason, SquatHmmAssistThresholds> = {
+  descent_span_too_short: {
+    minHmmConfidence: 0.42,
+    minHmmExcursion: 0.018,
+    minDescentCount: 2,
+    minAscentCount: 2,
+  },
+  no_descend: {
+    minHmmConfidence: 0.45,
+    minHmmExcursion: 0.02,
+    minDescentCount: 2,
+    minAscentCount: 2,
+  },
+  no_reversal: {
+    minHmmConfidence: 0.5,
+    minHmmExcursion: 0.021,
+    minDescentCount: 2,
+    minAscentCount: 2,
+  },
+};
+
+/** assistSuppressedByFinalize 등 — PR-03A 이전과 동일한 “강한 HMM” 바 (단일 막대) */
+const HMM_STRONG_EVIDENCE_FOR_SUPPRESSION: SquatHmmAssistThresholds = {
+  minHmmConfidence: 0.45,
+  minHmmExcursion: 0.02,
+  minDescentCount: 2,
+  minAscentCount: 2,
+};
+
 export interface HmmAssistContext {
   completionBlockedReason: string | null;
   relativeDepthPeak: number;
@@ -50,23 +93,47 @@ export interface HmmAssistDecision {
   notes: string[];
 }
 
-const HMM_MIN_CONFIDENCE = 0.45;
-const HMM_MIN_DESCENT = 2;
-const HMM_MIN_ASCENT = 2;
-const HMM_MIN_EXCURSION = 0.02;
+/**
+ * calibration / compact trace용: 현재 rule blocked reason에 대응하는 적용 임계 스냅샷.
+ * assist 불가 reason이면 null.
+ */
+export function getSquatHmmAssistThresholdSnapshot(
+  ruleCompletionBlockedReason: string | null
+): SquatHmmAssistThresholds | null {
+  if (!isAssistableBlockedReason(ruleCompletionBlockedReason)) return null;
+  return SQUAT_HMM_ASSIST_THRESHOLDS[ruleCompletionBlockedReason];
+}
+
+function meetsThresholds(hmm: SquatHmmDecodeResult, t: SquatHmmAssistThresholds): boolean {
+  return (
+    hmm.completionCandidate === true &&
+    hmm.confidence >= t.minHmmConfidence &&
+    hmm.dominantStateCounts.descent >= t.minDescentCount &&
+    hmm.dominantStateCounts.ascent >= t.minAscentCount &&
+    hmm.effectiveExcursion >= t.minHmmExcursion
+  );
+}
 
 /**
- * HMM이 “강한 사이클 후보”인지 — assist 후보의 1차 필터.
+ * 특정 assistable blocked reason에 대한 HMM 증거 충족 여부 (정책 게이트).
+ */
+export function hmmMeetsAssistThresholdForBlockedReason(
+  hmm: SquatHmmDecodeResult | undefined,
+  completionBlockedReason: string | null
+): boolean {
+  if (hmm == null || completionBlockedReason == null) return false;
+  if (!isAssistableBlockedReason(completionBlockedReason)) return false;
+  const t = SQUAT_HMM_ASSIST_THRESHOLDS[completionBlockedReason];
+  return meetsThresholds(hmm, t);
+}
+
+/**
+ * HMM이 “강한 사이클 후보”인지 — assistSuppressedByFinalize 등 **관측용** 단일 막대 (PR-03A 유지).
+ * assist 적용 여부는 reason별 `hmmMeetsAssistThresholdForBlockedReason`를 쓴다.
  */
 export function hmmMeetsStrongAssistEvidence(hmm: SquatHmmDecodeResult | undefined): boolean {
   if (hmm == null) return false;
-  return (
-    hmm.completionCandidate === true &&
-    hmm.confidence >= HMM_MIN_CONFIDENCE &&
-    hmm.dominantStateCounts.descent >= HMM_MIN_DESCENT &&
-    hmm.dominantStateCounts.ascent >= HMM_MIN_ASCENT &&
-    hmm.effectiveExcursion >= HMM_MIN_EXCURSION
-  );
+  return meetsThresholds(hmm, HMM_STRONG_EVIDENCE_FOR_SUPPRESSION);
 }
 
 /**
@@ -78,7 +145,10 @@ export function shouldUseHmmAssistForBlockedReason(
 ): boolean {
   if (completionBlockedReason == null) return false;
   if (NON_ASSIST_RECOVERY_OR_FINALIZE.includes(completionBlockedReason)) return false;
-  return isAssistableBlockedReason(completionBlockedReason) && hmmMeetsStrongAssistEvidence(hmm);
+  return (
+    isAssistableBlockedReason(completionBlockedReason) &&
+    hmmMeetsAssistThresholdForBlockedReason(hmm, completionBlockedReason)
+  );
 }
 
 /**
@@ -105,7 +175,11 @@ export function getHmmAssistDecision(
   const assistEligible = shouldUseHmmAssistForBlockedReason(blocked, hmm);
 
   if (!assistEligible) {
-    if (blocked != null && isAssistableBlockedReason(blocked) && !hmmMeetsStrongAssistEvidence(hmm)) {
+    if (
+      blocked != null &&
+      isAssistableBlockedReason(blocked) &&
+      !hmmMeetsAssistThresholdForBlockedReason(hmm, blocked)
+    ) {
       notes.push('hmm_evidence_below_assist_threshold');
     }
     return {

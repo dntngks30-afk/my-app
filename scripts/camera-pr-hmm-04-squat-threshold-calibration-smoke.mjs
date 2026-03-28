@@ -1,7 +1,7 @@
 /**
- * PR-HMM-03A — calibration observability contract (threshold 변경 없음)
+ * PR-HMM-04 — assist threshold calibration 회귀 (정책·observability 계약)
  *
- * npx tsx scripts/camera-pr-hmm-03a-squat-calibration-trace-smoke.mjs
+ * npx tsx scripts/camera-pr-hmm-04-squat-threshold-calibration-smoke.mjs
  */
 
 import { fileURLToPath } from 'url';
@@ -12,6 +12,10 @@ process.chdir(join(__dirname, '..'));
 
 const { evaluateSquatCompletionState } = await import('../src/lib/camera/squat-completion-state.ts');
 const { decodeSquatHmm } = await import('../src/lib/camera/squat/squat-hmm.ts');
+const {
+  hmmMeetsAssistThresholdForBlockedReason,
+  SQUAT_HMM_ASSIST_THRESHOLDS,
+} = await import('../src/lib/camera/squat/squat-hmm-assist.ts');
 const {
   buildSquatCalibrationTraceCompact,
   SQUAT_CALIBRATION_TRACE_COMPACT_KEYS,
@@ -59,7 +63,20 @@ function buildFrames(depths, phases, stepMs = 40) {
   return depths.map((d, i) => makeFrame(d, 100 + i * stepMs, phases[i] ?? 'start'));
 }
 
-console.log('\n-- A. descent_span assist: ruleBlocked !== finalBlocked, assistApplied --');
+/** borderline HMM: 구 단일 0.45 바에서는 assist 탈락, descent_span 전용 완화로 통과 */
+function framesBorderlineDescentSpan() {
+  const depths = [
+    0.01, 0.01, 0.01, 0.01, 0.024, 0.052, 0.062, 0.062, 0.043, 0.024, 0.017, 0.014, 0.012, 0.01, 0.01, 0.01, 0.01, 0.01,
+    0.01, 0.01, 0.01, 0.01,
+  ];
+  const phases = [
+    'start', 'start', 'start', 'start', 'descent', 'descent', 'bottom', 'bottom', 'ascent', 'ascent', 'ascent', 'start',
+    'start', 'start', 'start', 'start', 'start', 'start', 'start', 'start', 'start', 'start',
+  ];
+  return buildFrames(depths, phases, 40);
+}
+
+console.log('\n-- A. shallow meaningful cycle: assist 유지, completion true --');
 {
   const depths = [
     0.01, 0.01, 0.01, 0.01,
@@ -76,40 +93,23 @@ console.log('\n-- A. descent_span assist: ruleBlocked !== finalBlocked, assistAp
   const fr = buildFrames(depths, phases, 40);
   const hmm = decodeSquatHmm(fr);
   const st = evaluateSquatCompletionState(fr, { hmm });
-  ok('A: rule blocked was descent_span', st.ruleCompletionBlockedReason === 'descent_span_too_short', st);
-  ok('A: final blocked null', st.postAssistCompletionBlockedReason === null, st);
-  ok('A: rule !== final', st.ruleCompletionBlockedReason !== st.postAssistCompletionBlockedReason, st);
+  ok('A: rule was descent_span', st.ruleCompletionBlockedReason === 'descent_span_too_short', st);
   ok('A: assist applied', st.hmmAssistApplied === true, st);
   ok('A: completion true', st.completionSatisfied === true, st);
-  ok('A: not suppressed by finalize', st.assistSuppressedByFinalize === false, st);
 }
 
-console.log('\n-- B. strong HMM + finalize family rule block -> assistSuppressedByFinalize --');
+console.log('\n-- B. standing jitter / micro bend: assist 차단 --');
 {
-  const depths = [
-    0.01, 0.01, 0.01, 0.01,
-    0.03, 0.05, 0.07, 0.09, 0.09,
-    0.07, 0.05, 0.03, 0.02, 0.015,
-  ];
-  const phases = [
-    'start', 'start', 'start', 'start',
-    'descent', 'descent', 'descent', 'bottom', 'bottom',
-    'ascent', 'ascent', 'ascent', 'ascent', 'ascent',
-  ];
+  const depths = Array(20).fill(0.005).map((_, i) => 0.004 + (i % 3) * 0.0008);
+  const phases = Array(20).fill('start');
   const fr = buildFrames(depths, phases, 40);
   const hmm = decodeSquatHmm(fr);
   const st = evaluateSquatCompletionState(fr, { hmm });
-  const fin =
-    st.ruleCompletionBlockedReason === 'recovery_hold_too_short' ||
-    st.ruleCompletionBlockedReason === 'low_rom_standing_finalize_not_satisfied' ||
-    st.ruleCompletionBlockedReason === 'ultra_low_rom_standing_finalize_not_satisfied';
-  ok('B: rule is finalize family', fin, st);
-  ok('B: assistSuppressedByFinalize', st.assistSuppressedByFinalize === true, st);
-  ok('B: assist not applied', st.hmmAssistApplied === false, st);
-  ok('B: rule === final blocked', st.ruleCompletionBlockedReason === st.postAssistCompletionBlockedReason, st);
+  ok('B: assist eligible false', st.hmmAssistEligible === false, st);
+  ok('B: assist applied false', st.hmmAssistApplied === false, st);
 }
 
-console.log('\n-- C. finalize blocked: assist does not open (rule === final) --');
+console.log('\n-- C. finalize blocked: assist 불가, rule === final --');
 {
   const depths = [
     0.01, 0.01, 0.01, 0.01,
@@ -125,46 +125,45 @@ console.log('\n-- C. finalize blocked: assist does not open (rule === final) --'
   const hmm = decodeSquatHmm(fr);
   const st = evaluateSquatCompletionState(fr, { hmm });
   ok('C: assist not applied', st.hmmAssistApplied === false, st);
-  ok('C: rule === postAssist', st.ruleCompletionBlockedReason === st.postAssistCompletionBlockedReason, st);
+  ok('C: rule === postAssist blocked', st.ruleCompletionBlockedReason === st.postAssistCompletionBlockedReason, st);
 }
 
-console.log('\n-- D. jitter / weak HMM -> assist off --');
+console.log('\n-- D. borderline: descent_span 임계로 assist, no_reversal 임계는 더 빡세게 미충족 --');
 {
-  const depths = Array(20).fill(0.005).map((_, i) => 0.004 + (i % 3) * 0.0008);
-  const phases = Array(20).fill('start');
-  const fr = buildFrames(depths, phases, 40);
+  const fr = framesBorderlineDescentSpan();
   const hmm = decodeSquatHmm(fr);
+  ok('D: borderline meets descent_span policy gate', hmmMeetsAssistThresholdForBlockedReason(hmm, 'descent_span_too_short'), hmm);
+  ok(
+    'D: same HMM fails stricter no_reversal gate',
+    !hmmMeetsAssistThresholdForBlockedReason(hmm, 'no_reversal'),
+    hmm
+  );
   const st = evaluateSquatCompletionState(fr, { hmm });
-  ok('D: assist eligible false', st.hmmAssistEligible === false, st);
-  ok('D: assist applied false', st.hmmAssistApplied === false, st);
+  ok('D: rule descent_span', st.ruleCompletionBlockedReason === 'descent_span_too_short', st);
+  ok('D: assist applied after threshold tune', st.hmmAssistApplied === true, st);
+  ok('D: completion true', st.completionSatisfied === true, st);
 }
 
-console.log('\n-- E. compact trace shape --');
+console.log('\n-- E. observability: compact keys + threshold snapshot t --');
 {
-  // A와 동일한 descent_span + assist 케이스로 rb가 assistable일 때 t 스냅샷을 검증한다.
-  const depths = [
-    0.01, 0.01, 0.01, 0.01,
-    0.03, 0.08, 0.09, 0.09,
-    0.06, 0.03, 0.02, 0.015, 0.012, 0.01,
-    0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01,
-  ];
-  const phases = [
-    'start', 'start', 'start', 'start',
-    'descent', 'descent', 'bottom', 'bottom',
-    'ascent', 'ascent', 'ascent', 'start', 'start', 'start',
-    'start', 'start', 'start', 'start', 'start', 'start', 'start', 'start',
-  ];
-  const fr = buildFrames(depths, phases, 40);
+  const fr = framesBorderlineDescentSpan();
   const hmm = decodeSquatHmm(fr);
   const st = evaluateSquatCompletionState(fr, { hmm });
   const compact = buildSquatCalibrationTraceCompact(st, hmm);
   for (const k of SQUAT_CALIBRATION_TRACE_COMPACT_KEYS) {
     ok(`E: key ${k}`, Object.prototype.hasOwnProperty.call(compact, k), compact);
   }
-  ok('E: hcnts has s,d,b,a', 's' in compact.hcnts && 'd' in compact.hcnts, compact.hcnts);
-  ok('E: assistable rb has threshold snapshot t', compact.t != null, compact.t);
-  ok('E: descent_span threshold confidence', compact.t.c === 0.42, compact.t);
-  ok('E: t has c,e,d,a', 'c' in compact.t && 'e' in compact.t && 'd' in compact.t && 'a' in compact.t, compact.t);
+  ok('E: rb/fb/ae/aa contract', compact.rb === 'descent_span_too_short' && compact.fb === null, compact);
+  ok('E: t matches SQUAT_HMM_ASSIST_THRESHOLDS.descent_span_too_short', compact.t != null, compact);
+  const exp = SQUAT_HMM_ASSIST_THRESHOLDS.descent_span_too_short;
+  ok(
+    'E: t.c/e/d/a snapshot',
+    compact.t.c === exp.minHmmConfidence &&
+      compact.t.e === exp.minHmmExcursion &&
+      compact.t.d === exp.minDescentCount &&
+      compact.t.a === exp.minAscentCount,
+    compact.t
+  );
 }
 
-console.log(`\n== PR-HMM-03A calibration smoke: ${passed} passed, ${failed} failed ==\n`);
+console.log(`\n== PR-HMM-04 threshold calibration smoke: ${passed} passed, ${failed} failed ==\n`);
