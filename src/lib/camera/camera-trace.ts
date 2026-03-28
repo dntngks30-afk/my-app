@@ -150,6 +150,10 @@ export interface AttemptSnapshot {
       squatDepthPeakBlended?: number | null;
       armingDepthBlendAssisted?: boolean;
       armingFallbackUsed?: boolean;
+      /** PR-04E2: 역전 확인 관측 */
+      reversalConfirmedBy?: string | null;
+      reversalDepthDrop?: number | null;
+      reversalFrameCount?: number | null;
       /** PR-COMP-03 */
       squatInternalQuality?: SquatInternalQuality;
       /** CAM-shallow-obs: attempt-evidence보다 약한 관측 계약(저장·진단 전용) */
@@ -736,13 +740,16 @@ function buildDiagnosisSummary(
       squatDepthPeakBlended: sc.squatDepthPeakBlended,
       armingDepthBlendAssisted: sc.armingDepthBlendAssisted,
       armingFallbackUsed: sc.armingFallbackUsed,
+      reversalConfirmedBy: sc.reversalConfirmedBy ?? null,
+      reversalDepthDrop: sc.reversalDepthDrop ?? null,
+      reversalFrameCount: sc.reversalFrameCount ?? null,
       squatInternalQuality: gate.evaluatorResult.debug?.squatInternalQuality,
     };
 
     // PR-HMM-01B: shadow decoder compact summary — snapshot payload 과대화 방지
     const squatHmm = gate.evaluatorResult.debug?.squatHmm;
-    if (squatHmm != null && diagnosisSummary?.squatCycle != null) {
-      const squatCycleExt = diagnosisSummary.squatCycle as typeof diagnosisSummary.squatCycle & {
+    if (squatHmm != null && base.squatCycle != null) {
+      const squatCycleExt = base.squatCycle as typeof base.squatCycle & {
         hmmShadow?: {
           confidence: number;
           completionCandidate: boolean;
@@ -764,8 +771,8 @@ function buildDiagnosisSummary(
     }
 
     // PR-HMM-03A: calibration compact — HMM + completion state 한 블록
-    if (diagnosisSummary?.squatCycle != null) {
-      const squatCycleExt = diagnosisSummary.squatCycle as typeof diagnosisSummary.squatCycle & {
+    if (base.squatCycle != null) {
+      const squatCycleExt = base.squatCycle as typeof base.squatCycle & {
         calib?: ReturnType<typeof buildSquatCalibrationTraceCompact>;
         arm?: ReturnType<typeof buildSquatArmingAssistTraceCompact>;
         hra?: ReturnType<typeof buildSquatReversalAssistTraceCompact>;

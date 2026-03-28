@@ -18,6 +18,15 @@ export interface SquatDepthCalibrationDebug {
   armingDepthSource: string | null;
 }
 
+/** PR-04E2: completion-state reversal 확인 calibration — gate 미사용 */
+export interface SquatReversalCalibrationDebug {
+  reversalConfirmedBy: 'rule' | 'rule_plus_hmm' | null;
+  reversalDepthDrop: number | null;
+  reversalFrameCount: number | null;
+  peakDepth: number;
+  peakIndex: number | null;
+}
+
 /** PR-HMM-03A: evaluator debug 전용 calibration 묶음 — pass gate 미사용 */
 export interface SquatCalibrationDebug {
   ruleCompletionBlockedReason: string | null;
@@ -85,6 +94,8 @@ export interface EvaluatorDebugSummary {
   squatCalibration?: SquatCalibrationDebug;
   /** PR-04E1: shallow depth/arming 입력 관측 */
   squatDepthCalibration?: SquatDepthCalibrationDebug;
+  /** PR-04E2: reversal 확인(역전) calibration — pass gate 미사용 */
+  squatReversalCalibration?: SquatReversalCalibrationDebug;
   /**
    * PR-CAM-13: 오버헤드 진행 상태 전체(typed) — squat-style 소유권 분리.
    * - progressionSatisfied: 진행 gate truth (strict | fallback | easy 통합).

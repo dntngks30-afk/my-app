@@ -9,6 +9,7 @@ import type { MotionCompletionResult } from '@/lib/camera/types/motion-completio
 import type { SquatHmmDecodeResult } from '@/lib/camera/squat/squat-hmm';
 import { getHmmAssistDecision, hmmMeetsStrongAssistEvidence } from '@/lib/camera/squat/squat-hmm-assist';
 import { getSquatHmmReversalAssistDecision } from '@/lib/camera/squat/squat-reversal-assist';
+import { detectSquatReversalConfirmation } from '@/lib/camera/squat/squat-reversal-confirmation';
 
 export type SquatCompletionPhase =
   | 'idle'
@@ -88,6 +89,10 @@ export interface SquatCompletionState extends MotionCompletionResult {
   hmmReversalAssistEligible?: boolean;
   hmmReversalAssistApplied?: boolean;
   hmmReversalAssistReason?: string | null;
+  /** PR-04E2: 역전 확정 경로 — completion-state 소유, HMM assist와 별도 rule_plus_hmm bridge 가능 */
+  reversalConfirmedBy?: 'rule' | 'rule_plus_hmm' | null;
+  reversalDepthDrop?: number | null;
+  reversalFrameCount?: number | null;
 }
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
@@ -411,6 +416,9 @@ export function evaluateSquatCompletionState(
       hmmReversalAssistEligible: false,
       hmmReversalAssistApplied: false,
       hmmReversalAssistReason: null,
+      reversalConfirmedBy: null,
+      reversalDepthDrop: null,
+      reversalFrameCount: null,
     };
   }
 
@@ -519,11 +527,15 @@ export function evaluateSquatCompletionState(
     postPeakDepths.length > 0 ? Math.min(...postPeakDepths) : peakFrame.depth;
   const squatReversalDropAchieved = Math.max(0, peakFrame.depth - minPostPeakDepth);
 
-  const hasPostPeakDrop = depthFrames.some(
-    (frame) =>
-      frame.index > peakFrame.index &&
-      frame.depth <= peakFrame.depth - squatReversalDropRequired
-  );
+  const revConf = detectSquatReversalConfirmation({
+    validFrames,
+    peakValidIndex: peakFrame.index,
+    peakPrimaryDepth: peakFrame.depth,
+    relativeDepthPeak,
+    reversalDropRequired: squatReversalDropRequired,
+    hmm: options?.hmm ?? null,
+  });
+  const hasPostPeakDrop = committedFrame != null && revConf.reversalConfirmed;
   let reversalFrame =
     committedFrame != null && hasPostPeakDrop ? peakFrame : undefined;
 
@@ -537,6 +549,11 @@ export function evaluateSquatCompletionState(
       ));
 
   let ascendConfirmed = computeAscendConfirmed(reversalFrame);
+  if (committedFrame != null && revConf.reversalConfirmed && !ascendConfirmed) {
+    ascendConfirmed =
+      revConf.reversalDepthDrop >= squatReversalDropRequired * 0.88 ||
+      revConf.reversalFrameCount >= 2;
+  }
 
   const standingRecovery = getStandingRecoveryWindow(
     depthFrames.filter((frame) => frame.index > peakFrame.index),
@@ -712,6 +729,24 @@ export function evaluateSquatCompletionState(
 
   const completionSatisfied = completionPassReason !== 'not_confirmed';
 
+  const reversalConfirmedBy = hmmReversalAssistDecision.assistApplied
+    ? 'rule_plus_hmm'
+    : revConf.reversalConfirmed
+      ? revConf.reversalSource === 'rule_plus_hmm'
+        ? 'rule_plus_hmm'
+        : 'rule'
+      : null;
+  const reversalDepthDrop = hmmReversalAssistDecision.assistApplied
+    ? squatReversalDropAchieved
+    : revConf.reversalConfirmed
+      ? revConf.reversalDepthDrop
+      : null;
+  const reversalFrameCount = hmmReversalAssistDecision.assistApplied
+    ? 2
+    : revConf.reversalConfirmed
+      ? revConf.reversalFrameCount
+      : null;
+
   return {
     baselineStandingDepth,
     rawDepthPeak,
@@ -772,5 +807,8 @@ export function evaluateSquatCompletionState(
     hmmReversalAssistEligible: hmmReversalAssistDecision.assistEligible,
     hmmReversalAssistApplied: hmmReversalAssistDecision.assistApplied,
     hmmReversalAssistReason: hmmReversalAssistDecision.assistReason,
+    reversalConfirmedBy,
+    reversalDepthDrop,
+    reversalFrameCount,
   };
 }

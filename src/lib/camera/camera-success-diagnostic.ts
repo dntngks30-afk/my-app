@@ -152,6 +152,10 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   squatDepthPeakBlended?: number | null;
   armingDepthBlendAssisted?: boolean;
   armingFallbackUsed?: boolean;
+  /** PR-04E2 */
+  reversalConfirmedBy?: string | null;
+  reversalDepthDrop?: number | null;
+  reversalFrameCount?: number | null;
   cycleProofPassed?: boolean;
   reversalConfirmedAfterDescend?: boolean;
   recoveryConfirmedAfterReversal?: boolean;
@@ -268,6 +272,9 @@ function extractSquatMobileObsFieldsFromGate(
   | 'squatDepthPeakBlended'
   | 'armingDepthBlendAssisted'
   | 'armingFallbackUsed'
+  | 'reversalConfirmedBy'
+  | 'reversalDepthDrop'
+  | 'reversalFrameCount'
 > {
   const sc = gate.squatCycleDebug;
   const cs = gate.evaluatorResult?.debug?.squatCompletionState as
@@ -296,6 +303,9 @@ function extractSquatMobileObsFieldsFromGate(
     squatDepthPeakBlended: sc?.squatDepthPeakBlended,
     armingDepthBlendAssisted: sc?.armingDepthBlendAssisted,
     armingFallbackUsed: sc?.armingFallbackUsed,
+    reversalConfirmedBy: sc?.reversalConfirmedBy ?? null,
+    reversalDepthDrop: sc?.reversalDepthDrop ?? null,
+    reversalFrameCount: sc?.reversalFrameCount ?? null,
     cycleProofPassed: sc?.cycleProofPassed,
     reversalConfirmedAfterDescend: sc?.reversalConfirmedAfterDescend,
     recoveryConfirmedAfterReversal: sc?.recoveryConfirmedAfterReversal,
@@ -531,6 +541,10 @@ export interface SquatFailedShallowSnapshot {
   squatCalibrationCompact?: SquatCalibrationTraceCompact;
   /** PR-HMM-04A */
   armCompact?: SquatArmingAssistTraceCompact;
+  /** PR-04E2 */
+  reversalConfirmedBy?: string | null;
+  reversalDepthDrop?: number | null;
+  reversalFrameCount?: number | null;
 }
 
 /** CAM-OBS: 실패 스냅샷 기록 옵션(진단 전용, pass 로직 무관) */
@@ -643,6 +657,9 @@ export function recordSquatFailedShallowSnapshot(
         gate.evaluatorResult?.debug?.squatHmm
       ),
       armCompact: buildSquatArmingAssistTraceCompact(gate.evaluatorResult?.debug?.squatCompletionArming),
+      reversalConfirmedBy: sc?.reversalConfirmedBy ?? null,
+      reversalDepthDrop: sc?.reversalDepthDrop ?? null,
+      reversalFrameCount: sc?.reversalFrameCount ?? null,
     };
 
     if (typeof window === 'undefined') return;

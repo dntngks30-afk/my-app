@@ -1644,6 +1644,12 @@ export default function CameraSquatPage() {
                 <p className="break-all">
                   hrar: {gate.squatCycleDebug?.hmmReversalAssistReason ?? '—'}
                 </p>
+                <p className="mt-2 font-medium text-cyan-200/80">reversal confirmation PR-04E2 (dev)</p>
+                <p className="break-all">
+                  confirmedBy: {gate.squatCycleDebug?.reversalConfirmedBy ?? '—'} | drop:{' '}
+                  {gate.squatCycleDebug?.reversalDepthDrop ?? '—'} | frames:{' '}
+                  {gate.squatCycleDebug?.reversalFrameCount ?? '—'}
+                </p>
               </div>
             )}
 

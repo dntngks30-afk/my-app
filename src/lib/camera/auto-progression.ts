@@ -162,6 +162,10 @@ export interface SquatCycleDebug {
   hmmReversalAssistEligible?: boolean;
   hmmReversalAssistApplied?: boolean;
   hmmReversalAssistReason?: string | null;
+  /** PR-04E2: completion-state reversal 확인 — trace only */
+  reversalConfirmedBy?: string | null;
+  reversalDepthDrop?: number | null;
+  reversalFrameCount?: number | null;
   /** PR-04D1: pass vs capture-quality 분리 관측 (completion 계산 변경 없음) */
   completionTruthPassed?: boolean;
   qualityOnlyWarnings?: string[];
@@ -935,6 +939,9 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.hmmReversalAssistEligible = cs?.hmmReversalAssistEligible;
   squatCycleDebug.hmmReversalAssistApplied = cs?.hmmReversalAssistApplied;
   squatCycleDebug.hmmReversalAssistReason = cs?.hmmReversalAssistReason ?? null;
+  squatCycleDebug.reversalConfirmedBy = cs?.reversalConfirmedBy ?? null;
+  squatCycleDebug.reversalDepthDrop = cs?.reversalDepthDrop ?? null;
+  squatCycleDebug.reversalFrameCount = cs?.reversalFrameCount ?? null;
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';

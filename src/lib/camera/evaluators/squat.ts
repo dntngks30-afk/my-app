@@ -23,6 +23,7 @@ import type {
   EvaluatorMetric,
   SquatCalibrationDebug,
   SquatDepthCalibrationDebug,
+  SquatReversalCalibrationDebug,
 } from './types';
 import { squatCompletionBlockedReasonToCode } from '@/lib/camera/squat-completion-state';
 
@@ -187,6 +188,23 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     hmmArmingAssistApplied: armingAssistDec.assistApplied,
   });
 
+  let squatCompletionPeakIndex: number | null = null;
+  let completionPeakDepthScan = -Infinity;
+  for (let i = 0; i < completionFrames.length; i++) {
+    const d = completionFrames[i]!.derived.squatDepthProxy;
+    if (typeof d === 'number' && Number.isFinite(d) && d > completionPeakDepthScan) {
+      completionPeakDepthScan = d;
+      squatCompletionPeakIndex = i;
+    }
+  }
+  const squatReversalCalibration: SquatReversalCalibrationDebug = {
+    reversalConfirmedBy: state.reversalConfirmedBy ?? null,
+    reversalDepthDrop: state.reversalDepthDrop ?? null,
+    reversalFrameCount: state.reversalFrameCount ?? null,
+    peakDepth: state.rawDepthPeak,
+    peakIndex: squatCompletionPeakIndex,
+  };
+
   /** PR-HMM-03A: calibration 전용 묶음 — pass/truth 변경 없음 */
   const squatCalibration: SquatCalibrationDebug = {
     ruleCompletionBlockedReason: state.ruleCompletionBlockedReason ?? null,
@@ -333,6 +351,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       phaseHints: Array.from(new Set(valid.map((frame) => frame.phaseHint))),
       squatCompletionArming: completionArming,
       squatDepthCalibration,
+      squatReversalCalibration,
       squatInternalQuality,
       /** PR-CAM-09: typed completion state — auto-progression 이 highlightedMetrics 캐스팅 없이 읽는다 */
       squatCompletionState: state,
@@ -480,6 +499,18 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         hmmReversalAssistEligible: state.hmmReversalAssistEligible ? 1 : 0,
         hmmReversalAssistApplied: state.hmmReversalAssistApplied ? 1 : 0,
         hmmReversalAssistReason: state.hmmReversalAssistReason ?? null,
+        /** PR-04E2: 역전 확인 관측 (0=none, 1=rule, 2=rule_plus_hmm) */
+        squatReversalSourceCode:
+          state.reversalConfirmedBy === 'rule'
+            ? 1
+            : state.reversalConfirmedBy === 'rule_plus_hmm'
+              ? 2
+              : 0,
+        squatReversalDepthDrop:
+          state.reversalDepthDrop != null
+            ? Math.round(state.reversalDepthDrop * 1000) / 1000
+            : null,
+        squatReversalFrameCount: state.reversalFrameCount ?? null,
       },
       perStepDiagnostics: perStepRecord,
       /** PR-HMM-01B: shadow decoder 전체 결과 — debug 전용 */
