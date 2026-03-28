@@ -51,11 +51,13 @@ import {
 } from '@/lib/camera/camera-trace';
 import {
   getRecentSuccessSnapshots,
+  recordPassLatchOrderingDiag,
   recordSquatSuccessSnapshot,
   recordSquatFailedShallowSnapshot,
   hasShallowSquatObservation,
   hasSquatAttemptEvidence,
   isDiagnosticFreezeMode,
+  squatCaptureShouldClearSettledForPassLatch,
   type RecordSquatSuccessOptions,
 } from '@/lib/camera/camera-success-diagnostic';
 import {
@@ -949,6 +951,7 @@ export default function CameraSquatPage() {
     appendTransition,
     cameraPhase,
     cameraReady,
+    currentStepKey,
     gate.failureReasons,
     gate.progressionState,
     gate.reasons,
@@ -957,6 +960,7 @@ export default function CameraSquatPage() {
     latchPassEvent,
     effectivePassLatched,
     finalPassLatched,
+    passLatched,
     gate.squatCycleDebug?.completionPassReason,
     permissionDenied,
     previewKey,

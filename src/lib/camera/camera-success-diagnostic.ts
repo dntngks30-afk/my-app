@@ -817,3 +817,61 @@ export function getLatestSquatMobileDiagAttempt(): SquatMobileDiagEntry | null {
   const list = getSquatMobileDiagAttempts(64);
   return list.length > 0 ? list[list.length - 1]! : null;
 }
+
+/** HOTFIX-CAM-PASS-LATCH-PRECEDENCE-01: 스쿼트 캡처 effect settled 단락 vs 성공 래치 선행 판단(모션 truth 미변경) */
+export function squatCaptureShouldClearSettledForPassLatch(input: {
+  settled: boolean;
+  finalPassLatched: boolean;
+  passLatched: boolean;
+}): { clearSettled: boolean; reason: string | null } {
+  if (!input.settled) return { clearSettled: false, reason: null };
+  if (input.finalPassLatched && !input.passLatched) {
+    return { clearSettled: true, reason: 'final_pass_ready_page_latch_pending' };
+  }
+  return { clearSettled: false, reason: null };
+}
+
+const PASS_LATCH_ORDER_DIAG_KEY = 'moveReCameraPassLatchOrderDiag:v1';
+const MAX_PASS_LATCH_ORDER_DIAG = 24;
+const PASS_LATCH_ORDER_THROTTLE_MS = 900;
+const passLatchOrderDiagThrottle = new Map<string, number>();
+
+export type PassLatchOrderingDiagEntry = {
+  ts: string;
+  passLatchBlockedBySettled: boolean;
+  passLatchDeferredReason: string | null;
+  gateStatus: string;
+  finalPassLatched: boolean;
+  passLatched: boolean;
+  currentStepKey: string;
+};
+
+/** additive: settled 를 성공 래치를 위해 해제했을 때만 기록(스로틀) */
+export function recordPassLatchOrderingDiag(entry: PassLatchOrderingDiagEntry): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const tk = `${entry.currentStepKey}:${entry.passLatchDeferredReason ?? 'unk'}`;
+    const now = Date.now();
+    const prev = passLatchOrderDiagThrottle.get(tk) ?? 0;
+    if (now - prev < PASS_LATCH_ORDER_THROTTLE_MS) return;
+    passLatchOrderDiagThrottle.set(tk, now);
+
+    const raw = localStorage.getItem(PASS_LATCH_ORDER_DIAG_KEY);
+    const list: PassLatchOrderingDiagEntry[] = raw ? (JSON.parse(raw) as PassLatchOrderingDiagEntry[]) : [];
+    list.push(entry);
+    const trimmed = list.slice(-MAX_PASS_LATCH_ORDER_DIAG);
+    localStorage.setItem(PASS_LATCH_ORDER_DIAG_KEY, JSON.stringify(trimmed));
+  } catch {
+    // ignore
+  }
+}
+
+export function getRecentPassLatchOrderingDiags(): PassLatchOrderingDiagEntry[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(PASS_LATCH_ORDER_DIAG_KEY);
+    return raw ? (JSON.parse(raw) as PassLatchOrderingDiagEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
