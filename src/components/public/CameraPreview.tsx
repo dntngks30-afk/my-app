@@ -18,6 +18,10 @@ import {
   drawPoseFrameToCanvas,
   type LivePoseAnalyzer,
 } from '@/lib/motion/mediapipe-pose';
+import {
+  smoothPoseOverlayLandmarks,
+  type PoseOverlaySmoothingState,
+} from '@/lib/motion/pose-overlay-smoothing';
 
 const BG = '#0d161f';
 const ANALYSIS_INTERVAL_MS = 90;
@@ -320,6 +324,11 @@ export function CameraPreview({
   const analyzerRecreateCountRef = useRef(0);
   /** recreate 예약 timeout id. cleanup 시 반드시 해제한다. */
   const recreateTimeoutRef = useRef<number | null>(null);
+  /**
+   * PR-CAM-OVERLAY-RENDER-SMOOTHING-01: 디버그 스켈레톤만 스무딩 — onPoseFrame 에 넘기는 raw 프레임은 불변.
+   * stream/teardown/fatal/empty 시 null 로 리셋해 고스트 방지.
+   */
+  const overlaySmoothingStateRef = useRef<PoseOverlaySmoothingState | null>(null);
   const [poseStatus, setPoseStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [poseErrorMessage, setPoseErrorMessage] = useState<string | null>(null);
 
@@ -453,6 +462,7 @@ export function CameraPreview({
     const shouldAnalyze = Boolean(onPoseFrameRef.current) || showPoseDebugOverlay;
 
     if (!video || status !== 'ready' || !shouldAnalyze) {
+      overlaySmoothingStateRef.current = null;
       setPoseStatus('idle');
       setPoseErrorMessage(null);
       clearPoseOverlay(overlayCanvasRef.current);
@@ -558,12 +568,26 @@ export function CameraPreview({
               return;
             }
 
-            // 정상 frame만 여기까지 도달한다.
+            // 정상 frame만 여기까지 도달한다. (raw 그대로 — 캡처/evaluator truth)
             onPoseFrameRef.current?.(frame);
 
             if (showPoseDebugOverlay && overlayCanvasRef.current) {
-              drawPoseFrameToCanvas(overlayCanvasRef.current, frame, { mirrored });
+              if (!frame.landmarks || frame.landmarks.length === 0) {
+                overlaySmoothingStateRef.current = null;
+                clearPoseOverlay(overlayCanvasRef.current);
+              } else {
+                const { landmarks: smoothedLandmarks, nextState } = smoothPoseOverlayLandmarks(
+                  frame.landmarks,
+                  overlaySmoothingStateRef.current
+                );
+                overlaySmoothingStateRef.current = nextState;
+                drawPoseFrameToCanvas(overlayCanvasRef.current, frame, {
+                  mirrored,
+                  landmarksOverride: smoothedLandmarks ?? undefined,
+                });
+              }
             } else {
+              overlaySmoothingStateRef.current = null;
               clearPoseOverlay(overlayCanvasRef.current);
             }
           }
@@ -593,6 +617,7 @@ export function CameraPreview({
       cancelled = true;
       startAnalyzerRef.current = null;
       recreateScheduledRef.current = false;
+      overlaySmoothingStateRef.current = null;
       if (recreateTimeoutRef.current != null) {
         window.clearTimeout(recreateTimeoutRef.current);
         recreateTimeoutRef.current = null;
