@@ -22,6 +22,8 @@ export interface SquatCalibrationTraceCompact {
   htc: number;
   /** 적용 assist 임계: c=confidence, e=excursion, d/a=dominant descent·ascent 최소 */
   t: { c: number; e: number; d: number; a: number } | null;
+  /** PR-HMM-04C: HMM confidence breakdown — x/s/c/n (excursion/sequence/coverage/noise penalty) */
+  hcb: { x: number; s: number; c: number; n: number } | null;
 }
 
 export const SQUAT_CALIBRATION_TRACE_COMPACT_KEYS = [
@@ -38,6 +40,7 @@ export const SQUAT_CALIBRATION_TRACE_COMPACT_KEYS = [
   'hcnts',
   'htc',
   't',
+  'hcb',
 ] as const;
 
 export function buildSquatCalibrationTraceCompact(
@@ -69,6 +72,14 @@ export function buildSquatCalibrationTraceCompact(
           e: thr.minHmmExcursion,
           d: thr.minDescentCount,
           a: thr.minAscentCount,
+        }
+      : null,
+    hcb: hmm?.confidenceBreakdown
+      ? {
+          x: Math.round(hmm.confidenceBreakdown.excursionScore * 100) / 100,
+          s: Math.round(hmm.confidenceBreakdown.sequenceScore * 100) / 100,
+          c: Math.round(hmm.confidenceBreakdown.coverageScore * 100) / 100,
+          n: Math.round(hmm.confidenceBreakdown.noisePenalty * 100) / 100,
         }
       : null,
   };

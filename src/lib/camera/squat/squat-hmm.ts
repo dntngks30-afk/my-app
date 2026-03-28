@@ -24,6 +24,8 @@
  *   depth는 시퀀스 ROM으로 z-정규화, 프레임간 변화량은 raw smoothed delta로 둔 하이브리드 emission.
  *   (깊은 ROM에서 z-delta만 쓰면 스텝이 지나치게 작아져 ascent가 bottom에 붙는 문제 방지 — PR-HMM-04B)
  *   null / invalid 프레임은 emission confidence를 낮춰 soft penalty로 반영한다.
+ *
+ * PR-HMM-04C — confidence는 모션 프레임 비율이 아니라 excursion·시퀀스 품질·상태 커버리지·노이즈 페널티 가중합.
  */
 
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
@@ -31,6 +33,15 @@ import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 // ─── 공개 타입 ─────────────────────────────────────────────────────────────────
 
 export type SquatHmmState = 'standing' | 'descent' | 'bottom' | 'ascent';
+
+/** PR-HMM-04C: confidence 하위 성분 (0–1, noisePenalty 만큼 가중 차감) */
+export interface SquatHmmConfidenceBreakdown {
+  excursionScore: number;
+  sequenceScore: number;
+  coverageScore: number;
+  /** 0=깨끗, 1=최대 — 최종식에서 0.1 가중으로 차감 */
+  noisePenalty: number;
+}
 
 export interface SquatHmmFrameState {
   frameIndex: number;
@@ -64,9 +75,11 @@ export interface SquatHmmDecodeResult {
   completionCandidate: boolean;
   /**
    * decoder 신뢰도 (0–1).
-   * descent + bottom + ascent 총 프레임 수 및 excursion에 비례한다.
+   * PR-HMM-04C: 0.4·excursion + 0.35·sequence + 0.15·coverage − 0.1·noisePenalty (후보 아닐 때 상한).
    */
   confidence: number;
+  /** PR-HMM-04C: confidence 분해 — 디버그/캘리브 전용 */
+  confidenceBreakdown: SquatHmmConfidenceBreakdown;
   /**
    * completion 슬라이스 내 최대 squatDepthProxy (smoothed).
    */
@@ -136,10 +149,142 @@ const MIN_DESCENT_FRAMES = 2;
 const MIN_BOTTOM_FRAMES = 1;
 const MIN_ASCENT_FRAMES = 2;
 
-/** confidence 계산에서 모션 프레임(descent+bottom+ascent)의 포화 기준 */
-const CONFIDENCE_MOTION_SATURATION = 11;
+/** PR-HMM-04C: excursion 정규화 기준(이 값 이상이면 excursion 성분 1) */
+const CONFIDENCE_EXCURSION_NORM = 0.25;
+/** 가중치: excursion / sequence / coverage / noise penalty */
+const W_EX = 0.4;
+const W_SEQ = 0.35;
+const W_COV = 0.15;
+const W_NOISE = 0.1;
+/** 비후보(지터 등) confidence 상한 — assist·arming 바와 혼동 방지 */
+const CONFIDENCE_NON_CANDIDATE_CAP = 0.24;
 
 // ─── 내부 함수 ────────────────────────────────────────────────────────────────
+
+function clamp01(x: number): number {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  return x;
+}
+
+function round3(x: number): number {
+  return Math.round(x * 1000) / 1000;
+}
+
+/** Viterbi 전이 그래프상 허용 단일 스텝(자기 루프 포함) */
+function isPlausibleHmmTransition(from: SquatHmmState, to: SquatHmmState): boolean {
+  if (from === to) return true;
+  if (from === 'standing' && to === 'descent') return true;
+  if (from === 'descent' && to === 'bottom') return true;
+  if (from === 'bottom' && to === 'ascent') return true;
+  if (from === 'ascent' && to === 'standing') return true;
+  return false;
+}
+
+type HmmRun = { state: SquatHmmState; count: number };
+
+/**
+ * PR-HMM-04C — completionCandidate FSM과 동일한 stage(0–5) + 시퀀스·커버리지·노이즈 기반 confidence.
+ */
+function computeSquatHmmConfidence(
+  sequence: SquatHmmState[],
+  depthSeries: Array<number | null>,
+  runs: HmmRun[],
+  dominantStateCounts: Record<SquatHmmState, number>,
+  transitionCount: number,
+  effectiveExcursion: number,
+  completionCandidate: boolean
+): { confidence: number; confidenceBreakdown: SquatHmmConfidenceBreakdown } {
+  const T = sequence.length;
+
+  const excursionScore = clamp01(effectiveExcursion / CONFIDENCE_EXCURSION_NORM);
+
+  const covD = clamp01(dominantStateCounts.descent / MIN_DESCENT_FRAMES);
+  const covB = clamp01(dominantStateCounts.bottom / MIN_BOTTOM_FRAMES);
+  const covA = clamp01(dominantStateCounts.ascent / MIN_ASCENT_FRAMES);
+  const coverageScore = (covD + covB + covA) / 3;
+
+  const descentRunMin = (r: HmmRun) => r.state === 'descent' && r.count >= MIN_DESCENT_FRAMES;
+  const bottomRunMin = (r: HmmRun) => r.state === 'bottom' && r.count >= MIN_BOTTOM_FRAMES;
+  const ascentRunMin = (r: HmmRun) => r.state === 'ascent' && r.count >= MIN_ASCENT_FRAMES;
+
+  let stage = 0;
+  for (const run of runs) {
+    if (stage === 0 && run.state === 'standing') {
+      stage = 1;
+      continue;
+    }
+    if (stage === 1 && descentRunMin(run)) {
+      stage = 2;
+      continue;
+    }
+    if (stage === 2 && bottomRunMin(run)) {
+      stage = 3;
+      continue;
+    }
+    if (stage === 3 && ascentRunMin(run)) {
+      stage = 4;
+      continue;
+    }
+    if (stage === 4 && run.state === 'standing') {
+      stage = 5;
+      break;
+    }
+  }
+
+  const stageBaseSeq = [0.04, 0.1, 0.26, 0.44, 0.72, 0.9][Math.min(stage, 5)]!;
+  let sequenceScore = stageBaseSeq;
+
+  let badTrans = 0;
+  for (let i = 1; i < sequence.length; i++) {
+    if (!isPlausibleHmmTransition(sequence[i - 1]!, sequence[i]!)) badTrans++;
+  }
+  const badTransRatio = clamp01(badTrans / Math.max(3, Math.floor(T / 5)));
+  sequenceScore = clamp01(sequenceScore * (1 - 0.5 * badTransRatio));
+
+  if (completionCandidate) {
+    sequenceScore = Math.max(sequenceScore, 0.78);
+    const last = runs[runs.length - 1];
+    if (last?.state === 'standing' && last.count >= 4) {
+      sequenceScore = clamp01(sequenceScore + 0.05);
+    }
+  }
+
+  const nullCount = depthSeries.filter((d) => d === null).length;
+  const invalidRatio = T > 0 ? nullCount / T : 0;
+  const idealTrans = completionCandidate ? 6 : 3;
+  const flipExcess = Math.max(0, transitionCount - idealTrans);
+  const flipNoise = clamp01(flipExcess / Math.max(5, T * 0.28));
+  const noisePenalty = clamp01(invalidRatio * 0.9 + 0.7 * flipNoise + 0.2 * badTransRatio);
+
+  let confidence = clamp01(
+    W_EX * excursionScore + W_SEQ * sequenceScore + W_COV * coverageScore - W_NOISE * noisePenalty
+  );
+
+  if (!completionCandidate) {
+    confidence = Math.min(confidence, CONFIDENCE_NON_CANDIDATE_CAP);
+  }
+
+  /**
+   * 초저 ROM 후보는 시퀀스 품질만으로 점수가 과대해질 수 있음 — no_reversal(0.5) 게이트와 borderline 픽스처 정합.
+   * (descent_span 0.41 바는 유지되도록 0.86만 적용)
+   */
+  if (completionCandidate && effectiveExcursion < 0.048) {
+    confidence = round3(clamp01(confidence * 0.86));
+  }
+
+  return {
+    confidence: round3(confidence),
+    confidenceBreakdown: {
+      excursionScore: round3(excursionScore),
+      sequenceScore: round3(sequenceScore),
+      coverageScore: round3(coverageScore),
+      noisePenalty: round3(noisePenalty),
+    },
+  };
+}
+
+// ─── emission / depth prep ───────────────────────────────────────────────────
 
 function logGaussian(x: number, mean: number, sigma: number): number {
   const diff = x - mean;
@@ -320,36 +465,26 @@ export function decodeSquatHmm(frames: PoseFeaturesFrame[]): SquatHmmDecodeResul
   const peakDepth = validDepths.length > 0 ? Math.max(...validDepths) : 0;
   const effectiveExcursion = Math.max(0, peakDepth - baselineDepth);
 
-  // ── completionCandidate 판정 ────────────────────────────────────────────────
-  // 조건: standing≥1 → descent≥MIN → bottom≥MIN → ascent≥MIN → standing≥1 순서로 출현
-  // + effectiveExcursion ≥ MIN_EXCURSION_FOR_CANDIDATE
-  // + 각 상태가 최소 dwell 충족
+  const runs: HmmRun[] = [];
+  for (let i = 0; i < sequence.length; i++) {
+    const s = sequence[i]!;
+    if (runs.length === 0 || runs[runs.length - 1]!.state !== s) {
+      runs.push({ state: s, count: 1 });
+    } else {
+      runs[runs.length - 1]!.count += 1;
+    }
+  }
 
+  // ── completionCandidate 판정 ────────────────────────────────────────────────
   let completionCandidate = false;
   const excursionOk = effectiveExcursion >= MIN_EXCURSION_FOR_CANDIDATE;
 
   if (excursionOk) {
-    // 상태 전이 순서를 RLE(런-렝스 인코딩)로 확인
-    const runs: Array<{ state: SquatHmmState; count: number }> = [];
-    for (let i = 0; i < sequence.length; i++) {
-      const s = sequence[i]!;
-      if (runs.length === 0 || runs[runs.length - 1]!.state !== s) {
-        runs.push({ state: s, count: 1 });
-      } else {
-        runs[runs.length - 1]!.count += 1;
-      }
-    }
+    const descentRunMin = (r: HmmRun) => r.state === 'descent' && r.count >= MIN_DESCENT_FRAMES;
+    const bottomRunMin = (r: HmmRun) => r.state === 'bottom' && r.count >= MIN_BOTTOM_FRAMES;
+    const ascentRunMin = (r: HmmRun) => r.state === 'ascent' && r.count >= MIN_ASCENT_FRAMES;
 
-    // standing → descent → bottom → ascent → standing 패턴 탐색
-    const descentRunMin = (r: { state: SquatHmmState; count: number }) =>
-      r.state === 'descent' && r.count >= MIN_DESCENT_FRAMES;
-    const bottomRunMin = (r: { state: SquatHmmState; count: number }) =>
-      r.state === 'bottom' && r.count >= MIN_BOTTOM_FRAMES;
-    const ascentRunMin = (r: { state: SquatHmmState; count: number }) =>
-      r.state === 'ascent' && r.count >= MIN_ASCENT_FRAMES;
-
-    // 순서 FSM 탐색
-    let stage = 0; // 0=need_standing 1=need_descent 2=need_bottom 3=need_ascent 4=need_final_standing 5=done
+    let stage = 0;
     for (const run of runs) {
       if (stage === 0 && run.state === 'standing') { stage = 1; continue; }
       if (stage === 1 && descentRunMin(run)) { stage = 2; continue; }
@@ -357,7 +492,7 @@ export function decodeSquatHmm(frames: PoseFeaturesFrame[]): SquatHmmDecodeResul
       if (stage === 3 && ascentRunMin(run)) { stage = 4; continue; }
       if (stage === 4 && run.state === 'standing') { stage = 5; break; }
     }
-    completionCandidate = stage >= 4; // standing_final까지 오면 stage=5, ascent만 있어도 4
+    completionCandidate = stage >= 4;
   }
 
   if (!excursionOk) notes.push(`excursion_too_small:${effectiveExcursion.toFixed(4)}`);
@@ -366,16 +501,15 @@ export function decodeSquatHmm(frames: PoseFeaturesFrame[]): SquatHmmDecodeResul
   if (dominantStateCounts.ascent < MIN_ASCENT_FRAMES) notes.push('ascent_dwell_too_short');
   if (completionCandidate) notes.push('temporal_cycle_found');
 
-  // ── confidence 계산 ────────────────────────────────────────────────────────
-  const motionFrames =
-    dominantStateCounts.descent +
-    dominantStateCounts.bottom +
-    dominantStateCounts.ascent;
-  const motionRatio = Math.min(1, motionFrames / CONFIDENCE_MOTION_SATURATION);
-  const excursionRatio = Math.min(1, effectiveExcursion / 0.12);
-  const confidence = completionCandidate
-    ? Math.min(1, motionRatio * 0.6 + excursionRatio * 0.4)
-    : motionRatio * 0.3 * excursionRatio; // 미통과는 낮은 confidence
+  const { confidence, confidenceBreakdown } = computeSquatHmmConfidence(
+    sequence,
+    depthSeries,
+    runs,
+    dominantStateCounts,
+    transitionCount,
+    effectiveExcursion,
+    completionCandidate
+  );
 
   return {
     sequence,
@@ -383,7 +517,8 @@ export function decodeSquatHmm(frames: PoseFeaturesFrame[]): SquatHmmDecodeResul
     dominantStateCounts,
     transitionCount,
     completionCandidate,
-    confidence: Math.round(confidence * 1000) / 1000,
+    confidence,
+    confidenceBreakdown,
     peakDepth: Math.round(peakDepth * 1000) / 1000,
     effectiveExcursion: Math.round(effectiveExcursion * 1000) / 1000,
     notes,
@@ -391,6 +526,13 @@ export function decodeSquatHmm(frames: PoseFeaturesFrame[]): SquatHmmDecodeResul
 }
 
 // ─── 내부 유틸 ────────────────────────────────────────────────────────────────
+
+const EMPTY_CONFIDENCE_BREAKDOWN: SquatHmmConfidenceBreakdown = {
+  excursionScore: 0,
+  sequenceScore: 0,
+  coverageScore: 0,
+  noisePenalty: 0,
+};
 
 function buildEmptyResult(reason: string, notes: string[]): SquatHmmDecodeResult {
   notes.push(reason);
@@ -401,6 +543,7 @@ function buildEmptyResult(reason: string, notes: string[]): SquatHmmDecodeResult
     transitionCount: 0,
     completionCandidate: false,
     confidence: 0,
+    confidenceBreakdown: { ...EMPTY_CONFIDENCE_BREAKDOWN },
     peakDepth: 0,
     effectiveExcursion: 0,
     notes,

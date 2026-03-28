@@ -170,6 +170,11 @@ console.log('\n-- E. compact trace shape --');
     compact.t
   );
   ok('E: t has c,e,d,a', 'c' in compact.t && 'e' in compact.t && 'd' in compact.t && 'a' in compact.t, compact.t);
+  ok(
+    'E: hcb confidence breakdown',
+    compact.hcb != null && 'x' in compact.hcb && 's' in compact.hcb && 'c' in compact.hcb && 'n' in compact.hcb,
+    compact.hcb
+  );
 }
 
 console.log(`\n== PR-HMM-03A calibration smoke: ${passed} passed, ${failed} failed ==\n`);

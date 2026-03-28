@@ -24,6 +24,11 @@ export interface SquatCalibrationDebug {
   hmmExcursion: number;
   hmmTransitionCount: number;
   hmmDominantStateCounts: Record<'standing' | 'descent' | 'bottom' | 'ascent', number>;
+  /** PR-HMM-04C: HMM confidence 분해 (squatHmm.confidenceBreakdown 미러) */
+  hmmExcursionScore?: number;
+  hmmSequenceScore?: number;
+  hmmCoverageScore?: number;
+  hmmNoisePenalty?: number;
 }
 
 export interface EvaluatorMetric {

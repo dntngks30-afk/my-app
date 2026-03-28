@@ -177,6 +177,10 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     hmmExcursion: squatHmm.effectiveExcursion,
     hmmTransitionCount: squatHmm.transitionCount,
     hmmDominantStateCounts: { ...squatHmm.dominantStateCounts },
+    hmmExcursionScore: squatHmm.confidenceBreakdown.excursionScore,
+    hmmSequenceScore: squatHmm.confidenceBreakdown.sequenceScore,
+    hmmCoverageScore: squatHmm.confidenceBreakdown.coverageScore,
+    hmmNoisePenalty: squatHmm.confidenceBreakdown.noisePenalty,
   };
 
   const globalMaxDepthProxy = depthValues.length > 0 ? Math.max(...depthValues) : 0;
@@ -421,6 +425,10 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         squatReversalToStandingMs: state.squatReversalToStandingMs ?? null,
         /** PR-HMM-01B: shadow decoder 스칼라 — pass gate에 사용 금지 */
         hmmConfidence: squatHmm.confidence,
+        hmmExcursionScore: Math.round(squatHmm.confidenceBreakdown.excursionScore * 1000) / 1000,
+        hmmSequenceScore: Math.round(squatHmm.confidenceBreakdown.sequenceScore * 1000) / 1000,
+        hmmCoverageScore: Math.round(squatHmm.confidenceBreakdown.coverageScore * 1000) / 1000,
+        hmmNoisePenalty: Math.round(squatHmm.confidenceBreakdown.noisePenalty * 1000) / 1000,
         hmmCompletionCandidate: squatHmm.completionCandidate ? 1 : 0,
         hmmStandingCount: squatHmm.dominantStateCounts.standing,
         hmmDescentCount: squatHmm.dominantStateCounts.descent,
