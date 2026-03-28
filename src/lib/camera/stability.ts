@@ -193,6 +193,58 @@ export function smoothSignalValue(
   return previous + (current - previous) * alpha;
 }
 
+/**
+ * PR-04E5: 숫자 시리즈에서 단일 프레임 급락/급등을 제거한다.
+ *
+ * 용도: 스쿼트 primary depth (logistic → EMA 전 원시값)에서 visibility 손실로
+ * 인한 단발성 0 붕괴를 발생 즉시 차단해 EMA가 그 에너지를 여러 프레임에 분산시키는
+ * 현상을 방지한다.
+ *
+ * 규칙:
+ * - 인접 양쪽 이웃이 모두 minNeighborValue 이상일 때만 판단
+ * - curr < neighborMin * collapseThreshold  → 단발 붕괴  → (prev+next)/2 로 대체
+ * - curr > neighborMax * spikeThreshold (및 curr > 0.04) → 단발 스파이크 → 동일 대체
+ * - 이웃 중 하나라도 null 이면 건드리지 않음
+ */
+export function suppressOneFrameDrops(
+  series: (number | null)[],
+  options?: {
+    /** 현재값이 이웃 최솟값의 이 비율 미만이면 붕괴 판정 (기본 0.35) */
+    collapseThreshold?: number;
+    /** 현재값이 이웃 최댓값의 이 배수 이상이면 스파이크 판정 (기본 1.7) */
+    spikeThreshold?: number;
+    /** 이 값 이하인 이웃은 무시 — standing noise floor 에서 오탐 방지 (기본 0.008) */
+    minNeighborValue?: number;
+  }
+): { values: (number | null)[]; suppressedCount: number } {
+  const collapseThreshold = options?.collapseThreshold ?? 0.35;
+  const spikeThreshold = options?.spikeThreshold ?? 1.7;
+  const minNeighborValue = options?.minNeighborValue ?? 0.008;
+
+  const out: (number | null)[] = [...series];
+  let suppressedCount = 0;
+
+  for (let i = 1; i < series.length - 1; i++) {
+    const prev = series[i - 1];
+    const curr = series[i];
+    const next = series[i + 1];
+    if (prev == null || curr == null || next == null) continue;
+
+    const neighborMin = Math.min(prev, next);
+    const neighborMax = Math.max(prev, next);
+
+    if (neighborMin > minNeighborValue && curr < neighborMin * collapseThreshold) {
+      out[i] = (prev + next) / 2;
+      suppressedCount++;
+    } else if (curr > neighborMax * spikeThreshold && curr > 0.04) {
+      out[i] = (prev + next) / 2;
+      suppressedCount++;
+    }
+  }
+
+  return { values: out, suppressedCount };
+}
+
 export function stabilizePhaseSequence(
   candidates: PosePhaseHint[],
   minimumStableFrames = 2

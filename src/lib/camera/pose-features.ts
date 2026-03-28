@@ -5,7 +5,7 @@
 import { POSE_LANDMARKS } from '@/lib/motion/pose-types';
 import type { PoseLandmark, PoseLandmarks } from '@/lib/motion/pose-types';
 import type { CameraStepId } from '@/lib/public/camera-test';
-import { smoothSignalValue, stabilizePhaseSequence } from './stability';
+import { smoothSignalValue, stabilizePhaseSequence, suppressOneFrameDrops } from './stability';
 import { buildSquatDepthSignal } from './squat/squat-depth-signal';
 
 export type PoseFrameValidity = 'valid' | 'low_visibility' | 'missing_keypoints' | 'invalid';
@@ -94,6 +94,10 @@ export interface PoseFeaturesFrame {
     footHeightGap: number | null;
     footDownDetected: boolean;
     torsoCorrectionDetected: boolean;
+    /** PR-04E5: EMA of jump-suppressed raw primary depth (squat only, additive 관측) */
+    squatDepthPrimaryStable?: number | null;
+    /** PR-04E5: 이 프레임의 raw primary 가 단발 붕괴로 보정됐는지 여부 (squat only) */
+    squatDepthPrimaryJumpSuppressed?: boolean;
   };
 }
 
@@ -736,7 +740,60 @@ function stabilizeDerivedSignals(frames: PoseFeaturesFrame[]): PoseFeaturesFrame
   });
 }
 
-/** PR-04E1: phase / arming 에 쓰는 유효 depth (blended 우선) */
+/**
+ * PR-04E5: 스쿼트 전용 primary depth 단발 붕괴 억제 패스.
+ *
+ * `stabilizeDerivedSignals()` 이후의 EMA-smoothed primary (`squatDepthProxy`) 가 아닌
+ * 그 **이전** 원시 logistic 값 (`squatDepthProxyRaw`) 에 `suppressOneFrameDrops` 를 적용한 뒤
+ * 동일 alpha 로 EMA 를 다시 실행해 `squatDepthPrimaryStable` 을 만든다.
+ *
+ * 원시값에서 억제하기 때문에 EMA 가 붕괴 에너지를 여러 프레임에 분산시키지 않는다.
+ * 정상 하강·상승 구간에서는 두 신호가 사실상 동일하다.
+ */
+function applySquatPrimaryStabilization(frames: PoseFeaturesFrame[]): PoseFeaturesFrame[] {
+  const EMA_ALPHA = 0.46;
+
+  // squatDepthProxyRaw = pre-EMA logistic 값; 없으면 EMA 출력으로 대체
+  const rawSeries: (number | null)[] = frames.map((f) => {
+    if (!f.isValid) return null;
+    const r = f.derived.squatDepthProxyRaw;
+    if (typeof r === 'number' && Number.isFinite(r) && r >= 0) return r;
+    const d = f.derived.squatDepthProxy;
+    return typeof d === 'number' && Number.isFinite(d) ? d : null;
+  });
+
+  const { values: suppressedRaw } = suppressOneFrameDrops(rawSeries);
+
+  // 억제된 원시값으로 EMA 재계산 → squatDepthPrimaryStable
+  let prevStable: number | null = null;
+  const stableSmoothed: (number | null)[] = suppressedRaw.map((rawVal) => {
+    if (rawVal == null) return prevStable; // invalid frame: carry-forward
+    const smoothed = prevStable != null ? prevStable + (rawVal - prevStable) * EMA_ALPHA : rawVal;
+    prevStable = smoothed;
+    return smoothed;
+  });
+
+  return frames.map((frame, i) => {
+    const stableVal = stableSmoothed[i] ?? null;
+    const origRaw = rawSeries[i];
+    const suppressedVal = suppressedRaw[i];
+    const wasSuppressed =
+      origRaw != null &&
+      suppressedVal != null &&
+      Math.abs(suppressedVal - origRaw) > 0.002;
+
+    return {
+      ...frame,
+      derived: {
+        ...frame.derived,
+        squatDepthPrimaryStable: stableVal,
+        squatDepthPrimaryJumpSuppressed: wasSuppressed,
+      },
+    };
+  });
+}
+
+
 function squatPhaseDepthRead(frame: PoseFeaturesFrame): number {
   const b = frame.derived.squatDepthProxyBlended;
   if (typeof b === 'number' && Number.isFinite(b)) return b;
@@ -1026,6 +1083,7 @@ export function buildPoseFeaturesFrames(
   }
 
   const stabilized = stabilizeDerivedSignals(features);
-  const depthReady = stepId === 'squat' ? applySquatDepthBlendPass(stabilized) : stabilized;
+  const stabPrimary = stepId === 'squat' ? applySquatPrimaryStabilization(stabilized) : stabilized;
+  const depthReady = stepId === 'squat' ? applySquatDepthBlendPass(stabPrimary) : stabPrimary;
   return applyPhaseHints(stepId, depthReady);
 }

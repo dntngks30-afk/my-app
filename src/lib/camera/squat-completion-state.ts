@@ -192,9 +192,14 @@ function buildSquatCompletionDepthRows(validFrames: PoseFeaturesFrame[]): SquatC
     if (typeof p !== 'number' || !Number.isFinite(p)) continue;
     const cRead = readSquatCompletionDepth(frame);
     const depthCompletion = cRead != null && Number.isFinite(cRead) ? cRead : p;
+    // PR-04E5: 안정화된 primary(단발 붕괴 억제 후 EMA)가 있으면 rawDepthPeakPrimary 에 사용.
+    // 없으면 원래 EMA primary 로 폴백 — 기존 동작 유지.
+    const pStable = frame.derived.squatDepthPrimaryStable;
+    const depthPrimary =
+      pStable != null && Number.isFinite(pStable) ? pStable : p;
     depthRows.push({
       index: vi,
-      depthPrimary: p,
+      depthPrimary,
       depthCompletion,
       timestampMs: frame.timestampMs,
       phaseHint: frame.phaseHint,
