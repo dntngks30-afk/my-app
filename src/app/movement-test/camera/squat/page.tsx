@@ -42,28 +42,17 @@ import {
 import {
   deriveSquatObservabilitySignals,
   recordAttemptSnapshot,
-  recordSquatDiagNoDebugAttachThrottled,
-  recordSquatDiagStepIdMismatchThrottled,
   recordSquatObservationEvent,
-  recordSquatPassVisibleNotLatchedObservation,
   relativeDepthPeakBucket,
   squatDownwardCommitmentReachedObservable,
 } from '@/lib/camera/camera-trace';
 import {
-  getRecentSuccessSnapshots,
-  recordPassLatchOrderingDiag,
   recordSquatSuccessSnapshot,
   recordSquatFailedShallowSnapshot,
   hasShallowSquatObservation,
   hasSquatAttemptEvidence,
   isDiagnosticFreezeMode,
-  squatCaptureShouldClearSettledForPassLatch,
-  type RecordSquatSuccessOptions,
 } from '@/lib/camera/camera-success-diagnostic';
-import {
-  updateSuccessUiSettleCandidate,
-  type SuccessUiSettleCandidateState,
-} from '@/lib/camera/success-ui-settle';
 import { SquatMobileDiagPanel } from '@/components/camera/SquatMobileDiagPanel';
 import {
   getMovementSetupGuide,
@@ -252,8 +241,6 @@ export default function CameraSquatPage() {
     stallTimer: null as ReturnType<typeof window.setTimeout> | null,
     stallRecorded: false,
   });
-  /** PR-CAM-SUCCESS-UI-SETTLE-01: shallow 경로 finalPassLatched 후 UI 래치 전 디바운스 상태 */
-  const successUiSettleCandidateRef = useRef<SuccessUiSettleCandidateState | null>(null);
   /** CAM-27: 이번 capturing 세션에서 얕은 관측 신호가 있었는지(abandon 스팸 방지) */
   const squatObsHadShallowThisCaptureRef = useRef(false);
   /** 캡처 terminal 구간에서 attempt snapshot 1회 */
@@ -262,8 +249,6 @@ export default function CameraSquatPage() {
   const squatTerminalObservationRef = useRef<string | null>(null);
   /** hasShallowSquatObservation 최초 충족 엣지 — shallow_observed 이벤트 1회 */
   const squatShallowObservedEdgeRef = useRef(false);
-  /** CAM-PASS-LATCH-DIAG: dev 관측으로 pass/래치 간극이 있었으면 성공 스냅에 전달 */
-  const passGapObservedRef = useRef(false);
   /** PR-CAM-10: 애매 재시도 음성 1회 + 이후 completion 관측(디버그) */
   const [squatAmbiguousRetryHud, setSquatAmbiguousRetryHud] = useState<{
     voicePlayed: boolean;
@@ -287,21 +272,15 @@ export default function CameraSquatPage() {
   previewKeyRef.current = previewKey;
   finalPassLatchedRef.current = finalPassLatched;
   const effectivePassLatched = finalPassLatched || passLatched;
-  /**
-   * PR-CAM-SUCCESS-UI-SETTLE-01: 가이드/리드니스 "성공" 톤은 페이지 래치 이후에만 —
-   * finalPassLatched 만으로는 통과 UI가 너무 빨리 켜지지 않게 한다.
-   * 교정 음성 차단 등은 여전히 effectivePassLatched(엔진 passReady) 기준.
-   */
-  const readinessSuccessLatched = passLatched;
   const setupFramingHint = useMemo(() => getSetupFramingHint(landmarks), [landmarks]);
   const liveReadinessSummary = useMemo(
     () =>
       getLiveReadinessSummary({
-        success: readinessSuccessLatched,
+        success: effectivePassLatched,
         guardrail: gate.guardrail,
         framingHint: setupFramingHint,
       }),
-    [readinessSuccessLatched, gate.guardrail, setupFramingHint]
+    [effectivePassLatched, gate.guardrail, setupFramingHint]
   );
   const rawLiveReadiness = liveReadinessSummary.state;
   const primaryReadinessBlocker = getPrimaryReadinessBlocker(liveReadinessSummary);
@@ -438,8 +417,6 @@ export default function CameraSquatPage() {
     squatTerminalAttemptSnapshotRef.current = null;
     squatTerminalObservationRef.current = null;
     squatShallowObservedEdgeRef.current = false;
-    passGapObservedRef.current = false;
-    successUiSettleCandidateRef.current = null;
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
   /** CAM-OBS: URL 진단 플래그 (?diag=1, ?debug=1, ?diag_modal=1) */
@@ -763,69 +740,51 @@ export default function CameraSquatPage() {
     void speakVoiceCue(getSuccessVoiceCue());
   }, [currentStepKey, effectivePassLatched]);
 
-  const latchPassEvent = useCallback(
-    (successUiExtras?: Pick<
-      RecordSquatSuccessOptions,
-      | 'successUiCandidateAt'
-      | 'successUiSettledAt'
-      | 'successUiSettleMsUsed'
-      | 'successUiSettlePath'
-    > | null) => {
-      if (passLatchedStepKeyRef.current === currentStepKey || passLatched) {
-        return;
-      }
+  const latchPassEvent = useCallback(() => {
+    if (passLatchedStepKeyRef.current === currentStepKey || passLatched) {
+      return;
+    }
 
-      const latchedAt = new Date().toISOString();
-      const passLatchedAtMs = Date.now();
-      passLatchedStepKeyRef.current = currentStepKey;
-      settledRef.current = true;
-      advanceLockRef.current = true;
-      setPassLatched(true);
-      setPassLatchedAt(latchedAt);
-      setPassDetectedAt(latchedAt);
-      setTransitionLocked(true);
-      setNextTriggerReason('pass_latched');
-      stop();
-      /** PR success-diagnostic: success snapshot 저장 */
-      const noPriorSquatSuccessSnapshot =
-        getRecentSuccessSnapshots().filter((s) => s.motionType === 'squat').length === 0;
-      recordSquatSuccessSnapshot({
-        gate,
-        successOpenedBy: 'effectivePassLatched',
-        currentRoute: '/movement-test/camera/squat',
-        passLatchedAtMs,
-        effectivePassLatched,
-        competingPaths: [],
-        successUiCandidateAt: successUiExtras?.successUiCandidateAt ?? null,
-        successUiSettledAt: successUiExtras?.successUiSettledAt ?? null,
-        successUiSettleMsUsed: successUiExtras?.successUiSettleMsUsed ?? null,
-        successUiSettlePath: successUiExtras?.successUiSettlePath ?? null,
-        passVisibleButNotLatchedPrior: passGapObservedRef.current,
-        passVisibleWithoutSuccessSnapshotPrior: noPriorSquatSuccessSnapshot,
-      });
-      passGapObservedRef.current = false;
-      persistCurrentStep();
-      setProgressionState('passed');
-      setStatusMessage(gate.uiMessage);
-      appendTransition('passed', 'pass_latched');
-      /* 통과 직후 dev modal은 diag_modal=1 일 때만 자동 오픈(?debug=1 만으로는 모달 없음). */
-      if (IS_DEV && urlDebugFlags.diagModal) {
-        debugModalHoldRef.current = true;
-        setDebugModalGate(gate);
-        setShowSquatDebugModal(true);
-      }
-    },
-    [
-      appendTransition,
-      currentStepKey,
-      effectivePassLatched,
+    const latchedAt = new Date().toISOString();
+    const passLatchedAtMs = Date.now();
+    passLatchedStepKeyRef.current = currentStepKey;
+    settledRef.current = true;
+    advanceLockRef.current = true;
+    setPassLatched(true);
+    setPassLatchedAt(latchedAt);
+    setPassDetectedAt(latchedAt);
+    setTransitionLocked(true);
+    setNextTriggerReason('pass_latched');
+    stop();
+    /** PR success-diagnostic: success snapshot 저장 */
+    recordSquatSuccessSnapshot({
       gate,
-      passLatched,
-      persistCurrentStep,
-      stop,
-      urlDebugFlags.diagModal,
-    ]
-  );
+      successOpenedBy: 'effectivePassLatched',
+      currentRoute: '/movement-test/camera/squat',
+      passLatchedAtMs,
+      effectivePassLatched,
+      competingPaths: [],
+    });
+    persistCurrentStep();
+    setProgressionState('passed');
+    setStatusMessage(gate.uiMessage);
+    appendTransition('passed', 'pass_latched');
+    /* 통과 직후 dev modal은 diag_modal=1 일 때만 자동 오픈(?debug=1 만으로는 모달 없음). */
+    if (IS_DEV && urlDebugFlags.diagModal) {
+      debugModalHoldRef.current = true;
+      setDebugModalGate(gate);
+      setShowSquatDebugModal(true);
+    }
+  }, [
+    appendTransition,
+    currentStepKey,
+    effectivePassLatched,
+    gate,
+    passLatched,
+    persistCurrentStep,
+    stop,
+    urlDebugFlags.diagModal,
+  ]);
 
   useEffect(() => {
     if (cameraPhase !== 'capturing') return;
@@ -834,36 +793,9 @@ export default function CameraSquatPage() {
     }
 
     if (effectivePassLatched) {
-      if (passLatched) {
-        latchPassEvent();
-        return;
-      }
-      if (!finalPassLatched) {
-        latchPassEvent();
-        return;
-      }
-
-      const nowMs = Date.now();
-      const settleUpd = updateSuccessUiSettleCandidate({
-        passReady: true,
-        completionPassReason: gate.squatCycleDebug?.completionPassReason ?? null,
-        nowMs,
-        prev: successUiSettleCandidateRef.current,
-      });
-      successUiSettleCandidateRef.current = settleUpd.next;
-
-      if (settleUpd.shouldLatchUiNow) {
-        latchPassEvent({
-          successUiCandidateAt: settleUpd.candidateStartedAtIso,
-          successUiSettledAt: new Date(nowMs).toISOString(),
-          successUiSettleMsUsed: settleUpd.settleMsUsed,
-          successUiSettlePath: settleUpd.settlePathLabel,
-        });
-      }
+      latchPassEvent();
       return;
     }
-
-    successUiSettleCandidateRef.current = null;
 
     if (stats.sampledFrameCount === 0) {
       setProgressionState((prev) => (prev === 'camera_ready' ? prev : 'camera_ready'));
@@ -951,7 +883,6 @@ export default function CameraSquatPage() {
     appendTransition,
     cameraPhase,
     cameraReady,
-    currentStepKey,
     gate.failureReasons,
     gate.progressionState,
     gate.reasons,
@@ -960,8 +891,6 @@ export default function CameraSquatPage() {
     latchPassEvent,
     effectivePassLatched,
     finalPassLatched,
-    passLatched,
-    gate.squatCycleDebug?.completionPassReason,
     permissionDenied,
     previewKey,
     stats.sampledFrameCount,
@@ -974,8 +903,8 @@ export default function CameraSquatPage() {
       return;
     }
 
-    /** UI 래치는 capturing effect 에서만 수행 — 여기서는 래치 후 auto-advance / freeze 만 */
     if (passLatchedStepKeyRef.current !== currentStepKey) {
+      latchPassEvent();
       return;
     }
 
@@ -1079,37 +1008,6 @@ export default function CameraSquatPage() {
     }
   }, [cameraPhase]);
 
-  /* CAM-PASS-LATCH-DIAG: 엔진 gate.status pass 인데 페이지 effective 래치 전 — 모션 변경 없이 관측만 */
-  useEffect(() => {
-    if (!IS_DEV) return;
-    if (cameraPhase !== 'capturing' || permissionDenied) return;
-    if (stats.sampledFrameCount < 1) return;
-    if (gate.status !== 'pass') return;
-    if (effectivePassLatched) return;
-
-    recordSquatPassVisibleNotLatchedObservation(gate, {
-      finalPassLatched,
-      passLatched,
-      effectivePassLatched,
-      cameraPhase,
-      settled: settledRef.current,
-      sampledFrameCount: stats.sampledFrameCount,
-      currentStepKey,
-      passLatchedStepKey: passLatchedStepKeyRef.current,
-    });
-    passGapObservedRef.current = true;
-  }, [
-    cameraPhase,
-    permissionDenied,
-    stats.sampledFrameCount,
-    gate,
-    gate.status,
-    effectivePassLatched,
-    finalPassLatched,
-    passLatched,
-    currentStepKey,
-  ]);
-
   /* CAM-27: capturing 중 스쿼트 사전 관측 — 엣지·의미 있는 필드 변경만 기록(프레임 스팸 없음) */
   useEffect(() => {
     if (cameraPhase !== 'capturing' || effectivePassLatched || permissionDenied) {
@@ -1122,17 +1020,9 @@ export default function CameraSquatPage() {
     }
     if (stats.sampledFrameCount < 1) return;
 
-    if (gate.evaluatorResult?.stepId !== 'squat') {
-      recordSquatDiagStepIdMismatchThrottled(gate, currentStepKey);
-      return;
-    }
-
     const sc = gate.squatCycleDebug;
     const hm = gate.evaluatorResult?.debug?.highlightedMetrics as Record<string, unknown> | undefined;
-    if (!sc && !hm) {
-      recordSquatDiagNoDebugAttachThrottled(gate, currentStepKey);
-      return;
-    }
+    if (!sc && !hm) return;
 
     if (hasShallowSquatObservation(gate) && !squatShallowObservedEdgeRef.current) {
       squatShallowObservedEdgeRef.current = true;
@@ -1269,7 +1159,6 @@ export default function CameraSquatPage() {
     }
   }, [
     cameraPhase,
-    currentStepKey,
     effectivePassLatched,
     permissionDenied,
     gate,
@@ -1393,7 +1282,6 @@ export default function CameraSquatPage() {
     setDebugModalGate(null);
     debugModalHoldRef.current = false;
     setPreviewKey((prev) => prev + 1);
-    successUiSettleCandidateRef.current = null;
     appendTransition('idle', 'manual_retry');
   }, [cameraPhase, clearAutoAdvanceTimer, gate, readinessTraceSummary, stop]);
 
@@ -1501,7 +1389,7 @@ export default function CameraSquatPage() {
     () => (showRetryActions ? getEffectiveRetryGuidance(STEP_ID, gate) : null),
     [showRetryActions, gate]
   );
-  const visibleUserGuidance = readinessSuccessLatched
+  const visibleUserGuidance = effectivePassLatched
     ? []
     : retryGuidance
       ? [retryGuidance.primary, retryGuidance.secondary].filter(Boolean)
@@ -1509,7 +1397,7 @@ export default function CameraSquatPage() {
   const showPreCaptureHint =
     (progressionState === 'camera_ready' || progressionState === 'insufficient_signal') &&
     stats.sampledFrameCount < 8;
-  const effectiveProgressionState = readinessSuccessLatched ? 'passed' : progressionState;
+  const effectiveProgressionState = effectivePassLatched ? 'passed' : progressionState;
   const guideTone = getGuideToneFromLiveReadiness(liveReadiness);
   const overlayGuide = getSquatOverlayGuide(gate.failureReasons, effectiveProgressionState);
   const isPreCapturePhase =
@@ -1727,13 +1615,6 @@ export default function CameraSquatPage() {
                   {gate.squatCycleDebug?.eventCycleBand ?? '—'} | promoted:{' '}
                   {String(gate.squatCycleDebug?.eventCyclePromoted ?? '—')} | source:{' '}
                   {gate.squatCycleDebug?.eventCycleSource ?? '—'}
-                </p>
-                <p className="break-all">
-                  PR-04E3C lite: revLite={String(gate.squatCycleDebug?.reversalLiteConfirmed ?? '—')} |
-                  recLite={String(gate.squatCycleDebug?.recoveryLiteConfirmed ?? '—')} | revFrames:{' '}
-                  {gate.squatCycleDebug?.reversalLiteFrames ?? '—'} | recFrames:{' '}
-                  {gate.squatCycleDebug?.recoveryLiteFrames ?? '—'} | revDrop:{' '}
-                  {gate.squatCycleDebug?.reversalLiteDrop ?? '—'}
                 </p>
                 {/* PR-HMM-03A: dev-only calibration strip — production UX unchanged */}
                 <p className="mt-2 font-medium text-cyan-200/80">calibration (dev)</p>

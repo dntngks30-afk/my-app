@@ -355,7 +355,7 @@ function clearCanvas(canvas: HTMLCanvasElement) {
 export function drawPoseFrameToCanvas(
   canvas: HTMLCanvasElement,
   frame: PoseFrame,
-  options: { mirrored?: boolean; landmarksOverride?: PoseLandmark[] | null } = {}
+  options: { mirrored?: boolean } = {}
 ) {
   const context = canvas.getContext('2d');
   if (!context) return;
@@ -378,11 +378,7 @@ export function drawPoseFrameToCanvas(
 
   clearCanvas(canvas);
 
-  /** PR-CAM-OVERLAY-RENDER-SMOOTHING-01: 렌더 전용 스무딩 랜드마크 — frame.landmarks(raw)는 그대로 두고 그리기만 대체 */
-  const landmarksForDraw =
-    options.landmarksOverride !== undefined ? options.landmarksOverride : frame.landmarks;
-
-  if (!landmarksForDraw || landmarksForDraw.length === 0) {
+  if (!frame.landmarks || frame.landmarks.length === 0) {
     return;
   }
 
@@ -392,12 +388,10 @@ export function drawPoseFrameToCanvas(
   context.fillStyle = 'rgba(255, 255, 255, 0.85)';
 
   for (const [startIndex, endIndex] of POSE_CONNECTIONS) {
-    const start = landmarksForDraw[startIndex];
-    const end = landmarksForDraw[endIndex];
+    const start = frame.landmarks[startIndex];
+    const end = frame.landmarks[endIndex];
 
     if (!start || !end) continue;
-    if (typeof start.visibility === 'number' && start.visibility <= 0) continue;
-    if (typeof end.visibility === 'number' && end.visibility <= 0) continue;
 
     context.beginPath();
     context.moveTo(start.x * width, start.y * height);
@@ -405,9 +399,7 @@ export function drawPoseFrameToCanvas(
     context.stroke();
   }
 
-  for (const landmark of landmarksForDraw) {
-    if (typeof landmark.visibility === 'number' && landmark.visibility <= 0) continue;
-
+  for (const landmark of frame.landmarks) {
     const alpha =
       typeof landmark.visibility === 'number'
         ? Math.max(0.25, Math.min(1, landmark.visibility))

@@ -71,9 +71,6 @@ function buildExportPayload(entry: SquatMobileDiagEntry | null) {
         eventCycleDetected: p.eventCycleDetected,
         eventCyclePromoted: p.eventCyclePromoted,
         eventCycleBand: p.eventCycleBand,
-        reversalLiteConfirmed: p.reversalLiteConfirmed,
-        recoveryLiteConfirmed: p.recoveryLiteConfirmed,
-        reversalLiteDrop: p.reversalLiteDrop,
       },
       raw: p,
     };
@@ -113,9 +110,6 @@ function buildExportPayload(entry: SquatMobileDiagEntry | null) {
         eventCycleDetected: p.eventCycleDetected,
         eventCyclePromoted: p.eventCyclePromoted,
         eventCycleBand: p.eventCycleBand,
-        reversalLiteConfirmed: p.reversalLiteConfirmed,
-        recoveryLiteConfirmed: p.recoveryLiteConfirmed,
-        reversalLiteDrop: p.reversalLiteDrop,
     },
     raw: p,
   };
@@ -279,9 +273,6 @@ function SquatDiagFields({ entry }: { entry: SquatMobileDiagEntry }) {
           <Row label="eventCycleDetected" value={p.eventCycleDetected} />
           <Row label="eventCyclePromoted" value={p.eventCyclePromoted} />
           <Row label="eventCycleBand" value={p.eventCycleBand} />
-          <Row label="reversalLiteConfirmed" value={p.reversalLiteConfirmed} />
-          <Row label="recoveryLiteConfirmed" value={p.recoveryLiteConfirmed} />
-          <Row label="reversalLiteDrop" value={p.reversalLiteDrop} />
         </section>
       </div>
     );
@@ -327,9 +318,6 @@ function SquatDiagFields({ entry }: { entry: SquatMobileDiagEntry }) {
         <Row label="eventCycleDetected" value={p.eventCycleDetected} />
         <Row label="eventCyclePromoted" value={p.eventCyclePromoted} />
         <Row label="eventCycleBand" value={p.eventCycleBand} />
-        <Row label="reversalLiteConfirmed" value={p.reversalLiteConfirmed} />
-        <Row label="recoveryLiteConfirmed" value={p.recoveryLiteConfirmed} />
-        <Row label="reversalLiteDrop" value={p.reversalLiteDrop} />
       </section>
     </div>
   );

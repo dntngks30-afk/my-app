@@ -15,7 +15,6 @@ import { isFinalPassLatched } from './auto-progression';
 import { getCorrectiveCueObservability } from './voice-guidance';
 import { getLastPlaybackObservability } from './korean-audio-pack';
 import type { SquatInternalQuality } from './squat/squat-internal-quality';
-import type { SquatCompletionState } from '@/lib/camera/squat-completion-state';
 import { buildSquatCalibrationTraceCompact } from '@/lib/camera/squat/squat-calibration-trace';
 import { buildSquatArmingAssistTraceCompact } from '@/lib/camera/squat/squat-arming-assist';
 import { buildSquatReversalAssistTraceCompact } from '@/lib/camera/squat/squat-reversal-assist';
@@ -168,12 +167,6 @@ export interface AttemptSnapshot {
       eventCycleBand?: string | null;
       eventCyclePromoted?: boolean;
       eventCycleSource?: string | null;
-      /** PR-04E3C: shallow cycle lite */
-      reversalLiteConfirmed?: boolean;
-      recoveryLiteConfirmed?: boolean;
-      reversalLiteFrames?: number | null;
-      recoveryLiteFrames?: number | null;
-      reversalLiteDrop?: number | null;
       /** PR-COMP-03 */
       squatInternalQuality?: SquatInternalQuality;
       /** CAM-shallow-obs: attempt-evidence보다 약한 관측 계약(저장·진단 전용) */
@@ -258,13 +251,7 @@ export type SquatObservationEventType =
   /** 얕은 동작 계약 충족 시 1회(세션당 엣지) */
   | 'shallow_observed'
   /** 캡처 세션 종료(retry/fail/insufficient 등) 시 1회 */
-  | 'capture_session_terminal'
-  /** CAM-PASS-LATCH-DIAG: 엔진 pass 표시 vs 페이지 래치 간극(모션 이벤트 아님, dev 기본) */
-  | 'diag_pass_visible_not_latched'
-  /** CAM-PASS-LATCH-DIAG: evaluator stepId 불일치 마커 */
-  | 'diag_stepid_mismatch'
-  /** CAM-PASS-LATCH-DIAG: squatCycleDebug·highlightedMetrics 둘 다 없음 */
-  | 'diag_no_debug_attach';
+  | 'capture_session_terminal';
 
 export interface SquatAttemptObservation {
   traceKind: 'attempt_observation';
@@ -313,30 +300,7 @@ export interface SquatAttemptObservation {
   peakLatched?: boolean;
   eventCycleDetected?: boolean;
   eventCyclePromoted?: boolean;
-  /** PR-04E3C */
-  reversalLiteConfirmed?: boolean;
-  recoveryLiteConfirmed?: boolean;
-  reversalLiteDrop?: number | null;
   debugVersion: string;
-  /** CAM-PASS-LATCH-DIAG: 진단 마커(export·패널에서 필터 가능) */
-  diagMarkerKind?:
-    | 'diag_pass_visible_not_latched'
-    | 'diag_stepid_mismatch'
-    | 'diag_no_debug_attach';
-  diagExpectedStepId?: string;
-  diagActualStepId?: string | null;
-  /** PASS 가시화됐으나 effective 래치 전 페이지 컨텍스트 */
-  diagPassLatchGap?: {
-    finalPassLatched: boolean;
-    passLatched: boolean;
-    effectivePassLatched: boolean;
-    cameraPhase: string;
-    settled: boolean;
-    sampledFrameCount: number;
-    currentStepKey: string;
-    passLatchedStepKey: string | null;
-    passLatchedStepKeyMatches: boolean;
-  };
 }
 
 const TRACE_STORAGE_KEY = 'moveReCameraTrace:v1';
@@ -478,7 +442,6 @@ export function buildSquatAttemptObservation(
 
   const sc = gate.squatCycleDebug;
   const hm = readHighlighted(gate);
-  const csFull = gate.evaluatorResult?.debug?.squatCompletionState as SquatCompletionState | undefined;
   const signals = deriveSquatObservabilitySignals(gate);
   const relPeak = typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : undefined;
   const rawPeak = typeof hm?.rawDepthPeak === 'number' ? hm.rawDepthPeak : undefined;
@@ -556,8 +519,6 @@ export function buildSquatAttemptObservation(
 }
 
 function observationDedupSkip(list: SquatAttemptObservation[], next: SquatAttemptObservation): boolean {
-  /* 진단 마커는 짧은 윈도우 중복 억제 대상이 아님(상위에서 throttle) */
-  if (next.eventType.startsWith('diag_')) return false;
   if (next.eventType === 'capture_session_terminal' || next.eventType === 'shallow_observed') return false;
   const last = list[list.length - 1];
   if (!last || last.eventType !== next.eventType) return false;
@@ -609,178 +570,6 @@ export function recordSquatObservationEvent(
   try {
     const obs = buildSquatAttemptObservation(gate, eventType, options);
     if (obs) pushSquatObservation(obs);
-  } catch {
-    // ignore
-  }
-}
-
-/** CAM-PASS-LATCH-DIAG: 세션키·이벤트별 진단 스팸 방지(ms) */
-const DIAG_OBS_THROTTLE_MS = 1300;
-const diagObsThrottleUntil = new Map<string, number>();
-
-function consumeDiagObsThrottle(mapKey: string): boolean {
-  const now = Date.now();
-  const until = diagObsThrottleUntil.get(mapKey) ?? 0;
-  if (now < until) return false;
-  diagObsThrottleUntil.set(mapKey, now + DIAG_OBS_THROTTLE_MS);
-  return true;
-}
-
-function nextDiagObservationId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function squashFlagsForDiag(gate: ExerciseGateResult): string[] {
-  return [...(gate.flags ?? []), ...(gate.guardrail.flags ?? [])].filter(
-    (f, i, arr) => f && arr.indexOf(f) === i
-  ) as string[];
-}
-
-/** 페이지에서 채우는 PASS→effective 래치 간극 관측(production에서는 no-op) */
-export type SquatPassLatchDiagContext = {
-  finalPassLatched: boolean;
-  passLatched: boolean;
-  effectivePassLatched: boolean;
-  cameraPhase: string;
-  settled: boolean;
-  sampledFrameCount: number;
-  currentStepKey: string;
-  passLatchedStepKey: string | null;
-};
-
-export function recordSquatPassVisibleNotLatchedObservation(
-  gate: ExerciseGateResult,
-  ctx: SquatPassLatchDiagContext
-): void {
-  try {
-    if (typeof process !== 'undefined' && process.env.NODE_ENV === 'production') return;
-    const mapKey = `diag_pass:${ctx.currentStepKey}`;
-    if (!consumeDiagObsThrottle(mapKey)) return;
-
-    const passLatchedStepKeyMatches =
-      ctx.passLatchedStepKey == null || ctx.passLatchedStepKey === ctx.currentStepKey;
-
-    const obs: SquatAttemptObservation = {
-      traceKind: 'attempt_observation',
-      id: nextDiagObservationId('diag-pass'),
-      ts: new Date().toISOString(),
-      movementType: 'squat',
-      eventType: 'diag_pass_visible_not_latched',
-      captureQuality: gate.guardrail.captureQuality,
-      confidence: gate.confidence,
-      progressionStateSnapshot: gate.progressionState,
-      gateStatusSnapshot: gate.status,
-      debugVersion: `${OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
-      topReasons: buildTopReasons(gate).slice(0, 8),
-      flags: squashFlagsForDiag(gate),
-      shallowCandidateObserved: false,
-      attemptLikeMotionObserved: false,
-      shallowCandidateReasons: [],
-      attemptLikeReasons: [],
-      diagMarkerKind: 'diag_pass_visible_not_latched',
-      diagPassLatchGap: {
-        finalPassLatched: ctx.finalPassLatched,
-        passLatched: ctx.passLatched,
-        effectivePassLatched: ctx.effectivePassLatched,
-        cameraPhase: ctx.cameraPhase,
-        settled: ctx.settled,
-        sampledFrameCount: ctx.sampledFrameCount,
-        currentStepKey: ctx.currentStepKey,
-        passLatchedStepKey: ctx.passLatchedStepKey,
-        passLatchedStepKeyMatches,
-      },
-    };
-    pushSquatObservation(obs);
-    if (typeof console !== 'undefined' && typeof console.info === 'function') {
-      console.info('[CAM-DIAG] pass_visible_not_latched', {
-        gateStatus: gate.status,
-        progressionState: gate.progressionState,
-        finalPassLatched: ctx.finalPassLatched,
-        passLatched: ctx.passLatched,
-        effectivePassLatched: ctx.effectivePassLatched,
-        cameraPhase: ctx.cameraPhase,
-        settled: ctx.settled,
-        sampledFrameCount: ctx.sampledFrameCount,
-        currentStepKey: ctx.currentStepKey,
-        passLatchedStepKey: ctx.passLatchedStepKey,
-        passLatchedStepKeyMatches,
-      });
-    }
-  } catch {
-    // ignore
-  }
-}
-
-/** squat 페이지에서 stepId가 squat이 아닐 때(조용한 드롭 방지) */
-export function recordSquatDiagStepIdMismatchThrottled(
-  gate: ExerciseGateResult,
-  sessionKey: string
-): void {
-  try {
-    const actual = gate.evaluatorResult?.stepId ?? null;
-    if (actual === 'squat') return;
-    const mapKey = `diag_stepid:${sessionKey}`;
-    if (!consumeDiagObsThrottle(mapKey)) return;
-
-    const obs: SquatAttemptObservation = {
-      traceKind: 'attempt_observation',
-      id: nextDiagObservationId('diag-stepid'),
-      ts: new Date().toISOString(),
-      movementType: 'squat',
-      eventType: 'diag_stepid_mismatch',
-      captureQuality: gate.guardrail.captureQuality,
-      confidence: gate.confidence,
-      progressionStateSnapshot: gate.progressionState,
-      gateStatusSnapshot: gate.status,
-      debugVersion: `${OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
-      topReasons: buildTopReasons(gate).slice(0, 8),
-      flags: squashFlagsForDiag(gate),
-      shallowCandidateObserved: false,
-      attemptLikeMotionObserved: false,
-      shallowCandidateReasons: [],
-      attemptLikeReasons: [],
-      diagMarkerKind: 'diag_stepid_mismatch',
-      diagExpectedStepId: 'squat',
-      diagActualStepId: actual,
-    };
-    pushSquatObservation(obs);
-  } catch {
-    // ignore
-  }
-}
-
-/** squatCycleDebug·highlightedMetrics 부재 시 무음 방지(스로틀) */
-export function recordSquatDiagNoDebugAttachThrottled(
-  gate: ExerciseGateResult,
-  sessionKey: string
-): void {
-  try {
-    const sc = gate.squatCycleDebug;
-    const hm = readHighlighted(gate);
-    if (sc || hm) return;
-    const mapKey = `diag_no_debug:${sessionKey}`;
-    if (!consumeDiagObsThrottle(mapKey)) return;
-
-    const obs: SquatAttemptObservation = {
-      traceKind: 'attempt_observation',
-      id: nextDiagObservationId('diag-nodebug'),
-      ts: new Date().toISOString(),
-      movementType: 'squat',
-      eventType: 'diag_no_debug_attach',
-      captureQuality: gate.guardrail.captureQuality,
-      confidence: gate.confidence,
-      progressionStateSnapshot: gate.progressionState,
-      gateStatusSnapshot: gate.status,
-      debugVersion: `${OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
-      topReasons: buildTopReasons(gate).slice(0, 8),
-      flags: squashFlagsForDiag(gate),
-      shallowCandidateObserved: false,
-      attemptLikeMotionObserved: false,
-      shallowCandidateReasons: [],
-      attemptLikeReasons: [],
-      diagMarkerKind: 'diag_no_debug_attach',
-    };
-    pushSquatObservation(obs);
   } catch {
     // ignore
   }
@@ -989,14 +778,6 @@ function buildDiagnosisSummary(
       eventCycleBand: sc.eventCycleBand ?? null,
       eventCyclePromoted: sc.eventCyclePromoted,
       eventCycleSource: sc.eventCycleSource ?? null,
-      reversalLiteConfirmed: sc.reversalLiteConfirmed,
-      recoveryLiteConfirmed: sc.recoveryLiteConfirmed,
-      reversalLiteFrames: sc.reversalLiteFrames ?? null,
-      recoveryLiteFrames: sc.recoveryLiteFrames ?? null,
-      reversalLiteDrop:
-        typeof sc.reversalLiteDrop === 'number' && Number.isFinite(sc.reversalLiteDrop)
-          ? sc.reversalLiteDrop
-          : null,
       squatInternalQuality: gate.evaluatorResult.debug?.squatInternalQuality,
     };
 

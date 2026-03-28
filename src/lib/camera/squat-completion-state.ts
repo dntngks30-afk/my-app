@@ -111,10 +111,8 @@ export interface SquatCompletionState extends MotionCompletionResult {
   reversalConfirmedBy?: 'rule' | 'rule_plus_hmm' | null;
   reversalDepthDrop?: number | null;
   reversalFrameCount?: number | null;
-  /** PR-04E3A: primary 스트림 피크(관측) — relative 선택과 독립; squatDepthProxy 기반 (owner truth) */
+  /** PR-04E3A: primary 스트림 피크(관측) — relative 선택과 독립 */
   rawDepthPeakPrimary?: number;
-  /** PR-HOTFIX-04E5: stable primary 피크(관측 전용) — owner·게이트 미사용 */
-  rawDepthPeakPrimaryStableObs?: number;
   rawDepthPeakBlended?: number;
   /** PR-04E3A: relativeDepthPeak·rawDepthPeak 계산에 쓴 스트림 */
   relativeDepthPeakSource?: 'primary' | 'blended';
@@ -127,13 +125,6 @@ export interface SquatCompletionState extends MotionCompletionResult {
   eventCycleSource?: 'rule' | 'rule_plus_hmm' | null;
   /** PR-04E3B: shallow event-cycle 헬퍼 결과(관측·승격 판단 입력) */
   squatEventCycle?: SquatEventCycleResult;
-  /** PR-04E3C: event-cycle helper 의 shallow reversal/recovery lite (flatten 관측) */
-  reversalLiteConfirmed?: boolean;
-  recoveryLiteConfirmed?: boolean;
-  reversalLiteFrames?: number | null;
-  recoveryLiteFrames?: number | null;
-  reversalLiteDrop?: number | null;
-  reversalLiteDepthToBaseline?: number | null;
 }
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
@@ -186,18 +177,6 @@ type SquatCompletionDepthRow = {
   phaseHint: PoseFeaturesFrame['phaseHint'];
 };
 
-/**
- * PR-HOTFIX-04E5: valid 슬라이스에서 stable primary 피크만 스캔 — completion owner·relative 선택에 미사용.
- */
-function maxSquatDepthPrimaryStableObs(validFrames: PoseFeaturesFrame[]): number | undefined {
-  let m = -Infinity;
-  for (const frame of validFrames) {
-    const s = frame.derived.squatDepthPrimaryStable;
-    if (typeof s === 'number' && Number.isFinite(s)) m = Math.max(m, s);
-  }
-  return m === -Infinity ? undefined : m;
-}
-
 function buildSquatCompletionDepthRows(validFrames: PoseFeaturesFrame[]): SquatCompletionDepthRow[] {
   const depthRows: SquatCompletionDepthRow[] = [];
   for (let vi = 0; vi < validFrames.length; vi++) {
@@ -206,8 +185,6 @@ function buildSquatCompletionDepthRows(validFrames: PoseFeaturesFrame[]): SquatC
     if (typeof p !== 'number' || !Number.isFinite(p)) continue;
     const cRead = readSquatCompletionDepth(frame);
     const depthCompletion = cRead != null && Number.isFinite(cRead) ? cRead : p;
-    // PR-HOTFIX-04E5: owner·rawDepthPeakPrimary·relative primary 분기는 pre-04E5 와 같이 proxy 만 사용.
-    // stable primary 는 rawDepthPeakPrimaryStableObs 로만 노출.
     depthRows.push({
       index: vi,
       depthPrimary: p,
@@ -234,24 +211,13 @@ const STANDARD_LABEL_FLOOR = 0.1;
  */
 const STANDARD_OWNER_FLOOR = 0.4;
 const STANDING_RECOVERY_TOLERANCE_FLOOR = 0.015;
-/**
- * PR-04E4C: low_rom / ultra_low_rom 만 standing recovery 바닥 소폭 완화.
- * 스캔 토폴로지(역방향 연속 접미사)는 그대로 — 임계만 완화해 끝 1프레임 노이즈 FN 완화.
- */
-const STANDING_RECOVERY_TOLERANCE_FLOOR_LOW_BAND = 0.017;
 const STANDING_RECOVERY_TOLERANCE_RATIO = 0.18;
 const MIN_STANDING_RECOVERY_FRAMES = 2;
 const MIN_STANDING_RECOVERY_HOLD_MS = 160;
 const LOW_ROM_STANDING_RECOVERY_MIN_FRAMES = 2;
 const LOW_ROM_STANDING_RECOVERY_MIN_HOLD_MS = 60;
 const LOW_ROM_STANDING_FINALIZE_MIN_RETURN_CONTINUITY_FRAMES = 3;
-/** Ultra guarded 진입·기타 0.45 계약 유지용 (pose `getSquatRecoverySignal` ultra continuity 경로) */
 const LOW_ROM_STANDING_FINALIZE_MIN_DROP_RATIO = 0.45;
-/**
- * PR-04E4: continuity 게이트 통과 후 finalize drop 하한 — pose `lowRomContinuityOk`(≥3 프레임·≥0.35) 와 정렬.
- * `getStandingRecoveryFinalizeGate` 의 low-rom-style 분기에서만 사용.
- */
-const LOW_ROM_STANDING_FINALIZE_MIN_DROP_RATIO_WITH_CONTINUITY = 0.35;
 /** PR-CAM-02: 절대 최소 되돌림(미세 노이즈 역전 차단) */
 const REVERSAL_DROP_MIN_ABS = 0.007;
 /** PR-CAM-02: 상대 피크 대비 최소 되돌림 비율 — 깊은 스쿼트에서 0.005만으로 조기 역전 되는 것 방지 */
@@ -278,47 +244,38 @@ const RELAXED_LOW_ROM_MIN_DROP_RATIO = 0.45;
 const COMPLETION_PRIMARY_DOMINANT_REL_PEAK = 0.12;
 
 /**
- * PR-04E4B: ultra_low_rom 전용 guarded finalize 진입 — 60ms hold + low-rom-style 증명 분기.
- * continuity≥3 + drop≥0.35 로 PR-04E4 finalize 본문과 동일 계약(구 진입 0.45는 ultra 에서만 완화).
+ * PR-C: low_ROM finalize와 동일한 “복귀 증거” — ultra_low_rom 에서만 짧은 standing hold(60ms)를 허용할 때 사용.
+ * pose-features `getSquatRecoverySignal` 과 같은 continuity/drop 기준으로 shallow 오탐 없이 false negative만 줄인다.
  */
-function recoveryMeetsUltraGuardedFinalizeProof(
+function recoveryMeetsLowRomStyleFinalizeProof(
   recovery: Pick<SquatCompletionState, 'recoveryReturnContinuityFrames' | 'recoveryDropRatio'>
 ): boolean {
   return (
     (recovery.recoveryReturnContinuityFrames ?? 0) >= LOW_ROM_STANDING_FINALIZE_MIN_RETURN_CONTINUITY_FRAMES &&
-    (recovery.recoveryDropRatio ?? 0) >= LOW_ROM_STANDING_FINALIZE_MIN_DROP_RATIO_WITH_CONTINUITY
+    (recovery.recoveryDropRatio ?? 0) >= LOW_ROM_STANDING_FINALIZE_MIN_DROP_RATIO
   );
 }
 
 function getStandingRecoveryWindow(
   frames: Array<{ index: number; depth: number; timestampMs: number }>,
   baselineStandingDepth: number,
-  relativeDepthPeak: number,
-  evidenceLabel: SquatEvidenceLabel
+  relativeDepthPeak: number
 ): {
   standingRecoveredAtMs?: number;
   standingRecoveryHoldMs: number;
   standingRecoveryFrameCount: number;
   standingRecoveryThreshold: number;
 } {
-  const toleranceFloor =
-    evidenceLabel === 'low_rom' || evidenceLabel === 'ultra_low_rom'
-      ? STANDING_RECOVERY_TOLERANCE_FLOOR_LOW_BAND
-      : STANDING_RECOVERY_TOLERANCE_FLOOR;
-
   if (frames.length === 0) {
     return {
       standingRecoveryHoldMs: 0,
       standingRecoveryFrameCount: 0,
-      standingRecoveryThreshold: Math.max(
-        toleranceFloor,
-        relativeDepthPeak * STANDING_RECOVERY_TOLERANCE_RATIO
-      ),
+      standingRecoveryThreshold: STANDING_RECOVERY_TOLERANCE_FLOOR,
     };
   }
 
   const standingRecoveryThreshold = Math.max(
-    toleranceFloor,
+    STANDING_RECOVERY_TOLERANCE_FLOOR,
     relativeDepthPeak * STANDING_RECOVERY_TOLERANCE_RATIO
   );
 
@@ -380,7 +337,7 @@ function getStandingRecoveryFinalizeGate(
   finalizeReason: string | null;
 } {
   const ultraLowRomUsesGuardedFinalize =
-    evidenceLabel === 'ultra_low_rom' && recoveryMeetsUltraGuardedFinalizeProof(recovery);
+    evidenceLabel === 'ultra_low_rom' && recoveryMeetsLowRomStyleFinalizeProof(recovery);
 
   const minFramesUsed =
     evidenceLabel === 'low_rom' || ultraLowRomUsesGuardedFinalize
@@ -437,8 +394,7 @@ function getStandingRecoveryFinalizeGate(
         finalizeReason: 'return_continuity_below_min',
       };
     }
-    // PR-04E4: continuity ≥3 이미 충족 — drop 은 pose low-ROM continuity 보너스(0.35)와 동일 하한
-    if ((recovery.recoveryDropRatio ?? 0) < LOW_ROM_STANDING_FINALIZE_MIN_DROP_RATIO_WITH_CONTINUITY) {
+    if ((recovery.recoveryDropRatio ?? 0) < LOW_ROM_STANDING_FINALIZE_MIN_DROP_RATIO) {
       return {
         minFramesUsed,
         minHoldMsUsed,
@@ -467,7 +423,6 @@ function evaluateSquatCompletionCore(
   depthFreeze: SquatDepthFreezeConfig | null
 ): SquatCompletionState {
   const validFrames = frames.filter((frame) => frame.isValid);
-  const rawDepthPeakPrimaryStableObs = maxSquatDepthPrimaryStableObs(validFrames);
 
   const depthRows = buildSquatCompletionDepthRows(validFrames);
 
@@ -516,7 +471,6 @@ function evaluateSquatCompletionCore(
       reversalDepthDrop: null,
       reversalFrameCount: null,
       rawDepthPeakPrimary: 0,
-      rawDepthPeakPrimaryStableObs,
       rawDepthPeakBlended: 0,
       relativeDepthPeakSource: 'primary',
       baselineFrozen: false,
@@ -525,12 +479,6 @@ function evaluateSquatCompletionCore(
       peakLatchedAtIndex: null,
       eventCyclePromoted: false,
       eventCycleSource: null,
-      reversalLiteConfirmed: false,
-      recoveryLiteConfirmed: false,
-      reversalLiteFrames: null,
-      recoveryLiteFrames: null,
-      reversalLiteDrop: null,
-      reversalLiteDepthToBaseline: null,
     };
   }
 
@@ -740,13 +688,12 @@ function evaluateSquatCompletionCore(
       revConf.reversalFrameCount >= 2;
   }
 
-  const evidenceLabel = getSquatEvidenceLabel(relativeDepthPeak, attemptAdmissionSatisfied);
   const standingRecovery = getStandingRecoveryWindow(
     depthFrames.filter((frame) => frame.index > peakFrame.index),
     baselineStandingDepth,
-    relativeDepthPeak,
-    evidenceLabel
+    relativeDepthPeak
   );
+  const evidenceLabel = getSquatEvidenceLabel(relativeDepthPeak, attemptAdmissionSatisfied);
   const standingRecoveryFinalize = getStandingRecoveryFinalizeGate(
     evidenceLabel,
     standingRecovery,
@@ -997,7 +944,6 @@ function evaluateSquatCompletionCore(
     reversalDepthDrop,
     reversalFrameCount,
     rawDepthPeakPrimary,
-    rawDepthPeakPrimaryStableObs,
     rawDepthPeakBlended,
     relativeDepthPeakSource,
     baselineFrozen: depthFreeze != null,
@@ -1006,12 +952,6 @@ function evaluateSquatCompletionCore(
     peakLatchedAtIndex: depthFreeze != null ? peakFrame.index : null,
     eventCyclePromoted: false,
     eventCycleSource: null,
-    reversalLiteConfirmed: false,
-    recoveryLiteConfirmed: false,
-    reversalLiteFrames: null,
-    recoveryLiteFrames: null,
-    reversalLiteDrop: null,
-    reversalLiteDepthToBaseline: null,
   };
 }
 
@@ -1065,16 +1005,7 @@ export function evaluateSquatCompletionState(
     peakLatchedAtIndex: state.peakLatchedAtIndex ?? null,
   });
 
-  state = {
-    ...state,
-    squatEventCycle,
-    reversalLiteConfirmed: squatEventCycle.reversalLiteConfirmed,
-    recoveryLiteConfirmed: squatEventCycle.recoveryLiteConfirmed,
-    reversalLiteFrames: squatEventCycle.reversalLiteFrames,
-    recoveryLiteFrames: squatEventCycle.recoveryLiteFrames,
-    reversalLiteDrop: squatEventCycle.reversalLiteDrop,
-    reversalLiteDepthToBaseline: squatEventCycle.reversalLiteDepthToBaseline,
-  };
+  state = { ...state, squatEventCycle };
 
   const ruleBlock = state.ruleCompletionBlockedReason ?? null;
   const finalizeOk =
@@ -1090,9 +1021,7 @@ export function evaluateSquatCompletionState(
     state.standingRecoveredAtMs != null &&
     squatEventCycle.detected &&
     squatEventCycle.band != null &&
-    state.relativeDepthPeak < STANDARD_OWNER_FLOOR &&
-    squatEventCycle.reversalLiteConfirmed === true &&
-    squatEventCycle.recoveryLiteConfirmed === true;
+    state.relativeDepthPeak < STANDARD_OWNER_FLOOR;
 
   if (!canEventPromote) {
     return state;

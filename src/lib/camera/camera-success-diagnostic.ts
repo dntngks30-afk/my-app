@@ -169,10 +169,6 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   eventCycleBand?: string | null;
   eventCyclePromoted?: boolean;
   eventCycleSource?: string | null;
-  /** PR-04E3C: shallow low_rom_event_cycle 승격이 “cycle”인지 한눈에 */
-  reversalLiteConfirmed?: boolean;
-  recoveryLiteConfirmed?: boolean;
-  reversalLiteDrop?: number | null;
   cycleProofPassed?: boolean;
   reversalConfirmedAfterDescend?: boolean;
   recoveryConfirmedAfterReversal?: boolean;
@@ -182,14 +178,6 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   squatCalibrationCompact?: SquatCalibrationTraceCompact;
   /** PR-HMM-04A: arming assist compact */
   armCompact?: SquatArmingAssistTraceCompact;
-  /** PR-CAM-SUCCESS-UI-SETTLE-01: 페이지 레이어 shallow 성공 settle (additive) */
-  successUiCandidateAt?: string | null;
-  successUiSettledAt?: string | null;
-  successUiSettleMsUsed?: number | null;
-  successUiSettlePath?: string | null;
-  /** CAM-PASS-LATCH-DIAG: 래치 시점 직전 구간(옵션·export 가시성) */
-  passVisibleButNotLatched?: boolean;
-  passVisibleWithoutSuccessSnapshot?: boolean;
 }
 
 export type SuccessSnapshot = OverheadSuccessSnapshot | SquatSuccessSnapshot;
@@ -211,15 +199,6 @@ export interface RecordSquatSuccessOptions {
   passLatchedAtMs: number;
   effectivePassLatched: boolean;
   competingPaths?: string[];
-  /** PR-CAM-SUCCESS-UI-SETTLE-01 */
-  successUiCandidateAt?: string | null;
-  successUiSettledAt?: string | null;
-  successUiSettleMsUsed?: number | null;
-  successUiSettlePath?: string | null;
-  /** CAM-PASS-LATCH-DIAG: 래치 직전 엔진 pass vs UI 래치 간극이 있었는지(선택) */
-  passVisibleButNotLatchedPrior?: boolean;
-  /** CAM-PASS-LATCH-DIAG: 이 스냅 직전 success 스냅 부재 구간 표시(선택) */
-  passVisibleWithoutSuccessSnapshotPrior?: boolean;
 }
 
 function pushSuccessSnapshot(snapshot: SuccessSnapshot): void {
@@ -320,9 +299,6 @@ function extractSquatMobileObsFieldsFromGate(
   | 'eventCycleBand'
   | 'eventCyclePromoted'
   | 'eventCycleSource'
-  | 'reversalLiteConfirmed'
-  | 'recoveryLiteConfirmed'
-  | 'reversalLiteDrop'
 > {
   const sc = gate.squatCycleDebug;
   const cs = gate.evaluatorResult?.debug?.squatCompletionState as
@@ -365,12 +341,6 @@ function extractSquatMobileObsFieldsFromGate(
     eventCycleBand: sc?.eventCycleBand ?? null,
     eventCyclePromoted: sc?.eventCyclePromoted,
     eventCycleSource: sc?.eventCycleSource ?? null,
-    reversalLiteConfirmed: sc?.reversalLiteConfirmed,
-    recoveryLiteConfirmed: sc?.recoveryLiteConfirmed,
-    reversalLiteDrop:
-      typeof sc?.reversalLiteDrop === 'number' && Number.isFinite(sc.reversalLiteDrop)
-        ? sc.reversalLiteDrop
-        : null,
     cycleProofPassed: sc?.cycleProofPassed,
     reversalConfirmedAfterDescend: sc?.reversalConfirmedAfterDescend,
     recoveryConfirmedAfterReversal: sc?.recoveryConfirmedAfterReversal,
@@ -436,14 +406,7 @@ export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): 
         options.gate.evaluatorResult?.debug?.squatHmm
       ),
       armCompact: buildSquatArmingAssistTraceCompact(options.gate.evaluatorResult?.debug?.squatCompletionArming),
-      successUiCandidateAt: options.successUiCandidateAt ?? null,
-      successUiSettledAt: options.successUiSettledAt ?? null,
-      successUiSettleMsUsed:
-        typeof options.successUiSettleMsUsed === 'number' ? options.successUiSettleMsUsed : null,
-      successUiSettlePath: options.successUiSettlePath ?? null,
       ...mobileObs,
-      passVisibleButNotLatched: options.passVisibleButNotLatchedPrior ?? false,
-      passVisibleWithoutSuccessSnapshot: options.passVisibleWithoutSuccessSnapshotPrior ?? false,
     };
     pushSuccessSnapshot(snapshot);
   } catch {
@@ -630,10 +593,6 @@ export interface SquatFailedShallowSnapshot {
   eventCycleBand?: string | null;
   eventCyclePromoted?: boolean;
   eventCycleSource?: string | null;
-  /** PR-04E3C */
-  reversalLiteConfirmed?: boolean;
-  recoveryLiteConfirmed?: boolean;
-  reversalLiteDrop?: number | null;
 }
 
 /** CAM-OBS: 실패 스냅샷 기록 옵션(진단 전용, pass 로직 무관) */
@@ -760,12 +719,6 @@ export function recordSquatFailedShallowSnapshot(
       eventCycleBand: sc?.eventCycleBand ?? null,
       eventCyclePromoted: sc?.eventCyclePromoted,
       eventCycleSource: sc?.eventCycleSource ?? null,
-      reversalLiteConfirmed: sc?.reversalLiteConfirmed,
-      recoveryLiteConfirmed: sc?.recoveryLiteConfirmed,
-      reversalLiteDrop:
-        typeof sc?.reversalLiteDrop === 'number' && Number.isFinite(sc.reversalLiteDrop)
-          ? sc.reversalLiteDrop
-          : null,
     };
 
     if (typeof window === 'undefined') return;
@@ -816,62 +769,4 @@ export function getSquatMobileDiagAttempts(maxEntries = 8): SquatMobileDiagEntry
 export function getLatestSquatMobileDiagAttempt(): SquatMobileDiagEntry | null {
   const list = getSquatMobileDiagAttempts(64);
   return list.length > 0 ? list[list.length - 1]! : null;
-}
-
-/** HOTFIX-CAM-PASS-LATCH-PRECEDENCE-01: 스쿼트 캡처 effect settled 단락 vs 성공 래치 선행 판단(모션 truth 미변경) */
-export function squatCaptureShouldClearSettledForPassLatch(input: {
-  settled: boolean;
-  finalPassLatched: boolean;
-  passLatched: boolean;
-}): { clearSettled: boolean; reason: string | null } {
-  if (!input.settled) return { clearSettled: false, reason: null };
-  if (input.finalPassLatched && !input.passLatched) {
-    return { clearSettled: true, reason: 'final_pass_ready_page_latch_pending' };
-  }
-  return { clearSettled: false, reason: null };
-}
-
-const PASS_LATCH_ORDER_DIAG_KEY = 'moveReCameraPassLatchOrderDiag:v1';
-const MAX_PASS_LATCH_ORDER_DIAG = 24;
-const PASS_LATCH_ORDER_THROTTLE_MS = 900;
-const passLatchOrderDiagThrottle = new Map<string, number>();
-
-export type PassLatchOrderingDiagEntry = {
-  ts: string;
-  passLatchBlockedBySettled: boolean;
-  passLatchDeferredReason: string | null;
-  gateStatus: string;
-  finalPassLatched: boolean;
-  passLatched: boolean;
-  currentStepKey: string;
-};
-
-/** additive: settled 를 성공 래치를 위해 해제했을 때만 기록(스로틀) */
-export function recordPassLatchOrderingDiag(entry: PassLatchOrderingDiagEntry): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const tk = `${entry.currentStepKey}:${entry.passLatchDeferredReason ?? 'unk'}`;
-    const now = Date.now();
-    const prev = passLatchOrderDiagThrottle.get(tk) ?? 0;
-    if (now - prev < PASS_LATCH_ORDER_THROTTLE_MS) return;
-    passLatchOrderDiagThrottle.set(tk, now);
-
-    const raw = localStorage.getItem(PASS_LATCH_ORDER_DIAG_KEY);
-    const list: PassLatchOrderingDiagEntry[] = raw ? (JSON.parse(raw) as PassLatchOrderingDiagEntry[]) : [];
-    list.push(entry);
-    const trimmed = list.slice(-MAX_PASS_LATCH_ORDER_DIAG);
-    localStorage.setItem(PASS_LATCH_ORDER_DIAG_KEY, JSON.stringify(trimmed));
-  } catch {
-    // ignore
-  }
-}
-
-export function getRecentPassLatchOrderingDiags(): PassLatchOrderingDiagEntry[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(PASS_LATCH_ORDER_DIAG_KEY);
-    return raw ? (JSON.parse(raw) as PassLatchOrderingDiagEntry[]) : [];
-  } catch {
-    return [];
-  }
 }

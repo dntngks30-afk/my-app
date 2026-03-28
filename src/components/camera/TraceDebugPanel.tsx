@@ -14,10 +14,8 @@ import {
   type SquatAttemptObservation,
 } from '@/lib/camera/camera-trace';
 import {
-  getRecentFailedShallowSnapshots,
   getRecentSuccessSnapshots,
   CAMERA_DIAG_VERSION,
-  type SquatFailedShallowSnapshot,
   type SuccessSnapshot,
 } from '@/lib/camera/camera-success-diagnostic';
 import { getCorrectiveCueObservability } from '@/lib/camera/voice-guidance';
@@ -43,18 +41,15 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
   const [attempts, setAttempts] = useState<AttemptSnapshot[]>([]);
   const [squatObservations, setSquatObservations] = useState<SquatAttemptObservation[]>([]);
   const [successSnapshots, setSuccessSnapshots] = useState<SuccessSnapshot[]>([]);
-  const [failedShallowSnapshots, setFailedShallowSnapshots] = useState<SquatFailedShallowSnapshot[]>([]);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     const list = getRecentAttempts();
     const obs = getRecentSquatObservations();
     const successList = getRecentSuccessSnapshots();
-    const shallowFails = getRecentFailedShallowSnapshots();
     setAttempts(list);
     setSquatObservations(obs);
     setSuccessSnapshots(successList);
-    setFailedShallowSnapshots(shallowFails);
     setRefreshedAt(new Date().toISOString());
   }, []);
 
@@ -66,20 +61,11 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
     const list = getRecentAttempts();
     const obs = getRecentSquatObservations();
     const successList = getRecentSuccessSnapshots();
-    const failedShallow = getRecentFailedShallowSnapshots();
     const stats = getQuickStats(list);
     const payload = {
       attempts: list,
       squatAttemptObservations: obs,
       successSnapshots: successList,
-      /** 별도 localStorage 키 — 이전에는 export에서 누락되어 “빈 export”로 오해될 수 있었음 */
-      failedShallowSnapshots: failedShallow,
-      exportSummary: {
-        attemptsCount: list.length,
-        squatObservationsCount: obs.length,
-        successSnapshotsCount: successList.length,
-        failedShallowCount: failedShallow.length,
-      },
       quickStats: stats,
       diagVersion: CAMERA_DIAG_VERSION,
       exportedAt: new Date().toISOString(),
@@ -124,7 +110,7 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
     <div className="mt-3 rounded-lg border border-slate-600/50 bg-slate-900/50 p-3">
       <p className="text-[11px] text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
         PR-4 trace ({attempts.length} attempt_snapshots, {squatObservations.length} squat_observations) · success (
-        {successSnapshots.length}) · failed_shallow ({failedShallowSnapshots.length}) · diag={CAMERA_DIAG_VERSION}
+        {successSnapshots.length}) · diag={CAMERA_DIAG_VERSION}
         {refreshedAt && ` · refreshed ${refreshedAt.slice(11, 19)}`}
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
