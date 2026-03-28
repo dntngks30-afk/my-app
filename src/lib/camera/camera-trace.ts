@@ -138,6 +138,11 @@ export interface AttemptSnapshot {
       /** PR-COMP-01 */
       completionMachinePhase?: string;
       completionPassReason?: string;
+      /** PR-04D1: completion pass vs capture-quality 경고 분리(스쿼트 전용) */
+      completionTruthPassed?: boolean;
+      lowQualityPassAllowed?: boolean;
+      passOwner?: string;
+      qualityOnlyWarnings?: string[];
       /** PR-COMP-03 */
       squatInternalQuality?: SquatInternalQuality;
       /** CAM-shallow-obs: attempt-evidence보다 약한 관측 계약(저장·진단 전용) */
@@ -714,6 +719,10 @@ function buildDiagnosisSummary(
       ultraLowRomRejectionReason: sc.ultraLowRomRejectionReason,
       completionMachinePhase: sc.completionMachinePhase,
       completionPassReason: sc.completionPassReason,
+      completionTruthPassed: sc.completionTruthPassed,
+      lowQualityPassAllowed: sc.lowQualityPassAllowed,
+      passOwner: sc.passOwner,
+      qualityOnlyWarnings: sc.qualityOnlyWarnings,
       squatInternalQuality: gate.evaluatorResult.debug?.squatInternalQuality,
     };
 

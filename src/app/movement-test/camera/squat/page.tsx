@@ -1558,6 +1558,20 @@ export default function CameraSquatPage() {
                 <p className="break-all">
                   completionPathUsed: {gate.squatCycleDebug?.completionPathUsed ?? '—'}
                 </p>
+                {/* PR-04D1: pass vs quality-only — dev 관측 전용 */}
+                <p className="break-all">
+                  completionTruthPassed:{' '}
+                  {String(gate.squatCycleDebug?.completionTruthPassed ?? '—')}
+                </p>
+                <p className="break-all">
+                  lowQualityPassAllowed:{' '}
+                  {String(gate.squatCycleDebug?.lowQualityPassAllowed ?? '—')}
+                </p>
+                <p className="break-all">passOwner: {gate.squatCycleDebug?.passOwner ?? '—'}</p>
+                <p className="break-all">
+                  qualityOnlyWarnings:{' '}
+                  {(gate.squatCycleDebug?.qualityOnlyWarnings ?? []).join(', ') || '—'}
+                </p>
                 <p>confidence: {gate.confidence}</p>
                 <p>captureQuality: {gate.guardrail.captureQuality}</p>
                 <p className="break-all">

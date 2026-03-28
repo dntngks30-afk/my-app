@@ -168,8 +168,8 @@ console.log('\nC. noisy/partial false positives remain blocked');
     },
   });
   ok(
-    'C2: low-quality standard false positive still blocked',
-    isFinalPassLatched('squat', blockedGate) === false,
+    'C2: PR-04D1 — completed standard_cycle + low capture + partial flags may still final-latch (quality decoupled from pass)',
+    isFinalPassLatched('squat', blockedGate) === true,
     isFinalPassLatched('squat', blockedGate)
   );
 }

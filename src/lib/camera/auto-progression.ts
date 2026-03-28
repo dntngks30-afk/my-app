@@ -22,6 +22,16 @@ import {
   applySquatQualityCap,
 } from './squat-evidence';
 import { completionBlockedReasonToFailureTags } from './squat-retry-reason';
+import {
+  getSquatRawStandardCycleSignalIntegrityBlock,
+  getSquatQualityOnlyWarnings,
+  isSquatLowQualityPassDecoupleEligible,
+  resolveSquatPassOwner,
+  squatCompletionTruthPassed,
+  squatPassProgressionIntegrityBlock,
+  squatRetryTriggeredByPartialFramingReasons,
+  type SquatPassOwner,
+} from './squat/squat-progression-contract';
 
 export type ExerciseProgressionState =
   | 'idle'
@@ -152,6 +162,11 @@ export interface SquatCycleDebug {
   hmmReversalAssistEligible?: boolean;
   hmmReversalAssistApplied?: boolean;
   hmmReversalAssistReason?: string | null;
+  /** PR-04D1: pass vs capture-quality 분리 관측 (completion 계산 변경 없음) */
+  completionTruthPassed?: boolean;
+  qualityOnlyWarnings?: string[];
+  passOwner?: SquatPassOwner;
+  lowQualityPassAllowed?: boolean;
 }
 
 export interface ExerciseGateResult {
@@ -256,10 +271,23 @@ export function isFinalPassLatched(
   if (stepId === 'squat') {
     const cs = gate.evaluatorResult.debug?.squatCompletionState;
     const passReason = cs?.completionPassReason;
-    const standardCycleIntegrityBlock = getSquatStandardPassIntegrityBlock(
-      gate.completionSatisfied,
+    const severeInvalid = isSevereInvalid(gate.guardrail);
+    const squatDecoupleLatch = isSquatLowQualityPassDecoupleEligible({
+      stepId: 'squat',
+      completionSatisfied: gate.completionSatisfied === true,
+      completionPassReason: passReason,
+      guardrail: gate.guardrail,
+      severeInvalid,
+      effectivePassConfirmation: gate.passConfirmationSatisfied === true,
+    });
+    const rawIntegrityLatch = getSquatRawStandardCycleSignalIntegrityBlock(
+      gate.completionSatisfied === true,
       gate.guardrail,
       gate.evaluatorResult
+    );
+    const integrityForPassLatch = squatPassProgressionIntegrityBlock(
+      rawIntegrityLatch,
+      squatDecoupleLatch
     );
     const isSquatEasyOnly =
       gate.completionSatisfied === true &&
@@ -275,7 +303,7 @@ export function isFinalPassLatched(
       gate.confidence >= confTh &&
       gate.passConfirmationSatisfied === true &&
       gate.passConfirmationFrameCount >= framesReq &&
-      standardCycleIntegrityBlock == null
+      integrityForPassLatch == null
     );
   }
 
@@ -354,34 +382,6 @@ function getHighlightedMetric(result: EvaluatorResult, key: string): number {
 
 function hasAnyReason(reasons: string[], includes: string[]): boolean {
   return includes.some((value) => reasons.includes(value));
-}
-
-const SQUAT_STANDARD_SIGNAL_INTEGRITY_FLAGS = [
-  'hard_partial',
-  'unstable_frame_timing',
-  'unilateral_joint_dropout',
-  'left_side_missing',
-  'right_side_missing',
-] as const;
-
-function getSquatStandardPassIntegrityBlock(
-  completionSatisfied: boolean,
-  guardrail: Pick<StepGuardrailResult, 'captureQuality' | 'flags'>,
-  result: Pick<EvaluatorResult, 'debug'>
-): string | null {
-  const cs = result.debug?.squatCompletionState;
-  if (
-    completionSatisfied !== true ||
-    cs?.completionPassReason !== 'standard_cycle' ||
-    cs?.currentSquatPhase !== 'standing_recovered'
-  ) {
-    return null;
-  }
-  if (guardrail.captureQuality !== 'low') return null;
-  const severeFlag = SQUAT_STANDARD_SIGNAL_INTEGRITY_FLAGS.find((flag) =>
-    guardrail.flags.includes(flag)
-  );
-  return severeFlag ? `standard_cycle_signal_integrity:${severeFlag}` : null;
 }
 
 function getStableSignalBonus(stepId: CameraStepId, result: EvaluatorResult): number {
@@ -1037,7 +1037,7 @@ function getSquatFailureReasons(
     sqCs?.completionSatisfied === true &&
     (sqPassReason === 'low_rom_event_cycle' || sqPassReason === 'ultra_low_rom_event_cycle') &&
     sqCs?.currentSquatPhase === 'standing_recovered';
-  const standardCycleIntegrityBlock = getSquatStandardPassIntegrityBlock(
+  const standardCycleIntegrityBlock = getSquatRawStandardCycleSignalIntegrityBlock(
     sqCs?.completionSatisfied === true,
     guardrail,
     result
@@ -1250,15 +1250,56 @@ export function evaluateExerciseAutoProgress(
     noNextAllowed
   );
   const userGuidance = getUserGuidance(stepId, failureReasons, guardrail);
-  const squatStandardPassIntegrityBlock =
+  const squatCs = evaluatorResult.debug?.squatCompletionState;
+  const severeInvalidForSquat = isSevereInvalid(guardrail);
+  const squatDecoupleEligible =
+    stepId === 'squat' &&
+    isSquatLowQualityPassDecoupleEligible({
+      stepId: 'squat',
+      completionSatisfied,
+      completionPassReason: squatCs?.completionPassReason,
+      guardrail,
+      severeInvalid: severeInvalidForSquat,
+      effectivePassConfirmation,
+    });
+  const squatRawIntegrityBlock =
     stepId === 'squat'
-      ? getSquatStandardPassIntegrityBlock(completionSatisfied, guardrail, evaluatorResult)
+      ? getSquatRawStandardCycleSignalIntegrityBlock(completionSatisfied, guardrail, evaluatorResult)
+      : null;
+  const squatIntegrityBlockForPass =
+    stepId === 'squat'
+      ? squatPassProgressionIntegrityBlock(squatRawIntegrityBlock, squatDecoupleEligible)
       : null;
 
-  if (squatCycleDebug && squatStandardPassIntegrityBlock != null) {
-    squatCycleDebug.standardPathBlockedReason = squatStandardPassIntegrityBlock;
-    squatCycleDebug.falsePositiveBlockReason = squatStandardPassIntegrityBlock;
-    squatCycleDebug.passBlockedReason = squatStandardPassIntegrityBlock;
+  if (squatCycleDebug && stepId === 'squat' && squatRawIntegrityBlock != null) {
+    if (!squatDecoupleEligible) {
+      squatCycleDebug.standardPathBlockedReason = squatRawIntegrityBlock;
+      squatCycleDebug.falsePositiveBlockReason = squatRawIntegrityBlock;
+      squatCycleDebug.passBlockedReason = squatRawIntegrityBlock;
+    } else {
+      squatCycleDebug.qualityInterpretationReason =
+        squatCycleDebug.qualityInterpretationReason ?? squatRawIntegrityBlock;
+    }
+  }
+
+  if (squatCycleDebug && stepId === 'squat') {
+    const qWarn = getSquatQualityOnlyWarnings({
+      guardrail,
+      rawIntegrityBlock: squatRawIntegrityBlock,
+      decoupleEligible: squatDecoupleEligible,
+    });
+    squatCycleDebug = {
+      ...squatCycleDebug,
+      completionTruthPassed: squatCompletionTruthPassed(completionSatisfied, squatCs?.completionPassReason),
+      qualityOnlyWarnings: qWarn.length > 0 ? qWarn : undefined,
+      lowQualityPassAllowed: squatDecoupleEligible,
+      passOwner: resolveSquatPassOwner({
+        guardrail,
+        severeInvalid: severeInvalidForSquat,
+        decoupleEligible: squatDecoupleEligible,
+        completionSatisfied,
+      }),
+    };
   }
 
   if (
@@ -1307,7 +1348,7 @@ export function evaluateExerciseAutoProgress(
     guardrail.captureQuality !== 'invalid' &&
     confidence >= passThresholdEffective &&
     effectivePassConfirmation &&
-    squatStandardPassIntegrityBlock == null &&
+    squatIntegrityBlockForPass == null &&
     !hasAnyReason(reasons, hardBlockerReasons) &&
     !overheadRepHoldBlocks;
 
@@ -1318,7 +1359,7 @@ export function evaluateExerciseAutoProgress(
     if (confidence < passThresholdEffective)
       return `confidence_too_low:${confidence.toFixed(2)}<${passThresholdEffective.toFixed(2)}`;
     if (!effectivePassConfirmation) return 'pass_confirmation_not_ready';
-    if (squatStandardPassIntegrityBlock != null) return squatStandardPassIntegrityBlock;
+    if (squatIntegrityBlockForPass != null) return squatIntegrityBlockForPass;
     const blocker = hardBlockerReasons.find((r) => reasons.includes(r));
     if (blocker) return `hard_blocker:${blocker}`;
     if (overheadRepHoldBlocks) return 'overhead_rep_hold_blocked';
@@ -1335,7 +1376,10 @@ export function evaluateExerciseAutoProgress(
       nextAllowed: true,
       flags: guardrail.flags,
       reasons,
-      failureReasons: [],
+      failureReasons:
+        stepId === 'squat' && squatDecoupleEligible
+          ? getSquatFailureReasons(evaluatorResult, guardrail, confidence)
+          : [],
       userGuidance: [],
       retryRecommended: false,
       evaluatorResult,
@@ -1414,17 +1458,25 @@ export function evaluateExerciseAutoProgress(
     };
   }
 
-  if (
-    guardrail.captureQuality === 'invalid' ||
-    lowConfidenceRetry ||
-    squatStandardPassIntegrityBlock != null ||
+  const squatRetryQualityBranch =
+    stepId === 'squat' &&
+    (squatIntegrityBlockForPass != null ||
+      squatRetryTriggeredByPartialFramingReasons(reasons, squatDecoupleEligible));
+  const nonSquatPartialRetry =
+    stepId !== 'squat' &&
     hasAnyReason(reasons, [
       'rep_incomplete',
       'hold_too_short',
       'left_side_missing',
       'right_side_missing',
       'hard_partial',
-    ])
+    ]);
+
+  if (
+    guardrail.captureQuality === 'invalid' ||
+    lowConfidenceRetry ||
+    squatRetryQualityBranch ||
+    nonSquatPartialRetry
   ) {
     const progressionState =
       guardrail.captureQuality === 'invalid' &&

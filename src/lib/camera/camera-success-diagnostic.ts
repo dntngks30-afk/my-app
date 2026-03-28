@@ -140,6 +140,11 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   depthBand?: string;
   romBand?: string;
   completionPassReason?: string | null;
+  /** PR-04D1: squat pass vs quality-only 경고 분리 스냅샷 */
+  completionTruthPassed?: boolean;
+  lowQualityPassAllowed?: boolean;
+  passOwner?: string;
+  qualityOnlyWarnings?: string[];
   cycleProofPassed?: boolean;
   reversalConfirmedAfterDescend?: boolean;
   recoveryConfirmedAfterReversal?: boolean;
@@ -246,6 +251,10 @@ function extractSquatMobileObsFieldsFromGate(
   | 'recoveryConfirmedAfterReversal'
   | 'squatDescentToPeakMs'
   | 'squatReversalToStandingMs'
+  | 'completionTruthPassed'
+  | 'lowQualityPassAllowed'
+  | 'passOwner'
+  | 'qualityOnlyWarnings'
 > {
   const sc = gate.squatCycleDebug;
   const cs = gate.evaluatorResult?.debug?.squatCompletionState as
@@ -264,6 +273,10 @@ function extractSquatMobileObsFieldsFromGate(
     depthBand: sc?.depthBand,
     romBand: sc?.romBand,
     completionPassReason: sc?.completionPassReason ?? cs?.completionPassReason ?? null,
+    completionTruthPassed: sc?.completionTruthPassed,
+    lowQualityPassAllowed: sc?.lowQualityPassAllowed,
+    passOwner: sc?.passOwner,
+    qualityOnlyWarnings: sc?.qualityOnlyWarnings,
     cycleProofPassed: sc?.cycleProofPassed,
     reversalConfirmedAfterDescend: sc?.reversalConfirmedAfterDescend,
     recoveryConfirmedAfterReversal: sc?.recoveryConfirmedAfterReversal,
