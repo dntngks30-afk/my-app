@@ -1608,6 +1608,14 @@ export default function CameraSquatPage() {
                 <p className="break-all">
                   hmmArmingAssistReason: {gate.squatCycleDebug?.hmmArmingAssistReason ?? '—'}
                 </p>
+                <p className="mt-2 font-medium text-cyan-200/80">reversal assist (dev)</p>
+                <p>
+                  hrae: {String(gate.squatCycleDebug?.hmmReversalAssistEligible ?? false)} | hraa:{' '}
+                  {String(gate.squatCycleDebug?.hmmReversalAssistApplied ?? false)}
+                </p>
+                <p className="break-all">
+                  hrar: {gate.squatCycleDebug?.hmmReversalAssistReason ?? '—'}
+                </p>
               </div>
             )}
 

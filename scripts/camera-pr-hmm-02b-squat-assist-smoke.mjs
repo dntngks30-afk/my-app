@@ -89,12 +89,13 @@ console.log('\n-- A. descent_span_too_short + strong HMM + finalize OK -> assist
 
 console.log('\n-- B. no_descend + strong HMM + post gates -> assist (policy module) --');
 {
+  /** 피크 직후 급락 1프레임이면 z가 바로 떨어져 ascent dwell<2 — 완만한 2스텝 추가 (HMM z-정규화 정합) */
   const fr = buildFrames(
     [
-      0.01, 0.01, 0.01, 0.01, 0.03, 0.06, 0.09, 0.09, 0.05, 0.02, 0.012, 0.01, 0.01, 0.01, 0.01, 0.01,
+      0.01, 0.01, 0.01, 0.01, 0.03, 0.06, 0.09, 0.09, 0.084, 0.072, 0.048, 0.028, 0.016, 0.012, 0.01, 0.01, 0.01, 0.01,
     ],
     [
-      'start', 'start', 'start', 'start', 'descent', 'descent', 'bottom', 'bottom', 'ascent', 'ascent', 'ascent', 'start', 'start', 'start', 'start', 'start',
+      'start', 'start', 'start', 'start', 'descent', 'descent', 'bottom', 'bottom', 'ascent', 'ascent', 'ascent', 'ascent', 'start', 'start', 'start', 'start', 'start', 'start',
     ],
     40
   );

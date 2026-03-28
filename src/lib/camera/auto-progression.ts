@@ -148,6 +148,10 @@ export interface SquatCycleDebug {
   hmmArmingAssistApplied?: boolean;
   hmmArmingAssistReason?: string | null;
   effectiveArmed?: boolean;
+  /** PR-HMM-04B: reversal assist — trace only */
+  hmmReversalAssistEligible?: boolean;
+  hmmReversalAssistApplied?: boolean;
+  hmmReversalAssistReason?: string | null;
 }
 
 export interface ExerciseGateResult {
@@ -909,6 +913,10 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.hmmArmingAssistApplied = ca?.hmmArmingAssistApplied;
   squatCycleDebug.hmmArmingAssistReason = ca?.hmmArmingAssistReason ?? null;
   squatCycleDebug.effectiveArmed = ca?.effectiveArmed;
+
+  squatCycleDebug.hmmReversalAssistEligible = cs?.hmmReversalAssistEligible;
+  squatCycleDebug.hmmReversalAssistApplied = cs?.hmmReversalAssistApplied;
+  squatCycleDebug.hmmReversalAssistReason = cs?.hmmReversalAssistReason ?? null;
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';

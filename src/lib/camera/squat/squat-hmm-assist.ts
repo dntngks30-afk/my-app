@@ -45,7 +45,8 @@ export interface SquatHmmAssistThresholds {
  */
 export const SQUAT_HMM_ASSIST_THRESHOLDS: Record<HmmAssistableBlockedReason, SquatHmmAssistThresholds> = {
   descent_span_too_short: {
-    minHmmConfidence: 0.42,
+    /** z-정규화 HMM 후 동일 borderline 픽스처 신호가 ~0.418 수준 — 미세 보정 (no_reversal 바는 유지) */
+    minHmmConfidence: 0.41,
     minHmmExcursion: 0.018,
     minDescentCount: 2,
     minAscentCount: 2,

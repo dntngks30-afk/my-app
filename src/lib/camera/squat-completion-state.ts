@@ -8,6 +8,7 @@ import {
 import type { MotionCompletionResult } from '@/lib/camera/types/motion-completion';
 import type { SquatHmmDecodeResult } from '@/lib/camera/squat/squat-hmm';
 import { getHmmAssistDecision, hmmMeetsStrongAssistEvidence } from '@/lib/camera/squat/squat-hmm-assist';
+import { getSquatHmmReversalAssistDecision } from '@/lib/camera/squat/squat-reversal-assist';
 
 export type SquatCompletionPhase =
   | 'idle'
@@ -83,6 +84,10 @@ export interface SquatCompletionState extends MotionCompletionResult {
    * segmentation assist로는 열 수 없음 — shallow 실기기 calibration 구분용.
    */
   assistSuppressedByFinalize?: boolean;
+  /** PR-HMM-04B: 깊은 no_reversal 시 HMM ascent 역전 보조 */
+  hmmReversalAssistEligible?: boolean;
+  hmmReversalAssistApplied?: boolean;
+  hmmReversalAssistReason?: string | null;
 }
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
@@ -403,6 +408,9 @@ export function evaluateSquatCompletionState(
       ruleCompletionBlockedReason: 'not_armed',
       postAssistCompletionBlockedReason: 'not_armed',
       assistSuppressedByFinalize: false,
+      hmmReversalAssistEligible: false,
+      hmmReversalAssistApplied: false,
+      hmmReversalAssistReason: null,
     };
   }
 
@@ -516,16 +524,19 @@ export function evaluateSquatCompletionState(
       frame.index > peakFrame.index &&
       frame.depth <= peakFrame.depth - squatReversalDropRequired
   );
-  const reversalFrame =
+  let reversalFrame =
     committedFrame != null && hasPostPeakDrop ? peakFrame : undefined;
-  const ascendConfirmed =
+
+  const computeAscendConfirmed = (rf: typeof peakFrame | undefined): boolean =>
     ascentFrame != null ||
-    (reversalFrame != null &&
+    (rf != null &&
       depthFrames.some(
         (frame) =>
-          frame.index > reversalFrame.index &&
+          frame.index > rf.index &&
           frame.depth < peakFrame.depth - squatReversalDropRequired
       ));
+
+  let ascendConfirmed = computeAscendConfirmed(reversalFrame);
 
   const standingRecovery = getStandingRecoveryWindow(
     depthFrames.filter((frame) => frame.index > peakFrame.index),
@@ -566,20 +577,37 @@ export function evaluateSquatCompletionState(
   const bottomDetected = bottomFrame != null;
   const recoveryDetected = standingRecovery.standingRecoveredAtMs != null;
 
-  let currentSquatPhase: SquatCompletionPhase = 'idle';
-  if (armed) currentSquatPhase = 'armed';
-  if (descendConfirmed) currentSquatPhase = 'descending';
-  if (committedFrame != null && downwardCommitmentReached) {
-    currentSquatPhase = 'committed_bottom_or_downward_commitment';
-  }
-  if (ascendConfirmed && reversalFrame != null) {
-    currentSquatPhase = 'ascending';
-  }
-  if (
-    ascendConfirmed &&
-    standingRecoveryFinalize.finalizeSatisfied
-  ) {
-    currentSquatPhase = 'standing_recovered';
+  /** commitment 이후 역전·상승·복귀·타이밍 — reversalFrame/ascend 기준 */
+  function computeBlockedAfterCommitment(
+    rf: typeof peakFrame | undefined,
+    asc: boolean
+  ): string | null {
+    if (rf == null) return 'no_reversal';
+    if (!asc) return 'no_ascend';
+    if (standingRecovery.standingRecoveredAtMs == null) return 'not_standing_recovered';
+    if (!standingRecoveryFinalize.finalizeSatisfied) {
+      return evidenceLabel === 'low_rom'
+        ? 'low_rom_standing_finalize_not_satisfied'
+        : evidenceLabel === 'ultra_low_rom'
+          ? 'ultra_low_rom_standing_finalize_not_satisfied'
+          : 'recovery_hold_too_short';
+    }
+    if (
+      relativeDepthPeak < LOW_ROM_TIMING_PEAK_MAX &&
+      effectiveDescentStartFrame != null &&
+      peakFrame.timestampMs - effectiveDescentStartFrame.timestampMs < minDescentToPeakMsForLowRom
+    ) {
+      return 'descent_span_too_short';
+    }
+    if (
+      relativeDepthPeak < SHALLOW_REVERSAL_TIMING_PEAK_MAX &&
+      rf != null &&
+      standingRecovery.standingRecoveredAtMs != null &&
+      standingRecovery.standingRecoveredAtMs - rf.timestampMs < minReversalToStandingMsForShallow
+    ) {
+      return 'ascent_recovery_span_too_short';
+    }
+    return null;
   }
 
   let ruleCompletionBlockedReason: string | null = null;
@@ -591,33 +619,36 @@ export function evaluateSquatCompletionState(
     ruleCompletionBlockedReason = 'insufficient_relative_depth';
   } else if (!downwardCommitmentReached || committedFrame == null) {
     ruleCompletionBlockedReason = 'no_commitment';
-  } else if (reversalFrame == null) {
-    ruleCompletionBlockedReason = 'no_reversal';
-  } else if (!ascendConfirmed) {
-    ruleCompletionBlockedReason = 'no_ascend';
-  } else if (standingRecovery.standingRecoveredAtMs == null) {
-    ruleCompletionBlockedReason = 'not_standing_recovered';
-  } else if (!standingRecoveryFinalize.finalizeSatisfied) {
-    ruleCompletionBlockedReason =
-      evidenceLabel === 'low_rom'
-        ? 'low_rom_standing_finalize_not_satisfied'
-        : evidenceLabel === 'ultra_low_rom'
-          ? 'ultra_low_rom_standing_finalize_not_satisfied'
-          : 'recovery_hold_too_short';
-  } else if (
-    relativeDepthPeak < LOW_ROM_TIMING_PEAK_MAX &&
-    effectiveDescentStartFrame != null &&
-    peakFrame.timestampMs - effectiveDescentStartFrame.timestampMs < minDescentToPeakMsForLowRom
-  ) {
-    ruleCompletionBlockedReason = 'descent_span_too_short';
-  } else if (
-    relativeDepthPeak < SHALLOW_REVERSAL_TIMING_PEAK_MAX &&
-    reversalFrame != null &&
-    standingRecovery.standingRecoveredAtMs != null &&
-    standingRecovery.standingRecoveredAtMs - reversalFrame.timestampMs <
-      minReversalToStandingMsForShallow
-  ) {
-    ruleCompletionBlockedReason = 'ascent_recovery_span_too_short';
+  } else {
+    ruleCompletionBlockedReason = computeBlockedAfterCommitment(reversalFrame, ascendConfirmed);
+  }
+
+  const hmmReversalAssistDecision = getSquatHmmReversalAssistDecision({
+    ruleCompletionBlockedReason,
+    relativeDepthPeak,
+    evidenceLabel,
+    hmm: options?.hmm,
+    standingRecoveredAtMs: standingRecovery.standingRecoveredAtMs,
+    recovery,
+  });
+
+  if (hmmReversalAssistDecision.assistApplied) {
+    reversalFrame = peakFrame;
+    ascendConfirmed = true;
+    ruleCompletionBlockedReason = computeBlockedAfterCommitment(reversalFrame, ascendConfirmed);
+  }
+
+  let currentSquatPhase: SquatCompletionPhase = 'idle';
+  if (armed) currentSquatPhase = 'armed';
+  if (descendConfirmed) currentSquatPhase = 'descending';
+  if (committedFrame != null && downwardCommitmentReached) {
+    currentSquatPhase = 'committed_bottom_or_downward_commitment';
+  }
+  if (ascendConfirmed && reversalFrame != null) {
+    currentSquatPhase = 'ascending';
+  }
+  if (ascendConfirmed && standingRecoveryFinalize.finalizeSatisfied) {
+    currentSquatPhase = 'standing_recovered';
   }
 
   /** PR-HMM-02B: rule blocked reason만 HMM으로 완화 — recovery/finalize는 비터치 */
@@ -738,5 +769,8 @@ export function evaluateSquatCompletionState(
     ruleCompletionBlockedReason,
     postAssistCompletionBlockedReason,
     assistSuppressedByFinalize,
+    hmmReversalAssistEligible: hmmReversalAssistDecision.assistEligible,
+    hmmReversalAssistApplied: hmmReversalAssistDecision.assistApplied,
+    hmmReversalAssistReason: hmmReversalAssistDecision.assistReason,
   };
 }

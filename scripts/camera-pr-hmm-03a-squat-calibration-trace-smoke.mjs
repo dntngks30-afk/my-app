@@ -16,6 +16,7 @@ const {
   buildSquatCalibrationTraceCompact,
   SQUAT_CALIBRATION_TRACE_COMPACT_KEYS,
 } = await import('../src/lib/camera/squat/squat-calibration-trace.ts');
+const { SQUAT_HMM_ASSIST_THRESHOLDS } = await import('../src/lib/camera/squat/squat-hmm-assist.ts');
 
 let passed = 0;
 let failed = 0;
@@ -163,7 +164,11 @@ console.log('\n-- E. compact trace shape --');
   }
   ok('E: hcnts has s,d,b,a', 's' in compact.hcnts && 'd' in compact.hcnts, compact.hcnts);
   ok('E: assistable rb has threshold snapshot t', compact.t != null, compact.t);
-  ok('E: descent_span threshold confidence', compact.t.c === 0.42, compact.t);
+  ok(
+    'E: descent_span threshold confidence',
+    compact.t.c === SQUAT_HMM_ASSIST_THRESHOLDS.descent_span_too_short.minHmmConfidence,
+    compact.t
+  );
   ok('E: t has c,e,d,a', 'c' in compact.t && 'e' in compact.t && 'd' in compact.t && 'a' in compact.t, compact.t);
 }
 

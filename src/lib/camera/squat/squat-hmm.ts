@@ -21,8 +21,9 @@
  *   비현실 점프(standing→bottom, descent→standing 직접 등)는 매우 낮은 로그 확률
  *
  * 관측 모델:
- *   각 상태는 squatDepthProxy 절댓값 + 프레임간 delta를 결합한 가우시안 근사 emission을 사용한다.
- *   null / invalid 프레임은 제거하지 않고 emission confidence를 낮춰 soft penalty로 반영한다.
+ *   depth는 시퀀스 ROM으로 z-정규화, 프레임간 변화량은 raw smoothed delta로 둔 하이브리드 emission.
+ *   (깊은 ROM에서 z-delta만 쓰면 스텝이 지나치게 작아져 ascent가 bottom에 붙는 문제 방지 — PR-HMM-04B)
+ *   null / invalid 프레임은 emission confidence를 낮춰 soft penalty로 반영한다.
  */
 
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
@@ -99,8 +100,8 @@ const LOG_TRANSITION: number[][] = (() => {
   const fromDescent   = [NEG_INF, ln(0.55), ln(0.45), NEG_INF];
   // bottom
   const fromBottom    = [NEG_INF, NEG_INF, ln(0.55), ln(0.45)];
-  // ascent
-  const fromAscent    = [ln(0.45), NEG_INF, NEG_INF, ln(0.55)];
+  // ascent — 짧은 ROM에서도 ascent dwell≥2가 나오도록 self-loop 우세 (PR-HMM-02B no_descend 픽스처)
+  const fromAscent    = [ln(0.28), NEG_INF, NEG_INF, ln(0.72)];
   return [fromStanding, fromDescent, fromBottom, fromAscent];
 })();
 
@@ -108,20 +109,18 @@ const LOG_TRANSITION: number[][] = (() => {
 const LOG_INIT: number[] = [Math.log(0.85), Math.log(0.1), Math.log(0.025), Math.log(0.025)];
 
 /**
- * emission 파라미터 (가우시안 근사).
- * [mean_depth, sigma_depth, mean_delta, sigma_delta]
- * delta: 양수 = 깊어짐, 음수 = 얕아짐
+ * [mean_zDepth, sigma_zDepth, mean_rawDelta, sigma_rawDelta] — raw delta는 구 shallow 캘리브와 동일 스케일.
  */
-const EMISSION_PARAMS: Array<[number, number, number, number]> = [
-  // standing: depth 낮음, delta ≈ 0
-  [0.01, 0.015, 0.0,   0.006],
-  // descent:  depth 증가 중, delta > 0
-  [0.04, 0.04,  0.006, 0.008],
-  // bottom:   depth 높음, delta ≈ 0
-  [0.07, 0.05,  0.0,   0.006],
-  // ascent:   depth 감소 중, delta < 0
-  [0.04, 0.04, -0.006, 0.008],
+const EMISSION_HYBRID: Array<[number, number, number, number]> = [
+  [0.03, 0.12, 0.0, 0.006],
+  [0.28, 0.16, 0.006, 0.008],
+  /** 고깊이 z에서도 bottom/ascent 동일 평균 z — raw delta로만 구분 (z-delta만 쓸 때의 ascent 붕괴 방지) */
+  [0.93, 0.09, 0.0, 0.003],
+  [0.93, 0.09, -0.0045, 0.006],
 ];
+
+/** ROM 정규화 시 depth 스팬 하한 (지터 구간에서 z 과대 방지) */
+const MIN_DEPTH_SPAN_FOR_NORM = 0.03;
 
 /**
  * invalid/null 프레임의 emission penalty (log 단위).
@@ -138,7 +137,7 @@ const MIN_BOTTOM_FRAMES = 1;
 const MIN_ASCENT_FRAMES = 2;
 
 /** confidence 계산에서 모션 프레임(descent+bottom+ascent)의 포화 기준 */
-const CONFIDENCE_MOTION_SATURATION = 12;
+const CONFIDENCE_MOTION_SATURATION = 11;
 
 // ─── 내부 함수 ────────────────────────────────────────────────────────────────
 
@@ -147,9 +146,32 @@ function logGaussian(x: number, mean: number, sigma: number): number {
   return -0.5 * (diff / sigma) ** 2 - Math.log(sigma * Math.sqrt(2 * Math.PI));
 }
 
-function logEmission(stateIdx: number, depth: number, delta: number): number {
-  const [md, sd, mDelta, sDelta] = EMISSION_PARAMS[stateIdx]!;
-  return logGaussian(depth, md, sd) + logGaussian(delta, mDelta, sDelta);
+function logEmissionHybrid(stateIdx: number, zDepth: number, rawDelta: number): number {
+  const [mz, sz, mRd, sRd] = EMISSION_HYBRID[stateIdx]!;
+  return logGaussian(zDepth, mz, sz) + logGaussian(rawDelta, mRd, sRd);
+}
+
+/**
+ * 유효 depth만으로 min/max 스팬을 잡고 z-깊이·z-delta 시계열을 만든다.
+ */
+function computeZDepths(depthSeries: Array<number | null>): {
+  zDepths: Array<number | null>;
+  span: number;
+} {
+  const vals = depthSeries.filter((d): d is number => d !== null && Number.isFinite(d));
+  if (vals.length === 0) {
+    return {
+      zDepths: depthSeries.map(() => null),
+      span: MIN_DEPTH_SPAN_FOR_NORM,
+    };
+  }
+  const dmin = Math.min(...vals);
+  const dmax = Math.max(...vals);
+  const span = Math.max(MIN_DEPTH_SPAN_FOR_NORM, dmax - dmin);
+  const zDepths = depthSeries.map((d) =>
+    d === null || !Number.isFinite(d) ? null : (d - dmin) / span
+  );
+  return { zDepths, span };
 }
 
 /**
@@ -193,12 +215,14 @@ export function decodeSquatHmm(frames: PoseFeaturesFrame[]): SquatHmmDecodeResul
     return buildEmptyResult('too_few_frames', notes);
   }
 
+  const { zDepths } = computeZDepths(depthSeries);
+
   // ── Viterbi DP ──────────────────────────────────────────────────────────────
   // dp[t][s] = 시각 t에서 상태 s에 도달하는 최대 log 확률
   const dp: number[][] = Array.from({ length: T }, () => new Array<number>(S).fill(-Infinity));
   const backtrack: number[][] = Array.from({ length: T }, () => new Array<number>(S).fill(-1));
 
-  // delta 계산 (smoothed)
+  // delta 계산 (smoothed raw — states·디버그용)
   const deltas: number[] = depthSeries.map((d, i) => {
     if (i === 0 || d === null) return 0;
     const prev = depthSeries[i - 1];
@@ -209,20 +233,22 @@ export function decodeSquatHmm(frames: PoseFeaturesFrame[]): SquatHmmDecodeResul
   // 초기화
   for (let s = 0; s < S; s++) {
     const d = depthSeries[0];
-    const delta = deltas[0] ?? 0;
+    const z = zDepths[0];
+    const rawDelta = deltas[0] ?? 0;
     const emitLog =
-      d === null ? INVALID_FRAME_LOG_EMISSION : logEmission(s, d, delta);
+      d === null || z === null ? INVALID_FRAME_LOG_EMISSION : logEmissionHybrid(s, z, rawDelta);
     dp[0]![s] = LOG_INIT[s]! + emitLog;
   }
 
   // 재귀
   for (let t = 1; t < T; t++) {
     const d = depthSeries[t];
-    const delta = deltas[t] ?? 0;
+    const z = zDepths[t];
+    const rawDelta = deltas[t] ?? 0;
 
     for (let s = 0; s < S; s++) {
       const emitLog =
-        d === null ? INVALID_FRAME_LOG_EMISSION : logEmission(s, d, delta);
+        d === null || z === null ? INVALID_FRAME_LOG_EMISSION : logEmissionHybrid(s, z, rawDelta);
 
       let bestLogProb = -Infinity;
       let bestPrev = -1;

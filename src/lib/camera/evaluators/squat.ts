@@ -439,6 +439,10 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         ),
         assistSuppressedByFinalize: state.assistSuppressedByFinalize ? 1 : 0,
         hmmTransitionCount: squatHmm.transitionCount,
+        /** PR-HMM-04B: 깊은 no_reversal HMM 역전 보조 */
+        hmmReversalAssistEligible: state.hmmReversalAssistEligible ? 1 : 0,
+        hmmReversalAssistApplied: state.hmmReversalAssistApplied ? 1 : 0,
+        hmmReversalAssistReason: state.hmmReversalAssistReason ?? null,
       },
       perStepDiagnostics: perStepRecord,
       /** PR-HMM-01B: shadow decoder 전체 결과 — debug 전용 */

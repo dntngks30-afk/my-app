@@ -17,6 +17,7 @@ import { getLastPlaybackObservability } from './korean-audio-pack';
 import type { SquatInternalQuality } from './squat/squat-internal-quality';
 import { buildSquatCalibrationTraceCompact } from '@/lib/camera/squat/squat-calibration-trace';
 import { buildSquatArmingAssistTraceCompact } from '@/lib/camera/squat/squat-arming-assist';
+import { buildSquatReversalAssistTraceCompact } from '@/lib/camera/squat/squat-reversal-assist';
 import type { OverheadInternalQuality } from './overhead/overhead-internal-quality';
 
 /** PR-4: movement type (squat, overhead_reach만 지원) */
@@ -745,6 +746,7 @@ function buildDiagnosisSummary(
       const squatCycleExt = diagnosisSummary.squatCycle as typeof diagnosisSummary.squatCycle & {
         calib?: ReturnType<typeof buildSquatCalibrationTraceCompact>;
         arm?: ReturnType<typeof buildSquatArmingAssistTraceCompact>;
+        hra?: ReturnType<typeof buildSquatReversalAssistTraceCompact>;
       };
       squatCycleExt.calib = buildSquatCalibrationTraceCompact(
         gate.evaluatorResult.debug?.squatCompletionState,
@@ -752,6 +754,12 @@ function buildDiagnosisSummary(
       );
       squatCycleExt.arm = buildSquatArmingAssistTraceCompact(
         gate.evaluatorResult.debug?.squatCompletionArming
+      );
+      const cs = gate.evaluatorResult.debug?.squatCompletionState;
+      squatCycleExt.hra = buildSquatReversalAssistTraceCompact(
+        cs?.hmmReversalAssistEligible,
+        cs?.hmmReversalAssistApplied,
+        cs?.hmmReversalAssistReason ?? null
       );
     }
   }
