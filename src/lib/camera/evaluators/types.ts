@@ -10,6 +10,22 @@ import type { CompletionArmingState } from '@/lib/camera/squat/squat-completion-
 import type { SquatCompletionState } from '@/lib/camera/squat-completion-state';
 import type { SquatHmmDecodeResult } from '@/lib/camera/squat/squat-hmm';
 
+/** PR-HMM-03A: evaluator debug 전용 calibration 묶음 — pass gate 미사용 */
+export interface SquatCalibrationDebug {
+  ruleCompletionBlockedReason: string | null;
+  postAssistCompletionBlockedReason: string | null;
+  hmmAssistEligible: boolean;
+  hmmAssistApplied: boolean;
+  hmmAssistReason: string | null;
+  assistSuppressedByFinalize: boolean;
+  standingRecoveryFinalizeReason: string | null;
+  standingRecoveryBand: string | null;
+  hmmConfidence: number;
+  hmmExcursion: number;
+  hmmTransitionCount: number;
+  hmmDominantStateCounts: Record<'standing' | 'descent' | 'bottom' | 'ascent', number>;
+}
+
 export interface EvaluatorMetric {
   name: string;
   value: number;
@@ -52,6 +68,8 @@ export interface EvaluatorDebugSummary {
    * pass/retry/fail gate에 사용 금지.
    */
   squatHmm?: SquatHmmDecodeResult;
+  /** PR-HMM-03A: shallow assist calibration 요약 — squatHmm·squatCompletionState와 병행 */
+  squatCalibration?: SquatCalibrationDebug;
   /**
    * PR-CAM-13: 오버헤드 진행 상태 전체(typed) — squat-style 소유권 분리.
    * - progressionSatisfied: 진행 gate truth (strict | fallback | easy 통합).

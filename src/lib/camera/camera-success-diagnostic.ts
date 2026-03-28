@@ -4,6 +4,10 @@
  * threshold/contract 변경 없음, 진단 전용.
  */
 import type { ExerciseGateResult } from './auto-progression';
+import {
+  buildSquatCalibrationTraceCompact,
+  type SquatCalibrationTraceCompact,
+} from '@/lib/camera/squat/squat-calibration-trace';
 
 /** build/runtime diagnostic version — 실기기 bundle 확인용 */
 export const CAMERA_DIAG_VERSION = 'success-diagnostic-2025-03-18';
@@ -137,6 +141,8 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   recoveryConfirmedAfterReversal?: boolean;
   squatDescentToPeakMs?: number;
   squatReversalToStandingMs?: number;
+  /** PR-HMM-03A: shallow 성공 캘리브레이션 스냅샷 (컴팩트) */
+  squatCalibrationCompact?: SquatCalibrationTraceCompact;
 }
 
 export type SuccessSnapshot = OverheadSuccessSnapshot | SquatSuccessSnapshot;
@@ -312,6 +318,10 @@ export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): 
       evidenceLabel: squatDebug?.evidenceLabel ?? null,
       completionBlockedReason: squatDebug?.completionBlockedReason ?? null,
       cycleDurationMs: squatDebug?.cycleDurationMs,
+      squatCalibrationCompact: buildSquatCalibrationTraceCompact(
+        options.gate.evaluatorResult?.debug?.squatCompletionState,
+        options.gate.evaluatorResult?.debug?.squatHmm
+      ),
       ...mobileObs,
     };
     pushSuccessSnapshot(snapshot);
@@ -478,6 +488,8 @@ export interface SquatFailedShallowSnapshot {
   recoveryConfirmedAfterReversal?: boolean;
   squatDescentToPeakMs?: number;
   squatReversalToStandingMs?: number;
+  /** PR-HMM-03A: shallow 실패 캘리브레이션 스냅샷 (컴팩트) */
+  squatCalibrationCompact?: SquatCalibrationTraceCompact;
 }
 
 /** CAM-OBS: 실패 스냅샷 기록 옵션(진단 전용, pass 로직 무관) */
@@ -585,6 +597,10 @@ export function recordSquatFailedShallowSnapshot(
       recoveryConfirmedAfterReversal: sc?.recoveryConfirmedAfterReversal,
       squatDescentToPeakMs: cs?.squatDescentToPeakMs,
       squatReversalToStandingMs: cs?.squatReversalToStandingMs,
+      squatCalibrationCompact: buildSquatCalibrationTraceCompact(
+        gate.evaluatorResult?.debug?.squatCompletionState,
+        gate.evaluatorResult?.debug?.squatHmm
+      ),
     };
 
     if (typeof window === 'undefined') return;

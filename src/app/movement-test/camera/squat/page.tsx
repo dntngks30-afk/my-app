@@ -1569,6 +1569,30 @@ export default function CameraSquatPage() {
                     ? gate.evaluatorResult.debug.highlightedMetrics.relativeDepthPeak
                     : '—'}
                 </p>
+                {/* PR-HMM-03A: dev-only calibration strip — production UX unchanged */}
+                <p className="mt-2 font-medium text-cyan-200/80">calibration (dev)</p>
+                <p className="break-all">
+                  ruleBlocked: {gate.squatCycleDebug?.ruleCompletionBlockedReason ?? '—'}
+                </p>
+                <p className="break-all">
+                  finalBlocked: {gate.squatCycleDebug?.postAssistCompletionBlockedReason ?? gate.squatCycleDebug?.completionBlockedReason ?? '—'}
+                </p>
+                <p>
+                  assistEligible: {String(gate.squatCycleDebug?.hmmAssistEligible ?? false)} | assistApplied:{' '}
+                  {String(gate.squatCycleDebug?.hmmAssistApplied ?? false)} | assistReason:{' '}
+                  {gate.squatCycleDebug?.hmmAssistReason ?? '—'}
+                </p>
+                <p>
+                  assistSuppressedByFinalize: {String(gate.squatCycleDebug?.assistSuppressedByFinalize ?? false)}
+                </p>
+                <p className="break-all">
+                  finalizeReason: {gate.squatCycleDebug?.standingRecoveryFinalizeReason ?? '—'} | band:{' '}
+                  {gate.squatCycleDebug?.standingRecoveryBand ?? '—'}
+                </p>
+                <p>
+                  hmmConf: {gate.squatCycleDebug?.hmmConfidence ?? '—'} | hmmExc:{' '}
+                  {gate.squatCycleDebug?.hmmExcursion ?? '—'}
+                </p>
               </div>
             )}
 

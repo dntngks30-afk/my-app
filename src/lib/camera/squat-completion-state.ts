@@ -7,7 +7,7 @@ import {
 } from '@/lib/camera/squat-completion-machine';
 import type { MotionCompletionResult } from '@/lib/camera/types/motion-completion';
 import type { SquatHmmDecodeResult } from '@/lib/camera/squat/squat-hmm';
-import { getHmmAssistDecision } from '@/lib/camera/squat/squat-hmm-assist';
+import { getHmmAssistDecision, hmmMeetsStrongAssistEvidence } from '@/lib/camera/squat/squat-hmm-assist';
 
 export type SquatCompletionPhase =
   | 'idle'
@@ -74,12 +74,52 @@ export interface SquatCompletionState extends MotionCompletionResult {
   hmmAssistEligible?: boolean;
   hmmAssistApplied?: boolean;
   hmmAssistReason?: string | null;
+  /** PR-HMM-03A: assist 적용 전 순수 rule 체인 blocked reason */
+  ruleCompletionBlockedReason?: string | null;
+  /** PR-HMM-03A: assist 반영 후 최종 blocked (= completionBlockedReason 과 동일 의미, 명시 보존) */
+  postAssistCompletionBlockedReason?: string | null;
+  /**
+   * PR-HMM-03A: HMM assist 임계는 충족했으나 rule이 지목한 차단이 recovery/finalize 계열.
+   * segmentation assist로는 열 수 없음 — shallow 실기기 calibration 구분용.
+   */
+  assistSuppressedByFinalize?: boolean;
 }
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
 export type EvaluateSquatCompletionStateOptions = {
   hmm?: SquatHmmDecodeResult;
 };
+
+/** PR-HMM-03A: calibration 로그용 안정 정수 코드 (0 = null) */
+const SQUAT_COMPLETION_BLOCKED_REASON_CODES: Record<string, number> = {
+  not_armed: 1,
+  no_descend: 2,
+  insufficient_relative_depth: 3,
+  no_commitment: 4,
+  no_reversal: 5,
+  no_ascend: 6,
+  not_standing_recovered: 7,
+  recovery_hold_too_short: 8,
+  low_rom_standing_finalize_not_satisfied: 9,
+  ultra_low_rom_standing_finalize_not_satisfied: 10,
+  descent_span_too_short: 11,
+  ascent_recovery_span_too_short: 12,
+};
+
+export function squatCompletionBlockedReasonToCode(reason: string | null): number {
+  if (reason == null) return 0;
+  return SQUAT_COMPLETION_BLOCKED_REASON_CODES[reason] ?? 99;
+}
+
+function isRecoveryFinalizeFamilyRuleBlocked(reason: string | null): boolean {
+  if (reason == null) return false;
+  return (
+    reason === 'not_standing_recovered' ||
+    reason === 'recovery_hold_too_short' ||
+    reason === 'low_rom_standing_finalize_not_satisfied' ||
+    reason === 'ultra_low_rom_standing_finalize_not_satisfied'
+  );
+}
 
 const BASELINE_WINDOW = 6;
 const MIN_BASELINE_FRAMES = 4;
@@ -355,6 +395,9 @@ export function evaluateSquatCompletionState(
       hmmAssistEligible: false,
       hmmAssistApplied: false,
       hmmAssistReason: null,
+      ruleCompletionBlockedReason: 'not_armed',
+      postAssistCompletionBlockedReason: 'not_armed',
+      assistSuppressedByFinalize: false,
     };
   }
 
@@ -584,6 +627,12 @@ export function evaluateSquatCompletionState(
     ? null
     : ruleCompletionBlockedReason;
 
+  const postAssistCompletionBlockedReason = completionBlockedReason;
+  const assistSuppressedByFinalize =
+    options?.hmm != null &&
+    hmmMeetsStrongAssistEvidence(options.hmm) &&
+    isRecoveryFinalizeFamilyRuleBlocked(ruleCompletionBlockedReason);
+
   /** PR-CAM-18: phaseHint 기반 descentFrame이 없을 때 effectiveDescentStartFrame으로 폴백 */
   const squatDescentToPeakMs =
     effectiveDescentStartFrame != null
@@ -678,5 +727,8 @@ export function evaluateSquatCompletionState(
     hmmAssistEligible: hmmAssistDecision.assistEligible,
     hmmAssistApplied: hmmAssistDecision.assistApplied,
     hmmAssistReason: hmmAssistDecision.assistReason,
+    ruleCompletionBlockedReason,
+    postAssistCompletionBlockedReason,
+    assistSuppressedByFinalize,
   };
 }

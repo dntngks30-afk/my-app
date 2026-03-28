@@ -137,6 +137,12 @@ export interface SquatCycleDebug {
   hmmAssistEligible?: boolean;
   hmmAssistApplied?: boolean;
   hmmAssistReason?: string | null;
+  /** PR-HMM-03A: calibration trace — pass 로직 미사용 */
+  ruleCompletionBlockedReason?: string | null;
+  postAssistCompletionBlockedReason?: string | null;
+  assistSuppressedByFinalize?: boolean;
+  hmmExcursion?: number | null;
+  hmmTransitionCount?: number | null;
 }
 
 export interface ExerciseGateResult {
@@ -880,6 +886,18 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.hmmAssistEligible = cs?.hmmAssistEligible;
   squatCycleDebug.hmmAssistApplied = cs?.hmmAssistApplied;
   squatCycleDebug.hmmAssistReason = cs?.hmmAssistReason ?? null;
+
+  const cal = result.debug?.squatCalibration;
+  squatCycleDebug.ruleCompletionBlockedReason =
+    cal?.ruleCompletionBlockedReason ?? cs?.ruleCompletionBlockedReason ?? null;
+  squatCycleDebug.postAssistCompletionBlockedReason =
+    cal?.postAssistCompletionBlockedReason ?? cs?.postAssistCompletionBlockedReason ?? null;
+  squatCycleDebug.assistSuppressedByFinalize =
+    cal?.assistSuppressedByFinalize ?? cs?.assistSuppressedByFinalize;
+  squatCycleDebug.hmmExcursion =
+    cal?.hmmExcursion ?? (squatHmm != null ? squatHmm.effectiveExcursion : null);
+  squatCycleDebug.hmmTransitionCount =
+    cal?.hmmTransitionCount ?? (squatHmm != null ? squatHmm.transitionCount : null);
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';

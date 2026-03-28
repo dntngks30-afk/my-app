@@ -13,7 +13,8 @@ import {
 } from '@/lib/camera/squat/squat-internal-quality';
 import { getSquatPerStepDiagnostics } from '@/lib/camera/step-joint-spec';
 import { decodeSquatHmm } from '@/lib/camera/squat/squat-hmm';
-import type { EvaluatorResult, EvaluatorMetric } from './types';
+import type { EvaluatorResult, EvaluatorMetric, SquatCalibrationDebug } from './types';
+import { squatCompletionBlockedReasonToCode } from '@/lib/camera/squat-completion-state';
 
 const MIN_VALID_FRAMES = 8;
 
@@ -132,6 +133,22 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const state = evaluateSquatCompletionState(completionArming.armed ? completionFrames : [], {
     hmm: squatHmm,
   });
+
+  /** PR-HMM-03A: calibration 전용 묶음 — pass/truth 변경 없음 */
+  const squatCalibration: SquatCalibrationDebug = {
+    ruleCompletionBlockedReason: state.ruleCompletionBlockedReason ?? null,
+    postAssistCompletionBlockedReason: state.postAssistCompletionBlockedReason ?? null,
+    hmmAssistEligible: state.hmmAssistEligible ?? false,
+    hmmAssistApplied: state.hmmAssistApplied ?? false,
+    hmmAssistReason: state.hmmAssistReason ?? null,
+    assistSuppressedByFinalize: state.assistSuppressedByFinalize ?? false,
+    standingRecoveryFinalizeReason: state.standingRecoveryFinalizeReason,
+    standingRecoveryBand: state.standingRecoveryBand,
+    hmmConfidence: squatHmm.confidence,
+    hmmExcursion: squatHmm.effectiveExcursion,
+    hmmTransitionCount: squatHmm.transitionCount,
+    hmmDominantStateCounts: { ...squatHmm.dominantStateCounts },
+  };
 
   const globalMaxDepthProxy = depthValues.length > 0 ? Math.max(...depthValues) : 0;
   const completionSliceDepthValues = getNumbers(
@@ -379,10 +396,20 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         /** PR-HMM-02B: blocked-reason assist trace (1/0) */
         hmmAssistEligible: state.hmmAssistEligible ? 1 : 0,
         hmmAssistApplied: state.hmmAssistApplied ? 1 : 0,
+        /** PR-HMM-03A: calibration 정수 코드 (0=null) */
+        ruleCompletionBlockedReasonCode: squatCompletionBlockedReasonToCode(
+          state.ruleCompletionBlockedReason ?? null
+        ),
+        postAssistCompletionBlockedReasonCode: squatCompletionBlockedReasonToCode(
+          state.postAssistCompletionBlockedReason ?? null
+        ),
+        assistSuppressedByFinalize: state.assistSuppressedByFinalize ? 1 : 0,
+        hmmTransitionCount: squatHmm.transitionCount,
       },
       perStepDiagnostics: perStepRecord,
       /** PR-HMM-01B: shadow decoder 전체 결과 — debug 전용 */
       squatHmm,
+      squatCalibration,
     },
   };
 }

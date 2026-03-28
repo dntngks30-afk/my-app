@@ -15,6 +15,7 @@ import { isFinalPassLatched } from './auto-progression';
 import { getCorrectiveCueObservability } from './voice-guidance';
 import { getLastPlaybackObservability } from './korean-audio-pack';
 import type { SquatInternalQuality } from './squat/squat-internal-quality';
+import { buildSquatCalibrationTraceCompact } from '@/lib/camera/squat/squat-calibration-trace';
 import type { OverheadInternalQuality } from './overhead/overhead-internal-quality';
 
 /** PR-4: movement type (squat, overhead_reach만 지원) */
@@ -139,6 +140,21 @@ export interface AttemptSnapshot {
       squatInternalQuality?: SquatInternalQuality;
       /** CAM-shallow-obs: attempt-evidence보다 약한 관측 계약(저장·진단 전용) */
       shallowObservationEligible?: boolean;
+      /** PR-HMM-03A: 컴팩트 calibration (짧은 키) */
+      calib?: {
+        rb: string | null;
+        fb: string | null;
+        ae: boolean;
+        aa: boolean;
+        asbf: boolean;
+        ar: string | null;
+        fr: string | null;
+        fbnd: string | null;
+        hc: number;
+        he: number;
+        hcnts: { s: number; d: number; b: number; a: number };
+        htc: number;
+      };
     };
     /** overhead — PR-C4 trace, PR overhead-dwell */
     overhead?: {
@@ -720,6 +736,17 @@ function buildDiagnosisSummary(
         },
         excursion: squatHmm.effectiveExcursion,
       };
+    }
+
+    // PR-HMM-03A: calibration compact — HMM + completion state 한 블록
+    if (diagnosisSummary?.squatCycle != null) {
+      const squatCycleExt = diagnosisSummary.squatCycle as typeof diagnosisSummary.squatCycle & {
+        calib?: ReturnType<typeof buildSquatCalibrationTraceCompact>;
+      };
+      squatCycleExt.calib = buildSquatCalibrationTraceCompact(
+        gate.evaluatorResult.debug?.squatCompletionState,
+        gate.evaluatorResult.debug?.squatHmm
+      );
     }
   }
 
