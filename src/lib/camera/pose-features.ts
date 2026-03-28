@@ -6,6 +6,7 @@ import { POSE_LANDMARKS } from '@/lib/motion/pose-types';
 import type { PoseLandmark, PoseLandmarks } from '@/lib/motion/pose-types';
 import type { CameraStepId } from '@/lib/public/camera-test';
 import { smoothSignalValue, stabilizePhaseSequence } from './stability';
+import { buildSquatDepthSignal } from './squat/squat-depth-signal';
 
 export type PoseFrameValidity = 'valid' | 'low_visibility' | 'missing_keypoints' | 'invalid';
 export type PosePhaseHint =
@@ -68,6 +69,12 @@ export interface PoseFeaturesFrame {
     kneeAngleAvg: number | null;
     kneeAngleGap: number | null;
     squatDepthProxy: number | null;
+    /** PR-04E1: 스무딩 직전 knee-logistic primary (관측) */
+    squatDepthProxyRaw?: number | null;
+    /** PR-04E1: arming·phase shallow 가드용 blended depth (primary 보조) */
+    squatDepthProxyBlended?: number | null;
+    /** PR-04E1: 'primary' | 'fallback' | 'blended' */
+    squatDepthSource?: string | null;
     kneeTrackingRatio: number | null;
     trunkLeanDeg: number | null;
     torsoExtensionDeg: number | null;
@@ -686,6 +693,7 @@ function stabilizeDerivedSignals(frames: PoseFeaturesFrame[]): PoseFeaturesFrame
   let previousKneeTracking: number | null = null;
 
   return frames.map((frame) => {
+    const rawDepthIn = frame.derived.squatDepthProxy;
     const squatDepthProxy = smoothSignalValue(frame.derived.squatDepthProxy, previousDepth, 0.46);
     const armElevationAvg = smoothSignalValue(frame.derived.armElevationAvg, previousArmElevation, 0.42);
     const armElevationLeft = smoothSignalValue(
@@ -716,12 +724,36 @@ function stabilizeDerivedSignals(frames: PoseFeaturesFrame[]): PoseFeaturesFrame
       ...frame,
       derived: {
         ...frame.derived,
+        squatDepthProxyRaw: typeof rawDepthIn === 'number' && Number.isFinite(rawDepthIn) ? rawDepthIn : null,
         squatDepthProxy,
         armElevationAvg,
         armElevationLeft,
         armElevationRight,
         trunkLeanDeg,
         kneeTrackingRatio,
+      },
+    };
+  });
+}
+
+/** PR-04E1: phase / arming 에 쓰는 유효 depth (blended 우선) */
+function squatPhaseDepthRead(frame: PoseFeaturesFrame): number {
+  const b = frame.derived.squatDepthProxyBlended;
+  if (typeof b === 'number' && Number.isFinite(b)) return b;
+  const p = frame.derived.squatDepthProxy;
+  return typeof p === 'number' && Number.isFinite(p) ? p : 0;
+}
+
+function applySquatDepthBlendPass(frames: PoseFeaturesFrame[]): PoseFeaturesFrame[] {
+  return frames.map((frame, i) => {
+    const prev = i > 0 ? frames[i - 1]! : null;
+    const sig = buildSquatDepthSignal(frame, prev);
+    return {
+      ...frame,
+      derived: {
+        ...frame.derived,
+        squatDepthProxyBlended: sig.depthValue,
+        squatDepthSource: sig.source,
       },
     };
   });
@@ -753,8 +785,8 @@ function hasGuardedShallowSquatDescent(
   const recentDepths: number[] = [];
 
   for (let i = index - SHALLOW_DESCENT_MIN_CONSECUTIVE_FRAMES; i <= index; i += 1) {
-    const depth = frames[i]!.derived.squatDepthProxy;
-    if (typeof depth !== 'number') return false;
+    const depth = squatPhaseDepthRead(frames[i]!);
+    if (typeof depth !== 'number' || !Number.isFinite(depth)) return false;
     recentDepths.push(depth);
   }
 
@@ -781,7 +813,7 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
   if (frames.length === 0) return frames;
 
   if (stepId === 'squat') {
-    const maxDepth = Math.max(...frames.map((frame) => frame.derived.squatDepthProxy ?? 0));
+    const maxDepth = Math.max(...frames.map((frame) => squatPhaseDepthRead(frame)));
     /** PR G10: bottom = 30% of excursion. Shallower real cycle can get bottom phase. */
     const bottomThreshold = maxDepth * 0.3;
     /** PR squat-low-rom: shallow range (5–12%) uses lower delta for descent/ascent. Standing (<5%) keeps 0.008. */
@@ -794,15 +826,15 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
      */
     const MIN_EXCURSION_FOR_DESCENT_LABEL = 0.022;
     const candidates = frames.map((frame, index) => {
-      const previousDepth = index > 0 ? frames[index - 1]!.derived.squatDepthProxy : null;
-      const currentDepth = frame.derived.squatDepthProxy;
+      const previousDepth = index > 0 ? squatPhaseDepthRead(frames[index - 1]!) : null;
+      const currentDepth = squatPhaseDepthRead(frame);
       let phaseHint: PosePhaseHint = 'unknown';
 
-      if (typeof currentDepth === 'number') {
+      if (typeof currentDepth === 'number' && Number.isFinite(currentDepth)) {
         const depthSlice = frames
           .slice(0, index + 1)
-          .map((f) => f.derived.squatDepthProxy)
-          .filter((d): d is number => typeof d === 'number');
+          .map((f) => squatPhaseDepthRead(f))
+          .filter((d): d is number => typeof d === 'number' && Number.isFinite(d));
         const sessionMinDepth = depthSlice.length > 0 ? Math.min(...depthSlice) : currentDepth;
         const excursion = currentDepth - sessionMinDepth;
 
@@ -993,5 +1025,7 @@ export function buildPoseFeaturesFrames(
     });
   }
 
-  return applyPhaseHints(stepId, stabilizeDerivedSignals(features));
+  const stabilized = stabilizeDerivedSignals(features);
+  const depthReady = stepId === 'squat' ? applySquatDepthBlendPass(stabilized) : stabilized;
+  return applyPhaseHints(stepId, depthReady);
 }

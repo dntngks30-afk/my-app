@@ -167,6 +167,14 @@ export interface SquatCycleDebug {
   qualityOnlyWarnings?: string[];
   passOwner?: SquatPassOwner;
   lowQualityPassAllowed?: boolean;
+  /** PR-04E1: depth/arming 입력 관측 */
+  armingDepthSource?: string | null;
+  armingDepthPeak?: number | null;
+  squatDepthPeakPrimary?: number | null;
+  squatDepthPeakBlended?: number | null;
+  armingDepthBlendAssisted?: boolean;
+  /** PR-CAM-27 폴백 arm — completion arming contract */
+  armingFallbackUsed?: boolean;
 }
 
 export interface ExerciseGateResult {
@@ -913,6 +921,16 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.hmmArmingAssistApplied = ca?.hmmArmingAssistApplied;
   squatCycleDebug.hmmArmingAssistReason = ca?.hmmArmingAssistReason ?? null;
   squatCycleDebug.effectiveArmed = ca?.effectiveArmed;
+  squatCycleDebug.armingDepthSource = ca?.armingDepthSource ?? null;
+  squatCycleDebug.armingDepthPeak =
+    typeof ca?.armingDepthPeak === 'number' ? ca.armingDepthPeak : null;
+  squatCycleDebug.armingDepthBlendAssisted = ca?.armingDepthBlendAssisted;
+  squatCycleDebug.armingFallbackUsed = ca?.armingFallbackUsed;
+  const hmObs = result.debug?.highlightedMetrics;
+  squatCycleDebug.squatDepthPeakPrimary =
+    typeof hmObs?.squatDepthPeakPrimary === 'number' ? hmObs.squatDepthPeakPrimary : null;
+  squatCycleDebug.squatDepthPeakBlended =
+    typeof hmObs?.squatDepthPeakBlended === 'number' ? hmObs.squatDepthPeakBlended : null;
 
   squatCycleDebug.hmmReversalAssistEligible = cs?.hmmReversalAssistEligible;
   squatCycleDebug.hmmReversalAssistApplied = cs?.hmmReversalAssistApplied;

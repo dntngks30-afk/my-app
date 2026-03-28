@@ -36,6 +36,11 @@ export type CompletionArmingState = {
   hmmArmingAssistReason?: string | null;
   /** `armed || hmmArmingAssistApplied` — completion 슬라이스 선택 기준 */
   effectiveArmed?: boolean;
+  /** PR-04E1: arming depth 스트림 요약 — primary vs blended 우선 */
+  armingDepthSource?: string | null;
+  armingDepthPeak?: number;
+  /** blended depth 가 primary 피크를 유의하게 넘겼을 때 true */
+  armingDepthBlendAssisted?: boolean;
 };
 
 /** pose-features `start` 밴드와 정렬 (약간 여유로 초기 캘리브레이션 허용) */
@@ -72,19 +77,50 @@ const SECONDARY_STABLE_MIN_FRAMES = 4;
  */
 const SHALLOW_FALLBACK_EVIDENCE_MIN = 0.018;
 
-function readSquatDepth(frame: PoseFeaturesFrame): number | null {
+function readSquatDepthPrimary(frame: PoseFeaturesFrame): number | null {
   const d = frame.derived.squatDepthProxy;
   return typeof d === 'number' && Number.isFinite(d) ? d : null;
+}
+
+/** PR-04E1: 무장·피크 탐색은 blended(보조) 우선, 없으면 primary */
+function readSquatArmingDepth(frame: PoseFeaturesFrame): number | null {
+  const b = frame.derived.squatDepthProxyBlended;
+  if (typeof b === 'number' && Number.isFinite(b)) return b;
+  return readSquatDepthPrimary(frame);
+}
+
+/** PR-04E1: 최종 arming 상태에 valid 버퍼 기준 depth 피크 메타를 합친다 (evaluator 재호출 가능). */
+export function mergeArmingDepthObservability(
+  valid: PoseFeaturesFrame[],
+  arming: CompletionArmingState
+): CompletionArmingState {
+  let primaryPeak = -Infinity;
+  let armingPeak = -Infinity;
+  for (const f of valid) {
+    const p = readSquatDepthPrimary(f);
+    const a = readSquatArmingDepth(f);
+    if (p != null) primaryPeak = Math.max(primaryPeak, p);
+    if (a != null) armingPeak = Math.max(armingPeak, a);
+  }
+  if (!Number.isFinite(primaryPeak) || primaryPeak === -Infinity) primaryPeak = 0;
+  if (!Number.isFinite(armingPeak) || armingPeak === -Infinity) armingPeak = 0;
+  const assisted = armingPeak > primaryPeak + 0.007;
+  return {
+    ...arming,
+    armingDepthPeak: Math.round(armingPeak * 1000) / 1000,
+    armingDepthSource: assisted ? 'blended_preferred' : 'primary',
+    armingDepthBlendAssisted: assisted,
+  };
 }
 
 function isStableStandingRun(frames: PoseFeaturesFrame[], start: number, len: number): boolean {
   let dMin = Infinity;
   let dMax = -Infinity;
   for (let k = 0; k < len; k++) {
-    const d = readSquatDepth(frames[start + k]!);
+    const d = readSquatArmingDepth(frames[start + k]!);
     if (d == null || d >= STANDING_DEPTH_MAX) return false;
     if (k > 0) {
-      const prev = readSquatDepth(frames[start + k - 1]!);
+      const prev = readSquatArmingDepth(frames[start + k - 1]!);
       if (prev == null || Math.abs(d - prev) > STABLE_ADJACENT_DELTA_MAX) return false;
     }
     if (d < dMin) dMin = d;
@@ -100,7 +136,7 @@ function findGlobalSquatDepthPeakIndex(valid: PoseFeaturesFrame[]): number | nul
   let bestIdx: number | null = null;
   let bestD = -Infinity;
   for (let i = 0; i < valid.length; i++) {
-    const d = readSquatDepth(valid[i]!);
+    const d = readSquatArmingDepth(valid[i]!);
     if (d == null) continue;
     if (d > bestD) {
       bestD = d;
@@ -121,7 +157,7 @@ function tryPeakAnchoredArming(valid: PoseFeaturesFrame[]): {
   const peakIdx = findGlobalSquatDepthPeakIndex(valid);
   if (peakIdx == null || peakIdx < 1) return null;
 
-  const peakDepth = readSquatDepth(valid[peakIdx]!);
+  const peakDepth = readSquatArmingDepth(valid[peakIdx]!);
   if (peakDepth == null) return null;
 
   const stableLens = [MIN_STABLE_STANDING_FRAMES, SECONDARY_STABLE_MIN_FRAMES] as const;
@@ -137,9 +173,9 @@ function tryPeakAnchoredArming(valid: PoseFeaturesFrame[]): {
       const completionFrames = valid.slice(completionSliceStartIndex);
       const baselineDepths = valid
         .slice(start, end + 1)
-        .map(readSquatDepth)
+        .map(readSquatArmingDepth)
         .filter((d): d is number => d != null);
-      const completionDepths = completionFrames.map(readSquatDepth).filter((d): d is number => d != null);
+      const completionDepths = completionFrames.map(readSquatArmingDepth).filter((d): d is number => d != null);
 
       if (baselineDepths.length < stableLen || completionDepths.length === 0) continue;
 
@@ -200,11 +236,11 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
       const completionFrames = valid.slice(completionSliceStartIndex);
 
       const completionDepths = completionFrames
-        .map(readSquatDepth)
+        .map(readSquatArmingDepth)
         .filter((d): d is number => d != null);
       const baselineDepths = valid
         .slice(i, i + MIN_STABLE_STANDING_FRAMES)
-        .map(readSquatDepth)
+        .map(readSquatArmingDepth)
         .filter((d): d is number => d != null);
       const baseMin = baselineDepths.length > 0 ? Math.min(...baselineDepths) : 0;
       const baseMax = baselineDepths.length > 0 ? Math.max(...baselineDepths) : 0;
@@ -212,13 +248,13 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
 
       if (completionMax - baseMin >= SHALLOW_FALLBACK_EVIDENCE_MIN) {
         return {
-          arming: {
+          arming: mergeArmingDepthObservability(valid, {
             armed: true,
             baselineCaptured: completionFrames.length >= MIN_FRAMES_FOR_BASELINE_CAPTURE,
             stableFrames: MIN_STABLE_STANDING_FRAMES,
             completionSliceStartIndex,
             armingStandingWindowRange: Math.round((baseMax - baseMin) * 1000) / 1000,
-          },
+          }),
           completionFrames,
         };
       }
@@ -227,7 +263,7 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
   }
 
   if (valid.length < SECONDARY_STABLE_MIN_FRAMES + 4) {
-    return { arming: idle, completionFrames: [] };
+    return { arming: mergeArmingDepthObservability(valid, idle), completionFrames: [] };
   }
 
   for (let i = 0; i <= valid.length - SECONDARY_STABLE_MIN_FRAMES; i++) {
@@ -238,9 +274,9 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
 
     const baselineDepths = valid
       .slice(i, i + SECONDARY_STABLE_MIN_FRAMES)
-      .map(readSquatDepth)
+      .map(readSquatArmingDepth)
       .filter((d): d is number => d != null);
-    const motionDepths = completionFrames.map(readSquatDepth).filter((d): d is number => d != null);
+    const motionDepths = completionFrames.map(readSquatArmingDepth).filter((d): d is number => d != null);
 
     if (baselineDepths.length < SECONDARY_STABLE_MIN_FRAMES || motionDepths.length === 0) continue;
 
@@ -251,17 +287,17 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
     if (motionMax - baseMin < SHALLOW_FALLBACK_EVIDENCE_MIN) continue;
 
     return {
-      arming: {
+      arming: mergeArmingDepthObservability(valid, {
         armed: true,
         baselineCaptured: completionFrames.length >= MIN_FRAMES_FOR_BASELINE_CAPTURE,
         stableFrames: SECONDARY_STABLE_MIN_FRAMES,
         completionSliceStartIndex,
         armingFallbackUsed: true,
         armingStandingWindowRange: Math.round((baseMax - baseMin) * 1000) / 1000,
-      },
+      }),
       completionFrames,
     };
   }
 
-  return { arming: idle, completionFrames: [] };
+  return { arming: mergeArmingDepthObservability(valid, idle), completionFrames: [] };
 }

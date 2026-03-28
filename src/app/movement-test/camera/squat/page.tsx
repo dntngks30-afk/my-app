@@ -1572,6 +1572,20 @@ export default function CameraSquatPage() {
                   qualityOnlyWarnings:{' '}
                   {(gate.squatCycleDebug?.qualityOnlyWarnings ?? []).join(', ') || '—'}
                 </p>
+                {/* PR-04E1: depth/arming 입력 — dev only */}
+                <p className="mt-2 font-medium text-cyan-200/80">depth/arming (dev)</p>
+                <p className="break-all">
+                  peakPrimary%: {gate.squatCycleDebug?.squatDepthPeakPrimary ?? '—'} | peakBlended%:{' '}
+                  {gate.squatCycleDebug?.squatDepthPeakBlended ?? '—'}
+                </p>
+                <p className="break-all">
+                  armingDepthPeak: {gate.squatCycleDebug?.armingDepthPeak ?? '—'} | source:{' '}
+                  {gate.squatCycleDebug?.armingDepthSource ?? '—'}
+                </p>
+                <p className="break-all">
+                  depthBlendAssisted: {String(gate.squatCycleDebug?.armingDepthBlendAssisted ?? '—')} |
+                  armingFallbackUsed: {String(gate.squatCycleDebug?.armingFallbackUsed ?? '—')}
+                </p>
                 <p>confidence: {gate.confidence}</p>
                 <p>captureQuality: {gate.guardrail.captureQuality}</p>
                 <p className="break-all">

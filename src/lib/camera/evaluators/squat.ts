@@ -8,6 +8,7 @@ import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 import { evaluateSquatCompletionState } from '@/lib/camera/squat-completion-state';
 import {
   computeSquatCompletionArming,
+  mergeArmingDepthObservability,
   type CompletionArmingState,
 } from '@/lib/camera/squat/squat-completion-arming';
 import { getSquatHmmArmingAssistDecision } from '@/lib/camera/squat/squat-arming-assist';
@@ -17,7 +18,12 @@ import {
 } from '@/lib/camera/squat/squat-internal-quality';
 import { getSquatPerStepDiagnostics } from '@/lib/camera/step-joint-spec';
 import { decodeSquatHmm } from '@/lib/camera/squat/squat-hmm';
-import type { EvaluatorResult, EvaluatorMetric, SquatCalibrationDebug } from './types';
+import type {
+  EvaluatorResult,
+  EvaluatorMetric,
+  SquatCalibrationDebug,
+  SquatDepthCalibrationDebug,
+} from './types';
 import { squatCompletionBlockedReasonToCode } from '@/lib/camera/squat-completion-state';
 
 const MIN_VALID_FRAMES = 8;
@@ -140,7 +146,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         ? decodeSquatHmm(naturalCompletionFrames)
         : hmmOnValid;
 
-  const completionArming: CompletionArmingState = {
+  let completionArming: CompletionArmingState = {
     ...baseArming,
     hmmArmingAssistEligible: armingAssistDec.assistEligible,
     hmmArmingAssistApplied: armingAssistDec.assistApplied,
@@ -156,6 +162,24 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
           armingPeakAnchored: undefined,
         }
       : {}),
+  };
+  completionArming = mergeArmingDepthObservability(valid, completionArming);
+
+  const primaryDepthCalib = getNumbers(valid.map((frame) => frame.derived.squatDepthProxy));
+  const blendedDepthCalib = getNumbers(
+    valid.map((frame) =>
+      typeof frame.derived.squatDepthProxyBlended === 'number'
+        ? frame.derived.squatDepthProxyBlended
+        : frame.derived.squatDepthProxy
+    )
+  );
+  const maxPrimaryCalib = primaryDepthCalib.length > 0 ? Math.max(...primaryDepthCalib) : 0;
+  const maxBlendedCalib = blendedDepthCalib.length > 0 ? Math.max(...blendedDepthCalib) : 0;
+  const squatDepthCalibration: SquatDepthCalibrationDebug = {
+    maxPrimaryDepth: Math.round(maxPrimaryCalib * 1000) / 1000,
+    maxBlendedDepth: Math.round(maxBlendedCalib * 1000) / 1000,
+    blendedDepthUsed: maxBlendedCalib > maxPrimaryCalib + 0.006,
+    armingDepthSource: completionArming.armingDepthSource ?? null,
   };
 
   const state = evaluateSquatCompletionState(completionFrames, {
@@ -308,6 +332,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       validFrameCount: valid.length,
       phaseHints: Array.from(new Set(valid.map((frame) => frame.phaseHint))),
       squatCompletionArming: completionArming,
+      squatDepthCalibration,
       squatInternalQuality,
       /** PR-CAM-09: typed completion state — auto-progression 이 highlightedMetrics 캐스팅 없이 읽는다 */
       squatCompletionState: state,
@@ -334,6 +359,10 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         sliceMissedMotionCode,
         /** PR-CAM-27: 폴백 arm 사용 여부 — depth-truth source chain 추적용 */
         completionArmingFallbackUsed: completionArming.armingFallbackUsed ? 1 : 0,
+        /** PR-04E1: primary vs blended 피크 (% 스케일은 depthPeak 와 동일) */
+        squatDepthPeakPrimary: Math.round(maxPrimaryCalib * 100),
+        squatDepthPeakBlended: Math.round(maxBlendedCalib * 100),
+        squatArmingDepthBlendAssisted: completionArming.armingDepthBlendAssisted ? 1 : 0,
         /** PR-CAM-28: 글로벌 피크 앞 standing 앵커 */
         completionArmingPeakAnchored: completionArming.armingPeakAnchored ? 1 : 0,
         /**

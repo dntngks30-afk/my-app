@@ -145,6 +145,13 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   lowQualityPassAllowed?: boolean;
   passOwner?: string;
   qualityOnlyWarnings?: string[];
+  /** PR-04E1 */
+  armingDepthSource?: string | null;
+  armingDepthPeak?: number | null;
+  squatDepthPeakPrimary?: number | null;
+  squatDepthPeakBlended?: number | null;
+  armingDepthBlendAssisted?: boolean;
+  armingFallbackUsed?: boolean;
   cycleProofPassed?: boolean;
   reversalConfirmedAfterDescend?: boolean;
   recoveryConfirmedAfterReversal?: boolean;
@@ -255,6 +262,12 @@ function extractSquatMobileObsFieldsFromGate(
   | 'lowQualityPassAllowed'
   | 'passOwner'
   | 'qualityOnlyWarnings'
+  | 'armingDepthSource'
+  | 'armingDepthPeak'
+  | 'squatDepthPeakPrimary'
+  | 'squatDepthPeakBlended'
+  | 'armingDepthBlendAssisted'
+  | 'armingFallbackUsed'
 > {
   const sc = gate.squatCycleDebug;
   const cs = gate.evaluatorResult?.debug?.squatCompletionState as
@@ -277,6 +290,12 @@ function extractSquatMobileObsFieldsFromGate(
     lowQualityPassAllowed: sc?.lowQualityPassAllowed,
     passOwner: sc?.passOwner,
     qualityOnlyWarnings: sc?.qualityOnlyWarnings,
+    armingDepthSource: sc?.armingDepthSource,
+    armingDepthPeak: sc?.armingDepthPeak,
+    squatDepthPeakPrimary: sc?.squatDepthPeakPrimary,
+    squatDepthPeakBlended: sc?.squatDepthPeakBlended,
+    armingDepthBlendAssisted: sc?.armingDepthBlendAssisted,
+    armingFallbackUsed: sc?.armingFallbackUsed,
     cycleProofPassed: sc?.cycleProofPassed,
     reversalConfirmedAfterDescend: sc?.reversalConfirmedAfterDescend,
     recoveryConfirmedAfterReversal: sc?.recoveryConfirmedAfterReversal,

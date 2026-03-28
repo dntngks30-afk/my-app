@@ -143,6 +143,13 @@ export interface AttemptSnapshot {
       lowQualityPassAllowed?: boolean;
       passOwner?: string;
       qualityOnlyWarnings?: string[];
+      /** PR-04E1: depth/arming 입력 trace */
+      armingDepthSource?: string | null;
+      armingDepthPeak?: number | null;
+      squatDepthPeakPrimary?: number | null;
+      squatDepthPeakBlended?: number | null;
+      armingDepthBlendAssisted?: boolean;
+      armingFallbackUsed?: boolean;
       /** PR-COMP-03 */
       squatInternalQuality?: SquatInternalQuality;
       /** CAM-shallow-obs: attempt-evidence보다 약한 관측 계약(저장·진단 전용) */
@@ -723,6 +730,12 @@ function buildDiagnosisSummary(
       lowQualityPassAllowed: sc.lowQualityPassAllowed,
       passOwner: sc.passOwner,
       qualityOnlyWarnings: sc.qualityOnlyWarnings,
+      armingDepthSource: sc.armingDepthSource,
+      armingDepthPeak: sc.armingDepthPeak,
+      squatDepthPeakPrimary: sc.squatDepthPeakPrimary,
+      squatDepthPeakBlended: sc.squatDepthPeakBlended,
+      armingDepthBlendAssisted: sc.armingDepthBlendAssisted,
+      armingFallbackUsed: sc.armingFallbackUsed,
       squatInternalQuality: gate.evaluatorResult.debug?.squatInternalQuality,
     };
 
