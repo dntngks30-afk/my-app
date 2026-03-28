@@ -13,6 +13,16 @@ import {
   detectSquatReversalConfirmation,
   readSquatCompletionDepthForReversal,
 } from '@/lib/camera/squat/squat-reversal-confirmation';
+import {
+  detectSquatEventCycle,
+  type SquatEventCycleResult,
+} from '@/lib/camera/squat/squat-event-cycle';
+
+/** PR-04E3B: 첫 attemptStarted 시점에 고정한 스트림·baseline — 동일 버퍼 내 재평가 없음 */
+type SquatDepthFreezeConfig = {
+  lockedRelativeDepthPeakSource: 'primary' | 'blended';
+  frozenBaselineStandingDepth: number;
+};
 
 /** PR-04E3A: completion peak / relative depth / 밴드 — PR-04E1 blended 우선 (arming·reversal 과 동일 read) */
 export function readSquatCompletionDepth(frame: PoseFeaturesFrame): number | null {
@@ -106,6 +116,15 @@ export interface SquatCompletionState extends MotionCompletionResult {
   rawDepthPeakBlended?: number;
   /** PR-04E3A: relativeDepthPeak·rawDepthPeak 계산에 쓴 스트림 */
   relativeDepthPeakSource?: 'primary' | 'blended';
+  /** PR-04E3B: attempt 시작 후 baseline 고정 적용 여부 */
+  baselineFrozen?: boolean;
+  baselineFrozenDepth?: number | null;
+  peakLatched?: boolean;
+  peakLatchedAtIndex?: number | null;
+  eventCyclePromoted?: boolean;
+  eventCycleSource?: 'rule' | 'rule_plus_hmm' | null;
+  /** PR-04E3B: shallow event-cycle 헬퍼 결과(관측·승격 판단 입력) */
+  squatEventCycle?: SquatEventCycleResult;
 }
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
@@ -147,6 +166,34 @@ function isRecoveryFinalizeFamilyRuleBlocked(reason: string | null): boolean {
     reason === 'low_rom_standing_finalize_not_satisfied' ||
     reason === 'ultra_low_rom_standing_finalize_not_satisfied'
   );
+}
+
+/** PR-04E3B: depthRows 빌드 — freeze 루프·core 공통 */
+type SquatCompletionDepthRow = {
+  index: number;
+  depthPrimary: number;
+  depthCompletion: number;
+  timestampMs: number;
+  phaseHint: PoseFeaturesFrame['phaseHint'];
+};
+
+function buildSquatCompletionDepthRows(validFrames: PoseFeaturesFrame[]): SquatCompletionDepthRow[] {
+  const depthRows: SquatCompletionDepthRow[] = [];
+  for (let vi = 0; vi < validFrames.length; vi++) {
+    const frame = validFrames[vi]!;
+    const p = frame.derived.squatDepthProxy;
+    if (typeof p !== 'number' || !Number.isFinite(p)) continue;
+    const cRead = readSquatCompletionDepth(frame);
+    const depthCompletion = cRead != null && Number.isFinite(cRead) ? cRead : p;
+    depthRows.push({
+      index: vi,
+      depthPrimary: p,
+      depthCompletion,
+      timestampMs: frame.timestampMs,
+      phaseHint: frame.phaseHint,
+    });
+  }
+  return depthRows;
 }
 
 const BASELINE_WINDOW = 6;
@@ -370,33 +417,14 @@ function getStandingRecoveryFinalizeGate(
   };
 }
 
-export function evaluateSquatCompletionState(
+function evaluateSquatCompletionCore(
   frames: PoseFeaturesFrame[],
-  options?: EvaluateSquatCompletionStateOptions
+  options: EvaluateSquatCompletionStateOptions | undefined,
+  depthFreeze: SquatDepthFreezeConfig | null
 ): SquatCompletionState {
   const validFrames = frames.filter((frame) => frame.isValid);
 
-  const depthRows: Array<{
-    index: number;
-    depthPrimary: number;
-    depthCompletion: number;
-    timestampMs: number;
-    phaseHint: PoseFeaturesFrame['phaseHint'];
-  }> = [];
-  for (let vi = 0; vi < validFrames.length; vi++) {
-    const frame = validFrames[vi]!;
-    const p = frame.derived.squatDepthProxy;
-    if (typeof p !== 'number' || !Number.isFinite(p)) continue;
-    const cRead = readSquatCompletionDepth(frame);
-    const depthCompletion = cRead != null && Number.isFinite(cRead) ? cRead : p;
-    depthRows.push({
-      index: vi,
-      depthPrimary: p,
-      depthCompletion,
-      timestampMs: frame.timestampMs,
-      phaseHint: frame.phaseHint,
-    });
-  }
+  const depthRows = buildSquatCompletionDepthRows(validFrames);
 
   if (depthRows.length === 0) {
     const emptyBase = {
@@ -445,6 +473,12 @@ export function evaluateSquatCompletionState(
       rawDepthPeakPrimary: 0,
       rawDepthPeakBlended: 0,
       relativeDepthPeakSource: 'primary',
+      baselineFrozen: false,
+      baselineFrozenDepth: null,
+      peakLatched: false,
+      peakLatchedAtIndex: null,
+      eventCyclePromoted: false,
+      eventCycleSource: null,
     };
   }
 
@@ -458,34 +492,72 @@ export function evaluateSquatCompletionState(
 
   const rawDepthPeakPrimary = Math.max(...depthRows.map((r) => r.depthPrimary));
   const rawDepthPeakBlended = Math.max(...depthRows.map((r) => r.depthCompletion));
-  const relativePrimary = Math.max(0, rawDepthPeakPrimary - baselinePrimary);
-  const relativeBlended = Math.max(0, rawDepthPeakBlended - baselineBlended);
 
-  const relativeDepthPeakSource: 'primary' | 'blended' =
-    relativePrimary >= COMPLETION_PRIMARY_DOMINANT_REL_PEAK
-      ? 'primary'
-      : relativeBlended >= LEGACY_ATTEMPT_FLOOR && relativeBlended > relativePrimary
-        ? 'blended'
-        : 'primary';
+  let relativeDepthPeakSource: 'primary' | 'blended';
+  let baselineStandingDepth: number;
+  const depthFrames: Array<{
+    index: number;
+    depth: number;
+    timestampMs: number;
+    phaseHint: PoseFeaturesFrame['phaseHint'];
+  }> = [];
+  let peakFrame: {
+    index: number;
+    depth: number;
+    timestampMs: number;
+    phaseHint: PoseFeaturesFrame['phaseHint'];
+  };
+  let peakRowPrimary: SquatCompletionDepthRow;
+  let rawDepthPeak: number;
+  let relativeDepthPeak: number;
 
-  const depthFrames = depthRows.map((r) => ({
-    index: r.index,
-    depth: relativeDepthPeakSource === 'blended' ? r.depthCompletion : r.depthPrimary,
-    timestampMs: r.timestampMs,
-    phaseHint: r.phaseHint,
-  }));
+  if (depthFreeze != null) {
+    relativeDepthPeakSource = depthFreeze.lockedRelativeDepthPeakSource;
+    baselineStandingDepth = depthFreeze.frozenBaselineStandingDepth;
+    for (const r of depthRows) {
+      depthFrames.push({
+        index: r.index,
+        depth: relativeDepthPeakSource === 'blended' ? r.depthCompletion : r.depthPrimary,
+        timestampMs: r.timestampMs,
+        phaseHint: r.phaseHint,
+      });
+    }
+    peakFrame = depthFrames.reduce((best, frame) => (frame.depth > best.depth ? frame : best));
+    peakRowPrimary = depthRows.reduce((best, row) =>
+      row.depthPrimary > best.depthPrimary ? row : best
+    );
+    rawDepthPeak = peakFrame.depth;
+    relativeDepthPeak = Math.max(0, rawDepthPeak - baselineStandingDepth);
+  } else {
+    const relativePrimary = Math.max(0, rawDepthPeakPrimary - baselinePrimary);
+    const relativeBlended = Math.max(0, rawDepthPeakBlended - baselineBlended);
 
-  const peakFrame = depthFrames.reduce((best, frame) =>
-    frame.depth > best.depth ? frame : best
-  );
-  const peakRowPrimary = depthRows.reduce((best, row) =>
-    row.depthPrimary > best.depthPrimary ? row : best
-  );
+    relativeDepthPeakSource =
+      relativePrimary >= COMPLETION_PRIMARY_DOMINANT_REL_PEAK
+        ? 'primary'
+        : relativeBlended >= LEGACY_ATTEMPT_FLOOR && relativeBlended > relativePrimary
+          ? 'blended'
+          : 'primary';
 
-  const rawDepthPeak = peakFrame.depth;
-  const baselineStandingDepth =
-    relativeDepthPeakSource === 'blended' ? baselineBlended : baselinePrimary;
-  const relativeDepthPeak = Math.max(0, rawDepthPeak - baselineStandingDepth);
+    for (const r of depthRows) {
+      depthFrames.push({
+        index: r.index,
+        depth: relativeDepthPeakSource === 'blended' ? r.depthCompletion : r.depthPrimary,
+        timestampMs: r.timestampMs,
+        phaseHint: r.phaseHint,
+      });
+    }
+
+    peakFrame = depthFrames.reduce((best, frame) => (frame.depth > best.depth ? frame : best));
+    peakRowPrimary = depthRows.reduce((best, row) =>
+      row.depthPrimary > best.depthPrimary ? row : best
+    );
+
+    rawDepthPeak = peakFrame.depth;
+    baselineStandingDepth =
+      relativeDepthPeakSource === 'blended' ? baselineBlended : baselinePrimary;
+    relativeDepthPeak = Math.max(0, rawDepthPeak - baselineStandingDepth);
+  }
 
   const baselineDepths = depthFrames.slice(0, BASELINE_WINDOW).map((frame) => frame.depth);
   const recovery = getSquatRecoverySignal(validFrames);
@@ -874,5 +946,106 @@ export function evaluateSquatCompletionState(
     rawDepthPeakPrimary,
     rawDepthPeakBlended,
     relativeDepthPeakSource,
+    baselineFrozen: depthFreeze != null,
+    baselineFrozenDepth: depthFreeze != null ? depthFreeze.frozenBaselineStandingDepth : null,
+    peakLatched: depthFreeze != null,
+    peakLatchedAtIndex: depthFreeze != null ? peakFrame.index : null,
+    eventCyclePromoted: false,
+    eventCycleSource: null,
+  };
+}
+
+/** PR-04E3B: event-cycle 승격이 타임·finalize 계약을 덮어쓰지 않도록 차단 */
+const PR_04E3B_NO_EVENT_PROMOTION_BLOCKS = new Set<string>([
+  'recovery_hold_too_short',
+  'low_rom_standing_finalize_not_satisfied',
+  'ultra_low_rom_standing_finalize_not_satisfied',
+  'descent_span_too_short',
+  'ascent_recovery_span_too_short',
+]);
+
+export function evaluateSquatCompletionState(
+  frames: PoseFeaturesFrame[],
+  options?: EvaluateSquatCompletionStateOptions
+): SquatCompletionState {
+  let depthFreeze: SquatDepthFreezeConfig | null = null;
+  const MIN_PREFIX = Math.max(8, MIN_BASELINE_FRAMES + 2);
+  if (frames.length >= MIN_PREFIX) {
+    for (let n = MIN_PREFIX; n <= frames.length; n++) {
+      const partial = evaluateSquatCompletionCore(frames.slice(0, n), options, null);
+      if (partial.attemptStarted) {
+        const validFull = frames.filter((f) => f.isValid);
+        const fullRows = buildSquatCompletionDepthRows(validFull);
+        if (fullRows.length >= BASELINE_WINDOW) {
+          const win = fullRows.slice(0, BASELINE_WINDOW);
+          const src = partial.relativeDepthPeakSource ?? 'primary';
+          const frozenBaseline =
+            src === 'blended'
+              ? Math.min(...win.map((r) => r.depthCompletion))
+              : Math.min(...win.map((r) => r.depthPrimary));
+          depthFreeze = {
+            lockedRelativeDepthPeakSource: src,
+            frozenBaselineStandingDepth: frozenBaseline,
+          };
+        }
+        break;
+      }
+    }
+  }
+
+  let state = evaluateSquatCompletionCore(frames, options, depthFreeze);
+
+  const validForEvent = frames.filter((f) => f.isValid);
+  const squatEventCycle = detectSquatEventCycle(validForEvent, {
+    hmm: options?.hmm ?? undefined,
+    baselineFrozenDepth: state.baselineFrozenDepth ?? state.baselineStandingDepth,
+    lockedSource: state.relativeDepthPeakSource ?? null,
+    baselineFrozen: state.baselineFrozen === true,
+    peakLatched: state.peakLatched === true,
+    peakLatchedAtIndex: state.peakLatchedAtIndex ?? null,
+  });
+
+  state = { ...state, squatEventCycle };
+
+  const ruleBlock = state.ruleCompletionBlockedReason ?? null;
+  const finalizeOk =
+    state.standingRecoveryFinalizeReason === 'standing_hold_met' ||
+    state.standingRecoveryFinalizeReason === 'low_rom_guarded_finalize' ||
+    state.standingRecoveryFinalizeReason === 'ultra_low_rom_guarded_finalize';
+
+  const canEventPromote =
+    state.completionPassReason === 'not_confirmed' &&
+    ruleBlock != null &&
+    !PR_04E3B_NO_EVENT_PROMOTION_BLOCKS.has(ruleBlock) &&
+    finalizeOk &&
+    state.standingRecoveredAtMs != null &&
+    squatEventCycle.detected &&
+    squatEventCycle.band != null &&
+    state.relativeDepthPeak < STANDARD_OWNER_FLOOR;
+
+  if (!canEventPromote) {
+    return state;
+  }
+
+  const promotedPassReason =
+    squatEventCycle.band === 'low_rom' ? 'low_rom_event_cycle' : 'ultra_low_rom_event_cycle';
+  const promotedSource: 'rule' | 'rule_plus_hmm' =
+    squatEventCycle.source === 'rule_plus_hmm' ? 'rule_plus_hmm' : 'rule';
+
+  return {
+    ...state,
+    completionBlockedReason: null,
+    completionSatisfied: true,
+    completionPassReason: promotedPassReason,
+    cycleComplete: true,
+    successPhaseAtOpen: 'standing_recovered',
+    completionMachinePhase: deriveSquatCompletionMachinePhase({
+      completionSatisfied: true,
+      currentSquatPhase: state.currentSquatPhase,
+      downwardCommitmentReached: state.downwardCommitmentReached,
+    }),
+    eventCyclePromoted: true,
+    eventCycleSource: promotedSource,
+    postAssistCompletionBlockedReason: null,
   };
 }

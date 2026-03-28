@@ -562,11 +562,35 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
             ? Math.round(state.reversalDepthDrop * 1000) / 1000
             : null,
         squatReversalFrameCount: state.reversalFrameCount ?? null,
+        /** PR-04E3B: event-cycle / freeze / latch 관측 (정수 코드: band 0=none 1=low 2=ultra) */
+        squatBaselineFrozen: state.baselineFrozen ? 1 : 0,
+        squatPeakLatched: state.peakLatched ? 1 : 0,
+        squatPeakLatchedAtIndex: state.peakLatchedAtIndex ?? null,
+        baselineFrozenDepth:
+          state.baselineFrozenDepth != null && Number.isFinite(state.baselineFrozenDepth)
+            ? Math.round(state.baselineFrozenDepth * 1000) / 1000
+            : null,
+        squatEventCycleDetected: state.squatEventCycle?.detected ? 1 : 0,
+        squatEventCycleBandCode:
+          state.squatEventCycle?.band === 'low_rom'
+            ? 1
+            : state.squatEventCycle?.band === 'ultra_low_rom'
+              ? 2
+              : 0,
+        squatEventCyclePromoted: state.eventCyclePromoted ? 1 : 0,
+        squatEventCycleSourceCode:
+          state.eventCycleSource === 'rule'
+            ? 1
+            : state.eventCycleSource === 'rule_plus_hmm'
+              ? 2
+              : 0,
       },
       perStepDiagnostics: perStepRecord,
       /** PR-HMM-01B: shadow decoder 전체 결과 — debug 전용 */
       squatHmm,
       squatCalibration,
+      /** PR-04E3B: shallow event-cycle 헬퍼 — completion-state 가 채움 */
+      squatEventCycle: state.squatEventCycle,
     },
   };
 }

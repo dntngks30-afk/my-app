@@ -9,6 +9,7 @@ import type { OverheadInternalQuality } from '@/lib/camera/overhead/overhead-int
 import type { CompletionArmingState } from '@/lib/camera/squat/squat-completion-arming';
 import type { SquatCompletionState } from '@/lib/camera/squat-completion-state';
 import type { SquatHmmDecodeResult } from '@/lib/camera/squat/squat-hmm';
+import type { SquatEventCycleResult } from '@/lib/camera/squat/squat-event-cycle';
 
 /** PR-04E1: depth primary vs blended 관측 — gate 미사용 */
 export interface SquatDepthCalibrationDebug {
@@ -100,6 +101,8 @@ export interface EvaluatorDebugSummary {
   squatDepthCalibration?: SquatDepthCalibrationDebug;
   /** PR-04E2: reversal 확인(역전) calibration — pass gate 미사용 */
   squatReversalCalibration?: SquatReversalCalibrationDebug;
+  /** PR-04E3B: shallow event-cycle 헬퍼 결과 — pass 보조 입력·관측 전용 */
+  squatEventCycle?: SquatEventCycleResult;
   /**
    * PR-CAM-13: 오버헤드 진행 상태 전체(typed) — squat-style 소유권 분리.
    * - progressionSatisfied: 진행 gate truth (strict | fallback | easy 통합).

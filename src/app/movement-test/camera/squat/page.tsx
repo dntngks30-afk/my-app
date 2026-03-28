@@ -1602,6 +1602,20 @@ export default function CameraSquatPage() {
                   primary: {gate.squatCycleDebug?.rawDepthPeakPrimary ?? '—'} | rawPeak blended:{' '}
                   {gate.squatCycleDebug?.rawDepthPeakBlended ?? '—'}
                 </p>
+                {/* PR-04E3B: baseline freeze / peak latch / event-cycle owner (dev) */}
+                <p className="mt-2 font-medium text-cyan-200/80">event-cycle owner (dev)</p>
+                <p className="break-all">
+                  baselineFrozen: {String(gate.squatCycleDebug?.baselineFrozen ?? '—')} | frozenDepth:{' '}
+                  {gate.squatCycleDebug?.baselineFrozenDepth ?? '—'} | peakLatched:{' '}
+                  {String(gate.squatCycleDebug?.peakLatched ?? '—')} | peakIdx:{' '}
+                  {gate.squatCycleDebug?.peakLatchedAtIndex ?? '—'}
+                </p>
+                <p className="break-all">
+                  eventCycle: detected={String(gate.squatCycleDebug?.eventCycleDetected ?? '—')} | band:{' '}
+                  {gate.squatCycleDebug?.eventCycleBand ?? '—'} | promoted:{' '}
+                  {String(gate.squatCycleDebug?.eventCyclePromoted ?? '—')} | source:{' '}
+                  {gate.squatCycleDebug?.eventCycleSource ?? '—'}
+                </p>
                 {/* PR-HMM-03A: dev-only calibration strip — production UX unchanged */}
                 <p className="mt-2 font-medium text-cyan-200/80">calibration (dev)</p>
                 <p className="break-all">

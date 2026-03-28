@@ -158,6 +158,15 @@ export interface AttemptSnapshot {
       relativeDepthPeakSource?: string | null;
       rawDepthPeakPrimary?: number | null;
       rawDepthPeakBlended?: number | null;
+      /** PR-04E3B: shallow event-cycle owner 관측 */
+      baselineFrozen?: boolean;
+      baselineFrozenDepth?: number | null;
+      peakLatched?: boolean;
+      peakLatchedAtIndex?: number | null;
+      eventCycleDetected?: boolean;
+      eventCycleBand?: string | null;
+      eventCyclePromoted?: boolean;
+      eventCycleSource?: string | null;
       /** PR-COMP-03 */
       squatInternalQuality?: SquatInternalQuality;
       /** CAM-shallow-obs: attempt-evidence보다 약한 관측 계약(저장·진단 전용) */
@@ -286,6 +295,11 @@ export interface SquatAttemptObservation {
   motionRecoveryDetected?: boolean;
   /** 기록 시점 hasShallowSquatObservation(gate) */
   shallowObservationContract?: boolean;
+  /** PR-04E3B: blocked reason 전환 시점 canonical cycle owner 추적 */
+  baselineFrozen?: boolean;
+  peakLatched?: boolean;
+  eventCycleDetected?: boolean;
+  eventCyclePromoted?: boolean;
   debugVersion: string;
 }
 
@@ -496,6 +510,10 @@ export function buildSquatAttemptObservation(
     motionBottomDetected: !!sc?.bottomDetected,
     motionRecoveryDetected: !!sc?.recoveryDetected,
     shallowObservationContract: shallowContract,
+    baselineFrozen: csFull?.baselineFrozen,
+    peakLatched: csFull?.peakLatched,
+    eventCycleDetected: csFull?.squatEventCycle?.detected,
+    eventCyclePromoted: csFull?.eventCyclePromoted,
     debugVersion: `${OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
   };
 }
@@ -752,6 +770,14 @@ function buildDiagnosisSummary(
         typeof sc.rawDepthPeakPrimary === 'number' ? sc.rawDepthPeakPrimary : null,
       rawDepthPeakBlended:
         typeof sc.rawDepthPeakBlended === 'number' ? sc.rawDepthPeakBlended : null,
+      baselineFrozen: sc.baselineFrozen,
+      baselineFrozenDepth: sc.baselineFrozenDepth ?? null,
+      peakLatched: sc.peakLatched,
+      peakLatchedAtIndex: sc.peakLatchedAtIndex ?? null,
+      eventCycleDetected: sc.eventCycleDetected,
+      eventCycleBand: sc.eventCycleBand ?? null,
+      eventCyclePromoted: sc.eventCyclePromoted,
+      eventCycleSource: sc.eventCycleSource ?? null,
       squatInternalQuality: gate.evaluatorResult.debug?.squatInternalQuality,
     };
 

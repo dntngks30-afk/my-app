@@ -160,6 +160,15 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   relativeDepthPeakSource?: string | null;
   rawDepthPeakPrimary?: number | null;
   rawDepthPeakBlended?: number | null;
+  /** PR-04E3B */
+  baselineFrozen?: boolean;
+  baselineFrozenDepth?: number | null;
+  peakLatched?: boolean;
+  peakLatchedAtIndex?: number | null;
+  eventCycleDetected?: boolean;
+  eventCycleBand?: string | null;
+  eventCyclePromoted?: boolean;
+  eventCycleSource?: string | null;
   cycleProofPassed?: boolean;
   reversalConfirmedAfterDescend?: boolean;
   recoveryConfirmedAfterReversal?: boolean;
@@ -282,6 +291,14 @@ function extractSquatMobileObsFieldsFromGate(
   | 'relativeDepthPeakSource'
   | 'rawDepthPeakPrimary'
   | 'rawDepthPeakBlended'
+  | 'baselineFrozen'
+  | 'baselineFrozenDepth'
+  | 'peakLatched'
+  | 'peakLatchedAtIndex'
+  | 'eventCycleDetected'
+  | 'eventCycleBand'
+  | 'eventCyclePromoted'
+  | 'eventCycleSource'
 > {
   const sc = gate.squatCycleDebug;
   const cs = gate.evaluatorResult?.debug?.squatCompletionState as
@@ -316,6 +333,14 @@ function extractSquatMobileObsFieldsFromGate(
     relativeDepthPeakSource: sc?.relativeDepthPeakSource ?? null,
     rawDepthPeakPrimary: sc?.rawDepthPeakPrimary ?? null,
     rawDepthPeakBlended: sc?.rawDepthPeakBlended ?? null,
+    baselineFrozen: sc?.baselineFrozen,
+    baselineFrozenDepth: sc?.baselineFrozenDepth ?? null,
+    peakLatched: sc?.peakLatched,
+    peakLatchedAtIndex: sc?.peakLatchedAtIndex ?? null,
+    eventCycleDetected: sc?.eventCycleDetected,
+    eventCycleBand: sc?.eventCycleBand ?? null,
+    eventCyclePromoted: sc?.eventCyclePromoted,
+    eventCycleSource: sc?.eventCycleSource ?? null,
     cycleProofPassed: sc?.cycleProofPassed,
     reversalConfirmedAfterDescend: sc?.reversalConfirmedAfterDescend,
     recoveryConfirmedAfterReversal: sc?.recoveryConfirmedAfterReversal,
@@ -559,6 +584,15 @@ export interface SquatFailedShallowSnapshot {
   relativeDepthPeakSource?: string | null;
   rawDepthPeakPrimary?: number | null;
   rawDepthPeakBlended?: number | null;
+  /** PR-04E3B */
+  baselineFrozen?: boolean;
+  baselineFrozenDepth?: number | null;
+  peakLatched?: boolean;
+  peakLatchedAtIndex?: number | null;
+  eventCycleDetected?: boolean;
+  eventCycleBand?: string | null;
+  eventCyclePromoted?: boolean;
+  eventCycleSource?: string | null;
 }
 
 /** CAM-OBS: 실패 스냅샷 기록 옵션(진단 전용, pass 로직 무관) */
@@ -677,6 +711,14 @@ export function recordSquatFailedShallowSnapshot(
       relativeDepthPeakSource: sc?.relativeDepthPeakSource ?? null,
       rawDepthPeakPrimary: sc?.rawDepthPeakPrimary ?? null,
       rawDepthPeakBlended: sc?.rawDepthPeakBlended ?? null,
+      baselineFrozen: sc?.baselineFrozen,
+      baselineFrozenDepth: sc?.baselineFrozenDepth ?? null,
+      peakLatched: sc?.peakLatched,
+      peakLatchedAtIndex: sc?.peakLatchedAtIndex ?? null,
+      eventCycleDetected: sc?.eventCycleDetected,
+      eventCycleBand: sc?.eventCycleBand ?? null,
+      eventCyclePromoted: sc?.eventCyclePromoted,
+      eventCycleSource: sc?.eventCycleSource ?? null,
     };
 
     if (typeof window === 'undefined') return;

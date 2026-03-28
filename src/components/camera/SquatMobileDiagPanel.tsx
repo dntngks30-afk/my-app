@@ -66,6 +66,11 @@ function buildExportPayload(entry: SquatMobileDiagEntry | null) {
         standingRecoveryHoldMs: p.standingRecoveryHoldMs,
         squatDescentToPeakMs: p.squatDescentToPeakMs,
         squatReversalToStandingMs: p.squatReversalToStandingMs,
+        baselineFrozen: p.baselineFrozen,
+        peakLatched: p.peakLatched,
+        eventCycleDetected: p.eventCycleDetected,
+        eventCyclePromoted: p.eventCyclePromoted,
+        eventCycleBand: p.eventCycleBand,
       },
       raw: p,
     };
@@ -98,8 +103,13 @@ function buildExportPayload(entry: SquatMobileDiagEntry | null) {
       reversalConfirmedAfterDescend: p.reversalConfirmedAfterDescend,
       recoveryConfirmedAfterReversal: p.recoveryConfirmedAfterReversal,
       standingRecoveryHoldMs: p.standingRecoveryHoldMs,
-      squatDescentToPeakMs: p.squatDescentToPeakMs,
-      squatReversalToStandingMs: p.squatReversalToStandingMs,
+        squatDescentToPeakMs: p.squatDescentToPeakMs,
+        squatReversalToStandingMs: p.squatReversalToStandingMs,
+        baselineFrozen: p.baselineFrozen,
+        peakLatched: p.peakLatched,
+        eventCycleDetected: p.eventCycleDetected,
+        eventCyclePromoted: p.eventCyclePromoted,
+        eventCycleBand: p.eventCycleBand,
     },
     raw: p,
   };
@@ -258,6 +268,11 @@ function SquatDiagFields({ entry }: { entry: SquatMobileDiagEntry }) {
           <Row label="standingRecoveryHoldMs" value={p.standingRecoveryHoldMs} />
           <Row label="squatDescentToPeakMs" value={p.squatDescentToPeakMs} />
           <Row label="squatReversalToStandingMs" value={p.squatReversalToStandingMs} />
+          <Row label="baselineFrozen" value={p.baselineFrozen} />
+          <Row label="peakLatched" value={p.peakLatched} />
+          <Row label="eventCycleDetected" value={p.eventCycleDetected} />
+          <Row label="eventCyclePromoted" value={p.eventCyclePromoted} />
+          <Row label="eventCycleBand" value={p.eventCycleBand} />
         </section>
       </div>
     );
@@ -298,6 +313,11 @@ function SquatDiagFields({ entry }: { entry: SquatMobileDiagEntry }) {
         <Row label="standingRecoveryHoldMs" value={p.standingRecoveryHoldMs} />
         <Row label="squatDescentToPeakMs" value={p.squatDescentToPeakMs} />
         <Row label="squatReversalToStandingMs" value={p.squatReversalToStandingMs} />
+        <Row label="baselineFrozen" value={p.baselineFrozen} />
+        <Row label="peakLatched" value={p.peakLatched} />
+        <Row label="eventCycleDetected" value={p.eventCycleDetected} />
+        <Row label="eventCyclePromoted" value={p.eventCyclePromoted} />
+        <Row label="eventCycleBand" value={p.eventCycleBand} />
       </section>
     </div>
   );

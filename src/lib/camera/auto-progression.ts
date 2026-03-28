@@ -183,6 +183,15 @@ export interface SquatCycleDebug {
   relativeDepthPeakSource?: string | null;
   rawDepthPeakPrimary?: number | null;
   rawDepthPeakBlended?: number | null;
+  /** PR-04E3B: baseline freeze / peak latch / event-cycle owner 관측 */
+  baselineFrozen?: boolean;
+  baselineFrozenDepth?: number | null;
+  peakLatched?: boolean;
+  peakLatchedAtIndex?: number | null;
+  eventCycleDetected?: boolean;
+  eventCycleBand?: string | null;
+  eventCyclePromoted?: boolean;
+  eventCycleSource?: string | null;
 }
 
 export interface ExerciseGateResult {
@@ -952,6 +961,17 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.rawDepthPeakBlended =
     typeof cs?.rawDepthPeakBlended === 'number' ? cs.rawDepthPeakBlended : null;
 
+  squatCycleDebug.baselineFrozen = cs?.baselineFrozen;
+  squatCycleDebug.baselineFrozenDepth = cs?.baselineFrozenDepth ?? null;
+  squatCycleDebug.peakLatched = cs?.peakLatched;
+  squatCycleDebug.peakLatchedAtIndex = cs?.peakLatchedAtIndex ?? null;
+  const ec = cs?.squatEventCycle;
+  squatCycleDebug.eventCycleDetected = ec?.detected;
+  squatCycleDebug.eventCycleBand = ec?.band ?? null;
+  squatCycleDebug.eventCyclePromoted = cs?.eventCyclePromoted;
+  squatCycleDebug.eventCycleSource =
+    cs?.eventCycleSource ?? (ec?.source === 'none' ? null : ec?.source) ?? null;
+
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';
     squatCycleDebug.completionRejectedReason = 'guardrail_not_complete';
@@ -985,9 +1005,10 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.completionPathUsed =
     completionPassReason === 'standard_cycle'
       ? 'standard'
-      : completionPassReason === 'low_rom_event_cycle'
+      : completionPassReason === 'low_rom_event_cycle' || completionPassReason === 'low_rom_cycle'
         ? 'low_rom'
-        : completionPassReason === 'ultra_low_rom_event_cycle'
+        : completionPassReason === 'ultra_low_rom_event_cycle' ||
+            completionPassReason === 'ultra_low_rom_cycle'
           ? 'ultra_low_rom'
           : undefined;
   squatCycleDebug.successPhaseAtOpen = 'standing_recovered';
