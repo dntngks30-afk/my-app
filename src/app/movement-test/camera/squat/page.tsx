@@ -47,6 +47,14 @@ import {
   squatDownwardCommitmentReachedObservable,
 } from '@/lib/camera/camera-trace';
 import {
+  recordCaptureSessionTerminalBundle,
+  squatTerminalKindFromGate,
+  getRecentCaptureSessionBundles,
+  getLatestCaptureSessionBundle,
+  copyLatestCaptureSessionBundleJson,
+  clearCaptureSessionBundles,
+} from '@/lib/camera/camera-trace-bundle';
+import {
   recordSquatSuccessSnapshot,
   recordSquatFailedShallowSnapshot,
   hasShallowSquatObservation,
@@ -224,6 +232,8 @@ export default function CameraSquatPage() {
   const [failureFreezeRetryEpoch, setFailureFreezeRetryEpoch] = useState(0);
   const debugEnabled = IS_DEV;
   const currentStepKey = `${STEP_ID}:${previewKey}`;
+  const latestStepKeyForBundleRef = useRef(currentStepKey);
+  latestStepKeyForBundleRef.current = currentStepKey;
   const ambiguousRetryPlayedForStepRef = useRef<string | null>(null);
   const prevStepKeyForAmbiguousRef = useRef(currentStepKey);
   /** CAM-27: capturing 중 스쿼트 사전 관측 엣지(프레임당 기록 금지) */
@@ -247,6 +257,8 @@ export default function CameraSquatPage() {
   const squatTerminalAttemptSnapshotRef = useRef<string | null>(null);
   /** capture_session_terminal 관측 이벤트 1회(shallow가 늦게 true여도 1회 기록) */
   const squatTerminalObservationRef = useRef<string | null>(null);
+  /** PR-CAM-SNAPSHOT-BUNDLE-01: 동일 캡처 스텝당 터미널 번들 1회 */
+  const squatSessionBundleRecordedForStepKeyRef = useRef<string | null>(null);
   /** hasShallowSquatObservation 최초 충족 엣지 — shallow_observed 이벤트 1회 */
   const squatShallowObservedEdgeRef = useRef(false);
   /** PR-CAM-10: 애매 재시도 음성 1회 + 이후 completion 관측(디버그) */
@@ -271,6 +283,7 @@ export default function CameraSquatPage() {
   const finalPassLatched = isFinalPassLatched(STEP_ID, gate);
   previewKeyRef.current = previewKey;
   finalPassLatchedRef.current = finalPassLatched;
+  statsRef.current = stats;
   const effectivePassLatched = finalPassLatched || passLatched;
   const setupFramingHint = useMemo(() => getSetupFramingHint(landmarks), [landmarks]);
   const liveReadinessSummary = useMemo(
@@ -305,6 +318,8 @@ export default function CameraSquatPage() {
       readinessSmoothingApplied,
     ]
   );
+  const readinessTraceSummaryRef = useRef(readinessTraceSummary);
+  readinessTraceSummaryRef.current = readinessTraceSummary;
 
   useEffect(() => {
     if (!debugEnabled || stats.sampledFrameCount === 0) return;
@@ -416,6 +431,7 @@ export default function CameraSquatPage() {
     squatObsHadShallowThisCaptureRef.current = false;
     squatTerminalAttemptSnapshotRef.current = null;
     squatTerminalObservationRef.current = null;
+    squatSessionBundleRecordedForStepKeyRef.current = null;
     squatShallowObservedEdgeRef.current = false;
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
@@ -766,6 +782,21 @@ export default function CameraSquatPage() {
       competingPaths: [],
     });
     persistCurrentStep();
+    if (squatSessionBundleRecordedForStepKeyRef.current !== currentStepKey) {
+      recordCaptureSessionTerminalBundle({
+        stepId: STEP_ID,
+        gate,
+        context: readinessTraceSummary,
+        options: {
+          liveCueingEnabled: cameraPhase === 'capturing',
+          autoNextObservation: 'pass_latched',
+          successTriggeredAtMs: passLatchedAtMs,
+        },
+        route: '/movement-test/camera/squat',
+        terminalKind: 'success',
+      });
+      squatSessionBundleRecordedForStepKeyRef.current = currentStepKey;
+    }
     setProgressionState('passed');
     setStatusMessage(gate.uiMessage);
     appendTransition('passed', 'pass_latched');
@@ -777,11 +808,13 @@ export default function CameraSquatPage() {
     }
   }, [
     appendTransition,
+    cameraPhase,
     currentStepKey,
     effectivePassLatched,
     gate,
     passLatched,
     persistCurrentStep,
+    readinessTraceSummary,
     stop,
     urlDebugFlags.diagModal,
   ]);
@@ -842,6 +875,20 @@ export default function CameraSquatPage() {
           liveCueingEnabled: true,
           autoNextObservation: `capture_terminal:${gate.progressionState}:${gate.status}`,
         });
+        if (squatSessionBundleRecordedForStepKeyRef.current !== currentStepKey) {
+          recordCaptureSessionTerminalBundle({
+            stepId: STEP_ID,
+            gate,
+            context: readinessTraceSummary,
+            options: {
+              liveCueingEnabled: true,
+              autoNextObservation: `capture_terminal:${gate.progressionState}:${gate.status}`,
+            },
+            route: '/movement-test/camera/squat',
+            terminalKind: squatTerminalKindFromGate(gate),
+          });
+          squatSessionBundleRecordedForStepKeyRef.current = currentStepKey;
+        }
       }
     }
 
@@ -998,6 +1045,45 @@ export default function CameraSquatPage() {
   useEffect(() => {
     gateRef.current = gate;
   }, [gate]);
+
+  useEffect(() => {
+    if (!IS_DEV || typeof window === 'undefined') return;
+    type CamTraceApi = {
+      getLatestCaptureSessionBundle: typeof getLatestCaptureSessionBundle;
+      getRecentCaptureSessionBundles: typeof getRecentCaptureSessionBundles;
+      copyLatestCaptureSessionBundleJson: typeof copyLatestCaptureSessionBundleJson;
+      clearCaptureSessionBundles: typeof clearCaptureSessionBundles;
+    };
+    const api: CamTraceApi = {
+      getLatestCaptureSessionBundle,
+      getRecentCaptureSessionBundles,
+      copyLatestCaptureSessionBundleJson,
+      clearCaptureSessionBundles,
+    };
+    (window as Window & { __MOVE_RE_CAMERA_TRACE__?: CamTraceApi }).__MOVE_RE_CAMERA_TRACE__ = api;
+    return () => {
+      delete (window as Window & { __MOVE_RE_CAMERA_TRACE__?: CamTraceApi }).__MOVE_RE_CAMERA_TRACE__;
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      const stepKey = latestStepKeyForBundleRef.current;
+      if (squatSessionBundleRecordedForStepKeyRef.current === stepKey) return;
+      const g = gateRef.current;
+      if (!g) return;
+      if (statsRef.current.sampledFrameCount < 1) return;
+      recordCaptureSessionTerminalBundle({
+        stepId: STEP_ID,
+        gate: g,
+        context: readinessTraceSummaryRef.current,
+        options: { liveCueingEnabled: false, autoNextObservation: 'unmount_abandoned' },
+        route: '/movement-test/camera/squat',
+        terminalKind: 'abandoned',
+      });
+      squatSessionBundleRecordedForStepKeyRef.current = stepKey;
+    };
+  }, []);
 
   const prevCameraPhaseForShallowResetRef = useRef(cameraPhase);
   useEffect(() => {

@@ -1004,6 +1004,8 @@ export function clearAttempts(): void {
   try {
     localStorage.removeItem(TRACE_STORAGE_KEY);
     localStorage.removeItem(OBSERVATION_STORAGE_KEY);
+    /** PR-CAM-SNAPSHOT-BUNDLE-01: 번들 저장소 — camera-trace-bundle.ts BUNDLE_STORAGE_KEY 와 동일 문자열 */
+    localStorage.removeItem('moveReCameraTraceBundle:v1');
   } catch {
     // ignore
   }
