@@ -417,6 +417,50 @@ function getStandingRecoveryFinalizeGate(
   };
 }
 
+/**
+ * CAM-30: 동일 attempt 안에서 terminal 단계 증거가 이미 쌓인 뒤
+ * completionBlockedReason 이 더 이른 단계 사유로 역행하는 것을 막는다(임계·finalize 미변경).
+ */
+function normalizeCompletionBlockedReasonForTerminalStage(args: {
+  completionSatisfied: boolean;
+  attemptStarted: boolean;
+  downwardCommitmentReached: boolean;
+  reversalConfirmedAfterDescend: boolean;
+  standingRecoveredAtMs: number | null | undefined;
+  standingRecoveryFinalizeReason: string | null;
+  completionBlockedReason: string | null;
+}): string | null {
+  if (args.completionSatisfied) return null;
+
+  const cur = args.completionBlockedReason;
+
+  if (args.standingRecoveredAtMs != null) {
+    const allowedStanding = new Set([
+      'recovery_hold_too_short',
+      'low_rom_standing_finalize_not_satisfied',
+      'ultra_low_rom_standing_finalize_not_satisfied',
+    ]);
+    if (cur != null && allowedStanding.has(cur)) return cur;
+    return 'recovery_hold_too_short';
+  }
+
+  if (args.reversalConfirmedAfterDescend) {
+    const allowedReversal = new Set([
+      'not_standing_recovered',
+      'low_rom_standing_finalize_not_satisfied',
+      'ultra_low_rom_standing_finalize_not_satisfied',
+    ]);
+    if (cur != null && allowedReversal.has(cur)) return cur;
+    return 'not_standing_recovered';
+  }
+
+  if (args.attemptStarted && args.downwardCommitmentReached) {
+    return 'no_reversal';
+  }
+
+  return cur;
+}
+
 function evaluateSquatCompletionCore(
   frames: PoseFeaturesFrame[],
   options: EvaluateSquatCompletionStateOptions | undefined,
@@ -812,11 +856,23 @@ function evaluateSquatCompletionCore(
     attemptAdmissionSatisfied,
     committedFrameExists: committedFrame != null,
   });
-  const completionBlockedReason = hmmAssistDecision.assistApplied
+  const rawPostAssistCompletionBlockedReason = hmmAssistDecision.assistApplied
     ? null
     : ruleCompletionBlockedReason;
 
-  const postAssistCompletionBlockedReason = completionBlockedReason;
+  const reversalConfirmedAfterDescend = reversalFrame != null;
+
+  const completionBlockedReason = normalizeCompletionBlockedReasonForTerminalStage({
+    completionSatisfied: rawPostAssistCompletionBlockedReason == null,
+    attemptStarted,
+    downwardCommitmentReached,
+    reversalConfirmedAfterDescend,
+    standingRecoveredAtMs: standingRecovery.standingRecoveredAtMs,
+    standingRecoveryFinalizeReason: standingRecoveryFinalize.finalizeReason,
+    completionBlockedReason: rawPostAssistCompletionBlockedReason,
+  });
+
+  const postAssistCompletionBlockedReason = rawPostAssistCompletionBlockedReason;
   const assistSuppressedByFinalize =
     options?.hmm != null &&
     hmmMeetsStrongAssistEvidence(options.hmm) &&
