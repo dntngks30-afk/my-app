@@ -234,6 +234,11 @@ const STANDARD_LABEL_FLOOR = 0.1;
  */
 const STANDARD_OWNER_FLOOR = 0.4;
 const STANDING_RECOVERY_TOLERANCE_FLOOR = 0.015;
+/**
+ * PR-04E4C: low_rom / ultra_low_rom 만 standing recovery 바닥 소폭 완화.
+ * 스캔 토폴로지(역방향 연속 접미사)는 그대로 — 임계만 완화해 끝 1프레임 노이즈 FN 완화.
+ */
+const STANDING_RECOVERY_TOLERANCE_FLOOR_LOW_BAND = 0.017;
 const STANDING_RECOVERY_TOLERANCE_RATIO = 0.18;
 const MIN_STANDING_RECOVERY_FRAMES = 2;
 const MIN_STANDING_RECOVERY_HOLD_MS = 160;
@@ -288,23 +293,32 @@ function recoveryMeetsUltraGuardedFinalizeProof(
 function getStandingRecoveryWindow(
   frames: Array<{ index: number; depth: number; timestampMs: number }>,
   baselineStandingDepth: number,
-  relativeDepthPeak: number
+  relativeDepthPeak: number,
+  evidenceLabel: SquatEvidenceLabel
 ): {
   standingRecoveredAtMs?: number;
   standingRecoveryHoldMs: number;
   standingRecoveryFrameCount: number;
   standingRecoveryThreshold: number;
 } {
+  const toleranceFloor =
+    evidenceLabel === 'low_rom' || evidenceLabel === 'ultra_low_rom'
+      ? STANDING_RECOVERY_TOLERANCE_FLOOR_LOW_BAND
+      : STANDING_RECOVERY_TOLERANCE_FLOOR;
+
   if (frames.length === 0) {
     return {
       standingRecoveryHoldMs: 0,
       standingRecoveryFrameCount: 0,
-      standingRecoveryThreshold: STANDING_RECOVERY_TOLERANCE_FLOOR,
+      standingRecoveryThreshold: Math.max(
+        toleranceFloor,
+        relativeDepthPeak * STANDING_RECOVERY_TOLERANCE_RATIO
+      ),
     };
   }
 
   const standingRecoveryThreshold = Math.max(
-    STANDING_RECOVERY_TOLERANCE_FLOOR,
+    toleranceFloor,
     relativeDepthPeak * STANDING_RECOVERY_TOLERANCE_RATIO
   );
 
@@ -726,12 +740,13 @@ function evaluateSquatCompletionCore(
       revConf.reversalFrameCount >= 2;
   }
 
+  const evidenceLabel = getSquatEvidenceLabel(relativeDepthPeak, attemptAdmissionSatisfied);
   const standingRecovery = getStandingRecoveryWindow(
     depthFrames.filter((frame) => frame.index > peakFrame.index),
     baselineStandingDepth,
-    relativeDepthPeak
+    relativeDepthPeak,
+    evidenceLabel
   );
-  const evidenceLabel = getSquatEvidenceLabel(relativeDepthPeak, attemptAdmissionSatisfied);
   const standingRecoveryFinalize = getStandingRecoveryFinalizeGate(
     evidenceLabel,
     standingRecovery,
