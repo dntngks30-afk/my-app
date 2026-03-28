@@ -222,22 +222,25 @@ console.log('\n── A-extra2. suppressOneFrameDrops: 정상 하강 시 오탐 
   ok('A6: 정상 하강 오탐 없음 (suppressedCount === 0)', suppressedCount === 0, suppressedCount);
 }
 
-// ─── A-completion. rawDepthPeakPrimary 가 stable 을 반영 ────────────────────
+// ─── A-completion. proxy 피크 + stable 관측 (HOTFIX-04E5: owner 는 proxy 만) ──
 
-console.log('\n── A-completion. rawDepthPeakPrimary: stable primary 반영 ──');
+console.log('\n── A-completion. rawDepthPeakPrimary (proxy) + rawDepthPeakPrimaryStableObs ──');
 {
   // 피크 구간 근처 1프레임에서 primary 붕괴, stableDepth 는 정상값
   const collapseIdx = 17; // bottom 구간 첫 프레임 (index 18 = 8+10+0 → 18)
   const framesWithCollapse = makeShallowSquatFrames({ collapseAt: collapseIdx });
 
-  // rawDepthPeakPrimary: 붕괴가 있는 primary stream (0.003 이 포함된 EMA)
-  // stableDepth 는 0.18 이 유지된다
   const state = evaluateSquatCompletionState(framesWithCollapse, {});
 
   ok(
-    'A7: rawDepthPeakPrimary > 0.10 (near-zero 에서 복구)',
+    'A7: rawDepthPeakPrimary > 0.10 (다른 프레임 proxy 피크로 유지)',
     state.rawDepthPeakPrimary != null && state.rawDepthPeakPrimary > 0.10,
     state.rawDepthPeakPrimary
+  );
+  ok(
+    'A7b: rawDepthPeakPrimaryStableObs > 0.10 (stable 관측이 붕괴 프레임 보정)',
+    state.rawDepthPeakPrimaryStableObs != null && state.rawDepthPeakPrimaryStableObs > 0.10,
+    state.rawDepthPeakPrimaryStableObs
   );
   ok(
     'A8: relativeDepthPeak 존재',
@@ -262,11 +265,12 @@ console.log('\n── B. 단발 스파이크: fake peak / reversal 방지 ──
     ts += 100;
   }
 
-  // 단발 스파이크: raw 0.55, stable 은 보간 ~0.025
+  // 단발 스파이크: raw 0.55 이지만 pose 파이프라인(suppressOneFrameDrops) 이후 proxy·stable 은 ~0.025.
+  // HOTFIX-04E5: completion owner 는 proxy 만 쓰므로, 스모크는 보간된 proxy 를 넣어 fake pass 를 막는다.
   spFrames.push(makeFrame(ts, {
-    depth: 0.55,
+    depth: 0.025,
     blendedDepth: 0.025,
-    stableDepth: 0.025, // stable 이 spike 를 억제
+    stableDepth: 0.025,
     jumpSuppressed: true,
     phaseHint: 'unknown',
     rawDepth: 0.55,
@@ -289,9 +293,10 @@ console.log('\n── B. 단발 스파이크: fake peak / reversal 방지 ──
     state.completionSatisfied
   );
   ok(
-    'B2: rawDepthPeakPrimary stable 반영 (≤0.05)',
-    state.rawDepthPeakPrimary == null || state.rawDepthPeakPrimary <= 0.05,
-    state.rawDepthPeakPrimary
+    'B2: rawDepthPeakPrimary·rawDepthPeakPrimaryStableObs ≤0.05 (보간된 스트림)',
+    (state.rawDepthPeakPrimary == null || state.rawDepthPeakPrimary <= 0.05) &&
+      (state.rawDepthPeakPrimaryStableObs == null || state.rawDepthPeakPrimaryStableObs <= 0.05),
+    { primary: state.rawDepthPeakPrimary, stableObs: state.rawDepthPeakPrimaryStableObs }
   );
 }
 

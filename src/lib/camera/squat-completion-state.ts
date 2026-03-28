@@ -111,8 +111,10 @@ export interface SquatCompletionState extends MotionCompletionResult {
   reversalConfirmedBy?: 'rule' | 'rule_plus_hmm' | null;
   reversalDepthDrop?: number | null;
   reversalFrameCount?: number | null;
-  /** PR-04E3A: primary 스트림 피크(관측) — relative 선택과 독립 */
+  /** PR-04E3A: primary 스트림 피크(관측) — relative 선택과 독립; squatDepthProxy 기반 (owner truth) */
   rawDepthPeakPrimary?: number;
+  /** PR-HOTFIX-04E5: stable primary 피크(관측 전용) — owner·게이트 미사용 */
+  rawDepthPeakPrimaryStableObs?: number;
   rawDepthPeakBlended?: number;
   /** PR-04E3A: relativeDepthPeak·rawDepthPeak 계산에 쓴 스트림 */
   relativeDepthPeakSource?: 'primary' | 'blended';
@@ -184,6 +186,18 @@ type SquatCompletionDepthRow = {
   phaseHint: PoseFeaturesFrame['phaseHint'];
 };
 
+/**
+ * PR-HOTFIX-04E5: valid 슬라이스에서 stable primary 피크만 스캔 — completion owner·relative 선택에 미사용.
+ */
+function maxSquatDepthPrimaryStableObs(validFrames: PoseFeaturesFrame[]): number | undefined {
+  let m = -Infinity;
+  for (const frame of validFrames) {
+    const s = frame.derived.squatDepthPrimaryStable;
+    if (typeof s === 'number' && Number.isFinite(s)) m = Math.max(m, s);
+  }
+  return m === -Infinity ? undefined : m;
+}
+
 function buildSquatCompletionDepthRows(validFrames: PoseFeaturesFrame[]): SquatCompletionDepthRow[] {
   const depthRows: SquatCompletionDepthRow[] = [];
   for (let vi = 0; vi < validFrames.length; vi++) {
@@ -192,14 +206,11 @@ function buildSquatCompletionDepthRows(validFrames: PoseFeaturesFrame[]): SquatC
     if (typeof p !== 'number' || !Number.isFinite(p)) continue;
     const cRead = readSquatCompletionDepth(frame);
     const depthCompletion = cRead != null && Number.isFinite(cRead) ? cRead : p;
-    // PR-04E5: 안정화된 primary(단발 붕괴 억제 후 EMA)가 있으면 rawDepthPeakPrimary 에 사용.
-    // 없으면 원래 EMA primary 로 폴백 — 기존 동작 유지.
-    const pStable = frame.derived.squatDepthPrimaryStable;
-    const depthPrimary =
-      pStable != null && Number.isFinite(pStable) ? pStable : p;
+    // PR-HOTFIX-04E5: owner·rawDepthPeakPrimary·relative primary 분기는 pre-04E5 와 같이 proxy 만 사용.
+    // stable primary 는 rawDepthPeakPrimaryStableObs 로만 노출.
     depthRows.push({
       index: vi,
-      depthPrimary,
+      depthPrimary: p,
       depthCompletion,
       timestampMs: frame.timestampMs,
       phaseHint: frame.phaseHint,
@@ -435,6 +446,7 @@ function evaluateSquatCompletionCore(
   depthFreeze: SquatDepthFreezeConfig | null
 ): SquatCompletionState {
   const validFrames = frames.filter((frame) => frame.isValid);
+  const rawDepthPeakPrimaryStableObs = maxSquatDepthPrimaryStableObs(validFrames);
 
   const depthRows = buildSquatCompletionDepthRows(validFrames);
 
@@ -483,6 +495,7 @@ function evaluateSquatCompletionCore(
       reversalDepthDrop: null,
       reversalFrameCount: null,
       rawDepthPeakPrimary: 0,
+      rawDepthPeakPrimaryStableObs,
       rawDepthPeakBlended: 0,
       relativeDepthPeakSource: 'primary',
       baselineFrozen: false,
@@ -962,6 +975,7 @@ function evaluateSquatCompletionCore(
     reversalDepthDrop,
     reversalFrameCount,
     rawDepthPeakPrimary,
+    rawDepthPeakPrimaryStableObs,
     rawDepthPeakBlended,
     relativeDepthPeakSource,
     baselineFrozen: depthFreeze != null,

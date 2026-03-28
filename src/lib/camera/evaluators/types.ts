@@ -19,6 +19,8 @@ export interface SquatDepthCalibrationDebug {
   armingDepthSource: string | null;
   /** PR-04E3A: completion 슬라이스 피크(primary / blended 스트림) */
   rawDepthPeakPrimary?: number;
+  /** PR-HOTFIX-04E5: stable primary 피크(관측) — gate·owner 미사용 */
+  rawDepthPeakPrimaryStableObs?: number;
   rawDepthPeakBlended?: number;
   relativeDepthPeakSource?: 'primary' | 'blended' | null;
 }

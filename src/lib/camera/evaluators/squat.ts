@@ -206,6 +206,10 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       state.rawDepthPeakPrimary != null
         ? Math.round(state.rawDepthPeakPrimary * 1000) / 1000
         : undefined,
+    rawDepthPeakPrimaryStableObs:
+      state.rawDepthPeakPrimaryStableObs != null
+        ? Math.round(state.rawDepthPeakPrimaryStableObs * 1000) / 1000
+        : undefined,
     rawDepthPeakBlended:
       state.rawDepthPeakBlended != null
         ? Math.round(state.rawDepthPeakBlended * 1000) / 1000
@@ -432,9 +436,14 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         /** PR-04E1: primary vs blended 피크 (% 스케일은 depthPeak 와 동일) */
         squatDepthPeakPrimary: Math.round(maxPrimaryCalib * 100),
         squatDepthPeakBlended: Math.round(maxBlendedCalib * 100),
-        /** PR-04E5: 안정화된 primary 피크 및 단발 억제 카운트 (additive 관측) */
+        /** PR-04E5: 안정화된 primary 피크 및 단발 억제 카운트 (additive 관측; owner 미사용) */
         squatPrimaryStablePeak: Math.round(maxStablePrimaryCalib * 100),
         squatPrimaryJumpSuppressedCount: primaryJumpSuppressedCount,
+        /** PR-HOTFIX-04E5: completion state stable-peak 미러(슬라이스 일치) — owner·게이트 미사용 */
+        squatRawDepthPeakPrimaryStableObs:
+          state.rawDepthPeakPrimaryStableObs != null
+            ? Math.round(state.rawDepthPeakPrimaryStableObs * 1000) / 1000
+            : null,
         squatArmingDepthBlendAssisted: completionArming.armingDepthBlendAssisted ? 1 : 0,
         /** PR-CAM-28: 글로벌 피크 앞 standing 앵커 */
         completionArmingPeakAnchored: completionArming.armingPeakAnchored ? 1 : 0,
