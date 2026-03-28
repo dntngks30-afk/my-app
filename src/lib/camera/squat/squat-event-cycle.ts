@@ -24,6 +24,13 @@ const STANDING_RECOVERY_TOLERANCE_RATIO = 0.18;
 const MIN_DESCENT_FRAMES = 3;
 const MIN_REVERSAL_FRAMES = 2;
 const MIN_RECOVERY_FRAMES = 2;
+/** PR-04E3C: shallow truth 승격용 — 연속 프레임·최소 하락(단발 튐 차단) */
+const MIN_REVERSAL_FRAMES_LITE = 3;
+const MIN_REVERSAL_DROP_LITE_ABS = 0.004;
+const MIN_REVERSAL_DROP_LITE_FRAC_OF_REL_PEAK = 0.085;
+const MIN_RECOVERY_FRAMES_LITE = 3;
+/** standingBand 대비 약간 넓은 “근처” 복귀 허용 */
+const RECOVERY_LITE_BAND_MULT = 1.22;
 const MIN_PEAK_PLATEAU_FRAMES = 2;
 const JITTER_MAX_SINGLE_SPIKE_REL = 0.035;
 const MIN_DESCENT_DELTA_FROM_BASELINE = 0.022;
@@ -49,6 +56,14 @@ export interface SquatEventCycleResult {
   recoveryFrames: number;
   source: SquatEventCycleSource;
   notes: string[];
+  /** PR-04E3C: shallow 전용 — peak 대비 연속 baseline 방향 하락(단발 스파이크 아님) */
+  reversalLiteConfirmed: boolean;
+  recoveryLiteConfirmed: boolean;
+  reversalLiteFrames: number;
+  recoveryLiteFrames: number;
+  reversalLiteDrop: number;
+  /** 피크 이후 최소 depth 가 baseline 에 얼마나 가까웠는지 (abs); 미충족 시 null */
+  reversalLiteDepthToBaseline: number | null;
 }
 
 export type DetectSquatEventCycleOptions = {
@@ -141,6 +156,12 @@ export function detectSquatEventCycle(
     recoveryFrames: 0,
     source: 'none',
     notes,
+    reversalLiteConfirmed: false,
+    recoveryLiteConfirmed: false,
+    reversalLiteFrames: 0,
+    recoveryLiteFrames: 0,
+    reversalLiteDrop: 0,
+    reversalLiteDepthToBaseline: null,
   });
 
   if (!baselineFrozen || !peakLatched) {
@@ -240,6 +261,39 @@ export function detectSquatEventCycle(
   const nearStandingRecovered = recoveryFrames >= MIN_RECOVERY_FRAMES;
   const recoveryDetected = recoveryFrames >= 1;
 
+  const dropLite = Math.max(
+    MIN_REVERSAL_DROP_LITE_ABS,
+    relativePeak * MIN_REVERSAL_DROP_LITE_FRAC_OF_REL_PEAK
+  );
+  let revLiteStreak = 0;
+  let maxRevLiteStreak = 0;
+  for (const s of postPeak) {
+    if (peakDepth - s.depth >= dropLite) {
+      revLiteStreak += 1;
+      maxRevLiteStreak = Math.max(maxRevLiteStreak, revLiteStreak);
+    } else {
+      revLiteStreak = 0;
+    }
+  }
+  const reversalLiteFrames = maxRevLiteStreak;
+  const reversalLiteConfirmed = reversalLiteFrames >= MIN_REVERSAL_FRAMES_LITE;
+  const minPostPeakDepth = postPeak.length > 0 ? Math.min(...postPeak.map((s) => s.depth)) : peakDepth;
+  const reversalLiteDrop = Math.max(0, peakDepth - minPostPeakDepth);
+  const recoverLiteBand = standingBand * RECOVERY_LITE_BAND_MULT;
+  let recoveryLiteFrames = 0;
+  for (let i = series.length - 1; i > peakIdx; i -= 1) {
+    const rel = Math.max(0, series[i]!.depth - baseline);
+    if (rel <= recoverLiteBand) recoveryLiteFrames += 1;
+    else break;
+  }
+  const recoveryLiteConfirmed = recoveryLiteFrames >= MIN_RECOVERY_FRAMES_LITE;
+  const reversalLiteDepthToBaseline = reversalLiteConfirmed
+    ? Math.abs(minPostPeakDepth - baseline)
+    : null;
+
+  if (reversalLiteConfirmed) notes.push('reversal_lite_confirmed');
+  if (recoveryLiteConfirmed) notes.push('recovery_lite_confirmed');
+
   const hmm = options?.hmm;
   let source: SquatEventCycleSource = 'rule';
   if (hmm != null && hmm.completionCandidate) {
@@ -295,5 +349,11 @@ export function detectSquatEventCycle(
     recoveryFrames,
     source,
     notes,
+    reversalLiteConfirmed,
+    recoveryLiteConfirmed,
+    reversalLiteFrames,
+    recoveryLiteFrames,
+    reversalLiteDrop,
+    reversalLiteDepthToBaseline,
   };
 }

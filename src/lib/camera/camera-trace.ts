@@ -167,6 +167,12 @@ export interface AttemptSnapshot {
       eventCycleBand?: string | null;
       eventCyclePromoted?: boolean;
       eventCycleSource?: string | null;
+      /** PR-04E3C: shallow cycle lite */
+      reversalLiteConfirmed?: boolean;
+      recoveryLiteConfirmed?: boolean;
+      reversalLiteFrames?: number | null;
+      recoveryLiteFrames?: number | null;
+      reversalLiteDrop?: number | null;
       /** PR-COMP-03 */
       squatInternalQuality?: SquatInternalQuality;
       /** CAM-shallow-obs: attempt-evidence보다 약한 관측 계약(저장·진단 전용) */
@@ -300,6 +306,10 @@ export interface SquatAttemptObservation {
   peakLatched?: boolean;
   eventCycleDetected?: boolean;
   eventCyclePromoted?: boolean;
+  /** PR-04E3C */
+  reversalLiteConfirmed?: boolean;
+  recoveryLiteConfirmed?: boolean;
+  reversalLiteDrop?: number | null;
   debugVersion: string;
 }
 
@@ -778,6 +788,14 @@ function buildDiagnosisSummary(
       eventCycleBand: sc.eventCycleBand ?? null,
       eventCyclePromoted: sc.eventCyclePromoted,
       eventCycleSource: sc.eventCycleSource ?? null,
+      reversalLiteConfirmed: sc.reversalLiteConfirmed,
+      recoveryLiteConfirmed: sc.recoveryLiteConfirmed,
+      reversalLiteFrames: sc.reversalLiteFrames ?? null,
+      recoveryLiteFrames: sc.recoveryLiteFrames ?? null,
+      reversalLiteDrop:
+        typeof sc.reversalLiteDrop === 'number' && Number.isFinite(sc.reversalLiteDrop)
+          ? sc.reversalLiteDrop
+          : null,
       squatInternalQuality: gate.evaluatorResult.debug?.squatInternalQuality,
     };
 

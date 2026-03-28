@@ -1616,6 +1616,13 @@ export default function CameraSquatPage() {
                   {String(gate.squatCycleDebug?.eventCyclePromoted ?? '—')} | source:{' '}
                   {gate.squatCycleDebug?.eventCycleSource ?? '—'}
                 </p>
+                <p className="break-all">
+                  PR-04E3C lite: revLite={String(gate.squatCycleDebug?.reversalLiteConfirmed ?? '—')} |
+                  recLite={String(gate.squatCycleDebug?.recoveryLiteConfirmed ?? '—')} | revFrames:{' '}
+                  {gate.squatCycleDebug?.reversalLiteFrames ?? '—'} | recFrames:{' '}
+                  {gate.squatCycleDebug?.recoveryLiteFrames ?? '—'} | revDrop:{' '}
+                  {gate.squatCycleDebug?.reversalLiteDrop ?? '—'}
+                </p>
                 {/* PR-HMM-03A: dev-only calibration strip — production UX unchanged */}
                 <p className="mt-2 font-medium text-cyan-200/80">calibration (dev)</p>
                 <p className="break-all">

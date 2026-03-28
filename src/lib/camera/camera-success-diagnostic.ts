@@ -169,6 +169,10 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   eventCycleBand?: string | null;
   eventCyclePromoted?: boolean;
   eventCycleSource?: string | null;
+  /** PR-04E3C: shallow low_rom_event_cycle 승격이 “cycle”인지 한눈에 */
+  reversalLiteConfirmed?: boolean;
+  recoveryLiteConfirmed?: boolean;
+  reversalLiteDrop?: number | null;
   cycleProofPassed?: boolean;
   reversalConfirmedAfterDescend?: boolean;
   recoveryConfirmedAfterReversal?: boolean;
@@ -299,6 +303,9 @@ function extractSquatMobileObsFieldsFromGate(
   | 'eventCycleBand'
   | 'eventCyclePromoted'
   | 'eventCycleSource'
+  | 'reversalLiteConfirmed'
+  | 'recoveryLiteConfirmed'
+  | 'reversalLiteDrop'
 > {
   const sc = gate.squatCycleDebug;
   const cs = gate.evaluatorResult?.debug?.squatCompletionState as
@@ -341,6 +348,12 @@ function extractSquatMobileObsFieldsFromGate(
     eventCycleBand: sc?.eventCycleBand ?? null,
     eventCyclePromoted: sc?.eventCyclePromoted,
     eventCycleSource: sc?.eventCycleSource ?? null,
+    reversalLiteConfirmed: sc?.reversalLiteConfirmed,
+    recoveryLiteConfirmed: sc?.recoveryLiteConfirmed,
+    reversalLiteDrop:
+      typeof sc?.reversalLiteDrop === 'number' && Number.isFinite(sc.reversalLiteDrop)
+        ? sc.reversalLiteDrop
+        : null,
     cycleProofPassed: sc?.cycleProofPassed,
     reversalConfirmedAfterDescend: sc?.reversalConfirmedAfterDescend,
     recoveryConfirmedAfterReversal: sc?.recoveryConfirmedAfterReversal,
@@ -593,6 +606,10 @@ export interface SquatFailedShallowSnapshot {
   eventCycleBand?: string | null;
   eventCyclePromoted?: boolean;
   eventCycleSource?: string | null;
+  /** PR-04E3C */
+  reversalLiteConfirmed?: boolean;
+  recoveryLiteConfirmed?: boolean;
+  reversalLiteDrop?: number | null;
 }
 
 /** CAM-OBS: 실패 스냅샷 기록 옵션(진단 전용, pass 로직 무관) */
@@ -719,6 +736,12 @@ export function recordSquatFailedShallowSnapshot(
       eventCycleBand: sc?.eventCycleBand ?? null,
       eventCyclePromoted: sc?.eventCyclePromoted,
       eventCycleSource: sc?.eventCycleSource ?? null,
+      reversalLiteConfirmed: sc?.reversalLiteConfirmed,
+      recoveryLiteConfirmed: sc?.recoveryLiteConfirmed,
+      reversalLiteDrop:
+        typeof sc?.reversalLiteDrop === 'number' && Number.isFinite(sc.reversalLiteDrop)
+          ? sc.reversalLiteDrop
+          : null,
     };
 
     if (typeof window === 'undefined') return;

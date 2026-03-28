@@ -192,6 +192,12 @@ export interface SquatCycleDebug {
   eventCycleBand?: string | null;
   eventCyclePromoted?: boolean;
   eventCycleSource?: string | null;
+  /** PR-04E3C: shallow cycle lite truth 관측 */
+  reversalLiteConfirmed?: boolean;
+  recoveryLiteConfirmed?: boolean;
+  reversalLiteFrames?: number | null;
+  recoveryLiteFrames?: number | null;
+  reversalLiteDrop?: number | null;
 }
 
 export interface ExerciseGateResult {
@@ -971,6 +977,15 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.eventCyclePromoted = cs?.eventCyclePromoted;
   squatCycleDebug.eventCycleSource =
     cs?.eventCycleSource ?? (ec?.source === 'none' ? null : ec?.source) ?? null;
+
+  squatCycleDebug.reversalLiteConfirmed = cs?.reversalLiteConfirmed;
+  squatCycleDebug.recoveryLiteConfirmed = cs?.recoveryLiteConfirmed;
+  squatCycleDebug.reversalLiteFrames = cs?.reversalLiteFrames ?? null;
+  squatCycleDebug.recoveryLiteFrames = cs?.recoveryLiteFrames ?? null;
+  squatCycleDebug.reversalLiteDrop =
+    typeof cs?.reversalLiteDrop === 'number' && Number.isFinite(cs.reversalLiteDrop)
+      ? cs.reversalLiteDrop
+      : null;
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';

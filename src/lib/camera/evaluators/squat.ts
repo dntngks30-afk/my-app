@@ -584,6 +584,15 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
             : state.eventCycleSource === 'rule_plus_hmm'
               ? 2
               : 0,
+        /** PR-04E3C: shallow cycle truth lite — 승격 게이트 관측 */
+        squatReversalLiteConfirmed: state.reversalLiteConfirmed ? 1 : 0,
+        squatRecoveryLiteConfirmed: state.recoveryLiteConfirmed ? 1 : 0,
+        squatReversalLiteFrames: state.reversalLiteFrames ?? null,
+        squatRecoveryLiteFrames: state.recoveryLiteFrames ?? null,
+        squatReversalLiteDrop:
+          state.reversalLiteDrop != null && Number.isFinite(state.reversalLiteDrop)
+            ? Math.round(state.reversalLiteDrop * 1000) / 1000
+            : null,
       },
       perStepDiagnostics: perStepRecord,
       /** PR-HMM-01B: shadow decoder 전체 결과 — debug 전용 */

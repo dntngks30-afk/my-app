@@ -125,6 +125,13 @@ export interface SquatCompletionState extends MotionCompletionResult {
   eventCycleSource?: 'rule' | 'rule_plus_hmm' | null;
   /** PR-04E3B: shallow event-cycle 헬퍼 결과(관측·승격 판단 입력) */
   squatEventCycle?: SquatEventCycleResult;
+  /** PR-04E3C: event-cycle helper 의 shallow reversal/recovery lite (flatten 관측) */
+  reversalLiteConfirmed?: boolean;
+  recoveryLiteConfirmed?: boolean;
+  reversalLiteFrames?: number | null;
+  recoveryLiteFrames?: number | null;
+  reversalLiteDrop?: number | null;
+  reversalLiteDepthToBaseline?: number | null;
 }
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
@@ -479,6 +486,12 @@ function evaluateSquatCompletionCore(
       peakLatchedAtIndex: null,
       eventCyclePromoted: false,
       eventCycleSource: null,
+      reversalLiteConfirmed: false,
+      recoveryLiteConfirmed: false,
+      reversalLiteFrames: null,
+      recoveryLiteFrames: null,
+      reversalLiteDrop: null,
+      reversalLiteDepthToBaseline: null,
     };
   }
 
@@ -952,6 +965,12 @@ function evaluateSquatCompletionCore(
     peakLatchedAtIndex: depthFreeze != null ? peakFrame.index : null,
     eventCyclePromoted: false,
     eventCycleSource: null,
+    reversalLiteConfirmed: false,
+    recoveryLiteConfirmed: false,
+    reversalLiteFrames: null,
+    recoveryLiteFrames: null,
+    reversalLiteDrop: null,
+    reversalLiteDepthToBaseline: null,
   };
 }
 
@@ -1005,7 +1024,16 @@ export function evaluateSquatCompletionState(
     peakLatchedAtIndex: state.peakLatchedAtIndex ?? null,
   });
 
-  state = { ...state, squatEventCycle };
+  state = {
+    ...state,
+    squatEventCycle,
+    reversalLiteConfirmed: squatEventCycle.reversalLiteConfirmed,
+    recoveryLiteConfirmed: squatEventCycle.recoveryLiteConfirmed,
+    reversalLiteFrames: squatEventCycle.reversalLiteFrames,
+    recoveryLiteFrames: squatEventCycle.recoveryLiteFrames,
+    reversalLiteDrop: squatEventCycle.reversalLiteDrop,
+    reversalLiteDepthToBaseline: squatEventCycle.reversalLiteDepthToBaseline,
+  };
 
   const ruleBlock = state.ruleCompletionBlockedReason ?? null;
   const finalizeOk =
@@ -1021,7 +1049,9 @@ export function evaluateSquatCompletionState(
     state.standingRecoveredAtMs != null &&
     squatEventCycle.detected &&
     squatEventCycle.band != null &&
-    state.relativeDepthPeak < STANDARD_OWNER_FLOOR;
+    state.relativeDepthPeak < STANDARD_OWNER_FLOOR &&
+    squatEventCycle.reversalLiteConfirmed === true &&
+    squatEventCycle.recoveryLiteConfirmed === true;
 
   if (!canEventPromote) {
     return state;
