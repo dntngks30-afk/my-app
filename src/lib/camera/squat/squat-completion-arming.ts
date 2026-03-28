@@ -30,6 +30,12 @@ export type CompletionArmingState = {
    * 높으면 arming이 진짜 standing이 아닌 하강 구간을 선택했을 가능성이 있다.
    */
   armingStandingWindowRange?: number;
+  /** PR-HMM-04A: HMM 기반 arming 보조 — rule `armed`와 별도 */
+  hmmArmingAssistEligible?: boolean;
+  hmmArmingAssistApplied?: boolean;
+  hmmArmingAssistReason?: string | null;
+  /** `armed || hmmArmingAssistApplied` — completion 슬라이스 선택 기준 */
+  effectiveArmed?: boolean;
 };
 
 /** pose-features `start` 밴드와 정렬 (약간 여유로 초기 캘리브레이션 허용) */

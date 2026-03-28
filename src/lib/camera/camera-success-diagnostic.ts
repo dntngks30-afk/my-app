@@ -8,6 +8,10 @@ import {
   buildSquatCalibrationTraceCompact,
   type SquatCalibrationTraceCompact,
 } from '@/lib/camera/squat/squat-calibration-trace';
+import {
+  buildSquatArmingAssistTraceCompact,
+  type SquatArmingAssistTraceCompact,
+} from '@/lib/camera/squat/squat-arming-assist';
 
 /** build/runtime diagnostic version — 실기기 bundle 확인용 */
 export const CAMERA_DIAG_VERSION = 'success-diagnostic-2025-03-18';
@@ -143,6 +147,8 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   squatReversalToStandingMs?: number;
   /** PR-HMM-03A: shallow 성공 캘리브레이션 스냅샷 (컴팩트) */
   squatCalibrationCompact?: SquatCalibrationTraceCompact;
+  /** PR-HMM-04A: arming assist compact */
+  armCompact?: SquatArmingAssistTraceCompact;
 }
 
 export type SuccessSnapshot = OverheadSuccessSnapshot | SquatSuccessSnapshot;
@@ -322,6 +328,7 @@ export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): 
         options.gate.evaluatorResult?.debug?.squatCompletionState,
         options.gate.evaluatorResult?.debug?.squatHmm
       ),
+      armCompact: buildSquatArmingAssistTraceCompact(options.gate.evaluatorResult?.debug?.squatCompletionArming),
       ...mobileObs,
     };
     pushSuccessSnapshot(snapshot);
@@ -490,6 +497,8 @@ export interface SquatFailedShallowSnapshot {
   squatReversalToStandingMs?: number;
   /** PR-HMM-03A: shallow 실패 캘리브레이션 스냅샷 (컴팩트) */
   squatCalibrationCompact?: SquatCalibrationTraceCompact;
+  /** PR-HMM-04A */
+  armCompact?: SquatArmingAssistTraceCompact;
 }
 
 /** CAM-OBS: 실패 스냅샷 기록 옵션(진단 전용, pass 로직 무관) */
@@ -601,6 +610,7 @@ export function recordSquatFailedShallowSnapshot(
         gate.evaluatorResult?.debug?.squatCompletionState,
         gate.evaluatorResult?.debug?.squatHmm
       ),
+      armCompact: buildSquatArmingAssistTraceCompact(gate.evaluatorResult?.debug?.squatCompletionArming),
     };
 
     if (typeof window === 'undefined') return;

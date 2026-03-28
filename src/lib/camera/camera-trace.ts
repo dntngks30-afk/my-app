@@ -16,6 +16,7 @@ import { getCorrectiveCueObservability } from './voice-guidance';
 import { getLastPlaybackObservability } from './korean-audio-pack';
 import type { SquatInternalQuality } from './squat/squat-internal-quality';
 import { buildSquatCalibrationTraceCompact } from '@/lib/camera/squat/squat-calibration-trace';
+import { buildSquatArmingAssistTraceCompact } from '@/lib/camera/squat/squat-arming-assist';
 import type { OverheadInternalQuality } from './overhead/overhead-internal-quality';
 
 /** PR-4: movement type (squat, overhead_reach만 지원) */
@@ -319,7 +320,8 @@ export function deriveSquatObservabilitySignals(gate: ExerciseGateResult): {
   const relBelowSlice = relPeak == null || relPeak < SHALLOW_FLOOR;
   /** evaluator highlighted: `depthPeak` = round(max squatDepthProxy * 100) */
   const depthPeakPct = typeof hm?.depthPeak === 'number' ? hm.depthPeak : null;
-  const completionArmingArmed = hm?.completionArmingArmed === 1;
+  const completionArmingArmed =
+    hm?.effectiveArmed === 1 || hm?.completionArmingArmed === 1;
   const quietEvaluatorShallow =
     (relPeak != null && relPeak >= SHALLOW_FLOOR) ||
     (globalDepthPeak != null &&
@@ -742,10 +744,14 @@ function buildDiagnosisSummary(
     if (diagnosisSummary?.squatCycle != null) {
       const squatCycleExt = diagnosisSummary.squatCycle as typeof diagnosisSummary.squatCycle & {
         calib?: ReturnType<typeof buildSquatCalibrationTraceCompact>;
+        arm?: ReturnType<typeof buildSquatArmingAssistTraceCompact>;
       };
       squatCycleExt.calib = buildSquatCalibrationTraceCompact(
         gate.evaluatorResult.debug?.squatCompletionState,
         gate.evaluatorResult.debug?.squatHmm
+      );
+      squatCycleExt.arm = buildSquatArmingAssistTraceCompact(
+        gate.evaluatorResult.debug?.squatCompletionArming
       );
     }
   }

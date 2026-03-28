@@ -88,6 +88,11 @@ export interface SquatCompletionState extends MotionCompletionResult {
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
 export type EvaluateSquatCompletionStateOptions = {
   hmm?: SquatHmmDecodeResult;
+  /**
+   * PR-HMM-04A: HOTFIX arming이 synthetic일 때만 evaluator가 넘김.
+   * 내부 `armed` 게이트만 OR — finalize·pass 소유권·HMM blocked assist와 무관.
+   */
+  hmmArmingAssistApplied?: boolean;
 };
 
 /** PR-HMM-03A: calibration 로그용 안정 정수 코드 (0 = null) */
@@ -548,10 +553,13 @@ export function evaluateSquatCompletionState(
     ? RELAXED_MIN_REVERSAL_TO_STANDING_MS_SHALLOW
     : MIN_REVERSAL_TO_STANDING_MS_SHALLOW;
 
-  const armed =
+  const naturalArmed =
     baselineDepths.length >= MIN_BASELINE_FRAMES &&
     startFrame != null &&
     startBeforeBottom;
+  const armed =
+    naturalArmed ||
+    Boolean(options?.hmmArmingAssistApplied === true && depthFrames.length >= MIN_BASELINE_FRAMES);
   /** PR-CAM-18: phaseHint 'descent' 미탐지 시 trajectory 폴백 허용 */
   const descendConfirmed = (descentFrame != null || eventBasedDescentPath) && armed;
   const attemptStarted = descendConfirmed && downwardCommitmentReached;

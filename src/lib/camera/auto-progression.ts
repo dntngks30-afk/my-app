@@ -143,6 +143,11 @@ export interface SquatCycleDebug {
   assistSuppressedByFinalize?: boolean;
   hmmExcursion?: number | null;
   hmmTransitionCount?: number | null;
+  /** PR-HMM-04A: HMM arming assist — trace only */
+  hmmArmingAssistEligible?: boolean;
+  hmmArmingAssistApplied?: boolean;
+  hmmArmingAssistReason?: string | null;
+  effectiveArmed?: boolean;
 }
 
 export interface ExerciseGateResult {
@@ -898,6 +903,12 @@ function getSquatProgressionCompletionSatisfied(
     cal?.hmmExcursion ?? (squatHmm != null ? squatHmm.effectiveExcursion : null);
   squatCycleDebug.hmmTransitionCount =
     cal?.hmmTransitionCount ?? (squatHmm != null ? squatHmm.transitionCount : null);
+
+  const ca = result.debug?.squatCompletionArming;
+  squatCycleDebug.hmmArmingAssistEligible = ca?.hmmArmingAssistEligible;
+  squatCycleDebug.hmmArmingAssistApplied = ca?.hmmArmingAssistApplied;
+  squatCycleDebug.hmmArmingAssistReason = ca?.hmmArmingAssistReason ?? null;
+  squatCycleDebug.effectiveArmed = ca?.effectiveArmed;
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';

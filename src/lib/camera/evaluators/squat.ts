@@ -6,7 +6,11 @@ import type { PoseLandmarks } from '@/lib/motion/pose-types';
 import { buildPoseFeaturesFrames, getSquatRecoverySignal } from '@/lib/camera/pose-features';
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 import { evaluateSquatCompletionState } from '@/lib/camera/squat-completion-state';
-import { computeSquatCompletionArming } from '@/lib/camera/squat/squat-completion-arming';
+import {
+  computeSquatCompletionArming,
+  type CompletionArmingState,
+} from '@/lib/camera/squat/squat-completion-arming';
+import { getSquatHmmArmingAssistDecision } from '@/lib/camera/squat/squat-arming-assist';
 import {
   computeSquatInternalQuality,
   squatInternalQualityInsufficientSignal,
@@ -121,17 +125,42 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   });
 
   /** PR-HOTFIX-02: 서 있기 안정 구간 이후에만 completion 상태기에 프레임 전달 */
-  const { arming: completionArming, completionFrames } = computeSquatCompletionArming(valid);
+  const { arming: baseArming, completionFrames: naturalCompletionFrames } = computeSquatCompletionArming(valid);
 
-  /**
-   * PR-HMM-01B/02B: shadow decoder — completionFrames(또는 valid)로 먼저 decode 후
-   * PR-HMM-02B: evaluateSquatCompletionState에 HMM 전달(blocked-reason assist 전용).
-   */
-  const hmmInput = completionArming.armed ? completionFrames : valid;
-  const squatHmm = decodeSquatHmm(hmmInput);
+  /** PR-HMM-04A: 동일 버퍼로 HMM decode → arming 보조 판단 (final gate 아님) */
+  const hmmOnValid = decodeSquatHmm(valid);
+  const armingAssistDec = getSquatHmmArmingAssistDecision(valid, hmmOnValid, { armed: baseArming.armed });
+  const effectiveArmed = baseArming.armed || armingAssistDec.assistApplied;
+  const completionFrames = !effectiveArmed ? [] : baseArming.armed ? naturalCompletionFrames : valid;
 
-  const state = evaluateSquatCompletionState(completionArming.armed ? completionFrames : [], {
+  const squatHmm =
+    !effectiveArmed
+      ? hmmOnValid
+      : baseArming.armed && naturalCompletionFrames.length > 0
+        ? decodeSquatHmm(naturalCompletionFrames)
+        : hmmOnValid;
+
+  const completionArming: CompletionArmingState = {
+    ...baseArming,
+    hmmArmingAssistEligible: armingAssistDec.assistEligible,
+    hmmArmingAssistApplied: armingAssistDec.assistApplied,
+    hmmArmingAssistReason: armingAssistDec.assistReason,
+    effectiveArmed,
+    ...(armingAssistDec.assistApplied && !baseArming.armed
+      ? {
+          completionSliceStartIndex: 0,
+          baselineCaptured: valid.length >= 6,
+          stableFrames: 0,
+          armingStandingWindowRange: undefined,
+          armingFallbackUsed: undefined,
+          armingPeakAnchored: undefined,
+        }
+      : {}),
+  };
+
+  const state = evaluateSquatCompletionState(completionFrames, {
     hmm: squatHmm,
+    hmmArmingAssistApplied: armingAssistDec.assistApplied,
   });
 
   /** PR-HMM-03A: calibration 전용 묶음 — pass/truth 변경 없음 */
@@ -159,16 +188,16 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   /** PR-CAM-28: 슬라이스 최댓값이 전역 피크보다 유의하게 낮으면 tail-only 등 mismatch */
   const DEPTH_TRUTH_MISMATCH_EPS = 0.015;
   const depthTruthWindowMismatch =
-    completionArming.armed && globalMaxDepthProxy - completionSliceMaxDepthProxy > DEPTH_TRUTH_MISMATCH_EPS
+    effectiveArmed && globalMaxDepthProxy - completionSliceMaxDepthProxy > DEPTH_TRUTH_MISMATCH_EPS
       ? 1
       : 0;
-  const sliceMissedMotionCode = !completionArming.armed
+  const sliceMissedMotionCode = !effectiveArmed
     ? 2
     : depthTruthWindowMismatch === 1
       ? 1
       : 0;
 
-  const phaseScan = completionArming.armed ? completionFrames : [];
+  const phaseScan = effectiveArmed ? completionFrames : [];
   const offset = completionArming.completionSliceStartIndex;
   const toGlobalIdx = (idxInSlice: number) =>
     idxInSlice >= 0 ? offset + idxInSlice : -1;
@@ -179,7 +208,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const firstDescentIdxGlobal = valid.findIndex((f) => f.phaseHint === 'descent');
   const repCountEstimate = state.completionSatisfied ? 1 : 0;
 
-  if (!completionArming.armed) {
+  if (!effectiveArmed) {
     completionHints.push('completion_not_armed');
   }
 
@@ -282,11 +311,16 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         depthPeak: depthValues.length > 0 ? Math.round(Math.max(...depthValues) * 100) : null,
         /** PR standing-fp: baseline-relative depth for standard path gate */
         completionArmingArmed: completionArming.armed ? 1 : 0,
+        /** PR-HMM-04A: rule arming 또는 HMM arming assist */
+        effectiveArmed: effectiveArmed ? 1 : 0,
+        hmmArmingAssistEligible: completionArming.hmmArmingAssistEligible ? 1 : 0,
+        hmmArmingAssistApplied: completionArming.hmmArmingAssistApplied ? 1 : 0,
+        hmmArmingAssistReason: completionArming.hmmArmingAssistReason ?? null,
         completionArmingBaselineCaptured: completionArming.baselineCaptured ? 1 : 0,
         completionArmingStableFrames: completionArming.stableFrames,
         completionArmingSliceStart: completionArming.completionSliceStartIndex,
         /** PR-CAM-28: valid 내 마지막 인덱스(슬라이스는 항상 버퍼 끝까지) */
-        completionSliceEndIndex: completionArming.armed ? valid.length - 1 : -1,
+        completionSliceEndIndex: effectiveArmed ? valid.length - 1 : -1,
         /** PR-CAM-28: 전역 vs completion 슬라이스 최대 squatDepthProxy (0–1) */
         globalDepthPeak: Math.round(globalMaxDepthProxy * 1000) / 1000,
         completionSliceDepthPeak: Math.round(completionSliceMaxDepthProxy * 1000) / 1000,

@@ -1593,6 +1593,21 @@ export default function CameraSquatPage() {
                   hmmConf: {gate.squatCycleDebug?.hmmConfidence ?? '—'} | hmmExc:{' '}
                   {gate.squatCycleDebug?.hmmExcursion ?? '—'}
                 </p>
+                {/* PR-HMM-04A: arming assist — dev only */}
+                <p className="mt-2 font-medium text-cyan-200/80">arming (dev)</p>
+                <p>
+                  armed:{' '}
+                  {String(Boolean(gate.evaluatorResult?.debug?.squatCompletionArming?.armed))} | effectiveArmed:{' '}
+                  {String(gate.squatCycleDebug?.effectiveArmed ?? false)}
+                </p>
+                <p>
+                  hmmArmingAssistEligible:{' '}
+                  {String(gate.squatCycleDebug?.hmmArmingAssistEligible ?? false)} | applied:{' '}
+                  {String(gate.squatCycleDebug?.hmmArmingAssistApplied ?? false)}
+                </p>
+                <p className="break-all">
+                  hmmArmingAssistReason: {gate.squatCycleDebug?.hmmArmingAssistReason ?? '—'}
+                </p>
               </div>
             )}
 
