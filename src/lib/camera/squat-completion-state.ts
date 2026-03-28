@@ -273,15 +273,15 @@ const RELAXED_LOW_ROM_MIN_DROP_RATIO = 0.45;
 const COMPLETION_PRIMARY_DOMINANT_REL_PEAK = 0.12;
 
 /**
- * PR-C: low_ROM finalize와 동일한 “복귀 증거” — ultra_low_rom 에서만 짧은 standing hold(60ms)를 허용할 때 사용.
- * pose-features `getSquatRecoverySignal` 과 같은 continuity/drop 기준으로 shallow 오탐 없이 false negative만 줄인다.
+ * PR-04E4B: ultra_low_rom 전용 guarded finalize 진입 — 60ms hold + low-rom-style 증명 분기.
+ * continuity≥3 + drop≥0.35 로 PR-04E4 finalize 본문과 동일 계약(구 진입 0.45는 ultra 에서만 완화).
  */
-function recoveryMeetsLowRomStyleFinalizeProof(
+function recoveryMeetsUltraGuardedFinalizeProof(
   recovery: Pick<SquatCompletionState, 'recoveryReturnContinuityFrames' | 'recoveryDropRatio'>
 ): boolean {
   return (
     (recovery.recoveryReturnContinuityFrames ?? 0) >= LOW_ROM_STANDING_FINALIZE_MIN_RETURN_CONTINUITY_FRAMES &&
-    (recovery.recoveryDropRatio ?? 0) >= LOW_ROM_STANDING_FINALIZE_MIN_DROP_RATIO
+    (recovery.recoveryDropRatio ?? 0) >= LOW_ROM_STANDING_FINALIZE_MIN_DROP_RATIO_WITH_CONTINUITY
   );
 }
 
@@ -366,7 +366,7 @@ function getStandingRecoveryFinalizeGate(
   finalizeReason: string | null;
 } {
   const ultraLowRomUsesGuardedFinalize =
-    evidenceLabel === 'ultra_low_rom' && recoveryMeetsLowRomStyleFinalizeProof(recovery);
+    evidenceLabel === 'ultra_low_rom' && recoveryMeetsUltraGuardedFinalizeProof(recovery);
 
   const minFramesUsed =
     evidenceLabel === 'low_rom' || ultraLowRomUsesGuardedFinalize
