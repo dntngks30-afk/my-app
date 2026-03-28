@@ -182,6 +182,11 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   squatCalibrationCompact?: SquatCalibrationTraceCompact;
   /** PR-HMM-04A: arming assist compact */
   armCompact?: SquatArmingAssistTraceCompact;
+  /** PR-CAM-SUCCESS-UI-SETTLE-01: 페이지 레이어 shallow 성공 settle (additive) */
+  successUiCandidateAt?: string | null;
+  successUiSettledAt?: string | null;
+  successUiSettleMsUsed?: number | null;
+  successUiSettlePath?: string | null;
 }
 
 export type SuccessSnapshot = OverheadSuccessSnapshot | SquatSuccessSnapshot;
@@ -203,6 +208,11 @@ export interface RecordSquatSuccessOptions {
   passLatchedAtMs: number;
   effectivePassLatched: boolean;
   competingPaths?: string[];
+  /** PR-CAM-SUCCESS-UI-SETTLE-01 */
+  successUiCandidateAt?: string | null;
+  successUiSettledAt?: string | null;
+  successUiSettleMsUsed?: number | null;
+  successUiSettlePath?: string | null;
 }
 
 function pushSuccessSnapshot(snapshot: SuccessSnapshot): void {
@@ -419,6 +429,11 @@ export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): 
         options.gate.evaluatorResult?.debug?.squatHmm
       ),
       armCompact: buildSquatArmingAssistTraceCompact(options.gate.evaluatorResult?.debug?.squatCompletionArming),
+      successUiCandidateAt: options.successUiCandidateAt ?? null,
+      successUiSettledAt: options.successUiSettledAt ?? null,
+      successUiSettleMsUsed:
+        typeof options.successUiSettleMsUsed === 'number' ? options.successUiSettleMsUsed : null,
+      successUiSettlePath: options.successUiSettlePath ?? null,
       ...mobileObs,
     };
     pushSuccessSnapshot(snapshot);

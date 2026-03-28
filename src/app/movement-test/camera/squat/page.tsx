@@ -52,7 +52,12 @@ import {
   hasShallowSquatObservation,
   hasSquatAttemptEvidence,
   isDiagnosticFreezeMode,
+  type RecordSquatSuccessOptions,
 } from '@/lib/camera/camera-success-diagnostic';
+import {
+  updateSuccessUiSettleCandidate,
+  type SuccessUiSettleCandidateState,
+} from '@/lib/camera/success-ui-settle';
 import { SquatMobileDiagPanel } from '@/components/camera/SquatMobileDiagPanel';
 import {
   getMovementSetupGuide,
@@ -241,6 +246,8 @@ export default function CameraSquatPage() {
     stallTimer: null as ReturnType<typeof window.setTimeout> | null,
     stallRecorded: false,
   });
+  /** PR-CAM-SUCCESS-UI-SETTLE-01: shallow 경로 finalPassLatched 후 UI 래치 전 디바운스 상태 */
+  const successUiSettleCandidateRef = useRef<SuccessUiSettleCandidateState | null>(null);
   /** CAM-27: 이번 capturing 세션에서 얕은 관측 신호가 있었는지(abandon 스팸 방지) */
   const squatObsHadShallowThisCaptureRef = useRef(false);
   /** 캡처 terminal 구간에서 attempt snapshot 1회 */
@@ -272,15 +279,21 @@ export default function CameraSquatPage() {
   previewKeyRef.current = previewKey;
   finalPassLatchedRef.current = finalPassLatched;
   const effectivePassLatched = finalPassLatched || passLatched;
+  /**
+   * PR-CAM-SUCCESS-UI-SETTLE-01: 가이드/리드니스 "성공" 톤은 페이지 래치 이후에만 —
+   * finalPassLatched 만으로는 통과 UI가 너무 빨리 켜지지 않게 한다.
+   * 교정 음성 차단 등은 여전히 effectivePassLatched(엔진 passReady) 기준.
+   */
+  const readinessSuccessLatched = passLatched;
   const setupFramingHint = useMemo(() => getSetupFramingHint(landmarks), [landmarks]);
   const liveReadinessSummary = useMemo(
     () =>
       getLiveReadinessSummary({
-        success: effectivePassLatched,
+        success: readinessSuccessLatched,
         guardrail: gate.guardrail,
         framingHint: setupFramingHint,
       }),
-    [effectivePassLatched, gate.guardrail, setupFramingHint]
+    [readinessSuccessLatched, gate.guardrail, setupFramingHint]
   );
   const rawLiveReadiness = liveReadinessSummary.state;
   const primaryReadinessBlocker = getPrimaryReadinessBlocker(liveReadinessSummary);
@@ -417,6 +430,7 @@ export default function CameraSquatPage() {
     squatTerminalAttemptSnapshotRef.current = null;
     squatTerminalObservationRef.current = null;
     squatShallowObservedEdgeRef.current = false;
+    successUiSettleCandidateRef.current = null;
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
   /** CAM-OBS: URL 진단 플래그 (?diag=1, ?debug=1, ?diag_modal=1) */
@@ -740,31 +754,42 @@ export default function CameraSquatPage() {
     void speakVoiceCue(getSuccessVoiceCue());
   }, [currentStepKey, effectivePassLatched]);
 
-  const latchPassEvent = useCallback(() => {
-    if (passLatchedStepKeyRef.current === currentStepKey || passLatched) {
-      return;
-    }
+  const latchPassEvent = useCallback(
+    (successUiExtras?: Pick<
+      RecordSquatSuccessOptions,
+      | 'successUiCandidateAt'
+      | 'successUiSettledAt'
+      | 'successUiSettleMsUsed'
+      | 'successUiSettlePath'
+    > | null) => {
+      if (passLatchedStepKeyRef.current === currentStepKey || passLatched) {
+        return;
+      }
 
-    const latchedAt = new Date().toISOString();
-    const passLatchedAtMs = Date.now();
-    passLatchedStepKeyRef.current = currentStepKey;
-    settledRef.current = true;
-    advanceLockRef.current = true;
-    setPassLatched(true);
-    setPassLatchedAt(latchedAt);
-    setPassDetectedAt(latchedAt);
-    setTransitionLocked(true);
-    setNextTriggerReason('pass_latched');
-    stop();
-    /** PR success-diagnostic: success snapshot 저장 */
-    recordSquatSuccessSnapshot({
-      gate,
-      successOpenedBy: 'effectivePassLatched',
-      currentRoute: '/movement-test/camera/squat',
-      passLatchedAtMs,
-      effectivePassLatched,
-      competingPaths: [],
-    });
+      const latchedAt = new Date().toISOString();
+      const passLatchedAtMs = Date.now();
+      passLatchedStepKeyRef.current = currentStepKey;
+      settledRef.current = true;
+      advanceLockRef.current = true;
+      setPassLatched(true);
+      setPassLatchedAt(latchedAt);
+      setPassDetectedAt(latchedAt);
+      setTransitionLocked(true);
+      setNextTriggerReason('pass_latched');
+      stop();
+      /** PR success-diagnostic: success snapshot 저장 */
+      recordSquatSuccessSnapshot({
+        gate,
+        successOpenedBy: 'effectivePassLatched',
+        currentRoute: '/movement-test/camera/squat',
+        passLatchedAtMs,
+        effectivePassLatched,
+        competingPaths: [],
+        successUiCandidateAt: successUiExtras?.successUiCandidateAt ?? null,
+        successUiSettledAt: successUiExtras?.successUiSettledAt ?? null,
+        successUiSettleMsUsed: successUiExtras?.successUiSettleMsUsed ?? null,
+        successUiSettlePath: successUiExtras?.successUiSettlePath ?? null,
+      });
     persistCurrentStep();
     setProgressionState('passed');
     setStatusMessage(gate.uiMessage);
@@ -793,9 +818,36 @@ export default function CameraSquatPage() {
     }
 
     if (effectivePassLatched) {
-      latchPassEvent();
+      if (passLatched) {
+        latchPassEvent();
+        return;
+      }
+      if (!finalPassLatched) {
+        latchPassEvent();
+        return;
+      }
+
+      const nowMs = Date.now();
+      const settleUpd = updateSuccessUiSettleCandidate({
+        passReady: true,
+        completionPassReason: gate.squatCycleDebug?.completionPassReason ?? null,
+        nowMs,
+        prev: successUiSettleCandidateRef.current,
+      });
+      successUiSettleCandidateRef.current = settleUpd.next;
+
+      if (settleUpd.shouldLatchUiNow) {
+        latchPassEvent({
+          successUiCandidateAt: settleUpd.candidateStartedAtIso,
+          successUiSettledAt: new Date(nowMs).toISOString(),
+          successUiSettleMsUsed: settleUpd.settleMsUsed,
+          successUiSettlePath: settleUpd.settlePathLabel,
+        });
+      }
       return;
     }
+
+    successUiSettleCandidateRef.current = null;
 
     if (stats.sampledFrameCount === 0) {
       setProgressionState((prev) => (prev === 'camera_ready' ? prev : 'camera_ready'));
@@ -891,6 +943,7 @@ export default function CameraSquatPage() {
     latchPassEvent,
     effectivePassLatched,
     finalPassLatched,
+    gate.squatCycleDebug?.completionPassReason,
     permissionDenied,
     previewKey,
     stats.sampledFrameCount,
@@ -903,8 +956,8 @@ export default function CameraSquatPage() {
       return;
     }
 
+    /** UI 래치는 capturing effect 에서만 수행 — 여기서는 래치 후 auto-advance / freeze 만 */
     if (passLatchedStepKeyRef.current !== currentStepKey) {
-      latchPassEvent();
       return;
     }
 
@@ -1282,6 +1335,7 @@ export default function CameraSquatPage() {
     setDebugModalGate(null);
     debugModalHoldRef.current = false;
     setPreviewKey((prev) => prev + 1);
+    successUiSettleCandidateRef.current = null;
     appendTransition('idle', 'manual_retry');
   }, [cameraPhase, clearAutoAdvanceTimer, gate, readinessTraceSummary, stop]);
 
@@ -1389,7 +1443,7 @@ export default function CameraSquatPage() {
     () => (showRetryActions ? getEffectiveRetryGuidance(STEP_ID, gate) : null),
     [showRetryActions, gate]
   );
-  const visibleUserGuidance = effectivePassLatched
+  const visibleUserGuidance = readinessSuccessLatched
     ? []
     : retryGuidance
       ? [retryGuidance.primary, retryGuidance.secondary].filter(Boolean)
@@ -1397,7 +1451,7 @@ export default function CameraSquatPage() {
   const showPreCaptureHint =
     (progressionState === 'camera_ready' || progressionState === 'insufficient_signal') &&
     stats.sampledFrameCount < 8;
-  const effectiveProgressionState = effectivePassLatched ? 'passed' : progressionState;
+  const effectiveProgressionState = readinessSuccessLatched ? 'passed' : progressionState;
   const guideTone = getGuideToneFromLiveReadiness(liveReadiness);
   const overlayGuide = getSquatOverlayGuide(gate.failureReasons, effectiveProgressionState);
   const isPreCapturePhase =
