@@ -265,6 +265,20 @@ type SquatDepthFrameLite = {
 };
 
 /**
+ * PR-CAM-PEAK-ANCHOR-INTEGRITY-01: 전역 depth 최대(peakFrame)가 commitment 이전이면 reversal 앵커로 쓰면 안 됨.
+ * commitment 이후(포함) 구간에서만 최대 depth 프레임을 반환한다.
+ */
+function findCommittedOrPostCommitPeakFrame(
+  depthFrames: SquatDepthFrameLite[],
+  committedFrame: SquatDepthFrameLite | undefined
+): SquatDepthFrameLite | undefined {
+  if (committedFrame == null) return undefined;
+  const subset = depthFrames.filter((f) => f.index >= committedFrame.index);
+  if (subset.length === 0) return undefined;
+  return subset.reduce((best, frame) => (frame.depth > best.depth ? frame : best));
+}
+
+/**
  * PR-CAM-31: 명시 역전(reversalFrame)이 없을 때만, finalize·복귀 증거가 이미 잠긴 shallow/블렌드 궤적에 한해
  * 피크를 역전 앵커로 승격한다. 임계·recovery 윈도·finalize 게이트 수치는 변경하지 않는다.
  */
@@ -276,6 +290,8 @@ function getGuardedTrajectoryReversalRescue(args: {
   standingRecoveryFinalizeReason: string | null;
   recovery: Pick<SquatCompletionState, 'recoveryReturnContinuityFrames' | 'recoveryDropRatio'>;
   peakFrame: SquatDepthFrameLite;
+  /** PR-CAM-PEAK-ANCHOR-INTEGRITY-01: trajectory 승격 앵커는 commitment-safe 피크만 */
+  committedOrPostCommitPeakFrame?: SquatDepthFrameLite;
 }): {
   trajectoryReversalFrame: SquatDepthFrameLite | undefined;
   trajectoryReversalConfirmedBy: 'trajectory' | null;
@@ -296,10 +312,11 @@ function getGuardedTrajectoryReversalRescue(args: {
     args.attemptStarted &&
     args.downwardCommitmentReached &&
     finalizeOk &&
-    recoveryMeetsLowRomStyleFinalizeProof(args.recovery)
+    recoveryMeetsLowRomStyleFinalizeProof(args.recovery) &&
+    args.committedOrPostCommitPeakFrame != null
   ) {
     return {
-      trajectoryReversalFrame: args.peakFrame,
+      trajectoryReversalFrame: args.committedOrPostCommitPeakFrame,
       trajectoryReversalConfirmedBy: 'trajectory',
     };
   }
@@ -758,6 +775,16 @@ function evaluateSquatCompletionCore(
         frame.depth - baselineStandingDepth >= attemptAdmissionFloor
     );
 
+  const committedOrPostCommitPeakFrame = findCommittedOrPostCommitPeakFrame(
+    depthFrames,
+    committedFrame ?? undefined
+  );
+  const hasValidCommittedPeakAnchor =
+    committedFrame != null &&
+    committedOrPostCommitPeakFrame != null &&
+    committedOrPostCommitPeakFrame.index >= committedFrame.index &&
+    committedOrPostCommitPeakFrame.timestampMs >= committedFrame.timestampMs;
+
   /** 피크 대비 되돌림 요구량: 깊을수록 큰 상승 구간을 요구해 조기 역전·미드라이즈 오판 감소 */
   const squatReversalDropRequired = Math.max(
     REVERSAL_DROP_MIN_ABS,
@@ -784,9 +811,11 @@ function evaluateSquatCompletionCore(
     reversalDropRequired: squatReversalDropRequired,
     hmm: options?.hmm ?? null,
   });
-  const hasPostPeakDrop = committedFrame != null && revConf.reversalConfirmed;
+  const hasPostPeakDrop = revConf.reversalConfirmed;
   let reversalFrame =
-    committedFrame != null && hasPostPeakDrop ? peakFrame : undefined;
+    hasValidCommittedPeakAnchor && hasPostPeakDrop
+      ? committedOrPostCommitPeakFrame
+      : undefined;
 
   const computeAscendConfirmed = (rf: typeof peakFrame | undefined): boolean =>
     ascentFrame != null ||
@@ -904,7 +933,10 @@ function evaluateSquatCompletionCore(
   });
 
   if (hmmReversalAssistDecision.assistApplied) {
-    reversalFrame = peakFrame;
+    reversalFrame =
+      hasValidCommittedPeakAnchor && committedOrPostCommitPeakFrame != null
+        ? committedOrPostCommitPeakFrame
+        : undefined;
     ascendConfirmed = true;
     ruleCompletionBlockedReason = computeBlockedAfterCommitment(reversalFrame, ascendConfirmed);
   }
@@ -917,6 +949,7 @@ function evaluateSquatCompletionCore(
     standingRecoveryFinalizeReason: standingRecoveryFinalize.finalizeReason,
     recovery,
     peakFrame,
+    committedOrPostCommitPeakFrame,
   });
   const progressionReversalFrame = trajectoryRescue.trajectoryReversalFrame;
   let ascendForProgression = ascendConfirmed;
