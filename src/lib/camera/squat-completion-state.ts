@@ -126,6 +126,15 @@ export interface SquatCompletionState extends MotionCompletionResult {
   eventCycleSource?: 'rule' | 'rule_plus_hmm' | null;
   /** PR-04E3B: shallow event-cycle 헬퍼 결과(관측·승격 판단 입력) */
   squatEventCycle?: SquatEventCycleResult;
+  /**
+   * PR-CAM-ULTRA-LOW-ROM-EVENT-GATE-01: progression 역전 프레임 존재 — ultra-low event 승격 게이트 입력.
+   * (JSON/트레이스 `reversalConfirmedAfterDescend` 와 동일 의미로 유지)
+   */
+  reversalConfirmedAfterDescend?: boolean;
+  /**
+   * PR-CAM-ULTRA-LOW-ROM-EVENT-GATE-01: 역전 이후 서 있기 복귀 — 트레이스 보존.
+   */
+  recoveryConfirmedAfterReversal?: boolean;
 }
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
@@ -612,6 +621,8 @@ function evaluateSquatCompletionCore(
       peakLatchedAtIndex: null,
       eventCyclePromoted: false,
       eventCycleSource: null,
+      reversalConfirmedAfterDescend: false,
+      recoveryConfirmedAfterReversal: false,
     };
   }
 
@@ -1141,7 +1152,45 @@ function evaluateSquatCompletionCore(
     peakLatchedAtIndex: depthFreeze != null ? peakFrame.index : null,
     eventCyclePromoted: false,
     eventCycleSource: null,
+    reversalConfirmedAfterDescend,
+    recoveryConfirmedAfterReversal:
+      standingRecovery.standingRecoveredAtMs != null && progressionReversalFrame != null,
   };
+}
+
+/**
+ * PR-CAM-ULTRA-LOW-ROM-EVENT-GATE-01: ultra-low-rom **event promotion** 만 상승/역전 무결성으로 한 번 더 좁힘.
+ * (rule completion·reversal 디텍터·임계값은 변경하지 않음)
+ */
+export function ultraLowRomEventPromotionMeetsAscentIntegrity(
+  state: Pick<
+    SquatCompletionState,
+    | 'relativeDepthPeak'
+    | 'evidenceLabel'
+    | 'reversalConfirmedAfterDescend'
+    | 'recoveryConfirmedAfterReversal'
+    | 'ascendConfirmed'
+    | 'standingRecoveredAtMs'
+    | 'standingRecoveryFinalizeReason'
+    | 'squatReversalToStandingMs'
+  >
+): boolean {
+  if (!(state.relativeDepthPeak < LOW_ROM_LABEL_FLOOR)) return false;
+  if (state.evidenceLabel !== 'ultra_low_rom') return false;
+  if (state.ascendConfirmed !== true) return false;
+  if (state.standingRecoveredAtMs == null) return false;
+
+  const finalizeOk =
+    state.standingRecoveryFinalizeReason === 'standing_hold_met' ||
+    state.standingRecoveryFinalizeReason === 'ultra_low_rom_guarded_finalize';
+
+  if (!finalizeOk) return false;
+
+  if (state.reversalConfirmedAfterDescend === true) return true;
+
+  return (
+    state.squatReversalToStandingMs != null && state.squatReversalToStandingMs >= 180
+  );
 }
 
 /** PR-04E3B: event-cycle 승격이 타임·finalize 계약을 덮어쓰지 않도록 차단 */
@@ -1202,6 +1251,18 @@ export function evaluateSquatCompletionState(
     state.standingRecoveryFinalizeReason === 'low_rom_guarded_finalize' ||
     state.standingRecoveryFinalizeReason === 'ultra_low_rom_guarded_finalize';
 
+  const ultraLowRomEventCandidate =
+    squatEventCycle.detected && squatEventCycle.band === 'ultra_low_rom';
+
+  /**
+   * 이벤트 윈도우(locked primary) 상대 피크는 ultra 밴드인데, completion evidence는 blended 등으로
+   * 이미 low_rom 이상이면 PR JSON 클래스(ultra evidence + 앉은 자세 FP)가 아니다 — 승격을 막지 않는다.
+   */
+  const ultraLowRomEventPromotionAllowed =
+    !ultraLowRomEventCandidate ||
+    state.evidenceLabel !== 'ultra_low_rom' ||
+    ultraLowRomEventPromotionMeetsAscentIntegrity(state);
+
   const canEventPromote =
     state.completionPassReason === 'not_confirmed' &&
     ruleBlock != null &&
@@ -1210,7 +1271,8 @@ export function evaluateSquatCompletionState(
     state.standingRecoveredAtMs != null &&
     squatEventCycle.detected &&
     squatEventCycle.band != null &&
-    state.relativeDepthPeak < STANDARD_OWNER_FLOOR;
+    state.relativeDepthPeak < STANDARD_OWNER_FLOOR &&
+    ultraLowRomEventPromotionAllowed;
 
   if (!canEventPromote) {
     return state;
