@@ -123,6 +123,8 @@ export interface SquatCompletionState extends MotionCompletionResult {
   baselineFrozenDepth?: number | null;
   peakLatched?: boolean;
   peakLatchedAtIndex?: number | null;
+  /** PR-CAM-PEAK-ANCHOR-INTEGRITY-02: event-cycle·trace용 — 피크 래치가 commitment-safe 앵커일 때만 */
+  peakAnchorTruth?: 'committed_or_post_commit_peak';
   eventCyclePromoted?: boolean;
   eventCycleSource?: 'rule' | 'rule_plus_hmm' | null;
   /** PR-04E3B: shallow event-cycle 헬퍼 결과(관측·승격 판단 입력) */
@@ -622,6 +624,7 @@ function evaluateSquatCompletionCore(
       baselineFrozenDepth: null,
       peakLatched: false,
       peakLatchedAtIndex: null,
+      peakAnchorTruth: undefined,
       eventCyclePromoted: false,
       eventCycleSource: null,
       reversalConfirmedAfterDescend: false,
@@ -1152,8 +1155,10 @@ function evaluateSquatCompletionCore(
     relativeDepthPeakSource,
     baselineFrozen: depthFreeze != null,
     baselineFrozenDepth: depthFreeze != null ? depthFreeze.frozenBaselineStandingDepth : null,
-    peakLatched: depthFreeze != null,
-    peakLatchedAtIndex: depthFreeze != null ? peakFrame.index : null,
+    peakLatched: depthFreeze != null && committedOrPostCommitPeakFrame != null,
+    peakLatchedAtIndex: committedOrPostCommitPeakFrame?.index ?? null,
+    peakAnchorTruth:
+      committedOrPostCommitPeakFrame != null ? 'committed_or_post_commit_peak' : undefined,
     eventCyclePromoted: false,
     eventCycleSource: null,
     reversalConfirmedAfterDescend,

@@ -196,6 +196,8 @@ export interface SquatCycleDebug {
   baselineFrozenDepth?: number | null;
   peakLatched?: boolean;
   peakLatchedAtIndex?: number | null;
+  /** PR-CAM-PEAK-ANCHOR-INTEGRITY-02: completion-state peak anchor truth — 관측만 */
+  peakAnchorTruth?: 'committed_or_post_commit_peak';
   eventCycleDetected?: boolean;
   eventCycleBand?: string | null;
   eventCyclePromoted?: boolean;
@@ -984,9 +986,10 @@ function getSquatProgressionCompletionSatisfied(
 
   squatCycleDebug.baselineFrozen = cs?.baselineFrozen;
   squatCycleDebug.baselineFrozenDepth = cs?.baselineFrozenDepth ?? null;
-  squatCycleDebug.peakLatched = cs?.peakLatched;
-  squatCycleDebug.peakLatchedAtIndex = cs?.peakLatchedAtIndex ?? null;
-  squatCycleDebug.eventBasedDescentPath = cs?.eventBasedDescentPath;
+    squatCycleDebug.peakLatched = cs?.peakLatched;
+    squatCycleDebug.peakLatchedAtIndex = cs?.peakLatchedAtIndex ?? null;
+    squatCycleDebug.peakAnchorTruth = cs?.peakAnchorTruth;
+    squatCycleDebug.eventBasedDescentPath = cs?.eventBasedDescentPath;
   const ec = cs?.squatEventCycle;
   squatCycleDebug.eventCycleDetected = ec?.detected;
   squatCycleDebug.eventCycleBand = ec?.band ?? null;

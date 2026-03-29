@@ -173,6 +173,8 @@ export interface AttemptSnapshot {
       baselineFrozenDepth?: number | null;
       peakLatched?: boolean;
       peakLatchedAtIndex?: number | null;
+      /** PR-CAM-PEAK-ANCHOR-INTEGRITY-02 */
+      peakAnchorTruth?: 'committed_or_post_commit_peak';
       eventCycleDetected?: boolean;
       eventCycleBand?: string | null;
       eventCyclePromoted?: boolean;
@@ -907,6 +909,7 @@ function buildDiagnosisSummary(
       baselineFrozenDepth: sc.baselineFrozenDepth ?? null,
       peakLatched: sc.peakLatched,
       peakLatchedAtIndex: sc.peakLatchedAtIndex ?? null,
+      peakAnchorTruth: sc.peakAnchorTruth,
       eventCycleDetected: sc.eventCycleDetected,
       eventCycleBand: sc.eventCycleBand ?? null,
       eventCyclePromoted: sc.eventCyclePromoted,

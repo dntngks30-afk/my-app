@@ -167,14 +167,28 @@ export function detectSquatEventCycle(
     return empty();
   }
 
-  let peakIdx = 0;
-  let peakDepth = series[0]!.depth;
-  for (let i = 1; i < series.length; i++) {
-    if (series[i]!.depth > peakDepth) {
-      peakDepth = series[i]!.depth;
-      peakIdx = i;
-    }
+  /**
+   * PR-CAM-PEAK-ANCHOR-INTEGRITY-02: completion-state가 넘기는 인덱스는 depth row / valid frame 인덱스
+   * (`SquatEventCycleDepthSample.validIndex`)와 동일하다. 시리즈 순번은 full-series max 스캔이 아니라
+   * 해당 validIndex에 매칭되는 샘플 하나로 고정한다.
+   */
+  if (peakLatchedAtIndex == null) {
+    notes.push('peak_anchor_missing');
+    return empty();
   }
+  if (peakLatchedAtIndex < 0) {
+    notes.push('peak_anchor_invalid_range');
+    return empty();
+  }
+  const peakIdx = series.findIndex((s) => s.validIndex === peakLatchedAtIndex);
+  if (peakIdx < 0 || peakIdx >= series.length) {
+    notes.push('peak_anchor_invalid_range');
+    return empty();
+  }
+  if (peakIdx === 0) {
+    notes.push('peak_anchor_at_series_start');
+  }
+  const peakDepth = series[peakIdx]!.depth;
 
   const relativePeak = Math.max(0, peakDepth - baseline);
   const guardedUltra =

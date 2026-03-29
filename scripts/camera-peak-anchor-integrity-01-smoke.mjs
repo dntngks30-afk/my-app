@@ -1,5 +1,5 @@
 /**
- * PR-CAM-PEAK-ANCHOR-INTEGRITY-01: commitment-safe reversal peak anchor
+ * PR-CAM-PEAK-ANCHOR-INTEGRITY-01/02: commitment-safe reversal peak + event-cycle/trace alignment
  * Run: npx tsx scripts/camera-peak-anchor-integrity-01-smoke.mjs
  */
 import { fileURLToPath } from 'url';
@@ -9,6 +9,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 process.chdir(join(__dirname, '..'));
 
 const { evaluateSquatCompletionState } = await import('../src/lib/camera/squat-completion-state.ts');
+const { detectSquatEventCycle } = await import('../src/lib/camera/squat/squat-event-cycle.ts');
 
 let passed = 0;
 let failed = 0;
@@ -82,12 +83,83 @@ const phasesA = [
   'start',
   'start',
 ];
-const stateA = evaluateSquatCompletionState(syntheticStateFrames(depthsA, phasesA));
+const framesA = syntheticStateFrames(depthsA, phasesA);
+const stateA = evaluateSquatCompletionState(framesA);
 ok(
   'A: reversal anchor never before commitment (reversalAtMs >= committedAtMs or unset)',
   stateA.reversalAtMs == null ||
     stateA.committedAtMs == null ||
     stateA.reversalAtMs >= stateA.committedAtMs
+);
+// A': event-cycle uses committed/post-commit anchor, not full-series global max (prefix spike at vi=6)
+const prefixSpikeValidIndex = depthsA.indexOf(Math.max(...depthsA));
+ok(
+  "A': peakLatchedAtIndex is not the prefix spike index when peak is latched",
+  !stateA.peakLatched || stateA.peakLatchedAtIndex !== prefixSpikeValidIndex
+);
+ok(
+  "A': peakAnchorTruth surfaced when peak latched",
+  !stateA.peakLatched || stateA.peakAnchorTruth === 'committed_or_post_commit_peak'
+);
+ok(
+  "A': event-cycle does not fail on missing/invalid anchor",
+  stateA.squatEventCycle == null ||
+    (!stateA.squatEventCycle.notes.includes('peak_anchor_missing') &&
+      !stateA.squatEventCycle.notes.includes('peak_anchor_invalid_range'))
+);
+ok(
+  "A': event-cycle peakDepth is not the global-max depth in series (anchor ≠ full-series owner)",
+  !stateA.peakLatched ||
+    stateA.squatEventCycle == null ||
+    stateA.squatEventCycle.peakDepth < Math.max(...depthsA) - 1e-9
+);
+
+// B': missing anchor blocks event-cycle (unit-level options)
+const framesBPrime = syntheticStateFrames(
+  [
+    0.02, 0.02, 0.02, 0.02, 0.04, 0.06, 0.08, 0.09, 0.085, 0.06, 0.04, 0.03, 0.025, 0.02, 0.02,
+  ],
+  [
+    'start',
+    'start',
+    'start',
+    'start',
+    'descent',
+    'descent',
+    'bottom',
+    'bottom',
+    'ascent',
+    'ascent',
+    'ascent',
+    'start',
+    'start',
+    'start',
+    'start',
+  ]
+);
+const ecBPrime = detectSquatEventCycle(framesBPrime.filter((f) => f.isValid), {
+  baselineFrozen: true,
+  peakLatched: true,
+  peakLatchedAtIndex: null,
+  baselineFrozenDepth: 0.02,
+  lockedSource: 'primary',
+});
+ok(
+  "B': null peakLatchedAtIndex → not detected + peak_anchor_missing",
+  ecBPrime.detected === false && ecBPrime.notes.includes('peak_anchor_missing')
+);
+
+// C': invalid anchor range blocks event-cycle
+const ecCPrime = detectSquatEventCycle(framesBPrime.filter((f) => f.isValid), {
+  baselineFrozen: true,
+  peakLatched: true,
+  peakLatchedAtIndex: 99999,
+  baselineFrozenDepth: 0.02,
+  lockedSource: 'primary',
+});
+ok(
+  "C': out-of-range peakLatchedAtIndex → not detected + peak_anchor_invalid_range",
+  ecCPrime.detected === false && ecCPrime.notes.includes('peak_anchor_invalid_range')
 );
 
 // B: Meaningful shallow squat (PR-7 style) — success + standard or acceptable pass
@@ -121,6 +193,13 @@ ok(
   stateB.reversalAtMs == null ||
     stateB.committedAtMs == null ||
     stateB.reversalAtMs >= stateB.committedAtMs
+);
+ok(
+  'B-pres (PR-02): shallow meaningful cycle — no missing/invalid peak anchor notes when latched',
+  !stateB.peakLatched ||
+    stateB.squatEventCycle == null ||
+    (!stateB.squatEventCycle.notes.includes('peak_anchor_invalid_range') &&
+      !stateB.squatEventCycle.notes.includes('peak_anchor_missing'))
 );
 
 // C: Standing only
@@ -162,6 +241,10 @@ ok(
   stateD.reversalAtMs == null ||
     stateD.committedAtMs == null ||
     stateD.reversalAtMs >= stateD.committedAtMs
+);
+ok(
+  'D-pres (PR-02): deep standard_cycle — peakAnchorTruth when peak latched',
+  !stateD.peakLatched || stateD.peakAnchorTruth === 'committed_or_post_commit_peak'
 );
 
 // E: Low-ROM style depths with phase hints (event path may promote)
