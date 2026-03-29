@@ -125,6 +125,8 @@ export interface SquatCompletionState extends MotionCompletionResult {
   peakLatchedAtIndex?: number | null;
   /** PR-CAM-PEAK-ANCHOR-INTEGRITY-02: event-cycle·trace용 — 피크 래치가 commitment-safe 앵커일 때만 */
   peakAnchorTruth?: 'committed_or_post_commit_peak';
+  /** PR-CAM-ARMING-BASELINE-HANDOFF-01: arming standing primary baseline 이 completion 에 seed 됨 */
+  baselineSeeded?: boolean;
   eventCyclePromoted?: boolean;
   eventCycleSource?: 'rule' | 'rule_plus_hmm' | null;
   /** PR-04E3B: shallow event-cycle 헬퍼 결과(관측·승격 판단 입력) */
@@ -150,6 +152,11 @@ export type EvaluateSquatCompletionStateOptions = {
    * 내부 `armed` 게이트만 OR — finalize·pass 소유권·HMM blocked assist와 무관.
    */
   hmmArmingAssistApplied?: boolean;
+  /**
+   * PR-CAM-ARMING-BASELINE-HANDOFF-01: 검증된 standing 윈도우 baseline — slice 앞 6프레임 재추정보다 우선.
+   */
+  seedBaselineStandingDepthPrimary?: number;
+  seedBaselineStandingDepthBlended?: number;
 };
 
 /** PR-HMM-03A: calibration 로그용 안정 정수 코드 (0 = null) */
@@ -668,16 +675,25 @@ function evaluateSquatCompletionCore(
       reversalConfirmedAfterDescend: false,
       recoveryConfirmedAfterReversal: false,
       eventBasedDescentPath: false,
+      baselineSeeded: false,
     };
   }
 
+  const seedPrimary = options?.seedBaselineStandingDepthPrimary;
+  const seedBlended = options?.seedBaselineStandingDepthBlended;
+  const hasFiniteSeedPrimary = typeof seedPrimary === 'number' && Number.isFinite(seedPrimary);
+  const hasFiniteSeedBlended = typeof seedBlended === 'number' && Number.isFinite(seedBlended);
+
   const windowRows = depthRows.slice(0, BASELINE_WINDOW);
-  const baselinePrimary =
+  const baselinePrimaryFromWindow =
     windowRows.length > 0 ? Math.min(...windowRows.map((r) => r.depthPrimary)) : 0;
-  const baselineBlended =
+  const baselineBlendedFromWindow =
     windowRows.length > 0
       ? Math.min(...windowRows.map((r) => r.depthCompletion))
-      : baselinePrimary;
+      : baselinePrimaryFromWindow;
+
+  const baselinePrimary = hasFiniteSeedPrimary ? seedPrimary : baselinePrimaryFromWindow;
+  const baselineBlended = hasFiniteSeedBlended ? seedBlended : baselinePrimary;
 
   const rawDepthPeakPrimary = Math.max(...depthRows.map((r) => r.depthPrimary));
   const rawDepthPeakBlended = Math.max(...depthRows.map((r) => r.depthCompletion));
@@ -1212,6 +1228,7 @@ function evaluateSquatCompletionCore(
     recoveryConfirmedAfterReversal:
       standingRecovery.standingRecoveredAtMs != null && progressionReversalFrame != null,
     eventBasedDescentPath,
+    baselineSeeded: hasFiniteSeedPrimary,
   };
 }
 
@@ -1274,10 +1291,21 @@ export function evaluateSquatCompletionState(
         if (fullRows.length >= BASELINE_WINDOW) {
           const win = fullRows.slice(0, BASELINE_WINDOW);
           const src = partial.relativeDepthPeakSource ?? 'primary';
+          const opt = options;
+          const seedP = opt?.seedBaselineStandingDepthPrimary;
+          const seedB = opt?.seedBaselineStandingDepthBlended;
+          const finiteP = typeof seedP === 'number' && Number.isFinite(seedP);
+          const finiteB = typeof seedB === 'number' && Number.isFinite(seedB);
           const frozenBaseline =
             src === 'blended'
-              ? Math.min(...win.map((r) => r.depthCompletion))
-              : Math.min(...win.map((r) => r.depthPrimary));
+              ? finiteB
+                ? seedB
+                : finiteP
+                  ? seedP
+                  : Math.min(...win.map((r) => r.depthCompletion))
+              : finiteP
+                ? seedP
+                : Math.min(...win.map((r) => r.depthPrimary));
           depthFreeze = {
             lockedRelativeDepthPeakSource: src,
             frozenBaselineStandingDepth: frozenBaseline,

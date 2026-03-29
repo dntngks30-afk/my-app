@@ -36,6 +36,12 @@ export type CompletionArmingState = {
   hmmArmingAssistReason?: string | null;
   /** `armed || hmmArmingAssistApplied` — completion 슬라이스 선택 기준 */
   effectiveArmed?: boolean;
+  /**
+   * PR-CAM-ARMING-BASELINE-HANDOFF-01: 검증된 standing 윈도우 min(primary) — completion-state seed
+   */
+  armingBaselineStandingDepthPrimary?: number;
+  /** 동일 윈도우 min(blended 우선 스트림) */
+  armingBaselineStandingDepthBlended?: number;
   /** PR-04E1: arming depth 스트림 요약 — primary vs blended 우선 */
   armingDepthSource?: string | null;
   armingDepthPeak?: number;
@@ -80,6 +86,11 @@ const SHALLOW_FALLBACK_EVIDENCE_MIN = 0.018;
 function readSquatDepthPrimary(frame: PoseFeaturesFrame): number | null {
   const d = frame.derived.squatDepthProxy;
   return typeof d === 'number' && Number.isFinite(d) ? d : null;
+}
+
+/** PR-CAM-ARMING-BASELINE-HANDOFF-01: standing 윈도우 baseline primary 전용 — blended 미사용 */
+export function readSquatArmingDepthPrimaryOnly(frame: PoseFeaturesFrame): number | null {
+  return readSquatDepthPrimary(frame);
 }
 
 /** PR-04E1: 무장·피크 탐색은 blended(보조) 우선, 없으면 primary */
@@ -171,19 +182,25 @@ function tryPeakAnchoredArming(valid: PoseFeaturesFrame[]): {
       if (completionSliceStartIndex > peakIdx) continue;
 
       const completionFrames = valid.slice(completionSliceStartIndex);
-      const baselineDepths = valid
+      const baselineDepthsBlended = valid
         .slice(start, end + 1)
         .map(readSquatArmingDepth)
         .filter((d): d is number => d != null);
+      const baselineDepthsPrimary = valid
+        .slice(start, end + 1)
+        .map(readSquatArmingDepthPrimaryOnly)
+        .filter((d): d is number => d != null);
       const completionDepths = completionFrames.map(readSquatArmingDepth).filter((d): d is number => d != null);
 
-      if (baselineDepths.length < stableLen || completionDepths.length === 0) continue;
+      if (baselineDepthsBlended.length < stableLen || completionDepths.length === 0) continue;
 
-      const baseMin = Math.min(...baselineDepths);
-      const baseMax = Math.max(...baselineDepths);
+      const baseMinBlended = Math.min(...baselineDepthsBlended);
+      const baseMinPrimary =
+        baselineDepthsPrimary.length > 0 ? Math.min(...baselineDepthsPrimary) : baseMinBlended;
+      const baseMax = Math.max(...baselineDepthsBlended);
       const completionMax = Math.max(...completionDepths);
 
-      if (completionMax - baseMin < SHALLOW_FALLBACK_EVIDENCE_MIN) continue;
+      if (completionMax - baseMinBlended < SHALLOW_FALLBACK_EVIDENCE_MIN) continue;
 
       // 피크가 슬라이스 안에 있고, 슬라이스 최댓값이 전역 피크와 일치(부동 소수 허용)
       if (peakIdx >= completionSliceStartIndex && completionMax + 1e-9 >= peakDepth) {
@@ -194,7 +211,9 @@ function tryPeakAnchoredArming(valid: PoseFeaturesFrame[]): {
             stableFrames: stableLen,
             completionSliceStartIndex,
             armingPeakAnchored: true,
-            armingStandingWindowRange: Math.round((baseMax - baseMin) * 1000) / 1000,
+            armingStandingWindowRange: Math.round((baseMax - baseMinBlended) * 1000) / 1000,
+            armingBaselineStandingDepthPrimary: Math.round(baseMinPrimary * 1000) / 1000,
+            armingBaselineStandingDepthBlended: Math.round(baseMinBlended * 1000) / 1000,
           },
           completionFrames,
         };
@@ -238,22 +257,30 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
       const completionDepths = completionFrames
         .map(readSquatArmingDepth)
         .filter((d): d is number => d != null);
-      const baselineDepths = valid
+      const baselineDepthsBlended = valid
         .slice(i, i + MIN_STABLE_STANDING_FRAMES)
         .map(readSquatArmingDepth)
         .filter((d): d is number => d != null);
-      const baseMin = baselineDepths.length > 0 ? Math.min(...baselineDepths) : 0;
-      const baseMax = baselineDepths.length > 0 ? Math.max(...baselineDepths) : 0;
+      const baselineDepthsPrimary = valid
+        .slice(i, i + MIN_STABLE_STANDING_FRAMES)
+        .map(readSquatArmingDepthPrimaryOnly)
+        .filter((d): d is number => d != null);
+      const baseMinBlended = baselineDepthsBlended.length > 0 ? Math.min(...baselineDepthsBlended) : 0;
+      const baseMinPrimary =
+        baselineDepthsPrimary.length > 0 ? Math.min(...baselineDepthsPrimary) : baseMinBlended;
+      const baseMax = baselineDepthsBlended.length > 0 ? Math.max(...baselineDepthsBlended) : 0;
       const completionMax = completionDepths.length > 0 ? Math.max(...completionDepths) : 0;
 
-      if (completionMax - baseMin >= SHALLOW_FALLBACK_EVIDENCE_MIN) {
+      if (completionMax - baseMinBlended >= SHALLOW_FALLBACK_EVIDENCE_MIN) {
         return {
           arming: mergeArmingDepthObservability(valid, {
             armed: true,
             baselineCaptured: completionFrames.length >= MIN_FRAMES_FOR_BASELINE_CAPTURE,
             stableFrames: MIN_STABLE_STANDING_FRAMES,
             completionSliceStartIndex,
-            armingStandingWindowRange: Math.round((baseMax - baseMin) * 1000) / 1000,
+            armingStandingWindowRange: Math.round((baseMax - baseMinBlended) * 1000) / 1000,
+            armingBaselineStandingDepthPrimary: Math.round(baseMinPrimary * 1000) / 1000,
+            armingBaselineStandingDepthBlended: Math.round(baseMinBlended * 1000) / 1000,
           }),
           completionFrames,
         };
@@ -272,19 +299,25 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
     const completionSliceStartIndex = i + SECONDARY_STABLE_MIN_FRAMES;
     const completionFrames = valid.slice(completionSliceStartIndex);
 
-    const baselineDepths = valid
+    const baselineDepthsBlended = valid
       .slice(i, i + SECONDARY_STABLE_MIN_FRAMES)
       .map(readSquatArmingDepth)
       .filter((d): d is number => d != null);
+    const baselineDepthsPrimary = valid
+      .slice(i, i + SECONDARY_STABLE_MIN_FRAMES)
+      .map(readSquatArmingDepthPrimaryOnly)
+      .filter((d): d is number => d != null);
     const motionDepths = completionFrames.map(readSquatArmingDepth).filter((d): d is number => d != null);
 
-    if (baselineDepths.length < SECONDARY_STABLE_MIN_FRAMES || motionDepths.length === 0) continue;
+    if (baselineDepthsBlended.length < SECONDARY_STABLE_MIN_FRAMES || motionDepths.length === 0) continue;
 
-    const baseMin = Math.min(...baselineDepths);
-    const baseMax = Math.max(...baselineDepths);
+    const baseMinBlended = Math.min(...baselineDepthsBlended);
+    const baseMinPrimary =
+      baselineDepthsPrimary.length > 0 ? Math.min(...baselineDepthsPrimary) : baseMinBlended;
+    const baseMax = Math.max(...baselineDepthsBlended);
     const motionMax = Math.max(...motionDepths);
 
-    if (motionMax - baseMin < SHALLOW_FALLBACK_EVIDENCE_MIN) continue;
+    if (motionMax - baseMinBlended < SHALLOW_FALLBACK_EVIDENCE_MIN) continue;
 
     return {
       arming: mergeArmingDepthObservability(valid, {
@@ -293,7 +326,9 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
         stableFrames: SECONDARY_STABLE_MIN_FRAMES,
         completionSliceStartIndex,
         armingFallbackUsed: true,
-        armingStandingWindowRange: Math.round((baseMax - baseMin) * 1000) / 1000,
+        armingStandingWindowRange: Math.round((baseMax - baseMinBlended) * 1000) / 1000,
+        armingBaselineStandingDepthPrimary: Math.round(baseMinPrimary * 1000) / 1000,
+        armingBaselineStandingDepthBlended: Math.round(baseMinBlended * 1000) / 1000,
       }),
       completionFrames,
     };

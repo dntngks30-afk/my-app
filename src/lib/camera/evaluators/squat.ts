@@ -183,6 +183,8 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const state = evaluateSquatCompletionState(completionFrames, {
     hmm: squatHmm,
     hmmArmingAssistApplied: armingAssistDec.assistApplied,
+    seedBaselineStandingDepthPrimary: completionArming.armingBaselineStandingDepthPrimary,
+    seedBaselineStandingDepthBlended: completionArming.armingBaselineStandingDepthBlended,
   });
 
   const squatDepthCalibration: SquatDepthCalibrationDebug = {
@@ -431,6 +433,16 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
           completionArming.armingStandingWindowRange != null
             ? Math.round(completionArming.armingStandingWindowRange * 1000) / 1000
             : null,
+        /** PR-CAM-ARMING-BASELINE-HANDOFF-01: standing 윈도우 baseline → completion seed 관측 */
+        armingBaselineStandingDepthPrimary:
+          completionArming.armingBaselineStandingDepthPrimary != null
+            ? Math.round(completionArming.armingBaselineStandingDepthPrimary * 100) / 100
+            : null,
+        armingBaselineStandingDepthBlended:
+          completionArming.armingBaselineStandingDepthBlended != null
+            ? Math.round(completionArming.armingBaselineStandingDepthBlended * 100) / 100
+            : null,
+        completionBaselineSeeded: state.baselineSeeded === true ? 1 : 0,
         baselineStandingDepth: Math.round(state.baselineStandingDepth * 100) / 100,
         rawDepthPeak: Math.round(state.rawDepthPeak * 100) / 100,
         relativeDepthPeak: Math.round(state.relativeDepthPeak * 100) / 100,
