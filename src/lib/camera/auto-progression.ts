@@ -200,6 +200,8 @@ export interface SquatCycleDebug {
   eventCycleBand?: string | null;
   eventCyclePromoted?: boolean;
   eventCycleSource?: string | null;
+  /** PR-CAM-CORE: completion-state trajectory descent 폴백 — trace 전용 */
+  eventBasedDescentPath?: boolean;
 }
 
 export interface ExerciseGateResult {
@@ -297,7 +299,7 @@ export function isFinalPassLatched(
   }
 
   /**
-   * CAM-25: squat low_rom_event_cycle / ultra_low_rom_event_cycle 완료는 easy-only 완화 branch 사용.
+   * CAM-25 + PR-CAM-CORE-PASS-REASON-ALIGN-01: shallow ROM 완료(low/ultra × cycle/event)는 easy-only branch.
    * currentSquatPhase === 'standing_recovered' 는 reversal·ascend·recovery 전체를 함의한다.
    * standard_cycle(깊은 스쿼트)은 기존 임계(0.62)를 그대로 사용.
    */
@@ -324,7 +326,7 @@ export function isFinalPassLatched(
     );
     const isSquatEasyOnly =
       gate.completionSatisfied === true &&
-      (passReason === 'low_rom_event_cycle' || passReason === 'ultra_low_rom_event_cycle') &&
+      isSquatShallowRomPassReason(passReason) &&
       cs?.currentSquatPhase === 'standing_recovered';
     const confTh = isSquatEasyOnly
       ? SQUAT_EASY_PASS_CONFIDENCE
@@ -758,7 +760,7 @@ function getHardBlockerReasons(
 /** PR G3: arming window — countdown 직후 즉시 pass되지 않도록 최소 캡처 시간 */
 const SQUAT_ARMING_MS = 1500;
 /**
- * CAM-25: low_rom_event_cycle / ultra_low_rom_event_cycle 완료 경로 전용 완화 confidence 임계.
+ * CAM-25 + PR-CAM-CORE: shallow ROM 네 가지 passReason 전용 완화 confidence 임계.
  * standard pass chain(0.62)보다 낮게 설정해 매우 얕은 사이클도 final gate를 통과할 수 있게 한다.
  * 단, hard blocker · captureQuality invalid · 사이클 증명 부재 시는 여전히 차단된다.
  */
@@ -768,6 +770,17 @@ const SQUAT_EASY_PASS_CONFIDENCE = 0.56;
  * overhead easy와 동일하게 2프레임으로 완화 (standard 3프레임 대비).
  */
 const SQUAT_EASY_LATCH_STABLE_FRAMES = 2;
+
+/** PR-CAM-CORE-PASS-REASON-ALIGN-01: shallow ROM 성공(일반·이벤트 사이클) — easy latch / conf floor 공통 */
+function isSquatShallowRomPassReason(passReason: string | undefined): boolean {
+  return (
+    passReason === 'low_rom_cycle' ||
+    passReason === 'ultra_low_rom_cycle' ||
+    passReason === 'low_rom_event_cycle' ||
+    passReason === 'ultra_low_rom_event_cycle'
+  );
+}
+
 /** PR G6: depth는 completion이 아니라 quality band. completion은 full cycle만 요구. */
 
 function getSquatProgressionCompletionSatisfied(
@@ -973,6 +986,7 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.baselineFrozenDepth = cs?.baselineFrozenDepth ?? null;
   squatCycleDebug.peakLatched = cs?.peakLatched;
   squatCycleDebug.peakLatchedAtIndex = cs?.peakLatchedAtIndex ?? null;
+  squatCycleDebug.eventBasedDescentPath = cs?.eventBasedDescentPath;
   const ec = cs?.squatEventCycle;
   squatCycleDebug.eventCycleDetected = ec?.detected;
   squatCycleDebug.eventCycleBand = ec?.band ?? null;
@@ -1098,7 +1112,7 @@ function getSquatFailureReasons(
   const sqPassReason = sqCs?.completionPassReason;
   const squatIsEasyPath =
     sqCs?.completionSatisfied === true &&
-    (sqPassReason === 'low_rom_event_cycle' || sqPassReason === 'ultra_low_rom_event_cycle') &&
+    isSquatShallowRomPassReason(sqPassReason) &&
     sqCs?.currentSquatPhase === 'standing_recovered';
   const standardCycleIntegrityBlock = getSquatRawStandardCycleSignalIntegrityBlock(
     sqCs?.completionSatisfied === true,
@@ -1251,7 +1265,7 @@ export function evaluateExerciseAutoProgress(
       return Boolean((easy || lowRom || humaneLowRom) && !strict);
     })();
   /**
-   * CAM-25: low_rom_event_cycle / ultra_low_rom_event_cycle 완료 경로는 squat easy-only branch.
+   * CAM-25 + PR-CAM-CORE: shallow ROM 완료 경로는 squat easy-only branch.
    * evaluatorResult.debug.squatCompletionState 는 runEvaluator() 직후 이미 확정된 값이므로
    * getSquatProgressionCompletionSatisfied() 호출 전에도 안전하게 읽을 수 있다.
    */
@@ -1262,7 +1276,7 @@ export function evaluateExerciseAutoProgress(
       const passReason = cs?.completionPassReason;
       return (
         cs?.completionSatisfied === true &&
-        (passReason === 'low_rom_event_cycle' || passReason === 'ultra_low_rom_event_cycle') &&
+        isSquatShallowRomPassReason(passReason) &&
         cs?.currentSquatPhase === 'standing_recovered'
       );
     })();

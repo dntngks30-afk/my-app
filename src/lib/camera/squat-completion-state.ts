@@ -2,6 +2,7 @@ import type { PoseFeaturesFrame } from './pose-features';
 import { getSquatRecoverySignal } from './pose-features';
 import {
   deriveSquatCompletionMachinePhase,
+  deriveSquatCompletionPassReason,
   type SquatCompletionMachinePhase,
   type SquatCompletionPassReason,
 } from '@/lib/camera/squat-completion-machine';
@@ -126,6 +127,8 @@ export interface SquatCompletionState extends MotionCompletionResult {
   eventCycleSource?: 'rule' | 'rule_plus_hmm' | null;
   /** PR-04E3B: shallow event-cycle 헬퍼 결과(관측·승격 판단 입력) */
   squatEventCycle?: SquatEventCycleResult;
+  /** PR-CAM-18: phaseHint descent 없이 trajectory 폴백으로 하강 인정 시 true — pass reason *_event_cycle 구분 */
+  eventBasedDescentPath?: boolean;
   /**
    * PR-CAM-ULTRA-LOW-ROM-EVENT-GATE-01: progression 역전 프레임 존재 — ultra-low event 승격 게이트 입력.
    * (JSON/트레이스 `reversalConfirmedAfterDescend` 와 동일 의미로 유지)
@@ -623,6 +626,7 @@ function evaluateSquatCompletionCore(
       eventCycleSource: null,
       reversalConfirmedAfterDescend: false,
       recoveryConfirmedAfterReversal: false,
+      eventBasedDescentPath: false,
     };
   }
 
@@ -1031,30 +1035,30 @@ function evaluateSquatCompletionCore(
   /**
    * PR-CAM-21: completion owner는 evidenceLabel이 아니라 "실제 통과 경로"에서 고른다.
    *
-   * 구분 원칙:
-   * - blocked → not_confirmed
-   * - standard path:
-   *   - phaseHint descent 경로를 실제로 탔고(eventBasedDescentPath === false)
-   *   - owner 전용 cutoff(STANDARD_OWNER_FLOOR) 이상으로 충분히 깊은 경우
-   * - 그 외 성공은 event-cycle owner:
-   *   - low_rom_event_cycle / ultra_low_rom_event_cycle
-   *
-   * 즉 evidenceLabel은 여전히 quality/interpretation label이지만,
-   * completionPassReason 자체를 결정하는 source-of-truth 는 아니다.
+   * PR-CAM-CORE-PASS-REASON-ALIGN-01: pass reason taxonomy 는 `deriveSquatCompletionPassReason` 에 위임하고,
+   * ordinary shallow(phase descent 살아 있음)는 *_cycle, trajectory 이벤트 폴백만 *_event_cycle.
    */
   const standardPathWon =
     completionBlockedReason == null &&
     eventBasedDescentPath === false &&
     relativeDepthPeak >= STANDARD_OWNER_FLOOR;
 
+  /**
+   * PR-CAM-CORE: `standard_cycle` / `not_confirmed` 는 위에서 분기.
+   * evidenceLabel `standard` 인데 owner 미달이면 ROM 밴드는 low 와 동일하게 `deriveSquatCompletionPassReason('low_rom', …)` 에 맡긴다.
+   */
+  const passReasonEvidenceLabel: SquatEvidenceLabel =
+    evidenceLabel === 'standard' ? 'low_rom' : evidenceLabel;
   const completionPassReason: SquatCompletionPassReason =
     completionBlockedReason != null
       ? 'not_confirmed'
       : standardPathWon
         ? 'standard_cycle'
-        : relativeDepthPeak >= LOW_ROM_LABEL_FLOOR
-          ? 'low_rom_event_cycle'
-          : 'ultra_low_rom_event_cycle';
+        : deriveSquatCompletionPassReason({
+            completionSatisfied: true,
+            evidenceLabel: passReasonEvidenceLabel,
+            eventBasedDescentPath,
+          });
 
   const completionSatisfied = completionPassReason !== 'not_confirmed';
 
@@ -1155,6 +1159,7 @@ function evaluateSquatCompletionCore(
     reversalConfirmedAfterDescend,
     recoveryConfirmedAfterReversal:
       standingRecovery.standingRecoveredAtMs != null && progressionReversalFrame != null,
+    eventBasedDescentPath,
   };
 }
 

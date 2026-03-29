@@ -177,6 +177,8 @@ export interface AttemptSnapshot {
       eventCycleBand?: string | null;
       eventCyclePromoted?: boolean;
       eventCycleSource?: string | null;
+      /** PR-CAM-CORE: completion-state trajectory descent 폴백 truth */
+      eventBasedDescentPath?: boolean;
       /** PR-CAM-OBS-NORMALIZE-01: 표면 혼선 방지용 해석 라벨(값·산식 변경 아님) */
       displayDepthTruth?: 'evaluator_peak_metric';
       ownerDepthTruth?: 'completion_relative_depth';
@@ -909,6 +911,7 @@ function buildDiagnosisSummary(
       eventCycleBand: sc.eventCycleBand ?? null,
       eventCyclePromoted: sc.eventCyclePromoted,
       eventCycleSource: sc.eventCycleSource ?? null,
+      eventBasedDescentPath: sc.eventBasedDescentPath,
       displayDepthTruth: 'evaluator_peak_metric',
       ownerDepthTruth: 'completion_relative_depth',
       cycleDecisionTruth: 'completion_state',

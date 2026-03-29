@@ -131,6 +131,8 @@ export function resolveSquatPassOwner(input: {
   if (input.decoupleEligible && input.completionSatisfied) {
     if (input.completionPassReason === 'standard_cycle') return 'completion_truth_standard';
     if (
+      input.completionPassReason === 'low_rom_cycle' ||
+      input.completionPassReason === 'ultra_low_rom_cycle' ||
       input.completionPassReason === 'low_rom_event_cycle' ||
       input.completionPassReason === 'ultra_low_rom_event_cycle'
     ) {
