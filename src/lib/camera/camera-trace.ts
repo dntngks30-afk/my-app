@@ -19,6 +19,11 @@ import { buildSquatCalibrationTraceCompact } from '@/lib/camera/squat/squat-cali
 import { buildSquatArmingAssistTraceCompact } from '@/lib/camera/squat/squat-arming-assist';
 import { buildSquatReversalAssistTraceCompact } from '@/lib/camera/squat/squat-reversal-assist';
 import type { OverheadInternalQuality } from './overhead/overhead-internal-quality';
+import {
+  buildSquatResultSeveritySummary,
+  type SquatPassSeverity,
+  type SquatResultInterpretation,
+} from './squat-result-severity';
 
 /** PR-4: movement type (squat, overhead_reach만 지원) */
 export type TraceMovementType = 'squat' | 'overhead_reach';
@@ -178,6 +183,11 @@ export interface AttemptSnapshot {
       cycleDecisionTruth?: 'completion_state';
       /** PR-COMP-03 */
       squatInternalQuality?: SquatInternalQuality;
+      /** PR-CAM-SQUAT-RESULT-SEVERITY-01: pass truth + quality truth 기반 해석(판정 변경 없음) */
+      passSeverity?: SquatPassSeverity;
+      resultInterpretation?: SquatResultInterpretation;
+      qualityWarningCount?: number;
+      limitationCount?: number;
       /** CAM-shallow-obs: attempt-evidence보다 약한 관측 계약(저장·진단 전용) */
       shallowObservationEligible?: boolean;
       /** PR-HMM-03A: 컴팩트 calibration (짧은 키) */
@@ -801,6 +811,7 @@ function buildDiagnosisSummary(
 
   if (stepId === 'squat' && gate.squatCycleDebug) {
     const sc = gate.squatCycleDebug;
+    const siq = gate.evaluatorResult.debug?.squatInternalQuality;
     const peakDepth =
       typeof hm?.depthPeak === 'number'
         ? hm.depthPeak
@@ -901,8 +912,20 @@ function buildDiagnosisSummary(
       displayDepthTruth: 'evaluator_peak_metric',
       ownerDepthTruth: 'completion_relative_depth',
       cycleDecisionTruth: 'completion_state',
-      squatInternalQuality: gate.evaluatorResult.debug?.squatInternalQuality,
+      squatInternalQuality: siq,
     };
+
+    const severity = buildSquatResultSeveritySummary({
+      completionTruthPassed: sc.completionTruthPassed === true,
+      captureQuality: gate.guardrail.captureQuality,
+      qualityOnlyWarnings: sc.qualityOnlyWarnings,
+      qualityTier: siq?.qualityTier ?? null,
+      limitations: siq?.limitations,
+    });
+    base.squatCycle.passSeverity = severity.passSeverity;
+    base.squatCycle.resultInterpretation = severity.resultInterpretation;
+    base.squatCycle.qualityWarningCount = severity.qualityWarningCount;
+    base.squatCycle.limitationCount = severity.limitationCount;
 
     // PR-HMM-01B: shadow decoder compact summary — snapshot payload 과대화 방지
     const squatHmm = gate.evaluatorResult.debug?.squatHmm;

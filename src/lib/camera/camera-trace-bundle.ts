@@ -14,6 +14,10 @@ import {
   getRecentSquatObservationsSnapshot,
 } from './camera-trace';
 import { CAMERA_DIAG_VERSION } from './camera-success-diagnostic';
+import {
+  buildSquatResultSeveritySummary,
+  type SquatResultSeveritySummary,
+} from './squat-result-severity';
 
 export const BUNDLE_STORAGE_KEY = 'moveReCameraTraceBundle:v1';
 export const MAX_CAPTURE_SESSION_BUNDLES = 20;
@@ -94,6 +98,8 @@ export interface CaptureSessionBundleSummary {
   /** PR-CAM-OBS-TRUTH-STAGE-01: 터미널 번들 요약에서도 blocked reason 해석 단계(관측과 동일 의미) */
   observationTruthStage?: ObservationTruthStage;
   completionBlockedReasonAuthoritative?: boolean;
+  /** PR-CAM-SQUAT-RESULT-SEVERITY-01: 통과·품질 truth 기반 severity(엔진 변경 없음) */
+  resultSeverity?: SquatResultSeveritySummary;
 }
 
 export interface CaptureSessionBundle {
@@ -239,7 +245,14 @@ export function extractCaptureSessionSummaryFromAttempt(
   }
 
   const normalized = buildSquatNormalizedTruthFromCycle(sq);
-  const withNorm: CaptureSessionBundleSummary = { ...flat, normalized };
+  const resultSeverity = buildSquatResultSeveritySummary({
+    completionTruthPassed: sq.completionTruthPassed === true,
+    captureQuality: String(d.captureQuality ?? ''),
+    qualityOnlyWarnings: sq.qualityOnlyWarnings,
+    qualityTier: sq.squatInternalQuality?.qualityTier ?? null,
+    limitations: sq.squatInternalQuality?.limitations,
+  });
+  const withNorm: CaptureSessionBundleSummary = { ...flat, normalized, resultSeverity };
   return {
     ...withNorm,
     interpretationHints: buildSquatInterpretationHints(withNorm),
