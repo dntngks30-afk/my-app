@@ -39,6 +39,13 @@ export interface SquatReversalDetectInput {
 
 /** 완화 rule·HMM 보조 적용 최소 ROM — shallow bounce 에는 적용 안 함 */
 const MODERATE_ROM_REL_PEAK_FLOOR = 0.12;
+/** PR-CAM-SHALLOW-REVERSAL-SIGNAL-01: <0.08 은 기존과 동일 ultra-shallow strict-only */
+const ULTRA_SHALLOW_STRICT_ONLY_FLOOR = 0.08;
+/** 0.08 <= rel < 0.12 만 제한적 window relax 허용 (ascent/HMM 금지) */
+const SHALLOW_RELAX_FLOOR = 0.08;
+const SHALLOW_RELAX_CEIL = 0.12;
+/** shallow-relax 전용 drop 계수 — 기존 WINDOW_RELAX_FACTOR(0.92)와 별도, 함수 본문 미변경 유지 */
+const SHALLOW_WINDOW_RELAX_FACTOR = 0.88;
 const WINDOW_RELAX_FACTOR = 0.92;
 /** 너무 낮으면 PR-HMM-04B 완만 상승 합성 시퀀스가 구 assist 전에 rule로 열려 스모크·계약이 깨짐 */
 const ASCENT_STREAK_RELAX_FACTOR = 0.93;
@@ -126,6 +133,31 @@ function strictReversalHit(
   return { hit: false, firstIdx: null, count: 0 };
 }
 
+/**
+ * PR-CAM-SHALLOW-REVERSAL-SIGNAL-01: [0.08, 0.12) 전용 — 피크 직후 4프레임·reversal depth 유효 ≥2·drop ≥ required*0.88
+ * windowReversalRelax / ascent / HMM 과 분리(계수·노트 다름).
+ */
+function shallowWindowReversalRelax(
+  validFrames: PoseFeaturesFrame[],
+  peakValidIndex: number,
+  peakPrimaryDepth: number,
+  required: number
+): { ok: boolean; drop: number; frames: number } {
+  const win = 4;
+  const slice = validFrames.slice(peakValidIndex + 1, peakValidIndex + 1 + win);
+  const revs = slice
+    .map((f) => readSquatCompletionDepthForReversal(f))
+    .filter((x): x is number => x != null);
+  if (revs.length < 2) return { ok: false, drop: 0, frames: revs.length };
+  const minR = Math.min(...revs);
+  const drop = peakPrimaryDepth - minR;
+  return {
+    ok: drop >= required * SHALLOW_WINDOW_RELAX_FACTOR,
+    drop,
+    frames: revs.length,
+  };
+}
+
 function windowReversalRelax(
   validFrames: PoseFeaturesFrame[],
   peakValidIndex: number,
@@ -191,7 +223,7 @@ function hmmBridgeConfirm(
 
 /**
  * 피크 이후 역전(상승 시작) rule + 선택적 HMM 보조.
- * shallow(relativeDepthPeak < MODERATE_ROM_REL_PEAK_FLOOR) 에는 단일 프레임 strict 만 허용.
+ * relativeDepthPeak < 0.08: strict-only · <0.12 구간은 [0.08,0.12) 에서 shallowWindowReversalRelax 만 추가.
  */
 export function detectSquatReversalConfirmation(input: SquatReversalDetectInput): SquatReversalConfirmation {
   const notes: string[] = [];
@@ -205,7 +237,6 @@ export function detectSquatReversalConfirmation(input: SquatReversalDetectInput)
   } = input;
 
   const ev = computePostPeakRecoveryEvidence(validFrames, peakValidIndex, peakPrimaryDepth);
-  const shallowOnly = relativeDepthPeak < MODERATE_ROM_REL_PEAK_FLOOR;
 
   const sp = strictPrimaryHit(validFrames, peakValidIndex, peakPrimaryDepth, req);
   if (sp.hit && sp.firstIdx != null) {
@@ -246,47 +277,79 @@ export function detectSquatReversalConfirmation(input: SquatReversalDetectInput)
     };
   }
 
-  if (!shallowOnly) {
-    const w = windowReversalRelax(validFrames, peakValidIndex, peakPrimaryDepth, req, 4);
-    if (w.ok) {
-      notes.push('window_reversal_relax');
+  if (relativeDepthPeak < ULTRA_SHALLOW_STRICT_ONLY_FLOOR) {
+    notes.push('ultra_shallow_strict_only_no_hit');
+    return {
+      reversalConfirmed: false,
+      reversalIndex: null,
+      reversalDepthDrop: Math.max(ev.dropPrimary, ev.dropReversal),
+      reversalFrameCount: 0,
+      reversalSource: 'none',
+      notes,
+    };
+  }
+
+  if (relativeDepthPeak >= SHALLOW_RELAX_FLOOR && relativeDepthPeak < SHALLOW_RELAX_CEIL) {
+    const sw = shallowWindowReversalRelax(validFrames, peakValidIndex, peakPrimaryDepth, req);
+    if (sw.ok) {
+      notes.push('shallow_window_reversal_relax');
       return {
         reversalConfirmed: true,
         reversalIndex: peakValidIndex,
-        reversalDepthDrop: w.drop,
-        reversalFrameCount: w.frames,
+        reversalDepthDrop: sw.drop,
+        reversalFrameCount: sw.frames,
         reversalSource: 'rule',
         notes,
       };
     }
+    notes.push('shallow_relax_no_hit');
+    return {
+      reversalConfirmed: false,
+      reversalIndex: null,
+      reversalDepthDrop: Math.max(ev.dropPrimary, ev.dropReversal),
+      reversalFrameCount: 0,
+      reversalSource: 'none',
+      notes,
+    };
+  }
 
-    const a = ascentStreakRelax(validFrames, peakValidIndex, peakPrimaryDepth, req);
-    if (a.ok) {
-      notes.push('ascent_streak_relax');
-      return {
-        reversalConfirmed: true,
-        reversalIndex: peakValidIndex,
-        reversalDepthDrop: a.drop,
-        reversalFrameCount: a.streak,
-        reversalSource: 'rule',
-        notes,
-      };
-    }
+  const w = windowReversalRelax(validFrames, peakValidIndex, peakPrimaryDepth, req, 4);
+  if (w.ok) {
+    notes.push('window_reversal_relax');
+    return {
+      reversalConfirmed: true,
+      reversalIndex: peakValidIndex,
+      reversalDepthDrop: w.drop,
+      reversalFrameCount: w.frames,
+      reversalSource: 'rule',
+      notes,
+    };
+  }
 
-    const hb = hmmBridgeConfirm(validFrames, peakValidIndex, peakPrimaryDepth, req, relativeDepthPeak, hmm);
-    if (hb.ok) {
-      notes.push('hmm_bridge_rule_plus_hmm');
-      return {
-        reversalConfirmed: true,
-        reversalIndex: peakValidIndex,
-        reversalDepthDrop: hb.drop,
-        reversalFrameCount: 2,
-        reversalSource: 'rule_plus_hmm',
-        notes,
-      };
-    }
-  } else {
-    notes.push('shallow_strict_only_no_hit');
+  const a = ascentStreakRelax(validFrames, peakValidIndex, peakPrimaryDepth, req);
+  if (a.ok) {
+    notes.push('ascent_streak_relax');
+    return {
+      reversalConfirmed: true,
+      reversalIndex: peakValidIndex,
+      reversalDepthDrop: a.drop,
+      reversalFrameCount: a.streak,
+      reversalSource: 'rule',
+      notes,
+    };
+  }
+
+  const hb = hmmBridgeConfirm(validFrames, peakValidIndex, peakPrimaryDepth, req, relativeDepthPeak, hmm);
+  if (hb.ok) {
+    notes.push('hmm_bridge_rule_plus_hmm');
+    return {
+      reversalConfirmed: true,
+      reversalIndex: peakValidIndex,
+      reversalDepthDrop: hb.drop,
+      reversalFrameCount: 2,
+      reversalSource: 'rule_plus_hmm',
+      notes,
+    };
   }
 
   return {
