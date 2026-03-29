@@ -271,6 +271,44 @@ function recoveryMeetsLowRomStyleFinalizeProof(
   );
 }
 
+/**
+ * PR-CAM-ASCENT-INTEGRITY-RESCUE-01: trajectory rescue는 reversal 앵커만 줄 수 있고, ascent truth 는
+ * 명시 상승 증거 또는 (finalize + low-ROM 복귀 증거 + 역전→스탠딩 타이밍)을 만족할 때만 true.
+ * 새 threshold 없음 — `recoveryMeetsLowRomStyleFinalizeProof` 및 호출부 `minReversalToStandingMs` 재사용.
+ */
+export type TrajectoryRescueAscentIntegrityArgs = {
+  explicitAscendConfirmed: boolean;
+  standingRecoveredAtMs?: number;
+  standingRecoveryFinalizeSatisfied: boolean;
+  recoveryReturnContinuityFrames?: number;
+  recoveryDropRatio?: number;
+  reversalAtMs?: number;
+  minReversalToStandingMs: number;
+};
+
+export function trajectoryRescueMeetsAscentIntegrity(args: TrajectoryRescueAscentIntegrityArgs): boolean {
+  if (args.explicitAscendConfirmed === true) return true;
+  if (args.standingRecoveredAtMs == null) return false;
+  if (args.standingRecoveryFinalizeSatisfied !== true) return false;
+  if (
+    !recoveryMeetsLowRomStyleFinalizeProof({
+      recoveryReturnContinuityFrames: args.recoveryReturnContinuityFrames,
+      recoveryDropRatio: args.recoveryDropRatio,
+    })
+  ) {
+    return false;
+  }
+  if (args.reversalAtMs == null) return false;
+  if (args.standingRecoveredAtMs <= args.reversalAtMs) return false;
+  if (
+    args.standingRecoveredAtMs - args.reversalAtMs <
+    args.minReversalToStandingMs
+  ) {
+    return false;
+  }
+  return true;
+}
+
 type SquatDepthFrameLite = {
   index: number;
   depth: number;
@@ -974,7 +1012,16 @@ function evaluateSquatCompletionCore(
   if (trajectoryRescue.trajectoryReversalConfirmedBy === 'trajectory') {
     const rf = trajectoryRescue.trajectoryReversalFrame;
     if (rf != null) {
-      ascendForProgression = computeAscendConfirmed(rf) || true;
+      const explicitTrajectoryAscend = computeAscendConfirmed(rf);
+      ascendForProgression = trajectoryRescueMeetsAscentIntegrity({
+        explicitAscendConfirmed: explicitTrajectoryAscend,
+        standingRecoveredAtMs: standingRecovery.standingRecoveredAtMs,
+        standingRecoveryFinalizeSatisfied: standingRecoveryFinalize.finalizeSatisfied,
+        recoveryReturnContinuityFrames: recovery.returnContinuityFrames,
+        recoveryDropRatio: recovery.recoveryDropRatio,
+        reversalAtMs: rf.timestampMs,
+        minReversalToStandingMs: minReversalToStandingMsForShallow,
+      });
       ruleCompletionBlockedReason = computeBlockedAfterCommitment(rf, ascendForProgression);
     }
   }
