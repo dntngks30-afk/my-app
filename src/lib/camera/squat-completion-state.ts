@@ -375,6 +375,25 @@ function getSquatEvidenceLabel(
   return 'insufficient_signal';
 }
 
+/**
+ * PR-SHALLOW-SQUAT-FINALIZE-BAND-01: standing recovery finalize 게이트 전용 밴드.
+ *
+ * evidenceLabel(STANDARD_LABEL_FLOOR=0.10 기준)과 달리 owner 기준선(STANDARD_OWNER_FLOOR=0.40)으로
+ * 'standard'를 구분하므로, 0.10~0.39 구간이 standard finalize hold 대신 low_rom finalize 규칙을 탄다.
+ *
+ * 주의: evidenceLabel(quality/interpretation 라벨)은 이 함수로 대체되지 않는다.
+ * 이 helper는 standing recovery finalize 게이트 호출에만 사용한다.
+ */
+function getStandingRecoveryFinalizeBand(
+  relativeDepthPeak: number,
+  attemptAdmissionSatisfied: boolean
+): SquatEvidenceLabel {
+  if (relativeDepthPeak >= STANDARD_OWNER_FLOOR) return 'standard';
+  if (relativeDepthPeak >= LOW_ROM_LABEL_FLOOR) return 'low_rom';
+  if (attemptAdmissionSatisfied) return 'ultra_low_rom';
+  return 'insufficient_signal';
+}
+
 function getStandingRecoveryFinalizeGate(
   evidenceLabel: SquatEvidenceLabel,
   standingRecovery: {
@@ -791,8 +810,13 @@ function evaluateSquatCompletionCore(
     relativeDepthPeak
   );
   const evidenceLabel = getSquatEvidenceLabel(relativeDepthPeak, attemptAdmissionSatisfied);
+  /** PR-SHALLOW-SQUAT-FINALIZE-BAND-01: finalize gate는 evidenceLabel 대신 별도 band 사용 */
+  const standingRecoveryFinalizeBand = getStandingRecoveryFinalizeBand(
+    relativeDepthPeak,
+    attemptAdmissionSatisfied
+  );
   const standingRecoveryFinalize = getStandingRecoveryFinalizeGate(
-    evidenceLabel,
+    standingRecoveryFinalizeBand,
     standingRecovery,
     {
       recoveryReturnContinuityFrames: recovery.returnContinuityFrames,
@@ -833,9 +857,9 @@ function evaluateSquatCompletionCore(
     if (!asc) return 'no_ascend';
     if (standingRecovery.standingRecoveredAtMs == null) return 'not_standing_recovered';
     if (!standingRecoveryFinalize.finalizeSatisfied) {
-      return evidenceLabel === 'low_rom'
+      return standingRecoveryFinalizeBand === 'low_rom'
         ? 'low_rom_standing_finalize_not_satisfied'
-        : evidenceLabel === 'ultra_low_rom'
+        : standingRecoveryFinalizeBand === 'ultra_low_rom'
           ? 'ultra_low_rom_standing_finalize_not_satisfied'
           : 'recovery_hold_too_short';
     }
@@ -1046,7 +1070,7 @@ function evaluateSquatCompletionCore(
     standingRecoveryThreshold: standingRecovery.standingRecoveryThreshold,
     standingRecoveryMinFramesUsed: standingRecoveryFinalize.minFramesUsed,
     standingRecoveryMinHoldMsUsed: standingRecoveryFinalize.minHoldMsUsed,
-    standingRecoveryBand: evidenceLabel,
+    standingRecoveryBand: standingRecoveryFinalizeBand,
     standingRecoveryFinalizeReason: standingRecoveryFinalize.finalizeReason,
     lowRomRecoveryReason: recovery.lowRomRecoveryReason ?? null,
     ultraLowRomRecoveryReason: recovery.ultraLowRomRecoveryReason ?? null,
