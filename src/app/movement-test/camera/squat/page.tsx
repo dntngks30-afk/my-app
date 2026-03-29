@@ -783,6 +783,14 @@ export default function CameraSquatPage() {
     });
     persistCurrentStep();
     if (squatSessionBundleRecordedForStepKeyRef.current !== currentStepKey) {
+      /* PR-CAM-OBS-FLUSH-HARDEN-01: bundle 직전 terminal 관측 1회(성공 경로는 effect captureTerminal 미도달) */
+      if (squatTerminalObservationRef.current !== currentStepKey) {
+        squatTerminalObservationRef.current = currentStepKey;
+        recordSquatObservationEvent(gate, 'capture_session_terminal', {
+          captureTerminalKind: 'pass_latched',
+          shallowObservationContract: hasShallowSquatObservation(gate),
+        });
+      }
       recordCaptureSessionTerminalBundle({
         stepId: STEP_ID,
         gate,
@@ -857,19 +865,17 @@ export default function CameraSquatPage() {
             : gate.progressionState;
 
       if (
-        shallowObs &&
-        squatTerminalObservationRef.current !== currentStepKey
-      ) {
-        squatTerminalObservationRef.current = currentStepKey;
-        recordSquatObservationEvent(gate, 'capture_session_terminal', {
-          captureTerminalKind: terminalKind,
-          shallowObservationContract: true,
-        });
-      }
-      if (
         (shallowObs || attemptEv) &&
         squatTerminalAttemptSnapshotRef.current !== currentStepKey
       ) {
+        /* PR-CAM-OBS-FLUSH-HARDEN-01: snapshot/bundle 직전 terminal 관측 1회(shallow-only도 attempt 경로와 동일 ref) */
+        if (squatTerminalObservationRef.current !== currentStepKey) {
+          squatTerminalObservationRef.current = currentStepKey;
+          recordSquatObservationEvent(gate, 'capture_session_terminal', {
+            captureTerminalKind: terminalKind,
+            shallowObservationContract: shallowObs,
+          });
+        }
         squatTerminalAttemptSnapshotRef.current = currentStepKey;
         recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
           liveCueingEnabled: true,
@@ -1073,6 +1079,13 @@ export default function CameraSquatPage() {
       const g = gateRef.current;
       if (!g) return;
       if (statsRef.current.sampledFrameCount < 1) return;
+      if (squatTerminalObservationRef.current !== stepKey) {
+        squatTerminalObservationRef.current = stepKey;
+        recordSquatObservationEvent(g, 'capture_session_terminal', {
+          captureTerminalKind: 'unmount_abandoned',
+          shallowObservationContract: hasShallowSquatObservation(g),
+        });
+      }
       recordCaptureSessionTerminalBundle({
         stepId: STEP_ID,
         gate: g,

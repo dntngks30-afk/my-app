@@ -9,7 +9,7 @@ import {
   buildAttemptSnapshot,
   type AttemptSnapshot,
   type SquatAttemptObservation,
-  getRecentSquatObservations,
+  getRecentSquatObservationsSnapshot,
 } from './camera-trace';
 import { CAMERA_DIAG_VERSION } from './camera-success-diagnostic';
 
@@ -87,6 +87,8 @@ export interface CaptureSessionBundleSummary {
   eventCycleSource?: string | null;
   normalized?: SquatNormalizedTruthSummary | null;
   interpretationHints?: string[];
+  /** PR-CAM-OBS-FLUSH-HARDEN-01: bundle.observations 길이 힌트(모바일에서 비어 있음 빠르게 확인) */
+  observationCount?: number;
 }
 
 export interface CaptureSessionBundle {
@@ -272,6 +274,7 @@ export function buildCaptureSessionBundle(input: {
   const createdAt = new Date().toISOString();
   const terminalTs = input.latestAttempt?.ts ?? createdAt;
   const filtered = filterObservationsForBundle(terminalTs, input.observations);
+  const baseSummary = extractCaptureSessionSummaryFromAttempt(input.latestAttempt);
   return {
     id: newBundleId(),
     createdAt,
@@ -281,7 +284,7 @@ export function buildCaptureSessionBundle(input: {
     terminalKind: input.terminalKind,
     latestAttempt: input.latestAttempt,
     observations: filtered,
-    summary: extractCaptureSessionSummaryFromAttempt(input.latestAttempt),
+    summary: { ...baseSummary, observationCount: filtered.length },
     debugVersion: `${BUNDLE_DEBUG_PREFIX}:${CAMERA_DIAG_VERSION}`,
   };
 }
@@ -363,7 +366,7 @@ export function recordCaptureSessionTerminalBundle(input: {
       buildAttemptSnapshot(input.stepId, input.gate, input.context, input.options) ?? undefined;
     const motionType = input.stepId === 'squat' ? 'squat' : 'overhead_reach';
     const observations =
-      input.stepId === 'squat' ? getRecentSquatObservations() : ([] as SquatAttemptObservation[]);
+      input.stepId === 'squat' ? getRecentSquatObservationsSnapshot() : ([] as SquatAttemptObservation[]);
     const bundle = buildCaptureSessionBundle({
       latestAttempt,
       observations,

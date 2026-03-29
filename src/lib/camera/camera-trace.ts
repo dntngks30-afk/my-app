@@ -314,6 +314,21 @@ export interface SquatAttemptObservation {
 
 const TRACE_STORAGE_KEY = 'moveReCameraTrace:v1';
 const OBSERVATION_STORAGE_KEY = 'moveReCameraSquatObservation:v1';
+
+/** PR-CAM-OBS-FLUSH-HARDEN-01: LS 실패/레이스 시에도 terminal bundle이 비지 않도록 보조(LS가 정본) */
+let lastKnownSquatObservationsCache: SquatAttemptObservation[] = [];
+
+/** 브라우저·Node 스모크 공통 — `window` 없이 globalThis.localStorage만 있는 환경 지원 */
+function getObservationStorage(): Storage | null {
+  if (typeof globalThis === 'undefined') return null;
+  try {
+    const ls = (globalThis as { localStorage?: Storage }).localStorage;
+    if (ls && typeof ls.getItem === 'function' && typeof ls.setItem === 'function') return ls;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
 const MAX_ATTEMPTS = 50;
 const MAX_SQUAT_OBSERVATIONS = 80;
 const DEBUG_VERSION = 'pr4-2';
@@ -519,10 +534,10 @@ export function buildSquatAttemptObservation(
     motionBottomDetected: !!sc?.bottomDetected,
     motionRecoveryDetected: !!sc?.recoveryDetected,
     shallowObservationContract: shallowContract,
-    baselineFrozen: csFull?.baselineFrozen,
-    peakLatched: csFull?.peakLatched,
-    eventCycleDetected: csFull?.squatEventCycle?.detected,
-    eventCyclePromoted: csFull?.eventCyclePromoted,
+    baselineFrozen: gate.evaluatorResult?.debug?.squatCompletionState?.baselineFrozen,
+    peakLatched: gate.evaluatorResult?.debug?.squatCompletionState?.peakLatched,
+    eventCycleDetected: gate.evaluatorResult?.debug?.squatCompletionState?.squatEventCycle?.detected,
+    eventCyclePromoted: gate.evaluatorResult?.debug?.squatCompletionState?.eventCyclePromoted,
     debugVersion: `${OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
   };
 }
@@ -538,33 +553,77 @@ function observationDedupSkip(list: SquatAttemptObservation[], next: SquatAttemp
 
 /** bounded localStorage — 실패 시 무시 */
 export function pushSquatObservation(obs: SquatAttemptObservation): void {
-  if (typeof window === 'undefined') return;
+  const ls = getObservationStorage();
+  if (!ls) return;
   try {
-    const raw = localStorage.getItem(OBSERVATION_STORAGE_KEY);
+    const raw = ls.getItem(OBSERVATION_STORAGE_KEY);
     const list: SquatAttemptObservation[] = raw ? (JSON.parse(raw) as SquatAttemptObservation[]) : [];
     if (observationDedupSkip(list, obs)) return;
     list.push(obs);
     const trimmed = list.slice(-MAX_SQUAT_OBSERVATIONS);
-    localStorage.setItem(OBSERVATION_STORAGE_KEY, JSON.stringify(trimmed));
+    lastKnownSquatObservationsCache = trimmed.slice();
+    try {
+      ls.setItem(OBSERVATION_STORAGE_KEY, JSON.stringify(trimmed));
+    } catch {
+      /* LS 쓰기 실패 — 캐시는 이미 최신 목록 */
+    }
   } catch {
-    // ignore
+    try {
+      const list = [...lastKnownSquatObservationsCache];
+      if (observationDedupSkip(list, obs)) return;
+      list.push(obs);
+      lastKnownSquatObservationsCache = list.slice(-MAX_SQUAT_OBSERVATIONS);
+    } catch {
+      // ignore
+    }
   }
 }
 
 export function getRecentSquatObservations(): SquatAttemptObservation[] {
-  if (typeof window === 'undefined') return [];
+  const ls = getObservationStorage();
+  if (!ls) return [];
   try {
-    const raw = localStorage.getItem(OBSERVATION_STORAGE_KEY);
+    const raw = ls.getItem(OBSERVATION_STORAGE_KEY);
     return raw ? (JSON.parse(raw) as SquatAttemptObservation[]) : [];
   } catch {
     return [];
   }
 }
 
-export function clearSquatObservations(): void {
-  if (typeof window === 'undefined') return;
+/**
+ * Terminal bundle 직전에 호출 — LS 정본 우선, 파싱 실패·비어 있음·쓰기 실패로 캐시가 더 길면 캐시 사용.
+ * 산식 변경 없음, 읽기 경로만 명시.
+ */
+export function getRecentSquatObservationsSnapshot(): SquatAttemptObservation[] {
+  let fromLs: SquatAttemptObservation[] = [];
+  let readOk = false;
   try {
-    localStorage.removeItem(OBSERVATION_STORAGE_KEY);
+    const ls = getObservationStorage();
+    if (!ls) {
+      return lastKnownSquatObservationsCache.length > 0 ? lastKnownSquatObservationsCache.slice() : [];
+    }
+    const raw = ls.getItem(OBSERVATION_STORAGE_KEY);
+    fromLs = raw ? (JSON.parse(raw) as SquatAttemptObservation[]) : [];
+    readOk = true;
+  } catch {
+    fromLs = [];
+  }
+  if (!readOk) {
+    return lastKnownSquatObservationsCache.length > 0 ? lastKnownSquatObservationsCache.slice() : [];
+  }
+  if (lastKnownSquatObservationsCache.length > fromLs.length) {
+    return lastKnownSquatObservationsCache.slice();
+  }
+  if (fromLs.length > 0) return fromLs;
+  return lastKnownSquatObservationsCache.length > 0 ? lastKnownSquatObservationsCache.slice() : [];
+}
+
+export function clearSquatObservations(): void {
+  lastKnownSquatObservationsCache = [];
+  const ls = getObservationStorage();
+  if (!ls) return;
+  try {
+    ls.removeItem(OBSERVATION_STORAGE_KEY);
   } catch {
     // ignore
   }
@@ -1007,12 +1066,14 @@ export function getRecentAttempts(): AttemptSnapshot[] {
  * trace 저장소 초기화
  */
 export function clearAttempts(): void {
-  if (typeof window === 'undefined') return;
+  lastKnownSquatObservationsCache = [];
+  const ls = getObservationStorage();
+  if (!ls) return;
   try {
-    localStorage.removeItem(TRACE_STORAGE_KEY);
-    localStorage.removeItem(OBSERVATION_STORAGE_KEY);
+    ls.removeItem(TRACE_STORAGE_KEY);
+    ls.removeItem(OBSERVATION_STORAGE_KEY);
     /** PR-CAM-SNAPSHOT-BUNDLE-01: 번들 저장소 — camera-trace-bundle.ts BUNDLE_STORAGE_KEY 와 동일 문자열 */
-    localStorage.removeItem('moveReCameraTraceBundle:v1');
+    ls.removeItem('moveReCameraTraceBundle:v1');
   } catch {
     // ignore
   }

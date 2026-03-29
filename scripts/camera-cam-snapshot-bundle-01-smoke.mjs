@@ -10,7 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 process.chdir(join(__dirname, '..'));
 
 const store = new Map();
-globalThis.localStorage = {
+const mockLs = {
   getItem(k) {
     return store.has(k) ? store.get(k) : null;
   },
@@ -21,6 +21,16 @@ globalThis.localStorage = {
     store.delete(k);
   },
 };
+try {
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: mockLs,
+    configurable: true,
+    writable: true,
+    enumerable: true,
+  });
+} catch {
+  globalThis.localStorage = mockLs;
+}
 if (typeof globalThis.window === 'undefined') {
   globalThis.window = globalThis;
 }
@@ -154,6 +164,10 @@ ok(
   'attempt squatCycle truth labels',
   b0?.latestAttempt?.diagnosisSummary?.squatCycle?.displayDepthTruth === 'evaluator_peak_metric' &&
     b0?.latestAttempt?.diagnosisSummary?.squatCycle?.ownerDepthTruth === 'completion_relative_depth'
+);
+ok(
+  'PR-FLUSH: observationCount matches bundle.observations',
+  b0?.summary?.observationCount === b0?.observations?.length && (b0?.summary?.observationCount ?? 0) >= 1
 );
 const fromExtract = extractCaptureSessionSummaryFromAttempt(b0?.latestAttempt);
 ok('extract matches bundle.summary shape', typeof fromExtract === 'object');
