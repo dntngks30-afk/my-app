@@ -1,5 +1,6 @@
 /**
  * PR-CAM-SNAPSHOT-BUNDLE-01: 한 번의 촬영 시도를 단일 JSON 번들로 묶어 localStorage에 보관.
+ * PR-CAM-OBS-NORMALIZE-01: owner/depth truth 계층을 normalized summary·힌트로 구분(산식·값 조작 없음).
  * raw frame/landmark/video 없음 — 기존 AttemptSnapshot·SquatAttemptObservation 만 사용.
  */
 import type { CameraStepId } from '@/lib/public/camera-test';
@@ -16,6 +17,48 @@ export const BUNDLE_STORAGE_KEY = 'moveReCameraTraceBundle:v1';
 export const MAX_CAPTURE_SESSION_BUNDLES = 20;
 
 const BUNDLE_DEBUG_PREFIX = 'cam-snapshot-bundle-01';
+
+/** PR-CAM-OBS-NORMALIZE-01: 동일 스냅샷 내 서로 다른 truth 계층을 이름으로 분리(재계산 없음) */
+export interface SquatNormalizedTruthSummary {
+  ownerTruth: {
+    completionPassReason: string | null;
+    completionPathUsed: string | null;
+    passOwner: string | null;
+    finalSuccessOwner: string | null;
+    standardOwnerEligible: boolean | null;
+    shadowEventOwnerEligible: boolean | null;
+  };
+  completionDepthTruth: {
+    relativeDepthPeak: number | null;
+    rawDepthPeak: number | null;
+    relativeDepthPeakSource: string | null;
+    baselineFrozen: boolean | null;
+    baselineFrozenDepth: number | null;
+    eventCycleDetected: boolean | null;
+    eventCyclePromoted: boolean | null;
+    eventCycleBand: string | null;
+    eventCycleSource: string | null;
+  };
+  evaluatorDepthTruth: {
+    peakDepthMetric: number | null;
+    depthBand: string | null;
+    romBand: string | null;
+    squatDepthPeakPrimary: number | null;
+    squatDepthPeakBlended: number | null;
+    rawDepthPeakPrimary: number | null;
+    rawDepthPeakBlended: number | null;
+  };
+  cycleTruth: {
+    currentSquatPhase: string | null;
+    descendConfirmed: boolean | null;
+    ascendConfirmed: boolean | null;
+    reversalConfirmedAfterDescend: boolean | null;
+    recoveryConfirmedAfterReversal: boolean | null;
+    passBlockedReason: string | null;
+    completionBlockedReason: string | null;
+    standardPathBlockedReason: string | null;
+  };
+}
 
 export type CaptureSessionTerminalKind =
   | 'success'
@@ -42,6 +85,8 @@ export interface CaptureSessionBundleSummary {
   eventCycleDetected?: boolean;
   eventCyclePromoted?: boolean;
   eventCycleSource?: string | null;
+  normalized?: SquatNormalizedTruthSummary | null;
+  interpretationHints?: string[];
 }
 
 export interface CaptureSessionBundle {
@@ -61,7 +106,100 @@ function newBundleId(): string {
   return `bundle-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/** diagnosisSummary.squatCycle + 스냅샷 상단 필드에서 summary 추출 */
+type SquatCycleSnap = NonNullable<NonNullable<AttemptSnapshot['diagnosisSummary']>['squatCycle']>;
+
+function buildSquatNormalizedTruthFromCycle(sq: SquatCycleSnap): SquatNormalizedTruthSummary {
+  return {
+    ownerTruth: {
+      completionPassReason: sq.completionPassReason ?? null,
+      completionPathUsed: sq.completionPathUsed ?? null,
+      passOwner: sq.passOwner ?? null,
+      finalSuccessOwner: sq.finalSuccessOwner ?? null,
+      standardOwnerEligible: typeof sq.standardOwnerEligible === 'boolean' ? sq.standardOwnerEligible : null,
+      shadowEventOwnerEligible:
+        typeof sq.shadowEventOwnerEligible === 'boolean' ? sq.shadowEventOwnerEligible : null,
+    },
+    completionDepthTruth: {
+      relativeDepthPeak: typeof sq.relativeDepthPeak === 'number' ? sq.relativeDepthPeak : null,
+      rawDepthPeak: typeof sq.rawDepthPeak === 'number' ? sq.rawDepthPeak : null,
+      relativeDepthPeakSource: sq.relativeDepthPeakSource ?? null,
+      baselineFrozen: typeof sq.baselineFrozen === 'boolean' ? sq.baselineFrozen : null,
+      baselineFrozenDepth: typeof sq.baselineFrozenDepth === 'number' ? sq.baselineFrozenDepth : null,
+      eventCycleDetected: typeof sq.eventCycleDetected === 'boolean' ? sq.eventCycleDetected : null,
+      eventCyclePromoted: typeof sq.eventCyclePromoted === 'boolean' ? sq.eventCyclePromoted : null,
+      eventCycleBand: sq.eventCycleBand ?? null,
+      eventCycleSource: sq.eventCycleSource ?? null,
+    },
+    evaluatorDepthTruth: {
+      peakDepthMetric: typeof sq.peakDepth === 'number' ? sq.peakDepth : null,
+      depthBand: sq.depthBand ?? null,
+      romBand: sq.romBand ?? null,
+      squatDepthPeakPrimary: typeof sq.squatDepthPeakPrimary === 'number' ? sq.squatDepthPeakPrimary : null,
+      squatDepthPeakBlended: typeof sq.squatDepthPeakBlended === 'number' ? sq.squatDepthPeakBlended : null,
+      rawDepthPeakPrimary: typeof sq.rawDepthPeakPrimary === 'number' ? sq.rawDepthPeakPrimary : null,
+      rawDepthPeakBlended: typeof sq.rawDepthPeakBlended === 'number' ? sq.rawDepthPeakBlended : null,
+    },
+    cycleTruth: {
+      currentSquatPhase: sq.currentSquatPhase ?? null,
+      descendConfirmed: typeof sq.descendConfirmed === 'boolean' ? sq.descendConfirmed : null,
+      ascendConfirmed: typeof sq.ascendConfirmed === 'boolean' ? sq.ascendConfirmed : null,
+      reversalConfirmedAfterDescend:
+        typeof sq.reversalConfirmedAfterDescend === 'boolean' ? sq.reversalConfirmedAfterDescend : null,
+      recoveryConfirmedAfterReversal:
+        typeof sq.recoveryConfirmedAfterReversal === 'boolean' ? sq.recoveryConfirmedAfterReversal : null,
+      passBlockedReason: sq.passBlockedReason ?? null,
+      completionBlockedReason: sq.completionBlockedReason ?? null,
+      standardPathBlockedReason: sq.standardPathBlockedReason ?? null,
+    },
+  };
+}
+
+/**
+ * flat·normalized 필드 조합만으로 짧은 해석 문장 생성(새 산식·덮어쓰기 없음).
+ */
+export function buildSquatInterpretationHints(summary: CaptureSessionBundleSummary): string[] {
+  const hints: string[] = [];
+  const n = summary.normalized;
+  const o = n?.ownerTruth;
+  const ed = n?.evaluatorDepthTruth;
+  const cd = n?.completionDepthTruth;
+
+  if (o?.completionPassReason) {
+    const ownerLine =
+      o.finalSuccessOwner != null
+        ? `owner는 completion relative depth·event 계층 기준으로 completionPassReason="${o.completionPassReason}", finalSuccessOwner="${o.finalSuccessOwner}"로 기록됨`
+        : `completionPassReason="${o.completionPassReason}"는 completion_state 계층의 통과 사유 필드임`;
+    hints.push(ownerLine);
+  }
+
+  if (ed?.peakDepthMetric != null || ed?.depthBand) {
+    hints.push(
+      'peakDepth·depthBand·romBand(및 squatDepthPeak*)는 evaluator depth metric 계층이며, owner/통과 사유와 숫자가 어긋날 수 있음(서로 다른 truth 표면)'
+    );
+  }
+
+  if (cd?.relativeDepthPeak != null || cd?.relativeDepthPeakSource) {
+    hints.push(
+      'relativeDepthPeak·relativeDepthPeakSource·rawDepthPeak(스냅샷 상단 completion 블록)는 completion relative depth truth 계층임'
+    );
+  }
+
+  if (cd?.eventCyclePromoted === true && o?.finalSuccessOwner) {
+    hints.push(
+      `eventCyclePromoted=true이면 event owner 경로가 반영된 상태이며, finalSuccessOwner="${o.finalSuccessOwner}"와 함께 읽을 것`
+    );
+  }
+
+  if (summary.completionPathUsed && o?.completionPassReason) {
+    hints.push(
+      `completionPathUsed="${summary.completionPathUsed}"는 경로 라벨이며, depthBand/romBand의 "deep" 등과 항상 같은 의미가 아님`
+    );
+  }
+
+  return hints.slice(0, 5);
+}
+
+/** diagnosisSummary.squatCycle + 스냅샷 상단 필드에서 summary 추출(observation 불필요) */
 export function extractCaptureSessionSummaryFromAttempt(
   attempt: AttemptSnapshot | undefined
 ): CaptureSessionBundleSummary {
@@ -70,7 +208,7 @@ export function extractCaptureSessionSummaryFromAttempt(
   }
   const d = attempt.diagnosisSummary;
   const sq = d.squatCycle;
-  return {
+  const flat: CaptureSessionBundleSummary = {
     completionPassReason: sq?.completionPassReason ?? null,
     completionPathUsed: sq?.completionPathUsed ?? null,
     passOwner: sq?.passOwner ?? null,
@@ -87,6 +225,17 @@ export function extractCaptureSessionSummaryFromAttempt(
     eventCycleDetected: sq?.eventCycleDetected,
     eventCyclePromoted: sq?.eventCyclePromoted,
     eventCycleSource: sq?.eventCycleSource ?? null,
+  };
+
+  if (attempt.movementType !== 'squat' || !sq) {
+    return { ...flat, normalized: null, interpretationHints: [] };
+  }
+
+  const normalized = buildSquatNormalizedTruthFromCycle(sq);
+  const withNorm: CaptureSessionBundleSummary = { ...flat, normalized };
+  return {
+    ...withNorm,
+    interpretationHints: buildSquatInterpretationHints(withNorm),
   };
 }
 

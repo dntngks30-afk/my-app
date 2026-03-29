@@ -139,6 +139,22 @@ ok('bundle: terminalKind success', b0?.terminalKind === 'success');
 
 const summary = b0?.summary ?? {};
 ok('summary: squatCycle-derived keys present', 'completionPassReason' in summary && 'depthBand' in summary);
+ok(
+  'PR-OBS-NORM: summary.normalized + interpretationHints',
+  summary.normalized != null &&
+    summary.normalized.ownerTruth != null &&
+    Array.isArray(summary.interpretationHints) &&
+    summary.interpretationHints.length >= 1
+);
+ok(
+  'PR-OBS-NORM: evaluator vs completion depth buckets',
+  summary.normalized?.evaluatorDepthTruth != null && summary.normalized?.completionDepthTruth != null
+);
+ok(
+  'attempt squatCycle truth labels',
+  b0?.latestAttempt?.diagnosisSummary?.squatCycle?.displayDepthTruth === 'evaluator_peak_metric' &&
+    b0?.latestAttempt?.diagnosisSummary?.squatCycle?.ownerDepthTruth === 'completion_relative_depth'
+);
 const fromExtract = extractCaptureSessionSummaryFromAttempt(b0?.latestAttempt);
 ok('extract matches bundle.summary shape', typeof fromExtract === 'object');
 

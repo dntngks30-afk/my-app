@@ -144,6 +144,14 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   completionTruthPassed?: boolean;
   lowQualityPassAllowed?: boolean;
   passOwner?: string;
+  /** PR-CAM-OWNER-FREEZE-01 / PR-CAM-OBS-NORMALIZE-01: attempt 스냅샷과 동일 owner 표면 */
+  finalSuccessOwner?: string | null;
+  standardOwnerEligible?: boolean | null;
+  shadowEventOwnerEligible?: boolean | null;
+  /** PR-CAM-OBS-NORMALIZE-01: depth/owner 해석 라벨(값 변경 아님) */
+  displayDepthTruth?: 'evaluator_peak_metric';
+  ownerDepthTruth?: 'completion_relative_depth';
+  cycleDecisionTruth?: 'completion_state';
   qualityOnlyWarnings?: string[];
   /** PR-04E1 */
   armingDepthSource?: string | null;
@@ -278,6 +286,9 @@ function extractSquatMobileObsFieldsFromGate(
   | 'completionTruthPassed'
   | 'lowQualityPassAllowed'
   | 'passOwner'
+  | 'finalSuccessOwner'
+  | 'standardOwnerEligible'
+  | 'shadowEventOwnerEligible'
   | 'qualityOnlyWarnings'
   | 'armingDepthSource'
   | 'armingDepthPeak'
@@ -320,6 +331,9 @@ function extractSquatMobileObsFieldsFromGate(
     completionTruthPassed: sc?.completionTruthPassed,
     lowQualityPassAllowed: sc?.lowQualityPassAllowed,
     passOwner: sc?.passOwner,
+    finalSuccessOwner: sc?.finalSuccessOwner ?? null,
+    standardOwnerEligible: sc?.standardOwnerEligible,
+    shadowEventOwnerEligible: sc?.shadowEventOwnerEligible,
     qualityOnlyWarnings: sc?.qualityOnlyWarnings,
     armingDepthSource: sc?.armingDepthSource,
     armingDepthPeak: sc?.armingDepthPeak,
@@ -407,6 +421,9 @@ export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): 
       ),
       armCompact: buildSquatArmingAssistTraceCompact(options.gate.evaluatorResult?.debug?.squatCompletionArming),
       ...mobileObs,
+      displayDepthTruth: 'evaluator_peak_metric',
+      ownerDepthTruth: 'completion_relative_depth',
+      cycleDecisionTruth: 'completion_state',
     };
     pushSuccessSnapshot(snapshot);
   } catch {
