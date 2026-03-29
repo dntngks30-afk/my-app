@@ -180,6 +180,64 @@ function windowReversalRelax(
   };
 }
 
+/**
+ * PR-CAM-REVERSAL-SIGNAL-STABILIZATION-01: 피크 직후 짧은 구간에서 reversal depth 가 단조적으로
+ * 서 있기 방향으로 움직이는 partial 상승을 strict 2-frame 동시 hit 없이도 rule 로 잡는다.
+ * standing/jitter/1-frame spike 는 유효 프레임·단계 수·누적 drop 이 동시에 못 맞추게 한다.
+ */
+export function postPeakMonotonicReversalAssist(args: {
+  validFrames: PoseFeaturesFrame[];
+  peakValidIndex: number;
+  peakPrimaryDepth: number;
+  required: number;
+  windowSize?: number;
+  minFrames?: number;
+}): { ok: boolean; drop: number; frames: number } {
+  const windowSize = args.windowSize ?? 6;
+  const minFrames = args.minFrames ?? 3;
+  const slice = args.validFrames.slice(
+    args.peakValidIndex + 1,
+    args.peakValidIndex + 1 + windowSize
+  );
+  const depths: number[] = [];
+  for (const f of slice) {
+    const d = readSquatCompletionDepthForReversal(f);
+    if (typeof d === 'number' && Number.isFinite(d)) depths.push(d);
+  }
+  const usedFrames = depths.length;
+  if (usedFrames < minFrames) {
+    const minObserved =
+      usedFrames > 0 ? Math.min(...depths) : args.peakPrimaryDepth;
+    return {
+      ok: false,
+      drop: Math.max(0, args.peakPrimaryDepth - minObserved),
+      frames: usedFrames,
+    };
+  }
+  let strictDownStepCount = 0;
+  for (let i = 0; i < depths.length - 1; i++) {
+    if (depths[i + 1]! <= depths[i]! - 0.002) {
+      strictDownStepCount += 1;
+    }
+  }
+  const minObserved = Math.min(...depths);
+  const drop = Math.max(0, args.peakPrimaryDepth - minObserved);
+  let maxPartialFromPeak = 0;
+  for (const d of depths) {
+    maxPartialFromPeak = Math.max(maxPartialFromPeak, args.peakPrimaryDepth - d);
+  }
+  if (strictDownStepCount < 2) {
+    return { ok: false, drop, frames: usedFrames };
+  }
+  if (drop < args.required * 0.88) {
+    return { ok: false, drop, frames: usedFrames };
+  }
+  if (maxPartialFromPeak < args.required * 0.72) {
+    return { ok: false, drop, frames: usedFrames };
+  }
+  return { ok: true, drop, frames: usedFrames };
+}
+
 function ascentStreakRelax(
   validFrames: PoseFeaturesFrame[],
   peakValidIndex: number,
@@ -321,6 +379,24 @@ export function detectSquatReversalConfirmation(input: SquatReversalDetectInput)
       reversalIndex: peakValidIndex,
       reversalDepthDrop: w.drop,
       reversalFrameCount: w.frames,
+      reversalSource: 'rule',
+      notes,
+    };
+  }
+
+  const mono = postPeakMonotonicReversalAssist({
+    validFrames,
+    peakValidIndex,
+    peakPrimaryDepth,
+    required: req,
+  });
+  if (mono.ok) {
+    notes.push('post_peak_monotonic_reversal_assist');
+    return {
+      reversalConfirmed: true,
+      reversalIndex: peakValidIndex,
+      reversalDepthDrop: mono.drop,
+      reversalFrameCount: mono.frames,
       reversalSource: 'rule',
       notes,
     };
