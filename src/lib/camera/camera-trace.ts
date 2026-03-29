@@ -262,6 +262,9 @@ export type SquatObservationEventType =
   /** 캡처 세션 종료(retry/fail/insufficient 등) 시 1회 */
   | 'capture_session_terminal';
 
+/** PR-CAM-OBS-TRUTH-STAGE-01: 관측 JSON에서 completionBlockedReason 해석 단계 */
+export type ObservationTruthStage = 'pre_attempt_hint' | 'attempt_truth' | 'terminal_truth';
+
 export interface SquatAttemptObservation {
   traceKind: 'attempt_observation';
   id: string;
@@ -309,7 +312,42 @@ export interface SquatAttemptObservation {
   peakLatched?: boolean;
   eventCycleDetected?: boolean;
   eventCyclePromoted?: boolean;
+  /**
+   * PR-CAM-OBS-TRUTH-STAGE-01: completionBlockedReason이 completion truth인지 vs motion hint 단계인지 구분.
+   * 값·판정 로직 변경 없음 — 해석용 메타만 추가.
+   */
+  observationTruthStage?: ObservationTruthStage;
+  completionBlockedReasonAuthoritative?: boolean;
   debugVersion: string;
+}
+
+/**
+ * PR-CAM-OBS-TRUTH-STAGE-01: completionBlockedReason 권위 여부·관측 단계(판정 산식·blocked 문자열 불변).
+ * terminal 이벤트는 observationTruthStage만 terminal_truth로 덮어쓴다.
+ */
+export function computeObservationTruthFields(args: {
+  eventType: SquatObservationEventType;
+  attemptStarted: boolean;
+  baselineFrozen?: boolean;
+}): { observationTruthStage: ObservationTruthStage; completionBlockedReasonAuthoritative: boolean } {
+  const attemptStarted = args.attemptStarted === true;
+  const baselineFrozen = args.baselineFrozen === true;
+
+  let observationTruthStage: ObservationTruthStage;
+  if (args.eventType === 'capture_session_terminal') {
+    observationTruthStage = 'terminal_truth';
+  } else if (!attemptStarted) {
+    observationTruthStage = 'pre_attempt_hint';
+  } else if (!baselineFrozen) {
+    observationTruthStage = 'pre_attempt_hint';
+  } else {
+    observationTruthStage = 'attempt_truth';
+  }
+
+  return {
+    observationTruthStage,
+    completionBlockedReasonAuthoritative: attemptStarted && baselineFrozen,
+  };
 }
 
 const TRACE_STORAGE_KEY = 'moveReCameraTrace:v1';
@@ -492,6 +530,14 @@ export function buildSquatAttemptObservation(
   const shallowContract =
     options?.shallowObservationContract ?? hasShallowSquatObservation(gate);
 
+  const attemptStartedBool = !!(sc?.attemptStarted ?? hm?.attemptStarted);
+  const baselineFrozenBool = gate.evaluatorResult?.debug?.squatCompletionState?.baselineFrozen === true;
+  const truthMeta = computeObservationTruthFields({
+    eventType,
+    attemptStarted: attemptStartedBool,
+    baselineFrozen: baselineFrozenBool,
+  });
+
   return {
     traceKind: 'attempt_observation',
     id: `obs-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -501,7 +547,7 @@ export function buildSquatAttemptObservation(
     captureQuality: gate.guardrail.captureQuality,
     confidence: gate.confidence,
     phaseHint,
-    attemptStarted: !!(sc?.attemptStarted ?? hm?.attemptStarted),
+    attemptStarted: attemptStartedBool,
     downwardCommitmentReached: squatDownwardCommitmentReachedObservable(gate),
     descendConfirmed: !!(sc?.descendConfirmed ?? hm?.descendConfirmed),
     reversalConfirmedAfterDescend: !!sc?.reversalConfirmedAfterDescend,
@@ -538,6 +584,8 @@ export function buildSquatAttemptObservation(
     peakLatched: gate.evaluatorResult?.debug?.squatCompletionState?.peakLatched,
     eventCycleDetected: gate.evaluatorResult?.debug?.squatCompletionState?.squatEventCycle?.detected,
     eventCyclePromoted: gate.evaluatorResult?.debug?.squatCompletionState?.eventCyclePromoted,
+    observationTruthStage: truthMeta.observationTruthStage,
+    completionBlockedReasonAuthoritative: truthMeta.completionBlockedReasonAuthoritative,
     debugVersion: `${OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
   };
 }

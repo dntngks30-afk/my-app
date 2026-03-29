@@ -8,7 +8,9 @@ import type { ExerciseGateResult } from './auto-progression';
 import {
   buildAttemptSnapshot,
   type AttemptSnapshot,
+  type ObservationTruthStage,
   type SquatAttemptObservation,
+  computeObservationTruthFields,
   getRecentSquatObservationsSnapshot,
 } from './camera-trace';
 import { CAMERA_DIAG_VERSION } from './camera-success-diagnostic';
@@ -89,6 +91,9 @@ export interface CaptureSessionBundleSummary {
   interpretationHints?: string[];
   /** PR-CAM-OBS-FLUSH-HARDEN-01: bundle.observations 길이 힌트(모바일에서 비어 있음 빠르게 확인) */
   observationCount?: number;
+  /** PR-CAM-OBS-TRUTH-STAGE-01: 터미널 번들 요약에서도 blocked reason 해석 단계(관측과 동일 의미) */
+  observationTruthStage?: ObservationTruthStage;
+  completionBlockedReasonAuthoritative?: boolean;
 }
 
 export interface CaptureSessionBundle {
@@ -244,6 +249,61 @@ export function extractCaptureSessionSummaryFromAttempt(
 const OBSERVATION_WINDOW_MS = 90_000;
 
 /**
+ * PR-CAM-OBS-TRUTH-STAGE-01: 번들 summary용 truth 메타(판정·blocked 문자열 불변).
+ * 터미널 관측 우선; 구버전 관측(필드 없음)은 동일 규칙으로 재계산.
+ */
+function pickBundleObservationTruthSummary(
+  filtered: SquatAttemptObservation[],
+  attempt: AttemptSnapshot | undefined,
+  motionType: 'squat' | 'overhead_reach'
+): Pick<CaptureSessionBundleSummary, 'observationTruthStage' | 'completionBlockedReasonAuthoritative'> {
+  if (motionType !== 'squat') return {};
+
+  const terminalObs = [...filtered].reverse().find((o) => o.eventType === 'capture_session_terminal');
+  if (terminalObs) {
+    if (
+      terminalObs.observationTruthStage != null &&
+      typeof terminalObs.completionBlockedReasonAuthoritative === 'boolean'
+    ) {
+      return {
+        observationTruthStage: terminalObs.observationTruthStage,
+        completionBlockedReasonAuthoritative: terminalObs.completionBlockedReasonAuthoritative,
+      };
+    }
+    return computeObservationTruthFields({
+      eventType: 'capture_session_terminal',
+      attemptStarted: terminalObs.attemptStarted === true,
+      baselineFrozen: terminalObs.baselineFrozen === true,
+    });
+  }
+
+  const last = filtered.length > 0 ? filtered[filtered.length - 1] : undefined;
+  if (last) {
+    if (
+      last.observationTruthStage != null &&
+      typeof last.completionBlockedReasonAuthoritative === 'boolean'
+    ) {
+      return {
+        observationTruthStage: last.observationTruthStage,
+        completionBlockedReasonAuthoritative: last.completionBlockedReasonAuthoritative,
+      };
+    }
+    return computeObservationTruthFields({
+      eventType: last.eventType,
+      attemptStarted: last.attemptStarted === true,
+      baselineFrozen: last.baselineFrozen === true,
+    });
+  }
+
+  const sq = attempt?.diagnosisSummary?.squatCycle;
+  return computeObservationTruthFields({
+    eventType: 'capture_session_terminal',
+    attemptStarted: sq?.attemptStarted === true,
+    baselineFrozen: sq?.baselineFrozen === true,
+  });
+}
+
+/**
  * 터미널 스냅샷 시각 기준으로 같은 squat 관측만 보수적으로 포함.
  */
 export function filterObservationsForBundle(
@@ -275,6 +335,7 @@ export function buildCaptureSessionBundle(input: {
   const terminalTs = input.latestAttempt?.ts ?? createdAt;
   const filtered = filterObservationsForBundle(terminalTs, input.observations);
   const baseSummary = extractCaptureSessionSummaryFromAttempt(input.latestAttempt);
+  const truthSummary = pickBundleObservationTruthSummary(filtered, input.latestAttempt, input.motionType);
   return {
     id: newBundleId(),
     createdAt,
@@ -284,7 +345,7 @@ export function buildCaptureSessionBundle(input: {
     terminalKind: input.terminalKind,
     latestAttempt: input.latestAttempt,
     observations: filtered,
-    summary: { ...baseSummary, observationCount: filtered.length },
+    summary: { ...baseSummary, observationCount: filtered.length, ...truthSummary },
     debugVersion: `${BUNDLE_DEBUG_PREFIX}:${CAMERA_DIAG_VERSION}`,
   };
 }
