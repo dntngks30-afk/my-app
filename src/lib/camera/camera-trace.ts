@@ -915,17 +915,18 @@ function buildDiagnosisSummary(
       squatInternalQuality: siq,
     };
 
-    const severity = buildSquatResultSeveritySummary({
+    /** PR-CAM-RESULT-SEVERITY-SURFACE-01: diagnosis `base` = d, squatCycle.squatInternalQuality = 허용 source만 */
+    const resultSeverity = buildSquatResultSeveritySummary({
       completionTruthPassed: sc.completionTruthPassed === true,
-      captureQuality: gate.guardrail.captureQuality,
+      captureQuality: String(base.captureQuality ?? ''),
       qualityOnlyWarnings: sc.qualityOnlyWarnings,
-      qualityTier: siq?.qualityTier ?? null,
-      limitations: siq?.limitations,
+      qualityTier: base.squatCycle.squatInternalQuality?.qualityTier ?? null,
+      limitations: base.squatCycle.squatInternalQuality?.limitations,
     });
-    base.squatCycle.passSeverity = severity.passSeverity;
-    base.squatCycle.resultInterpretation = severity.resultInterpretation;
-    base.squatCycle.qualityWarningCount = severity.qualityWarningCount;
-    base.squatCycle.limitationCount = severity.limitationCount;
+    base.squatCycle.passSeverity = resultSeverity.passSeverity;
+    base.squatCycle.resultInterpretation = resultSeverity.resultInterpretation;
+    base.squatCycle.qualityWarningCount = resultSeverity.qualityWarningCount;
+    base.squatCycle.limitationCount = resultSeverity.limitationCount;
 
     // PR-HMM-01B: shadow decoder compact summary — snapshot payload 과대화 방지
     const squatHmm = gate.evaluatorResult.debug?.squatHmm;

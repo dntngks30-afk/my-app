@@ -12,6 +12,11 @@ import {
   buildSquatArmingAssistTraceCompact,
   type SquatArmingAssistTraceCompact,
 } from '@/lib/camera/squat/squat-arming-assist';
+import {
+  buildSquatResultSeveritySummary,
+  type SquatPassSeverity,
+  type SquatResultInterpretation,
+} from '@/lib/camera/squat-result-severity';
 
 /** build/runtime diagnostic version — 실기기 bundle 확인용 */
 export const CAMERA_DIAG_VERSION = 'success-diagnostic-2025-03-18';
@@ -153,6 +158,11 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   ownerDepthTruth?: 'completion_relative_depth';
   cycleDecisionTruth?: 'completion_state';
   qualityOnlyWarnings?: string[];
+  /** PR-CAM-RESULT-SEVERITY-SURFACE-01: attempt/bundle과 동일 helper·동일 입력 source */
+  passSeverity?: SquatPassSeverity;
+  resultInterpretation?: SquatResultInterpretation;
+  qualityWarningCount?: number;
+  limitationCount?: number;
   /** PR-04E1 */
   armingDepthSource?: string | null;
   armingDepthPeak?: number | null;
@@ -368,6 +378,14 @@ export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): 
     const hm = options.gate.evaluatorResult?.debug?.highlightedMetrics;
     const squatDebug = options.gate.squatCycleDebug;
     const mobileObs = extractSquatMobileObsFieldsFromGate(options.gate, options.effectivePassLatched);
+    const siq = options.gate.evaluatorResult?.debug?.squatInternalQuality;
+    const resultSeverity = buildSquatResultSeveritySummary({
+      completionTruthPassed: squatDebug?.completionTruthPassed === true,
+      captureQuality: String(mobileObs.captureQuality ?? ''),
+      qualityOnlyWarnings: squatDebug?.qualityOnlyWarnings,
+      qualityTier: siq?.qualityTier ?? null,
+      limitations: siq?.limitations,
+    });
     const snapshot: SquatSuccessSnapshot = {
       id: `sq-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       ts: new Date().toISOString(),
@@ -421,6 +439,10 @@ export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): 
       ),
       armCompact: buildSquatArmingAssistTraceCompact(options.gate.evaluatorResult?.debug?.squatCompletionArming),
       ...mobileObs,
+      passSeverity: resultSeverity.passSeverity,
+      resultInterpretation: resultSeverity.resultInterpretation,
+      qualityWarningCount: resultSeverity.qualityWarningCount,
+      limitationCount: resultSeverity.limitationCount,
       displayDepthTruth: 'evaluator_peak_metric',
       ownerDepthTruth: 'completion_relative_depth',
       cycleDecisionTruth: 'completion_state',
