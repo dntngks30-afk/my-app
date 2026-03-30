@@ -425,6 +425,9 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         squatArmingDepthBlendAssisted: completionArming.armingDepthBlendAssisted ? 1 : 0,
         /** PR-CAM-28: 글로벌 피크 앞 standing 앵커 */
         completionArmingPeakAnchored: completionArming.armingPeakAnchored ? 1 : 0,
+        /** PR-CAM-RETRO-ARMING-ASSIST-01: 짧은 standing + 강한 motion retro rule arm */
+        armingRetroApplied: completionArming.armingRetroApplied ? 1 : 0,
+        ra: completionArming.armingRetroApplied ?? false,
         /**
          * PR-B: 선택된 standing 윈도우 내부 depth range.
          * 0에 가까울수록 진짜 flat standing. 높으면 arming이 하강 구간을 잘못 선택한 것.

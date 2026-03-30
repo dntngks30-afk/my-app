@@ -25,6 +25,8 @@ export type CompletionArmingState = {
   armingFallbackUsed?: boolean;
   /** PR-CAM-28: 글로벌 depth 피크 직전 standing에 슬라이스를 앵커했는지 */
   armingPeakAnchored?: boolean;
+  /** PR-CAM-RETRO-ARMING-ASSIST-01: 짧은 standing + 강한 motion으로 뒤늦게 연 rule arm */
+  armingRetroApplied?: boolean;
   /**
    * PR-B: 선택된 standing 윈도우 내부 depth range (max-min).
    * 높으면 arming이 진짜 standing이 아닌 하강 구간을 선택했을 가능성이 있다.
@@ -82,6 +84,11 @@ const SECONDARY_STABLE_MIN_FRAMES = 4;
  * 이 값은 그보다 약간 높게 잡아 실질 하강 신호만 폴백을 허용한다.
  */
 const SHALLOW_FALLBACK_EVIDENCE_MIN = 0.018;
+
+/** PR-CAM-RETRO-ARMING-ASSIST-01: 피크 직전 짧은 standing 런(10/4프레임 rule과 별도) */
+const RETRO_STABLE_MIN_FRAMES = 3;
+const RETRO_ARMING_MIN_PEAK_DEPTH = 0.25;
+const RETRO_ARMING_MIN_EXCURSION_FROM_BASE = 0.12;
 
 function readSquatDepthPrimary(frame: PoseFeaturesFrame): number | null {
   const d = frame.derived.squatDepthProxy;
@@ -225,6 +232,70 @@ function tryPeakAnchoredArming(valid: PoseFeaturesFrame[]): {
 }
 
 /**
+ * PR-CAM-RETRO-ARMING-ASSIST-01: rule arm(피크/10/4)이 아직 열리지 않았을 때,
+ * 버퍼 안에 이미 짧은 stable standing 직후 의미 있는 하강 피크가 있으면 슬라이스를 복구한다.
+ * 기존 arm보다 먼저 호출하면 안 된다 — `computeSquatCompletionArming` 말단 보조 전용.
+ */
+export function tryRetroArmingFromMeaningfulMotion(valid: PoseFeaturesFrame[]): {
+  arming: CompletionArmingState;
+  completionFrames: PoseFeaturesFrame[];
+} | null {
+  const peakIdx = findGlobalSquatDepthPeakIndex(valid);
+  if (peakIdx == null || peakIdx < 1) return null;
+
+  const peakDepth = readSquatArmingDepth(valid[peakIdx]!);
+  if (peakDepth == null || peakDepth < RETRO_ARMING_MIN_PEAK_DEPTH) return null;
+
+  for (let end = peakIdx - 1; end >= RETRO_STABLE_MIN_FRAMES - 1; end--) {
+    const start = end - RETRO_STABLE_MIN_FRAMES + 1;
+    if (start < 0) break;
+    if (!isStableStandingRun(valid, start, RETRO_STABLE_MIN_FRAMES)) continue;
+
+    const completionSliceStartIndex = end + 1;
+    if (completionSliceStartIndex > peakIdx) continue;
+
+    const completionFrames = valid.slice(completionSliceStartIndex);
+    const baselineDepthsBlended = valid
+      .slice(start, end + 1)
+      .map(readSquatArmingDepth)
+      .filter((d): d is number => d != null);
+    const baselineDepthsPrimary = valid
+      .slice(start, end + 1)
+      .map(readSquatArmingDepthPrimaryOnly)
+      .filter((d): d is number => d != null);
+
+    if (baselineDepthsBlended.length < RETRO_STABLE_MIN_FRAMES || completionFrames.length === 0) continue;
+
+    const baseMinBlended = Math.min(...baselineDepthsBlended);
+    const baseMinPrimary =
+      baselineDepthsPrimary.length > 0 ? Math.min(...baselineDepthsPrimary) : baseMinBlended;
+    const baseMax = Math.max(...baselineDepthsBlended);
+    const completionDepths = completionFrames.map(readSquatArmingDepth).filter((d): d is number => d != null);
+    if (completionDepths.length === 0) continue;
+
+    const completionMax = Math.max(...completionDepths);
+    if (completionMax - baseMinBlended < RETRO_ARMING_MIN_EXCURSION_FROM_BASE) continue;
+
+    return {
+      arming: {
+        armed: true,
+        baselineCaptured: completionFrames.length >= MIN_FRAMES_FOR_BASELINE_CAPTURE,
+        stableFrames: RETRO_STABLE_MIN_FRAMES,
+        completionSliceStartIndex,
+        armingFallbackUsed: true,
+        armingRetroApplied: true,
+        armingStandingWindowRange: Math.round((baseMax - baseMinBlended) * 1000) / 1000,
+        armingBaselineStandingDepthPrimary: Math.round(baseMinPrimary * 1000) / 1000,
+        armingBaselineStandingDepthBlended: Math.round(baseMinBlended * 1000) / 1000,
+      },
+      completionFrames,
+    };
+  }
+
+  return null;
+}
+
+/**
  * 첫 번째로 나타나는 "연속 서 있기 안정" 구간 직후부터 completion 평가용 프레임을 자른다.
  * 해당 구간이 없으면 `armed: false`이고 completion 프레임은 빈 배열.
  *
@@ -289,48 +360,54 @@ export function computeSquatCompletionArming(valid: PoseFeaturesFrame[]): {
     }
   }
 
-  if (valid.length < SECONDARY_STABLE_MIN_FRAMES + 4) {
-    return { arming: mergeArmingDepthObservability(valid, idle), completionFrames: [] };
+  if (valid.length >= SECONDARY_STABLE_MIN_FRAMES + 4) {
+    for (let i = 0; i <= valid.length - SECONDARY_STABLE_MIN_FRAMES; i++) {
+      if (!isStableStandingRun(valid, i, SECONDARY_STABLE_MIN_FRAMES)) continue;
+
+      const completionSliceStartIndex = i + SECONDARY_STABLE_MIN_FRAMES;
+      const completionFrames = valid.slice(completionSliceStartIndex);
+
+      const baselineDepthsBlended = valid
+        .slice(i, i + SECONDARY_STABLE_MIN_FRAMES)
+        .map(readSquatArmingDepth)
+        .filter((d): d is number => d != null);
+      const baselineDepthsPrimary = valid
+        .slice(i, i + SECONDARY_STABLE_MIN_FRAMES)
+        .map(readSquatArmingDepthPrimaryOnly)
+        .filter((d): d is number => d != null);
+      const motionDepths = completionFrames.map(readSquatArmingDepth).filter((d): d is number => d != null);
+
+      if (baselineDepthsBlended.length < SECONDARY_STABLE_MIN_FRAMES || motionDepths.length === 0) continue;
+
+      const baseMinBlended = Math.min(...baselineDepthsBlended);
+      const baseMinPrimary =
+        baselineDepthsPrimary.length > 0 ? Math.min(...baselineDepthsPrimary) : baseMinBlended;
+      const baseMax = Math.max(...baselineDepthsBlended);
+      const motionMax = Math.max(...motionDepths);
+
+      if (motionMax - baseMinBlended < SHALLOW_FALLBACK_EVIDENCE_MIN) continue;
+
+      return {
+        arming: mergeArmingDepthObservability(valid, {
+          armed: true,
+          baselineCaptured: completionFrames.length >= MIN_FRAMES_FOR_BASELINE_CAPTURE,
+          stableFrames: SECONDARY_STABLE_MIN_FRAMES,
+          completionSliceStartIndex,
+          armingFallbackUsed: true,
+          armingStandingWindowRange: Math.round((baseMax - baseMinBlended) * 1000) / 1000,
+          armingBaselineStandingDepthPrimary: Math.round(baseMinPrimary * 1000) / 1000,
+          armingBaselineStandingDepthBlended: Math.round(baseMinBlended * 1000) / 1000,
+        }),
+        completionFrames,
+      };
+    }
   }
 
-  for (let i = 0; i <= valid.length - SECONDARY_STABLE_MIN_FRAMES; i++) {
-    if (!isStableStandingRun(valid, i, SECONDARY_STABLE_MIN_FRAMES)) continue;
-
-    const completionSliceStartIndex = i + SECONDARY_STABLE_MIN_FRAMES;
-    const completionFrames = valid.slice(completionSliceStartIndex);
-
-    const baselineDepthsBlended = valid
-      .slice(i, i + SECONDARY_STABLE_MIN_FRAMES)
-      .map(readSquatArmingDepth)
-      .filter((d): d is number => d != null);
-    const baselineDepthsPrimary = valid
-      .slice(i, i + SECONDARY_STABLE_MIN_FRAMES)
-      .map(readSquatArmingDepthPrimaryOnly)
-      .filter((d): d is number => d != null);
-    const motionDepths = completionFrames.map(readSquatArmingDepth).filter((d): d is number => d != null);
-
-    if (baselineDepthsBlended.length < SECONDARY_STABLE_MIN_FRAMES || motionDepths.length === 0) continue;
-
-    const baseMinBlended = Math.min(...baselineDepthsBlended);
-    const baseMinPrimary =
-      baselineDepthsPrimary.length > 0 ? Math.min(...baselineDepthsPrimary) : baseMinBlended;
-    const baseMax = Math.max(...baselineDepthsBlended);
-    const motionMax = Math.max(...motionDepths);
-
-    if (motionMax - baseMinBlended < SHALLOW_FALLBACK_EVIDENCE_MIN) continue;
-
+  const retro = tryRetroArmingFromMeaningfulMotion(valid);
+  if (retro != null) {
     return {
-      arming: mergeArmingDepthObservability(valid, {
-        armed: true,
-        baselineCaptured: completionFrames.length >= MIN_FRAMES_FOR_BASELINE_CAPTURE,
-        stableFrames: SECONDARY_STABLE_MIN_FRAMES,
-        completionSliceStartIndex,
-        armingFallbackUsed: true,
-        armingStandingWindowRange: Math.round((baseMax - baseMinBlended) * 1000) / 1000,
-        armingBaselineStandingDepthPrimary: Math.round(baseMinPrimary * 1000) / 1000,
-        armingBaselineStandingDepthBlended: Math.round(baseMinBlended * 1000) / 1000,
-      }),
-      completionFrames,
+      arming: mergeArmingDepthObservability(valid, retro.arming),
+      completionFrames: retro.completionFrames,
     };
   }
 

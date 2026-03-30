@@ -103,6 +103,8 @@ export interface SquatArmingAssistTraceCompact {
   haa: boolean;
   har: string | null;
   ea: boolean;
+  /** PR-CAM-RETRO-ARMING-ASSIST-01: rule retro-arm 발동 여부 */
+  ra: boolean;
 }
 
 export function buildSquatArmingAssistTraceCompact(
@@ -113,5 +115,6 @@ export function buildSquatArmingAssistTraceCompact(
     haa: ca?.hmmArmingAssistApplied ?? false,
     har: ca?.hmmArmingAssistReason ?? null,
     ea: ca?.effectiveArmed ?? ca?.armed ?? false,
+    ra: ca?.armingRetroApplied ?? false,
   };
 }
