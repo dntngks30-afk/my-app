@@ -407,7 +407,8 @@ export function detectSquatReversalConfirmation(input: SquatReversalDetectInput)
     if (guarded != null) {
       return { ...guarded, notes: [...notes, ...guarded.notes] };
     }
-    notes.push('ultra_shallow_guarded_assist_no_hit');
+    /* PR-CAM-30B: 스펙 노트명 — JSON/스모크에서 ultra-shallow guarded 실패 구분 */
+    notes.push('guarded_ultra_shallow_no_hit');
     return {
       reversalConfirmed: false,
       reversalIndex: null,

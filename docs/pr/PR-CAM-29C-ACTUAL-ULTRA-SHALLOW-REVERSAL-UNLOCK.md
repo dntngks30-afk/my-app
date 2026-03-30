@@ -39,7 +39,7 @@ reversal 확인이 되지 않아 영구 `no_reversal` 상태였다.
   - `postPeakMonotonicReversalAssist` + `ascentStreakMax >= 2` + `postPeakFrameCount >= 3` 동시 요구
   - `source: 'rule'` 고정, HMM bridge/rule_plus_hmm 확장 없음
   - 성공 note: `guarded_ultra_shallow_reversal_assist`
-  - 실패 note: `ultra_shallow_guarded_assist_no_hit`
+  - 실패 note: `guarded_ultra_shallow_no_hit` (PR-CAM-30B 명칭 정렬)
 - `detectSquatReversalConfirmation()` 구간 분기:
   - `< 0.02`: strict-only 유지 (`ultra_shallow_strict_only_no_hit`)
   - `[0.02, 0.08)`: guarded assist 추가
