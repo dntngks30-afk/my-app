@@ -24,7 +24,7 @@ import {
   type CameraStepId,
   type CameraPhase,
 } from '@/lib/public/camera-test';
-import { usePoseCapture } from '@/lib/camera/use-pose-capture';
+import { usePoseCapture, type PoseCaptureStats } from '@/lib/camera/use-pose-capture';
 import { getSetupFramingHint } from '@/lib/camera/setup-framing';
 import {
   evaluateExerciseAutoProgress,
@@ -95,6 +95,27 @@ import { SquatPostPassDebugModal } from '@/components/public/camera/SquatPostPas
 
 const STEP_ID: CameraStepId = 'squat';
 const IS_DEV = process.env.NODE_ENV !== 'production';
+
+/** PR-CAM-30A: capturing 전 gate 입력 — usePoseCapture EMPTY_STATS 와 동일 형태 */
+export const SQUAT_PAGE_IDLE_CAPTURE_STATS: PoseCaptureStats = {
+  sampledFrameCount: 0,
+  droppedFrameCount: 0,
+  filteredLowQualityFrameCount: 0,
+  unstableFrameCount: 0,
+  captureDurationMs: 0,
+  validFrameCount: 0,
+  averageLandmarkCount: 0,
+  averageVisibleJointsRatio: 0,
+  timestampDiscontinuityCount: 0,
+};
+
+/**
+ * PR-CAM-30A: setup/arming/countdown 에서는 스쿼트 gate·pass latch·pose 누적을 소비하지 않는다.
+ * 스모크·외부 도구가 page 정책과 동일한 판정을 쓰도록 export.
+ */
+export function squatPageExerciseEvaluationActive(phase: CameraPhase): boolean {
+  return phase === 'capturing';
+}
 
 const INSTRUCTION = '발을 어깨 너비로 벌리고, 허리를 펴고 천천히 앉았다 일어나세요.';
 
@@ -192,7 +213,11 @@ export default function CameraSquatPage() {
   const [nextTriggerReason, setNextTriggerReason] = useState<string | null>(null);
   const [transitionHistory, setTransitionHistory] = useState<DebugTransitionEntry[]>([]);
   const { landmarks, stats, start, stop, pushFrame } = usePoseCapture();
-  const hasStartedRef = useRef(false);
+  /** PR-CAM-30A: pushFrame 콜백이 stale closure 를 피하도록 항상 최신 phase */
+  const cameraPhaseRef = useRef(cameraPhase);
+  cameraPhaseRef.current = cameraPhase;
+  /** PR-CAM-30A: unmount 시 terminal bundle — 실제 capturing 에 진입한 세션만 */
+  const squatCaptureSessionEnteredRef = useRef(false);
   const settledRef = useRef(false);
   const advanceLockRef = useRef(false);
   const autoAdvanceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
@@ -276,10 +301,14 @@ export default function CameraSquatPage() {
     }
   }, [currentStepKey]);
 
-  const gate = useMemo(
-    () => evaluateExerciseAutoProgress(STEP_ID, landmarks, stats),
-    [landmarks, stats]
-  );
+  const gate = useMemo(() => {
+    const active = squatPageExerciseEvaluationActive(cameraPhase);
+    return evaluateExerciseAutoProgress(
+      STEP_ID,
+      active ? landmarks : [],
+      active ? stats : SQUAT_PAGE_IDLE_CAPTURE_STATS
+    );
+  }, [landmarks, stats, cameraPhase]);
   const finalPassLatched = isFinalPassLatched(STEP_ID, gate);
   previewKeyRef.current = previewKey;
   finalPassLatchedRef.current = finalPassLatched;
@@ -289,11 +318,11 @@ export default function CameraSquatPage() {
   const liveReadinessSummary = useMemo(
     () =>
       getLiveReadinessSummary({
-        success: effectivePassLatched,
+        success: cameraPhase === 'capturing' && effectivePassLatched,
         guardrail: gate.guardrail,
         framingHint: setupFramingHint,
       }),
-    [effectivePassLatched, gate.guardrail, setupFramingHint]
+    [cameraPhase, effectivePassLatched, gate.guardrail, setupFramingHint]
   );
   const rawLiveReadiness = liveReadinessSummary.state;
   const primaryReadinessBlocker = getPrimaryReadinessBlocker(liveReadinessSummary);
@@ -433,7 +462,22 @@ export default function CameraSquatPage() {
     squatTerminalObservationRef.current = null;
     squatSessionBundleRecordedForStepKeyRef.current = null;
     squatShallowObservedEdgeRef.current = false;
+    squatCaptureSessionEnteredRef.current = false;
   }, [clearAutoAdvanceTimer, currentStepKey]);
+
+  useEffect(() => {
+    if (cameraPhase === 'capturing') {
+      squatCaptureSessionEnteredRef.current = true;
+    }
+  }, [cameraPhase]);
+
+  const pushFrameDuringCapturingOnly = useCallback(
+    (frame: Parameters<typeof pushFrame>[0]) => {
+      if (cameraPhaseRef.current !== 'capturing') return;
+      pushFrame(frame);
+    },
+    [pushFrame]
+  );
 
   /** CAM-OBS: URL 진단 플래그 (?diag=1, ?debug=1, ?diag_modal=1) */
   const [urlDebugFlags, setUrlDebugFlags] = useState({ diag: false, debug: false, diagModal: false });
@@ -507,10 +551,7 @@ export default function CameraSquatPage() {
   const handleVideoReady = useCallback(
     (video: HTMLVideoElement) => {
       videoRef.current = video;
-      if (!hasStartedRef.current) {
-        hasStartedRef.current = true;
-        start(video);
-      }
+      /* PR-CAM-30A: setup 단계에서 start(video) 금지 — pose 누적·gate 평가는 capturing 진입 시에만 */
       settledRef.current = false;
       setCameraReady(true);
       setProgressionState('camera_ready');
@@ -519,7 +560,7 @@ export default function CameraSquatPage() {
       /* 음성 재생을 위해 가능한 시점에 unlock (카메라 권한 허용 시 사용자 제스처 있음) */
       unlockVoiceGuidance();
     },
-    [appendTransition, start]
+    [appendTransition]
   );
 
   const handleSetupReady = useCallback(() => {
@@ -724,6 +765,7 @@ export default function CameraSquatPage() {
 
   /* PR-CAM-10: 애매 재시도 음성 이후 completion 이 채워지면 second-chance 관측(스팸 없음, 1회) */
   useEffect(() => {
+    if (cameraPhase !== 'capturing') return;
     if (!squatAmbiguousRetryHud.voicePlayed || squatAmbiguousRetryHud.secondChanceCompletionSatisfied) {
       return;
     }
@@ -736,6 +778,7 @@ export default function CameraSquatPage() {
       });
     }
   }, [
+    cameraPhase,
     gate.completionSatisfied,
     squatAmbiguousRetryHud.reason,
     squatAmbiguousRetryHud.secondChanceCompletionSatisfied,
@@ -743,6 +786,7 @@ export default function CameraSquatPage() {
   ]);
 
   useEffect(() => {
+    if (cameraPhase !== 'capturing') return;
     if (
       !effectivePassLatched ||
       successCueAttemptedRef.current ||
@@ -754,9 +798,11 @@ export default function CameraSquatPage() {
     successCueAttemptedRef.current = true;
     cancelCorrectiveCueForSuccess();
     void speakVoiceCue(getSuccessVoiceCue());
-  }, [currentStepKey, effectivePassLatched]);
+  }, [cameraPhase, currentStepKey, effectivePassLatched]);
 
   const latchPassEvent = useCallback(() => {
+    /* PR-CAM-30A: 이중 방어 — countdown/setup 에서 절대 latch·snapshot·terminal 기록 안 함 */
+    if (cameraPhase !== 'capturing') return;
     if (passLatchedStepKeyRef.current === currentStepKey || passLatched) {
       return;
     }
@@ -952,6 +998,8 @@ export default function CameraSquatPage() {
   ]);
 
   useEffect(() => {
+    /* PR-CAM-30A: pass latch effect 는 capturing 에서만 동작 */
+    if (cameraPhase !== 'capturing') return;
     if (!effectivePassLatched) {
       return;
     }
@@ -1022,6 +1070,7 @@ export default function CameraSquatPage() {
       router.push(nextPath);
     }, SQUAT_AUTO_ADVANCE_MS);
   }, [
+    cameraPhase,
     clearAutoAdvanceTimer,
     currentStepKey,
     effectivePassLatched,
@@ -1074,6 +1123,8 @@ export default function CameraSquatPage() {
 
   useEffect(() => {
     return () => {
+      /* PR-CAM-30A: capturing 에 한 번도 들어가지 않은 세션은 terminal 번들 미기록 */
+      if (!squatCaptureSessionEnteredRef.current) return;
       const stepKey = latestStepKeyForBundleRef.current;
       if (squatSessionBundleRecordedForStepKeyRef.current === stepKey) return;
       const g = gateRef.current;
@@ -1354,7 +1405,6 @@ export default function CameraSquatPage() {
     passLatchedStepKeyRef.current = null;
     scheduledAdvanceStepKeyRef.current = null;
     triggeredAdvanceStepKeyRef.current = null;
-    hasStartedRef.current = false;
     prevCapturingReadinessRef.current = null;
     readyToShootAttemptedRef.current = false;
     setCameraPhase('setup');
@@ -1496,7 +1546,8 @@ export default function CameraSquatPage() {
   const showPreCaptureHint =
     (progressionState === 'camera_ready' || progressionState === 'insufficient_signal') &&
     stats.sampledFrameCount < 8;
-  const effectiveProgressionState = effectivePassLatched ? 'passed' : progressionState;
+  const effectiveProgressionState =
+    cameraPhase === 'capturing' && effectivePassLatched ? 'passed' : progressionState;
   const guideTone = getGuideToneFromLiveReadiness(liveReadiness);
   const overlayGuide = getSquatOverlayGuide(gate.failureReasons, effectiveProgressionState);
   const isPreCapturePhase =
@@ -1613,7 +1664,7 @@ export default function CameraSquatPage() {
               <CameraPreview
                 key={previewKey}
                 onVideoReady={handleVideoReady}
-                onPoseFrame={pushFrame}
+                onPoseFrame={pushFrameDuringCapturingOnly}
                 onError={handleCameraError}
                 guideTone={isPreCapturePhase ? 'neutral' : guideTone}
                 guideHint={isMinimalCapture ? null : isPreCapturePhase ? null : overlayGuide.hint}
