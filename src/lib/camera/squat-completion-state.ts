@@ -44,6 +44,42 @@ export type SquatEvidenceLabel =
   | 'ultra_low_rom'
   | 'insufficient_signal';
 
+/**
+ * PR-02 Assist lock: completion 이 어떻게 최종 확정됐는지(관측·trace 전용).
+ * success owner 가 아님 — PR-01 owner 는 completion truth 라인age 별도.
+ */
+export type SquatCompletionFinalizeMode =
+  | 'blocked'
+  | 'rule_finalized'
+  | 'assist_augmented_finalized'
+  | 'event_promoted_finalized';
+
+/** PR-02: 어떤 assist 채널이 개입했는지(OR 목록) */
+export type SquatCompletionAssistSource =
+  | 'hmm_blocked_reason'
+  | 'hmm_reversal'
+  | 'trajectory_reversal_rescue'
+  | 'standing_tail_backfill'
+  | 'event_cycle_promotion';
+
+/** PR-02: assist 축 단일 요약(복수면 mixed) */
+export type SquatCompletionAssistMode =
+  | 'none'
+  | 'hmm_segmentation'
+  | 'hmm_reversal'
+  | 'reversal_trajectory'
+  | 'reversal_tail'
+  | 'event_promotion'
+  | 'mixed';
+
+/** PR-02: 역전 앵커 증거 출처 — pass owner 아님 */
+export type SquatReversalEvidenceProvenance =
+  | 'strict_rule'
+  | 'rule_plus_hmm_detection'
+  | 'hmm_reversal_assist'
+  | 'trajectory_anchor_rescue'
+  | 'standing_tail_backfill';
+
 export interface SquatCompletionState extends MotionCompletionResult {
   baselineStandingDepth: number;
   rawDepthPeak: number;
@@ -144,6 +180,20 @@ export interface SquatCompletionState extends MotionCompletionResult {
    * PR-CAM-ULTRA-LOW-ROM-EVENT-GATE-01: 역전 이후 서 있기 복귀 — 트레이스 보존.
    */
   recoveryConfirmedAfterReversal?: boolean;
+  /** PR-02: guarded trajectory rescue 가 역전 앵커를 열었는지(assist provenance) */
+  trajectoryReversalRescueApplied?: boolean;
+  /** PR-02: finalize / assist 축 — JSON 에서 owner 와 분리해 읽기 */
+  completionFinalizeMode?: SquatCompletionFinalizeMode;
+  completionAssistApplied?: boolean;
+  completionAssistSources?: SquatCompletionAssistSource[];
+  completionAssistMode?: SquatCompletionAssistMode;
+  /**
+   * PR-02: event promotion 직전 rule 단계 blocked reason(승격 시에만 채움).
+   * assist 가 owner 처럼 막힌 이유를 지운 것이 아니라, 어떤 rule 에서 승격했는지 추적.
+   */
+  promotionBaseRuleBlockedReason?: string | null;
+  /** PR-02: 역전 증거 레인 — trajectory/tail/HMM 구분 */
+  reversalEvidenceProvenance?: SquatReversalEvidenceProvenance | null;
 }
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
@@ -190,6 +240,65 @@ function isRecoveryFinalizeFamilyRuleBlocked(reason: string | null): boolean {
     reason === 'low_rom_standing_finalize_not_satisfied' ||
     reason === 'ultra_low_rom_standing_finalize_not_satisfied'
   );
+}
+
+/** PR-02: assist 채널 목록 — owner 가 아닌 provenance 만 */
+function buildSquatCompletionAssistSources(input: {
+  hmmAssistApplied: boolean;
+  hmmReversalAssistApplied: boolean;
+  trajectoryReversalRescueApplied: boolean;
+  reversalTailBackfillApplied: boolean;
+  eventCyclePromoted: boolean;
+}): SquatCompletionAssistSource[] {
+  const out: SquatCompletionAssistSource[] = [];
+  if (input.hmmAssistApplied) out.push('hmm_blocked_reason');
+  if (input.hmmReversalAssistApplied) out.push('hmm_reversal');
+  if (input.trajectoryReversalRescueApplied) out.push('trajectory_reversal_rescue');
+  if (input.reversalTailBackfillApplied) out.push('standing_tail_backfill');
+  if (input.eventCyclePromoted) out.push('event_cycle_promotion');
+  return out;
+}
+
+function deriveSquatCompletionAssistMode(sources: SquatCompletionAssistSource[]): SquatCompletionAssistMode {
+  if (sources.length === 0) return 'none';
+  const uniq = [...new Set(sources)];
+  if (uniq.length === 1) {
+    const u = uniq[0]!;
+    if (u === 'hmm_blocked_reason') return 'hmm_segmentation';
+    if (u === 'hmm_reversal') return 'hmm_reversal';
+    if (u === 'trajectory_reversal_rescue') return 'reversal_trajectory';
+    if (u === 'standing_tail_backfill') return 'reversal_tail';
+    if (u === 'event_cycle_promotion') return 'event_promotion';
+  }
+  return 'mixed';
+}
+
+function deriveSquatCompletionFinalizeMode(input: {
+  completionSatisfied: boolean;
+  eventCyclePromoted: boolean;
+  assistSourcesWithoutPromotion: SquatCompletionAssistSource[];
+}): SquatCompletionFinalizeMode {
+  if (!input.completionSatisfied) return 'blocked';
+  if (input.eventCyclePromoted) return 'event_promoted_finalized';
+  if (input.assistSourcesWithoutPromotion.length === 0) return 'rule_finalized';
+  return 'assist_augmented_finalized';
+}
+
+function deriveSquatReversalEvidenceProvenance(input: {
+  trajectoryReversalRescueApplied: boolean;
+  reversalTailBackfillApplied: boolean;
+  hmmReversalAssistApplied: boolean;
+  revConfReversalConfirmed: boolean;
+  revConfSource: 'rule' | 'rule_plus_hmm' | 'none';
+}): SquatReversalEvidenceProvenance | null {
+  if (input.trajectoryReversalRescueApplied) return 'trajectory_anchor_rescue';
+  if (input.reversalTailBackfillApplied) return 'standing_tail_backfill';
+  if (input.hmmReversalAssistApplied) return 'hmm_reversal_assist';
+  if (input.revConfReversalConfirmed && input.revConfSource === 'rule_plus_hmm') {
+    return 'rule_plus_hmm_detection';
+  }
+  if (input.revConfReversalConfirmed) return 'strict_rule';
+  return null;
 }
 
 /** PR-04E3B: depthRows 빌드 — freeze 루프·core 공통 */
@@ -735,6 +844,13 @@ function evaluateSquatCompletionCore(
       eventBasedDescentPath: false,
       baselineSeeded: false,
       reversalTailBackfillApplied: false,
+      trajectoryReversalRescueApplied: false,
+      completionFinalizeMode: 'blocked',
+      completionAssistApplied: false,
+      completionAssistSources: [],
+      completionAssistMode: 'none',
+      promotionBaseRuleBlockedReason: null,
+      reversalEvidenceProvenance: null,
     };
   }
 
@@ -1245,6 +1361,29 @@ function evaluateSquatCompletionCore(
       ? revConf.reversalFrameCount
       : null;
 
+  const trajectoryReversalRescueApplied = trajectoryRescue.trajectoryReversalConfirmedBy === 'trajectory';
+  const reversalTailApplied = tailBackfill.backfillApplied;
+  const pr02AssistSources = buildSquatCompletionAssistSources({
+    hmmAssistApplied: hmmAssistDecision.assistApplied,
+    hmmReversalAssistApplied: hmmReversalAssistDecision.assistApplied,
+    trajectoryReversalRescueApplied,
+    reversalTailBackfillApplied: reversalTailApplied,
+    eventCyclePromoted: false,
+  });
+  const pr02FinalizeMode = deriveSquatCompletionFinalizeMode({
+    completionSatisfied,
+    eventCyclePromoted: false,
+    assistSourcesWithoutPromotion: pr02AssistSources,
+  });
+  const pr02AssistMode = deriveSquatCompletionAssistMode(pr02AssistSources);
+  const pr02ReversalProv = deriveSquatReversalEvidenceProvenance({
+    trajectoryReversalRescueApplied,
+    reversalTailBackfillApplied: reversalTailApplied,
+    hmmReversalAssistApplied: hmmReversalAssistDecision.assistApplied,
+    revConfReversalConfirmed: revConf.reversalConfirmed,
+    revConfSource: revConf.reversalSource,
+  });
+
   return {
     baselineStandingDepth,
     rawDepthPeak,
@@ -1325,6 +1464,13 @@ function evaluateSquatCompletionCore(
       standingRecovery.standingRecoveredAtMs != null && progressionReversalFrame != null,
     eventBasedDescentPath,
     baselineSeeded: hasFiniteSeedPrimary,
+    trajectoryReversalRescueApplied,
+    completionFinalizeMode: pr02FinalizeMode,
+    completionAssistApplied: pr02AssistSources.length > 0,
+    completionAssistSources: pr02AssistSources,
+    completionAssistMode: pr02AssistMode,
+    promotionBaseRuleBlockedReason: null,
+    reversalEvidenceProvenance: pr02ReversalProv,
   };
 }
 
@@ -1464,6 +1610,15 @@ export function evaluateSquatCompletionState(
   const promotedSource: 'rule' | 'rule_plus_hmm' =
     squatEventCycle.source === 'rule_plus_hmm' ? 'rule_plus_hmm' : 'rule';
 
+  const promotedAssistSources = buildSquatCompletionAssistSources({
+    hmmAssistApplied: state.hmmAssistApplied === true,
+    hmmReversalAssistApplied: state.hmmReversalAssistApplied === true,
+    trajectoryReversalRescueApplied: state.trajectoryReversalRescueApplied === true,
+    reversalTailBackfillApplied: state.reversalTailBackfillApplied === true,
+    eventCyclePromoted: true,
+  });
+  const promotedAssistMode = deriveSquatCompletionAssistMode(promotedAssistSources);
+
   return {
     ...state,
     completionBlockedReason: null,
@@ -1479,5 +1634,10 @@ export function evaluateSquatCompletionState(
     eventCyclePromoted: true,
     eventCycleSource: promotedSource,
     postAssistCompletionBlockedReason: null,
+    completionFinalizeMode: 'event_promoted_finalized',
+    completionAssistApplied: promotedAssistSources.length > 0,
+    completionAssistSources: promotedAssistSources,
+    completionAssistMode: promotedAssistMode,
+    promotionBaseRuleBlockedReason: ruleBlock,
   };
 }

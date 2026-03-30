@@ -2,6 +2,9 @@
  * PR-04E3B: shallow / low-ROM **event-cycle** 인식 전용 헬퍼.
  * completion truth 소유권은 squat-completion-state 에서만 승격하며,
  * 본 모듈은 동일 attempt 버퍼 내 궤적 증거만 산출한다 (HMM = 보조 증거).
+ *
+ * PR-02 Assist lock: 이벤트 사이클 탐지는 **assist provenance 입력**일 뿐 success owner 가 아니다.
+ * 승격(promoted finalize)은 completion-state 가 `eventCyclePromoted`·`completionFinalizeMode` 로만 기록한다.
  */
 
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';

@@ -1,6 +1,10 @@
 /**
  * PR-04E2: squat completion-state 전용 reversal 확인 — peak 이후 상승(standing 방향) 증거.
  * HMM assist 모듈(squat-reversal-assist) 임계값은 변경하지 않으며, rule 측 보강 + 보조 rule_plus_hmm 만 담당.
+ *
+ * PR-02 Assist lock: trajectory rescue / tail backfill / HMM reversal assist 는 **reversal evidence provenance**만
+ * 보강하며, 통과 게이트 소유권(completion truth finalized)을 대체하지 않는다. `reversalEvidenceProvenance`·`reversalConfirmedBy`는
+ * 앵커 출처 추적용이다.
  */
 
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';

@@ -197,6 +197,19 @@ export interface AttemptSnapshot {
       eventCycleSource?: string | null;
       /** PR-CAM-CORE: completion-state trajectory descent 폴백 truth */
       eventBasedDescentPath?: boolean;
+      /**
+       * PR-02 Assist lock: completion-state 정본 — assist / promoted finalize / reversal provenance.
+       * pass owner·PR-01 lineage 와 혼동 금지.
+       */
+      completionFinalizeMode?: string | null;
+      completionAssistApplied?: boolean;
+      completionAssistSources?: string[];
+      completionAssistMode?: string | null;
+      promotionBaseRuleBlockedReason?: string | null;
+      reversalEvidenceProvenance?: string | null;
+      trajectoryReversalRescueApplied?: boolean;
+      /** squatCompletionState.reversalTailBackfillApplied (squatCycleDebug 미러 없음) */
+      reversalTailBackfillApplied?: boolean;
       /** PR-CAM-OBS-NORMALIZE-01: 표면 혼선 방지용 해석 라벨(값·산식 변경 아님) */
       displayDepthTruth?: 'evaluator_peak_metric';
       ownerDepthTruth?: 'completion_relative_depth';
@@ -348,6 +361,17 @@ export interface SquatAttemptObservation {
    */
   observationTruthStage?: ObservationTruthStage;
   completionBlockedReasonAuthoritative?: boolean;
+  /** PR-02: completion-state assist provenance(관측 JSON) */
+  completionFinalizeMode?: string | null;
+  completionAssistApplied?: boolean;
+  completionAssistSources?: string[];
+  completionAssistMode?: string | null;
+  ruleCompletionBlockedReasonObs?: string | null;
+  postAssistCompletionBlockedReasonObs?: string | null;
+  promotionBaseRuleBlockedReason?: string | null;
+  reversalEvidenceProvenance?: string | null;
+  trajectoryReversalRescueApplied?: boolean;
+  reversalTailBackfillAppliedObs?: boolean;
   debugVersion: string;
 }
 
@@ -533,6 +557,7 @@ export function buildSquatAttemptObservation(
   if (gate.evaluatorResult?.stepId !== 'squat') return null;
 
   const sc = gate.squatCycleDebug;
+  const cs = gate.evaluatorResult?.debug?.squatCompletionState;
   const hm = readHighlighted(gate);
   const signals = deriveSquatObservabilitySignals(gate);
   const relPeak = typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : undefined;
@@ -616,6 +641,16 @@ export function buildSquatAttemptObservation(
     eventCyclePromoted: gate.evaluatorResult?.debug?.squatCompletionState?.eventCyclePromoted,
     observationTruthStage: truthMeta.observationTruthStage,
     completionBlockedReasonAuthoritative: truthMeta.completionBlockedReasonAuthoritative,
+    completionFinalizeMode: cs?.completionFinalizeMode ?? null,
+    completionAssistApplied: cs?.completionAssistApplied === true,
+    completionAssistSources: cs?.completionAssistSources ?? [],
+    completionAssistMode: cs?.completionAssistMode ?? null,
+    ruleCompletionBlockedReasonObs: cs?.ruleCompletionBlockedReason ?? null,
+    postAssistCompletionBlockedReasonObs: cs?.postAssistCompletionBlockedReason ?? null,
+    promotionBaseRuleBlockedReason: cs?.promotionBaseRuleBlockedReason ?? null,
+    reversalEvidenceProvenance: cs?.reversalEvidenceProvenance ?? null,
+    trajectoryReversalRescueApplied: cs?.trajectoryReversalRescueApplied === true,
+    reversalTailBackfillAppliedObs: cs?.reversalTailBackfillApplied === true,
     debugVersion: `${OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
   };
 }
@@ -831,6 +866,7 @@ function buildDiagnosisSummary(
 
   if (stepId === 'squat' && gate.squatCycleDebug) {
     const sc = gate.squatCycleDebug;
+    const cs = gate.evaluatorResult?.debug?.squatCompletionState;
     const siq = gate.evaluatorResult.debug?.squatInternalQuality;
     const peakDepth =
       typeof hm?.depthPeak === 'number'
@@ -952,6 +988,14 @@ function buildDiagnosisSummary(
       eventCyclePromoted: sc.eventCyclePromoted,
       eventCycleSource: sc.eventCycleSource ?? null,
       eventBasedDescentPath: sc.eventBasedDescentPath,
+      completionFinalizeMode: cs?.completionFinalizeMode ?? null,
+      completionAssistApplied: cs?.completionAssistApplied === true,
+      completionAssistSources: (cs?.completionAssistSources ?? []) as string[],
+      completionAssistMode: cs?.completionAssistMode ?? null,
+      promotionBaseRuleBlockedReason: cs?.promotionBaseRuleBlockedReason ?? null,
+      reversalEvidenceProvenance: cs?.reversalEvidenceProvenance ?? null,
+      trajectoryReversalRescueApplied: cs?.trajectoryReversalRescueApplied === true,
+      reversalTailBackfillApplied: cs?.reversalTailBackfillApplied === true,
       displayDepthTruth: 'evaluator_peak_metric',
       ownerDepthTruth: 'completion_relative_depth',
       cycleDecisionTruth: 'completion_state',
