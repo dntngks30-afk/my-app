@@ -231,6 +231,8 @@ export interface AttemptSnapshot {
       officialShallowStreamBridgeApplied?: boolean;
       officialShallowAscentEquivalentSatisfied?: boolean;
       officialShallowClosureProofSatisfied?: boolean;
+      /** PR-03 shallow closure final: primary-stream 폴백으로 shallow 번들만 성립(관측) */
+      officialShallowPrimaryDropClosureFallback?: boolean;
       /** PR-03 final: shallow closure 축 — 역전 truth */
       officialShallowReversalSatisfied?: boolean;
       /** PR-03 final: 관측 전용 — shallow 입장 후 버퍼 깊어져 standard_cycle 로만 닫힌 잔여 */
@@ -411,6 +413,7 @@ export interface SquatAttemptObservation {
   officialShallowStreamBridgeApplied?: boolean;
   officialShallowAscentEquivalentSatisfied?: boolean;
   officialShallowClosureProofSatisfied?: boolean;
+  officialShallowPrimaryDropClosureFallback?: boolean;
   officialShallowReversalSatisfied?: boolean;
   officialShallowDriftedToStandard?: boolean;
   officialShallowDriftReason?: string | null;
@@ -713,6 +716,7 @@ export function buildSquatAttemptObservation(
     officialShallowStreamBridgeApplied: cs?.officialShallowStreamBridgeApplied === true,
     officialShallowAscentEquivalentSatisfied: cs?.officialShallowAscentEquivalentSatisfied === true,
     officialShallowClosureProofSatisfied: cs?.officialShallowClosureProofSatisfied === true,
+    officialShallowPrimaryDropClosureFallback: cs?.officialShallowPrimaryDropClosureFallback === true,
     officialShallowReversalSatisfied: cs?.officialShallowReversalSatisfied === true,
     officialShallowDriftedToStandard: cs?.officialShallowDriftedToStandard === true,
     officialShallowDriftReason: cs?.officialShallowDriftReason ?? null,
@@ -1089,6 +1093,7 @@ function buildDiagnosisSummary(
       officialShallowStreamBridgeApplied: cs?.officialShallowStreamBridgeApplied === true,
       officialShallowAscentEquivalentSatisfied: cs?.officialShallowAscentEquivalentSatisfied === true,
       officialShallowClosureProofSatisfied: cs?.officialShallowClosureProofSatisfied === true,
+      officialShallowPrimaryDropClosureFallback: cs?.officialShallowPrimaryDropClosureFallback === true,
       officialShallowReversalSatisfied: cs?.officialShallowReversalSatisfied === true,
       officialShallowDriftedToStandard: cs?.officialShallowDriftedToStandard === true,
       officialShallowDriftReason: cs?.officialShallowDriftReason ?? null,

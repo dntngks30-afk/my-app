@@ -319,6 +319,11 @@ export interface SquatCompletionState extends MotionCompletionResult {
   officialShallowAscentEquivalentSatisfied?: boolean;
   /** PR-03 rework: shallow 공식 closure에 필요한 finalize·복귀·post-peak return 번들 충족(관측) */
   officialShallowClosureProofSatisfied?: boolean;
+  /**
+   * PR-03 shallow closure final: completion-stream 꼬리가 짧을 때 primary 0.88×역전량으로 번들만 성립했는지(관측).
+   * 게이트로 사용하지 않음.
+   */
+  officialShallowPrimaryDropClosureFallback?: boolean;
   /** PR-03 final: progression 역전 truth — shallow closure 판정·트레이스용 명시 축 */
   officialShallowReversalSatisfied?: boolean;
   /**
@@ -918,6 +923,8 @@ function normalizeCompletionBlockedReasonForTerminalStage(args: {
   completionBlockedReason: string | null;
   /** PR-03 rework: 공식 shallow 입장 시 no_reversal 을 recovery_hold 로 뭉개며 튀는 것 방지 */
   officialShallowPathAdmitted?: boolean;
+  /** PR-03 shallow closure final: stream/primary shallow closure 번들 성립 시 no_reversal 정체 완화 */
+  officialShallowClosureProofBundle?: boolean;
 }): string | null {
   if (args.completionSatisfied) return null;
 
@@ -927,6 +934,19 @@ function normalizeCompletionBlockedReasonForTerminalStage(args: {
   if (
     args.officialShallowPathAdmitted === true &&
     args.reversalConfirmedAfterDescend === true &&
+    cur === 'no_reversal'
+  ) {
+    return 'not_standing_recovered';
+  }
+
+  /**
+   * PR-03 shallow closure final: 번들·finalize 증거는 있는데 progression 앵커만 아직 rule 체인에 안 붙은 틈 —
+   * shallow 전용으로 no_reversal 에 고정되지 않게 한다 (standard/deep 경로는 건드리지 않음).
+   */
+  if (
+    args.officialShallowPathAdmitted === true &&
+    args.officialShallowClosureProofBundle === true &&
+    args.reversalConfirmedAfterDescend === false &&
     cur === 'no_reversal'
   ) {
     return 'not_standing_recovered';
@@ -1052,6 +1072,7 @@ function evaluateSquatCompletionCore(
       officialShallowStreamBridgeApplied: false,
       officialShallowAscentEquivalentSatisfied: false,
       officialShallowClosureProofSatisfied: false,
+      officialShallowPrimaryDropClosureFallback: false,
       officialShallowReversalSatisfied: false,
     };
   }
@@ -1352,9 +1373,12 @@ function evaluateSquatCompletionCore(
   /**
    * PR-03 rework: 공식 shallow closure 번들 — completion depth 스트림에서 앵커 이후 최소 3프레임·return drop.
    * primary `detectSquatReversalConfirmation` 미달이어도 trajectory rescue 와 동일한 finalize·복귀 증거를 쓴다.
+   *
+   * PR-03 shallow closure final: 공식 shallow + 이완 low-ROM 증거가 이미 잠겼을 때 post-peak 를 2프레임까지 허용.
+   * (버퍼 끝이 짧아 3프레임을 못 채우면 stream bridge 가 영원히 안 열려 no_reversal 에 갇힘)
    */
   let officialShallowProofCompletionReturnDrop: number | null = null;
-  /** completion-stream post-peak 번들(3프레임·drop) — 반환 객체 키와 이름 충돌 방지 */
+  /** completion-stream post-peak 번들 — 반환 객체 키와 이름 충돌 방지 */
   let shallowClosureProofBundleFromStream = false;
   if (
     officialShallowPathCandidate &&
@@ -1367,7 +1391,14 @@ function evaluateSquatCompletionCore(
   ) {
     const anchor = committedOrPostCommitPeakFrame;
     const postPeak = depthFrames.filter((f) => f.index > anchor.index);
-    if (postPeak.length >= 3) {
+    const minPostPeakFramesForShallowClosure =
+      officialShallowPathCandidate &&
+      relativeDepthPeak < STANDARD_OWNER_FLOOR &&
+      qualifiesForRelaxedLowRomTiming &&
+      recoveryMeetsLowRomStyleFinalizeProof(recovery)
+        ? 2
+        : 3;
+    if (postPeak.length >= minPostPeakFramesForShallowClosure) {
       const minPost = Math.min(...postPeak.map((f) => f.depth));
       const drop = anchor.depth - minPost;
       officialShallowProofCompletionReturnDrop = drop;
@@ -1379,6 +1410,28 @@ function evaluateSquatCompletionCore(
         shallowClosureProofBundleFromStream = true;
       }
     }
+  }
+  /**
+   * PR-03 shallow closure final: completion-stream 꼬리가 짧아도 primary 기하 되돌림이 이미 충분하면
+   * 동일 finalize·복귀 번들 하에서 shallow closure 번들로 인정 (event/HMM 확장 아님).
+   */
+  let officialShallowPrimaryDropClosureFallback = false;
+  if (
+    !shallowClosureProofBundleFromStream &&
+    officialShallowPathCandidate &&
+    relativeDepthPeak < STANDARD_OWNER_FLOOR &&
+    attemptStarted &&
+    hasValidCommittedPeakAnchor &&
+    committedOrPostCommitPeakFrame != null &&
+    isOfficialShallowRomFinalizeBand(standingRecoveryFinalizeBand) &&
+    standingRecoveryFinalize.finalizeSatisfied &&
+    recoveryMeetsLowRomStyleFinalizeProof(recovery) &&
+    qualifiesForRelaxedLowRomTiming &&
+    squatReversalDropAchieved >= Math.max(REVERSAL_DROP_MIN_ABS, squatReversalDropRequired * 0.88)
+  ) {
+    shallowClosureProofBundleFromStream = true;
+    officialShallowPrimaryDropClosureFallback = true;
+    officialShallowProofCompletionReturnDrop = squatReversalDropAchieved;
   }
 
   /** commitment 이후 역전·상승·복귀·타이밍 — reversalFrame/ascend 기준 */
@@ -1603,6 +1656,7 @@ function evaluateSquatCompletionCore(
     standingRecoveryFinalizeReason: standingRecoveryFinalize.finalizeReason,
     completionBlockedReason: rawPostAssistCompletionBlockedReason,
     officialShallowPathAdmitted: officialShallowPathAdmittedForNormalize,
+    officialShallowClosureProofBundle: shallowClosureProofBundleFromStream,
   });
 
   const postAssistCompletionBlockedReason = rawPostAssistCompletionBlockedReason;
@@ -1846,10 +1900,14 @@ function evaluateSquatCompletionCore(
     officialShallowStreamBridgeApplied,
     officialShallowAscentEquivalentSatisfied,
     /**
-     * PR-03 final: 통과 시 closure 와 동기 — official shallow 가 닫혔다면 finalize·복귀 번들이 이미 충족된 것.
-     * completion-stream 3프레임 번들은 shallowClosureProofBundleFromStream + bridge 경로로 별도 관측.
+     * PR-03 shallow closure final: 닫힘·stream 번들·primary 폴백 번들 중 하나면 closure proof 축 true.
+     * (strict primary 역전만으로 닫힌 경우 officialShallowPathClosed 와 함께 true)
      */
-    officialShallowClosureProofSatisfied: !!officialShallowPathClosed,
+    officialShallowClosureProofSatisfied:
+      officialShallowPathClosed ||
+      shallowClosureProofBundleFromStream ||
+      officialShallowStreamBridgeApplied,
+    officialShallowPrimaryDropClosureFallback,
     officialShallowReversalSatisfied: reversalConfirmedAfterDescend,
   };
 }
@@ -2004,6 +2062,15 @@ export function evaluateSquatCompletionState(
     };
   }
 
+  /** PR-03 shallow closure final: 실제 shallow ROM 으로 닫힌 성공이면 drift 잔류를 지운다 (관측 일관성). */
+  if (state.officialShallowPathClosed === true) {
+    state = {
+      ...state,
+      officialShallowDriftedToStandard: false,
+      officialShallowDriftReason: null,
+    };
+  }
+
   const validForEventFrames =
     state.officialShallowPreferredPrefixFrameCount != null
       ? frames.slice(0, state.officialShallowPreferredPrefixFrameCount)
@@ -2094,8 +2161,8 @@ export function evaluateSquatCompletionState(
     promotionBaseRuleBlockedReason: ruleBlock,
     officialShallowPathClosed: promotedOfficialShallowClosed,
     officialShallowPathBlockedReason: null,
-    officialShallowDriftedToStandard: state.officialShallowDriftedToStandard ?? false,
-    officialShallowDriftReason: state.officialShallowDriftReason ?? null,
+    officialShallowDriftedToStandard: promotedOfficialShallowClosed ? false : (state.officialShallowDriftedToStandard ?? false),
+    officialShallowDriftReason: promotedOfficialShallowClosed ? null : (state.officialShallowDriftReason ?? null),
     officialShallowPreferredPrefixFrameCount: state.officialShallowPreferredPrefixFrameCount ?? null,
   };
 }
