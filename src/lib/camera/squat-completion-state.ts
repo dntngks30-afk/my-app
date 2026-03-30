@@ -78,7 +78,9 @@ export type SquatReversalEvidenceProvenance =
   | 'rule_plus_hmm_detection'
   | 'hmm_reversal_assist'
   | 'trajectory_anchor_rescue'
-  | 'standing_tail_backfill';
+  | 'standing_tail_backfill'
+  /** PR-03 rework: 공식 shallow path 전용 — completion depth 스트림 post-peak return + guarded finalize 증거 */
+  | 'official_shallow_stream_bridge';
 
 export interface SquatCompletionState extends MotionCompletionResult {
   baselineStandingDepth: number;
@@ -184,6 +186,12 @@ export interface SquatCompletionState extends MotionCompletionResult {
   officialShallowPathReason?: string | null;
   /** PR-03: 후보인데 아직 닫히지 않았을 때 병목(관측 전용) */
   officialShallowPathBlockedReason?: string | null;
+  /** PR-03 rework: primary 역전 미달 시 completion 스트림으로 shallow reversal 앵커 보강 적용 */
+  officialShallowStreamBridgeApplied?: boolean;
+  /** PR-03 rework: phaseHint ascent 없이 completion return + 0.88×요구량으로 상승 등가 인정 */
+  officialShallowAscentEquivalentSatisfied?: boolean;
+  /** PR-03 rework: shallow 공식 closure에 필요한 finalize·복귀·post-peak return 번들 충족(관측) */
+  officialShallowClosureProofSatisfied?: boolean;
   /**
    * PR-CAM-ULTRA-LOW-ROM-EVENT-GATE-01: progression 역전 프레임 존재 — ultra-low event 승격 게이트 입력.
    * (JSON/트레이스 `reversalConfirmedAfterDescend` 와 동일 의미로 유지)
@@ -298,12 +306,14 @@ function deriveSquatCompletionFinalizeMode(input: {
 }
 
 function deriveSquatReversalEvidenceProvenance(input: {
+  officialShallowStreamBridgeApplied?: boolean;
   trajectoryReversalRescueApplied: boolean;
   reversalTailBackfillApplied: boolean;
   hmmReversalAssistApplied: boolean;
   revConfReversalConfirmed: boolean;
   revConfSource: 'rule' | 'rule_plus_hmm' | 'none';
 }): SquatReversalEvidenceProvenance | null {
+  if (input.officialShallowStreamBridgeApplied === true) return 'official_shallow_stream_bridge';
   if (input.trajectoryReversalRescueApplied) return 'trajectory_anchor_rescue';
   if (input.reversalTailBackfillApplied) return 'standing_tail_backfill';
   if (input.hmmReversalAssistApplied) return 'hmm_reversal_assist';
@@ -762,12 +772,21 @@ function normalizeCompletionBlockedReasonForTerminalStage(args: {
   standingRecoveredAtMs: number | null | undefined;
   standingRecoveryFinalizeReason: string | null;
   completionBlockedReason: string | null;
+  /** PR-03 rework: 공식 shallow 입장 시 no_reversal 을 recovery_hold 로 뭉개며 튀는 것 방지 */
+  officialShallowPathAdmitted?: boolean;
 }): string | null {
   if (args.completionSatisfied) return null;
 
   const cur = args.completionBlockedReason;
 
   if (args.standingRecoveredAtMs != null) {
+    if (
+      args.officialShallowPathAdmitted === true &&
+      args.reversalConfirmedAfterDescend === false &&
+      cur === 'no_reversal'
+    ) {
+      return 'no_reversal';
+    }
     const allowedStanding = new Set([
       'recovery_hold_too_short',
       'low_rom_standing_finalize_not_satisfied',
@@ -877,6 +896,9 @@ function evaluateSquatCompletionCore(
       officialShallowPathClosed: false,
       officialShallowPathReason: null,
       officialShallowPathBlockedReason: null,
+      officialShallowStreamBridgeApplied: false,
+      officialShallowAscentEquivalentSatisfied: false,
+      officialShallowClosureProofSatisfied: false,
     };
   }
 
@@ -1173,6 +1195,37 @@ function evaluateSquatCompletionCore(
   const bottomDetected = bottomFrame != null;
   const recoveryDetected = standingRecovery.standingRecoveredAtMs != null;
 
+  /**
+   * PR-03 rework: 공식 shallow closure 번들 — completion depth 스트림에서 앵커 이후 최소 3프레임·return drop.
+   * primary `detectSquatReversalConfirmation` 미달이어도 trajectory rescue 와 동일한 finalize·복귀 증거를 쓴다.
+   */
+  let officialShallowProofCompletionReturnDrop: number | null = null;
+  let officialShallowClosureProofSatisfied = false;
+  if (
+    officialShallowPathCandidate &&
+    attemptStarted &&
+    hasValidCommittedPeakAnchor &&
+    committedOrPostCommitPeakFrame != null &&
+    isOfficialShallowRomFinalizeBand(standingRecoveryFinalizeBand) &&
+    standingRecoveryFinalize.finalizeSatisfied &&
+    recoveryMeetsLowRomStyleFinalizeProof(recovery)
+  ) {
+    const anchor = committedOrPostCommitPeakFrame;
+    const postPeak = depthFrames.filter((f) => f.index > anchor.index);
+    if (postPeak.length >= 3) {
+      const minPost = Math.min(...postPeak.map((f) => f.depth));
+      const drop = anchor.depth - minPost;
+      officialShallowProofCompletionReturnDrop = drop;
+      const shallowStreamReq = Math.max(
+        REVERSAL_DROP_MIN_ABS,
+        squatReversalDropRequired * 0.88
+      );
+      if (drop >= shallowStreamReq) {
+        officialShallowClosureProofSatisfied = true;
+      }
+    }
+  }
+
   /** commitment 이후 역전·상승·복귀·타이밍 — reversalFrame/ascend 기준 */
   function computeBlockedAfterCommitment(
     rf: typeof peakFrame | undefined,
@@ -1234,6 +1287,46 @@ function evaluateSquatCompletionCore(
         ? committedOrPostCommitPeakFrame
         : undefined;
     ascendConfirmed = true;
+    ruleCompletionBlockedReason = computeBlockedAfterCommitment(reversalFrame, ascendConfirmed);
+  }
+
+  let officialShallowStreamBridgeApplied = false;
+  let officialShallowAscentEquivalentSatisfied = false;
+  let officialShallowStreamCompletionReturnDrop: number | null = null;
+  if (
+    reversalFrame == null &&
+    hmmReversalAssistDecision.assistApplied !== true &&
+    officialShallowClosureProofSatisfied &&
+    officialShallowPathCandidate &&
+    armed &&
+    descendConfirmed &&
+    attemptStarted &&
+    hasValidCommittedPeakAnchor &&
+    committedOrPostCommitPeakFrame != null
+  ) {
+    officialShallowStreamBridgeApplied = true;
+    const rf = committedOrPostCommitPeakFrame;
+    reversalFrame = rf;
+    officialShallowStreamCompletionReturnDrop = officialShallowProofCompletionReturnDrop;
+    const dropForAscend = officialShallowStreamCompletionReturnDrop ?? 0;
+    /** 앵커 depth 기준 상승 — 전역 peakFrame 이 primary·completion 피크 인덱스 불일치일 때 no_ascend 오판 방지 */
+    let bridgeAscend =
+      ascentFrame != null ||
+      depthFrames.some(
+        (frame) =>
+          frame.index > rf.index && frame.depth < rf.depth - squatReversalDropRequired
+      );
+    if (!bridgeAscend && dropForAscend >= squatReversalDropRequired * 0.88) {
+      bridgeAscend = true;
+      officialShallowAscentEquivalentSatisfied = true;
+    } else if (
+      bridgeAscend &&
+      ascentFrame == null &&
+      dropForAscend >= squatReversalDropRequired * 0.88
+    ) {
+      officialShallowAscentEquivalentSatisfied = true;
+    }
+    ascendConfirmed = bridgeAscend;
     ruleCompletionBlockedReason = computeBlockedAfterCommitment(reversalFrame, ascendConfirmed);
   }
 
@@ -1330,6 +1423,9 @@ function evaluateSquatCompletionCore(
 
   const reversalConfirmedAfterDescend = progressionReversalFrame != null;
 
+  const officialShallowPathAdmittedForNormalize =
+    officialShallowPathCandidate && armed && descendConfirmed && attemptStarted;
+
   const completionBlockedReason = normalizeCompletionBlockedReasonForTerminalStage({
     completionSatisfied: rawPostAssistCompletionBlockedReason == null,
     attemptStarted,
@@ -1338,6 +1434,7 @@ function evaluateSquatCompletionCore(
     standingRecoveredAtMs: standingRecovery.standingRecoveredAtMs,
     standingRecoveryFinalizeReason: standingRecoveryFinalize.finalizeReason,
     completionBlockedReason: rawPostAssistCompletionBlockedReason,
+    officialShallowPathAdmitted: officialShallowPathAdmittedForNormalize,
   });
 
   const postAssistCompletionBlockedReason = rawPostAssistCompletionBlockedReason;
@@ -1428,28 +1525,39 @@ function evaluateSquatCompletionCore(
   }
 
   let reversalConfirmedBy: 'rule' | 'rule_plus_hmm' | 'trajectory' | null =
-    hmmReversalAssistDecision.assistApplied
-      ? 'rule_plus_hmm'
-      : revConf.reversalConfirmed
-        ? revConf.reversalSource === 'rule_plus_hmm'
-          ? 'rule_plus_hmm'
-          : 'rule'
-        : null;
+    officialShallowStreamBridgeApplied
+      ? 'rule'
+      : hmmReversalAssistDecision.assistApplied
+        ? 'rule_plus_hmm'
+        : revConf.reversalConfirmed
+          ? revConf.reversalSource === 'rule_plus_hmm'
+            ? 'rule_plus_hmm'
+            : 'rule'
+          : null;
   if (trajectoryRescue.trajectoryReversalConfirmedBy === 'trajectory') {
     reversalConfirmedBy = 'trajectory';
   } else if (tailBackfill.backfillApplied) {
     reversalConfirmedBy = 'trajectory';
   }
-  const reversalDepthDrop = hmmReversalAssistDecision.assistApplied
-    ? squatReversalDropAchieved
-    : revConf.reversalConfirmed
-      ? revConf.reversalDepthDrop
-      : null;
-  const reversalFrameCount = hmmReversalAssistDecision.assistApplied
-    ? 2
-    : revConf.reversalConfirmed
-      ? revConf.reversalFrameCount
-      : null;
+  const reversalDepthDrop = officialShallowStreamBridgeApplied
+    ? officialShallowStreamCompletionReturnDrop
+    : hmmReversalAssistDecision.assistApplied
+      ? squatReversalDropAchieved
+      : revConf.reversalConfirmed
+        ? revConf.reversalDepthDrop
+        : null;
+  const reversalFrameCount = officialShallowStreamBridgeApplied
+    ? Math.max(
+        3,
+        committedOrPostCommitPeakFrame != null
+          ? depthFrames.filter((f) => f.index > committedOrPostCommitPeakFrame.index).length
+          : 0
+      )
+    : hmmReversalAssistDecision.assistApplied
+      ? 2
+      : revConf.reversalConfirmed
+        ? revConf.reversalFrameCount
+        : null;
 
   const trajectoryReversalRescueApplied = trajectoryRescue.trajectoryReversalConfirmedBy === 'trajectory';
   const reversalTailApplied = tailBackfill.backfillApplied;
@@ -1467,6 +1575,7 @@ function evaluateSquatCompletionCore(
   });
   const pr02AssistMode = deriveSquatCompletionAssistMode(pr02AssistSources);
   const pr02ReversalProv = deriveSquatReversalEvidenceProvenance({
+    officialShallowStreamBridgeApplied,
     trajectoryReversalRescueApplied,
     reversalTailBackfillApplied: reversalTailApplied,
     hmmReversalAssistApplied: hmmReversalAssistDecision.assistApplied,
@@ -1566,6 +1675,9 @@ function evaluateSquatCompletionCore(
     officialShallowPathClosed,
     officialShallowPathReason,
     officialShallowPathBlockedReason,
+    officialShallowStreamBridgeApplied,
+    officialShallowAscentEquivalentSatisfied,
+    officialShallowClosureProofSatisfied,
   };
 }
 

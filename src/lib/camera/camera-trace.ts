@@ -220,6 +220,10 @@ export interface AttemptSnapshot {
       closedAsOfficialRomCycle?: boolean;
       /** PR-03: residue event_cycle 라벨로 닫힘(현재는 승격도 cycle 로 통일되어 주로 false) */
       closedAsEventRescuePassReason?: boolean;
+      /** PR-03 rework: shallow 전용 completion-stream reversal 브리지·등가 상승·closure 증거 번들 */
+      officialShallowStreamBridgeApplied?: boolean;
+      officialShallowAscentEquivalentSatisfied?: boolean;
+      officialShallowClosureProofSatisfied?: boolean;
       /** PR-CAM-OBS-NORMALIZE-01: 표면 혼선 방지용 해석 라벨(값·산식 변경 아님) */
       displayDepthTruth?: 'evaluator_peak_metric';
       ownerDepthTruth?: 'completion_relative_depth';
@@ -391,6 +395,9 @@ export interface SquatAttemptObservation {
   /** PR-03 rework: completionState.officialShallowPathClosed 와 동기 */
   closedAsOfficialRomCycle?: boolean;
   closedAsEventRescuePassReason?: boolean;
+  officialShallowStreamBridgeApplied?: boolean;
+  officialShallowAscentEquivalentSatisfied?: boolean;
+  officialShallowClosureProofSatisfied?: boolean;
   debugVersion: string;
 }
 
@@ -679,6 +686,9 @@ export function buildSquatAttemptObservation(
     closedAsEventRescuePassReason:
       cs?.completionPassReason === 'low_rom_event_cycle' ||
       cs?.completionPassReason === 'ultra_low_rom_event_cycle',
+    officialShallowStreamBridgeApplied: cs?.officialShallowStreamBridgeApplied === true,
+    officialShallowAscentEquivalentSatisfied: cs?.officialShallowAscentEquivalentSatisfied === true,
+    officialShallowClosureProofSatisfied: cs?.officialShallowClosureProofSatisfied === true,
     debugVersion: `${OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
   };
 }
@@ -1033,6 +1043,9 @@ function buildDiagnosisSummary(
       closedAsEventRescuePassReason:
         cs?.completionPassReason === 'low_rom_event_cycle' ||
         cs?.completionPassReason === 'ultra_low_rom_event_cycle',
+      officialShallowStreamBridgeApplied: cs?.officialShallowStreamBridgeApplied === true,
+      officialShallowAscentEquivalentSatisfied: cs?.officialShallowAscentEquivalentSatisfied === true,
+      officialShallowClosureProofSatisfied: cs?.officialShallowClosureProofSatisfied === true,
       displayDepthTruth: 'evaluator_peak_metric',
       ownerDepthTruth: 'completion_relative_depth',
       cycleDecisionTruth: 'completion_state',
