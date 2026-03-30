@@ -224,6 +224,12 @@ export interface AttemptSnapshot {
       officialShallowStreamBridgeApplied?: boolean;
       officialShallowAscentEquivalentSatisfied?: boolean;
       officialShallowClosureProofSatisfied?: boolean;
+      /** PR-03 final: shallow closure 축 — 역전 truth */
+      officialShallowReversalSatisfied?: boolean;
+      /** PR-03 final: 관측 전용 — shallow 입장 후 버퍼 깊어져 standard_cycle 로만 닫힌 잔여 */
+      officialShallowDriftedToStandard?: boolean;
+      officialShallowDriftReason?: string | null;
+      officialShallowPreferredPrefixFrameCount?: number | null;
       /** PR-CAM-OBS-NORMALIZE-01: 표면 혼선 방지용 해석 라벨(값·산식 변경 아님) */
       displayDepthTruth?: 'evaluator_peak_metric';
       ownerDepthTruth?: 'completion_relative_depth';
@@ -398,6 +404,10 @@ export interface SquatAttemptObservation {
   officialShallowStreamBridgeApplied?: boolean;
   officialShallowAscentEquivalentSatisfied?: boolean;
   officialShallowClosureProofSatisfied?: boolean;
+  officialShallowReversalSatisfied?: boolean;
+  officialShallowDriftedToStandard?: boolean;
+  officialShallowDriftReason?: string | null;
+  officialShallowPreferredPrefixFrameCount?: number | null;
   debugVersion: string;
 }
 
@@ -689,6 +699,13 @@ export function buildSquatAttemptObservation(
     officialShallowStreamBridgeApplied: cs?.officialShallowStreamBridgeApplied === true,
     officialShallowAscentEquivalentSatisfied: cs?.officialShallowAscentEquivalentSatisfied === true,
     officialShallowClosureProofSatisfied: cs?.officialShallowClosureProofSatisfied === true,
+    officialShallowReversalSatisfied: cs?.officialShallowReversalSatisfied === true,
+    officialShallowDriftedToStandard: cs?.officialShallowDriftedToStandard === true,
+    officialShallowDriftReason: cs?.officialShallowDriftReason ?? null,
+    officialShallowPreferredPrefixFrameCount:
+      typeof cs?.officialShallowPreferredPrefixFrameCount === 'number'
+        ? cs.officialShallowPreferredPrefixFrameCount
+        : null,
     debugVersion: `${OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
   };
 }
@@ -1046,6 +1063,13 @@ function buildDiagnosisSummary(
       officialShallowStreamBridgeApplied: cs?.officialShallowStreamBridgeApplied === true,
       officialShallowAscentEquivalentSatisfied: cs?.officialShallowAscentEquivalentSatisfied === true,
       officialShallowClosureProofSatisfied: cs?.officialShallowClosureProofSatisfied === true,
+      officialShallowReversalSatisfied: cs?.officialShallowReversalSatisfied === true,
+      officialShallowDriftedToStandard: cs?.officialShallowDriftedToStandard === true,
+      officialShallowDriftReason: cs?.officialShallowDriftReason ?? null,
+      officialShallowPreferredPrefixFrameCount:
+        typeof cs?.officialShallowPreferredPrefixFrameCount === 'number'
+          ? cs.officialShallowPreferredPrefixFrameCount
+          : null,
       displayDepthTruth: 'evaluator_peak_metric',
       ownerDepthTruth: 'completion_relative_depth',
       cycleDecisionTruth: 'completion_state',

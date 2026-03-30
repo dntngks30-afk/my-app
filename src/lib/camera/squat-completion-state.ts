@@ -192,6 +192,16 @@ export interface SquatCompletionState extends MotionCompletionResult {
   officialShallowAscentEquivalentSatisfied?: boolean;
   /** PR-03 rework: shallow 공식 closure에 필요한 finalize·복귀·post-peak return 번들 충족(관측) */
   officialShallowClosureProofSatisfied?: boolean;
+  /** PR-03 final: progression 역전 truth — shallow closure 판정·트레이스용 명시 축 */
+  officialShallowReversalSatisfied?: boolean;
+  /**
+   * PR-03 final: 관측 전용 — 프레임 버퍼 후반 깊어져 standard_cycle 로 닫힌 뒤잦음이 shallow 입장 이후였는지.
+   * 게이트·판정 변경에 사용하지 않음.
+   */
+  officialShallowDriftedToStandard?: boolean;
+  officialShallowDriftReason?: string | null;
+  /** PR-03 final: full 버퍼 대신 최소 프리픽스로 shallow closure 채택 시 유효 프레임 수(없으면 null) */
+  officialShallowPreferredPrefixFrameCount?: number | null;
   /**
    * PR-CAM-ULTRA-LOW-ROM-EVENT-GATE-01: progression 역전 프레임 존재 — ultra-low event 승격 게이트 입력.
    * (JSON/트레이스 `reversalConfirmedAfterDescend` 와 동일 의미로 유지)
@@ -779,6 +789,15 @@ function normalizeCompletionBlockedReasonForTerminalStage(args: {
 
   const cur = args.completionBlockedReason;
 
+  /** PR-03 final: 역전이 이미 잠겼는데 no_reversal 로 남는 shallow 비일관성 제거 */
+  if (
+    args.officialShallowPathAdmitted === true &&
+    args.reversalConfirmedAfterDescend === true &&
+    cur === 'no_reversal'
+  ) {
+    return 'not_standing_recovered';
+  }
+
   if (args.standingRecoveredAtMs != null) {
     if (
       args.officialShallowPathAdmitted === true &&
@@ -899,6 +918,7 @@ function evaluateSquatCompletionCore(
       officialShallowStreamBridgeApplied: false,
       officialShallowAscentEquivalentSatisfied: false,
       officialShallowClosureProofSatisfied: false,
+      officialShallowReversalSatisfied: false,
     };
   }
 
@@ -1200,7 +1220,8 @@ function evaluateSquatCompletionCore(
    * primary `detectSquatReversalConfirmation` 미달이어도 trajectory rescue 와 동일한 finalize·복귀 증거를 쓴다.
    */
   let officialShallowProofCompletionReturnDrop: number | null = null;
-  let officialShallowClosureProofSatisfied = false;
+  /** completion-stream post-peak 번들(3프레임·drop) — 반환 객체 키와 이름 충돌 방지 */
+  let shallowClosureProofBundleFromStream = false;
   if (
     officialShallowPathCandidate &&
     attemptStarted &&
@@ -1221,7 +1242,7 @@ function evaluateSquatCompletionCore(
         squatReversalDropRequired * 0.88
       );
       if (drop >= shallowStreamReq) {
-        officialShallowClosureProofSatisfied = true;
+        shallowClosureProofBundleFromStream = true;
       }
     }
   }
@@ -1296,7 +1317,7 @@ function evaluateSquatCompletionCore(
   if (
     reversalFrame == null &&
     hmmReversalAssistDecision.assistApplied !== true &&
-    officialShallowClosureProofSatisfied &&
+    shallowClosureProofBundleFromStream &&
     officialShallowPathCandidate &&
     armed &&
     descendConfirmed &&
@@ -1387,6 +1408,19 @@ function evaluateSquatCompletionCore(
       reversalAtMs: progressionReversalFrame.timestampMs,
       minReversalToStandingMs: minReversalToStandingMsForShallow,
     });
+    ruleCompletionBlockedReason = computeBlockedAfterCommitment(
+      progressionReversalFrame,
+      ascendForProgression
+    );
+  }
+
+  /** PR-03 final: shallow 입장 후 progression 앵커가 있는데 rule 이 no_reversal 로 남는 경우 재정렬 */
+  if (
+    officialShallowPathCandidate &&
+    attemptStarted &&
+    progressionReversalFrame != null &&
+    ruleCompletionBlockedReason === 'no_reversal'
+  ) {
     ruleCompletionBlockedReason = computeBlockedAfterCommitment(
       progressionReversalFrame,
       ascendForProgression
@@ -1677,7 +1711,12 @@ function evaluateSquatCompletionCore(
     officialShallowPathBlockedReason,
     officialShallowStreamBridgeApplied,
     officialShallowAscentEquivalentSatisfied,
-    officialShallowClosureProofSatisfied,
+    /**
+     * PR-03 final: 통과 시 closure 와 동기 — official shallow 가 닫혔다면 finalize·복귀 번들이 이미 충족된 것.
+     * completion-stream 3프레임 번들은 shallowClosureProofBundleFromStream + bridge 경로로 별도 관측.
+     */
+    officialShallowClosureProofSatisfied: !!officialShallowPathClosed,
+    officialShallowReversalSatisfied: reversalConfirmedAfterDescend,
   };
 }
 
@@ -1767,7 +1806,75 @@ export function evaluateSquatCompletionState(
 
   let state = evaluateSquatCompletionCore(frames, options, depthFreeze);
 
-  const validForEvent = frames.filter((f) => f.isValid);
+  /**
+   * PR-03 final: full 버퍼에서 global peak 가 standard 로 밀려 standard_cycle 이 되기 전에,
+   * 더 짧은 프리픽스에서 이미 official shallow closure 가 있으면 그 시점의 truth 를 채택한다.
+   * moderate/deep( relativeDepthPeak ≥ STANDARD_OWNER_FLOOR ) 단일 시도는 기존과 동일.
+   */
+  const MIN_SHALLOW_PREFIX_SCAN = Math.max(8, MIN_BASELINE_FRAMES + 2);
+  let firstOfficialShallowClosedPrefix: SquatCompletionState | null = null;
+  let firstOfficialShallowClosedLen: number | null = null;
+  let sawOfficialShallowAdmissionOnPrefix = false;
+  if (frames.length >= MIN_SHALLOW_PREFIX_SCAN) {
+    for (let n = MIN_SHALLOW_PREFIX_SCAN; n <= frames.length; n++) {
+      const sn = evaluateSquatCompletionCore(frames.slice(0, n), options, depthFreeze);
+      if (!sawOfficialShallowAdmissionOnPrefix && sn.officialShallowPathCandidate && sn.officialShallowPathAdmitted) {
+        sawOfficialShallowAdmissionOnPrefix = true;
+      }
+      if (
+        firstOfficialShallowClosedPrefix == null &&
+        sn.officialShallowPathClosed &&
+        (sn.completionPassReason === 'low_rom_cycle' || sn.completionPassReason === 'ultra_low_rom_cycle') &&
+        sn.relativeDepthPeak < STANDARD_OWNER_FLOOR
+      ) {
+        firstOfficialShallowClosedPrefix = sn;
+        firstOfficialShallowClosedLen = n;
+        break;
+      }
+    }
+  }
+
+  let officialShallowDriftedToStandard = false;
+  let officialShallowDriftReason: string | null = null;
+  let officialShallowPreferredPrefixFrameCount: number | null = null;
+
+  if (
+    state.completionSatisfied &&
+    state.completionPassReason === 'standard_cycle' &&
+    state.relativeDepthPeak >= STANDARD_OWNER_FLOOR - 1e-9 &&
+    firstOfficialShallowClosedPrefix != null &&
+    firstOfficialShallowClosedLen != null
+  ) {
+    state = {
+      ...firstOfficialShallowClosedPrefix,
+      officialShallowDriftedToStandard: false,
+      officialShallowDriftReason: null,
+      officialShallowPreferredPrefixFrameCount: firstOfficialShallowClosedLen,
+    };
+  } else {
+    const driftObserved =
+      state.completionSatisfied &&
+      state.completionPassReason === 'standard_cycle' &&
+      state.relativeDepthPeak >= STANDARD_OWNER_FLOOR - 1e-9 &&
+      sawOfficialShallowAdmissionOnPrefix;
+    officialShallowDriftedToStandard = driftObserved;
+    officialShallowDriftReason = driftObserved
+      ? 'standard_cycle_full_buffer_after_official_shallow_admission'
+      : null;
+    officialShallowPreferredPrefixFrameCount = null;
+    state = {
+      ...state,
+      officialShallowDriftedToStandard,
+      officialShallowDriftReason,
+      officialShallowPreferredPrefixFrameCount,
+    };
+  }
+
+  const validForEventFrames =
+    state.officialShallowPreferredPrefixFrameCount != null
+      ? frames.slice(0, state.officialShallowPreferredPrefixFrameCount)
+      : frames;
+  const validForEvent = validForEventFrames.filter((f) => f.isValid);
   const squatEventCycle = detectSquatEventCycle(validForEvent, {
     hmm: options?.hmm ?? undefined,
     baselineFrozenDepth: state.baselineFrozenDepth ?? state.baselineStandingDepth,
@@ -1853,5 +1960,8 @@ export function evaluateSquatCompletionState(
     promotionBaseRuleBlockedReason: ruleBlock,
     officialShallowPathClosed: promotedOfficialShallowClosed,
     officialShallowPathBlockedReason: null,
+    officialShallowDriftedToStandard: state.officialShallowDriftedToStandard ?? false,
+    officialShallowDriftReason: state.officialShallowDriftReason ?? null,
+    officialShallowPreferredPrefixFrameCount: state.officialShallowPreferredPrefixFrameCount ?? null,
   };
 }
