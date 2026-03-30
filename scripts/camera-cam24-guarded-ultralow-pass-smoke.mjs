@@ -82,8 +82,8 @@ console.log('\nA. guarded ultra-low real squat can pass');
 
   ok('A1: completionSatisfied = true', state.completionSatisfied === true, state);
   ok(
-    'A2: completionPassReason = ultra_low_rom_event_cycle',
-    state.completionPassReason === 'ultra_low_rom_event_cycle',
+    'A2: completionPassReason = ultra_low_rom_cycle (PR-03 official path)',
+    state.completionPassReason === 'ultra_low_rom_cycle',
     { completionPassReason: state.completionPassReason, blocked: state.completionBlockedReason }
   );
   ok(
@@ -140,8 +140,8 @@ console.log('\nC. ordinary low-ROM path preserved');
 
   ok('C1: completionSatisfied = true', state.completionSatisfied === true, state);
   ok(
-    'C2: low-ROM owner preserved',
-    state.completionPassReason === 'low_rom_event_cycle',
+    'C2: low-ROM official cycle preserved',
+    state.completionPassReason === 'low_rom_cycle',
     state.completionPassReason
   );
 }

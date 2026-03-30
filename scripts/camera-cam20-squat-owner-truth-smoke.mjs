@@ -13,8 +13,8 @@
  *   직립 baseline (무릎 ~171°) ≈ 0.047
  *
  * 수용 테스트:
- * A. 얕은 유효 사이클 → completionPassReason = low_rom_event_cycle, completionPathUsed != 'standard'
- * B. ultra-low ROM 유효 사이클 → ultra_low_rom_event_cycle
+ * A. 얕은 유효 사이클 → completionPassReason = low_rom_cycle (PR-03 공식 path), completionPathUsed != 'standard'
+ * B. ultra-low ROM 유효 사이클 → ultra_low_rom_cycle
  * C. 깊은 스쿼트 → standard_cycle (회귀 없음)
  * D. standing/sway → blocked (false positive 없음)
  * E. 빠른 미세 딥 → blocked (timing guard)
@@ -147,14 +147,14 @@ function makeSquatFrames(baselineDepth, peakDepth, msPerFrame = 40, descentFrame
 // ────────────────────────────────────────────
 // A. 얕은 유효 사이클 (low_rom 구간)
 //    relativeDepthPeak ≈ 0.08 → LOW_ROM_LABEL_FLOOR(0.07) ≤ 0.08 < STANDARD_LABEL_FLOOR(0.10)
-//    → evidenceLabel = low_rom → completionPassReason = low_rom_event_cycle
+//    → evidenceLabel = low_rom → completionPassReason = low_rom_cycle
 //    타이밍: 0.08 < LOW_ROM_TIMING_PEAK_MAX(0.10) → 하강 >= 200ms 필요
 //    phaseHintMode='start' → descentFrame=null → effectiveDescentStartFrame(trajectory) 사용
 //    effectiveDescentStartFrame at ~t=350ms, peakFrame at t=850ms → 500ms >= 200ms ✓
 //    reversalToStanding: 0.08 < SHALLOW_REVERSAL_TIMING_PEAK_MAX(0.11) → >= 200ms 필요
 //    ascent + recovery = 12*50 + 7*50 = 950ms >= 200ms ✓
 // ────────────────────────────────────────────
-console.log('\nA. 얕은 유효 사이클 (low_rom_event_cycle owner)');
+console.log('\nA. 얕은 유효 사이클 (low_rom_cycle owner)');
 {
   const baseline = 0.047;
   const peak = 0.047 + 0.08; // relativeDepthPeak = 0.08
@@ -168,8 +168,8 @@ console.log('\nA. 얕은 유효 사이클 (low_rom_event_cycle owner)');
     state.evidenceLabel
   );
   ok(
-    'A2: completionPassReason = low_rom_event_cycle (owner)',
-    state.completionPassReason === 'low_rom_event_cycle',
+    'A2: completionPassReason = low_rom_cycle (owner)',
+    state.completionPassReason === 'low_rom_cycle',
     state.completionPassReason
   );
   ok(
@@ -197,7 +197,7 @@ console.log('\nA. 얕은 유효 사이클 (low_rom_event_cycle owner)');
 //    타이밍: 0.04 < 0.10 → 하강 >= 200ms 필요
 //    effectiveDescentStartFrame: depth >= 0.047+0.008=0.055, ~t=350ms; peakFrame ~t=850ms → 500ms ✓
 // ────────────────────────────────────────────
-console.log('\nB. ultra-low ROM 유효 사이클 (ultra_low_rom_event_cycle owner)');
+console.log('\nB. ultra-low ROM 유효 사이클 (ultra_low_rom_cycle owner)');
 {
   const baseline = 0.047;
   const peak = 0.047 + 0.04; // relativeDepthPeak = 0.04
@@ -210,8 +210,8 @@ console.log('\nB. ultra-low ROM 유효 사이클 (ultra_low_rom_event_cycle owne
     { evidenceLabel: state.evidenceLabel, relPeak: state.relativeDepthPeak }
   );
   ok(
-    'B2: completionPassReason = ultra_low_rom_event_cycle (owner)',
-    state.completionPassReason === 'ultra_low_rom_event_cycle',
+    'B2: completionPassReason = ultra_low_rom_cycle (owner)',
+    state.completionPassReason === 'ultra_low_rom_cycle',
     state.completionPassReason
   );
   ok(
@@ -331,8 +331,8 @@ console.log('\nG. 품질 분리 — low_rom pass는 evidenceLabel 변경 없음'
     state.evidenceLabel
   );
   ok(
-    'G2: completionPassReason = low_rom_event_cycle (not standard_cycle)',
-    state.completionPassReason === 'low_rom_event_cycle',
+    'G2: completionPassReason = low_rom_cycle (not standard_cycle)',
+    state.completionPassReason === 'low_rom_cycle',
     state.completionPassReason
   );
 }
@@ -360,23 +360,33 @@ console.log('\nH. 경계값 — STANDARD_LABEL_FLOOR 0.10 경계');
   const framesShallow = makeSquatFrames(baseline, baseline + 0.099, 50, 12, 'start');
   const stateShallow = evaluateSquatCompletionState(framesShallow);
   ok(
-    'H2: relativeDepthPeak ≈ 0.099 → low_rom_event_cycle',
-    stateShallow.completionPassReason === 'low_rom_event_cycle',
+    'H2: relativeDepthPeak ≈ 0.099 → low_rom_cycle',
+    stateShallow.completionPassReason === 'low_rom_cycle',
     { passReason: stateShallow.completionPassReason, evidenceLabel: stateShallow.evidenceLabel, relativeDepthPeak: stateShallow.relativeDepthPeak }
   );
 }
 
 // ────────────────────────────────────────────
-// I. 회귀: 기존 deeper standard squat (0.15, 0.30, 0.50) → 항상 standard_cycle
+// I. 오너 플로어 vs 라벨: 0.15·0.30 은 라벨 standard 이지만 오너 shallow → low_rom_cycle;
+//    0.50 은 standardPathWon → standard_cycle (PR-CAM-22 / PR-03 정합)
 // ────────────────────────────────────────────
-console.log('\nI. 기존 deeper squat 회귀');
+console.log('\nI. owner vs label — mid-depth vs deep');
 {
   const baseline = 0.047;
-  for (const relPeak of [0.15, 0.30, 0.50]) {
+  for (const relPeak of [0.15, 0.3]) {
     const frames = makeSquatFrames(baseline, baseline + relPeak, 40, 12);
     const state = evaluateSquatCompletionState(frames);
     ok(
-      `I: relativeDepthPeak = ${relPeak} → standard_cycle (completionSatisfied = true)`,
+      `I: relativeDepthPeak = ${relPeak} → low_rom_cycle (standard label, owner shallow)`,
+      state.completionPassReason === 'low_rom_cycle' && state.completionSatisfied === true,
+      { passReason: state.completionPassReason, satisfied: state.completionSatisfied, relPeak: state.relativeDepthPeak }
+    );
+  }
+  {
+    const frames = makeSquatFrames(baseline, baseline + 0.5, 40, 12);
+    const state = evaluateSquatCompletionState(frames);
+    ok(
+      'I: relativeDepthPeak = 0.5 → standard_cycle',
       state.completionPassReason === 'standard_cycle' && state.completionSatisfied === true,
       { passReason: state.completionPassReason, satisfied: state.completionSatisfied, relPeak: state.relativeDepthPeak }
     );

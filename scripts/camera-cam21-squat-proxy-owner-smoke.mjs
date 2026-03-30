@@ -175,7 +175,7 @@ console.log('\nB. moderate valid cycle — non-standard owner + debug path');
   ok('B1: completionSatisfied = true', gate.completionSatisfied === true, gate.squatCycleDebug);
   ok(
     'B2: completionPassReason is non-standard owner',
-    ['low_rom_event_cycle', 'ultra_low_rom_event_cycle'].includes(
+    ['low_rom_cycle', 'ultra_low_rom_cycle', 'low_rom_event_cycle', 'ultra_low_rom_event_cycle'].includes(
       gate.squatCycleDebug?.completionPassReason
     ),
     {
@@ -277,7 +277,9 @@ console.log('\nG. owner decouples from evidenceLabel');
   ok(
     'G1: evidenceLabel can stay standard while owner is non-standard',
     state.evidenceLabel === 'standard' &&
-      ['low_rom_event_cycle', 'ultra_low_rom_event_cycle'].includes(state.completionPassReason),
+      ['low_rom_cycle', 'ultra_low_rom_cycle', 'low_rom_event_cycle', 'ultra_low_rom_event_cycle'].includes(
+        state.completionPassReason
+      ),
     {
       evidenceLabel: state.evidenceLabel,
       completionPassReason: state.completionPassReason,

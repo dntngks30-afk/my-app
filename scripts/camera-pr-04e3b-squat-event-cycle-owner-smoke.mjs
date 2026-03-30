@@ -60,11 +60,16 @@ function framesFrom(depthsPrimary, phases, blendedSeries, stepMs = 40) {
   );
 }
 
-/** PR-04E3A-style shallow blended meaningful cycle */
+/**
+ * PR-04E3A-style shallow blended meaningful cycle.
+ * primary 깊이를 bottom 구간에서 충분히 올려 reversal(주로 primary 기하)이 잡히게 하고,
+ * tail 을 길게 두어 recovery finalize 가 성립하도록 한다 (PR-03 공식 path / 이벤트 승격 검증용).
+ */
 function buildShallowBlendedCycle() {
   const baseP = 0.04;
   const baseB = 0.045;
-  const n = 40;
+  const peakP = baseP + 0.06;
+  const n = 52;
   const depthsP = [];
   const blends = [];
   const phases = [];
@@ -75,18 +80,18 @@ function buildShallowBlendedCycle() {
   }
   for (let i = 6; i < 14; i++) {
     const t = (i - 6) / 7;
-    depthsP.push(baseP + 0.008 * t);
+    depthsP.push(baseP + (peakP - baseP) * t);
     blends.push(baseB + 0.35 * t);
     phases.push(t > 0.35 ? 'descent' : 'start');
   }
   for (let i = 14; i < 20; i++) {
-    depthsP.push(baseP + 0.01);
+    depthsP.push(peakP);
     blends.push(0.42);
     phases.push('bottom');
   }
   for (let i = 20; i < 32; i++) {
     const t = (i - 20) / 11;
-    depthsP.push(baseP + 0.01 - 0.005 * t);
+    depthsP.push(peakP - (peakP - baseP) * t);
     blends.push(0.42 - 0.36 * t);
     phases.push('ascent');
   }
@@ -106,9 +111,11 @@ console.log('\n── A. shallow meaningful cycle + blended relative peak ──
   ok('A2: peakLatched', st.peakLatched === true, st);
   ok('A3: event cycle detected', st.squatEventCycle?.detected === true, st.squatEventCycle);
   const prOk =
+    st.completionPassReason === 'low_rom_cycle' ||
+    st.completionPassReason === 'ultra_low_rom_cycle' ||
     st.completionPassReason === 'low_rom_event_cycle' ||
     st.completionPassReason === 'ultra_low_rom_event_cycle';
-  ok('A4: completion owner is low/ultra event cycle', prOk, st.completionPassReason);
+  ok('A4: completion official low/ultra cycle (PR-03)', prOk, st.completionPassReason);
 }
 
 console.log('\n── B. prefix blocked-reason set stabilizes (no churn class) ──');

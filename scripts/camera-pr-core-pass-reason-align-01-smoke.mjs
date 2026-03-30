@@ -175,9 +175,8 @@ console.log('\nPR-CAM-CORE-PASS-REASON-ALIGN-01 smoke\n');
   const st = evaluateSquatCompletionState(framesFrom(depths.slice(0, n), phases.slice(0, n), undefined, 80));
   if (st.eventBasedDescentPath === true && st.completionSatisfied) {
     ok(
-      '4 event path: *_event_cycle when satisfied',
-      st.completionPassReason === 'low_rom_event_cycle' ||
-        st.completionPassReason === 'ultra_low_rom_event_cycle',
+      '4 event path: PR-03 official *_cycle when satisfied',
+      st.completionPassReason === 'low_rom_cycle' || st.completionPassReason === 'ultra_low_rom_cycle',
       st.completionPassReason
     );
   } else {
@@ -227,9 +226,8 @@ console.log('\nPR-CAM-CORE-PASS-REASON-ALIGN-01 smoke\n');
   const st = evaluateSquatCompletionState(framesFrom(depthsP, phases, blends, 40), {});
   if (st.eventCyclePromoted === true) {
     ok(
-      '5 promoted: *_event_cycle + flag',
-      (st.completionPassReason === 'low_rom_event_cycle' ||
-        st.completionPassReason === 'ultra_low_rom_event_cycle') &&
+      '5 promoted: PR-03 *_cycle + flag',
+      (st.completionPassReason === 'low_rom_cycle' || st.completionPassReason === 'ultra_low_rom_cycle') &&
         st.eventCyclePromoted === true,
       { pr: st.completionPassReason, prom: st.eventCyclePromoted }
     );

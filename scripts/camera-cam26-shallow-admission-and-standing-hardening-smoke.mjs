@@ -221,12 +221,12 @@ console.log('\nD. low_rom / ultra_low_rom paths are not hit by standard-only har
     passConfirmationFrameCount: 2,
     squatCompletionState: {
       completionSatisfied: true,
-      completionPassReason: 'low_rom_event_cycle',
+      completionPassReason: 'low_rom_cycle',
       currentSquatPhase: 'standing_recovered',
     },
   });
   ok(
-    'D1: low_rom_event_cycle remains latched by easy branch',
+    'D1: low_rom_cycle remains latched by easy branch',
     isFinalPassLatched('squat', lowRomGate) === true,
     isFinalPassLatched('squat', lowRomGate)
   );
@@ -238,12 +238,12 @@ console.log('\nD. low_rom / ultra_low_rom paths are not hit by standard-only har
     passConfirmationFrameCount: 2,
     squatCompletionState: {
       completionSatisfied: true,
-      completionPassReason: 'ultra_low_rom_event_cycle',
+      completionPassReason: 'ultra_low_rom_cycle',
       currentSquatPhase: 'standing_recovered',
     },
   });
   ok(
-    'D2: ultra_low_rom_event_cycle remains latched by easy branch',
+    'D2: ultra_low_rom_cycle remains latched by easy branch',
     isFinalPassLatched('squat', ultraLowRomGate) === true,
     isFinalPassLatched('squat', ultraLowRomGate)
   );

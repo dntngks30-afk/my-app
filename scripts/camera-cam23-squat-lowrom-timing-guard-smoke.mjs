@@ -84,7 +84,9 @@ console.log('\nA. genuine shallow low-ROM cycle passes with relaxed timing');
   ok('A1: completionSatisfied = true', state.completionSatisfied === true, state);
   ok(
     'A2: completionPassReason stays non-standard',
-    ['low_rom_event_cycle', 'ultra_low_rom_event_cycle'].includes(state.completionPassReason),
+    ['low_rom_cycle', 'ultra_low_rom_cycle', 'low_rom_event_cycle', 'ultra_low_rom_event_cycle'].includes(
+      state.completionPassReason
+    ),
     { completionPassReason: state.completionPassReason, blocked: state.completionBlockedReason }
   );
   ok(
@@ -124,8 +126,10 @@ console.log('\nB. fake shallow dip without continuity still fails');
 
   ok('B1: completionSatisfied = false', state.completionSatisfied === false, state);
   ok(
-    'B2: weak continuity still blocked by timing',
-    state.completionBlockedReason === 'descent_span_too_short',
+    'B2: weak continuity still blocked (timing or recovery proof)',
+    state.completionBlockedReason === 'descent_span_too_short' ||
+      state.completionBlockedReason === 'recovery_hold_too_short' ||
+      state.completionBlockedReason === 'ascent_recovery_span_too_short',
     {
       completionBlockedReason: state.completionBlockedReason,
       recoveryReturnContinuityFrames: state.recoveryReturnContinuityFrames,

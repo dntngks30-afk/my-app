@@ -5,7 +5,7 @@
  * - evidenceLabel cutoff는 그대로 두고
  * - standard owner cutoff만 더 깊게 둬
  * - relativeDepthPeak ~= 0.30 성공 사이클이 standard_cycle이 아니라
- *   low_rom_event_cycle 이 되도록 확인한다.
+ *   low_rom_cycle(PR-03 공식 shallow 오너 밴드)이 되도록 확인한다.
  *
  * 실행:
  *   npx tsx scripts/camera-cam22-squat-owner-cutoff-smoke.mjs
@@ -134,8 +134,8 @@ console.log('\nA. observed-like shallow success (~0.30) is no longer standard');
     { evidenceLabel: state.evidenceLabel, relativeDepthPeak: state.relativeDepthPeak }
   );
   ok(
-    'A3: completionPassReason = low_rom_event_cycle',
-    state.completionPassReason === 'low_rom_event_cycle',
+    'A3: completionPassReason = low_rom_cycle (PR-03)',
+    state.completionPassReason === 'low_rom_cycle',
     { completionPassReason: state.completionPassReason, relativeDepthPeak: state.relativeDepthPeak }
   );
 }
@@ -169,8 +169,8 @@ console.log('\nC. ultra-low valid cycle preserved');
 
   ok('C1: completionSatisfied = true', state.completionSatisfied === true, state);
   ok(
-    'C2: completionPassReason = ultra_low_rom_event_cycle',
-    state.completionPassReason === 'ultra_low_rom_event_cycle',
+    'C2: completionPassReason = ultra_low_rom_cycle (PR-03)',
+    state.completionPassReason === 'ultra_low_rom_cycle',
     { completionPassReason: state.completionPassReason, relativeDepthPeak: state.relativeDepthPeak }
   );
 }
@@ -210,9 +210,8 @@ console.log('\nF. quality semantics unchanged');
   );
 
   ok(
-    'F1: evidenceLabel remains standard while owner is low_rom_event_cycle',
-    state.evidenceLabel === 'standard' &&
-      state.completionPassReason === 'low_rom_event_cycle',
+    'F1: evidenceLabel remains standard while pass is low_rom_cycle',
+    state.evidenceLabel === 'standard' && state.completionPassReason === 'low_rom_cycle',
     { evidenceLabel: state.evidenceLabel, completionPassReason: state.completionPassReason }
   );
 }
@@ -233,9 +232,9 @@ console.log('\nG. debug mapping remains coherent');
     'G1: completionPathUsed matches completionPassReason mapping',
     (gate.squatCycleDebug?.completionPassReason === 'standard_cycle' &&
       gate.squatCycleDebug?.completionPathUsed === 'standard') ||
-      (gate.squatCycleDebug?.completionPassReason === 'low_rom_event_cycle' &&
+      (gate.squatCycleDebug?.completionPassReason === 'low_rom_cycle' &&
         gate.squatCycleDebug?.completionPathUsed === 'low_rom') ||
-      (gate.squatCycleDebug?.completionPassReason === 'ultra_low_rom_event_cycle' &&
+      (gate.squatCycleDebug?.completionPassReason === 'ultra_low_rom_cycle' &&
         gate.squatCycleDebug?.completionPathUsed === 'ultra_low_rom'),
     {
       completionPassReason: gate.squatCycleDebug?.completionPassReason,

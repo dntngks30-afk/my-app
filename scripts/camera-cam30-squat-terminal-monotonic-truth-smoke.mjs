@@ -212,8 +212,8 @@ function assertTailStable(name, lmBase) {
   const shallowPr = gShallow.evaluatorResult?.debug?.squatCompletionState?.completionPassReason;
   const deepPr = gDeep.evaluatorResult?.debug?.squatCompletionState?.completionPassReason;
   console.log('\nE. no contract regression (pass reason strings)');
-  // CAM-29 동일 픽스처: relative peak 가 ultra_low_rom 밴드 → ultra_low_rom_event_cycle (문자열 회귀 방지)
-  assert('E: shallow/ultra-shallow family pass reason', shallowPr === 'ultra_low_rom_event_cycle', `got ${shallowPr}`);
+  // PR-03: ultra_low_rom 밴드 → 공식 ultra_low_rom_cycle
+  assert('E: shallow/ultra-shallow family pass reason', shallowPr === 'ultra_low_rom_cycle', `got ${shallowPr}`);
   assert('E: deep family pass reason', deepPr === 'standard_cycle', `got ${deepPr}`);
 }
 

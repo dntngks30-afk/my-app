@@ -251,7 +251,7 @@ console.log('\nPR-02 camera-assist-owner-isolation-smoke\n');
 // 3a) *_event_cycle pass reason (CAM-24) — completion truth finalize; 승격 래퍼 없이도 문자열은 event family
 {
   const st = evaluateSquatCompletionState(cam24UltraLowEventPromotionFrames(), {});
-  ok('3a cam24: ultra_low_rom_event_cycle', st.completionPassReason === 'ultra_low_rom_event_cycle', st.completionPassReason);
+  ok('3a cam24: ultra_low_rom_cycle', st.completionPassReason === 'ultra_low_rom_cycle', st.completionPassReason);
   ok('3a cam24: lineage event', lineage(st) === 'completion_truth_event', lineage(st));
   ok('3a cam24: satisfied', st.completionSatisfied === true, st.completionSatisfied);
   if (st.eventCyclePromoted !== true) {

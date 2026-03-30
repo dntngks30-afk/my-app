@@ -855,7 +855,8 @@ const ULTRA_SHALLOW_BOTTOM_RATIO = 0.78;
  * Very shallow squat은 절대 depth band 대신 짧은 하강 연속성으로 관측한다.
  * 단일 프레임 스파이크를 막기 위해 연속 frame trend + excursion 둘 다 요구한다.
  */
-function hasGuardedShallowSquatDescent(
+/** PR-03: completion-state·스모크에서 동일 guarded descent 정의를 재사용할 수 있도록 export */
+export function hasGuardedShallowSquatDescent(
   frames: PoseFeaturesFrame[],
   index: number,
   sessionMinDepth: number
