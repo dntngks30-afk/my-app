@@ -6,7 +6,7 @@ import { POSE_LANDMARKS } from '@/lib/motion/pose-types';
 import type { PoseLandmark, PoseLandmarks } from '@/lib/motion/pose-types';
 import type { CameraStepId } from '@/lib/public/camera-test';
 import { smoothSignalValue, stabilizePhaseSequence } from './stability';
-import { buildSquatDepthSignal } from './squat/squat-depth-signal';
+import { buildSquatDepthSignal, SQUAT_DEPTH_PRIMARY_NEAR_FLAT } from './squat/squat-depth-signal';
 
 export type PoseFrameValidity = 'valid' | 'low_visibility' | 'missing_keypoints' | 'invalid';
 export type PosePhaseHint =
@@ -75,6 +75,16 @@ export interface PoseFeaturesFrame {
     squatDepthProxyBlended?: number | null;
     /** PR-04E1: 'primary' | 'fallback' | 'blended' */
     squatDepthSource?: string | null;
+    /** PR-CAM-29: cap 전 blended 후보·증거(temporal/진단 전용, optional) */
+    squatDepthBlendRaw?: number | null;
+    squatDepthBlendEvidence?: number | null;
+    squatDepthBlendCapped?: boolean;
+    /** temporal 게이트 통과 후 실제 blended 출력이 나간 프레임 */
+    squatDepthBlendActive?: boolean;
+    squatDepthBlendTemporalSuppressed?: boolean;
+    squatDepthFallbackPeakFrame?: number | null;
+    /** raw 신호가 blended 를 제안했는지(temporal 전) */
+    squatDepthBlendOffered?: boolean;
     kneeTrackingRatio: number | null;
     trunkLeanDeg: number | null;
     torsoExtensionDeg: number | null;
@@ -744,26 +754,95 @@ function squatPhaseDepthRead(frame: PoseFeaturesFrame): number {
   return typeof p === 'number' && Number.isFinite(p) ? p : 0;
 }
 
-function applySquatDepthBlendPass(frames: PoseFeaturesFrame[]): PoseFeaturesFrame[] {
-  return frames.map((frame, i) => {
-    const prev = i > 0 ? frames[i - 1]! : null;
-    const sig = buildSquatDepthSignal(frame, prev);
-    return {
-      ...frame,
-      derived: {
-        ...frame.derived,
-        squatDepthProxyBlended: sig.depthValue,
-        squatDepthSource: sig.source,
-      },
-    };
-  });
-}
-
 const SHALLOW_DESCENT_DEPTH_MIN = 0.03;
 const SHALLOW_DESCENT_DEPTH_MAX = 0.08;
 const SHALLOW_DESCENT_EXCURSION_MIN = 0.015;
 const SHALLOW_DESCENT_MIN_CONSECUTIVE_FRAMES = 3;
 const SHALLOW_DESCENT_MIN_DELTA_PER_FRAME = 0.003;
+
+/**
+ * PR-CAM-29: raw depth 신호 → temporal 확인 → blended 기록.
+ * - blendOffered 가 연속 SHALLOW_DESCENT_MIN_CONSECUTIVE_FRAMES 프레임 이상일 때만 blended 를 살린다(단발 스파이크 억제).
+ * - primary 가 near-flat 으로 빠르게 복귀하면(standing 쪽) streak 리셋 → blended 빨리 소멸.
+ * - phaseHint 는 이후 applyPhaseHints 에서만 확정되므로 여기서는 primary 깊이 추세만 사용.
+ */
+function applySquatDepthBlendPass(frames: PoseFeaturesFrame[]): PoseFeaturesFrame[] {
+  const rawSignals = frames.map((frame, i) =>
+    buildSquatDepthSignal(frame, i > 0 ? frames[i - 1]! : null)
+  );
+
+  let blendOfferStreak = 0;
+  const out: PoseFeaturesFrame[] = [];
+
+  for (let i = 0; i < frames.length; i++) {
+    const frame = frames[i]!;
+    const sig = rawSignals[i]!;
+    const prevFrame = i > 0 ? frames[i - 1]! : null;
+    const prevPrimary =
+      prevFrame && typeof prevFrame.derived.squatDepthProxy === 'number'
+        ? prevFrame.derived.squatDepthProxy
+        : null;
+    const primaryNow =
+      typeof frame.derived.squatDepthProxy === 'number' && Number.isFinite(frame.derived.squatDepthProxy)
+        ? frame.derived.squatDepthProxy
+        : 0;
+
+    const offered = sig.blendOffered === true;
+    if (offered) blendOfferStreak += 1;
+    else blendOfferStreak = 0;
+
+    const rapidShallowing =
+      prevPrimary != null &&
+      primaryNow <= SQUAT_DEPTH_PRIMARY_NEAR_FLAT &&
+      prevPrimary > primaryNow + SHALLOW_DESCENT_MIN_DELTA_PER_FRAME;
+    if (rapidShallowing) blendOfferStreak = 0;
+
+    const allowBlendedOutput = offered && blendOfferStreak >= SHALLOW_DESCENT_MIN_CONSECUTIVE_FRAMES;
+    const temporalSuppressed = offered && !allowBlendedOutput;
+
+    const primaryOut =
+      typeof sig.primaryDepth === 'number' && Number.isFinite(sig.primaryDepth)
+        ? sig.primaryDepth
+        : primaryNow;
+
+    let depthOut = sig.depthValue;
+    let sourceOut = sig.source;
+    if (temporalSuppressed) {
+      depthOut = primaryOut;
+      sourceOut = 'primary';
+    }
+
+    const blendActive = allowBlendedOutput && sourceOut === 'blended';
+
+    out.push({
+      ...frame,
+      derived: {
+        ...frame.derived,
+        squatDepthProxyBlended: depthOut,
+        squatDepthSource: sourceOut,
+        squatDepthBlendRaw:
+          sig.blendCandidateRaw != null && Number.isFinite(sig.blendCandidateRaw)
+            ? sig.blendCandidateRaw
+            : null,
+        squatDepthBlendEvidence:
+          typeof sig.travelEvidence === 'number' && Number.isFinite(sig.travelEvidence)
+            ? sig.travelEvidence
+            : null,
+        squatDepthBlendCapped: sig.blendCapped === true,
+        squatDepthBlendActive: blendActive,
+        squatDepthBlendTemporalSuppressed: temporalSuppressed ? true : undefined,
+        squatDepthFallbackPeakFrame:
+          typeof sig.fallbackDepth === 'number' && Number.isFinite(sig.fallbackDepth)
+            ? sig.fallbackDepth
+            : null,
+        squatDepthBlendOffered: offered,
+      },
+    });
+  }
+
+  return out;
+}
+
 /**
  * PR-B: ultra-shallow 사이클(peak < SHALLOW_DESCENT_DEPTH_MAX)에서 피크 근방 프레임에
  * 'bottom' 레이블을 부여하기 위한 비율.

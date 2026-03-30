@@ -180,6 +180,30 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const maxPrimaryCalib = primaryDepthCalib.length > 0 ? Math.max(...primaryDepthCalib) : 0;
   const maxBlendedCalib = blendedDepthCalib.length > 0 ? Math.max(...blendedDepthCalib) : 0;
 
+  /** PR-CAM-29: depth source chain 관측(pass/fail·completion 로직 미변경) */
+  let depthBlendObsFallbackPeak = 0;
+  let depthBlendObsTravelPeak = 0;
+  let squatDepthBlendOfferedCount = 0;
+  let squatDepthBlendCapHitCount = 0;
+  let squatDepthBlendActiveFrameCount = 0;
+  let squatDepthSourceFlipCount = 0;
+  let prevDepthSourceKey: string | null = null;
+  for (const fr of valid) {
+    const d = fr.derived;
+    if (typeof d.squatDepthFallbackPeakFrame === 'number' && Number.isFinite(d.squatDepthFallbackPeakFrame)) {
+      depthBlendObsFallbackPeak = Math.max(depthBlendObsFallbackPeak, d.squatDepthFallbackPeakFrame);
+    }
+    if (typeof d.squatDepthBlendEvidence === 'number' && Number.isFinite(d.squatDepthBlendEvidence)) {
+      depthBlendObsTravelPeak = Math.max(depthBlendObsTravelPeak, d.squatDepthBlendEvidence);
+    }
+    if (d.squatDepthBlendOffered) squatDepthBlendOfferedCount += 1;
+    if (d.squatDepthBlendCapped) squatDepthBlendCapHitCount += 1;
+    if (d.squatDepthBlendActive) squatDepthBlendActiveFrameCount += 1;
+    const src = d.squatDepthSource ?? 'primary';
+    if (prevDepthSourceKey != null && prevDepthSourceKey !== src) squatDepthSourceFlipCount += 1;
+    prevDepthSourceKey = src;
+  }
+
   const state = evaluateSquatCompletionState(completionFrames, {
     hmm: squatHmm,
     hmmArmingAssistApplied: armingAssistDec.assistApplied,
@@ -461,6 +485,13 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
             : state.relativeDepthPeakSource === 'blended'
               ? 2
               : 0,
+        /** PR-CAM-29: blended 입력 분해·흔들림 관측(피크는 0–1 스케일) */
+        squatDepthObsFallbackPeak: Math.round(depthBlendObsFallbackPeak * 1000) / 1000,
+        squatDepthObsTravelPeak: Math.round(depthBlendObsTravelPeak * 1000) / 1000,
+        squatDepthBlendOfferedCount,
+        squatDepthBlendCapHitCount,
+        squatDepthBlendActiveFrameCount,
+        squatDepthSourceFlipCount,
         firstDescentIdx,
         firstBottomIdx,
         firstAscentIdx,

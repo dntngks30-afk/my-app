@@ -168,6 +168,13 @@ export interface AttemptSnapshot {
       relativeDepthPeakSource?: string | null;
       rawDepthPeakPrimary?: number | null;
       rawDepthPeakBlended?: number | null;
+      /** PR-CAM-29: shallow depth source stabilization — compact 스칼라만 */
+      squatDepthObsFallbackPeak?: number | null;
+      squatDepthObsTravelPeak?: number | null;
+      squatDepthBlendOfferedCount?: number;
+      squatDepthBlendCapHitCount?: number;
+      squatDepthBlendActiveFrameCount?: number;
+      squatDepthSourceFlipCount?: number;
       /** PR-04E3B: shallow event-cycle owner 관측 */
       baselineFrozen?: boolean;
       baselineFrozenDepth?: number | null;
@@ -905,6 +912,20 @@ function buildDiagnosisSummary(
         typeof sc.rawDepthPeakPrimary === 'number' ? sc.rawDepthPeakPrimary : null,
       rawDepthPeakBlended:
         typeof sc.rawDepthPeakBlended === 'number' ? sc.rawDepthPeakBlended : null,
+      squatDepthObsFallbackPeak:
+        typeof hm?.squatDepthObsFallbackPeak === 'number' ? hm.squatDepthObsFallbackPeak : null,
+      squatDepthObsTravelPeak:
+        typeof hm?.squatDepthObsTravelPeak === 'number' ? hm.squatDepthObsTravelPeak : null,
+      squatDepthBlendOfferedCount:
+        typeof hm?.squatDepthBlendOfferedCount === 'number' ? hm.squatDepthBlendOfferedCount : undefined,
+      squatDepthBlendCapHitCount:
+        typeof hm?.squatDepthBlendCapHitCount === 'number' ? hm.squatDepthBlendCapHitCount : undefined,
+      squatDepthBlendActiveFrameCount:
+        typeof hm?.squatDepthBlendActiveFrameCount === 'number'
+          ? hm.squatDepthBlendActiveFrameCount
+          : undefined,
+      squatDepthSourceFlipCount:
+        typeof hm?.squatDepthSourceFlipCount === 'number' ? hm.squatDepthSourceFlipCount : undefined,
       baselineFrozen: sc.baselineFrozen,
       baselineFrozenDepth: sc.baselineFrozenDepth ?? null,
       peakLatched: sc.peakLatched,
