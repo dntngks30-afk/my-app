@@ -111,6 +111,8 @@ export interface SquatCompletionState extends MotionCompletionResult {
   /** PR-04E2: 역전 확정 경로 — completion-state 소유, HMM assist와 별도 rule_plus_hmm bridge 가능 */
   /** PR-CAM-31: 명시 역전 미탐 시 guarded trajectory 구조 보조( finalize·복귀 증거 잠금 후에만 ) */
   reversalConfirmedBy?: 'rule' | 'rule_plus_hmm' | 'trajectory' | null;
+  /** PR-CAM-REVERSAL-TAIL-BACKFILL-01: standing tail 증거로 역전 앵커만 늦게 backfill (성공 게이트 아님) */
+  reversalTailBackfillApplied?: boolean;
   reversalDepthDrop?: number | null;
   reversalFrameCount?: number | null;
   /** PR-04E3A: primary 스트림 피크(관측) — relative 선택과 독립 */
@@ -316,7 +318,7 @@ export function trajectoryRescueMeetsAscentIntegrity(args: TrajectoryRescueAscen
   return true;
 }
 
-type SquatDepthFrameLite = {
+export type SquatDepthFrameLite = {
   index: number;
   depth: number;
   timestampMs: number;
@@ -382,6 +384,62 @@ function getGuardedTrajectoryReversalRescue(args: {
   return {
     trajectoryReversalFrame: undefined,
     trajectoryReversalConfirmedBy: null,
+  };
+}
+
+/**
+ * PR-CAM-REVERSAL-TAIL-BACKFILL-01: 명시 역전이 없고 trajectory rescue도 못 열 때만,
+ * 서 있기 tail 복귀·되돌림·연속성·타이밍 증거로 역전 앵커를 peak에 backfill한다.
+ * finalize 충족 여부는 backfill 게이트에 쓰지 않음 — `no_reversal` 정체 완화용.
+ */
+export function getGuardedStandingTailReversalBackfill(args: {
+  reversalFrame: SquatDepthFrameLite | undefined;
+  committedFrame: SquatDepthFrameLite | undefined;
+  committedOrPostCommitPeakFrame?: SquatDepthFrameLite;
+  attemptStarted: boolean;
+  downwardCommitmentReached: boolean;
+  standingRecoveredAtMs?: number;
+  /** backfill 판단에 사용하지 않음 — 시그니처만 유지 */
+  standingRecoveryFinalizeReason: string | null;
+  recovery: Pick<SquatCompletionState, 'recoveryReturnContinuityFrames' | 'recoveryDropRatio'>;
+  squatReversalDropRequired: number;
+  squatReversalDropAchieved: number;
+  minReversalToStandingMsForShallow: number;
+}): {
+  backfilledReversalFrame: SquatDepthFrameLite | undefined;
+  backfillApplied: boolean;
+} {
+  void args.standingRecoveryFinalizeReason;
+  if (args.reversalFrame != null) {
+    return { backfilledReversalFrame: args.reversalFrame, backfillApplied: false };
+  }
+  if (
+    args.committedFrame == null ||
+    args.committedOrPostCommitPeakFrame == null ||
+    args.attemptStarted !== true ||
+    args.downwardCommitmentReached !== true ||
+    args.standingRecoveredAtMs == null
+  ) {
+    return { backfilledReversalFrame: undefined, backfillApplied: false };
+  }
+  /** `0.9 * required` 부동소수 오차로 achieved==경계값이 거부되지 않게 1 ulp 여유 */
+  const minDropForTail = args.squatReversalDropRequired * 0.9 - 1e-12;
+  if (args.squatReversalDropAchieved < minDropForTail) {
+    return { backfilledReversalFrame: undefined, backfillApplied: false };
+  }
+  if ((args.recovery.recoveryReturnContinuityFrames ?? 0) < 2) {
+    return { backfilledReversalFrame: undefined, backfillApplied: false };
+  }
+  const peakTs = args.committedOrPostCommitPeakFrame.timestampMs;
+  if (
+    args.standingRecoveredAtMs - peakTs <
+    args.minReversalToStandingMsForShallow
+  ) {
+    return { backfilledReversalFrame: undefined, backfillApplied: false };
+  }
+  return {
+    backfilledReversalFrame: args.committedOrPostCommitPeakFrame,
+    backfillApplied: true,
   };
 }
 
@@ -676,6 +734,7 @@ function evaluateSquatCompletionCore(
       recoveryConfirmedAfterReversal: false,
       eventBasedDescentPath: false,
       baselineSeeded: false,
+      reversalTailBackfillApplied: false,
     };
   }
 
@@ -1023,7 +1082,26 @@ function evaluateSquatCompletionCore(
     peakFrame,
     committedOrPostCommitPeakFrame,
   });
-  const progressionReversalFrame = trajectoryRescue.trajectoryReversalFrame;
+  const tailBackfill =
+    trajectoryRescue.trajectoryReversalFrame == null
+      ? getGuardedStandingTailReversalBackfill({
+          reversalFrame,
+          committedFrame: committedFrame ?? undefined,
+          committedOrPostCommitPeakFrame,
+          attemptStarted,
+          downwardCommitmentReached,
+          standingRecoveredAtMs: standingRecovery.standingRecoveredAtMs,
+          standingRecoveryFinalizeReason: standingRecoveryFinalize.finalizeReason,
+          recovery,
+          squatReversalDropRequired,
+          squatReversalDropAchieved,
+          minReversalToStandingMsForShallow,
+        })
+      : { backfilledReversalFrame: undefined, backfillApplied: false };
+
+  const progressionReversalFrame =
+    trajectoryRescue.trajectoryReversalFrame ?? tailBackfill.backfilledReversalFrame;
+
   let ascendForProgression = ascendConfirmed;
   if (trajectoryRescue.trajectoryReversalConfirmedBy === 'trajectory') {
     const rf = trajectoryRescue.trajectoryReversalFrame;
@@ -1040,6 +1118,21 @@ function evaluateSquatCompletionCore(
       });
       ruleCompletionBlockedReason = computeBlockedAfterCommitment(rf, ascendForProgression);
     }
+  } else if (tailBackfill.backfillApplied && progressionReversalFrame != null) {
+    const explicitTailAscend = computeAscendConfirmed(progressionReversalFrame);
+    ascendForProgression = trajectoryRescueMeetsAscentIntegrity({
+      explicitAscendConfirmed: explicitTailAscend,
+      standingRecoveredAtMs: standingRecovery.standingRecoveredAtMs,
+      standingRecoveryFinalizeSatisfied: standingRecoveryFinalize.finalizeSatisfied,
+      recoveryReturnContinuityFrames: recovery.returnContinuityFrames,
+      recoveryDropRatio: recovery.recoveryDropRatio,
+      reversalAtMs: progressionReversalFrame.timestampMs,
+      minReversalToStandingMs: minReversalToStandingMsForShallow,
+    });
+    ruleCompletionBlockedReason = computeBlockedAfterCommitment(
+      progressionReversalFrame,
+      ascendForProgression
+    );
   }
 
   let currentSquatPhase: SquatCompletionPhase = 'idle';
@@ -1138,6 +1231,8 @@ function evaluateSquatCompletionCore(
         : null;
   if (trajectoryRescue.trajectoryReversalConfirmedBy === 'trajectory') {
     reversalConfirmedBy = 'trajectory';
+  } else if (tailBackfill.backfillApplied) {
+    reversalConfirmedBy = 'trajectory';
   }
   const reversalDepthDrop = hmmReversalAssistDecision.assistApplied
     ? squatReversalDropAchieved
@@ -1211,6 +1306,7 @@ function evaluateSquatCompletionCore(
     hmmReversalAssistApplied: hmmReversalAssistDecision.assistApplied,
     hmmReversalAssistReason: hmmReversalAssistDecision.assistReason,
     reversalConfirmedBy,
+    reversalTailBackfillApplied: tailBackfill.backfillApplied,
     reversalDepthDrop,
     reversalFrameCount,
     rawDepthPeakPrimary,
