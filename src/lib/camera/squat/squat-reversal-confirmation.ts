@@ -39,7 +39,18 @@ export interface SquatReversalDetectInput {
 
 /** 완화 rule·HMM 보조 적용 최소 ROM — shallow bounce 에는 적용 안 함 */
 const MODERATE_ROM_REL_PEAK_FLOOR = 0.12;
-/** PR-CAM-SHALLOW-REVERSAL-SIGNAL-01: <0.08 은 기존과 동일 ultra-shallow strict-only */
+/**
+ * PR-CAM-29B: squat-completion-state / squat-event-cycle 과 동일한 “의미 있는 시도” 하한.
+ * 그 미만 상대 피크는 reversal assist 없이 strict-only (standing jitter 차단).
+ */
+const LEGACY_ATTEMPT_FLOOR = 0.02;
+/**
+ * squat-event-cycle.ts MIN_DESCENT_FRAMES / MIN_REVERSAL_FRAMES 와 동일 수치(모듈 직접 import 안 함).
+ * guarded ultra-shallow 가 post-peak 증거·ascent streak 를 요구할 때만 사용.
+ */
+const MIN_DESCENT_FRAMES = 3;
+const MIN_REVERSAL_FRAMES = 2;
+/** PR-CAM-SHALLOW-REVERSAL-SIGNAL-01: [0.02,0.08) 에서는 PR-CAM-29B guarded assist 허용, <0.02 는 strict-only */
 const ULTRA_SHALLOW_STRICT_ONLY_FLOOR = 0.08;
 /** 0.08 <= rel < 0.12 만 제한적 window relax 허용 (ascent/HMM 금지) */
 const SHALLOW_RELAX_FLOOR = 0.08;
@@ -238,6 +249,41 @@ export function postPeakMonotonicReversalAssist(args: {
   return { ok: true, drop, frames: usedFrames };
 }
 
+/**
+ * PR-CAM-29B: [LEGACY_ATTEMPT_FLOOR, ULTRA_SHALLOW_STRICT_ONLY_FLOOR) 전용.
+ * strict primary/blended 가 모두 실패한 뒤에만 호출. source 는 rule 만 (HMM bridge·rule_plus_hmm 확장 없음).
+ * postPeakMonotonicReversalAssist + ascent 연속 프레임 + 최소 post-peak 길이로 1-frame·seated hold 차단.
+ */
+function guardedUltraShallowReversalAssist(
+  validFrames: PoseFeaturesFrame[],
+  peakValidIndex: number,
+  peakPrimaryDepth: number,
+  req: number,
+  relativeDepthPeak: number,
+  ev: PostPeakRecoveryEvidence
+): SquatReversalConfirmation | null {
+  if (relativeDepthPeak < LEGACY_ATTEMPT_FLOOR || relativeDepthPeak >= ULTRA_SHALLOW_STRICT_ONLY_FLOOR) {
+    return null;
+  }
+  const mono = postPeakMonotonicReversalAssist({
+    validFrames,
+    peakValidIndex,
+    peakPrimaryDepth,
+    required: req,
+  });
+  if (!mono.ok) return null;
+  if (ev.ascentStreakMax < MIN_REVERSAL_FRAMES) return null;
+  if (ev.postPeakFrameCount < MIN_DESCENT_FRAMES) return null;
+  return {
+    reversalConfirmed: true,
+    reversalIndex: peakValidIndex,
+    reversalDepthDrop: mono.drop,
+    reversalFrameCount: mono.frames,
+    reversalSource: 'rule',
+    notes: ['guarded_ultra_shallow_reversal_assist'],
+  };
+}
+
 function ascentStreakRelax(
   validFrames: PoseFeaturesFrame[],
   peakValidIndex: number,
@@ -281,7 +327,9 @@ function hmmBridgeConfirm(
 
 /**
  * 피크 이후 역전(상승 시작) rule + 선택적 HMM 보조.
- * relativeDepthPeak < 0.08: strict-only · <0.12 구간은 [0.08,0.12) 에서 shallowWindowReversalRelax 만 추가.
+ * relativeDepthPeak < LEGACY_ATTEMPT_FLOOR: strict-only.
+ * [LEGACY_ATTEMPT_FLOOR, 0.08): strict 실패 시 PR-CAM-29B guardedUltraShallowReversalAssist.
+ * [0.08,0.12): shallowWindowReversalRelax 만 추가(기존).
  */
 export function detectSquatReversalConfirmation(input: SquatReversalDetectInput): SquatReversalConfirmation {
   const notes: string[] = [];
@@ -335,8 +383,31 @@ export function detectSquatReversalConfirmation(input: SquatReversalDetectInput)
     };
   }
 
-  if (relativeDepthPeak < ULTRA_SHALLOW_STRICT_ONLY_FLOOR) {
+  if (relativeDepthPeak < LEGACY_ATTEMPT_FLOOR) {
     notes.push('ultra_shallow_strict_only_no_hit');
+    return {
+      reversalConfirmed: false,
+      reversalIndex: null,
+      reversalDepthDrop: Math.max(ev.dropPrimary, ev.dropReversal),
+      reversalFrameCount: 0,
+      reversalSource: 'none',
+      notes,
+    };
+  }
+
+  if (relativeDepthPeak < ULTRA_SHALLOW_STRICT_ONLY_FLOOR) {
+    const guarded = guardedUltraShallowReversalAssist(
+      validFrames,
+      peakValidIndex,
+      peakPrimaryDepth,
+      req,
+      relativeDepthPeak,
+      ev
+    );
+    if (guarded != null) {
+      return { ...guarded, notes: [...notes, ...guarded.notes] };
+    }
+    notes.push('ultra_shallow_guarded_assist_no_hit');
     return {
       reversalConfirmed: false,
       reversalIndex: null,

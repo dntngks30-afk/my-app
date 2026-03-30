@@ -3,7 +3,11 @@
  * metrics: depth, knee alignment trend, trunk lean, asymmetry
  */
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
-import { buildPoseFeaturesFrames, getSquatRecoverySignal } from '@/lib/camera/pose-features';
+import {
+  buildPoseFeaturesFrames,
+  getSquatRecoverySignal,
+  hasGuardedShallowSquatAscent,
+} from '@/lib/camera/pose-features';
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 import { evaluateSquatCompletionState } from '@/lib/camera/squat-completion-state';
 import {
@@ -210,6 +214,15 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     seedBaselineStandingDepthPrimary: completionArming.armingBaselineStandingDepthPrimary,
     seedBaselineStandingDepthBlended: completionArming.armingBaselineStandingDepthBlended,
   });
+
+  /** PR-CAM-29B: pose-features guarded shallow ascent — additive observability only */
+  let guardedShallowAscentDetected = 0;
+  for (let i = 0; i < frames.length; i++) {
+    if (hasGuardedShallowSquatAscent(frames, i)) {
+      guardedShallowAscentDetected = 1;
+      break;
+    }
+  }
 
   const squatDepthCalibration: SquatDepthCalibrationDebug = {
     maxPrimaryDepth: Math.round(maxPrimaryCalib * 1000) / 1000,
@@ -485,6 +498,8 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
             : state.relativeDepthPeakSource === 'blended'
               ? 2
               : 0,
+        /** PR-CAM-29B: 얕은 밴드 대칭 ascent 가드가 한 프레임이라도 성립(1/0) */
+        guardedShallowAscentDetected,
         /** PR-CAM-29: blended 입력 분해·흔들림 관측(피크는 0–1 스케일) */
         squatDepthObsFallbackPeak: Math.round(depthBlendObsFallbackPeak * 1000) / 1000,
         squatDepthObsTravelPeak: Math.round(depthBlendObsTravelPeak * 1000) / 1000,

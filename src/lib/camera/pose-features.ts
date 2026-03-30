@@ -888,6 +888,47 @@ function hasGuardedShallowSquatDescent(
   );
 }
 
+/**
+ * PR-CAM-29B: hasGuardedShallowSquatDescent 와 대칭 — 얕은 밴드에서 피크 이후 일관된 상승(깊이 감소).
+ * SHALLOW_DESCENT_* 상수만 재사용(신규 수치 없음). standing sway / flat bottom 은 연속 감소·excursion 에서 걸러짐.
+ */
+export function hasGuardedShallowSquatAscent(frames: PoseFeaturesFrame[], index: number): boolean {
+  if (index < SHALLOW_DESCENT_MIN_CONSECUTIVE_FRAMES) return false;
+  const depthSlice = frames
+    .slice(0, index + 1)
+    .map((f) => squatPhaseDepthRead(f))
+    .filter((d): d is number => typeof d === 'number' && Number.isFinite(d));
+  if (depthSlice.length === 0) return false;
+  const sessionPeak = Math.max(...depthSlice);
+  if (sessionPeak < SHALLOW_DESCENT_DEPTH_MIN || sessionPeak >= SHALLOW_DESCENT_DEPTH_MAX) {
+    return false;
+  }
+
+  const recentDepths: number[] = [];
+  for (let i = index - SHALLOW_DESCENT_MIN_CONSECUTIVE_FRAMES; i <= index; i += 1) {
+    const depth = squatPhaseDepthRead(frames[i]!);
+    if (typeof depth !== 'number' || !Number.isFinite(depth)) return false;
+    recentDepths.push(depth);
+  }
+
+  const currentDepth = recentDepths[recentDepths.length - 1]!;
+  if (currentDepth < SHALLOW_DESCENT_DEPTH_MIN || currentDepth >= SHALLOW_DESCENT_DEPTH_MAX) {
+    return false;
+  }
+
+  const dropFromPeak = sessionPeak - currentDepth;
+  if (dropFromPeak < SHALLOW_DESCENT_EXCURSION_MIN) return false;
+
+  const deltas = recentDepths.slice(1).map((depth, depthIndex) => depth - recentDepths[depthIndex]!);
+  const hasConsistentUpwardTrend = deltas.every(
+    (delta) => delta <= -SHALLOW_DESCENT_MIN_DELTA_PER_FRAME
+  );
+  if (!hasConsistentUpwardTrend) return false;
+
+  const totalTrendDelta = recentDepths[0]! - currentDepth;
+  return totalTrendDelta >= SHALLOW_DESCENT_EXCURSION_MIN;
+}
+
 function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): PoseFeaturesFrame[] {
   if (frames.length === 0) return frames;
 
@@ -923,8 +964,13 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
           index,
           sessionMinDepth
         );
+        const guardedShallowAscent = hasGuardedShallowSquatAscent(frames, index);
 
-        if (currentDepth < SHALLOW_DESCENT_DEPTH_MAX && !guardedShallowDescent) {
+        if (guardedShallowDescent) {
+          phaseHint = 'descent';
+        } else if (guardedShallowAscent) {
+          phaseHint = 'ascent';
+        } else if (currentDepth < SHALLOW_DESCENT_DEPTH_MAX && !guardedShallowDescent) {
           // PR-B: ultra-shallow 사이클(peak >= 0.03, peak < 0.08)에서
           // 피크 근방 프레임은 'start' 대신 'bottom'으로 레이블해 cycleDetection truth 개선.
           // sway/jitter 보호: maxDepth < SHALLOW_DESCENT_DEPTH_MIN이면 적용하지 않는다.
@@ -936,8 +982,6 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
           } else {
             phaseHint = 'start';
           }
-        } else if (guardedShallowDescent) {
-          phaseHint = 'descent';
         } else if (currentDepth >= bottomThreshold && Math.abs(depthDelta) < 0.022) {
           phaseHint = 'bottom';
         } else if (depthDelta > descentDelta && excursion >= MIN_EXCURSION_FOR_DESCENT_LABEL) {
