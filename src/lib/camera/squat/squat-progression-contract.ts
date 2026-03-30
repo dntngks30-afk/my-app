@@ -118,6 +118,88 @@ export function squatCompletionTruthPassed(
   return completionSatisfied === true && completionPassReason !== 'not_confirmed' && completionPassReason != null;
 }
 
+/**
+ * PR-01 Pass Owner Freeze: completion-state 슬라이스만으로 “유효 1rep 인정” 여부.
+ * captureQuality·confidence·passConfirmation·integrity·retry·quality warning·arming 타이밍 은 읽지 않는다.
+ * PR-CAM-29A: SQUAT_ARMING_MS 미달은 completion truth 가 아니라 UI/final latch gate 에서만 막는다.
+ */
+export type SquatCompletionOwnerStateSlice = {
+  completionSatisfied?: boolean;
+  completionPassReason?: string;
+  currentSquatPhase?: string;
+  completionBlockedReason?: string | null;
+};
+
+export function computeSquatCompletionOwnerTruth(input: {
+  squatCompletionState: SquatCompletionOwnerStateSlice | undefined;
+}): {
+  completionOwnerPassed: boolean;
+  completionOwnerReason: string | null;
+  completionOwnerBlockedReason: string | null;
+} {
+  const cs = input.squatCompletionState;
+  if (cs == null) {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason: 'no_squat_completion_state',
+    };
+  }
+  if (cs.completionBlockedReason != null && cs.completionBlockedReason !== '') {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason: cs.completionBlockedReason,
+    };
+  }
+  if (cs.completionSatisfied !== true) {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason: 'completion_not_satisfied',
+    };
+  }
+  if (cs.currentSquatPhase !== 'standing_recovered') {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason: 'not_standing_recovered',
+    };
+  }
+  const cpr = cs.completionPassReason;
+  if (cpr == null || cpr === 'not_confirmed') {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason: 'completion_pass_reason_invalid',
+    };
+  }
+  return {
+    completionOwnerPassed: true,
+    completionOwnerReason: cpr,
+    completionOwnerBlockedReason: null,
+  };
+}
+
+/**
+ * PR-01: 최종 성공 스냅샷용 — completionPassReason 만으로 lineage(standard vs event).
+ * capture / decouple / invalid 는 여기서 다루지 않는다(resolveSquatPassOwner 단위 테스트·레거시 호출은 유지).
+ */
+export function resolveSquatCompletionLineageOwner(
+  completionPassReason: string | undefined
+): SquatPassOwner {
+  if (completionPassReason === 'standard_cycle') return 'completion_truth_standard';
+  if (
+    completionPassReason === 'low_rom_cycle' ||
+    completionPassReason === 'ultra_low_rom_cycle' ||
+    completionPassReason === 'low_rom_event_cycle' ||
+    completionPassReason === 'ultra_low_rom_event_cycle'
+  ) {
+    return 'completion_truth_event';
+  }
+  return 'other';
+}
+
 export function resolveSquatPassOwner(input: {
   guardrail: Pick<StepGuardrailResult, 'captureQuality'>;
   severeInvalid: boolean;

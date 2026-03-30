@@ -136,7 +136,7 @@ ok(
   ok('deep: shadowEventOwnerEligible false', d.shadowEventOwnerEligible === false, d);
   ok('deep: finalSuccessOwner completion_truth_standard', d.finalSuccessOwner === 'completion_truth_standard', d);
   ok('deep: passOwner matches finalSuccessOwner', d.passOwner === d.finalSuccessOwner, d);
-  ok('deep: ownerFreezeVersion', d.ownerFreezeVersion === 'cam-owner-freeze-01', d);
+  ok('deep: ownerFreezeVersion', d.ownerFreezeVersion === 'cam-pass-owner-freeze-01', d);
   ok('deep: gate pass', gate.status === 'pass', gate.status);
   ok('deep: isFinalPassLatched unchanged for standard path', isFinalPassLatched('squat', gate) === true);
   const snap = buildAttemptSnapshot('squat', gate, undefined, {});
@@ -156,10 +156,16 @@ ok(
   const gate = evaluateExerciseAutoProgress('squat', lm, squatStats(lm.length));
   const d = gate.squatCycleDebug ?? {};
   const cs = gate.evaluatorResult?.debug?.squatCompletionState ?? {};
-  const isEvent =
-    cs.completionPassReason === 'low_rom_event_cycle' || cs.completionPassReason === 'ultra_low_rom_event_cycle';
-  ok('shallow: event completionPassReason', isEvent, cs.completionPassReason);
-  ok('shallow: shadowEventOwnerEligible', d.shadowEventOwnerEligible === true, d);
+  const isShallowRom =
+    cs.completionPassReason === 'low_rom_event_cycle' ||
+    cs.completionPassReason === 'ultra_low_rom_event_cycle' ||
+    cs.completionPassReason === 'low_rom_cycle' ||
+    cs.completionPassReason === 'ultra_low_rom_cycle';
+  const isEventPath =
+    cs.completionPassReason === 'low_rom_event_cycle' ||
+    cs.completionPassReason === 'ultra_low_rom_event_cycle';
+  ok('shallow: shallow rom completionPassReason', isShallowRom, cs.completionPassReason);
+  ok('shallow: shadowEventOwnerEligible matches event-only rule', d.shadowEventOwnerEligible === isEventPath, d);
   ok('shallow: standardOwnerEligible false', d.standardOwnerEligible === false, d);
   ok('shallow: finalSuccessOwner completion_truth_event', d.finalSuccessOwner === 'completion_truth_event', d);
 }

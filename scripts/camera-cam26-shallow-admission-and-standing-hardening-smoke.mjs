@@ -150,7 +150,7 @@ console.log('\nA. shallow descent under old 0.08 band is now observed and can pa
   });
 }
 
-console.log('\nB. standard_cycle low-quality severe partial is blocked');
+console.log('\nB. standard_cycle low-quality + decouple vs latch');
 {
   const blockedGate = makeSquatGate({
     confidence: 0.64,
@@ -162,9 +162,13 @@ console.log('\nB. standard_cycle low-quality severe partial is blocked');
       currentSquatPhase: 'standing_recovered',
     },
   });
+  /**
+   * PR-01 / low-quality decouple: integrity 는 progression latch 에서 null 이 되고
+   * qualityOnlyWarnings 로만 남는다. mock gate 는 min-cycle·owner·passConfirm 충족.
+   */
   ok(
-    'B1: standard_cycle low-quality severe flags fail final latch',
-    isFinalPassLatched('squat', blockedGate) === false,
+    'B1: standard_cycle low-quality severe flags still latch under decouple',
+    isFinalPassLatched('squat', blockedGate) === true,
     isFinalPassLatched('squat', blockedGate)
   );
 

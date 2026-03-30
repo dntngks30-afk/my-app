@@ -113,6 +113,7 @@ export interface AttemptSnapshot {
       reversalConfirmedAfterDescend?: boolean;
       recoveryConfirmedAfterReversal?: boolean;
       minimumCycleDurationSatisfied?: boolean;
+      captureArmingSatisfied?: boolean;
       /** PR-CAM-29A: final pass 타이밍만 차단( completion truth 와 분리 ) */
       finalPassTimingBlockedReason?: string | null;
       standardPathBlockedReason?: string | null;
@@ -154,6 +155,12 @@ export interface AttemptSnapshot {
       standardOwnerEligible?: boolean;
       shadowEventOwnerEligible?: boolean;
       ownerFreezeVersion?: string;
+      /** PR-01: completion truth owner vs UI progression gate */
+      completionOwnerPassed?: boolean;
+      completionOwnerReason?: string | null;
+      completionOwnerBlockedReason?: string | null;
+      uiProgressionAllowed?: boolean;
+      uiProgressionBlockedReason?: string | null;
       qualityOnlyWarnings?: string[];
       /** PR-04E1: depth/arming 입력 trace */
       armingDepthSource?: string | null;
@@ -862,6 +869,7 @@ function buildDiagnosisSummary(
       reversalConfirmedAfterDescend: sc.reversalConfirmedAfterDescend,
       recoveryConfirmedAfterReversal: sc.recoveryConfirmedAfterReversal,
       minimumCycleDurationSatisfied: sc.minimumCycleDurationSatisfied,
+      captureArmingSatisfied: sc.captureArmingSatisfied,
       finalPassTimingBlockedReason: sc.finalPassTimingBlockedReason ?? null,
       standardPathBlockedReason: sc.standardPathBlockedReason,
       baselineStandingDepth: typeof hm?.baselineStandingDepth === 'number' ? hm.baselineStandingDepth : undefined,
@@ -900,6 +908,11 @@ function buildDiagnosisSummary(
       standardOwnerEligible: sc.standardOwnerEligible,
       shadowEventOwnerEligible: sc.shadowEventOwnerEligible,
       ownerFreezeVersion: sc.ownerFreezeVersion,
+      completionOwnerPassed: sc.completionOwnerPassed,
+      completionOwnerReason: sc.completionOwnerReason ?? null,
+      completionOwnerBlockedReason: sc.completionOwnerBlockedReason ?? null,
+      uiProgressionAllowed: sc.uiProgressionAllowed,
+      uiProgressionBlockedReason: sc.uiProgressionBlockedReason ?? null,
       qualityOnlyWarnings: sc.qualityOnlyWarnings,
       armingDepthSource: sc.armingDepthSource,
       armingDepthPeak: sc.armingDepthPeak,

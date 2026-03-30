@@ -26,7 +26,8 @@ import {
   getSquatRawStandardCycleSignalIntegrityBlock,
   getSquatQualityOnlyWarnings,
   isSquatLowQualityPassDecoupleEligible,
-  resolveSquatPassOwner,
+  computeSquatCompletionOwnerTruth,
+  resolveSquatCompletionLineageOwner,
   squatCompletionTruthPassed,
   squatPassProgressionIntegrityBlock,
   squatRetryTriggeredByPartialFramingReasons,
@@ -90,6 +91,11 @@ export interface SquatCycleDebug {
   reversalConfirmedAfterDescend?: boolean;
   recoveryConfirmedAfterReversal?: boolean;
   minimumCycleDurationSatisfied?: boolean;
+  /**
+   * PR-01: 캡처 세션 arming — stats.captureDurationMs >= SQUAT_ARMING_MS.
+   * latch/UI 타이밍 정본(모션 cycleDurationMs 와 혼동 금지).
+   */
+  captureArmingSatisfied?: boolean;
   /**
    * PR-CAM-29A: completion truth 는 유지된 채 SQUAT_ARMING_MS 미달로 final pass 만 막을 때.
    * completion-state·blockedReason 체계는 불변 — auto-progression 트레이스 전용.
@@ -184,6 +190,13 @@ export interface SquatCycleDebug {
   shadowEventOwnerEligible?: boolean;
   ownerFreezeVersion?: string;
   lowQualityPassAllowed?: boolean;
+  /** PR-01: completion truth 전용 owner(캡처·confidence·passConfirm·integrity 미포함) */
+  completionOwnerPassed?: boolean;
+  completionOwnerReason?: string | null;
+  completionOwnerBlockedReason?: string | null;
+  /** PR-01: UI latch / progression gate(오너 통과 후 신호·확인·차단) */
+  uiProgressionAllowed?: boolean;
+  uiProgressionBlockedReason?: string | null;
   /** PR-04E1: depth/arming 입력 관측 */
   armingDepthSource?: string | null;
   armingDepthPeak?: number | null;
@@ -314,6 +327,14 @@ export function isFinalPassLatched(
   if (stepId === 'squat') {
     const cs = gate.evaluatorResult.debug?.squatCompletionState;
     const passReason = cs?.completionPassReason;
+    const captureArmingOk =
+      gate.squatCycleDebug?.captureArmingSatisfied !== undefined
+        ? gate.squatCycleDebug.captureArmingSatisfied === true
+        : squatMinimumCycleOkForFinalPass(gate.evaluatorResult, gate.squatCycleDebug);
+    const ownerTruth = computeSquatCompletionOwnerTruth({
+      squatCompletionState: cs,
+    });
+    if (!ownerTruth.completionOwnerPassed) return false;
     const severeInvalid = isSevereInvalid(gate.guardrail);
     const squatDecoupleLatch = isSquatLowQualityPassDecoupleEligible({
       stepId: 'squat',
@@ -340,28 +361,25 @@ export function isFinalPassLatched(
       ? SQUAT_EASY_PASS_CONFIDENCE
       : BASIC_PASS_CONFIDENCE_THRESHOLD.squat;
     const framesReq = isSquatEasyOnly ? SQUAT_EASY_LATCH_STABLE_FRAMES : REQUIRED_STABLE_FRAMES;
-    /** PR-CAM-29A: completion-state 가 잘못 열린 edge 와 무관하게 UI 래치는 standing_recovered 에만 */
-    const csPhase = gate.evaluatorResult.debug?.squatCompletionState?.currentSquatPhase;
-    if (
-      gate.completionSatisfied === true &&
-      csPhase != null &&
-      csPhase !== 'standing_recovered'
-    ) {
-      return false;
-    }
-    const minCycleOk = squatMinimumCycleOkForFinalPass(
-      gate.evaluatorResult,
-      gate.squatCycleDebug
-    );
-    if (!minCycleOk) return false;
-    return (
-      gate.completionSatisfied === true &&
-      gate.guardrail.captureQuality !== 'invalid' &&
-      gate.confidence >= confTh &&
-      gate.passConfirmationSatisfied === true &&
-      gate.passConfirmationFrameCount >= framesReq &&
-      integrityForPassLatch == null
-    );
+    const reasons = getCommonReasons(gate.evaluatorResult, gate.guardrail);
+    const hardBlockers = getHardBlockerReasons('squat', gate.guardrail);
+    const guardrailCompleteForLatch =
+      gate.guardrail.completionStatus === 'complete' || gate.guardrail.completionStatus == null;
+    const uiGate = computeSquatUiProgressionLatchGate({
+      completionOwnerPassed: ownerTruth.completionOwnerPassed,
+      guardrailCompletionComplete: guardrailCompleteForLatch,
+      captureQualityInvalid: gate.guardrail.captureQuality === 'invalid',
+      confidence: gate.confidence,
+      passThresholdEffective: confTh,
+      effectivePassConfirmation: gate.passConfirmationSatisfied === true,
+      passConfirmationFrameCount: gate.passConfirmationFrameCount,
+      framesReq,
+      captureArmingSatisfied: captureArmingOk,
+      squatIntegrityBlockForPass: integrityForPassLatch,
+      reasons,
+      hardBlockerReasons: hardBlockers,
+    });
+    return uiGate.uiProgressionAllowed;
   }
 
   const passThreshold = BASIC_PASS_CONFIDENCE_THRESHOLD[stepId];
@@ -810,6 +828,63 @@ function squatMinimumCycleOkForFinalPass(
   return true;
 }
 
+/**
+ * PR-01: UI progression / final latch gate — completion owner 와 분리.
+ * captureQuality·confidence·passConfirmation·integrity·hard blockers 만 사용한다.
+ * 스모크에서 owner 통과 + UI 차단 조합을 검증할 때 export 사용.
+ */
+export function computeSquatUiProgressionLatchGate(input: {
+  completionOwnerPassed: boolean;
+  guardrailCompletionComplete: boolean;
+  captureQualityInvalid: boolean;
+  confidence: number;
+  passThresholdEffective: number;
+  effectivePassConfirmation: boolean;
+  passConfirmationFrameCount: number;
+  framesReq: number;
+  /** PR-CAM-29A + PR-01: 캡처 최소 시간(arming) 충족 — latch/UI 전용 */
+  captureArmingSatisfied: boolean;
+  squatIntegrityBlockForPass: string | null;
+  reasons: string[];
+  hardBlockerReasons: string[];
+}): { uiProgressionAllowed: boolean; uiProgressionBlockedReason: string | null } {
+  if (!input.completionOwnerPassed) {
+    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'completion_owner_not_satisfied' };
+  }
+  if (input.captureArmingSatisfied !== true) {
+    return {
+      uiProgressionAllowed: false,
+      uiProgressionBlockedReason: 'minimum_cycle_duration_not_met',
+    };
+  }
+  if (input.guardrailCompletionComplete !== true) {
+    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'guardrail_not_complete' };
+  }
+  if (input.captureQualityInvalid) {
+    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'capture_quality_invalid' };
+  }
+  if (input.confidence < input.passThresholdEffective) {
+    return {
+      uiProgressionAllowed: false,
+      uiProgressionBlockedReason: `confidence_too_low:${input.confidence.toFixed(2)}<${input.passThresholdEffective.toFixed(2)}`,
+    };
+  }
+  if (!input.effectivePassConfirmation) {
+    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'pass_confirmation_not_ready' };
+  }
+  if (input.passConfirmationFrameCount < input.framesReq) {
+    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'pass_confirmation_frames_not_met' };
+  }
+  if (input.squatIntegrityBlockForPass != null) {
+    return { uiProgressionAllowed: false, uiProgressionBlockedReason: input.squatIntegrityBlockForPass };
+  }
+  const blocker = input.hardBlockerReasons.find((r) => input.reasons.includes(r));
+  if (blocker) {
+    return { uiProgressionAllowed: false, uiProgressionBlockedReason: `hard_blocker:${blocker}` };
+  }
+  return { uiProgressionAllowed: true, uiProgressionBlockedReason: null };
+}
+
 /** PR-CAM-CORE-PASS-REASON-ALIGN-01: shallow ROM 성공(일반·이벤트 사이클) — easy latch / conf floor 공통 */
 function isSquatShallowRomPassReason(passReason: string | undefined): boolean {
   return (
@@ -945,6 +1020,7 @@ function getSquatProgressionCompletionSatisfied(
     reversalConfirmedAfterDescend: committedAtMs != null && reversalAtMs != null,
     recoveryConfirmedAfterReversal: standingRecoveredAtMs != null && reversalAtMs != null,
     minimumCycleDurationSatisfied: cycleDurationMs >= SQUAT_ARMING_MS,
+    captureArmingSatisfied: stats.captureDurationMs >= SQUAT_ARMING_MS,
     ultraLowRomPathDisabledOrGuarded: false,
     squatEvidenceLevel,
     squatEvidenceReasons,
@@ -1388,6 +1464,31 @@ export function evaluateExerciseAutoProgress(
       ? squatPassProgressionIntegrityBlock(squatRawIntegrityBlock, squatDecoupleEligible)
       : null;
 
+  /** PR-01: completion owner truth vs UI gate — progressionPassed / latch / trace 공통 소스 */
+  let squatOwnerTruth: ReturnType<typeof computeSquatCompletionOwnerTruth> | null = null;
+  let squatUiGate: ReturnType<typeof computeSquatUiProgressionLatchGate> | null = null;
+  if (stepId === 'squat') {
+    const captureArmingOk = squatCycleDebug?.captureArmingSatisfied === true;
+    squatOwnerTruth = computeSquatCompletionOwnerTruth({
+      squatCompletionState: squatCs ?? undefined,
+    });
+    const squatFramesReq = squatEasyOnly ? SQUAT_EASY_LATCH_STABLE_FRAMES : REQUIRED_STABLE_FRAMES;
+    squatUiGate = computeSquatUiProgressionLatchGate({
+      completionOwnerPassed: squatOwnerTruth.completionOwnerPassed,
+      guardrailCompletionComplete: guardrail.completionStatus === 'complete',
+      captureQualityInvalid: guardrail.captureQuality === 'invalid',
+      confidence,
+      passThresholdEffective,
+      effectivePassConfirmation,
+      passConfirmationFrameCount: passConfirmation.stableFrameCount,
+      framesReq: squatFramesReq,
+      captureArmingSatisfied: captureArmingOk,
+      squatIntegrityBlockForPass,
+      reasons,
+      hardBlockerReasons,
+    });
+  }
+
   if (squatCycleDebug && stepId === 'squat' && squatRawIntegrityBlock != null) {
     if (!squatDecoupleEligible) {
       squatCycleDebug.standardPathBlockedReason = squatRawIntegrityBlock;
@@ -1410,32 +1511,32 @@ export function evaluateExerciseAutoProgress(
     const shadowEventOwnerEligible =
       completionSatisfied === true &&
       (cpr === 'low_rom_event_cycle' || cpr === 'ultra_low_rom_event_cycle');
-    const finalSuccessOwner = resolveSquatPassOwner({
-      guardrail,
-      severeInvalid: severeInvalidForSquat,
-      decoupleEligible: squatDecoupleEligible,
-      completionSatisfied,
-      completionPassReason: cpr,
-    });
+    /** PR-01: 스냅샷 passOwner / finalSuccessOwner = completion lineage 만(capture·decouple과 무관) */
+    const lineageOwner = resolveSquatCompletionLineageOwner(cpr);
     squatCycleDebug = {
       ...squatCycleDebug,
       completionTruthPassed: squatCompletionTruthPassed(completionSatisfied, cpr),
       qualityOnlyWarnings: qWarn.length > 0 ? qWarn : undefined,
       lowQualityPassAllowed: squatDecoupleEligible,
-      passOwner: finalSuccessOwner,
-      finalSuccessOwner,
+      passOwner: lineageOwner,
+      finalSuccessOwner: lineageOwner,
       standardOwnerEligible,
       shadowEventOwnerEligible,
-      ownerFreezeVersion: 'cam-owner-freeze-01',
+      ownerFreezeVersion: 'cam-pass-owner-freeze-01',
+      completionOwnerPassed: squatOwnerTruth?.completionOwnerPassed,
+      completionOwnerReason: squatOwnerTruth?.completionOwnerReason ?? undefined,
+      completionOwnerBlockedReason: squatOwnerTruth?.completionOwnerBlockedReason ?? undefined,
+      uiProgressionAllowed: squatUiGate?.uiProgressionAllowed,
+      uiProgressionBlockedReason: squatUiGate?.uiProgressionBlockedReason ?? undefined,
     };
   }
 
-  /** PR-CAM-29A: completion 은 true 인데 SQUAT_ARMING_MS 미달 → final pass 만 차단(관측) */
+  /** PR-CAM-29A: completion 은 true 인데 캡처 arming 미달 → final pass 만 차단(관측) */
   if (
     squatCycleDebug &&
     stepId === 'squat' &&
     completionSatisfied &&
-    squatCycleDebug.minimumCycleDurationSatisfied === false
+    squatCycleDebug.captureArmingSatisfied === false
   ) {
     squatCycleDebug = {
       ...squatCycleDebug,
@@ -1487,25 +1588,29 @@ export function evaluateExerciseAutoProgress(
   const overheadRepHoldBlocks = overheadEasySat ? false : hasHoldOrRepReason;
 
   const progressionPassed =
-    completionSatisfied &&
-    guardrail.captureQuality !== 'invalid' &&
-    confidence >= passThresholdEffective &&
-    effectivePassConfirmation &&
-    squatIntegrityBlockForPass == null &&
-    !hasAnyReason(reasons, hardBlockerReasons) &&
-    !overheadRepHoldBlocks &&
-    (stepId !== 'squat' || squatMinimumCycleOkForFinalPass(evaluatorResult, squatCycleDebug));
+    stepId === 'squat'
+      ? squatOwnerTruth?.completionOwnerPassed === true &&
+        squatUiGate?.uiProgressionAllowed === true
+      : completionSatisfied &&
+        guardrail.captureQuality !== 'invalid' &&
+        confidence >= passThresholdEffective &&
+        effectivePassConfirmation &&
+        squatIntegrityBlockForPass == null &&
+        !hasAnyReason(reasons, hardBlockerReasons) &&
+        !overheadRepHoldBlocks;
 
   /* PR-CAM-17: final pass 체인 가시성 — 어느 단계에서 pass가 막히는지 즉시 확인 가능. */
   const finalPassBlockedReason: string | null = (() => {
-    if (!completionSatisfied) return 'completion_not_satisfied';
-    if (
-      stepId === 'squat' &&
-      completionSatisfied &&
-      !squatMinimumCycleOkForFinalPass(evaluatorResult, squatCycleDebug)
-    ) {
-      return 'minimum_cycle_duration_not_met';
+    if (stepId === 'squat' && squatOwnerTruth != null && squatUiGate != null) {
+      if (!squatOwnerTruth.completionOwnerPassed) {
+        return squatOwnerTruth.completionOwnerBlockedReason ?? 'completion_owner_blocked';
+      }
+      if (!squatUiGate.uiProgressionAllowed) {
+        return squatUiGate.uiProgressionBlockedReason ?? 'ui_progression_blocked';
+      }
+      return null;
     }
+    if (!completionSatisfied) return 'completion_not_satisfied';
     if (guardrail.captureQuality === 'invalid') return 'capture_quality_invalid';
     if (confidence < passThresholdEffective)
       return `confidence_too_low:${confidence.toFixed(2)}<${passThresholdEffective.toFixed(2)}`;
