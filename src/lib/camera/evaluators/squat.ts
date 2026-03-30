@@ -32,6 +32,8 @@ import type {
 import {
   readSquatCompletionDepth,
   squatCompletionBlockedReasonToCode,
+  computeSquatReadinessStableDwell,
+  computeSquatSetupMotionBlock,
 } from '@/lib/camera/squat-completion-state';
 
 const MIN_VALID_FRAMES = 8;
@@ -54,8 +56,8 @@ function countPhases(frames: PoseFeaturesFrame[], phase: PoseFeaturesFrame['phas
 }
 
 export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): EvaluatorResult {
-  const valid = frames.filter((frame) => frame.isValid);
-  if (valid.length < MIN_VALID_FRAMES) {
+  const validRaw = frames.filter((frame) => frame.isValid);
+  if (validRaw.length < MIN_VALID_FRAMES) {
     const emptyDiag = {
       criticalJointAvailability: 0,
       missingCriticalJoints: [] as string[],
@@ -75,10 +77,10 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       completionHints: ['rep_missing'],
       debug: {
         frameCount: frames.length,
-        validFrameCount: valid.length,
+        validFrameCount: validRaw.length,
         phaseHints: Array.from(new Set(frames.map((frame) => frame.phaseHint))),
         highlightedMetrics: {
-          validFrameCount: valid.length,
+          validFrameCount: validRaw.length,
           completionMachinePhase: 'idle',
           completionPassReason: 'not_confirmed',
           completionSatisfied: false,
@@ -88,6 +90,58 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       },
     };
   }
+
+  /** Setup false-pass lock: dwell 충족 지점 이후만 rep 파이프라인에 넣는다. */
+  const dwell = computeSquatReadinessStableDwell(validRaw);
+  const valid = dwell.satisfied ? validRaw.slice(dwell.firstSliceStartIndexInValid) : [];
+  const squatSetupPhaseTrace = {
+    readinessStableDwellSatisfied: dwell.satisfied,
+    setupMotionBlocked: false as boolean,
+    setupMotionBlockReason: null as string | null,
+    attemptStartedAfterReady: dwell.satisfied && valid.length >= MIN_VALID_FRAMES,
+  };
+
+  if (valid.length < MIN_VALID_FRAMES) {
+    const emptyDiag = {
+      criticalJointAvailability: 0,
+      missingCriticalJoints: [] as string[],
+      leftSideCompleteness: 0,
+      rightSideCompleteness: 0,
+      leftRightAsymmetry: 0,
+      metricSufficiency: 0,
+      frameCount: 0,
+      instabilityFlags: [] as string[],
+    };
+    const qh = new Set(validRaw.flatMap((frame) => frame.qualityHints));
+    if (!dwell.satisfied) qh.add('readiness_dwell_not_met');
+    return {
+      stepId: 'squat',
+      metrics: [],
+      insufficientSignal: true,
+      reason: !dwell.satisfied ? '캡처 준비 연속 구간 부족' : '프레임 부족',
+      qualityHints: [...qh],
+      completionHints: ['rep_missing'],
+      debug: {
+        frameCount: frames.length,
+        validFrameCount: validRaw.length,
+        validFrameCountAfterReadinessDwell: valid.length,
+        phaseHints: Array.from(new Set(frames.map((frame) => frame.phaseHint))),
+        squatSetupPhaseTrace,
+        highlightedMetrics: {
+          validFrameCount: validRaw.length,
+          completionMachinePhase: 'idle',
+          completionPassReason: 'not_confirmed',
+          completionSatisfied: false,
+        },
+        perStepDiagnostics: { descent: emptyDiag, bottom: emptyDiag, ascent: emptyDiag },
+        squatInternalQuality: squatInternalQualityInsufficientSignal(),
+      },
+    };
+  }
+
+  const setupBlock = computeSquatSetupMotionBlock(valid);
+  squatSetupPhaseTrace.setupMotionBlocked = setupBlock.blocked;
+  squatSetupPhaseTrace.setupMotionBlockReason = setupBlock.reason;
 
   const metrics: EvaluatorMetric[] = [];
   const rawMetrics: EvaluatorMetric[] = [];
@@ -208,12 +262,28 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     prevDepthSourceKey = src;
   }
 
-  const state = evaluateSquatCompletionState(completionFrames, {
+  let state = evaluateSquatCompletionState(completionFrames, {
     hmm: squatHmm,
     hmmArmingAssistApplied: armingAssistDec.assistApplied,
     seedBaselineStandingDepthPrimary: completionArming.armingBaselineStandingDepthPrimary,
     seedBaselineStandingDepthBlended: completionArming.armingBaselineStandingDepthBlended,
   });
+
+  state = {
+    ...state,
+    readinessStableDwellSatisfied: dwell.satisfied,
+    setupMotionBlocked: setupBlock.blocked,
+    setupMotionBlockReason: setupBlock.reason,
+    attemptStartedAfterReady: dwell.satisfied,
+  };
+  if (state.completionSatisfied && setupBlock.blocked) {
+    state = {
+      ...state,
+      completionSatisfied: false,
+      completionPassReason: 'not_confirmed',
+      completionBlockedReason: `setup_motion:${setupBlock.reason ?? 'blocked'}`,
+    };
+  }
 
   /** PR-CAM-29B: pose-features guarded shallow ascent — additive observability only */
   let guardedShallowAscentDetected = 0;
@@ -433,6 +503,8 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       squatInternalQuality,
       /** PR-CAM-09: typed completion state — auto-progression 이 highlightedMetrics 캐스팅 없이 읽는다 */
       squatCompletionState: state,
+      /** Setup false-pass lock: dwell·프레이밍 이동 관측(auto-progression·trace) */
+      squatSetupPhaseTrace,
       highlightedMetrics: {
         depthPeak: depthValues.length > 0 ? Math.round(Math.max(...depthValues) * 100) : null,
         /** PR standing-fp: baseline-relative depth for standard path gate */

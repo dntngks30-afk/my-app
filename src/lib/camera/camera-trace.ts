@@ -161,6 +161,13 @@ export interface AttemptSnapshot {
       completionOwnerBlockedReason?: string | null;
       uiProgressionAllowed?: boolean;
       uiProgressionBlockedReason?: string | null;
+      /** Setup false-pass lock — squatCycleDebug 미러 */
+      liveReadinessSummaryState?: string;
+      readinessStableDwellSatisfied?: boolean;
+      setupMotionBlocked?: boolean;
+      setupMotionBlockReason?: string | null;
+      attemptStartedAfterReady?: boolean;
+      successSuppressedBySetupPhase?: boolean;
       qualityOnlyWarnings?: string[];
       /** PR-04E1: depth/arming 입력 trace */
       armingDepthSource?: string | null;
@@ -408,6 +415,13 @@ export interface SquatAttemptObservation {
   officialShallowDriftedToStandard?: boolean;
   officialShallowDriftReason?: string | null;
   officialShallowPreferredPrefixFrameCount?: number | null;
+  /** Setup false-pass lock — diagnosis 미러 */
+  liveReadinessSummaryState?: string;
+  readinessStableDwellSatisfied?: boolean;
+  setupMotionBlocked?: boolean;
+  setupMotionBlockReason?: string | null;
+  attemptStartedAfterReady?: boolean;
+  successSuppressedBySetupPhase?: boolean;
   debugVersion: string;
 }
 
@@ -706,6 +720,12 @@ export function buildSquatAttemptObservation(
       typeof cs?.officialShallowPreferredPrefixFrameCount === 'number'
         ? cs.officialShallowPreferredPrefixFrameCount
         : null,
+    liveReadinessSummaryState: gate.squatCycleDebug?.liveReadinessSummaryState,
+    readinessStableDwellSatisfied: gate.squatCycleDebug?.readinessStableDwellSatisfied,
+    setupMotionBlocked: gate.squatCycleDebug?.setupMotionBlocked,
+    setupMotionBlockReason: gate.squatCycleDebug?.setupMotionBlockReason ?? null,
+    attemptStartedAfterReady: gate.squatCycleDebug?.attemptStartedAfterReady,
+    successSuppressedBySetupPhase: gate.squatCycleDebug?.successSuppressedBySetupPhase,
     debugVersion: `${OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
   };
 }
@@ -1004,6 +1024,12 @@ function buildDiagnosisSummary(
       completionOwnerBlockedReason: sc.completionOwnerBlockedReason ?? null,
       uiProgressionAllowed: sc.uiProgressionAllowed,
       uiProgressionBlockedReason: sc.uiProgressionBlockedReason ?? null,
+      liveReadinessSummaryState: sc.liveReadinessSummaryState,
+      readinessStableDwellSatisfied: sc.readinessStableDwellSatisfied,
+      setupMotionBlocked: sc.setupMotionBlocked,
+      setupMotionBlockReason: sc.setupMotionBlockReason ?? null,
+      attemptStartedAfterReady: sc.attemptStartedAfterReady,
+      successSuppressedBySetupPhase: sc.successSuppressedBySetupPhase,
       qualityOnlyWarnings: sc.qualityOnlyWarnings,
       armingDepthSource: sc.armingDepthSource,
       armingDepthPeak: sc.armingDepthPeak,

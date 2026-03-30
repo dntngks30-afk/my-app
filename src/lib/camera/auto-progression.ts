@@ -4,6 +4,8 @@ import type { PoseLandmarks } from '@/lib/motion/pose-types';
 import type { PoseCaptureStats } from './use-pose-capture';
 import type { CameraStepId } from '@/lib/public/camera-test';
 import { buildPoseFeaturesFrames } from './pose-features';
+import { getLiveReadinessSummary } from './live-readiness';
+import { getSetupFramingHint } from './setup-framing';
 import { runEvaluator } from './run-evaluators';
 import { assessStepGuardrail } from './guardrails';
 import type { SquatInternalQuality } from './squat/squat-internal-quality';
@@ -197,6 +199,14 @@ export interface SquatCycleDebug {
   /** PR-01: UI latch / progression gate(오너 통과 후 신호·확인·차단) */
   uiProgressionAllowed?: boolean;
   uiProgressionBlockedReason?: string | null;
+  /** Setup false-pass lock: getLiveReadinessSummary.state 미러(래치·트레이스 정렬) */
+  liveReadinessSummaryState?: 'not_ready' | 'ready' | 'success';
+  readinessStableDwellSatisfied?: boolean;
+  setupMotionBlocked?: boolean;
+  setupMotionBlockReason?: string | null;
+  attemptStartedAfterReady?: boolean;
+  /** completion owner 통과했으나 setup/readiness 게이트로 UI pass 가 막힌 경우 */
+  successSuppressedBySetupPhase?: boolean;
   /** PR-04E1: depth/arming 입력 관측 */
   armingDepthSource?: string | null;
   armingDepthPeak?: number | null;
@@ -325,6 +335,10 @@ export function isFinalPassLatched(
    * standard_cycle(깊은 스쿼트)은 기존 임계(0.62)를 그대로 사용.
    */
   if (stepId === 'squat') {
+    const eligible = gate as ExerciseGateResult;
+    if (typeof eligible.finalPassEligible === 'boolean') {
+      return eligible.finalPassEligible === true;
+    }
     const cs = gate.evaluatorResult.debug?.squatCompletionState;
     const passReason = cs?.completionPassReason;
     const captureArmingOk =
@@ -365,6 +379,10 @@ export function isFinalPassLatched(
     const hardBlockers = getHardBlockerReasons('squat', gate.guardrail);
     const guardrailCompleteForLatch =
       gate.guardrail.completionStatus === 'complete' || gate.guardrail.completionStatus == null;
+    const scDbg = gate.squatCycleDebug;
+    let dwellLatch: boolean | undefined;
+    if (scDbg?.readinessStableDwellSatisfied === false) dwellLatch = false;
+    else if (scDbg?.readinessStableDwellSatisfied === true) dwellLatch = true;
     const uiGate = computeSquatUiProgressionLatchGate({
       completionOwnerPassed: ownerTruth.completionOwnerPassed,
       guardrailCompletionComplete: guardrailCompleteForLatch,
@@ -378,6 +396,9 @@ export function isFinalPassLatched(
       squatIntegrityBlockForPass: integrityForPassLatch,
       reasons,
       hardBlockerReasons: hardBlockers,
+      liveReadinessNotReady: scDbg?.liveReadinessSummaryState === 'not_ready',
+      readinessStableDwellSatisfied: dwellLatch,
+      setupMotionBlocked: scDbg?.setupMotionBlocked === true,
     });
     return uiGate.uiProgressionAllowed;
   }
@@ -847,9 +868,24 @@ export function computeSquatUiProgressionLatchGate(input: {
   squatIntegrityBlockForPass: string | null;
   reasons: string[];
   hardBlockerReasons: string[];
+  /** Setup false-pass lock: live readiness RED 이면 latch 금지 */
+  liveReadinessNotReady?: boolean;
+  /** evaluator 가 명시 false 일 때만 차단(undefined 는 레거시 스킵) */
+  readinessStableDwellSatisfied?: boolean;
+  /** completion state 가 setupMotionBlocked true 일 때 차단 */
+  setupMotionBlocked?: boolean;
 }): { uiProgressionAllowed: boolean; uiProgressionBlockedReason: string | null } {
   if (!input.completionOwnerPassed) {
     return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'completion_owner_not_satisfied' };
+  }
+  if (input.liveReadinessNotReady === true) {
+    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'live_readiness_not_ready' };
+  }
+  if (input.readinessStableDwellSatisfied === false) {
+    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'readiness_stable_dwell_not_met' };
+  }
+  if (input.setupMotionBlocked === true) {
+    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'setup_motion_blocked' };
   }
   if (input.captureArmingSatisfied !== true) {
     return {
@@ -1473,6 +1509,34 @@ export function evaluateExerciseAutoProgress(
       squatCompletionState: squatCs ?? undefined,
     });
     const squatFramesReq = squatEasyOnly ? SQUAT_EASY_LATCH_STABLE_FRAMES : REQUIRED_STABLE_FRAMES;
+    const setupTrace = evaluatorResult.debug?.squatSetupPhaseTrace as
+      | {
+          readinessStableDwellSatisfied?: boolean;
+          setupMotionBlocked?: boolean;
+          setupMotionBlockReason?: string | null;
+        }
+      | undefined;
+    let readinessStableDwellForGate: boolean | undefined;
+    if (
+      setupTrace?.readinessStableDwellSatisfied === false ||
+      squatCs?.readinessStableDwellSatisfied === false
+    ) {
+      readinessStableDwellForGate = false;
+    } else if (
+      setupTrace?.readinessStableDwellSatisfied === true ||
+      squatCs?.readinessStableDwellSatisfied === true
+    ) {
+      readinessStableDwellForGate = true;
+    }
+    const setupMotionBlockedForGate =
+      setupTrace?.setupMotionBlocked === true || squatCs?.setupMotionBlocked === true;
+    const liveSummary = getLiveReadinessSummary({
+      success: false,
+      guardrail,
+      framingHint: getSetupFramingHint(landmarks),
+    });
+    const liveReadinessNotReady = liveSummary.state === 'not_ready';
+
     squatUiGate = computeSquatUiProgressionLatchGate({
       completionOwnerPassed: squatOwnerTruth.completionOwnerPassed,
       guardrailCompletionComplete: guardrail.completionStatus === 'complete',
@@ -1486,6 +1550,9 @@ export function evaluateExerciseAutoProgress(
       squatIntegrityBlockForPass,
       reasons,
       hardBlockerReasons,
+      liveReadinessNotReady,
+      readinessStableDwellSatisfied: readinessStableDwellForGate,
+      setupMotionBlocked: setupMotionBlockedForGate,
     });
   }
 
@@ -1513,6 +1580,25 @@ export function evaluateExerciseAutoProgress(
       (cpr === 'low_rom_event_cycle' || cpr === 'ultra_low_rom_event_cycle');
     /** PR-01: 스냅샷 passOwner / finalSuccessOwner = completion lineage 만(capture·decouple과 무관) */
     const lineageOwner = resolveSquatCompletionLineageOwner(cpr);
+    const setupTrace = evaluatorResult.debug?.squatSetupPhaseTrace as
+      | {
+          readinessStableDwellSatisfied?: boolean;
+          setupMotionBlocked?: boolean;
+          setupMotionBlockReason?: string | null;
+        }
+      | undefined;
+    const liveSummary = getLiveReadinessSummary({
+      success: false,
+      guardrail,
+      framingHint: getSetupFramingHint(landmarks),
+    });
+    const setupSuppressed =
+      squatOwnerTruth?.completionOwnerPassed === true &&
+      squatUiGate != null &&
+      squatUiGate.uiProgressionAllowed === false &&
+      ['live_readiness_not_ready', 'readiness_stable_dwell_not_met', 'setup_motion_blocked'].includes(
+        squatUiGate.uiProgressionBlockedReason ?? ''
+      );
     squatCycleDebug = {
       ...squatCycleDebug,
       completionTruthPassed: squatCompletionTruthPassed(completionSatisfied, cpr),
@@ -1528,6 +1614,13 @@ export function evaluateExerciseAutoProgress(
       completionOwnerBlockedReason: squatOwnerTruth?.completionOwnerBlockedReason ?? undefined,
       uiProgressionAllowed: squatUiGate?.uiProgressionAllowed,
       uiProgressionBlockedReason: squatUiGate?.uiProgressionBlockedReason ?? undefined,
+      liveReadinessSummaryState: liveSummary.state,
+      readinessStableDwellSatisfied:
+        setupTrace?.readinessStableDwellSatisfied ?? squatCs?.readinessStableDwellSatisfied,
+      setupMotionBlocked: setupTrace?.setupMotionBlocked ?? squatCs?.setupMotionBlocked,
+      setupMotionBlockReason: setupTrace?.setupMotionBlockReason ?? squatCs?.setupMotionBlockReason,
+      attemptStartedAfterReady: squatCs?.attemptStartedAfterReady,
+      successSuppressedBySetupPhase: setupSuppressed,
     };
   }
 

@@ -30,6 +30,133 @@ export function readSquatCompletionDepth(frame: PoseFeaturesFrame): number | nul
   return readSquatCompletionDepthForReversal(frame);
 }
 
+/**
+ * Setup false-pass lock: 연속 N프레임이 capture-ready 프록시를 만족해야 rep 파이프라인에 진입.
+ * (live-readiness MIN_READY_* 와 정렬 — 단일 프레임 스파이크로 attempt 열리지 않게)
+ */
+export const SQUAT_READINESS_STABLE_DWELL_FRAMES = 12;
+
+const CAPTURE_READY_VISIBLE_RATIO = 0.7;
+const CAPTURE_READY_CRITICAL_AVAIL = 0.65;
+const CAPTURE_READY_AREA_MIN = 0.05;
+const CAPTURE_READY_AREA_MAX = 0.95;
+const CAPTURE_READY_ANKLE_Y_MIN = 0.55;
+const CAPTURE_READY_ANKLE_VIS = 0.35;
+
+/** 단일 프레임이 “캡처 준비(전신·가시성)” 프록시를 만족하는지 — live-readiness blockers 와 동일 축 */
+export function poseFrameMeetsCaptureReadyProxy(frame: PoseFeaturesFrame): boolean {
+  if (!frame.isValid) return false;
+  if (frame.visibilitySummary.visibleLandmarkRatio < CAPTURE_READY_VISIBLE_RATIO) return false;
+  if (frame.visibilitySummary.criticalJointsAvailability < CAPTURE_READY_CRITICAL_AVAIL) return false;
+  const a = frame.bodyBox.area;
+  if (a < CAPTURE_READY_AREA_MIN || a > CAPTURE_READY_AREA_MAX) return false;
+  const ankle = frame.joints.ankleCenter;
+  if (!ankle || (ankle.visibility ?? 0) < CAPTURE_READY_ANKLE_VIS) return false;
+  if (typeof ankle.y !== 'number' || !Number.isFinite(ankle.y)) return false;
+  if (ankle.y < CAPTURE_READY_ANKLE_Y_MIN) return false;
+  return true;
+}
+
+export type SquatReadinessStableDwellResult = {
+  satisfied: boolean;
+  /** dwell 윈도우가 끝나는 valid 내 인덱스(포함). 미충족 시 -1 */
+  dwellEndIndexInValid: number;
+  /** rep 파이프라인에 쓸 valid 슬라이스 시작 인덱스(포함). 미충족 시 0 */
+  firstSliceStartIndexInValid: number;
+};
+
+/**
+ * 첫 번째 연속 dwell 구간이 끝난 뒤부터만 completion/arming 입력으로 사용한다.
+ */
+export function computeSquatReadinessStableDwell(
+  valid: PoseFeaturesFrame[]
+): SquatReadinessStableDwellResult {
+  const min = SQUAT_READINESS_STABLE_DWELL_FRAMES;
+  if (valid.length < min) {
+    return { satisfied: false, dwellEndIndexInValid: -1, firstSliceStartIndexInValid: 0 };
+  }
+  for (let end = min - 1; end < valid.length; end++) {
+    let allOk = true;
+    for (let k = 0; k < min; k++) {
+      const fr = valid[end - min + 1 + k];
+      if (!fr || !poseFrameMeetsCaptureReadyProxy(fr)) {
+        allOk = false;
+        break;
+      }
+    }
+    if (allOk) {
+      return {
+        satisfied: true,
+        dwellEndIndexInValid: end,
+        firstSliceStartIndexInValid: end - min + 1,
+      };
+    }
+  }
+  return { satisfied: false, dwellEndIndexInValid: -1, firstSliceStartIndexInValid: 0 };
+}
+
+function meanSafe(nums: number[]): number {
+  if (nums.length === 0) return 0;
+  return nums.reduce((s, n) => s + n, 0) / nums.length;
+}
+
+function meanHipCenter(
+  frames: PoseFeaturesFrame[]
+): { x: number; y: number } | null {
+  const pts = frames
+    .map((f) => f.joints.hipCenter)
+    .filter((j): j is NonNullable<typeof j> => j != null && (j.visibility ?? 0) >= 0.35);
+  if (pts.length === 0) return null;
+  return {
+    x: meanSafe(pts.map((p) => p.x)),
+    y: meanSafe(pts.map((p) => p.y)),
+  };
+}
+
+/**
+ * setup 전용 대형 프레이밍 이동(뒤로/가까이/좌우 시프트) — 실제 rep 와 분리.
+ * completion truth 가 true 였어도 evaluator 에서 상위에서 막는다.
+ */
+export function computeSquatSetupMotionBlock(validPipeline: PoseFeaturesFrame[]): {
+  blocked: boolean;
+  reason: string | null;
+} {
+  if (validPipeline.length < 14) return { blocked: false, reason: null };
+  let maxIdx = 0;
+  let maxD = -Infinity;
+  for (let i = 0; i < validPipeline.length; i++) {
+    const d = validPipeline[i]!.derived.squatDepthProxy;
+    if (typeof d === 'number' && Number.isFinite(d) && d > maxD) {
+      maxD = d;
+      maxIdx = i;
+    }
+  }
+  if (maxIdx < 8) return { blocked: false, reason: null };
+
+  const head = validPipeline.slice(0, 4);
+  const tail = validPipeline.slice(-4);
+  const areasH = head.map((f) => f.bodyBox.area).filter((x) => x > 0);
+  const areasT = tail.map((f) => f.bodyBox.area).filter((x) => x > 0);
+  const areaEarly = meanSafe(areasH);
+  const areaLate = meanSafe(areasT);
+  if (areaEarly > 0.03 && areaLate > 0 && areaLate / areaEarly < 0.67) {
+    return { blocked: true, reason: 'step_back_or_camera_tilt_area_shrink' };
+  }
+  if (areaEarly > 0.03 && areaLate / areaEarly > 1.55) {
+    return { blocked: true, reason: 'step_in_or_camera_close_area_spike' };
+  }
+  const hipEarly = meanHipCenter(head);
+  const hipLate = meanHipCenter(tail);
+  if (hipEarly && hipLate) {
+    const dx = hipLate.x - hipEarly.x;
+    const dy = hipLate.y - hipEarly.y;
+    if (Math.hypot(dx, dy) > 0.138) {
+      return { blocked: true, reason: 'large_framing_translation' };
+    }
+  }
+  return { blocked: false, reason: null };
+}
+
 export type SquatCompletionPhase =
   | 'idle'
   | 'armed'
@@ -202,6 +329,13 @@ export interface SquatCompletionState extends MotionCompletionResult {
   officialShallowDriftReason?: string | null;
   /** PR-03 final: full 버퍼 대신 최소 프리픽스로 shallow closure 채택 시 유효 프레임 수(없으면 null) */
   officialShallowPreferredPrefixFrameCount?: number | null;
+  /** Setup false-pass lock: 연속 capture-ready dwell 충족 후에만 rep 파이프라인 사용 */
+  readinessStableDwellSatisfied?: boolean;
+  /** Setup false-pass lock: 대형 프레이밍 이동(뒤로/세우기/좌우) 감지 시 차단 */
+  setupMotionBlocked?: boolean;
+  setupMotionBlockReason?: string | null;
+  /** dwell 이후 슬라이스에서 attempt 가 열린 경우 true(관측) */
+  attemptStartedAfterReady?: boolean;
   /**
    * PR-CAM-ULTRA-LOW-ROM-EVENT-GATE-01: progression 역전 프레임 존재 — ultra-low event 승격 게이트 입력.
    * (JSON/트레이스 `reversalConfirmedAfterDescend` 와 동일 의미로 유지)
