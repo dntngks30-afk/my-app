@@ -90,6 +90,11 @@ export interface SquatCycleDebug {
   reversalConfirmedAfterDescend?: boolean;
   recoveryConfirmedAfterReversal?: boolean;
   minimumCycleDurationSatisfied?: boolean;
+  /**
+   * PR-CAM-29A: completion truth 는 유지된 채 SQUAT_ARMING_MS 미달로 final pass 만 막을 때.
+   * completion-state·blockedReason 체계는 불변 — auto-progression 트레이스 전용.
+   */
+  finalPassTimingBlockedReason?: string | null;
   standardPathBlockedReason?: string | null;
   ultraLowRomPathDisabledOrGuarded?: boolean;
   descendStartAtMs?: number;
@@ -266,6 +271,7 @@ export function isFinalPassLatched(
     | 'passConfirmationFrameCount'
     | 'guardrail'
     | 'evaluatorResult'
+    | 'squatCycleDebug'
   >
 ): boolean {
   if (stepId === 'overhead-reach') {
@@ -334,6 +340,20 @@ export function isFinalPassLatched(
       ? SQUAT_EASY_PASS_CONFIDENCE
       : BASIC_PASS_CONFIDENCE_THRESHOLD.squat;
     const framesReq = isSquatEasyOnly ? SQUAT_EASY_LATCH_STABLE_FRAMES : REQUIRED_STABLE_FRAMES;
+    /** PR-CAM-29A: completion-state 가 잘못 열린 edge 와 무관하게 UI 래치는 standing_recovered 에만 */
+    const csPhase = gate.evaluatorResult.debug?.squatCompletionState?.currentSquatPhase;
+    if (
+      gate.completionSatisfied === true &&
+      csPhase != null &&
+      csPhase !== 'standing_recovered'
+    ) {
+      return false;
+    }
+    const minCycleOk = squatMinimumCycleOkForFinalPass(
+      gate.evaluatorResult,
+      gate.squatCycleDebug
+    );
+    if (!minCycleOk) return false;
     return (
       gate.completionSatisfied === true &&
       gate.guardrail.captureQuality !== 'invalid' &&
@@ -772,6 +792,23 @@ const SQUAT_EASY_PASS_CONFIDENCE = 0.56;
  * overhead easy와 동일하게 2프레임으로 완화 (standard 3프레임 대비).
  */
 const SQUAT_EASY_LATCH_STABLE_FRAMES = 2;
+
+/**
+ * PR-CAM-29A: `getSquatProgressionCompletionSatisfied` 가 채운 `minimumCycleDurationSatisfied`(= cycleDurationMs >= SQUAT_ARMING_MS)를
+ * 최종 패스 래치·progressionPassed 와 동일하게 소비한다. 신규 수치 없음.
+ * 레거시 mock( debug 일부만 채움 )은 cycleDurationMs 부재 시 완화(true) — 실제 `evaluateExerciseAutoProgress` gate 는 항상 squatCycleDebug 포함.
+ */
+function squatMinimumCycleOkForFinalPass(
+  evaluatorResult: EvaluatorResult,
+  squatCycleDebug?: SquatCycleDebug
+): boolean {
+  if (squatCycleDebug != null && typeof squatCycleDebug.minimumCycleDurationSatisfied === 'boolean') {
+    return squatCycleDebug.minimumCycleDurationSatisfied;
+  }
+  const ms = evaluatorResult.debug?.squatCompletionState?.cycleDurationMs;
+  if (typeof ms === 'number') return ms >= SQUAT_ARMING_MS;
+  return true;
+}
 
 /** PR-CAM-CORE-PASS-REASON-ALIGN-01: shallow ROM 성공(일반·이벤트 사이클) — easy latch / conf floor 공통 */
 function isSquatShallowRomPassReason(passReason: string | undefined): boolean {
@@ -1393,6 +1430,19 @@ export function evaluateExerciseAutoProgress(
     };
   }
 
+  /** PR-CAM-29A: completion 은 true 인데 SQUAT_ARMING_MS 미달 → final pass 만 차단(관측) */
+  if (
+    squatCycleDebug &&
+    stepId === 'squat' &&
+    completionSatisfied &&
+    squatCycleDebug.minimumCycleDurationSatisfied === false
+  ) {
+    squatCycleDebug = {
+      ...squatCycleDebug,
+      finalPassTimingBlockedReason: 'minimum_cycle_duration_not_met',
+    };
+  }
+
   if (
     stats.sampledFrameCount === 0 ||
     (!completionSatisfied && stats.captureDurationMs < 2200 && guardrail.captureQuality !== 'invalid')
@@ -1417,6 +1467,8 @@ export function evaluateExerciseAutoProgress(
       passConfirmationFrameCount: passConfirmation.stableFrameCount,
       passConfirmationWindowCount: passConfirmation.windowFrameCount,
       ...(squatCycleDebug && { squatCycleDebug }),
+      finalPassEligible: false,
+      finalPassBlockedReason: 'completion_not_satisfied',
     };
   }
 
@@ -1441,11 +1493,19 @@ export function evaluateExerciseAutoProgress(
     effectivePassConfirmation &&
     squatIntegrityBlockForPass == null &&
     !hasAnyReason(reasons, hardBlockerReasons) &&
-    !overheadRepHoldBlocks;
+    !overheadRepHoldBlocks &&
+    (stepId !== 'squat' || squatMinimumCycleOkForFinalPass(evaluatorResult, squatCycleDebug));
 
   /* PR-CAM-17: final pass 체인 가시성 — 어느 단계에서 pass가 막히는지 즉시 확인 가능. */
   const finalPassBlockedReason: string | null = (() => {
     if (!completionSatisfied) return 'completion_not_satisfied';
+    if (
+      stepId === 'squat' &&
+      completionSatisfied &&
+      !squatMinimumCycleOkForFinalPass(evaluatorResult, squatCycleDebug)
+    ) {
+      return 'minimum_cycle_duration_not_met';
+    }
     if (guardrail.captureQuality === 'invalid') return 'capture_quality_invalid';
     if (confidence < passThresholdEffective)
       return `confidence_too_low:${confidence.toFixed(2)}<${passThresholdEffective.toFixed(2)}`;

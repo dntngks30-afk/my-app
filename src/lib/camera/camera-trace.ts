@@ -113,6 +113,8 @@ export interface AttemptSnapshot {
       reversalConfirmedAfterDescend?: boolean;
       recoveryConfirmedAfterReversal?: boolean;
       minimumCycleDurationSatisfied?: boolean;
+      /** PR-CAM-29A: final pass 타이밍만 차단( completion truth 와 분리 ) */
+      finalPassTimingBlockedReason?: string | null;
       standardPathBlockedReason?: string | null;
       baselineStandingDepth?: number;
       rawDepthPeak?: number;
@@ -860,6 +862,7 @@ function buildDiagnosisSummary(
       reversalConfirmedAfterDescend: sc.reversalConfirmedAfterDescend,
       recoveryConfirmedAfterReversal: sc.recoveryConfirmedAfterReversal,
       minimumCycleDurationSatisfied: sc.minimumCycleDurationSatisfied,
+      finalPassTimingBlockedReason: sc.finalPassTimingBlockedReason ?? null,
       standardPathBlockedReason: sc.standardPathBlockedReason,
       baselineStandingDepth: typeof hm?.baselineStandingDepth === 'number' ? hm.baselineStandingDepth : undefined,
       rawDepthPeak: typeof hm?.rawDepthPeak === 'number' ? hm.rawDepthPeak : undefined,
