@@ -169,8 +169,21 @@ export interface SquatCompletionState extends MotionCompletionResult {
   eventCycleSource?: 'rule' | 'rule_plus_hmm' | null;
   /** PR-04E3B: shallow event-cycle 헬퍼 결과(관측·승격 판단 입력) */
   squatEventCycle?: SquatEventCycleResult;
-  /** PR-CAM-18: phaseHint descent 없이 trajectory 폴백으로 하강 인정 시 true — pass reason *_event_cycle 구분 */
+  /**
+   * PR-CAM-18: phaseHint descent 없이 trajectory 폴백으로 하강 인정 시 true.
+   * PR-03: 통과 시 pass reason 은 공식 *_cycle 로 정리 — 본 플래그는 관측·승격 입력용으로 유지.
+   */
   eventBasedDescentPath?: boolean;
+  /** PR-03: low/ultra-low ROM 공식 completion path 후보(신호·밴드) */
+  officialShallowPathCandidate?: boolean;
+  /** PR-03: 공식 shallow path 로 baseline·무장·하강 승격까지 된 상태 */
+  officialShallowPathAdmitted?: boolean;
+  /** PR-03: 공식 shallow/ultra-low path 로 low_rom_cycle / ultra_low_rom_cycle 로 닫힘 */
+  officialShallowPathClosed?: boolean;
+  /** PR-03: 어떤 arming 계약으로 shallow path 에 들어왔는지 */
+  officialShallowPathReason?: string | null;
+  /** PR-03: 후보인데 아직 닫히지 않았을 때 병목(관측 전용) */
+  officialShallowPathBlockedReason?: string | null;
   /**
    * PR-CAM-ULTRA-LOW-ROM-EVENT-GATE-01: progression 역전 프레임 존재 — ultra-low event 승격 게이트 입력.
    * (JSON/트레이스 `reversalConfirmedAfterDescend` 와 동일 의미로 유지)
@@ -637,6 +650,11 @@ function getStandingRecoveryFinalizeBand(
   return 'insufficient_signal';
 }
 
+/** PR-03 rework: 공식 shallow 후보는 quality evidenceLabel 이 아닌 finalize ROM 밴드와 정렬 (0.22 + standard 라벨 포함). */
+function isOfficialShallowRomFinalizeBand(band: SquatEvidenceLabel): boolean {
+  return band === 'low_rom' || band === 'ultra_low_rom';
+}
+
 function getStandingRecoveryFinalizeGate(
   evidenceLabel: SquatEvidenceLabel,
   standingRecovery: {
@@ -754,6 +772,9 @@ function normalizeCompletionBlockedReasonForTerminalStage(args: {
       'recovery_hold_too_short',
       'low_rom_standing_finalize_not_satisfied',
       'ultra_low_rom_standing_finalize_not_satisfied',
+      /** PR-03 rework: 타이밍 차단을 잘못 recovery_hold 로 뭉개지 않게 유지 (임계값 불변). */
+      'descent_span_too_short',
+      'ascent_recovery_span_too_short',
     ]);
     if (cur != null && allowedStanding.has(cur)) return cur;
     return 'recovery_hold_too_short';
@@ -851,6 +872,11 @@ function evaluateSquatCompletionCore(
       completionAssistMode: 'none',
       promotionBaseRuleBlockedReason: null,
       reversalEvidenceProvenance: null,
+      officialShallowPathCandidate: false,
+      officialShallowPathAdmitted: false,
+      officialShallowPathClosed: false,
+      officialShallowPathReason: null,
+      officialShallowPathBlockedReason: null,
     };
   }
 
@@ -950,6 +976,23 @@ function evaluateSquatCompletionCore(
   const attemptAdmissionFloor = guardedUltraLowAttemptEligible
     ? GUARDED_ULTRA_LOW_ROM_FLOOR
     : LEGACY_ATTEMPT_FLOOR;
+
+  /**
+   * standing recovery finalize 밴드 — PR-SHALLOW-FINALIZE-BAND-01.
+   * PR-03 rework: `officialShallowPathCandidate` 는 이 밴드와 동일 축(피크·admission 만, tail 미사용).
+   * rel≈0.22 + quality `evidenceLabel === 'standard'` 도 여기선 low_rom → 공식 shallow 후보로 열림.
+   */
+  const standingRecoveryFinalizeBand = getStandingRecoveryFinalizeBand(
+    relativeDepthPeak,
+    attemptAdmissionSatisfied
+  );
+
+  /** ROM 밴드(quality 라벨) — pass reason·해석용; shallow 후보는 위 finalize 밴드 사용 */
+  const evidenceLabel = getSquatEvidenceLabel(relativeDepthPeak, attemptAdmissionSatisfied);
+  const officialShallowPathCandidate =
+    baselineDepths.length >= MIN_BASELINE_FRAMES &&
+    attemptAdmissionSatisfied &&
+    isOfficialShallowRomFinalizeBand(standingRecoveryFinalizeBand);
 
   const descentFrame = depthFrames.find((frame) => frame.phaseHint === 'descent');
   const bottomFrame = depthFrames.find((frame) => frame.phaseHint === 'bottom');
@@ -1085,12 +1128,6 @@ function evaluateSquatCompletionCore(
     baselineStandingDepth,
     relativeDepthPeak
   );
-  const evidenceLabel = getSquatEvidenceLabel(relativeDepthPeak, attemptAdmissionSatisfied);
-  /** PR-SHALLOW-SQUAT-FINALIZE-BAND-01: finalize gate는 evidenceLabel 대신 별도 band 사용 */
-  const standingRecoveryFinalizeBand = getStandingRecoveryFinalizeBand(
-    relativeDepthPeak,
-    attemptAdmissionSatisfied
-  );
   const standingRecoveryFinalize = getStandingRecoveryFinalizeGate(
     standingRecoveryFinalizeBand,
     standingRecovery,
@@ -1100,7 +1137,7 @@ function evaluateSquatCompletionCore(
     }
   );
   const qualifiesForRelaxedLowRomTiming =
-    (evidenceLabel === 'low_rom' || evidenceLabel === 'ultra_low_rom') &&
+    isOfficialShallowRomFinalizeBand(standingRecoveryFinalizeBand) &&
     standingRecoveryFinalize.finalizeSatisfied &&
     (recovery.returnContinuityFrames ?? 0) >= RELAXED_LOW_ROM_MIN_CONTINUITY_FRAMES &&
     (recovery.recoveryDropRatio ?? 0) >= RELAXED_LOW_ROM_MIN_DROP_RATIO;
@@ -1115,8 +1152,20 @@ function evaluateSquatCompletionCore(
     baselineDepths.length >= MIN_BASELINE_FRAMES &&
     startFrame != null &&
     startBeforeBottom;
+  /**
+   * PR-03: descent-first shallow/ultra-low 사이클은 `startBeforeBottom` 클래식 무장 없이도
+   * 하강·궤적 증거가 있으면 공식 completion admission 으로 무장한다 (not_armed 병목 제거).
+   * deep/standard 밴드(`standard` evidence)에는 적용하지 않는다.
+   */
+  const officialShallowDescentEvidenceForAdmission =
+    descentFrame != null || eventBasedDescentPath === true;
+  const pr03OfficialShallowArming =
+    officialShallowPathCandidate &&
+    officialShallowDescentEvidenceForAdmission &&
+    !naturalArmed;
   const armed =
     naturalArmed ||
+    pr03OfficialShallowArming ||
     Boolean(options?.hmmArmingAssistApplied === true && depthFrames.length >= MIN_BASELINE_FRAMES);
   /** PR-CAM-18: phaseHint 'descent' 미탐지 시 trajectory 폴백 허용 */
   const descendConfirmed = (descentFrame != null || eventBasedDescentPath) && armed;
@@ -1310,32 +1359,73 @@ function evaluateSquatCompletionCore(
   /**
    * PR-CAM-21: completion owner는 evidenceLabel이 아니라 "실제 통과 경로"에서 고른다.
    *
-   * PR-CAM-CORE-PASS-REASON-ALIGN-01: pass reason taxonomy 는 `deriveSquatCompletionPassReason` 에 위임하고,
-   * ordinary shallow(phase descent 살아 있음)는 *_cycle, trajectory 이벤트 폴백만 *_event_cycle.
+   * PR-CAM-CORE-PASS-REASON-ALIGN-01: `standardPathWon`(깊이·비이벤트 경로)이면 `standard_cycle`.
+   * PR-03: `low_rom` / `ultra_low_rom` 증거는 공식 `*_cycle` (event rescue 문자열과 분리).
+   *
+   * PR-CAM-22 / PR-03: 증거 라벨은 `standard`(≥0.10)인데 `relativeDepthPeak < STANDARD_OWNER_FLOOR`(0.40)이면
+   * 오너 관점 shallow — `low_rom_cycle`로 닫는다. 경계 `relativeDepthPeak <= STANDARD_LABEL_FLOOR` 는
+   * 라벨 플로어 정의상 여전히 `derive` → `standard_cycle` (CAM-20 H1).
    */
   const standardPathWon =
     completionBlockedReason == null &&
     eventBasedDescentPath === false &&
     relativeDepthPeak >= STANDARD_OWNER_FLOOR;
 
-  /**
-   * PR-CAM-CORE: `standard_cycle` / `not_confirmed` 는 위에서 분기.
-   * evidenceLabel `standard` 인데 owner 미달이면 ROM 밴드는 low 와 동일하게 `deriveSquatCompletionPassReason('low_rom', …)` 에 맡긴다.
-   */
-  const passReasonEvidenceLabel: SquatEvidenceLabel =
-    evidenceLabel === 'standard' ? 'low_rom' : evidenceLabel;
+  const standardEvidenceOwnerShallowBand =
+    evidenceLabel === 'standard' &&
+    relativeDepthPeak > STANDARD_LABEL_FLOOR + 1e-9 &&
+    relativeDepthPeak < STANDARD_OWNER_FLOOR;
+
   const completionPassReason: SquatCompletionPassReason =
     completionBlockedReason != null
       ? 'not_confirmed'
       : standardPathWon
         ? 'standard_cycle'
-        : deriveSquatCompletionPassReason({
-            completionSatisfied: true,
-            evidenceLabel: passReasonEvidenceLabel,
-            eventBasedDescentPath,
-          });
+        : evidenceLabel === 'low_rom'
+          ? 'low_rom_cycle'
+          : evidenceLabel === 'ultra_low_rom'
+            ? 'ultra_low_rom_cycle'
+            : standardEvidenceOwnerShallowBand
+              ? 'low_rom_cycle'
+              : deriveSquatCompletionPassReason({
+                  completionSatisfied: true,
+                  evidenceLabel,
+                  eventBasedDescentPath,
+                });
 
   const completionSatisfied = completionPassReason !== 'not_confirmed';
+
+  const officialShallowPathAdmitted =
+    officialShallowPathCandidate && armed && descendConfirmed && attemptStarted;
+  const officialShallowPathClosed =
+    completionSatisfied &&
+    officialShallowPathCandidate &&
+    (completionPassReason === 'low_rom_cycle' || completionPassReason === 'ultra_low_rom_cycle');
+  const officialShallowPathReason: string | null =
+    !officialShallowPathCandidate
+      ? null
+      : pr03OfficialShallowArming
+        ? 'pr03_official_shallow_contract'
+        : naturalArmed
+          ? 'classic_start_before_bottom'
+          : options?.hmmArmingAssistApplied === true
+            ? 'hmm_arming_assist'
+            : null;
+
+  let officialShallowPathBlockedReason: string | null = null;
+  if (officialShallowPathCandidate && !officialShallowPathClosed) {
+    if (!armed) {
+      officialShallowPathBlockedReason = officialShallowDescentEvidenceForAdmission
+        ? 'not_armed'
+        : 'official_shallow_pending_descent_evidence';
+    } else if (!descendConfirmed) {
+      officialShallowPathBlockedReason = 'no_descend';
+    } else if (!attemptStarted) {
+      officialShallowPathBlockedReason = 'no_downward_commitment';
+    } else if (completionBlockedReason != null) {
+      officialShallowPathBlockedReason = completionBlockedReason;
+    }
+  }
 
   let reversalConfirmedBy: 'rule' | 'rule_plus_hmm' | 'trajectory' | null =
     hmmReversalAssistDecision.assistApplied
@@ -1471,6 +1561,11 @@ function evaluateSquatCompletionCore(
     completionAssistMode: pr02AssistMode,
     promotionBaseRuleBlockedReason: null,
     reversalEvidenceProvenance: pr02ReversalProv,
+    officialShallowPathCandidate,
+    officialShallowPathAdmitted,
+    officialShallowPathClosed,
+    officialShallowPathReason,
+    officialShallowPathBlockedReason,
   };
 }
 
@@ -1605,8 +1700,9 @@ export function evaluateSquatCompletionState(
     return state;
   }
 
+  /** PR-03: 승격도 공식 *_cycle 로 통일 — residue event_cycle 문자열은 미통과·디버그 경로에만 유지 */
   const promotedPassReason =
-    squatEventCycle.band === 'low_rom' ? 'low_rom_event_cycle' : 'ultra_low_rom_event_cycle';
+    squatEventCycle.band === 'low_rom' ? 'low_rom_cycle' : 'ultra_low_rom_cycle';
   const promotedSource: 'rule' | 'rule_plus_hmm' =
     squatEventCycle.source === 'rule_plus_hmm' ? 'rule_plus_hmm' : 'rule';
 
@@ -1618,6 +1714,10 @@ export function evaluateSquatCompletionState(
     eventCyclePromoted: true,
   });
   const promotedAssistMode = deriveSquatCompletionAssistMode(promotedAssistSources);
+
+  const promotedOfficialShallowClosed =
+    state.officialShallowPathCandidate === true &&
+    (promotedPassReason === 'low_rom_cycle' || promotedPassReason === 'ultra_low_rom_cycle');
 
   return {
     ...state,
@@ -1639,5 +1739,7 @@ export function evaluateSquatCompletionState(
     completionAssistSources: promotedAssistSources,
     completionAssistMode: promotedAssistMode,
     promotionBaseRuleBlockedReason: ruleBlock,
+    officialShallowPathClosed: promotedOfficialShallowClosed,
+    officialShallowPathBlockedReason: null,
   };
 }

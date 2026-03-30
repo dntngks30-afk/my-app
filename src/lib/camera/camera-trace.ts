@@ -210,6 +210,16 @@ export interface AttemptSnapshot {
       trajectoryReversalRescueApplied?: boolean;
       /** squatCompletionState.reversalTailBackfillApplied (squatCycleDebug 미러 없음) */
       reversalTailBackfillApplied?: boolean;
+      /** PR-03: 공식 shallow / ultra-low completion path 관측 */
+      officialShallowPathCandidate?: boolean;
+      officialShallowPathAdmitted?: boolean;
+      officialShallowPathClosed?: boolean;
+      officialShallowPathReason?: string | null;
+      officialShallowPathBlockedReason?: string | null;
+      /** PR-03: event 승격이 아닌 공식 cycle 로 닫힘 여부( pass reason 기준 ) */
+      closedAsOfficialRomCycle?: boolean;
+      /** PR-03: residue event_cycle 라벨로 닫힘(현재는 승격도 cycle 로 통일되어 주로 false) */
+      closedAsEventRescuePassReason?: boolean;
       /** PR-CAM-OBS-NORMALIZE-01: 표면 혼선 방지용 해석 라벨(값·산식 변경 아님) */
       displayDepthTruth?: 'evaluator_peak_metric';
       ownerDepthTruth?: 'completion_relative_depth';
@@ -372,6 +382,15 @@ export interface SquatAttemptObservation {
   reversalEvidenceProvenance?: string | null;
   trajectoryReversalRescueApplied?: boolean;
   reversalTailBackfillAppliedObs?: boolean;
+  /** PR-03 */
+  officialShallowPathCandidate?: boolean;
+  officialShallowPathAdmitted?: boolean;
+  officialShallowPathClosed?: boolean;
+  officialShallowPathReason?: string | null;
+  officialShallowPathBlockedReason?: string | null;
+  /** PR-03 rework: completionState.officialShallowPathClosed 와 동기 */
+  closedAsOfficialRomCycle?: boolean;
+  closedAsEventRescuePassReason?: boolean;
   debugVersion: string;
 }
 
@@ -651,6 +670,15 @@ export function buildSquatAttemptObservation(
     reversalEvidenceProvenance: cs?.reversalEvidenceProvenance ?? null,
     trajectoryReversalRescueApplied: cs?.trajectoryReversalRescueApplied === true,
     reversalTailBackfillAppliedObs: cs?.reversalTailBackfillApplied === true,
+    officialShallowPathCandidate: cs?.officialShallowPathCandidate === true,
+    officialShallowPathAdmitted: cs?.officialShallowPathAdmitted === true,
+    officialShallowPathClosed: cs?.officialShallowPathClosed === true,
+    officialShallowPathReason: cs?.officialShallowPathReason ?? null,
+    officialShallowPathBlockedReason: cs?.officialShallowPathBlockedReason ?? null,
+    closedAsOfficialRomCycle: cs?.officialShallowPathClosed === true,
+    closedAsEventRescuePassReason:
+      cs?.completionPassReason === 'low_rom_event_cycle' ||
+      cs?.completionPassReason === 'ultra_low_rom_event_cycle',
     debugVersion: `${OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
   };
 }
@@ -996,6 +1024,15 @@ function buildDiagnosisSummary(
       reversalEvidenceProvenance: cs?.reversalEvidenceProvenance ?? null,
       trajectoryReversalRescueApplied: cs?.trajectoryReversalRescueApplied === true,
       reversalTailBackfillApplied: cs?.reversalTailBackfillApplied === true,
+      officialShallowPathCandidate: cs?.officialShallowPathCandidate === true,
+      officialShallowPathAdmitted: cs?.officialShallowPathAdmitted === true,
+      officialShallowPathClosed: cs?.officialShallowPathClosed === true,
+      officialShallowPathReason: cs?.officialShallowPathReason ?? null,
+      officialShallowPathBlockedReason: cs?.officialShallowPathBlockedReason ?? null,
+      closedAsOfficialRomCycle: cs?.officialShallowPathClosed === true,
+      closedAsEventRescuePassReason:
+        cs?.completionPassReason === 'low_rom_event_cycle' ||
+        cs?.completionPassReason === 'ultra_low_rom_event_cycle',
       displayDepthTruth: 'evaluator_peak_metric',
       ownerDepthTruth: 'completion_relative_depth',
       cycleDecisionTruth: 'completion_state',
