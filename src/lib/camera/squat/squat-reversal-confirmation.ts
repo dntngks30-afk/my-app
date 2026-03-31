@@ -283,15 +283,29 @@ function guardedUltraShallowReversalAssist(
     required: req,
   });
   if (!mono.ok) return null;
-  if (ev.ascentStreakMax < MIN_REVERSAL_FRAMES) return null;
   if (ev.postPeakFrameCount < MIN_DESCENT_FRAMES) return null;
+  /**
+   * PR-SQUAT-ULTRA-SHALLOW-CLOSURE-01: live ultra-low에서 phaseHint 가 ascent 를 거의 못 붙이는데
+   * post-peak monotonic + reversal-stream drop 은 이미 충분한 경우 — ascentStreak 만으로 막지 않는다.
+   * 여전히 mono + 최소 post-peak 길이 + dropReversal 바닥으로 1-frame·bottom-stall 과 분리.
+   */
+  const ascentPhaseOk = ev.ascentStreakMax >= MIN_REVERSAL_FRAMES;
+  const monotonicStreamIntegrityOk =
+    mono.frames >= 4 &&
+    ev.dropReversal >= req * 0.88 &&
+    ev.postPeakFrameCount >= 4;
+  if (!ascentPhaseOk && !monotonicStreamIntegrityOk) return null;
   return {
     reversalConfirmed: true,
     reversalIndex: peakValidIndex,
     reversalDepthDrop: mono.drop,
     reversalFrameCount: mono.frames,
     reversalSource: 'rule',
-    notes: ['guarded_ultra_shallow_reversal_assist'],
+    notes: [
+      ascentPhaseOk
+        ? 'guarded_ultra_shallow_reversal_assist'
+        : 'guarded_ultra_shallow_reversal_assist_monotonic_stream_integrity',
+    ],
   };
 }
 
