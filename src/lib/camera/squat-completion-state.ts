@@ -12,6 +12,7 @@ import { getHmmAssistDecision, hmmMeetsStrongAssistEvidence } from '@/lib/camera
 import { getSquatHmmReversalAssistDecision } from '@/lib/camera/squat/squat-reversal-assist';
 import {
   detectSquatReversalConfirmation,
+  evaluateOfficialShallowCompletionStreamBridge,
   readSquatCompletionDepthForReversal,
 } from '@/lib/camera/squat/squat-reversal-confirmation';
 import {
@@ -607,6 +608,87 @@ export type SquatDepthFrameLite = {
 };
 
 /**
+ * PR-SQUAT-COMPLETION-REARCH-01 — Subcontract C: shallow closure 번들(스트림·primary 폴백).
+ * admission/reversal 판정 없음 — orchestrator 가 A/B 결과만 넘긴다.
+ */
+export function computeOfficialShallowClosure(params: {
+  officialShallowPathCandidate: boolean;
+  attemptStarted: boolean;
+  hasValidCommittedPeakAnchor: boolean;
+  committedOrPostCommitPeakFrame: SquatDepthFrameLite | undefined;
+  standingRecoveryFinalizeBand: SquatEvidenceLabel;
+  standingRecoveryFinalizeSatisfied: boolean;
+  recovery: Pick<SquatCompletionState, 'recoveryReturnContinuityFrames' | 'recoveryDropRatio'>;
+  depthFrames: SquatDepthFrameLite[];
+  relativeDepthPeak: number;
+  qualifiesForRelaxedLowRomTiming: boolean;
+  squatReversalDropAchieved: number;
+  squatReversalDropRequired: number;
+}): {
+  shallowClosureProofBundleFromStream: boolean;
+  officialShallowProofCompletionReturnDrop: number | null;
+  officialShallowPrimaryDropClosureFallback: boolean;
+} {
+  let officialShallowProofCompletionReturnDrop: number | null = null;
+  let shallowClosureProofBundleFromStream = false;
+  if (
+    params.officialShallowPathCandidate &&
+    params.attemptStarted &&
+    params.hasValidCommittedPeakAnchor &&
+    params.committedOrPostCommitPeakFrame != null &&
+    isOfficialShallowRomFinalizeBand(params.standingRecoveryFinalizeBand) &&
+    params.standingRecoveryFinalizeSatisfied &&
+    recoveryMeetsLowRomStyleFinalizeProof(params.recovery)
+  ) {
+    const anchor = params.committedOrPostCommitPeakFrame;
+    const postPeak = params.depthFrames.filter((f) => f.index > anchor.index);
+    const minPostPeakFramesForShallowClosure =
+      params.officialShallowPathCandidate &&
+      params.relativeDepthPeak < STANDARD_OWNER_FLOOR &&
+      params.qualifiesForRelaxedLowRomTiming &&
+      recoveryMeetsLowRomStyleFinalizeProof(params.recovery)
+        ? 2
+        : 3;
+    if (postPeak.length >= minPostPeakFramesForShallowClosure) {
+      const minPost = Math.min(...postPeak.map((f) => f.depth));
+      const drop = anchor.depth - minPost;
+      officialShallowProofCompletionReturnDrop = drop;
+      const shallowStreamReq = Math.max(
+        REVERSAL_DROP_MIN_ABS,
+        params.squatReversalDropRequired * 0.88
+      );
+      if (drop >= shallowStreamReq) {
+        shallowClosureProofBundleFromStream = true;
+      }
+    }
+  }
+  let officialShallowPrimaryDropClosureFallback = false;
+  if (
+    !shallowClosureProofBundleFromStream &&
+    params.officialShallowPathCandidate &&
+    params.relativeDepthPeak < STANDARD_OWNER_FLOOR &&
+    params.attemptStarted &&
+    params.hasValidCommittedPeakAnchor &&
+    params.committedOrPostCommitPeakFrame != null &&
+    isOfficialShallowRomFinalizeBand(params.standingRecoveryFinalizeBand) &&
+    params.standingRecoveryFinalizeSatisfied &&
+    recoveryMeetsLowRomStyleFinalizeProof(params.recovery) &&
+    params.qualifiesForRelaxedLowRomTiming &&
+    params.squatReversalDropAchieved >=
+      Math.max(REVERSAL_DROP_MIN_ABS, params.squatReversalDropRequired * 0.88)
+  ) {
+    shallowClosureProofBundleFromStream = true;
+    officialShallowPrimaryDropClosureFallback = true;
+    officialShallowProofCompletionReturnDrop = params.squatReversalDropAchieved;
+  }
+  return {
+    shallowClosureProofBundleFromStream,
+    officialShallowProofCompletionReturnDrop,
+    officialShallowPrimaryDropClosureFallback,
+  };
+}
+
+/**
  * PR-CAM-PEAK-ANCHOR-INTEGRITY-01: 전역 depth 최대(peakFrame)가 commitment 이전이면 reversal 앵커로 쓰면 안 됨.
  * commitment 이후(포함) 구간에서만 최대 depth 프레임을 반환한다.
  */
@@ -791,6 +873,58 @@ function getSquatEvidenceLabel(
 }
 
 /**
+ * PR-SQUAT-COMPLETION-REARCH-01 — Subcontract C: `completionPassReason` 단일 결정점.
+ * (1) blocked → not_confirmed
+ * (2) standard owner 대역 + 비이벤트 descent → standard_cycle
+ * (3) official shallow admission + shallow owner 대역 + closure 증거(번들/브리지/역전) → *_cycle
+ * (4) evidence/owner-shallow 밴드·derive 잔여
+ */
+export function resolveSquatCompletionPath(params: {
+  completionBlockedReason: string | null;
+  relativeDepthPeak: number;
+  evidenceLabel: SquatEvidenceLabel;
+  eventBasedDescentPath: boolean;
+  officialShallowPathCandidate: boolean;
+  officialShallowPathAdmitted: boolean;
+  /** 번들·stream bridge·strict reversal·progression 앵커 등 shallow ROM 통과 증거 */
+  shallowRomClosureProofSignals: boolean;
+}): SquatCompletionPassReason {
+  if (params.completionBlockedReason != null) return 'not_confirmed';
+
+  const standardPathWon =
+    params.eventBasedDescentPath === false &&
+    params.relativeDepthPeak >= STANDARD_OWNER_FLOOR;
+
+  if (standardPathWon) return 'standard_cycle';
+
+  const shallowOwnerZone = params.relativeDepthPeak < STANDARD_OWNER_FLOOR;
+  const explicitShallowRomClosure =
+    params.officialShallowPathCandidate === true &&
+    params.officialShallowPathAdmitted === true &&
+    shallowOwnerZone &&
+    params.shallowRomClosureProofSignals === true;
+
+  if (explicitShallowRomClosure) {
+    if (params.evidenceLabel === 'ultra_low_rom') return 'ultra_low_rom_cycle';
+    return 'low_rom_cycle';
+  }
+
+  const standardEvidenceOwnerShallowBand =
+    params.evidenceLabel === 'standard' &&
+    params.relativeDepthPeak > STANDARD_LABEL_FLOOR + 1e-9 &&
+    params.relativeDepthPeak < STANDARD_OWNER_FLOOR;
+
+  if (params.evidenceLabel === 'low_rom') return 'low_rom_cycle';
+  if (params.evidenceLabel === 'ultra_low_rom') return 'ultra_low_rom_cycle';
+  if (standardEvidenceOwnerShallowBand) return 'low_rom_cycle';
+  return deriveSquatCompletionPassReason({
+    completionSatisfied: true,
+    evidenceLabel: params.evidenceLabel,
+    eventBasedDescentPath: params.eventBasedDescentPath,
+  });
+}
+
+/**
  * PR-SHALLOW-SQUAT-FINALIZE-BAND-01: standing recovery finalize 게이트 전용 밴드.
  *
  * evidenceLabel(STANDARD_LABEL_FLOOR=0.10 기준)과 달리 owner 기준선(STANDARD_OWNER_FLOOR=0.40)으로
@@ -812,6 +946,115 @@ function getStandingRecoveryFinalizeBand(
 /** PR-03 rework: 공식 shallow 후보는 quality evidenceLabel 이 아닌 finalize ROM 밴드와 정렬 (0.22 + standard 라벨 포함). */
 function isOfficialShallowRomFinalizeBand(band: SquatEvidenceLabel): boolean {
   return band === 'low_rom' || band === 'ultra_low_rom';
+}
+
+// =============================================================================
+// PR-SQUAT-COMPLETION-REARCH-01 — Subcontract A: Attempt Admission Contract
+// =============================================================================
+
+/** 공통 rep 시도 게이트(무장·하강·깊이·커밋) — reversal/closure 와 분리 */
+export function computeSquatAttemptAdmission(params: {
+  armed: boolean;
+  descendConfirmed: boolean;
+  attemptAdmissionSatisfied: boolean;
+  downwardCommitmentReached: boolean;
+  committedFrame: SquatDepthFrameLite | undefined;
+}): {
+  attemptStarted: boolean;
+  admissionBlockedReason: string | null;
+} {
+  const attemptStarted = params.descendConfirmed && params.downwardCommitmentReached;
+  if (!params.armed) return { attemptStarted, admissionBlockedReason: 'not_armed' };
+  if (!params.descendConfirmed) return { attemptStarted, admissionBlockedReason: 'no_descend' };
+  if (!params.attemptAdmissionSatisfied) {
+    return { attemptStarted, admissionBlockedReason: 'insufficient_relative_depth' };
+  }
+  if (!params.downwardCommitmentReached || params.committedFrame == null) {
+    return { attemptStarted, admissionBlockedReason: 'no_commitment' };
+  }
+  return { attemptStarted, admissionBlockedReason: null };
+}
+
+export function deriveOfficialShallowCandidate(params: {
+  baselineFrameCount: number;
+  attemptAdmissionSatisfied: boolean;
+  standingRecoveryFinalizeBand: SquatEvidenceLabel;
+}): boolean {
+  return (
+    params.baselineFrameCount >= MIN_BASELINE_FRAMES &&
+    params.attemptAdmissionSatisfied &&
+    isOfficialShallowRomFinalizeBand(params.standingRecoveryFinalizeBand)
+  );
+}
+
+export function deriveOfficialShallowAdmission(params: {
+  officialShallowPathCandidate: boolean;
+  armed: boolean;
+  descendConfirmed: boolean;
+  attemptStarted: boolean;
+}): boolean {
+  return (
+    params.officialShallowPathCandidate &&
+    params.armed &&
+    params.descendConfirmed &&
+    params.attemptStarted
+  );
+}
+
+/** Subcontract A: shallow admission 전용 trace shape (closure/reversal 미포함) */
+export type SquatOfficialShallowAdmissionContract = {
+  candidate: boolean;
+  admitted: boolean;
+  reason: string | null;
+  /** admission 게이트에서 막힌 경우만 — reversal/finalize 병목은 C */
+  blockedReason: string | null;
+};
+
+export function resolveOfficialShallowAdmissionContract(p: {
+  officialShallowPathCandidate: boolean;
+  armed: boolean;
+  descendConfirmed: boolean;
+  attemptStarted: boolean;
+  officialShallowDescentEvidenceForAdmission: boolean;
+  naturalArmed: boolean;
+  hmmArmingAssistApplied: boolean;
+  pr03OfficialShallowArming: boolean;
+}): SquatOfficialShallowAdmissionContract {
+  const admitted = deriveOfficialShallowAdmission({
+    officialShallowPathCandidate: p.officialShallowPathCandidate,
+    armed: p.armed,
+    descendConfirmed: p.descendConfirmed,
+    attemptStarted: p.attemptStarted,
+  });
+  const reason = !p.officialShallowPathCandidate
+    ? null
+    : p.pr03OfficialShallowArming
+      ? 'pr03_official_shallow_contract'
+      : p.naturalArmed
+        ? 'classic_start_before_bottom'
+        : p.hmmArmingAssistApplied
+          ? 'hmm_arming_assist'
+          : null;
+
+  let blockedReason: string | null = null;
+  if (p.officialShallowPathCandidate && !admitted) {
+    if (!p.armed) {
+      blockedReason = p.officialShallowDescentEvidenceForAdmission
+        ? 'not_armed'
+        : 'official_shallow_pending_descent_evidence';
+    } else if (!p.descendConfirmed) {
+      blockedReason = 'no_descend';
+    } else if (!p.attemptStarted) {
+      blockedReason = 'no_downward_commitment';
+    }
+  }
+
+  return {
+    candidate: p.officialShallowPathCandidate,
+    admitted,
+    reason,
+    blockedReason,
+  };
 }
 
 function getStandingRecoveryFinalizeGate(
@@ -1186,10 +1429,11 @@ function evaluateSquatCompletionCore(
 
   /** ROM 밴드(quality 라벨) — pass reason·해석용; shallow 후보는 위 finalize 밴드 사용 */
   const evidenceLabel = getSquatEvidenceLabel(relativeDepthPeak, attemptAdmissionSatisfied);
-  const officialShallowPathCandidate =
-    baselineDepths.length >= MIN_BASELINE_FRAMES &&
-    attemptAdmissionSatisfied &&
-    isOfficialShallowRomFinalizeBand(standingRecoveryFinalizeBand);
+  const officialShallowPathCandidate = deriveOfficialShallowCandidate({
+    baselineFrameCount: baselineDepths.length,
+    attemptAdmissionSatisfied,
+    standingRecoveryFinalizeBand,
+  });
 
   const descentFrame = depthFrames.find((frame) => frame.phaseHint === 'descent');
   const bottomFrame = depthFrames.find((frame) => frame.phaseHint === 'bottom');
@@ -1366,73 +1610,35 @@ function evaluateSquatCompletionCore(
     Boolean(options?.hmmArmingAssistApplied === true && depthFrames.length >= MIN_BASELINE_FRAMES);
   /** PR-CAM-18: phaseHint 'descent' 미탐지 시 trajectory 폴백 허용 */
   const descendConfirmed = (descentFrame != null || eventBasedDescentPath) && armed;
-  const attemptStarted = descendConfirmed && downwardCommitmentReached;
+  const admissionContract = computeSquatAttemptAdmission({
+    armed,
+    descendConfirmed,
+    attemptAdmissionSatisfied,
+    downwardCommitmentReached,
+    committedFrame,
+  });
+  const attemptStarted = admissionContract.attemptStarted;
   const bottomDetected = bottomFrame != null;
   const recoveryDetected = standingRecovery.standingRecoveredAtMs != null;
 
-  /**
-   * PR-03 rework: 공식 shallow closure 번들 — completion depth 스트림에서 앵커 이후 최소 3프레임·return drop.
-   * primary `detectSquatReversalConfirmation` 미달이어도 trajectory rescue 와 동일한 finalize·복귀 증거를 쓴다.
-   *
-   * PR-03 shallow closure final: 공식 shallow + 이완 low-ROM 증거가 이미 잠겼을 때 post-peak 를 2프레임까지 허용.
-   * (버퍼 끝이 짧아 3프레임을 못 채우면 stream bridge 가 영원히 안 열려 no_reversal 에 갇힘)
-   */
-  let officialShallowProofCompletionReturnDrop: number | null = null;
-  /** completion-stream post-peak 번들 — 반환 객체 키와 이름 충돌 방지 */
-  let shallowClosureProofBundleFromStream = false;
-  if (
-    officialShallowPathCandidate &&
-    attemptStarted &&
-    hasValidCommittedPeakAnchor &&
-    committedOrPostCommitPeakFrame != null &&
-    isOfficialShallowRomFinalizeBand(standingRecoveryFinalizeBand) &&
-    standingRecoveryFinalize.finalizeSatisfied &&
-    recoveryMeetsLowRomStyleFinalizeProof(recovery)
-  ) {
-    const anchor = committedOrPostCommitPeakFrame;
-    const postPeak = depthFrames.filter((f) => f.index > anchor.index);
-    const minPostPeakFramesForShallowClosure =
-      officialShallowPathCandidate &&
-      relativeDepthPeak < STANDARD_OWNER_FLOOR &&
-      qualifiesForRelaxedLowRomTiming &&
-      recoveryMeetsLowRomStyleFinalizeProof(recovery)
-        ? 2
-        : 3;
-    if (postPeak.length >= minPostPeakFramesForShallowClosure) {
-      const minPost = Math.min(...postPeak.map((f) => f.depth));
-      const drop = anchor.depth - minPost;
-      officialShallowProofCompletionReturnDrop = drop;
-      const shallowStreamReq = Math.max(
-        REVERSAL_DROP_MIN_ABS,
-        squatReversalDropRequired * 0.88
-      );
-      if (drop >= shallowStreamReq) {
-        shallowClosureProofBundleFromStream = true;
-      }
-    }
-  }
-  /**
-   * PR-03 shallow closure final: completion-stream 꼬리가 짧아도 primary 기하 되돌림이 이미 충분하면
-   * 동일 finalize·복귀 번들 하에서 shallow closure 번들로 인정 (event/HMM 확장 아님).
-   */
-  let officialShallowPrimaryDropClosureFallback = false;
-  if (
-    !shallowClosureProofBundleFromStream &&
-    officialShallowPathCandidate &&
-    relativeDepthPeak < STANDARD_OWNER_FLOOR &&
-    attemptStarted &&
-    hasValidCommittedPeakAnchor &&
-    committedOrPostCommitPeakFrame != null &&
-    isOfficialShallowRomFinalizeBand(standingRecoveryFinalizeBand) &&
-    standingRecoveryFinalize.finalizeSatisfied &&
-    recoveryMeetsLowRomStyleFinalizeProof(recovery) &&
-    qualifiesForRelaxedLowRomTiming &&
-    squatReversalDropAchieved >= Math.max(REVERSAL_DROP_MIN_ABS, squatReversalDropRequired * 0.88)
-  ) {
-    shallowClosureProofBundleFromStream = true;
-    officialShallowPrimaryDropClosureFallback = true;
-    officialShallowProofCompletionReturnDrop = squatReversalDropAchieved;
-  }
+  /** PR-SQUAT-COMPLETION-REARCH-01 — Subcontract C: shallow closure 번들(로직은 `computeOfficialShallowClosure`) */
+  const shallowClosureOut = computeOfficialShallowClosure({
+    officialShallowPathCandidate,
+    attemptStarted,
+    hasValidCommittedPeakAnchor,
+    committedOrPostCommitPeakFrame,
+    standingRecoveryFinalizeBand,
+    standingRecoveryFinalizeSatisfied: standingRecoveryFinalize.finalizeSatisfied,
+    recovery,
+    depthFrames,
+    relativeDepthPeak,
+    qualifiesForRelaxedLowRomTiming,
+    squatReversalDropAchieved,
+    squatReversalDropRequired,
+  });
+  let shallowClosureProofBundleFromStream = shallowClosureOut.shallowClosureProofBundleFromStream;
+  let officialShallowProofCompletionReturnDrop = shallowClosureOut.officialShallowProofCompletionReturnDrop;
+  const officialShallowPrimaryDropClosureFallback = shallowClosureOut.officialShallowPrimaryDropClosureFallback;
 
   /** commitment 이후 역전·상승·복귀·타이밍 — reversalFrame/ascend 기준 */
   function computeBlockedAfterCommitment(
@@ -1498,43 +1704,28 @@ function evaluateSquatCompletionCore(
     ruleCompletionBlockedReason = computeBlockedAfterCommitment(reversalFrame, ascendConfirmed);
   }
 
-  let officialShallowStreamBridgeApplied = false;
-  let officialShallowAscentEquivalentSatisfied = false;
-  let officialShallowStreamCompletionReturnDrop: number | null = null;
-  if (
-    reversalFrame == null &&
-    hmmReversalAssistDecision.assistApplied !== true &&
-    shallowClosureProofBundleFromStream &&
-    officialShallowPathCandidate &&
-    armed &&
-    descendConfirmed &&
-    attemptStarted &&
-    hasValidCommittedPeakAnchor &&
-    committedOrPostCommitPeakFrame != null
-  ) {
-    officialShallowStreamBridgeApplied = true;
-    const rf = committedOrPostCommitPeakFrame;
-    reversalFrame = rf;
-    officialShallowStreamCompletionReturnDrop = officialShallowProofCompletionReturnDrop;
-    const dropForAscend = officialShallowStreamCompletionReturnDrop ?? 0;
-    /** 앵커 depth 기준 상승 — 전역 peakFrame 이 primary·completion 피크 인덱스 불일치일 때 no_ascend 오판 방지 */
-    let bridgeAscend =
-      ascentFrame != null ||
-      depthFrames.some(
-        (frame) =>
-          frame.index > rf.index && frame.depth < rf.depth - squatReversalDropRequired
-      );
-    if (!bridgeAscend && dropForAscend >= squatReversalDropRequired * 0.88) {
-      bridgeAscend = true;
-      officialShallowAscentEquivalentSatisfied = true;
-    } else if (
-      bridgeAscend &&
-      ascentFrame == null &&
-      dropForAscend >= squatReversalDropRequired * 0.88
-    ) {
-      officialShallowAscentEquivalentSatisfied = true;
-    }
-    ascendConfirmed = bridgeAscend;
+  /** PR-SQUAT-COMPLETION-REARCH-01 — B2: `squat-reversal-confirmation` official shallow stream bridge */
+  const streamBridgeOut = evaluateOfficialShallowCompletionStreamBridge({
+    reversalFrameFromStrict: reversalFrame,
+    hmmReversalAssistApplied: hmmReversalAssistDecision.assistApplied === true,
+    shallowClosureProofBundleFromStream,
+    officialShallowPathCandidate,
+    armed,
+    descendConfirmed,
+    attemptStarted,
+    hasValidCommittedPeakAnchor,
+    committedOrPostCommitPeakFrame,
+    depthFrames,
+    ascentFrame,
+    squatReversalDropRequired,
+    officialShallowProofCompletionReturnDrop,
+  });
+  reversalFrame = streamBridgeOut.reversalFrame;
+  const officialShallowStreamBridgeApplied = streamBridgeOut.officialShallowStreamBridgeApplied;
+  let officialShallowAscentEquivalentSatisfied = streamBridgeOut.officialShallowAscentEquivalentSatisfied;
+  const officialShallowStreamCompletionReturnDrop = streamBridgeOut.officialShallowStreamCompletionReturnDrop;
+  if (streamBridgeOut.ascendConfirmedOverride != null) {
+    ascendConfirmed = streamBridgeOut.ascendConfirmedOverride;
     ruleCompletionBlockedReason = computeBlockedAfterCommitment(reversalFrame, ascendConfirmed);
   }
 
@@ -1676,60 +1867,44 @@ function evaluateSquatCompletionCore(
       : undefined;
 
   /**
-   * PR-CAM-21: completion owner는 evidenceLabel이 아니라 "실제 통과 경로"에서 고른다.
-   *
-   * PR-CAM-CORE-PASS-REASON-ALIGN-01: `standardPathWon`(깊이·비이벤트 경로)이면 `standard_cycle`.
-   * PR-03: `low_rom` / `ultra_low_rom` 증거는 공식 `*_cycle` (event rescue 문자열과 분리).
-   *
-   * PR-CAM-22 / PR-03: 증거 라벨은 `standard`(≥0.10)인데 `relativeDepthPeak < STANDARD_OWNER_FLOOR`(0.40)이면
-   * 오너 관점 shallow — `low_rom_cycle`로 닫는다. 경계 `relativeDepthPeak <= STANDARD_LABEL_FLOOR` 는
-   * 라벨 플로어 정의상 여전히 `derive` → `standard_cycle` (CAM-20 H1).
+   * Subcontract C: shallow ROM 이 통과 증거를 갖추면 standard derive 보다 먼저 low/ultra_cycle 로 닫는다.
+   * (standard owner 대역은 위에서 이미 분기됨)
    */
-  const standardPathWon =
-    completionBlockedReason == null &&
-    eventBasedDescentPath === false &&
-    relativeDepthPeak >= STANDARD_OWNER_FLOOR;
+  const shallowRomClosureProofSignals =
+    shallowClosureProofBundleFromStream ||
+    officialShallowStreamBridgeApplied ||
+    revConf.reversalConfirmed ||
+    reversalConfirmedAfterDescend;
 
-  const standardEvidenceOwnerShallowBand =
-    evidenceLabel === 'standard' &&
-    relativeDepthPeak > STANDARD_LABEL_FLOOR + 1e-9 &&
-    relativeDepthPeak < STANDARD_OWNER_FLOOR;
+  const shallowAdmissionContract = resolveOfficialShallowAdmissionContract({
+    officialShallowPathCandidate,
+    armed,
+    descendConfirmed,
+    attemptStarted,
+    officialShallowDescentEvidenceForAdmission,
+    naturalArmed,
+    hmmArmingAssistApplied: options?.hmmArmingAssistApplied === true,
+    pr03OfficialShallowArming,
+  });
 
-  const completionPassReason: SquatCompletionPassReason =
-    completionBlockedReason != null
-      ? 'not_confirmed'
-      : standardPathWon
-        ? 'standard_cycle'
-        : evidenceLabel === 'low_rom'
-          ? 'low_rom_cycle'
-          : evidenceLabel === 'ultra_low_rom'
-            ? 'ultra_low_rom_cycle'
-            : standardEvidenceOwnerShallowBand
-              ? 'low_rom_cycle'
-              : deriveSquatCompletionPassReason({
-                  completionSatisfied: true,
-                  evidenceLabel,
-                  eventBasedDescentPath,
-                });
+  const completionPassReason: SquatCompletionPassReason = resolveSquatCompletionPath({
+    completionBlockedReason,
+    relativeDepthPeak,
+    evidenceLabel,
+    eventBasedDescentPath,
+    officialShallowPathCandidate,
+    officialShallowPathAdmitted: shallowAdmissionContract.admitted,
+    shallowRomClosureProofSignals,
+  });
 
   const completionSatisfied = completionPassReason !== 'not_confirmed';
 
-  const officialShallowPathAdmitted =
-    officialShallowPathCandidate && armed && descendConfirmed && attemptStarted;
+  const officialShallowPathAdmitted = shallowAdmissionContract.admitted;
   const officialShallowPathClosed =
     completionSatisfied &&
     officialShallowPathCandidate &&
     (completionPassReason === 'low_rom_cycle' || completionPassReason === 'ultra_low_rom_cycle');
-  const officialShallowPathReason: string | null =
-    !officialShallowPathCandidate
-      ? null
-      : pr03OfficialShallowArming
-        ? 'pr03_official_shallow_contract'
-        : naturalArmed
-          ? 'classic_start_before_bottom'
-          : options?.hmmArmingAssistApplied === true
-            ? 'hmm_arming_assist'
-            : null;
+  const officialShallowPathReason: string | null = shallowAdmissionContract.reason;
 
   let officialShallowPathBlockedReason: string | null = null;
   if (officialShallowPathCandidate && !officialShallowPathClosed) {
@@ -1956,6 +2131,87 @@ const PR_04E3B_NO_EVENT_PROMOTION_BLOCKS = new Set<string>([
   'ascent_recovery_span_too_short',
 ]);
 
+/**
+ * PR-SQUAT-COMPLETION-REARCH-01 — Subcontract C: full-buffer standard drift vs shallow prefix closure.
+ * shallow 가 먼저 닫힌 프리픽스가 있으면 그 truth 를 채택하고 drift 관측을 정리한다.
+ */
+export function resolveStandardDriftAfterShallowAdmission(
+  coreState: SquatCompletionState,
+  frames: PoseFeaturesFrame[],
+  options: EvaluateSquatCompletionStateOptions | undefined,
+  depthFreeze: SquatDepthFreezeConfig | null
+): SquatCompletionState {
+  const MIN_SHALLOW_PREFIX_SCAN = Math.max(8, MIN_BASELINE_FRAMES + 2);
+  let firstOfficialShallowClosedPrefix: SquatCompletionState | null = null;
+  let firstOfficialShallowClosedLen: number | null = null;
+  let sawOfficialShallowAdmissionOnPrefix = false;
+  if (frames.length >= MIN_SHALLOW_PREFIX_SCAN) {
+    for (let n = MIN_SHALLOW_PREFIX_SCAN; n <= frames.length; n++) {
+      const sn = evaluateSquatCompletionCore(frames.slice(0, n), options, depthFreeze);
+      if (!sawOfficialShallowAdmissionOnPrefix && sn.officialShallowPathCandidate && sn.officialShallowPathAdmitted) {
+        sawOfficialShallowAdmissionOnPrefix = true;
+      }
+      if (
+        firstOfficialShallowClosedPrefix == null &&
+        sn.officialShallowPathClosed &&
+        (sn.completionPassReason === 'low_rom_cycle' || sn.completionPassReason === 'ultra_low_rom_cycle') &&
+        sn.relativeDepthPeak < STANDARD_OWNER_FLOOR
+      ) {
+        firstOfficialShallowClosedPrefix = sn;
+        firstOfficialShallowClosedLen = n;
+        break;
+      }
+    }
+  }
+
+  let state = coreState;
+  let officialShallowDriftedToStandard = false;
+  let officialShallowDriftReason: string | null = null;
+  let officialShallowPreferredPrefixFrameCount: number | null = null;
+
+  if (
+    state.completionSatisfied &&
+    state.completionPassReason === 'standard_cycle' &&
+    state.relativeDepthPeak >= STANDARD_OWNER_FLOOR - 1e-9 &&
+    firstOfficialShallowClosedPrefix != null &&
+    firstOfficialShallowClosedLen != null
+  ) {
+    state = {
+      ...firstOfficialShallowClosedPrefix,
+      officialShallowDriftedToStandard: false,
+      officialShallowDriftReason: null,
+      officialShallowPreferredPrefixFrameCount: firstOfficialShallowClosedLen,
+    };
+  } else {
+    const driftObserved =
+      state.completionSatisfied &&
+      state.completionPassReason === 'standard_cycle' &&
+      state.relativeDepthPeak >= STANDARD_OWNER_FLOOR - 1e-9 &&
+      sawOfficialShallowAdmissionOnPrefix;
+    officialShallowDriftedToStandard = driftObserved;
+    officialShallowDriftReason = driftObserved
+      ? 'standard_cycle_full_buffer_after_official_shallow_admission'
+      : null;
+    officialShallowPreferredPrefixFrameCount = null;
+    state = {
+      ...state,
+      officialShallowDriftedToStandard,
+      officialShallowDriftReason,
+      officialShallowPreferredPrefixFrameCount,
+    };
+  }
+
+  if (state.officialShallowPathClosed === true) {
+    state = {
+      ...state,
+      officialShallowDriftedToStandard: false,
+      officialShallowDriftReason: null,
+    };
+  }
+
+  return state;
+}
+
 export function evaluateSquatCompletionState(
   frames: PoseFeaturesFrame[],
   options?: EvaluateSquatCompletionStateOptions
@@ -1996,80 +2252,12 @@ export function evaluateSquatCompletionState(
     }
   }
 
-  let state = evaluateSquatCompletionCore(frames, options, depthFreeze);
-
-  /**
-   * PR-03 final: full 버퍼에서 global peak 가 standard 로 밀려 standard_cycle 이 되기 전에,
-   * 더 짧은 프리픽스에서 이미 official shallow closure 가 있으면 그 시점의 truth 를 채택한다.
-   * moderate/deep( relativeDepthPeak ≥ STANDARD_OWNER_FLOOR ) 단일 시도는 기존과 동일.
-   */
-  const MIN_SHALLOW_PREFIX_SCAN = Math.max(8, MIN_BASELINE_FRAMES + 2);
-  let firstOfficialShallowClosedPrefix: SquatCompletionState | null = null;
-  let firstOfficialShallowClosedLen: number | null = null;
-  let sawOfficialShallowAdmissionOnPrefix = false;
-  if (frames.length >= MIN_SHALLOW_PREFIX_SCAN) {
-    for (let n = MIN_SHALLOW_PREFIX_SCAN; n <= frames.length; n++) {
-      const sn = evaluateSquatCompletionCore(frames.slice(0, n), options, depthFreeze);
-      if (!sawOfficialShallowAdmissionOnPrefix && sn.officialShallowPathCandidate && sn.officialShallowPathAdmitted) {
-        sawOfficialShallowAdmissionOnPrefix = true;
-      }
-      if (
-        firstOfficialShallowClosedPrefix == null &&
-        sn.officialShallowPathClosed &&
-        (sn.completionPassReason === 'low_rom_cycle' || sn.completionPassReason === 'ultra_low_rom_cycle') &&
-        sn.relativeDepthPeak < STANDARD_OWNER_FLOOR
-      ) {
-        firstOfficialShallowClosedPrefix = sn;
-        firstOfficialShallowClosedLen = n;
-        break;
-      }
-    }
-  }
-
-  let officialShallowDriftedToStandard = false;
-  let officialShallowDriftReason: string | null = null;
-  let officialShallowPreferredPrefixFrameCount: number | null = null;
-
-  if (
-    state.completionSatisfied &&
-    state.completionPassReason === 'standard_cycle' &&
-    state.relativeDepthPeak >= STANDARD_OWNER_FLOOR - 1e-9 &&
-    firstOfficialShallowClosedPrefix != null &&
-    firstOfficialShallowClosedLen != null
-  ) {
-    state = {
-      ...firstOfficialShallowClosedPrefix,
-      officialShallowDriftedToStandard: false,
-      officialShallowDriftReason: null,
-      officialShallowPreferredPrefixFrameCount: firstOfficialShallowClosedLen,
-    };
-  } else {
-    const driftObserved =
-      state.completionSatisfied &&
-      state.completionPassReason === 'standard_cycle' &&
-      state.relativeDepthPeak >= STANDARD_OWNER_FLOOR - 1e-9 &&
-      sawOfficialShallowAdmissionOnPrefix;
-    officialShallowDriftedToStandard = driftObserved;
-    officialShallowDriftReason = driftObserved
-      ? 'standard_cycle_full_buffer_after_official_shallow_admission'
-      : null;
-    officialShallowPreferredPrefixFrameCount = null;
-    state = {
-      ...state,
-      officialShallowDriftedToStandard,
-      officialShallowDriftReason,
-      officialShallowPreferredPrefixFrameCount,
-    };
-  }
-
-  /** PR-03 shallow closure final: 실제 shallow ROM 으로 닫힌 성공이면 drift 잔류를 지운다 (관측 일관성). */
-  if (state.officialShallowPathClosed === true) {
-    state = {
-      ...state,
-      officialShallowDriftedToStandard: false,
-      officialShallowDriftReason: null,
-    };
-  }
+  let state = resolveStandardDriftAfterShallowAdmission(
+    evaluateSquatCompletionCore(frames, options, depthFreeze),
+    frames,
+    options,
+    depthFreeze
+  );
 
   const validForEventFrames =
     state.officialShallowPreferredPrefixFrameCount != null

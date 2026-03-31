@@ -5,6 +5,13 @@
  * PR-02 Assist lock: trajectory rescue / tail backfill / HMM reversal assist 는 **reversal evidence provenance**만
  * 보강하며, 통과 게이트 소유권(completion truth finalized)을 대체하지 않는다. `reversalEvidenceProvenance`·`reversalConfirmedBy`는
  * 앵커 출처 추적용이다.
+ *
+ * -----------------------------------------------------------------------------
+ * PR-SQUAT-COMPLETION-REARCH-01 — Subcontract B (Reversal / Ascent-Equivalent)
+ * -----------------------------------------------------------------------------
+ * B1 — `detectSquatReversalConfirmation`: strict + shallow relax + guarded ultra + HMM bridge (기존).
+ * B2 — `evaluateOfficialShallowCompletionStreamBridge`: 공식 shallow 전용 completion-stream 역전·상승 등가.
+ * B3 — orchestrator 측 trajectory/tail/HMM reversal assist: provenance only (closure 결정 안 함).
  */
 
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
@@ -511,5 +518,99 @@ export function detectSquatReversalConfirmation(input: SquatReversalDetectInput)
     reversalFrameCount: 0,
     reversalSource: 'none',
     notes,
+  };
+}
+
+/** completion-state depth row — bridge 전용 최소 필드 (순환 import 방지) */
+export type SquatCompletionStreamBridgeFrame = {
+  index: number;
+  depth: number;
+  timestampMs: number;
+  phaseHint: PoseFeaturesFrame['phaseHint'];
+};
+
+export type OfficialShallowStreamBridgeResult = {
+  reversalFrame: SquatCompletionStreamBridgeFrame | undefined;
+  officialShallowStreamBridgeApplied: boolean;
+  officialShallowAscentEquivalentSatisfied: boolean;
+  officialShallowStreamCompletionReturnDrop: number | null;
+  /** 브리지 적용 시에만 상승 확정 덮어쓰기; null 이면 orchestrator 기존 ascendConfirmed 유지 */
+  ascendConfirmedOverride: boolean | null;
+};
+
+/**
+ * PR-SQUAT-COMPLETION-REARCH-01 — B2: strict 역전 앵커가 없을 때만 shallow closure 번들 하에서
+ * completion-stream 앵커 + 상승 등가(0.88×drop)로 reversal truth 를 연다.
+ * closure / pass reason 은 호출하지 않는다.
+ */
+export function evaluateOfficialShallowCompletionStreamBridge(args: {
+  reversalFrameFromStrict: SquatCompletionStreamBridgeFrame | undefined;
+  hmmReversalAssistApplied: boolean;
+  shallowClosureProofBundleFromStream: boolean;
+  officialShallowPathCandidate: boolean;
+  armed: boolean;
+  descendConfirmed: boolean;
+  attemptStarted: boolean;
+  hasValidCommittedPeakAnchor: boolean;
+  committedOrPostCommitPeakFrame: SquatCompletionStreamBridgeFrame | null | undefined;
+  depthFrames: SquatCompletionStreamBridgeFrame[];
+  ascentFrame: SquatCompletionStreamBridgeFrame | undefined;
+  squatReversalDropRequired: number;
+  officialShallowProofCompletionReturnDrop: number | null;
+}): OfficialShallowStreamBridgeResult {
+  if (args.reversalFrameFromStrict != null) {
+    return {
+      reversalFrame: args.reversalFrameFromStrict,
+      officialShallowStreamBridgeApplied: false,
+      officialShallowAscentEquivalentSatisfied: false,
+      officialShallowStreamCompletionReturnDrop: null,
+      ascendConfirmedOverride: null,
+    };
+  }
+  if (
+    args.hmmReversalAssistApplied ||
+    !args.shallowClosureProofBundleFromStream ||
+    !args.officialShallowPathCandidate ||
+    !args.armed ||
+    !args.descendConfirmed ||
+    !args.attemptStarted ||
+    !args.hasValidCommittedPeakAnchor ||
+    args.committedOrPostCommitPeakFrame == null
+  ) {
+    return {
+      reversalFrame: undefined,
+      officialShallowStreamBridgeApplied: false,
+      officialShallowAscentEquivalentSatisfied: false,
+      officialShallowStreamCompletionReturnDrop: null,
+      ascendConfirmedOverride: null,
+    };
+  }
+
+  const rf = args.committedOrPostCommitPeakFrame;
+  const dropForAscend = args.officialShallowProofCompletionReturnDrop ?? 0;
+  let bridgeAscend =
+    args.ascentFrame != null ||
+    args.depthFrames.some(
+      (frame) =>
+        frame.index > rf.index && frame.depth < rf.depth - args.squatReversalDropRequired
+    );
+  let officialShallowAscentEquivalentSatisfied = false;
+  if (!bridgeAscend && dropForAscend >= args.squatReversalDropRequired * 0.88) {
+    bridgeAscend = true;
+    officialShallowAscentEquivalentSatisfied = true;
+  } else if (
+    bridgeAscend &&
+    args.ascentFrame == null &&
+    dropForAscend >= args.squatReversalDropRequired * 0.88
+  ) {
+    officialShallowAscentEquivalentSatisfied = true;
+  }
+
+  return {
+    reversalFrame: rf,
+    officialShallowStreamBridgeApplied: true,
+    officialShallowAscentEquivalentSatisfied,
+    officialShallowStreamCompletionReturnDrop: args.officialShallowProofCompletionReturnDrop,
+    ascendConfirmedOverride: bridgeAscend,
   };
 }

@@ -217,7 +217,10 @@ export interface AttemptSnapshot {
       trajectoryReversalRescueApplied?: boolean;
       /** squatCompletionState.reversalTailBackfillApplied (squatCycleDebug 미러 없음) */
       reversalTailBackfillApplied?: boolean;
-      /** PR-03: 공식 shallow / ultra-low completion path 관측 */
+      /**
+       * PR-SQUAT-COMPLETION-REARCH-01 — Subcontract A trace (admission / shallow gate)
+       * + C 일부: 아래 closed/blocked/drift 는 C 축.
+       */
       officialShallowPathCandidate?: boolean;
       officialShallowPathAdmitted?: boolean;
       officialShallowPathClosed?: boolean;
@@ -227,7 +230,7 @@ export interface AttemptSnapshot {
       closedAsOfficialRomCycle?: boolean;
       /** PR-03: residue event_cycle 라벨로 닫힘(현재는 승격도 cycle 로 통일되어 주로 false) */
       closedAsEventRescuePassReason?: boolean;
-      /** PR-03 rework: shallow 전용 completion-stream reversal 브리지·등가 상승·closure 증거 번들 */
+      /** PR-SQUAT-COMPLETION-REARCH-01 — Subcontract B trace (reversal / ascent-equivalent / provenance) */
       officialShallowStreamBridgeApplied?: boolean;
       officialShallowAscentEquivalentSatisfied?: boolean;
       officialShallowClosureProofSatisfied?: boolean;
@@ -401,7 +404,7 @@ export interface SquatAttemptObservation {
   reversalEvidenceProvenance?: string | null;
   trajectoryReversalRescueApplied?: boolean;
   reversalTailBackfillAppliedObs?: boolean;
-  /** PR-03 */
+  /** PR-SQUAT-COMPLETION-REARCH-01: Subcontract A·C surface (shallow admission + closure/drift) */
   officialShallowPathCandidate?: boolean;
   officialShallowPathAdmitted?: boolean;
   officialShallowPathClosed?: boolean;
@@ -410,6 +413,7 @@ export interface SquatAttemptObservation {
   /** PR-03 rework: completionState.officialShallowPathClosed 와 동기 */
   closedAsOfficialRomCycle?: boolean;
   closedAsEventRescuePassReason?: boolean;
+  /** Subcontract B (+ C proof 플래그) */
   officialShallowStreamBridgeApplied?: boolean;
   officialShallowAscentEquivalentSatisfied?: boolean;
   officialShallowClosureProofSatisfied?: boolean;

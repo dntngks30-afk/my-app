@@ -627,6 +627,14 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         /** PR-COMP-01: completion gate 전용(품질·depthBand와 분리) */
         completionMachinePhase: state.completionMachinePhase,
         completionPassReason: state.completionPassReason,
+        /** PR-SQUAT-COMPLETION-REARCH-01: A/B/C 계약 요약(0/1, 게이트 아님) */
+        contractA_officialShallowCandidate: state.officialShallowPathCandidate ? 1 : 0,
+        contractA_officialShallowAdmitted: state.officialShallowPathAdmitted ? 1 : 0,
+        contractB_officialShallowReversal: state.officialShallowReversalSatisfied ? 1 : 0,
+        contractB_officialShallowAscentEquiv: state.officialShallowAscentEquivalentSatisfied ? 1 : 0,
+        contractC_officialShallowClosed: state.officialShallowPathClosed ? 1 : 0,
+        contractC_closureProof: state.officialShallowClosureProofSatisfied ? 1 : 0,
+        contractC_shallowDriftedToStandard: state.officialShallowDriftedToStandard ? 1 : 0,
         /** PR squat-low-rom: trace */
         recoveryReturnContinuityFrames: state.recoveryReturnContinuityFrames,
         recoveryTrailingDepthCount: state.recoveryTrailingDepthCount,
