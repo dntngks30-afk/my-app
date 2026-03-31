@@ -30,6 +30,10 @@ const MIN_RECOVERY_FRAMES = 2;
 const MIN_PEAK_PLATEAU_FRAMES = 2;
 const JITTER_MAX_SINGLE_SPIKE_REL = 0.035;
 const MIN_DESCENT_DELTA_FROM_BASELINE = 0.022;
+const STRUCTURAL_DESCENT_FALLBACK_MIN_STEPS = 2;
+const STRUCTURAL_DESCENT_FALLBACK_MIN_PREPEAK_FRAMES = 4;
+const STRUCTURAL_DESCENT_FALLBACK_MIN_POSTPEAK_FRAMES = 4;
+const STRUCTURAL_DESCENT_FALLBACK_MIN_EXCURSION = 0.018;
 
 export type SquatEventCycleBand = 'low_rom' | 'ultra_low_rom' | null;
 
@@ -111,6 +115,33 @@ function bandFromRelativePeak(
     return 'ultra_low_rom';
   }
   return null;
+}
+
+function guardedStructuralDescentFallback(args: {
+  peakIdx: number;
+  prePeak: SquatEventCycleDepthSample[];
+  postPeak: SquatEventCycleDepthSample[];
+  relativePeak: number;
+  descentSteps: number;
+  descentExcursion: number;
+  attemptAdmissionSatisfied: boolean;
+  reversalDetected: boolean;
+  nearStandingRecovered: boolean;
+  jitterSpike: boolean;
+}): boolean {
+  if (!args.attemptAdmissionSatisfied) return false;
+  if (args.jitterSpike) return false;
+  if (!args.reversalDetected || !args.nearStandingRecovered) return false;
+  if (args.peakIdx < MIN_DESCENT_FRAMES) return false;
+  if (args.prePeak.length < STRUCTURAL_DESCENT_FALLBACK_MIN_PREPEAK_FRAMES) return false;
+  if (args.postPeak.length < STRUCTURAL_DESCENT_FALLBACK_MIN_POSTPEAK_FRAMES) return false;
+  if (args.descentSteps < STRUCTURAL_DESCENT_FALLBACK_MIN_STEPS) return false;
+  const minExcursion = Math.max(
+    STRUCTURAL_DESCENT_FALLBACK_MIN_EXCURSION,
+    Math.min(args.relativePeak * 0.35, args.relativePeak)
+  );
+  if (args.descentExcursion < minExcursion) return false;
+  return true;
 }
 
 /**
@@ -230,7 +261,7 @@ export function detectSquatEventCycle(
     ? Math.min(...prePeak.map((s) => Math.max(0, s.depth - baseline)))
     : 0;
   const descentExcursion = relativePeak - minRelBeforePeak;
-  const descentDetected =
+  const descentDetectedByRule =
     descentFrames >= MIN_DESCENT_FRAMES && descentExcursion >= MIN_DESCENT_DELTA_FROM_BASELINE;
 
   let plateau = 0;
@@ -267,6 +298,21 @@ export function detectSquatEventCycle(
     }
   }
 
+  const structuralDescentFallback = guardedStructuralDescentFallback({
+    peakIdx,
+    prePeak,
+    postPeak,
+    relativePeak,
+    descentSteps,
+    descentExcursion,
+    attemptAdmissionSatisfied,
+    reversalDetected,
+    nearStandingRecovered,
+    jitterSpike,
+  });
+
+  const descentDetected = descentDetectedByRule || structuralDescentFallback;
+
   let detected =
     descentDetected &&
     reversalDetected &&
@@ -274,7 +320,10 @@ export function detectSquatEventCycle(
     !jitterSpike &&
     attemptAdmissionSatisfied;
 
-  if (!descentDetected) notes.push('descent_weak');
+  if (!descentDetectedByRule) {
+    if (structuralDescentFallback) notes.push('descent_structural_cycle_canonical_fallback');
+    else notes.push('descent_weak');
+  }
   if (!reversalDetected) notes.push('reversal_weak');
   if (!nearStandingRecovered) notes.push('recovery_tail_weak');
   if (jitterSpike) notes.push('jitter_spike_reject');
