@@ -232,6 +232,8 @@ export interface SquatCycleDebug {
   eventCycleSource?: string | null;
   /** PR-CAM-CORE: completion-state trajectory descent 폴백 — trace 전용 */
   eventBasedDescentPath?: boolean;
+  /** PR-DOWNUP-GUARANTEE-03: ultra-shallow meaningful down-up rescue — trace only */
+  ultraShallowMeaningfulDownUpRescueApplied?: boolean;
 }
 
 export interface ExerciseGateResult {
@@ -1127,6 +1129,8 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.reversalConfirmedBy = cs?.reversalConfirmedBy ?? null;
   squatCycleDebug.reversalDepthDrop = cs?.reversalDepthDrop ?? null;
   squatCycleDebug.reversalFrameCount = cs?.reversalFrameCount ?? null;
+  squatCycleDebug.ultraShallowMeaningfulDownUpRescueApplied =
+    cs?.ultraShallowMeaningfulDownUpRescueApplied === true;
   squatCycleDebug.relativeDepthPeakSource = cs?.relativeDepthPeakSource ?? null;
   squatCycleDebug.rawDepthPeakPrimary =
     typeof cs?.rawDepthPeakPrimary === 'number' ? cs.rawDepthPeakPrimary : null;
