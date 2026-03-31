@@ -14,6 +14,13 @@ import {
   type SuccessSnapshot,
 } from '@/lib/camera/camera-success-diagnostic';
 
+const SUCCESS_SNAPSHOT_STALE_MS = 15000;
+
+function isFreshSuccessSnapshot(snapshot: SuccessSnapshot): boolean {
+  const ts = snapshot.passLatchedAtMs;
+  return Number.isFinite(ts) && Date.now() - ts <= SUCCESS_SNAPSHOT_STALE_MS;
+}
+
 interface SuccessFreezeOverlayProps {
   /** overlay 닫기 시 호출 (Continue 누르면 onContinue → overlay 닫힘) */
   onContinue: () => void;
@@ -66,12 +73,10 @@ export function SuccessFreezeOverlay({ onContinue, motionType }: SuccessFreezeOv
 
   useEffect(() => {
     const list = getRecentSuccessSnapshots();
-    const latest = list.length > 0 ? list[list.length - 1]! : null;
-    if (latest && latest.motionType === motionType) {
-      setSnapshot(latest);
-    } else {
-      setSnapshot(null);
-    }
+    const latest = [...list]
+      .reverse()
+      .find((entry) => entry.motionType === motionType && isFreshSuccessSnapshot(entry)) ?? null;
+    setSnapshot(latest);
   }, [motionType]);
 
   const handleCopyJson = useCallback(() => {
