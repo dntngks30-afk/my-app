@@ -214,9 +214,12 @@ export function postPeakMonotonicReversalAssist(args: {
   required: number;
   windowSize?: number;
   minFrames?: number;
+  /** 기본 0.002 — 실기기 ultra-low 느린 복귀(프레임당 ~0.001)는 guarded 전용 더 작은 값으로 별도 호출 */
+  stepDownEpsilon?: number;
 }): { ok: boolean; drop: number; frames: number } {
   const windowSize = args.windowSize ?? 6;
   const minFrames = args.minFrames ?? 3;
+  const stepDownEpsilon = args.stepDownEpsilon ?? 0.002;
   const slice = args.validFrames.slice(
     args.peakValidIndex + 1,
     args.peakValidIndex + 1 + windowSize
@@ -238,7 +241,7 @@ export function postPeakMonotonicReversalAssist(args: {
   }
   let strictDownStepCount = 0;
   for (let i = 0; i < depths.length - 1; i++) {
-    if (depths[i + 1]! <= depths[i]! - 0.002) {
+    if (depths[i + 1]! <= depths[i]! - stepDownEpsilon) {
       strictDownStepCount += 1;
     }
   }
@@ -276,13 +279,36 @@ function guardedUltraShallowReversalAssist(
   if (relativeDepthPeak < LEGACY_ATTEMPT_FLOOR || relativeDepthPeak >= ULTRA_SHALLOW_STRICT_ONLY_FLOOR) {
     return null;
   }
-  const mono = postPeakMonotonicReversalAssist({
+  /** 짧은 윈도우·0.002 스텝 — 기존 PR-CAM 안정화 경로 */
+  const primaryMono = postPeakMonotonicReversalAssist({
     validFrames,
     peakValidIndex,
     peakPrimaryDepth,
     required: req,
+    windowSize: 6,
+    minFrames: 3,
+    stepDownEpsilon: 0.002,
   });
-  if (!mono.ok) return null;
+  /**
+   * PR-SQUAT-ULTRA-SHALLOW-RUNTIME-ALIGN-02: 실기기 권위 ultra-low 는 피크 직후 프레임당 ~0.001 수준 복귀만 있어
+   * primaryMono 가 실패해도 reversal-stream 누적 drop 은 충분할 수 있음. 긴 윈도우·0.001 스텝으로만 보강하며
+   * post-peak 길이·dropReversal 바닥으로 스탠딩 지터 단발과 구분.
+   */
+  const slowMono =
+    !primaryMono.ok
+      ? postPeakMonotonicReversalAssist({
+          validFrames,
+          peakValidIndex,
+          peakPrimaryDepth,
+          required: req,
+          windowSize: 12,
+          minFrames: 5,
+          stepDownEpsilon: 0.001,
+        })
+      : { ok: false as const, drop: 0, frames: 0 };
+
+  const monoForReturn = primaryMono.ok ? primaryMono : slowMono.ok ? slowMono : null;
+  if (monoForReturn == null || !monoForReturn.ok) return null;
   if (ev.postPeakFrameCount < MIN_DESCENT_FRAMES) return null;
   /**
    * PR-SQUAT-ULTRA-SHALLOW-CLOSURE-01: live ultra-low에서 phaseHint 가 ascent 를 거의 못 붙이는데
@@ -291,21 +317,31 @@ function guardedUltraShallowReversalAssist(
    */
   const ascentPhaseOk = ev.ascentStreakMax >= MIN_REVERSAL_FRAMES;
   const monotonicStreamIntegrityOk =
-    mono.frames >= 4 &&
+    primaryMono.ok &&
+    primaryMono.frames >= 4 &&
     ev.dropReversal >= req * 0.88 &&
     ev.postPeakFrameCount >= 4;
-  if (!ascentPhaseOk && !monotonicStreamIntegrityOk) return null;
+  const slowRecoveryMonotonicOk =
+    !primaryMono.ok &&
+    slowMono.ok &&
+    slowMono.frames >= 6 &&
+    ev.dropReversal >= req * 0.88 &&
+    ev.postPeakFrameCount >= 6;
+  if (!ascentPhaseOk && !monotonicStreamIntegrityOk && !slowRecoveryMonotonicOk) return null;
+
+  const note = ascentPhaseOk
+    ? 'guarded_ultra_shallow_reversal_assist'
+    : monotonicStreamIntegrityOk
+      ? 'guarded_ultra_shallow_reversal_assist_monotonic_stream_integrity'
+      : 'guarded_ultra_shallow_reversal_assist_slow_recovery_monotonic';
+
   return {
     reversalConfirmed: true,
     reversalIndex: peakValidIndex,
-    reversalDepthDrop: mono.drop,
-    reversalFrameCount: mono.frames,
+    reversalDepthDrop: monoForReturn.drop,
+    reversalFrameCount: monoForReturn.frames,
     reversalSource: 'rule',
-    notes: [
-      ascentPhaseOk
-        ? 'guarded_ultra_shallow_reversal_assist'
-        : 'guarded_ultra_shallow_reversal_assist_monotonic_stream_integrity',
-    ],
+    notes: [note],
   };
 }
 

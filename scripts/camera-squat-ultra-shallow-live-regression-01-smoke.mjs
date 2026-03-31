@@ -1,11 +1,13 @@
 /**
- * PR-SQUAT-ULTRA-SHALLOW-CLOSURE-01 — live ultra-low authoritative regression
+ * PR-SQUAT-ULTRA-SHALLOW-CLOSURE-01 / PR-SQUAT-ULTRA-SHALLOW-RUNTIME-ALIGN-02 — live ultra-low regression
  * npx tsx scripts/camera-squat-ultra-shallow-live-regression-01-smoke.mjs
  *
- * A_truncated: pre-fix canonical = no_reversal + reversal false (guarded missed ascent streak).
- * Post-fix: reversal true, blocked moves off no_reversal (typically not_standing_recovered) on same buffer.
- * A_extended: same prefix + standing tail — end-to-end ultra_low_rom_cycle (fix + completion).
- * Fixture B: deeper low_rom success — regression anchor, not the PR primary target.
+ * A_truncated: zig-zag post-peak; guarded monotonic stream integrity opens reversal (CLOSURE-01).
+ * A_extended: truncated prefix + standing tail — ultra_low_rom_cycle.
+ * A_runtime_real_device: slow post-peak (~0.001/frame), phaseHint mostly start — 실기기 권위 fail 클래스
+ *   (rel~0.06, attempt+baselineFrozen, shallow admitted, primary 6f monotonic 실패) 재현; ALIGN-02 slow-recovery guarded.
+ * A_runtime_ext: A_runtime + standing tail — end-to-end ultra_low_rom_cycle (선호).
+ * Fixture B: deeper low_rom_cycle anchor.
  */
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -104,6 +106,48 @@ function buildFixtureAExtended() {
   return [...inner, ...tail];
 }
 
+/**
+ * 실기기 authoritative ultra-low: 피크 직후 reversal depth 가 프레임당 ~0.001 만 감소해
+ * 기본 postPeakMonotonic(6f, ε=0.002)는 실패했으나 누적 drop·post-peak 길이는 충분.
+ * (pre-fix 형태: officialShallowPathBlockedReason === no_reversal, officialShallowReversalSatisfied false)
+ */
+function buildFixtureARuntimeRealDevice() {
+  const base = 0.02;
+  const peak = 0.082;
+  const pre = [...Array(6).fill(base), 0.032, 0.055, 0.07, 0.078, peak, peak];
+  const prePhases = [
+    ...Array(6).fill('start'),
+    'descent',
+    'descent',
+    'descent',
+    'descent',
+    'bottom',
+    'bottom',
+  ];
+  const postLen = 14;
+  const post = [];
+  let d = peak - 0.001;
+  for (let i = 0; i < postLen; i++) {
+    post.push(d);
+    d -= 0.001;
+  }
+  const postPhases = Array(post.length).fill('start');
+  const depths = [...pre, ...post];
+  const phases = [...prePhases, ...postPhases];
+  let t = 200;
+  return depths.map((dp, i) => makeFrame(dp, (t += 80), phases[i]));
+}
+
+/** A_runtime + 짧은 스탠딩 tail — ultra_low_rom_cycle 종료 선호 검증 */
+function buildFixtureARuntimeRealDeviceExtended() {
+  const inner = buildFixtureARuntimeRealDevice();
+  const tailDepths = [0.065, 0.052, 0.04, 0.028, 0.022, 0.02, 0.02, 0.02, 0.02];
+  const tailPhases = tailDepths.map((_, i) => (i >= tailDepths.length - 5 ? 'ascent' : 'start'));
+  let t = inner[inner.length - 1].timestampMs;
+  const tail = tailDepths.map((d, i) => makeFrame(d, (t += 80), tailPhases[i]));
+  return [...inner, ...tail];
+}
+
 /** Fixture B: relativeDepthPeak well above ~0.08 ultra band; low_rom_cycle regression anchor. */
 function buildFixtureB() {
   const depths = [
@@ -152,6 +196,37 @@ function buildFixtureB() {
   ok('A_ext: officialShallowClosureProofSatisfied', st.officialShallowClosureProofSatisfied === true, st);
   ok('A_ext: eventCyclePromoted false', st.eventCyclePromoted !== true, st);
   ok('A_ext: relativeDepthPeak still ultra-shallow', st.relativeDepthPeak < 0.09, { rel: st.relativeDepthPeak });
+}
+
+/*
+ * A_runtime_real_device — pre-fix(ALIGN-02 이전) 권위 실패 형태:
+ * relativeDepthPeak ~0.06 대역, attemptStarted && baselineFrozen, shallow candidate+admitted,
+ * closed false, officialShallowPathBlockedReason === no_reversal, officialShallowReversalSatisfied false,
+ * officialShallowClosureProofSatisfied false, eventCyclePromoted !== true.
+ * 피크 직후 프레임당 ~0.001 복귀만 있어 기본 guarded monotonic(6f, ε=0.002)이 열지 못하던 갭.
+ */
+{
+  const st = evaluateSquatCompletionState(buildFixtureARuntimeRealDevice());
+  const rel = st.relativeDepthPeak;
+  ok('A_rt: relativeDepthPeak ultra-shallow band (~0.06)', rel >= 0.045 && rel <= 0.09, { rel });
+  ok('A_rt: officialShallowPathCandidate', st.officialShallowPathCandidate === true, st);
+  ok('A_rt: officialShallowPathAdmitted', st.officialShallowPathAdmitted === true, st);
+  ok('A_rt: attemptStarted + baselineFrozen authoritative', completionBlockedReasonAuthoritative(st), st);
+  ok('A_rt: officialShallowPathClosed false (incomplete buffer)', st.officialShallowPathClosed === false, st);
+  ok('A_rt: not stuck on no_reversal', st.officialShallowPathBlockedReason !== 'no_reversal', st);
+  ok('A_rt: officialShallowReversalSatisfied true', st.officialShallowReversalSatisfied === true, st);
+  ok('A_rt: officialShallowClosureProofSatisfied false (no standing tail)', st.officialShallowClosureProofSatisfied === false, st);
+  ok('A_rt: eventCyclePromoted false', st.eventCyclePromoted !== true, st);
+}
+
+{
+  const st = evaluateSquatCompletionState(buildFixtureARuntimeRealDeviceExtended());
+  ok('A_rt_ext: ultra_low_rom_cycle', st.completionPassReason === 'ultra_low_rom_cycle', st.completionPassReason);
+  ok('A_rt_ext: officialShallowPathClosed', st.officialShallowPathClosed === true, st);
+  ok('A_rt_ext: officialShallowReversalSatisfied', st.officialShallowReversalSatisfied === true, st);
+  ok('A_rt_ext: officialShallowClosureProofSatisfied', st.officialShallowClosureProofSatisfied === true, st);
+  ok('A_rt_ext: eventCyclePromoted false', st.eventCyclePromoted !== true, st);
+  ok('A_rt_ext: relativeDepthPeak ultra-shallow', st.relativeDepthPeak < 0.09, { rel: st.relativeDepthPeak });
 }
 
 {
