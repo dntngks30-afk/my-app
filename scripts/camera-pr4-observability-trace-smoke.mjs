@@ -20,6 +20,10 @@ const {
   pushAttemptSnapshot,
   recordAttemptSnapshot,
 } = await import('../src/lib/camera/camera-trace.ts');
+const {
+  resetSquatCameraObservabilitySession,
+  getFrozenSquatPassSnapshot,
+} = await import('../src/lib/camera/camera-observability-squat-session.ts');
 
 let passed = 0;
 let failed = 0;
@@ -56,6 +60,49 @@ function squatPoseLandmarks(timestamp, depthProxy) {
   landmarks[11] = mockLandmark(0.45, 0.2, 0.9);
   landmarks[12] = mockLandmark(0.55, 0.2, 0.9);
   return { landmarks, timestamp };
+}
+
+/**
+ * CAM-31 / no-early-pass D3 와 동일 계열 무릎 각 시계열 — `evaluateExerciseAutoProgress` standard pass 용.
+ */
+function squatLandmarksDeepStandardPass() {
+  function clamp(v, a = 0, b = 1) {
+    return Math.min(b, Math.max(a, v));
+  }
+  function fromKneeAngle(timestamp, kneeAngleDeg) {
+    const landmarks = Array(33)
+      .fill(null)
+      .map((_, i) => mockLandmark(0.3 + (i % 11) * 0.04, 0.1 + Math.floor(i / 11) * 0.2, 0.99));
+    const depthT = clamp((170 - kneeAngleDeg) / 110);
+    const shoulderY = 0.18 + depthT * 0.05;
+    const hipY = 0.38 + depthT * 0.12;
+    const kneeY = 0.58 + depthT * 0.04;
+    const shinLen = 0.18;
+    const bendRad = ((180 - kneeAngleDeg) * Math.PI) / 180;
+    const ankleDx = Math.sin(bendRad) * shinLen;
+    const ankleDy = Math.cos(bendRad) * shinLen;
+    landmarks[11] = mockLandmark(0.42, shoulderY, 0.99);
+    landmarks[12] = mockLandmark(0.58, shoulderY, 0.99);
+    landmarks[23] = mockLandmark(0.44, hipY, 0.99);
+    landmarks[24] = mockLandmark(0.56, hipY, 0.99);
+    landmarks[25] = mockLandmark(0.45, kneeY, 0.99);
+    landmarks[26] = mockLandmark(0.55, kneeY, 0.99);
+    landmarks[27] = mockLandmark(0.45 + ankleDx, kneeY + ankleDy, 0.99);
+    landmarks[28] = mockLandmark(0.55 + ankleDx, kneeY + ankleDy, 0.99);
+    landmarks[0] = mockLandmark(0.5, 0.08 + depthT * 0.02, 0.99);
+    return { landmarks, timestamp };
+  }
+  const standing = Array(12).fill(170);
+  const deep = [
+    170, 165, 155, 142, 128, 112, 95, 82, 70, 62, 58, 55, 57, 62, 70, 82, 95, 112, 128, 142, 155, 165, 170,
+  ];
+  const tail = Array(10).fill(170);
+  const angles = [...standing, ...deep, ...tail];
+  const stepMs = 80;
+  return angles.map((a, i) => {
+    const fr = fromKneeAngle(200 + i * stepMs, a);
+    return { landmarks: fr.landmarks, timestamp: fr.timestamp };
+  });
 }
 
 function overheadLandmarks() {
@@ -118,6 +165,39 @@ ok(
     typeof camObs.eventCycle === 'object' &&
     typeof camObs.reversal === 'object'
 );
+
+// PR-CAM-OBS-PASS-SNAPSHOT-FREEZE-PERSIST-01: terminal export 전 동기 freeze → pass_snapshot persist
+console.log('\nAT10: pass_snapshot freeze on export path\n');
+{
+  resetSquatCameraObservabilitySession();
+  ok('AT10a: after reset frozen pass snapshot is null', getFrozenSquatPassSnapshot() === null);
+
+  const passLm = squatLandmarksDeepStandardPass();
+  const passStats = {
+    sampledFrameCount: passLm.length,
+    droppedFrameCount: 0,
+    captureDurationMs: 5000,
+    timestampDiscontinuityCount: 0,
+  };
+  const passGate = evaluateExerciseAutoProgress('squat', passLm, passStats);
+  ok('AT10b: deep standard squat gate passes final', passGate.finalPassEligible === true && passGate.status === 'pass');
+
+  const passSnap = buildAttemptSnapshot('squat', passGate);
+  const obs = passSnap?.squatCameraObservability;
+  const ps = obs?.pass_snapshot;
+  ok('AT10c: pass_snapshot is non-null object after buildAttemptSnapshot', ps != null && typeof ps === 'object');
+  if (ps != null) {
+    ok('AT10d: pass_snapshot.frame_idx is number', typeof ps.frame_idx === 'number');
+    ok('AT10e: pass_snapshot.pass_reason is string', typeof ps.pass_reason === 'string');
+    ok('AT10f: pass_snapshot.completion_owner is string', typeof ps.completion_owner === 'string');
+    ok('AT10g: pass_snapshot.passLatched is boolean', typeof ps.passLatched === 'boolean');
+    ok('AT10h: pass_snapshot.stillSeatedAtPass is boolean', typeof ps.stillSeatedAtPass === 'boolean');
+    ok('AT10i: module frozen snapshot matches export', getFrozenSquatPassSnapshot() === ps);
+  }
+
+  buildAttemptSnapshot('squat', passGate);
+  ok('AT10j: duplicate export does not clear snapshot', getFrozenSquatPassSnapshot() != null);
+}
 
 // AT2: Snapshot creation works for overhead reach
 const ohLandmarks = overheadLandmarks();

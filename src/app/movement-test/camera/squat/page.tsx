@@ -1102,7 +1102,11 @@ export default function CameraSquatPage() {
     gateRef.current = gate;
   }, [gate]);
 
-  /** CAM-OBS: finalPassEligible 최초 true 엣지에서 pass_snapshot 1회 고정 */
+  /**
+   * CAM-OBS: 라이브 gate 갱신마다 freeze 후보 갱신(엣지 1회 고정은 observability 모듈 내부).
+   * 터미널 JSON 은 `camera-trace` 의 `buildSquatCameraObservabilityExport` 가 export 직전에 동기 `note` 로도 보장함
+   * (PR-CAM-OBS-PASS-SNAPSHOT-FREEZE-PERSIST-01 — effect 순서와 무관하게 persist).
+   */
   useEffect(() => {
     noteSquatGateForCameraObservability(gate);
   }, [gate]);

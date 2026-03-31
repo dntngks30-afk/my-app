@@ -25,7 +25,10 @@ import {
   type SquatResultInterpretation,
 } from './squat-result-severity';
 import { peekLastPoseCameraObservability } from './camera-observability-pose-bridge';
-import { getFrozenSquatPassSnapshot } from './camera-observability-squat-session';
+import {
+  getFrozenSquatPassSnapshot,
+  noteSquatGateForCameraObservability,
+} from './camera-observability-squat-session';
 import type { CameraPoseDelegateKind } from '@/lib/motion/pose-types';
 
 /** PR-4: movement type (squat, overhead_reach만 지원) */
@@ -362,6 +365,12 @@ export function buildSquatCameraObservabilityExport(
     pose_world_present: false,
   };
 
+  /**
+   * PR-CAM-OBS-PASS-SNAPSHOT-FREEZE-PERSIST-01: 터미널 export 직전에 동기적으로 freeze 를 한 번 더 보장.
+   * squat 페이지 `useEffect(noteSquatGate...)` 만으로는 동일 턴에서 latch/persist 가 먼저 돌면 JSON 에 null 이 남을 수 있음.
+   * gate 는 mutate 하지 않음 — 관측 모듈의 frozenPassSnapshot 만 갱신(이미 고정된 경우 no-op).
+   */
+  noteSquatGateForCameraObservability(gate);
   const pass_snapshot = getFrozenSquatPassSnapshot();
   const cs = gate.evaluatorResult.debug?.squatCompletionState;
 
