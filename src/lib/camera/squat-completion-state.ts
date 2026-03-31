@@ -1964,7 +1964,12 @@ function evaluateSquatCompletionCore(
         reversalAtMs: rf.timestampMs,
         minReversalToStandingMs: minReversalToStandingMsForShallow,
       });
-      ruleCompletionBlockedReason = computeBlockedAfterCommitment(rf, ascendForProgression);
+      /**
+       * PR-CAM-SQUAT-TRAJECTORY-RESCUE-OWNER-SEPARATION-01:
+       * trajectory rescue는 trace/provenance 전용이므로 ruleCompletionBlockedReason을 직접 변경하지 않는다.
+       * ascendForProgression은 위상(ascending/standing_recovered) 표시에만 사용한다.
+       * owner truth chain(completionBlockedReason → completionSatisfied)에는 영향을 주지 않는다.
+       */
     }
   } else if (tailBackfill.backfillApplied && progressionReversalFrame != null) {
     const explicitTailAscend = computeAscendConfirmed(progressionReversalFrame);
@@ -1996,12 +2001,29 @@ function evaluateSquatCompletionCore(
     ruleCompletionBlockedReason = computeBlockedAfterCommitment(rf, ascendForProgression);
   }
 
-  /** PR-03 final: shallow 입장 후 progression 앵커가 있는데 rule 이 no_reversal 로 남는 경우 재정렬 */
+  /**
+   * PR-CAM-SQUAT-TRAJECTORY-RESCUE-OWNER-SEPARATION-01:
+   * owner-authoritative 역전 확정 — strict rule / HMM reversal assist / shallow stream bridge /
+   * tail backfill / ultra shallow down-up rescue만 포함한다.
+   * trajectory rescue는 trace/provenance 전용으로 여기에 포함하지 않는다.
+   */
+  const ownerAuthoritativeReversalSatisfied =
+    revConf.reversalConfirmed ||
+    hmmReversalAssistDecision.assistApplied ||
+    officialShallowStreamBridgeApplied ||
+    tailBackfill.backfillApplied ||
+    ultraShallowMeaningfulDownUpRescueApplied;
+
+  /** PR-03 final: shallow 입장 후 progression 앵커가 있는데 rule 이 no_reversal 로 남는 경우 재정렬.
+   * PR-CAM-SQUAT-TRAJECTORY-RESCUE-OWNER-SEPARATION-01: owner-authoritative 역전이 있을 때만 재정렬한다.
+   * trajectory-only rescue가 progressionReversalFrame을 채웠을 때 잘못 no_reversal을 해제하지 않도록.
+   */
   if (
     officialShallowPathCandidate &&
     attemptStarted &&
     progressionReversalFrame != null &&
-    ruleCompletionBlockedReason === 'no_reversal'
+    ruleCompletionBlockedReason === 'no_reversal' &&
+    ownerAuthoritativeReversalSatisfied
   ) {
     ruleCompletionBlockedReason = computeBlockedAfterCommitment(
       progressionReversalFrame,
@@ -2037,7 +2059,14 @@ function evaluateSquatCompletionCore(
     ? null
     : ruleCompletionBlockedReason;
 
-  const reversalConfirmedAfterDescend = progressionReversalFrame != null;
+  /**
+   * PR-CAM-SQUAT-TRAJECTORY-RESCUE-OWNER-SEPARATION-01:
+   * trajectory rescue만으로 progressionReversalFrame이 채워진 경우는 owner-authoritative 역전 확정이 아니다.
+   * reversalConfirmedAfterDescend는 owner-authoritative 역전이 있을 때만 true로 설정한다.
+   * trajectory-only rescue는 trace/provenance 용도로 trajectoryReversalRescueApplied를 통해 관측한다.
+   */
+  const reversalConfirmedAfterDescend =
+    progressionReversalFrame != null && ownerAuthoritativeReversalSatisfied;
 
   const officialShallowPathAdmittedForNormalize =
     officialShallowPathCandidate && armed && descendConfirmed && attemptStarted;
