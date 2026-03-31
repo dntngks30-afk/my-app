@@ -296,5 +296,116 @@ console.log('\nFixture C — ultra-low ROM + short descent timing bypass\n');
     { completionPassReason: st.completionPassReason });
 }
 
+// ─── PR-TRAJECTORY-RESCUE-INTEGRITY-01: early rescue false positive guard ────
+console.log('\nPR-TRAJECTORY-RESCUE-INTEGRITY-01 — trajectory rescue alone must not close pass\n');
+
+/**
+ * Fixture D1: "early rescue false positive" 클래스.
+ *
+ * ultra-low shallow 대역(rel ~0.04) — 피크 이후 버퍼가 standing recovery 없이 끝남:
+ *   - shallowClosureProofBundleFromStream = false (finalize 미충족 → bundle 조건 불충족)
+ *   - officialShallowPrimaryDropClosureFallback = false (동일)
+ *   - officialShallowStreamBridgeApplied = false (bundle 선행 요건 불충족)
+ *   - trajectory rescue도 발동 불가 (finalize 미충족)
+ *   - explicit ascent 없음
+ *
+ * PR-TRAJECTORY-RESCUE-INTEGRITY-01 계약:
+ * "shallow return proof 없음 = pass 불가"를 end-to-end로 잠금.
+ * 이 케이스는 fix 전후 모두 불통과 — 회귀 잠금 역할.
+ */
+function buildFixtureD1NoReturnProof() {
+  const base = 0.02;
+  const peak = 0.062; // rel peak ~0.042 vs baseline 0.02 → ultra_low_rom 대역
+  const depths = [
+    // baseline 8f
+    base, base, base, base, base, base, base, base,
+    // descent
+    0.03, 0.045, peak,
+    // bottom 1f
+    peak,
+    // post-peak: zig-zag (no return, no standing tail) — 버퍼 미완성
+    0.061, 0.060, 0.061, 0.060, 0.061, 0.060,
+  ];
+  const phases = [
+    'start', 'start', 'start', 'start', 'start', 'start', 'start', 'start',
+    'descent', 'descent', 'bottom',
+    'bottom',
+    'start', 'start', 'start', 'start', 'start', 'start',
+  ];
+  let t = 100;
+  return depths.map((d, i) => makeFrame(d, (t += 80), phases[i]));
+}
+
+/**
+ * Fixture D2: "valid shallow pass 유지" 클래스.
+ *
+ * ultra-low shallow 대역(rel ~0.042) — explicit ascent는 약해도 되지만
+ * shallowClosureProofBundleFromStream = true (post-peak return drop ≥ 0.88×required).
+ *
+ * 기대: shallow return proof가 있으므로 ultra_low_rom_cycle로 pass되어야 한다.
+ */
+function buildFixtureD2ValidShallowPass() {
+  const base = 0.02;
+  const peak = 0.062; // rel peak ~0.042 vs baseline 0.02 → ultra_low_rom 대역
+  const depths = [
+    // baseline 8f
+    base, base, base, base, base, base, base, base,
+    // descent
+    0.03, 0.048, peak,
+    // bottom 1f
+    peak,
+    // post-peak return: 점진적 복귀 (drop = 0.042 ≫ 0.88×required ≈ 0.006)
+    0.055, 0.045, 0.035, 0.027,
+    // standing tail 6f (recoveryReturnContinuityFrames, dropRatio 확보)
+    base, base, base, base, base, base,
+  ];
+  const phases = [
+    'start', 'start', 'start', 'start', 'start', 'start', 'start', 'start',
+    'descent', 'descent', 'bottom',
+    'bottom',
+    'start', 'start', 'start', 'start',
+    'start', 'start', 'start', 'start', 'start', 'start',
+  ];
+  let t = 100;
+  return depths.map((d, i) => makeFrame(d, (t += 80), phases[i]));
+}
+
+{
+  const st = evaluateSquatCompletionState(buildFixtureD1NoReturnProof());
+  ok('D1 no_return_proof: completionPassReason !== ultra_low_rom_cycle',
+    st.completionPassReason !== 'ultra_low_rom_cycle',
+    { completionPassReason: st.completionPassReason, completionBlockedReason: st.completionBlockedReason });
+  ok('D1 no_return_proof: officialShallowPathClosed !== true',
+    st.officialShallowPathClosed !== true,
+    { officialShallowPathClosed: st.officialShallowPathClosed });
+  ok('D1 no_return_proof: eventCyclePromoted !== true',
+    st.eventCyclePromoted !== true,
+    { eventCyclePromoted: st.eventCyclePromoted });
+  ok('D1 no_return_proof: completionSatisfied false (no standing recovery = no pass)',
+    st.completionSatisfied !== true,
+    { completionSatisfied: st.completionSatisfied,
+      officialShallowStreamBridgeApplied: st.officialShallowStreamBridgeApplied,
+      shallowClosureProofBundleFromStream: undefined });
+}
+
+{
+  const st = evaluateSquatCompletionState(buildFixtureD2ValidShallowPass());
+  const passReasonOk =
+    st.completionPassReason === 'ultra_low_rom_cycle' ||
+    st.completionPassReason === 'low_rom_cycle';
+  ok('D2 valid_shallow_pass: completionPassReason === ultra_low_rom_cycle (또는 low_rom_cycle)',
+    passReasonOk,
+    { completionPassReason: st.completionPassReason, completionBlockedReason: st.completionBlockedReason });
+  ok('D2 valid_shallow_pass: officialShallowPathClosed === true',
+    st.officialShallowPathClosed === true,
+    { officialShallowPathClosed: st.officialShallowPathClosed });
+  ok('D2 valid_shallow_pass: eventCyclePromoted !== true',
+    st.eventCyclePromoted !== true,
+    { eventCyclePromoted: st.eventCyclePromoted });
+  ok('D2 valid_shallow_pass: completionSatisfied true',
+    st.completionSatisfied === true,
+    { completionSatisfied: st.completionSatisfied });
+}
+
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

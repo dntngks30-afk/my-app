@@ -49,6 +49,8 @@ ok(
     explicitAscendConfirmed: false,
     standingRecoveryFinalizeSatisfied: true,
     minReversalToStandingMs: MIN_SHALLOW_REVERSAL_TO_STANDING_MS,
+    /** PR-TRAJECTORY-RESCUE-INTEGRITY-01: shallow return proof 없으면 즉시 false */
+    shallowReturnProofSatisfied: false,
   }) === false
 );
 
@@ -62,6 +64,7 @@ ok(
     recoveryDropRatio: 0.5,
     reversalAtMs: 100,
     minReversalToStandingMs: MIN_SHALLOW_REVERSAL_TO_STANDING_MS,
+    shallowReturnProofSatisfied: true,
   }) === false
 );
 
@@ -75,6 +78,7 @@ ok(
     recoveryDropRatio: 0.2,
     reversalAtMs: 100,
     minReversalToStandingMs: MIN_SHALLOW_REVERSAL_TO_STANDING_MS,
+    shallowReturnProofSatisfied: true,
   }) === false
 );
 
@@ -88,6 +92,7 @@ ok(
     recoveryDropRatio: 0.45,
     reversalAtMs: 100,
     minReversalToStandingMs: MIN_SHALLOW_REVERSAL_TO_STANDING_MS,
+    shallowReturnProofSatisfied: true,
   }) === false
 );
 
@@ -101,6 +106,7 @@ ok(
     recoveryDropRatio: 0.45,
     reversalAtMs: 100,
     minReversalToStandingMs: MIN_SHALLOW_REVERSAL_TO_STANDING_MS,
+    shallowReturnProofSatisfied: true,
   }) === true
 );
 
@@ -110,6 +116,7 @@ ok(
     explicitAscendConfirmed: true,
     standingRecoveryFinalizeSatisfied: false,
     minReversalToStandingMs: MIN_SHALLOW_REVERSAL_TO_STANDING_MS,
+    shallowReturnProofSatisfied: false,
   }) === true
 );
 

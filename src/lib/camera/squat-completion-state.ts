@@ -534,6 +534,17 @@ const STANDARD_LABEL_FLOOR = 0.1;
 const STANDARD_OWNER_FLOOR = 0.4;
 const STANDING_RECOVERY_TOLERANCE_FLOOR = 0.015;
 const STANDING_RECOVERY_TOLERANCE_RATIO = 0.18;
+
+/**
+ * CAM-OBS: standing recovery 윈도우와 동일한 상대 임계(관측·JSON 전용, 판정 로직 미사용).
+ * `getStandingRecoveryWindow` 내부 산식과 정합 유지.
+ */
+export function getSquatStandingRecoveryThresholdForObservability(relativeDepthPeak: number): number {
+  return Math.max(
+    STANDING_RECOVERY_TOLERANCE_FLOOR,
+    relativeDepthPeak * STANDING_RECOVERY_TOLERANCE_RATIO
+  );
+}
 const MIN_STANDING_RECOVERY_FRAMES = 2;
 const MIN_STANDING_RECOVERY_HOLD_MS = 160;
 const LOW_ROM_STANDING_RECOVERY_MIN_FRAMES = 2;
@@ -633,6 +644,10 @@ export function shouldBypassUltraLowRomShortDescentTiming(params: {
  * PR-CAM-ASCENT-INTEGRITY-RESCUE-01: trajectory rescue는 reversal 앵커만 줄 수 있고, ascent truth 는
  * 명시 상승 증거 또는 (finalize + low-ROM 복귀 증거 + 역전→스탠딩 타이밍)을 만족할 때만 true.
  * 새 threshold 없음 — `recoveryMeetsLowRomStyleFinalizeProof` 및 호출부 `minReversalToStandingMs` 재사용.
+ *
+ * PR-TRAJECTORY-RESCUE-INTEGRITY-01: explicit ascent 증거 없이 shallow return proof(stream bundle/
+ * primary drop fallback/stream bridge)도 없으면 trajectory rescue alone으로 closure/pass를 열 수 없다.
+ * trajectory rescue = reversal anchor 보조는 가능; trajectory rescue alone = closure/pass owner 불가.
  */
 export type TrajectoryRescueAscentIntegrityArgs = {
   explicitAscendConfirmed: boolean;
@@ -642,10 +657,17 @@ export type TrajectoryRescueAscentIntegrityArgs = {
   recoveryDropRatio?: number;
   reversalAtMs?: number;
   minReversalToStandingMs: number;
+  /**
+   * PR-TRAJECTORY-RESCUE-INTEGRITY-01: stream bundle / primary drop fallback / stream bridge 중
+   * 하나 이상 — explicit ascent 없을 때 post-peak return proof 최소 요건.
+   */
+  shallowReturnProofSatisfied: boolean;
 };
 
 export function trajectoryRescueMeetsAscentIntegrity(args: TrajectoryRescueAscentIntegrityArgs): boolean {
   if (args.explicitAscendConfirmed === true) return true;
+  // PR-TRAJECTORY-RESCUE-INTEGRITY-01: explicit ascent 없으면 shallow return proof 하나 이상 필요
+  if (!args.shallowReturnProofSatisfied) return false;
   if (args.standingRecoveredAtMs == null) return false;
   if (args.standingRecoveryFinalizeSatisfied !== true) return false;
   if (
@@ -1936,6 +1958,15 @@ function evaluateSquatCompletionCore(
     progressionReversalFrame = committedOrPostCommitPeakFrame;
   }
 
+  /**
+   * PR-TRAJECTORY-RESCUE-INTEGRITY-01: stream bundle / primary drop fallback / stream bridge 중
+   * 하나 이상이면 post-peak return proof 최소 요건 충족 — trajectory rescue 호출부 공통.
+   */
+  const shallowReturnProofSatisfied =
+    shallowClosureProofBundleFromStream ||
+    officialShallowPrimaryDropClosureFallback ||
+    officialShallowStreamBridgeApplied;
+
   let ascendForProgression = ascendConfirmed;
   if (trajectoryRescue.trajectoryReversalConfirmedBy === 'trajectory') {
     const rf = trajectoryRescue.trajectoryReversalFrame;
@@ -1949,6 +1980,7 @@ function evaluateSquatCompletionCore(
         recoveryDropRatio: recovery.recoveryDropRatio,
         reversalAtMs: rf.timestampMs,
         minReversalToStandingMs: minReversalToStandingMsForShallow,
+        shallowReturnProofSatisfied,
       });
       ruleCompletionBlockedReason = computeBlockedAfterCommitment(rf, ascendForProgression);
     }
@@ -1962,6 +1994,7 @@ function evaluateSquatCompletionCore(
       recoveryDropRatio: recovery.recoveryDropRatio,
       reversalAtMs: progressionReversalFrame.timestampMs,
       minReversalToStandingMs: minReversalToStandingMsForShallow,
+      shallowReturnProofSatisfied,
     });
     ruleCompletionBlockedReason = computeBlockedAfterCommitment(
       progressionReversalFrame,
@@ -1978,6 +2011,7 @@ function evaluateSquatCompletionCore(
       recoveryDropRatio: recovery.recoveryDropRatio,
       reversalAtMs: rf.timestampMs,
       minReversalToStandingMs: minReversalToStandingMsForShallow,
+      shallowReturnProofSatisfied,
     });
     ruleCompletionBlockedReason = computeBlockedAfterCommitment(rf, ascendForProgression);
   }

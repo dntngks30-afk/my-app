@@ -9,7 +9,7 @@
  * - npx tsx scripts/camera-peak-anchor-integrity-01-smoke.mjs
  */
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 process.chdir(join(__dirname, '..'));
@@ -140,6 +140,7 @@ console.log('PR-CAM-REVERSAL-TAIL-BACKFILL-01 smoke\n');
     recoveryDropRatio: 0.5,
     reversalAtMs: peakF.timestampMs,
     minReversalToStandingMs: MIN_SHALLOW_MS,
+    shallowReturnProofSatisfied: true,
   });
   ok('G: integrity false without explicit ascend or finalize', g === false, g);
 }
