@@ -264,6 +264,58 @@ export function postPeakMonotonicReversalAssist(args: {
 }
 
 /**
+ * PR-SQUAT-ULTRA-SHALLOW-RUNTIME-FIX-03: primary/slow monotonic 이 모두 실패해도, 피크 이후 **전체** post-peak 에서
+ * 누적 reversal-stream drop 과 다프레임 분산이 있으면 실기기 zig-zag·backloaded 복귀 인정.
+ * 단일 프레임 스파이크·짧은 버퍼·약한 누적은 mid/deepBar·이웃 비율로 차단.
+ */
+function guardedUltraShallowCumulativeRuntimeFallback(
+  validFrames: PoseFeaturesFrame[],
+  peakValidIndex: number,
+  peakPrimaryDepth: number,
+  req: number,
+  ev: PostPeakRecoveryEvidence
+): SquatReversalConfirmation | null {
+  const post = validFrames.slice(peakValidIndex + 1);
+  if (post.length < 10 || ev.postPeakFrameCount < 10) return null;
+  if (ev.dropReversal < req * 0.9) return null;
+
+  const revs = post
+    .map((f) => readSquatCompletionDepthForReversal(f))
+    .filter((x): x is number => Number.isFinite(x));
+  if (revs.length < 10) return null;
+
+  const midBar = peakPrimaryDepth - req * 0.45;
+  const deepBar = peakPrimaryDepth - req * 0.88;
+  let countMid = 0;
+  let countDeep = 0;
+  for (const r of revs) {
+    if (r <= midBar) countMid += 1;
+    if (r <= deepBar) countDeep += 1;
+  }
+  if (countMid < 5 || countDeep < 2) return null;
+
+  const minR = Math.min(...revs);
+  const totalDrop = peakPrimaryDepth - minR;
+  if (totalDrop < req * 0.9) return null;
+
+  const minIdx = revs.indexOf(minR);
+  const prevR = minIdx > 0 ? revs[minIdx - 1]! : peakPrimaryDepth;
+  const nextR = minIdx < revs.length - 1 ? revs[minIdx + 1]! : peakPrimaryDepth;
+  const maxNeighbor = Math.max(prevR, nextR);
+  const troughIsolationDrop = maxNeighbor - minR;
+  if (troughIsolationDrop > totalDrop * 0.72) return null;
+
+  return {
+    reversalConfirmed: true,
+    reversalIndex: peakValidIndex,
+    reversalDepthDrop: totalDrop,
+    reversalFrameCount: Math.min(revs.length, 14),
+    reversalSource: 'rule',
+    notes: ['guarded_ultra_shallow_reversal_assist_cumulative_runtime'],
+  };
+}
+
+/**
  * PR-CAM-29B: [LEGACY_ATTEMPT_FLOOR, ULTRA_SHALLOW_STRICT_ONLY_FLOOR) 전용.
  * strict primary/blended 가 모두 실패한 뒤에만 호출. source 는 rule 만 (HMM bridge·rule_plus_hmm 확장 없음).
  * postPeakMonotonicReversalAssist + ascent 연속 프레임 + 최소 post-peak 길이로 1-frame·seated hold 차단.
@@ -292,7 +344,7 @@ function guardedUltraShallowReversalAssist(
   /**
    * PR-SQUAT-ULTRA-SHALLOW-RUNTIME-ALIGN-02 / FIX-02: authoritative ultra-low 는 피크 직후 프레임당 ~0.001 복귀만 있어
    * primaryMono(6f, ε=0.002) 가 실패해도 reversal-stream 누적 drop 은 충분할 수 있음. 긴 윈도우·0.001 스텝으로만 보강;
-   * post-peak 길이·dropReversal 바닥으로 지터 단발과 구분. 릴리스 게이트: `A_runtime_authoritative_fail` 스모크.
+   * post-peak 길이·dropReversal 바닥으로 지터 단발과 구분.
    */
   const slowMono =
     !primaryMono.ok
@@ -307,14 +359,8 @@ function guardedUltraShallowReversalAssist(
         })
       : { ok: false as const, drop: 0, frames: 0 };
 
-  const monoForReturn = primaryMono.ok ? primaryMono : slowMono.ok ? slowMono : null;
-  if (monoForReturn == null || !monoForReturn.ok) return null;
   if (ev.postPeakFrameCount < MIN_DESCENT_FRAMES) return null;
-  /**
-   * PR-SQUAT-ULTRA-SHALLOW-CLOSURE-01: live ultra-low에서 phaseHint 가 ascent 를 거의 못 붙이는데
-   * post-peak monotonic + reversal-stream drop 은 이미 충분한 경우 — ascentStreak 만으로 막지 않는다.
-   * 여전히 mono + 최소 post-peak 길이 + dropReversal 바닥으로 1-frame·bottom-stall 과 분리.
-   */
+
   const ascentPhaseOk = ev.ascentStreakMax >= MIN_REVERSAL_FRAMES;
   const monotonicStreamIntegrityOk =
     primaryMono.ok &&
@@ -327,22 +373,38 @@ function guardedUltraShallowReversalAssist(
     slowMono.frames >= 6 &&
     ev.dropReversal >= req * 0.88 &&
     ev.postPeakFrameCount >= 6;
-  if (!ascentPhaseOk && !monotonicStreamIntegrityOk && !slowRecoveryMonotonicOk) return null;
 
-  const note = ascentPhaseOk
-    ? 'guarded_ultra_shallow_reversal_assist'
-    : monotonicStreamIntegrityOk
-      ? 'guarded_ultra_shallow_reversal_assist_monotonic_stream_integrity'
-      : 'guarded_ultra_shallow_reversal_assist_slow_recovery_monotonic';
+  const monoForReturn = primaryMono.ok ? primaryMono : slowMono.ok ? slowMono : null;
+  if (monoForReturn != null && monoForReturn.ok) {
+    if (ascentPhaseOk || monotonicStreamIntegrityOk || slowRecoveryMonotonicOk) {
+      const note = ascentPhaseOk
+        ? 'guarded_ultra_shallow_reversal_assist'
+        : monotonicStreamIntegrityOk
+          ? 'guarded_ultra_shallow_reversal_assist_monotonic_stream_integrity'
+          : 'guarded_ultra_shallow_reversal_assist_slow_recovery_monotonic';
+      return {
+        reversalConfirmed: true,
+        reversalIndex: peakValidIndex,
+        reversalDepthDrop: monoForReturn.drop,
+        reversalFrameCount: monoForReturn.frames,
+        reversalSource: 'rule',
+        notes: [note],
+      };
+    }
+  }
 
-  return {
-    reversalConfirmed: true,
-    reversalIndex: peakValidIndex,
-    reversalDepthDrop: monoForReturn.drop,
-    reversalFrameCount: monoForReturn.frames,
-    reversalSource: 'rule',
-    notes: [note],
-  };
+  if (!primaryMono.ok && !slowMono.ok) {
+    const cum = guardedUltraShallowCumulativeRuntimeFallback(
+      validFrames,
+      peakValidIndex,
+      peakPrimaryDepth,
+      req,
+      ev
+    );
+    if (cum != null) return cum;
+  }
+
+  return null;
 }
 
 function ascentStreakRelax(

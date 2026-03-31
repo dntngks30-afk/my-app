@@ -4,8 +4,7 @@
  *
  * A_truncated: zig-zag post-peak; CLOSURE-01 guarded stream integrity.
  * A_extended: A_trunc + standing tail — ultra_low_rom_cycle.
- * A_runtime_authoritative_fail: canonical real-device authoritative fail shape (rel~0.06, slow −0.001/frame post-peak);
- *   **이 PR(FIX-02) 릴리스 게이트** — post-fix 에서 no_reversal 탈출·reversal truth.
+ * A_runtime_authoritative_fail: rel~0.06 + admitted + monotonic guarded miss + backloaded return (FIX-03 누적 fallback 게이트).
  * A_runtime_authoritative_fail_ext: 위 버퍼 + standing tail — ultra_low_rom_cycle (선호).
  * Fixture B: low_rom_cycle anchor.
  */
@@ -107,8 +106,8 @@ function buildFixtureAExtended() {
 }
 
 /**
- * Canonical authoritative runtime fail → post-fix: guarded slow-recovery monotonic (FIX-02 / ALIGN-02).
- * 피크 직후 reversal depth 가 프레임당 ~0.001 만 감소해 primary postPeakMonotonic(6f, ε=0.002) 는 실패하던 클래스.
+ * FIX-03: 실기기 0.06대 — 피크 직후 12f 윈도우는 좁은 박스만 흔들리며 monotonic(slow) drop 바닥 미달,
+ * 이후 backloaded 복귀는 strict 2f 동시 hit 없이(연속 두 프레임 ≤ peak−req 회피) 누적만 충분.
  */
 function buildFixtureARuntimeAuthoritativeFail() {
   const base = 0.02;
@@ -123,13 +122,13 @@ function buildFixtureARuntimeAuthoritativeFail() {
     'bottom',
     'bottom',
   ];
-  const postLen = 14;
-  const post = [];
-  let d = peak - 0.001;
-  for (let i = 0; i < postLen; i++) {
-    post.push(d);
-    d -= 0.001;
-  }
+  const postZig = [
+    0.0812, 0.0796, 0.0808, 0.0794, 0.0805, 0.0792, 0.0803, 0.0791, 0.0801, 0.0790, 0.0804, 0.0793,
+  ];
+  const postBackloaded = [
+    0.0778, 0.0742, 0.0765, 0.0736, 0.0762, 0.0732, 0.076, 0.0728, 0.0758, 0.0725, 0.0755, 0.0738,
+  ];
+  const post = [...postZig, ...postBackloaded];
   const postPhases = Array(post.length).fill('start');
   const depths = [...pre, ...post];
   const phases = [...prePhases, ...postPhases];
@@ -197,14 +196,6 @@ function buildFixtureB() {
   ok('A_ext: relativeDepthPeak still ultra-shallow', st.relativeDepthPeak < 0.09, { rel: st.relativeDepthPeak });
 }
 
-/*
- * A_runtime_authoritative_fail — 문서화된 canonical real-device authoritative fail (pre-fix 코드 기준):
- * relativeDepthPeak ≈ 0.06 대역, attemptStarted/baselineFrozen true, completionBlockedReasonAuthoritative,
- * officialShallowPathCandidate/Admitted true, officialShallowPathClosed false,
- * officialShallowPathBlockedReason === no_reversal, officialShallowReversalSatisfied false,
- * officialShallowClosureProofSatisfied false, eventCyclePromoted === false.
- * 머지 기준: 아래 post-fix assert 만 통과하면 됨(추가 실기기 success export 불필요).
- */
 {
   const st = evaluateSquatCompletionState(buildFixtureARuntimeAuthoritativeFail());
   const rel = st.relativeDepthPeak;
