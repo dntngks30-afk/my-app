@@ -1,13 +1,13 @@
 /**
- * PR-SQUAT-ULTRA-SHALLOW-CLOSURE-01 / PR-SQUAT-ULTRA-SHALLOW-RUNTIME-ALIGN-02 — live ultra-low regression
+ * PR-SQUAT-ULTRA-SHALLOW-CLOSURE-01 / ALIGN-02 / FIX-02 — live ultra-low regression
  * npx tsx scripts/camera-squat-ultra-shallow-live-regression-01-smoke.mjs
  *
- * A_truncated: zig-zag post-peak; guarded monotonic stream integrity opens reversal (CLOSURE-01).
- * A_extended: truncated prefix + standing tail — ultra_low_rom_cycle.
- * A_runtime_real_device: slow post-peak (~0.001/frame), phaseHint mostly start — 실기기 권위 fail 클래스
- *   (rel~0.06, attempt+baselineFrozen, shallow admitted, primary 6f monotonic 실패) 재현; ALIGN-02 slow-recovery guarded.
- * A_runtime_ext: A_runtime + standing tail — end-to-end ultra_low_rom_cycle (선호).
- * Fixture B: deeper low_rom_cycle anchor.
+ * A_truncated: zig-zag post-peak; CLOSURE-01 guarded stream integrity.
+ * A_extended: A_trunc + standing tail — ultra_low_rom_cycle.
+ * A_runtime_authoritative_fail: canonical real-device authoritative fail shape (rel~0.06, slow −0.001/frame post-peak);
+ *   **이 PR(FIX-02) 릴리스 게이트** — post-fix 에서 no_reversal 탈출·reversal truth.
+ * A_runtime_authoritative_fail_ext: 위 버퍼 + standing tail — ultra_low_rom_cycle (선호).
+ * Fixture B: low_rom_cycle anchor.
  */
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -107,11 +107,10 @@ function buildFixtureAExtended() {
 }
 
 /**
- * 실기기 authoritative ultra-low: 피크 직후 reversal depth 가 프레임당 ~0.001 만 감소해
- * 기본 postPeakMonotonic(6f, ε=0.002)는 실패했으나 누적 drop·post-peak 길이는 충분.
- * (pre-fix 형태: officialShallowPathBlockedReason === no_reversal, officialShallowReversalSatisfied false)
+ * Canonical authoritative runtime fail → post-fix: guarded slow-recovery monotonic (FIX-02 / ALIGN-02).
+ * 피크 직후 reversal depth 가 프레임당 ~0.001 만 감소해 primary postPeakMonotonic(6f, ε=0.002) 는 실패하던 클래스.
  */
-function buildFixtureARuntimeRealDevice() {
+function buildFixtureARuntimeAuthoritativeFail() {
   const base = 0.02;
   const peak = 0.082;
   const pre = [...Array(6).fill(base), 0.032, 0.055, 0.07, 0.078, peak, peak];
@@ -138,9 +137,9 @@ function buildFixtureARuntimeRealDevice() {
   return depths.map((dp, i) => makeFrame(dp, (t += 80), phases[i]));
 }
 
-/** A_runtime + 짧은 스탠딩 tail — ultra_low_rom_cycle 종료 선호 검증 */
-function buildFixtureARuntimeRealDeviceExtended() {
-  const inner = buildFixtureARuntimeRealDevice();
+/** A_runtime_authoritative_fail + standing tail — ultra_low_rom_cycle 선호 검증 */
+function buildFixtureARuntimeAuthoritativeFailExtended() {
+  const inner = buildFixtureARuntimeAuthoritativeFail();
   const tailDepths = [0.065, 0.052, 0.04, 0.028, 0.022, 0.02, 0.02, 0.02, 0.02];
   const tailPhases = tailDepths.map((_, i) => (i >= tailDepths.length - 5 ? 'ascent' : 'start'));
   let t = inner[inner.length - 1].timestampMs;
@@ -199,38 +198,37 @@ function buildFixtureB() {
 }
 
 /*
- * A_runtime_real_device — ALIGN-02 이전(느린 복귀만 있고 slow-recovery guarded 없을 때) 권위 실패 형태:
- * - relativeDepthPeak in [0.045, 0.09]
- * - attemptStarted === true, baselineFrozen === true → completionBlockedReasonAuthoritative 동일 계약
- * - officialShallowPathCandidate/Admitted === true, officialShallowPathClosed === false
- * - officialShallowPathBlockedReason === no_reversal, officialShallowReversalSatisfied === false
- * - officialShallowClosureProofSatisfied === false, eventCyclePromoted !== true
- * CI는 수정 후(post-fix) 아래 assert 만 실행한다.
+ * A_runtime_authoritative_fail — 문서화된 canonical real-device authoritative fail (pre-fix 코드 기준):
+ * relativeDepthPeak ≈ 0.06 대역, attemptStarted/baselineFrozen true, completionBlockedReasonAuthoritative,
+ * officialShallowPathCandidate/Admitted true, officialShallowPathClosed false,
+ * officialShallowPathBlockedReason === no_reversal, officialShallowReversalSatisfied false,
+ * officialShallowClosureProofSatisfied false, eventCyclePromoted === false.
+ * 머지 기준: 아래 post-fix assert 만 통과하면 됨(추가 실기기 success export 불필요).
  */
 {
-  const st = evaluateSquatCompletionState(buildFixtureARuntimeRealDevice());
+  const st = evaluateSquatCompletionState(buildFixtureARuntimeAuthoritativeFail());
   const rel = st.relativeDepthPeak;
-  ok('A_runtime_real_device: relativeDepthPeak ultra-shallow band (~0.06)', rel >= 0.045 && rel <= 0.09, { rel });
-  ok('A_runtime_real_device: officialShallowPathCandidate', st.officialShallowPathCandidate === true, st);
-  ok('A_runtime_real_device: officialShallowPathAdmitted', st.officialShallowPathAdmitted === true, st);
-  ok('A_runtime_real_device: attemptStarted true', st.attemptStarted === true, st);
-  ok('A_runtime_real_device: baselineFrozen true', st.baselineFrozen === true, st);
-  ok('A_runtime_real_device: completionBlockedReasonAuthoritative', completionBlockedReasonAuthoritative(st), st);
-  ok('A_runtime_real_device: officialShallowPathClosed false (incomplete buffer)', st.officialShallowPathClosed === false, st);
-  ok('A_runtime_real_device: not stuck on no_reversal (post-fix)', st.officialShallowPathBlockedReason !== 'no_reversal', st);
-  ok('A_runtime_real_device: officialShallowReversalSatisfied true (post-fix)', st.officialShallowReversalSatisfied === true, st);
-  ok('A_runtime_real_device: officialShallowClosureProofSatisfied false (no standing tail)', st.officialShallowClosureProofSatisfied === false, st);
-  ok('A_runtime_real_device: eventCyclePromoted false', st.eventCyclePromoted !== true, st);
+  ok('A_runtime_authoritative_fail: relativeDepthPeak ultra-shallow band (~0.06)', rel >= 0.045 && rel <= 0.09, { rel });
+  ok('A_runtime_authoritative_fail: officialShallowPathCandidate', st.officialShallowPathCandidate === true, st);
+  ok('A_runtime_authoritative_fail: officialShallowPathAdmitted', st.officialShallowPathAdmitted === true, st);
+  ok('A_runtime_authoritative_fail: attemptStarted true', st.attemptStarted === true, st);
+  ok('A_runtime_authoritative_fail: baselineFrozen true', st.baselineFrozen === true, st);
+  ok('A_runtime_authoritative_fail: completionBlockedReasonAuthoritative', completionBlockedReasonAuthoritative(st), st);
+  ok('A_runtime_authoritative_fail: officialShallowPathClosed false (incomplete buffer)', st.officialShallowPathClosed === false, st);
+  ok('A_runtime_authoritative_fail: not stuck on no_reversal (post-fix)', st.officialShallowPathBlockedReason !== 'no_reversal', st);
+  ok('A_runtime_authoritative_fail: officialShallowReversalSatisfied true (post-fix)', st.officialShallowReversalSatisfied === true, st);
+  ok('A_runtime_authoritative_fail: officialShallowClosureProofSatisfied false (no standing tail)', st.officialShallowClosureProofSatisfied === false, st);
+  ok('A_runtime_authoritative_fail: eventCyclePromoted false', st.eventCyclePromoted !== true, st);
 }
 
 {
-  const st = evaluateSquatCompletionState(buildFixtureARuntimeRealDeviceExtended());
-  ok('A_runtime_real_device_ext: ultra_low_rom_cycle', st.completionPassReason === 'ultra_low_rom_cycle', st.completionPassReason);
-  ok('A_runtime_real_device_ext: officialShallowPathClosed', st.officialShallowPathClosed === true, st);
-  ok('A_runtime_real_device_ext: officialShallowReversalSatisfied', st.officialShallowReversalSatisfied === true, st);
-  ok('A_runtime_real_device_ext: officialShallowClosureProofSatisfied', st.officialShallowClosureProofSatisfied === true, st);
-  ok('A_runtime_real_device_ext: eventCyclePromoted false', st.eventCyclePromoted !== true, st);
-  ok('A_runtime_real_device_ext: relativeDepthPeak ultra-shallow', st.relativeDepthPeak < 0.09, { rel: st.relativeDepthPeak });
+  const st = evaluateSquatCompletionState(buildFixtureARuntimeAuthoritativeFailExtended());
+  ok('A_runtime_authoritative_fail_ext: ultra_low_rom_cycle', st.completionPassReason === 'ultra_low_rom_cycle', st.completionPassReason);
+  ok('A_runtime_authoritative_fail_ext: officialShallowPathClosed', st.officialShallowPathClosed === true, st);
+  ok('A_runtime_authoritative_fail_ext: officialShallowReversalSatisfied', st.officialShallowReversalSatisfied === true, st);
+  ok('A_runtime_authoritative_fail_ext: officialShallowClosureProofSatisfied', st.officialShallowClosureProofSatisfied === true, st);
+  ok('A_runtime_authoritative_fail_ext: eventCyclePromoted false', st.eventCyclePromoted !== true, st);
+  ok('A_runtime_authoritative_fail_ext: relativeDepthPeak ultra-shallow', st.relativeDepthPeak < 0.09, { rel: st.relativeDepthPeak });
 }
 
 {

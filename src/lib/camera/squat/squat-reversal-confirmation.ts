@@ -290,9 +290,9 @@ function guardedUltraShallowReversalAssist(
     stepDownEpsilon: 0.002,
   });
   /**
-   * PR-SQUAT-ULTRA-SHALLOW-RUNTIME-ALIGN-02: 실기기 권위 ultra-low 는 피크 직후 프레임당 ~0.001 수준 복귀만 있어
-   * primaryMono 가 실패해도 reversal-stream 누적 drop 은 충분할 수 있음. 긴 윈도우·0.001 스텝으로만 보강하며
-   * post-peak 길이·dropReversal 바닥으로 스탠딩 지터 단발과 구분.
+   * PR-SQUAT-ULTRA-SHALLOW-RUNTIME-ALIGN-02 / FIX-02: authoritative ultra-low 는 피크 직후 프레임당 ~0.001 복귀만 있어
+   * primaryMono(6f, ε=0.002) 가 실패해도 reversal-stream 누적 drop 은 충분할 수 있음. 긴 윈도우·0.001 스텝으로만 보강;
+   * post-peak 길이·dropReversal 바닥으로 지터 단발과 구분. 릴리스 게이트: `A_runtime_authoritative_fail` 스모크.
    */
   const slowMono =
     !primaryMono.ok

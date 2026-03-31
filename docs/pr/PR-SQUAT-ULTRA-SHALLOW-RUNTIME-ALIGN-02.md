@@ -34,8 +34,8 @@ Real clips often show **slow post-peak return**: reversal depth falls ~**0.001 p
 
 ### `scripts/camera-squat-ultra-shallow-live-regression-01-smoke.mjs`
 
-- **`buildFixtureARuntimeRealDevice`:** slow `-0.001`/frame post-peak descent after ultra-shallow peak; documents pre-fix authoritative shape in comments; post-fix asserts reversal opens, not `no_reversal`, incomplete buffer (closure proof false), no event promotion.
-- **`buildFixtureARuntimeRealDeviceExtended`:** same prefix + standing tail → **`ultra_low_rom_cycle`**, closed, closure proof, no promotion (strong preference).
+- **`buildFixtureARuntimeAuthoritativeFail`** (PR-FIX-02 릴리스 게이트 이름; 과거 `A_runtime_real_device`): slow `-0.001`/frame post-peak; pre-fix shape in comments; post-fix asserts reversal opens, not `no_reversal`, incomplete buffer OK, no event promotion.
+- **`buildFixtureARuntimeAuthoritativeFailExtended`:** same + standing tail → **`ultra_low_rom_cycle`** (선호).
 
 Existing **A_trunc / A_ext / B** retained.
 
