@@ -308,15 +308,34 @@ console.log('\nPR-02 camera-assist-owner-isolation-smoke\n');
   );
 }
 
-// 6) Shallow fail unchanged — 짧은 시퀀스·미무장으로 not_armed 유지 (PR-03 전 공식 shallow pass 아님)
+// 6) Standing-only / ultra-short buffer — must not pass or claim a finalized ROM cycle (main: squatCompletionState often null pre-attempt; blocked reason is guardrail-driven, not legacy not_armed)
 {
   const tiny = toLandmarks(makeKneeAngleSeries(5000, Array(8).fill(170)));
   const gate = evaluateExerciseAutoProgress('squat', tiny, squatStats(tiny.length));
   const cs = gate.evaluatorResult?.debug?.squatCompletionState ?? {};
-  ok('6 shallow-fail: no attempt', cs.attemptStarted === false, cs.attemptStarted);
-  ok('6 shallow-fail: not_armed', cs.completionBlockedReason === 'not_armed', cs.completionBlockedReason);
-  ok('6 shallow-fail: finalize blocked', cs.completionFinalizeMode === 'blocked', cs.completionFinalizeMode);
+  const sc = gate.squatCycleDebug ?? {};
+  const hm = gate.evaluatorResult?.debug?.highlightedMetrics ?? {};
+  const cpr = sc.completionPassReason ?? hm.completionPassReason;
+  const finalizedCycleReasons = new Set([
+    'standard_cycle',
+    'low_rom_cycle',
+    'ultra_low_rom_cycle',
+    'low_rom_event_cycle',
+    'ultra_low_rom_event_cycle',
+  ]);
+
   ok('6 shallow-fail: gate not pass', gate.status !== 'pass', gate.status);
+  ok('6 shallow-fail: gate completion not satisfied', gate.completionSatisfied === false, gate.completionSatisfied);
+  ok('6 shallow-fail: cycle attempt not started', sc.attemptStarted === false, sc.attemptStarted);
+  ok('6 shallow-fail: no finalized cycle pass reason', cpr == null || !finalizedCycleReasons.has(cpr), cpr);
+  ok('6 shallow-fail: completion truth not passed', sc.completionTruthPassed !== true, sc.completionTruthPassed);
+  ok('6 shallow-fail: lineage not success band', lineage(cs) === 'other', lineage(cs));
+  ok(
+    '6 shallow-fail: finalSuccessOwner not standard/event truth',
+    sc.finalSuccessOwner !== 'completion_truth_standard' && sc.finalSuccessOwner !== 'completion_truth_event',
+    sc.finalSuccessOwner
+  );
+  ok('6 shallow-fail: event cycle not promoted', sc.eventCyclePromoted !== true, sc.eventCyclePromoted);
 }
 
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed`);
