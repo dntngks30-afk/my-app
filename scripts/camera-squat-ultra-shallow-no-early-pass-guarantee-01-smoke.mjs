@@ -165,5 +165,33 @@ console.log('\nD2. valid_shallow_pass — ultra-low squat with clear return path
   );
 }
 
+// ── D3: deep standard path (회귀: standard_cycle + trajectory rescue 비활성) ─
+console.log('\nD3. deep_standard — 깊은 스쿼트 full cycle');
+{
+  const angles = [
+    ...Array(8).fill(170),
+    160, 140, 115, 95, 78, 68, 65, 66, 65,
+    78, 98, 120, 145, 162, 170, 170, 170, 170, 170, 170,
+  ];
+  const landmarks = toLandmarks(makeKneeAngleSeries(200, angles));
+  const stats = squatStats(landmarks, 6000);
+  const gate = evaluateExerciseAutoProgress('squat', landmarks, stats);
+  const dbg = getDbg(gate);
+  const cs = getCs(gate);
+  console.log(
+    `    [info] status=${gate.status} passReason=${dbg.completionPassReason} trajectoryRescue=${cs.trajectoryReversalRescueApplied}`
+  );
+  ok('D3: status === pass', gate.status === 'pass', { status: gate.status });
+  ok('D3: completionPassReason === standard_cycle', dbg.completionPassReason === 'standard_cycle', {
+    completionPassReason: dbg.completionPassReason,
+  });
+  ok('D3: trajectory rescue not applied', cs.trajectoryReversalRescueApplied !== true, {
+    trajectoryReversalRescueApplied: cs.trajectoryReversalRescueApplied,
+  });
+  ok('D3: finalPassEligible === true', gate.finalPassEligible === true, {
+    finalPassEligible: gate.finalPassEligible,
+  });
+}
+
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

@@ -1072,8 +1072,33 @@ export function resolveSquatCompletionPath(params: {
     params.relativeDepthPeak > STANDARD_LABEL_FLOOR + 1e-9 &&
     params.relativeDepthPeak < STANDARD_OWNER_FLOOR;
 
-  if (params.evidenceLabel === 'low_rom') return 'low_rom_cycle';
-  if (params.evidenceLabel === 'ultra_low_rom') return 'ultra_low_rom_cycle';
+  /**
+   * PR-SQUAT-ULTRA-LOW-NO-EARLY-PASS-02: 공식 shallow 입장·승인·owner-얕은 대역인데
+   * shallow ROM closure 증거(번들/드롭 폴백/브리지/rule 역전 등)가 없으면
+   * evidence 라벨만으로 *_cycle 을 열지 않는다 — trajectory 앵커 단독 폴백 차단.
+   */
+  if (params.evidenceLabel === 'low_rom') {
+    if (
+      params.officialShallowPathCandidate === true &&
+      params.officialShallowPathAdmitted === true &&
+      shallowOwnerZone &&
+      params.shallowRomClosureProofSignals !== true
+    ) {
+      return 'not_confirmed';
+    }
+    return 'low_rom_cycle';
+  }
+  if (params.evidenceLabel === 'ultra_low_rom') {
+    if (
+      params.officialShallowPathCandidate === true &&
+      params.officialShallowPathAdmitted === true &&
+      shallowOwnerZone &&
+      params.shallowRomClosureProofSignals !== true
+    ) {
+      return 'not_confirmed';
+    }
+    return 'ultra_low_rom_cycle';
+  }
   if (standardEvidenceOwnerShallowBand) return 'low_rom_cycle';
   return deriveSquatCompletionPassReason({
     completionSatisfied: true,
@@ -2093,12 +2118,19 @@ function evaluateSquatCompletionCore(
   /**
    * Subcontract C: shallow ROM 이 통과 증거를 갖추면 standard derive 보다 먼저 low/ultra_cycle 로 닫는다.
    * (standard owner 대역은 위에서 이미 분기됨)
+   *
+   * PR-SQUAT-ULTRA-LOW-NO-EARLY-PASS-02: trajectory rescue 가 committed peak 만 앵커로 준 경우
+   * shallowReturnProofSatisfied(기존 stream·primary-drop·bridge) 없이는
+   * `reversalConfirmedAfterDescend`(프로그레션 앵커 존재)만으로 closure 증거로 치지 않는다.
    */
+  const trajectoryRescueWithoutShallowReturnProof =
+    trajectoryRescue.trajectoryReversalConfirmedBy === 'trajectory' && !shallowReturnProofSatisfied;
   const shallowRomClosureProofSignals =
     shallowClosureProofBundleFromStream ||
+    officialShallowPrimaryDropClosureFallback ||
     officialShallowStreamBridgeApplied ||
     revConf.reversalConfirmed ||
-    reversalConfirmedAfterDescend;
+    (reversalConfirmedAfterDescend && !trajectoryRescueWithoutShallowReturnProof);
 
   const shallowAdmissionContract = resolveOfficialShallowAdmissionContract({
     officialShallowPathCandidate,
