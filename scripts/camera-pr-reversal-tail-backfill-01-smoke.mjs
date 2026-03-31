@@ -140,7 +140,6 @@ console.log('PR-CAM-REVERSAL-TAIL-BACKFILL-01 smoke\n');
     recoveryDropRatio: 0.5,
     reversalAtMs: peakF.timestampMs,
     minReversalToStandingMs: MIN_SHALLOW_MS,
-    shallowReturnProofSatisfied: true,
   });
   ok('G: integrity false without explicit ascend or finalize', g === false, g);
 }

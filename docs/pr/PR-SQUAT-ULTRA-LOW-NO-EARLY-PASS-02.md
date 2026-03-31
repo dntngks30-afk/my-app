@@ -20,7 +20,14 @@
 
 ## NOT_YET_IMPLEMENTED
 
-- `auto-progression.ts` ultra-targeted guard: 본 PR에서 completion-state만으로 게이트 스모크 통과 → **미적용**.
+- (후속 **PR-SQUAT-ULTRA-LOW-FINAL-GATE-03**에서 처리) `auto-progression.ts` 초저특이 final gate + completion-state 되돌림으로 아래 “미적용” 항목은 **이관·완료**됨.
+
+---
+
+## 후속: PR-SQUAT-ULTRA-LOW-FINAL-GATE-03 (요약)
+
+- **LOCKED_DIRECTION 유지:** too-early ultra-low FP 는 막되, legitimate shallow trajectory rescue 는 completion-state 에서 `shallowReturnProofSatisfied` 강제·`not_confirmed` 폴백으로 잠그지 않는다.
+- **CURRENT_IMPLEMENTED:** `shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass` — `ultra_low_rom_cycle` + `reversalConfirmedBy === 'trajectory'` + `trajectoryReversalRescueApplied` + `minimumCycleDurationSatisfied === false` + step squat 일 때만 UI progression 차단 (`minimum_cycle_duration_not_met:ultra_low_trajectory`).
 
 ## 검증
 

@@ -1,16 +1,14 @@
 /**
- * PR-TRAJECTORY-RESCUE-INTEGRITY-01 — gate-level regression lock.
- * trajectory rescue alone이 shallow return proof 없이 ultra-low pass를 열면 안 된다.
+ * PR-SQUAT-ULTRA-LOW-FINAL-GATE-03 — gate-level regression lock.
  *
  * npx tsx scripts/camera-squat-ultra-shallow-no-early-pass-guarantee-01-smoke.mjs
  *
- * D1 (early_rescue_false_positive): ultra-low 대역 + zig-zag at bottom (post-peak return proof 없음)
- *   → status !== pass, finalPassEligible !== true
+ * D1: 버퍼 미완(standing recovery 없음) → pass 아님
+ * D2: 정상 얕은 full cycle + 충분한 motion cycle → pass
+ * D3: deep standard 회귀
+ * D4: ultra-low + trajectory rescue + 짧은 cycle (minimumCycleDurationSatisfied false) → completion 은 살아도 final pass 차단
  *
- * D2 (valid_shallow_pass): ultra-low 대역 + 명확한 full return cycle
- *   → status === pass, finalPassEligible === true, finalSuccessOwner !== completion_truth_standard
- *
- * completion-state 레벨 메커니즘 검증은 camera-squat-ultra-shallow-live-regression-01-smoke.mjs D1/D2 참조.
+ * completion-state 세부 검증은 camera-squat-ultra-shallow-live-regression-01-smoke.mjs 참조.
  */
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -18,9 +16,11 @@ import { dirname, join } from 'path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 process.chdir(join(__dirname, '..'));
 
-const { evaluateExerciseAutoProgress, isFinalPassLatched } = await import(
-  '../src/lib/camera/auto-progression.ts'
-);
+const {
+  evaluateExerciseAutoProgress,
+  shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass,
+  shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass,
+} = await import('../src/lib/camera/auto-progression.ts');
 
 let passed = 0;
 let failed = 0;
@@ -90,7 +90,27 @@ function getDbg(gate) {
   return gate?.squatCycleDebug ?? {};
 }
 
-console.log('\ncamera-squat-ultra-shallow-no-early-pass-guarantee-01-smoke (PR-TRAJECTORY-RESCUE-INTEGRITY-01)\n');
+/** CAM-31 동일 — 하지 가시성 저하로 guarded trajectory reversal 유도 */
+const LOWER_LIMB_INDICES = [25, 26, 27, 28];
+function applyLowerLimbVisibilityDegrade(landmarkRows, frameIndexFilter, vis = 0.4) {
+  return landmarkRows.map((row, i) => {
+    if (!frameIndexFilter(i)) return row;
+    const lm = row.landmarks.map((p, j) => {
+      if (p == null) return p;
+      if (!LOWER_LIMB_INDICES.includes(j)) return p;
+      return { ...p, visibility: vis };
+    });
+    return { landmarks: lm, timestamp: row.timestamp };
+  });
+}
+
+/** camera-cam31-squat-guarded-trajectory-reversal-smoke 와 동일 얕은 ROM 커브 */
+const SHALLOW_SQUAT_CYCLE_FOR_TRAJECTORY = [
+  170, 168, 162, 152, 140, 130, 118, 105, 98, 95, 93, 92,
+  93, 95, 100, 110, 122, 136, 150, 163, 170,
+];
+
+console.log('\ncamera-squat-ultra-shallow-no-early-pass-guarantee-01-smoke (PR-SQUAT-ULTRA-LOW-FINAL-GATE-03)\n');
 
 // ── D1: early rescue false positive (zig-zag at bottom, no return path) ──────
 console.log('D1. early_rescue_false_positive — zig-zag at bottom without post-peak return');
@@ -129,8 +149,7 @@ console.log('\nD2. valid_shallow_pass — ultra-low squat with clear return path
 {
   /**
    * Standing → ultra-low squat (angles ~92°) → full return to standing.
-   * post-peak return is sustained: shallowClosureProofBundleFromStream fires.
-   * Post-fix: shallowReturnProofSatisfied = true → pass still opens.
+   * post-peak return is sustained — 충분한 cycleDuration 으로 final gate 통과.
    */
   const angles = [
     ...Array(10).fill(170),
@@ -163,6 +182,11 @@ console.log('\nD2. valid_shallow_pass — ultra-low squat with clear return path
     dbg.completionPassReason === 'ultra_low_rom_cycle' || dbg.completionPassReason === 'low_rom_cycle',
     { completionPassReason: dbg.completionPassReason }
   );
+  ok(
+    'D2b: PR-SETUP-SERIES-START-01 predicate does not block legitimate shallow',
+    shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass('squat', cs, dbg) === false,
+    { csPeak: cs.peakLatchedAtIndex, armingFb: dbg.armingFallbackUsed, notes: dbg.eventCycleNotes }
+  );
 }
 
 // ── D3: deep standard path (회귀: standard_cycle + trajectory rescue 비활성) ─
@@ -191,6 +215,92 @@ console.log('\nD3. deep_standard — 깊은 스쿼트 full cycle');
   ok('D3: finalPassEligible === true', gate.finalPassEligible === true, {
     finalPassEligible: gate.finalPassEligible,
   });
+}
+
+// ── D4: final gate predicate (시그니처 고정) + rule·짧은 사이클 비차단 회귀 ─────
+console.log('\nD4. ultra_low_trajectory_short_cycle final gate');
+{
+  ok(
+    'D4a: predicate true only for 5-way ultra-low trajectory rescue + short cycle',
+    shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass(
+      'squat',
+      {
+        completionPassReason: 'ultra_low_rom_cycle',
+        reversalConfirmedBy: 'trajectory',
+        trajectoryReversalRescueApplied: true,
+      },
+      { minimumCycleDurationSatisfied: false }
+    ) === true
+  );
+  ok(
+    'D4a: standard_cycle never hits predicate',
+    shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass(
+      'squat',
+      {
+        completionPassReason: 'standard_cycle',
+        reversalConfirmedBy: 'trajectory',
+        trajectoryReversalRescueApplied: true,
+      },
+      { minimumCycleDurationSatisfied: false }
+    ) === false
+  );
+  ok(
+    'D4a: rule reversal + short cycle does not hit predicate (trajectoryRescueApplied는 rule 경로에서 false)',
+    shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass(
+      'squat',
+      {
+        completionPassReason: 'ultra_low_rom_cycle',
+        reversalConfirmedBy: 'rule',
+        trajectoryReversalRescueApplied: false,
+      },
+      { minimumCycleDurationSatisfied: false }
+    ) === false
+  );
+  ok(
+    'D4a: long cycle does not hit predicate',
+    shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass(
+      'squat',
+      {
+        completionPassReason: 'ultra_low_rom_cycle',
+        reversalConfirmedBy: 'trajectory',
+        trajectoryReversalRescueApplied: true,
+      },
+      { minimumCycleDurationSatisfied: true }
+    ) === false
+  );
+}
+
+console.log('\nD4b. CAM-31 style shallow + short motion cycle + rule — still pass (no over-block)');
+{
+  const stepMs = 44;
+  const nStand = 12;
+  const angles = [
+    ...Array(nStand).fill(170),
+    ...SHALLOW_SQUAT_CYCLE_FOR_TRAJECTORY.slice(1),
+    ...Array(8).fill(170),
+  ];
+  const base = toLandmarks(makeKneeAngleSeries(1000, angles, stepMs));
+  const degraded = applyLowerLimbVisibilityDegrade(
+    base,
+    (i) => i >= nStand + 8 && i < nStand + 16,
+    0.38
+  );
+  const stats = squatStats(degraded, 3200);
+  const gate = evaluateExerciseAutoProgress('squat', degraded, stats);
+  const cs = getCs(gate);
+  const dbg = getDbg(gate);
+  console.log(
+    `    [info] status=${gate.status} finalPassEligible=${gate.finalPassEligible} passReason=${dbg.completionPassReason} revBy=${cs.reversalConfirmedBy} trajRescue=${cs.trajectoryReversalRescueApplied} minCycleOk=${dbg.minimumCycleDurationSatisfied}`
+  );
+  ok(
+    'D4b: ultra_low + minimumCycleDurationSatisfied false + rule path still passes final gate',
+    gate.status === 'pass' &&
+      gate.finalPassEligible === true &&
+      cs.completionPassReason === 'ultra_low_rom_cycle' &&
+      dbg.minimumCycleDurationSatisfied === false &&
+      shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass('squat', cs, dbg) === false,
+    { gate, cs, dbg }
+  );
 }
 
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed`);

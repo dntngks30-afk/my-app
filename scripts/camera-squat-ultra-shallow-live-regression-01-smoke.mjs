@@ -15,6 +15,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 process.chdir(join(__dirname, '..'));
 
 const { evaluateSquatCompletionState } = await import('../src/lib/camera/squat-completion-state.ts');
+const { shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass } = await import(
+  '../src/lib/camera/auto-progression.ts'
+);
 
 let passed = 0;
 let failed = 0;
@@ -405,6 +408,68 @@ function buildFixtureD2ValidShallowPass() {
   ok('D2 valid_shallow_pass: completionSatisfied true',
     st.completionSatisfied === true,
     { completionSatisfied: st.completionSatisfied });
+}
+
+// ─── PR-SETUP-SERIES-START-01: setup/arming series-start 오염 시그니처 → final gate predicate ─
+console.log('\nFixture F — setup series-start false-pass signature (final gate only)\n');
+{
+  const toxicCs = {
+    evidenceLabel: 'ultra_low_rom',
+    reversalConfirmedBy: 'trajectory',
+    trajectoryReversalRescueApplied: true,
+    committedAtMs: 500,
+    reversalAtMs: 500,
+    descendStartAtMs: 500,
+    squatDescentToPeakMs: 0,
+    peakLatchedAtIndex: 0,
+    squatEventCycle: { notes: ['peak_anchor_at_series_start'] },
+  };
+  const toxicDbg = { armingFallbackUsed: true };
+  ok(
+    'F1: full toxic signature → shouldBlock true',
+    shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass('squat', toxicCs, toxicDbg) === true
+  );
+  ok(
+    'F2: descent_weak note only → shouldBlock true',
+    shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass('squat', {
+      ...toxicCs,
+      squatEventCycle: { notes: ['descent_weak'] },
+    }, toxicDbg) === true
+  );
+  ok(
+    'F3: legitimate — armingFallbackUsed false → shouldBlock false',
+    shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass('squat', toxicCs, { armingFallbackUsed: false }) ===
+      false
+  );
+  ok(
+    'F4: legitimate — peakLatchedAtIndex !== 0 → shouldBlock false',
+    shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass('squat', { ...toxicCs, peakLatchedAtIndex: 12 }, toxicDbg) ===
+      false
+  );
+  ok(
+    'F5: legitimate — squatDescentToPeakMs > 0 → shouldBlock false',
+    shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass(
+      'squat',
+      { ...toxicCs, squatDescentToPeakMs: 120 },
+      toxicDbg
+    ) === false
+  );
+  ok(
+    'F6: legitimate — timestamps differ → shouldBlock false',
+    shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass(
+      'squat',
+      { ...toxicCs, committedAtMs: 500, reversalAtMs: 620, descendStartAtMs: 500 },
+      toxicDbg
+    ) === false
+  );
+  ok(
+    'F7: no event-cycle contamination notes → shouldBlock false',
+    shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass(
+      'squat',
+      { ...toxicCs, squatEventCycle: { notes: ['other'] } },
+      toxicDbg
+    ) === false
+  );
 }
 
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed`);

@@ -645,9 +645,8 @@ export function shouldBypassUltraLowRomShortDescentTiming(params: {
  * 명시 상승 증거 또는 (finalize + low-ROM 복귀 증거 + 역전→스탠딩 타이밍)을 만족할 때만 true.
  * 새 threshold 없음 — `recoveryMeetsLowRomStyleFinalizeProof` 및 호출부 `minReversalToStandingMs` 재사용.
  *
- * PR-TRAJECTORY-RESCUE-INTEGRITY-01: explicit ascent 증거 없이 shallow return proof(stream bundle/
- * primary drop fallback/stream bridge)도 없으면 trajectory rescue alone으로 closure/pass를 열 수 없다.
- * trajectory rescue = reversal anchor 보조는 가능; trajectory rescue alone = closure/pass owner 불가.
+ * PR-SQUAT-ULTRA-LOW-FINAL-GATE-03: shallow return proof(bundle/bridge/drop)는 ascent integrity 에
+ * 강제하지 않는다 — 얕은 legitimate trajectory rescue 복구. too-early FP 는 auto-progression UI gate 에서만 차단.
  */
 export type TrajectoryRescueAscentIntegrityArgs = {
   explicitAscendConfirmed: boolean;
@@ -657,17 +656,10 @@ export type TrajectoryRescueAscentIntegrityArgs = {
   recoveryDropRatio?: number;
   reversalAtMs?: number;
   minReversalToStandingMs: number;
-  /**
-   * PR-TRAJECTORY-RESCUE-INTEGRITY-01: stream bundle / primary drop fallback / stream bridge 중
-   * 하나 이상 — explicit ascent 없을 때 post-peak return proof 최소 요건.
-   */
-  shallowReturnProofSatisfied: boolean;
 };
 
 export function trajectoryRescueMeetsAscentIntegrity(args: TrajectoryRescueAscentIntegrityArgs): boolean {
   if (args.explicitAscendConfirmed === true) return true;
-  // PR-TRAJECTORY-RESCUE-INTEGRITY-01: explicit ascent 없으면 shallow return proof 하나 이상 필요
-  if (!args.shallowReturnProofSatisfied) return false;
   if (args.standingRecoveredAtMs == null) return false;
   if (args.standingRecoveryFinalizeSatisfied !== true) return false;
   if (
@@ -1072,33 +1064,8 @@ export function resolveSquatCompletionPath(params: {
     params.relativeDepthPeak > STANDARD_LABEL_FLOOR + 1e-9 &&
     params.relativeDepthPeak < STANDARD_OWNER_FLOOR;
 
-  /**
-   * PR-SQUAT-ULTRA-LOW-NO-EARLY-PASS-02: 공식 shallow 입장·승인·owner-얕은 대역인데
-   * shallow ROM closure 증거(번들/드롭 폴백/브리지/rule 역전 등)가 없으면
-   * evidence 라벨만으로 *_cycle 을 열지 않는다 — trajectory 앵커 단독 폴백 차단.
-   */
-  if (params.evidenceLabel === 'low_rom') {
-    if (
-      params.officialShallowPathCandidate === true &&
-      params.officialShallowPathAdmitted === true &&
-      shallowOwnerZone &&
-      params.shallowRomClosureProofSignals !== true
-    ) {
-      return 'not_confirmed';
-    }
-    return 'low_rom_cycle';
-  }
-  if (params.evidenceLabel === 'ultra_low_rom') {
-    if (
-      params.officialShallowPathCandidate === true &&
-      params.officialShallowPathAdmitted === true &&
-      shallowOwnerZone &&
-      params.shallowRomClosureProofSignals !== true
-    ) {
-      return 'not_confirmed';
-    }
-    return 'ultra_low_rom_cycle';
-  }
+  if (params.evidenceLabel === 'low_rom') return 'low_rom_cycle';
+  if (params.evidenceLabel === 'ultra_low_rom') return 'ultra_low_rom_cycle';
   if (standardEvidenceOwnerShallowBand) return 'low_rom_cycle';
   return deriveSquatCompletionPassReason({
     completionSatisfied: true,
@@ -1983,15 +1950,6 @@ function evaluateSquatCompletionCore(
     progressionReversalFrame = committedOrPostCommitPeakFrame;
   }
 
-  /**
-   * PR-TRAJECTORY-RESCUE-INTEGRITY-01: stream bundle / primary drop fallback / stream bridge 중
-   * 하나 이상이면 post-peak return proof 최소 요건 충족 — trajectory rescue 호출부 공통.
-   */
-  const shallowReturnProofSatisfied =
-    shallowClosureProofBundleFromStream ||
-    officialShallowPrimaryDropClosureFallback ||
-    officialShallowStreamBridgeApplied;
-
   let ascendForProgression = ascendConfirmed;
   if (trajectoryRescue.trajectoryReversalConfirmedBy === 'trajectory') {
     const rf = trajectoryRescue.trajectoryReversalFrame;
@@ -2005,7 +1963,6 @@ function evaluateSquatCompletionCore(
         recoveryDropRatio: recovery.recoveryDropRatio,
         reversalAtMs: rf.timestampMs,
         minReversalToStandingMs: minReversalToStandingMsForShallow,
-        shallowReturnProofSatisfied,
       });
       ruleCompletionBlockedReason = computeBlockedAfterCommitment(rf, ascendForProgression);
     }
@@ -2019,7 +1976,6 @@ function evaluateSquatCompletionCore(
       recoveryDropRatio: recovery.recoveryDropRatio,
       reversalAtMs: progressionReversalFrame.timestampMs,
       minReversalToStandingMs: minReversalToStandingMsForShallow,
-      shallowReturnProofSatisfied,
     });
     ruleCompletionBlockedReason = computeBlockedAfterCommitment(
       progressionReversalFrame,
@@ -2036,7 +1992,6 @@ function evaluateSquatCompletionCore(
       recoveryDropRatio: recovery.recoveryDropRatio,
       reversalAtMs: rf.timestampMs,
       minReversalToStandingMs: minReversalToStandingMsForShallow,
-      shallowReturnProofSatisfied,
     });
     ruleCompletionBlockedReason = computeBlockedAfterCommitment(rf, ascendForProgression);
   }
@@ -2118,19 +2073,12 @@ function evaluateSquatCompletionCore(
   /**
    * Subcontract C: shallow ROM 이 통과 증거를 갖추면 standard derive 보다 먼저 low/ultra_cycle 로 닫는다.
    * (standard owner 대역은 위에서 이미 분기됨)
-   *
-   * PR-SQUAT-ULTRA-LOW-NO-EARLY-PASS-02: trajectory rescue 가 committed peak 만 앵커로 준 경우
-   * shallowReturnProofSatisfied(기존 stream·primary-drop·bridge) 없이는
-   * `reversalConfirmedAfterDescend`(프로그레션 앵커 존재)만으로 closure 증거로 치지 않는다.
    */
-  const trajectoryRescueWithoutShallowReturnProof =
-    trajectoryRescue.trajectoryReversalConfirmedBy === 'trajectory' && !shallowReturnProofSatisfied;
   const shallowRomClosureProofSignals =
     shallowClosureProofBundleFromStream ||
-    officialShallowPrimaryDropClosureFallback ||
     officialShallowStreamBridgeApplied ||
     revConf.reversalConfirmed ||
-    (reversalConfirmedAfterDescend && !trajectoryRescueWithoutShallowReturnProof);
+    reversalConfirmedAfterDescend;
 
   const shallowAdmissionContract = resolveOfficialShallowAdmissionContract({
     officialShallowPathCandidate,

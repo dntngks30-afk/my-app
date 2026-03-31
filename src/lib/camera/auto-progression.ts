@@ -228,6 +228,8 @@ export interface SquatCycleDebug {
   peakAnchorTruth?: 'committed_or_post_commit_peak';
   eventCycleDetected?: boolean;
   eventCycleBand?: string | null;
+  /** PR-SETUP-SERIES-START-01: detectSquatEventCycle notes — final gate 시그니처 전용(관측) */
+  eventCycleNotes?: string[];
   eventCyclePromoted?: boolean;
   eventCycleSource?: string | null;
   /** PR-CAM-CORE: completion-state trajectory descent 폴백 — trace 전용 */
@@ -852,6 +854,85 @@ function squatMinimumCycleOkForFinalPass(
 }
 
 /**
+ * PR-SQUAT-ULTRA-LOW-FINAL-GATE-03: completion-state 에서 shallow rescue 를 살린 뒤,
+ * seated/too-early ultra-low trajectory rescue 만 UI/final pass 에서 초저특이로 차단.
+ * standard_cycle · rule reversal deep · 긴 사이클 ultra-low trajectory 에는 적용 안 함.
+ */
+const SQUAT_ULTRA_LOW_TRAJECTORY_SHORT_CYCLE_UI_BLOCKED_REASON =
+  'minimum_cycle_duration_not_met:ultra_low_trajectory';
+
+/**
+ * 스모크 전용 export — production 은 `evaluateExerciseAutoProgress` 내부와 동일 시그니처만 통과시킨다.
+ */
+export function shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass(
+  stepId: CameraStepId,
+  squatCompletionState: EvaluatorResult['debug'] extends { squatCompletionState?: infer S }
+    ? S | undefined
+    : undefined,
+  squatCycleDebug: SquatCycleDebug | undefined
+): boolean {
+  if (stepId !== 'squat') return false;
+  if (squatCompletionState == null || typeof squatCompletionState !== 'object') return false;
+  const cs = squatCompletionState as {
+    completionPassReason?: string;
+    reversalConfirmedBy?: string;
+    trajectoryReversalRescueApplied?: boolean;
+  };
+  if (cs.completionPassReason !== 'ultra_low_rom_cycle') return false;
+  if (cs.reversalConfirmedBy !== 'trajectory') return false;
+  if (cs.trajectoryReversalRescueApplied !== true) return false;
+  if (squatCycleDebug?.minimumCycleDurationSatisfied !== false) return false;
+  return true;
+}
+
+/**
+ * PR-SETUP-SERIES-START-01: setup/arming 폴백 + 시리즈 시작 피크 앵커 오염으로
+ * trajectory ultra-low 가 닫히는 false positive 만 final pass 에서 차단. completion truth 유지.
+ */
+const SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON = 'setup_series_start_false_pass';
+
+function squatEventCycleNotesIndicateSeriesStartContamination(notes: string[] | undefined): boolean {
+  if (notes == null || notes.length === 0) return false;
+  return notes.includes('peak_anchor_at_series_start') || notes.includes('descent_weak');
+}
+
+/**
+ * 스모크·계약용 export — `evaluateExerciseAutoProgress` 가 사용하는 조건과 동일.
+ */
+export function shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass(
+  stepId: CameraStepId,
+  squatCompletionState: EvaluatorResult['debug'] extends { squatCompletionState?: infer S }
+    ? S | undefined
+    : undefined,
+  squatCycleDebug: SquatCycleDebug | undefined
+): boolean {
+  if (stepId !== 'squat') return false;
+  if (squatCompletionState == null || typeof squatCompletionState !== 'object') return false;
+  const cs = squatCompletionState as {
+    evidenceLabel?: string;
+    reversalConfirmedBy?: string;
+    trajectoryReversalRescueApplied?: boolean;
+    committedAtMs?: number;
+    reversalAtMs?: number;
+    descendStartAtMs?: number;
+    squatDescentToPeakMs?: number;
+    peakLatchedAtIndex?: number | null;
+    squatEventCycle?: { notes?: string[] };
+  };
+  if (cs.evidenceLabel !== 'ultra_low_rom') return false;
+  if (cs.reversalConfirmedBy !== 'trajectory') return false;
+  if (cs.trajectoryReversalRescueApplied !== true) return false;
+  if (squatCycleDebug?.armingFallbackUsed !== true) return false;
+  if (cs.peakLatchedAtIndex !== 0) return false;
+  if (cs.committedAtMs == null || cs.reversalAtMs == null || cs.descendStartAtMs == null) return false;
+  if (cs.descendStartAtMs !== cs.committedAtMs || cs.committedAtMs !== cs.reversalAtMs) return false;
+  if (cs.squatDescentToPeakMs == null || cs.squatDescentToPeakMs > 0) return false;
+  const notes = cs.squatEventCycle?.notes;
+  if (!squatEventCycleNotesIndicateSeriesStartContamination(notes)) return false;
+  return true;
+}
+
+/**
  * PR-01: UI progression / final latch gate — completion owner 와 분리.
  * captureQuality·confidence·passConfirmation·integrity·hard blockers 만 사용한다.
  * 스모크에서 owner 통과 + UI 차단 조합을 검증할 때 export 사용.
@@ -1146,6 +1227,8 @@ function getSquatProgressionCompletionSatisfied(
   const ec = cs?.squatEventCycle;
   squatCycleDebug.eventCycleDetected = ec?.detected;
   squatCycleDebug.eventCycleBand = ec?.band ?? null;
+  squatCycleDebug.eventCycleNotes =
+    ec?.notes != null && ec.notes.length > 0 ? [...ec.notes] : undefined;
   squatCycleDebug.eventCyclePromoted = cs?.eventCyclePromoted;
   squatCycleDebug.eventCycleSource =
     cs?.eventCycleSource ?? (ec?.source === 'none' ? null : ec?.source) ?? null;
@@ -1558,6 +1641,24 @@ export function evaluateExerciseAutoProgress(
       readinessStableDwellSatisfied: readinessStableDwellForGate,
       setupMotionBlocked: setupMotionBlockedForGate,
     });
+    if (
+      squatUiGate.uiProgressionAllowed === true &&
+      shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass(stepId, squatCs, squatCycleDebug)
+    ) {
+      squatUiGate = {
+        uiProgressionAllowed: false,
+        uiProgressionBlockedReason: SQUAT_ULTRA_LOW_TRAJECTORY_SHORT_CYCLE_UI_BLOCKED_REASON,
+      };
+    }
+    if (
+      squatUiGate.uiProgressionAllowed === true &&
+      shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass(stepId, squatCs, squatCycleDebug)
+    ) {
+      squatUiGate = {
+        uiProgressionAllowed: false,
+        uiProgressionBlockedReason: SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON,
+      };
+    }
   }
 
   if (squatCycleDebug && stepId === 'squat' && squatRawIntegrityBlock != null) {
@@ -1638,6 +1739,28 @@ export function evaluateExerciseAutoProgress(
     squatCycleDebug = {
       ...squatCycleDebug,
       finalPassTimingBlockedReason: 'minimum_cycle_duration_not_met',
+    };
+  } else if (
+    squatCycleDebug &&
+    stepId === 'squat' &&
+    completionSatisfied &&
+    squatUiGate?.uiProgressionAllowed === false &&
+    squatUiGate.uiProgressionBlockedReason === SQUAT_ULTRA_LOW_TRAJECTORY_SHORT_CYCLE_UI_BLOCKED_REASON
+  ) {
+    squatCycleDebug = {
+      ...squatCycleDebug,
+      finalPassTimingBlockedReason: SQUAT_ULTRA_LOW_TRAJECTORY_SHORT_CYCLE_UI_BLOCKED_REASON,
+    };
+  } else if (
+    squatCycleDebug &&
+    stepId === 'squat' &&
+    completionSatisfied &&
+    squatUiGate?.uiProgressionAllowed === false &&
+    squatUiGate.uiProgressionBlockedReason === SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON
+  ) {
+    squatCycleDebug = {
+      ...squatCycleDebug,
+      finalPassTimingBlockedReason: SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON,
     };
   }
 
