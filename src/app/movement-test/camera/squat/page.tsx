@@ -46,6 +46,7 @@ import {
   relativeDepthPeakBucket,
   squatDownwardCommitmentReachedObservable,
 } from '@/lib/camera/camera-trace';
+import { noteSquatGateForCameraObservability } from '@/lib/camera/camera-observability-squat-session';
 import {
   recordCaptureSessionTerminalBundle,
   squatTerminalKindFromGate,
@@ -1099,6 +1100,11 @@ export default function CameraSquatPage() {
 
   useEffect(() => {
     gateRef.current = gate;
+  }, [gate]);
+
+  /** CAM-OBS: finalPassEligible 최초 true 엣지에서 pass_snapshot 1회 고정 */
+  useEffect(() => {
+    noteSquatGateForCameraObservability(gate);
   }, [gate]);
 
   useEffect(() => {

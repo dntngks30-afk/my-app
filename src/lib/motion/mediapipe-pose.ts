@@ -1,5 +1,5 @@
 import type { PoseLandmarker } from '@mediapipe/tasks-vision';
-import type { PoseFrame, PoseLandmark } from './pose-types';
+import type { CameraPoseDelegateKind, PoseFrame, PoseLandmark } from './pose-types';
 
 const MEDIAPIPE_WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm';
 const POSE_MODEL_URL =
@@ -121,6 +121,14 @@ function logDetectVideoFailure(
  *   detect ts 소스로 사용하지 않는다.
  * - 이 함수는 반드시 실제 detect 직전에만 호출해야 한다(skip 경로에서는 호출 금지).
  */
+/** CAM-OBS: landmark visibility / presence median — 외부 의존성 없음 */
+function medianLandmarkConfidenceValues(values: number[]): number {
+  if (values.length === 0) return 0;
+  const s = [...values].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 === 1 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+}
+
 function bumpAnalyzerTimestampMs(lastDetectTimestampMs: number, candidateMs: number): number {
   let c = candidateMs;
   if (!Number.isFinite(c) || c < 0) {
@@ -178,11 +186,13 @@ function createEmptyPoseFrame(video: HTMLVideoElement, timestampMs: number): Pos
 function toPoseFrame(
   video: HTMLVideoElement,
   timestampMs: number,
-  landmarks: PoseLandmark[] | null
+  landmarks: PoseLandmark[] | null,
+  cameraObservability?: PoseFrame['cameraObservability']
 ): PoseFrame {
   return {
     ...createEmptyPoseFrame(video, timestampMs),
     landmarks,
+    ...(cameraObservability != null ? { cameraObservability } : {}),
   };
 }
 
@@ -215,6 +225,8 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
    */
   const analyzerStartedAtMs = performance.now();
   let lastDetectTimestampMs = -1;
+  /** CAM-OBS: 연속 detect 성공 시점 wall clock — fps_est 용 */
+  let lastSuccessfulDetectWallMs: number | null = null;
   let detectInFlight = false;
   let closed = false;
   let fatal = false;
@@ -290,7 +302,9 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
       detectInFlight = true;
 
       try {
+        const tDetect0 = performance.now();
         const result = landmarker.detectForVideo(video, ts);
+        const latencyMs = Math.round((performance.now() - tDetect0) * 10) / 10;
         detectInFlight = false;
 
         const firstPose = result.landmarks?.[0];
@@ -298,6 +312,42 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
         if (!firstPose || firstPose.length === 0) {
           return createEmptyPoseFrame(video, ts);
         }
+
+        const wallNow = performance.now();
+        let fpsEst = 0;
+        if (lastSuccessfulDetectWallMs != null && wallNow > lastSuccessfulDetectWallMs) {
+          fpsEst = Math.round(1000 / Math.max(1, wallNow - lastSuccessfulDetectWallMs));
+        }
+        lastSuccessfulDetectWallMs = wallNow;
+
+        const confs = firstPose.map((landmark) => {
+          const v = landmark.visibility;
+          const p = (landmark as { presence?: number }).presence;
+          if (typeof v === 'number' && Number.isFinite(v)) return v;
+          if (typeof p === 'number' && Number.isFinite(p)) return p;
+          return 1;
+        });
+        const medianLandmarkConf = Math.round(medianLandmarkConfidenceValues(confs) * 1000) / 1000;
+        const worldLm = result.worldLandmarks?.[0];
+        const poseWorldPresent = Array.isArray(worldLm) && worldLm.length > 0;
+        /**
+         * @mediapipe/tasks-vision 는 WASM 그래프로 실행 — GPU delegate 노출 없음.
+         * 브라우저 WebGPU/GL 이슈와 혼동 없이 'wasm' 로 기록(불확실 시 unknown 정책과 병행 가능).
+         */
+        const delegate: CameraPoseDelegateKind = 'wasm';
+
+        const cameraObservability = {
+          runtime: {
+            latency_ms: latencyMs,
+            fps_est: fpsEst,
+            delegate,
+          },
+          pose_quality: {
+            median_landmark_conf: medianLandmarkConf,
+            reproj_px: null as number | null,
+            pose_world_present: poseWorldPresent,
+          },
+        };
 
         return toPoseFrame(
           video,
@@ -307,7 +357,8 @@ export async function createLivePoseAnalyzer(): Promise<LivePoseAnalyzer> {
             y: landmark.y,
             z: landmark.z,
             visibility: landmark.visibility,
-          }))
+          })),
+          cameraObservability
         );
       } catch (error) {
         detectInFlight = false;

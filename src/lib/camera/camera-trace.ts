@@ -24,6 +24,9 @@ import {
   type SquatPassSeverity,
   type SquatResultInterpretation,
 } from './squat-result-severity';
+import { peekLastPoseCameraObservability } from './camera-observability-pose-bridge';
+import { getFrozenSquatPassSnapshot } from './camera-observability-squat-session';
+import type { CameraPoseDelegateKind } from '@/lib/motion/pose-types';
 
 /** PR-4: movement type (squat, overhead_reach만 지원) */
 export type TraceMovementType = 'squat' | 'overhead_reach';
@@ -36,6 +39,27 @@ export type TraceOutcome =
   | 'retry_required'
   | 'retry_optional'
   | 'failed';
+
+/**
+ * CAM-OBS: 스쿼트 trace/export용 관측 레이어 — `runtime`·`pose_quality`·`pass_snapshot` + 기존 truth 미러.
+ * 판정·임계값 변경 없음.
+ */
+export type SquatCameraObservabilityExport = {
+  runtime: {
+    latency_ms: number;
+    fps_est: number;
+    delegate: CameraPoseDelegateKind;
+  };
+  pose_quality: {
+    median_landmark_conf: number;
+    reproj_px: number | null;
+    pose_world_present: boolean;
+  };
+  pass_snapshot: Record<string, unknown> | null;
+  completion: Record<string, unknown>;
+  eventCycle: Record<string, unknown>;
+  reversal: Record<string, unknown>;
+};
 
 /** PR-4: 경량 attempt snapshot */
 export interface AttemptSnapshot {
@@ -316,6 +340,74 @@ export interface AttemptSnapshot {
     };
   };
   debugVersion: string;
+  /** CAM-OBS: 스쿼트일 때만 채움 */
+  squatCameraObservability?: SquatCameraObservabilityExport;
+}
+
+/** CAM-OBS: gate 스냅샷에서 관측 레이어 조립(읽기 전용) */
+export function buildSquatCameraObservabilityExport(
+  gate: ExerciseGateResult
+): SquatCameraObservabilityExport | undefined {
+  if (gate.evaluatorResult?.stepId !== 'squat') return undefined;
+
+  const poseObs = peekLastPoseCameraObservability();
+  const runtime = poseObs?.runtime ?? {
+    latency_ms: 0,
+    fps_est: 0,
+    delegate: 'unknown' as CameraPoseDelegateKind,
+  };
+  const pose_quality = poseObs?.pose_quality ?? {
+    median_landmark_conf: 0,
+    reproj_px: null as number | null,
+    pose_world_present: false,
+  };
+
+  const pass_snapshot = getFrozenSquatPassSnapshot();
+  const cs = gate.evaluatorResult.debug?.squatCompletionState;
+
+  const completion: Record<string, unknown> =
+    cs != null
+      ? {
+          completionSatisfied: cs.completionSatisfied === true,
+          completionPassReason: cs.completionPassReason ?? null,
+          completionBlockedReason: cs.completionBlockedReason ?? null,
+          completionMachinePhase: cs.completionMachinePhase ?? null,
+          descendConfirmed: cs.descendConfirmed === true,
+          reversalConfirmedAfterDescend: cs.reversalConfirmedAfterDescend === true,
+          recoveryConfirmedAfterReversal: cs.recoveryConfirmedAfterReversal === true,
+          relativeDepthPeak: cs.relativeDepthPeak,
+          rawDepthPeak: cs.rawDepthPeak,
+          baselineStandingDepth: cs.baselineStandingDepth,
+          standingRecoveryThreshold: cs.standingRecoveryThreshold,
+          eventCyclePromoted: cs.eventCyclePromoted === true,
+          peakLatchedAtIndex: cs.peakLatchedAtIndex ?? null,
+          peakAtMs: cs.peakAtMs ?? null,
+          reversalAtMs: cs.reversalAtMs ?? null,
+          committedAtMs: cs.committedAtMs ?? null,
+          finalPassEligible: gate.finalPassEligible,
+        }
+      : {};
+
+  const ev = cs?.squatEventCycle;
+  const eventCycle: Record<string, unknown> =
+    ev != null && typeof ev === 'object' ? { ...(ev as Record<string, unknown>) } : {};
+
+  const reversal: Record<string, unknown> =
+    cs != null
+      ? {
+          reversalConfirmedBy: cs.reversalConfirmedBy ?? null,
+          reversalDepthDrop: cs.reversalDepthDrop ?? null,
+          reversalFrameCount: cs.reversalFrameCount ?? null,
+          reversalAtMs: cs.reversalAtMs ?? null,
+          reversalConfirmedAfterDescend: cs.reversalConfirmedAfterDescend === true,
+          trajectoryReversalRescueApplied: cs.trajectoryReversalRescueApplied === true,
+          reversalTailBackfillApplied: cs.reversalTailBackfillApplied === true,
+          hmmReversalAssistApplied: cs.hmmReversalAssistApplied === true,
+          hmmReversalAssistReason: cs.hmmReversalAssistReason ?? null,
+        }
+      : {};
+
+  return { runtime, pose_quality, pass_snapshot, completion, eventCycle, reversal };
 }
 
 /** CAM-27: 스쿼트 사전 관측(통과/재시도/최종 스냅샷과 분리). landmark·프레임 배열·blob 없음. */
@@ -430,6 +522,8 @@ export interface SquatAttemptObservation {
   attemptStartedAfterReady?: boolean;
   successSuppressedBySetupPhase?: boolean;
   debugVersion: string;
+  /** CAM-OBS: 스쿼트 관측 레이어(attempt observation 행에 동일 스키마 부착) */
+  squatCameraObservability?: SquatCameraObservabilityExport;
 }
 
 /**
@@ -734,6 +828,7 @@ export function buildSquatAttemptObservation(
     setupMotionBlockReason: gate.squatCycleDebug?.setupMotionBlockReason ?? null,
     attemptStartedAfterReady: gate.squatCycleDebug?.attemptStartedAfterReady,
     successSuppressedBySetupPhase: gate.squatCycleDebug?.successSuppressedBySetupPhase,
+    squatCameraObservability: buildSquatCameraObservabilityExport(gate),
     debugVersion: `${OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
   };
 }
@@ -1297,6 +1392,7 @@ export function buildAttemptSnapshot(
     readinessSummary: context,
     stabilitySummary: extractStabilitySummary(gate),
     diagnosisSummary: buildDiagnosisSummary(stepId, gate, context, options),
+    squatCameraObservability: buildSquatCameraObservabilityExport(gate),
     debugVersion: `${DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
   };
 }

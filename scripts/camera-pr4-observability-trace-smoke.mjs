@@ -107,6 +107,17 @@ ok('AT1d: per-step summary included without raw frame dumps', !Array.isArray(squ
 ok('AT1e: no raw landmark arrays in snapshot', !('landmarks' in (squatSnapshot ?? {})));
 ok('AT1f: squat trace includes current phase', typeof squatSnapshot?.diagnosisSummary?.squatCycle?.currentSquatPhase === 'string');
 ok('AT1g: squat trace includes completion blocked reason field', 'completionBlockedReason' in (squatSnapshot?.diagnosisSummary?.squatCycle ?? {}));
+const camObs = squatSnapshot?.squatCameraObservability;
+ok(
+  'AT1h: CAM-OBS squat bundle has runtime, pose_quality, pass_snapshot, completion, eventCycle, reversal',
+  camObs != null &&
+    typeof camObs.runtime?.latency_ms === 'number' &&
+    typeof camObs.pose_quality?.median_landmark_conf === 'number' &&
+    (camObs.pass_snapshot === null || typeof camObs.pass_snapshot === 'object') &&
+    typeof camObs.completion === 'object' &&
+    typeof camObs.eventCycle === 'object' &&
+    typeof camObs.reversal === 'object'
+);
 
 // AT2: Snapshot creation works for overhead reach
 const ohLandmarks = overheadLandmarks();
@@ -121,6 +132,7 @@ const ohSnapshot = buildAttemptSnapshot('overhead-reach', ohGate);
 ok('AT2a: valid overhead reach result produces compact typed snapshot', ohSnapshot != null);
 ok('AT2b: overhead snapshot has movementType overhead_reach', ohSnapshot?.movementType === 'overhead_reach');
 ok('AT2c: hold/raise-related summary preserved at summary level', typeof ohSnapshot?.motionCompleteness === 'string');
+ok('AT2d: overhead snapshot omits squat-only CAM-OBS bundle', ohSnapshot?.squatCameraObservability === undefined);
 
 // AT3: Low/invalid/retry reasons are inspectable
 const lowQualityLandmarks = squatLandmarks.slice(0, 3);

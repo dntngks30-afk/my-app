@@ -294,6 +294,15 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     }
   }
 
+  const lastCompletionFrame =
+    completionFrames.length > 0 ? completionFrames[completionFrames.length - 1]! : null;
+  const latestSquatDepthProxy =
+    lastCompletionFrame != null &&
+    typeof lastCompletionFrame.derived.squatDepthProxy === 'number' &&
+    Number.isFinite(lastCompletionFrame.derived.squatDepthProxy)
+      ? Math.round(lastCompletionFrame.derived.squatDepthProxy * 1000) / 1000
+      : null;
+
   const squatDepthCalibration: SquatDepthCalibrationDebug = {
     maxPrimaryDepth: Math.round(maxPrimaryCalib * 1000) / 1000,
     maxBlendedDepth: Math.round(maxBlendedCalib * 1000) / 1000,
@@ -558,6 +567,8 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         baselineStandingDepth: Math.round(state.baselineStandingDepth * 100) / 100,
         rawDepthPeak: Math.round(state.rawDepthPeak * 100) / 100,
         relativeDepthPeak: Math.round(state.relativeDepthPeak * 100) / 100,
+        /** CAM-OBS: completion 슬라이스 마지막 프레임 primary depth — pass_snapshot currentDepth 정합 */
+        latestSquatDepthProxy,
         /** PR-04E3A: primary vs blended 상대 피크(%), completion 슬라이스 앞 윈도우 baseline */
         squatRelativeDepthPeakPrimary:
           relPeakPrimPct != null ? Math.round(relPeakPrimPct * 10) / 10 : null,
@@ -738,4 +749,41 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
 
 export function evaluateSquat(landmarks: PoseLandmarks[]): EvaluatorResult {
   return evaluateSquatFromPoseFrames(buildPoseFeaturesFrames('squat', landmarks));
+}
+
+/** CAM-OBS: pass_snapshot JSON 행 — snake_case·camelCase 혼합은 제품 스펙 4.3과 동일 */
+export type SquatPassSnapshotObservabilityInput = {
+  frameIdx: number;
+  passReason: string | null | undefined;
+  completionOwner: string | null | undefined;
+  eventCyclePromoted: boolean;
+  passLatched: boolean;
+  descentConfirmed: boolean;
+  reversalConfirmedAfterDescend: boolean;
+  recoveryConfirmedAfterReversal: boolean;
+  peakLatchedAtIndex: number | null;
+  bottomPeakTs: number | null | undefined;
+  relativeDepthPeak: number;
+  currentDepth: number;
+  stillSeatedAtPass: boolean;
+};
+
+export function formatSquatPassSnapshotObservabilityRow(
+  p: SquatPassSnapshotObservabilityInput
+): Record<string, unknown> {
+  return {
+    frame_idx: p.frameIdx,
+    pass_reason: p.passReason ?? '',
+    completion_owner: p.completionOwner ?? '',
+    eventCyclePromoted: p.eventCyclePromoted,
+    passLatched: p.passLatched,
+    descentConfirmed: p.descentConfirmed,
+    reversalConfirmedAfterDescend: p.reversalConfirmedAfterDescend,
+    recoveryConfirmedAfterReversal: p.recoveryConfirmedAfterReversal,
+    peakLatchedAtIndex: p.peakLatchedAtIndex,
+    bottomPeakTs: p.bottomPeakTs ?? null,
+    relativeDepthPeak: p.relativeDepthPeak,
+    currentDepth: p.currentDepth,
+    stillSeatedAtPass: p.stillSeatedAtPass,
+  };
 }

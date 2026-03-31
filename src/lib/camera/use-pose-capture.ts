@@ -12,6 +12,8 @@ import {
   type PoseFrame,
   type PoseLandmarks,
 } from '@/lib/motion/pose-types';
+import { ingestPoseFrameCameraObservability, resetPoseCameraObservabilityBuffer } from '@/lib/camera/camera-observability-pose-bridge';
+import { resetSquatCameraObservabilitySession } from '@/lib/camera/camera-observability-squat-session';
 
 const MAX_CAPTURED_FRAMES = 180; // 약 10~12초 분량 보존
 const TIMESTAMP_GAP_MS = 600;
@@ -92,6 +94,8 @@ export function usePoseCapture() {
     }
     lastTimestampMsRef.current = frame.timestampMs;
 
+    ingestPoseFrameCameraObservability(frame);
+
     const adaptedFrame = toPoseLandmarks(frame);
     if (!adaptedFrame || !isValidPoseFrame(frame)) {
       droppedFrameCountRef.current += 1;
@@ -127,6 +131,8 @@ export function usePoseCapture() {
 
   const start = useCallback(
     (_video?: HTMLVideoElement) => {
+      resetPoseCameraObservabilityBuffer();
+      resetSquatCameraObservabilitySession();
       sampledFrameCountRef.current = 0;
       droppedFrameCountRef.current = 0;
       filteredLowQualityFrameCountRef.current = 0;

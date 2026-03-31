@@ -9,12 +9,32 @@ export interface PoseLandmark {
   visibility?: number;
 }
 
+/**
+ * CAM-OBS: MediaPipe detect 1회 관측 — 판정·스무딩과 무관, JSON export 전용.
+ */
+export type CameraPoseDelegateKind = 'cpu' | 'gpu' | 'wasm' | 'unknown';
+
+export interface CameraPoseFrameObservability {
+  runtime: {
+    latency_ms: number;
+    fps_est: number;
+    delegate: CameraPoseDelegateKind;
+  };
+  pose_quality: {
+    median_landmark_conf: number;
+    reproj_px: number | null;
+    pose_world_present: boolean;
+  };
+}
+
 export interface PoseFrame {
   timestampMs: number;
   landmarks: PoseLandmark[] | null;
   source: 'mediapipe';
   width: number;
   height: number;
+  /** CAM-OBS: detectForVideo 직후 측정값(랜드마크 유효 프레임에만 채움) */
+  cameraObservability?: CameraPoseFrameObservability;
   /**
    * 내부용: `detectForVideo` 예외 시 true. 캡처 루프 백오프만을 위한 힌트(공개 결과 스키마 아님).
    */
