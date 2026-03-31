@@ -579,6 +579,57 @@ function recoveryMeetsLowRomStyleFinalizeProof(
 }
 
 /**
+ * PR-SQUAT-ULTRA-LOW-DOWNUP-TIMING-BYPASS-01:
+ * ultra-low ROM 에서 "유의미한 down-up cycle"이 이미 완전히 입증된 경우
+ * `descent_span_too_short` timing gate 를 조건부 우회한다.
+ *
+ * 발동 조건 (ALL 필수):
+ *   1. relativeDepthPeak < LOW_ROM_LABEL_FLOOR  (ultra_low_rom 대역 < 0.07)
+ *   2. evidenceLabel === 'ultra_low_rom'
+ *   3. officialShallowPathCandidate === true
+ *   4. attemptStarted === true
+ *   5. descendConfirmed === true
+ *   6. reversalFrameExists === true   (rf != null — 이미 상위 체크에서 보장)
+ *   7. ascendForProgression === true  (asc — 이미 상위 체크에서 보장)
+ *   8. standingRecoveredAtMs != null  (이미 상위 체크에서 보장)
+ *   9. standingRecoveryFinalizeSatisfied === true (이미 상위 체크에서 보장)
+ *  10. recoveryMeetsLowRomStyleFinalizeProof(...)  (continuity + drop proof)
+ *
+ * 새 threshold 없음 — 기존 signal·helper 만 재사용.
+ * 이 함수는 standalone 이므로 상위에서 이미 보장된 조건도 재검사한다.
+ */
+export function shouldBypassUltraLowRomShortDescentTiming(params: {
+  relativeDepthPeak: number;
+  evidenceLabel: SquatEvidenceLabel;
+  officialShallowPathCandidate: boolean;
+  attemptStarted: boolean;
+  descendConfirmed: boolean;
+  reversalFrameExists: boolean;
+  ascendForProgression: boolean;
+  standingRecoveredAtMs: number | null | undefined;
+  standingRecoveryFinalizeSatisfied: boolean;
+  recoveryReturnContinuityFrames: number | null | undefined;
+  recoveryDropRatio: number | null | undefined;
+}): boolean {
+  if (params.relativeDepthPeak >= LOW_ROM_LABEL_FLOOR) return false;
+  if (params.evidenceLabel !== 'ultra_low_rom') return false;
+  if (!params.officialShallowPathCandidate) return false;
+  if (!params.attemptStarted) return false;
+  if (!params.descendConfirmed) return false;
+  if (!params.reversalFrameExists) return false;
+  if (!params.ascendForProgression) return false;
+  if (params.standingRecoveredAtMs == null) return false;
+  if (!params.standingRecoveryFinalizeSatisfied) return false;
+  if (
+    !recoveryMeetsLowRomStyleFinalizeProof({
+      recoveryReturnContinuityFrames: params.recoveryReturnContinuityFrames ?? undefined,
+      recoveryDropRatio: params.recoveryDropRatio ?? undefined,
+    })
+  ) return false;
+  return true;
+}
+
+/**
  * PR-CAM-ASCENT-INTEGRITY-RESCUE-01: trajectory rescue는 reversal 앵커만 줄 수 있고, ascent truth 는
  * 명시 상승 증거 또는 (finalize + low-ROM 복귀 증거 + 역전→스탠딩 타이밍)을 만족할 때만 true.
  * 새 threshold 없음 — `recoveryMeetsLowRomStyleFinalizeProof` 및 호출부 `minReversalToStandingMs` 재사용.
@@ -1746,7 +1797,23 @@ function evaluateSquatCompletionCore(
       effectiveDescentStartFrame != null &&
       peakFrame.timestampMs - effectiveDescentStartFrame.timestampMs < minDescentToPeakMsForLowRom
     ) {
-      return 'descent_span_too_short';
+      if (
+        !shouldBypassUltraLowRomShortDescentTiming({
+          relativeDepthPeak,
+          evidenceLabel,
+          officialShallowPathCandidate,
+          attemptStarted,
+          descendConfirmed,
+          reversalFrameExists: rf != null,
+          ascendForProgression: asc,
+          standingRecoveredAtMs: standingRecovery.standingRecoveredAtMs,
+          standingRecoveryFinalizeSatisfied: standingRecoveryFinalize.finalizeSatisfied,
+          recoveryReturnContinuityFrames: recovery.returnContinuityFrames,
+          recoveryDropRatio: recovery.recoveryDropRatio,
+        })
+      ) {
+        return 'descent_span_too_short';
+      }
     }
     if (
       relativeDepthPeak < SHALLOW_REVERSAL_TIMING_PEAK_MAX &&

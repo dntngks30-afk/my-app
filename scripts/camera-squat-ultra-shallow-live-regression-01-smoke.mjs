@@ -146,6 +146,44 @@ function buildFixtureARuntimeAuthoritativeFailExtended() {
   return [...inner, ...tail];
 }
 
+/**
+ * Fixture C: PR-SQUAT-ULTRA-LOW-DOWNUP-TIMING-BYPASS-01 타겟 클래스.
+ *
+ * ultra-low ROM(rel~0.058) + descent-to-peak 타이밍이 극도로 짧아서
+ * pre-fix 에서는 `descent_span_too_short` 로 차단된다.
+ * reversal·recovery·finalize proof 는 충분 → bypass 조건 모두 충족 → post-fix 에서 shallow cycle.
+ *
+ * 타이밍 설계:
+ *   - baseline 8f × 40ms (BASELINE_WINDOW=6 오염 방지)
+ *   - 짧은 descent: effectiveDescentStart → peak 까지 40ms (1프레임 간격) << 120ms relaxed
+ *   - peak hold 1f, 복귀 4f, standing tail 6f (continuity ≥ 3, dropRatio ≥ 0.45 확보)
+ */
+function buildFixtureCShortDescentTiming() {
+  const base = 0.02;
+  const peak = 0.078; // rel peak ~0.058 vs baseline 0.02 → ultra_low_rom 대역
+  const depths = [
+    // baseline 8f (BASELINE_WINDOW=6 이후에도 여유분 확보)
+    base, base, base, base, base, base, base, base,
+    // 짧은 descent: 단 1프레임 계단으로 peak 도달 (40ms << 120ms relaxed threshold)
+    0.04, peak,
+    // peak hold 1f
+    peak,
+    // 복귀 4f (점진적): recoveryDropRatio≥0.45, continuity≥3 확보
+    0.062, 0.048, 0.032, 0.024,
+    // standing tail 6f
+    base, base, base, base, base, base,
+  ];
+  const phases = [
+    'start', 'start', 'start', 'start', 'start', 'start', 'start', 'start',
+    'descent', 'bottom',
+    'bottom',
+    'ascent', 'ascent', 'ascent', 'ascent',
+    'start', 'start', 'start', 'start', 'start', 'start',
+  ];
+  let t = 100;
+  return depths.map((d, i) => makeFrame(d, (t += 40), phases[i]));
+}
+
 /** Fixture B: relativeDepthPeak well above ~0.08 ultra band; low_rom_cycle regression anchor. */
 function buildFixtureB() {
   const depths = [
@@ -230,6 +268,32 @@ function buildFixtureB() {
   ok('B: completionPassReason low_rom_cycle', st.completionPassReason === 'low_rom_cycle', st.completionPassReason);
   ok('B: officialShallowPathClosed', st.officialShallowPathClosed === true, st);
   ok('B: eventCyclePromoted false', st.eventCyclePromoted !== true, st);
+}
+
+// ─── Fixture C: PR-SQUAT-ULTRA-LOW-DOWNUP-TIMING-BYPASS-01 ───────────────────
+console.log('\nFixture C — ultra-low ROM + short descent timing bypass\n');
+{
+  const st = evaluateSquatCompletionState(buildFixtureCShortDescentTiming());
+  const rel = st.relativeDepthPeak;
+  ok('C: relativeDepthPeak ultra-low band', rel >= 0.04 && rel < 0.09, { rel });
+  ok('C: evidenceLabel ultra_low_rom', st.evidenceLabel === 'ultra_low_rom', { evidenceLabel: st.evidenceLabel });
+  ok('C: officialShallowPathCandidate', st.officialShallowPathCandidate === true, st);
+  ok('C: officialShallowPathAdmitted', st.officialShallowPathAdmitted === true, st);
+  ok('C: attemptStarted', st.attemptStarted === true, st);
+  ok('C: descendConfirmed', st.descendConfirmed === true, st);
+  ok('C: completionBlockedReason !== descent_span_too_short (bypass 발동)',
+    st.completionBlockedReason !== 'descent_span_too_short',
+    { completionBlockedReason: st.completionBlockedReason });
+  ok('C: completionSatisfied', st.completionSatisfied === true,
+    { completionPassReason: st.completionPassReason, completionBlockedReason: st.completionBlockedReason });
+  ok('C: completionPassReason ultra_low_rom_cycle or low_rom_cycle (shallow truth)',
+    st.completionPassReason === 'ultra_low_rom_cycle' || st.completionPassReason === 'low_rom_cycle',
+    { completionPassReason: st.completionPassReason });
+  ok('C: officialShallowPathClosed', st.officialShallowPathClosed === true, st);
+  ok('C: eventCyclePromoted false (rule path, not event promotion)',
+    st.eventCyclePromoted !== true, st);
+  ok('C: completionPassReason NOT standard_cycle', st.completionPassReason !== 'standard_cycle',
+    { completionPassReason: st.completionPassReason });
 }
 
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed`);

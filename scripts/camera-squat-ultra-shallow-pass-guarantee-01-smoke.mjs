@@ -118,5 +118,16 @@ const symptomUltraShallowAngles = [
   ok('eventCyclePromoted not required', dbg?.eventCyclePromoted !== true, dbg?.eventCyclePromoted);
 }
 
+/**
+ * PR-SQUAT-ULTRA-LOW-DOWNUP-TIMING-BYPASS-01 gate-level 주석:
+ *
+ * "짧은 descent 타이밍" 클래스의 completion-state 레벨 bypass 검증은
+ * `camera-squat-ultra-shallow-live-regression-01-smoke.mjs` Fixture C 에서 수행한다.
+ * gate-level 전체 통과(evaluateExerciseAutoProgress → pass)는 위 `symptomUltraShallowAngles`
+ * 케이스가 이미 end-to-end 를 담보한다.
+ * 포즈 랜드마크 시뮬레이션으로 정확한 short-descent 타이밍을 재현하는 것은 depth proxy
+ * 계산 레이어 의존성이 높아 completion-state 레벨 smoke 에서 최소 diff 로 분리한다.
+ */
+
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
