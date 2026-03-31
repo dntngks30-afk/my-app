@@ -1,5 +1,7 @@
 # PR-SQUAT-ULTRA-SHALLOW-RUNTIME-ALIGN-02
 
+**Implementation:** `main` @ `7d7decd` (`guardedUltraShallowReversalAssist` slow-recovery monotonic + live smoke). 스모크 주석에 **pre-fix 권위 실패 조건** 전체를 적어 두고, CI는 **post-fix** assert만 실행한다.
+
 ## Single goal
 
 Close the **runtime authoritative ultra-low** gap where admission already holds (`officialShallowPathCandidate` / `officialShallowPathAdmitted`, `attemptStarted`, `baselineFrozen`, `relativeDepthPeak ≈ 0.06`) but reversal truth stays on **`officialShallowPathBlockedReason === "no_reversal"`** with `officialShallowReversalSatisfied === false`.
