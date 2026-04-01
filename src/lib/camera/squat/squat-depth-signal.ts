@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PR-04E1: 스쿼트 depth 보조 신호 — knee 기반 primary(squatDepthProxy)를 대체하지 않고
  * 얕은 ROM·모바일 노이즈에서 0 근처 붕괴를 완화하는 blended 입력을 만든다.
  *
@@ -115,7 +115,7 @@ function computeKneeTravelSignal(
 
 const PRIMARY_NEAR_FLAT = SQUAT_DEPTH_PRIMARY_NEAR_FLAT;
 /** 기존 분기와 동일 — “강한 primary” 하한(리터럴 이름만 부여, 값 변경 없음) */
-const PRIMARY_STRONG_MIN = 0.045;
+export const PRIMARY_STRONG_MIN = 0.045;
 const FALLBACK_MIN_FOR_ASSIST = 0.022;
 const FALLBACK_PRIMARY_RATIO = 1.75;
 const TRAVEL_EVIDENCE_MIN = 0.18;

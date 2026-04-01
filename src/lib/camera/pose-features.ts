@@ -6,7 +6,7 @@ import { POSE_LANDMARKS } from '@/lib/motion/pose-types';
 import type { PoseLandmark, PoseLandmarks } from '@/lib/motion/pose-types';
 import type { CameraStepId } from '@/lib/public/camera-test';
 import { smoothSignalValue, stabilizePhaseSequence } from './stability';
-import { buildSquatDepthSignal, SQUAT_DEPTH_PRIMARY_NEAR_FLAT } from './squat/squat-depth-signal';
+import { buildSquatDepthSignal, SQUAT_DEPTH_PRIMARY_NEAR_FLAT, PRIMARY_STRONG_MIN } from './squat/squat-depth-signal';
 
 export type PoseFrameValidity = 'valid' | 'low_visibility' | 'missing_keypoints' | 'invalid';
 export type PosePhaseHint =
@@ -766,7 +766,7 @@ const SHALLOW_DESCENT_MIN_DELTA_PER_FRAME = 0.003;
  * - primary 가 near-flat 으로 빠르게 복귀하면(standing 쪽) streak 리셋 → blended 빨리 소멸.
  * - phaseHint 는 이후 applyPhaseHints 에서만 확정되므로 여기서는 primary 깊이 추세만 사용.
  */
-function applySquatDepthBlendPass(frames: PoseFeaturesFrame[]): PoseFeaturesFrame[] {
+export function applySquatDepthBlendPass(frames: PoseFeaturesFrame[]): PoseFeaturesFrame[] {
   const rawSignals = frames.map((frame, i) =>
     buildSquatDepthSignal(frame, i > 0 ? frames[i - 1]! : null)
   );
@@ -810,6 +810,31 @@ function applySquatDepthBlendPass(frames: PoseFeaturesFrame[]): PoseFeaturesFram
     if (temporalSuppressed) {
       depthOut = primaryOut;
       sourceOut = 'primary';
+    }
+
+    /**
+     * PR-CAM-SHALLOW-DEPTH-TRUTH-ALIGN-01: raw peak capture.
+     *
+     * 문제: stabilizeDerivedSignals 의 EMA(alpha=0.46)가 shallow 하강 중 실제 무릎 깊이를
+     * 0~3 프레임 지연시킨다. 예: 실제 raw = 0.090 → EMA-smoothed = 0.068 → blended = 0.068.
+     * LOW_ROM_LABEL_FLOOR(0.07) 미달 → evidenceLabel = ultra_low_rom.
+     *
+     * 해결: EMA가 이미 PRIMARY_STRONG_MIN(0.045)까지 축적됐을 때 — 실제 지속 하강(jitter 아님) —
+     * raw 값이 더 높으면(EMA 지연 상태) squatDepthProxyBlended 를 raw 값으로 올린다.
+     *
+     * 안전 조건:
+     * - primaryNow >= PRIMARY_STRONG_MIN: jitter 스파이크에서는 EMA가 0.045까지 쌓이지 않는다.
+     * - rawPeakCapture > depthOut: 상승 구간에서는 raw < smoothed(EMA가 위에서 지연)이므로
+     *   이 조건은 false → 상승·서 있는 구간에 영향 없음.
+     * - 신규 수치 threshold 없음: PRIMARY_STRONG_MIN 은 squat-depth-signal 의 기존 상수.
+     */
+    const rawPeakCapture =
+      typeof frame.derived.squatDepthProxyRaw === 'number' &&
+      Number.isFinite(frame.derived.squatDepthProxyRaw)
+        ? frame.derived.squatDepthProxyRaw
+        : null;
+    if (rawPeakCapture !== null && rawPeakCapture > depthOut && primaryNow >= PRIMARY_STRONG_MIN) {
+      depthOut = rawPeakCapture;
     }
 
     const blendActive = allowBlendedOutput && sourceOut === 'blended';
