@@ -365,6 +365,8 @@ export interface SquatCompletionState extends MotionCompletionResult {
   officialShallowPathAdmitted?: boolean;
   /** PR-03: 공식 shallow/ultra-low path 로 low_rom_cycle / ultra_low_rom_cycle 로 닫힘 */
   officialShallowPathClosed?: boolean;
+  /** PR-10: 공식 ROM 사이클로 소비 종료(트레이스·camera-trace 정렬용) */
+  closedAsOfficialRomCycle?: boolean;
   /** PR-03: 어떤 arming 계약으로 shallow path 에 들어왔는지 */
   officialShallowPathReason?: string | null;
   /** PR-03: 후보인데 아직 닫히지 않았을 때 병목(관측 전용) */
@@ -530,6 +532,10 @@ export interface SquatCompletionState extends MotionCompletionResult {
   guardedShallowLocalPeakBlockedReason?: string | null;
   guardedShallowLocalPeakIndex?: number | null;
 
+  /** PR-08/09: recovered-suffix shallow closure(있을 때만) — PR-10 소비 게이트 입력 */
+  guardedShallowRecoveredSuffixSatisfied?: boolean;
+  guardedShallowRecoveredSuffixBlockedReason?: string | null;
+
   /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: finalize 게이트 충족 여부(관측). */
   standingFinalizeSatisfied?: boolean;
   /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: 늦은 setup_motion 이 성공을 덮어쓴 경우(평가기에서 설정). */
@@ -560,6 +566,10 @@ export type EvaluateSquatCompletionStateOptions = {
    * 코어가 guarded primary-drop closure 증거를 OR 한다.
    */
   guardedShallowTrajectoryClosureProofApply?: boolean;
+  /**
+   * PR-08/09: recovered-suffix 2차 코어 — `officialShallowReversalSatisfied` OR 에 합류.
+   */
+  guardedShallowRecoveredSuffixClosureApply?: boolean;
 };
 
 /** PR-HMM-03A: calibration 로그용 안정 정수 코드 (0 = null) */
@@ -3063,7 +3073,8 @@ function evaluateSquatCompletionCore(
     officialShallowPrimaryDropClosureFallback,
     officialShallowReversalSatisfied:
       reversalConfirmedAfterDescend ||
-      options?.guardedShallowTrajectoryClosureProofApply === true,
+      options?.guardedShallowTrajectoryClosureProofApply === true ||
+      options?.guardedShallowRecoveredSuffixClosureApply === true,
     ownerAuthoritativeReversalSatisfied,
     ownerAuthoritativeRecoverySatisfied,
     provenanceReversalEvidencePresent,
@@ -3804,6 +3815,151 @@ function mergeShallowTrajectoryAuthoritativeBridge(
   };
 }
 
+/** PR-10: 이미 합성된 공식 shallow closure 증거 → 최종 completion 소비(검출 확장 아님). */
+export type OfficialShallowConsumptionDecision = {
+  eligible: boolean;
+  satisfied: boolean;
+  blockedReason: string | null;
+};
+
+/**
+ * PR-10: proof 축이 이미 true 인데 rule 체인이 `no_reversal` 등으로 남은 모순을 한 곳에서 해소한다.
+ * 증거를 새로 만들지 않고, 기존 official shallow 경로와 동일한 종료 필드를 맞춘다.
+ */
+function consumeOfficialShallowClosureIntoCompletion(
+  state: SquatCompletionState,
+  ec: SquatEventCycleResult,
+  opts: { setupMotionBlocked?: boolean }
+): OfficialShallowConsumptionDecision {
+  const ineligible =
+    state.officialShallowPathCandidate !== true ||
+    state.officialShallowPathAdmitted !== true ||
+    state.completionSatisfied === true ||
+    state.completionPassReason !== 'not_confirmed' ||
+    (state.relativeDepthPeak ?? 0) >= STANDARD_OWNER_FLOOR ||
+    state.eventCyclePromoted === true ||
+    opts.setupMotionBlocked === true;
+
+  if (ineligible) {
+    return { eligible: false, satisfied: false, blockedReason: null };
+  }
+
+  const fail = (blockedReason: string): OfficialShallowConsumptionDecision => ({
+    eligible: true,
+    satisfied: false,
+    blockedReason,
+  });
+
+  if (
+    state.officialShallowClosureProofSatisfied !== true ||
+    state.officialShallowPrimaryDropClosureFallback !== true ||
+    state.officialShallowReversalSatisfied !== true
+  ) {
+    return fail('official_shallow_proof_incomplete');
+  }
+
+  if (
+    state.attemptStarted !== true ||
+    state.descendConfirmed !== true ||
+    state.downwardCommitmentReached !== true
+  ) {
+    return fail('no_real_cycle_context');
+  }
+
+  const machinePhase = deriveSquatCompletionMachinePhase({
+    completionSatisfied: false,
+    currentSquatPhase: state.currentSquatPhase,
+    downwardCommitmentReached: state.downwardCommitmentReached,
+  });
+  if (machinePhase !== 'recovered' && machinePhase !== 'completed') {
+    return fail('completion_machine_phase_not_recovered');
+  }
+
+  const recoveryChainOk =
+    state.recoveryConfirmedAfterReversal === true ||
+    state.guardedShallowRecoveredSuffixSatisfied === true ||
+    (state.standingRecoveredAtMs != null &&
+      state.trajectoryReversalRescueApplied === true &&
+      state.reversalEvidenceProvenance === 'trajectory_anchor_rescue' &&
+      ec.nearStandingRecovered === true);
+  if (!recoveryChainOk) return fail('recovery_chain_not_satisfied');
+
+  if (state.completionBlockedReason === 'not_armed') return fail('not_armed');
+  if (opts.setupMotionBlocked === true) return fail('setup_motion_blocked');
+
+  const notes = ec.notes ?? [];
+  if (notes.includes('series_too_short')) return fail('series_too_short');
+  if (notes.includes('jitter_spike_reject')) return fail('jitter_spike_contamination');
+
+  if (state.evidenceLabel === 'insufficient_signal') return fail('insufficient_signal_standing_proxy');
+
+  if (
+    state.completionBlockedReason === 'no_descend' ||
+    state.completionBlockedReason === 'no_commitment'
+  ) {
+    return fail('descend_or_commitment_blocked');
+  }
+
+  if (state.standingRecoveredAtMs == null) return fail('no_standing_recovery_timestamp');
+
+  const fr = state.standingRecoveryFinalizeReason;
+  const finalizeReasonOk =
+    fr === 'standing_hold_met' ||
+    fr === 'low_rom_guarded_finalize' ||
+    fr === 'ultra_low_rom_guarded_finalize' ||
+    fr === 'low_rom_tail_guarded_finalize';
+
+  const continuityOk = recoveryMeetsLowRomStyleFinalizeProof({
+    recoveryReturnContinuityFrames: state.recoveryReturnContinuityFrames,
+    recoveryDropRatio: state.recoveryDropRatio,
+  });
+
+  const finalizeBundleOk =
+    state.standingRecoveryFinalizeSatisfied === true ||
+    finalizeReasonOk ||
+    continuityOk ||
+    state.standingFinalizeSatisfied === true;
+  if (!finalizeBundleOk) return fail('recovery_finalize_proof_missing');
+
+  return { eligible: true, satisfied: true, blockedReason: null };
+}
+
+/** PR-10: `consumeOfficialShallowClosureIntoCompletion` 만족 시 completion 권위 필드 정렬 */
+function applyOfficialShallowConsumptionPatch(
+  state: SquatCompletionState
+): SquatCompletionState {
+  const completionFinalizeMode = deriveSquatCompletionFinalizeMode({
+    completionSatisfied: true,
+    eventCyclePromoted: false,
+    assistSourcesWithoutPromotion: state.completionAssistSources ?? [],
+    officialShallowAuthoritativeClosure: true,
+  });
+
+  return {
+    ...state,
+    completionSatisfied: true,
+    completionBlockedReason: null,
+    completionPassReason: 'official_shallow_cycle',
+    completionFinalizeMode,
+    officialShallowPathClosed:
+      state.officialShallowPathCandidate === true && state.officialShallowPathAdmitted === true,
+    officialShallowPathBlockedReason: null,
+    closedAsOfficialRomCycle: true,
+    ownerAuthoritativeShallowClosureSatisfied: true,
+    shallowAuthoritativeClosureReason: 'official_shallow_cycle',
+    shallowAuthoritativeClosureBlockedReason: null,
+    reversalConfirmedAfterDescend: true,
+    recoveryConfirmedAfterReversal: true,
+    cycleComplete: true,
+    successPhaseAtOpen: 'standing_recovered',
+    completionMachinePhase: deriveSquatCompletionMachinePhase({
+      completionSatisfied: true,
+      currentSquatPhase: state.currentSquatPhase,
+      downwardCommitmentReached: state.downwardCommitmentReached,
+    }),
+  };
+}
+
 export function evaluateSquatCompletionState(
   frames: PoseFeaturesFrame[],
   options?: EvaluateSquatCompletionStateOptions
@@ -3936,6 +4092,15 @@ export function evaluateSquatCompletionState(
   }
 
   state = mergeShallowTrajectoryAuthoritativeBridge(state, squatEventCycle, bridgeOpts);
+
+  const shallowConsumption = consumeOfficialShallowClosureIntoCompletion(
+    state,
+    squatEventCycle,
+    { setupMotionBlocked: options?.setupMotionBlocked }
+  );
+  if (shallowConsumption.satisfied) {
+    state = applyOfficialShallowConsumptionPatch(state);
+  }
 
   const ruleBlock = state.ruleCompletionBlockedReason ?? null;
   const finalizeOk =

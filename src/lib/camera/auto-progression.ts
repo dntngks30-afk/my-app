@@ -1364,7 +1364,15 @@ function getSquatProgressionCompletionSatisfied(
     squatCycleDebug.guardrailPartialReason = guardrail.debug?.guardrailPartialReason;
     return { satisfied: false, squatCycleDebug };
   }
-  if (currentSquatPhase !== 'standing_recovered' || completionBlockedReason != null) {
+  /** PR-10: completion-state 가 공식 shallow 소비로 이미 닫힌 경우 phase·blockedReason 이중 게이트 완화 */
+  const officialShallowConsumed =
+    cs?.completionSatisfied === true &&
+    completionPassReason === 'official_shallow_cycle' &&
+    completionBlockedReason == null;
+  if (
+    !officialShallowConsumed &&
+    (currentSquatPhase !== 'standing_recovered' || completionBlockedReason != null)
+  ) {
     squatCycleDebug.passBlockedReason = completionBlockedReason ?? 'not_standing_recovered';
     squatCycleDebug.completionRejectedReason =
       completionBlockedReason ?? 'not_standing_recovered';
