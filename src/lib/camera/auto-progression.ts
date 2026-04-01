@@ -236,6 +236,27 @@ export interface SquatCycleDebug {
   eventBasedDescentPath?: boolean;
   /** PR-DOWNUP-GUARANTEE-03: ultra-shallow meaningful down-up rescue — trace only */
   ultraShallowMeaningfulDownUpRescueApplied?: boolean;
+  /**
+   * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: completion-state shallow truth 정렬(디버그 전용).
+   * progression 결정에 사용하지 않는다.
+   */
+  shallowAuthoritativeStage?:
+    | 'pre_attempt'
+    | 'admission_blocked'
+    | 'reversal_blocked'
+    | 'policy_blocked'
+    | 'standing_finalize_blocked'
+    | 'closed';
+  shallowObservationLayerReversalTruth?: boolean;
+  shallowAuthoritativeReversalTruth?: boolean;
+  shallowObservationLayerRecoveryTruth?: boolean;
+  shallowAuthoritativeRecoveryTruth?: boolean;
+  shallowProvenanceOnlyReversalEvidence?: boolean;
+  truthMismatch_reversalTopVsCompletion?: boolean;
+  truthMismatch_recoveryTopVsCompletion?: boolean;
+  truthMismatch_shallowAdmissionVsClosure?: boolean;
+  truthMismatch_provenanceReversalWithoutAuthoritative?: boolean;
+  truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery?: boolean;
 }
 
 export interface ExerciseGateResult {
@@ -1232,6 +1253,21 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.eventCyclePromoted = cs?.eventCyclePromoted;
   squatCycleDebug.eventCycleSource =
     cs?.eventCycleSource ?? (ec?.source === 'none' ? null : ec?.source) ?? null;
+
+  /** PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: pass-through only — gate 로직 미사용 */
+  squatCycleDebug.shallowAuthoritativeStage = cs?.shallowAuthoritativeStage;
+  squatCycleDebug.shallowObservationLayerReversalTruth = cs?.shallowObservationLayerReversalTruth;
+  squatCycleDebug.shallowAuthoritativeReversalTruth = cs?.shallowAuthoritativeReversalTruth;
+  squatCycleDebug.shallowObservationLayerRecoveryTruth = cs?.shallowObservationLayerRecoveryTruth;
+  squatCycleDebug.shallowAuthoritativeRecoveryTruth = cs?.shallowAuthoritativeRecoveryTruth;
+  squatCycleDebug.shallowProvenanceOnlyReversalEvidence = cs?.shallowProvenanceOnlyReversalEvidence;
+  squatCycleDebug.truthMismatch_reversalTopVsCompletion = cs?.truthMismatch_reversalTopVsCompletion;
+  squatCycleDebug.truthMismatch_recoveryTopVsCompletion = cs?.truthMismatch_recoveryTopVsCompletion;
+  squatCycleDebug.truthMismatch_shallowAdmissionVsClosure = cs?.truthMismatch_shallowAdmissionVsClosure;
+  squatCycleDebug.truthMismatch_provenanceReversalWithoutAuthoritative =
+    cs?.truthMismatch_provenanceReversalWithoutAuthoritative;
+  squatCycleDebug.truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery =
+    cs?.truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery;
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';

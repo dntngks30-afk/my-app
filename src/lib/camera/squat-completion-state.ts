@@ -203,6 +203,17 @@ export type SquatCompletionAssistMode =
   | 'event_promotion'
   | 'mixed';
 
+/**
+ * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: shallow 시도 단계 라벨(권위 completion truth 기반, 디버그 전용).
+ */
+export type SquatAuthoritativeShallowStage =
+  | 'pre_attempt'
+  | 'admission_blocked'
+  | 'reversal_blocked'
+  | 'policy_blocked'
+  | 'standing_finalize_blocked'
+  | 'closed';
+
 /** PR-02: 역전 앵커 증거 출처 — pass owner 아님 */
 export type SquatReversalEvidenceProvenance =
   | 'strict_rule'
@@ -372,6 +383,38 @@ export interface SquatCompletionState extends MotionCompletionResult {
   promotionBaseRuleBlockedReason?: string | null;
   /** PR-02: 역전 증거 레인 — trajectory/tail/HMM 구분 */
   reversalEvidenceProvenance?: SquatReversalEvidenceProvenance | null;
+
+  /**
+   * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: shallow 전용 — completion 권위 기준 단일 스테이지(디버그 전용).
+   * pass/게이트 로직에 사용하지 않는다.
+   */
+  shallowAuthoritativeStage?: SquatAuthoritativeShallowStage;
+  /**
+   * auto-progression `SquatCycleDebug.reversalConfirmedAfterDescend` 와 동일 휴리스틱:
+   * committedAtMs·reversalAtMs 타임라인만으로 역전이 “있어 보이는지”.
+   */
+  shallowObservationLayerReversalTruth?: boolean;
+  /** completion 권위 역전 확정 (= reversalConfirmedAfterDescend) */
+  shallowAuthoritativeReversalTruth?: boolean;
+  /** 타임라인 기반 복귀 “있어 보임” (= standingRecoveredAtMs && reversalAtMs) */
+  shallowObservationLayerRecoveryTruth?: boolean;
+  /** completion 권위 복귀 확정 (= recoveryConfirmedAfterReversal) */
+  shallowAuthoritativeRecoveryTruth?: boolean;
+  /**
+   * trajectory/tail/stream-bridge/ultra-shallow rescue 또는 reversalConfirmedBy===trajectory —
+   * owner 역전과 혼동하면 안 되는 provenance 전용 신호.
+   */
+  shallowProvenanceOnlyReversalEvidence?: boolean;
+  /** 상위(타임라인) 역전 vs completion 권위 역전 불일치 */
+  truthMismatch_reversalTopVsCompletion?: boolean;
+  /** 상위(타임라인) 복귀 vs completion 권위 복귀 불일치 */
+  truthMismatch_recoveryTopVsCompletion?: boolean;
+  /** shallow path 입장(admitted) 했으나 닫히지 않고 미통과 */
+  truthMismatch_shallowAdmissionVsClosure?: boolean;
+  /** provenance 역전 신호는 있는데 권위 역전은 false */
+  truthMismatch_provenanceReversalWithoutAuthoritative?: boolean;
+  /** standing 밴드(standingRecoveredAtMs)는 잡혔으나 권위 복귀는 false */
+  truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery?: boolean;
 }
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
@@ -2520,6 +2563,107 @@ export function resolveStandardDriftAfterShallowAdmission(
   return state;
 }
 
+/** PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: standing/finalize 계열 blocked reason — 임계·규칙 변경 없음(분류만). */
+const SHALLOW_OBS_STANDING_FINALIZE_BLOCKERS = new Set<string>([
+  'not_standing_recovered',
+  'recovery_hold_too_short',
+  'low_rom_standing_finalize_not_satisfied',
+  'ultra_low_rom_standing_finalize_not_satisfied',
+  'descent_span_too_short',
+  'ascent_recovery_span_too_short',
+]);
+
+const SHALLOW_OBS_REVERSAL_BLOCKERS = new Set<string>(['no_reversal', 'no_ascend']);
+
+const SHALLOW_OBS_ADMISSION_BLOCKERS = new Set<string>([
+  'not_armed',
+  'no_descend',
+  'insufficient_relative_depth',
+  'no_commitment',
+]);
+
+const SHALLOW_OBS_POLICY_BLOCKERS = new Set<string>([
+  'ultra_low_rom_not_allowed',
+  'trajectory_rescue_not_allowed',
+  'event_promotion_not_allowed',
+]);
+
+/**
+ * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01:
+ * completion 권위 필드만으로 shallow 시도 스테이지를 한 곳에 접는다(pass 로직 미사용).
+ */
+function computeAuthoritativeShallowStageForObservability(
+  state: SquatCompletionState
+): SquatAuthoritativeShallowStage {
+  if (state.completionSatisfied) return 'closed';
+  const br = state.completionBlockedReason ?? '';
+
+  if (SHALLOW_OBS_STANDING_FINALIZE_BLOCKERS.has(br)) return 'standing_finalize_blocked';
+  if (SHALLOW_OBS_REVERSAL_BLOCKERS.has(br)) return 'reversal_blocked';
+
+  if (SHALLOW_OBS_POLICY_BLOCKERS.has(br)) return 'policy_blocked';
+
+  if (br.startsWith('setup_motion:')) return 'admission_blocked';
+
+  if (SHALLOW_OBS_ADMISSION_BLOCKERS.has(br)) {
+    if (br === 'not_armed' && !state.attemptStarted) return 'pre_attempt';
+    return 'admission_blocked';
+  }
+
+  return 'policy_blocked';
+}
+
+/**
+ * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01:
+ * shallow truth 계층(관측 타임라인 / 권위 completion / provenance)과 불일치 플래그를 부착한다.
+ * 기존 pass·blocked·승격 조건은 변경하지 않는다.
+ */
+export function attachShallowTruthObservabilityAlign01(
+  state: SquatCompletionState
+): SquatCompletionState {
+  const shallowObservationLayerReversalTruth =
+    state.committedAtMs != null && state.reversalAtMs != null;
+  const shallowAuthoritativeReversalTruth = state.reversalConfirmedAfterDescend === true;
+  const shallowObservationLayerRecoveryTruth =
+    state.standingRecoveredAtMs != null && state.reversalAtMs != null;
+  const shallowAuthoritativeRecoveryTruth = state.recoveryConfirmedAfterReversal === true;
+
+  const shallowProvenanceOnlyReversalEvidence =
+    state.trajectoryReversalRescueApplied === true ||
+    state.reversalTailBackfillApplied === true ||
+    state.ultraShallowMeaningfulDownUpRescueApplied === true ||
+    state.officialShallowStreamBridgeApplied === true ||
+    state.reversalConfirmedBy === 'trajectory';
+
+  const truthMismatch_reversalTopVsCompletion =
+    shallowObservationLayerReversalTruth !== shallowAuthoritativeReversalTruth;
+  const truthMismatch_recoveryTopVsCompletion =
+    shallowObservationLayerRecoveryTruth !== shallowAuthoritativeRecoveryTruth;
+  const truthMismatch_shallowAdmissionVsClosure =
+    state.officialShallowPathAdmitted === true &&
+    state.officialShallowPathClosed !== true &&
+    state.completionSatisfied !== true;
+  const truthMismatch_provenanceReversalWithoutAuthoritative =
+    shallowProvenanceOnlyReversalEvidence && !shallowAuthoritativeReversalTruth;
+  const truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery =
+    state.standingRecoveredAtMs != null && !shallowAuthoritativeRecoveryTruth;
+
+  return {
+    ...state,
+    shallowAuthoritativeStage: computeAuthoritativeShallowStageForObservability(state),
+    shallowObservationLayerReversalTruth,
+    shallowAuthoritativeReversalTruth,
+    shallowObservationLayerRecoveryTruth,
+    shallowAuthoritativeRecoveryTruth,
+    shallowProvenanceOnlyReversalEvidence,
+    truthMismatch_reversalTopVsCompletion,
+    truthMismatch_recoveryTopVsCompletion,
+    truthMismatch_shallowAdmissionVsClosure,
+    truthMismatch_provenanceReversalWithoutAuthoritative,
+    truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery,
+  };
+}
+
 export function evaluateSquatCompletionState(
   frames: PoseFeaturesFrame[],
   options?: EvaluateSquatCompletionStateOptions
@@ -2613,7 +2757,7 @@ export function evaluateSquatCompletionState(
     ultraLowRomEventPromotionAllowed;
 
   if (!canEventPromote) {
-    return state;
+    return attachShallowTruthObservabilityAlign01(state);
   }
 
   /** PR-03: 승격도 공식 *_cycle 로 통일 — residue event_cycle 문자열은 미통과·디버그 경로에만 유지 */
@@ -2636,7 +2780,7 @@ export function evaluateSquatCompletionState(
     state.officialShallowPathCandidate === true &&
     (promotedPassReason === 'low_rom_cycle' || promotedPassReason === 'ultra_low_rom_cycle');
 
-  return {
+  return attachShallowTruthObservabilityAlign01({
     ...state,
     completionBlockedReason: null,
     completionSatisfied: true,
@@ -2661,5 +2805,5 @@ export function evaluateSquatCompletionState(
     officialShallowDriftedToStandard: promotedOfficialShallowClosed ? false : (state.officialShallowDriftedToStandard ?? false),
     officialShallowDriftReason: promotedOfficialShallowClosed ? null : (state.officialShallowDriftReason ?? null),
     officialShallowPreferredPrefixFrameCount: state.officialShallowPreferredPrefixFrameCount ?? null,
-  };
+  });
 }

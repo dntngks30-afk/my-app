@@ -9,7 +9,10 @@ import {
   hasGuardedShallowSquatAscent,
 } from '@/lib/camera/pose-features';
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
-import { evaluateSquatCompletionState } from '@/lib/camera/squat-completion-state';
+import {
+  attachShallowTruthObservabilityAlign01,
+  evaluateSquatCompletionState,
+} from '@/lib/camera/squat-completion-state';
 import {
   computeSquatCompletionArming,
   mergeArmingDepthObservability,
@@ -284,6 +287,9 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       completionBlockedReason: `setup_motion:${setupBlock.reason ?? 'blocked'}`,
     };
   }
+
+  /** PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: setup 패치 후에도 스테이지·불일치 필드가 최종 state 와 정렬되도록 */
+  state = attachShallowTruthObservabilityAlign01(state);
 
   /** PR-CAM-29B: pose-features guarded shallow ascent — additive observability only */
   let guardedShallowAscentDetected = 0;
@@ -736,6 +742,20 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
             : state.eventCycleSource === 'rule_plus_hmm'
               ? 2
               : 0,
+        /** PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: shallow 권위 스테이지·truth 계층(문자열+0/1) */
+        shallowAuthoritativeStage: state.shallowAuthoritativeStage ?? null,
+        shallowObservationLayerReversalTruth: state.shallowObservationLayerReversalTruth ? 1 : 0,
+        shallowAuthoritativeReversalTruth: state.shallowAuthoritativeReversalTruth ? 1 : 0,
+        shallowObservationLayerRecoveryTruth: state.shallowObservationLayerRecoveryTruth ? 1 : 0,
+        shallowAuthoritativeRecoveryTruth: state.shallowAuthoritativeRecoveryTruth ? 1 : 0,
+        shallowProvenanceOnlyReversalEvidence: state.shallowProvenanceOnlyReversalEvidence ? 1 : 0,
+        truthMismatch_reversalTopVsCompletion: state.truthMismatch_reversalTopVsCompletion ? 1 : 0,
+        truthMismatch_recoveryTopVsCompletion: state.truthMismatch_recoveryTopVsCompletion ? 1 : 0,
+        truthMismatch_shallowAdmissionVsClosure: state.truthMismatch_shallowAdmissionVsClosure ? 1 : 0,
+        truthMismatch_provenanceReversalWithoutAuthoritative:
+          state.truthMismatch_provenanceReversalWithoutAuthoritative ? 1 : 0,
+        truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery:
+          state.truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery ? 1 : 0,
       },
       perStepDiagnostics: perStepRecord,
       /** PR-HMM-01B: shadow decoder 전체 결과 — debug 전용 */
