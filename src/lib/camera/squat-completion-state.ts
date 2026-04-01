@@ -264,6 +264,26 @@ export type ShallowClosureProofTraceStage =
   | 'proof'
   | 'consumption';
 
+/**
+ * PR-CAM-SHALLOW-TICKET-UNIFICATION-12: shallow 완료 단일 권위 티켓(증명·소비는 티켓의 투영).
+ * 이벤트 승격·trajectory 전역 권위화·딥 임계 변경 아님.
+ */
+export type ShallowCompletionTicket = {
+  eligible: boolean;
+  satisfied: boolean;
+  blockedReason: string | null;
+  admissionSatisfied: boolean;
+  attemptSatisfied: boolean;
+  descendSatisfied: boolean;
+  commitmentSatisfied: boolean;
+  lateRecoveredSuffixSatisfied: boolean;
+  antiFalsePassGuardsSatisfied: boolean;
+  proofSatisfied: boolean;
+  consumptionSatisfied: boolean;
+  /** 디버그: 첫 미충족 축(admission|attempt|…|finalize_bundle) */
+  firstFailedStage?: string | null;
+};
+
 export type ShallowClosureProofTrace = {
   stage: ShallowClosureProofTraceStage;
   eligible: boolean;
@@ -639,6 +659,13 @@ export interface SquatCompletionState extends MotionCompletionResult {
    * pass/게이트/임계값 로직에서 읽지 않는다.
    */
   shallowClosureProofTrace?: ShallowClosureProofTrace;
+
+  /** PR-CAM-SHALLOW-TICKET-UNIFICATION-12: 단일 shallow 완료 티켓(권위). */
+  shallowCompletionTicket?: ShallowCompletionTicket;
+  shallowCompletionTicketSatisfied?: boolean;
+  shallowCompletionTicketBlockedReason?: string | null;
+  /** admission | attempt | descend | commitment | late_suffix | anti_false_pass | finalize_bundle */
+  shallowCompletionTicketStage?: string | null;
 }
 
 /** PR-CAM-SHALLOW-PROOF-TRACE-11: 명시적 차단 문자열 — JSON 에서 추론 없이 원인 매핑 */
@@ -3887,6 +3914,9 @@ function getShallowTrajectoryAuthoritativeBridgeDecision(
   return { eligible, satisfied: false, blockedReason: br };
 }
 
+/**
+ * PR-CAM-SHALLOW-TICKET-UNIFICATION-12: 브리지 관측 스탬프만 — completion 은 `ShallowCompletionTicket` 단일 권위.
+ */
 function mergeShallowTrajectoryAuthoritativeBridge(
   state: SquatCompletionState,
   ec: SquatEventCycleResult,
@@ -3897,133 +3927,54 @@ function mergeShallowTrajectoryAuthoritativeBridge(
     guardedShallowLocalPeakAnchor: opts?.guardedShallowLocalPeakAnchor,
   });
 
-  const stamped: SquatCompletionState = {
+  return {
     ...state,
     shallowTrajectoryBridgeEligible: dec.eligible,
     shallowTrajectoryBridgeSatisfied: dec.satisfied,
     shallowTrajectoryBridgeBlockedReason: dec.satisfied ? null : dec.blockedReason,
   };
-
-  if (!dec.satisfied) return stamped;
-
-  const completionFinalizeMode = deriveSquatCompletionFinalizeMode({
-    completionSatisfied: true,
-    eventCyclePromoted: false,
-    assistSourcesWithoutPromotion: state.completionAssistSources ?? [],
-    officialShallowAuthoritativeClosure: true,
-  });
-
-  return {
-    ...stamped,
-    completionPassReason: 'official_shallow_cycle',
-    completionSatisfied: true,
-    completionBlockedReason: null,
-    ownerAuthoritativeShallowClosureSatisfied: true,
-    shallowAuthoritativeClosureReason: 'trajectory_guarded_official_shallow_cycle',
-    shallowAuthoritativeClosureBlockedReason: null,
-    officialShallowPathClosed:
-      state.officialShallowPathCandidate === true && state.officialShallowPathAdmitted === true,
-    officialShallowPathBlockedReason: null,
-    completionFinalizeMode,
-    completionMachinePhase: deriveSquatCompletionMachinePhase({
-      completionSatisfied: true,
-      currentSquatPhase: state.currentSquatPhase,
-      downwardCommitmentReached: state.downwardCommitmentReached,
-    }),
-    successPhaseAtOpen: 'standing_recovered',
-    cycleComplete: true,
-    officialShallowClosureProofSatisfied: true,
-  };
 }
 
-/** PR-10: 이미 합성된 공식 shallow closure 증거 → 최종 completion 소비(검출 확장 아님). */
-export type OfficialShallowConsumptionDecision = {
-  eligible: boolean;
-  satisfied: boolean;
-  blockedReason: string | null;
-};
-
 /**
- * PR-10: proof 축이 이미 true 인데 rule 체인이 `no_reversal` 등으로 남은 모순을 한 곳에서 해소한다.
- * 증거를 새로 만들지 않고, 기존 official shallow 경로와 동일한 종료 필드를 맞춘다.
+ * PR-CAM-SHALLOW-TICKET-UNIFICATION-12: 기존 신호만 모아 shallow 완료 티켓 1장을 만든다(새 증명 축 없음).
  */
-function consumeOfficialShallowClosureIntoCompletion(
+function buildShallowCompletionTicket(
   state: SquatCompletionState,
   ec: SquatEventCycleResult,
-  opts: { setupMotionBlocked?: boolean }
-): OfficialShallowConsumptionDecision {
-  const ineligible =
-    state.officialShallowPathCandidate !== true ||
-    state.officialShallowPathAdmitted !== true ||
-    state.completionSatisfied === true ||
-    state.completionPassReason !== 'not_confirmed' ||
-    (state.relativeDepthPeak ?? 0) >= STANDARD_OWNER_FLOOR ||
-    state.eventCyclePromoted === true ||
-    opts.setupMotionBlocked === true;
+  opts: { setupMotionBlocked: boolean }
+): ShallowCompletionTicket {
+  const s = state;
+  const rel = s.relativeDepthPeak ?? 0;
+  const inShallowOwnerZone = rel < STANDARD_OWNER_FLOOR;
 
-  if (ineligible) {
-    return { eligible: false, satisfied: false, blockedReason: null };
-  }
+  const admissionSatisfied =
+    s.officialShallowPathCandidate === true &&
+    s.officialShallowPathAdmitted === true &&
+    inShallowOwnerZone;
 
-  const fail = (blockedReason: string): OfficialShallowConsumptionDecision => ({
-    eligible: true,
-    satisfied: false,
-    blockedReason,
-  });
-
-  if (
-    state.officialShallowClosureProofSatisfied !== true ||
-    state.officialShallowPrimaryDropClosureFallback !== true ||
-    state.officialShallowReversalSatisfied !== true
-  ) {
-    return fail('official_shallow_proof_incomplete');
-  }
-
-  if (
-    state.attemptStarted !== true ||
-    state.descendConfirmed !== true ||
-    state.downwardCommitmentReached !== true
-  ) {
-    return fail('no_real_cycle_context');
-  }
+  const attemptSatisfied = s.attemptStarted === true;
+  const descendSatisfied = s.descendConfirmed === true;
+  const commitmentSatisfied = s.downwardCommitmentReached === true;
 
   const machinePhase = deriveSquatCompletionMachinePhase({
     completionSatisfied: false,
-    currentSquatPhase: state.currentSquatPhase,
-    downwardCommitmentReached: state.downwardCommitmentReached,
+    currentSquatPhase: s.currentSquatPhase,
+    downwardCommitmentReached: s.downwardCommitmentReached,
   });
-  if (machinePhase !== 'recovered' && machinePhase !== 'completed') {
-    return fail('completion_machine_phase_not_recovered');
-  }
+  const machinePhaseOk = machinePhase === 'recovered' || machinePhase === 'completed';
 
-  const recoveryChainOk =
-    state.recoveryConfirmedAfterReversal === true ||
-    state.guardedShallowRecoveredSuffixSatisfied === true ||
-    (state.standingRecoveredAtMs != null &&
-      state.trajectoryReversalRescueApplied === true &&
-      state.reversalEvidenceProvenance === 'trajectory_anchor_rescue' &&
-      ec.nearStandingRecovered === true);
-  if (!recoveryChainOk) return fail('recovery_chain_not_satisfied');
+  const trajectorySuffixOk =
+    s.trajectoryReversalRescueApplied === true &&
+    s.reversalEvidenceProvenance === 'trajectory_anchor_rescue';
 
-  if (state.completionBlockedReason === 'not_armed') return fail('not_armed');
-  if (opts.setupMotionBlocked === true) return fail('setup_motion_blocked');
+  const ecSuffixOk =
+    ec.reversalDetected === true &&
+    ec.recoveryDetected === true &&
+    ec.nearStandingRecovered === true;
 
-  const notes = ec.notes ?? [];
-  if (notes.includes('series_too_short')) return fail('series_too_short');
-  if (notes.includes('jitter_spike_reject')) return fail('jitter_spike_contamination');
+  const standingTsOk = s.standingRecoveredAtMs != null;
 
-  if (state.evidenceLabel === 'insufficient_signal') return fail('insufficient_signal_standing_proxy');
-
-  if (
-    state.completionBlockedReason === 'no_descend' ||
-    state.completionBlockedReason === 'no_commitment'
-  ) {
-    return fail('descend_or_commitment_blocked');
-  }
-
-  if (state.standingRecoveredAtMs == null) return fail('no_standing_recovery_timestamp');
-
-  const fr = state.standingRecoveryFinalizeReason;
+  const fr = s.standingRecoveryFinalizeReason;
   const finalizeReasonOk =
     fr === 'standing_hold_met' ||
     fr === 'low_rom_guarded_finalize' ||
@@ -4031,23 +3982,131 @@ function consumeOfficialShallowClosureIntoCompletion(
     fr === 'low_rom_tail_guarded_finalize';
 
   const continuityOk = recoveryMeetsLowRomStyleFinalizeProof({
-    recoveryReturnContinuityFrames: state.recoveryReturnContinuityFrames,
-    recoveryDropRatio: state.recoveryDropRatio,
+    recoveryReturnContinuityFrames: s.recoveryReturnContinuityFrames,
+    recoveryDropRatio: s.recoveryDropRatio,
   });
 
+  const st = s as SquatCompletionState & { standingRecoveryFinalizeSatisfied?: boolean };
   const finalizeBundleOk =
-    state.standingRecoveryFinalizeSatisfied === true ||
+    st.standingRecoveryFinalizeSatisfied === true ||
     finalizeReasonOk ||
     continuityOk ||
-    state.standingFinalizeSatisfied === true;
-  if (!finalizeBundleOk) return fail('recovery_finalize_proof_missing');
+    s.standingFinalizeSatisfied === true;
 
-  return { eligible: true, satisfied: true, blockedReason: null };
+  const recoveryProofOk =
+    fr === 'standing_hold_met' ||
+    recoveryMeetsLowRomStyleFinalizeProof({
+      recoveryReturnContinuityFrames: s.recoveryReturnContinuityFrames,
+      recoveryDropRatio: s.recoveryDropRatio,
+    });
+
+  const req = s.squatReversalDropRequired ?? REVERSAL_DROP_MIN_ABS;
+  const minDrop = Math.max(REVERSAL_DROP_MIN_ABS, req * 0.88) - 1e-12;
+  const achieved = s.squatReversalDropAchieved ?? 0;
+  const postPeakReturnOk = achieved >= minDrop;
+
+  const trajectoryLateSuffixOk =
+    machinePhaseOk &&
+    trajectorySuffixOk &&
+    ecSuffixOk &&
+    standingTsOk &&
+    finalizeBundleOk &&
+    recoveryProofOk &&
+    postPeakReturnOk;
+
+  /** 공식 스트림 브리지 — trajectory rescue 없이도 동일 finalize·이벤트 증거가 있으면 접미사로 인정(PR-03 rework). */
+  const streamBridgeLateSuffixOk =
+    s.officialShallowStreamBridgeApplied === true &&
+    machinePhaseOk &&
+    ecSuffixOk &&
+    standingTsOk &&
+    finalizeBundleOk &&
+    recoveryProofOk &&
+    postPeakReturnOk;
+
+  /** PR-08/09 국소 suffix | trajectory 접미사 | 스트림 브리지 접미사 — 새 증거 축 없음. */
+  const lateRecoveredSuffixSatisfied =
+    s.guardedShallowRecoveredSuffixSatisfied === true ||
+    trajectoryLateSuffixOk ||
+    streamBridgeLateSuffixOk;
+
+  const notes = ec.notes ?? [];
+  const antiFalsePassGuardsSatisfied =
+    opts.setupMotionBlocked !== true &&
+    s.eventCyclePromoted !== true &&
+    !notes.includes('series_too_short') &&
+    !notes.includes('jitter_spike_reject') &&
+    s.evidenceLabel !== 'insufficient_signal' &&
+    s.completionBlockedReason !== 'no_descend' &&
+    s.completionBlockedReason !== 'no_commitment' &&
+    s.completionBlockedReason !== 'not_armed' &&
+    s.currentSquatPhase !== 'idle';
+
+  const innerSatisfied =
+    admissionSatisfied &&
+    attemptSatisfied &&
+    descendSatisfied &&
+    commitmentSatisfied &&
+    lateRecoveredSuffixSatisfied &&
+    antiFalsePassGuardsSatisfied;
+
+  const eligible =
+    s.officialShallowPathCandidate === true &&
+    s.officialShallowPathAdmitted === true &&
+    inShallowOwnerZone &&
+    s.completionPassReason === 'not_confirmed' &&
+    s.completionSatisfied !== true &&
+    s.eventCyclePromoted !== true &&
+    opts.setupMotionBlocked !== true;
+
+  let firstFailedStage: string | null = null;
+  if (!admissionSatisfied) firstFailedStage = 'admission';
+  else if (!attemptSatisfied) firstFailedStage = 'attempt';
+  else if (!descendSatisfied) firstFailedStage = 'descend';
+  else if (!commitmentSatisfied) firstFailedStage = 'commitment';
+  else if (!lateRecoveredSuffixSatisfied) {
+    if (
+      machinePhaseOk &&
+      trajectorySuffixOk &&
+      ecSuffixOk &&
+      standingTsOk &&
+      !finalizeBundleOk
+    ) {
+      firstFailedStage = 'finalize_bundle';
+    } else {
+      firstFailedStage = 'late_suffix';
+    }
+  } else if (!antiFalsePassGuardsSatisfied) firstFailedStage = 'anti_false_pass';
+
+  const satisfied = eligible && innerSatisfied;
+  const blockedReason =
+    eligible && !innerSatisfied && firstFailedStage != null
+      ? `shallow_ticket_${firstFailedStage}`
+      : null;
+
+  const proofSatisfied = satisfied;
+  const consumptionSatisfied = satisfied;
+
+  return {
+    eligible,
+    satisfied,
+    blockedReason,
+    admissionSatisfied,
+    attemptSatisfied,
+    descendSatisfied,
+    commitmentSatisfied,
+    lateRecoveredSuffixSatisfied,
+    antiFalsePassGuardsSatisfied,
+    proofSatisfied,
+    consumptionSatisfied,
+    firstFailedStage,
+  } satisfies ShallowCompletionTicket;
 }
 
-/** PR-10: `consumeOfficialShallowClosureIntoCompletion` 만족 시 completion 권위 필드 정렬 */
-function applyOfficialShallowConsumptionPatch(
-  state: SquatCompletionState
+/** PR-CAM-SHALLOW-TICKET-UNIFICATION-12: 티켓 통과 시 공식 shallow 완료·증명 투영(단일 지점). */
+function applyShallowCompletionTicketPatch(
+  state: SquatCompletionState,
+  ticket: ShallowCompletionTicket
 ): SquatCompletionState {
   const completionFinalizeMode = deriveSquatCompletionFinalizeMode({
     completionSatisfied: true,
@@ -4078,10 +4137,54 @@ function applyOfficialShallowConsumptionPatch(
       currentSquatPhase: state.currentSquatPhase,
       downwardCommitmentReached: state.downwardCommitmentReached,
     }),
+    officialShallowReversalSatisfied: true,
+    officialShallowClosureProofSatisfied: true,
+    officialShallowPrimaryDropClosureFallback: true,
+    ruleCompletionBlockedReason: null,
+    postAssistCompletionBlockedReason: null,
+    shallowCompletionTicket: ticket,
+    shallowCompletionTicketSatisfied: true,
+    shallowCompletionTicketBlockedReason: null,
+    shallowCompletionTicketStage: null,
   };
 }
 
-/** PR-CAM-SHALLOW-PROOF-TRACE-11: `consumeOfficialShallowClosureIntoCompletion` ineligible 체인 순서 미러(관측만). */
+/**
+ * PR-CAM-SHALLOW-TICKET-UNIFICATION-12: 티켓 스코프에서 미통과 시 split-brain 제거 — 증명 축을 티켓과 정렬.
+ */
+function applyShallowCompletionTicketEligibleFailureProjection(
+  state: SquatCompletionState,
+  ticket: ShallowCompletionTicket
+): SquatCompletionState {
+  return {
+    ...state,
+    officialShallowReversalSatisfied: false,
+    officialShallowClosureProofSatisfied: false,
+    officialShallowPrimaryDropClosureFallback: false,
+    officialShallowPathClosed: false,
+    ownerAuthoritativeShallowClosureSatisfied: false,
+    shallowAuthoritativeClosureReason: null,
+    shallowAuthoritativeClosureBlockedReason: ticket.blockedReason,
+    shallowCompletionTicket: ticket,
+    shallowCompletionTicketSatisfied: false,
+    shallowCompletionTicketBlockedReason: ticket.blockedReason,
+    shallowCompletionTicketStage: ticket.firstFailedStage ?? null,
+  };
+}
+
+/** PR-10 레거시 소비 결정 형태 — PR-12 티켓이 합성해 트레이스에 전달한다. */
+export type OfficialShallowConsumptionDecision = {
+  eligible: boolean;
+  satisfied: boolean;
+  blockedReason: string | null;
+};
+
+/**
+ * PR-10 소비 로직은 PR-CAM-SHALLOW-TICKET-UNIFICATION-12 에서 `ShallowCompletionTicket` 단일 권위로 대체됨.
+ * 타입·트레이스 헬퍼는 티켓 기준 `shallowConsumption` 합성에 사용한다.
+ */
+
+/** PR-CAM-SHALLOW-PROOF-TRACE-11: 구 PR-10 ineligible 체인 순서 미러(관측만). */
 function firstOfficialShallowConsumptionIneligibilityReason(
   state: SquatCompletionState,
   setupMotionBlocked: boolean
@@ -4529,14 +4632,34 @@ export function evaluateSquatCompletionState(
 
   state = mergeShallowTrajectoryAuthoritativeBridge(state, squatEventCycle, bridgeOpts);
 
-  const shallowConsumption = consumeOfficialShallowClosureIntoCompletion(
-    state,
-    squatEventCycle,
-    { setupMotionBlocked: options?.setupMotionBlocked }
-  );
-  if (shallowConsumption.satisfied) {
-    state = applyOfficialShallowConsumptionPatch(state);
+  const setupMotionBlockedFlag = options?.setupMotionBlocked === true;
+  const shallowCompletionTicket = buildShallowCompletionTicket(state, squatEventCycle, {
+    setupMotionBlocked: setupMotionBlockedFlag,
+  });
+
+  if (shallowCompletionTicket.eligible && shallowCompletionTicket.satisfied) {
+    state = applyShallowCompletionTicketPatch(state, shallowCompletionTicket);
+  } else if (shallowCompletionTicket.eligible && !shallowCompletionTicket.satisfied) {
+    state = applyShallowCompletionTicketEligibleFailureProjection(state, shallowCompletionTicket);
+  } else {
+    state = {
+      ...state,
+      shallowCompletionTicket,
+      shallowCompletionTicketSatisfied: false,
+      shallowCompletionTicketBlockedReason: null,
+      shallowCompletionTicketStage: null,
+    };
   }
+
+  /** PR-10 호환: proof-trace 레이어는 티켓 결과를 소비 결정으로만 투영(별도 재판정 없음). */
+  const shallowConsumption: OfficialShallowConsumptionDecision = {
+    eligible: shallowCompletionTicket.eligible,
+    satisfied: shallowCompletionTicket.eligible && shallowCompletionTicket.satisfied,
+    blockedReason:
+      shallowCompletionTicket.eligible && !shallowCompletionTicket.satisfied
+        ? shallowCompletionTicket.blockedReason
+        : null,
+  };
 
   const ruleBlock = state.ruleCompletionBlockedReason ?? null;
   const finalizeOk =

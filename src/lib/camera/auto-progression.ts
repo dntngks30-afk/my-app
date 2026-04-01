@@ -38,6 +38,7 @@ import {
 import type {
   ShallowAuthoritativeContractStatus,
   ShallowClosureProofTrace,
+  ShallowCompletionTicket,
   ShallowNormalizedBlockerFamily,
 } from '@/lib/camera/squat-completion-state';
 import type { SquatOwnerTruthSource, SquatOwnerTruthStage } from '@/lib/camera/squat/squat-owner-trace';
@@ -312,6 +313,11 @@ export interface SquatCycleDebug {
     consumptionBlockedReason?: string | null;
     firstDecisiveBlockedReason?: string | null;
   };
+  /** PR-CAM-SHALLOW-TICKET-UNIFICATION-12: 단일 shallow 완료 티켓 */
+  shallowCompletionTicket?: ShallowCompletionTicket;
+  shallowCompletionTicketSatisfied?: boolean;
+  shallowCompletionTicketBlockedReason?: string | null;
+  shallowCompletionTicketStage?: string | null;
 }
 
 export interface ExerciseGateResult {
@@ -1380,6 +1386,14 @@ function getSquatProgressionCompletionSatisfied(
       firstDecisiveBlockedReason: shallowProofTrace.firstDecisiveBlockedReason,
     };
   }
+
+  if (cs?.shallowCompletionTicket != null) {
+    squatCycleDebug.shallowCompletionTicket = cs.shallowCompletionTicket;
+  }
+  squatCycleDebug.shallowCompletionTicketSatisfied = cs?.shallowCompletionTicketSatisfied;
+  squatCycleDebug.shallowCompletionTicketBlockedReason =
+    cs?.shallowCompletionTicketBlockedReason ?? null;
+  squatCycleDebug.shallowCompletionTicketStage = cs?.shallowCompletionTicketStage ?? null;
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';
