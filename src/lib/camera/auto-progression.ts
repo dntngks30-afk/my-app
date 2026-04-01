@@ -276,6 +276,10 @@ export interface SquatCycleDebug {
   ownerTruthSource?: SquatOwnerTruthSource;
   ownerTruthStage?: SquatOwnerTruthStage;
   ownerTruthBlockedBy?: string | null;
+  /** PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02 — pass-through only */
+  ownerAuthoritativeReversalSatisfied?: boolean;
+  ownerAuthoritativeRecoverySatisfied?: boolean;
+  provenanceReversalEvidencePresent?: boolean;
 }
 
 export interface ExerciseGateResult {
@@ -1298,6 +1302,11 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.ownerTruthSource = cs?.ownerTruthSource ?? 'none';
   squatCycleDebug.ownerTruthStage = cs?.ownerTruthStage;
   squatCycleDebug.ownerTruthBlockedBy = cs?.ownerTruthBlockedBy ?? null;
+
+  /** PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: 게이트 미사용 pass-through */
+  squatCycleDebug.ownerAuthoritativeReversalSatisfied = cs?.ownerAuthoritativeReversalSatisfied;
+  squatCycleDebug.ownerAuthoritativeRecoverySatisfied = cs?.ownerAuthoritativeRecoverySatisfied;
+  squatCycleDebug.provenanceReversalEvidencePresent = cs?.provenanceReversalEvidencePresent;
 
   /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 게이트 미사용 pass-through */
   squatCycleDebug.ultraLowPolicyScope = cs?.ultraLowPolicyScope;
