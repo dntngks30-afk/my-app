@@ -162,6 +162,9 @@ export interface SquatCycleDebug {
   guardedShallowLocalPeakFound?: boolean;
   guardedShallowLocalPeakBlockedReason?: string | null;
   guardedShallowLocalPeakIndex?: number | null;
+  /** PR-08: shallow recovered-suffix closure 계약(입장·평가 시에만) */
+  guardedShallowRecoveredSuffixSatisfied?: boolean;
+  guardedShallowRecoveredSuffixBlockedReason?: string | null;
   /** PR-COMP-03: completion·pass와 무관한 strict 내부 해석(트레이스 전용) */
   squatInternalQuality?: SquatInternalQuality;
   /** PR-CAM-10: ambiguous retry / severe-fail 완화 계약 관측 */
@@ -1234,6 +1237,13 @@ function getSquatProgressionCompletionSatisfied(
           guardedShallowLocalPeakFound: cs.guardedShallowLocalPeakFound,
           guardedShallowLocalPeakBlockedReason: cs.guardedShallowLocalPeakBlockedReason ?? null,
           guardedShallowLocalPeakIndex: cs.guardedShallowLocalPeakIndex ?? null,
+        }
+      : {}),
+    ...(typeof cs?.guardedShallowRecoveredSuffixSatisfied === 'boolean'
+      ? {
+          guardedShallowRecoveredSuffixSatisfied: cs.guardedShallowRecoveredSuffixSatisfied,
+          guardedShallowRecoveredSuffixBlockedReason:
+            cs.guardedShallowRecoveredSuffixBlockedReason ?? null,
         }
       : {}),
     squatInternalQuality: result.debug?.squatInternalQuality,

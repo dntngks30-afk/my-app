@@ -530,6 +530,13 @@ export interface SquatCompletionState extends MotionCompletionResult {
   guardedShallowLocalPeakBlockedReason?: string | null;
   guardedShallowLocalPeakIndex?: number | null;
 
+  /**
+   * PR-08: shallow recovered-suffix closure — 늦은 복구 접미사가 이미 입증된 경우에만 스탬프.
+   * 독립 성공 소유자 아님; 공식 shallow closure 경로 입력용.
+   */
+  guardedShallowRecoveredSuffixSatisfied?: boolean;
+  guardedShallowRecoveredSuffixBlockedReason?: string | null;
+
   /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: finalize 게이트 충족 여부(관측). */
   standingFinalizeSatisfied?: boolean;
   /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: 늦은 setup_motion 이 성공을 덮어쓴 경우(평가기에서 설정). */
@@ -560,6 +567,11 @@ export type EvaluateSquatCompletionStateOptions = {
    * 코어가 guarded primary-drop closure 증거를 OR 한다.
    */
   guardedShallowTrajectoryClosureProofApply?: boolean;
+  /**
+   * PR-08: recovered-suffix shallow closure — 피크 앵커 오염 시에도 `getShallowAuthoritativeClosureDecision` 가
+   * 동일 공식 shallow 경로로 닫을 수 있게 primary-drop 증거·피크 바이패스를 합성한다.
+   */
+  guardedShallowRecoveredSuffixClosureApply?: boolean;
 };
 
 /** PR-HMM-03A: calibration 로그용 안정 정수 코드 (0 = null) */
@@ -1798,6 +1810,11 @@ function getShallowAuthoritativeClosureDecision(p: {
   provenanceReversalEvidencePresent: boolean;
   /** trajectory rescue / tail / ultra 가 역전 라벨을 trajectory 쪽으로 만든 경우 */
   reversalLabeledTrajectory: boolean;
+  /**
+   * PR-08: `evaluateSquatCompletionState` 가 recovered-suffix 계약을 통과한 뒤 2차 코어에만 설정 —
+   * 피크 시리즈-시작/committed 앵커 실패를 shallow 권위 클로저에서 제외한다(그 외 게이트 동일).
+   */
+  recoveredSuffixPeakAnchorBypass?: boolean;
 }): { satisfied: boolean; shallowAuthoritativeClosureBlockedReason: string | null } {
   if (p.completionAlreadySatisfied) {
     return { satisfied: false, shallowAuthoritativeClosureBlockedReason: null };
@@ -1840,17 +1857,19 @@ function getShallowAuthoritativeClosureDecision(p: {
     };
   }
   /** PR-CAM-PEAK-ANCHOR-INTEGRITY: 첫 유효 프레임 피크 래치는 setup/시리즈 시작 오염으로 취급 */
-  if (p.peakLatchedAtIndex === 0) {
-    return {
-      satisfied: false,
-      shallowAuthoritativeClosureBlockedReason: 'peak_series_start_contamination',
-    };
-  }
-  if (!p.hasValidCommittedPeakAnchor || p.committedOrPostCommitPeakFrame == null) {
-    return {
-      satisfied: false,
-      shallowAuthoritativeClosureBlockedReason: 'invalid_committed_peak_anchor',
-    };
+  if (!p.recoveredSuffixPeakAnchorBypass) {
+    if (p.peakLatchedAtIndex === 0) {
+      return {
+        satisfied: false,
+        shallowAuthoritativeClosureBlockedReason: 'peak_series_start_contamination',
+      };
+    }
+    if (!p.hasValidCommittedPeakAnchor || p.committedOrPostCommitPeakFrame == null) {
+      return {
+        satisfied: false,
+        shallowAuthoritativeClosureBlockedReason: 'invalid_committed_peak_anchor',
+      };
+    }
   }
 
   const explicitClosureProof =
@@ -1909,13 +1928,19 @@ function getShallowAuthoritativeClosureDecision(p: {
     isOfficialShallowRomFinalizeBand(p.standingRecoveryFinalizeBand) ||
     p.standingRecoveryFinalizeReason === 'standing_hold_met';
 
+  /** PR-08: 접미사 경로는 `standing_hold_met` 시 low-ROM continuity 미요구(브리지와 동일 축). */
+  const recoveryProofOkForShallowAuth =
+    p.recoveredSuffixPeakAnchorBypass === true
+      ? fr === 'standing_hold_met' || recoveryProofOk
+      : recoveryProofOk;
+
   const shallowAuthoritativeRecovery =
     p.ownerAuthoritativeRecoverySatisfied === true ||
     (p.standingRecoveredAtMs != null &&
       p.standingRecoveryFinalizeSatisfied &&
       shallowFinalizeBandOk &&
       finalizeReasonOk &&
-      recoveryProofOk);
+      recoveryProofOkForShallowAuth);
 
   if (!shallowAuthoritativeRecovery) {
     return {
@@ -2363,6 +2388,10 @@ function evaluateSquatCompletionCore(
   let officialShallowPrimaryDropClosureFallback = shallowClosureOut.officialShallowPrimaryDropClosureFallback;
   /** PR-06: 이벤트 사이클+trajectory 가 입증한 얕은 사이클에만 primary-drop closure 증거를 합성 */
   if (options?.guardedShallowTrajectoryClosureProofApply === true) {
+    officialShallowPrimaryDropClosureFallback = true;
+  }
+  /** PR-08: recovered-suffix 계약 통과 후 2차 코어에서 동일 primary-drop 정규화 합성 */
+  if (options?.guardedShallowRecoveredSuffixClosureApply === true) {
     officialShallowPrimaryDropClosureFallback = true;
   }
 
@@ -2918,6 +2947,7 @@ function evaluateSquatCompletionCore(
     recovery,
     provenanceReversalEvidencePresent,
     reversalLabeledTrajectory: reversalLabeledTrajectoryForShallowClosure,
+    recoveredSuffixPeakAnchorBypass: options?.guardedShallowRecoveredSuffixClosureApply === true,
   });
 
   let ownerAuthoritativeShallowClosureSatisfied = false;
@@ -3063,7 +3093,8 @@ function evaluateSquatCompletionCore(
     officialShallowPrimaryDropClosureFallback,
     officialShallowReversalSatisfied:
       reversalConfirmedAfterDescend ||
-      options?.guardedShallowTrajectoryClosureProofApply === true,
+      options?.guardedShallowTrajectoryClosureProofApply === true ||
+      options?.guardedShallowRecoveredSuffixClosureApply === true,
     ownerAuthoritativeReversalSatisfied,
     ownerAuthoritativeRecoverySatisfied,
     provenanceReversalEvidencePresent,
@@ -3587,6 +3618,99 @@ function deriveEventCyclePromotionObservability(input: {
   };
 }
 
+/** PR-08: shallow recovered-suffix → 공식 closure 증거 합성 자격(직접 통과 아님). */
+export type GuardedShallowRecoveredSuffixDecision = {
+  eligible: boolean;
+  satisfied: boolean;
+  blockedReason: string | null;
+};
+
+/**
+ * PR-08: 늦은 shallow 복구 접미사가 이미 입증된 경우에만 `guardedShallowRecoveredSuffixClosureApply` 2차 코어를 허용.
+ * 피크 앵커 유효성은 이 계약이 만족될 때만 클로저에서 별도 바이패스된다 — trajectory 전역 권위화 아님.
+ */
+function getGuardedShallowRecoveredSuffixClosureDecision(
+  state: SquatCompletionState,
+  ec: SquatEventCycleResult,
+  opts: { setupMotionBlocked?: boolean }
+): GuardedShallowRecoveredSuffixDecision {
+  const ineligible =
+    state.officialShallowPathCandidate !== true ||
+    state.officialShallowPathAdmitted !== true ||
+    state.attemptStarted !== true ||
+    state.descendConfirmed !== true ||
+    state.downwardCommitmentReached !== true ||
+    (state.relativeDepthPeak ?? 0) >= STANDARD_OWNER_FLOOR ||
+    state.eventCyclePromoted === true ||
+    opts.setupMotionBlocked === true;
+
+  if (ineligible) {
+    return { eligible: false, satisfied: false, blockedReason: null };
+  }
+
+  const fail = (blockedReason: string): GuardedShallowRecoveredSuffixDecision => ({
+    eligible: true,
+    satisfied: false,
+    blockedReason,
+  });
+
+  if (state.completionBlockedReason === 'not_armed') return fail('not_armed');
+
+  const machinePhase = deriveSquatCompletionMachinePhase({
+    completionSatisfied: false,
+    currentSquatPhase: state.currentSquatPhase,
+    downwardCommitmentReached: state.downwardCommitmentReached,
+  });
+  if (machinePhase !== 'recovered') return fail('completion_machine_phase_not_recovered');
+
+  if (state.trajectoryReversalRescueApplied !== true) return fail('no_trajectory_reversal_rescue');
+  if (state.reversalEvidenceProvenance !== 'trajectory_anchor_rescue') {
+    return fail('reversal_provenance_not_trajectory_anchor');
+  }
+  if (!ec.reversalDetected || !ec.recoveryDetected || !ec.nearStandingRecovered) {
+    return fail('no_recovered_suffix_event_cycle');
+  }
+
+  const notes = ec.notes ?? [];
+  if (notes.includes('series_too_short')) return fail('series_too_short');
+
+  if (state.standingRecoveredAtMs == null) return fail('no_return_to_standing_evidence');
+  if (state.standingFinalizeSatisfied !== true) return fail('no_standing_finalize');
+
+  const fr = state.standingRecoveryFinalizeReason;
+  const finalizeReasonOk =
+    fr === 'standing_hold_met' ||
+    fr === 'low_rom_guarded_finalize' ||
+    fr === 'ultra_low_rom_guarded_finalize' ||
+    fr === 'low_rom_tail_guarded_finalize';
+
+  const continuityOk = recoveryMeetsLowRomStyleFinalizeProof({
+    recoveryReturnContinuityFrames: state.recoveryReturnContinuityFrames,
+    recoveryDropRatio: state.recoveryDropRatio,
+  });
+
+  const recoveryFinalizeBundleOk =
+    state.standingRecoveryFinalizeSatisfied === true ||
+    finalizeReasonOk ||
+    continuityOk;
+  if (!recoveryFinalizeBundleOk) return fail('recovery_finalize_proof_missing');
+
+  if (
+    state.completionBlockedReason === 'no_descend' ||
+    state.completionBlockedReason === 'no_commitment'
+  ) {
+    return fail('descend_or_commitment_blocked');
+  }
+
+  if (state.currentSquatPhase === 'idle') return fail('idle_phase');
+
+  const req = state.squatReversalDropRequired ?? REVERSAL_DROP_MIN_ABS;
+  const minDrop = Math.max(REVERSAL_DROP_MIN_ABS, req * 0.88) - 1e-12;
+  if ((state.squatReversalDropAchieved ?? 0) < minDrop) return fail('insufficient_post_peak_return');
+
+  return { eligible: true, satisfied: true, blockedReason: null };
+}
+
 /** PR-05 entry-tier 차단 사유 — eligible=false 로 스탬프 */
 const TRAJECTORY_GUARD_ENTRY_BLOCK_REASONS = new Set<string>([
   'shallow_admission_not_satisfied',
@@ -3924,6 +4048,64 @@ export function evaluateSquatCompletionState(
     };
   }
 
+  state = mergeShallowTrajectoryAuthoritativeBridge(state, squatEventCycle, bridgeOpts);
+
+  const recoveredSuffixDecision = getGuardedShallowRecoveredSuffixClosureDecision(
+    state,
+    squatEventCycle,
+    { setupMotionBlocked: options?.setupMotionBlocked }
+  );
+  const recoveredSuffixObsEligible =
+    state.officialShallowPathCandidate === true &&
+    state.officialShallowPathAdmitted === true &&
+    state.attemptStarted === true &&
+    state.descendConfirmed === true &&
+    state.downwardCommitmentReached === true &&
+    (state.relativeDepthPeak ?? 0) < STANDARD_OWNER_FLOOR &&
+    state.eventCyclePromoted !== true &&
+    options?.setupMotionBlocked !== true;
+
+  state = {
+    ...state,
+    ...(recoveredSuffixObsEligible
+      ? {
+          guardedShallowRecoveredSuffixSatisfied: recoveredSuffixDecision.satisfied,
+          guardedShallowRecoveredSuffixBlockedReason: recoveredSuffixDecision.satisfied
+            ? null
+            : recoveredSuffixDecision.blockedReason,
+        }
+      : {}),
+  };
+
+  const shallowStillOpenForRecoveredSuffix =
+    state.officialShallowPathClosed !== true && state.completionSatisfied !== true;
+
+  if (recoveredSuffixDecision.satisfied && shallowStillOpenForRecoveredSuffix) {
+    const preservedTrajectoryProof = state.guardedShallowTrajectoryClosureProofSatisfied === true;
+    state = resolveStandardDriftAfterShallowAdmission(
+      evaluateSquatCompletionCore(
+        frames,
+        { ...options, guardedShallowRecoveredSuffixClosureApply: true },
+        depthFreeze
+      ),
+      frames,
+      options,
+      depthFreeze
+    );
+    state = {
+      ...state,
+      squatEventCycle,
+      guardedShallowRecoveredSuffixSatisfied: true,
+      guardedShallowRecoveredSuffixBlockedReason: null,
+      ...(preservedTrajectoryProof
+        ? {
+            guardedShallowTrajectoryClosureProofSatisfied: true,
+            guardedShallowTrajectoryClosureProofBlockedReason: null,
+          }
+        : {}),
+    };
+  }
+
   if (shallowLocalPeakObsEligible) {
     state = {
       ...state,
@@ -3934,8 +4116,6 @@ export function evaluateSquatCompletionState(
       guardedShallowLocalPeakIndex: localPeakAnchor.localPeakIndex,
     };
   }
-
-  state = mergeShallowTrajectoryAuthoritativeBridge(state, squatEventCycle, bridgeOpts);
 
   const ruleBlock = state.ruleCompletionBlockedReason ?? null;
   const finalizeOk =
