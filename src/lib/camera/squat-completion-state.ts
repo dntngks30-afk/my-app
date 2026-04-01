@@ -498,6 +498,13 @@ export interface SquatCompletionState extends MotionCompletionResult {
    * PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: trajectory rescue / tail backfill / ultra-shallow rescue 등 provenance 전용.
    */
   provenanceReversalEvidencePresent?: boolean;
+
+  /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: finalize 게이트 충족 여부(관측). */
+  standingFinalizeSatisfied?: boolean;
+  /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: 늦은 setup_motion 이 성공을 덮어쓴 경우(평가기에서 설정). */
+  standingFinalizeSuppressedByLateSetup?: boolean;
+  /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: standard 경로에서 최소 tail 만족 시각(없으면 null). */
+  standingFinalizeReadyAtMs?: number | null;
 }
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
@@ -1138,6 +1145,58 @@ function getStandingRecoveryWindow(
   };
 }
 
+/**
+ * PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03:
+ * 피크 이후 tail 에서 **끝 프레임까지** 이어지는 standing 밴드 접미사 안에서,
+ * `minFrames`·`minHoldMs` 를 만족하는 **가장 짧은** 구간(가장 늦은 시작 인덱스)을 찾는다.
+ * 누적 체류(ms)를 줄여 JSON 이 “필요 홀드”를 과대 해석하지 않게 한다(임계 상수 불변).
+ */
+function computeMinimalQualifyingStandingTailHold(
+  frames: Array<{ depth: number; timestampMs: number }>,
+  baselineStandingDepth: number,
+  relativeDepthPeak: number,
+  minFrames: number,
+  minHoldMs: number
+): { holdMs: number; frameCount: number; recoveredAtMs: number } | null {
+  if (frames.length === 0 || minFrames < 1 || minHoldMs < 0) return null;
+
+  const standingRecoveryThreshold = Math.max(
+    STANDING_RECOVERY_TOLERANCE_FLOOR,
+    relativeDepthPeak * STANDING_RECOVERY_TOLERANCE_RATIO
+  );
+
+  let suffixStart = frames.length;
+  for (let i = frames.length - 1; i >= 0; i -= 1) {
+    const relativeDepth = Math.max(0, frames[i]!.depth - baselineStandingDepth);
+    if (relativeDepth <= standingRecoveryThreshold) {
+      suffixStart = i;
+    } else {
+      break;
+    }
+  }
+
+  if (suffixStart >= frames.length) return null;
+
+  const end = frames.length - 1;
+  const tEnd = frames[end]!.timestampMs;
+
+  for (let s = end - minFrames + 1; s >= suffixStart; s -= 1) {
+    if (s < 0) break;
+    const span = end - s + 1;
+    if (span < minFrames) continue;
+    const tS = frames[s]!.timestampMs;
+    if (tEnd - tS >= minHoldMs) {
+      return {
+        holdMs: tEnd - tS,
+        frameCount: span,
+        recoveredAtMs: tS,
+      };
+    }
+  }
+
+  return null;
+}
+
 function getSquatEvidenceLabel(
   relativeDepthPeak: number,
   attemptAdmissionSatisfied: boolean
@@ -1597,6 +1656,9 @@ function evaluateSquatCompletionCore(
       ownerAuthoritativeReversalSatisfied: false,
       ownerAuthoritativeRecoverySatisfied: false,
       provenanceReversalEvidencePresent: false,
+      standingFinalizeSatisfied: false,
+      standingFinalizeSuppressedByLateSetup: false,
+      standingFinalizeReadyAtMs: null,
     };
   }
 
@@ -2223,6 +2285,34 @@ function evaluateSquatCompletionCore(
     };
   }
 
+  /**
+   * PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03:
+   * standard 밴드에서 finalize 가 이미 true 일 때, 홀드·프레임 수는 “최소 만족 tail” 기준으로 보고한다.
+   * 게이트 판정은 기존 `getStandingRecoveryWindow`·`getStandingRecoveryFinalizeGate` 그대로(상수 동일).
+   */
+  let standingRecoveryHoldMsForOutput = standingRecovery.standingRecoveryHoldMs;
+  let standingRecoveryFrameCountForOutput = standingRecovery.standingRecoveryFrameCount;
+  let standingFinalizeReadyAtMs: number | null = null;
+  if (
+    standingRecoveryFinalizeBand === 'standard' &&
+    standingRecoveryFinalize.finalizeSatisfied &&
+    standingRecovery.standingRecoveredAtMs != null
+  ) {
+    const postPeakForNorm = depthFrames.filter((frame) => frame.index > peakFrame.index);
+    const minimalTail = computeMinimalQualifyingStandingTailHold(
+      postPeakForNorm,
+      baselineStandingDepth,
+      relativeDepthPeak,
+      standingRecoveryFinalize.minFramesUsed,
+      standingRecoveryFinalize.minHoldMsUsed
+    );
+    if (minimalTail != null) {
+      standingRecoveryHoldMsForOutput = minimalTail.holdMs;
+      standingRecoveryFrameCountForOutput = minimalTail.frameCount;
+      standingFinalizeReadyAtMs = minimalTail.recoveredAtMs + minimalTail.holdMs;
+    }
+  }
+
   let currentSquatPhase: SquatCompletionPhase = 'idle';
   if (armed) currentSquatPhase = 'armed';
   if (descendConfirmed) currentSquatPhase = 'descending';
@@ -2436,7 +2526,7 @@ function evaluateSquatCompletionCore(
     reversalAtMs: progressionReversalFrame?.timestampMs,
     ascendConfirmed: ascendForProgression,
     standingRecoveredAtMs: standingRecovery.standingRecoveredAtMs,
-    standingRecoveryHoldMs: standingRecovery.standingRecoveryHoldMs,
+    standingRecoveryHoldMs: standingRecoveryHoldMsForOutput,
     successPhaseAtOpen: completionSatisfied ? 'standing_recovered' : undefined,
     evidenceLabel,
     completionBlockedReason,
@@ -2454,7 +2544,7 @@ function evaluateSquatCompletionCore(
         ? standingRecovery.standingRecoveredAtMs - effectiveDescentStartFrame.timestampMs
         : undefined,
     downwardCommitmentDelta,
-    standingRecoveryFrameCount: standingRecovery.standingRecoveryFrameCount,
+    standingRecoveryFrameCount: standingRecoveryFrameCountForOutput,
     standingRecoveryThreshold: standingRecovery.standingRecoveryThreshold,
     standingRecoveryMinFramesUsed: standingRecoveryFinalize.minFramesUsed,
     standingRecoveryMinHoldMsUsed: standingRecoveryFinalize.minHoldMsUsed,
@@ -2532,6 +2622,9 @@ function evaluateSquatCompletionCore(
     ownerAuthoritativeReversalSatisfied,
     ownerAuthoritativeRecoverySatisfied,
     provenanceReversalEvidencePresent,
+    standingFinalizeSatisfied: standingRecoveryFinalize.finalizeSatisfied,
+    standingFinalizeSuppressedByLateSetup: false,
+    standingFinalizeReadyAtMs,
   };
 }
 

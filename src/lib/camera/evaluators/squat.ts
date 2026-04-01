@@ -272,6 +272,8 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     seedBaselineStandingDepthBlended: completionArming.armingBaselineStandingDepthBlended,
   });
 
+  let standingFinalizeSuppressedByLateSetup = false;
+
   state = {
     ...state,
     readinessStableDwellSatisfied: dwell.satisfied,
@@ -279,14 +281,37 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     setupMotionBlockReason: setupBlock.reason,
     attemptStartedAfterReady: dwell.satisfied,
   };
+
+  /**
+   * PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03:
+   * 권위 하강·역전·복구 후 standing_recovered 인데 늦은 setup_motion 만 걸리는 경우 통과를 막지 않는다.
+   * 초기/리딩 단계 setup 차단은 그대로(completion 미충족 시 기존과 동일).
+   */
   if (state.completionSatisfied && setupBlock.blocked) {
-    state = {
-      ...state,
-      completionSatisfied: false,
-      completionPassReason: 'not_confirmed',
-      completionBlockedReason: `setup_motion:${setupBlock.reason ?? 'blocked'}`,
-    };
+    const bypassLateSetupForClosedCycle =
+      state.descendConfirmed === true &&
+      state.attemptStarted === true &&
+      state.ownerAuthoritativeReversalSatisfied === true &&
+      state.ownerAuthoritativeRecoverySatisfied === true &&
+      state.currentSquatPhase === 'standing_recovered';
+
+    if (bypassLateSetupForClosedCycle) {
+      standingFinalizeSuppressedByLateSetup = false;
+    } else {
+      standingFinalizeSuppressedByLateSetup = true;
+      state = {
+        ...state,
+        completionSatisfied: false,
+        completionPassReason: 'not_confirmed',
+        completionBlockedReason: `setup_motion:${setupBlock.reason ?? 'blocked'}`,
+      };
+    }
   }
+
+  state = {
+    ...state,
+    standingFinalizeSuppressedByLateSetup,
+  };
 
   /** PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: setup 패치 후에도 스테이지·불일치 필드가 최종 state 와 정렬되도록 */
   state = attachShallowTruthObservabilityAlign01(state);
@@ -770,6 +795,10 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         ownerTruthSource: state.ownerTruthSource ?? 'none',
         ownerTruthStage: state.ownerTruthStage ?? null,
         ownerTruthBlockedBy: state.ownerTruthBlockedBy ?? null,
+        /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03 */
+        standingFinalizeSatisfied: state.standingFinalizeSatisfied ? 1 : 0,
+        standingFinalizeSuppressedByLateSetup: state.standingFinalizeSuppressedByLateSetup ? 1 : 0,
+        standingFinalizeReadyAtMs: state.standingFinalizeReadyAtMs ?? null,
       },
       perStepDiagnostics: perStepRecord,
       /** PR-HMM-01B: shadow decoder 전체 결과 — debug 전용 */
