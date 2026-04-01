@@ -280,6 +280,10 @@ export interface SquatCycleDebug {
   ownerAuthoritativeReversalSatisfied?: boolean;
   ownerAuthoritativeRecoverySatisfied?: boolean;
   provenanceReversalEvidencePresent?: boolean;
+  /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03 — pass-through */
+  standingFinalizeSatisfied?: boolean;
+  standingFinalizeSuppressedByLateSetup?: boolean;
+  standingFinalizeReadyAtMs?: number | null;
 }
 
 export interface ExerciseGateResult {
@@ -1307,6 +1311,10 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.ownerAuthoritativeReversalSatisfied = cs?.ownerAuthoritativeReversalSatisfied;
   squatCycleDebug.ownerAuthoritativeRecoverySatisfied = cs?.ownerAuthoritativeRecoverySatisfied;
   squatCycleDebug.provenanceReversalEvidencePresent = cs?.provenanceReversalEvidencePresent;
+
+  squatCycleDebug.standingFinalizeSatisfied = cs?.standingFinalizeSatisfied;
+  squatCycleDebug.standingFinalizeSuppressedByLateSetup = cs?.standingFinalizeSuppressedByLateSetup;
+  squatCycleDebug.standingFinalizeReadyAtMs = cs?.standingFinalizeReadyAtMs ?? null;
 
   /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 게이트 미사용 pass-through */
   squatCycleDebug.ultraLowPolicyScope = cs?.ultraLowPolicyScope;
