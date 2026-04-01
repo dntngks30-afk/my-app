@@ -19,6 +19,11 @@ import {
   detectSquatEventCycle,
   type SquatEventCycleResult,
 } from '@/lib/camera/squat/squat-event-cycle';
+import {
+  deriveSquatOwnerTruthTrace,
+  type SquatOwnerTruthSource,
+  type SquatOwnerTruthStage,
+} from '@/lib/camera/squat/squat-owner-trace';
 
 /** PR-04E3B: 첫 attemptStarted 시점에 고정한 스트림·baseline — 동일 버퍼 내 재평가 없음 */
 type SquatDepthFreezeConfig = {
@@ -467,6 +472,11 @@ export interface SquatCompletionState extends MotionCompletionResult {
   ultraLowPolicyBlocked?: boolean;
   /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 스코프/준비/락 적용 요약 트레이스. */
   ultraLowPolicyTrace?: string;
+
+  /** PR-0: owner truth trace — observability only, no gate changes. */
+  ownerTruthSource?: SquatOwnerTruthSource;
+  ownerTruthStage?: SquatOwnerTruthStage;
+  ownerTruthBlockedBy?: string | null;
 }
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
@@ -2877,6 +2887,15 @@ export function attachShallowTruthObservabilityAlign01(
     shallowAuthoritativeContractStatus,
   ].join('|');
 
+  const ownerTrace = deriveSquatOwnerTruthTrace({
+    completionSatisfied: stamped.completionSatisfied,
+    completionBlockedReason: stamped.completionBlockedReason ?? null,
+    eventCyclePromoted: stamped.eventCyclePromoted === true,
+    attemptStarted: stamped.attemptStarted === true,
+    reversalConfirmedAfterDescend: stamped.reversalConfirmedAfterDescend === true,
+    recoveryConfirmedAfterReversal: stamped.recoveryConfirmedAfterReversal === true,
+  });
+
   return {
     ...stamped,
     shallowAuthoritativeStage: computeAuthoritativeShallowStageForObservability(stamped),
@@ -2894,6 +2913,9 @@ export function attachShallowTruthObservabilityAlign01(
     shallowAuthoritativeContractStatus,
     shallowContractAuthoritativeClosure,
     shallowContractAuthorityTrace,
+    ownerTruthSource: ownerTrace.ownerTruthSource,
+    ownerTruthStage: ownerTrace.ownerTruthStage,
+    ownerTruthBlockedBy: ownerTrace.ownerTruthBlockedBy,
   };
 }
 

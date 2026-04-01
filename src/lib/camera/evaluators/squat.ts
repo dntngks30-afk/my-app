@@ -766,6 +766,10 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         ultraLowPolicyDecisionReady: state.ultraLowPolicyDecisionReady ? 1 : 0,
         ultraLowPolicyBlocked: state.ultraLowPolicyBlocked ? 1 : 0,
         ultraLowPolicyTrace: state.ultraLowPolicyTrace ?? null,
+        /** PR-0: owner truth trace — observability only */
+        ownerTruthSource: state.ownerTruthSource ?? 'none',
+        ownerTruthStage: state.ownerTruthStage ?? null,
+        ownerTruthBlockedBy: state.ownerTruthBlockedBy ?? null,
       },
       perStepDiagnostics: perStepRecord,
       /** PR-HMM-01B: shadow decoder 전체 결과 — debug 전용 */

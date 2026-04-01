@@ -39,6 +39,7 @@ import type {
   ShallowAuthoritativeContractStatus,
   ShallowNormalizedBlockerFamily,
 } from '@/lib/camera/squat-completion-state';
+import type { SquatOwnerTruthSource, SquatOwnerTruthStage } from '@/lib/camera/squat/squat-owner-trace';
 
 export type ExerciseProgressionState =
   | 'idle'
@@ -271,6 +272,10 @@ export interface SquatCycleDebug {
   ultraLowPolicyDecisionReady?: boolean;
   ultraLowPolicyBlocked?: boolean;
   ultraLowPolicyTrace?: string;
+  /** PR-0 owner trace — pass-through only */
+  ownerTruthSource?: SquatOwnerTruthSource;
+  ownerTruthStage?: SquatOwnerTruthStage;
+  ownerTruthBlockedBy?: string | null;
 }
 
 export interface ExerciseGateResult {
@@ -1288,6 +1293,11 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.shallowAuthoritativeContractStatus = cs?.shallowAuthoritativeContractStatus;
   squatCycleDebug.shallowContractAuthoritativeClosure = cs?.shallowContractAuthoritativeClosure;
   squatCycleDebug.shallowContractAuthorityTrace = cs?.shallowContractAuthorityTrace;
+
+  /** PR-0: owner truth observability — pass-through only */
+  squatCycleDebug.ownerTruthSource = cs?.ownerTruthSource ?? 'none';
+  squatCycleDebug.ownerTruthStage = cs?.ownerTruthStage;
+  squatCycleDebug.ownerTruthBlockedBy = cs?.ownerTruthBlockedBy ?? null;
 
   /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 게이트 미사용 pass-through */
   squatCycleDebug.ultraLowPolicyScope = cs?.ultraLowPolicyScope;
