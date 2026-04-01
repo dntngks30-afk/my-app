@@ -345,6 +345,14 @@ export interface SquatCompletionState extends MotionCompletionResult {
   /** PR-04E3B: shallow event-cycle 헬퍼 결과(관측·승격 판단 입력) */
   squatEventCycle?: SquatEventCycleResult;
   /**
+   * PR-CAM-EVENT-OWNER-DOWNGRADE-01: 구 승격 게이트 조건 충족(관측) — 성공 클로저·소유권 아님.
+   */
+  eventCyclePromotionCandidate?: boolean;
+  /**
+   * PR-CAM-EVENT-OWNER-DOWNGRADE-01: 미충족 사유 또는 `event_promotion_owner_disabled`(후보인데 승격 비활성).
+   */
+  eventCyclePromotionBlockedReason?: string | null;
+  /**
    * PR-CAM-18: phaseHint descent 없이 trajectory 폴백으로 하강 인정 시 true.
    * PR-03: 통과 시 pass reason 은 공식 *_cycle 로 정리 — 본 플래그는 관측·승격 입력용으로 유지.
    */
@@ -2919,6 +2927,88 @@ export function attachShallowTruthObservabilityAlign01(
   };
 }
 
+/**
+ * PR-CAM-EVENT-OWNER-DOWNGRADE-01: 과거 `canEventPromote` 와 동일 조건 순서로 관측 전용 사유만 산출(임계·게이트 변경 없음).
+ */
+function deriveEventCyclePromotionObservability(input: {
+  canPromote: boolean;
+  state: SquatCompletionState;
+  squatEventCycle: SquatEventCycleResult;
+  ruleBlock: string | null;
+  finalizeOk: boolean;
+  ultraLowRomEventPromotionAllowed: boolean;
+}): Pick<SquatCompletionState, 'eventCyclePromotionCandidate' | 'eventCyclePromotionBlockedReason'> {
+  if (input.canPromote) {
+    return {
+      eventCyclePromotionCandidate: true,
+      eventCyclePromotionBlockedReason: 'event_promotion_owner_disabled',
+    };
+  }
+
+  const s = input.state;
+  const ec = input.squatEventCycle;
+
+  if (s.completionPassReason !== 'not_confirmed') {
+    return {
+      eventCyclePromotionCandidate: false,
+      eventCyclePromotionBlockedReason: 'completion_pass_reason_not_pending',
+    };
+  }
+  if (input.ruleBlock == null) {
+    return {
+      eventCyclePromotionCandidate: false,
+      eventCyclePromotionBlockedReason: 'no_rule_completion_blocked_reason',
+    };
+  }
+  if (PR_04E3B_NO_EVENT_PROMOTION_BLOCKS.has(input.ruleBlock)) {
+    return {
+      eventCyclePromotionCandidate: false,
+      eventCyclePromotionBlockedReason: 'rule_block_bars_event_promotion',
+    };
+  }
+  if (!input.finalizeOk) {
+    return {
+      eventCyclePromotionCandidate: false,
+      eventCyclePromotionBlockedReason: 'standing_finalize_not_satisfied_for_event_gate',
+    };
+  }
+  if (s.standingRecoveredAtMs == null) {
+    return {
+      eventCyclePromotionCandidate: false,
+      eventCyclePromotionBlockedReason: 'standing_recovered_timestamp_missing',
+    };
+  }
+  if (!ec.detected) {
+    return {
+      eventCyclePromotionCandidate: false,
+      eventCyclePromotionBlockedReason: 'event_cycle_not_detected',
+    };
+  }
+  if (ec.band == null) {
+    return {
+      eventCyclePromotionCandidate: false,
+      eventCyclePromotionBlockedReason: 'event_cycle_band_missing',
+    };
+  }
+  if (!(s.relativeDepthPeak < STANDARD_OWNER_FLOOR)) {
+    return {
+      eventCyclePromotionCandidate: false,
+      eventCyclePromotionBlockedReason: 'relative_depth_not_below_standard_owner_floor',
+    };
+  }
+  if (!input.ultraLowRomEventPromotionAllowed) {
+    return {
+      eventCyclePromotionCandidate: false,
+      eventCyclePromotionBlockedReason: 'ultra_low_rom_event_promotion_gate_blocked',
+    };
+  }
+
+  return {
+    eventCyclePromotionCandidate: false,
+    eventCyclePromotionBlockedReason: 'event_promotion_not_eligible',
+  };
+}
+
 export function evaluateSquatCompletionState(
   frames: PoseFeaturesFrame[],
   options?: EvaluateSquatCompletionStateOptions
@@ -3011,54 +3101,22 @@ export function evaluateSquatCompletionState(
     state.relativeDepthPeak < STANDARD_OWNER_FLOOR &&
     ultraLowRomEventPromotionAllowed;
 
-  if (!canEventPromote) {
-    return attachShallowTruthObservabilityAlign01(state);
-  }
-
-  /** PR-03: 승격도 공식 *_cycle 로 통일 — residue event_cycle 문자열은 미통과·디버그 경로에만 유지 */
-  const promotedPassReason =
-    squatEventCycle.band === 'low_rom' ? 'low_rom_cycle' : 'ultra_low_rom_cycle';
-  const promotedSource: 'rule' | 'rule_plus_hmm' =
-    squatEventCycle.source === 'rule_plus_hmm' ? 'rule_plus_hmm' : 'rule';
-
-  const promotedAssistSources = buildSquatCompletionAssistSources({
-    hmmAssistApplied: state.hmmAssistApplied === true,
-    hmmReversalAssistApplied: state.hmmReversalAssistApplied === true,
-    trajectoryReversalRescueApplied: state.trajectoryReversalRescueApplied === true,
-    reversalTailBackfillApplied: state.reversalTailBackfillApplied === true,
-    ultraShallowMeaningfulDownUpRescueApplied: state.ultraShallowMeaningfulDownUpRescueApplied === true,
-    eventCyclePromoted: true,
+  const promoObs = deriveEventCyclePromotionObservability({
+    canPromote: canEventPromote,
+    state,
+    squatEventCycle,
+    ruleBlock,
+    finalizeOk,
+    ultraLowRomEventPromotionAllowed,
   });
-  const promotedAssistMode = deriveSquatCompletionAssistMode(promotedAssistSources);
 
-  const promotedOfficialShallowClosed =
-    state.officialShallowPathCandidate === true &&
-    (promotedPassReason === 'low_rom_cycle' || promotedPassReason === 'ultra_low_rom_cycle');
-
+  /**
+   * PR-CAM-EVENT-OWNER-DOWNGRADE-01: 이벤트 사이클은 탐지·관측만 — rule completion 이 성공 클로저의 유일 경로.
+   */
   return attachShallowTruthObservabilityAlign01({
     ...state,
-    completionBlockedReason: null,
-    completionSatisfied: true,
-    completionPassReason: promotedPassReason,
-    cycleComplete: true,
-    successPhaseAtOpen: 'standing_recovered',
-    completionMachinePhase: deriveSquatCompletionMachinePhase({
-      completionSatisfied: true,
-      currentSquatPhase: state.currentSquatPhase,
-      downwardCommitmentReached: state.downwardCommitmentReached,
-    }),
-    eventCyclePromoted: true,
-    eventCycleSource: promotedSource,
-    postAssistCompletionBlockedReason: null,
-    completionFinalizeMode: 'event_promoted_finalized',
-    completionAssistApplied: promotedAssistSources.length > 0,
-    completionAssistSources: promotedAssistSources,
-    completionAssistMode: promotedAssistMode,
-    promotionBaseRuleBlockedReason: ruleBlock,
-    officialShallowPathClosed: promotedOfficialShallowClosed,
-    officialShallowPathBlockedReason: null,
-    officialShallowDriftedToStandard: promotedOfficialShallowClosed ? false : (state.officialShallowDriftedToStandard ?? false),
-    officialShallowDriftReason: promotedOfficialShallowClosed ? null : (state.officialShallowDriftReason ?? null),
-    officialShallowPreferredPrefixFrameCount: state.officialShallowPreferredPrefixFrameCount ?? null,
+    eventCyclePromotionCandidate: promoObs.eventCyclePromotionCandidate,
+    eventCyclePromotionBlockedReason: promoObs.eventCyclePromotionBlockedReason,
+    eventCyclePromoted: false,
   });
 }
