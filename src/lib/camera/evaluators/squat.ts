@@ -270,6 +270,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     hmmArmingAssistApplied: armingAssistDec.assistApplied,
     seedBaselineStandingDepthPrimary: completionArming.armingBaselineStandingDepthPrimary,
     seedBaselineStandingDepthBlended: completionArming.armingBaselineStandingDepthBlended,
+    setupMotionBlocked: setupBlock.blocked,
   });
 
   let standingFinalizeSuppressedByLateSetup = false;
@@ -288,12 +289,20 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
    * 초기/리딩 단계 setup 차단은 그대로(completion 미충족 시 기존과 동일).
    */
   if (state.completionSatisfied && setupBlock.blocked) {
-    const bypassLateSetupForClosedCycle =
+    /** PR-CAM-SHALLOW-TRAJECTORY-BRIDGE-05: 권위 역전 플래그 없이도 통제 브리지로 닫힌 shallow 는 늦은 setup 만으로 깨지 않게 */
+    const trajectoryBridgeClosedCycle =
+      state.shallowTrajectoryBridgeSatisfied === true &&
       state.descendConfirmed === true &&
       state.attemptStarted === true &&
-      state.ownerAuthoritativeReversalSatisfied === true &&
-      state.ownerAuthoritativeRecoverySatisfied === true &&
       state.currentSquatPhase === 'standing_recovered';
+
+    const bypassLateSetupForClosedCycle =
+      trajectoryBridgeClosedCycle ||
+      (state.descendConfirmed === true &&
+        state.attemptStarted === true &&
+        state.ownerAuthoritativeReversalSatisfied === true &&
+        state.ownerAuthoritativeRecoverySatisfied === true &&
+        state.currentSquatPhase === 'standing_recovered');
 
     if (bypassLateSetupForClosedCycle) {
       standingFinalizeSuppressedByLateSetup = false;

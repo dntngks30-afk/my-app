@@ -151,6 +151,10 @@ export interface SquatCycleDebug {
   ownerAuthoritativeShallowClosureSatisfied?: boolean;
   shallowAuthoritativeClosureReason?: string | null;
   shallowAuthoritativeClosureBlockedReason?: string | null;
+  /** PR-CAM-SHALLOW-TRAJECTORY-BRIDGE-05 */
+  shallowTrajectoryBridgeEligible?: boolean;
+  shallowTrajectoryBridgeSatisfied?: boolean;
+  shallowTrajectoryBridgeBlockedReason?: string | null;
   /** PR-COMP-03: completion·pass와 무관한 strict 내부 해석(트레이스 전용) */
   squatInternalQuality?: SquatInternalQuality;
   /** PR-CAM-10: ambiguous retry / severe-fail 완화 계약 관측 */
@@ -1212,6 +1216,9 @@ function getSquatProgressionCompletionSatisfied(
     ownerAuthoritativeShallowClosureSatisfied: cs?.ownerAuthoritativeShallowClosureSatisfied,
     shallowAuthoritativeClosureReason: cs?.shallowAuthoritativeClosureReason ?? null,
     shallowAuthoritativeClosureBlockedReason: cs?.shallowAuthoritativeClosureBlockedReason ?? null,
+    shallowTrajectoryBridgeEligible: cs?.shallowTrajectoryBridgeEligible,
+    shallowTrajectoryBridgeSatisfied: cs?.shallowTrajectoryBridgeSatisfied,
+    shallowTrajectoryBridgeBlockedReason: cs?.shallowTrajectoryBridgeBlockedReason ?? null,
     squatInternalQuality: result.debug?.squatInternalQuality,
   };
 

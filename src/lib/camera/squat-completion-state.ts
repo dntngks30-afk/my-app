@@ -510,6 +510,14 @@ export interface SquatCompletionState extends MotionCompletionResult {
   /** PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04: shallow 권위 종료 미충족 시 구체 사유 */
   shallowAuthoritativeClosureBlockedReason?: string | null;
 
+  /**
+   * PR-CAM-SHALLOW-TRAJECTORY-BRIDGE-05: 통제된 trajectory-assisted shallow 권위 브리지(관측·결과).
+   * provenance 단독 권위화 아님 — `getShallowTrajectoryAuthoritativeBridgeDecision` 단일 게이트.
+   */
+  shallowTrajectoryBridgeEligible?: boolean;
+  shallowTrajectoryBridgeSatisfied?: boolean;
+  shallowTrajectoryBridgeBlockedReason?: string | null;
+
   /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: finalize 게이트 충족 여부(관측). */
   standingFinalizeSatisfied?: boolean;
   /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: 늦은 setup_motion 이 성공을 덮어쓴 경우(평가기에서 설정). */
@@ -531,6 +539,10 @@ export type EvaluateSquatCompletionStateOptions = {
    */
   seedBaselineStandingDepthPrimary?: number;
   seedBaselineStandingDepthBlended?: number;
+  /**
+   * PR-CAM-SHALLOW-TRAJECTORY-BRIDGE-05: 평가기에서 이미 계산된 setup 차단 — completion 코어와 독립.
+   */
+  setupMotionBlocked?: boolean;
 };
 
 /** PR-HMM-03A: calibration 로그용 안정 정수 코드 (0 = null) */
@@ -1849,6 +1861,9 @@ function evaluateSquatCompletionCore(
       ownerAuthoritativeShallowClosureSatisfied: false,
       shallowAuthoritativeClosureReason: null,
       shallowAuthoritativeClosureBlockedReason: null,
+      shallowTrajectoryBridgeEligible: false,
+      shallowTrajectoryBridgeSatisfied: false,
+      shallowTrajectoryBridgeBlockedReason: null,
       standingFinalizeSatisfied: false,
       standingFinalizeSuppressedByLateSetup: false,
       standingFinalizeReadyAtMs: null,
@@ -2876,6 +2891,9 @@ function evaluateSquatCompletionCore(
     ownerAuthoritativeShallowClosureSatisfied,
     shallowAuthoritativeClosureReason,
     shallowAuthoritativeClosureBlockedReason,
+    shallowTrajectoryBridgeEligible: false,
+    shallowTrajectoryBridgeSatisfied: false,
+    shallowTrajectoryBridgeBlockedReason: null,
     standingFinalizeSatisfied: standingRecoveryFinalize.finalizeSatisfied,
     standingFinalizeSuppressedByLateSetup: false,
     standingFinalizeReadyAtMs,
@@ -3388,6 +3406,173 @@ function deriveEventCyclePromotionObservability(input: {
   };
 }
 
+/**
+ * PR-CAM-SHALLOW-TRAJECTORY-BRIDGE-05: 공식 shallow 입장·실하강·commitment 이후에만 trajectory rescue 증거를
+ * 권위 completion에 예외 연결한다. provenance 전역 승격·이벤트 승격 소유권 복구 아님.
+ */
+function getShallowTrajectoryAuthoritativeBridgeDecision(
+  state: SquatCompletionState,
+  ec: SquatEventCycleResult,
+  opts: { setupMotionBlocked?: boolean }
+): { eligible: boolean; satisfied: boolean; blockedReason: string | null } {
+  if (state.completionSatisfied === true) {
+    return { eligible: false, satisfied: false, blockedReason: null };
+  }
+
+  if (!state.officialShallowPathCandidate || !state.officialShallowPathAdmitted) {
+    return { eligible: false, satisfied: false, blockedReason: 'shallow_admission_not_satisfied' };
+  }
+  if (!state.attemptStarted || !state.descendConfirmed || !state.downwardCommitmentReached) {
+    return { eligible: false, satisfied: false, blockedReason: 'no_attempt_descend_or_commitment' };
+  }
+  if (state.peakLatched !== true) {
+    return { eligible: false, satisfied: false, blockedReason: 'peak_not_latched' };
+  }
+  const pli = state.peakLatchedAtIndex;
+  if (pli == null || pli <= 0) {
+    return { eligible: false, satisfied: false, blockedReason: 'peak_anchor_at_series_start' };
+  }
+  if (state.relativeDepthPeak >= STANDARD_OWNER_FLOOR) {
+    return { eligible: false, satisfied: false, blockedReason: 'outside_shallow_owner_zone' };
+  }
+
+  const eligible = true;
+
+  if (opts.setupMotionBlocked === true) {
+    return { eligible, satisfied: false, blockedReason: 'setup_motion_blocked' };
+  }
+  if (state.eventCyclePromoted === true) {
+    return { eligible, satisfied: false, blockedReason: 'event_cycle_promoted' };
+  }
+  if (state.currentSquatPhase === 'idle') {
+    return { eligible, satisfied: false, blockedReason: 'idle_phase' };
+  }
+  if (
+    state.completionBlockedReason === 'not_armed' &&
+    (!state.attemptStarted || !state.descendConfirmed)
+  ) {
+    return { eligible, satisfied: false, blockedReason: 'not_armed_without_attempt_or_descend' };
+  }
+
+  const notes = ec.notes ?? [];
+  if (notes.includes('peak_anchor_at_series_start')) {
+    return { eligible, satisfied: false, blockedReason: 'peak_anchor_at_series_start' };
+  }
+  if (notes.includes('series_too_short')) {
+    return { eligible, satisfied: false, blockedReason: 'series_too_short' };
+  }
+
+  const standingSidePhase =
+    state.currentSquatPhase === 'standing_recovered' || state.currentSquatPhase === 'ascending';
+  if (!standingSidePhase && !ec.nearStandingRecovered) {
+    return { eligible, satisfied: false, blockedReason: 'bottom_hold_or_incomplete_cycle' };
+  }
+
+  if (state.trajectoryReversalRescueApplied !== true) {
+    return { eligible, satisfied: false, blockedReason: 'no_trajectory_reversal_rescue' };
+  }
+  if (state.reversalEvidenceProvenance !== 'trajectory_anchor_rescue') {
+    return { eligible, satisfied: false, blockedReason: 'reversal_provenance_not_trajectory_anchor' };
+  }
+
+  if (!ec.reversalDetected || !ec.recoveryDetected || !ec.nearStandingRecovered) {
+    return { eligible, satisfied: false, blockedReason: 'no_guarded_bridge_evidence' };
+  }
+
+  const machinePhase = deriveSquatCompletionMachinePhase({
+    completionSatisfied: false,
+    currentSquatPhase: state.currentSquatPhase,
+    downwardCommitmentReached: state.downwardCommitmentReached,
+  });
+  if (machinePhase !== 'recovered') {
+    return { eligible, satisfied: false, blockedReason: 'completion_machine_phase_not_recovered' };
+  }
+
+  if (state.standingRecoveredAtMs == null) {
+    return { eligible, satisfied: false, blockedReason: 'no_recovery_pattern' };
+  }
+  if (state.standingFinalizeSatisfied !== true) {
+    return { eligible, satisfied: false, blockedReason: 'no_recovery_pattern' };
+  }
+
+  const fr = state.standingRecoveryFinalizeReason;
+  const finalizeOk =
+    fr === 'standing_hold_met' ||
+    fr === 'low_rom_guarded_finalize' ||
+    fr === 'ultra_low_rom_guarded_finalize' ||
+    fr === 'low_rom_tail_guarded_finalize';
+  if (!finalizeOk) {
+    return { eligible, satisfied: false, blockedReason: 'no_recovery_pattern' };
+  }
+
+  const recoveryProofOk =
+    fr === 'standing_hold_met' ||
+    recoveryMeetsLowRomStyleFinalizeProof({
+      recoveryReturnContinuityFrames: state.recoveryReturnContinuityFrames,
+      recoveryDropRatio: state.recoveryDropRatio,
+    });
+  if (!recoveryProofOk) {
+    return { eligible, satisfied: false, blockedReason: 'no_recovery_pattern' };
+  }
+
+  const req = state.squatReversalDropRequired ?? REVERSAL_DROP_MIN_ABS;
+  const minDrop = Math.max(REVERSAL_DROP_MIN_ABS, req * 0.88) - 1e-12;
+  const achieved = state.squatReversalDropAchieved ?? 0;
+  if (achieved < minDrop) {
+    return { eligible, satisfied: false, blockedReason: 'insufficient_post_peak_return' };
+  }
+
+  return { eligible, satisfied: true, blockedReason: null };
+}
+
+function mergeShallowTrajectoryAuthoritativeBridge(
+  state: SquatCompletionState,
+  ec: SquatEventCycleResult,
+  opts?: { setupMotionBlocked?: boolean }
+): SquatCompletionState {
+  const dec = getShallowTrajectoryAuthoritativeBridgeDecision(state, ec, {
+    setupMotionBlocked: opts?.setupMotionBlocked,
+  });
+
+  const stamped: SquatCompletionState = {
+    ...state,
+    shallowTrajectoryBridgeEligible: dec.eligible,
+    shallowTrajectoryBridgeSatisfied: dec.satisfied,
+    shallowTrajectoryBridgeBlockedReason: dec.satisfied ? null : dec.blockedReason,
+  };
+
+  if (!dec.satisfied) return stamped;
+
+  const completionFinalizeMode = deriveSquatCompletionFinalizeMode({
+    completionSatisfied: true,
+    eventCyclePromoted: false,
+    assistSourcesWithoutPromotion: state.completionAssistSources ?? [],
+    officialShallowAuthoritativeClosure: true,
+  });
+
+  return {
+    ...stamped,
+    completionPassReason: 'official_shallow_cycle',
+    completionSatisfied: true,
+    completionBlockedReason: null,
+    ownerAuthoritativeShallowClosureSatisfied: true,
+    shallowAuthoritativeClosureReason: 'trajectory_guarded_official_shallow_cycle',
+    shallowAuthoritativeClosureBlockedReason: null,
+    officialShallowPathClosed:
+      state.officialShallowPathCandidate === true && state.officialShallowPathAdmitted === true,
+    officialShallowPathBlockedReason: null,
+    completionFinalizeMode,
+    completionMachinePhase: deriveSquatCompletionMachinePhase({
+      completionSatisfied: true,
+      currentSquatPhase: state.currentSquatPhase,
+      downwardCommitmentReached: state.downwardCommitmentReached,
+    }),
+    successPhaseAtOpen: 'standing_recovered',
+    cycleComplete: true,
+    officialShallowClosureProofSatisfied: true,
+  };
+}
+
 export function evaluateSquatCompletionState(
   frames: PoseFeaturesFrame[],
   options?: EvaluateSquatCompletionStateOptions
@@ -3450,6 +3635,10 @@ export function evaluateSquatCompletionState(
   });
 
   state = { ...state, squatEventCycle };
+
+  state = mergeShallowTrajectoryAuthoritativeBridge(state, squatEventCycle, {
+    setupMotionBlocked: options?.setupMotionBlocked,
+  });
 
   const ruleBlock = state.ruleCompletionBlockedReason ?? null;
   const finalizeOk =
