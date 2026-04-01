@@ -525,6 +525,11 @@ export interface SquatCompletionState extends MotionCompletionResult {
   guardedShallowTrajectoryClosureProofSatisfied?: boolean;
   guardedShallowTrajectoryClosureProofBlockedReason?: string | null;
 
+  /** PR-07: 브리지용 국소 shallow 피크 앵커(입장 조건 충족 시에만 스탬프). */
+  guardedShallowLocalPeakFound?: boolean;
+  guardedShallowLocalPeakBlockedReason?: string | null;
+  guardedShallowLocalPeakIndex?: number | null;
+
   /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: finalize 게이트 충족 여부(관측). */
   standingFinalizeSatisfied?: boolean;
   /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: 늦은 setup_motion 이 성공을 덮어쓴 경우(평가기에서 설정). */
@@ -857,6 +862,159 @@ export type SquatDepthFrameLite = {
   depth: number;
   timestampMs: number;
   phaseHint: PoseFeaturesFrame['phaseHint'];
+};
+
+/**
+ * PR-07: 가드 shallow trajectory 브리지 전용 — 글로벌 peak 앵커(시리즈 시작 오염)와 별개의 **국소** 피크.
+ * 딥/표준 경로·글로벌 피크 잠금 로직을 대체하지 않는다.
+ */
+export type GuardedShallowLocalPeakAnchor = {
+  found: boolean;
+  blockedReason: string | null;
+  localPeakIndex: number | null;
+  localPeakAtMs: number | null;
+  localPeakFrame: SquatDepthFrameLite | null;
+};
+
+/**
+ * PR-07: shallow 입장·실하강·commitment 이후 admitted 윈도우에서만 국소 피크를 찾는다.
+ * 기존 depthRows/phaseHint·finalize continuity·되돌림 스케일만 재사용한다.
+ */
+export function getGuardedShallowLocalPeakAnchor(args: {
+  state: SquatCompletionState;
+  validFrames: PoseFeaturesFrame[];
+}): GuardedShallowLocalPeakAnchor {
+  const s = args.state;
+  const nil = (blockedReason: string | null): GuardedShallowLocalPeakAnchor => ({
+    found: false,
+    blockedReason,
+    localPeakIndex: null,
+    localPeakAtMs: null,
+    localPeakFrame: null,
+  });
+
+  if (!s.officialShallowPathCandidate || !s.officialShallowPathAdmitted) return nil(null);
+  if (!s.attemptStarted || !s.descendConfirmed || !s.downwardCommitmentReached) return nil(null);
+
+  const depthRows = buildSquatCompletionDepthRows(args.validFrames);
+  if (depthRows.length < 5) return nil('series_too_short');
+
+  const src = s.relativeDepthPeakSource ?? 'primary';
+  const baselineStandingDepth = s.baselineStandingDepth ?? 0;
+  const depthFrames: SquatDepthFrameLite[] = depthRows.map((r) => ({
+    index: r.index,
+    depth: src === 'blended' ? r.depthCompletion : r.depthPrimary,
+    timestampMs: r.timestampMs,
+    phaseHint: r.phaseHint,
+  }));
+
+  const relativeDepthPeak = s.relativeDepthPeak ?? 0;
+  const recoverySig = getSquatRecoverySignal(args.validFrames);
+  const guardedUltraLowAttemptEligible =
+    relativeDepthPeak >= GUARDED_ULTRA_LOW_ROM_FLOOR &&
+    relativeDepthPeak < LEGACY_ATTEMPT_FLOOR &&
+    recoverySig.ultraLowRomGuardedRecovered === true;
+  const attemptAdmissionSatisfied =
+    relativeDepthPeak >= LEGACY_ATTEMPT_FLOOR || guardedUltraLowAttemptEligible;
+  const attemptAdmissionFloor = guardedUltraLowAttemptEligible
+    ? GUARDED_ULTRA_LOW_ROM_FLOOR
+    : LEGACY_ATTEMPT_FLOOR;
+
+  if (!attemptAdmissionSatisfied) return nil('no_committed_admitted_window');
+
+  const descentFrame = depthFrames.find((frame) => frame.phaseHint === 'descent');
+  const bottomFrame = depthFrames.find((frame) => frame.phaseHint === 'bottom');
+
+  const committedFrame =
+    bottomFrame ??
+    depthFrames.find(
+      (frame) =>
+        frame.index >= (descentFrame?.index ?? 0) &&
+        frame.depth - baselineStandingDepth >= attemptAdmissionFloor
+    );
+
+  if (committedFrame == null) return nil('no_committed_admitted_window');
+
+  const fr0 = s.standingRecoveryFinalizeReason;
+  const recoveryContinuityOk =
+    fr0 === 'standing_hold_met' ||
+    recoveryMeetsLowRomStyleFinalizeProof({
+      recoveryReturnContinuityFrames: s.recoveryReturnContinuityFrames,
+      recoveryDropRatio: s.recoveryDropRatio,
+    });
+  if (!recoveryContinuityOk) return nil('no_recovery_continuity');
+
+  const windowStart = Math.max(1, committedFrame.index);
+  const n = depthFrames.length;
+  const depths = depthFrames.map((f) => f.depth);
+  if (windowStart > n - 2) return nil('no_committed_admitted_window');
+
+  const localMaxima: number[] = [];
+  for (let i = windowStart; i <= n - 2; i++) {
+    const d = depths[i]!;
+    const left = depths[i - 1]!;
+    const right = depths[i + 1]!;
+    if (d >= left && d >= right) localMaxima.push(i);
+  }
+
+  let bestIdx: number;
+  if (localMaxima.length > 0) {
+    bestIdx = localMaxima[0]!;
+    for (const idx of localMaxima) {
+      const di = depths[idx]!;
+      const db = depths[bestIdx]!;
+      if (di > db + 1e-9 || (Math.abs(di - db) <= 1e-9 && idx > bestIdx)) bestIdx = idx;
+    }
+  } else {
+    bestIdx = windowStart;
+    for (let i = windowStart + 1; i <= n - 2; i++) {
+      if (depths[i]! > depths[bestIdx]!) bestIdx = i;
+    }
+  }
+
+  if (bestIdx <= 0) return nil('peak_anchor_series_start_only');
+
+  const peakFrame = depthFrames[bestIdx]!;
+  const relAtPeak = peakFrame.depth - baselineStandingDepth;
+  if (relAtPeak < attemptAdmissionFloor * 0.85) return nil('insufficient_local_peak_depth');
+
+  const plateauTol = 0.004;
+  let nearPeakCount = 0;
+  for (let j = 0; j < n; j++) {
+    if (depths[j]! >= peakFrame.depth - plateauTol) nearPeakCount++;
+  }
+  if (nearPeakCount < 2) return nil('one_frame_spike');
+
+  const postPeak = depthFrames.filter((f) => f.index > bestIdx);
+  if (postPeak.length < 3) return nil('no_post_peak_return');
+
+  const minPost = Math.min(...postPeak.map((f) => f.depth));
+  const drop = peakFrame.depth - minPost;
+  const req = s.squatReversalDropRequired ?? REVERSAL_DROP_MIN_ABS;
+  const minDropBridge = Math.max(REVERSAL_DROP_MIN_ABS, req * 0.88) - 1e-12;
+  if (drop < minDropBridge) return nil('no_post_peak_return');
+
+  const standingTol = getSquatStandingRecoveryThresholdForObservability(relativeDepthPeak);
+  if (minPost > baselineStandingDepth + standingTol) return nil('static_crouch_or_seated_hold');
+
+  const prePeak = depthFrames.filter((f) => f.index < bestIdx && f.index >= windowStart);
+  const minPre =
+    prePeak.length > 0 ? Math.min(...prePeak.map((f) => f.depth)) : baselineStandingDepth;
+  if (minPre >= peakFrame.depth - 1e-6) return nil('no_descent_into_peak');
+
+  return {
+    found: true,
+    blockedReason: null,
+    localPeakIndex: peakFrame.index,
+    localPeakAtMs: peakFrame.timestampMs,
+    localPeakFrame: peakFrame,
+  };
+}
+
+type GuardedTrajectoryShallowBridgeOpts = {
+  setupMotionBlocked?: boolean;
+  /** PR-07: 글로벌 앵커 오염 시 브리지 전용 국소 피크 정규화 */
+  guardedShallowLocalPeakAnchor?: GuardedShallowLocalPeakAnchor;
 };
 
 /**
@@ -3447,7 +3605,7 @@ const TRAJECTORY_GUARD_ENTRY_BLOCK_REASONS = new Set<string>([
 function guardedTrajectoryShallowSignalBlockReason(
   state: SquatCompletionState,
   ec: SquatEventCycleResult,
-  opts: { setupMotionBlocked?: boolean }
+  opts: GuardedTrajectoryShallowBridgeOpts
 ): string | null {
   if (!state.officialShallowPathCandidate || !state.officialShallowPathAdmitted) {
     return 'shallow_admission_not_satisfied';
@@ -3455,18 +3613,28 @@ function guardedTrajectoryShallowSignalBlockReason(
   if (!state.attemptStarted || !state.descendConfirmed || !state.downwardCommitmentReached) {
     return 'no_attempt_descend_or_commitment';
   }
+  const local = opts.guardedShallowLocalPeakAnchor;
+  const localAnchorOk =
+    local?.found === true &&
+    local.localPeakIndex != null &&
+    local.localPeakIndex > 0 &&
+    local.localPeakFrame != null;
+
   if (state.peakLatched !== true) {
     return 'peak_not_latched';
   }
-  const pli = state.peakLatchedAtIndex;
-  if (pli == null || pli <= 0) {
-    return 'peak_anchor_at_series_start';
+  if (!localAnchorOk) {
+    const pli = state.peakLatchedAtIndex;
+    if (pli == null || pli <= 0) {
+      return 'peak_anchor_at_series_start';
+    }
+    if (state.peakAnchorTruth !== 'committed_or_post_commit_peak') {
+      return 'no_committed_peak_anchor';
+    }
   }
+
   if (state.relativeDepthPeak >= STANDARD_OWNER_FLOOR) {
     return 'outside_shallow_owner_zone';
-  }
-  if (state.peakAnchorTruth !== 'committed_or_post_commit_peak') {
-    return 'no_committed_peak_anchor';
   }
 
   if (opts.setupMotionBlocked === true) {
@@ -3484,7 +3652,7 @@ function guardedTrajectoryShallowSignalBlockReason(
   }
 
   const notes = ec.notes ?? [];
-  if (notes.includes('peak_anchor_at_series_start')) {
+  if (!localAnchorOk && notes.includes('peak_anchor_at_series_start')) {
     return 'peak_anchor_at_series_start';
   }
   if (notes.includes('series_too_short')) {
@@ -3560,7 +3728,7 @@ function guardedTrajectoryShallowSignalBlockReason(
 function getGuardedShallowClosureProofFromTrajectoryBridge(
   state: SquatCompletionState,
   ec: SquatEventCycleResult,
-  opts: { setupMotionBlocked?: boolean }
+  opts: GuardedTrajectoryShallowBridgeOpts
 ): { satisfied: boolean; blockedReason: string | null } {
   const br = guardedTrajectoryShallowSignalBlockReason(state, ec, opts);
   return { satisfied: br === null, blockedReason: br };
@@ -3573,7 +3741,7 @@ function getGuardedShallowClosureProofFromTrajectoryBridge(
 function getShallowTrajectoryAuthoritativeBridgeDecision(
   state: SquatCompletionState,
   ec: SquatEventCycleResult,
-  opts: { setupMotionBlocked?: boolean }
+  opts: GuardedTrajectoryShallowBridgeOpts
 ): { eligible: boolean; satisfied: boolean; blockedReason: string | null } {
   if (state.completionSatisfied === true) {
     return { eligible: false, satisfied: false, blockedReason: null };
@@ -3590,10 +3758,11 @@ function getShallowTrajectoryAuthoritativeBridgeDecision(
 function mergeShallowTrajectoryAuthoritativeBridge(
   state: SquatCompletionState,
   ec: SquatEventCycleResult,
-  opts?: { setupMotionBlocked?: boolean }
+  opts?: GuardedTrajectoryShallowBridgeOpts
 ): SquatCompletionState {
   const dec = getShallowTrajectoryAuthoritativeBridgeDecision(state, ec, {
     setupMotionBlocked: opts?.setupMotionBlocked,
+    guardedShallowLocalPeakAnchor: opts?.guardedShallowLocalPeakAnchor,
   });
 
   const stamped: SquatCompletionState = {
@@ -3698,9 +3867,27 @@ export function evaluateSquatCompletionState(
 
   state = { ...state, squatEventCycle };
 
-  const guardedClosureProof = getGuardedShallowClosureProofFromTrajectoryBridge(state, squatEventCycle, {
-    setupMotionBlocked: options?.setupMotionBlocked,
+  const localPeakAnchor = getGuardedShallowLocalPeakAnchor({
+    state,
+    validFrames: validForEvent,
   });
+  const shallowLocalPeakObsEligible =
+    state.officialShallowPathCandidate === true &&
+    state.officialShallowPathAdmitted === true &&
+    state.attemptStarted === true &&
+    state.descendConfirmed === true &&
+    state.downwardCommitmentReached === true;
+
+  const bridgeOpts: GuardedTrajectoryShallowBridgeOpts = {
+    setupMotionBlocked: options?.setupMotionBlocked,
+    guardedShallowLocalPeakAnchor: localPeakAnchor,
+  };
+
+  const guardedClosureProof = getGuardedShallowClosureProofFromTrajectoryBridge(
+    state,
+    squatEventCycle,
+    bridgeOpts
+  );
   const alreadyNativeShallowClosureProof =
     state.officialShallowPathClosed === true ||
     state.officialShallowStreamBridgeApplied === true ||
@@ -3737,9 +3924,18 @@ export function evaluateSquatCompletionState(
     };
   }
 
-  state = mergeShallowTrajectoryAuthoritativeBridge(state, squatEventCycle, {
-    setupMotionBlocked: options?.setupMotionBlocked,
-  });
+  if (shallowLocalPeakObsEligible) {
+    state = {
+      ...state,
+      guardedShallowLocalPeakFound: localPeakAnchor.found,
+      guardedShallowLocalPeakBlockedReason: localPeakAnchor.found
+        ? null
+        : localPeakAnchor.blockedReason,
+      guardedShallowLocalPeakIndex: localPeakAnchor.localPeakIndex,
+    };
+  }
+
+  state = mergeShallowTrajectoryAuthoritativeBridge(state, squatEventCycle, bridgeOpts);
 
   const ruleBlock = state.ruleCompletionBlockedReason ?? null;
   const finalizeOk =
