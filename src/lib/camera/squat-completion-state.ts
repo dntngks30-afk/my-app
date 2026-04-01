@@ -24,6 +24,11 @@ import {
   type SquatOwnerTruthSource,
   type SquatOwnerTruthStage,
 } from '@/lib/camera/squat/squat-owner-trace';
+import {
+  deriveCanonicalShallowCompletionContract,
+  type CanonicalShallowCompletionContractBlockedReason,
+  type CanonicalShallowCompletionContractStage,
+} from '@/lib/camera/squat/shallow-completion-contract';
 
 /** PR-04E3B: 첫 attemptStarted 시점에 고정한 스트림·baseline — 동일 버퍼 내 재평가 없음 */
 type SquatDepthFreezeConfig = {
@@ -666,6 +671,23 @@ export interface SquatCompletionState extends MotionCompletionResult {
   shallowCompletionTicketBlockedReason?: string | null;
   /** admission | attempt | descend | commitment | late_suffix | anti_false_pass | finalize_bundle */
   shallowCompletionTicketStage?: string | null;
+
+  /**
+   * PR-CAM-CANONICAL-SHALLOW-CONTRACT-01: shallow closure fact 단일 정본 뷰(관측만 — completion 덮어쓰기 금지).
+   */
+  canonicalShallowContractEligible?: boolean;
+  canonicalShallowContractAdmissionSatisfied?: boolean;
+  canonicalShallowContractAttemptSatisfied?: boolean;
+  canonicalShallowContractReversalEvidenceSatisfied?: boolean;
+  canonicalShallowContractRecoveryEvidenceSatisfied?: boolean;
+  canonicalShallowContractAntiFalsePassClear?: boolean;
+  canonicalShallowContractSatisfied?: boolean;
+  canonicalShallowContractStage?: CanonicalShallowCompletionContractStage;
+  canonicalShallowContractBlockedReason?: CanonicalShallowCompletionContractBlockedReason;
+  canonicalShallowContractAuthoritativeClosureWouldBeSatisfied?: boolean;
+  canonicalShallowContractProvenanceOnlySignalPresent?: boolean;
+  canonicalShallowContractSplitBrainDetected?: boolean;
+  canonicalShallowContractTrace?: string;
 }
 
 /** PR-CAM-SHALLOW-PROOF-TRACE-11: 명시적 차단 문자열 — JSON 에서 추론 없이 원인 매핑 */
@@ -4492,6 +4514,36 @@ function buildShallowClosureProofTrace(input: {
   };
 }
 
+/** PR-CAM-CANONICAL-SHALLOW-CONTRACT-01: 이미 계산된 state fact 만 canonical 입력으로 넘긴다. */
+function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
+  return {
+    relativeDepthPeak: s.relativeDepthPeak ?? 0,
+    officialShallowPathCandidate: s.officialShallowPathCandidate === true,
+    officialShallowPathAdmitted: s.officialShallowPathAdmitted === true,
+    attemptStarted: s.attemptStarted === true,
+    descendConfirmed: s.descendConfirmed === true,
+    downwardCommitmentReached: s.downwardCommitmentReached === true,
+    currentSquatPhase: s.currentSquatPhase,
+    completionBlockedReason: s.completionBlockedReason ?? null,
+    ownerAuthoritativeReversalSatisfied: s.ownerAuthoritativeReversalSatisfied === true,
+    ownerAuthoritativeRecoverySatisfied: s.ownerAuthoritativeRecoverySatisfied === true,
+    officialShallowStreamBridgeApplied: s.officialShallowStreamBridgeApplied === true,
+    officialShallowAscentEquivalentSatisfied: s.officialShallowAscentEquivalentSatisfied === true,
+    officialShallowClosureProofSatisfied: s.officialShallowClosureProofSatisfied === true,
+    officialShallowPrimaryDropClosureFallback: s.officialShallowPrimaryDropClosureFallback === true,
+    provenanceReversalEvidencePresent: s.provenanceReversalEvidencePresent === true,
+    trajectoryReversalRescueApplied: s.trajectoryReversalRescueApplied === true,
+    reversalTailBackfillApplied: s.reversalTailBackfillApplied === true,
+    ultraShallowMeaningfulDownUpRescueApplied: s.ultraShallowMeaningfulDownUpRescueApplied === true,
+    standingFinalizeSatisfied: s.standingFinalizeSatisfied === true,
+    standingRecoveryFinalizeReason: s.standingRecoveryFinalizeReason ?? null,
+    setupMotionBlocked: s.setupMotionBlocked === true,
+    peakLatchedAtIndex: s.peakLatchedAtIndex ?? null,
+    evidenceLabel: s.evidenceLabel,
+    officialShallowPathClosed: s.officialShallowPathClosed === true,
+  };
+}
+
 export function evaluateSquatCompletionState(
   frames: PoseFeaturesFrame[],
   options?: EvaluateSquatCompletionStateOptions
@@ -4711,6 +4763,10 @@ export function evaluateSquatCompletionState(
       })
     : undefined;
 
+  const canonicalShallowContract = deriveCanonicalShallowCompletionContract(
+    buildCanonicalShallowContractInputFromState(state)
+  );
+
   /**
    * PR-CAM-EVENT-OWNER-DOWNGRADE-01: 이벤트 사이클은 탐지·관측만 — rule completion 이 성공 클로저의 유일 경로.
    */
@@ -4720,5 +4776,22 @@ export function evaluateSquatCompletionState(
     eventCyclePromotionBlockedReason: promoObs.eventCyclePromotionBlockedReason,
     eventCyclePromoted: false,
     ...(shallowClosureProofTrace != null ? { shallowClosureProofTrace } : {}),
+    canonicalShallowContractEligible: canonicalShallowContract.eligible,
+    canonicalShallowContractAdmissionSatisfied: canonicalShallowContract.admissionSatisfied,
+    canonicalShallowContractAttemptSatisfied: canonicalShallowContract.attemptSatisfied,
+    canonicalShallowContractReversalEvidenceSatisfied:
+      canonicalShallowContract.reversalEvidenceSatisfied,
+    canonicalShallowContractRecoveryEvidenceSatisfied:
+      canonicalShallowContract.recoveryEvidenceSatisfied,
+    canonicalShallowContractAntiFalsePassClear: canonicalShallowContract.antiFalsePassClear,
+    canonicalShallowContractSatisfied: canonicalShallowContract.satisfied,
+    canonicalShallowContractStage: canonicalShallowContract.stage,
+    canonicalShallowContractBlockedReason: canonicalShallowContract.blockedReason,
+    canonicalShallowContractAuthoritativeClosureWouldBeSatisfied:
+      canonicalShallowContract.authoritativeClosureWouldBeSatisfied,
+    canonicalShallowContractProvenanceOnlySignalPresent:
+      canonicalShallowContract.provenanceOnlySignalPresent,
+    canonicalShallowContractSplitBrainDetected: canonicalShallowContract.splitBrainDetected,
+    canonicalShallowContractTrace: canonicalShallowContract.trace,
   });
 }

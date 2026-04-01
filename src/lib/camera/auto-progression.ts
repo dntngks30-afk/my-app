@@ -318,6 +318,20 @@ export interface SquatCycleDebug {
   shallowCompletionTicketSatisfied?: boolean;
   shallowCompletionTicketBlockedReason?: string | null;
   shallowCompletionTicketStage?: string | null;
+  /** PR-CAM-CANONICAL-SHALLOW-CONTRACT-01 — pass-through only */
+  canonicalShallowContractEligible?: boolean;
+  canonicalShallowContractAdmissionSatisfied?: boolean;
+  canonicalShallowContractAttemptSatisfied?: boolean;
+  canonicalShallowContractReversalEvidenceSatisfied?: boolean;
+  canonicalShallowContractRecoveryEvidenceSatisfied?: boolean;
+  canonicalShallowContractAntiFalsePassClear?: boolean;
+  canonicalShallowContractSatisfied?: boolean;
+  canonicalShallowContractStage?: string;
+  canonicalShallowContractBlockedReason?: string | null;
+  canonicalShallowContractAuthoritativeClosureWouldBeSatisfied?: boolean;
+  canonicalShallowContractProvenanceOnlySignalPresent?: boolean;
+  canonicalShallowContractSplitBrainDetected?: boolean;
+  canonicalShallowContractTrace?: string;
 }
 
 export interface ExerciseGateResult {
@@ -1394,6 +1408,29 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.shallowCompletionTicketBlockedReason =
     cs?.shallowCompletionTicketBlockedReason ?? null;
   squatCycleDebug.shallowCompletionTicketStage = cs?.shallowCompletionTicketStage ?? null;
+
+  squatCycleDebug.canonicalShallowContractEligible = cs?.canonicalShallowContractEligible;
+  squatCycleDebug.canonicalShallowContractAdmissionSatisfied =
+    cs?.canonicalShallowContractAdmissionSatisfied;
+  squatCycleDebug.canonicalShallowContractAttemptSatisfied =
+    cs?.canonicalShallowContractAttemptSatisfied;
+  squatCycleDebug.canonicalShallowContractReversalEvidenceSatisfied =
+    cs?.canonicalShallowContractReversalEvidenceSatisfied;
+  squatCycleDebug.canonicalShallowContractRecoveryEvidenceSatisfied =
+    cs?.canonicalShallowContractRecoveryEvidenceSatisfied;
+  squatCycleDebug.canonicalShallowContractAntiFalsePassClear =
+    cs?.canonicalShallowContractAntiFalsePassClear;
+  squatCycleDebug.canonicalShallowContractSatisfied = cs?.canonicalShallowContractSatisfied;
+  squatCycleDebug.canonicalShallowContractStage = cs?.canonicalShallowContractStage;
+  squatCycleDebug.canonicalShallowContractBlockedReason =
+    cs?.canonicalShallowContractBlockedReason ?? null;
+  squatCycleDebug.canonicalShallowContractAuthoritativeClosureWouldBeSatisfied =
+    cs?.canonicalShallowContractAuthoritativeClosureWouldBeSatisfied;
+  squatCycleDebug.canonicalShallowContractProvenanceOnlySignalPresent =
+    cs?.canonicalShallowContractProvenanceOnlySignalPresent;
+  squatCycleDebug.canonicalShallowContractSplitBrainDetected =
+    cs?.canonicalShallowContractSplitBrainDetected;
+  squatCycleDebug.canonicalShallowContractTrace = cs?.canonicalShallowContractTrace;
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';
