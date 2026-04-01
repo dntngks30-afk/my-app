@@ -189,7 +189,6 @@ export function detectLowRomAngleRuleCycle(
   const prePeak = valid.slice(0, peakIndex);
   const postPeak = valid.slice(peakIndex + 1);
   if (prePeak.length < LOW_ROM_MIN_PRE_PEAK_FRAMES || postPeak.length < LOW_ROM_MIN_POST_PEAK_FRAMES) return null;
-  }
 
   const baselineFrames = prePeak.slice(0, Math.min(LOW_ROM_BASELINE_FRAMES, prePeak.length));
   const peakWindow = valid.slice(Math.max(0, peakIndex - 1), Math.min(valid.length, peakIndex + 2));
