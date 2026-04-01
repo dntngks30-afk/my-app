@@ -214,6 +214,28 @@ export type SquatAuthoritativeShallowStage =
   | 'standing_finalize_blocked'
   | 'closed';
 
+/**
+ * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: 세부 completionBlockedReason 을 6가지 패밀리로만 접는다(분류 전용).
+ */
+export type ShallowNormalizedBlockerFamily =
+  | 'admission'
+  | 'reversal'
+  | 'policy'
+  | 'standing_finalize'
+  | 'closed'
+  | 'none';
+
+/**
+ * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: 공식 shallow 계약 축 단일 상태(권위는 completion-state 만).
+ */
+export type ShallowAuthoritativeContractStatus =
+  | 'not_in_shallow_contract'
+  | 'admission_blocked'
+  | 'reversal_blocked'
+  | 'policy_blocked'
+  | 'standing_finalize_blocked'
+  | 'closed';
+
 /** PR-02: 역전 앵커 증거 출처 — pass owner 아님 */
 export type SquatReversalEvidenceProvenance =
   | 'strict_rule'
@@ -415,6 +437,24 @@ export interface SquatCompletionState extends MotionCompletionResult {
   truthMismatch_provenanceReversalWithoutAuthoritative?: boolean;
   /** standing 밴드(standingRecoveredAtMs)는 잡혔으나 권위 복귀는 false */
   truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery?: boolean;
+
+  /**
+   * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: completionBlockedReason 등 권위 결과만으로 정규화된 차단 패밀리.
+   */
+  shallowNormalizedBlockerFamily?: ShallowNormalizedBlockerFamily;
+  /**
+   * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: shallow 계약(officialShallowPath*) 기준 단일 권위 상태.
+   */
+  shallowAuthoritativeContractStatus?: ShallowAuthoritativeContractStatus;
+  /**
+   * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: Q4 — shallow 권위로 닫혔는지(= officialShallowPathClosed, 의미 동일·명시).
+   */
+  shallowContractAuthoritativeClosure?: boolean;
+  /**
+   * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: 계약 체인 요약 한 줄(디버그 전용, 게이트 미사용).
+   * 형식: candidate|admitted|reversalAuth|normalizedFamily|contractStatus
+   */
+  shallowContractAuthorityTrace?: string;
 }
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
@@ -2613,6 +2653,78 @@ function computeAuthoritativeShallowStageForObservability(
   return 'policy_blocked';
 }
 
+/** PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: 세부 reason → 정규 패밀리(표에 없는 문자열은 `none`). */
+const SHALLOW_PR2_ADMISSION_REASONS = new Set<string>([
+  'not_armed',
+  'no_descend',
+  'insufficient_relative_depth',
+  'no_commitment',
+  /** 실기기에서 completion 과 함께 관측되는 동결/래치 누락 — admission 계열로만 분류(PR-3+에서 쪼갤 수 있음). */
+  'freeze_or_latch_missing',
+]);
+
+const SHALLOW_PR2_REVERSAL_REASONS = new Set<string>(['no_reversal', 'no_ascend']);
+
+const SHALLOW_PR2_POLICY_REASONS = new Set<string>([
+  'ultra_low_rom_not_allowed',
+  'trajectory_rescue_not_allowed',
+  'event_promotion_not_allowed',
+]);
+
+const SHALLOW_PR2_STANDING_FINALIZE_REASONS = new Set<string>([
+  'not_standing_recovered',
+  'recovery_hold_too_short',
+  'low_rom_standing_finalize_not_satisfied',
+  'ultra_low_rom_standing_finalize_not_satisfied',
+  'descent_span_too_short',
+  'ascent_recovery_span_too_short',
+]);
+
+/**
+ * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01:
+ * `completionBlockedReason` + `completionSatisfied` 만으로 정규 패밀리를 낸다(임계·차단 로직 미변경).
+ */
+export function mapCompletionBlockedReasonToShallowNormalizedBlockerFamily(
+  completionBlockedReason: string | null,
+  completionSatisfied: boolean
+): ShallowNormalizedBlockerFamily {
+  if (completionSatisfied) return 'closed';
+  const r = completionBlockedReason;
+  if (r == null || r === '') return 'none';
+  if (r.startsWith('setup_motion:')) return 'admission';
+  if (SHALLOW_PR2_ADMISSION_REASONS.has(r)) return 'admission';
+  if (SHALLOW_PR2_REVERSAL_REASONS.has(r)) return 'reversal';
+  if (SHALLOW_PR2_POLICY_REASONS.has(r)) return 'policy';
+  if (SHALLOW_PR2_STANDING_FINALIZE_REASONS.has(r)) return 'standing_finalize';
+  return 'none';
+}
+
+/**
+ * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01:
+ * official shallow 계약 후보/입장/차단 권위만으로 단일 contract status.
+ */
+function deriveShallowAuthoritativeContractStatusForPr2(
+  state: SquatCompletionState
+): ShallowAuthoritativeContractStatus {
+  if (state.completionSatisfied) return 'closed';
+  if (!state.officialShallowPathCandidate) return 'not_in_shallow_contract';
+  if (!state.officialShallowPathAdmitted) return 'admission_blocked';
+
+  const fam = mapCompletionBlockedReasonToShallowNormalizedBlockerFamily(
+    state.completionBlockedReason ?? null,
+    false
+  );
+  if (fam === 'reversal') return 'reversal_blocked';
+  if (fam === 'policy') return 'policy_blocked';
+  if (fam === 'standing_finalize') return 'standing_finalize_blocked';
+  if (fam === 'admission') return 'admission_blocked';
+  /**
+   * 입장 이후인데 매핑 밖 reason — 복구/마무리 꼬리로만 읽히는 경우가 많아 standing_finalize_blocked 로만 라벨(PR-1과 동일 철학).
+   */
+  if (fam === 'none') return 'standing_finalize_blocked';
+  return 'closed';
+}
+
 /**
  * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01:
  * shallow truth 계층(관측 타임라인 / 권위 completion / provenance)과 불일치 플래그를 부착한다.
@@ -2648,6 +2760,20 @@ export function attachShallowTruthObservabilityAlign01(
   const truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery =
     state.standingRecoveredAtMs != null && !shallowAuthoritativeRecoveryTruth;
 
+  const shallowNormalizedBlockerFamily = mapCompletionBlockedReasonToShallowNormalizedBlockerFamily(
+    state.completionBlockedReason ?? null,
+    state.completionSatisfied === true
+  );
+  const shallowAuthoritativeContractStatus = deriveShallowAuthoritativeContractStatusForPr2(state);
+  const shallowContractAuthoritativeClosure = state.officialShallowPathClosed === true;
+  const shallowContractAuthorityTrace = [
+    state.officialShallowPathCandidate ? '1' : '0',
+    state.officialShallowPathAdmitted ? '1' : '0',
+    shallowAuthoritativeReversalTruth ? '1' : '0',
+    shallowNormalizedBlockerFamily,
+    shallowAuthoritativeContractStatus,
+  ].join('|');
+
   return {
     ...state,
     shallowAuthoritativeStage: computeAuthoritativeShallowStageForObservability(state),
@@ -2661,6 +2787,10 @@ export function attachShallowTruthObservabilityAlign01(
     truthMismatch_shallowAdmissionVsClosure,
     truthMismatch_provenanceReversalWithoutAuthoritative,
     truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery,
+    shallowNormalizedBlockerFamily,
+    shallowAuthoritativeContractStatus,
+    shallowContractAuthoritativeClosure,
+    shallowContractAuthorityTrace,
   };
 }
 

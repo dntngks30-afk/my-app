@@ -35,6 +35,10 @@ import {
   squatRetryTriggeredByPartialFramingReasons,
   type SquatPassOwner,
 } from './squat/squat-progression-contract';
+import type {
+  ShallowAuthoritativeContractStatus,
+  ShallowNormalizedBlockerFamily,
+} from '@/lib/camera/squat-completion-state';
 
 export type ExerciseProgressionState =
   | 'idle'
@@ -257,6 +261,11 @@ export interface SquatCycleDebug {
   truthMismatch_shallowAdmissionVsClosure?: boolean;
   truthMismatch_provenanceReversalWithoutAuthoritative?: boolean;
   truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery?: boolean;
+  /** PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01 — pass-through only */
+  shallowNormalizedBlockerFamily?: ShallowNormalizedBlockerFamily;
+  shallowAuthoritativeContractStatus?: ShallowAuthoritativeContractStatus;
+  shallowContractAuthoritativeClosure?: boolean;
+  shallowContractAuthorityTrace?: string;
 }
 
 export interface ExerciseGateResult {
@@ -1268,6 +1277,12 @@ function getSquatProgressionCompletionSatisfied(
     cs?.truthMismatch_provenanceReversalWithoutAuthoritative;
   squatCycleDebug.truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery =
     cs?.truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery;
+
+  /** PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: 게이트 미사용 pass-through */
+  squatCycleDebug.shallowNormalizedBlockerFamily = cs?.shallowNormalizedBlockerFamily;
+  squatCycleDebug.shallowAuthoritativeContractStatus = cs?.shallowAuthoritativeContractStatus;
+  squatCycleDebug.shallowContractAuthoritativeClosure = cs?.shallowContractAuthoritativeClosure;
+  squatCycleDebug.shallowContractAuthorityTrace = cs?.shallowContractAuthorityTrace;
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';

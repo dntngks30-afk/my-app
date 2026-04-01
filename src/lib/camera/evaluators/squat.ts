@@ -756,6 +756,11 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
           state.truthMismatch_provenanceReversalWithoutAuthoritative ? 1 : 0,
         truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery:
           state.truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery ? 1 : 0,
+        /** PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: 정규 패밀리·계약 상태(게이트 미사용) */
+        shallowNormalizedBlockerFamily: state.shallowNormalizedBlockerFamily ?? null,
+        shallowAuthoritativeContractStatus: state.shallowAuthoritativeContractStatus ?? null,
+        shallowContractAuthoritativeClosure: state.shallowContractAuthoritativeClosure ? 1 : 0,
+        shallowContractAuthorityTrace: state.shallowContractAuthorityTrace ?? null,
       },
       perStepDiagnostics: perStepRecord,
       /** PR-HMM-01B: shadow decoder 전체 결과 — debug 전용 */
