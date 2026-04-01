@@ -2,7 +2,7 @@
  * step별 evaluator 실행
  */
 import type { EvaluatorResult } from './evaluators/types';
-import { evaluateSquat } from './evaluators/squat-meaningful-shallow';
+import { evaluateSquat } from './evaluators/squat-low-rom-angle-rule';
 import { evaluateOverheadReach } from './evaluators/overhead-reach';
 import { evaluateWallAngel } from './evaluators/wall-angel';
 import { evaluateSingleLegBalance } from './evaluators/single-leg-balance';
