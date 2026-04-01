@@ -193,7 +193,8 @@ export function resolveSquatCompletionLineageOwner(
     completionPassReason === 'low_rom_cycle' ||
     completionPassReason === 'ultra_low_rom_cycle' ||
     completionPassReason === 'low_rom_event_cycle' ||
-    completionPassReason === 'ultra_low_rom_event_cycle'
+    completionPassReason === 'ultra_low_rom_event_cycle' ||
+    completionPassReason === 'official_shallow_cycle'
   ) {
     return 'completion_truth_event';
   }
@@ -216,7 +217,8 @@ export function resolveSquatPassOwner(input: {
       input.completionPassReason === 'low_rom_cycle' ||
       input.completionPassReason === 'ultra_low_rom_cycle' ||
       input.completionPassReason === 'low_rom_event_cycle' ||
-      input.completionPassReason === 'ultra_low_rom_event_cycle'
+      input.completionPassReason === 'ultra_low_rom_event_cycle' ||
+      input.completionPassReason === 'official_shallow_cycle'
     ) {
       return 'completion_truth_event';
     }

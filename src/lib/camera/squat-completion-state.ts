@@ -185,7 +185,9 @@ export type SquatCompletionFinalizeMode =
   | 'blocked'
   | 'rule_finalized'
   | 'assist_augmented_finalized'
-  | 'event_promoted_finalized';
+  | 'event_promoted_finalized'
+  /** PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04: 공식 shallow 권위 종료 계약으로만 닫힘 */
+  | 'official_shallow_finalized';
 
 /** PR-02: 어떤 assist 채널이 개입했는지(OR 목록) */
 export type SquatCompletionAssistSource =
@@ -499,6 +501,15 @@ export interface SquatCompletionState extends MotionCompletionResult {
    */
   provenanceReversalEvidencePresent?: boolean;
 
+  /**
+   * PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04: 공식 shallow 권위 종료 계약으로 completion 이 닫혔는지(provenance·이벤트 승격과 별개).
+   */
+  ownerAuthoritativeShallowClosureSatisfied?: boolean;
+  /** PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04: shallow 권위 종료 충족 시 사유 */
+  shallowAuthoritativeClosureReason?: string | null;
+  /** PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04: shallow 권위 종료 미충족 시 구체 사유 */
+  shallowAuthoritativeClosureBlockedReason?: string | null;
+
   /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: finalize 게이트 충족 여부(관측). */
   standingFinalizeSatisfied?: boolean;
   /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: 늦은 setup_motion 이 성공을 덮어쓴 경우(평가기에서 설정). */
@@ -593,8 +604,11 @@ function deriveSquatCompletionFinalizeMode(input: {
   completionSatisfied: boolean;
   eventCyclePromoted: boolean;
   assistSourcesWithoutPromotion: SquatCompletionAssistSource[];
+  /** PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04 */
+  officialShallowAuthoritativeClosure?: boolean;
 }): SquatCompletionFinalizeMode {
   if (!input.completionSatisfied) return 'blocked';
+  if (input.officialShallowAuthoritativeClosure === true) return 'official_shallow_finalized';
   if (input.eventCyclePromoted) return 'event_promoted_finalized';
   if (input.assistSourcesWithoutPromotion.length === 0) return 'rule_finalized';
   return 'assist_augmented_finalized';
@@ -1567,6 +1581,182 @@ function normalizeCompletionBlockedReasonForTerminalStage(args: {
   return cur;
 }
 
+/**
+ * PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04: 얕은 스쿼트만 **통제된 권위 종료 계약**으로 닫는다.
+ * trajectory/tail/ultra provenance 단독·시리즈 시작 피크 오염·무하강 정적 자세는 통과시키지 않는다.
+ */
+function getShallowAuthoritativeClosureDecision(p: {
+  completionAlreadySatisfied: boolean;
+  completionPassReason: SquatCompletionPassReason;
+  officialShallowPathCandidate: boolean;
+  officialShallowPathAdmitted: boolean;
+  attemptStarted: boolean;
+  descendConfirmed: boolean;
+  armed: boolean;
+  downwardCommitmentReached: boolean;
+  committedFrame: SquatDepthFrameLite | null | undefined;
+  relativeDepthPeak: number;
+  eventBasedDescentPath: boolean;
+  peakLatchedAtIndex: number | null | undefined;
+  hasValidCommittedPeakAnchor: boolean;
+  committedOrPostCommitPeakFrame: SquatDepthFrameLite | undefined | null;
+  ownerAuthoritativeReversalSatisfied: boolean;
+  ownerAuthoritativeRecoverySatisfied: boolean;
+  officialShallowStreamBridgeApplied: boolean;
+  officialShallowAscentEquivalentSatisfied: boolean;
+  shallowClosureProofBundleFromStream: boolean;
+  officialShallowPrimaryDropClosureFallback: boolean;
+  squatReversalDropAchieved: number;
+  squatReversalDropRequired: number;
+  standingRecoveredAtMs: number | undefined | null;
+  standingRecoveryFinalizeSatisfied: boolean;
+  standingRecoveryFinalizeReason: string | null;
+  standingRecoveryFinalizeBand: SquatEvidenceLabel;
+  recovery: Pick<SquatCompletionState, 'recoveryReturnContinuityFrames' | 'recoveryDropRatio'>;
+  provenanceReversalEvidencePresent: boolean;
+  /** trajectory rescue / tail / ultra 가 역전 라벨을 trajectory 쪽으로 만든 경우 */
+  reversalLabeledTrajectory: boolean;
+}): { satisfied: boolean; shallowAuthoritativeClosureBlockedReason: string | null } {
+  if (p.completionAlreadySatisfied) {
+    return { satisfied: false, shallowAuthoritativeClosureBlockedReason: null };
+  }
+  if (p.completionPassReason !== 'not_confirmed') {
+    return { satisfied: false, shallowAuthoritativeClosureBlockedReason: null };
+  }
+
+  const standardPathWouldWin =
+    p.eventBasedDescentPath === false && p.relativeDepthPeak >= STANDARD_OWNER_FLOOR;
+  if (standardPathWouldWin) {
+    return { satisfied: false, shallowAuthoritativeClosureBlockedReason: null };
+  }
+
+  if (!p.officialShallowPathCandidate || !p.officialShallowPathAdmitted) {
+    return {
+      satisfied: false,
+      shallowAuthoritativeClosureBlockedReason: 'shallow_admission_not_satisfied',
+    };
+  }
+  if (!p.attemptStarted || !p.descendConfirmed) {
+    return {
+      satisfied: false,
+      shallowAuthoritativeClosureBlockedReason: 'no_attempt_or_descend',
+    };
+  }
+  if (!p.armed) {
+    return { satisfied: false, shallowAuthoritativeClosureBlockedReason: 'not_armed' };
+  }
+  if (!p.downwardCommitmentReached || p.committedFrame == null) {
+    return {
+      satisfied: false,
+      shallowAuthoritativeClosureBlockedReason: 'no_downward_commitment',
+    };
+  }
+  if (p.relativeDepthPeak >= STANDARD_OWNER_FLOOR) {
+    return {
+      satisfied: false,
+      shallowAuthoritativeClosureBlockedReason: 'outside_shallow_owner_zone',
+    };
+  }
+  /** PR-CAM-PEAK-ANCHOR-INTEGRITY: 첫 유효 프레임 피크 래치는 setup/시리즈 시작 오염으로 취급 */
+  if (p.peakLatchedAtIndex === 0) {
+    return {
+      satisfied: false,
+      shallowAuthoritativeClosureBlockedReason: 'peak_series_start_contamination',
+    };
+  }
+  if (!p.hasValidCommittedPeakAnchor || p.committedOrPostCommitPeakFrame == null) {
+    return {
+      satisfied: false,
+      shallowAuthoritativeClosureBlockedReason: 'invalid_committed_peak_anchor',
+    };
+  }
+
+  const explicitClosureProof =
+    p.shallowClosureProofBundleFromStream === true ||
+    p.officialShallowPrimaryDropClosureFallback === true;
+  const minDropForShallowAuth =
+    Math.max(REVERSAL_DROP_MIN_ABS, p.squatReversalDropRequired * 0.88) - 1e-12;
+  const dropGate = p.squatReversalDropAchieved >= minDropForShallowAuth;
+
+  const shallowAuthoritativeReversal =
+    p.ownerAuthoritativeReversalSatisfied === true ||
+    p.officialShallowAscentEquivalentSatisfied === true ||
+    (explicitClosureProof && dropGate);
+
+  const provenanceOnlyReversalLane =
+    p.provenanceReversalEvidencePresent &&
+    !p.ownerAuthoritativeReversalSatisfied &&
+    !p.officialShallowStreamBridgeApplied &&
+    !p.officialShallowAscentEquivalentSatisfied &&
+    !(explicitClosureProof && dropGate);
+
+  if (provenanceOnlyReversalLane) {
+    return {
+      satisfied: false,
+      shallowAuthoritativeClosureBlockedReason: 'provenance_only_reversal_lane',
+    };
+  }
+
+  if (!shallowAuthoritativeReversal) {
+    return {
+      satisfied: false,
+      shallowAuthoritativeClosureBlockedReason: 'shallow_authoritative_reversal_not_satisfied',
+    };
+  }
+
+  if (
+    p.reversalLabeledTrajectory &&
+    !p.ownerAuthoritativeReversalSatisfied &&
+    !explicitClosureProof
+  ) {
+    return {
+      satisfied: false,
+      shallowAuthoritativeClosureBlockedReason: 'trajectory_reversal_without_closure_proof',
+    };
+  }
+
+  const fr = p.standingRecoveryFinalizeReason;
+  const finalizeReasonOk =
+    fr === 'standing_hold_met' ||
+    fr === 'low_rom_guarded_finalize' ||
+    fr === 'ultra_low_rom_guarded_finalize' ||
+    fr === 'low_rom_tail_guarded_finalize';
+
+  const recoveryProofOk = recoveryMeetsLowRomStyleFinalizeProof(p.recovery);
+  const shallowFinalizeBandOk =
+    isOfficialShallowRomFinalizeBand(p.standingRecoveryFinalizeBand) ||
+    p.standingRecoveryFinalizeReason === 'standing_hold_met';
+
+  const shallowAuthoritativeRecovery =
+    p.ownerAuthoritativeRecoverySatisfied === true ||
+    (p.standingRecoveredAtMs != null &&
+      p.standingRecoveryFinalizeSatisfied &&
+      shallowFinalizeBandOk &&
+      finalizeReasonOk &&
+      recoveryProofOk);
+
+  if (!shallowAuthoritativeRecovery) {
+    return {
+      satisfied: false,
+      shallowAuthoritativeClosureBlockedReason: 'shallow_authoritative_recovery_not_satisfied',
+    };
+  }
+
+  const closureProofSignal =
+    p.ownerAuthoritativeReversalSatisfied === true ||
+    p.officialShallowStreamBridgeApplied === true ||
+    explicitClosureProof;
+
+  if (!closureProofSignal) {
+    return {
+      satisfied: false,
+      shallowAuthoritativeClosureBlockedReason: 'shallow_closure_proof_missing',
+    };
+  }
+
+  return { satisfied: true, shallowAuthoritativeClosureBlockedReason: null };
+}
+
 function evaluateSquatCompletionCore(
   frames: PoseFeaturesFrame[],
   options: EvaluateSquatCompletionStateOptions | undefined,
@@ -1656,6 +1846,9 @@ function evaluateSquatCompletionCore(
       ownerAuthoritativeReversalSatisfied: false,
       ownerAuthoritativeRecoverySatisfied: false,
       provenanceReversalEvidencePresent: false,
+      ownerAuthoritativeShallowClosureSatisfied: false,
+      shallowAuthoritativeClosureReason: null,
+      shallowAuthoritativeClosureBlockedReason: null,
       standingFinalizeSatisfied: false,
       standingFinalizeSuppressedByLateSetup: false,
       standingFinalizeReadyAtMs: null,
@@ -2353,7 +2546,7 @@ function evaluateSquatCompletionCore(
   const officialShallowPathAdmittedForNormalize =
     officialShallowPathCandidate && armed && descendConfirmed && attemptStarted;
 
-  const completionBlockedReason = normalizeCompletionBlockedReasonForTerminalStage({
+  let completionBlockedReason = normalizeCompletionBlockedReasonForTerminalStage({
     completionSatisfied: rawPostAssistCompletionBlockedReason == null,
     attemptStarted,
     downwardCommitmentReached,
@@ -2402,7 +2595,7 @@ function evaluateSquatCompletionCore(
     pr03OfficialShallowArming,
   });
 
-  const completionPassReason: SquatCompletionPassReason = resolveSquatCompletionPath({
+  let completionPassReason: SquatCompletionPassReason = resolveSquatCompletionPath({
     completionBlockedReason,
     relativeDepthPeak,
     evidenceLabel,
@@ -2412,10 +2605,10 @@ function evaluateSquatCompletionCore(
     shallowRomClosureProofSignals,
   });
 
-  const completionSatisfied = completionPassReason !== 'not_confirmed';
+  let completionSatisfied = completionPassReason !== 'not_confirmed';
 
   const officialShallowPathAdmitted = shallowAdmissionContract.admitted;
-  const officialShallowPathClosed =
+  let officialShallowPathClosed =
     completionSatisfied &&
     officialShallowPathCandidate &&
     (completionPassReason === 'low_rom_cycle' || completionPassReason === 'ultra_low_rom_cycle');
@@ -2492,10 +2685,74 @@ function evaluateSquatCompletionCore(
     ultraShallowMeaningfulDownUpRescueApplied,
     eventCyclePromoted: false,
   });
+
+  /** PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: standing 복귀·finalize 권위 축(관측). */
+  const ownerAuthoritativeRecoverySatisfied =
+    ownerAuthoritativeReversalSatisfied === true &&
+    standingRecovery.standingRecoveredAtMs != null &&
+    standingRecoveryFinalize.finalizeSatisfied === true;
+
+  const reversalLabeledTrajectoryForShallowClosure =
+    trajectoryRescue.trajectoryReversalConfirmedBy === 'trajectory' ||
+    reversalTailApplied ||
+    ultraShallowMeaningfulDownUpRescueApplied;
+
+  const shallowAuthoritativeClosureDecision = getShallowAuthoritativeClosureDecision({
+    completionAlreadySatisfied: completionSatisfied,
+    completionPassReason,
+    officialShallowPathCandidate,
+    officialShallowPathAdmitted: shallowAdmissionContract.admitted,
+    attemptStarted,
+    descendConfirmed,
+    armed,
+    downwardCommitmentReached,
+    committedFrame,
+    relativeDepthPeak,
+    eventBasedDescentPath,
+    peakLatchedAtIndex: committedOrPostCommitPeakFrame?.index ?? null,
+    hasValidCommittedPeakAnchor,
+    committedOrPostCommitPeakFrame,
+    ownerAuthoritativeReversalSatisfied,
+    ownerAuthoritativeRecoverySatisfied,
+    officialShallowStreamBridgeApplied,
+    officialShallowAscentEquivalentSatisfied,
+    shallowClosureProofBundleFromStream,
+    officialShallowPrimaryDropClosureFallback,
+    squatReversalDropAchieved,
+    squatReversalDropRequired,
+    standingRecoveredAtMs: standingRecovery.standingRecoveredAtMs,
+    standingRecoveryFinalizeSatisfied: standingRecoveryFinalize.finalizeSatisfied,
+    standingRecoveryFinalizeReason: standingRecoveryFinalize.finalizeReason,
+    standingRecoveryFinalizeBand,
+    recovery,
+    provenanceReversalEvidencePresent,
+    reversalLabeledTrajectory: reversalLabeledTrajectoryForShallowClosure,
+  });
+
+  let ownerAuthoritativeShallowClosureSatisfied = false;
+  let shallowAuthoritativeClosureReason: string | null = null;
+  let shallowAuthoritativeClosureBlockedReason: string | null =
+    shallowAuthoritativeClosureDecision.shallowAuthoritativeClosureBlockedReason;
+
+  if (shallowAuthoritativeClosureDecision.satisfied) {
+    completionPassReason = 'official_shallow_cycle';
+    completionSatisfied = true;
+    completionBlockedReason = null;
+    ownerAuthoritativeShallowClosureSatisfied = true;
+    shallowAuthoritativeClosureReason = 'official_shallow_cycle';
+    shallowAuthoritativeClosureBlockedReason = null;
+    officialShallowPathClosed =
+      officialShallowPathCandidate === true &&
+      officialShallowPathAdmitted === true &&
+      completionSatisfied;
+    officialShallowPathBlockedReason = null;
+  }
+
   const pr02FinalizeMode = deriveSquatCompletionFinalizeMode({
     completionSatisfied,
     eventCyclePromoted: false,
     assistSourcesWithoutPromotion: pr02AssistSources,
+    officialShallowAuthoritativeClosure: ownerAuthoritativeShallowClosureSatisfied,
   });
   const pr02AssistMode = deriveSquatCompletionAssistMode(pr02AssistSources);
   const pr02ReversalProv = deriveSquatReversalEvidenceProvenance({
@@ -2507,12 +2764,6 @@ function evaluateSquatCompletionCore(
     revConfReversalConfirmed: revConf.reversalConfirmed,
     revConfSource: revConf.reversalSource,
   });
-
-  /** PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: standing 복귀·finalize 권위 축(관측). */
-  const ownerAuthoritativeRecoverySatisfied =
-    ownerAuthoritativeReversalSatisfied === true &&
-    standingRecovery.standingRecoveredAtMs != null &&
-    standingRecoveryFinalize.finalizeSatisfied === true;
 
   return {
     baselineStandingDepth,
@@ -2622,6 +2873,9 @@ function evaluateSquatCompletionCore(
     ownerAuthoritativeReversalSatisfied,
     ownerAuthoritativeRecoverySatisfied,
     provenanceReversalEvidencePresent,
+    ownerAuthoritativeShallowClosureSatisfied,
+    shallowAuthoritativeClosureReason,
+    shallowAuthoritativeClosureBlockedReason,
     standingFinalizeSatisfied: standingRecoveryFinalize.finalizeSatisfied,
     standingFinalizeSuppressedByLateSetup: false,
     standingFinalizeReadyAtMs,
@@ -2695,7 +2949,9 @@ export function resolveStandardDriftAfterShallowAdmission(
       if (
         firstOfficialShallowClosedPrefix == null &&
         sn.officialShallowPathClosed &&
-        (sn.completionPassReason === 'low_rom_cycle' || sn.completionPassReason === 'ultra_low_rom_cycle') &&
+        (sn.completionPassReason === 'low_rom_cycle' ||
+          sn.completionPassReason === 'ultra_low_rom_cycle' ||
+          sn.completionPassReason === 'official_shallow_cycle') &&
         sn.relativeDepthPeak < STANDARD_OWNER_FLOOR
       ) {
         firstOfficialShallowClosedPrefix = sn;

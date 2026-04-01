@@ -27,6 +27,8 @@ export type SquatCompletionPassReason =
   /** PR-CAM-18: phaseHint='descent'이 'start' 우선에 의해 억제된 경우 trajectory 기반 이벤트 사이클 경로 */
   | 'low_rom_event_cycle'
   | 'ultra_low_rom_event_cycle'
+  /** PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04: 공식 shallow 권위 종료 계약 충족 시에만(단일 게이트) */
+  | 'official_shallow_cycle'
   | 'not_confirmed';
 
 export function deriveSquatCompletionMachinePhase(s: {

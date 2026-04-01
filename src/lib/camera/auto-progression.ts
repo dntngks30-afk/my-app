@@ -147,6 +147,10 @@ export interface SquatCycleDebug {
   completionMachinePhase?: string;
   /** PR-COMP-01: 통과 ROM 사이클 분류 */
   completionPassReason?: string;
+  /** PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04: 공식 shallow 권위 종료(관측) */
+  ownerAuthoritativeShallowClosureSatisfied?: boolean;
+  shallowAuthoritativeClosureReason?: string | null;
+  shallowAuthoritativeClosureBlockedReason?: string | null;
   /** PR-COMP-03: completion·pass와 무관한 strict 내부 해석(트레이스 전용) */
   squatInternalQuality?: SquatInternalQuality;
   /** PR-CAM-10: ambiguous retry / severe-fail 완화 계약 관측 */
@@ -1058,7 +1062,8 @@ function isSquatShallowRomPassReason(passReason: string | undefined): boolean {
     passReason === 'low_rom_cycle' ||
     passReason === 'ultra_low_rom_cycle' ||
     passReason === 'low_rom_event_cycle' ||
-    passReason === 'ultra_low_rom_event_cycle'
+    passReason === 'ultra_low_rom_event_cycle' ||
+    passReason === 'official_shallow_cycle'
   );
 }
 
@@ -1204,6 +1209,9 @@ function getSquatProgressionCompletionSatisfied(
     recoveryDropRatio,
     completionMachinePhase,
     completionPassReason,
+    ownerAuthoritativeShallowClosureSatisfied: cs?.ownerAuthoritativeShallowClosureSatisfied,
+    shallowAuthoritativeClosureReason: cs?.shallowAuthoritativeClosureReason ?? null,
+    shallowAuthoritativeClosureBlockedReason: cs?.shallowAuthoritativeClosureBlockedReason ?? null,
     squatInternalQuality: result.debug?.squatInternalQuality,
   };
 
@@ -1360,7 +1368,9 @@ function getSquatProgressionCompletionSatisfied(
         : completionPassReason === 'ultra_low_rom_event_cycle' ||
             completionPassReason === 'ultra_low_rom_cycle'
           ? 'ultra_low_rom'
-          : undefined;
+          : completionPassReason === 'official_shallow_cycle'
+            ? 'low_rom'
+            : undefined;
   squatCycleDebug.successPhaseAtOpen = 'standing_recovered';
   squatCycleDebug.passTriggeredAtPhase = 'standing_recovered';
 
