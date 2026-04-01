@@ -296,8 +296,17 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       state.attemptStarted === true &&
       state.currentSquatPhase === 'standing_recovered';
 
+    /** PR-06: trajectory 정규화로 PR-4 official_shallow_cycle 이 닫힌 경우도 늦은 setup 으로 깨지 않게 */
+    const guardedClosureProofClosedCycle =
+      state.guardedShallowTrajectoryClosureProofSatisfied === true &&
+      state.completionPassReason === 'official_shallow_cycle' &&
+      state.descendConfirmed === true &&
+      state.attemptStarted === true &&
+      state.currentSquatPhase === 'standing_recovered';
+
     const bypassLateSetupForClosedCycle =
       trajectoryBridgeClosedCycle ||
+      guardedClosureProofClosedCycle ||
       (state.descendConfirmed === true &&
         state.attemptStarted === true &&
         state.ownerAuthoritativeReversalSatisfied === true &&
