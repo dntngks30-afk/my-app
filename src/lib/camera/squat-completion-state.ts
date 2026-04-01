@@ -1720,7 +1720,7 @@ function evaluateSquatCompletionCore(
     baselineStandingDepth,
     relativeDepthPeak
   );
-  const standingRecoveryFinalize = getStandingRecoveryFinalizeGate(
+  let standingRecoveryFinalize = getStandingRecoveryFinalizeGate(
     standingRecoveryFinalizeBand,
     standingRecovery,
     {
@@ -2029,6 +2029,67 @@ function evaluateSquatCompletionCore(
       progressionReversalFrame,
       ascendForProgression
     );
+  }
+
+  /**
+   * PR-CAM-SHALLOW-LOW-ROM-TAIL-FINALIZE-01:
+   * Guarded low-rom tail finalize path — activates ONLY when all upstream truth is already
+   * locked (descendConfirmed + owner-authoritative strict reversal + standing detected)
+   * and the ONLY remaining blocker is the continuity/drop sub-check inside
+   * `low_rom_standing_finalize_not_satisfied` (frame/hold minimums were already met).
+   *
+   * Activation guards (ALL required):
+   * - ruleCompletionBlockedReason === 'low_rom_standing_finalize_not_satisfied'
+   * - finalizeReason is exactly the continuity or drop sub-check (not frame/hold failures)
+   * - relativeDepthPeak in low_rom band: [LOW_ROM_LABEL_FLOOR, STANDARD_OWNER_FLOOR)
+   * - descendConfirmed + progressionReversalFrame + ownerAuthoritativeReversalSatisfied
+   * - Strict reversal ONLY: revConf.reversalConfirmed || hmmReversalAssistDecision.assistApplied
+   * - NOT trajectory rescue / tail backfill / ultra-low meaningful down-up rescue
+   * - standingRecoveredAtMs != null (standing actually detected)
+   *
+   * Uses existing boolean signals and existing thresholds only — no new numeric thresholds added.
+   * Sets standingRecoveryFinalizeReason = 'low_rom_tail_guarded_finalize' for observability.
+   */
+  const lowRomTailFinalizeGuardApplied =
+    ruleCompletionBlockedReason === 'low_rom_standing_finalize_not_satisfied' &&
+    (standingRecoveryFinalize.finalizeReason === 'return_continuity_below_min' ||
+      standingRecoveryFinalize.finalizeReason === 'recovery_drop_ratio_below_min') &&
+    relativeDepthPeak >= LOW_ROM_LABEL_FLOOR &&
+    relativeDepthPeak < STANDARD_OWNER_FLOOR &&
+    descendConfirmed &&
+    progressionReversalFrame != null &&
+    ownerAuthoritativeReversalSatisfied &&
+    (revConf.reversalConfirmed || hmmReversalAssistDecision.assistApplied) &&
+    trajectoryRescue.trajectoryReversalConfirmedBy !== 'trajectory' &&
+    !tailBackfill.backfillApplied &&
+    !ultraShallowMeaningfulDownUpRescueApplied &&
+    standingRecovery.standingRecoveredAtMs != null &&
+    /**
+     * Descent timing integrity: if relativeDepthPeak is in the timing-sensitive zone
+     * (< LOW_ROM_TIMING_PEAK_MAX), the descent must have been long enough.
+     * Mirrors the `descent_span_too_short` check in `computeBlockedAfterCommitment`
+     * (which never ran because finalize failed first).
+     * Reuses existing scope variables: no new numeric thresholds.
+     */
+    (relativeDepthPeak >= LOW_ROM_TIMING_PEAK_MAX ||
+      effectiveDescentStartFrame == null ||
+      peakFrame.timestampMs - effectiveDescentStartFrame.timestampMs >= minDescentToPeakMsForLowRom) &&
+    /**
+     * Reversal-to-standing timing integrity: mirrors the `ascent_recovery_span_too_short`
+     * check in `computeBlockedAfterCommitment` (also skipped due to early finalize return).
+     * Reuses existing scope variables: no new numeric thresholds.
+     */
+    (relativeDepthPeak >= SHALLOW_REVERSAL_TIMING_PEAK_MAX ||
+      standingRecovery.standingRecoveredAtMs - progressionReversalFrame.timestampMs >=
+        minReversalToStandingMsForShallow);
+
+  if (lowRomTailFinalizeGuardApplied) {
+    ruleCompletionBlockedReason = null;
+    standingRecoveryFinalize = {
+      ...standingRecoveryFinalize,
+      finalizeSatisfied: true,
+      finalizeReason: 'low_rom_tail_guarded_finalize',
+    };
   }
 
   let currentSquatPhase: SquatCompletionPhase = 'idle';
