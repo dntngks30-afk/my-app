@@ -6,6 +6,10 @@
  * 보강하며, 통과 게이트 소유권(completion truth finalized)을 대체하지 않는다. `reversalEvidenceProvenance`·`reversalConfirmedBy`는
  * 앵커 출처 추적용이다.
  *
+ * PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02 (completion-state): **권위 역전** 입력은 strict `detectSquatReversalConfirmation`·
+ * HMM reversal assist(이미 권위 체인)·`evaluateOfficialShallowCompletionStreamBridge` 만이다. trajectory rescue·
+ * standing tail backfill·ultra-shallow meaningful down-up rescue 는 `provenanceReversalEvidencePresent` 로만 구분한다(임계값 동일).
+ *
  * -----------------------------------------------------------------------------
  * PR-SQUAT-COMPLETION-REARCH-01 — Subcontract B (Reversal / Ascent-Equivalent)
  * -----------------------------------------------------------------------------

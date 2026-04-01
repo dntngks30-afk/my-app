@@ -485,6 +485,19 @@ export interface SquatCompletionState extends MotionCompletionResult {
   ownerTruthSource?: SquatOwnerTruthSource;
   ownerTruthStage?: SquatOwnerTruthStage;
   ownerTruthBlockedBy?: string | null;
+
+  /**
+   * PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: strict reversal / HMM assist / official shallow stream bridge 만 권위 역전.
+   */
+  ownerAuthoritativeReversalSatisfied?: boolean;
+  /**
+   * PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: 권위 역전 + standing 타임스탬프 + finalize 만족(관측·PR-3 입력).
+   */
+  ownerAuthoritativeRecoverySatisfied?: boolean;
+  /**
+   * PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: trajectory rescue / tail backfill / ultra-shallow rescue 등 provenance 전용.
+   */
+  provenanceReversalEvidencePresent?: boolean;
 }
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
@@ -1581,6 +1594,9 @@ function evaluateSquatCompletionCore(
       officialShallowClosureProofSatisfied: false,
       officialShallowPrimaryDropClosureFallback: false,
       officialShallowReversalSatisfied: false,
+      ownerAuthoritativeReversalSatisfied: false,
+      ownerAuthoritativeRecoverySatisfied: false,
+      provenanceReversalEvidencePresent: false,
     };
   }
 
@@ -2115,15 +2131,17 @@ function evaluateSquatCompletionCore(
   }
 
   /**
-   * PR-CAM-SQUAT-TRAJECTORY-RESCUE-OWNER-SEPARATION-01:
-   * owner-authoritative 역전 확정 — strict rule / HMM reversal assist / shallow stream bridge /
-   * tail backfill / ultra shallow down-up rescue만 포함한다.
-   * trajectory rescue는 trace/provenance 전용으로 여기에 포함하지 않는다.
+   * PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: 권위 역전 — `detectSquatReversalConfirmation`·HMM reversal assist·
+   * `evaluateOfficialShallowCompletionStreamBridge` 만. trajectory/tail/ultra-shallow rescue 는 provenance 전용.
    */
   const ownerAuthoritativeReversalSatisfied =
     revConf.reversalConfirmed ||
     hmmReversalAssistDecision.assistApplied ||
-    officialShallowStreamBridgeApplied ||
+    officialShallowStreamBridgeApplied;
+
+  /** PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: provenance-only (권위 역전을 단독으로 열지 않음). */
+  const provenanceReversalEvidencePresent =
+    trajectoryRescue.trajectoryReversalConfirmedBy === 'trajectory' ||
     tailBackfill.backfillApplied ||
     ultraShallowMeaningfulDownUpRescueApplied;
 
@@ -2400,6 +2418,12 @@ function evaluateSquatCompletionCore(
     revConfSource: revConf.reversalSource,
   });
 
+  /** PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: standing 복귀·finalize 권위 축(관측). */
+  const ownerAuthoritativeRecoverySatisfied =
+    ownerAuthoritativeReversalSatisfied === true &&
+    standingRecovery.standingRecoveredAtMs != null &&
+    standingRecoveryFinalize.finalizeSatisfied === true;
+
   return {
     baselineStandingDepth,
     rawDepthPeak,
@@ -2505,6 +2529,9 @@ function evaluateSquatCompletionCore(
       officialShallowStreamBridgeApplied,
     officialShallowPrimaryDropClosureFallback,
     officialShallowReversalSatisfied: reversalConfirmedAfterDescend,
+    ownerAuthoritativeReversalSatisfied,
+    ownerAuthoritativeRecoverySatisfied,
+    provenanceReversalEvidencePresent,
   };
 }
 
@@ -2924,6 +2951,9 @@ export function attachShallowTruthObservabilityAlign01(
     ownerTruthSource: ownerTrace.ownerTruthSource,
     ownerTruthStage: ownerTrace.ownerTruthStage,
     ownerTruthBlockedBy: ownerTrace.ownerTruthBlockedBy,
+    ownerAuthoritativeReversalSatisfied: stamped.ownerAuthoritativeReversalSatisfied,
+    ownerAuthoritativeRecoverySatisfied: stamped.ownerAuthoritativeRecoverySatisfied,
+    provenanceReversalEvidencePresent: stamped.provenanceReversalEvidencePresent,
   };
 }
 
