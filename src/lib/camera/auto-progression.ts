@@ -37,6 +37,7 @@ import {
 } from './squat/squat-progression-contract';
 import type {
   ShallowAuthoritativeContractStatus,
+  ShallowClosureProofTrace,
   ShallowNormalizedBlockerFamily,
 } from '@/lib/camera/squat-completion-state';
 import type { SquatOwnerTruthSource, SquatOwnerTruthStage } from '@/lib/camera/squat/squat-owner-trace';
@@ -299,6 +300,18 @@ export interface SquatCycleDebug {
   standingFinalizeSatisfied?: boolean;
   standingFinalizeSuppressedByLateSetup?: boolean;
   standingFinalizeReadyAtMs?: number | null;
+  /** PR-CAM-SHALLOW-PROOF-TRACE-11: shallow closure proof 생성·소비 관측(게이트 미사용) */
+  shallowClosureProofTrace?: ShallowClosureProofTrace;
+  /** PR-CAM-SHALLOW-PROOF-TRACE-11: 한 줄 JSON 요약 — 전체는 shallowClosureProofTrace */
+  shallowClosureProofTraceSummary?: {
+    stage?: string;
+    eligible?: boolean;
+    satisfied?: boolean;
+    blockedReason?: string | null;
+    proofBlockedReason?: string | null;
+    consumptionBlockedReason?: string | null;
+    firstDecisiveBlockedReason?: string | null;
+  };
 }
 
 export interface ExerciseGateResult {
@@ -1353,6 +1366,20 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.ultraLowPolicyDecisionReady = cs?.ultraLowPolicyDecisionReady;
   squatCycleDebug.ultraLowPolicyBlocked = cs?.ultraLowPolicyBlocked;
   squatCycleDebug.ultraLowPolicyTrace = cs?.ultraLowPolicyTrace;
+
+  const shallowProofTrace = cs?.shallowClosureProofTrace;
+  if (shallowProofTrace != null) {
+    squatCycleDebug.shallowClosureProofTrace = shallowProofTrace;
+    squatCycleDebug.shallowClosureProofTraceSummary = {
+      stage: shallowProofTrace.stage,
+      eligible: shallowProofTrace.eligible,
+      satisfied: shallowProofTrace.satisfied,
+      blockedReason: shallowProofTrace.blockedReason,
+      proofBlockedReason: shallowProofTrace.proofBlockedReason,
+      consumptionBlockedReason: shallowProofTrace.consumptionBlockedReason,
+      firstDecisiveBlockedReason: shallowProofTrace.firstDecisiveBlockedReason,
+    };
+  }
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';

@@ -684,6 +684,11 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         evidenceLabel: state.evidenceLabel,
         completionBlockedReason: state.completionBlockedReason,
         completionSatisfied: state.completionSatisfied,
+        /** PR-CAM-SHALLOW-PROOF-TRACE-11: shallow proof 관측(게이트 미사용) */
+        shallowProofStage: state.shallowClosureProofTrace?.stage ?? null,
+        shallowProofBlockedReason: state.shallowClosureProofTrace?.proofBlockedReason ?? null,
+        shallowConsumptionBlockedReason:
+          state.shallowClosureProofTrace?.consumptionBlockedReason ?? null,
         /** PR-COMP-01: completion gate 전용(품질·depthBand와 분리) */
         completionMachinePhase: state.completionMachinePhase,
         completionPassReason: state.completionPassReason,

@@ -255,6 +255,97 @@ export type SquatReversalEvidenceProvenance =
   /** PR-DOWNUP-GUARANTEE-03: ultra-low 전용 — finalize+복귀 증거로 strict 역전/closure 번들 없이 앵커 확정 */
   | 'ultra_shallow_meaningful_down_up_rescue';
 
+/** PR-CAM-SHALLOW-PROOF-TRACE-11: shallow proof 생성 관측 트레이스 — `SquatCompletionState` 필드가 참조(타입 선행). */
+export type ShallowClosureProofTraceStage =
+  | 'pre_admission'
+  | 'admitted'
+  | 'bridge'
+  | 'suffix'
+  | 'proof'
+  | 'consumption';
+
+export type ShallowClosureProofTrace = {
+  stage: ShallowClosureProofTraceStage;
+  eligible: boolean;
+  satisfied: boolean;
+  blockedReason: string | null;
+  firstDecisiveBlockedReason: string | null;
+  proofBlockedReason: string | null;
+  consumptionBlockedReason: string | null;
+
+  admission: {
+    candidate: boolean;
+    admitted: boolean;
+    relativeDepthPeak: number;
+    inShallowOwnerZone: boolean;
+  };
+
+  attempt: {
+    attemptStarted: boolean;
+    descendConfirmed: boolean;
+    downwardCommitmentReached: boolean;
+    armedLike: boolean;
+  };
+
+  peak: {
+    peakLatched: boolean;
+    peakLatchedAtIndex: number | null;
+    peakAnchorTruth: string | null;
+    localPeakFound: boolean;
+    localPeakIndex: number | null;
+    localPeakBlockedReason: string | null;
+  };
+
+  bridge: {
+    trajectoryRescue: boolean;
+    provenance: string | null;
+    eventCycleDetected: boolean;
+    reversalDetected: boolean;
+    recoveryDetected: boolean;
+    nearStandingRecovered: boolean;
+    eventCycleNotes: string[];
+    eligible: boolean;
+    satisfied: boolean;
+    bridgeBlockedReason: string | null;
+    guardedClosureProofSatisfied: boolean;
+    guardedClosureProofBlockedReason: string | null;
+  };
+
+  suffix: {
+    completionMachinePhase: string | null;
+    recoveryConfirmedAfterReversal: boolean;
+    standingRecoveredAtMs: number | null;
+    finalizeSatisfied: boolean;
+    finalizeReason: string | null;
+    finalizeBand: string | null;
+    continuityOk: boolean;
+    recoveredSuffixEligible: boolean;
+    recoveredSuffixSatisfied: boolean;
+    recoveredSuffixBlockedReason: string | null;
+    recoveredSuffixEvaluatorApplied: boolean;
+    recoveredSuffixBlockedSummary: string | null;
+  };
+
+  proof: {
+    officialShallowReversalSatisfied: boolean;
+    officialShallowClosureProofSatisfied: boolean;
+    officialShallowPrimaryDropClosureFallback: boolean;
+    guardedTrajectoryClosureProofSatisfied: boolean;
+    guardedRecoveredSuffixSatisfied: boolean;
+    proofBlockedReason: string | null;
+  };
+
+  consumption: {
+    eligible: boolean;
+    satisfied: boolean;
+    blockedReason: string | null;
+    ineligibilityFirstReason: string | null;
+    completionPassReason: string | null;
+    completionBlockedReason: string | null;
+    completionSatisfied: boolean;
+  };
+};
+
 export interface SquatCompletionState extends MotionCompletionResult {
   baselineStandingDepth: number;
   rawDepthPeak: number;
@@ -542,7 +633,37 @@ export interface SquatCompletionState extends MotionCompletionResult {
   standingFinalizeSuppressedByLateSetup?: boolean;
   /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: standard 경로에서 최소 tail 만족 시각(없으면 null). */
   standingFinalizeReadyAtMs?: number | null;
+
+  /**
+   * PR-CAM-SHALLOW-PROOF-TRACE-11: shallow closure **proof 생성·소비** 단계별 진실 그래프(관측 전용).
+   * pass/게이트/임계값 로직에서 읽지 않는다.
+   */
+  shallowClosureProofTrace?: ShallowClosureProofTrace;
 }
+
+/** PR-CAM-SHALLOW-PROOF-TRACE-11: 명시적 차단 문자열 — JSON 에서 추론 없이 원인 매핑 */
+export const SHALLOW_CLOSURE_PROOF_TRACE_REASON = {
+  admission_not_reached: 'admission_not_reached',
+  admission_not_admitted: 'admission_not_admitted',
+  not_armed: 'not_armed',
+  no_attempt_or_descend: 'no_attempt_or_descend',
+  no_downward_commitment: 'no_downward_commitment',
+  outside_shallow_owner_zone: 'outside_shallow_owner_zone',
+  peak_anchor_at_series_start: 'peak_anchor_at_series_start',
+  local_peak_missing: 'local_peak_missing',
+  trajectory_bridge_not_eligible: 'trajectory_bridge_not_eligible',
+  trajectory_bridge_no_recovery_pattern: 'trajectory_bridge_no_recovery_pattern',
+  recovered_suffix_not_eligible: 'recovered_suffix_not_eligible',
+  recovered_suffix_no_finalize_bundle: 'recovered_suffix_no_finalize_bundle',
+  proof_closure_bundle_not_satisfied: 'proof_closure_bundle_not_satisfied',
+  proof_primary_drop_not_satisfied: 'proof_primary_drop_not_satisfied',
+  proof_reversal_not_satisfied: 'proof_reversal_not_satisfied',
+  proof_flags_not_set: 'proof_flags_not_set',
+  proof_synthesized_but_not_consumed: 'proof_synthesized_but_not_consumed',
+  consumption_not_eligible: 'consumption_not_eligible',
+  consumption_rejected_by_no_reversal: 'consumption_rejected_by_no_reversal',
+  consumption_blocked: 'consumption_blocked',
+} as const;
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
 export type EvaluateSquatCompletionStateOptions = {
@@ -3960,6 +4081,314 @@ function applyOfficialShallowConsumptionPatch(
   };
 }
 
+/** PR-CAM-SHALLOW-PROOF-TRACE-11: `consumeOfficialShallowClosureIntoCompletion` ineligible 체인 순서 미러(관측만). */
+function firstOfficialShallowConsumptionIneligibilityReason(
+  state: SquatCompletionState,
+  setupMotionBlocked: boolean
+): string | null {
+  const T = SHALLOW_CLOSURE_PROOF_TRACE_REASON;
+  if (state.officialShallowPathCandidate !== true) return T.admission_not_reached;
+  if (state.officialShallowPathAdmitted !== true) return T.admission_not_admitted;
+  if (state.completionSatisfied === true) return null;
+  if (state.completionPassReason !== 'not_confirmed') return `${T.consumption_not_eligible}_pass_reason_not_pending`;
+  if ((state.relativeDepthPeak ?? 0) >= STANDARD_OWNER_FLOOR) return T.outside_shallow_owner_zone;
+  if (state.eventCyclePromoted === true) return `${T.consumption_not_eligible}_event_cycle_promoted`;
+  if (setupMotionBlocked) return `${T.consumption_not_eligible}_setup_motion_blocked`;
+  return null;
+}
+
+/** PR-CAM-SHALLOW-PROOF-TRACE-11: guarded 브리지/정규화 차단을 트레이스 상수로 정규화(게이트 미사용). */
+function mapGuardedClosureBlockToTraceReason(blocked: string | null): string | null {
+  if (blocked == null) return null;
+  const T = SHALLOW_CLOSURE_PROOF_TRACE_REASON;
+  if (blocked === 'peak_anchor_at_series_start') return T.peak_anchor_at_series_start;
+  if (blocked === 'no_committed_peak_anchor' || blocked === 'peak_not_latched') {
+    return T.local_peak_missing;
+  }
+  if (blocked === 'outside_shallow_owner_zone') return T.outside_shallow_owner_zone;
+  if (blocked === 'no_recovery_pattern' || blocked === 'insufficient_post_peak_return') {
+    return T.trajectory_bridge_no_recovery_pattern;
+  }
+  if (blocked === 'no_guarded_bridge_evidence' || blocked === 'no_trajectory_reversal_rescue') {
+    return T.trajectory_bridge_no_recovery_pattern;
+  }
+  if (TRAJECTORY_GUARD_ENTRY_BLOCK_REASONS.has(blocked)) {
+    return T.trajectory_bridge_not_eligible;
+  }
+  return blocked;
+}
+
+function computeProofLayerBlockedReason(s: SquatCompletionState): string | null {
+  const T = SHALLOW_CLOSURE_PROOF_TRACE_REASON;
+  if (s.officialShallowClosureProofSatisfied !== true) return T.proof_closure_bundle_not_satisfied;
+  if (s.officialShallowPrimaryDropClosureFallback !== true) return T.proof_primary_drop_not_satisfied;
+  if (s.officialShallowReversalSatisfied !== true) return T.proof_reversal_not_satisfied;
+  return null;
+}
+
+/**
+ * PR-CAM-SHALLOW-PROOF-TRACE-11: shallow 소비·증명 체인에서 가장 앞선 결정적 차단(추론 최소화).
+ * 기존 필드·소비 결정만 사용 — 새 게이트 없음.
+ */
+function computeFirstDecisiveShallowProofBlockedReason(input: {
+  state: SquatCompletionState;
+  shallowConsumption: OfficialShallowConsumptionDecision;
+  setupMotionBlocked: boolean;
+  bridgeEligible: boolean;
+  guardedClosureBlockedReason: string | null;
+}): string | null {
+  const T = SHALLOW_CLOSURE_PROOF_TRACE_REASON;
+  const s = input.state;
+  const c = input.shallowConsumption;
+
+  if (!s.officialShallowPathCandidate) return T.admission_not_reached;
+  if (!s.officialShallowPathAdmitted) return T.admission_not_admitted;
+  if (!s.attemptStarted || !s.descendConfirmed) return T.no_attempt_or_descend;
+  if (!s.downwardCommitmentReached) return T.no_downward_commitment;
+  if (s.ruleCompletionBlockedReason === 'not_armed' || s.completionBlockedReason === 'not_armed') {
+    return T.not_armed;
+  }
+
+  const inel = firstOfficialShallowConsumptionIneligibilityReason(s, input.setupMotionBlocked);
+  if (inel != null) return inel;
+
+  if (c.eligible && !c.satisfied && c.blockedReason === 'official_shallow_proof_incomplete') {
+    const p = computeProofLayerBlockedReason(s);
+    return p ?? T.proof_flags_not_set;
+  }
+
+  const proofBundleOk =
+    s.officialShallowClosureProofSatisfied === true &&
+    s.officialShallowPrimaryDropClosureFallback === true &&
+    s.officialShallowReversalSatisfied === true;
+
+  if (c.eligible && !c.satisfied && proofBundleOk) {
+    return T.proof_synthesized_but_not_consumed;
+  }
+
+  if (c.eligible && !c.satisfied && c.blockedReason != null) {
+    if (c.blockedReason === 'recovery_finalize_proof_missing') return T.recovered_suffix_no_finalize_bundle;
+    if (c.blockedReason === 'recovery_chain_not_satisfied') return T.trajectory_bridge_no_recovery_pattern;
+    return `${T.consumption_blocked}:${c.blockedReason}`;
+  }
+
+  if (!input.bridgeEligible && input.guardedClosureBlockedReason != null) {
+    const mapped = mapGuardedClosureBlockToTraceReason(input.guardedClosureBlockedReason);
+    if (mapped != null) return mapped;
+  }
+
+  if (
+    s.completionBlockedReason === 'no_reversal' &&
+    s.officialShallowReversalSatisfied !== true &&
+    proofBundleOk
+  ) {
+    return T.consumption_rejected_by_no_reversal;
+  }
+
+  return null;
+}
+
+function isShallowClosureProofTraceRelevant(s: SquatCompletionState): boolean {
+  const rel = s.relativeDepthPeak ?? 0;
+  const shallowObs =
+    (s as { shallowCandidateObserved?: boolean }).shallowCandidateObserved === true;
+  return (
+    shallowObs ||
+    s.officialShallowPathCandidate === true ||
+    s.officialShallowPathAdmitted === true ||
+    rel < STANDARD_OWNER_FLOOR
+  );
+}
+
+/**
+ * PR-CAM-SHALLOW-PROOF-TRACE-11: 1차 `evaluateSquatCompletionState` 종단 스냅샷(판정 로직 변경 없음).
+ */
+function buildShallowClosureProofTrace(input: {
+  finalState: SquatCompletionState;
+  ec: SquatEventCycleResult;
+  localPeakAnchor: GuardedShallowLocalPeakAnchor;
+  bridgeDecisionPreMerge: { eligible: boolean; satisfied: boolean; blockedReason: string | null };
+  shallowConsumption: OfficialShallowConsumptionDecision;
+  setupMotionBlocked: boolean;
+  recoveredSuffixApply: boolean;
+}): ShallowClosureProofTrace {
+  const T = SHALLOW_CLOSURE_PROOF_TRACE_REASON;
+  const s = input.finalState;
+  const ec = input.ec;
+  const rel = s.relativeDepthPeak ?? 0;
+  const inZone = rel < STANDARD_OWNER_FLOOR;
+  const guardedSatisfied = s.guardedShallowTrajectoryClosureProofSatisfied === true;
+  const guardedBlocked = s.guardedShallowTrajectoryClosureProofBlockedReason ?? null;
+
+  const stFin = s as SquatCompletionState & {
+    standingRecoveryFinalizeSatisfied?: boolean;
+    standingRecoveryFinalizeBand?: SquatEvidenceLabel;
+  };
+  const finalizeSatisfied = stFin.standingRecoveryFinalizeSatisfied === true;
+  const finalizeBand = stFin.standingRecoveryFinalizeBand ?? s.standingRecoveryBand ?? null;
+
+  const continuityOk = recoveryMeetsLowRomStyleFinalizeProof({
+    recoveryReturnContinuityFrames: s.recoveryReturnContinuityFrames,
+    recoveryDropRatio: s.recoveryDropRatio,
+  });
+
+  const recoveredSuffixEligible =
+    s.officialShallowPathCandidate === true &&
+    s.officialShallowPathAdmitted === true &&
+    inZone &&
+    s.attemptStarted === true &&
+    s.descendConfirmed === true &&
+    s.downwardCommitmentReached === true;
+
+  let recoveredSuffixBlockedSummary: string | null = null;
+  if (recoveredSuffixEligible && !input.recoveredSuffixApply) {
+    recoveredSuffixBlockedSummary = T.recovered_suffix_not_eligible;
+  } else if (
+    recoveredSuffixEligible &&
+    input.recoveredSuffixApply &&
+    s.guardedShallowRecoveredSuffixSatisfied !== true
+  ) {
+    recoveredSuffixBlockedSummary =
+      s.guardedShallowRecoveredSuffixBlockedReason ?? T.recovered_suffix_no_finalize_bundle;
+  }
+
+  const proofBlockedReason = computeProofLayerBlockedReason(s);
+
+  const ineligibilityFirst = firstOfficialShallowConsumptionIneligibilityReason(
+    s,
+    input.setupMotionBlocked
+  );
+
+  const bridgeBlockedTrace =
+    input.bridgeDecisionPreMerge.satisfied
+      ? null
+      : mapGuardedClosureBlockToTraceReason(input.bridgeDecisionPreMerge.blockedReason) ??
+        input.bridgeDecisionPreMerge.blockedReason;
+
+  const stage: ShallowClosureProofTraceStage = (() => {
+    if (!s.officialShallowPathCandidate) return 'pre_admission';
+    if (!s.officialShallowPathAdmitted) return 'pre_admission';
+    if (!input.bridgeDecisionPreMerge.eligible && inZone) return 'bridge';
+    if (input.shallowConsumption.eligible && !input.shallowConsumption.satisfied) {
+      if (input.shallowConsumption.blockedReason === 'official_shallow_proof_incomplete') return 'proof';
+      if (
+        input.shallowConsumption.blockedReason === 'recovery_finalize_proof_missing' ||
+        input.shallowConsumption.blockedReason === 'recovery_chain_not_satisfied'
+      ) {
+        return 'suffix';
+      }
+      return 'consumption';
+    }
+    if (proofBlockedReason != null && ineligibilityFirst == null) return 'proof';
+    return input.shallowConsumption.satisfied ? 'consumption' : 'admitted';
+  })();
+
+  const firstDecisive = computeFirstDecisiveShallowProofBlockedReason({
+    state: s,
+    shallowConsumption: input.shallowConsumption,
+    setupMotionBlocked: input.setupMotionBlocked,
+    bridgeEligible: input.bridgeDecisionPreMerge.eligible,
+    guardedClosureBlockedReason: guardedBlocked,
+  });
+
+  const topBlocked =
+    firstDecisive ??
+    proofBlockedReason ??
+    (input.shallowConsumption.eligible ? input.shallowConsumption.blockedReason : ineligibilityFirst);
+
+  const topSatisfied = input.shallowConsumption.satisfied === true;
+  const topEligible =
+    ineligibilityFirst == null &&
+    (input.shallowConsumption.eligible || s.completionSatisfied === true);
+
+  return {
+    stage,
+    eligible: topEligible,
+    satisfied: topSatisfied,
+    blockedReason: topSatisfied ? null : topBlocked,
+    firstDecisiveBlockedReason: firstDecisive,
+    proofBlockedReason,
+    consumptionBlockedReason: input.shallowConsumption.eligible
+      ? input.shallowConsumption.blockedReason
+      : ineligibilityFirst,
+
+    admission: {
+      candidate: s.officialShallowPathCandidate === true,
+      admitted: s.officialShallowPathAdmitted === true,
+      relativeDepthPeak: rel,
+      inShallowOwnerZone: inZone,
+    },
+
+    attempt: {
+      attemptStarted: s.attemptStarted === true,
+      descendConfirmed: s.descendConfirmed === true,
+      downwardCommitmentReached: s.downwardCommitmentReached === true,
+      armedLike:
+        s.attemptStarted === true &&
+        s.completionBlockedReason !== 'not_armed' &&
+        s.ruleCompletionBlockedReason !== 'not_armed',
+    },
+
+    peak: {
+      peakLatched: s.peakLatched === true,
+      peakLatchedAtIndex: s.peakLatchedAtIndex ?? null,
+      peakAnchorTruth: s.peakAnchorTruth ?? null,
+      localPeakFound: input.localPeakAnchor.found,
+      localPeakIndex: input.localPeakAnchor.localPeakIndex,
+      localPeakBlockedReason: input.localPeakAnchor.found ? null : input.localPeakAnchor.blockedReason,
+    },
+
+    bridge: {
+      trajectoryRescue: s.trajectoryReversalRescueApplied === true,
+      provenance: s.reversalEvidenceProvenance ?? null,
+      eventCycleDetected: ec.detected === true,
+      reversalDetected: ec.reversalDetected === true,
+      recoveryDetected: ec.recoveryDetected === true,
+      nearStandingRecovered: ec.nearStandingRecovered === true,
+      eventCycleNotes: ec.notes != null ? [...ec.notes] : [],
+      eligible: input.bridgeDecisionPreMerge.eligible,
+      satisfied: input.bridgeDecisionPreMerge.satisfied,
+      bridgeBlockedReason: bridgeBlockedTrace,
+      guardedClosureProofSatisfied: guardedSatisfied,
+      guardedClosureProofBlockedReason: guardedBlocked,
+    },
+
+    suffix: {
+      completionMachinePhase: s.completionMachinePhase ?? null,
+      recoveryConfirmedAfterReversal: s.recoveryConfirmedAfterReversal === true,
+      standingRecoveredAtMs: s.standingRecoveredAtMs ?? null,
+      finalizeSatisfied,
+      finalizeReason: s.standingRecoveryFinalizeReason ?? null,
+      finalizeBand,
+      continuityOk,
+      recoveredSuffixEligible,
+      recoveredSuffixSatisfied: s.guardedShallowRecoveredSuffixSatisfied === true,
+      recoveredSuffixBlockedReason: s.guardedShallowRecoveredSuffixBlockedReason ?? null,
+      recoveredSuffixEvaluatorApplied: input.recoveredSuffixApply === true,
+      recoveredSuffixBlockedSummary,
+    },
+
+    proof: {
+      officialShallowReversalSatisfied: s.officialShallowReversalSatisfied === true,
+      officialShallowClosureProofSatisfied: s.officialShallowClosureProofSatisfied === true,
+      officialShallowPrimaryDropClosureFallback: s.officialShallowPrimaryDropClosureFallback === true,
+      guardedTrajectoryClosureProofSatisfied: guardedSatisfied,
+      guardedRecoveredSuffixSatisfied: s.guardedShallowRecoveredSuffixSatisfied === true,
+      proofBlockedReason,
+    },
+
+    consumption: {
+      eligible: input.shallowConsumption.eligible,
+      satisfied: input.shallowConsumption.satisfied,
+      blockedReason: input.shallowConsumption.blockedReason,
+      ineligibilityFirstReason: ineligibilityFirst,
+      completionPassReason: s.completionPassReason ?? null,
+      completionBlockedReason: s.completionBlockedReason ?? null,
+      completionSatisfied: s.completionSatisfied === true,
+    },
+  };
+}
+
 export function evaluateSquatCompletionState(
   frames: PoseFeaturesFrame[],
   options?: EvaluateSquatCompletionStateOptions
@@ -4091,6 +4520,13 @@ export function evaluateSquatCompletionState(
     };
   }
 
+  const stateBeforeMerge = state;
+  const bridgeDecisionPreMerge = getShallowTrajectoryAuthoritativeBridgeDecision(
+    stateBeforeMerge,
+    squatEventCycle,
+    bridgeOpts
+  );
+
   state = mergeShallowTrajectoryAuthoritativeBridge(state, squatEventCycle, bridgeOpts);
 
   const shallowConsumption = consumeOfficialShallowClosureIntoCompletion(
@@ -4140,6 +4576,18 @@ export function evaluateSquatCompletionState(
     ultraLowRomEventPromotionAllowed,
   });
 
+  const shallowClosureProofTrace = isShallowClosureProofTraceRelevant(state)
+    ? buildShallowClosureProofTrace({
+        finalState: state,
+        ec: squatEventCycle,
+        localPeakAnchor,
+        bridgeDecisionPreMerge,
+        shallowConsumption,
+        setupMotionBlocked: options?.setupMotionBlocked === true,
+        recoveredSuffixApply: options?.guardedShallowRecoveredSuffixClosureApply === true,
+      })
+    : undefined;
+
   /**
    * PR-CAM-EVENT-OWNER-DOWNGRADE-01: 이벤트 사이클은 탐지·관측만 — rule completion 이 성공 클로저의 유일 경로.
    */
@@ -4148,5 +4596,6 @@ export function evaluateSquatCompletionState(
     eventCyclePromotionCandidate: promoObs.eventCyclePromotionCandidate,
     eventCyclePromotionBlockedReason: promoObs.eventCyclePromotionBlockedReason,
     eventCyclePromoted: false,
+    ...(shallowClosureProofTrace != null ? { shallowClosureProofTrace } : {}),
   });
 }
