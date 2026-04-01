@@ -455,6 +455,18 @@ export interface SquatCompletionState extends MotionCompletionResult {
    * 형식: candidate|admitted|reversalAuth|normalizedFamily|contractStatus
    */
   shallowContractAuthorityTrace?: string;
+
+  /**
+   * PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: ultra-low 제품 정책 스코프(권위 evidenceLabel + shallow 후보만).
+   * 관측층 reversal/recovery·provenance·event-cycle 로는 켜지지 않는다.
+   */
+  ultraLowPolicyScope?: boolean;
+  /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 정책 판단을 할 수 있는 늦은 단계까지 도달했는지(아래 헬퍼 규칙). */
+  ultraLowPolicyDecisionReady?: boolean;
+  /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 권위 차단이 `ultra_low_rom_not_allowed` 로 확정 적용됨. */
+  ultraLowPolicyBlocked?: boolean;
+  /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 스코프/준비/락 적용 요약 트레이스. */
+  ultraLowPolicyTrace?: string;
 }
 
 /** PR-HMM-02B: optional HMM shadow 입력 — completion truth는 rule 우선 */
@@ -2725,58 +2737,149 @@ function deriveShallowAuthoritativeContractStatusForPr2(
   return 'closed';
 }
 
+/** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 제품 정책 스코프 — 권위 레이블 + 공식 shallow 후보만. */
+function isUltraLowPolicyScope(state: SquatCompletionState): boolean {
+  return state.evidenceLabel === 'ultra_low_rom' && state.officialShallowPathCandidate === true;
+}
+
 /**
- * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01:
+ * PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 이벤트 승격과 동일한 standing finalize 권위 문자열만 허용(새 휴리스틱 없음).
+ */
+function isUltraLowPolicyFinalizeTruthSatisfied(state: SquatCompletionState): boolean {
+  const r = state.standingRecoveryFinalizeReason;
+  return (
+    r === 'standing_hold_met' ||
+    r === 'low_rom_guarded_finalize' ||
+    r === 'ultra_low_rom_guarded_finalize'
+  );
+}
+
+/**
+ * PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 늦은 단계에서만 true.
+ * provenance·타임라인 관측·event-cycle 은 조건에 넣지 않는다.
+ */
+function isUltraLowPolicyDecisionReady(state: SquatCompletionState): boolean {
+  if (!isUltraLowPolicyScope(state)) return false;
+  if (state.officialShallowPathCandidate !== true) return false;
+  if (state.officialShallowPathAdmitted !== true) return false;
+  if (state.reversalConfirmedAfterDescend !== true) return false;
+  if (state.recoveryConfirmedAfterReversal !== true) return false;
+  if (!isUltraLowPolicyFinalizeTruthSatisfied(state)) return false;
+
+  const fam = mapCompletionBlockedReasonToShallowNormalizedBlockerFamily(
+    state.completionBlockedReason ?? null,
+    state.completionSatisfied === true
+  );
+  if (fam === 'admission' || fam === 'reversal') return false;
+
+  return true;
+}
+
+const ULTRA_LOW_ROM_POLICY_BLOCK_REASON = 'ultra_low_rom_not_allowed' as const;
+
+/**
+ * PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 준비된 경우에만 권위 결과를 정책 차단으로 덮어쓴다.
+ * computeBlockedAfterCommitment·finalize·승격 내부는 건드리지 않고 출력만 정렬한다.
+ */
+function applyUltraLowPolicyLock(state: SquatCompletionState): SquatCompletionState {
+  const ultraLowPolicyScope = isUltraLowPolicyScope(state);
+  const ultraLowPolicyDecisionReady = isUltraLowPolicyDecisionReady(state);
+  const ultraLowPolicyTraceBase = [
+    `scope=${ultraLowPolicyScope ? '1' : '0'}`,
+    `ready=${ultraLowPolicyDecisionReady ? '1' : '0'}`,
+  ].join('|');
+
+  if (!ultraLowPolicyDecisionReady) {
+    return {
+      ...state,
+      ultraLowPolicyScope,
+      ultraLowPolicyDecisionReady: false,
+      ultraLowPolicyBlocked: false,
+      ultraLowPolicyTrace: ultraLowPolicyTraceBase,
+    };
+  }
+
+  return {
+    ...state,
+    completionBlockedReason: ULTRA_LOW_ROM_POLICY_BLOCK_REASON,
+    completionSatisfied: false,
+    completionPassReason: 'not_confirmed',
+    cycleComplete: false,
+    successPhaseAtOpen: undefined,
+    completionMachinePhase: deriveSquatCompletionMachinePhase({
+      completionSatisfied: false,
+      currentSquatPhase: state.currentSquatPhase,
+      downwardCommitmentReached: state.downwardCommitmentReached,
+    }),
+    postAssistCompletionBlockedReason: ULTRA_LOW_ROM_POLICY_BLOCK_REASON,
+    ruleCompletionBlockedReason: ULTRA_LOW_ROM_POLICY_BLOCK_REASON,
+    officialShallowPathClosed: false,
+    officialShallowPathBlockedReason: ULTRA_LOW_ROM_POLICY_BLOCK_REASON,
+    eventCyclePromoted: false,
+    eventCycleSource: null,
+    completionFinalizeMode:
+      state.completionFinalizeMode === 'event_promoted_finalized' ? 'blocked' : state.completionFinalizeMode,
+    ultraLowPolicyScope: true,
+    ultraLowPolicyDecisionReady: true,
+    ultraLowPolicyBlocked: true,
+    ultraLowPolicyTrace: `${ultraLowPolicyTraceBase}|blocked=policy`,
+  };
+}
+
+/**
+ * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01 + PR-3:
  * shallow truth 계층(관측 타임라인 / 권위 completion / provenance)과 불일치 플래그를 부착한다.
- * 기존 pass·blocked·승격 조건은 변경하지 않는다.
+ * PR-3는 ultra-low 제품 정책 락만 추가한다(임계·게이트 내부 미변경).
  */
 export function attachShallowTruthObservabilityAlign01(
   state: SquatCompletionState
 ): SquatCompletionState {
+  const stamped = applyUltraLowPolicyLock(state);
+
   const shallowObservationLayerReversalTruth =
-    state.committedAtMs != null && state.reversalAtMs != null;
-  const shallowAuthoritativeReversalTruth = state.reversalConfirmedAfterDescend === true;
+    stamped.committedAtMs != null && stamped.reversalAtMs != null;
+  const shallowAuthoritativeReversalTruth = stamped.reversalConfirmedAfterDescend === true;
   const shallowObservationLayerRecoveryTruth =
-    state.standingRecoveredAtMs != null && state.reversalAtMs != null;
-  const shallowAuthoritativeRecoveryTruth = state.recoveryConfirmedAfterReversal === true;
+    stamped.standingRecoveredAtMs != null && stamped.reversalAtMs != null;
+  const shallowAuthoritativeRecoveryTruth = stamped.recoveryConfirmedAfterReversal === true;
 
   const shallowProvenanceOnlyReversalEvidence =
-    state.trajectoryReversalRescueApplied === true ||
-    state.reversalTailBackfillApplied === true ||
-    state.ultraShallowMeaningfulDownUpRescueApplied === true ||
-    state.officialShallowStreamBridgeApplied === true ||
-    state.reversalConfirmedBy === 'trajectory';
+    stamped.trajectoryReversalRescueApplied === true ||
+    stamped.reversalTailBackfillApplied === true ||
+    stamped.ultraShallowMeaningfulDownUpRescueApplied === true ||
+    stamped.officialShallowStreamBridgeApplied === true ||
+    stamped.reversalConfirmedBy === 'trajectory';
 
   const truthMismatch_reversalTopVsCompletion =
     shallowObservationLayerReversalTruth !== shallowAuthoritativeReversalTruth;
   const truthMismatch_recoveryTopVsCompletion =
     shallowObservationLayerRecoveryTruth !== shallowAuthoritativeRecoveryTruth;
   const truthMismatch_shallowAdmissionVsClosure =
-    state.officialShallowPathAdmitted === true &&
-    state.officialShallowPathClosed !== true &&
-    state.completionSatisfied !== true;
+    stamped.officialShallowPathAdmitted === true &&
+    stamped.officialShallowPathClosed !== true &&
+    stamped.completionSatisfied !== true;
   const truthMismatch_provenanceReversalWithoutAuthoritative =
     shallowProvenanceOnlyReversalEvidence && !shallowAuthoritativeReversalTruth;
   const truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery =
-    state.standingRecoveredAtMs != null && !shallowAuthoritativeRecoveryTruth;
+    stamped.standingRecoveredAtMs != null && !shallowAuthoritativeRecoveryTruth;
 
   const shallowNormalizedBlockerFamily = mapCompletionBlockedReasonToShallowNormalizedBlockerFamily(
-    state.completionBlockedReason ?? null,
-    state.completionSatisfied === true
+    stamped.completionBlockedReason ?? null,
+    stamped.completionSatisfied === true
   );
-  const shallowAuthoritativeContractStatus = deriveShallowAuthoritativeContractStatusForPr2(state);
-  const shallowContractAuthoritativeClosure = state.officialShallowPathClosed === true;
+  const shallowAuthoritativeContractStatus = deriveShallowAuthoritativeContractStatusForPr2(stamped);
+  const shallowContractAuthoritativeClosure = stamped.officialShallowPathClosed === true;
   const shallowContractAuthorityTrace = [
-    state.officialShallowPathCandidate ? '1' : '0',
-    state.officialShallowPathAdmitted ? '1' : '0',
+    stamped.officialShallowPathCandidate ? '1' : '0',
+    stamped.officialShallowPathAdmitted ? '1' : '0',
     shallowAuthoritativeReversalTruth ? '1' : '0',
     shallowNormalizedBlockerFamily,
     shallowAuthoritativeContractStatus,
   ].join('|');
 
   return {
-    ...state,
-    shallowAuthoritativeStage: computeAuthoritativeShallowStageForObservability(state),
+    ...stamped,
+    shallowAuthoritativeStage: computeAuthoritativeShallowStageForObservability(stamped),
     shallowObservationLayerReversalTruth,
     shallowAuthoritativeReversalTruth,
     shallowObservationLayerRecoveryTruth,

@@ -266,6 +266,11 @@ export interface SquatCycleDebug {
   shallowAuthoritativeContractStatus?: ShallowAuthoritativeContractStatus;
   shallowContractAuthoritativeClosure?: boolean;
   shallowContractAuthorityTrace?: string;
+  /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01 — pass-through only */
+  ultraLowPolicyScope?: boolean;
+  ultraLowPolicyDecisionReady?: boolean;
+  ultraLowPolicyBlocked?: boolean;
+  ultraLowPolicyTrace?: string;
 }
 
 export interface ExerciseGateResult {
@@ -1283,6 +1288,12 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.shallowAuthoritativeContractStatus = cs?.shallowAuthoritativeContractStatus;
   squatCycleDebug.shallowContractAuthoritativeClosure = cs?.shallowContractAuthoritativeClosure;
   squatCycleDebug.shallowContractAuthorityTrace = cs?.shallowContractAuthorityTrace;
+
+  /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 게이트 미사용 pass-through */
+  squatCycleDebug.ultraLowPolicyScope = cs?.ultraLowPolicyScope;
+  squatCycleDebug.ultraLowPolicyDecisionReady = cs?.ultraLowPolicyDecisionReady;
+  squatCycleDebug.ultraLowPolicyBlocked = cs?.ultraLowPolicyBlocked;
+  squatCycleDebug.ultraLowPolicyTrace = cs?.ultraLowPolicyTrace;
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';

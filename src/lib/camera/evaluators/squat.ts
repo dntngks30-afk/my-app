@@ -761,6 +761,11 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         shallowAuthoritativeContractStatus: state.shallowAuthoritativeContractStatus ?? null,
         shallowContractAuthoritativeClosure: state.shallowContractAuthoritativeClosure ? 1 : 0,
         shallowContractAuthorityTrace: state.shallowContractAuthorityTrace ?? null,
+        /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 정책 락 관측(게이트 미사용) */
+        ultraLowPolicyScope: state.ultraLowPolicyScope ? 1 : 0,
+        ultraLowPolicyDecisionReady: state.ultraLowPolicyDecisionReady ? 1 : 0,
+        ultraLowPolicyBlocked: state.ultraLowPolicyBlocked ? 1 : 0,
+        ultraLowPolicyTrace: state.ultraLowPolicyTrace ?? null,
       },
       perStepDiagnostics: perStepRecord,
       /** PR-HMM-01B: shadow decoder 전체 결과 — debug 전용 */
