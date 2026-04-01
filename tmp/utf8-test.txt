@@ -1,0 +1,2 @@
+한글 UTF-8 테스트
+const ok = true;
