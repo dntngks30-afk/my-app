@@ -149,10 +149,40 @@ export interface SquatCycleDebug {
   completionMachinePhase?: string;
   /** PR-COMP-01: 통과 ROM 사이클 분류 */
   completionPassReason?: string;
-  /** PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04: 공식 shallow 권위 종료(관측) */
+  /** PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04: 공식 shallow 권위 종료(관측) — runtime 인접 */
   ownerAuthoritativeShallowClosureSatisfied?: boolean;
-  shallowAuthoritativeClosureReason?: string | null;
-  shallowAuthoritativeClosureBlockedReason?: string | null;
+
+  /**
+   * PR-D-CANONICAL-DEBUG-SURFACE-CLEANUP-04 — PRIMARY_CANONICAL (shallow debug SSOT).
+   * Gate 직접 입력 아님. `deriveCanonicalShallowCompletionContract` / closer 스탬프 pass-through.
+   */
+  canonicalShallowContractClosureApplied?: boolean;
+  canonicalShallowContractClosureSource?: string | null;
+  canonicalShallowContractEligible?: boolean;
+  canonicalShallowContractAdmissionSatisfied?: boolean;
+  canonicalShallowContractAttemptSatisfied?: boolean;
+  canonicalShallowContractReversalEvidenceSatisfied?: boolean;
+  canonicalShallowContractRecoveryEvidenceSatisfied?: boolean;
+  canonicalShallowContractAntiFalsePassClear?: boolean;
+  canonicalShallowContractSatisfied?: boolean;
+  canonicalShallowContractStage?: string;
+  canonicalShallowContractBlockedReason?: string | null;
+  canonicalShallowContractAuthoritativeClosureWouldBeSatisfied?: boolean;
+  canonicalShallowContractProvenanceOnlySignalPresent?: boolean;
+  canonicalShallowContractSplitBrainDetected?: boolean;
+  canonicalShallowContractTrace?: string;
+
+  /**
+   * PR-D — SECONDARY_DEBUG_USEFUL: owner trace, product policy projection, trajectory evidence.
+   * evaluator late-setup 등이 읽을 수 있음 — 필드 제거 금지.
+   */
+  ownerTruthSource?: SquatOwnerTruthSource;
+  ownerTruthStage?: SquatOwnerTruthStage;
+  ownerTruthBlockedBy?: string | null;
+  ultraLowPolicyScope?: boolean;
+  ultraLowPolicyDecisionReady?: boolean;
+  ultraLowPolicyBlocked?: boolean;
+  ultraLowPolicyTrace?: string;
   /** PR-CAM-SHALLOW-TRAJECTORY-BRIDGE-05 */
   shallowTrajectoryBridgeEligible?: boolean;
   shallowTrajectoryBridgeSatisfied?: boolean;
@@ -164,6 +194,61 @@ export interface SquatCycleDebug {
   guardedShallowLocalPeakFound?: boolean;
   guardedShallowLocalPeakBlockedReason?: string | null;
   guardedShallowLocalPeakIndex?: number | null;
+
+  /**
+   * PR-D — LEGACY_COMPAT: PR-ALIGN-01 / PR-2 / pre-canonical closure trace. 새 디버그는 canonical* 우선.
+   * @deprecated 필드는 `SquatCompletionState` JSDoc 과 동일 정책(compat 유지).
+   */
+  shallowAuthoritativeClosureReason?: string | null;
+  shallowAuthoritativeClosureBlockedReason?: string | null;
+  shallowAuthoritativeStage?:
+    | 'pre_attempt'
+    | 'admission_blocked'
+    | 'reversal_blocked'
+    | 'policy_blocked'
+    | 'standing_finalize_blocked'
+    | 'closed';
+  shallowObservationLayerReversalTruth?: boolean;
+  shallowAuthoritativeReversalTruth?: boolean;
+  shallowObservationLayerRecoveryTruth?: boolean;
+  shallowAuthoritativeRecoveryTruth?: boolean;
+  shallowProvenanceOnlyReversalEvidence?: boolean;
+  truthMismatch_reversalTopVsCompletion?: boolean;
+  truthMismatch_recoveryTopVsCompletion?: boolean;
+  truthMismatch_shallowAdmissionVsClosure?: boolean;
+  truthMismatch_provenanceReversalWithoutAuthoritative?: boolean;
+  truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery?: boolean;
+  shallowNormalizedBlockerFamily?: ShallowNormalizedBlockerFamily;
+  shallowAuthoritativeContractStatus?: ShallowAuthoritativeContractStatus;
+  shallowContractAuthoritativeClosure?: boolean;
+  shallowContractAuthorityTrace?: string;
+
+  /** PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02 — pass-through only */
+  ownerAuthoritativeReversalSatisfied?: boolean;
+  ownerAuthoritativeRecoverySatisfied?: boolean;
+  provenanceReversalEvidencePresent?: boolean;
+  /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03 — pass-through */
+  standingFinalizeSatisfied?: boolean;
+  standingFinalizeSuppressedByLateSetup?: boolean;
+  standingFinalizeReadyAtMs?: number | null;
+  /** PR-CAM-SHALLOW-PROOF-TRACE-11: shallow closure proof 생성·소비 관측(게이트 미사용) */
+  shallowClosureProofTrace?: ShallowClosureProofTrace;
+  /** PR-CAM-SHALLOW-PROOF-TRACE-11: 한 줄 JSON 요약 — 전체는 shallowClosureProofTrace */
+  shallowClosureProofTraceSummary?: {
+    stage?: string;
+    eligible?: boolean;
+    satisfied?: boolean;
+    blockedReason?: string | null;
+    proofBlockedReason?: string | null;
+    consumptionBlockedReason?: string | null;
+    firstDecisiveBlockedReason?: string | null;
+  };
+  /** PR-CAM-SHALLOW-TICKET-UNIFICATION-12: 단일 shallow 완료 티켓 */
+  shallowCompletionTicket?: ShallowCompletionTicket;
+  shallowCompletionTicketSatisfied?: boolean;
+  shallowCompletionTicketBlockedReason?: string | null;
+  shallowCompletionTicketStage?: string | null;
+
   /** PR-COMP-03: completion·pass와 무관한 strict 내부 해석(트레이스 전용) */
   squatInternalQuality?: SquatInternalQuality;
   /** PR-CAM-10: ambiguous retry / severe-fail 완화 계약 관측 */
@@ -258,83 +343,6 @@ export interface SquatCycleDebug {
   eventBasedDescentPath?: boolean;
   /** PR-DOWNUP-GUARANTEE-03: ultra-shallow meaningful down-up rescue — trace only */
   ultraShallowMeaningfulDownUpRescueApplied?: boolean;
-  /**
-   * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: completion-state shallow truth 정렬(디버그 전용).
-   * progression 결정에 사용하지 않는다.
-   */
-  shallowAuthoritativeStage?:
-    | 'pre_attempt'
-    | 'admission_blocked'
-    | 'reversal_blocked'
-    | 'policy_blocked'
-    | 'standing_finalize_blocked'
-    | 'closed';
-  shallowObservationLayerReversalTruth?: boolean;
-  shallowAuthoritativeReversalTruth?: boolean;
-  shallowObservationLayerRecoveryTruth?: boolean;
-  shallowAuthoritativeRecoveryTruth?: boolean;
-  shallowProvenanceOnlyReversalEvidence?: boolean;
-  truthMismatch_reversalTopVsCompletion?: boolean;
-  truthMismatch_recoveryTopVsCompletion?: boolean;
-  truthMismatch_shallowAdmissionVsClosure?: boolean;
-  truthMismatch_provenanceReversalWithoutAuthoritative?: boolean;
-  truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery?: boolean;
-  /** PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01 — pass-through only */
-  shallowNormalizedBlockerFamily?: ShallowNormalizedBlockerFamily;
-  shallowAuthoritativeContractStatus?: ShallowAuthoritativeContractStatus;
-  shallowContractAuthoritativeClosure?: boolean;
-  shallowContractAuthorityTrace?: string;
-  /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01 — pass-through only */
-  ultraLowPolicyScope?: boolean;
-  ultraLowPolicyDecisionReady?: boolean;
-  ultraLowPolicyBlocked?: boolean;
-  ultraLowPolicyTrace?: string;
-  /** PR-0 owner trace — pass-through only */
-  ownerTruthSource?: SquatOwnerTruthSource;
-  ownerTruthStage?: SquatOwnerTruthStage;
-  ownerTruthBlockedBy?: string | null;
-  /** PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02 — pass-through only */
-  ownerAuthoritativeReversalSatisfied?: boolean;
-  ownerAuthoritativeRecoverySatisfied?: boolean;
-  provenanceReversalEvidencePresent?: boolean;
-  /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03 — pass-through */
-  standingFinalizeSatisfied?: boolean;
-  standingFinalizeSuppressedByLateSetup?: boolean;
-  standingFinalizeReadyAtMs?: number | null;
-  /** PR-CAM-SHALLOW-PROOF-TRACE-11: shallow closure proof 생성·소비 관측(게이트 미사용) */
-  shallowClosureProofTrace?: ShallowClosureProofTrace;
-  /** PR-CAM-SHALLOW-PROOF-TRACE-11: 한 줄 JSON 요약 — 전체는 shallowClosureProofTrace */
-  shallowClosureProofTraceSummary?: {
-    stage?: string;
-    eligible?: boolean;
-    satisfied?: boolean;
-    blockedReason?: string | null;
-    proofBlockedReason?: string | null;
-    consumptionBlockedReason?: string | null;
-    firstDecisiveBlockedReason?: string | null;
-  };
-  /** PR-CAM-SHALLOW-TICKET-UNIFICATION-12: 단일 shallow 완료 티켓 */
-  shallowCompletionTicket?: ShallowCompletionTicket;
-  shallowCompletionTicketSatisfied?: boolean;
-  shallowCompletionTicketBlockedReason?: string | null;
-  shallowCompletionTicketStage?: string | null;
-  /** PR-CAM-CANONICAL-SHALLOW-CLOSER-02 — pass-through only */
-  canonicalShallowContractClosureApplied?: boolean;
-  canonicalShallowContractClosureSource?: string | null;
-  /** PR-CAM-CANONICAL-SHALLOW-CONTRACT-01 — pass-through only */
-  canonicalShallowContractEligible?: boolean;
-  canonicalShallowContractAdmissionSatisfied?: boolean;
-  canonicalShallowContractAttemptSatisfied?: boolean;
-  canonicalShallowContractReversalEvidenceSatisfied?: boolean;
-  canonicalShallowContractRecoveryEvidenceSatisfied?: boolean;
-  canonicalShallowContractAntiFalsePassClear?: boolean;
-  canonicalShallowContractSatisfied?: boolean;
-  canonicalShallowContractStage?: string;
-  canonicalShallowContractBlockedReason?: string | null;
-  canonicalShallowContractAuthoritativeClosureWouldBeSatisfied?: boolean;
-  canonicalShallowContractProvenanceOnlySignalPresent?: boolean;
-  canonicalShallowContractSplitBrainDetected?: boolean;
-  canonicalShallowContractTrace?: string;
 }
 
 export interface ExerciseGateResult {
@@ -1257,8 +1265,34 @@ function getSquatProgressionCompletionSatisfied(
     completionMachinePhase,
     completionPassReason,
     ownerAuthoritativeShallowClosureSatisfied: cs?.ownerAuthoritativeShallowClosureSatisfied,
-    shallowAuthoritativeClosureReason: cs?.shallowAuthoritativeClosureReason ?? null,
-    shallowAuthoritativeClosureBlockedReason: cs?.shallowAuthoritativeClosureBlockedReason ?? null,
+    // PR-D: PRIMARY_CANONICAL — shallow debug SSOT (동일 값은 아래 pass-through 에서 재확인)
+    canonicalShallowContractClosureApplied: cs?.canonicalShallowContractClosureApplied,
+    canonicalShallowContractClosureSource: cs?.canonicalShallowContractClosureSource ?? null,
+    canonicalShallowContractEligible: cs?.canonicalShallowContractEligible,
+    canonicalShallowContractAdmissionSatisfied: cs?.canonicalShallowContractAdmissionSatisfied,
+    canonicalShallowContractAttemptSatisfied: cs?.canonicalShallowContractAttemptSatisfied,
+    canonicalShallowContractReversalEvidenceSatisfied:
+      cs?.canonicalShallowContractReversalEvidenceSatisfied,
+    canonicalShallowContractRecoveryEvidenceSatisfied:
+      cs?.canonicalShallowContractRecoveryEvidenceSatisfied,
+    canonicalShallowContractAntiFalsePassClear: cs?.canonicalShallowContractAntiFalsePassClear,
+    canonicalShallowContractSatisfied: cs?.canonicalShallowContractSatisfied,
+    canonicalShallowContractStage: cs?.canonicalShallowContractStage,
+    canonicalShallowContractBlockedReason: cs?.canonicalShallowContractBlockedReason ?? null,
+    canonicalShallowContractAuthoritativeClosureWouldBeSatisfied:
+      cs?.canonicalShallowContractAuthoritativeClosureWouldBeSatisfied,
+    canonicalShallowContractProvenanceOnlySignalPresent:
+      cs?.canonicalShallowContractProvenanceOnlySignalPresent,
+    canonicalShallowContractSplitBrainDetected: cs?.canonicalShallowContractSplitBrainDetected,
+    canonicalShallowContractTrace: cs?.canonicalShallowContractTrace,
+    // PR-D: SECONDARY_DEBUG — owner / policy / trajectory evidence
+    ownerTruthSource: cs?.ownerTruthSource ?? 'none',
+    ownerTruthStage: cs?.ownerTruthStage,
+    ownerTruthBlockedBy: cs?.ownerTruthBlockedBy ?? null,
+    ultraLowPolicyScope: cs?.ultraLowPolicyScope,
+    ultraLowPolicyDecisionReady: cs?.ultraLowPolicyDecisionReady,
+    ultraLowPolicyBlocked: cs?.ultraLowPolicyBlocked,
+    ultraLowPolicyTrace: cs?.ultraLowPolicyTrace,
     shallowTrajectoryBridgeEligible: cs?.shallowTrajectoryBridgeEligible,
     shallowTrajectoryBridgeSatisfied: cs?.shallowTrajectoryBridgeSatisfied,
     shallowTrajectoryBridgeBlockedReason: cs?.shallowTrajectoryBridgeBlockedReason ?? null,
@@ -1272,6 +1306,32 @@ function getSquatProgressionCompletionSatisfied(
           guardedShallowLocalPeakIndex: cs.guardedShallowLocalPeakIndex ?? null,
         }
       : {}),
+    // PR-D: LEGACY_COMPAT
+    shallowAuthoritativeClosureReason: cs?.shallowAuthoritativeClosureReason ?? null,
+    shallowAuthoritativeClosureBlockedReason: cs?.shallowAuthoritativeClosureBlockedReason ?? null,
+    shallowAuthoritativeStage: cs?.shallowAuthoritativeStage,
+    shallowObservationLayerReversalTruth: cs?.shallowObservationLayerReversalTruth,
+    shallowAuthoritativeReversalTruth: cs?.shallowAuthoritativeReversalTruth,
+    shallowObservationLayerRecoveryTruth: cs?.shallowObservationLayerRecoveryTruth,
+    shallowAuthoritativeRecoveryTruth: cs?.shallowAuthoritativeRecoveryTruth,
+    shallowProvenanceOnlyReversalEvidence: cs?.shallowProvenanceOnlyReversalEvidence,
+    truthMismatch_reversalTopVsCompletion: cs?.truthMismatch_reversalTopVsCompletion,
+    truthMismatch_recoveryTopVsCompletion: cs?.truthMismatch_recoveryTopVsCompletion,
+    truthMismatch_shallowAdmissionVsClosure: cs?.truthMismatch_shallowAdmissionVsClosure,
+    truthMismatch_provenanceReversalWithoutAuthoritative:
+      cs?.truthMismatch_provenanceReversalWithoutAuthoritative,
+    truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery:
+      cs?.truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery,
+    shallowNormalizedBlockerFamily: cs?.shallowNormalizedBlockerFamily,
+    shallowAuthoritativeContractStatus: cs?.shallowAuthoritativeContractStatus,
+    shallowContractAuthoritativeClosure: cs?.shallowContractAuthoritativeClosure,
+    shallowContractAuthorityTrace: cs?.shallowContractAuthorityTrace,
+    ownerAuthoritativeReversalSatisfied: cs?.ownerAuthoritativeReversalSatisfied,
+    ownerAuthoritativeRecoverySatisfied: cs?.ownerAuthoritativeRecoverySatisfied,
+    provenanceReversalEvidencePresent: cs?.provenanceReversalEvidencePresent,
+    standingFinalizeSatisfied: cs?.standingFinalizeSatisfied,
+    standingFinalizeSuppressedByLateSetup: cs?.standingFinalizeSuppressedByLateSetup,
+    standingFinalizeReadyAtMs: cs?.standingFinalizeReadyAtMs ?? null,
     squatInternalQuality: result.debug?.squatInternalQuality,
   };
 
@@ -1336,10 +1396,10 @@ function getSquatProgressionCompletionSatisfied(
 
   squatCycleDebug.baselineFrozen = cs?.baselineFrozen;
   squatCycleDebug.baselineFrozenDepth = cs?.baselineFrozenDepth ?? null;
-    squatCycleDebug.peakLatched = cs?.peakLatched;
-    squatCycleDebug.peakLatchedAtIndex = cs?.peakLatchedAtIndex ?? null;
-    squatCycleDebug.peakAnchorTruth = cs?.peakAnchorTruth;
-    squatCycleDebug.eventBasedDescentPath = cs?.eventBasedDescentPath;
+  squatCycleDebug.peakLatched = cs?.peakLatched;
+  squatCycleDebug.peakLatchedAtIndex = cs?.peakLatchedAtIndex ?? null;
+  squatCycleDebug.peakAnchorTruth = cs?.peakAnchorTruth;
+  squatCycleDebug.eventBasedDescentPath = cs?.eventBasedDescentPath;
   const ec = cs?.squatEventCycle;
   squatCycleDebug.eventCycleDetected = ec?.detected;
   squatCycleDebug.eventCycleBand = ec?.band ?? null;
@@ -1349,46 +1409,10 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.eventCycleSource =
     cs?.eventCycleSource ?? (ec?.source === 'none' ? null : ec?.source) ?? null;
 
-  /** PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: pass-through only — gate 로직 미사용 */
-  squatCycleDebug.shallowAuthoritativeStage = cs?.shallowAuthoritativeStage;
-  squatCycleDebug.shallowObservationLayerReversalTruth = cs?.shallowObservationLayerReversalTruth;
-  squatCycleDebug.shallowAuthoritativeReversalTruth = cs?.shallowAuthoritativeReversalTruth;
-  squatCycleDebug.shallowObservationLayerRecoveryTruth = cs?.shallowObservationLayerRecoveryTruth;
-  squatCycleDebug.shallowAuthoritativeRecoveryTruth = cs?.shallowAuthoritativeRecoveryTruth;
-  squatCycleDebug.shallowProvenanceOnlyReversalEvidence = cs?.shallowProvenanceOnlyReversalEvidence;
-  squatCycleDebug.truthMismatch_reversalTopVsCompletion = cs?.truthMismatch_reversalTopVsCompletion;
-  squatCycleDebug.truthMismatch_recoveryTopVsCompletion = cs?.truthMismatch_recoveryTopVsCompletion;
-  squatCycleDebug.truthMismatch_shallowAdmissionVsClosure = cs?.truthMismatch_shallowAdmissionVsClosure;
-  squatCycleDebug.truthMismatch_provenanceReversalWithoutAuthoritative =
-    cs?.truthMismatch_provenanceReversalWithoutAuthoritative;
-  squatCycleDebug.truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery =
-    cs?.truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery;
-
-  /** PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: 게이트 미사용 pass-through */
-  squatCycleDebug.shallowNormalizedBlockerFamily = cs?.shallowNormalizedBlockerFamily;
-  squatCycleDebug.shallowAuthoritativeContractStatus = cs?.shallowAuthoritativeContractStatus;
-  squatCycleDebug.shallowContractAuthoritativeClosure = cs?.shallowContractAuthoritativeClosure;
-  squatCycleDebug.shallowContractAuthorityTrace = cs?.shallowContractAuthorityTrace;
-
-  /** PR-0: owner truth observability — pass-through only */
-  squatCycleDebug.ownerTruthSource = cs?.ownerTruthSource ?? 'none';
-  squatCycleDebug.ownerTruthStage = cs?.ownerTruthStage;
-  squatCycleDebug.ownerTruthBlockedBy = cs?.ownerTruthBlockedBy ?? null;
-
-  /** PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: 게이트 미사용 pass-through */
-  squatCycleDebug.ownerAuthoritativeReversalSatisfied = cs?.ownerAuthoritativeReversalSatisfied;
-  squatCycleDebug.ownerAuthoritativeRecoverySatisfied = cs?.ownerAuthoritativeRecoverySatisfied;
-  squatCycleDebug.provenanceReversalEvidencePresent = cs?.provenanceReversalEvidencePresent;
-
-  squatCycleDebug.standingFinalizeSatisfied = cs?.standingFinalizeSatisfied;
-  squatCycleDebug.standingFinalizeSuppressedByLateSetup = cs?.standingFinalizeSuppressedByLateSetup;
-  squatCycleDebug.standingFinalizeReadyAtMs = cs?.standingFinalizeReadyAtMs ?? null;
-
-  /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 게이트 미사용 pass-through */
-  squatCycleDebug.ultraLowPolicyScope = cs?.ultraLowPolicyScope;
-  squatCycleDebug.ultraLowPolicyDecisionReady = cs?.ultraLowPolicyDecisionReady;
-  squatCycleDebug.ultraLowPolicyBlocked = cs?.ultraLowPolicyBlocked;
-  squatCycleDebug.ultraLowPolicyTrace = cs?.ultraLowPolicyTrace;
+  /**
+   * PR-D-CANONICAL-DEBUG-SURFACE-CLEANUP-04: PRIMARY / SECONDARY / LEGACY shallow 필드는
+   * 위 `squatCycleDebug` 초기 객체에서 이미 `cs` 기준으로 채움. 아래는 조건부 proof·ticket 만 보강.
+   */
 
   const shallowProofTrace = cs?.shallowClosureProofTrace;
   if (shallowProofTrace != null) {
@@ -1411,34 +1435,6 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.shallowCompletionTicketBlockedReason =
     cs?.shallowCompletionTicketBlockedReason ?? null;
   squatCycleDebug.shallowCompletionTicketStage = cs?.shallowCompletionTicketStage ?? null;
-
-  squatCycleDebug.canonicalShallowContractEligible = cs?.canonicalShallowContractEligible;
-  squatCycleDebug.canonicalShallowContractAdmissionSatisfied =
-    cs?.canonicalShallowContractAdmissionSatisfied;
-  squatCycleDebug.canonicalShallowContractAttemptSatisfied =
-    cs?.canonicalShallowContractAttemptSatisfied;
-  squatCycleDebug.canonicalShallowContractReversalEvidenceSatisfied =
-    cs?.canonicalShallowContractReversalEvidenceSatisfied;
-  squatCycleDebug.canonicalShallowContractRecoveryEvidenceSatisfied =
-    cs?.canonicalShallowContractRecoveryEvidenceSatisfied;
-  squatCycleDebug.canonicalShallowContractAntiFalsePassClear =
-    cs?.canonicalShallowContractAntiFalsePassClear;
-  squatCycleDebug.canonicalShallowContractSatisfied = cs?.canonicalShallowContractSatisfied;
-  squatCycleDebug.canonicalShallowContractStage = cs?.canonicalShallowContractStage;
-  squatCycleDebug.canonicalShallowContractBlockedReason =
-    cs?.canonicalShallowContractBlockedReason ?? null;
-  squatCycleDebug.canonicalShallowContractAuthoritativeClosureWouldBeSatisfied =
-    cs?.canonicalShallowContractAuthoritativeClosureWouldBeSatisfied;
-  squatCycleDebug.canonicalShallowContractProvenanceOnlySignalPresent =
-    cs?.canonicalShallowContractProvenanceOnlySignalPresent;
-  squatCycleDebug.canonicalShallowContractSplitBrainDetected =
-    cs?.canonicalShallowContractSplitBrainDetected;
-  squatCycleDebug.canonicalShallowContractTrace = cs?.canonicalShallowContractTrace;
-
-  /** PR-CAM-CANONICAL-SHALLOW-CLOSER-02: gate 미사용 pass-through */
-  squatCycleDebug.canonicalShallowContractClosureApplied = cs?.canonicalShallowContractClosureApplied;
-  squatCycleDebug.canonicalShallowContractClosureSource =
-    cs?.canonicalShallowContractClosureSource ?? null;
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';

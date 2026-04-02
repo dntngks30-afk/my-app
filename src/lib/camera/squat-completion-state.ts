@@ -371,7 +371,16 @@ export type ShallowClosureProofTrace = {
   };
 };
 
+/**
+ * PR-D-CANONICAL-DEBUG-SURFACE-CLEANUP-04 — `SquatCompletionState` 필드 묶음(읽기 순서):
+ * (1) completion truth / active runtime
+ * (2) PRIMARY_CANONICAL — `canonicalShallowContract*` (+ closer applied/source)
+ * (3) owner / policy trace — `ownerTruth*`, `ultraLowPolicy*`, authoritative reversal/recovery provenance
+ * (4) LEGACY_COMPAT — PR-ALIGN-01 / PR-2 축 (`shallowAuthoritativeStage`, `truthMismatch_*`, …)
+ * (5) evidence / trajectory / proof / bridge — evaluator·late-setup 연결 필드 유지
+ */
 export interface SquatCompletionState extends MotionCompletionResult {
+  // ── (1) Completion truth / active runtime ──
   baselineStandingDepth: number;
   rawDepthPeak: number;
   relativeDepthPeak: number;
@@ -508,6 +517,11 @@ export interface SquatCompletionState extends MotionCompletionResult {
   officialShallowDriftReason?: string | null;
   /** PR-03 final: full 버퍼 대신 최소 프리픽스로 shallow closure 채택 시 유효 프레임 수(없으면 null) */
   officialShallowPreferredPrefixFrameCount?: number | null;
+  /**
+   * PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04: 공식 shallow 권위 종료 계약으로 completion 이 닫혔는지(provenance·이벤트 승격과 별개).
+   * Runtime / completion-truth 인접 플래그 — shallow primary debug 는 `canonicalShallowContract*`.
+   */
+  ownerAuthoritativeShallowClosureSatisfied?: boolean;
   /** Setup false-pass lock: 연속 capture-ready dwell 충족 후에만 rep 파이프라인 사용 */
   readinessStableDwellSatisfied?: boolean;
   /** Setup false-pass lock: 대형 프레이밍 이동(뒤로/세우기/좌우) 감지 시 차단 */
@@ -539,9 +553,74 @@ export interface SquatCompletionState extends MotionCompletionResult {
   /** PR-02: 역전 증거 레인 — trajectory/tail/HMM 구분 */
   reversalEvidenceProvenance?: SquatReversalEvidenceProvenance | null;
 
+  /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: finalize 게이트 충족 여부(관측). */
+  standingFinalizeSatisfied?: boolean;
+  /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: 늦은 setup_motion 이 성공을 덮어쓴 경우(평가기에서 설정). */
+  standingFinalizeSuppressedByLateSetup?: boolean;
+  /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: standard 경로에서 최소 tail 만족 시각(없으면 null). */
+  standingFinalizeReadyAtMs?: number | null;
+
+  // ── (2) PRIMARY_CANONICAL shallow contract (derive + closer observability; PR-A/B/D) ──
   /**
-   * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: shallow 전용 — completion 권위 기준 단일 스테이지(디버그 전용).
-   * pass/게이트 로직에 사용하지 않는다.
+   * PR-CAM-CANONICAL-SHALLOW-CLOSER-02: canonical closer 가 이번 평가에서 적용됐는지 + 경로.
+   * **Primary shallow debug truth** 축의 일부 — 게이트 직접 입력 아님.
+   */
+  canonicalShallowContractClosureApplied?: boolean;
+  canonicalShallowContractClosureSource?: 'none' | 'canonical_authoritative' | 'canonical_guarded_trajectory';
+
+  /**
+   * `deriveCanonicalShallowCompletionContract` 스냅샷 — **shallow 관련 디버그 1차 SSOT**.
+   * (resolver 는 mutate 없음; `official_shallow_cycle` 쓰기는 closer 전용.)
+   */
+  canonicalShallowContractEligible?: boolean;
+  canonicalShallowContractAdmissionSatisfied?: boolean;
+  canonicalShallowContractAttemptSatisfied?: boolean;
+  canonicalShallowContractReversalEvidenceSatisfied?: boolean;
+  canonicalShallowContractRecoveryEvidenceSatisfied?: boolean;
+  canonicalShallowContractAntiFalsePassClear?: boolean;
+  canonicalShallowContractSatisfied?: boolean;
+  canonicalShallowContractStage?: CanonicalShallowCompletionContractStage;
+  canonicalShallowContractBlockedReason?: CanonicalShallowCompletionContractBlockedReason;
+  canonicalShallowContractAuthoritativeClosureWouldBeSatisfied?: boolean;
+  canonicalShallowContractProvenanceOnlySignalPresent?: boolean;
+  canonicalShallowContractSplitBrainDetected?: boolean;
+  canonicalShallowContractTrace?: string;
+
+  // ── (3) Owner / policy projection trace (secondary debug; not deprecated) ──
+  /**
+   * PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: ultra-low 제품 정책 스코프(권위 evidenceLabel + shallow 후보만).
+   * 관측층 reversal/recovery·provenance·event-cycle 로는 켜지지 않는다.
+   */
+  ultraLowPolicyScope?: boolean;
+  /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 정책 판단을 할 수 있는 늦은 단계까지 도달했는지(아래 헬퍼 규칙). */
+  ultraLowPolicyDecisionReady?: boolean;
+  /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 권위 차단이 `ultra_low_rom_not_allowed` 로 확정 적용됨. */
+  ultraLowPolicyBlocked?: boolean;
+  /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 스코프/준비/락 적용 요약 트레이스. */
+  ultraLowPolicyTrace?: string;
+
+  /** PR-0: completion owner 요약 trace — observability only, no gate changes. */
+  ownerTruthSource?: SquatOwnerTruthSource;
+  ownerTruthStage?: SquatOwnerTruthStage;
+  ownerTruthBlockedBy?: string | null;
+
+  /**
+   * PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: strict reversal / HMM assist / official shallow stream bridge 만 권위 역전.
+   */
+  ownerAuthoritativeReversalSatisfied?: boolean;
+  /**
+   * PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: 권위 역전 + standing 타임스탬프 + finalize 만족(관측·PR-3 입력).
+   */
+  ownerAuthoritativeRecoverySatisfied?: boolean;
+  /**
+   * PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: trajectory rescue / tail backfill / ultra-shallow rescue 등 provenance 전용.
+   */
+  provenanceReversalEvidencePresent?: boolean;
+
+  // ── (4) LEGACY_COMPAT shallow observability (prefer canonicalShallowContract* for new debug) ──
+  /**
+   * @deprecated PR-D: PR-ALIGN-01 coarse stage — `canonicalShallowContractStage` / `BlockedReason` 우선.
+   * Compat 유지 필드(삭제 아님). pass/게이트 로직에 사용하지 않는다.
    */
   shallowAuthoritativeStage?: SquatAuthoritativeShallowStage;
   /**
@@ -560,74 +639,45 @@ export interface SquatCompletionState extends MotionCompletionResult {
    * owner 역전과 혼동하면 안 되는 provenance 전용 신호.
    */
   shallowProvenanceOnlyReversalEvidence?: boolean;
-  /** 상위(타임라인) 역전 vs completion 권위 역전 불일치 */
+  /** @deprecated PR-D: ALIGN-01 mismatch flag — `canonicalShallowContractSplitBrainDetected` / trace 우선. Compat only. */
   truthMismatch_reversalTopVsCompletion?: boolean;
-  /** 상위(타임라인) 복귀 vs completion 권위 복귀 불일치 */
+  /** @deprecated PR-D: compat only — canonical split-brain / stage 우선. */
   truthMismatch_recoveryTopVsCompletion?: boolean;
-  /** shallow path 입장(admitted) 했으나 닫히지 않고 미통과 */
+  /** @deprecated PR-D: compat only — canonical split-brain / stage 우선. */
   truthMismatch_shallowAdmissionVsClosure?: boolean;
-  /** provenance 역전 신호는 있는데 권위 역전은 false */
+  /** @deprecated PR-D: compat only — canonical provenance fields 우선. */
   truthMismatch_provenanceReversalWithoutAuthoritative?: boolean;
-  /** standing 밴드(standingRecoveredAtMs)는 잡혔으나 권위 복귀는 false */
+  /** @deprecated PR-D: compat only — canonical recovery evidence 우선. */
   truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery?: boolean;
 
   /**
-   * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: completionBlockedReason 등 권위 결과만으로 정규화된 차단 패밀리.
+   * @deprecated PR-D: PR-2 패밀리 접기 — `canonicalShallowContractBlockedReason` 우선. Compat only.
    */
   shallowNormalizedBlockerFamily?: ShallowNormalizedBlockerFamily;
   /**
-   * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: shallow 계약(officialShallowPath*) 기준 단일 권위 상태.
+   * @deprecated PR-D: PR-2 contract enum — `canonicalShallowContractStage` 우선. Compat only.
    */
   shallowAuthoritativeContractStatus?: ShallowAuthoritativeContractStatus;
   /**
-   * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: Q4 — shallow 권위로 닫혔는지(= officialShallowPathClosed, 의미 동일·명시).
+   * @deprecated PR-D: `officialShallowPathClosed` 미러 — 직접 플래그 또는 canonical 축 우선. Compat only.
    */
   shallowContractAuthoritativeClosure?: boolean;
   /**
-   * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: 계약 체인 요약 한 줄(디버그 전용, 게이트 미사용).
-   * 형식: candidate|admitted|reversalAuth|normalizedFamily|contractStatus
+   * @deprecated PR-D: PR-2 파이프 문자열 — `canonicalShallowContractTrace` 우선. Compat only.
    */
   shallowContractAuthorityTrace?: string;
 
   /**
-   * PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: ultra-low 제품 정책 스코프(권위 evidenceLabel + shallow 후보만).
-   * 관측층 reversal/recovery·provenance·event-cycle 로는 켜지지 않는다.
+   * @deprecated PR-D: pre-canonical closure trace reason — `canonicalShallowContract*` + closer 사유 우선. Compat only.
+   * PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04 잔존 필드.
    */
-  ultraLowPolicyScope?: boolean;
-  /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 정책 판단을 할 수 있는 늦은 단계까지 도달했는지(아래 헬퍼 규칙). */
-  ultraLowPolicyDecisionReady?: boolean;
-  /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 권위 차단이 `ultra_low_rom_not_allowed` 로 확정 적용됨. */
-  ultraLowPolicyBlocked?: boolean;
-  /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 스코프/준비/락 적용 요약 트레이스. */
-  ultraLowPolicyTrace?: string;
-
-  /** PR-0: owner truth trace — observability only, no gate changes. */
-  ownerTruthSource?: SquatOwnerTruthSource;
-  ownerTruthStage?: SquatOwnerTruthStage;
-  ownerTruthBlockedBy?: string | null;
-
-  /**
-   * PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: strict reversal / HMM assist / official shallow stream bridge 만 권위 역전.
-   */
-  ownerAuthoritativeReversalSatisfied?: boolean;
-  /**
-   * PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: 권위 역전 + standing 타임스탬프 + finalize 만족(관측·PR-3 입력).
-   */
-  ownerAuthoritativeRecoverySatisfied?: boolean;
-  /**
-   * PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02: trajectory rescue / tail backfill / ultra-shallow rescue 등 provenance 전용.
-   */
-  provenanceReversalEvidencePresent?: boolean;
-
-  /**
-   * PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04: 공식 shallow 권위 종료 계약으로 completion 이 닫혔는지(provenance·이벤트 승격과 별개).
-   */
-  ownerAuthoritativeShallowClosureSatisfied?: boolean;
-  /** PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04: shallow 권위 종료 충족 시 사유 */
   shallowAuthoritativeClosureReason?: string | null;
-  /** PR-CAM-SHALLOW-AUTHORITATIVE-CLOSURE-04: shallow 권위 종료 미충족 시 구체 사유 */
+  /**
+   * @deprecated PR-D: pre-canonical blocked detail — `getShallowAuthoritativeClosureDecision` 입력용 legacy 문자열. Compat only.
+   */
   shallowAuthoritativeClosureBlockedReason?: string | null;
 
+  // ── (5) Evidence / trajectory / proof / bridge (evaluator late-setup 등 연결 — 삭제 금지) ──
   /**
    * PR-CAM-SHALLOW-TRAJECTORY-BRIDGE-05: 통제된 trajectory-assisted shallow 권위 브리지(관측·결과).
    * provenance 단독 권위화 아님 — `getShallowTrajectoryAuthoritativeBridgeDecision` 단일 게이트.
@@ -652,13 +702,6 @@ export interface SquatCompletionState extends MotionCompletionResult {
   guardedShallowRecoveredSuffixSatisfied?: boolean;
   guardedShallowRecoveredSuffixBlockedReason?: string | null;
 
-  /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: finalize 게이트 충족 여부(관측). */
-  standingFinalizeSatisfied?: boolean;
-  /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: 늦은 setup_motion 이 성공을 덮어쓴 경우(평가기에서 설정). */
-  standingFinalizeSuppressedByLateSetup?: boolean;
-  /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03: standard 경로에서 최소 tail 만족 시각(없으면 null). */
-  standingFinalizeReadyAtMs?: number | null;
-
   /**
    * PR-CAM-SHALLOW-PROOF-TRACE-11: shallow closure **proof 생성·소비** 단계별 진실 그래프(관측 전용).
    * pass/게이트/임계값 로직에서 읽지 않는다.
@@ -671,29 +714,6 @@ export interface SquatCompletionState extends MotionCompletionResult {
   shallowCompletionTicketBlockedReason?: string | null;
   /** admission | attempt | descend | commitment | late_suffix | anti_false_pass | finalize_bundle */
   shallowCompletionTicketStage?: string | null;
-
-  /**
-   * PR-CAM-CANONICAL-SHALLOW-CLOSER-02: canonical closer 적용 여부 및 closure 경로(observability).
-   */
-  canonicalShallowContractClosureApplied?: boolean;
-  canonicalShallowContractClosureSource?: 'none' | 'canonical_authoritative' | 'canonical_guarded_trajectory';
-
-  /**
-   * PR-CAM-CANONICAL-SHALLOW-CONTRACT-01: shallow closure fact 단일 정본 뷰(관측만 — completion 덮어쓰기 금지).
-   */
-  canonicalShallowContractEligible?: boolean;
-  canonicalShallowContractAdmissionSatisfied?: boolean;
-  canonicalShallowContractAttemptSatisfied?: boolean;
-  canonicalShallowContractReversalEvidenceSatisfied?: boolean;
-  canonicalShallowContractRecoveryEvidenceSatisfied?: boolean;
-  canonicalShallowContractAntiFalsePassClear?: boolean;
-  canonicalShallowContractSatisfied?: boolean;
-  canonicalShallowContractStage?: CanonicalShallowCompletionContractStage;
-  canonicalShallowContractBlockedReason?: CanonicalShallowCompletionContractBlockedReason;
-  canonicalShallowContractAuthoritativeClosureWouldBeSatisfied?: boolean;
-  canonicalShallowContractProvenanceOnlySignalPresent?: boolean;
-  canonicalShallowContractSplitBrainDetected?: boolean;
-  canonicalShallowContractTrace?: string;
 }
 
 /** PR-CAM-SHALLOW-PROOF-TRACE-11: 명시적 차단 문자열 — JSON 에서 추론 없이 원인 매핑 */
@@ -3471,8 +3491,11 @@ const SHALLOW_PR2_STANDING_FINALIZE_REASONS = new Set<string>([
 ]);
 
 /**
- * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01:
+ * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01 / PR-D-CANONICAL-DEBUG-SURFACE-CLEANUP-04:
  * `completionBlockedReason` + `completionSatisfied` 만으로 정규 패밀리를 낸다(임계·차단 로직 미변경).
+ *
+ * **Legacy compat helper** — 새 shallow 디버그는 `canonicalShallowContractBlockedReason` 등 PRIMARY 축 우선.
+ * 내부 구현·정책 락(`applyUltraLowPolicyLock`)에서 여전히 사용한다(삭제 아님).
  */
 export function mapCompletionBlockedReasonToShallowNormalizedBlockerFamily(
   completionBlockedReason: string | null,
@@ -3610,17 +3633,16 @@ export function applyUltraLowPolicyLock(state: SquatCompletionState): SquatCompl
 }
 
 /**
- * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01 / PR-CAM-POLICY-DRIFT-OBSERVABILITY-SEPARATION-03:
- * shallow truth 계층(관측 타임라인 / 권위 completion / provenance)과 불일치 플래그를 부착한다.
+ * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01 / PR-C / PR-D-CANONICAL-DEBUG-SURFACE-CLEANUP-04
  *
- * **pure observability helper — completion 필드를 직접 덮어쓰지 않는다.**
- * product policy(ultra-low ROM lock 등)는 이 함수 밖 evaluator boundary 에서 적용한다.
+ * **Pure observability only** — completion 필드를 직접 덮어쓰지 않는다 (no policy writes).
+ * Product policy 는 evaluator boundary 에서만 적용한다.
  *
- * compat/legacy 필드 분류:
- * - canonicalShallowContract* : PR-A/B 이후 primary shallow truth view
- * - shallowAuthoritativeStage, shallowContractAuthorityTrace, truthMismatch_*, shallowNormalizedBlockerFamily,
- *   shallowAuthoritativeContractStatus : PR-2/ALIGN-01 계열 legacy / compatibility debug 축
- *   → 삭제하지 않되 canonical 필드가 SSOT 임을 인지하고 사용할 것
+ * **Primary shallow debug truth** 는 state 에 이미 스탬프된 `canonicalShallowContract*` 이다.
+ * 이 함수가 채우는 `shallowAuthoritativeStage`, `truthMismatch_*`, PR-2 trace 필드 등은
+ * **legacy / compatibility / debug-only** — 새 대시보드·원인 분석은 canonical 축 우선.
+ *
+ * 함수명은 PR-ALIGN-01 시절 태그 유지(rename 미실시, PR-D).
  */
 export function attachShallowTruthObservabilityAlign01(
   state: SquatCompletionState
@@ -3678,17 +3700,10 @@ export function attachShallowTruthObservabilityAlign01(
   });
 
   /**
-   * PR-CAM-POLICY-DRIFT-OBSERVABILITY-SEPARATION-03 — observability 필드 분류:
-   *
-   * [PRIMARY — canonical shallow truth view (PR-A/B 이후 SSOT)]
-   *   canonicalShallowContract* 필드들(state 에 이미 stamped 됨).
-   *
-   * [LEGACY / COMPATIBILITY — PR-2/ALIGN-01 계열, 삭제하지 않고 compat 유지]
-   *   - shallowAuthoritativeStage       : PR-ALIGN-01 completion stage 관측 (canonical satisfied 가 primary)
-   *   - shallowContractAuthorityTrace   : PR-2 contract trace string
-   *   - shallowAuthoritativeContractStatus : PR-2 contract status enum
-   *   - truthMismatch_*                 : PR-ALIGN-01 mismatch 감지 플래그 (debug/compat only)
-   *   - shallowNormalizedBlockerFamily  : PR-2 blocker 분류 (canonical blockedReason 이 primary)
+   * PR-D — 반환 스프레드 분류:
+   * - PRIMARY: `...stamped` 에 포함된 `canonicalShallowContract*` (변경 없음).
+   * - LEGACY_COMPAT: 아래 명시 필드만 이 함수가 덮어쓴다(PR-2/ALIGN-01).
+   * - `ownerTruth*`: secondary owner trace(deprecated 아님).
    */
   return {
     ...stamped,

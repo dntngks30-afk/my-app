@@ -1,18 +1,17 @@
 /**
  * PR-CAM-CANONICAL-SHALLOW-CONTRACT-01 / PR-CAM-CANONICAL-SHALLOW-CLOSER-02
- * Canonical shallow completion contract — primary shallow truth derivation.
+ * PR-D-CANONICAL-DEBUG-SURFACE-CLEANUP-04
  *
- * Architecture (PR-B 이후):
- * - contract 자체는 pure derivation: completion state 를 직접 mutate 하지 않는다.
- * - downstream canonical closer(applyCanonicalShallowClosureFromContract)가
- *   이 contract 를 유일한 writer input 으로 사용해 official_shallow_cycle 을 연다.
- * - PR-A 문구("does not own completion")는 PR-B 이후 의미가 바뀌었다:
- *   contract 함수 자체는 mutation 없이 derivation 만 하되,
- *   downstream 에서 이 contract 결과가 shallow success 의 유일 근거가 된다.
+ * Canonical shallow completion contract — **primary shallow truth derivation** (debug/observability SSOT).
+ *
+ * - Resolver (`deriveCanonicalShallowCompletionContract`)는 completion state 를 **mutate 하지 않는다** (pure derivation).
+ * - Downstream `applyCanonicalShallowClosureFromContract` 만이 그 결과를 유일 writer input 으로
+ *   `official_shallow_cycle` 을 연 수 있다 (PR-B).
+ * - Legacy shallow observability (`shallowAuthoritativeClosure*`, PR-2 trace 등)와 병렬일 때
+ *   **새 디버그/대시보드는 canonicalShallowContract* 를 1차로 읽는다** (PR-D).
  *
  * PR-CAM-POLICY-DRIFT-OBSERVABILITY-SEPARATION-03:
- * - product policy(applyUltraLowPolicyLock) 는 contract 내부에서 적용하지 않는다.
- * - evaluator boundary 에서 canonical closer → observability attach → product policy 순으로 실행된다.
+ * - product policy 는 이 모듈 밖(evaluator boundary)에서만 적용한다.
  */
 
 /** Must stay aligned with `STANDARD_OWNER_FLOOR` in squat-completion-state.ts (0.4). */
