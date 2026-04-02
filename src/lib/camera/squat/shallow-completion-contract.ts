@@ -62,6 +62,11 @@ export interface CanonicalShallowCompletionContractInput {
 
   /** 런타임 shallow 권위 종료 플래그 — contract vs closer 정렬용(입력 fact). */
   officialShallowPathClosed?: boolean;
+
+  /** PR-B: guarded trajectory closure proof — reversal evidence OR 에 합류 허용. */
+  guardedShallowTrajectoryClosureProofSatisfied?: boolean;
+  /** PR-B: 현재 completion pass reason — split-brain 감지 보강용(입력 fact). */
+  completionPassReason?: string;
 }
 
 export interface CanonicalShallowCompletionContract {
@@ -80,6 +85,16 @@ export interface CanonicalShallowCompletionContract {
   provenanceOnlySignalPresent: boolean;
   splitBrainDetected: boolean;
 
+  /**
+   * PR-B: canonical contract 가 satisfied 일 때 어떤 경로로 닫혔는지.
+   * 'canonical_guarded_trajectory' — guarded trajectory proof 가 reversal evidence 에 기여.
+   * 'canonical_authoritative' — authoritative 경로.
+   * 'none' — not satisfied.
+   */
+  closureSource: 'none' | 'canonical_authoritative' | 'canonical_guarded_trajectory';
+  /** PR-B: satisfied === true 이면 true — canonical closer 가 official_shallow_cycle 을 열 수 있음. */
+  closureWouldWriteOfficialShallowCycle: boolean;
+
   trace: string;
 }
 
@@ -89,7 +104,8 @@ function reversalEvidenceFromInput(input: CanonicalShallowCompletionContractInpu
     input.officialShallowStreamBridgeApplied === true ||
     input.officialShallowAscentEquivalentSatisfied === true ||
     input.officialShallowClosureProofSatisfied === true ||
-    input.officialShallowPrimaryDropClosureFallback === true
+    input.officialShallowPrimaryDropClosureFallback === true ||
+    input.guardedShallowTrajectoryClosureProofSatisfied === true
   );
 }
 
@@ -202,16 +218,41 @@ export function deriveCanonicalShallowCompletionContract(
       input.currentSquatPhase === 'standing_recovered' &&
       input.completionBlockedReason === 'no_reversal');
 
-  /** 런타임 `officialShallowPathClosed` 와 canonical `satisfied` 불일치 — active closer vs contract 정렬용. */
+  /** PR-B: runtime closer vs contract 불일치 + completionPassReason 단독 불일치 감지. */
   const closerCanonicalMismatch =
     input.officialShallowPathAdmitted === true &&
     inZone &&
     (input.officialShallowPathClosed === true) !== satisfied;
 
-  const splitBrainDetected = baseSplitBrain || closerCanonicalMismatch;
+  const passReasonMismatch =
+    (input.officialShallowPathClosed === true && satisfied === false) ||
+    (input.officialShallowPathClosed !== true &&
+      input.completionPassReason === 'official_shallow_cycle' &&
+      satisfied === false);
 
-  /** 런타임가 official shallow path 를 닫았다고 표시한 경우(입력 fact). */
-  const authoritativeClosureWouldBeSatisfied = input.officialShallowPathClosed === true;
+  const splitBrainDetected = baseSplitBrain || closerCanonicalMismatch || passReasonMismatch;
+
+  /**
+   * PR-B: satisfied 이고 shallow owner zone 에 있으며 standard path 가 아닌 경우 true.
+   * (PR-A 의 officialShallowPathClosed mirror 에서 계약 기반으로 승격)
+   */
+  const authoritativeClosureWouldBeSatisfied =
+    satisfied === true &&
+    inZone &&
+    input.completionPassReason !== 'standard_cycle';
+
+  /**
+   * PR-B: guarded trajectory proof 가 reversal evidence 에 기여해 contract 를 만족시켰으면
+   * 'canonical_guarded_trajectory', 그 외 authoritative 이면 'canonical_authoritative', 미충족이면 'none'.
+   */
+  const closureSource: 'none' | 'canonical_authoritative' | 'canonical_guarded_trajectory' =
+    !satisfied
+      ? 'none'
+      : input.guardedShallowTrajectoryClosureProofSatisfied === true
+        ? 'canonical_guarded_trajectory'
+        : 'canonical_authoritative';
+
+  const closureWouldWriteOfficialShallowCycle = satisfied;
 
   const trace = [
     `eligible=${eligible ? 1 : 0}`,
@@ -221,7 +262,8 @@ export function deriveCanonicalShallowCompletionContract(
     `recovery=${recoveryEvidenceSatisfied ? 1 : 0}`,
     `anti=${antiFalsePassClear ? 1 : 0}`,
     `split=${splitBrainDetected ? 1 : 0}`,
-    `closedPath=${authoritativeClosureWouldBeSatisfied ? 1 : 0}`,
+    `authClosure=${authoritativeClosureWouldBeSatisfied ? 1 : 0}`,
+    `closureSrc=${closureSource}`,
     `stage=${stage}`,
     `blocked=${blockedReason ?? 'none'}`,
   ].join('|');
@@ -239,6 +281,8 @@ export function deriveCanonicalShallowCompletionContract(
     authoritativeClosureWouldBeSatisfied,
     provenanceOnlySignalPresent,
     splitBrainDetected,
+    closureSource,
+    closureWouldWriteOfficialShallowCycle,
     trace,
   };
 }

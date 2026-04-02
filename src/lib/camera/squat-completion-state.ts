@@ -673,6 +673,12 @@ export interface SquatCompletionState extends MotionCompletionResult {
   shallowCompletionTicketStage?: string | null;
 
   /**
+   * PR-CAM-CANONICAL-SHALLOW-CLOSER-02: canonical closer 적용 여부 및 closure 경로(observability).
+   */
+  canonicalShallowContractClosureApplied?: boolean;
+  canonicalShallowContractClosureSource?: 'none' | 'canonical_authoritative' | 'canonical_guarded_trajectory';
+
+  /**
    * PR-CAM-CANONICAL-SHALLOW-CONTRACT-01: shallow closure fact 단일 정본 뷰(관측만 — completion 덮어쓰기 금지).
    */
   canonicalShallowContractEligible?: boolean;
@@ -731,11 +737,6 @@ export type EvaluateSquatCompletionStateOptions = {
    * PR-CAM-SHALLOW-TRAJECTORY-BRIDGE-05: 평가기에서 이미 계산된 setup 차단 — completion 코어와 독립.
    */
   setupMotionBlocked?: boolean;
-  /**
-   * PR-CAM-SHALLOW-CLOSURE-PROOF-NORMALIZE-06: 1차 `evaluateSquatCompletionState`에서만 설정 —
-   * 코어가 guarded primary-drop closure 증거를 OR 한다.
-   */
-  guardedShallowTrajectoryClosureProofApply?: boolean;
   /**
    * PR-08/09: recovered-suffix 2차 코어 — `officialShallowReversalSatisfied` OR 에 합류.
    */
@@ -2541,10 +2542,6 @@ function evaluateSquatCompletionCore(
   let shallowClosureProofBundleFromStream = shallowClosureOut.shallowClosureProofBundleFromStream;
   let officialShallowProofCompletionReturnDrop = shallowClosureOut.officialShallowProofCompletionReturnDrop;
   let officialShallowPrimaryDropClosureFallback = shallowClosureOut.officialShallowPrimaryDropClosureFallback;
-  /** PR-06: 이벤트 사이클+trajectory 가 입증한 얕은 사이클에만 primary-drop closure 증거를 합성 */
-  if (options?.guardedShallowTrajectoryClosureProofApply === true) {
-    officialShallowPrimaryDropClosureFallback = true;
-  }
 
   /** commitment 이후 역전·상승·복귀·타이밍 — reversalFrame/ascend 기준 */
   function computeBlockedAfterCommitment(
@@ -3105,19 +3102,12 @@ function evaluateSquatCompletionCore(
   let shallowAuthoritativeClosureBlockedReason: string | null =
     shallowAuthoritativeClosureDecision.shallowAuthoritativeClosureBlockedReason;
 
-  if (shallowAuthoritativeClosureDecision.satisfied) {
-    completionPassReason = 'official_shallow_cycle';
-    completionSatisfied = true;
-    completionBlockedReason = null;
-    ownerAuthoritativeShallowClosureSatisfied = true;
-    shallowAuthoritativeClosureReason = 'official_shallow_cycle';
-    shallowAuthoritativeClosureBlockedReason = null;
-    officialShallowPathClosed =
-      officialShallowPathCandidate === true &&
-      officialShallowPathAdmitted === true &&
-      completionSatisfied;
-    officialShallowPathBlockedReason = null;
-  }
+  /**
+   * PR-CAM-CANONICAL-SHALLOW-CLOSER-02: core 내부 direct closer 제거.
+   * shallowAuthoritativeClosureDecision 은 이후 canonical contract 의 evidence input 으로만 사용.
+   * shallow success write 는 evaluateSquatCompletionState() tail 의
+   * applyCanonicalShallowClosureFromContract() 단일 helper 에서만 일어난다.
+   */
 
   const pr02FinalizeMode = deriveSquatCompletionFinalizeMode({
     completionSatisfied,
@@ -3243,7 +3233,6 @@ function evaluateSquatCompletionCore(
     officialShallowPrimaryDropClosureFallback,
     officialShallowReversalSatisfied:
       reversalConfirmedAfterDescend ||
-      options?.guardedShallowTrajectoryClosureProofApply === true ||
       options?.guardedShallowRecoveredSuffixClosureApply === true,
     ownerAuthoritativeReversalSatisfied,
     ownerAuthoritativeRecoverySatisfied,
@@ -4125,74 +4114,11 @@ function buildShallowCompletionTicket(
   } satisfies ShallowCompletionTicket;
 }
 
-/** PR-CAM-SHALLOW-TICKET-UNIFICATION-12: 티켓 통과 시 공식 shallow 완료·증명 투영(단일 지점). */
-function applyShallowCompletionTicketPatch(
-  state: SquatCompletionState,
-  ticket: ShallowCompletionTicket
-): SquatCompletionState {
-  const completionFinalizeMode = deriveSquatCompletionFinalizeMode({
-    completionSatisfied: true,
-    eventCyclePromoted: false,
-    assistSourcesWithoutPromotion: state.completionAssistSources ?? [],
-    officialShallowAuthoritativeClosure: true,
-  });
-
-  return {
-    ...state,
-    completionSatisfied: true,
-    completionBlockedReason: null,
-    completionPassReason: 'official_shallow_cycle',
-    completionFinalizeMode,
-    officialShallowPathClosed:
-      state.officialShallowPathCandidate === true && state.officialShallowPathAdmitted === true,
-    officialShallowPathBlockedReason: null,
-    closedAsOfficialRomCycle: true,
-    ownerAuthoritativeShallowClosureSatisfied: true,
-    shallowAuthoritativeClosureReason: 'official_shallow_cycle',
-    shallowAuthoritativeClosureBlockedReason: null,
-    reversalConfirmedAfterDescend: true,
-    recoveryConfirmedAfterReversal: true,
-    cycleComplete: true,
-    successPhaseAtOpen: 'standing_recovered',
-    completionMachinePhase: deriveSquatCompletionMachinePhase({
-      completionSatisfied: true,
-      currentSquatPhase: state.currentSquatPhase,
-      downwardCommitmentReached: state.downwardCommitmentReached,
-    }),
-    officialShallowReversalSatisfied: true,
-    officialShallowClosureProofSatisfied: true,
-    officialShallowPrimaryDropClosureFallback: true,
-    ruleCompletionBlockedReason: null,
-    postAssistCompletionBlockedReason: null,
-    shallowCompletionTicket: ticket,
-    shallowCompletionTicketSatisfied: true,
-    shallowCompletionTicketBlockedReason: null,
-    shallowCompletionTicketStage: null,
-  };
-}
-
 /**
- * PR-CAM-SHALLOW-TICKET-UNIFICATION-12: 티켓 스코프에서 미통과 시 split-brain 제거 — 증명 축을 티켓과 정렬.
+ * PR-CAM-CANONICAL-SHALLOW-CLOSER-02: applyShallowCompletionTicketPatch 및
+ * applyShallowCompletionTicketEligibleFailureProjection 은 PR-B 에서 삭제됨.
+ * ticket 은 observability 스탬프만 — completion writer 역할은 canonical closer 에 이양.
  */
-function applyShallowCompletionTicketEligibleFailureProjection(
-  state: SquatCompletionState,
-  ticket: ShallowCompletionTicket
-): SquatCompletionState {
-  return {
-    ...state,
-    officialShallowReversalSatisfied: false,
-    officialShallowClosureProofSatisfied: false,
-    officialShallowPrimaryDropClosureFallback: false,
-    officialShallowPathClosed: false,
-    ownerAuthoritativeShallowClosureSatisfied: false,
-    shallowAuthoritativeClosureReason: null,
-    shallowAuthoritativeClosureBlockedReason: ticket.blockedReason,
-    shallowCompletionTicket: ticket,
-    shallowCompletionTicketSatisfied: false,
-    shallowCompletionTicketBlockedReason: ticket.blockedReason,
-    shallowCompletionTicketStage: ticket.firstFailedStage ?? null,
-  };
-}
 
 /** PR-10 레거시 소비 결정 형태 — PR-12 티켓이 합성해 트레이스에 전달한다. */
 export type OfficialShallowConsumptionDecision = {
@@ -4541,6 +4467,85 @@ function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
     peakLatchedAtIndex: s.peakLatchedAtIndex ?? null,
     evidenceLabel: s.evidenceLabel,
     officialShallowPathClosed: s.officialShallowPathClosed === true,
+    /** PR-B: guarded trajectory proof — reversal evidence OR 에 합류 */
+    guardedShallowTrajectoryClosureProofSatisfied: s.guardedShallowTrajectoryClosureProofSatisfied === true,
+    /** PR-B: split-brain 감지 보강용 */
+    completionPassReason: s.completionPassReason ?? undefined,
+  };
+}
+
+/**
+ * PR-CAM-CANONICAL-SHALLOW-CLOSER-02: shallow success 를 여는 유일한 writer.
+ * canonical shallow contract 가 satisfied 이고 모든 guard 조건이 만족될 때만 official_shallow_cycle 을 연다.
+ * 이 helper 외부에서 official_shallow_cycle 을 직접 쓰면 안 된다.
+ */
+function applyCanonicalShallowClosureFromContract(
+  state: SquatCompletionState
+): SquatCompletionState {
+  if (state.canonicalShallowContractSatisfied !== true) {
+    return {
+      ...state,
+      canonicalShallowContractClosureApplied: false,
+      canonicalShallowContractClosureSource: 'none',
+    };
+  }
+  if (state.completionPassReason !== 'not_confirmed') {
+    return {
+      ...state,
+      canonicalShallowContractClosureApplied: false,
+      canonicalShallowContractClosureSource: state.canonicalShallowContractClosureSource ?? 'none',
+    };
+  }
+  if (!(state.relativeDepthPeak < STANDARD_OWNER_FLOOR)) {
+    return {
+      ...state,
+      canonicalShallowContractClosureApplied: false,
+      canonicalShallowContractClosureSource: 'none',
+    };
+  }
+  if (state.officialShallowPathCandidate !== true) {
+    return {
+      ...state,
+      canonicalShallowContractClosureApplied: false,
+      canonicalShallowContractClosureSource: 'none',
+    };
+  }
+  if (state.officialShallowPathAdmitted !== true) {
+    return {
+      ...state,
+      canonicalShallowContractClosureApplied: false,
+      canonicalShallowContractClosureSource: 'none',
+    };
+  }
+
+  const closureSource = state.canonicalShallowContractClosureSource ?? 'canonical_authoritative';
+
+  const completionFinalizeMode = deriveSquatCompletionFinalizeMode({
+    completionSatisfied: true,
+    eventCyclePromoted: false,
+    assistSourcesWithoutPromotion: state.completionAssistSources ?? [],
+    officialShallowAuthoritativeClosure: true,
+  });
+
+  return {
+    ...state,
+    completionPassReason: 'official_shallow_cycle',
+    completionSatisfied: true,
+    completionBlockedReason: null,
+    cycleComplete: true,
+    successPhaseAtOpen: 'standing_recovered',
+    officialShallowPathClosed: true,
+    officialShallowPathBlockedReason: null,
+    ownerAuthoritativeShallowClosureSatisfied: true,
+    shallowAuthoritativeClosureReason:
+      closureSource === 'canonical_guarded_trajectory'
+        ? 'canonical_shallow_contract_guarded_trajectory'
+        : 'canonical_shallow_contract',
+    shallowAuthoritativeClosureBlockedReason: null,
+    completionFinalizeMode,
+    officialShallowClosureProofSatisfied: true,
+    canonicalShallowContractClosureApplied: true,
+    canonicalShallowContractClosureSource: closureSource,
   };
 }
 
@@ -4642,27 +4647,10 @@ export function evaluateSquatCompletionState(
   };
 
   /**
-   * PR-06: 1차 코어에서 closure 번들이 안 생긴 통제 shallow+trajectory 사이클은
-   * `officialShallowPrimaryDropClosureFallback` 만 합성해 PR-4 authoritative closure 가 자연스럽게 통과하게 한다.
+   * PR-CAM-CANONICAL-SHALLOW-CLOSER-02: guarded trajectory proof 는 canonical contract 의
+   * input fact 로만 사용. synthetic re-run(core 재실행으로 closure proof 주입) 경로 제거.
+   * guardedShallowTrajectoryClosureProofSatisfied 는 이미 위에서 state 에 stamped 됨.
    */
-  if (guardedClosureProof.satisfied && !alreadyNativeShallowClosureProof) {
-    state = resolveStandardDriftAfterShallowAdmission(
-      evaluateSquatCompletionCore(
-        frames,
-        { ...options, guardedShallowTrajectoryClosureProofApply: true },
-        depthFreeze
-      ),
-      frames,
-      options,
-      depthFreeze
-    );
-    state = {
-      ...state,
-      squatEventCycle,
-      guardedShallowTrajectoryClosureProofSatisfied: true,
-      guardedShallowTrajectoryClosureProofBlockedReason: null,
-    };
-  }
 
   if (shallowLocalPeakObsEligible) {
     state = {
@@ -4689,10 +4677,26 @@ export function evaluateSquatCompletionState(
     setupMotionBlocked: setupMotionBlockedFlag,
   });
 
+  /**
+   * PR-CAM-CANONICAL-SHALLOW-CLOSER-02: ticket 은 observability 스탬프만 — completion writer 아님.
+   * 모든 branch 에서 shallowCompletionTicket* 필드만 설정. completion/passReason/proof 변경 금지.
+   */
   if (shallowCompletionTicket.eligible && shallowCompletionTicket.satisfied) {
-    state = applyShallowCompletionTicketPatch(state, shallowCompletionTicket);
+    state = {
+      ...state,
+      shallowCompletionTicket,
+      shallowCompletionTicketSatisfied: true,
+      shallowCompletionTicketBlockedReason: null,
+      shallowCompletionTicketStage: null,
+    };
   } else if (shallowCompletionTicket.eligible && !shallowCompletionTicket.satisfied) {
-    state = applyShallowCompletionTicketEligibleFailureProjection(state, shallowCompletionTicket);
+    state = {
+      ...state,
+      shallowCompletionTicket,
+      shallowCompletionTicketSatisfied: false,
+      shallowCompletionTicketBlockedReason: shallowCompletionTicket.blockedReason,
+      shallowCompletionTicketStage: shallowCompletionTicket.firstFailedStage ?? null,
+    };
   } else {
     state = {
       ...state,
@@ -4763,14 +4767,17 @@ export function evaluateSquatCompletionState(
       })
     : undefined;
 
+  /**
+   * PR-CAM-CANONICAL-SHALLOW-CLOSER-02: canonical contract derive — 정확히 1회.
+   * derive 이전 snapshot 기준으로 계산하며, 결과를 state 에 merge 한 뒤
+   * applyCanonicalShallowClosureFromContract() 를 정확히 1회 호출해 shallow success 를 연다.
+   * attachShallowTruthObservabilityAlign01() 은 그 이후에 호출.
+   */
   const canonicalShallowContract = deriveCanonicalShallowCompletionContract(
     buildCanonicalShallowContractInputFromState(state)
   );
 
-  /**
-   * PR-CAM-EVENT-OWNER-DOWNGRADE-01: 이벤트 사이클은 탐지·관측만 — rule completion 이 성공 클로저의 유일 경로.
-   */
-  return attachShallowTruthObservabilityAlign01({
+  state = {
     ...state,
     eventCyclePromotionCandidate: promoObs.eventCyclePromotionCandidate,
     eventCyclePromotionBlockedReason: promoObs.eventCyclePromotionBlockedReason,
@@ -4793,5 +4800,13 @@ export function evaluateSquatCompletionState(
       canonicalShallowContract.provenanceOnlySignalPresent,
     canonicalShallowContractSplitBrainDetected: canonicalShallowContract.splitBrainDetected,
     canonicalShallowContractTrace: canonicalShallowContract.trace,
-  });
+    canonicalShallowContractClosureSource: canonicalShallowContract.closureSource,
+  };
+
+  state = applyCanonicalShallowClosureFromContract(state);
+
+  /**
+   * PR-CAM-EVENT-OWNER-DOWNGRADE-01: 이벤트 사이클은 탐지·관측만 — canonical closer 가 성공 클로저의 유일 경로.
+   */
+  return attachShallowTruthObservabilityAlign01(state);
 }

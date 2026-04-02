@@ -318,6 +318,9 @@ export interface SquatCycleDebug {
   shallowCompletionTicketSatisfied?: boolean;
   shallowCompletionTicketBlockedReason?: string | null;
   shallowCompletionTicketStage?: string | null;
+  /** PR-CAM-CANONICAL-SHALLOW-CLOSER-02 — pass-through only */
+  canonicalShallowContractClosureApplied?: boolean;
+  canonicalShallowContractClosureSource?: string | null;
   /** PR-CAM-CANONICAL-SHALLOW-CONTRACT-01 — pass-through only */
   canonicalShallowContractEligible?: boolean;
   canonicalShallowContractAdmissionSatisfied?: boolean;
@@ -1431,6 +1434,11 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.canonicalShallowContractSplitBrainDetected =
     cs?.canonicalShallowContractSplitBrainDetected;
   squatCycleDebug.canonicalShallowContractTrace = cs?.canonicalShallowContractTrace;
+
+  /** PR-CAM-CANONICAL-SHALLOW-CLOSER-02: gate 미사용 pass-through */
+  squatCycleDebug.canonicalShallowContractClosureApplied = cs?.canonicalShallowContractClosureApplied;
+  squatCycleDebug.canonicalShallowContractClosureSource =
+    cs?.canonicalShallowContractClosureSource ?? null;
 
   if (guardrail.completionStatus !== 'complete') {
     squatCycleDebug.passBlockedReason = 'guardrail_not_complete';
