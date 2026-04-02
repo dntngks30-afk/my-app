@@ -4498,6 +4498,31 @@ function buildShallowClosureProofTrace(input: {
 
 /** PR-CAM-CANONICAL-SHALLOW-CONTRACT-01: 이미 계산된 state fact 만 canonical 입력으로 넘긴다. */
 function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
+  /**
+   * PR-E1B-PEAK-ANCHOR-CONTAMINATION-01: canonical anti-false-pass 입력 peak index 보정.
+   *
+   * 글로벌/raw `peakLatchedAtIndex` 는 evaluateSquatCompletionCore 가 전체 버퍼에서 구한 값으로,
+   * baseline 앞 시리즈 시작 스파이크 등으로 index=0 이 될 수 있다.
+   * 이 경우 canonical contract 의 anti-false-pass(`peakLatchedAtIndex !== 0`) 가 항상 실패해
+   * shallow closure 가 영구적으로 차단된다.
+   *
+   * 해결책: admitted shallow attempt 에서 `getGuardedShallowLocalPeakAnchor` 가 이미
+   * 시리즈 시작 오염을 제거한 locally-valid peak(`> 0`)을 찾았다면,
+   * canonical 입력에서만 그 인덱스로 대체한다.
+   * - 글로벌 `state.peakLatchedAtIndex` 는 변경하지 않는다(debug/trace 용 보존).
+   * - 로컬 피크가 없는 경우(shallow admission 미달 또는 진짜 오염만 있는 경우)는 원래 값 사용.
+   */
+  const rawPeakLatchedAtIndex = s.peakLatchedAtIndex ?? null;
+  const localPeakIdx = s.guardedShallowLocalPeakIndex ?? null;
+  const canonicalPeakLatchedAtIndex =
+    rawPeakLatchedAtIndex === 0 &&
+    s.officialShallowPathAdmitted === true &&
+    s.guardedShallowLocalPeakFound === true &&
+    localPeakIdx != null &&
+    localPeakIdx > 0
+      ? localPeakIdx
+      : rawPeakLatchedAtIndex;
+
   return {
     relativeDepthPeak: s.relativeDepthPeak ?? 0,
     officialShallowPathCandidate: s.officialShallowPathCandidate === true,
@@ -4520,7 +4545,7 @@ function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
     standingFinalizeSatisfied: s.standingFinalizeSatisfied === true,
     standingRecoveryFinalizeReason: s.standingRecoveryFinalizeReason ?? null,
     setupMotionBlocked: s.setupMotionBlocked === true,
-    peakLatchedAtIndex: s.peakLatchedAtIndex ?? null,
+    peakLatchedAtIndex: canonicalPeakLatchedAtIndex,
     evidenceLabel: s.evidenceLabel,
     officialShallowPathClosed: s.officialShallowPathClosed === true,
     /** PR-B: guarded trajectory proof — reversal evidence OR 에 합류 */
