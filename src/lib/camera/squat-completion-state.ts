@@ -4583,12 +4583,21 @@ function applyCanonicalShallowClosureFromContract(
     officialShallowAuthoritativeClosure: true,
   });
 
+  /**
+   * PR-E1-CANONICAL-SHALLOW-OWNER-CLOSURE-01:
+   * `computeSquatCompletionOwnerTruth()` 가 owner truth 를 읽는 필드와 완전히 정렬한다.
+   * - currentSquatPhase: 'standing_recovered' — owner truth 의 3번째 gate
+   * - completionMachinePhase: 'completed'   — completionSatisfied=true 스냅샷 정합
+   * closer 외부에서 이 두 필드를 덮어쓰지 않는다(attachShallowTruthObservabilityAlign01 포함).
+   */
   return {
     ...state,
     completionPassReason: 'official_shallow_cycle',
     completionSatisfied: true,
     completionBlockedReason: null,
     cycleComplete: true,
+    currentSquatPhase: 'standing_recovered',
+    completionMachinePhase: 'completed',
     successPhaseAtOpen: 'standing_recovered',
     officialShallowPathClosed: true,
     officialShallowPathBlockedReason: null,
