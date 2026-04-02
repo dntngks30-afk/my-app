@@ -1248,8 +1248,15 @@ export function computeOfficialShallowClosure(params: {
     params.hasValidCommittedPeakAnchor &&
     params.committedOrPostCommitPeakFrame != null &&
     isOfficialShallowRomFinalizeBand(params.standingRecoveryFinalizeBand) &&
-    params.standingRecoveryFinalizeSatisfied &&
-    recoveryMeetsLowRomStyleFinalizeProof(params.recovery)
+    params.standingRecoveryFinalizeSatisfied
+    // PR-E1C: recoveryMeetsLowRomStyleFinalizeProof 조건 제거.
+    // getStandingRecoveryFinalizeGate는 evidenceLabel === 'low_rom' 또는 ultraLowRomUsesGuardedFinalize 일 때만
+    // recovery continuity/drop ratio를 검증하고 finalizeSatisfied에 반영한다.
+    // evidenceLabel === 'standard' (relativeDepthPeak 0.10~0.39) 구간은 finalize gate가
+    // frame+hold만 확인하므로 recoveryMeetsLowRomStyleFinalizeProof가 false여도 finalizeSatisfied = true.
+    // 이 불일치로 stream bundle이 항상 차단되어 no_reversal false-negative가 발생했다.
+    // standingRecoveryFinalizeSatisfied가 finalize gate의 전체 판정을 이미 포함하므로 여기서 중복 확인하지 않는다.
+    // 오탐 방지는 아래 post-peak drop 검사 + stream bridge ascent 검사 + canonical anti-false-pass가 담당.
   ) {
     const anchor = params.committedOrPostCommitPeakFrame;
     const postPeak = params.depthFrames.filter((f) => f.index > anchor.index);
