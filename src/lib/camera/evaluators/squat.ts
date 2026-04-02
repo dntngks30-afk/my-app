@@ -12,6 +12,7 @@ import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 import {
   attachShallowTruthObservabilityAlign01,
   evaluateSquatCompletionState,
+  applyUltraLowPolicyLock,
 } from '@/lib/camera/squat-completion-state';
 import {
   computeSquatCompletionArming,
@@ -331,8 +332,20 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     standingFinalizeSuppressedByLateSetup,
   };
 
-  /** PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: setup 패치 후에도 스테이지·불일치 필드가 최종 state 와 정렬되도록 */
+  /**
+   * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: setup 패치 후에도 스테이지·불일치 필드가 최종 state 와 정렬되도록.
+   * PR-CAM-POLICY-DRIFT-OBSERVABILITY-SEPARATION-03: attach 는 pure observability 전용.
+   * product policy(ultra-low ROM lock) 는 아래에서 별도로 1회만 적용한다.
+   */
   state = attachShallowTruthObservabilityAlign01(state);
+
+  /**
+   * PR-CAM-POLICY-DRIFT-OBSERVABILITY-SEPARATION-03:
+   * product policy layer — completion owner(canonical closer) 이후 evaluator boundary 에서 정확히 1회 적용.
+   * ultra-low ROM 이 policy 차단 조건이면 completion 결과를 덮어쓴다.
+   * 이 호출 이전에는 product policy 가 completion 필드를 수정하지 않는다.
+   */
+  state = applyUltraLowPolicyLock(state);
 
   /** PR-CAM-29B: pose-features guarded shallow ascent — additive observability only */
   let guardedShallowAscentDetected = 0;

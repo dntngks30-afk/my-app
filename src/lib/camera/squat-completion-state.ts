@@ -3298,6 +3298,12 @@ const PR_04E3B_NO_EVENT_PROMOTION_BLOCKS = new Set<string>([
 /**
  * PR-SQUAT-COMPLETION-REARCH-01 — Subcontract C: full-buffer standard drift vs shallow prefix closure.
  * shallow 가 먼저 닫힌 프리픽스가 있으면 그 truth 를 채택하고 drift 관측을 정리한다.
+ *
+ * PR-CAM-POLICY-DRIFT-OBSERVABILITY-SEPARATION-03:
+ * PR-B 이후 official_shallow_cycle 은 canonical closer(tail) 에서만 열리므로,
+ * prefix scan 에서 official_shallow_cycle 문자열 단독 의존은 사실상 dead.
+ * 대신 prefix core state 기반으로 canonical contract 를 직접 평가해 shallow closed truth 를 판단한다.
+ * → prefix마다 evaluateSquatCompletionState 전체를 재호출하지 않는다(policy/attach/late-patch 제외).
  */
 export function resolveStandardDriftAfterShallowAdmission(
   coreState: SquatCompletionState,
@@ -3315,17 +3321,26 @@ export function resolveStandardDriftAfterShallowAdmission(
       if (!sawOfficialShallowAdmissionOnPrefix && sn.officialShallowPathCandidate && sn.officialShallowPathAdmitted) {
         sawOfficialShallowAdmissionOnPrefix = true;
       }
-      if (
-        firstOfficialShallowClosedPrefix == null &&
-        sn.officialShallowPathClosed &&
-        (sn.completionPassReason === 'low_rom_cycle' ||
-          sn.completionPassReason === 'ultra_low_rom_cycle' ||
-          sn.completionPassReason === 'official_shallow_cycle') &&
-        sn.relativeDepthPeak < STANDARD_OWNER_FLOOR
-      ) {
-        firstOfficialShallowClosedPrefix = sn;
-        firstOfficialShallowClosedLen = n;
-        break;
+      if (firstOfficialShallowClosedPrefix == null && sn.relativeDepthPeak < STANDARD_OWNER_FLOOR) {
+        /**
+         * PR-CAM-POLICY-DRIFT-OBSERVABILITY-SEPARATION-03:
+         * 1) 기존 low_rom_cycle / ultra_low_rom_cycle core 경로(직접 closed)
+         * 2) PR-B 이후 canonical contract satisfied — official_shallow_cycle 문자열 불필요
+         */
+        const legacyCoreShallowClosed =
+          sn.officialShallowPathClosed === true &&
+          (sn.completionPassReason === 'low_rom_cycle' ||
+            sn.completionPassReason === 'ultra_low_rom_cycle');
+        const prefixCanonicalContract = deriveCanonicalShallowCompletionContract(
+          buildCanonicalShallowContractInputFromState(sn)
+        );
+        const canonicalShallowCloseable = prefixCanonicalContract.satisfied === true;
+
+        if (legacyCoreShallowClosed || canonicalShallowCloseable) {
+          firstOfficialShallowClosedPrefix = sn;
+          firstOfficialShallowClosedLen = n;
+          break;
+        }
       }
     }
   }
@@ -3541,10 +3556,15 @@ function isUltraLowPolicyDecisionReady(state: SquatCompletionState): boolean {
 const ULTRA_LOW_ROM_POLICY_BLOCK_REASON = 'ultra_low_rom_not_allowed' as const;
 
 /**
- * PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 준비된 경우에만 권위 결과를 정책 차단으로 덮어쓴다.
+ * PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01 / PR-CAM-POLICY-DRIFT-OBSERVABILITY-SEPARATION-03:
+ * 준비된 경우에만 completion owner 결과를 product policy 차단으로 덮어쓴다.
  * computeBlockedAfterCommitment·finalize·승격 내부는 건드리지 않고 출력만 정렬한다.
+ *
+ * **레이어**: product policy — completion owner 가 아님.
+ * completion owner(canonical closer)가 먼저 실행된 뒤 evaluator boundary 에서 1회만 호출해야 한다.
+ * attachShallowTruthObservabilityAlign01 내부에서 호출하지 않는다.
  */
-function applyUltraLowPolicyLock(state: SquatCompletionState): SquatCompletionState {
+export function applyUltraLowPolicyLock(state: SquatCompletionState): SquatCompletionState {
   const ultraLowPolicyScope = isUltraLowPolicyScope(state);
   const ultraLowPolicyDecisionReady = isUltraLowPolicyDecisionReady(state);
   const ultraLowPolicyTraceBase = [
@@ -3590,14 +3610,22 @@ function applyUltraLowPolicyLock(state: SquatCompletionState): SquatCompletionSt
 }
 
 /**
- * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01 + PR-3:
+ * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01 / PR-CAM-POLICY-DRIFT-OBSERVABILITY-SEPARATION-03:
  * shallow truth 계층(관측 타임라인 / 권위 completion / provenance)과 불일치 플래그를 부착한다.
- * PR-3는 ultra-low 제품 정책 락만 추가한다(임계·게이트 내부 미변경).
+ *
+ * **pure observability helper — completion 필드를 직접 덮어쓰지 않는다.**
+ * product policy(ultra-low ROM lock 등)는 이 함수 밖 evaluator boundary 에서 적용한다.
+ *
+ * compat/legacy 필드 분류:
+ * - canonicalShallowContract* : PR-A/B 이후 primary shallow truth view
+ * - shallowAuthoritativeStage, shallowContractAuthorityTrace, truthMismatch_*, shallowNormalizedBlockerFamily,
+ *   shallowAuthoritativeContractStatus : PR-2/ALIGN-01 계열 legacy / compatibility debug 축
+ *   → 삭제하지 않되 canonical 필드가 SSOT 임을 인지하고 사용할 것
  */
 export function attachShallowTruthObservabilityAlign01(
   state: SquatCompletionState
 ): SquatCompletionState {
-  const stamped = applyUltraLowPolicyLock(state);
+  const stamped = state;
 
   const shallowObservationLayerReversalTruth =
     stamped.committedAtMs != null && stamped.reversalAtMs != null;
@@ -3649,6 +3677,19 @@ export function attachShallowTruthObservabilityAlign01(
     recoveryConfirmedAfterReversal: stamped.recoveryConfirmedAfterReversal === true,
   });
 
+  /**
+   * PR-CAM-POLICY-DRIFT-OBSERVABILITY-SEPARATION-03 — observability 필드 분류:
+   *
+   * [PRIMARY — canonical shallow truth view (PR-A/B 이후 SSOT)]
+   *   canonicalShallowContract* 필드들(state 에 이미 stamped 됨).
+   *
+   * [LEGACY / COMPATIBILITY — PR-2/ALIGN-01 계열, 삭제하지 않고 compat 유지]
+   *   - shallowAuthoritativeStage       : PR-ALIGN-01 completion stage 관측 (canonical satisfied 가 primary)
+   *   - shallowContractAuthorityTrace   : PR-2 contract trace string
+   *   - shallowAuthoritativeContractStatus : PR-2 contract status enum
+   *   - truthMismatch_*                 : PR-ALIGN-01 mismatch 감지 플래그 (debug/compat only)
+   *   - shallowNormalizedBlockerFamily  : PR-2 blocker 분류 (canonical blockedReason 이 primary)
+   */
   return {
     ...stamped,
     shallowAuthoritativeStage: computeAuthoritativeShallowStageForObservability(stamped),
@@ -4807,6 +4848,9 @@ export function evaluateSquatCompletionState(
 
   /**
    * PR-CAM-EVENT-OWNER-DOWNGRADE-01: 이벤트 사이클은 탐지·관측만 — canonical closer 가 성공 클로저의 유일 경로.
+   * PR-CAM-POLICY-DRIFT-OBSERVABILITY-SEPARATION-03: attach 는 pure observability.
+   * product policy(applyUltraLowPolicyLock) 는 이 함수 내부에서 호출하지 않는다.
+   * → evaluator boundary(evaluators/squat.ts) 에서 1회 적용한다.
    */
   return attachShallowTruthObservabilityAlign01(state);
 }
