@@ -125,6 +125,26 @@
 ### PR-5 Regression Matrix Lock
 - 전 항목
 
+## Executable regression (PR-5 lock)
+
+아래 스크립트가 매트릭스의 핵심 행을 실행 가능한 형태로 고정한다. PR 병합 전 로컬/CI에서 함께 돌린다.
+
+| 스크립트 | 주요 매핑 |
+|-----------|-----------|
+| `scripts/camera-pr5-squat-regression-matrix-smoke.mjs` | A-1, A-2, A-3, B-1, B-2, B-3, C-1, C-2, 정적 단일 closer·evaluator 금지 |
+| `scripts/camera-e1-canonical-shallow-owner-closure-smoke.mjs` | B, owner/closer 정렬, C deep, D event-only, E ultra, F incomplete |
+| `scripts/camera-e1b-peak-anchor-contamination-smoke.mjs` | A-4 시리즈/피크 오염, trajectory 단독 비-owner |
+| `scripts/camera-e1c-authoritative-reversal-chain-smoke.mjs` | A-2/C 하강·역전·복구 체인, shallow closure |
+
+PowerShell 예시:
+
+```powershell
+npx tsx scripts/camera-pr5-squat-regression-matrix-smoke.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+npx tsx scripts/camera-e1-canonical-shallow-owner-closure-smoke.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+npx tsx scripts/camera-e1b-peak-anchor-contamination-smoke.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+npx tsx scripts/camera-e1c-authoritative-reversal-chain-smoke.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
 ## 판정 원칙
 회귀는 “완전히 깨졌다”일 때만이 아니라 아래도 포함한다.
 - blocked reason이 더 모호해짐
