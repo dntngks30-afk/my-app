@@ -33,6 +33,13 @@ export type CanonicalShallowCompletionContractBlockedReason =
   | 'no_commitment'
   | 'attempt_not_meaningful'
   | 'authoritative_reversal_missing'
+  /**
+   * PR-7-OFFICIAL-SHALLOW-CLOSER-INTEGRITY:
+   * Timing integrity gate failed — descent or ascent/recovery span is too short.
+   * bridge / proof / ascent-equivalent signals do NOT override timing integrity.
+   * This blocks `official_shallow_cycle` even when reversal evidence is otherwise present.
+   */
+  | 'timing_integrity_blocked'
   | 'recovery_or_finalize_missing'
   | 'setup_motion_blocked'
   | 'peak_series_start_contamination'
@@ -126,6 +133,12 @@ export interface CanonicalShallowCompletionContract {
   eligible: boolean;
   admissionSatisfied: boolean;
   attemptSatisfied: boolean;
+  /**
+   * PR-7-OFFICIAL-SHALLOW-CLOSER-INTEGRITY: false when core timing blockers are present.
+   * descent_span_too_short / ascent_recovery_span_too_short block the contract even if
+   * reversal evidence (bridge/proof) signals are present.
+   */
+  timingIntegrityClear: boolean;
   reversalEvidenceSatisfied: boolean;
   recoveryEvidenceSatisfied: boolean;
   antiFalsePassClear: boolean;
@@ -177,6 +190,24 @@ function antiFalsePassFromInput(input: CanonicalShallowCompletionContractInput):
   );
 }
 
+/**
+ * PR-7-OFFICIAL-SHALLOW-CLOSER-INTEGRITY: Timing integrity gate.
+ *
+ * Returns false when the core already determined timing was insufficient:
+ * `descent_span_too_short` — descent-to-peak span below minimum for shallow band.
+ * `ascent_recovery_span_too_short` — reversal-to-standing span below minimum for shallow band.
+ *
+ * These core-level timing blockers in `completionBlockedReason` must prevent the canonical
+ * contract from being satisfied even when bridge / proof / ascent-equivalent reversal
+ * evidence is present. Proof signals are the last step of integrity, not an override for it.
+ *
+ * Existing signal reuse only — no new numeric thresholds.
+ */
+function timingIntegrityClearFromInput(input: CanonicalShallowCompletionContractInput): boolean {
+  const br = input.completionBlockedReason ?? null;
+  return br !== 'descent_span_too_short' && br !== 'ascent_recovery_span_too_short';
+}
+
 function firstBlockedReason(input: CanonicalShallowCompletionContractInput): {
   reason: CanonicalShallowCompletionContractBlockedReason;
   stage: CanonicalShallowCompletionContractStage;
@@ -193,6 +224,25 @@ function firstBlockedReason(input: CanonicalShallowCompletionContractInput): {
   const br = input.completionBlockedReason ?? null;
   if (br === 'not_armed') {
     return { reason: 'not_armed', stage: 'attempt_blocked' };
+  }
+
+  /**
+   * PR-7-OFFICIAL-SHALLOW-CLOSER-INTEGRITY: Timing integrity gate.
+   *
+   * `descent_span_too_short` and `ascent_recovery_span_too_short` in completionBlockedReason
+   * mean the core already determined that timing is insufficient for a valid cycle.
+   * These timing failures must block the canonical contract even when bridge / proof /
+   * ascent-equivalent signals are present — those are reversal evidence contributors, not
+   * timing integrity substitutes.
+   *
+   * Why here (before reversal evidence check): proof signals are the last step, not an
+   * override for timing integrity. The contract integrity order is:
+   *   1. admission → 2. timing integrity → 3. reversal evidence → 4. recovery → 5. anti-false-pass
+   *
+   * Existing signal reuse only — no new numeric thresholds.
+   */
+  if (br === 'descent_span_too_short' || br === 'ascent_recovery_span_too_short') {
+    return { reason: 'timing_integrity_blocked', stage: 'reversal_blocked' };
   }
 
   if (!input.attemptStarted) {
@@ -248,11 +298,15 @@ export function deriveCanonicalShallowCompletionContract(
   const reversalEvidenceSatisfied = reversalEvidenceFromInput(input);
   const recoveryEvidenceSatisfied = recoveryEvidenceFromInput(input);
   const antiFalsePassClear = antiFalsePassFromInput(input);
+  // PR-7: timing integrity gate — timing blockers from core must block the contract
+  // even when bridge/proof reversal evidence signals are present.
+  const timingIntegrityClear = timingIntegrityClearFromInput(input);
 
   const satisfied =
     eligible &&
     admissionSatisfied &&
     attemptSatisfied &&
+    timingIntegrityClear &&
     reversalEvidenceSatisfied &&
     recoveryEvidenceSatisfied &&
     antiFalsePassClear;
@@ -311,6 +365,7 @@ export function deriveCanonicalShallowCompletionContract(
     `eligible=${eligible ? 1 : 0}`,
     `admission=${admissionSatisfied ? 1 : 0}`,
     `attempt=${attemptSatisfied ? 1 : 0}`,
+    `timing=${timingIntegrityClear ? 1 : 0}`,
     `reversal=${reversalEvidenceSatisfied ? 1 : 0}`,
     `recovery=${recoveryEvidenceSatisfied ? 1 : 0}`,
     `anti=${antiFalsePassClear ? 1 : 0}`,
@@ -325,6 +380,7 @@ export function deriveCanonicalShallowCompletionContract(
     eligible,
     admissionSatisfied,
     attemptSatisfied,
+    timingIntegrityClear,
     reversalEvidenceSatisfied,
     recoveryEvidenceSatisfied,
     antiFalsePassClear,
