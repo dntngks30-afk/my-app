@@ -183,6 +183,18 @@ export type SquatEvidenceLabel =
   | 'insufficient_signal';
 
 /**
+ * PR-2-SHALLOW-CONTRACT-NORMALIZATION: ROM band for the shallow completion contract.
+ *
+ * Per SSOT §shallow/low ROM 원칙: standard, low_rom, ultra_low_rom are admission bands
+ * within the same completion contract — not separate pass owners.
+ *
+ * SquatShallowContractBand = SquatEvidenceLabel restricted to the valid shallow zones.
+ * Use this type when a parameter or field specifically represents the contract band,
+ * rather than the full evidence label (which also includes 'insufficient_signal').
+ */
+export type SquatShallowContractBand = Extract<SquatEvidenceLabel, 'standard' | 'low_rom' | 'ultra_low_rom'>;
+
+/**
  * PR-02 Assist lock: completion 이 어떻게 최종 확정됐는지(관측·trace 전용).
  * success owner 가 아님 — PR-01 owner 는 completion truth 라인age 별도.
  */
@@ -3455,8 +3467,40 @@ export function resolveStandardDriftAfterShallowAdmission(
   return state;
 }
 
-/** PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: standing/finalize 계열 blocked reason — 임계·규칙 변경 없음(분류만). */
-const SHALLOW_OBS_STANDING_FINALIZE_BLOCKERS = new Set<string>([
+/**
+ * PR-2-SHALLOW-CONTRACT-NORMALIZATION: Single canonical set of shallow contract blocker families.
+ *
+ * These four sets are the sole classification source for completionBlockedReason → blocker family.
+ * Both mapCompletionBlockedReasonToShallowNormalizedBlockerFamily (active policy gate input)
+ * and computeAuthoritativeShallowStageForObservability (legacy compat observability) delegate
+ * to the same classification rather than maintaining separate parallel set definitions.
+ *
+ * The old SHALLOW_OBS_* sets (4 constants) are removed in PR-2.
+ * These SHALLOW_CONTRACT_BLOCKER_* sets replace them as the single classification source.
+ */
+
+/** admission blockers — attempt not yet started or depth commitment not reached. */
+const SHALLOW_CONTRACT_BLOCKER_ADMISSION = new Set<string>([
+  'not_armed',
+  'no_descend',
+  'insufficient_relative_depth',
+  'no_commitment',
+  /** freeze/latch missing: observed on real device alongside completion; classified admission (can split in PR-3+). */
+  'freeze_or_latch_missing',
+]);
+
+/** reversal blockers — descent confirmed but reversal or ascent not detected. */
+const SHALLOW_CONTRACT_BLOCKER_REVERSAL = new Set<string>(['no_reversal', 'no_ascend']);
+
+/** policy blockers — product-level or rescue-level gate blocked. */
+const SHALLOW_CONTRACT_BLOCKER_POLICY = new Set<string>([
+  'ultra_low_rom_not_allowed',
+  'trajectory_rescue_not_allowed',
+  'event_promotion_not_allowed',
+]);
+
+/** standing/finalize blockers — reversal seen but standing recovery finalize not met. */
+const SHALLOW_CONTRACT_BLOCKER_FINALIZE = new Set<string>([
   'not_standing_recovered',
   'recovery_hold_too_short',
   'low_rom_standing_finalize_not_satisfied',
@@ -3465,79 +3509,50 @@ const SHALLOW_OBS_STANDING_FINALIZE_BLOCKERS = new Set<string>([
   'ascent_recovery_span_too_short',
 ]);
 
-const SHALLOW_OBS_REVERSAL_BLOCKERS = new Set<string>(['no_reversal', 'no_ascend']);
-
-const SHALLOW_OBS_ADMISSION_BLOCKERS = new Set<string>([
-  'not_armed',
-  'no_descend',
-  'insufficient_relative_depth',
-  'no_commitment',
-]);
-
-const SHALLOW_OBS_POLICY_BLOCKERS = new Set<string>([
-  'ultra_low_rom_not_allowed',
-  'trajectory_rescue_not_allowed',
-  'event_promotion_not_allowed',
-]);
-
 /**
- * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01:
- * completion 권위 필드만으로 shallow 시도 스테이지를 한 곳에 접는다(pass 로직 미사용).
+ * PR-2-SHALLOW-CONTRACT-NORMALIZATION: Delegate to mapCompletionBlockedReasonToShallowNormalizedBlockerFamily.
+ * The old SHALLOW_OBS_* sets are removed; this function now uses SHALLOW_CONTRACT_BLOCKER_* via the
+ * family mapper, eliminating the duplicate parallel classification.
+ * Output: legacy-compat SquatAuthoritativeShallowStage (deprecated, observability only).
  */
 function computeAuthoritativeShallowStageForObservability(
   state: SquatCompletionState
 ): SquatAuthoritativeShallowStage {
   if (state.completionSatisfied) return 'closed';
-  const br = state.completionBlockedReason ?? '';
 
-  if (SHALLOW_OBS_STANDING_FINALIZE_BLOCKERS.has(br)) return 'standing_finalize_blocked';
-  if (SHALLOW_OBS_REVERSAL_BLOCKERS.has(br)) return 'reversal_blocked';
+  const br = state.completionBlockedReason ?? null;
 
-  if (SHALLOW_OBS_POLICY_BLOCKERS.has(br)) return 'policy_blocked';
+  // pre_attempt is more specific than admission_blocked: no attempt has fired yet
+  if (br === 'not_armed' && !state.attemptStarted) return 'pre_attempt';
 
-  if (br.startsWith('setup_motion:')) return 'admission_blocked';
-
-  if (SHALLOW_OBS_ADMISSION_BLOCKERS.has(br)) {
-    if (br === 'not_armed' && !state.attemptStarted) return 'pre_attempt';
-    return 'admission_blocked';
+  const family = mapCompletionBlockedReasonToShallowNormalizedBlockerFamily(br, false);
+  switch (family) {
+    case 'admission':
+      return 'admission_blocked';
+    case 'reversal':
+      return 'reversal_blocked';
+    case 'standing_finalize':
+      return 'standing_finalize_blocked';
+    case 'policy':
+      return 'policy_blocked';
+    case 'closed':
+      return 'closed';
+    case 'none':
+    default:
+      return 'policy_blocked'; // preserve existing fallback for unclassified reasons
   }
-
-  return 'policy_blocked';
 }
 
-/** PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: 세부 reason → 정규 패밀리(표에 없는 문자열은 `none`). */
-const SHALLOW_PR2_ADMISSION_REASONS = new Set<string>([
-  'not_armed',
-  'no_descend',
-  'insufficient_relative_depth',
-  'no_commitment',
-  /** 실기기에서 completion 과 함께 관측되는 동결/래치 누락 — admission 계열로만 분류(PR-3+에서 쪼갤 수 있음). */
-  'freeze_or_latch_missing',
-]);
-
-const SHALLOW_PR2_REVERSAL_REASONS = new Set<string>(['no_reversal', 'no_ascend']);
-
-const SHALLOW_PR2_POLICY_REASONS = new Set<string>([
-  'ultra_low_rom_not_allowed',
-  'trajectory_rescue_not_allowed',
-  'event_promotion_not_allowed',
-]);
-
-const SHALLOW_PR2_STANDING_FINALIZE_REASONS = new Set<string>([
-  'not_standing_recovered',
-  'recovery_hold_too_short',
-  'low_rom_standing_finalize_not_satisfied',
-  'ultra_low_rom_standing_finalize_not_satisfied',
-  'descent_span_too_short',
-  'ascent_recovery_span_too_short',
-]);
-
 /**
- * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01 / PR-D-CANONICAL-DEBUG-SURFACE-CLEANUP-04:
+ * PR-2-SHALLOW-CONTRACT-NORMALIZATION / PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01:
  * `completionBlockedReason` + `completionSatisfied` 만으로 정규 패밀리를 낸다(임계·차단 로직 미변경).
  *
- * **Legacy compat helper** — 새 shallow 디버그는 `canonicalShallowContractBlockedReason` 등 PRIMARY 축 우선.
- * 내부 구현·정책 락(`applyUltraLowPolicyLock`)에서 여전히 사용한다(삭제 아님).
+ * Single classification source — uses SHALLOW_CONTRACT_BLOCKER_* sets.
+ * computeAuthoritativeShallowStageForObservability also delegates here, eliminating parallel sets.
+ *
+ * Active usage: `applyUltraLowPolicyLock` (via `isUltraLowPolicyDecisionReady`).
+ * Legacy compat usage: feeds deprecated `shallowNormalizedBlockerFamily` state field.
+ * New debug: prefer `canonicalShallowContractBlockedReason` (PRIMARY axis).
  */
 export function mapCompletionBlockedReasonToShallowNormalizedBlockerFamily(
   completionBlockedReason: string | null,
@@ -3547,10 +3562,10 @@ export function mapCompletionBlockedReasonToShallowNormalizedBlockerFamily(
   const r = completionBlockedReason;
   if (r == null || r === '') return 'none';
   if (r.startsWith('setup_motion:')) return 'admission';
-  if (SHALLOW_PR2_ADMISSION_REASONS.has(r)) return 'admission';
-  if (SHALLOW_PR2_REVERSAL_REASONS.has(r)) return 'reversal';
-  if (SHALLOW_PR2_POLICY_REASONS.has(r)) return 'policy';
-  if (SHALLOW_PR2_STANDING_FINALIZE_REASONS.has(r)) return 'standing_finalize';
+  if (SHALLOW_CONTRACT_BLOCKER_ADMISSION.has(r)) return 'admission';
+  if (SHALLOW_CONTRACT_BLOCKER_REVERSAL.has(r)) return 'reversal';
+  if (SHALLOW_CONTRACT_BLOCKER_POLICY.has(r)) return 'policy';
+  if (SHALLOW_CONTRACT_BLOCKER_FINALIZE.has(r)) return 'standing_finalize';
   return 'none';
 }
 

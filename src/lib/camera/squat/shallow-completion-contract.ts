@@ -40,42 +40,85 @@ export type CanonicalShallowCompletionContractBlockedReason =
   | 'policy_or_unknown'
   | null;
 
+/**
+ * PR-2-SHALLOW-CONTRACT-NORMALIZATION: Canonical shallow contract input.
+ *
+ * Fields are grouped into the five contract sections defined by SQUAT_REFACTOR_SSOT.md.
+ * standard / low_rom / ultra_low_rom are ROM bands within the same contract (via evidenceLabel).
+ * They share identical admission, reversal, recovery, and anti-false-pass sections.
+ * The only band-specific behavior is in downstream finalize gates (handled via finalizeReason/band).
+ *
+ * Section 1 – ROM BAND CONTEXT
+ *   relativeDepthPeak, evidenceLabel
+ *
+ * Section 2 – ADMISSION
+ *   officialShallowPathCandidate, officialShallowPathAdmitted
+ *   attemptStarted, descendConfirmed, downwardCommitmentReached
+ *
+ * Section 3 – REVERSAL EVIDENCE (authoritative OR provenance-assisted)
+ *   ownerAuthoritativeReversalSatisfied (strict authoritative)
+ *   officialShallowStreamBridgeApplied, officialShallowAscentEquivalentSatisfied,
+ *   officialShallowClosureProofSatisfied, officialShallowPrimaryDropClosureFallback,
+ *   guardedShallowTrajectoryClosureProofSatisfied (assisted / bridge paths)
+ *   provenanceReversalEvidencePresent, trajectoryReversalRescueApplied,
+ *   reversalTailBackfillApplied, ultraShallowMeaningfulDownUpRescueApplied (provenance only)
+ *
+ * Section 4 – RECOVERY EVIDENCE
+ *   ownerAuthoritativeRecoverySatisfied, standingFinalizeSatisfied, standingRecoveryFinalizeReason
+ *
+ * Section 5 – ANTI-FALSE-PASS GUARD
+ *   setupMotionBlocked, peakLatchedAtIndex
+ *   (evidenceLabel === 'insufficient_signal' also blocks, shared with section 1)
+ *
+ * Alignment / split-brain context (not contract gates; observability inputs):
+ *   currentSquatPhase, completionBlockedReason, officialShallowPathClosed, completionPassReason
+ */
 export interface CanonicalShallowCompletionContractInput {
+  // ── Section 1: ROM BAND CONTEXT ──
   relativeDepthPeak: number;
+  /** SquatShallowContractBand or 'insufficient_signal'. Determines eligibility zone + anti-false-pass. */
+  evidenceLabel?: string;
+
+  // ── Section 2: ADMISSION ──
   officialShallowPathCandidate: boolean;
   officialShallowPathAdmitted: boolean;
   attemptStarted: boolean;
   descendConfirmed: boolean;
   downwardCommitmentReached: boolean;
-  currentSquatPhase?: string;
-  completionBlockedReason?: string | null;
 
+  // ── Section 3: REVERSAL EVIDENCE ──
+  /** Authoritative reversal: strict rule / HMM-assisted / stream bridge. */
   ownerAuthoritativeReversalSatisfied: boolean;
-  ownerAuthoritativeRecoverySatisfied: boolean;
-
+  /** Stream bridge reversal evidence (distinct channel from ownerAuthoritativeReversalSatisfied). */
   officialShallowStreamBridgeApplied: boolean;
   officialShallowAscentEquivalentSatisfied: boolean;
   officialShallowClosureProofSatisfied: boolean;
   officialShallowPrimaryDropClosureFallback: boolean;
-
+  /** Guarded trajectory proof: reversal evidence contribution (PR-B). */
+  guardedShallowTrajectoryClosureProofSatisfied?: boolean;
+  /** Provenance-only signals: do not satisfy reversal alone, but indicate signal presence. */
   provenanceReversalEvidencePresent: boolean;
   trajectoryReversalRescueApplied?: boolean;
   reversalTailBackfillApplied?: boolean;
   ultraShallowMeaningfulDownUpRescueApplied?: boolean;
 
+  // ── Section 4: RECOVERY EVIDENCE ──
+  ownerAuthoritativeRecoverySatisfied: boolean;
   standingFinalizeSatisfied?: boolean;
   standingRecoveryFinalizeReason?: string | null;
 
+  // ── Section 5: ANTI-FALSE-PASS GUARD ──
+  /** setup motion during capture blocked: rejects contract regardless of reversal evidence. */
   setupMotionBlocked?: boolean;
+  /** peak latched at series start (index=0): contamination guard. */
   peakLatchedAtIndex?: number | null;
-  evidenceLabel?: string;
 
-  /** 런타임 shallow 권위 종료 플래그 — contract vs closer 정렬용(입력 fact). */
+  // ── Alignment / split-brain context (observability inputs, not contract gates) ──
+  currentSquatPhase?: string;
+  completionBlockedReason?: string | null;
+  /** Runtime shallow path closed flag — used for split-brain detection (contract vs closer). */
   officialShallowPathClosed?: boolean;
-
-  /** PR-B: guarded trajectory closure proof — reversal evidence OR 에 합류 허용. */
-  guardedShallowTrajectoryClosureProofSatisfied?: boolean;
-  /** PR-B: 현재 completion pass reason — split-brain 감지 보강용(입력 fact). */
+  /** Current completion pass reason — split-brain detection (PR-B). */
   completionPassReason?: string;
 }
 
