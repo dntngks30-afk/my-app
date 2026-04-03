@@ -459,6 +459,15 @@ export interface SquatCompletionState extends MotionCompletionResult {
   /** PR-04E2: 역전 확정 경로 — completion-state 소유, HMM assist와 별도 rule_plus_hmm bridge 가능 */
   /** PR-CAM-31: 명시 역전 미탐 시 guarded trajectory 구조 보조( finalize·복귀 증거 잠금 후에만 ) */
   reversalConfirmedBy?: 'rule' | 'rule_plus_hmm' | 'trajectory' | null;
+  /**
+   * PR-9-MEANINGFUL-SHALLOW-DEFAULT-PASS:
+   * revConf.reversalConfirmed || hmmReversalAssistDecision.assistApplied
+   * (officialShallowStreamBridgeApplied 제외).
+   * true → rule 또는 HMM이 역전을 확인. stream bridge만으로는 true가 되지 않는다.
+   * false → rule·HMM 역전 없음 — bridge만 있는 경우. weak-event gate를 우회할 수 없다.
+   * canonical shallow contract의 weakEventProofSubstitutionBlocked 게이트 강화 입력.
+   */
+  reversalConfirmedByRuleOrHmm?: boolean;
   /** PR-CAM-REVERSAL-TAIL-BACKFILL-01: standing tail 증거로 역전 앵커만 늦게 backfill (성공 게이트 아님) */
   reversalTailBackfillApplied?: boolean;
   /** PR-DOWNUP-GUARANTEE-03: ultra-shallow에서 closure 번들 없이 finalize+되돌림으로 progression 앵커 보강 */
@@ -2301,6 +2310,7 @@ function evaluateSquatCompletionCore(
       eventCycleSource: null,
       reversalConfirmedAfterDescend: false,
       recoveryConfirmedAfterReversal: false,
+      reversalConfirmedByRuleOrHmm: false,
       eventBasedDescentPath: false,
       baselineSeeded: false,
       reversalTailBackfillApplied: false,
@@ -3335,6 +3345,16 @@ function evaluateSquatCompletionCore(
     reversalConfirmedAfterDescend,
     recoveryConfirmedAfterReversal:
       standingRecovery.standingRecoveredAtMs != null && progressionReversalFrame != null,
+    /**
+     * PR-9-MEANINGFUL-SHALLOW-DEFAULT-PASS: rule/HMM 역전 확인 여부 (bridge 제외).
+     * isUltraLowRomDirectCloseEligible의 reversalConfirmedByRuleOrHmm과 동일 계산.
+     * canonical shallow contract의 weakEventProofSubstitutionBlocked 게이트 강화용.
+     * stream bridge는 ownerAuthoritativeReversalSatisfied를 true로 만들지만,
+     * weak-event 패턴(eventCycleDetected=false, descentFrames=0)에서 단독으로
+     * 게이트를 통과할 수 없다. rule 또는 HMM 확인이 필요하다.
+     */
+    reversalConfirmedByRuleOrHmm:
+      revConf.reversalConfirmed || hmmReversalAssistDecision.assistApplied === true,
     eventBasedDescentPath,
     baselineSeeded: hasFiniteSeedPrimary,
     trajectoryReversalRescueApplied,
@@ -4765,6 +4785,20 @@ function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
      */
     eventCycleHasFreezeOrLatchMissing:
       s.squatEventCycle?.notes?.includes('freeze_or_latch_missing') ?? false,
+
+    // ── PR-9: non-degenerate commitment + gold-path reversal integrity ──
+    /**
+     * PR-9-MEANINGFUL-SHALLOW-DEFAULT-PASS: actual descent delta from pre-peak baseline.
+     * 0 → no actual descent occurred (standing at rest at depth threshold).
+     * undefined → not yet computed (gate bypassed in contract — conservative).
+     */
+    downwardCommitmentDelta: s.downwardCommitmentDelta,
+    /**
+     * PR-9-MEANINGFUL-SHALLOW-DEFAULT-PASS: rule/HMM reversal confirmed (bridge excluded).
+     * Used to tighten weak-event gate: stream bridge alone cannot bypass it.
+     * undefined → gate bypassed (state not yet computed).
+     */
+    reversalConfirmedByRuleOrHmm: s.reversalConfirmedByRuleOrHmm,
   };
 }
 

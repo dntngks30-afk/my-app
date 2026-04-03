@@ -61,6 +61,15 @@ export type CanonicalShallowCompletionContractBlockedReason =
    * when the event cycle shows no real descent was detected.
    */
   | 'weak_event_proof_substitution_blocked'
+  /**
+   * PR-9-MEANINGFUL-SHALLOW-DEFAULT-PASS:
+   * downwardCommitmentDelta === 0 — no actual descent from pre-peak baseline.
+   * Happens when downwardCommitmentReached=true only because relativeDepthPeak >= floor,
+   * not because the person actually moved downward from baseline. Standing at rest
+   * satisfying the depth threshold without active descent must not authorize official close.
+   * Bridge/proof cannot substitute for non-degenerate commitment movement.
+   */
+  | 'non_degenerate_commitment_blocked'
   | 'recovery_or_finalize_missing'
   | 'setup_motion_blocked'
   | 'peak_series_start_contamination'
@@ -186,6 +195,31 @@ export interface CanonicalShallowCompletionContractInput {
    */
   eventCycleHasFreezeOrLatchMissing?: boolean;
 
+  // ── Section 9: NON-DEGENERATE COMMITMENT INTEGRITY (PR-9) ──
+  /**
+   * PR-9-MEANINGFUL-SHALLOW-DEFAULT-PASS:
+   * Actual descent depth change from pre-peak baseline to peak (raw units).
+   * 0 → no actual descent occurred — standing at rest at depth threshold without moving.
+   * Must be > 0 for non-degenerate commitment. Does not require a new threshold.
+   * undefined → gate bypassed (state not yet computed or commitment path unavailable).
+   */
+  downwardCommitmentDelta?: number;
+
+  // ── Section 10: GOLD-PATH REVERSAL INTEGRITY (PR-9) ──
+  /**
+   * PR-9-MEANINGFUL-SHALLOW-DEFAULT-PASS:
+   * revConf.reversalConfirmed || hmmReversalAssistDecision.assistApplied
+   * (officialShallowStreamBridgeApplied 제외).
+   * true → reversal confirmed by rule detection or HMM assist (not just stream bridge).
+   * false → only stream bridge/proof sources — cannot override the weak-event gate alone.
+   * undefined → gate bypassed (state not yet populated).
+   *
+   * Stream bridge sets ownerAuthoritativeReversalSatisfied=true but is a secondary signal.
+   * When the event cycle shows no real descent (eventCycleDetected=false, descentFrames=0),
+   * bridge-only reversal must not bypass the weak-event gate. Rule or HMM is required.
+   */
+  reversalConfirmedByRuleOrHmm?: boolean;
+
   // ── Alignment / split-brain context (observability inputs, not contract gates) ──
   currentSquatPhase?: string;
   completionBlockedReason?: string | null;
@@ -217,6 +251,12 @@ export interface CanonicalShallowCompletionContract {
    * or freeze_or_latch_missing was the current completion blocker).
    */
   repEpochIntegrityClear: boolean;
+  /**
+   * PR-9-MEANINGFUL-SHALLOW-DEFAULT-PASS:
+   * false when downwardCommitmentDelta === 0 — no actual descent from pre-peak baseline.
+   * Standing at rest at depth threshold (no movement) must not authorize official close.
+   */
+  nonDegenerateCommitmentClear: boolean;
   reversalEvidenceSatisfied: boolean;
   recoveryEvidenceSatisfied: boolean;
   antiFalsePassClear: boolean;
@@ -322,24 +362,55 @@ function repEpochIntegrityClearFromInput(input: CanonicalShallowCompletionContra
 }
 
 /**
- * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY: Weak-event proof substitution gate.
+ * PR-9-MEANINGFUL-SHALLOW-DEFAULT-PASS: Non-degenerate commitment integrity gate.
+ *
+ * Returns false (= BLOCKED) when downwardCommitmentDelta === 0 (exactly zero).
+ * Zero delta means no actual descent occurred from the pre-peak baseline — the person
+ * was at rest at a depth that happened to satisfy the depth threshold without moving.
+ * This can occur when `downwardCommitmentReached=true` only because
+ * `relativeDepthPeak >= attemptAdmissionFloor`, not because the person squatted.
+ *
+ * Standing at rest at depth / micro-posture-shift cases must not authorize official close.
+ * Bridge/proof cannot substitute for non-degenerate movement commitment.
+ *
+ * Returns true (= not blocked) when:
+ * - delta > 0 (actual descent happened), OR
+ * - delta is undefined (gate bypassed — state not computed yet)
+ *
+ * Existing signal reuse only — delta is already tracked in state; no new numeric threshold.
+ */
+function nonDegenerateCommitmentClearFromInput(
+  input: CanonicalShallowCompletionContractInput
+): boolean {
+  // Only block when explicitly 0 — undefined is bypassed (conservative)
+  if (input.downwardCommitmentDelta === 0) return false;
+  return true;
+}
+
+/**
+ * PR-8 + PR-9-MEANINGFUL-SHALLOW-DEFAULT-PASS: Weak-event proof substitution gate.
  *
  * Returns true (= BLOCKED) when all three conditions hold simultaneously:
  * 1. event cycle was NOT detected (`eventCycleDetected = false`)
  * 2. event cycle notes include 'descent_weak' (no meaningful descent quality)
  * 3. event cycle had zero descent frames (`eventCycleDescentFrames = 0`)
  *
- * AND the only reversal evidence available is bridge/proof (not ownerAuthoritativeReversalSatisfied).
+ * AND rule/HMM reversal was NOT confirmed independently (`reversalConfirmedByRuleOrHmm !== true`).
  *
- * In this pattern, bridge/proof signals are acting as a substitute for real cycle truth.
- * `official_shallow_cycle` must not open based on proof-only evidence when event cycle
- * shows no real descent was detected. Bridge/proof are secondary signals — not reversal proof.
+ * PR-8 originally checked `ownerAuthoritativeReversalSatisfied !== true` here.
+ * PR-9 tightens this: `ownerAuthoritativeReversalSatisfied` INCLUDES stream bridge,
+ * which sets it to true even for bridge-only reversals. When the event cycle shows
+ * no real descent (not detected + descent_weak + descentFrames=0), bridge-only reversal
+ * must NOT bypass this gate — rule or HMM reversal is required.
+ *
+ * Bridge/proof are secondary signals (assist role). They can assist AFTER real descent
+ * evidence exists, but cannot substitute for real cycle truth when event cycle shows nothing.
  *
  * Returns false (= not blocked) when:
  * - event cycle was detected, OR
  * - no descent_weak note, OR
  * - descent frames > 0, OR
- * - ownerAuthoritativeReversalSatisfied is true (rule/HMM confirmed reversal independently)
+ * - reversalConfirmedByRuleOrHmm === true (rule/HMM confirmed reversal independently of bridge)
  */
 function weakEventProofSubstitutionBlockedFromInput(
   input: CanonicalShallowCompletionContractInput
@@ -347,10 +418,19 @@ function weakEventProofSubstitutionBlockedFromInput(
   if (
     input.eventCycleDetected === false &&
     input.eventCycleHasDescentWeak === true &&
-    (input.eventCycleDescentFrames ?? 1) === 0 &&
-    input.ownerAuthoritativeReversalSatisfied !== true
+    (input.eventCycleDescentFrames ?? 1) === 0
   ) {
-    return true;
+    // PR-9: when reversalConfirmedByRuleOrHmm is explicitly provided, use it (stricter).
+    // Stream bridge alone (reversalConfirmedByRuleOrHmm=false) cannot override this gate.
+    // When undefined (field not populated / pre-PR-9 caller), fall back to PR-8 behavior:
+    // ownerAuthoritativeReversalSatisfied — maintains backward compat with existing callers.
+    const strictReversalClear =
+      input.reversalConfirmedByRuleOrHmm !== undefined
+        ? input.reversalConfirmedByRuleOrHmm === true
+        : input.ownerAuthoritativeReversalSatisfied === true;
+    if (!strictReversalClear) {
+      return true;
+    }
   }
   return false;
 }
@@ -424,6 +504,20 @@ function firstBlockedReason(input: CanonicalShallowCompletionContractInput): {
     return { reason: 'no_commitment', stage: 'attempt_blocked' };
   }
 
+  /**
+   * PR-9-MEANINGFUL-SHALLOW-DEFAULT-PASS: Non-degenerate commitment gate.
+   *
+   * Placed after downwardCommitmentReached: commitment must be present AND non-degenerate.
+   * downwardCommitmentDelta=0 means the person was at depth threshold already (standing at rest)
+   * without any actual descent from pre-peak baseline. This is the standing micro-motion pattern.
+   * Bridge/proof cannot authorize close when commitment was degenerate (no real movement).
+   *
+   * Existing signal reuse only — delta is already tracked in state; no new numeric threshold.
+   */
+  if (!nonDegenerateCommitmentClearFromInput(input)) {
+    return { reason: 'non_degenerate_commitment_blocked', stage: 'attempt_blocked' };
+  }
+
   if (!reversalEvidenceFromInput(input)) {
     return { reason: 'authoritative_reversal_missing', stage: 'reversal_blocked' };
   }
@@ -488,8 +582,10 @@ export function deriveCanonicalShallowCompletionContract(
   const minimumCycleTimingClear = minimumCycleTimingClearFromInput(input);
   // PR-8: fresh-rep epoch integrity gate — baseline and peak must be established.
   const repEpochIntegrityClear = repEpochIntegrityClearFromInput(input);
-  // PR-8: weak-event proof substitution blocked — bridge/proof cannot substitute for
-  // authoritative reversal when event cycle shows no real descent was detected.
+  // PR-9: non-degenerate commitment gate — actual descent from baseline must have occurred.
+  const nonDegenerateCommitmentClear = nonDegenerateCommitmentClearFromInput(input);
+  // PR-8+PR-9: weak-event proof substitution blocked — stream bridge cannot override the
+  // weak-event gate; rule/HMM reversal required when event cycle shows no real descent.
   const weakEventProofSubstitutionBlocked = weakEventProofSubstitutionBlockedFromInput(input);
 
   const satisfied =
@@ -499,6 +595,7 @@ export function deriveCanonicalShallowCompletionContract(
     timingIntegrityClear &&
     minimumCycleTimingClear &&
     repEpochIntegrityClear &&
+    nonDegenerateCommitmentClear &&
     reversalEvidenceSatisfied &&
     !weakEventProofSubstitutionBlocked &&
     recoveryEvidenceSatisfied &&
@@ -561,6 +658,7 @@ export function deriveCanonicalShallowCompletionContract(
     `timing=${timingIntegrityClear ? 1 : 0}`,
     `minCycle=${minimumCycleTimingClear ? 1 : 0}`,
     `epoch=${repEpochIntegrityClear ? 1 : 0}`,
+    `nonDegCommit=${nonDegenerateCommitmentClear ? 1 : 0}`,
     `reversal=${reversalEvidenceSatisfied ? 1 : 0}`,
     `weakEvtBlock=${weakEventProofSubstitutionBlocked ? 1 : 0}`,
     `recovery=${recoveryEvidenceSatisfied ? 1 : 0}`,
@@ -579,6 +677,7 @@ export function deriveCanonicalShallowCompletionContract(
     timingIntegrityClear,
     minimumCycleTimingClear,
     repEpochIntegrityClear,
+    nonDegenerateCommitmentClear,
     reversalEvidenceSatisfied,
     recoveryEvidenceSatisfied,
     antiFalsePassClear,
