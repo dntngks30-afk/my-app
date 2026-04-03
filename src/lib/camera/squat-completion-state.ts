@@ -4662,6 +4662,14 @@ function buildShallowClosureProofTrace(input: {
   };
 }
 
+/**
+ * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY:
+ * Minimum cycle duration for official shallow close (descent start → standing recovered).
+ * Mirrors SQUAT_ARMING_MS = 1500 in auto-progression — this is NOT a new threshold.
+ * Used in buildCanonicalShallowContractInputFromState to compute minimumCycleDurationSatisfied.
+ */
+const SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS = 1500;
+
 /** PR-CAM-CANONICAL-SHALLOW-CONTRACT-01: 이미 계산된 state fact 만 canonical 입력으로 넘긴다. */
 function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
   /**
@@ -4718,6 +4726,45 @@ function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
     guardedShallowTrajectoryClosureProofSatisfied: s.guardedShallowTrajectoryClosureProofSatisfied === true,
     /** PR-B: split-brain 감지 보강용 */
     completionPassReason: s.completionPassReason ?? undefined,
+
+    // ── PR-8: timing + epoch + weak-event gates ──
+    /**
+     * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY: minimum cycle duration.
+     * cycleDurationMs is defined when descent start and standing recovered are both known.
+     * undefined → gate bypassed (conservative; completionSatisfied would be false anyway).
+     */
+    minimumCycleDurationSatisfied:
+      s.cycleDurationMs != null
+        ? s.cycleDurationMs >= SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS
+        : undefined,
+    /**
+     * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY: baseline frozen for current rep.
+     * false → pre-freeze / pre-attempt epoch — official close blocked.
+     * undefined → gate bypassed (state not yet set).
+     */
+    baselineFrozen: s.baselineFrozen,
+    /**
+     * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY: peak latched for current rep.
+     * false → pre-latch epoch — official close blocked.
+     * undefined → gate bypassed (state not yet set).
+     */
+    peakLatched: s.peakLatched,
+    /**
+     * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY: event cycle detected.
+     * false + descent_weak + descentFrames=0 → proof/bridge cannot substitute for authoritative reversal.
+     */
+    eventCycleDetected: s.squatEventCycle?.detected,
+    /** PR-8: event cycle has descent_weak note — weak descent quality flag. */
+    eventCycleHasDescentWeak: s.squatEventCycle?.notes?.includes('descent_weak') ?? false,
+    /** PR-8: number of descent frames in event cycle — 0 means no real descent detected. */
+    eventCycleDescentFrames: s.squatEventCycle?.descentFrames,
+    /**
+     * PR-8: event cycle notes include 'freeze_or_latch_missing'.
+     * detectSquatEventCycle adds this when baselineFrozen=false or peakLatched=false at
+     * evaluation time — a fresh-rep epoch integrity violation at event cycle level.
+     */
+    eventCycleHasFreezeOrLatchMissing:
+      s.squatEventCycle?.notes?.includes('freeze_or_latch_missing') ?? false,
   };
 }
 

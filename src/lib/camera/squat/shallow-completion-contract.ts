@@ -40,6 +40,27 @@ export type CanonicalShallowCompletionContractBlockedReason =
    * This blocks `official_shallow_cycle` even when reversal evidence is otherwise present.
    */
   | 'timing_integrity_blocked'
+  /**
+   * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY:
+   * Minimum cycle duration not satisfied — total cycle (descent start → standing recovered)
+   * is shorter than the required floor. Proof/bridge cannot substitute for cycle timing.
+   */
+  | 'minimum_cycle_timing_blocked'
+  /**
+   * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY:
+   * Fresh-rep epoch integrity missing — baseline not frozen, peak not latched, or
+   * freeze_or_latch_missing was the current completion blocker.
+   * Pre-attempt / pre-freeze / pre-latch history must not be laundered into official close.
+   */
+  | 'rep_epoch_integrity_blocked'
+  /**
+   * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY:
+   * Weak-event pattern detected (eventCycleDetected=false + descent_weak + descentFrames=0)
+   * and only bridge/proof reversal signals are present — not ownerAuthoritativeReversalSatisfied.
+   * Bridge/proof are secondary signals; they cannot substitute for authoritative reversal
+   * when the event cycle shows no real descent was detected.
+   */
+  | 'weak_event_proof_substitution_blocked'
   | 'recovery_or_finalize_missing'
   | 'setup_motion_blocked'
   | 'peak_series_start_contamination'
@@ -120,6 +141,51 @@ export interface CanonicalShallowCompletionContractInput {
   /** peak latched at series start (index=0): contamination guard. */
   peakLatchedAtIndex?: number | null;
 
+  // ── Section 6: TIMING INTEGRITY (PR-8) ──
+  /**
+   * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY:
+   * Total cycle (descent start → standing recovered) meets minimum duration.
+   * false → official_shallow_cycle cannot open regardless of proof/bridge signals.
+   * undefined → gate is bypassed (cycle not yet complete or duration not computed).
+   */
+  minimumCycleDurationSatisfied?: boolean;
+
+  // ── Section 7: FRESH-REP EPOCH INTEGRITY (PR-8) ──
+  /**
+   * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY:
+   * Baseline was frozen for the current rep (depthFreeze applied).
+   * false → pre-attempt / pre-freeze epoch — official close blocked.
+   * undefined → gate is bypassed (conservative — only block when explicitly false).
+   */
+  baselineFrozen?: boolean;
+  /**
+   * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY:
+   * Depth peak was latched for the current rep.
+   * false → pre-latch epoch — official close blocked.
+   * undefined → gate is bypassed (conservative — only block when explicitly false).
+   */
+  peakLatched?: boolean;
+
+  // ── Section 8: WEAK-EVENT GATE (PR-8) ──
+  /**
+   * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY:
+   * Whether the event cycle was detected at all.
+   * false + eventCycleHasDescentWeak=true + eventCycleDescentFrames=0 → proof/bridge
+   * cannot substitute for ownerAuthoritativeReversalSatisfied.
+   */
+  eventCycleDetected?: boolean;
+  /** PR-8: event cycle notes include 'descent_weak' — weak descent quality indicator. */
+  eventCycleHasDescentWeak?: boolean;
+  /** PR-8: number of descent frames detected in event cycle. 0 = no real descent frames. */
+  eventCycleDescentFrames?: number;
+  /**
+   * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY: event cycle notes include 'freeze_or_latch_missing'.
+   * detectSquatEventCycle adds this note when baseline was not frozen or peak was not latched
+   * at event cycle evaluation time. Indicates a rep epoch integrity violation at the event level.
+   * Official close must not proceed when the event cycle itself observed this condition.
+   */
+  eventCycleHasFreezeOrLatchMissing?: boolean;
+
   // ── Alignment / split-brain context (observability inputs, not contract gates) ──
   currentSquatPhase?: string;
   completionBlockedReason?: string | null;
@@ -139,6 +205,18 @@ export interface CanonicalShallowCompletionContract {
    * reversal evidence (bridge/proof) signals are present.
    */
   timingIntegrityClear: boolean;
+  /**
+   * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY:
+   * false when total cycle duration is below minimum floor (minimumCycleDurationSatisfied=false).
+   * Proof/bridge signals cannot override timing floor failures.
+   */
+  minimumCycleTimingClear: boolean;
+  /**
+   * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY:
+   * false when baseline or peak epoch integrity is missing (baselineFrozen=false, peakLatched=false,
+   * or freeze_or_latch_missing was the current completion blocker).
+   */
+  repEpochIntegrityClear: boolean;
   reversalEvidenceSatisfied: boolean;
   recoveryEvidenceSatisfied: boolean;
   antiFalsePassClear: boolean;
@@ -208,6 +286,75 @@ function timingIntegrityClearFromInput(input: CanonicalShallowCompletionContract
   return br !== 'descent_span_too_short' && br !== 'ascent_recovery_span_too_short';
 }
 
+/**
+ * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY: Minimum cycle duration gate.
+ *
+ * Returns false when the total cycle duration is explicitly below the minimum floor.
+ * `minimumCycleDurationSatisfied = false` means the cycle was too short — proof/bridge
+ * signals do NOT override this. Timing is a hard gate, not a soft suggestion.
+ *
+ * Note: undefined → gate bypassed (cycle not yet complete or duration not computed).
+ * The 1500ms floor matches SQUAT_ARMING_MS in auto-progression (not a new threshold).
+ */
+function minimumCycleTimingClearFromInput(input: CanonicalShallowCompletionContractInput): boolean {
+  return input.minimumCycleDurationSatisfied !== false;
+}
+
+/**
+ * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY: Fresh-rep epoch integrity gate.
+ *
+ * Returns false when the current rep epoch is missing baseline or peak integrity:
+ * - `baselineFrozen = false`: baseline not established for current rep → pre-attempt close
+ * - `peakLatched = false`: depth peak not latched for current rep → no real descent anchor
+ * - `eventCycleHasFreezeOrLatchMissing = true`: event cycle itself observed missing freeze/latch
+ *   (detectSquatEventCycle adds 'freeze_or_latch_missing' note when baseline/peak not ready)
+ *
+ * These pre-attempt / pre-freeze / pre-latch history patterns must not be laundered into
+ * later official close through bridge/proof signals.
+ *
+ * Note: undefined → gate bypassed (conservative — only block when explicitly false/true).
+ */
+function repEpochIntegrityClearFromInput(input: CanonicalShallowCompletionContractInput): boolean {
+  if (input.baselineFrozen === false) return false;
+  if (input.peakLatched === false) return false;
+  if (input.eventCycleHasFreezeOrLatchMissing === true) return false;
+  return true;
+}
+
+/**
+ * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY: Weak-event proof substitution gate.
+ *
+ * Returns true (= BLOCKED) when all three conditions hold simultaneously:
+ * 1. event cycle was NOT detected (`eventCycleDetected = false`)
+ * 2. event cycle notes include 'descent_weak' (no meaningful descent quality)
+ * 3. event cycle had zero descent frames (`eventCycleDescentFrames = 0`)
+ *
+ * AND the only reversal evidence available is bridge/proof (not ownerAuthoritativeReversalSatisfied).
+ *
+ * In this pattern, bridge/proof signals are acting as a substitute for real cycle truth.
+ * `official_shallow_cycle` must not open based on proof-only evidence when event cycle
+ * shows no real descent was detected. Bridge/proof are secondary signals — not reversal proof.
+ *
+ * Returns false (= not blocked) when:
+ * - event cycle was detected, OR
+ * - no descent_weak note, OR
+ * - descent frames > 0, OR
+ * - ownerAuthoritativeReversalSatisfied is true (rule/HMM confirmed reversal independently)
+ */
+function weakEventProofSubstitutionBlockedFromInput(
+  input: CanonicalShallowCompletionContractInput
+): boolean {
+  if (
+    input.eventCycleDetected === false &&
+    input.eventCycleHasDescentWeak === true &&
+    (input.eventCycleDescentFrames ?? 1) === 0 &&
+    input.ownerAuthoritativeReversalSatisfied !== true
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function firstBlockedReason(input: CanonicalShallowCompletionContractInput): {
   reason: CanonicalShallowCompletionContractBlockedReason;
   stage: CanonicalShallowCompletionContractStage;
@@ -237,12 +384,34 @@ function firstBlockedReason(input: CanonicalShallowCompletionContractInput): {
    *
    * Why here (before reversal evidence check): proof signals are the last step, not an
    * override for timing integrity. The contract integrity order is:
-   *   1. admission → 2. timing integrity → 3. reversal evidence → 4. recovery → 5. anti-false-pass
+   *   1. admission → 2. epoch → 3. timing integrity → 4. reversal evidence → 5. recovery → 6. anti-false-pass
    *
    * Existing signal reuse only — no new numeric thresholds.
    */
   if (br === 'descent_span_too_short' || br === 'ascent_recovery_span_too_short') {
     return { reason: 'timing_integrity_blocked', stage: 'reversal_blocked' };
+  }
+
+  /**
+   * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY: Minimum cycle duration gate.
+   *
+   * If total cycle duration is explicitly below the minimum floor, official close is blocked.
+   * Placed here (before attempt checks) because timing is a hard gate that proof cannot override.
+   * Any attempt-level or reversal-level evidence is moot if the cycle was too short.
+   */
+  if (!minimumCycleTimingClearFromInput(input)) {
+    return { reason: 'minimum_cycle_timing_blocked', stage: 'reversal_blocked' };
+  }
+
+  /**
+   * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY: Rep epoch integrity — baselineFrozen / peakLatched.
+   *
+   * If baseline was not frozen or peak not latched for the current rep, official close is blocked.
+   * These indicate a pre-attempt or contaminated epoch. Placed before attempt checks because
+   * even if `attemptStarted=true` via some assist path, the epoch integrity is still required.
+   */
+  if (!repEpochIntegrityClearFromInput(input)) {
+    return { reason: 'rep_epoch_integrity_blocked', stage: 'attempt_blocked' };
   }
 
   if (!input.attemptStarted) {
@@ -257,6 +426,20 @@ function firstBlockedReason(input: CanonicalShallowCompletionContractInput): {
 
   if (!reversalEvidenceFromInput(input)) {
     return { reason: 'authoritative_reversal_missing', stage: 'reversal_blocked' };
+  }
+
+  /**
+   * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY: Weak-event proof substitution gate.
+   *
+   * Placed after reversal evidence check: reversal evidence (including bridge/proof) may be
+   * present, but if the event cycle shows no real descent (not detected + descent_weak +
+   * descentFrames=0) AND no authoritative reversal (rule/HMM), those bridge/proof signals
+   * are acting as a substitute for real cycle truth, not as a post-integrity assist.
+   *
+   * Bridge/proof are allowed to assist AFTER integrity gates pass, not instead of them.
+   */
+  if (weakEventProofSubstitutionBlockedFromInput(input)) {
+    return { reason: 'weak_event_proof_substitution_blocked', stage: 'reversal_blocked' };
   }
 
   if (!recoveryEvidenceFromInput(input)) {
@@ -301,13 +484,23 @@ export function deriveCanonicalShallowCompletionContract(
   // PR-7: timing integrity gate — timing blockers from core must block the contract
   // even when bridge/proof reversal evidence signals are present.
   const timingIntegrityClear = timingIntegrityClearFromInput(input);
+  // PR-8: minimum cycle duration gate — total cycle must meet the minimum floor.
+  const minimumCycleTimingClear = minimumCycleTimingClearFromInput(input);
+  // PR-8: fresh-rep epoch integrity gate — baseline and peak must be established.
+  const repEpochIntegrityClear = repEpochIntegrityClearFromInput(input);
+  // PR-8: weak-event proof substitution blocked — bridge/proof cannot substitute for
+  // authoritative reversal when event cycle shows no real descent was detected.
+  const weakEventProofSubstitutionBlocked = weakEventProofSubstitutionBlockedFromInput(input);
 
   const satisfied =
     eligible &&
     admissionSatisfied &&
     attemptSatisfied &&
     timingIntegrityClear &&
+    minimumCycleTimingClear &&
+    repEpochIntegrityClear &&
     reversalEvidenceSatisfied &&
+    !weakEventProofSubstitutionBlocked &&
     recoveryEvidenceSatisfied &&
     antiFalsePassClear;
 
@@ -366,7 +559,10 @@ export function deriveCanonicalShallowCompletionContract(
     `admission=${admissionSatisfied ? 1 : 0}`,
     `attempt=${attemptSatisfied ? 1 : 0}`,
     `timing=${timingIntegrityClear ? 1 : 0}`,
+    `minCycle=${minimumCycleTimingClear ? 1 : 0}`,
+    `epoch=${repEpochIntegrityClear ? 1 : 0}`,
     `reversal=${reversalEvidenceSatisfied ? 1 : 0}`,
+    `weakEvtBlock=${weakEventProofSubstitutionBlocked ? 1 : 0}`,
     `recovery=${recoveryEvidenceSatisfied ? 1 : 0}`,
     `anti=${antiFalsePassClear ? 1 : 0}`,
     `split=${splitBrainDetected ? 1 : 0}`,
@@ -381,6 +577,8 @@ export function deriveCanonicalShallowCompletionContract(
     admissionSatisfied,
     attemptSatisfied,
     timingIntegrityClear,
+    minimumCycleTimingClear,
+    repEpochIntegrityClear,
     reversalEvidenceSatisfied,
     recoveryEvidenceSatisfied,
     antiFalsePassClear,
