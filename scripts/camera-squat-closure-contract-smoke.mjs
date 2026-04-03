@@ -61,6 +61,7 @@ console.log('\ncamera-squat-closure-contract-smoke\n');
       officialShallowPathCandidate: false,
       officialShallowPathAdmitted: false,
       shallowRomClosureProofSignals: false,
+      ultraLowRomFreshCycleIntegrity: false,
     }) === 'standard_cycle'
   );
   ok(
@@ -73,6 +74,7 @@ console.log('\ncamera-squat-closure-contract-smoke\n');
       officialShallowPathCandidate: true,
       officialShallowPathAdmitted: true,
       shallowRomClosureProofSignals: true,
+      ultraLowRomFreshCycleIntegrity: true,
     }) === 'not_confirmed'
   );
 }

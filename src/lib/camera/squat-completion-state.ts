@@ -1624,11 +1624,39 @@ function getSquatEvidenceLabel(
 }
 
 /**
+ * PR-7-CORRECTED: ultra-low ROM core direct close 최소 무결성 계약.
+ *
+ * stream bridge / ascent-equivalent / closure proof 신호는 보조 역할만 한다.
+ * 이 함수가 false 를 반환하면 `ultra_low_rom_cycle` 직접 close 는 열리지 않는다.
+ *
+ * 두 조건이 모두 필요하다:
+ *   1. hasValidCommittedPeakAnchor: baseline frozen + peak latched → fresh cycle 앵커
+ *   2. reversalConfirmedByRuleOrHmm: rule/HMM 기반 역전 (officialShallowStreamBridgeApplied 제외)
+ *
+ * 이 함수가 false 를 반환하는 케이스:
+ *   - pre-attempt / not_armed / freeze_or_latch_missing 이력 있는 ultra-low
+ *   - stream-bridge-only ultra-low (officialShallowStreamBridgeApplied 만 존재)
+ *   - eventCycleDetected=false + weak descent ultra-low
+ *   - baseline/latch 없는 반복 stale-like shallow ultra-low
+ */
+export function isUltraLowRomDirectCloseEligible(params: {
+  /** committedFrame + committedOrPostCommitPeakFrame 기반 fresh cycle anchor 존재 여부 */
+  hasValidCommittedPeakAnchor: boolean;
+  /** revConf.reversalConfirmed || hmmReversalAssistApplied — officialShallowStreamBridgeApplied 제외 */
+  reversalConfirmedByRuleOrHmm: boolean;
+}): boolean {
+  return params.hasValidCommittedPeakAnchor === true && params.reversalConfirmedByRuleOrHmm === true;
+}
+
+/**
  * PR-SQUAT-COMPLETION-REARCH-01 — Subcontract C: `completionPassReason` 단일 결정점.
  * (1) blocked → not_confirmed
  * (2) standard owner 대역 + 비이벤트 descent → standard_cycle
  * (3) official shallow admission + shallow owner 대역 + closure 증거(번들/브리지/역전) → *_cycle
  * (4) evidence/owner-shallow 밴드·derive 잔여
+ *
+ * PR-7-CORRECTED: (3)·(4)에서 ultra_low_rom_cycle 은 ultraLowRomFreshCycleIntegrity=true 일 때만 열린다.
+ * stream-bridge-only / pre-attempt / freeze-latch-missing 패턴은 not_confirmed 로 차단된다.
  */
 export function resolveSquatCompletionPath(params: {
   completionBlockedReason: string | null;
@@ -1639,6 +1667,12 @@ export function resolveSquatCompletionPath(params: {
   officialShallowPathAdmitted: boolean;
   /** 번들·stream bridge·strict reversal·progression 앵커 등 shallow ROM 통과 증거 */
   shallowRomClosureProofSignals: boolean;
+  /**
+   * PR-7-CORRECTED: ultra_low_rom_cycle 직접 close 무결성 플래그.
+   * = isUltraLowRomDirectCloseEligible(hasValidCommittedPeakAnchor, reversalConfirmedByRuleOrHmm).
+   * false 이면 ultra_low_rom_cycle 은 열리지 않고 not_confirmed 반환.
+   */
+  ultraLowRomFreshCycleIntegrity: boolean;
 }): SquatCompletionPassReason {
   if (params.completionBlockedReason != null) return 'not_confirmed';
 
@@ -1656,7 +1690,11 @@ export function resolveSquatCompletionPath(params: {
     params.shallowRomClosureProofSignals === true;
 
   if (explicitShallowRomClosure) {
-    if (params.evidenceLabel === 'ultra_low_rom') return 'ultra_low_rom_cycle';
+    if (params.evidenceLabel === 'ultra_low_rom') {
+      // PR-7-CORRECTED: fresh cycle integrity 없이는 ultra_low_rom_cycle 을 열 수 없다.
+      // stream-bridge-only / pre-attempt / freeze-latch-missing 패턴은 이 gate 에서 차단.
+      return params.ultraLowRomFreshCycleIntegrity ? 'ultra_low_rom_cycle' : 'not_confirmed';
+    }
     return 'low_rom_cycle';
   }
 
@@ -1666,7 +1704,11 @@ export function resolveSquatCompletionPath(params: {
     params.relativeDepthPeak < STANDARD_OWNER_FLOOR;
 
   if (params.evidenceLabel === 'low_rom') return 'low_rom_cycle';
-  if (params.evidenceLabel === 'ultra_low_rom') return 'ultra_low_rom_cycle';
+  if (params.evidenceLabel === 'ultra_low_rom') {
+    // PR-7-CORRECTED: evidence-label fallback path 에서도 동일 gate 적용.
+    // explicitShallowRomClosure 가 false 인데 ultra_low_rom 인 경우도 integrity 없이 열면 안 된다.
+    return params.ultraLowRomFreshCycleIntegrity ? 'ultra_low_rom_cycle' : 'not_confirmed';
+  }
   if (standardEvidenceOwnerShallowBand) return 'low_rom_cycle';
   return deriveSquatCompletionPassReason({
     completionSatisfied: true,
@@ -3026,6 +3068,19 @@ function evaluateSquatCompletionCore(
     revConf.reversalConfirmed ||
     reversalConfirmedAfterDescend;
 
+  /**
+   * PR-7-CORRECTED: ultra_low_rom_cycle 직접 close 무결성 플래그.
+   * stream bridge 단독으로는 ultra_low_rom_cycle 을 열 수 없다.
+   * - hasValidCommittedPeakAnchor: fresh cycle anchor (baseline frozen + peak latched)
+   * - revConf.reversalConfirmed || hmmReversalAssistDecision.assistApplied: rule/HMM 기반 역전만 허용
+   *   (officialShallowStreamBridgeApplied 는 ownerAuthoritativeReversalSatisfied 에 포함되지만 여기서 제외)
+   */
+  const ultraLowRomFreshCycleIntegrity = isUltraLowRomDirectCloseEligible({
+    hasValidCommittedPeakAnchor,
+    reversalConfirmedByRuleOrHmm:
+      revConf.reversalConfirmed || hmmReversalAssistDecision.assistApplied === true,
+  });
+
   const shallowAdmissionContract = resolveOfficialShallowAdmissionContract({
     officialShallowPathCandidate,
     armed,
@@ -3045,6 +3100,7 @@ function evaluateSquatCompletionCore(
     officialShallowPathCandidate,
     officialShallowPathAdmitted: shallowAdmissionContract.admitted,
     shallowRomClosureProofSignals,
+    ultraLowRomFreshCycleIntegrity,
   });
 
   let completionSatisfied = completionPassReason !== 'not_confirmed';
