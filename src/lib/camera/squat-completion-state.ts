@@ -4799,6 +4799,18 @@ function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
      * undefined → gate bypassed (state not yet computed).
      */
     reversalConfirmedByRuleOrHmm: s.reversalConfirmedByRuleOrHmm,
+
+    // ── PR-10: current-rep ownership integrity ──
+    /**
+     * PR-10-REP-SEGMENTATION-OWNERSHIP: time from reversal to standing recovery (ms).
+     * squatReversalToStandingMs = standingRecoveredAtMs - reversalAtMs.
+     * A large value indicates the reversal came from a prior attempt (repeated shallow
+     * aggregation, slow-rise laundering): the reversal evidence is stale.
+     * Values exceeding 7500ms (= 5 × SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS) are blocked
+     * by the currentRepOwnershipClear gate in the canonical contract.
+     * undefined → gate bypassed (reversal or standing not yet established).
+     */
+    squatReversalToStandingMs: s.squatReversalToStandingMs,
   };
 }
 

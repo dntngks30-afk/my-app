@@ -70,6 +70,16 @@ export type CanonicalShallowCompletionContractBlockedReason =
    * Bridge/proof cannot substitute for non-degenerate commitment movement.
    */
   | 'non_degenerate_commitment_blocked'
+  /**
+   * PR-10-REP-SEGMENTATION-OWNERSHIP:
+   * The time from reversal to standing recovery exceeds the current-rep maximum.
+   * A very long reversal-to-standing span indicates the reversal came from a prior rep
+   * (e.g., repeated shallow aggregation, slow-rise laundering) rather than the current rep.
+   * Official close requires that reversal and standing recovery belong to the same rep.
+   * Threshold: 5 × SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS (7500ms) — generous for legitimate
+   * slow shallow rises (up to 7.5 s of continuous ascent).
+   */
+  | 'current_rep_ownership_blocked'
   | 'recovery_or_finalize_missing'
   | 'setup_motion_blocked'
   | 'peak_series_start_contamination'
@@ -206,6 +216,18 @@ export interface CanonicalShallowCompletionContractInput {
   downwardCommitmentDelta?: number;
 
   // ── Section 10: GOLD-PATH REVERSAL INTEGRITY (PR-9) ──
+  // ── Section 11: CURRENT-REP OWNERSHIP (PR-10) ──
+  /**
+   * PR-10-REP-SEGMENTATION-OWNERSHIP:
+   * Time from reversal to standing recovery (ms).
+   * squatReversalToStandingMs = standingRecoveredAtMs - reversalAtMs.
+   * A large value indicates the reversal came from a prior attempt: the reversal evidence
+   * is stale (repeated shallow aggregation, slow-rise laundering) and the standing recovery
+   * is from a much later point in time.
+   * Values exceeding SHALLOW_CURRENT_REP_REVERSAL_TO_STANDING_MAX_MS are blocked.
+   * undefined → gate bypassed (reversal or standing not yet established — conservative).
+   */
+  squatReversalToStandingMs?: number;
   /**
    * PR-9-MEANINGFUL-SHALLOW-DEFAULT-PASS:
    * revConf.reversalConfirmed || hmmReversalAssistDecision.assistApplied
@@ -257,6 +279,13 @@ export interface CanonicalShallowCompletionContract {
    * Standing at rest at depth threshold (no movement) must not authorize official close.
    */
   nonDegenerateCommitmentClear: boolean;
+  /**
+   * PR-10-REP-SEGMENTATION-OWNERSHIP:
+   * false when squatReversalToStandingMs exceeds the current-rep maximum (7500ms).
+   * A reversal that is more than 7.5 seconds before the standing recovery almost certainly
+   * belongs to a prior rep — repeated shallow aggregation or slow-rise laundering.
+   */
+  currentRepOwnershipClear: boolean;
   reversalEvidenceSatisfied: boolean;
   recoveryEvidenceSatisfied: boolean;
   antiFalsePassClear: boolean;
@@ -362,6 +391,20 @@ function repEpochIntegrityClearFromInput(input: CanonicalShallowCompletionContra
 }
 
 /**
+ * PR-10-REP-SEGMENTATION-OWNERSHIP: Maximum reversal-to-standing span for current-rep ownership.
+ *
+ * = 5 × SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS (1500ms). Reuses the existing minimum cycle floor.
+ * Rationale: a legitimate slow shallow rise takes at most 5-7 seconds from reversal to standing.
+ * Cross-rep laundering (reversal from a prior attempt, standing from a later slow rise) typically
+ * spans 8-20+ seconds. 7500ms gives generous headroom for slow but continuous ascents while
+ * blocking repeated shallow aggregation and stale-reversal laundering patterns.
+ *
+ * This is NOT an arbitrary new threshold — it is derived as a fixed multiple of the existing
+ * minimum cycle floor constant (SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS = 1500ms).
+ */
+const SHALLOW_CURRENT_REP_REVERSAL_TO_STANDING_MAX_MS = 7500;
+
+/**
  * PR-9-MEANINGFUL-SHALLOW-DEFAULT-PASS: Non-degenerate commitment integrity gate.
  *
  * Returns false (= BLOCKED) when downwardCommitmentDelta === 0 (exactly zero).
@@ -384,6 +427,38 @@ function nonDegenerateCommitmentClearFromInput(
 ): boolean {
   // Only block when explicitly 0 — undefined is bypassed (conservative)
   if (input.downwardCommitmentDelta === 0) return false;
+  return true;
+}
+
+/**
+ * PR-10-REP-SEGMENTATION-OWNERSHIP: Current-rep ownership integrity gate.
+ *
+ * Returns false (= BLOCKED) when squatReversalToStandingMs > SHALLOW_CURRENT_REP_REVERSAL_TO_STANDING_MAX_MS.
+ *
+ * A reversal that is more than 7.5 seconds before the standing recovery almost certainly
+ * belongs to a prior rep. In repeated shallow aggregation:
+ * - The global peak is found from attempt 1 (deepest in the buffer)
+ * - The reversal is locked from attempt 1's reversal frame (early in the buffer)
+ * - The standing recovery is from the last slow rise (late in the buffer)
+ * - squatReversalToStandingMs = (final standing) - (early reversal) = very large
+ *
+ * standing_recovered is finalize-only for the CURRENT rep — it cannot inherit authorization
+ * from a reversal that belonged to a prior attempt. Bridge/proof cannot substitute for
+ * current-rep ownership: the reversal and standing recovery must be from the same rep.
+ *
+ * Returns true (= ownership OK) when:
+ * - squatReversalToStandingMs ≤ 7500ms (reversal and standing are close enough to be one rep)
+ * - squatReversalToStandingMs is undefined (gate bypassed — reversal/standing not yet known)
+ */
+function currentRepOwnershipClearFromInput(
+  input: CanonicalShallowCompletionContractInput
+): boolean {
+  if (
+    input.squatReversalToStandingMs !== undefined &&
+    input.squatReversalToStandingMs > SHALLOW_CURRENT_REP_REVERSAL_TO_STANDING_MAX_MS
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -536,6 +611,25 @@ function firstBlockedReason(input: CanonicalShallowCompletionContractInput): {
     return { reason: 'weak_event_proof_substitution_blocked', stage: 'reversal_blocked' };
   }
 
+  /**
+   * PR-10-REP-SEGMENTATION-OWNERSHIP: Current-rep ownership gate.
+   *
+   * Placed after reversal evidence: reversal is confirmed, but if it is from a prior
+   * attempt (too far before the current standing recovery), it does not belong to the
+   * current rep. Repeated shallow aggregation, slow-rise laundering, and stale-reversal
+   * reuse are blocked here.
+   *
+   * standing_recovered is finalize-only for the current rep — it cannot authorize a pass
+   * based on a reversal that happened in a much earlier attempt. The reversal-to-standing
+   * span must be within the current-rep maximum (7500ms) to ensure ownership.
+   *
+   * Existing signals only — squatReversalToStandingMs is already computed in the state.
+   * Threshold is 5 × SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS (not a new arbitrary value).
+   */
+  if (!currentRepOwnershipClearFromInput(input)) {
+    return { reason: 'current_rep_ownership_blocked', stage: 'reversal_blocked' };
+  }
+
   if (!recoveryEvidenceFromInput(input)) {
     return { reason: 'recovery_or_finalize_missing', stage: 'recovery_blocked' };
   }
@@ -587,6 +681,9 @@ export function deriveCanonicalShallowCompletionContract(
   // PR-8+PR-9: weak-event proof substitution blocked — stream bridge cannot override the
   // weak-event gate; rule/HMM reversal required when event cycle shows no real descent.
   const weakEventProofSubstitutionBlocked = weakEventProofSubstitutionBlockedFromInput(input);
+  // PR-10: current-rep ownership gate — reversal and standing recovery must belong to the same rep.
+  // Blocks repeated shallow aggregation, slow-rise laundering, and stale-reversal reuse.
+  const currentRepOwnershipClear = currentRepOwnershipClearFromInput(input);
 
   const satisfied =
     eligible &&
@@ -598,6 +695,7 @@ export function deriveCanonicalShallowCompletionContract(
     nonDegenerateCommitmentClear &&
     reversalEvidenceSatisfied &&
     !weakEventProofSubstitutionBlocked &&
+    currentRepOwnershipClear &&
     recoveryEvidenceSatisfied &&
     antiFalsePassClear;
 
@@ -661,6 +759,7 @@ export function deriveCanonicalShallowCompletionContract(
     `nonDegCommit=${nonDegenerateCommitmentClear ? 1 : 0}`,
     `reversal=${reversalEvidenceSatisfied ? 1 : 0}`,
     `weakEvtBlock=${weakEventProofSubstitutionBlocked ? 1 : 0}`,
+    `repOwnership=${currentRepOwnershipClear ? 1 : 0}`,
     `recovery=${recoveryEvidenceSatisfied ? 1 : 0}`,
     `anti=${antiFalsePassClear ? 1 : 0}`,
     `split=${splitBrainDetected ? 1 : 0}`,
@@ -678,6 +777,7 @@ export function deriveCanonicalShallowCompletionContract(
     minimumCycleTimingClear,
     repEpochIntegrityClear,
     nonDegenerateCommitmentClear,
+    currentRepOwnershipClear,
     reversalEvidenceSatisfied,
     recoveryEvidenceSatisfied,
     antiFalsePassClear,
