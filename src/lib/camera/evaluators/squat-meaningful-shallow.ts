@@ -381,6 +381,16 @@ export function getShallowMeaningfulCycleBlockReason(
   }
 
   if (state.completionPassReason === 'ultra_low_rom_cycle') {
+    // PR-6: policy layer가 이미 legitimate ultra-low cycle로 판정한 경우 — 추가 차단 없음.
+    // ultraLowPolicyBlocked === false + scope/ready 확인으로 "policy가 통과를 결정했음"을 검증.
+    // single-writer 원칙 유지: 이 gate는 새로운 truth를 만들지 않는다.
+    if (
+      state.ultraLowPolicyScope === true &&
+      state.ultraLowPolicyDecisionReady === true &&
+      state.ultraLowPolicyBlocked === false
+    ) {
+      return null; // policy layer가 이미 legitimate으로 판정 — 이 gate에서 추가 차단하지 않음
+    }
     return 'ultra_low_rom_not_allowed';
   }
 

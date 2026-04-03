@@ -3636,20 +3636,61 @@ function isUltraLowPolicyDecisionReady(state: SquatCompletionState): boolean {
 const ULTRA_LOW_ROM_POLICY_BLOCK_REASON = 'ultra_low_rom_not_allowed' as const;
 
 /**
- * PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01 / PR-CAM-POLICY-DRIFT-OBSERVABILITY-SEPARATION-03:
- * 준비된 경우에만 completion owner 결과를 product policy 차단으로 덮어쓴다.
- * computeBlockedAfterCommitment·finalize·승격 내부는 건드리지 않고 출력만 정렬한다.
+ * PR-6-ULTRA-LOW-POLICY-RESCOPE:
+ * canonical closer + canonical contract 수준의 증거가 이미 입증된 ultra-low cycle인지 판정.
  *
- * **레이어**: product policy — completion owner 가 아님.
- * completion owner(canonical closer)가 먼저 실행된 뒤 evaluator boundary 에서 1회만 호출해야 한다.
+ * 반환 true = 이미 legitimate cycle이 입증됨 → policy는 owner truth를 존중하고 통과시킨다.
+ * 반환 false = 아직 입증되지 않음 → 기존 차단 로직 유지.
+ *
+ * **사용 신호**: 기존 state 필드만 재사용 — 새 threshold 없음.
+ * - completionSatisfied: core가 cycle 확정
+ * - officialShallowPathClosed: ultra_low_rom_cycle pass로 core가 공식 shallow path를 닫음
+ * - officialShallowClosureProofSatisfied: closure proof bundle 충족 (officialShallowPathClosed의 자연적 결과)
+ * - canonicalShallowContractSatisfied: canonical contract가 독립적으로 quality 검증
+ *   (trajectory rescue 차단 · provenance-only 차단 · setup 오염 차단 · 권위 reversal/recovery 확인 포함)
+ *
+ * **아키텍처 안전성**: 이 함수는 success를 새로 만들지 않는다.
+ * core + canonical contract가 이미 결정한 truth를 policy가 존중하는지 판정할 뿐이다.
+ * single-writer 원칙 유지.
+ */
+function isUltraLowCycleLegitimateByCanonicalProof(state: SquatCompletionState): boolean {
+  // core가 cycle을 확정해야 함
+  if (state.completionSatisfied !== true) return false;
+  // core가 official shallow path를 닫아야 함 (ultra_low_rom_cycle pass 시 자동 설정)
+  if (state.officialShallowPathClosed !== true) return false;
+  // closure proof bundle이 충족되어야 함
+  if (state.officialShallowClosureProofSatisfied !== true) return false;
+  // canonical contract가 품질을 독립적으로 검증해야 함:
+  // trajectory rescue, provenance-only, setup 오염이 있으면 이 값이 false
+  if (state.canonicalShallowContractSatisfied !== true) return false;
+  return true;
+}
+
+/**
+ * PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01 / PR-CAM-POLICY-DRIFT-OBSERVABILITY-SEPARATION-03 /
+ * PR-6-ULTRA-LOW-POLICY-RESCOPE:
+ *
+ * **PR-6 이후 정책 행동:**
+ * - ultra-low scope + legitimate cycle already proven → 통과 (canonical closer의 truth 존중)
+ * - ultra-low scope + illegitimate pattern → 차단 (기존과 동일)
+ *
+ * blanket ultra-low ban이 아닌 illegitimate-ultra-low ban만 적용한다.
+ * `ultra_low_rom` band 자체는 실패 사유가 아니다 — meaningful cycle 미입증이 실패 사유다.
+ *
+ * **레이어**: product policy — completion owner가 아님.
+ * completion owner(canonical closer)가 먼저 실행된 뒤 evaluator boundary에서 1회만 호출해야 한다.
  * attachShallowTruthObservabilityAlign01 내부에서 호출하지 않는다.
  */
 export function applyUltraLowPolicyLock(state: SquatCompletionState): SquatCompletionState {
   const ultraLowPolicyScope = isUltraLowPolicyScope(state);
   const ultraLowPolicyDecisionReady = isUltraLowPolicyDecisionReady(state);
+  // PR-6: legitimate cycle 입증 여부 — canonical closer + canonical contract 수준의 증거 재사용
+  const ultraLowLegitimateByCanonical =
+    ultraLowPolicyDecisionReady && isUltraLowCycleLegitimateByCanonicalProof(state);
   const ultraLowPolicyTraceBase = [
     `scope=${ultraLowPolicyScope ? '1' : '0'}`,
     `ready=${ultraLowPolicyDecisionReady ? '1' : '0'}`,
+    `legitimate_canonical=${ultraLowLegitimateByCanonical ? '1' : '0'}`,
   ].join('|');
 
   if (!ultraLowPolicyDecisionReady) {
@@ -3662,6 +3703,18 @@ export function applyUltraLowPolicyLock(state: SquatCompletionState): SquatCompl
     };
   }
 
+  // PR-6: canonical 수준으로 입증된 legitimate cycle — policy는 consumer이므로 owner truth를 존중
+  if (ultraLowLegitimateByCanonical) {
+    return {
+      ...state,
+      ultraLowPolicyScope: true,
+      ultraLowPolicyDecisionReady: true,
+      ultraLowPolicyBlocked: false,
+      ultraLowPolicyTrace: `${ultraLowPolicyTraceBase}|blocked=0_legitimate_canonical`,
+    };
+  }
+
+  // illegitimate ultra-low pattern만 차단 (trajectory-only, provenance-only, setup 오염 등)
   return {
     ...state,
     completionBlockedReason: ULTRA_LOW_ROM_POLICY_BLOCK_REASON,
@@ -3685,7 +3738,7 @@ export function applyUltraLowPolicyLock(state: SquatCompletionState): SquatCompl
     ultraLowPolicyScope: true,
     ultraLowPolicyDecisionReady: true,
     ultraLowPolicyBlocked: true,
-    ultraLowPolicyTrace: `${ultraLowPolicyTraceBase}|blocked=policy`,
+    ultraLowPolicyTrace: `${ultraLowPolicyTraceBase}|blocked=policy_illegitimate`,
   };
 }
 
