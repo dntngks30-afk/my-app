@@ -1124,6 +1124,23 @@ function isSquatShallowRomPassReason(passReason: string | undefined): boolean {
 
 /** PR G6: depth는 completion이 아니라 quality band. completion은 full cycle만 요구. */
 
+/**
+ * PR-4-GATE-FREEZE: Squat progression completion reader.
+ *
+ * OWNERSHIP: This function reads already-finalized completion truth from
+ * `result.debug.squatCompletionState` (set by the evaluator pipeline after
+ * evaluateSquatCompletionState → late-setup check → applyUltraLowPolicyLock).
+ *
+ * It does NOT redefine or re-author completion truth. The `satisfied` return
+ * value combines two checks:
+ *   1. guardrail.completionStatus === 'complete'  (UI/signal gate — not motion truth)
+ *   2. currentSquatPhase === 'standing_recovered' AND no completionBlockedReason
+ *      (re-reads the already-finalized state to confirm it propagated)
+ *
+ * The bulk of this function assembles `squatCycleDebug` — a rich observability
+ * object read by downstream debug tooling and auto-progression trace.
+ * Debug fields do NOT feed back into the gate decision.
+ */
 function getSquatProgressionCompletionSatisfied(
   result: EvaluatorResult,
   guardrail: StepGuardrailResult,
@@ -1690,6 +1707,48 @@ function squatMeaningfulAttemptAllowsRetryInsteadOfSevereFail(
   return true;
 }
 
+/**
+ * PR-4-GATE-FREEZE: Observability-only stamp for `finalPassTimingBlockedReason`.
+ *
+ * OWNERSHIP: Pure UI gate observability — annotates squatCycleDebug to make the
+ * reason a final pass was timing-blocked visible in debug/trace tooling.
+ *
+ * Does NOT affect `progressionPassed`, `finalPassBlockedReason`, or any
+ * completion truth field (completionSatisfied / completionPassReason).
+ *
+ * Separated from the gate logic so it is clear this is a debug annotation layer,
+ * not a second gate decision point.
+ */
+function stampSquatFinalPassTimingBlockedReason(
+  squatCycleDebug: SquatCycleDebug,
+  completionSatisfied: boolean,
+  squatUiGate: ReturnType<typeof computeSquatUiProgressionLatchGate> | null
+): SquatCycleDebug {
+  if (!completionSatisfied) return squatCycleDebug;
+  if (squatCycleDebug.captureArmingSatisfied === false) {
+    return { ...squatCycleDebug, finalPassTimingBlockedReason: 'minimum_cycle_duration_not_met' };
+  }
+  if (
+    squatUiGate?.uiProgressionAllowed === false &&
+    squatUiGate.uiProgressionBlockedReason === SQUAT_ULTRA_LOW_TRAJECTORY_SHORT_CYCLE_UI_BLOCKED_REASON
+  ) {
+    return {
+      ...squatCycleDebug,
+      finalPassTimingBlockedReason: SQUAT_ULTRA_LOW_TRAJECTORY_SHORT_CYCLE_UI_BLOCKED_REASON,
+    };
+  }
+  if (
+    squatUiGate?.uiProgressionAllowed === false &&
+    squatUiGate.uiProgressionBlockedReason === SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON
+  ) {
+    return {
+      ...squatCycleDebug,
+      finalPassTimingBlockedReason: SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON,
+    };
+  }
+  return squatCycleDebug;
+}
+
 export function evaluateExerciseAutoProgress(
   stepId: CameraStepId,
   landmarks: PoseLandmarks[],
@@ -1800,16 +1859,57 @@ export function evaluateExerciseAutoProgress(
       ? squatPassProgressionIntegrityBlock(squatRawIntegrityBlock, squatDecoupleEligible)
       : null;
 
-  /** PR-01: completion owner truth vs UI gate — progressionPassed / latch / trace 공통 소스 */
+  /**
+   * PR-4-GATE-FREEZE: Squat UI gate pipeline.
+   *
+   * Sequential ownership layers for squat pass decision:
+   *
+   *   Step A — Completion truth (READ-ONLY from evaluator output, already finalized)
+   *   Step B — Completion owner truth interpretation
+   *             (computeSquatCompletionOwnerTruth: reads cs fields, no mutation)
+   *   Step C — UI progression latch gate
+   *             (computeSquatUiProgressionLatchGate: pure UI signals — confidence,
+   *              passConfirmation, captureQuality, setup suppression, arming timing)
+   *   Step D — UI-only final-pass blockers
+   *             (shouldBlockSquat*: squat-specific UI suppression checks.
+   *              May block uiProgressionAllowed. Do NOT write to completion fields.)
+   *   Step E — Observability enrichment (see block below, after integrity block)
+   *
+   * squatSetupTraceForGate and squatLiveSummaryForGate are hoisted here so that
+   * Step E reuses the same computed values without a second identical call.
+   */
   let squatOwnerTruth: ReturnType<typeof computeSquatCompletionOwnerTruth> | null = null;
   let squatUiGate: ReturnType<typeof computeSquatUiProgressionLatchGate> | null = null;
+  // Hoisted: shared between gate computation (C) and observability enrichment (E)
+  let squatSetupTraceForGate:
+    | {
+        readinessStableDwellSatisfied?: boolean;
+        setupMotionBlocked?: boolean;
+        setupMotionBlockReason?: string | null;
+      }
+    | undefined;
+  let squatLiveSummaryForGate: ReturnType<typeof getLiveReadinessSummary> | undefined;
+
   if (stepId === 'squat') {
+    // ── Step A: completion truth (already finalized by evaluator pipeline) ──
+    // squatCs = evaluatorResult.debug.squatCompletionState
+    // Truth is READ here, NOT redefined. completionSatisfied / completionPassReason
+    // were set by evaluateSquatCompletionState → late-setup check → applyUltraLowPolicyLock.
     const captureArmingOk = squatCycleDebug?.captureArmingSatisfied === true;
+
+    // ── Step B: completion owner truth interpretation ──
+    // Reads finalized completionSatisfied / completionPassReason / currentSquatPhase.
+    // Does NOT modify any completion truth field.
     squatOwnerTruth = computeSquatCompletionOwnerTruth({
       squatCompletionState: squatCs ?? undefined,
     });
+
+    // ── Step C: UI progression latch gate ──
+    // Pure UI signals: confidence, passConfirmation, captureQuality, setup suppression, arming.
+    // setupTrace and liveSummary are hoisted (squatSetupTraceForGate / squatLiveSummaryForGate)
+    // so Step E reuses them without duplicate computation.
     const squatFramesReq = squatEasyOnly ? SQUAT_EASY_LATCH_STABLE_FRAMES : REQUIRED_STABLE_FRAMES;
-    const setupTrace = evaluatorResult.debug?.squatSetupPhaseTrace as
+    squatSetupTraceForGate = evaluatorResult.debug?.squatSetupPhaseTrace as
       | {
           readinessStableDwellSatisfied?: boolean;
           setupMotionBlocked?: boolean;
@@ -1818,24 +1918,24 @@ export function evaluateExerciseAutoProgress(
       | undefined;
     let readinessStableDwellForGate: boolean | undefined;
     if (
-      setupTrace?.readinessStableDwellSatisfied === false ||
+      squatSetupTraceForGate?.readinessStableDwellSatisfied === false ||
       squatCs?.readinessStableDwellSatisfied === false
     ) {
       readinessStableDwellForGate = false;
     } else if (
-      setupTrace?.readinessStableDwellSatisfied === true ||
+      squatSetupTraceForGate?.readinessStableDwellSatisfied === true ||
       squatCs?.readinessStableDwellSatisfied === true
     ) {
       readinessStableDwellForGate = true;
     }
     const setupMotionBlockedForGate =
-      setupTrace?.setupMotionBlocked === true || squatCs?.setupMotionBlocked === true;
-    const liveSummary = getLiveReadinessSummary({
+      squatSetupTraceForGate?.setupMotionBlocked === true || squatCs?.setupMotionBlocked === true;
+    squatLiveSummaryForGate = getLiveReadinessSummary({
       success: false,
       guardrail,
       framingHint: getSetupFramingHint(landmarks),
     });
-    const liveReadinessNotReady = liveSummary.state === 'not_ready';
+    const liveReadinessNotReady = squatLiveSummaryForGate.state === 'not_ready';
 
     squatUiGate = computeSquatUiProgressionLatchGate({
       completionOwnerPassed: squatOwnerTruth.completionOwnerPassed,
@@ -1854,6 +1954,10 @@ export function evaluateExerciseAutoProgress(
       readinessStableDwellSatisfied: readinessStableDwellForGate,
       setupMotionBlocked: setupMotionBlockedForGate,
     });
+
+    // ── Step D: UI-only final-pass blockers ──
+    // These squat-specific suppression checks may set uiProgressionAllowed = false.
+    // They do NOT touch completionSatisfied, completionPassReason, or any motion truth field.
     if (
       squatUiGate.uiProgressionAllowed === true &&
       shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass(stepId, squatCs, squatCycleDebug)
@@ -1886,6 +1990,10 @@ export function evaluateExerciseAutoProgress(
   }
 
   if (squatCycleDebug && stepId === 'squat') {
+    // ── Step E: UI gate observability enrichment ──
+    // Pure packaging: annotates squatCycleDebug with gate result fields for debug / trace.
+    // Does NOT affect progressionPassed, finalPassBlockedReason, or any completion truth field.
+    // squatSetupTraceForGate and squatLiveSummaryForGate are reused from Step C (no duplicate call).
     const qWarn = getSquatQualityOnlyWarnings({
       guardrail,
       rawIntegrityBlock: squatRawIntegrityBlock,
@@ -1896,20 +2004,7 @@ export function evaluateExerciseAutoProgress(
     const shadowEventOwnerEligible =
       completionSatisfied === true &&
       (cpr === 'low_rom_event_cycle' || cpr === 'ultra_low_rom_event_cycle');
-    /** PR-01: 스냅샷 passOwner / finalSuccessOwner = completion lineage 만(capture·decouple과 무관) */
     const lineageOwner = resolveSquatCompletionLineageOwner(cpr);
-    const setupTrace = evaluatorResult.debug?.squatSetupPhaseTrace as
-      | {
-          readinessStableDwellSatisfied?: boolean;
-          setupMotionBlocked?: boolean;
-          setupMotionBlockReason?: string | null;
-        }
-      | undefined;
-    const liveSummary = getLiveReadinessSummary({
-      success: false,
-      guardrail,
-      framingHint: getSetupFramingHint(landmarks),
-    });
     const setupSuppressed =
       squatOwnerTruth?.completionOwnerPassed === true &&
       squatUiGate != null &&
@@ -1932,49 +2027,25 @@ export function evaluateExerciseAutoProgress(
       completionOwnerBlockedReason: squatOwnerTruth?.completionOwnerBlockedReason ?? undefined,
       uiProgressionAllowed: squatUiGate?.uiProgressionAllowed,
       uiProgressionBlockedReason: squatUiGate?.uiProgressionBlockedReason ?? undefined,
-      liveReadinessSummaryState: liveSummary.state,
+      liveReadinessSummaryState: squatLiveSummaryForGate?.state,
       readinessStableDwellSatisfied:
-        setupTrace?.readinessStableDwellSatisfied ?? squatCs?.readinessStableDwellSatisfied,
-      setupMotionBlocked: setupTrace?.setupMotionBlocked ?? squatCs?.setupMotionBlocked,
-      setupMotionBlockReason: setupTrace?.setupMotionBlockReason ?? squatCs?.setupMotionBlockReason,
+        squatSetupTraceForGate?.readinessStableDwellSatisfied ?? squatCs?.readinessStableDwellSatisfied,
+      setupMotionBlocked:
+        squatSetupTraceForGate?.setupMotionBlocked ?? squatCs?.setupMotionBlocked,
+      setupMotionBlockReason:
+        squatSetupTraceForGate?.setupMotionBlockReason ?? squatCs?.setupMotionBlockReason,
       attemptStartedAfterReady: squatCs?.attemptStartedAfterReady,
       successSuppressedBySetupPhase: setupSuppressed,
     };
   }
 
-  /** PR-CAM-29A: completion 은 true 인데 캡처 arming 미달 → final pass 만 차단(관측) */
-  if (
-    squatCycleDebug &&
-    stepId === 'squat' &&
-    completionSatisfied &&
-    squatCycleDebug.captureArmingSatisfied === false
-  ) {
-    squatCycleDebug = {
-      ...squatCycleDebug,
-      finalPassTimingBlockedReason: 'minimum_cycle_duration_not_met',
-    };
-  } else if (
-    squatCycleDebug &&
-    stepId === 'squat' &&
-    completionSatisfied &&
-    squatUiGate?.uiProgressionAllowed === false &&
-    squatUiGate.uiProgressionBlockedReason === SQUAT_ULTRA_LOW_TRAJECTORY_SHORT_CYCLE_UI_BLOCKED_REASON
-  ) {
-    squatCycleDebug = {
-      ...squatCycleDebug,
-      finalPassTimingBlockedReason: SQUAT_ULTRA_LOW_TRAJECTORY_SHORT_CYCLE_UI_BLOCKED_REASON,
-    };
-  } else if (
-    squatCycleDebug &&
-    stepId === 'squat' &&
-    completionSatisfied &&
-    squatUiGate?.uiProgressionAllowed === false &&
-    squatUiGate.uiProgressionBlockedReason === SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON
-  ) {
-    squatCycleDebug = {
-      ...squatCycleDebug,
-      finalPassTimingBlockedReason: SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON,
-    };
+  /** PR-4-GATE-FREEZE: Step E observability stamp — finalPassTimingBlockedReason (debug only) */
+  if (squatCycleDebug && stepId === 'squat') {
+    squatCycleDebug = stampSquatFinalPassTimingBlockedReason(
+      squatCycleDebug,
+      completionSatisfied,
+      squatUiGate
+    );
   }
 
   if (
