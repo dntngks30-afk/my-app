@@ -274,6 +274,32 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     setupMotionBlocked: setupBlock.blocked,
   });
 
+  /**
+   * PR-3-EVALUATOR-BOUNDARY-CLEANUP: Evaluator post-completion pipeline.
+   *
+   * The evaluator sequencing below operates on the finalized completion truth
+   * returned by evaluateSquatCompletionState. The sequence is:
+   *
+   *   1. Stamp setup-phase context fields (readiness, setupMotionBlocked) onto state —
+   *      additive observability only, not completion truth.
+   *
+   *   2. Late-setup suppression check (evaluator-local boundary enforcement):
+   *      Completion truth from the pipeline may be suppressed if setup motion was
+   *      detected AFTER the cycle was closed. This is evaluator-boundary enforcement,
+   *      NOT a second completion writer. It applies a single, tightly-scoped
+   *      override only when completionSatisfied === true AND setupBlock.blocked,
+   *      and only for cycles that do NOT meet the authoritative bypass criteria.
+   *      Temporarily lives here for compatibility; candidate for PR-4 boundary when
+   *      UI-gate / setup-suppression ownership is clarified.
+   *
+   *   3. attachShallowTruthObservabilityAlign01 — pure observability re-stamp
+   *      after the late-setup adjustment so debug fields reflect the final state.
+   *
+   *   4. applyUltraLowPolicyLock — product policy applied exactly once at the
+   *      evaluator boundary, after the canonical closer and after late-setup check.
+   */
+
+  // ── Step 1: stamp setup-phase context ──
   let standingFinalizeSuppressedByLateSetup = false;
 
   state = {
@@ -284,20 +310,22 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     attemptStartedAfterReady: dwell.satisfied,
   };
 
-  /**
-   * PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03:
-   * 권위 하강·역전·복구 후 standing_recovered 인데 늦은 setup_motion 만 걸리는 경우 통과를 막지 않는다.
-   * 초기/리딩 단계 setup 차단은 그대로(completion 미충족 시 기존과 동일).
-   */
+  // ── Step 2: late-setup suppression (evaluator boundary check, not a truth writer) ──
   if (state.completionSatisfied && setupBlock.blocked) {
-    /** PR-CAM-SHALLOW-TRAJECTORY-BRIDGE-05: 권위 역전 플래그 없이도 통제 브리지로 닫힌 shallow 는 늦은 setup 만으로 깨지 않게 */
+    /**
+     * Bypass criteria: cycles that were closed by a validated authoritative path
+     * are NOT suppressed by late setup motion.
+     *
+     * PR-CAM-SHALLOW-TRAJECTORY-BRIDGE-05: trajectory-bridge-closed shallow cycles.
+     * PR-06: guarded trajectory proof closed official_shallow_cycle cycles.
+     * General: descent+reversal+recovery authoritative path with standing phase.
+     */
     const trajectoryBridgeClosedCycle =
       state.shallowTrajectoryBridgeSatisfied === true &&
       state.descendConfirmed === true &&
       state.attemptStarted === true &&
       state.currentSquatPhase === 'standing_recovered';
 
-    /** PR-06: trajectory 정규화로 PR-4 official_shallow_cycle 이 닫힌 경우도 늦은 setup 으로 깨지 않게 */
     const guardedClosureProofClosedCycle =
       state.guardedShallowTrajectoryClosureProofSatisfied === true &&
       state.completionPassReason === 'official_shallow_cycle' &&
@@ -332,19 +360,10 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     standingFinalizeSuppressedByLateSetup,
   };
 
-  /**
-   * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: setup 패치 후에도 스테이지·불일치 필드가 최종 state 와 정렬되도록.
-   * PR-CAM-POLICY-DRIFT-OBSERVABILITY-SEPARATION-03: attach 는 pure observability 전용.
-   * product policy(ultra-low ROM lock) 는 아래에서 별도로 1회만 적용한다.
-   */
+  // ── Step 3: re-stamp observability to reflect final state (including late-setup adjustment) ──
   state = attachShallowTruthObservabilityAlign01(state);
 
-  /**
-   * PR-CAM-POLICY-DRIFT-OBSERVABILITY-SEPARATION-03:
-   * product policy layer — completion owner(canonical closer) 이후 evaluator boundary 에서 정확히 1회 적용.
-   * ultra-low ROM 이 policy 차단 조건이면 completion 결과를 덮어쓴다.
-   * 이 호출 이전에는 product policy 가 completion 필드를 수정하지 않는다.
-   */
+  // ── Step 4: product policy — applied exactly once, after canonical closer + late-setup check ──
   state = applyUltraLowPolicyLock(state);
 
   /** PR-CAM-29B: pose-features guarded shallow ascent — additive observability only */
@@ -556,6 +575,55 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     ascent: perStepDiagnostics.ascent,
   };
 
+  /**
+   * PR-3-EVALUATOR-BOUNDARY-CLEANUP: Packaging.
+   *
+   * buildSquatEvaluatorHighlightedMetrics assembles the read-only debug/observability
+   * surface from finalized completion truth. It does NOT write to completion fields.
+   * It reads from `state` which at this point has already passed through:
+   *   evaluateSquatCompletionState → late-setup check → attachShallowTruthObservabilityAlign01
+   *   → applyUltraLowPolicyLock
+   */
+  const highlightedMetrics = buildSquatEvaluatorHighlightedMetrics({
+    state,
+    frames,
+    valid,
+    completionFrames,
+    completionArming,
+    effectiveArmed,
+    squatHmm,
+    depthValues,
+    globalMaxDepthProxy,
+    completionSliceMaxDepthProxy,
+    maxPrimaryCalib,
+    maxBlendedCalib,
+    firstDescentIdx,
+    firstDescentIdxGlobal,
+    firstBottomIdx,
+    firstAscentIdx,
+    firstStartIdx,
+    depthTruthWindowMismatch,
+    sliceMissedMotionCode,
+    relPeakPrimPct,
+    relPeakBlendPct,
+    latestSquatDepthProxy,
+    guardedShallowAscentDetected,
+    depthBlendObsFallbackPeak,
+    depthBlendObsTravelPeak,
+    squatDepthBlendOfferedCount,
+    squatDepthBlendCapHitCount,
+    squatDepthBlendActiveFrameCount,
+    squatDepthSourceFlipCount,
+    bottomStability,
+    startCount,
+    descentCount,
+    bottomCount,
+    ascentCount,
+    recovery,
+    depthBand,
+    repCountEstimate,
+  });
+
   return {
     stepId: 'squat',
     metrics,
@@ -572,277 +640,296 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       squatDepthCalibration,
       squatReversalCalibration,
       squatInternalQuality,
-      /** PR-CAM-09: typed completion state — auto-progression 이 highlightedMetrics 캐스팅 없이 읽는다 */
+      /** PR-CAM-09: typed completion state — auto-progression reads this directly */
       squatCompletionState: state,
-      /** Setup false-pass lock: dwell·프레이밍 이동 관측(auto-progression·trace) */
+      /** Setup false-pass lock: dwell / framing-motion observation (auto-progression / trace) */
       squatSetupPhaseTrace,
-      highlightedMetrics: {
-        depthPeak: depthValues.length > 0 ? Math.round(Math.max(...depthValues) * 100) : null,
-        /** PR standing-fp: baseline-relative depth for standard path gate */
-        completionArmingArmed: completionArming.armed ? 1 : 0,
-        /** PR-HMM-04A: rule arming 또는 HMM arming assist */
-        effectiveArmed: effectiveArmed ? 1 : 0,
-        hmmArmingAssistEligible: completionArming.hmmArmingAssistEligible ? 1 : 0,
-        hmmArmingAssistApplied: completionArming.hmmArmingAssistApplied ? 1 : 0,
-        hmmArmingAssistReason: completionArming.hmmArmingAssistReason ?? null,
-        completionArmingBaselineCaptured: completionArming.baselineCaptured ? 1 : 0,
-        completionArmingStableFrames: completionArming.stableFrames,
-        completionArmingSliceStart: completionArming.completionSliceStartIndex,
-        /** PR-CAM-28: valid 내 마지막 인덱스(슬라이스는 항상 버퍼 끝까지) */
-        completionSliceEndIndex: effectiveArmed ? valid.length - 1 : -1,
-        /** PR-CAM-28: 전역 vs completion 슬라이스 최대 squatDepthProxy (0–1) */
-        globalDepthPeak: Math.round(globalMaxDepthProxy * 1000) / 1000,
-        completionSliceDepthPeak: Math.round(completionSliceMaxDepthProxy * 1000) / 1000,
-        firstDescentIdxGlobal: firstDescentIdxGlobal >= 0 ? firstDescentIdxGlobal : -1,
-        depthTruthWindowMismatch,
-        /** 0=slice OK, 1=armed but slice missed global peak, 2=not armed */
-        sliceMissedMotionCode,
-        /** PR-CAM-27: 폴백 arm 사용 여부 — depth-truth source chain 추적용 */
-        completionArmingFallbackUsed: completionArming.armingFallbackUsed ? 1 : 0,
-        /** PR-04E1: primary vs blended 피크 (% 스케일은 depthPeak 와 동일) */
-        squatDepthPeakPrimary: Math.round(maxPrimaryCalib * 100),
-        squatDepthPeakBlended: Math.round(maxBlendedCalib * 100),
-        squatArmingDepthBlendAssisted: completionArming.armingDepthBlendAssisted ? 1 : 0,
-        /** PR-CAM-28: 글로벌 피크 앞 standing 앵커 */
-        completionArmingPeakAnchored: completionArming.armingPeakAnchored ? 1 : 0,
-        /** PR-CAM-RETRO-ARMING-ASSIST-01: 짧은 standing + 강한 motion retro rule arm */
-        armingRetroApplied: completionArming.armingRetroApplied ? 1 : 0,
-        ra: completionArming.armingRetroApplied ?? false,
-        /**
-         * PR-B: 선택된 standing 윈도우 내부 depth range.
-         * 0에 가까울수록 진짜 flat standing. 높으면 arming이 하강 구간을 잘못 선택한 것.
-         */
-        completionArmingStandingWindowRange:
-          completionArming.armingStandingWindowRange != null
-            ? Math.round(completionArming.armingStandingWindowRange * 1000) / 1000
-            : null,
-        /** PR-CAM-ARMING-BASELINE-HANDOFF-01: standing 윈도우 baseline → completion seed 관측 */
-        armingBaselineStandingDepthPrimary:
-          completionArming.armingBaselineStandingDepthPrimary != null
-            ? Math.round(completionArming.armingBaselineStandingDepthPrimary * 100) / 100
-            : null,
-        armingBaselineStandingDepthBlended:
-          completionArming.armingBaselineStandingDepthBlended != null
-            ? Math.round(completionArming.armingBaselineStandingDepthBlended * 100) / 100
-            : null,
-        completionBaselineSeeded: state.baselineSeeded === true ? 1 : 0,
-        baselineStandingDepth: Math.round(state.baselineStandingDepth * 100) / 100,
-        rawDepthPeak: Math.round(state.rawDepthPeak * 100) / 100,
-        relativeDepthPeak: Math.round(state.relativeDepthPeak * 100) / 100,
-        /** CAM-OBS: completion 슬라이스 마지막 프레임 primary depth — pass_snapshot currentDepth 정합 */
-        latestSquatDepthProxy,
-        /** PR-04E3A: primary vs blended 상대 피크(%), completion 슬라이스 앞 윈도우 baseline */
-        squatRelativeDepthPeakPrimary:
-          relPeakPrimPct != null ? Math.round(relPeakPrimPct * 10) / 10 : null,
-        squatRelativeDepthPeakBlended:
-          relPeakBlendPct != null ? Math.round(relPeakBlendPct * 10) / 10 : null,
-        /** 0=unset, 1=primary, 2=blended */
-        squatRelativeDepthSourceCode:
-          state.relativeDepthPeakSource === 'primary'
-            ? 1
-            : state.relativeDepthPeakSource === 'blended'
-              ? 2
-              : 0,
-        /** PR-CAM-29B: 얕은 밴드 대칭 ascent 가드가 한 프레임이라도 성립(1/0) */
-        guardedShallowAscentDetected,
-        /** PR-CAM-29: blended 입력 분해·흔들림 관측(피크는 0–1 스케일) */
-        squatDepthObsFallbackPeak: Math.round(depthBlendObsFallbackPeak * 1000) / 1000,
-        squatDepthObsTravelPeak: Math.round(depthBlendObsTravelPeak * 1000) / 1000,
-        squatDepthBlendOfferedCount,
-        squatDepthBlendCapHitCount,
-        squatDepthBlendActiveFrameCount,
-        squatDepthSourceFlipCount,
-        firstDescentIdx,
-        firstBottomIdx,
-        firstAscentIdx,
-        depthBand,
-        bottomStability: Math.round(bottomStability * 100),
-        startCount,
-        descentCount,
-        bottomCount,
-        ascentCount,
-        ascentRecovered: recovery.recovered ? 1 : 0,
-        ascentRecoveredLowRom: recovery.lowRomRecovered ? 1 : 0,
-        ascentRecoveredUltraLowRom: recovery.ultraLowRomRecovered ? 1 : 0,
-        ascentRecoveredUltraLowRomGuarded: recovery.ultraLowRomGuardedRecovered ? 1 : 0,
-        recoveryDrop: Math.round(recovery.recoveryDrop * 100),
-        attemptStarted: state.attemptStarted,
-        currentSquatPhase: state.currentSquatPhase,
-        descendConfirmed: state.descendConfirmed,
-        committedAtMs: state.committedAtMs ?? null,
-        ascendConfirmed: state.ascendConfirmed,
-        standingRecoveredAtMs: state.standingRecoveredAtMs ?? null,
-        standingRecoveryHoldMs: state.standingRecoveryHoldMs,
-        standingRecoveryFrameCount: state.standingRecoveryFrameCount,
-        standingRecoveryThreshold: Math.round(state.standingRecoveryThreshold * 100) / 100,
-        standingRecoveryMinFramesUsed: state.standingRecoveryMinFramesUsed,
-        standingRecoveryMinHoldMsUsed: state.standingRecoveryMinHoldMsUsed,
-        standingRecoveryBand: state.standingRecoveryBand,
-        standingRecoveryFinalizeReason: state.standingRecoveryFinalizeReason,
-        /**
-         * PR-C: post-peak standing 밴드(상대 깊이 임계 이하) 진입 시각이 잡혔는지(1/0).
-         * standing_recovered 와는 별개 — finalize 전 단계 관측.
-         */
-        squatStandingBandHit: state.standingRecoveredAtMs != null ? 1 : 0,
-        /**
-         * PR-C: standing recovery finalize 통과(1). tail_hold/continuity/drop 미충족 시 0.
-         */
-        squatFinalizeGateOk:
-          state.standingRecoveryFinalizeReason === 'standing_hold_met' ||
-          state.standingRecoveryFinalizeReason === 'low_rom_guarded_finalize' ||
-          state.standingRecoveryFinalizeReason === 'ultra_low_rom_guarded_finalize'
-            ? 1
-            : 0,
-        successPhaseAtOpen: state.successPhaseAtOpen ?? null,
-        evidenceLabel: state.evidenceLabel,
-        completionBlockedReason: state.completionBlockedReason,
-        completionSatisfied: state.completionSatisfied,
-        /** PR-CAM-SHALLOW-PROOF-TRACE-11: shallow proof 관측(게이트 미사용) */
-        shallowProofStage: state.shallowClosureProofTrace?.stage ?? null,
-        shallowProofBlockedReason: state.shallowClosureProofTrace?.proofBlockedReason ?? null,
-        shallowConsumptionBlockedReason:
-          state.shallowClosureProofTrace?.consumptionBlockedReason ?? null,
-        /** PR-COMP-01: completion gate 전용(품질·depthBand와 분리) */
-        completionMachinePhase: state.completionMachinePhase,
-        completionPassReason: state.completionPassReason,
-        /** PR-SQUAT-COMPLETION-REARCH-01: A/B/C 계약 요약(0/1, 게이트 아님) */
-        contractA_officialShallowCandidate: state.officialShallowPathCandidate ? 1 : 0,
-        contractA_officialShallowAdmitted: state.officialShallowPathAdmitted ? 1 : 0,
-        contractB_officialShallowReversal: state.officialShallowReversalSatisfied ? 1 : 0,
-        contractB_officialShallowAscentEquiv: state.officialShallowAscentEquivalentSatisfied ? 1 : 0,
-        contractC_officialShallowClosed: state.officialShallowPathClosed ? 1 : 0,
-        contractC_closureProof: state.officialShallowClosureProofSatisfied ? 1 : 0,
-        contractC_shallowDriftedToStandard: state.officialShallowDriftedToStandard ? 1 : 0,
-        /** PR squat-low-rom: trace */
-        recoveryReturnContinuityFrames: state.recoveryReturnContinuityFrames,
-        recoveryTrailingDepthCount: state.recoveryTrailingDepthCount,
-        recoveryDropRatio: state.recoveryDropRatio != null ? Math.round(state.recoveryDropRatio * 100) / 100 : undefined,
-        lowRomRecoveryReason: state.lowRomRecoveryReason,
-        ultraLowRomRecoveryReason: state.ultraLowRomRecoveryReason,
-        repCount: repCountEstimate,
-        cycleComplete: state.cycleComplete ? 1 : 0,
-        startBeforeBottom: state.startBeforeBottom ? 1 : 0,
-        descendStartAtMs: state.descendStartAtMs,
-        peakAtMs: state.peakAtMs,
-        committedAtMs: state.committedAtMs ?? null,
-        reversalAtMs: state.reversalAtMs ?? null,
-        ascendStartAtMs: state.ascendStartAtMs,
-        recoveryAtMs: state.standingRecoveredAtMs ?? null,
-        cycleDurationMs: state.cycleDurationMs,
-        downwardCommitmentDelta: Math.round(state.downwardCommitmentDelta * 100) / 100,
-        /** PR-CAM-02: 역전/타이밍 관측(기기 트레이스·디버그) */
-        squatReversalDropRequiredPct:
-          state.squatReversalDropRequired != null
-            ? Math.round(state.squatReversalDropRequired * 1000) / 10
-            : null,
-        squatReversalDropAchievedPct:
-          state.squatReversalDropAchieved != null
-            ? Math.round(state.squatReversalDropAchieved * 1000) / 10
-            : null,
-        squatDescentToPeakMs: state.squatDescentToPeakMs ?? null,
-        squatReversalToStandingMs: state.squatReversalToStandingMs ?? null,
-        /** PR-HMM-01B: shadow decoder 스칼라 — pass gate에 사용 금지 */
-        hmmConfidence: squatHmm.confidence,
-        hmmExcursionScore: Math.round(squatHmm.confidenceBreakdown.excursionScore * 1000) / 1000,
-        hmmSequenceScore: Math.round(squatHmm.confidenceBreakdown.sequenceScore * 1000) / 1000,
-        hmmCoverageScore: Math.round(squatHmm.confidenceBreakdown.coverageScore * 1000) / 1000,
-        hmmNoisePenalty: Math.round(squatHmm.confidenceBreakdown.noisePenalty * 1000) / 1000,
-        hmmCompletionCandidate: squatHmm.completionCandidate ? 1 : 0,
-        hmmStandingCount: squatHmm.dominantStateCounts.standing,
-        hmmDescentCount: squatHmm.dominantStateCounts.descent,
-        hmmBottomCount: squatHmm.dominantStateCounts.bottom,
-        hmmAscentCount: squatHmm.dominantStateCounts.ascent,
-        hmmExcursion: squatHmm.effectiveExcursion,
-        /** PR-HMM-02B: blocked-reason assist trace (1/0) */
-        hmmAssistEligible: state.hmmAssistEligible ? 1 : 0,
-        hmmAssistApplied: state.hmmAssistApplied ? 1 : 0,
-        /** PR-HMM-03A: calibration 정수 코드 (0=null) */
-        ruleCompletionBlockedReasonCode: squatCompletionBlockedReasonToCode(
-          state.ruleCompletionBlockedReason ?? null
-        ),
-        postAssistCompletionBlockedReasonCode: squatCompletionBlockedReasonToCode(
-          state.postAssistCompletionBlockedReason ?? null
-        ),
-        assistSuppressedByFinalize: state.assistSuppressedByFinalize ? 1 : 0,
-        hmmTransitionCount: squatHmm.transitionCount,
-        /** PR-HMM-04B: 깊은 no_reversal HMM 역전 보조 */
-        hmmReversalAssistEligible: state.hmmReversalAssistEligible ? 1 : 0,
-        hmmReversalAssistApplied: state.hmmReversalAssistApplied ? 1 : 0,
-        hmmReversalAssistReason: state.hmmReversalAssistReason ?? null,
-        /** PR-04E2: 역전 확인 관측 (0=none, 1=rule, 2=rule_plus_hmm) */
-        squatReversalSourceCode:
-          state.reversalConfirmedBy === 'rule'
-            ? 1
-            : state.reversalConfirmedBy === 'rule_plus_hmm'
-              ? 2
-              : 0,
-        squatReversalDepthDrop:
-          state.reversalDepthDrop != null
-            ? Math.round(state.reversalDepthDrop * 1000) / 1000
-            : null,
-        squatReversalFrameCount: state.reversalFrameCount ?? null,
-        /** PR-04E3B: event-cycle / freeze / latch 관측 (정수 코드: band 0=none 1=low 2=ultra) */
-        squatBaselineFrozen: state.baselineFrozen ? 1 : 0,
-        squatPeakLatched: state.peakLatched ? 1 : 0,
-        squatPeakLatchedAtIndex: state.peakLatchedAtIndex ?? null,
-        baselineFrozenDepth:
-          state.baselineFrozenDepth != null && Number.isFinite(state.baselineFrozenDepth)
-            ? Math.round(state.baselineFrozenDepth * 1000) / 1000
-            : null,
-        squatEventCycleDetected: state.squatEventCycle?.detected ? 1 : 0,
-        squatEventCycleBandCode:
-          state.squatEventCycle?.band === 'low_rom'
-            ? 1
-            : state.squatEventCycle?.band === 'ultra_low_rom'
-              ? 2
-              : 0,
-        squatEventCyclePromoted: state.eventCyclePromoted ? 1 : 0,
-        squatEventCycleSourceCode:
-          state.eventCycleSource === 'rule'
-            ? 1
-            : state.eventCycleSource === 'rule_plus_hmm'
-              ? 2
-              : 0,
-        /** PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: shallow 권위 스테이지·truth 계층(문자열+0/1) */
-        shallowAuthoritativeStage: state.shallowAuthoritativeStage ?? null,
-        shallowObservationLayerReversalTruth: state.shallowObservationLayerReversalTruth ? 1 : 0,
-        shallowAuthoritativeReversalTruth: state.shallowAuthoritativeReversalTruth ? 1 : 0,
-        shallowObservationLayerRecoveryTruth: state.shallowObservationLayerRecoveryTruth ? 1 : 0,
-        shallowAuthoritativeRecoveryTruth: state.shallowAuthoritativeRecoveryTruth ? 1 : 0,
-        shallowProvenanceOnlyReversalEvidence: state.shallowProvenanceOnlyReversalEvidence ? 1 : 0,
-        truthMismatch_reversalTopVsCompletion: state.truthMismatch_reversalTopVsCompletion ? 1 : 0,
-        truthMismatch_recoveryTopVsCompletion: state.truthMismatch_recoveryTopVsCompletion ? 1 : 0,
-        truthMismatch_shallowAdmissionVsClosure: state.truthMismatch_shallowAdmissionVsClosure ? 1 : 0,
-        truthMismatch_provenanceReversalWithoutAuthoritative:
-          state.truthMismatch_provenanceReversalWithoutAuthoritative ? 1 : 0,
-        truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery:
-          state.truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery ? 1 : 0,
-        /** PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: 정규 패밀리·계약 상태(게이트 미사용) */
-        shallowNormalizedBlockerFamily: state.shallowNormalizedBlockerFamily ?? null,
-        shallowAuthoritativeContractStatus: state.shallowAuthoritativeContractStatus ?? null,
-        shallowContractAuthoritativeClosure: state.shallowContractAuthoritativeClosure ? 1 : 0,
-        shallowContractAuthorityTrace: state.shallowContractAuthorityTrace ?? null,
-        /** PR-SHALLOW-ULTRA-LOW-POLICY-LOCK-01: 정책 락 관측(게이트 미사용) */
-        ultraLowPolicyScope: state.ultraLowPolicyScope ? 1 : 0,
-        ultraLowPolicyDecisionReady: state.ultraLowPolicyDecisionReady ? 1 : 0,
-        ultraLowPolicyBlocked: state.ultraLowPolicyBlocked ? 1 : 0,
-        ultraLowPolicyTrace: state.ultraLowPolicyTrace ?? null,
-        /** PR-0: owner truth trace — observability only */
-        ownerTruthSource: state.ownerTruthSource ?? 'none',
-        ownerTruthStage: state.ownerTruthStage ?? null,
-        ownerTruthBlockedBy: state.ownerTruthBlockedBy ?? null,
-        /** PR-CAM-STANDING-FINALIZE-TIMING-NORMALIZE-03 */
-        standingFinalizeSatisfied: state.standingFinalizeSatisfied ? 1 : 0,
-        standingFinalizeSuppressedByLateSetup: state.standingFinalizeSuppressedByLateSetup ? 1 : 0,
-        standingFinalizeReadyAtMs: state.standingFinalizeReadyAtMs ?? null,
-      },
+      highlightedMetrics,
       perStepDiagnostics: perStepRecord,
-      /** PR-HMM-01B: shadow decoder 전체 결과 — debug 전용 */
+      /** PR-HMM-01B: shadow decoder full result — debug only */
       squatHmm,
       squatCalibration,
-      /** PR-04E3B: shallow event-cycle 헬퍼 — completion-state 가 채움 */
+      /** PR-04E3B: shallow event-cycle helper — populated by completion-state */
       squatEventCycle: state.squatEventCycle,
     },
+  };
+}
+
+/**
+ * PR-3-EVALUATOR-BOUNDARY-CLEANUP: Evaluator packaging helper.
+ *
+ * Converts finalized completion truth + evaluator-local context into the
+ * highlightedMetrics debug surface consumed by auto-progression and debug tooling.
+ *
+ * OWNERSHIP: Pure packaging — reads from finalized state, produces scalar/code fields.
+ * Does NOT write to completionSatisfied, completionPassReason, completionBlockedReason,
+ * or any other completion truth field.
+ *
+ * All fields produced here are observability/debug — NOT gate inputs for auto-progression.
+ */
+function buildSquatEvaluatorHighlightedMetrics(p: {
+  state: ReturnType<typeof evaluateSquatCompletionState> & {
+    standingFinalizeSuppressedByLateSetup?: boolean;
+  };
+  frames: PoseFeaturesFrame[];
+  valid: PoseFeaturesFrame[];
+  completionFrames: PoseFeaturesFrame[];
+  completionArming: ReturnType<typeof mergeArmingDepthObservability>;
+  effectiveArmed: boolean;
+  squatHmm: ReturnType<typeof decodeSquatHmm>;
+  depthValues: number[];
+  globalMaxDepthProxy: number;
+  completionSliceMaxDepthProxy: number;
+  maxPrimaryCalib: number;
+  maxBlendedCalib: number;
+  firstDescentIdx: number;
+  firstDescentIdxGlobal: number;
+  firstBottomIdx: number;
+  firstAscentIdx: number;
+  firstStartIdx: number;
+  depthTruthWindowMismatch: number;
+  sliceMissedMotionCode: number;
+  relPeakPrimPct: number | null;
+  relPeakBlendPct: number | null;
+  latestSquatDepthProxy: number | null;
+  guardedShallowAscentDetected: number;
+  depthBlendObsFallbackPeak: number;
+  depthBlendObsTravelPeak: number;
+  squatDepthBlendOfferedCount: number;
+  squatDepthBlendCapHitCount: number;
+  squatDepthBlendActiveFrameCount: number;
+  squatDepthSourceFlipCount: number;
+  bottomStability: number;
+  startCount: number;
+  descentCount: number;
+  bottomCount: number;
+  ascentCount: number;
+  recovery: ReturnType<typeof getSquatRecoverySignal>;
+  depthBand: number;
+  repCountEstimate: number;
+}) {
+  const { state, completionArming, effectiveArmed, squatHmm } = p;
+
+  return {
+    depthPeak: p.depthValues.length > 0 ? Math.round(Math.max(...p.depthValues) * 100) : null,
+    completionArmingArmed: completionArming.armed ? 1 : 0,
+    effectiveArmed: effectiveArmed ? 1 : 0,
+    hmmArmingAssistEligible: completionArming.hmmArmingAssistEligible ? 1 : 0,
+    hmmArmingAssistApplied: completionArming.hmmArmingAssistApplied ? 1 : 0,
+    hmmArmingAssistReason: completionArming.hmmArmingAssistReason ?? null,
+    completionArmingBaselineCaptured: completionArming.baselineCaptured ? 1 : 0,
+    completionArmingStableFrames: completionArming.stableFrames,
+    completionArmingSliceStart: completionArming.completionSliceStartIndex,
+    completionSliceEndIndex: effectiveArmed ? p.valid.length - 1 : -1,
+    globalDepthPeak: Math.round(p.globalMaxDepthProxy * 1000) / 1000,
+    completionSliceDepthPeak: Math.round(p.completionSliceMaxDepthProxy * 1000) / 1000,
+    firstDescentIdxGlobal: p.firstDescentIdxGlobal >= 0 ? p.firstDescentIdxGlobal : -1,
+    depthTruthWindowMismatch: p.depthTruthWindowMismatch,
+    sliceMissedMotionCode: p.sliceMissedMotionCode,
+    completionArmingFallbackUsed: completionArming.armingFallbackUsed ? 1 : 0,
+    squatDepthPeakPrimary: Math.round(p.maxPrimaryCalib * 100),
+    squatDepthPeakBlended: Math.round(p.maxBlendedCalib * 100),
+    squatArmingDepthBlendAssisted: completionArming.armingDepthBlendAssisted ? 1 : 0,
+    completionArmingPeakAnchored: completionArming.armingPeakAnchored ? 1 : 0,
+    armingRetroApplied: completionArming.armingRetroApplied ? 1 : 0,
+    ra: completionArming.armingRetroApplied ?? false,
+    completionArmingStandingWindowRange:
+      completionArming.armingStandingWindowRange != null
+        ? Math.round(completionArming.armingStandingWindowRange * 1000) / 1000
+        : null,
+    armingBaselineStandingDepthPrimary:
+      completionArming.armingBaselineStandingDepthPrimary != null
+        ? Math.round(completionArming.armingBaselineStandingDepthPrimary * 100) / 100
+        : null,
+    armingBaselineStandingDepthBlended:
+      completionArming.armingBaselineStandingDepthBlended != null
+        ? Math.round(completionArming.armingBaselineStandingDepthBlended * 100) / 100
+        : null,
+    completionBaselineSeeded: state.baselineSeeded === true ? 1 : 0,
+    baselineStandingDepth: Math.round(state.baselineStandingDepth * 100) / 100,
+    rawDepthPeak: Math.round(state.rawDepthPeak * 100) / 100,
+    relativeDepthPeak: Math.round(state.relativeDepthPeak * 100) / 100,
+    latestSquatDepthProxy: p.latestSquatDepthProxy,
+    squatRelativeDepthPeakPrimary:
+      p.relPeakPrimPct != null ? Math.round(p.relPeakPrimPct * 10) / 10 : null,
+    squatRelativeDepthPeakBlended:
+      p.relPeakBlendPct != null ? Math.round(p.relPeakBlendPct * 10) / 10 : null,
+    squatRelativeDepthSourceCode:
+      state.relativeDepthPeakSource === 'primary'
+        ? 1
+        : state.relativeDepthPeakSource === 'blended'
+          ? 2
+          : 0,
+    guardedShallowAscentDetected: p.guardedShallowAscentDetected,
+    squatDepthObsFallbackPeak: Math.round(p.depthBlendObsFallbackPeak * 1000) / 1000,
+    squatDepthObsTravelPeak: Math.round(p.depthBlendObsTravelPeak * 1000) / 1000,
+    squatDepthBlendOfferedCount: p.squatDepthBlendOfferedCount,
+    squatDepthBlendCapHitCount: p.squatDepthBlendCapHitCount,
+    squatDepthBlendActiveFrameCount: p.squatDepthBlendActiveFrameCount,
+    squatDepthSourceFlipCount: p.squatDepthSourceFlipCount,
+    firstDescentIdx: p.firstDescentIdx,
+    firstBottomIdx: p.firstBottomIdx,
+    firstAscentIdx: p.firstAscentIdx,
+    depthBand: p.depthBand,
+    bottomStability: Math.round(p.bottomStability * 100),
+    startCount: p.startCount,
+    descentCount: p.descentCount,
+    bottomCount: p.bottomCount,
+    ascentCount: p.ascentCount,
+    ascentRecovered: p.recovery.recovered ? 1 : 0,
+    ascentRecoveredLowRom: p.recovery.lowRomRecovered ? 1 : 0,
+    ascentRecoveredUltraLowRom: p.recovery.ultraLowRomRecovered ? 1 : 0,
+    ascentRecoveredUltraLowRomGuarded: p.recovery.ultraLowRomGuardedRecovered ? 1 : 0,
+    recoveryDrop: Math.round(p.recovery.recoveryDrop * 100),
+    attemptStarted: state.attemptStarted,
+    currentSquatPhase: state.currentSquatPhase,
+    descendConfirmed: state.descendConfirmed,
+    committedAtMs: state.committedAtMs ?? null,
+    ascendConfirmed: state.ascendConfirmed,
+    standingRecoveredAtMs: state.standingRecoveredAtMs ?? null,
+    standingRecoveryHoldMs: state.standingRecoveryHoldMs,
+    standingRecoveryFrameCount: state.standingRecoveryFrameCount,
+    standingRecoveryThreshold: Math.round(state.standingRecoveryThreshold * 100) / 100,
+    standingRecoveryMinFramesUsed: state.standingRecoveryMinFramesUsed,
+    standingRecoveryMinHoldMsUsed: state.standingRecoveryMinHoldMsUsed,
+    standingRecoveryBand: state.standingRecoveryBand,
+    standingRecoveryFinalizeReason: state.standingRecoveryFinalizeReason,
+    squatStandingBandHit: state.standingRecoveredAtMs != null ? 1 : 0,
+    squatFinalizeGateOk:
+      state.standingRecoveryFinalizeReason === 'standing_hold_met' ||
+      state.standingRecoveryFinalizeReason === 'low_rom_guarded_finalize' ||
+      state.standingRecoveryFinalizeReason === 'ultra_low_rom_guarded_finalize'
+        ? 1
+        : 0,
+    successPhaseAtOpen: state.successPhaseAtOpen ?? null,
+    evidenceLabel: state.evidenceLabel,
+    completionBlockedReason: state.completionBlockedReason,
+    completionSatisfied: state.completionSatisfied,
+    shallowProofStage: state.shallowClosureProofTrace?.stage ?? null,
+    shallowProofBlockedReason: state.shallowClosureProofTrace?.proofBlockedReason ?? null,
+    shallowConsumptionBlockedReason:
+      state.shallowClosureProofTrace?.consumptionBlockedReason ?? null,
+    completionMachinePhase: state.completionMachinePhase,
+    completionPassReason: state.completionPassReason,
+    contractA_officialShallowCandidate: state.officialShallowPathCandidate ? 1 : 0,
+    contractA_officialShallowAdmitted: state.officialShallowPathAdmitted ? 1 : 0,
+    contractB_officialShallowReversal: state.officialShallowReversalSatisfied ? 1 : 0,
+    contractB_officialShallowAscentEquiv: state.officialShallowAscentEquivalentSatisfied ? 1 : 0,
+    contractC_officialShallowClosed: state.officialShallowPathClosed ? 1 : 0,
+    contractC_closureProof: state.officialShallowClosureProofSatisfied ? 1 : 0,
+    contractC_shallowDriftedToStandard: state.officialShallowDriftedToStandard ? 1 : 0,
+    recoveryReturnContinuityFrames: state.recoveryReturnContinuityFrames,
+    recoveryTrailingDepthCount: state.recoveryTrailingDepthCount,
+    recoveryDropRatio:
+      state.recoveryDropRatio != null
+        ? Math.round(state.recoveryDropRatio * 100) / 100
+        : undefined,
+    lowRomRecoveryReason: state.lowRomRecoveryReason,
+    ultraLowRomRecoveryReason: state.ultraLowRomRecoveryReason,
+    repCount: p.repCountEstimate,
+    cycleComplete: state.cycleComplete ? 1 : 0,
+    startBeforeBottom: state.startBeforeBottom ? 1 : 0,
+    descendStartAtMs: state.descendStartAtMs,
+    peakAtMs: state.peakAtMs,
+    committedAtMs: state.committedAtMs ?? null,
+    reversalAtMs: state.reversalAtMs ?? null,
+    ascendStartAtMs: state.ascendStartAtMs,
+    recoveryAtMs: state.standingRecoveredAtMs ?? null,
+    cycleDurationMs: state.cycleDurationMs,
+    downwardCommitmentDelta: Math.round(state.downwardCommitmentDelta * 100) / 100,
+    squatReversalDropRequiredPct:
+      state.squatReversalDropRequired != null
+        ? Math.round(state.squatReversalDropRequired * 1000) / 10
+        : null,
+    squatReversalDropAchievedPct:
+      state.squatReversalDropAchieved != null
+        ? Math.round(state.squatReversalDropAchieved * 1000) / 10
+        : null,
+    squatDescentToPeakMs: state.squatDescentToPeakMs ?? null,
+    squatReversalToStandingMs: state.squatReversalToStandingMs ?? null,
+    hmmConfidence: squatHmm.confidence,
+    hmmExcursionScore: Math.round(squatHmm.confidenceBreakdown.excursionScore * 1000) / 1000,
+    hmmSequenceScore: Math.round(squatHmm.confidenceBreakdown.sequenceScore * 1000) / 1000,
+    hmmCoverageScore: Math.round(squatHmm.confidenceBreakdown.coverageScore * 1000) / 1000,
+    hmmNoisePenalty: Math.round(squatHmm.confidenceBreakdown.noisePenalty * 1000) / 1000,
+    hmmCompletionCandidate: squatHmm.completionCandidate ? 1 : 0,
+    hmmStandingCount: squatHmm.dominantStateCounts.standing,
+    hmmDescentCount: squatHmm.dominantStateCounts.descent,
+    hmmBottomCount: squatHmm.dominantStateCounts.bottom,
+    hmmAscentCount: squatHmm.dominantStateCounts.ascent,
+    hmmExcursion: squatHmm.effectiveExcursion,
+    hmmAssistEligible: state.hmmAssistEligible ? 1 : 0,
+    hmmAssistApplied: state.hmmAssistApplied ? 1 : 0,
+    ruleCompletionBlockedReasonCode: squatCompletionBlockedReasonToCode(
+      state.ruleCompletionBlockedReason ?? null
+    ),
+    postAssistCompletionBlockedReasonCode: squatCompletionBlockedReasonToCode(
+      state.postAssistCompletionBlockedReason ?? null
+    ),
+    assistSuppressedByFinalize: state.assistSuppressedByFinalize ? 1 : 0,
+    hmmTransitionCount: squatHmm.transitionCount,
+    hmmReversalAssistEligible: state.hmmReversalAssistEligible ? 1 : 0,
+    hmmReversalAssistApplied: state.hmmReversalAssistApplied ? 1 : 0,
+    hmmReversalAssistReason: state.hmmReversalAssistReason ?? null,
+    squatReversalSourceCode:
+      state.reversalConfirmedBy === 'rule'
+        ? 1
+        : state.reversalConfirmedBy === 'rule_plus_hmm'
+          ? 2
+          : 0,
+    squatReversalDepthDrop:
+      state.reversalDepthDrop != null
+        ? Math.round(state.reversalDepthDrop * 1000) / 1000
+        : null,
+    squatReversalFrameCount: state.reversalFrameCount ?? null,
+    squatBaselineFrozen: state.baselineFrozen ? 1 : 0,
+    squatPeakLatched: state.peakLatched ? 1 : 0,
+    squatPeakLatchedAtIndex: state.peakLatchedAtIndex ?? null,
+    baselineFrozenDepth:
+      state.baselineFrozenDepth != null && Number.isFinite(state.baselineFrozenDepth)
+        ? Math.round(state.baselineFrozenDepth * 1000) / 1000
+        : null,
+    squatEventCycleDetected: state.squatEventCycle?.detected ? 1 : 0,
+    squatEventCycleBandCode:
+      state.squatEventCycle?.band === 'low_rom'
+        ? 1
+        : state.squatEventCycle?.band === 'ultra_low_rom'
+          ? 2
+          : 0,
+    squatEventCyclePromoted: state.eventCyclePromoted ? 1 : 0,
+    squatEventCycleSourceCode:
+      state.eventCycleSource === 'rule'
+        ? 1
+        : state.eventCycleSource === 'rule_plus_hmm'
+          ? 2
+          : 0,
+    shallowAuthoritativeStage: state.shallowAuthoritativeStage ?? null,
+    shallowObservationLayerReversalTruth: state.shallowObservationLayerReversalTruth ? 1 : 0,
+    shallowAuthoritativeReversalTruth: state.shallowAuthoritativeReversalTruth ? 1 : 0,
+    shallowObservationLayerRecoveryTruth: state.shallowObservationLayerRecoveryTruth ? 1 : 0,
+    shallowAuthoritativeRecoveryTruth: state.shallowAuthoritativeRecoveryTruth ? 1 : 0,
+    shallowProvenanceOnlyReversalEvidence: state.shallowProvenanceOnlyReversalEvidence ? 1 : 0,
+    truthMismatch_reversalTopVsCompletion: state.truthMismatch_reversalTopVsCompletion ? 1 : 0,
+    truthMismatch_recoveryTopVsCompletion: state.truthMismatch_recoveryTopVsCompletion ? 1 : 0,
+    truthMismatch_shallowAdmissionVsClosure: state.truthMismatch_shallowAdmissionVsClosure ? 1 : 0,
+    truthMismatch_provenanceReversalWithoutAuthoritative:
+      state.truthMismatch_provenanceReversalWithoutAuthoritative ? 1 : 0,
+    truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery:
+      state.truthMismatch_recoveryBandHitWithoutAuthoritativeRecovery ? 1 : 0,
+    shallowNormalizedBlockerFamily: state.shallowNormalizedBlockerFamily ?? null,
+    shallowAuthoritativeContractStatus: state.shallowAuthoritativeContractStatus ?? null,
+    shallowContractAuthoritativeClosure: state.shallowContractAuthoritativeClosure ? 1 : 0,
+    shallowContractAuthorityTrace: state.shallowContractAuthorityTrace ?? null,
+    ultraLowPolicyScope: state.ultraLowPolicyScope ? 1 : 0,
+    ultraLowPolicyDecisionReady: state.ultraLowPolicyDecisionReady ? 1 : 0,
+    ultraLowPolicyBlocked: state.ultraLowPolicyBlocked ? 1 : 0,
+    ultraLowPolicyTrace: state.ultraLowPolicyTrace ?? null,
+    ownerTruthSource: state.ownerTruthSource ?? 'none',
+    ownerTruthStage: state.ownerTruthStage ?? null,
+    ownerTruthBlockedBy: state.ownerTruthBlockedBy ?? null,
+    standingFinalizeSatisfied: state.standingFinalizeSatisfied ? 1 : 0,
+    standingFinalizeSuppressedByLateSetup: state.standingFinalizeSuppressedByLateSetup ? 1 : 0,
+    standingFinalizeReadyAtMs: state.standingFinalizeReadyAtMs ?? null,
   };
 }
 
