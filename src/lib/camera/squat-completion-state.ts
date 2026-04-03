@@ -2147,6 +2147,41 @@ function getShallowAuthoritativeClosureDecision(p: {
   return { satisfied: true, shallowAuthoritativeClosureBlockedReason: null };
 }
 
+/**
+ * PR-1-COMPLETION-STATE-SLIMMING: Completion core truth boundary — SQUAT_REFACTOR_SSOT.md §1.
+ *
+ * Names only the fields that belong to the completion core per the SSOT definition.
+ * evaluateSquatCompletionCore owns these fields as completion truth.
+ * All other SquatCompletionState fields are observability / context / assist annotations.
+ *
+ * This type is intentionally unexported and serves as a living specification boundary.
+ * Future PRs (PR-2+) may tighten this into a concrete return type once the boundary
+ * is proven stable through regression.
+ *
+ * Categories (per SSOT §Completion Core):
+ *   admission     — attemptStarted, descendConfirmed, downwardCommitmentReached
+ *   reversal      — reversalConfirmedAfterDescend, ascendConfirmed
+ *   recovery      — recoveryConfirmedAfterReversal
+ *   completion    — completionSatisfied, completionBlockedReason, completionPassReason
+ *   phase context — completionMachinePhase, currentSquatPhase
+ *   depth context — relativeDepthPeak, evidenceLabel (minimum to interpret the above)
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _SquatCompletionCoreBoundary = Pick<
+  SquatCompletionState,
+  | 'attemptStarted'
+  | 'descendConfirmed'
+  | 'downwardCommitmentReached'
+  | 'ascendConfirmed'
+  | 'relativeDepthPeak'
+  | 'evidenceLabel'
+  | 'currentSquatPhase'
+  | 'completionMachinePhase'
+  | 'completionPassReason'
+  | 'reversalConfirmedAfterDescend'
+  | 'recoveryConfirmedAfterReversal'
+>;
+
 function evaluateSquatCompletionCore(
   frames: PoseFeaturesFrame[],
   options: EvaluateSquatCompletionStateOptions | undefined,
@@ -4646,53 +4681,25 @@ function applyCanonicalShallowClosureFromContract(
   };
 }
 
-export function evaluateSquatCompletionState(
+/**
+ * PR-1-COMPLETION-STATE-SLIMMING: Pre-canonical observability layer.
+ *
+ * Stamps all observability facts that must exist before canonical contract derivation.
+ * This function ONLY ADDS fields to state — it never modifies the completion truth fields
+ * (completionSatisfied, completionBlockedReason, completionPassReason, currentSquatPhase,
+ * completionMachinePhase, reversalConfirmedAfterDescend, recoveryConfirmedAfterReversal).
+ *
+ * Fields stamped here are then consumed as inputs by buildCanonicalShallowContractInputFromState.
+ * The canonical contract derivation and single truth writer (applyCanonicalShallowClosureFromContract)
+ * are called by evaluateSquatCompletionState AFTER this function returns.
+ *
+ * Ownership boundary: observability / pre-canonical input preparation only.
+ */
+function stampPreCanonicalObservability(
+  state: SquatCompletionState,
   frames: PoseFeaturesFrame[],
-  options?: EvaluateSquatCompletionStateOptions
+  options: EvaluateSquatCompletionStateOptions | undefined
 ): SquatCompletionState {
-  let depthFreeze: SquatDepthFreezeConfig | null = null;
-  const MIN_PREFIX = Math.max(8, MIN_BASELINE_FRAMES + 2);
-  if (frames.length >= MIN_PREFIX) {
-    for (let n = MIN_PREFIX; n <= frames.length; n++) {
-      const partial = evaluateSquatCompletionCore(frames.slice(0, n), options, null);
-      if (partial.attemptStarted) {
-        const validFull = frames.filter((f) => f.isValid);
-        const fullRows = buildSquatCompletionDepthRows(validFull);
-        if (fullRows.length >= BASELINE_WINDOW) {
-          const win = fullRows.slice(0, BASELINE_WINDOW);
-          const src = partial.relativeDepthPeakSource ?? 'primary';
-          const opt = options;
-          const seedP = opt?.seedBaselineStandingDepthPrimary;
-          const seedB = opt?.seedBaselineStandingDepthBlended;
-          const finiteP = typeof seedP === 'number' && Number.isFinite(seedP);
-          const finiteB = typeof seedB === 'number' && Number.isFinite(seedB);
-          const frozenBaseline =
-            src === 'blended'
-              ? finiteB
-                ? seedB
-                : finiteP
-                  ? seedP
-                  : Math.min(...win.map((r) => r.depthCompletion))
-              : finiteP
-                ? seedP
-                : Math.min(...win.map((r) => r.depthPrimary));
-          depthFreeze = {
-            lockedRelativeDepthPeakSource: src,
-            frozenBaselineStandingDepth: frozenBaseline,
-          };
-        }
-        break;
-      }
-    }
-  }
-
-  let state = resolveStandardDriftAfterShallowAdmission(
-    evaluateSquatCompletionCore(frames, options, depthFreeze),
-    frames,
-    options,
-    depthFreeze
-  );
-
   const validForEventFrames =
     state.officialShallowPreferredPrefixFrameCount != null
       ? frames.slice(0, state.officialShallowPreferredPrefixFrameCount)
@@ -4730,10 +4737,6 @@ export function evaluateSquatCompletionState(
     squatEventCycle,
     bridgeOpts
   );
-  const alreadyNativeShallowClosureProof =
-    state.officialShallowPathClosed === true ||
-    state.officialShallowStreamBridgeApplied === true ||
-    state.officialShallowPrimaryDropClosureFallback === true;
 
   state = {
     ...state,
@@ -4864,6 +4867,69 @@ export function evaluateSquatCompletionState(
       })
     : undefined;
 
+  return {
+    ...state,
+    eventCyclePromotionCandidate: promoObs.eventCyclePromotionCandidate,
+    eventCyclePromotionBlockedReason: promoObs.eventCyclePromotionBlockedReason,
+    eventCyclePromoted: false,
+    ...(shallowClosureProofTrace != null ? { shallowClosureProofTrace } : {}),
+  };
+}
+
+export function evaluateSquatCompletionState(
+  frames: PoseFeaturesFrame[],
+  options?: EvaluateSquatCompletionStateOptions
+): SquatCompletionState {
+  let depthFreeze: SquatDepthFreezeConfig | null = null;
+  const MIN_PREFIX = Math.max(8, MIN_BASELINE_FRAMES + 2);
+  if (frames.length >= MIN_PREFIX) {
+    for (let n = MIN_PREFIX; n <= frames.length; n++) {
+      const partial = evaluateSquatCompletionCore(frames.slice(0, n), options, null);
+      if (partial.attemptStarted) {
+        const validFull = frames.filter((f) => f.isValid);
+        const fullRows = buildSquatCompletionDepthRows(validFull);
+        if (fullRows.length >= BASELINE_WINDOW) {
+          const win = fullRows.slice(0, BASELINE_WINDOW);
+          const src = partial.relativeDepthPeakSource ?? 'primary';
+          const opt = options;
+          const seedP = opt?.seedBaselineStandingDepthPrimary;
+          const seedB = opt?.seedBaselineStandingDepthBlended;
+          const finiteP = typeof seedP === 'number' && Number.isFinite(seedP);
+          const finiteB = typeof seedB === 'number' && Number.isFinite(seedB);
+          const frozenBaseline =
+            src === 'blended'
+              ? finiteB
+                ? seedB
+                : finiteP
+                  ? seedP
+                  : Math.min(...win.map((r) => r.depthCompletion))
+              : finiteP
+                ? seedP
+                : Math.min(...win.map((r) => r.depthPrimary));
+          depthFreeze = {
+            lockedRelativeDepthPeakSource: src,
+            frozenBaselineStandingDepth: frozenBaseline,
+          };
+        }
+        break;
+      }
+    }
+  }
+
+  let state = resolveStandardDriftAfterShallowAdmission(
+    evaluateSquatCompletionCore(frames, options, depthFreeze),
+    frames,
+    options,
+    depthFreeze
+  );
+
+  /**
+   * PR-1-COMPLETION-STATE-SLIMMING: Observability stamps before canonical contract.
+   * stampPreCanonicalObservability adds observability fields only — completion truth
+   * (completionSatisfied / completionBlockedReason / completionPassReason) is not modified.
+   */
+  state = stampPreCanonicalObservability(state, frames, options);
+
   /**
    * PR-CAM-CANONICAL-SHALLOW-CLOSER-02: canonical contract derive — 정확히 1회.
    * derive 이전 snapshot 기준으로 계산하며, 결과를 state 에 merge 한 뒤
@@ -4876,10 +4942,6 @@ export function evaluateSquatCompletionState(
 
   state = {
     ...state,
-    eventCyclePromotionCandidate: promoObs.eventCyclePromotionCandidate,
-    eventCyclePromotionBlockedReason: promoObs.eventCyclePromotionBlockedReason,
-    eventCyclePromoted: false,
-    ...(shallowClosureProofTrace != null ? { shallowClosureProofTrace } : {}),
     canonicalShallowContractEligible: canonicalShallowContract.eligible,
     canonicalShallowContractAdmissionSatisfied: canonicalShallowContract.admissionSatisfied,
     canonicalShallowContractAttemptSatisfied: canonicalShallowContract.attemptSatisfied,
