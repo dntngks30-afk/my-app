@@ -438,15 +438,84 @@ export function getShallowMeaningfulCycleBlockReason(
   }
 
   if (state.completionPassReason === 'ultra_low_rom_cycle') {
-    // PR-6: policy layer가 이미 legitimate ultra-low cycle로 판정한 경우 — 추가 차단 없음.
-    // ultraLowPolicyBlocked === false + scope/ready 확인으로 "policy가 통과를 결정했음"을 검증.
+    // PR-6: policy layer가 이미 legitimate ultra-low cycle로 판정한 경우.
     // single-writer 원칙 유지: 이 gate는 새로운 truth를 만들지 않는다.
     if (
       state.ultraLowPolicyScope === true &&
       state.ultraLowPolicyDecisionReady === true &&
       state.ultraLowPolicyBlocked === false
     ) {
-      return null; // policy layer가 이미 legitimate으로 판정 — 이 gate에서 추가 차단하지 않음
+      /**
+       * PR-11-MEANINGFUL-SHALLOW-GOLD-PATH-ONLY:
+       * Gold-path evaluator gates for ultra_low_rom_cycle.
+       *
+       * The policy gate (applyUltraLowPolicyLock) confirms canonical legitimacy, but
+       * ultra_low_rom_cycle still needs the same open-window, reversal-source, and
+       * timing standards as low_rom_cycle to prevent it from being a competing direct
+       * path outside the gold path.
+       *
+       * Guards use `!= null` bypass (not `== null` block) to preserve backward
+       * compatibility with callers that do not populate optional fields — the core/policy
+       * layer already enforces these invariants; the evaluator adds defense-in-depth when
+       * fields are explicitly set.
+       *
+       * 1. Phase gate — pass authorization requires standing_recovered.
+       *    terminal / non-standing phases cannot create new pass ownership.
+       *    terminal-adjacent and descent-phase passes are blocked here.
+       *
+       * 2. Reversal-source gate — rule or HMM reversal required (not bridge/trajectory).
+       *    Direct bridge-only / trajectory-only reversal cannot authorize gold-path pass.
+       *    Bypass when undefined: core (isUltraLowRomDirectCloseEligible) already requires
+       *    reversalConfirmedByRuleOrHmm=true; this is defence-in-depth when field is set.
+       *
+       * 3. Descent timing lower bound — meaningful descent takes ≥ 200ms.
+       *    jitter / sensor spike / micro-motion descend too quickly to satisfy this.
+       *    Bypass when undefined (conservative).
+       *
+       * 4. Reversal-to-standing lower bound — meaningful ascent takes ≥ 200ms.
+       *    jitter / instant reversal cannot satisfy this even with real event detection.
+       *    Bypass when undefined (conservative).
+       *
+       * 5. Reversal-to-standing upper bound — same 7500ms constant as canonical contract
+       *    and low_rom_cycle gate.
+       *    Repeated shallow aggregation, slow-rise laundering, and terminal laundering
+       *    produce large spans and are blocked here.
+       *    Bypass when undefined (conservative).
+       */
+      if (state.currentSquatPhase != null && state.currentSquatPhase !== 'standing_recovered') {
+        return 'standing_recovered_required';
+      }
+
+      if (
+        state.reversalConfirmedBy != null &&
+        state.reversalConfirmedBy !== 'rule' &&
+        state.reversalConfirmedBy !== 'rule_plus_hmm'
+      ) {
+        return 'rule_based_reversal_required';
+      }
+
+      if (
+        state.squatDescentToPeakMs != null &&
+        state.squatDescentToPeakMs < MIN_DESCENT_TO_PEAK_MS_SHALLOW
+      ) {
+        return 'shallow_descent_too_short';
+      }
+
+      if (
+        state.squatReversalToStandingMs != null &&
+        state.squatReversalToStandingMs < MIN_REVERSAL_TO_STANDING_MS_SHALLOW
+      ) {
+        return 'shallow_reversal_to_standing_too_short';
+      }
+
+      if (
+        state.squatReversalToStandingMs != null &&
+        state.squatReversalToStandingMs > SHALLOW_CURRENT_REP_REVERSAL_TO_STANDING_MAX_MS
+      ) {
+        return 'current_rep_ownership_blocked';
+      }
+
+      return null; // policy layer가 이미 legitimate으로 판정 + gold-path gates 통과
     }
     return 'ultra_low_rom_not_allowed';
   }
