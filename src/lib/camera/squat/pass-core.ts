@@ -1,24 +1,25 @@
 /**
- * PASS-AUTHORITY-RESET-02: Truly independent squat pass authority core.
+ * PASS-WINDOW-RESET-01: Truly independent squat pass authority core.
  *
  * This module is the ONLY owner of squat motion pass truth.
- * It derives pass truth DIRECTLY from the raw depth stream, WITHOUT depending
- * on upstream completion-state verdict fields such as:
- *   completionSatisfied, ownerAuthoritativeReversalSatisfied,
- *   ownerAuthoritativeRecoverySatisfied, standingFinalizeSatisfied, etc.
+ * It derives pass truth from pass-window-owned inputs, NOT from completionFrames
+ * or completion-state verdict fields.
  *
- * RESET-01 limitation: pass-core still required completionSatisfied === true
- * as its primary gate, so shallow reps that failed upstream continued to fail.
- *
- * RESET-02 fix: all pass gates are derived independently from depthFrames.
- * Completion-state is an observer / interpreter only.
+ * RESET-01 limitation: pass-core still required completionSatisfied as primary gate.
+ * RESET-02 fix: all gates derived independently from depthFrames.
+ * RESET-02 practical limitation: depthFrames still came from upstream-clipped completionFrames
+ *   and baseline came from completion-state.baselineStandingDepth.
+ * PASS-WINDOW-RESET-01 fix: depthFrames now come from the full post-readiness valid stream
+ *   (built by pass-window.ts), and baseline is pass-window-owned (min of first 8 valid frames).
+ *   This ensures the peak is never the first frame and pre-peak descent is always visible.
  *
  * Design contract:
- * - Reads raw depth stream + baseline (NOT completionSatisfied).
- * - Does NOT read: completionSatisfied, completionPassReason, completionBlockedReason.
- * - Does NOT read: official_shallow_cycle / low_rom_cycle / ultra_low_rom_cycle labels.
- * - Does NOT read: canonical shallow contract, ultra-low policy, interpretation labels.
- * - Setup bypass: a complete valid depth cycle overrides setup motion block.
+ * - Reads pass-window-owned depth stream + pass-window-owned baseline.
+ * - Does NOT read: completionSatisfied, completionBlockedReason, official_shallow_cycle,
+ *   low_rom_cycle, ultra_low_rom_cycle, canonical shallow contract, ultra-low policy.
+ * - Setup bypass REMOVED: setup motion blocks pass unconditionally per SSOT §4.3.
+ * - Cycle duration measured from descent epoch (not from stream start) to handle
+ *   long pre-squat standing periods in the wider valid stream.
  *
  * After this module runs, downstream layers (evaluator, policy, UI) may:
  *   - classify (shallow / low / standard)
@@ -26,7 +27,9 @@
  *   - gate UI latch / celebration timing
  * but may NOT flip passDetected from true to false.
  *
- * Reference: docs/PASS_AUTHORITY_RESET_02_SSOT_20260404.md
+ * References:
+ *   docs/PASS_AUTHORITY_RESET_02_SSOT_20260404.md
+ *   docs/PASS_WINDOW_RESET_01_SSOT_20260404.md
  */
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -66,9 +69,17 @@ const MAX_REVERSAL_TO_STANDING_MS = 10000;
 /** Minimum depth frame count for evaluation. */
 const MIN_DEPTH_FRAMES = 4;
 
+/**
+ * PASS-WINDOW-RESET-01: cycle duration is measured from the descent epoch start,
+ * not from depthFrames[0].timestampMs. The descent epoch starts at the last frame
+ * before the peak where depth is within (baseline + DESCENT_EPOCH_REL_THRESHOLD × relativePeak).
+ * This correctly handles long pre-squat standing periods in the wider valid stream.
+ */
+const DESCENT_EPOCH_REL_THRESHOLD = 0.10;
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-/** Single depth sample from the completion frames window. */
+/** Single depth sample from the pass window. */
 export interface SquatPassCoreDepthFrame {
   /** Raw or blended squatDepthProxy value. */
   depth: number;
@@ -77,15 +88,21 @@ export interface SquatPassCoreDepthFrame {
 }
 
 /**
- * RESET-02 pass-core input.
- * Primary authority source: depthFrames + baselineStandingDepth.
- * Completion-state verdict fields (completionSatisfied etc.) are NOT inputs.
+ * PASS-WINDOW-RESET-01 pass-core input.
+ * Primary authority source: depthFrames from pass-window.ts + passWindowBaseline.
+ * completionFrames and completion-state verdict fields are NOT inputs.
  */
 export interface SquatPassCoreInput {
-  /** Raw depth stream from the completion frames window — PRIMARY AUTHORITY SOURCE. */
+  /**
+   * Depth stream from the pass window (full valid stream, not arming-clipped completionFrames).
+   * PRIMARY AUTHORITY SOURCE — provided by pass-window.ts.
+   */
   depthFrames: SquatPassCoreDepthFrame[];
 
-  /** Baseline standing depth established from the arming readiness window. Raw structural fact. */
+  /**
+   * Pass-window-owned baseline: min depth of first 8 valid frames (readiness dwell standing).
+   * NOT completion-state.baselineStandingDepth. Owned by pass-window.ts.
+   */
   baselineStandingDepth: number;
 
   /** True when evaluator detected setup camera motion in the capture window. */
@@ -247,7 +264,7 @@ function buildResult(args: BuildResultArgs): SquatPassCoreResult {
 }
 
 /**
- * PASS-AUTHORITY-RESET-02: Derive immutable squat pass truth from raw depth stream.
+ * PASS-WINDOW-RESET-01: Derive immutable squat pass truth from pass-window-owned inputs.
  *
  * Called by evaluators/squat.ts BEFORE applyUltraLowPolicyLock and late-setup annotation.
  * The result is stored in evaluatorResult.debug.squatPassCore and consumed by auto-progression.
@@ -255,15 +272,19 @@ function buildResult(args: BuildResultArgs): SquatPassCoreResult {
  * Hard pass criteria (all must be true in one continuous depth stream):
  *  1. Sufficient depth frames + valid baseline (readiness)
  *  2. Meaningful descent: relativePeak >= MIN_DESCENT_DEPTH_DELTA (0.025)
- *  3. Peak sustained >= MIN_PEAK_HOLD_FRAMES (anti-single-spike)
+ *  3. Peak sustained >= MIN_PEAK_HOLD_FRAMES (anti-single-spike), peak not first frame
  *  4. Reversal: depth decreased by >= REVERSAL_FRACTION × relativePeak after peak
  *  5. Standing recovery: depth returned to <= baseline + STANDING_RECOVERY_FRACTION × relativePeak
  *  6. Anti-spike timing: cycle >= MIN_CYCLE_DURATION_MS and <= MAX_CYCLE_DURATION_MS
+ *     (cycle measured from descent epoch, not stream start — handles long pre-squat standing)
  *  7. Same-rep ownership: reversal-to-standing <= MAX_REVERSAL_TO_STANDING_MS
- *  8. Setup clear (or bypassed by a complete valid cycle)
+ *  8. Setup clear — NO BYPASS: setup motion blocks pass unconditionally (SSOT §4.3)
  *
- * RESET-02 key change: does NOT read completionSatisfied, ownerAuthoritativeReversalSatisfied,
- * standingFinalizeSatisfied, or any other completion-state verdict field as a pass gate.
+ * PASS-WINDOW-RESET-01 key changes:
+ * - depthFrames now comes from pass-window.ts (full valid stream, not arming-clipped completionFrames)
+ * - baselineStandingDepth is pass-window-owned (not completion-state.baselineStandingDepth)
+ * - Setup bypass removed: allMotionGatesClear no longer overrides setupMotionBlocked
+ * - Cycle duration measured from descent epoch start, not from depthFrames[0].timestampMs
  */
 export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreResult {
   const { depthFrames, baselineStandingDepth, setupMotionBlocked, setupMotionBlockReason } = input;
@@ -307,6 +328,19 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
 
   const peakTs = depthFrames[peakIndex]!.timestampMs;
   const relativePeak = peakDepth - baselineStandingDepth;
+
+  // ── 2b. Descent epoch start ──
+  // Measure cycle duration from descent epoch (not from stream start).
+  // With the wider valid stream, depthFrames[0] could be seconds before the squat motion.
+  // Scan backward from peak to find the last frame within DESCENT_EPOCH_REL_THRESHOLD of baseline.
+  const descentEpochThreshold = baselineStandingDepth + Math.max(0.005, relativePeak * DESCENT_EPOCH_REL_THRESHOLD);
+  let descentEpochStartTs = depthFrames[0]!.timestampMs; // fallback
+  for (let i = peakIndex; i >= 0; i--) {
+    if (depthFrames[i]!.depth <= descentEpochThreshold) {
+      descentEpochStartTs = depthFrames[i]!.timestampMs;
+      break;
+    }
+  }
 
   // ── 3. Descent check ──
   const descentDetected = relativePeak >= MIN_DESCENT_DEPTH_DELTA;
@@ -439,11 +473,12 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
   }
 
   // ── 7. Anti-spike timing (cycle duration) ──
-  const firstFrameTs = depthFrames[0]!.timestampMs;
+  // PASS-WINDOW-RESET-01: measure from descent epoch start, not stream start.
+  // With the wider valid stream, descentEpochStartTs ≈ when person started moving from standing.
   const cycleDurationMs =
     standingRecoveredAtMs != null
-      ? standingRecoveredAtMs - firstFrameTs
-      : depthFrames[depthFrames.length - 1]!.timestampMs - firstFrameTs;
+      ? standingRecoveredAtMs - descentEpochStartTs
+      : depthFrames[depthFrames.length - 1]!.timestampMs - descentEpochStartTs;
 
   const antiSpikeClear =
     peakLatched &&
@@ -511,17 +546,13 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
     });
   }
 
-  // ── 9. Setup gate (with bypass for complete valid cycle) ──
-  // If all motion gates pass independently, setup motion block is bypassed.
-  // Rationale: a clear depth cycle confirms a real rep even if framing moved slightly.
-  const allMotionGatesClear =
-    descentDetected &&
-    peakLatched &&
-    reversalDetected &&
-    standingRecovered &&
-    antiSpikeClear &&
-    sameRepOwnershipClear;
-  const setupClear = !setupMotionBlocked || allMotionGatesClear;
+  // ── 9. Setup gate — NO BYPASS (PASS-WINDOW-RESET-01 §4.3) ──
+  // Setup motion blocks pass unconditionally.
+  // Rationale: if setup motion was detected in the valid stream, the depth cycle may be
+  // caused by or contaminated by the framing change, not by a genuine squat rep.
+  // A pass may only open after a stable ready segment and a full same-rep cycle after that.
+  // The allMotionGatesClear bypass from RESET-02 is removed here.
+  const setupClear = !setupMotionBlocked;
 
   if (!setupClear) {
     return buildResult({
@@ -547,7 +578,8 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
   }
 
   // ── PASS ──
-  const descentStartAtMs = input.descendStartAtMs ?? firstFrameTs;
+  // descentStartAtMs: use descent epoch start for accurate trace (PASS-WINDOW-RESET-01).
+  const descentStartAtMs = descentEpochStartTs;
   return buildResult({
     passDetected: true,
     passBlockedReason: null,

@@ -15,6 +15,7 @@ import {
   applyUltraLowPolicyLock,
 } from '@/lib/camera/squat-completion-state';
 import { evaluateSquatPassCore, type SquatPassCoreDepthFrame } from '@/lib/camera/squat/pass-core';
+import { buildSquatPassWindow } from '@/lib/camera/squat/pass-window';
 import {
   computeSquatCompletionArming,
   mergeArmingDepthObservability,
@@ -313,20 +314,18 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   };
 
   // ── PASS-CORE: derive immutable pass truth (before policy lock and late-setup annotation) ──
-  // RESET-02: pass-core now reads raw depth frames directly — no completionSatisfied dependency.
-  const passCoreDepthFrames: SquatPassCoreDepthFrame[] = completionFrames
-    .map((f) => {
-      const d = readSquatCompletionDepth(f) ?? f.derived.squatDepthProxy;
-      if (typeof d !== 'number' || !Number.isFinite(d)) return null;
-      return { depth: d, timestampMs: f.timestampMs };
-    })
-    .filter((x): x is SquatPassCoreDepthFrame => x !== null);
+  // PASS-WINDOW-RESET-01: pass-core now reads from the full valid stream (not completionFrames).
+  // The pass window builder owns both the frame window and the baseline.
+  // This fixes: peakLatchedAtIndex=0, descentFrames=0, freeze_or_latch_missing, series_too_short
+  // caused by upstream arming/completion slicing that started at or after the peak.
+  const passWindow = buildSquatPassWindow(valid);
 
   const squatPassCore = evaluateSquatPassCore({
-    depthFrames: passCoreDepthFrames,
-    baselineStandingDepth: state.baselineStandingDepth,
+    depthFrames: passWindow.passWindowFrames,
+    baselineStandingDepth: passWindow.passWindowBaseline,
     setupMotionBlocked: setupBlock.blocked,
     setupMotionBlockReason: setupBlock.reason,
+    // Trace hints from completion state (non-authoritative — observability only)
     descendConfirmed: state.descendConfirmed,
     downwardCommitmentDelta: state.downwardCommitmentDelta,
     squatReversalToStandingMs: state.squatReversalToStandingMs,
@@ -668,6 +667,11 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
        * auto-progression reads squatPassCore.passDetected as final motion pass truth.
        */
       squatPassCore,
+      /**
+       * PASS-WINDOW-RESET-01: pass window build result.
+       * Observability only — shows the frame window and baseline pass-core actually used.
+       */
+      squatPassWindow: passWindow,
       /** Setup false-pass lock: dwell / framing-motion observation (auto-progression / trace) */
       squatSetupPhaseTrace,
       highlightedMetrics,

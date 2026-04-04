@@ -229,13 +229,13 @@ section('TEST 6: setup motion blocked — no cycle to bypass');
   assert('T6-C: setupClear=false', r.setupClear, false);
 }
 
-section('TEST 6b: setup motion bypassed by complete valid cycle');
+section('TEST 6b: setup motion blocks even with complete valid cycle (PASS-WINDOW-RESET-01)');
 {
-  // Setup motion + complete valid cycle: bypass
+  // Setup motion + complete valid cycle: bypass REMOVED — setup always blocks per SSOT §4.3
   const input = { ...makeUltraShallowCycle({ relPeak: 0.06 }), setupMotionBlocked: true, setupMotionBlockReason: 'step_back' };
   const r = evaluateSquatPassCore(input);
-  assert('T6b-A: passDetected=true (bypass)', r.passDetected, true);
-  assert('T6b-B: setupClear=true (bypassed)', r.setupClear, true);
+  assert('T6b-A: passDetected=false (no bypass)', r.passDetected, false);
+  assert('T6b-B: setupClear=false (blocked)', r.setupClear, false);
   assert('T6b-C: antiSetupClear=false (raw setup still blocked)', r.antiSetupClear, false);
 }
 

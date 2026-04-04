@@ -9,6 +9,7 @@ import type { OverheadInternalQuality } from '@/lib/camera/overhead/overhead-int
 import type { CompletionArmingState } from '@/lib/camera/squat/squat-completion-arming';
 import type { SquatCompletionState } from '@/lib/camera/squat-completion-state';
 import type { SquatPassCoreResult } from '@/lib/camera/squat/pass-core';
+import type { SquatPassWindowResult } from '@/lib/camera/squat/pass-window';
 import type { SquatHmmDecodeResult } from '@/lib/camera/squat/squat-hmm';
 import type { SquatEventCycleResult } from '@/lib/camera/squat/squat-event-cycle';
 
@@ -111,6 +112,12 @@ export interface EvaluatorDebugSummary {
    * auto-progression reads squatPassCore.passDetected as the final motion pass truth.
    */
   squatPassCore?: SquatPassCoreResult;
+  /**
+   * PASS-WINDOW-RESET-01: Squat pass window build result.
+   * Observability only — shows frame count, baseline, and usability of the window
+   * that pass-core actually evaluated. Not a gate input; debug/trace only.
+   */
+  squatPassWindow?: SquatPassWindowResult;
   /**
    * PR-CAM-13: 오버헤드 진행 상태 전체(typed) — squat-style 소유권 분리.
    * - progressionSatisfied: 진행 gate truth (strict | fallback | easy 통합).

@@ -256,14 +256,15 @@ function makeDeepGoldPath() {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// TEST 9 — setup motion bypassed by complete valid cycle
+// TEST 9 — setup motion blocks even with complete valid cycle (PASS-WINDOW-RESET-01)
+// Bypass removed: setup contamination always blocks pass per SSOT §4.3
 // ─────────────────────────────────────────────────────────────────────
 {
   const input = { ...makeShallowGoldPath(), setupMotionBlocked: true, setupMotionBlockReason: 'step_back' };
   const r = evaluateSquatPassCore(input);
-  results.push('[TEST 9] setup motion bypassed by complete valid cycle');
-  assert('9A: passDetected=true (bypass)', r.passDetected, true);
-  assert('9B: setupClear=true (bypassed)', r.setupClear, true);
+  results.push('[TEST 9] setup motion blocks even with complete valid cycle (no bypass)');
+  assert('9A: passDetected=false (no bypass)', r.passDetected, false);
+  assert('9B: setupClear=false (blocked)', r.setupClear, false);
   assert('9C: antiSetupClear=false (raw setup blocked)', r.antiSetupClear, false);
 }
 
