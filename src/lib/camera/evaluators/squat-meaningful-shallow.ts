@@ -383,13 +383,12 @@ export function getShallowMeaningfulCycleBlockReason(
   }
 
   /**
-   * PR-10C-MEANINGFUL-SHALLOW-CURRENT-REP-ONLY:
+   * PR-10C-MEANINGFUL-SHALLOW-CURRENT-REP-ONLY / PR-12-OFFICIAL-SHALLOW-GOLD-PATH-CONVERGENCE:
    * Evaluator-level guard for official_shallow_cycle.
    *
-   * The canonical contract (shallow-completion-contract.ts) enforces integrity (timing,
-   * epoch, commitment, weak-event, current-rep ownership). These additional evaluator-level
-   * checks enforce the terminal-finalize-only contract and lower timing bounds that the
-   * canonical contract does not explicitly validate at this layer:
+   * PR-12 canonical contract tightening: official_shallow_cycle now requires gold-path
+   * (rule/HMM) reversal. Bridge-assisted reversal no longer independently satisfies
+   * the canonical contract. These evaluator gates add defense-in-depth:
    *
    * 1. Phase gate — pass authorization requires standing_recovered.
    *    terminal / non-standing phases cannot create new pass ownership.
@@ -405,11 +404,11 @@ export function getShallowMeaningfulCycleBlockReason(
    *    Redundant with canonical contract but explicit here so both close paths are
    *    gated identically at the evaluator layer (single-constant, consistent behaviour).
    *
-   * Why NOT add event-cycle / rule-reversal checks here:
-   *   official_shallow_cycle allows bridge-assisted reversal through the canonical contract.
-   *   Adding rule-only reversal check at evaluator level would regress legitimate
-   *   bridge-assisted passes that the canonical contract deliberately allows.
-   *   The timing + phase gates alone are sufficient to block terminal/jitter/micro-motion.
+   * Note (PR-12): bridge/proof/fallback reversal is no longer allowed as authorization
+   * for official_shallow_cycle at the canonical contract level. The old note about
+   * "bridge-assisted reversal through the canonical contract" is no longer accurate.
+   * These evaluator gates are now complementary to the tightened canonical contract,
+   * not a substitute for it.
    */
   if (state.completionPassReason === 'official_shallow_cycle') {
     if (state.currentSquatPhase !== 'standing_recovered') {

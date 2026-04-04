@@ -134,14 +134,30 @@ export interface CanonicalShallowCompletionContractInput {
   downwardCommitmentReached: boolean;
 
   // ── Section 3: REVERSAL EVIDENCE ──
-  /** Authoritative reversal: strict rule / HMM-assisted / stream bridge. */
+  /**
+   * Authoritative reversal: strict rule / HMM-assisted / stream bridge.
+   * Note: this field includes stream bridge. For PR-12 gold-path enforcement,
+   * reversalConfirmedByRuleOrHmm (Section 10) is the primary authority gate.
+   * ownerAuthoritativeReversalSatisfied is used here only as a backward-compat fallback
+   * when reversalConfirmedByRuleOrHmm is undefined (pre-PR-12 callers).
+   */
   ownerAuthoritativeReversalSatisfied: boolean;
-  /** Stream bridge reversal evidence (distinct channel from ownerAuthoritativeReversalSatisfied). */
+  /**
+   * PR-12-OFFICIAL-SHALLOW-GOLD-PATH-CONVERGENCE: support-only — no longer reversal authority.
+   * May remain as observability / assist annotation. Does not satisfy reversal for official close.
+   */
   officialShallowStreamBridgeApplied: boolean;
+  /** PR-12: support-only — observability / assist annotation. Not reversal authority. */
   officialShallowAscentEquivalentSatisfied: boolean;
+  /** PR-12: support-only — observability / assist annotation. Not reversal authority. */
   officialShallowClosureProofSatisfied: boolean;
+  /** PR-12: support-only — observability / assist annotation. Not reversal authority. */
   officialShallowPrimaryDropClosureFallback: boolean;
-  /** Guarded trajectory proof: reversal evidence contribution (PR-B). */
+  /**
+   * PR-B / PR-12: support-only — observability / assist annotation.
+   * Guarded trajectory proof is no longer a reversal authority source.
+   * May still be present when satisfied=true if the gold path was satisfied via rule/HMM.
+   */
   guardedShallowTrajectoryClosureProofSatisfied?: boolean;
   /** Provenance-only signals: do not satisfy reversal alone, but indicate signal presence. */
   provenanceReversalEvidencePresent: boolean;
@@ -299,9 +315,11 @@ export interface CanonicalShallowCompletionContract {
   splitBrainDetected: boolean;
 
   /**
-   * PR-B: canonical contract 가 satisfied 일 때 어떤 경로로 닫혔는지.
-   * 'canonical_guarded_trajectory' — guarded trajectory proof 가 reversal evidence 에 기여.
-   * 'canonical_authoritative' — authoritative 경로.
+   * PR-B / PR-12: canonical contract 가 satisfied 일 때 어떤 경로로 닫혔는지.
+   * 'canonical_guarded_trajectory' — guarded trajectory proof 가 present 이고 gold-path 도 satisfied.
+   *   PR-12 이후: guarded trajectory 자체는 reversal authority 가 아님 — gold-path (rule/HMM)가 있을 때만 satisfied.
+   *   이 값은 "trajectory proof 가 함께 관찰됨" 수준의 annotiation 이지, "trajectory 가 reversal 을 제공함"이 아님.
+   * 'canonical_authoritative' — gold-path (rule/HMM) 경로.
    * 'none' — not satisfied.
    */
   closureSource: 'none' | 'canonical_authoritative' | 'canonical_guarded_trajectory';
@@ -311,15 +329,44 @@ export interface CanonicalShallowCompletionContract {
   trace: string;
 }
 
+/**
+ * PR-12-OFFICIAL-SHALLOW-GOLD-PATH-CONVERGENCE: Gold-path reversal authority gate.
+ *
+ * After PR-12, ONLY gold-path reversal — rule-confirmed or HMM-assisted — may satisfy
+ * official_shallow_cycle reversal authority. Bridge / proof / fallback signals are demoted
+ * to support-only / observability context; they may no longer independently authorize close.
+ *
+ * Decision hierarchy:
+ *   1. reversalConfirmedByRuleOrHmm === true
+ *      → gold-path confirmed (revConf.reversalConfirmed || hmmReversalAssistDecision.assistApplied,
+ *        explicitly excludes officialShallowStreamBridgeApplied) → reversal satisfied.
+ *   2. reversalConfirmedByRuleOrHmm === false
+ *      → bridge-only / proof-only reversal → NOT satisfied.
+ *   3. reversalConfirmedByRuleOrHmm === undefined
+ *      → field not populated (pre-PR-12 test fixtures, older callers).
+ *      Conservative backward-compat fallback: accept if ownerAuthoritativeReversalSatisfied === true.
+ *      In production, evaluateSquatCompletionCore always sets this field to a boolean;
+ *      undefined only appears in tests that pre-date PR-12.
+ *
+ * Removed from authorization (now support-only):
+ *   - officialShallowStreamBridgeApplied
+ *   - officialShallowAscentEquivalentSatisfied
+ *   - officialShallowClosureProofSatisfied
+ *   - officialShallowPrimaryDropClosureFallback
+ *   - guardedShallowTrajectoryClosureProofSatisfied
+ *
+ * These fields remain in the input for observability / assist annotation only.
+ */
 function reversalEvidenceFromInput(input: CanonicalShallowCompletionContractInput): boolean {
-  return (
-    input.ownerAuthoritativeReversalSatisfied === true ||
-    input.officialShallowStreamBridgeApplied === true ||
-    input.officialShallowAscentEquivalentSatisfied === true ||
-    input.officialShallowClosureProofSatisfied === true ||
-    input.officialShallowPrimaryDropClosureFallback === true ||
-    input.guardedShallowTrajectoryClosureProofSatisfied === true
-  );
+  if (input.reversalConfirmedByRuleOrHmm !== undefined) {
+    // PR-12: explicit gold-path decision — true = rule/HMM, false = bridge-only.
+    return input.reversalConfirmedByRuleOrHmm === true;
+  }
+  // Backward-compat fallback for pre-PR-12 callers / test fixtures that do not set
+  // reversalConfirmedByRuleOrHmm. Production code always sets this field; this branch
+  // fires only for legacy fixtures. ownerAuthoritativeReversalSatisfied includes bridge,
+  // but in the fallback path we accept it to avoid breaking pre-existing callers.
+  return input.ownerAuthoritativeReversalSatisfied === true;
 }
 
 function recoveryEvidenceFromInput(input: CanonicalShallowCompletionContractInput): boolean {

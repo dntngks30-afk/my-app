@@ -300,7 +300,7 @@ section('Section 5: PR-9 게이트 회귀 없음');
   assert('5A: nonDegenerateCommitmentClear=false', result.nonDegenerateCommitmentClear, false);
 }
 
-// 5B: weak_event_proof_substitution_blocked — PR-9 게이트 여전히 작동
+// 5B: bridge-only reversal → PR-12 blocked at reversal gate (before weak-event gate)
 {
   const input = {
     ...makeGoldPath(),
@@ -312,8 +312,9 @@ section('Section 5: PR-9 게이트 회귀 없음');
     officialShallowStreamBridgeApplied: true,
   };
   const result = deriveCanonicalShallowCompletionContract(input);
-  assert('5B: eventless+descent_weak+bridge-only → weak_event_proof_substitution_blocked (PR-9 유지)',
-    result.blockedReason, 'weak_event_proof_substitution_blocked');
+  // PR-12: reversal gate fires before weak-event gate (bridge-only blocked at authoritative_reversal_missing)
+  assert('5B: eventless+descent_weak+bridge-only → PR-12 authoritative_reversal_missing',
+    result.blockedReason, 'authoritative_reversal_missing');
 }
 
 // 5C: delta=0 + stale reversal → delta 게이트가 ownership보다 먼저 차단

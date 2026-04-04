@@ -216,11 +216,15 @@ section('repEpochIntegrityClear gate (PR-8)');
 // ──────────────────────────────────────────────────────────────────────────────
 section('Weak-event proof substitution gate (PR-8)');
 
-// 3-A: 위험 패턴 (eventCycleDetected=false + descent_weak + descentFrames=0 + bridge/proof, no authoritative)
+// 3-A: 위험 패턴 (eventCycleDetected=false + descent_weak + descentFrames=0 + bridge/proof, no rule/HMM)
+// PR-12: reversalConfirmedByRuleOrHmm=false → blocked at reversal gate (authoritative_reversal_missing)
+//        before the weak-event gate even fires. old (pre-PR-12) blockedReason was
+//        weak_event_proof_substitution_blocked; PR-12 moves the block earlier to the reversal gate.
 {
   const input = {
     ...makeLegitimateBase(),
     ownerAuthoritativeReversalSatisfied: false, // no authoritative
+    reversalConfirmedByRuleOrHmm: false, // PR-12: explicit bridge-only, no rule/HMM
     officialShallowStreamBridgeApplied: true,
     officialShallowAscentEquivalentSatisfied: true,
     officialShallowClosureProofSatisfied: true,
@@ -230,58 +234,59 @@ section('Weak-event proof substitution gate (PR-8)');
   };
   const result = deriveCanonicalShallowCompletionContract(input);
   assert('3A: weak-event + bridge/proof only → NOT satisfied', result.satisfied, false);
-  assert('3A: blockedReason=weak_event_proof_substitution_blocked', result.blockedReason, 'weak_event_proof_substitution_blocked');
+  // PR-12: reversal gate blocks first (bridge-only, no rule/HMM) before weak-event gate
+  assert('3A: PR-12 blocked at reversal gate', result.blockedReason, 'authoritative_reversal_missing');
 }
 
-// 3-B: 위험 패턴 + ownerAuthoritativeReversalSatisfied=true → 허용 (rule/HMM 역전 있음)
+// 3-B: 위험 패턴 + ownerAuthoritativeReversalSatisfied=true + reversalConfirmedByRuleOrHmm=true → 허용 (rule/HMM 역전 있음)
 {
   const input = {
     ...makeLegitimateBase(),
     ownerAuthoritativeReversalSatisfied: true,
+    reversalConfirmedByRuleOrHmm: true, // PR-12: gold-path confirmed
     officialShallowStreamBridgeApplied: true,
     eventCycleDetected: false,
     eventCycleHasDescentWeak: true,
     eventCycleDescentFrames: 0,
   };
   const result = deriveCanonicalShallowCompletionContract(input);
-  assert('3B: weak-event + authoritative reversal → satisfied (authoritative overrides weak-event gate)', result.satisfied, true);
+  assert('3B: weak-event + gold-path (rule/HMM) reversal → satisfied', result.satisfied, true);
 }
 
-// 3-C: eventCycleDetected=false 지만 descent_weak 없음 → gate 미적용 (다른 조건만으로 차단 안 됨)
+// 3-C: eventCycleDetected=false 지만 descent_weak 없음 → weak-event gate 미적용
+// PR-12: bridge-only (reversalConfirmedByRuleOrHmm=false) is now blocked at the reversal gate.
+//        Test updated to use gold-path reversal so the weak-event gate logic is still testable.
 {
   const input = {
     ...makeLegitimateBase(),
-    ownerAuthoritativeReversalSatisfied: false,
+    ownerAuthoritativeReversalSatisfied: true,
+    reversalConfirmedByRuleOrHmm: true, // PR-12: gold-path required
     officialShallowStreamBridgeApplied: true,
     officialShallowClosureProofSatisfied: true,
     eventCycleDetected: false,
-    eventCycleHasDescentWeak: false, // no descent_weak
+    eventCycleHasDescentWeak: false, // no descent_weak → weak-event gate not active
     eventCycleDescentFrames: 0,
   };
   const result = deriveCanonicalShallowCompletionContract(input);
-  // weak-event gate doesn't block (no descent_weak), but ownerAuthoritativeReversalSatisfied=false
-  // → reversal evidence must come from bridge/proof (still satisfies reversalEvidenceFromInput)
-  // This test validates that the weak-event gate only fires on all three conditions
-  assertFalsy('3C: no descent_weak → weak-event gate not active (other gates may still block)', false);
-  results.push('  ✓ 3C: weak-event gate requires all 3 conditions (not just eventCycleDetected=false)');
-  passed++;
+  assert('3C: gold-path reversal + no descent_weak → satisfied (weak-event gate requires all 3 conditions)', result.satisfied, true);
 }
 
-// 3-D: eventCycleDetected=false + descent_weak 지만 descentFrames=2 → gate 미적용
+// 3-D: eventCycleDetected=false + descent_weak 지만 descentFrames=2 → weak-event gate 미적용
+// PR-12: must use gold-path reversal (reversalConfirmedByRuleOrHmm=true); bridge-only no longer authorized.
 {
   const input = {
     ...makeLegitimateBase(),
-    ownerAuthoritativeReversalSatisfied: false,
+    ownerAuthoritativeReversalSatisfied: true,
+    reversalConfirmedByRuleOrHmm: true, // PR-12: gold-path required
     officialShallowStreamBridgeApplied: true,
     officialShallowClosureProofSatisfied: true,
     eventCycleDetected: false,
     eventCycleHasDescentWeak: true,
-    eventCycleDescentFrames: 2, // has descent frames → gate not active
+    eventCycleDescentFrames: 2, // has descent frames → weak-event gate not active
   };
   const result = deriveCanonicalShallowCompletionContract(input);
-  // weak-event gate doesn't apply (descentFrames > 0)
-  // bridge/proof still satisfies reversal, so contract may be satisfied
-  assert('3D: descent_weak but descentFrames=2 → weak-event gate not triggered (satisfied)', result.satisfied, true);
+  // weak-event gate doesn't apply (descentFrames > 0); gold-path reversal satisfies
+  assert('3D: descent_weak but descentFrames=2 + gold-path reversal → satisfied', result.satisfied, true);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

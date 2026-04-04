@@ -180,16 +180,19 @@ section('Section 1: nonDegenerateCommitmentClear gate (PR-9)');
 section('Section 2: weakEventProofSubstitutionBlocked gate (PR-9 tightened)');
 
 // 2A: eventCycle detected → weak-event gate does not fire
+// PR-12: bridge-only reversal is no longer authorized. Use gold-path (reversalConfirmedByRuleOrHmm=true)
+// to confirm the weak-event gate's bypass condition (eventCycleDetected=true).
 {
   const input = {
     ...makeGoldPath(),
     eventCycleDetected: true,
     eventCycleHasDescentWeak: true,
     eventCycleDescentFrames: 0,
-    reversalConfirmedByRuleOrHmm: false, // bridge only
+    reversalConfirmedByRuleOrHmm: true, // PR-12: gold-path required
+    ownerAuthoritativeReversalSatisfied: true,
   };
   const result = deriveCanonicalShallowCompletionContract(input);
-  assert('2A: eventCycleDetected=true → weak-event gate bypassed → satisfied', result.satisfied, true);
+  assert('2A: eventCycleDetected=true + gold-path reversal → weak-event gate bypassed → satisfied', result.satisfied, true);
 }
 
 // 2B: eventCycle NOT detected + descent_weak + descentFrames=0 + rule reversal → ALLOWED
@@ -221,22 +224,24 @@ section('Section 2: weakEventProofSubstitutionBlocked gate (PR-9 tightened)');
     officialShallowStreamBridgeApplied: true,
   };
   const result = deriveCanonicalShallowCompletionContract(input);
-  assert('2C: eventCycle=false + descent_weak + bridge-only → BLOCKED (PR-9)', result.satisfied, false);
-  assert('2C: blocked by weak_event_proof_substitution_blocked', result.blockedReason, 'weak_event_proof_substitution_blocked');
+  assert('2C: eventCycle=false + descent_weak + bridge-only → BLOCKED (PR-12)', result.satisfied, false);
+  // PR-12: blocked at reversal gate (authoritative_reversal_missing) before weak-event gate fires
+  assert('2C: PR-12 blocked at reversal gate', result.blockedReason, 'authoritative_reversal_missing');
 }
 
 // 2D: eventCycle NOT detected + descent_weak + descentFrames>0 → gate does NOT fire (descentFrames > 0)
+// PR-12: must use gold-path reversal; bridge-only is blocked regardless of descentFrames.
 {
   const input = {
     ...makeGoldPath(),
     eventCycleDetected: false,
     eventCycleHasDescentWeak: true,
-    eventCycleDescentFrames: 2, // some frames
-    reversalConfirmedByRuleOrHmm: false, // bridge only, but descentFrames > 0 so gate doesn't fire
+    eventCycleDescentFrames: 2, // some frames → weak-event gate doesn't fire
+    reversalConfirmedByRuleOrHmm: true, // PR-12: gold-path required
     ownerAuthoritativeReversalSatisfied: true,
   };
   const result = deriveCanonicalShallowCompletionContract(input);
-  assert('2D: eventCycle=false + descent_weak + descentFrames=2 → gate not fired → satisfied', result.satisfied, true);
+  assert('2D: eventCycle=false + descent_weak + descentFrames=2 + gold-path → gate not fired → satisfied', result.satisfied, true);
 }
 
 // 2E: reversalConfirmedByRuleOrHmm=undefined → gate does NOT fire (bypass — conservative)
@@ -383,8 +388,9 @@ section('Section 5: Eventless weak-descent bridge-only false-pass family (PR-9 k
     officialShallowClosureProofSatisfied: true,
   };
   const result = deriveCanonicalShallowCompletionContract(input);
-  assert('5A: real-device false pass pattern → BLOCKED by PR-9', result.satisfied, false);
-  assert('5A: blocked by weak_event_proof_substitution_blocked', result.blockedReason, 'weak_event_proof_substitution_blocked');
+  assert('5A: real-device false pass pattern → BLOCKED by PR-12', result.satisfied, false);
+  // PR-12: blocked at reversal gate (bridge-only has no rule/HMM) before weak-event gate fires
+  assert('5A: PR-12 blocked at reversal gate', result.blockedReason, 'authoritative_reversal_missing');
 }
 
 // 5B: same pattern but with rule/HMM reversal → ALLOWED (real reversal confirmed)
@@ -418,7 +424,8 @@ section('Section 5: Eventless weak-descent bridge-only false-pass family (PR-9 k
   };
   const result = deriveCanonicalShallowCompletionContract(input);
   assert('5C: second attempt stale bridge-only → still blocked', result.satisfied, false);
-  assert('5C: weak_event_proof_substitution_blocked', result.blockedReason, 'weak_event_proof_substitution_blocked');
+  // PR-12: blocked at reversal gate before weak-event gate fires
+  assert('5C: PR-12 authoritative_reversal_missing', result.blockedReason, 'authoritative_reversal_missing');
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -574,7 +581,8 @@ section('Section 8: Compound dangerous patterns (real-device observed)');
   };
   const result = deriveCanonicalShallowCompletionContract(input);
   assert('8B: tiny delta + weak-event + bridge-only → blocked', result.satisfied, false);
-  assert('8B: weak_event_proof_substitution_blocked', result.blockedReason, 'weak_event_proof_substitution_blocked');
+  // PR-12: blocked at reversal gate (before weak-event gate)
+  assert('8B: PR-12 authoritative_reversal_missing', result.blockedReason, 'authoritative_reversal_missing');
 }
 
 // 8C: Meaningful attempt with rule reversal — this should PASS
