@@ -8,6 +8,7 @@ import type { SquatInternalQuality } from '@/lib/camera/squat/squat-internal-qua
 import type { OverheadInternalQuality } from '@/lib/camera/overhead/overhead-internal-quality';
 import type { CompletionArmingState } from '@/lib/camera/squat/squat-completion-arming';
 import type { SquatCompletionState } from '@/lib/camera/squat-completion-state';
+import type { SquatPassCoreResult } from '@/lib/camera/squat/pass-core';
 import type { SquatHmmDecodeResult } from '@/lib/camera/squat/squat-hmm';
 import type { SquatEventCycleResult } from '@/lib/camera/squat/squat-event-cycle';
 
@@ -103,6 +104,13 @@ export interface EvaluatorDebugSummary {
   squatReversalCalibration?: SquatReversalCalibrationDebug;
   /** PR-04E3B: shallow event-cycle 헬퍼 결과 — pass 보조 입력·관측 전용 */
   squatEventCycle?: SquatEventCycleResult;
+  /**
+   * PASS-AUTHORITY-RESET-01: Single squat motion pass authority result.
+   * Set by evaluators/squat.ts BEFORE applyUltraLowPolicyLock and late-setup suppression run.
+   * passDetected is immutable — no downstream module may revoke it.
+   * auto-progression reads squatPassCore.passDetected as the final motion pass truth.
+   */
+  squatPassCore?: SquatPassCoreResult;
   /**
    * PR-CAM-13: 오버헤드 진행 상태 전체(typed) — squat-style 소유권 분리.
    * - progressionSatisfied: 진행 gate truth (strict | fallback | easy 통합).

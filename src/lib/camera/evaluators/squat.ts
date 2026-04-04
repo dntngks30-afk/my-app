@@ -14,6 +14,7 @@ import {
   evaluateSquatCompletionState,
   applyUltraLowPolicyLock,
 } from '@/lib/camera/squat-completion-state';
+import { evaluateSquatPassCore } from '@/lib/camera/squat/pass-core';
 import {
   computeSquatCompletionArming,
   mergeArmingDepthObservability,
@@ -275,7 +276,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   });
 
   /**
-   * PR-3-EVALUATOR-BOUNDARY-CLEANUP: Evaluator post-completion pipeline.
+   * PASS-AUTHORITY-RESET-01: Evaluator post-completion pipeline.
    *
    * The evaluator sequencing below operates on the finalized completion truth
    * returned by evaluateSquatCompletionState. The sequence is:
@@ -283,20 +284,21 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
    *   1. Stamp setup-phase context fields (readiness, setupMotionBlocked) onto state —
    *      additive observability only, not completion truth.
    *
-   *   2. Late-setup suppression check (evaluator-local boundary enforcement):
-   *      Completion truth from the pipeline may be suppressed if setup motion was
-   *      detected AFTER the cycle was closed. This is evaluator-boundary enforcement,
-   *      NOT a second completion writer. It applies a single, tightly-scoped
-   *      override only when completionSatisfied === true AND setupBlock.blocked,
-   *      and only for cycles that do NOT meet the authoritative bypass criteria.
-   *      Temporarily lives here for compatibility; candidate for PR-4 boundary when
-   *      UI-gate / setup-suppression ownership is clarified.
+   *   PASS-CORE: Derive immutable pass truth BEFORE any policy or late-setup rewrite.
+   *      pass-core.ts is the ONLY owner of squat motion pass truth.
+   *      Result stored in squatPassCore; consumed by auto-progression.
    *
-   *   3. attachShallowTruthObservabilityAlign01 — pure observability re-stamp
-   *      after the late-setup adjustment so debug fields reflect the final state.
+   *   2. Late-setup suppression — ANNOTATION ONLY (PASS-AUTHORITY-RESET-01).
+   *      Completion truth (completionSatisfied / completionPassReason / completionBlockedReason)
+   *      is NO LONGER rewritten by this check. The pass-core's lateSetupSuppressed gate
+   *      handles setup rejection before pass opens. This block now only stamps
+   *      standingFinalizeSuppressedByLateSetup for observability.
    *
-   *   4. applyUltraLowPolicyLock — product policy applied exactly once at the
-   *      evaluator boundary, after the canonical closer and after late-setup check.
+   *   3. attachShallowTruthObservabilityAlign01 — pure observability re-stamp.
+   *
+   *   4. applyUltraLowPolicyLock — ANNOTATION ONLY (PASS-AUTHORITY-RESET-01).
+   *      Policy fields (ultraLowPolicyBlocked, trace) are set for observability.
+   *      Does NOT rewrite completionSatisfied / completionPassReason / completionBlockedReason.
    */
 
   // ── Step 1: stamp setup-phase context ──
@@ -310,15 +312,20 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     attemptStartedAfterReady: dwell.satisfied,
   };
 
-  // ── Step 2: late-setup suppression (evaluator boundary check, not a truth writer) ──
+  // ── PASS-CORE: derive immutable pass truth (before policy lock and late-setup annotation) ──
+  const squatPassCore = evaluateSquatPassCore(state, {
+    setupMotionBlocked: setupBlock.blocked,
+    reason: setupBlock.reason,
+  });
+
+  // ── Step 2: late-setup — ANNOTATION ONLY, no completion truth rewrite ──
   if (state.completionSatisfied && setupBlock.blocked) {
     /**
-     * Bypass criteria: cycles that were closed by a validated authoritative path
-     * are NOT suppressed by late setup motion.
+     * PASS-AUTHORITY-RESET-01: This block now only computes standingFinalizeSuppressedByLateSetup
+     * for observability. completionSatisfied, completionPassReason, completionBlockedReason are NOT
+     * rewritten here. Setup rejection is handled inside evaluateSquatPassCore (lateSetupSuppressed).
      *
-     * PR-CAM-SHALLOW-TRAJECTORY-BRIDGE-05: trajectory-bridge-closed shallow cycles.
-     * PR-06: guarded trajectory proof closed official_shallow_cycle cycles.
-     * General: descent+reversal+recovery authoritative path with standing phase.
+     * Bypass criteria preserved for observability annotation consistency.
      */
     const trajectoryBridgeClosedCycle =
       state.shallowTrajectoryBridgeSatisfied === true &&
@@ -345,13 +352,8 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     if (bypassLateSetupForClosedCycle) {
       standingFinalizeSuppressedByLateSetup = false;
     } else {
+      // Annotation only: mark for observability but do NOT rewrite completion truth.
       standingFinalizeSuppressedByLateSetup = true;
-      state = {
-        ...state,
-        completionSatisfied: false,
-        completionPassReason: 'not_confirmed',
-        completionBlockedReason: `setup_motion:${setupBlock.reason ?? 'blocked'}`,
-      };
     }
   }
 
@@ -642,6 +644,12 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       squatInternalQuality,
       /** PR-CAM-09: typed completion state — auto-progression reads this directly */
       squatCompletionState: state,
+      /**
+       * PASS-AUTHORITY-RESET-01: immutable motion pass authority result.
+       * Set BEFORE applyUltraLowPolicyLock and before late-setup suppression.
+       * auto-progression reads squatPassCore.passDetected as final motion pass truth.
+       */
+      squatPassCore,
       /** Setup false-pass lock: dwell / framing-motion observation (auto-progression / trace) */
       squatSetupPhaseTrace,
       highlightedMetrics,

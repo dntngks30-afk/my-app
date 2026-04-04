@@ -202,8 +202,10 @@ section('A-2: trajectory-rescued ultra-low → policy BLOCKS (기존 방어 유�
   const result = applyUltraLowPolicyLock(state);
 
   assert('A-2 ultraLowPolicyBlocked=true', result.ultraLowPolicyBlocked, true);
-  assert('A-2 completionSatisfied=false (차단됨)', result.completionSatisfied, false);
-  assert('A-2 completionBlockedReason=ultra_low_rom_not_allowed', result.completionBlockedReason, 'ultra_low_rom_not_allowed');
+  // PASS-AUTHORITY-RESET-01: policy is annotation-only — completionSatisfied NOT overwritten.
+  // Pass truth is now determined by pass-core (evaluateSquatPassCore), not by applyUltraLowPolicyLock.
+  assert('A-2 completionSatisfied=true (policy annotation-only, NOT overwritten)', result.completionSatisfied, true);
+  assert('A-2 completionBlockedReason=null (policy annotation-only, NOT overwritten)', result.completionBlockedReason, null);
   assertTruthy('A-2 trace contains blocked=policy_illegitimate', result.ultraLowPolicyTrace?.includes('blocked=policy_illegitimate'));
 }
 
@@ -213,8 +215,9 @@ section('A-3: setup-contaminated ultra-low → policy BLOCKS (기존 방어 유�
   const result = applyUltraLowPolicyLock(state);
 
   assert('A-3 ultraLowPolicyBlocked=true', result.ultraLowPolicyBlocked, true);
-  assert('A-3 completionSatisfied=false (차단됨)', result.completionSatisfied, false);
-  assert('A-3 completionBlockedReason=ultra_low_rom_not_allowed', result.completionBlockedReason, 'ultra_low_rom_not_allowed');
+  // PASS-AUTHORITY-RESET-01: policy annotation-only — completionSatisfied/completionBlockedReason NOT overwritten.
+  assert('A-3 completionSatisfied=true (policy annotation-only, NOT overwritten)', result.completionSatisfied, true);
+  assert('A-3 completionBlockedReason=null (policy annotation-only, NOT overwritten)', result.completionBlockedReason, null);
 }
 
 section('A-4: incomplete ultra-low (core not passed) → policy BLOCKS');
@@ -410,7 +413,8 @@ section('D-2: ultra_low but no canonical contract → illegitimate로 분류됨'
   };
   const result = applyUltraLowPolicyLock(state);
   assert('D-2 ultraLowPolicyBlocked=true (canonical 없으면 차단)', result.ultraLowPolicyBlocked, true);
-  assert('D-2 completionSatisfied=false', result.completionSatisfied, false);
+  // PASS-AUTHORITY-RESET-01: policy annotation-only — completionSatisfied NOT overwritten.
+  assert('D-2 completionSatisfied=true (policy annotation-only, NOT overwritten)', result.completionSatisfied, true);
 }
 
 section('D-3: ultra_low + canonical OK지만 officialShallowPathClosed=false → illegitimate');

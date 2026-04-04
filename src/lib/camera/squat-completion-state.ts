@@ -3790,31 +3790,17 @@ export function applyUltraLowPolicyLock(state: SquatCompletionState): SquatCompl
     };
   }
 
-  // illegitimate ultra-low pattern만 차단 (trajectory-only, provenance-only, setup 오염 등)
+  // PASS-AUTHORITY-RESET-01: Policy is now ANNOTATION-ONLY.
+  // Motion truth fields (completionSatisfied, completionPassReason, completionBlockedReason,
+  // cycleComplete, officialShallowPathClosed, etc.) are NOT rewritten here.
+  // pass-core.ts determined pass truth before this function ran.
+  // ultraLowPolicyBlocked=true is preserved as an interpretation/observability annotation.
   return {
     ...state,
-    completionBlockedReason: ULTRA_LOW_ROM_POLICY_BLOCK_REASON,
-    completionSatisfied: false,
-    completionPassReason: 'not_confirmed',
-    cycleComplete: false,
-    successPhaseAtOpen: undefined,
-    completionMachinePhase: deriveSquatCompletionMachinePhase({
-      completionSatisfied: false,
-      currentSquatPhase: state.currentSquatPhase,
-      downwardCommitmentReached: state.downwardCommitmentReached,
-    }),
-    postAssistCompletionBlockedReason: ULTRA_LOW_ROM_POLICY_BLOCK_REASON,
-    ruleCompletionBlockedReason: ULTRA_LOW_ROM_POLICY_BLOCK_REASON,
-    officialShallowPathClosed: false,
-    officialShallowPathBlockedReason: ULTRA_LOW_ROM_POLICY_BLOCK_REASON,
-    eventCyclePromoted: false,
-    eventCycleSource: null,
-    completionFinalizeMode:
-      state.completionFinalizeMode === 'event_promoted_finalized' ? 'blocked' : state.completionFinalizeMode,
     ultraLowPolicyScope: true,
     ultraLowPolicyDecisionReady: true,
     ultraLowPolicyBlocked: true,
-    ultraLowPolicyTrace: `${ultraLowPolicyTraceBase}|blocked=policy_illegitimate`,
+    ultraLowPolicyTrace: `${ultraLowPolicyTraceBase}|blocked=policy_illegitimate_annotation_only`,
   };
 }
 

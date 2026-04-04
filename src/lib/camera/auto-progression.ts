@@ -42,6 +42,7 @@ import type {
   ShallowNormalizedBlockerFamily,
 } from '@/lib/camera/squat-completion-state';
 import type { SquatOwnerTruthSource, SquatOwnerTruthStage } from '@/lib/camera/squat/squat-owner-trace';
+import type { SquatPassCoreResult } from '@/lib/camera/squat/pass-core';
 
 export type ExerciseProgressionState =
   | 'idle'
@@ -1154,6 +1155,9 @@ function getSquatProgressionCompletionSatisfied(
   const cycleComplete = getHighlightedMetric(result, 'cycleComplete') > 0;
   const depthBand = getHighlightedMetric(result, 'depthBand'); /* 0=shallow, 1=moderate, 2=deep */
 
+  // ── PASS-AUTHORITY-RESET-01: immutable pass truth from pass-core ──
+  const passCore = result.debug?.squatPassCore as SquatPassCoreResult | undefined;
+
   // ── completion truth: squatCompletionState (typed) 우선, highlightedMetrics fallback ──
   // PR-CAM-09: evaluators/squat.ts 가 squatCompletionState 를 직접 설정하므로
   // highlightedMetrics 캐스팅 roundtrip 없이 타입 안전하게 읽는다.
@@ -1463,30 +1467,31 @@ function getSquatProgressionCompletionSatisfied(
     squatCycleDebug.guardrailPartialReason = guardrail.debug?.guardrailPartialReason;
     return { satisfied: false, squatCycleDebug };
   }
-  /** PR-10: completion-state 가 공식 shallow 소비로 이미 닫힌 경우 phase·blockedReason 이중 게이트 완화 */
-  const officialShallowConsumed =
-    cs?.completionSatisfied === true &&
-    completionPassReason === 'official_shallow_cycle' &&
-    completionBlockedReason == null;
-  if (
-    !officialShallowConsumed &&
-    (currentSquatPhase !== 'standing_recovered' || completionBlockedReason != null)
-  ) {
-    squatCycleDebug.passBlockedReason = completionBlockedReason ?? 'not_standing_recovered';
-    squatCycleDebug.completionRejectedReason =
-      completionBlockedReason ?? 'not_standing_recovered';
-    squatCycleDebug.falsePositiveBlockReason =
-      completionBlockedReason ?? 'not_standing_recovered';
-    squatCycleDebug.insufficientSignalReason =
-      completionBlockedReason ?? 'not_standing_recovered';
+  /**
+   * PASS-AUTHORITY-RESET-01: Main pass gate uses immutable passCore.passDetected.
+   *
+   * Previously: checked completionBlockedReason (which could be 'ultra_low_rom_not_allowed')
+   * and currentSquatPhase. This allowed policy and late-setup suppression to revoke passes.
+   *
+   * Now: passCore.passDetected is the single truth (set before policy lock and late-setup
+   * annotation). Policy (ultraLowPolicyBlocked) and late-setup (lateSetupSuppressed) are
+   * observability annotations only — they cannot revoke passDetected.
+   *
+   * Guardrail completionStatus check (above, line 1460) is kept as a signal-quality gate
+   * (if capture is incomplete we can't make any motion determination).
+   */
+  if (!passCore?.passDetected) {
+    const blockedReason =
+      passCore?.passBlockedReason ?? completionBlockedReason ?? 'not_standing_recovered';
+    squatCycleDebug.passBlockedReason = blockedReason;
+    squatCycleDebug.completionRejectedReason = blockedReason;
+    squatCycleDebug.falsePositiveBlockReason = blockedReason;
+    squatCycleDebug.insufficientSignalReason = blockedReason;
     squatCycleDebug.squatEvidenceLevel =
       evidenceLabel === 'insufficient_signal' ? 'insufficient_signal' : squatEvidenceLevel;
-    squatCycleDebug.squatEvidenceReasons = [
-      completionBlockedReason ?? 'not_standing_recovered',
-    ];
+    squatCycleDebug.squatEvidenceReasons = [blockedReason];
     return { satisfied: false, squatCycleDebug };
   }
-
   /**
    * PR-CAM-20: completionPathUsed는 evidenceLabel이 아닌 completionPassReason(성공 오너)에서 파생.
    * evidenceLabel은 품질/해석 레이블로만 유지. 경로 소유권은 상태기계 결과에서 온다.
@@ -1891,18 +1896,24 @@ export function evaluateExerciseAutoProgress(
   let squatLiveSummaryForGate: ReturnType<typeof getLiveReadinessSummary> | undefined;
 
   if (stepId === 'squat') {
-    // ── Step A: completion truth (already finalized by evaluator pipeline) ──
-    // squatCs = evaluatorResult.debug.squatCompletionState
-    // Truth is READ here, NOT redefined. completionSatisfied / completionPassReason
-    // were set by evaluateSquatCompletionState → late-setup check → applyUltraLowPolicyLock.
+    // ── Step A: completion truth — read from squatPassCore (PASS-AUTHORITY-RESET-01) ──
+    // squatPassCore.passDetected is the immutable motion pass truth.
+    // It was set BEFORE applyUltraLowPolicyLock and before late-setup suppression.
+    // squatCs is still read for classification / interpretation fields only.
     const captureArmingOk = squatCycleDebug?.captureArmingSatisfied === true;
+    const squatPassCore = evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined;
 
-    // ── Step B: completion owner truth interpretation ──
-    // Reads finalized completionSatisfied / completionPassReason / currentSquatPhase.
-    // Does NOT modify any completion truth field.
-    squatOwnerTruth = computeSquatCompletionOwnerTruth({
-      squatCompletionState: squatCs ?? undefined,
-    });
+    // ── Step B: completion owner truth — sourced from passCore, not from completionBlockedReason ──
+    // PASS-AUTHORITY-RESET-01: policy (ultraLowPolicyBlocked) and late-setup (lateSetupSuppressed)
+    // are now annotation-only. squatOwnerTruth reads passCore.passDetected as authoritative.
+    squatOwnerTruth = {
+      completionOwnerPassed: squatPassCore?.passDetected === true,
+      completionOwnerReason: squatCs?.completionPassReason ?? null,
+      completionOwnerBlockedReason:
+        squatPassCore?.passBlockedReason ??
+        squatCs?.completionBlockedReason ??
+        null,
+    };
 
     // ── Step C: UI progression latch gate ──
     // Pure UI signals: confidence, passConfirmation, captureQuality, setup suppression, arming.
