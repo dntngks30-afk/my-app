@@ -17,6 +17,9 @@ import {
 import { evaluateSquatPassCore, type SquatPassCoreDepthFrame } from '@/lib/camera/squat/pass-core';
 import { buildSquatPassWindow } from '@/lib/camera/squat/pass-window';
 import {
+  computeSquatDescentTruth,
+} from '@/lib/camera/squat/squat-descent-truth';
+import {
   computeSquatCompletionArming,
   mergeArmingDepthObservability,
   type CompletionArmingState,
@@ -268,16 +271,32 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     prevDepthSourceKey = src;
   }
 
+  // ── DESCENT-TRUTH-RESET-01: Build pass window BEFORE completion-state evaluation ──
+  // Pass window is built here so that the shared descent truth can be injected into
+  // both completion-state and pass-core, eliminating the split-brain ownership.
+  const passWindow = buildSquatPassWindow(valid);
+
+  // Shared descent truth: global pre-peak excursion (§4.4), latest-equal-max peak (§4.5).
+  // Consumed by completion-state (descendConfirmed) and pass-core (descentDetected + peak).
+  const sharedDescentTruth = passWindow.usable
+    ? computeSquatDescentTruth({
+        frames: passWindow.passWindowFrames,
+        baseline: passWindow.passWindowBaseline,
+      })
+    : null;
+
   let state = evaluateSquatCompletionState(completionFrames, {
     hmm: squatHmm,
     hmmArmingAssistApplied: armingAssistDec.assistApplied,
     seedBaselineStandingDepthPrimary: completionArming.armingBaselineStandingDepthPrimary,
     seedBaselineStandingDepthBlended: completionArming.armingBaselineStandingDepthBlended,
     setupMotionBlocked: setupBlock.blocked,
+    // DESCENT-TRUTH-RESET-01: shared descent truth aligns descendConfirmed to pass-window truth.
+    sharedDescentTruth: sharedDescentTruth ?? undefined,
   });
 
   /**
-   * PASS-AUTHORITY-RESET-01: Evaluator post-completion pipeline.
+   * PASS-AUTHORITY-RESET-01 / DESCENT-TRUTH-RESET-01: Evaluator post-completion pipeline.
    *
    * The evaluator sequencing below operates on the finalized completion truth
    * returned by evaluateSquatCompletionState. The sequence is:
@@ -287,6 +306,8 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
    *
    *   PASS-CORE: Derive immutable pass truth BEFORE any policy or late-setup rewrite.
    *      pass-core.ts is the ONLY owner of squat motion pass truth.
+   *      sharedDescentTruth is injected so pass-core uses the same peak anchor and
+   *      descent result as completion-state and event-cycle.
    *      Result stored in squatPassCore; consumed by auto-progression.
    *
    *   2. Late-setup suppression — ANNOTATION ONLY (PASS-AUTHORITY-RESET-01).
@@ -314,17 +335,16 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   };
 
   // ── PASS-CORE: derive immutable pass truth (before policy lock and late-setup annotation) ──
-  // PASS-WINDOW-RESET-01: pass-core now reads from the full valid stream (not completionFrames).
-  // The pass window builder owns both the frame window and the baseline.
-  // This fixes: peakLatchedAtIndex=0, descentFrames=0, freeze_or_latch_missing, series_too_short
-  // caused by upstream arming/completion slicing that started at or after the peak.
-  const passWindow = buildSquatPassWindow(valid);
-
+  // DESCENT-TRUTH-RESET-01: pass-core receives the pre-computed sharedDescentTruth so it
+  // uses the SAME peak anchor and descent result as completion-state. This eliminates the
+  // independent descent authority that previously diverged across modules.
   const squatPassCore = evaluateSquatPassCore({
     depthFrames: passWindow.passWindowFrames,
     baselineStandingDepth: passWindow.passWindowBaseline,
     setupMotionBlocked: setupBlock.blocked,
     setupMotionBlockReason: setupBlock.reason,
+    // DESCENT-TRUTH-RESET-01: pre-computed shared truth (same instance as completion-state used)
+    sharedDescentTruth: sharedDescentTruth ?? undefined,
     // Trace hints from completion state (non-authoritative — observability only)
     descendConfirmed: state.descendConfirmed,
     downwardCommitmentDelta: state.downwardCommitmentDelta,
@@ -334,6 +354,34 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     completionStateStandingAtMs: state.standingRecoveredAtMs,
     cycleDurationMs: state.cycleDurationMs,
   });
+
+  // ── DESCENT-TRUTH-RESET-01: align event-cycle descentDetected to shared descent truth ──
+  // event-cycle uses per-frame increments (>= 0.002) which can undercount with smoothing.
+  // If the shared descent truth confirms descent but event-cycle's local rule misses it,
+  // override event-cycle's descentDetected/descentFrames with the shared truth.
+  // This is alignment-only — event-cycle remains a trace/debug surface, not a pass gate.
+  if (
+    sharedDescentTruth?.descentDetected === true &&
+    state.squatEventCycle != null &&
+    !state.squatEventCycle.descentDetected
+  ) {
+    state = {
+      ...state,
+      squatEventCycle: {
+        ...state.squatEventCycle,
+        descentDetected: true,
+        // Use shared descentFrameCount as the minimum bound to eliminate false "descentFrames=0"
+        descentFrames: Math.max(
+          state.squatEventCycle.descentFrames,
+          sharedDescentTruth.descentFrameCount
+        ),
+        notes: [
+          ...state.squatEventCycle.notes,
+          'descent_aligned_to_shared_truth',
+        ],
+      },
+    };
+  }
 
   // ── Step 2: late-setup — ANNOTATION ONLY, no completion truth rewrite ──
   if (state.completionSatisfied && setupBlock.blocked) {

@@ -27,6 +27,7 @@ import {
 import { peekLastPoseCameraObservability } from './camera-observability-pose-bridge';
 import {
   getFrozenSquatPassSnapshot,
+  getLiveSquatPassCoreTruth,
   noteSquatGateForCameraObservability,
 } from './camera-observability-squat-session';
 import type { CameraPoseDelegateKind } from '@/lib/motion/pose-types';
@@ -44,7 +45,17 @@ export type TraceOutcome =
   | 'failed';
 
 /**
- * CAM-OBS: 스쿼트 trace/export용 관측 레이어 — `runtime`·`pose_quality`·`pass_snapshot` + 기존 truth 미러.
+ * CAM-OBS / PASS-SNAPSHOT-OBSERVABILITY-RESET-01: 스쿼트 trace/export용 관측 레이어.
+ *
+ * `runtime`·`pose_quality`·`pass_snapshot` + 기존 truth 미러.
+ *
+ * NEW (DESCENT-TRUTH-RESET-01 / PASS-SNAPSHOT-OBSERVABILITY-RESET-01):
+ * - `pass_core_truth`: squatPassCore.passDetected + passBlockedReason + descent timing.
+ *   Always present (not gated on finalPassEligible). Enables real-device diagnosis of
+ *   "pass-core never opened" vs "UI gate blocked final pass".
+ * - `ui_gate_truth`: squatUiGate.uiProgressionAllowed + uiProgressionBlockedReason.
+ *   Always present. Distinguishes pass-core true / UI blocked from pass-core false.
+ *
  * 판정·임계값 변경 없음.
  */
 export type SquatCameraObservabilityExport = {
@@ -59,6 +70,11 @@ export type SquatCameraObservabilityExport = {
     pose_world_present: boolean;
   };
   pass_snapshot: Record<string, unknown> | null;
+  /**
+   * PASS-SNAPSHOT-OBSERVABILITY-RESET-01: Always-present pass-core truth.
+   * Non-null after first gate update. Distinguishes pass-core false vs UI gate blocked.
+   */
+  pass_core_truth: Record<string, unknown> | null;
   completion: Record<string, unknown>;
   eventCycle: Record<string, unknown>;
   reversal: Record<string, unknown>;
@@ -372,6 +388,12 @@ export function buildSquatCameraObservabilityExport(
    */
   noteSquatGateForCameraObservability(gate);
   const pass_snapshot = getFrozenSquatPassSnapshot();
+  /**
+   * PASS-SNAPSHOT-OBSERVABILITY-RESET-01: always-present pass-core + UI gate truth.
+   * Non-null after first gate update. Exported regardless of finalPassEligible.
+   * Enables real-device diagnosis without needing the frozen pass snapshot.
+   */
+  const pass_core_truth = getLiveSquatPassCoreTruth();
   const cs = gate.evaluatorResult.debug?.squatCompletionState;
 
   const completion: Record<string, unknown> =
@@ -416,7 +438,7 @@ export function buildSquatCameraObservabilityExport(
         }
       : {};
 
-  return { runtime, pose_quality, pass_snapshot, completion, eventCycle, reversal };
+  return { runtime, pose_quality, pass_snapshot, pass_core_truth, completion, eventCycle, reversal };
 }
 
 /** CAM-27: 스쿼트 사전 관측(통과/재시도/최종 스냅샷과 분리). landmark·프레임 배열·blob 없음. */

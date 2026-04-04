@@ -1,17 +1,32 @@
 /**
- * CAM-OBS: 스쿼트 세션당 `finalPassEligible` 최초 true 엣지에서 pass_snapshot 1회 고정.
- * completion / gate 산식은 변경하지 않는다.
+ * CAM-OBS / DESCENT-TRUTH-RESET-01 / PASS-SNAPSHOT-OBSERVABILITY-RESET-01:
+ *
+ * Two observability layers:
+ *
+ * 1. frozenPassSnapshot — classic frozen snapshot (finalPassEligible false→true edge).
+ *    Unchanged from original.
+ *
+ * 2. livePassCoreTruth — NEW. Captured on every gate update. Always shows the latest
+ *    squatPassCore truth and squatUiGate truth, regardless of whether finalPassEligible
+ *    ever becomes true. This eliminates the gap where pass_snapshot=null made it impossible
+ *    to distinguish "pass-core never opened" from "UI gate blocked".
+ *
+ * SSOT §8 compliance: exported JSON must always show pass-core truth and UI gate truth.
  */
 import type { ExerciseGateResult } from '@/lib/camera/auto-progression';
 import { isFinalPassLatched } from '@/lib/camera/auto-progression';
 import { formatSquatPassSnapshotObservabilityRow } from '@/lib/camera/evaluators/squat';
+import type { SquatPassCoreResult } from '@/lib/camera/squat/pass-core';
 
 let prevFinalPassEligible = false;
 let frozenPassSnapshot: Record<string, unknown> | null = null;
+/** PASS-SNAPSHOT-OBSERVABILITY-RESET-01: always-updated pass-core + UI gate truth snapshot. */
+let livePassCoreTruth: Record<string, unknown> | null = null;
 
 export function resetSquatCameraObservabilitySession(): void {
   prevFinalPassEligible = false;
   frozenPassSnapshot = null;
+  livePassCoreTruth = null;
 }
 
 export function getFrozenSquatPassSnapshot(): Record<string, unknown> | null {
@@ -19,8 +34,23 @@ export function getFrozenSquatPassSnapshot(): Record<string, unknown> | null {
 }
 
 /**
+ * PASS-SNAPSHOT-OBSERVABILITY-RESET-01: Returns the latest pass-core + UI gate truth.
+ * Always non-null after the first gate update (even if finalPassEligible never goes true).
+ * This directly exposes whether pass-core opened and whether UI gate allowed progression,
+ * enabling real-device diagnosis without relying on the frozen pass snapshot.
+ */
+export function getLiveSquatPassCoreTruth(): Record<string, unknown> | null {
+  return livePassCoreTruth;
+}
+
+/**
  * squat 페이지(또는 동일 gate 구동부)에서 매 gate 갱신 시 호출.
- * `prevFinalPassEligible === false && gate.finalPassEligible === true` 인 최초 1회만 스냅샷 고정.
+ *
+ * - frozenPassSnapshot: `prevFinalPassEligible === false && gate.finalPassEligible === true`
+ *   인 최초 1회만 고정 (기존 동작 유지).
+ *
+ * - livePassCoreTruth: 매 호출마다 squatPassCore + squatUiGate 현재 상태로 갱신
+ *   (PASS-SNAPSHOT-OBSERVABILITY-RESET-01).
  */
 export function noteSquatGateForCameraObservability(gate: ExerciseGateResult): void {
   if (gate.evaluatorResult?.stepId !== 'squat') return;
@@ -28,7 +58,32 @@ export function noteSquatGateForCameraObservability(gate: ExerciseGateResult): v
   const cs = gate.evaluatorResult.debug?.squatCompletionState;
   const hm = gate.evaluatorResult.debug?.highlightedMetrics as Record<string, unknown> | undefined;
   const nowElig = gate.finalPassEligible === true;
+  const passCore = gate.evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined;
+  const sqCycleDebug = gate.squatCycleDebug;
 
+  // ── PASS-SNAPSHOT-OBSERVABILITY-RESET-01: always update live pass-core truth ──
+  if (passCore != null) {
+    livePassCoreTruth = {
+      squatPassCore: {
+        passDetected: passCore.passDetected,
+        passBlockedReason: passCore.passBlockedReason ?? null,
+        descentDetected: passCore.descentDetected,
+        descentStartAtMs: passCore.descentStartAtMs ?? null,
+        peakAtMs: passCore.peakAtMs ?? null,
+        reversalAtMs: passCore.reversalAtMs ?? null,
+        standingRecoveredAtMs: passCore.standingRecoveredAtMs ?? null,
+        trace: passCore.trace,
+      },
+      squatUiGate: {
+        uiProgressionAllowed: sqCycleDebug?.uiProgressionAllowed ?? null,
+        uiProgressionBlockedReason: sqCycleDebug?.uiProgressionBlockedReason ?? null,
+      },
+      finalPassEligible: gate.finalPassEligible,
+      finalPassBlockedReason: gate.finalPassBlockedReason ?? null,
+    };
+  }
+
+  // ── Classic frozen snapshot (unchanged) ──
   if (!frozenPassSnapshot && !prevFinalPassEligible && nowElig && cs != null) {
     const latest =
       typeof hm?.latestSquatDepthProxy === 'number' && Number.isFinite(hm.latestSquatDepthProxy)

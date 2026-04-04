@@ -782,6 +782,14 @@ export type EvaluateSquatCompletionStateOptions = {
    * PR-08/09: recovered-suffix 2차 코어 — `officialShallowReversalSatisfied` OR 에 합류.
    */
   guardedShallowRecoveredSuffixClosureApply?: boolean;
+  /**
+   * DESCENT-TRUTH-RESET-01: Shared descent truth from pass-window-owned frames.
+   * When provided, completion-state aligns its descendConfirmed and arming evidence
+   * to the shared truth instead of relying solely on phaseHint-based detection.
+   * This prevents split-brain where completion-state says descendConfirmed=false
+   * while pass-core (which owns the single pass authority) says descentDetected=true.
+   */
+  sharedDescentTruth?: import('@/lib/camera/squat/squat-descent-truth').SquatDescentTruthResult;
 };
 
 /** PR-HMM-03A: calibration 로그용 안정 정수 코드 (0 = null) */
@@ -2628,7 +2636,10 @@ function evaluateSquatCompletionCore(
    * deep/standard 밴드(`standard` evidence)에는 적용하지 않는다.
    */
   const officialShallowDescentEvidenceForAdmission =
-    descentFrame != null || eventBasedDescentPath === true;
+    descentFrame != null ||
+    eventBasedDescentPath === true ||
+    /** DESCENT-TRUTH-RESET-01: shared descent truth confirms descent — treat as evidence */
+    options?.sharedDescentTruth?.descentDetected === true;
   const pr03OfficialShallowArming =
     officialShallowPathCandidate &&
     officialShallowDescentEvidenceForAdmission &&
@@ -2637,8 +2648,19 @@ function evaluateSquatCompletionCore(
     naturalArmed ||
     pr03OfficialShallowArming ||
     Boolean(options?.hmmArmingAssistApplied === true && depthFrames.length >= MIN_BASELINE_FRAMES);
-  /** PR-CAM-18: phaseHint 'descent' 미탐지 시 trajectory 폴백 허용 */
-  const descendConfirmed = (descentFrame != null || eventBasedDescentPath) && armed;
+  /**
+   * DESCENT-TRUTH-RESET-01: align descendConfirmed to the shared descent truth.
+   * When shared truth (from pass-window-owned frames) detects descent, descendConfirmed
+   * becomes true regardless of phaseHint-based detection gaps.
+   * This prevents the split-brain where pass-core sees descent but completion-state does not.
+   * Local logic (descentFrame / eventBasedDescentPath) is retained as OR — it can only ADD
+   * passes, never revoke. Armed is still required.
+   */
+  const descendConfirmedLocal = (descentFrame != null || eventBasedDescentPath) && armed;
+  const descendConfirmed =
+    (options?.sharedDescentTruth?.descentDetected === true && armed)
+      ? true
+      : descendConfirmedLocal;
   const admissionContract = computeSquatAttemptAdmission({
     armed,
     descendConfirmed,

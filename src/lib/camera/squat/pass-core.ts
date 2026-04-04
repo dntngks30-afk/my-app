@@ -1,25 +1,25 @@
 /**
- * PASS-WINDOW-RESET-01: Truly independent squat pass authority core.
+ * PASS-WINDOW-RESET-01 / DESCENT-TRUTH-RESET-01: Squat pass authority core.
  *
  * This module is the ONLY owner of squat motion pass truth.
  * It derives pass truth from pass-window-owned inputs, NOT from completionFrames
  * or completion-state verdict fields.
  *
- * RESET-01 limitation: pass-core still required completionSatisfied as primary gate.
- * RESET-02 fix: all gates derived independently from depthFrames.
- * RESET-02 practical limitation: depthFrames still came from upstream-clipped completionFrames
- *   and baseline came from completion-state.baselineStandingDepth.
- * PASS-WINDOW-RESET-01 fix: depthFrames now come from the full post-readiness valid stream
- *   (built by pass-window.ts), and baseline is pass-window-owned (min of first 8 valid frames).
- *   This ensures the peak is never the first frame and pre-peak descent is always visible.
+ * DESCENT-TRUTH-RESET-01 key change:
+ *   Peak finding and descent detection are now delegated to the shared descent truth
+ *   module (squat-descent-truth.ts). This eliminates the independent descent definition
+ *   that previously diverged from completion-state and event-cycle.
+ *   - Peak anchoring: latest-equal-max (§4.5) — preserves pre-peak descent window.
+ *   - Descent check: global pre-peak excursion (§4.4) — not per-frame increments.
+ *   - A pre-computed sharedDescentTruth may be injected via input (from evaluators/squat.ts)
+ *     or computed internally if not provided (backward compat / direct call sites).
  *
- * Design contract:
+ * Design contract (unchanged):
  * - Reads pass-window-owned depth stream + pass-window-owned baseline.
  * - Does NOT read: completionSatisfied, completionBlockedReason, official_shallow_cycle,
  *   low_rom_cycle, ultra_low_rom_cycle, canonical shallow contract, ultra-low policy.
  * - Setup bypass REMOVED: setup motion blocks pass unconditionally per SSOT §4.3.
- * - Cycle duration measured from descent epoch (not from stream start) to handle
- *   long pre-squat standing periods in the wider valid stream.
+ * - Cycle duration measured from descent epoch (not from stream start).
  *
  * After this module runs, downstream layers (evaluator, policy, UI) may:
  *   - classify (shallow / low / standard)
@@ -30,11 +30,20 @@
  * References:
  *   docs/PASS_AUTHORITY_RESET_02_SSOT_20260404.md
  *   docs/PASS_WINDOW_RESET_01_SSOT_20260404.md
+ *   docs/DESCENT_TRUTH_RESET_01_SSOT_20260404.md
  */
+
+import {
+  computeSquatDescentTruth,
+  type SquatDescentTruthResult,
+} from '@/lib/camera/squat/squat-descent-truth';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-/** Minimum relative depth (peak − baseline) for meaningful descent. Blocks standing-only / micro-sway. */
+// DESCENT-TRUTH-RESET-01: MIN_DESCENT_DEPTH_DELTA is no longer used for the primary
+// descent gate — that is now owned by squat-descent-truth.ts (MIN_SHARED_DESCENT_RELATIVE_PEAK).
+// Kept here only as a named reference constant in case future callers need it.
+/** @deprecated Use computeSquatDescentTruth for descent checks. */
 const MIN_DESCENT_DEPTH_DELTA = 0.025;
 
 /** After peak, depth must decrease by >= REVERSAL_FRACTION × relativePeak to confirm reversal. */
@@ -70,10 +79,10 @@ const MAX_REVERSAL_TO_STANDING_MS = 10000;
 const MIN_DEPTH_FRAMES = 4;
 
 /**
- * PASS-WINDOW-RESET-01: cycle duration is measured from the descent epoch start,
- * not from depthFrames[0].timestampMs. The descent epoch starts at the last frame
- * before the peak where depth is within (baseline + DESCENT_EPOCH_REL_THRESHOLD × relativePeak).
- * This correctly handles long pre-squat standing periods in the wider valid stream.
+ * PASS-WINDOW-RESET-01: cycle duration is measured from the descent epoch start.
+ * Kept as a named constant for documentation. The actual epoch start is now
+ * computed by squat-descent-truth.ts (DESCENT-TRUTH-RESET-01).
+ * @deprecated epoch computation delegated to squat-descent-truth.ts
  */
 const DESCENT_EPOCH_REL_THRESHOLD = 0.10;
 
@@ -88,7 +97,7 @@ export interface SquatPassCoreDepthFrame {
 }
 
 /**
- * PASS-WINDOW-RESET-01 pass-core input.
+ * PASS-WINDOW-RESET-01 / DESCENT-TRUTH-RESET-01 pass-core input.
  * Primary authority source: depthFrames from pass-window.ts + passWindowBaseline.
  * completionFrames and completion-state verdict fields are NOT inputs.
  */
@@ -110,6 +119,15 @@ export interface SquatPassCoreInput {
 
   /** Human-readable reason for setup block (trace only). */
   setupMotionBlockReason: string | null;
+
+  /**
+   * DESCENT-TRUTH-RESET-01: Pre-computed shared descent truth from squat-descent-truth.ts.
+   * When provided (injected by evaluators/squat.ts), pass-core uses this for peak anchoring
+   * and descent detection instead of computing them independently. This makes pass-core
+   * a consumer of the shared descent truth rather than an independent descent authority.
+   * When not provided, pass-core computes descent truth internally (backward compat).
+   */
+  sharedDescentTruth?: SquatDescentTruthResult;
 
   /**
    * Optional trace hints from completion state — NOT final authority.
@@ -264,27 +282,27 @@ function buildResult(args: BuildResultArgs): SquatPassCoreResult {
 }
 
 /**
- * PASS-WINDOW-RESET-01: Derive immutable squat pass truth from pass-window-owned inputs.
+ * PASS-WINDOW-RESET-01 / DESCENT-TRUTH-RESET-01: Derive immutable squat pass truth.
  *
  * Called by evaluators/squat.ts BEFORE applyUltraLowPolicyLock and late-setup annotation.
  * The result is stored in evaluatorResult.debug.squatPassCore and consumed by auto-progression.
  *
+ * DESCENT-TRUTH-RESET-01 key change:
+ *   Peak finding and descent detection now delegate to computeSquatDescentTruth (shared).
+ *   input.sharedDescentTruth is pre-computed by evaluators/squat.ts and injected here so that
+ *   pass-core, completion-state, and event-cycle all use the SAME descent truth.
+ *   If not provided, computed freshly (backward compat).
+ *
  * Hard pass criteria (all must be true in one continuous depth stream):
  *  1. Sufficient depth frames + valid baseline (readiness)
- *  2. Meaningful descent: relativePeak >= MIN_DESCENT_DEPTH_DELTA (0.025)
+ *  2. Meaningful descent: shared descent truth detects descent (global excursion >= 0.025)
  *  3. Peak sustained >= MIN_PEAK_HOLD_FRAMES (anti-single-spike), peak not first frame
  *  4. Reversal: depth decreased by >= REVERSAL_FRACTION × relativePeak after peak
  *  5. Standing recovery: depth returned to <= baseline + STANDING_RECOVERY_FRACTION × relativePeak
  *  6. Anti-spike timing: cycle >= MIN_CYCLE_DURATION_MS and <= MAX_CYCLE_DURATION_MS
- *     (cycle measured from descent epoch, not stream start — handles long pre-squat standing)
+ *     (cycle measured from descent epoch start)
  *  7. Same-rep ownership: reversal-to-standing <= MAX_REVERSAL_TO_STANDING_MS
- *  8. Setup clear — NO BYPASS: setup motion blocks pass unconditionally (SSOT §4.3)
- *
- * PASS-WINDOW-RESET-01 key changes:
- * - depthFrames now comes from pass-window.ts (full valid stream, not arming-clipped completionFrames)
- * - baselineStandingDepth is pass-window-owned (not completion-state.baselineStandingDepth)
- * - Setup bypass removed: allMotionGatesClear no longer overrides setupMotionBlocked
- * - Cycle duration measured from descent epoch start, not from depthFrames[0].timestampMs
+ *  8. Setup clear — NO BYPASS: setup motion blocks pass unconditionally
  */
 export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreResult {
   const { depthFrames, baselineStandingDepth, setupMotionBlocked, setupMotionBlockReason } = input;
@@ -316,39 +334,30 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
     });
   }
 
-  // ── 2. Find peak in depth stream ──
-  let peakIndex = 0;
-  let peakDepth = depthFrames[0]!.depth;
-  for (let i = 1; i < depthFrames.length; i++) {
-    if (depthFrames[i]!.depth > peakDepth) {
-      peakDepth = depthFrames[i]!.depth;
-      peakIndex = i;
-    }
-  }
+  // ── DESCENT-TRUTH-RESET-01: use shared descent truth ──
+  // Use pre-computed sharedDescentTruth when provided (injected by evaluators/squat.ts).
+  // Fall back to fresh computation when called directly (backward compat / tests).
+  // This makes pass-core a consumer of the shared descent authority, not an independent owner.
+  const descentTruth: SquatDescentTruthResult =
+    input.sharedDescentTruth ??
+    computeSquatDescentTruth({ frames: depthFrames, baseline: baselineStandingDepth });
 
-  const peakTs = depthFrames[peakIndex]!.timestampMs;
-  const relativePeak = peakDepth - baselineStandingDepth;
+  const peakIndex = descentTruth.peakIndex ?? 0;
+  const peakDepth = descentTruth.peakDepth;
+  const peakTs =
+    descentTruth.peakAtMs ?? depthFrames[peakIndex]!.timestampMs;
+  const relativePeak = descentTruth.relativePeak;
+  // Descent epoch start: from shared truth (latest-equal-max anchored, epoch threshold applied).
+  const descentEpochStartTs =
+    descentTruth.descentStartAtMs ?? depthFrames[0]!.timestampMs;
 
-  // ── 2b. Descent epoch start ──
-  // Measure cycle duration from descent epoch (not from stream start).
-  // With the wider valid stream, depthFrames[0] could be seconds before the squat motion.
-  // Scan backward from peak to find the last frame within DESCENT_EPOCH_REL_THRESHOLD of baseline.
-  const descentEpochThreshold = baselineStandingDepth + Math.max(0.005, relativePeak * DESCENT_EPOCH_REL_THRESHOLD);
-  let descentEpochStartTs = depthFrames[0]!.timestampMs; // fallback
-  for (let i = peakIndex; i >= 0; i--) {
-    if (depthFrames[i]!.depth <= descentEpochThreshold) {
-      descentEpochStartTs = depthFrames[i]!.timestampMs;
-      break;
-    }
-  }
-
-  // ── 3. Descent check ──
-  const descentDetected = relativePeak >= MIN_DESCENT_DEPTH_DELTA;
+  // ── 3. Descent check (delegated to shared descent truth) ──
+  const descentDetected = descentTruth.descentDetected;
 
   if (!descentDetected) {
     return buildResult({
       passDetected: false,
-      passBlockedReason: 'no_meaningful_descent',
+      passBlockedReason: descentTruth.descentBlockedReason ?? 'no_meaningful_descent',
       readinessClear,
       baselineEstablished,
       peakLatched: false,
