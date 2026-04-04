@@ -1,10 +1,19 @@
 /**
- * PASS-WINDOW-RESET-01 / DESCENT-TRUTH-RESET-01 / REVERSAL-STANDING-RESET-01:
+ * PASS-WINDOW-RESET-01 / DESCENT-TRUTH-RESET-01 / REVERSAL-STANDING-RESET-01 / DESCENT-SPAN-RESET-01:
  * Squat pass authority core.
  *
  * This module is the ONLY owner of squat motion pass truth.
  * It derives pass truth from pass-window-owned inputs, NOT from completionFrames
  * or completion-state verdict fields.
+ *
+ * DESCENT-SPAN-RESET-01 key change:
+ *   Pre-peak descent span gate added (step 3.5). For shallow reps (relativePeak < 0.1),
+ *   the peak must not latch too early: descentFrameCount >= MIN_PRE_PEAK_DESCENT_FRAMES (3)
+ *   is required. This blocks the observed false-pass class where peakLatchedAtIndex=1 and
+ *   completion-state reports descent_span_too_short while pass-core still opened pass.
+ *   Pass-core-local reason: 'descent_span_too_short'. New trace fields: descentSpanClear,
+ *   descentToPeakSpanMs. Aligned with completion-state LOW_ROM_TIMING_PEAK_MAX but using
+ *   pass-core-owned frame count evidence only (NOT reading completionBlockedReason).
  *
  * REVERSAL-STANDING-RESET-01 key changes:
  *   Reversal is now confirmed only after a STRUCTURED post-peak ascent segment
@@ -41,6 +50,7 @@
  *   docs/PASS_AUTHORITY_RESET_02_SSOT_20260404.md
  *   docs/PASS_WINDOW_RESET_01_SSOT_20260404.md
  *   docs/DESCENT_TRUTH_RESET_01_SSOT_20260404.md
+ *   docs/DESCENT_SPAN_RESET_01_SSOT_20260404.md
  */
 
 import {
@@ -92,6 +102,23 @@ const MIN_STANDING_FRAMES = 2;
  * PEAK_NEIGHBORHOOD_FRACTION band of the peak (anti-single-spike).
  */
 const MIN_PEAK_HOLD_FRAMES = 2;
+
+/**
+ * DESCENT-SPAN-RESET-01: Shallow band threshold for the pre-peak descent span gate.
+ * Aligned with completion-state LOW_ROM_TIMING_PEAK_MAX = 0.1.
+ * When relativePeak < this value, the minimum pre-peak frame count gate is applied.
+ * Deeper reps (>= 0.1) carry sufficient geometric evidence; the gate is not needed.
+ */
+const DESCENT_SPAN_SHALLOW_PEAK_MAX = 0.1;
+
+/**
+ * DESCENT-SPAN-RESET-01: Minimum pre-peak frames required for a pass when relativePeak
+ * is in the shallow band (< DESCENT_SPAN_SHALLOW_PEAK_MAX).
+ * Blocks the observed false-pass class where peakLatchedAtIndex=1 (descentFrameCount=1)
+ * yet post-peak reversal/standing structure appears valid.
+ * At typical device frame rates (15-30 fps) this requires ~100-200 ms of pre-peak descent.
+ */
+const MIN_PRE_PEAK_DESCENT_FRAMES = 3;
 
 /** Depth tolerance band for "near peak": max(PEAK_NEIGHBORHOOD_FLOOR, relativePeak × this). */
 const PEAK_NEIGHBORHOOD_FRACTION = 0.15;
@@ -215,6 +242,19 @@ export interface SquatPassCoreResult {
   standingRecoveredAtMs?: number;
   cycleDurationMs?: number;
 
+  // ── DESCENT-SPAN-RESET-01 trace ──
+  /**
+   * True when pre-peak descent span gate passed (either relativePeak >= DESCENT_SPAN_SHALLOW_PEAK_MAX
+   * or descentFrameCount >= MIN_PRE_PEAK_DESCENT_FRAMES). False on all blocked paths.
+   */
+  descentSpanClear: boolean;
+  /**
+   * Pre-peak descent duration (ms) = peakAtMs − descentStartAtMs.
+   * From shared descent truth. Non-null only when descent was detected.
+   * Exposes the span evidence used by the descent-span gate for real-device diagnostics.
+   */
+  descentToPeakSpanMs?: number;
+
   // ── REVERSAL-TRUTH-RESET-01 trace ──
   /** Timestamp when ascending streak began (first strictly-downward depth frame post-peak). */
   reversalCandidateStartAtMs?: number;
@@ -267,6 +307,9 @@ interface BuildResultArgs {
   standingRecoveredAtMs?: number;
   cycleDurationMs?: number;
   depthPeak?: number;
+  // DESCENT-SPAN-RESET-01 trace
+  descentSpanClear?: boolean;
+  descentToPeakSpanMs?: number;
   // REVERSAL-TRUTH-RESET-01 trace
   reversalCandidateStartAtMs?: number;
   reversalConfirmedAtMs?: number;
@@ -301,6 +344,7 @@ function buildResult(args: BuildResultArgs): SquatPassCoreResult {
     standingRecoveredAtMs,
     cycleDurationMs,
     depthPeak,
+    descentToPeakSpanMs,
     reversalCandidateStartAtMs,
     reversalConfirmedAtMs,
     reversalFrameCount,
@@ -313,10 +357,13 @@ function buildResult(args: BuildResultArgs): SquatPassCoreResult {
     input,
   } = args;
 
+  const descentSpanClear = args.descentSpanClear ?? false;
+
   const trace = [
     `ready=${readinessClear ? 1 : 0}`,
     `baseline=${baselineEstablished ? 1 : 0}`,
     `desc=${descentDetected ? 1 : 0}`,
+    `dspan=${descentSpanClear ? 1 : 0}`,
     `peak=${peakLatched ? 1 : 0}`,
     `rev=${reversalDetected ? 1 : 0}`,
     `stand=${standingRecovered ? 1 : 0}`,
@@ -327,6 +374,7 @@ function buildResult(args: BuildResultArgs): SquatPassCoreResult {
     passBlockedReason != null ? `blocked=${passBlockedReason}` : null,
     depthPeak != null ? `peak_d=${Math.round(depthPeak * 1000) / 1000}` : null,
     cycleDurationMs != null ? `cycle=${cycleDurationMs}ms` : null,
+    descentToPeakSpanMs != null ? `dspan_ms=${descentToPeakSpanMs}` : null,
     input.descendConfirmed != null ? `cs_desc=${input.descendConfirmed ? 1 : 0}` : null,
     // REVERSAL-TRUTH-RESET-01 trace fields
     reversalFrameCount != null ? `rev_fr=${reversalFrameCount}` : null,
@@ -348,6 +396,8 @@ function buildResult(args: BuildResultArgs): SquatPassCoreResult {
     baselineEstablished,
     peakLatched,
     descentDetected,
+    descentSpanClear,
+    descentToPeakSpanMs,
     reversalDetected,
     standingRecovered,
     sameRepOwnershipClear,
@@ -445,6 +495,11 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
   const descentEpochStartTs =
     descentTruth.descentStartAtMs ?? depthFrames[0]!.timestampMs;
 
+  // DESCENT-SPAN-RESET-01: pre-peak span evidence from shared descent truth.
+  // descentToPeakSpanMs is non-null only when descentDetected=true (in descent-truth success path).
+  const descentToPeakSpanMs: number | undefined =
+    descentTruth.descentToPeakSpanMs != null ? descentTruth.descentToPeakSpanMs : undefined;
+
   // ── 3. Descent check (delegated to shared descent truth) ──
   const descentDetected = descentTruth.descentDetected;
 
@@ -456,6 +511,44 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       baselineEstablished,
       peakLatched: false,
       descentDetected: false,
+      reversalDetected: false,
+      standingRecovered: false,
+      sameRepOwnershipClear: false,
+      antiSpikeClear: false,
+      antiSetupClear,
+      setupClear: false,
+      peakAtMs: peakTs,
+      depthPeak: peakDepth,
+      input,
+    });
+  }
+
+  // ── 3.5 DESCENT-SPAN-RESET-01: Pre-peak descent span gate ──
+  //
+  // For shallow reps (relativePeak < DESCENT_SPAN_SHALLOW_PEAK_MAX = 0.1), the pre-peak
+  // descent must span at least MIN_PRE_PEAK_DESCENT_FRAMES frames. This blocks the false-pass
+  // class where peakLatchedAtIndex=1 (descentFrameCount=1): the peak was reached almost
+  // immediately after the stream start, indicating no meaningful descent occurred before peak.
+  //
+  // Aligned with completion-state's LOW_ROM_TIMING_PEAK_MAX and MIN_DESCENT_TO_PEAK_MS_LOW_ROM
+  // but uses pass-core-owned frame count evidence, NOT completionBlockedReason.
+  //
+  // Deep reps (relativePeak >= 0.1) carry sufficient geometric evidence and do not require
+  // the frame-count gate.
+  const descentSpanClear =
+    relativePeak >= DESCENT_SPAN_SHALLOW_PEAK_MAX ||
+    descentTruth.descentFrameCount >= MIN_PRE_PEAK_DESCENT_FRAMES;
+
+  if (!descentSpanClear) {
+    return buildResult({
+      passDetected: false,
+      passBlockedReason: 'descent_span_too_short',
+      readinessClear,
+      baselineEstablished,
+      peakLatched: false,
+      descentDetected,
+      descentSpanClear: false,
+      descentToPeakSpanMs,
       reversalDetected: false,
       standingRecovered: false,
       sameRepOwnershipClear: false,
@@ -487,6 +580,8 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       baselineEstablished,
       peakLatched: false,
       descentDetected,
+      descentSpanClear: true,
+      descentToPeakSpanMs,
       reversalDetected: false,
       standingRecovered: false,
       sameRepOwnershipClear: false,
@@ -575,6 +670,8 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       baselineEstablished,
       peakLatched,
       descentDetected,
+      descentSpanClear: true,
+      descentToPeakSpanMs,
       reversalDetected: false,
       standingRecovered: false,
       sameRepOwnershipClear: false,
@@ -650,6 +747,8 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       baselineEstablished,
       peakLatched,
       descentDetected,
+      descentSpanClear: true,
+      descentToPeakSpanMs,
       reversalDetected,
       standingRecovered: false,
       sameRepOwnershipClear: false,
@@ -698,6 +797,8 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       baselineEstablished,
       peakLatched,
       descentDetected,
+      descentSpanClear: true,
+      descentToPeakSpanMs,
       reversalDetected,
       standingRecovered,
       sameRepOwnershipClear: false,
@@ -739,6 +840,8 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       baselineEstablished,
       peakLatched,
       descentDetected,
+      descentSpanClear: true,
+      descentToPeakSpanMs,
       reversalDetected,
       standingRecovered,
       sameRepOwnershipClear: false,
@@ -777,6 +880,8 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       baselineEstablished,
       peakLatched,
       descentDetected,
+      descentSpanClear: true,
+      descentToPeakSpanMs,
       reversalDetected,
       standingRecovered,
       sameRepOwnershipClear,
@@ -809,6 +914,8 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
     baselineEstablished,
     peakLatched,
     descentDetected,
+    descentSpanClear: true,
+    descentToPeakSpanMs,
     reversalDetected,
     standingRecovered,
     sameRepOwnershipClear,

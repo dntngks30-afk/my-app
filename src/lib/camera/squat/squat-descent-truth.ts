@@ -96,6 +96,14 @@ export interface SquatDescentTruthResult {
    */
   descentExcursion: number;
 
+  /**
+   * DESCENT-SPAN-RESET-01: Pre-peak descent duration (ms) = peakAtMs − descentStartAtMs.
+   * Exposes the pass-relevant pre-peak span contract for pass-core alignment.
+   * Non-null only when descentDetected=true (both timestamps are available).
+   * Null in all blocked / no-frames paths.
+   */
+  descentToPeakSpanMs: number | null;
+
   /** Non-null when descentDetected=false. First reason why descent was not confirmed. */
   descentBlockedReason: string | null;
 
@@ -131,6 +139,7 @@ export function computeSquatDescentTruth(input: SquatDescentTruthInput): SquatDe
     relativePeak: 0,
     descentFrameCount: 0,
     descentExcursion: 0,
+    descentToPeakSpanMs: null,
     descentBlockedReason: 'no_frames',
     trace: 'frames=0|no_descent',
   };
@@ -196,6 +205,7 @@ export function computeSquatDescentTruth(input: SquatDescentTruthInput): SquatDe
       relativePeak,
       descentFrameCount,
       descentExcursion,
+      descentToPeakSpanMs: null,
       descentBlockedReason: reason,
       trace: `peak=${r3(relativePeak)}|pIdx=${peakIndex}|frames=${descentFrameCount}|exc=${r3(descentExcursion)}|blocked=${reason}`,
     };
@@ -225,6 +235,7 @@ export function computeSquatDescentTruth(input: SquatDescentTruthInput): SquatDe
     relativePeak,
     descentFrameCount,
     descentExcursion,
+    descentToPeakSpanMs: descentStartAtMs != null ? peakFrame.timestampMs - descentStartAtMs : null,
     descentBlockedReason: null,
     trace: `peak=${r3(relativePeak)}|pIdx=${peakIndex}|frames=${descentFrameCount}|exc=${r3(descentExcursion)}|desc=1`,
   };
