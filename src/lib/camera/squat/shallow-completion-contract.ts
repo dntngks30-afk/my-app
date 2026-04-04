@@ -76,8 +76,8 @@ export type CanonicalShallowCompletionContractBlockedReason =
    * A very long reversal-to-standing span indicates the reversal came from a prior rep
    * (e.g., repeated shallow aggregation, slow-rise laundering) rather than the current rep.
    * Official close requires that reversal and standing recovery belong to the same rep.
-   * Threshold: 5 × SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS (7500ms) — generous for legitimate
-   * slow shallow rises (up to 7.5 s of continuous ascent).
+   * Threshold: 7500ms (PR-10 fixed constant — generous for legitimate
+   * slow shallow rises up to 7.5 s of continuous ascent; unchanged by PR-13).
    */
   | 'current_rep_ownership_blocked'
   | 'recovery_or_finalize_missing'
@@ -410,7 +410,8 @@ function timingIntegrityClearFromInput(input: CanonicalShallowCompletionContract
  * signals do NOT override this. Timing is a hard gate, not a soft suggestion.
  *
  * Note: undefined → gate bypassed (cycle not yet complete or duration not computed).
- * The 1500ms floor matches SQUAT_ARMING_MS in auto-progression (not a new threshold).
+ * The 800ms floor (PR-13, lowered from 1500ms) guards against instantaneous micro-bounces
+ * while allowing legitimate fast shallow squats (~800–1200ms total cycle).
  */
 function minimumCycleTimingClearFromInput(input: CanonicalShallowCompletionContractInput): boolean {
   return input.minimumCycleDurationSatisfied !== false;
@@ -441,7 +442,8 @@ function repEpochIntegrityClearFromInput(input: CanonicalShallowCompletionContra
  * PR-10-REP-SEGMENTATION-OWNERSHIP / PR-10B-MEANINGFUL-SHALLOW-TERMINAL-OWNERSHIP:
  * Maximum reversal-to-standing span for current-rep ownership.
  *
- * = 5 × SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS (1500ms). Reuses the existing minimum cycle floor.
+ * = fixed 7500ms (independent constant — previously described as 5 × SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS
+ * when that floor was 1500ms; PR-13 lowered the floor to 800ms but this maximum remains 7500ms).
  * Rationale: a legitimate slow shallow rise takes at most 5-7 seconds from reversal to standing.
  * Cross-rep laundering (reversal from a prior attempt, standing from a later slow rise) typically
  * spans 8-20+ seconds. 7500ms gives generous headroom for slow but continuous ascents while
@@ -450,8 +452,9 @@ function repEpochIntegrityClearFromInput(input: CanonicalShallowCompletionContra
  * Exported so the low_rom_cycle gate in getShallowMeaningfulCycleBlockReason can reuse the
  * same constant (single definition, consistent behaviour across both close paths).
  *
- * This is NOT an arbitrary new threshold — it is derived as a fixed multiple of the existing
- * minimum cycle floor constant (SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS = 1500ms).
+ * This is NOT an arbitrary new threshold — the 7500ms value was originally derived as 5×
+ * SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS (= 5 × 1500ms). PR-13 lowered the minimum cycle floor
+ * to 800ms but leaves this maximum ownership span at 7500ms unchanged.
  */
 export const SHALLOW_CURRENT_REP_REVERSAL_TO_STANDING_MAX_MS = 7500;
 
@@ -675,7 +678,7 @@ function firstBlockedReason(input: CanonicalShallowCompletionContractInput): {
    * span must be within the current-rep maximum (7500ms) to ensure ownership.
    *
    * Existing signals only — squatReversalToStandingMs is already computed in the state.
-   * Threshold is 5 × SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS (not a new arbitrary value).
+   * Threshold is 7500ms (PR-10 fixed constant, independent of SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS after PR-13).
    */
   if (!currentRepOwnershipClearFromInput(input)) {
     return { reason: 'current_rep_ownership_blocked', stage: 'reversal_blocked' };

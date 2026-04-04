@@ -4685,10 +4685,21 @@ function buildShallowClosureProofTrace(input: {
 /**
  * PR-8-OFFICIAL-SHALLOW-TIMING-EPOCH-INTEGRITY:
  * Minimum cycle duration for official shallow close (descent start → standing recovered).
- * Mirrors SQUAT_ARMING_MS = 1500 in auto-progression — this is NOT a new threshold.
- * Used in buildCanonicalShallowContractInputFromState to compute minimumCycleDurationSatisfied.
+ *
+ * PR-13: Lowered from 1500ms to 800ms.
+ * Rationale: the 1500ms floor was derived from SQUAT_ARMING_MS but is too strict for
+ * legitimate fast ultra-shallow reps. Real-device telemetry shows 0.05–0.07 relPeak squats
+ * complete in ~800–1200ms total (effectiveDescentStartFrame → standingRecoveredAtMs).
+ * The 1500ms floor blocked every such attempt, forcing users to deepen into low_rom before
+ * passing — the exact symptom targeted by PR-13.
+ * Remaining safeguards still prevent micro-bounces:
+ *   - 200ms minimum reversal-to-standing span (minReversalToStandingMsForShallow)
+ *   - non-degenerate commitment gate (downwardCommitmentDelta > 0)
+ *   - reversal by rule/HMM only (reversalConfirmedByRuleOrHmm=true required)
+ *   - standing finalize hold (60–160ms minimum)
+ * 200ms and 7500ms thresholds are NOT changed (PR-13 SSOT constraint).
  */
-const SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS = 1500;
+const SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS = 800;
 
 /** PR-CAM-CANONICAL-SHALLOW-CONTRACT-01: 이미 계산된 state fact 만 canonical 입력으로 넘긴다. */
 function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
