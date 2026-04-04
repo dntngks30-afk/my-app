@@ -14,7 +14,7 @@ import {
   evaluateSquatCompletionState,
   applyUltraLowPolicyLock,
 } from '@/lib/camera/squat-completion-state';
-import { evaluateSquatPassCore } from '@/lib/camera/squat/pass-core';
+import { evaluateSquatPassCore, type SquatPassCoreDepthFrame } from '@/lib/camera/squat/pass-core';
 import {
   computeSquatCompletionArming,
   mergeArmingDepthObservability,
@@ -313,9 +313,27 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   };
 
   // ── PASS-CORE: derive immutable pass truth (before policy lock and late-setup annotation) ──
-  const squatPassCore = evaluateSquatPassCore(state, {
+  // RESET-02: pass-core now reads raw depth frames directly — no completionSatisfied dependency.
+  const passCoreDepthFrames: SquatPassCoreDepthFrame[] = completionFrames
+    .map((f) => {
+      const d = readSquatCompletionDepth(f) ?? f.derived.squatDepthProxy;
+      if (typeof d !== 'number' || !Number.isFinite(d)) return null;
+      return { depth: d, timestampMs: f.timestampMs };
+    })
+    .filter((x): x is SquatPassCoreDepthFrame => x !== null);
+
+  const squatPassCore = evaluateSquatPassCore({
+    depthFrames: passCoreDepthFrames,
+    baselineStandingDepth: state.baselineStandingDepth,
     setupMotionBlocked: setupBlock.blocked,
-    reason: setupBlock.reason,
+    setupMotionBlockReason: setupBlock.reason,
+    descendConfirmed: state.descendConfirmed,
+    downwardCommitmentDelta: state.downwardCommitmentDelta,
+    squatReversalToStandingMs: state.squatReversalToStandingMs,
+    descendStartAtMs: state.descendStartAtMs,
+    completionStateReversalAtMs: state.reversalAtMs,
+    completionStateStandingAtMs: state.standingRecoveredAtMs,
+    cycleDurationMs: state.cycleDurationMs,
   });
 
   // ── Step 2: late-setup — ANNOTATION ONLY, no completion truth rewrite ──

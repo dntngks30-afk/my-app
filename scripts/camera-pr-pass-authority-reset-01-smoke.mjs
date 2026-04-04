@@ -1,5 +1,8 @@
 /**
- * PASS-AUTHORITY-RESET-01 스모크 테스트
+ * PASS-AUTHORITY-RESET-01 스모크 테스트 (RESET-02 인터페이스로 업데이트)
+ *
+ * RESET-02: pass-core는 이제 depthFrames + baselineStandingDepth로 독립 판단.
+ * completionSatisfied 의존 제거됨.
  *
  * npx tsx scripts/camera-pr-pass-authority-reset-01-smoke.mjs
  */
@@ -28,279 +31,316 @@ function assert(label, actual, expected) {
   }
 }
 
+function assertTruthy(label, actual) {
+  if (actual) {
+    passCount++;
+    results.push(`  ✓ ${label}`);
+  } else {
+    failCount++;
+    results.push(`  ✗ ${label} — expected truthy, got ${JSON.stringify(actual)}`);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────
-// Fixtures
+// Depth-stream fixture helpers
 // ─────────────────────────────────────────────────────────────────────
 
-function makeGoldPathShallow() {
+function makeFrames(specs) {
+  return specs.map(([depth, ms]) => ({ depth, timestampMs: ms }));
+}
+
+/**
+ * Shallow gold-path: baseline=0.05, peak=0.11 (relativePeak=0.06), clean cycle ~1200ms
+ */
+function makeShallowGoldPath() {
   return {
-    completionSatisfied: true,
-    completionBlockedReason: null,
+    depthFrames: makeFrames([
+      [0.05, 0],    // baseline
+      [0.05, 33],
+      [0.06, 100],  // start descent
+      [0.08, 200],
+      [0.10, 400],
+      [0.11, 600],  // peak
+      [0.11, 633],  // peak hold
+      [0.10, 700],  // reversal begins
+      [0.08, 800],
+      [0.06, 950],
+      [0.052, 1100], // standing threshold = 0.05 + 0.40*0.06 = 0.074 → passes
+      [0.050, 1200],
+    ]),
+    baselineStandingDepth: 0.05,
+    setupMotionBlocked: false,
+    setupMotionBlockReason: null,
     descendConfirmed: true,
-    attemptStarted: true,
-    ownerAuthoritativeReversalSatisfied: true,
-    ownerAuthoritativeRecoverySatisfied: true,
-    currentSquatPhase: 'standing_recovered',
-    standingFinalizeSatisfied: true,
-    squatReversalToStandingMs: 1200,
-    downwardCommitmentDelta: 0.058,
-    descendStartAtMs: 1000,
-    peakAtMs: 1600,
-    reversalAtMs: 1700,
-    standingRecoveredAtMs: 2200,
-    cycleDurationMs: 1200,
+    downwardCommitmentDelta: 0.06,
   };
 }
 
-function makeGoldPathDeep() {
+/**
+ * Deep gold-path: baseline=0.05, peak=0.40 (relativePeak=0.35), clean cycle ~2000ms
+ */
+function makeDeepGoldPath() {
   return {
-    completionSatisfied: true,
-    completionBlockedReason: null,
+    depthFrames: makeFrames([
+      [0.05, 0],
+      [0.05, 33],
+      [0.10, 200],
+      [0.20, 500],
+      [0.35, 900],
+      [0.40, 1100], // peak
+      [0.40, 1133], // peak hold
+      [0.35, 1300],
+      [0.20, 1600],
+      [0.08, 1900], // standing threshold = 0.05 + 0.40*0.35 = 0.19 → passes at 0.08
+      [0.05, 2000],
+    ]),
+    baselineStandingDepth: 0.05,
+    setupMotionBlocked: false,
+    setupMotionBlockReason: null,
     descendConfirmed: true,
-    attemptStarted: true,
-    ownerAuthoritativeReversalSatisfied: true,
-    ownerAuthoritativeRecoverySatisfied: true,
-    currentSquatPhase: 'standing_recovered',
-    standingFinalizeSatisfied: true,
-    squatReversalToStandingMs: 2100,
-    downwardCommitmentDelta: 0.42,
-    descendStartAtMs: 1000,
-    peakAtMs: 2000,
-    reversalAtMs: 2100,
-    standingRecoveredAtMs: 3100,
-    cycleDurationMs: 2100,
+    downwardCommitmentDelta: 0.35,
   };
 }
 
-const noSetup = { setupMotionBlocked: false, reason: null };
-const withSetup = { setupMotionBlocked: true, reason: 'camera_reposition' };
-
 // ─────────────────────────────────────────────────────────────────────
-// TEST 1 — 실제 shallow 렙 passes
+// TEST 1 — 실제 shallow 렙 passes (RESET-02 핵심: completionSatisfied 없이 통과)
 // ─────────────────────────────────────────────────────────────────────
 {
-  console.log('\n[TEST 1] shallow real rep passes');
-  const r = evaluateSquatPassCore(makeGoldPathShallow(), noSetup);
+  const r = evaluateSquatPassCore(makeShallowGoldPath());
+  results.push('[TEST 1] shallow real rep passes (RESET-02: no completionSatisfied)');
   assert('1A: passDetected=true', r.passDetected, true);
   assert('1B: passBlockedReason=null', r.passBlockedReason, null);
   assert('1C: descentDetected=true', r.descentDetected, true);
   assert('1D: reversalDetected=true', r.reversalDetected, true);
   assert('1E: standingRecovered=true', r.standingRecovered, true);
   assert('1F: setupClear=true', r.setupClear, true);
-  assert('1G: currentRepOwnershipClear=true', r.currentRepOwnershipClear, true);
-  assert('1H: antiFalsePassClear=true', r.antiFalsePassClear, true);
+  assert('1G: sameRepOwnershipClear=true', r.sameRepOwnershipClear, true);
+  assert('1H: antiSpikeClear=true', r.antiSpikeClear, true);
+  assert('1I: peakLatched=true', r.peakLatched, true);
+  assert('1J: baselineEstablished=true', r.baselineEstablished, true);
+  assertTruthy('1K: repId non-null', r.repId);
 }
 
 // ─────────────────────────────────────────────────────────────────────
 // TEST 2 — 실제 deep 렙 passes
 // ─────────────────────────────────────────────────────────────────────
 {
-  console.log('\n[TEST 2] deep real rep passes');
-  const r = evaluateSquatPassCore(makeGoldPathDeep(), noSetup);
+  const r = evaluateSquatPassCore(makeDeepGoldPath());
+  results.push('[TEST 2] deep real rep passes');
   assert('2A: passDetected=true', r.passDetected, true);
   assert('2B: passBlockedReason=null', r.passBlockedReason, null);
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// TEST 3 — standing only never passes
+// TEST 3 — standing only never passes (depth stays near baseline)
 // ─────────────────────────────────────────────────────────────────────
 {
-  console.log('\n[TEST 3] standing only never passes');
-  const input = {
-    completionSatisfied: false,
-    completionBlockedReason: 'no_reversal',
-    descendConfirmed: false,
-    attemptStarted: false,
-    ownerAuthoritativeReversalSatisfied: false,
-    ownerAuthoritativeRecoverySatisfied: false,
-    currentSquatPhase: 'standing_recovered',
-    standingFinalizeSatisfied: true,
-    squatReversalToStandingMs: undefined,
-    downwardCommitmentDelta: 0,
-  };
-  const r = evaluateSquatPassCore(input, noSetup);
+  const r = evaluateSquatPassCore({
+    depthFrames: makeFrames([
+      [0.05, 0], [0.05, 33], [0.05, 66], [0.05, 100],
+      [0.05, 133], [0.05, 166], [0.05, 200], [0.05, 233],
+    ]),
+    baselineStandingDepth: 0.05,
+    setupMotionBlocked: false,
+    setupMotionBlockReason: null,
+  });
+  results.push('[TEST 3] standing only never passes');
   assert('3A: passDetected=false', r.passDetected, false);
-  assert('3B: descentDetected=false', r.descentDetected, false);
+  assert('3B: blocked by no_meaningful_descent', r.passBlockedReason, 'no_meaningful_descent');
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// TEST 4 — descent only (reversal/standing not confirmed) never passes
+// TEST 4 — descent only never passes (sits and stays)
 // ─────────────────────────────────────────────────────────────────────
 {
-  console.log('\n[TEST 4] descent only never passes');
-  const input = {
-    completionSatisfied: false,
-    completionBlockedReason: 'no_reversal',
-    descendConfirmed: true,
-    attemptStarted: true,
-    ownerAuthoritativeReversalSatisfied: false,
-    ownerAuthoritativeRecoverySatisfied: false,
-    currentSquatPhase: 'descending',
-    standingFinalizeSatisfied: false,
-    downwardCommitmentDelta: 0.12,
-  };
-  const r = evaluateSquatPassCore(input, noSetup);
+  const r = evaluateSquatPassCore({
+    depthFrames: makeFrames([
+      [0.05, 0], [0.05, 33],
+      [0.07, 200], [0.09, 400], [0.11, 600], [0.11, 800],
+      [0.11, 1000], [0.11, 1200], // stays at bottom
+    ]),
+    baselineStandingDepth: 0.05,
+    setupMotionBlocked: false,
+    setupMotionBlockReason: null,
+  });
+  results.push('[TEST 4] descent only never passes');
   assert('4A: passDetected=false', r.passDetected, false);
-  const blockerMentionsCorrect = r.passBlockedReason === 'no_reversal' ||
-    r.passBlockedReason === 'completion_not_satisfied';
-  assert('4B: passBlockedReason mentions blocked state', blockerMentionsCorrect, true);
+  assert('4B: blocked by no_reversal_after_peak', r.passBlockedReason, 'no_reversal_after_peak');
+  assert('4C: descentDetected=true', r.descentDetected, true);
+  assert('4D: reversalDetected=false', r.reversalDetected, false);
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// TEST 5 — too-fast bounce / zero delta never passes
+// TEST 5 — mid-rise / partial return not standing → blocked
 // ─────────────────────────────────────────────────────────────────────
 {
-  console.log('\n[TEST 5] zero downwardCommitmentDelta (micro-dip) never passes');
-  const input = {
-    ...makeGoldPathShallow(),
-    downwardCommitmentDelta: 0,  // degenerate movement
-  };
-  const r = evaluateSquatPassCore(input, noSetup);
-  assert('5A: passDetected=false (delta=0)', r.passDetected, false);
-  assert('5B: antiFalsePassClear=false', r.antiFalsePassClear, false);
-  assert('5C: passBlockedReason=non_degenerate_commitment_blocked', r.passBlockedReason, 'non_degenerate_commitment_blocked');
+  const r = evaluateSquatPassCore({
+    // relativePeak = 0.06, standingThreshold = 0.05 + 0.40*0.06 = 0.074
+    // Partial return stops at 0.085 → above threshold → blocked
+    depthFrames: makeFrames([
+      [0.05, 0], [0.05, 33],
+      [0.08, 200], [0.11, 500], [0.11, 533], // peak (rel=0.06)
+      [0.10, 700], [0.09, 900], [0.085, 1100], [0.085, 1300], // stays above 0.074
+    ]),
+    baselineStandingDepth: 0.05,
+    setupMotionBlocked: false,
+    setupMotionBlockReason: null,
+  });
+  results.push('[TEST 5] partial return (not fully standing) blocked');
+  assert('5A: passDetected=false', r.passDetected, false);
+  assert('5B: standingRecovered=false', r.standingRecovered, false);
+  assert('5C: reversalDetected=true', r.reversalDetected, true);
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// TEST 6 — setup motion blocked + no valid rep bypass → never passes
+// TEST 6 — setup motion blocked (no complete cycle to bypass)
 // ─────────────────────────────────────────────────────────────────────
 {
-  console.log('\n[TEST 6] setup motion blocked (no bypass) never passes');
-  const input = {
-    ...makeGoldPathShallow(),
-    ownerAuthoritativeReversalSatisfied: false,
-    ownerAuthoritativeRecoverySatisfied: false,
-  };
-  const r = evaluateSquatPassCore(input, withSetup);
-  assert('6A: passDetected=false (setup blocked, no bypass)', r.passDetected, false);
-  assert('6B: setupClear=false', r.setupClear, false);
-  assert('6C: lateSetupSuppressed=true', r.lateSetupSuppressed, true);
-  assert('6D: passBlockedReason starts with setup_motion', r.passBlockedReason?.startsWith('setup_motion'), true);
+  const r = evaluateSquatPassCore({
+    // Only 4 frames, all near-baseline: no clear cycle
+    depthFrames: makeFrames([
+      [0.05, 0], [0.05, 33], [0.05, 66], [0.05, 100],
+    ]),
+    baselineStandingDepth: 0.05,
+    setupMotionBlocked: true,
+    setupMotionBlockReason: 'large_framing_translation',
+  });
+  results.push('[TEST 6] setup motion blocked with no clear cycle');
+  assert('6A: passDetected=false', r.passDetected, false);
+  assert('6B: antiSetupClear=false', r.antiSetupClear, false);
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// TEST 7 — setup motion blocked BUT valid rep → passes via bypass criteria
+// TEST 7 — jitter spike (1 frame at peak) blocked by peakLatched
 // ─────────────────────────────────────────────────────────────────────
 {
-  console.log('\n[TEST 7] setup blocked but valid rep (bypass criteria met) still passes');
-  const r = evaluateSquatPassCore(makeGoldPathShallow(), withSetup);
-  assert('7A: passDetected=true (bypass criteria met)', r.passDetected, true);
-  assert('7B: setupClear=true (bypass applied)', r.setupClear, true);
-  assert('7C: lateSetupSuppressed=false', r.lateSetupSuppressed, false);
+  const r = evaluateSquatPassCore({
+    depthFrames: makeFrames([
+      [0.05, 0], [0.05, 33], [0.05, 66],
+      [0.11, 100], // single spike frame — peak
+      [0.05, 133], [0.05, 166], [0.05, 200], [0.05, 233],
+    ]),
+    baselineStandingDepth: 0.05,
+    setupMotionBlocked: false,
+    setupMotionBlockReason: null,
+  });
+  results.push('[TEST 7] single-frame jitter spike blocked');
+  assert('7A: passDetected=false', r.passDetected, false);
+  assert('7B: descentDetected=true (peak > threshold)', r.descentDetected, true);
+  assert('7C: peakLatched=false (only 1 frame near peak)', r.peakLatched, false);
+  assert('7D: blocked by peak_not_latched', r.passBlockedReason, 'peak_not_latched');
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// TEST 8 — policy annotation (ultraLowPolicyBlocked) cannot revoke pass
+// TEST 8 — micro-bounce (too-fast cycle) blocked
 // ─────────────────────────────────────────────────────────────────────
 {
-  console.log('\n[TEST 8] policy annotation does not affect passDetected');
-  const input = {
-    ...makeGoldPathShallow(),
-    completionSatisfied: true,
-    completionBlockedReason: null,
-  };
-  const r = evaluateSquatPassCore(input, noSetup);
-  assert('8A: passDetected=true even if policy would have blocked', r.passDetected, true);
-  assert('8B: passBlockedReason=null', r.passBlockedReason, null);
+  // Full cycle but under 350ms
+  const r = evaluateSquatPassCore({
+    depthFrames: makeFrames([
+      [0.05, 0],
+      [0.08, 30],   // descent
+      [0.11, 60],   // peak
+      [0.11, 90],   // peak hold
+      [0.08, 120],  // reversal
+      [0.05, 160],  // standing — total cycle = 160ms < 350ms
+    ]),
+    baselineStandingDepth: 0.05,
+    setupMotionBlocked: false,
+    setupMotionBlockReason: null,
+  });
+  results.push('[TEST 8] micro-bounce (too fast) blocked');
+  assert('8A: passDetected=false', r.passDetected, false);
+  assert('8B: blocked by cycle_too_short', r.passBlockedReason, 'cycle_too_short');
+  assert('8C: antiSpikeClear=false', r.antiSpikeClear, false);
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// TEST 9 — cross-rep laundering (reversalToStanding > 7500ms) → never passes
+// TEST 9 — setup motion bypassed by complete valid cycle
 // ─────────────────────────────────────────────────────────────────────
 {
-  console.log('\n[TEST 9] cross-rep laundering (reversalToStanding > 7500ms) never passes');
-  const input = {
-    ...makeGoldPathShallow(),
-    squatReversalToStandingMs: 8000,
-  };
-  const r = evaluateSquatPassCore(input, noSetup);
-  assert('9A: passDetected=false', r.passDetected, false);
-  assert('9B: currentRepOwnershipClear=false', r.currentRepOwnershipClear, false);
-  assert('9C: passBlockedReason=current_rep_ownership_blocked', r.passBlockedReason, 'current_rep_ownership_blocked');
+  const input = { ...makeShallowGoldPath(), setupMotionBlocked: true, setupMotionBlockReason: 'step_back' };
+  const r = evaluateSquatPassCore(input);
+  results.push('[TEST 9] setup motion bypassed by complete valid cycle');
+  assert('9A: passDetected=true (bypass)', r.passDetected, true);
+  assert('9B: setupClear=true (bypassed)', r.setupClear, true);
+  assert('9C: antiSetupClear=false (raw setup blocked)', r.antiSetupClear, false);
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// TEST 10 — passDetected immutability
+// TEST 10 — cross-rep ownership blocked
 // ─────────────────────────────────────────────────────────────────────
 {
-  console.log('\n[TEST 10] passDetected immutability');
-  const r = evaluateSquatPassCore(makeGoldPathShallow(), noSetup);
-  const snapshot = r.passDetected;
-  const r2 = evaluateSquatPassCore(makeGoldPathShallow(), noSetup);
-  assert('10A: original passDetected was true', snapshot, true);
-  assert('10B: subsequent call returns fresh true result', r2.passDetected, true);
+  // Reversal at t=200, standing at t=10500: 10300ms > 10000ms
+  const r = evaluateSquatPassCore({
+    depthFrames: makeFrames([
+      [0.05, 0], [0.05, 33],
+      [0.08, 200], [0.11, 500], [0.11, 533], // peak
+      [0.10, 700],
+      [0.09, 1000],  // reversal starts here (drop ~0.02 = 33% of 0.06 ✓)
+      [0.086, 1100], // threshold = 0.05 + 0.40*0.06 = 0.074 → above
+      [0.074, 11000], // stands up 9900ms after reversal start (> 10000ms)
+    ]),
+    baselineStandingDepth: 0.05,
+    setupMotionBlocked: false,
+    setupMotionBlockReason: null,
+  });
+  results.push('[TEST 10] cross-rep ownership (too slow reversal-to-standing) blocked');
+  assert('10A: passDetected=false', r.passDetected, false);
+  assert('10B: sameRepOwnershipClear=false', r.sameRepOwnershipClear, false);
+  assert('10C: blocked by same_rep_ownership_broken', r.passBlockedReason, 'same_rep_ownership_broken');
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// TEST 11 — no ownerAuthoritativeReversalSatisfied → blocked
+// TEST 11 — RESET-02 independence: passes WITHOUT completionSatisfied
 // ─────────────────────────────────────────────────────────────────────
 {
-  console.log('\n[TEST 11] reversal without ownerAuthoritativeReversalSatisfied blocked');
-  const input = {
-    ...makeGoldPathShallow(),
-    ownerAuthoritativeReversalSatisfied: false,
-    completionSatisfied: false,
-    completionBlockedReason: 'no_reversal',
-  };
-  const r = evaluateSquatPassCore(input, noSetup);
-  assert('11A: passDetected=false (no authoritative reversal)', r.passDetected, false);
-  assert('11B: reversalDetected=false', r.reversalDetected, false);
+  // Pass-core is called with depth stream only — no completionSatisfied field in input.
+  // This is the core regression guard for RESET-02.
+  const input = makeShallowGoldPath();
+  // Confirm: input has NO completionSatisfied field
+  assert('11A: input has no completionSatisfied field', 'completionSatisfied' in input, false);
+  const r = evaluateSquatPassCore(input);
+  assert('11B: passDetected=true without completionSatisfied', r.passDetected, true);
+  results.push('[TEST 11] RESET-02 independence: passes without completionSatisfied');
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// TEST 12 — no standing recovery → never passes
+// TEST 12 — repId and trace fields present on pass
 // ─────────────────────────────────────────────────────────────────────
 {
-  console.log('\n[TEST 12] still descending (no standing recovery) never passes');
-  const input = {
-    ...makeGoldPathShallow(),
-    completionSatisfied: false,
-    completionBlockedReason: 'no_standing_recovery',
-    currentSquatPhase: 'ascending',
-    standingFinalizeSatisfied: false,
-    standingRecoveredAtMs: undefined,
-  };
-  const r = evaluateSquatPassCore(input, noSetup);
-  assert('12A: passDetected=false', r.passDetected, false);
-  assert('12B: standingRecovered=false', r.standingRecovered, false);
+  const r = evaluateSquatPassCore(makeShallowGoldPath());
+  results.push('[TEST 12] repId and trace fields');
+  assertTruthy('12A: repId non-null when passing', r.repId);
+  assertTruthy('12B: trace contains pass=1', r.trace?.includes('pass=1'));
+  assertTruthy('12C: trace contains peak_d', r.trace?.includes('peak_d='));
+  assertTruthy('12D: trace contains cycle=', r.trace?.includes('cycle='));
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// TEST 13 — repId assignment
+// TEST 13 — repId=null and trace contains pass=0 on block
 // ─────────────────────────────────────────────────────────────────────
 {
-  console.log('\n[TEST 13] repId assignment');
-  const rPass = evaluateSquatPassCore(makeGoldPathShallow(), noSetup);
-  const rFail = evaluateSquatPassCore({ completionSatisfied: false }, noSetup);
-  assert('13A: repId non-null when passDetected=true', rPass.repId !== null, true);
-  assert('13B: repId=null when passDetected=false', rFail.repId, null);
+  const r = evaluateSquatPassCore({
+    depthFrames: makeFrames([[0.05, 0], [0.05, 33], [0.05, 66], [0.05, 100]]),
+    baselineStandingDepth: 0.05,
+    setupMotionBlocked: false,
+    setupMotionBlockReason: null,
+  });
+  results.push('[TEST 13] repId=null and trace=pass=0 on block');
+  assert('13A: repId=null when blocked', r.repId, null);
+  assertTruthy('13B: trace contains pass=0', r.trace?.includes('pass=0'));
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// TEST 14 — trace field
+// Print results
 // ─────────────────────────────────────────────────────────────────────
-{
-  console.log('\n[TEST 14] trace field correctness');
-  const rPass = evaluateSquatPassCore(makeGoldPathShallow(), noSetup);
-  const rFail = evaluateSquatPassCore({ completionSatisfied: false }, noSetup);
-  assert('14A: trace contains pass=1 when passing', rPass.trace.includes('pass=1'), true);
-  assert('14B: trace contains pass=0 when blocked', rFail.trace.includes('pass=0'), true);
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// SUMMARY
-// ─────────────────────────────────────────────────────────────────────
-for (const line of results) {
-  if (line.startsWith('  ✗')) {
-    console.error(line);
-  } else {
-    console.log(line);
-  }
-}
-console.log(`\n${'='.repeat(60)}`);
-console.log(`PASS-AUTHORITY-RESET-01 smoke: ${passCount} passed, ${failCount} failed`);
-if (failCount > 0) {
-  process.exit(1);
-} else {
+results.forEach((r) => console.log(r));
+console.log('\n============================================================');
+console.log(`PASS-AUTHORITY-RESET-01 smoke (updated to RESET-02 interface): ${passCount} passed, ${failCount} failed`);
+if (failCount === 0) {
   console.log('ALL ASSERTIONS PASSED');
+} else {
+  console.log('SOME ASSERTIONS FAILED');
+  process.exit(1);
 }
