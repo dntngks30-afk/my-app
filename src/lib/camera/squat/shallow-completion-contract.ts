@@ -391,7 +391,8 @@ function repEpochIntegrityClearFromInput(input: CanonicalShallowCompletionContra
 }
 
 /**
- * PR-10-REP-SEGMENTATION-OWNERSHIP: Maximum reversal-to-standing span for current-rep ownership.
+ * PR-10-REP-SEGMENTATION-OWNERSHIP / PR-10B-MEANINGFUL-SHALLOW-TERMINAL-OWNERSHIP:
+ * Maximum reversal-to-standing span for current-rep ownership.
  *
  * = 5 × SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS (1500ms). Reuses the existing minimum cycle floor.
  * Rationale: a legitimate slow shallow rise takes at most 5-7 seconds from reversal to standing.
@@ -399,10 +400,13 @@ function repEpochIntegrityClearFromInput(input: CanonicalShallowCompletionContra
  * spans 8-20+ seconds. 7500ms gives generous headroom for slow but continuous ascents while
  * blocking repeated shallow aggregation and stale-reversal laundering patterns.
  *
+ * Exported so the low_rom_cycle gate in getShallowMeaningfulCycleBlockReason can reuse the
+ * same constant (single definition, consistent behaviour across both close paths).
+ *
  * This is NOT an arbitrary new threshold — it is derived as a fixed multiple of the existing
  * minimum cycle floor constant (SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS = 1500ms).
  */
-const SHALLOW_CURRENT_REP_REVERSAL_TO_STANDING_MAX_MS = 7500;
+export const SHALLOW_CURRENT_REP_REVERSAL_TO_STANDING_MAX_MS = 7500;
 
 /**
  * PR-9-MEANINGFUL-SHALLOW-DEFAULT-PASS: Non-degenerate commitment integrity gate.

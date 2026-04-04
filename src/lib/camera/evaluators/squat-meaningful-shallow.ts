@@ -18,6 +18,7 @@ import {
 } from '@/lib/camera/pose-features';
 import type { EvaluatorResult } from './types';
 import type { SquatCompletionState } from '../squat-completion-state';
+import { SHALLOW_CURRENT_REP_REVERSAL_TO_STANDING_MAX_MS } from '../squat/shallow-completion-contract';
 import {
   computeSquatReadinessStableDwell,
   computeSquatSetupMotionBlock,
@@ -448,6 +449,29 @@ export function getShallowMeaningfulCycleBlockReason(
     state.squatReversalToStandingMs < MIN_REVERSAL_TO_STANDING_MS_SHALLOW
   ) {
     return 'shallow_reversal_to_standing_too_short';
+  }
+
+  /**
+   * PR-10B-MEANINGFUL-SHALLOW-TERMINAL-OWNERSHIP:
+   * Current-rep ownership gate — reversal-to-standing span must not exceed single-rep maximum.
+   *
+   * Uses the same constant (7500ms) as the canonical contract's currentRepOwnershipClear gate.
+   * A large span means the reversal came from a prior attempt while standing is from a much
+   * later point — the classic pattern for:
+   *   - repeated shallow aggregation (3-5 attempts, reversal at t=3s, standing at t=15s)
+   *   - slow-rise laundering (reversal from attempt 1, slow rise closing attempt N)
+   *   - terminal finalization laundering (session end standing + stale reversal trace)
+   *
+   * standing_recovered is finalize-only for the CURRENT rep — it cannot inherit authorization
+   * from a reversal that belonged to a prior attempt.
+   * Bridge/proof/recovery evidence cannot substitute for current-rep ownership.
+   *
+   * Reuses SHALLOW_CURRENT_REP_REVERSAL_TO_STANDING_MAX_MS exported from shallow-completion-contract.ts.
+   * Same constant as canonical contract — single source of truth, consistent behaviour across
+   * both low_rom_cycle and official_shallow_cycle close paths.
+   */
+  if (state.squatReversalToStandingMs > SHALLOW_CURRENT_REP_REVERSAL_TO_STANDING_MAX_MS) {
+    return 'current_rep_ownership_blocked';
   }
 
   const primaryRelativePeak = getPrimaryRelativePeak(state as SquatStateRecord);
