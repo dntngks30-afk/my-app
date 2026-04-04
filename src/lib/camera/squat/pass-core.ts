@@ -1,9 +1,19 @@
 /**
- * PASS-WINDOW-RESET-01 / DESCENT-TRUTH-RESET-01: Squat pass authority core.
+ * PASS-WINDOW-RESET-01 / DESCENT-TRUTH-RESET-01 / REVERSAL-STANDING-RESET-01:
+ * Squat pass authority core.
  *
  * This module is the ONLY owner of squat motion pass truth.
  * It derives pass truth from pass-window-owned inputs, NOT from completionFrames
  * or completion-state verdict fields.
+ *
+ * REVERSAL-STANDING-RESET-01 key changes:
+ *   Reversal is now confirmed only after a STRUCTURED post-peak ascent segment
+ *   (MIN_REVERSAL_FRAMES consecutive ascending frames), not on a single scalar
+ *   threshold crossing. Standing recovery scan starts strictly AFTER the reversal
+ *   confirmation index, making same-frame reversal+standing structurally impossible.
+ *   New trace fields expose the reversal and standing proof details for real-device
+ *   diagnostics: reversalCandidateStartAtMs, reversalConfirmedAtMs, reversalFrameCount,
+ *   reversalSpanMs, standingCandidateAtMs, standingRecoveryFrameCount, standingRecoveryHoldMs.
  *
  * DESCENT-TRUTH-RESET-01 key change:
  *   Peak finding and descent detection are now delegated to the shared descent truth
@@ -50,11 +60,32 @@ const MIN_DESCENT_DEPTH_DELTA = 0.025;
 const REVERSAL_FRACTION = 0.20;
 
 /**
+ * REVERSAL-TRUTH-RESET-01: Minimum consecutive ascending frames (depth strictly decreasing)
+ * required to confirm reversal. Prevents single-frame post-peak collapse from counting as reversal.
+ * "Ascending" = depth[i] < depth[i-1] strictly, which means person is moving upward.
+ */
+const MIN_REVERSAL_FRAMES = 3;
+
+/**
+ * REVERSAL-TRUTH-RESET-01: Depth increase larger than this tolerance resets the ascending streak.
+ * Small noisy re-descents within this band do NOT reset the streak (noise gate).
+ */
+const REVERSAL_NOISE_FLOOR = 0.005;
+
+/**
  * After reversal, depth must return to
  *   <= baselineStandingDepth + STANDING_RECOVERY_FRACTION × relativePeak
  * to confirm standing recovery.
  */
 const STANDING_RECOVERY_FRACTION = 0.40;
+
+/**
+ * STANDING-RECOVERY-RESET-01: Minimum consecutive frames at or below standing threshold
+ * required to confirm standing recovery. Prevents a single threshold-touch from counting.
+ * Standing scan starts strictly AFTER fullReversalIndex, making same-frame reversal+standing
+ * structurally impossible.
+ */
+const MIN_STANDING_FRAMES = 2;
 
 /**
  * Peak must be sustained by >= MIN_PEAK_HOLD_FRAMES frames within the
@@ -184,6 +215,30 @@ export interface SquatPassCoreResult {
   standingRecoveredAtMs?: number;
   cycleDurationMs?: number;
 
+  // ── REVERSAL-TRUTH-RESET-01 trace ──
+  /** Timestamp when ascending streak began (first strictly-downward depth frame post-peak). */
+  reversalCandidateStartAtMs?: number;
+  /** Timestamp when reversal was structurally confirmed (after MIN_REVERSAL_FRAMES upward frames). */
+  reversalConfirmedAtMs?: number;
+  /** Number of consecutive ascending frames that confirmed reversal. */
+  reversalFrameCount?: number;
+  /** Time span (ms) from reversalCandidateStart to reversalConfirmed. */
+  reversalSpanMs?: number;
+  /** 'structured' when confirmed, else blocked reason string. */
+  reversalSource?: 'structured' | string;
+  /** Non-null when reversalDetected=false. Explains why structured reversal was not confirmed. */
+  reversalBlockedReason?: string;
+
+  // ── STANDING-RECOVERY-RESET-01 trace ──
+  /** Timestamp of the first frame at or below standing threshold post-reversal. */
+  standingCandidateAtMs?: number;
+  /** Number of consecutive frames below standing threshold that confirmed standing. */
+  standingRecoveryFrameCount?: number;
+  /** Time held at or below standing threshold (ms) when confirmed. */
+  standingRecoveryHoldMs?: number;
+  /** Non-null when standingRecovered=false. Explains why standing recovery was not confirmed. */
+  standingRecoveryBlockedReason?: string;
+
   // ── Depth observability ──
   depthPeak?: number;
 
@@ -212,6 +267,17 @@ interface BuildResultArgs {
   standingRecoveredAtMs?: number;
   cycleDurationMs?: number;
   depthPeak?: number;
+  // REVERSAL-TRUTH-RESET-01 trace
+  reversalCandidateStartAtMs?: number;
+  reversalConfirmedAtMs?: number;
+  reversalFrameCount?: number;
+  reversalSpanMs?: number;
+  reversalBlockedReason?: string;
+  // STANDING-RECOVERY-RESET-01 trace
+  standingCandidateAtMs?: number;
+  standingRecoveryFrameCount?: number;
+  standingRecoveryHoldMs?: number;
+  standingRecoveryBlockedReason?: string;
   input: SquatPassCoreInput;
 }
 
@@ -235,6 +301,15 @@ function buildResult(args: BuildResultArgs): SquatPassCoreResult {
     standingRecoveredAtMs,
     cycleDurationMs,
     depthPeak,
+    reversalCandidateStartAtMs,
+    reversalConfirmedAtMs,
+    reversalFrameCount,
+    reversalSpanMs,
+    reversalBlockedReason,
+    standingCandidateAtMs,
+    standingRecoveryFrameCount,
+    standingRecoveryHoldMs,
+    standingRecoveryBlockedReason,
     input,
   } = args;
 
@@ -253,6 +328,13 @@ function buildResult(args: BuildResultArgs): SquatPassCoreResult {
     depthPeak != null ? `peak_d=${Math.round(depthPeak * 1000) / 1000}` : null,
     cycleDurationMs != null ? `cycle=${cycleDurationMs}ms` : null,
     input.descendConfirmed != null ? `cs_desc=${input.descendConfirmed ? 1 : 0}` : null,
+    // REVERSAL-TRUTH-RESET-01 trace fields
+    reversalFrameCount != null ? `rev_fr=${reversalFrameCount}` : null,
+    reversalSpanMs != null ? `rev_span=${reversalSpanMs}ms` : null,
+    reversalBlockedReason != null ? `rev_block=${reversalBlockedReason}` : null,
+    // STANDING-RECOVERY-RESET-01 trace fields
+    standingRecoveryFrameCount != null ? `std_fr=${standingRecoveryFrameCount}` : null,
+    standingRecoveryBlockedReason != null ? `std_block=${standingRecoveryBlockedReason}` : null,
   ]
     .filter(Boolean)
     .join('|');
@@ -277,6 +359,18 @@ function buildResult(args: BuildResultArgs): SquatPassCoreResult {
     standingRecoveredAtMs,
     cycleDurationMs,
     depthPeak,
+    // REVERSAL-TRUTH-RESET-01 trace
+    reversalCandidateStartAtMs,
+    reversalConfirmedAtMs,
+    reversalFrameCount,
+    reversalSpanMs,
+    reversalSource: reversalDetected ? 'structured' : reversalBlockedReason,
+    reversalBlockedReason,
+    // STANDING-RECOVERY-RESET-01 trace
+    standingCandidateAtMs,
+    standingRecoveryFrameCount,
+    standingRecoveryHoldMs,
+    standingRecoveryBlockedReason,
     trace,
   };
 }
@@ -405,24 +499,72 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
     });
   }
 
-  // ── 5. Reversal check (after peak) ──
-  // Depth must decrease by >= REVERSAL_FRACTION × relativePeak from the peak.
+  // ── 5. REVERSAL-TRUTH-RESET-01: Structured reversal check (after peak) ──
+  //
+  // Reversal must be confirmed by a genuine post-peak ascending segment, NOT a single
+  // scalar threshold crossing. A one-frame depth collapse (the false-pass root cause)
+  // cannot satisfy MIN_REVERSAL_FRAMES = 3 consecutive ascending frames.
+  //
+  // Algorithm:
+  //   - Scan post-peak frames for consecutive "ascending" frames (depth[i] < depth[i-1]).
+  //   - Streak is reset if depth re-ascends by more than REVERSAL_NOISE_FLOOR (noise gate).
+  //   - Flat frames (depth[i] >= depth[i-1] but within noise) do not count as ascending
+  //     AND do not reset the streak — allowing brief sensor noise pauses.
+  //   - Reversal is confirmed when ascendStreak >= MIN_REVERSAL_FRAMES AND
+  //     total depth drop from peak >= reversalDropRequired.
+  //
+  // Gate result: fullReversalIndex is the LAST ascending frame in the confirming segment.
+  // Same-frame reversal+standing is made impossible in step 6 (standing scan starts at
+  // fullReversalIndex + 1, i.e., strictly AFTER this confirmation frame).
   const reversalDropRequired = relativePeak * REVERSAL_FRACTION;
-  let reversalAtMs: number | undefined;
+
+  let reversalCandidateStartAtMs: number | undefined;
+  let reversalConfirmedAtMs: number | undefined;
+  let reversalAtMs: number | undefined;       // backward-compat: = reversalCandidateStartAtMs
   let reversalDetected = false;
   let fullReversalIndex = -1;
+  let reversalFrameCount = 0;
+  let reversalSpanMs = 0;
+  let reversalBlockedReason: string | undefined;
+
+  let _ascendStreak = 0;      // consecutive ascending frames since candidate start
+  let _ascendStartIdx = -1;   // index of first frame in current ascending streak
 
   for (let i = peakIndex + 1; i < depthFrames.length; i++) {
-    const drop = peakDepth - depthFrames[i]!.depth;
-    // Mark the halfway point as the estimated reversal-start timestamp.
-    if (reversalAtMs === undefined && drop >= reversalDropRequired * 0.5) {
-      reversalAtMs = depthFrames[i]!.timestampMs;
+    const prevDepth = depthFrames[i - 1]!.depth;
+    const currDepth = depthFrames[i]!.depth;
+
+    if (currDepth < prevDepth) {
+      // Ascending frame: depth decreasing = person moving upward
+      if (_ascendStartIdx < 0) _ascendStartIdx = i;
+      _ascendStreak++;
+
+      const totalDrop = peakDepth - currDepth;
+      const span = depthFrames[i]!.timestampMs - depthFrames[_ascendStartIdx]!.timestampMs;
+
+      if (_ascendStreak >= MIN_REVERSAL_FRAMES && totalDrop >= reversalDropRequired) {
+        reversalDetected = true;
+        fullReversalIndex = i;
+        reversalCandidateStartAtMs = depthFrames[_ascendStartIdx]!.timestampMs;
+        reversalConfirmedAtMs = depthFrames[i]!.timestampMs;
+        reversalAtMs = reversalCandidateStartAtMs;
+        reversalFrameCount = _ascendStreak;
+        reversalSpanMs = span;
+        break;
+      }
+    } else if (currDepth > prevDepth + REVERSAL_NOISE_FLOOR) {
+      // Significant re-descent: reset ascending streak
+      _ascendStreak = 0;
+      _ascendStartIdx = -1;
     }
-    if (drop >= reversalDropRequired) {
-      reversalDetected = true;
-      fullReversalIndex = i;
-      break;
-    }
+    // Flat or within noise tolerance: keep streak (don't increment, don't reset)
+  }
+
+  if (!reversalDetected) {
+    reversalBlockedReason =
+      _ascendStreak > 0
+        ? `reversal_streak_insufficient:${_ascendStreak}<${MIN_REVERSAL_FRAMES}`
+        : 'no_post_peak_ascending_segment';
   }
 
   if (!reversalDetected) {
@@ -441,23 +583,63 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       setupClear: false,
       peakAtMs: peakTs,
       depthPeak: peakDepth,
+      reversalBlockedReason,
       input,
     });
   }
 
-  // ── 6. Standing recovery check ──
-  // After reversal, depth must return to <= baseline + STANDING_RECOVERY_FRACTION × relativePeak.
+  // ── 6. STANDING-RECOVERY-RESET-01: Structured standing recovery check ──
+  //
+  // Standing recovery scan starts STRICTLY AFTER fullReversalIndex (fullReversalIndex + 1).
+  // This is the hard same-frame prohibition: since standing scan cannot include the reversal
+  // confirmation frame, reversalConfirmedAtMs === standingRecoveredAtMs is structurally
+  // impossible regardless of depth values.
+  //
+  // Additionally, MIN_STANDING_FRAMES consecutive frames at or below the standing threshold
+  // are required. A single threshold-touch is no longer sufficient proof of standing recovery.
+  // Standing candidate is reset if depth rises above threshold again.
   const standingThreshold = baselineStandingDepth + STANDING_RECOVERY_FRACTION * relativePeak;
   let standingRecovered = false;
   let standingRecoveredAtMs: number | undefined;
-  const scanStart = fullReversalIndex >= 0 ? fullReversalIndex : peakIndex + 1;
+  let standingCandidateAtMs: number | undefined;
+  let standingCandidateIdx = -1;
+  let standingRecoveryFrameCount = 0;
+  let standingRecoveryHoldMs = 0;
+  let standingRecoveryBlockedReason: string | undefined;
+
+  // Hard same-frame prohibition: scan starts at fullReversalIndex + 1, NOT fullReversalIndex.
+  // This guarantees reversalConfirmedAtMs < standingRecoveredAtMs by at least one frame interval.
+  const scanStart = fullReversalIndex + 1;
 
   for (let i = scanStart; i < depthFrames.length; i++) {
     if (depthFrames[i]!.depth <= standingThreshold) {
-      standingRecovered = true;
-      standingRecoveredAtMs = depthFrames[i]!.timestampMs;
-      break;
+      if (standingCandidateIdx < 0) {
+        standingCandidateIdx = i;
+        standingCandidateAtMs = depthFrames[i]!.timestampMs;
+      }
+      standingRecoveryFrameCount++;
+      standingRecoveryHoldMs =
+        depthFrames[i]!.timestampMs - (standingCandidateAtMs ?? depthFrames[i]!.timestampMs);
+
+      if (standingRecoveryFrameCount >= MIN_STANDING_FRAMES) {
+        standingRecovered = true;
+        standingRecoveredAtMs = depthFrames[i]!.timestampMs;
+        break;
+      }
+    } else {
+      // Depth rose above threshold — reset standing candidate
+      standingCandidateIdx = -1;
+      standingCandidateAtMs = undefined;
+      standingRecoveryFrameCount = 0;
+      standingRecoveryHoldMs = 0;
     }
+  }
+
+  if (!standingRecovered) {
+    standingRecoveryBlockedReason =
+      standingRecoveryFrameCount > 0
+        ? `standing_frames_insufficient:${standingRecoveryFrameCount}<${MIN_STANDING_FRAMES}`
+        : 'no_standing_threshold_reached_post_reversal';
   }
 
   if (!standingRecovered) {
@@ -476,6 +658,14 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       setupClear: false,
       peakAtMs: peakTs,
       reversalAtMs,
+      reversalCandidateStartAtMs,
+      reversalConfirmedAtMs,
+      reversalFrameCount,
+      reversalSpanMs,
+      standingCandidateAtMs,
+      standingRecoveryFrameCount,
+      standingRecoveryHoldMs,
+      standingRecoveryBlockedReason,
       depthPeak: peakDepth,
       input,
     });
@@ -519,14 +709,23 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       standingRecoveredAtMs,
       cycleDurationMs,
       depthPeak: peakDepth,
+      reversalCandidateStartAtMs,
+      reversalConfirmedAtMs,
+      reversalFrameCount,
+      reversalSpanMs,
+      standingCandidateAtMs,
+      standingRecoveryFrameCount,
+      standingRecoveryHoldMs,
       input,
     });
   }
 
   // ── 8. Same-rep ownership (reversal-to-standing timing) ──
+  // Use reversalConfirmedAtMs (structural confirmation point) for ownership check,
+  // not reversalCandidateStartAtMs (earlier start of ascending segment).
   const reversalToStandingMs =
-    reversalAtMs != null && standingRecoveredAtMs != null
-      ? standingRecoveredAtMs - reversalAtMs
+    reversalConfirmedAtMs != null && standingRecoveredAtMs != null
+      ? standingRecoveredAtMs - reversalConfirmedAtMs
       : undefined;
 
   const sameRepOwnershipClear =
@@ -551,6 +750,13 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       standingRecoveredAtMs,
       cycleDurationMs,
       depthPeak: peakDepth,
+      reversalCandidateStartAtMs,
+      reversalConfirmedAtMs,
+      reversalFrameCount,
+      reversalSpanMs,
+      standingCandidateAtMs,
+      standingRecoveryFrameCount,
+      standingRecoveryHoldMs,
       input,
     });
   }
@@ -582,6 +788,13 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       standingRecoveredAtMs,
       cycleDurationMs,
       depthPeak: peakDepth,
+      reversalCandidateStartAtMs,
+      reversalConfirmedAtMs,
+      reversalFrameCount,
+      reversalSpanMs,
+      standingCandidateAtMs,
+      standingRecoveryFrameCount,
+      standingRecoveryHoldMs,
       input,
     });
   }
@@ -608,6 +821,13 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
     standingRecoveredAtMs,
     cycleDurationMs,
     depthPeak: peakDepth,
+    reversalCandidateStartAtMs,
+    reversalConfirmedAtMs,
+    reversalFrameCount,
+    reversalSpanMs,
+    standingCandidateAtMs,
+    standingRecoveryFrameCount,
+    standingRecoveryHoldMs,
     input,
   });
 }
