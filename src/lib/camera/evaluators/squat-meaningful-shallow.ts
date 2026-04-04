@@ -376,8 +376,64 @@ export function getShallowMeaningfulCycleBlockReason(
 
   if (
     state.completionPassReason !== 'low_rom_cycle' &&
-    state.completionPassReason !== 'ultra_low_rom_cycle'
+    state.completionPassReason !== 'ultra_low_rom_cycle' &&
+    state.completionPassReason !== 'official_shallow_cycle'
   ) {
+    return null;
+  }
+
+  /**
+   * PR-10C-MEANINGFUL-SHALLOW-CURRENT-REP-ONLY:
+   * Evaluator-level guard for official_shallow_cycle.
+   *
+   * The canonical contract (shallow-completion-contract.ts) enforces integrity (timing,
+   * epoch, commitment, weak-event, current-rep ownership). These additional evaluator-level
+   * checks enforce the terminal-finalize-only contract and lower timing bounds that the
+   * canonical contract does not explicitly validate at this layer:
+   *
+   * 1. Phase gate — pass authorization requires standing_recovered.
+   *    terminal / non-standing phases cannot create new pass ownership.
+   *    terminal-adjacent finalization is blocked here.
+   *
+   * 2. Descent timing lower bound — meaningful descent takes ≥ 200ms.
+   *    jitter / sensor spike / micro-motion descend too quickly to satisfy this.
+   *
+   * 3. Reversal-to-standing lower bound — meaningful ascent takes ≥ 200ms.
+   *    jitter / instant reversal cannot satisfy this even with real event detection.
+   *
+   * 4. Current-rep ownership upper bound — same 7500ms constant as canonical contract.
+   *    Redundant with canonical contract but explicit here so both close paths are
+   *    gated identically at the evaluator layer (single-constant, consistent behaviour).
+   *
+   * Why NOT add event-cycle / rule-reversal checks here:
+   *   official_shallow_cycle allows bridge-assisted reversal through the canonical contract.
+   *   Adding rule-only reversal check at evaluator level would regress legitimate
+   *   bridge-assisted passes that the canonical contract deliberately allows.
+   *   The timing + phase gates alone are sufficient to block terminal/jitter/micro-motion.
+   */
+  if (state.completionPassReason === 'official_shallow_cycle') {
+    if (state.currentSquatPhase !== 'standing_recovered') {
+      return 'standing_recovered_required';
+    }
+
+    if (
+      state.squatDescentToPeakMs == null ||
+      state.squatDescentToPeakMs < MIN_DESCENT_TO_PEAK_MS_SHALLOW
+    ) {
+      return 'shallow_descent_too_short';
+    }
+
+    if (
+      state.squatReversalToStandingMs == null ||
+      state.squatReversalToStandingMs < MIN_REVERSAL_TO_STANDING_MS_SHALLOW
+    ) {
+      return 'shallow_reversal_to_standing_too_short';
+    }
+
+    if (state.squatReversalToStandingMs > SHALLOW_CURRENT_REP_REVERSAL_TO_STANDING_MAX_MS) {
+      return 'current_rep_ownership_blocked';
+    }
+
     return null;
   }
 
