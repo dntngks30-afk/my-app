@@ -1,10 +1,20 @@
 /**
- * PASS-WINDOW-RESET-01 / DESCENT-TRUTH-RESET-01 / REVERSAL-STANDING-RESET-01 / DESCENT-SPAN-RESET-01:
+ * PASS-WINDOW-RESET-01 / DESCENT-TRUTH-RESET-01 / REVERSAL-STANDING-RESET-01 /
+ * DESCENT-SPAN-RESET-01 / THIN-EVIDENCE-PASS-RESET-01:
  * Squat pass authority core.
  *
  * This module is the ONLY owner of squat motion pass truth.
  * It derives pass truth from pass-window-owned inputs, NOT from completionFrames
  * or completion-state verdict fields.
+ *
+ * THIN-EVIDENCE-PASS-RESET-01 key change:
+ *   Minimum post-peak reversal span gate added (step 5.5). For shallow reps
+ *   (relativePeak < 0.1), reversalSpanMs >= MIN_REVERSAL_SPAN_MS_SHALLOW (300ms) is required.
+ *   This blocks the thin-evidence class where reversal is structurally confirmed
+ *   (MIN_REVERSAL_FRAMES=3 ascending frames) but the ascent window is too thin for a real squat.
+ *   Calibrated from real-device data: blocked case rev_span~196ms, good passes ~884ms/~1100ms.
+ *   Pass-core-local reason: 'reversal_span_too_short'. New trace field: thinEvidenceClear (tev=).
+ *   completionBlockedReason is NOT read — uses pass-core-owned reversalSpanMs only.
  *
  * DESCENT-SPAN-RESET-01 key change:
  *   Pre-peak descent span gate added (step 3.5). For shallow reps (relativePeak < 0.1),
@@ -51,6 +61,7 @@
  *   docs/PASS_WINDOW_RESET_01_SSOT_20260404.md
  *   docs/DESCENT_TRUTH_RESET_01_SSOT_20260404.md
  *   docs/DESCENT_SPAN_RESET_01_SSOT_20260404.md
+ *   docs/THIN_EVIDENCE_PASS_RESET_01_SSOT_20260404.md
  */
 
 import {
@@ -119,6 +130,16 @@ const DESCENT_SPAN_SHALLOW_PEAK_MAX = 0.1;
  * At typical device frame rates (15-30 fps) this requires ~100-200 ms of pre-peak descent.
  */
 const MIN_PRE_PEAK_DESCENT_FRAMES = 3;
+
+/**
+ * THIN-EVIDENCE-PASS-RESET-01: Minimum post-peak reversal span (ms) for shallow reps.
+ * Applies only when relativePeak < DESCENT_SPAN_SHALLOW_PEAK_MAX (shallow band).
+ * Blocks the thin-evidence class where reversal is structurally confirmed (MIN_REVERSAL_FRAMES=3
+ * ascending frames) but the post-peak ascent window is too thin to represent real upward motion.
+ * Calibrated from real-device data: bad signature ~196ms, preserved good passes ~884ms / ~1100ms.
+ * 300ms provides ~104ms margin above the bad case and ~584ms margin below the good cases.
+ */
+const MIN_REVERSAL_SPAN_MS_SHALLOW = 300;
 
 /** Depth tolerance band for "near peak": max(PEAK_NEIGHBORHOOD_FLOOR, relativePeak × this). */
 const PEAK_NEIGHBORHOOD_FRACTION = 0.15;
@@ -255,6 +276,15 @@ export interface SquatPassCoreResult {
    */
   descentToPeakSpanMs?: number;
 
+  // ── THIN-EVIDENCE-PASS-RESET-01 trace ──
+  /**
+   * True when post-peak reversal span clears the minimum evidence floor.
+   * For shallow reps (relativePeak < DESCENT_SPAN_SHALLOW_PEAK_MAX), requires
+   * reversalSpanMs >= MIN_REVERSAL_SPAN_MS_SHALLOW (300ms).
+   * Deep reps are exempt (gate does not apply when relativePeak >= 0.1).
+   */
+  thinEvidenceClear: boolean;
+
   // ── REVERSAL-TRUTH-RESET-01 trace ──
   /** Timestamp when ascending streak began (first strictly-downward depth frame post-peak). */
   reversalCandidateStartAtMs?: number;
@@ -310,6 +340,8 @@ interface BuildResultArgs {
   // DESCENT-SPAN-RESET-01 trace
   descentSpanClear?: boolean;
   descentToPeakSpanMs?: number;
+  // THIN-EVIDENCE-PASS-RESET-01 trace
+  thinEvidenceClear?: boolean;
   // REVERSAL-TRUTH-RESET-01 trace
   reversalCandidateStartAtMs?: number;
   reversalConfirmedAtMs?: number;
@@ -358,12 +390,14 @@ function buildResult(args: BuildResultArgs): SquatPassCoreResult {
   } = args;
 
   const descentSpanClear = args.descentSpanClear ?? false;
+  const thinEvidenceClear = args.thinEvidenceClear ?? false;
 
   const trace = [
     `ready=${readinessClear ? 1 : 0}`,
     `baseline=${baselineEstablished ? 1 : 0}`,
     `desc=${descentDetected ? 1 : 0}`,
     `dspan=${descentSpanClear ? 1 : 0}`,
+    `tev=${thinEvidenceClear ? 1 : 0}`,
     `peak=${peakLatched ? 1 : 0}`,
     `rev=${reversalDetected ? 1 : 0}`,
     `stand=${standingRecovered ? 1 : 0}`,
@@ -398,6 +432,7 @@ function buildResult(args: BuildResultArgs): SquatPassCoreResult {
     descentDetected,
     descentSpanClear,
     descentToPeakSpanMs,
+    thinEvidenceClear,
     reversalDetected,
     standingRecovered,
     sameRepOwnershipClear,
@@ -685,6 +720,50 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
     });
   }
 
+  // ── 5.5 THIN-EVIDENCE-PASS-RESET-01: Minimum post-peak reversal span for shallow reps ──
+  //
+  // For shallow reps (relativePeak < DESCENT_SPAN_SHALLOW_PEAK_MAX = 0.1), the post-peak
+  // reversal span must exceed MIN_REVERSAL_SPAN_MS_SHALLOW (300ms).
+  //
+  // This blocks the thin-evidence class where reversal is structurally confirmed
+  // (MIN_REVERSAL_FRAMES=3 consecutive ascending frames) but the upward motion window
+  // is too thin to represent a real ascent. Calibrated from real-device data:
+  //   - Blocked thin-pass:   rev_span ~196ms (barely 3 frames, not genuine ascent)
+  //   - Preserved good pass: rev_span ~884ms / ~1100ms (clear genuine ascent)
+  //
+  // Deep reps (relativePeak >= 0.1) are exempt — they carry sufficient geometric evidence.
+  // completionBlockedReason is NOT read — this uses pass-core-owned reversalSpanMs.
+  const thinEvidenceClear =
+    relativePeak >= DESCENT_SPAN_SHALLOW_PEAK_MAX ||
+    reversalSpanMs >= MIN_REVERSAL_SPAN_MS_SHALLOW;
+
+  if (!thinEvidenceClear) {
+    return buildResult({
+      passDetected: false,
+      passBlockedReason: 'reversal_span_too_short',
+      readinessClear,
+      baselineEstablished,
+      peakLatched,
+      descentDetected,
+      descentSpanClear: true,
+      descentToPeakSpanMs,
+      thinEvidenceClear: false,
+      reversalDetected,
+      standingRecovered: false,
+      sameRepOwnershipClear: false,
+      antiSpikeClear: false,
+      antiSetupClear,
+      setupClear: false,
+      peakAtMs: peakTs,
+      depthPeak: peakDepth,
+      reversalCandidateStartAtMs,
+      reversalConfirmedAtMs,
+      reversalFrameCount,
+      reversalSpanMs,
+      input,
+    });
+  }
+
   // ── 6. STANDING-RECOVERY-RESET-01: Structured standing recovery check ──
   //
   // Standing recovery scan starts STRICTLY AFTER fullReversalIndex (fullReversalIndex + 1).
@@ -749,6 +828,7 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       descentDetected,
       descentSpanClear: true,
       descentToPeakSpanMs,
+      thinEvidenceClear: true,
       reversalDetected,
       standingRecovered: false,
       sameRepOwnershipClear: false,
@@ -799,6 +879,7 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       descentDetected,
       descentSpanClear: true,
       descentToPeakSpanMs,
+      thinEvidenceClear: true,
       reversalDetected,
       standingRecovered,
       sameRepOwnershipClear: false,
@@ -842,6 +923,7 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       descentDetected,
       descentSpanClear: true,
       descentToPeakSpanMs,
+      thinEvidenceClear: true,
       reversalDetected,
       standingRecovered,
       sameRepOwnershipClear: false,
@@ -882,6 +964,7 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
       descentDetected,
       descentSpanClear: true,
       descentToPeakSpanMs,
+      thinEvidenceClear: true,
       reversalDetected,
       standingRecovered,
       sameRepOwnershipClear,
@@ -916,6 +999,7 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
     descentDetected,
     descentSpanClear: true,
     descentToPeakSpanMs,
+    thinEvidenceClear: true,
     reversalDetected,
     standingRecovered,
     sameRepOwnershipClear,
