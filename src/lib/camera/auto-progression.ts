@@ -1948,6 +1948,9 @@ export function evaluateExerciseAutoProgress(
     });
     const liveReadinessNotReady = squatLiveSummaryForGate.state === 'not_ready';
 
+    // GUARDRAIL-DECOUPLE-RESET-01: for squat, guardrail.completionStatus is aligned to
+    // squatPassCore.passDetected inside guardrails.getMotionCompleteness — legacy
+    // highlightedMetrics.completionSatisfied no longer sole motion-complete owner.
     squatUiGate = computeSquatUiProgressionLatchGate({
       completionOwnerPassed: squatOwnerTruth.completionOwnerPassed,
       guardrailCompletionComplete: guardrail.completionStatus === 'complete',

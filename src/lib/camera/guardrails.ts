@@ -209,12 +209,29 @@ function getMotionCompleteness(
       .map((f, i) => ({ i, d: f.derived.squatDepthProxy }))
       .filter((x): x is { i: number; d: number } => typeof x.d === 'number');
     const depthValues = depthWithIndex.map((x) => x.d);
+    const peakDepth = depthValues.length > 0 ? Math.max(...depthValues) : 0;
+
+    /**
+     * GUARDRAIL-DECOUPLE-RESET-01: single squat motion-completion owner is pass-core.
+     * Do not let legacy highlightedMetrics.completionSatisfied (completion-state) veto
+     * guardrail.completionStatus when squatPassCore.passDetected is already true.
+     * captureQuality invalid / framing / insufficient valid frames still apply above this branch.
+     *
+     * Ref: docs/GUARDRAIL_DECOUPLE_RESET_01_TRUTH_MAP_20260404.md
+     */
+    const passCoreDetected = evaluatorResult?.debug?.squatPassCore?.passDetected === true;
+    if (passCoreDetected) {
+      return {
+        score: clamp(0.45 + peakDepth * 0.55),
+        status: 'complete',
+        completePath: 'pass_core_motion',
+      };
+    }
 
     if (depthValues.length < MIN_VALID_FRAMES) {
       flags.add('rep_incomplete');
       return { score: 0.2, status: 'partial', partialReason: 'depth_values_too_few' };
     }
-    const peakDepth = depthValues.length > 0 ? Math.max(...depthValues) : 0;
     const hm = evaluatorResult?.debug?.highlightedMetrics;
     const completionSatisfied =
       hm?.completionSatisfied === true || hm?.completionSatisfied === 1;
