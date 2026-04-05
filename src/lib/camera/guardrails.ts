@@ -18,8 +18,9 @@ import {
 import { buildPoseFeaturesFrames } from './pose-features';
 import type { PoseFeaturesFrame } from './pose-features';
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
+import { HOOK_QUALITY_THRESHOLDS } from '@/lib/motion/pose-types';
 import type { EvaluatorResult } from './evaluators/types';
-import type { PoseCaptureStats } from './use-pose-capture';
+import type { PoseCaptureStats, PoseHookFirstRejectionSample } from './use-pose-capture';
 import { selectQualityWindow } from './stability';
 
 export type CaptureQuality = 'ok' | 'low' | 'invalid';
@@ -98,6 +99,16 @@ export interface OverheadInputTruthMap {
     droppedFrameCount: number;
     /** use-pose-capture 훅 경로 기반 compact count-only 분해 */
     poseRejectionBreakdown: Record<string, number>;
+    /** OBS: exact threshold values used by getPoseFrameQuality — single source of truth */
+    hookThresholdEcho: {
+      minCoreVisibilityRatio: number;
+      perJointVisibilityThreshold: number;
+      coreJointCount: number;
+      minBodyBoxArea: number;
+      maxBodyBoxArea: number;
+    };
+    /** OBS: compact measured values from the first rejection that involved core_joints_missing or body_box_invalid */
+    hookFirstRejectionSample: PoseHookFirstRejectionSample | null;
   };
   layer3_featureValidity: {
     featureFrameCount: number;
@@ -507,6 +518,8 @@ function buildOverheadInputTruthMap(args: {
       hookAcceptedFrameCount: stats.validFrameCount,
       droppedFrameCount: stats.droppedFrameCount,
       poseRejectionBreakdown,
+      hookThresholdEcho: { ...HOOK_QUALITY_THRESHOLDS },
+      hookFirstRejectionSample: stats.hookFirstRejectionSample ?? null,
     },
     layer3_featureValidity: {
       featureFrameCount,

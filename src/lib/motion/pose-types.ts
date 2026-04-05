@@ -110,6 +110,18 @@ const CORE_LANDMARK_INDICES = [
   POSE_LANDMARKS.RIGHT_KNEE,
 ] as const;
 
+/**
+ * OBS: read-only threshold echo — the exact values used by getPoseFrameQuality.
+ * Export only; do NOT change these values here.
+ */
+export const HOOK_QUALITY_THRESHOLDS = {
+  perJointVisibilityThreshold: DEFAULT_VISIBILITY_THRESHOLD,
+  coreJointCount: CORE_LANDMARK_INDICES.length,
+  minCoreVisibilityRatio: MIN_CORE_VISIBILITY_RATIO,
+  minBodyBoxArea: MIN_BODY_BOX_AREA,
+  maxBodyBoxArea: MAX_BODY_BOX_AREA,
+} as const;
+
 export interface PoseFrameBodyBox {
   width: number;
   height: number;

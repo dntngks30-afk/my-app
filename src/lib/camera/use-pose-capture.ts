@@ -38,6 +38,20 @@ export interface PoseCaptureStats {
   hookRejectLowVisibilityFrameCount?: number;
   hookRejectCoreJointsMissingFrameCount?: number;
   hookRejectBodyBoxInvalidFrameCount?: number;
+  /**
+   * OBS: compact measured-value echo from the first hook-level rejection that involved
+   * core_joints_missing or body_box_invalid.
+   * null when no such rejection has occurred this session.
+   */
+  hookFirstRejectionSample?: PoseHookFirstRejectionSample | null;
+}
+
+/** OBS: compact measured values from the first qualifying hook-level rejection frame */
+export interface PoseHookFirstRejectionSample {
+  coreVisibilityRatio: number;
+  bodyBoxArea: number;
+  bodyBoxWidth: number;
+  bodyBoxHeight: number;
 }
 
 const EMPTY_STATS: PoseCaptureStats = {
@@ -54,6 +68,7 @@ const EMPTY_STATS: PoseCaptureStats = {
   hookRejectLowVisibilityFrameCount: 0,
   hookRejectCoreJointsMissingFrameCount: 0,
   hookRejectBodyBoxInvalidFrameCount: 0,
+  hookFirstRejectionSample: null,
 };
 
 export function usePoseCapture() {
@@ -68,6 +83,7 @@ export function usePoseCapture() {
   const hookRejectBodyBoxInvalidFrameCountRef = useRef(0);
   const unstableFrameCountRef = useRef(0);
   const validFrameCountRef = useRef(0);
+  const hookFirstRejectionSampleRef = useRef<PoseHookFirstRejectionSample | null>(null);
   const landmarkCountTotalRef = useRef(0);
   const visibleRatioTotalRef = useRef(0);
   const timestampDiscontinuityCountRef = useRef(0);
@@ -101,6 +117,7 @@ export function usePoseCapture() {
       hookRejectLowVisibilityFrameCount: hookRejectLowVisibilityFrameCountRef.current,
       hookRejectCoreJointsMissingFrameCount: hookRejectCoreJointsMissingFrameCountRef.current,
       hookRejectBodyBoxInvalidFrameCount: hookRejectBodyBoxInvalidFrameCountRef.current,
+      hookFirstRejectionSample: hookFirstRejectionSampleRef.current,
       };
 
       return JSON.stringify(prev) === JSON.stringify(nextStats) ? prev : nextStats;
@@ -137,6 +154,17 @@ export function usePoseCapture() {
       if (quality.reasons.some((reason) => reason === 'low_visibility' || reason === 'core_joints_missing' || reason === 'body_box_invalid')) {
         filteredLowQualityFrameCountRef.current += 1;
       }
+      if (
+        hookFirstRejectionSampleRef.current === null &&
+        (quality.reasons.includes('core_joints_missing') || quality.reasons.includes('body_box_invalid'))
+      ) {
+        hookFirstRejectionSampleRef.current = {
+          coreVisibilityRatio: quality.coreVisibilityRatio,
+          bodyBoxArea: quality.bodyBox.area,
+          bodyBoxWidth: quality.bodyBox.width,
+          bodyBoxHeight: quality.bodyBox.height,
+        };
+      }
       syncStats();
       return;
     }
@@ -167,6 +195,7 @@ export function usePoseCapture() {
       hookRejectBodyBoxInvalidFrameCountRef.current = 0;
       unstableFrameCountRef.current = 0;
       validFrameCountRef.current = 0;
+      hookFirstRejectionSampleRef.current = null;
       landmarkCountTotalRef.current = 0;
       visibleRatioTotalRef.current = 0;
       timestampDiscontinuityCountRef.current = 0;
