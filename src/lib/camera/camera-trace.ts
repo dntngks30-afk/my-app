@@ -4,7 +4,8 @@
  * - 요약 전용 snapshot, raw frame/landmark 저장 없음
  */
 import type { ExerciseGateResult } from './auto-progression';
-import type { CaptureQuality } from './guardrails';
+import type { CaptureQuality, OverheadInputTruthMap } from './guardrails';
+import type { PoseCaptureStats } from './use-pose-capture';
 import type { CameraStepId } from '@/lib/public/camera-test';
 import {
   CAMERA_DIAG_VERSION,
@@ -355,6 +356,16 @@ export interface AttemptSnapshot {
       riseBlockedReason?: string | null;
       /** PR-02: final-pass layer blocked reason (Layer 2 — from gate.finalPassBlockedReason) */
       finalPassBlockedReason?: string | null;
+      /** OBS: guardrail.debug.overheadInputTruthMap + readiness 병합 */
+      inputTruthMap?: OverheadInputTruthMap;
+      /** OBS: 페이지 훅 stats 에코(게이트와 동일 프레임이면 수치 일치) */
+      pageHookStatsEcho?: {
+        sampledFrameCount: number;
+        hookAcceptedFrameCount: number;
+        droppedFrameCount: number;
+        filteredLowQualityFrameCount: number;
+        unstableFrameCount: number;
+      };
     };
     /** cue */
     cue?: {
@@ -1226,6 +1237,8 @@ export interface RecordAttemptOptions {
   holdCuePlayed?: boolean;
   /** PR-C4: success latch 시점 (ms) */
   successTriggeredAtMs?: number;
+  /** OBS: overhead 입력 truth — usePoseCapture stats 에코 */
+  poseCaptureStats?: PoseCaptureStats;
 }
 
 function buildDiagnosisSummary(
@@ -1557,7 +1570,6 @@ function buildDiagnosisSummary(
       dwellHoldDurationMs,
       legacyHoldDurationMs,
       stableTopEnteredAtMs,
-      holdArmedAtMs,
       stableTopExitedAtMs,
       stableTopDwellMs,
       stableTopSegmentCount,
@@ -1577,6 +1589,28 @@ function buildDiagnosisSummary(
       finalPassBlockedReason:
         typeof gate.finalPassBlockedReason === 'string' ? gate.finalPassBlockedReason : null,
     };
+
+    const ohTruth = gate.guardrail.debug?.overheadInputTruthMap;
+    if (ohTruth && base.overhead) {
+      base.overhead.inputTruthMap = {
+        ...ohTruth,
+        layer4_readinessMotion: {
+          ...ohTruth.layer4_readinessMotion,
+          readinessState: context?.state,
+          readinessBlocker: context?.blocker ?? null,
+        },
+      };
+    }
+    if (options?.poseCaptureStats && base.overhead) {
+      const ps = options.poseCaptureStats;
+      base.overhead.pageHookStatsEcho = {
+        sampledFrameCount: ps.sampledFrameCount,
+        hookAcceptedFrameCount: ps.validFrameCount,
+        droppedFrameCount: ps.droppedFrameCount,
+        filteredLowQualityFrameCount: ps.filteredLowQualityFrameCount,
+        unstableFrameCount: ps.unstableFrameCount,
+      };
+    }
   }
 
   return base;

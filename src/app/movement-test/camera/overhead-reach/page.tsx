@@ -396,6 +396,7 @@ export default function CameraOverheadReachPage() {
       recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
         liveCueingEnabled: startSequenceComplete,
         autoNextObservation,
+        poseCaptureStats: stats,
       });
       emitOverheadCaptureTerminalOnce(gate, autoNextObservation);
     },
@@ -405,7 +406,7 @@ export default function CameraOverheadReachPage() {
       gate,
       readinessTraceSummary,
       startSequenceComplete,
-      stats.sampledFrameCount,
+      stats,
     ]
   );
 
@@ -459,6 +460,7 @@ export default function CameraOverheadReachPage() {
       autoNextObservation: nextTriggerReason ?? 'pass_latched',
       holdCuePlayed: holdCuePlayedRef.current,
       successTriggeredAtMs: Date.now(),
+      poseCaptureStats: stats,
     });
     /* latchPassEvent에서 setNextTriggerReason 직후 호출되므로 state는 한 틱 늦을 수 있음 — 성공 터미널 관측은 고정 라벨 */
     emitOverheadCaptureTerminalOnce(gate, 'pass_latched');
@@ -481,7 +483,7 @@ export default function CameraOverheadReachPage() {
       evaluatorResults,
       guardrailResults,
     });
-  }, [emitOverheadCaptureTerminalOnce, gate, nextTriggerReason, readinessTraceSummary, startSequenceComplete]);
+  }, [emitOverheadCaptureTerminalOnce, gate, nextTriggerReason, readinessTraceSummary, startSequenceComplete, stats]);
 
   const handleVideoReady = useCallback(
     (video: HTMLVideoElement) => {
@@ -777,6 +779,7 @@ export default function CameraOverheadReachPage() {
         recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
           liveCueingEnabled: startSequenceComplete,
           autoNextObservation: 'terminal_retry_or_fail',
+          poseCaptureStats: stats,
         });
         emitOverheadCaptureTerminalOnce(
           gate,
@@ -804,7 +807,7 @@ export default function CameraOverheadReachPage() {
     permissionDenied,
     readinessTraceSummary,
     startSequenceComplete,
-    stats.sampledFrameCount,
+    stats,
     stop,
   ]);
 
@@ -976,6 +979,7 @@ export default function CameraOverheadReachPage() {
       recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
         liveCueingEnabled: startSequenceComplete,
         autoNextObservation: 'retry',
+        poseCaptureStats: stats,
       });
       emitOverheadCaptureTerminalOnce(gate, 'retry');
     }
@@ -1013,6 +1017,7 @@ export default function CameraOverheadReachPage() {
     gate,
     readinessTraceSummary,
     startSequenceComplete,
+    stats,
     stop,
   ]);
 

@@ -79,6 +79,42 @@ export interface StepGuardrailDebug extends StepMetrics {
   guardrailPartialReason?: string;
   /** PR squat-state: guardrail complete 시 evidence label (standard | low_rom | ultra_low_rom) */
   guardrailCompletePath?: string;
+  /**
+   * OBS: overhead 전용 컴팩트 입력 truth 맵(진단·export 전용, 판정 임계 변경 없음).
+   * squat 및 다른 스텝에는 설정하지 않는다.
+   */
+  overheadInputTruthMap?: OverheadInputTruthMap;
+}
+
+/** OBS: overhead 스냅샷·JSON에서 샘플링→훅→feature→가드레일 집계를 분리 표기 */
+export interface OverheadInputTruthMap {
+  layer1_rawSampled: {
+    sampledFrameCount: number;
+    captureDurationMs: number;
+    timestampDiscontinuityCount: number;
+  };
+  layer2_hookAcceptance: {
+    hookAcceptedFrameCount: number;
+    droppedFrameCount: number;
+    /** use-pose-capture 경로 기반 건수만(저수준 분리 불가 시 병합 키 사용) */
+    poseRejectionBreakdown: Record<string, number>;
+  };
+  layer3_featureValidity: {
+    featureFrameCount: number;
+    guardrailValidFrameCount: number;
+    invalidFeatureFrameCount: number;
+    featureValidityBreakdown: Record<string, number>;
+  };
+  layer4_readinessMotion: {
+    guardrailValidFrameCount: number;
+    qualityWindowVisibleJointsRatio: number;
+    qualityWindowCriticalJointsAvailability: number;
+    captureQuality: CaptureQuality;
+    motionCompletenessStatus: CompletionStatus;
+    /** attempt 스냅샷 시 camera-trace가 readinessSummary에서 병합 */
+    readinessState?: string;
+    readinessBlocker?: string | null;
+  };
 }
 
 export interface StepGuardrailResult {
@@ -421,6 +457,77 @@ function getMetricSufficiency(stepId: CameraStepId, evaluatorResult: EvaluatorRe
   return clamp(evaluatorResult.metrics.length / expectedMetricsByStep[stepId]);
 }
 
+function buildOverheadInputTruthMap(args: {
+  featureFrames: PoseFeaturesFrame[];
+  stats: PoseCaptureStats;
+  guardrailValidFrameCount: number;
+  visibleJointsRatio: number;
+  criticalJointsAvailability: number;
+  captureQuality: CaptureQuality;
+  motionCompletenessStatus: CompletionStatus;
+}): OverheadInputTruthMap {
+  const {
+    featureFrames,
+    stats,
+    guardrailValidFrameCount,
+    visibleJointsRatio,
+    criticalJointsAvailability,
+    captureQuality,
+    motionCompletenessStatus,
+  } = args;
+
+  const featureFrameCount = featureFrames.length;
+  const invalidFeatureFrameCount = Math.max(0, featureFrameCount - guardrailValidFrameCount);
+
+  const featureValidityBreakdown: Record<string, number> = {};
+  for (const f of featureFrames) {
+    const fk = `frameValidity_${f.frameValidity}`;
+    featureValidityBreakdown[fk] = (featureValidityBreakdown[fk] ?? 0) + 1;
+    for (const h of f.qualityHints) {
+      const hk = `qualityHint_${h}`;
+      featureValidityBreakdown[hk] = (featureValidityBreakdown[hk] ?? 0) + 1;
+    }
+  }
+
+  /** 훅: 품질 게이트 이전 탈락(랜드마크<33·어댑터 실패 등) ≈ dropped − merged 품질 필터 카운트 */
+  const landmarkCountOrAdaptorDrop = Math.max(
+    0,
+    stats.droppedFrameCount - stats.filteredLowQualityFrameCount
+  );
+
+  const poseRejectionBreakdown: Record<string, number> = {
+    landmark_count_or_adaptor: landmarkCountOrAdaptorDrop,
+    low_visibility_core_body_box_merged: stats.filteredLowQualityFrameCount,
+    unstable_flagged: stats.unstableFrameCount,
+  };
+
+  return {
+    layer1_rawSampled: {
+      sampledFrameCount: stats.sampledFrameCount,
+      captureDurationMs: stats.captureDurationMs,
+      timestampDiscontinuityCount: stats.timestampDiscontinuityCount,
+    },
+    layer2_hookAcceptance: {
+      hookAcceptedFrameCount: stats.validFrameCount,
+      droppedFrameCount: stats.droppedFrameCount,
+      poseRejectionBreakdown,
+    },
+    layer3_featureValidity: {
+      featureFrameCount,
+      guardrailValidFrameCount,
+      invalidFeatureFrameCount,
+      featureValidityBreakdown,
+    },
+    layer4_readinessMotion: {
+      guardrailValidFrameCount,
+      qualityWindowVisibleJointsRatio: visibleJointsRatio,
+      qualityWindowCriticalJointsAvailability: criticalJointsAvailability,
+      captureQuality,
+      motionCompletenessStatus,
+    },
+  };
+}
+
 export function assessStepGuardrail(
   stepId: CameraStepId,
   frames: PoseLandmarks[],
@@ -559,6 +666,19 @@ export function assessStepGuardrail(
   const fallbackMode: CameraFallbackMode =
     captureQuality === 'invalid' ? 'survey' : retryRecommended ? 'retry' : null;
 
+  const overheadInputTruthMap =
+    stepId === 'overhead-reach'
+      ? buildOverheadInputTruthMap({
+          featureFrames,
+          stats,
+          guardrailValidFrameCount: validFrameCount,
+          visibleJointsRatio,
+          criticalJointsAvailability,
+          captureQuality,
+          motionCompletenessStatus: motion.status,
+        })
+      : undefined;
+
   return {
     stepId,
     captureQuality,
@@ -596,6 +716,7 @@ export function assessStepGuardrail(
       ankleYMean: getAnkleYMean(qualityFrames),
       guardrailPartialReason: motion.status !== 'complete' ? (motion as { partialReason?: string }).partialReason : undefined,
       guardrailCompletePath: motion.status === 'complete' ? (motion as { completePath?: string }).completePath : undefined,
+      overheadInputTruthMap,
     },
   };
 }
