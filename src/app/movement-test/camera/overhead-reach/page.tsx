@@ -195,6 +195,8 @@ export default function CameraOverheadReachPage() {
   const [holdCueActive, setHoldCueActive] = useState(false);
   const currentStepKey = `${STEP_ID}:${previewKey}`;
   const ambiguousRetryPlayedForStepRef = useRef<string | null>(null);
+  /** PR-02A: 터미널 retry/fail 시도당 attempt snapshot 1회 — handleRetry와 중복 방지 */
+  const terminalAttemptSnapshotRecordedStepKeyRef = useRef<string | null>(null);
   const prevStepKeyForAmbiguousRef = useRef(currentStepKey);
   const gateRef = useRef<ExerciseGateResult | null>(null);
   const nextPath = getNextStepPath(STEP_ID) ?? '/movement-test/camera/complete';
@@ -210,6 +212,7 @@ export default function CameraOverheadReachPage() {
   useLayoutEffect(() => {
     if (prevStepKeyForAmbiguousRef.current !== currentStepKey) {
       ambiguousRetryPlayedForStepRef.current = null;
+      terminalAttemptSnapshotRecordedStepKeyRef.current = null;
       prevStepKeyForAmbiguousRef.current = currentStepKey;
     }
   }, [currentStepKey]);
@@ -642,13 +645,22 @@ export default function CameraOverheadReachPage() {
     }
 
     if (gate.status === 'retry' || gate.status === 'fail') {
+      if (terminalAttemptSnapshotRecordedStepKeyRef.current !== currentStepKey) {
+        terminalAttemptSnapshotRecordedStepKeyRef.current = currentStepKey;
+        recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
+          liveCueingEnabled: startSequenceComplete,
+          autoNextObservation: 'terminal_retry_or_fail',
+        });
+      }
       settledRef.current = true;
       stop();
       setProgressionState((prev) => (prev === gate.progressionState ? prev : gate.progressionState));
       setStatusMessage((prev) => (prev === gate.uiMessage ? prev : gate.uiMessage));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recordAttemptSnapshot은 gate.status 전환 시점의 gate 스냅샷 사용; gate 객체는 매 프레임 새 참조라 deps에 넣지 않음
   }, [
     cameraReady,
+    currentStepKey,
     effectivePassLatched,
     gate.progressionState,
     gate.status,
@@ -658,6 +670,8 @@ export default function CameraOverheadReachPage() {
     passReady,
     passLatched,
     permissionDenied,
+    readinessTraceSummary,
+    startSequenceComplete,
     stats.sampledFrameCount,
     stop,
   ]);
@@ -825,10 +839,13 @@ export default function CameraOverheadReachPage() {
 
   const handleRetry = useCallback(() => {
     unlockVoiceGuidance();
-    recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
-      liveCueingEnabled: startSequenceComplete,
-      autoNextObservation: 'retry',
-    });
+    if (terminalAttemptSnapshotRecordedStepKeyRef.current !== currentStepKey) {
+      terminalAttemptSnapshotRecordedStepKeyRef.current = currentStepKey;
+      recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
+        liveCueingEnabled: startSequenceComplete,
+        autoNextObservation: 'retry',
+      });
+    }
     clearAutoAdvanceTimer();
     resetVoiceGuidanceSession();
     stop();
@@ -856,7 +873,14 @@ export default function CameraOverheadReachPage() {
     setPermissionDenied(false);
     setShowSuccessFreezeOverlay(false);
     setPreviewKey((prev) => prev + 1);
-  }, [clearAutoAdvanceTimer, gate, readinessTraceSummary, startSequenceComplete, stop]);
+  }, [
+    clearAutoAdvanceTimer,
+    currentStepKey,
+    gate,
+    readinessTraceSummary,
+    startSequenceComplete,
+    stop,
+  ]);
 
   const handleCameraError = useCallback(() => {
     clearAutoAdvanceTimer();
