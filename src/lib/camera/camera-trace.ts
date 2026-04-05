@@ -102,6 +102,10 @@ export interface AttemptSnapshot {
     rawState?: 'not_ready' | 'ready' | 'success';
     blocker: string | null;
     framingHint: string | null;
+    /** PR-OH-READINESS-BLOCKER-ALIGN-02B: readiness blocker framing 입력이 평가 창 기준인지 꼬리 폴백인지 */
+    framingHintSource?: 'evaluation_window' | 'recent_tail_fallback';
+    /** 동일 시점 최근 버퍼 꼬리 framing 힌트(진단·tail 오염 대비용) */
+    recentTailFramingHint?: string | null;
     smoothingApplied: boolean;
     validFrameCount?: number;
     visibleJointsRatio?: number;

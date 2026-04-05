@@ -68,7 +68,10 @@ import {
   isOverheadAccumulationGraceEligible,
   type OverheadAttemptFailureType,
 } from '@/lib/camera/overhead/overhead-input-stability';
-import { getSetupFramingHint } from '@/lib/camera/setup-framing';
+import {
+  getSetupFramingHint,
+  resolveOverheadReadinessFramingHint,
+} from '@/lib/camera/setup-framing';
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 import { SuccessFreezeOverlay } from '@/components/camera/SuccessFreezeOverlay';
 
@@ -347,15 +350,28 @@ export default function CameraOverheadReachPage() {
     typeof gate.evaluatorResult.debug?.highlightedMetrics?.holdDurationMs === 'number'
       ? gate.evaluatorResult.debug.highlightedMetrics.holdDurationMs
       : 0;
-  const setupFramingHint = useMemo(() => getSetupFramingHint(landmarks), [landmarks]);
+  const recentTailFramingHint = useMemo(() => getSetupFramingHint(landmarks), [landmarks]);
+  const overheadReadinessFraming = useMemo(
+    () =>
+      resolveOverheadReadinessFramingHint({
+        landmarks,
+        windowStartMs: gate.guardrail.debug?.selectedWindowStartMs,
+        windowEndMs: gate.guardrail.debug?.selectedWindowEndMs,
+      }),
+    [
+      landmarks,
+      gate.guardrail.debug?.selectedWindowStartMs,
+      gate.guardrail.debug?.selectedWindowEndMs,
+    ]
+  );
   const liveReadinessSummary = useMemo(
     () =>
       getLiveReadinessSummary({
         success: effectivePassLatched,
         guardrail: gate.guardrail,
-        framingHint: setupFramingHint,
+        framingHint: overheadReadinessFraming.framingHint,
       }),
-    [effectivePassLatched, gate.guardrail, setupFramingHint]
+    [effectivePassLatched, gate.guardrail, overheadReadinessFraming.framingHint]
   );
   const rawLiveReadiness = liveReadinessSummary.state;
   const primaryReadinessBlocker = getPrimaryReadinessBlocker(liveReadinessSummary);
@@ -367,6 +383,8 @@ export default function CameraOverheadReachPage() {
       rawState: rawLiveReadiness,
       blocker: primaryReadinessBlocker,
       framingHint: liveReadinessSummary.framingHint,
+      framingHintSource: overheadReadinessFraming.source,
+      recentTailFramingHint,
       smoothingApplied: readinessSmoothingApplied,
       validFrameCount: liveReadinessSummary.inputs.validFrameCount,
       visibleJointsRatio: liveReadinessSummary.inputs.visibleJointsRatio,
@@ -377,6 +395,8 @@ export default function CameraOverheadReachPage() {
       rawLiveReadiness,
       primaryReadinessBlocker,
       liveReadinessSummary,
+      overheadReadinessFraming.source,
+      recentTailFramingHint,
       readinessSmoothingApplied,
     ]
   );
