@@ -13,6 +13,16 @@ const VISIBILITY_LOW = 0.4;
 /** guardrail selected window 내 최소 샘플 수 (setup 과 동일한 하한) */
 const MIN_LANDMARKS_IN_EVAL_WINDOW = 5;
 
+/**
+ * PR-OH-CAPTURE-PROTOCOL-CONTRACT-05B
+ * 오버헤드 촬영 계약 보조 문구(UX 전용). readiness·게이트·훅 임계값과 연결하지 않는다.
+ * 페이지·가이드에서 기존 framing 힌트와 함께 노출할 때 사용.
+ */
+export const OVERHEAD_CAPTURE_PROTOCOL_SOFT_REMINDERS: readonly string[] = [
+  '팔을 끝까지 올릴 때 손목이 잘리지 않게 조금 떨어져 서 주세요',
+  '맨 위에서 얼굴·머리와 양 손목이 화면에 함께 보이게 해 주세요',
+];
+
 function computeFramingHintFromFeatureFrames(frames: PoseFeaturesFrame[]): string | null {
   if (frames.length === 0) return null;
 

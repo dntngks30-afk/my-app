@@ -144,15 +144,15 @@ function getOverheadReachOverlayGuide(
     failureReasons.includes('capture_quality_invalid') ||
     failureReasons.includes('capture_quality_low')
   ) {
-    return { hint: '손끝까지 보이기', focus: 'frame', animated: true };
+    return { hint: '거리·손 안 잘림', focus: 'frame', animated: true };
   }
 
   if (failureReasons.includes('hold_too_short')) {
-    return { hint: '위에서 잠깐 멈추기', focus: 'upper', animated: true };
+    return { hint: '맨 위에서 손+얼굴 유지', focus: 'upper', animated: true };
   }
 
   if (reasons.includes('rep_incomplete') || reasons.includes('raise_peak_incomplete')) {
-    return { hint: '양팔 머리 위로', focus: 'upper', animated: true };
+    return { hint: '머리 옆으로 세워 올리기', focus: 'upper', animated: true };
   }
 
   if (failureReasons.includes('confidence_too_low')) {
@@ -160,7 +160,7 @@ function getOverheadReachOverlayGuide(
   }
 
   if (progressionState === 'camera_ready') {
-    return { hint: '정면 준비', focus: 'upper', animated: false };
+    return { hint: '정면·거리 맞추기', focus: 'upper', animated: false };
   }
 
   return { hint: null, focus: null, animated: false };
@@ -1320,6 +1320,24 @@ export default function CameraOverheadReachPage() {
   const showPreCaptureHint =
     (progressionState === 'camera_ready' || progressionState === 'insufficient_signal') &&
     stats.sampledFrameCount < 8;
+  /** PR-OH-CAPTURE-PROTOCOL-CONTRACT-05B: CameraPreview 하단 가이드 — 계산된 설정 문구가 실제 프리뷰로 전달됨 */
+  const overheadPreviewInstructions = useMemo(() => {
+    const merged: string[] = [];
+    if (showPreCaptureHint) {
+      if (preCaptureGuidance.primary) merged.push(preCaptureGuidance.primary);
+      if (preCaptureGuidance.secondary) merged.push(preCaptureGuidance.secondary);
+    }
+    for (const line of setupGuide.instructions) {
+      if (merged.length >= 4) break;
+      merged.push(line);
+    }
+    return merged.length > 0 ? merged.slice(0, 4) : setupGuide.instructions.slice(0, 4);
+  }, [
+    showPreCaptureHint,
+    preCaptureGuidance.primary,
+    preCaptureGuidance.secondary,
+    setupGuide.instructions,
+  ]);
   const effectiveProgressionState = effectivePassLatched ? 'passed' : progressionState;
   const overlayGuide = getOverheadReachOverlayGuide(
     gate.reasons,
@@ -1430,15 +1448,26 @@ export default function CameraOverheadReachPage() {
                 guideFocus={isMinimalCapture ? null : overlayGuide.focus}
                 guideAnimated={isMinimalCapture ? false : overlayGuide.animated}
                 guideVariant="overhead-reach"
-                guideBadges={[]}
-                guideInstructions={undefined}
-                guideReadinessLabel={null}
+                guideBadges={setupGuide.badges}
+                guideInstructions={overheadPreviewInstructions}
+                guideReadinessLabel={setupGuide.readinessLabel}
                 minimalCaptureMode={isMinimalCapture}
+                showProtocolGuideInMinimal={isMinimalCapture}
                 className="w-full"
               />
             </div>
             {!isMinimalCapture && (
             <div className="w-full max-w-md mt-4 space-y-3">
+              {visibleUserGuidance.length > 0 && (
+                <div
+                  className="space-y-1 text-xs text-slate-400 break-keep px-1"
+                  style={{ fontFamily: 'var(--font-sans-noto)' }}
+                >
+                  {visibleUserGuidance.map((message) => (
+                    <p key={message}>{message}</p>
+                  ))}
+                </div>
+              )}
               <div className="flex flex-col gap-3">
                 <button
                   type="button"

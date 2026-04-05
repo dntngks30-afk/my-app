@@ -53,6 +53,11 @@ interface CameraPreviewProps {
   guideReadinessLabel?: string | null;
   /** PR-CAM-UX-02: 캡처 중 클러터 숨김 (배지/힌트/가이드/개발 오버레이) */
   minimalCaptureMode?: boolean;
+  /**
+   * PR-OH-CAPTURE-PROTOCOL-CONTRACT-05B: minimal 캡처 중에도 하단·상단 정적 가이드(배지/문구/준비 라벨) 노출.
+   * 게이트·readiness 임계와 무관한 UX 전용. 오버헤드 등 프로토콜 가시화에만 사용.
+   */
+  showProtocolGuideInMinimal?: boolean;
   /** MediaPipe 실패 로그에 붙일 모션 라벨(예: overhead-reach). 공개 스키마와 무관 */
   poseDiagnosticsMotionType?: string | null;
   className?: string;
@@ -154,8 +159,9 @@ function renderWallAngelSilhouette(palette: ReturnType<typeof getGuidePalette>) 
 }
 
 function renderOverheadReachSilhouette(palette: ReturnType<typeof getGuidePalette>) {
+  /* PR-OH-CAPTURE-PROTOCOL-CONTRACT-05B: 프레임 위쪽 헤드룸을 확보해 손·머리 동시 가시 계약을 실루엣으로 암시 */
   return (
-    <>
+    <g transform="translate(0 -14)">
       <circle
         cx="120"
         cy="92"
@@ -172,13 +178,13 @@ function renderOverheadReachSilhouette(palette: ReturnType<typeof getGuidePalett
       />
       <path d="M104 176L92 110" stroke={palette.frame} strokeWidth="14" strokeLinecap="round" />
       <path d="M146 176L158 110" stroke={palette.frame} strokeWidth="14" strokeLinecap="round" />
-      <path d="M92 110L106 58" stroke={palette.frame} strokeWidth="14" strokeLinecap="round" />
-      <path d="M158 110L144 58" stroke={palette.frame} strokeWidth="14" strokeLinecap="round" />
+      <path d="M92 110L108 52" stroke={palette.frame} strokeWidth="14" strokeLinecap="round" />
+      <path d="M158 110L142 52" stroke={palette.frame} strokeWidth="14" strokeLinecap="round" />
       <path d="M120 264L104 412" stroke={palette.frame} strokeWidth="17" strokeLinecap="round" />
       <path d="M136 264L152 412" stroke={palette.frame} strokeWidth="17" strokeLinecap="round" />
       <path d="M96 418H111" stroke={palette.frame} strokeWidth="10" strokeLinecap="round" />
       <path d="M145 418H160" stroke={palette.frame} strokeWidth="10" strokeLinecap="round" />
-    </>
+    </g>
   );
 }
 
@@ -282,6 +288,7 @@ export function CameraPreview({
   guideInstructions = [],
   guideReadinessLabel = null,
   minimalCaptureMode = false,
+  showProtocolGuideInMinimal = false,
   poseDiagnosticsMotionType = null,
   className = '',
 }: CameraPreviewProps) {
@@ -667,8 +674,10 @@ export function CameraPreview({
   const guidePalette = getGuidePalette(guideTone);
   const showGuideBadge =
     !minimalCaptureMode && Boolean(guideHint) && status === 'ready';
+  const allowStaticGuide =
+    !minimalCaptureMode || (showProtocolGuideInMinimal && minimalCaptureMode);
   const showStaticGuide =
-    !minimalCaptureMode && status === 'ready' && (guideBadges.length > 0 || guideInstructions.length > 0);
+    allowStaticGuide && status === 'ready' && (guideBadges.length > 0 || guideInstructions.length > 0);
   const showFocusOverlay = !minimalCaptureMode && Boolean(guideFocus);
 
   return (
@@ -801,7 +810,7 @@ export function CameraPreview({
           )}
         </div>
       )}
-      {!minimalCaptureMode && status === 'ready' && guideReadinessLabel && (
+      {allowStaticGuide && status === 'ready' && guideReadinessLabel && (
         <div className="absolute left-1/2 top-14 z-45 -translate-x-1/2 pointer-events-none">
           <div className="rounded-full border border-emerald-400/20 bg-emerald-500/15 px-3 py-1 text-[11px] font-medium text-emerald-100 backdrop-blur-sm">
             {guideReadinessLabel}
