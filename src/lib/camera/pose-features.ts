@@ -494,6 +494,14 @@ function smoothFrames(frames: PoseLandmarks[]): PoseLandmarks[] {
   });
 }
 
+/**
+ * PR-OH-DISTAL-HAND-OBS-07B: same landmark smoothing as `buildPoseFeaturesFrames` (read-only export).
+ * Used so fingertip coordinates align with wrist-derived features in observability bundles.
+ */
+export function getSmoothedPoseLandmarksSequence(frames: PoseLandmarks[]): PoseLandmarks[] {
+  return smoothFrames(frames);
+}
+
 function buildJointMap(frame: PoseLandmarks): Record<JointKey, PoseLandmark | null> {
   const joints: Record<JointKey, PoseLandmark | null> = {
     nose: getLandmark(frame, POSE_LANDMARKS.NOSE),

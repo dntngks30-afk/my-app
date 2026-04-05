@@ -4,8 +4,14 @@
  */
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 import { overheadHeadTopProxyY } from '@/lib/camera/pose-features';
-import type { PoseLandmark } from '@/lib/motion/pose-types';
+import type { PoseLandmark, PoseLandmarks } from '@/lib/motion/pose-types';
 import type { PoseCaptureStats } from '@/lib/camera/use-pose-capture';
+import {
+  buildOverheadDistalHandObservabilityExport,
+  type OverheadDistalHandObservabilityExport,
+} from './distal-hand-observability';
+
+export type { OverheadDistalHandObservabilityExport } from './distal-hand-observability';
 
 export const OVERHEAD_VISUAL_TRUTH_EXPORT_VERSION = 'oh-visual-truth-obs-06b-1' as const;
 
@@ -59,6 +65,8 @@ export type OverheadVisualTruthCandidateExport = {
   rawShoulderWristElevationAvgDeg: number | null;
   smoothedShoulderWristElevationAvgDeg: number | null;
   landmarksCompact: OverheadVisualTruthLandmarksCompact | null;
+  /** PR-OH-DISTAL-HAND-OBS-07B: fingertip + wrist side-split vs nose/ear/headTop (export-only) */
+  distalHandObservability?: OverheadDistalHandObservabilityExport | null;
 };
 
 export type OverheadVisualTruthNearTopLossSummary = {
@@ -163,7 +171,8 @@ function buildCandidate(
   windowStart: number | null | undefined,
   windowEnd: number | null | undefined,
   isOverheadAnalyzableFrame: (f: PoseFeaturesFrame) => boolean,
-  withLandmarks: boolean
+  withLandmarks: boolean,
+  smoothedHookAcceptedLandmarks: PoseLandmarks[] | null
 ): OverheadVisualTruthCandidateExport | null {
   if (index === null || index < 0 || index >= smoothed.length || index >= pre.length) return null;
   const s = smoothed[index]!;
@@ -172,6 +181,15 @@ function buildCandidate(
   const inside = inSelectedWindow(ts, windowStart, windowEnd);
   const pd = p.derived;
   const sd = s.derived;
+  const hookLm =
+    smoothedHookAcceptedLandmarks &&
+    index >= 0 &&
+    index < smoothedHookAcceptedLandmarks.length
+      ? smoothedHookAcceptedLandmarks[index]!
+      : null;
+  const distalHandObservability = hookLm
+    ? buildOverheadDistalHandObservabilityExport(hookLm, s)
+    : null;
   return {
     tag,
     frameIndex: index,
@@ -190,12 +208,15 @@ function buildCandidate(
     rawShoulderWristElevationAvgDeg: pd.shoulderWristElevationAvgDeg ?? null,
     smoothedShoulderWristElevationAvgDeg: sd.shoulderWristElevationAvgDeg ?? null,
     landmarksCompact: withLandmarks ? buildLandmarksCompact(s.joints) : null,
+    distalHandObservability,
   };
 }
 
 export type BuildOverheadVisualTruthCandidatesInput = {
   preStabilizeFrames: PoseFeaturesFrame[];
   smoothedFeatureFrames: PoseFeaturesFrame[];
+  /** Same length as feature frames; landmark-smoothed hook buffer (aligns with buildPoseFeaturesFrames input). */
+  smoothedHookAcceptedLandmarks?: PoseLandmarks[] | null;
   selectedWindowStartMs: number | null | undefined;
   selectedWindowEndMs: number | null | undefined;
   stats: PoseCaptureStats;
@@ -211,6 +232,11 @@ export function buildOverheadVisualTruthCandidatesExport(
   const { preStabilizeFrames, smoothedFeatureFrames, stats } = input;
   const n = smoothedFeatureFrames.length;
   if (n === 0 || preStabilizeFrames.length !== n) return null;
+  const hookLm =
+    input.smoothedHookAcceptedLandmarks != null &&
+    input.smoothedHookAcceptedLandmarks.length === n
+      ? input.smoothedHookAcceptedLandmarks
+      : null;
 
   const windowStart = input.selectedWindowStartMs ?? null;
   const windowEnd = input.selectedWindowEndMs ?? null;
@@ -306,7 +332,8 @@ export function buildOverheadVisualTruthCandidatesExport(
       windowStart,
       windowEnd,
       isA,
-      true
+      true,
+      hookLm
     );
 
   const selectedWindowBest = withLms('selectedWindowBest', idxSelectedBest);

@@ -26,6 +26,7 @@
     "test:camera-pr8-overhead-reach": "npx tsx scripts/camera-pr8-overhead-reach-completion-smoke.mjs",
     "test:oh-visual-truth-obs-06b": "npx tsx scripts/oh-visual-truth-obs-06b-smoke.mjs",
     "test:oh-visual-snapshot-06c": "npx tsx scripts/oh-visual-snapshot-06c-smoke.mjs",
+    "test:oh-distal-hand-obs-07b": "npx tsx scripts/oh-distal-hand-obs-07b-smoke.mjs",
     "test:camera-setup-screen": "npx tsx scripts/camera-setup-screen-smoke.mjs",
     "test:session-feedback": "npx tsx scripts/session-feedback-smoke.mjs",
     "test:progress-report": "npx tsx scripts/progress-report-smoke.mjs",

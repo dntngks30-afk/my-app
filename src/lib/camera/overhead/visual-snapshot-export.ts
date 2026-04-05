@@ -149,6 +149,28 @@ function drawOverheadDiagnosticOverlay(
       ctx.restore();
     }
   }
+
+  /** PR-OH-DISTAL-HAND-OBS-07B: fingertip overlay (diagnostic snapshot only) */
+  const distalIdx = [
+    POSE_LANDMARKS.LEFT_INDEX,
+    POSE_LANDMARKS.RIGHT_INDEX,
+    POSE_LANDMARKS.LEFT_PINKY,
+    POSE_LANDMARKS.RIGHT_PINKY,
+    POSE_LANDMARKS.LEFT_THUMB,
+    POSE_LANDMARKS.RIGHT_THUMB,
+  ];
+  for (const i of distalIdx) {
+    const lm = pickLm(lms, i);
+    if (!lm) continue;
+    const vis =
+      typeof lm.visibility === 'number' && Number.isFinite(lm.visibility) ? lm.visibility : 0.75;
+    const px = lm.x * w;
+    const py = lm.y * h;
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(255, 100, 220, ${0.35 + vis * 0.45})`;
+    ctx.arc(px, py, Math.max(2, w * 0.007), 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 export type CaptureOverheadTruthSnapshotOptions = {

@@ -15,7 +15,11 @@ import {
   OVERHEAD_LOW_ROM_ABSOLUTE_FLOOR_DEG,
   OVERHEAD_HUMANE_ABSOLUTE_FLOOR_DEG,
 } from './overhead/overhead-easy-progression';
-import { buildOverheadReachFeatureFramesPreDerivedStabilize, buildPoseFeaturesFrames } from './pose-features';
+import {
+  buildOverheadReachFeatureFramesPreDerivedStabilize,
+  buildPoseFeaturesFrames,
+  getSmoothedPoseLandmarksSequence,
+} from './pose-features';
 import type { PoseFeaturesFrame } from './pose-features';
 import {
   buildOverheadVisualTruthCandidatesExport,
@@ -820,6 +824,7 @@ export function assessStepGuardrail(
       ? buildOverheadVisualTruthCandidatesExport({
           preStabilizeFrames: buildOverheadReachFeatureFramesPreDerivedStabilize(frames),
           smoothedFeatureFrames: featureFrames,
+          smoothedHookAcceptedLandmarks: getSmoothedPoseLandmarksSequence(frames),
           selectedWindowStartMs: qualitySelection.selectedWindowStartMs,
           selectedWindowEndMs: qualitySelection.selectedWindowEndMs,
           stats,
