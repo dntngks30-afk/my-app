@@ -256,6 +256,10 @@ export default function CameraOverheadReachPage() {
     [currentStepKey]
   );
 
+  const passReady = isGatePassReady(gate);
+  const finalPassLatched = isFinalPassLatched(STEP_ID, gate);
+  const effectivePassLatched = finalPassLatched || passLatched;
+
   /* OBS: 오버헤드 mid-attempt 관측 — highlightedMetrics·gate 엣지만(프레임 로그 없음) */
   useEffect(() => {
     if (!cameraReady || permissionDenied || effectivePassLatched) return;
@@ -317,10 +321,6 @@ export default function CameraOverheadReachPage() {
     permissionDenied,
     stats.sampledFrameCount,
   ]);
-
-  const passReady = isGatePassReady(gate);
-  const finalPassLatched = isFinalPassLatched(STEP_ID, gate);
-  const effectivePassLatched = finalPassLatched || passLatched;
   const raiseCount =
     typeof gate.evaluatorResult.debug?.highlightedMetrics?.raiseCount === 'number'
       ? gate.evaluatorResult.debug.highlightedMetrics.raiseCount
