@@ -22,6 +22,7 @@ import { buildSquatReversalAssistTraceCompact } from '@/lib/camera/squat/squat-r
 import type { OverheadInternalQuality } from './overhead/overhead-internal-quality';
 import type { OverheadInputStabilityDiag } from './overhead/overhead-input-stability';
 import type { OverheadReadinessBlockerTracePayload } from './overhead/overhead-readiness-blocker-trace';
+import type { OverheadVisualTruthCandidatesExport } from './overhead/visual-truth-candidates';
 import {
   buildSquatResultSeveritySummary,
   type SquatPassSeverity,
@@ -428,6 +429,8 @@ export interface AttemptSnapshot {
       ohHeadRelativeMeanWristAboveHeadTopProxyAvgNorm?: number | null;
       ohHeadRelativePeakElbowAboveEarAvgNorm?: number | null;
       ohHeadRelativeMeanElbowAboveEarAvgNorm?: number | null;
+      /** PR-OH-VISUAL-TRUTH-OBS-06B: selected-window vs global top-like diagnostics (export-only) */
+      visualTruthCandidates?: OverheadVisualTruthCandidatesExport | null;
     };
     /** cue */
     cue?: {
@@ -1771,6 +1774,9 @@ function buildDiagnosisSummary(
           readinessBlocker: context?.blocker ?? null,
         },
       };
+    }
+    if (base.overhead) {
+      base.overhead.visualTruthCandidates = gate.guardrail.debug?.visualTruthCandidates ?? null;
     }
     if (options?.poseCaptureStats && base.overhead) {
       const ps = options.poseCaptureStats;

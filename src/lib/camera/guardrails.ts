@@ -15,8 +15,12 @@ import {
   OVERHEAD_LOW_ROM_ABSOLUTE_FLOOR_DEG,
   OVERHEAD_HUMANE_ABSOLUTE_FLOOR_DEG,
 } from './overhead/overhead-easy-progression';
-import { buildPoseFeaturesFrames } from './pose-features';
+import { buildOverheadReachFeatureFramesPreDerivedStabilize, buildPoseFeaturesFrames } from './pose-features';
 import type { PoseFeaturesFrame } from './pose-features';
+import {
+  buildOverheadVisualTruthCandidatesExport,
+  type OverheadVisualTruthCandidatesExport,
+} from './overhead/visual-truth-candidates';
 import type { PoseLandmark, PoseLandmarks } from '@/lib/motion/pose-types';
 import { HOOK_QUALITY_THRESHOLDS, OVERHEAD_HOOK_QUALITY_THRESHOLDS } from '@/lib/motion/pose-types';
 import type { EvaluatorResult } from './evaluators/types';
@@ -85,6 +89,10 @@ export interface StepGuardrailDebug extends StepMetrics {
    * squat 및 다른 스텝에는 설정하지 않는다.
    */
   overheadInputTruthMap?: OverheadInputTruthMap;
+  /**
+   * PR-OH-VISUAL-TRUTH-OBS-06B: selected-window vs global top-like frame evidence (export-only).
+   */
+  visualTruthCandidates?: OverheadVisualTruthCandidatesExport | null;
 }
 
 /** OBS: overhead 스냅샷·JSON에서 샘플링→훅→feature→가드레일 집계를 분리 표기 */
@@ -807,6 +815,18 @@ export function assessStepGuardrail(
         })
       : undefined;
 
+  const visualTruthCandidates: OverheadVisualTruthCandidatesExport | null | undefined =
+    stepId === 'overhead-reach'
+      ? buildOverheadVisualTruthCandidatesExport({
+          preStabilizeFrames: buildOverheadReachFeatureFramesPreDerivedStabilize(frames),
+          smoothedFeatureFrames: featureFrames,
+          selectedWindowStartMs: qualitySelection.selectedWindowStartMs,
+          selectedWindowEndMs: qualitySelection.selectedWindowEndMs,
+          stats,
+          isOverheadAnalyzableFrame: isOverheadFrameAnalyzable,
+        })
+      : undefined;
+
   return {
     stepId,
     captureQuality,
@@ -845,6 +865,7 @@ export function assessStepGuardrail(
       guardrailPartialReason: motion.status !== 'complete' ? (motion as { partialReason?: string }).partialReason : undefined,
       guardrailCompletePath: motion.status === 'complete' ? (motion as { completePath?: string }).completePath : undefined,
       overheadInputTruthMap,
+      visualTruthCandidates,
     },
   };
 }

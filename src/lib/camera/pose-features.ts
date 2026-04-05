@@ -681,7 +681,8 @@ function overheadJointAboveHeadRefNorm(
   return (ref.y - joint.y) / denom;
 }
 
-function overheadHeadTopProxyY(joints: Record<JointKey, PoseLandmark | null>): number | null {
+/** Exported for PR-OH-VISUAL-TRUTH-OBS-06B compact landmark diagnostics (read-only). */
+export function overheadHeadTopProxyY(joints: Record<JointKey, PoseLandmark | null>): number | null {
   const ys: number[] = [];
   const pushY = (lm: PoseLandmark | null) => {
     if (lm && Number.isFinite(lm.y)) ys.push(lm.y);
@@ -1558,9 +1559,17 @@ function applyPhaseHints(stepId: CameraStepId, frames: PoseFeaturesFrame[]): Pos
   });
 }
 
-export function buildPoseFeaturesFrames(
+type BuildPoseFeaturesPipelineOptions = {
+  stabilizeDerived: boolean;
+  /** Applied only when stepId === 'squat' */
+  applySquatDepthBlendPass: boolean;
+  applyPhaseHints: boolean;
+};
+
+function buildPoseFeaturesFramesPipeline(
   stepId: CameraStepId,
-  frames: PoseLandmarks[]
+  frames: PoseLandmarks[],
+  options: BuildPoseFeaturesPipelineOptions
 ): PoseFeaturesFrame[] {
   const smoothedFrames = smoothFrames(frames);
   const features: PoseFeaturesFrame[] = [];
@@ -1609,7 +1618,41 @@ export function buildPoseFeaturesFrames(
     });
   }
 
-  const stabilized = stabilizeDerivedSignals(features);
-  const depthReady = stepId === 'squat' ? applySquatDepthBlendPass(stabilized) : stabilized;
-  return applyPhaseHints(stepId, depthReady);
+  let pipeline = features;
+  if (options.stabilizeDerived) {
+    pipeline = stabilizeDerivedSignals(pipeline);
+  }
+  if (options.applySquatDepthBlendPass && stepId === 'squat') {
+    pipeline = applySquatDepthBlendPass(pipeline);
+  }
+  if (options.applyPhaseHints) {
+    pipeline = applyPhaseHints(stepId, pipeline);
+  }
+  return pipeline;
+}
+
+export function buildPoseFeaturesFrames(
+  stepId: CameraStepId,
+  frames: PoseLandmarks[]
+): PoseFeaturesFrame[] {
+  return buildPoseFeaturesFramesPipeline(stepId, frames, {
+    stabilizeDerived: true,
+    applySquatDepthBlendPass: true,
+    applyPhaseHints: true,
+  });
+}
+
+/**
+ * PR-OH-VISUAL-TRUTH-OBS-06B: same landmark + raw-derived path as production frames, but stops before
+ * `stabilizeDerivedSignals` and phase hints. Diagnostic pairing only — evaluators must use
+ * `buildPoseFeaturesFrames`.
+ */
+export function buildOverheadReachFeatureFramesPreDerivedStabilize(
+  frames: PoseLandmarks[]
+): PoseFeaturesFrame[] {
+  return buildPoseFeaturesFramesPipeline('overhead-reach', frames, {
+    stabilizeDerived: false,
+    applySquatDepthBlendPass: false,
+    applyPhaseHints: false,
+  });
 }
