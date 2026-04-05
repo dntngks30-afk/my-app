@@ -284,6 +284,29 @@ export default function CameraOverheadReachPage() {
     setAutoAdvanceScheduled(false);
   }, []);
 
+  /**
+   * OBS: 터미널 retry/fail·수동 재시도·성공 외 이탈 경로에서도 실캡처 시도 1회 기록.
+   * terminalAttemptSnapshotRecordedStepKeyRef와 동일 래치로 중복 방지.
+   */
+  const persistAttemptSnapshotIfRealAttemptOnce = useCallback(
+    (autoNextObservation: string) => {
+      if (stats.sampledFrameCount <= 0) return;
+      if (terminalAttemptSnapshotRecordedStepKeyRef.current === currentStepKey) return;
+      terminalAttemptSnapshotRecordedStepKeyRef.current = currentStepKey;
+      recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
+        liveCueingEnabled: startSequenceComplete,
+        autoNextObservation,
+      });
+    },
+    [
+      currentStepKey,
+      gate,
+      readinessTraceSummary,
+      startSequenceComplete,
+      stats.sampledFrameCount,
+    ]
+  );
+
   useEffect(() => {
     if (!debugEnabled || typeof window === 'undefined') {
       return;
@@ -883,6 +906,7 @@ export default function CameraOverheadReachPage() {
   ]);
 
   const handleCameraError = useCallback(() => {
+    persistAttemptSnapshotIfRealAttemptOnce('exit_camera_error');
     clearAutoAdvanceTimer();
     cancelVoiceGuidance();
     settledRef.current = false;
@@ -901,14 +925,15 @@ export default function CameraOverheadReachPage() {
     setCameraReady(false);
     setPermissionDenied(true);
     setShowSuccessFreezeOverlay(false);
-  }, [clearAutoAdvanceTimer]);
+  }, [clearAutoAdvanceTimer, persistAttemptSnapshotIfRealAttemptOnce]);
 
   const handleSurveyFallback = useCallback(() => {
+    persistAttemptSnapshotIfRealAttemptOnce('exit_survey_fallback');
     clearAutoAdvanceTimer();
     cancelVoiceGuidance();
     stop();
     router.push('/movement-test/survey');
-  }, [clearAutoAdvanceTimer, router, stop]);
+  }, [clearAutoAdvanceTimer, persistAttemptSnapshotIfRealAttemptOnce, router, stop]);
 
   const handleDevOverride = useCallback(() => {
     if (!IS_DEV) return;
