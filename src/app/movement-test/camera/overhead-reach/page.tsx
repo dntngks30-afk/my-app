@@ -72,6 +72,11 @@ import {
   getSetupFramingHint,
   resolveOverheadReadinessFramingHint,
 } from '@/lib/camera/setup-framing';
+import {
+  buildOverheadReadinessBlockerTracePayload,
+  deriveDisplayedPrimaryBlockerSource,
+  type OverheadReadinessBlockerMotionLatch,
+} from '@/lib/camera/overhead/overhead-readiness-blocker-trace';
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 import { SuccessFreezeOverlay } from '@/components/camera/SuccessFreezeOverlay';
 
@@ -223,6 +228,16 @@ export default function CameraOverheadReachPage() {
   const overheadAccumulationGraceStartedAtRef = useRef<number | null>(null);
   /** True once we deferred terminal at least once this attempt (for snapshot diagnosis). */
   const overheadTerminalDeferralOccurredRef = useRef(false);
+  /** PR-OH-OBS-BLOCKER-TRACE-02C */
+  const overheadBlockerTimeRef = useRef<{ firstSeenAtMs: number | null; lastSeenAtMs: number | null }>({
+    firstSeenAtMs: null,
+    lastSeenAtMs: null,
+  });
+  const overheadBlockerMotionLatchRef = useRef<OverheadReadinessBlockerMotionLatch>({
+    seenDuringActiveMotion: false,
+    seenAfterMotionWindow: false,
+    lastSignals: null,
+  });
   const prevStepKeyForAmbiguousRef = useRef(currentStepKey);
   const gateRef = useRef<ExerciseGateResult | null>(null);
   const nextPath = getNextStepPath(STEP_ID) ?? '/movement-test/camera/complete';
@@ -251,6 +266,12 @@ export default function CameraOverheadReachPage() {
         holdSatisfied: false,
         completionBlocked: null,
         finalPassBlocked: null,
+      };
+      overheadBlockerTimeRef.current = { firstSeenAtMs: null, lastSeenAtMs: null };
+      overheadBlockerMotionLatchRef.current = {
+        seenDuringActiveMotion: false,
+        seenAfterMotionWindow: false,
+        lastSignals: null,
       };
       prevStepKeyForAmbiguousRef.current = currentStepKey;
     }
@@ -373,12 +394,114 @@ export default function CameraOverheadReachPage() {
       }),
     [effectivePassLatched, gate.guardrail, overheadReadinessFraming.framingHint]
   );
+  const liveReadinessSummaryEvalWindow = useMemo(
+    () =>
+      getLiveReadinessSummary({
+        success: effectivePassLatched,
+        guardrail: gate.guardrail,
+        framingHint: overheadReadinessFraming.evaluationWindowApplied
+          ? overheadReadinessFraming.evaluationWindowFramingHintOnly
+          : null,
+      }),
+    [
+      effectivePassLatched,
+      gate.guardrail,
+      overheadReadinessFraming.evaluationWindowApplied,
+      overheadReadinessFraming.evaluationWindowFramingHintOnly,
+    ]
+  );
+  const liveReadinessSummaryRecentTail = useMemo(
+    () =>
+      getLiveReadinessSummary({
+        success: effectivePassLatched,
+        guardrail: gate.guardrail,
+        framingHint: recentTailFramingHint,
+      }),
+    [effectivePassLatched, gate.guardrail, recentTailFramingHint]
+  );
   const rawLiveReadiness = liveReadinessSummary.state;
   const primaryReadinessBlocker = getPrimaryReadinessBlocker(liveReadinessSummary);
+  const evaluationWindowPrimaryBlocker = getPrimaryReadinessBlocker(liveReadinessSummaryEvalWindow);
+  const recentTailPrimaryBlocker = getPrimaryReadinessBlocker(liveReadinessSummaryRecentTail);
   const { stableState: liveReadiness, smoothingApplied: readinessSmoothingApplied } =
     useStabilizedLiveReadiness(rawLiveReadiness);
-  const readinessTraceSummary = useMemo(
-    () => ({
+  const readinessTraceSummary = useMemo(() => {
+    const hm = gate.evaluatorResult?.debug?.highlightedMetrics as Record<string, unknown> | undefined;
+    const meaningfulRiseSatisfied =
+      hm?.meaningfulRiseSatisfied === 1 || hm?.meaningfulRiseSatisfied === true;
+    const topDetected = Number(hm?.topDetected ?? 0) >= 1;
+    const stableTopEntered =
+      Number(hm?.stableTopEntry ?? 0) >= 1 || typeof hm?.stableTopEnteredAtMs === 'number';
+    const holdStarted = Number(hm?.holdStarted ?? 0) >= 1;
+    const holdDur = typeof hm?.holdDurationMs === 'number' ? hm.holdDurationMs : 0;
+    const holdSatisfied = Number(hm?.holdSatisfied ?? 0) >= 1 || holdDur >= 1200;
+    const completionMachinePhase =
+      typeof hm?.completionMachinePhase === 'string' ? hm.completionMachinePhase : null;
+
+    const motionSignalsAtLastBlocker = hm
+      ? {
+          meaningfulRiseSatisfied,
+          topDetected,
+          stableTopEntered,
+          holdStarted,
+          holdSatisfied,
+          completionMachinePhase,
+        }
+      : null;
+
+    if (primaryReadinessBlocker != null) {
+      const now = Date.now();
+      if (overheadBlockerTimeRef.current.firstSeenAtMs == null) {
+        overheadBlockerTimeRef.current.firstSeenAtMs = now;
+      }
+      overheadBlockerTimeRef.current.lastSeenAtMs = now;
+      if (motionSignalsAtLastBlocker) {
+        overheadBlockerMotionLatchRef.current.lastSignals = motionSignalsAtLastBlocker;
+      }
+      if (meaningfulRiseSatisfied) {
+        overheadBlockerMotionLatchRef.current.seenDuringActiveMotion = true;
+      }
+      if (holdSatisfied || gate.completionSatisfied) {
+        overheadBlockerMotionLatchRef.current.seenAfterMotionWindow = true;
+      }
+    }
+
+    const winStart = gate.guardrail.debug?.selectedWindowStartMs;
+    const winEnd = gate.guardrail.debug?.selectedWindowEndMs;
+    const evaluationWindowFramingHintForTrace = overheadReadinessFraming.evaluationWindowApplied
+      ? overheadReadinessFraming.evaluationWindowFramingHintOnly
+      : null;
+
+    const displayedPrimaryBlockerSource = deriveDisplayedPrimaryBlockerSource({
+      success: effectivePassLatched,
+      rawReadinessState: rawLiveReadiness,
+      activeBlockers: liveReadinessSummary.activeBlockers,
+      severeFramingInvalid: liveReadinessSummary.blockers.severeFramingInvalid,
+      framingHintSource: overheadReadinessFraming.source,
+    });
+
+    const blockerSeenNearTerminal =
+      (gate.status === 'retry' || gate.status === 'fail') &&
+      overheadBlockerTimeRef.current.lastSeenAtMs != null;
+
+    const overheadReadinessBlockerTrace = buildOverheadReadinessBlockerTracePayload({
+      displayedPrimaryBlocker: primaryReadinessBlocker,
+      displayedPrimaryBlockerSource,
+      evaluationWindowFramingHint: evaluationWindowFramingHintForTrace,
+      evaluationWindowPrimaryBlocker,
+      recentTailFramingHint,
+      recentTailPrimaryBlocker,
+      blockerFirstSeenAtMs: overheadBlockerTimeRef.current.firstSeenAtMs,
+      blockerLastSeenAtMs: overheadBlockerTimeRef.current.lastSeenAtMs,
+      motionLatch: { ...overheadBlockerMotionLatchRef.current },
+      blockerSeenNearTerminal,
+      motionSignalsAtLastBlocker: overheadBlockerMotionLatchRef.current.lastSignals,
+      selectedWindowStartMs: typeof winStart === 'number' && Number.isFinite(winStart) ? winStart : null,
+      selectedWindowEndMs: typeof winEnd === 'number' && Number.isFinite(winEnd) ? winEnd : null,
+      traceWallClockMs: Date.now(),
+    });
+
+    return {
       state: liveReadiness,
       rawState: rawLiveReadiness,
       blocker: primaryReadinessBlocker,
@@ -389,17 +512,27 @@ export default function CameraOverheadReachPage() {
       validFrameCount: liveReadinessSummary.inputs.validFrameCount,
       visibleJointsRatio: liveReadinessSummary.inputs.visibleJointsRatio,
       criticalJointsAvailability: liveReadinessSummary.inputs.criticalJointsAvailability,
-    }),
-    [
-      liveReadiness,
-      rawLiveReadiness,
-      primaryReadinessBlocker,
-      liveReadinessSummary,
-      overheadReadinessFraming.source,
-      recentTailFramingHint,
-      readinessSmoothingApplied,
-    ]
-  );
+      overheadReadinessBlockerTrace,
+    };
+  }, [
+    effectivePassLatched,
+    evaluationWindowPrimaryBlocker,
+    gate.completionSatisfied,
+    gate.evaluatorResult?.debug?.highlightedMetrics,
+    gate.guardrail.debug?.selectedWindowEndMs,
+    gate.guardrail.debug?.selectedWindowStartMs,
+    gate.status,
+    liveReadiness,
+    liveReadinessSummary,
+    overheadReadinessFraming.evaluationWindowApplied,
+    overheadReadinessFraming.evaluationWindowFramingHintOnly,
+    overheadReadinessFraming.source,
+    primaryReadinessBlocker,
+    rawLiveReadiness,
+    recentTailFramingHint,
+    recentTailPrimaryBlocker,
+    readinessSmoothingApplied,
+  ]);
   const armRange = getMetricValueFromList(gate.evaluatorResult.metrics, 'arm_range');
   const compensation = getMetricValueFromList(gate.evaluatorResult.metrics, 'lumbar_extension');
   const symmetry = getMetricValueFromList(gate.evaluatorResult.metrics, 'asymmetry');

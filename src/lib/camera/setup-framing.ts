@@ -47,6 +47,63 @@ export type OverheadReadinessFramingHintSource = 'evaluation_window' | 'recent_t
 export interface OverheadReadinessFramingHintResult {
   framingHint: string | null;
   source: OverheadReadinessFramingHintSource;
+  /**
+   * PR-OH-OBS-BLOCKER-TRACE-02C: 선택 창 기반 힌트만(꼬리 폴백 없음).
+   * `evaluationWindowApplied === false` 이면 의미 없음(null).
+   */
+  evaluationWindowFramingHintOnly: string | null;
+  /** true = framingHint 가 in-window feature 경로에서 나옴(힌트 문자열은 null 일 수 있음). */
+  evaluationWindowApplied: boolean;
+}
+
+/**
+ * guardrail selected window 구간만으로 framing hint 계산. 실패 시 applied=false.
+ * 진단 전용 — 제품 경로는 {@link resolveOverheadReadinessFramingHint} 사용.
+ */
+export function computeOverheadEvaluationWindowFramingOnly(args: {
+  landmarks: PoseLandmarks[];
+  windowStartMs: number | null | undefined;
+  windowEndMs: number | null | undefined;
+}): { applied: boolean; hint: string | null } {
+  const { landmarks, windowStartMs, windowEndMs } = args;
+  if (!landmarks || landmarks.length < 1) {
+    return { applied: false, hint: null };
+  }
+
+  const hasWindow =
+    typeof windowStartMs === 'number' &&
+    Number.isFinite(windowStartMs) &&
+    typeof windowEndMs === 'number' &&
+    Number.isFinite(windowEndMs) &&
+    windowEndMs >= windowStartMs;
+
+  if (!hasWindow) {
+    return { applied: false, hint: null };
+  }
+
+  const inWindow = landmarks.filter((lm) => {
+    const t = lm.timestamp;
+    if (typeof t !== 'number' || !Number.isFinite(t)) return false;
+    return t >= windowStartMs && t <= windowEndMs;
+  });
+
+  if (inWindow.length < MIN_LANDMARKS_IN_EVAL_WINDOW) {
+    return { applied: false, hint: null };
+  }
+
+  try {
+    const frames = buildPoseFeaturesFrames('overhead-reach', inWindow);
+    if (frames.length === 0) {
+      return { applied: false, hint: null };
+    }
+    const recentInWindow = frames.slice(-RECENT_FRAME_COUNT);
+    return {
+      applied: true,
+      hint: computeFramingHintFromFeatureFrames(recentInWindow),
+    };
+  } catch {
+    return { applied: false, hint: null };
+  }
 }
 
 /**
@@ -60,47 +117,21 @@ export function resolveOverheadReadinessFramingHint(args: {
   windowEndMs: number | null | undefined;
 }): OverheadReadinessFramingHintResult {
   const { landmarks, windowStartMs, windowEndMs } = args;
-  const tailFallback = (): OverheadReadinessFramingHintResult => ({
-    framingHint: getSetupFramingHint(landmarks),
-    source: 'recent_tail_fallback',
-  });
+  const ew = computeOverheadEvaluationWindowFramingOnly({ landmarks, windowStartMs, windowEndMs });
 
-  if (!landmarks || landmarks.length < 1) {
-    return { framingHint: null, source: 'recent_tail_fallback' };
-  }
-
-  const hasWindow =
-    typeof windowStartMs === 'number' &&
-    Number.isFinite(windowStartMs) &&
-    typeof windowEndMs === 'number' &&
-    Number.isFinite(windowEndMs) &&
-    windowEndMs >= windowStartMs;
-
-  if (!hasWindow) {
-    return tailFallback();
-  }
-
-  const inWindow = landmarks.filter((lm) => {
-    const t = lm.timestamp;
-    if (typeof t !== 'number' || !Number.isFinite(t)) return false;
-    return t >= windowStartMs && t <= windowEndMs;
-  });
-
-  if (inWindow.length < MIN_LANDMARKS_IN_EVAL_WINDOW) {
-    return tailFallback();
-  }
-
-  try {
-    const frames = buildPoseFeaturesFrames('overhead-reach', inWindow);
-    if (frames.length === 0) {
-      return tailFallback();
-    }
-    const recentInWindow = frames.slice(-RECENT_FRAME_COUNT);
+  if (ew.applied) {
     return {
-      framingHint: computeFramingHintFromFeatureFrames(recentInWindow),
+      framingHint: ew.hint,
       source: 'evaluation_window',
+      evaluationWindowFramingHintOnly: ew.hint,
+      evaluationWindowApplied: true,
     };
-  } catch {
-    return tailFallback();
   }
+
+  return {
+    framingHint: getSetupFramingHint(landmarks ?? []),
+    source: 'recent_tail_fallback',
+    evaluationWindowFramingHintOnly: null,
+    evaluationWindowApplied: false,
+  };
 }

@@ -21,6 +21,7 @@ import { buildSquatArmingAssistTraceCompact } from '@/lib/camera/squat/squat-arm
 import { buildSquatReversalAssistTraceCompact } from '@/lib/camera/squat/squat-reversal-assist';
 import type { OverheadInternalQuality } from './overhead/overhead-internal-quality';
 import type { OverheadInputStabilityDiag } from './overhead/overhead-input-stability';
+import type { OverheadReadinessBlockerTracePayload } from './overhead/overhead-readiness-blocker-trace';
 import {
   buildSquatResultSeveritySummary,
   type SquatPassSeverity,
@@ -110,6 +111,8 @@ export interface AttemptSnapshot {
     validFrameCount?: number;
     visibleJointsRatio?: number;
     criticalJointsAvailability?: number;
+    /** PR-OH-OBS-BLOCKER-TRACE-02C: displayed vs eval-window vs tail primary blocker + motion timing */
+    overheadReadinessBlockerTrace?: OverheadReadinessBlockerTracePayload;
   };
   stabilitySummary?: {
     warmupExcludedFrameCount?: number;
@@ -373,6 +376,8 @@ export interface AttemptSnapshot {
       };
       /** PR-OH-INPUT-STABILITY-02A: adaptor vs early-cutoff terminal / grace (page-supplied) */
       inputStability?: OverheadInputStabilityDiag;
+      /** PR-OH-OBS-BLOCKER-TRACE-02C: readinessSummary 와 동일 payload 에코 (motion 블록과 함께 해석) */
+      readinessBlockerTrace?: OverheadReadinessBlockerTracePayload;
     };
     /** cue */
     cue?: {
@@ -380,6 +385,18 @@ export interface AttemptSnapshot {
       chosenClipKey: string | null;
       suppressedReason: string | null;
       liveCueingEnabled: boolean;
+      /** PR-OH-OBS-BLOCKER-TRACE-02C: 명시적 후보 키( chosenCueKey 와 동일 값, 의미 고정용 ) */
+      lastCorrectiveCueCandidateKey?: string | null;
+      /** 교정 루프가 마지막으로 재생 성공으로 기록한 여부 */
+      correctiveCueActuallyPlayed?: boolean;
+      /** 억제 시 사유( 재생 안 됨 ) */
+      correctiveCueSuppressedReason?: string | null;
+      /** anti-spam 측 마지막 emit 시각(ms) — 재생 시도 직전 타임스탬프 */
+      correctiveCueAntiSpamEmittedAtMs?: number | null;
+      /** 클립/TTS 재생 관측 성공 여부( 알 수 없으면 null ) */
+      playbackSuccessIfKnown?: boolean | null;
+      /** 마지막 재생 관측에 연결된 cue 키 */
+      lastPlaybackObservedCueKey?: string | null;
     };
   };
   debugVersion: string;
@@ -1280,6 +1297,13 @@ function buildDiagnosisSummary(
       chosenClipKey: playbackObs?.clipKey ?? null,
       suppressedReason: cueObs?.suppressedReason ?? null,
       liveCueingEnabled: options?.liveCueingEnabled ?? false,
+      lastCorrectiveCueCandidateKey: cueObs?.cueCandidate ?? null,
+      correctiveCueActuallyPlayed: cueObs?.played ?? false,
+      correctiveCueSuppressedReason: cueObs?.suppressedReason ?? null,
+      correctiveCueAntiSpamEmittedAtMs: cueObs?.emittedAtMs ?? null,
+      playbackSuccessIfKnown:
+        typeof playbackObs?.success === 'boolean' ? playbackObs.success : null,
+      lastPlaybackObservedCueKey: playbackObs?.cueKey ?? null,
     },
   };
 
@@ -1622,6 +1646,9 @@ function buildDiagnosisSummary(
     }
     if (options?.overheadInputStability && base.overhead) {
       base.overhead.inputStability = options.overheadInputStability;
+    }
+    if (context?.overheadReadinessBlockerTrace && base.overhead) {
+      base.overhead.readinessBlockerTrace = context.overheadReadinessBlockerTrace;
     }
   }
 
