@@ -170,7 +170,7 @@ export default function CameraOverheadReachPage() {
   const [nextTriggeredAt, setNextTriggeredAt] = useState<string | null>(null);
   const [nextTriggerReason, setNextTriggerReason] = useState<string | null>(null);
   const [successSnapshot, setSuccessSnapshot] = useState<OverheadReachDebugSnapshot | null>(null);
-  const { landmarks, stats, start, stop, pushFrame } = usePoseCapture();
+  const { landmarks, stats, start, stop, pushFrame } = usePoseCapture({ mode: 'overhead-reach' });
   const hasStartedRef = useRef(false);
   const settledRef = useRef(false);
   const advanceLockRef = useRef(false);

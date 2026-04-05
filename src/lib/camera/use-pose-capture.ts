@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   getPoseFrameQuality,
+  getOverheadPoseFrameQuality,
   getPoseFrameLandmarkCount,
   getPoseFrameVisibleRatio,
   isValidPoseFrame,
@@ -44,6 +45,17 @@ export interface PoseCaptureStats {
    * null when no such rejection has occurred this session.
    */
   hookFirstRejectionSample?: PoseHookFirstRejectionSample | null;
+  /**
+   * OBS: diagnostic for the first landmark/adaptor failure (pre-quality-object path).
+   * Provides truthful scalar context without inventing quality measurements.
+   * null when no such failure has occurred this session.
+   */
+  hookFirstAdaptorFailureDiag?: PoseHookAdaptorFailureDiag | null;
+  /**
+   * OBS: which hook quality mode is active for this capture session.
+   * 'overhead-reach' uses OVERHEAD_HOOK_QUALITY_THRESHOLDS; 'default' uses HOOK_QUALITY_THRESHOLDS.
+   */
+  hookQualityMode?: 'default' | 'overhead-reach';
 }
 
 /** OBS: compact measured values from the first qualifying hook-level rejection frame */
@@ -52,6 +64,18 @@ export interface PoseHookFirstRejectionSample {
   bodyBoxArea: number;
   bodyBoxWidth: number;
   bodyBoxHeight: number;
+}
+
+/** OBS: truthful pre-quality diagnostic for landmark/adaptor failure path */
+export interface PoseHookAdaptorFailureDiag {
+  rawLandmarkCount: number;
+  toPoseLandmarksNull: boolean;
+}
+
+/** OH-INPUT-01: options for scoped hook quality mode */
+export interface UsePoseCaptureOptions {
+  /** 'overhead-reach' routes pushFrame through overhead-scoped quality profile */
+  mode?: 'default' | 'overhead-reach';
 }
 
 const EMPTY_STATS: PoseCaptureStats = {
@@ -69,9 +93,13 @@ const EMPTY_STATS: PoseCaptureStats = {
   hookRejectCoreJointsMissingFrameCount: 0,
   hookRejectBodyBoxInvalidFrameCount: 0,
   hookFirstRejectionSample: null,
+  hookFirstAdaptorFailureDiag: null,
+  hookQualityMode: 'default',
 };
 
-export function usePoseCapture() {
+export function usePoseCapture(options?: UsePoseCaptureOptions) {
+  const mode = options?.mode ?? 'default';
+  const resolveQuality = mode === 'overhead-reach' ? getOverheadPoseFrameQuality : getPoseFrameQuality;
   const [landmarks, setLandmarks] = useState<PoseLandmarks[]>([]);
   const [stats, setStats] = useState<PoseCaptureStats>(EMPTY_STATS);
   const sampledFrameCountRef = useRef(0);
@@ -84,6 +112,7 @@ export function usePoseCapture() {
   const unstableFrameCountRef = useRef(0);
   const validFrameCountRef = useRef(0);
   const hookFirstRejectionSampleRef = useRef<PoseHookFirstRejectionSample | null>(null);
+  const hookFirstAdaptorFailureDiagRef = useRef<PoseHookAdaptorFailureDiag | null>(null);
   const landmarkCountTotalRef = useRef(0);
   const visibleRatioTotalRef = useRef(0);
   const timestampDiscontinuityCountRef = useRef(0);
@@ -118,6 +147,8 @@ export function usePoseCapture() {
       hookRejectCoreJointsMissingFrameCount: hookRejectCoreJointsMissingFrameCountRef.current,
       hookRejectBodyBoxInvalidFrameCount: hookRejectBodyBoxInvalidFrameCountRef.current,
       hookFirstRejectionSample: hookFirstRejectionSampleRef.current,
+      hookFirstAdaptorFailureDiag: hookFirstAdaptorFailureDiagRef.current,
+      hookQualityMode: mode,
       };
 
       return JSON.stringify(prev) === JSON.stringify(nextStats) ? prev : nextStats;
@@ -138,11 +169,17 @@ export function usePoseCapture() {
     if (!adaptedFrame || !isValidPoseFrame(frame)) {
       droppedFrameCountRef.current += 1;
       landmarkOrAdaptorFailedFrameCountRef.current += 1;
+      if (hookFirstAdaptorFailureDiagRef.current === null) {
+        hookFirstAdaptorFailureDiagRef.current = {
+          rawLandmarkCount: getPoseFrameLandmarkCount(frame),
+          toPoseLandmarksNull: adaptedFrame === null,
+        };
+      }
       syncStats();
       return;
     }
 
-    const quality = getPoseFrameQuality(frame, lastAcceptedFrameRef.current);
+    const quality = resolveQuality(frame, lastAcceptedFrameRef.current);
     if (!quality.usable) {
       droppedFrameCountRef.current += 1;
       for (const reason of quality.reasons) {
@@ -196,6 +233,7 @@ export function usePoseCapture() {
       unstableFrameCountRef.current = 0;
       validFrameCountRef.current = 0;
       hookFirstRejectionSampleRef.current = null;
+      hookFirstAdaptorFailureDiagRef.current = null;
       landmarkCountTotalRef.current = 0;
       visibleRatioTotalRef.current = 0;
       timestampDiscontinuityCountRef.current = 0;

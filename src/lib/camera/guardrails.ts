@@ -18,9 +18,9 @@ import {
 import { buildPoseFeaturesFrames } from './pose-features';
 import type { PoseFeaturesFrame } from './pose-features';
 import type { PoseLandmarks } from '@/lib/motion/pose-types';
-import { HOOK_QUALITY_THRESHOLDS } from '@/lib/motion/pose-types';
+import { HOOK_QUALITY_THRESHOLDS, OVERHEAD_HOOK_QUALITY_THRESHOLDS } from '@/lib/motion/pose-types';
 import type { EvaluatorResult } from './evaluators/types';
-import type { PoseCaptureStats, PoseHookFirstRejectionSample } from './use-pose-capture';
+import type { PoseCaptureStats, PoseHookFirstRejectionSample, PoseHookAdaptorFailureDiag } from './use-pose-capture';
 import { selectQualityWindow } from './stability';
 
 export type CaptureQuality = 'ok' | 'low' | 'invalid';
@@ -105,10 +105,14 @@ export interface OverheadInputTruthMap {
       perJointVisibilityThreshold: number;
       coreJointCount: number;
       minBodyBoxArea: number;
-      maxBodyBoxArea: number;
+      maxBodyBoxArea: number | null;
+      /** OH-INPUT-01: which quality profile was active for this session */
+      hookQualityMode: 'default' | 'overhead-reach';
     };
     /** OBS: compact measured values from the first rejection that involved core_joints_missing or body_box_invalid */
     hookFirstRejectionSample: PoseHookFirstRejectionSample | null;
+    /** OBS: truthful pre-quality diagnostic for landmark/adaptor failure path */
+    hookFirstAdaptorFailureDiag: PoseHookAdaptorFailureDiag | null;
   };
   layer3_featureValidity: {
     featureFrameCount: number;
@@ -518,8 +522,11 @@ function buildOverheadInputTruthMap(args: {
       hookAcceptedFrameCount: stats.validFrameCount,
       droppedFrameCount: stats.droppedFrameCount,
       poseRejectionBreakdown,
-      hookThresholdEcho: { ...HOOK_QUALITY_THRESHOLDS },
+      hookThresholdEcho: stats.hookQualityMode === 'overhead-reach'
+        ? { ...OVERHEAD_HOOK_QUALITY_THRESHOLDS, hookQualityMode: 'overhead-reach' as const }
+        : { ...HOOK_QUALITY_THRESHOLDS, hookQualityMode: 'default' as const },
       hookFirstRejectionSample: stats.hookFirstRejectionSample ?? null,
+      hookFirstAdaptorFailureDiag: stats.hookFirstAdaptorFailureDiag ?? null,
     },
     layer3_featureValidity: {
       featureFrameCount,
