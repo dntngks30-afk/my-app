@@ -10,8 +10,16 @@ import {
   buildOverheadDistalHandObservabilityExport,
   type OverheadDistalHandObservabilityExport,
 } from './distal-hand-observability';
+import {
+  buildOverheadHeadReferenceObservabilityExport,
+  type OverheadHeadReferenceObservabilityExport,
+} from './head-reference-observability';
 
 export type { OverheadDistalHandObservabilityExport } from './distal-hand-observability';
+export type {
+  OverheadHeadReferenceObservabilityExport,
+  OverheadHeadRefFamilyStrip,
+} from './head-reference-observability';
 
 export const OVERHEAD_VISUAL_TRUTH_EXPORT_VERSION = 'oh-visual-truth-obs-06b-1' as const;
 
@@ -67,6 +75,8 @@ export type OverheadVisualTruthCandidateExport = {
   landmarksCompact: OverheadVisualTruthLandmarksCompact | null;
   /** PR-OH-DISTAL-HAND-OBS-07B: fingertip + wrist side-split vs nose/ear/headTop (export-only) */
   distalHandObservability?: OverheadDistalHandObservabilityExport | null;
+  /** PR-OH-HEAD-REFERENCE-OBS-08B: parallel head-reference families vs wrist / distal (export-only) */
+  headReferenceObservability?: OverheadHeadReferenceObservabilityExport | null;
 };
 
 export type OverheadVisualTruthNearTopLossSummary = {
@@ -190,6 +200,9 @@ function buildCandidate(
   const distalHandObservability = hookLm
     ? buildOverheadDistalHandObservabilityExport(hookLm, s)
     : null;
+  const headReferenceObservability = hookLm
+    ? buildOverheadHeadReferenceObservabilityExport(hookLm, s)
+    : null;
   return {
     tag,
     frameIndex: index,
@@ -209,6 +222,7 @@ function buildCandidate(
     smoothedShoulderWristElevationAvgDeg: sd.shoulderWristElevationAvgDeg ?? null,
     landmarksCompact: withLandmarks ? buildLandmarksCompact(s.joints) : null,
     distalHandObservability,
+    headReferenceObservability,
   };
 }
 
