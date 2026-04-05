@@ -23,7 +23,10 @@ import {
   overheadInternalQualityInsufficientSignal,
 } from '@/lib/camera/overhead/overhead-internal-quality';
 import { computeOverheadTopHoldFallback } from '@/lib/camera/overhead/overhead-top-hold-fallback';
-import { computeOverheadRiseTruth } from '@/lib/camera/overhead/overhead-rise-truth';
+import {
+  computeOverheadRiseTruth,
+  computeOverheadRiseBaselineArmDeg,
+} from '@/lib/camera/overhead/overhead-rise-truth';
 import {
   computeOverheadEasyProgressionHold,
   computeOverheadLowRomProgression,
@@ -526,13 +529,12 @@ export function evaluateOverheadReachFromPoseFrames(
   const peakCountAtEasyFloor = easyTopZoneFrames.length;
 
   // PR-CAM-15: low-ROM 진행 경로 준비 — easy floor(126°) 미달 사용자용
-  // baseline: 초기 6프레임 평균 (세션 시작 시 팔의 자연스러운 시작 위치)
-  const LOW_ROM_BASELINE_WINDOW = 6;
-  const baselineArmValues = valid
-    .slice(0, LOW_ROM_BASELINE_WINDOW)
-    .map((f) => f.derived.armElevationAvg)
-    .filter((v): v is number => typeof v === 'number');
-  const baselineArmDeg = baselineArmValues.length > 0 ? mean(baselineArmValues) : 0;
+  // PR-03A: 하한 포락선(lower-envelope) baseline — 초기 16 유효 프레임의 최솟값.
+  // 이전 방식(6프레임 평균)은 readiness 자세에서 팔이 약간 들린 채로 시작하면 baseline이
+  // 부풀어 rise delta가 과소 산출되는 문제가 있었다.
+  // 최솟값 전략: 초기 구간 중 진정한 '팔 내림' 참조점을 1프레임이라도 포착하면 baseline이
+  // 올바르게 고정됨. humane 경로의 humaneBaselineArmDeg와 동일한 접근법 사용.
+  const baselineArmDeg = computeOverheadRiseBaselineArmDeg(valid);
 
   // PR-02: compute rise truth (baseline-relative elevation travel) for this accumulated session.
   // Must come before evaluateOverheadCompletionState which now consumes meaningfulRiseSatisfied.
