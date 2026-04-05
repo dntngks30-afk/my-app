@@ -1,4 +1,28 @@
 /**
+ * OVERHEAD REACH — COMPLETION TRUTH LAYER (PR-01 vocabulary freeze)
+ *
+ * Reference: docs/ssot/OVERHEAD_REACH_SSOT_20260405_R2.md §3.1
+ * Vocabulary: src/lib/camera/overhead/overhead-truth-vocabulary.ts
+ *
+ * This module is the COMPLETION TRUTH layer (Layer 1) for overhead reach.
+ * It answers motion-only questions only:
+ *   - did a meaningful rise happen?
+ *   - did the user enter a valid top zone?
+ *   - did the user hold at top long enough?
+ *   - what path satisfied completion?
+ *   - if blocked, what blocked it?
+ *
+ * This module must NOT include:
+ *   - confidence threshold
+ *   - capture quality invalid vs low
+ *   - pass confirmation window
+ *   - UI latch / auto-advance
+ *   - retry vs fail routing
+ *   - voice playback state
+ *
+ * Final pass decision (Layer 2) lives in isFinalPassLatched() in auto-progression.ts.
+ * Interpretation truth (Layer 3) lives in computeOverheadInternalQuality().
+ *
  * PR-COMP-04 — 오버헤드 리치 **completion 게이트** 단일 진실(모션 관점).
  *
  * - pass/latch/guardrail는 `auto-progression`이 `completionSatisfied`와 결합해 판단.
