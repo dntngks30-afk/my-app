@@ -53,6 +53,11 @@ export type OverheadCompletionMachinePhase =
 export type OverheadCompletionPassReason = 'top_hold_met' | 'not_confirmed';
 
 export interface OverheadCompletionInput {
+  /**
+   * Legacy raise-frame counter (phaseHint='raise' frames).
+   * Still consumed by `derivePhase` for the 'raising' phase label.
+   * For the completion gate, `meaningfulRiseSatisfied` is used instead.
+   */
   raiseCount: number;
   peakCount: number;
   peakArmElevationDeg: number;
@@ -65,6 +70,19 @@ export interface OverheadCompletionInput {
   holdArmingBlockedReason: string | null;
   meanAsymmetryDeg: number | null;
   maxAsymmetryDeg: number | null;
+  /**
+   * PR-02: robust rise truth from overhead-rise-truth.ts.
+   * When true, the user demonstrably raised their arm ≥ OVERHEAD_RISE_MIN_DELTA_DEG
+   * above their starting (baseline) position.
+   * Replaces fragile `raiseCount === 0` check in the completion gate.
+   * See: src/lib/camera/overhead/overhead-rise-truth.ts
+   */
+  meaningfulRiseSatisfied: boolean;
+  /**
+   * PR-02: timestamp when meaningful rise first started (arm crossed baseline+5°).
+   * Used for observability only — not a pass gate.
+   */
+  riseStartedAtMs?: number;
   /**
    * PR-CAM-11A: jitter-tolerant 폴백 결과 (evaluator가 주입).
    * strict 경로 실패 시 이 결과가 fallbackSatisfied이면 completion 인정.
@@ -89,6 +107,17 @@ export interface OverheadCompletionState extends MotionCompletionResult {
    * 'strict' = stable-top dwell, 'fallback' = jitter-tolerant top-zone run, null = 미통과
    */
   completionPath: 'strict' | 'fallback' | null;
+  /**
+   * PR-02: reflected from input — whether the user made a meaningful rise.
+   * True = arm traveled ≥ OVERHEAD_RISE_MIN_DELTA_DEG above starting position.
+   * Used in debug/observability to distinguish "rise not detected" from other blocks.
+   */
+  meaningfulRiseSatisfied: boolean;
+  /**
+   * PR-02: timestamp when meaningful rise first started, or undefined if not detected.
+   * Observability only — not a pass gate.
+   */
+  riseStartedAtMs: number | undefined;
 }
 
 function asymmetryFails(mean: number | null, peak: number | null): boolean {
@@ -131,7 +160,9 @@ export function evaluateOverheadCompletionState(
 
   let completionBlockedReason: string | null = null;
 
-  if (input.raiseCount === 0 || input.peakCount < OVERHEAD_MIN_PEAK_FRAMES) {
+  // PR-02: use meaningfulRiseSatisfied (baseline-relative travel) instead of fragile raiseCount===0.
+  // raiseCount is kept above for derivePhase only.
+  if (!input.meaningfulRiseSatisfied || input.peakCount < OVERHEAD_MIN_PEAK_FRAMES) {
     completionBlockedReason = 'raise_peak_incomplete';
   } else if (effectiveArm < OVERHEAD_TOP_FLOOR_DEG) {
     completionBlockedReason = 'insufficient_elevation';
@@ -183,5 +214,7 @@ export function evaluateOverheadCompletionState(
     completionPassReason,
     fallbackTopHoldSatisfied,
     completionPath,
+    meaningfulRiseSatisfied: input.meaningfulRiseSatisfied,
+    riseStartedAtMs: input.riseStartedAtMs,
   };
 }

@@ -23,6 +23,7 @@ import {
   overheadInternalQualityInsufficientSignal,
 } from '@/lib/camera/overhead/overhead-internal-quality';
 import { computeOverheadTopHoldFallback } from '@/lib/camera/overhead/overhead-top-hold-fallback';
+import { computeOverheadRiseTruth } from '@/lib/camera/overhead/overhead-rise-truth';
 import {
   computeOverheadEasyProgressionHold,
   computeOverheadLowRomProgression,
@@ -533,6 +534,13 @@ export function evaluateOverheadReachFromPoseFrames(
     .filter((v): v is number => typeof v === 'number');
   const baselineArmDeg = baselineArmValues.length > 0 ? mean(baselineArmValues) : 0;
 
+  // PR-02: compute rise truth (baseline-relative elevation travel) for this accumulated session.
+  // Must come before evaluateOverheadCompletionState which now consumes meaningfulRiseSatisfied.
+  const riseTruth = computeOverheadRiseTruth({ validFrames: valid, baselineArmDeg });
+  // effectiveRaiseCount gates easy/lowRom/humane paths: if meaningful rise not established,
+  // force raiseCount=0 so those paths' own `raiseCount===0` guard also blocks them.
+  const effectiveRaiseCount = riseTruth.meaningfulRiseSatisfied ? Math.max(raiseCount, 1) : 0;
+
   const lowRomZoneFrames = valid
     .filter(
       (f) =>
@@ -586,12 +594,14 @@ export function evaluateOverheadReachFromPoseFrames(
     meanAsymmetryDeg,
     maxAsymmetryDeg,
     fallbackTopHold,
+    meaningfulRiseSatisfied: riseTruth.meaningfulRiseSatisfied,
+    riseStartedAtMs: riseTruth.riseStartedAtMs,
   });
 
   // PR-CAM-11B: 진행 전용 easy 홀드 (해석·overheadPlanning 은 strict dwell 기준 유지)
   const easyProgression = computeOverheadEasyProgressionHold({
     easyTopZoneFrames,
-    raiseCount,
+    raiseCount: effectiveRaiseCount,
     peakCountAtEasyFloor,
     effectiveArmDeg: peakArmForCompletion,
     meanAsymmetryDeg,
@@ -601,7 +611,7 @@ export function evaluateOverheadReachFromPoseFrames(
   // PR-CAM-15: low-ROM 진행 경로 (easy floor 미달 사용자 — 개인 baseline 대비 실질적 거상 + 짧은 안정)
   const lowRomProgression = computeOverheadLowRomProgression({
     lowRomZoneFrames,
-    raiseCount,
+    raiseCount: effectiveRaiseCount,
     peakCountAtLowRomFloor,
     effectiveArmDeg: peakArmForCompletion,
     baselineArmDeg,
@@ -612,7 +622,7 @@ export function evaluateOverheadReachFromPoseFrames(
   // PR-CAM-16: humane low-ROM 진행 경로 (low-ROM floor 미달 사용자 — lower-envelope baseline + 완화된 임계)
   const humaneLowRomProgression = computeOverheadHumaneLowRomProgression({
     humaneZoneFrames,
-    raiseCount,
+    raiseCount: effectiveRaiseCount,
     peakCountAtHumaneFloor,
     effectiveArmDeg: peakArmForCompletion,
     humaneBaselineArmDeg,
@@ -959,6 +969,13 @@ export function evaluateOverheadReachFromPoseFrames(
         fallbackTopHoldEligible: fallbackTopHold.fallbackEligible ? 1 : 0,
         fallbackTopHoldBlockedReason: fallbackTopHold.fallbackBlockedReason,
         topZoneFrameCount: topZoneFrames.length,
+        /** PR-02: rise truth owner — baseline-relative arm travel */
+        meaningfulRiseSatisfied: riseTruth.meaningfulRiseSatisfied ? 1 : 0,
+        riseStartedAtMs: riseTruth.riseStartedAtMs,
+        riseElevationDeltaFromBaseline: riseTruth.riseElevationDeltaFromBaseline,
+        riseBaselineArmDeg: riseTruth.baselineArmDeg,
+        risePeakArmElevation: riseTruth.peakArmElevation,
+        riseBlockedReason: riseTruth.riseBlockedReason,
       },
       perStepDiagnostics: perStepRecord,
     },

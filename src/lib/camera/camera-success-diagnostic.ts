@@ -94,6 +94,18 @@ export interface OverheadSuccessSnapshot extends SuccessSnapshotBase {
   holdSatisfiedAtMs: number | undefined;
   holdArmingBlockedReason: string | null;
   successTriggeredAtMs: number;
+  /** PR-02: rise truth owner observability */
+  meaningfulRiseSatisfied: boolean;
+  riseStartedAtMs: number | undefined;
+  riseElevationDeltaFromBaseline: number | undefined;
+  riseBaselineArmDeg: number | undefined;
+  riseBlockedReason: string | null;
+  /**
+   * PR-02: final-pass blocked reason at the moment of success trigger.
+   * Should be null at success (pass was granted). Populated for diagnostic completeness.
+   * Distinguishes completion-layer (Layer 1) vs final-pass-layer (Layer 2) failure context.
+   */
+  finalPassBlockedReason: string | null;
 }
 
 export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
@@ -264,6 +276,23 @@ export function recordOverheadSuccessSnapshot(options: RecordOverheadSuccessOpti
       holdArmingBlockedReason:
         hm?.holdArmingBlockedReason == null ? null : String(hm.holdArmingBlockedReason),
       successTriggeredAtMs: options.passLatchedAtMs,
+      /** PR-02: rise truth fields */
+      meaningfulRiseSatisfied:
+        hm?.meaningfulRiseSatisfied === 1 || hm?.meaningfulRiseSatisfied === true,
+      riseStartedAtMs:
+        typeof hm?.riseStartedAtMs === 'number' ? hm.riseStartedAtMs : undefined,
+      riseElevationDeltaFromBaseline:
+        typeof hm?.riseElevationDeltaFromBaseline === 'number'
+          ? hm.riseElevationDeltaFromBaseline
+          : undefined,
+      riseBaselineArmDeg:
+        typeof hm?.riseBaselineArmDeg === 'number' ? hm.riseBaselineArmDeg : undefined,
+      riseBlockedReason:
+        typeof hm?.riseBlockedReason === 'string' ? hm.riseBlockedReason : null,
+      finalPassBlockedReason:
+        typeof options.gate.finalPassBlockedReason === 'string'
+          ? options.gate.finalPassBlockedReason
+          : null,
     };
     pushSuccessSnapshot(snapshot);
   } catch {

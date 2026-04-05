@@ -349,6 +349,12 @@ export interface AttemptSnapshot {
       completionMachinePhase?: string;
       completionBlockedReason?: string | null;
       overheadInternalQuality?: OverheadInternalQuality;
+      /** PR-02: rise truth owner observability */
+      meaningfulRiseSatisfied?: boolean;
+      riseStartedAtMs?: number;
+      riseBlockedReason?: string | null;
+      /** PR-02: final-pass layer blocked reason (Layer 2 — from gate.finalPassBlockedReason) */
+      finalPassBlockedReason?: string | null;
     };
     /** cue */
     cue?: {
@@ -1379,6 +1385,15 @@ function buildDiagnosisSummary(
       completionBlockedReason:
         typeof hm?.completionBlockedReason === 'string' ? hm.completionBlockedReason : undefined,
       overheadInternalQuality: gate.evaluatorResult.debug?.overheadInternalQuality,
+      /** PR-02: rise truth owner */
+      meaningfulRiseSatisfied:
+        hm?.meaningfulRiseSatisfied === 1 || hm?.meaningfulRiseSatisfied === true,
+      riseStartedAtMs: typeof hm?.riseStartedAtMs === 'number' ? hm.riseStartedAtMs : undefined,
+      riseBlockedReason:
+        typeof hm?.riseBlockedReason === 'string' ? hm.riseBlockedReason : null,
+      /** PR-02: final-pass blocked reason — distinguishes Layer 1 vs Layer 2 failure */
+      finalPassBlockedReason:
+        typeof gate.finalPassBlockedReason === 'string' ? gate.finalPassBlockedReason : null,
     };
   }
 
