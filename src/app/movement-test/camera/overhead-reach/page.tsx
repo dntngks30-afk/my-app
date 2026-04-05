@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
 import { Starfield } from '@/components/landing/Starfield';
 import { CameraPreview } from '@/components/public/CameraPreview';
+import { ExternalCameraGuidePanel } from '@/components/public/ExternalCameraGuidePanel';
 import {
   saveCameraTest,
   loadCameraTest,
@@ -1449,13 +1450,19 @@ export default function CameraOverheadReachPage() {
                 guideAnimated={isMinimalCapture ? false : overlayGuide.animated}
                 guideVariant="overhead-reach"
                 guideBadges={setupGuide.badges}
-                guideInstructions={overheadPreviewInstructions}
                 guideReadinessLabel={setupGuide.readinessLabel}
                 minimalCaptureMode={isMinimalCapture}
                 showProtocolGuideInMinimal={isMinimalCapture}
                 className="w-full"
               />
             </div>
+            {!permissionDenied && overheadPreviewInstructions.length > 0 && (
+              <ExternalCameraGuidePanel
+                variant="overhead-reach"
+                lines={overheadPreviewInstructions}
+                className="w-full max-w-md mt-2 shrink-0"
+              />
+            )}
             {!isMinimalCapture && (
             <div className="w-full max-w-md mt-4 space-y-3">
               {visibleUserGuidance.length > 0 && (

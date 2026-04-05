@@ -64,12 +64,12 @@ console.log('\n[AT3] Retry recovery — model-visible wording');
   ok('AT3c: hold_too_short secondary visibility', /손|얼굴|화면/i.test(h.secondary ?? ''), h.secondary);
 }
 
-console.log('\n[AT4] Wiring — page + CameraPreview');
+console.log('\n[AT4] Wiring — page + CameraPreview (05C: 외부 가이드 패널)');
 {
   const pagePath = join(process.cwd(), 'src/app/movement-test/camera/overhead-reach/page.tsx');
   const src = readFileSync(pagePath, 'utf8');
   ok('AT4a: overheadPreviewInstructions memo', /overheadPreviewInstructions/.test(src), false);
-  ok('AT4b: guideInstructions wired', /guideInstructions=\{overheadPreviewInstructions\}/.test(src), false);
+  ok('AT4b: ExternalCameraGuidePanel + overhead variant', /ExternalCameraGuidePanel/.test(src) && /variant="overhead-reach"/.test(src), false);
   ok('AT4c: guideBadges from setupGuide', /guideBadges=\{setupGuide\.badges\}/.test(src), false);
   ok('AT4d: showProtocolGuideInMinimal', /showProtocolGuideInMinimal=\{isMinimalCapture\}/.test(src), false);
   const prevPath = join(process.cwd(), 'src/components/public/CameraPreview.tsx');

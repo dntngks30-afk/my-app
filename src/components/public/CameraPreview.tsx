@@ -47,7 +47,10 @@ interface CameraPreviewProps {
   guideVariant?: 'default' | 'overhead-reach' | 'wall-angel' | 'single-leg-balance';
   /** 상단 고정 가이드 배지 */
   guideBadges?: string[];
-  /** 하단 고정 가이드 문구 */
+  /**
+   * 상세 촬영 가이드(다줄). PR-OH-GUIDE-NONBLOCKING-05C 이후 **프리뷰 내부에 렌더하지 않음**.
+   * 호환을 위해 prop은 유지하나, 각 페이지에서 프리뷰 아래 등 외부 영역에 직접 그려야 함.
+   */
   guideInstructions?: string[];
   /** 간단한 준비 상태 힌트 */
   guideReadinessLabel?: string | null;
@@ -676,8 +679,8 @@ export function CameraPreview({
     !minimalCaptureMode && Boolean(guideHint) && status === 'ready';
   const allowStaticGuide =
     !minimalCaptureMode || (showProtocolGuideInMinimal && minimalCaptureMode);
-  const showStaticGuide =
-    allowStaticGuide && status === 'ready' && (guideBadges.length > 0 || guideInstructions.length > 0);
+  /** 인프레임: 배지만(다줄 가이드 카드는 프리뷰 밖에서 렌더 — 05C) */
+  const showStaticGuide = allowStaticGuide && status === 'ready' && guideBadges.length > 0;
   const showFocusOverlay = !minimalCaptureMode && Boolean(guideFocus);
 
   return (
@@ -814,20 +817,6 @@ export function CameraPreview({
         <div className="absolute left-1/2 top-14 z-45 -translate-x-1/2 pointer-events-none">
           <div className="rounded-full border border-emerald-400/20 bg-emerald-500/15 px-3 py-1 text-[11px] font-medium text-emerald-100 backdrop-blur-sm">
             {guideReadinessLabel}
-          </div>
-        </div>
-      )}
-      {showStaticGuide && guideInstructions.length > 0 && (
-        <div className="absolute inset-x-3 bottom-3 z-45 pointer-events-none">
-          <div className="rounded-2xl border border-white/10 bg-black/38 px-4 py-3 backdrop-blur-sm">
-            <p className="text-[11px] font-semibold tracking-[0.18em] text-slate-400">
-              GUIDE
-            </p>
-            <div className="mt-2 space-y-1 text-sm font-medium text-slate-100">
-              {guideInstructions.slice(0, 4).map((line) => (
-                <p key={line}>{line}</p>
-              ))}
-            </div>
           </div>
         </div>
       )}

@@ -16,6 +16,7 @@ import {
   StitchCameraSquatRoot,
 } from '@/components/stitch/camera/CameraSquat';
 import { CameraPreview } from '@/components/public/CameraPreview';
+import { ExternalCameraGuidePanel } from '@/components/public/ExternalCameraGuidePanel';
 import {
   saveCameraTest,
   loadCameraTest,
@@ -1682,7 +1683,6 @@ export default function CameraSquatPage() {
                 guideAnimated={isMinimalCapture ? false : isPreCapturePhase ? false : overlayGuide.animated}
                 guideVariant="default"
                 guideBadges={isMinimalCapture ? [] : cameraPhase === 'setup' ? ['전신', '1.8~2m 거리', '폰 낮게'] : []}
-                guideInstructions={cameraPhase === 'setup' ? setupGuide.instructions : undefined}
                 guideReadinessLabel={cameraPhase === 'setup' ? setupGuide.readinessLabel : null}
                 minimalCaptureMode={isMinimalCapture}
                 className="w-full"
@@ -1701,6 +1701,14 @@ export default function CameraSquatPage() {
                 </div>
               )}
             </div>
+
+            {cameraPhase === 'setup' && setupGuide.instructions.length > 0 && (
+              <ExternalCameraGuidePanel
+                variant="squat"
+                lines={setupGuide.instructions}
+                className="w-full max-w-md mt-2 shrink-0"
+              />
+            )}
 
             {showCompactMobileDebugStrip && (
               <div

@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
 import { Starfield } from '@/components/landing/Starfield';
 import { CameraPreview } from '@/components/public/CameraPreview';
+import { ExternalCameraGuidePanel } from '@/components/public/ExternalCameraGuidePanel';
 import {
   saveCameraTest,
   loadCameraTest,
@@ -643,11 +644,17 @@ export default function CameraWallAngelPage() {
                 guideAnimated={overlayGuide.animated}
                 guideVariant="wall-angel"
                 guideBadges={guideBadges}
-                guideInstructions={guideInstructions}
                 guideReadinessLabel={guideReadinessLabel}
                 className="w-full"
               />
             </div>
+            {guideInstructions.length > 0 && (
+              <ExternalCameraGuidePanel
+                variant="wall-angel"
+                lines={guideInstructions}
+                className="w-full max-w-md mt-2 shrink-0"
+              />
+            )}
             <div className="w-full max-w-md mt-4 space-y-3">
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-center">
                 <p
