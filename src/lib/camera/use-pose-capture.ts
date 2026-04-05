@@ -80,6 +80,11 @@ export interface PoseHookAdaptorFailureDiag {
 export interface UsePoseCaptureOptions {
   /** 'overhead-reach' routes pushFrame through overhead-scoped quality profile */
   mode?: 'default' | 'overhead-reach';
+  /**
+   * PR-OH-VISUAL-SNAPSHOT-06C: invoked synchronously when a frame passes the hook and is appended
+   * to the landmarks buffer (diagnostic thumbnails only; optional).
+   */
+  onHookAcceptedFrame?: (payload: { poseFrame: PoseFrame; landmarkRow: PoseLandmarks }) => void;
 }
 
 const EMPTY_STATS: PoseCaptureStats = {
@@ -104,6 +109,7 @@ const EMPTY_STATS: PoseCaptureStats = {
 
 export function usePoseCapture(options?: UsePoseCaptureOptions) {
   const mode = options?.mode ?? 'default';
+  const onHookAcceptedFrame = options?.onHookAcceptedFrame;
   const resolveQuality = mode === 'overhead-reach' ? getOverheadPoseFrameQuality : getPoseFrameQuality;
   const [landmarks, setLandmarks] = useState<PoseLandmarks[]>([]);
   const [stats, setStats] = useState<PoseCaptureStats>(EMPTY_STATS);
@@ -225,9 +231,15 @@ export function usePoseCapture(options?: UsePoseCaptureOptions) {
     visibleRatioTotalRef.current += getPoseFrameVisibleRatio(frame);
     lastAcceptedFrameRef.current = frame;
 
+    try {
+      onHookAcceptedFrame?.({ poseFrame: frame, landmarkRow: adaptedFrame });
+    } catch {
+      // diagnostic path — never break capture
+    }
+
     setLandmarks((prev) => [...prev.slice(-(MAX_CAPTURED_FRAMES - 1)), adaptedFrame]);
     syncStats();
-  }, [syncStats]);
+  }, [syncStats, onHookAcceptedFrame]);
 
   const start = useCallback(
     (_video?: HTMLVideoElement) => {

@@ -18,6 +18,7 @@ import {
   getPrevStepPath,
   type CameraStepId,
 } from '@/lib/public/camera-test';
+import type { PoseFrame, PoseLandmarks } from '@/lib/motion/pose-types';
 import { usePoseCapture } from '@/lib/camera/use-pose-capture';
 import {
   evaluateExerciseAutoProgress,
@@ -34,6 +35,10 @@ import {
   type LiveReadinessState,
 } from '@/lib/camera/live-readiness';
 import { recordAttemptSnapshot, recordOverheadObservationEvent } from '@/lib/camera/camera-trace';
+import {
+  buildOverheadVisualTruthSnapshotRecordAttemptOptions,
+  captureOverheadTruthSnapshotDataUrl,
+} from '@/lib/camera/overhead/visual-snapshot-export';
 import {
   recordOverheadSuccessSnapshot,
   isDiagnosticFreezeMode,
@@ -185,7 +190,26 @@ export default function CameraOverheadReachPage() {
   const [nextTriggeredAt, setNextTriggeredAt] = useState<string | null>(null);
   const [nextTriggerReason, setNextTriggerReason] = useState<string | null>(null);
   const [successSnapshot, setSuccessSnapshot] = useState<OverheadReachDebugSnapshot | null>(null);
-  const { landmarks, stats, start, stop, pushFrame } = usePoseCapture({ mode: 'overhead-reach' });
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const acceptedSnapshotDataUrlsRef = useRef<string[]>([]);
+
+  const onHookAcceptedFrameForSnapshots = useCallback(
+    ({ poseFrame }: { poseFrame: PoseFrame; landmarkRow: PoseLandmarks }) => {
+      const video = previewVideoRef.current;
+      if (!video) {
+        acceptedSnapshotDataUrlsRef.current = [...acceptedSnapshotDataUrlsRef.current.slice(-179), ''];
+        return;
+      }
+      const url = captureOverheadTruthSnapshotDataUrl(video, poseFrame) ?? '';
+      acceptedSnapshotDataUrlsRef.current = [...acceptedSnapshotDataUrlsRef.current.slice(-179), url];
+    },
+    []
+  );
+
+  const { landmarks, stats, start, stop, pushFrame } = usePoseCapture({
+    mode: 'overhead-reach',
+    onHookAcceptedFrame: onHookAcceptedFrameForSnapshots,
+  });
   const hasStartedRef = useRef(false);
   const settledRef = useRef(false);
   const advanceLockRef = useRef(false);
@@ -563,6 +587,10 @@ export default function CameraOverheadReachPage() {
         liveCueingEnabled: startSequenceComplete,
         autoNextObservation,
         poseCaptureStats: stats,
+        ...(buildOverheadVisualTruthSnapshotRecordAttemptOptions(
+          gate.guardrail.debug?.visualTruthCandidates,
+          acceptedSnapshotDataUrlsRef.current
+        ) ?? {}),
       });
       emitOverheadCaptureTerminalOnce(gate, autoNextObservation);
     },
@@ -618,6 +646,7 @@ export default function CameraOverheadReachPage() {
     setNextTriggeredAt(null);
     setNextTriggerReason(null);
     setSuccessSnapshot(null);
+    acceptedSnapshotDataUrlsRef.current = [];
   }, [clearAutoAdvanceTimer, currentStepKey]);
 
   const persistCurrentStep = useCallback(() => {
@@ -627,6 +656,10 @@ export default function CameraOverheadReachPage() {
       holdCuePlayed: holdCuePlayedRef.current,
       successTriggeredAtMs: Date.now(),
       poseCaptureStats: stats,
+      ...(buildOverheadVisualTruthSnapshotRecordAttemptOptions(
+        gate.guardrail.debug?.visualTruthCandidates,
+        acceptedSnapshotDataUrlsRef.current
+      ) ?? {}),
     });
     /* latchPassEvent에서 setNextTriggerReason 직후 호출되므로 state는 한 틱 늦을 수 있음 — 성공 터미널 관측은 고정 라벨 */
     emitOverheadCaptureTerminalOnce(gate, 'pass_latched');
@@ -653,8 +686,10 @@ export default function CameraOverheadReachPage() {
 
   const handleVideoReady = useCallback(
     (video: HTMLVideoElement) => {
+      previewVideoRef.current = video;
       if (!hasStartedRef.current) {
         hasStartedRef.current = true;
+        acceptedSnapshotDataUrlsRef.current = [];
         start(video);
       }
       settledRef.current = false;
@@ -1012,6 +1047,10 @@ export default function CameraOverheadReachPage() {
           autoNextObservation: 'terminal_retry_or_fail',
           poseCaptureStats: stats,
           overheadInputStability,
+          ...(buildOverheadVisualTruthSnapshotRecordAttemptOptions(
+            gate.guardrail.debug?.visualTruthCandidates,
+            acceptedSnapshotDataUrlsRef.current
+          ) ?? {}),
         });
         emitOverheadCaptureTerminalOnce(
           gate,
@@ -1212,6 +1251,10 @@ export default function CameraOverheadReachPage() {
         liveCueingEnabled: startSequenceComplete,
         autoNextObservation: 'retry',
         poseCaptureStats: stats,
+        ...(buildOverheadVisualTruthSnapshotRecordAttemptOptions(
+          gate.guardrail.debug?.visualTruthCandidates,
+          acceptedSnapshotDataUrlsRef.current
+        ) ?? {}),
       });
       emitOverheadCaptureTerminalOnce(gate, 'retry');
     }

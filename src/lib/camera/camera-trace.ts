@@ -23,6 +23,7 @@ import type { OverheadInternalQuality } from './overhead/overhead-internal-quali
 import type { OverheadInputStabilityDiag } from './overhead/overhead-input-stability';
 import type { OverheadReadinessBlockerTracePayload } from './overhead/overhead-readiness-blocker-trace';
 import type { OverheadVisualTruthCandidatesExport } from './overhead/visual-truth-candidates';
+import type { OverheadVisualTruthSnapshotBundle } from './overhead/visual-snapshot-export';
 import {
   buildSquatResultSeveritySummary,
   type SquatPassSeverity,
@@ -431,6 +432,8 @@ export interface AttemptSnapshot {
       ohHeadRelativeMeanElbowAboveEarAvgNorm?: number | null;
       /** PR-OH-VISUAL-TRUTH-OBS-06B: selected-window vs global top-like diagnostics (export-only) */
       visualTruthCandidates?: OverheadVisualTruthCandidatesExport | null;
+      /** PR-OH-VISUAL-SNAPSHOT-06C: JPEG + overlay tied to visualTruthCandidates tags/indices */
+      visualTruthSnapshots?: OverheadVisualTruthSnapshotBundle | null;
     };
     /** cue */
     cue?: {
@@ -1318,6 +1321,8 @@ export interface RecordAttemptOptions {
   poseCaptureStats?: PoseCaptureStats;
   /** PR-OH-INPUT-STABILITY-02A: overhead terminal deferral / failure class (optional) */
   overheadInputStability?: OverheadInputStabilityDiag;
+  /** PR-OH-VISUAL-SNAPSHOT-06C: bounded JPEGs for 06B candidates (terminal attempt, client-built) */
+  overheadVisualTruthSnapshots?: OverheadVisualTruthSnapshotBundle;
 }
 
 function buildDiagnosisSummary(
@@ -1777,6 +1782,7 @@ function buildDiagnosisSummary(
     }
     if (base.overhead) {
       base.overhead.visualTruthCandidates = gate.guardrail.debug?.visualTruthCandidates ?? null;
+      base.overhead.visualTruthSnapshots = options?.overheadVisualTruthSnapshots ?? null;
     }
     if (options?.poseCaptureStats && base.overhead) {
       const ps = options.poseCaptureStats;
