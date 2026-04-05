@@ -263,6 +263,8 @@ export default function CameraOverheadReachPage() {
   /* OBS: 오버헤드 mid-attempt 관측 — highlightedMetrics·gate 엣지만(프레임 로그 없음) */
   useEffect(() => {
     if (!cameraReady || permissionDenied || effectivePassLatched) return;
+    /* OBS: 동일 attemptCorrelationId(currentStepKey)에서 capture_session_terminal 이후 mid 이벤트 금지 */
+    if (overheadTerminalObsStepKeyRef.current === currentStepKey) return;
     if (stats.sampledFrameCount < 1) return;
     const hm = gate.evaluatorResult?.debug?.highlightedMetrics as Record<string, unknown> | undefined;
     if (!hm) return;
