@@ -38,6 +38,15 @@ import type { CameraPoseDelegateKind } from '@/lib/motion/pose-types';
 /** PR-4: movement type (squat, overhead_reach만 지원) */
 export type TraceMovementType = 'squat' | 'overhead_reach';
 
+/**
+ * PR-OH-MOTION-METRIC-TRACE-03C: What `diagnosisSummary.overhead.peakElevation` (legacy) was sourced from.
+ * Evaluator `metrics[].name === 'arm_range'` is **time-average** smoothed arm elevation (deg), not a peak.
+ */
+export type OverheadExportedPeakElevationProvenance =
+  | 'highlighted_metrics_true_peak'
+  | 'legacy_metrics_arm_range_time_average_fallback'
+  | 'unavailable';
+
 /** PR-4: 최종 결과 카테고리 */
 export type TraceOutcome =
   | 'ok'
@@ -325,7 +334,26 @@ export interface AttemptSnapshot {
     };
     /** overhead — PR-C4 trace, PR overhead-dwell */
     overhead?: {
+      /**
+       * Legacy field: max smoothed arm elevation (deg) when `highlightedMetrics.peakArmElevation` exists;
+       * otherwise falls back to `metrics.arm_range` which is a **time average**, not a peak.
+       * PR-03C: use `truePeakArmElevationDeg`, `armElevationTimeAvgDeg`, `exportedPeakElevationProvenance`.
+       */
       peakElevation?: number;
+      /** PR-03C: same numeric value as `peakElevation` when present — explicit label for legacy consumers. */
+      legacyPeakElevationDeg?: number;
+      /** PR-03C: max over valid frames — `highlightedMetrics.peakArmElevation` (smoothed armElevationAvg space). */
+      truePeakArmElevationDeg?: number;
+      /** PR-03C: rise-truth module peak — `highlightedMetrics.risePeakArmElevation` (same input stream; diagnostic parity). */
+      risePeakArmElevationDeg?: number;
+      /** PR-03C: `metrics.arm_range` value = mean time-average of armElevationAvg (deg), NOT peak ROM. */
+      armElevationTimeAvgDeg?: number;
+      /** PR-03C: documents how `peakElevation` / `legacyPeakElevationDeg` was chosen. */
+      exportedPeakElevationProvenance?: OverheadExportedPeakElevationProvenance;
+      /** PR-03C: true iff legacy peak field was filled from arm_range (time average). */
+      peakElevationRepresentsTimeAverageFallback?: boolean;
+      /** PR-03C: when arm_range metric row exists, its value semantics (always time average for this name). */
+      armRangeMetricSemantics?: 'time_average_deg';
       peakCount?: number;
       holdDurationMs?: number;
       holdAccumulationMs?: number;
@@ -1546,10 +1574,33 @@ function buildDiagnosisSummary(
     const holdArmingBlockedReason = hm?.holdArmingBlockedReason ?? undefined;
     const holdAccumulationMs = typeof hm?.holdAccumulationMs === 'number' ? hm.holdAccumulationMs : holdDurationMs;
     const holdSatisfiedAtMs = typeof hm?.holdSatisfiedAtMs === 'number' ? hm.holdSatisfiedAtMs : undefined;
-    const peakElevation =
-      typeof hm?.peakArmElevation === 'number'
+
+    // PR-OH-MOTION-METRIC-TRACE-03C: separate true peak vs time-average vs rise peak — no evaluator behavior change.
+    const armRangeMetric = gate.evaluatorResult?.metrics?.find((m) => m.name === 'arm_range');
+    const armElevationTimeAvgDeg =
+      typeof armRangeMetric?.value === 'number' && Number.isFinite(armRangeMetric.value)
+        ? armRangeMetric.value
+        : undefined;
+    const truePeakArmElevationDeg =
+      typeof hm?.peakArmElevation === 'number' && Number.isFinite(hm.peakArmElevation)
         ? hm.peakArmElevation
-        : gate.evaluatorResult?.metrics?.find((m) => m.name === 'arm_range')?.value;
+        : undefined;
+    const risePeakArmElevationDeg =
+      typeof hm?.risePeakArmElevation === 'number' && Number.isFinite(hm.risePeakArmElevation)
+        ? hm.risePeakArmElevation
+        : undefined;
+    /** Identical to pre-03C: prefer highlighted max peak, else arm_range (mean — historically mislabeled as "peak"). */
+    const peakElevation =
+      truePeakArmElevationDeg !== undefined ? truePeakArmElevationDeg : armElevationTimeAvgDeg;
+    const exportedPeakElevationProvenance: OverheadExportedPeakElevationProvenance =
+      truePeakArmElevationDeg !== undefined
+        ? 'highlighted_metrics_true_peak'
+        : armElevationTimeAvgDeg !== undefined
+          ? 'legacy_metrics_arm_range_time_average_fallback'
+          : 'unavailable';
+    const peakElevationRepresentsTimeAverageFallback =
+      exportedPeakElevationProvenance === 'legacy_metrics_arm_range_time_average_fallback';
+
     const holdSatisfied = holdDurationMs >= REQUIRED_HOLD_MS;
     const isHoldCue = cueObs?.cueCandidate === 'correction:hold:overhead-reach';
     const successBlockedReason = passLatched
@@ -1578,6 +1629,13 @@ function buildDiagnosisSummary(
 
     base.overhead = {
       peakElevation,
+      legacyPeakElevationDeg: peakElevation,
+      truePeakArmElevationDeg,
+      risePeakArmElevationDeg,
+      armElevationTimeAvgDeg,
+      exportedPeakElevationProvenance,
+      peakElevationRepresentsTimeAverageFallback,
+      armRangeMetricSemantics: armRangeMetric !== undefined ? 'time_average_deg' : undefined,
       peakCount,
       holdDurationMs,
       holdAccumulationMs,
