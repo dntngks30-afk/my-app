@@ -492,6 +492,19 @@ export function getRecentSuccessSnapshots(): SuccessSnapshot[] {
   }
 }
 
+/**
+ * Trace debug Export JSON / 패널 Clear와 정합: success snapshot 버퍼만 비운다.
+ * attempt trace(clearAttempts)와 별도 키이므로 함께 호출해야 전체 진단 히스토리가 리셋된다.
+ */
+export function clearSuccessSnapshots(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(SUCCESS_SNAPSHOT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 /* --- Squat failed shallow attempt snapshot (diagnostic only) --- */
 const FAILED_SHALLOW_SNAPSHOT_KEY = 'moveReCameraFailedShallowSnapshots:v1';
 /** CAM-OBS: 모바일 링 버퍼 상한(과도한 localStorage 증가 방지) */

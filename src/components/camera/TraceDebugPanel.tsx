@@ -15,6 +15,7 @@ import {
 } from '@/lib/camera/camera-trace';
 import {
   getRecentSuccessSnapshots,
+  clearSuccessSnapshots,
   CAMERA_DIAG_VERSION,
   type SuccessSnapshot,
 } from '@/lib/camera/camera-success-diagnostic';
@@ -93,8 +94,10 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
 
   const handleClear = useCallback(() => {
     clearAttempts();
+    clearSuccessSnapshots();
     setAttempts([]);
     setSquatObservations([]);
+    setSuccessSnapshots([]);
     setRefreshedAt(null);
   }, []);
 
