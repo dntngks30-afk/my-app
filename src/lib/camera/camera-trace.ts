@@ -406,6 +406,16 @@ export interface AttemptSnapshot {
       inputStability?: OverheadInputStabilityDiag;
       /** PR-OH-OBS-BLOCKER-TRACE-02C: readinessSummary 와 동일 payload 에코 (motion 블록과 함께 해석) */
       readinessBlockerTrace?: OverheadReadinessBlockerTracePayload;
+      /**
+       * PR-OH-KINEMATIC-SIGNAL-04B: Session aggregates of overhead-only candidate kinematics (highlightedMetrics).
+       * Diagnostic only — not used for gates. Compare to truePeakArmElevationDeg (legacy hip–shoulder–elbow).
+       */
+      ohKinematicPeakShoulderWristElevationAvgDeg?: number | null;
+      ohKinematicMeanShoulderWristElevationAvgDeg?: number | null;
+      ohKinematicPeakWristAboveShoulderAvgNorm?: number | null;
+      ohKinematicMeanWristAboveShoulderAvgNorm?: number | null;
+      ohKinematicPeakElbowAboveShoulderAvgNorm?: number | null;
+      ohKinematicMeanElbowAboveShoulderAvgNorm?: number | null;
     };
     /** cue */
     cue?: {
@@ -1679,6 +1689,31 @@ function buildDiagnosisSummary(
       /** PR-02: final-pass blocked reason — distinguishes Layer 1 vs Layer 2 failure */
       finalPassBlockedReason:
         typeof gate.finalPassBlockedReason === 'string' ? gate.finalPassBlockedReason : null,
+      /** PR-OH-KINEMATIC-SIGNAL-04B */
+      ohKinematicPeakShoulderWristElevationAvgDeg:
+        typeof hm?.ohKinematicPeakShoulderWristElevationAvgDeg === 'number'
+          ? hm.ohKinematicPeakShoulderWristElevationAvgDeg
+          : undefined,
+      ohKinematicMeanShoulderWristElevationAvgDeg:
+        typeof hm?.ohKinematicMeanShoulderWristElevationAvgDeg === 'number'
+          ? hm.ohKinematicMeanShoulderWristElevationAvgDeg
+          : undefined,
+      ohKinematicPeakWristAboveShoulderAvgNorm:
+        typeof hm?.ohKinematicPeakWristAboveShoulderAvgNorm === 'number'
+          ? hm.ohKinematicPeakWristAboveShoulderAvgNorm
+          : undefined,
+      ohKinematicMeanWristAboveShoulderAvgNorm:
+        typeof hm?.ohKinematicMeanWristAboveShoulderAvgNorm === 'number'
+          ? hm.ohKinematicMeanWristAboveShoulderAvgNorm
+          : undefined,
+      ohKinematicPeakElbowAboveShoulderAvgNorm:
+        typeof hm?.ohKinematicPeakElbowAboveShoulderAvgNorm === 'number'
+          ? hm.ohKinematicPeakElbowAboveShoulderAvgNorm
+          : undefined,
+      ohKinematicMeanElbowAboveShoulderAvgNorm:
+        typeof hm?.ohKinematicMeanElbowAboveShoulderAvgNorm === 'number'
+          ? hm.ohKinematicMeanElbowAboveShoulderAvgNorm
+          : undefined,
     };
 
     const ohTruth = gate.guardrail.debug?.overheadInputTruthMap;

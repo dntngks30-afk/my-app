@@ -420,6 +420,12 @@ export function evaluateOverheadReachFromPoseFrames(
           holdSatisfied: 0,
           passLatchedCandidate: 0,
           overheadTopDetected: 0,
+          ohKinematicPeakShoulderWristElevationAvgDeg: null,
+          ohKinematicMeanShoulderWristElevationAvgDeg: null,
+          ohKinematicPeakWristAboveShoulderAvgNorm: null,
+          ohKinematicMeanWristAboveShoulderAvgNorm: null,
+          ohKinematicPeakElbowAboveShoulderAvgNorm: null,
+          ohKinematicMeanElbowAboveShoulderAvgNorm: null,
         },
         perStepDiagnostics: { raise: emptyDiag, hold: emptyDiag },
         overheadEvidenceLevel: 'insufficient_signal',
@@ -435,6 +441,23 @@ export function evaluateOverheadReachFromPoseFrames(
   const qualityHints = [...new Set(valid.flatMap((frame) => frame.qualityHints))];
   const completionHints: string[] = [];
   const armElevationAvgValues = getNumbers(valid.map((frame) => frame.derived.armElevationAvg));
+  /** PR-OH-KINEMATIC-SIGNAL-04B: diagnostic aggregates only — not used for rise/top/hold gates. */
+  const ohShoulderWristAvgVals = getNumbers(valid.map((f) => f.derived.shoulderWristElevationAvgDeg));
+  const ohWristAboveAvgNormVals = getNumbers(valid.map((f) => f.derived.wristAboveShoulderAvgNorm));
+  const ohElbowAboveAvgNormVals = getNumbers(valid.map((f) => f.derived.elbowAboveShoulderAvgNorm));
+  const roundOhObs = (v: number) => Math.round(v * 10) / 10;
+  const ohKinematicPeakShoulderWristElevationAvgDeg =
+    ohShoulderWristAvgVals.length > 0 ? roundOhObs(Math.max(...ohShoulderWristAvgVals)) : null;
+  const ohKinematicMeanShoulderWristElevationAvgDeg =
+    ohShoulderWristAvgVals.length > 0 ? roundOhObs(mean(ohShoulderWristAvgVals)) : null;
+  const ohKinematicPeakWristAboveShoulderAvgNorm =
+    ohWristAboveAvgNormVals.length > 0 ? roundOhObs(Math.max(...ohWristAboveAvgNormVals)) : null;
+  const ohKinematicMeanWristAboveShoulderAvgNorm =
+    ohWristAboveAvgNormVals.length > 0 ? roundOhObs(mean(ohWristAboveAvgNormVals)) : null;
+  const ohKinematicPeakElbowAboveShoulderAvgNorm =
+    ohElbowAboveAvgNormVals.length > 0 ? roundOhObs(Math.max(...ohElbowAboveAvgNormVals)) : null;
+  const ohKinematicMeanElbowAboveShoulderAvgNorm =
+    ohElbowAboveAvgNormVals.length > 0 ? roundOhObs(mean(ohElbowAboveAvgNormVals)) : null;
   const armElevationGapValues = getNumbers(valid.map((frame) => frame.derived.armElevationGap));
   const torsoExtensionDeviation = getNumbers(valid.map((frame) => frame.derived.torsoExtensionDeg)).map((value) =>
     Math.abs(value - 90)
@@ -978,6 +1001,13 @@ export function evaluateOverheadReachFromPoseFrames(
         riseBaselineArmDeg: riseTruth.baselineArmDeg,
         risePeakArmElevation: riseTruth.peakArmElevation,
         riseBlockedReason: riseTruth.riseBlockedReason,
+        /** PR-OH-KINEMATIC-SIGNAL-04B: candidate kinematic session aggregates (vs legacy armElevationAvg peak above). */
+        ohKinematicPeakShoulderWristElevationAvgDeg,
+        ohKinematicMeanShoulderWristElevationAvgDeg,
+        ohKinematicPeakWristAboveShoulderAvgNorm,
+        ohKinematicMeanWristAboveShoulderAvgNorm,
+        ohKinematicPeakElbowAboveShoulderAvgNorm,
+        ohKinematicMeanElbowAboveShoulderAvgNorm,
       },
       perStepDiagnostics: perStepRecord,
     },
