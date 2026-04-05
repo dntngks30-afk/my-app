@@ -32,7 +32,7 @@ import {
   useStabilizedLiveReadiness,
   type LiveReadinessState,
 } from '@/lib/camera/live-readiness';
-import { recordAttemptSnapshot } from '@/lib/camera/camera-trace';
+import { recordAttemptSnapshot, recordOverheadObservationEvent } from '@/lib/camera/camera-trace';
 import {
   recordOverheadSuccessSnapshot,
   isDiagnosticFreezeMode,
@@ -197,6 +197,19 @@ export default function CameraOverheadReachPage() {
   const ambiguousRetryPlayedForStepRef = useRef<string | null>(null);
   /** PR-02A: 터미널 retry/fail 시도당 attempt snapshot 1회 — handleRetry와 중복 방지 */
   const terminalAttemptSnapshotRecordedStepKeyRef = useRef<string | null>(null);
+  /** OBS: 오버헤드 mid-attempt 관측 엣지(스텝당 1회 리셋) */
+  const overheadObsEdgeRef = useRef({
+    attemptStarted: false,
+    meaningfulRise: false,
+    topDetected: false,
+    stableTop: false,
+    holdStarted: false,
+    holdSatisfied: false,
+    completionBlocked: null as string | null,
+    finalPassBlocked: null as string | null,
+  });
+  /** OBS: capture_session_terminal 1회/스텝 */
+  const overheadTerminalObsStepKeyRef = useRef<string | null>(null);
   const prevStepKeyForAmbiguousRef = useRef(currentStepKey);
   const gateRef = useRef<ExerciseGateResult | null>(null);
   const nextPath = getNextStepPath(STEP_ID) ?? '/movement-test/camera/complete';
@@ -213,6 +226,17 @@ export default function CameraOverheadReachPage() {
     if (prevStepKeyForAmbiguousRef.current !== currentStepKey) {
       ambiguousRetryPlayedForStepRef.current = null;
       terminalAttemptSnapshotRecordedStepKeyRef.current = null;
+      overheadTerminalObsStepKeyRef.current = null;
+      overheadObsEdgeRef.current = {
+        attemptStarted: false,
+        meaningfulRise: false,
+        topDetected: false,
+        stableTop: false,
+        holdStarted: false,
+        holdSatisfied: false,
+        completionBlocked: null,
+        finalPassBlocked: null,
+      };
       prevStepKeyForAmbiguousRef.current = currentStepKey;
     }
   }, [currentStepKey]);
@@ -220,6 +244,80 @@ export default function CameraOverheadReachPage() {
   useEffect(() => {
     gateRef.current = gate;
   }, [gate]);
+
+  const emitOverheadCaptureTerminalOnce = useCallback(
+    (g: ExerciseGateResult, kind: string) => {
+      if (overheadTerminalObsStepKeyRef.current === currentStepKey) return;
+      overheadTerminalObsStepKeyRef.current = currentStepKey;
+      recordOverheadObservationEvent(g, currentStepKey, 'capture_session_terminal', {
+        captureTerminalKind: kind,
+      });
+    },
+    [currentStepKey]
+  );
+
+  /* OBS: 오버헤드 mid-attempt 관측 — highlightedMetrics·gate 엣지만(프레임 로그 없음) */
+  useEffect(() => {
+    if (!cameraReady || permissionDenied || effectivePassLatched) return;
+    if (stats.sampledFrameCount < 1) return;
+    const hm = gate.evaluatorResult?.debug?.highlightedMetrics as Record<string, unknown> | undefined;
+    if (!hm) return;
+
+    const ref = overheadObsEdgeRef.current;
+
+    if (!ref.attemptStarted) {
+      recordOverheadObservationEvent(gate, currentStepKey, 'attempt_started');
+      ref.attemptStarted = true;
+    }
+
+    if (hm.meaningfulRiseSatisfied === 1 && !ref.meaningfulRise) {
+      recordOverheadObservationEvent(gate, currentStepKey, 'meaningful_rise_satisfied');
+      ref.meaningfulRise = true;
+    }
+    if (hm.topDetected === 1 && !ref.topDetected) {
+      recordOverheadObservationEvent(gate, currentStepKey, 'top_detected');
+      ref.topDetected = true;
+    }
+    if (hm.stableTopEntry === 1 && !ref.stableTop) {
+      recordOverheadObservationEvent(gate, currentStepKey, 'stable_top_entered');
+      ref.stableTop = true;
+    }
+    if (hm.holdStarted === 1 && !ref.holdStarted) {
+      recordOverheadObservationEvent(gate, currentStepKey, 'hold_started');
+      ref.holdStarted = true;
+    }
+    if (hm.holdSatisfied === 1 && !ref.holdSatisfied) {
+      recordOverheadObservationEvent(gate, currentStepKey, 'hold_satisfied');
+      ref.holdSatisfied = true;
+    }
+
+    if (ref.attemptStarted) {
+      const cb = (hm.completionBlockedReason as string | null | undefined) ?? null;
+      if (cb !== ref.completionBlocked && ref.completionBlocked != null) {
+        recordOverheadObservationEvent(gate, currentStepKey, 'completion_blocked_changed', {
+          priorCompletionBlockedReason: ref.completionBlocked,
+        });
+      }
+      ref.completionBlocked = cb;
+
+      const fp =
+        typeof gate.finalPassBlockedReason === 'string' ? gate.finalPassBlockedReason : null;
+      if (fp !== ref.finalPassBlocked && ref.finalPassBlocked != null) {
+        recordOverheadObservationEvent(gate, currentStepKey, 'final_pass_blocked_changed', {
+          priorFinalPassBlockedReason: ref.finalPassBlocked,
+        });
+      }
+      ref.finalPassBlocked = fp;
+    }
+  }, [
+    cameraReady,
+    currentStepKey,
+    effectivePassLatched,
+    gate,
+    permissionDenied,
+    stats.sampledFrameCount,
+  ]);
+
   const passReady = isGatePassReady(gate);
   const finalPassLatched = isFinalPassLatched(STEP_ID, gate);
   const effectivePassLatched = finalPassLatched || passLatched;
@@ -297,9 +395,11 @@ export default function CameraOverheadReachPage() {
         liveCueingEnabled: startSequenceComplete,
         autoNextObservation,
       });
+      emitOverheadCaptureTerminalOnce(gate, autoNextObservation);
     },
     [
       currentStepKey,
+      emitOverheadCaptureTerminalOnce,
       gate,
       readinessTraceSummary,
       startSequenceComplete,
@@ -358,6 +458,8 @@ export default function CameraOverheadReachPage() {
       holdCuePlayed: holdCuePlayedRef.current,
       successTriggeredAtMs: Date.now(),
     });
+    /* latchPassEvent에서 setNextTriggerReason 직후 호출되므로 state는 한 틱 늦을 수 있음 — 성공 터미널 관측은 고정 라벨 */
+    emitOverheadCaptureTerminalOnce(gate, 'pass_latched');
     const current = loadCameraTest();
     const completed = current.completedSteps?.includes(STEP_ID)
       ? current.completedSteps
@@ -377,7 +479,7 @@ export default function CameraOverheadReachPage() {
       evaluatorResults,
       guardrailResults,
     });
-  }, [gate, nextTriggerReason, readinessTraceSummary, startSequenceComplete]);
+  }, [emitOverheadCaptureTerminalOnce, gate, nextTriggerReason, readinessTraceSummary, startSequenceComplete]);
 
   const handleVideoReady = useCallback(
     (video: HTMLVideoElement) => {
@@ -674,6 +776,10 @@ export default function CameraOverheadReachPage() {
           liveCueingEnabled: startSequenceComplete,
           autoNextObservation: 'terminal_retry_or_fail',
         });
+        emitOverheadCaptureTerminalOnce(
+          gate,
+          `terminal_retry_or_fail:${gate.status}:${gate.progressionState}`
+        );
       }
       settledRef.current = true;
       stop();
@@ -685,6 +791,7 @@ export default function CameraOverheadReachPage() {
     cameraReady,
     currentStepKey,
     effectivePassLatched,
+    emitOverheadCaptureTerminalOnce,
     gate.progressionState,
     gate.status,
     gate.uiMessage,
@@ -868,6 +975,7 @@ export default function CameraOverheadReachPage() {
         liveCueingEnabled: startSequenceComplete,
         autoNextObservation: 'retry',
       });
+      emitOverheadCaptureTerminalOnce(gate, 'retry');
     }
     clearAutoAdvanceTimer();
     resetVoiceGuidanceSession();
@@ -899,6 +1007,7 @@ export default function CameraOverheadReachPage() {
   }, [
     clearAutoAdvanceTimer,
     currentStepKey,
+    emitOverheadCaptureTerminalOnce,
     gate,
     readinessTraceSummary,
     startSequenceComplete,

@@ -971,6 +971,188 @@ export function recordSquatObservationEvent(
   }
 }
 
+/** OBS: 오버헤드 리치 mid-attempt 관측(스쿼트 키·시맨틱과 분리). */
+export type OverheadObservationEventType =
+  | 'attempt_started'
+  | 'meaningful_rise_satisfied'
+  | 'top_detected'
+  | 'stable_top_entered'
+  | 'hold_started'
+  | 'hold_satisfied'
+  | 'completion_blocked_changed'
+  | 'final_pass_blocked_changed'
+  | 'capture_session_terminal';
+
+export interface OverheadAttemptObservation {
+  traceKind: 'attempt_observation';
+  id: string;
+  ts: string;
+  movementType: 'overhead_reach';
+  eventType: OverheadObservationEventType;
+  attemptCorrelationId: string;
+  captureQuality: CaptureQuality;
+  confidence: number;
+  gateStatusSnapshot: string;
+  progressionStateSnapshot: string;
+  meaningfulRiseSatisfied: boolean;
+  completionBlockedReason: string | null;
+  finalPassBlockedReason: string | null;
+  riseStartedAtMs?: number | null;
+  riseElevationDeltaFromBaseline?: number | null;
+  topDetected?: boolean;
+  stableTopEntered?: boolean;
+  holdStarted?: boolean;
+  holdSatisfied?: boolean;
+  holdArmingBlockedReason?: string | null;
+  completionMachinePhase?: string | null;
+  /** capture_session_terminal 전용 */
+  captureTerminalKind?: string | null;
+  priorCompletionBlockedReason?: string | null;
+  priorFinalPassBlockedReason?: string | null;
+  debugVersion: string;
+}
+
+const OVERHEAD_OBSERVATION_STORAGE_KEY = 'moveReCameraOverheadObservation:v1';
+const MAX_OVERHEAD_OBSERVATIONS = 80;
+const OVERHEAD_OBS_DEBUG_VERSION = 'overhead-obs-1';
+
+let lastKnownOverheadObservationsCache: OverheadAttemptObservation[] = [];
+
+export function buildOverheadAttemptObservation(
+  gate: ExerciseGateResult,
+  attemptCorrelationId: string,
+  eventType: OverheadObservationEventType,
+  options?: {
+    captureTerminalKind?: string | null;
+    priorCompletionBlockedReason?: string | null;
+    priorFinalPassBlockedReason?: string | null;
+  }
+): OverheadAttemptObservation | null {
+  if (gate.evaluatorResult?.stepId !== 'overhead-reach') return null;
+
+  const hm = readHighlighted(gate);
+  const riseStartedAtMs = typeof hm?.riseStartedAtMs === 'number' ? hm.riseStartedAtMs : null;
+  const riseElevationDeltaFromBaseline =
+    typeof hm?.riseElevationDeltaFromBaseline === 'number' ? hm.riseElevationDeltaFromBaseline : null;
+  const meaningfulRiseSatisfied = hm?.meaningfulRiseSatisfied === 1;
+  const topDetected = hm?.topDetected === 1;
+  const stableTopEntered = hm?.stableTopEntry === 1;
+  const holdStarted = hm?.holdStarted === 1;
+  const holdSatisfied = hm?.holdSatisfied === 1;
+  const completionBlockedReason =
+    (hm?.completionBlockedReason as string | null | undefined) ?? null;
+  const completionMachinePhase =
+    typeof hm?.completionMachinePhase === 'string' ? hm.completionMachinePhase : null;
+  const holdArmingBlockedReason =
+    (hm?.holdArmingBlockedReason as string | null | undefined) ?? null;
+  const finalPassBlockedReason =
+    typeof gate.finalPassBlockedReason === 'string' ? gate.finalPassBlockedReason : null;
+
+  return {
+    traceKind: 'attempt_observation',
+    id: `obs-oh-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    ts: new Date().toISOString(),
+    movementType: 'overhead_reach',
+    eventType,
+    attemptCorrelationId,
+    captureQuality: gate.guardrail.captureQuality,
+    confidence: gate.confidence,
+    gateStatusSnapshot: gate.status,
+    progressionStateSnapshot: gate.progressionState,
+    meaningfulRiseSatisfied,
+    completionBlockedReason,
+    finalPassBlockedReason,
+    riseStartedAtMs: riseStartedAtMs ?? undefined,
+    riseElevationDeltaFromBaseline: riseElevationDeltaFromBaseline ?? undefined,
+    topDetected,
+    stableTopEntered,
+    holdStarted,
+    holdSatisfied,
+    holdArmingBlockedReason: holdArmingBlockedReason ?? undefined,
+    completionMachinePhase: completionMachinePhase ?? undefined,
+    captureTerminalKind: options?.captureTerminalKind ?? undefined,
+    priorCompletionBlockedReason: options?.priorCompletionBlockedReason ?? undefined,
+    priorFinalPassBlockedReason: options?.priorFinalPassBlockedReason ?? undefined,
+    debugVersion: `${OVERHEAD_OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
+  };
+}
+
+function overheadObservationDedupSkip(
+  list: OverheadAttemptObservation[],
+  next: OverheadAttemptObservation
+): boolean {
+  if (next.eventType === 'capture_session_terminal') return false;
+  const last = list[list.length - 1];
+  if (!last || last.eventType !== next.eventType) return false;
+  const prevMs = Date.parse(last.ts);
+  if (Number.isNaN(prevMs)) return false;
+  return Date.now() - prevMs < 140;
+}
+
+export function pushOverheadObservation(obs: OverheadAttemptObservation): void {
+  const ls = getObservationStorage();
+  if (!ls) return;
+  try {
+    const raw = ls.getItem(OVERHEAD_OBSERVATION_STORAGE_KEY);
+    const list: OverheadAttemptObservation[] = raw ? (JSON.parse(raw) as OverheadAttemptObservation[]) : [];
+    if (overheadObservationDedupSkip(list, obs)) return;
+    list.push(obs);
+    const trimmed = list.slice(-MAX_OVERHEAD_OBSERVATIONS);
+    lastKnownOverheadObservationsCache = trimmed.slice();
+    try {
+      ls.setItem(OVERHEAD_OBSERVATION_STORAGE_KEY, JSON.stringify(trimmed));
+    } catch {
+      /* LS 쓰기 실패 */
+    }
+  } catch {
+    try {
+      const list = [...lastKnownOverheadObservationsCache];
+      if (overheadObservationDedupSkip(list, obs)) return;
+      list.push(obs);
+      lastKnownOverheadObservationsCache = list.slice(-MAX_OVERHEAD_OBSERVATIONS);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export function getRecentOverheadObservations(): OverheadAttemptObservation[] {
+  const ls = getObservationStorage();
+  if (!ls) return [];
+  try {
+    const raw = ls.getItem(OVERHEAD_OBSERVATION_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as OverheadAttemptObservation[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function clearOverheadObservations(): void {
+  lastKnownOverheadObservationsCache = [];
+  const ls = getObservationStorage();
+  if (!ls) return;
+  try {
+    ls.removeItem(OVERHEAD_OBSERVATION_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** 오버헤드 관측 1건 기록(페이지 effect·터미널 경로). */
+export function recordOverheadObservationEvent(
+  gate: ExerciseGateResult,
+  attemptCorrelationId: string,
+  eventType: OverheadObservationEventType,
+  options?: Parameters<typeof buildOverheadAttemptObservation>[3]
+): void {
+  try {
+    const obs = buildOverheadAttemptObservation(gate, attemptCorrelationId, eventType, options);
+    if (obs) pushOverheadObservation(obs);
+  } catch {
+    // ignore
+  }
+}
+
 function stepIdToMovementType(stepId: CameraStepId): TraceMovementType | null {
   if (stepId === 'squat') return 'squat';
   if (stepId === 'overhead-reach') return 'overhead_reach';
@@ -1477,11 +1659,13 @@ export function getRecentAttempts(): AttemptSnapshot[] {
  */
 export function clearAttempts(): void {
   lastKnownSquatObservationsCache = [];
+  lastKnownOverheadObservationsCache = [];
   const ls = getObservationStorage();
   if (!ls) return;
   try {
     ls.removeItem(TRACE_STORAGE_KEY);
     ls.removeItem(OBSERVATION_STORAGE_KEY);
+    ls.removeItem(OVERHEAD_OBSERVATION_STORAGE_KEY);
     /** PR-CAM-SNAPSHOT-BUNDLE-01: 번들 저장소 — camera-trace-bundle.ts BUNDLE_STORAGE_KEY 와 동일 문자열 */
     ls.removeItem('moveReCameraTraceBundle:v1');
   } catch {

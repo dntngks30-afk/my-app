@@ -10,8 +10,10 @@ import {
   clearAttempts,
   getQuickStats,
   getRecentSquatObservations,
+  getRecentOverheadObservations,
   type AttemptSnapshot,
   type SquatAttemptObservation,
+  type OverheadAttemptObservation,
 } from '@/lib/camera/camera-trace';
 import {
   getRecentSuccessSnapshots,
@@ -41,15 +43,18 @@ interface TraceDebugPanelProps {
 export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebugPanelProps) {
   const [attempts, setAttempts] = useState<AttemptSnapshot[]>([]);
   const [squatObservations, setSquatObservations] = useState<SquatAttemptObservation[]>([]);
+  const [overheadObservations, setOverheadObservations] = useState<OverheadAttemptObservation[]>([]);
   const [successSnapshots, setSuccessSnapshots] = useState<SuccessSnapshot[]>([]);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     const list = getRecentAttempts();
     const obs = getRecentSquatObservations();
+    const ohObs = getRecentOverheadObservations();
     const successList = getRecentSuccessSnapshots();
     setAttempts(list);
     setSquatObservations(obs);
+    setOverheadObservations(ohObs);
     setSuccessSnapshots(successList);
     setRefreshedAt(new Date().toISOString());
   }, []);
@@ -61,11 +66,13 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
   const handleExport = useCallback(() => {
     const list = getRecentAttempts();
     const obs = getRecentSquatObservations();
+    const ohObs = getRecentOverheadObservations();
     const successList = getRecentSuccessSnapshots();
     const stats = getQuickStats(list);
     const payload = {
       attempts: list,
       squatAttemptObservations: obs,
+      overheadAttemptObservations: ohObs,
       successSnapshots: successList,
       quickStats: stats,
       diagVersion: CAMERA_DIAG_VERSION,
@@ -97,6 +104,7 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
     clearSuccessSnapshots();
     setAttempts([]);
     setSquatObservations([]);
+    setOverheadObservations([]);
     setSuccessSnapshots([]);
     setRefreshedAt(null);
   }, []);
@@ -112,8 +120,9 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
   return (
     <div className="mt-3 rounded-lg border border-slate-600/50 bg-slate-900/50 p-3">
       <p className="text-[11px] text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-        PR-4 trace ({attempts.length} attempt_snapshots, {squatObservations.length} squat_observations) · success (
-        {successSnapshots.length}) · diag={CAMERA_DIAG_VERSION}
+        PR-4 trace ({attempts.length} attempt_snapshots, {squatObservations.length} squat_observations,{' '}
+        {overheadObservations.length} overhead_observations) · success ({successSnapshots.length}) ·
+        diag={CAMERA_DIAG_VERSION}
         {refreshedAt && ` · refreshed ${refreshedAt.slice(11, 19)}`}
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
