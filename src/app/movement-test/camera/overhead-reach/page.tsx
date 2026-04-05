@@ -62,6 +62,12 @@ import {
   unlockVoiceGuidance,
 } from '@/lib/camera/voice-guidance';
 import { deriveOverheadAmbiguousRetryReason } from '@/lib/camera/overhead/overhead-ambiguous-retry';
+import {
+  OH_READINESS_MIN_VALID_FRAMES_FOR_GRACE,
+  computeOverheadRetryFailDeferral,
+  isOverheadAccumulationGraceEligible,
+  type OverheadAttemptFailureType,
+} from '@/lib/camera/overhead/overhead-input-stability';
 import { getSetupFramingHint } from '@/lib/camera/setup-framing';
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 import { SuccessFreezeOverlay } from '@/components/camera/SuccessFreezeOverlay';
@@ -210,6 +216,10 @@ export default function CameraOverheadReachPage() {
   });
   /** OBS: capture_session_terminal 1회/스텝 */
   const overheadTerminalObsStepKeyRef = useRef<string | null>(null);
+  /** PR-OH-INPUT-STABILITY-02A: bounded accumulation grace start (performance.now); Category 2 only */
+  const overheadAccumulationGraceStartedAtRef = useRef<number | null>(null);
+  /** True once we deferred terminal at least once this attempt (for snapshot diagnosis). */
+  const overheadTerminalDeferralOccurredRef = useRef(false);
   const prevStepKeyForAmbiguousRef = useRef(currentStepKey);
   const gateRef = useRef<ExerciseGateResult | null>(null);
   const nextPath = getNextStepPath(STEP_ID) ?? '/movement-test/camera/complete';
@@ -227,6 +237,8 @@ export default function CameraOverheadReachPage() {
       ambiguousRetryPlayedForStepRef.current = null;
       terminalAttemptSnapshotRecordedStepKeyRef.current = null;
       overheadTerminalObsStepKeyRef.current = null;
+      overheadAccumulationGraceStartedAtRef.current = null;
+      overheadTerminalDeferralOccurredRef.current = false;
       overheadObsEdgeRef.current = {
         attemptStarted: false,
         meaningfulRise: false,
@@ -773,17 +785,83 @@ export default function CameraOverheadReachPage() {
       return;
     }
 
+    if (gate.status !== 'retry' && gate.status !== 'fail') {
+      overheadAccumulationGraceStartedAtRef.current = null;
+      overheadTerminalDeferralOccurredRef.current = false;
+    }
+
     if (gate.status === 'retry' || gate.status === 'fail') {
+      const guardrailValidCount = gate.guardrail.debug?.validFrameCount ?? 0;
+      const graceEligible = isOverheadAccumulationGraceEligible(
+        stats.validFrameCount,
+        guardrailValidCount
+      );
+
+      let deferTerminal = false;
+      if (graceEligible) {
+        const now = performance.now();
+        const r = computeOverheadRetryFailDeferral({
+          graceStartedAtMs: overheadAccumulationGraceStartedAtRef.current,
+          nowMs: now,
+          readinessValidFrameCount: readinessTraceSummary.validFrameCount,
+        });
+        overheadAccumulationGraceStartedAtRef.current = r.graceStartedAtMs;
+        deferTerminal = r.deferTerminal;
+        if (deferTerminal) {
+          overheadTerminalDeferralOccurredRef.current = true;
+        }
+      } else {
+        overheadAccumulationGraceStartedAtRef.current = null;
+      }
+
+      if (deferTerminal) {
+        return;
+      }
+
+      const graceStartMs = overheadAccumulationGraceStartedAtRef.current;
+      const accumulationGraceElapsedMs =
+        graceStartMs != null ? performance.now() - graceStartMs : undefined;
+      overheadAccumulationGraceStartedAtRef.current = null;
+
+      let overheadAttemptFailureType: OverheadAttemptFailureType;
+      if (stats.validFrameCount === 0) {
+        overheadAttemptFailureType = 'adaptor_no_input';
+      } else if (graceEligible) {
+        overheadAttemptFailureType = 'early_cutoff_valid_support';
+      } else {
+        overheadAttemptFailureType = 'insufficient_signal_other';
+      }
+
+      const readinessVF = readinessTraceSummary.validFrameCount;
+      const accumulationGraceApplied = overheadTerminalDeferralOccurredRef.current;
+      overheadTerminalDeferralOccurredRef.current = false;
+
+      const overheadInputStability = {
+        overheadAttemptFailureType,
+        accumulationGraceApplied,
+        terminalReasonCategory: graceEligible
+          ? 'dual_support_retry_fail'
+          : 'no_dual_support_retry_fail',
+        terminalDecisionPhase: 'page_retry_fail_terminal',
+        accumulationGraceElapsedMs,
+        terminalBeforeAccumulationComplete: readinessVF < OH_READINESS_MIN_VALID_FRAMES_FOR_GRACE,
+        adaptorFailureObserved: (stats.landmarkOrAdaptorFailedFrameCount ?? 0) > 0,
+        firstHookAcceptedAtMs: stats.firstHookAcceptedAtMs ?? null,
+        readinessMinValidFramesTarget: OH_READINESS_MIN_VALID_FRAMES_FOR_GRACE,
+      };
+
+      const terminalKindSuffix = accumulationGraceApplied ? ':after_grace_window' : '';
       if (terminalAttemptSnapshotRecordedStepKeyRef.current !== currentStepKey) {
         terminalAttemptSnapshotRecordedStepKeyRef.current = currentStepKey;
         recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
           liveCueingEnabled: startSequenceComplete,
           autoNextObservation: 'terminal_retry_or_fail',
           poseCaptureStats: stats,
+          overheadInputStability,
         });
         emitOverheadCaptureTerminalOnce(
           gate,
-          `terminal_retry_or_fail:${gate.status}:${gate.progressionState}`
+          `terminal_retry_or_fail:${gate.status}:${gate.progressionState}${terminalKindSuffix}`
         );
       }
       settledRef.current = true;

@@ -56,6 +56,10 @@ export interface PoseCaptureStats {
    * 'overhead-reach' uses OVERHEAD_HOOK_QUALITY_THRESHOLDS; 'default' uses HOOK_QUALITY_THRESHOLDS.
    */
   hookQualityMode?: 'default' | 'overhead-reach';
+  /**
+   * PR-OH-INPUT-STABILITY-02A: `performance.now()` at first hook-accepted frame this session; null until then.
+   */
+  firstHookAcceptedAtMs?: number | null;
 }
 
 /** OBS: compact measured values from the first qualifying hook-level rejection frame */
@@ -95,6 +99,7 @@ const EMPTY_STATS: PoseCaptureStats = {
   hookFirstRejectionSample: null,
   hookFirstAdaptorFailureDiag: null,
   hookQualityMode: 'default',
+  firstHookAcceptedAtMs: null,
 };
 
 export function usePoseCapture(options?: UsePoseCaptureOptions) {
@@ -119,6 +124,7 @@ export function usePoseCapture(options?: UsePoseCaptureOptions) {
   const lastTimestampMsRef = useRef<number | null>(null);
   const captureStartedAtRef = useRef<number | null>(null);
   const lastAcceptedFrameRef = useRef<PoseFrame | null>(null);
+  const firstHookAcceptedAtMsRef = useRef<number | null>(null);
   const lastStatsSyncedAtRef = useRef(0);
 
   const syncStats = useCallback((durationMs?: number, force = false) => {
@@ -149,6 +155,7 @@ export function usePoseCapture(options?: UsePoseCaptureOptions) {
       hookFirstRejectionSample: hookFirstRejectionSampleRef.current,
       hookFirstAdaptorFailureDiag: hookFirstAdaptorFailureDiagRef.current,
       hookQualityMode: mode,
+      firstHookAcceptedAtMs: firstHookAcceptedAtMsRef.current,
       };
 
       return JSON.stringify(prev) === JSON.stringify(nextStats) ? prev : nextStats;
@@ -211,6 +218,9 @@ export function usePoseCapture(options?: UsePoseCaptureOptions) {
     }
 
     validFrameCountRef.current += 1;
+    if (firstHookAcceptedAtMsRef.current === null) {
+      firstHookAcceptedAtMsRef.current = performance.now();
+    }
     landmarkCountTotalRef.current += getPoseFrameLandmarkCount(frame);
     visibleRatioTotalRef.current += getPoseFrameVisibleRatio(frame);
     lastAcceptedFrameRef.current = frame;
@@ -234,6 +244,7 @@ export function usePoseCapture(options?: UsePoseCaptureOptions) {
       validFrameCountRef.current = 0;
       hookFirstRejectionSampleRef.current = null;
       hookFirstAdaptorFailureDiagRef.current = null;
+      firstHookAcceptedAtMsRef.current = null;
       landmarkCountTotalRef.current = 0;
       visibleRatioTotalRef.current = 0;
       timestampDiscontinuityCountRef.current = 0;

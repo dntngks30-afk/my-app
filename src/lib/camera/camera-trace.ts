@@ -20,6 +20,7 @@ import { buildSquatCalibrationTraceCompact } from '@/lib/camera/squat/squat-cali
 import { buildSquatArmingAssistTraceCompact } from '@/lib/camera/squat/squat-arming-assist';
 import { buildSquatReversalAssistTraceCompact } from '@/lib/camera/squat/squat-reversal-assist';
 import type { OverheadInternalQuality } from './overhead/overhead-internal-quality';
+import type { OverheadInputStabilityDiag } from './overhead/overhead-input-stability';
 import {
   buildSquatResultSeveritySummary,
   type SquatPassSeverity,
@@ -366,6 +367,8 @@ export interface AttemptSnapshot {
         filteredLowQualityFrameCount: number;
         unstableFrameCount: number;
       };
+      /** PR-OH-INPUT-STABILITY-02A: adaptor vs early-cutoff terminal / grace (page-supplied) */
+      inputStability?: OverheadInputStabilityDiag;
     };
     /** cue */
     cue?: {
@@ -1239,6 +1242,8 @@ export interface RecordAttemptOptions {
   successTriggeredAtMs?: number;
   /** OBS: overhead 입력 truth — usePoseCapture stats 에코 */
   poseCaptureStats?: PoseCaptureStats;
+  /** PR-OH-INPUT-STABILITY-02A: overhead terminal deferral / failure class (optional) */
+  overheadInputStability?: OverheadInputStabilityDiag;
 }
 
 function buildDiagnosisSummary(
@@ -1610,6 +1615,9 @@ function buildDiagnosisSummary(
         filteredLowQualityFrameCount: ps.filteredLowQualityFrameCount,
         unstableFrameCount: ps.unstableFrameCount,
       };
+    }
+    if (options?.overheadInputStability && base.overhead) {
+      base.overhead.inputStability = options.overheadInputStability;
     }
   }
 
