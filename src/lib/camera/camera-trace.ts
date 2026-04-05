@@ -20,6 +20,8 @@ import { buildSquatCalibrationTraceCompact } from '@/lib/camera/squat/squat-cali
 import { buildSquatArmingAssistTraceCompact } from '@/lib/camera/squat/squat-arming-assist';
 import { buildSquatReversalAssistTraceCompact } from '@/lib/camera/squat/squat-reversal-assist';
 import type { OverheadInternalQuality } from './overhead/overhead-internal-quality';
+import type { OverheadInputStabilityDiag } from './overhead/overhead-input-stability';
+import type { OverheadReadinessBlockerTracePayload } from './overhead/overhead-readiness-blocker-trace';
 import {
   buildSquatResultSeveritySummary,
   type SquatPassSeverity,
@@ -35,6 +37,15 @@ import type { CameraPoseDelegateKind } from '@/lib/motion/pose-types';
 
 /** PR-4: movement type (squat, overhead_reach만 지원) */
 export type TraceMovementType = 'squat' | 'overhead_reach';
+
+/**
+ * PR-OH-MOTION-METRIC-TRACE-03C: What `diagnosisSummary.overhead.peakElevation` (legacy) was sourced from.
+ * Evaluator `metrics[].name === 'arm_range'` is **time-average** smoothed arm elevation (deg), not a peak.
+ */
+export type OverheadExportedPeakElevationProvenance =
+  | 'highlighted_metrics_true_peak'
+  | 'legacy_metrics_arm_range_time_average_fallback'
+  | 'unavailable';
 
 /** PR-4: 최종 결과 카테고리 */
 export type TraceOutcome =
@@ -101,10 +112,16 @@ export interface AttemptSnapshot {
     rawState?: 'not_ready' | 'ready' | 'success';
     blocker: string | null;
     framingHint: string | null;
+    /** PR-OH-READINESS-BLOCKER-ALIGN-02B: readiness blocker framing 입력이 평가 창 기준인지 꼬리 폴백인지 */
+    framingHintSource?: 'evaluation_window' | 'recent_tail_fallback';
+    /** 동일 시점 최근 버퍼 꼬리 framing 힌트(진단·tail 오염 대비용) */
+    recentTailFramingHint?: string | null;
     smoothingApplied: boolean;
     validFrameCount?: number;
     visibleJointsRatio?: number;
     criticalJointsAvailability?: number;
+    /** PR-OH-OBS-BLOCKER-TRACE-02C: displayed vs eval-window vs tail primary blocker + motion timing */
+    overheadReadinessBlockerTrace?: OverheadReadinessBlockerTracePayload;
   };
   stabilitySummary?: {
     warmupExcludedFrameCount?: number;
@@ -317,7 +334,26 @@ export interface AttemptSnapshot {
     };
     /** overhead — PR-C4 trace, PR overhead-dwell */
     overhead?: {
+      /**
+       * Legacy field: max smoothed arm elevation (deg) when `highlightedMetrics.peakArmElevation` exists;
+       * otherwise falls back to `metrics.arm_range` which is a **time average**, not a peak.
+       * PR-03C: use `truePeakArmElevationDeg`, `armElevationTimeAvgDeg`, `exportedPeakElevationProvenance`.
+       */
       peakElevation?: number;
+      /** PR-03C: same numeric value as `peakElevation` when present — explicit label for legacy consumers. */
+      legacyPeakElevationDeg?: number;
+      /** PR-03C: max over valid frames — `highlightedMetrics.peakArmElevation` (smoothed armElevationAvg space). */
+      truePeakArmElevationDeg?: number;
+      /** PR-03C: rise-truth module peak — `highlightedMetrics.risePeakArmElevation` (same input stream; diagnostic parity). */
+      risePeakArmElevationDeg?: number;
+      /** PR-03C: `metrics.arm_range` value = mean time-average of armElevationAvg (deg), NOT peak ROM. */
+      armElevationTimeAvgDeg?: number;
+      /** PR-03C: documents how `peakElevation` / `legacyPeakElevationDeg` was chosen. */
+      exportedPeakElevationProvenance?: OverheadExportedPeakElevationProvenance;
+      /** PR-03C: true iff legacy peak field was filled from arm_range (time average). */
+      peakElevationRepresentsTimeAverageFallback?: boolean;
+      /** PR-03C: when arm_range metric row exists, its value semantics (always time average for this name). */
+      armRangeMetricSemantics?: 'time_average_deg';
       peakCount?: number;
       holdDurationMs?: number;
       holdAccumulationMs?: number;
@@ -366,6 +402,20 @@ export interface AttemptSnapshot {
         filteredLowQualityFrameCount: number;
         unstableFrameCount: number;
       };
+      /** PR-OH-INPUT-STABILITY-02A: adaptor vs early-cutoff terminal / grace (page-supplied) */
+      inputStability?: OverheadInputStabilityDiag;
+      /** PR-OH-OBS-BLOCKER-TRACE-02C: readinessSummary 와 동일 payload 에코 (motion 블록과 함께 해석) */
+      readinessBlockerTrace?: OverheadReadinessBlockerTracePayload;
+      /**
+       * PR-OH-KINEMATIC-SIGNAL-04B: Session aggregates of overhead-only candidate kinematics (highlightedMetrics).
+       * Diagnostic only — not used for gates. Compare to truePeakArmElevationDeg (legacy hip–shoulder–elbow).
+       */
+      ohKinematicPeakShoulderWristElevationAvgDeg?: number | null;
+      ohKinematicMeanShoulderWristElevationAvgDeg?: number | null;
+      ohKinematicPeakWristAboveShoulderAvgNorm?: number | null;
+      ohKinematicMeanWristAboveShoulderAvgNorm?: number | null;
+      ohKinematicPeakElbowAboveShoulderAvgNorm?: number | null;
+      ohKinematicMeanElbowAboveShoulderAvgNorm?: number | null;
     };
     /** cue */
     cue?: {
@@ -373,6 +423,18 @@ export interface AttemptSnapshot {
       chosenClipKey: string | null;
       suppressedReason: string | null;
       liveCueingEnabled: boolean;
+      /** PR-OH-OBS-BLOCKER-TRACE-02C: 명시적 후보 키( chosenCueKey 와 동일 값, 의미 고정용 ) */
+      lastCorrectiveCueCandidateKey?: string | null;
+      /** 교정 루프가 마지막으로 재생 성공으로 기록한 여부 */
+      correctiveCueActuallyPlayed?: boolean;
+      /** 억제 시 사유( 재생 안 됨 ) */
+      correctiveCueSuppressedReason?: string | null;
+      /** anti-spam 측 마지막 emit 시각(ms) — 재생 시도 직전 타임스탬프 */
+      correctiveCueAntiSpamEmittedAtMs?: number | null;
+      /** 클립/TTS 재생 관측 성공 여부( 알 수 없으면 null ) */
+      playbackSuccessIfKnown?: boolean | null;
+      /** 마지막 재생 관측에 연결된 cue 키 */
+      lastPlaybackObservedCueKey?: string | null;
     };
   };
   debugVersion: string;
@@ -1239,6 +1301,8 @@ export interface RecordAttemptOptions {
   successTriggeredAtMs?: number;
   /** OBS: overhead 입력 truth — usePoseCapture stats 에코 */
   poseCaptureStats?: PoseCaptureStats;
+  /** PR-OH-INPUT-STABILITY-02A: overhead terminal deferral / failure class (optional) */
+  overheadInputStability?: OverheadInputStabilityDiag;
 }
 
 function buildDiagnosisSummary(
@@ -1271,6 +1335,13 @@ function buildDiagnosisSummary(
       chosenClipKey: playbackObs?.clipKey ?? null,
       suppressedReason: cueObs?.suppressedReason ?? null,
       liveCueingEnabled: options?.liveCueingEnabled ?? false,
+      lastCorrectiveCueCandidateKey: cueObs?.cueCandidate ?? null,
+      correctiveCueActuallyPlayed: cueObs?.played ?? false,
+      correctiveCueSuppressedReason: cueObs?.suppressedReason ?? null,
+      correctiveCueAntiSpamEmittedAtMs: cueObs?.emittedAtMs ?? null,
+      playbackSuccessIfKnown:
+        typeof playbackObs?.success === 'boolean' ? playbackObs.success : null,
+      lastPlaybackObservedCueKey: playbackObs?.cueKey ?? null,
     },
   };
 
@@ -1513,10 +1584,33 @@ function buildDiagnosisSummary(
     const holdArmingBlockedReason = hm?.holdArmingBlockedReason ?? undefined;
     const holdAccumulationMs = typeof hm?.holdAccumulationMs === 'number' ? hm.holdAccumulationMs : holdDurationMs;
     const holdSatisfiedAtMs = typeof hm?.holdSatisfiedAtMs === 'number' ? hm.holdSatisfiedAtMs : undefined;
-    const peakElevation =
-      typeof hm?.peakArmElevation === 'number'
+
+    // PR-OH-MOTION-METRIC-TRACE-03C: separate true peak vs time-average vs rise peak — no evaluator behavior change.
+    const armRangeMetric = gate.evaluatorResult?.metrics?.find((m) => m.name === 'arm_range');
+    const armElevationTimeAvgDeg =
+      typeof armRangeMetric?.value === 'number' && Number.isFinite(armRangeMetric.value)
+        ? armRangeMetric.value
+        : undefined;
+    const truePeakArmElevationDeg =
+      typeof hm?.peakArmElevation === 'number' && Number.isFinite(hm.peakArmElevation)
         ? hm.peakArmElevation
-        : gate.evaluatorResult?.metrics?.find((m) => m.name === 'arm_range')?.value;
+        : undefined;
+    const risePeakArmElevationDeg =
+      typeof hm?.risePeakArmElevation === 'number' && Number.isFinite(hm.risePeakArmElevation)
+        ? hm.risePeakArmElevation
+        : undefined;
+    /** Identical to pre-03C: prefer highlighted max peak, else arm_range (mean — historically mislabeled as "peak"). */
+    const peakElevation =
+      truePeakArmElevationDeg !== undefined ? truePeakArmElevationDeg : armElevationTimeAvgDeg;
+    const exportedPeakElevationProvenance: OverheadExportedPeakElevationProvenance =
+      truePeakArmElevationDeg !== undefined
+        ? 'highlighted_metrics_true_peak'
+        : armElevationTimeAvgDeg !== undefined
+          ? 'legacy_metrics_arm_range_time_average_fallback'
+          : 'unavailable';
+    const peakElevationRepresentsTimeAverageFallback =
+      exportedPeakElevationProvenance === 'legacy_metrics_arm_range_time_average_fallback';
+
     const holdSatisfied = holdDurationMs >= REQUIRED_HOLD_MS;
     const isHoldCue = cueObs?.cueCandidate === 'correction:hold:overhead-reach';
     const successBlockedReason = passLatched
@@ -1545,6 +1639,13 @@ function buildDiagnosisSummary(
 
     base.overhead = {
       peakElevation,
+      legacyPeakElevationDeg: peakElevation,
+      truePeakArmElevationDeg,
+      risePeakArmElevationDeg,
+      armElevationTimeAvgDeg,
+      exportedPeakElevationProvenance,
+      peakElevationRepresentsTimeAverageFallback,
+      armRangeMetricSemantics: armRangeMetric !== undefined ? 'time_average_deg' : undefined,
       peakCount,
       holdDurationMs,
       holdAccumulationMs,
@@ -1588,6 +1689,31 @@ function buildDiagnosisSummary(
       /** PR-02: final-pass blocked reason — distinguishes Layer 1 vs Layer 2 failure */
       finalPassBlockedReason:
         typeof gate.finalPassBlockedReason === 'string' ? gate.finalPassBlockedReason : null,
+      /** PR-OH-KINEMATIC-SIGNAL-04B */
+      ohKinematicPeakShoulderWristElevationAvgDeg:
+        typeof hm?.ohKinematicPeakShoulderWristElevationAvgDeg === 'number'
+          ? hm.ohKinematicPeakShoulderWristElevationAvgDeg
+          : undefined,
+      ohKinematicMeanShoulderWristElevationAvgDeg:
+        typeof hm?.ohKinematicMeanShoulderWristElevationAvgDeg === 'number'
+          ? hm.ohKinematicMeanShoulderWristElevationAvgDeg
+          : undefined,
+      ohKinematicPeakWristAboveShoulderAvgNorm:
+        typeof hm?.ohKinematicPeakWristAboveShoulderAvgNorm === 'number'
+          ? hm.ohKinematicPeakWristAboveShoulderAvgNorm
+          : undefined,
+      ohKinematicMeanWristAboveShoulderAvgNorm:
+        typeof hm?.ohKinematicMeanWristAboveShoulderAvgNorm === 'number'
+          ? hm.ohKinematicMeanWristAboveShoulderAvgNorm
+          : undefined,
+      ohKinematicPeakElbowAboveShoulderAvgNorm:
+        typeof hm?.ohKinematicPeakElbowAboveShoulderAvgNorm === 'number'
+          ? hm.ohKinematicPeakElbowAboveShoulderAvgNorm
+          : undefined,
+      ohKinematicMeanElbowAboveShoulderAvgNorm:
+        typeof hm?.ohKinematicMeanElbowAboveShoulderAvgNorm === 'number'
+          ? hm.ohKinematicMeanElbowAboveShoulderAvgNorm
+          : undefined,
     };
 
     const ohTruth = gate.guardrail.debug?.overheadInputTruthMap;
@@ -1610,6 +1736,12 @@ function buildDiagnosisSummary(
         filteredLowQualityFrameCount: ps.filteredLowQualityFrameCount,
         unstableFrameCount: ps.unstableFrameCount,
       };
+    }
+    if (options?.overheadInputStability && base.overhead) {
+      base.overhead.inputStability = options.overheadInputStability;
+    }
+    if (context?.overheadReadinessBlockerTrace && base.overhead) {
+      base.overhead.readinessBlockerTrace = context.overheadReadinessBlockerTrace;
     }
   }
 

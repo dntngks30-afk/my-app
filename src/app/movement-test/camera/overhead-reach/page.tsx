@@ -62,7 +62,21 @@ import {
   unlockVoiceGuidance,
 } from '@/lib/camera/voice-guidance';
 import { deriveOverheadAmbiguousRetryReason } from '@/lib/camera/overhead/overhead-ambiguous-retry';
-import { getSetupFramingHint } from '@/lib/camera/setup-framing';
+import {
+  OH_READINESS_MIN_VALID_FRAMES_FOR_GRACE,
+  computeOverheadRetryFailDeferral,
+  isOverheadAccumulationGraceEligible,
+  type OverheadAttemptFailureType,
+} from '@/lib/camera/overhead/overhead-input-stability';
+import {
+  getSetupFramingHint,
+  resolveOverheadReadinessFramingHint,
+} from '@/lib/camera/setup-framing';
+import {
+  buildOverheadReadinessBlockerTracePayload,
+  deriveDisplayedPrimaryBlockerSource,
+  type OverheadReadinessBlockerMotionLatch,
+} from '@/lib/camera/overhead/overhead-readiness-blocker-trace';
 import { TraceDebugPanel } from '@/components/camera/TraceDebugPanel';
 import { SuccessFreezeOverlay } from '@/components/camera/SuccessFreezeOverlay';
 
@@ -170,7 +184,7 @@ export default function CameraOverheadReachPage() {
   const [nextTriggeredAt, setNextTriggeredAt] = useState<string | null>(null);
   const [nextTriggerReason, setNextTriggerReason] = useState<string | null>(null);
   const [successSnapshot, setSuccessSnapshot] = useState<OverheadReachDebugSnapshot | null>(null);
-  const { landmarks, stats, start, stop, pushFrame } = usePoseCapture();
+  const { landmarks, stats, start, stop, pushFrame } = usePoseCapture({ mode: 'overhead-reach' });
   const hasStartedRef = useRef(false);
   const settledRef = useRef(false);
   const advanceLockRef = useRef(false);
@@ -210,6 +224,20 @@ export default function CameraOverheadReachPage() {
   });
   /** OBS: capture_session_terminal 1회/스텝 */
   const overheadTerminalObsStepKeyRef = useRef<string | null>(null);
+  /** PR-OH-INPUT-STABILITY-02A: bounded accumulation grace start (performance.now); Category 2 only */
+  const overheadAccumulationGraceStartedAtRef = useRef<number | null>(null);
+  /** True once we deferred terminal at least once this attempt (for snapshot diagnosis). */
+  const overheadTerminalDeferralOccurredRef = useRef(false);
+  /** PR-OH-OBS-BLOCKER-TRACE-02C */
+  const overheadBlockerTimeRef = useRef<{ firstSeenAtMs: number | null; lastSeenAtMs: number | null }>({
+    firstSeenAtMs: null,
+    lastSeenAtMs: null,
+  });
+  const overheadBlockerMotionLatchRef = useRef<OverheadReadinessBlockerMotionLatch>({
+    seenDuringActiveMotion: false,
+    seenAfterMotionWindow: false,
+    lastSignals: null,
+  });
   const prevStepKeyForAmbiguousRef = useRef(currentStepKey);
   const gateRef = useRef<ExerciseGateResult | null>(null);
   const nextPath = getNextStepPath(STEP_ID) ?? '/movement-test/camera/complete';
@@ -227,6 +255,8 @@ export default function CameraOverheadReachPage() {
       ambiguousRetryPlayedForStepRef.current = null;
       terminalAttemptSnapshotRecordedStepKeyRef.current = null;
       overheadTerminalObsStepKeyRef.current = null;
+      overheadAccumulationGraceStartedAtRef.current = null;
+      overheadTerminalDeferralOccurredRef.current = false;
       overheadObsEdgeRef.current = {
         attemptStarted: false,
         meaningfulRise: false,
@@ -236,6 +266,12 @@ export default function CameraOverheadReachPage() {
         holdSatisfied: false,
         completionBlocked: null,
         finalPassBlocked: null,
+      };
+      overheadBlockerTimeRef.current = { firstSeenAtMs: null, lastSeenAtMs: null };
+      overheadBlockerMotionLatchRef.current = {
+        seenDuringActiveMotion: false,
+        seenAfterMotionWindow: false,
+        lastSignals: null,
       };
       prevStepKeyForAmbiguousRef.current = currentStepKey;
     }
@@ -335,39 +371,168 @@ export default function CameraOverheadReachPage() {
     typeof gate.evaluatorResult.debug?.highlightedMetrics?.holdDurationMs === 'number'
       ? gate.evaluatorResult.debug.highlightedMetrics.holdDurationMs
       : 0;
-  const setupFramingHint = useMemo(() => getSetupFramingHint(landmarks), [landmarks]);
+  const recentTailFramingHint = useMemo(() => getSetupFramingHint(landmarks), [landmarks]);
+  const overheadReadinessFraming = useMemo(
+    () =>
+      resolveOverheadReadinessFramingHint({
+        landmarks,
+        windowStartMs: gate.guardrail.debug?.selectedWindowStartMs,
+        windowEndMs: gate.guardrail.debug?.selectedWindowEndMs,
+      }),
+    [
+      landmarks,
+      gate.guardrail.debug?.selectedWindowStartMs,
+      gate.guardrail.debug?.selectedWindowEndMs,
+    ]
+  );
   const liveReadinessSummary = useMemo(
     () =>
       getLiveReadinessSummary({
         success: effectivePassLatched,
         guardrail: gate.guardrail,
-        framingHint: setupFramingHint,
+        framingHint: overheadReadinessFraming.framingHint,
       }),
-    [effectivePassLatched, gate.guardrail, setupFramingHint]
+    [effectivePassLatched, gate.guardrail, overheadReadinessFraming.framingHint]
+  );
+  const liveReadinessSummaryEvalWindow = useMemo(
+    () =>
+      getLiveReadinessSummary({
+        success: effectivePassLatched,
+        guardrail: gate.guardrail,
+        framingHint: overheadReadinessFraming.evaluationWindowApplied
+          ? overheadReadinessFraming.evaluationWindowFramingHintOnly
+          : null,
+      }),
+    [
+      effectivePassLatched,
+      gate.guardrail,
+      overheadReadinessFraming.evaluationWindowApplied,
+      overheadReadinessFraming.evaluationWindowFramingHintOnly,
+    ]
+  );
+  const liveReadinessSummaryRecentTail = useMemo(
+    () =>
+      getLiveReadinessSummary({
+        success: effectivePassLatched,
+        guardrail: gate.guardrail,
+        framingHint: recentTailFramingHint,
+      }),
+    [effectivePassLatched, gate.guardrail, recentTailFramingHint]
   );
   const rawLiveReadiness = liveReadinessSummary.state;
   const primaryReadinessBlocker = getPrimaryReadinessBlocker(liveReadinessSummary);
+  const evaluationWindowPrimaryBlocker = getPrimaryReadinessBlocker(liveReadinessSummaryEvalWindow);
+  const recentTailPrimaryBlocker = getPrimaryReadinessBlocker(liveReadinessSummaryRecentTail);
   const { stableState: liveReadiness, smoothingApplied: readinessSmoothingApplied } =
     useStabilizedLiveReadiness(rawLiveReadiness);
-  const readinessTraceSummary = useMemo(
-    () => ({
+  const readinessTraceSummary = useMemo(() => {
+    const hm = gate.evaluatorResult?.debug?.highlightedMetrics as Record<string, unknown> | undefined;
+    const meaningfulRiseSatisfied =
+      hm?.meaningfulRiseSatisfied === 1 || hm?.meaningfulRiseSatisfied === true;
+    const topDetected = Number(hm?.topDetected ?? 0) >= 1;
+    const stableTopEntered =
+      Number(hm?.stableTopEntry ?? 0) >= 1 || typeof hm?.stableTopEnteredAtMs === 'number';
+    const holdStarted = Number(hm?.holdStarted ?? 0) >= 1;
+    const holdDur = typeof hm?.holdDurationMs === 'number' ? hm.holdDurationMs : 0;
+    const holdSatisfied = Number(hm?.holdSatisfied ?? 0) >= 1 || holdDur >= 1200;
+    const completionMachinePhase =
+      typeof hm?.completionMachinePhase === 'string' ? hm.completionMachinePhase : null;
+
+    const motionSignalsAtLastBlocker = hm
+      ? {
+          meaningfulRiseSatisfied,
+          topDetected,
+          stableTopEntered,
+          holdStarted,
+          holdSatisfied,
+          completionMachinePhase,
+        }
+      : null;
+
+    if (primaryReadinessBlocker != null) {
+      const now = Date.now();
+      if (overheadBlockerTimeRef.current.firstSeenAtMs == null) {
+        overheadBlockerTimeRef.current.firstSeenAtMs = now;
+      }
+      overheadBlockerTimeRef.current.lastSeenAtMs = now;
+      if (motionSignalsAtLastBlocker) {
+        overheadBlockerMotionLatchRef.current.lastSignals = motionSignalsAtLastBlocker;
+      }
+      if (meaningfulRiseSatisfied) {
+        overheadBlockerMotionLatchRef.current.seenDuringActiveMotion = true;
+      }
+      if (holdSatisfied || gate.completionSatisfied) {
+        overheadBlockerMotionLatchRef.current.seenAfterMotionWindow = true;
+      }
+    }
+
+    const winStart = gate.guardrail.debug?.selectedWindowStartMs;
+    const winEnd = gate.guardrail.debug?.selectedWindowEndMs;
+    const evaluationWindowFramingHintForTrace = overheadReadinessFraming.evaluationWindowApplied
+      ? overheadReadinessFraming.evaluationWindowFramingHintOnly
+      : null;
+
+    const displayedPrimaryBlockerSource = deriveDisplayedPrimaryBlockerSource({
+      success: effectivePassLatched,
+      rawReadinessState: rawLiveReadiness,
+      activeBlockers: liveReadinessSummary.activeBlockers,
+      severeFramingInvalid: liveReadinessSummary.blockers.severeFramingInvalid,
+      framingHintSource: overheadReadinessFraming.source,
+    });
+
+    const blockerSeenNearTerminal =
+      (gate.status === 'retry' || gate.status === 'fail') &&
+      overheadBlockerTimeRef.current.lastSeenAtMs != null;
+
+    const overheadReadinessBlockerTrace = buildOverheadReadinessBlockerTracePayload({
+      displayedPrimaryBlocker: primaryReadinessBlocker,
+      displayedPrimaryBlockerSource,
+      evaluationWindowFramingHint: evaluationWindowFramingHintForTrace,
+      evaluationWindowPrimaryBlocker,
+      recentTailFramingHint,
+      recentTailPrimaryBlocker,
+      blockerFirstSeenAtMs: overheadBlockerTimeRef.current.firstSeenAtMs,
+      blockerLastSeenAtMs: overheadBlockerTimeRef.current.lastSeenAtMs,
+      motionLatch: { ...overheadBlockerMotionLatchRef.current },
+      blockerSeenNearTerminal,
+      motionSignalsAtLastBlocker: overheadBlockerMotionLatchRef.current.lastSignals,
+      selectedWindowStartMs: typeof winStart === 'number' && Number.isFinite(winStart) ? winStart : null,
+      selectedWindowEndMs: typeof winEnd === 'number' && Number.isFinite(winEnd) ? winEnd : null,
+      traceWallClockMs: Date.now(),
+    });
+
+    return {
       state: liveReadiness,
       rawState: rawLiveReadiness,
       blocker: primaryReadinessBlocker,
       framingHint: liveReadinessSummary.framingHint,
+      framingHintSource: overheadReadinessFraming.source,
+      recentTailFramingHint,
       smoothingApplied: readinessSmoothingApplied,
       validFrameCount: liveReadinessSummary.inputs.validFrameCount,
       visibleJointsRatio: liveReadinessSummary.inputs.visibleJointsRatio,
       criticalJointsAvailability: liveReadinessSummary.inputs.criticalJointsAvailability,
-    }),
-    [
-      liveReadiness,
-      rawLiveReadiness,
-      primaryReadinessBlocker,
-      liveReadinessSummary,
-      readinessSmoothingApplied,
-    ]
-  );
+      overheadReadinessBlockerTrace,
+    };
+  }, [
+    effectivePassLatched,
+    evaluationWindowPrimaryBlocker,
+    gate.completionSatisfied,
+    gate.evaluatorResult?.debug?.highlightedMetrics,
+    gate.guardrail.debug?.selectedWindowEndMs,
+    gate.guardrail.debug?.selectedWindowStartMs,
+    gate.status,
+    liveReadiness,
+    liveReadinessSummary,
+    overheadReadinessFraming.evaluationWindowApplied,
+    overheadReadinessFraming.evaluationWindowFramingHintOnly,
+    overheadReadinessFraming.source,
+    primaryReadinessBlocker,
+    rawLiveReadiness,
+    recentTailFramingHint,
+    recentTailPrimaryBlocker,
+    readinessSmoothingApplied,
+  ]);
   const armRange = getMetricValueFromList(gate.evaluatorResult.metrics, 'arm_range');
   const compensation = getMetricValueFromList(gate.evaluatorResult.metrics, 'lumbar_extension');
   const symmetry = getMetricValueFromList(gate.evaluatorResult.metrics, 'asymmetry');
@@ -773,17 +938,83 @@ export default function CameraOverheadReachPage() {
       return;
     }
 
+    if (gate.status !== 'retry' && gate.status !== 'fail') {
+      overheadAccumulationGraceStartedAtRef.current = null;
+      overheadTerminalDeferralOccurredRef.current = false;
+    }
+
     if (gate.status === 'retry' || gate.status === 'fail') {
+      const guardrailValidCount = gate.guardrail.debug?.validFrameCount ?? 0;
+      const graceEligible = isOverheadAccumulationGraceEligible(
+        stats.validFrameCount,
+        guardrailValidCount
+      );
+
+      let deferTerminal = false;
+      if (graceEligible) {
+        const now = performance.now();
+        const r = computeOverheadRetryFailDeferral({
+          graceStartedAtMs: overheadAccumulationGraceStartedAtRef.current,
+          nowMs: now,
+          readinessValidFrameCount: readinessTraceSummary.validFrameCount,
+        });
+        overheadAccumulationGraceStartedAtRef.current = r.graceStartedAtMs;
+        deferTerminal = r.deferTerminal;
+        if (deferTerminal) {
+          overheadTerminalDeferralOccurredRef.current = true;
+        }
+      } else {
+        overheadAccumulationGraceStartedAtRef.current = null;
+      }
+
+      if (deferTerminal) {
+        return;
+      }
+
+      const graceStartMs = overheadAccumulationGraceStartedAtRef.current;
+      const accumulationGraceElapsedMs =
+        graceStartMs != null ? performance.now() - graceStartMs : undefined;
+      overheadAccumulationGraceStartedAtRef.current = null;
+
+      let overheadAttemptFailureType: OverheadAttemptFailureType;
+      if (stats.validFrameCount === 0) {
+        overheadAttemptFailureType = 'adaptor_no_input';
+      } else if (graceEligible) {
+        overheadAttemptFailureType = 'early_cutoff_valid_support';
+      } else {
+        overheadAttemptFailureType = 'insufficient_signal_other';
+      }
+
+      const readinessVF = readinessTraceSummary.validFrameCount;
+      const accumulationGraceApplied = overheadTerminalDeferralOccurredRef.current;
+      overheadTerminalDeferralOccurredRef.current = false;
+
+      const overheadInputStability = {
+        overheadAttemptFailureType,
+        accumulationGraceApplied,
+        terminalReasonCategory: graceEligible
+          ? 'dual_support_retry_fail'
+          : 'no_dual_support_retry_fail',
+        terminalDecisionPhase: 'page_retry_fail_terminal',
+        accumulationGraceElapsedMs,
+        terminalBeforeAccumulationComplete: readinessVF < OH_READINESS_MIN_VALID_FRAMES_FOR_GRACE,
+        adaptorFailureObserved: (stats.landmarkOrAdaptorFailedFrameCount ?? 0) > 0,
+        firstHookAcceptedAtMs: stats.firstHookAcceptedAtMs ?? null,
+        readinessMinValidFramesTarget: OH_READINESS_MIN_VALID_FRAMES_FOR_GRACE,
+      };
+
+      const terminalKindSuffix = accumulationGraceApplied ? ':after_grace_window' : '';
       if (terminalAttemptSnapshotRecordedStepKeyRef.current !== currentStepKey) {
         terminalAttemptSnapshotRecordedStepKeyRef.current = currentStepKey;
         recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
           liveCueingEnabled: startSequenceComplete,
           autoNextObservation: 'terminal_retry_or_fail',
           poseCaptureStats: stats,
+          overheadInputStability,
         });
         emitOverheadCaptureTerminalOnce(
           gate,
-          `terminal_retry_or_fail:${gate.status}:${gate.progressionState}`
+          `terminal_retry_or_fail:${gate.status}:${gate.progressionState}${terminalKindSuffix}`
         );
       }
       settledRef.current = true;

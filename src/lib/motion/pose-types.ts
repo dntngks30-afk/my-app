@@ -122,6 +122,88 @@ export const HOOK_QUALITY_THRESHOLDS = {
   maxBodyBoxArea: MAX_BODY_BOX_AREA,
 } as const;
 
+/**
+ * OH-INPUT-01: Overhead-reach specific core visibility floor.
+ * Reason: users performing overhead reach may have knees off-screen (close camera),
+ * so we relax from 0.34 (3/6 ≈ requires 3 core joints) to 0.30 (allows 2/6 visible).
+ * Scoped to overhead only — squat and other steps remain on MIN_CORE_VISIBILITY_RATIO.
+ */
+const OVERHEAD_MIN_CORE_VISIBILITY_RATIO = 0.30;
+
+/**
+ * OH-INPUT-01: Overhead-reach has NO upper body-box area limit.
+ * Reason: arms raised overhead structurally expand the MediaPipe 33-point bounding box
+ * beyond normalized 1.0. The global MAX_BODY_BOX_AREA = 0.98 is a "blank wall / no body"
+ * guard that is semantically incorrect for overhead motion.
+ * Lower bound (MIN_BODY_BOX_AREA) is kept to still reject completely empty frames.
+ */
+const OVERHEAD_MAX_BODY_BOX_AREA = null; // no upper limit for overhead reach
+
+/**
+ * OBS: threshold echo for overhead-reach scoped hook quality (single source of truth).
+ * maxBodyBoxArea: null means no upper limit is enforced.
+ */
+export const OVERHEAD_HOOK_QUALITY_THRESHOLDS = {
+  perJointVisibilityThreshold: DEFAULT_VISIBILITY_THRESHOLD,
+  coreJointCount: CORE_LANDMARK_INDICES.length,
+  minCoreVisibilityRatio: OVERHEAD_MIN_CORE_VISIBILITY_RATIO,
+  minBodyBoxArea: MIN_BODY_BOX_AREA,
+  maxBodyBoxArea: OVERHEAD_MAX_BODY_BOX_AREA,
+} as const;
+
+/**
+ * OH-INPUT-01: Overhead-reach scoped hook quality evaluation.
+ *
+ * Differences from the global getPoseFrameQuality:
+ *   1. MAX_BODY_BOX_AREA upper limit is not enforced — arms overhead expand bbox past 1.0.
+ *   2. MIN_CORE_VISIBILITY_RATIO is relaxed to 0.30 — allows 2/6 core joints for close-camera use.
+ *
+ * Everything else (landmark count, low_visibility, unstable_frame) is IDENTICAL.
+ * Squat and all other steps remain on getPoseFrameQuality — no regression possible.
+ */
+export function getOverheadPoseFrameQuality(
+  frame: PoseFrame,
+  previousFrame: PoseFrame | null = null
+): PoseFrameQuality {
+  const reasons: string[] = [];
+  const visibleRatio = getPoseFrameVisibleRatio(frame);
+  const coreVisibilityRatio = getPoseFrameCoreVisibilityRatio(frame);
+  const bodyBox = getPoseFrameBodyBox(frame);
+  const jitterDistance = getPoseFrameJitterDistance(frame, previousFrame);
+
+  if (!isValidPoseFrame(frame)) {
+    reasons.push('landmark_count');
+  }
+  if (visibleRatio < MIN_USABLE_VISIBLE_RATIO) {
+    reasons.push('low_visibility');
+  }
+  if (coreVisibilityRatio < OVERHEAD_MIN_CORE_VISIBILITY_RATIO) {
+    reasons.push('core_joints_missing');
+  }
+  // Only lower bound check — no upper bound for overhead: arms-overhead expands bbox beyond 1.0.
+  if (bodyBox.area < MIN_BODY_BOX_AREA) {
+    reasons.push('body_box_invalid');
+  }
+  if (
+    jitterDistance !== null &&
+    jitterDistance > MAX_CORE_JITTER_DISTANCE &&
+    visibleRatio < 0.5
+  ) {
+    reasons.push('unstable_frame');
+  }
+
+  const blockingReasons = reasons.filter((reason) => reason !== 'unstable_frame');
+
+  return {
+    usable: blockingReasons.length === 0,
+    visibleRatio,
+    coreVisibilityRatio,
+    bodyBox,
+    jitterDistance,
+    reasons,
+  };
+}
+
 export interface PoseFrameBodyBox {
   width: number;
   height: number;

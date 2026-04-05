@@ -21,6 +21,27 @@
  *   - Immune to micro-sways (< MIN_RISE_DELTA_DEG travel)
  *   - Immune to passive oscillation at top (baseline already near top → delta small)
  *
+ * ── PR-03A: Baseline fairness ─────────────────────────────────────────────────
+ * Previous baseline: mean of first 6 valid frames.
+ *
+ * Problem: if the user's arms are already somewhat raised during early readiness
+ * frames (semi-raised posture, arm adjustment), the 6-frame mean can be inflated.
+ * A genuine raise to just above readiness posture then produces < 20° delta and
+ * returns rise_delta_too_small even for a real attempt.
+ *
+ * Fix: use the lower-envelope (minimum) of the first OVERHEAD_RISE_BASELINE_WINDOW
+ * valid frames. This captures the true low-start reference position — the frame
+ * where arms were genuinely at rest — even if that frame comes before the user
+ * begins actively raising.
+ *
+ * This aligns with the approach already used for humaneBaselineArmDeg in the
+ * evaluator (Math.min over 16 frames). Consistency in baseline strategy.
+ *
+ * Anti-false-positive preservation:
+ *   - A user already at 130° (top zone) will have min ≈ 130°, so tiny drift still fails
+ *   - Only genuine downward-then-up motion benefits from the lower reference
+ *   - Top detection (132°) and hold requirement remain unchanged
+ *
  * ── Product law preserved ─────────────────────────────────────────────────────
  * What must still satisfy rise truth:
  *   - Real upward raise from a low/normal starting position
@@ -58,6 +79,38 @@ export const OVERHEAD_RISE_MIN_DELTA_DEG = 20;
  * Used for `riseStartedAtMs` only — not a pass gate.
  */
 const RISE_START_THRESHOLD_DEG = 5;
+
+/**
+ * PR-03A: number of early valid frames to consider when selecting the rise baseline.
+ * Wide enough to include pre-raise rest position even with some readiness motion.
+ * Matches the HUMANE_BASELINE_WINDOW already used in the evaluator for consistency.
+ */
+export const OVERHEAD_RISE_BASELINE_WINDOW = 16;
+
+// ── Baseline helper ────────────────────────────────────────────────────────────
+
+/**
+ * PR-03A: Compute the arm elevation baseline for rise-truth detection using
+ * the lower-envelope (minimum) of the first OVERHEAD_RISE_BASELINE_WINDOW valid frames.
+ *
+ * Rationale:
+ * - Mean-of-6 can be inflated if the user's arms are partially raised during early frames
+ * - Minimum captures the true lowest reference position seen in the window
+ * - Even one low-arm frame at rest anchors the baseline honestly
+ *
+ * Returns 0 if no valid elevation values are found (safe fallback).
+ *
+ * Overhead-only. Do NOT use in squat or other step calculations.
+ */
+export function computeOverheadRiseBaselineArmDeg(
+  validFrames: readonly Pick<PoseFeaturesFrame, 'derived' | 'timestampMs'>[]
+): number {
+  const windowFrames = validFrames.slice(0, OVERHEAD_RISE_BASELINE_WINDOW);
+  const values = windowFrames
+    .map((f) => f.derived.armElevationAvg)
+    .filter((v): v is number => typeof v === 'number');
+  return values.length > 0 ? Math.min(...values) : 0;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

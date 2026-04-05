@@ -93,6 +93,21 @@ export interface PoseFeaturesFrame {
     armElevationRight: number | null;
     armElevationAvg: number | null;
     armElevationGap: number | null;
+    /**
+     * PR-OH-KINEMATIC-SIGNAL-04B — Overhead-only candidate kinematics (null unless stepId is overhead-reach).
+     * shoulderWrist*: 2D ∠(hip→shoulder→wrist) in image plane (deg), x/y only — full arm vs torso proxy; not a gate signal.
+     * wristAboveShoulder*: (shoulder.y − wrist.y) / max(|shoulder.y − hip.y|, floor); + when wrist above shoulder; unitless; z unused.
+     * elbowAboveShoulder*: same for elbow vs shoulder — “upper joint above shoulder line” proxy.
+     */
+    shoulderWristElevationLeftDeg: number | null;
+    shoulderWristElevationRightDeg: number | null;
+    shoulderWristElevationAvgDeg: number | null;
+    wristAboveShoulderLeftNorm: number | null;
+    wristAboveShoulderRightNorm: number | null;
+    wristAboveShoulderAvgNorm: number | null;
+    elbowAboveShoulderLeftNorm: number | null;
+    elbowAboveShoulderRightNorm: number | null;
+    elbowAboveShoulderAvgNorm: number | null;
     elbowAngleLeft: number | null;
     elbowAngleRight: number | null;
     wristElbowAlignmentLeft: number | null;
@@ -528,9 +543,107 @@ function toTorsoExtensionDeg(
   return Math.atan2(hipCenter.y - shoulderCenter.y, hipCenter.x - shoulderCenter.x) * (180 / Math.PI);
 }
 
+/** Same-side torso scale floor for overhead norm (normalized coords). */
+const OVERHEAD_KINEMATIC_TORSO_SCALE_MIN = 0.04;
+
+/**
+ * PR-OH-KINEMATIC-SIGNAL-04B: vertical “above shoulder” proxy, x/y only (z ignored).
+ * Image y increases downward → positive when joint.y < shoulder.y.
+ */
+function overheadJointAboveShoulderNorm(
+  shoulder: PoseLandmark,
+  joint: PoseLandmark,
+  hip: PoseLandmark
+): number | null {
+  const scale = Math.abs(shoulder.y - hip.y);
+  if (!Number.isFinite(scale) || scale < 1e-8) return null;
+  const denom = Math.max(scale, OVERHEAD_KINEMATIC_TORSO_SCALE_MIN);
+  return (shoulder.y - joint.y) / denom;
+}
+
+/** PR-OH-KINEMATIC-SIGNAL-04B: candidate signals for overhead reach diagnostics only (not gating). */
+function computeOverheadCandidateKinematics(joints: Record<JointKey, PoseLandmark | null>): Pick<
+  PoseFeaturesFrame['derived'],
+  | 'shoulderWristElevationLeftDeg'
+  | 'shoulderWristElevationRightDeg'
+  | 'shoulderWristElevationAvgDeg'
+  | 'wristAboveShoulderLeftNorm'
+  | 'wristAboveShoulderRightNorm'
+  | 'wristAboveShoulderAvgNorm'
+  | 'elbowAboveShoulderLeftNorm'
+  | 'elbowAboveShoulderRightNorm'
+  | 'elbowAboveShoulderAvgNorm'
+> {
+  const lh = joints.leftHip;
+  const ls = joints.leftShoulder;
+  const le = joints.leftElbow;
+  const lw = joints.leftWrist;
+  const rh = joints.rightHip;
+  const rs = joints.rightShoulder;
+  const re = joints.rightElbow;
+  const rw = joints.rightWrist;
+
+  const shoulderWristElevationLeftDeg =
+    lh && ls && lw ? angle(lh, ls, lw) : null;
+  const shoulderWristElevationRightDeg =
+    rh && rs && rw ? angle(rh, rs, rw) : null;
+  const shoulderWristElevationAvgDeg =
+    typeof shoulderWristElevationLeftDeg === 'number' &&
+    typeof shoulderWristElevationRightDeg === 'number'
+      ? (shoulderWristElevationLeftDeg + shoulderWristElevationRightDeg) / 2
+      : shoulderWristElevationLeftDeg ?? shoulderWristElevationRightDeg;
+
+  const wristAboveShoulderLeftNorm =
+    ls && lw && lh ? overheadJointAboveShoulderNorm(ls, lw, lh) : null;
+  const wristAboveShoulderRightNorm =
+    rs && rw && rh ? overheadJointAboveShoulderNorm(rs, rw, rh) : null;
+  const wristAboveShoulderAvgNorm =
+    typeof wristAboveShoulderLeftNorm === 'number' &&
+    typeof wristAboveShoulderRightNorm === 'number'
+      ? (wristAboveShoulderLeftNorm + wristAboveShoulderRightNorm) / 2
+      : wristAboveShoulderLeftNorm ?? wristAboveShoulderRightNorm;
+
+  const elbowAboveShoulderLeftNorm =
+    ls && le && lh ? overheadJointAboveShoulderNorm(ls, le, lh) : null;
+  const elbowAboveShoulderRightNorm =
+    rs && re && rh ? overheadJointAboveShoulderNorm(rs, re, rh) : null;
+  const elbowAboveShoulderAvgNorm =
+    typeof elbowAboveShoulderLeftNorm === 'number' &&
+    typeof elbowAboveShoulderRightNorm === 'number'
+      ? (elbowAboveShoulderLeftNorm + elbowAboveShoulderRightNorm) / 2
+      : elbowAboveShoulderLeftNorm ?? elbowAboveShoulderRightNorm;
+
+  return {
+    shoulderWristElevationLeftDeg,
+    shoulderWristElevationRightDeg,
+    shoulderWristElevationAvgDeg,
+    wristAboveShoulderLeftNorm,
+    wristAboveShoulderRightNorm,
+    wristAboveShoulderAvgNorm,
+    elbowAboveShoulderLeftNorm,
+    elbowAboveShoulderRightNorm,
+    elbowAboveShoulderAvgNorm,
+  };
+}
+
+function emptyOverheadCandidateKinematics(): ReturnType<typeof computeOverheadCandidateKinematics> {
+  return {
+    shoulderWristElevationLeftDeg: null,
+    shoulderWristElevationRightDeg: null,
+    shoulderWristElevationAvgDeg: null,
+    wristAboveShoulderLeftNorm: null,
+    wristAboveShoulderRightNorm: null,
+    wristAboveShoulderAvgNorm: null,
+    elbowAboveShoulderLeftNorm: null,
+    elbowAboveShoulderRightNorm: null,
+    elbowAboveShoulderAvgNorm: null,
+  };
+}
+
 function buildDerivedMetrics(
   joints: Record<JointKey, PoseLandmark | null>,
-  previousFrame: PoseFeaturesFrame | null
+  previousFrame: PoseFeaturesFrame | null,
+  stepId: CameraStepId
 ): PoseFeaturesFrame['derived'] {
   const kneeAngleLeft =
     joints.leftHip && joints.leftKnee && joints.leftAnkle
@@ -622,6 +735,11 @@ function buildDerivedMetrics(
       ? Math.abs(trunkLeanDeg - previousFrame.derived.trunkLeanDeg) > 4
       : false;
 
+  const overheadKinematics =
+    stepId === 'overhead-reach'
+      ? computeOverheadCandidateKinematics(joints)
+      : emptyOverheadCandidateKinematics();
+
   return {
     kneeAngleLeft,
     kneeAngleRight,
@@ -636,6 +754,7 @@ function buildDerivedMetrics(
     armElevationRight,
     armElevationAvg,
     armElevationGap,
+    ...overheadKinematics,
     elbowAngleLeft,
     elbowAngleRight,
     wristElbowAlignmentLeft,
@@ -701,6 +820,16 @@ function stabilizeDerivedSignals(frames: PoseFeaturesFrame[]): PoseFeaturesFrame
   let previousArmElevationRight: number | null = null;
   let previousTrunkLean: number | null = null;
   let previousKneeTracking: number | null = null;
+  /** PR-OH-KINEMATIC-SIGNAL-04B: temporal smooth for overhead candidate signals (diagnostic parity with armElevation). */
+  let prevOhSwL: number | null = null;
+  let prevOhSwR: number | null = null;
+  let prevOhSwAvg: number | null = null;
+  let prevOhWristL: number | null = null;
+  let prevOhWristR: number | null = null;
+  let prevOhWristAvg: number | null = null;
+  let prevOhElbowL: number | null = null;
+  let prevOhElbowR: number | null = null;
+  let prevOhElbowAvg: number | null = null;
 
   return frames.map((frame) => {
     const rawDepthIn = frame.derived.squatDepthProxy;
@@ -723,12 +852,67 @@ function stabilizeDerivedSignals(frames: PoseFeaturesFrame[]): PoseFeaturesFrame
       0.4
     );
 
+    const shoulderWristElevationLeftDeg = smoothSignalValue(
+      frame.derived.shoulderWristElevationLeftDeg,
+      prevOhSwL,
+      0.42
+    );
+    const shoulderWristElevationRightDeg = smoothSignalValue(
+      frame.derived.shoulderWristElevationRightDeg,
+      prevOhSwR,
+      0.42
+    );
+    const shoulderWristElevationAvgDeg = smoothSignalValue(
+      frame.derived.shoulderWristElevationAvgDeg,
+      prevOhSwAvg,
+      0.42
+    );
+    const wristAboveShoulderLeftNorm = smoothSignalValue(
+      frame.derived.wristAboveShoulderLeftNorm,
+      prevOhWristL,
+      0.42
+    );
+    const wristAboveShoulderRightNorm = smoothSignalValue(
+      frame.derived.wristAboveShoulderRightNorm,
+      prevOhWristR,
+      0.42
+    );
+    const wristAboveShoulderAvgNorm = smoothSignalValue(
+      frame.derived.wristAboveShoulderAvgNorm,
+      prevOhWristAvg,
+      0.42
+    );
+    const elbowAboveShoulderLeftNorm = smoothSignalValue(
+      frame.derived.elbowAboveShoulderLeftNorm,
+      prevOhElbowL,
+      0.42
+    );
+    const elbowAboveShoulderRightNorm = smoothSignalValue(
+      frame.derived.elbowAboveShoulderRightNorm,
+      prevOhElbowR,
+      0.42
+    );
+    const elbowAboveShoulderAvgNorm = smoothSignalValue(
+      frame.derived.elbowAboveShoulderAvgNorm,
+      prevOhElbowAvg,
+      0.42
+    );
+
     previousDepth = squatDepthProxy;
     previousArmElevation = armElevationAvg;
     previousArmElevationLeft = armElevationLeft;
     previousArmElevationRight = armElevationRight;
     previousTrunkLean = trunkLeanDeg;
     previousKneeTracking = kneeTrackingRatio;
+    prevOhSwL = shoulderWristElevationLeftDeg;
+    prevOhSwR = shoulderWristElevationRightDeg;
+    prevOhSwAvg = shoulderWristElevationAvgDeg;
+    prevOhWristL = wristAboveShoulderLeftNorm;
+    prevOhWristR = wristAboveShoulderRightNorm;
+    prevOhWristAvg = wristAboveShoulderAvgNorm;
+    prevOhElbowL = elbowAboveShoulderLeftNorm;
+    prevOhElbowR = elbowAboveShoulderRightNorm;
+    prevOhElbowAvg = elbowAboveShoulderAvgNorm;
 
     return {
       ...frame,
@@ -739,6 +923,15 @@ function stabilizeDerivedSignals(frames: PoseFeaturesFrame[]): PoseFeaturesFrame
         armElevationAvg,
         armElevationLeft,
         armElevationRight,
+        shoulderWristElevationLeftDeg,
+        shoulderWristElevationRightDeg,
+        shoulderWristElevationAvgDeg,
+        wristAboveShoulderLeftNorm,
+        wristAboveShoulderRightNorm,
+        wristAboveShoulderAvgNorm,
+        elbowAboveShoulderLeftNorm,
+        elbowAboveShoulderRightNorm,
+        elbowAboveShoulderAvgNorm,
         trunkLeanDeg,
         kneeTrackingRatio,
       },
@@ -1142,7 +1335,7 @@ export function buildPoseFeaturesFrames(
     const timestampMs = frame.timestamp ?? 0;
     const timestampDeltaMs =
       previousFrame && previousFrame.timestampMs > 0 ? timestampMs - previousFrame.timestampMs : null;
-    const derived = buildDerivedMetrics(joints, previousFrame);
+    const derived = buildDerivedMetrics(joints, previousFrame, stepId);
     const { frameValidity, qualityHints, isValid } = getFrameValidity(
       stepId,
       frame,
