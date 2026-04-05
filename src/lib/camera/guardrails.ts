@@ -17,7 +17,7 @@ import {
 } from './overhead/overhead-easy-progression';
 import { buildPoseFeaturesFrames } from './pose-features';
 import type { PoseFeaturesFrame } from './pose-features';
-import type { PoseLandmarks } from '@/lib/motion/pose-types';
+import type { PoseLandmark, PoseLandmarks } from '@/lib/motion/pose-types';
 import { HOOK_QUALITY_THRESHOLDS, OVERHEAD_HOOK_QUALITY_THRESHOLDS } from '@/lib/motion/pose-types';
 import type { EvaluatorResult } from './evaluators/types';
 import type { PoseCaptureStats, PoseHookFirstRejectionSample, PoseHookAdaptorFailureDiag } from './use-pose-capture';
@@ -119,6 +119,13 @@ export interface OverheadInputTruthMap {
     guardrailValidFrameCount: number;
     invalidFeatureFrameCount: number;
     featureValidityBreakdown: Record<string, number>;
+    /**
+     * OH-READINESS-02: frames that failed default `isValid` (missing_keypoints) but were
+     * admitted by the overhead-specific `isOverheadFrameAnalyzable` check because at least
+     * one arm elevation triplet (hip + shoulder + elbow) was usable at the 0.20 threshold.
+     * Non-zero value indicates the overhead extended-validity path was exercised.
+     */
+    overheadExtendedAnalyzableCount: number;
   };
   layer4_readinessMotion: {
     guardrailValidFrameCount: number;
@@ -241,6 +248,94 @@ function countNoisyFrames(frames: PoseFeaturesFrame[]): number {
     );
   }).length;
 }
+
+// ---------------------------------------------------------------------------
+// OH-READINESS-02: Overhead-specific feature-validity helpers
+// ---------------------------------------------------------------------------
+// These helpers are scoped exclusively to overhead-reach. They do NOT modify
+// the global getFrameValidity / isValid semantics used by squat and other steps.
+
+/** Minimum per-joint visibility for overhead arm triplet eligibility. */
+const OVERHEAD_ARM_TRIPLET_VIS_MIN = 0.20;
+
+/**
+ * Returns true when a landmark has sufficient visibility for use in the
+ * overhead arm-elevation triplet check. Lower than the global 0.45 threshold
+ * to tolerate frame-edge positions during the arm-raise phase.
+ */
+function isOverheadJointUsable(joint: PoseLandmark | null): boolean {
+  if (!joint) return false;
+  if (typeof joint.visibility === 'number') return joint.visibility >= OVERHEAD_ARM_TRIPLET_VIS_MIN;
+  return true; // no visibility data → treat as usable (legacy frame compat)
+}
+
+/**
+ * OH-READINESS-02: Overhead-specific frame analyzability guard.
+ *
+ * The global `frame.isValid` (criticalJointsAvailability >= 0.35 over 8 overhead
+ * critical joints including wrists) can reject legitimate overhead frames where
+ * wrists / ankles drift to the frame edge during the arm-raise phase.
+ *
+ * A frame is overhead-analyzable when:
+ *   1. frameValidity !== 'invalid' (has 33+ landmarks — already ensured by hook)
+ *   2. At least one side's arm-elevation triplet is usable:
+ *      hip + shoulder + elbow with per-joint visibility >= 0.20
+ *
+ * This guarantees `armElevationAvg` can be computed for the frame, which is the
+ * primary signal for overhead motion detection.
+ *
+ * Squat and all other steps use the unmodified `frame.isValid` path.
+ */
+function isOverheadFrameAnalyzable(frame: PoseFeaturesFrame): boolean {
+  if (frame.frameValidity === 'invalid') return false;
+  if (frame.isValid) return true; // already passes default criteria
+
+  const { joints } = frame;
+  const leftUsable =
+    isOverheadJointUsable(joints.leftHip) &&
+    isOverheadJointUsable(joints.leftShoulder) &&
+    isOverheadJointUsable(joints.leftElbow);
+  const rightUsable =
+    isOverheadJointUsable(joints.rightHip) &&
+    isOverheadJointUsable(joints.rightShoulder) &&
+    isOverheadJointUsable(joints.rightElbow);
+
+  return leftUsable || rightUsable;
+}
+
+/** Visibility threshold for arm-core critical availability metric (overhead only). */
+const OVERHEAD_ARM_CORE_VIS_THRESHOLD = 0.35;
+
+/**
+ * OH-READINESS-02: Overhead arm-core critical joint availability.
+ *
+ * Computes joint availability using only the 6 joints essential for arm-elevation
+ * measurement (shoulders + elbows + hips), excluding wrists that commonly exit
+ * the frame at full overhead extension.
+ *
+ * Uses a slightly lower visibility threshold (0.35 vs global 0.45) to accommodate
+ * joints at the boundary of the camera frame.
+ *
+ * This value replaces `criticalJointsAvailability` in the guardrail debug for
+ * overhead-reach so that readiness is not falsely blocked by off-screen wrists.
+ */
+function getOverheadArmCoreAvailability(frame: PoseFeaturesFrame): number {
+  const armCoreJoints: Array<PoseLandmark | null> = [
+    frame.joints.leftShoulder,
+    frame.joints.rightShoulder,
+    frame.joints.leftElbow,
+    frame.joints.rightElbow,
+    frame.joints.leftHip,
+    frame.joints.rightHip,
+  ];
+  const visibleCount = armCoreJoints.filter((joint) => {
+    if (!joint) return false;
+    if (typeof joint.visibility === 'number') return joint.visibility >= OVERHEAD_ARM_CORE_VIS_THRESHOLD;
+    return true;
+  }).length;
+  return visibleCount / armCoreJoints.length;
+}
+// ---------------------------------------------------------------------------
 
 function getMotionCompleteness(
   stepId: CameraStepId,
@@ -494,6 +589,11 @@ function buildOverheadInputTruthMap(args: {
   const featureFrameCount = featureFrames.length;
   const invalidFeatureFrameCount = Math.max(0, featureFrameCount - guardrailValidFrameCount);
 
+  // OH-READINESS-02: frames that were admitted by the overhead extended path but would
+  // have been rejected by the global isValid check (missing_keypoints category).
+  const defaultValidFrameCount = featureFrames.filter((f) => f.isValid).length;
+  const overheadExtendedAnalyzableCount = Math.max(0, guardrailValidFrameCount - defaultValidFrameCount);
+
   const featureValidityBreakdown: Record<string, number> = {};
   for (const f of featureFrames) {
     const fk = `frameValidity_${f.frameValidity}`;
@@ -533,6 +633,7 @@ function buildOverheadInputTruthMap(args: {
       guardrailValidFrameCount,
       invalidFeatureFrameCount,
       featureValidityBreakdown,
+      overheadExtendedAnalyzableCount,
     },
     layer4_readinessMotion: {
       guardrailValidFrameCount,
@@ -551,7 +652,12 @@ export function assessStepGuardrail(
   evaluatorResult: EvaluatorResult
 ): StepGuardrailResult {
   const featureFrames = buildPoseFeaturesFrames(stepId, frames);
-  const validFrames = featureFrames.filter((frame) => frame.isValid);
+  // OH-READINESS-02: overhead-reach uses an extended analyzability check so that
+  // frames with wrists/ankles at frame edges during arm raise are not prematurely
+  // rejected. All other steps retain the unmodified isValid path.
+  const validFrames = stepId === 'overhead-reach'
+    ? featureFrames.filter(isOverheadFrameAnalyzable)
+    : featureFrames.filter((frame) => frame.isValid);
   const flags = new Set<CameraGuardrailFlag>();
 
   const qualitySelection = selectQualityWindow(validFrames, {
@@ -563,7 +669,13 @@ export function assessStepGuardrail(
 
   const visibleJointsRatio = getVisibleJointsRatio(qualityFrames);
   const averageLandmarkConfidence = getAverageLandmarkConfidence(qualityFrames);
-  const criticalJointsAvailability = getCriticalAvailability(qualityFrames);
+  // OH-READINESS-02: overhead uses arm-core availability (shoulders + elbows + hips,
+  // no wrists) at a slightly relaxed per-joint threshold. This prevents off-screen
+  // wrists during arm raise from falsely triggering insufficient_signal / invalid
+  // captureQuality and blocking readiness. Squat and other steps are unchanged.
+  const criticalJointsAvailability = stepId === 'overhead-reach'
+    ? mean(qualityFrames.map(getOverheadArmCoreAvailability))
+    : getCriticalAvailability(qualityFrames);
   const bboxSizeStability = getBboxStability(qualityFrames);
   const validFrameCount = validFrames.length;
   const droppedFrameRatio =
