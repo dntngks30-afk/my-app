@@ -416,6 +416,18 @@ export interface AttemptSnapshot {
       ohKinematicMeanWristAboveShoulderAvgNorm?: number | null;
       ohKinematicPeakElbowAboveShoulderAvgNorm?: number | null;
       ohKinematicMeanElbowAboveShoulderAvgNorm?: number | null;
+      /**
+       * PR-OH-HEAD-RELATIVE-SIGNAL-04E: Session aggregates — face/head-relative wrist & elbow evidence.
+       * Diagnostic only; not used for gates. Compare to 04B shoulder-relative + legacy arm elevation.
+       */
+      ohHeadRelativePeakWristAboveNoseAvgNorm?: number | null;
+      ohHeadRelativeMeanWristAboveNoseAvgNorm?: number | null;
+      ohHeadRelativePeakWristAboveEarAvgNorm?: number | null;
+      ohHeadRelativeMeanWristAboveEarAvgNorm?: number | null;
+      ohHeadRelativePeakWristAboveHeadTopProxyAvgNorm?: number | null;
+      ohHeadRelativeMeanWristAboveHeadTopProxyAvgNorm?: number | null;
+      ohHeadRelativePeakElbowAboveEarAvgNorm?: number | null;
+      ohHeadRelativeMeanElbowAboveEarAvgNorm?: number | null;
     };
     /** cue */
     cue?: {
@@ -1713,6 +1725,39 @@ function buildDiagnosisSummary(
       ohKinematicMeanElbowAboveShoulderAvgNorm:
         typeof hm?.ohKinematicMeanElbowAboveShoulderAvgNorm === 'number'
           ? hm.ohKinematicMeanElbowAboveShoulderAvgNorm
+          : undefined,
+      /** PR-OH-HEAD-RELATIVE-SIGNAL-04E */
+      ohHeadRelativePeakWristAboveNoseAvgNorm:
+        typeof hm?.ohHeadRelativePeakWristAboveNoseAvgNorm === 'number'
+          ? hm.ohHeadRelativePeakWristAboveNoseAvgNorm
+          : undefined,
+      ohHeadRelativeMeanWristAboveNoseAvgNorm:
+        typeof hm?.ohHeadRelativeMeanWristAboveNoseAvgNorm === 'number'
+          ? hm.ohHeadRelativeMeanWristAboveNoseAvgNorm
+          : undefined,
+      ohHeadRelativePeakWristAboveEarAvgNorm:
+        typeof hm?.ohHeadRelativePeakWristAboveEarAvgNorm === 'number'
+          ? hm.ohHeadRelativePeakWristAboveEarAvgNorm
+          : undefined,
+      ohHeadRelativeMeanWristAboveEarAvgNorm:
+        typeof hm?.ohHeadRelativeMeanWristAboveEarAvgNorm === 'number'
+          ? hm.ohHeadRelativeMeanWristAboveEarAvgNorm
+          : undefined,
+      ohHeadRelativePeakWristAboveHeadTopProxyAvgNorm:
+        typeof hm?.ohHeadRelativePeakWristAboveHeadTopProxyAvgNorm === 'number'
+          ? hm.ohHeadRelativePeakWristAboveHeadTopProxyAvgNorm
+          : undefined,
+      ohHeadRelativeMeanWristAboveHeadTopProxyAvgNorm:
+        typeof hm?.ohHeadRelativeMeanWristAboveHeadTopProxyAvgNorm === 'number'
+          ? hm.ohHeadRelativeMeanWristAboveHeadTopProxyAvgNorm
+          : undefined,
+      ohHeadRelativePeakElbowAboveEarAvgNorm:
+        typeof hm?.ohHeadRelativePeakElbowAboveEarAvgNorm === 'number'
+          ? hm.ohHeadRelativePeakElbowAboveEarAvgNorm
+          : undefined,
+      ohHeadRelativeMeanElbowAboveEarAvgNorm:
+        typeof hm?.ohHeadRelativeMeanElbowAboveEarAvgNorm === 'number'
+          ? hm.ohHeadRelativeMeanElbowAboveEarAvgNorm
           : undefined,
     };
 

@@ -426,6 +426,14 @@ export function evaluateOverheadReachFromPoseFrames(
           ohKinematicMeanWristAboveShoulderAvgNorm: null,
           ohKinematicPeakElbowAboveShoulderAvgNorm: null,
           ohKinematicMeanElbowAboveShoulderAvgNorm: null,
+          ohHeadRelativePeakWristAboveNoseAvgNorm: null,
+          ohHeadRelativeMeanWristAboveNoseAvgNorm: null,
+          ohHeadRelativePeakWristAboveEarAvgNorm: null,
+          ohHeadRelativeMeanWristAboveEarAvgNorm: null,
+          ohHeadRelativePeakWristAboveHeadTopProxyAvgNorm: null,
+          ohHeadRelativeMeanWristAboveHeadTopProxyAvgNorm: null,
+          ohHeadRelativePeakElbowAboveEarAvgNorm: null,
+          ohHeadRelativeMeanElbowAboveEarAvgNorm: null,
         },
         perStepDiagnostics: { raise: emptyDiag, hold: emptyDiag },
         overheadEvidenceLevel: 'insufficient_signal',
@@ -458,6 +466,27 @@ export function evaluateOverheadReachFromPoseFrames(
     ohElbowAboveAvgNormVals.length > 0 ? roundOhObs(Math.max(...ohElbowAboveAvgNormVals)) : null;
   const ohKinematicMeanElbowAboveShoulderAvgNorm =
     ohElbowAboveAvgNormVals.length > 0 ? roundOhObs(mean(ohElbowAboveAvgNormVals)) : null;
+  /** PR-OH-HEAD-RELATIVE-SIGNAL-04E: diagnostic aggregates only — not used for rise/top/hold gates. */
+  const ohHeadNoseAvgVals = getNumbers(valid.map((f) => f.derived.wristAboveNoseAvgNorm));
+  const ohHeadEarAvgVals = getNumbers(valid.map((f) => f.derived.wristAboveEarAvgNorm));
+  const ohHeadTopProxyVals = getNumbers(valid.map((f) => f.derived.wristAboveHeadTopProxyAvgNorm));
+  const ohElbowEarAvgVals = getNumbers(valid.map((f) => f.derived.elbowAboveEarAvgNorm));
+  const ohHeadRelativePeakWristAboveNoseAvgNorm =
+    ohHeadNoseAvgVals.length > 0 ? roundOhObs(Math.max(...ohHeadNoseAvgVals)) : null;
+  const ohHeadRelativeMeanWristAboveNoseAvgNorm =
+    ohHeadNoseAvgVals.length > 0 ? roundOhObs(mean(ohHeadNoseAvgVals)) : null;
+  const ohHeadRelativePeakWristAboveEarAvgNorm =
+    ohHeadEarAvgVals.length > 0 ? roundOhObs(Math.max(...ohHeadEarAvgVals)) : null;
+  const ohHeadRelativeMeanWristAboveEarAvgNorm =
+    ohHeadEarAvgVals.length > 0 ? roundOhObs(mean(ohHeadEarAvgVals)) : null;
+  const ohHeadRelativePeakWristAboveHeadTopProxyAvgNorm =
+    ohHeadTopProxyVals.length > 0 ? roundOhObs(Math.max(...ohHeadTopProxyVals)) : null;
+  const ohHeadRelativeMeanWristAboveHeadTopProxyAvgNorm =
+    ohHeadTopProxyVals.length > 0 ? roundOhObs(mean(ohHeadTopProxyVals)) : null;
+  const ohHeadRelativePeakElbowAboveEarAvgNorm =
+    ohElbowEarAvgVals.length > 0 ? roundOhObs(Math.max(...ohElbowEarAvgVals)) : null;
+  const ohHeadRelativeMeanElbowAboveEarAvgNorm =
+    ohElbowEarAvgVals.length > 0 ? roundOhObs(mean(ohElbowEarAvgVals)) : null;
   const armElevationGapValues = getNumbers(valid.map((frame) => frame.derived.armElevationGap));
   const torsoExtensionDeviation = getNumbers(valid.map((frame) => frame.derived.torsoExtensionDeg)).map((value) =>
     Math.abs(value - 90)
@@ -1008,6 +1037,15 @@ export function evaluateOverheadReachFromPoseFrames(
         ohKinematicMeanWristAboveShoulderAvgNorm,
         ohKinematicPeakElbowAboveShoulderAvgNorm,
         ohKinematicMeanElbowAboveShoulderAvgNorm,
+        /** PR-OH-HEAD-RELATIVE-SIGNAL-04E: head/face-relative session aggregates (device JSON vs 04B vs legacy). */
+        ohHeadRelativePeakWristAboveNoseAvgNorm,
+        ohHeadRelativeMeanWristAboveNoseAvgNorm,
+        ohHeadRelativePeakWristAboveEarAvgNorm,
+        ohHeadRelativeMeanWristAboveEarAvgNorm,
+        ohHeadRelativePeakWristAboveHeadTopProxyAvgNorm,
+        ohHeadRelativeMeanWristAboveHeadTopProxyAvgNorm,
+        ohHeadRelativePeakElbowAboveEarAvgNorm,
+        ohHeadRelativeMeanElbowAboveEarAvgNorm,
       },
       perStepDiagnostics: perStepRecord,
     },

@@ -24,6 +24,8 @@ export type PosePhaseHint =
 
 type JointKey =
   | 'nose'
+  | 'leftEar'
+  | 'rightEar'
   | 'leftShoulder'
   | 'rightShoulder'
   | 'leftElbow'
@@ -108,6 +110,27 @@ export interface PoseFeaturesFrame {
     elbowAboveShoulderLeftNorm: number | null;
     elbowAboveShoulderRightNorm: number | null;
     elbowAboveShoulderAvgNorm: number | null;
+    /**
+     * PR-OH-HEAD-RELATIVE-SIGNAL-04E — Overhead-only head/face-relative diagnostics (null unless stepId is overhead-reach).
+     * All use image y only (z ignored). Denominator per side: max(|shoulder.y − hip.y|, OVERHEAD_KINEMATIC_TORSO_SCALE_MIN)
+     * — same torso scale as 04B so logs are comparable across families.
+     * wristAboveNose*: (nose.y − wrist.y) / denom; + when wrist is visually above nose (smaller y).
+     * wristAboveEar*: same-side (ear.y − wrist.y) / denom — “hand above ear line” vs shoulder-relative opening.
+     * elbowAboveEar*: same-side ear vs elbow — upper arm segment height vs head.
+     * wristAboveHeadTopProxyAvgNorm: (headTopProxyY − wrist.y) / denom per side, averaged; headTopProxyY = min y among
+     * nose + ears present (highest point in frame among those landmarks — not a clinical crown, a safe MediaPipe proxy).
+     * Not used for gates / phase / pass — encodes “above face/head” outcome evidence for device logs.
+     */
+    wristAboveNoseLeftNorm: number | null;
+    wristAboveNoseRightNorm: number | null;
+    wristAboveNoseAvgNorm: number | null;
+    wristAboveEarLeftNorm: number | null;
+    wristAboveEarRightNorm: number | null;
+    wristAboveEarAvgNorm: number | null;
+    elbowAboveEarLeftNorm: number | null;
+    elbowAboveEarRightNorm: number | null;
+    elbowAboveEarAvgNorm: number | null;
+    wristAboveHeadTopProxyAvgNorm: number | null;
     elbowAngleLeft: number | null;
     elbowAngleRight: number | null;
     wristElbowAlignmentLeft: number | null;
@@ -474,6 +497,8 @@ function smoothFrames(frames: PoseLandmarks[]): PoseLandmarks[] {
 function buildJointMap(frame: PoseLandmarks): Record<JointKey, PoseLandmark | null> {
   const joints: Record<JointKey, PoseLandmark | null> = {
     nose: getLandmark(frame, POSE_LANDMARKS.NOSE),
+    leftEar: getLandmark(frame, POSE_LANDMARKS.LEFT_EAR),
+    rightEar: getLandmark(frame, POSE_LANDMARKS.RIGHT_EAR),
     leftShoulder: getLandmark(frame, POSE_LANDMARKS.LEFT_SHOULDER),
     rightShoulder: getLandmark(frame, POSE_LANDMARKS.RIGHT_SHOULDER),
     leftElbow: getLandmark(frame, POSE_LANDMARKS.LEFT_ELBOW),
@@ -640,6 +665,137 @@ function emptyOverheadCandidateKinematics(): ReturnType<typeof computeOverheadCa
   };
 }
 
+/**
+ * PR-OH-HEAD-RELATIVE-SIGNAL-04E: vertical offset of `joint` above `ref` in normalized image space (x/y only).
+ * Same denominator convention as 04B shoulder-relative norms for cross-family comparison in JSON traces.
+ */
+function overheadJointAboveHeadRefNorm(
+  shoulder: PoseLandmark,
+  hip: PoseLandmark,
+  ref: PoseLandmark,
+  joint: PoseLandmark
+): number | null {
+  const scale = Math.abs(shoulder.y - hip.y);
+  if (!Number.isFinite(scale) || scale < 1e-8) return null;
+  const denom = Math.max(scale, OVERHEAD_KINEMATIC_TORSO_SCALE_MIN);
+  return (ref.y - joint.y) / denom;
+}
+
+function overheadHeadTopProxyY(joints: Record<JointKey, PoseLandmark | null>): number | null {
+  const ys: number[] = [];
+  const pushY = (lm: PoseLandmark | null) => {
+    if (lm && Number.isFinite(lm.y)) ys.push(lm.y);
+  };
+  pushY(joints.nose);
+  pushY(joints.leftEar);
+  pushY(joints.rightEar);
+  if (ys.length === 0) return null;
+  return Math.min(...ys);
+}
+
+type OverheadHeadRelativeDerived = Pick<
+  PoseFeaturesFrame['derived'],
+  | 'wristAboveNoseLeftNorm'
+  | 'wristAboveNoseRightNorm'
+  | 'wristAboveNoseAvgNorm'
+  | 'wristAboveEarLeftNorm'
+  | 'wristAboveEarRightNorm'
+  | 'wristAboveEarAvgNorm'
+  | 'elbowAboveEarLeftNorm'
+  | 'elbowAboveEarRightNorm'
+  | 'elbowAboveEarAvgNorm'
+  | 'wristAboveHeadTopProxyAvgNorm'
+>;
+
+/** PR-OH-HEAD-RELATIVE-SIGNAL-04E: head/face-relative candidates; overhead-reach only; not gating. */
+function computeOverheadHeadRelativeKinematics(joints: Record<JointKey, PoseLandmark | null>): OverheadHeadRelativeDerived {
+  const nose = joints.nose;
+  const le = joints.leftEar;
+  const re = joints.rightEar;
+  const lh = joints.leftHip;
+  const ls = joints.leftShoulder;
+  const lelb = joints.leftElbow;
+  const lw = joints.leftWrist;
+  const rh = joints.rightHip;
+  const rs = joints.rightShoulder;
+  const relb = joints.rightElbow;
+  const rw = joints.rightWrist;
+
+  const wristAboveNoseLeftNorm =
+    nose && lw && ls && lh ? overheadJointAboveHeadRefNorm(ls, lh, nose, lw) : null;
+  const wristAboveNoseRightNorm =
+    nose && rw && rs && rh ? overheadJointAboveHeadRefNorm(rs, rh, nose, rw) : null;
+  const wristAboveNoseAvgNorm =
+    typeof wristAboveNoseLeftNorm === 'number' && typeof wristAboveNoseRightNorm === 'number'
+      ? (wristAboveNoseLeftNorm + wristAboveNoseRightNorm) / 2
+      : wristAboveNoseLeftNorm ?? wristAboveNoseRightNorm;
+
+  const wristAboveEarLeftNorm =
+    le && lw && ls && lh ? overheadJointAboveHeadRefNorm(ls, lh, le, lw) : null;
+  const wristAboveEarRightNorm =
+    re && rw && rs && rh ? overheadJointAboveHeadRefNorm(rs, rh, re, rw) : null;
+  const wristAboveEarAvgNorm =
+    typeof wristAboveEarLeftNorm === 'number' && typeof wristAboveEarRightNorm === 'number'
+      ? (wristAboveEarLeftNorm + wristAboveEarRightNorm) / 2
+      : wristAboveEarLeftNorm ?? wristAboveEarRightNorm;
+
+  const elbowAboveEarLeftNorm =
+    le && lelb && ls && lh ? overheadJointAboveHeadRefNorm(ls, lh, le, lelb) : null;
+  const elbowAboveEarRightNorm =
+    re && relb && rs && rh ? overheadJointAboveHeadRefNorm(rs, rh, re, relb) : null;
+  const elbowAboveEarAvgNorm =
+    typeof elbowAboveEarLeftNorm === 'number' && typeof elbowAboveEarRightNorm === 'number'
+      ? (elbowAboveEarLeftNorm + elbowAboveEarRightNorm) / 2
+      : elbowAboveEarLeftNorm ?? elbowAboveEarRightNorm;
+
+  const headTopY = overheadHeadTopProxyY(joints);
+  let wristAboveHeadTopProxyAvgNorm: number | null = null;
+  if (headTopY !== null && Number.isFinite(headTopY)) {
+    const leftN =
+      ls && lh && lw
+        ? (headTopY - lw.y) /
+          Math.max(Math.abs(ls.y - lh.y), OVERHEAD_KINEMATIC_TORSO_SCALE_MIN)
+        : null;
+    const rightN =
+      rs && rh && rw
+        ? (headTopY - rw.y) /
+          Math.max(Math.abs(rs.y - rh.y), OVERHEAD_KINEMATIC_TORSO_SCALE_MIN)
+        : null;
+    wristAboveHeadTopProxyAvgNorm =
+      typeof leftN === 'number' && typeof rightN === 'number'
+        ? (leftN + rightN) / 2
+        : leftN ?? rightN ?? null;
+  }
+
+  return {
+    wristAboveNoseLeftNorm,
+    wristAboveNoseRightNorm,
+    wristAboveNoseAvgNorm,
+    wristAboveEarLeftNorm,
+    wristAboveEarRightNorm,
+    wristAboveEarAvgNorm,
+    elbowAboveEarLeftNorm,
+    elbowAboveEarRightNorm,
+    elbowAboveEarAvgNorm,
+    wristAboveHeadTopProxyAvgNorm,
+  };
+}
+
+function emptyOverheadHeadRelativeKinematics(): OverheadHeadRelativeDerived {
+  return {
+    wristAboveNoseLeftNorm: null,
+    wristAboveNoseRightNorm: null,
+    wristAboveNoseAvgNorm: null,
+    wristAboveEarLeftNorm: null,
+    wristAboveEarRightNorm: null,
+    wristAboveEarAvgNorm: null,
+    elbowAboveEarLeftNorm: null,
+    elbowAboveEarRightNorm: null,
+    elbowAboveEarAvgNorm: null,
+    wristAboveHeadTopProxyAvgNorm: null,
+  };
+}
+
 function buildDerivedMetrics(
   joints: Record<JointKey, PoseLandmark | null>,
   previousFrame: PoseFeaturesFrame | null,
@@ -739,6 +895,10 @@ function buildDerivedMetrics(
     stepId === 'overhead-reach'
       ? computeOverheadCandidateKinematics(joints)
       : emptyOverheadCandidateKinematics();
+  const overheadHeadRelative =
+    stepId === 'overhead-reach'
+      ? computeOverheadHeadRelativeKinematics(joints)
+      : emptyOverheadHeadRelativeKinematics();
 
   return {
     kneeAngleLeft,
@@ -755,6 +915,7 @@ function buildDerivedMetrics(
     armElevationAvg,
     armElevationGap,
     ...overheadKinematics,
+    ...overheadHeadRelative,
     elbowAngleLeft,
     elbowAngleRight,
     wristElbowAlignmentLeft,
@@ -830,6 +991,17 @@ function stabilizeDerivedSignals(frames: PoseFeaturesFrame[]): PoseFeaturesFrame
   let prevOhElbowL: number | null = null;
   let prevOhElbowR: number | null = null;
   let prevOhElbowAvg: number | null = null;
+  /** PR-OH-HEAD-RELATIVE-SIGNAL-04E */
+  let prevOhNoseL: number | null = null;
+  let prevOhNoseR: number | null = null;
+  let prevOhNoseAvg: number | null = null;
+  let prevOhEarL: number | null = null;
+  let prevOhEarR: number | null = null;
+  let prevOhEarAvg: number | null = null;
+  let prevOhElbowEarL: number | null = null;
+  let prevOhElbowEarR: number | null = null;
+  let prevOhElbowEarAvg: number | null = null;
+  let prevOhHeadTop: number | null = null;
 
   return frames.map((frame) => {
     const rawDepthIn = frame.derived.squatDepthProxy;
@@ -897,6 +1069,56 @@ function stabilizeDerivedSignals(frames: PoseFeaturesFrame[]): PoseFeaturesFrame
       prevOhElbowAvg,
       0.42
     );
+    const wristAboveNoseLeftNorm = smoothSignalValue(
+      frame.derived.wristAboveNoseLeftNorm,
+      prevOhNoseL,
+      0.42
+    );
+    const wristAboveNoseRightNorm = smoothSignalValue(
+      frame.derived.wristAboveNoseRightNorm,
+      prevOhNoseR,
+      0.42
+    );
+    const wristAboveNoseAvgNorm = smoothSignalValue(
+      frame.derived.wristAboveNoseAvgNorm,
+      prevOhNoseAvg,
+      0.42
+    );
+    const wristAboveEarLeftNorm = smoothSignalValue(
+      frame.derived.wristAboveEarLeftNorm,
+      prevOhEarL,
+      0.42
+    );
+    const wristAboveEarRightNorm = smoothSignalValue(
+      frame.derived.wristAboveEarRightNorm,
+      prevOhEarR,
+      0.42
+    );
+    const wristAboveEarAvgNorm = smoothSignalValue(
+      frame.derived.wristAboveEarAvgNorm,
+      prevOhEarAvg,
+      0.42
+    );
+    const elbowAboveEarLeftNorm = smoothSignalValue(
+      frame.derived.elbowAboveEarLeftNorm,
+      prevOhElbowEarL,
+      0.42
+    );
+    const elbowAboveEarRightNorm = smoothSignalValue(
+      frame.derived.elbowAboveEarRightNorm,
+      prevOhElbowEarR,
+      0.42
+    );
+    const elbowAboveEarAvgNorm = smoothSignalValue(
+      frame.derived.elbowAboveEarAvgNorm,
+      prevOhElbowEarAvg,
+      0.42
+    );
+    const wristAboveHeadTopProxyAvgNorm = smoothSignalValue(
+      frame.derived.wristAboveHeadTopProxyAvgNorm,
+      prevOhHeadTop,
+      0.42
+    );
 
     previousDepth = squatDepthProxy;
     previousArmElevation = armElevationAvg;
@@ -913,6 +1135,16 @@ function stabilizeDerivedSignals(frames: PoseFeaturesFrame[]): PoseFeaturesFrame
     prevOhElbowL = elbowAboveShoulderLeftNorm;
     prevOhElbowR = elbowAboveShoulderRightNorm;
     prevOhElbowAvg = elbowAboveShoulderAvgNorm;
+    prevOhNoseL = wristAboveNoseLeftNorm;
+    prevOhNoseR = wristAboveNoseRightNorm;
+    prevOhNoseAvg = wristAboveNoseAvgNorm;
+    prevOhEarL = wristAboveEarLeftNorm;
+    prevOhEarR = wristAboveEarRightNorm;
+    prevOhEarAvg = wristAboveEarAvgNorm;
+    prevOhElbowEarL = elbowAboveEarLeftNorm;
+    prevOhElbowEarR = elbowAboveEarRightNorm;
+    prevOhElbowEarAvg = elbowAboveEarAvgNorm;
+    prevOhHeadTop = wristAboveHeadTopProxyAvgNorm;
 
     return {
       ...frame,
@@ -932,6 +1164,16 @@ function stabilizeDerivedSignals(frames: PoseFeaturesFrame[]): PoseFeaturesFrame
         elbowAboveShoulderLeftNorm,
         elbowAboveShoulderRightNorm,
         elbowAboveShoulderAvgNorm,
+        wristAboveNoseLeftNorm,
+        wristAboveNoseRightNorm,
+        wristAboveNoseAvgNorm,
+        wristAboveEarLeftNorm,
+        wristAboveEarRightNorm,
+        wristAboveEarAvgNorm,
+        elbowAboveEarLeftNorm,
+        elbowAboveEarRightNorm,
+        elbowAboveEarAvgNorm,
+        wristAboveHeadTopProxyAvgNorm,
         trunkLeanDeg,
         kneeTrackingRatio,
       },
