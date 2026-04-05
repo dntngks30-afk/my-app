@@ -29,6 +29,15 @@ export interface PoseCaptureStats {
   averageLandmarkCount: number;
   averageVisibleLandmarkRatio: number;
   timestampDiscontinuityCount: number;
+  /**
+   * OBS: hook-level rejection tallies (overhead input-truth export).
+   * Optional so legacy/partial stats objects (e.g. idle placeholders) stay valid.
+   * Per-frame multi-reason drops may increment several counters for one droppedFrameCount.
+   */
+  landmarkOrAdaptorFailedFrameCount?: number;
+  hookRejectLowVisibilityFrameCount?: number;
+  hookRejectCoreJointsMissingFrameCount?: number;
+  hookRejectBodyBoxInvalidFrameCount?: number;
 }
 
 const EMPTY_STATS: PoseCaptureStats = {
@@ -41,6 +50,10 @@ const EMPTY_STATS: PoseCaptureStats = {
   averageLandmarkCount: 0,
   averageVisibleLandmarkRatio: 0,
   timestampDiscontinuityCount: 0,
+  landmarkOrAdaptorFailedFrameCount: 0,
+  hookRejectLowVisibilityFrameCount: 0,
+  hookRejectCoreJointsMissingFrameCount: 0,
+  hookRejectBodyBoxInvalidFrameCount: 0,
 };
 
 export function usePoseCapture() {
@@ -49,6 +62,10 @@ export function usePoseCapture() {
   const sampledFrameCountRef = useRef(0);
   const droppedFrameCountRef = useRef(0);
   const filteredLowQualityFrameCountRef = useRef(0);
+  const landmarkOrAdaptorFailedFrameCountRef = useRef(0);
+  const hookRejectLowVisibilityFrameCountRef = useRef(0);
+  const hookRejectCoreJointsMissingFrameCountRef = useRef(0);
+  const hookRejectBodyBoxInvalidFrameCountRef = useRef(0);
   const unstableFrameCountRef = useRef(0);
   const validFrameCountRef = useRef(0);
   const landmarkCountTotalRef = useRef(0);
@@ -80,6 +97,10 @@ export function usePoseCapture() {
       averageVisibleLandmarkRatio:
         validFrameCountRef.current > 0 ? visibleRatioTotalRef.current / validFrameCountRef.current : 0,
       timestampDiscontinuityCount: timestampDiscontinuityCountRef.current,
+      landmarkOrAdaptorFailedFrameCount: landmarkOrAdaptorFailedFrameCountRef.current,
+      hookRejectLowVisibilityFrameCount: hookRejectLowVisibilityFrameCountRef.current,
+      hookRejectCoreJointsMissingFrameCount: hookRejectCoreJointsMissingFrameCountRef.current,
+      hookRejectBodyBoxInvalidFrameCount: hookRejectBodyBoxInvalidFrameCountRef.current,
       };
 
       return JSON.stringify(prev) === JSON.stringify(nextStats) ? prev : nextStats;
@@ -99,6 +120,7 @@ export function usePoseCapture() {
     const adaptedFrame = toPoseLandmarks(frame);
     if (!adaptedFrame || !isValidPoseFrame(frame)) {
       droppedFrameCountRef.current += 1;
+      landmarkOrAdaptorFailedFrameCountRef.current += 1;
       syncStats();
       return;
     }
@@ -106,11 +128,14 @@ export function usePoseCapture() {
     const quality = getPoseFrameQuality(frame, lastAcceptedFrameRef.current);
     if (!quality.usable) {
       droppedFrameCountRef.current += 1;
+      for (const reason of quality.reasons) {
+        if (reason === 'low_visibility') hookRejectLowVisibilityFrameCountRef.current += 1;
+        if (reason === 'core_joints_missing') hookRejectCoreJointsMissingFrameCountRef.current += 1;
+        if (reason === 'body_box_invalid') hookRejectBodyBoxInvalidFrameCountRef.current += 1;
+        if (reason === 'unstable_frame') unstableFrameCountRef.current += 1;
+      }
       if (quality.reasons.some((reason) => reason === 'low_visibility' || reason === 'core_joints_missing' || reason === 'body_box_invalid')) {
         filteredLowQualityFrameCountRef.current += 1;
-      }
-      if (quality.reasons.includes('unstable_frame')) {
-        unstableFrameCountRef.current += 1;
       }
       syncStats();
       return;
@@ -136,6 +161,10 @@ export function usePoseCapture() {
       sampledFrameCountRef.current = 0;
       droppedFrameCountRef.current = 0;
       filteredLowQualityFrameCountRef.current = 0;
+      landmarkOrAdaptorFailedFrameCountRef.current = 0;
+      hookRejectLowVisibilityFrameCountRef.current = 0;
+      hookRejectCoreJointsMissingFrameCountRef.current = 0;
+      hookRejectBodyBoxInvalidFrameCountRef.current = 0;
       unstableFrameCountRef.current = 0;
       validFrameCountRef.current = 0;
       landmarkCountTotalRef.current = 0;

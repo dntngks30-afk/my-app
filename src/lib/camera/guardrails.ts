@@ -96,7 +96,7 @@ export interface OverheadInputTruthMap {
   layer2_hookAcceptance: {
     hookAcceptedFrameCount: number;
     droppedFrameCount: number;
-    /** use-pose-capture 경로 기반 건수만(저수준 분리 불가 시 병합 키 사용) */
+    /** use-pose-capture 훅 경로 기반 compact count-only 분해 */
     poseRejectionBreakdown: Record<string, number>;
   };
   layer3_featureValidity: {
@@ -489,16 +489,12 @@ function buildOverheadInputTruthMap(args: {
     }
   }
 
-  /** 훅: 품질 게이트 이전 탈락(랜드마크<33·어댑터 실패 등) ≈ dropped − merged 품질 필터 카운트 */
-  const landmarkCountOrAdaptorDrop = Math.max(
-    0,
-    stats.droppedFrameCount - stats.filteredLowQualityFrameCount
-  );
-
   const poseRejectionBreakdown: Record<string, number> = {
-    landmark_count_or_adaptor: landmarkCountOrAdaptorDrop,
-    low_visibility_core_body_box_merged: stats.filteredLowQualityFrameCount,
-    unstable_flagged: stats.unstableFrameCount,
+    landmark_or_adaptor_failed: stats.landmarkOrAdaptorFailedFrameCount ?? 0,
+    low_visibility: stats.hookRejectLowVisibilityFrameCount ?? 0,
+    core_joints_missing: stats.hookRejectCoreJointsMissingFrameCount ?? 0,
+    body_box_invalid: stats.hookRejectBodyBoxInvalidFrameCount ?? 0,
+    unstable_frame_flagged: stats.unstableFrameCount,
   };
 
   return {
