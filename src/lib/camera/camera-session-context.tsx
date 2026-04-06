@@ -13,6 +13,10 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import {
+  applySafeVideoTrackConstraints,
+  getPreferredUserFacingCameraConstraints,
+} from '@/lib/camera/ios-camera-safe';
 
 export type CameraSessionStatus =
   | 'idle'
@@ -29,12 +33,6 @@ export interface CameraSessionValue {
 }
 
 const CameraSessionContext = createContext<CameraSessionValue | null>(null);
-
-const VIDEO_CONSTRAINTS: MediaTrackConstraints = {
-  facingMode: 'user',
-  width: { ideal: 640 },
-  height: { ideal: 480 },
-};
 
 /** dev-only: getUserMedia 호출 횟수 */
 let gumCallCount = 0;
@@ -77,8 +75,15 @@ export function CameraSessionProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     navigator.mediaDevices
-      .getUserMedia({ video: VIDEO_CONSTRAINTS, audio: false })
-      .then((s) => {
+      .getUserMedia({
+        video: getPreferredUserFacingCameraConstraints(),
+        audio: false,
+      })
+      .then(async (s) => {
+        const videoTrack = s.getVideoTracks()[0];
+        if (videoTrack) {
+          await applySafeVideoTrackConstraints(videoTrack);
+        }
         if (process.env.NODE_ENV !== 'production') {
           gumCallCount += 1;
           console.info('[CameraSession] getUserMedia success', {

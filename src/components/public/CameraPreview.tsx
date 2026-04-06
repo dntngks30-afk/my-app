@@ -10,6 +10,10 @@ import {
   useCameraSession,
   getCameraSessionObservability,
 } from '@/lib/camera/camera-session-context';
+import {
+  applySafeVideoTrackConstraints,
+  getPreferredUserFacingCameraConstraints,
+} from '@/lib/camera/ios-camera-safe';
 import type { PoseFrame } from '@/lib/motion/pose-types';
 import type { CameraGuideTone } from '@/lib/camera/auto-progression';
 import {
@@ -403,12 +407,16 @@ export function CameraPreview({
       setErrorMessage(null);
       try {
         const s = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          video: getPreferredUserFacingCameraConstraints(),
           audio: false,
         });
         if (!mounted) {
           s.getTracks().forEach((t) => t.stop());
           return;
+        }
+        const videoTrack = s.getVideoTracks()[0];
+        if (videoTrack) {
+          await applySafeVideoTrackConstraints(videoTrack);
         }
         streamRef.current = s;
         setStream(s);
