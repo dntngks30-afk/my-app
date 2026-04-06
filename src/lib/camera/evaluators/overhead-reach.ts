@@ -551,6 +551,59 @@ export function evaluateOverheadReachFromPoseFrames(
   const armRangeAvgDeg =
     armElevationAvgValues.length > 0 ? mean(armElevationAvgValues) : 0;
 
+  // PR-SIMPLE-PASS-01: best-side elevation (max of left/right per frame)
+  const bestSideElevationValues = valid
+    .map((f) => {
+      const left = f.derived.armElevationLeft;
+      const right = f.derived.armElevationRight;
+      if (typeof left === 'number' && typeof right === 'number') return Math.max(left, right);
+      if (typeof left === 'number') return left;
+      if (typeof right === 'number') return right;
+      return null;
+    })
+    .filter((v): v is number => v !== null);
+  const bestSidePeakElevation =
+    bestSideElevationValues.length > 0 ? Math.max(...bestSideElevationValues) : 0;
+
+  // PR-SIMPLE-PASS-01: best-side zone frames (best-side >= 100°) for hold computation
+  const SIMPLE_PASS_DWELL_FLOOR_DEG = 100;
+  const bestSideZoneFrames = valid
+    .filter((f) => {
+      const left = f.derived.armElevationLeft;
+      const right = f.derived.armElevationRight;
+      const best =
+        typeof left === 'number' && typeof right === 'number'
+          ? Math.max(left, right)
+          : typeof left === 'number'
+            ? left
+            : typeof right === 'number'
+              ? right
+              : null;
+      return best !== null && best >= SIMPLE_PASS_DWELL_FLOOR_DEG;
+    })
+    .map((f) => ({ timestampMs: f.timestampMs }));
+
+  // PR-SIMPLE-PASS-01: best continuous run in best-side zone (gap tolerance 200ms)
+  const SIMPLE_PASS_ZONE_GAP_TOLERANCE_MS = 200;
+  let simplePassHoldMs = 0;
+  if (bestSideZoneFrames.length >= 2) {
+    let runStartMs = bestSideZoneFrames[0]!.timestampMs;
+    let runEndMs = bestSideZoneFrames[0]!.timestampMs;
+    for (let i = 1; i < bestSideZoneFrames.length; i++) {
+      const gap = bestSideZoneFrames[i]!.timestampMs - bestSideZoneFrames[i - 1]!.timestampMs;
+      if (gap <= SIMPLE_PASS_ZONE_GAP_TOLERANCE_MS) {
+        runEndMs = bestSideZoneFrames[i]!.timestampMs;
+      } else {
+        const runMs = runEndMs - runStartMs;
+        if (runMs > simplePassHoldMs) simplePassHoldMs = runMs;
+        runStartMs = bestSideZoneFrames[i]!.timestampMs;
+        runEndMs = bestSideZoneFrames[i]!.timestampMs;
+      }
+    }
+    const lastRunMs = runEndMs - runStartMs;
+    if (lastRunMs > simplePassHoldMs) simplePassHoldMs = lastRunMs;
+  }
+
   /**
    * PR-CAM-11A: top-zone 프레임 수집 (e >= floor 인 valid 프레임만).
    * fallback top-hold 계산에 사용; strict dwell 계산과 무관.
@@ -650,6 +703,8 @@ export function evaluateOverheadReachFromPoseFrames(
     fallbackTopHold,
     meaningfulRiseSatisfied: riseTruth.meaningfulRiseSatisfied,
     riseStartedAtMs: riseTruth.riseStartedAtMs,
+    bestSideElevationDeg: bestSidePeakElevation,
+    simplePassHoldMs,
   });
 
   // PR-CAM-11B: 진행 전용 easy 홀드 (해석·overheadPlanning 은 strict dwell 기준 유지)
@@ -684,9 +739,12 @@ export function evaluateOverheadReachFromPoseFrames(
     maxAsymmetryDeg,
   });
 
+  // PR-SIMPLE-PASS-01: Primary completion truth = new simple rise-hold owner.
+  // overheadCompletion.completionSatisfied IS the single completion gate.
+  // Old strict/easy/low-rom/humane paths are kept for debug/compat only.
   const strictMotionCompletionSatisfied = overheadCompletion.completionSatisfied;
-  const progressionCompletionSatisfied =
-    strictMotionCompletionSatisfied ||
+  // Legacy aggregate — debug/compat only, no longer owns completionSatisfied
+  const progressionCompletionSatisfied_debugOnly =
     easyProgression.easyCompletionSatisfied ||
     lowRomProgression.lowRomProgressionSatisfied ||
     humaneLowRomProgression.humaneLowRomProgressionSatisfied;
@@ -698,6 +756,7 @@ export function evaluateOverheadReachFromPoseFrames(
     | 'low_rom'
     | 'humane_low_rom'
     | 'not_confirmed';
+  // PR-SIMPLE-PASS-01: completion path is always 'strict' (new simple owner) or from completion state
   if (strictMotionCompletionSatisfied) {
     progressionCompletionPath =
       overheadCompletion.completionPath === 'fallback' ? 'fallback' : 'strict';
@@ -711,29 +770,26 @@ export function evaluateOverheadReachFromPoseFrames(
     progressionCompletionPath = 'not_confirmed';
   }
 
-  // PR-CAM-13/15/16: 진행 전용 blocked reason — raw 데이터 기반, 접근성 높은 경로 우선 결정.
+  // PR-CAM-13/15/16: 진행 전용 blocked reason — debug/compat only (단순 패스 소유자는 overheadCompletion)
   const progressionBlockedReason: string | null = (() => {
-    if (progressionCompletionSatisfied) return null;
+    if (strictMotionCompletionSatisfied) return null;
     // Level 1: raise 동작 자체가 없음
     if (raiseCount === 0) return 'easy_raise_incomplete';
     // Level 2: easy top zone(>= 126°) 미달
     if (easyTopZoneFrames.length === 0) {
       if (lowRomZoneFrames.length > 0) {
-        // low-ROM zone(>= 110°)에 진입 — low-ROM 차단 이유 우선 보고
         const lowRomBlocked = lowRomProgression.lowRomBlockedReason;
         if (lowRomBlocked === 'low_rom_hold_short') return 'low_rom_hold_short';
         if (lowRomBlocked === 'low_rom_frames_too_few') return 'low_rom_hold_short';
         if (lowRomBlocked === 'asymmetry_unacceptable') return 'asymmetry_unacceptable';
         if (lowRomBlocked != null) return 'easy_top_not_reached';
       } else if (humaneZoneFrames.length > 0) {
-        // PR-CAM-16: humane zone(>= 100°)에 진입 — humane 차단 이유 보고
         const humaneBlocked = humaneLowRomProgression.humaneLowRomBlockedReason;
         if (humaneBlocked === 'humane_hold_short') return 'humane_hold_short';
         if (humaneBlocked === 'humane_frames_too_few') return 'humane_hold_short';
         if (humaneBlocked === 'asymmetry_unacceptable') return 'asymmetry_unacceptable';
         if (humaneBlocked != null) return 'easy_top_not_reached';
       } else {
-        // 100° 미만 — 높이 자체가 부족
         return 'easy_top_not_reached';
       }
     }
@@ -742,13 +798,13 @@ export function evaluateOverheadReachFromPoseFrames(
     if (easyBlocked === 'easy_hold_short') return 'easy_hold_short';
     if (easyBlocked === 'asymmetry_unacceptable') return 'asymmetry_unacceptable';
     if (easyBlocked != null) return 'easy_top_not_reached';
-    // strict 머신 차단 사유로 fallback
     return overheadCompletion.completionBlockedReason;
   })();
 
-  // PR-CAM-13/15/16: 진행 전용 phase (접근성 높은 경로 우선, strict top-unstable fallback)
+  // PR-CAM-13/15/16: typed progression phase (debug/compat — 접근성 높은 경로 우선)
+  // PR-SIMPLE-PASS-01: 'completed' is driven by strictMotionCompletionSatisfied (new single truth)
   const progressionPhase: OverheadProgressionState['progressionPhase'] = (() => {
-    if (progressionCompletionSatisfied) return 'completed';
+    if (strictMotionCompletionSatisfied) return 'completed';
     if (raiseCount === 0) return 'idle';
     // PR-CAM-15: low-ROM zone 진입 (easy zone 미달) — low-ROM 단계 우선 보고
     if (easyTopZoneFrames.length === 0 && lowRomZoneFrames.length > 0) {
@@ -789,8 +845,9 @@ export function evaluateOverheadReachFromPoseFrames(
   })();
 
   // PR-CAM-13/15/16: typed progression state (squat-style 소유권 분리 + humane_low_rom 추가)
+  // PR-SIMPLE-PASS-01: progressionSatisfied = overheadCompletion.completionSatisfied (single truth)
   const overheadProgressionState: OverheadProgressionState = {
-    progressionSatisfied: progressionCompletionSatisfied,
+    progressionSatisfied: strictMotionCompletionSatisfied,
     progressionPath: progressionCompletionPath === 'not_confirmed' ? 'none' : progressionCompletionPath,
     progressionBlockedReason,
     progressionPhase,
@@ -815,14 +872,13 @@ export function evaluateOverheadReachFromPoseFrames(
     strictCompletionBlockedReason: overheadCompletion.completionBlockedReason,
     strictCompletionMachinePhase: overheadCompletion.completionMachinePhase,
     /**
-     * PR-CAM-17: easy/low_rom/humane 중 하나만으로 progression이 충족됐고
-     * strict 경로는 실패했을 때 true — isFinalPassLatched가 완화 임계(0.58)를 쓰도록 신호.
+     * PR-SIMPLE-PASS-01: always false — single owner, no easy threshold variation.
+     * Confidence is quality-only for overhead. Not a pass gate.
      */
-    requiresEasyFinalPassThreshold:
-      progressionCompletionSatisfied && !strictMotionCompletionSatisfied,
+    requiresEasyFinalPassThreshold: false,
   };
 
-  if (!progressionCompletionSatisfied) {
+  if (!strictMotionCompletionSatisfied) {
     if (overheadCompletion.completionBlockedReason === 'hold_short') {
       completionHints.push('top_hold_short');
     } else {
@@ -974,8 +1030,8 @@ export function evaluateOverheadReachFromPoseFrames(
         cam03OverheadPlanningLevel: overheadPlanning.level,
         /** PR-COMP-04: strict 모션 completion (strict+fallback) — 해석·플래닝 기준 */
         strictMotionCompletionSatisfied: strictMotionCompletionSatisfied ? 1 : 0,
-        /** PR-CAM-11B: 진행 게이트 truth = strict | easy */
-        completionSatisfied: progressionCompletionSatisfied,
+        /** PR-SIMPLE-PASS-01: primary completion truth = new simple rise-hold owner */
+        completionSatisfied: strictMotionCompletionSatisfied,
         completionBlockedReason: overheadCompletion.completionBlockedReason,
         completionMachinePhase: overheadCompletion.completionMachinePhase,
         completionPassReason: overheadCompletion.completionPassReason,
@@ -983,7 +1039,7 @@ export function evaluateOverheadReachFromPoseFrames(
         stableTopEntry: overheadCompletion.stableTopEntry ? 1 : 0,
         holdStarted: overheadCompletion.holdStarted ? 1 : 0,
         holdSatisfied: overheadCompletion.holdSatisfied ? 1 : 0,
-        passLatchedCandidate: progressionCompletionSatisfied ? 1 : 0,
+        passLatchedCandidate: strictMotionCompletionSatisfied ? 1 : 0,
         overheadTopDetected: overheadCompletion.topDetected ? 1 : 0,
         /** PR-CAM-11B: 진행 경로 (strict|fallback|easy|not_confirmed) */
         completionPath: progressionCompletionPath,
@@ -1030,6 +1086,10 @@ export function evaluateOverheadReachFromPoseFrames(
         riseBaselineArmDeg: riseTruth.baselineArmDeg,
         risePeakArmElevation: riseTruth.peakArmElevation,
         riseBlockedReason: riseTruth.riseBlockedReason,
+        /** PR-SIMPLE-PASS-01: best-side elevation and hold for simple completion owner */
+        bestSidePeakElevation,
+        simplePassHoldMs,
+        bestSideZoneFrameCount: bestSideZoneFrames.length,
         /** PR-OH-KINEMATIC-SIGNAL-04B: candidate kinematic session aggregates (vs legacy armElevationAvg peak above). */
         ohKinematicPeakShoulderWristElevationAvgDeg,
         ohKinematicMeanShoulderWristElevationAvgDeg,

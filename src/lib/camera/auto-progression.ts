@@ -410,34 +410,14 @@ export function isFinalPassLatched(
   >
 ): boolean {
   if (stepId === 'overhead-reach') {
-    const hm = gate.evaluatorResult.debug?.highlightedMetrics;
-    const ops = gate.evaluatorResult.debug?.overheadProgressionState;
-    const strictMotion =
-      hm?.strictMotionCompletionSatisfied === true || hm?.strictMotionCompletionSatisfied === 1;
-    const easySat =
-      hm?.easyCompletionSatisfied === true || hm?.easyCompletionSatisfied === 1;
-    /* PR-CAM-17: low_rom·humane_low_rom 경로도 easy-only 임계 적용.
-     * 이전 구현은 easySat만 확인해 low_rom/humane pass 시 0.72 엄격 임계가 적용됐음.
-     * 이로 인해 confidence 0.58~0.71 구간의 humane/low_rom pass가 isFinalPassLatched=false → 
-     * effectivePassLatched=false가 되어 성공 음성 누락·애매 재시도 오발화가 발생. */
-    const lowRomSat =
-      hm?.lowRomProgressionSatisfied === true || hm?.lowRomProgressionSatisfied === 1;
-    const humaneLowRomSat =
-      hm?.humaneLowRomProgressionSatisfied === true || hm?.humaneLowRomProgressionSatisfied === 1;
-    /** ops.requiresEasyFinalPassThreshold(PR-CAM-17 신규 필드) 또는 개별 필드 조합으로 판단 */
-    const easyOnly =
-      ops?.requiresEasyFinalPassThreshold === true ||
-      Boolean((easySat || lowRomSat || humaneLowRomSat) && !strictMotion);
-    const confTh = easyOnly
-      ? OVERHEAD_EASY_PASS_CONFIDENCE
-      : BASIC_PASS_CONFIDENCE_THRESHOLD['overhead-reach'];
-    const framesReq = easyOnly ? OVERHEAD_EASY_LATCH_STABLE_FRAMES : REQUIRED_STABLE_FRAMES;
+    // PR-SIMPLE-PASS-01: confidence is quality-only — NOT a pass gate for overhead.
+    // Pass requires: completion + captureQuality valid + passConfirmation stable frames.
+    // passConfirmationFrameCount >= REQUIRED_STABLE_FRAMES blocks single-frame spikes.
     return (
       gate.completionSatisfied === true &&
       gate.guardrail.captureQuality !== 'invalid' &&
-      gate.confidence >= confTh &&
       gate.passConfirmationSatisfied === true &&
-      gate.passConfirmationFrameCount >= framesReq
+      gate.passConfirmationFrameCount >= REQUIRED_STABLE_FRAMES
     );
   }
 
@@ -1669,21 +1649,12 @@ function getFailureReasons(
     reasons.add(guardrail.captureQuality === 'low' ? 'capture_quality_low' : 'capture_quality_invalid');
   }
   const ohm = stepId === 'overhead-reach' ? result.debug?.highlightedMetrics : undefined;
-  const overheadEasyOnly =
-    stepId === 'overhead-reach' &&
-    (ohm?.easyCompletionSatisfied === true ||
-      ohm?.easyCompletionSatisfied === 1 ||
-      // PR-CAM-15: low-ROM path
-      ohm?.lowRomProgressionSatisfied === true ||
-      ohm?.lowRomProgressionSatisfied === 1 ||
-      // PR-CAM-16: humane low-ROM path
-      ohm?.humaneLowRomProgressionSatisfied === true ||
-      ohm?.humaneLowRomProgressionSatisfied === 1) &&
-    !(ohm?.strictMotionCompletionSatisfied === true || ohm?.strictMotionCompletionSatisfied === 1);
+  // PR-SIMPLE-PASS-01: confidence is quality-only for overhead — not added to failure reasons
+  const overheadEasyOnly = false; // kept for naming compat, unused for overhead confidence
   const confFloor = overheadEasyOnly
     ? OVERHEAD_EASY_PASS_CONFIDENCE
     : BASIC_PASS_CONFIDENCE_THRESHOLD[stepId];
-  if (confidence < confFloor) {
+  if (stepId !== 'overhead-reach' && confidence < confFloor) {
     reasons.add('confidence_too_low');
   }
   if (guardrail.flags.includes('left_side_missing')) {
@@ -1804,8 +1775,9 @@ export function evaluateExerciseAutoProgress(
   const passConfirmation = getPassConfirmation(
     stepId,
     landmarks,
-    overheadEasyOnly
-      ? OVERHEAD_EASY_LATCH_STABLE_FRAMES
+    // PR-SIMPLE-PASS-01: overhead always uses REQUIRED_STABLE_FRAMES (3) — no easy path variation
+    stepId === 'overhead-reach'
+      ? REQUIRED_STABLE_FRAMES
       : squatEasyOnly
         ? SQUAT_EASY_LATCH_STABLE_FRAMES
         : REQUIRED_STABLE_FRAMES
@@ -1828,10 +1800,10 @@ export function evaluateExerciseAutoProgress(
     stepId === 'squat' ? getSquatQualitySignals(evaluatorResult, confidence) : null;
   const severeFail = isSevereInvalid(guardrail) && stats.captureDurationMs >= 4500;
   const autoAdvanceDelayMs = AUTO_ADVANCE_DELAY_MS[stepId];
-  /* PR-CAM-17: easy/low_rom/humane 경로는 완화 임계(0.58) 사용 — 이전 구현은 엄격 0.72를 써서
-   * 2200ms 초과 세션에서 completionSatisfied=false 구간에 조기 retry를 유발할 수 있었음. */
+  /* PR-CAM-17: easy/low_rom/humane 경로는 완화 임계(0.58) 사용.
+   * PR-SIMPLE-PASS-01: overhead는 confidence 기반 retry 없음 — quality-only. */
   const lowConfidenceRetry =
-    guardrail.retryRecommended && confidence < passThresholdEffective;
+    stepId !== 'overhead-reach' && guardrail.retryRecommended && confidence < passThresholdEffective;
   const hardBlockerReasons = getHardBlockerReasons(stepId, guardrail);
   const noNextAllowed = false;
   const failureReasons = getFailureReasons(
@@ -2091,31 +2063,33 @@ export function evaluateExerciseAutoProgress(
     };
   }
 
-  /** PR-CAM-11B/15/16: easy/low-ROM/humane 진행 통과 시 reasons에 남은 hold_too_short/rep_incomplete 로 pass를 막지 않음 */
+  /** PR-CAM-11B/15/16: easy/low-ROM/humane 진행 통과 시 reasons에 남은 hold_too_short/rep_incomplete 로 pass를 막지 않음
+   * PR-SIMPLE-PASS-01: completionSatisfied(새 단일 오너)가 true이면 guardrail이 'complete' 반환 → 플래그 불생성 */
   const hasHoldOrRepReason = hasAnyReason(reasons, ['rep_incomplete', 'hold_too_short']);
-  const overheadEasySat =
+  const overheadSimpleSat =
     stepId === 'overhead-reach' &&
-    (evaluatorResult.debug?.highlightedMetrics?.easyCompletionSatisfied === true ||
-      evaluatorResult.debug?.highlightedMetrics?.easyCompletionSatisfied === 1 ||
-      // PR-CAM-15: low-ROM 통과 시도 동일하게 hold/rep 차단 해제
-      evaluatorResult.debug?.highlightedMetrics?.lowRomProgressionSatisfied === true ||
-      evaluatorResult.debug?.highlightedMetrics?.lowRomProgressionSatisfied === 1 ||
-      // PR-CAM-16: humane low-ROM 통과 시도 동일하게 hold/rep 차단 해제
-      evaluatorResult.debug?.highlightedMetrics?.humaneLowRomProgressionSatisfied === true ||
-      evaluatorResult.debug?.highlightedMetrics?.humaneLowRomProgressionSatisfied === 1);
-  const overheadRepHoldBlocks = overheadEasySat ? false : hasHoldOrRepReason;
+    (evaluatorResult.debug?.highlightedMetrics?.completionSatisfied === true ||
+      evaluatorResult.debug?.highlightedMetrics?.completionSatisfied === 1);
+  const overheadRepHoldBlocks = overheadSimpleSat ? false : hasHoldOrRepReason;
 
   const progressionPassed =
     stepId === 'squat'
       ? squatOwnerTruth?.completionOwnerPassed === true &&
         squatUiGate?.uiProgressionAllowed === true
-      : completionSatisfied &&
-        guardrail.captureQuality !== 'invalid' &&
-        confidence >= passThresholdEffective &&
-        effectivePassConfirmation &&
-        squatIntegrityBlockForPass == null &&
-        !hasAnyReason(reasons, hardBlockerReasons) &&
-        !overheadRepHoldBlocks;
+      : stepId === 'overhead-reach'
+        // PR-SIMPLE-PASS-01: confidence is quality-only for overhead — NOT a pass gate
+        ? completionSatisfied &&
+          guardrail.captureQuality !== 'invalid' &&
+          effectivePassConfirmation &&
+          !hasAnyReason(reasons, hardBlockerReasons) &&
+          !overheadRepHoldBlocks
+        : completionSatisfied &&
+          guardrail.captureQuality !== 'invalid' &&
+          confidence >= passThresholdEffective &&
+          effectivePassConfirmation &&
+          squatIntegrityBlockForPass == null &&
+          !hasAnyReason(reasons, hardBlockerReasons) &&
+          !overheadRepHoldBlocks;
 
   /* PR-CAM-17: final pass 체인 가시성 — 어느 단계에서 pass가 막히는지 즉시 확인 가능. */
   const finalPassBlockedReason: string | null = (() => {
@@ -2130,10 +2104,12 @@ export function evaluateExerciseAutoProgress(
     }
     if (!completionSatisfied) return 'completion_not_satisfied';
     if (guardrail.captureQuality === 'invalid') return 'capture_quality_invalid';
-    if (confidence < passThresholdEffective)
+    // PR-SIMPLE-PASS-01: confidence is quality-only for overhead — NOT a pass gate
+    if (stepId !== 'overhead-reach' && confidence < passThresholdEffective)
       return `confidence_too_low:${confidence.toFixed(2)}<${passThresholdEffective.toFixed(2)}`;
     if (!effectivePassConfirmation) return 'pass_confirmation_not_ready';
-    if (squatIntegrityBlockForPass != null) return squatIntegrityBlockForPass;
+    if (stepId !== 'overhead-reach' && squatIntegrityBlockForPass != null)
+      return squatIntegrityBlockForPass;
     const blocker = hardBlockerReasons.find((r) => reasons.includes(r));
     if (blocker) return `hard_blocker:${blocker}`;
     if (overheadRepHoldBlocks) return 'overhead_rep_hold_blocked';

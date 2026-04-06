@@ -62,16 +62,23 @@ import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /**
- * Minimum arm elevation gain above baseline required for a "meaningful rise".
- * Must be ≥ this many degrees above starting position.
+ * Minimum BEST-SIDE arm elevation gain above baseline required for a "meaningful rise".
+ * Best-side = max(armElevationLeft, armElevationRight) per frame.
  *
- * Value aligned with OVERHEAD_LOW_ROM_REQUIRED_DELTA_FROM_BASELINE_DEG = 20
- * so that the rise gate is consistent with the low-ROM progression path.
+ * PR-SIMPLE-PASS-01: Lowered from 20° to 15° — bilateral-average asymmetry no longer
+ * penalises single-arm raisers. 15° is still safely above measurement noise.
  *
- * Do NOT set this below 15° — micro-sways and arm noise can produce that much drift.
- * Do NOT set this above 30° — would block real short-ROM raises.
+ * Do NOT set this below 10° — sub-threshold noise and arm swings can produce that drift.
+ * Do NOT set this above 20° — would block valid short-ROM raises.
  */
-export const OVERHEAD_RISE_MIN_DELTA_DEG = 20;
+export const OVERHEAD_RISE_MIN_DELTA_DEG = 15;
+
+/**
+ * PR-SIMPLE-PASS-01: Minimum usable best-side absolute elevation for the simple pass owner.
+ * Best-side peak must reach this value for the attempt to be considered a genuine raise.
+ * Blocks shrugs (≈60-90°), half-raises and lying noise.
+ */
+export const OVERHEAD_RISE_ABSOLUTE_FLOOR_DEG = 100;
 
 /**
  * Threshold above baseline to detect rise start.
@@ -87,16 +94,40 @@ const RISE_START_THRESHOLD_DEG = 5;
  */
 export const OVERHEAD_RISE_BASELINE_WINDOW = 16;
 
+// ── Best-side helper ───────────────────────────────────────────────────────────
+
+/**
+ * PR-SIMPLE-PASS-01: Return the best-side arm elevation for a single frame.
+ * Best-side = max(armElevationLeft, armElevationRight).
+ * Falls back to whichever side is available if only one is present.
+ * Returns null if neither side has a valid reading.
+ *
+ * Using best-side instead of bilateral average means a single-arm raiser is not
+ * penalised by the opposite arm that may not rise as high.
+ */
+function getBestSideElevation(
+  frame: Pick<PoseFeaturesFrame, 'derived'>
+): number | null {
+  const left = frame.derived.armElevationLeft;
+  const right = frame.derived.armElevationRight;
+  if (typeof left === 'number' && typeof right === 'number') return Math.max(left, right);
+  if (typeof left === 'number') return left;
+  if (typeof right === 'number') return right;
+  return null;
+}
+
 // ── Baseline helper ────────────────────────────────────────────────────────────
 
 /**
- * PR-03A: Compute the arm elevation baseline for rise-truth detection using
- * the lower-envelope (minimum) of the first OVERHEAD_RISE_BASELINE_WINDOW valid frames.
+ * PR-03A + PR-SIMPLE-PASS-01: Compute the arm elevation baseline for rise-truth
+ * detection using the lower-envelope (minimum) of the first
+ * OVERHEAD_RISE_BASELINE_WINDOW valid frames, evaluated on BEST-SIDE elevation.
  *
  * Rationale:
  * - Mean-of-6 can be inflated if the user's arms are partially raised during early frames
  * - Minimum captures the true lowest reference position seen in the window
  * - Even one low-arm frame at rest anchors the baseline honestly
+ * - Best-side (max of left/right) prevents penalising asymmetric raisers
  *
  * Returns 0 if no valid elevation values are found (safe fallback).
  *
@@ -107,8 +138,8 @@ export function computeOverheadRiseBaselineArmDeg(
 ): number {
   const windowFrames = validFrames.slice(0, OVERHEAD_RISE_BASELINE_WINDOW);
   const values = windowFrames
-    .map((f) => f.derived.armElevationAvg)
-    .filter((v): v is number => typeof v === 'number');
+    .map((f) => getBestSideElevation(f))
+    .filter((v): v is number => v !== null);
   return values.length > 0 ? Math.min(...values) : 0;
 }
 
@@ -174,11 +205,15 @@ export interface OverheadRiseTruthResult {
 /**
  * Compute overhead rise truth from accumulated valid frames.
  *
+ * PR-SIMPLE-PASS-01: Uses BEST-SIDE elevation (max of left/right) instead of
+ * bilateral average. This removes the penalty for asymmetric raisers and aligns
+ * with the product law that a genuine single-arm raise should satisfy the rise gate.
+ *
  * Algorithm:
- * 1. Find peak arm elevation across all valid frames.
+ * 1. Find peak BEST-SIDE arm elevation across all valid frames.
  * 2. Compute elevation delta = peak - baseline.
  * 3. If delta >= OVERHEAD_RISE_MIN_DELTA_DEG, rise is meaningful.
- * 4. Find first frame where elevation crossed baseline + RISE_START_THRESHOLD_DEG
+ * 4. Find first frame where best-side elevation crossed baseline + RISE_START_THRESHOLD_DEG
  *    to provide riseStartedAtMs timestamp.
  *
  * This is called on every evaluator update (frame accumulation). Result will
@@ -189,10 +224,10 @@ export function computeOverheadRiseTruth(
 ): OverheadRiseTruthResult {
   const { validFrames, baselineArmDeg } = input;
 
-  // Find peak arm elevation across all valid frames
+  // Find peak BEST-SIDE arm elevation across all valid frames
   let peakArmElevation = 0;
   for (const f of validFrames) {
-    const e = f.derived.armElevationAvg;
+    const e = getBestSideElevation(f);
     if (typeof e === 'number' && e > peakArmElevation) {
       peakArmElevation = e;
     }
@@ -201,11 +236,11 @@ export function computeOverheadRiseTruth(
   const elevationDelta = peakArmElevation - baselineArmDeg;
   const meaningfulRiseSatisfied = elevationDelta >= OVERHEAD_RISE_MIN_DELTA_DEG;
 
-  // Find first frame where rise started (first crossing of baseline + threshold)
+  // Find first frame where rise started (first best-side crossing of baseline + threshold)
   const riseStartThreshold = baselineArmDeg + RISE_START_THRESHOLD_DEG;
   let riseStartedAtMs: number | undefined;
   for (const f of validFrames) {
-    const e = f.derived.armElevationAvg;
+    const e = getBestSideElevation(f);
     if (typeof e === 'number' && e > riseStartThreshold) {
       riseStartedAtMs = f.timestampMs;
       break;

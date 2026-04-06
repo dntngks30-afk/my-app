@@ -8,14 +8,6 @@ import {
   OVERHEAD_ABSOLUTE_TOP_FLOOR_DEG,
 } from './evaluators/overhead-reach';
 import {
-  OVERHEAD_EASY_ELEVATION_FLOOR_DEG,
-  OVERHEAD_EASY_MIN_PEAK_FRAMES,
-} from './overhead/overhead-constants';
-import {
-  OVERHEAD_LOW_ROM_ABSOLUTE_FLOOR_DEG,
-  OVERHEAD_HUMANE_ABSOLUTE_FLOOR_DEG,
-} from './overhead/overhead-easy-progression';
-import {
   buildOverheadReachFeatureFramesPreDerivedStabilize,
   buildPoseFeaturesFrames,
   getSmoothedPoseLandmarksSequence,
@@ -138,6 +130,15 @@ export interface OverheadInputTruthMap {
      * Non-zero value indicates the overhead extended-validity path was exercised.
      */
     overheadExtendedAnalyzableCount: number;
+    /**
+     * PR-OH-INPUT-READINESS-HARDEN-09A: count of 'missing_keypoints' frames that ALSO failed
+     * the overhead arm triplet check at 0.20 visibility threshold.
+     * Derived as: frameValidity_missing_keypoints - overheadExtendedAnalyzableCount.
+     * Non-zero means even the relaxed arm-triplet path could not admit most frames —
+     * the arm-core joints were below 0.20 visibility, indicating a genuine input/setup failure.
+     * Diagnostic only — not a gate.
+     */
+    armTripletCheckFailCount: number;
   };
   layer4_readinessMotion: {
     guardrailValidFrameCount: number;
@@ -145,6 +146,29 @@ export interface OverheadInputTruthMap {
     qualityWindowCriticalJointsAvailability: number;
     captureQuality: CaptureQuality;
     motionCompletenessStatus: CompletionStatus;
+    /**
+     * PR-OH-INPUT-READINESS-HARDEN-09A: true when guardrailValidFrameCount >= MIN_VALID_FRAMES.
+     * Explicit boundary marker separating "valid overhead input established" from
+     * "raw sampling started." Motion evaluation is only meaningful when this is true.
+     * When false, the attempt failed before entering motion-truth territory.
+     * Diagnostic only — not a gate.
+     */
+    validInputEstablished: boolean;
+    /**
+     * PR-OH-INPUT-READINESS-HARDEN-09A: pre-motion input layer outcome classification.
+     * Disambiguates input/setup failures from motion-truth failures in the exported trace.
+     *
+     * 'input_never_established'        — guardrailValidFrameCount < MIN_VALID_FRAMES;
+     *                                    motion evaluation is not meaningful for this attempt.
+     * 'input_established_motion_failed' — valid input reached, but motion was partial/insufficient.
+     * 'input_established_complete'      — valid input + motion completion satisfied.
+     *
+     * Diagnostic only — not a gate.
+     */
+    inputLayerOutcome:
+      | 'input_never_established'
+      | 'input_established_motion_failed'
+      | 'input_established_complete';
     /** attempt 스냅샷 시 camera-trace가 readinessSummary에서 병합 */
     readinessState?: string;
     readinessBlocker?: string | null;
@@ -436,92 +460,32 @@ function getMotionCompleteness(
   const OVERHEAD_HOLD_COMPLETE_MS = 1200;
   if (stepId === 'overhead-reach') {
     const hm = evaluatorResult?.debug?.highlightedMetrics;
-    const easySatisfied = hm?.easyCompletionSatisfied === true || hm?.easyCompletionSatisfied === 1;
-    const lowRomSatisfied =
-      hm?.lowRomProgressionSatisfied === true || hm?.lowRomProgressionSatisfied === 1;
-    const humaneLowRomSatisfied =
-      hm?.humaneLowRomProgressionSatisfied === true || hm?.humaneLowRomProgressionSatisfied === 1;
+
+    // PR-SIMPLE-PASS-01: Primary completion owner check first.
+    // If the evaluator's simple rise-hold owner says satisfied, return 'complete' immediately.
+    // This prevents old strict/easy/lowRom/humane flags from blocking the new single owner.
+    const simplePassSatisfied = hm?.completionSatisfied === true || hm?.completionSatisfied === 1;
 
     const armElevations = frames
       .map((frame) => frame.derived.armElevationAvg)
       .filter((value): value is number => typeof value === 'number');
     const raiseCount = frames.filter((frame) => frame.phaseHint === 'raise').length;
     const peakElevation = armElevations.length > 0 ? Math.max(...armElevations) : 0;
+
+    if (simplePassSatisfied) {
+      const raiseScoreMul = raiseCount === 0 ? 0.95 : 1.0;
+      return {
+        score: clamp(Math.min(peakElevation / 160, 0.75) * raiseScoreMul),
+        status: 'complete',
+        completePath: 'simple_pass',
+      };
+    }
+
+    // Fallback: strict top-zone check (for edge cases and signal coherence)
     const dwellResult = computeOverheadStableTopDwell(frames);
     const holdDurationMs = dwellResult.holdDurationMs;
     const peakCount = frames.filter((f) => f.phaseHint === 'peak').length;
-    const peakCountAtEasyFloor =
-      typeof hm?.peakCountAtEasyFloor === 'number' ? hm.peakCountAtEasyFloor : 0;
     const stableTopEntered = dwellResult.stableTopEnteredAtMs !== undefined;
-
-    /* PR-CAM-11B: evaluator easy 진행이 true면 긴 홀드·stableTop 미요구.
-     * PR-CAM-17: raiseCount === 0 체크를 soft guard로 전환 — 느린 팔 올리기에서
-     * phaseHint='raise' 감지가 실패해도 elev 조건이 충족되면 pass 허용.
-     * frames·peakElevation 하드 조건만 유지; raiseCount 0이면 점수 소폭 감점만 적용. */
-    if (easySatisfied) {
-      if (
-        frames.length < MIN_VALID_FRAMES ||
-        peakElevation < OVERHEAD_EASY_ELEVATION_FLOOR_DEG ||
-        peakCountAtEasyFloor < OVERHEAD_EASY_MIN_PEAK_FRAMES
-      ) {
-        flags.add('rep_incomplete');
-        return {
-          score: clamp(peakElevation / 150),
-          status: 'partial',
-          partialReason: 'easy_progression_guard_failed',
-        };
-      }
-      const easyScoreMul = raiseCount === 0 ? 0.95 : 1.0;
-      return {
-        score: clamp(Math.min(peakElevation / 165, 0.72) * easyScoreMul),
-        status: 'complete',
-        completePath: 'easy',
-      };
-    }
-
-    /* PR-CAM-15: low-ROM 진행이 true면 easy보다 낮은 absolute floor 확인만 요구.
-     * PR-CAM-17: raiseCount soft guard — 느린 low-ROM 사용자 차단 방지. */
-    if (!easySatisfied && lowRomSatisfied) {
-      if (
-        frames.length < MIN_VALID_FRAMES ||
-        peakElevation < OVERHEAD_LOW_ROM_ABSOLUTE_FLOOR_DEG
-      ) {
-        flags.add('rep_incomplete');
-        return {
-          score: clamp(peakElevation / 150),
-          status: 'partial',
-          partialReason: 'low_rom_guard_failed',
-        };
-      }
-      const lowRomScoreMul = raiseCount === 0 ? 0.95 : 1.0;
-      return {
-        score: clamp(Math.min(peakElevation / 155, 0.62) * lowRomScoreMul),
-        status: 'complete',
-        completePath: 'low_rom',
-      };
-    }
-
-    /* PR-CAM-16: humane low-ROM 진행이 true면 가장 낮은 absolute floor 확인만 요구.
-     * PR-CAM-17: raiseCount soft guard — humane 진행 충족 시 raiseCount=0이어도 통과. */
-    if (!easySatisfied && !lowRomSatisfied && humaneLowRomSatisfied) {
-      if (
-        frames.length < MIN_VALID_FRAMES ||
-        peakElevation < OVERHEAD_HUMANE_ABSOLUTE_FLOOR_DEG
-      ) {
-        flags.add('rep_incomplete');
-        return {
-          score: clamp(peakElevation / 150),
-          status: 'partial',
-          partialReason: 'humane_guard_failed',
-        };
-      }
-      const humaneScoreMul = raiseCount === 0 ? 0.92 : 1.0;
-      return {
-        score: clamp(Math.min(peakElevation / 160, 0.55) * humaneScoreMul),
-        status: 'complete',
-        completePath: 'humane_low_rom',
-      };
-    }
 
     if (
       frames.length < 10 ||
@@ -606,6 +570,21 @@ function buildOverheadInputTruthMap(args: {
   const defaultValidFrameCount = featureFrames.filter((f) => f.isValid).length;
   const overheadExtendedAnalyzableCount = Math.max(0, guardrailValidFrameCount - defaultValidFrameCount);
 
+  // PR-OH-INPUT-READINESS-HARDEN-09A: count frames with 'missing_keypoints' that still
+  // failed the extended arm triplet check. These are frames where even the relaxed
+  // 0.20 visibility threshold could not admit an arm triplet — pure input/setup failure.
+  const missingKeypointsCount = featureFrames.filter((f) => f.frameValidity === 'missing_keypoints').length;
+  const armTripletCheckFailCount = Math.max(0, missingKeypointsCount - overheadExtendedAnalyzableCount);
+
+  // PR-OH-INPUT-READINESS-HARDEN-09A: explicit input-layer boundary marker.
+  const validInputEstablished = guardrailValidFrameCount >= MIN_VALID_FRAMES;
+  const inputLayerOutcome: OverheadInputTruthMap['layer4_readinessMotion']['inputLayerOutcome'] =
+    !validInputEstablished
+      ? 'input_never_established'
+      : motionCompletenessStatus === 'complete'
+        ? 'input_established_complete'
+        : 'input_established_motion_failed';
+
   const featureValidityBreakdown: Record<string, number> = {};
   for (const f of featureFrames) {
     const fk = `frameValidity_${f.frameValidity}`;
@@ -646,6 +625,7 @@ function buildOverheadInputTruthMap(args: {
       invalidFeatureFrameCount,
       featureValidityBreakdown,
       overheadExtendedAnalyzableCount,
+      armTripletCheckFailCount,
     },
     layer4_readinessMotion: {
       guardrailValidFrameCount,
@@ -653,6 +633,8 @@ function buildOverheadInputTruthMap(args: {
       qualityWindowCriticalJointsAvailability: criticalJointsAvailability,
       captureQuality,
       motionCompletenessStatus,
+      validInputEstablished,
+      inputLayerOutcome,
     },
   };
 }
