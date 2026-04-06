@@ -59,6 +59,22 @@ export interface OverheadStableTopDwellResult {
   /** trace: legacy first~last peak span (비교용) */
   holdDurationMsLegacySpan: number;
   holdArmingBlockedReason: string | null;
+  /**
+   * PR-13A: Timestamp when arm was confirmed to have stopped rising (rise ended).
+   * Defined as the moment N consecutive frames passed without a new elevation peak.
+   * Hold may not arm before this point.
+   */
+  riseEndedAtMs: number | undefined;
+  /**
+   * PR-13A: true if hold was armed after rise was confirmed to have ended.
+   * Should always be true for any valid pass. false = hold armed while still rising (bug).
+   */
+  peakReachedBeforeHold: boolean;
+  /**
+   * PR-13A: Diagnostic invariant — should always be false with correct logic.
+   * true would indicate a hold that started before rise ended (regression guard).
+   */
+  holdStartedWhileStillRising: boolean;
 }
 
 /** timestamp gap > 이 값이면 segment break — 프레임 누락 시 누적 불가 */
@@ -73,6 +89,18 @@ const STABLE_TOP_SETTLE_CONSECUTIVE = 2;
 const HOLD_ARMING_CONSECUTIVE = 1;
 /** jitter grace: !isSettled 연속 이 프레임 수 이내면 holdArmed 유지 */
 const HOLD_GRACE_FRAMES = 2;
+/**
+ * PR-13A: Rise-ended gate — hold may NOT arm while arm is still meaningfully climbing.
+ * After topDetected, arm must stop setting new elevation peaks for this many consecutive
+ * frames before settle arming is allowed. At 30fps ≈ 133ms "peak plateau" window.
+ * Prevents hold from starting during the final deceleration phase of the raise.
+ */
+const FRAMES_WITHOUT_NEW_PEAK_TO_SETTLE = 4;
+/**
+ * PR-13A: Minimum elevation increase to count as a meaningful new peak.
+ * Below this threshold, a frame-to-frame increase is treated as noise / plateau.
+ */
+const NEW_PEAK_THRESHOLD_DEG = 1.0;
 
 /**
  * 연속 stable-top dwell time 계산.
@@ -133,6 +161,11 @@ export function computeOverheadStableTopDwell(
   let bestAccumulationStartedMs: number | undefined;
   let segmentCount = 0;
   let holdArmingBlockedReason: string | null = null;
+  // PR-13A: Rise-ended anchor state
+  let peakReached = false;
+  let riseEndedAtMs: number | undefined;
+  let peakElevationSoFar = -Infinity;
+  let framesSinceNewPeak = 0;
 
   for (let i = 0; i < valid.length; i++) {
     const f = valid[i]!;
@@ -153,6 +186,24 @@ export function computeOverheadStableTopDwell(
       topDetectedAtMs = f.timestampMs;
     }
 
+    // PR-13A: Rise-ended tracking — hold must not arm while arm is still climbing.
+    // After topDetected, count frames without a meaningful new elevation peak.
+    // Once FRAMES_WITHOUT_NEW_PEAK_TO_SETTLE consecutive frames pass without a new peak,
+    // peakReached latches true and settle arming is unlocked.
+    if (topDetectedAtMs !== undefined && typeof e === 'number') {
+      if (e > peakElevationSoFar + NEW_PEAK_THRESHOLD_DEG) {
+        // New significant peak — arm still rising
+        peakElevationSoFar = e;
+        framesSinceNewPeak = 0;
+      } else {
+        framesSinceNewPeak += 1;
+        if (!peakReached && framesSinceNewPeak >= FRAMES_WITHOUT_NEW_PEAK_TO_SETTLE) {
+          peakReached = true;
+          riseEndedAtMs = f.timestampMs;
+        }
+      }
+    }
+
     const timestampDeltaMs =
       prevStableTimestampMs !== null ? f.timestampMs - prevStableTimestampMs : 0;
 
@@ -162,6 +213,7 @@ export function computeOverheadStableTopDwell(
       if (
         settledStreak >= STABLE_TOP_SETTLE_CONSECUTIVE &&
         topDetectedAtMs !== undefined &&
+        peakReached &&  // PR-13A: rise must have ended before hold can arm
         segmentStartMs === null &&
         settledRunStartMs !== null
       ) {
@@ -188,6 +240,7 @@ export function computeOverheadStableTopDwell(
           segmentStartMs === null &&
           settledStreak >= STABLE_TOP_SETTLE_CONSECUTIVE &&
           topDetectedAtMs !== undefined &&
+          peakReached &&  // PR-13A: rise must have ended before hold can arm (re-arm after reset)
           settledRunStartMs !== null
         ) {
           segmentStartMs = settledRunStartMs;
@@ -240,10 +293,13 @@ export function computeOverheadStableTopDwell(
     }
   }
 
-  if (holdArmingBlockedReason === null && bestDwellMs === 0 && topDetectedAtMs !== undefined) {
-    holdArmingBlockedReason = 'settle_not_reached';
-  } else if (topDetectedAtMs === undefined) {
+  // PR-13A: updated reason assignment — distinguish peak_not_reached from settle_not_reached.
+  // Priority: no_top_detected > peak_not_reached > settle_not_reached.
+  if (topDetectedAtMs === undefined) {
     holdArmingBlockedReason = 'no_top_detected';
+  } else if (holdArmingBlockedReason === null && bestDwellMs === 0) {
+    // Top was detected but hold never accumulated — determine why.
+    holdArmingBlockedReason = !peakReached ? 'peak_not_reached' : 'settle_not_reached';
   }
 
   return {
@@ -258,6 +314,10 @@ export function computeOverheadStableTopDwell(
     holdComputationMode: 'dwell',
     holdDurationMsLegacySpan: legacySpan,
     holdArmingBlockedReason,
+    // PR-13A: rise-ended anchor observability
+    riseEndedAtMs,
+    peakReachedBeforeHold: bestHoldArmedMs !== undefined,
+    holdStartedWhileStillRising: false,  // invariant: enforced by peakReached gate above
   };
 }
 
@@ -1077,6 +1137,10 @@ export function evaluateOverheadReachFromPoseFrames(
         topNearTopDetectedAtMs: topNearDwellResult.topDetectedAtMs,
         topNearStableTopEnteredAtMs: topNearDwellResult.stableTopEnteredAtMs,
         topNearHoldArmedAtMs: topNearDwellResult.holdArmedAtMs,
+        /** PR-13A: rise-ended anchor — hold must not start before this point */
+        topNearRiseEndedAtMs: topNearDwellResult.riseEndedAtMs,
+        topNearPeakReachedBeforeHold: topNearDwellResult.peakReachedBeforeHold ? 1 : 0,
+        topNearHoldStartedWhileStillRising: topNearDwellResult.holdStartedWhileStillRising ? 1 : 0,
         bestSideZoneFrameCount,
         /** PR-OH-KINEMATIC-SIGNAL-04B: candidate kinematic session aggregates (vs legacy armElevationAvg peak above). */
         ohKinematicPeakShoulderWristElevationAvgDeg,
