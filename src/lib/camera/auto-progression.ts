@@ -410,9 +410,18 @@ export function isFinalPassLatched(
   >
 ): boolean {
   if (stepId === 'overhead-reach') {
-    // PR-SIMPLE-PASS-01: confidence is quality-only — NOT a pass gate for overhead.
-    // Pass requires: completion + captureQuality valid + passConfirmation stable frames.
-    // passConfirmationFrameCount >= REQUIRED_STABLE_FRAMES blocks single-frame spikes.
+    // PR-12A: Hold authority defense-in-depth.
+    // completionSatisfied already requires simplePassHoldMs >= 1000 and
+    // simplePassHoldArmingBlockedReason === null. This explicit guard is a
+    // second wall: latch can NEVER open if the evaluator reports hold < 1000ms
+    // or hold arming was blocked (settle_not_reached / no_top_detected).
+    const hm = gate.evaluatorResult?.debug?.highlightedMetrics;
+    const simplePassHoldMs = typeof hm?.simplePassHoldMs === 'number' ? hm.simplePassHoldMs : 0;
+    const holdArmingBlocked =
+      hm?.simplePassHoldArmingBlockedReason != null &&
+      hm.simplePassHoldArmingBlockedReason !== null;
+    if (simplePassHoldMs < 1000 || holdArmingBlocked) return false;
+
     return (
       gate.completionSatisfied === true &&
       gate.guardrail.captureQuality !== 'invalid' &&

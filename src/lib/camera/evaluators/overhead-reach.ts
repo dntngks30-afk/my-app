@@ -565,44 +565,26 @@ export function evaluateOverheadReachFromPoseFrames(
   const bestSidePeakElevation =
     bestSideElevationValues.length > 0 ? Math.max(...bestSideElevationValues) : 0;
 
-  // PR-SIMPLE-PASS-01: best-side zone frames (best-side >= 100°) for hold computation
+  // PR-12A: Hold authority — top-near dwell at 100° floor with settle enforcement.
+  // Replaces the previous gap-tolerance best-side zone accumulation from PR-SIMPLE-PASS-01.
+  //
+  // Root cause fixed: the old approach (200ms gap tolerance over best-side zone frames)
+  // accumulated hold time without requiring settle, allowing settle_not_reached to still pass.
+  //
+  // New approach: reuse computeOverheadStableTopDwell machinery at reduced 100° floor.
+  // This ensures:
+  //   - hold timer only starts after arm settles at ≥ 100° (same settle logic as strict path)
+  //   - settle_not_reached → simplePassHoldArmingBlockedReason non-null → completionSatisfied=false
+  //   - no_top_detected → simplePassHoldArmingBlockedReason non-null → completionSatisfied=false
+  //   - gap > 120ms resets the segment (no bridge over frame gaps)
   const SIMPLE_PASS_DWELL_FLOOR_DEG = 100;
-  const bestSideZoneFrames = valid
-    .filter((f) => {
-      const left = f.derived.armElevationLeft;
-      const right = f.derived.armElevationRight;
-      const best =
-        typeof left === 'number' && typeof right === 'number'
-          ? Math.max(left, right)
-          : typeof left === 'number'
-            ? left
-            : typeof right === 'number'
-              ? right
-              : null;
-      return best !== null && best >= SIMPLE_PASS_DWELL_FLOOR_DEG;
-    })
-    .map((f) => ({ timestampMs: f.timestampMs }));
-
-  // PR-SIMPLE-PASS-01: best continuous run in best-side zone (gap tolerance 200ms)
-  const SIMPLE_PASS_ZONE_GAP_TOLERANCE_MS = 200;
-  let simplePassHoldMs = 0;
-  if (bestSideZoneFrames.length >= 2) {
-    let runStartMs = bestSideZoneFrames[0]!.timestampMs;
-    let runEndMs = bestSideZoneFrames[0]!.timestampMs;
-    for (let i = 1; i < bestSideZoneFrames.length; i++) {
-      const gap = bestSideZoneFrames[i]!.timestampMs - bestSideZoneFrames[i - 1]!.timestampMs;
-      if (gap <= SIMPLE_PASS_ZONE_GAP_TOLERANCE_MS) {
-        runEndMs = bestSideZoneFrames[i]!.timestampMs;
-      } else {
-        const runMs = runEndMs - runStartMs;
-        if (runMs > simplePassHoldMs) simplePassHoldMs = runMs;
-        runStartMs = bestSideZoneFrames[i]!.timestampMs;
-        runEndMs = bestSideZoneFrames[i]!.timestampMs;
-      }
-    }
-    const lastRunMs = runEndMs - runStartMs;
-    if (lastRunMs > simplePassHoldMs) simplePassHoldMs = lastRunMs;
-  }
+  const topNearDwellResult = computeOverheadStableTopDwell(valid, SIMPLE_PASS_DWELL_FLOOR_DEG);
+  const simplePassHoldMs = topNearDwellResult.holdDurationMs;
+  const simplePassHoldArmingBlockedReason = topNearDwellResult.holdArmingBlockedReason;
+  // Best-side zone frame count — observability only (not used for hold authority)
+  const bestSideZoneFrameCount = bestSideElevationValues.filter(
+    (v) => v >= SIMPLE_PASS_DWELL_FLOOR_DEG
+  ).length;
 
   /**
    * PR-CAM-11A: top-zone 프레임 수집 (e >= floor 인 valid 프레임만).
@@ -705,6 +687,7 @@ export function evaluateOverheadReachFromPoseFrames(
     riseStartedAtMs: riseTruth.riseStartedAtMs,
     bestSideElevationDeg: bestSidePeakElevation,
     simplePassHoldMs,
+    simplePassHoldArmingBlockedReason,
   });
 
   // PR-CAM-11B: 진행 전용 easy 홀드 (해석·overheadPlanning 은 strict dwell 기준 유지)
@@ -1086,10 +1069,15 @@ export function evaluateOverheadReachFromPoseFrames(
         riseBaselineArmDeg: riseTruth.baselineArmDeg,
         risePeakArmElevation: riseTruth.peakArmElevation,
         riseBlockedReason: riseTruth.riseBlockedReason,
-        /** PR-SIMPLE-PASS-01: best-side elevation and hold for simple completion owner */
+        /** PR-SIMPLE-PASS-01 / PR-12A: best-side elevation and hold for simple completion owner */
         bestSidePeakElevation,
         simplePassHoldMs,
-        bestSideZoneFrameCount: bestSideZoneFrames.length,
+        /** PR-12A: hold arming blocked reason for top-near 100° dwell — null = armed OK */
+        simplePassHoldArmingBlockedReason,
+        topNearTopDetectedAtMs: topNearDwellResult.topDetectedAtMs,
+        topNearStableTopEnteredAtMs: topNearDwellResult.stableTopEnteredAtMs,
+        topNearHoldArmedAtMs: topNearDwellResult.holdArmedAtMs,
+        bestSideZoneFrameCount,
         /** PR-OH-KINEMATIC-SIGNAL-04B: candidate kinematic session aggregates (vs legacy armElevationAvg peak above). */
         ohKinematicPeakShoulderWristElevationAvgDeg,
         ohKinematicMeanShoulderWristElevationAvgDeg,

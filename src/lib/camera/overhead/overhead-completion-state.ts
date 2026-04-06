@@ -110,10 +110,20 @@ export interface OverheadCompletionInput {
    */
   bestSideElevationDeg: number;
   /**
-   * PR-SIMPLE-PASS-01: Dwell duration (ms) while best-side elevation >= 100°.
+   * PR-12A: Dwell duration (ms) from top-near settle dwell computation at 100° floor.
+   * This is the hold authority value — computed with settle enforcement, not gap-tolerance zone frames.
    * Primary hold requirement in the simple completion owner (>= 1000ms to pass).
    */
   simplePassHoldMs: number;
+  /**
+   * PR-12A: Hold arming blocked reason from top-near dwell computation at 100° floor.
+   * null = hold armed successfully (settle was reached, hold can accumulate).
+   * Non-null = hold never armed:
+   *   'settle_not_reached' — arm reached top-near zone but never settled (jitter / quick pass)
+   *   'no_top_detected'    — arm never reached top-near zone (100°)
+   * MUST be null for completionSatisfied to become true.
+   */
+  simplePassHoldArmingBlockedReason: string | null;
 }
 
 export interface OverheadCompletionState extends MotionCompletionResult {
@@ -182,8 +192,14 @@ export function evaluateOverheadCompletionState(
   // holdSatisfied = strict 1200ms dwell at 132° — observability only
   const holdSatisfied = holdStarted && holdDurationMs >= OVERHEAD_REQUIRED_HOLD_MS;
 
-  // ── PR-SIMPLE-PASS-01: Single simple completion owner ──────────────────────
-  // Pass = meaningful best-side rise + best-side >= 100° + 1000ms dwell.
+  // ── PR-SIMPLE-PASS-01 / PR-12A: Single simple completion owner ─────────────
+  // Pass = meaningful best-side rise + best-side >= 100° floor + settled 1000ms dwell.
+  //
+  // PR-12A contract (non-negotiable):
+  //   1. simplePassHoldArmingBlockedReason must be null (settle was reached)
+  //   2. simplePassHoldMs must be >= 1000ms (real, settle-enforced dwell)
+  //   3. holdDurationMs=0 + holdArmingBlockedReason='settle_not_reached' → NEVER pass
+  //
   // Asymmetry, 132° strict floor, stable-top entry are NOT completion gates.
   let completionBlockedReason: string | null = null;
 
@@ -191,6 +207,10 @@ export function evaluateOverheadCompletionState(
     completionBlockedReason = 'raise_not_satisfied';
   } else if (input.bestSideElevationDeg < SIMPLE_PASS_BEST_SIDE_ABSOLUTE_FLOOR_DEG) {
     completionBlockedReason = 'insufficient_elevation';
+  } else if (input.simplePassHoldArmingBlockedReason !== null) {
+    // Hold never armed — settle was not reached or top-near zone never entered.
+    // This explicitly blocks: settle_not_reached, no_top_detected.
+    completionBlockedReason = input.simplePassHoldArmingBlockedReason;
   } else if (input.simplePassHoldMs < SIMPLE_PASS_REQUIRED_HOLD_MS) {
     completionBlockedReason = 'hold_short';
   }
