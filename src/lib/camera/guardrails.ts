@@ -204,6 +204,41 @@ const JITTER_PENALTY_CAP = 0.12;
 const FRAMING_PENALTY_CAP = 0.08;
 const LANDMARK_PENALTY_CAP = 0.06;
 
+/** PR-IOS-LOW-FPS-SUFFICIENCY-NORMALIZE-02: sparse-but-good guardrail exception. */
+const LOW_FPS_GUARDRAIL_MIN_FRAMES = 5;
+const LOW_FPS_GUARDRAIL_MIN_DURATION_MS = 900;
+
+interface LowFpsGuardrailArgs {
+  validFrameCount: number;
+  captureDurationMs: number;
+  visibleJointsRatio: number;
+  criticalJointsAvailability: number;
+  droppedFrameRatio: number;
+  noisyFrameRatio: number;
+  leftSideCompleteness: number;
+  rightSideCompleteness: number;
+}
+
+/**
+ * PR-IOS-LOW-FPS-SUFFICIENCY-NORMALIZE-02
+ * Returns true when a sparse-but-good capture should bypass the MIN_VALID_FRAMES gate.
+ * Never rescues bad framing (visibleJointsRatio < 0.60), hard_partial-equivalent side
+ * dropout, severely noisy, or obviously dropped capture.
+ * Uses raw metric values only — no dependency on the flags Set.
+ */
+function isLowFpsButUsableGuardrail(args: LowFpsGuardrailArgs): boolean {
+  if (args.validFrameCount >= MIN_VALID_FRAMES) return false;
+  if (args.validFrameCount < LOW_FPS_GUARDRAIL_MIN_FRAMES) return false;
+  if (args.captureDurationMs < LOW_FPS_GUARDRAIL_MIN_DURATION_MS) return false;
+  if (args.visibleJointsRatio < 0.60) return false;
+  if (args.criticalJointsAvailability < 0.60) return false;
+  if (args.droppedFrameRatio > 0.35) return false;
+  if (args.noisyFrameRatio > 0.35) return false;
+  if (args.leftSideCompleteness < 0.55) return false;
+  if (args.rightSideCompleteness < 0.55) return false;
+  return true;
+}
+
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -679,7 +714,19 @@ export function assessStepGuardrail(
   const leftSideCompleteness = getSideCompleteness(qualityFrames, 'left');
   const rightSideCompleteness = getSideCompleteness(qualityFrames, 'right');
 
-  if (validFrameCount < MIN_VALID_FRAMES) {
+  // PR-IOS-LOW-FPS-SUFFICIENCY-NORMALIZE-02: computed from raw metrics before flags are set.
+  const lowFpsUsable = isLowFpsButUsableGuardrail({
+    validFrameCount,
+    captureDurationMs: stats.captureDurationMs,
+    visibleJointsRatio,
+    criticalJointsAvailability,
+    droppedFrameRatio,
+    noisyFrameRatio,
+    leftSideCompleteness,
+    rightSideCompleteness,
+  });
+
+  if (validFrameCount < MIN_VALID_FRAMES && !lowFpsUsable) {
     flags.add('insufficient_signal');
     flags.add('valid_frames_too_few');
   }
@@ -736,10 +783,10 @@ export function assessStepGuardrail(
 
   let captureQuality: CaptureQuality = 'ok';
   if (
-    validFrameCount < MIN_VALID_FRAMES ||
+    (validFrameCount < MIN_VALID_FRAMES && !lowFpsUsable) ||
     criticalJointsAvailability < 0.4 ||
     visibleJointsRatio < 0.35 ||
-    motion.status === 'insufficient'
+    (motion.status === 'insufficient' && !lowFpsUsable)
   ) {
     captureQuality = 'invalid';
   } else if (

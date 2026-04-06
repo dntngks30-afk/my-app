@@ -40,6 +40,37 @@ const MIN_READY_VISIBLE_JOINTS_RATIO = 0.70;
 const MIN_READY_CRITICAL_AVAILABILITY = 0.65;
 const READY_ENTER_DELAY_MS = 300;
 
+/** PR-IOS-LOW-FPS-SUFFICIENCY-NORMALIZE-02: sparse-but-good readiness exception. */
+const LOW_FPS_READINESS_MIN_FRAMES = 5;
+const LOW_FPS_READINESS_MIN_WINDOW_MS = 650;
+
+/**
+ * PR-IOS-LOW-FPS-SUFFICIENCY-NORMALIZE-02
+ * Returns true when a sparse-but-good capture should satisfy the minimal-frames gate.
+ * Never rescues framing errors, poor visibility, poor critical availability, or ankle failures.
+ * Does not change any other blocker (severeFramingInvalid / fullBodyVisibleEnough /
+ * landmarkPresenceEnough / ankleVisibleInFrame) — only minimalFramesReady.
+ */
+function isLowFpsButReadableReadiness(
+  validFrameCount: number,
+  visibleJointsRatio: number,
+  criticalJointsAvailability: number,
+  framingHint: string | null | undefined,
+  ankleVisibleInFrame: boolean,
+  debug: LiveReadinessInput['guardrail']['debug'],
+): boolean {
+  if (validFrameCount >= MIN_READY_VALID_FRAMES) return false;
+  if (validFrameCount < LOW_FPS_READINESS_MIN_FRAMES) return false;
+  if (framingHint) return false;
+  if (!ankleVisibleInFrame) return false;
+  if (visibleJointsRatio < MIN_READY_VISIBLE_JOINTS_RATIO) return false;
+  if (criticalJointsAvailability < MIN_READY_CRITICAL_AVAILABILITY) return false;
+  const startMs = debug?.selectedWindowStartMs;
+  const endMs = debug?.selectedWindowEndMs;
+  if (typeof startMs !== 'number' || typeof endMs !== 'number') return false;
+  return endMs - startMs >= LOW_FPS_READINESS_MIN_WINDOW_MS;
+}
+
 function isReadinessInputValid(debug: LiveReadinessInput['guardrail']['debug']): boolean {
   if (!debug) return false;
   const v = debug.validFrameCount;
@@ -122,7 +153,16 @@ export function getLiveReadinessSummary(input: LiveReadinessInput): LiveReadines
     severeFramingInvalid: Boolean(input.framingHint),
     landmarkPresenceEnough: criticalJointsAvailability >= MIN_READY_CRITICAL_AVAILABILITY,
     fullBodyVisibleEnough: visibleJointsRatio >= MIN_READY_VISIBLE_JOINTS_RATIO,
-    minimalFramesReady: validFrameCount >= MIN_READY_VALID_FRAMES,
+    minimalFramesReady:
+      validFrameCount >= MIN_READY_VALID_FRAMES ||
+      isLowFpsButReadableReadiness(
+        validFrameCount,
+        visibleJointsRatio,
+        criticalJointsAvailability,
+        input.framingHint,
+        ankleVisibleInFrame,
+        debug,
+      ),
     ankleVisibleInFrame,
   };
 
