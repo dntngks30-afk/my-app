@@ -100,6 +100,12 @@ const MOTION_REASONS = [
   'hold_too_short',
 ] as const;
 
+/**
+ * PR-P0-START-SEQUENCE-AUDIO-BLOCK-GUARD-01: speakVoiceCueAndWait must resolve even if
+ * clip load/playback or TTS end callbacks never fire (domain stall, WebKit edge cases).
+ */
+const VOICE_CUE_WAIT_TIMEOUT_MS = 35000;
+
 const runtimeState: VoicePlaybackState & {
   unlocked: boolean;
   audioContext: AudioContext | null;
@@ -525,11 +531,20 @@ async function playVoiceCue(cue: VoiceCue | null, waitUntilEnd: boolean): Promis
   const currentCueKey = cue.dedupeKey;
   let waitResolve: ((ok: boolean) => void) | null = null;
   let waitSettled = false;
+  let voiceWaitWatchdogId: ReturnType<typeof window.setTimeout> | null = null;
+
+  const clearVoiceWaitWatchdog = () => {
+    if (voiceWaitWatchdogId !== null) {
+      window.clearTimeout(voiceWaitWatchdogId);
+      voiceWaitWatchdogId = null;
+    }
+  };
 
   const settleWait = (ok: boolean) => {
     if (!waitUntilEnd || waitSettled) {
       return;
     }
+    clearVoiceWaitWatchdog();
     waitSettled = true;
     if (runtimeState.waitResolver === settleWait) {
       runtimeState.waitResolver = null;
@@ -607,6 +622,25 @@ async function playVoiceCue(cue: VoiceCue | null, waitUntilEnd: boolean): Promis
   if (!waitPromise) {
     return true;
   }
+
+  voiceWaitWatchdogId = window.setTimeout(() => {
+    voiceWaitWatchdogId = null;
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[voice-guidance] speakVoiceCueAndWait watchdog (wait timeout)', {
+        dedupeKey: currentCueKey,
+        timeoutMs: VOICE_CUE_WAIT_TIMEOUT_MS,
+      });
+    }
+    cancelClipPlayback();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    if (runtimeState.activeCueKey === currentCueKey) {
+      runtimeState.activeCueKey = null;
+      runtimeState.activePriority = 0;
+    }
+    settleWait(false);
+  }, VOICE_CUE_WAIT_TIMEOUT_MS);
 
   return waitPromise;
 }

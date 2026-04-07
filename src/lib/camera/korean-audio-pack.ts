@@ -101,6 +101,8 @@ export interface PlaybackObservability {
   mode: 'clip' | 'speech' | 'beep';
   clipMissing?: boolean;
   clipFailed?: boolean;
+  /** PR-P0: load stalled (no canplaythrough/error within CLIP_LOAD_TIMEOUT_MS) */
+  clipLoadTimedOut?: boolean;
   success: boolean;
 }
 
@@ -117,6 +119,12 @@ export function getLastPlaybackObservability(): PlaybackObservability | null {
 function setPlaybackObs(obs: PlaybackObservability) {
   playbackObsState.last = obs;
 }
+
+/**
+ * PR-P0-START-SEQUENCE-AUDIO-BLOCK-GUARD-01: clip load stall on new domains (e.g. Vercel)
+ * must not block indefinitely — fall through to TTS/beep.
+ */
+const CLIP_LOAD_TIMEOUT_MS = 8000;
 
 /** 재생 중인 Audio 인스턴스 (cancel 시 정지용) */
 let activeClipAudio: HTMLAudioElement | null = null;
@@ -146,19 +154,45 @@ async function tryPlayClip(
   const path = getClipPath(clipKey);
   const audio = new Audio(path);
 
-  const loaded = await new Promise<boolean>((resolve) => {
-    audio.addEventListener('canplaythrough', () => resolve(true), { once: true });
-    audio.addEventListener('error', () => resolve(false), { once: true });
+  type LoadResult = { ok: true } | { ok: false; reason: 'error' | 'timeout' };
+  const loadResult = await new Promise<LoadResult>((resolve) => {
+    let settled = false;
+    const finish = (result: LoadResult) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      audio.removeEventListener('canplaythrough', onCanPlayThrough);
+      audio.removeEventListener('error', onError);
+      resolve(result);
+    };
+    const onCanPlayThrough = () => finish({ ok: true });
+    const onError = () => finish({ ok: false, reason: 'error' });
+    const timeoutId = window.setTimeout(() => {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[korean-audio-pack] clip load timeout', { clipKey, path });
+      }
+      try {
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+      } catch {
+        /* ignore */
+      }
+      finish({ ok: false, reason: 'timeout' });
+    }, CLIP_LOAD_TIMEOUT_MS);
+    audio.addEventListener('canplaythrough', onCanPlayThrough, { once: true });
+    audio.addEventListener('error', onError, { once: true });
     audio.load();
   });
 
-  if (!loaded) {
+  if (!loadResult.ok) {
     setPlaybackObs({
       cueKey: clipKey,
       clipKey,
       clipPath: getClipPath(clipKey),
       mode: 'speech',
-      clipMissing: true,
+      clipMissing: loadResult.reason === 'error',
+      clipLoadTimedOut: loadResult.reason === 'timeout',
       success: false,
     });
     return false;
