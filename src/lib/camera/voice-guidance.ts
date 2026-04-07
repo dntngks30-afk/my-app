@@ -101,10 +101,11 @@ const MOTION_REASONS = [
 ] as const;
 
 /**
- * PR-P0-START-SEQUENCE-AUDIO-BLOCK-GUARD-01: speakVoiceCueAndWait must resolve even if
- * clip load/playback or TTS end callbacks never fire (domain stall, WebKit edge cases).
+ * PR-P0-WAITED-CUE-COMPLETION-UNBLOCK-01: speakVoiceCueAndWait must resolve even when
+ * clip `ended` / TTS `onend` never fires (Safari waited-cue stall before countdown).
+ * Shorter than clip completion safety + margin so UX unblocks without feeling frozen.
  */
-const VOICE_CUE_WAIT_TIMEOUT_MS = 35000;
+const VOICE_CUE_WAIT_TIMEOUT_MS = 18000;
 
 const runtimeState: VoicePlaybackState & {
   unlocked: boolean;
@@ -626,7 +627,7 @@ async function playVoiceCue(cue: VoiceCue | null, waitUntilEnd: boolean): Promis
   voiceWaitWatchdogId = window.setTimeout(() => {
     voiceWaitWatchdogId = null;
     if (process.env.NODE_ENV !== 'production') {
-      console.warn('[voice-guidance] speakVoiceCueAndWait watchdog (wait timeout)', {
+      console.warn('[voice-guidance] speakVoiceCueAndWait watchdog (completion stalled)', {
         dedupeKey: currentCueKey,
         timeoutMs: VOICE_CUE_WAIT_TIMEOUT_MS,
       });

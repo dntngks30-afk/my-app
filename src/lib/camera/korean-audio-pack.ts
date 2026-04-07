@@ -121,10 +121,18 @@ function setPlaybackObs(obs: PlaybackObservability) {
 }
 
 /**
- * PR-P0-START-SEQUENCE-AUDIO-BLOCK-GUARD-01: clip load stall on new domains (e.g. Vercel)
- * must not block indefinitely — fall through to TTS/beep.
+ * PR-P0-START-SEQUENCE-AUDIO-BLOCK-GUARD-01 / PR-P0-WAITED-CUE-COMPLETION-UNBLOCK-01:
+ * clip load stall on new domains must not block indefinitely — fall through to TTS/beep.
  */
 const CLIP_LOAD_TIMEOUT_MS = 8000;
+
+/**
+ * PR-P0-WAITED-CUE-COMPLETION-UNBLOCK-01: Safari/WebKit may omit `ended` after audible play;
+ * release waited callers with a single synthetic completion after duration + slack (capped).
+ */
+const CLIP_COMPLETION_SLACK_MS = 1500;
+const CLIP_COMPLETION_UNKNOWN_DURATION_MS = 18000;
+const CLIP_COMPLETION_MAX_MS = 60000;
 
 /** 재생 중인 Audio 인스턴스 (cancel 시 정지용) */
 let activeClipAudio: HTMLAudioElement | null = null;
@@ -199,11 +207,54 @@ async function tryPlayClip(
   }
 
   try {
-    audio.addEventListener('ended', () => {
+    let clipPlaybackSettled = false;
+    let clipCompletionSafetyId: ReturnType<typeof window.setTimeout> | null = null;
+
+    const clearClipCompletionSafety = () => {
+      if (clipCompletionSafetyId !== null) {
+        window.clearTimeout(clipCompletionSafetyId);
+        clipCompletionSafetyId = null;
+      }
+    };
+
+    const clipCompletionSafetyDelayMs = (): number => {
+      const d = audio.duration;
+      if (typeof d === 'number' && Number.isFinite(d) && d > 0) {
+        return Math.min(d * 1000 + CLIP_COMPLETION_SLACK_MS, CLIP_COMPLETION_MAX_MS);
+      }
+      return CLIP_COMPLETION_UNKNOWN_DURATION_MS;
+    };
+
+    const armClipCompletionSafety = () => {
+      clearClipCompletionSafety();
+      if (clipPlaybackSettled) return;
+      const ms = clipCompletionSafetyDelayMs();
+      clipCompletionSafetyId = window.setTimeout(() => {
+        clipCompletionSafetyId = null;
+        if (clipPlaybackSettled) return;
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[korean-audio-pack] clip completion safety (ended stalled)', {
+            clipKey,
+            path,
+            scheduledMs: ms,
+          });
+        }
+        settleClipComplete();
+      }, ms);
+    };
+
+    const settleClipComplete = () => {
+      if (clipPlaybackSettled) return;
+      clipPlaybackSettled = true;
+      clearClipCompletionSafety();
       activeClipAudio = null;
       onEnd();
-    }, { once: true });
-    audio.addEventListener('error', () => {
+    };
+
+    const settleClipError = () => {
+      if (clipPlaybackSettled) return;
+      clipPlaybackSettled = true;
+      clearClipCompletionSafety();
       activeClipAudio = null;
       onError();
       setPlaybackObs({
@@ -214,7 +265,10 @@ async function tryPlayClip(
         clipFailed: true,
         success: false,
       });
-    }, { once: true });
+    };
+
+    audio.addEventListener('ended', () => settleClipComplete(), { once: true });
+    audio.addEventListener('error', () => settleClipError(), { once: true });
 
     activeClipAudio = audio;
     await audio.play();
@@ -225,6 +279,8 @@ async function tryPlayClip(
       mode: 'clip',
       success: true,
     });
+    armClipCompletionSafety();
+    audio.addEventListener('loadedmetadata', () => armClipCompletionSafety(), { once: true });
     return true;
   } catch {
     activeClipAudio = null;
