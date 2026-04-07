@@ -28,6 +28,8 @@
     "test:oh-visual-snapshot-06c": "npx tsx scripts/oh-visual-snapshot-06c-smoke.mjs",
     "test:oh-distal-hand-obs-07b": "npx tsx scripts/oh-distal-hand-obs-07b-smoke.mjs",
     "test:oh-head-reference-obs-08b": "npx tsx scripts/oh-head-reference-obs-08b-smoke.mjs",
+    "test:oh-input-readiness-harden-09a": "npx tsx scripts/oh-input-readiness-harden-09a-smoke.mjs",
+    "test:voice-waited-cue-completion": "npx tsx scripts/voice-waited-cue-completion-smoke.mjs",
     "test:camera-setup-screen": "npx tsx scripts/camera-setup-screen-smoke.mjs",
     "test:session-feedback": "npx tsx scripts/session-feedback-smoke.mjs",
     "test:progress-report": "npx tsx scripts/progress-report-smoke.mjs",

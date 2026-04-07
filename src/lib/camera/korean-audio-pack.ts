@@ -93,6 +93,9 @@ export function getClipPath(clipKey: KoreanCueClipKey): string {
   return `${AUDIO_BASE}/${filename}`;
 }
 
+/** How a clip playback run terminated (clip mode only). */
+export type ClipTerminalMode = 'ended' | 'near_end' | 'watchdog' | 'error';
+
 /** PR D: playback observability */
 export interface PlaybackObservability {
   cueKey: string;
@@ -103,6 +106,8 @@ export interface PlaybackObservability {
   clipFailed?: boolean;
   /** PR-P0: load stalled (no canplaythrough/error within CLIP_LOAD_TIMEOUT_MS) */
   clipLoadTimedOut?: boolean;
+  /** PR Safari: which path fired first to complete waited clip playback */
+  clipTerminalMode?: ClipTerminalMode;
   success: boolean;
 }
 
@@ -128,16 +133,30 @@ const CLIP_LOAD_TIMEOUT_MS = 8000;
 
 /**
  * PR-P0-WAITED-CUE-COMPLETION-UNBLOCK-01: Safari/WebKit may omit `ended` after audible play;
- * release waited callers with a single synthetic completion after duration + slack (capped).
+ * release waited callers with near-end + duration+slack watchdog (single-fire).
  */
 const CLIP_COMPLETION_SLACK_MS = 1500;
 const CLIP_COMPLETION_UNKNOWN_DURATION_MS = 18000;
 const CLIP_COMPLETION_MAX_MS = 60000;
+/** Safari-safe: treat as terminal when within this many seconds of duration */
+const CLIP_NEAR_END_EPSILON_SEC = 0.14;
 
 /** 재생 중인 Audio 인스턴스 (cancel 시 정지용) */
 let activeClipAudio: HTMLAudioElement | null = null;
 
+/** Removes listeners/timers only — never invokes clip onEnd/onError (cancel / unmount). */
+let activeClipCleanup: (() => void) | null = null;
+
 export function cancelClipPlayback() {
+  const cleanup = activeClipCleanup;
+  activeClipCleanup = null;
+  if (cleanup) {
+    try {
+      cleanup();
+    } catch {
+      /* ignore */
+    }
+  }
   if (activeClipAudio) {
     try {
       activeClipAudio.pause();
@@ -210,22 +229,61 @@ async function tryPlayClip(
     let clipPlaybackSettled = false;
     let clipCompletionSafetyId: ReturnType<typeof window.setTimeout> | null = null;
 
-    const clearClipCompletionSafety = () => {
+    function clearClipCompletionSafety() {
       if (clipCompletionSafetyId !== null) {
         window.clearTimeout(clipCompletionSafetyId);
         clipCompletionSafetyId = null;
       }
-    };
+    }
 
-    const clipCompletionSafetyDelayMs = (): number => {
+    function clipCompletionSafetyDelayMs(): number {
       const d = audio.duration;
       if (typeof d === 'number' && Number.isFinite(d) && d > 0) {
         return Math.min(d * 1000 + CLIP_COMPLETION_SLACK_MS, CLIP_COMPLETION_MAX_MS);
       }
       return CLIP_COMPLETION_UNKNOWN_DURATION_MS;
-    };
+    }
 
-    const armClipCompletionSafety = () => {
+    function onEnded() {
+      settleClipComplete('ended');
+    }
+
+    function onPlaybackError() {
+      settleClipError();
+    }
+
+    function onTimeUpdate() {
+      if (clipPlaybackSettled) return;
+      const d = audio.duration;
+      if (typeof d !== 'number' || !Number.isFinite(d) || d <= 0) return;
+      if (audio.currentTime >= Math.max(0, d - CLIP_NEAR_END_EPSILON_SEC)) {
+        settleClipComplete('near_end');
+      }
+    }
+
+    function onLoadedMetadataForArm() {
+      armClipCompletionSafety();
+    }
+
+    function cleanupPlaybackResources() {
+      clearClipCompletionSafety();
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onPlaybackError);
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('loadedmetadata', onLoadedMetadataForArm);
+    }
+
+    function applyClipTerminalObs(terminal: ClipTerminalMode) {
+      const prev = playbackObsState.last;
+      if (!prev || prev.mode !== 'clip') return;
+      setPlaybackObs({
+        ...prev,
+        clipTerminalMode: terminal,
+        success: terminal !== 'error',
+      });
+    }
+
+    function armClipCompletionSafety() {
       clearClipCompletionSafety();
       if (clipPlaybackSettled) return;
       const ms = clipCompletionSafetyDelayMs();
@@ -233,28 +291,31 @@ async function tryPlayClip(
         clipCompletionSafetyId = null;
         if (clipPlaybackSettled) return;
         if (process.env.NODE_ENV !== 'production') {
-          console.warn('[korean-audio-pack] clip completion safety (ended stalled)', {
+          console.warn('[korean-audio-pack] clip terminal watchdog', {
             clipKey,
             path,
             scheduledMs: ms,
           });
         }
-        settleClipComplete();
+        settleClipComplete('watchdog');
       }, ms);
-    };
+    }
 
-    const settleClipComplete = () => {
+    function settleClipComplete(terminal: 'ended' | 'near_end' | 'watchdog') {
       if (clipPlaybackSettled) return;
       clipPlaybackSettled = true;
-      clearClipCompletionSafety();
+      activeClipCleanup = null;
+      cleanupPlaybackResources();
       activeClipAudio = null;
+      applyClipTerminalObs(terminal);
       onEnd();
-    };
+    }
 
-    const settleClipError = () => {
+    function settleClipError() {
       if (clipPlaybackSettled) return;
       clipPlaybackSettled = true;
-      clearClipCompletionSafety();
+      activeClipCleanup = null;
+      cleanupPlaybackResources();
       activeClipAudio = null;
       onError();
       setPlaybackObs({
@@ -263,12 +324,28 @@ async function tryPlayClip(
         clipPath: getClipPath(clipKey),
         mode: 'speech',
         clipFailed: true,
+        clipTerminalMode: 'error',
         success: false,
       });
-    };
+    }
 
-    audio.addEventListener('ended', () => settleClipComplete(), { once: true });
-    audio.addEventListener('error', () => settleClipError(), { once: true });
+    audio.addEventListener('ended', onEnded, { once: true });
+    audio.addEventListener('error', onPlaybackError, { once: true });
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('loadedmetadata', onLoadedMetadataForArm, { once: true });
+
+    activeClipCleanup = () => {
+      cleanupPlaybackResources();
+      try {
+        audio.pause();
+        audio.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+      if (activeClipAudio === audio) {
+        activeClipAudio = null;
+      }
+    };
 
     activeClipAudio = audio;
     await audio.play();
@@ -280,9 +357,17 @@ async function tryPlayClip(
       success: true,
     });
     armClipCompletionSafety();
-    audio.addEventListener('loadedmetadata', () => armClipCompletionSafety(), { once: true });
     return true;
   } catch {
+    const cleanup = activeClipCleanup;
+    activeClipCleanup = null;
+    if (cleanup) {
+      try {
+        cleanup();
+      } catch {
+        /* ignore */
+      }
+    }
     activeClipAudio = null;
     setPlaybackObs({
       cueKey: clipKey,

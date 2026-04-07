@@ -101,11 +101,24 @@ const MOTION_REASONS = [
 ] as const;
 
 /**
- * PR-P0-WAITED-CUE-COMPLETION-UNBLOCK-01: speakVoiceCueAndWait must resolve even when
- * clip `ended` / TTS `onend` never fires (Safari waited-cue stall before countdown).
- * Shorter than clip completion safety + margin so UX unblocks without feeling frozen.
+ * PR Safari start sequence: max wall-clock wait per cue kind after playback has started.
+ * If clip/TTS completion never fires, we force-settle so countdown / capturing can proceed.
+ * Mirror: scripts/voice-waited-cue-completion-smoke.mjs (run `npm run test:voice-waited-cue-completion`).
  */
-const VOICE_CUE_WAIT_TIMEOUT_MS = 18000;
+export function getVoiceCueMaxWaitMs(cue: Pick<VoiceCue, 'kind'>): number {
+  switch (cue.kind) {
+    case 'countdown':
+      return 9000;
+    case 'start':
+      return 32000;
+    case 'correction':
+      return 26000;
+    case 'success':
+      return 22000;
+    default:
+      return 20000;
+  }
+}
 
 const runtimeState: VoicePlaybackState & {
   unlocked: boolean;
@@ -624,12 +637,14 @@ async function playVoiceCue(cue: VoiceCue | null, waitUntilEnd: boolean): Promis
     return true;
   }
 
+  const maxWaitMs = getVoiceCueMaxWaitMs(cue);
   voiceWaitWatchdogId = window.setTimeout(() => {
     voiceWaitWatchdogId = null;
     if (process.env.NODE_ENV !== 'production') {
-      console.warn('[voice-guidance] speakVoiceCueAndWait watchdog (completion stalled)', {
+      console.warn('[voice-guidance] speakVoiceCueAndWait watchdog (forced completion)', {
         dedupeKey: currentCueKey,
-        timeoutMs: VOICE_CUE_WAIT_TIMEOUT_MS,
+        timeoutMs: maxWaitMs,
+        kind: cue.kind,
       });
     }
     cancelClipPlayback();
@@ -640,8 +655,9 @@ async function playVoiceCue(cue: VoiceCue | null, waitUntilEnd: boolean): Promis
       runtimeState.activeCueKey = null;
       runtimeState.activePriority = 0;
     }
-    settleWait(false);
-  }, VOICE_CUE_WAIT_TIMEOUT_MS);
+    /* Playback had already started (playCueWithFallback returned true) — unblock sequence. */
+    settleWait(true);
+  }, maxWaitMs);
 
   return waitPromise;
 }
