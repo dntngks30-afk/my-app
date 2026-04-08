@@ -29,6 +29,18 @@ import {
   type SquatPassSeverity,
   type SquatResultInterpretation,
 } from './squat-result-severity';
+import {
+  clearStoredCameraTraceData,
+  clearStoredOverheadObservations,
+  clearStoredSquatObservations,
+  getStoredRecentAttempts,
+  getStoredRecentOverheadObservations,
+  getStoredRecentSquatObservations,
+  getStoredRecentSquatObservationsSnapshot,
+  pushStoredAttemptSnapshot,
+  pushStoredOverheadObservation,
+  pushStoredSquatObservation,
+} from './trace/camera-trace-storage';
 import { peekLastPoseCameraObservability } from './camera-observability-pose-bridge';
 import {
   getFrozenSquatPassSnapshot,
@@ -683,25 +695,6 @@ export function computeObservationTruthFields(args: {
   };
 }
 
-const TRACE_STORAGE_KEY = 'moveReCameraTrace:v1';
-const OBSERVATION_STORAGE_KEY = 'moveReCameraSquatObservation:v1';
-
-/** PR-CAM-OBS-FLUSH-HARDEN-01: LS 실패/레이스 시에도 terminal bundle이 비지 않도록 보조(LS가 정본) */
-let lastKnownSquatObservationsCache: SquatAttemptObservation[] = [];
-
-/** 브라우저·Node 스모크 공통 — `window` 없이 globalThis.localStorage만 있는 환경 지원 */
-function getObservationStorage(): Storage | null {
-  if (typeof globalThis === 'undefined') return null;
-  try {
-    const ls = (globalThis as { localStorage?: Storage }).localStorage;
-    if (ls && typeof ls.getItem === 'function' && typeof ls.setItem === 'function') return ls;
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-const MAX_ATTEMPTS = 50;
-const MAX_SQUAT_OBSERVATIONS = 80;
 const DEBUG_VERSION = 'pr4-2';
 const OBS_DEBUG_VERSION = 'cam27-obs-1';
 
@@ -972,41 +965,11 @@ function observationDedupSkip(list: SquatAttemptObservation[], next: SquatAttemp
 
 /** bounded localStorage — 실패 시 무시 */
 export function pushSquatObservation(obs: SquatAttemptObservation): void {
-  const ls = getObservationStorage();
-  if (!ls) return;
-  try {
-    const raw = ls.getItem(OBSERVATION_STORAGE_KEY);
-    const list: SquatAttemptObservation[] = raw ? (JSON.parse(raw) as SquatAttemptObservation[]) : [];
-    if (observationDedupSkip(list, obs)) return;
-    list.push(obs);
-    const trimmed = list.slice(-MAX_SQUAT_OBSERVATIONS);
-    lastKnownSquatObservationsCache = trimmed.slice();
-    try {
-      ls.setItem(OBSERVATION_STORAGE_KEY, JSON.stringify(trimmed));
-    } catch {
-      /* LS 쓰기 실패 — 캐시는 이미 최신 목록 */
-    }
-  } catch {
-    try {
-      const list = [...lastKnownSquatObservationsCache];
-      if (observationDedupSkip(list, obs)) return;
-      list.push(obs);
-      lastKnownSquatObservationsCache = list.slice(-MAX_SQUAT_OBSERVATIONS);
-    } catch {
-      // ignore
-    }
-  }
+  pushStoredSquatObservation(obs, observationDedupSkip);
 }
 
 export function getRecentSquatObservations(): SquatAttemptObservation[] {
-  const ls = getObservationStorage();
-  if (!ls) return [];
-  try {
-    const raw = ls.getItem(OBSERVATION_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as SquatAttemptObservation[]) : [];
-  } catch {
-    return [];
-  }
+  return getStoredRecentSquatObservations();
 }
 
 /**
@@ -1014,38 +977,11 @@ export function getRecentSquatObservations(): SquatAttemptObservation[] {
  * 산식 변경 없음, 읽기 경로만 명시.
  */
 export function getRecentSquatObservationsSnapshot(): SquatAttemptObservation[] {
-  let fromLs: SquatAttemptObservation[] = [];
-  let readOk = false;
-  try {
-    const ls = getObservationStorage();
-    if (!ls) {
-      return lastKnownSquatObservationsCache.length > 0 ? lastKnownSquatObservationsCache.slice() : [];
-    }
-    const raw = ls.getItem(OBSERVATION_STORAGE_KEY);
-    fromLs = raw ? (JSON.parse(raw) as SquatAttemptObservation[]) : [];
-    readOk = true;
-  } catch {
-    fromLs = [];
-  }
-  if (!readOk) {
-    return lastKnownSquatObservationsCache.length > 0 ? lastKnownSquatObservationsCache.slice() : [];
-  }
-  if (lastKnownSquatObservationsCache.length > fromLs.length) {
-    return lastKnownSquatObservationsCache.slice();
-  }
-  if (fromLs.length > 0) return fromLs;
-  return lastKnownSquatObservationsCache.length > 0 ? lastKnownSquatObservationsCache.slice() : [];
+  return getStoredRecentSquatObservationsSnapshot();
 }
 
 export function clearSquatObservations(): void {
-  lastKnownSquatObservationsCache = [];
-  const ls = getObservationStorage();
-  if (!ls) return;
-  try {
-    ls.removeItem(OBSERVATION_STORAGE_KEY);
-  } catch {
-    // ignore
-  }
+  clearStoredSquatObservations();
 }
 
 /** 스쿼트 관측 1건 기록(페이지 effect에서 호출). 통과 임계·해석 변경 없음. */
@@ -1103,11 +1039,7 @@ export interface OverheadAttemptObservation {
   debugVersion: string;
 }
 
-const OVERHEAD_OBSERVATION_STORAGE_KEY = 'moveReCameraOverheadObservation:v1';
-const MAX_OVERHEAD_OBSERVATIONS = 80;
 const OVERHEAD_OBS_DEBUG_VERSION = 'overhead-obs-1';
-
-let lastKnownOverheadObservationsCache: OverheadAttemptObservation[] = [];
 
 export function buildOverheadAttemptObservation(
   gate: ExerciseGateResult,
@@ -1181,52 +1113,15 @@ function overheadObservationDedupSkip(
 }
 
 export function pushOverheadObservation(obs: OverheadAttemptObservation): void {
-  const ls = getObservationStorage();
-  if (!ls) return;
-  try {
-    const raw = ls.getItem(OVERHEAD_OBSERVATION_STORAGE_KEY);
-    const list: OverheadAttemptObservation[] = raw ? (JSON.parse(raw) as OverheadAttemptObservation[]) : [];
-    if (overheadObservationDedupSkip(list, obs)) return;
-    list.push(obs);
-    const trimmed = list.slice(-MAX_OVERHEAD_OBSERVATIONS);
-    lastKnownOverheadObservationsCache = trimmed.slice();
-    try {
-      ls.setItem(OVERHEAD_OBSERVATION_STORAGE_KEY, JSON.stringify(trimmed));
-    } catch {
-      /* LS 쓰기 실패 */
-    }
-  } catch {
-    try {
-      const list = [...lastKnownOverheadObservationsCache];
-      if (overheadObservationDedupSkip(list, obs)) return;
-      list.push(obs);
-      lastKnownOverheadObservationsCache = list.slice(-MAX_OVERHEAD_OBSERVATIONS);
-    } catch {
-      // ignore
-    }
-  }
+  pushStoredOverheadObservation(obs, overheadObservationDedupSkip);
 }
 
 export function getRecentOverheadObservations(): OverheadAttemptObservation[] {
-  const ls = getObservationStorage();
-  if (!ls) return [];
-  try {
-    const raw = ls.getItem(OVERHEAD_OBSERVATION_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as OverheadAttemptObservation[]) : [];
-  } catch {
-    return [];
-  }
+  return getStoredRecentOverheadObservations();
 }
 
 export function clearOverheadObservations(): void {
-  lastKnownOverheadObservationsCache = [];
-  const ls = getObservationStorage();
-  if (!ls) return;
-  try {
-    ls.removeItem(OVERHEAD_OBSERVATION_STORAGE_KEY);
-  } catch {
-    // ignore
-  }
+  clearStoredOverheadObservations();
 }
 
 /** 오버헤드 관측 1건 기록(페이지 effect·터미널 경로). */
@@ -1852,48 +1747,21 @@ export function buildAttemptSnapshot(
  * snapshot을 bounded localStorage에 추가 (non-blocking)
  */
 export function pushAttemptSnapshot(snapshot: AttemptSnapshot): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const raw = localStorage.getItem(TRACE_STORAGE_KEY);
-    const list: AttemptSnapshot[] = raw ? (JSON.parse(raw) as AttemptSnapshot[]) : [];
-    list.push(snapshot);
-    const trimmed = list.slice(-MAX_ATTEMPTS);
-    localStorage.setItem(TRACE_STORAGE_KEY, JSON.stringify(trimmed));
-  } catch {
-    // trace 실패 시 카메라 플로우는 정상 동작해야 함
-  }
+  pushStoredAttemptSnapshot(snapshot);
 }
 
 /**
  * 최근 attempt 목록 조회
  */
 export function getRecentAttempts(): AttemptSnapshot[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(TRACE_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as AttemptSnapshot[]) : [];
-  } catch {
-    return [];
-  }
+  return getStoredRecentAttempts();
 }
 
 /**
  * trace 저장소 초기화
  */
 export function clearAttempts(): void {
-  lastKnownSquatObservationsCache = [];
-  lastKnownOverheadObservationsCache = [];
-  const ls = getObservationStorage();
-  if (!ls) return;
-  try {
-    ls.removeItem(TRACE_STORAGE_KEY);
-    ls.removeItem(OBSERVATION_STORAGE_KEY);
-    ls.removeItem(OVERHEAD_OBSERVATION_STORAGE_KEY);
-    /** PR-CAM-SNAPSHOT-BUNDLE-01: 번들 저장소 — camera-trace-bundle.ts BUNDLE_STORAGE_KEY 와 동일 문자열 */
-    ls.removeItem('moveReCameraTraceBundle:v1');
-  } catch {
-    // ignore
-  }
+  clearStoredCameraTraceData();
 }
 
 /** dogfooding용 quick stats */
