@@ -377,6 +377,15 @@ export interface ExerciseGateResult {
 
 const REQUIRED_STABLE_FRAMES = 3;
 
+type SquatCompletionState = NonNullable<EvaluatorResult['debug']>['squatCompletionState'];
+type SquatUiGate = ReturnType<typeof computeSquatUiProgressionLatchGate>;
+type SquatOwnerTruth = ReturnType<typeof computeSquatCompletionOwnerTruth>;
+type SquatSetupPhaseTrace = {
+  readinessStableDwellSatisfied?: boolean;
+  setupMotionBlocked?: boolean;
+  setupMotionBlockReason?: string | null;
+};
+
 export function isGatePassReady(
   gate: Pick<
     ExerciseGateResult,
@@ -415,11 +424,9 @@ export function isFinalPassLatched(
     // simplePassHoldArmingBlockedReason === null. This explicit guard is a
     // second wall: latch can NEVER open if the evaluator reports hold < 1000ms
     // or hold arming was blocked (settle_not_reached / no_top_detected).
-    const hm = gate.evaluatorResult?.debug?.highlightedMetrics;
-    const simplePassHoldMs = typeof hm?.simplePassHoldMs === 'number' ? hm.simplePassHoldMs : 0;
-    const holdArmingBlocked =
-      hm?.simplePassHoldArmingBlockedReason != null &&
-      hm.simplePassHoldArmingBlockedReason !== null;
+    const { simplePassHoldMs, holdArmingBlocked } = getOverheadSimplePassHoldState(
+      gate.evaluatorResult
+    );
     if (simplePassHoldMs < 1000 || holdArmingBlocked) return false;
 
     return (
@@ -468,37 +475,31 @@ export function isFinalPassLatched(
       rawIntegrityLatch,
       squatDecoupleLatch
     );
-    const isSquatEasyOnly =
-      gate.completionSatisfied === true &&
-      isSquatShallowRomPassReason(passReason) &&
-      cs?.currentSquatPhase === 'standing_recovered';
-    const confTh = isSquatEasyOnly
-      ? SQUAT_EASY_PASS_CONFIDENCE
-      : BASIC_PASS_CONFIDENCE_THRESHOLD.squat;
-    const framesReq = isSquatEasyOnly ? SQUAT_EASY_LATCH_STABLE_FRAMES : REQUIRED_STABLE_FRAMES;
+    const squatPassThresholds = getSquatPassThresholds(
+      gate.completionSatisfied === true,
+      passReason,
+      cs?.currentSquatPhase
+    );
     const reasons = getCommonReasons(gate.evaluatorResult, gate.guardrail);
     const hardBlockers = getHardBlockerReasons('squat', gate.guardrail);
     const guardrailCompleteForLatch =
       gate.guardrail.completionStatus === 'complete' || gate.guardrail.completionStatus == null;
     const scDbg = gate.squatCycleDebug;
-    let dwellLatch: boolean | undefined;
-    if (scDbg?.readinessStableDwellSatisfied === false) dwellLatch = false;
-    else if (scDbg?.readinessStableDwellSatisfied === true) dwellLatch = true;
     const uiGate = computeSquatUiProgressionLatchGate({
       completionOwnerPassed: ownerTruth.completionOwnerPassed,
       guardrailCompletionComplete: guardrailCompleteForLatch,
       captureQualityInvalid: gate.guardrail.captureQuality === 'invalid',
       confidence: gate.confidence,
-      passThresholdEffective: confTh,
+      passThresholdEffective: squatPassThresholds.confidenceThreshold,
       effectivePassConfirmation: gate.passConfirmationSatisfied === true,
       passConfirmationFrameCount: gate.passConfirmationFrameCount,
-      framesReq,
+      framesReq: squatPassThresholds.stableFramesRequired,
       captureArmingSatisfied: captureArmingOk,
       squatIntegrityBlockForPass: integrityForPassLatch,
       reasons,
       hardBlockerReasons: hardBlockers,
       liveReadinessNotReady: scDbg?.liveReadinessSummaryState === 'not_ready',
-      readinessStableDwellSatisfied: dwellLatch,
+      readinessStableDwellSatisfied: getSquatReadinessStableDwellSatisfied(scDbg, cs),
       setupMotionBlocked: scDbg?.setupMotionBlocked === true,
     });
     return uiGate.uiProgressionAllowed;
@@ -577,8 +578,168 @@ function getHighlightedMetric(result: EvaluatorResult, key: string): number {
   return typeof value === 'number' ? value : 0;
 }
 
+function getOverheadSimplePassHoldState(result: EvaluatorResult): {
+  simplePassHoldMs: number;
+  holdArmingBlocked: boolean;
+} {
+  const hm = result.debug?.highlightedMetrics;
+  return {
+    simplePassHoldMs: typeof hm?.simplePassHoldMs === 'number' ? hm.simplePassHoldMs : 0,
+    holdArmingBlocked:
+      hm?.simplePassHoldArmingBlockedReason != null &&
+      hm.simplePassHoldArmingBlockedReason !== null,
+  };
+}
+
 function hasAnyReason(reasons: string[], includes: string[]): boolean {
   return includes.some((value) => reasons.includes(value));
+}
+
+function getSquatPassThresholds(
+  completionSatisfied: boolean,
+  passReason: string | undefined,
+  currentSquatPhase: SquatCompletionState extends { currentSquatPhase?: infer P }
+    ? P | undefined
+    : undefined
+): {
+  easyOnly: boolean;
+  confidenceThreshold: number;
+  stableFramesRequired: number;
+} {
+  const easyOnly =
+    completionSatisfied === true &&
+    isSquatShallowRomPassReason(passReason) &&
+    currentSquatPhase === 'standing_recovered';
+  return {
+    easyOnly,
+    confidenceThreshold: easyOnly
+      ? SQUAT_EASY_PASS_CONFIDENCE
+      : BASIC_PASS_CONFIDENCE_THRESHOLD.squat,
+    stableFramesRequired: easyOnly ? SQUAT_EASY_LATCH_STABLE_FRAMES : REQUIRED_STABLE_FRAMES,
+  };
+}
+
+function isOverheadEasyOnlyProgression(result: EvaluatorResult): boolean {
+  const hm = result.debug?.highlightedMetrics;
+  const strict =
+    hm?.strictMotionCompletionSatisfied === true || hm?.strictMotionCompletionSatisfied === 1;
+  const easy = hm?.easyCompletionSatisfied === true || hm?.easyCompletionSatisfied === 1;
+  // PR-CAM-15: low-ROM path도 easy-only 완화 적용 (동일 confidence·latch 임계)
+  const lowRom = hm?.lowRomProgressionSatisfied === true || hm?.lowRomProgressionSatisfied === 1;
+  // PR-CAM-16: humane low-ROM path도 동일하게 easy-only 완화 적용
+  const humaneLowRom =
+    hm?.humaneLowRomProgressionSatisfied === true || hm?.humaneLowRomProgressionSatisfied === 1;
+  return Boolean((easy || lowRom || humaneLowRom) && !strict);
+}
+
+function getPassThresholdEffective(
+  stepId: CameraStepId,
+  passThreshold: number,
+  overheadEasyOnly: boolean,
+  squatEasyOnly: boolean
+): number {
+  return overheadEasyOnly
+    ? OVERHEAD_EASY_PASS_CONFIDENCE
+    : stepId === 'squat' && squatEasyOnly
+      ? SQUAT_EASY_PASS_CONFIDENCE
+      : passThreshold;
+}
+
+function getPassConfirmationMinStableFrames(
+  stepId: CameraStepId,
+  squatEasyOnly: boolean
+): number {
+  return stepId === 'overhead-reach'
+    ? REQUIRED_STABLE_FRAMES
+    : stepId === 'squat' && squatEasyOnly
+      ? SQUAT_EASY_LATCH_STABLE_FRAMES
+      : REQUIRED_STABLE_FRAMES;
+}
+
+function getSquatReadinessStableDwellSatisfied(
+  setupTrace: Pick<SquatSetupPhaseTrace, 'readinessStableDwellSatisfied'> | undefined,
+  squatCompletionState: Pick<SquatCompletionState, 'readinessStableDwellSatisfied'> | undefined
+): boolean | undefined {
+  if (
+    setupTrace?.readinessStableDwellSatisfied === false ||
+    squatCompletionState?.readinessStableDwellSatisfied === false
+  ) {
+    return false;
+  }
+  if (
+    setupTrace?.readinessStableDwellSatisfied === true ||
+    squatCompletionState?.readinessStableDwellSatisfied === true
+  ) {
+    return true;
+  }
+  return undefined;
+}
+
+function getOverheadRepHoldBlocks(
+  stepId: CameraStepId,
+  reasons: string[],
+  evaluatorResult: EvaluatorResult
+): boolean {
+  const hasHoldOrRepReason = hasAnyReason(reasons, ['rep_incomplete', 'hold_too_short']);
+  const overheadSimpleSat =
+    stepId === 'overhead-reach' &&
+    (evaluatorResult.debug?.highlightedMetrics?.completionSatisfied === true ||
+      evaluatorResult.debug?.highlightedMetrics?.completionSatisfied === 1);
+  return overheadSimpleSat ? false : hasHoldOrRepReason;
+}
+
+function getFinalPassBlockedReason(input: {
+  stepId: CameraStepId;
+  completionSatisfied: boolean;
+  confidence: number;
+  passThresholdEffective: number;
+  effectivePassConfirmation: boolean;
+  guardrail: StepGuardrailResult;
+  reasons: string[];
+  hardBlockerReasons: string[];
+  overheadRepHoldBlocks: boolean;
+  squatOwnerTruth: SquatOwnerTruth | null;
+  squatUiGate: SquatUiGate | null;
+  squatIntegrityBlockForPass: string | null;
+}): string | null {
+  const {
+    stepId,
+    completionSatisfied,
+    confidence,
+    passThresholdEffective,
+    effectivePassConfirmation,
+    guardrail,
+    reasons,
+    hardBlockerReasons,
+    overheadRepHoldBlocks,
+    squatOwnerTruth,
+    squatUiGate,
+    squatIntegrityBlockForPass,
+  } = input;
+
+  if (stepId === 'squat' && squatOwnerTruth != null && squatUiGate != null) {
+    if (!squatOwnerTruth.completionOwnerPassed) {
+      return squatOwnerTruth.completionOwnerBlockedReason ?? 'completion_owner_blocked';
+    }
+    if (!squatUiGate.uiProgressionAllowed) {
+      return squatUiGate.uiProgressionBlockedReason ?? 'ui_progression_blocked';
+    }
+    return null;
+  }
+  if (!completionSatisfied) return 'completion_not_satisfied';
+  if (guardrail.captureQuality === 'invalid') return 'capture_quality_invalid';
+  // PR-SIMPLE-PASS-01: confidence is quality-only for overhead — NOT a pass gate
+  if (stepId !== 'overhead-reach' && confidence < passThresholdEffective) {
+    return `confidence_too_low:${confidence.toFixed(2)}<${passThresholdEffective.toFixed(2)}`;
+  }
+  if (!effectivePassConfirmation) return 'pass_confirmation_not_ready';
+  if (stepId !== 'overhead-reach' && squatIntegrityBlockForPass != null) {
+    return squatIntegrityBlockForPass;
+  }
+  const blocker = hardBlockerReasons.find((reason) => reasons.includes(reason));
+  if (blocker) return `hard_blocker:${blocker}`;
+  if (overheadRepHoldBlocks) return 'overhead_rep_hold_blocked';
+  return null;
 }
 
 function getStableSignalBonus(stepId: CameraStepId, result: EvaluatorResult): number {
@@ -1744,22 +1905,7 @@ export function evaluateExerciseAutoProgress(
   const confidence = getEffectiveConfidence(stepId, evaluatorResult, guardrail);
   const reasons = getCommonReasons(evaluatorResult, guardrail);
   const passThreshold = BASIC_PASS_CONFIDENCE_THRESHOLD[stepId];
-  const overheadEasyOnly =
-    stepId === 'overhead-reach' &&
-    (() => {
-      const hm = evaluatorResult.debug?.highlightedMetrics;
-      const strict =
-        hm?.strictMotionCompletionSatisfied === true || hm?.strictMotionCompletionSatisfied === 1;
-      const easy = hm?.easyCompletionSatisfied === true || hm?.easyCompletionSatisfied === 1;
-      // PR-CAM-15: low-ROM path도 easy-only 완화 적용 (동일 confidence·latch 임계)
-      const lowRom =
-        hm?.lowRomProgressionSatisfied === true || hm?.lowRomProgressionSatisfied === 1;
-      // PR-CAM-16: humane low-ROM path도 동일하게 easy-only 완화 적용
-      const humaneLowRom =
-        hm?.humaneLowRomProgressionSatisfied === true ||
-        hm?.humaneLowRomProgressionSatisfied === 1;
-      return Boolean((easy || lowRom || humaneLowRom) && !strict);
-    })();
+  const overheadEasyOnly = stepId === 'overhead-reach' && isOverheadEasyOnlyProgression(evaluatorResult);
   /**
    * CAM-25 + PR-CAM-CORE: shallow ROM 완료 경로는 squat easy-only branch.
    * evaluatorResult.debug.squatCompletionState 는 runEvaluator() 직후 이미 확정된 값이므로
@@ -1767,29 +1913,22 @@ export function evaluateExerciseAutoProgress(
    */
   const squatEasyOnly =
     stepId === 'squat' &&
-    (() => {
-      const cs = evaluatorResult.debug?.squatCompletionState;
-      const passReason = cs?.completionPassReason;
-      return (
-        cs?.completionSatisfied === true &&
-        isSquatShallowRomPassReason(passReason) &&
-        cs?.currentSquatPhase === 'standing_recovered'
-      );
-    })();
-  const passThresholdEffective = overheadEasyOnly
-    ? OVERHEAD_EASY_PASS_CONFIDENCE
-    : squatEasyOnly
-      ? SQUAT_EASY_PASS_CONFIDENCE
-      : passThreshold;
+    getSquatPassThresholds(
+      evaluatorResult.debug?.squatCompletionState?.completionSatisfied === true,
+      evaluatorResult.debug?.squatCompletionState?.completionPassReason,
+      evaluatorResult.debug?.squatCompletionState?.currentSquatPhase
+    ).easyOnly;
+  const passThresholdEffective = getPassThresholdEffective(
+    stepId,
+    passThreshold,
+    overheadEasyOnly,
+    squatEasyOnly
+  );
   const passConfirmation = getPassConfirmation(
     stepId,
     landmarks,
     // PR-SIMPLE-PASS-01: overhead always uses REQUIRED_STABLE_FRAMES (3) — no easy path variation
-    stepId === 'overhead-reach'
-      ? REQUIRED_STABLE_FRAMES
-      : squatEasyOnly
-        ? SQUAT_EASY_LATCH_STABLE_FRAMES
-        : REQUIRED_STABLE_FRAMES
+    getPassConfirmationMinStableFrames(stepId, squatEasyOnly)
   );
   let completionSatisfied: boolean;
   let squatCycleDebug: SquatCycleDebug | undefined;
@@ -1864,16 +2003,10 @@ export function evaluateExerciseAutoProgress(
    * squatSetupTraceForGate and squatLiveSummaryForGate are hoisted here so that
    * Step E reuses the same computed values without a second identical call.
    */
-  let squatOwnerTruth: ReturnType<typeof computeSquatCompletionOwnerTruth> | null = null;
-  let squatUiGate: ReturnType<typeof computeSquatUiProgressionLatchGate> | null = null;
+  let squatOwnerTruth: SquatOwnerTruth | null = null;
+  let squatUiGate: SquatUiGate | null = null;
   // Hoisted: shared between gate computation (C) and observability enrichment (E)
-  let squatSetupTraceForGate:
-    | {
-        readinessStableDwellSatisfied?: boolean;
-        setupMotionBlocked?: boolean;
-        setupMotionBlockReason?: string | null;
-      }
-    | undefined;
+  let squatSetupTraceForGate: SquatSetupPhaseTrace | undefined;
   let squatLiveSummaryForGate: ReturnType<typeof getLiveReadinessSummary> | undefined;
 
   if (stepId === 'squat') {
@@ -1901,25 +2034,7 @@ export function evaluateExerciseAutoProgress(
     // setupTrace and liveSummary are hoisted (squatSetupTraceForGate / squatLiveSummaryForGate)
     // so Step E reuses them without duplicate computation.
     const squatFramesReq = squatEasyOnly ? SQUAT_EASY_LATCH_STABLE_FRAMES : REQUIRED_STABLE_FRAMES;
-    squatSetupTraceForGate = evaluatorResult.debug?.squatSetupPhaseTrace as
-      | {
-          readinessStableDwellSatisfied?: boolean;
-          setupMotionBlocked?: boolean;
-          setupMotionBlockReason?: string | null;
-        }
-      | undefined;
-    let readinessStableDwellForGate: boolean | undefined;
-    if (
-      squatSetupTraceForGate?.readinessStableDwellSatisfied === false ||
-      squatCs?.readinessStableDwellSatisfied === false
-    ) {
-      readinessStableDwellForGate = false;
-    } else if (
-      squatSetupTraceForGate?.readinessStableDwellSatisfied === true ||
-      squatCs?.readinessStableDwellSatisfied === true
-    ) {
-      readinessStableDwellForGate = true;
-    }
+    squatSetupTraceForGate = evaluatorResult.debug?.squatSetupPhaseTrace as SquatSetupPhaseTrace | undefined;
     const setupMotionBlockedForGate =
       squatSetupTraceForGate?.setupMotionBlocked === true || squatCs?.setupMotionBlocked === true;
     squatLiveSummaryForGate = getLiveReadinessSummary({
@@ -1946,7 +2061,10 @@ export function evaluateExerciseAutoProgress(
       reasons,
       hardBlockerReasons,
       liveReadinessNotReady,
-      readinessStableDwellSatisfied: readinessStableDwellForGate,
+      readinessStableDwellSatisfied: getSquatReadinessStableDwellSatisfied(
+        squatSetupTraceForGate,
+        squatCs
+      ),
       setupMotionBlocked: setupMotionBlockedForGate,
     });
 
@@ -2074,12 +2192,7 @@ export function evaluateExerciseAutoProgress(
 
   /** PR-CAM-11B/15/16: easy/low-ROM/humane 진행 통과 시 reasons에 남은 hold_too_short/rep_incomplete 로 pass를 막지 않음
    * PR-SIMPLE-PASS-01: completionSatisfied(새 단일 오너)가 true이면 guardrail이 'complete' 반환 → 플래그 불생성 */
-  const hasHoldOrRepReason = hasAnyReason(reasons, ['rep_incomplete', 'hold_too_short']);
-  const overheadSimpleSat =
-    stepId === 'overhead-reach' &&
-    (evaluatorResult.debug?.highlightedMetrics?.completionSatisfied === true ||
-      evaluatorResult.debug?.highlightedMetrics?.completionSatisfied === 1);
-  const overheadRepHoldBlocks = overheadSimpleSat ? false : hasHoldOrRepReason;
+  const overheadRepHoldBlocks = getOverheadRepHoldBlocks(stepId, reasons, evaluatorResult);
 
   const progressionPassed =
     stepId === 'squat'
@@ -2101,29 +2214,20 @@ export function evaluateExerciseAutoProgress(
           !overheadRepHoldBlocks;
 
   /* PR-CAM-17: final pass 체인 가시성 — 어느 단계에서 pass가 막히는지 즉시 확인 가능. */
-  const finalPassBlockedReason: string | null = (() => {
-    if (stepId === 'squat' && squatOwnerTruth != null && squatUiGate != null) {
-      if (!squatOwnerTruth.completionOwnerPassed) {
-        return squatOwnerTruth.completionOwnerBlockedReason ?? 'completion_owner_blocked';
-      }
-      if (!squatUiGate.uiProgressionAllowed) {
-        return squatUiGate.uiProgressionBlockedReason ?? 'ui_progression_blocked';
-      }
-      return null;
-    }
-    if (!completionSatisfied) return 'completion_not_satisfied';
-    if (guardrail.captureQuality === 'invalid') return 'capture_quality_invalid';
-    // PR-SIMPLE-PASS-01: confidence is quality-only for overhead — NOT a pass gate
-    if (stepId !== 'overhead-reach' && confidence < passThresholdEffective)
-      return `confidence_too_low:${confidence.toFixed(2)}<${passThresholdEffective.toFixed(2)}`;
-    if (!effectivePassConfirmation) return 'pass_confirmation_not_ready';
-    if (stepId !== 'overhead-reach' && squatIntegrityBlockForPass != null)
-      return squatIntegrityBlockForPass;
-    const blocker = hardBlockerReasons.find((r) => reasons.includes(r));
-    if (blocker) return `hard_blocker:${blocker}`;
-    if (overheadRepHoldBlocks) return 'overhead_rep_hold_blocked';
-    return null;
-  })();
+  const finalPassBlockedReason = getFinalPassBlockedReason({
+    stepId,
+    completionSatisfied,
+    confidence,
+    passThresholdEffective,
+    effectivePassConfirmation,
+    guardrail,
+    reasons,
+    hardBlockerReasons,
+    overheadRepHoldBlocks,
+    squatOwnerTruth,
+    squatUiGate,
+    squatIntegrityBlockForPass,
+  });
   const finalPassEligible = progressionPassed; // = finalPassBlockedReason === null
 
   if (progressionPassed) {
