@@ -43,6 +43,11 @@ import type {
 } from '@/lib/camera/squat-completion-state';
 import type { SquatOwnerTruthSource, SquatOwnerTruthStage } from '@/lib/camera/squat/squat-owner-trace';
 import type { SquatPassCoreResult } from '@/lib/camera/squat/pass-core';
+import {
+  computeSquatUiProgressionLatchGate,
+  type SquatUiProgressionLatchGateInput,
+  type SquatUiProgressionLatchGateResult,
+} from './squat/squat-ui-progression-latch-gate';
 
 export type ExerciseProgressionState =
   | 'idle'
@@ -378,7 +383,7 @@ export interface ExerciseGateResult {
 const REQUIRED_STABLE_FRAMES = 3;
 
 type SquatCompletionState = NonNullable<EvaluatorResult['debug']>['squatCompletionState'];
-type SquatUiGate = ReturnType<typeof computeSquatUiProgressionLatchGate>;
+type SquatUiGate = SquatUiProgressionLatchGateResult;
 type SquatOwnerTruth = ReturnType<typeof computeSquatCompletionOwnerTruth>;
 type SquatSetupPhaseTrace = {
   readinessStableDwellSatisfied?: boolean;
@@ -485,23 +490,25 @@ export function isFinalPassLatched(
     const guardrailCompleteForLatch =
       gate.guardrail.completionStatus === 'complete' || gate.guardrail.completionStatus == null;
     const scDbg = gate.squatCycleDebug;
-    const uiGate = computeSquatUiProgressionLatchGate({
-      completionOwnerPassed: ownerTruth.completionOwnerPassed,
-      guardrailCompletionComplete: guardrailCompleteForLatch,
-      captureQualityInvalid: gate.guardrail.captureQuality === 'invalid',
-      confidence: gate.confidence,
-      passThresholdEffective: squatPassThresholds.confidenceThreshold,
-      effectivePassConfirmation: gate.passConfirmationSatisfied === true,
-      passConfirmationFrameCount: gate.passConfirmationFrameCount,
-      framesReq: squatPassThresholds.stableFramesRequired,
-      captureArmingSatisfied: captureArmingOk,
-      squatIntegrityBlockForPass: integrityForPassLatch,
-      reasons,
-      hardBlockerReasons: hardBlockers,
-      liveReadinessNotReady: scDbg?.liveReadinessSummaryState === 'not_ready',
-      readinessStableDwellSatisfied: getSquatReadinessStableDwellSatisfied(scDbg, cs),
-      setupMotionBlocked: scDbg?.setupMotionBlocked === true,
-    });
+    const uiGate = computeSquatUiProgressionLatchGate(
+      buildSquatUiProgressionLatchGateInput({
+        completionOwnerPassed: ownerTruth.completionOwnerPassed,
+        guardrailCompletionComplete: guardrailCompleteForLatch,
+        captureQualityInvalid: gate.guardrail.captureQuality === 'invalid',
+        confidence: gate.confidence,
+        passThresholdEffective: squatPassThresholds.confidenceThreshold,
+        effectivePassConfirmation: gate.passConfirmationSatisfied === true,
+        passConfirmationFrameCount: gate.passConfirmationFrameCount,
+        framesReq: squatPassThresholds.stableFramesRequired,
+        captureArmingSatisfied: captureArmingOk,
+        squatIntegrityBlockForPass: integrityForPassLatch,
+        reasons,
+        hardBlockerReasons: hardBlockers,
+        liveReadinessNotReady: scDbg?.liveReadinessSummaryState === 'not_ready',
+        readinessStableDwellSatisfied: getSquatReadinessStableDwellSatisfied(scDbg, cs),
+        setupMotionBlocked: scDbg?.setupMotionBlocked === true,
+      })
+    );
     return uiGate.uiProgressionAllowed;
   }
 
@@ -1190,12 +1197,7 @@ export function shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass(
   return true;
 }
 
-/**
- * PR-01: UI progression / final latch gate — completion owner 와 분리.
- * captureQuality·confidence·passConfirmation·integrity·hard blockers 만 사용한다.
- * 스모크에서 owner 통과 + UI 차단 조합을 검증할 때 export 사용.
- */
-export function computeSquatUiProgressionLatchGate(input: {
+function buildSquatUiProgressionLatchGateInput(input: {
   completionOwnerPassed: boolean;
   guardrailCompletionComplete: boolean;
   captureQualityInvalid: boolean;
@@ -1204,62 +1206,31 @@ export function computeSquatUiProgressionLatchGate(input: {
   effectivePassConfirmation: boolean;
   passConfirmationFrameCount: number;
   framesReq: number;
-  /** PR-CAM-29A + PR-01: 캡처 최소 시간(arming) 충족 — latch/UI 전용 */
   captureArmingSatisfied: boolean;
   squatIntegrityBlockForPass: string | null;
   reasons: string[];
   hardBlockerReasons: string[];
-  /** Setup false-pass lock: live readiness RED 이면 latch 금지 */
-  liveReadinessNotReady?: boolean;
-  /** evaluator 가 명시 false 일 때만 차단(undefined 는 레거시 스킵) */
-  readinessStableDwellSatisfied?: boolean;
-  /** completion state 가 setupMotionBlocked true 일 때 차단 */
-  setupMotionBlocked?: boolean;
-}): { uiProgressionAllowed: boolean; uiProgressionBlockedReason: string | null } {
-  if (!input.completionOwnerPassed) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'completion_owner_not_satisfied' };
-  }
-  if (input.liveReadinessNotReady === true) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'live_readiness_not_ready' };
-  }
-  if (input.readinessStableDwellSatisfied === false) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'readiness_stable_dwell_not_met' };
-  }
-  if (input.setupMotionBlocked === true) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'setup_motion_blocked' };
-  }
-  if (input.captureArmingSatisfied !== true) {
-    return {
-      uiProgressionAllowed: false,
-      uiProgressionBlockedReason: 'minimum_cycle_duration_not_met',
-    };
-  }
-  if (input.guardrailCompletionComplete !== true) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'guardrail_not_complete' };
-  }
-  if (input.captureQualityInvalid) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'capture_quality_invalid' };
-  }
-  if (input.confidence < input.passThresholdEffective) {
-    return {
-      uiProgressionAllowed: false,
-      uiProgressionBlockedReason: `confidence_too_low:${input.confidence.toFixed(2)}<${input.passThresholdEffective.toFixed(2)}`,
-    };
-  }
-  if (!input.effectivePassConfirmation) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'pass_confirmation_not_ready' };
-  }
-  if (input.passConfirmationFrameCount < input.framesReq) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'pass_confirmation_frames_not_met' };
-  }
-  if (input.squatIntegrityBlockForPass != null) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: input.squatIntegrityBlockForPass };
-  }
-  const blocker = input.hardBlockerReasons.find((r) => input.reasons.includes(r));
-  if (blocker) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: `hard_blocker:${blocker}` };
-  }
-  return { uiProgressionAllowed: true, uiProgressionBlockedReason: null };
+  liveReadinessNotReady: boolean;
+  readinessStableDwellSatisfied: boolean | undefined;
+  setupMotionBlocked: boolean;
+}): SquatUiProgressionLatchGateInput {
+  return {
+    completionOwnerPassed: input.completionOwnerPassed,
+    guardrailCompletionComplete: input.guardrailCompletionComplete,
+    captureQualityInvalid: input.captureQualityInvalid,
+    confidence: input.confidence,
+    passThresholdEffective: input.passThresholdEffective,
+    effectivePassConfirmation: input.effectivePassConfirmation,
+    passConfirmationFrameCount: input.passConfirmationFrameCount,
+    framesReq: input.framesReq,
+    captureArmingSatisfied: input.captureArmingSatisfied,
+    squatIntegrityBlockForPass: input.squatIntegrityBlockForPass,
+    reasons: input.reasons,
+    hardBlockerReasons: input.hardBlockerReasons,
+    liveReadinessNotReady: input.liveReadinessNotReady,
+    readinessStableDwellSatisfied: input.readinessStableDwellSatisfied,
+    setupMotionBlocked: input.setupMotionBlocked,
+  };
 }
 
 /** PR-CAM-CORE-PASS-REASON-ALIGN-01: shallow ROM 성공(일반·이벤트 사이클) — easy latch / conf floor 공통 */
@@ -1868,7 +1839,7 @@ function squatMeaningfulAttemptAllowsRetryInsteadOfSevereFail(
 function stampSquatFinalPassTimingBlockedReason(
   squatCycleDebug: SquatCycleDebug,
   completionSatisfied: boolean,
-  squatUiGate: ReturnType<typeof computeSquatUiProgressionLatchGate> | null
+  squatUiGate: SquatUiGate | null
 ): SquatCycleDebug {
   if (!completionSatisfied) return squatCycleDebug;
   if (squatCycleDebug.captureArmingSatisfied === false) {
@@ -2047,26 +2018,28 @@ export function evaluateExerciseAutoProgress(
     // GUARDRAIL-DECOUPLE-RESET-01: for squat, guardrail.completionStatus is aligned to
     // squatPassCore.passDetected inside guardrails.getMotionCompleteness — legacy
     // highlightedMetrics.completionSatisfied no longer sole motion-complete owner.
-    squatUiGate = computeSquatUiProgressionLatchGate({
-      completionOwnerPassed: squatOwnerTruth.completionOwnerPassed,
-      guardrailCompletionComplete: guardrail.completionStatus === 'complete',
-      captureQualityInvalid: guardrail.captureQuality === 'invalid',
-      confidence,
-      passThresholdEffective,
-      effectivePassConfirmation,
-      passConfirmationFrameCount: passConfirmation.stableFrameCount,
-      framesReq: squatFramesReq,
-      captureArmingSatisfied: captureArmingOk,
-      squatIntegrityBlockForPass,
-      reasons,
-      hardBlockerReasons,
-      liveReadinessNotReady,
-      readinessStableDwellSatisfied: getSquatReadinessStableDwellSatisfied(
-        squatSetupTraceForGate,
-        squatCs
-      ),
-      setupMotionBlocked: setupMotionBlockedForGate,
-    });
+    squatUiGate = computeSquatUiProgressionLatchGate(
+      buildSquatUiProgressionLatchGateInput({
+        completionOwnerPassed: squatOwnerTruth.completionOwnerPassed,
+        guardrailCompletionComplete: guardrail.completionStatus === 'complete',
+        captureQualityInvalid: guardrail.captureQuality === 'invalid',
+        confidence,
+        passThresholdEffective,
+        effectivePassConfirmation,
+        passConfirmationFrameCount: passConfirmation.stableFrameCount,
+        framesReq: squatFramesReq,
+        captureArmingSatisfied: captureArmingOk,
+        squatIntegrityBlockForPass,
+        reasons,
+        hardBlockerReasons,
+        liveReadinessNotReady,
+        readinessStableDwellSatisfied: getSquatReadinessStableDwellSatisfied(
+          squatSetupTraceForGate,
+          squatCs
+        ),
+        setupMotionBlocked: setupMotionBlockedForGate,
+      })
+    );
 
     // ── Step D: UI-only final-pass blockers ──
     // These squat-specific suppression checks may set uiProgressionAllowed = false.
