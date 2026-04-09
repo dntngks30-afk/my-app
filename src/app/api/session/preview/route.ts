@@ -5,13 +5,13 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 /**
- * POST /api/session/bootstrap
+ * POST /api/session/preview
  *
- * Compat route only.
- * Canonical session-preview owner route is /api/session/preview.
+ * Canonical session-preview owner route.
+ * Returns current active-session preview or next-session pre-create preview only.
  */
 export async function POST(req: NextRequest) {
   return handlePostSessionPreviewBootstrap(req, {
-    errorTag: '[session/bootstrap]',
+    errorTag: '[session/preview]',
   });
 }

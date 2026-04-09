@@ -1,11 +1,12 @@
 /**
  * GET /api/bootstrap
  *
- * Minimal summary bundle for app initialization across ì§€ë„ / í†µê³„ / ë§ˆì´ tabs.
+ * Generic summary bundle surface.
+ * Kept separate from /api/app/bootstrap app-init and from home/session bootstrap owners.
  * Read-only. No writes, no side effects.
  *
  * Auth: Bearer token (getCurrentUserId)
- * ?debug=1 â†’ response includes debug timings (auth_ms, user_ms, home_ms, stats_ms, my_ms, total_ms)
+ * ?debug=1 => response includes debug timings (auth_ms, user_ms, home_ms, stats_ms, my_ms, total_ms)
  */
 
 import { NextRequest } from 'next/server';
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest) {
     const authMs = Math.round(performance.now() - t0);
 
     if (!userId) {
-      return fail(401, ApiErrorCode.AUTH_REQUIRED, 'ë¡œê·¸ì¸ì´ í•„ìš”í•©ë‹ˆë‹¤');
+      return fail(401, ApiErrorCode.AUTH_REQUIRED, '·Î±×ÀÎÀÌ ÇÊ¿äÇÕ´Ï´Ù');
     }
 
     const supabase = getServerSupabaseAdmin();
@@ -47,6 +48,6 @@ export async function GET(req: NextRequest) {
     return ok(result.data, extras);
   } catch (err) {
     console.error('[api/bootstrap]', err);
-    return fail(500, ApiErrorCode.INTERNAL_ERROR, 'ì„œë²„ ì˜¤ë¥˜');
+    return fail(500, ApiErrorCode.INTERNAL_ERROR, '¼­¹ö ¿À·ù');
   }
 }

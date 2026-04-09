@@ -7,9 +7,10 @@
 import { setCache, invalidateCache, getCacheStale } from '@/lib/cache/tabDataCache';
 import {
   getActiveSession,
-  getBootstrap,
+  getHomeActiveLite,
   type ActiveSessionResponse,
   type ActiveSessionLiteResponse,
+  type HomeActiveLiteResponse,
   type BootstrapResponse,
 } from './client';
 
@@ -37,7 +38,7 @@ function tokenKey(t: string): string {
   return t && t.length >= 16 ? t.slice(-16) : t || '';
 }
 
-/** Home/Stats/My 탭용 — bootstrap SSOT 재사용. active-lite 대신 /api/home/bootstrap 단일 호출.
+/** Home/Stats/My 탭용 — home-lite owner 재사용. active-lite 대신 canonical bundle 단일 호출.
  * stale-while-revalidate: tabDataCache에 stale이 있으면 즉시 반환, 백그라운드 재검증 */
 export async function getCachedActiveSessionLite(
   token: string,
@@ -62,13 +63,13 @@ export async function getCachedActiveSessionLite(
   return { ok: false, status: result.status, error: result.error };
 }
 
-/** 홈 초기 진입용 — bootstrap (activeLite) 1회 조회, 캐시 공유.
+/** 홈 초기 진입용 — canonical home-lite bundle 1회 조회, 캐시 공유.
  * stale-while-revalidate: tabDataCache에 stale이 있으면 즉시 반환, 백그라운드 재검증.
  * debug=true 시 캐시 우회하여 timing 정보 반환 (AT1). */
-export async function getCachedBootstrap(
+export async function getCachedHomeActiveLiteBundle(
   token: string,
   opts?: { debug?: boolean }
-): Promise<{ ok: true; data: BootstrapResponse } | { ok: false; status: number; error: unknown }> {
+): Promise<{ ok: true; data: HomeActiveLiteResponse } | { ok: false; status: number; error: unknown }> {
   const key = tokenKey(token);
   const now = Date.now();
   if (!opts?.debug && bootstrapCache && bootstrapCache.tokenKey === key && bootstrapCache.entry.expiresAt > now) {
@@ -79,7 +80,7 @@ export async function getCachedBootstrap(
   }
   const stale = !opts?.debug ? getCacheStale<BootstrapResponse>('home.bootstrap') : null;
   if (stale) {
-    const revalidate = getBootstrap(token).then((result) => {
+    const revalidate = getHomeActiveLite(token).then((result) => {
       bootstrapInflight = null;
       if (result.ok) {
         bootstrapCache = {
@@ -96,7 +97,7 @@ export async function getCachedBootstrap(
     void revalidate;
     return { ok: true as const, data: stale };
   }
-  const promise = getBootstrap(token, opts).then((result) => {
+  const promise = getHomeActiveLite(token, opts).then((result) => {
     bootstrapInflight = null;
     if (result.ok) {
       bootstrapCache = {
@@ -116,6 +117,13 @@ export async function getCachedBootstrap(
   });
   bootstrapInflight = promise;
   return promise;
+}
+
+export async function getCachedBootstrap(
+  token: string,
+  opts?: { debug?: boolean }
+): Promise<{ ok: true; data: BootstrapResponse } | { ok: false; status: number; error: unknown }> {
+  return getCachedHomeActiveLiteBundle(token, opts);
 }
 
 export async function getCachedActiveSession(

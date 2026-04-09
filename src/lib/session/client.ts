@@ -191,17 +191,27 @@ export async function getActiveSessionLite(
   return sessionFetch<ActiveSessionLiteResponse>(path, token, { method: 'GET' });
 }
 
-/** GET /api/home/bootstrap — 홈 초기 진입용 경량 (activeLite만, bootstrap-lite) */
-export type BootstrapResponse = {
+/** GET /api/home/active-lite — 홈/탭 active-lite canonical bundle */
+export type HomeActiveLiteResponse = {
   activeLite: ActiveSessionLiteResponse;
 };
+
+export type BootstrapResponse = HomeActiveLiteResponse;
+
+/** Canonical fetch helper for home-lite owner route. */
+export async function getHomeActiveLite(
+  token: string,
+  opts?: { debug?: boolean }
+): Promise<ApiResult<HomeActiveLiteResponse>> {
+  const path = opts?.debug ? '/api/home/active-lite?debug=1' : '/api/home/active-lite';
+  return sessionFetch<HomeActiveLiteResponse>(path, token, { method: 'GET' });
+}
 
 export async function getBootstrap(
   token: string,
   opts?: { debug?: boolean }
 ): Promise<ApiResult<BootstrapResponse>> {
-  const path = opts?.debug ? '/api/home/bootstrap?debug=1' : '/api/home/bootstrap';
-  return sessionFetch<BootstrapResponse>(path, token, { method: 'GET' });
+  return getHomeActiveLite(token, opts);
 }
 
 /** GET /api/session/plan?session_number=N — 과거/현재 세션 plan 조회 (read-only) */
@@ -300,17 +310,27 @@ export type SessionBootstrapResponse = {
   constraint_flags: string[];
 };
 
+export type SessionPreviewResponse = SessionBootstrapResponse;
+
+/** Canonical fetch helper for session-preview owner route. */
+export async function getSessionPreview(
+  token: string,
+  input?: { session_number?: number; debug?: boolean }
+): Promise<ApiResult<SessionPreviewResponse>> {
+  const body: Record<string, unknown> = {};
+  if (typeof input?.session_number === 'number') body.session_number = input.session_number;
+  if (input?.debug) body.debug = true;
+  return sessionFetch<SessionPreviewResponse>('/api/session/preview', token, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 export async function bootstrapSession(
   token: string,
   input?: { session_number?: number; debug?: boolean }
 ): Promise<ApiResult<SessionBootstrapResponse>> {
-  const body: Record<string, unknown> = {};
-  if (typeof input?.session_number === 'number') body.session_number = input.session_number;
-  if (input?.debug) body.debug = true;
-  return sessionFetch<SessionBootstrapResponse>('/api/session/bootstrap', token, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
+  return getSessionPreview(token, input);
 }
 
 export type CreateSessionInput = {

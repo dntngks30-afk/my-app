@@ -5,13 +5,13 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 /**
- * GET /api/home/bootstrap
+ * GET /api/home/active-lite
  *
- * Compat route only.
- * Canonical home-lite owner route is /api/home/active-lite.
+ * Canonical home-lite owner route.
+ * Returns only active-lite bootstrap data for home/stats/profile tab hydration.
  */
 export async function GET(req: NextRequest) {
   return handleGetHomeActiveLiteBootstrap(req, {
-    errorTag: '[home/bootstrap]',
+    errorTag: '[home/active-lite]',
   });
 }
