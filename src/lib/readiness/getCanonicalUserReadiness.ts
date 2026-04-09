@@ -8,9 +8,12 @@
  */
 
 import {
+  buildSessionReadinessV1,
   loadReadinessContext,
+  UNAUTHENTICATED_SESSION_READINESS_V1,
   type ReadinessContext,
 } from './get-session-readiness';
+import type { SessionReadinessV1 } from './types';
 
 // ─── 타입 정의 ────────────────────────────────────────────────────────────────
 
@@ -74,6 +77,49 @@ export interface CanonicalUserReadiness {
 }
 
 /** 미인증 사용자용 최소 readiness 객체 */
+function projectBlockingReason(readiness: SessionReadinessV1): SessionBlockingReasonCode | null {
+  switch (readiness.status) {
+    case 'needs_auth':
+    case 'needs_payment':
+      return 'INACTIVE_PLAN';
+    case 'needs_result_claim':
+      return 'ANALYSIS_INPUT_UNAVAILABLE';
+    case 'needs_onboarding':
+      return 'ONBOARDING_INCOMPLETE';
+    case 'execution_blocked':
+      if (readiness.execution_block === 'PROGRAM_FINISHED') {
+        return 'PROGRAM_FINISHED';
+      }
+      if (readiness.execution_block === 'DAILY_LIMIT') {
+        return 'DAILY_LIMIT_REACHED';
+      }
+      return null;
+    default:
+      return null;
+  }
+}
+
+function projectNextAction(readiness: SessionReadinessV1): CanonicalUserReadiness['next_action'] {
+  switch (readiness.status) {
+    case 'needs_auth':
+      return { code: 'login', href: '/app/auth' };
+    case 'needs_payment':
+      return { code: 'pay', href: null };
+    case 'needs_result_claim':
+      return { code: 'claim_result', href: '/movement-test/baseline' };
+    case 'needs_onboarding':
+      return { code: 'complete_onboarding', href: '/onboarding' };
+    case 'ready_for_session_create':
+      return { code: 'create_session', href: '/app/home' };
+    case 'session_already_created':
+      return { code: 'open_app', href: '/app/home' };
+    case 'execution_blocked':
+      return { code: 'blocked', href: '/app/home' };
+    default:
+      return { code: 'blocked', href: '/app/home' };
+  }
+}
+
 export const UNAUTHENTICATED_READINESS: CanonicalUserReadiness = {
   access: {
     is_authenticated: false,
@@ -96,55 +142,16 @@ export const UNAUTHENTICATED_READINESS: CanonicalUserReadiness = {
     can_create_session: false,
     has_active_session: false,
     active_session_number: null,
-    blocking_reason_code: 'INACTIVE_PLAN',
+    blocking_reason_code: projectBlockingReason(UNAUTHENTICATED_SESSION_READINESS_V1),
     today_completed: false,
     program_finished: false,
   },
-  next_action: {
-    code: 'login',
-    href: '/app/auth',
-  },
+  next_action: projectNextAction(UNAUTHENTICATED_SESSION_READINESS_V1),
 };
 
-function deriveBlockingReason(ctx: ReadinessContext): SessionBlockingReasonCode | null {
-  if (!ctx.hasActivePlan) return 'INACTIVE_PLAN';
-  if (!ctx.hasAnalysisInput) return 'ANALYSIS_INPUT_UNAVAILABLE';
-  if (!ctx.onboardingComplete) return 'ONBOARDING_INCOMPLETE';
-  if (ctx.programFinished) return 'PROGRAM_FINISHED';
-  if (ctx.todayCompleted && !ctx.hasActiveSession) return 'DAILY_LIMIT_REACHED';
-  return null;
-}
-
-function deriveNextActionLegacy(r: Omit<CanonicalUserReadiness, 'next_action'>): CanonicalUserReadiness['next_action'] {
-  if (!r.access.is_authenticated) {
-    return { code: 'login', href: '/app/auth' };
-  }
-  if (!r.access.has_active_plan) {
-    return { code: 'pay', href: null };
-  }
-  if (!r.analysis.has_analysis_input) {
-    return { code: 'claim_result', href: '/movement-test/baseline' };
-  }
-  // PR-FLOW-06: 주간 빈도 + 경험 + 통증 확인 최소 세트
-  if (!r.onboarding.has_target_frequency || !r.onboarding.has_execution_setup) {
-    return { code: 'complete_onboarding', href: '/onboarding' };
-  }
-  if (r.session.program_finished) {
-    return { code: 'blocked', href: '/app/home' };
-  }
-  if (r.session.today_completed) {
-    return { code: 'blocked', href: '/app/home' };
-  }
-  if (r.session.has_active_session) {
-    return { code: 'open_app', href: '/app/home' };
-  }
-  if (r.session.can_create_session) {
-    return { code: 'create_session', href: '/app/home' };
-  }
-  return { code: 'blocked', href: '/app/home' };
-}
-
 function contextToCanonical(ctx: ReadinessContext): CanonicalUserReadiness {
+  const readiness = buildSessionReadinessV1(ctx);
+
   let sourceMode: AnalysisSourceMode = null;
   if (ctx.hasClaimedPublic) {
     sourceMode = 'public_result';
@@ -171,10 +178,10 @@ function contextToCanonical(ctx: ReadinessContext): CanonicalUserReadiness {
       missing_fields: ctx.missingFieldsLegacy,
     },
     session: {
-      can_create_session: ctx.canCreateSession,
+      can_create_session: readiness.status === 'ready_for_session_create',
       has_active_session: ctx.hasActiveSession,
       active_session_number: ctx.activeSessionNumber,
-      blocking_reason_code: deriveBlockingReason(ctx),
+      blocking_reason_code: projectBlockingReason(readiness),
       today_completed: ctx.todayCompleted,
       program_finished: ctx.programFinished,
     },
@@ -182,7 +189,7 @@ function contextToCanonical(ctx: ReadinessContext): CanonicalUserReadiness {
 
   return {
     ...partial,
-    next_action: deriveNextActionLegacy(partial),
+    next_action: projectNextAction(readiness),
   };
 }
 
