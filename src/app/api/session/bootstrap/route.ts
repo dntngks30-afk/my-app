@@ -3,8 +3,8 @@ import { getCurrentUserId } from '@/lib/auth/getCurrentUserId'
 import { getServerSupabaseAdmin } from '@/lib/supabase'
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract'
 import { fetchActiveLiteData } from '@/lib/session/active-lite-data'
-import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary'
 import { buildSessionBootstrapSummary } from '@/lib/session/bootstrap-summary'
+import { resolveSessionAnalysisInput } from '@/lib/session/resolveSessionAnalysisInput'
 import {
   computePhase,
   resolvePhaseLengths,
@@ -180,10 +180,11 @@ export async function POST(req: NextRequest) {
       return fail(409, ApiErrorCode.DAILY_LIMIT_REACHED, '오늘은 이미 완료했습니다')
     }
 
-    const deepSummary = await loadSessionDeepSummary(userId)
-    if (!deepSummary) {
+    const resolvedAnalysisInput = await resolveSessionAnalysisInput(userId)
+    if (!resolvedAnalysisInput) {
       return fail(404, ApiErrorCode.DEEP_RESULT_MISSING, '심층 결과가 없습니다')
     }
+    const deepSummary = resolvedAnalysisInput.summary
 
     const policyOptions: PhasePolicyOptions = {
       deepLevel: deepSummary.deep_level ?? null,

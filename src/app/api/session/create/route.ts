@@ -23,10 +23,9 @@
 import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
-import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
-import { getLatestClaimedPublicResultForUser } from '@/lib/public-results/getLatestClaimedPublicResultForUser';
-import { buildSessionDeepSummaryFromPublicResult } from '@/lib/deep-result/buildSessionDeepSummaryFromPublicResult';
+import type { SessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import { buildSessionPlanJson } from '@/lib/session/plan-generator';
+import { resolveSessionAnalysisInput } from '@/lib/session/resolveSessionAnalysisInput';
 import {
   computeAdaptiveModifier,
   getAvoidTagsForDiscomfort,
@@ -499,25 +498,15 @@ export async function POST(req: NextRequest) {
     // 둘 다 없으면: ANALYSIS_INPUT_UNAVAILABLE
     const tDeep = performance.now();
 
-    let deepSummary = null as Awaited<ReturnType<typeof loadSessionDeepSummary>>;
+    let deepSummary = null as SessionDeepSummary | null;
     let analysisSourceMode: 'public_result' | 'legacy_paid_deep' | null = null;
     let sourcePublicResultId: string | null = null;
 
-    // 1. 공개 결과 경로 시도 (claim 완료된 public result)
-    const claimedPublicResult = await getLatestClaimedPublicResultForUser(userId);
-    if (claimedPublicResult) {
-      const adapted = buildSessionDeepSummaryFromPublicResult(claimedPublicResult);
-      deepSummary = adapted;
-      analysisSourceMode = 'public_result';
-      sourcePublicResultId = claimedPublicResult.id;
-    }
-
-    // 2. Legacy fallback: paid deep_test_attempts
-    if (!deepSummary) {
-      deepSummary = await loadSessionDeepSummary(userId);
-      if (deepSummary) {
-        analysisSourceMode = 'legacy_paid_deep';
-      }
+    const resolvedAnalysisInput = await resolveSessionAnalysisInput(userId);
+    if (resolvedAnalysisInput) {
+      deepSummary = resolvedAnalysisInput.summary;
+      analysisSourceMode = resolvedAnalysisInput.source.mode;
+      sourcePublicResultId = resolvedAnalysisInput.source.public_result_id;
     }
 
     timings.deep_profile_ms = Math.round(performance.now() - tDeep);

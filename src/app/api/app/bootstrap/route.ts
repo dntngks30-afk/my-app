@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
-import { loadSessionDeepSummary } from '@/lib/deep-result/session-deep-summary';
 import { buildSessionBootstrapSummary } from '@/lib/session/bootstrap-summary';
 import { fetchActiveLiteData } from '@/lib/session/active-lite-data';
+import { resolveSessionAnalysisInput } from '@/lib/session/resolveSessionAnalysisInput';
 import {
   resolveBootstrapNextSessionPreview,
   type NextSessionPreviewPayload,
@@ -116,12 +116,12 @@ async function loadNextSessionPreview(
 
     if (nextSessionNumber > session.total_sessions) return null;
 
-    const deepSummary = await loadSessionDeepSummary(userId);
-    if (!deepSummary) return null;
+    const resolvedAnalysisInput = await resolveSessionAnalysisInput(userId);
+    if (!resolvedAnalysisInput) return null;
 
     const summary = await buildSessionBootstrapSummary({
       sessionNumber: nextSessionNumber,
-      deepSummary,
+      deepSummary: resolvedAnalysisInput.summary,
     });
 
     return resolveBootstrapNextSessionPreview({
