@@ -1,7 +1,7 @@
-/**
- * PR-4: 카메라 시도 관측용 경량 trace
- * - pass/funnel/result 계약 변경 없음
- * - 요약 전용 snapshot, raw frame/landmark 저장 없음
+﻿/**
+ * PR-4: 移대찓???쒕룄 愿痢≪슜 寃쎈웾 trace
+ * - pass/funnel/result 怨꾩빟 蹂寃??놁쓬
+ * - ?붿빟 ?꾩슜 snapshot, raw frame/landmark ????놁쓬
  */
 import type { ExerciseGateResult } from './auto-progression';
 import type { CaptureQuality, OverheadInputTruthMap } from './guardrails';
@@ -41,15 +41,45 @@ import {
   pushStoredOverheadObservation,
   pushStoredSquatObservation,
 } from './trace/camera-trace-storage';
-import { peekLastPoseCameraObservability } from './camera-observability-pose-bridge';
 import {
-  getFrozenSquatPassSnapshot,
-  getLiveSquatPassCoreTruth,
-  noteSquatGateForCameraObservability,
-} from './camera-observability-squat-session';
-import type { CameraPoseDelegateKind } from '@/lib/motion/pose-types';
+  buildOverheadAttemptObservation,
+  buildSquatAttemptObservation,
+  buildSquatCameraObservabilityExport,
+  buildTopReasons,
+  computeObservationTruthFields,
+  deriveSquatObservabilitySignals,
+  overheadObservationDedupSkip,
+  observationDedupSkip,
+  relativeDepthPeakBucket,
+  squatDownwardCommitmentReachedObservable,
+} from './trace/camera-trace-observation-builders';
+import type {
+  OverheadAttemptObservation,
+  OverheadObservationEventType,
+  SquatAttemptObservation,
+  SquatCameraObservabilityExport,
+  SquatObservationEventType,
+} from './trace/camera-trace-observation-builders';
 
-/** PR-4: movement type (squat, overhead_reach만 지원) */
+export {
+  buildOverheadAttemptObservation,
+  buildSquatAttemptObservation,
+  buildSquatCameraObservabilityExport,
+  computeObservationTruthFields,
+  deriveSquatObservabilitySignals,
+  relativeDepthPeakBucket,
+  squatDownwardCommitmentReachedObservable,
+};
+export type {
+  ObservationTruthStage,
+  OverheadAttemptObservation,
+  OverheadObservationEventType,
+  SquatAttemptObservation,
+  SquatCameraObservabilityExport,
+  SquatObservationEventType,
+} from './trace/camera-trace-observation-builders';
+
+/** PR-4: movement type (squat, overhead_reach留?吏?? */
 export type TraceMovementType = 'squat' | 'overhead_reach';
 
 /**
@@ -61,7 +91,7 @@ export type OverheadExportedPeakElevationProvenance =
   | 'legacy_metrics_arm_range_time_average_fallback'
   | 'unavailable';
 
-/** PR-4: 최종 결과 카테고리 */
+/** PR-4: 理쒖쥌 寃곌낵 移댄뀒怨좊━ */
 export type TraceOutcome =
   | 'ok'
   | 'low'
@@ -70,43 +100,7 @@ export type TraceOutcome =
   | 'retry_optional'
   | 'failed';
 
-/**
- * CAM-OBS / PASS-SNAPSHOT-OBSERVABILITY-RESET-01: 스쿼트 trace/export용 관측 레이어.
- *
- * `runtime`·`pose_quality`·`pass_snapshot` + 기존 truth 미러.
- *
- * NEW (DESCENT-TRUTH-RESET-01 / PASS-SNAPSHOT-OBSERVABILITY-RESET-01):
- * - `pass_core_truth`: squatPassCore.passDetected + passBlockedReason + descent timing.
- *   Always present (not gated on finalPassEligible). Enables real-device diagnosis of
- *   "pass-core never opened" vs "UI gate blocked final pass".
- * - `ui_gate_truth`: squatUiGate.uiProgressionAllowed + uiProgressionBlockedReason.
- *   Always present. Distinguishes pass-core true / UI blocked from pass-core false.
- *
- * 판정·임계값 변경 없음.
- */
-export type SquatCameraObservabilityExport = {
-  runtime: {
-    latency_ms: number;
-    fps_est: number;
-    delegate: CameraPoseDelegateKind;
-  };
-  pose_quality: {
-    median_landmark_conf: number;
-    reproj_px: number | null;
-    pose_world_present: boolean;
-  };
-  pass_snapshot: Record<string, unknown> | null;
-  /**
-   * PASS-SNAPSHOT-OBSERVABILITY-RESET-01: Always-present pass-core truth.
-   * Non-null after first gate update. Distinguishes pass-core false vs UI gate blocked.
-   */
-  pass_core_truth: Record<string, unknown> | null;
-  completion: Record<string, unknown>;
-  eventCycle: Record<string, unknown>;
-  reversal: Record<string, unknown>;
-};
-
-/** PR-4: 경량 attempt snapshot */
+/** PR-4: 寃쎈웾 attempt snapshot */
 export interface AttemptSnapshot {
   id: string;
   ts: string;
@@ -126,9 +120,9 @@ export interface AttemptSnapshot {
     rawState?: 'not_ready' | 'ready' | 'success';
     blocker: string | null;
     framingHint: string | null;
-    /** PR-OH-READINESS-BLOCKER-ALIGN-02B: readiness blocker framing 입력이 평가 창 기준인지 꼬리 폴백인지 */
+    /** PR-OH-READINESS-BLOCKER-ALIGN-02B: readiness blocker framing ?낅젰???됯? 李?湲곗??몄? 瑗щ━ ?대갚?몄? */
     framingHintSource?: 'evaluation_window' | 'recent_tail_fallback';
-    /** 동일 시점 최근 버퍼 꼬리 framing 힌트(진단·tail 오염 대비용) */
+    /** ?숈씪 ?쒖젏 理쒓렐 踰꾪띁 瑗щ━ framing ?뚰듃(吏꾨떒쨌tail ?ㅼ뿼 ?鍮꾩슜) */
     recentTailFramingHint?: string | null;
     smoothingApplied: boolean;
     validFrameCount?: number;
@@ -144,7 +138,7 @@ export interface AttemptSnapshot {
     selectedWindowEndMs?: number | null;
     selectedWindowScore?: number | null;
   };
-  /** dev-only: real-device diagnosis — pass/cue/latch 직결 런타임 값 */
+  /** dev-only: real-device diagnosis ??pass/cue/latch 吏곴껐 ?고???媛?*/
   diagnosisSummary?: {
     stepId: string;
     readinessState?: string;
@@ -154,7 +148,7 @@ export interface AttemptSnapshot {
     passLatched: boolean;
     autoNextObservation?: string;
     sampledFrameCount?: number;
-    /** squat — PR-A4 cycle trace */
+    /** squat ??PR-A4 cycle trace */
     squatCycle?: {
       peakDepth?: number;
       depthBand?: string;
@@ -189,43 +183,43 @@ export interface AttemptSnapshot {
       recoveryConfirmedAfterReversal?: boolean;
       minimumCycleDurationSatisfied?: boolean;
       captureArmingSatisfied?: boolean;
-      /** PR-CAM-29A: final pass 타이밍만 차단( completion truth 와 분리 ) */
+      /** PR-CAM-29A: final pass ??대컢留?李⑤떒( completion truth ? 遺꾨━ ) */
       finalPassTimingBlockedReason?: string | null;
       standardPathBlockedReason?: string | null;
       baselineStandingDepth?: number;
       rawDepthPeak?: number;
       relativeDepthPeak?: number;
       ultraLowRomPathDisabledOrGuarded?: boolean;
-      /** PR evidence: completion과 분리된 evidence layer */
+      /** PR evidence: completion怨?遺꾨━??evidence layer */
       squatEvidenceLevel?: string;
       squatEvidenceReasons?: string[];
       cycleProofPassed?: boolean;
       romBand?: string;
       confidenceDowngradeReason?: string | null;
       insufficientSignalReason?: string | null;
-      /** PR failure-freeze: overlay arming — attempt evidence 기반 */
+      /** PR failure-freeze: overlay arming ??attempt evidence 湲곕컲 */
       failureOverlayArmed?: boolean;
       failureOverlayBlockedReason?: string | null;
       attemptStarted?: boolean;
       downwardCommitmentReached?: boolean;
       evidenceLabel?: string;
       completionBlockedReason?: string | null;
-      /** PR shallow: guardrail partial 시 이유 */
+      /** PR shallow: guardrail partial ???댁쑀 */
       guardrailPartialReason?: string;
-      /** PR shallow: guardrail complete 시 경로 */
+      /** PR shallow: guardrail complete ??寃쎈줈 */
       guardrailCompletePath?: string;
-      /** PR shallow: low-ROM recovery 미확인 이유 */
+      /** PR shallow: low-ROM recovery 誘명솗???댁쑀 */
       lowRomRejectionReason?: string | null;
-      /** PR shallow: ultra-low-ROM recovery 미확인 이유 */
+      /** PR shallow: ultra-low-ROM recovery 誘명솗???댁쑀 */
       ultraLowRomRejectionReason?: string | null;
       /** PR-COMP-01 */
       completionMachinePhase?: string;
       completionPassReason?: string;
-      /** PR-04D1: completion pass vs capture-quality 경고 분리(스쿼트 전용) */
+      /** PR-04D1: completion pass vs capture-quality 寃쎄퀬 遺꾨━(?ㅼ옘???꾩슜) */
       completionTruthPassed?: boolean;
       lowQualityPassAllowed?: boolean;
       passOwner?: string;
-      /** PR-CAM-OWNER-FREEZE-01: success 스냅샷에서 final vs shadow event 밴드 분리 */
+      /** PR-CAM-OWNER-FREEZE-01: success ?ㅻ깄?룹뿉??final vs shadow event 諛대뱶 遺꾨━ */
       finalSuccessOwner?: string;
       standardOwnerEligible?: boolean;
       shadowEventOwnerEligible?: boolean;
@@ -236,7 +230,7 @@ export interface AttemptSnapshot {
       completionOwnerBlockedReason?: string | null;
       uiProgressionAllowed?: boolean;
       uiProgressionBlockedReason?: string | null;
-      /** Setup false-pass lock — squatCycleDebug 미러 */
+      /** Setup false-pass lock ??squatCycleDebug 誘몃윭 */
       liveReadinessSummaryState?: string;
       readinessStableDwellSatisfied?: boolean;
       setupMotionBlocked?: boolean;
@@ -244,14 +238,14 @@ export interface AttemptSnapshot {
       attemptStartedAfterReady?: boolean;
       successSuppressedBySetupPhase?: boolean;
       qualityOnlyWarnings?: string[];
-      /** PR-04E1: depth/arming 입력 trace */
+      /** PR-04E1: depth/arming ?낅젰 trace */
       armingDepthSource?: string | null;
       armingDepthPeak?: number | null;
       squatDepthPeakPrimary?: number | null;
       squatDepthPeakBlended?: number | null;
       armingDepthBlendAssisted?: boolean;
       armingFallbackUsed?: boolean;
-      /** PR-04E2: 역전 확인 관측 */
+      /** PR-04E2: ??쟾 ?뺤씤 愿痢?*/
       reversalConfirmedBy?: string | null;
       reversalDepthDrop?: number | null;
       reversalFrameCount?: number | null;
@@ -259,14 +253,14 @@ export interface AttemptSnapshot {
       relativeDepthPeakSource?: string | null;
       rawDepthPeakPrimary?: number | null;
       rawDepthPeakBlended?: number | null;
-      /** PR-CAM-29: shallow depth source stabilization — compact 스칼라만 */
+      /** PR-CAM-29: shallow depth source stabilization ??compact ?ㅼ뭡?쇰쭔 */
       squatDepthObsFallbackPeak?: number | null;
       squatDepthObsTravelPeak?: number | null;
       squatDepthBlendOfferedCount?: number;
       squatDepthBlendCapHitCount?: number;
       squatDepthBlendActiveFrameCount?: number;
       squatDepthSourceFlipCount?: number;
-      /** PR-04E3B: shallow event-cycle owner 관측 */
+      /** PR-04E3B: shallow event-cycle owner 愿痢?*/
       baselineFrozen?: boolean;
       baselineFrozenDepth?: number | null;
       peakLatched?: boolean;
@@ -277,11 +271,11 @@ export interface AttemptSnapshot {
       eventCycleBand?: string | null;
       eventCyclePromoted?: boolean;
       eventCycleSource?: string | null;
-      /** PR-CAM-CORE: completion-state trajectory descent 폴백 truth */
+      /** PR-CAM-CORE: completion-state trajectory descent ?대갚 truth */
       eventBasedDescentPath?: boolean;
       /**
-       * PR-02 Assist lock: completion-state 정본 — assist / promoted finalize / reversal provenance.
-       * pass owner·PR-01 lineage 와 혼동 금지.
+       * PR-02 Assist lock: completion-state ?뺣낯 ??assist / promoted finalize / reversal provenance.
+       * pass owner쨌PR-01 lineage ? ?쇰룞 湲덉?.
        */
       completionFinalizeMode?: string | null;
       completionAssistApplied?: boolean;
@@ -290,47 +284,47 @@ export interface AttemptSnapshot {
       promotionBaseRuleBlockedReason?: string | null;
       reversalEvidenceProvenance?: string | null;
       trajectoryReversalRescueApplied?: boolean;
-      /** squatCompletionState.reversalTailBackfillApplied (squatCycleDebug 미러 없음) */
+      /** squatCompletionState.reversalTailBackfillApplied (squatCycleDebug 誘몃윭 ?놁쓬) */
       reversalTailBackfillApplied?: boolean;
       /**
-       * PR-SQUAT-COMPLETION-REARCH-01 — Subcontract A trace (admission / shallow gate)
-       * + C 일부: 아래 closed/blocked/drift 는 C 축.
+       * PR-SQUAT-COMPLETION-REARCH-01 ??Subcontract A trace (admission / shallow gate)
+       * + C ?쇰?: ?꾨옒 closed/blocked/drift ??C 異?
        */
       officialShallowPathCandidate?: boolean;
       officialShallowPathAdmitted?: boolean;
       officialShallowPathClosed?: boolean;
       officialShallowPathReason?: string | null;
       officialShallowPathBlockedReason?: string | null;
-      /** PR-03: event 승격이 아닌 공식 cycle 로 닫힘 여부( pass reason 기준 ) */
+      /** PR-03: event ?밴꺽???꾨땶 怨듭떇 cycle 濡??ロ옒 ?щ?( pass reason 湲곗? ) */
       closedAsOfficialRomCycle?: boolean;
-      /** PR-03: residue event_cycle 라벨로 닫힘(현재는 승격도 cycle 로 통일되어 주로 false) */
+      /** PR-03: residue event_cycle ?쇰꺼濡??ロ옒(?꾩옱???밴꺽??cycle 濡??듭씪?섏뼱 二쇰줈 false) */
       closedAsEventRescuePassReason?: boolean;
-      /** PR-SQUAT-COMPLETION-REARCH-01 — Subcontract B trace (reversal / ascent-equivalent / provenance) */
+      /** PR-SQUAT-COMPLETION-REARCH-01 ??Subcontract B trace (reversal / ascent-equivalent / provenance) */
       officialShallowStreamBridgeApplied?: boolean;
       officialShallowAscentEquivalentSatisfied?: boolean;
       officialShallowClosureProofSatisfied?: boolean;
-      /** PR-03 shallow closure final: primary-stream 폴백으로 shallow 번들만 성립(관측) */
+      /** PR-03 shallow closure final: primary-stream ?대갚?쇰줈 shallow 踰덈뱾留??깅┰(愿痢? */
       officialShallowPrimaryDropClosureFallback?: boolean;
-      /** PR-03 final: shallow closure 축 — 역전 truth */
+      /** PR-03 final: shallow closure 異?????쟾 truth */
       officialShallowReversalSatisfied?: boolean;
-      /** PR-03 final: 관측 전용 — shallow 입장 후 버퍼 깊어져 standard_cycle 로만 닫힌 잔여 */
+      /** PR-03 final: 愿痢??꾩슜 ??shallow ?낆옣 ??踰꾪띁 源딆뼱??standard_cycle 濡쒕쭔 ?ロ엺 ?붿뿬 */
       officialShallowDriftedToStandard?: boolean;
       officialShallowDriftReason?: string | null;
       officialShallowPreferredPrefixFrameCount?: number | null;
-      /** PR-CAM-OBS-NORMALIZE-01: 표면 혼선 방지용 해석 라벨(값·산식 변경 아님) */
+      /** PR-CAM-OBS-NORMALIZE-01: ?쒕㈃ ?쇱꽑 諛⑹????댁꽍 ?쇰꺼(媛뮻룹궛??蹂寃??꾨떂) */
       displayDepthTruth?: 'evaluator_peak_metric';
       ownerDepthTruth?: 'completion_relative_depth';
       cycleDecisionTruth?: 'completion_state';
       /** PR-COMP-03 */
       squatInternalQuality?: SquatInternalQuality;
-      /** PR-CAM-SQUAT-RESULT-SEVERITY-01: pass truth + quality truth 기반 해석(판정 변경 없음) */
+      /** PR-CAM-SQUAT-RESULT-SEVERITY-01: pass truth + quality truth 湲곕컲 ?댁꽍(?먯젙 蹂寃??놁쓬) */
       passSeverity?: SquatPassSeverity;
       resultInterpretation?: SquatResultInterpretation;
       qualityWarningCount?: number;
       limitationCount?: number;
-      /** CAM-shallow-obs: attempt-evidence보다 약한 관측 계약(저장·진단 전용) */
+      /** CAM-shallow-obs: attempt-evidence蹂대떎 ?쏀븳 愿痢?怨꾩빟(??Β룹쭊???꾩슜) */
       shallowObservationEligible?: boolean;
-      /** PR-HMM-03A: 컴팩트 calibration (짧은 키) */
+      /** PR-HMM-03A: 而댄뙥??calibration (吏㏃? ?? */
       calib?: {
         rb: string | null;
         fb: string | null;
@@ -346,7 +340,7 @@ export interface AttemptSnapshot {
         htc: number;
       };
     };
-    /** overhead — PR-C4 trace, PR overhead-dwell */
+    /** overhead ??PR-C4 trace, PR overhead-dwell */
     overhead?: {
       /**
        * Legacy field: max smoothed arm elevation (deg) when `highlightedMetrics.peakArmElevation` exists;
@@ -354,11 +348,11 @@ export interface AttemptSnapshot {
        * PR-03C: use `truePeakArmElevationDeg`, `armElevationTimeAvgDeg`, `exportedPeakElevationProvenance`.
        */
       peakElevation?: number;
-      /** PR-03C: same numeric value as `peakElevation` when present — explicit label for legacy consumers. */
+      /** PR-03C: same numeric value as `peakElevation` when present ??explicit label for legacy consumers. */
       legacyPeakElevationDeg?: number;
-      /** PR-03C: max over valid frames — `highlightedMetrics.peakArmElevation` (smoothed armElevationAvg space). */
+      /** PR-03C: max over valid frames ??`highlightedMetrics.peakArmElevation` (smoothed armElevationAvg space). */
       truePeakArmElevationDeg?: number;
-      /** PR-03C: rise-truth module peak — `highlightedMetrics.risePeakArmElevation` (same input stream; diagnostic parity). */
+      /** PR-03C: rise-truth module peak ??`highlightedMetrics.risePeakArmElevation` (same input stream; diagnostic parity). */
       risePeakArmElevationDeg?: number;
       /** PR-03C: `metrics.arm_range` value = mean time-average of armElevationAvg (deg), NOT peak ROM. */
       armElevationTimeAvgDeg?: number;
@@ -387,7 +381,7 @@ export interface AttemptSnapshot {
       successEligibleAtMs?: number;
       successTriggeredAtMs?: number;
       successBlockedReason?: string;
-      /** PR overhead-dwell: dwell vs legacy span 비교용 */
+      /** PR overhead-dwell: dwell vs legacy span 鍮꾧탳??*/
       holdDurationMsLegacySpan?: number;
       dwellHoldDurationMs?: number;
       legacyHoldDurationMs?: number;
@@ -404,11 +398,11 @@ export interface AttemptSnapshot {
       meaningfulRiseSatisfied?: boolean;
       riseStartedAtMs?: number;
       riseBlockedReason?: string | null;
-      /** PR-02: final-pass layer blocked reason (Layer 2 — from gate.finalPassBlockedReason) */
+      /** PR-02: final-pass layer blocked reason (Layer 2 ??from gate.finalPassBlockedReason) */
       finalPassBlockedReason?: string | null;
-      /** OBS: guardrail.debug.overheadInputTruthMap + readiness 병합 */
+      /** OBS: guardrail.debug.overheadInputTruthMap + readiness 蹂묓빀 */
       inputTruthMap?: OverheadInputTruthMap;
-      /** OBS: 페이지 훅 stats 에코(게이트와 동일 프레임이면 수치 일치) */
+      /** OBS: ?섏씠吏 ??stats ?먯퐫(寃뚯씠?몄? ?숈씪 ?꾨젅?꾩씠硫??섏튂 ?쇱튂) */
       pageHookStatsEcho?: {
         sampledFrameCount: number;
         hookAcceptedFrameCount: number;
@@ -418,11 +412,11 @@ export interface AttemptSnapshot {
       };
       /** PR-OH-INPUT-STABILITY-02A: adaptor vs early-cutoff terminal / grace (page-supplied) */
       inputStability?: OverheadInputStabilityDiag;
-      /** PR-OH-OBS-BLOCKER-TRACE-02C: readinessSummary 와 동일 payload 에코 (motion 블록과 함께 해석) */
+      /** PR-OH-OBS-BLOCKER-TRACE-02C: readinessSummary ? ?숈씪 payload ?먯퐫 (motion 釉붾줉怨??④퍡 ?댁꽍) */
       readinessBlockerTrace?: OverheadReadinessBlockerTracePayload;
       /**
        * PR-OH-KINEMATIC-SIGNAL-04B: Session aggregates of overhead-only candidate kinematics (highlightedMetrics).
-       * Diagnostic only — not used for gates. Compare to truePeakArmElevationDeg (legacy hip–shoulder–elbow).
+       * Diagnostic only ??not used for gates. Compare to truePeakArmElevationDeg (legacy hip?뱒houlder?밻lbow).
        */
       ohKinematicPeakShoulderWristElevationAvgDeg?: number | null;
       ohKinematicMeanShoulderWristElevationAvgDeg?: number | null;
@@ -431,7 +425,7 @@ export interface AttemptSnapshot {
       ohKinematicPeakElbowAboveShoulderAvgNorm?: number | null;
       ohKinematicMeanElbowAboveShoulderAvgNorm?: number | null;
       /**
-       * PR-OH-HEAD-RELATIVE-SIGNAL-04E: Session aggregates — face/head-relative wrist & elbow evidence.
+       * PR-OH-HEAD-RELATIVE-SIGNAL-04E: Session aggregates ??face/head-relative wrist & elbow evidence.
        * Diagnostic only; not used for gates. Compare to 04B shoulder-relative + legacy arm elevation.
        */
       ohHeadRelativePeakWristAboveNoseAvgNorm?: number | null;
@@ -453,517 +447,26 @@ export interface AttemptSnapshot {
       chosenClipKey: string | null;
       suppressedReason: string | null;
       liveCueingEnabled: boolean;
-      /** PR-OH-OBS-BLOCKER-TRACE-02C: 명시적 후보 키( chosenCueKey 와 동일 값, 의미 고정용 ) */
+      /** PR-OH-OBS-BLOCKER-TRACE-02C: 紐낆떆???꾨낫 ?? chosenCueKey ? ?숈씪 媛? ?섎? 怨좎젙??) */
       lastCorrectiveCueCandidateKey?: string | null;
-      /** 교정 루프가 마지막으로 재생 성공으로 기록한 여부 */
+      /** 援먯젙 猷⑦봽媛 留덉?留됱쑝濡??ъ깮 ?깃났?쇰줈 湲곕줉???щ? */
       correctiveCueActuallyPlayed?: boolean;
-      /** 억제 시 사유( 재생 안 됨 ) */
+      /** ?듭젣 ???ъ쑀( ?ъ깮 ????) */
       correctiveCueSuppressedReason?: string | null;
-      /** anti-spam 측 마지막 emit 시각(ms) — 재생 시도 직전 타임스탬프 */
+      /** anti-spam 痢?留덉?留?emit ?쒓컖(ms) ???ъ깮 ?쒕룄 吏곸쟾 ??꾩뒪?ы봽 */
       correctiveCueAntiSpamEmittedAtMs?: number | null;
-      /** 클립/TTS 재생 관측 성공 여부( 알 수 없으면 null ) */
+      /** ?대┰/TTS ?ъ깮 愿痢??깃났 ?щ?( ?????놁쑝硫?null ) */
       playbackSuccessIfKnown?: boolean | null;
-      /** 마지막 재생 관측에 연결된 cue 키 */
+      /** 留덉?留??ъ깮 愿痢≪뿉 ?곌껐??cue ??*/
       lastPlaybackObservedCueKey?: string | null;
     };
   };
   debugVersion: string;
-  /** CAM-OBS: 스쿼트일 때만 채움 */
+  /** CAM-OBS: ?ㅼ옘?몄씪 ?뚮쭔 梨꾩? */
   squatCameraObservability?: SquatCameraObservabilityExport;
 }
 
-/** CAM-OBS: gate 스냅샷에서 관측 레이어 조립(읽기 전용) */
-export function buildSquatCameraObservabilityExport(
-  gate: ExerciseGateResult
-): SquatCameraObservabilityExport | undefined {
-  if (gate.evaluatorResult?.stepId !== 'squat') return undefined;
-
-  const poseObs = peekLastPoseCameraObservability();
-  const runtime = poseObs?.runtime ?? {
-    latency_ms: 0,
-    fps_est: 0,
-    delegate: 'unknown' as CameraPoseDelegateKind,
-  };
-  const pose_quality = poseObs?.pose_quality ?? {
-    median_landmark_conf: 0,
-    reproj_px: null as number | null,
-    pose_world_present: false,
-  };
-
-  /**
-   * PR-CAM-OBS-PASS-SNAPSHOT-FREEZE-PERSIST-01: 터미널 export 직전에 동기적으로 freeze 를 한 번 더 보장.
-   * squat 페이지 `useEffect(noteSquatGate...)` 만으로는 동일 턴에서 latch/persist 가 먼저 돌면 JSON 에 null 이 남을 수 있음.
-   * gate 는 mutate 하지 않음 — 관측 모듈의 frozenPassSnapshot 만 갱신(이미 고정된 경우 no-op).
-   */
-  noteSquatGateForCameraObservability(gate);
-  const pass_snapshot = getFrozenSquatPassSnapshot();
-  /**
-   * PASS-SNAPSHOT-OBSERVABILITY-RESET-01: always-present pass-core + UI gate truth.
-   * Non-null after first gate update. Exported regardless of finalPassEligible.
-   * Enables real-device diagnosis without needing the frozen pass snapshot.
-   */
-  const pass_core_truth = getLiveSquatPassCoreTruth();
-  const cs = gate.evaluatorResult.debug?.squatCompletionState;
-
-  const completion: Record<string, unknown> =
-    cs != null
-      ? {
-          completionSatisfied: cs.completionSatisfied === true,
-          completionPassReason: cs.completionPassReason ?? null,
-          completionBlockedReason: cs.completionBlockedReason ?? null,
-          completionMachinePhase: cs.completionMachinePhase ?? null,
-          descendConfirmed: cs.descendConfirmed === true,
-          reversalConfirmedAfterDescend: cs.reversalConfirmedAfterDescend === true,
-          recoveryConfirmedAfterReversal: cs.recoveryConfirmedAfterReversal === true,
-          relativeDepthPeak: cs.relativeDepthPeak,
-          rawDepthPeak: cs.rawDepthPeak,
-          baselineStandingDepth: cs.baselineStandingDepth,
-          standingRecoveryThreshold: cs.standingRecoveryThreshold,
-          eventCyclePromoted: cs.eventCyclePromoted === true,
-          peakLatchedAtIndex: cs.peakLatchedAtIndex ?? null,
-          peakAtMs: cs.peakAtMs ?? null,
-          reversalAtMs: cs.reversalAtMs ?? null,
-          committedAtMs: cs.committedAtMs ?? null,
-          finalPassEligible: gate.finalPassEligible,
-        }
-      : {};
-
-  const ev = cs?.squatEventCycle;
-  const eventCycle: Record<string, unknown> =
-    ev != null && typeof ev === 'object' ? { ...(ev as Record<string, unknown>) } : {};
-
-  const reversal: Record<string, unknown> =
-    cs != null
-      ? {
-          reversalConfirmedBy: cs.reversalConfirmedBy ?? null,
-          reversalDepthDrop: cs.reversalDepthDrop ?? null,
-          reversalFrameCount: cs.reversalFrameCount ?? null,
-          reversalAtMs: cs.reversalAtMs ?? null,
-          reversalConfirmedAfterDescend: cs.reversalConfirmedAfterDescend === true,
-          trajectoryReversalRescueApplied: cs.trajectoryReversalRescueApplied === true,
-          reversalTailBackfillApplied: cs.reversalTailBackfillApplied === true,
-          hmmReversalAssistApplied: cs.hmmReversalAssistApplied === true,
-          hmmReversalAssistReason: cs.hmmReversalAssistReason ?? null,
-        }
-      : {};
-
-  return { runtime, pose_quality, pass_snapshot, pass_core_truth, completion, eventCycle, reversal };
-}
-
-/** CAM-27: 스쿼트 사전 관측(통과/재시도/최종 스냅샷과 분리). landmark·프레임 배열·blob 없음. */
-export type SquatObservationEventType =
-  | 'pre_attempt_candidate'
-  | 'attempt_started'
-  | 'downward_commitment_reached'
-  | 'descent_detected'
-  | 'reversal_detected'
-  | 'recovery_detected'
-  | 'attempt_stalled'
-  | 'attempt_abandoned'
-  | 'evidence_label_changed'
-  | 'completion_blocked_changed'
-  | 'standard_path_blocked_changed'
-  | 'relative_depth_bucket_changed'
-  /** 얕은 동작 계약 충족 시 1회(세션당 엣지) */
-  | 'shallow_observed'
-  /** 캡처 세션 종료(retry/fail/insufficient 등) 시 1회 */
-  | 'capture_session_terminal';
-
-/** PR-CAM-OBS-TRUTH-STAGE-01: 관측 JSON에서 completionBlockedReason 해석 단계 */
-export type ObservationTruthStage = 'pre_attempt_hint' | 'attempt_truth' | 'terminal_truth';
-
-export interface SquatAttemptObservation {
-  traceKind: 'attempt_observation';
-  id: string;
-  ts: string;
-  movementType: 'squat';
-  eventType: SquatObservationEventType;
-  captureQuality: CaptureQuality;
-  confidence: number;
-  phaseHint?: string;
-  attemptStarted?: boolean;
-  downwardCommitmentReached?: boolean;
-  descendConfirmed?: boolean;
-  reversalConfirmedAfterDescend?: boolean;
-  recoveryConfirmedAfterReversal?: boolean;
-  evidenceLabel?: string;
-  completionBlockedReason?: string | null;
-  standardPathBlockedReason?: string | null;
-  relativeDepthPeak?: number;
-  rawDepthPeak?: number;
-  currentDepth?: number;
-  relativeDepthPeakBucket?: string | null;
-  shallowCandidateObserved?: boolean;
-  attemptLikeMotionObserved?: boolean;
-  shallowCandidateReasons?: string[];
-  attemptLikeReasons?: string[];
-  flags?: string[];
-  topReasons?: string[];
-  priorEvidenceLabel?: string;
-  priorCompletionBlockedReason?: string | null;
-  priorStandardPathBlockedReason?: string | null;
-  priorRelativeDepthPeakBucket?: string | null;
-  /** capture_session_terminal 전용 */
-  captureTerminalKind?: string | null;
-  progressionStateSnapshot?: string;
-  gateStatusSnapshot?: string;
-  completionMachinePhase?: string | null;
-  baselineStandingDepth?: number;
-  motionDescendDetected?: boolean;
-  motionBottomDetected?: boolean;
-  motionRecoveryDetected?: boolean;
-  /** 기록 시점 hasShallowSquatObservation(gate) */
-  shallowObservationContract?: boolean;
-  /** PR-04E3B: blocked reason 전환 시점 canonical cycle owner 추적 */
-  baselineFrozen?: boolean;
-  peakLatched?: boolean;
-  eventCycleDetected?: boolean;
-  eventCyclePromoted?: boolean;
-  /**
-   * PR-CAM-OBS-TRUTH-STAGE-01: completionBlockedReason이 completion truth인지 vs motion hint 단계인지 구분.
-   * 값·판정 로직 변경 없음 — 해석용 메타만 추가.
-   */
-  observationTruthStage?: ObservationTruthStage;
-  completionBlockedReasonAuthoritative?: boolean;
-  /** PR-02: completion-state assist provenance(관측 JSON) */
-  completionFinalizeMode?: string | null;
-  completionAssistApplied?: boolean;
-  completionAssistSources?: string[];
-  completionAssistMode?: string | null;
-  ruleCompletionBlockedReasonObs?: string | null;
-  postAssistCompletionBlockedReasonObs?: string | null;
-  promotionBaseRuleBlockedReason?: string | null;
-  reversalEvidenceProvenance?: string | null;
-  trajectoryReversalRescueApplied?: boolean;
-  reversalTailBackfillAppliedObs?: boolean;
-  /** PR-SQUAT-COMPLETION-REARCH-01: Subcontract A·C surface (shallow admission + closure/drift) */
-  officialShallowPathCandidate?: boolean;
-  officialShallowPathAdmitted?: boolean;
-  officialShallowPathClosed?: boolean;
-  officialShallowPathReason?: string | null;
-  officialShallowPathBlockedReason?: string | null;
-  /** PR-03 rework: completionState.officialShallowPathClosed 와 동기 */
-  closedAsOfficialRomCycle?: boolean;
-  closedAsEventRescuePassReason?: boolean;
-  /** Subcontract B (+ C proof 플래그) */
-  officialShallowStreamBridgeApplied?: boolean;
-  officialShallowAscentEquivalentSatisfied?: boolean;
-  officialShallowClosureProofSatisfied?: boolean;
-  officialShallowPrimaryDropClosureFallback?: boolean;
-  officialShallowReversalSatisfied?: boolean;
-  officialShallowDriftedToStandard?: boolean;
-  officialShallowDriftReason?: string | null;
-  officialShallowPreferredPrefixFrameCount?: number | null;
-  /** Setup false-pass lock — diagnosis 미러 */
-  liveReadinessSummaryState?: string;
-  readinessStableDwellSatisfied?: boolean;
-  setupMotionBlocked?: boolean;
-  setupMotionBlockReason?: string | null;
-  attemptStartedAfterReady?: boolean;
-  successSuppressedBySetupPhase?: boolean;
-  debugVersion: string;
-  /** CAM-OBS: 스쿼트 관측 레이어(attempt observation 행에 동일 스키마 부착) */
-  squatCameraObservability?: SquatCameraObservabilityExport;
-}
-
-/**
- * PR-CAM-OBS-TRUTH-STAGE-01: completionBlockedReason 권위 여부·관측 단계(판정 산식·blocked 문자열 불변).
- * terminal 이벤트는 observationTruthStage만 terminal_truth로 덮어쓴다.
- */
-export function computeObservationTruthFields(args: {
-  eventType: SquatObservationEventType;
-  attemptStarted: boolean;
-  baselineFrozen?: boolean;
-}): { observationTruthStage: ObservationTruthStage; completionBlockedReasonAuthoritative: boolean } {
-  const attemptStarted = args.attemptStarted === true;
-  const baselineFrozen = args.baselineFrozen === true;
-
-  let observationTruthStage: ObservationTruthStage;
-  if (args.eventType === 'capture_session_terminal') {
-    observationTruthStage = 'terminal_truth';
-  } else if (!attemptStarted) {
-    observationTruthStage = 'pre_attempt_hint';
-  } else if (!baselineFrozen) {
-    observationTruthStage = 'pre_attempt_hint';
-  } else {
-    observationTruthStage = 'attempt_truth';
-  }
-
-  return {
-    observationTruthStage,
-    completionBlockedReasonAuthoritative: attemptStarted && baselineFrozen,
-  };
-}
-
-const DEBUG_VERSION = 'pr4-2';
-const OBS_DEBUG_VERSION = 'cam27-obs-1';
-
-/** 관측 전용: 얕은 후보 depth 구간 버킷(임계 통과와 무관). */
-export function relativeDepthPeakBucket(relativeDepthPeak: number | undefined | null): string | null {
-  if (relativeDepthPeak == null || Number.isNaN(relativeDepthPeak)) return null;
-  if (relativeDepthPeak < 0.02) return 'lt_0.02';
-  if (relativeDepthPeak < 0.04) return '0.02_0.04';
-  if (relativeDepthPeak < 0.07) return '0.04_0.07';
-  if (relativeDepthPeak < 0.1) return '0.07_0.10';
-  return 'ge_0.10';
-}
-
-function readHighlighted(gate: ExerciseGateResult): Record<string, unknown> | undefined {
-  return gate.evaluatorResult?.debug?.highlightedMetrics as Record<string, unknown> | undefined;
-}
-
-/**
- * 통과/재시도 판정과 분리된 얕은 움직임 관측 신호(디버그·트레이스 전용).
- * — shallowCandidate: 초기 얕은 움직임 후보
- * — attemptLike: 하강 확정·attempt 플래그 등 더 강한 시도 흔적
- */
-export function deriveSquatObservabilitySignals(gate: ExerciseGateResult): {
-  shallowCandidateObserved: boolean;
-  attemptLikeMotionObserved: boolean;
-  shallowCandidateReasons: string[];
-  attemptLikeReasons: string[];
-} {
-  const sc = gate.squatCycleDebug;
-  const hm = readHighlighted(gate);
-  const relPeak = typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : undefined;
-  const globalDepthPeak =
-    typeof hm?.globalDepthPeak === 'number' ? hm.globalDepthPeak : undefined;
-  const descentCount = typeof hm?.descentCount === 'number' ? hm.descentCount : 0;
-  const shallowReasons: string[] = [];
-  const attemptReasons: string[] = [];
-
-  const SHALLOW_FLOOR = 0.02;
-  const SHALLOW_CEIL = 0.14;
-  /**
-   * 관측 전용: completion 슬라이스 relativePeak가 낮아도 전역 depth 피크와 하강/무장 신호가 있으면 얕은 후보 허용.
-   * - descentCount: phaseHint descent 다수
-   * - descendDetected: squatCycleDebug( phase !== idle 등 ) — 미완 시퀀스에서 relPeak만으로 누락 방지
-   * standing-only는 보통 미무장·descendDetected false → 여기 걸리지 않음.
-   */
-  const relBelowSlice = relPeak == null || relPeak < SHALLOW_FLOOR;
-  /** evaluator highlighted: `depthPeak` = round(max squatDepthProxy * 100) */
-  const depthPeakPct = typeof hm?.depthPeak === 'number' ? hm.depthPeak : null;
-  const completionArmingArmed =
-    hm?.effectiveArmed === 1 || hm?.completionArmingArmed === 1;
-  const quietEvaluatorShallow =
-    (relPeak != null && relPeak >= SHALLOW_FLOOR) ||
-    (globalDepthPeak != null &&
-      globalDepthPeak >= SHALLOW_FLOOR &&
-      descentCount > 0 &&
-      relBelowSlice) ||
-    (globalDepthPeak != null &&
-      globalDepthPeak >= SHALLOW_FLOOR &&
-      sc?.descendDetected === true &&
-      relBelowSlice) ||
-    // 슬라이스 relative는 0이어도 전역 피크·무장·최대%가 얕은 밴드면 관측 허용(통과와 무관)
-    (globalDepthPeak != null &&
-      globalDepthPeak >= SHALLOW_FLOOR &&
-      completionArmingArmed &&
-      depthPeakPct != null &&
-      depthPeakPct >= SHALLOW_FLOOR * 100 &&
-      relBelowSlice);
-  if (relPeak != null && relPeak >= SHALLOW_FLOOR && relPeak < SHALLOW_CEIL) {
-    shallowReasons.push('relative_depth_shallow_band');
-  }
-  if (sc?.depthBand === 'shallow' && quietEvaluatorShallow) shallowReasons.push('depth_band_shallow');
-  if (sc?.descendDetected && quietEvaluatorShallow) shallowReasons.push('descend_detected_flag');
-  const phase = sc?.currentSquatPhase ?? (hm?.currentSquatPhase as string | undefined);
-  if (
-    (phase === 'descending' || phase === 'committed_bottom_or_downward_commitment') &&
-    quietEvaluatorShallow
-  ) {
-    shallowReasons.push('phase_descent_related');
-  }
-  if (descentCount > 0 && (quietEvaluatorShallow || descentCount >= 2)) {
-    shallowReasons.push('descent_count_positive');
-  }
-  const commitDelta = typeof hm?.downwardCommitmentDelta === 'number' ? hm.downwardCommitmentDelta : 0;
-  if (commitDelta >= 0.012 && quietEvaluatorShallow) shallowReasons.push('downward_commitment_delta');
-
-  if (
-    sc?.descendDetected &&
-    sc?.recoveryDetected &&
-    (quietEvaluatorShallow || descentCount >= 2 || (typeof hm?.firstDescentIdx === 'number' && hm.firstDescentIdx >= 0))
-  ) {
-    shallowReasons.push('descend_and_recovery_cycle');
-  }
-
-  if (sc?.attemptStarted === true || hm?.attemptStarted === true) attemptReasons.push('attempt_started_flag');
-  if (sc?.descendConfirmed === true || hm?.descendConfirmed === true) attemptReasons.push('descend_confirmed');
-  if (descentCount >= 2) attemptReasons.push('descent_count_2plus');
-  if (relPeak != null && relPeak >= 0.035) attemptReasons.push('relative_depth_ge_0.035');
-
-  return {
-    shallowCandidateObserved: shallowReasons.length > 0,
-    attemptLikeMotionObserved: attemptReasons.length > 0,
-    shallowCandidateReasons: shallowReasons.slice(0, 8),
-    attemptLikeReasons: attemptReasons.slice(0, 8),
-  };
-}
-
-/** 페이지 관측 엣지용 — 통과 로직과 동일한 산식을 쓰지 않고 “관측 가능한 하향 확약” 근사만 표시 */
-export function squatDownwardCommitmentReachedObservable(gate: ExerciseGateResult): boolean {
-  const sc = gate.squatCycleDebug;
-  const hm = readHighlighted(gate);
-  if (sc?.reversalConfirmedAfterDescend) return true;
-  if (sc?.downwardCommitmentAtMs != null && sc.downwardCommitmentAtMs > 0) return true;
-  const d = typeof hm?.downwardCommitmentDelta === 'number' ? hm.downwardCommitmentDelta : 0;
-  return d >= 0.02;
-}
-
-/**
- * 현재 gate 스냅샷으로 compact observation 레코드 생성(squat 단계만).
- */
-export function buildSquatAttemptObservation(
-  gate: ExerciseGateResult,
-  eventType: SquatObservationEventType,
-  options?: {
-    priorEvidenceLabel?: string;
-    priorCompletionBlockedReason?: string | null;
-    priorStandardPathBlockedReason?: string | null;
-    priorRelativeDepthPeakBucket?: string | null;
-    captureTerminalKind?: string | null;
-    shallowObservationContract?: boolean;
-  }
-): SquatAttemptObservation | null {
-  if (gate.evaluatorResult?.stepId !== 'squat') return null;
-
-  const sc = gate.squatCycleDebug;
-  const cs = gate.evaluatorResult?.debug?.squatCompletionState;
-  const hm = readHighlighted(gate);
-  const signals = deriveSquatObservabilitySignals(gate);
-  const relPeak = typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : undefined;
-  const rawPeak = typeof hm?.rawDepthPeak === 'number' ? hm.rawDepthPeak : undefined;
-  const depthPeakMetric = gate.evaluatorResult?.metrics?.find((m) => m.name === 'depth')?.value;
-  const currentDepth =
-    typeof depthPeakMetric === 'number'
-      ? depthPeakMetric
-      : typeof hm?.depthPeak === 'number'
-        ? hm.depthPeak
-        : undefined;
-
-  const evidenceLabel =
-    (sc?.evidenceLabel as string | undefined) ?? (hm?.evidenceLabel as string | undefined);
-  const completionBlocked =
-    sc?.completionBlockedReason ?? (hm?.completionBlockedReason as string | null | undefined) ?? null;
-  const standardBlocked = sc?.standardPathBlockedReason ?? null;
-  const phaseHint =
-    (sc?.currentSquatPhase as string | undefined) ?? (hm?.currentSquatPhase as string | undefined);
-  const completionMachinePhase =
-    (typeof hm?.completionMachinePhase === 'string' ? hm.completionMachinePhase : null) ??
-    (typeof sc?.completionMachinePhase === 'string' ? sc.completionMachinePhase : null);
-  const baselineStandingDepth =
-    typeof hm?.baselineStandingDepth === 'number' ? hm.baselineStandingDepth : undefined;
-  const shallowContract =
-    options?.shallowObservationContract ?? hasShallowSquatObservation(gate);
-
-  const attemptStartedBool = !!(sc?.attemptStarted ?? hm?.attemptStarted);
-  const baselineFrozenBool = gate.evaluatorResult?.debug?.squatCompletionState?.baselineFrozen === true;
-  const truthMeta = computeObservationTruthFields({
-    eventType,
-    attemptStarted: attemptStartedBool,
-    baselineFrozen: baselineFrozenBool,
-  });
-
-  return {
-    traceKind: 'attempt_observation',
-    id: `obs-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    ts: new Date().toISOString(),
-    movementType: 'squat',
-    eventType,
-    captureQuality: gate.guardrail.captureQuality,
-    confidence: gate.confidence,
-    phaseHint,
-    attemptStarted: attemptStartedBool,
-    downwardCommitmentReached: squatDownwardCommitmentReachedObservable(gate),
-    descendConfirmed: !!(sc?.descendConfirmed ?? hm?.descendConfirmed),
-    reversalConfirmedAfterDescend: !!sc?.reversalConfirmedAfterDescend,
-    recoveryConfirmedAfterReversal: !!sc?.recoveryConfirmedAfterReversal,
-    evidenceLabel,
-    completionBlockedReason: completionBlocked,
-    standardPathBlockedReason: standardBlocked,
-    relativeDepthPeak: relPeak,
-    rawDepthPeak: rawPeak,
-    currentDepth,
-    relativeDepthPeakBucket: relativeDepthPeakBucket(relPeak ?? null),
-    shallowCandidateObserved: signals.shallowCandidateObserved,
-    attemptLikeMotionObserved: signals.attemptLikeMotionObserved,
-    shallowCandidateReasons: signals.shallowCandidateReasons,
-    attemptLikeReasons: signals.attemptLikeReasons,
-    flags: [...(gate.flags ?? []), ...(gate.guardrail.flags ?? [])].filter(
-      (f, i, arr) => f && arr.indexOf(f) === i
-    ) as string[],
-    topReasons: buildTopReasons(gate).slice(0, 8),
-    priorEvidenceLabel: options?.priorEvidenceLabel,
-    priorCompletionBlockedReason: options?.priorCompletionBlockedReason,
-    priorStandardPathBlockedReason: options?.priorStandardPathBlockedReason,
-    priorRelativeDepthPeakBucket: options?.priorRelativeDepthPeakBucket,
-    captureTerminalKind: options?.captureTerminalKind ?? null,
-    progressionStateSnapshot: gate.progressionState,
-    gateStatusSnapshot: gate.status,
-    completionMachinePhase,
-    baselineStandingDepth,
-    motionDescendDetected: !!sc?.descendDetected,
-    motionBottomDetected: !!sc?.bottomDetected,
-    motionRecoveryDetected: !!sc?.recoveryDetected,
-    shallowObservationContract: shallowContract,
-    baselineFrozen: gate.evaluatorResult?.debug?.squatCompletionState?.baselineFrozen,
-    peakLatched: gate.evaluatorResult?.debug?.squatCompletionState?.peakLatched,
-    eventCycleDetected: gate.evaluatorResult?.debug?.squatCompletionState?.squatEventCycle?.detected,
-    eventCyclePromoted: gate.evaluatorResult?.debug?.squatCompletionState?.eventCyclePromoted,
-    observationTruthStage: truthMeta.observationTruthStage,
-    completionBlockedReasonAuthoritative: truthMeta.completionBlockedReasonAuthoritative,
-    completionFinalizeMode: cs?.completionFinalizeMode ?? null,
-    completionAssistApplied: cs?.completionAssistApplied === true,
-    completionAssistSources: cs?.completionAssistSources ?? [],
-    completionAssistMode: cs?.completionAssistMode ?? null,
-    ruleCompletionBlockedReasonObs: cs?.ruleCompletionBlockedReason ?? null,
-    postAssistCompletionBlockedReasonObs: cs?.postAssistCompletionBlockedReason ?? null,
-    promotionBaseRuleBlockedReason: cs?.promotionBaseRuleBlockedReason ?? null,
-    reversalEvidenceProvenance: cs?.reversalEvidenceProvenance ?? null,
-    trajectoryReversalRescueApplied: cs?.trajectoryReversalRescueApplied === true,
-    reversalTailBackfillAppliedObs: cs?.reversalTailBackfillApplied === true,
-    officialShallowPathCandidate: cs?.officialShallowPathCandidate === true,
-    officialShallowPathAdmitted: cs?.officialShallowPathAdmitted === true,
-    officialShallowPathClosed: cs?.officialShallowPathClosed === true,
-    officialShallowPathReason: cs?.officialShallowPathReason ?? null,
-    officialShallowPathBlockedReason: cs?.officialShallowPathBlockedReason ?? null,
-    closedAsOfficialRomCycle: cs?.officialShallowPathClosed === true,
-    closedAsEventRescuePassReason:
-      cs?.completionPassReason === 'low_rom_event_cycle' ||
-      cs?.completionPassReason === 'ultra_low_rom_event_cycle',
-    officialShallowStreamBridgeApplied: cs?.officialShallowStreamBridgeApplied === true,
-    officialShallowAscentEquivalentSatisfied: cs?.officialShallowAscentEquivalentSatisfied === true,
-    officialShallowClosureProofSatisfied: cs?.officialShallowClosureProofSatisfied === true,
-    officialShallowPrimaryDropClosureFallback: cs?.officialShallowPrimaryDropClosureFallback === true,
-    officialShallowReversalSatisfied: cs?.officialShallowReversalSatisfied === true,
-    officialShallowDriftedToStandard: cs?.officialShallowDriftedToStandard === true,
-    officialShallowDriftReason: cs?.officialShallowDriftReason ?? null,
-    officialShallowPreferredPrefixFrameCount:
-      typeof cs?.officialShallowPreferredPrefixFrameCount === 'number'
-        ? cs.officialShallowPreferredPrefixFrameCount
-        : null,
-    liveReadinessSummaryState: gate.squatCycleDebug?.liveReadinessSummaryState,
-    readinessStableDwellSatisfied: gate.squatCycleDebug?.readinessStableDwellSatisfied,
-    setupMotionBlocked: gate.squatCycleDebug?.setupMotionBlocked,
-    setupMotionBlockReason: gate.squatCycleDebug?.setupMotionBlockReason ?? null,
-    attemptStartedAfterReady: gate.squatCycleDebug?.attemptStartedAfterReady,
-    successSuppressedBySetupPhase: gate.squatCycleDebug?.successSuppressedBySetupPhase,
-    squatCameraObservability: buildSquatCameraObservabilityExport(gate),
-    debugVersion: `${OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
-  };
-}
-
-function observationDedupSkip(list: SquatAttemptObservation[], next: SquatAttemptObservation): boolean {
-  if (next.eventType === 'capture_session_terminal' || next.eventType === 'shallow_observed') return false;
-  const last = list[list.length - 1];
-  if (!last || last.eventType !== next.eventType) return false;
-  const prevMs = Date.parse(last.ts);
-  if (Number.isNaN(prevMs)) return false;
-  return Date.now() - prevMs < 140;
-}
-
-/** bounded localStorage — 실패 시 무시 */
+/** bounded localStorage ???ㅽ뙣 ??臾댁떆 */
 export function pushSquatObservation(obs: SquatAttemptObservation): void {
   pushStoredSquatObservation(obs, observationDedupSkip);
 }
@@ -973,8 +476,8 @@ export function getRecentSquatObservations(): SquatAttemptObservation[] {
 }
 
 /**
- * Terminal bundle 직전에 호출 — LS 정본 우선, 파싱 실패·비어 있음·쓰기 실패로 캐시가 더 길면 캐시 사용.
- * 산식 변경 없음, 읽기 경로만 명시.
+ * Terminal bundle 吏곸쟾???몄텧 ??LS ?뺣낯 ?곗꽑, ?뚯떛 ?ㅽ뙣쨌鍮꾩뼱 ?덉쓬쨌?곌린 ?ㅽ뙣濡?罹먯떆媛 ??湲몃㈃ 罹먯떆 ?ъ슜.
+ * ?곗떇 蹂寃??놁쓬, ?쎄린 寃쎈줈留?紐낆떆.
  */
 export function getRecentSquatObservationsSnapshot(): SquatAttemptObservation[] {
   return getStoredRecentSquatObservationsSnapshot();
@@ -984,7 +487,7 @@ export function clearSquatObservations(): void {
   clearStoredSquatObservations();
 }
 
-/** 스쿼트 관측 1건 기록(페이지 effect에서 호출). 통과 임계·해석 변경 없음. */
+/** ?ㅼ옘??愿痢?1嫄?湲곕줉(?섏씠吏 effect?먯꽌 ?몄텧). ?듦낵 ?꾧퀎쨌?댁꽍 蹂寃??놁쓬. */
 export function recordSquatObservationEvent(
   gate: ExerciseGateResult,
   eventType: SquatObservationEventType,
@@ -996,120 +499,6 @@ export function recordSquatObservationEvent(
   } catch {
     // ignore
   }
-}
-
-/** OBS: 오버헤드 리치 mid-attempt 관측(스쿼트 키·시맨틱과 분리). */
-export type OverheadObservationEventType =
-  | 'attempt_started'
-  | 'meaningful_rise_satisfied'
-  | 'top_detected'
-  | 'stable_top_entered'
-  | 'hold_started'
-  | 'hold_satisfied'
-  | 'completion_blocked_changed'
-  | 'final_pass_blocked_changed'
-  | 'capture_session_terminal';
-
-export interface OverheadAttemptObservation {
-  traceKind: 'attempt_observation';
-  id: string;
-  ts: string;
-  movementType: 'overhead_reach';
-  eventType: OverheadObservationEventType;
-  attemptCorrelationId: string;
-  captureQuality: CaptureQuality;
-  confidence: number;
-  gateStatusSnapshot: string;
-  progressionStateSnapshot: string;
-  meaningfulRiseSatisfied: boolean;
-  completionBlockedReason: string | null;
-  finalPassBlockedReason: string | null;
-  riseStartedAtMs?: number | null;
-  riseElevationDeltaFromBaseline?: number | null;
-  topDetected?: boolean;
-  stableTopEntered?: boolean;
-  holdStarted?: boolean;
-  holdSatisfied?: boolean;
-  holdArmingBlockedReason?: string | null;
-  completionMachinePhase?: string | null;
-  /** capture_session_terminal 전용 */
-  captureTerminalKind?: string | null;
-  priorCompletionBlockedReason?: string | null;
-  priorFinalPassBlockedReason?: string | null;
-  debugVersion: string;
-}
-
-const OVERHEAD_OBS_DEBUG_VERSION = 'overhead-obs-1';
-
-export function buildOverheadAttemptObservation(
-  gate: ExerciseGateResult,
-  attemptCorrelationId: string,
-  eventType: OverheadObservationEventType,
-  options?: {
-    captureTerminalKind?: string | null;
-    priorCompletionBlockedReason?: string | null;
-    priorFinalPassBlockedReason?: string | null;
-  }
-): OverheadAttemptObservation | null {
-  if (gate.evaluatorResult?.stepId !== 'overhead-reach') return null;
-
-  const hm = readHighlighted(gate);
-  const riseStartedAtMs = typeof hm?.riseStartedAtMs === 'number' ? hm.riseStartedAtMs : null;
-  const riseElevationDeltaFromBaseline =
-    typeof hm?.riseElevationDeltaFromBaseline === 'number' ? hm.riseElevationDeltaFromBaseline : null;
-  const meaningfulRiseSatisfied = hm?.meaningfulRiseSatisfied === 1;
-  const topDetected = hm?.topDetected === 1;
-  const stableTopEntered = hm?.stableTopEntry === 1;
-  const holdStarted = hm?.holdStarted === 1;
-  const holdSatisfied = hm?.holdSatisfied === 1;
-  const completionBlockedReason =
-    (hm?.completionBlockedReason as string | null | undefined) ?? null;
-  const completionMachinePhase =
-    typeof hm?.completionMachinePhase === 'string' ? hm.completionMachinePhase : null;
-  const holdArmingBlockedReason =
-    (hm?.holdArmingBlockedReason as string | null | undefined) ?? null;
-  const finalPassBlockedReason =
-    typeof gate.finalPassBlockedReason === 'string' ? gate.finalPassBlockedReason : null;
-
-  return {
-    traceKind: 'attempt_observation',
-    id: `obs-oh-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    ts: new Date().toISOString(),
-    movementType: 'overhead_reach',
-    eventType,
-    attemptCorrelationId,
-    captureQuality: gate.guardrail.captureQuality,
-    confidence: gate.confidence,
-    gateStatusSnapshot: gate.status,
-    progressionStateSnapshot: gate.progressionState,
-    meaningfulRiseSatisfied,
-    completionBlockedReason,
-    finalPassBlockedReason,
-    riseStartedAtMs: riseStartedAtMs ?? undefined,
-    riseElevationDeltaFromBaseline: riseElevationDeltaFromBaseline ?? undefined,
-    topDetected,
-    stableTopEntered,
-    holdStarted,
-    holdSatisfied,
-    holdArmingBlockedReason: holdArmingBlockedReason ?? undefined,
-    completionMachinePhase: completionMachinePhase ?? undefined,
-    captureTerminalKind: options?.captureTerminalKind ?? undefined,
-    priorCompletionBlockedReason: options?.priorCompletionBlockedReason ?? undefined,
-    priorFinalPassBlockedReason: options?.priorFinalPassBlockedReason ?? undefined,
-    debugVersion: `${OVERHEAD_OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
-  };
-}
-
-function overheadObservationDedupSkip(
-  list: OverheadAttemptObservation[],
-  next: OverheadAttemptObservation
-): boolean {
-  if (next.eventType === 'capture_session_terminal') return false;
-  const last = list[list.length - 1];
-  if (!last || last.eventType !== next.eventType) return false;
-  const prevMs = Date.parse(last.ts);
-  if (Number.isNaN(prevMs)) return false;
-  return Date.now() - prevMs < 140;
 }
 
 export function pushOverheadObservation(obs: OverheadAttemptObservation): void {
@@ -1124,7 +513,7 @@ export function clearOverheadObservations(): void {
   clearStoredOverheadObservations();
 }
 
-/** 오버헤드 관측 1건 기록(페이지 effect·터미널 경로). */
+/** ?ㅻ쾭?ㅻ뱶 愿痢?1嫄?湲곕줉(?섏씠吏 effect쨌?곕???寃쎈줈). */
 export function recordOverheadObservationEvent(
   gate: ExerciseGateResult,
   attemptCorrelationId: string,
@@ -1156,32 +545,8 @@ function gateToOutcome(gate: ExerciseGateResult): TraceOutcome {
   return 'retry_optional';
 }
 
-function buildTopReasons(gate: ExerciseGateResult): string[] {
-  const reasons: string[] = [];
-  const fr = gate.failureReasons ?? [];
-  const flags = gate.guardrail.flags ?? [];
 
-  for (const r of fr) {
-    if (r && !reasons.includes(r)) reasons.push(r);
-  }
-  for (const f of flags) {
-    if (f && !reasons.includes(f)) reasons.push(f);
-  }
-  if (gate.evaluatorResult?.completionHints?.length) {
-    for (const h of gate.evaluatorResult.completionHints) {
-      const s = `completion:${h}`;
-      if (!reasons.includes(s)) reasons.push(s);
-    }
-  }
-  if (gate.evaluatorResult?.qualityHints?.length) {
-    for (const h of gate.evaluatorResult.qualityHints) {
-      const s = `quality:${h}`;
-      if (!reasons.includes(s)) reasons.push(s);
-    }
-  }
-
-  return reasons.slice(0, 8);
-}
+const DEBUG_VERSION = 'pr4-2';
 
 function extractStabilitySummary(gate: ExerciseGateResult): AttemptSnapshot['stabilitySummary'] {
   const d = gate.guardrail.debug;
@@ -1208,11 +573,11 @@ function extractPerStepSummary(gate: ExerciseGateResult): Record<string, unknown
 export interface RecordAttemptOptions {
   liveCueingEnabled?: boolean;
   autoNextObservation?: string;
-  /** PR-C4: overhead hold cue 재생 여부 */
+  /** PR-C4: overhead hold cue ?ъ깮 ?щ? */
   holdCuePlayed?: boolean;
-  /** PR-C4: success latch 시점 (ms) */
+  /** PR-C4: success latch ?쒖젏 (ms) */
   successTriggeredAtMs?: number;
-  /** OBS: overhead 입력 truth — usePoseCapture stats 에코 */
+  /** OBS: overhead ?낅젰 truth ??usePoseCapture stats ?먯퐫 */
   poseCaptureStats?: PoseCaptureStats;
   /** PR-OH-INPUT-STABILITY-02A: overhead terminal deferral / failure class (optional) */
   overheadInputStability?: OverheadInputStabilityDiag;
@@ -1424,7 +789,7 @@ function buildDiagnosisSummary(
       squatInternalQuality: siq,
     };
 
-    /** PR-CAM-RESULT-SEVERITY-SURFACE-01: diagnosis `base` = d, squatCycle.squatInternalQuality = 허용 source만 */
+    /** PR-CAM-RESULT-SEVERITY-SURFACE-01: diagnosis `base` = d, squatCycle.squatInternalQuality = ?덉슜 source留?*/
     const resultSeverity = buildSquatResultSeveritySummary({
       completionTruthPassed: sc.completionTruthPassed === true,
       captureQuality: String(base.captureQuality ?? ''),
@@ -1437,7 +802,7 @@ function buildDiagnosisSummary(
     base.squatCycle.qualityWarningCount = resultSeverity.qualityWarningCount;
     base.squatCycle.limitationCount = resultSeverity.limitationCount;
 
-    // PR-HMM-01B: shadow decoder compact summary — snapshot payload 과대화 방지
+    // PR-HMM-01B: shadow decoder compact summary ??snapshot payload 怨쇰???諛⑹?
     const squatHmm = gate.evaluatorResult.debug?.squatHmm;
     if (squatHmm != null && base.squatCycle != null) {
       const squatCycleExt = base.squatCycle as typeof base.squatCycle & {
@@ -1461,7 +826,7 @@ function buildDiagnosisSummary(
       };
     }
 
-    // PR-HMM-03A: calibration compact — HMM + completion state 한 블록
+    // PR-HMM-03A: calibration compact ??HMM + completion state ??釉붾줉
     if (base.squatCycle != null) {
       const squatCycleExt = base.squatCycle as typeof base.squatCycle & {
         calib?: ReturnType<typeof buildSquatCalibrationTraceCompact>;
@@ -1500,7 +865,7 @@ function buildDiagnosisSummary(
     const holdAccumulationMs = typeof hm?.holdAccumulationMs === 'number' ? hm.holdAccumulationMs : holdDurationMs;
     const holdSatisfiedAtMs = typeof hm?.holdSatisfiedAtMs === 'number' ? hm.holdSatisfiedAtMs : undefined;
 
-    // PR-OH-MOTION-METRIC-TRACE-03C: separate true peak vs time-average vs rise peak — no evaluator behavior change.
+    // PR-OH-MOTION-METRIC-TRACE-03C: separate true peak vs time-average vs rise peak ??no evaluator behavior change.
     const armRangeMetric = gate.evaluatorResult?.metrics?.find((m) => m.name === 'arm_range');
     const armElevationTimeAvgDeg =
       typeof armRangeMetric?.value === 'number' && Number.isFinite(armRangeMetric.value)
@@ -1514,7 +879,7 @@ function buildDiagnosisSummary(
       typeof hm?.risePeakArmElevation === 'number' && Number.isFinite(hm.risePeakArmElevation)
         ? hm.risePeakArmElevation
         : undefined;
-    /** Identical to pre-03C: prefer highlighted max peak, else arm_range (mean — historically mislabeled as "peak"). */
+    /** Identical to pre-03C: prefer highlighted max peak, else arm_range (mean ??historically mislabeled as "peak"). */
     const peakElevation =
       truePeakArmElevationDeg !== undefined ? truePeakArmElevationDeg : armElevationTimeAvgDeg;
     const exportedPeakElevationProvenance: OverheadExportedPeakElevationProvenance =
@@ -1575,8 +940,8 @@ function buildDiagnosisSummary(
       holdSatisfiedAtMs:
         holdSatisfiedAtMs ??
         (holdSatisfied && holdArmedAtMs != null ? holdArmedAtMs + REQUIRED_HOLD_MS : undefined),
-      holdArmingBlockedReason: holdArmingBlockedReason ?? undefined,
-      holdRemainingMsAtCue: REQUIRED_HOLD_MS - holdDurationMs,
+      holdArmingBlockedReason:
+        typeof holdArmingBlockedReason === 'string' ? holdArmingBlockedReason : undefined,
       holdCuePlayed: options?.holdCuePlayed,
       holdCueSuppressedReason: isHoldCue ? (cueObs?.suppressedReason ?? null) : undefined,
       successEligibleAtMs: passLatched ? (options?.successTriggeredAtMs ?? Date.now()) : undefined,
@@ -1601,7 +966,7 @@ function buildDiagnosisSummary(
       riseStartedAtMs: typeof hm?.riseStartedAtMs === 'number' ? hm.riseStartedAtMs : undefined,
       riseBlockedReason:
         typeof hm?.riseBlockedReason === 'string' ? hm.riseBlockedReason : null,
-      /** PR-02: final-pass blocked reason — distinguishes Layer 1 vs Layer 2 failure */
+      /** PR-02: final-pass blocked reason ??distinguishes Layer 1 vs Layer 2 failure */
       finalPassBlockedReason:
         typeof gate.finalPassBlockedReason === 'string' ? gate.finalPassBlockedReason : null,
       /** PR-OH-KINEMATIC-SIGNAL-04B */
@@ -1701,7 +1066,7 @@ function buildDiagnosisSummary(
 }
 
 /**
- * gate 결과로부터 compact attempt snapshot 생성
+ * gate 寃곌낵濡쒕???compact attempt snapshot ?앹꽦
  */
 export function buildAttemptSnapshot(
   stepId: CameraStepId,
@@ -1744,27 +1109,26 @@ export function buildAttemptSnapshot(
 }
 
 /**
- * snapshot을 bounded localStorage에 추가 (non-blocking)
+ * snapshot??bounded localStorage??異붽? (non-blocking)
  */
 export function pushAttemptSnapshot(snapshot: AttemptSnapshot): void {
   pushStoredAttemptSnapshot(snapshot);
 }
 
 /**
- * 최근 attempt 목록 조회
+ * 理쒓렐 attempt 紐⑸줉 議고쉶
  */
 export function getRecentAttempts(): AttemptSnapshot[] {
   return getStoredRecentAttempts();
 }
 
 /**
- * trace 저장소 초기화
- */
+ * trace ??μ냼 珥덇린?? */
 export function clearAttempts(): void {
   clearStoredCameraTraceData();
 }
 
-/** dogfooding용 quick stats */
+/** dogfooding??quick stats */
 export interface TraceQuickStats {
   byMovement: Record<TraceMovementType, number>;
   byOutcome: Record<TraceOutcome, number>;
@@ -1843,8 +1207,8 @@ export function getQuickStats(snapshots: AttemptSnapshot[]): TraceQuickStats {
 }
 
 /**
- * gate가 있을 때 snapshot을 생성하고 저장 (non-blocking)
- * 실패해도 예외를 던지지 않음
+ * gate媛 ?덉쓣 ??snapshot???앹꽦?섍퀬 ???(non-blocking)
+ * ?ㅽ뙣?대룄 ?덉쇅瑜??섏?吏 ?딆쓬
  */
 export function recordAttemptSnapshot(
   stepId: CameraStepId,
