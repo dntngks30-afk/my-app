@@ -14,29 +14,8 @@ import { loadPublicResultHandoff } from '@/lib/public-results/public-result-hand
 import { loadPublicResult } from '@/lib/public-results/loadPublicResult';
 import { useExecutionStartBridge } from '@/lib/public-results/useExecutionStartBridge';
 import { ResumeExecutionGate } from '@/components/public-result/ResumeExecutionGate';
+import { loadCompletedSurveyAnswersCache } from '@/lib/public/survey-session-cache';
 import type { FreeSurveyBaselineResult } from '@/lib/deep-v2/types';
-import type { TestAnswerValue } from '@/features/movement-test/v2';
-
-const SESSION_KEY = 'movementTestSession:v2';
-
-interface StoredSessionV2 {
-  version: string;
-  isCompleted: boolean;
-  answersById: Record<string, TestAnswerValue>;
-}
-
-function loadSurveyAnswers(): Record<string, TestAnswerValue> | null {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const data: StoredSessionV2 = JSON.parse(raw);
-    if (data?.version !== 'v2') return null;
-    if (!data.isCompleted) return null;
-    return data.answersById ?? {};
-  } catch {
-    return null;
-  }
-}
 
 export default function BaselinePage() {
   const router = useRouter();
@@ -82,7 +61,7 @@ export default function BaselinePage() {
 
         if (cancelled) return;
 
-        const answers = loadSurveyAnswers();
+        const answers = loadCompletedSurveyAnswersCache();
         if (!answers) {
           router.replace('/movement-test/survey');
           return;
