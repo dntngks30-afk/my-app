@@ -1,27 +1,30 @@
 'use client';
 
 /**
- * PR-SESSION-PREPARING-TRANSPLANT-MIN-DWELL-02 — zip(9) 톤: 오브·가로 바·중앙 서사
+ * PR-SESSION-PREPARING-TRANSPLANT-MIN-DWELL-02 - zip(9) tone session preparing scene.
  */
 import { PostpayChapterShell, PostpayBrandHeader, PostpayHorizontalPreparingBar } from './shared';
 
 export type StitchSessionPreparingSceneProps = {
   stageIndex: number;
-  stageLines: readonly string[];
-  /** 0~1 시각 진행(백엔드 퍼센트와 무관) */
   visualProgress: number;
   errorMessage: string | null;
   onSkipNext: () => void;
 };
 
+const STAGE_LINES = [
+  '지금 정리된 상태를 반영해, 운동 시작점을 맞추고 있어요.',
+  '조심해야 할 움직임과 난이도에 맞춰 세션을 잡고 있어요.',
+  '리셋맵에 이어질 전체 세션 구성을 준비하고 있어요.',
+] as const;
+
 export default function StitchSessionPreparingScene({
   stageIndex,
-  stageLines,
   visualProgress,
   errorMessage,
   onSkipNext,
 }: StitchSessionPreparingSceneProps) {
-  const line = stageLines[stageIndex] ?? stageLines[0];
+  const line = STAGE_LINES[stageIndex] ?? STAGE_LINES[0];
 
   return (
     <PostpayChapterShell>
@@ -29,7 +32,6 @@ export default function StitchSessionPreparingScene({
         <PostpayBrandHeader />
 
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6">
-          {/* zip(9): 중앙 오브 글로우 */}
           <div className="pointer-events-none absolute left-1/2 top-[28%] z-0 h-[min(500px,90vw)] w-[min(500px,90vw)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,#ffb77d_0%,rgba(255,183,125,0)_70%)] opacity-40 blur-[60px] motion-safe:animate-pulse" />
 
           <div className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center text-center">
@@ -75,7 +77,7 @@ export default function StitchSessionPreparingScene({
                 <div className="mt-6 flex flex-col items-center gap-3">
                   <PostpayHorizontalPreparingBar fraction={visualProgress} />
                   <div className="flex justify-center gap-2" aria-hidden>
-                    {stageLines.map((_, i) => (
+                    {STAGE_LINES.map((_, i) => (
                       <span
                         key={i}
                         className="h-1.5 w-1.5 rounded-full transition-colors duration-300"
