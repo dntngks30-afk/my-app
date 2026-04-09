@@ -1,7 +1,7 @@
-﻿/**
- * PR-4: 移대찓???쒕룄 愿痢≪슜 寃쎈웾 trace
- * - pass/funnel/result 怨꾩빟 蹂寃??놁쓬
- * - ?붿빟 ?꾩슜 snapshot, raw frame/landmark ????놁쓬
+/**
+ * PR-4: 카메라 시도 관측용 경량 trace
+ * - pass/funnel/result 계약 변경 없음
+ * - 요약 전용 snapshot, raw frame/landmark 저장 없음
  */
 import type { ExerciseGateResult } from './auto-progression';
 import type { CaptureQuality, OverheadInputTruthMap } from './guardrails';
@@ -79,7 +79,7 @@ export type {
   SquatObservationEventType,
 } from './trace/camera-trace-observation-builders';
 
-/** PR-4: movement type (squat, overhead_reach留?吏?? */
+/** PR-4: movement type (squat, overhead_reach만 지원) */
 export type TraceMovementType = 'squat' | 'overhead_reach';
 
 /**
@@ -91,7 +91,7 @@ export type OverheadExportedPeakElevationProvenance =
   | 'legacy_metrics_arm_range_time_average_fallback'
   | 'unavailable';
 
-/** PR-4: 理쒖쥌 寃곌낵 移댄뀒怨좊━ */
+/** PR-4: 최종 결과 카테고리 */
 export type TraceOutcome =
   | 'ok'
   | 'low'
@@ -100,7 +100,7 @@ export type TraceOutcome =
   | 'retry_optional'
   | 'failed';
 
-/** PR-4: 寃쎈웾 attempt snapshot */
+/** PR-4: 경량 attempt snapshot */
 export interface AttemptSnapshot {
   id: string;
   ts: string;
@@ -861,7 +861,8 @@ function buildDiagnosisSummary(
     const holdArmedAtMs = typeof hm?.holdArmedAtMs === 'number' ? hm.holdArmedAtMs : undefined;
     const holdAccumulationStartedAtMs =
       typeof hm?.holdAccumulationStartedAtMs === 'number' ? hm.holdAccumulationStartedAtMs : undefined;
-    const holdArmingBlockedReason = hm?.holdArmingBlockedReason ?? undefined;
+    const holdArmingBlockedReason =
+      hm?.holdArmingBlockedReason as string | null | undefined;
     const holdAccumulationMs = typeof hm?.holdAccumulationMs === 'number' ? hm.holdAccumulationMs : holdDurationMs;
     const holdSatisfiedAtMs = typeof hm?.holdSatisfiedAtMs === 'number' ? hm.holdSatisfiedAtMs : undefined;
 
@@ -940,8 +941,8 @@ function buildDiagnosisSummary(
       holdSatisfiedAtMs:
         holdSatisfiedAtMs ??
         (holdSatisfied && holdArmedAtMs != null ? holdArmedAtMs + REQUIRED_HOLD_MS : undefined),
-      holdArmingBlockedReason:
-        typeof holdArmingBlockedReason === 'string' ? holdArmingBlockedReason : undefined,
+      holdArmingBlockedReason: holdArmingBlockedReason ?? undefined,
+      holdRemainingMsAtCue: REQUIRED_HOLD_MS - holdDurationMs,
       holdCuePlayed: options?.holdCuePlayed,
       holdCueSuppressedReason: isHoldCue ? (cueObs?.suppressedReason ?? null) : undefined,
       successEligibleAtMs: passLatched ? (options?.successTriggeredAtMs ?? Date.now()) : undefined,
@@ -1066,7 +1067,7 @@ function buildDiagnosisSummary(
 }
 
 /**
- * gate 寃곌낵濡쒕???compact attempt snapshot ?앹꽦
+ * gate 결과로부터 compact attempt snapshot 생성
  */
 export function buildAttemptSnapshot(
   stepId: CameraStepId,
@@ -1109,26 +1110,27 @@ export function buildAttemptSnapshot(
 }
 
 /**
- * snapshot??bounded localStorage??異붽? (non-blocking)
+ * snapshot을 bounded localStorage에 추가 (non-blocking)
  */
 export function pushAttemptSnapshot(snapshot: AttemptSnapshot): void {
   pushStoredAttemptSnapshot(snapshot);
 }
 
 /**
- * 理쒓렐 attempt 紐⑸줉 議고쉶
+ * 최근 attempt 목록 조회
  */
 export function getRecentAttempts(): AttemptSnapshot[] {
   return getStoredRecentAttempts();
 }
 
 /**
- * trace ??μ냼 珥덇린?? */
+ * trace 저장소 초기화
+ */
 export function clearAttempts(): void {
   clearStoredCameraTraceData();
 }
 
-/** dogfooding??quick stats */
+/** dogfooding용 quick stats */
 export interface TraceQuickStats {
   byMovement: Record<TraceMovementType, number>;
   byOutcome: Record<TraceOutcome, number>;
@@ -1207,8 +1209,8 @@ export function getQuickStats(snapshots: AttemptSnapshot[]): TraceQuickStats {
 }
 
 /**
- * gate媛 ?덉쓣 ??snapshot???앹꽦?섍퀬 ???(non-blocking)
- * ?ㅽ뙣?대룄 ?덉쇅瑜??섏?吏 ?딆쓬
+ * gate가 있을 때 snapshot을 생성하고 저장 (non-blocking)
+ * 실패해도 예외를 던지지 않음
  */
 export function recordAttemptSnapshot(
   stepId: CameraStepId,
