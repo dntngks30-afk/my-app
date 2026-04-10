@@ -1,7 +1,5 @@
-import type {
-  ShallowNormalizedBlockerFamily,
-  SquatCompletionState,
-} from '../squat-completion-state';
+import type { SquatCompletionState } from '../squat-completion-state';
+import type { ShallowNormalizedBlockerFamily } from './squat-completion-debug-types';
 
 type ApplyUltraLowPolicyLockDeps = {
   mapCompletionBlockedReasonToShallowNormalizedBlockerFamily: (

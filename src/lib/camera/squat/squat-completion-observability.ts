@@ -2,16 +2,18 @@ import type { PoseFeaturesFrame } from '../pose-features';
 import { deriveSquatCompletionMachinePhase } from '../squat-completion-machine';
 import type {
   EvaluateSquatCompletionStateOptions,
-  GuardedShallowLocalPeakAnchor,
   OfficialShallowConsumptionDecision,
+  SquatCompletionState,
+  SquatEvidenceLabel,
+} from '../squat-completion-state';
+import type { GuardedShallowLocalPeakAnchor } from './squat-completion-core';
+import type {
   ShallowAuthoritativeContractStatus,
   ShallowClosureProofTrace,
   ShallowClosureProofTraceStage,
   ShallowNormalizedBlockerFamily,
   SquatAuthoritativeShallowStage,
-  SquatCompletionState,
-  SquatEvidenceLabel,
-} from '../squat-completion-state';
+} from './squat-completion-debug-types';
 import { detectSquatEventCycle, type SquatEventCycleResult } from './squat-event-cycle';
 import { deriveSquatOwnerTruthTrace } from './squat-owner-trace';
 

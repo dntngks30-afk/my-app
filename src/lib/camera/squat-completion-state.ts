@@ -39,32 +39,22 @@ import {
   attachShallowTruthObservabilityAlign01 as attachShallowTruthObservabilityAlign01Impl,
 } from '@/lib/camera/squat/squat-completion-observability';
 import { applyUltraLowPolicyLock as applyUltraLowPolicyLockImpl } from '@/lib/camera/squat/squat-completion-policy';
-
+import type {
+  ShallowAuthoritativeContractStatus,
+  ShallowClosureProofTraceStage,
+  ShallowNormalizedBlockerFamily,
+  SquatAuthoritativeShallowStage,
+} from '@/lib/camera/squat/squat-completion-debug-types';
 // RF-09B: core helper graph relocated to squat-completion-core
 import {
   type SquatDepthFreezeConfig,
   type GuardedTrajectoryShallowBridgeOpts,
   type GuardedShallowLocalPeakAnchor,
-  type SquatDepthFrameLite,
-  type TrajectoryRescueAscentIntegrityArgs,
-  type SquatOfficialShallowAdmissionContract,
   BASELINE_WINDOW,
   MIN_BASELINE_FRAMES,
   STANDARD_OWNER_FLOOR,
   REVERSAL_DROP_MIN_ABS,
-  squatCompletionBlockedReasonToCode,
-  shouldBypassUltraLowRomShortDescentTiming,
-  trajectoryRescueMeetsAscentIntegrity,
   getGuardedShallowLocalPeakAnchor,
-  computeOfficialShallowClosure,
-  getGuardedStandingTailReversalBackfill,
-  isUltraLowRomDirectCloseEligible,
-  resolveSquatCompletionPath,
-  computeSquatAttemptAdmission,
-  deriveOfficialShallowCandidate,
-  deriveOfficialShallowAdmission,
-  resolveOfficialShallowAdmissionContract,
-  getSquatStandingRecoveryThresholdForObservability,
   buildSquatCompletionDepthRows,
   recoveryMeetsLowRomStyleFinalizeProof,
   mapCompletionBlockedReasonToShallowNormalizedBlockerFamily,
@@ -72,29 +62,6 @@ import {
   ultraLowRomEventPromotionMeetsAscentIntegrity,
   evaluateSquatCompletionCore,
   resolveStandardDriftAfterShallowAdmission,
-} from './squat/squat-completion-core';
-export type {
-  GuardedShallowLocalPeakAnchor,
-  SquatDepthFrameLite,
-  TrajectoryRescueAscentIntegrityArgs,
-  SquatOfficialShallowAdmissionContract,
-} from './squat/squat-completion-core';
-export {
-  squatCompletionBlockedReasonToCode,
-  getSquatStandingRecoveryThresholdForObservability,
-  shouldBypassUltraLowRomShortDescentTiming,
-  trajectoryRescueMeetsAscentIntegrity,
-  getGuardedShallowLocalPeakAnchor,
-  computeOfficialShallowClosure,
-  getGuardedStandingTailReversalBackfill,
-  isUltraLowRomDirectCloseEligible,
-  resolveSquatCompletionPath,
-  computeSquatAttemptAdmission,
-  deriveOfficialShallowCandidate,
-  deriveOfficialShallowAdmission,
-  resolveOfficialShallowAdmissionContract,
-  ultraLowRomEventPromotionMeetsAscentIntegrity,
-  mapCompletionBlockedReasonToShallowNormalizedBlockerFamily,
 } from './squat/squat-completion-core';
 
 
@@ -289,39 +256,6 @@ export type SquatCompletionAssistMode =
   | 'event_promotion'
   | 'mixed';
 
-/**
- * PR-SHALLOW-TRUTH-OBSERVABILITY-ALIGN-01: shallow 시도 단계 라벨(권위 completion truth 기반, 디버그 전용).
- */
-export type SquatAuthoritativeShallowStage =
-  | 'pre_attempt'
-  | 'admission_blocked'
-  | 'reversal_blocked'
-  | 'policy_blocked'
-  | 'standing_finalize_blocked'
-  | 'closed';
-
-/**
- * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: 세부 completionBlockedReason 을 6가지 패밀리로만 접는다(분류 전용).
- */
-export type ShallowNormalizedBlockerFamily =
-  | 'admission'
-  | 'reversal'
-  | 'policy'
-  | 'standing_finalize'
-  | 'closed'
-  | 'none';
-
-/**
- * PR-SHALLOW-CONTRACT-AUTHORITY-SEPARATION-01: 공식 shallow 계약 축 단일 상태(권위는 completion-state 만).
- */
-export type ShallowAuthoritativeContractStatus =
-  | 'not_in_shallow_contract'
-  | 'admission_blocked'
-  | 'reversal_blocked'
-  | 'policy_blocked'
-  | 'standing_finalize_blocked'
-  | 'closed';
-
 /** PR-02: 역전 앵커 증거 출처 — pass owner 아님 */
 export type SquatReversalEvidenceProvenance =
   | 'strict_rule'
@@ -334,20 +268,11 @@ export type SquatReversalEvidenceProvenance =
   /** PR-DOWNUP-GUARANTEE-03: ultra-low 전용 — finalize+복귀 증거로 strict 역전/closure 번들 없이 앵커 확정 */
   | 'ultra_shallow_meaningful_down_up_rescue';
 
-/** PR-CAM-SHALLOW-PROOF-TRACE-11: shallow proof 생성 관측 트레이스 — `SquatCompletionState` 필드가 참조(타입 선행). */
-export type ShallowClosureProofTraceStage =
-  | 'pre_admission'
-  | 'admitted'
-  | 'bridge'
-  | 'suffix'
-  | 'proof'
-  | 'consumption';
-
 /**
  * PR-CAM-SHALLOW-TICKET-UNIFICATION-12: shallow 완료 단일 권위 티켓(증명·소비는 티켓의 투영).
  * 이벤트 승격·trajectory 전역 권위화·딥 임계 변경 아님.
  */
-export type ShallowCompletionTicket = {
+type ShallowCompletionTicket = {
   eligible: boolean;
   satisfied: boolean;
   blockedReason: string | null;
@@ -363,7 +288,7 @@ export type ShallowCompletionTicket = {
   firstFailedStage?: string | null;
 };
 
-export type ShallowClosureProofTrace = {
+type ShallowClosureProofTrace = {
   stage: ShallowClosureProofTraceStage;
   eligible: boolean;
   satisfied: boolean;

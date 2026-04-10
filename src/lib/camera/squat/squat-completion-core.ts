@@ -1,6 +1,5 @@
-// RF-09B: squat completion core ??pre-canonical truth writer + core helper graph.
-// Relocated from squat-completion-state.ts.
-// DO NOT import directly from consumer code ??use squat-completion-state.ts facade.
+// RF09: squat completion core helper graph.
+// Runtime owner entry points stay in squat-completion-state.ts; helper/debug consumers may import owned helpers directly.
 import type { PoseFeaturesFrame } from '../pose-features';
 import { getSquatRecoverySignal } from '../pose-features';
 import {
@@ -31,9 +30,9 @@ import type {
   SquatCompletionAssistSource,
   SquatCompletionAssistMode,
   SquatReversalEvidenceProvenance,
-  ShallowNormalizedBlockerFamily,
   EvaluateSquatCompletionStateOptions,
 } from '../squat-completion-state';
+import type { ShallowNormalizedBlockerFamily } from './squat-completion-debug-types';
 
 /** PR-04E3B: 첫 attemptStarted 시점에 고정한 스트림·baseline — 동일 버퍼 내 재평가 없음 */
 export type SquatDepthFreezeConfig = {

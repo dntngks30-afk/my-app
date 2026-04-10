@@ -40,10 +40,10 @@ import type {
 } from './types';
 import {
   readSquatCompletionDepth,
-  squatCompletionBlockedReasonToCode,
   computeSquatReadinessStableDwell,
   computeSquatSetupMotionBlock,
 } from '@/lib/camera/squat-completion-state';
+import { squatCompletionBlockedReasonToCode } from '@/lib/camera/squat/squat-completion-core';
 
 const MIN_VALID_FRAMES = 8;
 

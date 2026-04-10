@@ -40,7 +40,7 @@ import type {
   ShallowClosureProofTrace,
   ShallowCompletionTicket,
   ShallowNormalizedBlockerFamily,
-} from '@/lib/camera/squat-completion-state';
+} from './squat/squat-completion-debug-types';
 import type { SquatOwnerTruthSource, SquatOwnerTruthStage } from '@/lib/camera/squat/squat-owner-trace';
 import type { SquatPassCoreResult } from '@/lib/camera/squat/pass-core';
 import {
