@@ -33,33 +33,39 @@ console.log('\n=== FLOW-07: Canonical User Readiness Smoke Test ===\n');
 // 1. 파일 존재 확인
 console.log('[1] 신규 파일 존재 확인');
 assert(
-  'getCanonicalUserReadiness.ts 존재',
-  existsSync(resolve(root, 'src/lib/readiness/getCanonicalUserReadiness.ts'))
+  'canonical-user-readiness.compat.ts 존재 (legacy projection 격리)',
+  existsSync(resolve(root, 'src/lib/readiness/canonical-user-readiness.compat.ts'))
 );
 assert(
   'GET /api/readiness/route.ts 존재',
   existsSync(resolve(root, 'src/app/api/readiness/route.ts'))
 );
 assert(
-  'get-session-readiness.ts 존재 (PR-FLOW-06 SSOT)',
+  'get-session-readiness.ts 존재 (PR-FLOW-06 공개 진입)',
   existsSync(resolve(root, 'src/lib/readiness/get-session-readiness.ts'))
+);
+assert(
+  'session-readiness-owner.internal.ts 존재 (owner 구현)',
+  existsSync(resolve(root, 'src/lib/readiness/session-readiness-owner.internal.ts'))
 );
 
 // 2. readiness 유틸 구조 확인
-console.log('\n[2] getCanonicalUserReadiness + getSessionReadiness 검증');
-const util = readSrc('src/lib/readiness/getCanonicalUserReadiness.ts');
-const ssot = readSrc('src/lib/readiness/get-session-readiness.ts');
-assert('getCanonicalUserReadiness export', util?.includes('export async function getCanonicalUserReadiness'));
-assert('UNAUTHENTICATED_READINESS export', util?.includes('export const UNAUTHENTICATED_READINESS'));
-assert('CanonicalUserReadiness 타입 export', util?.includes('export interface CanonicalUserReadiness'));
-assert('NextActionCode 타입 정의', util?.includes("export type NextActionCode"));
-assert('getSessionReadiness export', ssot?.includes('export async function getSessionReadiness'));
-assert('loadReadinessContext export', ssot?.includes('export async function loadReadinessContext'));
+console.log('\n[2] compat projection + getSessionReadiness 검증');
+const util = readSrc('src/lib/readiness/canonical-user-readiness.compat.ts');
+const ssot = readSrc('src/lib/readiness/session-readiness-owner.internal.ts');
+const publicEntry = readSrc('src/lib/readiness/get-session-readiness.ts');
+assert('getCompatCanonicalUserReadiness export', util?.includes('export async function getCompatCanonicalUserReadiness'));
+assert('COMPAT_UNAUTHENTICATED_LEGACY_READINESS export', util?.includes('export const COMPAT_UNAUTHENTICATED_LEGACY_READINESS'));
+assert('CompatCanonicalUserReadiness 타입 export', util?.includes('export interface CompatCanonicalUserReadiness'));
+assert('CompatNextActionCode 타입 정의', util?.includes('export type CompatNextActionCode'));
+assert('getSessionReadiness export (owner internal)', ssot?.includes('export async function getSessionReadiness'));
+assert('loadReadinessContext export (owner internal)', ssot?.includes('export async function loadReadinessContext'));
+assert('공개 진입이 getSessionReadiness만 재export', publicEntry?.includes("from './session-readiness-owner.internal'"));
 
 // 3. 접근(access) 상태 확인
 console.log('\n[3] access 상태 검증');
 assert("has_active_plan 필드", util?.includes('has_active_plan'));
-assert("plan_status 조회", util?.includes("plan_status"));
+assert("plan_status 조회", util?.includes('plan_status'));
 assert("plan_status === 'active' 확인", ssot?.includes("=== 'active'"));
 
 // 4. 분석(analysis) 상태 확인
@@ -100,7 +106,7 @@ assert("'complete_onboarding' action", util?.includes("'complete_onboarding'"));
 assert("'create_session' action", util?.includes("'create_session'"));
 assert("'open_app' action", util?.includes("'open_app'"));
 assert("'blocked' action", util?.includes("'blocked'"));
-assert('deriveNextActionLegacy (레거시 next_action)', util?.includes('function deriveNextActionLegacy'));
+assert('projectNextAction (SessionReadinessV1 → 레거시 코드)', util?.includes('function projectNextAction'));
 
 // 8. API 라우트 확인
 console.log('\n[8] /api/readiness 라우트 검증');
@@ -108,7 +114,7 @@ const route = readSrc('src/app/api/readiness/route.ts');
 assert('GET export', route?.includes('export async function GET'));
 assert('getCurrentUserId 사용', route?.includes('getCurrentUserId'));
 assert('미인증 → UNAUTHENTICATED_SESSION_READINESS_V1 반환 (401 아님)', route?.includes('UNAUTHENTICATED_SESSION_READINESS_V1'));
-assert('force-dynamic', route?.includes("force-dynamic"));
+assert('force-dynamic', route?.includes('force-dynamic'));
 assert('ok() 사용', route?.includes('return ok('));
 assert('getSessionReadiness 호출', route?.includes('getSessionReadiness'));
 
@@ -120,8 +126,8 @@ assert('onboarding save 로직 없음', !ssot?.includes('applyTargetFrequency') 
 
 // 10. FLOW-08 준비: 재사용 가능 계약
 console.log('\n[10] FLOW-08 준비 확인');
-assert('next_action.href 존재 (레거시 Canonical)', util?.includes('href:'));
-assert('CanonicalUserReadiness 단일 export (재사용 가능)', util?.includes('export interface CanonicalUserReadiness'));
+assert('next_action.href 존재 (레거시 Compat)', util?.includes('href:'));
+assert('CompatCanonicalUserReadiness export', util?.includes('export interface CompatCanonicalUserReadiness'));
 assert('병렬 DB 조회 (Promise.all)', ssot?.includes('Promise.all'));
 
 console.log(`\n=== 결과: ${passed} 통과 / ${passed + failed} 총 ===\n`);

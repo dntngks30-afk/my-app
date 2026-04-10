@@ -1,7 +1,8 @@
 /**
  * FLOW-08 / PR-FLOW-06 — Readiness Client Fetcher (browser-side)
  *
- * GET /api/readiness — SessionReadinessV1.
+ * 브라우저 공개 진입: `SessionReadinessV1`만 반환한다 (레거시 compat 타입 없음).
+ * GET /api/readiness — 동일 계약.
  *
  * @see src/app/api/readiness/route.ts
  * @see src/lib/readiness/get-session-readiness.ts

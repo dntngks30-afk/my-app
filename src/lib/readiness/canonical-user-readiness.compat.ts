@@ -1,10 +1,14 @@
 /**
- * FLOW-07 — Canonical User Readiness (server-side read model)
+ * FLOW-07 — Legacy CanonicalUserReadiness projection (compat / internal)
  *
- * PR-FLOW-06: 계산 SSOT는 loadReadinessContext + 동일 컨텍스트 매핑.
- * 이 파일은 레거시 CanonicalUserReadiness 형태를 유지하기 위한 어댑터다.
+ * PR-FLOW-06: 계산 SSOT는 `session-readiness-owner.internal.ts`의
+ * `loadReadinessContext` + 동일 컨텍스트 매핑.
  *
- * @see src/lib/readiness/get-session-readiness.ts (PR-FLOW-06 SSOT)
+ * 이 파일은 **레거시** `CanonicalUserReadiness` 형태를 유지하기 위한 어댑터다.
+ * 정본 계약은 `SessionReadinessV1` (`types.ts` + `getSessionReadiness`)만 사용한다.
+ *
+ * @see src/lib/readiness/get-session-readiness.ts (공개 진입)
+ * @see src/lib/readiness/session-readiness-owner.internal.ts (owner 구현)
  */
 
 import {
@@ -12,16 +16,16 @@ import {
   loadReadinessContext,
   UNAUTHENTICATED_SESSION_READINESS_V1,
   type ReadinessContext,
-} from './get-session-readiness';
+} from './session-readiness-owner.internal';
 import type { SessionReadinessV1 } from './types';
 
-// ─── 타입 정의 ────────────────────────────────────────────────────────────────
+// ─── 레거시 compat 타입 (정본이 아님) ───────────────────────────────────────
 
-/** 분석 입력 소스 (FLOW-06 source_mode와 일치) */
-export type AnalysisSourceMode = 'public_result' | 'legacy_paid_deep' | null;
+/** @internal 레거시 FLOW-06 source_mode 표현 */
+export type CompatAnalysisSourceMode = 'public_result' | 'legacy_paid_deep' | null;
 
-/** next_action 코드 (FLOW-08 ReadinessEntryGate와 정렬) */
-export type NextActionCode =
+/** @internal 레거시 next_action 코드 (FLOW-08 이전 명명) */
+export type CompatNextActionCode =
   | 'login'
   | 'pay'
   | 'claim_result'
@@ -30,8 +34,8 @@ export type NextActionCode =
   | 'open_app'
   | 'blocked';
 
-/** 세션 차단 사유 코드 (FLOW-06 ApiErrorCode와 호환) */
-export type SessionBlockingReasonCode =
+/** @internal 레거시 세션 차단 사유 코드 */
+export type CompatSessionBlockingReasonCode =
   | 'DAILY_LIMIT_REACHED'
   | 'PROGRAM_FINISHED'
   | 'ANALYSIS_INPUT_UNAVAILABLE'
@@ -40,7 +44,8 @@ export type SessionBlockingReasonCode =
   | 'NO_CLAIMED_RESULT'
   | 'ONBOARDING_INCOMPLETE';
 
-export interface CanonicalUserReadiness {
+/** @internal 레거시 readiness 묶음 (SessionReadinessV1과 병행 금지 — 마이그레이션·스모크 전용) */
+export interface CompatCanonicalUserReadiness {
   access: {
     is_authenticated: boolean;
     has_active_plan: boolean;
@@ -51,7 +56,7 @@ export interface CanonicalUserReadiness {
     has_claimed_public_result: boolean;
     has_legacy_deep_result: boolean;
     has_analysis_input: boolean;
-    source_mode: AnalysisSourceMode;
+    source_mode: CompatAnalysisSourceMode;
     public_result_id: string | null;
   };
 
@@ -65,19 +70,20 @@ export interface CanonicalUserReadiness {
     can_create_session: boolean;
     has_active_session: boolean;
     active_session_number: number | null;
-    blocking_reason_code: SessionBlockingReasonCode | null;
+    blocking_reason_code: CompatSessionBlockingReasonCode | null;
     today_completed: boolean;
     program_finished: boolean;
   };
 
   next_action: {
-    code: NextActionCode;
+    code: CompatNextActionCode;
     href: string | null;
   };
 }
 
-/** 미인증 사용자용 최소 readiness 객체 */
-function projectBlockingReason(readiness: SessionReadinessV1): SessionBlockingReasonCode | null {
+function projectBlockingReason(
+  readiness: SessionReadinessV1
+): CompatSessionBlockingReasonCode | null {
   switch (readiness.status) {
     case 'needs_auth':
     case 'needs_payment':
@@ -99,7 +105,7 @@ function projectBlockingReason(readiness: SessionReadinessV1): SessionBlockingRe
   }
 }
 
-function projectNextAction(readiness: SessionReadinessV1): CanonicalUserReadiness['next_action'] {
+function projectNextAction(readiness: SessionReadinessV1): CompatCanonicalUserReadiness['next_action'] {
   switch (readiness.status) {
     case 'needs_auth':
       return { code: 'login', href: '/app/auth' };
@@ -120,7 +126,8 @@ function projectNextAction(readiness: SessionReadinessV1): CanonicalUserReadines
   }
 }
 
-export const UNAUTHENTICATED_READINESS: CanonicalUserReadiness = {
+/** @internal 미인증 사용자용 레거시 readiness 상수 */
+export const COMPAT_UNAUTHENTICATED_LEGACY_READINESS: CompatCanonicalUserReadiness = {
   access: {
     is_authenticated: false,
     has_active_plan: false,
@@ -149,17 +156,17 @@ export const UNAUTHENTICATED_READINESS: CanonicalUserReadiness = {
   next_action: projectNextAction(UNAUTHENTICATED_SESSION_READINESS_V1),
 };
 
-function contextToCanonical(ctx: ReadinessContext): CanonicalUserReadiness {
+function contextToCompatCanonical(ctx: ReadinessContext): CompatCanonicalUserReadiness {
   const readiness = buildSessionReadinessV1(ctx);
 
-  let sourceMode: AnalysisSourceMode = null;
+  let sourceMode: CompatAnalysisSourceMode = null;
   if (ctx.hasClaimedPublic) {
     sourceMode = 'public_result';
   } else if (ctx.hasLegacyDeep) {
     sourceMode = 'legacy_paid_deep';
   }
 
-  const partial: Omit<CanonicalUserReadiness, 'next_action'> = {
+  const partial: Omit<CompatCanonicalUserReadiness, 'next_action'> = {
     access: {
       is_authenticated: true,
       has_active_plan: ctx.hasActivePlan,
@@ -194,11 +201,13 @@ function contextToCanonical(ctx: ReadinessContext): CanonicalUserReadiness {
 }
 
 /**
- * getCanonicalUserReadiness — 레거시 CanonicalUserReadiness (FLOW-07/08 호환)
+ * getCompatCanonicalUserReadiness — 레거시 CompatCanonicalUserReadiness (FLOW-07/08 호환)
  *
- * READ ONLY.
+ * READ ONLY. 정본 조회는 `getSessionReadiness` 사용.
  */
-export async function getCanonicalUserReadiness(userId: string): Promise<CanonicalUserReadiness> {
+export async function getCompatCanonicalUserReadiness(
+  userId: string
+): Promise<CompatCanonicalUserReadiness> {
   const ctx = await loadReadinessContext(userId);
-  return contextToCanonical(ctx);
+  return contextToCompatCanonical(ctx);
 }

@@ -1,5 +1,9 @@
 /**
- * PR-FLOW-06 — Canonical Session Readiness (V1)
+ * PR-FLOW-06 — Canonical Session Readiness (V1) — **공개 계약 타입**
+ *
+ * 신규 코드는 readiness를 읽을 때 이 파일의 `SessionReadiness*` 타입과
+ * `getSessionReadiness` / `fetchReadinessClient`만 사용한다.
+ * 레거시 FLOW-07 묶음 타입은 `canonical-user-readiness.compat.ts`에 격리되어 있다.
  *
  * 실행 진입 직전 단일 진실 레이어. 스코어링/렌더러/세션 컴포저와 분리한다.
  *
