@@ -23,7 +23,7 @@ export async function POST(req: Request) {
       console.error("FormData parsing error:", formError);
       return NextResponse.json(
         {
-          error: "파일 업로드 실패: 파일이 올바른 형식이 아니었습니다.",
+          error: "파일 업로드 실패: 파일이 너무 크거나 형식이 잘못되었습니다.",
           details: formError instanceof Error ? formError.message : String(formError),
         },
         { status: 400 }
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     const requestSide = side === "front" ? "front" : "side";
 
     if (!file) {
-      return NextResponse.json({ error: "파일을 선택하지 않았습니다." }, { status: 400 });
+      return NextResponse.json({ error: "파일이 선택되지 않았습니다." }, { status: 400 });
     }
 
     if (file.size > 10 * 1024 * 1024) {
