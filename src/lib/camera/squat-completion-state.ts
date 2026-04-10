@@ -29,6 +29,16 @@ import {
   type CanonicalShallowCompletionContractBlockedReason,
   type CanonicalShallowCompletionContractStage,
 } from '@/lib/camera/squat/shallow-completion-contract';
+import {
+  buildCanonicalShallowContractInputFromState as buildCanonicalShallowContractInputFromStateImpl,
+  mergeCanonicalShallowContractResult,
+  applyCanonicalShallowClosureFromContract as applyCanonicalShallowClosureFromContractImpl,
+} from '@/lib/camera/squat/squat-completion-canonical';
+import {
+  stampPreCanonicalObservability as stampPreCanonicalObservabilityImpl,
+  attachShallowTruthObservabilityAlign01 as attachShallowTruthObservabilityAlign01Impl,
+} from '@/lib/camera/squat/squat-completion-observability';
+import { applyUltraLowPolicyLock as applyUltraLowPolicyLockImpl } from '@/lib/camera/squat/squat-completion-policy';
 
 /** PR-04E3B: 첫 attemptStarted 시점에 고정한 스트림·baseline — 동일 버퍼 내 재평가 없음 */
 type SquatDepthFreezeConfig = {
@@ -3780,6 +3790,9 @@ function isUltraLowCycleLegitimateByCanonicalProof(state: SquatCompletionState):
  * attachShallowTruthObservabilityAlign01 내부에서 호출하지 않는다.
  */
 export function applyUltraLowPolicyLock(state: SquatCompletionState): SquatCompletionState {
+  return applyUltraLowPolicyLockImpl(state, {
+    mapCompletionBlockedReasonToShallowNormalizedBlockerFamily,
+  });
   const ultraLowPolicyScope = isUltraLowPolicyScope(state);
   const ultraLowPolicyDecisionReady = isUltraLowPolicyDecisionReady(state);
   // PR-6: legitimate cycle 입증 여부 — canonical closer + canonical contract 수준의 증거 재사용
@@ -3841,6 +3854,15 @@ export function applyUltraLowPolicyLock(state: SquatCompletionState): SquatCompl
 export function attachShallowTruthObservabilityAlign01(
   state: SquatCompletionState
 ): SquatCompletionState {
+  return attachShallowTruthObservabilityAlign01Impl(state, {
+    mapCompletionBlockedReasonToShallowNormalizedBlockerFamily,
+    standardOwnerFloor: STANDARD_OWNER_FLOOR,
+    reversalDropMinAbs: REVERSAL_DROP_MIN_ABS,
+    recoveryMeetsLowRomStyleFinalizeProof,
+    getGuardedShallowLocalPeakAnchor,
+    ultraLowRomEventPromotionMeetsAscentIntegrity,
+    shallowClosureProofTraceReason: SHALLOW_CLOSURE_PROOF_TRACE_REASON,
+  });
   const stamped = state;
 
   const shallowObservationLayerReversalTruth =
@@ -4711,6 +4733,7 @@ const SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS = 800;
 
 /** PR-CAM-CANONICAL-SHALLOW-CONTRACT-01: 이미 계산된 state fact 만 canonical 입력으로 넘긴다. */
 function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
+  return buildCanonicalShallowContractInputFromStateImpl(s);
   /**
    * PR-E1B-PEAK-ANCHOR-CONTAMINATION-01: canonical anti-false-pass 입력 peak index 보정.
    *
@@ -4841,6 +4864,10 @@ function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
 function applyCanonicalShallowClosureFromContract(
   state: SquatCompletionState
 ): SquatCompletionState {
+  return applyCanonicalShallowClosureFromContractImpl(state, {
+    standardOwnerFloor: STANDARD_OWNER_FLOOR,
+    deriveSquatCompletionFinalizeMode,
+  });
   if (state.canonicalShallowContractSatisfied !== true) {
     return {
       ...state,
@@ -4936,6 +4963,15 @@ function stampPreCanonicalObservability(
   frames: PoseFeaturesFrame[],
   options: EvaluateSquatCompletionStateOptions | undefined
 ): SquatCompletionState {
+  return stampPreCanonicalObservabilityImpl(state, frames, options, {
+    mapCompletionBlockedReasonToShallowNormalizedBlockerFamily,
+    standardOwnerFloor: STANDARD_OWNER_FLOOR,
+    reversalDropMinAbs: REVERSAL_DROP_MIN_ABS,
+    recoveryMeetsLowRomStyleFinalizeProof,
+    getGuardedShallowLocalPeakAnchor,
+    ultraLowRomEventPromotionMeetsAscentIntegrity,
+    shallowClosureProofTraceReason: SHALLOW_CLOSURE_PROOF_TRACE_REASON,
+  });
   const validForEventFrames =
     state.officialShallowPreferredPrefixFrameCount != null
       ? frames.slice(0, state.officialShallowPreferredPrefixFrameCount)
@@ -5176,27 +5212,7 @@ export function evaluateSquatCompletionState(
     buildCanonicalShallowContractInputFromState(state)
   );
 
-  state = {
-    ...state,
-    canonicalShallowContractEligible: canonicalShallowContract.eligible,
-    canonicalShallowContractAdmissionSatisfied: canonicalShallowContract.admissionSatisfied,
-    canonicalShallowContractAttemptSatisfied: canonicalShallowContract.attemptSatisfied,
-    canonicalShallowContractReversalEvidenceSatisfied:
-      canonicalShallowContract.reversalEvidenceSatisfied,
-    canonicalShallowContractRecoveryEvidenceSatisfied:
-      canonicalShallowContract.recoveryEvidenceSatisfied,
-    canonicalShallowContractAntiFalsePassClear: canonicalShallowContract.antiFalsePassClear,
-    canonicalShallowContractSatisfied: canonicalShallowContract.satisfied,
-    canonicalShallowContractStage: canonicalShallowContract.stage,
-    canonicalShallowContractBlockedReason: canonicalShallowContract.blockedReason,
-    canonicalShallowContractAuthoritativeClosureWouldBeSatisfied:
-      canonicalShallowContract.authoritativeClosureWouldBeSatisfied,
-    canonicalShallowContractProvenanceOnlySignalPresent:
-      canonicalShallowContract.provenanceOnlySignalPresent,
-    canonicalShallowContractSplitBrainDetected: canonicalShallowContract.splitBrainDetected,
-    canonicalShallowContractTrace: canonicalShallowContract.trace,
-    canonicalShallowContractClosureSource: canonicalShallowContract.closureSource,
-  };
+  state = mergeCanonicalShallowContractResult(state, canonicalShallowContract);
 
   state = applyCanonicalShallowClosureFromContract(state);
 
