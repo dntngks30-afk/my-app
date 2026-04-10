@@ -21,6 +21,8 @@ import {
 } from '@/lib/public/camera-test';
 import { normalizeCameraResult, type NormalizedCameraResult } from '@/lib/camera/normalize';
 import { clearCameraResult, saveCameraResult } from '@/lib/camera/camera-result';
+import type { EvaluatorResult } from '@/lib/camera/evaluators/types';
+import type { CameraGuardrailFlag, StepGuardrailResult } from '@/lib/camera/guardrails';
 
 const ACTIVE_STEP_COUNT = CAMERA_STEPS.length;
 
@@ -32,15 +34,19 @@ export default function CameraCompletePage() {
     const data = loadCameraTest();
     const results = data.evaluatorResults ?? {};
     const guardrails = data.guardrailResults ?? {};
-    const allResults = CAMERA_STEPS.flatMap((step) => (results[step.id] ? [results[step.id]] : []));
-    const allGuardrails = CAMERA_STEPS.flatMap((step) =>
-      guardrails[step.id] ? [guardrails[step.id]] : []
-    );
+    const allResults = CAMERA_STEPS
+      .map((step) => results[step.id])
+      .filter((result): result is EvaluatorResult => result != null);
+    const allGuardrails = CAMERA_STEPS
+      .map((step) => guardrails[step.id])
+      .filter((result): result is StepGuardrailResult => result != null);
     const normalized = normalizeCameraResult(allResults, allGuardrails);
 
     if (allResults.length < CAMERA_STEPS.length || allGuardrails.length < CAMERA_STEPS.length) {
       normalized.captureQuality = 'invalid';
-      normalized.flags = [...new Set([...normalized.flags, 'hard_partial', 'insufficient_signal'])];
+      normalized.flags = [
+        ...new Set([...normalized.flags, 'hard_partial', 'insufficient_signal']),
+      ] as CameraGuardrailFlag[];
       normalized.retryRecommended = true;
       normalized.fallbackMode = 'survey';
       normalized.insufficientSignal = true;

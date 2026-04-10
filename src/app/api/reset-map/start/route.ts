@@ -117,8 +117,8 @@ export async function POST(req: NextRequest) {
         responseBody,
         flowId: activeFlow.id,
       });
-      if (outcome.stored) return ok(data);
-      if (outcome.conflict && outcome.fingerprintMatch) {
+      if ('stored' in outcome) return ok(data);
+      if (outcome.fingerprintMatch) {
         void logResetMapEvent(supabase, {
           flowId: activeFlow.id,
           userId,
@@ -170,8 +170,8 @@ export async function POST(req: NextRequest) {
           responseBody,
           flowId: recovered.id,
         });
-        if (outcome.stored) return ok(data);
-        if (outcome.conflict && outcome.fingerprintMatch) {
+        if ('stored' in outcome) return ok(data);
+        if (outcome.fingerprintMatch) {
           void logResetMapEvent(supabase, {
             flowId: recovered.id,
             userId,
@@ -217,8 +217,8 @@ export async function POST(req: NextRequest) {
       flowId: inserted.id,
     });
 
-    if (outcome.stored) return ok(data);
-    if (outcome.conflict && outcome.fingerprintMatch) {
+    if ('stored' in outcome) return ok(data);
+    if (outcome.fingerprintMatch) {
       void logResetMapEvent(supabase, {
         flowId: inserted.id,
         userId,

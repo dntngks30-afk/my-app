@@ -30,10 +30,20 @@ export type AdaptiveEvaluatorTrace = {
     recovery_bias?: boolean;
     complexity_cap_basic?: boolean;
     volume_reduction?: boolean;
+    difficulty_adjustment?: -1 | 0 | 1;
+    intensity_adjustment?: -1 | 0 | 1;
+    caution_bias?: boolean;
   };
   decision: {
     reasons: string[];
-    modifier: { volume_modifier: number; complexity_cap: string; recovery_bias: boolean };
+    modifier: {
+      volume_modifier: number;
+      complexity_cap: string;
+      recovery_bias: boolean;
+      difficulty_adjustment?: -1 | 0 | 1;
+      intensity_adjustment?: -1 | 0 | 1;
+      caution_bias?: boolean;
+    };
   };
 };
 
@@ -91,7 +101,13 @@ type EventRow = {
  * from exercise-log-identity to normalize legacy plan_item_key (seg{N}-item{M}, log{N}).
  */
 export async function loadSessionEventsForEval(
-  supabase: { from: (t: string) => { select: (cols: string) => { eq: (col: string, val: unknown) => Promise<{ data: unknown[] | null }> } } },
+  supabase: {
+    from: (t: string) => {
+      select: (cols: string) => {
+        eq: (col: string, val: unknown) => PromiseLike<{ data: unknown[] | null }>;
+      };
+    };
+  },
   sessionPlanId: string
 ): Promise<EventRow[]> {
   const { data } = await supabase
@@ -263,8 +279,10 @@ function buildEvaluatorTrace(
 export async function runEvaluatorAndUpsert(
   supabase: {
     from: (t: string) => {
-      select: (cols: string) => { eq: (col: string, val: unknown) => Promise<{ data: unknown[] | null }> };
-      upsert: (row: unknown[], opts?: object) => Promise<{ error: unknown }>;
+      select: (cols: string) => {
+        eq: (col: string, val: unknown) => PromiseLike<{ data: unknown[] | null }>;
+      };
+      upsert: (row: unknown[], opts?: object) => PromiseLike<{ error: unknown }>;
     };
   },
   ctx: { userId: string; sessionPlanId: string; sessionNumber: number }

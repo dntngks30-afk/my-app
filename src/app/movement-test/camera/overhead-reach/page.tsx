@@ -213,7 +213,7 @@ export default function CameraOverheadReachPage() {
   const hasStartedRef = useRef(false);
   const settledRef = useRef(false);
   const advanceLockRef = useRef(false);
-  const autoAdvanceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const autoAdvanceTimerRef = useRef<number | null>(null);
   const passLatchedStepKeyRef = useRef<string | null>(null);
   const scheduledAdvanceStepKeyRef = useRef<string | null>(null);
   const triggeredAdvanceStepKeyRef = useRef<string | null>(null);
@@ -714,7 +714,7 @@ export default function CameraOverheadReachPage() {
     if (alreadyPlayed) {
       /* squat 이후 진입: follow-up intro 1회 재생, 완료 후에만 overhead evaluation 활성화 */
       const cancelledRef = { current: false };
-      const idRef = { current: null as ReturnType<typeof setTimeout> | null };
+      const idRef = { current: null as number | null };
       void (async () => {
         await speakVoiceCueAndWait(getFollowUpIntroVoiceCue());
         if (cancelledRef.current) return;

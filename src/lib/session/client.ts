@@ -90,6 +90,17 @@ export type SessionPlanMeta = {
   /** PR-SESSION-QUALITY-01 */
   session_rationale?: string | null;
   session_focus_axes?: string[];
+  constraint_flags?: {
+    avoid_filter_applied?: boolean;
+    duplicate_filtered_count?: number;
+    focus_diversity_enforced?: boolean;
+    fallback_used?: boolean;
+    short_mode_applied?: boolean;
+    recovery_mode_applied?: boolean;
+    priority_applied?: boolean;
+    pain_gate_applied?: boolean;
+    first_session_guardrail_applied?: boolean;
+  };
 };
 
 export type SessionPlanSegmentItem = {
@@ -107,7 +118,7 @@ export type SessionPlanSegmentItem = {
 
 export type SessionPlanSegment = {
   title: string;
-  duration_sec: number;
+  duration_sec?: number;
   items: SessionPlanSegmentItem[];
 };
 

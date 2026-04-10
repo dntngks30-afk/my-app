@@ -307,7 +307,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
           : null;
       const result = reconcileResetMapClientState(latestFlow, local);
 
-      if (result.action === 'repair' && latestFlow.state === 'started') {
+      if (result.action === 'repair' && latestFlow?.state === 'started') {
         setResetMapFlowId(result.flow_id);
         if (result.clearApplyKey) clearApplyKey();
         setResetMapClientState({
@@ -318,7 +318,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         return;
       }
 
-      if (result.action === 'none' && latestFlow.state === 'started') {
+      if (result.action === 'none' && latestFlow?.state === 'started') {
         setResetMapFlowId(result.flow_id);
         return;
       }

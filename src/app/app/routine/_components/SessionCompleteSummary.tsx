@@ -17,6 +17,8 @@ import { CheckInModal } from '@/app/app/_components/CheckInModal';
 import { getSessionSafe } from '@/lib/supabase';
 import type { SessionProgress, ExerciseLogItem } from '@/lib/session/client';
 
+type SessionProgressSummary = Pick<SessionProgress, 'completed_sessions' | 'total_sessions'>;
+
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -38,7 +40,7 @@ export default function SessionCompleteSummary({
   isNextLockedUntilTomorrow = false,
 }: {
   durationSeconds: number;
-  progress: SessionProgress;
+  progress: SessionProgressSummary;
   nextTheme: string | null;
   durationClamped?: boolean;
   exerciseLogs?: ExerciseLogItem[] | null;

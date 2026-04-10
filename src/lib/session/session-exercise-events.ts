@@ -229,7 +229,14 @@ export function buildSessionExerciseEvents(
  * Returns result for observability. Does not throw.
  */
 export async function writeSessionExerciseEvents(
-  supabase: { from: (table: string) => { upsert: (rows: unknown[], opts?: object) => Promise<{ data: unknown[] | null; error: unknown }> } },
+  supabase: {
+    from: (table: string) => {
+      upsert: (
+        rows: unknown[],
+        opts?: object
+      ) => PromiseLike<{ data: unknown[] | null; error: { message?: string } | null }>;
+    };
+  },
   rows: SessionExerciseEventRow[]
 ): Promise<EventLogResult> {
   const attempted = rows.length;

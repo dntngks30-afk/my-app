@@ -229,6 +229,10 @@ async function handleSubscriptionCreated(
   subscription: Stripe.Subscription,
   supabase: ReturnType<typeof getServerSupabaseAdmin>
 ) {
+  const stripeSubscription = subscription as Stripe.Subscription & {
+    current_period_start?: number;
+    current_period_end?: number | null;
+  };
   const userId = subscription.metadata?.userId;
   const planId = subscription.metadata?.planId;
 
@@ -255,12 +259,12 @@ async function handleSubscriptionCreated(
     plan_id: planId,
     status: subscription.status === 'active' ? 'active' : 'paused',
     billing_type: plan.billing_type,
-    start_date: new Date(subscription.current_period_start * 1000).toISOString(),
-    end_date: subscription.current_period_end
-      ? new Date(subscription.current_period_end * 1000).toISOString()
+    start_date: new Date((stripeSubscription.current_period_start ?? 0) * 1000).toISOString(),
+    end_date: stripeSubscription.current_period_end
+      ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
       : null,
-    next_billing_date: subscription.current_period_end
-      ? new Date(subscription.current_period_end * 1000).toISOString()
+    next_billing_date: stripeSubscription.current_period_end
+      ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
       : null,
     auto_renew: !subscription.cancel_at_period_end,
     stripe_subscription_id: subscription.id,
@@ -297,6 +301,9 @@ async function handleSubscriptionUpdated(
   subscription: Stripe.Subscription,
   supabase: ReturnType<typeof getServerSupabaseAdmin>
 ) {
+  const stripeSubscription = subscription as Stripe.Subscription & {
+    current_period_end?: number | null;
+  };
   const stripeSubscriptionId = subscription.id;
 
   // Subscription 업데이트
@@ -308,11 +315,11 @@ async function handleSubscriptionUpdated(
           subscription.status === 'unpaid'
         ? 'cancelled'
         : 'paused',
-    end_date: subscription.current_period_end
-      ? new Date(subscription.current_period_end * 1000).toISOString()
+    end_date: stripeSubscription.current_period_end
+      ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
       : null,
-    next_billing_date: subscription.current_period_end
-      ? new Date(subscription.current_period_end * 1000).toISOString()
+    next_billing_date: stripeSubscription.current_period_end
+      ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
       : null,
     auto_renew: !subscription.cancel_at_period_end,
     cancelled_at: subscription.canceled_at
@@ -413,7 +420,11 @@ async function handleInvoicePaymentSucceeded(
   invoice: Stripe.Invoice,
   supabase: ReturnType<typeof getServerSupabaseAdmin>
 ) {
-  const subscriptionId = invoice.subscription as string | null;
+  const stripeInvoice = invoice as Stripe.Invoice & {
+    subscription?: string | null;
+    payment_intent?: string | null;
+  };
+  const subscriptionId = stripeInvoice.subscription ?? null;
   if (!subscriptionId) {
     return; // 구독이 아닌 단건 결제는 이미 checkout.session.completed에서 처리됨
   }
@@ -443,7 +454,7 @@ async function handleInvoicePaymentSucceeded(
     status: 'completed',
     payment_provider: 'stripe',
     stripe_subscription_id: subscriptionId,
-    stripe_payment_intent_id: invoice.payment_intent as string,
+    stripe_payment_intent_id: stripeInvoice.payment_intent ?? null,
     paid_at: new Date().toISOString(),
   });
 }
@@ -455,7 +466,8 @@ async function handleInvoicePaymentFailed(
   invoice: Stripe.Invoice,
   supabase: ReturnType<typeof getServerSupabaseAdmin>
 ) {
-  const subscriptionId = invoice.subscription as string | null;
+  const stripeInvoice = invoice as Stripe.Invoice & { subscription?: string | null };
+  const subscriptionId = stripeInvoice.subscription ?? null;
   if (!subscriptionId) {
     return;
   }

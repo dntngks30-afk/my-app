@@ -127,7 +127,7 @@ export default function CameraWallAngelPage() {
   const hasStartedRef = useRef(false);
   const settledRef = useRef(false);
   const advanceLockRef = useRef(false);
-  const autoAdvanceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const autoAdvanceTimerRef = useRef<number | null>(null);
   const passLatchedStepKeyRef = useRef<string | null>(null);
   const scheduledAdvanceStepKeyRef = useRef<string | null>(null);
   const triggeredAdvanceStepKeyRef = useRef<string | null>(null);

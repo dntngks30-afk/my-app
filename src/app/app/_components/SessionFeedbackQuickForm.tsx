@@ -53,7 +53,7 @@ export function SessionFeedbackQuickForm({
 }: SessionFeedbackQuickFormProps) {
   const sf = value?.sessionFeedback ?? {};
 
-  const update = (patch: Partial<SessionFeedbackPayload['sessionFeedback']>) => {
+  const update = (patch: Partial<SessionFeedbackPayload>) => {
     const next = { ...sf, ...patch };
     const hasAny = Object.values(next).some((v) => v !== undefined && v !== null);
     onChange(hasAny ? { sessionFeedback: next } : null);

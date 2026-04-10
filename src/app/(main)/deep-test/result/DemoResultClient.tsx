@@ -55,7 +55,8 @@ export default function DemoResultClient() {
     );
   }
 
-  const hasResult = derived?.result_type && typeof derived.result_type === 'string';
+  const resultType = typeof derived?.result_type === 'string' ? derived.result_type : null;
+  const hasResult = resultType != null;
 
   if (!hasResult) {
     return (
@@ -76,15 +77,18 @@ export default function DemoResultClient() {
     );
   }
 
-  const effectiveConfidence = getEffectiveConfidence(toConfidenceSourceFromDerived(derived));
+  const effectiveConfidence = getEffectiveConfidence(
+    toConfidenceSourceFromDerived((derived ?? null) as Record<string, unknown> | null)
+  );
+  const safeDerived = derived ?? {};
 
   return (
     <DeepTestResultContent
-      resultType={derived.result_type}
+      resultType={resultType}
       confidence={effectiveConfidence}
-      focusTags={derived.focus_tags ?? []}
-      avoidTags={derived.avoid_tags ?? []}
-      algorithmScores={derived.algorithm_scores ?? undefined}
+      focusTags={safeDerived.focus_tags ?? []}
+      avoidTags={safeDerived.avoid_tags ?? []}
+      algorithmScores={safeDerived.algorithm_scores ?? undefined}
       variant="demo"
       onReset={handleReset}
     />

@@ -34,6 +34,7 @@ import {
   type SessionPlan,
   type SessionProgress,
   type CreateSessionInput,
+  type ExerciseLogItem,
 } from '@/lib/session/client';
 import {
   loadSessionDraft,
@@ -354,7 +355,7 @@ export default function SessionRoutinePanel() {
   // 완료 후 Summary 표시용
   const [summaryDurationSec, setSummaryDurationSec] = useState<number>(0);
   const [summaryNextTheme, setSummaryNextTheme] = useState<string | null>(null);
-  const [summaryExerciseLogs, setSummaryExerciseLogs] = useState<Array<{ templateId: string; name: string; sets: number | null; reps: number | null }> | null>(null);
+  const [summaryExerciseLogs, setSummaryExerciseLogs] = useState<ExerciseLogItem[] | null>(null);
   const [durationClamped, setDurationClamped] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackPayload | null>(null);
 

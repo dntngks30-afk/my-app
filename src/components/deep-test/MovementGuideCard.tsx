@@ -10,7 +10,7 @@ import { useState } from 'react';
 interface MovementGuideCardProps {
   title: string;
   subtitle: string;
-  bullets: string[];
+  bullets: readonly string[];
   videoMp4Src: string;
   videoWebmSrc?: string;
   posterSrc?: string;

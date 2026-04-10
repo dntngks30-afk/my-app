@@ -46,9 +46,9 @@ export function CheckInModal({
     setSubmittingLocal(true);
     try {
       await onSubmit({
-        pain_today: pain === '' ? null : pain,
-        stiffness: stiffness === '' ? null : stiffness,
-        sleep: sleep === '' ? null : sleep,
+        pain_today: pain,
+        stiffness: stiffness,
+        sleep: sleep,
         time_available_min: timeAvailable,
         equipment_available: [],
       });

@@ -27,7 +27,7 @@ export function ExercisePlayerModal({ item, exerciseIndex = 0, totalExercises = 
   return (
     <ModalInner
       item={item}
-      exerciseIndex={exerciseIndex}
+      exerciseIndex={exerciseIndex ?? undefined}
       totalExercises={totalExercises}
       initialLog={initialLog}
       onClose={onClose}

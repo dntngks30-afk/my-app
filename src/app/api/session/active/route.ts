@@ -44,9 +44,8 @@ function addTimingHeaders(
 ): NextResponse {
   if (!isDebug || Object.keys(timings).length === 0) return res;
   const parts = Object.entries(timings).map(([k, v]) => `${k};dur=${v}`);
-  const next = res.clone();
-  next.headers.set('Server-Timing', parts.join(', '));
-  return next;
+  res.headers.set('Server-Timing', parts.join(', '));
+  return res;
 }
 
 /** 서버 로그에 타이밍 breakdown 출력 (?debug=1 시). */

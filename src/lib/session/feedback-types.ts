@@ -21,9 +21,9 @@ export type SessionFeedbackPayload = {
   timeOverrun?: boolean;
   note?: string;
   /** PR-UX-03: 운동 후 몸 상태 변화 */
-  bodyStateChange?: BodyStateChange | null;
+  bodyStateChange?: BodyStateChange;
   /** PR-UX-03: 불편 부위 (단일) */
-  discomfortArea?: SessionPainArea | string | null;
+  discomfortArea?: SessionPainArea | string;
 };
 
 export type ExerciseFeedbackItem = {

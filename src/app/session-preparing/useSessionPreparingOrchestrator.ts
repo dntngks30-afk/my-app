@@ -59,8 +59,8 @@ export function useSessionPreparingOrchestrator({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const startPerfRef = useRef<number | null>(null);
   const sessionReadyPerfRef = useRef<number | null>(null);
-  const redirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const redirectTimeoutRef = useRef<number | null>(null);
+  const progressIntervalRef = useRef<number | null>(null);
 
   const clearRedirectTimer = useCallback(() => {
     if (redirectTimeoutRef.current != null) {

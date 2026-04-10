@@ -213,7 +213,7 @@ export default function ShareButtons({
       </div>
 
       {/* 네이티브 공유 버튼 (모바일) */}
-      {typeof navigator !== 'undefined' && navigator.share && (
+      {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
         <button
           onClick={handleNativeShare}
           disabled={isSharing}

@@ -158,7 +158,7 @@ function getPhaseLengthsFromTrace(trace: unknown): PhaseLengths | null {
   if (nums.some((n) => n === null)) return null;
   const sum = (nums as number[]).reduce((a, b) => a + b, 0);
   if (sum < 4 || sum > 20) return null;
-  return nums as PhaseLengths;
+  return nums as unknown as PhaseLengths;
 }
 
 /** total_sessions + optional phase_lengths → 테마 라벨 (create와 동일 phase 경계) */
@@ -466,11 +466,17 @@ export async function POST(req: NextRequest) {
         // PR-B: run adaptive evaluator after event logging
         adaptiveSummary = await runEvaluatorAndUpsert(supabase, { userId, sessionPlanId: planId, sessionNumber });
       }
-      const { data: progress } = await supabase
+      const progressResult: any = await (supabase as any)
         .from('session_program_progress')
         .select('*')
         .eq('user_id', userId)
-        .maybeSingle();
+        .maybeSingle()
+      const progress = progressResult?.data as
+        | {
+            completed_sessions?: number | null;
+            total_sessions?: number | null;
+          }
+        | null;
 
       const newCompleted = Math.max(progress?.completed_sessions ?? 0, sessionNumber);
       const nextNum = newCompleted + 1;

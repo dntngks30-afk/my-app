@@ -222,10 +222,10 @@ export default function CameraSquatPage() {
   const squatCaptureSessionEnteredRef = useRef(false);
   const settledRef = useRef(false);
   const advanceLockRef = useRef(false);
-  const autoAdvanceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const autoAdvanceTimerRef = useRef<number | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const armingTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
-  const countdownTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const armingTimerRef = useRef<number | null>(null);
+  const countdownTimerRef = useRef<number | null>(null);
   const startCueAttemptedRef = useRef(false);
   const startSequenceRunIdRef = useRef(0);
   /* capturing 중 ready_to_shoot 완료 후 교정 음성 허용 여부.
@@ -247,7 +247,7 @@ export default function CameraSquatPage() {
   const passLatchedStepKeyRef = useRef<string | null>(null);
   const scheduledAdvanceStepKeyRef = useRef<string | null>(null);
   const triggeredAdvanceStepKeyRef = useRef<string | null>(null);
-  const failureFreezeTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const failureFreezeTimerRef = useRef<number | null>(null);
   const gateRef = useRef<ExerciseGateResult | null>(null);
   /** CAM-OBS: failure freeze 타이머가 최신 previewKey·finalPassLatched를 읽기 위한 ref */
   const previewKeyRef = useRef(previewKey);
@@ -275,7 +275,7 @@ export default function CameraSquatPage() {
     completionBlocked: null as string | null,
     standardBlocked: null as string | null,
     depthBucket: null as string | null,
-    stallTimer: null as ReturnType<typeof window.setTimeout> | null,
+    stallTimer: null as number | null,
     stallRecorded: false,
   });
   /** CAM-27: 이번 capturing 세션에서 얕은 관측 신호가 있었는지(abandon 스팸 방지) */
@@ -398,7 +398,7 @@ export default function CameraSquatPage() {
   }, []);
 
   const waitForTimer = useCallback(
-    (ms: number, timerRef: { current: ReturnType<typeof window.setTimeout> | null }) =>
+    (ms: number, timerRef: { current: number | null }) =>
       new Promise<void>((resolve) => {
         timerRef.current = window.setTimeout(() => {
           timerRef.current = null;
@@ -497,7 +497,7 @@ export default function CameraSquatPage() {
   }, []);
 
   const [headerDiagTapCount, setHeaderDiagTapCount] = useState(0);
-  const headerDiagTapResetRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const headerDiagTapResetRef = useRef<number | null>(null);
   const onHeaderAreaTapForDiag = useCallback(() => {
     if (headerDiagTapResetRef.current) window.clearTimeout(headerDiagTapResetRef.current);
     setHeaderDiagTapCount((c) => {

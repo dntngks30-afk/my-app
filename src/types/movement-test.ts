@@ -15,6 +15,24 @@
  * 4가지 기본 움직임 타입
  */
 export type MovementType = '담직' | '날림' | '버팀' | '흘림';
+export type MainTypeCode = 'D' | 'N' | 'B' | 'H';
+export type SubTypeKey =
+  | 'D_UPPER_LOCK'
+  | 'D_LOWER_LOCK'
+  | 'D_BREATH_LOCK'
+  | 'D_SYSTEM_SLOW'
+  | 'N_JOINT_FLOW'
+  | 'N_CORE_DRIFT'
+  | 'N_LR_IMBAL'
+  | 'N_SPEED_OVER'
+  | 'B_LOWBACK_RELY'
+  | 'B_NECK_SHOULDER_OVER'
+  | 'B_KNEE_FOCUS'
+  | 'B_SINGLE_DOM'
+  | 'H_POWER_LEAK'
+  | 'H_CHAIN_BREAK'
+  | 'H_ASYM_TRANSFER'
+  | 'H_EFFICIENCY_LOW';
 
 /**
  * 질문 타입 (4지선다 또는 예/아니오)

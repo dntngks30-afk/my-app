@@ -129,7 +129,8 @@ export async function POST(req: NextRequest) {
     const promise = doFetch();
     inflightMap.set(dedupeKey, { promise, expiresAt: now + DEDUPE_TTL_MS });
     setTimeout(() => {
-      if (inflightMap.get(dedupeKey)?.expiresAt <= Date.now()) {
+      const inflight = inflightMap.get(dedupeKey);
+      if (inflight && inflight.expiresAt <= Date.now()) {
         inflightMap.delete(dedupeKey);
       }
     }, DEDUPE_TTL_MS + 100);

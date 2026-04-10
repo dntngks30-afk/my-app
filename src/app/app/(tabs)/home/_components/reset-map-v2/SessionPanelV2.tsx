@@ -180,7 +180,8 @@ function PanelInner({
   nextSession,
   onFetchLockedPreview,
   createSessionError,
-}: Required<Omit<SessionPanelV2Props, 'onSessionCompleted' | 'onRequestNextSession'>> & {
+}: Omit<SessionPanelV2Props, 'sessionId'> & {
+  sessionId: number
   onSessionCompleted?: (completedSessions: number) => void
   onRequestNextSession?: (nextSessionNumber: number) => void
 }) {
@@ -235,7 +236,7 @@ function PanelInner({
     isLockedNext === true &&
     sessionId != null &&
     lockedPreviewRecoveryReason !== null &&
-    !!onFetchLockedPreview
+    typeof onFetchLockedPreview === 'function'
 
   useEffect(() => {
     if (process.env.NODE_ENV === 'production') return
@@ -249,11 +250,12 @@ function PanelInner({
   useEffect(() => {
     if (!needsFallbackFetch) return
     if (fallbackFetchAttemptedRef.current) return
+    if (!onFetchLockedPreview) return
     fallbackFetchAttemptedRef.current = true
     setFallbackFetchState('loading')
 
     let cancelled = false
-    void onFetchLockedPreview!(sessionId, { forceRefresh: true }).then((payload) => {
+    void onFetchLockedPreview(sessionId, { forceRefresh: true }).then((payload) => {
       if (cancelled) return
       const normalizedPayload = normalizeNextSessionPreviewForDisplay(payload)
       if (isUsableNextSessionPreview(normalizedPayload, sessionId)) {
@@ -410,7 +412,7 @@ function PanelInner({
           {!(completed && completeResult && sessionId === completeResult.progress.completed_sessions) && (
             <>
           {/* PR-SESSION-FIX-03: 다음 세션 미리보기 배너 */}
-          {completedSessions != null && sessionId === completedSessions + 1 && status !== 'locked' && (
+          {completedSessions != null && sessionId === completedSessions + 1 && (
             <div className="mx-4 mt-2 mb-0 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-center">
               <p className="text-sm font-semibold text-violet-800">다음 세션 준비됐어요</p>
               <p className="text-xs text-violet-600 mt-0.5">세션 {sessionId}에서 이런 운동을 하게 돼요</p>
@@ -665,6 +667,7 @@ function ExerciseList({
     )
   }
 
+  const panelStatus = status as SessionStatus
   const grouped = groupBySegment(exercises)
 
   return (
@@ -721,12 +724,11 @@ function ExerciseList({
                   {/* ▶ 버튼 — current/completed(과거) 세션에서 재생 가능 */}
                   <button
                     type="button"
-                    onClick={() => (status === 'current' || status === 'completed') ? onPlay(item, Math.max(0, exercises?.findIndex((e) => (e.plan_item_key ? e.plan_item_key === item.plan_item_key : e.templateId === item.templateId && e.segmentTitle === item.segmentTitle && e.order === item.order)) ?? 0)) : undefined}
-                    disabled={status === 'locked'}
+                    onClick={() => onPlay(item, Math.max(0, exercises.findIndex((e) => (e.plan_item_key ? e.plan_item_key === item.plan_item_key : e.templateId === item.templateId && e.segmentTitle === item.segmentTitle && e.order === item.order))))}
                     title={status === 'locked' ? '현재 세션이 아닙니다' : '운동 보기'}
                     className={[
                       'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors',
-                      status === 'current' || status === 'completed'
+                      panelStatus === 'current' || panelStatus === 'completed'
                         ? isDone
                           ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
                           : 'bg-orange-100 text-orange-600 hover:bg-orange-200'

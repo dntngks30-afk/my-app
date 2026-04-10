@@ -15,6 +15,7 @@ export type LogResetMapEventParams = {
     | 'applied'
     | 'invalid_state_attempt'
     | 'aborted'
+    | 'rail_not_ready_blocked'
     | 'preview_ready'
     | 'preview_blocked'
     | 'active_flow_reused'
