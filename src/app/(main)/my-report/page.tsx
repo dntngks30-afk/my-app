@@ -1,16 +1,23 @@
 "use client";
 
+/**
+ * Legacy report compat page.
+ * Owner: requests + solutions legacy rail.
+ * Canonical movement-test/public_results continuity must stay separate.
+ */
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { LEGACY_MY_REPORT_REQUESTS_SELECT } from "@/lib/legacy/upload-report-rail";
 import { supabaseBrowser as supabase, getSessionSafe } from "@/lib/supabase";
 import type { Request as RequestType } from "@/lib/supabase-types";
 
 // Request 타입의 부분 집합 (쿼리에서 선택한 필드만)
-type RequestPartial = Pick<RequestType, "id" | "front_url" | "side_url" | "status" | "created_at">;
+type LegacyRequestPartial = Pick<RequestType, "id" | "front_url" | "side_url" | "status" | "created_at">;
 
 // 리포트 데이터 타입
-interface Report {
+interface LegacyReport {
   id: string;
   request_id: string;
   diagnoses: string[];
@@ -27,9 +34,9 @@ export default function MyReportPage() {
 
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
-  const [reports, setReports] = useState<Report[]>([]);
-  const [requests, setRequests] = useState<RequestPartial[]>([]);
-  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [reports, setReports] = useState<LegacyReport[]>([]);
+  const [legacyPhotoRequests, setLegacyPhotoRequests] = useState<LegacyRequestPartial[]>([]);
+  const [selectedReport, setSelectedReport] = useState<LegacyReport | null>(null);
   const [deepStatus, setDeepStatus] = useState<'loading' | 'paywall' | 'not_started' | 'in_progress' | 'done'>('loading');
   const [deepProgress, setDeepProgress] = useState<number>(0);
 
@@ -50,6 +57,7 @@ export default function MyReportPage() {
         });
 
         // ✅ 내 리포트 조회: 서버 API(/api/my-report)로 조회 (Bearer 토큰)
+        // Legacy report compat rail: solutions remain the content owner for this page.
         const reportRes = await fetch("/api/my-report", {
           cache: "no-store",
           headers: {
@@ -58,20 +66,21 @@ export default function MyReportPage() {
         });
 
         const reportJson = await reportRes.json();
-        const reportList: Report[] = reportJson.data || [];
+        const reportList: LegacyReport[] = reportJson.data || [];
         setReports(reportList);
 
         if (reportList.length > 0) setSelectedReport(reportList[0]);
 
         // ✅ 내 요청 목록(사진 확인용) - requests는 클라에서 조회 (RLS 정책이 있어야 보임)
+        // Legacy requests rail: photo lookup only for compat UX, never public_results continuity.
         const { data: requestData, error: requestError } = await supabase
           .from("requests")
-          .select("id, front_url, side_url, status, created_at")
+          .select(LEGACY_MY_REPORT_REQUESTS_SELECT)
           .eq("user_id", session.user.id)
           .order("created_at", { ascending: false });
 
         if (!requestError && requestData) {
-          setRequests(requestData as RequestPartial[]);
+          setLegacyPhotoRequests(requestData as LegacyRequestPartial[]);
         }
 
         // 심층분석 상태: DB 직접 조회 (plan_status + deep_test_attempts)
@@ -215,6 +224,10 @@ export default function MyReportPage() {
               </div>
             )}
           </section>
+        )}
+
+        {legacyPhotoRequests.length > 0 && (
+          <span className="sr-only">legacy photo requests loaded: {legacyPhotoRequests.length}</span>
         )}
 
         {reports.length === 0 && (

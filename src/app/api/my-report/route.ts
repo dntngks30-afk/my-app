@@ -3,6 +3,11 @@ import { getServerSupabaseAdmin } from "@/lib/supabase";
 import { getCurrentUserId } from "@/lib/auth/getCurrentUserId";
 
 export const dynamic = "force-dynamic";
+/**
+ * Legacy report compat rail.
+ * Reads solutions from the requests/solutions pipeline only.
+ * Canonical movement-test/public_results flow does not read through this endpoint.
+ */
 
 /**
  * ✅ 사용자용 "내 리포트" 조회 API
@@ -19,7 +24,7 @@ export async function GET(req: NextRequest) {
     }
 
     const supabase = getServerSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data: legacySolutions, error } = await supabase
       .from("solutions")
       .select("*")
       .eq("user_id", userId)
@@ -32,7 +37,7 @@ export async function GET(req: NextRequest) {
       return r;
     }
 
-    const res = NextResponse.json({ data: data ?? [] });
+    const res = NextResponse.json({ data: legacySolutions ?? [] });
     res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
     return res;
   } catch (err) {
