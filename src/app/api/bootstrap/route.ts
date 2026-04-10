@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     const authMs = Math.round(performance.now() - t0);
 
     if (!userId) {
-      return fail(401, ApiErrorCode.AUTH_REQUIRED, '·Î±×ÀÎÀÌ ÇÊ¿äÇÕ´Ï´Ù');
+      return fail(401, ApiErrorCode.AUTH_REQUIRED, 'ë¡œê·¸ì¸ì´ í•„ìš”í•©ë‹ˆë‹¤');
     }
 
     const supabase = getServerSupabaseAdmin();
@@ -48,6 +48,6 @@ export async function GET(req: NextRequest) {
     return ok(result.data, extras);
   } catch (err) {
     console.error('[api/bootstrap]', err);
-    return fail(500, ApiErrorCode.INTERNAL_ERROR, '¼­¹ö ¿À·ù');
+    return fail(500, ApiErrorCode.INTERNAL_ERROR, 'ì„œë²„ ì˜¤ë¥˜');
   }
 }
