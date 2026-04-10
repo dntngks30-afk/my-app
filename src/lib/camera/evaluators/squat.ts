@@ -909,7 +909,6 @@ function buildSquatEvaluatorHighlightedMetrics(p: {
     startBeforeBottom: state.startBeforeBottom ? 1 : 0,
     descendStartAtMs: state.descendStartAtMs,
     peakAtMs: state.peakAtMs,
-    committedAtMs: state.committedAtMs ?? null,
     reversalAtMs: state.reversalAtMs ?? null,
     ascendStartAtMs: state.ascendStartAtMs,
     recoveryAtMs: state.standingRecoveredAtMs ?? null,

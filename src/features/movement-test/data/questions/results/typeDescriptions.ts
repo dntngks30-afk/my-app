@@ -1,7 +1,8 @@
-export const TYPE_DESCRIPTIONS = {
-    담직: { title: '...', summary: '...', do: [...], dont: [...] },
-    날림: { ... },
-    버팀: { ... },
-    흘림: { ... },
-  };
-  
+export type MovementTypeDescription = {
+  title: string;
+  summary: string;
+  do: string[];
+  dont: string[];
+};
+
+export const TYPE_DESCRIPTIONS: Record<string, MovementTypeDescription> = {};

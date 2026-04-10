@@ -6,7 +6,7 @@
  * - strict completionBlockedReason / completionMachinePhase 는 progression state 부재 시 fallback.
  * - 출력 vocabulary(OverheadAmbiguousRetryReason)는 기존과 동일 — 소비자 호환.
  */
-import type { ExerciseGateResult } from './auto-progression';
+import type { ExerciseGateResult } from '../auto-progression';
 
 export type OverheadAmbiguousRetryReason =
   | 'insufficient_height'

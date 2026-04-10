@@ -99,7 +99,7 @@ const STEP_ID: CameraStepId = 'squat';
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
 /** PR-CAM-30A: capturing 전 gate 입력 — usePoseCapture EMPTY_STATS 와 동일 형태 */
-export const SQUAT_PAGE_IDLE_CAPTURE_STATS: PoseCaptureStats = {
+const SQUAT_PAGE_IDLE_CAPTURE_STATS: PoseCaptureStats = {
   sampledFrameCount: 0,
   droppedFrameCount: 0,
   filteredLowQualityFrameCount: 0,
@@ -107,7 +107,7 @@ export const SQUAT_PAGE_IDLE_CAPTURE_STATS: PoseCaptureStats = {
   captureDurationMs: 0,
   validFrameCount: 0,
   averageLandmarkCount: 0,
-  averageVisibleJointsRatio: 0,
+  averageVisibleLandmarkRatio: 0,
   timestampDiscontinuityCount: 0,
 };
 
@@ -115,7 +115,7 @@ export const SQUAT_PAGE_IDLE_CAPTURE_STATS: PoseCaptureStats = {
  * PR-CAM-30A: setup/arming/countdown 에서는 스쿼트 gate·pass latch·pose 누적을 소비하지 않는다.
  * 스모크·외부 도구가 page 정책과 동일한 판정을 쓰도록 export.
  */
-export function squatPageExerciseEvaluationActive(phase: CameraPhase): boolean {
+function squatPageExerciseEvaluationActive(phase: CameraPhase): boolean {
   return phase === 'capturing';
 }
 
