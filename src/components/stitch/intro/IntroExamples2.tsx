@@ -52,7 +52,7 @@ export default function IntroExamples2() {
                 src="/intro/balanced-alignment.png"
                 alt="균형 잡힌 정렬을 나타내는 정면 실루엣과 중앙 수직 정렬선"
                 fill
-                className="object-cover object-center"
+                className="bg-[#2e3447] object-cover object-[center_31%]"
                 sizes="(max-width: 768px) 100vw, 50vw"
               />
               <div
@@ -63,7 +63,7 @@ export default function IntroExamples2() {
                 aria-hidden
                 className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-br from-cyan-400/10 to-transparent opacity-80"
               />
-              <div className="absolute inset-0 z-10 flex flex-col justify-end p-6 text-left md:p-8">
+              <div className="absolute inset-x-0 bottom-0 top-px z-10 flex flex-col justify-end p-6 text-left md:p-8">
                 <span className="mb-2 inline-block w-max bg-[#ffb77d]/20 px-3 py-1 text-xs uppercase tracking-widest text-[#ffb77d]">
                   Optimal
                 </span>
@@ -88,7 +88,7 @@ export default function IntroExamples2() {
                 src="/intro/asymmetric-compensation.png"
                 alt="비대칭적 보상을 나타내는 실루엣과 휘어진 중심선"
                 fill
-                className="object-cover object-center"
+                className="bg-[#2e3447] object-cover object-[center_37%]"
                 sizes="(max-width: 768px) 100vw, 50vw"
               />
               <div
