@@ -4,12 +4,25 @@ import { Fragment, type ReactNode } from 'react';
 import { UserRound } from 'lucide-react';
 import { BASELINE_STEP1_HERO_OVERLINE } from '@/components/public-result/public-result-labels';
 
+type Step1HeroHighlight = { phrase: string; tone: 'accent' | 'bodyMuted' };
+
 /** Step1 본문에서만 강조(표현 전용). 부분 문자열 미포함 타입은 변화 없음. */
-const BASELINE_STEP1_HERO_HIGHLIGHTS = [
-  '당신의 움직임 타입',
-  '허리와 골반이 먼저 긴장해',
-  '호흡과 함께 몸통 중심이 자연스럽게 연결',
-] as const;
+const BASELINE_STEP1_HERO_HIGHLIGHTS: readonly Step1HeroHighlight[] = [
+  { phrase: '당신의 움직임 타입', tone: 'accent' },
+  { phrase: '허리와 골반이 먼저 긴장해', tone: 'accent' },
+  { phrase: '호흡과 함께 몸통 중심이 자연스럽게 연결', tone: 'accent' },
+  { phrase: '스트레스가 쌓이면 몸의 균형도', tone: 'accent' },
+  { phrase: '흔들릴 수 있습니다', tone: 'accent' },
+  { phrase: '균형을 유지', tone: 'accent' },
+  { phrase: '무릎과 발목이 먼저 버티는 방식', tone: 'accent' },
+  { phrase: '이\n익숙해지기 쉽습니다.', tone: 'bodyMuted' },
+  { phrase: '체중을 받쳐주는 감각', tone: 'accent' },
+  { phrase: '상체 전체가 긴장으로 버티게 됩니다.', tone: 'accent' },
+  { phrase: '가슴·등·어깨', tone: 'accent' },
+  { phrase: '긴장을 먼저 풀어주는 것', tone: 'accent' },
+  { phrase: '몸 전체가 쉽게 무겁고 둔하게 느껴지고,', tone: 'accent' },
+  { phrase: '회복 리듬을 되찾는 것', tone: 'accent' },
+];
 
 function renderHeroLineWithHighlights(line: string): ReactNode {
   const nodes: ReactNode[] = [];
@@ -18,27 +31,31 @@ function renderHeroLineWithHighlights(line: string): ReactNode {
 
   while (remaining.length > 0) {
     let bestIdx = -1;
-    let bestPhrase = '';
-    for (const phrase of BASELINE_STEP1_HERO_HIGHLIGHTS) {
-      const idx = remaining.indexOf(phrase);
+    let best: Step1HeroHighlight | null = null;
+    for (const spec of BASELINE_STEP1_HERO_HIGHLIGHTS) {
+      const idx = remaining.indexOf(spec.phrase);
       if (idx >= 0 && (bestIdx < 0 || idx < bestIdx)) {
         bestIdx = idx;
-        bestPhrase = phrase;
+        best = spec;
       }
     }
-    if (bestIdx < 0) {
+    if (bestIdx < 0 || !best) {
       nodes.push(<Fragment key={k++}>{remaining}</Fragment>);
       break;
     }
     if (bestIdx > 0) {
       nodes.push(<Fragment key={k++}>{remaining.slice(0, bestIdx)}</Fragment>);
     }
+    const spanClass =
+      best.tone === 'accent'
+        ? 'text-[14px] font-medium text-[#fcb973]'
+        : 'font-normal text-[rgba(198,198,205,1)]';
     nodes.push(
-      <span key={k++} className="text-[15px] text-[#fcb973]">
-        {bestPhrase}
+      <span key={k++} className={spanClass}>
+        {best.phrase}
       </span>
     );
-    remaining = remaining.slice(bestIdx + bestPhrase.length);
+    remaining = remaining.slice(bestIdx + best.phrase.length);
   }
 
   return <>{nodes}</>;
@@ -100,7 +117,7 @@ export function BaselineResultStep1({
           </div>
 
           <div
-            className="mx-0 my-5 flex w-full min-h-[40px] max-w-[20rem] transform-none items-center justify-center gap-0 rounded-xl border border-white/10 bg-[#151b2d]/85 px-0 py-5 text-center backdrop-blur-sm"
+            className="mx-0 my-2.5 flex w-full min-h-[40px] max-w-[20rem] transform-none items-center justify-center gap-0 rounded-xl border border-white/10 bg-[#151b2d]/85 px-0 py-0 text-center backdrop-blur-sm"
             style={{ boxShadow: '0 0 0 1px rgba(252, 144, 29, 0.25) inset' }}
           >
             <h2
@@ -118,7 +135,7 @@ export function BaselineResultStep1({
             {lines.map((line, i) => (
               <p
                 key={i}
-                className="whitespace-pre-line break-keep text-center text-[13px] font-normal leading-[19px] tracking-[-0.6px] text-[rgba(198,198,205,1)] sm:text-[15px] sm:leading-[19px]"
+                className="whitespace-pre-line break-keep text-center text-[13px] font-normal leading-[17px] tracking-[-0.5px] text-[rgba(198,198,205,1)] sm:text-[15px] sm:leading-[17px]"
               >
                 {renderHeroLineWithHighlights(line)}
               </p>
