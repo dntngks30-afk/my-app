@@ -1,9 +1,48 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { UserRound } from 'lucide-react';
-import { StitchBottomNavRow } from '@/components/stitch/shared/BottomNavRow';
 import { BASELINE_STEP1_HERO_OVERLINE } from '@/components/public-result/public-result-labels';
+
+/** Step1 본문에서만 강조(표현 전용). 부분 문자열 미포함 타입은 변화 없음. */
+const BASELINE_STEP1_HERO_HIGHLIGHTS = [
+  '당신의 움직임 타입',
+  '허리와 골반이 먼저 긴장해',
+  '호흡과 함께 몸통 중심이 자연스럽게 연결',
+] as const;
+
+function renderHeroLineWithHighlights(line: string): ReactNode {
+  const nodes: ReactNode[] = [];
+  let remaining = line;
+  let k = 0;
+
+  while (remaining.length > 0) {
+    let bestIdx = -1;
+    let bestPhrase = '';
+    for (const phrase of BASELINE_STEP1_HERO_HIGHLIGHTS) {
+      const idx = remaining.indexOf(phrase);
+      if (idx >= 0 && (bestIdx < 0 || idx < bestIdx)) {
+        bestIdx = idx;
+        bestPhrase = phrase;
+      }
+    }
+    if (bestIdx < 0) {
+      nodes.push(<Fragment key={k++}>{remaining}</Fragment>);
+      break;
+    }
+    if (bestIdx > 0) {
+      nodes.push(<Fragment key={k++}>{remaining.slice(0, bestIdx)}</Fragment>);
+    }
+    nodes.push(
+      <span key={k++} className="text-[15px] text-[#fcb973]">
+        {bestPhrase}
+      </span>
+    );
+    remaining = remaining.slice(bestIdx + bestPhrase.length);
+  }
+
+  return <>{nodes}</>;
+}
 
 export type BaselineResultStep1Props = {
   /** 사용자 대면 타입명 (6형 + UNKNOWN 안내) */
@@ -38,10 +77,10 @@ export function BaselineResultStep1({
           aria-hidden
         />
 
-        <section className="relative flex flex-col items-center px-1 text-center">
+        <section className="relative flex flex-col items-center px-1 text-left">
           <p
-            className="text-[13px] font-medium tracking-wide text-[#c6c6cd]/90"
-            style={{ fontFamily: 'var(--font-sans-noto)' }}
+            className="text-[15px] font-extrabold tracking-[0] text-[#c6c6cd]/90"
+            style={{ fontFamily: '"Noto Sans KR"' }}
           >
             {BASELINE_STEP1_HERO_OVERLINE}
           </p>
@@ -60,23 +99,28 @@ export function BaselineResultStep1({
             </div>
           </div>
 
-          <h2
-            className="mt-5 max-w-[20rem] break-keep text-[1.75rem] font-light italic leading-[1.15] tracking-tight [font-family:var(--font-display)] md:text-[2rem]"
-            style={{ color: typeAccentColor }}
+          <div
+            className="mx-0 my-5 flex w-full min-h-[40px] max-w-[20rem] transform-none items-center justify-center gap-0 rounded-xl border border-white/10 bg-[#151b2d]/85 px-0 py-5 text-center backdrop-blur-sm"
+            style={{ boxShadow: '0 0 0 1px rgba(252, 144, 29, 0.25) inset' }}
           >
-            {typeName}
-          </h2>
+            <h2
+              className="break-keep text-center text-[26px] font-bold not-italic leading-[1.2] tracking-[-0.6px] text-[#fc901d] transform-none"
+              style={{ fontFamily: 'var(--font-serif-noto)' }}
+            >
+              {typeName}
+            </h2>
+          </div>
 
           <div
-            className="mx-auto mt-5 w-full max-w-[22.5rem] space-y-3 text-left"
+            className="mx-auto mt-5 w-full max-w-[22.5rem] space-y-3 text-center"
             style={{ fontFamily: 'var(--font-sans-noto)' }}
           >
             {lines.map((line, i) => (
               <p
                 key={i}
-                className="break-keep text-[14px] leading-[1.65] text-[#c6c6cd] sm:text-[15px]"
+                className="whitespace-pre-line break-keep text-center text-[13px] font-normal leading-[19px] tracking-[-0.6px] text-[rgba(198,198,205,1)] sm:text-[15px] sm:leading-[19px]"
               >
-                {line}
+                {renderHeroLineWithHighlights(line)}
               </p>
             ))}
           </div>
@@ -86,18 +130,17 @@ export function BaselineResultStep1({
       </div>
 
       <ResultStitchFooter>
-        <StitchBottomNavRow
-          right={
-            <button
-              type="button"
-              onClick={onNext}
-              className="w-full min-h-[52px] rounded-md bg-gradient-to-br from-[#ffb77d] to-[#ab4c00] py-3.5 text-sm font-semibold tracking-wide text-[#4d2600] shadow-[0_20px_40px_rgba(2,6,23,0.08)] transition-all hover:brightness-110"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
-            >
-              다음 — 왜 이런 패턴인지 보기
-            </button>
-          }
-        />
+        <>
+          <button
+            type="button"
+            onClick={onNext}
+            className="w-full min-h-[52px] rounded-md bg-gradient-to-br from-[#ffb77d] to-[#ab4c00] py-3.5 text-[16px] font-semibold tracking-wide text-[#4d2600] shadow-[0_20px_40px_rgba(2,6,23,0.08)] transition-all hover:brightness-110"
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
+          >
+            왜 이런 패턴인지 보기
+          </button>
+          <div className="w-full" aria-hidden />
+        </>
       </ResultStitchFooter>
     </>
   );
