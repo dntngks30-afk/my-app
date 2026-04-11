@@ -44,7 +44,7 @@ const PANEL_SECTIONS = [
 
       <>
 
-        가장 먼저 실행해야 할 점을
+        가장 먼저 실행해야 할 움직임을
 
         <br />
 
@@ -89,7 +89,7 @@ export default function IntroTrust() {
       <div className="w-full max-w-2xl px-2 text-center">
 
         <h2
-          className="mb-8 text-[23px] font-semibold leading-8 tracking-[-1.2px] text-[#dce1fb]"
+          className="mb-8 text-[21px] font-semibold leading-8 tracking-[-1.2px] text-[#dce1fb]"
           style={{ fontFamily: '"Noto Serif KR"' }}
         >
 
@@ -97,7 +97,7 @@ export default function IntroTrust() {
 
           <br />
 
-          <span className="text-[23px] font-extrabold text-[#fcb973]">맞춤형 움직임</span>을 제공합니다.
+          <span className="text-[25px] font-bold text-[#fcb973]">맞춤형 움직임</span>을 제공합니다.
 
         </h2>
 
@@ -111,13 +111,13 @@ export default function IntroTrust() {
 
               <div key={title} className="py-4 first:pt-0 last:pb-0">
 
-                <h3 className="text-sm font-medium tracking-wide text-[#ffb77d] [font-family:var(--font-sans-noto)]">
+                <h3 className="text-sm font-semibold tracking-wide text-[#ffb77d] [font-family:var(--font-sans-noto)]">
                   {title}
                 </h3>
 
                 <p
 
-                  className="mt-2 text-xs font-light leading-[17px] tracking-[-0.9px] text-[#c6c6cd]/90"
+                  className="mt-2 text-[13px] font-normal leading-[17px] tracking-[-0.9px] text-[#c6c6cd]/90"
 
                   style={{ fontFamily: 'var(--font-sans-noto)' }}
 
@@ -139,7 +139,7 @@ export default function IntroTrust() {
 
         <p
 
-          className="mx-auto mt-8 max-w-sm text-[11px] font-light leading-[15px] tracking-[-0.4px] text-[#c6c6cd]/60"
+          className="mx-auto mt-8 max-w-sm text-[13px] font-light leading-[15px] tracking-[-0.4px] text-[#c6c6cd]"
 
           style={{ fontFamily: 'var(--font-sans-noto)' }}
 
