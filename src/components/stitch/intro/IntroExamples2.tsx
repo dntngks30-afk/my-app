@@ -52,7 +52,7 @@ export default function IntroExamples2() {
                 src="/intro/balanced-alignment.png"
                 alt="균형 잡힌 정렬을 나타내는 정면 실루엣과 중앙 수직 정렬선"
                 fill
-                className="origin-top -translate-y-[17%] object-cover object-[center_top]"
+                className="object-cover object-center"
                 sizes="(max-width: 768px) 100vw, 50vw"
               />
               <div
@@ -88,7 +88,7 @@ export default function IntroExamples2() {
                 src="/intro/asymmetric-compensation.png"
                 alt="비대칭적 보상을 나타내는 실루엣과 휘어진 중심선"
                 fill
-                className="origin-top -translate-y-[20%] object-cover object-[center_top]"
+                className="object-cover object-center"
                 sizes="(max-width: 768px) 100vw, 50vw"
               />
               <div
