@@ -88,13 +88,16 @@ export default function IntroTrust() {
 
       <div className="w-full max-w-2xl px-2 text-center">
 
-        <h2 className="mb-8 text-xl font-normal leading-8 tracking-[-1.2px] text-[#dce1fb] [font-family:var(--font-serif-noto)]">
+        <h2
+          className="mb-8 text-[23px] font-semibold leading-8 tracking-[-1.2px] text-[#dce1fb]"
+          style={{ fontFamily: '"Noto Serif KR"' }}
+        >
 
           테스트 종료 후,
 
           <br />
 
-          <span className="font-bold text-[23px] text-[#fcb973]">맞춤형 움직임</span>을 제공합니다.
+          <span className="text-[23px] font-extrabold text-[#fcb973]">맞춤형 움직임</span>을 제공합니다.
 
         </h2>
 

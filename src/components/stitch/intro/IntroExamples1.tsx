@@ -11,9 +11,9 @@ export default function IntroExamples1() {
     <IntroSceneShell currentPath="/intro/examples/1">
       <div className="w-full max-w-6xl px-2">
         <h2 className="mb-12 flex flex-col items-center gap-1 text-center font-medium leading-[25px] text-[#dce1fb] md:gap-1.5 md:text-4xl md:leading-tight [font-family:var(--font-serif-noto)]">
-          <span className="text-[23px] md:text-4xl">같은 자세도,</span>
-          <span className="text-[24px] font-bold tracking-[-1.2px] text-[#ffb77d] [font-family:var(--font-serif-noto)] md:text-4xl">
-            움직임이 다를 수 있습니다.
+          <span className="text-[23px] font-semibold [font-family:var(--font-serif-noto)] md:text-4xl">같은 자세도,</span>
+          <span className="text-[24px] font-bold tracking-[-1.2px] [font-family:var(--font-serif-noto)] md:text-4xl">
+            <span className="text-[25px] text-[#FCB973] md:text-4xl">움직임</span>이 다를 수 있습니다.
           </span>
         </h2>
 

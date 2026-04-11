@@ -15,10 +15,13 @@ export default function IntroTypes() {
   return (
     <IntroSceneShell currentPath="/intro/types">
       <div className="mx-auto flex w-full max-w-2xl flex-col items-center px-2">
-        <h2 className="mb-12 w-full text-center text-[26px] font-semibold leading-[31px] tracking-[-1.2px] text-[rgba(220,225,251,1)] [font-family:var(--font-serif-noto)]">
+        <h2
+          className="mb-12 w-full text-center text-[26px] font-semibold leading-[31px] tracking-[-1.2px] text-[rgba(220,225,251,1)]"
+          style={{ fontFamily: '"Noto Serif KR"' }}
+        >
           사람마다
           <br />
-          <span className="text-[#FCB973]">시작점</span>이 다릅니다.
+          <span className="text-[28px] font-extrabold text-[#FCB973]">시작점</span>이 다릅니다.
         </h2>
 
         <div className="w-full md:flex md:justify-center">
