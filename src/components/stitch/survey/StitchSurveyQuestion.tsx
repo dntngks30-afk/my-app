@@ -4,8 +4,39 @@
  * 단일 문항 + 0~4 원형 스케일 (stitch code.html 레일·중앙 강조)
  * 질문 본문은 부모가 전달하는 truth 문자열만 표시한다.
  */
+import { Fragment, type ReactNode } from 'react';
 import { ANSWER_CHOICES_V2 } from '@/features/movement-test/v2';
 import type { TestAnswerValue } from '@/features/movement-test/v2';
+
+/** `(...)` 전체(괄호 포함) 본문 대비 4px 작게 (24px → 20px) */
+function renderLineWithParenSized(line: string): ReactNode {
+  const re = /\([^)]+\)/g;
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let k = 0;
+  while ((m = re.exec(line)) !== null) {
+    if (m.index > last) nodes.push(line.slice(last, m.index));
+    nodes.push(
+      <span key={`p-${k++}`} className="text-[20px] align-baseline">
+        {m[0]}
+      </span>,
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < line.length) nodes.push(line.slice(last));
+  return nodes.length ? nodes : line;
+}
+
+function renderSurveyQuestionBody(text: string): ReactNode {
+  const lines = text.split('\n');
+  return lines.map((line, i) => (
+    <Fragment key={i}>
+      {i > 0 ? '\n' : null}
+      {renderLineWithParenSized(line)}
+    </Fragment>
+  ));
+}
 
 export type StitchSurveyQuestionProps = {
   /** 0-based — 표시용 Question 라벨에만 사용 */
@@ -33,8 +64,8 @@ export default function StitchSurveyQuestion({
           <span className="block text-lg italic text-[#ffb77d]/60 [font-family:var(--font-display)]">
             Question {qLabel}
           </span>
-          <h1 className="break-keep px-2 text-3xl font-semibold leading-snug tracking-tight text-[#dce1fb] md:text-4xl [font-family:var(--font-display)]">
-            {questionText}
+          <h1 className="mr-public-brand-serif whitespace-pre-line break-keep px-2 text-[24px] font-semibold leading-[34px] tracking-[-0.8px] text-[#dce1fb]">
+            {renderSurveyQuestionBody(questionText)}
           </h1>
         </div>
 

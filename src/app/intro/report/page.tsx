@@ -1,10 +1,8 @@
-'use client';
+import { redirect } from 'next/navigation';
 
 /**
- * intro 리포트 소개 화면
+ * 예전 STEP 2 경로 호환: 퍼널에서 제거됨 → 첫 예시 장으로 이어짐
  */
-import IntroReport from '@/components/stitch/intro/IntroReport';
-
 export default function IntroReportPage() {
-  return <IntroReport />;
+  redirect('/intro/examples/1');
 }

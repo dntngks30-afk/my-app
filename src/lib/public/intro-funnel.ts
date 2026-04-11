@@ -24,12 +24,11 @@ export const toProfileMerge = (d: FunnelData): Record<string, unknown> => ({
 /** funnel 단계 순서 (1-based index) */
 export const INTRO_STEPS = [
   { path: '/intro/welcome', step: 1 },
-  { path: '/intro/report', step: 2 },
-  { path: '/intro/examples/1', step: 3 },
-  { path: '/intro/examples/2', step: 4 },
-  { path: '/intro/types', step: 5 },
-  { path: '/intro/trust', step: 6 },
-  { path: '/intro/profile', step: 7 },
+  { path: '/intro/examples/1', step: 2 },
+  { path: '/intro/examples/2', step: 3 },
+  { path: '/intro/types', step: 4 },
+  { path: '/intro/trust', step: 5 },
+  { path: '/intro/profile', step: 6 },
 ] as const;
 
 export const TOTAL_STEPS = INTRO_STEPS.length;

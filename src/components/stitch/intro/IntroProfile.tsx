@@ -66,15 +66,17 @@ export default function IntroProfile() {
   const canSubmit = Boolean(age && gender);
 
   return (
-    <IntroSceneShell currentPath="/intro/profile" navVariant="hidden">
+    <IntroSceneShell currentPath="/intro/profile" navVariant="hidden" mainClassName="py-[30px]">
       <div className="w-full max-w-lg pb-28">
         <div className="mb-8 space-y-2 text-center">
-          <p className="text-sm tracking-[0.3em] text-[#ffb77d] opacity-80" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+          <p className="text-sm font-bold tracking-[1px] text-[#ffb77d] opacity-80" style={{ fontFamily: 'var(--font-sans-noto)' }}>
             시작 전,
           </p>
-          <h1 className="text-4xl font-light text-[#dce1fb] [font-family:var(--font-display)]">몇 가지만 알려주세요</h1>
-          <p className="text-sm font-light text-[#c6c6cd]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-            맞춤형 웰니스 케어 제공을 위해 최소한의 정보를 수집합니다.
+          <h1 className="mr-public-brand-serif text-[29px] font-semibold tracking-[-1.2px] text-[#dce1fb]">
+            몇 가지만 알려주세요
+          </h1>
+          <p className="text-[11px] font-light text-[#c6c6cd]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+            맞춤형 웰니스 케어 제공을 위한 정보 수집입니다.
           </p>
         </div>
 
@@ -89,7 +91,7 @@ export default function IntroProfile() {
             <select
               value={age}
               onChange={(e) => setAge(e.target.value)}
-              className="w-full cursor-pointer appearance-none rounded-none border-0 border-b border-white/20 bg-transparent py-4 text-xl text-[#dce1fb] focus:border-[#ffb77d] focus:outline-none focus:ring-0"
+              className="w-full cursor-pointer appearance-none rounded-none border-0 border-b border-white/20 bg-transparent px-[50px] py-4 text-center text-[18px] font-light tracking-[-0.8px] text-[#dce1fb] focus:border-[#ffb77d] focus:outline-none focus:ring-0"
               style={{ fontFamily: 'var(--font-sans-noto)' }}
             >
               <option value="">연령대를 선택해주세요</option>
@@ -117,7 +119,7 @@ export default function IntroProfile() {
                   className={`flex-1 rounded-lg border py-5 text-lg font-light transition-all ${
                     gender === o.value
                       ? 'border-[#ffb77d] text-[#dce1fb]'
-                      : 'border-white/20 text-[#c6c6cd] hover:border-[#ffb77d]/50'
+                      : 'border-white/20 text-[#c6c6cd]/80 hover:border-[#ffb77d]/50'
                   }`}
                   style={{ fontFamily: 'var(--font-sans-noto)' }}
                 >
@@ -131,7 +133,7 @@ export default function IntroProfile() {
             type="button"
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="w-full rounded-lg bg-gradient-to-br from-[#ffb77d] to-[#ab4c00] py-6 text-lg font-semibold text-[#4d2600] shadow-xl shadow-black/40 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+            className="w-full rounded-lg bg-gradient-to-br from-[#ffb77d] to-[#ab4c00] py-5 text-lg font-semibold tracking-[-1.2px] text-[#1e1e1f] shadow-xl shadow-black/40 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
             style={{ fontFamily: 'var(--font-sans-noto)' }}
           >
             다음으로 진행
@@ -143,7 +145,7 @@ export default function IntroProfile() {
         </div>
 
         <div className="mt-12 flex justify-center">
-          <IntroStepIndicator step={7} />
+          <IntroStepIndicator step={6} />
         </div>
       </div>
 

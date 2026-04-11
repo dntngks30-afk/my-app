@@ -30,13 +30,13 @@ const geistMono = Geist_Mono({
 const notoSansKR = Noto_Sans_KR({
   variable: "--font-sans-noto",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["100", "400", "500", "600", "700"],
 });
 
 const notoSerifKR = Noto_Serif_KR({
   variable: "--font-serif-noto",
   subsets: ["latin"],
-  weight: ["400", "700", "900"],
+  weight: ["400", "600", "700", "900"],
 });
 
 const ibmPlexSansKR = IBM_Plex_Sans_KR({

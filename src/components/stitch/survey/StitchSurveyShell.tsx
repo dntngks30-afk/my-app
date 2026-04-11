@@ -76,7 +76,7 @@ export function StitchSurveyShell({
         </div>
       ) : (
         <div className="relative z-10 flex min-h-[100svh] flex-col">
-          <header className="fixed inset-x-0 top-0 z-50 mx-auto flex w-full max-w-screen-2xl items-center justify-between bg-transparent px-6 py-6 md:px-8">
+          <header className="fixed inset-x-0 top-0 z-50 mx-auto flex w-full max-w-screen-2xl items-center justify-start bg-transparent px-6 py-6 md:px-8">
             <div className="flex min-w-0 items-center gap-4">
               {showBack ? (
                 <button
@@ -88,33 +88,39 @@ export function StitchSurveyShell({
                   <ChevronLeft className="size-6" strokeWidth={1.5} />
                 </button>
               ) : null}
-              <span className="text-xl italic tracking-tighter text-[#ffb77d] [font-family:var(--font-display)]">
-                Move Re
-              </span>
             </div>
+          </header>
 
-            <div className="flex flex-col items-end gap-1">
+          <main className="public-chapter-content-light flex min-h-0 flex-1 flex-col overflow-hidden pt-[5.5rem] pb-[max(5.5rem,env(safe-area-inset-bottom,0px)+4.5rem)]">
+            {children}
+          </main>
+
+          <div
+            role="progressbar"
+            aria-label={`설문 진행 ${currentIndex + 1}번째, 전체 ${total}문항`}
+            aria-valuenow={currentIndex + 1}
+            aria-valuemin={1}
+            aria-valuemax={total}
+            className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-6 pb-[max(1.25rem,env(safe-area-inset-bottom,0px)+0.75rem)] pt-6"
+          >
+            <div className="flex flex-col items-center gap-1.5">
               <div
                 className="text-[10px] font-light uppercase tracking-[0.2em] text-slate-500"
                 style={{ fontFamily: 'var(--font-sans-noto)' }}
               >
                 Progress
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center gap-3">
                 <span className="text-lg tracking-widest text-[#ffb77d] [font-family:var(--font-display)]">
                   {displayNum}{' '}
                   <span className="text-sm italic text-slate-600">/ {total}</span>
                 </span>
-                <div className="h-0.5 w-24 overflow-hidden rounded-full bg-[#2e3447]/30">
+                <div className="h-0.5 w-24 shrink-0 overflow-hidden rounded-full bg-[#2e3447]/30">
                   <div className="h-full bg-[#ffb77d] transition-all duration-700 ease-out" style={{ width: `${pct}%` }} />
                 </div>
               </div>
             </div>
-          </header>
-
-          <main className="public-chapter-content-light flex min-h-0 flex-1 flex-col overflow-hidden pt-[5.5rem]">
-            {children}
-          </main>
+          </div>
         </div>
       )}
     </div>

@@ -9,24 +9,34 @@ export default function IntroWelcome() {
   return (
     <IntroSceneShell currentPath="/intro/welcome">
       <div className="w-full max-w-2xl text-center">
-        <span
-          className="mb-4 block text-sm tracking-[0.3em] text-[#ffb77d] opacity-80"
-          style={{ fontFamily: 'var(--font-sans-noto)' }}
+        <h1
+          className="mb-8 text-[32px] font-normal leading-[38px] tracking-[-1.3px] text-[#dce1fb] [font-family:var(--font-serif-noto)]"
         >
-          안녕하세요,
-        </span>
-
-        <h1 className="mb-8 text-4xl font-extralight leading-tight tracking-tight text-[#dce1fb] md:text-5xl lg:text-6xl [font-family:var(--font-display)]">
-          MOVE RE가 당신의
+          <span className="inline-flex items-baseline justify-center gap-0 whitespace-nowrap">
+            <span className="text-[32px] font-bold [font-family:var(--font-serif-noto)]">MOVE RE</span>
+            <span className="text-[24px] leading-[36px] [font-family:var(--font-serif-noto)]">는</span>
+          </span>
           <br />
-          <span className="italic text-[#ffb77d]">움직임 패턴</span>을 분석해드립니다
+          <span className="block text-[24px] leading-[33px] [font-family:var(--font-serif-noto)]">
+            <span
+              className="text-[27px] font-bold text-[#ffb77d] opacity-80"
+              style={{ fontFamily: '"Noto Serif KR"' }}
+            >
+              움직임 패턴
+            </span>
+            을 통해
+            <br />
+            맞춤형 운동방향을
+            <br />
+            안내합니다.
+          </span>
         </h1>
 
         <p
-          className="mb-12 text-lg font-light text-[#c6c6cd]"
+          className="mb-12 text-[13px] font-light text-[#c6c6cd]"
           style={{ fontFamily: 'var(--font-sans-noto)' }}
         >
-          당신도 몰랐던 몸의 반복 패턴을 알려드릴게요
+          간단한 테스트를 통해 몸의 균형을 찾아가는 과정입니다.
         </p>
 
         <IntroStepIndicator step={1} />

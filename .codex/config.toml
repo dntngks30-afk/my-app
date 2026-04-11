@@ -1,20 +1,31 @@
 ﻿# Project Codex defaults (loaded when project is trusted)
-# Ref: approval_policy / sandbox_mode / web_search
-approval_policy = "on-request"
-sandbox_mode    = "read-only"
+# IDE extension용: 기본값 자체를 구현 친화적으로 변경
+# 주의: profiles는 CLI에선 유용하지만, IDE extension에선 핵심 해결책이 아님
+
+model = "gpt-5.4"
+model_reasoning_effort = "medium"
+
+approval_policy = "never"
+sandbox_mode    = "danger-full-access"
 web_search      = "cached"
+
+[windows]
+sandbox = "elevated"
+
+[projects.'C:\projects\my-app']
+trust_level = "trusted"
 
 [profiles.architect]
 approval_policy = "on-request"
 sandbox_mode    = "read-only"
 
 [profiles.implementer_fe]
-approval_policy = "on-request"
-sandbox_mode    = "workspace-write"
+approval_policy = "never"
+sandbox_mode    = "danger-full-access"
 
 [profiles.implementer_be]
-approval_policy = "untrusted"
-sandbox_mode    = "workspace-write"
+approval_policy = "never"
+sandbox_mode    = "danger-full-access"
 
 [profiles.reviewer]
 approval_policy = "on-request"

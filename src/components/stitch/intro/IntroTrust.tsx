@@ -1,39 +1,168 @@
 'use client';
 
+
+
 /**
- * stitch code.html Screen 7 — Trust
+
+ * intro trust — 테스트 직전 기대 정리(진행 씬)
+
+ * 셸·내비·스텝은 IntroSceneShell SSOT 유지, 본문 카피·정보 패턴만 교체.
+
  */
-import { Info } from 'lucide-react';
+
 import { IntroSceneShell, IntroStepIndicator } from './IntroSceneShell';
 
+
+
+const PANEL_SECTIONS = [
+
+  {
+
+    title: '현재 상태 요약',
+
+    body: (
+
+      <>
+
+        움직임 패턴과 몸의 상태를
+
+        <br />
+
+        한눈에 이해할 수 있게 정리해드려요
+
+      </>
+
+    ),
+
+  },
+
+  {
+
+    title: '우선 과제',
+
+    body: (
+
+      <>
+
+        가장 먼저 실행해야 할 점을
+
+        <br />
+
+        분명하게 알려드려요
+
+      </>
+
+    ),
+
+  },
+
+  {
+
+    title: '추천 루틴',
+
+    body: (
+
+      <>
+
+        지금 상태에 맞는 시작점을 제안해
+
+        <br />
+
+        바로 실행 할 루틴을 제공합니다
+
+      </>
+
+    ),
+
+  },
+
+] as const;
+
+
+
 export default function IntroTrust() {
+
   return (
+
     <IntroSceneShell currentPath="/intro/trust">
+
       <div className="w-full max-w-2xl px-2 text-center">
-        <h2 className="mb-8 text-4xl font-light text-[#dce1fb] md:text-5xl [font-family:var(--font-display)]">
-          잘못된 움직임은 습관이 됩니다
+
+        <h2 className="mb-8 text-xl font-normal leading-8 tracking-[-1.2px] text-[#dce1fb] [font-family:var(--font-serif-noto)]">
+
+          테스트 종료 후,
+
+          <br />
+
+          <span className="font-bold text-[23px] text-[#fcb973]">맞춤형 움직임</span>을 제공합니다.
+
         </h2>
 
+
+
+        <div className="mx-auto w-full max-w-md rounded-lg border border-white/10 bg-[#23293c]/90 px-5 py-5 text-left">
+
+          <div className="divide-y divide-white/10">
+
+            {PANEL_SECTIONS.map(({ title, body }) => (
+
+              <div key={title} className="py-4 first:pt-0 last:pb-0">
+
+                <h3 className="text-sm font-medium tracking-wide text-[#ffb77d] [font-family:var(--font-sans-noto)]">
+                  {title}
+                </h3>
+
+                <p
+
+                  className="mt-2 text-xs font-light leading-[17px] tracking-[-0.9px] text-[#c6c6cd]/90"
+
+                  style={{ fontFamily: 'var(--font-sans-noto)' }}
+
+                >
+
+                  {body}
+
+                </p>
+
+              </div>
+
+            ))}
+
+          </div>
+
+        </div>
+
+
+
         <p
-          className="mb-12 text-xl font-light leading-relaxed text-[#c6c6cd]"
+
+          className="mx-auto mt-8 max-w-sm text-[11px] font-light leading-[15px] tracking-[-0.4px] text-[#c6c6cd]/60"
+
           style={{ fontFamily: 'var(--font-sans-noto)' }}
+
         >
-          몸은 편한 방식으로 버티고, 그게 반복됩니다
+
+          이 테스트는 몸의 움직임을 간단히 파악하여
+
+          <br />
+
+          다음 행동으로 연결하기 위한 시작점입니다.
+
         </p>
 
-        <div className="inline-flex items-center gap-3 rounded-lg border border-white/10 bg-[#23293c]/90 px-6 py-4">
-          <Info className="size-5 shrink-0 text-[#fcb973]" strokeWidth={1.5} aria-hidden />
-          <p className="text-left text-sm text-[#c6c6cd]/80" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-            본 분석은 의학적 진단이 아니며 참고용입니다.
-            <br />
-            규칙 기반 알고리즘으로 제공됩니다.
-          </p>
+
+
+        <div className="mt-12 flex justify-center md:mt-16">
+
+          <IntroStepIndicator step={5} />
+
         </div>
 
-        <div className="mt-16 flex justify-center">
-          <IntroStepIndicator step={6} />
-        </div>
       </div>
+
     </IntroSceneShell>
+
   );
+
 }
+

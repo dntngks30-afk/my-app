@@ -1,12 +1,13 @@
 'use client';
 
 /**
- * intro 7장 공용 풀스크린 씬 — StitchLanding과 동일 navy / cosmic / copper family
+ * intro 6장 공용 풀스크린 씬 — StitchLanding과 동일 navy / cosmic / copper family
  * @see stitch_analysis_selection code.html
  */
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { getNextPath, getPrevPath } from '@/lib/public/intro-funnel';
+import { getNextPath, getPrevPath, TOTAL_STEPS } from '@/lib/public/intro-funnel';
+import { cn } from '@/lib/utils';
 
 export type IntroNavVariant = 'next-only' | 'prev-next' | 'hidden';
 
@@ -15,6 +16,8 @@ export type IntroSceneShellProps = {
   children: React.ReactNode;
   /** 미지정 시 currentPath로 자동: welcome → next-only, profile → hidden, 나머지 prev-next */
   navVariant?: IntroNavVariant;
+  /** `<main>`에 병합 (예: 프로필 전용 세로 패딩) */
+  mainClassName?: string;
 };
 
 function resolveNavVariant(path: string, explicit?: IntroNavVariant): IntroNavVariant {
@@ -24,16 +27,16 @@ function resolveNavVariant(path: string, explicit?: IntroNavVariant): IntroNavVa
   return 'prev-next';
 }
 
-/** Step n/7 + 얇은 진행 막대 (통일된 chapter 느낌) */
+/** Step n/N + 얇은 진행 막대 (통일된 chapter 느낌) */
 export function IntroStepIndicator({ step }: { step: number }) {
-  const pct = (step / 7) * 100;
+  const pct = (step / TOTAL_STEPS) * 100;
   return (
     <div className="flex flex-col items-center gap-2 opacity-40">
       <span
         className="text-xs uppercase tracking-widest text-slate-300"
         style={{ fontFamily: 'var(--font-sans-noto)' }}
       >
-        Step {step}/7
+        Step {step}/{TOTAL_STEPS}
       </span>
       <div className="h-px w-32 overflow-hidden bg-[#2e3447]">
         <div className="h-full bg-[#ffb77d]" style={{ width: `${pct}%` }} />
@@ -42,7 +45,7 @@ export function IntroStepIndicator({ step }: { step: number }) {
   );
 }
 
-export function IntroSceneShell({ currentPath, children, navVariant }: IntroSceneShellProps) {
+export function IntroSceneShell({ currentPath, children, navVariant, mainClassName }: IntroSceneShellProps) {
   const variant = resolveNavVariant(currentPath, navVariant);
   const prevPath = getPrevPath(currentPath);
   const nextPath = getNextPath(currentPath);
@@ -79,7 +82,12 @@ export function IntroSceneShell({ currentPath, children, navVariant }: IntroScen
       </div>
 
       <div className="relative z-10 flex min-h-[100svh] flex-col">
-        <main className="public-chapter-content-default flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-10 md:px-11">
+        <main
+          className={cn(
+            'public-chapter-content-default flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-10 md:px-11',
+            mainClassName,
+          )}
+        >
           {children}
         </main>
 

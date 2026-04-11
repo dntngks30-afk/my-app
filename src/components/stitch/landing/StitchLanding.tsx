@@ -36,33 +36,32 @@ export default function StitchLanding({ onStart }: StitchLandingProps) {
         <div className="absolute left-1/2 top-1/2 h-[70vw] w-[70vw] max-h-[820px] max-w-[820px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ffb77d]/6 blur-[140px]" />
       </div>
 
-      <main className="public-chapter-content-default relative z-10 flex min-h-[100svh] flex-col items-center justify-center px-6 text-center">
+      <main className="public-chapter-content-default relative z-10 flex min-h-[100svh] flex-col items-center justify-center space-y-12 px-6 text-center">
+        <h2
+          className="inline-block align-bottom pt-5 text-[30px] font-bold tracking-[-0.8px] text-[#fcb973] md:text-3xl"
+          style={{ fontFamily: '"Noto Serif KR"' }}
+        >
+          Move Re
+        </h2>
+
         <div className="w-full max-w-3xl space-y-12">
-          <div className="space-y-4">
-            <span className="inline-block rounded-full border border-[#ffb77d]/20 px-4 py-1 text-[10px] uppercase tracking-[0.3em] text-[#ffb77d]">
-              Movement Type Analysis
-            </span>
-
-            <h2 className="text-2xl tracking-widest text-[#ffb77d] md:text-3xl [font-family:var(--font-display)]">
-              Move Re
-            </h2>
-          </div>
-
           <div className="space-y-6">
             <h1
-              className="text-4xl font-bold leading-tight tracking-tight text-[#dce1fb] md:text-6xl"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
+              className="font-bold text-[#dce1fb] text-[35px] leading-[44px] tracking-[-2px] md:text-6xl md:leading-[1.12] md:tracking-tight"
+              style={{ fontFamily: '"Noto Serif KR"' }}
             >
-              당신의 움직임은 안녕하신가요?
+              당신의 <span className="text-[#FCB973]">움직임</span>,
+              <br />
+              알고 계신가요?
             </h1>
 
             <p
-              className="mx-auto max-w-xl text-lg font-light leading-relaxed text-[#c6c6cd] md:text-xl"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
+              className="mx-auto !my-0 h-[30px] max-w-xl text-[15px] font-light leading-[19px] text-[#c6c6cd]"
+              style={{ fontFamily: '"Noto Sans KR"' }}
             >
-              짧은 체크로 패턴을 정리하고,
-              <br className="hidden md:block" />
-              실행까지 이어질 수 있게 도와드려요
+              1분 체크로 몸의 상태를 확인하고,
+              <br />
+              나에게 필요한 운동방향을 알려드릴게요
             </p>
           </div>
 
@@ -70,7 +69,7 @@ export default function StitchLanding({ onStart }: StitchLandingProps) {
             <button
               type="button"
               onClick={onStart}
-              className="group inline-flex min-h-[64px] items-center justify-center rounded-md bg-gradient-to-br from-[#ffb77d] to-[#ab4c00] px-12 py-5 text-base font-semibold text-[#4d2600] shadow-[0_18px_60px_rgba(0,0,0,0.35)] transition-all duration-500 hover:opacity-90 active:scale-[0.985] md:text-lg"
+              className="-mt-[23px] -mb-[23px] group inline-flex min-h-[64px] items-center justify-center rounded-md bg-gradient-to-br from-[#ffb77d] to-[#ab4c00] px-12 py-5 text-base font-semibold text-[#4d2600] shadow-[0_18px_60px_rgba(0,0,0,0.35)] transition-all duration-500 hover:opacity-90 active:scale-[0.985] md:text-lg"
               style={{ fontFamily: 'var(--font-sans-noto)' }}
               aria-label="내 몸 상태 1분 체크하기"
             >
@@ -83,28 +82,14 @@ export default function StitchLanding({ onStart }: StitchLandingProps) {
             </button>
 
             <p
-              className="max-w-xs text-center text-xs leading-relaxed text-[#909097] opacity-80 md:text-[13px]"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
+              className="mt-[7px] mb-[7px] max-w-xs text-center text-xs leading-relaxed text-[#909097] opacity-80 md:text-[13px]"
+              style={{ fontFamily: '"Noto Sans KR"' }}
             >
-              짧은 질문으로 시작해요. 원하시면 결과를 보기 직전에
-              <br />
-              짧은 동작 확인을 더할 수 있어요.
+              회원가입 없이 짧은 질문으로 시작해요
             </p>
           </div>
         </div>
       </main>
-
-      <footer className="pointer-events-none fixed bottom-0 left-0 z-20 flex w-full items-center justify-center px-8 py-10">
-        <div className="flex flex-col items-center gap-4 opacity-45">
-          <div className="h-12 w-px bg-gradient-to-b from-transparent to-[#ffb77d]/50" />
-          <p
-            className="text-[10px] uppercase tracking-[0.4em] text-slate-500"
-            style={{ fontFamily: 'var(--font-sans-noto)' }}
-          >
-            Professional Motion Intelligence Engine
-          </p>
-        </div>
-      </footer>
     </div>
   );
 }

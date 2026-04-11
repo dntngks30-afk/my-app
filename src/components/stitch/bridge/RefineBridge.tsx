@@ -30,20 +30,23 @@ export default function RefineBridge({ loading, onResultFirst, onCameraRefine }:
         <div className="mx-auto w-full max-w-md space-y-10">
           <div className="space-y-4 text-center">
             <p
-              className="text-[10px] font-light uppercase tracking-[0.35em] text-[#ffb77d]/80"
+              className="text-[14px] font-bold uppercase tracking-[-0.7px] text-[#ffb77d]/80"
               style={{ fontFamily: 'var(--font-sans-noto)' }}
             >
               다음 단계
             </p>
-            <h1 className="break-keep text-3xl font-light leading-tight tracking-tight text-[#dce1fb] md:text-4xl [font-family:var(--font-display)]">
+            <h1 className="mr-public-brand-serif break-keep py-[25px] text-[30px] font-bold leading-tight tracking-tight text-[#dce1fb]">
               설문 결과는 준비됐어요
             </h1>
             <p
-              className="break-keep text-base font-light leading-relaxed text-[#c6c6cd]"
+              className="break-keep whitespace-pre-line text-[14px] font-light leading-[18px] tracking-[-0.7px] text-[#c6c6cd]"
               style={{ fontFamily: 'var(--font-sans-noto)' }}
             >
-              원하시면 20~30초 동작 체크로 움직임 신호를 조금 더 반영할 수 있어요. 진단이 아니라, 더 맞는 운동
-              시작점을 잡기 위한 간단한 확인이에요.
+              {`원하시면 20~30초 움직임 체크로
+문제점 신호를 조금 더 반영할 수 있습니다.
+진단이 아닌, `}
+              <span className="font-semibold text-[#FCB973]">시작점을 찾기 위한 움직임 체크</span>
+              {'입니다.'}
             </p>
           </div>
 
@@ -67,10 +70,10 @@ export default function RefineBridge({ loading, onResultFirst, onCameraRefine }:
           </div>
 
           <p
-            className="break-keep text-center text-xs text-slate-500"
+            className="break-keep text-center text-[14px] font-light leading-[18px] tracking-[-0.7px] text-[rgb(149,159,172)]"
             style={{ fontFamily: 'var(--font-sans-noto)' }}
           >
-            동작 체크 없이도 결과와 이후 단계를 모두 이용할 수 있어요.
+            움직임 체크 없이도 이후 단계를 모두 이용할 수 있어요.
           </p>
         </div>
       </main>
