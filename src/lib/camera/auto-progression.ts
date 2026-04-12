@@ -393,6 +393,15 @@ type SquatSetupPhaseTrace = {
   readinessStableDwellSatisfied?: boolean;
   setupMotionBlocked?: boolean;
   setupMotionBlockReason?: string | null;
+  attemptStartedAfterReady?: boolean;
+};
+type SquatReadinessSetupRoutedSources = {
+  readinessStableDwellSatisfied: boolean | undefined;
+  setupMotionBlocked: boolean;
+  setupMotionBlockReason: string | null | undefined;
+  attemptStartedAfterReady: boolean | undefined;
+  liveReadinessNotReady: boolean;
+  liveReadinessSummaryState: ReturnType<typeof getLiveReadinessSummary>['state'];
 };
 type SquatPostOwnerPreLatchGateLayer = {
   ownerTruth: SquatOwnerTruth;
@@ -419,6 +428,56 @@ export function readSquatPassOwnerTruth(
       squatPassCore.passBlockedReason ??
       cs?.completionBlockedReason ??
       null,
+  };
+}
+
+function readSquatSetupTruthWithCompatFallback(input: {
+  squatSetupPhaseTrace: SquatSetupPhaseTrace | undefined;
+  squatCompletionState: SquatCompletionState | undefined;
+}): Pick<
+  SquatReadinessSetupRoutedSources,
+  | 'readinessStableDwellSatisfied'
+  | 'setupMotionBlocked'
+  | 'setupMotionBlockReason'
+  | 'attemptStartedAfterReady'
+> {
+  const { squatSetupPhaseTrace, squatCompletionState } = input;
+  return {
+    readinessStableDwellSatisfied:
+      squatSetupPhaseTrace?.readinessStableDwellSatisfied ??
+      squatCompletionState?.readinessStableDwellSatisfied,
+    setupMotionBlocked:
+      squatSetupPhaseTrace?.setupMotionBlocked ??
+      squatCompletionState?.setupMotionBlocked ??
+      false,
+    setupMotionBlockReason:
+      squatSetupPhaseTrace?.setupMotionBlockReason ??
+      squatCompletionState?.setupMotionBlockReason,
+    attemptStartedAfterReady:
+      squatSetupPhaseTrace?.attemptStartedAfterReady ??
+      squatCompletionState?.attemptStartedAfterReady,
+  };
+}
+
+function resolveSquatReadinessSetupGateInputs(input: {
+  landmarks: PoseLandmarks[];
+  guardrail: StepGuardrailResult;
+  squatSetupPhaseTrace: SquatSetupPhaseTrace | undefined;
+  squatCompletionState: SquatCompletionState | undefined;
+}): SquatReadinessSetupRoutedSources {
+  const setupTruth = readSquatSetupTruthWithCompatFallback({
+    squatSetupPhaseTrace: input.squatSetupPhaseTrace,
+    squatCompletionState: input.squatCompletionState,
+  });
+  const liveReadinessSummary = getLiveReadinessSummary({
+    success: false,
+    guardrail: input.guardrail,
+    framingHint: getSetupFramingHint(input.landmarks),
+  });
+  return {
+    ...setupTruth,
+    liveReadinessNotReady: liveReadinessSummary.state === 'not_ready',
+    liveReadinessSummaryState: liveReadinessSummary.state,
   };
 }
 
@@ -522,6 +581,13 @@ export function isFinalPassLatched(
     const guardrailCompleteForLatch =
       gate.guardrail.completionStatus === 'complete' || gate.guardrail.completionStatus == null;
     const scDbg = gate.squatCycleDebug;
+    const setupTrace = (
+      gate.evaluatorResult.debug as { squatSetupPhaseTrace?: SquatSetupPhaseTrace } | undefined
+    )?.squatSetupPhaseTrace;
+    const setupTruthForLatch = readSquatSetupTruthWithCompatFallback({
+      squatSetupPhaseTrace: setupTrace,
+      squatCompletionState: cs,
+    });
     const uiGate = computeSquatUiProgressionLatchGate(
       buildSquatUiProgressionLatchGateInput({
         completionOwnerPassed: ownerTruth.completionOwnerPassed,
@@ -537,8 +603,8 @@ export function isFinalPassLatched(
         reasons,
         hardBlockerReasons: hardBlockers,
         liveReadinessNotReady: scDbg?.liveReadinessSummaryState === 'not_ready',
-        readinessStableDwellSatisfied: getSquatReadinessStableDwellSatisfied(scDbg, cs),
-        setupMotionBlocked: scDbg?.setupMotionBlocked === true,
+        readinessStableDwellSatisfied: setupTruthForLatch.readinessStableDwellSatisfied,
+        setupMotionBlocked: setupTruthForLatch.setupMotionBlocked,
       })
     );
     return uiGate.uiProgressionAllowed;
@@ -693,25 +759,6 @@ function getPassConfirmationMinStableFrames(
     : stepId === 'squat' && squatEasyOnly
       ? SQUAT_EASY_LATCH_STABLE_FRAMES
       : REQUIRED_STABLE_FRAMES;
-}
-
-function getSquatReadinessStableDwellSatisfied(
-  setupTrace: Pick<SquatSetupPhaseTrace, 'readinessStableDwellSatisfied'> | undefined,
-  squatCompletionState: Pick<SquatCompletionState, 'readinessStableDwellSatisfied'> | undefined
-): boolean | undefined {
-  if (
-    setupTrace?.readinessStableDwellSatisfied === false ||
-    squatCompletionState?.readinessStableDwellSatisfied === false
-  ) {
-    return false;
-  }
-  if (
-    setupTrace?.readinessStableDwellSatisfied === true ||
-    squatCompletionState?.readinessStableDwellSatisfied === true
-  ) {
-    return true;
-  }
-  return undefined;
 }
 
 function applySquatFinalBlockerVetoLayer(input: {
@@ -2074,7 +2121,7 @@ export function evaluateExerciseAutoProgress(
    *              May block uiProgressionAllowed. Do NOT write to completion fields.)
    *   Step E — Observability enrichment (see block below, after integrity block)
    *
-   * squatSetupTraceForGate and squatLiveSummaryForGate are hoisted here so that
+   * squatSetupTraceForGate and squatReadinessSetupRoutedSources are hoisted here so that
    * Step E reuses the same computed values without a second identical call.
    */
   // 11B freeze: owner truth -> post-owner/pre-latch gate layer -> latch handoff.
@@ -2083,7 +2130,7 @@ export function evaluateExerciseAutoProgress(
   let squatPostOwnerGateLayer: SquatPostOwnerPreLatchGateLayer | null = null;
   // Hoisted: shared between gate computation (C) and observability enrichment (E)
   let squatSetupTraceForGate: SquatSetupPhaseTrace | undefined;
-  let squatLiveSummaryForGate: ReturnType<typeof getLiveReadinessSummary> | undefined;
+  let squatReadinessSetupRoutedSources: SquatReadinessSetupRoutedSources | undefined;
 
   if (stepId === 'squat') {
     // ── Step A: completion truth — read from squatPassCore (PASS-AUTHORITY-RESET-01) ──
@@ -2103,18 +2150,18 @@ export function evaluateExerciseAutoProgress(
 
     // ── Step C: UI progression latch gate ──
     // Pure UI signals: confidence, passConfirmation, captureQuality, setup suppression, arming.
-    // setupTrace and liveSummary are hoisted (squatSetupTraceForGate / squatLiveSummaryForGate)
+    // setup/live readiness routing is hoisted (squatSetupTraceForGate / squatReadinessSetupRoutedSources)
     // so Step E reuses them without duplicate computation.
     const squatFramesReq = squatEasyOnly ? SQUAT_EASY_LATCH_STABLE_FRAMES : REQUIRED_STABLE_FRAMES;
-    squatSetupTraceForGate = evaluatorResult.debug?.squatSetupPhaseTrace as SquatSetupPhaseTrace | undefined;
-    const setupMotionBlockedForGate =
-      squatSetupTraceForGate?.setupMotionBlocked === true || squatCs?.setupMotionBlocked === true;
-    squatLiveSummaryForGate = getLiveReadinessSummary({
-      success: false,
+    squatSetupTraceForGate = (
+      evaluatorResult.debug as { squatSetupPhaseTrace?: SquatSetupPhaseTrace } | undefined
+    )?.squatSetupPhaseTrace;
+    squatReadinessSetupRoutedSources = resolveSquatReadinessSetupGateInputs({
+      landmarks,
       guardrail,
-      framingHint: getSetupFramingHint(landmarks),
+      squatSetupPhaseTrace: squatSetupTraceForGate,
+      squatCompletionState: squatCs,
     });
-    const liveReadinessNotReady = squatLiveSummaryForGate.state === 'not_ready';
 
     // GUARDRAIL-DECOUPLE-RESET-01: for squat, guardrail.completionStatus is aligned to
     // squatPassCore.passDetected inside guardrails.getMotionCompleteness — legacy
@@ -2135,12 +2182,10 @@ export function evaluateExerciseAutoProgress(
         squatIntegrityBlockForPass,
         reasons,
         hardBlockerReasons,
-        liveReadinessNotReady,
-        readinessStableDwellSatisfied: getSquatReadinessStableDwellSatisfied(
-          squatSetupTraceForGate,
-          squatCs
-        ),
-        setupMotionBlocked: setupMotionBlockedForGate,
+        liveReadinessNotReady: squatReadinessSetupRoutedSources.liveReadinessNotReady,
+        readinessStableDwellSatisfied:
+          squatReadinessSetupRoutedSources.readinessStableDwellSatisfied,
+        setupMotionBlocked: squatReadinessSetupRoutedSources.setupMotionBlocked,
       }),
       squatCompletionState: squatCs,
       squatCycleDebug,
@@ -2163,7 +2208,7 @@ export function evaluateExerciseAutoProgress(
     // ── Step E: UI gate observability enrichment ──
     // Pure packaging: annotates squatCycleDebug with gate result fields for debug / trace.
     // Does NOT affect progressionPassed, finalPassBlockedReason, or any completion truth field.
-    // squatSetupTraceForGate and squatLiveSummaryForGate are reused from Step C (no duplicate call).
+    // squatSetupTraceForGate and squatReadinessSetupRoutedSources are reused from Step C.
     const qWarn = getSquatQualityOnlyWarnings({
       guardrail,
       rawIntegrityBlock: squatRawIntegrityBlock,
@@ -2197,14 +2242,12 @@ export function evaluateExerciseAutoProgress(
       completionOwnerBlockedReason: squatOwnerTruth?.completionOwnerBlockedReason ?? undefined,
       uiProgressionAllowed: squatUiGate?.uiProgressionAllowed,
       uiProgressionBlockedReason: squatUiGate?.uiProgressionBlockedReason ?? undefined,
-      liveReadinessSummaryState: squatLiveSummaryForGate?.state,
+      liveReadinessSummaryState: squatReadinessSetupRoutedSources?.liveReadinessSummaryState,
       readinessStableDwellSatisfied:
-        squatSetupTraceForGate?.readinessStableDwellSatisfied ?? squatCs?.readinessStableDwellSatisfied,
-      setupMotionBlocked:
-        squatSetupTraceForGate?.setupMotionBlocked ?? squatCs?.setupMotionBlocked,
-      setupMotionBlockReason:
-        squatSetupTraceForGate?.setupMotionBlockReason ?? squatCs?.setupMotionBlockReason,
-      attemptStartedAfterReady: squatCs?.attemptStartedAfterReady,
+        squatReadinessSetupRoutedSources?.readinessStableDwellSatisfied,
+      setupMotionBlocked: squatReadinessSetupRoutedSources?.setupMotionBlocked,
+      setupMotionBlockReason: squatReadinessSetupRoutedSources?.setupMotionBlockReason,
+      attemptStartedAfterReady: squatReadinessSetupRoutedSources?.attemptStartedAfterReady,
       successSuppressedBySetupPhase: setupSuppressed,
     };
   }
