@@ -385,11 +385,36 @@ const REQUIRED_STABLE_FRAMES = 3;
 type SquatCompletionState = NonNullable<EvaluatorResult['debug']>['squatCompletionState'];
 type SquatUiGate = SquatUiProgressionLatchGateResult;
 type SquatOwnerTruth = ReturnType<typeof computeSquatCompletionOwnerTruth>;
+type SquatPassOwnerTruthReadInput = {
+  squatCompletionState: SquatCompletionState | undefined;
+  squatPassCore: SquatPassCoreResult | undefined;
+};
 type SquatSetupPhaseTrace = {
   readinessStableDwellSatisfied?: boolean;
   setupMotionBlocked?: boolean;
   setupMotionBlockReason?: string | null;
 };
+
+export function readSquatPassOwnerTruth(
+  input: SquatPassOwnerTruthReadInput
+): SquatOwnerTruth {
+  const { squatCompletionState: cs, squatPassCore } = input;
+
+  if (squatPassCore == null) {
+    return computeSquatCompletionOwnerTruth({
+      squatCompletionState: cs,
+    });
+  }
+
+  return {
+    completionOwnerPassed: squatPassCore.passDetected === true,
+    completionOwnerReason: cs?.completionPassReason ?? null,
+    completionOwnerBlockedReason:
+      squatPassCore.passBlockedReason ??
+      cs?.completionBlockedReason ??
+      null,
+  };
+}
 
 export function isGatePassReady(
   gate: Pick<
@@ -458,8 +483,9 @@ export function isFinalPassLatched(
       gate.squatCycleDebug?.captureArmingSatisfied !== undefined
         ? gate.squatCycleDebug.captureArmingSatisfied === true
         : squatMinimumCycleOkForFinalPass(gate.evaluatorResult, gate.squatCycleDebug);
-    const ownerTruth = computeSquatCompletionOwnerTruth({
+    const ownerTruth = readSquatPassOwnerTruth({
       squatCompletionState: cs,
+      squatPassCore: gate.evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined,
     });
     if (!ownerTruth.completionOwnerPassed) return false;
     const severeInvalid = isSevereInvalid(gate.guardrail);
@@ -1990,15 +2016,11 @@ export function evaluateExerciseAutoProgress(
 
     // ── Step B: completion owner truth — sourced from passCore, not from completionBlockedReason ──
     // PASS-AUTHORITY-RESET-01: policy (ultraLowPolicyBlocked) and late-setup (lateSetupSuppressed)
-    // are now annotation-only. squatOwnerTruth reads passCore.passDetected as authoritative.
-    squatOwnerTruth = {
-      completionOwnerPassed: squatPassCore?.passDetected === true,
-      completionOwnerReason: squatCs?.completionPassReason ?? null,
-      completionOwnerBlockedReason:
-        squatPassCore?.passBlockedReason ??
-        squatCs?.completionBlockedReason ??
-        null,
-    };
+    // are now annotation-only. readSquatPassOwnerTruth is shared with the latch fallback path.
+    squatOwnerTruth = readSquatPassOwnerTruth({
+      squatCompletionState: squatCs,
+      squatPassCore,
+    });
 
     // ── Step C: UI progression latch gate ──
     // Pure UI signals: confidence, passConfirmation, captureQuality, setup suppression, arming.
