@@ -382,7 +382,7 @@ export interface ExerciseGateResult {
 
 const REQUIRED_STABLE_FRAMES = 3;
 
-type SquatCompletionState = NonNullable<EvaluatorResult['debug']>['squatCompletionState'];
+type SquatCompletionState = NonNullable<NonNullable<EvaluatorResult['debug']>['squatCompletionState']>;
 type SquatUiGate = SquatUiProgressionLatchGateResult;
 type SquatOwnerTruth = ReturnType<typeof computeSquatCompletionOwnerTruth>;
 type SquatPassOwnerTruthReadInput = {
@@ -393,6 +393,12 @@ type SquatSetupPhaseTrace = {
   readinessStableDwellSatisfied?: boolean;
   setupMotionBlocked?: boolean;
   setupMotionBlockReason?: string | null;
+};
+type SquatPostOwnerPreLatchGateLayer = {
+  ownerTruth: SquatOwnerTruth;
+  uiGate: SquatUiGate;
+  progressionPassed: boolean;
+  finalPassBlockedReason: string | null;
 };
 
 export function readSquatPassOwnerTruth(
@@ -708,6 +714,84 @@ function getSquatReadinessStableDwellSatisfied(
   return undefined;
 }
 
+function applySquatFinalBlockerVetoLayer(input: {
+  stepId: CameraStepId;
+  uiGate: SquatUiGate;
+  squatCompletionState: SquatCompletionState | undefined;
+  squatCycleDebug: SquatCycleDebug | undefined;
+}): SquatUiGate {
+  if (
+    input.uiGate.uiProgressionAllowed === true &&
+    shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass(
+      input.stepId,
+      input.squatCompletionState,
+      input.squatCycleDebug
+    )
+  ) {
+    return {
+      uiProgressionAllowed: false,
+      uiProgressionBlockedReason: SQUAT_ULTRA_LOW_TRAJECTORY_SHORT_CYCLE_UI_BLOCKED_REASON,
+    };
+  }
+
+  if (
+    input.uiGate.uiProgressionAllowed === true &&
+    shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass(
+      input.stepId,
+      input.squatCompletionState,
+      input.squatCycleDebug
+    )
+  ) {
+    return {
+      uiProgressionAllowed: false,
+      uiProgressionBlockedReason: SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON,
+    };
+  }
+
+  return input.uiGate;
+}
+
+export function getSquatPostOwnerFinalPassBlockedReason(input: {
+  ownerTruth: SquatOwnerTruth;
+  uiGate: SquatUiGate;
+}): string | null {
+  if (!input.ownerTruth.completionOwnerPassed) {
+    return input.ownerTruth.completionOwnerBlockedReason ?? 'completion_owner_blocked';
+  }
+  if (!input.uiGate.uiProgressionAllowed) {
+    return input.uiGate.uiProgressionBlockedReason ?? 'ui_progression_blocked';
+  }
+  return null;
+}
+
+export function computeSquatPostOwnerPreLatchGateLayer(input: {
+  stepId: CameraStepId;
+  ownerTruth: SquatOwnerTruth;
+  uiGateInput: SquatUiProgressionLatchGateInput;
+  squatCompletionState: SquatCompletionState | undefined;
+  squatCycleDebug: SquatCycleDebug | undefined;
+}): SquatPostOwnerPreLatchGateLayer {
+  const uiGate = applySquatFinalBlockerVetoLayer({
+    stepId: input.stepId,
+    uiGate: computeSquatUiProgressionLatchGate(input.uiGateInput),
+    squatCompletionState: input.squatCompletionState,
+    squatCycleDebug: input.squatCycleDebug,
+  });
+  const finalPassBlockedReason = getSquatPostOwnerFinalPassBlockedReason({
+    ownerTruth: input.ownerTruth,
+    uiGate,
+  });
+
+  return {
+    ownerTruth: input.ownerTruth,
+    uiGate,
+    finalPassBlockedReason,
+    progressionPassed:
+      input.ownerTruth.completionOwnerPassed === true &&
+      uiGate.uiProgressionAllowed === true,
+  };
+}
+
 function getOverheadRepHoldBlocks(
   stepId: CameraStepId,
   reasons: string[],
@@ -751,13 +835,10 @@ function getFinalPassBlockedReason(input: {
   } = input;
 
   if (stepId === 'squat' && squatOwnerTruth != null && squatUiGate != null) {
-    if (!squatOwnerTruth.completionOwnerPassed) {
-      return squatOwnerTruth.completionOwnerBlockedReason ?? 'completion_owner_blocked';
-    }
-    if (!squatUiGate.uiProgressionAllowed) {
-      return squatUiGate.uiProgressionBlockedReason ?? 'ui_progression_blocked';
-    }
-    return null;
+    return getSquatPostOwnerFinalPassBlockedReason({
+      ownerTruth: squatOwnerTruth,
+      uiGate: squatUiGate,
+    });
   }
   if (!completionSatisfied) return 'completion_not_satisfied';
   if (guardrail.captureQuality === 'invalid') return 'capture_quality_invalid';
@@ -1157,9 +1238,7 @@ const SQUAT_ULTRA_LOW_TRAJECTORY_SHORT_CYCLE_UI_BLOCKED_REASON =
  */
 export function shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass(
   stepId: CameraStepId,
-  squatCompletionState: EvaluatorResult['debug'] extends { squatCompletionState?: infer S }
-    ? S | undefined
-    : undefined,
+  squatCompletionState: unknown,
   squatCycleDebug: SquatCycleDebug | undefined
 ): boolean {
   if (stepId !== 'squat') return false;
@@ -1192,9 +1271,7 @@ function squatEventCycleNotesIndicateSeriesStartContamination(notes: string[] | 
  */
 export function shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass(
   stepId: CameraStepId,
-  squatCompletionState: EvaluatorResult['debug'] extends { squatCompletionState?: infer S }
-    ? S | undefined
-    : undefined,
+  squatCompletionState: unknown,
   squatCycleDebug: SquatCycleDebug | undefined
 ): boolean {
   if (stepId !== 'squat') return false;
@@ -2000,8 +2077,10 @@ export function evaluateExerciseAutoProgress(
    * squatSetupTraceForGate and squatLiveSummaryForGate are hoisted here so that
    * Step E reuses the same computed values without a second identical call.
    */
+  // 11B freeze: owner truth -> post-owner/pre-latch gate layer -> latch handoff.
   let squatOwnerTruth: SquatOwnerTruth | null = null;
   let squatUiGate: SquatUiGate | null = null;
+  let squatPostOwnerGateLayer: SquatPostOwnerPreLatchGateLayer | null = null;
   // Hoisted: shared between gate computation (C) and observability enrichment (E)
   let squatSetupTraceForGate: SquatSetupPhaseTrace | undefined;
   let squatLiveSummaryForGate: ReturnType<typeof getLiveReadinessSummary> | undefined;
@@ -2040,8 +2119,10 @@ export function evaluateExerciseAutoProgress(
     // GUARDRAIL-DECOUPLE-RESET-01: for squat, guardrail.completionStatus is aligned to
     // squatPassCore.passDetected inside guardrails.getMotionCompleteness — legacy
     // highlightedMetrics.completionSatisfied no longer sole motion-complete owner.
-    squatUiGate = computeSquatUiProgressionLatchGate(
-      buildSquatUiProgressionLatchGateInput({
+    squatPostOwnerGateLayer = computeSquatPostOwnerPreLatchGateLayer({
+      stepId,
+      ownerTruth: squatOwnerTruth,
+      uiGateInput: buildSquatUiProgressionLatchGateInput({
         completionOwnerPassed: squatOwnerTruth.completionOwnerPassed,
         guardrailCompletionComplete: guardrail.completionStatus === 'complete',
         captureQualityInvalid: guardrail.captureQuality === 'invalid',
@@ -2060,30 +2141,11 @@ export function evaluateExerciseAutoProgress(
           squatCs
         ),
         setupMotionBlocked: setupMotionBlockedForGate,
-      })
-    );
-
-    // ── Step D: UI-only final-pass blockers ──
-    // These squat-specific suppression checks may set uiProgressionAllowed = false.
-    // They do NOT touch completionSatisfied, completionPassReason, or any motion truth field.
-    if (
-      squatUiGate.uiProgressionAllowed === true &&
-      shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass(stepId, squatCs, squatCycleDebug)
-    ) {
-      squatUiGate = {
-        uiProgressionAllowed: false,
-        uiProgressionBlockedReason: SQUAT_ULTRA_LOW_TRAJECTORY_SHORT_CYCLE_UI_BLOCKED_REASON,
-      };
-    }
-    if (
-      squatUiGate.uiProgressionAllowed === true &&
-      shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass(stepId, squatCs, squatCycleDebug)
-    ) {
-      squatUiGate = {
-        uiProgressionAllowed: false,
-        uiProgressionBlockedReason: SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON,
-      };
-    }
+      }),
+      squatCompletionState: squatCs,
+      squatCycleDebug,
+    });
+    squatUiGate = squatPostOwnerGateLayer.uiGate;
   }
 
   if (squatCycleDebug && stepId === 'squat' && squatRawIntegrityBlock != null) {
@@ -2191,8 +2253,7 @@ export function evaluateExerciseAutoProgress(
 
   const progressionPassed =
     stepId === 'squat'
-      ? squatOwnerTruth?.completionOwnerPassed === true &&
-        squatUiGate?.uiProgressionAllowed === true
+      ? squatPostOwnerGateLayer?.progressionPassed === true
       : stepId === 'overhead-reach'
         // PR-SIMPLE-PASS-01: confidence is quality-only for overhead — NOT a pass gate
         ? completionSatisfied &&
@@ -2209,20 +2270,23 @@ export function evaluateExerciseAutoProgress(
           !overheadRepHoldBlocks;
 
   /* PR-CAM-17: final pass 체인 가시성 — 어느 단계에서 pass가 막히는지 즉시 확인 가능. */
-  const finalPassBlockedReason = getFinalPassBlockedReason({
-    stepId,
-    completionSatisfied,
-    confidence,
-    passThresholdEffective,
-    effectivePassConfirmation,
-    guardrail,
-    reasons,
-    hardBlockerReasons,
-    overheadRepHoldBlocks,
-    squatOwnerTruth,
-    squatUiGate,
-    squatIntegrityBlockForPass,
-  });
+  const finalPassBlockedReason =
+    stepId === 'squat' && squatPostOwnerGateLayer != null
+      ? squatPostOwnerGateLayer.finalPassBlockedReason
+      : getFinalPassBlockedReason({
+          stepId,
+          completionSatisfied,
+          confidence,
+          passThresholdEffective,
+          effectivePassConfirmation,
+          guardrail,
+          reasons,
+          hardBlockerReasons,
+          overheadRepHoldBlocks,
+          squatOwnerTruth,
+          squatUiGate,
+          squatIntegrityBlockForPass,
+        });
   const finalPassEligible = progressionPassed; // = finalPassBlockedReason === null
 
   if (progressionPassed) {
