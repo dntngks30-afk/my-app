@@ -127,6 +127,7 @@ export type SquatCompletionOwnerStateSlice = {
   completionSatisfied?: boolean;
   completionPassReason?: string;
   currentSquatPhase?: string;
+  cycleComplete?: boolean;
   completionBlockedReason?: string | null;
 };
 
@@ -164,6 +165,13 @@ export function computeSquatCompletionOwnerTruth(input: {
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'not_standing_recovered',
+    };
+  }
+  if (cs.cycleComplete !== true) {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason: 'cycle_not_complete',
     };
   }
   const cpr = cs.completionPassReason;

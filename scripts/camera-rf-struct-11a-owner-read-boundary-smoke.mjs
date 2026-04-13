@@ -37,6 +37,7 @@ function makeSquatGate(opts) {
     completionPassReason: opts.completionPassReason ?? 'standard_cycle',
     completionBlockedReason: opts.completionBlockedReason ?? null,
     currentSquatPhase: opts.currentSquatPhase ?? 'standing_recovered',
+    cycleComplete: opts.cycleComplete ?? true,
     readinessStableDwellSatisfied: opts.readinessStableDwellSatisfied ?? true,
     setupMotionBlocked: opts.setupMotionBlocked ?? false,
   };
