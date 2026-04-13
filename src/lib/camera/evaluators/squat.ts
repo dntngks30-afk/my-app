@@ -355,6 +355,42 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     cycleDurationMs: state.cycleDurationMs,
   });
 
+  // ── PR-CAM-PASS-CORE-RESET-AND-REP-ID-ALIGN-01: rep-identity stale guard ──
+  //
+  // pass-core evaluates passWindowFrames (ALL valid) while completion-state evaluates
+  // completionFrames (arming slice). When the arming re-anchors to a LATER standing
+  // segment (e.g. post-rep standing), completionFrames no longer includes the old rep,
+  // and completion enters idle/not_armed — but passWindowFrames still contains the full
+  // old rep cycle → passCore.passDetected=true (stale).
+  //
+  // Detection: if passCore.standingRecoveredAtMs is strictly before the first frame of
+  // completionFrames (or completionFrames is empty), the pass-core result belongs to a
+  // prior rep window and must be suppressed to prevent the contradiction:
+  //   passCore.passDetected=true  +  completion=idle/not_armed  →  completion_truth_not_passed
+  //
+  // Suppression is safe: it cannot open a genuine blocked rep (genuinely blocked reps
+  // have passDetected=false already). It only resets a stale positive to false so that
+  // the debug observable and the downstream gate are coherent.
+  //
+  // This guard is sink-only for the passCoreStale flag; it does NOT become a gate owner.
+  const squatPassCoreFinal: typeof squatPassCore = (() => {
+    if (!squatPassCore.passDetected) return squatPassCore;
+    if (squatPassCore.standingRecoveredAtMs == null) return squatPassCore;
+    const completionWindowStartTs =
+      completionFrames.length > 0 ? completionFrames[0]!.timestampMs : null;
+    const isStale =
+      completionWindowStartTs == null ||
+      squatPassCore.standingRecoveredAtMs < completionWindowStartTs;
+    if (!isStale) return squatPassCore;
+    return {
+      ...squatPassCore,
+      passDetected: false,
+      passBlockedReason: 'stale_prior_rep',
+      repId: null,
+      passCoreStale: true,
+    };
+  })();
+
   // ── DESCENT-TRUTH-RESET-01: align event-cycle descentDetected to shared descent truth ──
   // event-cycle uses per-frame increments (>= 0.002) which can undercount with smoothing.
   // If the shared descent truth confirms descent but event-cycle's local rule misses it,
@@ -710,11 +746,20 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       /** PR-CAM-09: typed completion state — auto-progression reads this directly */
       squatCompletionState: state,
       /**
-       * PASS-AUTHORITY-RESET-01: immutable motion pass authority result.
-       * Set BEFORE applyUltraLowPolicyLock and before late-setup suppression.
+       * PASS-AUTHORITY-RESET-01 / PR-CAM-PASS-CORE-RESET-AND-REP-ID-ALIGN-01:
+       * Stale-guarded motion pass authority result.
+       *
+       * squatPassCore is the raw pass-core result; squatPassCoreFinal is the
+       * rep-identity-guarded version. A result is stale when pass-core's
+       * standingRecoveredAtMs is strictly before the current completion window's
+       * first frame (or when there are no completion frames at all — unarmed/idle).
+       * In that case passDetected is reset to false and passBlockedReason is
+       * set to 'stale_prior_rep', preventing the observable contradiction:
+       *   passCore.passDetected=true  +  completion_truth_not_passed
+       *
        * auto-progression reads squatPassCore.passDetected as final motion pass truth.
        */
-      squatPassCore,
+      squatPassCore: squatPassCoreFinal,
       /**
        * PASS-WINDOW-RESET-01: pass window build result.
        * Observability only — shows the frame window and baseline pass-core actually used.

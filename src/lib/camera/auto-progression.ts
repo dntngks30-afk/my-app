@@ -349,6 +349,28 @@ export interface SquatCycleDebug {
   eventBasedDescentPath?: boolean;
   /** PR-DOWNUP-GUARANTEE-03: ultra-shallow meaningful down-up rescue — trace only */
   ultraShallowMeaningfulDownUpRescueApplied?: boolean;
+
+  /**
+   * PR-CAM-PASS-CORE-RESET-AND-REP-ID-ALIGN-01: stale-rep observability.
+   * true when the pass-core result was suppressed because it belonged to a prior rep
+   * (passCore.standingRecoveredAtMs was before the current completion window).
+   * Sink-only — must NOT be read as a gate input.
+   */
+  passCoreStale?: boolean;
+  /**
+   * Rep identity observability: repId from the stale-guarded pass-core result.
+   * Non-null only when passCore.passDetected=true (same-rep pass confirmed).
+   * Sink-only.
+   */
+  passCoreRepId?: string | null;
+  /**
+   * PR-CAM-PASS-CORE-RESET-AND-REP-ID-ALIGN-01: same-rep split observability.
+   * true when pass-core is detected (not stale) for the current rep but the
+   * completion owner is not satisfied — indicates a residual cross-layer split.
+   * This mismatch must be explicit and never silently hidden.
+   * Sink-only — must NOT be read as a gate input.
+   */
+  passCoreRepIdentityMismatch?: boolean;
 }
 
 export interface ExerciseGateResult {
@@ -2323,7 +2345,21 @@ export function evaluateExerciseAutoProgress(
       setupMotionBlockReason: squatReadinessSetupRoutedSources?.setupMotionBlockReason,
       attemptStartedAfterReady: squatReadinessSetupRoutedSources?.attemptStartedAfterReady,
       successSuppressedBySetupPhase: setupSuppressed,
-    };
+      // PR-CAM-PASS-CORE-RESET-AND-REP-ID-ALIGN-01: stale-pass and rep-identity observability
+      passCoreStale:
+        (evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined)
+          ?.passCoreStale === true,
+      passCoreRepId:
+        (evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined)?.repId ?? null,
+      // Same-rep identity mismatch: pass-core says pass for current rep (not stale)
+      // but completion owner is not satisfied. Must be explicit — never silently hidden.
+      passCoreRepIdentityMismatch:
+        (evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined)?.passDetected ===
+          true &&
+        (evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined)?.passCoreStale !==
+          true &&
+        squatOwnerTruth?.completionOwnerPassed !== true,
+    } as SquatCycleDebug;
   }
 
   /** PR-4-GATE-FREEZE: Step E observability stamp — finalPassTimingBlockedReason (debug only) */
@@ -2444,13 +2480,13 @@ export function evaluateExerciseAutoProgress(
       squatCycleDebug &&
       squatMeaningfulAttemptAllowsRetryInsteadOfSevereFail(squatCycleDebug);
     if (squatSoftRetry) {
-      const enrichedSquatDebug: SquatCycleDebug = {
+      const enrichedSquatDebug = {
         ...squatCycleDebug,
         squatRetryContractObservation: {
           severeFailSoftenedToRetry: true,
           fallbackUsed: 'weak_cycle_retry_instead_of_survey_fail',
         },
-      };
+      } as SquatCycleDebug;
       return {
         status: 'retry',
         progressionState: 'retry_required',

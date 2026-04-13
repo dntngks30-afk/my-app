@@ -314,6 +314,14 @@ export interface SquatPassCoreResult {
 
   /** Machine-readable trace string for device debugging. */
   trace: string;
+
+  /**
+   * PR-CAM-PASS-CORE-RESET-AND-REP-ID-ALIGN-01: observability only.
+   * True when this result was suppressed by the stale-rep guard in evaluators/squat.ts.
+   * A suppressed result has passDetected=false and passBlockedReason='stale_prior_rep'.
+   * Sink-only — must NOT be used as a gate input.
+   */
+  passCoreStale?: boolean;
 }
 
 // ── Implementation ────────────────────────────────────────────────────────────
