@@ -1412,7 +1412,7 @@ export function shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass(
   if (cs.reversalConfirmedBy !== 'trajectory') return false;
   if (cs.trajectoryReversalRescueApplied !== true) return false;
   if (squatCycleDebug?.armingFallbackUsed !== true) return false;
-  if (cs.peakLatchedAtIndex !== 0) return false;
+  if (cs.peakLatchedAtIndex == null || cs.peakLatchedAtIndex > 0) return false;
   if (cs.committedAtMs == null || cs.reversalAtMs == null || cs.descendStartAtMs == null) return false;
   if (cs.descendStartAtMs !== cs.committedAtMs || cs.committedAtMs !== cs.reversalAtMs) return false;
   if (cs.squatDescentToPeakMs == null || cs.squatDescentToPeakMs > 0) return false;

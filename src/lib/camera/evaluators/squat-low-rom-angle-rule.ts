@@ -15,6 +15,7 @@ import {
 } from '@/lib/camera/pose-features';
 import type { EvaluatorResult } from './types';
 import type { SquatCompletionState } from '../squat-completion-state';
+import type { SquatPassCoreResult } from '../squat/pass-core';
 import { evaluateSquat as evaluateSquatBase } from './squat-meaningful-shallow';
 
 const LOW_ROM_LABEL_FLOOR = 0.07;
@@ -41,6 +42,8 @@ type LowRomAngleRuleCycleEvidence = {
   peakIndex: number;
   peakRelativeDepth: number;
   depthReturnDrop: number;
+  peakAtMs: number;
+  reversalAtMs: number;
   standingRecoveredAtMs: number;
   standingRecoveryHoldMs: number;
   standingRecoveryFrameCount: number;
@@ -48,6 +51,26 @@ type LowRomAngleRuleCycleEvidence = {
   reversalToStandingMs: number;
   reversalFrameCount: number;
 };
+
+function passCoreHasLegalTemporalEpoch(
+  passCore: SquatPassCoreResult | undefined
+): passCore is SquatPassCoreResult & {
+  descentStartAtMs: number;
+  peakAtMs: number;
+  reversalAtMs: number;
+  standingRecoveredAtMs: number;
+} {
+  return (
+    passCore?.passDetected === true &&
+    passCore.descentStartAtMs != null &&
+    passCore.peakAtMs != null &&
+    passCore.reversalAtMs != null &&
+    passCore.standingRecoveredAtMs != null &&
+    passCore.peakAtMs > passCore.descentStartAtMs &&
+    passCore.reversalAtMs > passCore.peakAtMs &&
+    passCore.standingRecoveredAtMs > passCore.reversalAtMs
+  );
+}
 
 function meanSafe(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -166,9 +189,11 @@ function isLowRomAngleRulePromotionEligible(
 
 export function detectLowRomAngleRuleCycle(
   frames: PoseFeaturesFrame[],
-  state: SquatCompletionState | undefined
+  state: SquatCompletionState | undefined,
+  passCore?: SquatPassCoreResult
 ): LowRomAngleRuleCycleEvidence | null {
   if (!isLowRomAngleRulePromotionEligible(state)) return null;
+  if (!passCoreHasLegalTemporalEpoch(passCore)) return null;
   if (state == null || state.baselineFrozen !== true || state.peakLatched !== true) {
     return null;
   }
@@ -310,19 +335,10 @@ export function detectLowRomAngleRuleCycle(
     return null;
   }
 
-  const peakAtMs =
-    typeof state.peakAtMs === 'number' && Number.isFinite(state.peakAtMs)
-      ? state.peakAtMs
-      : valid[peakIndex]!.timestampMs;
-  const descentStartAtMs =
-    typeof state.descendStartAtMs === 'number' && Number.isFinite(state.descendStartAtMs)
-      ? state.descendStartAtMs
-      : prePeak[Math.max(0, prePeak.length - LOW_ROM_MIN_PRE_PEAK_FRAMES)]!.timestampMs;
-  const descentToPeakMs =
-    typeof state.squatDescentToPeakMs === 'number' && Number.isFinite(state.squatDescentToPeakMs)
-      ? state.squatDescentToPeakMs
-      : peakAtMs - descentStartAtMs;
-  const reversalToStandingMs = tailRecovery.standingRecoveredAtMs - peakAtMs;
+  const peakAtMs = passCore.peakAtMs;
+  const reversalAtMs = passCore.reversalAtMs;
+  const descentToPeakMs = peakAtMs - passCore.descentStartAtMs;
+  const reversalToStandingMs = passCore.standingRecoveredAtMs - reversalAtMs;
 
   if (descentToPeakMs < MIN_DESCENT_TO_PEAK_MS_SHALLOW) return null;
   if (reversalToStandingMs < MIN_REVERSAL_TO_STANDING_MS_SHALLOW) return null;
@@ -331,9 +347,11 @@ export function detectLowRomAngleRuleCycle(
     peakIndex,
     peakRelativeDepth: state.relativeDepthPeak,
     depthReturnDrop,
-    standingRecoveredAtMs: tailRecovery.standingRecoveredAtMs,
+    peakAtMs,
+    reversalAtMs,
+    standingRecoveredAtMs: passCore.standingRecoveredAtMs,
     standingRecoveryHoldMs:
-      valid[valid.length - 1]!.timestampMs - tailRecovery.standingRecoveredAtMs,
+      valid[valid.length - 1]!.timestampMs - passCore.standingRecoveredAtMs,
     standingRecoveryFrameCount: tailRecovery.count,
     descentToPeakMs,
     reversalToStandingMs,
@@ -346,7 +364,8 @@ export function promoteAngleAwareLowRomRuleCycle(
   result: EvaluatorResult
 ): EvaluatorResult {
   const state = result.debug?.squatCompletionState as SquatCompletionState | undefined;
-  const evidence = detectLowRomAngleRuleCycle(frames, state);
+  const passCore = result.debug?.squatPassCore as SquatPassCoreResult | undefined;
+  const evidence = detectLowRomAngleRuleCycle(frames, state, passCore);
   if (evidence == null || state == null) return result;
 
   const nextState: SquatStateRecord = {
@@ -371,6 +390,8 @@ export function promoteAngleAwareLowRomRuleCycle(
     reversalConfirmedBy: 'rule',
     reversalDepthDrop: evidence.depthReturnDrop,
     reversalFrameCount: evidence.reversalFrameCount,
+    peakAtMs: evidence.peakAtMs,
+    reversalAtMs: evidence.reversalAtMs,
     reversalConfirmedAfterDescend: true,
     recoveryConfirmedAfterReversal: true,
     standingRecoveredAtMs: evidence.standingRecoveredAtMs,

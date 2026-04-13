@@ -83,6 +83,7 @@ export type CanonicalShallowCompletionContractBlockedReason =
   | 'recovery_or_finalize_missing'
   | 'setup_motion_blocked'
   | 'peak_series_start_contamination'
+  | 'temporal_epoch_order_blocked'
   | 'insufficient_signal'
   | 'policy_or_unknown'
   | null;
@@ -175,6 +176,14 @@ export interface CanonicalShallowCompletionContractInput {
   setupMotionBlocked?: boolean;
   /** peak latched at series start (index=0): contamination guard. */
   peakLatchedAtIndex?: number | null;
+  /** Owned descent epoch start; required before shallow ROM classification may close. */
+  descentStartAtMs?: number | null;
+  /** Owned peak timestamp; must be after descentStartAtMs. */
+  peakAtMs?: number | null;
+  /** Owned reversal timestamp; must be after peakAtMs. */
+  reversalAtMs?: number | null;
+  /** Owned standing recovery timestamp; must be after reversalAtMs. */
+  standingRecoveredAtMs?: number | null;
 
   // ── Section 6: TIMING INTEGRITY (PR-8) ──
   /**
@@ -379,8 +388,30 @@ function recoveryEvidenceFromInput(input: CanonicalShallowCompletionContractInpu
 function antiFalsePassFromInput(input: CanonicalShallowCompletionContractInput): boolean {
   return (
     input.setupMotionBlocked !== true &&
-    input.peakLatchedAtIndex !== 0 &&
+    input.peakLatchedAtIndex != null &&
+    input.peakLatchedAtIndex > 0 &&
+    temporalEpochOrderClearFromInput(input) &&
     input.evidenceLabel !== 'insufficient_signal'
+  );
+}
+
+function temporalEpochOrderClearFromInput(
+  input: CanonicalShallowCompletionContractInput
+): boolean {
+  const {
+    descentStartAtMs,
+    peakAtMs,
+    reversalAtMs,
+    standingRecoveredAtMs,
+  } = input;
+  return (
+    descentStartAtMs != null &&
+    peakAtMs != null &&
+    reversalAtMs != null &&
+    standingRecoveredAtMs != null &&
+    peakAtMs > descentStartAtMs &&
+    reversalAtMs > peakAtMs &&
+    standingRecoveredAtMs > reversalAtMs
   );
 }
 
@@ -693,6 +724,12 @@ function firstBlockedReason(input: CanonicalShallowCompletionContractInput): {
   }
   if (input.peakLatchedAtIndex === 0) {
     return { reason: 'peak_series_start_contamination', stage: 'anti_false_pass_blocked' };
+  }
+  if ((input.peakLatchedAtIndex ?? 0) <= 0) {
+    return { reason: 'peak_series_start_contamination', stage: 'anti_false_pass_blocked' };
+  }
+  if (!temporalEpochOrderClearFromInput(input)) {
+    return { reason: 'temporal_epoch_order_blocked', stage: 'anti_false_pass_blocked' };
   }
   if (input.evidenceLabel === 'insufficient_signal') {
     return { reason: 'insufficient_signal', stage: 'anti_false_pass_blocked' };

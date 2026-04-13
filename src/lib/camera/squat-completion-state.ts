@@ -1753,9 +1753,9 @@ function buildShallowClosureProofTrace(input: {
  * 200ms and 7500ms thresholds are NOT changed (PR-13 SSOT constraint).
  */
 const SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS = 800;
-const SHALLOW_OWNER_REOPEN_ULTRA_LOW_FLOOR = 0.07;
+const DISABLED_SHALLOW_OWNER_REOPEN_ULTRA_LOW_FLOOR = 0.07;
 
-function applyCompletionOwnerShallowAdmissibilityReopen(
+function disabledCompletionOwnerShallowAdmissibilityReopen(
   state: SquatCompletionState
 ): SquatCompletionState {
   if (state.completionSatisfied === true) return state;
@@ -1776,7 +1776,7 @@ function applyCompletionOwnerShallowAdmissibilityReopen(
   if (state.completionBlockedReason === 'not_armed') return state;
 
   const ownerReason =
-    (state.relativeDepthPeak ?? 0) < SHALLOW_OWNER_REOPEN_ULTRA_LOW_FLOOR
+    (state.relativeDepthPeak ?? 0) < DISABLED_SHALLOW_OWNER_REOPEN_ULTRA_LOW_FLOOR
       ? 'ultra_low_rom_complete_rule'
       : 'shallow_complete_rule';
   const passReason =
@@ -1790,7 +1790,6 @@ function applyCompletionOwnerShallowAdmissibilityReopen(
     completionMachinePhase: 'completed',
     cycleComplete: true,
     successPhaseAtOpen: 'standing_recovered',
-    completionOwnerReason: ownerReason,
   };
 }
 
@@ -1910,7 +1909,6 @@ export function evaluateSquatCompletionState(
   state = mergeCanonicalShallowContractResult(state, canonicalShallowContract);
 
   state = applyCanonicalShallowClosureFromContract(state);
-  state = applyCompletionOwnerShallowAdmissibilityReopen(state);
 
   /**
    * PR-CAM-EVENT-OWNER-DOWNGRADE-01: 이벤트 사이클은 탐지·관측만 — canonical closer 가 성공 클로저의 유일 경로.

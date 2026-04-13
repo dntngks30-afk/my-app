@@ -63,6 +63,22 @@ function hasStructuralCycleBannedNotes(notes: string[] | undefined): boolean {
   return notes.some((note) => STRUCTURAL_CYCLE_BANNED_NOTES.has(note));
 }
 
+function getStructuralTemporalEpochBlockReason(state: SquatCompletionState): string | null {
+  if (state.descendStartAtMs == null) return 'descent_start_missing';
+  if (state.peakLatchedAtIndex == null || state.peakLatchedAtIndex <= 0) {
+    return 'peak_series_start_contamination';
+  }
+  if (state.peakAtMs == null) return 'peak_time_missing';
+  if (state.peakAtMs <= state.descendStartAtMs) return 'peak_not_after_descent';
+  if (state.reversalAtMs == null) return 'reversal_time_missing';
+  if (state.reversalAtMs <= state.peakAtMs) return 'reversal_not_after_peak';
+  if (state.standingRecoveredAtMs == null) return 'standing_recovery_missing';
+  if (state.standingRecoveredAtMs <= state.reversalAtMs) {
+    return 'standing_recovery_not_after_reversal';
+  }
+  return null;
+}
+
 function structuralCycleUsesRelaxedTiming(
   state: Pick<
     SquatCompletionState,
@@ -126,6 +142,10 @@ export function shouldPromoteShallowStructuralCycleResult(
   }
   if (state.standingRecoveredAtMs == null) {
     return { ok: false, band, blockedReason: 'standing_recovery_missing' };
+  }
+  const temporalBlock = getStructuralTemporalEpochBlockReason(state);
+  if (temporalBlock != null) {
+    return { ok: false, band, blockedReason: temporalBlock };
   }
   if (state.recoveryConfirmedAfterReversal !== true) {
     return { ok: false, band, blockedReason: 'recovery_after_reversal_missing' };
