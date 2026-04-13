@@ -19,15 +19,6 @@ type ApplyCanonicalShallowClosureFromContractDeps = {
 
 export function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
   const rawPeakLatchedAtIndex = s.peakLatchedAtIndex ?? null;
-  const localPeakIdx = s.guardedShallowLocalPeakIndex ?? null;
-  const canonicalPeakLatchedAtIndex =
-    rawPeakLatchedAtIndex === 0 &&
-    s.officialShallowPathAdmitted === true &&
-    s.guardedShallowLocalPeakFound === true &&
-    localPeakIdx != null &&
-    localPeakIdx > 0
-      ? localPeakIdx
-      : rawPeakLatchedAtIndex;
 
   return {
     relativeDepthPeak: s.relativeDepthPeak ?? 0,
@@ -51,7 +42,11 @@ export function buildCanonicalShallowContractInputFromState(s: SquatCompletionSt
     standingFinalizeSatisfied: s.standingFinalizeSatisfied === true,
     standingRecoveryFinalizeReason: s.standingRecoveryFinalizeReason ?? null,
     setupMotionBlocked: s.setupMotionBlocked === true,
-    peakLatchedAtIndex: canonicalPeakLatchedAtIndex,
+    peakLatchedAtIndex: rawPeakLatchedAtIndex,
+    descentStartAtMs: s.descendStartAtMs ?? null,
+    peakAtMs: s.peakAtMs ?? null,
+    reversalAtMs: s.reversalAtMs ?? null,
+    standingRecoveredAtMs: s.standingRecoveredAtMs ?? null,
     evidenceLabel: s.evidenceLabel,
     officialShallowPathClosed: s.officialShallowPathClosed === true,
     guardedShallowTrajectoryClosureProofSatisfied:
