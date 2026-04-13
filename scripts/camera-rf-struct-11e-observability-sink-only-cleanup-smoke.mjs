@@ -29,7 +29,11 @@ const diagnosisBuilderSource = readFileSync(
 const debugPanelSource = readFileSync('src/components/camera/TraceDebugPanel.tsx', 'utf8');
 
 console.log('\nA. Trace type exposes sink-only provenance envelope (no runtime gate rewiring)');
-ok('A1: passChainProvenance field exists on squatCycle', traceTypeSource.includes('passChainProvenance?: {'));
+ok(
+  'A1: passChainProvenance field exists on squatCycle',
+  traceTypeSource.includes('passChainProvenance?: {') ||
+    traceTypeSource.includes('passChainProvenance?: SquatPassChainProvenance;')
+);
 ok('A2: owner source label locked to runtime_completion_owner', traceTypeSource.includes("ownerReasonSource: 'runtime_completion_owner';"));
 ok('A3: gate source label locked to runtime_ui_gate', traceTypeSource.includes("gateReasonSource: 'runtime_ui_gate';"));
 ok('A4: latch source label locked to runtime_final_latch', traceTypeSource.includes("latchSource: 'runtime_final_latch';"));

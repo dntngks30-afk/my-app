@@ -80,6 +80,17 @@ export type OverheadExportedPeakElevationProvenance =
   | 'legacy_metrics_arm_range_time_average_fallback'
   | 'unavailable';
 
+/**
+ * PR-RF-STRUCT-11E/11E-2: runtime-derived provenance labels for sink-only pass-chain mirrors.
+ * These labels are exported/displayed only; they are not runtime owner/gate/latch inputs.
+ */
+export type SquatPassChainProvenance = {
+  ownerReasonSource: 'runtime_completion_owner';
+  gateReasonSource: 'runtime_ui_gate';
+  latchSource: 'runtime_final_latch';
+  sinkOnly: true;
+};
+
 /** PR-4: 최종 결과 카테고리 */
 export type TraceOutcome =
   | 'ok'
@@ -127,7 +138,10 @@ export interface AttemptSnapshot {
     selectedWindowEndMs?: number | null;
     selectedWindowScore?: number | null;
   };
-  /** dev-only: real-device diagnosis ??pass/cue/latch 吏곴껐 ?고???媛?*/
+  /**
+   * Dev-only sink surface for real-device diagnosis.
+   * Runtime truth flows into this compact mirror; this block must not be read back as live truth.
+   */
   diagnosisSummary?: {
     stepId: string;
     readinessState?: string;
@@ -213,26 +227,23 @@ export interface AttemptSnapshot {
       standardOwnerEligible?: boolean;
       shadowEventOwnerEligible?: boolean;
       ownerFreezeVersion?: string;
-      /** PR-01: completion truth owner vs UI progression gate */
+      /** Owner truth mirrors (mirror-only; sourced from the runtime owner chain). */
       completionOwnerPassed?: boolean;
       completionOwnerReason?: string | null;
       completionOwnerBlockedReason?: string | null;
+      /** UI gate / final blocker mirrors (mirror-only; sourced after owner truth). */
       uiProgressionAllowed?: boolean;
       uiProgressionBlockedReason?: string | null;
       /** PR-RF-STRUCT-11E: owner/gate/latch reason provenance는 sink-only 관측 필드다. */
-      passChainProvenance?: {
-        ownerReasonSource: 'runtime_completion_owner';
-        gateReasonSource: 'runtime_ui_gate';
-        latchSource: 'runtime_final_latch';
-        sinkOnly: true;
-      };
-      /** Setup false-pass lock ??squatCycleDebug 誘몃윭 */
+      passChainProvenance?: SquatPassChainProvenance;
+      /** Readiness/setup mirrors (mirror-only; downstream of 11C routed source values). */
       liveReadinessSummaryState?: string;
       readinessStableDwellSatisfied?: boolean;
       setupMotionBlocked?: boolean;
       setupMotionBlockReason?: string | null;
       attemptStartedAfterReady?: boolean;
       successSuppressedBySetupPhase?: boolean;
+      /** Interpretation-only mirrors; not owner/gate/latch truth. */
       qualityOnlyWarnings?: string[];
       /** PR-04E1: depth/arming ?낅젰 trace */
       armingDepthSource?: string | null;
@@ -320,7 +331,7 @@ export interface AttemptSnapshot {
       limitationCount?: number;
       /** CAM-shallow-obs: attempt-evidence蹂대떎 ?쏀븳 愿痢?怨꾩빟(??Β룹쭊???꾩슜) */
       shallowObservationEligible?: boolean;
-      /** PR-HMM-03A: 而댄뙥??calibration (吏㏃? ?? */
+      /** Derived/sink-only calibration summary; not runtime decision input. */
       calib?: {
         rb: string | null;
         fb: string | null;

@@ -144,6 +144,7 @@ export function buildDiagnosisSummary(
       standardOwnerEligible: sc.standardOwnerEligible,
       shadowEventOwnerEligible: sc.shadowEventOwnerEligible,
       ownerFreezeVersion: sc.ownerFreezeVersion,
+      // PR-RF-STRUCT-11E-2: owner/gate/latch values below are runtime-derived mirrors only.
       completionOwnerPassed: sc.completionOwnerPassed,
       completionOwnerReason: sc.completionOwnerReason ?? null,
       completionOwnerBlockedReason: sc.completionOwnerBlockedReason ?? null,
@@ -155,12 +156,14 @@ export function buildDiagnosisSummary(
         latchSource: 'runtime_final_latch',
         sinkOnly: true,
       },
+      // Readiness/setup mirrors remain downstream of 11C routed inputs; no route redefinition here.
       liveReadinessSummaryState: sc.liveReadinessSummaryState,
       readinessStableDwellSatisfied: sc.readinessStableDwellSatisfied,
       setupMotionBlocked: sc.setupMotionBlocked,
       setupMotionBlockReason: sc.setupMotionBlockReason ?? null,
       attemptStartedAfterReady: sc.attemptStartedAfterReady,
       successSuppressedBySetupPhase: sc.successSuppressedBySetupPhase,
+      // Interpretation-only mirror. It must not be promoted into owner/gate/latch truth.
       qualityOnlyWarnings: sc.qualityOnlyWarnings,
       armingDepthSource: sc.armingDepthSource,
       armingDepthPeak: sc.armingDepthPeak,
@@ -243,6 +246,7 @@ export function buildDiagnosisSummary(
       squatInternalQuality: siq,
     };
 
+    // Derived interpretation summary for export/debug only; runtime pass meaning is unchanged.
     const resultSeverity = buildSquatResultSeveritySummary({
       completionTruthPassed: sc.completionTruthPassed === true,
       captureQuality: String(base.captureQuality ?? ''),
@@ -285,6 +289,7 @@ export function buildDiagnosisSummary(
         arm?: ReturnType<typeof buildSquatArmingAssistTraceCompact>;
         hra?: ReturnType<typeof buildSquatReversalAssistTraceCompact>;
       };
+      // Derived compact summaries are sink-only debugging aids, not live decision inputs.
       squatCycleExt.calib = buildSquatCalibrationTraceCompact(
         gate.evaluatorResult.debug?.squatCompletionState,
         gate.evaluatorResult.debug?.squatHmm

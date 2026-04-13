@@ -4,7 +4,7 @@
  * PR-4: dev-only trace 관측 패널
  * - 최근 attempt 수, export, clear
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   getRecentAttempts,
   clearAttempts,
@@ -38,6 +38,102 @@ interface TraceDebugPanelProps {
   };
   /** dev-only: live cueing 활성화 여부 (bottom-stall / overhead cue 진단용) */
   liveCueingEnabled?: boolean;
+}
+
+type DiagnosisSummary = NonNullable<AttemptSnapshot['diagnosisSummary']>;
+
+function renderProvenanceLine(label: string, children: ReactNode) {
+  return (
+    <p className="text-slate-500">
+      <span className="text-slate-400">{label}:</span> {children}
+    </p>
+  );
+}
+
+function renderSquatProvenanceSections(d: DiagnosisSummary) {
+  if (!d.squatCycle) return null;
+
+  const sq = d.squatCycle;
+  return (
+    <>
+      <p>peakDepth={sq.peakDepth ?? 'n/a'} bottom={sq.bottomDetected} recovery={sq.recoveryDetected} startBeforeBottom={sq.startBeforeBottom}</p>
+      <p className="text-slate-500">phase={sq.currentSquatPhase ?? 'n/a'} successPhase={sq.successPhaseAtOpen ?? 'n/a'} path={sq.completionPathUsed ?? 'n/a'} label={sq.evidenceLabel ?? 'n/a'}</p>
+      <p className="text-slate-500">blocked={sq.completionBlockedReason ?? 'n/a'} rejected={sq.completionRejectedReason ?? 'n/a'} cycleMs={sq.cycleDurationMs ?? 'n/a'} holdMs={sq.standingRecoveryHoldMs ?? 'n/a'}</p>
+      <p className="mt-1 font-medium text-slate-400">Owner mirrors</p>
+      {renderProvenanceLine(
+        'owner mirror-only',
+        <>
+          passed={String(sq.completionOwnerPassed ?? false)} ownerReason={d.squatCycle.completionOwnerReason ?? d.squatCycle.completionOwnerBlockedReason ?? 'n/a'} passOwner={sq.passOwner ?? 'n/a'} completionTruth={String(sq.completionTruthPassed ?? false)}
+        </>
+      )}
+      {renderProvenanceLine(
+        'cycle owner mirror',
+        <>
+          completionReason={sq.completionPassReason ?? 'n/a'} completionBlocked={sq.completionOwnerBlockedReason ?? sq.completionBlockedReason ?? 'n/a'} finalSuccessOwner={sq.finalSuccessOwner ?? 'n/a'}
+        </>
+      )}
+      <p className="mt-1 font-medium text-slate-400">Gate / final blocker mirrors</p>
+      {renderProvenanceLine(
+        'gate mirror-only',
+        <>
+          allowed={String(sq.uiProgressionAllowed ?? false)} gateReason={d.squatCycle.uiProgressionBlockedReason ?? 'n/a'} captureQuality={d.captureQuality} passConfirmed={String(d.passConfirmed)}
+        </>
+      )}
+      {renderProvenanceLine(
+        'final blocker mirror',
+        <>
+          finalPassTimingBlocked={sq.finalPassTimingBlockedReason ?? 'n/a'} progressionLatched={d.passLatched ? 'latched' : 'not_latched'}
+        </>
+      )}
+      <p className="mt-1 font-medium text-slate-400">Readiness / setup mirrors</p>
+      {renderProvenanceLine(
+        'readiness mirror-only',
+        <>
+          liveState={sq.liveReadinessSummaryState ?? d.readinessState ?? 'n/a'} dwell={String(sq.readinessStableDwellSatisfied ?? false)} setupMotionBlocked={String(sq.setupMotionBlocked ?? false)} setupReason={sq.setupMotionBlockReason ?? 'n/a'}
+        </>
+      )}
+      {renderProvenanceLine(
+        'setup source mirror',
+        <>
+          attemptStartedAfterReady={String(sq.attemptStartedAfterReady ?? false)} successSuppressedBySetup={String(sq.successSuppressedBySetupPhase ?? false)}
+        </>
+      )}
+      <p className="mt-1 font-medium text-slate-400">Latch / navigation mirrors</p>
+      {renderProvenanceLine(
+        'latch mirror-only',
+        <>
+          latch={d.passLatched ? 'latched' : 'not_latched'} autoNextObservation={d.autoNextObservation ?? 'n/a'} successPhase={sq.successPhaseAtOpen ?? 'n/a'}
+        </>
+      )}
+      {renderProvenanceLine(
+        'provenance',
+        <>
+          provenance owner={d.squatCycle.passChainProvenance?.ownerReasonSource ?? 'n/a'} gate={d.squatCycle.passChainProvenance?.gateReasonSource ?? 'n/a'} latch={d.squatCycle.passChainProvenance?.latchSource ?? 'n/a'} sinkOnly={String(d.squatCycle.passChainProvenance?.sinkOnly ?? false)}
+        </>
+      )}
+      <p className="mt-1 font-medium text-slate-400">Interpretation-only</p>
+      {renderProvenanceLine(
+        'interpretation-only',
+        <>
+          severity={sq.passSeverity ?? 'n/a'} result={sq.resultInterpretation ?? 'n/a'} qualityWarnings={sq.qualityWarningCount ?? sq.qualityOnlyWarnings?.length ?? 0} limitations={sq.limitationCount ?? 'n/a'}
+        </>
+      )}
+      <p className="text-slate-500">PR evidence: level={sq.squatEvidenceLevel ?? 'n/a'} cycleProof={sq.cycleProofPassed ?? 'n/a'} romBand={sq.romBand ?? 'n/a'} downgrade={sq.confidenceDowngradeReason ?? 'n/a'} insufficient={sq.insufficientSignalReason ?? 'n/a'}</p>
+      <p className="mt-1 font-medium text-slate-400">Derived / sink-only summaries</p>
+      {renderProvenanceLine(
+        'derived sink-only',
+        <>
+          ultraCand={sq.ultraLowRomCandidate ?? 'n/a'} ultraPass={sq.ultraLowRomGuardPassed ?? 'n/a'} ultraRej={sq.ultraLowRomRejectReason ?? 'n/a'} commitDelta={sq.downwardCommitmentDelta ?? 'n/a'}
+        </>
+      )}
+      {renderProvenanceLine(
+        'derived guard summaries',
+        <>
+          standingRej={sq.standingStillRejected ?? 'n/a'} fpBlock={sq.falsePositiveBlockReason ?? 'n/a'} ultraDisabled={sq.ultraLowRomPathDisabledOrGuarded ?? 'n/a'}
+        </>
+      )}
+    </>
+  );
 }
 
 export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebugPanelProps) {
@@ -256,22 +352,7 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
               <div className="mt-1 border-t border-slate-600/50 pt-1">
                 <p className="font-medium text-slate-400">Latest diagnosis</p>
                 <p>comp={d.completionSatisfied} passConf={d.passConfirmed} latched={d.passLatched}</p>
-                {d.squatCycle && (
-                  <>
-                    <p>peakDepth={d.squatCycle.peakDepth ?? 'n/a'} bottom={d.squatCycle.bottomDetected} recovery={d.squatCycle.recoveryDetected} startBeforeBottom={d.squatCycle.startBeforeBottom}</p>
-                    <p className="text-slate-500">phase={d.squatCycle.currentSquatPhase ?? 'n/a'} successPhase={d.squatCycle.successPhaseAtOpen ?? 'n/a'} path={d.squatCycle.completionPathUsed ?? 'n/a'} label={d.squatCycle.evidenceLabel ?? 'n/a'}</p>
-                    <p className="text-slate-500">blocked={d.squatCycle.completionBlockedReason ?? 'n/a'} rejected={d.squatCycle.completionRejectedReason ?? 'n/a'} cycleMs={d.squatCycle.cycleDurationMs ?? 'n/a'} holdMs={d.squatCycle.standingRecoveryHoldMs ?? 'n/a'}</p>
-                    <p className="text-slate-500">PR-A5: ultraCand={d.squatCycle.ultraLowRomCandidate ?? 'n/a'} ultraPass={d.squatCycle.ultraLowRomGuardPassed ?? 'n/a'} ultraRej={d.squatCycle.ultraLowRomRejectReason ?? 'n/a'} commitDelta={d.squatCycle.downwardCommitmentDelta ?? 'n/a'}</p>
-                    <p className="text-slate-500">PR-A6: standingRej={d.squatCycle.standingStillRejected ?? 'n/a'} fpBlock={d.squatCycle.falsePositiveBlockReason ?? 'n/a'} ultraDisabled={d.squatCycle.ultraLowRomPathDisabledOrGuarded ?? 'n/a'}</p>
-                    <p className="text-slate-500">PR evidence: level={d.squatCycle.squatEvidenceLevel ?? 'n/a'} cycleProof={d.squatCycle.cycleProofPassed ?? 'n/a'} romBand={d.squatCycle.romBand ?? 'n/a'} downgrade={d.squatCycle.confidenceDowngradeReason ?? 'n/a'} insufficient={d.squatCycle.insufficientSignalReason ?? 'n/a'}</p>
-                    <p className="text-slate-500">
-                      ownerReason={d.squatCycle.completionOwnerReason ?? d.squatCycle.completionOwnerBlockedReason ?? 'n/a'} gateReason={d.squatCycle.uiProgressionBlockedReason ?? 'n/a'} latch={d.passLatched ? 'latched' : 'not_latched'}
-                    </p>
-                    <p className="text-slate-500">
-                      provenance owner={d.squatCycle.passChainProvenance?.ownerReasonSource ?? 'n/a'} gate={d.squatCycle.passChainProvenance?.gateReasonSource ?? 'n/a'} latch={d.squatCycle.passChainProvenance?.latchSource ?? 'n/a'} sinkOnly={String(d.squatCycle.passChainProvenance?.sinkOnly ?? false)}
-                    </p>
-                  </>
-                )}
+                {renderSquatProvenanceSections(d)}
                 {d.overhead && (
                   <>
                     <p>peakElev={d.overhead.peakElevation ?? 'n/a'} peakCnt={d.overhead.peakCount} holdMs={d.overhead.holdDurationMs} holdTooShort={d.overhead.holdTooShort}</p>
