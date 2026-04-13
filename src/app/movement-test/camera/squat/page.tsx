@@ -875,6 +875,34 @@ export default function CameraSquatPage() {
     urlDebugFlags.diagModal,
   ]);
 
+  /**
+   * 11D contract: route execution owner.
+   * - Consumes already-latched success for currentStepKey only.
+   * - Does NOT decide pass truth (domain/page latch truth are upstream).
+   * - Enforces step-key idempotency for actual router.push.
+   */
+  const triggerLatchedNavigation = useCallback(
+    (reason: 'route_push_next_step' | 'debug_modal_closed') => {
+      if (!nextPath) return false;
+      if (passLatchedStepKeyRef.current !== currentStepKey) return false;
+      if (triggeredAdvanceStepKeyRef.current === currentStepKey) return false;
+
+      triggeredAdvanceStepKeyRef.current = currentStepKey;
+      setNavigationTriggered(true);
+      setNextTriggeredAt(new Date().toISOString());
+      setNextTriggerReason(reason);
+      console.info('[camera:squat-next]', {
+        currentStepKey,
+        nextPath,
+        triggeredAt: new Date().toISOString(),
+        reason,
+      });
+      router.push(nextPath);
+      return true;
+    },
+    [currentStepKey, nextPath, router]
+  );
+
   useEffect(() => {
     if (cameraPhase !== 'capturing') return;
     if (permissionDenied || !cameraReady || settledRef.current) {
@@ -1002,16 +1030,23 @@ export default function CameraSquatPage() {
   useEffect(() => {
     /* PR-CAM-30A: pass latch effect 는 capturing 에서만 동작 */
     if (cameraPhase !== 'capturing') return;
-    if (!effectivePassLatched) {
+    // 11D contract layer A: domain latch truth consumer (library-owned truth).
+    const domainLatchOpen = effectivePassLatched;
+    if (!domainLatchOpen) {
       return;
     }
 
-    if (passLatchedStepKeyRef.current !== currentStepKey) {
+    // 11D contract layer B: page success-event latch consumption (step-key one-shot).
+    const pageSuccessConsumedForStep = passLatchedStepKeyRef.current === currentStepKey;
+    if (!pageSuccessConsumedForStep) {
       latchPassEvent();
       return;
     }
 
-    if (triggeredAdvanceStepKeyRef.current === currentStepKey || navigationTriggered) {
+    // 11D contract layer D: route execution idempotency for current step.
+    const routeAlreadyTriggeredForStep =
+      triggeredAdvanceStepKeyRef.current === currentStepKey || navigationTriggered;
+    if (routeAlreadyTriggeredForStep) {
       return;
     }
 
@@ -1059,17 +1094,7 @@ export default function CameraSquatPage() {
         return;
       }
 
-      triggeredAdvanceStepKeyRef.current = currentStepKey;
-      setNavigationTriggered(true);
-      setNextTriggeredAt(new Date().toISOString());
-      setNextTriggerReason('route_push_next_step');
-      console.info('[camera:squat-next]', {
-        currentStepKey,
-        nextPath,
-        triggeredAt: new Date().toISOString(),
-        reason: 'route_push_next_step',
-      });
-      router.push(nextPath);
+      triggerLatchedNavigation('route_push_next_step');
     }, SQUAT_AUTO_ADVANCE_MS);
   }, [
     cameraPhase,
@@ -1079,7 +1104,7 @@ export default function CameraSquatPage() {
     latchPassEvent,
     navigationTriggered,
     nextPath,
-    router,
+    triggerLatchedNavigation,
   ]);
 
   useEffect(() => {
@@ -1485,24 +1510,8 @@ export default function CameraSquatPage() {
     setDebugModalGate(null);
     /* 타이머가 이미 만료되어 hold로 중단됐거나, 아직 실행 전인 경우 모두 커버:
      * triggeredAdvanceStepKeyRef를 확인해 이미 navigation이 나간 경우 중복 방지 */
-    if (
-      nextPath &&
-      passLatchedStepKeyRef.current === currentStepKey &&
-      triggeredAdvanceStepKeyRef.current !== currentStepKey
-    ) {
-      triggeredAdvanceStepKeyRef.current = currentStepKey;
-      setNavigationTriggered(true);
-      setNextTriggeredAt(new Date().toISOString());
-      setNextTriggerReason('debug_modal_closed');
-      console.info('[camera:squat-next]', {
-        currentStepKey,
-        nextPath,
-        triggeredAt: new Date().toISOString(),
-        reason: 'debug_modal_closed',
-      });
-      router.push(nextPath);
-    }
-  }, [currentStepKey, nextPath, router]);
+    triggerLatchedNavigation('debug_modal_closed');
+  }, [triggerLatchedNavigation]);
 
   const handleSuccessFreezeContinue = useCallback(() => {
     setShowSuccessFreezeOverlay(false);

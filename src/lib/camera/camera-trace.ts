@@ -219,6 +219,13 @@ export interface AttemptSnapshot {
       completionOwnerBlockedReason?: string | null;
       uiProgressionAllowed?: boolean;
       uiProgressionBlockedReason?: string | null;
+      /** PR-RF-STRUCT-11E: owner/gate/latch reason provenance는 sink-only 관측 필드다. */
+      passChainProvenance?: {
+        ownerReasonSource: 'runtime_completion_owner';
+        gateReasonSource: 'runtime_ui_gate';
+        latchSource: 'runtime_final_latch';
+        sinkOnly: true;
+      };
       /** Setup false-pass lock ??squatCycleDebug 誘몃윭 */
       liveReadinessSummaryState?: string;
       readinessStableDwellSatisfied?: boolean;

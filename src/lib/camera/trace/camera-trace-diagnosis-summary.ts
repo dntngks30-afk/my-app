@@ -149,6 +149,12 @@ export function buildDiagnosisSummary(
       completionOwnerBlockedReason: sc.completionOwnerBlockedReason ?? null,
       uiProgressionAllowed: sc.uiProgressionAllowed,
       uiProgressionBlockedReason: sc.uiProgressionBlockedReason ?? null,
+      passChainProvenance: {
+        ownerReasonSource: 'runtime_completion_owner',
+        gateReasonSource: 'runtime_ui_gate',
+        latchSource: 'runtime_final_latch',
+        sinkOnly: true,
+      },
       liveReadinessSummaryState: sc.liveReadinessSummaryState,
       readinessStableDwellSatisfied: sc.readinessStableDwellSatisfied,
       setupMotionBlocked: sc.setupMotionBlocked,

@@ -264,6 +264,12 @@ export function TraceDebugPanel({ liveReadiness, liveCueingEnabled }: TraceDebug
                     <p className="text-slate-500">PR-A5: ultraCand={d.squatCycle.ultraLowRomCandidate ?? 'n/a'} ultraPass={d.squatCycle.ultraLowRomGuardPassed ?? 'n/a'} ultraRej={d.squatCycle.ultraLowRomRejectReason ?? 'n/a'} commitDelta={d.squatCycle.downwardCommitmentDelta ?? 'n/a'}</p>
                     <p className="text-slate-500">PR-A6: standingRej={d.squatCycle.standingStillRejected ?? 'n/a'} fpBlock={d.squatCycle.falsePositiveBlockReason ?? 'n/a'} ultraDisabled={d.squatCycle.ultraLowRomPathDisabledOrGuarded ?? 'n/a'}</p>
                     <p className="text-slate-500">PR evidence: level={d.squatCycle.squatEvidenceLevel ?? 'n/a'} cycleProof={d.squatCycle.cycleProofPassed ?? 'n/a'} romBand={d.squatCycle.romBand ?? 'n/a'} downgrade={d.squatCycle.confidenceDowngradeReason ?? 'n/a'} insufficient={d.squatCycle.insufficientSignalReason ?? 'n/a'}</p>
+                    <p className="text-slate-500">
+                      ownerReason={d.squatCycle.completionOwnerReason ?? d.squatCycle.completionOwnerBlockedReason ?? 'n/a'} gateReason={d.squatCycle.uiProgressionBlockedReason ?? 'n/a'} latch={d.passLatched ? 'latched' : 'not_latched'}
+                    </p>
+                    <p className="text-slate-500">
+                      provenance owner={d.squatCycle.passChainProvenance?.ownerReasonSource ?? 'n/a'} gate={d.squatCycle.passChainProvenance?.gateReasonSource ?? 'n/a'} latch={d.squatCycle.passChainProvenance?.latchSource ?? 'n/a'} sinkOnly={String(d.squatCycle.passChainProvenance?.sinkOnly ?? false)}
+                    </p>
                   </>
                 )}
                 {d.overhead && (
