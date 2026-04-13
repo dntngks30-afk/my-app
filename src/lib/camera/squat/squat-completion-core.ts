@@ -1755,6 +1755,15 @@ export function evaluateSquatCompletionCore(
         )
       : undefined;
 
+  const sharedDescentStartAtMs =
+    options?.sharedDescentTruth?.descentDetected === true
+      ? options.sharedDescentTruth.descentStartAtMs
+      : null;
+  const sharedDescentStartFrame =
+    sharedDescentStartAtMs != null
+      ? depthFrames.find((f) => f.timestampMs === sharedDescentStartAtMs)
+      : undefined;
+
   const effectiveDescentStartFrame: {
     index: number;
     depth: number;
@@ -1765,7 +1774,7 @@ export function evaluateSquatCompletionCore(
       ? descentFrame.index <= trajectoryDescentStartFrame.index
         ? descentFrame
         : trajectoryDescentStartFrame
-      : descentFrame ?? trajectoryDescentStartFrame;
+      : descentFrame ?? trajectoryDescentStartFrame ?? sharedDescentStartFrame;
 
   /** phaseHint 기반 descent가 없으면 true — completionPassReason 구분용 */
   const eventBasedDescentPath =

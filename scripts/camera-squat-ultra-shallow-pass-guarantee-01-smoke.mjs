@@ -84,24 +84,38 @@ console.log('\ncamera-squat-ultra-shallow-pass-guarantee-01-smoke (PR-DOWNUP-GUA
  */
 const symptomUltraShallowAngles = [
   ...Array(8).fill(170),
-  165, 155, 145, 130, 115, 100, 95, 93, 92,
-  92, 93, 95, 100, 115, 130, 145, 160,
-  ...Array(10).fill(170),
+  166, 158, 150, 142, 134, 126, 118, 110, 104, 100, 98, 96, 94, 92,
+  92, 93, 94, 95, 96, 97, 98, 100, 103, 106, 110, 116, 124, 132, 142, 154, 166,
+  ...Array(12).fill(170),
 ];
 
 {
-  const landmarks = toLandmarks(makeKneeAngleSeries(100, symptomUltraShallowAngles, 80));
-  const gate = evaluateExerciseAutoProgress('squat', landmarks, squatStats(landmarks, 3200));
+  const landmarks = toLandmarks(makeKneeAngleSeries(100, symptomUltraShallowAngles, 100));
+  const gate = evaluateExerciseAutoProgress('squat', landmarks, squatStats(landmarks, 5600));
   const dbg = gate.squatCycleDebug;
   const cpr = dbg?.completionPassReason;
   const hm = gate.evaluatorResult?.debug?.highlightedMetrics;
+  const cs = gate.evaluatorResult?.debug?.squatCompletionState;
+  const passCore = gate.evaluatorResult?.debug?.squatPassCore;
   const rel = typeof hm?.relativeDepthPeak === 'number' ? hm.relativeDepthPeak : null;
+  const trace = {
+    status: gate.status,
+    finalPassBlockedReason: gate.finalPassBlockedReason,
+    completionPassReason: cpr,
+    completionBlockedReason: dbg?.completionBlockedReason,
+    canonicalShallowContractBlockedReason: dbg?.canonicalShallowContractBlockedReason,
+    descendStartAtMs: dbg?.descendStartAtMs,
+    peakAtMs: cs?.peakAtMs,
+    reversalAtMs: dbg?.reversalAtMs,
+    standingRecoveredAtMs: dbg?.standingRecoveredAtMs,
+    passCore,
+  };
 
-  ok('gate.status === pass', gate.status === 'pass', { status: gate.status });
-  ok('gate.completionSatisfied', gate.completionSatisfied === true, gate.completionSatisfied);
-  ok('gate.finalPassEligible', gate.finalPassEligible === true, gate.finalPassEligible);
-  ok('gate.finalPassBlockedReason == null', gate.finalPassBlockedReason == null, gate.finalPassBlockedReason);
-  ok('isFinalPassLatched(squat)', isFinalPassLatched('squat', gate) === true, isFinalPassLatched('squat', gate));
+  ok('gate.status === pass', gate.status === 'pass', trace);
+  ok('gate.completionSatisfied', gate.completionSatisfied === true, trace);
+  ok('gate.finalPassEligible', gate.finalPassEligible === true, trace);
+  ok('gate.finalPassBlockedReason == null', gate.finalPassBlockedReason == null, trace);
+  ok('isFinalPassLatched(squat)', isFinalPassLatched('squat', gate) === true, trace);
   ok(
     'relativeDepthPeak shallow class (not deep standard)',
     rel != null && rel >= 0.03 && rel < 0.22,
@@ -110,7 +124,7 @@ const symptomUltraShallowAngles = [
   ok(
     'completionPassReason shallow cycle (ultra or low)',
     cpr === 'ultra_low_rom_cycle' || cpr === 'low_rom_cycle',
-    cpr
+    trace
   );
   ok('not standard_cycle', cpr !== 'standard_cycle', cpr);
   ok('lineage owner is event truth', resolveSquatCompletionLineageOwner(cpr) === 'completion_truth_event', cpr);
