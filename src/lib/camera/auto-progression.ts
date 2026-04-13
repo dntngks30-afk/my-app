@@ -414,21 +414,66 @@ export function readSquatPassOwnerTruth(
   input: SquatPassOwnerTruthReadInput
 ): SquatOwnerTruth {
   const { squatCompletionState: cs, squatPassCore } = input;
+  const completionOwnerTruth = computeSquatCompletionOwnerTruth({
+    squatCompletionState: cs,
+  });
 
-  if (squatPassCore == null) {
-    return computeSquatCompletionOwnerTruth({
-      squatCompletionState: cs,
-    });
+  if (completionOwnerTruth.completionOwnerPassed !== true) {
+    return completionOwnerTruth;
+  }
+
+  if (squatPassCore != null && squatPassCore.passDetected !== true) {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason:
+        squatPassCore.passBlockedReason ?? 'pass_core_not_detected',
+    };
+  }
+
+  if (completionOwnerTruth.completionOwnerReason === 'not_confirmed') {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason: 'completion_owner_reason_not_confirmed',
+    };
   }
 
   return {
-    completionOwnerPassed: squatPassCore.passDetected === true,
-    completionOwnerReason: cs?.completionPassReason ?? null,
-    completionOwnerBlockedReason:
-      squatPassCore.passBlockedReason ??
-      cs?.completionBlockedReason ??
-      null,
+    completionOwnerPassed: true,
+    completionOwnerReason: completionOwnerTruth.completionOwnerReason,
+    completionOwnerBlockedReason: null,
   };
+}
+
+export function enforceSquatOwnerContradictionInvariant(input: {
+  ownerTruth: SquatOwnerTruth;
+  squatCompletionState: SquatCompletionState | undefined;
+}): SquatOwnerTruth {
+  const { ownerTruth, squatCompletionState } = input;
+  if (ownerTruth.completionOwnerPassed !== true) return ownerTruth;
+  if (ownerTruth.completionOwnerReason === 'not_confirmed') {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason: 'owner_contradiction:not_confirmed_reason',
+    };
+  }
+  if (ownerTruth.completionOwnerBlockedReason != null) {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason: 'owner_contradiction:blocked_reason_with_passed_owner',
+    };
+  }
+  if (squatCompletionState?.cycleComplete !== true) {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason: 'owner_contradiction:cycle_not_complete',
+    };
+  }
+  return ownerTruth;
 }
 
 function readSquatSetupTruthWithCompatFallback(input: {
@@ -801,9 +846,30 @@ function applySquatFinalBlockerVetoLayer(input: {
 export function getSquatPostOwnerFinalPassBlockedReason(input: {
   ownerTruth: SquatOwnerTruth;
   uiGate: SquatUiGate;
+  squatCompletionState: SquatCompletionState | undefined;
 }): string | null {
-  if (!input.ownerTruth.completionOwnerPassed) {
-    return input.ownerTruth.completionOwnerBlockedReason ?? 'completion_owner_blocked';
+  const ownerTruth = enforceSquatOwnerContradictionInvariant({
+    ownerTruth: input.ownerTruth,
+    squatCompletionState: input.squatCompletionState,
+  });
+  const completionState = input.squatCompletionState;
+  const completionPassReason = completionState?.completionPassReason;
+  const completionBlockedReason = completionState?.completionBlockedReason ?? null;
+  const completionTruthPassed = squatCompletionTruthPassed(
+    completionState?.completionSatisfied === true,
+    completionPassReason
+  );
+  const cycleComplete = completionState?.cycleComplete === true;
+
+  if (completionTruthPassed !== true) return 'completion_truth_not_passed';
+  if (completionPassReason === 'not_confirmed') return 'completion_reason_not_confirmed';
+  if (completionBlockedReason != null) return `completion_blocked:${completionBlockedReason}`;
+  if (!cycleComplete) return 'cycle_not_complete';
+  if (ownerTruth.completionOwnerReason === 'not_confirmed') {
+    return 'completion_owner_reason_not_confirmed';
+  }
+  if (!ownerTruth.completionOwnerPassed) {
+    return ownerTruth.completionOwnerBlockedReason ?? 'completion_owner_blocked';
   }
   if (!input.uiGate.uiProgressionAllowed) {
     return input.uiGate.uiProgressionBlockedReason ?? 'ui_progression_blocked';
@@ -818,24 +884,30 @@ export function computeSquatPostOwnerPreLatchGateLayer(input: {
   squatCompletionState: SquatCompletionState | undefined;
   squatCycleDebug: SquatCycleDebug | undefined;
 }): SquatPostOwnerPreLatchGateLayer {
+  const ownerTruth = enforceSquatOwnerContradictionInvariant({
+    ownerTruth: input.ownerTruth,
+    squatCompletionState: input.squatCompletionState,
+  });
   const uiGate = applySquatFinalBlockerVetoLayer({
     stepId: input.stepId,
-    uiGate: computeSquatUiProgressionLatchGate(input.uiGateInput),
+    uiGate: computeSquatUiProgressionLatchGate({
+      ...input.uiGateInput,
+      completionOwnerPassed: ownerTruth.completionOwnerPassed,
+    }),
     squatCompletionState: input.squatCompletionState,
     squatCycleDebug: input.squatCycleDebug,
   });
   const finalPassBlockedReason = getSquatPostOwnerFinalPassBlockedReason({
-    ownerTruth: input.ownerTruth,
+    ownerTruth,
     uiGate,
+    squatCompletionState: input.squatCompletionState,
   });
 
   return {
-    ownerTruth: input.ownerTruth,
+    ownerTruth,
     uiGate,
     finalPassBlockedReason,
-    progressionPassed:
-      input.ownerTruth.completionOwnerPassed === true &&
-      uiGate.uiProgressionAllowed === true,
+    progressionPassed: finalPassBlockedReason == null,
   };
 }
 
@@ -864,6 +936,7 @@ function getFinalPassBlockedReason(input: {
   overheadRepHoldBlocks: boolean;
   squatOwnerTruth: SquatOwnerTruth | null;
   squatUiGate: SquatUiGate | null;
+  squatCompletionState: SquatCompletionState | undefined;
   squatIntegrityBlockForPass: string | null;
 }): string | null {
   const {
@@ -885,6 +958,7 @@ function getFinalPassBlockedReason(input: {
     return getSquatPostOwnerFinalPassBlockedReason({
       ownerTruth: squatOwnerTruth,
       uiGate: squatUiGate,
+      squatCompletionState: input.squatCompletionState,
     });
   }
   if (!completionSatisfied) return 'completion_not_satisfied';
@@ -2328,6 +2402,7 @@ export function evaluateExerciseAutoProgress(
           overheadRepHoldBlocks,
           squatOwnerTruth,
           squatUiGate,
+          squatCompletionState: squatCs,
           squatIntegrityBlockForPass,
         });
   const finalPassEligible = progressionPassed; // = finalPassBlockedReason === null

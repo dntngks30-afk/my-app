@@ -63,11 +63,18 @@ function uiGateInput(overrides = {}) {
 }
 
 function computeLayer({ owner = ownerTruth(), gate = uiGateInput(), cs, debug } = {}) {
+  const completionState = {
+    completionSatisfied: true,
+    completionPassReason: 'standard_cycle',
+    completionBlockedReason: null,
+    cycleComplete: true,
+    ...(cs ?? {}),
+  };
   return computeSquatPostOwnerPreLatchGateLayer({
     stepId: 'squat',
     ownerTruth: owner,
     uiGateInput: gate,
-    squatCompletionState: cs,
+    squatCompletionState: completionState,
     squatCycleDebug: debug,
   });
 }
@@ -109,7 +116,16 @@ console.log('\nC. Owner reason is not overwritten by gate reason');
   ok('C2: final reason preserves owner blocked reason', result.finalPassBlockedReason === 'no_reversal_after_peak', result);
   ok(
     'C3: direct final reason helper matches layer exposure',
-    getSquatPostOwnerFinalPassBlockedReason({ ownerTruth: owner, uiGate: result.uiGate }) ===
+    getSquatPostOwnerFinalPassBlockedReason({
+      ownerTruth: owner,
+      uiGate: result.uiGate,
+      squatCompletionState: {
+        completionSatisfied: true,
+        completionPassReason: 'standard_cycle',
+        completionBlockedReason: null,
+        cycleComplete: true,
+      },
+    }) ===
       result.finalPassBlockedReason,
     result
   );
