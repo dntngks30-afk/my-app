@@ -426,6 +426,8 @@ export interface SquatCompletionState extends MotionCompletionResult {
   completionMachinePhase: SquatCompletionMachinePhase;
   /** PR-COMP-01: 통과 시 ROM 사이클 분류 / 미통과 not_confirmed */
   completionPassReason: SquatCompletionPassReason;
+  /** Completion-owner projection reason; trace/owner contract only, not a separate reopen source. */
+  completionOwnerReason?: string | null;
   /** PR-HMM-02B: HMM blocked-reason assist trace (pass gate 소유권은 rule 유지) */
   hmmAssistEligible?: boolean;
   hmmAssistApplied?: boolean;
@@ -1755,11 +1757,23 @@ function buildShallowClosureProofTrace(input: {
 const SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS = 800;
 const SHALLOW_OWNER_REOPEN_ULTRA_LOW_FLOOR = 0.07;
 
-function applyCompletionOwnerShallowAdmissibilityReopen(
+function hasCompletionOwnerShallowAdmissibilityReopenIntegrityBlocker(
+  state: Pick<
+    SquatCompletionState,
+    'completionBlockedReason' | 'canonicalShallowContractBlockedReason'
+  >
+): boolean {
+  if (state.completionBlockedReason != null) return true;
+  if (state.canonicalShallowContractBlockedReason != null) return true;
+  return false;
+}
+
+export function applyCompletionOwnerShallowAdmissibilityReopen(
   state: SquatCompletionState
 ): SquatCompletionState {
   if (state.completionSatisfied === true) return state;
   if (state.completionPassReason !== 'not_confirmed') return state;
+  if (hasCompletionOwnerShallowAdmissibilityReopenIntegrityBlocker(state)) return state;
   if (state.currentSquatPhase !== 'standing_recovered') return state;
   if (state.standingRecoveredAtMs == null) return state;
   if (state.attemptStarted !== true) return state;
@@ -1773,7 +1787,6 @@ function applyCompletionOwnerShallowAdmissibilityReopen(
   if (state.officialShallowReversalSatisfied !== true) return state;
   if (state.reversalConfirmedByRuleOrHmm !== true) return state;
   if (state.setupMotionBlocked === true) return state;
-  if (state.completionBlockedReason === 'not_armed') return state;
 
   const ownerReason =
     (state.relativeDepthPeak ?? 0) < SHALLOW_OWNER_REOPEN_ULTRA_LOW_FLOOR
