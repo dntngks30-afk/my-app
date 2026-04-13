@@ -126,6 +126,7 @@ export function squatCompletionTruthPassed(
 export type SquatCompletionOwnerStateSlice = {
   completionSatisfied?: boolean;
   completionPassReason?: string;
+  completionOwnerReason?: string | null;
   currentSquatPhase?: string;
   cycleComplete?: boolean;
   completionBlockedReason?: string | null;
@@ -182,9 +183,14 @@ export function computeSquatCompletionOwnerTruth(input: {
       completionOwnerBlockedReason: 'completion_pass_reason_invalid',
     };
   }
+  const explicitShallowOwnerReason =
+    cs.completionOwnerReason === 'shallow_complete_rule' ||
+    cs.completionOwnerReason === 'ultra_low_rom_complete_rule'
+      ? cs.completionOwnerReason
+      : null;
   return {
     completionOwnerPassed: true,
-    completionOwnerReason: cpr,
+    completionOwnerReason: explicitShallowOwnerReason ?? cpr,
     completionOwnerBlockedReason: null,
   };
 }

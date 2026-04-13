@@ -1753,6 +1753,46 @@ function buildShallowClosureProofTrace(input: {
  * 200ms and 7500ms thresholds are NOT changed (PR-13 SSOT constraint).
  */
 const SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS = 800;
+const SHALLOW_OWNER_REOPEN_ULTRA_LOW_FLOOR = 0.07;
+
+function applyCompletionOwnerShallowAdmissibilityReopen(
+  state: SquatCompletionState
+): SquatCompletionState {
+  if (state.completionSatisfied === true) return state;
+  if (state.completionPassReason !== 'not_confirmed') return state;
+  if (state.currentSquatPhase !== 'standing_recovered') return state;
+  if (state.standingRecoveredAtMs == null) return state;
+  if (state.attemptStarted !== true) return state;
+  if (state.descendConfirmed !== true) return state;
+  if (state.downwardCommitmentReached !== true) return state;
+  if (state.recoveryConfirmedAfterReversal !== true) return state;
+  if (state.eventCyclePromoted === true) return state;
+  if (state.officialShallowPathAdmitted !== true) return state;
+  if (state.officialShallowClosureProofSatisfied !== true) return state;
+  if (state.officialShallowAscentEquivalentSatisfied !== true) return state;
+  if (state.officialShallowReversalSatisfied !== true) return state;
+  if (state.reversalConfirmedByRuleOrHmm !== true) return state;
+  if (state.setupMotionBlocked === true) return state;
+  if (state.completionBlockedReason === 'not_armed') return state;
+
+  const ownerReason =
+    (state.relativeDepthPeak ?? 0) < SHALLOW_OWNER_REOPEN_ULTRA_LOW_FLOOR
+      ? 'ultra_low_rom_complete_rule'
+      : 'shallow_complete_rule';
+  const passReason =
+    ownerReason === 'ultra_low_rom_complete_rule' ? 'ultra_low_rom_cycle' : 'low_rom_cycle';
+
+  return {
+    ...state,
+    completionSatisfied: true,
+    completionBlockedReason: null,
+    completionPassReason: passReason,
+    completionMachinePhase: 'completed',
+    cycleComplete: true,
+    successPhaseAtOpen: 'standing_recovered',
+    completionOwnerReason: ownerReason,
+  };
+}
 
 /** PR-CAM-CANONICAL-SHALLOW-CONTRACT-01: 이미 계산된 state fact 만 canonical 입력으로 넘긴다. */
 function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
@@ -1870,6 +1910,7 @@ export function evaluateSquatCompletionState(
   state = mergeCanonicalShallowContractResult(state, canonicalShallowContract);
 
   state = applyCanonicalShallowClosureFromContract(state);
+  state = applyCompletionOwnerShallowAdmissibilityReopen(state);
 
   /**
    * PR-CAM-EVENT-OWNER-DOWNGRADE-01: 이벤트 사이클은 탐지·관측만 — canonical closer 가 성공 클로저의 유일 경로.
