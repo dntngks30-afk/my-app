@@ -52,24 +52,51 @@ type LowRomAngleRuleCycleEvidence = {
   reversalFrameCount: number;
 };
 
-function passCoreHasLegalTemporalEpoch(
-  passCore: SquatPassCoreResult | undefined
-): passCore is SquatPassCoreResult & {
+/**
+ * PR-CAM-EPOCH-SOURCE-RESTORE-01: resolve temporal epoch without circular dependency.
+ *
+ * Previously `passCoreHasLegalTemporalEpoch` required `passCore.passDetected === true`,
+ * which made this rescue circular: it could only run after the rep already passed,
+ * so it could never rescue pre-pass shallow cases that needed it.
+ *
+ * Fix: use legal temporal ordering as the sole gate.
+ * Timestamps are resolved from passCore first, then state as fallback.
+ * passDetected is NOT a required precondition — only timestamp legality is.
+ *
+ * Anti-false-pass integrity: the angle rule body (knee/hip flexion, extension streak,
+ * depth return, standing recovery tail) provides its own geometric evidence gates.
+ * These gates catch setup / sway / seated / mid-ascent false-pass patterns regardless
+ * of whether passDetected is true or false.
+ */
+function resolveTemporalEpochForLowRomRule(
+  passCore: SquatPassCoreResult | undefined,
+  state: SquatCompletionState | undefined,
+): {
   descentStartAtMs: number;
   peakAtMs: number;
   reversalAtMs: number;
   standingRecoveredAtMs: number;
-} {
-  return (
-    passCore?.passDetected === true &&
-    passCore.descentStartAtMs != null &&
-    passCore.peakAtMs != null &&
-    passCore.reversalAtMs != null &&
-    passCore.standingRecoveredAtMs != null &&
-    passCore.peakAtMs > passCore.descentStartAtMs &&
-    passCore.reversalAtMs > passCore.peakAtMs &&
-    passCore.standingRecoveredAtMs > passCore.reversalAtMs
-  );
+} | null {
+  const descentStartAtMs =
+    passCore?.descentStartAtMs ??
+    state?.descendStartAtMs ??
+    null;
+  const peakAtMs = passCore?.peakAtMs ?? state?.peakAtMs ?? null;
+  const reversalAtMs = passCore?.reversalAtMs ?? state?.reversalAtMs ?? null;
+  const standingRecoveredAtMs =
+    passCore?.standingRecoveredAtMs ??
+    state?.standingRecoveredAtMs ??
+    null;
+  if (
+    descentStartAtMs == null ||
+    peakAtMs == null ||
+    reversalAtMs == null ||
+    standingRecoveredAtMs == null ||
+    !(peakAtMs > descentStartAtMs) ||
+    !(reversalAtMs > peakAtMs) ||
+    !(standingRecoveredAtMs > reversalAtMs)
+  ) return null;
+  return { descentStartAtMs, peakAtMs, reversalAtMs, standingRecoveredAtMs };
 }
 
 function meanSafe(values: number[]): number | null {
@@ -193,7 +220,9 @@ export function detectLowRomAngleRuleCycle(
   passCore?: SquatPassCoreResult
 ): LowRomAngleRuleCycleEvidence | null {
   if (!isLowRomAngleRulePromotionEligible(state)) return null;
-  if (!passCoreHasLegalTemporalEpoch(passCore)) return null;
+  // PR-CAM-EPOCH-SOURCE-RESTORE-01: resolve epoch without requiring passDetected === true
+  const epoch = resolveTemporalEpochForLowRomRule(passCore, state);
+  if (epoch == null) return null;
   if (state == null || state.baselineFrozen !== true || state.peakLatched !== true) {
     return null;
   }
@@ -335,10 +364,11 @@ export function detectLowRomAngleRuleCycle(
     return null;
   }
 
-  const peakAtMs = passCore.peakAtMs;
-  const reversalAtMs = passCore.reversalAtMs;
-  const descentToPeakMs = peakAtMs - passCore.descentStartAtMs;
-  const reversalToStandingMs = passCore.standingRecoveredAtMs - reversalAtMs;
+  // PR-CAM-EPOCH-SOURCE-RESTORE-01: use resolved epoch timestamps (not passCore directly)
+  const peakAtMs = epoch.peakAtMs;
+  const reversalAtMs = epoch.reversalAtMs;
+  const descentToPeakMs = peakAtMs - epoch.descentStartAtMs;
+  const reversalToStandingMs = epoch.standingRecoveredAtMs - reversalAtMs;
 
   if (descentToPeakMs < MIN_DESCENT_TO_PEAK_MS_SHALLOW) return null;
   if (reversalToStandingMs < MIN_REVERSAL_TO_STANDING_MS_SHALLOW) return null;
@@ -349,9 +379,9 @@ export function detectLowRomAngleRuleCycle(
     depthReturnDrop,
     peakAtMs,
     reversalAtMs,
-    standingRecoveredAtMs: passCore.standingRecoveredAtMs,
+    standingRecoveredAtMs: epoch.standingRecoveredAtMs,
     standingRecoveryHoldMs:
-      valid[valid.length - 1]!.timestampMs - passCore.standingRecoveredAtMs,
+      valid[valid.length - 1]!.timestampMs - epoch.standingRecoveredAtMs,
     standingRecoveryFrameCount: tailRecovery.count,
     descentToPeakMs,
     reversalToStandingMs,

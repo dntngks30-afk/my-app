@@ -1755,17 +1755,66 @@ export function evaluateSquatCompletionCore(
         )
       : undefined;
 
-  const effectiveDescentStartFrame: {
+  /**
+   * PR-CAM-EPOCH-SOURCE-RESTORE-01: shared descent truth epoch frame — third source.
+   *
+   * When sharedDescentTruth confirms descent (descentDetected=true) and owns a legal
+   * descentStartAtMs, find the nearest pre-peak depthFrame to use as epoch anchor.
+   * This resolves the live half-state where descentDetected=true but
+   * effectiveDescentStartFrame was null because neither phaseHint='descent' nor
+   * trajectoryDescentStartFrame threshold were reached (ultra-shallow plateau reps).
+   *
+   * Guards:
+   * - sharedDescentTruth.descentDetected must be true (owned by shared truth)
+   * - sharedDescentTruth.descentStartAtMs must be non-null
+   * - chosen frame must be strictly pre-peak (within current legal rep window)
+   *
+   * This does NOT weaken the canonical temporal contract — it restores the missing
+   * input source that the contract requires to pass.
+   */
+  const sharedDescentEpochFrame: {
     index: number;
     depth: number;
     timestampMs: number;
     phaseHint: PoseFeaturesFrame['phaseHint'];
   } | undefined =
-    descentFrame != null && trajectoryDescentStartFrame != null
-      ? descentFrame.index <= trajectoryDescentStartFrame.index
-        ? descentFrame
-        : trajectoryDescentStartFrame
-      : descentFrame ?? trajectoryDescentStartFrame;
+    options?.sharedDescentTruth?.descentDetected === true &&
+    options.sharedDescentTruth.descentStartAtMs != null
+      ? (() => {
+          const targetMs = options.sharedDescentTruth!.descentStartAtMs!;
+          let best: (typeof depthFrames)[number] | undefined;
+          let bestDiff = Infinity;
+          for (const f of depthFrames) {
+            if (f.index >= peakFrame.index) continue;
+            const diff = Math.abs(f.timestampMs - targetMs);
+            if (diff < bestDiff) {
+              bestDiff = diff;
+              best = f;
+            }
+          }
+          return best;
+        })()
+      : undefined;
+
+  /**
+   * PR-CAM-EPOCH-SOURCE-RESTORE-01: pick earliest frame among all three legal sources.
+   * Source priority is by index (earliest in time wins — canonical temporal contract
+   * is preserved by downstream ordering checks, not by source selection here).
+   */
+  const effectiveDescentStartFrame: {
+    index: number;
+    depth: number;
+    timestampMs: number;
+    phaseHint: PoseFeaturesFrame['phaseHint'];
+  } | undefined = (() => {
+    const candidates = [
+      descentFrame,
+      trajectoryDescentStartFrame,
+      sharedDescentEpochFrame,
+    ].filter((f): f is NonNullable<typeof f> => f != null);
+    if (candidates.length === 0) return undefined;
+    return candidates.reduce((earliest, f) => (f.index < earliest.index ? f : earliest));
+  })();
 
   /** phaseHint 기반 descent가 없으면 true — completionPassReason 구분용 */
   const eventBasedDescentPath =
