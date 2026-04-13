@@ -95,21 +95,20 @@ console.log('\nA. canonical integrity blockers deny owner-local reopen');
   ok('A4: all candidate/proof flags true still cannot reopen blocked state', remainedBlocked(a4), a4);
 }
 
-console.log('\nB. blocker-free owner-local reopen still works only inside existing scope');
+// SINGLE-WRITER-RESTORATION: B section rewritten.
+// applyCompletionOwnerShallowAdmissibilityReopen is now a no-op (canonical closer is sole writer).
+// Even when all blocker guards are absent, the reopen must NOT fire.
+console.log('\nB. no-op guarantee: reopen never writes completionSatisfied=true');
 {
   const b1 = reopened(reopenCandidate({ relativeDepthPeak: 0.22 }));
-  ok('B1: blocker-free low_rom reopen survives', b1.completionSatisfied === true, b1);
-  ok('B1b: low_rom reopen keeps explicit owner reason', b1.completionOwnerReason === 'shallow_complete_rule', b1);
-  ok('B1c: low_rom pass reason is low_rom_cycle', b1.completionPassReason === 'low_rom_cycle', b1);
+  ok('B1: no-op reopen leaves completionSatisfied=false', remainedBlocked(b1), b1);
+  ok('B1b: no-op reopen does not set completionOwnerReason', b1.completionOwnerReason == null, b1);
+  ok('B1c: no-op reopen leaves pass reason not_confirmed', b1.completionPassReason === 'not_confirmed', b1);
 
   const b2 = reopened(reopenCandidate({ relativeDepthPeak: 0.04 }));
-  ok('B2: blocker-free ultra_low reopen survives', b2.completionSatisfied === true, b2);
-  ok(
-    'B2b: ultra_low reopen keeps explicit owner reason',
-    b2.completionOwnerReason === 'ultra_low_rom_complete_rule',
-    b2
-  );
-  ok('B2c: ultra_low pass reason is ultra_low_rom_cycle', b2.completionPassReason === 'ultra_low_rom_cycle', b2);
+  ok('B2: no-op reopen leaves ultra_low completionSatisfied=false', remainedBlocked(b2), b2);
+  ok('B2b: no-op reopen does not set ultra_low owner reason', b2.completionOwnerReason == null, b2);
+  ok('B2c: no-op reopen leaves pass reason not_confirmed', b2.completionPassReason === 'not_confirmed', b2);
 }
 
 console.log('\nC. existing false-positive reopen denials stay closed');

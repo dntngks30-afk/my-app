@@ -67,12 +67,15 @@ function run(state) {
   return { ownerTruth, gate };
 }
 
-console.log('\nA. safe reopen: explicit owner-level shallow reason');
+// SINGLE-WRITER-RESTORATION: The reopen no longer sets completionOwnerReason.
+// owner truth is a reader: it returns the completionPassReason directly.
+// A legit shallow close now uses 'official_shallow_cycle' (from canonical closer).
+console.log('\nA. canonical closer path: owner truth reads completionPassReason directly');
 {
   const state = {
     completionSatisfied: true,
-    completionPassReason: 'low_rom_cycle',
-    completionOwnerReason: 'shallow_complete_rule',
+    completionPassReason: 'official_shallow_cycle',
+    completionOwnerReason: null,
     completionBlockedReason: null,
     currentSquatPhase: 'standing_recovered',
     cycleComplete: true,
@@ -80,7 +83,7 @@ console.log('\nA. safe reopen: explicit owner-level shallow reason');
   };
   const r = run(state);
   ok('A1: owner pass true', r.ownerTruth.completionOwnerPassed === true, r.ownerTruth);
-  ok('A2: owner reason uses explicit shallow rule', r.ownerTruth.completionOwnerReason === 'shallow_complete_rule', r.ownerTruth);
+  ok('A2: owner reason is completionPassReason (official_shallow_cycle)', r.ownerTruth.completionOwnerReason === 'official_shallow_cycle', r.ownerTruth);
   ok('A3: final pass open', r.gate.progressionPassed === true && r.gate.finalPassBlockedReason == null, r.gate);
 }
 
@@ -104,12 +107,12 @@ console.log('\nB. false-positive lock: candidate-only shallow flags cannot reope
   ok('B2: final pass remains blocked', r.gate.progressionPassed === false, r.gate);
 }
 
-console.log('\nC. explicit reason must not reopen not_confirmed');
+console.log('\nC. not_confirmed pass reason always blocks owner truth');
 {
   const state = {
     completionSatisfied: true,
     completionPassReason: 'not_confirmed',
-    completionOwnerReason: 'shallow_complete_rule',
+    completionOwnerReason: null,
     completionBlockedReason: null,
     currentSquatPhase: 'standing_recovered',
     cycleComplete: true,

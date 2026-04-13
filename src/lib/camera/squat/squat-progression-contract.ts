@@ -183,14 +183,13 @@ export function computeSquatCompletionOwnerTruth(input: {
       completionOwnerBlockedReason: 'completion_pass_reason_invalid',
     };
   }
-  const explicitShallowOwnerReason =
-    cs.completionOwnerReason === 'shallow_complete_rule' ||
-    cs.completionOwnerReason === 'ultra_low_rom_complete_rule'
-      ? cs.completionOwnerReason
-      : null;
+  // SINGLE-WRITER-RESTORATION: owner truth is a reader, not a writer.
+  // shallow_complete_rule / ultra_low_rom_complete_rule were set by the removed reopen helper.
+  // With the reopen removed, completionOwnerReason is no longer set by a second writer;
+  // just pass through cpr (the canonical closer's pass reason, e.g. 'official_shallow_cycle').
   return {
     completionOwnerPassed: true,
-    completionOwnerReason: explicitShallowOwnerReason ?? cpr,
+    completionOwnerReason: cpr,
     completionOwnerBlockedReason: null,
   };
 }

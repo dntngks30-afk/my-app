@@ -19,15 +19,15 @@ type ApplyCanonicalShallowClosureFromContractDeps = {
 
 export function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
   const rawPeakLatchedAtIndex = s.peakLatchedAtIndex ?? null;
-  const localPeakIdx = s.guardedShallowLocalPeakIndex ?? null;
-  const canonicalPeakLatchedAtIndex =
-    rawPeakLatchedAtIndex === 0 &&
-    s.officialShallowPathAdmitted === true &&
-    s.guardedShallowLocalPeakFound === true &&
-    localPeakIdx != null &&
-    localPeakIdx > 0
-      ? localPeakIdx
-      : rawPeakLatchedAtIndex;
+
+  // SERIES-START-CONTAMINATION-FAIL-CLOSE:
+  // Always use the RAW peak latched index for the canonical contract's anti-false-pass guard.
+  // The previous local-peak substitution (localPeakIdx when raw===0) bypassed the
+  // `peakLatchedAtIndex !== 0` contamination check in antiFalsePassFromInput — allowing
+  // series-start contaminated reps to reach `official_shallow_cycle`.
+  // Per SSOT: peakLatchedAtIndex <= 0 (raw) is unconditionally a contamination signature.
+  // The local peak substitution was for trajectory bridge evidence only, not for the
+  // anti-false-pass gate. Using rawPeakLatchedAtIndex restores the correct fail-close.
 
   return {
     relativeDepthPeak: s.relativeDepthPeak ?? 0,
@@ -51,7 +51,7 @@ export function buildCanonicalShallowContractInputFromState(s: SquatCompletionSt
     standingFinalizeSatisfied: s.standingFinalizeSatisfied === true,
     standingRecoveryFinalizeReason: s.standingRecoveryFinalizeReason ?? null,
     setupMotionBlocked: s.setupMotionBlocked === true,
-    peakLatchedAtIndex: canonicalPeakLatchedAtIndex,
+    peakLatchedAtIndex: rawPeakLatchedAtIndex,
     evidenceLabel: s.evidenceLabel,
     officialShallowPathClosed: s.officialShallowPathClosed === true,
     guardedShallowTrajectoryClosureProofSatisfied:
