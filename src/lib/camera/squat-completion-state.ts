@@ -426,6 +426,8 @@ export interface SquatCompletionState extends MotionCompletionResult {
   completionMachinePhase: SquatCompletionMachinePhase;
   /** PR-COMP-01: 통과 시 ROM 사이클 분류 / 미통과 not_confirmed */
   completionPassReason: SquatCompletionPassReason;
+  /** PR-SQUAT-SHALLOW-ADMISSIBILITY-REOPEN-01: explicit owner-local shallow reopen reason. */
+  completionOwnerReason?: 'shallow_complete_rule' | 'ultra_low_rom_complete_rule' | null;
   /** PR-HMM-02B: HMM blocked-reason assist trace (pass gate 소유권은 rule 유지) */
   hmmAssistEligible?: boolean;
   hmmAssistApplied?: boolean;
@@ -1755,7 +1757,7 @@ function buildShallowClosureProofTrace(input: {
 const SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS = 800;
 const SHALLOW_OWNER_REOPEN_ULTRA_LOW_FLOOR = 0.07;
 
-function applyCompletionOwnerShallowAdmissibilityReopen(
+export function applyCompletionOwnerShallowAdmissibilityReopen(
   state: SquatCompletionState
 ): SquatCompletionState {
   if (state.completionSatisfied === true) return state;
@@ -1791,6 +1793,21 @@ function applyCompletionOwnerShallowAdmissibilityReopen(
     cycleComplete: true,
     successPhaseAtOpen: 'standing_recovered',
     completionOwnerReason: ownerReason,
+    officialShallowPathClosed: true,
+    closedAsOfficialRomCycle: true,
+    officialShallowPathBlockedReason: null,
+    ownerAuthoritativeShallowClosureSatisfied: true,
+    shallowAuthoritativeClosureReason:
+      ownerReason === 'ultra_low_rom_complete_rule'
+        ? 'ultra_low_rom_complete_rule'
+        : 'shallow_complete_rule',
+    shallowAuthoritativeClosureBlockedReason: null,
+    completionFinalizeMode: deriveSquatCompletionFinalizeMode({
+      completionSatisfied: true,
+      eventCyclePromoted: false,
+      assistSourcesWithoutPromotion: state.completionAssistSources ?? [],
+      officialShallowAuthoritativeClosure: true,
+    }),
   };
 }
 
