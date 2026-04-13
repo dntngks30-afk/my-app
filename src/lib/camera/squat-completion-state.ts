@@ -1882,8 +1882,55 @@ export function evaluateSquatCompletionState(
     }
   }
 
+  /**
+   * PR-CAM-CURRENT-REP-OWNERSHIP-REALIGN-01: Late depth freeze for ultra-shallow reps.
+   *
+   * The prefix loop above may fail to find attemptStarted=true for ultra-shallow reps
+   * whose admission requires recovery evidence (guardedUltraLowAttemptEligible). In
+   * early prefixes, recovery is not yet visible → attemptAdmissionSatisfied=false →
+   * downwardCommitmentReached=false → attemptStarted=false → depthFreeze stays null.
+   *
+   * When this happens, the full-frame evaluation produces attemptStarted=true (recovery
+   * IS detected) but baselineFrozen=false / peakLatched=false because depthFreeze is
+   * null. The canonical contract then blocks with rep_epoch_integrity_blocked.
+   *
+   * Fix: if the prefix loop failed but the full evaluation succeeds, retroactively
+   * compute depthFreeze from the full context and re-evaluate. This does NOT change
+   * any threshold — it ensures the freeze mechanism fires for the same motion that
+   * already earned attemptStarted=true.
+   */
+  let initialState = evaluateSquatCompletionCore(frames, options, depthFreeze);
+
+  if (depthFreeze === null && initialState.attemptStarted === true) {
+    const validFull = frames.filter((f) => f.isValid);
+    const fullRows = buildSquatCompletionDepthRows(validFull);
+    if (fullRows.length >= BASELINE_WINDOW) {
+      const win = fullRows.slice(0, BASELINE_WINDOW);
+      const src = initialState.relativeDepthPeakSource ?? 'primary';
+      const seedP = options?.seedBaselineStandingDepthPrimary;
+      const seedB = options?.seedBaselineStandingDepthBlended;
+      const finiteP = typeof seedP === 'number' && Number.isFinite(seedP);
+      const finiteB = typeof seedB === 'number' && Number.isFinite(seedB);
+      const frozenBaseline =
+        src === 'blended'
+          ? finiteB
+            ? seedB
+            : finiteP
+              ? seedP
+              : Math.min(...win.map((r) => r.depthCompletion))
+          : finiteP
+            ? seedP
+            : Math.min(...win.map((r) => r.depthPrimary));
+      depthFreeze = {
+        lockedRelativeDepthPeakSource: src,
+        frozenBaselineStandingDepth: frozenBaseline,
+      };
+      initialState = evaluateSquatCompletionCore(frames, options, depthFreeze);
+    }
+  }
+
   let state = resolveStandardDriftAfterShallowAdmission(
-    evaluateSquatCompletionCore(frames, options, depthFreeze),
+    initialState,
     frames,
     options,
     depthFreeze
