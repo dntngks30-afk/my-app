@@ -1937,6 +1937,37 @@ export function evaluateSquatCompletionState(
   );
 
   /**
+   * PR-RF-STRUCT-12 REP-REBIND-01: Hard-reset ghost rep timestamps at rep boundary.
+   *
+   * `evaluateSquatCompletionCore` always sets `peakAtMs` (global max-depth frame timestamp)
+   * regardless of whether a proper attempt was detected. When `attemptStarted=false`, that
+   * timestamp is a "ghost peak" — a frame-level artifact with no rep identity — and MUST
+   * NOT be readable by downstream layers as if it belonged to a real rep.
+   *
+   * Mixed-rep rule: all rep-bound timestamp fields must belong to the same rep identity
+   * or be undefined. `attemptStarted=false` is the reliable signal that no rep epoch
+   * has been established; clearing timestamps here makes it impossible for downstream
+   * code to combine a ghost `peakAtMs` from a pre-attempt frame with `reversalAtMs` or
+   * `standingRecoveredAtMs` from a later evaluation context.
+   *
+   * Fields cleared: descendStartAtMs, peakAtMs (the main ghost risk), committedAtMs,
+   * reversalAtMs, ascendStartAtMs, standingRecoveredAtMs.
+   * Completion truth fields (completionSatisfied, completionBlockedReason, etc.) are
+   * not touched — this is pure rep-bound timestamp hygiene.
+   */
+  if (state.attemptStarted !== true) {
+    state = {
+      ...state,
+      descendStartAtMs: undefined,
+      peakAtMs: undefined,
+      committedAtMs: undefined,
+      reversalAtMs: undefined,
+      ascendStartAtMs: undefined,
+      standingRecoveredAtMs: undefined,
+    };
+  }
+
+  /**
    * PR-1-COMPLETION-STATE-SLIMMING: Observability stamps before canonical contract.
    * stampPreCanonicalObservability adds observability fields only — completion truth
    * (completionSatisfied / completionBlockedReason / completionPassReason) is not modified.

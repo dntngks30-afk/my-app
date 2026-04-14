@@ -371,6 +371,19 @@ export interface SquatCycleDebug {
    * Sink-only — must NOT be read as a gate input.
    */
   passCoreRepIdentityMismatch?: boolean;
+  /**
+   * PR-RF-STRUCT-12: current-rep owner-read trace — rep consistency verification.
+   * Exposes readSquatCurrentRepPassTruth() result for real-device diagnostics.
+   * Sink-only — must NOT be read as a gate input.
+   */
+  squatOwnerRead?: {
+    repId: string | null;
+    ownerPassEligible: boolean;
+    ownerBlockedReason: string | null;
+    ownerSource: 'pass_core' | 'completion_state' | 'none';
+    timestampsConsistent: boolean;
+    reboundAtRepBoundary: boolean;
+  };
 }
 
 export interface ExerciseGateResult {
@@ -432,25 +445,147 @@ type SquatPostOwnerPreLatchGateLayer = {
   finalPassBlockedReason: string | null;
 };
 
+/**
+ * PR-RF-STRUCT-12: Typed current-rep pass truth adapter.
+ *
+ * Single downstream read boundary for squat final gating.
+ * Exposes one coherent current-rep payload:
+ *   - passEligible: pass-core truth (primary) or completion-state truth (fallback)
+ *   - rep-bound timestamps from the authoritative source
+ *   - ownerSource: which authority drove the result
+ *   - timestampsConsistent: whether all timestamps belong to the same rep
+ *
+ * Downstream gates must use this adapter, not scattered completion-state fields.
+ */
+export interface SquatCurrentRepPassTruth {
+  repId: string | null;
+  passEligible: boolean;
+  blockedReason: string | null;
+  ownerSource: 'pass_core' | 'completion_state' | 'none';
+  descendStartAtMs?: number;
+  peakAtMs?: number;
+  committedAtMs?: number;
+  reversalAtMs?: number;
+  ascendStartAtMs?: number;
+  standingRecoveredAtMs?: number;
+  currentPhase?: string;
+  evidenceLabel?: string;
+  completionMachinePhase?: string;
+  /** True when all rep-bound timestamps belong to the same rep identity. */
+  timestampsConsistent: boolean;
+}
+
+export function readSquatCurrentRepPassTruth(input: {
+  squatPassCore: SquatPassCoreResult | undefined;
+  squatCompletionState: SquatCompletionState | undefined;
+}): SquatCurrentRepPassTruth {
+  const { squatPassCore: pc, squatCompletionState: cs } = input;
+
+  if (pc != null) {
+    // pass-core is the single motion truth; use its timestamps as rep-bound anchors.
+    const commonFields = {
+      ownerSource: 'pass_core' as const,
+      descendStartAtMs: pc.descentStartAtMs,
+      peakAtMs: pc.peakAtMs,
+      committedAtMs: undefined,  // pass-core does not expose committedAtMs
+      reversalAtMs: pc.reversalAtMs,
+      ascendStartAtMs: undefined,  // pass-core does not expose ascendStartAtMs
+      standingRecoveredAtMs: pc.standingRecoveredAtMs,
+      currentPhase: cs?.currentSquatPhase,
+      evidenceLabel: cs?.evidenceLabel,
+      completionMachinePhase: cs?.completionMachinePhase,
+      timestampsConsistent: true,  // pass-core algorithms guarantee same-rep timestamps
+    };
+    if (pc.passDetected === true) {
+      return { repId: pc.repId ?? null, passEligible: true, blockedReason: null, ...commonFields };
+    }
+    return {
+      repId: null,
+      passEligible: false,
+      blockedReason: pc.passBlockedReason ?? 'pass_core_not_detected',
+      ...commonFields,
+    };
+  }
+
+  // Fallback: no pass-core — use completion-state owner truth.
+  if (cs == null) {
+    return {
+      repId: null,
+      passEligible: false,
+      blockedReason: 'no_squat_state',
+      ownerSource: 'none',
+      timestampsConsistent: false,
+    };
+  }
+
+  const completionOwnerTruth = computeSquatCompletionOwnerTruth({ squatCompletionState: cs });
+  // Timestamps are consistent when they coherently represent one attempt:
+  // peak before committed, committed before reversal, reversal before standing.
+  const peakTs = cs.peakAtMs;
+  const revTs = cs.reversalAtMs;
+  const standTs = cs.standingRecoveredAtMs;
+  const timestampsConsistent =
+    (peakTs == null || revTs == null || peakTs < revTs) &&
+    (revTs == null || standTs == null || revTs < standTs) &&
+    cs.attemptStarted === true;
+
+  return {
+    repId: cs.standingRecoveredAtMs != null ? `rep_${cs.standingRecoveredAtMs}` : null,
+    passEligible: completionOwnerTruth.completionOwnerPassed,
+    blockedReason: completionOwnerTruth.completionOwnerBlockedReason,
+    ownerSource: 'completion_state',
+    descendStartAtMs: cs.descendStartAtMs,
+    peakAtMs: cs.peakAtMs,
+    committedAtMs: cs.committedAtMs,
+    reversalAtMs: cs.reversalAtMs,
+    ascendStartAtMs: cs.ascendStartAtMs,
+    standingRecoveredAtMs: cs.standingRecoveredAtMs,
+    currentPhase: cs.currentSquatPhase,
+    evidenceLabel: cs.evidenceLabel,
+    completionMachinePhase: cs.completionMachinePhase,
+    timestampsConsistent,
+  };
+}
+
+/**
+ * PR-RF-STRUCT-12: pass-core-first owner truth.
+ *
+ * When pass-core provides a result, it is the sole motion truth.
+ * Completion-state must not veto a pass-core-confirmed rep.
+ *
+ * completionOwnerReason === 'pass_core_detected' signals that pass-core drove this result
+ * and downstream contradiction checks (cycleComplete, completionTruthPassed) must be skipped.
+ */
 export function readSquatPassOwnerTruth(
   input: SquatPassOwnerTruthReadInput
 ): SquatOwnerTruth {
   const { squatCompletionState: cs, squatPassCore } = input;
-  const completionOwnerTruth = computeSquatCompletionOwnerTruth({
-    squatCompletionState: cs,
-  });
 
-  if (completionOwnerTruth.completionOwnerPassed !== true) {
-    return completionOwnerTruth;
-  }
-
-  if (squatPassCore != null && squatPassCore.passDetected !== true) {
+  // RF-STRUCT-12: pass-core is the primary motion truth.
+  // When it has a definitive result, return it directly — do NOT gate on completion-state first.
+  if (squatPassCore != null) {
+    if (squatPassCore.passDetected === true) {
+      return {
+        completionOwnerPassed: true,
+        completionOwnerReason: 'pass_core_detected',
+        completionOwnerBlockedReason: null,
+      };
+    }
     return {
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason:
         squatPassCore.passBlockedReason ?? 'pass_core_not_detected',
     };
+  }
+
+  // Fallback: no pass-core available — use completion owner truth.
+  const completionOwnerTruth = computeSquatCompletionOwnerTruth({
+    squatCompletionState: cs,
+  });
+
+  if (completionOwnerTruth.completionOwnerPassed !== true) {
+    return completionOwnerTruth;
   }
 
   if (completionOwnerTruth.completionOwnerReason === 'not_confirmed') {
@@ -474,6 +609,13 @@ export function enforceSquatOwnerContradictionInvariant(input: {
 }): SquatOwnerTruth {
   const { ownerTruth, squatCompletionState } = input;
   if (ownerTruth.completionOwnerPassed !== true) return ownerTruth;
+
+  // RF-STRUCT-12: when pass-core drove the owner truth, skip completion-state
+  // contradiction checks — pass-core already enforces same-rep invariants internally.
+  if (ownerTruth.completionOwnerReason === 'pass_core_detected') {
+    return ownerTruth;
+  }
+
   if (ownerTruth.completionOwnerReason === 'not_confirmed') {
     return {
       completionOwnerPassed: false,
@@ -874,6 +1016,21 @@ export function getSquatPostOwnerFinalPassBlockedReason(input: {
     ownerTruth: input.ownerTruth,
     squatCompletionState: input.squatCompletionState,
   });
+
+  // RF-STRUCT-12: when pass-core drove the owner truth, completionTruthPassed is NOT
+  // the final authority. Skip the completion-state veto chain and go straight to UI gate.
+  // Blocked reason is pass-core's reason, not a stale completion-state reason.
+  if (ownerTruth.completionOwnerReason === 'pass_core_detected') {
+    if (!ownerTruth.completionOwnerPassed) {
+      return ownerTruth.completionOwnerBlockedReason ?? 'completion_owner_blocked';
+    }
+    if (!input.uiGate.uiProgressionAllowed) {
+      return input.uiGate.uiProgressionBlockedReason ?? 'ui_progression_blocked';
+    }
+    return null;
+  }
+
+  // Legacy completion-state path (unchanged): completion-state owns the decision.
   const completionState = input.squatCompletionState;
   const completionPassReason = completionState?.completionPassReason;
   const completionBlockedReason = completionState?.completionBlockedReason ?? null;
@@ -2353,12 +2510,30 @@ export function evaluateExerciseAutoProgress(
         (evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined)?.repId ?? null,
       // Same-rep identity mismatch: pass-core says pass for current rep (not stale)
       // but completion owner is not satisfied. Must be explicit — never silently hidden.
+      // RF-STRUCT-12: with pass-core-first owner alignment, this should always be false
+      // when pass-core passes — retained for regression observability.
       passCoreRepIdentityMismatch:
         (evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined)?.passDetected ===
           true &&
         (evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined)?.passCoreStale !==
           true &&
         squatOwnerTruth?.completionOwnerPassed !== true,
+      // RF-STRUCT-12: owner-read trace block — rep consistency verification.
+      squatOwnerRead: (() => {
+        const pc = evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined;
+        const repTruth = readSquatCurrentRepPassTruth({
+          squatPassCore: pc,
+          squatCompletionState: squatCs,
+        });
+        return {
+          repId: repTruth.repId,
+          ownerPassEligible: repTruth.passEligible,
+          ownerBlockedReason: repTruth.blockedReason,
+          ownerSource: repTruth.ownerSource,
+          timestampsConsistent: repTruth.timestampsConsistent,
+          reboundAtRepBoundary: squatCs?.attemptStarted !== true,
+        };
+      })(),
     } as SquatCycleDebug;
   }
 
