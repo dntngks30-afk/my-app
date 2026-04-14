@@ -68,6 +68,28 @@ export type CameraGuideTone = 'neutral' | 'warning' | 'success';
 /** PR-CAM-09: SquatEvidenceLevel 은 squat-evidence.ts 에 정의. 타입 re-export */
 export type { SquatEvidenceLevel };
 
+/**
+ * PR-A — Final Pass Truth Surface Freeze (parent: `docs/pr/SSOT_SHALLOW_SQUAT_PASS_TRUTH_MAP_2026_04.md`).
+ *
+ * Canonical squat **product** pass/fail at the post-owner + UI gate layer (including
+ * `applySquatFinalBlockerVetoLayer`). Same contract as `ExerciseGateResult.finalPassEligible` /
+ * `progressionPassed` for squat when produced by `evaluateExerciseAutoProgress`.
+ *
+ * `completionTruthPassed`, `completionPassReason`, `completionBlockedReason`, and `cycleComplete`
+ * are **not** this surface — they remain debug / compat sinks (PR-B may rebind consumers only).
+ *
+ * Additive trace fields (`finalPassTruthSource`, `motionOwnerSource`, `finalPassGrantedReason`)
+ * are sink-only and must **never** be read as gate inputs.
+ */
+export interface SquatFinalPassTruthSurface {
+  finalPassGranted: boolean;
+  finalPassBlockedReason: string | null;
+  finalPassTruthSource: 'post_owner_ui_gate';
+  motionOwnerSource: 'pass_core' | 'completion_state' | 'none';
+  /** Additive trace only — not a gate input. */
+  finalPassGrantedReason: string | null;
+}
+
 export interface SquatCycleDebug {
   armingSatisfied: boolean;
   currentSquatPhase?:
@@ -384,6 +406,11 @@ export interface SquatCycleDebug {
     timestampsConsistent: boolean;
     reboundAtRepBoundary: boolean;
   };
+  /**
+   * PR-A: mirrors `computeSquatPostOwnerPreLatchGateLayer().squatFinalPassTruth` for the same frame.
+   * Sink-only — must not be read as a gate input.
+   */
+  squatFinalPassTruth?: SquatFinalPassTruthSurface;
 }
 
 export interface ExerciseGateResult {
@@ -443,6 +470,8 @@ type SquatPostOwnerPreLatchGateLayer = {
   uiGate: SquatUiGate;
   progressionPassed: boolean;
   finalPassBlockedReason: string | null;
+  /** PR-A: frozen product pass surface — `progressionPassed === squatFinalPassTruth.finalPassGranted`. */
+  squatFinalPassTruth: SquatFinalPassTruthSurface;
 };
 
 /**
@@ -544,6 +573,24 @@ export function readSquatCurrentRepPassTruth(input: {
     evidenceLabel: cs.evidenceLabel,
     completionMachinePhase: cs.completionMachinePhase,
     timestampsConsistent,
+  };
+}
+
+/**
+ * PR-A: single builder for the frozen squat final-pass **product** truth surface.
+ * `motionOwnerSource` is additive trace only (from `readSquatCurrentRepPassTruth`) — not a gate input.
+ */
+export function buildSquatFinalPassTruthSurface(input: {
+  finalPassBlockedReason: string | null;
+  motionOwnerSource: 'pass_core' | 'completion_state' | 'none';
+}): SquatFinalPassTruthSurface {
+  const granted = input.finalPassBlockedReason == null;
+  return {
+    finalPassGranted: granted,
+    finalPassBlockedReason: input.finalPassBlockedReason,
+    finalPassTruthSource: 'post_owner_ui_gate',
+    motionOwnerSource: input.motionOwnerSource,
+    finalPassGrantedReason: granted ? 'post_owner_final_pass_clear' : null,
   };
 }
 
@@ -708,6 +755,12 @@ export function isGatePassReady(
  * Strict success contract: success UI, tone, and auto-advance must depend ONLY on this.
  * Aligned with progressionPassed: captureQuality 'low' and unstable_frame_timing must NOT
  * block final latch when passConfirmed (completionSatisfied + passConfirmationSatisfied) is true.
+ *
+ * PR-A (squat): when `gate.finalPassEligible` is present, latch **equals** the frozen post-owner
+ * final-pass surface from `evaluateExerciseAutoProgress` — it does not independently read
+ * `completionTruthPassed`, `completionBlockedReason`, or `cycleComplete`. Partial gate snapshots
+ * that omit `finalPassEligible` keep a narrow historical UI-gate compat path (tests only); real
+ * product frames must carry `finalPassEligible`.
  */
 export function isFinalPassLatched(
   stepId: CameraStepId,
@@ -720,6 +773,8 @@ export function isFinalPassLatched(
     | 'guardrail'
     | 'evaluatorResult'
     | 'squatCycleDebug'
+    | 'finalPassEligible'
+    | 'finalPassBlockedReason'
   >
 ): boolean {
   if (stepId === 'overhead-reach') {
@@ -745,11 +800,17 @@ export function isFinalPassLatched(
    * CAM-25 + PR-CAM-CORE-PASS-REASON-ALIGN-01: shallow ROM 완료(low/ultra × cycle/event)는 easy-only branch.
    * currentSquatPhase === 'standing_recovered' 는 reversal·ascend·recovery 전체를 함의한다.
    * standard_cycle(깊은 스쿼트)은 기존 임계(0.62)를 그대로 사용.
+   *
+   * PR-A: primary latch input is `finalPassEligible` (same surface as `progressionPassed` /
+   * `squatFinalPassTruth.finalPassGranted` for frames produced by the squat auto-progress path).
    */
   if (stepId === 'squat') {
-    const eligible = gate as ExerciseGateResult;
-    if (typeof eligible.finalPassEligible === 'boolean') {
-      return eligible.finalPassEligible === true;
+    if (typeof gate.finalPassEligible === 'boolean') {
+      return gate.finalPassEligible === true;
+    }
+    // Partial snapshots (e.g. structural smoke) may omit both `finalPassEligible` and evaluator debug.
+    if (gate.evaluatorResult?.debug == null) {
+      return false;
     }
     const cs = gate.evaluatorResult.debug?.squatCompletionState;
     const passReason = cs?.completionPassReason;
@@ -816,6 +877,12 @@ export function isFinalPassLatched(
         setupMotionBlocked: setupTruthForLatch.setupMotionBlocked,
       })
     );
+    /**
+     * PR-A: production frames always carry `finalPassEligible` from `evaluateExerciseAutoProgress` and use the branch
+     * above. This branch remains for **partial gate snapshots** (tests, structural mocks) that omit that field; it
+     * intentionally mirrors the historical latch helper (UI gate only) to avoid regressing script fixtures.
+     * Do not treat this path as the canonical product surface — prefer `finalPassEligible` on real gates.
+     */
     return uiGate.uiProgressionAllowed;
   }
 
@@ -1062,6 +1129,8 @@ export function computeSquatPostOwnerPreLatchGateLayer(input: {
   uiGateInput: SquatUiProgressionLatchGateInput;
   squatCompletionState: SquatCompletionState | undefined;
   squatCycleDebug: SquatCycleDebug | undefined;
+  /** PR-A: additive motion-owner trace for `squatFinalPassTruth` only — not used to compute blocked reason. */
+  squatPassCore?: SquatPassCoreResult | undefined;
 }): SquatPostOwnerPreLatchGateLayer {
   const ownerTruth = enforceSquatOwnerContradictionInvariant({
     ownerTruth: input.ownerTruth,
@@ -1081,12 +1150,21 @@ export function computeSquatPostOwnerPreLatchGateLayer(input: {
     uiGate,
     squatCompletionState: input.squatCompletionState,
   });
+  const motionOwnerSource = readSquatCurrentRepPassTruth({
+    squatPassCore: input.squatPassCore,
+    squatCompletionState: input.squatCompletionState,
+  }).ownerSource;
+  const squatFinalPassTruth = buildSquatFinalPassTruthSurface({
+    finalPassBlockedReason,
+    motionOwnerSource,
+  });
 
   return {
     ownerTruth,
     uiGate,
     finalPassBlockedReason,
     progressionPassed: finalPassBlockedReason == null,
+    squatFinalPassTruth,
   };
 }
 
@@ -2442,6 +2520,7 @@ export function evaluateExerciseAutoProgress(
       }),
       squatCompletionState: squatCs,
       squatCycleDebug,
+      squatPassCore,
     });
     squatUiGate = squatPostOwnerGateLayer.uiGate;
   }
@@ -2534,6 +2613,7 @@ export function evaluateExerciseAutoProgress(
           reboundAtRepBoundary: squatCs?.attemptStarted !== true,
         };
       })(),
+      squatFinalPassTruth: squatPostOwnerGateLayer?.squatFinalPassTruth,
     } as SquatCycleDebug;
   }
 
@@ -2616,6 +2696,11 @@ export function evaluateExerciseAutoProgress(
           squatCompletionState: squatCs,
           squatIntegrityBlockForPass,
         });
+  /**
+   * PR-A squat invariants (post-owner surface only):
+   *   progressionPassed === finalPassEligible === (finalPassBlockedReason == null)
+   *   === squatPostOwnerGateLayer?.squatFinalPassTruth.finalPassGranted (when layer present)
+   */
   const finalPassEligible = progressionPassed; // = finalPassBlockedReason === null
 
   if (progressionPassed) {
