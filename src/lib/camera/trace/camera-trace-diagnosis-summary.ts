@@ -243,8 +243,14 @@ export function buildDiagnosisSummary(
       squatInternalQuality: siq,
     };
 
+    // PR-B: pass/fail truth is the PR-A frozen final-pass surface (finalPassGranted); completionTruthPassed is debug sink.
+    // Allowed source order: gate.finalPassEligible > sc.squatFinalPassTruth?.finalPassGranted
+    const finalPassGrantedForSemantics =
+      gate.finalPassEligible === true || sc.squatFinalPassTruth?.finalPassGranted === true;
+    base.squatCycle.finalPassGrantedForSemantics = finalPassGrantedForSemantics;
+
     const resultSeverity = buildSquatResultSeveritySummary({
-      completionTruthPassed: sc.completionTruthPassed === true,
+      finalPassGranted: finalPassGrantedForSemantics,
       captureQuality: String(base.captureQuality ?? ''),
       qualityOnlyWarnings: sc.qualityOnlyWarnings,
       qualityTier: base.squatCycle.squatInternalQuality?.qualityTier ?? null,
@@ -255,7 +261,6 @@ export function buildDiagnosisSummary(
       resultSeverity.resultInterpretation as SquatResultInterpretation;
     base.squatCycle.qualityWarningCount = resultSeverity.qualityWarningCount;
     base.squatCycle.limitationCount = resultSeverity.limitationCount;
-
     const squatHmm = gate.evaluatorResult.debug?.squatHmm;
     if (squatHmm != null && base.squatCycle != null) {
       const squatCycleExt = base.squatCycle as typeof base.squatCycle & {

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PR-4: 카메라 시도 관측용 경량 trace
  * - pass/funnel/result 계약 변경 없음
  * - 요약 전용 snapshot, raw frame/landmark 저장 없음
@@ -313,6 +313,12 @@ export interface AttemptSnapshot {
       cycleDecisionTruth?: 'completion_state';
       /** PR-COMP-03 */
       squatInternalQuality?: SquatInternalQuality;
+      /**
+       * PR-B: PR-A SquatFinalPassTruthSurface.finalPassGranted와 동치.
+       * 진단/번들 소비자가 completionTruthPassed를 쓰지 않고 정본 표면을 읽을 수 있도록 전파한다.
+       * Sink-only — 게이트 입력으로 쓰면 안 됨.
+       */
+      finalPassGrantedForSemantics?: boolean;
       /** PR-CAM-SQUAT-RESULT-SEVERITY-01: pass truth + quality truth 湲곕컲 ?댁꽍(?먯젙 蹂寃??놁쓬) */
       passSeverity?: SquatPassSeverity;
       resultInterpretation?: SquatResultInterpretation;

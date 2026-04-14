@@ -408,8 +408,12 @@ export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): 
     const squatDebug = options.gate.squatCycleDebug;
     const mobileObs = extractSquatMobileObsFieldsFromGate(options.gate, options.effectivePassLatched);
     const siq = options.gate.evaluatorResult?.debug?.squatInternalQuality;
+    // PR-B: pass/fail truth is the PR-A frozen final-pass surface; completionTruthPassed is debug sink.
+    const snapshotFinalPassGranted =
+      options.gate.finalPassEligible === true ||
+      squatDebug?.squatFinalPassTruth?.finalPassGranted === true;
     const resultSeverity = buildSquatResultSeveritySummary({
-      completionTruthPassed: squatDebug?.completionTruthPassed === true,
+      finalPassGranted: snapshotFinalPassGranted,
       captureQuality: String(mobileObs.captureQuality ?? ''),
       qualityOnlyWarnings: squatDebug?.qualityOnlyWarnings,
       qualityTier: siq?.qualityTier ?? null,

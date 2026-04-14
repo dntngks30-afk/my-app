@@ -1,5 +1,9 @@
 /**
  * PR-CAM-SQUAT-RESULT-SEVERITY-01: 통과 truth·품질 truth만으로 결과 severity 표면화(엔진·판정 로직 없음).
+ *
+ * PR-B: pass/fail 정본은 PR-A에서 동결된 최종 패스 표면(`finalPassGranted`)이다.
+ * `completionTruthPassed`는 레거시 폴백으로만 남음 — 새 소비자는 `finalPassGranted`를 사용할 것.
+ * 두 인자가 모두 존재하면 `finalPassGranted`가 우선한다.
  */
 
 export type SquatPassSeverity =
@@ -23,7 +27,17 @@ export interface SquatResultSeveritySummary {
 }
 
 export function buildSquatResultSeveritySummary(args: {
-  completionTruthPassed: boolean;
+  /**
+   * PR-B: 스쿼트 최종 패스 표면(PR-A `SquatFinalPassTruthSurface.finalPassGranted`과 동치).
+   * 존재하면 항상 `completionTruthPassed`보다 우선한다.
+   */
+  finalPassGranted?: boolean;
+  /**
+   * PR-04D1 레거시 — `finalPassGranted`가 없을 때만 사용.
+   * 신규 소비자는 `finalPassGranted`를 명시적으로 전달할 것.
+   * @deprecated Use `finalPassGranted` instead.
+   */
+  completionTruthPassed?: boolean;
   captureQuality: string;
   qualityOnlyWarnings?: string[];
   qualityTier?: string | null;
@@ -34,7 +48,14 @@ export function buildSquatResultSeveritySummary(args: {
   const limitationCount = limitations.length;
   const qualityTier = args.qualityTier ?? null;
 
-  if (args.completionTruthPassed !== true) {
+  // PR-B: `finalPassGranted`가 존재하면 항상 정본으로 사용.
+  // 없으면 레거시 `completionTruthPassed`로 폴백(기존 스모크·이전 소비자 유지).
+  const passed =
+    typeof args.finalPassGranted === 'boolean'
+      ? args.finalPassGranted
+      : args.completionTruthPassed === true;
+
+  if (passed !== true) {
     return {
       passSeverity: 'failed',
       resultInterpretation: 'movement_not_completed',
