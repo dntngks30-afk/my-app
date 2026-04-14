@@ -169,12 +169,17 @@ const SHALLOW_FIXTURE_REGISTRY = {
  *      - Engine must pass; if not, fail loudly.
  *      - Fixture identity must remain in matrix.
  *
- * @param {string} fixtureId - unique key in SHALLOW_FIXTURE_REGISTRY
+ * @param {string} fixtureId - unique key in the registry
  * @param {object} gate - result of evaluateExerciseAutoProgress
- * @param {function} [extraAssertions] - optional additional assertions when engine passes
+ * @param {function|null} [extraAssertions] - optional additional assertions when engine passes
+ * @param {object|null} [registryOverride] - if provided, use this registry instead of
+ *   SHALLOW_FIXTURE_REGISTRY. Only real (non-override) calls are tracked in `matrix`.
  */
-function runWithPromotionState(fixtureId, gate, extraAssertions) {
-  const entry = SHALLOW_FIXTURE_REGISTRY[fixtureId];
+function runWithPromotionState(fixtureId, gate, extraAssertions, registryOverride) {
+  const registry = registryOverride ?? SHALLOW_FIXTURE_REGISTRY;
+  const isRealFixture = registryOverride == null;
+
+  const entry = registry[fixtureId];
   if (!entry) {
     failed++;
     console.error(`  FAIL: runWithPromotionState: unknown fixtureId "${fixtureId}" — every fixture must be registered`);
@@ -182,8 +187,11 @@ function runWithPromotionState(fixtureId, gate, extraAssertions) {
     return;
   }
 
-  // Record fixture in matrix — must always be visible (§7.1, §7.2, §8.2)
-  matrix.push({ fixtureId, state: entry.state, enginePasses: gate.finalPassEligible === true });
+  // Record real fixtures in matrix — must always be visible (§7.1, §7.2, §8.2).
+  // Synthetic mechanism-test calls (registryOverride provided) are not tracked here.
+  if (isRealFixture) {
+    matrix.push({ fixtureId, state: entry.state, enginePasses: gate.finalPassEligible === true });
+  }
 
   const enginePasses = gate.status === 'pass' && gate.completionSatisfied === true && gate.finalPassEligible === true;
 
@@ -228,109 +236,38 @@ function runWithPromotionState(fixtureId, gate, extraAssertions) {
 }
 
 /**
- * §11 Matrix C downgrade guard:
- * If a fixture is `permanent_must_pass` in the registry, a SKIP attempt
- * on that fixture is a hard failure — no "temporarily ignore" allowed.
+ * Expect-failure helper for downgrade/permanent enforcement tests.
  *
- * We test this by constructing a synthetic scenario: we pass a gate result
- * that does NOT pass (simulating a regression) to `runWithPromotionState`
- * with a `permanent_must_pass` fixture. The harness must fail loudly.
+ * Calls `runWithPromotionState` through the SAME consumer path, but in an
+ * isolated counter context. Asserts that the consumer actually fired at least
+ * one failure (proving the enforcement mechanism executed).
  *
- * We do this in an isolated sub-harness so it does not corrupt the main
- * passed/failed counters.
+ * This replaces the previous boolean-only simulation (`wouldHardFail = !x`).
+ *
+ * @param {string} label - assertion label shown in test output
+ * @param {string} fixtureId
+ * @param {object} gate
+ * @param {object} registry - must contain a `permanent_must_pass` entry for fixtureId
  */
-function runDowngradeGuardTest() {
-  // Capture harness state, run in isolation
+function expectConsumerToFail(label, fixtureId, gate, registry) {
   const savedPassed = passed;
   const savedFailed = failed;
   const savedExitCode = process.exitCode;
 
-  let subPassed = 0;
-  let subFailed = 0;
+  // Note: console.error output from within runWithPromotionState is expected here.
+  // It is prefixed below so reviewers can distinguish expected from unexpected output.
+  console.log(`  [expect-failure run] driving permanent branch through same consumer path:`);
+  runWithPromotionState(fixtureId, gate, undefined, registry);
 
-  function subOk(name, cond) {
-    if (cond) {
-      subPassed++;
-      console.log(`  PASS: ${name}`);
-    } else {
-      subFailed++;
-      console.error(`  FAIL: ${name}`);
-    }
-  }
+  const firedFailures = failed - savedFailed;
 
-  // Synthetic permanent fixture — represents a fixture that was once promoted
-  // (e.g. an engine recovery PR flipped it to permanent_must_pass).
-  const SYNTHETIC_REGISTRY_PERMANENT = {
-    'synthetic_deep_for_downgrade_test': {
-      state: 'permanent_must_pass',
-      description: 'Synthetic fixture: represents a previously-promoted permanent fixture',
-    },
-  };
+  // Restore counters — this was an intentional failure scenario
+  passed = savedPassed;
+  failed = savedFailed;
+  process.exitCode = savedExitCode ?? 0;
 
-  // Case 1: permanent + engine PASSES → harness should assert pass (no SKIP)
-  // We use the deep squat gate (already known to pass from PR-D context)
-  const deepAngles = [
-    ...Array(10).fill(170),
-    165, 160, 150, 140, 130, 120, 110, 100, 90, 80, 70, 60,
-    60, 60,
-    70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 165, 170,
-    ...Array(4).fill(170),
-  ];
-  const gateDeep = evaluateExerciseAutoProgress(
-    'squat',
-    toLandmarks(makeKneeAngleSeries(5000, deepAngles, 80)),
-    squatStats(toLandmarks(makeKneeAngleSeries(5000, deepAngles, 80)))
-  );
-
-  const deepPasses = gateDeep.status === 'pass' && gateDeep.completionSatisfied === true && gateDeep.finalPassEligible === true;
-  subOk(
-    'Downgrade guard setup: deep gate passes (synthetic permanent fixture baseline)',
-    deepPasses
-  );
-
-  // Case 2: permanent + engine DOES NOT PASS → harness must fail loudly (no hidden SKIP)
-  // We simulate a regression by using a standing-still gate (known to not pass).
-  const standingAngles = Array(30).fill(170);
-  const gateStanding = evaluateExerciseAutoProgress(
-    'squat',
-    toLandmarks(makeKneeAngleSeries(6000, standingAngles, 80)),
-    squatStats(toLandmarks(makeKneeAngleSeries(6000, standingAngles, 80)))
-  );
-
-  const standingPasses = gateStanding.status === 'pass' && gateStanding.finalPassEligible === true;
-
-  // The harness MUST treat this as a failure — SKIP is not allowed for permanent fixtures.
-  // We simulate what `runWithPromotionState` would do for a permanent fixture
-  // when the engine does NOT pass, and assert it would report failure.
-  const wouldHardFail = !standingPasses;  // permanent + engine fails = hard failure required
-  subOk(
-    'Downgrade guard: permanent fixture that loses engine pass → harness reports failure (no SKIP)',
-    wouldHardFail
-  );
-
-  // Case 3: conditional fixture with SKIP path — verify SKIP does NOT become a hard failure
-  // (i.e., confirm conditional fixtures are still allowed to SKIP gracefully)
-  const entryConditional = SHALLOW_FIXTURE_REGISTRY['shallow_92deg'];
-  subOk(
-    'Downgrade guard: conditional fixture has skipReason (SKIP is permitted)',
-    entryConditional?.state === 'conditional_until_main_passes' &&
-      typeof entryConditional.skipReason === 'string' &&
-      entryConditional.skipReason.length > 0,
-    entryConditional
-  );
-
-  // Case 4: a fixture that was permanent and is now "silently removed from registry"
-  //         must be detectable — we assert all registered fixtures remain in matrix
-  //         after runWithPromotionState completes.
-  // (This is verified at the end of the script in the matrix completeness check.)
-
-  console.log(`  [downgrade guard sub-result] ${subPassed} passed, ${subFailed} failed`);
-
-  // Propagate sub-harness results into main harness
-  passed = savedPassed + subPassed;
-  failed = savedFailed + subFailed;
-  if (subFailed > 0) process.exitCode = 1;
-  else process.exitCode = savedExitCode;
+  // Assert that the consumer actually fired at least one failure
+  ok(label, firedFailures > 0, { firedFailures });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -417,31 +354,38 @@ console.log('\n━━ Matrix A — conditional fixture behavior (conditional_unt
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// §11 Matrix B — permanent fixture behavior (permanent_must_pass)
+// §11 Matrix B — permanent fixture behavior (permanent_must_pass mechanism)
 //
-// NOTE: Neither shallow nor ultra-low-ROM fixture is currently `permanent_must_pass`
+// Neither shallow nor ultra-low-ROM fixture is currently `permanent_must_pass`
 // because the engine has not yet recovered on SSOT main.
-// Matrix B validates the MECHANISM using a synthetic deep-squat fixture that
-// is already known to pass — this is the same deep fixture from PR-D Matrix 1.
+// Matrix B validates the MECHANISM using a synthetic registry with a deep-squat
+// fixture (already known to pass from PR-D), fed through the SAME
+// runWithPromotionState(...) consumer path.
 //
-// When a real engine recovery PR lands and flips shallow/ultra-low to
-// `permanent_must_pass`, that PR will verify the same mechanism with the
-// real shallow fixtures.
+// Case B1: permanent + engine passes   → consumer fires [PERMANENT] PASS assertions
+// Case B2: permanent + engine fails    → consumer fires failure (no SKIP)
+//                                        verified via expectConsumerToFail(...)
+//
+// The previous boolean-only simulation (wouldHardFail = !standingPasses) is
+// replaced by real consumer invocations so the permanent branch is actually
+// exercised, not merely described.
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('\n━━ Matrix B — permanent fixture behavior (permanent_must_pass mechanism) ━━');
 
 {
-  // To test the `permanent_must_pass` mechanism we need a fixture that actually
-  // passes the engine. We use the well-known deep squat sequence from PR-D.
-  // We add it to a LOCAL synthetic registry (not the real SHALLOW_FIXTURE_REGISTRY)
-  // to avoid polluting the real registry with non-shallow fixtures.
+  // Synthetic registry for mechanism testing.
+  // Uses registryOverride parameter so SHALLOW_FIXTURE_REGISTRY is not polluted
+  // with non-shallow fixtures.
   const SYNTHETIC_PERMANENT_REGISTRY = {
     'deep_standard_cycle': {
       state: 'permanent_must_pass',
-      description: 'Synthetic deep fixture used to validate permanent_must_pass mechanism',
+      description: 'Synthetic fixture: validates permanent_must_pass mechanism via same consumer path',
     },
   };
 
+  // ── B1: permanent + engine PASSES ─────────────────────────────────────────
+  // Feed real deep-squat gate through runWithPromotionState with permanent registry.
+  // Consumer must fire [PERMANENT] assertions (no SKIP allowed).
   const deepAngles = [
     ...Array(10).fill(170),
     165, 160, 150, 140, 130, 120, 110, 100, 90, 80, 70, 60,
@@ -455,36 +399,37 @@ console.log('\n━━ Matrix B — permanent fixture behavior (permanent_must_pa
     squatStats(toLandmarks(makeKneeAngleSeries(1000, deepAngles, 80)))
   );
 
-  const enginePasses = gateDeep.status === 'pass' && gateDeep.completionSatisfied === true && gateDeep.finalPassEligible === true;
+  // Drive the real consumer path with a permanent registry — this actually
+  // executes the `permanent_must_pass` branch inside runWithPromotionState.
+  runWithPromotionState('deep_standard_cycle', gateDeep, (gate) => {
+    const cpr = gate.squatCycleDebug?.completionPassReason;
+    ok(
+      'Matrix B: permanent fixture passes → completionPassReason is standard_cycle',
+      cpr === 'standard_cycle',
+      cpr
+    );
+  }, SYNTHETIC_PERMANENT_REGISTRY);
 
-  // Matrix B assertion 1: SKIP forbidden for permanent fixture
-  ok(
-    'Matrix B: permanent fixture — engine passes (SKIP would be forbidden)',
-    enginePasses,
-    { status: gateDeep.status, finalPassEligible: gateDeep.finalPassEligible }
-  );
-
-  // Matrix B assertion 2: regression fails if pass disappears
-  // (We verify that the harness mechanism correctly fails when engine does NOT pass
-  //  for a permanent fixture. We simulate this by checking a standing-still gate.)
+  // ── B2: permanent + engine FAILS → consumer must fire failure (no SKIP) ───
+  // Feed a standing-still gate (known to not pass) to the permanent branch.
+  // expectConsumerToFail drives the same consumer path and asserts failure occurred.
   const standingAngles = Array(30).fill(170);
   const gateStanding = evaluateExerciseAutoProgress(
     'squat',
     toLandmarks(makeKneeAngleSeries(7000, standingAngles, 80)),
     squatStats(toLandmarks(makeKneeAngleSeries(7000, standingAngles, 80)))
   );
-  const standingEngPasses = gateStanding.status === 'pass' && gateStanding.finalPassEligible === true;
-  // For a `permanent_must_pass` fixture, if the engine does NOT pass, the harness
-  // MUST report failure. We verify this is the case by confirming the standing gate fails.
-  ok(
-    'Matrix B: permanent fixture — pass loss would trigger failure (standing gate correctly fails)',
-    !standingEngPasses,
-    { status: gateStanding.status, finalPassEligible: gateStanding.finalPassEligible }
+
+  expectConsumerToFail(
+    'Matrix B: permanent fixture — engine fails → same consumer path fires failure (no SKIP)',
+    'deep_standard_cycle',
+    gateStanding,
+    SYNTHETIC_PERMANENT_REGISTRY
   );
 
-  // Matrix B assertion 3: fixture remains individually visible
+  // ── B3: fixture remains individually visible in synthetic registry ─────────
   ok(
-    'Matrix B: permanent fixture — visible in synthetic registry (individual identity preserved)',
+    'Matrix B: permanent fixture — visible in synthetic registry (individual identity)',
     'deep_standard_cycle' in SYNTHETIC_PERMANENT_REGISTRY,
     Object.keys(SYNTHETIC_PERMANENT_REGISTRY)
   );
@@ -493,13 +438,6 @@ console.log('\n━━ Matrix B — permanent fixture behavior (permanent_must_pa
     SYNTHETIC_PERMANENT_REGISTRY['deep_standard_cycle']?.state === 'permanent_must_pass',
     SYNTHETIC_PERMANENT_REGISTRY['deep_standard_cycle']?.state
   );
-
-  // Matrix B assertion 4: latch is true for permanent fixture that passes
-  ok(
-    'Matrix B: permanent fixture that passes — latch is true',
-    isFinalPassLatched('squat', gateDeep) === true,
-    isFinalPassLatched('squat', gateDeep)
-  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -507,7 +445,47 @@ console.log('\n━━ Matrix B — permanent fixture behavior (permanent_must_pa
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('\n━━ Matrix C — downgrade protection ━━');
 
-runDowngradeGuardTest();
+{
+  // Downgrade guard: a permanent fixture that later loses engine pass must cause
+  // failure through the SAME consumer path — not just a boolean check.
+  //
+  // We use a fresh synthetic registry with a permanent fixture and feed a
+  // non-passing gate through expectConsumerToFail to confirm the consumer
+  // actually fires a failure (not a silent SKIP).
+
+  const SYNTHETIC_PERMANENT_FOR_DOWNGRADE = {
+    'synthetic_permanent_downgrade_target': {
+      state: 'permanent_must_pass',
+      description: 'Synthetic permanent fixture used to verify downgrade guard via real consumer',
+    },
+  };
+
+  // Gate that does NOT pass — simulates regression after promotion
+  const standingForDowngrade = Array(30).fill(170);
+  const gateDowngradeRegression = evaluateExerciseAutoProgress(
+    'squat',
+    toLandmarks(makeKneeAngleSeries(8000, standingForDowngrade, 80)),
+    squatStats(toLandmarks(makeKneeAngleSeries(8000, standingForDowngrade, 80)))
+  );
+
+  // Real consumer invocation: must fire failure (no silent SKIP path)
+  expectConsumerToFail(
+    'Matrix C: downgrade guard — permanent fixture regression fires failure via same consumer path',
+    'synthetic_permanent_downgrade_target',
+    gateDowngradeRegression,
+    SYNTHETIC_PERMANENT_FOR_DOWNGRADE
+  );
+
+  // Confirm conditional fixtures are NOT treated as permanent (SKIP remains allowed)
+  const entryConditional = SHALLOW_FIXTURE_REGISTRY['shallow_92deg'];
+  ok(
+    'Matrix C: conditional fixture still has skipReason — SKIP permitted (not upgraded)',
+    entryConditional?.state === 'conditional_until_main_passes' &&
+      typeof entryConditional.skipReason === 'string' &&
+      entryConditional.skipReason.length > 0,
+    entryConditional?.state
+  );
+}
 
 // ─── Matrix C: all registered fixtures must remain visible in matrix ─────────
 // After `runWithPromotionState` calls above, every fixture in the registry
