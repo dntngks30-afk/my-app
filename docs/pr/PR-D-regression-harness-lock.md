@@ -265,6 +265,7 @@ Allowed implementation files:
 
 - `scripts/camera-pr-b-semantics-rebind-smoke.mjs`
 - `scripts/camera-pr-c-final-pass-semantics-smoke.mjs`
+- `scripts/camera-pr-d-squat-regression-harness-smoke.mjs` (PR-D primary harness: matrix 1–4 + compat)
 - new narrow squat regression smoke files under `scripts/`
 - optional narrow helper assertion files under `src/lib/camera/squat/` only if needed for non-production test support
 - `docs/pr/PR-D-regression-harness-lock.md`
