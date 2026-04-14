@@ -136,7 +136,11 @@ console.log('\nE. buildDiagnosisSummary: finalPassEligible=true + completionTrut
   const diag = buildDiagnosisSummary('squat', gate, undefined);
   const sq = diag?.squatCycle;
   ok('E1: squatCycle exists', sq != null);
-  ok('E2: finalPassGrantedForSemantics=true', sq?.finalPassGrantedForSemantics === true, sq?.finalPassGrantedForSemantics);
+  ok('E2: canonical finalPassGranted=true', sq?.finalPassGranted === true, sq?.finalPassGranted);
+  ok('E2b: semantics source is gate', sq?.finalPassSemanticsSource === 'gate_final_pass_eligible', sq?.finalPassSemanticsSource);
+  ok('E2c: no mismatch', sq?.finalPassSemanticsMismatchDetected === false, sq?.finalPassSemanticsMismatchDetected);
+  ok('E2d: deprecated alias still true', sq?.finalPassGrantedForSemantics === true, sq?.finalPassGrantedForSemantics);
+  ok('E2e: passSemanticsTruth set', sq?.passSemanticsTruth === 'final_pass_surface', sq?.passSemanticsTruth);
   ok('E3: passSeverity is not failed', sq?.passSeverity !== 'failed', sq?.passSeverity);
   ok('E4: resultInterpretation is not movement_not_completed',
      sq?.resultInterpretation !== 'movement_not_completed', sq?.resultInterpretation);

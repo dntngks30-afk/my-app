@@ -17,6 +17,7 @@ import {
   type SquatPassSeverity,
   type SquatResultInterpretation,
 } from './squat-result-severity';
+import type { SquatFinalPassSemanticsSource } from './squat/squat-final-pass-semantics';
 import {
   clearStoredCameraTraceData,
   clearStoredOverheadObservations,
@@ -311,12 +312,24 @@ export interface AttemptSnapshot {
       displayDepthTruth?: 'evaluator_peak_metric';
       ownerDepthTruth?: 'completion_relative_depth';
       cycleDecisionTruth?: 'completion_state';
+      /**
+       * PR-C: canonical product pass-semantics truth label (PR-A/B final-pass surface).
+       * Complements legacy `cycleDecisionTruth` (completion history), not a replacement for gate fields.
+       */
+      passSemanticsTruth?: 'final_pass_surface';
       /** PR-COMP-03 */
       squatInternalQuality?: SquatInternalQuality;
       /**
-       * PR-B: PR-A SquatFinalPassTruthSurface.finalPassGranted와 동치.
-       * 진단/번들 소비자가 completionTruthPassed를 쓰지 않고 정본 표면을 읽을 수 있도록 전파한다.
-       * Sink-only — 게이트 입력으로 쓰면 안 됨.
+       * PR-C: authoritative final-pass semantics value from `readSquatFinalPassSemanticsTruth`.
+       * `undefined` when no upstream boolean is available.
+       */
+      finalPassGranted?: boolean;
+      /** PR-C: which upstream field supplied `finalPassGranted`. */
+      finalPassSemanticsSource?: SquatFinalPassSemanticsSource;
+      /** PR-C: gate.finalPassEligible vs squatFinalPassTruth.finalPassGranted disagree when both are boolean. */
+      finalPassSemanticsMismatchDetected?: boolean;
+      /**
+       * @deprecated PR-C: use `finalPassGranted` + `finalPassSemanticsSource`. Legacy bundle readers only.
        */
       finalPassGrantedForSemantics?: boolean;
       /** PR-CAM-SQUAT-RESULT-SEVERITY-01: pass truth + quality truth 湲곕컲 ?댁꽍(?먯젙 蹂寃??놁쓬) */

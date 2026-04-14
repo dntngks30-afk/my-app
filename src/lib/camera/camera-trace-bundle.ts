@@ -245,11 +245,13 @@ export function extractCaptureSessionSummaryFromAttempt(
   }
 
   const normalized = buildSquatNormalizedTruthFromCycle(sq);
-  // PR-B: prefer the PR-A frozen final-pass surface from diagnosisSummary; fall back to completionTruthPassed (legacy sink).
+  // PR-C: read canonical `finalPassGranted` from diagnosis first; deprecated alias for older snapshots.
   const bundleFinalPassGranted =
-    typeof sq.finalPassGrantedForSemantics === 'boolean'
-      ? sq.finalPassGrantedForSemantics
-      : undefined;
+    typeof sq.finalPassGranted === 'boolean'
+      ? sq.finalPassGranted
+      : typeof sq.finalPassGrantedForSemantics === 'boolean'
+        ? sq.finalPassGrantedForSemantics
+        : undefined;
   const resultSeverity = buildSquatResultSeveritySummary({
     finalPassGranted: bundleFinalPassGranted,
     completionTruthPassed: sq.completionTruthPassed === true,

@@ -17,6 +17,10 @@ import {
   type SquatPassSeverity,
   type SquatResultInterpretation,
 } from '@/lib/camera/squat-result-severity';
+import {
+  readSquatFinalPassSemanticsTruth,
+  type SquatFinalPassSemanticsSource,
+} from '@/lib/camera/squat/squat-final-pass-semantics';
 
 /** build/runtime diagnostic version — 실기기 bundle 확인용 */
 export const CAMERA_DIAG_VERSION = 'success-diagnostic-2025-03-18';
@@ -168,7 +172,14 @@ export interface SquatSuccessSnapshot extends SuccessSnapshotBase {
   /** PR-CAM-OBS-NORMALIZE-01: depth/owner 해석 라벨(값 변경 아님) */
   displayDepthTruth?: 'evaluator_peak_metric';
   ownerDepthTruth?: 'completion_relative_depth';
+  /** Legacy: completion-state cycle layer — not pass-semantics authority (PR-C). */
   cycleDecisionTruth?: 'completion_state';
+  /** PR-C: canonical pass-semantics truth surface (PR-A/B final-pass). */
+  passSemanticsTruth?: 'final_pass_surface';
+  /** PR-C: authoritative final-pass semantics from `readSquatFinalPassSemanticsTruth`. */
+  finalPassGranted?: boolean;
+  finalPassSemanticsSource?: SquatFinalPassSemanticsSource;
+  finalPassSemanticsMismatchDetected?: boolean;
   qualityOnlyWarnings?: string[];
   /** PR-CAM-RESULT-SEVERITY-SURFACE-01: attempt/bundle과 동일 helper·동일 입력 source */
   passSeverity?: SquatPassSeverity;
@@ -408,12 +419,13 @@ export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): 
     const squatDebug = options.gate.squatCycleDebug;
     const mobileObs = extractSquatMobileObsFieldsFromGate(options.gate, options.effectivePassLatched);
     const siq = options.gate.evaluatorResult?.debug?.squatInternalQuality;
-    // PR-B: pass/fail truth is the PR-A frozen final-pass surface; completionTruthPassed is debug sink.
-    const snapshotFinalPassGranted =
-      options.gate.finalPassEligible === true ||
-      squatDebug?.squatFinalPassTruth?.finalPassGranted === true;
+    // PR-C: single read boundary for final-pass semantics (no OR-merge).
+    const semanticsRead = readSquatFinalPassSemanticsTruth({
+      finalPassEligible: options.gate.finalPassEligible,
+      squatFinalPassTruth: squatDebug?.squatFinalPassTruth,
+    });
     const resultSeverity = buildSquatResultSeveritySummary({
-      finalPassGranted: snapshotFinalPassGranted,
+      finalPassGranted: semanticsRead.finalPassGranted,
       captureQuality: String(mobileObs.captureQuality ?? ''),
       qualityOnlyWarnings: squatDebug?.qualityOnlyWarnings,
       qualityTier: siq?.qualityTier ?? null,
@@ -479,6 +491,10 @@ export function recordSquatSuccessSnapshot(options: RecordSquatSuccessOptions): 
       displayDepthTruth: 'evaluator_peak_metric',
       ownerDepthTruth: 'completion_relative_depth',
       cycleDecisionTruth: 'completion_state',
+      passSemanticsTruth: 'final_pass_surface',
+      finalPassGranted: semanticsRead.finalPassGranted,
+      finalPassSemanticsSource: semanticsRead.source,
+      finalPassSemanticsMismatchDetected: semanticsRead.mismatchDetected,
     };
     pushSuccessSnapshot(snapshot);
   } catch {

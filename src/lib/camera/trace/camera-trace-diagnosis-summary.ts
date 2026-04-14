@@ -15,6 +15,7 @@ import type { CameraStepId } from '@/lib/public/camera-test';
 import { buildSquatArmingAssistTraceCompact } from '@/lib/camera/squat/squat-arming-assist';
 import { buildSquatCalibrationTraceCompact } from '@/lib/camera/squat/squat-calibration-trace';
 import { buildSquatReversalAssistTraceCompact } from '@/lib/camera/squat/squat-reversal-assist';
+import { readSquatFinalPassSemanticsTruth } from '@/lib/camera/squat/squat-final-pass-semantics';
 import type {
   AttemptSnapshot,
   OverheadExportedPeakElevationProvenance,
@@ -239,18 +240,26 @@ export function buildDiagnosisSummary(
           : null,
       displayDepthTruth: 'evaluator_peak_metric',
       ownerDepthTruth: 'completion_relative_depth',
+      /** Legacy: completion-state cycle decision layer — not current pass-semantics authority (PR-C). */
       cycleDecisionTruth: 'completion_state',
+      /** PR-C: current product pass-semantics truth surface (PR-A/B frozen final-pass). */
+      passSemanticsTruth: 'final_pass_surface',
       squatInternalQuality: siq,
     };
 
-    // PR-B: pass/fail truth is the PR-A frozen final-pass surface (finalPassGranted); completionTruthPassed is debug sink.
-    // Allowed source order: gate.finalPassEligible > sc.squatFinalPassTruth?.finalPassGranted
-    const finalPassGrantedForSemantics =
-      gate.finalPassEligible === true || sc.squatFinalPassTruth?.finalPassGranted === true;
-    base.squatCycle.finalPassGrantedForSemantics = finalPassGrantedForSemantics;
+    // PR-C: single read boundary — no OR-merge; mismatch surfaced when gate vs truth disagree.
+    const semanticsRead = readSquatFinalPassSemanticsTruth({
+      finalPassEligible: gate.finalPassEligible,
+      squatFinalPassTruth: sc.squatFinalPassTruth,
+    });
+    base.squatCycle.finalPassGranted = semanticsRead.finalPassGranted;
+    base.squatCycle.finalPassSemanticsSource = semanticsRead.source;
+    base.squatCycle.finalPassSemanticsMismatchDetected = semanticsRead.mismatchDetected;
+    /** @deprecated PR-C: use `finalPassGranted` + `finalPassSemanticsSource`; kept for legacy bundle readers. */
+    base.squatCycle.finalPassGrantedForSemantics = semanticsRead.finalPassGranted === true;
 
     const resultSeverity = buildSquatResultSeveritySummary({
-      finalPassGranted: finalPassGrantedForSemantics,
+      finalPassGranted: semanticsRead.finalPassGranted,
       captureQuality: String(base.captureQuality ?? ''),
       qualityOnlyWarnings: sc.qualityOnlyWarnings,
       qualityTier: base.squatCycle.squatInternalQuality?.qualityTier ?? null,
