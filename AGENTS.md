@@ -269,3 +269,28 @@ API 라우트 수정 전: 호출자 전부, 프론트 사용처, 인증 방식, 
 ---
 
 **Agent instruction:** 변경 전 본 문서와 SSOT를 따른다. SSOT·PR 분리·완전성 계약을 존중하고, 무관한 파일을 수정하지 않는다.
+
+---
+
+## Cursor Cloud specific instructions
+
+### Dev environment essentials
+- **Package manager:** `npm` (`package-lock.json` present). Run `npm install` to restore dependencies.
+- **Dev server:** `npm run dev` → Next.js 16 Turbopack on `http://localhost:3000`.
+- **Env vars:** Create `.env.local` with at minimum `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. Placeholder values are sufficient for the dev server to start and serve client-side pages, but real Supabase credentials are needed for any auth/DB features.
+
+### Lint
+- `npm run lint` invokes `next lint`, which was **removed in Next.js 16**. ESLint is not in `package.json` dependencies. Lint currently does not function; this is a pre-existing repo state.
+
+### Tests
+- No Jest/Vitest/Playwright. All tests are custom smoke/regression scripts in `scripts/` run via `npx tsx`. See `package.json` `test:*` scripts (70+).
+- Example: `npm run test:taxonomy`, `npm run test:session-constraints`, `npm run test:session-ordering`.
+- These scripts are pure logic tests that run without Supabase or any external service.
+
+### Build
+- `npm run build` uses webpack (`next build --webpack`). Build may fail if `RESEND_API_KEY` is missing (the cron notification route imports Resend at module level). This is a pre-existing issue — dev server works without it.
+
+### Key caveats
+- `NEXT_PUBLIC_SKIP_CANONICAL_REDIRECT=1` should be set in `.env.local` to avoid redirect issues in local dev.
+- Supabase client (`src/lib/supabase.ts`) throws at import time if `NEXT_PUBLIC_SUPABASE_URL` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` are empty — placeholder values prevent the crash.
+- External services (Stripe, Mux, OpenAI, Resend) degrade gracefully with missing keys except for the Resend cron route at build time.
