@@ -98,6 +98,10 @@ export type GenerationInputContinue = ProgressGateContinue & {
   deepSummary: SessionDeepSummary;
   analysisSourceMode: SessionAnalysisSourceMode;
   sourcePublicResultId: string | null;
+  /** PR-PILOT-BASELINE-SESSION-ALIGN-01: public result(baseline 또는 refined)가 truth owner인지 */
+  isPublicResultTruthOwner: boolean;
+  /** PR-PILOT-BASELINE-SESSION-ALIGN-01: fallback 사용 시 이유 */
+  fallbackReason: string | null;
   totalSessionsForPhase: number;
   policyOptions: PhasePolicyOptions;
   phaseLengths: PhaseLengths;
@@ -145,6 +149,8 @@ export type GenerationInputContinue = ProgressGateContinue & {
     exercise_experience_level?: ExerciseExperienceLevel | null;
     survey_session_hints?: unknown | null;
     session_camera_translation?: unknown | null;
+    /** PR-PILOT-BASELINE-SESSION-ALIGN-01 */
+    baseline_session_anchor?: string | null;
   };
 };
 

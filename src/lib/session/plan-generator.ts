@@ -301,6 +301,8 @@ export type PlanGeneratorInput = {
   survey_session_hints?: SurveySessionHints;
   /** PR-SURVEY-07: refined 행 설문+카메라 병합 메타(관찰성) */
   session_camera_translation?: SessionCameraTranslationMetaV1;
+  /** PR-PILOT-BASELINE-SESSION-ALIGN-01: public baseline에서 파생된 세분화된 세션 앵커 */
+  baseline_session_anchor?: string;
 };
 
 export type PlanItem = {
@@ -393,6 +395,13 @@ export type PlanJsonOutput = {
     candidate_competition?: CandidateCompetitionMeta;
     /** PR-ALG-19: additive plan quality audit meta */
     plan_quality_audit?: PlanQualityAuditMeta;
+    /** PR-PILOT-BASELINE-SESSION-ALIGN-01: baseline-first alignment observability */
+    baseline_alignment?: {
+      baseline_session_anchor: string | null;
+      first_session_intent_anchor: string | null;
+      gold_path_vector: string | null;
+      intent_source: 'baseline_anchor' | 'legacy_band' | 'none';
+    };
   };
   flags: { recovery: boolean; short: boolean };
   segments: PlanSegment[];
@@ -712,6 +721,16 @@ function selectGoldPathTemplates(
   return segments;
 }
 
+/**
+ * PR-PILOT-BASELINE-SESSION-ALIGN-01: session 1 Main segment alignment 보장.
+ *
+ * Main-eligible template만 Main에 주입 가능. prep-eligible을 Main에 승격하는 것은 금지.
+ *
+ * 1단계: Main에 이미 intent tag가 있으면 forbiddenDominant 검사만 수행.
+ * 2단계: Main에 aligned item이 없으면 main-eligible aligned replacement를 찾아 교체.
+ * 3단계: main-eligible replacement가 없으면 기존 Main을 유지 (무교체 종료).
+ * 4단계: forbiddenDominantAxes 위반 교정.
+ */
 function enforceFirstSessionIntentOnSegments(
   segmentEntries: Array<{ title: string; items: SessionTemplateRow[] }>,
   sorted: Array<{ template: SessionTemplateRow; score: number }>,
@@ -720,12 +739,16 @@ function enforceFirstSessionIntentOnSegments(
 ): Array<{ title: string; items: SessionTemplateRow[] }> {
   if (!firstSessionIntent || firstSessionIntent.requiredTags.length === 0) return segmentEntries;
 
-  const prepAndMain = segmentEntries.filter((entry) => entry.title === 'Prep' || entry.title === 'Main');
-  const alreadyAligned = prepAndMain.some((entry) =>
-    entry.items.some((item) => hasFirstSessionIntentTag(item, firstSessionIntent))
-  );
-  if (alreadyAligned) return segmentEntries;
+  const mainEntry = segmentEntries.find((e) => e.title === 'Main');
+  const mainAligned = mainEntry?.items.some((item) =>
+    hasFirstSessionIntentTag(item, firstSessionIntent)
+  ) ?? false;
 
+  if (mainAligned) {
+    return enforceForbiddenDominantAxes(segmentEntries, sorted, painMode, firstSessionIntent);
+  }
+
+  // Main에 aligned item이 없으면 main-eligible replacement만 시도
   const usedIds = new Set(segmentEntries.flatMap((entry) => entry.items.map((item) => item.id)));
   const replacement = sorted
     .map(({ template }) => template)
@@ -733,15 +756,84 @@ function enforceFirstSessionIntentOnSegments(
       if (usedIds.has(template.id)) return false;
       if (!hasFirstSessionIntentTag(template, firstSessionIntent)) return false;
       if (painMode && painMode !== 'none' && (template.avoid_if_pain_mode ?? []).includes(painMode)) return false;
-      return isMainEligible(template) || isPrepEligible(template);
+      return isMainEligible(template);
+    });
+
+  if (replacement) {
+    segmentEntries = segmentEntries.map((entry) => {
+      if (entry.title === 'Main' && entry.items.length > 0) {
+        const nextItems = [...entry.items];
+        nextItems[nextItems.length - 1] = replacement;
+        return { ...entry, items: nextItems };
+      }
+      return entry;
+    });
+  }
+  // main-eligible replacement가 없으면 기존 Main 유지 (phase semantics 보존)
+
+  return enforceForbiddenDominantAxes(segmentEntries, sorted, painMode, firstSessionIntent);
+}
+
+/**
+ * PR-PILOT-BASELINE-SESSION-ALIGN-01: forbiddenDominantAxes 위반 교정.
+ * Main segment에서 forbidden axis가 과반을 차지하면 교체 시도.
+ */
+function enforceForbiddenDominantAxes(
+  segmentEntries: Array<{ title: string; items: SessionTemplateRow[] }>,
+  sorted: Array<{ template: SessionTemplateRow; score: number }>,
+  painMode: 'none' | 'caution' | 'protected' | undefined,
+  firstSessionIntent: FirstSessionIntentSSOT
+): Array<{ title: string; items: SessionTemplateRow[] }> {
+  if (firstSessionIntent.forbiddenDominantAxes.length === 0) return segmentEntries;
+
+  const mainEntry = segmentEntries.find((e) => e.title === 'Main');
+  if (!mainEntry || mainEntry.items.length === 0) return segmentEntries;
+
+  const forbiddenSet = new Set(firstSessionIntent.forbiddenDominantAxes);
+  const forbiddenTagsForAxis: Record<string, string[]> = {
+    upper_mobility: ['shoulder_mobility', 'thoracic_mobility', 'upper_back_activation', 'shoulder_stability'],
+    lower_mobility: ['hip_mobility', 'ankle_mobility', 'hip_flexor_stretch'],
+    lower_stability: ['lower_chain_stability', 'glute_medius', 'glute_activation', 'basic_balance'],
+    trunk_control: ['core_control', 'core_stability', 'global_core'],
+  };
+
+  const forbiddenTags = new Set<string>();
+  for (const axis of forbiddenSet) {
+    for (const tag of forbiddenTagsForAxis[axis] ?? []) {
+      forbiddenTags.add(tag);
+    }
+  }
+
+  const forbiddenCount = mainEntry.items.filter((item) =>
+    item.focus_tags.some((tag) => forbiddenTags.has(tag))
+  ).length;
+
+  if (forbiddenCount <= mainEntry.items.length / 2) return segmentEntries;
+
+  const usedIds = new Set(segmentEntries.flatMap((entry) => entry.items.map((item) => item.id)));
+  const replacement = sorted
+    .map(({ template }) => template)
+    .find((template) => {
+      if (usedIds.has(template.id)) return false;
+      if (template.focus_tags.some((tag) => forbiddenTags.has(tag))) return false;
+      if (!hasFirstSessionIntentTag(template, firstSessionIntent)) return false;
+      if (painMode && painMode !== 'none' && (template.avoid_if_pain_mode ?? []).includes(painMode)) return false;
+      return isMainEligible(template);
     });
 
   if (!replacement) return segmentEntries;
 
+  const worstIdx = mainEntry.items.reduce((worst, item, idx) => {
+    const isForbidden = item.focus_tags.some((tag) => forbiddenTags.has(tag));
+    return isForbidden ? idx : worst;
+  }, -1);
+
+  if (worstIdx < 0) return segmentEntries;
+
   return segmentEntries.map((entry) => {
-    if (entry.title === 'Main' && entry.items.length > 0) {
+    if (entry.title === 'Main') {
       const nextItems = [...entry.items];
-      nextItems[nextItems.length - 1] = replacement;
+      nextItems[worstIdx] = replacement;
       return { ...entry, items: nextItems };
     }
     return entry;
@@ -871,6 +963,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     deepLevel: input.deep_level,
     safetyMode: input.safety_mode,
     redFlags: input.red_flags,
+    baselineSessionAnchor: input.baseline_session_anchor,
   });
 
   // PR-ALG-03: pain_mode Safety Gate - 추가 제외 태그
@@ -1172,6 +1265,18 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
         taxonomy_mode: 'derived_v1',
       },
       candidate_competition: competitionResult.meta,
+      ...(isFirstSession && {
+        baseline_alignment: {
+          baseline_session_anchor: input.baseline_session_anchor ?? null,
+          first_session_intent_anchor: firstSessionIntent?.anchorType ?? null,
+          gold_path_vector: goldPathVector ?? null,
+          intent_source: input.baseline_session_anchor
+            ? 'baseline_anchor' as const
+            : firstSessionIntent
+              ? 'legacy_band' as const
+              : 'none' as const,
+        },
+      }),
     },
     flags: {
       recovery: isRecovery,

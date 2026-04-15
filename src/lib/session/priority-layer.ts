@@ -65,6 +65,73 @@ const RESULT_TYPE_TO_RATIONALE: Record<string, string> = {
   'STABLE': '',
 };
 
+// ─── PR-PILOT-BASELINE-SESSION-ALIGN-01: baseline_session_anchor → 세분화된 intent ───
+// legacy band(LOWER-LIMB)로는 LOWER_INSTABILITY와 LOWER_MOBILITY_RESTRICTION을 구분 못함.
+// baseline_session_anchor가 있으면 이 맵이 우선 적용.
+
+const BASELINE_ANCHOR_TO_GOLD_PATH: Record<string, string> = {
+  lower_stability: 'lower_stability',
+  lower_mobility: 'lower_mobility',
+  upper_mobility: 'upper_mobility',
+  trunk_control: 'trunk_control',
+  deconditioned: 'deconditioned',
+  balanced_reset: '',
+};
+
+const BASELINE_ANCHOR_TO_FOCUS_AXES: Record<string, string[]> = {
+  lower_stability: ['lower_stability'],
+  lower_mobility: ['lower_mobility'],
+  upper_mobility: ['upper_mobility'],
+  trunk_control: ['trunk_control'],
+  deconditioned: ['deconditioned'],
+  balanced_reset: [],
+};
+
+const BASELINE_ANCHOR_TO_RATIONALE: Record<string, string> = {
+  lower_stability: '하체 안정성이 우선이어서 무릎·골반·엉덩이 안정을 잡는 세션입니다.',
+  lower_mobility: '하체 가동성 회복이 우선이어서 고관절·발목 움직임 범위를 여는 세션입니다.',
+  upper_mobility: '상체 움직임 회복이 우선이어서 흉추·견갑·어깨 가동성을 여는 세션입니다.',
+  trunk_control: '몸통 연결이 우선이어서 호흡·코어 제어를 강화하는 세션입니다.',
+  deconditioned: '기본 움직임 회복이 우선이어서 안정적인 움직임 기반을 다지는 세션입니다.',
+  balanced_reset: '',
+};
+
+const BASELINE_ANCHOR_TO_REQUIRED_TAGS: Record<string, string[]> = {
+  lower_stability: ['lower_chain_stability', 'glute_medius', 'glute_activation', 'basic_balance'],
+  lower_mobility: ['hip_mobility', 'ankle_mobility', 'hip_flexor_stretch'],
+  upper_mobility: ['shoulder_mobility', 'thoracic_mobility', 'upper_back_activation', 'shoulder_stability'],
+  trunk_control: ['core_control', 'core_stability', 'global_core'],
+  deconditioned: ['full_body_reset', 'core_control'],
+  balanced_reset: ['core_stability', 'upper_back_activation'],
+};
+
+const BASELINE_ANCHOR_TO_FORBIDDEN_DOMINANT: Record<string, string[]> = {
+  lower_stability: ['upper_mobility', 'lower_mobility'],
+  lower_mobility: ['upper_mobility', 'lower_stability'],
+  upper_mobility: ['trunk_control', 'lower_stability', 'lower_mobility'],
+  trunk_control: ['upper_mobility', 'lower_mobility'],
+  deconditioned: [],
+  balanced_reset: [],
+};
+
+const BASELINE_ANCHOR_RATIONALE_MUST_INCLUDE: Record<string, string[]> = {
+  lower_stability: ['하체', '안정', '무릎', '골반', '엉덩이'],
+  lower_mobility: ['가동성', '고관절', '발목', '움직임', '하체'],
+  upper_mobility: ['상체', '흉추', '견갑', '어깨', '가동성'],
+  trunk_control: ['몸통', '코어', '호흡', '연결'],
+  deconditioned: ['기본', '움직임', '회복'],
+  balanced_reset: [],
+};
+
+const BASELINE_ANCHOR_RATIONALE_MUST_AVOID_ONLY: Record<string, string[]> = {
+  lower_stability: ['가동성', '스트레칭'],
+  lower_mobility: ['안정성', '활성화'],
+  upper_mobility: ['몸통', '코어', '안정성'],
+  trunk_control: ['상체', '가동성'],
+  deconditioned: [],
+  balanced_reset: [],
+};
+
 export type PainMode = 'none' | 'caution' | 'protected';
 
 /**
@@ -111,19 +178,71 @@ export interface ResolveFirstSessionIntentInput {
   deepLevel?: 1 | 2 | 3;
   safetyMode?: 'red' | 'yellow' | 'none';
   redFlags?: boolean;
+  /** PR-PILOT-BASELINE-SESSION-ALIGN-01: public baseline에서 온 세분화된 세션 앵커 */
+  baselineSessionAnchor?: string | null;
 }
 
 /**
  * PR-SSOT-01: session 1 canonical intent SSOT.
- * resultType = primary anchor, priority_vector = secondary modulation only.
+ * PR-PILOT-BASELINE-SESSION-ALIGN-01: baseline_session_anchor가 있으면 우선 소비.
+ * 그렇지 않으면 legacy resultType band를 사용 (backward compat).
+ *
+ * 우선순위: baselineSessionAnchor > resultType (legacy band)
  */
 export function resolveFirstSessionIntent(
   input: ResolveFirstSessionIntentInput
 ): FirstSessionIntentSSOT | null {
   if (input.sessionNumber !== 1) return null;
+
+  // PR-PILOT-BASELINE-SESSION-ALIGN-01: baseline anchor 우선 경로
+  const anchor = typeof input.baselineSessionAnchor === 'string'
+    ? input.baselineSessionAnchor.trim()
+    : '';
+
+  if (anchor && BASELINE_ANCHOR_TO_GOLD_PATH[anchor] !== undefined) {
+    return buildBaselineAnchorIntent(anchor);
+  }
+
+  // Legacy band 경로 (backward compat)
   const key = typeof input.resultType === 'string' ? input.resultType.trim() : '';
   if (!key) return null;
+  return buildLegacyBandIntent(key);
+}
 
+/** PR-PILOT-BASELINE-SESSION-ALIGN-01: baseline_session_anchor → intent (세분화) */
+function buildBaselineAnchorIntent(anchor: string): FirstSessionIntentSSOT | null {
+  const goldPath = BASELINE_ANCHOR_TO_GOLD_PATH[anchor];
+  const focusAxes = BASELINE_ANCHOR_TO_FOCUS_AXES[anchor] ?? [];
+  const rationale = BASELINE_ANCHOR_TO_RATIONALE[anchor] ?? null;
+  const requiredTags = BASELINE_ANCHOR_TO_REQUIRED_TAGS[anchor] ?? [];
+  const forbiddenDominantAxes = BASELINE_ANCHOR_TO_FORBIDDEN_DOMINANT[anchor] ?? [];
+  const rationaleMustInclude = BASELINE_ANCHOR_RATIONALE_MUST_INCLUDE[anchor] ?? [];
+  const rationaleMustAvoidOnly = BASELINE_ANCHOR_RATIONALE_MUST_AVOID_ONLY[anchor] ?? [];
+
+  if (!goldPath && focusAxes.length === 0 && !rationale && requiredTags.length === 0) return null;
+
+  return {
+    anchorType: anchor,
+    goldPath: goldPath || null,
+    focusAxes: [...focusAxes],
+    rationale,
+    requiredTags: [...requiredTags],
+    preferredTemplateTags: [...requiredTags],
+    forbiddenDominantAxes: [...forbiddenDominantAxes],
+    forbiddenTemplateTags: [],
+    intensityTier: 'inherit',
+    auditExpectations: {
+      forbiddenDominantAxes: [...forbiddenDominantAxes],
+      requiredFocusAxes: [...focusAxes],
+      requiredTags: [...requiredTags],
+      rationaleMustInclude: [...rationaleMustInclude],
+      rationaleMustAvoidOnly: [...rationaleMustAvoidOnly],
+    },
+  };
+}
+
+/** Legacy resultType band → intent (기존 동작 유지) */
+function buildLegacyBandIntent(key: string): FirstSessionIntentSSOT | null {
   const goldPath = RESULT_TYPE_TO_GOLD_PATH[key];
   const focusAxes = RESULT_TYPE_TO_FOCUS_AXES[key] ?? [];
   const rationale = RESULT_TYPE_TO_RATIONALE[key] ?? null;

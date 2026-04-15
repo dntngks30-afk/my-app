@@ -22,6 +22,8 @@ export async function runPlanMaterialize(
     deepSummary,
     analysisSourceMode,
     sourcePublicResultId,
+    isPublicResultTruthOwner,
+    fallbackReason,
     totalSessionsForPhase,
     policyOptions,
     phaseLengths,
@@ -70,6 +72,7 @@ export async function runPlanMaterialize(
       exercise_experience_level: exerciseExperienceForSession1,
       survey_session_hints: deepSummary.survey_session_hints,
       session_camera_translation: deepSummary.session_camera_translation,
+      baseline_session_anchor: deepSummary.baseline_session_anchor,
     });
     setCachedPlan(cacheInput as GenCacheInput, planJson as Record<string, unknown>);
   }
@@ -165,6 +168,15 @@ export async function runPlanMaterialize(
       ...generationTrace,
       analysis_source_mode: analysisSourceMode,
       ...(sourcePublicResultId && { source_public_result_id: sourcePublicResultId }),
+      // PR-PILOT-BASELINE-SESSION-ALIGN-01: observability 강화
+      is_public_result_truth_owner: isPublicResultTruthOwner,
+      ...(fallbackReason && { fallback_reason: fallbackReason }),
+      ...(deepSummary.baseline_session_anchor && {
+        baseline_session_anchor: deepSummary.baseline_session_anchor,
+      }),
+      ...(deepSummary.primary_type && {
+        baseline_primary_type: deepSummary.primary_type,
+      }),
     },
   };
 

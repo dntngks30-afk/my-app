@@ -44,12 +44,16 @@ export async function runGenerationInputResolve(
   let deepSummary: SessionDeepSummary | null = null;
   let analysisSourceMode: 'public_result' | 'legacy_paid_deep' | null = null;
   let sourcePublicResultId: string | null = null;
+  let isPublicResultTruthOwner = false;
+  let fallbackReason: string | null = null;
 
   const resolvedAnalysisInput = await resolveSessionAnalysisInput(userId);
   if (resolvedAnalysisInput) {
     deepSummary = resolvedAnalysisInput.summary;
     analysisSourceMode = resolvedAnalysisInput.source.mode;
     sourcePublicResultId = resolvedAnalysisInput.source.public_result_id;
+    isPublicResultTruthOwner = resolvedAnalysisInput.source.is_public_result_truth_owner;
+    fallbackReason = resolvedAnalysisInput.source.fallback_reason;
   }
 
   timings.deep_profile_ms = Math.round(performance.now() - tDeep);
@@ -209,6 +213,8 @@ export async function runGenerationInputResolve(
     deepSummary,
     analysisSourceMode,
     sourcePublicResultId,
+    isPublicResultTruthOwner,
+    fallbackReason,
     totalSessionsForPhase,
     policyOptions,
     phaseLengths,
@@ -243,6 +249,7 @@ export async function runGenerationInputResolve(
       exercise_experience_level: exerciseExperienceForSession1,
       survey_session_hints: deepSummary.survey_session_hints ?? null,
       session_camera_translation: deepSummary.session_camera_translation ?? null,
+      baseline_session_anchor: deepSummary.baseline_session_anchor ?? undefined,
     },
   };
 }

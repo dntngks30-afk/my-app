@@ -48,6 +48,9 @@ export interface SessionDeepSummary {
   survey_session_hints?: SurveySessionHints;
   /** PR-SURVEY-07: refined 행에서 설문 힌트+카메라 병합 메타(세션 1 관찰성). */
   session_camera_translation?: SessionCameraTranslationMetaV1;
+  /** PR-PILOT-BASELINE-SESSION-ALIGN-01: public baseline primary_type에서 파생된 세분화된 세션 앵커.
+   *  legacy deep path에서는 undefined. session 1 alignment 강화에 사용. */
+  baseline_session_anchor?: string;
 }
 
 /**
