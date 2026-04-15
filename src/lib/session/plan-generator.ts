@@ -724,10 +724,12 @@ function selectGoldPathTemplates(
 /**
  * PR-PILOT-BASELINE-SESSION-ALIGN-01: session 1 Main segment alignment 보장.
  *
- * 1단계: Main에 이미 intent tag가 있으면 통과.
- * 2단계: Prep+Main에 있으면 통과 (기존 동작).
- * 3단계: Main의 마지막 아이템을 aligned template로 교체.
- * 4단계: forbiddenDominantAxes에 해당하는 template가 Main을 지배하면 교체 시도.
+ * Main-eligible template만 Main에 주입 가능. prep-eligible을 Main에 승격하는 것은 금지.
+ *
+ * 1단계: Main에 이미 intent tag가 있으면 forbiddenDominant 검사만 수행.
+ * 2단계: Main에 aligned item이 없으면 main-eligible aligned replacement를 찾아 교체.
+ * 3단계: main-eligible replacement가 없으면 기존 Main을 유지 (무교체 종료).
+ * 4단계: forbiddenDominantAxes 위반 교정.
  */
 function enforceFirstSessionIntentOnSegments(
   segmentEntries: Array<{ title: string; items: SessionTemplateRow[] }>,
@@ -742,60 +744,32 @@ function enforceFirstSessionIntentOnSegments(
     hasFirstSessionIntentTag(item, firstSessionIntent)
   ) ?? false;
 
-  // Main에 이미 aligned item이 있으면 forbiddenDominant 검사만 수행
   if (mainAligned) {
     return enforceForbiddenDominantAxes(segmentEntries, sorted, painMode, firstSessionIntent);
   }
 
-  // Prep+Main 통합으로 aligned가 있는지 확인
-  const prepAndMain = segmentEntries.filter((e) => e.title === 'Prep' || e.title === 'Main');
-  const anyAligned = prepAndMain.some((entry) =>
-    entry.items.some((item) => hasFirstSessionIntentTag(item, firstSessionIntent))
-  );
+  // Main에 aligned item이 없으면 main-eligible replacement만 시도
+  const usedIds = new Set(segmentEntries.flatMap((entry) => entry.items.map((item) => item.id)));
+  const replacement = sorted
+    .map(({ template }) => template)
+    .find((template) => {
+      if (usedIds.has(template.id)) return false;
+      if (!hasFirstSessionIntentTag(template, firstSessionIntent)) return false;
+      if (painMode && painMode !== 'none' && (template.avoid_if_pain_mode ?? []).includes(painMode)) return false;
+      return isMainEligible(template);
+    });
 
-  // Main에 aligned item이 없으면 교체 시도
-  if (!anyAligned || !mainAligned) {
-    const usedIds = new Set(segmentEntries.flatMap((entry) => entry.items.map((item) => item.id)));
-    const replacement = sorted
-      .map(({ template }) => template)
-      .find((template) => {
-        if (usedIds.has(template.id)) return false;
-        if (!hasFirstSessionIntentTag(template, firstSessionIntent)) return false;
-        if (painMode && painMode !== 'none' && (template.avoid_if_pain_mode ?? []).includes(painMode)) return false;
-        return isMainEligible(template);
-      });
-
-    if (replacement) {
-      segmentEntries = segmentEntries.map((entry) => {
-        if (entry.title === 'Main' && entry.items.length > 0) {
-          const nextItems = [...entry.items];
-          nextItems[nextItems.length - 1] = replacement;
-          return { ...entry, items: nextItems };
-        }
-        return entry;
-      });
-    } else {
-      // Main-eligible이 없으면 prep-eligible이라도 시도
-      const prepReplacement = sorted
-        .map(({ template }) => template)
-        .find((template) => {
-          if (usedIds.has(template.id)) return false;
-          if (!hasFirstSessionIntentTag(template, firstSessionIntent)) return false;
-          if (painMode && painMode !== 'none' && (template.avoid_if_pain_mode ?? []).includes(painMode)) return false;
-          return isPrepEligible(template);
-        });
-      if (prepReplacement) {
-        segmentEntries = segmentEntries.map((entry) => {
-          if (entry.title === 'Main' && entry.items.length > 0) {
-            const nextItems = [...entry.items];
-            nextItems[nextItems.length - 1] = prepReplacement;
-            return { ...entry, items: nextItems };
-          }
-          return entry;
-        });
+  if (replacement) {
+    segmentEntries = segmentEntries.map((entry) => {
+      if (entry.title === 'Main' && entry.items.length > 0) {
+        const nextItems = [...entry.items];
+        nextItems[nextItems.length - 1] = replacement;
+        return { ...entry, items: nextItems };
       }
-    }
+      return entry;
+    });
   }
+  // main-eligible replacement가 없으면 기존 Main 유지 (phase semantics 보존)
 
   return enforceForbiddenDominantAxes(segmentEntries, sorted, painMode, firstSessionIntent);
 }

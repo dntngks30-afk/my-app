@@ -98,8 +98,8 @@ export type GenerationInputContinue = ProgressGateContinue & {
   deepSummary: SessionDeepSummary;
   analysisSourceMode: SessionAnalysisSourceMode;
   sourcePublicResultId: string | null;
-  /** PR-PILOT-BASELINE-SESSION-ALIGN-01: public baseline이 truth owner인지 */
-  isBaselineTruthOwner: boolean;
+  /** PR-PILOT-BASELINE-SESSION-ALIGN-01: public result(baseline 또는 refined)가 truth owner인지 */
+  isPublicResultTruthOwner: boolean;
   /** PR-PILOT-BASELINE-SESSION-ALIGN-01: fallback 사용 시 이유 */
   fallbackReason: string | null;
   totalSessionsForPhase: number;

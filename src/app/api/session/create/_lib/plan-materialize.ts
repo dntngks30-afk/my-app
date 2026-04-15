@@ -22,7 +22,7 @@ export async function runPlanMaterialize(
     deepSummary,
     analysisSourceMode,
     sourcePublicResultId,
-    isBaselineTruthOwner,
+    isPublicResultTruthOwner,
     fallbackReason,
     totalSessionsForPhase,
     policyOptions,
@@ -169,7 +169,7 @@ export async function runPlanMaterialize(
       analysis_source_mode: analysisSourceMode,
       ...(sourcePublicResultId && { source_public_result_id: sourcePublicResultId }),
       // PR-PILOT-BASELINE-SESSION-ALIGN-01: observability 강화
-      is_baseline_truth_owner: isBaselineTruthOwner,
+      is_public_result_truth_owner: isPublicResultTruthOwner,
       ...(fallbackReason && { fallback_reason: fallbackReason }),
       ...(deepSummary.baseline_session_anchor && {
         baseline_session_anchor: deepSummary.baseline_session_anchor,

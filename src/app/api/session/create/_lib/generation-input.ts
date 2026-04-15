@@ -44,7 +44,7 @@ export async function runGenerationInputResolve(
   let deepSummary: SessionDeepSummary | null = null;
   let analysisSourceMode: 'public_result' | 'legacy_paid_deep' | null = null;
   let sourcePublicResultId: string | null = null;
-  let isBaselineTruthOwner = false;
+  let isPublicResultTruthOwner = false;
   let fallbackReason: string | null = null;
 
   const resolvedAnalysisInput = await resolveSessionAnalysisInput(userId);
@@ -52,7 +52,7 @@ export async function runGenerationInputResolve(
     deepSummary = resolvedAnalysisInput.summary;
     analysisSourceMode = resolvedAnalysisInput.source.mode;
     sourcePublicResultId = resolvedAnalysisInput.source.public_result_id;
-    isBaselineTruthOwner = resolvedAnalysisInput.source.is_baseline_truth_owner;
+    isPublicResultTruthOwner = resolvedAnalysisInput.source.is_public_result_truth_owner;
     fallbackReason = resolvedAnalysisInput.source.fallback_reason;
   }
 
@@ -213,7 +213,7 @@ export async function runGenerationInputResolve(
     deepSummary,
     analysisSourceMode,
     sourcePublicResultId,
-    isBaselineTruthOwner,
+    isPublicResultTruthOwner,
     fallbackReason,
     totalSessionsForPhase,
     policyOptions,
