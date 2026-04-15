@@ -64,17 +64,42 @@ const PRIMARY_TYPE_TO_SESSION_BAND: Record<UnifiedPrimaryType, string | null> = 
   UNKNOWN:                    null,
 };
 
+// ─── PR-PILOT-BASELINE-SESSION-ALIGN-01: baseline_session_anchor ─────────────
+// legacy band만으로는 LOWER_INSTABILITY와 LOWER_MOBILITY_RESTRICTION이
+// 동일한 세션으로 보임. primary_type 의미를 그대로 유지하는 세분화된 앵커.
+// priority-layer의 resolveFirstSessionIntent가 이 값을 우선 소비한다.
+export type BaselineSessionAnchor =
+  | 'lower_stability'
+  | 'lower_mobility'
+  | 'upper_mobility'
+  | 'trunk_control'
+  | 'deconditioned'
+  | 'balanced_reset';
+
+const PRIMARY_TYPE_TO_BASELINE_ANCHOR: Record<UnifiedPrimaryType, BaselineSessionAnchor | null> = {
+  LOWER_INSTABILITY:          'lower_stability',
+  LOWER_MOBILITY_RESTRICTION: 'lower_mobility',
+  UPPER_IMMOBILITY:           'upper_mobility',
+  CORE_CONTROL_DEFICIT:       'trunk_control',
+  DECONDITIONED:              'deconditioned',
+  STABLE:                     'balanced_reset',
+  UNKNOWN:                    null,
+};
+
 // ─── primary_type → focus/avoid 파생 매핑 ────────────────────────────────────
 // plan generator의 focus scoring 체계와 호환되는 태그 집합.
 // _compat.focus_tags가 없는 free_survey/camera 계열에 적용.
 
+// PR-PILOT-BASELINE-SESSION-ALIGN-01: focus 태그를 더 정교하게 분리.
+// LOWER_INSTABILITY는 stability/activation 계열, LOWER_MOBILITY_RESTRICTION은 mobility 계열.
+// UPPER_IMMOBILITY는 상체 가동성 우선으로 core가 앞에 오지 않도록.
 const PRIMARY_TYPE_FOCUS_MAP: Record<UnifiedPrimaryType, string[]> = {
-  LOWER_INSTABILITY:         ['lower_chain_stability', 'glute_activation', 'glute_medius'],
-  LOWER_MOBILITY_RESTRICTION:['hip_mobility', 'ankle_mobility', 'hip_flexor_stretch'],
-  UPPER_IMMOBILITY:          ['shoulder_mobility', 'thoracic_mobility', 'upper_back_activation'],
-  CORE_CONTROL_DEFICIT:      ['core_stability', 'core_control', 'global_core'],
-  DECONDITIONED:             ['full_body_reset', 'glute_activation', 'core_stability'],
-  STABLE:                    ['core_stability', 'upper_back_activation'],
+  LOWER_INSTABILITY:         ['lower_chain_stability', 'glute_activation', 'glute_medius', 'basic_balance'],
+  LOWER_MOBILITY_RESTRICTION:['hip_mobility', 'ankle_mobility', 'hip_flexor_stretch', 'lower_chain_stability'],
+  UPPER_IMMOBILITY:          ['shoulder_mobility', 'thoracic_mobility', 'upper_back_activation', 'shoulder_stability'],
+  CORE_CONTROL_DEFICIT:      ['core_control', 'core_stability', 'global_core'],
+  DECONDITIONED:             ['full_body_reset', 'core_control', 'glute_activation'],
+  STABLE:                    ['core_stability', 'upper_back_activation', 'hip_mobility'],
   UNKNOWN:                   ['core_stability'],
 };
 
@@ -119,6 +144,8 @@ export interface SessionDeepSummaryFromPublicResult extends SessionDeepSummary {
   source_mode: 'public_result';
   /** FLOW-06 관찰가능성: 원본 public result id (source_deep_attempt_id 대신) */
   source_public_result_id: string;
+  /** PR-PILOT-BASELINE-SESSION-ALIGN-01: primary_type에서 파생된 세분화된 세션 앵커 */
+  baseline_session_anchor: string | undefined;
 }
 
 /**
@@ -220,6 +247,9 @@ export function buildSessionDeepSummaryFromPublicResult(
     if (translationMeta) session_camera_translation = translationMeta;
   }
 
+  // PR-PILOT-BASELINE-SESSION-ALIGN-01: primary_type → 세분화된 세션 앵커
+  const baseline_session_anchor = PRIMARY_TYPE_TO_BASELINE_ANCHOR[primaryType] ?? undefined;
+
   return {
     // ── SessionDeepSummary fields ───────────────────────────────────────
     result_type,
@@ -244,5 +274,7 @@ export function buildSessionDeepSummaryFromPublicResult(
     source_mode: 'public_result' as const,
     source_public_result_id: row.id,
     // source_deep_attempt_id: 없음 (public result 경로)
+    // ── PR-PILOT-BASELINE-SESSION-ALIGN-01: 세분화된 세션 앵커 ─────────
+    baseline_session_anchor,
   };
 }
