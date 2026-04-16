@@ -67,6 +67,19 @@ export type ReplacementEffect =
   | 'alignment_weakening'
   | 'unknown';
 export type PhaseSemanticGuardrail = 'preserved' | 'warning' | 'violated';
+export type SelectedTruthFallbackLayer = 'analysis_input' | 'generation' | 'none';
+
+export interface SelectedTruthTrace {
+  source_mode: 'public_result' | 'legacy_paid_deep';
+  is_truth_owner: boolean;
+  public_result_id: string | null;
+  public_result_stage: 'baseline' | 'refined' | null;
+  selected_claimed_at: string | null;
+  selected_created_at: string | null;
+  legacy_deep_attempt_id: string | null;
+  fallback_reason: string | null;
+  fallback_layer: SelectedTruthFallbackLayer;
+}
 
 export interface AlignmentAuditTrace {
   selected_truth: {

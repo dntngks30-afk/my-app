@@ -10,6 +10,16 @@ import { buildAdaptationTrace } from '@/lib/session/adaptive-progression';
 import { isAdaptivePhasePolicy, resolvePhasePolicyReason } from '@/lib/session/phase';
 import type { GenerationInputContinue, PlanMaterializeResult } from './types';
 import { buildAlignmentAuditTrace } from './alignment-audit';
+import type { SelectedTruthFallbackLayer } from '@/lib/session/session-snapshot';
+
+function resolveSelectedTruthFallbackLayer(input: {
+  fallbackReason: string | null;
+  generatorFallbackUsed: boolean;
+}): SelectedTruthFallbackLayer {
+  if (input.fallbackReason) return 'analysis_input';
+  if (input.generatorFallbackUsed) return 'generation';
+  return 'none';
+}
 
 export async function runPlanMaterialize(
   input: GenerationInputContinue
@@ -23,6 +33,10 @@ export async function runPlanMaterialize(
     deepSummary,
     analysisSourceMode,
     sourcePublicResultId,
+    sourcePublicResultStage,
+    selectedClaimedAt,
+    selectedCreatedAt,
+    sourceLegacyDeepAttemptId,
     isPublicResultTruthOwner,
     fallbackReason,
     totalSessionsForPhase,
@@ -162,6 +176,38 @@ export async function runPlanMaterialize(
     baselinePrimaryType: deepSummary.primary_type,
     planJson,
   });
+  const fallbackLayer = resolveSelectedTruthFallbackLayer({
+    fallbackReason,
+    generatorFallbackUsed: alignmentAudit.realized_alignment.generator_fallback_used,
+  });
+  const selectedTruthTrace = {
+    source_mode: analysisSourceMode,
+    is_truth_owner: isPublicResultTruthOwner,
+    public_result_id: sourcePublicResultId,
+    public_result_stage: sourcePublicResultStage,
+    selected_claimed_at: selectedClaimedAt,
+    selected_created_at: selectedCreatedAt,
+    legacy_deep_attempt_id: sourceLegacyDeepAttemptId,
+    fallback_reason: fallbackReason,
+    fallback_layer: fallbackLayer,
+  };
+  const finalGenerationTrace = {
+    ...generationTrace,
+    analysis_source_mode: analysisSourceMode,
+    ...(sourcePublicResultId && { source_public_result_id: sourcePublicResultId }),
+    // PR-PILOT-BASELINE-SESSION-ALIGN-01: observability 강화
+    is_public_result_truth_owner: isPublicResultTruthOwner,
+    ...(fallbackReason && { fallback_reason: fallbackReason }),
+    fallback_layer: fallbackLayer,
+    ...(deepSummary.baseline_session_anchor && {
+      baseline_session_anchor: deepSummary.baseline_session_anchor,
+    }),
+    ...(deepSummary.primary_type && {
+      baseline_primary_type: deepSummary.primary_type,
+    }),
+    selected_truth_trace: selectedTruthTrace,
+    alignment_audit: alignmentAudit,
+  };
 
   const planPayload = {
     user_id: input.userId,
@@ -174,21 +220,7 @@ export async function runPlanMaterialize(
     source_deep_attempt_id: deepSummary.source_deep_attempt_id ?? null,
     deep_summary_snapshot_json: deepSummarySnapshot,
     profile_snapshot_json: profileSnapshot,
-    generation_trace_json: {
-      ...generationTrace,
-      analysis_source_mode: analysisSourceMode,
-      ...(sourcePublicResultId && { source_public_result_id: sourcePublicResultId }),
-      // PR-PILOT-BASELINE-SESSION-ALIGN-01: observability 강화
-      is_public_result_truth_owner: isPublicResultTruthOwner,
-      ...(fallbackReason && { fallback_reason: fallbackReason }),
-      ...(deepSummary.baseline_session_anchor && {
-        baseline_session_anchor: deepSummary.baseline_session_anchor,
-      }),
-      ...(deepSummary.primary_type && {
-        baseline_primary_type: deepSummary.primary_type,
-      }),
-      alignment_audit: alignmentAudit,
-    },
+    generation_trace_json: finalGenerationTrace,
   };
 
   return {
@@ -198,7 +230,7 @@ export async function runPlanMaterialize(
     deepSummarySnapshot,
     profileSnapshot,
     adaptationTrace,
-    generationTrace,
+    generationTrace: finalGenerationTrace,
     planPayload,
   };
 }
