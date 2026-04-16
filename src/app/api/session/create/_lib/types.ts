@@ -12,6 +12,7 @@ import type {
   PlanJsonOutput,
 } from '@/lib/session/plan-generator';
 import type { ExerciseExperienceLevel } from '@/lib/session/profile';
+import type { AlignmentAuditTrace } from '@/lib/session/session-snapshot';
 
 export type SessionCreateAdminClient = ReturnType<typeof getServerSupabaseAdmin>;
 
@@ -169,7 +170,7 @@ export type PlanMaterializeResult = GenerationInputContinue & {
   deepSummarySnapshot: Record<string, unknown>;
   profileSnapshot: Record<string, unknown>;
   adaptationTrace: AdaptationTrace;
-  generationTrace: Record<string, unknown>;
+  generationTrace: Record<string, unknown> & { alignment_audit?: AlignmentAuditTrace };
   planPayload: {
     user_id: string;
     session_number: number;
@@ -186,7 +187,7 @@ export type PlanMaterializeResult = GenerationInputContinue & {
     source_deep_attempt_id: string | null;
     deep_summary_snapshot_json: Record<string, unknown>;
     profile_snapshot_json: Record<string, unknown>;
-    generation_trace_json: Record<string, unknown>;
+    generation_trace_json: Record<string, unknown> & { alignment_audit?: AlignmentAuditTrace };
   };
 };
 

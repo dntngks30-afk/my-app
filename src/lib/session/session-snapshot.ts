@@ -59,6 +59,46 @@ export interface GenerationTrace {
   phase_policy_reason?: PhasePolicyReason;
 }
 
+export type AlignmentStrength = 'strong' | 'partial' | 'weak' | 'fallback_only';
+export type AlignmentMode = 'direct' | 'translated' | 'degraded' | 'fallback';
+export type ReplacementEffect =
+  | 'none'
+  | 'alignment_preserving'
+  | 'alignment_weakening'
+  | 'unknown';
+export type PhaseSemanticGuardrail = 'preserved' | 'warning' | 'violated';
+
+export interface AlignmentAuditTrace {
+  selected_truth: {
+    source_mode: 'public_result' | 'legacy_paid_deep';
+    public_result_id: string | null;
+    anchor_basis: string | null;
+    primary_type: string | null;
+    fallback_active: boolean;
+  };
+  intended_alignment: {
+    expected_anchor: string | null;
+    expected_primary_type: string | null;
+    expected_truth_owner_dominance: boolean;
+    pre_generation_fallback_active: boolean;
+  };
+  realized_alignment: {
+    alignment_mode: AlignmentMode;
+    alignment_strength: AlignmentStrength;
+    realized_intent_anchor: string | null;
+    gold_path_vector: string | null;
+    intent_source: 'baseline_anchor' | 'legacy_band' | 'none' | 'unknown';
+    generator_fallback_used: boolean;
+  };
+  guardrail_outcome: {
+    phase_semantic_guardrail: PhaseSemanticGuardrail;
+    prep_dominance_avoided: 'avoided' | 'not_avoided' | 'unknown';
+    replacement_applied: boolean;
+    replacement_effect: ReplacementEffect;
+    warning_codes?: string[];
+  };
+}
+
 /**
  * Build deep summary snapshot (no raw answers). Explainability + plan generation basis only.
  */
