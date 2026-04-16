@@ -9,6 +9,7 @@ import {
 import { buildAdaptationTrace } from '@/lib/session/adaptive-progression';
 import { isAdaptivePhasePolicy, resolvePhasePolicyReason } from '@/lib/session/phase';
 import type { GenerationInputContinue, PlanMaterializeResult } from './types';
+import { buildAlignmentAuditTrace } from './alignment-audit';
 
 export async function runPlanMaterialize(
   input: GenerationInputContinue
@@ -152,6 +153,15 @@ export async function runPlanMaterialize(
     ...baseTrace,
     adaptation: adaptationTrace,
   };
+  const alignmentAudit = buildAlignmentAuditTrace({
+    analysisSourceMode,
+    sourcePublicResultId,
+    isPublicResultTruthOwner,
+    fallbackReason,
+    baselineSessionAnchor: deepSummary.baseline_session_anchor,
+    baselinePrimaryType: deepSummary.primary_type,
+    planJson,
+  });
 
   const planPayload = {
     user_id: input.userId,
@@ -177,6 +187,7 @@ export async function runPlanMaterialize(
       ...(deepSummary.primary_type && {
         baseline_primary_type: deepSummary.primary_type,
       }),
+      alignment_audit: alignmentAudit,
     },
   };
 
