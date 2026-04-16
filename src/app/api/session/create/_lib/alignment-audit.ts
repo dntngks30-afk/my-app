@@ -67,7 +67,12 @@ function resolveAlignmentMode(input: {
   }
 
   if (!input.selectedAnchor) {
-    return input.fallbackUsedByGenerator ? 'degraded' : 'translated';
+    if (input.fallbackUsedByGenerator) return 'degraded';
+    // Anchor 근거가 없을 때는 intent source + realized anchor가 모두 있어야만 translated로 인정한다.
+    if (input.intentSource === 'baseline_anchor' && !!input.realizedIntentAnchor) {
+      return 'translated';
+    }
+    return 'degraded';
   }
 
   if (input.intentSource === 'baseline_anchor' && input.realizedIntentAnchor === input.selectedAnchor) {
@@ -82,7 +87,7 @@ function resolveAlignmentMode(input: {
     return 'degraded';
   }
 
-  return 'translated';
+  return 'degraded';
 }
 
 function resolveGuardrail(input: {
