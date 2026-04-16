@@ -9,6 +9,9 @@ export interface ResolvedSessionAnalysisInput {
   source: {
     mode: SessionAnalysisSourceMode;
     public_result_id: string | null;
+    public_result_stage: 'baseline' | 'refined' | null;
+    selected_claimed_at: string | null;
+    selected_created_at: string | null;
     deep_attempt_id: string | null;
     /** PR-PILOT-BASELINE-SESSION-ALIGN-01: public result(baseline 또는 refined)가 truth owner인지 */
     is_public_result_truth_owner: boolean;
@@ -45,6 +48,9 @@ export async function resolveSessionAnalysisInput(
       source: {
         mode: 'public_result',
         public_result_id: claimedPublicResult.id,
+        public_result_stage: claimedPublicResult.stage,
+        selected_claimed_at: claimedPublicResult.claimedAt,
+        selected_created_at: claimedPublicResult.createdAt,
         deep_attempt_id: null,
         is_public_result_truth_owner: true,
         fallback_reason: null,
@@ -62,6 +68,9 @@ export async function resolveSessionAnalysisInput(
     source: {
       mode: 'legacy_paid_deep',
       public_result_id: null,
+      public_result_stage: null,
+      selected_claimed_at: null,
+      selected_created_at: null,
       deep_attempt_id: legacyDeepSummary.source_deep_attempt_id ?? null,
       is_public_result_truth_owner: false,
       fallback_reason: 'no_claimed_public_result',

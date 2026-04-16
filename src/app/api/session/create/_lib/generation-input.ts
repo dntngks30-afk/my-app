@@ -44,6 +44,10 @@ export async function runGenerationInputResolve(
   let deepSummary: SessionDeepSummary | null = null;
   let analysisSourceMode: 'public_result' | 'legacy_paid_deep' | null = null;
   let sourcePublicResultId: string | null = null;
+  let sourcePublicResultStage: 'baseline' | 'refined' | null = null;
+  let selectedClaimedAt: string | null = null;
+  let selectedCreatedAt: string | null = null;
+  let sourceLegacyDeepAttemptId: string | null = null;
   let isPublicResultTruthOwner = false;
   let fallbackReason: string | null = null;
 
@@ -52,6 +56,10 @@ export async function runGenerationInputResolve(
     deepSummary = resolvedAnalysisInput.summary;
     analysisSourceMode = resolvedAnalysisInput.source.mode;
     sourcePublicResultId = resolvedAnalysisInput.source.public_result_id;
+    sourcePublicResultStage = resolvedAnalysisInput.source.public_result_stage;
+    selectedClaimedAt = resolvedAnalysisInput.source.selected_claimed_at;
+    selectedCreatedAt = resolvedAnalysisInput.source.selected_created_at;
+    sourceLegacyDeepAttemptId = resolvedAnalysisInput.source.deep_attempt_id;
     isPublicResultTruthOwner = resolvedAnalysisInput.source.is_public_result_truth_owner;
     fallbackReason = resolvedAnalysisInput.source.fallback_reason;
   }
@@ -213,6 +221,10 @@ export async function runGenerationInputResolve(
     deepSummary,
     analysisSourceMode,
     sourcePublicResultId,
+    sourcePublicResultStage,
+    selectedClaimedAt,
+    selectedCreatedAt,
+    sourceLegacyDeepAttemptId,
     isPublicResultTruthOwner,
     fallbackReason,
     totalSessionsForPhase,

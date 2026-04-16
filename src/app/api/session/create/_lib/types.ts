@@ -12,7 +12,11 @@ import type {
   PlanJsonOutput,
 } from '@/lib/session/plan-generator';
 import type { ExerciseExperienceLevel } from '@/lib/session/profile';
-import type { AlignmentAuditTrace } from '@/lib/session/session-snapshot';
+import type {
+  AlignmentAuditTrace,
+  SelectedTruthTrace,
+  SelectedTruthFallbackLayer,
+} from '@/lib/session/session-snapshot';
 
 export type SessionCreateAdminClient = ReturnType<typeof getServerSupabaseAdmin>;
 
@@ -99,6 +103,10 @@ export type GenerationInputContinue = ProgressGateContinue & {
   deepSummary: SessionDeepSummary;
   analysisSourceMode: SessionAnalysisSourceMode;
   sourcePublicResultId: string | null;
+  sourcePublicResultStage: 'baseline' | 'refined' | null;
+  selectedClaimedAt: string | null;
+  selectedCreatedAt: string | null;
+  sourceLegacyDeepAttemptId: string | null;
   /** PR-PILOT-BASELINE-SESSION-ALIGN-01: public result(baseline 또는 refined)가 truth owner인지 */
   isPublicResultTruthOwner: boolean;
   /** PR-PILOT-BASELINE-SESSION-ALIGN-01: fallback 사용 시 이유 */
@@ -170,7 +178,11 @@ export type PlanMaterializeResult = GenerationInputContinue & {
   deepSummarySnapshot: Record<string, unknown>;
   profileSnapshot: Record<string, unknown>;
   adaptationTrace: AdaptationTrace;
-  generationTrace: Record<string, unknown> & { alignment_audit?: AlignmentAuditTrace };
+  generationTrace: Record<string, unknown> & {
+    alignment_audit?: AlignmentAuditTrace;
+    selected_truth_trace?: SelectedTruthTrace;
+    fallback_layer?: SelectedTruthFallbackLayer;
+  };
   planPayload: {
     user_id: string;
     session_number: number;
@@ -187,7 +199,11 @@ export type PlanMaterializeResult = GenerationInputContinue & {
     source_deep_attempt_id: string | null;
     deep_summary_snapshot_json: Record<string, unknown>;
     profile_snapshot_json: Record<string, unknown>;
-    generation_trace_json: Record<string, unknown> & { alignment_audit?: AlignmentAuditTrace };
+    generation_trace_json: Record<string, unknown> & {
+      alignment_audit?: AlignmentAuditTrace;
+      selected_truth_trace?: SelectedTruthTrace;
+      fallback_layer?: SelectedTruthFallbackLayer;
+    };
   };
 };
 
