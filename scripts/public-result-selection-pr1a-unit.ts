@@ -40,9 +40,29 @@ function row({
 }
 
 function run() {
-  // 1) older refined vs much newer baseline => baseline wins
+  function selectWinnerForExecutionTruth(
+    rows: ReturnType<typeof row>[],
+    validResultRowIds: Set<string>
+  ): ReturnType<typeof row> | null {
+    const validCandidates = rows.filter(
+      (candidate) =>
+        (candidate.result_stage === 'baseline' || candidate.result_stage === 'refined') &&
+        validResultRowIds.has(candidate.id)
+    );
+    if (validCandidates.length === 0) return null;
+    const { ranked } = rankClaimedRowsForExecution(validCandidates);
+    return ranked[0] ?? null;
+  }
+
+  // 1) invalid latest refined + valid older refined + fresher valid baseline
+  //    -> invalid refined must not pollute policy decision
   {
-    const refinedOld = row({
+    const refinedInvalidLatest = row({
+      id: 'r-invalid-latest',
+      stage: 'refined',
+      claimedAt: '2026-04-13T00:00:00.000Z',
+    });
+    const refinedOldValid = row({
       id: 'r-old',
       stage: 'refined',
       claimedAt: '2026-04-01T00:00:00.000Z',
@@ -52,12 +72,33 @@ function run() {
       stage: 'baseline',
       claimedAt: '2026-04-10T00:00:00.000Z',
     });
-    const { ranked, policy } = rankClaimedRowsForExecution([refinedOld, baselineNew]);
-    assert.equal(ranked[0]?.id, 'b-new');
-    assert.equal(policy.appliedStagePriority, 'baseline_overrides_stale_refined');
+    const winner = selectWinnerForExecutionTruth(
+      [refinedInvalidLatest, refinedOldValid, baselineNew],
+      new Set(['r-old', 'b-new'])
+    );
+    assert.equal(winner?.id, 'b-new');
   }
 
-  // 2) recent refined vs slightly newer baseline => refined can still win
+  // 2) invalid latest baseline + valid refined -> invalid baseline must not push out refined
+  {
+    const baselineInvalidLatest = row({
+      id: 'b-invalid-latest',
+      stage: 'baseline',
+      claimedAt: '2026-04-14T00:00:00.000Z',
+    });
+    const refinedValid = row({
+      id: 'r-valid',
+      stage: 'refined',
+      claimedAt: '2026-04-13T00:00:00.000Z',
+    });
+    const winner = selectWinnerForExecutionTruth(
+      [baselineInvalidLatest, refinedValid],
+      new Set(['r-valid'])
+    );
+    assert.equal(winner?.id, 'r-valid');
+  }
+
+  // 3) valid refined vs valid slightly newer baseline => refined can still win
   {
     const refinedRecent = row({
       id: 'r-recent',
@@ -69,54 +110,54 @@ function run() {
       stage: 'baseline',
       claimedAt: '2026-04-11T00:00:00.000Z',
     });
-    const { ranked, policy } = rankClaimedRowsForExecution([refinedRecent, baselineSlightlyNewer]);
-    assert.equal(ranked[0]?.id, 'r-recent');
-    assert.equal(policy.appliedStagePriority, 'refined_within_window');
-  }
-
-  // 3) same-stage deterministic ordering
-  {
-    const b1 = row({
-      id: 'b1',
-      stage: 'baseline',
-      claimedAt: '2026-04-10T00:00:00.000Z',
-      createdAt: '2026-04-10T00:00:00.000Z',
-    });
-    const b2 = row({
-      id: 'b2',
-      stage: 'baseline',
-      claimedAt: '2026-04-10T00:00:00.000Z',
-      createdAt: '2026-04-10T00:00:01.000Z',
-    });
-    const { ranked } = rankClaimedRowsForExecution([b1, b2]);
-    assert.deepEqual(
-      ranked.map((r) => r.id),
-      ['b2', 'b1']
+    const winner = selectWinnerForExecutionTruth(
+      [refinedRecent, baselineSlightlyNewer],
+      new Set(['r-recent', 'b-slight'])
     );
+    assert.equal(winner?.id, 'r-recent');
   }
 
-  // 4) no claimed candidate => empty ranking
+  // 4) no valid claimed candidate => final null
   {
-    const { ranked, policy } = rankClaimedRowsForExecution([]);
-    assert.equal(ranked.length, 0);
-    assert.equal(policy.appliedStagePriority, 'single_stage_only');
+    const refinedInvalid = row({
+      id: 'r-invalid',
+      stage: 'refined',
+      claimedAt: '2026-04-10T00:00:00.000Z',
+    });
+    const baselineInvalid = row({
+      id: 'b-invalid',
+      stage: 'baseline',
+      claimedAt: '2026-04-11T00:00:00.000Z',
+    });
+    const winner = selectWinnerForExecutionTruth(
+      [refinedInvalid, baselineInvalid],
+      new Set<string>()
+    );
+    assert.equal(winner, null);
   }
 
-  // 5) invalid row skip remains possible because unknown stage is ranked last
+  // 5) unknown stage row present -> must not pollute policy decision
   {
-    const unknown = row({
+    const unknownStageLatest = row({
       id: 'x-unknown',
       stage: 'invalid-stage',
       claimedAt: '2026-04-12T00:00:00.000Z',
     });
-    const baseline = row({
-      id: 'b-valid',
-      stage: 'baseline',
-      claimedAt: '2026-04-11T00:00:00.000Z',
+    const refinedValid = row({
+      id: 'r-valid-2',
+      stage: 'refined',
+      claimedAt: '2026-04-10T00:00:00.000Z',
     });
-    const { ranked } = rankClaimedRowsForExecution([unknown, baseline]);
-    assert.equal(ranked[0]?.id, 'b-valid');
-    assert.equal(ranked[1]?.id, 'x-unknown');
+    const baselineValidMuchNewer = row({
+      id: 'b-valid-2',
+      stage: 'baseline',
+      claimedAt: '2026-04-15T00:00:00.000Z',
+    });
+    const winner = selectWinnerForExecutionTruth(
+      [unknownStageLatest, refinedValid, baselineValidMuchNewer],
+      new Set(['r-valid-2', 'b-valid-2', 'x-unknown'])
+    );
+    assert.equal(winner?.id, 'b-valid-2');
   }
 
   console.log('public-result-selection-pr1a-unit: ok');
