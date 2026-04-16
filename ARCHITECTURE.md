@@ -25,6 +25,7 @@
 ## 1. Core identity
 
 MOVE RE는 운동 콘텐츠 앱이 아니다.  
+MOVE RE는 정적 추천 라이브러리도 아니다.  
 MOVE RE는 상태 기반 운동 실행 시스템이다.
 
 핵심 구조:
@@ -206,12 +207,51 @@ Locked direction:
 - session create의 primary source는 claimed public result다
 - legacy paid deep는 fallback only다
 - empty draft reuse 차단이 들어갔다
+- selected current public result truth는 result layer에서 끝나지 않고 session creation까지 연속된다
+- session 1은 selected current state truth의 continuation으로 체감되어야 한다
 
 Critical ownership rule:
 - analysis engine identifier와 template selection key는 분리되어야 한다
 
 금지:
 - compat metadata를 template-pool selector처럼 직접 사용
+- `Prep` semantics가 `Main` semantics를 silently dominate하는 composition
+
+---
+
+### Layer 8.1 Selected-truth trace layer (PR4 lock)
+책임:
+- selected truth를 canonical trace로 설명
+- what truth won / why won / 어떤 fallback layer였는지 기록
+
+Canonical block:
+- `selected_truth_trace`
+
+Required fields (개념):
+- source_mode
+- truth_owner
+- public_result_id + stage
+- selected timestamps (claimedAt / createdAt)
+- fallback_reason + fallback_layer
+
+Boundary:
+- selected truth 설명 계층이며 realized alignment 판정 계층이 아니다.
+
+### Layer 8.2 Alignment audit layer (PR3 lock)
+책임:
+- 생성 output이 selected truth를 honor했는지 machine-audit
+- phase-semantic drift(특히 Prep→Main 잠식) 여부를 감시
+
+Canonical block:
+- `alignment_audit`
+
+Boundary:
+- realized alignment 판정 계층이며 selected truth source 설명 계층이 아니다.
+
+### Layer 8.3 Boundary law (anti-conflation)
+- `selected_truth_trace` = what truth won and why
+- `alignment_audit` = whether output honored that truth
+- 두 블록을 합치거나 의미를 교차 재해석하지 않는다
 
 ---
 

@@ -49,6 +49,7 @@
 ## Current product identity
 
 MOVE RE는 운동 콘텐츠 앱이 아니다.  
+MOVE RE는 정적 추천 라이브러리도 아니다.  
 MOVE RE는 **상태 기반 운동 실행 시스템**이다.
 
 Core loop:
@@ -63,6 +64,8 @@ Core loop:
 - **Deep Result V2**가 단일 분석 truth
 - 카메라는 설문 baseline 위 **optional refine evidence** (독립 canonical truth 아님)
 - 세션 생성의 1차 source는 **claimed public result**; legacy paid deep는 **fallback only**
+- public result truth는 result 화면에서 종료되지 않고 session generation까지 이어지는 연속 계약
+- session 1은 선택된 current state truth의 continuation으로 체감되어야 함 (generic routine 금지)
 - **readiness**가 `next_action` 소유
 - login / signup / signup-complete 구간 **next·intent continuity** 강화됨 (기본 복귀는 마케팅 루트 `/`가 아닌 계약된 경로 — SSOT §3-7)
 - empty plan: `scoring_version`(분석 엔진 식별자)이 템플릿 풀 키로 새는 문제 **완화됨** (`deep_v3` → 풀 조회 시 `deep_v2` 정규화)
@@ -108,6 +111,47 @@ Core loop:
 - public-entry/handoff 수정 시 **`/app` 실행 코어**를 불필요하게 흔들지 않는다.
 - **내부 raw scoring / priority 축**을 사용자 대면 UX의 중심에 두지 않는다 (디버그/어드민 예외는 별도).
 - 기본 UX로 **두 개의 평행한 public entry**를 다시 만들지 않는다.
+- `selected_truth_trace`와 `alignment_audit`를 같은 블록/같은 의미로 합치지 않는다.
+- `selected_truth_trace`를 realized alignment 판정 블록처럼 재해석하지 않는다.
+- `alignment_audit`를 selected truth 설명 블록처럼 재해석하지 않는다.
+- `Prep` semantics가 `Main` semantics를 silently dominate하게 만들지 않는다.
+
+---
+
+## Canonical contracts after PR52/PR3/PR4 (durable memory)
+
+### Contract A — Public result truth continuity
+- public result truth는 결과 페이지에서 끝나지 않는다.
+- selected current public result는 session creation 입력 truth로 이어져야 한다.
+- session create는 generic routine 조합이 아니라 selected analysis truth의 continuation이어야 한다.
+
+### Contract B — Session 1 alignment law
+- session 1은 selected current state truth의 continuation처럼 느껴져야 한다.
+- state-based execution의 증거는 텍스트 설명이 아니라 실제 session 구성/체감에서 나타나야 한다.
+- `Prep`는 준비 단계 의미를 유지하며 `Main` 의도를 대체/지배하면 안 된다.
+
+### Contract C — PR3 conceptual lock (`alignment_audit`)
+- `alignment_audit`는 realized alignment를 machine-audit하기 위한 계약이다.
+- 목적: 생성 결과가 selected truth를 실제로 honor했는지 추적.
+- 비목적: selected truth가 무엇이었는지의 source-owner 설명.
+- audit precision은 overclaim(“맞는 것처럼 보임”을 확정으로 기록) 금지.
+
+### Contract D — PR4 conceptual lock (`selected_truth_trace`)
+- `selected_truth_trace`는 selected truth 계약이다.
+- 목적: what truth won / stage / timestamps / fallback layer-reason를 설명.
+- 비목적: generated output의 realized alignment 품질 판정.
+
+### Contract E — Boundary law (절대 혼합 금지)
+- `selected_truth_trace` = **what truth won and why**
+- `alignment_audit` = **whether output honored that truth**
+- 두 계약을 conflation하면 디버깅·회귀 판정·책임 경계가 무너진다.
+
+### Contract F — Canonical follow-up order memory (post-PR52)
+1. source-selection truth
+2. first-session composition quality
+3. alignment audit / guardrails
+4. truth-owner / trace contract cleanup
+5. docs alignment (현재 PR 성격)
 
 ---
 
