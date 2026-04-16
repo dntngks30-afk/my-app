@@ -24,30 +24,48 @@ function parseIsoToEpochMs(value: string): number {
   return Number.isFinite(ms) ? ms : Number.NEGATIVE_INFINITY;
 }
 
-function sortStageRowsByRecency(
+/**
+ * PR1-B timing law:
+ * 1) claimed_at  (execution-path recency)
+ * 2) created_at  (analysis-generation recency)
+ * 3) id          (final deterministic stability)
+ */
+export function compareByDeterministicSelectionTimingLaw(
+  a: PublicResultClaimedRowForSelection,
+  b: PublicResultClaimedRowForSelection
+): number {
+  const claimedDiff = parseIsoToEpochMs(b.claimed_at) - parseIsoToEpochMs(a.claimed_at);
+  if (claimedDiff !== 0) return claimedDiff;
+
+  const createdDiff = parseIsoToEpochMs(b.created_at) - parseIsoToEpochMs(a.created_at);
+  if (createdDiff !== 0) return createdDiff;
+
+  return b.id.localeCompare(a.id);
+}
+
+function sortRowsByDeterministicSelectionTimingLaw(
   rows: PublicResultClaimedRowForSelection[]
 ): PublicResultClaimedRowForSelection[] {
-  return [...rows].sort((a, b) => {
-    const claimedDiff = parseIsoToEpochMs(b.claimed_at) - parseIsoToEpochMs(a.claimed_at);
-    if (claimedDiff !== 0) return claimedDiff;
-    const createdDiff = parseIsoToEpochMs(b.created_at) - parseIsoToEpochMs(a.created_at);
-    if (createdDiff !== 0) return createdDiff;
-    return b.id.localeCompare(a.id);
-  });
+  return [...rows].sort(compareByDeterministicSelectionTimingLaw);
 }
 
 export function rankClaimedRowsForExecution(
   rows: PublicResultClaimedRowForSelection[]
 ): RankedClaimedRowsForExecution {
-  const refinedRows = sortStageRowsByRecency(rows.filter((row) => row.result_stage === 'refined'));
-  const baselineRows = sortStageRowsByRecency(rows.filter((row) => row.result_stage === 'baseline'));
-  const unknownStageRows = sortStageRowsByRecency(
+  const refinedRows = sortRowsByDeterministicSelectionTimingLaw(
+    rows.filter((row) => row.result_stage === 'refined')
+  );
+  const baselineRows = sortRowsByDeterministicSelectionTimingLaw(
+    rows.filter((row) => row.result_stage === 'baseline')
+  );
+  const unknownStageRows = sortRowsByDeterministicSelectionTimingLaw(
     rows.filter((row) => row.result_stage !== 'baseline' && row.result_stage !== 'refined')
   );
 
   const bestRefined = refinedRows[0] ?? null;
   const bestBaseline = baselineRows[0] ?? null;
 
+  // PR1-A: stage/currentness ownership remains first.
   if (bestBaseline && bestRefined) {
     const baselineFreshnessGapMs =
       parseIsoToEpochMs(bestBaseline.claimed_at) - parseIsoToEpochMs(bestRefined.claimed_at);

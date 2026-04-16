@@ -9,12 +9,13 @@
  * - claim 자체는 FLOW-05 (claimPublicResult.ts) 범위
  * - session create 어댑터는 buildSessionDeepSummaryFromPublicResult.ts 범위
  *
- * ─── PR1-A 선택 기준 (currentness-window-aware stage/freshness) ─────────────
+ * ─── PR1-A/PR1-B 선택 기준 (stage/currentness + deterministic timing law) ───
  * - 동일 user의 claimed 행 후보를 가져온 뒤 메모리에서 순위 결정:
- *   1) baseline/refined 각각의 "best claimed 후보"를 찾음
- *   2) baseline이 refined보다 policy window 이상 의미 있게 최신이면 baseline 우선
- *   3) 그 외에는 refined 우선 유지 (naive latest-only 붕괴 방지)
- *   4) 같은 stage 내에서는 claimed_at(동률 created_at, id)으로 결정
+ *   1) PR1-A: stage/currentness window로 baseline/refined 우선순위 결정
+ *   2) PR1-B: 같은 bucket 내 timing law를 deterministic하게 고정
+ *      - claimed_at: authenticated execution path 편입 시점(1순위)
+ *      - created_at: 분석 결과 생성 시점(2순위)
+ *      - id: 최종 안정 정렬키(3순위)
  * - stage/V2 검증으로 execution-owner 가능 후보를 먼저 좁힌 뒤,
  *   그 valid 후보 집합에만 currentness-window 정책 적용
  * - 후보는 DB에서 상한 개수만큼만 가져옴(드문 다건 claim). refined가 그 밖에 있으면
