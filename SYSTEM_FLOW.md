@@ -268,6 +268,8 @@ Boundary:
 
 ### Contract 1. Public result continuity
 public result는 auth 이전에도 존재하고, auth 이후에도 같은 결과 continuity 위에서 이어져야 한다.
+또한 continuity는 result 화면에서 끝나지 않고 session creation 입력 truth까지 이어져야 한다.
+session create는 selected current public result truth의 continuation이어야 하며 generic routine 생성으로 퇴행하면 안 된다.
 
 ### Contract 2. Auth continuity
 login/signup/signup-complete 이후 **마케팅 루트(`/`)로 의도 없이만** 튕기면 안 된다. 복귀는 `next`·bridge·`/app/home` 등 **의도가 보존된 경로**여야 한다.
@@ -284,6 +286,25 @@ survey는 baseline, camera는 refine다.
 
 ### Contract 6. Result presentation
 복잡한 내부 분석 정보보다, 사용자 행동 가이드를 우선한다.
+
+### Contract 7. Session 1 alignment law
+session 1은 selected current state truth의 continuation처럼 체감되어야 한다.
+state-based execution의 증거는 설명 문구가 아니라 실제 session 구성에서 느껴져야 한다.
+
+### Contract 8. Phase semantics preservation
+`Prep` semantics는 `Main` semantics를 silently dominate하면 안 된다.
+
+### Contract 9. Trace-vs-audit boundary
+- `selected_truth_trace`: what truth won and why (stage/timestamps/fallback layer 포함)
+- `alignment_audit`: generated output이 그 truth를 실제로 honor했는지
+- 두 블록을 혼합 해석하지 않는다.
+
+### Contract 10. Canonical follow-up memory (post-PR52)
+1) source-selection truth  
+2) first-session composition quality  
+3) alignment audit/guardrails  
+4) truth-owner/trace contract cleanup  
+5) docs alignment
 
 ---
 
