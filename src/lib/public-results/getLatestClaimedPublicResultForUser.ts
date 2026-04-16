@@ -9,11 +9,14 @@
  * - claim 자체는 FLOW-05 (claimPublicResult.ts) 범위
  * - session create 어댑터는 buildSessionDeepSummaryFromPublicResult.ts 범위
  *
- * ─── PR-RESULT-SELECTION-01 선택 기준 ─────────────────────────────────────────
+ * ─── PR1-A 선택 기준 (currentness-window-aware stage/freshness) ─────────────
  * - 동일 user의 claimed 행 후보를 가져온 뒤 메모리에서 순위 결정:
- *   1) result_stage: refined 가 baseline 보다 우선
- *   2) 같은 stage 내에서는 claimed_at 이 더 최근인 행 우선
- * - 순위대로 stage / UnifiedDeepResultV2 검증 → 첫 통과 행 반환
+ *   1) baseline/refined 각각의 "best claimed 후보"를 찾음
+ *   2) baseline이 refined보다 policy window 이상 의미 있게 최신이면 baseline 우선
+ *   3) 그 외에는 refined 우선 유지 (naive latest-only 붕괴 방지)
+ *   4) 같은 stage 내에서는 claimed_at(동률 created_at, id)으로 결정
+ * - stage/V2 검증으로 execution-owner 가능 후보를 먼저 좁힌 뒤,
+ *   그 valid 후보 집합에만 currentness-window 정책 적용
  * - 후보는 DB에서 상한 개수만큼만 가져옴(드문 다건 claim). refined가 그 밖에 있으면
  *   이론상 누락 가능 — docs/pr/PR-RESULT-SELECTION-01.md 참고.
  *
@@ -26,6 +29,10 @@
  */
 
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import {
+  rankClaimedRowsForExecution,
+  type PublicResultClaimedRowForSelection,
+} from '@/lib/public-results/claimed-result-selection-policy';
 import {
   validateUnifiedDeepResultV2,
   type UnifiedDeepResultV2,
@@ -48,29 +55,7 @@ export interface ClaimedPublicResultRow {
   createdAt: string;
 }
 
-/** DB 행 (검증 전) */
-interface PublicResultClaimedRow {
-  id: string;
-  user_id: string;
-  result_stage: string;
-  result_v2_json: unknown;
-  claimed_at: string;
-  created_at: string;
-}
-
-/** PR-RESULT-SELECTION-01: refined 우선, 동일 stage 내 claimed_at 최신 우선 */
 const MAX_CLAIMED_CANDIDATES = 80;
-
-function rankClaimedRowsForExecution(rows: PublicResultClaimedRow[]): PublicResultClaimedRow[] {
-  return [...rows].sort((a, b) => {
-    const rank = (stage: string) => (stage === 'refined' ? 0 : stage === 'baseline' ? 1 : 2);
-    const dr = rank(a.result_stage) - rank(b.result_stage);
-    if (dr !== 0) return dr;
-    const ta = new Date(a.claimed_at).getTime();
-    const tb = new Date(b.claimed_at).getTime();
-    return tb - ta;
-  });
-}
 
 // ─── 로더 함수 ────────────────────────────────────────────────────────────────
 
@@ -78,7 +63,8 @@ function rankClaimedRowsForExecution(rows: PublicResultClaimedRow[]): PublicResu
  * getLatestClaimedPublicResultForUser — 사용자의 실행 truth용 claimed public result 로드
  *
  * - claimed_at IS NOT NULL 인 행만 후보
- * - 후보를 refined-first · claimed_at 내림차순으로 순위 매긴 뒤 검증 통과 첫 행 반환
+ * - 후보를 currentness-window-aware(stage/freshness) 정책으로 순위 매긴 뒤
+ *   검증 통과 첫 행 반환
  * - result_v2_json을 UnifiedDeepResultV2로 검증하지 못하면 다음 순위 후보 시도
  *
  * @returns ClaimedPublicResultRow (존재하고 유효하면) | null (없거나 유효하지 않으면)
@@ -110,9 +96,9 @@ export async function getLatestClaimedPublicResultForUser(
 
   if (!rows || rows.length === 0) return null;
 
-  const ranked = rankClaimedRowsForExecution(rows as PublicResultClaimedRow[]);
+  const validCandidates: PublicResultClaimedRowForSelection[] = [];
 
-  for (const data of ranked) {
+  for (const data of rows as PublicResultClaimedRowForSelection[]) {
     if (data.result_stage !== 'baseline' && data.result_stage !== 'refined') {
       console.warn(
         `[getLatestClaimedPublicResultForUser] 알 수 없는 stage: ${data.result_stage} (id=${data.id})`
@@ -128,16 +114,21 @@ export async function getLatestClaimedPublicResultForUser(
       );
       continue;
     }
-
-    return {
-      id: data.id as string,
-      userId: data.user_id as string,
-      stage: data.result_stage as 'baseline' | 'refined',
-      result: data.result_v2_json as UnifiedDeepResultV2,
-      claimedAt: data.claimed_at as string,
-      createdAt: data.created_at as string,
-    };
+    validCandidates.push(data);
   }
 
-  return null;
+  if (validCandidates.length === 0) return null;
+
+  const { ranked } = rankClaimedRowsForExecution(validCandidates);
+  const winner = ranked[0];
+  if (!winner) return null;
+
+  return {
+    id: winner.id as string,
+    userId: winner.user_id as string,
+    stage: winner.result_stage as 'baseline' | 'refined',
+    result: winner.result_v2_json as UnifiedDeepResultV2,
+    claimedAt: winner.claimed_at as string,
+    createdAt: winner.created_at as string,
+  };
 }
