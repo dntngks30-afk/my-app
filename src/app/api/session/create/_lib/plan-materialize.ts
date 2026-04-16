@@ -191,6 +191,23 @@ export async function runPlanMaterialize(
     fallback_reason: fallbackReason,
     fallback_layer: fallbackLayer,
   };
+  const finalGenerationTrace = {
+    ...generationTrace,
+    analysis_source_mode: analysisSourceMode,
+    ...(sourcePublicResultId && { source_public_result_id: sourcePublicResultId }),
+    // PR-PILOT-BASELINE-SESSION-ALIGN-01: observability 강화
+    is_public_result_truth_owner: isPublicResultTruthOwner,
+    ...(fallbackReason && { fallback_reason: fallbackReason }),
+    fallback_layer: fallbackLayer,
+    ...(deepSummary.baseline_session_anchor && {
+      baseline_session_anchor: deepSummary.baseline_session_anchor,
+    }),
+    ...(deepSummary.primary_type && {
+      baseline_primary_type: deepSummary.primary_type,
+    }),
+    selected_truth_trace: selectedTruthTrace,
+    alignment_audit: alignmentAudit,
+  };
 
   const planPayload = {
     user_id: input.userId,
@@ -203,23 +220,7 @@ export async function runPlanMaterialize(
     source_deep_attempt_id: deepSummary.source_deep_attempt_id ?? null,
     deep_summary_snapshot_json: deepSummarySnapshot,
     profile_snapshot_json: profileSnapshot,
-    generation_trace_json: {
-      ...generationTrace,
-      analysis_source_mode: analysisSourceMode,
-      ...(sourcePublicResultId && { source_public_result_id: sourcePublicResultId }),
-      // PR-PILOT-BASELINE-SESSION-ALIGN-01: observability 강화
-      is_public_result_truth_owner: isPublicResultTruthOwner,
-      ...(fallbackReason && { fallback_reason: fallbackReason }),
-      fallback_layer: fallbackLayer,
-      ...(deepSummary.baseline_session_anchor && {
-        baseline_session_anchor: deepSummary.baseline_session_anchor,
-      }),
-      ...(deepSummary.primary_type && {
-        baseline_primary_type: deepSummary.primary_type,
-      }),
-      selected_truth_trace: selectedTruthTrace,
-      alignment_audit: alignmentAudit,
-    },
+    generation_trace_json: finalGenerationTrace,
   };
 
   return {
@@ -229,7 +230,7 @@ export async function runPlanMaterialize(
     deepSummarySnapshot,
     profileSnapshot,
     adaptationTrace,
-    generationTrace,
+    generationTrace: finalGenerationTrace,
     planPayload,
   };
 }
