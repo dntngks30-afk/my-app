@@ -43,6 +43,11 @@ import type {
 } from '@/lib/deep-v2/session/survey-session-hints-first-session';
 import type { SessionCameraTranslationMetaV1 } from '@/lib/deep-v2/session/merge-survey-camera-session-hints';
 import { LOWER_AXIS_GUARD_TAGS, LOWER_PAIR_GOLD_PATH_RULES } from '@/lib/session/lower-pair-session1-shared';
+import {
+  scoreUpperMobilityIntentFit,
+  shouldReplaceForbiddenDominantByAnchor,
+  shouldReserveUpperMainCandidate,
+} from '@/lib/session/upper-mobility-session1-shared';
 
 const REPETITION_PENALTY = 100;
 const CONTRAINDICATION_PENALTY = 100;
@@ -59,9 +64,6 @@ const MAX_SAME_FOCUS_IN_MAIN = 2;
 const GOLD_PATH_VECTORS = ['lower_stability', 'lower_mobility', 'trunk_control', 'upper_mobility', 'deconditioned'] as const;
 type GoldPathVector = typeof GOLD_PATH_VECTORS[number];
 type SegmentKind = 'prep' | 'main' | 'accessory' | 'cooldown';
-
-const UPPER_MOBILITY_INTENT_TAGS = new Set(['shoulder_mobility', 'thoracic_mobility', 'upper_back_activation', 'shoulder_stability']);
-const TRUNK_CONTROL_TAGS = new Set(['core_control', 'core_stability', 'global_core']);
 
 /** Phase-safe composition: focus_tags → segment eligibility (no DB change) */
 const PREP_TAGS = new Set([
@@ -483,17 +485,7 @@ function scoreFirstSessionIntentFit(
     return 2;
   }
   if (anchor === 'upper_mobility') {
-    const hasUpperIntentTag = template.focus_tags.some((tag) => UPPER_MOBILITY_INTENT_TAGS.has(tag));
-    const hasTrunkControlTag = template.focus_tags.some((tag) => TRUNK_CONTROL_TAGS.has(tag));
-    if (rule.kind === 'main') {
-      let score = 13;
-      if (hasUpperIntentTag) score += 2;
-      if (hasTrunkControlTag && !hasUpperIntentTag) score -= 5;
-      return score;
-    }
-    if (rule.kind === 'accessory') return 6;
-    if (rule.kind === 'prep') return 4;
-    return 2;
+    return scoreUpperMobilityIntentFit(template.focus_tags, rule.kind);
   }
   if (rule.kind === 'main') return 10;
   if (rule.kind === 'prep') return 6;
@@ -656,20 +648,6 @@ function buildGoldPathSegmentRules(
   }));
 }
 
-
-function shouldReserveUpperMainCandidate(
-  template: SessionTemplateRow,
-  ruleKind: SegmentKind,
-  firstSessionIntent?: FirstSessionIntentSSOT | null
-): boolean {
-  if (!firstSessionIntent || firstSessionIntent.anchorType !== 'upper_mobility') return false;
-  if (ruleKind === 'main') return false;
-  const hasUpperMainTag = template.focus_tags.some((tag) =>
-    tag === 'upper_back_activation' || tag === 'shoulder_stability'
-  );
-  return hasUpperMainTag && isMainEligible(template);
-}
-
 function selectGoldPathTemplates(
   sorted: Array<{ template: SessionTemplateRow; score: number }>,
   input: PlanGeneratorInput,
@@ -726,7 +704,12 @@ function selectGoldPathTemplates(
 
     for (const { template } of ranked) {
       if (items.length >= rule.count) break;
-      if (shouldReserveUpperMainCandidate(template, rule.kind, firstSessionIntent)) continue;
+      if (shouldReserveUpperMainCandidate({
+        anchorType: firstSessionIntent?.anchorType,
+        ruleKind: rule.kind,
+        templateFocusTags: template.focus_tags,
+        isMainEligible: isMainEligible(template),
+      })) continue;
       if (!hasTemplatePhase(template, rule.preferredPhases)) continue;
       if (!hasTargetVector(template, rule.preferredVectors)) continue;
       tryPick(template);
@@ -734,7 +717,12 @@ function selectGoldPathTemplates(
 
     for (const { template } of ranked) {
       if (items.length >= rule.count) break;
-      if (shouldReserveUpperMainCandidate(template, rule.kind, firstSessionIntent)) continue;
+      if (shouldReserveUpperMainCandidate({
+        anchorType: firstSessionIntent?.anchorType,
+        ruleKind: rule.kind,
+        templateFocusTags: template.focus_tags,
+        isMainEligible: isMainEligible(template),
+      })) continue;
       if (!hasTemplatePhase(template, rule.preferredPhases)) continue;
       if (!hasTargetVector(template, rule.fallbackVectors)) continue;
       tryPick(template);
@@ -742,7 +730,12 @@ function selectGoldPathTemplates(
 
     for (const { template } of ranked) {
       if (items.length >= rule.count) break;
-      if (shouldReserveUpperMainCandidate(template, rule.kind, firstSessionIntent)) continue;
+      if (shouldReserveUpperMainCandidate({
+        anchorType: firstSessionIntent?.anchorType,
+        ruleKind: rule.kind,
+        templateFocusTags: template.focus_tags,
+        isMainEligible: isMainEligible(template),
+      })) continue;
       if (!hasTargetVector(template, rule.preferredVectors)) continue;
       tryPick(template);
     }
@@ -847,10 +840,11 @@ function enforceForbiddenDominantAxes(
     item.focus_tags.some((tag) => forbiddenTags.has(tag))
   ).length;
 
-  const shouldReplaceForbiddenDominant =
-    firstSessionIntent.anchorType === 'upper_mobility'
-      ? forbiddenCount >= 1
-      : forbiddenCount > mainEntry.items.length / 2;
+  const shouldReplaceForbiddenDominant = shouldReplaceForbiddenDominantByAnchor({
+    anchorType: firstSessionIntent.anchorType,
+    forbiddenCount,
+    mainItemCount: mainEntry.items.length,
+  });
 
   if (!shouldReplaceForbiddenDominant) return segmentEntries;
 
