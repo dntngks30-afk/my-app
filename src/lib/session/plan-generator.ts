@@ -704,6 +704,7 @@ function selectGoldPathTemplates(
 
     for (const { template } of ranked) {
       if (items.length >= rule.count) break;
+      // PR2-C follow-up: reserve upper-main-capacity candidates in the final conservative fallback pass too.
       if (shouldReserveUpperMainCandidate({
         anchorType: firstSessionIntent?.anchorType,
         ruleKind: rule.kind,
