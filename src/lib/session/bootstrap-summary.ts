@@ -19,6 +19,11 @@ import {
   shouldReplaceForbiddenDominantByAnchor,
   shouldReserveUpperMainCandidate,
 } from '@/lib/session/upper-mobility-session1-shared'
+import {
+  applyTrunkCoreSession1TemplateProjection,
+  scoreTrunkCoreIntentFit,
+  TRUNK_CORE_GOLD_PATH_RULES,
+} from '@/lib/session/trunk-core-session1-shared'
 
 type GoldPathVector =
   | 'lower_stability'
@@ -94,12 +99,7 @@ type GoldPathSegmentRule = {
 const GOLD_PATH_RULES: Record<GoldPathVector, Omit<GoldPathSegmentRule, 'count'>[]> = {
   lower_stability: [...LOWER_PAIR_GOLD_PATH_RULES.lower_stability],
   lower_mobility: [...LOWER_PAIR_GOLD_PATH_RULES.lower_mobility],
-  trunk_control: [
-    { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: ['trunk_control', 'deconditioned'], fallbackVectors: ['upper_mobility'], preferredProgression: [1] },
-    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['trunk_control'], fallbackVectors: ['lower_stability'], preferredProgression: [1, 2, 3] },
-    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['trunk_control'], fallbackVectors: ['lower_stability', 'upper_mobility'], preferredProgression: [1, 2] },
-    { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['accessory', 'prep'], preferredVectors: ['deconditioned', 'trunk_control'], fallbackVectors: ['upper_mobility'], preferredProgression: [1] },
-  ],
+  trunk_control: [...TRUNK_CORE_GOLD_PATH_RULES],
   upper_mobility: [
     { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: ['upper_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [1] },
     { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['upper_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [2, 1, 3] },
@@ -413,6 +413,9 @@ function scoreFirstSessionIntentFit(
   if (anchor === 'upper_mobility') {
     return scoreUpperMobilityIntentFit(template.focus_tags, rule.kind)
   }
+  if (anchor === 'trunk_control') {
+    return scoreTrunkCoreIntentFit(template.focus_tags, rule.kind)
+  }
   if (rule.kind === 'main') return 10
   if (rule.kind === 'prep') return 6
   return 3
@@ -580,8 +583,12 @@ export function buildSessionBootstrapSummaryFromTemplates(
     redFlags: input.deepSummary.red_flags,
     baselineSessionAnchor: input.deepSummary.baseline_session_anchor,
   })
+  const sessionTemplates = applyTrunkCoreSession1TemplateProjection(
+    templates,
+    firstSessionIntent?.anchorType
+  )
 
-  const candidates = templates.filter(
+  const candidates = sessionTemplates.filter(
     (template) =>
       !hasContraindicationOverlap(template.contraindications, excludeSet) &&
       template.level <= maxLevel &&

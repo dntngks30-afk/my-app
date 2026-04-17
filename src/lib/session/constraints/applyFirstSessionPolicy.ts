@@ -19,6 +19,7 @@ import {
 import { DECONDITIONED_REDUCTIONS } from '@/core/session-guardrail/guardrailRules';
 import { RULE_IDS } from '@/lib/session/policy-registry';
 import { createConstraintReason } from './reasons';
+import { scoreTrunkCoreReplacementFit } from '@/lib/session/trunk-core-session1-shared';
 import type {
   ConstraintEngineContext,
   ConstraintEngineResult,
@@ -95,7 +96,9 @@ function findReplacementTemplate(
     const ranked = candidates
       .map((template) => ({
         template,
-        score: template.focus_tags.filter((tag) => focusSet.has(tag)).length,
+        score:
+          template.focus_tags.filter((tag) => focusSet.has(tag)).length +
+          scoreTrunkCoreReplacementFit(template.focus_tags, sessionFocusAxes),
       }))
       .sort((a, b) => b.score - a.score || a.template.id.localeCompare(b.template.id));
     return ranked[0]?.template ?? null;

@@ -60,14 +60,14 @@ function topCounts(items, limit = 4) {
     .map(([key, count]) => ({ key, count }));
 }
 
-function collectTagShape(plan, templateById, segmentTitle) {
+function collectTagShape(plan, templateById, segmentTitle, limit = 4) {
   const seg = getSegment(plan, segmentTitle);
   const tags = [];
   for (const item of seg?.items ?? []) {
     const template = templateById.get(item.templateId);
     for (const tag of template?.focus_tags ?? []) tags.push(tag);
   }
-  return topCounts(tags);
+  return topCounts(tags, limit);
 }
 
 function collectVectorShape(plan, templateById, segmentTitle) {
@@ -116,7 +116,12 @@ function buildSnapshot({ fixture, persona, deep, plan, templateById }) {
         item_count: countItems(seg),
       })),
       main_emphasis_shape: {
-        focus_tags_top: collectTagShape(plan, templateById, 'Main'),
+        focus_tags_top: collectTagShape(
+          plan,
+          templateById,
+          'Main',
+          fixture.anchor_type === 'CORE_CONTROL_DEFICIT' ? 8 : 4
+        ),
         target_vectors_top: collectVectorShape(plan, templateById, 'Main'),
       },
       guardrail_summary: {
@@ -246,17 +251,18 @@ async function run() {
   let buildSessionPlanJson;
   let calculateDeepV3;
   let getTemplatesForSessionPlan;
+  let applyTrunkCoreSession1TemplateProjection;
 
   try {
     ({ buildSessionPlanJson } = await import('../src/lib/session/plan-generator.ts'));
     ({ getTemplatesForSessionPlan } = await import('../src/lib/workout-routine/exercise-templates-db.ts'));
     ({ calculateDeepV3 } = await import('../src/lib/deep-test/scoring/deep_v3.ts'));
+    ({ applyTrunkCoreSession1TemplateProjection } = await import('../src/lib/session/trunk-core-session1-shared.ts'));
   } catch (e) {
     throw e;
   }
 
   const { templates, source } = await loadTemplates({ getTemplatesForSessionPlan });
-  const templateById = new Map(templates.map((t) => [t.id, t]));
 
   const snapshots = [];
 
@@ -274,6 +280,7 @@ async function run() {
     }
 
     const resultType = deep.derived?.result_type ?? PRIMARY_TO_RESULT_TYPE[deep.primary_type] ?? 'UNKNOWN';
+    const baselineAnchor = PRIMARY_TO_BASELINE_ANCHOR[deep.primary_type];
 
     const plan = await buildSessionPlanJson({
       templatePool: templates,
@@ -295,8 +302,10 @@ async function run() {
       secondary_type: deep.secondary_type,
       priority_vector: deep.priority_vector,
       pain_mode: deep.pain_mode,
-      baseline_session_anchor: PRIMARY_TO_BASELINE_ANCHOR[deep.primary_type],
+      baseline_session_anchor: baselineAnchor,
     });
+    const snapshotTemplates = applyTrunkCoreSession1TemplateProjection(templates, baselineAnchor);
+    const templateById = new Map(snapshotTemplates.map((t) => [t.id, t]));
 
     snapshots.push(
       buildSnapshot({
