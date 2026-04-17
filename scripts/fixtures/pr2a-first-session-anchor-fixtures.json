@@ -1,0 +1,26 @@
+[
+  {
+    "anchor_type": "LOWER_INSTABILITY",
+    "persona_id": "lower-instability-basic"
+  },
+  {
+    "anchor_type": "LOWER_MOBILITY_RESTRICTION",
+    "persona_id": "lower-mobility-ankle"
+  },
+  {
+    "anchor_type": "UPPER_IMMOBILITY",
+    "persona_id": "upper-immobility-basic"
+  },
+  {
+    "anchor_type": "CORE_CONTROL_DEFICIT",
+    "persona_id": "core-control-lumbo"
+  },
+  {
+    "anchor_type": "DECONDITIONED",
+    "persona_id": "deconditioned-basic"
+  },
+  {
+    "anchor_type": "STABLE",
+    "persona_id": "stable-basic"
+  }
+]
