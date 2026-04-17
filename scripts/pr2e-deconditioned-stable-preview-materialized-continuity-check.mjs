@@ -132,7 +132,9 @@ function deriveDifficulty(level) {
 
 function getExpectedVectors(anchorType) {
   if (anchorType === 'DECONDITIONED') {
-    return ['trunk_control', 'upper_mobility'];
+    // PR2-E composition truth: DECONDITIONED Main is M13+M14 (both trunk_control-only,
+    // no upper_mobility). Expected signal is pure trunk-supportive.
+    return ['trunk_control'];
   }
   return ['upper_mobility', 'trunk_control'];
 }
@@ -211,13 +213,16 @@ async function run() {
     const previewPrimaryVector = topKey(previewMain.target_vectors_top);
     const materializedFocusAxes = plan.meta?.session_focus_axes ?? [];
     const previewFocusAxes = preview.focus_axes ?? [];
+    // PR2-E composition truth: DECONDITIONED Main is now M13+M14 (pure trunk_control).
+    // old check required upper_mobility — removed since that was the pre-polish state.
     const deconditionedActualMainAligned =
       fixture.anchor_type !== 'DECONDITIONED' ||
       (
         materializedFocusAxes.includes('trunk_control') &&
-        hasAllVectors(materializedMain, ['trunk_control', 'upper_mobility']) &&
-        hasAnyTag(materializedMain, ['core_control', 'core_stability', 'global_core']) &&
-        materializedMain.template_ids.includes('M14')
+        hasAllVectors(materializedMain, ['trunk_control']) &&
+        !hasAllVectors(materializedMain, ['upper_mobility']) &&
+        hasAnyTag(materializedMain, ['core_stability', 'global_core']) &&
+        (materializedMain.template_ids.includes('M13') || materializedMain.template_ids.includes('M14'))
       );
 
     perAnchor.push({

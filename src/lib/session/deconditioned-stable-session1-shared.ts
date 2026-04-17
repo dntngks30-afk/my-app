@@ -48,8 +48,8 @@ export function getDeconditionedFirstSessionGoldPathRules(): DeconditionedStable
       'Accessory',
       'accessory',
       ['accessory', 'prep'],
-      ['upper_mobility', 'trunk_control'],
-      ['deconditioned'],
+      ['trunk_control', 'deconditioned'],
+      ['upper_mobility'],
       [1, 2]
     ),
     makeRule(
@@ -142,17 +142,21 @@ export function scoreDeconditionedStableIntentFit(args: {
       );
     }
     if (ruleKind === 'main') {
+      // Prefer gentle trunk-supportive floor patterns (core_stability/global_core)
+      // over upper-adjacent patterns for DECONDITIONED main composition.
       return (
-        (hasCoreControl ? 8 : 0) +
-        ((hasCoreStability || hasGlobalCore) ? 6 : 0) +
-        ((hasUpperBack || hasShoulderStability) ? 3 : 0)
+        ((hasCoreStability || hasGlobalCore) ? 9 : 0) +
+        (hasCoreControl ? 5 : 0) +
+        ((hasUpperBack || hasShoulderStability) ? 1 : 0)
       );
     }
     if (ruleKind === 'accessory') {
+      // Favor trunk/core anchor over upper-adjacent for DECONDITIONED accessory.
       return (
-        ((hasUpperBack || hasShoulderStability) ? 7 : 0) +
+        (hasCoreControl ? 7 : 0) +
+        ((hasCoreStability || hasGlobalCore) ? 5 : 0) +
         (hasBasicBalance ? 3 : 0) +
-        (hasThoracicMobility ? 2 : 0)
+        ((hasUpperBack || hasShoulderStability) ? 1 : 0)
       );
     }
     return (hasFullBodyReset ? 4 : 0) + (hasThoracicMobility ? 2 : 0);
@@ -215,7 +219,8 @@ export function scoreDeconditionedStableTemplatePolishBonus(args: {
   const { anchorType, templateId, ruleKind } = args;
   if (anchorType !== 'deconditioned' || ruleKind !== 'main') return 0;
 
-  // PR2-E follow-up: keep DECONDITIONED gentle, but prefer a clearer
-  // trunk-control main pattern over an interchangeable generic core slot.
-  return templateId === 'M14' ? 4 : 0;
+  // PR2-E: prefer gentle trunk-supportive floor exercises (M13 데드버그, M14 버드독)
+  // as the DECONDITIONED main pair. Both are level-2, trunk_control-only,
+  // and clearly deconditioned-safe without upper-mobility contamination.
+  return (templateId === 'M14' || templateId === 'M13') ? 8 : 0;
 }

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-17T18:17:10.143Z",
+  "generated_at": "2026-04-17T19:03:09.584Z",
   "purpose": "PR2-A baseline comparison harness snapshot (no tuning)",
   "template_source": "static_fallback_fixture",
   "anchors": [
@@ -61,22 +61,21 @@
         ],
         "main_emphasis_shape": {
           "template_ids": [
-            "M09",
+            "M13",
             "M14"
           ],
           "templates": [
             {
-              "template_id": "M09",
-              "name": "푸쉬업 플러스",
+              "template_id": "M13",
+              "name": "데드버그",
               "level": 2,
               "phase": "main",
               "focus_tags": [
-                "shoulder_stability",
-                "core_control"
+                "core_stability",
+                "global_core"
               ],
               "target_vector": [
-                "trunk_control",
-                "upper_mobility"
+                "trunk_control"
               ]
             },
             {
@@ -95,30 +94,18 @@
           ],
           "focus_tags_top": [
             {
-              "key": "core_control",
-              "count": 1
-            },
-            {
               "key": "core_stability",
-              "count": 1
+              "count": 2
             },
             {
               "key": "global_core",
-              "count": 1
-            },
-            {
-              "key": "shoulder_stability",
-              "count": 1
+              "count": 2
             }
           ],
           "target_vectors_top": [
             {
               "key": "trunk_control",
               "count": 2
-            },
-            {
-              "key": "upper_mobility",
-              "count": 1
             }
           ]
         },
@@ -168,22 +155,21 @@
           {
             "title": "Main",
             "template_ids": [
-              "M09",
+              "M13",
               "M14"
             ],
             "templates": [
               {
-                "template_id": "M09",
-                "name": "푸쉬업 플러스",
+                "template_id": "M13",
+                "name": "데드버그",
                 "level": 2,
                 "phase": "main",
                 "focus_tags": [
-                  "shoulder_stability",
-                  "core_control"
+                  "core_stability",
+                  "global_core"
                 ],
                 "target_vector": [
-                  "trunk_control",
-                  "upper_mobility"
+                  "trunk_control"
                 ]
               },
               {
@@ -202,30 +188,18 @@
             ],
             "focus_tags_top": [
               {
-                "key": "core_control",
-                "count": 1
-              },
-              {
                 "key": "core_stability",
-                "count": 1
+                "count": 2
               },
               {
                 "key": "global_core",
-                "count": 1
-              },
-              {
-                "key": "shoulder_stability",
-                "count": 1
+                "count": 2
               }
             ],
             "target_vectors_top": [
               {
                 "key": "trunk_control",
                 "count": 2
-              },
-              {
-                "key": "upper_mobility",
-                "count": 1
               }
             ]
           },

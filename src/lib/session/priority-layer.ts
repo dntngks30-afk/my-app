@@ -103,7 +103,11 @@ const BASELINE_ANCHOR_TO_REQUIRED_TAGS: Record<string, string[]> = {
   lower_mobility: ['hip_mobility', 'ankle_mobility', 'hip_flexor_stretch', 'calf_release'],
   upper_mobility: ['shoulder_mobility', 'thoracic_mobility', 'upper_back_activation', 'shoulder_stability'],
   trunk_control: ['core_control', 'core_stability', 'global_core'],
-  deconditioned: ['full_body_reset', 'core_control'],
+  // PR2-E: include core_stability so gentle trunk-supportive templates (M13/M14)
+  // satisfy the required-tag gate in enforceFirstSessionIntentOnSegments.
+  // Without this, the enforcement forces a core_control carrier (e.g. M09)
+  // back into Main, preventing the deconditioned-safe composition from landing.
+  deconditioned: ['full_body_reset', 'core_control', 'core_stability'],
   balanced_reset: ['core_control', 'core_stability'],
 };
 
