@@ -1,0 +1,96 @@
+{
+  "anchor_type": "STABLE",
+  "persona_id": "stable-basic",
+  "result": {
+    "primary_type": "STABLE",
+    "result_type": "STABLE",
+    "pain_mode": "none",
+    "safety_mode": "none",
+    "baseline_session_anchor": "balanced_reset",
+    "priority_vector": {
+      "lower_stability": 0,
+      "lower_mobility": 0,
+      "upper_mobility": 0,
+      "trunk_control": 0,
+      "asymmetry": 0,
+      "deconditioned": 0
+    }
+  },
+  "first_session": {
+    "session_number": 1,
+    "first_session_intent_anchor": "balanced_reset",
+    "intent_source": "baseline_anchor",
+    "gold_path_vector": "balanced_reset",
+    "rationale": "몸통 정렬과 상체 가동성을 함께 정리해 균형 잡힌 시작을 만드는 세션입니다.",
+    "session_focus_axes": [
+      "trunk_control",
+      "upper_mobility"
+    ],
+    "segment_counts": {
+      "prep": 1,
+      "main": 2,
+      "accessory": 1,
+      "cooldown": 1,
+      "total": 5
+    },
+    "segment_shape": [
+      {
+        "title": "Prep",
+        "item_count": 1
+      },
+      {
+        "title": "Main",
+        "item_count": 2
+      },
+      {
+        "title": "Accessory",
+        "item_count": 1
+      },
+      {
+        "title": "Cooldown",
+        "item_count": 1
+      }
+    ],
+    "main_emphasis_shape": {
+      "focus_tags_top": [
+        {
+          "key": "core_control",
+          "count": 1
+        },
+        {
+          "key": "core_stability",
+          "count": 1
+        },
+        {
+          "key": "global_core",
+          "count": 1
+        },
+        {
+          "key": "shoulder_stability",
+          "count": 1
+        }
+      ],
+      "target_vectors_top": [
+        {
+          "key": "trunk_control",
+          "count": 2
+        },
+        {
+          "key": "upper_mobility",
+          "count": 1
+        }
+      ]
+    },
+    "guardrail_summary": {
+      "pain_mode": "none",
+      "safety_mode": "none",
+      "first_session_guardrail_applied": true,
+      "pain_gate_applied": false,
+      "short_mode_applied": false,
+      "recovery_mode_applied": false,
+      "policy_rules": [
+        "sel_first_session"
+      ]
+    }
+  }
+}

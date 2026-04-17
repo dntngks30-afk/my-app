@@ -1,0 +1,199 @@
+{
+  "generated_at": "2026-04-17T17:06:34.750Z",
+  "purpose": "PR2-A baseline comparison harness snapshot (no tuning)",
+  "template_source": "static_fallback_fixture",
+  "anchors": [
+    "DECONDITIONED",
+    "STABLE"
+  ],
+  "snapshots": [
+    {
+      "anchor_type": "DECONDITIONED",
+      "persona_id": "deconditioned-basic",
+      "result": {
+        "primary_type": "DECONDITIONED",
+        "result_type": "DECONDITIONED",
+        "pain_mode": "none",
+        "safety_mode": "none",
+        "baseline_session_anchor": "deconditioned",
+        "priority_vector": {
+          "lower_stability": 0,
+          "lower_mobility": 0,
+          "upper_mobility": 0,
+          "trunk_control": 0.2,
+          "asymmetry": 0,
+          "deconditioned": 1
+        }
+      },
+      "first_session": {
+        "session_number": 1,
+        "first_session_intent_anchor": "deconditioned",
+        "intent_source": "baseline_anchor",
+        "gold_path_vector": "deconditioned",
+        "rationale": "기본 움직임 회복이 우선이어서 안정적인 움직임 기반을 다지는 세션입니다.",
+        "session_focus_axes": [
+          "deconditioned"
+        ],
+        "segment_counts": {
+          "prep": 1,
+          "main": 2,
+          "accessory": 1,
+          "cooldown": 1,
+          "total": 5
+        },
+        "segment_shape": [
+          {
+            "title": "Prep",
+            "item_count": 1
+          },
+          {
+            "title": "Main",
+            "item_count": 2
+          },
+          {
+            "title": "Accessory",
+            "item_count": 1
+          },
+          {
+            "title": "Cooldown",
+            "item_count": 1
+          }
+        ],
+        "main_emphasis_shape": {
+          "focus_tags_top": [
+            {
+              "key": "core_control",
+              "count": 1
+            },
+            {
+              "key": "core_stability",
+              "count": 1
+            },
+            {
+              "key": "global_core",
+              "count": 1
+            },
+            {
+              "key": "shoulder_stability",
+              "count": 1
+            }
+          ],
+          "target_vectors_top": [
+            {
+              "key": "trunk_control",
+              "count": 2
+            },
+            {
+              "key": "upper_mobility",
+              "count": 1
+            }
+          ]
+        },
+        "guardrail_summary": {
+          "pain_mode": "none",
+          "safety_mode": "none",
+          "first_session_guardrail_applied": true,
+          "pain_gate_applied": false,
+          "short_mode_applied": false,
+          "recovery_mode_applied": false,
+          "policy_rules": [
+            "sel_first_session"
+          ]
+        }
+      }
+    },
+    {
+      "anchor_type": "STABLE",
+      "persona_id": "stable-basic",
+      "result": {
+        "primary_type": "STABLE",
+        "result_type": "STABLE",
+        "pain_mode": "none",
+        "safety_mode": "none",
+        "baseline_session_anchor": "balanced_reset",
+        "priority_vector": {
+          "lower_stability": 0,
+          "lower_mobility": 0,
+          "upper_mobility": 0,
+          "trunk_control": 0,
+          "asymmetry": 0,
+          "deconditioned": 0
+        }
+      },
+      "first_session": {
+        "session_number": 1,
+        "first_session_intent_anchor": "balanced_reset",
+        "intent_source": "baseline_anchor",
+        "gold_path_vector": null,
+        "rationale": "",
+        "session_focus_axes": [],
+        "segment_counts": {
+          "prep": 1,
+          "main": 2,
+          "accessory": 1,
+          "cooldown": 1,
+          "total": 5
+        },
+        "segment_shape": [
+          {
+            "title": "Prep",
+            "item_count": 1
+          },
+          {
+            "title": "Main",
+            "item_count": 2
+          },
+          {
+            "title": "Accessory",
+            "item_count": 1
+          },
+          {
+            "title": "Cooldown",
+            "item_count": 1
+          }
+        ],
+        "main_emphasis_shape": {
+          "focus_tags_top": [
+            {
+              "key": "core_control",
+              "count": 1
+            },
+            {
+              "key": "shoulder_stability",
+              "count": 1
+            },
+            {
+              "key": "thoracic_mobility",
+              "count": 1
+            },
+            {
+              "key": "upper_back_activation",
+              "count": 1
+            }
+          ],
+          "target_vectors_top": [
+            {
+              "key": "upper_mobility",
+              "count": 2
+            },
+            {
+              "key": "trunk_control",
+              "count": 1
+            }
+          ]
+        },
+        "guardrail_summary": {
+          "pain_mode": "none",
+          "safety_mode": "none",
+          "first_session_guardrail_applied": true,
+          "pain_gate_applied": false,
+          "short_mode_applied": false,
+          "recovery_mode_applied": false,
+          "policy_rules": [
+            "sel_first_session"
+          ]
+        }
+      }
+    }
+  ]
+}

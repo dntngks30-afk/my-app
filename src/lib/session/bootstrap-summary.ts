@@ -24,6 +24,13 @@ import {
   scoreTrunkCoreIntentFit,
   TRUNK_CORE_GOLD_PATH_RULES,
 } from '@/lib/session/trunk-core-session1-shared'
+import {
+  getBalancedResetFirstSessionGoldPathRules,
+  getDeconditionedFirstSessionGoldPathRules,
+  isDeconditionedStablePolishAnchor,
+  scoreDeconditionedStableLevelPolishBonus,
+  scoreDeconditionedStableIntentFit,
+} from '@/lib/session/deconditioned-stable-session1-shared'
 
 type GoldPathVector =
   | 'lower_stability'
@@ -31,6 +38,7 @@ type GoldPathVector =
   | 'trunk_control'
   | 'upper_mobility'
   | 'deconditioned'
+  | 'balanced_reset'
 
 type SegmentKind = 'prep' | 'main' | 'accessory' | 'cooldown'
 
@@ -106,12 +114,8 @@ const GOLD_PATH_RULES: Record<GoldPathVector, Omit<GoldPathSegmentRule, 'count'>
     { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['upper_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2] },
     { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['accessory', 'prep'], preferredVectors: ['upper_mobility'], fallbackVectors: ['deconditioned'], preferredProgression: [1] },
   ],
-  deconditioned: [
-    { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: ['deconditioned'], fallbackVectors: ['trunk_control'], preferredProgression: [1] },
-    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['deconditioned', 'trunk_control'], fallbackVectors: ['lower_mobility', 'upper_mobility'], preferredProgression: [1, 2] },
-    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'prep'], preferredVectors: ['lower_mobility', 'upper_mobility'], fallbackVectors: ['deconditioned', 'trunk_control'], preferredProgression: [1] },
-    { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['prep', 'accessory'], preferredVectors: ['deconditioned'], fallbackVectors: ['lower_mobility', 'upper_mobility'], preferredProgression: [1] },
-  ],
+  deconditioned: [...getDeconditionedFirstSessionGoldPathRules()],
+  balanced_reset: [...getBalancedResetFirstSessionGoldPathRules()],
 }
 
 function isPrepEligible(t: SessionTemplateRow): boolean {
@@ -154,7 +158,7 @@ function resolveFocusAxes(priorityVector?: Record<string, number> | null): strin
 function resolveGoldPathVector(input: SessionBootstrapSummaryInput): GoldPathVector | null {
   const ranked = Object.entries(input.deepSummary.priority_vector ?? {})
     .filter((entry): entry is [GoldPathVector, number] =>
-      ['lower_stability', 'lower_mobility', 'trunk_control', 'upper_mobility', 'deconditioned'].includes(entry[0]) &&
+      ['lower_stability', 'lower_mobility', 'trunk_control', 'upper_mobility', 'deconditioned', 'balanced_reset'].includes(entry[0]) &&
       typeof entry[1] === 'number' &&
       entry[1] > 0
     )
@@ -173,6 +177,8 @@ function resolveGoldPathVector(input: SessionBootstrapSummaryInput): GoldPathVec
       return 'upper_mobility'
     case 'DECONDITIONED':
       return 'deconditioned'
+    case 'STABLE':
+      return 'balanced_reset'
     default:
       return null
   }
@@ -210,6 +216,17 @@ function scoreTemplate(
     score += PRIMARY_FOCUS_BONUS
   }
   if (priorityTags) score += scoreByPriority(template.focus_tags, priorityTags, PRIORITY_MATCH_BONUS)
+  const polishAnchor = firstSessionIntent?.goldPath ?? null
+  if (isDeconditionedStablePolishAnchor(polishAnchor)) {
+    score += scoreDeconditionedStableIntentFit({
+      anchorType: polishAnchor,
+      templateFocusTags: template.focus_tags,
+    })
+    score += scoreDeconditionedStableLevelPolishBonus({
+      anchorType: polishAnchor,
+      templateLevel: template.level,
+    })
+  }
   score -= getPainModePenalty(template.contraindications, input.deepSummary.pain_mode)
   if (template.level === finalTargetLevel) score += LEVEL_MATCH_BONUS
 
@@ -397,6 +414,14 @@ function scoreFirstSessionIntentFit(
 ): number {
   if (!firstSessionIntent) return 0
   if (!hasFirstSessionIntentTag(template, firstSessionIntent)) return 0
+  const polishAnchor = firstSessionIntent.goldPath
+  if (isDeconditionedStablePolishAnchor(polishAnchor)) {
+    return scoreDeconditionedStableIntentFit({
+      anchorType: polishAnchor,
+      templateFocusTags: template.focus_tags,
+      ruleKind: rule.kind,
+    })
+  }
   const anchor = firstSessionIntent.anchorType
   if (anchor === 'lower_stability') {
     if (rule.kind === 'main') return 12
@@ -490,9 +515,13 @@ function enforceFirstSessionIntentOnBootstrapSegments(
 ): Array<{ title: string; items: SessionTemplateRow[] }> {
   if (!firstSessionIntent || firstSessionIntent.requiredTags.length === 0) return segmentEntries
   const supportedAnchors =
+    firstSessionIntent.goldPath === 'deconditioned' ||
+    firstSessionIntent.goldPath === 'balanced_reset' ||
     firstSessionIntent.anchorType === 'lower_stability' ||
     firstSessionIntent.anchorType === 'lower_mobility' ||
-    firstSessionIntent.anchorType === 'upper_mobility'
+    firstSessionIntent.anchorType === 'upper_mobility' ||
+    firstSessionIntent.anchorType === 'deconditioned' ||
+    firstSessionIntent.anchorType === 'balanced_reset'
   if (!supportedAnchors) return segmentEntries
 
   const mainEntry = segmentEntries.find((e) => e.title === 'Main')

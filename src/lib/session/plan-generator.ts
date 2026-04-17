@@ -53,6 +53,13 @@ import {
   scoreTrunkCoreIntentFit,
   TRUNK_CORE_GOLD_PATH_RULES,
 } from '@/lib/session/trunk-core-session1-shared';
+import {
+  getBalancedResetFirstSessionGoldPathRules,
+  getDeconditionedFirstSessionGoldPathRules,
+  isDeconditionedStablePolishAnchor,
+  scoreDeconditionedStableLevelPolishBonus,
+  scoreDeconditionedStableIntentFit,
+} from '@/lib/session/deconditioned-stable-session1-shared';
 
 const REPETITION_PENALTY = 100;
 const CONTRAINDICATION_PENALTY = 100;
@@ -66,7 +73,7 @@ const LEVEL_MATCH_BONUS = 1;
 
 /** PR-P2-4: constraint hardening */
 const MAX_SAME_FOCUS_IN_MAIN = 2;
-const GOLD_PATH_VECTORS = ['lower_stability', 'lower_mobility', 'trunk_control', 'upper_mobility', 'deconditioned'] as const;
+const GOLD_PATH_VECTORS = ['lower_stability', 'lower_mobility', 'trunk_control', 'upper_mobility', 'deconditioned', 'balanced_reset'] as const;
 type GoldPathVector = typeof GOLD_PATH_VECTORS[number];
 type SegmentKind = 'prep' | 'main' | 'accessory' | 'cooldown';
 
@@ -140,12 +147,8 @@ const GOLD_PATH_RULES: Record<GoldPathVector, Omit<GoldPathSegmentRule, 'count'>
     { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['upper_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2] },
     { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['accessory', 'prep'], preferredVectors: ['upper_mobility'], fallbackVectors: ['deconditioned'], preferredProgression: [1] },
   ],
-  deconditioned: [
-    { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: ['deconditioned'], fallbackVectors: ['trunk_control'], preferredProgression: [1] },
-    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['deconditioned', 'trunk_control'], fallbackVectors: ['lower_mobility', 'upper_mobility'], preferredProgression: [1, 2] },
-    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'prep'], preferredVectors: ['lower_mobility', 'upper_mobility'], fallbackVectors: ['deconditioned', 'trunk_control'], preferredProgression: [1] },
-    { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['prep', 'accessory'], preferredVectors: ['deconditioned'], fallbackVectors: ['lower_mobility', 'upper_mobility'], preferredProgression: [1] },
-  ],
+  deconditioned: [...getDeconditionedFirstSessionGoldPathRules()],
+  balanced_reset: [...getBalancedResetFirstSessionGoldPathRules()],
 };
 const MIN_CANDIDATES_FOR_STRICT_AVOID = 3;
 const SHORT_TOTAL_ITEM_CAP = 4;
@@ -245,6 +248,8 @@ function resolveGoldPathVector(
       return 'upper_mobility';
     case 'DECONDITIONED':
       return 'deconditioned';
+    case 'STABLE':
+      return 'balanced_reset';
     default:
       return null;
   }
@@ -442,6 +447,18 @@ function scoreTemplate(
     score += PRIMARY_FOCUS_BONUS;
   }
 
+  const polishAnchor = firstSessionIntent?.goldPath ?? null;
+  if (isDeconditionedStablePolishAnchor(polishAnchor)) {
+    score += scoreDeconditionedStableIntentFit({
+      anchorType: polishAnchor,
+      templateFocusTags: t.focus_tags,
+    });
+    score += scoreDeconditionedStableLevelPolishBonus({
+      anchorType: polishAnchor,
+      templateLevel: t.level,
+    });
+  }
+
   // PR-ALG-03: pain_mode 기반 penalty
   score -= getPainModePenalty(t.contraindications, input.pain_mode);
 
@@ -471,6 +488,14 @@ function scoreFirstSessionIntentFit(
 ): number {
   if (!firstSessionIntent) return 0;
   if (!hasFirstSessionIntentTag(template, firstSessionIntent)) return 0;
+  const polishAnchor = firstSessionIntent.goldPath;
+  if (isDeconditionedStablePolishAnchor(polishAnchor)) {
+    return scoreDeconditionedStableIntentFit({
+      anchorType: polishAnchor,
+      templateFocusTags: template.focus_tags,
+      ruleKind: rule.kind,
+    });
+  }
   const anchor = firstSessionIntent.anchorType;
   if (anchor === 'lower_stability') {
     if (rule.kind === 'main') return 12;

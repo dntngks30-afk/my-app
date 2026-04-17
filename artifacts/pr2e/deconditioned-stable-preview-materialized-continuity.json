@@ -1,0 +1,201 @@
+{
+  "generated_at": "2026-04-17T17:35:18.968Z",
+  "purpose": "PR2-E preview/materialized continuity proof",
+  "template_source": "static_fallback_fixture",
+  "per_anchor": [
+    {
+      "anchor_type": "DECONDITIONED",
+      "expected_baseline_anchor": "deconditioned",
+      "materialized_first_session_intent_anchor": "deconditioned",
+      "materialized_focus_axes": [
+        "deconditioned",
+        "trunk_control"
+      ],
+      "preview_focus_axes": [
+        "deconditioned",
+        "trunk_control"
+      ],
+      "materialized_segment_titles": [
+        "Prep",
+        "Main",
+        "Accessory",
+        "Cooldown"
+      ],
+      "preview_segment_titles": [
+        "Prep",
+        "Main",
+        "Accessory",
+        "Cooldown"
+      ],
+      "materialized_main_emphasis_shape": {
+        "template_ids": [
+          "M09",
+          "M13"
+        ],
+        "focus_tags_top": [
+          {
+            "key": "core_control",
+            "count": 1
+          },
+          {
+            "key": "core_stability",
+            "count": 1
+          },
+          {
+            "key": "global_core",
+            "count": 1
+          },
+          {
+            "key": "shoulder_stability",
+            "count": 1
+          }
+        ],
+        "target_vectors_top": [
+          {
+            "key": "trunk_control",
+            "count": 2
+          },
+          {
+            "key": "upper_mobility",
+            "count": 1
+          }
+        ]
+      },
+      "preview_main_emphasis_shape": {
+        "template_ids": [
+          "M09"
+        ],
+        "focus_tags_top": [
+          {
+            "key": "core_control",
+            "count": 1
+          },
+          {
+            "key": "shoulder_stability",
+            "count": 1
+          }
+        ],
+        "target_vectors_top": [
+          {
+            "key": "trunk_control",
+            "count": 1
+          },
+          {
+            "key": "upper_mobility",
+            "count": 1
+          }
+        ]
+      },
+      "continuity_checks": {
+        "intent_anchor_matches_expected": true,
+        "focus_axes_match": true,
+        "segment_titles_match": true,
+        "primary_vector_matches": true,
+        "shared_vector_keys": [
+          "trunk_control",
+          "upper_mobility"
+        ],
+        "shared_vector_keys_nonempty": true,
+        "expected_signal_vectors_present": true,
+        "first_session_guardrail_kept": true
+      }
+    },
+    {
+      "anchor_type": "STABLE",
+      "expected_baseline_anchor": "balanced_reset",
+      "materialized_first_session_intent_anchor": "balanced_reset",
+      "materialized_focus_axes": [
+        "trunk_control",
+        "upper_mobility"
+      ],
+      "preview_focus_axes": [
+        "trunk_control",
+        "upper_mobility"
+      ],
+      "materialized_segment_titles": [
+        "Prep",
+        "Main",
+        "Accessory",
+        "Cooldown"
+      ],
+      "preview_segment_titles": [
+        "Prep",
+        "Main",
+        "Accessory",
+        "Cooldown"
+      ],
+      "materialized_main_emphasis_shape": {
+        "template_ids": [
+          "M09",
+          "M13"
+        ],
+        "focus_tags_top": [
+          {
+            "key": "core_control",
+            "count": 1
+          },
+          {
+            "key": "core_stability",
+            "count": 1
+          },
+          {
+            "key": "global_core",
+            "count": 1
+          },
+          {
+            "key": "shoulder_stability",
+            "count": 1
+          }
+        ],
+        "target_vectors_top": [
+          {
+            "key": "trunk_control",
+            "count": 2
+          },
+          {
+            "key": "upper_mobility",
+            "count": 1
+          }
+        ]
+      },
+      "preview_main_emphasis_shape": {
+        "template_ids": [
+          "M09"
+        ],
+        "focus_tags_top": [
+          {
+            "key": "core_control",
+            "count": 1
+          },
+          {
+            "key": "shoulder_stability",
+            "count": 1
+          }
+        ],
+        "target_vectors_top": [
+          {
+            "key": "trunk_control",
+            "count": 1
+          },
+          {
+            "key": "upper_mobility",
+            "count": 1
+          }
+        ]
+      },
+      "continuity_checks": {
+        "intent_anchor_matches_expected": true,
+        "focus_axes_match": true,
+        "segment_titles_match": true,
+        "primary_vector_matches": true,
+        "shared_vector_keys": [
+          "trunk_control",
+          "upper_mobility"
+        ],
+        "shared_vector_keys_nonempty": true,
+        "expected_signal_vectors_present": true,
+        "first_session_guardrail_kept": true
+      }
+    }
+  ]
+}
