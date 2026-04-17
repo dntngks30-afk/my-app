@@ -80,6 +80,31 @@ function collectVectorShape(plan, templateById, segmentTitle) {
   return topCounts(vectors);
 }
 
+function collectTemplateShape(plan, templateById, segmentTitle) {
+  const seg = getSegment(plan, segmentTitle);
+  return (seg?.items ?? []).map((item) => {
+    const template = templateById.get(item.templateId);
+    return {
+      template_id: item.templateId,
+      name: template?.name ?? null,
+      level: template?.level ?? null,
+      phase: template?.phase ?? null,
+      focus_tags: template?.focus_tags ?? [],
+      target_vector: template?.target_vector ?? [],
+    };
+  });
+}
+
+function collectSegmentEmphasisShape(plan, templateById) {
+  return plan.segments.map((seg) => ({
+    title: seg.title,
+    template_ids: (seg.items ?? []).map((item) => item.templateId),
+    templates: collectTemplateShape(plan, templateById, seg.title),
+    focus_tags_top: collectTagShape(plan, templateById, seg.title, 8),
+    target_vectors_top: collectVectorShape(plan, templateById, seg.title),
+  }));
+}
+
 function buildSnapshot({ fixture, persona, deep, plan, templateById }) {
   const meta = plan.meta ?? {};
   const prep = getSegment(plan, 'Prep');
@@ -116,6 +141,8 @@ function buildSnapshot({ fixture, persona, deep, plan, templateById }) {
         item_count: countItems(seg),
       })),
       main_emphasis_shape: {
+        template_ids: collectTemplateShape(plan, templateById, 'Main').map((template) => template.template_id),
+        templates: collectTemplateShape(plan, templateById, 'Main'),
         focus_tags_top: collectTagShape(
           plan,
           templateById,
@@ -124,6 +151,7 @@ function buildSnapshot({ fixture, persona, deep, plan, templateById }) {
         ),
         target_vectors_top: collectVectorShape(plan, templateById, 'Main'),
       },
+      segment_emphasis_shape: collectSegmentEmphasisShape(plan, templateById),
       guardrail_summary: {
         pain_mode: meta.pain_mode ?? null,
         safety_mode: meta.safety_mode ?? null,

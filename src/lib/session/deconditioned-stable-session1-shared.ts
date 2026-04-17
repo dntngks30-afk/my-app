@@ -206,3 +206,16 @@ export function scoreDeconditionedStableLevelPolishBonus(args: {
   if (anchorType !== 'balanced_reset' || typeof templateLevel !== 'number') return 0;
   return templateLevel >= 3 ? 4 : 0;
 }
+
+export function scoreDeconditionedStableTemplatePolishBonus(args: {
+  anchorType?: DeconditionedStablePolishAnchor | null;
+  templateId?: string | null;
+  ruleKind?: SegmentKind | null;
+}): number {
+  const { anchorType, templateId, ruleKind } = args;
+  if (anchorType !== 'deconditioned' || ruleKind !== 'main') return 0;
+
+  // PR2-E follow-up: keep DECONDITIONED gentle, but prefer a clearer
+  // trunk-control main pattern over an interchangeable generic core slot.
+  return templateId === 'M14' ? 4 : 0;
+}

@@ -59,6 +59,7 @@ import {
   isDeconditionedStablePolishAnchor,
   scoreDeconditionedStableLevelPolishBonus,
   scoreDeconditionedStableIntentFit,
+  scoreDeconditionedStableTemplatePolishBonus,
 } from '@/lib/session/deconditioned-stable-session1-shared';
 
 const REPETITION_PENALTY = 100;
@@ -487,15 +488,22 @@ function scoreFirstSessionIntentFit(
   firstSessionIntent?: FirstSessionIntentSSOT | null
 ): number {
   if (!firstSessionIntent) return 0;
-  if (!hasFirstSessionIntentTag(template, firstSessionIntent)) return 0;
   const polishAnchor = firstSessionIntent.goldPath;
   if (isDeconditionedStablePolishAnchor(polishAnchor)) {
-    return scoreDeconditionedStableIntentFit({
+    const requiredTagFit = hasFirstSessionIntentTag(template, firstSessionIntent)
+      ? scoreDeconditionedStableIntentFit({
+          anchorType: polishAnchor,
+          templateFocusTags: template.focus_tags,
+          ruleKind: rule.kind,
+        })
+      : 0;
+    return requiredTagFit + scoreDeconditionedStableTemplatePolishBonus({
       anchorType: polishAnchor,
-      templateFocusTags: template.focus_tags,
+      templateId: template.id,
       ruleKind: rule.kind,
     });
   }
+  if (!hasFirstSessionIntentTag(template, firstSessionIntent)) return 0;
   const anchor = firstSessionIntent.anchorType;
   if (anchor === 'lower_stability') {
     if (rule.kind === 'main') return 12;

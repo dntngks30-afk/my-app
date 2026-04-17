@@ -34,14 +34,24 @@ function collectMainShape(segmentCarrier, templateById) {
   const tags = [];
   const vectors = [];
   const templateIds = [];
+  const templates = [];
   for (const item of main?.items ?? []) {
     const template = templateById.get(item.templateId);
     templateIds.push(item.templateId);
+    templates.push({
+      template_id: item.templateId,
+      name: template?.name ?? null,
+      level: template?.level ?? null,
+      phase: template?.phase ?? null,
+      focus_tags: template?.focus_tags ?? [],
+      target_vector: template?.target_vector ?? [],
+    });
     for (const tag of template?.focus_tags ?? []) tags.push(tag);
     for (const vector of template?.target_vector ?? []) vectors.push(vector);
   }
   return {
     template_ids: templateIds,
+    templates,
     focus_tags_top: topCounts(tags, 8),
     target_vectors_top: topCounts(vectors),
   };
@@ -63,6 +73,16 @@ function sharedKeys(a, b) {
 function hasAnyVector(shape, keys) {
   const shapeKeys = new Set(vectorKeys(shape.target_vectors_top));
   return keys.some((key) => shapeKeys.has(key));
+}
+
+function hasAllVectors(shape, keys) {
+  const shapeKeys = new Set(vectorKeys(shape.target_vectors_top));
+  return keys.every((key) => shapeKeys.has(key));
+}
+
+function hasAnyTag(shape, keys) {
+  const tagKeys = new Set((shape.focus_tags_top ?? []).map((item) => item.key));
+  return keys.some((key) => tagKeys.has(key));
 }
 
 async function loadStaticTemplates() {
@@ -187,32 +207,58 @@ async function run() {
     const previewVectorKeys = vectorKeys(previewMain.target_vectors_top);
     const sharedVectorKeys = sharedKeys(materializedVectorKeys, previewVectorKeys);
     const expectedVectors = getExpectedVectors(fixture.anchor_type);
+    const materializedPrimaryVector = topKey(materializedMain.target_vectors_top);
+    const previewPrimaryVector = topKey(previewMain.target_vectors_top);
+    const materializedFocusAxes = plan.meta?.session_focus_axes ?? [];
+    const previewFocusAxes = preview.focus_axes ?? [];
+    const deconditionedActualMainAligned =
+      fixture.anchor_type !== 'DECONDITIONED' ||
+      (
+        materializedFocusAxes.includes('trunk_control') &&
+        hasAllVectors(materializedMain, ['trunk_control', 'upper_mobility']) &&
+        hasAnyTag(materializedMain, ['core_control', 'core_stability', 'global_core']) &&
+        materializedMain.template_ids.includes('M14')
+      );
 
     perAnchor.push({
       anchor_type: fixture.anchor_type,
       expected_baseline_anchor: baselineSessionAnchor,
       materialized_first_session_intent_anchor: plan.meta?.baseline_alignment?.first_session_intent_anchor ?? null,
-      materialized_focus_axes: plan.meta?.session_focus_axes ?? [],
-      preview_focus_axes: preview.focus_axes ?? [],
+      materialized_focus_axes: materializedFocusAxes,
+      preview_focus_axes: previewFocusAxes,
       materialized_segment_titles: plan.segments.map((segment) => segment.title),
       preview_segment_titles: preview.segments.map((segment) => segment.title),
       materialized_main_emphasis_shape: materializedMain,
       preview_main_emphasis_shape: previewMain,
+      alignment_evidence: {
+        expected_signal_vectors: expectedVectors,
+        materialized_primary_vector: materializedPrimaryVector,
+        preview_primary_vector: previewPrimaryVector,
+        materialized_main_template_ids: materializedMain.template_ids,
+        preview_main_template_ids: previewMain.template_ids,
+        deconditioned_actual_main_aligned: deconditionedActualMainAligned,
+      },
       continuity_checks: {
         intent_anchor_matches_expected:
           (plan.meta?.baseline_alignment?.first_session_intent_anchor ?? null) === baselineSessionAnchor,
         focus_axes_match:
-          JSON.stringify(plan.meta?.session_focus_axes ?? []) === JSON.stringify(preview.focus_axes ?? []),
+          JSON.stringify(materializedFocusAxes) === JSON.stringify(previewFocusAxes),
         segment_titles_match:
           JSON.stringify(plan.segments.map((segment) => segment.title)) ===
           JSON.stringify(preview.segments.map((segment) => segment.title)),
-        primary_vector_matches: topKey(materializedMain.target_vectors_top) === topKey(previewMain.target_vectors_top),
+        primary_vector_matches: materializedPrimaryVector === previewPrimaryVector,
+        primary_vector_matches_expected_focus_axes:
+          materializedPrimaryVector !== null && materializedFocusAxes.includes(materializedPrimaryVector),
         shared_vector_keys: sharedVectorKeys,
         shared_vector_keys_nonempty: sharedVectorKeys.length > 0,
         expected_signal_vectors_present:
           expectedVectors.every((vector) => sharedVectorKeys.includes(vector)) ||
           hasAnyVector(materializedMain, expectedVectors) ||
           hasAnyVector(previewMain, expectedVectors),
+        actual_main_direction_aligned:
+          expectedVectors.every((vector) => materializedVectorKeys.includes(vector)) &&
+          materializedPrimaryVector !== null &&
+          materializedFocusAxes.includes(materializedPrimaryVector),
         first_session_guardrail_kept:
           plan.meta?.constraint_flags?.first_session_guardrail_applied === true &&
           (preview.constraint_flags ?? []).includes('first_session_guardrail_applied'),

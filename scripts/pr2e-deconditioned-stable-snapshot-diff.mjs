@@ -53,7 +53,22 @@ function pickSurface(snapshot) {
     segment_counts: snapshot?.first_session?.segment_counts ?? null,
     segment_shape: snapshot?.first_session?.segment_shape ?? [],
     main_emphasis_shape: snapshot?.first_session?.main_emphasis_shape ?? null,
+    segment_emphasis_shape: snapshot?.first_session?.segment_emphasis_shape ?? null,
     guardrail_summary: snapshot?.first_session?.guardrail_summary ?? null,
+  };
+}
+
+function pickRegressionSurface(snapshot) {
+  const surface = pickSurface(snapshot);
+  return {
+    ...surface,
+    main_emphasis_shape: surface.main_emphasis_shape
+      ? {
+          focus_tags_top: surface.main_emphasis_shape.focus_tags_top ?? [],
+          target_vectors_top: surface.main_emphasis_shape.target_vectors_top ?? [],
+        }
+      : null,
+    segment_emphasis_shape: null,
   };
 }
 
@@ -78,11 +93,13 @@ function buildAnchorDiff(beforeDoc, afterDoc, anchor) {
       segment_counts: diffObject(before.segment_counts, after.segment_counts),
       segment_shape: diffObject(before.segment_shape, after.segment_shape),
       main_emphasis_shape: diffObject(before.main_emphasis_shape, after.main_emphasis_shape),
+      segment_emphasis_shape: diffObject(before.segment_emphasis_shape, after.segment_emphasis_shape),
       guardrail_summary: diffObject(before.guardrail_summary, after.guardrail_summary),
     },
     directional_readout: {
       structural_delta_observed:
         JSON.stringify(before.main_emphasis_shape) !== JSON.stringify(after.main_emphasis_shape) ||
+        JSON.stringify(before.segment_emphasis_shape) !== JSON.stringify(after.segment_emphasis_shape) ||
         JSON.stringify(before.session_focus_axes) !== JSON.stringify(after.session_focus_axes) ||
         JSON.stringify(before.gold_path_vector) !== JSON.stringify(after.gold_path_vector),
       guardrails_unchanged: JSON.stringify(before.guardrail_summary) === JSON.stringify(after.guardrail_summary),
@@ -94,8 +111,8 @@ function buildAnchorDiff(beforeDoc, afterDoc, anchor) {
 function buildRegressionChecks(beforeDoc, afterDoc) {
   const perAnchor = [];
   for (const anchor of REGRESSION_TARGETS) {
-    const before = pickSurface(pickSnapshot(beforeDoc, anchor));
-    const after = pickSurface(pickSnapshot(afterDoc, anchor));
+    const before = pickRegressionSurface(pickSnapshot(beforeDoc, anchor));
+    const after = pickRegressionSurface(pickSnapshot(afterDoc, anchor));
     perAnchor.push({
       anchor_type: anchor,
       changed: JSON.stringify(before) !== JSON.stringify(after),
