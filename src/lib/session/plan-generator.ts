@@ -128,8 +128,8 @@ const GOLD_PATH_RULES: Record<GoldPathVector, Omit<GoldPathSegmentRule, 'count'>
   ],
   lower_mobility: [
     { title: 'Prep', kind: 'prep', preferredPhases: ['prep', 'accessory'], preferredVectors: ['lower_mobility'], fallbackVectors: ['deconditioned'], preferredProgression: [1] },
-    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['lower_mobility'], fallbackVectors: ['lower_stability', 'trunk_control'], preferredProgression: [1, 2, 3] },
-    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['lower_mobility'], fallbackVectors: ['lower_stability', 'trunk_control'], preferredProgression: [1, 2] },
+    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['lower_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2, 3] },
+    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['lower_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2] },
     { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['accessory', 'prep'], preferredVectors: ['lower_mobility'], fallbackVectors: ['deconditioned'], preferredProgression: [1] },
   ],
   trunk_control: [
@@ -303,6 +303,8 @@ export type PlanGeneratorInput = {
   session_camera_translation?: SessionCameraTranslationMetaV1;
   /** PR-PILOT-BASELINE-SESSION-ALIGN-01: public baseline에서 파생된 세분화된 세션 앵커 */
   baseline_session_anchor?: string;
+  /** Harness/fixture path: DB 조회 없이 템플릿 풀 주입 (기본 동작은 DB 조회 유지) */
+  templatePool?: SessionTemplateRow[];
 };
 
 export type PlanItem = {
@@ -481,9 +483,9 @@ function scoreFirstSessionIntentFit(
     return 2;
   }
   if (anchor === 'lower_mobility') {
-    if (rule.kind === 'main') return 10;
+    if (rule.kind === 'main') return 12;
     if (rule.kind === 'accessory') return 6;
-    if (rule.kind === 'prep' || rule.kind === 'cooldown') return 5;
+    if (rule.kind === 'prep' || rule.kind === 'cooldown') return 4;
     return 2;
   }
   if (rule.kind === 'main') return 10;
@@ -929,9 +931,11 @@ function computeTargetLevel(input: PlanGeneratorInput): {
  * 템플릿 1회 조회, 스코어링, 선택, 세그먼트 조립.
  */
 export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<PlanJsonOutput> {
-  const templates = await getTemplatesForSessionPlan({
-    scoringVersion: input.scoringVersion ?? 'deep_v2',
-  });
+  const templates = Array.isArray(input.templatePool) && input.templatePool.length > 0
+    ? input.templatePool
+    : await getTemplatesForSessionPlan({
+        scoringVersion: input.scoringVersion ?? 'deep_v2',
+      });
 
   const surveyHintTrace: string[] = [];
   const hardDominated = surveyHintsDominatedByHardGuardrails({

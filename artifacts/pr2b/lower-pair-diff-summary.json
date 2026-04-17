@@ -1,0 +1,364 @@
+{
+  "generated_at": "2026-04-17T04:28:35.992Z",
+  "purpose": "PR2-B lower-pair before/after proof summary",
+  "before_source": "static_fallback_fixture",
+  "after_source": "static_fallback_fixture",
+  "before_file": "artifacts/pr2b/lower-pair-before.json",
+  "after_file": "artifacts/pr2b/lower-pair-after.json",
+  "surface_diff_by_anchor": {
+    "LOWER_INSTABILITY": {
+      "first_session_intent_anchor": {
+        "before": "lower_stability",
+        "after": "lower_stability",
+        "changed": false
+      },
+      "rationale": {
+        "before": "하체 안정성이 우선이어서 무릎·골반·엉덩이 안정을 잡는 세션입니다.",
+        "after": "하체 안정성이 우선이어서 무릎·골반·엉덩이 안정을 잡는 세션입니다.",
+        "changed": false
+      },
+      "session_focus_axes": {
+        "before": [
+          "lower_stability"
+        ],
+        "after": [
+          "lower_stability"
+        ],
+        "changed": false
+      },
+      "segment_counts": {
+        "before": {
+          "prep": 1,
+          "main": 2,
+          "accessory": 1,
+          "cooldown": 1,
+          "total": 5
+        },
+        "after": {
+          "prep": 1,
+          "main": 2,
+          "accessory": 1,
+          "cooldown": 1,
+          "total": 5
+        },
+        "changed": false
+      },
+      "segment_shape": {
+        "before": [
+          {
+            "title": "Prep",
+            "item_count": 1
+          },
+          {
+            "title": "Main",
+            "item_count": 2
+          },
+          {
+            "title": "Accessory",
+            "item_count": 1
+          },
+          {
+            "title": "Cooldown",
+            "item_count": 1
+          }
+        ],
+        "after": [
+          {
+            "title": "Prep",
+            "item_count": 1
+          },
+          {
+            "title": "Main",
+            "item_count": 2
+          },
+          {
+            "title": "Accessory",
+            "item_count": 1
+          },
+          {
+            "title": "Cooldown",
+            "item_count": 1
+          }
+        ],
+        "changed": false
+      },
+      "main_emphasis_shape": {
+        "before": {
+          "focus_tags_top": [
+            {
+              "key": "core_control",
+              "count": 1
+            },
+            {
+              "key": "glute_activation",
+              "count": 1
+            },
+            {
+              "key": "lower_chain_stability",
+              "count": 1
+            },
+            {
+              "key": "shoulder_stability",
+              "count": 1
+            }
+          ],
+          "target_vectors_top": [
+            {
+              "key": "lower_stability",
+              "count": 1
+            },
+            {
+              "key": "trunk_control",
+              "count": 1
+            },
+            {
+              "key": "upper_mobility",
+              "count": 1
+            }
+          ]
+        },
+        "after": {
+          "focus_tags_top": [
+            {
+              "key": "core_control",
+              "count": 1
+            },
+            {
+              "key": "glute_activation",
+              "count": 1
+            },
+            {
+              "key": "lower_chain_stability",
+              "count": 1
+            },
+            {
+              "key": "shoulder_stability",
+              "count": 1
+            }
+          ],
+          "target_vectors_top": [
+            {
+              "key": "lower_stability",
+              "count": 1
+            },
+            {
+              "key": "trunk_control",
+              "count": 1
+            },
+            {
+              "key": "upper_mobility",
+              "count": 1
+            }
+          ]
+        },
+        "changed": false
+      },
+      "guardrail_summary": {
+        "before": {
+          "pain_mode": "none",
+          "safety_mode": "none",
+          "first_session_guardrail_applied": true,
+          "pain_gate_applied": false,
+          "short_mode_applied": false,
+          "recovery_mode_applied": false,
+          "policy_rules": [
+            "sel_first_session"
+          ]
+        },
+        "after": {
+          "pain_mode": "none",
+          "safety_mode": "none",
+          "first_session_guardrail_applied": true,
+          "pain_gate_applied": false,
+          "short_mode_applied": false,
+          "recovery_mode_applied": false,
+          "policy_rules": [
+            "sel_first_session"
+          ]
+        },
+        "changed": false
+      }
+    },
+    "LOWER_MOBILITY_RESTRICTION": {
+      "first_session_intent_anchor": {
+        "before": "lower_mobility",
+        "after": "lower_mobility",
+        "changed": false
+      },
+      "rationale": {
+        "before": "하체 가동성 회복이 우선이어서 고관절·발목 움직임 범위를 여는 세션입니다.",
+        "after": "하체 가동성 회복이 우선이어서 고관절·발목 움직임 범위를 여는 세션입니다.",
+        "changed": false
+      },
+      "session_focus_axes": {
+        "before": [
+          "lower_mobility"
+        ],
+        "after": [
+          "lower_mobility"
+        ],
+        "changed": false
+      },
+      "segment_counts": {
+        "before": {
+          "prep": 1,
+          "main": 2,
+          "accessory": 1,
+          "cooldown": 1,
+          "total": 5
+        },
+        "after": {
+          "prep": 1,
+          "main": 2,
+          "accessory": 1,
+          "cooldown": 1,
+          "total": 5
+        },
+        "changed": false
+      },
+      "segment_shape": {
+        "before": [
+          {
+            "title": "Prep",
+            "item_count": 1
+          },
+          {
+            "title": "Main",
+            "item_count": 2
+          },
+          {
+            "title": "Accessory",
+            "item_count": 1
+          },
+          {
+            "title": "Cooldown",
+            "item_count": 1
+          }
+        ],
+        "after": [
+          {
+            "title": "Prep",
+            "item_count": 1
+          },
+          {
+            "title": "Main",
+            "item_count": 2
+          },
+          {
+            "title": "Accessory",
+            "item_count": 1
+          },
+          {
+            "title": "Cooldown",
+            "item_count": 1
+          }
+        ],
+        "changed": false
+      },
+      "main_emphasis_shape": {
+        "before": {
+          "focus_tags_top": [
+            {
+              "key": "core_control",
+              "count": 1
+            },
+            {
+              "key": "core_stability",
+              "count": 1
+            },
+            {
+              "key": "global_core",
+              "count": 1
+            },
+            {
+              "key": "shoulder_stability",
+              "count": 1
+            }
+          ],
+          "target_vectors_top": [
+            {
+              "key": "trunk_control",
+              "count": 2
+            },
+            {
+              "key": "upper_mobility",
+              "count": 1
+            }
+          ]
+        },
+        "after": {
+          "focus_tags_top": [
+            {
+              "key": "core_control",
+              "count": 1
+            },
+            {
+              "key": "glute_activation",
+              "count": 1
+            },
+            {
+              "key": "hip_mobility",
+              "count": 1
+            },
+            {
+              "key": "shoulder_stability",
+              "count": 1
+            }
+          ],
+          "target_vectors_top": [
+            {
+              "key": "lower_mobility",
+              "count": 1
+            },
+            {
+              "key": "lower_stability",
+              "count": 1
+            },
+            {
+              "key": "trunk_control",
+              "count": 1
+            },
+            {
+              "key": "upper_mobility",
+              "count": 1
+            }
+          ]
+        },
+        "changed": true
+      },
+      "guardrail_summary": {
+        "before": {
+          "pain_mode": "none",
+          "safety_mode": "none",
+          "first_session_guardrail_applied": true,
+          "pain_gate_applied": false,
+          "short_mode_applied": false,
+          "recovery_mode_applied": false,
+          "policy_rules": [
+            "sel_first_session"
+          ]
+        },
+        "after": {
+          "pain_mode": "none",
+          "safety_mode": "none",
+          "first_session_guardrail_applied": true,
+          "pain_gate_applied": false,
+          "short_mode_applied": false,
+          "recovery_mode_applied": false,
+          "policy_rules": [
+            "sel_first_session"
+          ]
+        },
+        "changed": false
+      }
+    }
+  },
+  "lower_pair_after_separation": {
+    "different_intent_anchor": true,
+    "different_rationale": true,
+    "different_focus_axes": true,
+    "different_main_emphasis_shape": true,
+    "different_segment_shape": false,
+    "guardrails_match_expected_safety": true
+  }
+}
