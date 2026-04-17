@@ -75,7 +75,8 @@
     "test:reset-map-e2e": "node scripts/reset-map-e2e-acceptance.mjs",
     "test:reset-map-reconcile": "npx tsx scripts/reset-map-reconcile-acceptance.mjs",
     "test:reset-map-metrics": "npx tsx scripts/reset-map-metrics-smoke.mjs",
-    "test:claimed-result-selection-timing-law": "npx tsx scripts/claimed-public-result-selection-timing-law-regression.mjs"
+    "test:claimed-result-selection-timing-law": "npx tsx scripts/claimed-public-result-selection-timing-law-regression.mjs",
+    "test:claimed-result-selection-suitability": "npx tsx scripts/claimed-public-result-selection-suitability-regression.mjs"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
