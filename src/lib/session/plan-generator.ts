@@ -121,15 +121,15 @@ type GoldPathSegmentRule = {
 
 const GOLD_PATH_RULES: Record<GoldPathVector, Omit<GoldPathSegmentRule, 'count'>[]> = {
   lower_stability: [
-    { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: ['trunk_control'], fallbackVectors: ['lower_mobility', 'deconditioned'], preferredProgression: [1] },
+    { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: ['trunk_control'], fallbackVectors: ['deconditioned'], preferredProgression: [1] },
     { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['lower_stability'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2, 3] },
-    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['lower_stability'], fallbackVectors: ['trunk_control', 'lower_mobility'], preferredProgression: [1, 2] },
-    { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['accessory', 'prep'], preferredVectors: ['lower_mobility'], fallbackVectors: ['deconditioned', 'trunk_control'], preferredProgression: [1] },
+    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['lower_stability'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2] },
+    { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['accessory', 'prep'], preferredVectors: ['deconditioned'], fallbackVectors: ['trunk_control'], preferredProgression: [1] },
   ],
   lower_mobility: [
     { title: 'Prep', kind: 'prep', preferredPhases: ['prep', 'accessory'], preferredVectors: ['lower_mobility'], fallbackVectors: ['deconditioned'], preferredProgression: [1] },
-    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['lower_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [2, 1, 3] },
-    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['lower_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2] },
+    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['lower_mobility'], fallbackVectors: ['lower_stability', 'trunk_control'], preferredProgression: [1, 2, 3] },
+    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['lower_mobility'], fallbackVectors: ['lower_stability', 'trunk_control'], preferredProgression: [1, 2] },
     { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['accessory', 'prep'], preferredVectors: ['lower_mobility'], fallbackVectors: ['deconditioned'], preferredProgression: [1] },
   ],
   trunk_control: [
@@ -473,6 +473,19 @@ function scoreFirstSessionIntentFit(
 ): number {
   if (!firstSessionIntent) return 0;
   if (!hasFirstSessionIntentTag(template, firstSessionIntent)) return 0;
+  const anchor = firstSessionIntent.anchorType;
+  if (anchor === 'lower_stability') {
+    if (rule.kind === 'main') return 12;
+    if (rule.kind === 'accessory') return 5;
+    if (rule.kind === 'prep') return 5;
+    return 2;
+  }
+  if (anchor === 'lower_mobility') {
+    if (rule.kind === 'main') return 10;
+    if (rule.kind === 'accessory') return 6;
+    if (rule.kind === 'prep' || rule.kind === 'cooldown') return 5;
+    return 2;
+  }
   if (rule.kind === 'main') return 10;
   if (rule.kind === 'prep') return 6;
   return 3;

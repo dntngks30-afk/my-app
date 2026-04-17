@@ -97,8 +97,8 @@ const BASELINE_ANCHOR_TO_RATIONALE: Record<string, string> = {
 };
 
 const BASELINE_ANCHOR_TO_REQUIRED_TAGS: Record<string, string[]> = {
-  lower_stability: ['lower_chain_stability', 'glute_medius', 'glute_activation', 'basic_balance'],
-  lower_mobility: ['hip_mobility', 'ankle_mobility', 'hip_flexor_stretch'],
+  lower_stability: ['lower_chain_stability', 'glute_medius', 'glute_activation', 'basic_balance', 'core_stability'],
+  lower_mobility: ['hip_mobility', 'ankle_mobility', 'hip_flexor_stretch', 'calf_release'],
   upper_mobility: ['shoulder_mobility', 'thoracic_mobility', 'upper_back_activation', 'shoulder_stability'],
   trunk_control: ['core_control', 'core_stability', 'global_core'],
   deconditioned: ['full_body_reset', 'core_control'],
