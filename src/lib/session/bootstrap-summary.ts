@@ -364,6 +364,12 @@ function selectGoldPathTemplates(
     }
     for (const { template } of ranked) {
       if (items.length >= rule.count) break
+      if (shouldReserveUpperMainCandidate({
+        anchorType: firstSessionIntent?.anchorType,
+        ruleKind: rule.kind,
+        templateFocusTags: template.focus_tags,
+        isMainEligible: isMainEligible(template),
+      })) continue
       if (!isConservativeFallbackEligible(template, rule.kind)) continue
       tryPick(template)
     }

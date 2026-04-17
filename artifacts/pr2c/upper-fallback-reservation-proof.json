@@ -1,0 +1,82 @@
+{
+  "generated_at": "2026-04-17T12:58:18.607Z",
+  "purpose": "PR2-C follow-up 3: fallback-pass upper reservation proof",
+  "sparse_fixture_template_ids": [
+    "U_MAIN_1",
+    "U_MAIN_2",
+    "PREP_ONLY_1",
+    "DECOND_1"
+  ],
+  "reserved_main_candidate_ids": [
+    "U_MAIN_1",
+    "U_MAIN_2"
+  ],
+  "materialized": {
+    "segment_ids": [
+      {
+        "title": "Prep",
+        "ids": [
+          "PREP_ONLY_1"
+        ]
+      },
+      {
+        "title": "Main",
+        "ids": [
+          "U_MAIN_2",
+          "U_MAIN_1"
+        ]
+      },
+      {
+        "title": "Accessory",
+        "ids": [
+          "DECOND_1"
+        ]
+      }
+    ],
+    "main_vectors_top": [
+      {
+        "key": "upper_mobility",
+        "count": 2
+      }
+    ],
+    "non_main_reserved_leak": false,
+    "first_session_guardrail_applied": true
+  },
+  "preview": {
+    "segment_ids": [
+      {
+        "title": "Prep",
+        "ids": [
+          "PREP_ONLY_1"
+        ]
+      },
+      {
+        "title": "Main",
+        "ids": [
+          "U_MAIN_2"
+        ]
+      },
+      {
+        "title": "Accessory",
+        "ids": [
+          "DECOND_1"
+        ]
+      }
+    ],
+    "main_vectors_top": [
+      {
+        "key": "upper_mobility",
+        "count": 1
+      }
+    ],
+    "non_main_reserved_leak": false,
+    "first_session_guardrail_applied": true
+  },
+  "checks": {
+    "materialized_no_non_main_leak": true,
+    "preview_no_non_main_leak": true,
+    "materialized_main_upper_dominant": true,
+    "preview_main_upper_dominant": true,
+    "guardrail_kept": true
+  }
+}

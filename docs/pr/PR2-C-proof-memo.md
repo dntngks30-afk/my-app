@@ -17,6 +17,7 @@
 - `artifacts/pr2c/upper-after.json`
 - `artifacts/pr2c/upper-diff-summary.json`
 - `artifacts/pr2c/upper-preview-materialized-continuity.json`
+- `artifacts/pr2c/upper-fallback-reservation-proof.json`
 - `artifacts/pr2c/all-before.json`
 - `artifacts/pr2c/all-after.json`
 - `artifacts/pr2c/lower-regression-check.json`
@@ -26,3 +27,4 @@
 - Guardrail summary remained unchanged (`pain_mode`, `safety_mode`, `first_session_guardrail_applied`, `pain_gate_applied`).
 - Lower pair snapshots remained unchanged in before/after regression check.
 - Follow-up continuity proof confirms preview/bootstrap path and materialized path both stay upper-dominant for `UPPER_IMMOBILITY` in focus axes + main emphasis shape while keeping first-session guardrail flag.
+- Follow-up 3 proof confirms final conservative fallback pass에서도 non-main이 reserved upper-main candidate를 선점하지 않고 Main upper 방향성을 유지한다.
