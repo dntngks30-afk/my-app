@@ -1,0 +1,75 @@
+{
+  "generated_at": "2026-04-17T15:43:03.731Z",
+  "purpose": "PR2-D preview/materialized trunk-core continuity proof",
+  "anchor_type": "CORE_CONTROL_DEFICIT",
+  "expected_baseline_anchor": "trunk_control",
+  "materialized_first_session_intent_anchor": "trunk_control",
+  "materialized_focus_axes": [
+    "trunk_control"
+  ],
+  "preview_focus_axes": [
+    "trunk_control"
+  ],
+  "materialized_main_emphasis_shape": {
+    "template_ids": [
+      "M12",
+      "M13"
+    ],
+    "focus_tags_top": [
+      {
+        "key": "core_stability",
+        "count": 1
+      },
+      {
+        "key": "global_core",
+        "count": 1
+      },
+      {
+        "key": "glute_activation",
+        "count": 1
+      },
+      {
+        "key": "lower_chain_stability",
+        "count": 1
+      }
+    ],
+    "target_vectors_top": [
+      {
+        "key": "lower_stability",
+        "count": 1
+      },
+      {
+        "key": "trunk_control",
+        "count": 1
+      }
+    ]
+  },
+  "preview_main_emphasis_shape": {
+    "template_ids": [
+      "M13"
+    ],
+    "focus_tags_top": [
+      {
+        "key": "core_stability",
+        "count": 1
+      },
+      {
+        "key": "global_core",
+        "count": 1
+      }
+    ],
+    "target_vectors_top": [
+      {
+        "key": "trunk_control",
+        "count": 1
+      }
+    ]
+  },
+  "continuity_checks": {
+    "focus_axes_match": true,
+    "intent_anchor_matches_expected": true,
+    "materialized_has_trunk_main": true,
+    "preview_has_trunk_main": true,
+    "first_session_guardrail_kept": true
+  }
+}
