@@ -42,6 +42,7 @@ import type {
   SurveySessionHintsObservabilityV1,
 } from '@/lib/deep-v2/session/survey-session-hints-first-session';
 import type { SessionCameraTranslationMetaV1 } from '@/lib/deep-v2/session/merge-survey-camera-session-hints';
+import { LOWER_AXIS_GUARD_TAGS, LOWER_PAIR_GOLD_PATH_RULES } from '@/lib/session/lower-pair-session1-shared';
 
 const REPETITION_PENALTY = 100;
 const CONTRAINDICATION_PENALTY = 100;
@@ -120,18 +121,8 @@ type GoldPathSegmentRule = {
 };
 
 const GOLD_PATH_RULES: Record<GoldPathVector, Omit<GoldPathSegmentRule, 'count'>[]> = {
-  lower_stability: [
-    { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: ['trunk_control'], fallbackVectors: ['deconditioned'], preferredProgression: [1] },
-    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['lower_stability'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2, 3] },
-    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['lower_stability'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2] },
-    { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['accessory', 'prep'], preferredVectors: ['deconditioned'], fallbackVectors: ['trunk_control'], preferredProgression: [1] },
-  ],
-  lower_mobility: [
-    { title: 'Prep', kind: 'prep', preferredPhases: ['prep', 'accessory'], preferredVectors: ['lower_mobility'], fallbackVectors: ['deconditioned'], preferredProgression: [1] },
-    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['lower_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2, 3] },
-    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['lower_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2] },
-    { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['accessory', 'prep'], preferredVectors: ['lower_mobility'], fallbackVectors: ['deconditioned'], preferredProgression: [1] },
-  ],
+  lower_stability: [...LOWER_PAIR_GOLD_PATH_RULES.lower_stability],
+  lower_mobility: [...LOWER_PAIR_GOLD_PATH_RULES.lower_mobility],
   trunk_control: [
     { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: ['trunk_control', 'deconditioned'], fallbackVectors: ['upper_mobility'], preferredProgression: [1] },
     { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['trunk_control'], fallbackVectors: ['lower_stability'], preferredProgression: [1, 2, 3] },
@@ -807,8 +798,8 @@ function enforceForbiddenDominantAxes(
   const forbiddenSet = new Set(firstSessionIntent.forbiddenDominantAxes);
   const forbiddenTagsForAxis: Record<string, string[]> = {
     upper_mobility: ['shoulder_mobility', 'thoracic_mobility', 'upper_back_activation', 'shoulder_stability'],
-    lower_mobility: ['hip_mobility', 'ankle_mobility', 'hip_flexor_stretch'],
-    lower_stability: ['lower_chain_stability', 'glute_medius', 'glute_activation', 'basic_balance'],
+    lower_mobility: [...LOWER_AXIS_GUARD_TAGS.lower_mobility],
+    lower_stability: [...LOWER_AXIS_GUARD_TAGS.lower_stability],
     trunk_control: ['core_control', 'core_stability', 'global_core'],
   };
 

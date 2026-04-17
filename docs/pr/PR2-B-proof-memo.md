@@ -20,8 +20,11 @@
 - `artifacts/pr2b/lower-pair-before.json`
 - `artifacts/pr2b/lower-pair-after.json`
 - `artifacts/pr2b/lower-pair-diff-summary.json`
+- `artifacts/pr2b/lower-pair-preview-materialized-continuity.json`
 
 ## Readout
 - `LOWER_INSTABILITY` remains control/stability-led.
 - `LOWER_MOBILITY_RESTRICTION` main emphasis shifts from trunk-dominant to include lower-mobility signal.
 - Guardrail summary remains unchanged (`first_session_guardrail_applied=true`, safety/pain flags unchanged).
+- Preview/bootstrap summary and materialized session plan now consume synchronized lower-pair gold-path rule source.
+- `core_stability` / `calf_release` 확장 태그는 dominant-axis guard 태그 세트에도 동기화됨.

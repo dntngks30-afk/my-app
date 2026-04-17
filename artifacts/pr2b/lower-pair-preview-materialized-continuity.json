@@ -1,0 +1,132 @@
+{
+  "generated_at": "2026-04-17T06:30:54.168Z",
+  "purpose": "PR2-B follow-up continuity + dominant-axis guard sync proof",
+  "continuity": [
+    {
+      "anchor_type": "LOWER_INSTABILITY",
+      "expected_baseline_anchor": "lower_stability",
+      "materialized_first_session_intent_anchor": "lower_stability",
+      "materialized_focus_axes": [
+        "lower_stability"
+      ],
+      "preview_focus_axes": [
+        "lower_stability"
+      ],
+      "materialized_main_vectors_top": [
+        {
+          "key": "lower_stability",
+          "count": 1
+        },
+        {
+          "key": "trunk_control",
+          "count": 1
+        },
+        {
+          "key": "upper_mobility",
+          "count": 1
+        }
+      ],
+      "preview_main_vectors_top": [
+        {
+          "key": "lower_stability",
+          "count": 2
+        }
+      ],
+      "continuity_checks": {
+        "focus_axes_match": true,
+        "intent_anchor_matches_expected": true,
+        "preview_main_has_expected_vector": true,
+        "materialized_main_has_expected_vector": true,
+        "first_session_guardrail_kept": true
+      }
+    },
+    {
+      "anchor_type": "LOWER_MOBILITY_RESTRICTION",
+      "expected_baseline_anchor": "lower_mobility",
+      "materialized_first_session_intent_anchor": "lower_mobility",
+      "materialized_focus_axes": [
+        "lower_mobility"
+      ],
+      "preview_focus_axes": [
+        "lower_mobility"
+      ],
+      "materialized_main_vectors_top": [
+        {
+          "key": "lower_mobility",
+          "count": 1
+        },
+        {
+          "key": "lower_stability",
+          "count": 1
+        },
+        {
+          "key": "trunk_control",
+          "count": 1
+        },
+        {
+          "key": "upper_mobility",
+          "count": 1
+        }
+      ],
+      "preview_main_vectors_top": [
+        {
+          "key": "lower_mobility",
+          "count": 1
+        },
+        {
+          "key": "lower_stability",
+          "count": 1
+        },
+        {
+          "key": "trunk_control",
+          "count": 1
+        },
+        {
+          "key": "upper_mobility",
+          "count": 1
+        }
+      ],
+      "continuity_checks": {
+        "focus_axes_match": true,
+        "intent_anchor_matches_expected": true,
+        "preview_main_has_expected_vector": true,
+        "materialized_main_has_expected_vector": true,
+        "first_session_guardrail_kept": true
+      }
+    }
+  ],
+  "guard_sync": {
+    "lower_stability": {
+      "intent_required_tags": [
+        "lower_chain_stability",
+        "glute_medius",
+        "glute_activation",
+        "basic_balance",
+        "core_stability"
+      ],
+      "guard_tags": [
+        "lower_chain_stability",
+        "glute_medius",
+        "glute_activation",
+        "basic_balance",
+        "core_stability"
+      ],
+      "includes_new_core_stability": true
+    },
+    "lower_mobility": {
+      "intent_required_tags": [
+        "hip_mobility",
+        "ankle_mobility",
+        "hip_flexor_stretch",
+        "calf_release"
+      ],
+      "guard_tags": [
+        "hip_mobility",
+        "ankle_mobility",
+        "hip_flexor_stretch",
+        "calf_release"
+      ],
+      "includes_new_calf_release": true
+    }
+  }
+}
