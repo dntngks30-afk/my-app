@@ -3,14 +3,17 @@ import { buildExcludeSet, hasContraindicationOverlap } from '@/lib/session/safet
 import {
   getPainModeExtraAvoid,
   getPainModePenalty,
+  resolveFirstSessionIntent,
   resolveSessionPriorities,
   scoreByPriority,
+  type FirstSessionIntentSSOT,
 } from '@/lib/session/priority-layer'
 import {
   isExcludedByFirstSessionGuardrail,
   isExcludedByPainMode,
 } from '@/lib/session/policy-registry/rules/selectionRules'
 import type { SessionTemplateRow } from '@/lib/workout-routine/exercise-templates-db'
+import { LOWER_PAIR_GOLD_PATH_RULES } from '@/lib/session/lower-pair-session1-shared'
 
 type GoldPathVector =
   | 'lower_stability'
@@ -70,6 +73,7 @@ const SECONDARY_FOCUS_BONUS = 2
 const PRIORITY_MATCH_BONUS = 2
 const LEVEL_MATCH_BONUS = 1
 const MAX_FIRST_SESSION_MAIN_COUNT = 1
+const LOWER_PAIR_FIRST_SESSION_MAIN_COUNT = 2
 const MAX_FIRST_SESSION_TOTAL_EXERCISES = 5
 
 type GoldPathSegmentRule = {
@@ -83,18 +87,8 @@ type GoldPathSegmentRule = {
 }
 
 const GOLD_PATH_RULES: Record<GoldPathVector, Omit<GoldPathSegmentRule, 'count'>[]> = {
-  lower_stability: [
-    { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: ['trunk_control'], fallbackVectors: ['lower_mobility', 'deconditioned'], preferredProgression: [1] },
-    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['lower_stability'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2, 3] },
-    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['lower_stability'], fallbackVectors: ['trunk_control', 'lower_mobility'], preferredProgression: [1, 2] },
-    { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['accessory', 'prep'], preferredVectors: ['lower_mobility'], fallbackVectors: ['deconditioned', 'trunk_control'], preferredProgression: [1] },
-  ],
-  lower_mobility: [
-    { title: 'Prep', kind: 'prep', preferredPhases: ['prep', 'accessory'], preferredVectors: ['lower_mobility'], fallbackVectors: ['deconditioned'], preferredProgression: [1] },
-    { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['lower_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [2, 1, 3] },
-    { title: 'Accessory', kind: 'accessory', preferredPhases: ['accessory', 'main'], preferredVectors: ['lower_mobility'], fallbackVectors: ['trunk_control'], preferredProgression: [1, 2] },
-    { title: 'Cooldown', kind: 'cooldown', preferredPhases: ['accessory', 'prep'], preferredVectors: ['lower_mobility'], fallbackVectors: ['deconditioned'], preferredProgression: [1] },
-  ],
+  lower_stability: [...LOWER_PAIR_GOLD_PATH_RULES.lower_stability],
+  lower_mobility: [...LOWER_PAIR_GOLD_PATH_RULES.lower_mobility],
   trunk_control: [
     { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: ['trunk_control', 'deconditioned'], fallbackVectors: ['upper_mobility'], preferredProgression: [1] },
     { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['trunk_control'], fallbackVectors: ['lower_stability'], preferredProgression: [1, 2, 3] },
@@ -191,7 +185,8 @@ function scoreTemplate(
   template: SessionTemplateRow,
   input: SessionBootstrapSummaryInput,
   finalTargetLevel: number,
-  excludeSet: Set<string>
+  excludeSet: Set<string>,
+  firstSessionIntent?: FirstSessionIntentSSOT | null
 ): number {
   if (hasContraindicationOverlap(template.contraindications, excludeSet)) return -100
 
@@ -203,6 +198,12 @@ function scoreTemplate(
 
   if (primary && template.focus_tags.includes(primary)) score += PRIMARY_FOCUS_BONUS
   if (secondary && template.focus_tags.includes(secondary)) score += SECONDARY_FOCUS_BONUS
+  if (
+    firstSessionIntent?.requiredTags?.length &&
+    template.focus_tags.some((tag) => firstSessionIntent.requiredTags.includes(tag))
+  ) {
+    score += PRIMARY_FOCUS_BONUS
+  }
   if (priorityTags) score += scoreByPriority(template.focus_tags, priorityTags, PRIORITY_MATCH_BONUS)
   score -= getPainModePenalty(template.contraindications, input.deepSummary.pain_mode)
   if (template.level === finalTargetLevel) score += LEVEL_MATCH_BONUS
@@ -273,7 +274,8 @@ function selectGoldPathTemplates(
   sorted: Array<{ template: SessionTemplateRow; score: number }>,
   input: SessionBootstrapSummaryInput,
   vector: GoldPathVector,
-  mainCount: number
+  mainCount: number,
+  firstSessionIntent?: FirstSessionIntentSSOT | null
 ): { segments: Array<{ title: string; items: SessionTemplateRow[] }>; duplicateFilteredCount: number } {
   const used = new Set<string>()
   const duplicateSeen = new Set<string>()
@@ -285,7 +287,10 @@ function selectGoldPathTemplates(
     const ranked = sorted
       .map(({ template, score }) => ({
         template,
-        score: score + scoreGoldPathSegmentFit(template, rule, input.deepSummary.pain_mode),
+        score:
+          score +
+          scoreGoldPathSegmentFit(template, rule, input.deepSummary.pain_mode) +
+          scoreFirstSessionIntentFit(template, rule, firstSessionIntent),
       }))
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score
@@ -346,6 +351,76 @@ function selectGoldPathTemplates(
   return { segments, duplicateFilteredCount }
 }
 
+function hasFirstSessionIntentTag(
+  template: SessionTemplateRow,
+  firstSessionIntent?: FirstSessionIntentSSOT | null
+): boolean {
+  if (!firstSessionIntent || firstSessionIntent.requiredTags.length === 0) return false
+  const set = new Set([...firstSessionIntent.requiredTags, ...firstSessionIntent.preferredTemplateTags])
+  return template.focus_tags.some((tag) => set.has(tag))
+}
+
+function scoreFirstSessionIntentFit(
+  template: SessionTemplateRow,
+  rule: GoldPathSegmentRule,
+  firstSessionIntent?: FirstSessionIntentSSOT | null
+): number {
+  if (!firstSessionIntent) return 0
+  if (!hasFirstSessionIntentTag(template, firstSessionIntent)) return 0
+  const anchor = firstSessionIntent.anchorType
+  if (anchor === 'lower_stability') {
+    if (rule.kind === 'main') return 12
+    if (rule.kind === 'accessory') return 5
+    if (rule.kind === 'prep') return 5
+    return 2
+  }
+  if (anchor === 'lower_mobility') {
+    if (rule.kind === 'main') return 12
+    if (rule.kind === 'accessory') return 6
+    if (rule.kind === 'prep' || rule.kind === 'cooldown') return 4
+    return 2
+  }
+  if (rule.kind === 'main') return 10
+  if (rule.kind === 'prep') return 6
+  return 3
+}
+
+function enforceFirstSessionIntentOnBootstrapSegments(
+  segmentEntries: Array<{ title: string; items: SessionTemplateRow[] }>,
+  sorted: Array<{ template: SessionTemplateRow; score: number }>,
+  painMode: 'none' | 'caution' | 'protected' | undefined,
+  firstSessionIntent?: FirstSessionIntentSSOT | null
+): Array<{ title: string; items: SessionTemplateRow[] }> {
+  if (!firstSessionIntent || firstSessionIntent.requiredTags.length === 0) return segmentEntries
+  const lowerPair =
+    firstSessionIntent.anchorType === 'lower_stability' ||
+    firstSessionIntent.anchorType === 'lower_mobility'
+  if (!lowerPair) return segmentEntries
+
+  const mainEntry = segmentEntries.find((e) => e.title === 'Main')
+  if (!mainEntry || mainEntry.items.length === 0) return segmentEntries
+  const aligned = mainEntry.items.some((item) => hasFirstSessionIntentTag(item, firstSessionIntent))
+  if (aligned) return segmentEntries
+
+  const used = new Set(segmentEntries.flatMap((e) => e.items.map((i) => i.id)))
+  const replacement = sorted
+    .map(({ template }) => template)
+    .find((template) => {
+      if (used.has(template.id)) return false
+      if (!hasFirstSessionIntentTag(template, firstSessionIntent)) return false
+      if (painMode && painMode !== 'none' && (template.avoid_if_pain_mode ?? []).includes(painMode)) return false
+      return isMainEligible(template)
+    })
+  if (!replacement) return segmentEntries
+
+  return segmentEntries.map((entry) => {
+    if (entry.title !== 'Main' || entry.items.length === 0) return entry
+    const next = [...entry.items]
+    next[next.length - 1] = replacement
+    return { ...entry, items: next }
+  })
+}
+
 function toBootstrapItem(
   template: SessionTemplateRow,
   order: number,
@@ -393,6 +468,18 @@ export function buildSessionBootstrapSummaryFromTemplates(
   const painExtraAvoid = getPainModeExtraAvoid(input.deepSummary.pain_mode)
   const excludeSet = buildExcludeSet(input.deepSummary.avoid, painExtraAvoid)
   const isFirstSession = input.sessionNumber === 1
+  const firstSessionIntent = resolveFirstSessionIntent({
+    resultType: input.deepSummary.result_type,
+    primaryType: input.deepSummary.primary_type,
+    secondaryType: input.deepSummary.secondary_type,
+    priorityVector: input.deepSummary.priority_vector,
+    painMode: input.deepSummary.pain_mode,
+    sessionNumber: input.sessionNumber,
+    deepLevel: input.deepSummary.deep_level,
+    safetyMode: input.deepSummary.safety_mode,
+    redFlags: input.deepSummary.red_flags,
+    baselineSessionAnchor: input.deepSummary.baseline_session_anchor,
+  })
 
   const candidates = templates.filter(
     (template) =>
@@ -405,23 +492,41 @@ export function buildSessionBootstrapSummaryFromTemplates(
   const scored = candidates
     .map((template) => ({
       template,
-      score: scoreTemplate(template, input, finalTargetLevel, excludeSet),
+      score: scoreTemplate(template, input, finalTargetLevel, excludeSet, firstSessionIntent),
     }))
     .filter((entry) => entry.score >= 0)
     .sort((a, b) => b.score - a.score)
 
   /** PR-SESSION-BASELINE-01: main 2~3 baseline. red=1, yellow=2, else 3. first session guardrail 유지 */
   let mainCount = input.deepSummary.safety_mode === 'red' ? 1 : input.deepSummary.safety_mode === 'yellow' ? 2 : 3
-  if (isFirstSession && mainCount > MAX_FIRST_SESSION_MAIN_COUNT) {
-    mainCount = MAX_FIRST_SESSION_MAIN_COUNT
+  const lowerPairFirstSession =
+    firstSessionIntent?.anchorType === 'lower_stability' ||
+    firstSessionIntent?.anchorType === 'lower_mobility'
+  const firstSessionMainCap = lowerPairFirstSession
+    ? LOWER_PAIR_FIRST_SESSION_MAIN_COUNT
+    : MAX_FIRST_SESSION_MAIN_COUNT
+  if (isFirstSession && mainCount > firstSessionMainCap) {
+    mainCount = firstSessionMainCap
   }
   if (1 + mainCount + 1 + 1 > MAX_FIRST_SESSION_TOTAL_EXERCISES && isFirstSession) {
     mainCount = Math.max(1, MAX_FIRST_SESSION_TOTAL_EXERCISES - 3)
   }
 
   const vector = resolveGoldPathVector(input)
-  const selection = selectGoldPathTemplates(scored, input, vector ?? 'trunk_control', mainCount)
-  const segments = selection.segments
+  const selection = selectGoldPathTemplates(
+    scored,
+    input,
+    vector ?? 'trunk_control',
+    mainCount,
+    firstSessionIntent
+  )
+  const alignedSegments = enforceFirstSessionIntentOnBootstrapSegments(
+    selection.segments,
+    scored,
+    input.deepSummary.pain_mode,
+    firstSessionIntent
+  )
+  const segments = alignedSegments
     .filter((segment) => segment.items.length > 0)
     .map((segment) => ({
       title: segment.title,
@@ -431,7 +536,9 @@ export function buildSessionBootstrapSummaryFromTemplates(
   return {
     segments,
     estimated_duration: segments.reduce((sum, segment) => sum + segment.items.length * 300, 0),
-    focus_axes: resolveFocusAxes(input.deepSummary.priority_vector),
+    focus_axes: firstSessionIntent?.focusAxes?.length
+      ? firstSessionIntent.focusAxes
+      : resolveFocusAxes(input.deepSummary.priority_vector),
     constraint_flags: buildConstraintFlags({
       avoidFilterApplied: excludeSet.size > 0,
       duplicateFilteredCount: selection.duplicateFilteredCount,

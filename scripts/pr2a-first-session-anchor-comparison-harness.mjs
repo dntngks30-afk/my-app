@@ -132,30 +132,130 @@ function buildSnapshot({ fixture, persona, deep, plan, templateById }) {
   };
 }
 
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const out = {
+    output: null,
+    anchors: null,
+  };
+
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--output' && args[i + 1]) {
+      out.output = args[i + 1];
+      i += 1;
+      continue;
+    }
+    if (a === '--anchors' && args[i + 1]) {
+      out.anchors = args[i + 1]
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      i += 1;
+    }
+  }
+  return out;
+}
+
+function inferTargetVector(focusTags) {
+  const hasAny = (tags) => tags.some((tag) => focusTags.includes(tag));
+  const vectors = [];
+
+  if (hasAny(['lower_chain_stability', 'glute_medius', 'glute_activation', 'basic_balance'])) {
+    vectors.push('lower_stability');
+  }
+  if (hasAny(['hip_mobility', 'ankle_mobility', 'hip_flexor_stretch', 'calf_release'])) {
+    vectors.push('lower_mobility');
+  }
+  if (hasAny(['core_control', 'core_stability', 'global_core'])) {
+    vectors.push('trunk_control');
+  }
+  if (hasAny(['thoracic_mobility', 'shoulder_mobility', 'shoulder_stability', 'upper_back_activation'])) {
+    vectors.push('upper_mobility');
+  }
+  if (hasAny(['full_body_reset'])) {
+    vectors.push('deconditioned');
+  }
+  return [...new Set(vectors)];
+}
+
+function inferPhase(focusTags) {
+  const hasAny = (tags) => tags.some((tag) => focusTags.includes(tag));
+  if (hasAny(['full_body_reset', 'calf_release', 'upper_trap_release', 'neck_mobility', 'thoracic_mobility', 'shoulder_mobility', 'hip_flexor_stretch', 'hip_mobility', 'ankle_mobility'])) {
+    return 'prep';
+  }
+  if (hasAny(['core_stability', 'global_core', 'upper_back_activation', 'shoulder_stability', 'glute_activation', 'lower_chain_stability', 'glute_medius', 'basic_balance'])) {
+    return 'main';
+  }
+  return 'accessory';
+}
+
+function deriveDifficulty(level) {
+  if (level <= 1) return 'low';
+  if (level === 2) return 'medium';
+  return 'high';
+}
+
+async function loadTemplates({ getTemplatesForSessionPlan }) {
+  try {
+    const templates = await getTemplatesForSessionPlan({ scoringVersion: 'deep_v2' });
+    return { templates, source: 'supabase' };
+  } catch (e) {
+    const msg = String(e?.message ?? '');
+    const recoverable =
+      msg.includes('SUPABASE') ||
+      msg.includes('Missing') ||
+      msg.includes('fetch failed') ||
+      msg.includes('session plan fetch failed');
+    if (!recoverable) throw e;
+  }
+
+  const { EXERCISE_TEMPLATES } = await import('../src/lib/workout-routine/exercise-templates.ts');
+  const templates = EXERCISE_TEMPLATES.map((t) => ({
+    id: t.id,
+    name: t.name,
+    level: t.level ?? 1,
+    focus_tags: [...(t.focus_tags ?? [])],
+    contraindications: [...(t.avoid_tags ?? [])],
+    duration_sec: 300,
+    media_ref: null,
+    is_fallback: t.id === 'M01' || t.id === 'M28',
+    phase: t.phase ?? inferPhase(t.focus_tags ?? []),
+    target_vector: t.target_vector?.length ? [...t.target_vector] : inferTargetVector(t.focus_tags ?? []),
+    difficulty: t.difficulty ?? deriveDifficulty(t.level ?? 1),
+    avoid_if_pain_mode: t.avoid_if_pain_mode?.length ? [...t.avoid_if_pain_mode] : null,
+    progression_level: t.progression_level ?? 1,
+    balance_demand: t.balance_demand ?? 'low',
+    complexity: t.complexity ?? 'low',
+  }));
+  return { templates, source: 'static_fallback_fixture' };
+}
+
 async function run() {
+  const args = parseArgs();
   const fixturePath = join(root, 'scripts/fixtures/pr2a-first-session-anchor-fixtures.json');
   const personasPath = join(root, 'src/lib/deep-test/scenarios/personas.json');
-  const fixtures = JSON.parse(readFileSync(fixturePath, 'utf-8'));
+  const allFixtures = JSON.parse(readFileSync(fixturePath, 'utf-8'));
+  const fixtures = args.anchors?.length
+    ? allFixtures.filter((f) => args.anchors.includes(f.anchor_type))
+    : allFixtures;
+  if (fixtures.length === 0) throw new Error('No fixtures selected. Check --anchors value.');
   const personas = JSON.parse(readFileSync(personasPath, 'utf-8'));
   const personaById = new Map(personas.map((p) => [p.id, p]));
 
   let buildSessionPlanJson;
-  let getTemplatesForSessionPlan;
   let calculateDeepV3;
+  let getTemplatesForSessionPlan;
 
   try {
     ({ buildSessionPlanJson } = await import('../src/lib/session/plan-generator.ts'));
     ({ getTemplatesForSessionPlan } = await import('../src/lib/workout-routine/exercise-templates-db.ts'));
     ({ calculateDeepV3 } = await import('../src/lib/deep-test/scoring/deep_v3.ts'));
   } catch (e) {
-    if (e?.message?.includes('SUPABASE') || e?.message?.includes('Missing')) {
-      console.log('SKIP: Supabase env required for PR2-A comparison harness output.');
-      return;
-    }
     throw e;
   }
 
-  const templates = await getTemplatesForSessionPlan({ scoringVersion: 'deep_v2' });
+  const { templates, source } = await loadTemplates({ getTemplatesForSessionPlan });
   const templateById = new Map(templates.map((t) => [t.id, t]));
 
   const snapshots = [];
@@ -176,6 +276,7 @@ async function run() {
     const resultType = deep.derived?.result_type ?? PRIMARY_TO_RESULT_TYPE[deep.primary_type] ?? 'UNKNOWN';
 
     const plan = await buildSessionPlanJson({
+      templatePool: templates,
       sessionNumber: 1,
       totalSessions: 16,
       phase: 1,
@@ -210,13 +311,17 @@ async function run() {
 
   const outputDir = join(root, 'artifacts');
   mkdirSync(outputDir, { recursive: true });
-  const outPath = join(outputDir, 'pr2a-first-session-anchor-comparison-baseline.json');
+  const outPath = args.output
+    ? (args.output.startsWith('/') ? args.output : join(root, args.output))
+    : join(outputDir, 'pr2a-first-session-anchor-comparison-baseline.json');
+  mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(
     outPath,
     JSON.stringify(
       {
         generated_at: new Date().toISOString(),
         purpose: 'PR2-A baseline comparison harness snapshot (no tuning)',
+        template_source: source,
         anchors: fixtures.map((f) => f.anchor_type),
         snapshots,
       },
@@ -226,6 +331,7 @@ async function run() {
   );
 
   console.log(`Generated baseline snapshot: ${outPath}`);
+  console.log(`Template source: ${source}`);
   console.log(`Anchors covered: ${fixtures.map((f) => f.anchor_type).join(', ')}`);
 }
 
