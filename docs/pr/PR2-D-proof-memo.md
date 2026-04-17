@@ -38,7 +38,9 @@
 ## Acceptance test checklist
 
 - `CORE_CONTROL_DEFICIT` before/after snapshot generated with PR2-A harness.
-- Main upper distractor signal decreases while trunk/core-led center-control tags increase.
+- Main upper distractor signal decreases.
+- Strict trunk/core tags and trunk target-vector counts are reported separately from lower-support contribution.
+- Lower-support contribution is visible as support, not counted as strict trunk/core improvement.
 - Guardrail summary remains unchanged.
 - Segment/phase shape remains unchanged.
 - Preview/bootstrap and materialized paths both resolve `trunk_control`.

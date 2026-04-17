@@ -8,13 +8,12 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 
-const TRUNK_CORE_LED_TAGS = new Set([
+const STRICT_TRUNK_CORE_TAGS = new Set([
   'core_control',
   'core_stability',
   'global_core',
-  'glute_activation',
-  'lower_chain_stability',
 ]);
+const SUPPORT_TAGS = new Set(['glute_activation', 'lower_chain_stability', 'basic_balance']);
 const UPPER_DISTRACTOR_TAGS = new Set([
   'shoulder_mobility',
   'thoracic_mobility',
@@ -68,11 +67,12 @@ function summarizeCore(snapshot) {
     segment_counts: snapshot.first_session.segment_counts,
     segment_shape: snapshot.first_session.segment_shape,
     main_emphasis_shape: snapshot.first_session.main_emphasis_shape,
-    trunk_core_led_tag_count: countTopKeys(tags, TRUNK_CORE_LED_TAGS),
+    strict_trunk_core_tag_count: countTopKeys(tags, STRICT_TRUNK_CORE_TAGS),
+    support_tag_count: countTopKeys(tags, SUPPORT_TAGS),
     upper_distractor_tag_count: countTopKeys(tags, UPPER_DISTRACTOR_TAGS),
     trunk_vector_count: vectorCount(snapshot, 'trunk_control'),
-    upper_vector_count: vectorCount(snapshot, 'upper_mobility'),
     lower_stability_vector_count: vectorCount(snapshot, 'lower_stability'),
+    upper_vector_count: vectorCount(snapshot, 'upper_mobility'),
     guardrail_summary: snapshot.first_session.guardrail_summary,
   };
 }
@@ -125,11 +125,43 @@ function run() {
       before,
       after,
       directional_readout: {
-        trunk_core_led_tag_delta: after.trunk_core_led_tag_count - before.trunk_core_led_tag_count,
-        upper_distractor_tag_delta: after.upper_distractor_tag_count - before.upper_distractor_tag_count,
-        upper_vector_delta: after.upper_vector_count - before.upper_vector_count,
-        trunk_vector_delta: after.trunk_vector_count - before.trunk_vector_count,
-        lower_stability_vector_delta: after.lower_stability_vector_count - before.lower_stability_vector_count,
+        strict_trunk_core: {
+          before_tag_count: before.strict_trunk_core_tag_count,
+          after_tag_count: after.strict_trunk_core_tag_count,
+          tag_delta: after.strict_trunk_core_tag_count - before.strict_trunk_core_tag_count,
+          before_trunk_vector_count: before.trunk_vector_count,
+          after_trunk_vector_count: after.trunk_vector_count,
+          trunk_vector_delta: after.trunk_vector_count - before.trunk_vector_count,
+          improved_by_strict_tags:
+            after.strict_trunk_core_tag_count > before.strict_trunk_core_tag_count,
+          improved_by_trunk_vector:
+            after.trunk_vector_count > before.trunk_vector_count,
+        },
+        support_contribution: {
+          before_tag_count: before.support_tag_count,
+          after_tag_count: after.support_tag_count,
+          tag_delta: after.support_tag_count - before.support_tag_count,
+          before_lower_stability_vector_count: before.lower_stability_vector_count,
+          after_lower_stability_vector_count: after.lower_stability_vector_count,
+          lower_stability_vector_delta:
+            after.lower_stability_vector_count - before.lower_stability_vector_count,
+        },
+        upper_distractor_reduction: {
+          before_tag_count: before.upper_distractor_tag_count,
+          after_tag_count: after.upper_distractor_tag_count,
+          tag_delta: after.upper_distractor_tag_count - before.upper_distractor_tag_count,
+          before_upper_vector_count: before.upper_vector_count,
+          after_upper_vector_count: after.upper_vector_count,
+          upper_vector_delta: after.upper_vector_count - before.upper_vector_count,
+        },
+        target_vector_readout: {
+          trunk_vector_delta: after.trunk_vector_count - before.trunk_vector_count,
+          lower_stability_vector_delta:
+            after.lower_stability_vector_count - before.lower_stability_vector_count,
+          upper_vector_delta: after.upper_vector_count - before.upper_vector_count,
+        },
+        proof_honesty_note:
+          'Strict trunk/core tags, lower support tags, upper distractors, and target vectors are separated; lower-support gains are not counted as strict trunk/core improvement.',
         guardrails_unchanged:
           JSON.stringify(before.guardrail_summary) === JSON.stringify(after.guardrail_summary),
         phase_shape_unchanged:

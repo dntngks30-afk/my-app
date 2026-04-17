@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-17T15:43:00.429Z",
+  "generated_at": "2026-04-17T16:14:14.596Z",
   "purpose": "PR2-D CORE_CONTROL_DEFICIT before/after trunk-core distinctness proof",
   "core_diff": {
     "before": {
@@ -62,11 +62,12 @@
           }
         ]
       },
-      "trunk_core_led_tag_count": 3,
+      "strict_trunk_core_tag_count": 3,
+      "support_tag_count": 0,
       "upper_distractor_tag_count": 1,
       "trunk_vector_count": 2,
-      "upper_vector_count": 1,
       "lower_stability_vector_count": 0,
+      "upper_vector_count": 1,
       "guardrail_summary": {
         "pain_mode": "caution",
         "safety_mode": "yellow",
@@ -137,11 +138,12 @@
           }
         ]
       },
-      "trunk_core_led_tag_count": 4,
+      "strict_trunk_core_tag_count": 2,
+      "support_tag_count": 2,
       "upper_distractor_tag_count": 0,
       "trunk_vector_count": 1,
-      "upper_vector_count": 0,
       "lower_stability_vector_count": 1,
+      "upper_vector_count": 0,
       "guardrail_summary": {
         "pain_mode": "caution",
         "safety_mode": "yellow",
@@ -153,11 +155,38 @@
       }
     },
     "directional_readout": {
-      "trunk_core_led_tag_delta": 1,
-      "upper_distractor_tag_delta": -1,
-      "upper_vector_delta": -1,
-      "trunk_vector_delta": -1,
-      "lower_stability_vector_delta": 1,
+      "strict_trunk_core": {
+        "before_tag_count": 3,
+        "after_tag_count": 2,
+        "tag_delta": -1,
+        "before_trunk_vector_count": 2,
+        "after_trunk_vector_count": 1,
+        "trunk_vector_delta": -1,
+        "improved_by_strict_tags": false,
+        "improved_by_trunk_vector": false
+      },
+      "support_contribution": {
+        "before_tag_count": 0,
+        "after_tag_count": 2,
+        "tag_delta": 2,
+        "before_lower_stability_vector_count": 0,
+        "after_lower_stability_vector_count": 1,
+        "lower_stability_vector_delta": 1
+      },
+      "upper_distractor_reduction": {
+        "before_tag_count": 1,
+        "after_tag_count": 0,
+        "tag_delta": -1,
+        "before_upper_vector_count": 1,
+        "after_upper_vector_count": 0,
+        "upper_vector_delta": -1
+      },
+      "target_vector_readout": {
+        "trunk_vector_delta": -1,
+        "lower_stability_vector_delta": 1,
+        "upper_vector_delta": -1
+      },
+      "proof_honesty_note": "Strict trunk/core tags, lower support tags, upper distractors, and target vectors are separated; lower-support gains are not counted as strict trunk/core improvement.",
       "guardrails_unchanged": true,
       "phase_shape_unchanged": true,
       "rationale_unchanged": true,
