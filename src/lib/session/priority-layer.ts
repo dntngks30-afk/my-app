@@ -33,6 +33,8 @@ const RESULT_TYPE_TO_FOCUS_TAGS: Record<string, string[]> = {
   'UPPER-LIMB': ['shoulder_mobility', 'shoulder_stability', 'upper_back_activation'],
   'LOWER-LIMB': ['lower_chain_stability', 'glute_medius', 'ankle_mobility', 'glute_activation'],
   'LUMBO-PELVIS': ['hip_mobility', 'glute_activation', 'core_control', 'core_stability'],
+  'DECONDITIONED': ['full_body_reset', 'core_control'],
+  'STABLE': ['core_control', 'core_stability'],
 };
 
 /** PR-ALIGN-01: resultType → GoldPathVector for first-session composition. Ensures UPPER-LIMB does not start as core-only. */
@@ -42,7 +44,7 @@ const RESULT_TYPE_TO_GOLD_PATH: Record<string, string> = {
   'LOWER-LIMB': 'lower_stability',
   'LUMBO-PELVIS': 'trunk_control',
   'DECONDITIONED': 'deconditioned',
-  'STABLE': '', // use priority_vector
+  'STABLE': 'balanced_reset',
 };
 
 /** PR-ALIGN-01: resultType → session_focus_axes (axis names for meta). First session alignment. */
@@ -51,8 +53,8 @@ const RESULT_TYPE_TO_FOCUS_AXES: Record<string, string[]> = {
   'NECK-SHOULDER': ['upper_mobility'],
   'LOWER-LIMB': ['lower_stability'],
   'LUMBO-PELVIS': ['trunk_control'],
-  'DECONDITIONED': ['deconditioned'],
-  'STABLE': [],
+  'DECONDITIONED': ['deconditioned', 'trunk_control'],
+  'STABLE': ['trunk_control', 'upper_mobility'],
 };
 
 /** PR-ALIGN-01: resultType → session_rationale first sentence. User-facing alignment. */
@@ -61,8 +63,8 @@ const RESULT_TYPE_TO_RATIONALE: Record<string, string> = {
   'NECK-SHOULDER': '어깨·목 움직임을 정리하기 위해 흉추·견갑 가동성을 회복하는 세션입니다.',
   'LOWER-LIMB': '무릎·발목 안정을 잡기 위해 엉덩이와 골반 안정성을 강화하는 세션입니다.',
   'LUMBO-PELVIS': '몸통 안정을 잡기 위해 호흡·코어 연결을 강화하는 세션입니다.',
-  'DECONDITIONED': '기본 움직임 회복이 우선이어서 안정적인 움직임 기반을 다지는 세션입니다.',
-  'STABLE': '',
+  'DECONDITIONED': '기본 움직임 회복을 시작하면서 몸통 연결을 천천히 세우는 세션입니다.',
+  'STABLE': '몸통 정렬과 상체 가동성을 함께 정리해 균형 잡힌 시작을 만드는 세션입니다.',
 };
 
 // ─── PR-PILOT-BASELINE-SESSION-ALIGN-01: baseline_session_anchor → 세분화된 intent ───
@@ -75,7 +77,7 @@ const BASELINE_ANCHOR_TO_GOLD_PATH: Record<string, string> = {
   upper_mobility: 'upper_mobility',
   trunk_control: 'trunk_control',
   deconditioned: 'deconditioned',
-  balanced_reset: '',
+  balanced_reset: 'balanced_reset',
 };
 
 const BASELINE_ANCHOR_TO_FOCUS_AXES: Record<string, string[]> = {
@@ -83,8 +85,8 @@ const BASELINE_ANCHOR_TO_FOCUS_AXES: Record<string, string[]> = {
   lower_mobility: ['lower_mobility'],
   upper_mobility: ['upper_mobility'],
   trunk_control: ['trunk_control'],
-  deconditioned: ['deconditioned'],
-  balanced_reset: [],
+  deconditioned: ['deconditioned', 'trunk_control'],
+  balanced_reset: ['trunk_control', 'upper_mobility'],
 };
 
 const BASELINE_ANCHOR_TO_RATIONALE: Record<string, string> = {
@@ -92,8 +94,8 @@ const BASELINE_ANCHOR_TO_RATIONALE: Record<string, string> = {
   lower_mobility: '하체 가동성 회복이 우선이어서 고관절·발목 움직임 범위를 여는 세션입니다.',
   upper_mobility: '상체 움직임 회복이 우선이어서 흉추·견갑·어깨 가동성을 여는 세션입니다.',
   trunk_control: '몸통 연결이 우선이어서 호흡·코어 제어를 강화하는 세션입니다.',
-  deconditioned: '기본 움직임 회복이 우선이어서 안정적인 움직임 기반을 다지는 세션입니다.',
-  balanced_reset: '',
+  deconditioned: '기본 움직임 회복을 시작하면서 몸통 연결을 천천히 세우는 세션입니다.',
+  balanced_reset: '몸통 정렬과 상체 가동성을 함께 정리해 균형 잡힌 시작을 만드는 세션입니다.',
 };
 
 const BASELINE_ANCHOR_TO_REQUIRED_TAGS: Record<string, string[]> = {
@@ -101,8 +103,12 @@ const BASELINE_ANCHOR_TO_REQUIRED_TAGS: Record<string, string[]> = {
   lower_mobility: ['hip_mobility', 'ankle_mobility', 'hip_flexor_stretch', 'calf_release'],
   upper_mobility: ['shoulder_mobility', 'thoracic_mobility', 'upper_back_activation', 'shoulder_stability'],
   trunk_control: ['core_control', 'core_stability', 'global_core'],
-  deconditioned: ['full_body_reset', 'core_control'],
-  balanced_reset: ['core_stability', 'upper_back_activation'],
+  // PR2-E: include core_stability so gentle trunk-supportive templates (M13/M14)
+  // satisfy the required-tag gate in enforceFirstSessionIntentOnSegments.
+  // Without this, the enforcement forces a core_control carrier (e.g. M09)
+  // back into Main, preventing the deconditioned-safe composition from landing.
+  deconditioned: ['full_body_reset', 'core_control', 'core_stability'],
+  balanced_reset: ['core_control', 'core_stability'],
 };
 
 const BASELINE_ANCHOR_TO_FORBIDDEN_DOMINANT: Record<string, string[]> = {
@@ -111,7 +117,7 @@ const BASELINE_ANCHOR_TO_FORBIDDEN_DOMINANT: Record<string, string[]> = {
   upper_mobility: ['trunk_control', 'lower_stability', 'lower_mobility'],
   trunk_control: ['upper_mobility', 'lower_mobility'],
   deconditioned: [],
-  balanced_reset: [],
+  balanced_reset: ['lower_mobility'],
 };
 
 const BASELINE_ANCHOR_RATIONALE_MUST_INCLUDE: Record<string, string[]> = {

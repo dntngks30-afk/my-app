@@ -1,0 +1,622 @@
+{
+  "generated_at": "2026-04-17T19:03:07.059Z",
+  "purpose": "PR2-A baseline comparison harness snapshot (no tuning)",
+  "template_source": "static_fallback_fixture",
+  "anchors": [
+    "DECONDITIONED",
+    "STABLE"
+  ],
+  "snapshots": [
+    {
+      "anchor_type": "DECONDITIONED",
+      "persona_id": "deconditioned-basic",
+      "result": {
+        "primary_type": "DECONDITIONED",
+        "result_type": "DECONDITIONED",
+        "pain_mode": "none",
+        "safety_mode": "none",
+        "baseline_session_anchor": "deconditioned",
+        "priority_vector": {
+          "lower_stability": 0,
+          "lower_mobility": 0,
+          "upper_mobility": 0,
+          "trunk_control": 0.2,
+          "asymmetry": 0,
+          "deconditioned": 1
+        }
+      },
+      "first_session": {
+        "session_number": 1,
+        "first_session_intent_anchor": "deconditioned",
+        "intent_source": "baseline_anchor",
+        "gold_path_vector": "deconditioned",
+        "rationale": "기본 움직임 회복을 시작하면서 몸통 연결을 천천히 세우는 세션입니다.",
+        "session_focus_axes": [
+          "deconditioned",
+          "trunk_control"
+        ],
+        "segment_counts": {
+          "prep": 1,
+          "main": 2,
+          "accessory": 1,
+          "cooldown": 1,
+          "total": 5
+        },
+        "segment_shape": [
+          {
+            "title": "Prep",
+            "item_count": 1
+          },
+          {
+            "title": "Main",
+            "item_count": 2
+          },
+          {
+            "title": "Accessory",
+            "item_count": 1
+          },
+          {
+            "title": "Cooldown",
+            "item_count": 1
+          }
+        ],
+        "main_emphasis_shape": {
+          "template_ids": [
+            "M13",
+            "M14"
+          ],
+          "templates": [
+            {
+              "template_id": "M13",
+              "name": "데드버그",
+              "level": 2,
+              "phase": "main",
+              "focus_tags": [
+                "core_stability",
+                "global_core"
+              ],
+              "target_vector": [
+                "trunk_control"
+              ]
+            },
+            {
+              "template_id": "M14",
+              "name": "버드독",
+              "level": 2,
+              "phase": "main",
+              "focus_tags": [
+                "core_stability",
+                "global_core"
+              ],
+              "target_vector": [
+                "trunk_control"
+              ]
+            }
+          ],
+          "focus_tags_top": [
+            {
+              "key": "core_stability",
+              "count": 2
+            },
+            {
+              "key": "global_core",
+              "count": 2
+            }
+          ],
+          "target_vectors_top": [
+            {
+              "key": "trunk_control",
+              "count": 2
+            }
+          ]
+        },
+        "segment_emphasis_shape": [
+          {
+            "title": "Prep",
+            "template_ids": [
+              "M01"
+            ],
+            "templates": [
+              {
+                "template_id": "M01",
+                "name": "90/90 벽 호흡",
+                "level": 1,
+                "phase": "prep",
+                "focus_tags": [
+                  "full_body_reset",
+                  "core_control"
+                ],
+                "target_vector": [
+                  "trunk_control",
+                  "deconditioned"
+                ]
+              }
+            ],
+            "focus_tags_top": [
+              {
+                "key": "core_control",
+                "count": 1
+              },
+              {
+                "key": "full_body_reset",
+                "count": 1
+              }
+            ],
+            "target_vectors_top": [
+              {
+                "key": "deconditioned",
+                "count": 1
+              },
+              {
+                "key": "trunk_control",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "title": "Main",
+            "template_ids": [
+              "M13",
+              "M14"
+            ],
+            "templates": [
+              {
+                "template_id": "M13",
+                "name": "데드버그",
+                "level": 2,
+                "phase": "main",
+                "focus_tags": [
+                  "core_stability",
+                  "global_core"
+                ],
+                "target_vector": [
+                  "trunk_control"
+                ]
+              },
+              {
+                "template_id": "M14",
+                "name": "버드독",
+                "level": 2,
+                "phase": "main",
+                "focus_tags": [
+                  "core_stability",
+                  "global_core"
+                ],
+                "target_vector": [
+                  "trunk_control"
+                ]
+              }
+            ],
+            "focus_tags_top": [
+              {
+                "key": "core_stability",
+                "count": 2
+              },
+              {
+                "key": "global_core",
+                "count": 2
+              }
+            ],
+            "target_vectors_top": [
+              {
+                "key": "trunk_control",
+                "count": 2
+              }
+            ]
+          },
+          {
+            "title": "Accessory",
+            "template_ids": [
+              "M02"
+            ],
+            "templates": [
+              {
+                "template_id": "M02",
+                "name": "크로커다일 호흡",
+                "level": 1,
+                "phase": "prep",
+                "focus_tags": [
+                  "full_body_reset",
+                  "core_control"
+                ],
+                "target_vector": [
+                  "trunk_control",
+                  "deconditioned"
+                ]
+              }
+            ],
+            "focus_tags_top": [
+              {
+                "key": "core_control",
+                "count": 1
+              },
+              {
+                "key": "full_body_reset",
+                "count": 1
+              }
+            ],
+            "target_vectors_top": [
+              {
+                "key": "deconditioned",
+                "count": 1
+              },
+              {
+                "key": "trunk_control",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "title": "Cooldown",
+            "template_ids": [
+              "M28"
+            ],
+            "templates": [
+              {
+                "template_id": "M28",
+                "name": "레그업 더 월",
+                "level": 1,
+                "phase": "prep",
+                "focus_tags": [
+                  "full_body_reset",
+                  "calf_release"
+                ],
+                "target_vector": [
+                  "lower_mobility",
+                  "deconditioned"
+                ]
+              }
+            ],
+            "focus_tags_top": [
+              {
+                "key": "calf_release",
+                "count": 1
+              },
+              {
+                "key": "full_body_reset",
+                "count": 1
+              }
+            ],
+            "target_vectors_top": [
+              {
+                "key": "deconditioned",
+                "count": 1
+              },
+              {
+                "key": "lower_mobility",
+                "count": 1
+              }
+            ]
+          }
+        ],
+        "guardrail_summary": {
+          "pain_mode": "none",
+          "safety_mode": "none",
+          "first_session_guardrail_applied": true,
+          "pain_gate_applied": false,
+          "short_mode_applied": false,
+          "recovery_mode_applied": false,
+          "policy_rules": [
+            "sel_first_session"
+          ]
+        }
+      }
+    },
+    {
+      "anchor_type": "STABLE",
+      "persona_id": "stable-basic",
+      "result": {
+        "primary_type": "STABLE",
+        "result_type": "STABLE",
+        "pain_mode": "none",
+        "safety_mode": "none",
+        "baseline_session_anchor": "balanced_reset",
+        "priority_vector": {
+          "lower_stability": 0,
+          "lower_mobility": 0,
+          "upper_mobility": 0,
+          "trunk_control": 0,
+          "asymmetry": 0,
+          "deconditioned": 0
+        }
+      },
+      "first_session": {
+        "session_number": 1,
+        "first_session_intent_anchor": "balanced_reset",
+        "intent_source": "baseline_anchor",
+        "gold_path_vector": "balanced_reset",
+        "rationale": "몸통 정렬과 상체 가동성을 함께 정리해 균형 잡힌 시작을 만드는 세션입니다.",
+        "session_focus_axes": [
+          "trunk_control",
+          "upper_mobility"
+        ],
+        "segment_counts": {
+          "prep": 1,
+          "main": 2,
+          "accessory": 1,
+          "cooldown": 1,
+          "total": 5
+        },
+        "segment_shape": [
+          {
+            "title": "Prep",
+            "item_count": 1
+          },
+          {
+            "title": "Main",
+            "item_count": 2
+          },
+          {
+            "title": "Accessory",
+            "item_count": 1
+          },
+          {
+            "title": "Cooldown",
+            "item_count": 1
+          }
+        ],
+        "main_emphasis_shape": {
+          "template_ids": [
+            "M09",
+            "M13"
+          ],
+          "templates": [
+            {
+              "template_id": "M09",
+              "name": "푸쉬업 플러스",
+              "level": 2,
+              "phase": "main",
+              "focus_tags": [
+                "shoulder_stability",
+                "core_control"
+              ],
+              "target_vector": [
+                "trunk_control",
+                "upper_mobility"
+              ]
+            },
+            {
+              "template_id": "M13",
+              "name": "데드버그",
+              "level": 2,
+              "phase": "main",
+              "focus_tags": [
+                "core_stability",
+                "global_core"
+              ],
+              "target_vector": [
+                "trunk_control"
+              ]
+            }
+          ],
+          "focus_tags_top": [
+            {
+              "key": "core_control",
+              "count": 1
+            },
+            {
+              "key": "core_stability",
+              "count": 1
+            },
+            {
+              "key": "global_core",
+              "count": 1
+            },
+            {
+              "key": "shoulder_stability",
+              "count": 1
+            }
+          ],
+          "target_vectors_top": [
+            {
+              "key": "trunk_control",
+              "count": 2
+            },
+            {
+              "key": "upper_mobility",
+              "count": 1
+            }
+          ]
+        },
+        "segment_emphasis_shape": [
+          {
+            "title": "Prep",
+            "template_ids": [
+              "M01"
+            ],
+            "templates": [
+              {
+                "template_id": "M01",
+                "name": "90/90 벽 호흡",
+                "level": 1,
+                "phase": "prep",
+                "focus_tags": [
+                  "full_body_reset",
+                  "core_control"
+                ],
+                "target_vector": [
+                  "trunk_control",
+                  "deconditioned"
+                ]
+              }
+            ],
+            "focus_tags_top": [
+              {
+                "key": "core_control",
+                "count": 1
+              },
+              {
+                "key": "full_body_reset",
+                "count": 1
+              }
+            ],
+            "target_vectors_top": [
+              {
+                "key": "deconditioned",
+                "count": 1
+              },
+              {
+                "key": "trunk_control",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "title": "Main",
+            "template_ids": [
+              "M09",
+              "M13"
+            ],
+            "templates": [
+              {
+                "template_id": "M09",
+                "name": "푸쉬업 플러스",
+                "level": 2,
+                "phase": "main",
+                "focus_tags": [
+                  "shoulder_stability",
+                  "core_control"
+                ],
+                "target_vector": [
+                  "trunk_control",
+                  "upper_mobility"
+                ]
+              },
+              {
+                "template_id": "M13",
+                "name": "데드버그",
+                "level": 2,
+                "phase": "main",
+                "focus_tags": [
+                  "core_stability",
+                  "global_core"
+                ],
+                "target_vector": [
+                  "trunk_control"
+                ]
+              }
+            ],
+            "focus_tags_top": [
+              {
+                "key": "core_control",
+                "count": 1
+              },
+              {
+                "key": "core_stability",
+                "count": 1
+              },
+              {
+                "key": "global_core",
+                "count": 1
+              },
+              {
+                "key": "shoulder_stability",
+                "count": 1
+              }
+            ],
+            "target_vectors_top": [
+              {
+                "key": "trunk_control",
+                "count": 2
+              },
+              {
+                "key": "upper_mobility",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "title": "Accessory",
+            "template_ids": [
+              "M14"
+            ],
+            "templates": [
+              {
+                "template_id": "M14",
+                "name": "버드독",
+                "level": 2,
+                "phase": "main",
+                "focus_tags": [
+                  "core_stability",
+                  "global_core"
+                ],
+                "target_vector": [
+                  "trunk_control"
+                ]
+              }
+            ],
+            "focus_tags_top": [
+              {
+                "key": "core_stability",
+                "count": 1
+              },
+              {
+                "key": "global_core",
+                "count": 1
+              }
+            ],
+            "target_vectors_top": [
+              {
+                "key": "trunk_control",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "title": "Cooldown",
+            "template_ids": [
+              "M02"
+            ],
+            "templates": [
+              {
+                "template_id": "M02",
+                "name": "크로커다일 호흡",
+                "level": 1,
+                "phase": "prep",
+                "focus_tags": [
+                  "full_body_reset",
+                  "core_control"
+                ],
+                "target_vector": [
+                  "trunk_control",
+                  "deconditioned"
+                ]
+              }
+            ],
+            "focus_tags_top": [
+              {
+                "key": "core_control",
+                "count": 1
+              },
+              {
+                "key": "full_body_reset",
+                "count": 1
+              }
+            ],
+            "target_vectors_top": [
+              {
+                "key": "deconditioned",
+                "count": 1
+              },
+              {
+                "key": "trunk_control",
+                "count": 1
+              }
+            ]
+          }
+        ],
+        "guardrail_summary": {
+          "pain_mode": "none",
+          "safety_mode": "none",
+          "first_session_guardrail_applied": true,
+          "pain_gate_applied": false,
+          "short_mode_applied": false,
+          "recovery_mode_applied": false,
+          "policy_rules": [
+            "sel_first_session"
+          ]
+        }
+      }
+    }
+  ]
+}
