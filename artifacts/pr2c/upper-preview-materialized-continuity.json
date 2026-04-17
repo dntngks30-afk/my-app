@@ -1,0 +1,61 @@
+{
+  "generated_at": "2026-04-17T13:13:17.675Z",
+  "purpose": "PR2-C follow-up preview/materialized upper continuity proof",
+  "anchor_type": "UPPER_IMMOBILITY",
+  "expected_baseline_anchor": "upper_mobility",
+  "materialized_first_session_intent_anchor": "upper_mobility",
+  "materialized_focus_axes": [
+    "upper_mobility"
+  ],
+  "preview_focus_axes": [
+    "upper_mobility"
+  ],
+  "materialized_main_emphasis_shape": {
+    "focus_tags_top": [
+      {
+        "key": "thoracic_mobility",
+        "count": 2
+      },
+      {
+        "key": "shoulder_mobility",
+        "count": 1
+      },
+      {
+        "key": "upper_back_activation",
+        "count": 1
+      }
+    ],
+    "target_vectors_top": [
+      {
+        "key": "upper_mobility",
+        "count": 2
+      }
+    ]
+  },
+  "preview_main_emphasis_shape": {
+    "focus_tags_top": [
+      {
+        "key": "thoracic_mobility",
+        "count": 1
+      },
+      {
+        "key": "upper_back_activation",
+        "count": 1
+      }
+    ],
+    "target_vectors_top": [
+      {
+        "key": "upper_mobility",
+        "count": 1
+      }
+    ]
+  },
+  "continuity_checks": {
+    "focus_axes_match": true,
+    "intent_anchor_matches_expected": true,
+    "materialized_upper_dominant": true,
+    "preview_upper_dominant": true,
+    "main_emphasis_shape_upper_aligned": true,
+    "first_session_guardrail_kept": true
+  }
+}

@@ -13,7 +13,12 @@ import {
   isExcludedByPainMode,
 } from '@/lib/session/policy-registry/rules/selectionRules'
 import type { SessionTemplateRow } from '@/lib/workout-routine/exercise-templates-db'
-import { LOWER_PAIR_GOLD_PATH_RULES } from '@/lib/session/lower-pair-session1-shared'
+import { LOWER_AXIS_GUARD_TAGS, LOWER_PAIR_GOLD_PATH_RULES } from '@/lib/session/lower-pair-session1-shared'
+import {
+  scoreUpperMobilityIntentFit,
+  shouldReplaceForbiddenDominantByAnchor,
+  shouldReserveUpperMainCandidate,
+} from '@/lib/session/upper-mobility-session1-shared'
 
 type GoldPathVector =
   | 'lower_stability'
@@ -324,23 +329,48 @@ function selectGoldPathTemplates(
 
     for (const { template } of ranked) {
       if (items.length >= rule.count) break
+      // PR2-C follow-up: reserve upper-main-capacity candidates in the final conservative fallback pass too.
+      if (shouldReserveUpperMainCandidate({
+        anchorType: firstSessionIntent?.anchorType,
+        ruleKind: rule.kind,
+        templateFocusTags: template.focus_tags,
+        isMainEligible: isMainEligible(template),
+      })) continue
       if (!(template.phase && rule.preferredPhases.includes(template.phase))) continue
       if (!hasTargetVector(template, rule.preferredVectors)) continue
       tryPick(template)
     }
     for (const { template } of ranked) {
       if (items.length >= rule.count) break
+      if (shouldReserveUpperMainCandidate({
+        anchorType: firstSessionIntent?.anchorType,
+        ruleKind: rule.kind,
+        templateFocusTags: template.focus_tags,
+        isMainEligible: isMainEligible(template),
+      })) continue
       if (!(template.phase && rule.preferredPhases.includes(template.phase))) continue
       if (!hasTargetVector(template, rule.fallbackVectors)) continue
       tryPick(template)
     }
     for (const { template } of ranked) {
       if (items.length >= rule.count) break
+      if (shouldReserveUpperMainCandidate({
+        anchorType: firstSessionIntent?.anchorType,
+        ruleKind: rule.kind,
+        templateFocusTags: template.focus_tags,
+        isMainEligible: isMainEligible(template),
+      })) continue
       if (!hasTargetVector(template, rule.preferredVectors)) continue
       tryPick(template)
     }
     for (const { template } of ranked) {
       if (items.length >= rule.count) break
+      if (shouldReserveUpperMainCandidate({
+        anchorType: firstSessionIntent?.anchorType,
+        ruleKind: rule.kind,
+        templateFocusTags: template.focus_tags,
+        isMainEligible: isMainEligible(template),
+      })) continue
       if (!isConservativeFallbackEligible(template, rule.kind)) continue
       tryPick(template)
     }
@@ -380,9 +410,73 @@ function scoreFirstSessionIntentFit(
     if (rule.kind === 'prep' || rule.kind === 'cooldown') return 4
     return 2
   }
+  if (anchor === 'upper_mobility') {
+    return scoreUpperMobilityIntentFit(template.focus_tags, rule.kind)
+  }
   if (rule.kind === 'main') return 10
   if (rule.kind === 'prep') return 6
   return 3
+}
+
+function enforceForbiddenDominantAxesOnBootstrap(
+  segmentEntries: Array<{ title: string; items: SessionTemplateRow[] }>,
+  sorted: Array<{ template: SessionTemplateRow; score: number }>,
+  painMode: 'none' | 'caution' | 'protected' | undefined,
+  firstSessionIntent: FirstSessionIntentSSOT
+): Array<{ title: string; items: SessionTemplateRow[] }> {
+  if (firstSessionIntent.forbiddenDominantAxes.length === 0) return segmentEntries
+
+  const mainEntry = segmentEntries.find((entry) => entry.title === 'Main')
+  if (!mainEntry || mainEntry.items.length === 0) return segmentEntries
+
+  const forbiddenSet = new Set(firstSessionIntent.forbiddenDominantAxes)
+  const forbiddenTagsForAxis: Record<string, string[]> = {
+    upper_mobility: ['shoulder_mobility', 'thoracic_mobility', 'upper_back_activation', 'shoulder_stability'],
+    lower_mobility: [...LOWER_AXIS_GUARD_TAGS.lower_mobility],
+    lower_stability: [...LOWER_AXIS_GUARD_TAGS.lower_stability],
+    trunk_control: ['core_control', 'core_stability', 'global_core'],
+  }
+
+  const forbiddenTags = new Set<string>()
+  for (const axis of forbiddenSet) {
+    for (const tag of forbiddenTagsForAxis[axis] ?? []) forbiddenTags.add(tag)
+  }
+
+  const forbiddenCount = mainEntry.items.filter((item) =>
+    item.focus_tags.some((tag) => forbiddenTags.has(tag))
+  ).length
+
+  const shouldReplace = shouldReplaceForbiddenDominantByAnchor({
+    anchorType: firstSessionIntent.anchorType,
+    forbiddenCount,
+    mainItemCount: mainEntry.items.length,
+  })
+  if (!shouldReplace) return segmentEntries
+
+  const used = new Set(segmentEntries.flatMap((entry) => entry.items.map((item) => item.id)))
+  const replacement = sorted
+    .map(({ template }) => template)
+    .find((template) => {
+      if (used.has(template.id)) return false
+      if (template.focus_tags.some((tag) => forbiddenTags.has(tag))) return false
+      if (!hasFirstSessionIntentTag(template, firstSessionIntent)) return false
+      if (painMode && painMode !== 'none' && (template.avoid_if_pain_mode ?? []).includes(painMode)) return false
+      return isMainEligible(template)
+    })
+  if (!replacement) return segmentEntries
+
+  const worstIdx = mainEntry.items.reduce((worst, item, idx) => {
+    const isForbidden = item.focus_tags.some((tag) => forbiddenTags.has(tag))
+    return isForbidden ? idx : worst
+  }, -1)
+  if (worstIdx < 0) return segmentEntries
+
+  return segmentEntries.map((entry) => {
+    if (entry.title !== 'Main') return entry
+    const next = [...entry.items]
+    next[worstIdx] = replacement
+    return { ...entry, items: next }
+  })
 }
 
 function enforceFirstSessionIntentOnBootstrapSegments(
@@ -392,15 +486,18 @@ function enforceFirstSessionIntentOnBootstrapSegments(
   firstSessionIntent?: FirstSessionIntentSSOT | null
 ): Array<{ title: string; items: SessionTemplateRow[] }> {
   if (!firstSessionIntent || firstSessionIntent.requiredTags.length === 0) return segmentEntries
-  const lowerPair =
+  const supportedAnchors =
     firstSessionIntent.anchorType === 'lower_stability' ||
-    firstSessionIntent.anchorType === 'lower_mobility'
-  if (!lowerPair) return segmentEntries
+    firstSessionIntent.anchorType === 'lower_mobility' ||
+    firstSessionIntent.anchorType === 'upper_mobility'
+  if (!supportedAnchors) return segmentEntries
 
   const mainEntry = segmentEntries.find((e) => e.title === 'Main')
   if (!mainEntry || mainEntry.items.length === 0) return segmentEntries
   const aligned = mainEntry.items.some((item) => hasFirstSessionIntentTag(item, firstSessionIntent))
-  if (aligned) return segmentEntries
+  if (aligned) {
+    return enforceForbiddenDominantAxesOnBootstrap(segmentEntries, sorted, painMode, firstSessionIntent)
+  }
 
   const used = new Set(segmentEntries.flatMap((e) => e.items.map((i) => i.id)))
   const replacement = sorted
@@ -411,14 +508,17 @@ function enforceFirstSessionIntentOnBootstrapSegments(
       if (painMode && painMode !== 'none' && (template.avoid_if_pain_mode ?? []).includes(painMode)) return false
       return isMainEligible(template)
     })
-  if (!replacement) return segmentEntries
+  if (!replacement) {
+    return enforceForbiddenDominantAxesOnBootstrap(segmentEntries, sorted, painMode, firstSessionIntent)
+  }
 
-  return segmentEntries.map((entry) => {
+  const replaced = segmentEntries.map((entry) => {
     if (entry.title !== 'Main' || entry.items.length === 0) return entry
     const next = [...entry.items]
     next[next.length - 1] = replacement
     return { ...entry, items: next }
   })
+  return enforceForbiddenDominantAxesOnBootstrap(replaced, sorted, painMode, firstSessionIntent)
 }
 
 function toBootstrapItem(
