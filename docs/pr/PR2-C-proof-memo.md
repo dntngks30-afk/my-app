@@ -27,4 +27,4 @@
 - Guardrail summary remained unchanged (`pain_mode`, `safety_mode`, `first_session_guardrail_applied`, `pain_gate_applied`).
 - Lower pair snapshots remained unchanged in before/after regression check.
 - Follow-up continuity proof confirms preview/bootstrap path and materialized path both stay upper-dominant for `UPPER_IMMOBILITY` in focus axes + main emphasis shape while keeping first-session guardrail flag.
-- Follow-up 3 proof confirms final conservative fallback pass에서도 non-main이 reserved upper-main candidate를 선점하지 않고 Main upper 방향성을 유지한다.
+- Follow-up 3 proof confirms final conservative fallback pass가 실제로 exercised된 조건에서도 non-main이 reserved upper-main candidate를 선점하지 않고 Main upper 방향성을 유지한다.

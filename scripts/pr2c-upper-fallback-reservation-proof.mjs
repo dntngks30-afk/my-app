@@ -38,6 +38,11 @@ function hasReservedInNonMain(segmentCarrier) {
   return false;
 }
 
+function hasSegmentTemplateId(segmentCarrier, title, templateId) {
+  const seg = segmentCarrier.segments.find((s) => s.title === title);
+  return (seg?.items ?? []).some((item) => item.templateId === templateId);
+}
+
 function buildSparseTemplatePool() {
   return [
     {
@@ -198,6 +203,10 @@ async function run() {
       preview_no_non_main_leak: !hasReservedInNonMain(preview),
       materialized_main_upper_dominant: planMainVectors.some((v) => v.key === 'upper_mobility'),
       preview_main_upper_dominant: previewMainVectors.some((v) => v.key === 'upper_mobility'),
+      materialized_fallback_path_exercised:
+        hasSegmentTemplateId(plan, 'Accessory', 'DECOND_1') || hasSegmentTemplateId(plan, 'Cooldown', 'DECOND_1'),
+      preview_fallback_path_exercised:
+        hasSegmentTemplateId(preview, 'Accessory', 'DECOND_1') || hasSegmentTemplateId(preview, 'Cooldown', 'DECOND_1'),
       guardrail_kept:
         plan.meta?.constraint_flags?.first_session_guardrail_applied === true &&
         Array.isArray(preview.constraint_flags) &&

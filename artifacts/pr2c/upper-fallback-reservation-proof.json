@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-17T12:58:18.607Z",
+  "generated_at": "2026-04-17T13:08:39.004Z",
   "purpose": "PR2-C follow-up 3: fallback-pass upper reservation proof",
   "sparse_fixture_template_ids": [
     "U_MAIN_1",
@@ -77,6 +77,8 @@
     "preview_no_non_main_leak": true,
     "materialized_main_upper_dominant": true,
     "preview_main_upper_dominant": true,
+    "materialized_fallback_path_exercised": true,
+    "preview_fallback_path_exercised": true,
     "guardrail_kept": true
   }
 }
