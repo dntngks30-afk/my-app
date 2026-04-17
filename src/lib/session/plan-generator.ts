@@ -60,6 +60,9 @@ const GOLD_PATH_VECTORS = ['lower_stability', 'lower_mobility', 'trunk_control',
 type GoldPathVector = typeof GOLD_PATH_VECTORS[number];
 type SegmentKind = 'prep' | 'main' | 'accessory' | 'cooldown';
 
+const UPPER_MOBILITY_INTENT_TAGS = new Set(['shoulder_mobility', 'thoracic_mobility', 'upper_back_activation', 'shoulder_stability']);
+const TRUNK_CONTROL_TAGS = new Set(['core_control', 'core_stability', 'global_core']);
+
 /** Phase-safe composition: focus_tags → segment eligibility (no DB change) */
 const PREP_TAGS = new Set([
   'full_body_reset', 'calf_release', 'upper_trap_release', 'neck_mobility',
@@ -479,6 +482,19 @@ function scoreFirstSessionIntentFit(
     if (rule.kind === 'prep' || rule.kind === 'cooldown') return 4;
     return 2;
   }
+  if (anchor === 'upper_mobility') {
+    const hasUpperIntentTag = template.focus_tags.some((tag) => UPPER_MOBILITY_INTENT_TAGS.has(tag));
+    const hasTrunkControlTag = template.focus_tags.some((tag) => TRUNK_CONTROL_TAGS.has(tag));
+    if (rule.kind === 'main') {
+      let score = 13;
+      if (hasUpperIntentTag) score += 2;
+      if (hasTrunkControlTag && !hasUpperIntentTag) score -= 5;
+      return score;
+    }
+    if (rule.kind === 'accessory') return 6;
+    if (rule.kind === 'prep') return 4;
+    return 2;
+  }
   if (rule.kind === 'main') return 10;
   if (rule.kind === 'prep') return 6;
   return 3;
@@ -640,6 +656,20 @@ function buildGoldPathSegmentRules(
   }));
 }
 
+
+function shouldReserveUpperMainCandidate(
+  template: SessionTemplateRow,
+  ruleKind: SegmentKind,
+  firstSessionIntent?: FirstSessionIntentSSOT | null
+): boolean {
+  if (!firstSessionIntent || firstSessionIntent.anchorType !== 'upper_mobility') return false;
+  if (ruleKind === 'main') return false;
+  const hasUpperMainTag = template.focus_tags.some((tag) =>
+    tag === 'upper_back_activation' || tag === 'shoulder_stability'
+  );
+  return hasUpperMainTag && isMainEligible(template);
+}
+
 function selectGoldPathTemplates(
   sorted: Array<{ template: SessionTemplateRow; score: number }>,
   input: PlanGeneratorInput,
@@ -696,6 +726,7 @@ function selectGoldPathTemplates(
 
     for (const { template } of ranked) {
       if (items.length >= rule.count) break;
+      if (shouldReserveUpperMainCandidate(template, rule.kind, firstSessionIntent)) continue;
       if (!hasTemplatePhase(template, rule.preferredPhases)) continue;
       if (!hasTargetVector(template, rule.preferredVectors)) continue;
       tryPick(template);
@@ -703,6 +734,7 @@ function selectGoldPathTemplates(
 
     for (const { template } of ranked) {
       if (items.length >= rule.count) break;
+      if (shouldReserveUpperMainCandidate(template, rule.kind, firstSessionIntent)) continue;
       if (!hasTemplatePhase(template, rule.preferredPhases)) continue;
       if (!hasTargetVector(template, rule.fallbackVectors)) continue;
       tryPick(template);
@@ -710,6 +742,7 @@ function selectGoldPathTemplates(
 
     for (const { template } of ranked) {
       if (items.length >= rule.count) break;
+      if (shouldReserveUpperMainCandidate(template, rule.kind, firstSessionIntent)) continue;
       if (!hasTargetVector(template, rule.preferredVectors)) continue;
       tryPick(template);
     }
@@ -814,7 +847,12 @@ function enforceForbiddenDominantAxes(
     item.focus_tags.some((tag) => forbiddenTags.has(tag))
   ).length;
 
-  if (forbiddenCount <= mainEntry.items.length / 2) return segmentEntries;
+  const shouldReplaceForbiddenDominant =
+    firstSessionIntent.anchorType === 'upper_mobility'
+      ? forbiddenCount >= 1
+      : forbiddenCount > mainEntry.items.length / 2;
+
+  if (!shouldReplaceForbiddenDominant) return segmentEntries;
 
   const usedIds = new Set(segmentEntries.flatMap((entry) => entry.items.map((item) => item.id)));
   const replacement = sorted

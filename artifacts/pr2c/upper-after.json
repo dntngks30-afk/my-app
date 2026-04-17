@@ -1,0 +1,95 @@
+{
+  "generated_at": "2026-04-17T09:00:20.273Z",
+  "purpose": "PR2-A baseline comparison harness snapshot (no tuning)",
+  "template_source": "static_fallback_fixture",
+  "anchors": [
+    "UPPER_IMMOBILITY"
+  ],
+  "snapshots": [
+    {
+      "anchor_type": "UPPER_IMMOBILITY",
+      "persona_id": "upper-immobility-basic",
+      "result": {
+        "primary_type": "UPPER_IMMOBILITY",
+        "result_type": "UPPER-LIMB",
+        "pain_mode": "caution",
+        "safety_mode": "yellow",
+        "baseline_session_anchor": "upper_mobility",
+        "priority_vector": {
+          "lower_stability": 0,
+          "lower_mobility": 0,
+          "upper_mobility": 1,
+          "trunk_control": 0,
+          "asymmetry": 0.25,
+          "deconditioned": 1
+        }
+      },
+      "first_session": {
+        "session_number": 1,
+        "first_session_intent_anchor": "upper_mobility",
+        "intent_source": "baseline_anchor",
+        "gold_path_vector": "upper_mobility",
+        "rationale": "상체 움직임 회복이 우선이어서 흉추·견갑·어깨 가동성을 여는 세션입니다.",
+        "session_focus_axes": [
+          "upper_mobility"
+        ],
+        "segment_counts": {
+          "prep": 1,
+          "main": 2,
+          "accessory": 1,
+          "cooldown": 1,
+          "total": 5
+        },
+        "segment_shape": [
+          {
+            "title": "Prep",
+            "item_count": 1
+          },
+          {
+            "title": "Main",
+            "item_count": 2
+          },
+          {
+            "title": "Accessory",
+            "item_count": 1
+          },
+          {
+            "title": "Cooldown",
+            "item_count": 1
+          }
+        ],
+        "main_emphasis_shape": {
+          "focus_tags_top": [
+            {
+              "key": "thoracic_mobility",
+              "count": 2
+            },
+            {
+              "key": "shoulder_mobility",
+              "count": 1
+            },
+            {
+              "key": "upper_back_activation",
+              "count": 1
+            }
+          ],
+          "target_vectors_top": [
+            {
+              "key": "upper_mobility",
+              "count": 2
+            }
+          ]
+        },
+        "guardrail_summary": {
+          "pain_mode": "caution",
+          "safety_mode": "yellow",
+          "first_session_guardrail_applied": true,
+          "pain_gate_applied": true,
+          "short_mode_applied": false,
+          "recovery_mode_applied": false,
+          "policy_rules": []
+        }
+      }
+    }
+  ]
+}
