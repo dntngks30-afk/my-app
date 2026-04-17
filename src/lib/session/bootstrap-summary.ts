@@ -505,7 +505,7 @@ export function buildSessionBootstrapSummaryFromTemplates(
   const firstSessionMainCap = lowerPairFirstSession
     ? LOWER_PAIR_FIRST_SESSION_MAIN_COUNT
     : MAX_FIRST_SESSION_MAIN_COUNT
-  if (isFirstSession && mainCount > MAX_FIRST_SESSION_MAIN_COUNT) {
+  if (isFirstSession && mainCount > firstSessionMainCap) {
     mainCount = firstSessionMainCap
   }
   if (1 + mainCount + 1 + 1 > MAX_FIRST_SESSION_TOTAL_EXERCISES && isFirstSession) {
