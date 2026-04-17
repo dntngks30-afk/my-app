@@ -25,4 +25,4 @@
 - `UPPER_IMMOBILITY` Main emphasis changed from mixed `trunk_control + upper_mobility` to `upper_mobility`-dominant only in the harness snapshot.
 - Guardrail summary remained unchanged (`pain_mode`, `safety_mode`, `first_session_guardrail_applied`, `pain_gate_applied`).
 - Lower pair snapshots remained unchanged in before/after regression check.
-- Follow-up continuity proof confirms preview/bootstrap path and materialized path both stay upper-dominant for `UPPER_IMMOBILITY` Main vectors while keeping first-session guardrail flag.
+- Follow-up continuity proof confirms preview/bootstrap path and materialized path both stay upper-dominant for `UPPER_IMMOBILITY` in focus axes + main emphasis shape while keeping first-session guardrail flag.

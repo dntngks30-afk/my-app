@@ -150,6 +150,14 @@ async function run() {
   const previewVectors = collectMainVectors(preview, templateById);
   const materializedTags = collectMainTags(plan, templateById);
   const previewTags = collectMainTags(preview, templateById);
+  const materializedMainEmphasisShape = {
+    focus_tags_top: materializedTags,
+    target_vectors_top: materializedVectors,
+  };
+  const previewMainEmphasisShape = {
+    focus_tags_top: previewTags,
+    target_vectors_top: previewVectors,
+  };
 
   const out = {
     generated_at: new Date().toISOString(),
@@ -159,10 +167,8 @@ async function run() {
     materialized_first_session_intent_anchor: plan.meta?.baseline_alignment?.first_session_intent_anchor ?? null,
     materialized_focus_axes: plan.meta?.session_focus_axes ?? [],
     preview_focus_axes: preview.focus_axes ?? [],
-    materialized_main_vectors_top: materializedVectors,
-    preview_main_vectors_top: previewVectors,
-    materialized_main_tags_top: materializedTags,
-    preview_main_tags_top: previewTags,
+    materialized_main_emphasis_shape: materializedMainEmphasisShape,
+    preview_main_emphasis_shape: previewMainEmphasisShape,
     continuity_checks: {
       focus_axes_match:
         JSON.stringify(plan.meta?.session_focus_axes ?? []) === JSON.stringify(preview.focus_axes ?? []),
@@ -172,6 +178,9 @@ async function run() {
         getVectorCount(materializedVectors, 'upper_mobility') > getVectorCount(materializedVectors, 'trunk_control'),
       preview_upper_dominant:
         getVectorCount(previewVectors, 'upper_mobility') > getVectorCount(previewVectors, 'trunk_control'),
+      main_emphasis_shape_upper_aligned:
+        materializedMainEmphasisShape.target_vectors_top.some((v) => v.key === 'upper_mobility') &&
+        previewMainEmphasisShape.target_vectors_top.some((v) => v.key === 'upper_mobility'),
       first_session_guardrail_kept:
         plan.meta?.constraint_flags?.first_session_guardrail_applied === true &&
         (preview.constraint_flags ?? []).includes('first_session_guardrail_applied'),
