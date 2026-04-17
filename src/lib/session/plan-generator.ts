@@ -49,6 +49,7 @@ import {
   shouldReserveUpperMainCandidate,
 } from '@/lib/session/upper-mobility-session1-shared';
 import {
+  applyTrunkCoreSession1TemplateProjection,
   scoreTrunkCoreIntentFit,
   TRUNK_CORE_GOLD_PATH_RULES,
 } from '@/lib/session/trunk-core-session1-shared';
@@ -963,7 +964,7 @@ function computeTargetLevel(input: PlanGeneratorInput): {
  * 템플릿 1회 조회, 스코어링, 선택, 세그먼트 조립.
  */
 export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<PlanJsonOutput> {
-  const templates = Array.isArray(input.templatePool) && input.templatePool.length > 0
+  let templates = Array.isArray(input.templatePool) && input.templatePool.length > 0
     ? input.templatePool
     : await getTemplatesForSessionPlan({
         scoringVersion: input.scoringVersion ?? 'deep_v2',
@@ -1014,6 +1015,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     redFlags: input.red_flags,
     baselineSessionAnchor: input.baseline_session_anchor,
   });
+  templates = applyTrunkCoreSession1TemplateProjection(templates, firstSessionIntent?.anchorType);
 
   // PR-ALG-03: pain_mode Safety Gate - 추가 제외 태그
   const painExtraAvoid = getPainModeExtraAvoid(input.pain_mode);

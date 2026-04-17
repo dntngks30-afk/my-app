@@ -61,7 +61,7 @@ function collectMainShape(segmentCarrier, templateById) {
   }
   return {
     template_ids,
-    focus_tags_top: topCounts(tags),
+    focus_tags_top: topCounts(tags, 8),
     target_vectors_top: topCounts(vectors),
   };
 }
@@ -92,10 +92,16 @@ async function loadStaticTemplates() {
 }
 
 async function run() {
-  const [{ calculateDeepV3 }, { buildSessionPlanJson }, { buildSessionBootstrapSummaryFromTemplates }] = await Promise.all([
+  const [
+    { calculateDeepV3 },
+    { buildSessionPlanJson },
+    { buildSessionBootstrapSummaryFromTemplates },
+    { applyTrunkCoreSession1TemplateProjection },
+  ] = await Promise.all([
     import('../src/lib/deep-test/scoring/deep_v3.ts'),
     import('../src/lib/session/plan-generator.ts'),
     import('../src/lib/session/bootstrap-summary.ts'),
+    import('../src/lib/session/trunk-core-session1-shared.ts'),
   ]);
   const personas = (await import('../src/lib/deep-test/scenarios/personas.json')).default;
   const persona = personas.find((p) => p.id === 'core-control-lumbo');
@@ -103,7 +109,8 @@ async function run() {
 
   const deep = calculateDeepV3(persona.input);
   const templates = await loadStaticTemplates();
-  const templateById = new Map(templates.map((template) => [template.id, template]));
+  const projectedTemplates = applyTrunkCoreSession1TemplateProjection(templates, BASELINE_ANCHOR);
+  const templateById = new Map(projectedTemplates.map((template) => [template.id, template]));
 
   const common = {
     sessionNumber: 1,

@@ -20,6 +20,7 @@ import {
   shouldReserveUpperMainCandidate,
 } from '@/lib/session/upper-mobility-session1-shared'
 import {
+  applyTrunkCoreSession1TemplateProjection,
   scoreTrunkCoreIntentFit,
   TRUNK_CORE_GOLD_PATH_RULES,
 } from '@/lib/session/trunk-core-session1-shared'
@@ -582,8 +583,12 @@ export function buildSessionBootstrapSummaryFromTemplates(
     redFlags: input.deepSummary.red_flags,
     baselineSessionAnchor: input.deepSummary.baseline_session_anchor,
   })
+  const sessionTemplates = applyTrunkCoreSession1TemplateProjection(
+    templates,
+    firstSessionIntent?.anchorType
+  )
 
-  const candidates = templates.filter(
+  const candidates = sessionTemplates.filter(
     (template) =>
       !hasContraindicationOverlap(template.contraindications, excludeSet) &&
       template.level <= maxLevel &&

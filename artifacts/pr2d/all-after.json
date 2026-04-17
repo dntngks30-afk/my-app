@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-17T15:40:19.203Z",
+  "generated_at": "2026-04-17T16:25:26.859Z",
   "purpose": "PR2-A baseline comparison harness snapshot (no tuning)",
   "template_source": "static_fallback_fixture",
   "anchors": [
@@ -353,6 +353,10 @@
         "main_emphasis_shape": {
           "focus_tags_top": [
             {
+              "key": "core_control",
+              "count": 1
+            },
+            {
               "key": "core_stability",
               "count": 1
             },
@@ -371,11 +375,11 @@
           ],
           "target_vectors_top": [
             {
-              "key": "lower_stability",
-              "count": 1
+              "key": "trunk_control",
+              "count": 2
             },
             {
-              "key": "trunk_control",
+              "key": "lower_stability",
               "count": 1
             }
           ]

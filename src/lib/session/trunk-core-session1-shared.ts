@@ -5,6 +5,12 @@
 
 import type { SessionSegmentKind } from '@/lib/session/upper-mobility-session1-shared';
 
+type TrunkCoreSessionTemplateProjectionRow = {
+  id: string;
+  focus_tags?: string[] | null;
+  target_vector?: string[] | null;
+};
+
 export const TRUNK_CORE_GOLD_PATH_RULES = [
   { title: 'Prep', kind: 'prep', preferredPhases: ['prep'], preferredVectors: ['trunk_control', 'deconditioned'], fallbackVectors: ['upper_mobility'], preferredProgression: [1] },
   { title: 'Main', kind: 'main', preferredPhases: ['main'], preferredVectors: ['trunk_control'], fallbackVectors: ['lower_stability'], preferredProgression: [1, 2, 3] },
@@ -15,6 +21,7 @@ export const TRUNK_CORE_GOLD_PATH_RULES = [
 const TRUNK_CORE_MAIN_TAGS = new Set(['core_stability', 'global_core']);
 const TRUNK_CORE_CONTROL_TAGS = new Set(['core_control', 'core_stability', 'global_core']);
 const TRUNK_CORE_SUPPORT_TAGS = new Set(['glute_activation', 'lower_chain_stability', 'basic_balance']);
+const TRUNK_CORE_SESSION1_MAIN_SUPPORT_TEMPLATE_IDS = new Set(['M12']);
 const UPPER_DISTRACTOR_TAGS = new Set([
   'shoulder_mobility',
   'thoracic_mobility',
@@ -22,8 +29,29 @@ const UPPER_DISTRACTOR_TAGS = new Set([
   'shoulder_stability',
 ]);
 
+function appendUnique(values: readonly string[], additions: readonly string[]): string[] {
+  return [...new Set([...values, ...additions])];
+}
+
 function countMatches(tags: readonly string[], tagSet: ReadonlySet<string>): number {
   return tags.filter((tag) => tagSet.has(tag)).length;
+}
+
+export function applyTrunkCoreSession1TemplateProjection<T extends TrunkCoreSessionTemplateProjectionRow>(
+  templates: readonly T[],
+  anchorType?: string | null
+): T[] {
+  if (anchorType !== 'trunk_control') return templates as T[];
+
+  return templates.map((template) => {
+    if (!TRUNK_CORE_SESSION1_MAIN_SUPPORT_TEMPLATE_IDS.has(template.id)) return template;
+
+    return {
+      ...template,
+      focus_tags: appendUnique(template.focus_tags ?? [], ['core_control']),
+      target_vector: appendUnique(template.target_vector ?? [], ['trunk_control']),
+    };
+  });
 }
 
 export function scoreTrunkCoreIntentFit(

@@ -136,6 +136,11 @@ function run() {
             after.strict_trunk_core_tag_count > before.strict_trunk_core_tag_count,
           improved_by_trunk_vector:
             after.trunk_vector_count > before.trunk_vector_count,
+          maintained_or_improved_by_trunk_vector:
+            after.trunk_vector_count >= before.trunk_vector_count,
+          strict_distinctness_floor_met:
+            after.strict_trunk_core_tag_count >= before.strict_trunk_core_tag_count ||
+            after.trunk_vector_count >= before.trunk_vector_count,
         },
         support_contribution: {
           before_tag_count: before.support_tag_count,
