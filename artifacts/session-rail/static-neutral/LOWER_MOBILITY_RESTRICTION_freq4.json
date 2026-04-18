@@ -1,0 +1,2051 @@
+{
+  "harness_version": "1.0.0",
+  "script": "session-rail-truth-harness.mjs",
+  "generated_at": "2026-04-18T13:32:56.245Z",
+  "template_pool_source": "static_EXERCISE_TEMPLATES_fallback",
+  "modes": [
+    "static-neutral",
+    "adaptive-branch",
+    "secondary-type-ab"
+  ],
+  "note": "Direct buildSessionPlanJson calls only — no HTTP, no session-gen-cache.",
+  "mode": "static-neutral",
+  "case_label": "LOWER_MOBILITY_RESTRICTION×freq4",
+  "fixture_label": "Lower mobility restriction",
+  "primary_type": "LOWER_MOBILITY_RESTRICTION",
+  "target_frequency": 4,
+  "total_sessions": 16,
+  "phase_lengths": [
+    4,
+    4,
+    4,
+    4
+  ],
+  "adaptive_branch": "neutral",
+  "sessions": [
+    {
+      "session_number": 1,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 1,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 1 · hip_mobility 안정화",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility"
+      ],
+      "session_rationale": "하체 가동성 회복이 우선이어서 고관절·발목 움직임 범위를 여는 세션입니다.",
+      "used_template_ids": [
+        "M11",
+        "M13",
+        "M20",
+        "M09",
+        "M18"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 3,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": true,
+        "survey_session_hints_present": false,
+        "survey_session_hints_eligible": false,
+        "survey_session_hints_applied": false,
+        "survey_session_hints_blocked": false,
+        "survey_session_hints_blocked_by": null
+      },
+      "baseline_alignment": {
+        "baseline_session_anchor": "lower_mobility",
+        "first_session_intent_anchor": "lower_mobility",
+        "gold_path_vector": "lower_mobility",
+        "intent_source": "baseline_anchor"
+      },
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 100,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 100), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 3
+      },
+      "first_session_intent_anchor": "lower_mobility",
+      "gold_path_vector": "lower_mobility",
+      "main_segment_template_ids": [
+        "M20",
+        "M13"
+      ],
+      "all_template_ids": [
+        "M11",
+        "M20",
+        "M13",
+        "M09",
+        "M18"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M11",
+              "name": "사각자세 록백",
+              "focus_tag": "hip_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 2,
+          "items": [
+            {
+              "templateId": "M20",
+              "name": "월 서포티드 힙힌지(벽 앞에서서 힙힌지)",
+              "focus_tag": "hip_mobility"
+            },
+            {
+              "templateId": "M13",
+              "name": "데드버그",
+              "focus_tag": "core_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M09",
+              "name": "푸쉬업 플러스",
+              "focus_tag": "shoulder_stability"
+            }
+          ]
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M18",
+              "name": "양발 카프 레이즈",
+              "focus_tag": "ankle_mobility"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    },
+    {
+      "session_number": 2,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 1,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 1 · hip_mobility 안정화",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility",
+        "lower_stability"
+      ],
+      "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
+      "used_template_ids": [
+        "M24",
+        "M14",
+        "M21",
+        "M23",
+        "M10"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 4,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M14",
+        "M21",
+        "M23"
+      ],
+      "all_template_ids": [
+        "M24",
+        "M14",
+        "M21",
+        "M23",
+        "M10"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M24",
+              "name": "티비얼리스 레이즈",
+              "focus_tag": "ankle_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M14",
+              "name": "버드독",
+              "focus_tag": "core_stability"
+            },
+            {
+              "templateId": "M21",
+              "name": "버드독 슬로우 컨트롤",
+              "focus_tag": "global_core"
+            },
+            {
+              "templateId": "M23",
+              "name": "한발 밸런스 리치",
+              "focus_tag": "lower_chain_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M10",
+              "name": "고관절 굴곡근 스트레치",
+              "focus_tag": "hip_flexor_stretch"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility",
+          "lower_stability"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    },
+    {
+      "session_number": 3,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 1,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 1 · hip_mobility 안정화",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility",
+        "lower_stability"
+      ],
+      "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
+      "used_template_ids": [
+        "M28",
+        "M26",
+        "M16",
+        "M22",
+        "M01"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 4,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M26",
+        "M22",
+        "M16"
+      ],
+      "all_template_ids": [
+        "M28",
+        "M26",
+        "M22",
+        "M16",
+        "M01"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M28",
+              "name": "레그업 더 월",
+              "focus_tag": "full_body_reset"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M26",
+              "name": "플랭크",
+              "focus_tag": "global_core"
+            },
+            {
+              "templateId": "M22",
+              "name": "사이드-라이잉 힙 어브덕션",
+              "focus_tag": "glute_medius"
+            },
+            {
+              "templateId": "M16",
+              "name": "벽 짚고 스플릿 스쿼트",
+              "focus_tag": "lower_chain_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M01",
+              "name": "90/90 벽 호흡",
+              "focus_tag": "full_body_reset"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility",
+          "lower_stability"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    },
+    {
+      "session_number": 4,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 1,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 1 · hip_mobility 안정화",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility",
+        "lower_stability"
+      ],
+      "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
+      "used_template_ids": [
+        "M02",
+        "M15",
+        "M17",
+        "M12",
+        "M03",
+        "M04"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 2,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M12",
+        "M15",
+        "M17"
+      ],
+      "all_template_ids": [
+        "M02",
+        "M12",
+        "M15",
+        "M17",
+        "M03",
+        "M04"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M02",
+              "name": "크로커다일 호흡",
+              "focus_tag": "full_body_reset"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M12",
+              "name": "글루트 브릿지",
+              "focus_tag": "glute_activation"
+            },
+            {
+              "templateId": "M15",
+              "name": "의자 박스 스쿼트",
+              "focus_tag": "lower_chain_stability"
+            },
+            {
+              "templateId": "M17",
+              "name": "벽 짚고 스탠딩 힙 어브덕션",
+              "focus_tag": "glute_medius"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M03",
+              "name": "턱 당기기",
+              "focus_tag": "upper_trap_release"
+            }
+          ]
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M04",
+              "name": "흉추 신전",
+              "focus_tag": "thoracic_mobility"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility",
+          "lower_stability"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    },
+    {
+      "session_number": 5,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 2,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 2 · ankle_mobility 심화",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility",
+        "lower_stability"
+      ],
+      "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
+      "used_template_ids": [
+        "M06",
+        "M19",
+        "M08",
+        "M25",
+        "M07"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 2,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 93,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 93), 2 issue(s)",
+        "issue_count": 2,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M08",
+        "M25",
+        "M19"
+      ],
+      "all_template_ids": [
+        "M06",
+        "M08",
+        "M25",
+        "M19",
+        "M07"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M06",
+              "name": "문틀 가슴 스트레치",
+              "focus_tag": "shoulder_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M08",
+              "name": "누워서하는 T레이즈",
+              "focus_tag": "upper_back_activation"
+            },
+            {
+              "templateId": "M25",
+              "name": "프론 Y 레이즈",
+              "focus_tag": "shoulder_stability"
+            },
+            {
+              "templateId": "M19",
+              "name": "리버스 런지",
+              "focus_tag": "lower_chain_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M07",
+              "name": "벽천사 / 월슬라이드",
+              "focus_tag": "shoulder_mobility"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility",
+          "lower_stability"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    },
+    {
+      "session_number": 6,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 2,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 2 · ankle_mobility 심화",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility",
+        "lower_stability"
+      ],
+      "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
+      "used_template_ids": [
+        "M11",
+        "M13",
+        "M09",
+        "M18",
+        "M20",
+        "M27"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 5,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M18",
+        "M09",
+        "M13"
+      ],
+      "all_template_ids": [
+        "M11",
+        "M18",
+        "M09",
+        "M13",
+        "M20",
+        "M27"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M11",
+              "name": "사각자세 록백",
+              "focus_tag": "hip_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M18",
+              "name": "양발 카프 레이즈",
+              "focus_tag": "ankle_mobility"
+            },
+            {
+              "templateId": "M09",
+              "name": "푸쉬업 플러스",
+              "focus_tag": "shoulder_stability"
+            },
+            {
+              "templateId": "M13",
+              "name": "데드버그",
+              "focus_tag": "core_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M20",
+              "name": "월 서포티드 힙힌지(벽 앞에서서 힙힌지)",
+              "focus_tag": "hip_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M27",
+              "name": "오픈북",
+              "focus_tag": "thoracic_mobility"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility",
+          "lower_stability"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    },
+    {
+      "session_number": 7,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 2,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 2 · ankle_mobility 심화",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility",
+        "lower_stability"
+      ],
+      "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
+      "used_template_ids": [
+        "M24",
+        "M14",
+        "M21",
+        "M23",
+        "M05"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 5,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M14",
+        "M21",
+        "M23"
+      ],
+      "all_template_ids": [
+        "M24",
+        "M14",
+        "M21",
+        "M23",
+        "M05"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M24",
+              "name": "티비얼리스 레이즈",
+              "focus_tag": "ankle_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M14",
+              "name": "버드독",
+              "focus_tag": "core_stability"
+            },
+            {
+              "templateId": "M21",
+              "name": "버드독 슬로우 컨트롤",
+              "focus_tag": "global_core"
+            },
+            {
+              "templateId": "M23",
+              "name": "한발 밸런스 리치",
+              "focus_tag": "lower_chain_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M05",
+              "name": "스레드 더 니들",
+              "focus_tag": "thoracic_mobility"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility",
+          "lower_stability"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    },
+    {
+      "session_number": 8,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 2,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 2 · ankle_mobility 심화",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility",
+        "lower_stability"
+      ],
+      "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
+      "used_template_ids": [
+        "M10",
+        "M26",
+        "M16",
+        "M28",
+        "M22"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 5,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 93,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 93), 2 issue(s)",
+        "issue_count": 2,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M28",
+        "M26",
+        "M16"
+      ],
+      "all_template_ids": [
+        "M10",
+        "M28",
+        "M26",
+        "M16",
+        "M22"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M10",
+              "name": "고관절 굴곡근 스트레치",
+              "focus_tag": "hip_flexor_stretch"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M28",
+              "name": "레그업 더 월",
+              "focus_tag": "full_body_reset"
+            },
+            {
+              "templateId": "M26",
+              "name": "플랭크",
+              "focus_tag": "global_core"
+            },
+            {
+              "templateId": "M16",
+              "name": "벽 짚고 스플릿 스쿼트",
+              "focus_tag": "lower_chain_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M22",
+              "name": "사이드-라이잉 힙 어브덕션",
+              "focus_tag": "glute_medius"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility",
+          "lower_stability"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    },
+    {
+      "session_number": 9,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 3,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 3 · 통합",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility",
+        "lower_stability"
+      ],
+      "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
+      "used_template_ids": [
+        "M01",
+        "M15",
+        "M17",
+        "M12",
+        "M02",
+        "M03"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 2,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M12",
+        "M15",
+        "M17"
+      ],
+      "all_template_ids": [
+        "M01",
+        "M12",
+        "M15",
+        "M17",
+        "M02",
+        "M03"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M01",
+              "name": "90/90 벽 호흡",
+              "focus_tag": "full_body_reset"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M12",
+              "name": "글루트 브릿지",
+              "focus_tag": "glute_activation"
+            },
+            {
+              "templateId": "M15",
+              "name": "의자 박스 스쿼트",
+              "focus_tag": "lower_chain_stability"
+            },
+            {
+              "templateId": "M17",
+              "name": "벽 짚고 스탠딩 힙 어브덕션",
+              "focus_tag": "glute_medius"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M02",
+              "name": "크로커다일 호흡",
+              "focus_tag": "full_body_reset"
+            }
+          ]
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M03",
+              "name": "턱 당기기",
+              "focus_tag": "upper_trap_release"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility",
+          "lower_stability"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    },
+    {
+      "session_number": 10,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 3,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 3 · 통합",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility",
+        "lower_stability"
+      ],
+      "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
+      "used_template_ids": [
+        "M04",
+        "M19",
+        "M08",
+        "M25",
+        "M07"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 2,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 93,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 93), 2 issue(s)",
+        "issue_count": 2,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M08",
+        "M25",
+        "M19"
+      ],
+      "all_template_ids": [
+        "M04",
+        "M08",
+        "M25",
+        "M19",
+        "M07"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M04",
+              "name": "흉추 신전",
+              "focus_tag": "thoracic_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M08",
+              "name": "누워서하는 T레이즈",
+              "focus_tag": "upper_back_activation"
+            },
+            {
+              "templateId": "M25",
+              "name": "프론 Y 레이즈",
+              "focus_tag": "shoulder_stability"
+            },
+            {
+              "templateId": "M19",
+              "name": "리버스 런지",
+              "focus_tag": "lower_chain_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M07",
+              "name": "벽천사 / 월슬라이드",
+              "focus_tag": "shoulder_mobility"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility",
+          "lower_stability"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    },
+    {
+      "session_number": 11,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 3,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 3 · 통합",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility",
+        "lower_stability"
+      ],
+      "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
+      "used_template_ids": [
+        "M11",
+        "M13",
+        "M09",
+        "M18",
+        "M20",
+        "M06"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 5,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M18",
+        "M09",
+        "M13"
+      ],
+      "all_template_ids": [
+        "M11",
+        "M18",
+        "M09",
+        "M13",
+        "M20",
+        "M06"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M11",
+              "name": "사각자세 록백",
+              "focus_tag": "hip_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M18",
+              "name": "양발 카프 레이즈",
+              "focus_tag": "ankle_mobility"
+            },
+            {
+              "templateId": "M09",
+              "name": "푸쉬업 플러스",
+              "focus_tag": "shoulder_stability"
+            },
+            {
+              "templateId": "M13",
+              "name": "데드버그",
+              "focus_tag": "core_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M20",
+              "name": "월 서포티드 힙힌지(벽 앞에서서 힙힌지)",
+              "focus_tag": "hip_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M06",
+              "name": "문틀 가슴 스트레치",
+              "focus_tag": "shoulder_mobility"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility",
+          "lower_stability"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    },
+    {
+      "session_number": 12,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 3,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 3 · 통합",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility",
+        "lower_stability"
+      ],
+      "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
+      "used_template_ids": [
+        "M24",
+        "M14",
+        "M21",
+        "M23",
+        "M05"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 5,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M14",
+        "M21",
+        "M23"
+      ],
+      "all_template_ids": [
+        "M24",
+        "M14",
+        "M21",
+        "M23",
+        "M05"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M24",
+              "name": "티비얼리스 레이즈",
+              "focus_tag": "ankle_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M14",
+              "name": "버드독",
+              "focus_tag": "core_stability"
+            },
+            {
+              "templateId": "M21",
+              "name": "버드독 슬로우 컨트롤",
+              "focus_tag": "global_core"
+            },
+            {
+              "templateId": "M23",
+              "name": "한발 밸런스 리치",
+              "focus_tag": "lower_chain_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M05",
+              "name": "스레드 더 니들",
+              "focus_tag": "thoracic_mobility"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility",
+          "lower_stability"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    },
+    {
+      "session_number": 13,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 4,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 4 · 릴렉스",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility",
+        "lower_stability"
+      ],
+      "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
+      "used_template_ids": [
+        "M10",
+        "M26",
+        "M16",
+        "M28",
+        "M22"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 5,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 93,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 93), 2 issue(s)",
+        "issue_count": 2,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M28",
+        "M26",
+        "M16"
+      ],
+      "all_template_ids": [
+        "M10",
+        "M28",
+        "M26",
+        "M16",
+        "M22"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M10",
+              "name": "고관절 굴곡근 스트레치",
+              "focus_tag": "hip_flexor_stretch"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M28",
+              "name": "레그업 더 월",
+              "focus_tag": "full_body_reset"
+            },
+            {
+              "templateId": "M26",
+              "name": "플랭크",
+              "focus_tag": "global_core"
+            },
+            {
+              "templateId": "M16",
+              "name": "벽 짚고 스플릿 스쿼트",
+              "focus_tag": "lower_chain_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M22",
+              "name": "사이드-라이잉 힙 어브덕션",
+              "focus_tag": "glute_medius"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility",
+          "lower_stability"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    },
+    {
+      "session_number": 14,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 4,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 4 · 릴렉스",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility",
+        "lower_stability"
+      ],
+      "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
+      "used_template_ids": [
+        "M01",
+        "M15",
+        "M17",
+        "M12",
+        "M02",
+        "M03"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 2,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M12",
+        "M15",
+        "M17"
+      ],
+      "all_template_ids": [
+        "M01",
+        "M12",
+        "M15",
+        "M17",
+        "M02",
+        "M03"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M01",
+              "name": "90/90 벽 호흡",
+              "focus_tag": "full_body_reset"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M12",
+              "name": "글루트 브릿지",
+              "focus_tag": "glute_activation"
+            },
+            {
+              "templateId": "M15",
+              "name": "의자 박스 스쿼트",
+              "focus_tag": "lower_chain_stability"
+            },
+            {
+              "templateId": "M17",
+              "name": "벽 짚고 스탠딩 힙 어브덕션",
+              "focus_tag": "glute_medius"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M02",
+              "name": "크로커다일 호흡",
+              "focus_tag": "full_body_reset"
+            }
+          ]
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M03",
+              "name": "턱 당기기",
+              "focus_tag": "upper_trap_release"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility",
+          "lower_stability"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    },
+    {
+      "session_number": 15,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 4,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 4 · 릴렉스",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility",
+        "lower_stability"
+      ],
+      "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
+      "used_template_ids": [
+        "M04",
+        "M19",
+        "M08",
+        "M25",
+        "M07"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 2,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 93,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 93), 2 issue(s)",
+        "issue_count": 2,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M08",
+        "M25",
+        "M19"
+      ],
+      "all_template_ids": [
+        "M04",
+        "M08",
+        "M25",
+        "M19",
+        "M07"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M04",
+              "name": "흉추 신전",
+              "focus_tag": "thoracic_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M08",
+              "name": "누워서하는 T레이즈",
+              "focus_tag": "upper_back_activation"
+            },
+            {
+              "templateId": "M25",
+              "name": "프론 Y 레이즈",
+              "focus_tag": "shoulder_stability"
+            },
+            {
+              "templateId": "M19",
+              "name": "리버스 런지",
+              "focus_tag": "lower_chain_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M07",
+              "name": "벽천사 / 월슬라이드",
+              "focus_tag": "shoulder_mobility"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility",
+          "lower_stability"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    },
+    {
+      "session_number": 16,
+      "total_sessions": 16,
+      "target_frequency": 4,
+      "phase": 4,
+      "phase_lengths": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "theme": "Phase 4 · 릴렉스",
+      "result_type": "LOWER-LIMB",
+      "primary_type": "LOWER_MOBILITY_RESTRICTION",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "lower_mobility",
+      "session_focus_axes": [
+        "lower_mobility",
+        "lower_stability"
+      ],
+      "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
+      "used_template_ids": [
+        "M11",
+        "M13",
+        "M09",
+        "M18",
+        "M20",
+        "M06"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 5,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M18",
+        "M09",
+        "M13"
+      ],
+      "all_template_ids": [
+        "M11",
+        "M18",
+        "M09",
+        "M13",
+        "M20",
+        "M06"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M11",
+              "name": "사각자세 록백",
+              "focus_tag": "hip_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M18",
+              "name": "양발 카프 레이즈",
+              "focus_tag": "ankle_mobility"
+            },
+            {
+              "templateId": "M09",
+              "name": "푸쉬업 플러스",
+              "focus_tag": "shoulder_stability"
+            },
+            {
+              "templateId": "M13",
+              "name": "데드버그",
+              "focus_tag": "core_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M20",
+              "name": "월 서포티드 힙힌지(벽 앞에서서 힙힌지)",
+              "focus_tag": "hip_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M06",
+              "name": "문틀 가슴 스트레치",
+              "focus_tag": "shoulder_mobility"
+            }
+          ]
+        }
+      ],
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "lower_mobility",
+          "lower_stability"
+        ],
+        "primary_type": "LOWER_MOBILITY_RESTRICTION",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "lower_mobility",
+        "result_type": "LOWER-LIMB"
+      }
+    }
+  ]
+}

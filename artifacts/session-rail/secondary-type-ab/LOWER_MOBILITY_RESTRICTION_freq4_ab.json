@@ -1,0 +1,216 @@
+{
+  "harness_version": "1.0.0",
+  "script": "session-rail-truth-harness.mjs",
+  "generated_at": "2026-04-18T13:32:56.245Z",
+  "template_pool_source": "static_EXERCISE_TEMPLATES_fallback",
+  "modes": [
+    "static-neutral",
+    "adaptive-branch",
+    "secondary-type-ab"
+  ],
+  "note": "Direct buildSessionPlanJson calls only — no HTTP, no session-gen-cache.",
+  "mode": "secondary-type-ab",
+  "case_label": "LOWER_MOBILITY_RESTRICTION_freq4",
+  "primary_type": "LOWER_MOBILITY_RESTRICTION",
+  "target_frequency": 4,
+  "secondary_a": "HARNESS_AB_SECONDARY_ALPHA",
+  "secondary_b": "HARNESS_AB_SECONDARY_BETA",
+  "session_comparisons": [
+    {
+      "session_number": 1,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    },
+    {
+      "session_number": 2,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    },
+    {
+      "session_number": 3,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    },
+    {
+      "session_number": 4,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    },
+    {
+      "session_number": 5,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    },
+    {
+      "session_number": 6,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    },
+    {
+      "session_number": 7,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    },
+    {
+      "session_number": 8,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    },
+    {
+      "session_number": 9,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    },
+    {
+      "session_number": 10,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    },
+    {
+      "session_number": 11,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    },
+    {
+      "session_number": 12,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    },
+    {
+      "session_number": 13,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    },
+    {
+      "session_number": 14,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    },
+    {
+      "session_number": 15,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    },
+    {
+      "session_number": 16,
+      "comparison": {
+        "confounder_check_ok": true,
+        "segments_identical": true,
+        "session_focus_axes_identical": true,
+        "rationale_identical": true,
+        "meta_except_secondary_identical": true,
+        "classification": "metadata_only_strong",
+        "changed_fields": []
+      }
+    }
+  ],
+  "confounder_assertions": {
+    "anchor_primary_priority_unchanged": true,
+    "only_secondary_type_varies_in_generator_input": true
+  }
+}
