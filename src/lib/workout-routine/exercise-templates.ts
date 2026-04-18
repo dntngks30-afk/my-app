@@ -111,7 +111,7 @@ export const EXERCISE_TEMPLATES: ReadonlyArray<ExerciseTemplate> = [
   },
   {
     id: 'M07',
-    name: '벽천사 / 월슬라이드',
+    name: '벽천사',
     level: 2,
     focus_tags: ['shoulder_mobility', 'core_control'],
     avoid_tags: ['shoulder_overhead'],
@@ -119,7 +119,7 @@ export const EXERCISE_TEMPLATES: ReadonlyArray<ExerciseTemplate> = [
   },
   {
     id: 'M08',
-    name: '누워서하는 T레이즈', // 교체 완료
+    name: '누워서 하는 T 레이즈', // 교체 완료
     level: 2,
     focus_tags: ['upper_back_activation', 'thoracic_mobility'],
     avoid_tags: ['shoulder_anterior_pain'],
@@ -251,7 +251,7 @@ export const EXERCISE_TEMPLATES: ReadonlyArray<ExerciseTemplate> = [
   },
   {
     id: 'M20',
-    name: '월 서포티드 힙힌지(벽 앞에서서 힙힌지)', // 교체 완료
+    name: '월 서포티드 힙힌지', // 교체 완료
     level: 2,
     focus_tags: ['hip_mobility', 'glute_activation'],
     avoid_tags: ['lower_back_pain'],
@@ -259,7 +259,7 @@ export const EXERCISE_TEMPLATES: ReadonlyArray<ExerciseTemplate> = [
   },
   {
     id: 'M22',
-    name: '사이드-라이잉 힙 어브덕션',
+    name: '사이드 라이잉 힙 어브덕션',
     level: 1,
     focus_tags: ['glute_medius', 'basic_balance'],
     avoid_tags: [],

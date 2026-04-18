@@ -1,0 +1,338 @@
+[
+  {
+    "template_id": "M01",
+    "final_name_ko": "90/90 벽 호흡",
+    "local_video_filename": "M01.mp4",
+    "local_video_path": "videos/templates/M01.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M02",
+    "final_name_ko": "크로커다일 호흡",
+    "local_video_filename": "M02.mp4",
+    "local_video_path": "videos/templates/M02.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M03",
+    "final_name_ko": "턱 당기기",
+    "local_video_filename": "M03.mp4",
+    "local_video_path": "videos/templates/M03.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M04",
+    "final_name_ko": "흉추 신전",
+    "local_video_filename": "M04.mp4",
+    "local_video_path": "videos/templates/M04.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M05",
+    "final_name_ko": "스레드 더 니들",
+    "local_video_filename": "M05.mp4",
+    "local_video_path": "videos/templates/M05.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M06",
+    "final_name_ko": "문틀 가슴 스트레치",
+    "local_video_filename": "M06.mp4",
+    "local_video_path": "videos/templates/M06.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M07",
+    "final_name_ko": "벽천사",
+    "local_video_filename": "M07.mp4",
+    "local_video_path": "videos/templates/M07.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M08",
+    "final_name_ko": "누워서 하는 T 레이즈",
+    "local_video_filename": "M08.mp4",
+    "local_video_path": "videos/templates/M08.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M09",
+    "final_name_ko": "푸쉬업 플러스",
+    "local_video_filename": "M09.mp4",
+    "local_video_path": "videos/templates/M09.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M10",
+    "final_name_ko": "고관절 굴곡근 스트레치",
+    "local_video_filename": "M10.mp4",
+    "local_video_path": "videos/templates/M10.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M11",
+    "final_name_ko": "사각자세 록백",
+    "local_video_filename": "M11.mp4",
+    "local_video_path": "videos/templates/M11.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M12",
+    "final_name_ko": "글루트 브릿지",
+    "local_video_filename": "M12.mp4",
+    "local_video_path": "videos/templates/M12.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M13",
+    "final_name_ko": "데드버그",
+    "local_video_filename": "M13.mp4",
+    "local_video_path": "videos/templates/M13.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M14",
+    "final_name_ko": "버드독",
+    "local_video_filename": "M14.mp4",
+    "local_video_path": "videos/templates/M14.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M15",
+    "final_name_ko": "의자 박스 스쿼트",
+    "local_video_filename": "M15.mp4",
+    "local_video_path": "videos/templates/M15.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M16",
+    "final_name_ko": "벽 짚고 스플릿 스쿼트",
+    "local_video_filename": "M16.mp4",
+    "local_video_path": "videos/templates/M16.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M17",
+    "final_name_ko": "벽 짚고 스탠딩 힙 어브덕션",
+    "local_video_filename": "M17.mp4",
+    "local_video_path": "videos/templates/M17.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M18",
+    "final_name_ko": "양발 카프 레이즈",
+    "local_video_filename": "M18.mp4",
+    "local_video_path": "videos/templates/M18.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M19",
+    "final_name_ko": "리버스 런지",
+    "local_video_filename": "M19.mp4",
+    "local_video_path": "videos/templates/M19.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M20",
+    "final_name_ko": "월 서포티드 힙힌지",
+    "local_video_filename": "M20.mp4",
+    "local_video_path": "videos/templates/M20.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M21",
+    "final_name_ko": "버드독 슬로우 컨트롤",
+    "local_video_filename": "M21.mp4",
+    "local_video_path": "videos/templates/M21.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M22",
+    "final_name_ko": "사이드 라이잉 힙 어브덕션",
+    "local_video_filename": "M22.mp4",
+    "local_video_path": "videos/templates/M22.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M23",
+    "final_name_ko": "한발 밸런스 리치",
+    "local_video_filename": "M23.mp4",
+    "local_video_path": "videos/templates/M23.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M24",
+    "final_name_ko": "티비얼리스 레이즈",
+    "local_video_filename": "M24.mp4",
+    "local_video_path": "videos/templates/M24.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M25",
+    "final_name_ko": "프론 Y 레이즈",
+    "local_video_filename": "M25.mp4",
+    "local_video_path": "videos/templates/M25.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M26",
+    "final_name_ko": "플랭크",
+    "local_video_filename": "M26.mp4",
+    "local_video_path": "videos/templates/M26.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M27",
+    "final_name_ko": "오픈북",
+    "local_video_filename": "M27.mp4",
+    "local_video_path": "videos/templates/M27.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M28",
+    "final_name_ko": "레그업 더 월",
+    "local_video_filename": "M28.mp4",
+    "local_video_path": "videos/templates/M28.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M29",
+    "final_name_ko": "힐 탭 데드버그",
+    "local_video_filename": "M29.mp4",
+    "local_video_path": "videos/templates/M29.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M30",
+    "final_name_ko": "쿼드러펫 숄더탭",
+    "local_video_filename": "M30.mp4",
+    "local_video_path": "videos/templates/M30.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M31",
+    "final_name_ko": "버드독 3초 홀드",
+    "local_video_filename": "M31.mp4",
+    "local_video_path": "videos/templates/M31.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M32",
+    "final_name_ko": "베어 포지션 홀드",
+    "local_video_filename": "M32.mp4",
+    "local_video_path": "videos/templates/M32.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M33",
+    "final_name_ko": "사이드 플랭크 무릎 버전",
+    "local_video_filename": "M33.mp4",
+    "local_video_path": "videos/templates/M33.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M34",
+    "final_name_ko": "마치 브릿지",
+    "local_video_filename": "M34.mp4",
+    "local_video_path": "videos/templates/M34.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M35",
+    "final_name_ko": "싱글 브릿지 보조형",
+    "local_video_filename": "M35.mp4",
+    "local_video_path": "videos/templates/M35.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M36",
+    "final_name_ko": "스플릿 스탠스 체중이동",
+    "local_video_filename": "M36.mp4",
+    "local_video_path": "videos/templates/M36.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M37",
+    "final_name_ko": "스플릿 스쿼트 아이소 홀드",
+    "local_video_filename": "M37.mp4",
+    "local_video_path": "videos/templates/M37.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M38",
+    "final_name_ko": "리버스 런지 투 니드라이브",
+    "local_video_filename": "M38.mp4",
+    "local_video_path": "videos/templates/M38.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M39",
+    "final_name_ko": "의자 보조 싱글레그 RDL 리치",
+    "local_video_filename": "M39.mp4",
+    "local_video_path": "videos/templates/M39.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M40",
+    "final_name_ko": "싱글레그 스탠드 리치 3방향",
+    "local_video_filename": "M40.mp4",
+    "local_video_path": "videos/templates/M40.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M41",
+    "final_name_ko": "벽 발목 전방 이동",
+    "local_video_filename": "M41.mp4",
+    "local_video_path": "videos/templates/M41.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M42",
+    "final_name_ko": "하프 니링 힙 쉬프트",
+    "local_video_filename": "M42.mp4",
+    "local_video_path": "videos/templates/M42.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M43",
+    "final_name_ko": "90/90 힙 스위치",
+    "local_video_filename": "M43.mp4",
+    "local_video_path": "videos/templates/M43.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M44",
+    "final_name_ko": "딥 스쿼트",
+    "local_video_filename": "M44.mp4",
+    "local_video_path": "videos/templates/M44.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M45",
+    "final_name_ko": "벽 푸쉬업 플러스",
+    "local_video_filename": "M45.mp4",
+    "local_video_path": "videos/templates/M45.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M46",
+    "final_name_ko": "스탠딩 오픈북",
+    "local_video_filename": "M46.mp4",
+    "local_video_path": "videos/templates/M46.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M47",
+    "final_name_ko": "프론 W 레이즈",
+    "local_video_filename": "M47.mp4",
+    "local_video_path": "videos/templates/M47.mp4",
+    "notes": ""
+  },
+  {
+    "template_id": "M48",
+    "final_name_ko": "스탠딩 W 리트랙션",
+    "local_video_filename": "M48.mp4",
+    "local_video_path": "videos/templates/M48.mp4",
+    "notes": ""
+  }
+]
