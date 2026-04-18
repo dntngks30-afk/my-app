@@ -3,6 +3,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabaseBrowser } from '@/lib/supabase';
 import { createSession } from '@/lib/session/client';
+import {
+  loadBridgeContext,
+  clearBridgeContext,
+} from '@/lib/public-results/public-result-bridge';
+import { claimPublicResultClient } from '@/lib/public-results/useClaimPublicResult';
 
 // Minimum dwell on the success path. Env override allowed, default 10s.
 export const SESSION_PREPARING_DWELL_FLOOR_MS =
@@ -10,25 +15,56 @@ export const SESSION_PREPARING_DWELL_FLOOR_MS =
     ? Number(process.env.NEXT_PUBLIC_SESSION_PREPARING_DWELL_MS)
     : 10000;
 
-type SessionCreateResult = Awaited<ReturnType<typeof createSession>>;
+type PipelineResult =
+  | { ok: true }
+  | { ok: false; stage: 'auth' | 'claim' | 'create'; message: string };
 
-// Module-level in-flight owner to prevent duplicate POSTs across StrictMode/remount.
-let sessionPreparingCreateInflight: Promise<SessionCreateResult> | null = null;
+// Module-level in-flight owner: covers the full claim+create pipeline.
+// Prevents duplicate runs across StrictMode/remount.
+let sessionPreparingPipelineInflight: Promise<PipelineResult> | null = null;
 
-function runSessionPreparingCreateOnce(accessToken: string): Promise<SessionCreateResult> {
-  if (!sessionPreparingCreateInflight) {
-    sessionPreparingCreateInflight = createSession(accessToken, {
-      condition_mood: 'ok',
-      time_budget: 'normal',
-      summary: true,
-    });
+async function runPipeline(accessToken: string): Promise<PipelineResult> {
+  const ctx = loadBridgeContext();
+
+  if (ctx?.publicResultId) {
+    // Bridge path: claim MUST succeed before create is attempted.
+    const claimResult = await claimPublicResultClient(ctx.publicResultId, ctx.anonId ?? null);
+    if (!claimResult.ok) {
+      // Bridge is retained (not cleared) on failure — PR-CLAIM-FLOW-HARDENING-01.
+      return { ok: false, stage: 'claim', message: '결과를 연결하지 못했습니다.' };
+    }
+    // Claim confirmed (claimed or already_owned): clear bridge before create.
+    clearBridgeContext();
   }
-  return sessionPreparingCreateInflight;
+  // Legacy deep-only path (no bridge publicResultId) falls through directly to create.
+
+  const createResult = await createSession(accessToken, {
+    condition_mood: 'ok',
+    time_budget: 'normal',
+    summary: true,
+  });
+
+  if (!createResult.ok) {
+    return {
+      ok: false,
+      stage: 'create',
+      message: createResult.error.message ?? '세션을 준비하지 못했습니다.',
+    };
+  }
+
+  return { ok: true };
 }
 
-// Allow a fresh request after a failure or explicit exit.
-function resetSessionPreparingCreateInflight() {
-  sessionPreparingCreateInflight = null;
+function runPipelineOnce(accessToken: string): Promise<PipelineResult> {
+  if (!sessionPreparingPipelineInflight) {
+    sessionPreparingPipelineInflight = runPipeline(accessToken);
+  }
+  return sessionPreparingPipelineInflight;
+}
+
+// Allow a fresh pipeline after a failure or explicit exit.
+function resetPipelineInflight() {
+  sessionPreparingPipelineInflight = null;
 }
 
 // Progress can only fill to ~92% until both readiness and dwell complete.
@@ -48,8 +84,7 @@ type UseSessionPreparingOrchestratorResult = {
   onSkipNext: () => void;
 };
 
-const AUTH_REQUIRED_MESSAGE = '\uB85C\uADF8\uC778\uC774 \uD544\uC694\uD569\uB2C8\uB2E4.';
-const CREATE_FAILED_MESSAGE = '\uC138\uC158\uC744 \uC900\uBE44\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.';
+const AUTH_REQUIRED_MESSAGE = '로그인이 필요합니다.';
 
 export function useSessionPreparingOrchestrator({
   onReadyRedirect,
@@ -71,7 +106,7 @@ export function useSessionPreparingOrchestrator({
 
   const finishAndRedirect = useCallback(() => {
     clearRedirectTimer();
-    resetSessionPreparingCreateInflight();
+    resetPipelineInflight();
     onReadyRedirect();
   }, [clearRedirectTimer, onReadyRedirect]);
 
@@ -135,12 +170,12 @@ export function useSessionPreparingOrchestrator({
         return;
       }
 
-      const result = await runSessionPreparingCreateOnce(session.access_token);
+      const result = await runPipelineOnce(session.access_token);
       if (dead) return;
 
       if (!result.ok) {
-        resetSessionPreparingCreateInflight();
-        setErrorMessage(result.error.message ?? CREATE_FAILED_MESSAGE);
+        resetPipelineInflight();
+        setErrorMessage(result.message);
         return;
       }
 
@@ -161,9 +196,9 @@ export function useSessionPreparingOrchestrator({
     }
 
     run().catch((e) => {
-      resetSessionPreparingCreateInflight();
+      resetPipelineInflight();
       if (!dead) {
-        setErrorMessage(e instanceof Error ? e.message : CREATE_FAILED_MESSAGE);
+        setErrorMessage(e instanceof Error ? e.message : '세션을 준비하지 못했습니다.');
       }
     });
 
