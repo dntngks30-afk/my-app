@@ -79,7 +79,8 @@
     "test:claimed-result-selection-suitability": "npx tsx scripts/claimed-public-result-selection-suitability-regression.mjs",
     "test:session-rail-truth": "npx tsx scripts/session-rail-truth-harness.mjs",
     "ops:template-media:mux-upload": "node scripts/template-media/mux-batch-upload.mjs",
-    "ops:template-media:attach": "node scripts/template-media/apply-template-media-refresh.mjs"
+    "ops:template-media:attach": "node scripts/template-media/apply-template-media-refresh.mjs",
+    "ops:template-media:legacy-delete": "node scripts/template-media/delete-legacy-template-assets.mjs"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
