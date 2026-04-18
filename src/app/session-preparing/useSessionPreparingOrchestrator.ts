@@ -81,7 +81,6 @@ type UseSessionPreparingOrchestratorResult = {
   stageIndex: number;
   visualProgress: number;
   errorMessage: string | null;
-  onSkipNext: () => void;
 };
 
 const AUTH_REQUIRED_MESSAGE = '로그인이 필요합니다.';
@@ -109,10 +108,6 @@ export function useSessionPreparingOrchestrator({
     resetPipelineInflight();
     onReadyRedirect();
   }, [clearRedirectTimer, onReadyRedirect]);
-
-  const onSkipNext = useCallback(() => {
-    finishAndRedirect();
-  }, [finishAndRedirect]);
 
   useEffect(() => {
     startPerfRef.current = performance.now();
@@ -212,6 +207,5 @@ export function useSessionPreparingOrchestrator({
     stageIndex,
     visualProgress,
     errorMessage,
-    onSkipNext,
   };
 }

@@ -9,7 +9,6 @@ export type StitchSessionPreparingSceneProps = {
   stageIndex: number;
   visualProgress: number;
   errorMessage: string | null;
-  onSkipNext: () => void;
 };
 
 const STAGE_LINES = [
@@ -22,7 +21,6 @@ export default function StitchSessionPreparingScene({
   stageIndex,
   visualProgress,
   errorMessage,
-  onSkipNext,
 }: StitchSessionPreparingSceneProps) {
   const line = STAGE_LINES[stageIndex] ?? STAGE_LINES[0];
 
@@ -107,17 +105,6 @@ export default function StitchSessionPreparingScene({
                 </p>
               )}
             </div>
-          </div>
-
-          <div className="relative z-10 mx-auto mt-auto w-full max-w-md shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-6">
-            <button
-              type="button"
-              onClick={onSkipNext}
-              className="flex min-h-[48px] w-full items-center justify-center rounded-lg border border-[#ffb77d]/30 bg-transparent text-sm font-medium text-[#c6c6cd] transition-colors hover:bg-white/5 hover:text-[#dce1fb]"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
-            >
-              바로 다음으로
-            </button>
           </div>
         </div>
       </div>
