@@ -1,4 +1,5 @@
 import type { SessionDisplayContract } from '@/lib/session/session-display-contract';
+import type { FinalAlignmentAuditV1 } from '@/lib/session/final-plan-display-reconciliation';
 import type { ExerciseLogItem } from './types';
 
 /**
@@ -242,6 +243,8 @@ export type PlanSummaryResponse = {
     constraint_flags?: Record<string, unknown>;
     session_number?: number;
   } & Partial<SessionDisplayContract>;
+  /** PR-TRUTH-02: optional drift observability */
+  final_alignment_audit?: FinalAlignmentAuditV1;
   adaptation_summary?: string;
   segments: Array<{
     title: string;

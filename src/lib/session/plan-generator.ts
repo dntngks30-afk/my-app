@@ -27,6 +27,10 @@ import { applyCandidateCompetition } from './candidate-competition';
 import type { CandidateCompetitionMeta } from './candidate-competition';
 import { auditPlanQuality } from './plan-quality-audit';
 import type { PlanQualityAuditMeta } from './plan-quality-audit';
+import {
+  reconcileFinalPlanDisplayMeta,
+  type FinalAlignmentAuditV1,
+} from './final-plan-display-reconciliation';
 import type { SurveySessionHints } from '@/lib/result/deep-result-v2-contract';
 import {
   buildSurveySessionHintsObservability,
@@ -357,7 +361,7 @@ export type PlanJsonOutput = {
     session_rationale?: string | null;
     /**
      * PR-SURVEY-06: UI 카피용 아님. 설문 힌트 기반 세션 구성 태그(디버그·감사).
-     * session_rationale 문자열을 바꾸지 않는다.
+     * PR-TRUTH-02: session_rationale 본문은 최종 세그먼트 기준으로 재정렬될 수 있음(감사는 final_alignment_audit).
      */
     survey_session_rationale_tags?: string[];
     /** PR-SURVEY-06: 설문 힌트 관찰성(세션 1 중심) */
@@ -399,6 +403,8 @@ export type PlanJsonOutput = {
     candidate_competition?: CandidateCompetitionMeta;
     /** PR-ALG-19: additive plan quality audit meta */
     plan_quality_audit?: PlanQualityAuditMeta;
+    /** PR-TRUTH-02: upstream intent vs final composition drift (additive) */
+    final_alignment_audit?: FinalAlignmentAuditV1;
     /** PR-PILOT-BASELINE-SESSION-ALIGN-01: baseline-first alignment observability */
     baseline_alignment?: {
       baseline_session_anchor: string | null;
@@ -1386,7 +1392,42 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     priorityVector: input.priority_vector ?? null,
   });
 
-  const auditResult = auditPlanQuality(orderingResult.plan, templates, {
+  const templatesById = new Map(templates.map((t) => [t.id, t]));
+  const reconcileInput = {
+    segments: orderingResult.plan.segments,
+    templatesById,
+    upstreamFocusAxes:
+      effectiveFocusAxes.length > 0 ? effectiveFocusAxes : resolveSessionFocusAxes(input.priority_vector),
+    upstreamRationale:
+      effectiveRationale ?? resolveSessionRationale(input.priority_vector, input.pain_mode),
+    sessionNumber: input.sessionNumber,
+    phase: input.phase,
+    painMode: input.pain_mode ?? null,
+    priorityVector: input.priority_vector ?? null,
+    primaryType: input.primary_type ?? null,
+    resultType: input.resultType ?? null,
+  };
+  const reconcileOut = reconcileFinalPlanDisplayMeta(reconcileInput);
+
+  let planAfterReconcile = orderingResult.plan;
+  if (reconcileOut) {
+    planAfterReconcile = {
+      ...orderingResult.plan,
+      meta: {
+        ...orderingResult.plan.meta,
+        ...(reconcileOut.session_focus_axes.length > 0 && {
+          session_focus_axes: reconcileOut.session_focus_axes,
+        }),
+        ...(reconcileOut.session_rationale != null && {
+          session_rationale: reconcileOut.session_rationale,
+        }),
+        ...reconcileOut.sessionDisplayFields,
+        final_alignment_audit: reconcileOut.audit,
+      },
+    };
+  }
+
+  const auditResult = auditPlanQuality(planAfterReconcile, templates, {
     sessionNumber: input.sessionNumber,
     isFirstSession,
     painMode: input.pain_mode ?? null,
@@ -1401,9 +1442,9 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   });
 
   return {
-    ...orderingResult.plan,
+    ...planAfterReconcile,
     meta: {
-      ...orderingResult.plan.meta,
+      ...planAfterReconcile.meta,
       plan_quality_audit: auditResult,
     },
   };

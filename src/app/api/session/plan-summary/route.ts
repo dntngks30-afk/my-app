@@ -16,6 +16,7 @@ import {
   resolveSessionDisplayContract,
   type SessionDisplayContract,
 } from '@/lib/session/session-display-contract';
+import type { FinalAlignmentAuditV1 } from '@/lib/session/final-plan-display-reconciliation';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -42,6 +43,8 @@ export type PlanSummaryResponse = {
     session_rationale?: string | null;
     session_focus_axes?: string[];
   } & Partial<SessionDisplayContract>;
+  /** PR-TRUTH-02: upstream vs final composition drift (optional; additive). */
+  final_alignment_audit?: FinalAlignmentAuditV1;
   /** Adaptive trace reason summary (one-liner). Only when adaptation was applied. */
   adaptation_summary?: string;
   segments: Array<{
@@ -108,6 +111,7 @@ export async function GET(req: NextRequest) {
         session_rationale?: string | null;
         session_focus_axes?: string[];
         phase?: number;
+        final_alignment_audit?: FinalAlignmentAuditV1;
       } & Partial<SessionDisplayContract>;
       segments?: Array<{ title?: string; items?: Array<{ templateId?: string; name?: string; order?: number; sets?: number; reps?: number; hold_seconds?: number; rationale?: string | null }> }>
     } | null;
@@ -132,6 +136,15 @@ export async function GET(req: NextRequest) {
     }
 
     const statusVal = row.status ?? 'draft';
+    const pmRaw = planJson?.meta as Record<string, unknown> | undefined;
+    const finalAlignmentAudit: FinalAlignmentAuditV1 | undefined =
+      pmRaw &&
+      pmRaw.final_alignment_audit &&
+      typeof pmRaw.final_alignment_audit === 'object' &&
+      !Array.isArray(pmRaw.final_alignment_audit)
+        ? (pmRaw.final_alignment_audit as FinalAlignmentAuditV1)
+        : undefined;
+
     const rationale = planJson?.meta
       ? (() => {
           const pm = planJson.meta as Record<string, unknown>;
@@ -212,6 +225,7 @@ export async function GET(req: NextRequest) {
       session_number: row.session_number,
       status: statusVal,
       ...(rationale && { rationale }),
+      ...(finalAlignmentAudit && { final_alignment_audit: finalAlignmentAudit }),
       ...(adaptationSummary && { adaptation_summary: adaptationSummary }),
       segments,
       ...(exercise_logs != null && { exercise_logs }),
