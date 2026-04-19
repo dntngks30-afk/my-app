@@ -94,6 +94,12 @@ function getPlanRationale(plan: SessionPlan | ActivePlanSummary | null) {
       adaptation_summary?: string
       session_rationale?: string | null
       session_focus_axes?: string[]
+      /** PR1 display contract — consumed by later map alignment; optional here */
+      session_role_code?: string
+      session_role_label?: string
+      session_goal_code?: string
+      session_goal_label?: string
+      session_goal_hint?: string
     }
   }).meta
   const base = buildBriefSessionRationale(meta?.priority_vector, meta?.pain_mode, meta?.focus)

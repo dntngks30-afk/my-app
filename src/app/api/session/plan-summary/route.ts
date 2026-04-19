@@ -12,6 +12,10 @@ import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
+import {
+  resolveSessionDisplayContract,
+  type SessionDisplayContract,
+} from '@/lib/session/session-display-contract';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -37,7 +41,7 @@ export type PlanSummaryResponse = {
     pain_mode?: 'none' | 'caution' | 'protected';
     session_rationale?: string | null;
     session_focus_axes?: string[];
-  };
+  } & Partial<SessionDisplayContract>;
   /** Adaptive trace reason summary (one-liner). Only when adaptation was applied. */
   adaptation_summary?: string;
   segments: Array<{
@@ -103,7 +107,8 @@ export async function GET(req: NextRequest) {
         pain_mode?: 'none' | 'caution' | 'protected';
         session_rationale?: string | null;
         session_focus_axes?: string[];
-      };
+        phase?: number;
+      } & Partial<SessionDisplayContract>;
       segments?: Array<{ title?: string; items?: Array<{ templateId?: string; name?: string; order?: number; sets?: number; reps?: number; hold_seconds?: number; rationale?: string | null }> }>
     } | null;
     const segments = (planJson?.segments ?? []).map(seg => ({
@@ -136,6 +141,7 @@ export async function GET(req: NextRequest) {
           ...(Array.isArray(planJson.meta.session_focus_axes) && planJson.meta.session_focus_axes.length > 0 && {
             session_focus_axes: planJson.meta.session_focus_axes,
           }),
+          ...resolveSessionDisplayContract(planJson.meta as Record<string, unknown>),
         }
       : undefined;
     // PR-EXEC-02: return exercise_logs for in-progress (draft/started) and completed

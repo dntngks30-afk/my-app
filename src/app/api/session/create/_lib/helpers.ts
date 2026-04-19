@@ -1,4 +1,5 @@
 import { computePhase, type PhaseLengths, type PhasePolicyOptions } from '@/lib/session/phase';
+import { resolveSessionDisplayContract } from '@/lib/session/session-display-contract';
 import type { SessionCreatePlanRow } from './types';
 
 const PHASE_LABELS = [
@@ -68,6 +69,18 @@ export function toSummaryPlan(
     const cf = pj.meta.constraint_flags;
     if (cf && typeof cf === 'object' && typeof cf.first_session_guardrail_applied === 'boolean') {
       meta.constraint_flags = { first_session_guardrail_applied: cf.first_session_guardrail_applied };
+    }
+
+    const display = resolveSessionDisplayContract(pj.meta as unknown as Record<string, unknown>);
+    for (const k of [
+      'session_role_code',
+      'session_role_label',
+      'session_goal_code',
+      'session_goal_label',
+      'session_goal_hint',
+    ] as const) {
+      const v = display[k];
+      if (typeof v === 'string' && v.length > 0) meta[k] = v;
     }
   }
   if (adaptationTrace?.reason_summary) meta.adaptation_summary = adaptationTrace.reason_summary;

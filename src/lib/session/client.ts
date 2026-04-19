@@ -1,3 +1,6 @@
+import type { SessionDisplayContract } from '@/lib/session/session-display-contract';
+import type { ExerciseLogItem } from './types';
+
 /**
  * /api/session/* 클라이언트 fetch 헬퍼 (Path B 전용)
  *
@@ -101,7 +104,7 @@ export type SessionPlanMeta = {
     pain_gate_applied?: boolean;
     first_session_guardrail_applied?: boolean;
   };
-};
+} & Partial<SessionDisplayContract>;
 
 export type SessionPlanSegmentItem = {
   order: number;
@@ -256,7 +259,7 @@ export type PlanSummaryResponse = {
     pain_mode?: 'none' | 'caution' | 'protected';
     session_rationale?: string | null;
     session_focus_axes?: string[];
-  };
+  } & Partial<SessionDisplayContract>;
   adaptation_summary?: string;
   segments: Array<{
     title: string;

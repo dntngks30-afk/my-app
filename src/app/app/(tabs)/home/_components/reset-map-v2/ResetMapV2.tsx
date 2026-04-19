@@ -29,6 +29,7 @@ import { getSessionBootstrapFetchStrategy } from '@/lib/session/locked-preview-r
 import { getSessionSafe } from '@/lib/supabase'
 import { prefetchMediaSign } from './media-cache'
 import { clearSessionDraftForSession } from '@/lib/session/draftStorage'
+import { buildSessionDisplaySeedFromBootstrap } from '@/lib/session/session-display-contract'
 
 interface ResetMapV2Props {
   /** 전체 세션 수 (max 20) */
@@ -85,6 +86,16 @@ function summaryToPanelPlan(data: PanelPlanSummaryResponse): SessionPlan {
     if (data.rationale.pain_mode) meta.pain_mode = data.rationale.pain_mode;
     if (data.rationale.session_rationale != null) meta.session_rationale = data.rationale.session_rationale;
     if (Array.isArray(data.rationale.session_focus_axes)) meta.session_focus_axes = data.rationale.session_focus_axes;
+    for (const k of [
+      'session_role_code',
+      'session_role_label',
+      'session_goal_code',
+      'session_goal_label',
+      'session_goal_hint',
+    ] as const) {
+      const v = data.rationale[k];
+      if (typeof v === 'string' && v.length > 0) meta[k] = v;
+    }
   }
   if (data.adaptation_summary) meta.adaptation_summary = data.adaptation_summary;
 
@@ -115,6 +126,11 @@ function toExerciseLogMap(logs?: ExerciseLogItem[]): Record<string, ExerciseLogI
 /** PR-18: bootstrap → panel-compatible plan (display only). Full plan_json 아님. */
 function bootstrapToPanelPlan(data: PanelBootstrapResponse): SessionPlan {
   const flagMap = new Set(data.constraint_flags)
+  const displaySeed = buildSessionDisplaySeedFromBootstrap({
+    phase: data.phase,
+    focus_axes: data.focus_axes,
+    constraint_flags: data.constraint_flags,
+  })
   return {
     session_number: data.session_number,
     status: 'draft',
@@ -131,6 +147,7 @@ function bootstrapToPanelPlan(data: PanelBootstrapResponse): SessionPlan {
         scoring_version: 'session_bootstrap_v1',
         session_focus_axes: data.focus_axes,
         session_rationale: buildNextSessionPreviewRationale(data.focus_axes),
+        ...displaySeed,
         constraint_flags: {
           avoid_filter_applied: flagMap.has('avoid_filter_applied'),
           duplicate_filtered_count: flagMap.has('duplicate_filtered') ? 1 : 0,
