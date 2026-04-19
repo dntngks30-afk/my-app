@@ -180,8 +180,8 @@ const FIRST_SESSION_LIMITS: Record<FirstSessionTier, { maxMain: number; maxTotal
 };
 
 /**
- * PR-FIRST-SESSION-QUALITY-02A: 온보딩 beginner → 첫 세션 티어 한 단계 보수적으로 (볼륨·toPlanItem 단일 세트 경향).
- * pain_mode/safety 기반 티어가 우선 계산된 뒤 적용. intermediate/advanced는 변경 없음.
+ * PR-FIRST-SESSION-QUALITY-02A / PR-TRUTH-03: beginner → 티어 한 단계 보수적으로.
+ * intermediate는 변경 없음(baseline). advanced는 티어가 아니라 별도 assertive uplift(아래)로 처리.
  */
 function adjustFirstSessionTierForOnboardingExperience(
   tier: FirstSessionTier,
@@ -192,6 +192,27 @@ function adjustFirstSessionTierForOnboardingExperience(
   if (tier === 'normal') return 'moderate';
   if (tier === 'moderate') return 'conservative';
   return 'conservative';
+}
+
+/**
+ * PR-TRUTH-03: advanced 첫 세션 — 안전·통증·난이도 캡·짧은/회복 모드가 아닐 때만 제한적 uplift.
+ */
+function canApplyAdvancedFirstSessionUplift(
+  input: PlanGeneratorInput,
+  firstSessionTier: FirstSessionTier,
+  maxDifficultyCap: 'low' | 'medium' | 'high' | undefined
+): boolean {
+  if (input.sessionNumber !== 1) return false;
+  if (input.exercise_experience_level !== 'advanced') return false;
+  if (firstSessionTier !== 'normal') return false;
+  if (input.pain_mode != null && input.pain_mode !== 'none') return false;
+  if (input.safety_mode != null && input.safety_mode !== 'none') return false;
+  const isShort = input.adaptiveOverlay?.forceShort ?? input.timeBudget === 'short';
+  const isRecovery = input.adaptiveOverlay?.forceRecovery ?? input.conditionMood === 'bad';
+  if (isShort || isRecovery) return false;
+  if (maxDifficultyCap != null) return false;
+  if ((input.adaptiveOverlay?.targetLevelDelta ?? 0) < 0) return false;
+  return true;
 }
 
 /** PR-ALG-05: difficulty order for cap (low < medium < high) */
@@ -932,6 +953,8 @@ type ToPlanItemContext = {
   conditionMood: ConditionMood;
   isFirstSession: boolean;
   firstSessionTier: FirstSessionTier;
+  /** PR-TRUTH-03: Main prescription density when advanced uplift applies */
+  advancedFirstSessionPrescriptionUplift?: boolean;
 };
 function toPlanItem(
   t: SessionTemplateRow,
@@ -946,7 +969,11 @@ function toPlanItem(
     isRecovery ||
     ctx.firstSessionTier === 'conservative';
   const sets = allowSingleSet ? 1 : 2;
-  const reps = isRecovery ? 8 : 12;
+  const reps = isRecovery
+    ? 8
+    : ctx.advancedFirstSessionPrescriptionUplift && segmentTitle === 'Main'
+      ? 14
+      : 12;
   const focusTag = t.focus_tags[0] ?? null;
 
   const rationale = getExerciseRationale(focusTag);
@@ -1042,6 +1069,29 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const maxDifficultyCap = capMerged.cap;
   surveyHintTrace.push(...capMerged.trace);
 
+  const tierSurvey = bumpFirstSessionTierForSurveyHints(
+    adjustFirstSessionTierForOnboardingExperience(getFirstSessionTier(input), input),
+    input.sessionNumber,
+    surveySessionHints,
+    hardDominated
+  );
+  const firstSessionTier = tierSurvey.tier;
+  surveyHintTrace.push(...tierSurvey.trace);
+
+  const advancedFirstSessionUplift = canApplyAdvancedFirstSessionUplift(
+    input,
+    firstSessionTier,
+    maxDifficultyCap
+  );
+  if (advancedFirstSessionUplift) {
+    const next = Math.min(maxLevel, Math.min(3, finalTargetLevel + 1));
+    if (next > finalTargetLevel) {
+      finalTargetLevel = next;
+      surveyHintTrace.push('experience:advanced_target_level+1');
+    }
+    surveyHintTrace.push('experience:advanced_uplift_v1');
+  }
+
   const firstSessionIntent = resolveFirstSessionIntent({
     resultType: input.resultType,
     primaryType: input.primary_type,
@@ -1106,14 +1156,6 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const isShort = overlay?.forceShort ?? input.timeBudget === 'short';
   const isRecovery = overlay?.forceRecovery ?? input.conditionMood === 'bad';
   const isFirstSession = input.sessionNumber === 1;
-  const tierSurvey = bumpFirstSessionTierForSurveyHints(
-    adjustFirstSessionTierForOnboardingExperience(getFirstSessionTier(input), input),
-    input.sessionNumber,
-    surveySessionHints,
-    hardDominated
-  );
-  const firstSessionTier = tierSurvey.tier;
-  surveyHintTrace.push(...tierSurvey.trace);
 
   let volumeModForMainCount = input.volumeModifier ?? 0;
   if (isFirstSession && surveySessionHints && !hardDominated) {
@@ -1123,7 +1165,10 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     surveyHintTrace.push(...vol.trace);
   }
 
-  const firstSessionLimits = FIRST_SESSION_LIMITS[firstSessionTier];
+  const firstSessionLimits =
+    isFirstSession && advancedFirstSessionUplift
+      ? { maxMain: 3, maxTotal: 6 }
+      : FIRST_SESSION_LIMITS[firstSessionTier];
   /** PR-SESSION-BASELINE-01: main 2~3 baseline. red=1, yellow=2, else 3 */
   let mainCount = isShort ? 1 : isRecovery ? 1 : 3;
   if (input.safety_mode === 'red') {
@@ -1261,6 +1306,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     conditionMood: input.conditionMood,
     isFirstSession,
     firstSessionTier,
+    advancedFirstSessionPrescriptionUplift: isFirstSession && advancedFirstSessionUplift,
   };
   for (const entry of segmentEntries) {
     if (entry.items.length === 0) continue;

@@ -208,6 +208,7 @@ export async function runGenerationInputResolve(
   const mergedVolume = mergedControls.volumeModifier;
   timings.adaptive_modifier_ms = Math.round(performance.now() - tAdaptiveMod);
 
+  /** PR-FIRST-SESSION-QUALITY-02A / PR-TRUTH-03: beginner|intermediate|advanced → plan-generator + gen-cache 키 */
   const exerciseExperienceForSession1 =
     nextSessionNumber === 1 &&
     resolved.profile &&
