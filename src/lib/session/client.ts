@@ -289,7 +289,10 @@ export async function getSessionPlanSummary(
   return sessionFetch<PlanSummaryResponse>(path, token, { method: 'GET' });
 }
 
-/** PR-LEGACY-HYDRATION: display-only batch (no segments). */
+/**
+ * PR-LEGACY-HYDRATION + PR-TRUTH-05: display-only batch (no segments).
+ * Same canonical field family as plan_json.meta / plan-summary rationale.
+ */
 export type SessionNodeDisplayHydrationItem = {
   session_number: number;
   session_role_code?: string;

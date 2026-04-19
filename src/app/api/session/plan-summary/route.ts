@@ -13,6 +13,7 @@ import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import {
+  extractCanonicalDisplayFamilyPassThrough,
   resolveSessionDisplayContract,
   type SessionDisplayContract,
 } from '@/lib/session/session-display-contract';
@@ -149,6 +150,8 @@ export async function GET(req: NextRequest) {
       ? (() => {
           const pm = planJson.meta as Record<string, unknown>;
           const metaForResolve: Record<string, unknown> = { ...pm, session_number: row.session_number };
+          const canonicalPass = extractCanonicalDisplayFamilyPassThrough(pm);
+          // PR-TRUTH-05: resolve fills gaps only when plan meta lacks full explicit contract; else pure pass-through.
           const resolvedDisplay = resolveSessionDisplayContract(metaForResolve);
           return {
             ...(Array.isArray(pm.focus) ? { focus: (pm.focus as string[]).slice(0, 3) } : {}),
@@ -156,11 +159,11 @@ export async function GET(req: NextRequest) {
               ? { priority_vector: pm.priority_vector as Record<string, number> }
               : {}),
             ...(pm.pain_mode ? { pain_mode: pm.pain_mode as 'none' | 'caution' | 'protected' } : {}),
-            ...(pm.session_rationale != null ? { session_rationale: pm.session_rationale as string | null } : {}),
-            ...(Array.isArray(pm.session_focus_axes) && (pm.session_focus_axes as unknown[]).length > 0
-              ? {
-                  session_focus_axes: pm.session_focus_axes as string[],
-                }
+            ...('session_rationale' in canonicalPass
+              ? { session_rationale: canonicalPass.session_rationale ?? null }
+              : {}),
+            ...(canonicalPass.session_focus_axes !== undefined
+              ? { session_focus_axes: canonicalPass.session_focus_axes }
               : {}),
             ...(typeof pm.primary_type === 'string' && pm.primary_type.trim()
               ? { primary_type: pm.primary_type.trim() }

@@ -200,7 +200,7 @@ export function hydrationItemToResolverMeta(item: SessionNodeDisplayHydrationIte
   if (item.session_goal_label) m.session_goal_label = item.session_goal_label
   if (item.session_goal_hint) m.session_goal_hint = item.session_goal_hint
   if (item.session_rationale !== undefined) m.session_rationale = item.session_rationale
-  if (Array.isArray(item.session_focus_axes) && item.session_focus_axes.length > 0) {
+  if (Array.isArray(item.session_focus_axes)) {
     m.session_focus_axes = item.session_focus_axes
   }
   if (item.priority_vector && typeof item.priority_vector === 'object') {

@@ -11,6 +11,12 @@ export type SessionDisplayContract = {
   session_goal_hint?: string;
 };
 
+/** PR-TRUTH-05: canonical display field family on plan_json.meta (pass-through + recovery). */
+export type SessionCanonicalDisplayFamily = SessionDisplayContract & {
+  session_focus_axes?: string[];
+  session_rationale?: string | null;
+};
+
 const ROLE_ORDER = [
   'ADAPT',
   'ALIGN',
@@ -147,6 +153,44 @@ export function extractSessionDisplayFields(
     if (typeof v === 'string' && v.trim()) {
       out[k] = v.trim();
     }
+  }
+  return out;
+}
+
+function hasCompleteExplicitDisplayContract(
+  extracted: Partial<SessionDisplayContract>
+): extracted is Required<SessionDisplayContract> {
+  return (
+    typeof extracted.session_role_code === 'string' &&
+    extracted.session_role_code.trim().length > 0 &&
+    typeof extracted.session_role_label === 'string' &&
+    extracted.session_role_label.trim().length > 0 &&
+    typeof extracted.session_goal_code === 'string' &&
+    extracted.session_goal_code.trim().length > 0 &&
+    typeof extracted.session_goal_label === 'string' &&
+    extracted.session_goal_label.trim().length > 0 &&
+    typeof extracted.session_goal_hint === 'string' &&
+    extracted.session_goal_hint.trim().length > 0
+  );
+}
+
+/**
+ * PR-TRUTH-05: read canonical display fields already on plan_json.meta without legacy derivation.
+ * Used for echo paths (hydration, summary); incomplete payloads still go through resolveSessionDisplayContract.
+ */
+export function extractCanonicalDisplayFamilyPassThrough(
+  meta: Record<string, unknown> | null | undefined
+): Partial<SessionCanonicalDisplayFamily> {
+  if (!meta || typeof meta !== 'object') return {};
+  const out: Partial<SessionCanonicalDisplayFamily> = {
+    ...extractSessionDisplayFields(meta),
+  };
+  if (Array.isArray(meta.session_focus_axes)) {
+    out.session_focus_axes = meta.session_focus_axes.filter((x): x is string => typeof x === 'string');
+  }
+  if (Object.prototype.hasOwnProperty.call(meta, 'session_rationale')) {
+    const v = meta.session_rationale;
+    out.session_rationale = typeof v === 'string' || v === null ? v : null;
   }
   return out;
 }
@@ -311,6 +355,17 @@ export function resolveSessionDisplayContract(
   meta: Record<string, unknown> | null | undefined
 ): SessionDisplayContract {
   const extracted = extractSessionDisplayFields(meta);
+  // PR-TRUTH-05: fresh plans — plan meta is authoritative; skip read-time legacy reconstruction.
+  if (hasCompleteExplicitDisplayContract(extracted)) {
+    return {
+      session_role_code: extracted.session_role_code.trim(),
+      session_role_label: extracted.session_role_label.trim(),
+      session_goal_code: extracted.session_goal_code.trim(),
+      session_goal_label: extracted.session_goal_label.trim(),
+      session_goal_hint: extracted.session_goal_hint.trim(),
+    };
+  }
+
   const derived = deriveLegacySessionDisplayContract(meta);
 
   const roleCode = extracted.session_role_code ?? derived.session_role_code;

@@ -3,7 +3,10 @@
  * Used by /api/session/node-display-batch, home bundle, and /api/home/active-lite.
  */
 
-import { resolveSessionDisplayContract } from '@/lib/session/session-display-contract';
+import {
+  extractCanonicalDisplayFamilyPassThrough,
+  resolveSessionDisplayContract,
+} from '@/lib/session/session-display-contract';
 import type { SessionNodeDisplayHydrationItem } from '@/lib/session/client';
 
 export function buildSessionNodeDisplayHydrationItem(
@@ -15,6 +18,7 @@ export function buildSessionNodeDisplayHydrationItem(
   }
   const metaForResolve: Record<string, unknown> = { ...meta, session_number: sessionNumber };
   const c = resolveSessionDisplayContract(metaForResolve);
+  const canonicalPass = extractCanonicalDisplayFamilyPassThrough(meta);
   const priority_vector =
     meta.priority_vector &&
     typeof meta.priority_vector === 'object' &&
@@ -38,14 +42,11 @@ export function buildSessionNodeDisplayHydrationItem(
     ...(c.session_goal_code && { session_goal_code: c.session_goal_code }),
     ...(c.session_goal_label && { session_goal_label: c.session_goal_label }),
     ...(c.session_goal_hint && { session_goal_hint: c.session_goal_hint }),
-    ...(typeof meta.session_rationale === 'string'
-      ? { session_rationale: meta.session_rationale }
-      : meta.session_rationale === null
-        ? { session_rationale: null }
-        : {}),
-    ...(Array.isArray(meta.session_focus_axes) &&
-    meta.session_focus_axes.length > 0
-      ? { session_focus_axes: meta.session_focus_axes as string[] }
+    ...('session_rationale' in canonicalPass
+      ? { session_rationale: canonicalPass.session_rationale ?? null }
+      : {}),
+    ...(canonicalPass.session_focus_axes !== undefined
+      ? { session_focus_axes: canonicalPass.session_focus_axes }
       : {}),
     ...(priority_vector ? { priority_vector } : {}),
     ...(meta.pain_mode === 'none' ||

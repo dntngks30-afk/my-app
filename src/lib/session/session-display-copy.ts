@@ -1,6 +1,6 @@
 /**
- * PR3 — Shared map + panel display copy (wording only). No source hierarchy here.
- * Uses PR1 resolveSessionDisplayContract for contract-first truth; bounded fallback via buildBriefSessionRationale.
+ * PR3 + PR-TRUTH-05 — Shared map + panel display copy (wording only). No source hierarchy here.
+ * resolveSessionDisplayContract: full plan meta passes through when complete; legacy derivation is recovery-only.
  */
 
 import { buildBriefSessionRationale } from '@/lib/deep-result/copy'
@@ -63,7 +63,7 @@ function firstLine(text: string, maxLen: number): string {
 }
 
 /**
- * Single ownership for role/goal/subtitle + panel copy. Contract fields win via resolveSessionDisplayContract.
+ * Role/goal/subtitle + panel copy. Plan meta is authoritative when the display contract is complete; else recovery merge.
  */
 export function buildSessionDisplayCopy(meta: SessionDisplayCopyInput): SessionDisplayCopy {
   const record = { ...meta } as Record<string, unknown>
