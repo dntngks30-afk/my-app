@@ -1,5 +1,10 @@
 import { getCache, getCacheStale, invalidateCache, setCache } from '@/lib/cache/tabDataCache';
-import type { ActivePlanSummary, ActiveSessionLiteResponse, SessionProgress } from '@/lib/session/client';
+import type {
+  ActivePlanSummary,
+  ActiveSessionLiteResponse,
+  HomeNodeDisplayBundle,
+  SessionProgress,
+} from '@/lib/session/client';
 import type { NextSessionPreviewPayload } from '@/lib/session/next-session-preview';
 
 type ApiError = {
@@ -44,6 +49,8 @@ export type AppBootstrapResponse = {
   stats_preview: AppBootstrapStatsPreview;
   /** PR-PERF-21: Reset Map active flow (removes latest/start waterfall) */
   reset_map?: BootstrapResetMap;
+  /** PR4: compact map node display slice (canonical with /api/home/active-lite + node-display-batch family). */
+  node_display_bundle?: HomeNodeDisplayBundle;
 };
 
 const TTL_MS = 5_000;

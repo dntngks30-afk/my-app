@@ -16,6 +16,7 @@ import {
   type ExerciseLogItem,
   type PlanSummaryResponse,
   type SessionNodeDisplayHydrationItem,
+  type HomeNodeDisplayBundle,
 } from '@/lib/session/client'
 import {
   submitResetMapPreview,
@@ -63,6 +64,8 @@ interface ResetMapV2Props {
   adaptiveExplanation?: { title: string; message: string } | null
   /** PR-RISK-02: next session preview from bootstrap (post-completion 카드용) */
   nextSession?: NextSessionPreviewPayload | null
+  /** PR4: canonical compact display from app bootstrap / home-lite — batch fetch is fallback only */
+  initialNodeDisplayBundle?: HomeNodeDisplayBundle | null
   /** PR-RESET-05: reset-map flow id for preview/apply wiring */
   resetMapFlowId?: string | null
   /** PR-RESET-05: called after successful apply */
@@ -178,7 +181,7 @@ function bootstrapToPanelPlan(data: PanelBootstrapResponse): SessionPlan {
   }
 }
 
-export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, onFlowApplied, resetMapFlowId, onRequestNextSession, initialSelectedSessionId, adaptiveExplanation, nextSession, debug, mapRenderer }: ResetMapV2Props) {
+export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, onFlowApplied, resetMapFlowId, onRequestNextSession, initialSelectedSessionId, adaptiveExplanation, nextSession, initialNodeDisplayBundle, debug, mapRenderer }: ResetMapV2Props) {
   // localDailyCapActive: createSession이 DAILY_LIMIT_REACHED 반환 시 클라이언트 측 즉시 반영 (방어)
   const [localDailyCapActive, setLocalDailyCapActive] = useState(false)
   // daily cap: today_completed || localDailyCapActive, activePlan 없을 때 → 현재 세션 없음, 다음 세션 locked
@@ -213,8 +216,10 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   /** PR2: bump when summary/bootstrap cache mutates so node labels recompute (refs alone do not rerender). */
   const [displayVersion, setDisplayVersion] = useState(0)
 
-  /** PR-LEGACY-HYDRATION: batch display-only meta for completed history (map label drift 방지). */
-  const [hydrationItems, setHydrationItems] = useState<SessionNodeDisplayHydrationItem[]>([])
+  /** PR-LEGACY-HYDRATION: batch display-only meta for completed history (map label drift 방지). PR4: prefer bootstrap bundle. */
+  const [hydrationItems, setHydrationItems] = useState<SessionNodeDisplayHydrationItem[]>(() =>
+    initialNodeDisplayBundle?.items?.length ? initialNodeDisplayBundle.items : []
+  )
 
   /** PR-RISK-08b: Scoped invalidation — only stale sessions (completed + next). */
   const invalidateStaleSessionCaches = useCallback(
@@ -317,10 +322,17 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     }
   }, [resolveAuthToken, debug])
 
-  /** 홈 진입 시 완료 히스토리·노드 display batch 습수 (단일 요청, segments 없음). */
+  /** 홈 진입: PR4 canonical bundle 우선; 없으면 node-display-batch fallback (recovery/legacy). */
   useEffect(() => {
     let cancelled = false
     if (total < 1) return
+
+    if (initialNodeDisplayBundle?.items && initialNodeDisplayBundle.items.length > 0) {
+      setHydrationItems(initialNodeDisplayBundle.items)
+      setDisplayVersion((v) => v + 1)
+      return
+    }
+
     void resolveAuthToken().then(async (token) => {
       if (!token || cancelled) return
       const res = await getSessionNodeDisplayBatch(token, {
@@ -334,7 +346,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     return () => {
       cancelled = true
     }
-  }, [total, completed, resolveAuthToken])
+  }, [total, completed, resolveAuthToken, initialNodeDisplayBundle])
 
   // prop 변경(세션 완료 후 null 리셋 등) 반영
   // PR-RISK-08b: activePlan non-null→null 시 identity 기반 정밀 invalidation (prefix purge 대체)

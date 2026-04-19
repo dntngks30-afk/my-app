@@ -6,7 +6,7 @@ import { getSessionSafe } from '@/lib/supabase';
 import { invalidateActiveCache } from '@/lib/session/active-cache';
 import { getCache } from '@/lib/cache/tabDataCache';
 import AppEntryLoader, { isAppBooted, setAppBooted } from '@/app/app/_components/AppEntryLoader';
-import type { SessionPlan, ActivePlanSummary, ActiveSessionLiteResponse } from '@/lib/session/client';
+import type { SessionPlan, ActivePlanSummary, ActiveSessionLiteResponse, HomeNodeDisplayBundle } from '@/lib/session/client';
 import {
   getAppBootstrapCacheSnapshot,
   getCachedAppBootstrap,
@@ -78,6 +78,8 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const [adaptiveExplanation, setAdaptiveExplanation] = useState<AppBootstrapResponse['adaptive_explanation']>(null);
   /** PR-RESET-05: reset-map flow for execution-entry tracking */
   const [resetMapFlowId, setResetMapFlowId] = useState<string | null>(null);
+  /** PR4: canonical node display slice from app bootstrap (reduces map batch hydration fetch). */
+  const [nodeDisplayBundle, setNodeDisplayBundle] = useState<HomeNodeDisplayBundle | null>(null);
 
   const activeFetchedRef = useRef(false);
   const authTokenRef = useRef<string | null>(null);
@@ -112,6 +114,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     setStatsPreview(data.stats_preview);
     setNextSession(data.next_session ?? null);
     setAdaptiveExplanation(data.adaptive_explanation ?? null);
+    setNodeDisplayBundle(data.node_display_bundle && data.node_display_bundle.items.length > 0 ? data.node_display_bundle : null);
   }, []);
 
   const applyActiveLiteState = useCallback((data: ActiveSessionLiteResponse) => {
@@ -429,6 +432,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
                 resetMapFlowId={resetMapFlowId}
                 adaptiveExplanation={adaptiveExplanation}
                 nextSession={nextSession}
+                initialNodeDisplayBundle={nodeDisplayBundle}
                 initialSelectedSessionId={
                   focusSessionNum != null && focusSessionNum >= 1 && focusSessionNum <= total
                     ? focusSessionNum

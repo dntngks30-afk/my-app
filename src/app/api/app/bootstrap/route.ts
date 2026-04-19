@@ -14,6 +14,8 @@ import { computeAdaptiveModifier } from '@/core/adaptive-engine';
 import { generateAdaptiveExplanation } from '@/core/adaptive-explanation';
 import { getActiveFlowByUser, type ResetMapFlowRow } from '@/lib/reset-map/activeFlow';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
+import { fetchHomeNodeDisplayBundle } from '@/lib/session/home-node-display-bundle';
+import type { HomeNodeDisplayBundle } from '@/lib/session/client';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -52,6 +54,8 @@ type AppBootstrapData = {
     active_flow: ResetMapFlowRow | null;
     should_start: boolean;
   };
+  /** PR4: home map node display slice (compact; same family as node-display-batch). */
+  node_display_bundle?: HomeNodeDisplayBundle;
 };
 
 function estimateMinutesFromPlanJson(planJson: unknown): number {
@@ -183,6 +187,21 @@ export async function GET(req: NextRequest) {
     );
     timings.next_session_ms = Math.round(performance.now() - tNext);
 
+    const tNodeDisplay = performance.now();
+    let nodeDisplayBundle: HomeNodeDisplayBundle | undefined;
+    try {
+      const bundle = await fetchHomeNodeDisplayBundle(supabase, userId, {
+        totalSessions: sessionData.total_sessions,
+        activeSessionNumber: activeLite.data.progress.active_session_number ?? null,
+      });
+      if (bundle.items.length > 0) {
+        nodeDisplayBundle = bundle;
+      }
+    } catch (err) {
+      console.warn('[app/bootstrap] node_display_bundle skipped', err);
+    }
+    timings.node_display_bundle_ms = Math.round(performance.now() - tNodeDisplay);
+
     // PR-ALG-15: Adaptive explanation from last session signals
     let adaptiveExplanation: AppBootstrapData['adaptive_explanation'] = null;
     const nextSessionNumber = sessionData.completed_sessions + 1;
@@ -239,6 +258,7 @@ export async function GET(req: NextRequest) {
         active_flow: activeFlow,
         should_start: !activeFlow,
       },
+      ...(nodeDisplayBundle ? { node_display_bundle: nodeDisplayBundle } : {}),
     };
 
     if (isDebug) {

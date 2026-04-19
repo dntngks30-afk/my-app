@@ -3,10 +3,12 @@ import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { fetchActiveLiteData } from '@/lib/session/active-lite-data';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
-import type { ActiveSessionLiteResponse } from '@/lib/session/client';
+import type { ActiveSessionLiteResponse, HomeNodeDisplayBundle } from '@/lib/session/client';
+import { fetchHomeNodeDisplayBundle } from '@/lib/session/home-node-display-bundle';
 
 export type HomeActiveLiteBootstrapResponse = {
   activeLite: ActiveSessionLiteResponse;
+  nodeDisplayBundle?: HomeNodeDisplayBundle;
 };
 
 type HomeActiveLiteBootstrapOptions = {
@@ -46,8 +48,21 @@ export async function handleGetHomeActiveLiteBootstrap(
       );
     }
 
+    const totalSessions = activeResult.data.progress.total_sessions ?? 16;
+    const activeSessionNumber = activeResult.data.progress.active_session_number ?? null;
+    let nodeDisplayBundle: HomeNodeDisplayBundle | undefined;
+    try {
+      nodeDisplayBundle = await fetchHomeNodeDisplayBundle(supabase, userId, {
+        totalSessions,
+        activeSessionNumber,
+      });
+    } catch (e) {
+      console.warn(options.errorTag, 'nodeDisplayBundle skipped', e);
+    }
+
     const data: HomeActiveLiteBootstrapResponse = {
       activeLite: activeResult.data,
+      ...(nodeDisplayBundle && nodeDisplayBundle.items.length > 0 ? { nodeDisplayBundle } : {}),
     };
 
     if (debug) {

@@ -205,29 +205,6 @@ export async function getActiveSessionLite(
   return sessionFetch<ActiveSessionLiteResponse>(path, token, { method: 'GET' });
 }
 
-/** GET /api/home/active-lite — 홈/탭 active-lite canonical bundle */
-export type HomeActiveLiteResponse = {
-  activeLite: ActiveSessionLiteResponse;
-};
-
-export type BootstrapResponse = HomeActiveLiteResponse;
-
-/** Canonical fetch helper for home-lite owner route. */
-export async function getHomeActiveLite(
-  token: string,
-  opts?: { debug?: boolean }
-): Promise<ApiResult<HomeActiveLiteResponse>> {
-  const path = opts?.debug ? '/api/home/active-lite?debug=1' : '/api/home/active-lite';
-  return sessionFetch<HomeActiveLiteResponse>(path, token, { method: 'GET' });
-}
-
-export async function getBootstrap(
-  token: string,
-  opts?: { debug?: boolean }
-): Promise<ApiResult<BootstrapResponse>> {
-  return getHomeActiveLite(token, opts);
-}
-
 /** GET /api/session/plan?session_number=N — 과거/현재 세션 plan 조회 (read-only) */
 export async function getSessionPlan(
   token: string,
@@ -332,6 +309,47 @@ export type SessionNodeDisplayHydrationItem = {
 export type SessionNodeDisplayHydrationResponse = {
   items: SessionNodeDisplayHydrationItem[];
 };
+
+/** PR4 home-entry bundle: display-only compact items + optional provenance hint (resolver ignores unknown keys). */
+export type HomeNodeDisplayBundleSourceHint =
+  | 'active'
+  | 'summary'
+  | 'hydrated_history'
+  | 'bootstrap'
+  | 'next_preview';
+
+export type HomeNodeDisplayBundleItem = SessionNodeDisplayHydrationItem & {
+  source_hint?: HomeNodeDisplayBundleSourceHint;
+};
+
+export type HomeNodeDisplayBundle = {
+  items: HomeNodeDisplayBundleItem[];
+};
+
+/** GET /api/home/active-lite — 홈/탭 active-lite canonical bundle */
+export type HomeActiveLiteResponse = {
+  activeLite: ActiveSessionLiteResponse;
+  /** PR4: compact node display slice for first paint (same family as node-display-batch). */
+  nodeDisplayBundle?: HomeNodeDisplayBundle;
+};
+
+export type BootstrapResponse = HomeActiveLiteResponse;
+
+/** Canonical fetch helper for home-lite owner route. */
+export async function getHomeActiveLite(
+  token: string,
+  opts?: { debug?: boolean }
+): Promise<ApiResult<HomeActiveLiteResponse>> {
+  const path = opts?.debug ? '/api/home/active-lite?debug=1' : '/api/home/active-lite';
+  return sessionFetch<HomeActiveLiteResponse>(path, token, { method: 'GET' });
+}
+
+export async function getBootstrap(
+  token: string,
+  opts?: { debug?: boolean }
+): Promise<ApiResult<BootstrapResponse>> {
+  return getHomeActiveLite(token, opts);
+}
 
 /** GET /api/session/node-display-batch — 기존 계정 히스토리 노드 display 습수 (read-time derivation). */
 export async function getSessionNodeDisplayBatch(
