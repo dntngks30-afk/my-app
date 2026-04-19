@@ -209,6 +209,20 @@ export async function runPlanMaterialize(
     alignment_audit: alignmentAudit,
   };
 
+  // PR-TRUTH-04: generation-side profile snapshot for session-1 active-plan mismatch guard
+  if (nextSessionNumber === 1) {
+    const prevMeta = (planJson as { meta?: Record<string, unknown> }).meta ?? {};
+    planJson = {
+      ...(planJson as Record<string, unknown>),
+      meta: {
+        ...prevMeta,
+        profile_generation_snapshot: {
+          exercise_experience_level: exerciseExperienceForSession1 ?? null,
+        },
+      },
+    } as typeof planJson;
+  }
+
   const planPayload = {
     user_id: input.userId,
     session_number: nextSessionNumber,

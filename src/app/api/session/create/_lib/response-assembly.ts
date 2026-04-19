@@ -30,7 +30,8 @@ function buildIdempotentData(
   progress: SessionCreateProgressRow,
   activePlan: SessionCreatePlanRow | null,
   todayCompleted: boolean,
-  nextUnlockAt: string | null
+  nextUnlockAt: string | null,
+  activePlanProfileGuard?: 'match' | 'snapshot_absent_reuse' | 'mismatch_reuse_unsafe'
 ) {
   const active = activePlan ? toSummaryPlan(activePlan) : null;
   return {
@@ -39,6 +40,10 @@ function buildIdempotentData(
     idempotent: true,
     today_completed: todayCompleted,
     ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }),
+    ...(activePlanProfileGuard != null &&
+      activePlan?.session_number === 1 && {
+        active_plan_profile_guard: activePlanProfileGuard,
+      }),
   };
 }
 
@@ -75,7 +80,8 @@ export function assembleProgressGateResponse(result: Exclude<ProgressGateResult,
         result.progress,
         result.existingPlan,
         result.todayCompleted,
-        result.nextUnlockAt
+        result.nextUnlockAt,
+        result.activePlanProfileGuard
       );
       return ok(data, data);
     }

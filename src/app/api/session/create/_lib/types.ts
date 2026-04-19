@@ -38,6 +38,8 @@ export type SessionCreatePlanRow = {
   theme: string;
   plan_json: unknown;
   condition: unknown;
+  /** PR-TRUTH-04: progress gate may select for safe-regeneration checks */
+  exercise_logs?: unknown;
 };
 
 export type SessionCreateProgressRow = {
@@ -96,6 +98,8 @@ export type ProgressGateResult =
       existingPlan: SessionCreatePlanRow | null;
       todayCompleted: boolean;
       nextUnlockAt: string | null;
+      /** PR-TRUTH-04: session 1 profile snapshot vs current profile (additive observability) */
+      activePlanProfileGuard?: 'match' | 'snapshot_absent_reuse' | 'mismatch_reuse_unsafe';
     };
 
 export type GenerationInputContinue = ProgressGateContinue & {
