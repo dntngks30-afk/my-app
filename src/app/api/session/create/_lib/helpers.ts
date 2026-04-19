@@ -22,7 +22,8 @@ export function toSummaryPlan(
       session_focus_axes?: string[];
       primary_type?: string;
       result_type?: string;
-      constraint_flags?: { first_session_guardrail_applied?: boolean };
+      phase?: number;
+      constraint_flags?: Record<string, unknown>;
     };
     segments?: Array<{
       title?: string;
@@ -51,6 +52,7 @@ export function toSummaryPlan(
 
   const meta: Record<string, unknown> = {};
   if (pj?.meta) {
+    meta.session_number = plan.session_number;
     if (Array.isArray(pj.meta.focus)) meta.focus = pj.meta.focus.slice(0, 3);
     if (pj.meta.priority_vector) meta.priority_vector = pj.meta.priority_vector;
     if (pj.meta.pain_mode) meta.pain_mode = pj.meta.pain_mode;
@@ -66,9 +68,12 @@ export function toSummaryPlan(
     if (typeof pj.meta.result_type === 'string' && pj.meta.result_type.length > 0) {
       meta.result_type = pj.meta.result_type;
     }
+    if (typeof pj.meta.phase === 'number' && Number.isFinite(pj.meta.phase)) {
+      meta.phase = Math.floor(pj.meta.phase);
+    }
     const cf = pj.meta.constraint_flags;
-    if (cf && typeof cf === 'object' && typeof cf.first_session_guardrail_applied === 'boolean') {
-      meta.constraint_flags = { first_session_guardrail_applied: cf.first_session_guardrail_applied };
+    if (cf && typeof cf === 'object' && !Array.isArray(cf)) {
+      meta.constraint_flags = { ...(cf as Record<string, unknown>) };
     }
 
     const display = resolveSessionDisplayContract(pj.meta as unknown as Record<string, unknown>);

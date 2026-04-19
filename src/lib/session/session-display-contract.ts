@@ -92,17 +92,19 @@ function pickGoalCodeFromAxesAndPriority(meta: {
   priority_vector?: Record<string, number>;
   focus?: string[];
 }): (typeof GOAL_ORDER)[number] {
-  const firstAxis = meta.session_focus_axes?.[0];
-  if (firstAxis && FOCUS_AXIS_TO_GOAL[firstAxis]) {
-    return FOCUS_AXIS_TO_GOAL[firstAxis]!;
+  for (const ax of meta.session_focus_axes ?? []) {
+    if (ax && FOCUS_AXIS_TO_GOAL[ax]) {
+      return FOCUS_AXIS_TO_GOAL[ax]!;
+    }
   }
   const pk = topPriorityKey(meta.priority_vector);
   if (pk && PRIORITY_KEY_TO_GOAL[pk]) {
     return PRIORITY_KEY_TO_GOAL[pk]!;
   }
-  const f0 = meta.focus?.[0];
-  if (f0 && FOCUS_AXIS_TO_GOAL[f0]) {
-    return FOCUS_AXIS_TO_GOAL[f0]!;
+  for (const f of meta.focus ?? []) {
+    if (f && FOCUS_AXIS_TO_GOAL[f]) {
+      return FOCUS_AXIS_TO_GOAL[f]!;
+    }
   }
   return 'FULL_BODY_PRIME';
 }
@@ -150,24 +152,62 @@ export function extractSessionDisplayFields(
 }
 
 /**
- * Bounded deterministic seed from existing meta (axes, pain, focus, priority, optional phase).
- * Side-effect free.
+ * Read-time legacy normalization (no DB write). Bounded vocabulary only.
+ * Uses primary_type, result_type, constraint_flags, phase, session_number when axes/priority are thin.
  */
-export function buildSessionDisplaySeedFromMeta(meta: {
-  session_focus_axes?: string[];
-  priority_vector?: Record<string, number>;
-  pain_mode?: 'none' | 'caution' | 'protected';
-  focus?: string[];
-  session_rationale?: string | null;
-  phase?: number;
-} | null | undefined): SessionDisplayContract {
-  const m = meta ?? {};
-  const pain = m.pain_mode === 'caution' || m.pain_mode === 'protected' ? m.pain_mode : undefined;
-  let goalCode = pickGoalCodeFromAxesAndPriority(m);
+export function deriveLegacySessionDisplayContract(
+  meta: Record<string, unknown> | null | undefined
+): Required<SessionDisplayContract> {
+  const m = meta && typeof meta === 'object' ? meta : {};
+
+  const pain =
+    m.pain_mode === 'caution' || m.pain_mode === 'protected'
+      ? (m.pain_mode as 'caution' | 'protected')
+      : undefined;
+
   if (pain) {
-    goalCode = 'RECOVERY_RELIEF';
+    const roleCode: (typeof ROLE_ORDER)[number] = 'RECOVER';
+    const goalCode: (typeof GOAL_ORDER)[number] = 'RECOVERY_RELIEF';
+    return {
+      session_role_code: roleCode,
+      session_role_label: ROLE_LABEL[roleCode],
+      session_goal_code: goalCode,
+      session_goal_label: GOAL_LABEL[goalCode],
+      session_goal_hint: GOAL_HINT[goalCode],
+    };
   }
-  const roleCode = pickRoleCodeFromPhaseAndPain(m.phase, pain);
+
+  const primaryType = typeof m.primary_type === 'string' ? m.primary_type : undefined;
+  const resultType = typeof m.result_type === 'string' ? m.result_type : undefined;
+  const cf = m.constraint_flags;
+  const firstGuard = Boolean(
+    cf &&
+      typeof cf === 'object' &&
+      (cf as { first_session_guardrail_applied?: boolean }).first_session_guardrail_applied === true
+  );
+  const recoveryMode = Boolean(
+    cf &&
+      typeof cf === 'object' &&
+      (cf as { recovery_mode_applied?: boolean }).recovery_mode_applied === true
+  );
+  const phase = typeof m.phase === 'number' && Number.isFinite(m.phase) ? Math.floor(m.phase) : undefined;
+  const sessionNum =
+    typeof m.session_number === 'number' && Number.isFinite(m.session_number)
+      ? Math.floor(m.session_number)
+      : undefined;
+
+  const goalFromHeuristics = pickGoalCodeFromLegacySignals(primaryType, resultType);
+  const goalCode: (typeof GOAL_ORDER)[number] =
+    goalFromHeuristics ?? pickGoalCodeFromAxesAndPriority(m as Parameters<typeof pickGoalCodeFromAxesAndPriority>[0]);
+
+  const roleCode: (typeof ROLE_ORDER)[number] = pickRoleCodeFromLegacySignals(
+    primaryType,
+    resultType,
+    phase,
+    sessionNum,
+    firstGuard,
+    recoveryMode
+  );
 
   return {
     session_role_code: roleCode,
@@ -178,6 +218,134 @@ export function buildSessionDisplaySeedFromMeta(meta: {
   };
 }
 
+function pickGoalCodeFromLegacySignals(
+  primaryType: string | undefined,
+  resultType: string | undefined
+): (typeof GOAL_ORDER)[number] | null {
+  if (primaryType) {
+    const g = goalFromPrimaryType(primaryType);
+    if (g) return g;
+  }
+  if (resultType) {
+    const g = goalFromResultType(resultType);
+    if (g) return g;
+  }
+  return null;
+}
+
+function goalFromPrimaryType(p: string): (typeof GOAL_ORDER)[number] | null {
+  switch (p) {
+    case 'LOWER_INSTABILITY':
+      return 'LOWER_STABILITY';
+    case 'CORE_CONTROL_DEFICIT':
+      return 'CORE_STABILITY';
+    case 'UPPER_IMMOBILITY':
+      return 'UPPER_MOBILITY';
+    case 'LOWER_MOBILITY_RESTRICTION':
+      return 'LOWER_MOBILITY';
+    case 'DECONDITIONED':
+      return 'RECOVERY_RELIEF';
+    case 'STABLE':
+      return null;
+    default:
+      return null;
+  }
+}
+
+function goalFromResultType(r: string): (typeof GOAL_ORDER)[number] | null {
+  switch (r) {
+    case 'NECK-SHOULDER':
+    case 'UPPER-LIMB':
+      return 'UPPER_MOBILITY';
+    case 'LUMBO-PELVIS':
+      return 'CORE_STABILITY';
+    case 'LOWER-LIMB':
+      return 'LOWER_STABILITY';
+    case 'DECONDITIONED':
+      return 'RECOVERY_RELIEF';
+    case 'STABLE':
+      return null;
+    default:
+      return null;
+  }
+}
+
+function pickRoleCodeFromLegacySignals(
+  primaryType: string | undefined,
+  resultType: string | undefined,
+  phase: number | undefined,
+  sessionNum: number | undefined,
+  firstGuard: boolean,
+  recoveryMode: boolean
+): (typeof ROLE_ORDER)[number] {
+  if (primaryType === 'STABLE' || resultType === 'STABLE') {
+    if (firstGuard) return 'ADAPT';
+    if (recoveryMode) return 'INTEGRATE';
+  }
+  if (primaryType === 'DECONDITIONED' || resultType === 'DECONDITIONED') {
+    return 'RECOVER';
+  }
+  if (primaryType === 'CORE_CONTROL_DEFICIT') return 'STABILIZE';
+  if (primaryType === 'LOWER_INSTABILITY') return 'STABILIZE';
+  if (primaryType === 'UPPER_IMMOBILITY') return 'MOBILIZE';
+  if (primaryType === 'LOWER_MOBILITY_RESTRICTION') return 'MOBILIZE';
+  if (primaryType === 'STABLE' && typeof sessionNum === 'number') {
+    if (sessionNum >= 16) return 'INTEGRATE';
+    if (sessionNum <= 3) return 'ADAPT';
+  }
+  return pickRoleCodeFromPhaseAndPain(phase, undefined);
+}
+
+function isBoundedRoleCode(code: string | undefined): code is (typeof ROLE_ORDER)[number] {
+  return !!code && (ROLE_ORDER as readonly string[]).includes(code);
+}
+function isBoundedGoalCode(code: string | undefined): code is (typeof GOAL_ORDER)[number] {
+  return !!code && (GOAL_ORDER as readonly string[]).includes(code);
+}
+
+/**
+ * Explicit field wins per key; missing keys filled from deriveLegacySessionDisplayContract (read-time only).
+ * If only a bounded code is explicit, label/hint follow the same vocabulary maps before falling back to derived.
+ */
+export function resolveSessionDisplayContract(
+  meta: Record<string, unknown> | null | undefined
+): SessionDisplayContract {
+  const extracted = extractSessionDisplayFields(meta);
+  const derived = deriveLegacySessionDisplayContract(meta);
+
+  const roleCode = extracted.session_role_code ?? derived.session_role_code;
+  const goalCode = extracted.session_goal_code ?? derived.session_goal_code;
+
+  return {
+    session_role_code: roleCode,
+    session_role_label:
+      extracted.session_role_label ??
+      (isBoundedRoleCode(roleCode) ? ROLE_LABEL[roleCode] : derived.session_role_label),
+    session_goal_code: goalCode,
+    session_goal_label:
+      extracted.session_goal_label ??
+      (isBoundedGoalCode(goalCode) ? GOAL_LABEL[goalCode] : derived.session_goal_label),
+    session_goal_hint:
+      extracted.session_goal_hint ??
+      (isBoundedGoalCode(goalCode) ? GOAL_HINT[goalCode] : derived.session_goal_hint),
+  };
+}
+
+/**
+ * Bounded deterministic seed from existing meta (axes, pain, focus, priority, optional phase).
+ * Side-effect free. Delegates to legacy read-time derivation (same family as resolve / batch hydration).
+ */
+export function buildSessionDisplaySeedFromMeta(meta: {
+  session_focus_axes?: string[];
+  priority_vector?: Record<string, number>;
+  pain_mode?: 'none' | 'caution' | 'protected';
+  focus?: string[];
+  session_rationale?: string | null;
+  phase?: number;
+} | null | undefined): SessionDisplayContract {
+  return deriveLegacySessionDisplayContract((meta ?? {}) as Record<string, unknown>);
+}
+
 /** Bootstrap-only: phase + focus_axes + implicit pain from constraint flags (conservative). */
 export function buildSessionDisplaySeedFromBootstrap(input: {
   phase: number;
@@ -186,24 +354,10 @@ export function buildSessionDisplaySeedFromBootstrap(input: {
 }): SessionDisplayContract {
   const painGate = input.constraint_flags.includes('pain_gate_applied');
   const pain: 'caution' | 'protected' | undefined = painGate ? 'caution' : undefined;
-  const fakeMeta = {
+  const fakeMeta: Record<string, unknown> = {
     session_focus_axes: input.focus_axes,
     phase: input.phase,
     pain_mode: pain,
   };
-  return buildSessionDisplaySeedFromMeta(fakeMeta);
-}
-
-/**
- * Pass-through wins over seed: existing non-empty contract fields override fallback.
- */
-export function resolveSessionDisplayContract(
-  meta: Record<string, unknown> | null | undefined
-): SessionDisplayContract {
-  const extracted = extractSessionDisplayFields(meta);
-  const seed = buildSessionDisplaySeedFromMeta(meta as Parameters<typeof buildSessionDisplaySeedFromMeta>[0]);
-  return {
-    ...seed,
-    ...extracted,
-  };
+  return deriveLegacySessionDisplayContract(fakeMeta);
 }

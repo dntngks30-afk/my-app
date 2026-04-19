@@ -22,13 +22,22 @@ function buildHydrationItem(
   if (!meta || typeof meta !== 'object') {
     return { session_number: sessionNumber };
   }
-  const c = resolveSessionDisplayContract(meta);
+  const metaForResolve: Record<string, unknown> = { ...meta, session_number: sessionNumber };
+  const c = resolveSessionDisplayContract(metaForResolve);
   const priority_vector =
     meta.priority_vector &&
     typeof meta.priority_vector === 'object' &&
     meta.priority_vector !== null &&
     !Array.isArray(meta.priority_vector)
       ? (meta.priority_vector as Record<string, number>)
+      : undefined;
+
+  const cf =
+    meta.constraint_flags &&
+    typeof meta.constraint_flags === 'object' &&
+    meta.constraint_flags !== null &&
+    !Array.isArray(meta.constraint_flags)
+      ? (meta.constraint_flags as Record<string, unknown>)
       : undefined;
 
   return {
@@ -54,6 +63,14 @@ function buildHydrationItem(
       ? { pain_mode: meta.pain_mode }
       : {}),
     ...(Array.isArray(meta.focus) && meta.focus.length > 0 ? { focus: meta.focus as string[] } : {}),
+    ...(typeof meta.primary_type === 'string' && meta.primary_type.trim()
+      ? { primary_type: meta.primary_type.trim() }
+      : {}),
+    ...(typeof meta.result_type === 'string' && meta.result_type.trim()
+      ? { result_type: meta.result_type.trim() }
+      : {}),
+    ...(typeof meta.phase === 'number' && Number.isFinite(meta.phase) ? { phase: Math.floor(meta.phase) } : {}),
+    ...(cf ? { constraint_flags: cf } : {}),
   };
 }
 

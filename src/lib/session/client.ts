@@ -259,6 +259,11 @@ export type PlanSummaryResponse = {
     pain_mode?: 'none' | 'caution' | 'protected';
     session_rationale?: string | null;
     session_focus_axes?: string[];
+    primary_type?: string;
+    result_type?: string;
+    phase?: number;
+    constraint_flags?: Record<string, unknown>;
+    session_number?: number;
   } & Partial<SessionDisplayContract>;
   adaptation_summary?: string;
   segments: Array<{
@@ -317,6 +322,11 @@ export type SessionNodeDisplayHydrationItem = {
   priority_vector?: Record<string, number>;
   pain_mode?: 'none' | 'caution' | 'protected';
   focus?: string[];
+  /** Read-time derivation signals (compact echo; same family as plan_json.meta). */
+  primary_type?: string;
+  result_type?: string;
+  phase?: number;
+  constraint_flags?: Record<string, unknown>;
 };
 
 export type SessionNodeDisplayHydrationResponse = {

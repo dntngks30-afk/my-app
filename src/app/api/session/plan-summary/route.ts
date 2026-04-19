@@ -133,16 +133,39 @@ export async function GET(req: NextRequest) {
 
     const statusVal = row.status ?? 'draft';
     const rationale = planJson?.meta
-      ? {
-          ...(Array.isArray(planJson.meta.focus) && { focus: planJson.meta.focus.slice(0, 3) }),
-          ...(planJson.meta.priority_vector && { priority_vector: planJson.meta.priority_vector }),
-          ...(planJson.meta.pain_mode && { pain_mode: planJson.meta.pain_mode }),
-          ...(planJson.meta.session_rationale != null && { session_rationale: planJson.meta.session_rationale }),
-          ...(Array.isArray(planJson.meta.session_focus_axes) && planJson.meta.session_focus_axes.length > 0 && {
-            session_focus_axes: planJson.meta.session_focus_axes,
-          }),
-          ...resolveSessionDisplayContract(planJson.meta as Record<string, unknown>),
-        }
+      ? (() => {
+          const pm = planJson.meta as Record<string, unknown>;
+          const metaForResolve: Record<string, unknown> = { ...pm, session_number: row.session_number };
+          const resolvedDisplay = resolveSessionDisplayContract(metaForResolve);
+          return {
+            ...(Array.isArray(pm.focus) ? { focus: (pm.focus as string[]).slice(0, 3) } : {}),
+            ...(pm.priority_vector && typeof pm.priority_vector === 'object'
+              ? { priority_vector: pm.priority_vector as Record<string, number> }
+              : {}),
+            ...(pm.pain_mode ? { pain_mode: pm.pain_mode as 'none' | 'caution' | 'protected' } : {}),
+            ...(pm.session_rationale != null ? { session_rationale: pm.session_rationale as string | null } : {}),
+            ...(Array.isArray(pm.session_focus_axes) && (pm.session_focus_axes as unknown[]).length > 0
+              ? {
+                  session_focus_axes: pm.session_focus_axes as string[],
+                }
+              : {}),
+            ...(typeof pm.primary_type === 'string' && pm.primary_type.trim()
+              ? { primary_type: pm.primary_type.trim() }
+              : {}),
+            ...(typeof pm.result_type === 'string' && pm.result_type.trim()
+              ? { result_type: pm.result_type.trim() }
+              : {}),
+            ...(typeof pm.phase === 'number' && Number.isFinite(pm.phase) ? { phase: Math.floor(pm.phase) } : {}),
+            ...(pm.constraint_flags &&
+            typeof pm.constraint_flags === 'object' &&
+            pm.constraint_flags !== null &&
+            !Array.isArray(pm.constraint_flags)
+              ? { constraint_flags: pm.constraint_flags as Record<string, unknown> }
+              : {}),
+            session_number: row.session_number,
+            ...resolvedDisplay,
+          };
+        })()
       : undefined;
     // PR-EXEC-02: return exercise_logs for in-progress (draft/started) and completed
     const rawLogs = row.exercise_logs as unknown;

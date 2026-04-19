@@ -192,6 +192,9 @@ function legacyFallback(sessionNumber: number, node: SessionNode | undefined): S
 /** Batch hydration item → plan_json.meta-shaped object for resolveSessionDisplayContract. */
 export function hydrationItemToResolverMeta(item: SessionNodeDisplayHydrationItem): Record<string, unknown> {
   const m: Record<string, unknown> = {}
+  if (typeof item.session_number === 'number' && Number.isFinite(item.session_number)) {
+    m.session_number = Math.floor(item.session_number)
+  }
   if (item.session_role_code) m.session_role_code = item.session_role_code
   if (item.session_role_label) m.session_role_label = item.session_role_label
   if (item.session_goal_code) m.session_goal_code = item.session_goal_code
@@ -206,6 +209,18 @@ export function hydrationItemToResolverMeta(item: SessionNodeDisplayHydrationIte
   }
   if (item.pain_mode) m.pain_mode = item.pain_mode
   if (Array.isArray(item.focus) && item.focus.length > 0) m.focus = item.focus
+  if (typeof item.primary_type === 'string' && item.primary_type.trim()) {
+    m.primary_type = item.primary_type.trim()
+  }
+  if (typeof item.result_type === 'string' && item.result_type.trim()) {
+    m.result_type = item.result_type.trim()
+  }
+  if (typeof item.phase === 'number' && Number.isFinite(item.phase)) {
+    m.phase = Math.floor(item.phase)
+  }
+  if (item.constraint_flags && typeof item.constraint_flags === 'object') {
+    m.constraint_flags = item.constraint_flags
+  }
   return m
 }
 
@@ -303,7 +318,10 @@ export function resolveSessionNodeDisplays(args: ResolveSessionNodeDisplaysArgs)
     // 2) Summary (completed + current + any prefetched)
     const summary = summaryBySession.get(n)
     if (summary?.rationale) {
-      const c = resolveSessionDisplayContract(rationaleToContractMeta(summary.rationale))
+      const c = resolveSessionDisplayContract({
+        ...rationaleToContractMeta(summary.rationale),
+        session_number: n,
+      })
       out[n] = contractToDisplay(n, c, 'confirmed', 'summary', 'high')
       continue
     }
