@@ -6,7 +6,7 @@ import type { ExerciseItem } from './planJsonAdapter'
 import { getLogKey } from './planJsonAdapter'
 import type { ExerciseLogItem, SessionPlan, ActivePlanSummary } from '@/lib/session/client'
 import { isExerciseLogCompleted, getExerciseLogDisplayValue } from './exercise-log-helpers'
-import { buildBriefSessionRationale } from '@/lib/deep-result/copy'
+import { buildSessionDisplayCopy, type SessionDisplayCopyInput } from '@/lib/session/session-display-copy'
 import { ExercisePlayerModal } from './ExercisePlayerModal'
 import SessionCompleteSummary from '@/app/app/routine/_components/SessionCompleteSummary'
 import { ReflectionModal } from './ReflectionModal'
@@ -74,55 +74,21 @@ const STATUS_CLASS: Record<SessionStatus, string> = {
   locked: 'bg-slate-100 text-slate-500',
 }
 
-/** PR-SESSION-EXPERIENCE-01: session_focus_axes → 한글 라벨 */
-const FOCUS_AXIS_LABELS: Record<string, string> = {
-  lower_stability: '하체 안정',
-  lower_mobility: '하체 가동성',
-  upper_mobility: '상체 가동성',
-  trunk_control: '몸통 제어',
-  asymmetry: '좌우 균형',
-  deconditioned: '전신 회복',
-}
-
+/** PR3: panel copy aligns with map via buildSessionDisplayCopy (contract-first). */
 function getPlanRationale(plan: SessionPlan | ActivePlanSummary | null) {
   if (!plan || !('plan_json' in plan) || !plan.plan_json || typeof plan.plan_json !== 'object') return null
-  const meta = (plan.plan_json as {
-    meta?: {
-      focus?: string[]
-      priority_vector?: Record<string, number>
-      pain_mode?: 'none' | 'caution' | 'protected'
-      adaptation_summary?: string
-      session_rationale?: string | null
-      session_focus_axes?: string[]
-      /** PR1 display contract — consumed by later map alignment; optional here */
-      session_role_code?: string
-      session_role_label?: string
-      session_goal_code?: string
-      session_goal_label?: string
-      session_goal_hint?: string
-    }
-  }).meta
-  const base = buildBriefSessionRationale(meta?.priority_vector, meta?.pain_mode, meta?.focus)
-  const headline = meta?.session_rationale ?? base?.headline
-  const detail = meta?.session_rationale ? undefined : base?.detail
-  const chips = (meta?.session_focus_axes ?? []).map((a) => FOCUS_AXIS_LABELS[a] ?? a)
-  if (!base && (headline || chips.length > 0)) {
-    return {
-      headline: headline ?? '이번 세션을 빠르게 미리 볼 수 있는 요약입니다',
-      detail: '패널은 먼저 요약을 보여주고, 뒤에서 실제 세션 구성을 불러옵니다.',
-      chips,
-      ...(meta?.adaptation_summary && { adaptation_summary: meta.adaptation_summary }),
-    }
+  const meta = (plan.plan_json as { meta?: SessionDisplayCopyInput }).meta
+  if (!meta || typeof meta !== 'object') return null
+  const copy = buildSessionDisplayCopy(meta)
+  return {
+    panelTitle: copy.panelTitle,
+    headline: copy.panelHeadline,
+    detail: copy.panelDetail,
+    chips: copy.panelChips,
+    ...(typeof meta.adaptation_summary === 'string' && meta.adaptation_summary.trim() && {
+      adaptation_summary: meta.adaptation_summary,
+    }),
   }
-  return base
-    ? {
-        ...base,
-        headline: headline ?? base.headline,
-        ...(detail && { detail }),
-        chips,
-        ...(meta?.adaptation_summary && { adaptation_summary: meta.adaptation_summary }),
-      }
-    : null
 }
 
 export function SessionPanelV2({
@@ -466,9 +432,9 @@ function PanelInner({
             {rationale && (status === 'current' || status === 'completed') && (
               <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">오늘의 목표</p>
-                {'chips' in rationale && Array.isArray(rationale.chips) && rationale.chips.length > 0 && rationale.chips[0] && (
+                {'panelTitle' in rationale && typeof rationale.panelTitle === 'string' && rationale.panelTitle && (
                   <p className="mt-1 text-sm font-semibold text-slate-800">
-                    {String(rationale.chips[0])} 개선
+                    {rationale.panelTitle}
                   </p>
                 )}
                 <p className="mt-1.5 text-xs leading-5 text-slate-600">{rationale.headline}</p>
@@ -478,9 +444,9 @@ function PanelInner({
                 {'adaptation_summary' in rationale && rationale.adaptation_summary && (
                   <p className="mt-1.5 text-xs text-slate-600">{rationale.adaptation_summary}</p>
                 )}
-                {'chips' in rationale && Array.isArray(rationale.chips) && rationale.chips.length > 1 && (
+                {'chips' in rationale && Array.isArray(rationale.chips) && rationale.chips.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {rationale.chips.slice(1).map((chip) => (
+                    {rationale.chips.map((chip) => (
                       <span key={chip} className="rounded-lg bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
                         {chip}
                       </span>
@@ -549,8 +515,8 @@ function PanelInner({
         onComplete={handleLogComplete}
         onNextOrEnd={handleNextOrEnd}
         sessionGoalText={
-          rationale && 'chips' in rationale && Array.isArray(rationale.chips) && rationale.chips.length > 0
-            ? rationale.chips.slice(0, 2).join(' + ')
+          rationale && 'panelTitle' in rationale && typeof rationale.panelTitle === 'string'
+            ? rationale.panelTitle
             : undefined
         }
         painModeMessage={

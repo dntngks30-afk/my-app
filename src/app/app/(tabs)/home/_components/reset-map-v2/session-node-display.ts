@@ -10,6 +10,11 @@ import {
 } from '@/lib/session/session-display-contract'
 import type { NextSessionPreviewPayload } from '@/lib/session/next-session-preview'
 import { isUsableNextSessionPreview } from '@/lib/session/next-session-preview'
+import {
+  buildSessionDisplayCopy,
+  mapLinesFromSessionDisplayCopy,
+  sessionCopyInputFromNodeDisplay,
+} from '@/lib/session/session-display-copy'
 import type { SessionNode } from './map-data'
 
 export type SessionNodeDisplayState = 'confirmed' | 'preview' | 'placeholder'
@@ -329,12 +334,10 @@ export function getMapLines(
   if (!display) {
     return { largeLabel: fallbackNode.label, subtitle: fallbackNode.description?.trim() ? fallbackNode.description : null }
   }
-  const sub = display.subtitle?.trim()
   if (display.source === 'legacy_map_data') {
+    const sub = display.subtitle?.trim()
     return { largeLabel: display.roleLabel, subtitle: sub || null }
   }
-  return {
-    largeLabel: display.roleLabel,
-    subtitle: sub || null,
-  }
+  const copy = buildSessionDisplayCopy(sessionCopyInputFromNodeDisplay(display))
+  return mapLinesFromSessionDisplayCopy(copy)
 }
