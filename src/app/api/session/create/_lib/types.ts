@@ -38,8 +38,13 @@ export type SessionCreatePlanRow = {
   theme: string;
   plan_json: unknown;
   condition: unknown;
-  /** PR-TRUTH-04: progress gate may select for safe-regeneration checks */
+  /** PR-TRUTH-04 / PR-RISK-08: progress gate selects for safe-regeneration / consumption evidence */
   exercise_logs?: unknown;
+  started_at?: string | null;
+  completed_at?: string | null;
+  duration_seconds?: number | null;
+  completion_mode?: string | null;
+  execution_summary_json?: unknown;
 };
 
 export type SessionCreateProgressRow = {

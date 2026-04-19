@@ -8,6 +8,10 @@ import type {
   SessionCreatePlanRow,
   SessionCreateProgressRow,
 } from './types';
+import {
+  classifySession1PlanConsumptionEvidence,
+  isSafeSession1ProfileMismatchRegen,
+} from './session1-regen-consumption-evidence';
 
 const DEFAULT_TOTAL_SESSIONS = 16;
 const FREQUENCY_TO_TOTAL: Record<number, number> = {
@@ -84,14 +88,6 @@ function isMaterialExerciseExperienceMismatch(
   }
   const curNorm = normalizedExerciseExperienceLevel(currentLevel);
   return snapNorm !== curNorm;
-}
-
-function isSafeSession1ProfileMismatchRegen(plan: SessionCreatePlanRow): boolean {
-  if (plan.session_number !== 1) return false;
-  if (plan.status !== 'draft') return false;
-  const logs = plan.exercise_logs;
-  if (Array.isArray(logs) && logs.length > 0) return false;
-  return true;
 }
 
 export async function runProgressGate(input: RequestGateContinue): Promise<ProgressGateResult> {
@@ -200,7 +196,9 @@ export async function runProgressGate(input: RequestGateContinue): Promise<Progr
   if (effectiveProgress.active_session_number) {
     const { data: existingPlan } = await supabase
       .from('session_plans')
-      .select('session_number, status, theme, plan_json, condition, exercise_logs')
+      .select(
+        'session_number, status, theme, plan_json, condition, exercise_logs, started_at, completed_at, duration_seconds, completion_mode, execution_summary_json'
+      )
       .eq('user_id', userId)
       .eq('session_number', effectiveProgress.active_session_number)
       .maybeSingle();
@@ -219,6 +217,7 @@ export async function runProgressGate(input: RequestGateContinue): Promise<Progr
         if (mismatch && isSafeSession1ProfileMismatchRegen(planRow)) {
           const snapNorm = normalizedExerciseExperienceLevel(snapshot?.exercise_experience_level);
           const curNorm = normalizedExerciseExperienceLevel(currentLevel);
+          const consumption = classifySession1PlanConsumptionEvidence(planRow);
           void logSessionEvent(supabase, {
             userId,
             eventType: 'session_create',
@@ -229,6 +228,7 @@ export async function runProgressGate(input: RequestGateContinue): Promise<Progr
               active_plan_profile_mismatch: true,
               profile_exercise_experience_level: curNorm,
               snapshot_exercise_experience_level: snapNorm,
+              consumption_evidence: consumption.classification,
             },
           });
           effectiveProgress = { ...effectiveProgress, active_session_number: null };
@@ -244,6 +244,14 @@ export async function runProgressGate(input: RequestGateContinue): Promise<Progr
             const curNorm = normalizedExerciseExperienceLevel(currentLevel);
             meta.profile_exercise_experience_level = curNorm;
             meta.snapshot_exercise_experience_level = snapNorm;
+            const consumption = classifySession1PlanConsumptionEvidence(planRow);
+            meta.consumption_evidence_classification = consumption.classification;
+            if (consumption.reasons.length > 0) {
+              meta.consumption_evidence_reasons = consumption.reasons;
+            }
+            if (consumption.classification !== 'no_consumption_evidence') {
+              meta.regen_blocked_due_to_consumption_evidence = true;
+            }
           } else if (snapshotAbsent) {
             guard = 'snapshot_absent_reuse';
             meta.snapshot_absent = true;
