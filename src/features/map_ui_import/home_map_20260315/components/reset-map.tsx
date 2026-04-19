@@ -10,10 +10,6 @@ import {
   getMapLines,
   type SessionNodeDisplay,
 } from "@/app/app/(tabs)/home/_components/reset-map-v2/session-node-display"
-import {
-  resolveViewportSafePlacement,
-  type SessionNodePlacement,
-} from "./session-node-layout"
 
 interface DonorSession {
   id: number
@@ -73,6 +69,7 @@ const END_Y = 80
 const ROUTE_SAMPLES = 120 // Dense points for smooth curved path
 
 // Uniform gap from road edge to panel center
+const PANEL_GAP = 52
 const RIGHT_PANEL_OFFSET = 42 // Right panels slightly closer (shifted left)
 const LEFT_PANEL_OFFSET = 62 // Left panels slightly further out (shifted left from road)
 
@@ -247,28 +244,7 @@ export function ResetMap({
 }: DonorResetMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [sessionAnchors, setSessionAnchors] = useState<SessionAnchor[] | null>(null)
-  const [containerWidth, setContainerWidth] = useState<number | null>(null)
   const hasInitialScrolled = useRef(false)
-
-  useEffect(() => {
-    const node = containerRef.current
-    if (!node) return
-
-    const updateWidth = () => {
-      setContainerWidth(Math.round(node.getBoundingClientRect().width))
-    }
-
-    updateWidth()
-
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", updateWidth)
-      return () => window.removeEventListener("resize", updateWidth)
-    }
-
-    const observer = new ResizeObserver(() => updateWidth())
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [])
 
   const sessions = useMemo(
     () =>
@@ -280,30 +256,6 @@ export function ResetMap({
       ),
     [total, completed, currentSession, nodeDisplayBySession]
   )
-
-  const effectiveContainerWidth =
-    containerWidth != null && containerWidth > 0 ? containerWidth : 360
-
-  const sessionPlacements = useMemo((): (SessionNodePlacement | null)[] => {
-    if (!sessionAnchors?.length) return []
-    return sessionAnchors.map((anchor, index) => {
-      const session = sessions[index]
-      if (!session) return null
-      const isActive = session.status === "active"
-      const isCompleted = session.status === "completed"
-      const nodeR = isActive ? 23 : isCompleted ? 20 : 17.5
-      return resolveViewportSafePlacement({
-        baseNodeX: anchor.x,
-        baseNodeY: anchor.y,
-        preferredLabelSide: anchor.side === 1 ? "right" : "left",
-        containerWidthPx: effectiveContainerWidth,
-        canvasWidthPx: CANVAS_WIDTH,
-        title: session.title,
-        subtitle: session.subtitle,
-        nodeRadiusPx: nodeR,
-      })
-    })
-  }, [sessionAnchors, sessions, effectiveContainerWidth])
 
   const mainPathRef = useCallback(
     (el: SVGPathElement | null) => {
@@ -525,13 +477,13 @@ export function ResetMap({
             ))}
         </svg>
 
-        {/* Session nodes - path-following with viewport-safe final placement */}
+        {/* Session nodes - all anchored to road, unified GAP, alternating left/right */}
         {sessionAnchors?.map((anchor, index) =>
-          sessions[index] && sessionPlacements[index] ? (
+          sessions[index] ? (
             <SessionNode
               key={sessions[index].id}
               session={sessions[index]}
-              placement={sessionPlacements[index]!}
+              anchor={anchor}
               index={index}
               onTap={
                 onNodeTap
@@ -699,22 +651,21 @@ function BackgroundLayers({
 
 function SessionNode({
   session,
-  placement,
+  anchor,
   index,
   onTap,
 }: {
   session: DonorSession
-  placement: SessionNodePlacement
+  anchor: SessionAnchor
   index: number
   onTap?: () => void
 }) {
   const isCompleted = session.status === "completed"
   const isActive = session.status === "active"
   const isLocked = session.status === "locked"
-  const position = { x: placement.nodeX, y: placement.nodeY }
+  const position = { x: anchor.x, y: anchor.y }
+  const labelOnRight = anchor.side === 1
   const isClickable = !!onTap
-  const labelGap = 10
-  const nodeHalf = isActive ? 23 : isCompleted ? 20 : 17.5
 
   return (
     <motion.div
@@ -792,7 +743,7 @@ function SessionNode({
         </>
       )}
 
-      {/* Node circle — center stays at placement (road-safe nodeX/nodeY) */}
+      {/* Node circle - ~12% smaller */}
       <motion.div
         className={cn(
           "relative flex items-center justify-center rounded-full transition-all",
@@ -824,48 +775,16 @@ function SessionNode({
         {isLocked && <Lock className="w-3 h-3" strokeWidth={2.5} />}
       </motion.div>
 
-      {/* Label — absolute from node center; side-inline vs stacked-below */}
+      {/* Label — donor-faithful: session number, title, subtitle */}
       <motion.div
-        className={cn(
-          "absolute min-w-0",
-          placement.layoutMode === "stacked-below"
-            ? "left-1/2 top-full mt-2 -translate-x-1/2 text-center"
-            : "top-1/2 -translate-y-1/2",
-          placement.layoutMode !== "stacked-below" &&
-            placement.labelSide === "right" &&
-            "text-left",
-          placement.layoutMode !== "stacked-below" && placement.labelSide === "left" && "text-right"
-        )}
-        style={
-          placement.layoutMode === "stacked-below"
-            ? {
-                maxWidth: placement.labelMaxWidth,
-                width: placement.labelMaxWidth,
-                writingMode: "horizontal-tb",
-              }
-            : placement.labelSide === "right"
-              ? {
-                  left: `calc(50% + ${nodeHalf + labelGap}px)`,
-                  maxWidth: placement.labelMaxWidth,
-                  writingMode: "horizontal-tb",
-                }
-              : {
-                  right: `calc(50% + ${nodeHalf + labelGap}px)`,
-                  maxWidth: placement.labelMaxWidth,
-                  writingMode: "horizontal-tb",
-                }
-        }
-        initial={{
-          opacity: 0,
-          x: placement.layoutMode === "stacked-below" ? 0 : placement.labelSide === "right" ? -8 : 8,
-          y: placement.layoutMode === "stacked-below" ? -6 : 0,
-        }}
-        animate={{ opacity: 1, x: 0, y: 0 }}
+        className={cn("absolute top-1/2 -translate-y-1/2 whitespace-nowrap", labelOnRight ? "left-full ml-3" : "right-full mr-3 text-right")}
+        initial={{ opacity: 0, x: labelOnRight ? -8 : 8 }}
+        animate={{ opacity: 1, x: 0 }}
         transition={{ delay: index * 0.03 + 0.7 }}
       >
         <p
           className={cn(
-            "text-[10px] font-medium tabular-nums leading-tight break-keep",
+            "text-[10px] font-medium tabular-nums",
             isActive && "text-orange-400",
             isCompleted && "text-slate-300",
             isLocked && "text-slate-500"
@@ -875,7 +794,7 @@ function SessionNode({
         </p>
         <p
           className={cn(
-            "text-sm font-semibold leading-snug break-keep break-words line-clamp-2",
+            "text-sm font-semibold",
             isActive && "text-orange-500",
             isCompleted && "text-white/95",
             isLocked && "text-slate-400"
@@ -883,18 +802,16 @@ function SessionNode({
         >
           {session.title}
         </p>
-        {session.subtitle ? (
-          <p
-            className={cn(
-              "text-[11px] leading-snug break-keep break-words line-clamp-2",
-              isActive && "text-orange-400/90",
-              isCompleted && "text-slate-400",
-              isLocked && "text-slate-500/70"
-            )}
-          >
-            {session.subtitle}
-          </p>
-        ) : null}
+        <p
+          className={cn(
+            "text-[11px]",
+            isActive && "text-orange-400/90",
+            isCompleted && "text-slate-400",
+            isLocked && "text-slate-500/70"
+          )}
+        >
+          {session.subtitle}
+        </p>
       </motion.div>
     </motion.div>
   )
