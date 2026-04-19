@@ -10,6 +10,10 @@ import {
   getMapLines,
   type SessionNodeDisplay,
 } from "@/app/app/(tabs)/home/_components/reset-map-v2/session-node-display"
+import {
+  resolveViewportSafePlacement,
+  type SessionNodePlacement,
+} from "./session-node-layout"
 
 interface DonorSession {
   id: number
@@ -72,100 +76,7 @@ const ROUTE_SAMPLES = 120 // Dense points for smooth curved path
 const RIGHT_PANEL_OFFSET = 42 // Right panels slightly closer (shifted left)
 const LEFT_PANEL_OFFSET = 62 // Left panels slightly further out (shifted left from road)
 
-const SAFE_EDGE_INSET = 18
-const NODE_LABEL_GAP = 12
-const INLINE_LABEL_MIN_WIDTH = 96
-const INLINE_LABEL_MAX_WIDTH = 132
-const STACKED_LABEL_MIN_WIDTH = 132
-const STACKED_LABEL_MAX_WIDTH = 168
-const MAX_NODE_DIAMETER = 46
-
 const round = (n: number) => Math.round(n * 100) / 100
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
-
-type SessionNodeLayoutMode = "side-inline" | "stacked-below"
-
-type SessionNodePlacement = {
-  nodeX: number
-  nodeY: number
-  labelSide: "left" | "right"
-  layoutMode: SessionNodeLayoutMode
-  labelWidth: number
-  labelAlign: "left" | "right" | "center"
-}
-
-function resolveVisibleCanvasBounds(containerWidth: number | null) {
-  const visibleWidth = clamp(containerWidth ?? CANVAS_WIDTH, 260, CANVAS_WIDTH)
-  const sideCrop = Math.max(0, (CANVAS_WIDTH - visibleWidth) / 2)
-  return {
-    safeLeft: sideCrop + SAFE_EDGE_INSET,
-    safeRight: CANVAS_WIDTH - sideCrop - SAFE_EDGE_INSET,
-    visibleWidth: visibleWidth - SAFE_EDGE_INSET * 2,
-  }
-}
-
-function resolveViewportSafePlacement(
-  anchor: SessionAnchor,
-  preferredSide: "left" | "right",
-  containerWidth: number | null
-): SessionNodePlacement {
-  const { safeLeft, safeRight, visibleWidth } = resolveVisibleCanvasBounds(containerWidth)
-  const nodeHalf = MAX_NODE_DIAMETER / 2
-  const inlineMin = INLINE_LABEL_MIN_WIDTH
-  const inlineMax = INLINE_LABEL_MAX_WIDTH
-
-  const tryInline = (side: "left" | "right"): SessionNodePlacement | null => {
-    if (side === "right") {
-      const maxNodeX = safeRight - nodeHalf - NODE_LABEL_GAP - inlineMin
-      if (maxNodeX < safeLeft + nodeHalf) return null
-      const nodeX = clamp(anchor.x, safeLeft + nodeHalf, maxNodeX)
-      const labelWidth = Math.min(
-        inlineMax,
-        Math.max(inlineMin, safeRight - (nodeX + nodeHalf + NODE_LABEL_GAP))
-      )
-      return {
-        nodeX,
-        nodeY: anchor.y,
-        labelSide: "right",
-        layoutMode: "side-inline",
-        labelWidth,
-        labelAlign: "left",
-      }
-    }
-
-    const minNodeX = safeLeft + nodeHalf + NODE_LABEL_GAP + inlineMin
-    if (minNodeX > safeRight - nodeHalf) return null
-    const nodeX = clamp(anchor.x, minNodeX, safeRight - nodeHalf)
-    const labelWidth = Math.min(
-      inlineMax,
-      Math.max(inlineMin, nodeX - nodeHalf - NODE_LABEL_GAP - safeLeft)
-    )
-    return {
-      nodeX,
-      nodeY: anchor.y,
-      labelSide: "left",
-      layoutMode: "side-inline",
-      labelWidth,
-      labelAlign: "right",
-    }
-  }
-
-  const preferred = tryInline(preferredSide)
-  if (preferred) return preferred
-
-  const opposite = tryInline(preferredSide === "right" ? "left" : "right")
-  if (opposite) return opposite
-
-  const stackedWidth = clamp(visibleWidth - 12, STACKED_LABEL_MIN_WIDTH, STACKED_LABEL_MAX_WIDTH)
-  return {
-    nodeX: clamp(anchor.x, safeLeft + stackedWidth / 2, safeRight - stackedWidth / 2),
-    nodeY: anchor.y,
-    labelSide: "right",
-    layoutMode: "stacked-below",
-    labelWidth: stackedWidth,
-    labelAlign: "center",
-  }
-}
 
 // Parametric curve: road rises through center of canvas, gentle S-curves
 // Returns { x, y } for t in [0, 1], bottom to top
@@ -370,23 +281,36 @@ export function ResetMap({
     [total, completed, currentSession, nodeDisplayBySession]
   )
 
+  const effectiveContainerWidth =
+    containerWidth != null && containerWidth > 0 ? containerWidth : 360
+
+  const sessionPlacements = useMemo((): (SessionNodePlacement | null)[] => {
+    if (!sessionAnchors?.length) return []
+    return sessionAnchors.map((anchor, index) => {
+      const session = sessions[index]
+      if (!session) return null
+      const isActive = session.status === "active"
+      const isCompleted = session.status === "completed"
+      const nodeR = isActive ? 23 : isCompleted ? 20 : 17.5
+      return resolveViewportSafePlacement({
+        baseNodeX: anchor.x,
+        baseNodeY: anchor.y,
+        preferredLabelSide: anchor.side === 1 ? "right" : "left",
+        containerWidthPx: effectiveContainerWidth,
+        canvasWidthPx: CANVAS_WIDTH,
+        title: session.title,
+        subtitle: session.subtitle,
+        nodeRadiusPx: nodeR,
+      })
+    })
+  }, [sessionAnchors, sessions, effectiveContainerWidth])
+
   const mainPathRef = useCallback(
     (el: SVGPathElement | null) => {
       if (el) setSessionAnchors(computeAnchorsFromPath(el, total))
     },
     [total]
   )
-
-  const sessionPlacements = useMemo(() => {
-    if (!sessionAnchors || containerWidth == null) return null
-    return sessionAnchors.map((anchor) =>
-      resolveViewportSafePlacement(
-        anchor,
-        anchor.side === 1 ? "right" : "left",
-        containerWidth
-      )
-    )
-  }, [sessionAnchors, containerWidth])
 
   const [isDragging, setIsDragging] = useState(false)
   const dragStartY = useRef(0)
@@ -603,11 +527,11 @@ export function ResetMap({
 
         {/* Session nodes - path-following with viewport-safe final placement */}
         {sessionAnchors?.map((anchor, index) =>
-          sessions[index] && sessionPlacements?.[index] ? (
+          sessions[index] && sessionPlacements[index] ? (
             <SessionNode
               key={sessions[index].id}
               session={sessions[index]}
-              placement={sessionPlacements[index]}
+              placement={sessionPlacements[index]!}
               index={index}
               onTap={
                 onNodeTap
@@ -788,9 +712,9 @@ function SessionNode({
   const isActive = session.status === "active"
   const isLocked = session.status === "locked"
   const position = { x: placement.nodeX, y: placement.nodeY }
-  const labelOnRight = placement.labelSide === "right"
-  const isStacked = placement.layoutMode === "stacked-below"
   const isClickable = !!onTap
+  const labelGap = 10
+  const nodeHalf = isActive ? 23 : isCompleted ? 20 : 17.5
 
   return (
     <motion.div
@@ -868,7 +792,7 @@ function SessionNode({
         </>
       )}
 
-      {/* Node circle - ~12% smaller */}
+      {/* Node circle — center stays at placement (road-safe nodeX/nodeY) */}
       <motion.div
         className={cn(
           "relative flex items-center justify-center rounded-full transition-all",
@@ -900,57 +824,73 @@ function SessionNode({
         {isLocked && <Lock className="w-3 h-3" strokeWidth={2.5} />}
       </motion.div>
 
-      {/* Label — viewport-safe horizontal text block */}
+      {/* Label — absolute from node center; side-inline vs stacked-below */}
       <motion.div
         className={cn(
-          "absolute",
-          isStacked
-            ? "left-1/2 top-full mt-3 -translate-x-1/2"
-            : labelOnRight
-              ? "left-full top-1/2 ml-3 -translate-y-1/2"
-              : "right-full top-1/2 mr-3 -translate-y-1/2"
+          "absolute min-w-0",
+          placement.layoutMode === "stacked-below"
+            ? "left-1/2 top-full mt-2 -translate-x-1/2 text-center"
+            : "top-1/2 -translate-y-1/2",
+          placement.layoutMode !== "stacked-below" &&
+            placement.labelSide === "right" &&
+            "text-left",
+          placement.layoutMode !== "stacked-below" && placement.labelSide === "left" && "text-right"
         )}
-        style={{
-          width: placement.labelWidth,
-          minWidth: placement.layoutMode === "side-inline" ? INLINE_LABEL_MIN_WIDTH : STACKED_LABEL_MIN_WIDTH,
-          maxWidth: placement.labelWidth,
-          textAlign: placement.labelAlign,
+        style={
+          placement.layoutMode === "stacked-below"
+            ? {
+                maxWidth: placement.labelMaxWidth,
+                width: placement.labelMaxWidth,
+                writingMode: "horizontal-tb",
+              }
+            : placement.labelSide === "right"
+              ? {
+                  left: `calc(50% + ${nodeHalf + labelGap}px)`,
+                  maxWidth: placement.labelMaxWidth,
+                  writingMode: "horizontal-tb",
+                }
+              : {
+                  right: `calc(50% + ${nodeHalf + labelGap}px)`,
+                  maxWidth: placement.labelMaxWidth,
+                  writingMode: "horizontal-tb",
+                }
+        }
+        initial={{
+          opacity: 0,
+          x: placement.layoutMode === "stacked-below" ? 0 : placement.labelSide === "right" ? -8 : 8,
+          y: placement.layoutMode === "stacked-below" ? -6 : 0,
         }}
-        initial={{ opacity: 0, x: isStacked ? 0 : labelOnRight ? -8 : 8, y: 0 }}
         animate={{ opacity: 1, x: 0, y: 0 }}
         transition={{ delay: index * 0.03 + 0.7 }}
       >
         <p
           className={cn(
-            "text-[10px] font-medium tabular-nums leading-tight",
+            "text-[10px] font-medium tabular-nums leading-tight break-keep",
             isActive && "text-orange-400",
             isCompleted && "text-slate-300",
             isLocked && "text-slate-500"
           )}
-          style={{ whiteSpace: "normal", wordBreak: "keep-all", overflowWrap: "anywhere" }}
         >
           세션 {session.id}
         </p>
         <p
           className={cn(
-            "mt-0.5 text-sm font-semibold leading-tight",
+            "text-sm font-semibold leading-snug break-keep break-words line-clamp-2",
             isActive && "text-orange-500",
             isCompleted && "text-white/95",
             isLocked && "text-slate-400"
           )}
-          style={{ whiteSpace: "normal", wordBreak: "keep-all", overflowWrap: "anywhere" }}
         >
           {session.title}
         </p>
         {session.subtitle ? (
           <p
             className={cn(
-              "mt-0.5 text-[11px] leading-tight",
+              "text-[11px] leading-snug break-keep break-words line-clamp-2",
               isActive && "text-orange-400/90",
               isCompleted && "text-slate-400",
               isLocked && "text-slate-500/70"
             )}
-            style={{ whiteSpace: "normal", wordBreak: "keep-all", overflowWrap: "anywhere" }}
           >
             {session.subtitle}
           </p>
