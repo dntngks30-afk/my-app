@@ -1,0 +1,955 @@
+{
+  "plan_version": 1,
+  "run_mode": "apply",
+  "generated_at": "2026-04-18T19:32:46.800Z",
+  "manifest_path": "ops\\template-media\\template-refresh-2026-04.json",
+  "ledger_path": "ops\\template-media\\template-refresh-2026-04.mux-upload-result.json",
+  "attach_verify_path": "ops\\template-media\\template-refresh-2026-04.attach-verify.json",
+  "allowlist_path": "ops\\template-media\\template-refresh-2026-04.legacy-delete-allowlist.json",
+  "mux_assets_listed": 72,
+  "keep_asset_count": 48,
+  "keep_playback_count": 48,
+  "summary": {
+    "candidate": 24,
+    "kept": 48,
+    "excluded": 0
+  },
+  "rows": [
+    {
+      "asset_id": "zByT4oR2g7n8jXTithuZ69lU01lxjtWkw02Q2KkJCeydM",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M48",
+      "playback_ids": [
+        "pEmuhqODInFk02NXgWwIRoVfcAqoSw9kW65R2pK5jsYY"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M48",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "R6I96DE8yAu2nd007JBTeFjKgeZPuJygMIff8qcribJ8",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M47",
+      "playback_ids": [
+        "lYCeCeVcurYwtiVMRuKNedwIkyav6KMSmzW2dknKXkQ"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M47",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "T5WKOXm5RkpAJc7KC8Rwz5UOUq02bTkWpN57ikUTjhvY",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M46",
+      "playback_ids": [
+        "DLWNxAE3HV2Vc00IL1c7XNQLoxjiiJyribg01WNRH3VeE"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M46",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "s72XkPLEFoRfXNMujhQ00ure6uVPlSptr8AaTQe3QiTU",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M45",
+      "playback_ids": [
+        "kYyK31L6Yu0274dUssVDn8K8cZh3ZIHuRq6W5UUOJo1I"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M45",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "u9DjuohNuUiAywlPk3hEYzshrqXeWhvEcgYO4PZ7jY00",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M44",
+      "playback_ids": [
+        "8S8apr3STr4hFtayRxXCFsis0102ccDxwYfqNLY01slpZQ"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M44",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "cEe029FJJR5ewy5h8d7RZ98sIS4p9YZA4CoPSdhqoniA",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M43",
+      "playback_ids": [
+        "bxU7Afva77SOtipSaDBuFx00z00HIHES009nfWTqX9Kdlk"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M43",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "tMtcbyxFODWyd7gFV1hdtJDlPunVKTYDKfHYQYGyjdk",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M42",
+      "playback_ids": [
+        "RsmiyyT6G01r02flFqGtKL02E9Cb00bIO02b6YOVxhlJoNvI"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M42",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "1F1adkVrFceqEBh6602K02u57gxzutjgO2uu2O5xUC2KY",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M41",
+      "playback_ids": [
+        "00SfJpc7aiTtBBBcwJ6jL7ZgVW01xIZr7N6vWmRT7moew"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M41",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "ZmRKpSW5PAi2OPutpjcKiAO3aPJLV8QWWOLuMKLf6y4",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M40",
+      "playback_ids": [
+        "NlDJhPtv9HHfrpOVhnvjH7EOxV9IjKwPfHWTKevwEuw"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M40",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "nAyocfrJPIUiQdClH3a9qVDGCjKeNqCMPnAR58eINg8",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M39",
+      "playback_ids": [
+        "bsaEI00hC7IvXGUsloWteHKT2W1moepWl02TCxS02Zq1kI"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M39",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "Rqdak1MFeLe2tmJElw5leF02NBh7vUSaRIUI01cl9gWTo",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M38",
+      "playback_ids": [
+        "ueTFlpPgTtODxU4W1LNd00uMnae2UxrI7KuE5602Cqszs"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M38",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "mntBvyU67DEk2rTjlYPNPpbMk9SqbuJrFx02fljd00HGo",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M37",
+      "playback_ids": [
+        "MVNA2txXsa6jAYsbkAZ8uvc02aXwhS01VD00JVclDg007rE"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M37",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "yHcMpTjdUz4M539sKwi6L5sEjim5ShbC6Rj1iAktBMU",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M36",
+      "playback_ids": [
+        "kKTBRHlaJ4NhTgyIAhEveStWwK00A02kbjYWcgEhDJFsY"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M36",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "qCVNBIVUE145q9jUuhAvr02IH2YSX01fp0063i2r01Bw6q4",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M35",
+      "playback_ids": [
+        "TzrCuX2GD4EqRqzSP9EHRTCpDTPksyJb01JuH4NdBEhQ"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M35",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "D3D28V4urFyrWKXUxYmTTQwM02SJre59KZbeva02Um9Iw",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M34",
+      "playback_ids": [
+        "JvCEfzyxi00yTSGoTl802JPzLaou1Eye500wpy96KOuXzA"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M34",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "36uS6hnT2uin1fIePE5JzQSswCygI02OCDkjMy018tb9w",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M33",
+      "playback_ids": [
+        "JYXNtYpTIghPd4H4pR1Py3AImGPOevil3lDvdIH3QRY"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M33",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "KTz391v3gszqB9rrvJxq00xKTcSxfVC1G1FQ02MgmVD8w",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M32",
+      "playback_ids": [
+        "iLCTtTS0002pMXvxhIcnbsJbNPuZizka3QmqtsWhTunf00"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M32",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "avmfse6m02Tf01kWROxsJOQqyzahN4wL7SRfPGnGp4Uwc",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M31",
+      "playback_ids": [
+        "b4Zza2CB4E9F689WuYUhgJm001p7tU77T3CU5HIFGU02A"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M31",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "qfTmXkWV9qMXjL5KL5qe7SACuEjS3IrA8OtbrGIdLYk",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M30",
+      "playback_ids": [
+        "MztME8fsnBcKnfNh1rVouPMDLbvaj8zFAlyDbpRyeKI"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M30",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "KsHOWnMqEo005IvzhpFjrmDmz6NiWY1sLIDp02aaK00j1w",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M29",
+      "playback_ids": [
+        "mHk02QPk9ss1BH1B6q8xXb00kqLAp1iaZJKLNBai3sUSk"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M29",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "aR9sr02tbCgTyV9K3lYJ3SYb6pMGtZKMxc1zv300BLQ44",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M28",
+      "playback_ids": [
+        "X5gtS8MXSsOJUjYBhYvfq8OQ2MawVqDjLdURsal6mxQ"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M28",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "IdCOZmQbBr4X9NcoZD3zRDXYpHZ1uJRoOCiYi02oPhX8",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M27",
+      "playback_ids": [
+        "NrBiPQiFjdhEMvpddIW111jQV4awrxFCqXKyUV24xig"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M27",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "2UfR9iQ3R0115EdLys300spHdP9bD55jq5HbjXoCLjwfw",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M26",
+      "playback_ids": [
+        "gIeF27pSHW3remS5pRVfPLN5ryBbdBXo6UkrtN1IxuY"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M26",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "4u4BIDsgiRpTFSZVTFPegwXdGgNyCDyzVMNvDLp9Vkc",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M25",
+      "playback_ids": [
+        "F9802t1W2w6Xuf00MmIw7roy6QVoNoa5UShcd1XP01MOXw"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M25",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "vjQLhPVmOPI9hzLqpHDB58dlO00P02EonwNDenNu02kqZQ",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M24",
+      "playback_ids": [
+        "jf3t5AUNanRgcJljK02sEVs8hMLhVwkuPtUSGLIxWpF4"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M24",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "Jq02c00Q7OrZImaPHIO5SsFbK8NB7T6Rqh01LDEpeClxuQ",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M23",
+      "playback_ids": [
+        "y2gCUnjwUF18mhlNQCg7YmKiplIdqQxLiqFd2laX5TE"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M23",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "02K13wFSFO31rHYqj01x2YRRZDp9Bx7vaKBwFnqAL7gNc",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M22",
+      "playback_ids": [
+        "M01fwgC5apc7lkRh7mGMrUE8x6QTommMpcnmppRxLx3U"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M22",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "Bi9nQzKRGWVfgJsmGYbrjZAQPWZgmtzd02jt1sbfkSbI",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M21",
+      "playback_ids": [
+        "rXlFRxzMLUWdvoPxYMIqmNVsjFm01VIJjN7xFjqlnqmo"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M21",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "nvGkXPNHRsVVR00gZ5d3jPG6G1bAKXeJ9eSEz1wCBRCc",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M20",
+      "playback_ids": [
+        "t4EaUH0001ovfLQ00a7L58b2wKjoqb6YCRgltpidKknpS4"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M20",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "Laa01lJrJGC8wksX6t02dl9aT1wFxVOAfIiJFX3WYqkuM",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M19",
+      "playback_ids": [
+        "ck00SzOENTML01n02hh7Cz0268kHvG55w65yZwnF7802JXMM"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M19",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "vql3LecBXL8TrroB01A89YCLPPfyuAXYf9EQ4q4mGZK00",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M18",
+      "playback_ids": [
+        "ZpmnA502nM01Wt5Y2l6LzIt01xeoGQ3yzoobaFVaLXTxQI"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M18",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "SVRdXLUbPzQ3hgcwSPQD9dnU2NNQGTwfE2JjnBskIQs",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M17",
+      "playback_ids": [
+        "02BbGnEwOW6aiQ00IZYN3UezS12AlToJHv7RXeLKep9fk"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M17",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "01OMOw41zSEWGOm02RunolkQ1T02dP82w3jHn2GsR02Rdk4",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M16",
+      "playback_ids": [
+        "hIy01IZxOAkxzWuYjydNPi1gqVuckd1btUWAZJ2yVrBM"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M16",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "DrAbNVMs7kcKTPEhTSZ6ESrXjaH4JOYvic023fVR3gWs",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M15",
+      "playback_ids": [
+        "pefMEXLh7I7x91PqgmN201c1GgEAQ9AAP25bQehwR02VY"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M15",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "z2kMgH00WN9gg1fpC16iRj01LABAy7lgm02EQH200tDgUo8",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M14",
+      "playback_ids": [
+        "aPki02vBR1pp00pE6UmEh4PjjtPCHbejg9cvDJEnvwLE4"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M14",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "yOCgFDkZBjdx8qd9Rh2U9sTlNRVXBPTbKrxK00u01clqY",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M13",
+      "playback_ids": [
+        "L02SiAN1k6kjJzr01sr008WIj3duOcDvmP1EVJTqSRxw01k"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M13",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "tTFZ00Y5w8vyFtI55vGSXtefDxbUYUpXl02csn82xk01DQ",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M12",
+      "playback_ids": [
+        "P2VH3kb4A6OTMSj99PtnRhQqDiHlPLwuLLbwrU01enFA"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M12",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "eRaYsIGF5TTFzeI46QfNAvraRkskVcD4r00gtbeSAuRg",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M11",
+      "playback_ids": [
+        "5inv9RVLU3XgW5hwZsw01004Wz7mvCgQIauGcFv6jxRY8"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M11",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "R1fPzEkgyLFn79lhjIZj9TbiXyQ9WU3jvO5IQoik4aE",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M10",
+      "playback_ids": [
+        "as5zRu3L6v5qt00IzdX4KvS736M4eWvX02h531hElSZJs"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M10",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "WwNGwRmC76haAQ7OAJGvrtx00YDGKJqOeNCTRwl8qsKc",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M09",
+      "playback_ids": [
+        "4IbfMhmQMBm8T01dOWarqInZUS38oKDGvOfSYeNyNz0200"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M09",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "8mysPVEB5GFKWZa00tFOlX4d5Fb007Hu6Unu28Sf3ANkU",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M08",
+      "playback_ids": [
+        "JnwnPu00NXd3X2S8jv2qt01McXLP02ce3sL5UhfwofSzX00"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M08",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "86SLhU019khw1cyFWv2VOGuoBKpJ9awyjVL7cg00e9LIA",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M07",
+      "playback_ids": [
+        "wSnNGNtQvEvrijGJjECXfTIFxeGnFOkUviKqa02Wi00tY"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M07",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "gfybR1Ngctc98fiMNeY4Gn5mZORMRWrEtRsbpyBKn5Q",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M06",
+      "playback_ids": [
+        "z2ShH66815Ws49WpOGdqQ8gPAbjKSke6HJh5lFkXVLY"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M06",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "hrpCdar4Ph172hod1Ktjd7QKremvfbpQgIKt7txzzUg",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M05",
+      "playback_ids": [
+        "qN3EtU6b8vEmDJqE1F3Y01VYoOq5hHnc9gZ00zvCSH3Wc"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M05",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "9dNL20034OcslHRAgd026dL021Ok2fcD02oaBqtGUHOdaQE",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M04",
+      "playback_ids": [
+        "c2GtWlvuOcrxg9hrZg00g49aVZBFA2kdqoL0201pA2zxAA"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M04",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "tcwR1K560293x028axwxFOMUOtcNdC6KoCuvOIC8hLA7c",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M03",
+      "playback_ids": [
+        "6KpSs00SVRVe3WXdJVMAeNLEPpMkQrNzcPciSds00X4Cc"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M03",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "Zj02z4W5kiCQYoBH8pLLOMBRxo00Q2hB01tdjjigHwJU00c",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M02",
+      "playback_ids": [
+        "CeFjwZTebSpcPPiNQOMxoFgWzOkApYtI7AJ01c2AyWCU"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M02",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "ZMCKIvao8aDKA8uA5pZ02FlChIjPJsAEKdLDt5d3o601M",
+      "status": "kept",
+      "reason": "asset_id in keep-set",
+      "passthrough": "M01",
+      "playback_ids": [
+        "9rrShxjQ3i1IYVpiq9P00rsTprivbLS6ibZR8uqaNqn8"
+      ],
+      "in_keep_asset_set": true,
+      "in_keep_playback_set": true,
+      "matched_template_id": "M01",
+      "allowlist_matched": false
+    },
+    {
+      "asset_id": "VPFZlbYd202tYGAeMUnO02EM2QX66tKvutDYFLSSKIAb8",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "00dAU5Ac91VEEEh02oh8fi7HK00PUOt2LtWUFmmmBZqRW8"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "3XdyE16XPpgcYpV2wx9T1jpNhXxhwyFFwwggNb1rgN00",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "p5KBD51eGu1A5WA7CN6PbFovfzHUukwbJntHgX14P1c"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "8Yy9f55NtpWsK5XeyqXCYOaRvvZ6r3Ff02Hwgg4QgcpY",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "s8kqlAhLKDwBzJ4SJAVRIB9KznI3oPfGeJ9oEcRFiDk"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "4HBEXBjKNnSpuPdSIIHRIgv02qikg5w9at63Yra1I1024",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "JfGTjfy39tq4NiRbi6o011f9a02ZLYtqbyu7ndH1g01Ujk"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "NAewD3x01rpGdDqFjCtttP001pOUSciV9MFss6wqUbe02c",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "01f00GZtlHQKgol3ulXbOk00x02SR4a1sbFzkIcBKg5Cv3g"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "e02011yHLvcjA7g7NOahRsaVVJoC5KGTokZWnkq2n91N00",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "pCvnASoKTXkvOZ8pBe00yqepWIUB2R1toZuuGdVRwgPg"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "500JYaJSr6gemF01mykivfxhBUikAWcALMp3ljww2lk8I",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "Dcn02TwwBvd1zVYjcQ02F5b61VPS4dOUYdQr4CBxhv7iA"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "Omv00lj006SPLmdYb00ApoNSRs5QoquoLRKrNk01IMZtE44",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "iBUzsp2llVGqkyBR1zRF01m2pkNejVO008VBBGgteSM3I"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "uvMsMTpW901n28BliCgdZzyfifnVSJfVFAQjdEDv9ROg",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "afgF00KnOc9LzEA5Px004w4RbjfFXnyyQGgsCADx01FpAc"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "vSBjSdTC8ZdF1SNbRcv00rUs1DNuQM4E3CrqGccrbnzI",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "x1UbDa00CCf5fTt011AB1Z55PvKl785zAMZj5JflyjwQc"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "uOPQRf2ImM9zaFcYElyOBhL0002A69o01xU20096chTOxYQ",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "2HDI33YPyHmOXpjqhtCZmdNoDuTdS7wRot89O00nzLEg"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "s1tNKA2ZLMrbJnt9A802GulgeZ4TJZc3XJAOES01F18Bo",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "6xdFBF2JMdWM2GVk7bjVXMm9AEomUUYr4AHuvHrGJhA"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "UT79pAhGpuuJYF7EAmP400TH00TaLpTBtKeIfuRUDm5cI",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "wRALo1EUlOsvPX8o3P9Tf2z02FxTjO02pjWq1FcQMNZGs"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "tb7b0201JdOxgyx9eOVU6t6KZMtYzykz1rtb9oy00amYSg",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "jaYYFz9JsI8dO1dogHyHqpZmmsgjRh02LFCECwoZk9OI"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "CrT5rbfxKk8AgYD0002rWuMljI3umCVIF6iR5OSUcVhEY",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "j00tQkJm42Jccf7nn6JW1p96cwyjz7OlH9Cq7Joz7Hu8"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "IRNG00bCCwyHTEDBSOLfp9eZRlJBCWIpTgPjgzb58D01w",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "q81ZZxh202yGfuf1j4LIgiT2jCoZfkjGLYb004kQuc00ew"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "oDo00COzs989YAYqXG611XhOVXSkdShjVPuvhSR3IZkU",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "Y6qsJktkuF2vpPFwBSU4YIZ6QoDMl5LWZ2013fal3GfA"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "lSa0201fXajpyQmak9602T5ZHktoP16pmW02bblNItRWvtw",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "jmx6rXH300sSDFaehcNspwxNmEuddTOb02fInjyGZQ02xc"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "Ay4OphUfcn1mutv5nAjcQHsRsY1xHt501Q7vYlx00tqwE",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "Q00jcpxZx8n7Ip01bWksDbV800J6T6RrhOJqXRAHobK2024"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "ysHYDW2qWev8znxvjI4GKwP85LvrQLG2QSN5ALmhkFA",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "OsfjacXvg02ekYIvNcCl1tGKCl02uJqMP2Js3qWRGP200k"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "TizsVDUgxAPxnH1oMUzpA02tQfsh8hAMXVfUn9CTtVWs",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "9Q43KDBVA2d6BDm01asw6lOEQn3Vvf47hAdIFKTrnLsM"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "XkHR84cMrmxX5n4Myvn3902CygXBwxlb2jQ5W4rF4zR8",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "f4cYCfcXi5rCMFHXEIcysArppsZwsLGrQodOUho4IXw"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "01EIg00L2lZv2usbVnSMt402vmtFkvTeN3RVwLn5K00ANCo",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "jFrs63Q4fhR1lt2upfA3MbC22iyli2GMQgFFi9FaqJw"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    },
+    {
+      "asset_id": "bzXDQ97VDQVxdUrfnQE8OPhVruVsA2azOb0102VxJDzmo",
+      "status": "candidate",
+      "reason": "allowlist only",
+      "passthrough": null,
+      "playback_ids": [
+        "4xbU2JpENHR01nGWJrpajHs0000PcrPY96VgKh1NBehYrM"
+      ],
+      "in_keep_asset_set": false,
+      "in_keep_playback_set": false,
+      "matched_template_id": null,
+      "allowlist_matched": true
+    }
+  ]
+}

@@ -1,7 +1,6 @@
 /**
  * Viewport-safe placement for donor home reset map nodes (presentation only).
- * Geometry ownership stays with SVG path sampling in reset-map.tsx; this module
- * resolves final node + label footprint against measured container width.
+ * Prioritizes horizontal-readable Korean labels and full node+label containment.
  */
 
 export type SessionNodeLayoutMode = "side-inline" | "stacked-below"
@@ -11,23 +10,36 @@ export type SessionNodePlacement = {
   nodeY: number
   labelSide: "left" | "right"
   layoutMode: SessionNodeLayoutMode
+  /** Fixed box width: min === max so text never collapses to a vertical column */
+  labelMinWidth: number
   labelMaxWidth: number
   labelAlign: "left" | "right" | "center"
+  /** Dev manual override: extra label translation in canvas px (after auto placement) */
+  labelOffsetX?: number
+  labelOffsetY?: number
 }
 
 const DEFAULT_SAFE_INSET = 16
 const DEFAULT_LABEL_GAP = 10
-const DEFAULT_MAX_LABEL = 112
-/** ~8–9자 한글 가로 줄이 유지되도록 하는 하한; 이보다 좁으면 한 글자씩 세로처럼 보일 수 있음 */
-const READABLE_HORIZONTAL_LABEL_MIN_PX = 96
-/** 뷰포트가 매우 좁을 때만 허용하는 최소값(가독성 타협) */
-const ABSOLUTE_LABEL_WIDTH_FLOOR_PX = 72
+/** Upper cap; real width is min(this, safe zone minus node+gap) */
+const LABEL_WIDTH_CAP_PX = 168
+/**
+ * 한글 2~4음절(안정·하체 등)이 한 줄로 읽히게 할 최소 박스 폭.
+ * 이보다 좁으면 글자가 줄마다 1음절씩만 서서 세로처럼 보이기 쉽다.
+ */
+const READABLE_HORIZONTAL_LABEL_MIN_PX = 128
+/** 뷰포트가 매우 좁을 때만 허용하는 최저값(그래도 keep-all + 다줄 가로) */
+const ABSOLUTE_LABEL_WIDTH_FLOOR_PX = 96
 
-function readableLabelFloorPx(safeCanvasSpan: number): number {
-  const capByViewport = Math.max(0, safeCanvasSpan - 8)
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n))
+}
+
+function readableFloorForSafeSpan(safeCanvasSpan: number): number {
+  const room = Math.max(0, safeCanvasSpan - 12)
   return Math.min(
-    DEFAULT_MAX_LABEL,
-    Math.max(ABSOLUTE_LABEL_WIDTH_FLOOR_PX, Math.min(READABLE_HORIZONTAL_LABEL_MIN_PX, capByViewport))
+    LABEL_WIDTH_CAP_PX,
+    Math.max(ABSOLUTE_LABEL_WIDTH_FLOOR_PX, Math.min(READABLE_HORIZONTAL_LABEL_MIN_PX, room))
   )
 }
 
@@ -49,7 +61,7 @@ export function getSafeHorizontalCanvasBounds(
   }
 }
 
-/** Conservative width estimate for wrapped primary + subtitle (Korean-friendly). */
+/** Desired label column width from copy, capped by budget (horizontal reading). */
 export function estimateLabelBlockWidth(
   title: string,
   subtitle: string,
@@ -57,8 +69,8 @@ export function estimateLabelBlockWidth(
 ): number {
   const cap = Math.max(0, maxWidth)
   const innerFloor = Math.min(ABSOLUTE_LABEL_WIDTH_FLOOR_PX, cap)
-  const titleW = Math.min(cap, Math.max(innerFloor, title.length * 11))
-  const subW = Math.min(cap, Math.max(innerFloor, subtitle.length * 10))
+  const titleW = Math.min(cap, Math.max(innerFloor, title.length * 12))
+  const subW = Math.min(cap, Math.max(innerFloor, subtitle.length * 11))
   return Math.min(cap, Math.max(titleW, subW, innerFloor))
 }
 
@@ -80,7 +92,6 @@ function footprintStacked(nodeX: number, nodeR: number, labelW: number): { left:
   return { left: nodeX - half, right: nodeX + half }
 }
 
-/** Single horizontal shift so footprint fits [safeLeft, safeRight], or null if too wide. */
 function bestShiftForFootprint(
   fp: { left: number; right: number },
   safeLeft: number,
@@ -94,10 +105,64 @@ function bestShiftForFootprint(
   return sHi
 }
 
+function tryInlinePlacement(
+  baseNodeX: number,
+  baseNodeY: number,
+  nodeR: number,
+  gap: number,
+  lw: number,
+  side: "left" | "right",
+  safeLeft: number,
+  safeRight: number
+): SessionNodePlacement | null {
+  let lo: number
+  let hi: number
+  if (side === "right") {
+    lo = safeLeft + nodeR
+    hi = safeRight - nodeR - gap - lw
+  } else {
+    lo = safeLeft + nodeR + gap + lw
+    hi = safeRight - nodeR
+  }
+  if (lo > hi) return null
+  const nodeX = clamp(baseNodeX, lo, hi)
+  return {
+    nodeX,
+    nodeY: baseNodeY,
+    labelSide: side,
+    layoutMode: "side-inline",
+    labelMinWidth: lw,
+    labelMaxWidth: lw,
+    labelAlign: side === "right" ? "left" : "right",
+  }
+}
+
+function tryStackedPlacement(
+  baseNodeX: number,
+  baseNodeY: number,
+  nodeR: number,
+  lw: number,
+  preferredLabelSide: "left" | "right",
+  safeLeft: number,
+  safeRight: number
+): SessionNodePlacement {
+  const fp0 = footprintStacked(baseNodeX, nodeR, lw)
+  const shift = bestShiftForFootprint(fp0, safeLeft, safeRight) ?? 0
+  const nodeX = baseNodeX + shift
+  return {
+    nodeX,
+    nodeY: baseNodeY,
+    labelSide: preferredLabelSide,
+    layoutMode: "stacked-below",
+    labelMinWidth: lw,
+    labelMaxWidth: lw,
+    labelAlign: "center",
+  }
+}
+
 export type ResolveViewportSafePlacementInput = {
   baseNodeX: number
   baseNodeY: number
-  /** Preferred label side: 'right' = label sits to the right of the node (donor rhythm). */
   preferredLabelSide: "left" | "right"
   containerWidthPx: number
   canvasWidthPx: number
@@ -124,7 +189,7 @@ export function resolveViewportSafePlacement(
   } = input
   const safeInset = input.safeInsetPx ?? DEFAULT_SAFE_INSET
   const gap = input.labelGapPx ?? DEFAULT_LABEL_GAP
-  const labelCap = input.maxLabelWidthPx ?? DEFAULT_MAX_LABEL
+  const labelCap = input.maxLabelWidthPx ?? LABEL_WIDTH_CAP_PX
 
   const { safeLeft, safeRight } = getSafeHorizontalCanvasBounds(
     containerWidthPx,
@@ -133,70 +198,81 @@ export function resolveViewportSafePlacement(
   )
   const safeW = Math.max(0, safeRight - safeLeft)
   const nodeR = Math.max(17.5, nodeRadiusPx)
-  const readableFloor = readableLabelFloorPx(safeW)
-  let labelW = estimateLabelBlockWidth(
-    title,
-    subtitle,
-    Math.min(labelCap, Math.max(readableFloor, safeW - nodeR * 2 - gap))
-  )
+  const readableFloor = readableFloorForSafeSpan(safeW)
 
-  const tryInline = (side: "left" | "right"): SessionNodePlacement | null => {
-    const fp0 = footprintInline(baseNodeX, nodeR, gap, labelW, side)
-    const shift = bestShiftForFootprint(fp0, safeLeft, safeRight)
-    if (shift === null) return null
-    const nodeX = baseNodeX + shift
-    return {
-      nodeX,
-      nodeY: baseNodeY,
-      labelSide: side,
-      layoutMode: "side-inline",
-      labelMaxWidth: labelW,
-      labelAlign: side === "right" ? "left" : "right",
-    }
+  /** Max horizontal span for label when node+label share one row */
+  const inlineLabelBudget = Math.max(0, safeW - 2 * nodeR - gap)
+  const stackedLabelBudget = Math.max(0, safeW - 12)
+
+  const opposite = (s: "left" | "right"): "left" | "right" => (s === "right" ? "left" : "right")
+
+  const attemptInline = (lw: number): SessionNodePlacement | null => {
+    if (lw > inlineLabelBudget + 1e-6) return null
+    const a =
+      tryInlinePlacement(baseNodeX, baseNodeY, nodeR, gap, lw, preferredLabelSide, safeLeft, safeRight) ??
+      tryInlinePlacement(baseNodeX, baseNodeY, nodeR, gap, lw, opposite(preferredLabelSide), safeLeft, safeRight)
+    return a
   }
 
-  const opp: "left" | "right" = preferredLabelSide === "right" ? "left" : "right"
-  let result = tryInline(preferredLabelSide) ?? tryInline(opp)
+  let result: SessionNodePlacement | null = null
 
-  if (!result) {
-    labelW = estimateLabelBlockWidth(
-      title,
-      subtitle,
-      Math.min(labelCap, Math.max(readableFloor, safeW - 8))
-    )
-    result = tryInline(preferredLabelSide) ?? tryInline(opp)
-  }
+  if (inlineLabelBudget >= readableFloor) {
+    const cap = Math.min(labelCap, inlineLabelBudget)
+    let lw = estimateLabelBlockWidth(title, subtitle, cap)
+    lw = Math.max(readableFloor, Math.min(lw, cap))
 
-  if (!result) {
-    let lw = Math.max(labelW, readableFloor)
-    for (let attempt = 0; attempt < 14; attempt++) {
-      const fp0 = footprintStacked(baseNodeX, nodeR, lw)
-      const shift = bestShiftForFootprint(fp0, safeLeft, safeRight)
-      if (shift !== null) {
-        return {
-          nodeX: baseNodeX + shift,
-          nodeY: baseNodeY,
-          labelSide: preferredLabelSide,
-          layoutMode: "stacked-below",
-          labelMaxWidth: lw,
-          labelAlign: "center",
-        }
+    result = attemptInline(lw)
+
+    if (!result) {
+      let trial = Math.min(lw, inlineLabelBudget)
+      while (trial >= readableFloor) {
+        result = attemptInline(trial)
+        if (result) break
+        trial -= 12
       }
-      if (lw <= readableFloor) break
-      lw = Math.max(readableFloor, lw - 10)
-    }
-    const lastW = Math.max(ABSOLUTE_LABEL_WIDTH_FLOOR_PX, Math.min(readableFloor, safeW - 8))
-    const shift =
-      bestShiftForFootprint(footprintStacked(baseNodeX, nodeR, lastW), safeLeft, safeRight) ?? 0
-    return {
-      nodeX: baseNodeX + shift,
-      nodeY: baseNodeY,
-      labelSide: preferredLabelSide,
-      layoutMode: "stacked-below",
-      labelMaxWidth: lastW,
-      labelAlign: "center",
     }
   }
 
-  return result
+  if (result) return result
+
+  const capStack = Math.min(labelCap, stackedLabelBudget)
+  let stackedLw = estimateLabelBlockWidth(title, subtitle, capStack)
+  stackedLw = Math.min(stackedLw, capStack)
+  if (capStack >= readableFloor) {
+    stackedLw = Math.max(readableFloor, stackedLw)
+  }
+
+  let stacked = tryStackedPlacement(
+    baseNodeX,
+    baseNodeY,
+    nodeR,
+    stackedLw,
+    preferredLabelSide,
+    safeLeft,
+    safeRight
+  )
+  const fp = footprintStacked(stacked.nodeX, nodeR, stackedLw)
+  if (fp.left < safeLeft - 0.5 || fp.right > safeRight + 0.5) {
+    let trial = stackedLw
+    while (trial >= ABSOLUTE_LABEL_WIDTH_FLOOR_PX) {
+      stacked = tryStackedPlacement(
+        baseNodeX,
+        baseNodeY,
+        nodeR,
+        trial,
+        preferredLabelSide,
+        safeLeft,
+        safeRight
+      )
+      const f2 = footprintStacked(stacked.nodeX, nodeR, trial)
+      if (f2.left >= safeLeft - 0.5 && f2.right <= safeRight + 0.5) {
+        stacked.labelMinWidth = trial
+        stacked.labelMaxWidth = trial
+        return stacked
+      }
+      trial -= 12
+    }
+  }
+
+  return stacked
 }

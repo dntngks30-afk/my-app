@@ -1,7 +1,7 @@
 "use client"
 
-import { useRef, useEffect, useState, useCallback, useMemo } from "react"
-import { motion, useSpring, useTransform, useMotionValue, animate } from "framer-motion"
+import { useRef, useEffect, useState, useCallback, useMemo, type PointerEventHandler } from "react"
+import { motion, useSpring, useTransform, useMotionValue, animate, type MotionValue } from "framer-motion"
 import { Check, Lock, Dumbbell } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { sessions as mapDataSessions } from "@/app/app/(tabs)/home/_components/reset-map-v2/map-data"
@@ -10,6 +10,24 @@ import {
   getMapLines,
   type SessionNodeDisplay,
 } from "@/app/app/(tabs)/home/_components/reset-map-v2/session-node-display"
+import {
+  resolveViewportSafePlacement,
+  type SessionNodePlacement,
+} from "./session-node-layout"
+import {
+  MANUAL_NODE_OVERRIDES_FROM_CODE_BY_TOTAL,
+  MANUAL_EDIT_FLAG_STORAGE_KEY,
+  MANUAL_OVERRIDES_STORAGE_KEY,
+  applyManualOverride,
+  coerceManualOverrideTotal,
+  formatOverridesByTotalForClipboard,
+  loadOverridesFromLocalStorage,
+  mergeCodeAndLocalManualOverridesByTotal,
+  mergeManualOverrideSourcesForTotal,
+  saveOverridesToLocalStorage,
+  type ManualNodeOverride,
+  type ManualNodeOverridesByTotal,
+} from "./manual-node-overrides"
 
 interface DonorSession {
   id: number
@@ -243,8 +261,23 @@ export function ResetMap({
   nodeDisplayBySession,
 }: DonorResetMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const canvasMotionRef = useRef<HTMLDivElement | null>(null)
   const [sessionAnchors, setSessionAnchors] = useState<SessionAnchor[] | null>(null)
   const hasInitialScrolled = useRef(false)
+  const [mapEditMode, setMapEditMode] = useState(false)
+  const [manualOverridesByTotal, setManualOverridesByTotal] = useState<ManualNodeOverridesByTotal>({})
+  const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null)
+
+  const overrideBucket = useMemo(() => coerceManualOverrideTotal(total), [total])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const q = new URLSearchParams(window.location.search)
+    const fromUrl = q.get("mapEdit") === "1"
+    const fromLs = window.localStorage.getItem(MANUAL_EDIT_FLAG_STORAGE_KEY) === "1"
+    setMapEditMode(fromUrl || fromLs)
+    setManualOverridesByTotal(loadOverridesFromLocalStorage())
+  }, [])
 
   const sessions = useMemo(
     () =>
@@ -256,6 +289,201 @@ export function ResetMap({
       ),
     [total, completed, currentSession, nodeDisplayBySession]
   )
+
+  const [containerWidth, setContainerWidth] = useState<number | null>(null)
+
+  useEffect(() => {
+    const node = containerRef.current
+    if (!node) return
+
+    const updateWidth = () => {
+      setContainerWidth(Math.round(node.getBoundingClientRect().width))
+    }
+    updateWidth()
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth)
+      return () => window.removeEventListener("resize", updateWidth)
+    }
+    const observer = new ResizeObserver(() => updateWidth())
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+
+  const effectiveContainerWidth =
+    containerWidth != null && containerWidth > 0 ? containerWidth : 360
+
+  const sessionPlacements = useMemo((): (SessionNodePlacement | null)[] => {
+    if (!sessionAnchors?.length) return []
+    return sessionAnchors.map((anchor, index) => {
+      const session = sessions[index]
+      if (!session) return null
+      const isActive = session.status === "active"
+      const isCompleted = session.status === "completed"
+      const nodeR = isActive ? 23 : isCompleted ? 20 : 17.5
+      return resolveViewportSafePlacement({
+        baseNodeX: anchor.x,
+        baseNodeY: anchor.y,
+        preferredLabelSide: anchor.side === 1 ? "right" : "left",
+        containerWidthPx: effectiveContainerWidth,
+        canvasWidthPx: CANVAS_WIDTH,
+        title: session.title,
+        subtitle: session.subtitle,
+        nodeRadiusPx: nodeR,
+      })
+    })
+  }, [sessionAnchors, sessions, effectiveContainerWidth])
+
+  const effectiveManualOverrides = useMemo(
+    () =>
+      mergeManualOverrideSourcesForTotal(
+        MANUAL_NODE_OVERRIDES_FROM_CODE_BY_TOTAL,
+        manualOverridesByTotal,
+        total
+      ),
+    [manualOverridesByTotal, total]
+  )
+
+  const finalPlacements = useMemo((): (SessionNodePlacement | null)[] => {
+    if (!sessionPlacements.length) return []
+    return sessionPlacements.map((p, index) => {
+      const session = sessions[index]
+      if (!p || !session) return null
+      return applyManualOverride(p, effectiveManualOverrides[session.id])
+    })
+  }, [sessionPlacements, sessions, effectiveManualOverrides])
+
+  const clientToCanvas = useCallback((clientX: number, clientY: number) => {
+    const el = canvasMotionRef.current
+    if (!el) return { x: clientX, y: clientY }
+    const r = el.getBoundingClientRect()
+    const x = (clientX - r.left) * (CANVAS_WIDTH / Math.max(1, r.width))
+    const y = (clientY - r.top) * (CANVAS_HEIGHT / Math.max(1, r.height))
+    return { x, y }
+  }, [])
+
+  const onManualNodeDragDelta = useCallback(
+    (sessionId: number, ddx: number, ddy: number) => {
+      setManualOverridesByTotal((prev) => {
+        const bucket = coerceManualOverrideTotal(total)
+        const slice = { ...(prev[bucket] ?? {}) }
+        const cur = slice[sessionId] ?? {}
+        slice[sessionId] = {
+          ...cur,
+          dx: (cur.dx ?? 0) + ddx,
+          dy: (cur.dy ?? 0) + ddy,
+        }
+        return { ...prev, [bucket]: slice }
+      })
+    },
+    [total]
+  )
+
+  const onManualLabelDragDelta = useCallback(
+    (sessionId: number, ddx: number, ddy: number) => {
+      setManualOverridesByTotal((prev) => {
+        const bucket = coerceManualOverrideTotal(total)
+        const slice = { ...(prev[bucket] ?? {}) }
+        const cur = slice[sessionId] ?? {}
+        slice[sessionId] = {
+          ...cur,
+          labelDx: (cur.labelDx ?? 0) + ddx,
+          labelDy: (cur.labelDy ?? 0) + ddy,
+        }
+        return { ...prev, [bucket]: slice }
+      })
+    },
+    [total]
+  )
+
+  const persistOverridesToLs = useCallback(() => {
+    saveOverridesToLocalStorage(manualOverridesByTotal)
+  }, [manualOverridesByTotal])
+
+  const reloadOverridesFromLs = useCallback(() => {
+    setManualOverridesByTotal(loadOverridesFromLocalStorage())
+  }, [])
+
+  const copyOverridesJson = useCallback(async () => {
+    const merged = mergeCodeAndLocalManualOverridesByTotal(
+      MANUAL_NODE_OVERRIDES_FROM_CODE_BY_TOTAL,
+      manualOverridesByTotal
+    )
+    const text = formatOverridesByTotalForClipboard(merged)
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      window.prompt("Copy:", text)
+    }
+  }, [manualOverridesByTotal])
+
+  const resetOverrideOne = useCallback(() => {
+    if (selectedSessionId == null) return
+    setManualOverridesByTotal((prev) => {
+      const bucket = coerceManualOverrideTotal(total)
+      const slice = { ...(prev[bucket] ?? {}) }
+      delete slice[selectedSessionId]
+      if (Object.keys(slice).length === 0) {
+        const next = { ...prev }
+        delete next[bucket]
+        return next
+      }
+      return { ...prev, [bucket]: slice }
+    })
+  }, [selectedSessionId, total])
+
+  const resetOverrideAll = useCallback(() => {
+    setManualOverridesByTotal((prev) => {
+      const bucket = coerceManualOverrideTotal(total)
+      const next = { ...prev }
+      delete next[bucket]
+      if (typeof window !== "undefined") {
+        if (Object.keys(next).length === 0) window.localStorage.removeItem(MANUAL_OVERRIDES_STORAGE_KEY)
+        else saveOverridesToLocalStorage(next)
+      }
+      return next
+    })
+  }, [total])
+
+  const toggleEditPersistFlag = useCallback((on: boolean) => {
+    setMapEditMode(on)
+    if (typeof window !== "undefined") {
+      if (on) window.localStorage.setItem(MANUAL_EDIT_FLAG_STORAGE_KEY, "1")
+      else window.localStorage.removeItem(MANUAL_EDIT_FLAG_STORAGE_KEY)
+    }
+  }, [])
+
+  const toggleSelectedLabelSide = useCallback(() => {
+    if (selectedSessionId == null) return
+    const idx = sessions.findIndex((s) => s.id === selectedSessionId)
+    const auto = idx >= 0 ? sessionPlacements[idx] : null
+    if (!auto) return
+    setManualOverridesByTotal((prev) => {
+      const bucket = coerceManualOverrideTotal(total)
+      const slice = { ...(prev[bucket] ?? {}) }
+      const cur = slice[selectedSessionId] ?? {}
+      const currentSide = cur.labelSide ?? auto.labelSide
+      const nextSide = currentSide === "right" ? "left" : "right"
+      slice[selectedSessionId] = { ...cur, labelSide: nextSide }
+      return { ...prev, [bucket]: slice }
+    })
+  }, [selectedSessionId, sessionPlacements, sessions, total])
+
+  const toggleSelectedLayoutMode = useCallback(() => {
+    if (selectedSessionId == null) return
+    const idx = sessions.findIndex((s) => s.id === selectedSessionId)
+    const auto = idx >= 0 ? sessionPlacements[idx] : null
+    if (!auto) return
+    setManualOverridesByTotal((prev) => {
+      const bucket = coerceManualOverrideTotal(total)
+      const slice = { ...(prev[bucket] ?? {}) }
+      const cur = slice[selectedSessionId] ?? {}
+      const currentMode = cur.layoutMode ?? auto.layoutMode
+      const nextMode = currentMode === "stacked-below" ? "side-inline" : "stacked-below"
+      slice[selectedSessionId] = { ...cur, layoutMode: nextMode }
+      return { ...prev, [bucket]: slice }
+    })
+  }, [selectedSessionId, sessionPlacements, sessions, total])
 
   const mainPathRef = useCallback(
     (el: SVGPathElement | null) => {
@@ -347,7 +575,7 @@ export function ResetMap({
     <div
       ref={containerRef}
       className="relative h-full w-full overflow-hidden rounded-2xl cursor-grab active:cursor-grabbing select-none"
-      style={{ height: VIEWPORT_HEIGHT, backgroundColor: 'oklch(0.22 0.03 245)' }}
+      style={{ height: VIEWPORT_HEIGHT, backgroundColor: "oklch(0.22 0.03 245)" }}
       onMouseDown={(e) => handleDragStart(e.clientY)}
       onMouseMove={(e) => handleDragMove(e.clientY)}
       onMouseUp={handleDragEnd}
@@ -371,6 +599,7 @@ export function ResetMap({
 
       {/* Main pannable canvas - 600x4000 matches SVG viewBox for exact panel alignment */}
       <motion.div
+        ref={canvasMotionRef}
         className="absolute left-1/2 -translate-x-1/2"
         style={{
           width: CANVAS_WIDTH,
@@ -477,14 +706,21 @@ export function ResetMap({
             ))}
         </svg>
 
-        {/* Session nodes - all anchored to road, unified GAP, alternating left/right */}
+        {/* Session nodes: road anchors + viewport-safe node+label footprint */}
         {sessionAnchors?.map((anchor, index) =>
-          sessions[index] ? (
+          sessions[index] && finalPlacements[index] ? (
             <SessionNode
               key={sessions[index].id}
               session={sessions[index]}
-              anchor={anchor}
+              placement={finalPlacements[index]!}
               index={index}
+              mapEditMode={mapEditMode}
+              selectedSessionId={selectedSessionId}
+              onSelectSession={setSelectedSessionId}
+              clientToCanvas={clientToCanvas}
+              onManualNodeDragDelta={onManualNodeDragDelta}
+              onManualLabelDragDelta={onManualLabelDragDelta}
+              manualOverride={effectiveManualOverrides[sessions[index].id]}
               onTap={
                 onNodeTap
                   ? () => {
@@ -507,6 +743,106 @@ export function ResetMap({
         <div className="w-1 h-8 rounded-full bg-white/50" />
         <div className="w-1 h-4 rounded-full bg-white/30" />
       </motion.div>
+
+      {mapEditMode ? (
+        <div
+          className="pointer-events-auto absolute bottom-0 left-0 right-0 z-[30] flex max-h-[min(45vh,220px)] flex-col gap-1 overflow-y-auto border-t border-white/15 bg-black/90 px-2 py-1.5 text-[10px] text-slate-200 shadow-[0_-4px_16px_rgba(0,0,0,0.35)]"
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+        >
+          {/* 액션 우선: 가로 넘침 시에도 스크롤로 전부 도달 */}
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              className="shrink-0 rounded border border-amber-400/40 bg-amber-500/15 px-1.5 py-0.5 hover:bg-amber-500/25"
+              title="코드+LS 병합 결과를 8/12/16/20별 객체로 복사 (MANUAL_NODE_OVERRIDES_FROM_CODE_BY_TOTAL)"
+              onClick={() => void copyOverridesJson()}
+            >
+              JSON 복사
+            </button>
+            <button
+              type="button"
+              className="shrink-0 rounded border border-white/20 px-1.5 py-0.5 hover:bg-white/10"
+              onClick={persistOverridesToLs}
+            >
+              LS 저장
+            </button>
+            <button
+              type="button"
+              className="shrink-0 rounded border border-white/20 px-1.5 py-0.5 hover:bg-white/10"
+              onClick={reloadOverridesFromLs}
+            >
+              LS 불러오기
+            </button>
+            <button
+              type="button"
+              className="shrink-0 rounded border border-white/20 px-1.5 py-0.5 hover:bg-white/10"
+              onClick={() => toggleEditPersistFlag(false)}
+            >
+              편집 끄기
+            </button>
+            <button
+              type="button"
+              className="shrink-0 rounded border border-white/20 px-1.5 py-0.5 hover:bg-white/10"
+              onClick={resetOverrideOne}
+              disabled={selectedSessionId == null}
+            >
+              reset 1
+            </button>
+            <button
+              type="button"
+              className="shrink-0 rounded border border-white/20 px-1.5 py-0.5 hover:bg-white/10"
+              title="현재 total에 해당하는 버킷(8/12/16/20)의 LS 오버라이드만 삭제합니다"
+              onClick={resetOverrideAll}
+            >
+              reset all
+            </button>
+            <button
+              type="button"
+              className="shrink-0 rounded border border-white/20 px-1.5 py-0.5 hover:bg-white/10"
+              onClick={toggleSelectedLabelSide}
+              disabled={selectedSessionId == null}
+            >
+              side↔
+            </button>
+            <button
+              type="button"
+              className="shrink-0 rounded border border-white/20 px-1.5 py-0.5 hover:bg-white/10"
+              onClick={toggleSelectedLayoutMode}
+              disabled={selectedSessionId == null}
+            >
+              layout↔
+            </button>
+          </div>
+          {/* 메타 + 선택 세션 JSON: 별도 줄·가로 스크롤로 버튼 밀림 방지 */}
+          <div className="flex min-w-0 flex-col gap-1 border-t border-white/10 pt-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 font-semibold text-amber-200">mapEdit</span>
+              <span
+                className={`shrink-0 ${overrideBucket !== total ? "text-amber-200/90" : "text-slate-500"}`}
+                title="편집·LS는 coerce된 8/12/16/20 버킷에만 기록됩니다. total과 다르면 가장 가까운 버킷을 씁니다."
+              >
+                total {total} · bucket {overrideBucket}
+                {overrideBucket !== total ? " (nearest)" : ""}
+              </span>
+              <span className="shrink-0 text-slate-400">세션 {selectedSessionId ?? "—"}</span>
+            </div>
+            {selectedSessionId != null && effectiveManualOverrides[selectedSessionId] ? (
+              <div className="max-h-14 min-w-0 overflow-x-auto overflow-y-auto whitespace-nowrap rounded bg-black/50 px-1.5 py-1 font-mono text-[9px] leading-snug text-slate-400">
+                {JSON.stringify(effectiveManualOverrides[selectedSessionId])}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : process.env.NODE_ENV === "development" ? (
+        <button
+          type="button"
+          className="pointer-events-auto absolute bottom-1 right-1 z-[25] rounded border border-white/10 bg-black/50 px-1.5 py-0.5 text-[9px] text-slate-500 opacity-60 hover:opacity-100"
+          onClick={() => toggleEditPersistFlag(true)}
+        >
+          mapEdit
+        </button>
+      ) : null}
     </div>
   )
 }
@@ -518,10 +854,10 @@ function BackgroundLayers({
   layer4Y,
   areaBlocks,
 }: {
-  layer1Y: ReturnType<typeof useTransform>
-  layer2Y: ReturnType<typeof useTransform>
-  layer3Y: ReturnType<typeof useTransform>
-  layer4Y: ReturnType<typeof useTransform>
+  layer1Y: MotionValue<number>
+  layer2Y: MotionValue<number>
+  layer3Y: MotionValue<number>
+  layer4Y: MotionValue<number>
   areaBlocks: { x: number; y: number; w: number; h: number }[]
 }) {
   return (
@@ -651,26 +987,113 @@ function BackgroundLayers({
 
 function SessionNode({
   session,
-  anchor,
+  placement,
   index,
   onTap,
+  mapEditMode,
+  selectedSessionId,
+  onSelectSession,
+  clientToCanvas,
+  onManualNodeDragDelta,
+  onManualLabelDragDelta,
+  manualOverride,
 }: {
   session: DonorSession
-  anchor: SessionAnchor
+  placement: SessionNodePlacement
   index: number
   onTap?: () => void
+  mapEditMode: boolean
+  selectedSessionId: number | null
+  onSelectSession: (id: number) => void
+  clientToCanvas: (clientX: number, clientY: number) => { x: number; y: number }
+  onManualNodeDragDelta: (sessionId: number, ddx: number, ddy: number) => void
+  onManualLabelDragDelta: (sessionId: number, ddx: number, ddy: number) => void
+  manualOverride: ManualNodeOverride | undefined
 }) {
   const isCompleted = session.status === "completed"
   const isActive = session.status === "active"
   const isLocked = session.status === "locked"
-  const position = { x: anchor.x, y: anchor.y }
-  const labelOnRight = anchor.side === 1
+  const position = { x: placement.nodeX, y: placement.nodeY }
   const isClickable = !!onTap
+  const labelGap = 10
+  const nodeHalf = isActive ? 23 : isCompleted ? 20 : 17.5
+  const labelBoxW = placement.labelMaxWidth
+  const isSelected = mapEditMode && selectedSessionId === session.id
+
+  const nodeDragRef = useRef<{ lastX: number; lastY: number } | null>(null)
+  const labelDragRef = useRef<{ lastX: number; lastY: number } | null>(null)
+
+  const onNodeHandlePointerDown: PointerEventHandler<HTMLDivElement> = (e) => {
+    if (!mapEditMode) return
+    e.stopPropagation()
+    e.preventDefault()
+    onSelectSession(session.id)
+    const p = clientToCanvas(e.clientX, e.clientY)
+    nodeDragRef.current = { lastX: p.x, lastY: p.y }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  }
+
+  const onNodeHandlePointerMove: PointerEventHandler<HTMLDivElement> = (e) => {
+    if (!mapEditMode || !nodeDragRef.current) return
+    e.stopPropagation()
+    const p = clientToCanvas(e.clientX, e.clientY)
+    const ddx = p.x - nodeDragRef.current.lastX
+    const ddy = p.y - nodeDragRef.current.lastY
+    nodeDragRef.current = { lastX: p.x, lastY: p.y }
+    if (ddx !== 0 || ddy !== 0) onManualNodeDragDelta(session.id, ddx, ddy)
+  }
+
+  const onNodeHandlePointerUp: PointerEventHandler<HTMLDivElement> = (e) => {
+    nodeDragRef.current = null
+    try {
+      ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const onLabelHandlePointerDown: PointerEventHandler<HTMLDivElement> = (e) => {
+    if (!mapEditMode) return
+    e.stopPropagation()
+    e.preventDefault()
+    onSelectSession(session.id)
+    const p = clientToCanvas(e.clientX, e.clientY)
+    labelDragRef.current = { lastX: p.x, lastY: p.y }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  }
+
+  const onLabelHandlePointerMove: PointerEventHandler<HTMLDivElement> = (e) => {
+    if (!mapEditMode || !labelDragRef.current) return
+    e.stopPropagation()
+    const p = clientToCanvas(e.clientX, e.clientY)
+    const ddx = p.x - labelDragRef.current.lastX
+    const ddy = p.y - labelDragRef.current.lastY
+    labelDragRef.current = { lastX: p.x, lastY: p.y }
+    if (ddx !== 0 || ddy !== 0) onManualLabelDragDelta(session.id, ddx, ddy)
+  }
+
+  const onLabelHandlePointerUp: PointerEventHandler<HTMLDivElement> = (e) => {
+    labelDragRef.current = null
+    try {
+      ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+    } catch {
+      /* ignore */
+    }
+  }
 
   return (
     <motion.div
-      className={cn("absolute z-10", isClickable && "cursor-pointer")}
+      className={cn(
+        "absolute z-10",
+        isClickable && !mapEditMode && "cursor-pointer",
+        isSelected && "rounded-lg ring-2 ring-cyan-400/90 ring-offset-2 ring-offset-transparent"
+      )}
       onPointerDown={(e) => {
+        if (mapEditMode) {
+          e.stopPropagation()
+          onSelectSession(session.id)
+          return
+        }
         if (onTap) {
           e.stopPropagation()
           e.preventDefault()
@@ -743,14 +1166,29 @@ function SessionNode({
         </>
       )}
 
+      {mapEditMode ? (
+        <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-black/70 px-1 py-0.5 font-mono text-[8px] text-slate-300">
+          #{session.id} dx:{manualOverride?.dx ?? 0} dy:{manualOverride?.dy ?? 0} lΔ:
+          {manualOverride?.labelDx ?? 0},{manualOverride?.labelDy ?? 0}
+        </div>
+      ) : null}
+
       {/* Node circle - ~12% smaller */}
       <motion.div
         className={cn(
           "relative flex items-center justify-center rounded-full transition-all",
+          mapEditMode && "pointer-events-auto",
           isCompleted && "bg-orange-500 text-white",
           isActive && "bg-orange-500 text-white",
           isLocked && "bg-[oklch(0.32_0.04_245)] text-slate-400"
         )}
+        onPointerDown={(e) => {
+          if (mapEditMode && onTap) {
+            e.stopPropagation()
+            onSelectSession(session.id)
+            onTap()
+          }
+        }}
         style={{
           width: isActive ? 46 : isCompleted ? 40 : 35,
           height: isActive ? 46 : isCompleted ? 40 : 35,
@@ -775,43 +1213,112 @@ function SessionNode({
         {isLocked && <Lock className="w-3 h-3" strokeWidth={2.5} />}
       </motion.div>
 
-      {/* Label — donor-faithful: session number, title, subtitle */}
+      {mapEditMode ? (
+        <div
+          role="presentation"
+          className="pointer-events-auto absolute -right-1 -top-1 z-30 h-4 w-4 cursor-grab rounded-full border border-white bg-orange-500 active:cursor-grabbing"
+          title="노드 이동"
+          onPointerDown={onNodeHandlePointerDown}
+          onPointerMove={onNodeHandlePointerMove}
+          onPointerUp={onNodeHandlePointerUp}
+          onPointerCancel={onNodeHandlePointerUp}
+        />
+      ) : null}
+
+      {/* Label: fixed min/max width, horizontal multi-line only (no vertical reading) */}
       <motion.div
-        className={cn("absolute top-1/2 -translate-y-1/2 whitespace-nowrap", labelOnRight ? "left-full ml-3" : "right-full mr-3 text-right")}
-        initial={{ opacity: 0, x: labelOnRight ? -8 : 8 }}
-        animate={{ opacity: 1, x: 0 }}
+        className={cn(
+          "absolute min-w-0",
+          placement.layoutMode === "stacked-below"
+            ? "left-1/2 top-full mt-2 -translate-x-1/2 text-center"
+            : "top-1/2 -translate-y-1/2",
+          placement.layoutMode !== "stacked-below" &&
+            placement.labelSide === "right" &&
+            "text-left",
+          placement.layoutMode !== "stacked-below" && placement.labelSide === "left" && "text-right"
+        )}
+        style={
+          placement.layoutMode === "stacked-below"
+            ? {
+                width: labelBoxW,
+                minWidth: placement.labelMinWidth,
+                maxWidth: labelBoxW,
+                writingMode: "horizontal-tb",
+              }
+            : placement.labelSide === "right"
+              ? {
+                  left: `calc(50% + ${nodeHalf + labelGap}px)`,
+                  width: labelBoxW,
+                  minWidth: placement.labelMinWidth,
+                  maxWidth: labelBoxW,
+                  writingMode: "horizontal-tb",
+                }
+              : {
+                  right: `calc(50% + ${nodeHalf + labelGap}px)`,
+                  width: labelBoxW,
+                  minWidth: placement.labelMinWidth,
+                  maxWidth: labelBoxW,
+                  writingMode: "horizontal-tb",
+                }
+        }
+        initial={{
+          opacity: 0,
+          x: placement.layoutMode === "stacked-below" ? 0 : placement.labelSide === "right" ? -8 : 8,
+          y: placement.layoutMode === "stacked-below" ? -6 : 0,
+        }}
+        animate={{ opacity: 1, x: 0, y: 0 }}
         transition={{ delay: index * 0.03 + 0.7 }}
       >
-        <p
-          className={cn(
-            "text-[10px] font-medium tabular-nums",
-            isActive && "text-orange-400",
-            isCompleted && "text-slate-300",
-            isLocked && "text-slate-500"
-          )}
+        <div
+          className="relative"
+          style={{
+            transform: `translate3d(${placement.labelOffsetX ?? 0}px, ${placement.labelOffsetY ?? 0}px, 0)`,
+          }}
         >
-          세션 {session.id}
-        </p>
-        <p
-          className={cn(
-            "text-sm font-semibold",
-            isActive && "text-orange-500",
-            isCompleted && "text-white/95",
-            isLocked && "text-slate-400"
-          )}
-        >
-          {session.title}
-        </p>
-        <p
-          className={cn(
-            "text-[11px]",
-            isActive && "text-orange-400/90",
-            isCompleted && "text-slate-400",
-            isLocked && "text-slate-500/70"
-          )}
-        >
-          {session.subtitle}
-        </p>
+          <p
+            className={cn(
+              "text-[10px] font-medium tabular-nums leading-tight break-keep",
+              isActive && "text-orange-400",
+              isCompleted && "text-slate-300",
+              isLocked && "text-slate-500"
+            )}
+          >
+            세션 {session.id}
+          </p>
+          <p
+            className={cn(
+              "text-sm font-semibold leading-snug break-keep break-words line-clamp-3",
+              isActive && "text-orange-500",
+              isCompleted && "text-white/95",
+              isLocked && "text-slate-400"
+            )}
+          >
+            {session.title}
+          </p>
+          {session.subtitle ? (
+            <p
+              className={cn(
+                "text-[11px] leading-snug break-keep break-words line-clamp-3",
+                isActive && "text-orange-400/90",
+                isCompleted && "text-slate-400",
+                isLocked && "text-slate-500/70"
+              )}
+            >
+              {session.subtitle}
+            </p>
+          ) : null}
+          {mapEditMode ? (
+            <div
+              role="presentation"
+              className="pointer-events-auto absolute -bottom-1 -right-1 z-30 h-4 w-4 cursor-grab rounded-full border border-white bg-cyan-500 active:cursor-grabbing"
+              title="라벨 이동"
+              onPointerDown={onLabelHandlePointerDown}
+              onPointerMove={onLabelHandlePointerMove}
+              onPointerUp={onLabelHandlePointerUp}
+              onPointerCancel={onLabelHandlePointerUp}
+            />
+          ) : null}
+        </div>
       </motion.div>
     </motion.div>
   )

@@ -1,0 +1,182 @@
+{
+  "result_version": 1,
+  "run_mode": "apply",
+  "generated_at": "2026-04-18T19:32:56.378Z",
+  "plan_output": "ops\\template-media\\template-refresh-2026-04.legacy-delete-plan.json",
+  "targets_requested": 24,
+  "rows": [
+    {
+      "asset_id": "01EIg00L2lZv2usbVnSMt402vmtFkvTeN3RVwLn5K00ANCo",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:47.576Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "3XdyE16XPpgcYpV2wx9T1jpNhXxhwyFFwwggNb1rgN00",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:47.961Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "4HBEXBjKNnSpuPdSIIHRIgv02qikg5w9at63Yra1I1024",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:48.361Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "500JYaJSr6gemF01mykivfxhBUikAWcALMp3ljww2lk8I",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:48.751Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "8Yy9f55NtpWsK5XeyqXCYOaRvvZ6r3Ff02Hwgg4QgcpY",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:49.129Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "Ay4OphUfcn1mutv5nAjcQHsRsY1xHt501Q7vYlx00tqwE",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:49.545Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "bzXDQ97VDQVxdUrfnQE8OPhVruVsA2azOb0102VxJDzmo",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:49.884Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "CrT5rbfxKk8AgYD0002rWuMljI3umCVIF6iR5OSUcVhEY",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:50.247Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "e02011yHLvcjA7g7NOahRsaVVJoC5KGTokZWnkq2n91N00",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:50.605Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "IRNG00bCCwyHTEDBSOLfp9eZRlJBCWIpTgPjgzb58D01w",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:50.980Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "lSa0201fXajpyQmak9602T5ZHktoP16pmW02bblNItRWvtw",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:51.338Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "NAewD3x01rpGdDqFjCtttP001pOUSciV9MFss6wqUbe02c",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:51.715Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "oDo00COzs989YAYqXG611XhOVXSkdShjVPuvhSR3IZkU",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:52.111Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "Omv00lj006SPLmdYb00ApoNSRs5QoquoLRKrNk01IMZtE44",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:52.494Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "s1tNKA2ZLMrbJnt9A802GulgeZ4TJZc3XJAOES01F18Bo",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:52.856Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "tb7b0201JdOxgyx9eOVU6t6KZMtYzykz1rtb9oy00amYSg",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:53.219Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "TizsVDUgxAPxnH1oMUzpA02tQfsh8hAMXVfUn9CTtVWs",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:53.595Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "uOPQRf2ImM9zaFcYElyOBhL0002A69o01xU20096chTOxYQ",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:54.008Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "UT79pAhGpuuJYF7EAmP400TH00TaLpTBtKeIfuRUDm5cI",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:54.399Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "uvMsMTpW901n28BliCgdZzyfifnVSJfVFAQjdEDv9ROg",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:54.763Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "VPFZlbYd202tYGAeMUnO02EM2QX66tKvutDYFLSSKIAb8",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:55.122Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "vSBjSdTC8ZdF1SNbRcv00rUs1DNuQM4E3CrqGccrbnzI",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:55.551Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "XkHR84cMrmxX5n4Myvn3902CygXBwxlb2jQ5W4rF4zR8",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:55.951Z",
+      "error_message": null
+    },
+    {
+      "asset_id": "ysHYDW2qWev8znxvjI4GKwP85LvrQLG2QSN5ALmhkFA",
+      "status": "deleted",
+      "reason": "mux delete succeeded",
+      "deleted_at": "2026-04-18T19:32:56.378Z",
+      "error_message": null
+    }
+  ],
+  "summary": {
+    "deleted": 24,
+    "failed": 0,
+    "skipped": 0
+  }
+}

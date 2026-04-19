@@ -1,0 +1,810 @@
+{
+  "verify_version": 1,
+  "run_mode": "apply",
+  "force": false,
+  "manifest_path": "ops\\template-media\\template-refresh-2026-04.json",
+  "ledger_path": "ops\\template-media\\template-refresh-2026-04.mux-upload-result.json",
+  "verify_output": "ops\\template-media\\template-refresh-2026-04.attach-verify.json",
+  "updated_at": "2026-04-18T18:58:01.899Z",
+  "summary": {
+    "updated": 46,
+    "unchanged": 2,
+    "failed": 0,
+    "skipped": 0,
+    "work_count": 48
+  },
+  "rows": [
+    {
+      "template_id": "M01",
+      "expected_playback_id": "9rrShxjQ3i1IYVpiq9P00rsTprivbLS6ibZR8uqaNqn8",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "9rrShxjQ3i1IYVpiq9P00rsTprivbLS6ibZR8uqaNqn8"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "9rrShxjQ3i1IYVpiq9P00rsTprivbLS6ibZR8uqaNqn8"
+      },
+      "status": "unchanged",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:56.899Z",
+      "expected_name": "90/90 벽 호흡",
+      "db_name": "90/90 벽 호흡",
+      "manifest_name_snapshot": "90/90 벽 호흡"
+    },
+    {
+      "template_id": "M02",
+      "expected_playback_id": "CeFjwZTebSpcPPiNQOMxoFgWzOkApYtI7AJ01c2AyWCU",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "CeFjwZTebSpcPPiNQOMxoFgWzOkApYtI7AJ01c2AyWCU"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "CeFjwZTebSpcPPiNQOMxoFgWzOkApYtI7AJ01c2AyWCU"
+      },
+      "status": "unchanged",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:57.243Z",
+      "expected_name": "크로커다일 호흡",
+      "db_name": "크로커다일 호흡",
+      "manifest_name_snapshot": "크로커다일 호흡"
+    },
+    {
+      "template_id": "M03",
+      "expected_playback_id": "6KpSs00SVRVe3WXdJVMAeNLEPpMkQrNzcPciSds00X4Cc",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "f4cYCfcXi5rCMFHXEIcysArppsZwsLGrQodOUho4IXw"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "6KpSs00SVRVe3WXdJVMAeNLEPpMkQrNzcPciSds00X4Cc"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:57.331Z",
+      "expected_name": "턱 당기기",
+      "db_name": "턱 당기기",
+      "manifest_name_snapshot": "턱 당기기"
+    },
+    {
+      "template_id": "M04",
+      "expected_playback_id": "c2GtWlvuOcrxg9hrZg00g49aVZBFA2kdqoL0201pA2zxAA",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "9Q43KDBVA2d6BDm01asw6lOEQn3Vvf47hAdIFKTrnLsM"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "c2GtWlvuOcrxg9hrZg00g49aVZBFA2kdqoL0201pA2zxAA"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:57.602Z",
+      "expected_name": "흉추 신전",
+      "db_name": "흉추 신전",
+      "manifest_name_snapshot": "흉추 신전"
+    },
+    {
+      "template_id": "M05",
+      "expected_playback_id": "qN3EtU6b8vEmDJqE1F3Y01VYoOq5hHnc9gZ00zvCSH3Wc",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "OsfjacXvg02ekYIvNcCl1tGKCl02uJqMP2Js3qWRGP200k"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "qN3EtU6b8vEmDJqE1F3Y01VYoOq5hHnc9gZ00zvCSH3Wc"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:57.845Z",
+      "expected_name": "스레드 더 니들",
+      "db_name": "스레드 더 니들",
+      "manifest_name_snapshot": "스레드 더 니들"
+    },
+    {
+      "template_id": "M06",
+      "expected_playback_id": "z2ShH66815Ws49WpOGdqQ8gPAbjKSke6HJh5lFkXVLY",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "Q00jcpxZx8n7Ip01bWksDbV800J6T6RrhOJqXRAHobK2024"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "z2ShH66815Ws49WpOGdqQ8gPAbjKSke6HJh5lFkXVLY"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:58.051Z",
+      "expected_name": "문틀 가슴 스트레치",
+      "db_name": "문틀 가슴 스트레치",
+      "manifest_name_snapshot": "문틀 가슴 스트레치"
+    },
+    {
+      "template_id": "M07",
+      "expected_playback_id": "wSnNGNtQvEvrijGJjECXfTIFxeGnFOkUviKqa02Wi00tY",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "jmx6rXH300sSDFaehcNspwxNmEuddTOb02fInjyGZQ02xc"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "wSnNGNtQvEvrijGJjECXfTIFxeGnFOkUviKqa02Wi00tY"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:58.244Z",
+      "expected_name": "벽천사",
+      "db_name": "벽천사",
+      "manifest_name_snapshot": "벽천사"
+    },
+    {
+      "template_id": "M08",
+      "expected_playback_id": "JnwnPu00NXd3X2S8jv2qt01McXLP02ce3sL5UhfwofSzX00",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "afgF00KnOc9LzEA5Px004w4RbjfFXnyyQGgsCADx01FpAc"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "JnwnPu00NXd3X2S8jv2qt01McXLP02ce3sL5UhfwofSzX00"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:58.325Z",
+      "expected_name": "누워서 하는 T 레이즈",
+      "db_name": "누워서 하는 T 레이즈",
+      "manifest_name_snapshot": "누워서 하는 T 레이즈"
+    },
+    {
+      "template_id": "M09",
+      "expected_playback_id": "4IbfMhmQMBm8T01dOWarqInZUS38oKDGvOfSYeNyNz0200",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "Y6qsJktkuF2vpPFwBSU4YIZ6QoDMl5LWZ2013fal3GfA"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "4IbfMhmQMBm8T01dOWarqInZUS38oKDGvOfSYeNyNz0200"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:58.410Z",
+      "expected_name": "푸쉬업 플러스",
+      "db_name": "푸쉬업 플러스",
+      "manifest_name_snapshot": "푸쉬업 플러스"
+    },
+    {
+      "template_id": "M10",
+      "expected_playback_id": "as5zRu3L6v5qt00IzdX4KvS736M4eWvX02h531hElSZJs",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "q81ZZxh202yGfuf1j4LIgiT2jCoZfkjGLYb004kQuc00ew"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "as5zRu3L6v5qt00IzdX4KvS736M4eWvX02h531hElSZJs"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:58.495Z",
+      "expected_name": "고관절 굴곡근 스트레치",
+      "db_name": "고관절 굴곡근 스트레치",
+      "manifest_name_snapshot": "고관절 굴곡근 스트레치"
+    },
+    {
+      "template_id": "M11",
+      "expected_playback_id": "5inv9RVLU3XgW5hwZsw01004Wz7mvCgQIauGcFv6jxRY8",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "j00tQkJm42Jccf7nn6JW1p96cwyjz7OlH9Cq7Joz7Hu8"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "5inv9RVLU3XgW5hwZsw01004Wz7mvCgQIauGcFv6jxRY8"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:58.625Z",
+      "expected_name": "사각자세 록백",
+      "db_name": "사각자세 록백",
+      "manifest_name_snapshot": "사각자세 록백"
+    },
+    {
+      "template_id": "M12",
+      "expected_playback_id": "P2VH3kb4A6OTMSj99PtnRhQqDiHlPLwuLLbwrU01enFA",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "jaYYFz9JsI8dO1dogHyHqpZmmsgjRh02LFCECwoZk9OI"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "P2VH3kb4A6OTMSj99PtnRhQqDiHlPLwuLLbwrU01enFA"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:58.758Z",
+      "expected_name": "글루트 브릿지",
+      "db_name": "글루트 브릿지",
+      "manifest_name_snapshot": "글루트 브릿지"
+    },
+    {
+      "template_id": "M13",
+      "expected_playback_id": "L02SiAN1k6kjJzr01sr008WIj3duOcDvmP1EVJTqSRxw01k",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "wRALo1EUlOsvPX8o3P9Tf2z02FxTjO02pjWq1FcQMNZGs"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "L02SiAN1k6kjJzr01sr008WIj3duOcDvmP1EVJTqSRxw01k"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:58.835Z",
+      "expected_name": "데드버그",
+      "db_name": "데드버그",
+      "manifest_name_snapshot": "데드버그"
+    },
+    {
+      "template_id": "M14",
+      "expected_playback_id": "aPki02vBR1pp00pE6UmEh4PjjtPCHbejg9cvDJEnvwLE4",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "6xdFBF2JMdWM2GVk7bjVXMm9AEomUUYr4AHuvHrGJhA"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "aPki02vBR1pp00pE6UmEh4PjjtPCHbejg9cvDJEnvwLE4"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:58.923Z",
+      "expected_name": "버드독",
+      "db_name": "버드독",
+      "manifest_name_snapshot": "버드독"
+    },
+    {
+      "template_id": "M15",
+      "expected_playback_id": "pefMEXLh7I7x91PqgmN201c1GgEAQ9AAP25bQehwR02VY",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "2HDI33YPyHmOXpjqhtCZmdNoDuTdS7wRot89O00nzLEg"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "pefMEXLh7I7x91PqgmN201c1GgEAQ9AAP25bQehwR02VY"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:59.002Z",
+      "expected_name": "의자 박스 스쿼트",
+      "db_name": "의자 박스 스쿼트",
+      "manifest_name_snapshot": "의자 박스 스쿼트"
+    },
+    {
+      "template_id": "M16",
+      "expected_playback_id": "hIy01IZxOAkxzWuYjydNPi1gqVuckd1btUWAZJ2yVrBM",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "hIy01IZxOAkxzWuYjydNPi1gqVuckd1btUWAZJ2yVrBM"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:59.082Z",
+      "expected_name": "벽 짚고 스플릿 스쿼트",
+      "db_name": "벽 짚고 스플릿 스쿼트",
+      "manifest_name_snapshot": "벽 짚고 스플릿 스쿼트"
+    },
+    {
+      "template_id": "M17",
+      "expected_playback_id": "02BbGnEwOW6aiQ00IZYN3UezS12AlToJHv7RXeLKep9fk",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "02BbGnEwOW6aiQ00IZYN3UezS12AlToJHv7RXeLKep9fk"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:59.162Z",
+      "expected_name": "벽 짚고 스탠딩 힙 어브덕션",
+      "db_name": "벽 짚고 스탠딩 힙 어브덕션",
+      "manifest_name_snapshot": "벽 짚고 스탠딩 힙 어브덕션"
+    },
+    {
+      "template_id": "M18",
+      "expected_playback_id": "ZpmnA502nM01Wt5Y2l6LzIt01xeoGQ3yzoobaFVaLXTxQI",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "ZpmnA502nM01Wt5Y2l6LzIt01xeoGQ3yzoobaFVaLXTxQI"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:59.240Z",
+      "expected_name": "양발 카프 레이즈",
+      "db_name": "양발 카프 레이즈",
+      "manifest_name_snapshot": "양발 카프 레이즈"
+    },
+    {
+      "template_id": "M19",
+      "expected_playback_id": "ck00SzOENTML01n02hh7Cz0268kHvG55w65yZwnF7802JXMM",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "x1UbDa00CCf5fTt011AB1Z55PvKl785zAMZj5JflyjwQc"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "ck00SzOENTML01n02hh7Cz0268kHvG55w65yZwnF7802JXMM"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:59.323Z",
+      "expected_name": "리버스 런지",
+      "db_name": "리버스 런지",
+      "manifest_name_snapshot": "리버스 런지"
+    },
+    {
+      "template_id": "M20",
+      "expected_playback_id": "t4EaUH0001ovfLQ00a7L58b2wKjoqb6YCRgltpidKknpS4",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "p5KBD51eGu1A5WA7CN6PbFovfzHUukwbJntHgX14P1c"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "t4EaUH0001ovfLQ00a7L58b2wKjoqb6YCRgltpidKknpS4"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:59.443Z",
+      "expected_name": "월 서포티드 힙힌지",
+      "db_name": "월 서포티드 힙힌지",
+      "manifest_name_snapshot": "월 서포티드 힙힌지"
+    },
+    {
+      "template_id": "M21",
+      "expected_playback_id": "rXlFRxzMLUWdvoPxYMIqmNVsjFm01VIJjN7xFjqlnqmo",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "rXlFRxzMLUWdvoPxYMIqmNVsjFm01VIJjN7xFjqlnqmo"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:59.529Z",
+      "expected_name": "버드독 슬로우 컨트롤",
+      "db_name": "버드독 슬로우 컨트롤",
+      "manifest_name_snapshot": "버드독 슬로우 컨트롤"
+    },
+    {
+      "template_id": "M22",
+      "expected_playback_id": "M01fwgC5apc7lkRh7mGMrUE8x6QTommMpcnmppRxLx3U",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "iBUzsp2llVGqkyBR1zRF01m2pkNejVO008VBBGgteSM3I"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "M01fwgC5apc7lkRh7mGMrUE8x6QTommMpcnmppRxLx3U"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:59.611Z",
+      "expected_name": "사이드 라이잉 힙 어브덕션",
+      "db_name": "사이드 라이잉 힙 어브덕션",
+      "manifest_name_snapshot": "사이드 라이잉 힙 어브덕션"
+    },
+    {
+      "template_id": "M23",
+      "expected_playback_id": "y2gCUnjwUF18mhlNQCg7YmKiplIdqQxLiqFd2laX5TE",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "Dcn02TwwBvd1zVYjcQ02F5b61VPS4dOUYdQr4CBxhv7iA"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "y2gCUnjwUF18mhlNQCg7YmKiplIdqQxLiqFd2laX5TE"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:59.690Z",
+      "expected_name": "한발 밸런스 리치",
+      "db_name": "한발 밸런스 리치",
+      "manifest_name_snapshot": "한발 밸런스 리치"
+    },
+    {
+      "template_id": "M24",
+      "expected_playback_id": "jf3t5AUNanRgcJljK02sEVs8hMLhVwkuPtUSGLIxWpF4",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "pCvnASoKTXkvOZ8pBe00yqepWIUB2R1toZuuGdVRwgPg"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "jf3t5AUNanRgcJljK02sEVs8hMLhVwkuPtUSGLIxWpF4"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:59.796Z",
+      "expected_name": "티비얼리스 레이즈",
+      "db_name": "티비얼리스 레이즈",
+      "manifest_name_snapshot": "티비얼리스 레이즈"
+    },
+    {
+      "template_id": "M25",
+      "expected_playback_id": "F9802t1W2w6Xuf00MmIw7roy6QVoNoa5UShcd1XP01MOXw",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "01f00GZtlHQKgol3ulXbOk00x02SR4a1sbFzkIcBKg5Cv3g"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "F9802t1W2w6Xuf00MmIw7roy6QVoNoa5UShcd1XP01MOXw"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:59.891Z",
+      "expected_name": "프론 Y 레이즈",
+      "db_name": "프론 Y 레이즈",
+      "manifest_name_snapshot": "프론 Y 레이즈"
+    },
+    {
+      "template_id": "M26",
+      "expected_playback_id": "gIeF27pSHW3remS5pRVfPLN5ryBbdBXo6UkrtN1IxuY",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "00dAU5Ac91VEEEh02oh8fi7HK00PUOt2LtWUFmmmBZqRW8"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "gIeF27pSHW3remS5pRVfPLN5ryBbdBXo6UkrtN1IxuY"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:57:59.977Z",
+      "expected_name": "플랭크",
+      "db_name": "플랭크",
+      "manifest_name_snapshot": "플랭크"
+    },
+    {
+      "template_id": "M27",
+      "expected_playback_id": "NrBiPQiFjdhEMvpddIW111jQV4awrxFCqXKyUV24xig",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "JfGTjfy39tq4NiRbi6o011f9a02ZLYtqbyu7ndH1g01Ujk"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "NrBiPQiFjdhEMvpddIW111jQV4awrxFCqXKyUV24xig"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:00.052Z",
+      "expected_name": "오픈북",
+      "db_name": "오픈북",
+      "manifest_name_snapshot": "오픈북"
+    },
+    {
+      "template_id": "M28",
+      "expected_playback_id": "X5gtS8MXSsOJUjYBhYvfq8OQ2MawVqDjLdURsal6mxQ",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "s8kqlAhLKDwBzJ4SJAVRIB9KznI3oPfGeJ9oEcRFiDk"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "X5gtS8MXSsOJUjYBhYvfq8OQ2MawVqDjLdURsal6mxQ"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:00.137Z",
+      "expected_name": "레그업 더 월",
+      "db_name": "레그업 더 월",
+      "manifest_name_snapshot": "레그업 더 월"
+    },
+    {
+      "template_id": "M29",
+      "expected_playback_id": "mHk02QPk9ss1BH1B6q8xXb00kqLAp1iaZJKLNBai3sUSk",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "mHk02QPk9ss1BH1B6q8xXb00kqLAp1iaZJKLNBai3sUSk"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:00.214Z",
+      "expected_name": "힐 탭 데드버그",
+      "db_name": "힐 탭 데드버그",
+      "manifest_name_snapshot": "힐 탭 데드버그"
+    },
+    {
+      "template_id": "M30",
+      "expected_playback_id": "MztME8fsnBcKnfNh1rVouPMDLbvaj8zFAlyDbpRyeKI",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "MztME8fsnBcKnfNh1rVouPMDLbvaj8zFAlyDbpRyeKI"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:00.291Z",
+      "expected_name": "쿼드러펫 숄더탭",
+      "db_name": "쿼드러펫 숄더탭",
+      "manifest_name_snapshot": "쿼드러펫 숄더탭"
+    },
+    {
+      "template_id": "M31",
+      "expected_playback_id": "b4Zza2CB4E9F689WuYUhgJm001p7tU77T3CU5HIFGU02A",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "b4Zza2CB4E9F689WuYUhgJm001p7tU77T3CU5HIFGU02A"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:00.368Z",
+      "expected_name": "버드독 3초 홀드",
+      "db_name": "버드독 3초 홀드",
+      "manifest_name_snapshot": "버드독 3초 홀드"
+    },
+    {
+      "template_id": "M32",
+      "expected_playback_id": "iLCTtTS0002pMXvxhIcnbsJbNPuZizka3QmqtsWhTunf00",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "iLCTtTS0002pMXvxhIcnbsJbNPuZizka3QmqtsWhTunf00"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:00.447Z",
+      "expected_name": "베어 포지션 홀드",
+      "db_name": "베어 포지션 홀드",
+      "manifest_name_snapshot": "베어 포지션 홀드"
+    },
+    {
+      "template_id": "M33",
+      "expected_playback_id": "JYXNtYpTIghPd4H4pR1Py3AImGPOevil3lDvdIH3QRY",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "JYXNtYpTIghPd4H4pR1Py3AImGPOevil3lDvdIH3QRY"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:00.537Z",
+      "expected_name": "사이드 플랭크 무릎 버전",
+      "db_name": "사이드 플랭크 무릎 버전",
+      "manifest_name_snapshot": "사이드 플랭크 무릎 버전"
+    },
+    {
+      "template_id": "M34",
+      "expected_playback_id": "JvCEfzyxi00yTSGoTl802JPzLaou1Eye500wpy96KOuXzA",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "JvCEfzyxi00yTSGoTl802JPzLaou1Eye500wpy96KOuXzA"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:00.617Z",
+      "expected_name": "마치 브릿지",
+      "db_name": "마치 브릿지",
+      "manifest_name_snapshot": "마치 브릿지"
+    },
+    {
+      "template_id": "M35",
+      "expected_playback_id": "TzrCuX2GD4EqRqzSP9EHRTCpDTPksyJb01JuH4NdBEhQ",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "TzrCuX2GD4EqRqzSP9EHRTCpDTPksyJb01JuH4NdBEhQ"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:00.712Z",
+      "expected_name": "싱글 브릿지 보조형",
+      "db_name": "싱글 브릿지 보조형",
+      "manifest_name_snapshot": "싱글 브릿지 보조형"
+    },
+    {
+      "template_id": "M36",
+      "expected_playback_id": "kKTBRHlaJ4NhTgyIAhEveStWwK00A02kbjYWcgEhDJFsY",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "kKTBRHlaJ4NhTgyIAhEveStWwK00A02kbjYWcgEhDJFsY"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:00.799Z",
+      "expected_name": "스플릿 스탠스 체중이동",
+      "db_name": "스플릿 스탠스 체중이동",
+      "manifest_name_snapshot": "스플릿 스탠스 체중이동"
+    },
+    {
+      "template_id": "M37",
+      "expected_playback_id": "MVNA2txXsa6jAYsbkAZ8uvc02aXwhS01VD00JVclDg007rE",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "MVNA2txXsa6jAYsbkAZ8uvc02aXwhS01VD00JVclDg007rE"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:00.891Z",
+      "expected_name": "스플릿 스쿼트 아이소 홀드",
+      "db_name": "스플릿 스쿼트 아이소 홀드",
+      "manifest_name_snapshot": "스플릿 스쿼트 아이소 홀드"
+    },
+    {
+      "template_id": "M38",
+      "expected_playback_id": "ueTFlpPgTtODxU4W1LNd00uMnae2UxrI7KuE5602Cqszs",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "ueTFlpPgTtODxU4W1LNd00uMnae2UxrI7KuE5602Cqszs"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:00.968Z",
+      "expected_name": "리버스 런지 투 니드라이브",
+      "db_name": "리버스 런지 투 니드라이브",
+      "manifest_name_snapshot": "리버스 런지 투 니드라이브"
+    },
+    {
+      "template_id": "M39",
+      "expected_playback_id": "bsaEI00hC7IvXGUsloWteHKT2W1moepWl02TCxS02Zq1kI",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "bsaEI00hC7IvXGUsloWteHKT2W1moepWl02TCxS02Zq1kI"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:01.047Z",
+      "expected_name": "의자 보조 싱글레그 RDL 리치",
+      "db_name": "의자 보조 싱글레그 RDL 리치",
+      "manifest_name_snapshot": "의자 보조 싱글레그 RDL 리치"
+    },
+    {
+      "template_id": "M40",
+      "expected_playback_id": "NlDJhPtv9HHfrpOVhnvjH7EOxV9IjKwPfHWTKevwEuw",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "NlDJhPtv9HHfrpOVhnvjH7EOxV9IjKwPfHWTKevwEuw"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:01.132Z",
+      "expected_name": "싱글레그 스탠드 리치 3방향",
+      "db_name": "싱글레그 스탠드 리치 3방향",
+      "manifest_name_snapshot": "싱글레그 스탠드 리치 3방향"
+    },
+    {
+      "template_id": "M41",
+      "expected_playback_id": "00SfJpc7aiTtBBBcwJ6jL7ZgVW01xIZr7N6vWmRT7moew",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "00SfJpc7aiTtBBBcwJ6jL7ZgVW01xIZr7N6vWmRT7moew"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:01.212Z",
+      "expected_name": "벽 발목 전방 이동",
+      "db_name": "벽 발목 전방 이동",
+      "manifest_name_snapshot": "벽 발목 전방 이동"
+    },
+    {
+      "template_id": "M42",
+      "expected_playback_id": "RsmiyyT6G01r02flFqGtKL02E9Cb00bIO02b6YOVxhlJoNvI",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "RsmiyyT6G01r02flFqGtKL02E9Cb00bIO02b6YOVxhlJoNvI"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:01.296Z",
+      "expected_name": "하프 니링 힙 쉬프트",
+      "db_name": "하프 니링 힙 쉬프트",
+      "manifest_name_snapshot": "하프 니링 힙 쉬프트"
+    },
+    {
+      "template_id": "M43",
+      "expected_playback_id": "bxU7Afva77SOtipSaDBuFx00z00HIHES009nfWTqX9Kdlk",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "bxU7Afva77SOtipSaDBuFx00z00HIHES009nfWTqX9Kdlk"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:01.396Z",
+      "expected_name": "90/90 힙 스위치",
+      "db_name": "90/90 힙 스위치",
+      "manifest_name_snapshot": "90/90 힙 스위치"
+    },
+    {
+      "template_id": "M44",
+      "expected_playback_id": "8S8apr3STr4hFtayRxXCFsis0102ccDxwYfqNLY01slpZQ",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "8S8apr3STr4hFtayRxXCFsis0102ccDxwYfqNLY01slpZQ"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:01.479Z",
+      "expected_name": "딥 스쿼트",
+      "db_name": "딥 스쿼트",
+      "manifest_name_snapshot": "딥 스쿼트"
+    },
+    {
+      "template_id": "M45",
+      "expected_playback_id": "kYyK31L6Yu0274dUssVDn8K8cZh3ZIHuRq6W5UUOJo1I",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "kYyK31L6Yu0274dUssVDn8K8cZh3ZIHuRq6W5UUOJo1I"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:01.558Z",
+      "expected_name": "벽 푸쉬업 플러스",
+      "db_name": "벽 푸쉬업 플러스",
+      "manifest_name_snapshot": "벽 푸쉬업 플러스"
+    },
+    {
+      "template_id": "M46",
+      "expected_playback_id": "DLWNxAE3HV2Vc00IL1c7XNQLoxjiiJyribg01WNRH3VeE",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "DLWNxAE3HV2Vc00IL1c7XNQLoxjiiJyribg01WNRH3VeE"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:01.650Z",
+      "expected_name": "스탠딩 오픈북",
+      "db_name": "스탠딩 오픈북",
+      "manifest_name_snapshot": "스탠딩 오픈북"
+    },
+    {
+      "template_id": "M47",
+      "expected_playback_id": "lYCeCeVcurYwtiVMRuKNedwIkyav6KMSmzW2dknKXkQ",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "lYCeCeVcurYwtiVMRuKNedwIkyav6KMSmzW2dknKXkQ"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:01.730Z",
+      "expected_name": "프론 W 레이즈",
+      "db_name": "프론 W 레이즈",
+      "manifest_name_snapshot": "프론 W 레이즈"
+    },
+    {
+      "template_id": "M48",
+      "expected_playback_id": "pEmuhqODInFk02NXgWwIRoVfcAqoSw9kW65R2pK5jsYY",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "pEmuhqODInFk02NXgWwIRoVfcAqoSw9kW65R2pK5jsYY"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-18T18:58:01.815Z",
+      "expected_name": "스탠딩 W 리트랙션",
+      "db_name": "스탠딩 W 리트랙션",
+      "manifest_name_snapshot": "스탠딩 W 리트랙션"
+    }
+  ]
+}
