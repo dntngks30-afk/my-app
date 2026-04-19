@@ -30,6 +30,10 @@ import { getSessionSafe } from '@/lib/supabase'
 import { prefetchMediaSign } from './media-cache'
 import { clearSessionDraftForSession } from '@/lib/session/draftStorage'
 import { buildSessionDisplaySeedFromBootstrap } from '@/lib/session/session-display-contract'
+import {
+  resolveSessionNodeDisplays,
+  type SessionNodeDisplay,
+} from './session-node-display'
 
 interface ResetMapV2Props {
   /** 전체 세션 수 (max 20) */
@@ -68,6 +72,8 @@ interface ResetMapV2Props {
     completed: number
     currentSession: number | null
     onNodeTap: (session: SessionNode) => void
+    /** PR2: optional — donor maps may ignore */
+    nodeDisplayBySession?: Record<number, SessionNodeDisplay>
   }>
 }
 
@@ -201,6 +207,9 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   const bootstrapRequestRef = useRef(new Map<number, Promise<SessionPlan | null>>())
   const prevActivePlanRef = useRef<SessionPlan | ActivePlanSummary | null>(activePlan)
 
+  /** PR2: bump when summary/bootstrap cache mutates so node labels recompute (refs alone do not rerender). */
+  const [displayVersion, setDisplayVersion] = useState(0)
+
   /** PR-RISK-08b: Scoped invalidation — only stale sessions (completed + next). */
   const invalidateStaleSessionCaches = useCallback(
     (
@@ -227,6 +236,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
         setPastSessionInitialLogs({})
         setPastSessionPlan(null)
       }
+      setDisplayVersion((v) => v + 1)
     },
     []
   )
@@ -251,6 +261,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       if (!result.ok || !result.data) return null
       const data = result.data as PanelPlanSummaryResponse
       summaryCacheRef.current.set(sessionNumber, data)
+      setDisplayVersion((v) => v + 1)
       return data
     })()
 
@@ -288,6 +299,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       if (!result.ok || !result.data) return null
       const data = bootstrapToPanelPlan(result.data as PanelBootstrapResponse)
       bootstrapCacheRef.current.set(sessionNumber, data)
+      setDisplayVersion((v) => v + 1)
       return data
     })()
 
@@ -783,6 +795,102 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     }
   }, [exercises])
 
+  useEffect(() => {
+    setDisplayVersion((v) => v + 1)
+  }, [nextSession])
+
+  const nodeDisplayBySession = useMemo(() => {
+    const summaryBySession = new Map<number, PlanSummaryResponse>()
+    for (const [k, v] of summaryCacheRef.current.entries()) {
+      summaryBySession.set(k, v)
+    }
+    if (pastSessionPlan?.plan_json?.meta) {
+      const pid = pastSessionPlan.session_number
+      if (!summaryBySession.has(pid)) {
+        const meta = pastSessionPlan.plan_json.meta
+        summaryBySession.set(pid, {
+          session_number: pid,
+          status: pastSessionPlan.status,
+          segments: pastSessionPlan.plan_json.segments ?? [],
+          rationale: {
+            ...(Array.isArray(meta.focus) && { focus: meta.focus }),
+            ...(meta.priority_vector && { priority_vector: meta.priority_vector }),
+            ...(meta.pain_mode && { pain_mode: meta.pain_mode }),
+            ...(meta.session_rationale != null && { session_rationale: meta.session_rationale }),
+            ...(Array.isArray(meta.session_focus_axes) && meta.session_focus_axes.length > 0 && {
+              session_focus_axes: meta.session_focus_axes,
+            }),
+            ...(typeof meta.session_role_code === 'string' && meta.session_role_code && { session_role_code: meta.session_role_code }),
+            ...(typeof meta.session_role_label === 'string' && meta.session_role_label && { session_role_label: meta.session_role_label }),
+            ...(typeof meta.session_goal_code === 'string' && meta.session_goal_code && { session_goal_code: meta.session_goal_code }),
+            ...(typeof meta.session_goal_label === 'string' && meta.session_goal_label && { session_goal_label: meta.session_goal_label }),
+            ...(typeof meta.session_goal_hint === 'string' && meta.session_goal_hint && { session_goal_hint: meta.session_goal_hint }),
+          },
+        })
+      }
+    }
+
+    const bootstrapMetaBySession = new Map<number, Record<string, unknown>>()
+    for (const [k, v] of bootstrapCacheRef.current.entries()) {
+      const m = v.plan_json?.meta
+      if (m) bootstrapMetaBySession.set(k, m as Record<string, unknown>)
+    }
+    if (bootstrapPlan?.plan_json?.meta) {
+      bootstrapMetaBySession.set(
+        bootstrapPlan.session_number,
+        bootstrapPlan.plan_json.meta as Record<string, unknown>
+      )
+    }
+
+    let activeFullMeta: { sessionNumber: number; meta: Record<string, unknown> } | null = null
+    if (
+      fullPlan &&
+      'plan_json' in fullPlan &&
+      fullPlan.plan_json?.meta &&
+      effectiveCurrentSession !== null &&
+      fullPlan.session_number === effectiveCurrentSession
+    ) {
+      activeFullMeta = {
+        sessionNumber: fullPlan.session_number,
+        meta: fullPlan.plan_json.meta as Record<string, unknown>,
+      }
+    } else if (
+      activePlan &&
+      'plan_json' in activePlan &&
+      activePlan.plan_json?.meta &&
+      effectiveCurrentSession !== null &&
+      activePlan.session_number === effectiveCurrentSession
+    ) {
+      activeFullMeta = {
+        sessionNumber: activePlan.session_number,
+        meta: activePlan.plan_json.meta as Record<string, unknown>,
+      }
+    }
+
+    return resolveSessionNodeDisplays({
+      total,
+      completed,
+      effectiveCurrentSession,
+      activeFullMeta,
+      summaryBySession,
+      bootstrapMetaBySession,
+      nextPreview: nextSession ?? null,
+      nextSessionNumber: nextSessionNum,
+      visibleNodes: sessions.filter((s) => s.id <= total),
+    })
+  }, [
+    displayVersion,
+    total,
+    completed,
+    effectiveCurrentSession,
+    fullPlan,
+    activePlan,
+    nextSession,
+    nextSessionNum,
+    pastSessionPlan,
+    bootstrapPlan,
+  ])
+
   const isDonorCard = !!mapRenderer
   /** 페이지·맵과 동일한 배경 (0.22) — 경계 없이 통일 */
   const DONOR_BG = 'oklch(0.22 0.03 245)'
@@ -858,6 +966,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
                 completed={completed}
                 currentSession={effectiveCurrentSession}
                 onNodeTap={handleNodeTap}
+                nodeDisplayBySession={nodeDisplayBySession}
               />
             )
           })()}
@@ -868,6 +977,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
           completed={completed}
           currentSession={effectiveCurrentSession}
           onNodeTap={handleNodeTap}
+          nodeDisplayBySession={nodeDisplayBySession}
         />
       )}
 

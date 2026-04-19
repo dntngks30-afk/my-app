@@ -1,0 +1,340 @@
+/**
+ * PR2 — Map node display: source hierarchy + arc placeholders only.
+ * Pure helpers; no adaptive/scoring/generation semantics.
+ */
+
+import type { PlanSummaryResponse } from '@/lib/session/client'
+import {
+  resolveSessionDisplayContract,
+  buildSessionDisplaySeedFromMeta,
+} from '@/lib/session/session-display-contract'
+import type { NextSessionPreviewPayload } from '@/lib/session/next-session-preview'
+import { isUsableNextSessionPreview } from '@/lib/session/next-session-preview'
+import type { SessionNode } from './map-data'
+
+export type SessionNodeDisplayState = 'confirmed' | 'preview' | 'placeholder'
+
+export type SessionNodeDisplaySource =
+  | 'active_plan'
+  | 'summary'
+  | 'bootstrap'
+  | 'next_preview'
+  | 'arc_template'
+  | 'legacy_map_data'
+
+export type SessionNodeDisplay = {
+  sessionNumber: number
+  state: SessionNodeDisplayState
+  roleCode: string
+  roleLabel: string
+  goalCode: string
+  goalLabel: string
+  /** Map secondary line — goal hint preferred */
+  subtitle: string
+  source: SessionNodeDisplaySource
+  confidence: 'high' | 'medium' | 'low'
+}
+
+const GOAL = {
+  FULL_BODY_PRIME: { code: 'FULL_BODY_PRIME', label: '전신 준비', hint: '전신 준비' },
+  CORE_STABILITY: { code: 'CORE_STABILITY', label: '코어 안정성', hint: '코어 안정성' },
+  LOWER_MOBILITY: { code: 'LOWER_MOBILITY', label: '하체 가동성', hint: '하체 가동성' },
+  ASYMMETRY_BALANCE: { code: 'ASYMMETRY_BALANCE', label: '좌우 균형', hint: '좌우 균형' },
+  RECOVERY_RELIEF: { code: 'RECOVERY_RELIEF', label: '부담 완화 회복', hint: '부담 완화 회복' },
+} as const
+
+const ROLE = {
+  ADAPT: { code: 'ADAPT', label: '적응' },
+  STABILIZE: { code: 'STABILIZE', label: '안정' },
+  MOBILIZE: { code: 'MOBILIZE', label: '확장' },
+  BALANCE: { code: 'BALANCE', label: '균형' },
+  INTEGRATE: { code: 'INTEGRATE', label: '통합' },
+  RECOVER: { code: 'RECOVER', label: '회복' },
+} as const
+
+function pickSubtitle(contract: {
+  session_goal_hint?: string
+  session_goal_label?: string
+}): string {
+  const h = contract.session_goal_hint?.trim()
+  if (h) return h
+  const l = contract.session_goal_label?.trim()
+  return l ?? ''
+}
+
+function contractToDisplay(
+  sessionNumber: number,
+  c: ReturnType<typeof resolveSessionDisplayContract>,
+  state: SessionNodeDisplayState,
+  source: SessionNodeDisplaySource,
+  confidence: SessionNodeDisplay['confidence']
+): SessionNodeDisplay {
+  const roleCode = c.session_role_code?.trim() ?? 'ADAPT'
+  const roleLabel = c.session_role_label?.trim() ?? '적응'
+  const goalCode = c.session_goal_code?.trim() ?? 'FULL_BODY_PRIME'
+  const goalLabel = c.session_goal_label?.trim() ?? '전신 준비'
+  const subtitle = pickSubtitle(c) || goalLabel
+  return {
+    sessionNumber,
+    state,
+    roleCode,
+    roleLabel,
+    goalCode,
+    goalLabel,
+    subtitle,
+    source,
+    confidence,
+  }
+}
+
+/** Far-future arc — bounded vocabulary only (SSOT bands, 20 sessions). */
+export function arcPlaceholderDisplay(sessionNumber: number): SessionNodeDisplay {
+  const n = sessionNumber
+
+  if (n <= 3) {
+    return {
+      sessionNumber: n,
+      state: 'placeholder',
+      roleCode: ROLE.ADAPT.code,
+      roleLabel: ROLE.ADAPT.label,
+      goalCode: GOAL.FULL_BODY_PRIME.code,
+      goalLabel: GOAL.FULL_BODY_PRIME.label,
+      subtitle: GOAL.FULL_BODY_PRIME.hint,
+      source: 'arc_template',
+      confidence: 'low',
+    }
+  }
+  if (n <= 7) {
+    return {
+      sessionNumber: n,
+      state: 'placeholder',
+      roleCode: ROLE.STABILIZE.code,
+      roleLabel: ROLE.STABILIZE.label,
+      goalCode: GOAL.CORE_STABILITY.code,
+      goalLabel: GOAL.CORE_STABILITY.label,
+      subtitle: GOAL.CORE_STABILITY.hint,
+      source: 'arc_template',
+      confidence: 'low',
+    }
+  }
+  if (n <= 11) {
+    return {
+      sessionNumber: n,
+      state: 'placeholder',
+      roleCode: ROLE.MOBILIZE.code,
+      roleLabel: ROLE.MOBILIZE.label,
+      goalCode: GOAL.LOWER_MOBILITY.code,
+      goalLabel: GOAL.LOWER_MOBILITY.label,
+      subtitle: GOAL.LOWER_MOBILITY.hint,
+      source: 'arc_template',
+      confidence: 'low',
+    }
+  }
+  if (n <= 15) {
+    return {
+      sessionNumber: n,
+      state: 'placeholder',
+      roleCode: ROLE.BALANCE.code,
+      roleLabel: ROLE.BALANCE.label,
+      goalCode: GOAL.ASYMMETRY_BALANCE.code,
+      goalLabel: GOAL.ASYMMETRY_BALANCE.label,
+      subtitle: GOAL.ASYMMETRY_BALANCE.hint,
+      source: 'arc_template',
+      confidence: 'low',
+    }
+  }
+  if (n <= 18) {
+    return {
+      sessionNumber: n,
+      state: 'placeholder',
+      roleCode: ROLE.INTEGRATE.code,
+      roleLabel: ROLE.INTEGRATE.label,
+      goalCode: GOAL.FULL_BODY_PRIME.code,
+      goalLabel: GOAL.FULL_BODY_PRIME.label,
+      subtitle: GOAL.FULL_BODY_PRIME.hint,
+      source: 'arc_template',
+      confidence: 'low',
+    }
+  }
+  return {
+    sessionNumber: n,
+    state: 'placeholder',
+    roleCode: ROLE.RECOVER.code,
+    roleLabel: ROLE.RECOVER.label,
+    goalCode: GOAL.RECOVERY_RELIEF.code,
+    goalLabel: GOAL.RECOVERY_RELIEF.label,
+    subtitle: GOAL.RECOVERY_RELIEF.hint,
+    source: 'arc_template',
+    confidence: 'low',
+  }
+}
+
+function legacyFallback(sessionNumber: number, node: SessionNode | undefined): SessionNodeDisplay {
+  return {
+    sessionNumber,
+    state: 'placeholder',
+    roleCode: 'LEGACY',
+    roleLabel: node?.label ?? `세션 ${sessionNumber}`,
+    goalCode: 'LEGACY',
+    goalLabel: node?.description ?? '',
+    subtitle: node?.description ?? '',
+    source: 'legacy_map_data',
+    confidence: 'low',
+  }
+}
+
+function rationaleToContractMeta(
+  r: NonNullable<PlanSummaryResponse['rationale']>
+): Record<string, unknown> {
+  return {
+    ...r,
+    session_focus_axes: r.session_focus_axes,
+    session_rationale: r.session_rationale,
+    focus: r.focus,
+    priority_vector: r.priority_vector,
+    pain_mode: r.pain_mode,
+  }
+}
+
+function displayFromNextPreviewPayload(sessionNumber: number, payload: NextSessionPreviewPayload): SessionNodeDisplay {
+  const c = buildSessionDisplaySeedFromMeta({
+    session_focus_axes: payload.focus_axes,
+    phase: Math.max(1, Math.min(4, sessionNumber)),
+    pain_mode: 'none',
+  })
+  const full = resolveSessionDisplayContract({
+    ...c,
+    session_role_code: c.session_role_code,
+    session_role_label: c.session_role_label,
+    session_goal_code: c.session_goal_code,
+    session_goal_label: c.session_goal_label,
+    session_goal_hint: c.session_goal_hint,
+  } as Record<string, unknown>)
+  return contractToDisplay(sessionNumber, full, 'preview', 'next_preview', 'medium')
+}
+
+export type ResolveSessionNodeDisplaysArgs = {
+  total: number
+  completed: number
+  /** null = daily cap / no current session */
+  effectiveCurrentSession: number | null
+  /** plan_json.meta for the one active full plan (current session) */
+  activeFullMeta: { sessionNumber: number; meta: Record<string, unknown> } | null
+  summaryBySession: Map<number, PlanSummaryResponse>
+  bootstrapMetaBySession: Map<number, Record<string, unknown>>
+  nextPreview: NextSessionPreviewPayload | null
+  /** min(completed+1, total) */
+  nextSessionNumber: number
+  visibleNodes: SessionNode[]
+}
+
+/**
+ * Source hierarchy (SSOT):
+ * 1. active full plan meta (current session)
+ * 2. plan-summary rationale/meta
+ * 3. bootstrap meta
+ * 4. usable next-session preview (applies to next node only)
+ * 5a. completed history without summary → legacy map-data copy
+ * 5b. far-future nodes → arc_template
+ * 5c. next node without preview → legacy before arc
+ * Lower tiers never override higher tiers.
+ */
+export function resolveSessionNodeDisplays(args: ResolveSessionNodeDisplaysArgs): Record<number, SessionNodeDisplay> {
+  const {
+    total,
+    completed,
+    effectiveCurrentSession,
+    activeFullMeta,
+    summaryBySession,
+    bootstrapMetaBySession,
+    nextPreview,
+    nextSessionNumber,
+    visibleNodes,
+  } = args
+
+  const safeTotal = Math.max(1, Math.min(20, total ?? 20))
+  const byId = new Map(visibleNodes.filter((s) => s.id <= safeTotal).map((s) => [s.id, s]))
+  const out: Record<number, SessionNodeDisplay> = {}
+
+  for (let n = 1; n <= safeTotal; n++) {
+    const legacyNode = byId.get(n)
+    const isPastDone = n <= completed
+    const isCurrent = effectiveCurrentSession !== null && n === effectiveCurrentSession
+    const isNextNode = n === nextSessionNumber
+    const isFarFuture = n > nextSessionNumber
+
+    // 1) Active full plan (current session only)
+    if (activeFullMeta && activeFullMeta.sessionNumber === n) {
+      const c = resolveSessionDisplayContract(activeFullMeta.meta)
+      out[n] = contractToDisplay(n, c, 'confirmed', 'active_plan', 'high')
+      continue
+    }
+
+    // 2) Summary (completed + current + any prefetched)
+    const summary = summaryBySession.get(n)
+    if (summary?.rationale) {
+      const c = resolveSessionDisplayContract(rationaleToContractMeta(summary.rationale))
+      out[n] = contractToDisplay(n, c, 'confirmed', 'summary', 'high')
+      continue
+    }
+
+    // Past completed sessions: map-data legacy until plan-summary loads (no arc for history)
+    if (isPastDone && !isCurrent) {
+      out[n] = legacyFallback(n, legacyNode)
+      continue
+    }
+
+    // 3) Bootstrap preview
+    const bMeta = bootstrapMetaBySession.get(n)
+    if (bMeta) {
+      const c = resolveSessionDisplayContract(bMeta)
+      out[n] = contractToDisplay(n, c, 'preview', 'bootstrap', 'medium')
+      continue
+    }
+
+    // 4) Next-session preview prop
+    if (nextPreview && isNextNode && isUsableNextSessionPreview(nextPreview, n)) {
+      out[n] = displayFromNextPreviewPayload(n, nextPreview)
+      continue
+    }
+
+    // Next node (not current): journey copy before arc
+    if (isNextNode && !isCurrent) {
+      out[n] = legacyFallback(n, legacyNode)
+      continue
+    }
+
+    // Far future: arc, then legacy safety
+    if (isFarFuture) {
+      out[n] = arcPlaceholderDisplay(n)
+      continue
+    }
+
+    // Current session without meta yet (no summary / bootstrap): legacy so map stays stable
+    if (isCurrent) {
+      out[n] = legacyFallback(n, legacyNode)
+      continue
+    }
+
+    out[n] = legacyFallback(n, legacyNode)
+  }
+
+  return out
+}
+
+export function getMapLines(
+  display: SessionNodeDisplay | undefined,
+  fallbackNode: SessionNode
+): { largeLabel: string; subtitle: string | null } {
+  if (!display) {
+    return { largeLabel: fallbackNode.label, subtitle: fallbackNode.description?.trim() ? fallbackNode.description : null }
+  }
+  const sub = display.subtitle?.trim()
+  if (display.source === 'legacy_map_data') {
+    return { largeLabel: display.roleLabel, subtitle: sub || null }
+  }
+  return {
+    largeLabel: display.roleLabel,
+    subtitle: sub || null,
+  }
+}

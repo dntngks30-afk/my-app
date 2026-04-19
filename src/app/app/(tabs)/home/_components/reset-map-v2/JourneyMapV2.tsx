@@ -9,6 +9,7 @@ import {
   mapFeatures,
   type SessionNode,
 } from './map-data'
+import { getMapLines, type SessionNodeDisplay } from './session-node-display'
 
 interface JourneyMapV2Props {
   total: number
@@ -16,6 +17,8 @@ interface JourneyMapV2Props {
   /** null = daily cap, 현재 세션 없음 */
   currentSession: number | null
   onNodeTap: (session: SessionNode) => void
+  /** PR2: runtime-resolved labels; geometry still from map-data `sessions` */
+  nodeDisplayBySession?: Record<number, SessionNodeDisplay>
 }
 
 const VW = 390
@@ -71,7 +74,7 @@ function Flag({ x, y }: { x: number; y: number }) {
   )
 }
 
-function JourneyMapV2Inner({ total, completed, currentSession, onNodeTap }: JourneyMapV2Props) {
+function JourneyMapV2Inner({ total, completed, currentSession, onNodeTap, nodeDisplayBySession }: JourneyMapV2Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [, setMounted] = useState(false)
 
@@ -309,6 +312,7 @@ function JourneyMapV2Inner({ total, completed, currentSession, onNodeTap }: Jour
           const st = status(session.id)
           const r = session.type === 'milestone' ? MILESTONE_R : NODE_R
           const isMile = session.type === 'milestone'
+          const mapLines = getMapLines(nodeDisplayBySession?.[session.id], session)
 
           return (
             <g
@@ -317,7 +321,7 @@ function JourneyMapV2Inner({ total, completed, currentSession, onNodeTap }: Jour
               className="cursor-pointer"
               role="button"
               tabIndex={0}
-              aria-label={`세션 ${session.id}: ${session.label}${st === 'locked' ? ' (잠김)' : ''}`}
+              aria-label={`세션 ${session.id}: ${mapLines.largeLabel}${st === 'locked' ? ' (잠김)' : ''}`}
             >
               {st === 'current' && (
                 <>
@@ -381,11 +385,47 @@ function JourneyMapV2Inner({ total, completed, currentSession, onNodeTap }: Jour
                 letterSpacing="0.04em"
                 className="font-sans"
               >
-                {session.label}
+                {mapLines.largeLabel}
               </text>
 
+              {!isMile && mapLines.subtitle && (
+                <text
+                  x={session.x}
+                  y={session.y + r + 30}
+                  textAnchor="middle"
+                  fill={st === 'locked' ? C.lockedText : C.elevText}
+                  fontSize="6.5"
+                  opacity={st === 'locked' ? 0.55 : 0.72}
+                  className="font-sans"
+                >
+                  {mapLines.subtitle}
+                </text>
+              )}
+
+              {isMile && mapLines.subtitle && (
+                <text
+                  x={session.x}
+                  y={session.y + r + 32}
+                  textAnchor="middle"
+                  fill={st === 'locked' ? C.lockedText : C.elevText}
+                  fontSize="6.5"
+                  opacity={0.65}
+                  className="font-sans"
+                >
+                  {mapLines.subtitle}
+                </text>
+              )}
+
               {isMile && (
-                <text x={session.x} y={session.y + r + 31} textAnchor="middle" fill={C.elevText} fontSize="6.5" opacity="0.6" className="font-mono">
+                <text
+                  x={session.x}
+                  y={session.y + r + (mapLines.subtitle ? 43 : 31)}
+                  textAnchor="middle"
+                  fill={C.elevText}
+                  fontSize="6.5"
+                  opacity="0.6"
+                  className="font-mono"
+                >
                   {`${session.elevation}m`}
                 </text>
               )}

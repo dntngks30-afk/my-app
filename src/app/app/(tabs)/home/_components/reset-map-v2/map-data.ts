@@ -1,10 +1,16 @@
+/**
+ * Geometry + route structure for the reset map.
+ * `label` / `description` are legacy fallback copy only (PR2+); runtime node text uses session-node-display resolver.
+ */
 export interface SessionNode {
   id: number
   x: number
   y: number
   week: number
+  /** Legacy fallback — not canonical session truth when plan meta / summary exists */
   label: string
   type: 'workout' | 'milestone'
+  /** Legacy fallback subtitle seed */
   description: string
   duration: string
   exercises: string[]
