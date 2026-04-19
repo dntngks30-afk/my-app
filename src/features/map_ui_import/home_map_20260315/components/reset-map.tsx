@@ -69,11 +69,103 @@ const END_Y = 80
 const ROUTE_SAMPLES = 120 // Dense points for smooth curved path
 
 // Uniform gap from road edge to panel center
-const PANEL_GAP = 52
 const RIGHT_PANEL_OFFSET = 42 // Right panels slightly closer (shifted left)
 const LEFT_PANEL_OFFSET = 62 // Left panels slightly further out (shifted left from road)
 
+const SAFE_EDGE_INSET = 18
+const NODE_LABEL_GAP = 12
+const INLINE_LABEL_MIN_WIDTH = 96
+const INLINE_LABEL_MAX_WIDTH = 132
+const STACKED_LABEL_MIN_WIDTH = 132
+const STACKED_LABEL_MAX_WIDTH = 168
+const MAX_NODE_DIAMETER = 46
+
 const round = (n: number) => Math.round(n * 100) / 100
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
+
+type SessionNodeLayoutMode = "side-inline" | "stacked-below"
+
+type SessionNodePlacement = {
+  nodeX: number
+  nodeY: number
+  labelSide: "left" | "right"
+  layoutMode: SessionNodeLayoutMode
+  labelWidth: number
+  labelAlign: "left" | "right" | "center"
+}
+
+function resolveVisibleCanvasBounds(containerWidth: number | null) {
+  const visibleWidth = clamp(containerWidth ?? CANVAS_WIDTH, 260, CANVAS_WIDTH)
+  const sideCrop = Math.max(0, (CANVAS_WIDTH - visibleWidth) / 2)
+  return {
+    safeLeft: sideCrop + SAFE_EDGE_INSET,
+    safeRight: CANVAS_WIDTH - sideCrop - SAFE_EDGE_INSET,
+    visibleWidth: visibleWidth - SAFE_EDGE_INSET * 2,
+  }
+}
+
+function resolveViewportSafePlacement(
+  anchor: SessionAnchor,
+  preferredSide: "left" | "right",
+  containerWidth: number | null
+): SessionNodePlacement {
+  const { safeLeft, safeRight, visibleWidth } = resolveVisibleCanvasBounds(containerWidth)
+  const nodeHalf = MAX_NODE_DIAMETER / 2
+  const inlineMin = INLINE_LABEL_MIN_WIDTH
+  const inlineMax = INLINE_LABEL_MAX_WIDTH
+
+  const tryInline = (side: "left" | "right"): SessionNodePlacement | null => {
+    if (side === "right") {
+      const maxNodeX = safeRight - nodeHalf - NODE_LABEL_GAP - inlineMin
+      if (maxNodeX < safeLeft + nodeHalf) return null
+      const nodeX = clamp(anchor.x, safeLeft + nodeHalf, maxNodeX)
+      const labelWidth = Math.min(
+        inlineMax,
+        Math.max(inlineMin, safeRight - (nodeX + nodeHalf + NODE_LABEL_GAP))
+      )
+      return {
+        nodeX,
+        nodeY: anchor.y,
+        labelSide: "right",
+        layoutMode: "side-inline",
+        labelWidth,
+        labelAlign: "left",
+      }
+    }
+
+    const minNodeX = safeLeft + nodeHalf + NODE_LABEL_GAP + inlineMin
+    if (minNodeX > safeRight - nodeHalf) return null
+    const nodeX = clamp(anchor.x, minNodeX, safeRight - nodeHalf)
+    const labelWidth = Math.min(
+      inlineMax,
+      Math.max(inlineMin, nodeX - nodeHalf - NODE_LABEL_GAP - safeLeft)
+    )
+    return {
+      nodeX,
+      nodeY: anchor.y,
+      labelSide: "left",
+      layoutMode: "side-inline",
+      labelWidth,
+      labelAlign: "right",
+    }
+  }
+
+  const preferred = tryInline(preferredSide)
+  if (preferred) return preferred
+
+  const opposite = tryInline(preferredSide === "right" ? "left" : "right")
+  if (opposite) return opposite
+
+  const stackedWidth = clamp(visibleWidth - 12, STACKED_LABEL_MIN_WIDTH, STACKED_LABEL_MAX_WIDTH)
+  return {
+    nodeX: clamp(anchor.x, safeLeft + stackedWidth / 2, safeRight - stackedWidth / 2),
+    nodeY: anchor.y,
+    labelSide: "right",
+    layoutMode: "stacked-below",
+    labelWidth: stackedWidth,
+    labelAlign: "center",
+  }
+}
 
 // Parametric curve: road rises through center of canvas, gentle S-curves
 // Returns { x, y } for t in [0, 1], bottom to top
@@ -244,7 +336,28 @@ export function ResetMap({
 }: DonorResetMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [sessionAnchors, setSessionAnchors] = useState<SessionAnchor[] | null>(null)
+  const [containerWidth, setContainerWidth] = useState<number | null>(null)
   const hasInitialScrolled = useRef(false)
+
+  useEffect(() => {
+    const node = containerRef.current
+    if (!node) return
+
+    const updateWidth = () => {
+      setContainerWidth(Math.round(node.getBoundingClientRect().width))
+    }
+
+    updateWidth()
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth)
+      return () => window.removeEventListener("resize", updateWidth)
+    }
+
+    const observer = new ResizeObserver(() => updateWidth())
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
 
   const sessions = useMemo(
     () =>
@@ -263,6 +376,17 @@ export function ResetMap({
     },
     [total]
   )
+
+  const sessionPlacements = useMemo(() => {
+    if (!sessionAnchors || containerWidth == null) return null
+    return sessionAnchors.map((anchor) =>
+      resolveViewportSafePlacement(
+        anchor,
+        anchor.side === 1 ? "right" : "left",
+        containerWidth
+      )
+    )
+  }, [sessionAnchors, containerWidth])
 
   const [isDragging, setIsDragging] = useState(false)
   const dragStartY = useRef(0)
@@ -477,13 +601,13 @@ export function ResetMap({
             ))}
         </svg>
 
-        {/* Session nodes - all anchored to road, unified GAP, alternating left/right */}
+        {/* Session nodes - path-following with viewport-safe final placement */}
         {sessionAnchors?.map((anchor, index) =>
-          sessions[index] ? (
+          sessions[index] && sessionPlacements?.[index] ? (
             <SessionNode
               key={sessions[index].id}
               session={sessions[index]}
-              anchor={anchor}
+              placement={sessionPlacements[index]}
               index={index}
               onTap={
                 onNodeTap
@@ -651,20 +775,21 @@ function BackgroundLayers({
 
 function SessionNode({
   session,
-  anchor,
+  placement,
   index,
   onTap,
 }: {
   session: DonorSession
-  anchor: SessionAnchor
+  placement: SessionNodePlacement
   index: number
   onTap?: () => void
 }) {
   const isCompleted = session.status === "completed"
   const isActive = session.status === "active"
   const isLocked = session.status === "locked"
-  const position = { x: anchor.x, y: anchor.y }
-  const labelOnRight = anchor.side === 1
+  const position = { x: placement.nodeX, y: placement.nodeY }
+  const labelOnRight = placement.labelSide === "right"
+  const isStacked = placement.layoutMode === "stacked-below"
   const isClickable = !!onTap
 
   return (
@@ -775,43 +900,61 @@ function SessionNode({
         {isLocked && <Lock className="w-3 h-3" strokeWidth={2.5} />}
       </motion.div>
 
-      {/* Label — donor-faithful: session number, title, subtitle */}
+      {/* Label — viewport-safe horizontal text block */}
       <motion.div
-        className={cn("absolute top-1/2 -translate-y-1/2 whitespace-nowrap", labelOnRight ? "left-full ml-3" : "right-full mr-3 text-right")}
-        initial={{ opacity: 0, x: labelOnRight ? -8 : 8 }}
-        animate={{ opacity: 1, x: 0 }}
+        className={cn(
+          "absolute",
+          isStacked
+            ? "left-1/2 top-full mt-3 -translate-x-1/2"
+            : labelOnRight
+              ? "left-full top-1/2 ml-3 -translate-y-1/2"
+              : "right-full top-1/2 mr-3 -translate-y-1/2"
+        )}
+        style={{
+          width: placement.labelWidth,
+          minWidth: placement.layoutMode === "side-inline" ? INLINE_LABEL_MIN_WIDTH : STACKED_LABEL_MIN_WIDTH,
+          maxWidth: placement.labelWidth,
+          textAlign: placement.labelAlign,
+        }}
+        initial={{ opacity: 0, x: isStacked ? 0 : labelOnRight ? -8 : 8, y: 0 }}
+        animate={{ opacity: 1, x: 0, y: 0 }}
         transition={{ delay: index * 0.03 + 0.7 }}
       >
         <p
           className={cn(
-            "text-[10px] font-medium tabular-nums",
+            "text-[10px] font-medium tabular-nums leading-tight",
             isActive && "text-orange-400",
             isCompleted && "text-slate-300",
             isLocked && "text-slate-500"
           )}
+          style={{ whiteSpace: "normal", wordBreak: "keep-all", overflowWrap: "anywhere" }}
         >
           세션 {session.id}
         </p>
         <p
           className={cn(
-            "text-sm font-semibold",
+            "mt-0.5 text-sm font-semibold leading-tight",
             isActive && "text-orange-500",
             isCompleted && "text-white/95",
             isLocked && "text-slate-400"
           )}
+          style={{ whiteSpace: "normal", wordBreak: "keep-all", overflowWrap: "anywhere" }}
         >
           {session.title}
         </p>
-        <p
-          className={cn(
-            "text-[11px]",
-            isActive && "text-orange-400/90",
-            isCompleted && "text-slate-400",
-            isLocked && "text-slate-500/70"
-          )}
-        >
-          {session.subtitle}
-        </p>
+        {session.subtitle ? (
+          <p
+            className={cn(
+              "mt-0.5 text-[11px] leading-tight",
+              isActive && "text-orange-400/90",
+              isCompleted && "text-slate-400",
+              isLocked && "text-slate-500/70"
+            )}
+            style={{ whiteSpace: "normal", wordBreak: "keep-all", overflowWrap: "anywhere" }}
+          >
+            {session.subtitle}
+          </p>
+        ) : null}
       </motion.div>
     </motion.div>
   )
