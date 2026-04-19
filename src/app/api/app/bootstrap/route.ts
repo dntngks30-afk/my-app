@@ -15,6 +15,7 @@ import { generateAdaptiveExplanation } from '@/core/adaptive-explanation';
 import { getActiveFlowByUser, type ResetMapFlowRow } from '@/lib/reset-map/activeFlow';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import { fetchHomeNodeDisplayBundle } from '@/lib/session/home-node-display-bundle';
+import { buildSessionNodeDisplayHydrationItem } from '@/lib/session/session-node-display-hydration-item';
 import type { HomeNodeDisplayBundle } from '@/lib/session/client';
 
 export const dynamic = 'force-dynamic';
@@ -194,8 +195,35 @@ export async function GET(req: NextRequest) {
         totalSessions: sessionData.total_sessions,
         activeSessionNumber: activeLite.data.progress.active_session_number ?? null,
       });
-      if (bundle.items.length > 0) {
-        nodeDisplayBundle = bundle;
+      const items = [...bundle.items];
+      const nextNum = Math.min(
+        sessionData.completed_sessions + 1,
+        sessionData.total_sessions
+      );
+      if (
+        nextNum >= 1 &&
+        nextNum <= sessionData.total_sessions &&
+        nextSession &&
+        nextSession.session_number === nextNum &&
+        !items.some((i) => i.session_number === nextNum)
+      ) {
+        const syntheticMeta: Record<string, unknown> = {
+          session_number: nextNum,
+          phase: Math.max(1, Math.min(4, nextNum)),
+          session_focus_axes: nextSession.focus_axes,
+        };
+        if (
+          typeof nextSession.session_rationale === 'string' &&
+          nextSession.session_rationale.trim().length > 0
+        ) {
+          syntheticMeta.session_rationale = nextSession.session_rationale.trim();
+        }
+        const base = buildSessionNodeDisplayHydrationItem(nextNum, syntheticMeta);
+        items.push({ ...base, source_hint: 'bootstrap' });
+        items.sort((a, b) => a.session_number - b.session_number);
+      }
+      if (items.length > 0) {
+        nodeDisplayBundle = { items };
       }
     } catch (err) {
       console.warn('[app/bootstrap] node_display_bundle skipped', err);

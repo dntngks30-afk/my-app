@@ -9,7 +9,6 @@ import {
   buildSessionDisplaySeedFromMeta,
 } from '@/lib/session/session-display-contract'
 import type { NextSessionPreviewPayload } from '@/lib/session/next-session-preview'
-import { isUsableNextSessionPreview } from '@/lib/session/next-session-preview'
 import {
   buildSessionDisplayCopy,
   mapLinesFromSessionDisplayCopy,
@@ -254,6 +253,17 @@ function displayFromNextPreviewPayload(sessionNumber: number, payload: NextSessi
   return contractToDisplay(sessionNumber, full, 'preview', 'next_preview', 'medium')
 }
 
+function syntheticNextPreviewPayload(sessionNumber: number): NextSessionPreviewPayload {
+  return {
+    session_number: sessionNumber,
+    focus_axes: [],
+    estimated_time: 0,
+    exercise_count: 0,
+    session_rationale: null,
+    exercises_preview: [],
+  }
+}
+
 export type ResolveSessionNodeDisplaysArgs = {
   total: number
   completed: number
@@ -272,15 +282,16 @@ export type ResolveSessionNodeDisplaysArgs = {
 }
 
 /**
- * Source hierarchy (SSOT):
+ * Source hierarchy (PR-TRUTH-01):
  * 1. active full plan meta (current session)
  * 2. plan-summary rationale/meta
- * 3. batch hydrated display (read-time; summary보다 약하거나 동급, active는 덮지 않음)
- * 4. bootstrap meta
- * 5. usable next-session preview (applies to next node only)
- * 6a. completed history → legacy map-data copy
- * 6b. far-future nodes → arc_template
- * 6c. next node without preview → legacy before arc
+ * 3. batch hydrated display (bootstrap bundle / node-display-batch; plan_json.meta family)
+ * 4. client bootstrap meta (prefetched draft)
+ * 5. next operational node → next-session preview payload when present, else phase-only preview (never legacy map copy)
+ * 6. far-future (n > nextSessionNumber) → arc_template placeholder
+ * 7. completed history without any runtime meta → legacy_map_data (last resort)
+ * 8. current without meta → phase-only preview (same contract family as panel/bootstrap)
+ * 9. final legacy_map_data safety net
  * Lower tiers never override higher tiers.
  */
 export function resolveSessionNodeDisplays(args: ResolveSessionNodeDisplaysArgs): Record<number, SessionNodeDisplay> {
@@ -333,12 +344,6 @@ export function resolveSessionNodeDisplays(args: ResolveSessionNodeDisplaysArgs)
       continue
     }
 
-    // Past completed sessions: map-data legacy until summary/hydration (no arc for history)
-    if (isPastDone && !isCurrent) {
-      out[n] = legacyFallback(n, legacyNode)
-      continue
-    }
-
     // Bootstrap preview
     const bMeta = bootstrapMetaBySession.get(n)
     if (bMeta) {
@@ -347,27 +352,26 @@ export function resolveSessionNodeDisplays(args: ResolveSessionNodeDisplaysArgs)
       continue
     }
 
-    // 4) Next-session preview prop
-    if (nextPreview && isNextNode && isUsableNextSessionPreview(nextPreview, n)) {
-      out[n] = displayFromNextPreviewPayload(n, nextPreview)
+    // Next unlock target: always stay in display-contract / preview family (demote legacy_map_data).
+    if (isNextNode) {
+      const payload: NextSessionPreviewPayload =
+        nextPreview?.session_number === n ? nextPreview : syntheticNextPreviewPayload(n)
+      out[n] = displayFromNextPreviewPayload(n, payload)
       continue
     }
 
-    // Next node (not current): journey copy before arc
-    if (isNextNode && !isCurrent) {
-      out[n] = legacyFallback(n, legacyNode)
-      continue
-    }
-
-    // Far future: arc, then legacy safety
     if (isFarFuture) {
       out[n] = arcPlaceholderDisplay(n)
       continue
     }
 
-    // Current session without meta yet (no summary / bootstrap): legacy so map stays stable
-    if (isCurrent) {
+    if (isPastDone && !isCurrent) {
       out[n] = legacyFallback(n, legacyNode)
+      continue
+    }
+
+    if (isCurrent) {
+      out[n] = displayFromNextPreviewPayload(n, syntheticNextPreviewPayload(n))
       continue
     }
 

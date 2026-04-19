@@ -6,6 +6,10 @@ import { Check, Lock, Dumbbell } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { sessions as mapDataSessions } from "@/app/app/(tabs)/home/_components/reset-map-v2/map-data"
 import type { SessionNode as MapDataSessionNode } from "@/app/app/(tabs)/home/_components/reset-map-v2/map-data"
+import {
+  getMapLines,
+  type SessionNodeDisplay,
+} from "@/app/app/(tabs)/home/_components/reset-map-v2/session-node-display"
 
 interface DonorSession {
   id: number
@@ -18,14 +22,28 @@ interface DonorSession {
 function buildImportedSessionsFromProgress(
   total: number,
   completed: number,
-  currentSession: number | null
+  currentSession: number | null,
+  nodeDisplayBySession?: Record<number, SessionNodeDisplay>
 ): DonorSession[] {
   const safeTotal = Math.max(1, Math.min(20, total))
   const items: DonorSession[] = []
   for (let id = 1; id <= safeTotal; id++) {
     const node = mapDataSessions.find((s) => s.id === id)
-    const title = node?.label ?? `세션 ${id}`
-    const subtitle = node?.description ?? ""
+    const geometryFallback: MapDataSessionNode = node ?? {
+      id,
+      x: 0,
+      y: 0,
+      week: 1,
+      label: `세션 ${id}`,
+      type: "workout",
+      description: "",
+      duration: "",
+      exercises: [],
+      elevation: 0,
+    }
+    const lines = getMapLines(nodeDisplayBySession?.[id], geometryFallback)
+    const title = lines.largeLabel
+    const subtitle = lines.subtitle ?? ""
     let status: "completed" | "active" | "locked"
     if (currentSession === null) {
       status = id <= completed ? "completed" : "locked"
@@ -213,6 +231,8 @@ export interface DonorResetMapProps {
   /** null = daily cap, 현재 세션 없음 */
   currentSession: number | null
   onNodeTap?: (session: MapDataSessionNode) => void
+  /** PR-TRUTH-01: same runtime node copy family as JourneyMapV2 */
+  nodeDisplayBySession?: Record<number, SessionNodeDisplay>
 }
 
 export function ResetMap({
@@ -220,14 +240,21 @@ export function ResetMap({
   completed,
   currentSession,
   onNodeTap,
+  nodeDisplayBySession,
 }: DonorResetMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [sessionAnchors, setSessionAnchors] = useState<SessionAnchor[] | null>(null)
   const hasInitialScrolled = useRef(false)
 
   const sessions = useMemo(
-    () => buildImportedSessionsFromProgress(total, completed, currentSession),
-    [total, completed, currentSession]
+    () =>
+      buildImportedSessionsFromProgress(
+        total,
+        completed,
+        currentSession,
+        nodeDisplayBySession
+      ),
+    [total, completed, currentSession, nodeDisplayBySession]
   )
 
   const mainPathRef = useCallback(

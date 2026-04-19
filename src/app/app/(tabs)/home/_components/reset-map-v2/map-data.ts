@@ -1,6 +1,7 @@
 /**
  * Geometry + route structure for the reset map.
- * `label` / `description` are legacy fallback copy only (PR2+); runtime node text uses session-node-display resolver.
+ * `label` / `description` are legacy fallback / geometry-adjacent seed only (PR2, PR-TRUTH-01);
+ * near-node semantic truth is session-node-display + plan meta / bootstrap / preview, not this file.
  */
 export interface SessionNode {
   id: number
