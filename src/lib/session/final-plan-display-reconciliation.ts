@@ -8,37 +8,8 @@
 
 import type { SessionTemplateRow } from '@/lib/workout-routine/exercise-templates-db';
 import { getAxisLabel, getAxisSessionGoal } from '@/core/session-rationale';
+import { TAG_TO_AXES, VECTOR_TO_FOCUS_AXIS } from '@/lib/session/axis-focus-tag-mapping';
 import { resolveSessionDisplayContract } from '@/lib/session/session-display-contract';
-
-/** Keep in sync with priority-layer.ts PRIORITY_AXIS_TO_FOCUS_TAGS */
-const PRIORITY_AXIS_TO_FOCUS_TAGS: Record<string, readonly string[]> = {
-  lower_stability: ['lower_chain_stability', 'glute_medius', 'basic_balance', 'core_stability'],
-  lower_mobility: ['hip_mobility', 'ankle_mobility'],
-  upper_mobility: ['thoracic_mobility', 'shoulder_mobility', 'shoulder_stability'],
-  trunk_control: ['core_control', 'core_stability', 'global_core'],
-  asymmetry: ['basic_balance', 'lower_chain_stability'],
-  deconditioned: ['full_body_reset', 'core_control'],
-};
-
-const TAG_TO_AXES: Map<string, string[]> = (() => {
-  const m = new Map<string, Set<string>>();
-  for (const [axis, tags] of Object.entries(PRIORITY_AXIS_TO_FOCUS_TAGS)) {
-    for (const tag of tags) {
-      if (!m.has(tag)) m.set(tag, new Set());
-      m.get(tag)!.add(axis);
-    }
-  }
-  return new Map([...m.entries()].map(([k, v]) => [k, [...v]]));
-})();
-
-const VECTOR_TO_FOCUS_AXIS: Record<string, string | 'split_trunk_upper'> = {
-  lower_stability: 'lower_stability',
-  lower_mobility: 'lower_mobility',
-  upper_mobility: 'upper_mobility',
-  trunk_control: 'trunk_control',
-  deconditioned: 'deconditioned',
-  balanced_reset: 'split_trunk_upper',
-};
 
 export type FinalAlignmentAuditV1 = {
   upstream_focus_axes: string[];

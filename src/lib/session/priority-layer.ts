@@ -5,15 +5,7 @@
  * Additive front-layer only. Generator core unchanged.
  */
 
-/** priority_vector axis → focus_tags for template scoring */
-const PRIORITY_AXIS_TO_FOCUS_TAGS: Record<string, string[]> = {
-  lower_stability: ['lower_chain_stability', 'glute_medius', 'basic_balance', 'core_stability'],
-  lower_mobility: ['hip_mobility', 'ankle_mobility'],
-  upper_mobility: ['thoracic_mobility', 'shoulder_mobility', 'shoulder_stability'],
-  trunk_control: ['core_control', 'core_stability', 'global_core'],
-  asymmetry: ['basic_balance', 'lower_chain_stability'],
-  deconditioned: ['full_body_reset', 'core_control'],
-};
+import { PRIORITY_AXIS_TO_FOCUS_TAGS } from '@/lib/session/axis-focus-tag-mapping';
 
 /** pain_mode=protected 시 추가 제외할 contraindication 코드. PR-SESSION-QUALITY-01: deep_squat 추가 */
 const PAIN_PROTECTED_EXTRA_AVOID = [
@@ -358,7 +350,8 @@ export function resolveSessionPriorities(priorityVector?: Record<string, number>
   const tags: string[] = [];
   const seen = new Set<string>();
   for (const [axis] of axes.slice(0, 3)) {
-    const axisTags = PRIORITY_AXIS_TO_FOCUS_TAGS[axis] ?? [];
+    const entry = PRIORITY_AXIS_TO_FOCUS_TAGS[axis];
+    const axisTags = entry ? [...entry] : [];
     for (const t of axisTags) {
       if (!seen.has(t)) {
         seen.add(t);
