@@ -304,6 +304,36 @@ export async function getSessionPlanSummary(
   return sessionFetch<PlanSummaryResponse>(path, token, { method: 'GET' });
 }
 
+/** PR-LEGACY-HYDRATION: display-only batch (no segments). */
+export type SessionNodeDisplayHydrationItem = {
+  session_number: number;
+  session_role_code?: string;
+  session_role_label?: string;
+  session_goal_code?: string;
+  session_goal_label?: string;
+  session_goal_hint?: string;
+  session_rationale?: string | null;
+  session_focus_axes?: string[];
+  priority_vector?: Record<string, number>;
+  pain_mode?: 'none' | 'caution' | 'protected';
+  focus?: string[];
+};
+
+export type SessionNodeDisplayHydrationResponse = {
+  items: SessionNodeDisplayHydrationItem[];
+};
+
+/** GET /api/session/node-display-batch — 기존 계정 히스토리 노드 display 습수 (read-time derivation). */
+export async function getSessionNodeDisplayBatch(
+  token: string,
+  input: { from?: number; to?: number }
+): Promise<ApiResult<SessionNodeDisplayHydrationResponse>> {
+  const from = input.from ?? 1;
+  const to = input.to ?? 20;
+  const path = `/api/session/node-display-batch?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  return sessionFetch<SessionNodeDisplayHydrationResponse>(path, token, { method: 'GET' });
+}
+
 export type SessionBootstrapResponse = {
   session_number: number;
   phase: number;

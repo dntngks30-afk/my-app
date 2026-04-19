@@ -3,7 +3,7 @@
  * Pure helpers; no adaptive/scoring/generation semantics.
  */
 
-import type { PlanSummaryResponse } from '@/lib/session/client'
+import type { PlanSummaryResponse, SessionNodeDisplayHydrationItem } from '@/lib/session/client'
 import {
   resolveSessionDisplayContract,
   buildSessionDisplaySeedFromMeta,
@@ -22,6 +22,7 @@ export type SessionNodeDisplayState = 'confirmed' | 'preview' | 'placeholder'
 export type SessionNodeDisplaySource =
   | 'active_plan'
   | 'summary'
+  | 'hydrated_history'
   | 'bootstrap'
   | 'next_preview'
   | 'arc_template'
@@ -188,6 +189,26 @@ function legacyFallback(sessionNumber: number, node: SessionNode | undefined): S
   }
 }
 
+/** Batch hydration item → plan_json.meta-shaped object for resolveSessionDisplayContract. */
+export function hydrationItemToResolverMeta(item: SessionNodeDisplayHydrationItem): Record<string, unknown> {
+  const m: Record<string, unknown> = {}
+  if (item.session_role_code) m.session_role_code = item.session_role_code
+  if (item.session_role_label) m.session_role_label = item.session_role_label
+  if (item.session_goal_code) m.session_goal_code = item.session_goal_code
+  if (item.session_goal_label) m.session_goal_label = item.session_goal_label
+  if (item.session_goal_hint) m.session_goal_hint = item.session_goal_hint
+  if (item.session_rationale !== undefined) m.session_rationale = item.session_rationale
+  if (Array.isArray(item.session_focus_axes) && item.session_focus_axes.length > 0) {
+    m.session_focus_axes = item.session_focus_axes
+  }
+  if (item.priority_vector && typeof item.priority_vector === 'object') {
+    m.priority_vector = item.priority_vector
+  }
+  if (item.pain_mode) m.pain_mode = item.pain_mode
+  if (Array.isArray(item.focus) && item.focus.length > 0) m.focus = item.focus
+  return m
+}
+
 function rationaleToContractMeta(
   r: NonNullable<PlanSummaryResponse['rationale']>
 ): Record<string, unknown> {
@@ -226,6 +247,8 @@ export type ResolveSessionNodeDisplaysArgs = {
   /** plan_json.meta for the one active full plan (current session) */
   activeFullMeta: { sessionNumber: number; meta: Record<string, unknown> } | null
   summaryBySession: Map<number, PlanSummaryResponse>
+  /** PR-LEGACY-HYDRATION: batch read-time display, weaker than loaded summary */
+  hydrationMetaBySession: Map<number, Record<string, unknown>>
   bootstrapMetaBySession: Map<number, Record<string, unknown>>
   nextPreview: NextSessionPreviewPayload | null
   /** min(completed+1, total) */
@@ -237,11 +260,12 @@ export type ResolveSessionNodeDisplaysArgs = {
  * Source hierarchy (SSOT):
  * 1. active full plan meta (current session)
  * 2. plan-summary rationale/meta
- * 3. bootstrap meta
- * 4. usable next-session preview (applies to next node only)
- * 5a. completed history without summary → legacy map-data copy
- * 5b. far-future nodes → arc_template
- * 5c. next node without preview → legacy before arc
+ * 3. batch hydrated display (read-time; summary보다 약하거나 동급, active는 덮지 않음)
+ * 4. bootstrap meta
+ * 5. usable next-session preview (applies to next node only)
+ * 6a. completed history → legacy map-data copy
+ * 6b. far-future nodes → arc_template
+ * 6c. next node without preview → legacy before arc
  * Lower tiers never override higher tiers.
  */
 export function resolveSessionNodeDisplays(args: ResolveSessionNodeDisplaysArgs): Record<number, SessionNodeDisplay> {
@@ -251,6 +275,7 @@ export function resolveSessionNodeDisplays(args: ResolveSessionNodeDisplaysArgs)
     effectiveCurrentSession,
     activeFullMeta,
     summaryBySession,
+    hydrationMetaBySession,
     bootstrapMetaBySession,
     nextPreview,
     nextSessionNumber,
@@ -283,13 +308,20 @@ export function resolveSessionNodeDisplays(args: ResolveSessionNodeDisplaysArgs)
       continue
     }
 
-    // Past completed sessions: map-data legacy until plan-summary loads (no arc for history)
+    const hyd = hydrationMetaBySession.get(n)
+    if (hyd && Object.keys(hyd).length > 0) {
+      const c = resolveSessionDisplayContract(hyd)
+      out[n] = contractToDisplay(n, c, 'confirmed', 'hydrated_history', 'medium')
+      continue
+    }
+
+    // Past completed sessions: map-data legacy until summary/hydration (no arc for history)
     if (isPastDone && !isCurrent) {
       out[n] = legacyFallback(n, legacyNode)
       continue
     }
 
-    // 3) Bootstrap preview
+    // Bootstrap preview
     const bMeta = bootstrapMetaBySession.get(n)
     if (bMeta) {
       const c = resolveSessionDisplayContract(bMeta)

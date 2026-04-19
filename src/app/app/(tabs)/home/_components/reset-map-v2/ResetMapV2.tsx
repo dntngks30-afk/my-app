@@ -9,11 +9,13 @@ import {
   bootstrapSession,
   createSession,
   getSessionPlanSummary,
+  getSessionNodeDisplayBatch,
   type SessionBootstrapResponse,
   type SessionPlan,
   type ActivePlanSummary,
   type ExerciseLogItem,
   type PlanSummaryResponse,
+  type SessionNodeDisplayHydrationItem,
 } from '@/lib/session/client'
 import {
   submitResetMapPreview,
@@ -32,6 +34,7 @@ import { clearSessionDraftForSession } from '@/lib/session/draftStorage'
 import { buildSessionDisplaySeedFromBootstrap } from '@/lib/session/session-display-contract'
 import {
   resolveSessionNodeDisplays,
+  hydrationItemToResolverMeta,
   type SessionNodeDisplay,
 } from './session-node-display'
 
@@ -210,6 +213,9 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
   /** PR2: bump when summary/bootstrap cache mutates so node labels recompute (refs alone do not rerender). */
   const [displayVersion, setDisplayVersion] = useState(0)
 
+  /** PR-LEGACY-HYDRATION: batch display-only meta for completed history (map label drift 방지). */
+  const [hydrationItems, setHydrationItems] = useState<SessionNodeDisplayHydrationItem[]>([])
+
   /** PR-RISK-08b: Scoped invalidation — only stale sessions (completed + next). */
   const invalidateStaleSessionCaches = useCallback(
     (
@@ -310,6 +316,25 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       bootstrapRequestRef.current.delete(sessionNumber)
     }
   }, [resolveAuthToken, debug])
+
+  /** 홈 진입 시 완료 히스토리·노드 display batch 습수 (단일 요청, segments 없음). */
+  useEffect(() => {
+    let cancelled = false
+    if (total < 1) return
+    void resolveAuthToken().then(async (token) => {
+      if (!token || cancelled) return
+      const res = await getSessionNodeDisplayBatch(token, {
+        from: 1,
+        to: Math.min(20, total),
+      })
+      if (cancelled || !res.ok) return
+      setHydrationItems(res.data.items)
+      setDisplayVersion((v) => v + 1)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [total, completed, resolveAuthToken])
 
   // prop 변경(세션 완료 후 null 리셋 등) 반영
   // PR-RISK-08b: activePlan non-null→null 시 identity 기반 정밀 invalidation (prefix purge 대체)
@@ -867,12 +892,21 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       }
     }
 
+    const hydrationMetaBySession = new Map<number, Record<string, unknown>>()
+    for (const item of hydrationItems) {
+      const hm = hydrationItemToResolverMeta(item)
+      if (Object.keys(hm).length > 0) {
+        hydrationMetaBySession.set(item.session_number, hm)
+      }
+    }
+
     return resolveSessionNodeDisplays({
       total,
       completed,
       effectiveCurrentSession,
       activeFullMeta,
       summaryBySession,
+      hydrationMetaBySession,
       bootstrapMetaBySession,
       nextPreview: nextSession ?? null,
       nextSessionNumber: nextSessionNum,
@@ -889,6 +923,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     nextSessionNum,
     pastSessionPlan,
     bootstrapPlan,
+    hydrationItems,
   ])
 
   const isDonorCard = !!mapRenderer
