@@ -397,6 +397,15 @@ export function getMapLines(
     const sub = display.subtitle?.trim()
     return { largeLabel: display.roleLabel, subtitle: sub || null }
   }
-  const copy = buildSessionDisplayCopy(sessionCopyInputFromNodeDisplay(display))
+  const copy = buildSessionDisplayCopy(
+    sessionCopyInputFromNodeDisplay({
+      roleCode: display.roleCode,
+      roleLabel: display.roleLabel,
+      goalCode: display.goalCode,
+      goalLabel: display.goalLabel,
+      subtitle: display.subtitle,
+      sessionNumber: display.sessionNumber,
+    })
+  )
   return mapLinesFromSessionDisplayCopy(copy)
 }

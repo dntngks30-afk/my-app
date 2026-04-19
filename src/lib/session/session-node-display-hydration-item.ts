@@ -5,6 +5,7 @@
 
 import {
   extractCanonicalDisplayFamilyPassThrough,
+  metaForDisplayContractResolve,
   resolveSessionDisplayContract,
 } from '@/lib/session/session-display-contract';
 import type { SessionNodeDisplayHydrationItem } from '@/lib/session/client';
@@ -16,7 +17,7 @@ export function buildSessionNodeDisplayHydrationItem(
   if (!meta || typeof meta !== 'object') {
     return { session_number: sessionNumber };
   }
-  const metaForResolve: Record<string, unknown> = { ...meta, session_number: sessionNumber };
+  const metaForResolve = metaForDisplayContractResolve(meta, sessionNumber);
   const c = resolveSessionDisplayContract(metaForResolve);
   const canonicalPass = extractCanonicalDisplayFamilyPassThrough(meta);
   const priority_vector =

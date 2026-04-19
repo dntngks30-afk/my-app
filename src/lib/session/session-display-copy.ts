@@ -21,6 +21,8 @@ export type SessionDisplayCopyInput = {
   adaptation_summary?: string
   /** Session plan meta may include phase for PR1 seed alignment */
   phase?: number
+  /** PR-RISK-09: align legacy recovery with plan-summary / hydration (not used for TRUTH-05 pass-through) */
+  session_number?: number
 }
 
 export type SessionDisplayCopy = {
@@ -67,6 +69,9 @@ function firstLine(text: string, maxLen: number): string {
  */
 export function buildSessionDisplayCopy(meta: SessionDisplayCopyInput): SessionDisplayCopy {
   const record = { ...meta } as Record<string, unknown>
+  if (meta.session_number != null && Number.isFinite(meta.session_number)) {
+    record.session_number = Math.floor(meta.session_number)
+  }
   const contract = resolveSessionDisplayContract(record)
 
   const roleCode = contract.session_role_code?.trim() ?? 'ADAPT'
@@ -126,6 +131,8 @@ export function sessionCopyInputFromNodeDisplay(input: {
   goalCode: string
   goalLabel: string
   subtitle: string
+  /** PR-RISK-09: legacy recovery parity when re-resolving through buildSessionDisplayCopy */
+  sessionNumber: number
 }): SessionDisplayCopyInput {
   return {
     session_role_code: input.roleCode === 'LEGACY' ? undefined : input.roleCode,
@@ -133,5 +140,6 @@ export function sessionCopyInputFromNodeDisplay(input: {
     session_goal_code: input.goalCode === 'LEGACY' ? undefined : input.goalCode,
     session_goal_label: input.goalLabel,
     session_goal_hint: input.subtitle,
+    session_number: Math.floor(input.sessionNumber),
   }
 }

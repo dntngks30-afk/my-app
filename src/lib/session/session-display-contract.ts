@@ -175,6 +175,21 @@ function hasCompleteExplicitDisplayContract(
 }
 
 /**
+ * PR-RISK-09: Same merge shape for display contract resolution as plan-summary and node hydration.
+ * Keeps legacy recovery inputs aligned across surfaces (e.g. session_number for STABLE role heuristics).
+ */
+export function metaForDisplayContractResolve(
+  planMeta: Record<string, unknown> | null | undefined,
+  sessionNumber: number
+): Record<string, unknown> {
+  const sn = Math.floor(sessionNumber);
+  if (!planMeta || typeof planMeta !== 'object') {
+    return { session_number: sn };
+  }
+  return { ...planMeta, session_number: sn };
+}
+
+/**
  * PR-TRUTH-05: read canonical display fields already on plan_json.meta without legacy derivation.
  * Used for echo paths (hydration, summary); incomplete payloads still go through resolveSessionDisplayContract.
  */

@@ -74,12 +74,19 @@ const STATUS_CLASS: Record<SessionStatus, string> = {
   locked: 'bg-slate-100 text-slate-500',
 }
 
-/** PR3: panel copy aligns with map via buildSessionDisplayCopy (contract-first). */
+/** PR3 + PR-RISK-09: panel copy aligns with map/summary (legacy recovery sees session_number). */
 function getPlanRationale(plan: SessionPlan | ActivePlanSummary | null) {
   if (!plan || !('plan_json' in plan) || !plan.plan_json || typeof plan.plan_json !== 'object') return null
   const meta = (plan.plan_json as { meta?: SessionDisplayCopyInput }).meta
   if (!meta || typeof meta !== 'object') return null
-  const copy = buildSessionDisplayCopy(meta)
+  const sn =
+    typeof plan.session_number === 'number' && Number.isFinite(plan.session_number)
+      ? Math.floor(plan.session_number)
+      : undefined
+  const copy = buildSessionDisplayCopy({
+    ...(meta as SessionDisplayCopyInput),
+    ...(sn != null ? { session_number: sn } : {}),
+  })
   return {
     panelTitle: copy.panelTitle,
     headline: copy.panelHeadline,

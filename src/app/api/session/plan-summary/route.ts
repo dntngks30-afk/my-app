@@ -14,6 +14,7 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import {
   extractCanonicalDisplayFamilyPassThrough,
+  metaForDisplayContractResolve,
   resolveSessionDisplayContract,
   type SessionDisplayContract,
 } from '@/lib/session/session-display-contract';
@@ -149,7 +150,7 @@ export async function GET(req: NextRequest) {
     const rationale = planJson?.meta
       ? (() => {
           const pm = planJson.meta as Record<string, unknown>;
-          const metaForResolve: Record<string, unknown> = { ...pm, session_number: row.session_number };
+          const metaForResolve = metaForDisplayContractResolve(pm, row.session_number);
           const canonicalPass = extractCanonicalDisplayFamilyPassThrough(pm);
           // PR-TRUTH-05: resolve fills gaps only when plan meta lacks full explicit contract; else pure pass-through.
           const resolvedDisplay = resolveSessionDisplayContract(metaForResolve);

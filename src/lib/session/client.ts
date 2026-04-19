@@ -231,6 +231,7 @@ export async function getSessionPlanDetail(
 export type PlanSummaryResponse = {
   session_number: number;
   status: string;
+  /** PR-RISK-09: rationale includes session_number for legacy recovery parity with hydration/panel. */
   rationale?: {
     focus?: string[];
     priority_vector?: Record<string, number>;
