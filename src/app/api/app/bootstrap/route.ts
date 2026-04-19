@@ -17,6 +17,7 @@ import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import { fetchHomeNodeDisplayBundle } from '@/lib/session/home-node-display-bundle';
 import { buildSessionNodeDisplayHydrationItem } from '@/lib/session/session-node-display-hydration-item';
 import type { HomeNodeDisplayBundle } from '@/lib/session/client';
+import { resolveSyntheticPreviewPhase } from '@/lib/session/phase';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -209,7 +210,7 @@ export async function GET(req: NextRequest) {
       ) {
         const syntheticMeta: Record<string, unknown> = {
           session_number: nextNum,
-          phase: Math.max(1, Math.min(4, nextNum)),
+          phase: resolveSyntheticPreviewPhase(nextNum, sessionData.total_sessions),
           session_focus_axes: nextSession.focus_axes,
         };
         if (

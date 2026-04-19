@@ -101,6 +101,24 @@ export function computePhase(
 }
 
 /**
+ * PR-RISK-06: Phase for synthetic preview seeds (map/bootstrap) when final plan meta is absent.
+ * Uses the same {@link computePhase} / length policy as session creation (equal split when no adaptive options).
+ * If totalSessions is missing or invalid, falls back to {@link TOTAL_SESSIONS_DEFAULT} — not sessionNumber clamp.
+ */
+export function resolveSyntheticPreviewPhase(
+  sessionNumber: number,
+  totalSessions: number | null | undefined
+): Phase {
+  const sn = Number.isFinite(sessionNumber) ? Math.floor(sessionNumber) : 1;
+  const boundedSn = Math.max(1, sn);
+  const tt =
+    totalSessions != null && Number.isFinite(totalSessions) && totalSessions >= 1
+      ? Math.max(1, Math.min(20, Math.floor(totalSessions)))
+      : TOTAL_SESSIONS_DEFAULT;
+  return computePhase(tt, boundedSn);
+}
+
+/**
  * Phase → 0-based index (0~3)
  */
 export function getPhaseIndex(phase: Phase): number {

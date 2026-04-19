@@ -14,6 +14,7 @@ import {
   mapLinesFromSessionDisplayCopy,
   sessionCopyInputFromNodeDisplay,
 } from '@/lib/session/session-display-copy'
+import { resolveSyntheticPreviewPhase } from '@/lib/session/phase'
 import type { SessionNode } from './map-data'
 
 export type SessionNodeDisplayState = 'confirmed' | 'preview' | 'placeholder'
@@ -236,10 +237,14 @@ function rationaleToContractMeta(
   }
 }
 
-function displayFromNextPreviewPayload(sessionNumber: number, payload: NextSessionPreviewPayload): SessionNodeDisplay {
+function displayFromNextPreviewPayload(
+  sessionNumber: number,
+  payload: NextSessionPreviewPayload,
+  programTotalSessions: number
+): SessionNodeDisplay {
   const c = buildSessionDisplaySeedFromMeta({
     session_focus_axes: payload.focus_axes,
-    phase: Math.max(1, Math.min(4, sessionNumber)),
+    phase: resolveSyntheticPreviewPhase(sessionNumber, programTotalSessions),
     pain_mode: 'none',
   })
   const full = resolveSessionDisplayContract({
@@ -356,7 +361,7 @@ export function resolveSessionNodeDisplays(args: ResolveSessionNodeDisplaysArgs)
     if (isNextNode) {
       const payload: NextSessionPreviewPayload =
         nextPreview?.session_number === n ? nextPreview : syntheticNextPreviewPayload(n)
-      out[n] = displayFromNextPreviewPayload(n, payload)
+      out[n] = displayFromNextPreviewPayload(n, payload, safeTotal)
       continue
     }
 
@@ -371,7 +376,7 @@ export function resolveSessionNodeDisplays(args: ResolveSessionNodeDisplaysArgs)
     }
 
     if (isCurrent) {
-      out[n] = displayFromNextPreviewPayload(n, syntheticNextPreviewPayload(n))
+      out[n] = displayFromNextPreviewPayload(n, syntheticNextPreviewPayload(n), safeTotal)
       continue
     }
 
