@@ -3,6 +3,7 @@
 import {
   useRef,
   useEffect,
+  useLayoutEffect,
   useState,
   useCallback,
   useMemo,
@@ -132,6 +133,47 @@ const routePoints = buildRoutePoints()
 /** Donor map: pan starts after this travel (CSS px); tap eligibility uses the same scale in SessionNode. */
 const MAP_PAN_THRESHOLD_PX = 10
 const WHEEL_PAN_DELTA_SCALE = 0.35
+
+/** Dev mapEdit floating panel: persisted position (presentation only). */
+const MAP_EDIT_PANEL_POS_STORAGE_KEY = "donor-map-edit-panel-pos-v1"
+const MAP_EDIT_PANEL_MARGIN_PX = 6
+/** Extra inset below panel so it stays above home indicator / thumb zone when env() is unavailable. */
+const MAP_EDIT_PANEL_EXTRA_BOTTOM_PX = 12
+
+function clampMapEditPanelPosition(
+  x: number,
+  y: number,
+  containerW: number,
+  containerH: number,
+  panelW: number,
+  panelH: number,
+  margin: number,
+  extraBottom: number
+): { x: number; y: number } {
+  const minX = margin
+  const minY = margin
+  const maxX = containerW - panelW - margin
+  const maxY = containerH - panelH - margin - extraBottom
+  const safeMaxX = Math.max(minX, maxX)
+  const safeMaxY = Math.max(minY, maxY)
+  return {
+    x: Math.max(minX, Math.min(safeMaxX, x)),
+    y: Math.max(minY, Math.min(safeMaxY, y)),
+  }
+}
+
+function readSafeAreaInsetBottomPx(): number {
+  if (typeof document === "undefined") return 0
+  try {
+    const raw = getComputedStyle(document.documentElement)
+      .getPropertyValue("env(safe-area-inset-bottom)")
+      .trim()
+    if (raw.endsWith("px")) return Math.max(0, Number.parseFloat(raw) || 0)
+  } catch {
+    /* ignore */
+  }
+  return 0
+}
 
 // Generate SVG path from route points (Catmull-Rom to Bezier)
 function generatePath(): string {
@@ -279,6 +321,20 @@ export function ResetMap({
   const [mapEditMode, setMapEditMode] = useState(false)
   const [manualOverridesByTotal, setManualOverridesByTotal] = useState<ManualNodeOverridesByTotal>({})
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null)
+  const mapEditPanelRef = useRef<HTMLDivElement>(null)
+  const mapEditPanelDidLayoutOnceRef = useRef(false)
+  const mapEditPanelPosRef = useRef({ x: MAP_EDIT_PANEL_MARGIN_PX, y: MAP_EDIT_PANEL_MARGIN_PX })
+  const mapEditPanelDragRef = useRef<{
+    pointerId: number
+    startClientX: number
+    startClientY: number
+    originX: number
+    originY: number
+  } | null>(null)
+  const [mapEditPanelPos, setMapEditPanelPos] = useState({
+    x: MAP_EDIT_PANEL_MARGIN_PX,
+    y: MAP_EDIT_PANEL_MARGIN_PX,
+  })
 
   const overrideBucket = useMemo(() => coerceManualOverrideTotal(total), [total])
 
@@ -321,6 +377,56 @@ export function ResetMap({
     observer.observe(node)
     return () => observer.disconnect()
   }, [])
+
+  useLayoutEffect(() => {
+    if (!mapEditMode) {
+      mapEditPanelDidLayoutOnceRef.current = false
+      return
+    }
+    const el = containerRef.current
+    const panel = mapEditPanelRef.current
+    if (!el || !panel) return
+    const cw = el.clientWidth
+    const ch = el.clientHeight
+    const pr = panel.getBoundingClientRect()
+    const pw = Math.max(1, pr.width)
+    const ph = Math.max(1, pr.height)
+    const margin = MAP_EDIT_PANEL_MARGIN_PX
+    const extraBottom = readSafeAreaInsetBottomPx() + MAP_EDIT_PANEL_EXTRA_BOTTOM_PX
+
+    setMapEditPanelPos((prev) => {
+      const next = (() => {
+        if (!mapEditPanelDidLayoutOnceRef.current) {
+          mapEditPanelDidLayoutOnceRef.current = true
+          try {
+            const raw =
+              typeof window !== "undefined"
+                ? window.localStorage.getItem(MAP_EDIT_PANEL_POS_STORAGE_KEY)
+                : null
+            if (raw) {
+              const p = JSON.parse(raw) as { x?: unknown; y?: unknown }
+              if (
+                typeof p.x === "number" &&
+                typeof p.y === "number" &&
+                Number.isFinite(p.x) &&
+                Number.isFinite(p.y)
+              ) {
+                return clampMapEditPanelPosition(p.x, p.y, cw, ch, pw, ph, margin, extraBottom)
+              }
+            }
+          } catch {
+            /* ignore */
+          }
+          const defX = cw - pw - margin
+          const defY = ch - ph - margin - extraBottom
+          return clampMapEditPanelPosition(defX, defY, cw, ch, pw, ph, margin, extraBottom)
+        }
+        return clampMapEditPanelPosition(prev.x, prev.y, cw, ch, pw, ph, margin, extraBottom)
+      })()
+      mapEditPanelPosRef.current = next
+      return next
+    })
+  }, [mapEditMode, containerWidth])
 
   const effectiveContainerWidth =
     containerWidth != null && containerWidth > 0 ? containerWidth : 360
@@ -591,6 +697,7 @@ export function ResetMap({
     if (!e.isPrimary || e.button !== 0) return
     const t = e.target as HTMLElement | null
     if (t?.closest("button")) return
+    if (t?.closest("[data-map-edit-panel]")) return
 
     const st = mapGestureRef.current
     if (st.phase !== "idle") return
@@ -700,6 +807,110 @@ export function ResetMap({
     el.addEventListener("wheel", onMapSurfaceWheelNative, { passive: false })
     return () => el.removeEventListener("wheel", onMapSurfaceWheelNative)
   }, [onMapSurfaceWheelNative])
+
+  const persistMapEditPanelPos = useCallback(() => {
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(
+          MAP_EDIT_PANEL_POS_STORAGE_KEY,
+          JSON.stringify(mapEditPanelPosRef.current)
+        )
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const onMapEditPanelHandlePointerDown = useCallback((e: PointerEvent<HTMLDivElement>) => {
+    if (!e.isPrimary || e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    const origin = mapEditPanelPosRef.current
+    mapEditPanelDragRef.current = {
+      pointerId: e.pointerId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      originX: origin.x,
+      originY: origin.y,
+    }
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const onMapEditPanelHandlePointerMove = useCallback((e: PointerEvent<HTMLDivElement>) => {
+    const d = mapEditPanelDragRef.current
+    if (!d || e.pointerId !== d.pointerId) return
+    e.stopPropagation()
+    if (e.pointerType === "touch") e.preventDefault()
+    const el = containerRef.current
+    const panel = mapEditPanelRef.current
+    if (!el || !panel) return
+    const cw = el.clientWidth
+    const ch = el.clientHeight
+    const pr = panel.getBoundingClientRect()
+    const pw = Math.max(1, pr.width)
+    const ph = Math.max(1, pr.height)
+    const margin = MAP_EDIT_PANEL_MARGIN_PX
+    const extraBottom = readSafeAreaInsetBottomPx() + MAP_EDIT_PANEL_EXTRA_BOTTOM_PX
+    const dx = e.clientX - d.startClientX
+    const dy = e.clientY - d.startClientY
+    const next = clampMapEditPanelPosition(
+      d.originX + dx,
+      d.originY + dy,
+      cw,
+      ch,
+      pw,
+      ph,
+      margin,
+      extraBottom
+    )
+    mapEditPanelPosRef.current = next
+    setMapEditPanelPos(next)
+  }, [])
+
+  const onMapEditPanelHandlePointerUp = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      const d = mapEditPanelDragRef.current
+      if (!d || e.pointerId !== d.pointerId) return
+      e.stopPropagation()
+      mapEditPanelDragRef.current = null
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      } catch {
+        /* ignore */
+      }
+      persistMapEditPanelPos()
+    },
+    [persistMapEditPanelPos]
+  )
+
+  const onMapEditPanelHandlePointerCancel = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      const d = mapEditPanelDragRef.current
+      if (!d || e.pointerId !== d.pointerId) return
+      mapEditPanelDragRef.current = null
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      } catch {
+        /* ignore */
+      }
+      persistMapEditPanelPos()
+    },
+    [persistMapEditPanelPos]
+  )
+
+  const onMapEditPanelHandleLostPointerCapture = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      const d = mapEditPanelDragRef.current
+      if (!d || e.pointerId !== d.pointerId) return
+      mapEditPanelDragRef.current = null
+      persistMapEditPanelPos()
+    },
+    [persistMapEditPanelPos]
+  )
 
   const areaBlocks = generateAreaBlocks()
 
@@ -886,13 +1097,35 @@ export function ResetMap({
 
       {mapEditMode ? (
         <div
+          ref={mapEditPanelRef}
           data-map-edit-panel
-          className="pointer-events-auto absolute bottom-0 left-0 right-0 z-[30] flex max-h-[min(45vh,220px)] flex-col gap-1 overflow-y-auto border-t border-white/15 bg-black/90 px-2 py-1.5 text-[10px] text-slate-200 shadow-[0_-4px_16px_rgba(0,0,0,0.35)]"
-          style={{ touchAction: "auto", overscrollBehavior: "auto" }}
-          onMouseDown={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
+          className="pointer-events-auto absolute left-0 top-0 z-[30] flex max-h-[min(45vh,220px)] min-w-[260px] max-w-[min(380px,calc(100%-12px))] flex-col overflow-hidden rounded-xl border border-white/15 bg-black/90 text-[10px] text-slate-200 shadow-[0_8px_28px_rgba(0,0,0,0.5)]"
+          style={{
+            touchAction: "auto",
+            overscrollBehavior: "auto",
+            transform: `translate3d(${mapEditPanelPos.x}px, ${mapEditPanelPos.y}px, 0)`,
+          }}
         >
+          <div
+            data-map-edit-drag-handle
+            className="flex shrink-0 cursor-grab select-none items-center justify-center gap-2 border-b border-white/10 bg-white/5 py-2 text-[9px] font-medium text-amber-200/90 active:cursor-grabbing"
+            style={{ touchAction: "none" }}
+            onPointerDown={onMapEditPanelHandlePointerDown}
+            onPointerMove={onMapEditPanelHandlePointerMove}
+            onPointerUp={onMapEditPanelHandlePointerUp}
+            onPointerCancel={onMapEditPanelHandlePointerCancel}
+            onLostPointerCapture={onMapEditPanelHandleLostPointerCapture}
+          >
+            <span className="h-0.5 w-7 shrink-0 rounded-full bg-white/35" aria-hidden />
+            <span>mapEdit · 드래그</span>
+            <span className="h-0.5 w-7 shrink-0 rounded-full bg-white/35" aria-hidden />
+          </div>
+          <div
+            className="flex min-h-0 flex-col gap-1 overflow-y-auto px-2 py-1.5"
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
           {/* 액션 우선: 가로 넘침 시에도 스크롤로 전부 도달 */}
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <button
@@ -975,6 +1208,7 @@ export function ResetMap({
                 {JSON.stringify(effectiveManualOverrides[selectedSessionId])}
               </div>
             ) : null}
+          </div>
           </div>
         </div>
       ) : process.env.NODE_ENV === "development" ? (
