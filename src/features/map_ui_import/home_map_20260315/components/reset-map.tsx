@@ -1,6 +1,14 @@
 "use client"
 
-import { useRef, useEffect, useState, useCallback, useMemo, type PointerEventHandler } from "react"
+import {
+  useRef,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  type PointerEventHandler,
+  type PointerEvent,
+} from "react"
 import { motion, useSpring, useTransform, useMotionValue, animate, type MotionValue } from "framer-motion"
 import { Check, Lock, Dumbbell } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -120,6 +128,10 @@ function buildRoutePoints(): { x: number; y: number }[] {
 }
 
 const routePoints = buildRoutePoints()
+
+/** Donor map: pan starts after this travel (CSS px); tap eligibility uses the same scale in SessionNode. */
+const MAP_PAN_THRESHOLD_PX = 10
+const WHEEL_PAN_DELTA_SCALE = 0.35
 
 // Generate SVG path from route points (Catmull-Rom to Bezier)
 function generatePath(): string {
@@ -492,15 +504,29 @@ export function ResetMap({
     [total]
   )
 
-  const [isDragging, setIsDragging] = useState(false)
-  const dragStartY = useRef(0)
-  const lastY = useRef(0)
-  const velocity = useRef(0)
-  const lastTime = useRef(0)
-
   const panY = useMotionValue(0)
-  // Soft spring: low stiffness so pan stays where user leaves it, no snap-back
+  // Parallax / settle: main canvas follows panY directly; background uses soft spring from panY
   const springY = useSpring(panY, { stiffness: 80, damping: 28 })
+
+  type MapGesturePhase = "idle" | "pressing" | "panning"
+  const mapGestureRef = useRef<{
+    phase: MapGesturePhase
+    pointerId: number | null
+    pressStartX: number
+    pressStartY: number
+    lastClientY: number
+    lastTime: number
+    velocity: number
+  }>({
+    phase: "idle",
+    pointerId: null,
+    pressStartX: 0,
+    pressStartY: 0,
+    lastClientY: 0,
+    lastTime: 0,
+    velocity: 0,
+  })
+  const [isMapPanning, setIsMapPanning] = useState(false)
 
   // Parallax transforms for background layers
   const bgLayer1Y = useTransform(springY, [-(CANVAS_HEIGHT - VIEWPORT_HEIGHT), 0], [200, -200])
@@ -526,63 +552,174 @@ export function ResetMap({
     panY.set(clampPan(targetY))
   }, [sessionAnchors, panY, clampPan, sessions, completed])
 
-  const handleDragStart = (clientY: number) => {
-    setIsDragging(true)
-    dragStartY.current = clientY
-    lastY.current = clientY
-    lastTime.current = Date.now()
-    velocity.current = 0
-  }
-
-  const handleDragMove = (clientY: number) => {
-    if (!isDragging) return
-
-    const now = Date.now()
-    const dt = now - lastTime.current
-    const dy = clientY - lastY.current
-
-    if (dt > 0) {
-      velocity.current = (dy / dt) * 16
-    }
-
-    lastY.current = clientY
-    lastTime.current = now
-
-    const delta = clientY - dragStartY.current
-    const newPan = clampPan(panY.get() + delta)
-    panY.set(newPan)
-    dragStartY.current = clientY
-  }
-
-  const handleDragEnd = () => {
-    setIsDragging(false)
-
-    // Light momentum only; no aggressive spring-back
-    if (Math.abs(velocity.current) > 0.8) {
-      const targetY = clampPan(panY.get() + velocity.current * 12)
+  const finishMapPanMomentum = useCallback(() => {
+    const st = mapGestureRef.current
+    const v = st.velocity
+    if (Math.abs(v) > 0.8) {
+      const targetY = clampPan(panY.get() + v * 12)
       animate(panY, targetY, {
         type: "spring",
         stiffness: 120,
         damping: 22,
-        velocity: velocity.current,
+        velocity: v,
       })
     }
-  }
+    st.velocity = 0
+  }, [clampPan, panY])
+
+  const resetMapPointerGesture = useCallback(
+    (el: HTMLDivElement | null, pointerId: number, applyMomentum: boolean) => {
+      const st = mapGestureRef.current
+      if (el) {
+        try {
+          el.releasePointerCapture(pointerId)
+        } catch {
+          /* ignore */
+        }
+      }
+      const wasPanning = st.phase === "panning"
+      st.phase = "idle"
+      st.pointerId = null
+      setIsMapPanning(false)
+      if (wasPanning && applyMomentum) finishMapPanMomentum()
+      else st.velocity = 0
+    },
+    [finishMapPanMomentum]
+  )
+
+  const onMapSurfacePointerDown = useCallback((e: PointerEvent<HTMLDivElement>) => {
+    if (!e.isPrimary || e.button !== 0) return
+    const t = e.target as HTMLElement | null
+    if (t?.closest("button")) return
+
+    const st = mapGestureRef.current
+    if (st.phase !== "idle") return
+
+    st.phase = "pressing"
+    st.pointerId = e.pointerId
+    st.pressStartX = e.clientX
+    st.pressStartY = e.clientY
+    st.lastClientY = e.clientY
+    st.lastTime = performance.now()
+    st.velocity = 0
+  }, [])
+
+  const onMapSurfacePointerMove = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      const st = mapGestureRef.current
+      if (st.phase === "idle" || e.pointerId !== st.pointerId) return
+
+      const now = performance.now()
+      const travel = Math.hypot(e.clientX - st.pressStartX, e.clientY - st.pressStartY)
+
+      if (st.phase === "pressing" && travel >= MAP_PAN_THRESHOLD_PX) {
+        st.phase = "panning"
+        setIsMapPanning(true)
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId)
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (st.phase === "panning") {
+        if (e.pointerType === "touch") e.preventDefault()
+        const dy = e.clientY - st.lastClientY
+        const dt = now - st.lastTime
+        if (dt > 0) st.velocity = (dy / dt) * 16
+        panY.set(clampPan(panY.get() + dy))
+        st.lastClientY = e.clientY
+        st.lastTime = now
+      } else {
+        st.lastClientY = e.clientY
+        st.lastTime = now
+      }
+    },
+    [clampPan, panY]
+  )
+
+  const onMapSurfacePointerUp = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      const st = mapGestureRef.current
+      if (e.pointerId !== st.pointerId) return
+      resetMapPointerGesture(e.currentTarget, e.pointerId, true)
+    },
+    [resetMapPointerGesture]
+  )
+
+  const onMapSurfacePointerCancel = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      const st = mapGestureRef.current
+      if (e.pointerId !== st.pointerId) return
+      resetMapPointerGesture(e.currentTarget, e.pointerId, false)
+    },
+    [resetMapPointerGesture]
+  )
+
+  const onMapSurfaceLostPointerCapture = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      const st = mapGestureRef.current
+      if (e.pointerId !== st.pointerId) return
+      resetMapPointerGesture(null, e.pointerId, true)
+    },
+    [resetMapPointerGesture]
+  )
+
+  const onMapSurfacePointerLeave = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      if (e.pointerType !== "mouse") return
+      const st = mapGestureRef.current
+      if (st.phase === "idle" || e.pointerId !== st.pointerId) return
+      resetMapPointerGesture(e.currentTarget, e.pointerId, true)
+    },
+    [resetMapPointerGesture]
+  )
+
+  const onMapSurfaceWheelNative = useCallback(
+    (e: WheelEvent) => {
+      const t = e.target
+      if (t instanceof Element && t.closest("[data-map-edit-panel]")) return
+      if (e.ctrlKey) return
+      let dy = e.deltaY
+      if (e.deltaMode === 1) dy *= 16
+      if (e.deltaMode === 2) dy *= 24
+      if (Math.abs(dy) < 0.5) return
+      e.preventDefault()
+      e.stopPropagation()
+      panY.set(clampPan(panY.get() - dy * WHEEL_PAN_DELTA_SCALE))
+    },
+    [clampPan, panY]
+  )
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    el.addEventListener("wheel", onMapSurfaceWheelNative, { passive: false })
+    return () => el.removeEventListener("wheel", onMapSurfaceWheelNative)
+  }, [onMapSurfaceWheelNative])
 
   const areaBlocks = generateAreaBlocks()
 
   return (
     <div
       ref={containerRef}
-      className="relative h-full w-full overflow-hidden rounded-2xl cursor-grab active:cursor-grabbing select-none"
-      style={{ height: VIEWPORT_HEIGHT, backgroundColor: "oklch(0.22 0.03 245)" }}
-      onMouseDown={(e) => handleDragStart(e.clientY)}
-      onMouseMove={(e) => handleDragMove(e.clientY)}
-      onMouseUp={handleDragEnd}
-      onMouseLeave={handleDragEnd}
-      onTouchStart={(e) => handleDragStart(e.touches[0].clientY)}
-      onTouchMove={(e) => handleDragMove(e.touches[0].clientY)}
-      onTouchEnd={handleDragEnd}
+      data-donor-map-surface
+      className={cn(
+        "relative h-full w-full overflow-hidden rounded-2xl select-none",
+        isMapPanning ? "cursor-grabbing" : "cursor-grab"
+      )}
+      style={{
+        height: VIEWPORT_HEIGHT,
+        backgroundColor: "oklch(0.22 0.03 245)",
+        touchAction: "none",
+        overscrollBehaviorY: "contain",
+      }}
+      onPointerDown={onMapSurfacePointerDown}
+      onPointerMove={onMapSurfacePointerMove}
+      onPointerUp={onMapSurfacePointerUp}
+      onPointerCancel={onMapSurfacePointerCancel}
+      onPointerLeave={onMapSurfacePointerLeave}
+      onLostPointerCapture={onMapSurfaceLostPointerCapture}
     >
       {/* Edge fade hints */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-24 z-20" style={{ background: 'linear-gradient(to bottom, oklch(0.22 0.03 245), oklch(0.22 0.03 245 / 0.7), transparent)' }} />
@@ -604,7 +741,7 @@ export function ResetMap({
         style={{
           width: CANVAS_WIDTH,
           height: CANVAS_HEIGHT,
-          y: springY,
+          y: panY,
         }}
       >
         {/* Route SVG */}
@@ -746,9 +883,12 @@ export function ResetMap({
 
       {mapEditMode ? (
         <div
+          data-map-edit-panel
           className="pointer-events-auto absolute bottom-0 left-0 right-0 z-[30] flex max-h-[min(45vh,220px)] flex-col gap-1 overflow-y-auto border-t border-white/15 bg-black/90 px-2 py-1.5 text-[10px] text-slate-200 shadow-[0_-4px_16px_rgba(0,0,0,0.35)]"
+          style={{ touchAction: "auto", overscrollBehavior: "auto" }}
           onMouseDown={(e) => e.stopPropagation()}
           onTouchStart={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
         >
           {/* 액션 우선: 가로 넘침 시에도 스크롤로 전부 도달 */}
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -838,6 +978,7 @@ export function ResetMap({
         <button
           type="button"
           className="pointer-events-auto absolute bottom-1 right-1 z-[25] rounded border border-white/10 bg-black/50 px-1.5 py-0.5 text-[9px] text-slate-500 opacity-60 hover:opacity-100"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={() => toggleEditPersistFlag(true)}
         >
           mapEdit
@@ -1022,6 +1163,12 @@ function SessionNode({
 
   const nodeDragRef = useRef<{ lastX: number; lastY: number } | null>(null)
   const labelDragRef = useRef<{ lastX: number; lastY: number } | null>(null)
+  const tapCandidateRef = useRef<{
+    pointerId: number
+    startX: number
+    startY: number
+    eligible: boolean
+  } | null>(null)
 
   const onNodeHandlePointerDown: PointerEventHandler<HTMLDivElement> = (e) => {
     if (!mapEditMode) return
@@ -1094,11 +1241,34 @@ function SessionNode({
           onSelectSession(session.id)
           return
         }
-        if (onTap) {
-          e.stopPropagation()
-          e.preventDefault()
-          onTap()
+        if (onTap && e.isPrimary && e.button === 0) {
+          tapCandidateRef.current = {
+            pointerId: e.pointerId,
+            startX: e.clientX,
+            startY: e.clientY,
+            eligible: true,
+          }
         }
+      }}
+      onPointerMove={(e) => {
+        if (mapEditMode || !onTap || !tapCandidateRef.current) return
+        if (e.pointerId !== tapCandidateRef.current.pointerId) return
+        const c = tapCandidateRef.current
+        const dx = e.clientX - c.startX
+        const dy = e.clientY - c.startY
+        if (dx * dx + dy * dy > MAP_PAN_THRESHOLD_PX * MAP_PAN_THRESHOLD_PX) {
+          c.eligible = false
+        }
+      }}
+      onPointerUp={(e) => {
+        if (mapEditMode || !onTap || !tapCandidateRef.current) return
+        if (e.pointerId !== tapCandidateRef.current.pointerId) return
+        const eligible = tapCandidateRef.current.eligible
+        tapCandidateRef.current = null
+        if (eligible && e.isPrimary && e.button === 0) onTap()
+      }}
+      onPointerCancel={() => {
+        tapCandidateRef.current = null
       }}
       onKeyDown={(e) => {
         if (onTap && (e.key === "Enter" || e.key === " ")) {
