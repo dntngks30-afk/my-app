@@ -36,6 +36,7 @@ const REQUIRED_PROOF_BUNDLE = [
   { path: 'scripts/camera-e1b-peak-anchor-contamination-smoke.mjs', group: 'peak-anchor/reversal/ultra-low-policy' },
   { path: 'scripts/camera-e1c-authoritative-reversal-chain-smoke.mjs', group: 'peak-anchor/reversal/ultra-low-policy' },
   { path: 'scripts/camera-pr6-ultra-low-policy-smoke.mjs', group: 'peak-anchor/reversal/ultra-low-policy' },
+  { path: 'scripts/camera-pr-cam-squat-blended-early-peak-false-pass-lock-01-smoke.mjs', group: 'peak-anchor/reversal/ultra-low-policy' },
 
 ];
 
