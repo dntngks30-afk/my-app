@@ -233,9 +233,28 @@ function runWithPromotionState(fixtureId, gate, extraAssertions, registryOverrid
 
 function assertRepresentativeAuthorityBundle(label, gate) {
   const pc = gate.evaluatorResult?.debug?.squatPassCore;
-  const finalTruth = gate.squatCycleDebug?.squatFinalPassTruth;
+  const ownerRead = gate.squatCycleDebug?.squatOwnerRead;
+  const rawFinalTruth = gate.squatCycleDebug?.squatFinalPassTruth;
+  const finalTruth = rawFinalTruth == null
+    ? null
+    : {
+        ...rawFinalTruth,
+        ownerPassDetected: ownerRead?.ownerPassEligible ?? rawFinalTruth.ownerPassDetected,
+        ownerBlockedReason: ownerRead?.ownerBlockedReason ?? rawFinalTruth.ownerBlockedReason,
+        source: rawFinalTruth.source ?? rawFinalTruth.finalPassTruthSource,
+      };
   const latch = isFinalPassLatched('squat', gate);
 
+  ok(
+    `${label}: passCore exists`,
+    pc != null,
+    { hasPassCore: pc != null }
+  );
+  ok(
+    `${label}: final truth exists`,
+    finalTruth != null && ownerRead != null,
+    { hasFinalTruth: finalTruth != null, hasOwnerRead: ownerRead != null }
+  );
   ok(
     `${label}: passCore.passDetected === true`,
     pc?.passDetected === true,
@@ -255,17 +274,19 @@ function assertRepresentativeAuthorityBundle(label, gate) {
   // no owner contradiction: final pass truth owner chain must agree with pass-core and gate.
   ok(
     `${label}: no owner contradiction`,
-    (finalTruth?.ownerPassDetected ?? gate.finalPassEligible) === true &&
-      (finalTruth?.finalPassGranted ?? gate.finalPassEligible) === true &&
-      (finalTruth?.ownerBlockedReason ?? null) == null &&
-      (finalTruth?.finalPassBlockedReason ?? null) == null,
+    finalTruth?.ownerPassDetected === true &&
+      finalTruth?.finalPassGranted === true &&
+      finalTruth?.ownerBlockedReason == null &&
+      finalTruth?.finalPassBlockedReason == null,
     finalTruth
   );
 
   // no fallback ambiguity: permanent representative fixtures must not pass through fallback-only source selection.
   ok(
     `${label}: no fallback ambiguity`,
-    finalTruth?.source !== 'fallback_completion_owner',
+    typeof finalTruth?.source === 'string' &&
+      finalTruth.source.length > 0 &&
+      finalTruth.source !== 'fallback_completion_owner',
     { source: finalTruth?.source, finalTruth }
   );
 }
