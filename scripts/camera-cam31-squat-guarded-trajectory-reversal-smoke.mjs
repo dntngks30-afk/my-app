@@ -158,18 +158,41 @@ console.log('A. blended-assisted shallow rescue (lower-limb visibility degrade)'
   );
 
   ok('A: depth / admission (relativeDepthPeak > 0)', (hm.relativeDepthPeak ?? 0) > 0, hm.relativeDepthPeak);
-  ok('A: final gate pass', gate.status === 'pass', gate.status);
-  ok('A: completionTruthPassed remains false (owner separation preserved)', truthPassed(gate) === false, dbg.completionTruthPassed);
-  ok(
-    'A: representative agreement (pass-core/final/latch)',
-    gate.evaluatorResult?.debug?.squatPassCore?.passDetected === true &&
-      gate.finalPassEligible === true,
-    {
-      passDetected: gate.evaluatorResult?.debug?.squatPassCore?.passDetected,
-      finalPassEligible: gate.finalPassEligible,
-      completionTruthPassed: dbg.completionTruthPassed,
-    }
-  );
+
+  // PR-01 (Completion-First Authority Freeze) realignment:
+  //   The previous "A: final gate pass" + "completionTruthPassed remains false"
+  //   assertions locked exactly SSOT §6 illegal state #1
+  //   (`completionTruthPassed === false` and `finalPassGranted === true`).
+  //   PR-01 closes that split-brain path. The trajectory-guarded motion-truth
+  //   invariants (phase, reversalConfirmedBy, no_reversal absence) remain
+  //   testable at the motion layer — they do not require that final pass open.
+  if (gate.status === 'pass' && gate.finalPassEligible === true) {
+    // If the engine still opens final pass, it must do so with canonical
+    // completion-owner truth (PR-01 Invariants A/D) — no split-brain.
+    ok(
+      'A: pass path honors completion-owner truth (PR-01 Invariant A/D)',
+      truthPassed(gate) === true && gate.finalPassBlockedReason == null,
+      {
+        completionTruthPassed: dbg.completionTruthPassed,
+        finalPassBlockedReason: gate.finalPassBlockedReason,
+      }
+    );
+  } else {
+    // Shallow trajectory-guarded rescue no longer leaks to final pass when
+    // completion-owner truth is false — this is the intended PR-01 behavior.
+    ok(
+      'A: PR-01 closes split-brain path (no pass while completionTruthPassed=false)',
+      !(truthPassed(gate) === false && gate.finalPassEligible === true),
+      {
+        status: gate.status,
+        finalPassEligible: gate.finalPassEligible,
+        completionTruthPassed: dbg.completionTruthPassed,
+        finalPassBlockedReason: gate.finalPassBlockedReason,
+      }
+    );
+  }
+
+  // Motion-layer guardrails — these remain stable regardless of final-pass outcome.
   ok('A: currentSquatPhase standing_recovered', cs.currentSquatPhase === 'standing_recovered', cs.currentSquatPhase);
   ok(
     'A: reversal trajectory or rule',

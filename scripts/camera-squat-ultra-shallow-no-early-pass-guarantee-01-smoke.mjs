@@ -145,19 +145,26 @@ console.log('D1. early_rescue_false_positive — zig-zag at bottom without post-
 }
 
 // ── D2: valid shallow pass (full return cycle with clear post-peak return) ────
+//
+// PR-01 (Completion-First Authority Freeze) realignment:
+//   Before PR-01 this scenario reached `finalPassEligible=true` via the
+//   pass-core-first opener shortcut even though the completion-owner path
+//   produced `completionPassReason='not_confirmed'` / `finalSuccessOwner='other'`.
+//   That is exactly SSOT §6 illegal state #8 (assist-only shallow admission
+//   reopening final pass without canonical completion-owner truth). PR-01
+//   closes that shortcut. Upstream shallow evidence fragility is accepted as
+//   residual risk (PR-01 §12 / PR-Truth-Map §4.PR-01) and the "pass" guarantee
+//   for this synthetic sequence is lifted until a follow-on shallow-evidence PR
+//   lands.
+//
+//   The D2b predicate-level assertion is kept — it does not depend on the
+//   engine actually opening final pass.
 console.log('\nD2. valid_shallow_pass — ultra-low squat with clear return path');
 {
-  /**
-   * Standing → ultra-low squat (angles ~92°) → full return to standing.
-   * post-peak return is sustained — 충분한 cycleDuration 으로 final gate 통과.
-   */
   const angles = [
     ...Array(10).fill(170),
-    // descent to ultra-shallow bottom
     165, 155, 142, 128, 115, 103, 95, 93, 92,
-    // clear return (angles increasing = depth decreasing = post-peak drop)
     92, 93, 95, 100, 115, 130, 148, 163, 170,
-    // standing tail
     ...Array(10).fill(170),
   ];
   const landmarks = toLandmarks(makeKneeAngleSeries(100, angles));
@@ -169,26 +176,41 @@ console.log('\nD2. valid_shallow_pass — ultra-low squat with clear return path
     `    [info] status=${gate.status} finalPassEligible=${gate.finalPassEligible} passReason=${dbg.completionPassReason} owner=${dbg.finalSuccessOwner}`
   );
 
-  ok('D2: status === pass', gate.status === 'pass', { status: gate.status });
-  ok('D2: finalPassEligible === true', gate.finalPassEligible === true, { finalPassEligible: gate.finalPassEligible });
-  ok('D2: finalPassBlockedReason == null', gate.finalPassBlockedReason == null, { finalPassBlockedReason: gate.finalPassBlockedReason });
-  ok(
-    'D2: finalSuccessOwner !== completion_truth_standard',
-    dbg.finalSuccessOwner !== 'completion_truth_standard',
-    { finalSuccessOwner: dbg.finalSuccessOwner }
-  );
-  ok(
-    'D2: pass-core/final/latch semantic agreement',
-    gate.evaluatorResult?.debug?.squatPassCore?.passDetected === true &&
-      gate.finalPassEligible === true &&
-      gate.status === 'pass',
-    {
-      status: gate.status,
-      finalPassEligible: gate.finalPassEligible,
-      passDetected: gate.evaluatorResult?.debug?.squatPassCore?.passDetected,
-      completionPassReason: dbg.completionPassReason,
-    }
-  );
+  if (gate.status === 'pass' && gate.finalPassEligible === true) {
+    // Engine happens to pass today — still assert canonical completion-owner truth
+    // so this branch cannot silently re-open the split-brain path.
+    ok(
+      'D2: pass path honors completion-owner truth (PR-01 Invariant A/B/D)',
+      gate.finalPassBlockedReason == null &&
+        dbg.completionPassReason !== 'not_confirmed' &&
+        dbg.completionPassReason != null,
+      {
+        finalPassBlockedReason: gate.finalPassBlockedReason,
+        completionPassReason: dbg.completionPassReason,
+        completionTruthPassed: dbg.completionTruthPassed,
+      }
+    );
+  } else {
+    // Residual shallow-evidence risk per PR-01 §12 — fail-close with truthful reason.
+    const D2_ACCEPTED_BLOCKED = new Set([
+      'completion_truth_not_passed',
+      'completion_reason_not_confirmed',
+      'completion_blocked:ultra_low_rom_not_allowed',
+      'completion_owner_reason_not_confirmed',
+      'cycle_not_complete',
+    ]);
+    ok(
+      'D2: PR-01 residual shallow-evidence — fails-closed with truthful authority reason',
+      gate.finalPassEligible === false &&
+        D2_ACCEPTED_BLOCKED.has(gate.finalPassBlockedReason),
+      {
+        status: gate.status,
+        finalPassEligible: gate.finalPassEligible,
+        finalPassBlockedReason: gate.finalPassBlockedReason,
+      }
+    );
+  }
+
   ok(
     'D2b: PR-SETUP-SERIES-START-01 predicate does not block legitimate shallow',
     shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass('squat', cs, dbg) === false,
@@ -302,16 +324,31 @@ console.log('\nD4b. CAM-31 style shallow + short motion cycle + rule — still p
   console.log(
     `    [info] status=${gate.status} finalPassEligible=${gate.finalPassEligible} passReason=${dbg.completionPassReason} revBy=${cs.reversalConfirmedBy} trajRescue=${cs.trajectoryReversalRescueApplied} minCycleOk=${dbg.minimumCycleDurationSatisfied}`
   );
+  // PR-01 (Completion-First Authority Freeze) realignment:
+  //   The "still pass" guarantee is lifted here for the same reason as D2 —
+  //   pre-PR-01 this path reached pass via the pass-core-first opener shortcut.
+  //   After PR-01 the predicate-level assertion is what this test must keep
+  //   locking (short-cycle rule path must not be over-blocked); the engine pass
+  //   itself is conditional on upstream shallow evidence forming canonical
+  //   completion-owner truth (residual risk per PR-01 §12).
   ok(
-    'D4b: minimumCycleDurationSatisfied false + rule path still passes final gate',
-    gate.status === 'pass' &&
-      gate.finalPassEligible === true &&
-      dbg.minimumCycleDurationSatisfied === false &&
+    'D4b: rule + short cycle is not over-blocked by the short-cycle predicate (PR-01-invariant)',
+    dbg.minimumCycleDurationSatisfied === false &&
       shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass('squat', cs, dbg) === false,
-    {
-      gate, cs, dbg
-    }
+    { gate, cs, dbg }
   );
+  if (gate.status === 'pass' && gate.finalPassEligible === true) {
+    ok(
+      'D4b: if engine passes today, completion-owner truth is satisfied',
+      dbg.completionPassReason != null &&
+        dbg.completionPassReason !== 'not_confirmed' &&
+        gate.finalPassBlockedReason == null,
+      {
+        completionPassReason: dbg.completionPassReason,
+        finalPassBlockedReason: gate.finalPassBlockedReason,
+      }
+    );
+  }
 }
 
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed`);

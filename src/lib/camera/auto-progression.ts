@@ -595,44 +595,37 @@ export function buildSquatFinalPassTruthSurface(input: {
 }
 
 /**
- * PR-RF-STRUCT-12: pass-core-first owner truth.
+ * PR-01 (Completion-First Authority Freeze):
  *
- * When pass-core provides a result, it is the sole motion truth.
- * Completion-state must not veto a pass-core-confirmed rep.
+ * Only canonical completion-owner truth may open squat final pass.
+ * `squatPassCore` is demoted from opener to assist/veto/trace:
+ *   - it may supply a more specific blocked reason when completion-owner truth is already negative,
+ *   - it may veto a passed completion-owner truth when pass-core explicitly marks the rep as stale
+ *     (same-rep integrity veto),
+ *   - it may NOT independently open final pass.
  *
- * completionOwnerReason === 'pass_core_detected' signals that pass-core drove this result
- * and downstream contradiction checks (cycleComplete, completionTruthPassed) must be skipped.
+ * Invariants enforced here (PR-01 §7):
+ *   A) completionOwnerPassed !== true  ->  owner pass false
+ *   B) completionOwnerReason === 'not_confirmed'  ->  owner pass false
  */
 export function readSquatPassOwnerTruth(
   input: SquatPassOwnerTruthReadInput
 ): SquatOwnerTruth {
   const { squatCompletionState: cs, squatPassCore } = input;
 
-  // RF-STRUCT-12: pass-core is the primary motion truth.
-  // When it has a definitive result, return it directly — do NOT gate on completion-state first.
-  if (squatPassCore != null) {
-    if (squatPassCore.passDetected === true) {
-      return {
-        completionOwnerPassed: true,
-        completionOwnerReason: 'pass_core_detected',
-        completionOwnerBlockedReason: null,
-      };
-    }
-    return {
-      completionOwnerPassed: false,
-      completionOwnerReason: null,
-      completionOwnerBlockedReason:
-        squatPassCore.passBlockedReason ?? 'pass_core_not_detected',
-    };
-  }
-
-  // Fallback: no pass-core available — use completion owner truth.
   const completionOwnerTruth = computeSquatCompletionOwnerTruth({
     squatCompletionState: cs,
   });
 
   if (completionOwnerTruth.completionOwnerPassed !== true) {
-    return completionOwnerTruth;
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason:
+        completionOwnerTruth.completionOwnerBlockedReason ??
+        squatPassCore?.passBlockedReason ??
+        'completion_owner_not_passed',
+    };
   }
 
   if (completionOwnerTruth.completionOwnerReason === 'not_confirmed') {
@@ -643,6 +636,15 @@ export function readSquatPassOwnerTruth(
     };
   }
 
+  // Pass-core acts as a same-rep stale veto only — never as an opener.
+  if (squatPassCore != null && squatPassCore.passCoreStale === true) {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason: 'pass_core_stale_rep',
+    };
+  }
+
   return {
     completionOwnerPassed: true,
     completionOwnerReason: completionOwnerTruth.completionOwnerReason,
@@ -650,18 +652,25 @@ export function readSquatPassOwnerTruth(
   };
 }
 
+/**
+ * PR-01 (Completion-First Authority Freeze) — contradiction invariant enforcement.
+ *
+ * Every passed owner truth must be internally consistent with completion-state.
+ * Previously this layer allowed `pass_core_detected` to bypass contradiction checks;
+ * that shortcut is removed so that all owner-pass paths honor the same invariants.
+ *
+ * Fail-closed contradictions (PR-01 §7 C / D / E):
+ *   - owner passed + owner blocked reason present
+ *   - owner passed + `not_confirmed`
+ *   - owner passed + cycle not complete
+ *   - owner passed + completion truth not passed / blocked reason present
+ */
 export function enforceSquatOwnerContradictionInvariant(input: {
   ownerTruth: SquatOwnerTruth;
   squatCompletionState: SquatCompletionState | undefined;
 }): SquatOwnerTruth {
   const { ownerTruth, squatCompletionState } = input;
   if (ownerTruth.completionOwnerPassed !== true) return ownerTruth;
-
-  // RF-STRUCT-12: when pass-core drove the owner truth, skip completion-state
-  // contradiction checks — pass-core already enforces same-rep invariants internally.
-  if (ownerTruth.completionOwnerReason === 'pass_core_detected') {
-    return ownerTruth;
-  }
 
   if (ownerTruth.completionOwnerReason === 'not_confirmed') {
     return {
@@ -677,7 +686,36 @@ export function enforceSquatOwnerContradictionInvariant(input: {
       completionOwnerBlockedReason: 'owner_contradiction:blocked_reason_with_passed_owner',
     };
   }
-  if (squatCompletionState?.cycleComplete !== true) {
+  if (squatCompletionState == null) {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason: 'owner_contradiction:no_completion_state',
+    };
+  }
+  if (
+    squatCompletionState.completionBlockedReason != null &&
+    squatCompletionState.completionBlockedReason !== ''
+  ) {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason: `owner_contradiction:${squatCompletionState.completionBlockedReason}`,
+    };
+  }
+  if (
+    squatCompletionTruthPassed(
+      squatCompletionState.completionSatisfied === true,
+      squatCompletionState.completionPassReason
+    ) !== true
+  ) {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason: 'owner_contradiction:completion_truth_not_passed',
+    };
+  }
+  if (squatCompletionState.cycleComplete !== true) {
     return {
       completionOwnerPassed: false,
       completionOwnerReason: null,
@@ -1088,6 +1126,14 @@ function applySquatFinalBlockerVetoLayer(input: {
   return input.uiGate;
 }
 
+/**
+ * PR-01 (Completion-First Authority Freeze) — final-pass blocked-reason builder.
+ *
+ * All squat owner-pass paths (including those derived from `pass-core`) must traverse
+ * the same completion-state veto chain before final pass may open. The prior
+ * `pass_core_detected` shortcut is removed so that `completionTruthPassed === false`
+ * combined with `finalPassEligible === true` becomes impossible.
+ */
 export function getSquatPostOwnerFinalPassBlockedReason(input: {
   ownerTruth: SquatOwnerTruth;
   uiGate: SquatUiGate;
@@ -1098,20 +1144,6 @@ export function getSquatPostOwnerFinalPassBlockedReason(input: {
     squatCompletionState: input.squatCompletionState,
   });
 
-  // RF-STRUCT-12: when pass-core drove the owner truth, completionTruthPassed is NOT
-  // the final authority. Skip the completion-state veto chain and go straight to UI gate.
-  // Blocked reason is pass-core's reason, not a stale completion-state reason.
-  if (ownerTruth.completionOwnerReason === 'pass_core_detected') {
-    if (!ownerTruth.completionOwnerPassed) {
-      return ownerTruth.completionOwnerBlockedReason ?? 'completion_owner_blocked';
-    }
-    if (!input.uiGate.uiProgressionAllowed) {
-      return input.uiGate.uiProgressionBlockedReason ?? 'ui_progression_blocked';
-    }
-    return null;
-  }
-
-  // Legacy completion-state path (unchanged): completion-state owns the decision.
   const completionState = input.squatCompletionState;
   const completionPassReason = completionState?.completionPassReason;
   const completionBlockedReason = completionState?.completionBlockedReason ?? null;
