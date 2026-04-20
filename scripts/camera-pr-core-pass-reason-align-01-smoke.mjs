@@ -254,6 +254,8 @@ console.log('\nPR-CAM-CORE-PASS-REASON-ALIGN-01 smoke\n');
     ok(`6 owner ${cpr} -> completion_truth_event`, owner === 'completion_truth_event', owner);
   }
   const gate = {
+    finalPassEligible: true,
+    finalPassBlockedReason: null,
     completionSatisfied: true,
     confidence: 0.58,
     passConfirmationSatisfied: true,
@@ -269,11 +271,13 @@ console.log('\nPR-CAM-CORE-PASS-REASON-ALIGN-01 smoke\n');
         },
       },
     },
-  };
+};
   ok('6 easy latch: low_rom_cycle', isFinalPassLatched('squat', gate) === true, isFinalPassLatched('squat', gate));
 }
 
 const strictGate = {
+  finalPassEligible: true,
+  finalPassBlockedReason: null,
   completionSatisfied: true,
   confidence: 0.62,
   passConfirmationSatisfied: true,

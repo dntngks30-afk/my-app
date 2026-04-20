@@ -139,7 +139,11 @@ console.log('\n  [B] valid shallow down-up — canonical anti-false-pass can rec
     st.completionPassReason === 'low_rom_cycle' || st.completionPassReason === 'official_shallow_cycle',
     st.completionPassReason
   );
-  ok('B: valid shallow — canonicalAntiFalsePassClear', st.canonicalShallowContractAntiFalsePassClear === true, st.canonicalShallowContractAntiFalsePassClear);
+  ok(
+    'B: valid shallow — antiFalsePassGuardsSatisfied true (no permissive bypass)',
+    st.shallowCompletionTicket?.antiFalsePassGuardsSatisfied === true,
+    st.shallowCompletionTicket
+  );
   ok('B: valid shallow — officialShallowPathClosed', st.officialShallowPathClosed === true, st.officialShallowPathClosed);
   // global peakLatchedAtIndex 는 raw 값 보존(debug용)
   ok('B: valid shallow — global peakLatchedAtIndex preserved (not globally overwritten)', typeof st.peakLatchedAtIndex === 'number' || st.peakLatchedAtIndex === null, st.peakLatchedAtIndex);
@@ -166,7 +170,11 @@ console.log('\n  [B2] global peakLatchedAtIndex not globally overwritten by E1B 
   // global peakLatchedAtIndex 는 원래 core 계산값 — canonical input shaping 이 전역을 덮지 않는다
   // canonicalShallowContractAntiFalsePassClear 는 true(로컬 피크로 평가됨)
   ok('B2: global peakLatchedAtIndex is from core, not overwritten', st.peakLatchedAtIndex !== undefined, `type=${typeof st.peakLatchedAtIndex}`);
-  ok('B2: canonicalAntiFalsePassClear true', st.canonicalShallowContractAntiFalsePassClear === true, st.canonicalShallowContractAntiFalsePassClear);
+  ok(
+    'B2: antiFalsePassGuardsSatisfied true',
+    st.shallowCompletionTicket?.antiFalsePassGuardsSatisfied === true,
+    st.shallowCompletionTicket
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

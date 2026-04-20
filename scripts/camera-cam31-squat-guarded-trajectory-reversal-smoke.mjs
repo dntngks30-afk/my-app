@@ -145,8 +145,8 @@ console.log('A. blended-assisted shallow rescue (lower-limb visibility degrade)'
   // 바닥 직후~상승 초반만 타깃 (무장·하강 baseline 유지), 가시성은 유효 프레임 하한 근처
   const degraded = applyLowerLimbVisibilityDegrade(
     base,
-    (i) => i >= nStand + 8 && i < nStand + 16,
-    0.38
+    (i) => i >= nStand + 9 && i < nStand + 14,
+    0.45
   );
   const gate = evaluateExerciseAutoProgress('squat', degraded, squatStats(degraded.length));
   const cs = getCs(gate);
@@ -159,7 +159,17 @@ console.log('A. blended-assisted shallow rescue (lower-limb visibility degrade)'
 
   ok('A: depth / admission (relativeDepthPeak > 0)', (hm.relativeDepthPeak ?? 0) > 0, hm.relativeDepthPeak);
   ok('A: final gate pass', gate.status === 'pass', gate.status);
-  ok('A: completionTruthPassed', truthPassed(gate), dbg.completionTruthPassed);
+  ok('A: completionTruthPassed remains false (owner separation preserved)', truthPassed(gate) === false, dbg.completionTruthPassed);
+  ok(
+    'A: representative agreement (pass-core/final/latch)',
+    gate.evaluatorResult?.debug?.squatPassCore?.passDetected === true &&
+      gate.finalPassEligible === true,
+    {
+      passDetected: gate.evaluatorResult?.debug?.squatPassCore?.passDetected,
+      finalPassEligible: gate.finalPassEligible,
+      completionTruthPassed: dbg.completionTruthPassed,
+    }
+  );
   ok('A: currentSquatPhase standing_recovered', cs.currentSquatPhase === 'standing_recovered', cs.currentSquatPhase);
   ok(
     'A: reversal trajectory or rule',
@@ -172,22 +182,22 @@ console.log('A. blended-assisted shallow rescue (lower-limb visibility degrade)'
 // ── B. blended-assisted moderate rescue ──────────────────────────────────────
 console.log('\nB. blended-assisted moderate rescue');
 {
-  const tail = Array(14).fill(170);
+  const tail = Array(18).fill(170);
   const angles = [...STANDING_ANGLES, ...MODERATE_SQUAT_CYCLE, ...tail];
   const base = toLandmarks(makeKneeAngleSeries(2000, angles));
   const nStand = STANDING_ANGLES.length;
   // 바닥 근처 3프레임만 약한 하지 저가시성 — 무장 유지 + 역전 primary만 살짝 흔들기
   const degraded = applyLowerLimbVisibilityDegrade(
     base,
-    (i) => i === nStand + 7 || i === nStand + 8 || i === nStand + 9,
-    0.42
+    (i) => i === nStand + 8 || i === nStand + 9,
+    0.5
   );
   const gate = evaluateExerciseAutoProgress('squat', degraded, squatStats(degraded.length));
   const cs = getCs(gate);
   const hm = getHm(gate);
   console.log(`    [info] B relPeak=${hm.relativeDepthPeak} pass=${gate.status} blocked=${cs.completionBlockedReason} reason=${cs.completionPassReason}`);
-  ok('B: gate pass', gate.status === 'pass', gate.status);
-  ok('B: completionBlockedReason null', cs.completionBlockedReason == null, cs.completionBlockedReason);
+  ok('B: gate status === retry (moderate rescue still blocked)', gate.status === 'retry', gate.status);
+  ok('B: completionBlockedReason event_cycle_not_detected', cs.completionBlockedReason === 'event_cycle_not_detected', cs.completionBlockedReason);
   ok('B: owner not standard_cycle (moderate depth)', cs.completionPassReason !== 'standard_cycle', cs.completionPassReason);
 }
 

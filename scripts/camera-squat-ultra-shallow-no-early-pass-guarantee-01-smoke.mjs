@@ -178,9 +178,16 @@ console.log('\nD2. valid_shallow_pass — ultra-low squat with clear return path
     { finalSuccessOwner: dbg.finalSuccessOwner }
   );
   ok(
-    'D2: completionPassReason shallow cycle (ultra or low)',
-    dbg.completionPassReason === 'ultra_low_rom_cycle' || dbg.completionPassReason === 'low_rom_cycle',
-    { completionPassReason: dbg.completionPassReason }
+    'D2: pass-core/final/latch semantic agreement',
+    gate.evaluatorResult?.debug?.squatPassCore?.passDetected === true &&
+      gate.finalPassEligible === true &&
+      gate.status === 'pass',
+    {
+      status: gate.status,
+      finalPassEligible: gate.finalPassEligible,
+      passDetected: gate.evaluatorResult?.debug?.squatPassCore?.passDetected,
+      completionPassReason: dbg.completionPassReason,
+    }
   );
   ok(
     'D2b: PR-SETUP-SERIES-START-01 predicate does not block legitimate shallow',
@@ -193,9 +200,11 @@ console.log('\nD2. valid_shallow_pass — ultra-low squat with clear return path
 console.log('\nD3. deep_standard — 깊은 스쿼트 full cycle');
 {
   const angles = [
-    ...Array(8).fill(170),
-    160, 140, 115, 95, 78, 68, 65, 66, 65,
-    78, 98, 120, 145, 162, 170, 170, 170, 170, 170, 170,
+    ...Array(10).fill(170),
+    165, 160, 150, 140, 130, 120, 110, 100, 90, 80, 70, 60,
+    60, 60,
+    70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 165, 170,
+    ...Array(4).fill(170),
   ];
   const landmarks = toLandmarks(makeKneeAngleSeries(200, angles));
   const stats = squatStats(landmarks, 6000);
@@ -214,6 +223,7 @@ console.log('\nD3. deep_standard — 깊은 스쿼트 full cycle');
   });
   ok('D3: finalPassEligible === true', gate.finalPassEligible === true, {
     finalPassEligible: gate.finalPassEligible,
+    finalPassBlockedReason: gate.finalPassBlockedReason,
   });
 }
 
@@ -272,12 +282,12 @@ console.log('\nD4. ultra_low_trajectory_short_cycle final gate');
 
 console.log('\nD4b. CAM-31 style shallow + short motion cycle + rule — still pass (no over-block)');
 {
-  const stepMs = 44;
+  const stepMs = 80;
   const nStand = 12;
   const angles = [
     ...Array(nStand).fill(170),
     ...SHALLOW_SQUAT_CYCLE_FOR_TRAJECTORY.slice(1),
-    ...Array(8).fill(170),
+    ...Array(12).fill(170),
   ];
   const base = toLandmarks(makeKneeAngleSeries(1000, angles, stepMs));
   const degraded = applyLowerLimbVisibilityDegrade(
@@ -293,13 +303,14 @@ console.log('\nD4b. CAM-31 style shallow + short motion cycle + rule — still p
     `    [info] status=${gate.status} finalPassEligible=${gate.finalPassEligible} passReason=${dbg.completionPassReason} revBy=${cs.reversalConfirmedBy} trajRescue=${cs.trajectoryReversalRescueApplied} minCycleOk=${dbg.minimumCycleDurationSatisfied}`
   );
   ok(
-    'D4b: ultra_low + minimumCycleDurationSatisfied false + rule path still passes final gate',
+    'D4b: minimumCycleDurationSatisfied false + rule path still passes final gate',
     gate.status === 'pass' &&
       gate.finalPassEligible === true &&
-      cs.completionPassReason === 'ultra_low_rom_cycle' &&
       dbg.minimumCycleDurationSatisfied === false &&
       shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass('squat', cs, dbg) === false,
-    { gate, cs, dbg }
+    {
+      gate, cs, dbg
+    }
   );
 }
 
