@@ -231,6 +231,45 @@ function runWithPromotionState(fixtureId, gate, extraAssertions, registryOverrid
   }
 }
 
+function assertRepresentativeAuthorityBundle(label, gate) {
+  const pc = gate.evaluatorResult?.debug?.squatPassCore;
+  const finalTruth = gate.squatCycleDebug?.squatFinalPassTruth;
+  const latch = isFinalPassLatched('squat', gate);
+
+  ok(
+    `${label}: passCore.passDetected === true`,
+    pc?.passDetected === true,
+    { passDetected: pc?.passDetected, passBlockedReason: pc?.passBlockedReason }
+  );
+  ok(
+    `${label}: gate.finalPassEligible === true`,
+    gate.finalPassEligible === true,
+    { finalPassEligible: gate.finalPassEligible, finalPassBlockedReason: gate.finalPassBlockedReason }
+  );
+  ok(
+    `${label}: isFinalPassLatched('squat', gate) === true`,
+    latch === true,
+    { latch, finalPassEligible: gate.finalPassEligible }
+  );
+
+  // no owner contradiction: final pass truth owner chain must agree with pass-core and gate.
+  ok(
+    `${label}: no owner contradiction`,
+    (finalTruth?.ownerPassDetected ?? gate.finalPassEligible) === true &&
+      (finalTruth?.finalPassGranted ?? gate.finalPassEligible) === true &&
+      (finalTruth?.ownerBlockedReason ?? null) == null &&
+      (finalTruth?.finalPassBlockedReason ?? null) == null,
+    finalTruth
+  );
+
+  // no fallback ambiguity: permanent representative fixtures must not pass through fallback-only source selection.
+  ok(
+    `${label}: no fallback ambiguity`,
+    finalTruth?.source !== 'fallback_completion_owner',
+    { source: finalTruth?.source, finalTruth }
+  );
+}
+
 /**
  * Expect-failure helper for downgrade/permanent enforcement tests.
  *
@@ -306,8 +345,7 @@ console.log('\n━━ Matrix A — promoted shallow fixtures (permanent_must_pas
 
   // Consume via harness — permanent path
   runWithPromotionState('shallow_92deg', gateShallow, (gate) => {
-    const pc = gate.evaluatorResult.debug?.squatPassCore;
-    ok('Matrix A: shallow pass-core/final/latch agree', pc?.passDetected === true && gate.finalPassEligible === true && isFinalPassLatched('squat', gate) === true, pc);
+    assertRepresentativeAuthorityBundle('Matrix A shallow_92deg', gate);
   });
 }
 
@@ -343,8 +381,7 @@ console.log('\n━━ Matrix A — promoted shallow fixtures (permanent_must_pas
   );
 
   runWithPromotionState('ultra_low_rom_92deg', gateUltra, (gate) => {
-    const pc = gate.evaluatorResult.debug?.squatPassCore;
-    ok('Matrix A: ultra pass-core/final/latch agree', pc?.passDetected === true && gate.finalPassEligible === true && isFinalPassLatched('squat', gate) === true, pc);
+    assertRepresentativeAuthorityBundle('Matrix A ultra_low_rom_92deg', gate);
   });
 }
 

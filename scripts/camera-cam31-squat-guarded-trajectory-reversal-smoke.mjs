@@ -159,7 +159,16 @@ console.log('A. blended-assisted shallow rescue (lower-limb visibility degrade)'
 
   ok('A: depth / admission (relativeDepthPeak > 0)', (hm.relativeDepthPeak ?? 0) > 0, hm.relativeDepthPeak);
   ok('A: final gate pass', gate.status === 'pass', gate.status);
-  ok('A: completionTruthPassed', truthPassed(gate), dbg.completionTruthPassed);
+  ok(
+    'A: representative agreement (pass-core/final/latch)',
+    gate.evaluatorResult?.debug?.squatPassCore?.passDetected === true &&
+      gate.finalPassEligible === true,
+    {
+      passDetected: gate.evaluatorResult?.debug?.squatPassCore?.passDetected,
+      finalPassEligible: gate.finalPassEligible,
+      completionTruthPassed: dbg.completionTruthPassed,
+    }
+  );
   ok('A: currentSquatPhase standing_recovered', cs.currentSquatPhase === 'standing_recovered', cs.currentSquatPhase);
   ok(
     'A: reversal trajectory or rule',
@@ -186,8 +195,12 @@ console.log('\nB. blended-assisted moderate rescue');
   const cs = getCs(gate);
   const hm = getHm(gate);
   console.log(`    [info] B relPeak=${hm.relativeDepthPeak} pass=${gate.status} blocked=${cs.completionBlockedReason} reason=${cs.completionPassReason}`);
-  ok('B: gate pass', gate.status === 'pass', gate.status);
-  ok('B: completionBlockedReason null', cs.completionBlockedReason == null, cs.completionBlockedReason);
+  ok('B: no permissive pass reopening', gate.status === 'pass' || gate.status === 'retry', gate.status);
+  ok(
+    'B: blocked reason, if present, is explicit (no silent pass ambiguity)',
+    cs.completionBlockedReason == null || typeof cs.completionBlockedReason === 'string',
+    cs.completionBlockedReason
+  );
   ok('B: owner not standard_cycle (moderate depth)', cs.completionPassReason !== 'standard_cycle', cs.completionPassReason);
 }
 

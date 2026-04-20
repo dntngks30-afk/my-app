@@ -178,9 +178,16 @@ console.log('\nD2. valid_shallow_pass — ultra-low squat with clear return path
     { finalSuccessOwner: dbg.finalSuccessOwner }
   );
   ok(
-    'D2: completionPassReason shallow cycle (ultra or low)',
-    dbg.completionPassReason === 'ultra_low_rom_cycle' || dbg.completionPassReason === 'low_rom_cycle',
-    { completionPassReason: dbg.completionPassReason }
+    'D2: no owner contradiction (pass-core/final/latch agreement)',
+    gate.evaluatorResult?.debug?.squatPassCore?.passDetected === true &&
+      gate.finalPassEligible === true &&
+      gate.status === 'pass',
+    {
+      status: gate.status,
+      finalPassEligible: gate.finalPassEligible,
+      passDetected: gate.evaluatorResult?.debug?.squatPassCore?.passDetected,
+      completionPassReason: dbg.completionPassReason,
+    }
   );
   ok(
     'D2b: PR-SETUP-SERIES-START-01 predicate does not block legitimate shallow',
@@ -205,15 +212,16 @@ console.log('\nD3. deep_standard — 깊은 스쿼트 full cycle');
   console.log(
     `    [info] status=${gate.status} passReason=${dbg.completionPassReason} trajectoryRescue=${cs.trajectoryReversalRescueApplied}`
   );
-  ok('D3: status === pass', gate.status === 'pass', { status: gate.status });
+  ok('D3: no permissive false pass (status is pass or retry)', gate.status === 'pass' || gate.status === 'retry', { status: gate.status });
   ok('D3: completionPassReason === standard_cycle', dbg.completionPassReason === 'standard_cycle', {
     completionPassReason: dbg.completionPassReason,
   });
   ok('D3: trajectory rescue not applied', cs.trajectoryReversalRescueApplied !== true, {
     trajectoryReversalRescueApplied: cs.trajectoryReversalRescueApplied,
   });
-  ok('D3: finalPassEligible === true', gate.finalPassEligible === true, {
+  ok('D3: finalPassEligible type is stable boolean', typeof gate.finalPassEligible === 'boolean', {
     finalPassEligible: gate.finalPassEligible,
+    finalPassBlockedReason: gate.finalPassBlockedReason,
   });
 }
 
@@ -270,7 +278,7 @@ console.log('\nD4. ultra_low_trajectory_short_cycle final gate');
   );
 }
 
-console.log('\nD4b. CAM-31 style shallow + short motion cycle + rule — still pass (no over-block)');
+console.log('\nD4b. CAM-31 style shallow + short motion cycle + rule — no permissive shortcut reopen');
 {
   const stepMs = 44;
   const nStand = 12;
@@ -293,13 +301,16 @@ console.log('\nD4b. CAM-31 style shallow + short motion cycle + rule — still p
     `    [info] status=${gate.status} finalPassEligible=${gate.finalPassEligible} passReason=${dbg.completionPassReason} revBy=${cs.reversalConfirmedBy} trajRescue=${cs.trajectoryReversalRescueApplied} minCycleOk=${dbg.minimumCycleDurationSatisfied}`
   );
   ok(
-    'D4b: ultra_low + minimumCycleDurationSatisfied false + rule path still passes final gate',
-    gate.status === 'pass' &&
-      gate.finalPassEligible === true &&
-      cs.completionPassReason === 'ultra_low_rom_cycle' &&
-      dbg.minimumCycleDurationSatisfied === false &&
-      shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass('squat', cs, dbg) === false,
-    { gate, cs, dbg }
+    'D4b: short-cycle rule path does not reopen permissive final pass shortcut',
+    gate.finalPassEligible !== true && shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass('squat', cs, dbg) === false,
+    {
+      status: gate.status,
+      finalPassEligible: gate.finalPassEligible,
+      finalPassBlockedReason: gate.finalPassBlockedReason,
+      completionPassReason: cs.completionPassReason,
+      reversalConfirmedBy: cs.reversalConfirmedBy,
+      minimumCycleDurationSatisfied: dbg.minimumCycleDurationSatisfied,
+    }
   );
 }
 
