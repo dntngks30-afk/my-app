@@ -682,7 +682,10 @@ export function ResetMap({
       if (e.ctrlKey) return
       let dy = e.deltaY
       if (e.deltaMode === 1) dy *= 16
-      if (e.deltaMode === 2) dy *= 24
+      if (e.deltaMode === 2) {
+        const h = containerRef.current?.clientHeight
+        dy *= h && h > 0 ? h : VIEWPORT_HEIGHT
+      }
       if (Math.abs(dy) < 0.5) return
       e.preventDefault()
       e.stopPropagation()
@@ -1169,6 +1172,15 @@ function SessionNode({
     startY: number
     eligible: boolean
   } | null>(null)
+  /** Normal-mode tap: window-level end so pointerup outside the node still clears stale candidate (no capture). */
+  const tapWindowCleanupRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    return () => {
+      tapWindowCleanupRef.current?.()
+      tapWindowCleanupRef.current = null
+    }
+  }, [])
 
   const onNodeHandlePointerDown: PointerEventHandler<HTMLDivElement> = (e) => {
     if (!mapEditMode) return
@@ -1242,8 +1254,26 @@ function SessionNode({
           return
         }
         if (onTap && e.isPrimary && e.button === 0) {
+          tapWindowCleanupRef.current?.()
+          const pointerId = e.pointerId
+          const onWindowPointerEnd = (ev: globalThis.PointerEvent) => {
+            if (ev.pointerId !== pointerId) return
+            const c = tapCandidateRef.current
+            if (c?.pointerId === pointerId) tapCandidateRef.current = null
+            window.removeEventListener("pointerup", onWindowPointerEnd)
+            window.removeEventListener("pointercancel", onWindowPointerEnd)
+            tapWindowCleanupRef.current = null
+          }
+          const cleanup = () => {
+            window.removeEventListener("pointerup", onWindowPointerEnd)
+            window.removeEventListener("pointercancel", onWindowPointerEnd)
+            tapWindowCleanupRef.current = null
+          }
+          tapWindowCleanupRef.current = cleanup
+          window.addEventListener("pointerup", onWindowPointerEnd)
+          window.addEventListener("pointercancel", onWindowPointerEnd)
           tapCandidateRef.current = {
-            pointerId: e.pointerId,
+            pointerId,
             startX: e.clientX,
             startY: e.clientY,
             eligible: true,
@@ -1261,14 +1291,30 @@ function SessionNode({
         }
       }}
       onPointerUp={(e) => {
-        if (mapEditMode || !onTap || !tapCandidateRef.current) return
-        if (e.pointerId !== tapCandidateRef.current.pointerId) return
-        const eligible = tapCandidateRef.current.eligible
+        if (mapEditMode || !onTap) {
+          tapWindowCleanupRef.current?.()
+          return
+        }
+        const c = tapCandidateRef.current
+        if (!c) {
+          tapWindowCleanupRef.current?.()
+          return
+        }
+        if (e.pointerId !== c.pointerId) return
+        const eligible = c.eligible
         tapCandidateRef.current = null
+        tapWindowCleanupRef.current?.()
         if (eligible && e.isPrimary && e.button === 0) onTap()
       }}
-      onPointerCancel={() => {
+      onPointerCancel={(e) => {
+        const c = tapCandidateRef.current
+        if (!c) {
+          tapWindowCleanupRef.current?.()
+          return
+        }
+        if (e.pointerId !== c.pointerId) return
         tapCandidateRef.current = null
+        tapWindowCleanupRef.current?.()
       }}
       onKeyDown={(e) => {
         if (onTap && (e.key === "Enter" || e.key === " ")) {
