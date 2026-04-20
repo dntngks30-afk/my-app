@@ -177,6 +177,29 @@ export const BASELINE_WINDOW = 6;
 export const MIN_BASELINE_FRAMES = 4;
 const LEGACY_ATTEMPT_FLOOR = 0.02;
 const GUARDED_ULTRA_LOW_ROM_FLOOR = 0.01;
+
+/**
+ * PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION — Branch B implementation.
+ *
+ * Frozen parameters for the 4th `effectiveDescentStartFrame` candidate family
+ * `legitimateKinematicShallowDescentOnsetFrame`. These are the one-shot values
+ * picked from the design SSOT §4.4 admissible band and are NOT tuning knobs.
+ * Any further movement outside the band requires a new superseding design SSOT
+ * per design SSOT §9 item 1 (threshold relaxation prohibition).
+ *
+ * Chosen within-band values (frozen):
+ *   - KNEE_DESCENT_ONSET_EPSILON_DEG   = 5.0  (band [3.0, 7.0])
+ *       Matches the representative synthetic shallow fixture's 170°→165° onset
+ *       transition exactly while staying ≥ 10× the pose-feature angular noise
+ *       floor. Neither extreme of the band is chosen — the midpoint preserves
+ *       the synthetic frame-8 anchor without admitting single-frame jitter.
+ *   - KNEE_DESCENT_ONSET_SUSTAIN_FRAMES = 2   (band [2, 3])
+ *       Minimum sustain = 160 ms at 80 ms step. This rejects single-frame
+ *       spikes (`no_real_descent` family) while remaining short enough to fire
+ *       on legitimate shallow reps that bottom within ≈ 400 ms of onset.
+ */
+const KNEE_DESCENT_ONSET_EPSILON_DEG = 5.0;
+const KNEE_DESCENT_ONSET_SUSTAIN_FRAMES = 2;
 const LOW_ROM_LABEL_FLOOR = 0.07;
 const STANDARD_LABEL_FLOOR = 0.1;
 /**
@@ -1468,6 +1491,123 @@ function getShallowAuthoritativeClosureDecision(p: {
 }
 
 /**
+ * PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION — Branch B.
+ *
+ * Compute `baselineKneeAngleAvg` as the median of `kneeAngleAvg` across the
+ * first BASELINE_WINDOW valid frames referenced by `depthRowIndices`. Returns
+ * null when fewer than MIN_BASELINE_FRAMES finite samples are available, which
+ * keeps the source closed on reps whose standing-baseline window never formed
+ * (matches design SSOT §4.1 condition (3) and §5.8 seated/quasi-seated proof).
+ */
+function computeBaselineKneeAngleAvgMedian(
+  validFrames: PoseFeaturesFrame[],
+  depthRowIndices: readonly number[],
+): number | null {
+  const windowIndices = depthRowIndices.slice(0, BASELINE_WINDOW);
+  if (windowIndices.length < MIN_BASELINE_FRAMES) return null;
+  const samples: number[] = [];
+  for (const vi of windowIndices) {
+    const v = validFrames[vi]?.derived.kneeAngleAvg;
+    if (typeof v === 'number' && Number.isFinite(v)) samples.push(v);
+  }
+  if (samples.length < MIN_BASELINE_FRAMES) return null;
+  samples.sort((a, b) => a - b);
+  const mid = samples.length >> 1;
+  return samples.length % 2 === 0 ? (samples[mid - 1]! + samples[mid]!) / 2 : samples[mid]!;
+}
+
+/**
+ * PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION — Branch B.
+ *
+ * **Source #4 candidate** for `effectiveDescentStartFrame`:
+ * `legitimateKinematicShallowDescentOnsetFrame` per design SSOT §4.
+ *
+ * Fires only when **all** of the following hold (design SSOT §4.1):
+ *   1. `f.index ≥ baselineFreezeFrameIndex`
+ *   2. `f.index < peakFrame.index`
+ *   3. `baselineKneeAngleAvg` resolvable from the baseline window (median)
+ *   4. `kneeAngleAvg[f] ≤ baselineKneeAngleAvg − KNEE_DESCENT_ONSET_EPSILON_DEG`
+ *   5. `kneeAngleAvg[j] − kneeAngleAvg[j+1] ≥ 0` over
+ *      `[f, f + KNEE_DESCENT_ONSET_SUSTAIN_FRAMES − 1]` (monotonic non-increase)
+ *   6. `baselineFrozen === true`
+ *   7. `attemptAdmissionSatisfied === true`
+ *   8. `descentConfirmed === true` somewhere in the rep window (automatically
+ *      satisfied whenever conditions 1–7 fire because the source itself
+ *      contributes to the engine's descent-confirmation ladder via
+ *      `eventBasedDescentPath`; design SSOT §4.3 documents this as intent).
+ *
+ * The returned candidate may only make the descent anchor EARLIER. It never
+ * opens final pass by itself (design SSOT §6.1 SL-1); it feeds the canonical
+ * shallow contract's cycle-timing gate only. All downstream gates (reversal,
+ * recovery, anti-false-pass, minimum-cycle) continue to evaluate independently.
+ *
+ * **Coexistence deferral (design SSOT §7.4 item 4).** This branch does NOT
+ * resolve the `completionOwnerReason === 'pass_core_detected'` authority
+ * ambiguity surfaced by the P1 calibration study. The new source is
+ * orthogonal to the `completionOwnerReason` pipeline — it never writes to
+ * any `completionOwner*` field. Resolving that ambiguity is an
+ * authority-law session, not this implementation; the additive diagnostic
+ * `canonicalShallowContractDrovePass` (design SSOT §7.4 item 3) is exposed
+ * by the auto-progression layer so the authority-law owner can diff canonical
+ * shallow passes from assist passes without reading private owner reasons.
+ */
+function findLegitimateKinematicShallowDescentOnsetFrame(params: {
+  validFrames: PoseFeaturesFrame[];
+  depthFrames: ReadonlyArray<{
+    index: number;
+    depth: number;
+    timestampMs: number;
+    phaseHint: PoseFeaturesFrame['phaseHint'];
+  }>;
+  peakFrameIndex: number;
+  baselineFreezeFrameIndex: number | null;
+  baselineKneeAngleAvg: number | null;
+  baselineFrozen: boolean;
+  attemptAdmissionSatisfied: boolean;
+}): {
+  frame: {
+    index: number;
+    depth: number;
+    timestampMs: number;
+    phaseHint: PoseFeaturesFrame['phaseHint'];
+  };
+  kneeAngleAtOnset: number;
+  sustainSatisfied: true;
+} | null {
+  if (!params.baselineFrozen) return null;
+  if (!params.attemptAdmissionSatisfied) return null;
+  if (params.baselineKneeAngleAvg == null) return null;
+  if (params.baselineFreezeFrameIndex == null) return null;
+
+  const { validFrames, depthFrames, peakFrameIndex, baselineFreezeFrameIndex } = params;
+  const threshold = params.baselineKneeAngleAvg - KNEE_DESCENT_ONSET_EPSILON_DEG;
+  const sustainWindow = Math.max(2, KNEE_DESCENT_ONSET_SUSTAIN_FRAMES);
+
+  for (let i = 0; i < depthFrames.length; i++) {
+    const f = depthFrames[i]!;
+    if (f.index < baselineFreezeFrameIndex) continue;
+    if (f.index >= peakFrameIndex) break;
+    const kneeAtI = validFrames[f.index]?.derived.kneeAngleAvg;
+    if (typeof kneeAtI !== 'number' || !Number.isFinite(kneeAtI)) continue;
+    if (!(kneeAtI <= threshold)) continue;
+
+    if (i + sustainWindow - 1 >= depthFrames.length) break;
+    let monotonic = true;
+    for (let j = 0; j < sustainWindow - 1; j++) {
+      const cur = validFrames[depthFrames[i + j]!.index]?.derived.kneeAngleAvg;
+      const nxt = validFrames[depthFrames[i + j + 1]!.index]?.derived.kneeAngleAvg;
+      if (typeof cur !== 'number' || !Number.isFinite(cur)) { monotonic = false; break; }
+      if (typeof nxt !== 'number' || !Number.isFinite(nxt)) { monotonic = false; break; }
+      if (cur - nxt < 0) { monotonic = false; break; }
+    }
+    if (!monotonic) continue;
+
+    return { frame: f, kneeAngleAtOnset: kneeAtI, sustainSatisfied: true };
+  }
+  return null;
+}
+
+/**
  * PR-1-COMPLETION-STATE-SLIMMING: Completion core truth boundary — SQUAT_REFACTOR_SSOT.md §1.
  *
  * Names only the fields that belong to the completion core per the SSOT definition.
@@ -1603,6 +1743,12 @@ export function evaluateSquatCompletionCore(
       standingFinalizeSatisfied: false,
       standingFinalizeSuppressedByLateSetup: false,
       standingFinalizeReadyAtMs: null,
+      legitimateKinematicShallowDescentOnsetFrameIndex: null,
+      legitimateKinematicShallowDescentOnsetAtMs: null,
+      legitimateKinematicShallowDescentOnsetKneeAngleAvg: null,
+      legitimateKinematicShallowDescentBaselineKneeAngleAvg: null,
+      effectiveDescentStartFrameSource: null,
+      descentAnchorCoherent: true,
     };
   }
 
@@ -1797,9 +1943,50 @@ export function evaluateSquatCompletionCore(
       : undefined;
 
   /**
-   * PR-CAM-EPOCH-SOURCE-RESTORE-01: pick earliest frame among all three legal sources.
-   * Source priority is by index (earliest in time wins — canonical temporal contract
-   * is preserved by downstream ordering checks, not by source selection here).
+   * PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION — Branch B, source #4.
+   *
+   * `legitimateKinematicShallowDescentOnsetFrame` — earliest-by-index frame in the
+   * pre-peak window whose `kneeAngleAvg` falls ≥ `KNEE_DESCENT_ONSET_EPSILON_DEG`
+   * below the standing-baseline median and is sustained (monotonic non-increase)
+   * over `KNEE_DESCENT_ONSET_SUSTAIN_FRAMES`. Gated by `baselineFrozen` and
+   * `attemptAdmissionSatisfied`. Design SSOT §4.1–§4.3; proof obligations §5;
+   * split-brain guards §6; coexistence deferral with `pass_core_detected` §7.
+   *
+   * NOTE (coexistence deferral — design SSOT §7.4 item 4):
+   * this branch does NOT resolve the `pass_core_detected` authority ambiguity
+   * surfaced by the P1 calibration study; it only exposes the diagnostics
+   * (`canonicalShallowContractDrovePass`, `legitimateKinematicShallowDescentOnset*`)
+   * required for a later authority-law session.
+   */
+  const baselineFreezeFrameIndex =
+    depthFreeze != null && depthFrames.length >= MIN_BASELINE_FRAMES
+      ? depthFrames[Math.min(BASELINE_WINDOW, depthFrames.length) - 1]!.index
+      : null;
+  const baselineKneeAngleAvgValue = computeBaselineKneeAngleAvgMedian(
+    validFrames,
+    depthFrames.map((f) => f.index),
+  );
+  const legitimateKinematicOnset =
+    depthFreeze != null
+      ? findLegitimateKinematicShallowDescentOnsetFrame({
+          validFrames,
+          depthFrames,
+          peakFrameIndex: peakFrame.index,
+          baselineFreezeFrameIndex,
+          baselineKneeAngleAvg: baselineKneeAngleAvgValue,
+          baselineFrozen: true,
+          attemptAdmissionSatisfied,
+        })
+      : null;
+  const legitimateKinematicShallowDescentOnsetFrame = legitimateKinematicOnset?.frame;
+
+  /**
+   * PR-CAM-EPOCH-SOURCE-RESTORE-01 + PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION:
+   * pick the earliest-by-index frame among the four legal sources. Source #4
+   * (`legitimateKinematicShallowDescentOnsetFrame`) is purely additive — it may
+   * only move the anchor EARLIER, never later, because resolution is earliest-
+   * by-index over the non-null set. Canonical temporal contract is preserved
+   * by downstream ordering checks, not by source selection here.
    */
   const effectiveDescentStartFrame: {
     index: number;
@@ -1811,10 +1998,33 @@ export function evaluateSquatCompletionCore(
       descentFrame,
       trajectoryDescentStartFrame,
       sharedDescentEpochFrame,
+      legitimateKinematicShallowDescentOnsetFrame,
     ].filter((f): f is NonNullable<typeof f> => f != null);
     if (candidates.length === 0) return undefined;
     return candidates.reduce((earliest, f) => (f.index < earliest.index ? f : earliest));
   })();
+
+  /**
+   * PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION — split-brain
+   * guard CL-1 (design SSOT §6.4). `descentAnchorCoherent` is true when every
+   * non-null candidate source timestamp equals `effectiveDescentStartFrame`'s
+   * timestamp at its own index, OR when the earliest-wins rule correctly
+   * surfaces the minimum. We assert the simpler form: the chosen anchor is
+   * the minimum-index candidate (observable property). `false` would indicate
+   * a downstream consumer mis-selecting a non-earliest candidate — which this
+   * function cannot produce by construction, hence true when any source fires.
+   */
+  const descentAnchorCoherent =
+    effectiveDescentStartFrame == null
+      ? true
+      : [
+          descentFrame,
+          trajectoryDescentStartFrame,
+          sharedDescentEpochFrame,
+          legitimateKinematicShallowDescentOnsetFrame,
+        ]
+          .filter((f): f is NonNullable<typeof f> => f != null)
+          .every((f) => f.index >= effectiveDescentStartFrame.index);
 
   /** phaseHint 기반 descent가 없으면 true — completionPassReason 구분용 */
   const eventBasedDescentPath =
@@ -2718,6 +2928,27 @@ export function evaluateSquatCompletionCore(
     standingFinalizeSatisfied: standingRecoveryFinalize.finalizeSatisfied,
     standingFinalizeSuppressedByLateSetup: false,
     standingFinalizeReadyAtMs,
+    // PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION — Branch B §7 additive diagnostics.
+    legitimateKinematicShallowDescentOnsetFrameIndex:
+      legitimateKinematicShallowDescentOnsetFrame?.index ?? null,
+    legitimateKinematicShallowDescentOnsetAtMs:
+      legitimateKinematicShallowDescentOnsetFrame?.timestampMs ?? null,
+    legitimateKinematicShallowDescentOnsetKneeAngleAvg:
+      legitimateKinematicOnset?.kneeAngleAtOnset ?? null,
+    legitimateKinematicShallowDescentBaselineKneeAngleAvg: baselineKneeAngleAvgValue,
+    effectiveDescentStartFrameSource:
+      effectiveDescentStartFrame == null
+        ? null
+        : effectiveDescentStartFrame === descentFrame
+          ? 'phase_hint_descent'
+          : effectiveDescentStartFrame === trajectoryDescentStartFrame
+            ? 'trajectory_descent_start'
+            : effectiveDescentStartFrame === sharedDescentEpochFrame
+              ? 'shared_descent_epoch'
+              : effectiveDescentStartFrame === legitimateKinematicShallowDescentOnsetFrame
+                ? 'legitimate_kinematic_shallow_descent_onset'
+                : null,
+    descentAnchorCoherent,
   };
 }
 

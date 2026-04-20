@@ -411,6 +411,37 @@ export interface SquatCycleDebug {
    * Sink-only — must not be read as a gate input.
    */
   squatFinalPassTruth?: SquatFinalPassTruthSurface;
+
+  // ── PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION (Branch B §7) ──
+  // Additive diagnostics surfaced so authority-law owners can diff canonical
+  // shallow passes from assist passes without reading private owner reasons.
+  // All sink-only — never read as gate inputs (design SSOT §6.1 SL-1/SL-2).
+  /**
+   * `canonicalShallowContractDrovePass === true` iff this cycle ended in a
+   * completion-core pass (`completionTruthPassed === true`) AND the cycle's
+   * `evidenceLabel ∈ { 'ultra_low_rom', 'low_rom' }` AND the canonical
+   * completion-owner reason was not the `pass_core_detected` assist path
+   * (i.e., the shallow contract — not pass-core — drove the owner into pass).
+   * Undefined for cycles that did not pass. Design SSOT §7.4 item 3.
+   */
+  canonicalShallowContractDrovePass?: boolean;
+  /** Mirror of `SquatCompletionState.legitimateKinematicShallowDescentOnsetFrameIndex`. */
+  legitimateKinematicShallowDescentOnsetFrameIndex?: number | null;
+  /** Mirror of `SquatCompletionState.legitimateKinematicShallowDescentOnsetAtMs`. */
+  legitimateKinematicShallowDescentOnsetAtMs?: number | null;
+  /** Mirror of `SquatCompletionState.legitimateKinematicShallowDescentOnsetKneeAngleAvg`. */
+  legitimateKinematicShallowDescentOnsetKneeAngleAvg?: number | null;
+  /** Mirror of `SquatCompletionState.legitimateKinematicShallowDescentBaselineKneeAngleAvg`. */
+  legitimateKinematicShallowDescentBaselineKneeAngleAvg?: number | null;
+  /** Mirror of `SquatCompletionState.effectiveDescentStartFrameSource`. */
+  effectiveDescentStartFrameSource?:
+    | 'phase_hint_descent'
+    | 'trajectory_descent_start'
+    | 'shared_descent_epoch'
+    | 'legitimate_kinematic_shallow_descent_onset'
+    | null;
+  /** Mirror of `SquatCompletionState.descentAnchorCoherent` (split-brain guard CL-1). */
+  descentAnchorCoherent?: boolean;
 }
 
 export interface ExerciseGateResult {
@@ -2752,6 +2783,30 @@ export function evaluateExerciseAutoProgress(
         };
       })(),
       squatFinalPassTruth: squatPostOwnerGateLayer?.squatFinalPassTruth,
+      // PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION (Branch B §7).
+      // Authority-law diagnostic: true when the completion-core pass was driven
+      // by the canonical shallow contract (not by the `pass_core_detected`
+      // assist path). Sink-only — never a gate input (design SSOT §6.1 SL-1).
+      canonicalShallowContractDrovePass:
+        squatCompletionTruthPassed(completionSatisfied, cpr) === true &&
+        (squatCs?.evidenceLabel === 'ultra_low_rom' ||
+          squatCs?.evidenceLabel === 'low_rom') &&
+        squatOwnerTruth?.completionOwnerReason !== 'pass_core_detected'
+          ? true
+          : squatCompletionTruthPassed(completionSatisfied, cpr) === true
+            ? false
+            : undefined,
+      legitimateKinematicShallowDescentOnsetFrameIndex:
+        squatCs?.legitimateKinematicShallowDescentOnsetFrameIndex ?? null,
+      legitimateKinematicShallowDescentOnsetAtMs:
+        squatCs?.legitimateKinematicShallowDescentOnsetAtMs ?? null,
+      legitimateKinematicShallowDescentOnsetKneeAngleAvg:
+        squatCs?.legitimateKinematicShallowDescentOnsetKneeAngleAvg ?? null,
+      legitimateKinematicShallowDescentBaselineKneeAngleAvg:
+        squatCs?.legitimateKinematicShallowDescentBaselineKneeAngleAvg ?? null,
+      effectiveDescentStartFrameSource:
+        squatCs?.effectiveDescentStartFrameSource ?? null,
+      descentAnchorCoherent: squatCs?.descentAnchorCoherent ?? true,
     } as SquatCycleDebug;
   }
 

@@ -722,6 +722,42 @@ export interface SquatCompletionState extends MotionCompletionResult {
   shallowCompletionTicketBlockedReason?: string | null;
   /** admission | attempt | descend | commitment | late_suffix | anti_false_pass | finalize_bundle */
   shallowCompletionTicketStage?: string | null;
+
+  // ── PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION (Branch B §7) ──
+  // Additive diagnostics for the 4th `effectiveDescentStartFrame` candidate
+  // `legitimateKinematicShallowDescentOnsetFrame`. All fields are observation-
+  // only per design SSOT §6.1 SL-1/SL-2 (the source never opens final pass
+  // by itself and never writes to any `completionOwner*` field).
+  /** Source #4 onset frame index (null when source did not fire). */
+  legitimateKinematicShallowDescentOnsetFrameIndex?: number | null;
+  /** Source #4 onset timestampMs (null when source did not fire). */
+  legitimateKinematicShallowDescentOnsetAtMs?: number | null;
+  /** `kneeAngleAvg` at the onset frame (null when source did not fire). */
+  legitimateKinematicShallowDescentOnsetKneeAngleAvg?: number | null;
+  /**
+   * Median `kneeAngleAvg` over the baseline window used to compute the
+   * onset threshold. Null when fewer than MIN_BASELINE_FRAMES finite
+   * samples were available.
+   */
+  legitimateKinematicShallowDescentBaselineKneeAngleAvg?: number | null;
+  /**
+   * Which source currently anchors `effectiveDescentStartFrame`. Null when
+   * no candidate fired. Values are drawn from design SSOT §4.2:
+   *   'phase_hint_descent' | 'trajectory_descent_start' |
+   *   'shared_descent_epoch' | 'legitimate_kinematic_shallow_descent_onset'.
+   */
+  effectiveDescentStartFrameSource?:
+    | 'phase_hint_descent'
+    | 'trajectory_descent_start'
+    | 'shared_descent_epoch'
+    | 'legitimate_kinematic_shallow_descent_onset'
+    | null;
+  /**
+   * Split-brain guard CL-1 (design SSOT §6.4): every non-null candidate's
+   * index is ≥ `effectiveDescentStartFrame.index` (i.e., the earliest-wins
+   * rule actually picked the minimum). True when no source fired.
+   */
+  descentAnchorCoherent?: boolean;
 }
 
 /** PR-CAM-SHALLOW-PROOF-TRACE-11: 명시적 차단 문자열 — JSON 에서 추론 없이 원인 매핑 */
