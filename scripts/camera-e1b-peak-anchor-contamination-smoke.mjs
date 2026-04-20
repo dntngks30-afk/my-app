@@ -140,9 +140,9 @@ console.log('\n  [B] valid shallow down-up — canonical anti-false-pass can rec
     st.completionPassReason
   );
   ok(
-    'B: valid shallow — canonicalAntiFalsePassClear remains false (no permissive anti-false-pass bypass)',
-    st.canonicalShallowContractAntiFalsePassClear === false,
-    st.canonicalShallowContractAntiFalsePassClear
+    'B: valid shallow — antiFalsePassGuardsSatisfied true (no permissive bypass)',
+    st.shallowCompletionTicket?.antiFalsePassGuardsSatisfied === true,
+    st.shallowCompletionTicket
   );
   ok('B: valid shallow — officialShallowPathClosed', st.officialShallowPathClosed === true, st.officialShallowPathClosed);
   // global peakLatchedAtIndex 는 raw 값 보존(debug용)
@@ -171,9 +171,9 @@ console.log('\n  [B2] global peakLatchedAtIndex not globally overwritten by E1B 
   // canonicalShallowContractAntiFalsePassClear 는 true(로컬 피크로 평가됨)
   ok('B2: global peakLatchedAtIndex is from core, not overwritten', st.peakLatchedAtIndex !== undefined, `type=${typeof st.peakLatchedAtIndex}`);
   ok(
-    'B2: canonicalAntiFalsePassClear remains false',
-    st.canonicalShallowContractAntiFalsePassClear === false,
-    st.canonicalShallowContractAntiFalsePassClear
+    'B2: antiFalsePassGuardsSatisfied true',
+    st.shallowCompletionTicket?.antiFalsePassGuardsSatisfied === true,
+    st.shallowCompletionTicket
   );
 }
 
