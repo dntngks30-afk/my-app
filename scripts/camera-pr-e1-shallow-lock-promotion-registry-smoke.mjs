@@ -23,12 +23,10 @@
  *     metadata.
  *   - Mix E2 (localStorage/snapshot) or E3 (framing false-pass) logic.
  *
- * Current engine state (observed on this main):
- *   - shallow fixture (peak ≈92°):      SKIP (engine not passing)
- *   - ultra-low-ROM fixture (peak ≈92°): SKIP (engine not passing)
- *   Both are therefore registered as `conditional_until_main_passes`.
- *   Neither may be flipped to `permanent_must_pass` until a real engine
- *   recovery PR lands and proves real-path pass.
+ * Current engine state (PR-F):
+ *   - shallow fixture (peak ≈92°):       permanent must-pass
+ *   - ultra-low-ROM fixture (peak ≈92°): permanent must-pass
+ *   Both now pass through the real authority chain, so SKIP is forbidden.
  *
  * Run:
  *   npx tsx scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs
@@ -141,14 +139,12 @@ function squatStats(landmarks, captureDurationMs = 3200) {
 /** @type {Record<string, { state: 'conditional_until_main_passes' | 'permanent_must_pass', skipReason?: string, description: string }>} */
 const SHALLOW_FIXTURE_REGISTRY = {
   'shallow_92deg': {
-    state: 'conditional_until_main_passes',
-    skipReason: 'engine does not pass shallow fixture (peak ≈92°) on current SSOT main — pending real-path engine recovery PR',
-    description: 'PR-D Matrix 1b shallow: knee-angle peak ≈92°, same geometry as PR-CAM-26 shallow family',
+    state: 'permanent_must_pass',
+    description: 'PR-F shallow: knee-angle peak ≈92°, same geometry as PR-CAM-26 shallow family',
   },
   'ultra_low_rom_92deg': {
-    state: 'conditional_until_main_passes',
-    skipReason: 'engine does not pass ultra-low-ROM fixture (peak ≈92°) on current SSOT main — pending real-path engine recovery PR',
-    description: 'PR-D Matrix 1b ultra-low-ROM: knee-angle peak ≈92°, extended standing-recovery tail',
+    state: 'permanent_must_pass',
+    description: 'PR-F ultra-low-ROM: knee-angle peak ≈92°, extended standing-recovery tail',
   },
 };
 
@@ -274,7 +270,7 @@ function expectConsumerToFail(label, fixtureId, gate, registry) {
 // §11 Matrix A — conditional fixture behavior
 // fixture state = conditional_until_main_passes
 // ═══════════════════════════════════════════════════════════════════════════
-console.log('\n━━ Matrix A — conditional fixture behavior (conditional_until_main_passes) ━━');
+console.log('\n━━ Matrix A — promoted shallow fixtures (permanent_must_pass) ━━');
 
 {
   // Fixture: shallow (PR-D Matrix 1b — peak knee angle ≈92°)
@@ -297,22 +293,21 @@ console.log('\n━━ Matrix A — conditional fixture behavior (conditional_unt
     Object.keys(SHALLOW_FIXTURE_REGISTRY)
   );
   ok(
-    'Matrix A: shallow_92deg state is conditional_until_main_passes',
-    SHALLOW_FIXTURE_REGISTRY['shallow_92deg']?.state === 'conditional_until_main_passes',
+    'Matrix A: shallow_92deg state is permanent_must_pass',
+    SHALLOW_FIXTURE_REGISTRY['shallow_92deg']?.state === 'permanent_must_pass',
     SHALLOW_FIXTURE_REGISTRY['shallow_92deg']?.state
   );
   ok(
-    'Matrix A: shallow_92deg skipReason is non-empty',
-    typeof SHALLOW_FIXTURE_REGISTRY['shallow_92deg']?.skipReason === 'string' &&
-      SHALLOW_FIXTURE_REGISTRY['shallow_92deg'].skipReason.length > 0,
-    SHALLOW_FIXTURE_REGISTRY['shallow_92deg']?.skipReason
+    'Matrix A: shallow_92deg description is non-empty',
+    typeof SHALLOW_FIXTURE_REGISTRY['shallow_92deg']?.description === 'string' &&
+      SHALLOW_FIXTURE_REGISTRY['shallow_92deg'].description.length > 0,
+    SHALLOW_FIXTURE_REGISTRY['shallow_92deg']?.description
   );
 
-  // Consume via harness — conditional path
+  // Consume via harness — permanent path
   runWithPromotionState('shallow_92deg', gateShallow, (gate) => {
-    // Only reached if engine passes today (not expected on current main)
-    const cpr = gate.squatCycleDebug?.completionPassReason;
-    ok('Matrix A: shallow passes today → low/ultra-low cycle class', cpr === 'low_rom_cycle' || cpr === 'ultra_low_rom_cycle', cpr);
+    const pc = gate.evaluatorResult.debug?.squatPassCore;
+    ok('Matrix A: shallow pass-core/final/latch agree', pc?.passDetected === true && gate.finalPassEligible === true && isFinalPassLatched('squat', gate) === true, pc);
   });
 }
 
@@ -336,20 +331,20 @@ console.log('\n━━ Matrix A — conditional fixture behavior (conditional_unt
     Object.keys(SHALLOW_FIXTURE_REGISTRY)
   );
   ok(
-    'Matrix A: ultra_low_rom_92deg state is conditional_until_main_passes',
-    SHALLOW_FIXTURE_REGISTRY['ultra_low_rom_92deg']?.state === 'conditional_until_main_passes',
+    'Matrix A: ultra_low_rom_92deg state is permanent_must_pass',
+    SHALLOW_FIXTURE_REGISTRY['ultra_low_rom_92deg']?.state === 'permanent_must_pass',
     SHALLOW_FIXTURE_REGISTRY['ultra_low_rom_92deg']?.state
   );
   ok(
-    'Matrix A: ultra_low_rom_92deg skipReason is non-empty',
-    typeof SHALLOW_FIXTURE_REGISTRY['ultra_low_rom_92deg']?.skipReason === 'string' &&
-      SHALLOW_FIXTURE_REGISTRY['ultra_low_rom_92deg'].skipReason.length > 0,
-    SHALLOW_FIXTURE_REGISTRY['ultra_low_rom_92deg']?.skipReason
+    'Matrix A: ultra_low_rom_92deg description is non-empty',
+    typeof SHALLOW_FIXTURE_REGISTRY['ultra_low_rom_92deg']?.description === 'string' &&
+      SHALLOW_FIXTURE_REGISTRY['ultra_low_rom_92deg'].description.length > 0,
+    SHALLOW_FIXTURE_REGISTRY['ultra_low_rom_92deg']?.description
   );
 
   runWithPromotionState('ultra_low_rom_92deg', gateUltra, (gate) => {
-    const cpr = gate.squatCycleDebug?.completionPassReason;
-    ok('Matrix A: ultra passes today → low/ultra-low cycle class', cpr === 'low_rom_cycle' || cpr === 'ultra_low_rom_cycle', cpr);
+    const pc = gate.evaluatorResult.debug?.squatPassCore;
+    ok('Matrix A: ultra pass-core/final/latch agree', pc?.passDetected === true && gate.finalPassEligible === true && isFinalPassLatched('squat', gate) === true, pc);
   });
 }
 
@@ -476,14 +471,18 @@ console.log('\n━━ Matrix C — downgrade protection ━━');
     SYNTHETIC_PERMANENT_FOR_DOWNGRADE
   );
 
-  // Confirm conditional fixtures are NOT treated as permanent (SKIP remains allowed)
+  // Confirm representative fixtures are promoted; SKIP is no longer allowed.
   const entryConditional = SHALLOW_FIXTURE_REGISTRY['shallow_92deg'];
   ok(
-    'Matrix C: conditional fixture still has skipReason — SKIP permitted (not upgraded)',
-    entryConditional?.state === 'conditional_until_main_passes' &&
-      typeof entryConditional.skipReason === 'string' &&
-      entryConditional.skipReason.length > 0,
+    'Matrix C: shallow_92deg is promoted to permanent_must_pass',
+    entryConditional?.state === 'permanent_must_pass',
     entryConditional?.state
+  );
+  const ultraEntry = SHALLOW_FIXTURE_REGISTRY['ultra_low_rom_92deg'];
+  ok(
+    'Matrix C: ultra_low_rom_92deg is promoted to permanent_must_pass',
+    ultraEntry?.state === 'permanent_must_pass',
+    ultraEntry?.state
   );
 }
 
@@ -566,7 +565,7 @@ console.log('\n━━ §12 Acceptance criteria ━━');
 console.log('\n━━ Scope discipline ━━');
 console.log('  INFO: E2 (localStorage/snapshot storage) — not implemented in this script');
 console.log('  INFO: E3 (framing/setup false-pass fixtures) — not implemented in this script');
-console.log('  INFO: No production files modified');
+console.log('  INFO: Production change is limited to squat pass-core PR-F recovery anchoring');
 console.log('  INFO: evaluateExerciseAutoProgress and isFinalPassLatched used read-only');
 console.log('  INFO: Registry does not judge pass/fail — real-path engine judgment preserved');
 

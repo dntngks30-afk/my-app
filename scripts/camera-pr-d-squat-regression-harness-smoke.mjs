@@ -211,11 +211,11 @@ console.log('\n━━ Matrix 1b — optional shallow / ultra-low-ROM (only if en
   );
   if (whenPassing('ultra-shallow', gateUltra)) {
     runGateInvariants(gateUltra, 'M1b ultra-shallow');
-    const cpr = gateUltra.squatCycleDebug?.completionPassReason;
+    const passCore = gateUltra.evaluatorResult.debug?.squatPassCore;
     ok(
-      'M1b ultra-shallow: shallow cycle class',
-      cpr === 'ultra_low_rom_cycle' || cpr === 'low_rom_cycle',
-      cpr
+      'M1b ultra-shallow: pass-core/final/latch agree',
+      passCore?.passDetected === true && gateUltra.finalPassEligible === true && isFinalPassLatched('squat', gateUltra) === true,
+      passCore
     );
   } else {
     console.log('  SKIP: ultra-low-ROM fixture not passing on this main (no PR-D broadening)');

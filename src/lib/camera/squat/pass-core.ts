@@ -141,6 +141,15 @@ const MIN_PRE_PEAK_DESCENT_FRAMES = 3;
  */
 const MIN_REVERSAL_SPAN_MS_SHALLOW = 300;
 
+/**
+ * PR-F: legitimate shallow reps may complete usable ascent proof after the
+ * three-frame reversal confirmation. Require a recovery-owned tail before the
+ * standing candidate so instant collapse remains blocked.
+ */
+const MIN_SHALLOW_POST_REVERSAL_RECOVERY_SPAN_MS = 80;
+const MIN_LOW_ROM_POST_REVERSAL_RECOVERY_SPAN_MS = 160;
+const RECOVERY_ANCHORED_ULTRA_LOW_PEAK_MAX = 0.05;
+
 /** Depth tolerance band for "near peak": max(PEAK_NEIGHBORHOOD_FLOOR, relativePeak × this). */
 const PEAK_NEIGHBORHOOD_FRACTION = 0.15;
 const PEAK_NEIGHBORHOOD_FLOOR = 0.004;
@@ -733,8 +742,8 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
 
   // ── 5.5 THIN-EVIDENCE-PASS-RESET-01: Minimum post-peak reversal span for shallow reps ──
   //
-  // For shallow reps (relativePeak < DESCENT_SPAN_SHALLOW_PEAK_MAX = 0.1), the post-peak
-  // reversal span must exceed MIN_REVERSAL_SPAN_MS_SHALLOW (300ms).
+  // For shallow reps (relativePeak < DESCENT_SPAN_SHALLOW_PEAK_MAX = 0.1), the initial
+  // reversal span or the recovery-owned ascent tail must clear the shallow evidence floor.
   //
   // This blocks the thin-evidence class where reversal is structurally confirmed
   // (MIN_REVERSAL_FRAMES=3 consecutive ascending frames) but the upward motion window
@@ -744,37 +753,9 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
   //
   // Deep reps (relativePeak >= 0.1) are exempt — they carry sufficient geometric evidence.
   // completionBlockedReason is NOT read — this uses pass-core-owned reversalSpanMs.
-  const thinEvidenceClear =
+  const initialReversalSpanClear =
     relativePeak >= DESCENT_SPAN_SHALLOW_PEAK_MAX ||
     reversalSpanMs >= MIN_REVERSAL_SPAN_MS_SHALLOW;
-
-  if (!thinEvidenceClear) {
-    return buildResult({
-      passDetected: false,
-      passBlockedReason: 'reversal_span_too_short',
-      readinessClear,
-      baselineEstablished,
-      peakLatched,
-      descentDetected,
-      descentSpanClear: true,
-      descentToPeakSpanMs,
-      thinEvidenceClear: false,
-      reversalDetected,
-      standingRecovered: false,
-      sameRepOwnershipClear: false,
-      antiSpikeClear: false,
-      antiSetupClear,
-      setupClear: false,
-      descentStartAtMs: descentEpochStartTs,
-      peakAtMs: peakTs,
-      depthPeak: peakDepth,
-      reversalCandidateStartAtMs,
-      reversalConfirmedAtMs,
-      reversalFrameCount,
-      reversalSpanMs,
-      input,
-    });
-  }
 
   // ── 6. STANDING-RECOVERY-RESET-01: Structured standing recovery check ──
   //
@@ -866,6 +847,61 @@ export function evaluateSquatPassCore(input: SquatPassCoreInput): SquatPassCoreR
   // ── 7. Anti-spike timing (cycle duration) ──
   // PASS-WINDOW-RESET-01: measure from descent epoch start, not stream start.
   // With the wider valid stream, descentEpochStartTs ≈ when person started moving from standing.
+  // PR-F: if the initial three-frame reversal proof is short, the same rep may
+  // still clear shallow thin-evidence through a gradual recovery-owned ascent.
+  const recoveryAnchoredAscentSpanMs =
+    reversalCandidateStartAtMs != null && standingRecoveredAtMs != null
+      ? standingRecoveredAtMs - reversalCandidateStartAtMs
+      : undefined;
+  const postReversalRecoverySpanMs =
+    reversalConfirmedAtMs != null && standingCandidateAtMs != null
+      ? standingCandidateAtMs - reversalConfirmedAtMs
+      : undefined;
+  const minPostReversalRecoverySpanMs =
+    relativePeak < RECOVERY_ANCHORED_ULTRA_LOW_PEAK_MAX
+      ? MIN_SHALLOW_POST_REVERSAL_RECOVERY_SPAN_MS
+      : MIN_LOW_ROM_POST_REVERSAL_RECOVERY_SPAN_MS;
+  const shallowRecoveryAnchoredEvidenceClear =
+    recoveryAnchoredAscentSpanMs != null &&
+    recoveryAnchoredAscentSpanMs >= MIN_REVERSAL_SPAN_MS_SHALLOW &&
+    postReversalRecoverySpanMs != null &&
+    postReversalRecoverySpanMs >= minPostReversalRecoverySpanMs;
+  const thinEvidenceClear =
+    initialReversalSpanClear || shallowRecoveryAnchoredEvidenceClear;
+
+  if (!thinEvidenceClear) {
+    return buildResult({
+      passDetected: false,
+      passBlockedReason: 'reversal_span_too_short',
+      readinessClear,
+      baselineEstablished,
+      peakLatched,
+      descentDetected,
+      descentSpanClear: true,
+      descentToPeakSpanMs,
+      thinEvidenceClear: false,
+      reversalDetected,
+      standingRecovered,
+      sameRepOwnershipClear: false,
+      antiSpikeClear: false,
+      antiSetupClear,
+      setupClear: false,
+      descentStartAtMs: descentEpochStartTs,
+      peakAtMs: peakTs,
+      reversalAtMs,
+      standingRecoveredAtMs,
+      depthPeak: peakDepth,
+      reversalCandidateStartAtMs,
+      reversalConfirmedAtMs,
+      reversalFrameCount,
+      reversalSpanMs,
+      standingCandidateAtMs,
+      standingRecoveryFrameCount,
+      standingRecoveryHoldMs,
+      input,
+    });
+  }
+
   const cycleDurationMs =
     standingRecoveredAtMs != null
       ? standingRecoveredAtMs - descentEpochStartTs
