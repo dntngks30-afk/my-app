@@ -9,7 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { clearReadinessCheck } from '@/app/app/_components/ReadinessEntryGate';
+import { clearReadinessCheck } from '@/lib/readiness/readinessSessionFlag';
 import StitchOnboardingCompleteScene from '@/components/stitch/postpay/StitchOnboardingCompleteScene';
 
 export default function OnboardingCompletePage() {

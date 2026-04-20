@@ -5,13 +5,14 @@
  * mode="login" | "signup"
  * signup: signInWithOtp → 메일 확인 UI (프로덕션)
  * signup (개발): signUp → 이메일 인증 없이 바로 가입
- * login: signInWithPassword → redirectTo(기본 /app/home)
+ * login: signInWithPassword → readiness next_action 기반 경로(폴백 redirectTo, 기본 /app/home)
  * errorParam: searchParams.error (auth_failed 등) — 서버에서 props로 전달
  */
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase';
+import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth';
 import { Input } from '@/components/ui/input';
 import AuthShell from '@/components/auth/AuthShell';
 import { NeoButton } from '@/components/neobrutalism';
@@ -65,7 +66,7 @@ export default function AuthCard({ mode, errorParam, redirectTo = DEFAULT_POST_A
             return;
           }
           if (data.session) {
-            router.replace(redirectTo);
+            await replaceRouteAfterAuthSession(router, redirectTo);
             return;
           }
           setError(
@@ -95,7 +96,7 @@ export default function AuthCard({ mode, errorParam, redirectTo = DEFAULT_POST_A
           setError(err.message);
           return;
         }
-        router.replace(redirectTo);
+        await replaceRouteAfterAuthSession(router, redirectTo);
       }
     } finally {
       setLoading(false);

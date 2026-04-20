@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase';
+import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth';
 
 interface CallbackClientProps {
   codeParam?: string | null;
@@ -40,7 +41,7 @@ export default function CallbackClient({ codeParam, nextParam }: CallbackClientP
         return;
       }
 
-      router.replace(next);
+      await replaceRouteAfterAuthSession(router, next);
     }
 
     run();

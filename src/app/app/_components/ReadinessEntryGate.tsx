@@ -36,28 +36,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchReadinessClient } from '@/lib/readiness/fetchReadinessClient';
 import type { SessionReadinessNextAction } from '@/lib/readiness/types';
-
-const READINESS_CHECKED_KEY = 'move-re-readiness-checked:v1';
-
-/** readiness 체크가 이번 세션에 이미 수행되었는지 확인 */
-function isReadinessAlreadyChecked(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return sessionStorage.getItem(READINESS_CHECKED_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-/** readiness 체크 완료 플래그 설정 */
-function markReadinessChecked(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    sessionStorage.setItem(READINESS_CHECKED_KEY, '1');
-  } catch {
-    // 무시
-  }
-}
+import {
+  clearReadinessCheck,
+  isReadinessAlreadyChecked,
+  markReadinessChecked,
+} from '@/lib/readiness/readinessSessionFlag';
 
 interface ReadinessEntryGateProps {
   children: React.ReactNode;
@@ -133,17 +116,4 @@ export default function ReadinessEntryGate({ children }: ReadinessEntryGateProps
   if (gating) return null;
 
   return <>{children}</>;
-}
-
-/**
- * clearReadinessCheck — 다음 /app/home 진입 시 readiness를 다시 체크하게 만든다.
- * onboarding 완료, claim 완료 후 등에서 호출.
- */
-export function clearReadinessCheck(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    sessionStorage.removeItem(READINESS_CHECKED_KEY);
-  } catch {
-    // 무시
-  }
 }

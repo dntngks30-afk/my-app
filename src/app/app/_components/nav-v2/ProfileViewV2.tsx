@@ -1,12 +1,17 @@
 'use client'
 
-import { Settings, ChevronRight } from 'lucide-react'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Settings, ChevronRight, LogOut } from 'lucide-react'
+import { performAppLogout } from '@/lib/auth/performAppLogout'
 
 interface ProfileViewV2Props {
   completed: number
 }
 
 export function ProfileViewV2({ completed }: ProfileViewV2Props) {
+  const router = useRouter()
+  const [loggingOut, setLoggingOut] = useState(false)
   const level = completed >= 15 ? '고급' : completed >= 8 ? '중급' : '초급'
 
   const menuItems = [
@@ -53,6 +58,25 @@ export function ProfileViewV2({ completed }: ProfileViewV2Props) {
             <ChevronRight className="h-4 w-4 text-slate-300 transition-transform group-hover:translate-x-0.5" />
           </button>
         ))}
+      </div>
+
+      <div className="mt-8 border-t border-slate-100 pt-6 pb-2">
+        <button
+          type="button"
+          disabled={loggingOut}
+          onClick={() => {
+            if (loggingOut) return
+            setLoggingOut(true)
+            void performAppLogout(router).finally(() => setLoggingOut(false))
+          }}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-red-200 bg-red-50/80 px-4 py-3.5 text-sm font-medium text-red-800 shadow-sm transition-colors hover:border-red-300 hover:bg-red-50 disabled:opacity-60"
+        >
+          <LogOut className="h-4 w-4 shrink-0" aria-hidden />
+          {loggingOut ? '로그아웃 중…' : '로그아웃'}
+        </button>
+        <p className="mt-2 text-center text-[10px] text-slate-400">
+          이 기기에 저장된 운동 진행·임시 데이터가 함께 정리됩니다.
+        </p>
       </div>
     </div>
   )

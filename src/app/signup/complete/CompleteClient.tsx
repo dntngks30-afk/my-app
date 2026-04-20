@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase';
+import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth';
 import AuthShell from '@/components/auth/AuthShell';
 import { Input } from '@/components/ui/input';
 import { NeoButton } from '@/components/neobrutalism';
@@ -60,7 +61,7 @@ export default function CompleteClient({ codeParam, nextParam }: CompleteClientP
         .single();
 
       if (profile?.birthdate) {
-        router.replace(safeNext);
+        await replaceRouteAfterAuthSession(router, safeNext);
         return;
       }
 
@@ -114,7 +115,7 @@ export default function CompleteClient({ codeParam, nextParam }: CompleteClientP
         return;
       }
 
-      router.replace(safeNext);
+      await replaceRouteAfterAuthSession(router, safeNext);
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다.');
       setSubmitting(false);
