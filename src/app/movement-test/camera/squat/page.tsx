@@ -481,8 +481,13 @@ export default function CameraSquatPage() {
     [pushFrame]
   );
 
-  /** CAM-OBS: URL 진단 플래그 (?diag=1, ?debug=1, ?diag_modal=1) */
-  const [urlDebugFlags, setUrlDebugFlags] = useState({ diag: false, debug: false, diagModal: false });
+  /** CAM-OBS: URL 진단 플래그 (?diag=1, ?debug=1, ?diag_modal=1, ?pose_overlay=1) */
+  const [urlDebugFlags, setUrlDebugFlags] = useState({
+    diag: false,
+    debug: false,
+    diagModal: false,
+    poseOverlay: false,
+  });
   useEffect(() => {
     try {
       const p = new URLSearchParams(window.location.search);
@@ -490,9 +495,10 @@ export default function CameraSquatPage() {
         diag: p.get('diag') === '1',
         debug: p.get('debug') === '1',
         diagModal: p.get('diag_modal') === '1',
+        poseOverlay: p.get('pose_overlay') === '1',
       });
     } catch {
-      setUrlDebugFlags({ diag: false, debug: false, diagModal: false });
+      setUrlDebugFlags({ diag: false, debug: false, diagModal: false, poseOverlay: false });
     }
   }, []);
 
@@ -1575,6 +1581,8 @@ export default function CameraSquatPage() {
   const isMinimalCapture =
     cameraPhase === 'capturing' && !showRetryActions;
   const hasDebugQuery = urlDebugFlags.debug;
+  const showPoseOverlayForDiagnostics =
+    urlDebugFlags.debug || urlDebugFlags.diag || urlDebugFlags.poseOverlay;
   const showDebugPanel =
     debugEnabled &&
     (isPreCapturePhase || showRetryActions || hasDebugQuery);
@@ -1685,6 +1693,7 @@ export default function CameraSquatPage() {
                 key={previewKey}
                 onVideoReady={handleVideoReady}
                 onPoseFrame={pushFrameDuringCapturingOnly}
+                showPoseDebugOverlay={showPoseOverlayForDiagnostics}
                 onError={handleCameraError}
                 guideTone={isPreCapturePhase ? 'neutral' : guideTone}
                 guideHint={isMinimalCapture ? null : isPreCapturePhase ? null : overlayGuide.hint}
