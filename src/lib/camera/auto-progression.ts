@@ -1071,6 +1071,20 @@ function applySquatFinalBlockerVetoLayer(input: {
     };
   }
 
+  if (
+    input.uiGate.uiProgressionAllowed === true &&
+    shouldBlockSquatBlendedEarlyPeakContaminatedFalsePassFinalPass(
+      input.stepId,
+      input.squatCompletionState,
+      input.squatCycleDebug
+    )
+  ) {
+    return {
+      uiProgressionAllowed: false,
+      uiProgressionBlockedReason: SQUAT_BLENDED_EARLY_PEAK_CONTAMINATED_FALSE_PASS_BLOCKED_REASON,
+    };
+  }
+
   return input.uiGate;
 }
 
@@ -1638,6 +1652,8 @@ export function shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass(
  * trajectory ultra-low 가 닫히는 false positive 만 final pass 에서 차단. completion truth 유지.
  */
 const SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON = 'setup_series_start_false_pass';
+const SQUAT_BLENDED_EARLY_PEAK_CONTAMINATED_FALSE_PASS_BLOCKED_REASON =
+  'contaminated_blended_early_peak_false_pass';
 
 function squatEventCycleNotesIndicateSeriesStartContamination(notes: string[] | undefined): boolean {
   if (notes == null || notes.length === 0) return false;
@@ -1675,6 +1691,85 @@ export function shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass(
   if (cs.squatDescentToPeakMs == null || cs.squatDescentToPeakMs > 0) return false;
   const notes = cs.squatEventCycle?.notes;
   if (!squatEventCycleNotesIndicateSeriesStartContamination(notes)) return false;
+  return true;
+}
+
+/**
+ * PR-CAM-SQUAT-BLENDED-EARLY-PEAK-FALSE-PASS-LOCK-01:
+ * blended/assisted shallow-like + very-early peak + no event-cycle rescue contamination family만
+ * final-pass에서 차단한다. 단일 필드 기반 차단 금지.
+ */
+export function shouldBlockSquatBlendedEarlyPeakContaminatedFalsePassFinalPass(
+  stepId: CameraStepId,
+  squatCompletionState: unknown,
+  squatCycleDebug: SquatCycleDebug | undefined
+): boolean {
+  if (stepId !== 'squat') return false;
+  if (squatCompletionState == null || typeof squatCompletionState !== 'object') return false;
+
+  const cs = squatCompletionState as {
+    evidenceLabel?: string;
+    completionPassReason?: string;
+    completionTruthPassed?: boolean;
+    relativeDepthPeak?: number;
+    relativeDepthPeakSource?: string | null;
+    rawDepthPeakPrimary?: number | null;
+    rawDepthPeakBlended?: number | null;
+    eventCycleDetected?: boolean;
+    eventCyclePromoted?: boolean;
+    peakLatchedAtIndex?: number | null;
+    baselineFrozen?: boolean;
+  };
+
+  const dbg = squatCycleDebug ?? {};
+  const evidenceLooksShallowLike =
+    cs.evidenceLabel === 'ultra_low_rom' ||
+    cs.evidenceLabel === 'low_rom' ||
+    cs.completionPassReason === 'ultra_low_rom_cycle' ||
+    cs.completionPassReason === 'low_rom_cycle' ||
+    (typeof cs.relativeDepthPeak === 'number' && cs.relativeDepthPeak > 0 && cs.relativeDepthPeak < 0.12);
+  if (!evidenceLooksShallowLike) return false;
+
+  const blendedAssistContamination =
+    cs.relativeDepthPeakSource === 'blended' &&
+    dbg.armingDepthBlendAssisted === true &&
+    (dbg.armingFallbackUsed === true || dbg.armingDepthSource === 'fallback_assisted_blended');
+  if (!blendedAssistContamination) return false;
+
+  const peakLatchedAtIndex =
+    cs.peakLatchedAtIndex ?? dbg.peakLatchedAtIndex ?? null;
+  const observedFamilyEarlyPeakAt2 =
+    peakLatchedAtIndex === 2 &&
+    dbg.armingFallbackUsed === true &&
+    (cs.baselineFrozen === true || dbg.baselineFrozen === true);
+  const earlyPeakLatched =
+    peakLatchedAtIndex != null &&
+    (peakLatchedAtIndex <= 1 || observedFamilyEarlyPeakAt2);
+  if (!earlyPeakLatched) return false;
+
+  const noStrongEventCycleRescue =
+    cs.eventCycleDetected !== true &&
+    dbg.eventCycleDetected !== true &&
+    cs.eventCyclePromoted !== true &&
+    dbg.eventCyclePromoted !== true;
+  if (!noStrongEventCycleRescue) return false;
+
+  const completionWeak =
+    cs.completionTruthPassed === false && cs.completionPassReason === 'not_confirmed';
+  if (!completionWeak) return false;
+
+  const primaryDepth = Math.max(
+    0,
+    Number(cs.rawDepthPeakPrimary ?? dbg.rawDepthPeakPrimary ?? dbg.squatDepthPeakPrimary ?? 0)
+  );
+  const blendedDepth = Math.max(
+    0,
+    Number(cs.rawDepthPeakBlended ?? dbg.rawDepthPeakBlended ?? dbg.squatDepthPeakBlended ?? 0)
+  );
+  const primaryDepthNegligibleVsBlended =
+    blendedDepth > 0 && (primaryDepth <= 0.004 || primaryDepth <= blendedDepth * 0.35);
+  if (!primaryDepthNegligibleVsBlended) return false;
+
   return true;
 }
 
@@ -2342,6 +2437,16 @@ function stampSquatFinalPassTimingBlockedReason(
     return {
       ...squatCycleDebug,
       finalPassTimingBlockedReason: SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON,
+    };
+  }
+  if (
+    squatUiGate?.uiProgressionAllowed === false &&
+    squatUiGate.uiProgressionBlockedReason ===
+      SQUAT_BLENDED_EARLY_PEAK_CONTAMINATED_FALSE_PASS_BLOCKED_REASON
+  ) {
+    return {
+      ...squatCycleDebug,
+      finalPassTimingBlockedReason: SQUAT_BLENDED_EARLY_PEAK_CONTAMINATED_FALSE_PASS_BLOCKED_REASON,
     };
   }
   return squatCycleDebug;
