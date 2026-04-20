@@ -1735,9 +1735,17 @@ export function shouldBlockSquatBlendedEarlyPeakContaminatedFalsePassFinalPass(
     (dbg.armingFallbackUsed === true || dbg.armingDepthSource === 'fallback_assisted_blended');
   if (!blendedAssistContamination) return false;
 
-  const earlyPeakLatched =
+  // index <= 1: original coverage (extreme/synthetic + most-frequent observed case)
+  const earlyPeakLatchedCore =
     (cs.peakLatchedAtIndex != null && cs.peakLatchedAtIndex <= 1) ||
     (dbg.peakLatchedAtIndex != null && dbg.peakLatchedAtIndex <= 1);
+  // Observed-family extension: index=2 must also bring canonicalShallowContractProvenanceOnlySignalPresent
+  // so this branch only fires when provenance-without-reversal contamination is confirmed —
+  // legitimate PR-F shallow recovery has reversalEvidenceSatisfied=true, which keeps that flag false.
+  const earlyPeakLatchedObservedFamily =
+    (cs.peakLatchedAtIndex === 2 || dbg.peakLatchedAtIndex === 2) &&
+    dbg.canonicalShallowContractProvenanceOnlySignalPresent === true;
+  const earlyPeakLatched = earlyPeakLatchedCore || earlyPeakLatchedObservedFamily;
   if (!earlyPeakLatched) return false;
 
   const noStrongEventCycleRescue =

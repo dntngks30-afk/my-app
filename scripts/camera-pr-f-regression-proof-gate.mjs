@@ -58,6 +58,7 @@ function runProofScript(entry, index, total) {
   const child = spawnSync('npx', ['tsx', entry.path], {
     encoding: 'utf8',
     env: process.env,
+    shell: true,
   });
 
   const stdout = child.stdout ?? '';

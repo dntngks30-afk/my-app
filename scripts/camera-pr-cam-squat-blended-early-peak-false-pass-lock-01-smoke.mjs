@@ -60,6 +60,39 @@ function buildContaminatedSignature() {
   };
 }
 
+/** Observed-family variant: same compound contaminated signature, but peakLatchedAtIndex=2.
+ *  canonicalShallowContractProvenanceOnlySignalPresent=true confirms provenance-without-reversal
+ *  contamination, which is the extra AND guard that keeps the index=2 branch narrow. */
+function buildObservedFamilyPeakIndex2() {
+  return {
+    cs: {
+      evidenceLabel: 'ultra_low_rom',
+      completionPassReason: 'not_confirmed',
+      completionTruthPassed: false,
+      relativeDepthPeak: 0.074,
+      relativeDepthPeakSource: 'blended',
+      rawDepthPeakPrimary: 0.003,
+      rawDepthPeakBlended: 0.073,
+      peakLatchedAtIndex: 2,
+      eventCycleDetected: false,
+      eventCyclePromoted: false,
+    },
+    dbg: {
+      armingDepthBlendAssisted: true,
+      armingFallbackUsed: true,
+      armingDepthSource: 'fallback_assisted_blended',
+      peakLatchedAtIndex: 2,
+      eventCycleDetected: false,
+      eventCyclePromoted: false,
+      squatDepthPeakPrimary: 0.003,
+      squatDepthPeakBlended: 0.073,
+      rawDepthPeakPrimary: 0.003,
+      rawDepthPeakBlended: 0.073,
+      canonicalShallowContractProvenanceOnlySignalPresent: true,
+    },
+  };
+}
+
 console.log('\nPR-CAM-SQUAT-BLENDED-EARLY-PEAK-FALSE-PASS-LOCK-01 smoke\n');
 
 // A) contaminated compound signature MUST block final pass opening.
@@ -197,6 +230,93 @@ console.log('\nPR-CAM-SQUAT-BLENDED-EARLY-PEAK-FALSE-PASS-LOCK-01 smoke\n');
       eventCycleDetected: false,
       eventCyclePromoted: false,
     }) === false
+  );
+
+  // B5: index=2 WITHOUT canonicalShallowContractProvenanceOnlySignalPresent is not a blocker.
+  // The observed-family extension requires both index=2 AND the provenance-only marker.
+  ok(
+    'B5 peakLatchedAtIndex=2 without provenanceOnlySignalPresent is not blocker',
+    shouldBlockSquatBlendedEarlyPeakContaminatedFalsePassFinalPass('squat', {
+      ...cs,
+      peakLatchedAtIndex: 2,
+    }, {
+      ...dbg,
+      peakLatchedAtIndex: 2,
+      canonicalShallowContractProvenanceOnlySignalPresent: false,
+    }) === false
+  );
+}
+
+// D) observed-family variant: peakLatchedAtIndex=2 + provenanceOnlySignalPresent MUST block.
+console.log('\nObserved-family variant (peakLatchedAtIndex=2)\n');
+{
+  const { cs, dbg } = buildObservedFamilyPeakIndex2();
+
+  ok(
+    'D1 observed-family index=2 -> blocker true',
+    shouldBlockSquatBlendedEarlyPeakContaminatedFalsePassFinalPass('squat', cs, dbg) === true
+  );
+
+  const layer = computeSquatPostOwnerPreLatchGateLayer({
+    stepId: 'squat',
+    ownerTruth: {
+      completionOwnerPassed: true,
+      completionOwnerReason: 'pass_core_detected',
+      completionOwnerBlockedReason: null,
+    },
+    uiGateInput: {
+      completionOwnerPassed: true,
+      guardrailCompletionComplete: true,
+      captureQualityInvalid: false,
+      confidence: 0.9,
+      passThresholdEffective: 0.56,
+      effectivePassConfirmation: true,
+      passConfirmationFrameCount: 3,
+      framesReq: 2,
+      captureArmingSatisfied: true,
+      squatIntegrityBlockForPass: null,
+      reasons: [],
+      hardBlockerReasons: [],
+      liveReadinessNotReady: false,
+      readinessStableDwellSatisfied: true,
+      setupMotionBlocked: false,
+    },
+    squatCompletionState: cs,
+    squatCycleDebug: dbg,
+    squatPassCore: {
+      passDetected: true,
+      passBlockedReason: null,
+      repId: 'rep_observed_index2',
+      descentDetected: true,
+      reversalDetected: true,
+      standingRecovered: true,
+      setupClear: true,
+      currentRepOwnershipClear: true,
+      antiFalsePassClear: true,
+      trace: 'smoke_observed_index2',
+    },
+  });
+
+  const syntheticGateD = {
+    status: layer.progressionPassed ? 'pass' : 'retry',
+    nextAllowed: layer.progressionPassed,
+    completionSatisfied: true,
+    passConfirmationSatisfied: true,
+    finalPassEligible: layer.progressionPassed,
+    finalPassBlockedReason: layer.finalPassBlockedReason,
+  };
+
+  ok('D2 observed-family index=2 -> gate.status !== pass', syntheticGateD.status !== 'pass', syntheticGateD);
+  ok('D3 observed-family index=2 -> finalPassEligible false', syntheticGateD.finalPassEligible === false, syntheticGateD);
+  ok(
+    'D4 observed-family index=2 -> isFinalPassLatched false',
+    isFinalPassLatched('squat', syntheticGateD) === false,
+    syntheticGateD
+  );
+  ok(
+    'D5 observed-family index=2 -> explicit blocker reason',
+    syntheticGateD.finalPassBlockedReason === 'contaminated_blended_early_peak_false_pass',
+    syntheticGateD.finalPassBlockedReason
   );
 }
 
