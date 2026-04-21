@@ -30,6 +30,12 @@ function isOfficialShallowAdmittedToClosedResidualBlocker(
   );
 }
 
+function officialShallowCloseCommitCanBePending(
+  reason: string | null | undefined
+): boolean {
+  return reason == null || isOfficialShallowAdmittedToClosedResidualBlocker(reason);
+}
+
 function hasNoKnownStaleOrMixedShallowEpoch(state: SquatCompletionState): boolean {
   const br = state.canonicalTemporalEpochOrderBlockedReason ?? null;
   return (
@@ -81,7 +87,10 @@ function ownershipRecoveryFirstMissReason(
 ): OfficialShallowOwnerWriteMissReason | null {
   if (state.completionSatisfied === true) return 'shallow_close_not_pending';
   if (state.completionPassReason !== 'not_confirmed') return 'shallow_close_not_pending';
-  if (!isOfficialShallowAdmittedToClosedResidualBlocker(state.completionBlockedReason)) {
+  if (
+    state.completionBlockedReason != null &&
+    !isOfficialShallowAdmittedToClosedResidualBlocker(state.completionBlockedReason)
+  ) {
     const br = state.completionBlockedReason ?? null;
     if (br === 'not_armed' || br === 'freeze_or_latch_missing') return 'not_admitted';
     if (br === 'no_reversal') return 'reversal_not_confirmed';
@@ -124,7 +133,7 @@ function sameRepOfficialShallowCloseOwnershipRecoveryEligible(
 ): boolean {
   if (state.completionSatisfied === true) return false;
   if (state.completionPassReason !== 'not_confirmed') return false;
-  if (!isOfficialShallowAdmittedToClosedResidualBlocker(state.completionBlockedReason)) return false;
+  if (!officialShallowCloseCommitCanBePending(state.completionBlockedReason)) return false;
   if (state.officialShallowPathCandidate !== true) return false;
   if (state.officialShallowPathAdmitted !== true) return false;
   if (!(state.relativeDepthPeak < deps.standardOwnerFloor)) return false;

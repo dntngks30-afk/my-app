@@ -1964,6 +1964,12 @@ function isOfficialShallowAdmittedToClosedResidualBlocker(
   );
 }
 
+function officialShallowCloseCommitCanBePending(
+  reason: string | null | undefined
+): boolean {
+  return reason == null || isOfficialShallowAdmittedToClosedResidualBlocker(reason);
+}
+
 function shallowRecoverySetupClear(
   state: SquatCompletionState,
   options: EvaluateSquatCompletionStateOptions | undefined
@@ -2084,7 +2090,7 @@ function officialShallowAdmittedToClosedContractEligible(
 ): boolean {
   if (state.completionSatisfied === true) return false;
   if (state.completionPassReason !== 'not_confirmed') return false;
-  if (!isOfficialShallowAdmittedToClosedResidualBlocker(state.completionBlockedReason)) return false;
+  if (!officialShallowCloseCommitCanBePending(state.completionBlockedReason)) return false;
   if (!shallowRecoveryShallowBandEligible(state)) return false;
   if (state.officialShallowPathAdmitted !== true) return false;
   if (!shallowRecoveryHasAttemptDescendCommitment(state)) return false;

@@ -51,6 +51,7 @@ const REQUIRED_PROOF_BUNDLE = [
   { path: 'scripts/camera-pr-shallow-authoritative-close-writer-miss-observability-01-smoke.mjs', group: 'shallow/writer-miss-observability' },
   { path: 'scripts/camera-pr-shallow-peak-latch-anchor-guard-align-01-smoke.mjs', group: 'shallow/peak-latch-anchor-guard-align' },
   { path: 'scripts/camera-pr-shallow-admitted-to-closed-contract-align-01-smoke.mjs', group: 'shallow/admitted-to-closed-contract-align' },
+  { path: 'scripts/camera-pr-shallow-close-commit-contract-align-01-smoke.mjs', group: 'shallow/close-commit-contract-align' },
 ];
 
 let failed = 0;
