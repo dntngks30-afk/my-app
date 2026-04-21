@@ -912,6 +912,55 @@ function normalizeLocalTemporalEpoch(
   };
 }
 
+function resolveCompletionSliceStartIndexForTiming(
+  options: EvaluateSquatCompletionStateOptions | undefined
+): number {
+  const optionCompletionSliceStartIndex = options?.completionSliceStartIndex;
+  if (
+    typeof optionCompletionSliceStartIndex === 'number' &&
+    Number.isInteger(optionCompletionSliceStartIndex) &&
+    optionCompletionSliceStartIndex >= 0
+  ) {
+    return optionCompletionSliceStartIndex;
+  }
+  const preArmingEpoch = options?.preArmingKinematicDescentEpoch;
+  if (
+    preArmingEpoch != null &&
+    Number.isInteger(preArmingEpoch.completionSliceStartIndex) &&
+    preArmingEpoch.completionSliceStartIndex >= 0
+  ) {
+    return preArmingEpoch.completionSliceStartIndex;
+  }
+  return 0;
+}
+
+export function shouldEnableUpstreamShallowArmingCandidateFromPreArmingEpoch(input: {
+  preArmingEpoch: PreArmingKinematicDescentEpoch | undefined;
+  completionSliceStartIndex: number;
+  relativeDepthPeak: number;
+  attemptAdmissionSatisfied: boolean;
+  downwardCommitmentReached: boolean;
+  setupMotionBlocked: boolean;
+  baselineFrameCount: number;
+}): boolean {
+  if (input.setupMotionBlocked) return false;
+  if (input.baselineFrameCount >= MIN_BASELINE_FRAMES) return false;
+  if (!input.attemptAdmissionSatisfied) return false;
+  if (!input.downwardCommitmentReached) return false;
+  if (!(input.relativeDepthPeak < STANDARD_OWNER_FLOOR)) return false;
+  const epoch = input.preArmingEpoch;
+  if (epoch == null) return false;
+  if (epoch.source !== 'pre_arming_kinematic_descent_epoch') return false;
+  if (epoch.completionSliceStartIndex !== input.completionSliceStartIndex) return false;
+  if (epoch.descentOnsetValidIndex >= epoch.completionSliceStartIndex) return false;
+  const proof = epoch.proof;
+  if (proof.monotonicSustainSatisfied !== true) return false;
+  if (proof.baselineBeforeOnset !== true) return false;
+  if (proof.onsetBeforeCompletionSlicePeak !== true) return false;
+  if (proof.noStandingRecoveryBetweenOnsetAndSlice !== true) return false;
+  return true;
+}
+
 function findRuleOrHmmReversalEpochFrame(args: {
   validFrames: PoseFeaturesFrame[];
   peakLocalIndex: number;
@@ -2101,6 +2150,8 @@ export function evaluateSquatCompletionCore(
 
   const baselineDepths = depthFrames.slice(0, BASELINE_WINDOW).map((frame) => frame.depth);
   const recovery = getSquatRecoverySignal(validFrames);
+  const preArmingKinematicEpoch = options?.preArmingKinematicDescentEpoch;
+  const completionSliceStartIndexForTiming = resolveCompletionSliceStartIndexForTiming(options);
   const guardedUltraLowAttemptEligible =
     relativeDepthPeak >= GUARDED_ULTRA_LOW_ROM_FLOOR &&
     relativeDepthPeak < LEGACY_ATTEMPT_FLOOR &&
@@ -2123,11 +2174,6 @@ export function evaluateSquatCompletionCore(
 
   /** ROM 밴드(quality 라벨) — pass reason·해석용; shallow 후보는 위 finalize 밴드 사용 */
   const evidenceLabel = getSquatEvidenceLabel(relativeDepthPeak, attemptAdmissionSatisfied);
-  const officialShallowPathCandidate = deriveOfficialShallowCandidate({
-    baselineFrameCount: baselineDepths.length,
-    attemptAdmissionSatisfied,
-    standingRecoveryFinalizeBand,
-  });
 
   const descentFrame = depthFrames.find((frame) => frame.phaseHint === 'descent');
   const bottomFrame = depthFrames.find((frame) => frame.phaseHint === 'bottom');
@@ -2296,25 +2342,6 @@ export function evaluateSquatCompletionCore(
     return candidates.reduce((earliest, f) => (f.index < earliest.index ? f : earliest));
   })();
 
-  const preArmingKinematicEpoch = options?.preArmingKinematicDescentEpoch;
-  const completionSliceStartIndexForTiming = (() => {
-    const optionCompletionSliceStartIndex = options?.completionSliceStartIndex;
-    if (
-      typeof optionCompletionSliceStartIndex === 'number' &&
-      Number.isInteger(optionCompletionSliceStartIndex) &&
-      optionCompletionSliceStartIndex >= 0
-    ) {
-      return optionCompletionSliceStartIndex;
-    }
-    if (
-      preArmingKinematicEpoch != null &&
-      Number.isInteger(preArmingKinematicEpoch.completionSliceStartIndex) &&
-      preArmingKinematicEpoch.completionSliceStartIndex >= 0
-    ) {
-      return preArmingKinematicEpoch.completionSliceStartIndex;
-    }
-    return 0;
-  })();
   const corePeakValidIndex = completionSliceStartIndexForTiming + peakFrame.index;
   const validatePreArmingKinematicEpoch = (
     epoch: PreArmingKinematicDescentEpoch | undefined
@@ -2457,6 +2484,23 @@ export function evaluateSquatCompletionCore(
     relativeDepthPeak >= attemptAdmissionFloor ||
     downwardCommitmentDelta >= attemptAdmissionFloor ||
     bottomFrame != null;
+  const upstreamShallowCandidateFallbackEnabled =
+    shouldEnableUpstreamShallowArmingCandidateFromPreArmingEpoch({
+      preArmingEpoch: preArmingKinematicEpoch,
+      completionSliceStartIndex: completionSliceStartIndexForTiming,
+      relativeDepthPeak,
+      attemptAdmissionSatisfied,
+      downwardCommitmentReached,
+      setupMotionBlocked: options?.setupMotionBlocked === true,
+      baselineFrameCount: baselineDepths.length,
+    });
+  const officialShallowPathCandidate = deriveOfficialShallowCandidate({
+    baselineFrameCount: upstreamShallowCandidateFallbackEnabled
+      ? MIN_BASELINE_FRAMES
+      : baselineDepths.length,
+    attemptAdmissionSatisfied,
+    standingRecoveryFinalizeBand,
+  });
 
   const committedFrame =
     bottomFrame ??
