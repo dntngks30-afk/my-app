@@ -781,6 +781,18 @@ export interface SquatCompletionState extends MotionCompletionResult {
   selectedCanonicalDescentTimingEpochValidIndex?: number | null;
   selectedCanonicalDescentTimingEpochAtMs?: number | null;
   normalizedDescentAnchorCoherent?: boolean;
+  canonicalTemporalEpochOrderSatisfied?: boolean;
+  canonicalTemporalEpochOrderBlockedReason?: string | null;
+  selectedCanonicalPeakEpochValidIndex?: number | null;
+  selectedCanonicalPeakEpochAtMs?: number | null;
+  selectedCanonicalPeakEpochSource?: 'completion_core_peak' | null;
+  selectedCanonicalReversalEpochValidIndex?: number | null;
+  selectedCanonicalReversalEpochAtMs?: number | null;
+  selectedCanonicalReversalEpochSource?: 'rule_or_hmm_reversal_epoch' | null;
+  selectedCanonicalRecoveryEpochValidIndex?: number | null;
+  selectedCanonicalRecoveryEpochAtMs?: number | null;
+  selectedCanonicalRecoveryEpochSource?: 'standing_recovery_finalize_epoch' | null;
+  temporalEpochOrderTrace?: string | null;
 }
 
 /** PR-CAM-SHALLOW-PROOF-TRACE-11: 명시적 차단 문자열 — JSON 에서 추론 없이 원인 매핑 */

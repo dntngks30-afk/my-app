@@ -47,6 +47,8 @@ export function buildCanonicalShallowContractInputFromState(s: SquatCompletionSt
     peakAtMs: s.peakAtMs ?? null,
     reversalAtMs: s.reversalAtMs ?? null,
     standingRecoveredAtMs: s.standingRecoveredAtMs ?? null,
+    canonicalTemporalEpochOrderSatisfied: s.canonicalTemporalEpochOrderSatisfied,
+    canonicalTemporalEpochOrderBlockedReason: s.canonicalTemporalEpochOrderBlockedReason ?? null,
     evidenceLabel: s.evidenceLabel,
     officialShallowPathClosed: s.officialShallowPathClosed === true,
     guardedShallowTrajectoryClosureProofSatisfied:

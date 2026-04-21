@@ -194,13 +194,17 @@ function assertRepresentativeTiming(label, angles, startTs) {
     }
   );
   ok(
-    `${label}: no E1 promotion condition is implied by this smoke`,
-    gate.finalPassEligible !== true &&
-      isFinalPassLatched('squat', gate) !== true &&
-      cs?.canonicalShallowContractBlockedReason !== 'minimum_cycle_timing_blocked',
+    `${label}: canonical final pass does not imply E1 registry promotion`,
+    cs?.canonicalShallowContractBlockedReason !== 'minimum_cycle_timing_blocked' &&
+      (gate.finalPassEligible !== true ||
+        (isFinalPassLatched('squat', gate) === true &&
+          dbg?.canonicalShallowContractDrovePass === true &&
+          cs?.canonicalTemporalEpochOrderSatisfied === true)),
     {
       finalPassEligible: gate.finalPassEligible,
       latch: isFinalPassLatched('squat', gate),
+      drovePass: dbg?.canonicalShallowContractDrovePass,
+      temporalOrder: cs?.canonicalTemporalEpochOrderSatisfied,
       blockedReason: cs?.canonicalShallowContractBlockedReason,
     }
   );

@@ -1010,6 +1010,30 @@ function buildSquatEvaluatorHighlightedMetrics(p: {
       state.selectedCanonicalDescentTimingEpochValidIndex ?? null,
     normalizedDescentAnchorCoherent:
       state.normalizedDescentAnchorCoherent === false ? 0 : 1,
+    canonicalTemporalEpochOrderSatisfied:
+      state.canonicalTemporalEpochOrderSatisfied === true ? 1 : 0,
+    canonicalTemporalEpochOrderBlockedReason:
+      state.canonicalTemporalEpochOrderBlockedReason ?? null,
+    selectedCanonicalPeakEpochValidIndex:
+      state.selectedCanonicalPeakEpochValidIndex ?? null,
+    selectedCanonicalPeakEpochAtMs:
+      state.selectedCanonicalPeakEpochAtMs ?? null,
+    selectedCanonicalPeakEpochSource:
+      state.selectedCanonicalPeakEpochSource ?? null,
+    selectedCanonicalReversalEpochValidIndex:
+      state.selectedCanonicalReversalEpochValidIndex ?? null,
+    selectedCanonicalReversalEpochAtMs:
+      state.selectedCanonicalReversalEpochAtMs ?? null,
+    selectedCanonicalReversalEpochSource:
+      state.selectedCanonicalReversalEpochSource ?? null,
+    selectedCanonicalRecoveryEpochValidIndex:
+      state.selectedCanonicalRecoveryEpochValidIndex ?? null,
+    selectedCanonicalRecoveryEpochAtMs:
+      state.selectedCanonicalRecoveryEpochAtMs ?? null,
+    selectedCanonicalRecoveryEpochSource:
+      state.selectedCanonicalRecoveryEpochSource ?? null,
+    temporalEpochOrderTrace:
+      state.temporalEpochOrderTrace ?? null,
     downwardCommitmentDelta: Math.round(state.downwardCommitmentDelta * 100) / 100,
     squatReversalDropRequiredPct:
       state.squatReversalDropRequired != null

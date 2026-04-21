@@ -45,6 +45,46 @@ export type SquatDepthFreezeConfig = {
   frozenBaselineStandingDepth: number;
 };
 
+type DescentTimingEpochSource =
+  | 'phase_hint_descent'
+  | 'trajectory_descent_start'
+  | 'shared_descent_epoch'
+  | 'legitimate_kinematic_shallow_descent_onset'
+  | 'pre_arming_kinematic_descent_epoch';
+
+type NormalizedDescentTimingEpoch = {
+  source: DescentTimingEpochSource;
+  validIndex: number;
+  timestampMs: number;
+};
+
+type CanonicalTemporalEpoch =
+  | {
+      source:
+        | DescentTimingEpochSource
+        | 'completion_core_peak'
+        | 'rule_or_hmm_reversal_epoch'
+        | 'standing_recovery_finalize_epoch';
+      validIndex: number;
+      timestampMs: number;
+      localIndex?: number;
+    }
+  | null;
+
+type CanonicalTemporalEpochOrderBlockedReason =
+  | 'missing_descent_epoch'
+  | 'missing_peak_epoch'
+  | 'missing_reversal_epoch'
+  | 'missing_recovery_epoch'
+  | 'timestamp_not_mappable_to_valid_buffer'
+  | 'mixed_rep_epoch_contamination'
+  | 'baseline_not_before_descent'
+  | 'peak_not_after_descent'
+  | 'reversal_not_after_peak'
+  | 'recovery_not_after_reversal'
+  | 'stale_prior_rep_epoch'
+  | null;
+
 
 /** PR-HMM-03A: calibration 로그용 안정 정수 코드 (0 = null) */
 const SQUAT_COMPLETION_BLOCKED_REASON_CODES: Record<string, number> = {
@@ -850,6 +890,198 @@ function getStandingRecoveryWindow(
     standingRecoveryHoldMs,
     standingRecoveryFrameCount,
     standingRecoveryThreshold,
+  };
+}
+
+function normalizeLocalTemporalEpoch(
+  source: Exclude<NonNullable<CanonicalTemporalEpoch>['source'], DescentTimingEpochSource>,
+  frame:
+    | {
+        index: number;
+        timestampMs: number;
+      }
+    | undefined,
+  completionSliceStartIndex: number
+): CanonicalTemporalEpoch {
+  if (frame == null) return null;
+  return {
+    source,
+    validIndex: completionSliceStartIndex + frame.index,
+    timestampMs: frame.timestampMs,
+    localIndex: frame.index,
+  };
+}
+
+function findRuleOrHmmReversalEpochFrame(args: {
+  validFrames: PoseFeaturesFrame[];
+  peakLocalIndex: number;
+  peakPrimaryDepth: number;
+  ruleOrHmmReversalConfirmed: boolean;
+}): { index: number; timestampMs: number } | undefined {
+  if (!args.ruleOrHmmReversalConfirmed) return undefined;
+  for (let i = args.peakLocalIndex + 1; i < args.validFrames.length; i += 1) {
+    const d = readSquatCompletionDepthForReversal(args.validFrames[i]!);
+    if (d == null) continue;
+    if (d < args.peakPrimaryDepth) {
+      return { index: i, timestampMs: args.validFrames[i]!.timestampMs };
+    }
+  }
+  return undefined;
+}
+
+function findTimestampLocalIndex(
+  validFrames: PoseFeaturesFrame[],
+  timestampMs: number | undefined
+): number | null {
+  if (timestampMs == null || !Number.isFinite(timestampMs)) return null;
+  const index = validFrames.findIndex((frame) => frame.timestampMs === timestampMs);
+  return index >= 0 ? index : null;
+}
+
+function buildCanonicalTemporalEpochOrderTrace(input: {
+  descent: CanonicalTemporalEpoch;
+  peak: CanonicalTemporalEpoch;
+  reversal: CanonicalTemporalEpoch;
+  recovery: CanonicalTemporalEpoch;
+  blockedReason: CanonicalTemporalEpochOrderBlockedReason;
+}): string {
+  const part = (label: string, epoch: CanonicalTemporalEpoch) =>
+    epoch == null
+      ? `${label}=missing`
+      : `${label}:${epoch.source}@v${epoch.validIndex}/t${epoch.timestampMs}`;
+  return [
+    part('descent', input.descent),
+    part('peak', input.peak),
+    part('reversal', input.reversal),
+    part('recovery', input.recovery),
+    `blocked=${input.blockedReason ?? 'none'}`,
+  ].join('|');
+}
+
+function normalizeSameRepTemporalEpochs(input: {
+  descent: NormalizedDescentTimingEpoch | null;
+  peak: CanonicalTemporalEpoch;
+  reversal: CanonicalTemporalEpoch;
+  recovery: CanonicalTemporalEpoch;
+  completionSliceStartIndex: number;
+  preArmingEpoch: PreArmingKinematicDescentEpoch | undefined;
+}): {
+  descent: CanonicalTemporalEpoch;
+  peak: CanonicalTemporalEpoch;
+  reversal: CanonicalTemporalEpoch;
+  recovery: CanonicalTemporalEpoch;
+  proof: {
+    sameValidBuffer: boolean;
+    sameRepBoundary: boolean;
+    baselineBeforeDescent: boolean;
+    descentBeforePeak: boolean;
+    peakBeforeReversal: boolean;
+    reversalBeforeRecovery: boolean;
+    noRecoveryResetBetweenDescentAndPeak: boolean;
+  };
+  blockedReason: CanonicalTemporalEpochOrderBlockedReason;
+  trace: string;
+} {
+  const descent: CanonicalTemporalEpoch =
+    input.descent == null
+      ? null
+      : {
+          source: input.descent.source,
+          validIndex: input.descent.validIndex,
+          timestampMs: input.descent.timestampMs,
+        };
+  const epochs = [descent, input.peak, input.reversal, input.recovery];
+  const sameValidBuffer = epochs.every(
+    (epoch) =>
+      epoch != null &&
+      Number.isInteger(epoch.validIndex) &&
+      epoch.validIndex >= 0 &&
+      Number.isFinite(epoch.timestampMs)
+  );
+  const preArmingProof =
+    descent?.source === 'pre_arming_kinematic_descent_epoch'
+      ? input.preArmingEpoch?.proof
+      : undefined;
+  const baselineBeforeDescent =
+    descent?.source === 'pre_arming_kinematic_descent_epoch'
+      ? preArmingProof?.baselineBeforeOnset === true &&
+        input.preArmingEpoch != null &&
+        input.preArmingEpoch.baselineWindowEndValidIndex < descent.validIndex
+      : descent != null;
+  const descentInsideOrPreArmingSameRep =
+    descent != null &&
+    (descent.validIndex >= input.completionSliceStartIndex ||
+      (descent.source === 'pre_arming_kinematic_descent_epoch' &&
+        input.preArmingEpoch?.completionSliceStartIndex === input.completionSliceStartIndex &&
+        preArmingProof?.onsetBeforeCompletionSlicePeak === true));
+  const peakInsideCompletionSlice =
+    input.peak != null && input.peak.validIndex >= input.completionSliceStartIndex;
+  const reversalInsideCompletionSlice =
+    input.reversal != null && input.reversal.validIndex >= input.completionSliceStartIndex;
+  const recoveryInsideCompletionSlice =
+    input.recovery != null && input.recovery.validIndex >= input.completionSliceStartIndex;
+  const sameRepBoundary =
+    descentInsideOrPreArmingSameRep &&
+    peakInsideCompletionSlice &&
+    reversalInsideCompletionSlice &&
+    recoveryInsideCompletionSlice;
+  const descentBeforePeak =
+    descent != null &&
+    input.peak != null &&
+    input.peak.validIndex > descent.validIndex &&
+    input.peak.timestampMs > descent.timestampMs;
+  const peakBeforeReversal =
+    input.peak != null &&
+    input.reversal != null &&
+    input.reversal.validIndex > input.peak.validIndex &&
+    input.reversal.timestampMs > input.peak.timestampMs;
+  const reversalBeforeRecovery =
+    input.reversal != null &&
+    input.recovery != null &&
+    input.recovery.validIndex > input.reversal.validIndex &&
+    input.recovery.timestampMs > input.reversal.timestampMs;
+  const noRecoveryResetBetweenDescentAndPeak =
+    descent?.source === 'pre_arming_kinematic_descent_epoch'
+      ? preArmingProof?.noStandingRecoveryBetweenOnsetAndSlice === true
+      : true;
+
+  let blockedReason: CanonicalTemporalEpochOrderBlockedReason = null;
+  if (descent == null) blockedReason = 'missing_descent_epoch';
+  else if (input.peak == null) blockedReason = 'missing_peak_epoch';
+  else if (input.reversal == null) blockedReason = 'missing_reversal_epoch';
+  else if (input.recovery == null) blockedReason = 'missing_recovery_epoch';
+  else if (!sameValidBuffer) blockedReason = 'timestamp_not_mappable_to_valid_buffer';
+  else if (!sameRepBoundary) blockedReason = 'mixed_rep_epoch_contamination';
+  else if (!baselineBeforeDescent) blockedReason = 'baseline_not_before_descent';
+  else if (!descentBeforePeak) blockedReason = 'peak_not_after_descent';
+  else if (!peakBeforeReversal) blockedReason = 'reversal_not_after_peak';
+  else if (!reversalBeforeRecovery) blockedReason = 'recovery_not_after_reversal';
+  else if (!noRecoveryResetBetweenDescentAndPeak) blockedReason = 'stale_prior_rep_epoch';
+
+  const trace = buildCanonicalTemporalEpochOrderTrace({
+    descent,
+    peak: input.peak,
+    reversal: input.reversal,
+    recovery: input.recovery,
+    blockedReason,
+  });
+
+  return {
+    descent,
+    peak: input.peak,
+    reversal: input.reversal,
+    recovery: input.recovery,
+    proof: {
+      sameValidBuffer,
+      sameRepBoundary,
+      baselineBeforeDescent,
+      descentBeforePeak,
+      peakBeforeReversal,
+      reversalBeforeRecovery,
+      noRecoveryResetBetweenDescentAndPeak,
+    },
+    blockedReason,
+    trace,
   };
 }
 
@@ -1763,6 +1995,18 @@ export function evaluateSquatCompletionCore(
       selectedCanonicalDescentTimingEpochValidIndex: null,
       selectedCanonicalDescentTimingEpochAtMs: null,
       normalizedDescentAnchorCoherent: true,
+      canonicalTemporalEpochOrderSatisfied: false,
+      canonicalTemporalEpochOrderBlockedReason: 'missing_descent_epoch',
+      selectedCanonicalPeakEpochValidIndex: null,
+      selectedCanonicalPeakEpochAtMs: null,
+      selectedCanonicalPeakEpochSource: null,
+      selectedCanonicalReversalEpochValidIndex: null,
+      selectedCanonicalReversalEpochAtMs: null,
+      selectedCanonicalReversalEpochSource: null,
+      selectedCanonicalRecoveryEpochValidIndex: null,
+      selectedCanonicalRecoveryEpochAtMs: null,
+      selectedCanonicalRecoveryEpochSource: null,
+      temporalEpochOrderTrace: 'descent=missing|peak=missing|reversal=missing|recovery=missing|blocked=missing_descent_epoch',
     };
   }
 
@@ -2044,18 +2288,6 @@ export function evaluateSquatCompletionCore(
     if (candidates.length === 0) return undefined;
     return candidates.reduce((earliest, f) => (f.index < earliest.index ? f : earliest));
   })();
-
-  type DescentTimingEpochSource =
-    | 'phase_hint_descent'
-    | 'trajectory_descent_start'
-    | 'shared_descent_epoch'
-    | 'legitimate_kinematic_shallow_descent_onset'
-    | 'pre_arming_kinematic_descent_epoch';
-  type NormalizedDescentTimingEpoch = {
-    source: DescentTimingEpochSource;
-    validIndex: number;
-    timestampMs: number;
-  };
 
   const preArmingKinematicEpoch = options?.preArmingKinematicDescentEpoch;
   const completionSliceStartIndexForTiming = (() => {
@@ -2773,6 +3005,54 @@ export function evaluateSquatCompletionCore(
     progressionReversalFrame != null && standingRecovery.standingRecoveredAtMs != null
       ? standingRecovery.standingRecoveredAtMs - progressionReversalFrame.timestampMs
       : undefined;
+  const selectedCanonicalPeakEpoch = normalizeLocalTemporalEpoch(
+    'completion_core_peak',
+    peakFrame,
+    completionSliceStartIndexForTiming
+  );
+  const ruleOrHmmReversalConfirmed =
+    revConf.reversalConfirmed || hmmReversalAssistDecision.assistApplied === true;
+  const selectedCanonicalReversalEpoch = normalizeLocalTemporalEpoch(
+    'rule_or_hmm_reversal_epoch',
+    findRuleOrHmmReversalEpochFrame({
+      validFrames,
+      peakLocalIndex: peakFrame.index,
+      peakPrimaryDepth: peakRowPrimary.depthPrimary,
+      ruleOrHmmReversalConfirmed,
+    }),
+    completionSliceStartIndexForTiming
+  );
+  const selectedCanonicalRecoveryLocalIndex = standingRecoveryFinalize.finalizeSatisfied
+    ? findTimestampLocalIndex(validFrames, standingRecovery.standingRecoveredAtMs)
+    : null;
+  const selectedCanonicalRecoveryEpoch =
+    selectedCanonicalRecoveryLocalIndex != null && standingRecovery.standingRecoveredAtMs != null
+      ? normalizeLocalTemporalEpoch(
+          'standing_recovery_finalize_epoch',
+          {
+            index: selectedCanonicalRecoveryLocalIndex,
+            timestampMs: standingRecovery.standingRecoveredAtMs,
+          },
+          completionSliceStartIndexForTiming
+        )
+      : null;
+  const canonicalTemporalEpochLedger = normalizeSameRepTemporalEpochs({
+    descent: selectedCanonicalDescentTimingEpoch,
+    peak: selectedCanonicalPeakEpoch,
+    reversal: selectedCanonicalReversalEpoch,
+    recovery: selectedCanonicalRecoveryEpoch,
+    completionSliceStartIndex: completionSliceStartIndexForTiming,
+    preArmingEpoch: preArmingKinematicEpoch,
+  });
+  const canonicalTemporalEpochOrderSatisfied =
+    canonicalTemporalEpochLedger.blockedReason == null &&
+    canonicalTemporalEpochLedger.proof.sameValidBuffer &&
+    canonicalTemporalEpochLedger.proof.sameRepBoundary &&
+    canonicalTemporalEpochLedger.proof.baselineBeforeDescent &&
+    canonicalTemporalEpochLedger.proof.descentBeforePeak &&
+    canonicalTemporalEpochLedger.proof.peakBeforeReversal &&
+    canonicalTemporalEpochLedger.proof.reversalBeforeRecovery &&
+    canonicalTemporalEpochLedger.proof.noRecoveryResetBetweenDescentAndPeak;
 
   /**
    * Subcontract C: shallow ROM 이 통과 증거를 갖추면 standard derive 보다 먼저 low/ultra_cycle 로 닫는다.
@@ -3135,6 +3415,28 @@ export function evaluateSquatCompletionCore(
     selectedCanonicalDescentTimingEpochAtMs:
       selectedCanonicalDescentTimingEpoch?.timestampMs ?? null,
     normalizedDescentAnchorCoherent,
+    canonicalTemporalEpochOrderSatisfied,
+    canonicalTemporalEpochOrderBlockedReason:
+      canonicalTemporalEpochLedger.blockedReason,
+    selectedCanonicalPeakEpochValidIndex:
+      canonicalTemporalEpochLedger.peak?.validIndex ?? null,
+    selectedCanonicalPeakEpochAtMs:
+      canonicalTemporalEpochLedger.peak?.timestampMs ?? null,
+    selectedCanonicalPeakEpochSource:
+      canonicalTemporalEpochLedger.peak?.source ?? null,
+    selectedCanonicalReversalEpochValidIndex:
+      canonicalTemporalEpochLedger.reversal?.validIndex ?? null,
+    selectedCanonicalReversalEpochAtMs:
+      canonicalTemporalEpochLedger.reversal?.timestampMs ?? null,
+    selectedCanonicalReversalEpochSource:
+      canonicalTemporalEpochLedger.reversal?.source ?? null,
+    selectedCanonicalRecoveryEpochValidIndex:
+      canonicalTemporalEpochLedger.recovery?.validIndex ?? null,
+    selectedCanonicalRecoveryEpochAtMs:
+      canonicalTemporalEpochLedger.recovery?.timestampMs ?? null,
+    selectedCanonicalRecoveryEpochSource:
+      canonicalTemporalEpochLedger.recovery?.source ?? null,
+    temporalEpochOrderTrace: canonicalTemporalEpochLedger.trace,
   };
 }
 

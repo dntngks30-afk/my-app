@@ -184,6 +184,9 @@ export interface CanonicalShallowCompletionContractInput {
   reversalAtMs?: number | null;
   /** Owned standing recovery timestamp; must be after reversalAtMs. */
   standingRecoveredAtMs?: number | null;
+  /** Structured same-rep valid-buffer epoch-order ledger result. Preferred when present. */
+  canonicalTemporalEpochOrderSatisfied?: boolean;
+  canonicalTemporalEpochOrderBlockedReason?: string | null;
 
   // ── Section 6: TIMING INTEGRITY (PR-8) ──
   /**
@@ -398,6 +401,9 @@ function antiFalsePassFromInput(input: CanonicalShallowCompletionContractInput):
 function temporalEpochOrderClearFromInput(
   input: CanonicalShallowCompletionContractInput
 ): boolean {
+  if (input.canonicalTemporalEpochOrderSatisfied != null) {
+    return input.canonicalTemporalEpochOrderSatisfied === true;
+  }
   const {
     descentStartAtMs,
     peakAtMs,

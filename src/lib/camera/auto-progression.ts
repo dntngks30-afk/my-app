@@ -465,6 +465,18 @@ export interface SquatCycleDebug {
   selectedCanonicalDescentTimingEpochValidIndex?: number | null;
   selectedCanonicalDescentTimingEpochAtMs?: number | null;
   normalizedDescentAnchorCoherent?: boolean;
+  canonicalTemporalEpochOrderSatisfied?: boolean;
+  canonicalTemporalEpochOrderBlockedReason?: string | null;
+  selectedCanonicalPeakEpochValidIndex?: number | null;
+  selectedCanonicalPeakEpochAtMs?: number | null;
+  selectedCanonicalPeakEpochSource?: string | null;
+  selectedCanonicalReversalEpochValidIndex?: number | null;
+  selectedCanonicalReversalEpochAtMs?: number | null;
+  selectedCanonicalReversalEpochSource?: string | null;
+  selectedCanonicalRecoveryEpochValidIndex?: number | null;
+  selectedCanonicalRecoveryEpochAtMs?: number | null;
+  selectedCanonicalRecoveryEpochSource?: string | null;
+  temporalEpochOrderTrace?: string | null;
 }
 
 export interface ExerciseGateResult {
@@ -2851,6 +2863,30 @@ export function evaluateExerciseAutoProgress(
       selectedCanonicalDescentTimingEpochAtMs:
         squatCs?.selectedCanonicalDescentTimingEpochAtMs ?? null,
       normalizedDescentAnchorCoherent: squatCs?.normalizedDescentAnchorCoherent ?? true,
+      canonicalTemporalEpochOrderSatisfied:
+        squatCs?.canonicalTemporalEpochOrderSatisfied ?? false,
+      canonicalTemporalEpochOrderBlockedReason:
+        squatCs?.canonicalTemporalEpochOrderBlockedReason ?? null,
+      selectedCanonicalPeakEpochValidIndex:
+        squatCs?.selectedCanonicalPeakEpochValidIndex ?? null,
+      selectedCanonicalPeakEpochAtMs:
+        squatCs?.selectedCanonicalPeakEpochAtMs ?? null,
+      selectedCanonicalPeakEpochSource:
+        squatCs?.selectedCanonicalPeakEpochSource ?? null,
+      selectedCanonicalReversalEpochValidIndex:
+        squatCs?.selectedCanonicalReversalEpochValidIndex ?? null,
+      selectedCanonicalReversalEpochAtMs:
+        squatCs?.selectedCanonicalReversalEpochAtMs ?? null,
+      selectedCanonicalReversalEpochSource:
+        squatCs?.selectedCanonicalReversalEpochSource ?? null,
+      selectedCanonicalRecoveryEpochValidIndex:
+        squatCs?.selectedCanonicalRecoveryEpochValidIndex ?? null,
+      selectedCanonicalRecoveryEpochAtMs:
+        squatCs?.selectedCanonicalRecoveryEpochAtMs ?? null,
+      selectedCanonicalRecoveryEpochSource:
+        squatCs?.selectedCanonicalRecoveryEpochSource ?? null,
+      temporalEpochOrderTrace:
+        squatCs?.temporalEpochOrderTrace ?? null,
     } as SquatCycleDebug;
   }
 
