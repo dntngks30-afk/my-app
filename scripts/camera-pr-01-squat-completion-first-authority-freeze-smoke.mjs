@@ -13,6 +13,10 @@
  *   5. `cycleComplete === false` and final pass true
  *   6. pass-core positive evidence opening final pass while canonical
  *      completion-owner truth is false (SSOT §6 #8)
+ *   7. `readSquatPassOwnerTruth` emitting
+ *      `completionOwnerReason === 'pass_core_detected'` from pass-core
+ *      positive inputs (PR-CAM-SQUAT-AUTHORITY-LAW-RESOLUTION §4
+ *      Interpretation C — no production assigner in `src/`)
  *
  * Also preserves must-remain-true cases (PR-01 §4 A/B/C/D/E):
  *   - deep/standard squat still passes
@@ -472,6 +476,87 @@ console.log('\n§10 — final pass surface mutual coherence');
     blockedLayer.progressionPassed === false &&
       blockedLayer.squatFinalPassTruth.finalPassGranted === false,
     blockedLayer
+  );
+}
+
+// ── §11 Authority-law resolution: pass_core_detected has no production assigner ──
+// PR-CAM-SQUAT-AUTHORITY-LAW-RESOLUTION §4 (Interpretation C) locks
+// `completionOwnerReason === 'pass_core_detected'` as a formally closed
+// legacy label. `readSquatPassOwnerTruth` must never synthesize it from
+// pass-core positive inputs, regardless of completion-state contents.
+console.log('\n§11 — Authority-law resolution (pass_core_detected is not a production owner reason)');
+{
+  // (a) pass-core positive + valid standard completion state
+  const ownerA = readSquatPassOwnerTruth({
+    squatCompletionState: validStandardCompletionState(),
+    squatPassCore: passCorePositive(),
+  });
+  ok(
+    '§11a pass-core positive + standard completion → owner reason is not pass_core_detected',
+    ownerA.completionOwnerReason !== 'pass_core_detected',
+    ownerA
+  );
+
+  // (b) pass-core positive + shallow owner reason in completion state
+  const ownerB = readSquatPassOwnerTruth({
+    squatCompletionState: {
+      completionSatisfied: true,
+      completionPassReason: 'low_rom_cycle',
+      completionOwnerReason: 'shallow_complete_rule',
+      completionBlockedReason: null,
+      cycleComplete: true,
+      currentSquatPhase: 'standing_recovered',
+      attemptStarted: true,
+    },
+    squatPassCore: passCorePositive(),
+  });
+  ok(
+    '§11b pass-core positive + shallow owner reason → owner reason is not pass_core_detected',
+    ownerB.completionOwnerReason !== 'pass_core_detected',
+    ownerB
+  );
+
+  // (c) pass-core positive + completion truth false
+  const ownerC = readSquatPassOwnerTruth({
+    squatCompletionState: {
+      completionSatisfied: false,
+      completionPassReason: 'not_confirmed',
+      completionBlockedReason: null,
+      cycleComplete: true,
+      currentSquatPhase: 'standing_recovered',
+      attemptStarted: true,
+    },
+    squatPassCore: passCorePositive(),
+  });
+  ok(
+    '§11c pass-core positive + completion truth false → owner reason is not pass_core_detected (and owner pass false)',
+    ownerC.completionOwnerReason !== 'pass_core_detected' && ownerC.completionOwnerPassed === false,
+    ownerC
+  );
+
+  // (d) synthetic pass_core_detected reason as an opener MUST NOT produce final pass
+  // when completion state is contradicted — reinforces §5/§6/§10 and proves that a
+  // reason label by itself is never sufficient to open final pass.
+  const layerD = runPostOwnerGate({
+    ownerTruth: {
+      completionOwnerPassed: true,
+      completionOwnerReason: 'pass_core_detected',
+      completionOwnerBlockedReason: null,
+    },
+    squatCompletionState: {
+      completionSatisfied: false,
+      completionPassReason: 'not_confirmed',
+      completionBlockedReason: null,
+      cycleComplete: true,
+      currentSquatPhase: 'standing_recovered',
+      attemptStarted: true,
+    },
+  });
+  ok(
+    '§11d synthetic pass_core_detected owner reason cannot open final pass when completion truth is false',
+    layerD.squatFinalPassTruth.finalPassGranted === false &&
+      layerD.progressionPassed === false,
+    layerD
   );
 }
 

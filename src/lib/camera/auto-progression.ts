@@ -420,9 +420,20 @@ export interface SquatCycleDebug {
    * `canonicalShallowContractDrovePass === true` iff this cycle ended in a
    * completion-core pass (`completionTruthPassed === true`) AND the cycle's
    * `evidenceLabel ∈ { 'ultra_low_rom', 'low_rom' }` AND the canonical
-   * completion-owner reason was not the `pass_core_detected` assist path
-   * (i.e., the shallow contract — not pass-core — drove the owner into pass).
-   * Undefined for cycles that did not pass. Design SSOT §7.4 item 3.
+   * completion-owner reason was not the `pass_core_detected` historical
+   * assist label (i.e., the shallow contract — not pass-core — drove the
+   * owner into pass). Undefined for cycles that did not pass. Design SSOT
+   * §7.4 item 3.
+   *
+   * Authority-law classification (PR-CAM-SQUAT-AUTHORITY-LAW-RESOLUTION §4):
+   * `completionOwnerReason === 'pass_core_detected'` is a formally closed
+   * legacy owner-reason label. No production path in `src/` produces it
+   * today (`computeSquatCompletionOwnerTruth` only emits
+   * `completionPassReason` values plus the explicit
+   * `shallow_complete_rule` / `ultra_low_rom_complete_rule` reasons), so
+   * this exclusion is a defensive diagnostic guard, not an active
+   * separator between two live pass paths. The field itself remains
+   * sink-only — never a gate input.
    */
   canonicalShallowContractDrovePass?: boolean;
   /** Mirror of `SquatCompletionState.legitimateKinematicShallowDescentOnsetFrameIndex`. */
@@ -724,6 +735,14 @@ export function readSquatPassOwnerTruth(
  * Every passed owner truth must be internally consistent with completion-state.
  * Previously this layer allowed `pass_core_detected` to bypass contradiction checks;
  * that shortcut is removed so that all owner-pass paths honor the same invariants.
+ *
+ * Authority-law classification (PR-CAM-SQUAT-AUTHORITY-LAW-RESOLUTION §4):
+ * `completionOwnerReason === 'pass_core_detected'` is a formally closed
+ * legacy label — no production path produces it today, and this layer
+ * treats it exactly like any other owner reason (i.e., completion-state
+ * invariants still apply). The label is retained only as a synthetic
+ * probe in PR-01 smoke §5/§6/§10/§11, where it is used to prove that
+ * a reason label cannot by itself open final pass.
  *
  * Fail-closed contradictions (PR-01 §7 C / D / E):
  *   - owner passed + owner blocked reason present
@@ -1199,6 +1218,14 @@ function applySquatFinalBlockerVetoLayer(input: {
  * the same completion-state veto chain before final pass may open. The prior
  * `pass_core_detected` shortcut is removed so that `completionTruthPassed === false`
  * combined with `finalPassEligible === true` becomes impossible.
+ *
+ * Authority-law classification (PR-CAM-SQUAT-AUTHORITY-LAW-RESOLUTION §3):
+ * current law reads as
+ *   `completionTruthPassed && completionOwnerPassed && ui/progression clear
+ *    && block-only vetoes clear => finalPassEligible / finalPassGranted`.
+ * `completionOwnerReason` is an explanation layer, not an opener — no
+ * reason label (including the legacy `pass_core_detected`) may bypass
+ * this chain. See §5 of the resolution doc for the locked illegal states.
  */
 export function getSquatPostOwnerFinalPassBlockedReason(input: {
   ownerTruth: SquatOwnerTruth;
@@ -2820,8 +2847,11 @@ export function evaluateExerciseAutoProgress(
       squatFinalPassTruth: squatPostOwnerGateLayer?.squatFinalPassTruth,
       // PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION (Branch B §7).
       // Authority-law diagnostic: true when the completion-core pass was driven
-      // by the canonical shallow contract (not by the `pass_core_detected`
-      // assist path). Sink-only — never a gate input (design SSOT §6.1 SL-1).
+      // by the canonical shallow contract (not by the historical
+      // `pass_core_detected` owner-reason label). Sink-only — never a gate
+      // input (design SSOT §6.1 SL-1). Per PR-CAM-SQUAT-AUTHORITY-LAW-
+      // RESOLUTION §4, the `pass_core_detected` label has no production
+      // assigner in `src/` today; this exclusion is a defensive guard.
       canonicalShallowContractDrovePass:
         squatCompletionTruthPassed(completionSatisfied, cpr) === true &&
         (squatCs?.evidenceLabel === 'ultra_low_rom' ||

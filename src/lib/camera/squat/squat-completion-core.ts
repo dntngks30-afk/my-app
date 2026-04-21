@@ -1776,15 +1776,19 @@ function computeBaselineKneeAngleAvgMedian(
  * shallow contract's cycle-timing gate only. All downstream gates (reversal,
  * recovery, anti-false-pass, minimum-cycle) continue to evaluate independently.
  *
- * **Coexistence deferral (design SSOT §7.4 item 4).** This branch does NOT
- * resolve the `completionOwnerReason === 'pass_core_detected'` authority
- * ambiguity surfaced by the P1 calibration study. The new source is
- * orthogonal to the `completionOwnerReason` pipeline — it never writes to
- * any `completionOwner*` field. Resolving that ambiguity is an
- * authority-law session, not this implementation; the additive diagnostic
- * `canonicalShallowContractDrovePass` (design SSOT §7.4 item 3) is exposed
- * by the auto-progression layer so the authority-law owner can diff canonical
- * shallow passes from assist passes without reading private owner reasons.
+ * **Coexistence deferral (design SSOT §7.4 item 4) — resolved.** This
+ * branch never writes to any `completionOwner*` field, and the
+ * `completionOwnerReason === 'pass_core_detected'` ambiguity surfaced by
+ * the P1 calibration study has since been formally closed by
+ * PR-CAM-SQUAT-AUTHORITY-LAW-RESOLUTION §4 (Interpretation C): no
+ * production path in `src/` produces that owner-reason label today, and
+ * the authority law is
+ *   `completionTruthPassed && completionOwnerPassed && gates clear
+ *    => finalPassEligible / finalPassGranted / finalPassLatched`.
+ * The additive diagnostic `canonicalShallowContractDrovePass` (design
+ * SSOT §7.4 item 3) remains exposed by the auto-progression layer as a
+ * sink-only separator between canonical shallow passes and the legacy
+ * assist label, never as a gate input.
  */
 function findLegitimateKinematicShallowDescentOnsetFrame(params: {
   validFrames: PoseFeaturesFrame[];
@@ -2210,11 +2214,14 @@ export function evaluateSquatCompletionCore(
    * `attemptAdmissionSatisfied`. Design SSOT §4.1–§4.3; proof obligations §5;
    * split-brain guards §6; coexistence deferral with `pass_core_detected` §7.
    *
-   * NOTE (coexistence deferral — design SSOT §7.4 item 4):
-   * this branch does NOT resolve the `pass_core_detected` authority ambiguity
-   * surfaced by the P1 calibration study; it only exposes the diagnostics
-   * (`canonicalShallowContractDrovePass`, `legitimateKinematicShallowDescentOnset*`)
-   * required for a later authority-law session.
+   * NOTE (coexistence deferral — design SSOT §7.4 item 4, resolved):
+   * this branch never touches `completionOwner*` fields. The
+   * `pass_core_detected` authority ambiguity surfaced by the P1
+   * calibration study has since been formally closed by
+   * PR-CAM-SQUAT-AUTHORITY-LAW-RESOLUTION §4 (Interpretation C — no
+   * production assigner, sink-only defensive label). This layer continues
+   * to expose only the sink-only diagnostics
+   * (`canonicalShallowContractDrovePass`, `legitimateKinematicShallowDescentOnset*`).
    */
   /**
    * PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-FOLLOWUP:

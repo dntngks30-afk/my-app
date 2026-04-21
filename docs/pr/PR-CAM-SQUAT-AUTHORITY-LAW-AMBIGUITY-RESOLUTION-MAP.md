@@ -1,5 +1,13 @@
 # PR-CAM-SQUAT-AUTHORITY-LAW-AMBIGUITY-RESOLUTION-MAP
 
+> **Resolution landed.** The ambiguity mapped by this design document is now
+> formally closed under **Interpretation C** (formally closed legacy label
+> with no production assigner) by
+> `docs/pr/PR-CAM-SQUAT-AUTHORITY-LAW-RESOLUTION.md`. That resolution is the
+> authoritative source for the current opener law, the classification of
+> `pass_core_detected`, and the locked illegal states. This map remains as
+> the design-time decision boundary that preceded the resolution.
+>
 > **Session type:** docs-only design SSOT.
 >
 > **Sole output:** this document. No `src/*`, `scripts/*`, tests, harness,
@@ -429,6 +437,10 @@ Locked principles:
 
 Recommended next order:
 
-1. Authority-law resolution PR.
+1. Authority-law resolution PR. **Landed:** see
+   `docs/pr/PR-CAM-SQUAT-AUTHORITY-LAW-RESOLUTION.md`. Classification is
+   Interpretation C. The single opener law
+   (`completionTruthPassed AND completionOwnerPassed AND gates clear =>
+   finalPassEligible / finalPassGranted / finalPassLatched`) is locked.
 2. P3 absurd-pass registry normalization PR.
 3. P2 authority naming/comment cleanup PR.
