@@ -182,7 +182,8 @@ function assertSourceFiresThroughGate(label, angles, startTs) {
     `${label}: effectiveDescentStartFrameSource is a legal family label`,
     cs?.effectiveDescentStartFrameSource != null &&
       ['phase_hint_descent', 'trajectory_descent_start', 'shared_descent_epoch',
-       'legitimate_kinematic_shallow_descent_onset'].includes(cs.effectiveDescentStartFrameSource),
+       'legitimate_kinematic_shallow_descent_onset',
+       'pre_arming_kinematic_descent_epoch'].includes(cs.effectiveDescentStartFrameSource),
     cs?.effectiveDescentStartFrameSource
   );
 }

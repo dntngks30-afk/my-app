@@ -203,7 +203,8 @@ console.log('\n━━ Smoke #1 — legitimateKinematicShallowDescentOnsetFrame f
     '#1.5 effectiveDescentStartFrameSource identifies the new source',
     cs?.effectiveDescentStartFrameSource != null &&
       ['phase_hint_descent', 'trajectory_descent_start', 'shared_descent_epoch',
-       'legitimate_kinematic_shallow_descent_onset'].includes(cs.effectiveDescentStartFrameSource),
+       'legitimate_kinematic_shallow_descent_onset',
+       'pre_arming_kinematic_descent_epoch'].includes(cs.effectiveDescentStartFrameSource),
     cs?.effectiveDescentStartFrameSource
   );
   ok(
@@ -316,7 +317,8 @@ console.log('\n━━ Smoke #3 — descentAnchorCoherent + earliest-wins selecti
     '#3.2 deep fixture: chosen source is one of the four legal values',
     csDeep?.effectiveDescentStartFrameSource == null ||
       ['phase_hint_descent', 'trajectory_descent_start', 'shared_descent_epoch',
-       'legitimate_kinematic_shallow_descent_onset'].includes(csDeep.effectiveDescentStartFrameSource),
+       'legitimate_kinematic_shallow_descent_onset',
+       'pre_arming_kinematic_descent_epoch'].includes(csDeep.effectiveDescentStartFrameSource),
     csDeep?.effectiveDescentStartFrameSource
   );
 

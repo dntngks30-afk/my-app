@@ -21,6 +21,7 @@ import {
 } from '@/lib/camera/squat/squat-descent-truth';
 import {
   computeSquatCompletionArming,
+  findPreArmingKinematicDescentEpoch,
   mergeArmingDepthObservability,
   type CompletionArmingState,
 } from '@/lib/camera/squat/squat-completion-arming';
@@ -314,6 +315,12 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         ? (kneeBaselineSamples[mid - 1]! + kneeBaselineSamples[mid]!) / 2
         : kneeBaselineSamples[mid]!;
   }
+  const preArmingKinematicDescentEpoch = findPreArmingKinematicDescentEpoch(valid, {
+    baselineKneeAngleAvg: seedBaselineKneeAngleAvg,
+    completionSliceStartIndex: completionArming.completionSliceStartIndex,
+    baselineWindowStartValidIndex: 0,
+    baselineWindowEndValidIndex: BASELINE_WINDOW_EVAL_KNEE - 1,
+  });
 
   let state = evaluateSquatCompletionState(completionFrames, {
     hmm: squatHmm,
@@ -321,6 +328,8 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     seedBaselineStandingDepthPrimary: completionArming.armingBaselineStandingDepthPrimary,
     seedBaselineStandingDepthBlended: completionArming.armingBaselineStandingDepthBlended,
     seedBaselineKneeAngleAvg,
+    completionSliceStartIndex: completionArming.completionSliceStartIndex,
+    preArmingKinematicDescentEpoch: preArmingKinematicDescentEpoch ?? undefined,
     setupMotionBlocked: setupBlock.blocked,
     // DESCENT-TRUTH-RESET-01: shared descent truth aligns descendConfirmed to pass-window truth.
     sharedDescentTruth: sharedDescentTruth ?? undefined,
@@ -989,6 +998,18 @@ function buildSquatEvaluatorHighlightedMetrics(p: {
     ascendStartAtMs: state.ascendStartAtMs,
     recoveryAtMs: state.standingRecoveredAtMs ?? null,
     cycleDurationMs: state.cycleDurationMs,
+    preArmingKinematicDescentEpochAccepted:
+      state.preArmingKinematicDescentEpochAccepted === true ? 1 : 0,
+    preArmingKinematicDescentEpochRejectedReason:
+      state.preArmingKinematicDescentEpochRejectedReason ?? null,
+    preArmingKinematicDescentEpochValidIndex:
+      state.preArmingKinematicDescentEpochValidIndex ?? null,
+    selectedCanonicalDescentTimingEpochSource:
+      state.selectedCanonicalDescentTimingEpochSource ?? null,
+    selectedCanonicalDescentTimingEpochValidIndex:
+      state.selectedCanonicalDescentTimingEpochValidIndex ?? null,
+    normalizedDescentAnchorCoherent:
+      state.normalizedDescentAnchorCoherent === false ? 0 : 1,
     downwardCommitmentDelta: Math.round(state.downwardCommitmentDelta * 100) / 100,
     squatReversalDropRequiredPct:
       state.squatReversalDropRequired != null

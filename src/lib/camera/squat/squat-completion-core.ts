@@ -33,6 +33,11 @@ import type {
   EvaluateSquatCompletionStateOptions,
 } from '../squat-completion-state';
 import type { ShallowNormalizedBlockerFamily } from './squat-completion-debug-types';
+import {
+  KNEE_DESCENT_ONSET_EPSILON_DEG,
+  KNEE_DESCENT_ONSET_SUSTAIN_FRAMES,
+  type PreArmingKinematicDescentEpoch,
+} from './squat-completion-arming';
 
 /** PR-04E3B: 첫 attemptStarted 시점에 고정한 스트림·baseline — 동일 버퍼 내 재평가 없음 */
 export type SquatDepthFreezeConfig = {
@@ -198,8 +203,6 @@ const GUARDED_ULTRA_LOW_ROM_FLOOR = 0.01;
  *       spikes (`no_real_descent` family) while remaining short enough to fire
  *       on legitimate shallow reps that bottom within ≈ 400 ms of onset.
  */
-const KNEE_DESCENT_ONSET_EPSILON_DEG = 5.0;
-const KNEE_DESCENT_ONSET_SUSTAIN_FRAMES = 2;
 const LOW_ROM_LABEL_FLOOR = 0.07;
 const STANDARD_LABEL_FLOOR = 0.1;
 /**
@@ -1749,6 +1752,17 @@ export function evaluateSquatCompletionCore(
       legitimateKinematicShallowDescentBaselineKneeAngleAvg: null,
       effectiveDescentStartFrameSource: null,
       descentAnchorCoherent: true,
+      preArmingKinematicDescentEpochValidIndex: null,
+      preArmingKinematicDescentEpochAtMs: null,
+      preArmingKinematicDescentEpochAccepted: false,
+      preArmingKinematicDescentEpochRejectedReason: 'missing',
+      preArmingKinematicDescentEpochCompletionSliceStartIndex: null,
+      preArmingKinematicDescentEpochPeakGuardValidIndex: null,
+      preArmingKinematicDescentEpochProof: null,
+      selectedCanonicalDescentTimingEpochSource: null,
+      selectedCanonicalDescentTimingEpochValidIndex: null,
+      selectedCanonicalDescentTimingEpochAtMs: null,
+      normalizedDescentAnchorCoherent: true,
     };
   }
 
@@ -2031,6 +2045,141 @@ export function evaluateSquatCompletionCore(
     return candidates.reduce((earliest, f) => (f.index < earliest.index ? f : earliest));
   })();
 
+  type DescentTimingEpochSource =
+    | 'phase_hint_descent'
+    | 'trajectory_descent_start'
+    | 'shared_descent_epoch'
+    | 'legitimate_kinematic_shallow_descent_onset'
+    | 'pre_arming_kinematic_descent_epoch';
+  type NormalizedDescentTimingEpoch = {
+    source: DescentTimingEpochSource;
+    validIndex: number;
+    timestampMs: number;
+  };
+
+  const preArmingKinematicEpoch = options?.preArmingKinematicDescentEpoch;
+  const completionSliceStartIndexForTiming = (() => {
+    const optionCompletionSliceStartIndex = options?.completionSliceStartIndex;
+    if (
+      typeof optionCompletionSliceStartIndex === 'number' &&
+      Number.isInteger(optionCompletionSliceStartIndex) &&
+      optionCompletionSliceStartIndex >= 0
+    ) {
+      return optionCompletionSliceStartIndex;
+    }
+    if (
+      preArmingKinematicEpoch != null &&
+      Number.isInteger(preArmingKinematicEpoch.completionSliceStartIndex) &&
+      preArmingKinematicEpoch.completionSliceStartIndex >= 0
+    ) {
+      return preArmingKinematicEpoch.completionSliceStartIndex;
+    }
+    return 0;
+  })();
+  const corePeakValidIndex = completionSliceStartIndexForTiming + peakFrame.index;
+  const validatePreArmingKinematicEpoch = (
+    epoch: PreArmingKinematicDescentEpoch | undefined
+  ): { timingEpoch: NormalizedDescentTimingEpoch | null; rejectedReason: string | null } => {
+    if (epoch == null) return { timingEpoch: null, rejectedReason: 'missing' };
+    if (depthFreeze == null) return { timingEpoch: null, rejectedReason: 'core_not_frozen' };
+    if (epoch.source !== 'pre_arming_kinematic_descent_epoch') {
+      return { timingEpoch: null, rejectedReason: 'invalid_payload' };
+    }
+    const finitePayload =
+      Number.isFinite(epoch.baselineKneeAngleAvg) &&
+      Number.isFinite(epoch.descentOnsetAtMs) &&
+      Number.isFinite(epoch.descentOnsetKneeAngleAvg) &&
+      Number.isFinite(epoch.peakGuardAtMs);
+    const integerPayload =
+      Number.isInteger(epoch.baselineWindowStartValidIndex) &&
+      Number.isInteger(epoch.baselineWindowEndValidIndex) &&
+      Number.isInteger(epoch.descentOnsetValidIndex) &&
+      Number.isInteger(epoch.completionSliceStartIndex) &&
+      Number.isInteger(epoch.peakGuardValidIndex);
+    if (!finitePayload || !integerPayload) {
+      return { timingEpoch: null, rejectedReason: 'invalid_payload' };
+    }
+    if (epoch.completionSliceStartIndex !== completionSliceStartIndexForTiming) {
+      return { timingEpoch: null, rejectedReason: 'slice_start_mismatch' };
+    }
+    if (
+      epoch.baselineWindowStartValidIndex < 0 ||
+      epoch.baselineWindowEndValidIndex < epoch.baselineWindowStartValidIndex ||
+      epoch.baselineWindowEndValidIndex >= epoch.descentOnsetValidIndex
+    ) {
+      return { timingEpoch: null, rejectedReason: 'baseline_not_before_onset' };
+    }
+    if (epoch.descentOnsetValidIndex >= epoch.completionSliceStartIndex) {
+      return { timingEpoch: null, rejectedReason: 'not_pre_arming' };
+    }
+    if (
+      epoch.descentOnsetValidIndex >= corePeakValidIndex ||
+      epoch.descentOnsetAtMs >= peakFrame.timestampMs
+    ) {
+      return { timingEpoch: null, rejectedReason: 'onset_not_before_peak' };
+    }
+    const proof = epoch.proof;
+    if (
+      proof?.monotonicSustainSatisfied !== true ||
+      proof.baselineBeforeOnset !== true ||
+      proof.onsetBeforeCompletionSlicePeak !== true ||
+      proof.noStandingRecoveryBetweenOnsetAndSlice !== true
+    ) {
+      return { timingEpoch: null, rejectedReason: 'proof_failed' };
+    }
+    return {
+      timingEpoch: {
+        source: 'pre_arming_kinematic_descent_epoch',
+        validIndex: epoch.descentOnsetValidIndex,
+        timestampMs: epoch.descentOnsetAtMs,
+      },
+      rejectedReason: null,
+    };
+  };
+  const preArmingKinematicEpochDecision = validatePreArmingKinematicEpoch(preArmingKinematicEpoch);
+
+  const toLocalTimingEpoch = (
+    source: Exclude<DescentTimingEpochSource, 'pre_arming_kinematic_descent_epoch'>,
+    frame:
+      | {
+          index: number;
+          timestampMs: number;
+        }
+      | undefined
+  ): NormalizedDescentTimingEpoch | null => {
+    if (frame == null) return null;
+    return {
+      source,
+      validIndex: completionSliceStartIndexForTiming + frame.index,
+      timestampMs: frame.timestampMs,
+    };
+  };
+  const canonicalDescentTimingEpochs = [
+    toLocalTimingEpoch('phase_hint_descent', descentFrame),
+    toLocalTimingEpoch('trajectory_descent_start', trajectoryDescentStartFrame),
+    toLocalTimingEpoch('shared_descent_epoch', sharedDescentEpochFrame),
+    toLocalTimingEpoch(
+      'legitimate_kinematic_shallow_descent_onset',
+      legitimateKinematicShallowDescentOnsetFrame
+    ),
+    preArmingKinematicEpochDecision.timingEpoch,
+  ].filter((epoch): epoch is NormalizedDescentTimingEpoch => epoch != null);
+  const selectedCanonicalDescentTimingEpoch =
+    canonicalDescentTimingEpochs.length === 0
+      ? null
+      : canonicalDescentTimingEpochs.reduce((earliest, epoch) =>
+          epoch.validIndex < earliest.validIndex ||
+          (epoch.validIndex === earliest.validIndex && epoch.timestampMs < earliest.timestampMs)
+            ? epoch
+            : earliest
+        );
+  const normalizedDescentAnchorCoherent =
+    selectedCanonicalDescentTimingEpoch == null
+      ? true
+      : canonicalDescentTimingEpochs.every(
+          (epoch) => epoch.validIndex >= selectedCanonicalDescentTimingEpoch.validIndex
+        );
+
   /**
    * PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION — split-brain
    * guard CL-1 (design SSOT §6.4). `descentAnchorCoherent` is true when every
@@ -2243,8 +2392,8 @@ export function evaluateSquatCompletionCore(
     }
     if (
       relativeDepthPeak < LOW_ROM_TIMING_PEAK_MAX &&
-      effectiveDescentStartFrame != null &&
-      peakFrame.timestampMs - effectiveDescentStartFrame.timestampMs < minDescentToPeakMsForLowRom
+      selectedCanonicalDescentTimingEpoch != null &&
+      peakFrame.timestampMs - selectedCanonicalDescentTimingEpoch.timestampMs < minDescentToPeakMsForLowRom
     ) {
       if (
         !shouldBypassUltraLowRomShortDescentTiming({
@@ -2509,8 +2658,8 @@ export function evaluateSquatCompletionCore(
      * Reuses existing scope variables: no new numeric thresholds.
      */
     (relativeDepthPeak >= LOW_ROM_TIMING_PEAK_MAX ||
-      effectiveDescentStartFrame == null ||
-      peakFrame.timestampMs - effectiveDescentStartFrame.timestampMs >= minDescentToPeakMsForLowRom) &&
+      selectedCanonicalDescentTimingEpoch == null ||
+      peakFrame.timestampMs - selectedCanonicalDescentTimingEpoch.timestampMs >= minDescentToPeakMsForLowRom) &&
     /**
      * Reversal-to-standing timing integrity: mirrors the `ascent_recovery_span_too_short`
      * check in `computeBlockedAfterCommitment` (also skipped due to early finalize return).
@@ -2617,8 +2766,8 @@ export function evaluateSquatCompletionCore(
 
   /** PR-CAM-18: phaseHint 기반 descentFrame이 없을 때 effectiveDescentStartFrame으로 폴백 */
   const squatDescentToPeakMs =
-    effectiveDescentStartFrame != null
-      ? peakFrame.timestampMs - effectiveDescentStartFrame.timestampMs
+    selectedCanonicalDescentTimingEpoch != null
+      ? peakFrame.timestampMs - selectedCanonicalDescentTimingEpoch.timestampMs
       : undefined;
   const squatReversalToStandingMs =
     progressionReversalFrame != null && standingRecovery.standingRecoveredAtMs != null
@@ -2845,12 +2994,12 @@ export function evaluateSquatCompletionCore(
     recoveryDetected,
     cycleComplete: completionSatisfied,
     /** PR-CAM-18: phaseHint 'descent' 없는 경우 effectiveDescentStartFrame 타임스탬프로 폴백 */
-    descendStartAtMs: effectiveDescentStartFrame?.timestampMs,
+    descendStartAtMs: selectedCanonicalDescentTimingEpoch?.timestampMs,
     peakAtMs: peakFrame.timestampMs,
     ascendStartAtMs: ascentFrame?.timestampMs,
     cycleDurationMs:
-      effectiveDescentStartFrame != null && standingRecovery.standingRecoveredAtMs != null
-        ? standingRecovery.standingRecoveredAtMs - effectiveDescentStartFrame.timestampMs
+      selectedCanonicalDescentTimingEpoch != null && standingRecovery.standingRecoveredAtMs != null
+        ? standingRecovery.standingRecoveredAtMs - selectedCanonicalDescentTimingEpoch.timestampMs
         : undefined,
     downwardCommitmentDelta,
     standingRecoveryFrameCount: standingRecoveryFrameCountForOutput,
@@ -2963,19 +3112,29 @@ export function evaluateSquatCompletionCore(
     legitimateKinematicShallowDescentOnsetKneeAngleAvg:
       legitimateKinematicOnset?.kneeAngleAtOnset ?? null,
     legitimateKinematicShallowDescentBaselineKneeAngleAvg: baselineKneeAngleAvgValue,
-    effectiveDescentStartFrameSource:
-      effectiveDescentStartFrame == null
-        ? null
-        : effectiveDescentStartFrame === descentFrame
-          ? 'phase_hint_descent'
-          : effectiveDescentStartFrame === trajectoryDescentStartFrame
-            ? 'trajectory_descent_start'
-            : effectiveDescentStartFrame === sharedDescentEpochFrame
-              ? 'shared_descent_epoch'
-              : effectiveDescentStartFrame === legitimateKinematicShallowDescentOnsetFrame
-                ? 'legitimate_kinematic_shallow_descent_onset'
-                : null,
+    effectiveDescentStartFrameSource: selectedCanonicalDescentTimingEpoch?.source ?? null,
     descentAnchorCoherent,
+    preArmingKinematicDescentEpochValidIndex:
+      preArmingKinematicEpoch?.descentOnsetValidIndex ?? null,
+    preArmingKinematicDescentEpochAtMs:
+      preArmingKinematicEpoch?.descentOnsetAtMs ?? null,
+    preArmingKinematicDescentEpochAccepted:
+      preArmingKinematicEpochDecision.timingEpoch != null,
+    preArmingKinematicDescentEpochRejectedReason:
+      preArmingKinematicEpochDecision.rejectedReason,
+    preArmingKinematicDescentEpochCompletionSliceStartIndex:
+      preArmingKinematicEpoch?.completionSliceStartIndex ?? null,
+    preArmingKinematicDescentEpochPeakGuardValidIndex:
+      preArmingKinematicEpoch?.peakGuardValidIndex ?? null,
+    preArmingKinematicDescentEpochProof:
+      preArmingKinematicEpoch?.proof ?? null,
+    selectedCanonicalDescentTimingEpochSource:
+      selectedCanonicalDescentTimingEpoch?.source ?? null,
+    selectedCanonicalDescentTimingEpochValidIndex:
+      selectedCanonicalDescentTimingEpoch?.validIndex ?? null,
+    selectedCanonicalDescentTimingEpochAtMs:
+      selectedCanonicalDescentTimingEpoch?.timestampMs ?? null,
+    normalizedDescentAnchorCoherent,
   };
 }
 

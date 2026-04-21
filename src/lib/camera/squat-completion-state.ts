@@ -751,6 +751,7 @@ export interface SquatCompletionState extends MotionCompletionResult {
     | 'trajectory_descent_start'
     | 'shared_descent_epoch'
     | 'legitimate_kinematic_shallow_descent_onset'
+    | 'pre_arming_kinematic_descent_epoch'
     | null;
   /**
    * Split-brain guard CL-1 (design SSOT §6.4): every non-null candidate's
@@ -758,6 +759,28 @@ export interface SquatCompletionState extends MotionCompletionResult {
    * rule actually picked the minimum). True when no source fired.
    */
   descentAnchorCoherent?: boolean;
+  preArmingKinematicDescentEpochValidIndex?: number | null;
+  preArmingKinematicDescentEpochAtMs?: number | null;
+  preArmingKinematicDescentEpochAccepted?: boolean;
+  preArmingKinematicDescentEpochRejectedReason?: string | null;
+  preArmingKinematicDescentEpochCompletionSliceStartIndex?: number | null;
+  preArmingKinematicDescentEpochPeakGuardValidIndex?: number | null;
+  preArmingKinematicDescentEpochProof?: {
+    monotonicSustainSatisfied: true;
+    baselineBeforeOnset: true;
+    onsetBeforeCompletionSlicePeak: true;
+    noStandingRecoveryBetweenOnsetAndSlice: true;
+  } | null;
+  selectedCanonicalDescentTimingEpochSource?:
+    | 'phase_hint_descent'
+    | 'trajectory_descent_start'
+    | 'shared_descent_epoch'
+    | 'legitimate_kinematic_shallow_descent_onset'
+    | 'pre_arming_kinematic_descent_epoch'
+    | null;
+  selectedCanonicalDescentTimingEpochValidIndex?: number | null;
+  selectedCanonicalDescentTimingEpochAtMs?: number | null;
+  normalizedDescentAnchorCoherent?: boolean;
 }
 
 /** PR-CAM-SHALLOW-PROOF-TRACE-11: 명시적 차단 문자열 — JSON 에서 추론 없이 원인 매핑 */
@@ -813,6 +836,8 @@ export type EvaluateSquatCompletionStateOptions = {
    * baseline window" 를 arming 절단 이전 경계에서 취한다는 동일 의미를 복원하는 플러밍이다.
    */
   seedBaselineKneeAngleAvg?: number;
+  completionSliceStartIndex?: number;
+  preArmingKinematicDescentEpoch?: import('@/lib/camera/squat/squat-completion-arming').PreArmingKinematicDescentEpoch;
   /**
    * PR-CAM-SHALLOW-TRAJECTORY-BRIDGE-05: 평가기에서 이미 계산된 setup 차단 — completion 코어와 독립.
    */

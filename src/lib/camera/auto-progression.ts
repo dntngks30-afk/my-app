@@ -439,9 +439,32 @@ export interface SquatCycleDebug {
     | 'trajectory_descent_start'
     | 'shared_descent_epoch'
     | 'legitimate_kinematic_shallow_descent_onset'
+    | 'pre_arming_kinematic_descent_epoch'
     | null;
   /** Mirror of `SquatCompletionState.descentAnchorCoherent` (split-brain guard CL-1). */
   descentAnchorCoherent?: boolean;
+  preArmingKinematicDescentEpochValidIndex?: number | null;
+  preArmingKinematicDescentEpochAtMs?: number | null;
+  preArmingKinematicDescentEpochAccepted?: boolean;
+  preArmingKinematicDescentEpochRejectedReason?: string | null;
+  preArmingKinematicDescentEpochCompletionSliceStartIndex?: number | null;
+  preArmingKinematicDescentEpochPeakGuardValidIndex?: number | null;
+  preArmingKinematicDescentEpochProof?: {
+    monotonicSustainSatisfied: true;
+    baselineBeforeOnset: true;
+    onsetBeforeCompletionSlicePeak: true;
+    noStandingRecoveryBetweenOnsetAndSlice: true;
+  } | null;
+  selectedCanonicalDescentTimingEpochSource?:
+    | 'phase_hint_descent'
+    | 'trajectory_descent_start'
+    | 'shared_descent_epoch'
+    | 'legitimate_kinematic_shallow_descent_onset'
+    | 'pre_arming_kinematic_descent_epoch'
+    | null;
+  selectedCanonicalDescentTimingEpochValidIndex?: number | null;
+  selectedCanonicalDescentTimingEpochAtMs?: number | null;
+  normalizedDescentAnchorCoherent?: boolean;
 }
 
 export interface ExerciseGateResult {
@@ -2807,6 +2830,27 @@ export function evaluateExerciseAutoProgress(
       effectiveDescentStartFrameSource:
         squatCs?.effectiveDescentStartFrameSource ?? null,
       descentAnchorCoherent: squatCs?.descentAnchorCoherent ?? true,
+      preArmingKinematicDescentEpochValidIndex:
+        squatCs?.preArmingKinematicDescentEpochValidIndex ?? null,
+      preArmingKinematicDescentEpochAtMs:
+        squatCs?.preArmingKinematicDescentEpochAtMs ?? null,
+      preArmingKinematicDescentEpochAccepted:
+        squatCs?.preArmingKinematicDescentEpochAccepted ?? false,
+      preArmingKinematicDescentEpochRejectedReason:
+        squatCs?.preArmingKinematicDescentEpochRejectedReason ?? null,
+      preArmingKinematicDescentEpochCompletionSliceStartIndex:
+        squatCs?.preArmingKinematicDescentEpochCompletionSliceStartIndex ?? null,
+      preArmingKinematicDescentEpochPeakGuardValidIndex:
+        squatCs?.preArmingKinematicDescentEpochPeakGuardValidIndex ?? null,
+      preArmingKinematicDescentEpochProof:
+        squatCs?.preArmingKinematicDescentEpochProof ?? null,
+      selectedCanonicalDescentTimingEpochSource:
+        squatCs?.selectedCanonicalDescentTimingEpochSource ?? null,
+      selectedCanonicalDescentTimingEpochValidIndex:
+        squatCs?.selectedCanonicalDescentTimingEpochValidIndex ?? null,
+      selectedCanonicalDescentTimingEpochAtMs:
+        squatCs?.selectedCanonicalDescentTimingEpochAtMs ?? null,
+      normalizedDescentAnchorCoherent: squatCs?.normalizedDescentAnchorCoherent ?? true,
     } as SquatCycleDebug;
   }
 

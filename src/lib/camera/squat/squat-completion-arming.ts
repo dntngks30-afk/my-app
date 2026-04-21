@@ -12,6 +12,28 @@
 
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 
+export const KNEE_DESCENT_ONSET_EPSILON_DEG = 5.0;
+export const KNEE_DESCENT_ONSET_SUSTAIN_FRAMES = 2;
+
+export type PreArmingKinematicDescentEpoch = {
+  source: 'pre_arming_kinematic_descent_epoch';
+  baselineKneeAngleAvg: number;
+  baselineWindowStartValidIndex: number;
+  baselineWindowEndValidIndex: number;
+  descentOnsetValidIndex: number;
+  descentOnsetAtMs: number;
+  descentOnsetKneeAngleAvg: number;
+  completionSliceStartIndex: number;
+  peakGuardValidIndex: number;
+  peakGuardAtMs: number;
+  proof: {
+    monotonicSustainSatisfied: true;
+    baselineBeforeOnset: true;
+    onsetBeforeCompletionSlicePeak: true;
+    noStandingRecoveryBetweenOnsetAndSlice: true;
+  };
+};
+
 /** completion 평가를 허용하기 전 관측 상태(디버그·게이트용) */
 export type CompletionArmingState = {
   armed: boolean;
@@ -105,6 +127,104 @@ function readSquatArmingDepth(frame: PoseFeaturesFrame): number | null {
   const b = frame.derived.squatDepthProxyBlended;
   if (typeof b === 'number' && Number.isFinite(b)) return b;
   return readSquatDepthPrimary(frame);
+}
+
+function readFiniteKneeAngleAvg(frame: PoseFeaturesFrame | undefined): number | null {
+  const knee = frame?.derived.kneeAngleAvg;
+  return typeof knee === 'number' && Number.isFinite(knee) ? knee : null;
+}
+
+export function findPreArmingKinematicDescentEpoch(
+  valid: PoseFeaturesFrame[],
+  input: {
+    baselineKneeAngleAvg: number | undefined;
+    completionSliceStartIndex: number;
+    baselineWindowStartValidIndex?: number;
+    baselineWindowEndValidIndex?: number;
+  }
+): PreArmingKinematicDescentEpoch | null {
+  const baseline = input.baselineKneeAngleAvg;
+  const completionSliceStartIndex = input.completionSliceStartIndex;
+  if (typeof baseline !== 'number' || !Number.isFinite(baseline)) return null;
+  if (!Number.isInteger(completionSliceStartIndex) || completionSliceStartIndex <= 0) return null;
+  if (completionSliceStartIndex >= valid.length) return null;
+
+  const baselineWindowStartValidIndex = input.baselineWindowStartValidIndex ?? 0;
+  const baselineWindowEndValidIndex =
+    input.baselineWindowEndValidIndex ?? Math.min(5, valid.length - 1);
+  if (
+    !Number.isInteger(baselineWindowStartValidIndex) ||
+    !Number.isInteger(baselineWindowEndValidIndex) ||
+    baselineWindowStartValidIndex < 0 ||
+    baselineWindowEndValidIndex < baselineWindowStartValidIndex ||
+    baselineWindowEndValidIndex >= valid.length
+  ) {
+    return null;
+  }
+
+  let peakGuardValidIndex: number | null = null;
+  let peakGuardDepth = -Infinity;
+  for (let i = completionSliceStartIndex; i < valid.length; i++) {
+    const depth = readSquatArmingDepth(valid[i]!);
+    if (depth == null) continue;
+    if (depth > peakGuardDepth) {
+      peakGuardDepth = depth;
+      peakGuardValidIndex = i;
+    }
+  }
+  if (peakGuardValidIndex == null) return null;
+
+  const threshold = baseline - KNEE_DESCENT_ONSET_EPSILON_DEG;
+  const sustainWindow = Math.max(2, KNEE_DESCENT_ONSET_SUSTAIN_FRAMES);
+  for (let i = baselineWindowEndValidIndex + 1; i < completionSliceStartIndex; i++) {
+    if (i >= peakGuardValidIndex) break;
+    const kneeAtI = readFiniteKneeAngleAvg(valid[i]);
+    if (kneeAtI == null || !(kneeAtI <= threshold)) continue;
+    if (i + sustainWindow - 1 >= valid.length) break;
+    if (i + sustainWindow - 1 >= peakGuardValidIndex) continue;
+
+    let monotonic = true;
+    for (let j = 0; j < sustainWindow - 1; j++) {
+      const cur = readFiniteKneeAngleAvg(valid[i + j]);
+      const nxt = readFiniteKneeAngleAvg(valid[i + j + 1]);
+      if (cur == null || nxt == null || cur - nxt < 0) {
+        monotonic = false;
+        break;
+      }
+    }
+    if (!monotonic) continue;
+
+    let noStandingRecoveryBetweenOnsetAndSlice = true;
+    for (let k = i + 1; k < completionSliceStartIndex; k++) {
+      const knee = readFiniteKneeAngleAvg(valid[k]);
+      if (knee == null || knee > threshold) {
+        noStandingRecoveryBetweenOnsetAndSlice = false;
+        break;
+      }
+    }
+    if (!noStandingRecoveryBetweenOnsetAndSlice) continue;
+
+    return {
+      source: 'pre_arming_kinematic_descent_epoch',
+      baselineKneeAngleAvg: baseline,
+      baselineWindowStartValidIndex,
+      baselineWindowEndValidIndex,
+      descentOnsetValidIndex: i,
+      descentOnsetAtMs: valid[i]!.timestampMs,
+      descentOnsetKneeAngleAvg: kneeAtI,
+      completionSliceStartIndex,
+      peakGuardValidIndex,
+      peakGuardAtMs: valid[peakGuardValidIndex]!.timestampMs,
+      proof: {
+        monotonicSustainSatisfied: true,
+        baselineBeforeOnset: true,
+        onsetBeforeCompletionSlicePeak: true,
+        noStandingRecoveryBetweenOnsetAndSlice: true,
+      },
+    };
+  }
+
+  return null;
 }
 
 /** PR-04E1: 최종 arming 상태에 valid 버퍼 기준 depth 피크 메타를 합친다 (evaluator 재호출 가능). */
