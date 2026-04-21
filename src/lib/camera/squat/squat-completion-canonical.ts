@@ -20,10 +20,14 @@ type ApplyCanonicalShallowClosureFromContractDeps = {
   }) => SquatCompletionFinalizeMode;
 };
 
-function isSameRepShallowTimingCloseBlocker(
+function isOfficialShallowAdmittedToClosedResidualBlocker(
   reason: string | null | undefined
-): reason is 'descent_span_too_short' | 'ascent_recovery_span_too_short' {
-  return reason === 'descent_span_too_short' || reason === 'ascent_recovery_span_too_short';
+): reason is 'descent_span_too_short' | 'ascent_recovery_span_too_short' | 'no_reversal' {
+  return (
+    reason === 'descent_span_too_short' ||
+    reason === 'ascent_recovery_span_too_short' ||
+    reason === 'no_reversal'
+  );
 }
 
 function hasNoKnownStaleOrMixedShallowEpoch(state: SquatCompletionState): boolean {
@@ -77,7 +81,7 @@ function ownershipRecoveryFirstMissReason(
 ): OfficialShallowOwnerWriteMissReason | null {
   if (state.completionSatisfied === true) return 'shallow_close_not_pending';
   if (state.completionPassReason !== 'not_confirmed') return 'shallow_close_not_pending';
-  if (!isSameRepShallowTimingCloseBlocker(state.completionBlockedReason)) {
+  if (!isOfficialShallowAdmittedToClosedResidualBlocker(state.completionBlockedReason)) {
     const br = state.completionBlockedReason ?? null;
     if (br === 'not_armed' || br === 'freeze_or_latch_missing') return 'not_admitted';
     if (br === 'no_reversal') return 'reversal_not_confirmed';
@@ -120,7 +124,7 @@ function sameRepOfficialShallowCloseOwnershipRecoveryEligible(
 ): boolean {
   if (state.completionSatisfied === true) return false;
   if (state.completionPassReason !== 'not_confirmed') return false;
-  if (!isSameRepShallowTimingCloseBlocker(state.completionBlockedReason)) return false;
+  if (!isOfficialShallowAdmittedToClosedResidualBlocker(state.completionBlockedReason)) return false;
   if (state.officialShallowPathCandidate !== true) return false;
   if (state.officialShallowPathAdmitted !== true) return false;
   if (!(state.relativeDepthPeak < deps.standardOwnerFloor)) return false;
@@ -140,6 +144,12 @@ function sameRepOfficialShallowCloseOwnershipRecoveryEligible(
   if (state.officialShallowReversalSatisfied !== true) return false;
   if (state.officialShallowAscentEquivalentSatisfied !== true) return false;
   if (state.officialShallowClosureProofSatisfied !== true) return false;
+  if (
+    state.completionBlockedReason === 'no_reversal' &&
+    state.officialShallowAdmittedToClosedContractSatisfied !== true
+  ) {
+    return false;
+  }
 
   if (state.canonicalTemporalEpochOrderSatisfied !== true) return false;
   if (!hasNoKnownStaleOrMixedShallowEpoch(state)) return false;
@@ -380,7 +390,7 @@ export function applyCanonicalShallowClosureFromContract(
   }
 
   const ownershipRecoveredFrom = ownershipRecoveryEligible
-    ? isSameRepShallowTimingCloseBlocker(state.completionBlockedReason)
+    ? isOfficialShallowAdmittedToClosedResidualBlocker(state.completionBlockedReason)
       ? state.completionBlockedReason
       : null
     : null;

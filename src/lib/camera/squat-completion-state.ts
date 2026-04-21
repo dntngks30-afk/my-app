@@ -784,6 +784,23 @@ export interface SquatCompletionState extends MotionCompletionResult {
   sameRepShallowCloseRecoveredFrom?:
     | 'descent_span_too_short'
     | 'ascent_recovery_span_too_short'
+    | 'no_reversal'
+    | null;
+  /**
+   * PR-SHALLOW-ADMITTED-TO-CLOSED-CONTRACT-ALIGN-01:
+   * Explicit upstream same-rep contract stamp for an admitted official shallow rep that
+   * has genuine close truth but is still carrying a legacy residual close blocker.
+   * Observability/contract input only; final pass still opens only through the canonical writer.
+   */
+  officialShallowAdmittedToClosedContractSatisfied?: boolean;
+  officialShallowAdmittedToClosedContractRecoveredFrom?:
+    | 'descent_span_too_short'
+    | 'ascent_recovery_span_too_short'
+    | 'no_reversal'
+    | null;
+  officialShallowAdmittedToClosedContractSource?:
+    | 'same_rep_official_shallow_bridge_closure'
+    | 'same_rep_rule_or_hmm_shallow_closure'
     | null;
   /**
    * PR-SHALLOW-AUTHORITATIVE-CLOSE-OWNERSHIP-RECOVERY-01:
@@ -794,6 +811,7 @@ export interface SquatCompletionState extends MotionCompletionResult {
   sameRepShallowAuthoritativeCloseOwnershipRecoveredFrom?:
     | 'descent_span_too_short'
     | 'ascent_recovery_span_too_short'
+    | 'no_reversal'
     | null;
 
   /**
@@ -1936,6 +1954,16 @@ function isSameRepShallowTimingCloseBlocker(
   return reason === 'descent_span_too_short' || reason === 'ascent_recovery_span_too_short';
 }
 
+function isOfficialShallowAdmittedToClosedResidualBlocker(
+  reason: string | null | undefined
+): reason is 'descent_span_too_short' | 'ascent_recovery_span_too_short' | 'no_reversal' {
+  return (
+    reason === 'descent_span_too_short' ||
+    reason === 'ascent_recovery_span_too_short' ||
+    reason === 'no_reversal'
+  );
+}
+
 function shallowRecoverySetupClear(
   state: SquatCompletionState,
   options: EvaluateSquatCompletionStateOptions | undefined
@@ -1975,6 +2003,18 @@ function shallowRecoveryHasNoKnownStaleOrMixedRep(state: SquatCompletionState): 
     br !== 'recovery_not_after_reversal' &&
     br !== 'reversal_not_after_peak' &&
     br !== 'peak_not_after_descent'
+  );
+}
+
+function shallowRecoveryHasSameRepPeakAnchor(state: SquatCompletionState): boolean {
+  if (state.peakLatchedAtIndex != null && state.peakLatchedAtIndex > 0) return true;
+  return (
+    state.guardedShallowLocalPeakFound === true &&
+    state.guardedShallowLocalPeakBlockedReason == null &&
+    state.guardedShallowLocalPeakIndex != null &&
+    state.guardedShallowLocalPeakIndex > 0 &&
+    state.officialShallowStreamBridgeApplied === true &&
+    state.officialShallowClosureProofSatisfied === true
   );
 }
 
@@ -2038,6 +2078,39 @@ function sameRepShallowCloseRecoveryEligible(
   return true;
 }
 
+function officialShallowAdmittedToClosedContractEligible(
+  state: SquatCompletionState,
+  options: EvaluateSquatCompletionStateOptions | undefined
+): boolean {
+  if (state.completionSatisfied === true) return false;
+  if (state.completionPassReason !== 'not_confirmed') return false;
+  if (!isOfficialShallowAdmittedToClosedResidualBlocker(state.completionBlockedReason)) return false;
+  if (!shallowRecoveryShallowBandEligible(state)) return false;
+  if (state.officialShallowPathAdmitted !== true) return false;
+  if (!shallowRecoveryHasAttemptDescendCommitment(state)) return false;
+  if (!shallowRecoveryReadinessClear(state)) return false;
+  if (!shallowRecoverySetupClear(state, options)) return false;
+  if (state.eventCyclePromoted === true) return false;
+
+  const closeTruthSourcePresent =
+    state.reversalConfirmedByRuleOrHmm === true ||
+    state.officialShallowStreamBridgeApplied === true;
+  if (!closeTruthSourcePresent) return false;
+  if (state.reversalConfirmedAfterDescend !== true) return false;
+  if (state.recoveryConfirmedAfterReversal !== true) return false;
+  if (state.officialShallowReversalSatisfied !== true) return false;
+  if (state.officialShallowAscentEquivalentSatisfied !== true) return false;
+  if (state.officialShallowClosureProofSatisfied !== true) return false;
+  if (state.ownerAuthoritativeRecoverySatisfied !== true) return false;
+
+  if (state.canonicalTemporalEpochOrderSatisfied !== true) return false;
+  if (!shallowRecoveryHasNoKnownStaleOrMixedRep(state)) return false;
+  if (state.standingRecoveredAtMs == null) return false;
+  if (!shallowRecoveryHasSameRepPeakAnchor(state)) return false;
+
+  return true;
+}
+
 export function applySameRepShallowAdmissionCloseRecovery(
   state: SquatCompletionState,
   options?: EvaluateSquatCompletionStateOptions
@@ -2064,6 +2137,27 @@ export function applySameRepShallowAdmissionCloseRecovery(
       completionBlockedReason: null,
       sameRepShallowCloseRecovered: true,
       sameRepShallowCloseRecoveredFrom: recoveredFrom,
+    };
+  }
+
+  if (officialShallowAdmittedToClosedContractEligible(next, options)) {
+    const recoveredFrom = isOfficialShallowAdmittedToClosedResidualBlocker(
+      state.completionBlockedReason
+    )
+      ? state.completionBlockedReason
+      : isOfficialShallowAdmittedToClosedResidualBlocker(next.completionBlockedReason)
+        ? next.completionBlockedReason
+        : null;
+    next = {
+      ...next,
+      officialShallowAdmittedToClosedContractSatisfied: true,
+      officialShallowAdmittedToClosedContractRecoveredFrom: recoveredFrom,
+      officialShallowAdmittedToClosedContractSource:
+        next.reversalConfirmedByRuleOrHmm === true
+          ? 'same_rep_rule_or_hmm_shallow_closure'
+          : 'same_rep_official_shallow_bridge_closure',
+      sameRepShallowCloseRecovered: true,
+      sameRepShallowCloseRecoveredFrom: next.sameRepShallowCloseRecoveredFrom ?? recoveredFrom,
     };
   }
 
