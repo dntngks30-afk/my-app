@@ -47,6 +47,7 @@ const REQUIRED_PROOF_BUNDLE = [
 
   // PR-SHALLOW-SAME-REP-ADMISSION-CLOSE-RECOVERY-01
   { path: 'scripts/camera-pr-shallow-same-rep-admission-close-recovery-01-smoke.mjs', group: 'shallow/same-rep-recovery' },
+  { path: 'scripts/camera-pr-shallow-authoritative-close-ownership-recovery-01-smoke.mjs', group: 'shallow/authoritative-close-ownership' },
 ];
 
 let failed = 0;

@@ -574,7 +574,11 @@ export interface SquatCompletionState extends MotionCompletionResult {
    * **Primary shallow debug truth** 축의 일부 — 게이트 직접 입력 아님.
    */
   canonicalShallowContractClosureApplied?: boolean;
-  canonicalShallowContractClosureSource?: 'none' | 'canonical_authoritative' | 'canonical_guarded_trajectory';
+  canonicalShallowContractClosureSource?:
+    | 'none'
+    | 'canonical_authoritative'
+    | 'canonical_guarded_trajectory'
+    | 'same_rep_official_shallow_owner_write';
 
   /**
    * `deriveCanonicalShallowCompletionContract` 스냅샷 — **shallow 관련 디버그 1차 SSOT**.
@@ -724,6 +728,16 @@ export interface SquatCompletionState extends MotionCompletionResult {
    */
   sameRepShallowCloseRecovered?: boolean;
   sameRepShallowCloseRecoveredFrom?:
+    | 'descent_span_too_short'
+    | 'ascent_recovery_span_too_short'
+    | null;
+  /**
+   * PR-SHALLOW-AUTHORITATIVE-CLOSE-OWNERSHIP-RECOVERY-01:
+   * Same-rep official shallow close proof was consumed by the final canonical
+   * close writer. This is owner-write recovery, not an alternate opener.
+   */
+  sameRepShallowAuthoritativeCloseOwnershipRecovered?: boolean;
+  sameRepShallowAuthoritativeCloseOwnershipRecoveredFrom?:
     | 'descent_span_too_short'
     | 'ascent_recovery_span_too_short'
     | null;
@@ -2051,11 +2065,13 @@ function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
  * 이 helper 외부에서 official_shallow_cycle 을 직접 쓰면 안 된다.
  */
 function applyCanonicalShallowClosureFromContract(
-  state: SquatCompletionState
+  state: SquatCompletionState,
+  options?: EvaluateSquatCompletionStateOptions
 ): SquatCompletionState {
   return applyCanonicalShallowClosureFromContractImpl(state, {
     standardOwnerFloor: STANDARD_OWNER_FLOOR,
     deriveSquatCompletionFinalizeMode,
+    setupMotionBlocked: state.setupMotionBlocked === true || options?.setupMotionBlocked === true,
   });
 }
 
@@ -2235,7 +2251,7 @@ export function evaluateSquatCompletionState(
 
   state = mergeCanonicalShallowContractResult(state, canonicalShallowContract);
 
-  state = applyCanonicalShallowClosureFromContract(state);
+  state = applyCanonicalShallowClosureFromContract(state, options);
 
   /**
    * PR-CAM-EVENT-OWNER-DOWNGRADE-01: 이벤트 사이클은 탐지·관측만 — canonical closer 가 성공 클로저의 유일 경로.

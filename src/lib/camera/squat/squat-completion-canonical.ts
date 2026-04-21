@@ -9,6 +9,7 @@ const SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS = 800;
 
 type ApplyCanonicalShallowClosureFromContractDeps = {
   standardOwnerFloor: number;
+  setupMotionBlocked?: boolean;
   deriveSquatCompletionFinalizeMode: (input: {
     completionSatisfied: boolean;
     eventCyclePromoted: boolean;
@@ -16,6 +17,58 @@ type ApplyCanonicalShallowClosureFromContractDeps = {
     officialShallowAuthoritativeClosure?: boolean;
   }) => SquatCompletionFinalizeMode;
 };
+
+function isSameRepShallowTimingCloseBlocker(
+  reason: string | null | undefined
+): reason is 'descent_span_too_short' | 'ascent_recovery_span_too_short' {
+  return reason === 'descent_span_too_short' || reason === 'ascent_recovery_span_too_short';
+}
+
+function hasNoKnownStaleOrMixedShallowEpoch(state: SquatCompletionState): boolean {
+  const br = state.canonicalTemporalEpochOrderBlockedReason ?? null;
+  return (
+    br !== 'mixed_rep_epoch_contamination' &&
+    br !== 'stale_prior_rep_epoch' &&
+    br !== 'recovery_not_after_reversal' &&
+    br !== 'reversal_not_after_peak' &&
+    br !== 'peak_not_after_descent'
+  );
+}
+
+function sameRepOfficialShallowCloseOwnershipRecoveryEligible(
+  state: SquatCompletionState,
+  deps: ApplyCanonicalShallowClosureFromContractDeps
+): boolean {
+  if (state.completionSatisfied === true) return false;
+  if (state.completionPassReason !== 'not_confirmed') return false;
+  if (!isSameRepShallowTimingCloseBlocker(state.completionBlockedReason)) return false;
+  if (state.officialShallowPathCandidate !== true) return false;
+  if (state.officialShallowPathAdmitted !== true) return false;
+  if (!(state.relativeDepthPeak < deps.standardOwnerFloor)) return false;
+  if (state.evidenceLabel === 'insufficient_signal') return false;
+  if (state.attemptStarted !== true) return false;
+  if (state.descendConfirmed !== true) return false;
+  if (state.downwardCommitmentReached !== true) return false;
+  if ((state.downwardCommitmentDelta ?? 0) <= 0) return false;
+  if (state.readinessStableDwellSatisfied === false) return false;
+  if (state.attemptStartedAfterReady === false) return false;
+  if (deps.setupMotionBlocked !== false) return false;
+  if (state.setupMotionBlocked === true) return false;
+  if (state.eventCyclePromoted === true) return false;
+
+  if (state.reversalConfirmedAfterDescend !== true) return false;
+  if (state.recoveryConfirmedAfterReversal !== true) return false;
+  if (state.officialShallowReversalSatisfied !== true) return false;
+  if (state.officialShallowAscentEquivalentSatisfied !== true) return false;
+  if (state.officialShallowClosureProofSatisfied !== true) return false;
+
+  if (state.canonicalTemporalEpochOrderSatisfied !== true) return false;
+  if (!hasNoKnownStaleOrMixedShallowEpoch(state)) return false;
+  if (state.standingRecoveredAtMs == null) return false;
+  if (state.peakLatchedAtIndex == null || state.peakLatchedAtIndex <= 0) return false;
+
+  return true;
+}
 
 export function buildCanonicalShallowContractInputFromState(s: SquatCompletionState) {
   const rawPeakLatchedAtIndex = s.peakLatchedAtIndex ?? null;
@@ -102,7 +155,10 @@ export function applyCanonicalShallowClosureFromContract(
   state: SquatCompletionState,
   deps: ApplyCanonicalShallowClosureFromContractDeps
 ): SquatCompletionState {
-  if (state.canonicalShallowContractSatisfied !== true) {
+  const ownershipRecoveryEligible =
+    sameRepOfficialShallowCloseOwnershipRecoveryEligible(state, deps);
+
+  if (state.canonicalShallowContractSatisfied !== true && !ownershipRecoveryEligible) {
     return {
       ...state,
       canonicalShallowContractClosureApplied: false,
@@ -139,7 +195,14 @@ export function applyCanonicalShallowClosureFromContract(
     };
   }
 
-  const closureSource = state.canonicalShallowContractClosureSource ?? 'canonical_authoritative';
+  const ownershipRecoveredFrom = ownershipRecoveryEligible
+    ? isSameRepShallowTimingCloseBlocker(state.completionBlockedReason)
+      ? state.completionBlockedReason
+      : null
+    : null;
+  const closureSource = ownershipRecoveryEligible
+    ? 'same_rep_official_shallow_owner_write'
+    : state.canonicalShallowContractClosureSource ?? 'canonical_authoritative';
 
   const completionFinalizeMode = deps.deriveSquatCompletionFinalizeMode({
     completionSatisfied: true,
@@ -161,7 +224,9 @@ export function applyCanonicalShallowClosureFromContract(
     officialShallowPathBlockedReason: null,
     ownerAuthoritativeShallowClosureSatisfied: true,
     shallowAuthoritativeClosureReason:
-      closureSource === 'canonical_guarded_trajectory'
+      closureSource === 'same_rep_official_shallow_owner_write'
+        ? 'same_rep_official_shallow_owner_write'
+        : closureSource === 'canonical_guarded_trajectory'
         ? 'canonical_shallow_contract_guarded_trajectory'
         : 'canonical_shallow_contract',
     shallowAuthoritativeClosureBlockedReason: null,
@@ -169,5 +234,11 @@ export function applyCanonicalShallowClosureFromContract(
     officialShallowClosureProofSatisfied: true,
     canonicalShallowContractClosureApplied: true,
     canonicalShallowContractClosureSource: closureSource,
+    sameRepShallowCloseRecovered:
+      state.sameRepShallowCloseRecovered === true || ownershipRecoveryEligible,
+    sameRepShallowCloseRecoveredFrom:
+      state.sameRepShallowCloseRecoveredFrom ?? ownershipRecoveredFrom,
+    sameRepShallowAuthoritativeCloseOwnershipRecovered: ownershipRecoveryEligible,
+    sameRepShallowAuthoritativeCloseOwnershipRecoveredFrom: ownershipRecoveredFrom,
   };
 }
