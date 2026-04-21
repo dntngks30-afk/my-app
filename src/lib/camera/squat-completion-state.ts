@@ -711,6 +711,24 @@ export interface SquatCompletionState extends MotionCompletionResult {
   guardedShallowRecoveredSuffixBlockedReason?: string | null;
 
   /**
+   * PR-SHALLOW-SAME-REP-ADMISSION-CLOSE-RECOVERY-01:
+   * Same-rep shallow admission was recovered inside completion-state ownership.
+   * Observability only; final pass still requires canonical shallow contract close.
+   */
+  sameRepShallowAdmissionRecovered?: boolean;
+  sameRepShallowAdmissionRecoveryReason?: string | null;
+  /**
+   * PR-SHALLOW-SAME-REP-ADMISSION-CLOSE-RECOVERY-01:
+   * Same-rep shallow close recovered from a narrow timing blocker after closure proof
+   * was already satisfied. Observability only; canonical closer remains the only writer.
+   */
+  sameRepShallowCloseRecovered?: boolean;
+  sameRepShallowCloseRecoveredFrom?:
+    | 'descent_span_too_short'
+    | 'ascent_recovery_span_too_short'
+    | null;
+
+  /**
    * PR-CAM-SHALLOW-PROOF-TRACE-11: shallow closure **proof 생성·소비** 단계별 진실 그래프(관측 전용).
    * pass/게이트/임계값 로직에서 읽지 않는다.
    */
@@ -1844,6 +1862,146 @@ function buildShallowClosureProofTrace(input: {
 const SHALLOW_OFFICIAL_CLOSE_MIN_CYCLE_MS = 800;
 const DISABLED_SHALLOW_OWNER_REOPEN_ULTRA_LOW_FLOOR = 0.07;
 
+function isSameRepShallowTimingCloseBlocker(
+  reason: string | null | undefined
+): reason is 'descent_span_too_short' | 'ascent_recovery_span_too_short' {
+  return reason === 'descent_span_too_short' || reason === 'ascent_recovery_span_too_short';
+}
+
+function shallowRecoverySetupClear(
+  state: SquatCompletionState,
+  options: EvaluateSquatCompletionStateOptions | undefined
+): boolean {
+  return state.setupMotionBlocked !== true && options?.setupMotionBlocked !== true;
+}
+
+function shallowRecoveryReadinessClear(state: SquatCompletionState): boolean {
+  return (
+    state.readinessStableDwellSatisfied !== false &&
+    state.attemptStartedAfterReady !== false
+  );
+}
+
+function shallowRecoveryShallowBandEligible(state: SquatCompletionState): boolean {
+  return (
+    state.officialShallowPathCandidate === true &&
+    (state.relativeDepthPeak ?? 0) < STANDARD_OWNER_FLOOR &&
+    state.evidenceLabel !== 'insufficient_signal'
+  );
+}
+
+function shallowRecoveryHasAttemptDescendCommitment(state: SquatCompletionState): boolean {
+  return (
+    state.attemptStarted === true &&
+    state.descendConfirmed === true &&
+    state.downwardCommitmentReached === true &&
+    (state.downwardCommitmentDelta ?? 0) > 0
+  );
+}
+
+function shallowRecoveryHasNoKnownStaleOrMixedRep(state: SquatCompletionState): boolean {
+  const br = state.canonicalTemporalEpochOrderBlockedReason ?? null;
+  return (
+    br !== 'mixed_rep_epoch_contamination' &&
+    br !== 'stale_prior_rep_epoch' &&
+    br !== 'recovery_not_after_reversal' &&
+    br !== 'reversal_not_after_peak' &&
+    br !== 'peak_not_after_descent'
+  );
+}
+
+function sameRepShallowAdmissionRecoveryEligible(
+  state: SquatCompletionState,
+  options: EvaluateSquatCompletionStateOptions | undefined
+): boolean {
+  if (state.completionSatisfied === true) return false;
+  if (state.officialShallowPathAdmitted === true) return false;
+  if (!shallowRecoveryShallowBandEligible(state)) return false;
+  if (!shallowRecoveryHasAttemptDescendCommitment(state)) return false;
+  if (!shallowRecoveryReadinessClear(state)) return false;
+  if (!shallowRecoverySetupClear(state, options)) return false;
+  if (!shallowRecoveryHasNoKnownStaleOrMixedRep(state)) return false;
+  if (state.eventCyclePromoted === true) return false;
+
+  const currentBlock = state.completionBlockedReason ?? state.officialShallowPathBlockedReason ?? null;
+  const notes = state.squatEventCycle?.notes ?? [];
+  const hasResidualAdmissionSignature =
+    currentBlock === 'not_armed' ||
+    currentBlock === 'freeze_or_latch_missing' ||
+    notes.includes('freeze_or_latch_missing') ||
+    state.baselineFrozen === false ||
+    state.peakLatched === false;
+  if (!hasResidualAdmissionSignature) return false;
+
+  const eventDescendEvidence =
+    state.squatEventCycle?.descentDetected === true ||
+    (state.squatEventCycle?.descentFrames ?? 0) > 0 ||
+    state.selectedCanonicalDescentTimingEpochAtMs != null ||
+    state.legitimateKinematicShallowDescentOnsetAtMs != null;
+  return eventDescendEvidence;
+}
+
+function sameRepShallowCloseRecoveryEligible(
+  state: SquatCompletionState,
+  options: EvaluateSquatCompletionStateOptions | undefined
+): boolean {
+  if (state.completionSatisfied === true) return false;
+  if (state.completionPassReason !== 'not_confirmed') return false;
+  if (!isSameRepShallowTimingCloseBlocker(state.completionBlockedReason)) return false;
+  if (!shallowRecoveryShallowBandEligible(state)) return false;
+  if (state.officialShallowPathAdmitted !== true) return false;
+  if (!shallowRecoveryHasAttemptDescendCommitment(state)) return false;
+  if (!shallowRecoveryReadinessClear(state)) return false;
+  if (!shallowRecoverySetupClear(state, options)) return false;
+  if (state.eventCyclePromoted === true) return false;
+
+  if (state.reversalConfirmedAfterDescend !== true) return false;
+  if (state.recoveryConfirmedAfterReversal !== true) return false;
+  if (state.officialShallowReversalSatisfied !== true) return false;
+  if (state.officialShallowAscentEquivalentSatisfied !== true) return false;
+  if (state.officialShallowClosureProofSatisfied !== true) return false;
+  if (state.reversalConfirmedByRuleOrHmm !== true) return false;
+
+  if (state.canonicalTemporalEpochOrderSatisfied !== true) return false;
+  if (!shallowRecoveryHasNoKnownStaleOrMixedRep(state)) return false;
+  if (state.standingRecoveredAtMs == null) return false;
+  if (state.peakLatchedAtIndex == null || state.peakLatchedAtIndex <= 0) return false;
+
+  return true;
+}
+
+export function applySameRepShallowAdmissionCloseRecovery(
+  state: SquatCompletionState,
+  options?: EvaluateSquatCompletionStateOptions
+): SquatCompletionState {
+  let next = state;
+
+  if (sameRepShallowAdmissionRecoveryEligible(next, options)) {
+    next = {
+      ...next,
+      officialShallowPathAdmitted: true,
+      officialShallowPathReason: next.officialShallowPathReason ?? 'same_rep_shallow_admission_recovery',
+      officialShallowPathBlockedReason: null,
+      sameRepShallowAdmissionRecovered: true,
+      sameRepShallowAdmissionRecoveryReason: next.completionBlockedReason ?? 'freeze_or_latch_missing',
+    };
+  }
+
+  if (sameRepShallowCloseRecoveryEligible(next, options)) {
+    const recoveredFrom = isSameRepShallowTimingCloseBlocker(state.completionBlockedReason)
+      ? state.completionBlockedReason
+      : null;
+    next = {
+      ...next,
+      completionBlockedReason: null,
+      sameRepShallowCloseRecovered: true,
+      sameRepShallowCloseRecoveredFrom: recoveredFrom,
+    };
+  }
+
+  return next;
+}
+
 function disabledCompletionOwnerShallowAdmissibilityReopen(
   state: SquatCompletionState
 ): SquatCompletionState {
@@ -2062,6 +2220,8 @@ export function evaluateSquatCompletionState(
    * (completionSatisfied / completionBlockedReason / completionPassReason) is not modified.
    */
   state = stampPreCanonicalObservability(state, frames, options);
+
+  state = applySameRepShallowAdmissionCloseRecovery(state, options);
 
   /**
    * PR-CAM-CANONICAL-SHALLOW-CLOSER-02: canonical contract derive — 정확히 1회.

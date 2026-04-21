@@ -44,6 +44,9 @@ const REQUIRED_PROOF_BUNDLE = [
 
   // PR-P3 (Absurd-Pass Registry Normalization)
   { path: 'scripts/camera-pr-p3-squat-absurd-pass-registry-normalization-smoke.mjs', group: 'p3/absurd-pass-registry' },
+
+  // PR-SHALLOW-SAME-REP-ADMISSION-CLOSE-RECOVERY-01
+  { path: 'scripts/camera-pr-shallow-same-rep-admission-close-recovery-01-smoke.mjs', group: 'shallow/same-rep-recovery' },
 ];
 
 let failed = 0;
