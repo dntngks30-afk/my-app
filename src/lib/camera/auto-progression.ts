@@ -48,6 +48,29 @@ import {
   type SquatUiProgressionLatchGateInput,
   type SquatUiProgressionLatchGateResult,
 } from './squat/squat-ui-progression-latch-gate';
+import {
+  SQUAT_ULTRA_LOW_TRAJECTORY_SHORT_CYCLE_UI_BLOCKED_REASON,
+  SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON,
+  SQUAT_BLENDED_EARLY_PEAK_CONTAMINATED_FALSE_PASS_BLOCKED_REASON,
+  evaluateSquatAbsurdPassRegistry,
+  shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass,
+  shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass,
+  shouldBlockSquatBlendedEarlyPeakContaminatedFalsePassFinalPass,
+} from './squat/squat-absurd-pass-registry';
+
+/**
+ * PR-P3 compat re-exports. These three predicate functions and the
+ * three blocked-reason constants moved into
+ * `squat-absurd-pass-registry.ts` as part of the P3 normalization PR.
+ * They are re-exported here unchanged so external smokes / callers
+ * that import them from `auto-progression` continue to work without
+ * code change.
+ */
+export {
+  shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass,
+  shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass,
+  shouldBlockSquatBlendedEarlyPeakContaminatedFalsePassFinalPass,
+};
 
 export type ExerciseProgressionState =
   | 'idle'
@@ -1160,55 +1183,33 @@ function getPassConfirmationMinStableFrames(
       : REQUIRED_STABLE_FRAMES;
 }
 
+/**
+ * PR-P3 (Squat Absurd-Pass Registry Normalization) — late final-pass
+ * veto layer. Completion-owner truth is the sole opener; this layer is
+ * block-only and consumes the single absurd-pass registry in
+ * `squat-absurd-pass-registry.ts`. The production veto order is
+ * preserved by `SQUAT_ACTIVE_ABSURD_PASS_REGISTRY` (same input → same
+ * family fires → same blocked reason).
+ */
 function applySquatFinalBlockerVetoLayer(input: {
   stepId: CameraStepId;
   uiGate: SquatUiGate;
   squatCompletionState: SquatCompletionState | undefined;
   squatCycleDebug: SquatCycleDebug | undefined;
 }): SquatUiGate {
-  if (
-    input.uiGate.uiProgressionAllowed === true &&
-    shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass(
-      input.stepId,
-      input.squatCompletionState,
-      input.squatCycleDebug
-    )
-  ) {
-    return {
-      uiProgressionAllowed: false,
-      uiProgressionBlockedReason: SQUAT_ULTRA_LOW_TRAJECTORY_SHORT_CYCLE_UI_BLOCKED_REASON,
-    };
-  }
+  if (input.uiGate.uiProgressionAllowed !== true) return input.uiGate;
 
-  if (
-    input.uiGate.uiProgressionAllowed === true &&
-    shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass(
-      input.stepId,
-      input.squatCompletionState,
-      input.squatCycleDebug
-    )
-  ) {
-    return {
-      uiProgressionAllowed: false,
-      uiProgressionBlockedReason: SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON,
-    };
-  }
+  const verdict = evaluateSquatAbsurdPassRegistry({
+    stepId: input.stepId,
+    squatCompletionState: input.squatCompletionState,
+    squatCycleDebug: input.squatCycleDebug,
+  });
+  if (verdict == null) return input.uiGate;
 
-  if (
-    input.uiGate.uiProgressionAllowed === true &&
-    shouldBlockSquatBlendedEarlyPeakContaminatedFalsePassFinalPass(
-      input.stepId,
-      input.squatCompletionState,
-      input.squatCycleDebug
-    )
-  ) {
-    return {
-      uiProgressionAllowed: false,
-      uiProgressionBlockedReason: SQUAT_BLENDED_EARLY_PEAK_CONTAMINATED_FALSE_PASS_BLOCKED_REASON,
-    };
-  }
-
-  return input.uiGate;
+  return {
+    uiProgressionAllowed: false,
+    uiProgressionBlockedReason: verdict.blockedReason,
+  };
 }
 
 /**
@@ -1739,163 +1740,6 @@ function squatMinimumCycleOkForFinalPass(
   }
   const ms = evaluatorResult.debug?.squatCompletionState?.cycleDurationMs;
   if (typeof ms === 'number') return ms >= SQUAT_ARMING_MS;
-  return true;
-}
-
-/**
- * PR-SQUAT-ULTRA-LOW-FINAL-GATE-03: completion-state 에서 shallow rescue 를 살린 뒤,
- * seated/too-early ultra-low trajectory rescue 만 UI/final pass 에서 초저특이로 차단.
- * standard_cycle · rule reversal deep · 긴 사이클 ultra-low trajectory 에는 적용 안 함.
- */
-const SQUAT_ULTRA_LOW_TRAJECTORY_SHORT_CYCLE_UI_BLOCKED_REASON =
-  'minimum_cycle_duration_not_met:ultra_low_trajectory';
-
-/**
- * 스모크 전용 export — production 은 `evaluateExerciseAutoProgress` 내부와 동일 시그니처만 통과시킨다.
- */
-export function shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass(
-  stepId: CameraStepId,
-  squatCompletionState: unknown,
-  squatCycleDebug: SquatCycleDebug | undefined
-): boolean {
-  if (stepId !== 'squat') return false;
-  if (squatCompletionState == null || typeof squatCompletionState !== 'object') return false;
-  const cs = squatCompletionState as {
-    completionPassReason?: string;
-    reversalConfirmedBy?: string;
-    trajectoryReversalRescueApplied?: boolean;
-  };
-  if (cs.completionPassReason !== 'ultra_low_rom_cycle') return false;
-  if (cs.reversalConfirmedBy !== 'trajectory') return false;
-  if (cs.trajectoryReversalRescueApplied !== true) return false;
-  if (squatCycleDebug?.minimumCycleDurationSatisfied !== false) return false;
-  return true;
-}
-
-/**
- * PR-SETUP-SERIES-START-01: setup/arming 폴백 + 시리즈 시작 피크 앵커 오염으로
- * trajectory ultra-low 가 닫히는 false positive 만 final pass 에서 차단. completion truth 유지.
- */
-const SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON = 'setup_series_start_false_pass';
-const SQUAT_BLENDED_EARLY_PEAK_CONTAMINATED_FALSE_PASS_BLOCKED_REASON =
-  'contaminated_blended_early_peak_false_pass';
-
-function squatEventCycleNotesIndicateSeriesStartContamination(notes: string[] | undefined): boolean {
-  if (notes == null || notes.length === 0) return false;
-  return notes.includes('peak_anchor_at_series_start') || notes.includes('descent_weak');
-}
-
-/**
- * 스모크·계약용 export — `evaluateExerciseAutoProgress` 가 사용하는 조건과 동일.
- */
-export function shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass(
-  stepId: CameraStepId,
-  squatCompletionState: unknown,
-  squatCycleDebug: SquatCycleDebug | undefined
-): boolean {
-  if (stepId !== 'squat') return false;
-  if (squatCompletionState == null || typeof squatCompletionState !== 'object') return false;
-  const cs = squatCompletionState as {
-    evidenceLabel?: string;
-    reversalConfirmedBy?: string;
-    trajectoryReversalRescueApplied?: boolean;
-    committedAtMs?: number;
-    reversalAtMs?: number;
-    descendStartAtMs?: number;
-    squatDescentToPeakMs?: number;
-    peakLatchedAtIndex?: number | null;
-    squatEventCycle?: { notes?: string[] };
-  };
-  if (cs.evidenceLabel !== 'ultra_low_rom') return false;
-  if (cs.reversalConfirmedBy !== 'trajectory') return false;
-  if (cs.trajectoryReversalRescueApplied !== true) return false;
-  if (squatCycleDebug?.armingFallbackUsed !== true) return false;
-  if (cs.peakLatchedAtIndex == null || cs.peakLatchedAtIndex > 0) return false;
-  if (cs.committedAtMs == null || cs.reversalAtMs == null || cs.descendStartAtMs == null) return false;
-  if (cs.descendStartAtMs !== cs.committedAtMs || cs.committedAtMs !== cs.reversalAtMs) return false;
-  if (cs.squatDescentToPeakMs == null || cs.squatDescentToPeakMs > 0) return false;
-  const notes = cs.squatEventCycle?.notes;
-  if (!squatEventCycleNotesIndicateSeriesStartContamination(notes)) return false;
-  return true;
-}
-
-/**
- * PR-CAM-SQUAT-BLENDED-EARLY-PEAK-FALSE-PASS-LOCK-01:
- * blended/assisted shallow-like + very-early peak + no event-cycle rescue contamination family만
- * final-pass에서 차단한다. 단일 필드 기반 차단 금지.
- */
-export function shouldBlockSquatBlendedEarlyPeakContaminatedFalsePassFinalPass(
-  stepId: CameraStepId,
-  squatCompletionState: unknown,
-  squatCycleDebug: SquatCycleDebug | undefined
-): boolean {
-  if (stepId !== 'squat') return false;
-  if (squatCompletionState == null || typeof squatCompletionState !== 'object') return false;
-
-  const cs = squatCompletionState as {
-    evidenceLabel?: string;
-    completionPassReason?: string;
-    completionTruthPassed?: boolean;
-    relativeDepthPeak?: number;
-    relativeDepthPeakSource?: string | null;
-    rawDepthPeakPrimary?: number | null;
-    rawDepthPeakBlended?: number | null;
-    eventCycleDetected?: boolean;
-    eventCyclePromoted?: boolean;
-    peakLatchedAtIndex?: number | null;
-  };
-
-  const dbg = squatCycleDebug ?? {};
-  const evidenceLooksShallowLike =
-    cs.evidenceLabel === 'ultra_low_rom' ||
-    cs.evidenceLabel === 'low_rom' ||
-    cs.completionPassReason === 'ultra_low_rom_cycle' ||
-    cs.completionPassReason === 'low_rom_cycle' ||
-    (typeof cs.relativeDepthPeak === 'number' && cs.relativeDepthPeak > 0 && cs.relativeDepthPeak < 0.12);
-  if (!evidenceLooksShallowLike) return false;
-
-  const blendedAssistContamination =
-    cs.relativeDepthPeakSource === 'blended' &&
-    dbg.armingDepthBlendAssisted === true &&
-    (dbg.armingFallbackUsed === true || dbg.armingDepthSource === 'fallback_assisted_blended');
-  if (!blendedAssistContamination) return false;
-
-  // index <= 1: original coverage (extreme/synthetic + most-frequent observed case)
-  const earlyPeakLatchedCore =
-    (cs.peakLatchedAtIndex != null && cs.peakLatchedAtIndex <= 1) ||
-    (dbg.peakLatchedAtIndex != null && dbg.peakLatchedAtIndex <= 1);
-  // Observed-family extension: index=2 must also bring canonicalShallowContractProvenanceOnlySignalPresent
-  // so this branch only fires when provenance-without-reversal contamination is confirmed —
-  // legitimate PR-F shallow recovery has reversalEvidenceSatisfied=true, which keeps that flag false.
-  const earlyPeakLatchedObservedFamily =
-    (cs.peakLatchedAtIndex === 2 || dbg.peakLatchedAtIndex === 2) &&
-    dbg.canonicalShallowContractProvenanceOnlySignalPresent === true;
-  const earlyPeakLatched = earlyPeakLatchedCore || earlyPeakLatchedObservedFamily;
-  if (!earlyPeakLatched) return false;
-
-  const noStrongEventCycleRescue =
-    cs.eventCycleDetected !== true &&
-    dbg.eventCycleDetected !== true &&
-    cs.eventCyclePromoted !== true &&
-    dbg.eventCyclePromoted !== true;
-  if (!noStrongEventCycleRescue) return false;
-
-  const completionWeak =
-    cs.completionTruthPassed === false && cs.completionPassReason === 'not_confirmed';
-  if (!completionWeak) return false;
-
-  const primaryDepth = Math.max(
-    0,
-    Number(cs.rawDepthPeakPrimary ?? dbg.rawDepthPeakPrimary ?? dbg.squatDepthPeakPrimary ?? 0)
-  );
-  const blendedDepth = Math.max(
-    0,
-    Number(cs.rawDepthPeakBlended ?? dbg.rawDepthPeakBlended ?? dbg.squatDepthPeakBlended ?? 0)
-  );
-  const primaryDepthNegligibleVsBlended =
-    blendedDepth > 0 && (primaryDepth <= 0.004 || primaryDepth <= blendedDepth * 0.35);
-  if (!primaryDepthNegligibleVsBlended) return false;
-
   return true;
 }
 

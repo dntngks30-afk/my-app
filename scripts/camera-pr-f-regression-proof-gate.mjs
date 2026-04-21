@@ -41,6 +41,9 @@ const REQUIRED_PROOF_BUNDLE = [
 
   // PR-01 (Completion-First Authority Freeze)
   { path: 'scripts/camera-pr-01-squat-completion-first-authority-freeze-smoke.mjs', group: 'pr01/authority-freeze' },
+
+  // PR-P3 (Absurd-Pass Registry Normalization)
+  { path: 'scripts/camera-pr-p3-squat-absurd-pass-registry-normalization-smoke.mjs', group: 'p3/absurd-pass-registry' },
 ];
 
 let failed = 0;
