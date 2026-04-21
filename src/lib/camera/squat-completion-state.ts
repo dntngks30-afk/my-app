@@ -798,6 +798,22 @@ export type EvaluateSquatCompletionStateOptions = {
   seedBaselineStandingDepthPrimary?: number;
   seedBaselineStandingDepthBlended?: number;
   /**
+   * PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-FOLLOWUP:
+   * pre-arming standing window 의 `kneeAngleAvg` 중앙값. arming이 앞쪽 standing 프레임을
+   * 잘라내면 `evaluateSquatCompletionCore` 가 받는 slice 는 이미 하강 구간에서 시작하므로
+   * 내부의 `computeBaselineKneeAngleAvgMedian(depthFrames.slice(0,6))` 는 descent 프레임을
+   * 기준으로 median 을 뽑아 source #4 (`legitimateKinematicShallowDescentOnsetFrame`) 의
+   * 기준선이 true standing 에서 벗어난다 — representative shallow fixture 에서 소스가 null 이
+   * 되는 원인.
+   *
+   * 이 옵션은 evaluator 에서 pre-arming `valid` 버퍼의 standing window kneeAngleAvg median 을
+   * 계산해 넘겨주는 additive seed 다. 완료-코어는 finite seed 가 있으면 slice 지역 median 대신
+   * 이 값을 사용해 source #4 의 threshold 를 standing 기준선으로 정합시킨다.
+   * threshold/authority-law/fixture 는 변경하지 않는다 — design SSOT §4.1 이 명시한 "standing-
+   * baseline window" 를 arming 절단 이전 경계에서 취한다는 동일 의미를 복원하는 플러밍이다.
+   */
+  seedBaselineKneeAngleAvg?: number;
+  /**
    * PR-CAM-SHALLOW-TRAJECTORY-BRIDGE-05: 평가기에서 이미 계산된 setup 차단 — completion 코어와 독립.
    */
   setupMotionBlocked?: boolean;

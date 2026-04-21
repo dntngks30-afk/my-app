@@ -1,9 +1,10 @@
-﻿# Project Codex defaults (loaded when project is trusted)
-# IDE extension용: 기본값 자체를 구현 친화적으로 변경
-# 주의: profiles는 CLI에선 유용하지만, IDE extension에선 핵심 해결책이 아님
-
-model = "gpt-5.4"
-model_reasoning_effort = "medium"
+﻿# =============================================================================
+# Codex config.toml
+# 목적:
+# - IDE extension / Codex app에서 모델을 고정하지 않고
+#   입력창 아래 모델 선택기로 수동 선택 가능하게 유지
+# - approval / sandbox / web search 기본값만 구현 친화적으로 유지
+# =============================================================================
 
 approval_policy = "never"
 sandbox_mode    = "danger-full-access"
@@ -14,6 +15,14 @@ sandbox = "elevated"
 
 [projects.'C:\projects\my-app']
 trust_level = "trusted"
+
+# -----------------------------------------------------------------------------
+# 중요
+# - IDE extension에서 수동 모델 선택을 원하면 top-level에 model / model_reasoning_effort
+#   / profile 을 두지 않는 편이 안전하다.
+# - profiles는 현재 IDE extension에서 지원되지 않으므로,
+#   아래 프로필들은 CLI용 보관 템플릿 정도로만 두는 것이 좋다.
+# -----------------------------------------------------------------------------
 
 [profiles.architect]
 approval_policy = "on-request"

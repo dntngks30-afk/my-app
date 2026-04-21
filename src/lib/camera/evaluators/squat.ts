@@ -285,11 +285,42 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       })
     : null;
 
+  /**
+   * PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-FOLLOWUP:
+   * pre-arming standing window 의 `kneeAngleAvg` median 을 완료 코어로 seed 한다.
+   *
+   * arming (`computeSquatCompletionArming`) 은 standing 이후 프레임만 잘라 `completionFrames`
+   * 로 전달하므로, 완료 코어가 내부에서 `depthFrames.slice(0, 6)` 의 knee median 을 뽑으면
+   * representative shallow fixture 에서는 descent 프레임이 섞인 median (≈96°) 이 되어
+   * source #4 (`legitimateKinematicShallowDescentOnsetFrame`) 가 항상 null 이 된다.
+   *
+   * 여기서는 **arming truncation 이전** 의 `valid` 버퍼 앞 6프레임에서 동일한 median 규칙
+   * (median, not mean — design SSOT §4.1 clause 3) 으로 한 번만 계산해 seed 로 넘긴다.
+   * threshold/authority-law/fixture 는 건드리지 않으며, arming 이 없거나 pre-arming 버퍼가
+   * 짧으면 seed 는 `undefined` 로 남아 완료 코어의 기존 slice-local fallback 이 그대로 쓰인다.
+   */
+  const BASELINE_WINDOW_EVAL_KNEE = 6;
+  const MIN_BASELINE_KNEE_SAMPLES = 4;
+  const kneeBaselineSamples = valid
+    .slice(0, BASELINE_WINDOW_EVAL_KNEE)
+    .map((f) => f.derived?.kneeAngleAvg ?? null)
+    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+    .sort((a, b) => a - b);
+  let seedBaselineKneeAngleAvg: number | undefined;
+  if (kneeBaselineSamples.length >= MIN_BASELINE_KNEE_SAMPLES) {
+    const mid = kneeBaselineSamples.length >> 1;
+    seedBaselineKneeAngleAvg =
+      kneeBaselineSamples.length % 2 === 0
+        ? (kneeBaselineSamples[mid - 1]! + kneeBaselineSamples[mid]!) / 2
+        : kneeBaselineSamples[mid]!;
+  }
+
   let state = evaluateSquatCompletionState(completionFrames, {
     hmm: squatHmm,
     hmmArmingAssistApplied: armingAssistDec.assistApplied,
     seedBaselineStandingDepthPrimary: completionArming.armingBaselineStandingDepthPrimary,
     seedBaselineStandingDepthBlended: completionArming.armingBaselineStandingDepthBlended,
+    seedBaselineKneeAngleAvg,
     setupMotionBlocked: setupBlock.blocked,
     // DESCENT-TRUTH-RESET-01: shared descent truth aligns descendConfirmed to pass-window truth.
     sharedDescentTruth: sharedDescentTruth ?? undefined,

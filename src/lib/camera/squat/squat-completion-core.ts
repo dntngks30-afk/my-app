@@ -1958,14 +1958,41 @@ export function evaluateSquatCompletionCore(
    * (`canonicalShallowContractDrovePass`, `legitimateKinematicShallowDescentOnset*`)
    * required for a later authority-law session.
    */
+  /**
+   * PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-FOLLOWUP:
+   * baseline-sourcing 정합 (Target 1 / Target 4).
+   *
+   * `depthFrames` 는 evaluator 의 arming slice (`completionFrames`) 기준이므로
+   * shallow 대표 fixture 에서 slice[0] 이 이미 하강 구간이다. 이 경우
+   *   (a) `computeBaselineKneeAngleAvgMedian(first 6 rows)` 의 median 이 descent
+   *       프레임을 섞어 뽑혀 threshold 가 true standing 기준보다 훨씬 낮아지고,
+   *   (b) `baselineFreezeFrameIndex = depthFrames[5].index` 이 peak index 보다
+   *       뒤에 있어 `[freezeIdx, peakIdx)` 검색 구간이 공집합이 된다.
+   *
+   * evaluator 가 pre-arming `valid` 버퍼 기준의 standing kneeAngleAvg median 을
+   * `seedBaselineKneeAngleAvg` 로 넘겨주면 baseline 은 true standing 값으로
+   * 복원되고, 동시에 baseline 은 slice 시작 이전에 이미 동결된 셈이므로
+   * `baselineFreezeFrameIndex` 는 slice 의 가장 앞 depthFrame 으로 정합한다.
+   *
+   * seed 가 없을 때(직접 호출 / pre-arming 경로)는 기존 동작을 그대로 유지한다 —
+   * design SSOT §4.1 의 "standing-baseline window" 의미 자체는 동일하며,
+   * threshold 값(5°), sustain 값(2 frames), authority-law 는 전혀 변경되지 않는다.
+   */
+  const seedBaselineKneeAngleAvgOpt = options?.seedBaselineKneeAngleAvg;
+  const hasSeedBaselineKneeAngleAvg =
+    typeof seedBaselineKneeAngleAvgOpt === 'number' && Number.isFinite(seedBaselineKneeAngleAvgOpt);
+  const baselineKneeAngleAvgValue = hasSeedBaselineKneeAngleAvg
+    ? seedBaselineKneeAngleAvgOpt
+    : computeBaselineKneeAngleAvgMedian(
+        validFrames,
+        depthFrames.map((f) => f.index),
+      );
   const baselineFreezeFrameIndex =
     depthFreeze != null && depthFrames.length >= MIN_BASELINE_FRAMES
-      ? depthFrames[Math.min(BASELINE_WINDOW, depthFrames.length) - 1]!.index
+      ? hasSeedBaselineKneeAngleAvg
+        ? depthFrames[0]!.index
+        : depthFrames[Math.min(BASELINE_WINDOW, depthFrames.length) - 1]!.index
       : null;
-  const baselineKneeAngleAvgValue = computeBaselineKneeAngleAvgMedian(
-    validFrames,
-    depthFrames.map((f) => f.index),
-  );
   const legitimateKinematicOnset =
     depthFreeze != null
       ? findLegitimateKinematicShallowDescentOnsetFrame({
