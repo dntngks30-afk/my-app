@@ -224,6 +224,28 @@ export type SquatEvidenceLabel =
 export type SquatShallowContractBand = Extract<SquatEvidenceLabel, 'standard' | 'low_rom' | 'ultra_low_rom'>;
 
 /**
+ * PR-SHALLOW-AUTHORITATIVE-CLOSE-WRITER-MISS-OBSERVABILITY-01
+ *
+ * Single diagnostic label for why `applyCanonicalShallowClosureFromContract` did not apply a shallow
+ * authoritative close write. **Sink-only** — not a product pass/block authority surface.
+ */
+export type OfficialShallowOwnerWriteMissReason =
+  | 'not_admitted'
+  | 'descend_not_confirmed'
+  | 'reversal_not_confirmed'
+  | 'recovery_not_confirmed'
+  | 'closure_proof_not_satisfied'
+  | 'ascent_equivalent_not_satisfied'
+  | 'temporal_order_not_satisfied'
+  | 'setup_not_clear'
+  | 'stale_or_mixed_rep_guard'
+  | 'descent_span_guard_failed'
+  | 'ascent_recovery_span_guard_failed'
+  | 'peak_latch_anchor_guard_failed'
+  | 'shallow_close_not_pending'
+  | 'writer_guard_unknown';
+
+/**
  * PR-02 Assist lock: completion 이 어떻게 최종 확정됐는지(관측·trace 전용).
  * success owner 가 아님 — PR-01 owner 는 completion truth 라인age 별도.
  */
@@ -579,6 +601,30 @@ export interface SquatCompletionState extends MotionCompletionResult {
     | 'canonical_authoritative'
     | 'canonical_guarded_trajectory'
     | 'same_rep_official_shallow_owner_write';
+
+  /**
+   * PR-SHALLOW-AUTHORITATIVE-CLOSE-WRITER-MISS-OBSERVABILITY-01
+   *
+   * **Sink-only / diagnostic-only.** Emitted only at `applyCanonicalShallowClosureFromContract`.
+   * Do not consume as grant truth, opener input, registry signal, or final-pass authority.
+   */
+  officialShallowOwnerWriteCandidate?: boolean;
+  officialShallowOwnerWriteApplied?: boolean;
+  officialShallowOwnerWriteMissReason?: OfficialShallowOwnerWriteMissReason | null;
+  writerSawOfficialShallowPathAdmitted?: boolean;
+  writerSawDescendConfirmed?: boolean;
+  writerSawReversalConfirmedAfterDescend?: boolean;
+  writerSawRecoveryConfirmedAfterReversal?: boolean;
+  writerSawOfficialShallowReversalSatisfied?: boolean;
+  writerSawOfficialShallowAscentEquivalentSatisfied?: boolean;
+  writerSawOfficialShallowClosureProofSatisfied?: boolean;
+  writerSawSetupMotionBlocked?: boolean;
+  writerSawTemporalOrderSatisfied?: boolean;
+  writerSawPeakLatched?: boolean;
+  writerSawBaselineFrozen?: boolean;
+  writerSawStaleOrMixedRepBlocked?: boolean;
+  writerSawDescentSpanSatisfied?: boolean;
+  writerSawAscentRecoverySpanSatisfied?: boolean;
 
   /**
    * `deriveCanonicalShallowCompletionContract` 스냅샷 — **shallow 관련 디버그 1차 SSOT**.

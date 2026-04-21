@@ -1,0 +1,158 @@
+PR-SHALLOW-AUTHORITATIVE-CLOSE-WRITER-MISS-OBSERVABILITY-01
+
+한 줄 목적
+
+canonical shallow final writer가 왜 hit하지 않는지, hidden guard를 런타임에서 한 줄로 드러내고 고정한다.
+
+왜 이 PR이 먼저인가
+
+지금은 이미 visible proof cluster는 true다.
+그런데도 final close가 false다.
+
+즉 다음에 또 바로 behavior를 바꾸면,
+
+어떤 숨은 guard를 건드렸는지 모른 채
+broadening이 일어날 위험이 크다.
+
+이번엔 그걸 하면 안 된다.
+그래서 다음 PR은 무조건 no-behavior-change observability PR 이어야 한다.
+
+범위
+
+수정 범위는 아주 좁게 잡는다.
+
+src/lib/camera/squat-completion-canonical.ts
+src/lib/camera/squat-completion-state.ts
+pass-through만 필요할 때
+새 smoke 1개
+PR-F proof gate 등록
+
+절대 금지:
+
+auto-progression.ts
+authority-law
+pass-core
+P3 registry
+UI latch
+deep/standard path
+threshold 변경
+close success 조건 완화
+이번 PR에서 추가해야 할 필드
+
+applyCanonicalShallowClosureFromContract(...) 경계에서 아래를 반드시 남긴다.
+
+writer 진입 여부
+officialShallowOwnerWriteCandidate
+officialShallowOwnerWriteApplied
+단일 miss reason
+officialShallowOwnerWriteMissReason
+
+이건 enum/string 하나로 남겨야 한다.
+예시:
+
+not_admitted
+descend_not_confirmed
+reversal_not_confirmed
+recovery_not_confirmed
+closure_proof_not_satisfied
+ascent_equivalent_not_satisfied
+temporal_order_not_satisfied
+setup_not_clear
+stale_or_mixed_rep_guard
+span_guard_failed
+writer_guard_unknown
+guard snapshot
+
+writer가 실제로 본 guard를 그대로 남긴다.
+
+writerSawOfficialShallowPathAdmitted
+writerSawDescendConfirmed
+writerSawReversalConfirmedAfterDescend
+writerSawRecoveryConfirmedAfterReversal
+writerSawOfficialShallowReversalSatisfied
+writerSawOfficialShallowAscentEquivalentSatisfied
+writerSawOfficialShallowClosureProofSatisfied
+writerSawSetupMotionBlocked
+writerSawTemporalOrderSatisfied
+writerSawPeakLatched
+writerSawBaselineFrozen
+writerSawStaleOrMixedRepBlocked
+writerSawDescentSpanSatisfied
+writerSawAscentRecoverySpanSatisfied
+
+핵심은 이거다.
+
+final writer가 실제로 검사한 모든 조건을 그대로 드러내야 한다.
+지금처럼 “겉으로는 다 true처럼 보이는데 왜 miss인지 모르는 상태”를 끝내야 한다.
+
+이번 PR의 acceptance
+
+이번 PR은 pass/fail을 바꾸면 실패다.
+
+성공 기준은 이것뿐이다.
+
+현재 clean shallow fail trace가 여전히 fail한다
+대신 officialShallowOwnerWriteCandidate=true/false 와 officialShallowOwnerWriteMissReason 이 반드시 남는다
+miss reason이 writer_guard_unknown 남발이면 실패
+standing still / seated hold / setup contamination / stale / mixed-rep / early-pass는 여전히 block
+deep standard는 그대로 pass
+PR-F gate green
+no skip expansion
+새 smoke 설계
+
+파일명:
+
+scripts/camera-pr-shallow-authoritative-close-writer-miss-observability-01-smoke.mjs
+
+필수 섹션:
+
+1. clean shallow fail fixture
+
+현재 업로드된 clean trace처럼
+
+setupMotionBlocked=false
+admitted=true
+closureProof=true
+ascentEquivalent=true
+reversalSatisfied=true
+인데도 fail하는 케이스를 넣고,
+반드시 아래를 assert한다.
+officialShallowOwnerWriteApplied === false
+officialShallowOwnerWriteMissReason !== null
+officialShallowOwnerWriteMissReason !== "writer_guard_unknown"
+2. transient-setup trace
+
+초반 setup spike가 있었던 trace는
+이번 PR에서 pass로 만들지 않는다.
+그냥 writer miss reason이 무엇인지 드러내기만 한다.
+
+3. weird-pass locked
+standing still blocked
+seated hold blocked
+setup contamination blocked
+stale prior rep blocked
+mixed-rep blocked
+pass-core-only blocked
+4. deep standard unchanged
+standard_cycle 유지
+이 PR 이후의 다음 단계
+
+이 PR이 끝나면 그때야 비로소 다음 fix PR을 자를 수 있다.
+
+그 fix PR은 이렇게 된다.
+
+PR-SHALLOW-AUTHORITATIVE-CLOSE-WRITER-GUARD-ALIGN-01
+
+단, 조건은 하나다.
+
+writer miss reason이 clean shallow gold-path에서
+딱 하나의 hidden guard 로 좁혀졌을 때만 간다.
+
+예를 들어:
+
+진짜 원인이 span_guard_failed 하나로 드러나면
+그 guard만 맞춘다
+setup_not_clear면 setup-clear propagation만 맞춘다
+temporal_order_not_satisfied면 writer 경계 temporal snapshot만 맞춘다
+
+즉 다음 fix는 원인 1개만 수정해야 한다.
