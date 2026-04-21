@@ -803,6 +803,28 @@ export interface SquatCompletionState extends MotionCompletionResult {
     | 'same_rep_rule_or_hmm_shallow_closure'
     | null;
   /**
+   * PR-SHALLOW-ANCHOR-PROVENANCE-RESET-AND-SPAN-ALIGN-01:
+   * An admitted official shallow rep with full same-rep close truth may rebind a
+   * stale/missing series-start peak anchor to the guarded current-rep local peak.
+   * Diagnostic/contract-alignment only; final pass still opens only through the
+   * canonical completion-owner writer.
+   */
+  currentRepShallowAnchorProvenanceResetApplied?: boolean;
+  currentRepShallowAnchorProvenanceResetFrom?:
+    | 'series_start_anchor'
+    | 'missing_latched_anchor'
+    | 'unlatched_anchor'
+    | 'baseline_not_frozen'
+    | 'peak_anchor_truth_missing'
+    | null;
+  currentRepShallowAnchorProvenanceResetSource?: OfficialShallowWriterAnchorSource;
+  currentRepShallowAnchorProvenanceResetIndex?: number | null;
+  sameRepShallowSpanAlignedToCurrentAnchor?: boolean;
+  sameRepShallowSpanAlignedFrom?:
+    | 'descent_span_too_short'
+    | 'ascent_recovery_span_too_short'
+    | null;
+  /**
    * PR-SHALLOW-AUTHORITATIVE-CLOSE-OWNERSHIP-RECOVERY-01:
    * Same-rep official shallow close proof was consumed by the final canonical
    * close writer. This is owner-write recovery, not an alternate opener.
@@ -2012,16 +2034,56 @@ function shallowRecoveryHasNoKnownStaleOrMixedRep(state: SquatCompletionState): 
   );
 }
 
-function shallowRecoveryHasSameRepPeakAnchor(state: SquatCompletionState): boolean {
-  if (state.peakLatchedAtIndex != null && state.peakLatchedAtIndex > 0) return true;
-  return (
+type SameRepShallowAnchorProvenance = {
+  aligned: boolean;
+  index: number | null;
+  source: OfficialShallowWriterAnchorSource;
+};
+
+function readSameRepShallowAnchorProvenance(
+  state: SquatCompletionState
+): SameRepShallowAnchorProvenance {
+  const latchedIndex = state.peakLatchedAtIndex ?? null;
+  if (latchedIndex != null && latchedIndex > 0) {
+    return { aligned: true, index: latchedIndex, source: 'peak_latched' };
+  }
+
+  const localIndex = state.guardedShallowLocalPeakIndex ?? null;
+  const localAnchorAligned =
     state.guardedShallowLocalPeakFound === true &&
     state.guardedShallowLocalPeakBlockedReason == null &&
-    state.guardedShallowLocalPeakIndex != null &&
-    state.guardedShallowLocalPeakIndex > 0 &&
+    localIndex != null &&
+    localIndex > 0 &&
     state.officialShallowStreamBridgeApplied === true &&
-    state.officialShallowClosureProofSatisfied === true
-  );
+    state.officialShallowClosureProofSatisfied === true;
+
+  if (localAnchorAligned) {
+    return { aligned: true, index: localIndex, source: 'guarded_shallow_local_peak' };
+  }
+
+  return { aligned: false, index: null, source: null };
+}
+
+function shallowRecoveryHasSameRepPeakAnchor(state: SquatCompletionState): boolean {
+  return readSameRepShallowAnchorProvenance(state).aligned;
+}
+
+function currentRepAnchorResetReason(
+  state: SquatCompletionState
+): SquatCompletionState['currentRepShallowAnchorProvenanceResetFrom'] {
+  const latchedIndex = state.peakLatchedAtIndex ?? null;
+  if (latchedIndex === 0) return 'series_start_anchor';
+  if (latchedIndex == null) return 'missing_latched_anchor';
+  if (state.peakLatched !== true) return 'unlatched_anchor';
+  if (state.baselineFrozen !== true) return 'baseline_not_frozen';
+  if (state.peakAnchorTruth !== 'committed_or_post_commit_peak') {
+    return 'peak_anchor_truth_missing';
+  }
+  return null;
+}
+
+function needsCurrentRepAnchorProvenanceReset(state: SquatCompletionState): boolean {
+  return currentRepAnchorResetReason(state) != null;
 }
 
 function sameRepShallowAdmissionRecoveryEligible(
@@ -2154,8 +2216,40 @@ export function applySameRepShallowAdmissionCloseRecovery(
       : isOfficialShallowAdmittedToClosedResidualBlocker(next.completionBlockedReason)
         ? next.completionBlockedReason
         : null;
+    const anchorProvenance = readSameRepShallowAnchorProvenance(next);
+    const anchorResetFrom = currentRepAnchorResetReason(next);
+    const shouldResetAnchor =
+      anchorProvenance.aligned === true &&
+      anchorProvenance.index != null &&
+      needsCurrentRepAnchorProvenanceReset(next);
+    const spanAlignedFrom = isSameRepShallowTimingCloseBlocker(next.completionBlockedReason)
+      ? next.completionBlockedReason
+      : null;
     next = {
       ...next,
+      ...(anchorProvenance.aligned === true
+        ? {
+            baselineFrozen: shouldResetAnchor ? true : next.baselineFrozen,
+            peakLatched: shouldResetAnchor ? true : next.peakLatched,
+            peakLatchedAtIndex:
+              shouldResetAnchor && anchorProvenance.index != null
+                ? anchorProvenance.index
+                : next.peakLatchedAtIndex,
+            peakAnchorTruth:
+              shouldResetAnchor
+                ? 'committed_or_post_commit_peak'
+                : next.peakAnchorTruth,
+            currentRepShallowAnchorProvenanceResetApplied: shouldResetAnchor,
+            currentRepShallowAnchorProvenanceResetFrom: shouldResetAnchor
+              ? anchorResetFrom
+              : next.currentRepShallowAnchorProvenanceResetFrom ?? null,
+            currentRepShallowAnchorProvenanceResetSource: anchorProvenance.source,
+            currentRepShallowAnchorProvenanceResetIndex: anchorProvenance.index,
+          }
+        : {}),
+      completionBlockedReason: spanAlignedFrom != null ? null : next.completionBlockedReason,
+      officialShallowPathBlockedReason:
+        spanAlignedFrom != null ? null : next.officialShallowPathBlockedReason,
       officialShallowAdmittedToClosedContractSatisfied: true,
       officialShallowAdmittedToClosedContractRecoveredFrom: recoveredFrom,
       officialShallowAdmittedToClosedContractSource:
@@ -2164,6 +2258,9 @@ export function applySameRepShallowAdmissionCloseRecovery(
           : 'same_rep_official_shallow_bridge_closure',
       sameRepShallowCloseRecovered: true,
       sameRepShallowCloseRecoveredFrom: next.sameRepShallowCloseRecoveredFrom ?? recoveredFrom,
+      sameRepShallowSpanAlignedToCurrentAnchor:
+        spanAlignedFrom != null ? true : next.sameRepShallowSpanAlignedToCurrentAnchor,
+      sameRepShallowSpanAlignedFrom: next.sameRepShallowSpanAlignedFrom ?? spanAlignedFrom,
     };
   }
 
