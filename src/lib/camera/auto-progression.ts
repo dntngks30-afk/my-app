@@ -94,20 +94,44 @@ export type { SquatEvidenceLevel };
 /**
  * PR-A — Final Pass Truth Surface Freeze (parent: `docs/pr/SSOT_SHALLOW_SQUAT_PASS_TRUTH_MAP_2026_04.md`).
  *
- * Canonical squat **product** pass/fail at the post-owner + UI gate layer (including
- * `applySquatFinalBlockerVetoLayer`). Same contract as `ExerciseGateResult.finalPassEligible` /
- * `progressionPassed` for squat when produced by `evaluateExerciseAutoProgress`.
+ * Canonical squat **product** pass/fail surface at the post-owner + UI gate
+ * layer (including `applySquatFinalBlockerVetoLayer`). Same contract as
+ * `ExerciseGateResult.finalPassEligible` / `progressionPassed` for squat
+ * when produced by `evaluateExerciseAutoProgress`.
  *
- * `completionTruthPassed`, `completionPassReason`, `completionBlockedReason`, and `cycleComplete`
- * are **not** this surface — they remain debug / compat sinks (PR-B may rebind consumers only).
+ * Authority-law position (PR-01 + PR-CAM-SQUAT-AUTHORITY-LAW-RESOLUTION):
+ * this surface is the **consumer** of the single opener law
+ *   `completionTruthPassed && completionOwnerPassed && gates clear
+ *    && P3 block-only registry clear => finalPassGranted`
+ * and a **non-opener mirror**. No field on this shape is an opener, an
+ * alternate owner, or a gate input anywhere else.
  *
- * Additive trace fields (`finalPassTruthSource`, `motionOwnerSource`, `finalPassGrantedReason`)
- * are sink-only and must **never** be read as gate inputs.
+ * `completionTruthPassed`, `completionPassReason`, `completionBlockedReason`,
+ * and `cycleComplete` are **not** this surface — they remain upstream
+ * completion-state truth fields and are read by the opener chain, not by
+ * this mirror.
+ *
+ * The additive trace fields (`finalPassTruthSource`, `motionOwnerSource`,
+ * `finalPassGrantedReason`) are **sink-only** diagnostics:
+ *   - `finalPassTruthSource`: always `'post_owner_ui_gate'` — identifies
+ *     which layer produced this mirror.
+ *   - `motionOwnerSource`: which rep-consistency adapter drove the
+ *     diagnostic (`'pass_core' | 'completion_state' | 'none'`). This is
+ *     NOT an opener and NOT an owner-truth source; it is a trace label
+ *     sourced from `readSquatCurrentRepPassTruth`. Under PR-01 the sole
+ *     opener is `completionOwnerPassed`.
+ *   - `finalPassGrantedReason`: diagnostic string; must not be read as a
+ *     gate input anywhere.
  */
 export interface SquatFinalPassTruthSurface {
   finalPassGranted: boolean;
   finalPassBlockedReason: string | null;
   finalPassTruthSource: 'post_owner_ui_gate';
+  /**
+   * Sink-only rep-consistency adapter trace — NOT an opener, NOT an
+   * owner-truth source. See interface-level doc for authority-law
+   * position.
+   */
   motionOwnerSource: 'pass_core' | 'completion_state' | 'none';
   /** Additive trace only — not a gate input. */
   finalPassGrantedReason: string | null;
@@ -575,16 +599,32 @@ type SquatPostOwnerPreLatchGateLayer = {
 };
 
 /**
- * PR-RF-STRUCT-12: Typed current-rep pass truth adapter.
+ * PR-RF-STRUCT-12: Typed current-rep pass truth **trace adapter**.
  *
- * Single downstream read boundary for squat final gating.
- * Exposes one coherent current-rep payload:
- *   - passEligible: pass-core truth (primary) or completion-state truth (fallback)
- *   - rep-bound timestamps from the authoritative source
- *   - ownerSource: which authority drove the result
- *   - timestampsConsistent: whether all timestamps belong to the same rep
+ * Authority-law position (PR-01 + PR-CAM-SQUAT-AUTHORITY-LAW-RESOLUTION):
+ * this adapter is a **rep-consistency diagnostic**, not a final-pass
+ * opener. The sole opener law is
+ *   `completionTruthPassed && completionOwnerPassed && gates clear
+ *    && P3 block-only registry clear => finalPassGranted`.
  *
- * Downstream gates must use this adapter, not scattered completion-state fields.
+ * What this adapter exposes (all frame-level trace for observability):
+ *   - `passEligible`: same-rep consistency indicator, sourced from
+ *     `squatPassCore.passDetected` when a pass-core result is available,
+ *     otherwise from `computeSquatCompletionOwnerTruth`. This is NOT the
+ *     final-pass opener; it is a rep-identity trace. Production final-pass
+ *     gating continues to read `completionOwnerPassed` from
+ *     `readSquatPassOwnerTruth` (which itself demotes pass-core to a
+ *     same-rep stale veto / assist, never an opener).
+ *   - Rep-bound timestamps from the selected trace source.
+ *   - `ownerSource`: which trace source produced the payload
+ *     (`'pass_core' | 'completion_state' | 'none'`). Sink-only label —
+ *     never a gate input.
+ *   - `timestampsConsistent`: whether the timestamps coherently belong to
+ *     one rep. Sink-only diagnostic.
+ *
+ * Downstream gate code must use `readSquatPassOwnerTruth` +
+ * `computeSquatPostOwnerPreLatchGateLayer`, not this adapter, to drive
+ * the opener law. This adapter feeds `squatOwnerRead` trace only.
  */
 export interface SquatCurrentRepPassTruth {
   repId: string | null;
@@ -611,19 +651,21 @@ export function readSquatCurrentRepPassTruth(input: {
   const { squatPassCore: pc, squatCompletionState: cs } = input;
 
   if (pc != null) {
-    // pass-core is the single motion truth; use its timestamps as rep-bound anchors.
+    // Trace adapter — uses pass-core timestamps as same-rep anchors for
+    // observability. This does NOT open final pass (see function-level
+    // docstring); the opener law in readSquatPassOwnerTruth is unchanged.
     const commonFields = {
       ownerSource: 'pass_core' as const,
       descendStartAtMs: pc.descentStartAtMs,
       peakAtMs: pc.peakAtMs,
-      committedAtMs: undefined,  // pass-core does not expose committedAtMs
+      committedAtMs: undefined,
       reversalAtMs: pc.reversalAtMs,
-      ascendStartAtMs: undefined,  // pass-core does not expose ascendStartAtMs
+      ascendStartAtMs: undefined,
       standingRecoveredAtMs: pc.standingRecoveredAtMs,
       currentPhase: cs?.currentSquatPhase,
       evidenceLabel: cs?.evidenceLabel,
       completionMachinePhase: cs?.completionMachinePhase,
-      timestampsConsistent: true,  // pass-core algorithms guarantee same-rep timestamps
+      timestampsConsistent: true,
     };
     if (pc.passDetected === true) {
       return { repId: pc.repId ?? null, passEligible: true, blockedReason: null, ...commonFields };
@@ -636,7 +678,8 @@ export function readSquatCurrentRepPassTruth(input: {
     };
   }
 
-  // Fallback: no pass-core — use completion-state owner truth.
+  // Fallback trace source: no pass-core — derive the diagnostic from
+  // completion-state owner truth. Still trace-only; not an opener.
   if (cs == null) {
     return {
       repId: null,
@@ -677,8 +720,19 @@ export function readSquatCurrentRepPassTruth(input: {
 }
 
 /**
- * PR-A: single builder for the frozen squat final-pass **product** truth surface.
- * `motionOwnerSource` is additive trace only (from `readSquatCurrentRepPassTruth`) — not a gate input.
+ * PR-A: single builder for the frozen squat final-pass **product** truth
+ * surface (the non-opener consumer mirror — see `SquatFinalPassTruthSurface`
+ * interface docs for authority-law position).
+ *
+ * `finalPassGranted` here is the mirror of the opener-law outcome: it is
+ * true iff `finalPassBlockedReason == null`, which the caller computes via
+ * the opener chain (`readSquatPassOwnerTruth` →
+ * `enforceSquatOwnerContradictionInvariant` →
+ * `getSquatPostOwnerFinalPassBlockedReason` → P3 block-only registry).
+ * This builder never evaluates the chain itself.
+ *
+ * `motionOwnerSource` is sink-only trace from `readSquatCurrentRepPassTruth`
+ * — NOT an opener, NOT a gate input.
  */
 export function buildSquatFinalPassTruthSurface(input: {
   finalPassBlockedReason: string | null;
@@ -695,18 +749,33 @@ export function buildSquatFinalPassTruthSurface(input: {
 }
 
 /**
- * PR-01 (Completion-First Authority Freeze):
+ * PR-01 (Completion-First Authority Freeze) + PR-CAM-SQUAT-AUTHORITY-LAW-
+ * RESOLUTION (Interpretation C) — canonical owner-truth reader.
  *
- * Only canonical completion-owner truth may open squat final pass.
- * `squatPassCore` is demoted from opener to assist/veto/trace:
- *   - it may supply a more specific blocked reason when completion-owner truth is already negative,
- *   - it may veto a passed completion-owner truth when pass-core explicitly marks the rep as stale
- *     (same-rep integrity veto),
- *   - it may NOT independently open final pass.
+ * This function is the **canonical opener-truth adapter** for squat final
+ * pass. Downstream final-pass gating reads `completionOwnerPassed` from
+ * its result; nothing else in the repo is allowed to act as an opener.
  *
- * Invariants enforced here (PR-01 §7):
- *   A) completionOwnerPassed !== true  ->  owner pass false
- *   B) completionOwnerReason === 'not_confirmed'  ->  owner pass false
+ * Authority-law position of the two inputs:
+ *   - `squatCompletionState` — canonical opener input. The returned
+ *     `completionOwnerPassed` is computed from
+ *     `computeSquatCompletionOwnerTruth(squatCompletionState)` and gates
+ *     on the full opener chain (completion-satisfied, standing-recovered,
+ *     cycle-complete, pass reason confirmed, not explicitly blocked).
+ *   - `squatPassCore` — non-opener. Demoted to two narrow roles only:
+ *       1) `blockedReason` assist when completion-owner truth is already
+ *          negative (provides a more specific reason string);
+ *       2) same-rep stale veto: if `passCoreStale === true`, flip a
+ *          passed owner truth to false with reason `pass_core_stale_rep`.
+ *     Pass-core may NEVER independently open final pass.
+ *
+ * `completionOwnerReason` in the returned value is an **explanation
+ * label**, not an opener (see PR-CAM-SQUAT-AUTHORITY-LAW-RESOLUTION §3).
+ * No reason label — including the formally closed legacy
+ * `pass_core_detected` — may bypass the opener chain. The legacy label
+ * has no production assigner today; it exists only as a synthetic probe
+ * in the PR-01 smoke. See PR-01 §7 and the authority-law resolution §4
+ * for the locked illegal states.
  */
 export function readSquatPassOwnerTruth(
   input: SquatPassOwnerTruthReadInput
@@ -898,15 +967,26 @@ export function isGatePassReady(
 }
 
 /**
- * Strict success contract: success UI, tone, and auto-advance must depend ONLY on this.
- * Aligned with progressionPassed: captureQuality 'low' and unstable_frame_timing must NOT
- * block final latch when passConfirmed (completionSatisfied + passConfirmationSatisfied) is true.
+ * Strict success contract: success UI, tone, and auto-advance must depend
+ * ONLY on this. Aligned with `progressionPassed`: `captureQuality === 'low'`
+ * and `unstable_frame_timing` must NOT block final latch when passConfirmed
+ * (`completionSatisfied && passConfirmationSatisfied`) is true.
  *
- * PR-A (squat): when `gate.finalPassEligible` is present, latch **equals** the frozen post-owner
- * final-pass surface from `evaluateExerciseAutoProgress` — it does not independently read
- * `completionTruthPassed`, `completionBlockedReason`, or `cycleComplete`. Partial gate snapshots
- * that omit `finalPassEligible` keep a narrow historical UI-gate compat path (tests only); real
- * product frames must carry `finalPassEligible`.
+ * Authority-law position (PR-01 + PR-CAM-SQUAT-AUTHORITY-LAW-RESOLUTION):
+ * `isFinalPassLatched` is a **final-pass consumer / latch mirror**, not an
+ * opener. Under the single opener law
+ *   `completionTruthPassed && completionOwnerPassed && gates clear
+ *    && P3 block-only registry clear => finalPassGranted`
+ * the latch only reflects the already-computed post-owner + UI gate outcome.
+ *
+ * PR-A (squat): when `gate.finalPassEligible` is present, latch **equals**
+ * the frozen post-owner final-pass surface from
+ * `evaluateExerciseAutoProgress` — it does not independently read
+ * `completionTruthPassed`, `completionBlockedReason`, or `cycleComplete`,
+ * and it does not run any alternate owner/opener logic. Partial gate
+ * snapshots that omit `finalPassEligible` keep a narrow historical UI-gate
+ * compat path used by tests only; real product frames must carry
+ * `finalPassEligible`, so the compat path is never reached in production.
  */
 export function isFinalPassLatched(
   stepId: CameraStepId,
@@ -1822,7 +1902,10 @@ function getSquatProgressionCompletionSatisfied(
   const cycleComplete = getHighlightedMetric(result, 'cycleComplete') > 0;
   const depthBand = getHighlightedMetric(result, 'depthBand'); /* 0=shallow, 1=moderate, 2=deep */
 
-  // ── PASS-AUTHORITY-RESET-01: immutable pass truth from pass-core ──
+  // ── Same-rep motion trace input (non-opener) sourced from pass-core.
+  // Used by the rep-identity and stale-veto diagnostics only; the
+  // final-pass opener is `completionOwnerPassed` from
+  // `readSquatPassOwnerTruth` (PR-01 authority-law resolution).
   const passCore = result.debug?.squatPassCore as SquatPassCoreResult | undefined;
 
   // ── completion truth: squatCompletionState (typed) 우선, highlightedMetrics fallback ──
@@ -2512,23 +2595,34 @@ export function evaluateExerciseAutoProgress(
       : null;
 
   /**
-   * PR-4-GATE-FREEZE: Squat UI gate pipeline.
+   * PR-4-GATE-FREEZE + PR-01 + PR-P3 — Squat final-pass pipeline.
    *
-   * Sequential ownership layers for squat pass decision:
+   * Sequential ownership layers for the squat pass decision (the single
+   * opener law `completionTruthPassed && completionOwnerPassed && gates
+   * clear && P3 block-only registry clear => finalPassGranted`):
    *
-   *   Step A — Completion truth (READ-ONLY from evaluator output, already finalized)
-   *   Step B — Completion owner truth interpretation
-   *             (computeSquatCompletionOwnerTruth: reads cs fields, no mutation)
+   *   Step A — Completion truth (READ-ONLY from evaluator output, already
+   *             finalized by the completion-state pipeline). Opener input.
+   *   Step B — Completion owner truth interpretation via
+   *             `readSquatPassOwnerTruth` + `computeSquatCompletionOwnerTruth`
+   *             (pass-core is demoted to same-rep stale veto / assist; never
+   *             an opener). This is the sole opener-truth adapter.
    *   Step C — UI progression latch gate
-   *             (computeSquatUiProgressionLatchGate: pure UI signals — confidence,
-   *              passConfirmation, captureQuality, setup suppression, arming timing)
-   *   Step D — UI-only final-pass blockers
-   *             (shouldBlockSquat*: squat-specific UI suppression checks.
-   *              May block uiProgressionAllowed. Do NOT write to completion fields.)
-   *   Step E — Observability enrichment (see block below, after integrity block)
+   *             (`computeSquatUiProgressionLatchGate`: pure UI signals —
+   *              confidence, passConfirmation, captureQuality, setup
+   *              suppression, arming timing). Non-opener consumer layer.
+   *   Step D — Block-only absurd-pass registry veto
+   *             (`applySquatFinalBlockerVetoLayer` →
+   *              `evaluateSquatAbsurdPassRegistry`). May flip
+   *              `uiProgressionAllowed` to false when a P3 late family
+   *              fires; MUST NOT grant pass and MUST NOT write to
+   *              completion fields.
+   *   Step E — Observability enrichment (see block below, after integrity
+   *             block). Sink-only trace fields.
    *
-   * squatSetupTraceForGate and squatReadinessSetupRoutedSources are hoisted here so that
-   * Step E reuses the same computed values without a second identical call.
+   * `squatSetupTraceForGate` and `squatReadinessSetupRoutedSources` are
+   * hoisted here so Step E reuses the same computed values without a
+   * second identical call.
    */
   // 11B freeze: owner truth -> post-owner/pre-latch gate layer -> latch handoff.
   let squatOwnerTruth: SquatOwnerTruth | null = null;
@@ -2539,16 +2633,18 @@ export function evaluateExerciseAutoProgress(
   let squatReadinessSetupRoutedSources: SquatReadinessSetupRoutedSources | undefined;
 
   if (stepId === 'squat') {
-    // ── Step A: completion truth — read from squatPassCore (PASS-AUTHORITY-RESET-01) ──
-    // squatPassCore.passDetected is the immutable motion pass truth.
-    // It was set BEFORE applyUltraLowPolicyLock and before late-setup suppression.
-    // squatCs is still read for classification / interpretation fields only.
+    // ── Step A: completion truth — read-only from the already-finalized
+    // completion-state pipeline output on `squatCs`. `squatPassCore` is
+    // also read, but only as a same-rep stale veto / assist input into
+    // Step B (never as an opener). PR-01 locks completion-state truth as
+    // the sole opener input.
     const captureArmingOk = squatCycleDebug?.captureArmingSatisfied === true;
     const squatPassCore = evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined;
 
-    // ── Step B: completion owner truth — sourced from passCore, not from completionBlockedReason ──
-    // PASS-AUTHORITY-RESET-01: policy (ultraLowPolicyBlocked) and late-setup (lateSetupSuppressed)
-    // are now annotation-only. readSquatPassOwnerTruth is shared with the latch fallback path.
+    // ── Step B: canonical completion-owner truth via
+    // readSquatPassOwnerTruth (see its docstring for the PR-01 +
+    // authority-law position of the two inputs). `ultraLowPolicyBlocked`
+    // and `lateSetupSuppressed` remain annotation-only upstream.
     squatOwnerTruth = readSquatPassOwnerTruth({
       squatCompletionState: squatCs,
       squatPassCore,
@@ -2569,9 +2665,11 @@ export function evaluateExerciseAutoProgress(
       squatCompletionState: squatCs,
     });
 
-    // GUARDRAIL-DECOUPLE-RESET-01: for squat, guardrail.completionStatus is aligned to
-    // squatPassCore.passDetected inside guardrails.getMotionCompleteness — legacy
-    // highlightedMetrics.completionSatisfied no longer sole motion-complete owner.
+    // ── Steps C + D: UI progression latch gate + block-only absurd-pass
+    // registry veto. `computeSquatPostOwnerPreLatchGateLayer` runs the
+    // non-opener UI gate and then applies the P3 block-only registry via
+    // `applySquatFinalBlockerVetoLayer`. Neither can open pass; both can
+    // only close the final-pass surface.
     squatPostOwnerGateLayer = computeSquatPostOwnerPreLatchGateLayer({
       stepId,
       ownerTruth: squatOwnerTruth,
@@ -2662,10 +2760,13 @@ export function evaluateExerciseAutoProgress(
           ?.passCoreStale === true,
       passCoreRepId:
         (evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined)?.repId ?? null,
-      // Same-rep identity mismatch: pass-core says pass for current rep (not stale)
-      // but completion owner is not satisfied. Must be explicit — never silently hidden.
-      // RF-STRUCT-12: with pass-core-first owner alignment, this should always be false
-      // when pass-core passes — retained for regression observability.
+      // Same-rep identity mismatch diagnostic: pass-core reports a
+      // non-stale pass for the current rep yet the canonical completion
+      // owner is not satisfied — indicates a residual cross-layer split
+      // that must stay explicit. Sink-only; never read as a gate input.
+      // PR-01 authority-law position: pass-core is not an opener, so a
+      // true here does NOT imply any pass authority — it is a regression
+      // observability flag only.
       passCoreRepIdentityMismatch:
         (evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined)?.passDetected ===
           true &&

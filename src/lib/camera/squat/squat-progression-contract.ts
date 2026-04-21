@@ -119,9 +119,25 @@ export function squatCompletionTruthPassed(
 }
 
 /**
- * PR-01 Pass Owner Freeze: completion-state 슬라이스만으로 “유효 1rep 인정” 여부.
- * captureQuality·confidence·passConfirmation·integrity·retry·quality warning·arming 타이밍 은 읽지 않는다.
- * PR-CAM-29A: SQUAT_ARMING_MS 미달은 completion truth 가 아니라 UI/final latch gate 에서만 막는다.
+ * PR-01 Pass Owner Freeze + PR-CAM-SQUAT-AUTHORITY-LAW-RESOLUTION —
+ * canonical completion-owner truth slice.
+ *
+ * Reads ONLY the completion-state slice and returns the canonical
+ * opener-truth signal (`completionOwnerPassed`) for the single opener
+ * law
+ *   `completionTruthPassed && completionOwnerPassed && gates clear
+ *    && P3 block-only registry clear => finalPassGranted`.
+ *
+ * UI-layer signals (captureQuality, confidence, passConfirmation,
+ * integrity, retry, quality warning, arming timing) are explicitly NOT
+ * read here — they are handled downstream by
+ * `computeSquatUiProgressionLatchGate` (non-opener consumer). PR-CAM-29A:
+ * `SQUAT_ARMING_MS` timing is also a UI/final-latch concern, not
+ * completion truth.
+ *
+ * The returned `completionOwnerReason` is an **explanation label**, not
+ * an opener — no reason label (including the formally closed legacy
+ * `pass_core_detected`) can bypass the opener chain.
  */
 export type SquatCompletionOwnerStateSlice = {
   completionSatisfied?: boolean;
