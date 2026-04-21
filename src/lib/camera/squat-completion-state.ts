@@ -245,6 +245,11 @@ export type OfficialShallowOwnerWriteMissReason =
   | 'shallow_close_not_pending'
   | 'writer_guard_unknown';
 
+export type OfficialShallowWriterAnchorSource =
+  | 'peak_latched'
+  | 'guarded_shallow_local_peak'
+  | null;
+
 /**
  * PR-02 Assist lock: completion 이 어떻게 최종 확정됐는지(관측·trace 전용).
  * success owner 가 아님 — PR-01 owner 는 completion truth 라인age 별도.
@@ -611,6 +616,9 @@ export interface SquatCompletionState extends MotionCompletionResult {
   officialShallowOwnerWriteCandidate?: boolean;
   officialShallowOwnerWriteApplied?: boolean;
   officialShallowOwnerWriteMissReason?: OfficialShallowOwnerWriteMissReason | null;
+  officialShallowWriterAnchorAligned?: boolean;
+  officialShallowWriterAnchorIndex?: number | null;
+  officialShallowWriterAnchorSource?: OfficialShallowWriterAnchorSource;
   writerSawOfficialShallowPathAdmitted?: boolean;
   writerSawDescendConfirmed?: boolean;
   writerSawReversalConfirmedAfterDescend?: boolean;

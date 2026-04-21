@@ -1,5 +1,6 @@
 import type {
   OfficialShallowOwnerWriteMissReason,
+  OfficialShallowWriterAnchorSource,
   SquatCompletionAssistSource,
   SquatCompletionFinalizeMode,
   SquatCompletionState,
@@ -34,6 +35,36 @@ function hasNoKnownStaleOrMixedShallowEpoch(state: SquatCompletionState): boolea
     br !== 'reversal_not_after_peak' &&
     br !== 'peak_not_after_descent'
   );
+}
+
+type SameRepOfficialShallowWriterAnchorTruth = {
+  aligned: boolean;
+  index: number | null;
+  source: OfficialShallowWriterAnchorSource;
+};
+
+function readSameRepOfficialShallowWriterAnchorTruth(
+  state: SquatCompletionState
+): SameRepOfficialShallowWriterAnchorTruth {
+  const latchedIndex = state.peakLatchedAtIndex ?? null;
+  if (latchedIndex != null && latchedIndex > 0) {
+    return { aligned: true, index: latchedIndex, source: 'peak_latched' };
+  }
+
+  const localIndex = state.guardedShallowLocalPeakIndex ?? null;
+  const localAnchorAligned =
+    state.guardedShallowLocalPeakFound === true &&
+    state.guardedShallowLocalPeakBlockedReason == null &&
+    localIndex != null &&
+    localIndex > 0 &&
+    state.officialShallowStreamBridgeApplied === true &&
+    state.officialShallowClosureProofSatisfied === true;
+
+  if (localAnchorAligned) {
+    return { aligned: true, index: localIndex, source: 'guarded_shallow_local_peak' };
+  }
+
+  return { aligned: false, index: null, source: null };
 }
 
 /**
@@ -76,7 +107,7 @@ function ownershipRecoveryFirstMissReason(
   if (state.canonicalTemporalEpochOrderSatisfied !== true) return 'temporal_order_not_satisfied';
   if (!hasNoKnownStaleOrMixedShallowEpoch(state)) return 'stale_or_mixed_rep_guard';
   if (state.standingRecoveredAtMs == null) return 'recovery_not_confirmed';
-  if (state.peakLatchedAtIndex == null || state.peakLatchedAtIndex <= 0) {
+  if (!readSameRepOfficialShallowWriterAnchorTruth(state).aligned) {
     return 'peak_latch_anchor_guard_failed';
   }
 
@@ -113,7 +144,7 @@ function sameRepOfficialShallowCloseOwnershipRecoveryEligible(
   if (state.canonicalTemporalEpochOrderSatisfied !== true) return false;
   if (!hasNoKnownStaleOrMixedShallowEpoch(state)) return false;
   if (state.standingRecoveredAtMs == null) return false;
-  if (state.peakLatchedAtIndex == null || state.peakLatchedAtIndex <= 0) return false;
+  if (!readSameRepOfficialShallowWriterAnchorTruth(state).aligned) return false;
 
   return true;
 }
@@ -218,6 +249,9 @@ function buildOfficialShallowWriterObservability(
   | 'officialShallowOwnerWriteCandidate'
   | 'officialShallowOwnerWriteApplied'
   | 'officialShallowOwnerWriteMissReason'
+  | 'officialShallowWriterAnchorAligned'
+  | 'officialShallowWriterAnchorIndex'
+  | 'officialShallowWriterAnchorSource'
   | 'writerSawOfficialShallowPathAdmitted'
   | 'writerSawDescendConfirmed'
   | 'writerSawReversalConfirmedAfterDescend'
@@ -237,10 +271,14 @@ function buildOfficialShallowWriterObservability(
   const setupBlockedState = state.setupMotionBlocked === true;
   const staleOrMixed = !hasNoKnownStaleOrMixedShallowEpoch(state);
   const br = state.completionBlockedReason ?? null;
+  const writerAnchor = readSameRepOfficialShallowWriterAnchorTruth(state);
   return {
     officialShallowOwnerWriteCandidate: outcome.candidate,
     officialShallowOwnerWriteApplied: outcome.applied,
     officialShallowOwnerWriteMissReason: outcome.missReason,
+    officialShallowWriterAnchorAligned: writerAnchor.aligned,
+    officialShallowWriterAnchorIndex: writerAnchor.index,
+    officialShallowWriterAnchorSource: writerAnchor.source,
     writerSawOfficialShallowPathAdmitted: state.officialShallowPathAdmitted === true,
     writerSawDescendConfirmed: state.descendConfirmed === true,
     writerSawReversalConfirmedAfterDescend: state.reversalConfirmedAfterDescend === true,
@@ -356,6 +394,7 @@ export function applyCanonicalShallowClosureFromContract(
     assistSourcesWithoutPromotion: state.completionAssistSources ?? [],
     officialShallowAuthoritativeClosure: true,
   });
+  const writerAnchor = readSameRepOfficialShallowWriterAnchorTruth(state);
 
   return {
     ...state,
@@ -378,6 +417,12 @@ export function applyCanonicalShallowClosureFromContract(
     shallowAuthoritativeClosureBlockedReason: null,
     completionFinalizeMode,
     officialShallowClosureProofSatisfied: true,
+    peakLatched: writerAnchor.aligned ? true : state.peakLatched,
+    peakLatchedAtIndex: writerAnchor.index ?? state.peakLatchedAtIndex,
+    peakAnchorTruth:
+      writerAnchor.aligned && state.peakAnchorTruth == null
+        ? 'committed_or_post_commit_peak'
+        : state.peakAnchorTruth,
     canonicalShallowContractClosureApplied: true,
     canonicalShallowContractClosureSource: closureSource,
     sameRepShallowCloseRecovered:
