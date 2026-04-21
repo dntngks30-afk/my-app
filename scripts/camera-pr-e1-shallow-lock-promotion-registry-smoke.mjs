@@ -23,28 +23,18 @@
  *     metadata.
  *   - Mix E2 (localStorage/snapshot) or E3 (framing false-pass) logic.
  *
- * Current engine state:
- *   - shallow fixture (peak ≈92°):       conditional_until_main_passes
- *   - ultra-low-ROM fixture (peak ≈92°): conditional_until_main_passes
+ * Current engine state after P4 / E1 promotion verification:
+ *   - shallow fixture (peak ≈92°):       permanent_must_pass
+ *   - ultra-low-ROM fixture (peak ≈92°): permanent_must_pass
  *
- *   PR-01 (Completion-First Authority Freeze) realignment:
- *     Before PR-01, both fixtures passed through a pass-core-first opener shortcut
- *     even though the completion-owner path surfaced
- *     `completionBlockedReason='ultra_low_rom_not_allowed'` and
- *     `completionSatisfied !== true`. That path is one of the illegal states
- *     listed in SSOT §6 (#8: "assist-only shallow admission reopening final pass
- *     without canonical completion-owner truth") and was the recurring
- *     split-brain failure class PR-01 exists to close.
- *
- *     After PR-01 the split-brain opener is removed, so the representative
- *     shallow fixtures currently fail-close with a truthful authority reason
- *     (e.g. `completion_truth_not_passed`). Per PR-01 §12 / PR-Truth-Map §4.PR-01
- *     residual risk, these shallow misses are accepted intentionally and are
- *     deferred to a follow-on shallow-evidence PR (PR-F upstream evidence
- *     formation).
- *
- *     They will be re-promoted to `permanent_must_pass` only once the real
- *     authority chain produces canonical completion-owner truth for them.
+ *   The representative shallow fixtures now pass on the real authority chain
+ *   with full canonical proof:
+ *     `completionTruthPassed === true`,
+ *     `finalPassEligible === true`,
+ *     `isFinalPassLatched('squat', gate) === true`,
+ *     `canonicalShallowContractDrovePass === true`,
+ *     `canonicalTemporalEpochOrderSatisfied === true`, and
+ *     `canonicalShallowContractBlockedReason == null`.
  *
  * Run:
  *   npx tsx scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs
@@ -158,21 +148,11 @@ function squatStats(landmarks, captureDurationMs = 3200) {
 /** @type {Record<string, { state: 'conditional_until_main_passes' | 'permanent_must_pass', skipReason?: string, description: string }>} */
 const SHALLOW_FIXTURE_REGISTRY = {
   'shallow_92deg': {
-    state: 'conditional_until_main_passes',
-    skipReason:
-      'pr01_completion_owner_not_yet_satisfied: PR-01 freezes the opener at completion-owner truth; ' +
-      'representative shallow fixture currently has completionBlockedReason=ultra_low_rom_not_allowed ' +
-      'and completionSatisfied !== true on the real path. Re-promote to permanent_must_pass only once ' +
-      'upstream shallow evidence forms canonical completion-owner truth.',
+    state: 'permanent_must_pass',
     description: 'PR-F shallow: knee-angle peak ≈92°, same geometry as PR-CAM-26 shallow family',
   },
   'ultra_low_rom_92deg': {
-    state: 'conditional_until_main_passes',
-    skipReason:
-      'pr01_completion_owner_not_yet_satisfied: PR-01 freezes the opener at completion-owner truth; ' +
-      'representative ultra-low-ROM fixture currently has completionBlockedReason=ultra_low_rom_not_allowed ' +
-      'and completionSatisfied !== true on the real path. Re-promote to permanent_must_pass only once ' +
-      'upstream shallow evidence forms canonical completion-owner truth.',
+    state: 'permanent_must_pass',
     description: 'PR-F ultra-low-ROM: knee-angle peak ≈92°, extended standing-recovery tail',
   },
 };
@@ -263,6 +243,8 @@ function runWithPromotionState(fixtureId, gate, extraAssertions, registryOverrid
 function assertRepresentativeAuthorityBundle(label, gate) {
   const pc = gate.evaluatorResult?.debug?.squatPassCore;
   const ownerRead = gate.squatCycleDebug?.squatOwnerRead;
+  const dbg = gate.squatCycleDebug;
+  const cs = gate.evaluatorResult?.debug?.squatCompletionState;
   const rawFinalTruth = gate.squatCycleDebug?.squatFinalPassTruth;
   const finalTruth = rawFinalTruth == null
     ? null
@@ -298,6 +280,37 @@ function assertRepresentativeAuthorityBundle(label, gate) {
     `${label}: isFinalPassLatched('squat', gate) === true`,
     latch === true,
     { latch, finalPassEligible: gate.finalPassEligible }
+  );
+  ok(
+    `${label}: completionTruthPassed === true`,
+    dbg?.completionTruthPassed === true,
+    { completionTruthPassed: dbg?.completionTruthPassed, completionPassReason: dbg?.completionPassReason }
+  );
+  ok(
+    `${label}: canonicalShallowContractDrovePass === true`,
+    dbg?.canonicalShallowContractDrovePass === true,
+    {
+      canonicalShallowContractDrovePass: dbg?.canonicalShallowContractDrovePass,
+      completionOwnerReason: dbg?.completionOwnerReason,
+    }
+  );
+  ok(
+    `${label}: canonicalTemporalEpochOrderSatisfied === true`,
+    dbg?.canonicalTemporalEpochOrderSatisfied === true &&
+      dbg?.canonicalTemporalEpochOrderBlockedReason == null,
+    {
+      satisfied: dbg?.canonicalTemporalEpochOrderSatisfied,
+      blockedReason: dbg?.canonicalTemporalEpochOrderBlockedReason,
+    }
+  );
+  ok(
+    `${label}: canonicalShallowContractBlockedReason == null`,
+    dbg?.canonicalShallowContractBlockedReason == null &&
+      cs?.canonicalShallowContractBlockedReason == null,
+    {
+      debugBlockedReason: dbg?.canonicalShallowContractBlockedReason,
+      stateBlockedReason: cs?.canonicalShallowContractBlockedReason,
+    }
   );
 
   // no owner contradiction: final pass truth owner chain must agree with pass-core and gate.
@@ -356,8 +369,8 @@ function expectConsumerToFail(label, fixtureId, gate, registry) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// §11 Matrix A — conditional fixture behavior
-// fixture state = conditional_until_main_passes
+// §11 Matrix A — promoted fixture behavior
+// fixture state = permanent_must_pass
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('\n━━ Matrix A — promoted shallow fixtures (permanent_must_pass) ━━');
 
@@ -382,9 +395,8 @@ console.log('\n━━ Matrix A — promoted shallow fixtures (permanent_must_pas
     Object.keys(SHALLOW_FIXTURE_REGISTRY)
   );
   ok(
-    'Matrix A: shallow_92deg state is one of the canonical two values (permanent_must_pass | conditional_until_main_passes)',
-    SHALLOW_FIXTURE_REGISTRY['shallow_92deg']?.state === 'permanent_must_pass' ||
-      SHALLOW_FIXTURE_REGISTRY['shallow_92deg']?.state === 'conditional_until_main_passes',
+    'Matrix A: shallow_92deg state is permanent_must_pass',
+    SHALLOW_FIXTURE_REGISTRY['shallow_92deg']?.state === 'permanent_must_pass',
     SHALLOW_FIXTURE_REGISTRY['shallow_92deg']?.state
   );
   ok(
@@ -420,9 +432,8 @@ console.log('\n━━ Matrix A — promoted shallow fixtures (permanent_must_pas
     Object.keys(SHALLOW_FIXTURE_REGISTRY)
   );
   ok(
-    'Matrix A: ultra_low_rom_92deg state is one of the canonical two values (permanent_must_pass | conditional_until_main_passes)',
-    SHALLOW_FIXTURE_REGISTRY['ultra_low_rom_92deg']?.state === 'permanent_must_pass' ||
-      SHALLOW_FIXTURE_REGISTRY['ultra_low_rom_92deg']?.state === 'conditional_until_main_passes',
+    'Matrix A: ultra_low_rom_92deg state is permanent_must_pass',
+    SHALLOW_FIXTURE_REGISTRY['ultra_low_rom_92deg']?.state === 'permanent_must_pass',
     SHALLOW_FIXTURE_REGISTRY['ultra_low_rom_92deg']?.state
   );
   ok(
@@ -560,32 +571,26 @@ console.log('\n━━ Matrix C — downgrade protection ━━');
     SYNTHETIC_PERMANENT_FOR_DOWNGRADE
   );
 
-  // PR-01 realignment: representative shallow fixtures are currently
-  // `conditional_until_main_passes` (see top-of-file banner). They will be
-  // re-promoted to `permanent_must_pass` only once completion-owner truth
-  // forms canonically for them on the real authority chain.
   const entryConditional = SHALLOW_FIXTURE_REGISTRY['shallow_92deg'];
   ok(
-    'Matrix C: shallow_92deg is in canonical conditional state (PR-01 residual shallow-evidence risk)',
-    entryConditional?.state === 'conditional_until_main_passes',
+    'Matrix C: shallow_92deg is promoted to permanent_must_pass',
+    entryConditional?.state === 'permanent_must_pass',
     entryConditional?.state
   );
   ok(
-    'Matrix C: shallow_92deg has explicit PR-01 skipReason',
-    typeof entryConditional?.skipReason === 'string' &&
-      entryConditional.skipReason.includes('pr01_completion_owner_not_yet_satisfied'),
+    'Matrix C: shallow_92deg has no conditional skipReason after promotion',
+    entryConditional?.skipReason == null,
     entryConditional?.skipReason
   );
   const ultraEntry = SHALLOW_FIXTURE_REGISTRY['ultra_low_rom_92deg'];
   ok(
-    'Matrix C: ultra_low_rom_92deg is in canonical conditional state (PR-01 residual shallow-evidence risk)',
-    ultraEntry?.state === 'conditional_until_main_passes',
+    'Matrix C: ultra_low_rom_92deg is promoted to permanent_must_pass',
+    ultraEntry?.state === 'permanent_must_pass',
     ultraEntry?.state
   );
   ok(
-    'Matrix C: ultra_low_rom_92deg has explicit PR-01 skipReason',
-    typeof ultraEntry?.skipReason === 'string' &&
-      ultraEntry.skipReason.includes('pr01_completion_owner_not_yet_satisfied'),
+    'Matrix C: ultra_low_rom_92deg has no conditional skipReason after promotion',
+    ultraEntry?.skipReason == null,
     ultraEntry?.skipReason
   );
 }
@@ -669,7 +674,7 @@ console.log('\n━━ §12 Acceptance criteria ━━');
 console.log('\n━━ Scope discipline ━━');
 console.log('  INFO: E2 (localStorage/snapshot storage) — not implemented in this script');
 console.log('  INFO: E3 (framing/setup false-pass fixtures) — not implemented in this script');
-console.log('  INFO: Production change is limited to squat pass-core PR-F recovery anchoring');
+console.log('  INFO: Runtime behavior is unchanged; this script only verifies promotion registry policy');
 console.log('  INFO: evaluateExerciseAutoProgress and isFinalPassLatched used read-only');
 console.log('  INFO: Registry does not judge pass/fail — real-path engine judgment preserved');
 

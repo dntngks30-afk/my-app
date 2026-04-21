@@ -4,19 +4,9 @@
  * Purpose:
  * - Run the mandatory PR-F proof bundle in a fixed order.
  * - Hard-fail on: missing script or non-zero exit.
- * - Allow explicitly-reasoned conditional SKIPs (e.g. PR-01 residual
- *   shallow-evidence risk) that carry a recognized marker. Unexplained bare
- *   SKIPs are still hard-failed so regressions cannot hide.
+ * - Hard-fail on unexplained bare SKIPs so regressions cannot hide.
  * - Prevent representative-permanent promotion from being accepted without
  *   executable full-chain proof on the same head commit.
- *
- * PR-01 (Completion-First Authority Freeze) context:
- *   PR-01 closes SSOT §6 illegal state #8 (assist-only shallow admission
- *   reopening final pass without canonical completion-owner truth). Some
- *   representative shallow / ultra-low-ROM fixtures were pre-PR-01 kept green
- *   only via that split-brain opener; PR-01 §12 accepts their temporary
- *   `conditional_until_main_passes` state as residual risk. Those specific
- *   SKIPs are allowed here and must carry an explicit reason marker.
  */
 
 import { existsSync } from 'node:fs';
@@ -81,17 +71,13 @@ function runProofScript(entry, index, total) {
   if (stderr.length > 0) process.stderr.write(stderr);
 
   const combined = `${stdout}\n${stderr}`;
-  // PR-01-aware SKIP classification:
-  //   - explicit SKIP with a recognized reason marker is allowed (and logged)
+  // SKIP classification:
+  //   - explicit non-representative SKIP with a recognized reason marker is allowed (and logged)
   //   - any other SKIP is treated as regression and hard-fails
   const skipLineRegex = /(^|\n)\s*SKIP\b[^\n]*/gi;
   const skipLines = combined.match(skipLineRegex) ?? [];
   const ALLOWED_SKIP_MARKERS = [
-    'pr01_completion_owner_not_yet_satisfied',
-    'conditional_until_main_passes',
     'no PR-D broadening',
-    'shallow fixture not passing on this main',
-    'ultra-low-ROM fixture not passing on this main',
   ];
   const unexplainedSkips = skipLines.filter(
     (line) => !ALLOWED_SKIP_MARKERS.some((marker) => line.includes(marker))
@@ -113,7 +99,7 @@ function runProofScript(entry, index, total) {
   if (unexplainedSkips.length === 0) {
     if (skipLines.length > 0) {
       console.log(
-        `PASS (with ${skipLines.length} PR-01-accepted conditional SKIP${skipLines.length === 1 ? '' : 's'}): ${label}`
+        `PASS (with ${skipLines.length} recognized non-representative SKIP${skipLines.length === 1 ? '' : 's'}): ${label}`
       );
     } else {
       console.log(`PASS: ${label}`);
