@@ -83,6 +83,8 @@ It is about deciding how the system should carry earlier standing/descent timing
 
 ---
 
+> **HISTORICAL DESIGN PROMPT.** The numbered “fixed facts” below describe the machine **at authoring time** for this design session. **Current main:** both E1 representatives are **`permanent_must_pass`** with full canonical proof; **`docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`**. Items that mention conditional registry or blocked promotion reflect pre-landing state and are not current facts.
+
 ## Fixed facts from predecessor sessions
 
 Treat the following as already established and do not reopen them:
@@ -92,7 +94,7 @@ Treat the following as already established and do not reopen them:
 3. Source #4 now fires on the representative shallow fixtures for the right reason.
 4. Promotion is still blocked because canonical shallow cycle timing is still not satisfied.
 5. The blocker is no longer “Source #4 is null”; it is the broader coupling between arming truncation and cycle timing.
-6. E1 registry remains unchanged: `shallow_92deg` and `ultra_low_rom_92deg` are still `conditional_until_main_passes`.
+6. **(Authoring time)** E1 registry was unchanged: `shallow_92deg` and `ultra_low_rom_92deg` were still `conditional_until_main_passes`. **Current main:** both are `permanent_must_pass` — `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
 
 The follow-up fix report explicitly states that source #4 firing alone did not reopen the canonical cycle-timing gate because the slice still begins mid-descent, so the earliest local anchor cannot move earlier than slice start fileciteturn65file0
 

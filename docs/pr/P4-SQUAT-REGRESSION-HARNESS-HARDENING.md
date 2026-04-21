@@ -4,6 +4,8 @@ Parent SSOT: `docs/SSOT_SQUAT_COMPLETION_FIRST_QUALITY_STRICT_2026_04.md`
 Parent Truth Map: `docs/pr/PR-SQUAT-COMPLETION-FIRST-QUALITY-STRICT-TRUTH-MAP-01.md`
 Depends on: P1 successful shallow recovery on current head
 
+**Current main note:** the two E1 shallow representatives (`shallow_92deg`, `ultra_low_rom_92deg`) are **`permanent_must_pass`** with executable proof — `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`. P4’s “retire conditional tolerance” rule still governs any **other** conditional surfaces until explicitly converted.
+
 P4 exists to remove temporary conditional tolerance once P1 has restored legitimate shallow fixtures.
 
 ## One-line purpose
@@ -17,8 +19,8 @@ It does not rescue shallow motion and does not rewire authority.
 It only hardens executable proof.
 
 2. Conditional skip is temporary.
-Markers such as `conditional_until_main_passes`, `shallow fixture not passing on this main`, and `ultra-low-ROM fixture not passing on this main` are acceptable only before P1 is complete.
-After P1, they must be retired or converted to hard assertions.
+Markers such as `conditional_until_main_passes`, `shallow fixture not passing on this main`, and `ultra-low-ROM fixture not passing on this main` described **older** tolerance for conditional representative skips. **Current main:** the PR-F proof gate recognizes **only** `no PR-D broadening` as an explained `SKIP` marker (`scripts/camera-pr-f-regression-proof-gate.mjs`), and the two E1 shallow representatives are **`permanent_must_pass`** — `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
+After P1, conditional posture for recovered fixtures must be retired or converted to hard assertions.
 
 3. Harness must assert cross-layer illegal states directly.
 Not just pass/fail snapshots, but the precise illegal authority combinations must be locked.

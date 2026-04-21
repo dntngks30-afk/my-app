@@ -1,5 +1,7 @@
 # Implementation Prompt — Branch B Follow-up Source Logic Review / Narrow Fix
 
+> **HISTORICAL PROMPT.** Authored for the source-#4 follow-up while canonical promotion was still blocked on a prior head. **Current main:** `shallow_92deg` / `ultra_low_rom_92deg` are **`permanent_must_pass`** — `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`. Sections below preserve the **session-time** mission and blocked-report facts for archive.
+
 Use GPT-5.4 or an equivalently strong reasoning model.
 
 This session is a **narrow follow-up review/fix session for Branch B source #4 only**.
@@ -57,7 +59,7 @@ There is no third path where you silently widen scope.
 
 Right now the system added a new way to notice a shallow squat earlier.
 But on the two representative shallow fixtures, that new detector never turns on.
-So the old detector still wins, the cycle is still judged too short, and promotion stays blocked.
+So the old detector still wins, the cycle is still judged too short, and **at this prompt’s authoring time** canonical promotion for those fixtures was still blocked (**current main:** promotion **landed** later — status-lock doc).
 
 This session is ONLY about the new detector itself:
 - why it is not turning on
@@ -82,7 +84,7 @@ If your proposed change requires violating any of the above, stop.
 
 ## What the stop report already proved
 
-Treat the following as fixed facts from the blocked-promotion session:
+**At the blocked-promotion report head,** treat the following as fixed facts:
 
 - both `shallow_92deg` and `ultra_low_rom_92deg` still fail canonical promotion
 - `canonicalShallowContractBlockedReason === 'minimum_cycle_timing_blocked'`

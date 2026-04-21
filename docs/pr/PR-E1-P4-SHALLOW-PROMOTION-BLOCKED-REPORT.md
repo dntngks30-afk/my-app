@@ -1,5 +1,7 @@
 # PR-E1/P4 — Shallow Promotion Blocked (Stop Report)
 
+> **HISTORICAL — SUPERSEDED FOR REGISTRY STATE.** This file is an archived stop report from a session where promotion was blocked on **that** head. On **current main**, both `shallow_92deg` and `ultra_low_rom_92deg` are **`permanent_must_pass`** in `scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs`. Do not treat the decision block below as the live registry. **Current SSOT:** `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
+>
 > **Session type**: stop-report only. No `src/*`, no `scripts/*`, no
 > registry mutation, no skip-marker widening, no threshold change,
 > no fixture edit. This document is the session's sole output.

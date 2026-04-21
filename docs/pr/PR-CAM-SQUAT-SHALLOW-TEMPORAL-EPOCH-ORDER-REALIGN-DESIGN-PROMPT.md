@@ -97,6 +97,8 @@ It is about deciding how the earlier pre-arming epoch should participate in the 
 
 ---
 
+> **HISTORICAL DESIGN PROMPT.** The numbered “fixed facts” below describe the machine **at authoring time** for this design session. **Current main:** both E1 representatives are **`permanent_must_pass`** with full canonical proof; **`docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`**. Items that mention conditional registry or blocked promotion reflect pre-landing state and are not current facts.
+
 ## Fixed facts from predecessor sessions
 
 Treat the following as already established and do not reopen them:
@@ -109,7 +111,7 @@ Treat the following as already established and do not reopen them:
 6. `cycleDurationMs >= 800` is now reachable on the representative shallow fixtures without threshold relaxation.
 7. The old blocker `minimum_cycle_timing_blocked` is no longer the first blocker for the representative shallow fixtures.
 8. Promotion is still blocked because canonical close later fails at a temporal epoch ordering guard.
-9. E1 registry remains unchanged: `shallow_92deg` and `ultra_low_rom_92deg` are still `conditional_until_main_passes`.
+9. **(Authoring time)** E1 registry was unchanged: `shallow_92deg` and `ultra_low_rom_92deg` were still `conditional_until_main_passes`. **Current main:** both are `permanent_must_pass` — `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
 
 Do not reopen source-activation design, fixture design, or registry promotion in this session.
 

@@ -11,6 +11,8 @@
 - SSOT: `docs/SSOT_SQUAT_COMPLETION_FIRST_QUALITY_STRICT_2026_04.md`
 - Classifying prompt: [P1-FOLLOWON-CLASSIFICATION-PROMPT.md](./P1-FOLLOWON-CLASSIFICATION-PROMPT.md)
 
+> **HISTORICAL CLASSIFICATION.** This document freezes the P1-stop decision and Branch A vs B ruling at classification time. **Current main:** E1 representatives `shallow_92deg` / `ultra_low_rom_92deg` are **`permanent_must_pass`** — `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
+
 ---
 
 ## §1. Scope and stop condition recap
@@ -33,8 +35,8 @@ contract's `anti=0` secondary gap. Lever A (4th source for
 (1480 → 1400) but could not reach the ≤1160ms needed for the 800ms cycle floor.
 
 `src/*` tree was fully reverted to HEAD. PR-01 authority remains intact.
-Absurd-pass blockers remain unweakened. The two fixtures continue as
-`conditional_until_main_passes` in the E1 registry.
+Absurd-pass blockers remain unweakened. **At classification time,** the two fixtures continued as
+`conditional_until_main_passes` in the E1 registry (**current main:** both are **`permanent_must_pass`** per the status-lock doc).
 
 This session must classify whether the next correct move is **Branch A —
 fixture calibration** or **Branch B — new authority-safe descent source**.
@@ -366,11 +368,13 @@ session's first task is to identify a valid data source.
 
 ### §8.4 Blocked-until-resolved
 
-P4, P3, and P2 all remain blocked until this classification branch is
+**At classification time:** P4, P3, and P2 all remained blocked until this classification branch was
 empirically resolved. The E1 registry entries for `shallow_92deg` and
-`ultra_low_rom_92deg` remain `conditional_until_main_passes`. Promotion to
-`permanent_must_pass` is forbidden. Downgrade is forbidden. PR-F SKIP
-markers remain.
+`ultra_low_rom_92deg` were `conditional_until_main_passes`. Promotion to
+`permanent_must_pass` was forbidden. Downgrade was forbidden. PR-F SKIP
+markers remained.
+
+**Current main:** E1 promotion for those two entries **has landed** (`permanent_must_pass`). P3 and P2 remain independent follow-ons until authorized by their prompts. PR-F explained-SKIP allowlist is exactly as in `scripts/camera-pr-f-regression-proof-gate.mjs` (sole marker: `no PR-D broadening`).
 
 ---
 

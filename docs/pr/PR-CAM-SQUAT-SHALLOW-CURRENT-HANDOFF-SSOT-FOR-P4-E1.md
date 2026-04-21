@@ -1,17 +1,10 @@
 # PR-CAM-SQUAT-SHALLOW-CURRENT-HANDOFF-SSOT-FOR-P4-E1
 
-> **Session type**: docs-only handoff SSOT.
+> **Session type:** docs-only handoff SSOT.
 >
-> **Purpose**: summarize the currently locked shallow-squat camera state so the
-> next room can start directly from **P4 / E1 promotion verification** without
-> re-litigating earlier branches.
+> **Purpose:** summarize **current main** shallow-squat camera state after **E1 representative promotion has landed**, so the next room does not re-run a completed verification-first promotion loop.
 >
-> **Current decision**: the next branch is **verification-first E1 promotion**.
-> The representative shallow fixtures are reported to pass on the current real
-> runtime path after the temporal epoch-order ledger work, but registry state is
-> still intentionally left at `conditional_until_main_passes`. The next session
-> must verify current-head truth and promote only if the full canonical proof is
-> executable and green.
+> **Status lock (current main):** `shallow_92deg` and `ultra_low_rom_92deg` are **`permanent_must_pass`** in `scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs`, with the full canonical authority bundle asserted in that smoke. Authoritative one-page summary: `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
 
 ---
 
@@ -24,13 +17,12 @@ It does **not** authorize:
 - fixture edits or fixture re-derivation
 - authority-law rewrite
 - pass-core opener revival
-- proof-gate skip-marker expansion
+- proof-gate skip-marker expansion beyond the allowlist in `camera-pr-f-regression-proof-gate.mjs`
 - P2 naming/comment cleanup
 - P3 registry normalization
 - unrelated camera-stack rewrites
 
-It exists only to transfer the current truth into the next room so that the
-next room can execute **P4 / E1 promotion verification** cleanly.
+The **completed** promotion step was **verification / registry lock**, not a new runtime broadening PR.
 
 ---
 
@@ -48,6 +40,7 @@ A new shallow detector family was added so that legitimate shallow descent could
 be seen earlier without changing pass ownership.
 
 Key rule that remains locked:
+
 - the detector is timing evidence only
 - it is **not** a final-pass opener
 
@@ -64,37 +57,28 @@ canonical timing could use the true same-rep descent start instead of only the
 slice-local start.
 
 Result:
+
 - `minimum_cycle_timing_blocked` stopped being the first blocker for the two
   representative shallow fixtures.
 
 ### 2.5 Structured normalized temporal epoch-order ledger was implemented
 
-The next blocker was temporal ordering. A structured normalized epoch-order
-ledger was then designed and implemented so canonical shallow close could reason
-about:
-- descent
-- peak
-- reversal
-- recovery
+Temporal ordering was addressed with a structured normalized epoch-order ledger so canonical shallow close could reason about descent, peak, reversal, and recovery inside one same-rep valid-buffer coordinate system.
 
-inside one same-rep valid-buffer coordinate system.
+This direction remains locked by design SSOT: **ordering success is a close guard only**, not pass ownership.
 
-This direction is locked by the current design SSOT: ordering success is a
-**close guard only**, not pass ownership.
+### 2.6 E1 representative promotion **landed** (current main)
 
-### 2.6 Current reported runtime state
+Verification and harness work **promoted** both representatives from the earlier conditional posture to **`permanent_must_pass`**, with executable assertions for:
 
-After the temporal epoch-order ledger implementation, the representative shallow
-fixtures are reported to satisfy the real path rather than merely timing-only
-subconditions. However, registry state was intentionally **not** promoted in the
-same session.
+- `completionTruthPassed`
+- `finalPassEligible`
+- `isFinalPassLatched('squat', gate)`
+- `canonicalShallowContractDrovePass`
+- `canonicalTemporalEpochOrderSatisfied`
+- `canonicalShallowContractBlockedReason == null`
 
-So current head is in this state:
-
-- runtime path reportedly passes for representative shallow fixtures
-- registry still says `conditional_until_main_passes`
-- next step must verify that the runtime proof is truly canonical and then, only
-  if verified, promote to executable must-pass status
+`scripts/camera-pr-f-regression-proof-gate.mjs` continues to enforce the full bundle; **unexplained** `SKIP` is forbidden. The sole recognized non-representative skip marker in that gate remains **`no PR-D broadening`**.
 
 ---
 
@@ -108,163 +92,105 @@ The following remain absolute:
 4. threshold relaxation is forbidden
 5. quality truth remains separate from pass truth
 
-Promotion verification must not violate any of the above.
+`canonicalTemporalEpochOrderSatisfied` is **close-order / guard** input when present; it does **not** replace completion-owner pass ownership.
 
 ---
 
 ## 4. Current Technical Truth To Carry Forward
 
-The next room should assume the following as the current intended runtime shape:
-
 ### 4.1 Canonical timing truth
+
 - selected canonical descent timing may come from `pre_arming_kinematic_descent_epoch`
-- cycle timing visibility across the arming boundary is already implemented
-- `minimum_cycle_timing_blocked` is no longer expected to be the first blocker on
-  the representative shallow fixtures
+- cycle timing visibility across the arming boundary is implemented
+- `minimum_cycle_timing_blocked` is not expected to be the first blocker on the representative shallow fixtures on main
 
 ### 4.2 Canonical temporal ordering truth
-- canonical close now has a normalized same-rep epoch-order result available
+
+- canonical close has a normalized same-rep epoch-order result available
 - `canonicalTemporalEpochOrderSatisfied` is the preferred close-order input when present
-- descent / peak / reversal / recovery should now be comparable in one valid-buffer
-  coordinate system
 
-### 4.3 Promotion boundary truth
-The representative fixtures are **not yet promoted in registry** even if runtime
-truth is now green.
+### 4.3 Promotion boundary truth (**landed**)
 
-That means the next room must not assume promotion is already earned.
-It must verify the current head directly.
+The two E1 representatives are **`permanent_must_pass`** on main. The next room must **preserve** that lock, not re-litigate whether promotion is still “pending verification.”
 
 ---
 
-## 5. Exact Verification Question For The Next Room
+## 5. What The Next Room Is **Not** Being Asked To Do
 
-The next room must answer exactly this:
+Obsolete framing (do **not** use as current work):
 
-> On current head, do `shallow_92deg` and `ultra_low_rom_92deg` now satisfy the
-> full canonical promotion proof strongly enough to move from
-> `conditional_until_main_passes` to `permanent_must_pass`?
-
-The next room must not broaden beyond that question.
+- “Verification-first E1 promotion” as the **next** branch — that loop completed on main.
+- “Registry still says `conditional_until_main_passes` for the two representatives” — false on current main.
 
 ---
 
-## 6. Promotion Proof Required In The Next Room
-
-A fixture may be promoted only if **all** of the following are true on current
-head for **both** representative fixtures:
-
-1. `completionTruthPassed === true`
-2. `finalPassEligible === true`
-3. `isFinalPassLatched('squat', gate) === true`
-4. `canonicalShallowContractDrovePass === true`
-5. `canonicalTemporalEpochOrderSatisfied === true`
-6. `canonicalShallowContractBlockedReason == null` or equivalent full-close state
-7. no PR-01 illegal-state regression appears
-8. no absurd-pass family flips to pass
-
-If even one of these is missing for either fixture, promotion is blocked.
-
----
-
-## 7. Exact Allowed Scope For The Next Room
+## 6. Exact Allowed Scope For The Next Room (default)
 
 Strong default:
-- this should be a **verification / harness PR**, not a new runtime logic PR
 
-Allowed by default:
-- `scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs`
-- one narrow promotion-verification smoke if needed
-- one stop-report doc if promotion fails
+- **no** new shallow runtime redesign
+- **no** registry downgrade
+- **no** skip-marker expansion
 
-Runtime changes should be treated as out-of-scope by default.
-Only if the verification room finds that current runtime truth is already green
-but one required diagnostic is merely missing from the harness surface should a
-very narrow additive diagnostic mirror be considered. Otherwise, runtime logic
-should not be touched.
+If a regression appears, the correct response is **fix the regression** inside existing law or **stop with a narrow report** — not conditionalize the representatives again without an explicit, law-compliant SSOT decision.
 
 ---
 
-## 8. Exact Forbidden Scope For The Next Room
+## 7. Exact Forbidden Scope For The Next Room
 
 The next room must not do any of the following:
 
-- no threshold relaxation
-- no fixture edits or fixture cheat
-- no pass-core opener revival
-- no authority-law rewrite
-- no proof-gate skip-marker expansion
-- no P2 cleanup
-- no P3 registry normalization
-- no broad camera-stack rewrite
-- no new Source #4 redesign
-- no new arming/cycle-timing redesign
-- no new temporal-order redesign
-
-If promotion cannot be verified without any of the above, the correct action is
-**stop and report**, not broaden.
+- threshold relaxation
+- fixture edits or fixture cheat
+- pass-core opener revival
+- authority-law rewrite
+- proof-gate skip-marker expansion (beyond what `camera-pr-f-regression-proof-gate.mjs` already allows)
+- P2 cleanup (unless a dedicated P2 prompt authorizes it)
+- P3 registry normalization (unless a dedicated P3 prompt authorizes it)
+- broad camera-stack rewrite
+- new Source #4 redesign
+- new arming/cycle-timing redesign
+- new temporal-order redesign
 
 ---
 
-## 9. Success Path For The Next Room
+## 8. Success Path For Maintenance
 
-If both representative fixtures satisfy the full canonical promotion proof on
-current head, the next room should:
+Keep these green on current head:
 
-1. promote `shallow_92deg` from `conditional_until_main_passes` to `permanent_must_pass`
-2. promote `ultra_low_rom_92deg` from `conditional_until_main_passes` to `permanent_must_pass`
-3. remove only the temporary conditional wording that belonged to the earlier
-   residual-risk phase
-4. keep PR-01 authority smokes green
-5. keep absurd-pass smokes green
-6. keep proof-gate green with no unexplained skip changes
-
-Promotion assertions must stay canonical, not cosmetic.
+1. `scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs`
+2. `scripts/camera-pr-f-regression-proof-gate.mjs`
+3. PR-01 authority freeze smoke and absurd-pass perimeter as already required by the proof bundle
 
 ---
 
-## 10. Stop Path For The Next Room
+## 9. Stop Path For Regressions
 
-If either representative fixture fails the proof in §6, the next room must:
+If either representative fails the E1 smoke’s permanent path:
 
-1. leave registry unchanged
-2. land no weakened assertion
-3. land no skip-marker expansion
-4. write one narrow blocked report only
-
-Recommended blocked report path:
-- `docs/pr/PR-E1-P4-SHALLOW-PROMOTION-VERIFICATION-BLOCKED-REPORT.md`
-
-The report must say exactly which required proof bit was still missing.
+1. do not silently demote to conditional skip
+2. do not widen skip markers to hide the failure
+3. write a narrow blocked or regression report naming the first missing proof bit
 
 ---
 
-## 11. Required Reading For The Next Room
+## 10. Required Reading For The Next Room
 
-The next room should begin from these files, in this order:
-
-1. `docs/SSOT_SQUAT_COMPLETION_FIRST_QUALITY_STRICT_2026_04.md`
-2. `docs/pr/PR-SQUAT-COMPLETION-FIRST-QUALITY-STRICT-TRUTH-MAP-01.md`
-3. `docs/pr/PR-01-SQUAT-COMPLETION-FIRST-AUTHORITY-FREEZE.md`
-4. `docs/pr/PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION.md`
-5. `docs/pr/PR-CAM-SQUAT-SHALLOW-ARMING-CYCLE-TIMING-REALIGN.md`
-6. `docs/pr/PR-CAM-SQUAT-SHALLOW-TEMPORAL-EPOCH-ORDER-REALIGN.md`
-7. `docs/pr/PR-CAM-SQUAT-SHALLOW-CURRENT-HANDOFF-SSOT-FOR-P4-E1.md`
-8. `docs/pr/PR-E1-P4-SHALLOW-PROMOTION-VERIFICATION-IMPLEMENTATION-PROMPT.md`
+1. `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`
+2. `docs/SSOT_SQUAT_COMPLETION_FIRST_QUALITY_STRICT_2026_04.md`
+3. `docs/pr/PR-SQUAT-COMPLETION-FIRST-QUALITY-STRICT-TRUTH-MAP-01.md`
+4. `docs/pr/PR-01-SQUAT-COMPLETION-FIRST-AUTHORITY-FREEZE.md`
+5. `docs/pr/PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION.md`
+6. `docs/pr/PR-CAM-SQUAT-SHALLOW-ARMING-CYCLE-TIMING-REALIGN.md`
+7. `docs/pr/PR-CAM-SQUAT-SHALLOW-TEMPORAL-EPOCH-ORDER-REALIGN.md`
+8. `docs/pr/PR-CAM-SQUAT-SHALLOW-CURRENT-HANDOFF-SSOT-FOR-P4-E1.md` (this file)
 
 ---
 
-## 12. Final Lock
+## 11. Final Lock
 
 The next room starts from this truth:
 
-- the shallow detector branch is already implemented
-- the baseline bug is already fixed
-- the arming/cycle-timing handoff is already implemented
-- the normalized temporal epoch-order ledger is already implemented
-- registry promotion has **not** yet been granted
-
-So the next room must not redesign earlier layers.
-It must do one thing only:
-
-**verify current-head canonical shallow truth and promote E1 only if the full proof is green for both representative shallow fixtures.**
+- Branch B shallow visibility, baseline fix, arming handoff, and temporal epoch-order ledger are **landed**
+- E1 representative registry promotion to **`permanent_must_pass`** is **landed**
+- **Remaining** authorized follow-ons are **authority-law clarity**, then **P3**, then **P2** — not re-running the completed E1 promotion verification handoff

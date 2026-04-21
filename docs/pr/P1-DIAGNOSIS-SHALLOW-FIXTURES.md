@@ -13,6 +13,8 @@
 > 4. Quality interpretation is separate from pass/fail truth.
 > 5. No pass-core-first authority may be reopened.
 
+> **Historical diagnostic.** Failure modes and registry rows below describe the **diagnosis-era** head. **Current main:** `shallow_92deg` and `ultra_low_rom_92deg` are **`permanent_must_pass`** in `scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs` — `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
+
 - Related SSOT: [docs/SSOT_SQUAT_COMPLETION_FIRST_QUALITY_STRICT_2026_04.md](../SSOT_SQUAT_COMPLETION_FIRST_QUALITY_STRICT_2026_04.md)
 - Parent PR prompts:
   - [P1 — legitimate shallow evidence recovery](P1-SQUAT-LEGITIMATE-SHALLOW-EVIDENCE-RECOVERY.md)
@@ -25,15 +27,15 @@
 
 ## §1. Fixtures in diagnosis
 
-Both fixtures are currently registered as `conditional_until_main_passes` in
+At diagnosis time, both fixtures were registered as `conditional_until_main_passes` in
 [scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs](../../scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs)
 Matrix A. Both are representative legitimate shallow reps — they should pass
-under real-world completion-owner truth but currently fail-close.
+under real-world completion-owner truth but **at diagnosis time** failed-close on the observed head.
 
 | fixtureId | Knee-angle peak | Recovery tail | Total frames | Registry state |
 |---|---|---|---|---|
-| `shallow_92deg` | ≈92° | 6 frames of 170° | 31 frames @ 80ms | `conditional_until_main_passes` |
-| `ultra_low_rom_92deg` | ≈92° | 10 frames of 170° | 35 frames @ 80ms | `conditional_until_main_passes` |
+| `shallow_92deg` | ≈92° | 6 frames of 170° | 31 frames @ 80ms | `conditional_until_main_passes` at diagnosis; **`permanent_must_pass` on current main** |
+| `ultra_low_rom_92deg` | ≈92° | 10 frames of 170° | 35 frames @ 80ms | `conditional_until_main_passes` at diagnosis; **`permanent_must_pass` on current main** |
 
 Knee-angle sequence (both):
 
@@ -454,7 +456,7 @@ Residual risks going into P1 implementation:
 (`shallow_92deg`, `ultra_low_rom_92deg`) return
 `gate.status === 'pass'` + `finalPassEligible === true` via the capture script.
 
-**Actions**:
+**Actions** (original P4 intent at diagnosis time; **current main** completed E1 promotion and tightened PR-F explained-SKIP allowlist — `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`):
 
 - [scripts/camera-pr-f-regression-proof-gate.mjs](../../scripts/camera-pr-f-regression-proof-gate.mjs) — remove markers
   `pr01_completion_owner_not_yet_satisfied`,

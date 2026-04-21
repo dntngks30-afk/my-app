@@ -9,9 +9,11 @@
 > - **PR-C** normalized final-pass semantics naming and source selection.
 > - **PR-D** locked the current contract with regression harnesses.
 >
+> **E1 addendum (current main):** the two shallow representatives in the E1 promotion registry are **`permanent_must_pass`** — `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`. List item 1 below names the **class** of conditional real-path posture PR-D allowed before promotion machinery fully closed the representative row; it is not a claim that those two fixtures still SKIP.
+>
 > This document exists because PR-D intentionally left three residual safety gaps:
 >
-> 1. shallow / ultra-low-ROM real-path lock is still conditional and can SKIP,
+> 1. shallow / ultra-low-ROM real-path regression could historically stay **conditional** SKIP until promotion bookkeeping closes a target row (**current main:** E1 `shallow_92deg` / `ultra_low_rom_92deg` are **`permanent_must_pass`** — E1 status-lock doc),
 > 2. success snapshot real storage path is not fully locked in Node-only regression,
 > 3. setup step-back / frame-jump / camera-tilt / unstable-bbox false-pass family is not yet pinned with dedicated fixtures.
 >

@@ -5,7 +5,8 @@
 - **Design SSOT**: `docs/pr/PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION.md`
 - **Predecessor stop report**: `docs/pr/PR-E1-P4-SHALLOW-PROMOTION-BLOCKED-REPORT.md`
 - **Session prompt**: `docs/pr/PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-FOLLOWUP-REVIEW-IMPLEMENTATION-PROMPT.md`
-- **E1 promotion registry**: unchanged (strong default respected — `shallow_92deg` / `ultra_low_rom_92deg` remain `conditional_until_main_passes`).
+- **E1 promotion registry (this session’s close)**: unchanged — `shallow_92deg` / `ultra_low_rom_92deg` remained `conditional_until_main_passes` when this report was written (correct for that session).
+- **Current main addendum**: subsequent verification promoted both representatives to **`permanent_must_pass`** in `scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs`. **SSOT:** `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
 
 ---
 
@@ -209,16 +210,14 @@ Making source #4 fire unblocks the source itself (the session mission),
 but does not shift the **earliest-by-index** `effectiveDescentStartFrame`
 for these fixtures (source #2 still ties at the same slice-local index),
 so the canonical cycle-timing gate is not re-opened by this fix alone.
-The `shallow_92deg` / `ultra_low_rom_92deg` entries in
-`scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs` remain
-at `conditional_until_main_passes`. The E1 smoke still reports them as
-conditional SKIPs within the PR-01-accepted band. No registry write, no
-harness hard-green assertion was changed.
 
-Promoting these fixtures belongs to a later session whose scope includes
-the factor that actually drives the cycle-timing gate on shallow reps
-(e.g. the arming-truncation-versus-early-descent coupling). That is
-explicitly **out of scope** for this follow-up.
+**As of this report’s close:** the `shallow_92deg` / `ultra_low_rom_92deg` entries in
+`scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs` were still
+`conditional_until_main_passes`, and the E1 smoke reported conditional SKIPs within the PR-01-accepted band. No registry write and no harness hard-green assertion were changed in this follow-up.
+
+**Current main:** later arming/temporal work and verification promoted both fixtures to **`permanent_must_pass`** with full canonical assertions; see `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
+
+Promoting these fixtures belonged to later sessions whose scope included the factors that drive canonical shallow close on shallow reps. That broader promotion work was **out of scope** for this follow-up.
 
 ---
 

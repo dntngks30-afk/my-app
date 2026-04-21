@@ -499,7 +499,7 @@ Evidence that would justify moving `shallow_92deg` and
 - no threshold, fixture, authority, or proof-gate edits are required to make
   them pass.
 
-Until then, both fixtures remain `conditional_until_main_passes`.
+**Current main:** the promotion path described in companion SSOT completed; both representatives are **`permanent_must_pass`** with full canonical proof. **SSOT:** `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`. The checklist above is retained as historical evidence framing, not a pending conditional registry statement.
 
 ---
 

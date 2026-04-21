@@ -20,6 +20,14 @@
 
 ---
 
+## 0. Current main snapshot (landed)
+
+In `scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs`, **`shallow_92deg`** and **`ultra_low_rom_92deg`** are **`permanent_must_pass`**, with Matrix A asserting the full canonical shallow authority bundle documented in that script’s header. One-page narrative: **`docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`**.
+
+Sections below define the promotion **contract** (`conditional_until_main_passes` vs `permanent_must_pass` semantics). They are not invalidated by the snapshot; other fixtures may still use conditional state when lawfully registered.
+
+---
+
 ## 1. Why this PR exists
 
 Current PR-D behavior is intentionally conservative.
@@ -312,3 +320,9 @@ The bookkeeping is simple; the engine recovery is the risky part.
 ## 15. One-line lock
 
 **PR-E1 must turn shallow/ultra-low-ROM lock state from informal conditional SKIP into a machine-readable, test-enforced promotion contract so no recovered fixture can ever silently fall back into ambiguity.**
+
+---
+
+## 16. Landed status pointer (current main)
+
+Executable registry state, canonical proof bits, and PR-F skip policy as enforced on main: **`docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`**.

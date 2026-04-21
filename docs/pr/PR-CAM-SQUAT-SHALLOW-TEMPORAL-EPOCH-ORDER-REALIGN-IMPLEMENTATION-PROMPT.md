@@ -1,5 +1,7 @@
 # Implementation Prompt — PR-CAM-SQUAT-SHALLOW-TEMPORAL-EPOCH-ORDER-REALIGN
 
+> **HISTORICAL IMPLEMENTATION PROMPT.** Scoped out E1 registry promotion by design. **Current main:** representative promotion **landed** afterward — `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
+
 Use GPT-5.4 or an equivalently strong reasoning model.
 
 This session is an **implementation session for temporal epoch-order realignment only**.

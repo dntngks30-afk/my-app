@@ -1,5 +1,7 @@
 # Implementation Prompt — P4 / E1 Shallow Promotion Verification
 
+> **HISTORICAL — SESSION COMPLETE ON MAIN.** The verification-first promotion pass this prompt described has **landed**: both representatives are **`permanent_must_pass`** with full canonical assertions in `scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs`. Use **`docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`** and the updated **`docs/pr/PR-CAM-SQUAT-SHALLOW-CURRENT-HANDOFF-SSOT-FOR-P4-E1.md`** for current work. Retain this file only as a record of the completed mission shape.
+
 Use GPT-5.4 or an equivalently strong reasoning model.
 
 This session is a **verification-first promotion implementation session**.
@@ -9,7 +11,7 @@ It is **not** a new temporal epoch-order redesign session.
 It is **not** an authority-law rewrite session.
 It is **not** a P2 / P3 cleanup session.
 
-The current runtime branch is already reported to pass the representative shallow fixtures on the real path after the temporal epoch-order ledger work. Registry state was intentionally left conditional. Your job in this session is to verify that claim on current head, and promote registry state only if the full canonical proof is executable and green.
+**Archival context:** When this prompt was authored, registry was still conditional while runtime was reported green; the session goal was verify-then-promote. **On current main that work is complete** — both representatives are `permanent_must_pass` with full canonical proof in `scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs`. See `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`. The sections below record the proof bar and constraints for reference.
 
 ---
 
@@ -24,12 +26,13 @@ Read these files first and treat them as binding, in this order:
 5. `docs/pr/PR-CAM-SQUAT-SHALLOW-ARMING-CYCLE-TIMING-REALIGN.md`
 6. `docs/pr/PR-CAM-SQUAT-SHALLOW-TEMPORAL-EPOCH-ORDER-REALIGN.md`
 7. `docs/pr/PR-CAM-SQUAT-SHALLOW-CURRENT-HANDOFF-SSOT-FOR-P4-E1.md`
-8. current relevant runtime files on main:
+8. `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md` (current main registry + proof posture)
+9. current relevant runtime files on main:
    - `src/lib/camera/squat/squat-completion-core.ts`
    - `src/lib/camera/squat/shallow-completion-contract.ts`
    - `src/lib/camera/squat/squat-completion-canonical.ts`
    - `src/lib/camera/auto-progression.ts`
-9. current relevant smokes:
+10. current relevant smokes:
    - `scripts/camera-pr-cam-squat-shallow-authority-safe-descent-source-expansion-smoke.mjs`
    - `scripts/camera-pr-cam-squat-shallow-authority-safe-descent-source-followup-smoke.mjs`
    - `scripts/camera-pr-cam-squat-shallow-arming-cycle-timing-realign-smoke.mjs`
@@ -42,7 +45,7 @@ Then inspect the current head before editing.
 
 ---
 
-## Session mission
+## Session mission (archival — answered on main)
 
 Answer one narrow question and act only within that answer:
 

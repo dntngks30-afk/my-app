@@ -37,6 +37,8 @@ from ever becoming `true` on the shallow depth band, which in turn blocks
 the two E1 fixtures (`shallow_92deg`, `ultra_low_rom_92deg`) from
 promoting beyond `conditional_until_main_passes`.
 
+**Current main — E1 registry:** both representatives are **`permanent_must_pass`** with full canonical proof in `scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs` — `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`. The problem statement above is the **design-time** motivation tied to the calibration study; it does not re-assert that those fixtures are still registry-conditional.
+
 The calibration study ([P1-CALIBRATION-STUDY-RESULT](./P1-CALIBRATION-STUDY-RESULT.md))
 established empirically that:
 
@@ -904,13 +906,11 @@ accept either outcome.
    `completionTruthPassed === true` (i.e. canonical, not via
    `pass_core_detected`).
 6. **PR-F regression proof gate** —
-   `scripts/camera-pr-f-regression-proof-gate.mjs` must run green with
-   NO new entries in `ALLOWED_SKIP_MARKERS`. Existing markers for the
-   two fixtures (`conditional_until_main_passes`,
-   `shallow fixture not passing on this main`,
-   `ultra-low-ROM fixture not passing on this main`,
-   `pr01_completion_owner_not_yet_satisfied`) MUST be removable only
-   after smoke #5 is green.
+   `scripts/camera-pr-f-regression-proof-gate.mjs` must run green.
+
+   **Current main:** executable policy is the gate script — explained `SKIP` is allowed **only** when the line contains `no PR-D broadening`. Older representative-conditional skip markers are **not** part of that allowlist.
+
+   **Design-time note (archival):** This SSOT once tied “removable marker families” to conditional representatives and forbade widening `ALLOWED_SKIP_MARKERS`. That vocabulary described an earlier gate posture; promotion and gate tightening have since landed per `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
 
 ### §8.2 Illegal states that MUST remain locked
 
@@ -1064,11 +1064,15 @@ Resolve the §7.2 vs §7.3 interpretation ambiguity for the
 `canonicalShallowContractDrovePass` diagnostic introduced by §7.4 item 3.
 
 ### §10.4 Blocked-until-resolved
+**At authoring time:**
+
 - P2, P3, P4 remain blocked until §8.1 #1 – #6 are all green.
 - E1 entries for `shallow_92deg` and `ultra_low_rom_92deg` remain
   `conditional_until_main_passes`. Promotion is gated on §8.1 smoke #5.
   Downgrade is forbidden (§9 item 10). PR-F SKIP markers remain at
   current breadth (§9 item 7).
+
+**Current main:** E1 promotion for the two representatives and PR-F allowlist tightening **have landed** — `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`. P2/P3/P4 gating may still apply for other authorized reasons until those prompts supersede.
 
 ---
 
@@ -1085,5 +1089,7 @@ produce, or on the pass-core assist path currently observed in production
 telemetry. Its proof obligations (§5), split-brain guards (§6),
 coexistence accounting with `pass_core_detected` (§7), and validation
 plan (§8) are binding on the implementation session that cites this
-SSOT. P2, P3, P4, and E1 fixture promotion remain blocked until that
+SSOT. **At authoring time,** P2, P3, P4, and E1 fixture promotion remained blocked until that
 implementation session lands green against §8.1.
+
+**Current main:** E1 representative promotion **has landed** (see `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`). Remaining follow-ons include authority-law clarity, P3, and P2 as separately authorized.

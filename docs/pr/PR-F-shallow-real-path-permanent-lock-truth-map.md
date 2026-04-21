@@ -12,13 +12,21 @@
 > - PR-A/B/C/D already froze squat product success at the post-owner final-pass surface and locked the current regression contract.
 > - PR-E1/E2/E3 already closed the three blind spots around promotion bookkeeping, success-snapshot storage verification, and setup/framing false-pass families.
 > - Latest main is therefore **not missing blind-spot coverage**.
-> - The remaining problem is narrower and more dangerous: shallow / ultra-low-ROM real-path fixtures are still not promoted to permanent must-pass because main truth is not yet strong enough to justify promotion.
+> - **(Pre-landing framing; superseded for E1 representatives by §0.)** The remaining problem was stated as: shallow / ultra-low-ROM real-path fixtures not yet promoted to permanent must-pass because main truth was not yet strong enough to justify promotion. **Current main:** `shallow_92deg` / `ultra_low_rom_92deg` are **`permanent_must_pass`** — §0 and `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
 >
-> This PR is the next step after PR-E.
+> This PR was the planned next step after PR-E.
 >
 > It is **not** another bookkeeping PR.
 > It is **not** a broad camera retune.
 > It is a narrow engine-recovery + permanent-lock promotion PR for shallow real-path truth only.
+
+---
+
+## 0. Current main status (landed)
+
+`shallow_92deg` and `ultra_low_rom_92deg` are **`permanent_must_pass`** in `scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs`, with the full canonical authority bundle asserted in Matrix A. **`docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`**.
+
+Sections 1–3 below keep the **pre-landing** framing for law and scope history. They must not be read as claiming the E1 representative pair is still conditional on main.
 
 ---
 
@@ -33,14 +41,14 @@ The repo already has:
 - false-pass fixture locks,
 - snapshot/storage verification.
 
-But the two representative shallow fixtures are still not promoted to permanent must-pass on main.
+**Pre-landing narrative (historical):** the two representative shallow fixtures were still not promoted to permanent must-pass on the head that existed when this map was written.
 
-That means the repo is currently in this half-state:
+That described a **half-state** at that time:
 
 - false-pass families are guarded,
-- but legitimate shallow / ultra-low-ROM real-path success is not yet strong enough to be treated as permanent truth.
+- but legitimate shallow / ultra-low-ROM real-path success was not yet treated as permanent truth for the E1 representative rows.
 
-That half-state is no longer acceptable.
+**Current main:** that promotion gap for `shallow_92deg` / `ultra_low_rom_92deg` **is closed** — §0.
 
 Once the blind spots are closed, the remaining work must be:
 

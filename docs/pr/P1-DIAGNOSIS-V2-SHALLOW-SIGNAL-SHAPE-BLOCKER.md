@@ -15,6 +15,8 @@
 > 3. Absurd-pass registry is block-only.
 > 4. Threshold relaxation is forbidden.
 > 5. Quality truth is separate from pass truth.
+>
+> **HISTORICAL STOP REPORT.** E1 registry conclusions below state the **post-P1-stop** snapshot. **Current main:** both representatives are **`permanent_must_pass`** — `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
 
 - Prior diagnosis: [P1-DIAGNOSIS-SHALLOW-FIXTURES.md](./P1-DIAGNOSIS-SHALLOW-FIXTURES.md)
 - Parent prompt: this session's P1 implementation entry
@@ -179,9 +181,7 @@ scope, not this session's scope.
    healthy PR-01 guardrail it is supposed to be.
 3. Absurd-pass blocker families (`standing_still`, `setup_motion_contaminated`,
    `no_real_descent`, etc.) remain unchanged and unweakened.
-4. Both fixtures remain `conditional_until_main_passes` in the E1 registry;
-   the PR-F proof gate's explicit SKIP markers continue to cover this residual
-   risk with byte-exact justification strings.
+4. **At this report's close:** both fixtures remained `conditional_until_main_passes` in the E1 registry, and the PR-F proof gate's explicit SKIP markers covered that residual risk with byte-exact justification strings. **Current main:** both are `permanent_must_pass`; PR-F allows only the `no PR-D broadening` explained-SKIP marker — `scripts/camera-pr-f-regression-proof-gate.mjs`.
 
 ---
 
@@ -215,11 +215,13 @@ session should:
    bundle and split-brain guard. This is meaningfully larger than Lever A and
    requires its own SSOT + PR prompt.
 
-Until one of (1)/(2) is chosen and designed with full authority accounting,
-`shallow_92deg` and `ultra_low_rom_92deg` MUST remain
-`conditional_until_main_passes` — promotion to `permanent_must_pass` is
-forbidden, downgrade is forbidden, SKIP markers stay with explicit reason
+**At this report's close:** until one of (1)/(2) was chosen and designed with full authority accounting,
+`shallow_92deg` and `ultra_low_rom_92deg` were required to remain
+`conditional_until_main_passes`; promotion to `permanent_must_pass` was
+forbidden; downgrade was forbidden; SKIP markers stayed with explicit reason
 strings.
+
+**Current main:** subsequent Branch B / arming / temporal / verification work satisfied canonical promotion; both fixtures are **`permanent_must_pass`** per `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
 
 ---
 

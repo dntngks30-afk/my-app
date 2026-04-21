@@ -645,7 +645,7 @@ Evidence required before `shallow_92deg` / `ultra_low_rom_92deg` can move to
 - no threshold, fixture, authority-law, proof-gate, or skip-marker change was
   needed.
 
-Until then, both fixtures remain `conditional_until_main_passes`.
+**Current main:** the evidence bar above was satisfied and both representatives were promoted to **`permanent_must_pass`** in `scripts/camera-pr-e1-shallow-lock-promotion-registry-smoke.mjs`. **SSOT:** `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`. The list above remains the historical justification checklist; it is not an open “until then” gate.
 
 ---
 

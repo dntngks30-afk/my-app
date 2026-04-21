@@ -1,5 +1,7 @@
 # Implementation Prompt — P4 / E1 Shallow Promotion After Branch B
 
+> **HISTORICAL — SUPERSEDED.** Representative E1 promotion to **`permanent_must_pass`** is **landed on main**. Current SSOT: `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`. This prompt remains as the archived mission statement for the promotion/hardening class of work.
+
 Use GPT-5.4 or an equivalently strong reasoning model.
 
 This session is a **narrow promotion / hardening implementation session**.
@@ -8,7 +10,9 @@ It is **not** an authority-law reconciliation session.
 It is **not** a P2 naming cleanup session.
 It is **not** a P3 registry-normalization session.
 
-Branch B source implementation is already landed on canonical ref/main. The next task is to determine whether the representative shallow fixtures now satisfy the canonical shallow contract strongly enough to be promoted out of conditional state, and if so, harden that result into executable regression locks.
+Branch B source implementation is already landed on canonical ref/main.
+
+**At authoring time,** the open task was to determine whether the representative shallow fixtures satisfied the canonical shallow contract strongly enough to be promoted out of conditional state and, if so, harden that into executable regression locks. **On current main that promotion is complete;** see `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
 
 ---
 

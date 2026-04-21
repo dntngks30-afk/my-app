@@ -17,6 +17,8 @@
 - Prior diagnosis: [P1-DIAGNOSIS-V2-SHALLOW-SIGNAL-SHAPE-BLOCKER.md](./P1-DIAGNOSIS-V2-SHALLOW-SIGNAL-SHAPE-BLOCKER.md)
 - Authority law: [PR-01-SQUAT-COMPLETION-FIRST-AUTHORITY-FREEZE.md](./PR-01-SQUAT-COMPLETION-FIRST-AUTHORITY-FREEZE.md)
 
+> **E1 registry addendum (current main):** `shallow_92deg` and `ultra_low_rom_92deg` are **`permanent_must_pass`** with full canonical proof — `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`. Telemetry conclusions and Branch B design direction in this study are **not** retracted; closure sections that speak of “E1 still conditional” describe **study-time** registry, not current main.
+
 ---
 
 ## §1. Scope and data sources
@@ -36,10 +38,10 @@ Decision rule (from parent prompt §"Required decision rule"):
 
 ### §1.2 Synthetic fixtures (Branch A's reference point)
 
-- `shallow_92deg` — E1 `conditional_until_main_passes`, synthetic via
+- `shallow_92deg` — at study time, E1 `conditional_until_main_passes` (**current main:** `permanent_must_pass`); synthetic via
   `squatPoseLandmarksFromKneeAngle` (see `P1-DIAGNOSIS-V2` §3.1).
 - `ultra_low_rom_92deg` — same mock family, same logistic-flat
-  `squatDepthProxy` profile in the critical early descent window.
+  `squatDepthProxy` profile in the critical early descent window; same E1 registry note as `shallow_92deg`.
 
 ### §1.3 Real user recordings (Branch A's test set)
 
@@ -478,6 +480,8 @@ trigger an immediate stop with a higher-level SSOT escalation.
 
 ### §7.4 Blocked-until-resolved
 
+**At the time this section was written:**
+
 - P2, P3, P4 remain blocked until the new source design PR lands its design
   SSOT, its absurd-pass proof bundle, and its split-brain guard proof.
 - E1 registry entries for `shallow_92deg` and `ultra_low_rom_92deg` remain
@@ -487,6 +491,8 @@ trigger an immediate stop with a higher-level SSOT escalation.
 - Downgrade of either fixture to `conditional` or `skip_permanent` is
   forbidden.
 - PR-F `ALLOWED_SKIP_MARKERS` stays at current breadth. No new markers.
+
+**Current main:** E1 promotion for the two representatives **has landed**; PR-F explained-SKIP allowlist is defined solely by `scripts/camera-pr-f-regression-proof-gate.mjs` (`no PR-D broadening` only). P3/P2 blocking language above may still apply until those prompts authorize work.
 - `P1-FOLLOWON-CLASSIFICATION-DECISION.md` §8's "fixture calibration
   representativeness study" recommendation is superseded by this result.
   A fixture re-derivation session is no longer the correct next step; §6.1
@@ -624,6 +630,9 @@ the empirical evidence that:
 The next authorized session is a **design session** for a new
 authority-safe descent source, with explicit new SSOT, new absurd-pass
 proof bundle, and new split-brain guard deliverables. P2, P3, P4 remain
-blocked until that design branch resolves. E1 entries for `shallow_92deg`
-and `ultra_low_rom_92deg` remain `conditional_until_main_passes`. PR-F
-SKIP markers remain at current breadth.
+blocked until that design branch resolves. **At this document's original
+close,** E1 entries for `shallow_92deg`
+and `ultra_low_rom_92deg` were still `conditional_until_main_passes`. PR-F
+SKIP markers were at the then-current breadth.
+
+**Current main:** E1 representatives are **`permanent_must_pass`**; PR-F allows only `no PR-D broadening` as an explained SKIP marker — `docs/pr/PR-E1-shallow-representative-must-pass-landed-status-lock.md`.
