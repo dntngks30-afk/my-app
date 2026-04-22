@@ -74,6 +74,39 @@ export function isSquatLowQualityPassDecoupleEligible(input: {
   return true;
 }
 
+/**
+ * PR-5 — Quality Semantics Split (SSOT §4.4).
+ *
+ * Confidence decouple eligibility: when the upstream owner law already
+ * proved the rep cycle (completionOwnerPassed === true) and the PR-2
+ * false-pass guard cleared as part of that opener, `confidence_too_low`
+ * must be a quality-only signal, not a pass killer. The caller supplies
+ * `completionOwnerPassed` so this helper stays layered — it does not
+ * re-derive owner truth.
+ *
+ * Must still block when:
+ *   - completion not satisfied (no cycle truth)
+ *   - captureQuality === 'invalid' (severe capture failure — not quality)
+ *   - `severeInvalid` true (insufficient signal / framing invalid)
+ *   - pass-confirmation not yet ready (cycle stability)
+ */
+export function isSquatConfidencePassDecoupleEligible(input: {
+  stepId: CameraStepId;
+  completionOwnerPassed: boolean;
+  completionSatisfied: boolean;
+  guardrail: Pick<StepGuardrailResult, 'captureQuality'>;
+  severeInvalid: boolean;
+  effectivePassConfirmation: boolean;
+}): boolean {
+  if (input.stepId !== 'squat') return false;
+  if (!input.completionOwnerPassed) return false;
+  if (!input.completionSatisfied) return false;
+  if (input.guardrail.captureQuality === 'invalid') return false;
+  if (input.severeInvalid) return false;
+  if (!input.effectivePassConfirmation) return false;
+  return true;
+}
+
 /** progression pass / isFinalPassLatched 에 쓰는 integrity — decouple 시 무시(null). */
 export function squatPassProgressionIntegrityBlock(
   rawIntegrityBlock: string | null,
@@ -82,17 +115,29 @@ export function squatPassProgressionIntegrityBlock(
   return decoupleEligible ? null : rawIntegrityBlock;
 }
 
-/** decouple 구간에서 pass 를 막지 않고 trace/failureReasons 용으로만 남기는 태그 */
+/**
+ * decouple 구간에서 pass 를 막지 않고 trace/failureReasons 용으로만 남기는 태그.
+ *
+ * PR-5 — Quality Semantics Split (SSOT §4.4):
+ * confidence_too_low 도 `confidenceDecoupleApplied === true` 일 때 quality-only
+ * 경고로 surface 한다. `confidenceDecoupleApplied` 는 UI gate 가 실제로
+ * 저confidence 케이스를 demote 했을 때만 true (decoupleEligible 만으론 surface 하지 않음).
+ */
 export function getSquatQualityOnlyWarnings(input: {
   guardrail: Pick<StepGuardrailResult, 'captureQuality' | 'flags'>;
   rawIntegrityBlock: string | null;
   decoupleEligible: boolean;
+  confidenceDecoupleApplied?: boolean;
 }): string[] {
-  if (!input.decoupleEligible) return [];
   const w: string[] = [];
-  if (input.guardrail.captureQuality === 'low') w.push('capture_quality_low');
-  if (input.guardrail.flags.includes('hard_partial')) w.push('hard_partial');
-  if (input.rawIntegrityBlock != null) w.push('standard_cycle_signal_integrity');
+  if (input.decoupleEligible) {
+    if (input.guardrail.captureQuality === 'low') w.push('capture_quality_low');
+    if (input.guardrail.flags.includes('hard_partial')) w.push('hard_partial');
+    if (input.rawIntegrityBlock != null) w.push('standard_cycle_signal_integrity');
+  }
+  if (input.confidenceDecoupleApplied === true) {
+    w.push('confidence_too_low');
+  }
   return w;
 }
 
@@ -315,6 +360,46 @@ function explicitCanonicalEpochLedgerClear(cs: SquatCompletionOwnerStateSlice): 
     pAt < rAt &&
     rAt < recAt
   );
+}
+
+/**
+ * PR-5 — Quality Semantics Split (SSOT §4.4).
+ *
+ * Quality-semantics split snapshot. Post-pass diagnostic. Records which
+ * signals crossed from pass gate to quality interpretation on this tick.
+ *
+ * `qualityOnlyWarnings` mirrors `getSquatQualityOnlyWarnings` output and
+ * should be surfaced by downstream UI/latch writers for observability.
+ * Pass / owner / final-latch decisions must NOT read this snapshot — they
+ * use the explicit gate signals (`completionOwnerPassed`, UI gate result,
+ * PR-2 guard, absurd-pass registry).
+ */
+export type SquatQualitySemanticsSplitSnapshot = {
+  lowQualityDecoupleEligible: boolean;
+  confidenceDecoupleEligible: boolean;
+  confidenceDecoupleApplied: boolean;
+  qualityOnlyWarnings: string[];
+};
+
+export function readSquatQualitySemanticsSplitSnapshot(input: {
+  lowQualityDecoupleEligible: boolean;
+  confidenceDecoupleEligible: boolean;
+  confidenceDecoupleApplied: boolean;
+  guardrail: Pick<StepGuardrailResult, 'captureQuality' | 'flags'>;
+  rawIntegrityBlock: string | null;
+}): SquatQualitySemanticsSplitSnapshot {
+  const qualityOnlyWarnings = getSquatQualityOnlyWarnings({
+    guardrail: input.guardrail,
+    rawIntegrityBlock: input.rawIntegrityBlock,
+    decoupleEligible: input.lowQualityDecoupleEligible,
+    confidenceDecoupleApplied: input.confidenceDecoupleApplied,
+  });
+  return {
+    lowQualityDecoupleEligible: input.lowQualityDecoupleEligible,
+    confidenceDecoupleEligible: input.confidenceDecoupleEligible,
+    confidenceDecoupleApplied: input.confidenceDecoupleApplied,
+    qualityOnlyWarnings,
+  };
 }
 
 /**

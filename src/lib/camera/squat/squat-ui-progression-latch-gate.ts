@@ -43,11 +43,28 @@ export interface SquatUiProgressionLatchGateInput {
   setupMotionBlocked?: boolean;
   /** Official shallow owner freeze: downstream UI/final surfaces are sink-only readers. */
   officialShallowOwnerFrozen?: boolean;
+  /**
+   * PR-5 — Quality Semantics Split (SSOT §4.4).
+   * When the caller has proven upstream owner law + PR-2 guard clear, the
+   * `confidence < passThresholdEffective` block is demoted to a quality-only
+   * warning. The UI gate stays block-only for actual cycle/readiness gates
+   * (readiness, arming, capture invalid, pass-confirmation, hard blockers).
+   * Defaults to `false` for pre-PR-5 callers — never opens new pass.
+   */
+  confidenceDecoupleEligible?: boolean;
 }
 
 export interface SquatUiProgressionLatchGateResult {
   uiProgressionAllowed: boolean;
   uiProgressionBlockedReason: string | null;
+  /**
+   * PR-5 — true iff the gate actually demoted a `confidence_too_low` case
+   * (decoupleEligible AND confidence < threshold). Diagnostic only —
+   * downstream consumers use `uiProgressionAllowed` for the gate decision
+   * and surface `confidence_too_low` as a quality-only warning when this
+   * flag is set.
+   */
+  confidenceDecoupleApplied?: boolean;
 }
 
 /**
@@ -92,24 +109,60 @@ export function computeSquatUiProgressionLatchGate(
   if (input.captureQualityInvalid) {
     return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'capture_quality_invalid' };
   }
+  /**
+   * PR-5 — Quality Semantics Split (SSOT §4.4).
+   * `confidence_too_low` is demoted to a quality-only signal when the caller
+   * has proven upstream owner law + PR-2 guard clear. This does NOT open new
+   * pass for no-cycle motion — the gate already short-circuits on
+   * `completionOwnerPassed === false` at the top, and downstream pass-core /
+   * false-pass guard layers remain independent. When demoted, the gate keeps
+   * closing on real cycle/readiness issues (pass-confirmation, integrity,
+   * hard blockers) below.
+   */
+  let confidenceDecoupleApplied = false;
   if (input.confidence < input.passThresholdEffective) {
-    return {
-      uiProgressionAllowed: false,
-      uiProgressionBlockedReason: `confidence_too_low:${input.confidence.toFixed(2)}<${input.passThresholdEffective.toFixed(2)}`,
-    };
+    if (input.confidenceDecoupleEligible === true) {
+      confidenceDecoupleApplied = true;
+    } else {
+      return {
+        uiProgressionAllowed: false,
+        uiProgressionBlockedReason: `confidence_too_low:${input.confidence.toFixed(2)}<${input.passThresholdEffective.toFixed(2)}`,
+        confidenceDecoupleApplied: false,
+      };
+    }
   }
   if (!input.effectivePassConfirmation) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'pass_confirmation_not_ready' };
+    return {
+      uiProgressionAllowed: false,
+      uiProgressionBlockedReason: 'pass_confirmation_not_ready',
+      confidenceDecoupleApplied,
+    };
   }
   if (input.passConfirmationFrameCount < input.framesReq) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'pass_confirmation_frames_not_met' };
+    return {
+      uiProgressionAllowed: false,
+      uiProgressionBlockedReason: 'pass_confirmation_frames_not_met',
+      confidenceDecoupleApplied,
+    };
   }
   if (input.squatIntegrityBlockForPass != null) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: input.squatIntegrityBlockForPass };
+    return {
+      uiProgressionAllowed: false,
+      uiProgressionBlockedReason: input.squatIntegrityBlockForPass,
+      confidenceDecoupleApplied,
+    };
   }
   const blocker = input.hardBlockerReasons.find((r) => input.reasons.includes(r));
   if (blocker) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: `hard_blocker:${blocker}` };
+    return {
+      uiProgressionAllowed: false,
+      uiProgressionBlockedReason: `hard_blocker:${blocker}`,
+      confidenceDecoupleApplied,
+    };
   }
-  return { uiProgressionAllowed: true, uiProgressionBlockedReason: null };
+  return {
+    uiProgressionAllowed: true,
+    uiProgressionBlockedReason: null,
+    confidenceDecoupleApplied,
+  };
 }

@@ -28,6 +28,7 @@ import {
   getSquatRawStandardCycleSignalIntegrityBlock,
   getSquatQualityOnlyWarnings,
   isSquatLowQualityPassDecoupleEligible,
+  isSquatConfidencePassDecoupleEligible,
   computeSquatCompletionOwnerTruth,
   resolveSquatCompletionLineageOwner,
   squatCompletionTruthPassed,
@@ -1085,6 +1086,14 @@ export function isFinalPassLatched(
       severeInvalid,
       effectivePassConfirmation: gate.passConfirmationSatisfied === true,
     });
+    const squatConfidenceDecoupleLatch = isSquatConfidencePassDecoupleEligible({
+      stepId: 'squat',
+      completionOwnerPassed: ownerTruth.completionOwnerPassed,
+      completionSatisfied: gate.completionSatisfied === true,
+      guardrail: gate.guardrail,
+      severeInvalid,
+      effectivePassConfirmation: gate.passConfirmationSatisfied === true,
+    });
     const rawIntegrityLatch = getSquatRawStandardCycleSignalIntegrityBlock(
       gate.completionSatisfied === true,
       gate.guardrail,
@@ -1129,6 +1138,7 @@ export function isFinalPassLatched(
         readinessStableDwellSatisfied: setupTruthForLatch.readinessStableDwellSatisfied,
         setupMotionBlocked: setupTruthForLatch.setupMotionBlocked,
         officialShallowOwnerFrozen: ownerTruth.officialShallowOwnerFrozen,
+        confidenceDecoupleEligible: squatConfidenceDecoupleLatch,
       })
     );
     /**
@@ -1879,6 +1889,7 @@ function buildSquatUiProgressionLatchGateInput(input: {
   readinessStableDwellSatisfied: boolean | undefined;
   setupMotionBlocked: boolean;
   officialShallowOwnerFrozen?: boolean;
+  confidenceDecoupleEligible?: boolean;
 }): SquatUiProgressionLatchGateInput {
   return {
     completionOwnerPassed: input.completionOwnerPassed,
@@ -1897,6 +1908,7 @@ function buildSquatUiProgressionLatchGateInput(input: {
     readinessStableDwellSatisfied: input.readinessStableDwellSatisfied,
     setupMotionBlocked: input.setupMotionBlocked,
     officialShallowOwnerFrozen: input.officialShallowOwnerFrozen,
+    confidenceDecoupleEligible: input.confidenceDecoupleEligible,
   };
 }
 
@@ -2634,6 +2646,27 @@ export function evaluateExerciseAutoProgress(
     stepId === 'squat'
       ? squatPassProgressionIntegrityBlock(squatRawIntegrityBlock, squatDecoupleEligible)
       : null;
+  /**
+   * PR-5 — Quality Semantics Split (SSOT §4.4).
+   *
+   * Confidence decouple is derived from the same owner-truth read that
+   * feeds Step B below. Owner truth is stateless over `squatCs`, so
+   * reading it here is a constant-time derivation with no side effects —
+   * it does NOT create a second opener. Step B still owns the canonical
+   * owner-truth consumed by the post-owner gate layer.
+   */
+  const squatConfidenceDecoupleEligible =
+    stepId === 'squat' &&
+    isSquatConfidencePassDecoupleEligible({
+      stepId: 'squat',
+      completionOwnerPassed:
+        computeSquatCompletionOwnerTruth({ squatCompletionState: squatCs })
+          .completionOwnerPassed,
+      completionSatisfied,
+      guardrail,
+      severeInvalid: severeInvalidForSquat,
+      effectivePassConfirmation,
+    });
 
   /**
    * PR-4-GATE-FREEZE + PR-01 + PR-P3 — Squat final-pass pipeline.
@@ -2732,6 +2765,7 @@ export function evaluateExerciseAutoProgress(
           squatReadinessSetupRoutedSources.readinessStableDwellSatisfied,
         setupMotionBlocked: squatReadinessSetupRoutedSources.setupMotionBlocked,
         officialShallowOwnerFrozen: squatOwnerTruth.officialShallowOwnerFrozen,
+        confidenceDecoupleEligible: squatConfidenceDecoupleEligible,
       }),
       squatCompletionState: squatCs,
       squatCycleDebug,
@@ -2760,6 +2794,7 @@ export function evaluateExerciseAutoProgress(
       guardrail,
       rawIntegrityBlock: squatRawIntegrityBlock,
       decoupleEligible: squatDecoupleEligible,
+      confidenceDecoupleApplied: squatUiGate?.confidenceDecoupleApplied === true,
     });
     const cpr = squatCs?.completionPassReason;
     const standardOwnerEligible = completionSatisfied === true && cpr === 'standard_cycle';
