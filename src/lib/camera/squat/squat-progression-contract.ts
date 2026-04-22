@@ -146,16 +146,207 @@ export type SquatCompletionOwnerStateSlice = {
   currentSquatPhase?: string;
   cycleComplete?: boolean;
   completionBlockedReason?: string | null;
+  attemptStarted?: boolean;
+  descendConfirmed?: boolean;
+  downwardCommitmentReached?: boolean;
+  downwardCommitmentDelta?: number;
+  reversalConfirmedAfterDescend?: boolean;
+  recoveryConfirmedAfterReversal?: boolean;
+  officialShallowReversalSatisfied?: boolean;
+  ownerAuthoritativeRecoverySatisfied?: boolean;
+  standingFinalizeSatisfied?: boolean;
+  standingRecoveredAtMs?: number | null;
+  attemptStartedAfterReady?: boolean;
+  readinessStableDwellSatisfied?: boolean;
+  setupMotionBlocked?: boolean;
+  evidenceLabel?: string;
+  peakLatchedAtIndex?: number | null;
   officialShallowPathClosed?: boolean;
   officialShallowClosureProofSatisfied?: boolean;
   canonicalShallowContractAntiFalsePassClear?: boolean;
+  canonicalTemporalEpochOrderSatisfied?: boolean;
+  canonicalTemporalEpochOrderBlockedReason?: string | null;
+  selectedCanonicalDescentTimingEpochValidIndex?: number | null;
+  selectedCanonicalDescentTimingEpochAtMs?: number | null;
+  selectedCanonicalPeakEpochValidIndex?: number | null;
+  selectedCanonicalPeakEpochAtMs?: number | null;
+  selectedCanonicalReversalEpochValidIndex?: number | null;
+  selectedCanonicalReversalEpochAtMs?: number | null;
+  selectedCanonicalRecoveryEpochValidIndex?: number | null;
+  selectedCanonicalRecoveryEpochAtMs?: number | null;
+  reversalConfirmedByRuleOrHmm?: boolean;
+  officialShallowStreamBridgeApplied?: boolean;
+  stillSeatedAtPass?: boolean;
+  squatEventCycle?: {
+    detected?: boolean;
+    descentFrames?: number;
+    notes?: string[];
+  };
+};
+
+export type OfficialShallowFalsePassGuardFamily =
+  | 'no_real_descent'
+  | 'no_real_reversal'
+  | 'no_real_recovery'
+  | 'still_seated_at_pass'
+  | 'seated_hold_without_upward_recovery'
+  | 'standing_still_or_jitter_only'
+  | 'setup_motion_blocked'
+  | 'ready_before_start_success'
+  | 'cross_epoch_stitched_proof'
+  | 'assist_only_closure_without_raw_epoch_provenance'
+  | 'canonical_false_pass_guard_not_clear';
+
+export type OfficialShallowFalsePassGuardSnapshot = {
+  officialShallowFalsePassGuardClear: boolean;
+  officialShallowFalsePassGuardFamily: OfficialShallowFalsePassGuardFamily | null;
+  officialShallowFalsePassGuardBlockedReason: string | null;
 };
 
 export type OfficialShallowOwnerFreezeSnapshot = {
   officialShallowOwnerFrozen: boolean;
   officialShallowOwnerReason: 'official_shallow_owner_freeze' | null;
   officialShallowOwnerBlockedReason: string | null;
+  officialShallowFalsePassGuardFamily: OfficialShallowFalsePassGuardFamily | null;
 };
+
+function officialShallowFalsePassBlocked(
+  family: OfficialShallowFalsePassGuardFamily
+): OfficialShallowFalsePassGuardSnapshot {
+  return {
+    officialShallowFalsePassGuardClear: false,
+    officialShallowFalsePassGuardFamily: family,
+    officialShallowFalsePassGuardBlockedReason: `official_shallow_false_pass_guard:${family}`,
+  };
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 0;
+}
+
+function explicitCanonicalEpochLedgerClear(cs: SquatCompletionOwnerStateSlice): boolean {
+  if (cs.canonicalTemporalEpochOrderSatisfied !== true) return false;
+  if (cs.canonicalTemporalEpochOrderBlockedReason != null) return false;
+
+  const dIdx = cs.selectedCanonicalDescentTimingEpochValidIndex;
+  const pIdx = cs.selectedCanonicalPeakEpochValidIndex;
+  const rIdx = cs.selectedCanonicalReversalEpochValidIndex;
+  const recIdx = cs.selectedCanonicalRecoveryEpochValidIndex;
+  const hasAnyIndex = dIdx != null || pIdx != null || rIdx != null || recIdx != null;
+  if (hasAnyIndex) {
+    if (
+      !isNonNegativeInteger(dIdx) ||
+      !isNonNegativeInteger(pIdx) ||
+      !isNonNegativeInteger(rIdx) ||
+      !isNonNegativeInteger(recIdx) ||
+      !(dIdx < pIdx && pIdx < rIdx && rIdx < recIdx)
+    ) {
+      return false;
+    }
+  }
+
+  const dAt = cs.selectedCanonicalDescentTimingEpochAtMs;
+  const pAt = cs.selectedCanonicalPeakEpochAtMs;
+  const rAt = cs.selectedCanonicalReversalEpochAtMs;
+  const recAt = cs.selectedCanonicalRecoveryEpochAtMs;
+  return (
+    isFiniteNumber(dAt) &&
+    isFiniteNumber(pAt) &&
+    isFiniteNumber(rAt) &&
+    isFiniteNumber(recAt) &&
+    dAt < pAt &&
+    pAt < rAt &&
+    rAt < recAt
+  );
+}
+
+export function readOfficialShallowFalsePassGuardSnapshot(input: {
+  squatCompletionState: SquatCompletionOwnerStateSlice | undefined;
+}): OfficialShallowFalsePassGuardSnapshot {
+  const cs = input.squatCompletionState;
+  if (cs == null || cs.officialShallowPathClosed !== true) {
+    return {
+      officialShallowFalsePassGuardClear: false,
+      officialShallowFalsePassGuardFamily: null,
+      officialShallowFalsePassGuardBlockedReason: null,
+    };
+  }
+
+  const notes = cs.squatEventCycle?.notes ?? [];
+
+  if (cs.setupMotionBlocked === true) {
+    return officialShallowFalsePassBlocked('setup_motion_blocked');
+  }
+  if (cs.readinessStableDwellSatisfied === false || cs.attemptStartedAfterReady === false) {
+    return officialShallowFalsePassBlocked('ready_before_start_success');
+  }
+  if (cs.stillSeatedAtPass === true) {
+    return officialShallowFalsePassBlocked('still_seated_at_pass');
+  }
+  if (
+    cs.evidenceLabel === 'insufficient_signal' ||
+    notes.includes('jitter_spike_reject') ||
+    (cs.squatEventCycle?.detected === false &&
+      (cs.squatEventCycle?.descentFrames ?? 0) === 0 &&
+      (cs.downwardCommitmentDelta ?? 0) <= 0)
+  ) {
+    return officialShallowFalsePassBlocked('standing_still_or_jitter_only');
+  }
+  if (
+    cs.attemptStarted !== true ||
+    cs.descendConfirmed !== true ||
+    cs.downwardCommitmentReached !== true ||
+    !((cs.downwardCommitmentDelta ?? 0) > 0)
+  ) {
+    return officialShallowFalsePassBlocked('no_real_descent');
+  }
+  if (cs.peakLatchedAtIndex == null || cs.peakLatchedAtIndex <= 0) {
+    return officialShallowFalsePassBlocked('ready_before_start_success');
+  }
+  if (
+    cs.reversalConfirmedAfterDescend !== true ||
+    cs.officialShallowReversalSatisfied !== true
+  ) {
+    return officialShallowFalsePassBlocked('no_real_reversal');
+  }
+  if (
+    cs.recoveryConfirmedAfterReversal !== true ||
+    (cs.ownerAuthoritativeRecoverySatisfied !== true &&
+      cs.standingFinalizeSatisfied !== true) ||
+    cs.standingRecoveredAtMs == null
+  ) {
+    if (cs.currentSquatPhase !== 'standing_recovered' || cs.standingRecoveredAtMs == null) {
+      return officialShallowFalsePassBlocked('seated_hold_without_upward_recovery');
+    }
+    return officialShallowFalsePassBlocked('no_real_recovery');
+  }
+  const epochLedgerClear = explicitCanonicalEpochLedgerClear(cs);
+  if (
+    cs.reversalConfirmedByRuleOrHmm !== true &&
+    cs.officialShallowStreamBridgeApplied === true &&
+    !epochLedgerClear
+  ) {
+    return officialShallowFalsePassBlocked(
+      'assist_only_closure_without_raw_epoch_provenance'
+    );
+  }
+  if (!epochLedgerClear) {
+    return officialShallowFalsePassBlocked('cross_epoch_stitched_proof');
+  }
+  if (cs.canonicalShallowContractAntiFalsePassClear !== true) {
+    return officialShallowFalsePassBlocked('canonical_false_pass_guard_not_clear');
+  }
+
+  return {
+    officialShallowFalsePassGuardClear: true,
+    officialShallowFalsePassGuardFamily: null,
+    officialShallowFalsePassGuardBlockedReason: null,
+  };
+}
 
 export function readOfficialShallowOwnerFreezeSnapshot(input: {
   squatCompletionState: SquatCompletionOwnerStateSlice | undefined;
@@ -166,6 +357,7 @@ export function readOfficialShallowOwnerFreezeSnapshot(input: {
       officialShallowOwnerFrozen: false,
       officialShallowOwnerReason: null,
       officialShallowOwnerBlockedReason: null,
+      officialShallowFalsePassGuardFamily: null,
     };
   }
 
@@ -174,14 +366,20 @@ export function readOfficialShallowOwnerFreezeSnapshot(input: {
       officialShallowOwnerFrozen: false,
       officialShallowOwnerReason: null,
       officialShallowOwnerBlockedReason: 'official_shallow_closure_proof_not_satisfied',
+      officialShallowFalsePassGuardFamily: null,
     };
   }
 
-  if (cs.canonicalShallowContractAntiFalsePassClear !== true) {
+  const falsePassGuard = readOfficialShallowFalsePassGuardSnapshot(input);
+  if (falsePassGuard.officialShallowFalsePassGuardClear !== true) {
     return {
       officialShallowOwnerFrozen: false,
       officialShallowOwnerReason: null,
-      officialShallowOwnerBlockedReason: 'official_shallow_false_pass_guard_not_clear',
+      officialShallowOwnerBlockedReason:
+        falsePassGuard.officialShallowFalsePassGuardBlockedReason ??
+        'official_shallow_false_pass_guard_not_clear',
+      officialShallowFalsePassGuardFamily:
+        falsePassGuard.officialShallowFalsePassGuardFamily,
     };
   }
 
@@ -189,6 +387,7 @@ export function readOfficialShallowOwnerFreezeSnapshot(input: {
     officialShallowOwnerFrozen: true,
     officialShallowOwnerReason: 'official_shallow_owner_freeze',
     officialShallowOwnerBlockedReason: null,
+    officialShallowFalsePassGuardFamily: null,
   };
 }
 
