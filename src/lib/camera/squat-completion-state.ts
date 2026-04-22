@@ -531,6 +531,18 @@ export interface SquatCompletionState extends MotionCompletionResult {
   officialShallowPathReason?: string | null;
   /** PR-03: 후보인데 아직 닫히지 않았을 때 병목(관측 전용) */
   officialShallowPathBlockedReason?: string | null;
+  /**
+   * PR-3 — Official Shallow Admission Promotion (SSOT §4.2).
+   * Admission-level anti-false-pass guard family that rejected the attempt
+   * (`setup_motion_blocked` / `standing_still_or_jitter_only` /
+   * `seated_hold_without_descent`), or `null` when no admission guard fired.
+   * Diagnostic / sink-only — admission closure / pass logic read `admitted`.
+   */
+  officialShallowPathAdmissionGuardFamily?:
+    | 'setup_motion_blocked'
+    | 'standing_still_or_jitter_only'
+    | 'seated_hold_without_descent'
+    | null;
   /** PR-03 rework: primary 역전 미달 시 completion 스트림으로 shallow reversal 앵커 보강 적용 */
   officialShallowStreamBridgeApplied?: boolean;
   /** PR-03 rework: phaseHint ascent 없이 completion return + 0.88×요구량으로 상승 등가 인정 */

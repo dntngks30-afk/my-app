@@ -1367,6 +1367,23 @@ export function deriveOfficialShallowAdmission(params: {
   );
 }
 
+/**
+ * PR-3 — Official Shallow Admission Promotion (SSOT §4.2).
+ *
+ * Admission guard families that MUST reject an official shallow attempt even if
+ * the structural conditions (candidate/armed/descend/attemptStarted) are met.
+ * These correspond to the "must not" baseline constraints of admission:
+ * setup-motion, standing-still, seated-hold.
+ *
+ * Admission guard families are NOT closure/pass veto families — they only
+ * prevent an epoch from being recognised as an official shallow attempt when
+ * upstream evidence shows the motion could not be a real shallow rep.
+ */
+export type OfficialShallowAdmissionGuardFamily =
+  | 'setup_motion_blocked'
+  | 'standing_still_or_jitter_only'
+  | 'seated_hold_without_descent';
+
 /** Subcontract A: shallow admission 전용 trace shape (closure/reversal 미포함) */
 export type SquatOfficialShallowAdmissionContract = {
   candidate: boolean;
@@ -1374,8 +1391,39 @@ export type SquatOfficialShallowAdmissionContract = {
   reason: string | null;
   /** admission 게이트에서 막힌 경우만 — reversal/finalize 병목은 C */
   blockedReason: string | null;
+  /**
+   * PR-3: admission-level anti-false-pass guard family that rejected the
+   * attempt (or null when no guard fired). Diagnostic only when admitted.
+   */
+  admissionGuardFamily: OfficialShallowAdmissionGuardFamily | null;
 };
 
+/**
+ * PR-3 — Official Shallow Admission Promotion (SSOT §4.2).
+ *
+ * Admission law (all must hold, else admission does not open):
+ *   1. `officialShallowPathCandidate` — shallow ROM band + attemptAdmissionSatisfied (+ baseline OR
+ *      upstream pre-arming fallback). This is the "shallow band / shallow rep evidence" leg.
+ *   2. `armed` — readiness satisfied after valid start (natural / PR-03 shallow / HMM assist).
+ *   3. `descendConfirmed` — intentional descent evidence (same motion epoch).
+ *   4. `attemptStarted` — downward commitment reached (not setup noise).
+ *
+ * PR-3 anti-false-pass admission guards (reject even if structural gate passes):
+ *   - `setup_motion_blocked` — setup framing/motion blocker still active.
+ *   - `standing_still_or_jitter_only` — attemptAdmissionSatisfied is false;
+ *     no real depth evidence while claiming attempt.
+ *   - `seated_hold_without_descent` — downwardCommitmentDelta is not positive;
+ *     the attempt is likely a seated-hold, not a descent.
+ *
+ * Admission explicitly does NOT depend on (SSOT §4.2 "must not"):
+ *   - `peakLatched` / `hasValidCommittedPeakAnchor` (standard peak latch)
+ *   - `descent_span_too_short` / `ascent_recovery_span_too_short` (standard frame span)
+ *   - `standingFinalizeSatisfied` / `standingRecoveredAtMs` (standard standing hold)
+ *   - `reversalConfirmedAfterDescend` / `no_reversal_after_peak` (standard reversal streak)
+ *
+ * Those belong to closure / false-pass guard / final owner sink layers and must
+ * not pre-empt admission when shallow attempt evidence is already valid.
+ */
 export function resolveOfficialShallowAdmissionContract(p: {
   officialShallowPathCandidate: boolean;
   armed: boolean;
@@ -1385,13 +1433,38 @@ export function resolveOfficialShallowAdmissionContract(p: {
   naturalArmed: boolean;
   hmmArmingAssistApplied: boolean;
   pr03OfficialShallowArming: boolean;
+  /** PR-3: admission-level anti-false-pass inputs (SSOT §4.2 "must not" list). */
+  setupMotionBlocked: boolean;
+  attemptAdmissionSatisfied: boolean;
+  downwardCommitmentDelta: number;
 }): SquatOfficialShallowAdmissionContract {
-  const admitted = deriveOfficialShallowAdmission({
+  const structurallyAdmitted = deriveOfficialShallowAdmission({
     officialShallowPathCandidate: p.officialShallowPathCandidate,
     armed: p.armed,
     descendConfirmed: p.descendConfirmed,
     attemptStarted: p.attemptStarted,
   });
+
+  /**
+   * PR-3 §4.2: admission-level anti-false-pass guard families. Evaluated only
+   * once the structural admission gate would otherwise open — the goal is to
+   * stop weird-pass inputs (setup motion, standing-still, seated-hold) from
+   * earning official shallow admission, without tightening admission against
+   * legitimate shallow reps.
+   */
+  let admissionGuardFamily: OfficialShallowAdmissionGuardFamily | null = null;
+  if (structurallyAdmitted) {
+    if (p.setupMotionBlocked) {
+      admissionGuardFamily = 'setup_motion_blocked';
+    } else if (!p.attemptAdmissionSatisfied) {
+      admissionGuardFamily = 'standing_still_or_jitter_only';
+    } else if (!(p.downwardCommitmentDelta > 0)) {
+      admissionGuardFamily = 'seated_hold_without_descent';
+    }
+  }
+
+  const admitted = structurallyAdmitted && admissionGuardFamily == null;
+
   const reason = !p.officialShallowPathCandidate
     ? null
     : p.pr03OfficialShallowArming
@@ -1404,7 +1477,9 @@ export function resolveOfficialShallowAdmissionContract(p: {
 
   let blockedReason: string | null = null;
   if (p.officialShallowPathCandidate && !admitted) {
-    if (!p.armed) {
+    if (admissionGuardFamily != null) {
+      blockedReason = `official_shallow_admission_guard:${admissionGuardFamily}`;
+    } else if (!p.armed) {
       blockedReason = p.officialShallowDescentEvidenceForAdmission
         ? 'not_armed'
         : 'official_shallow_pending_descent_evidence';
@@ -1420,6 +1495,7 @@ export function resolveOfficialShallowAdmissionContract(p: {
     admitted,
     reason,
     blockedReason,
+    admissionGuardFamily,
   };
 }
 
@@ -2012,6 +2088,7 @@ export function evaluateSquatCompletionCore(
       officialShallowPathClosed: false,
       officialShallowPathReason: null,
       officialShallowPathBlockedReason: null,
+      officialShallowPathAdmissionGuardFamily: null,
       officialShallowStreamBridgeApplied: false,
       officialShallowAscentEquivalentSatisfied: false,
       officialShallowClosureProofSatisfied: false,
@@ -3026,8 +3103,18 @@ export function evaluateSquatCompletionCore(
   const reversalConfirmedAfterDescend =
     progressionReversalFrame != null && ownerAuthoritativeReversalSatisfied;
 
-  const officialShallowPathAdmittedForNormalize =
-    officialShallowPathCandidate && armed && descendConfirmed && attemptStarted;
+  /**
+   * PR-3: structural admission-only form (no anti-false-pass guards) for the
+   * terminal-stage blocked-reason normalize. Anti-false-pass admission guards
+   * live in `resolveOfficialShallowAdmissionContract` and do not affect
+   * completion-blocked-reason coercion.
+   */
+  const officialShallowPathAdmittedForNormalize = deriveOfficialShallowAdmission({
+    officialShallowPathCandidate,
+    armed,
+    descendConfirmed,
+    attemptStarted,
+  });
 
   let completionBlockedReason = normalizeCompletionBlockedReasonForTerminalStage({
     completionSatisfied: rawPostAssistCompletionBlockedReason == null,
@@ -3137,6 +3224,10 @@ export function evaluateSquatCompletionCore(
     naturalArmed,
     hmmArmingAssistApplied: options?.hmmArmingAssistApplied === true,
     pr03OfficialShallowArming,
+    /** PR-3 §4.2: admission-level anti-false-pass guard inputs. */
+    setupMotionBlocked: options?.setupMotionBlocked === true,
+    attemptAdmissionSatisfied,
+    downwardCommitmentDelta,
   });
 
   let completionPassReason: SquatCompletionPassReason = resolveSquatCompletionPath({
@@ -3161,7 +3252,15 @@ export function evaluateSquatCompletionCore(
 
   let officialShallowPathBlockedReason: string | null = null;
   if (officialShallowPathCandidate && !officialShallowPathClosed) {
-    if (!armed) {
+    /**
+     * PR-3 §4.2: admission-level anti-false-pass guard family takes precedence
+     * over downstream closure blockers, so weird-pass rejections are surfaced
+     * with a stable shallow admission guard label instead of leaking as
+     * standard closure blocker reasons.
+     */
+    if (shallowAdmissionContract.blockedReason != null) {
+      officialShallowPathBlockedReason = shallowAdmissionContract.blockedReason;
+    } else if (!armed) {
       officialShallowPathBlockedReason = officialShallowDescentEvidenceForAdmission
         ? 'not_armed'
         : 'official_shallow_pending_descent_evidence';
@@ -3406,6 +3505,8 @@ export function evaluateSquatCompletionCore(
     officialShallowPathClosed,
     officialShallowPathReason,
     officialShallowPathBlockedReason,
+    /** PR-3 §4.2: admission-level anti-false-pass guard family (null when clear). */
+    officialShallowPathAdmissionGuardFamily: shallowAdmissionContract.admissionGuardFamily,
     officialShallowStreamBridgeApplied,
     officialShallowAscentEquivalentSatisfied,
     /**

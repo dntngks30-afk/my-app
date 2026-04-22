@@ -161,6 +161,15 @@ export type SquatCompletionOwnerStateSlice = {
   setupMotionBlocked?: boolean;
   evidenceLabel?: string;
   peakLatchedAtIndex?: number | null;
+  officialShallowPathCandidate?: boolean;
+  officialShallowPathAdmitted?: boolean;
+  officialShallowPathReason?: string | null;
+  officialShallowPathBlockedReason?: string | null;
+  officialShallowPathAdmissionGuardFamily?:
+    | 'setup_motion_blocked'
+    | 'standing_still_or_jitter_only'
+    | 'seated_hold_without_descent'
+    | null;
   officialShallowPathClosed?: boolean;
   officialShallowClosureProofSatisfied?: boolean;
   canonicalShallowContractAntiFalsePassClear?: boolean;
@@ -208,6 +217,26 @@ export type OfficialShallowOwnerFreezeSnapshot = {
   officialShallowOwnerReason: 'official_shallow_owner_freeze' | null;
   officialShallowOwnerBlockedReason: string | null;
   officialShallowFalsePassGuardFamily: OfficialShallowFalsePassGuardFamily | null;
+};
+
+/**
+ * PR-3 — Official Shallow Admission Promotion (SSOT §4.2).
+ * Admission-layer snapshot. Admission is NOT closure and NOT pass. This
+ * snapshot only reflects whether a legitimate shallow attempt was promoted
+ * into an officially admissible shallow attempt, and — when rejected — which
+ * admission-level anti-false-pass guard family caused the rejection.
+ */
+export type OfficialShallowAdmissionGuardFamily =
+  | 'setup_motion_blocked'
+  | 'standing_still_or_jitter_only'
+  | 'seated_hold_without_descent';
+
+export type OfficialShallowAdmissionSnapshot = {
+  officialShallowAdmissionCandidate: boolean;
+  officialShallowAdmissionAdmitted: boolean;
+  officialShallowAdmissionReason: string | null;
+  officialShallowAdmissionBlockedReason: string | null;
+  officialShallowAdmissionGuardFamily: OfficialShallowAdmissionGuardFamily | null;
 };
 
 function officialShallowFalsePassBlocked(
@@ -262,6 +291,35 @@ function explicitCanonicalEpochLedgerClear(cs: SquatCompletionOwnerStateSlice): 
     pAt < rAt &&
     rAt < recAt
   );
+}
+
+/**
+ * PR-3 §4.2: Read the admission-stage snapshot. Diagnostic only — downstream
+ * closure / pass gates must not depend on this, and admission does not grant
+ * pass. This mirrors the admission contract fields surfaced by
+ * `squat-completion-core.ts` without re-deriving admission rules.
+ */
+export function readOfficialShallowAdmissionSnapshot(input: {
+  squatCompletionState: SquatCompletionOwnerStateSlice | undefined;
+}): OfficialShallowAdmissionSnapshot {
+  const cs = input.squatCompletionState;
+  if (cs == null) {
+    return {
+      officialShallowAdmissionCandidate: false,
+      officialShallowAdmissionAdmitted: false,
+      officialShallowAdmissionReason: null,
+      officialShallowAdmissionBlockedReason: null,
+      officialShallowAdmissionGuardFamily: null,
+    };
+  }
+  return {
+    officialShallowAdmissionCandidate: cs.officialShallowPathCandidate === true,
+    officialShallowAdmissionAdmitted: cs.officialShallowPathAdmitted === true,
+    officialShallowAdmissionReason: cs.officialShallowPathReason ?? null,
+    officialShallowAdmissionBlockedReason: cs.officialShallowPathBlockedReason ?? null,
+    officialShallowAdmissionGuardFamily:
+      cs.officialShallowPathAdmissionGuardFamily ?? null,
+  };
 }
 
 export function readOfficialShallowFalsePassGuardSnapshot(input: {
