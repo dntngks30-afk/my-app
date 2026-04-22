@@ -776,6 +776,21 @@ export interface SquatCompletionState extends MotionCompletionResult {
   sameRepShallowAdmissionRecovered?: boolean;
   sameRepShallowAdmissionRecoveryReason?: string | null;
   /**
+   * PR-SHALLOW-UPSTREAM-CURRENT-REP-EPOCH-STABILITY-01:
+   * A legitimately opened shallow current-rep epoch was kept from regressing to
+   * pre-attempt classification inside the same acquisition buffer. Observability
+   * only; this never grants completion or clears terminal blockers.
+   */
+  upstreamCurrentRepEpochStabilityApplied?: boolean;
+  upstreamCurrentRepEpochStabilityRecoveredFrom?:
+    | 'not_armed'
+    | 'freeze_or_latch_missing'
+    | 'baseline_not_frozen'
+    | 'peak_not_latched'
+    | 'admission_dropped'
+    | null;
+  upstreamCurrentRepEpochStabilitySource?: 'prefix_official_shallow_admission' | null;
+  /**
    * PR-SHALLOW-SAME-REP-ADMISSION-CLOSE-RECOVERY-01:
    * Same-rep shallow close recovered from a narrow timing blocker after closure proof
    * was already satisfied. Observability only; canonical closer remains the only writer.
@@ -2086,6 +2101,159 @@ function needsCurrentRepAnchorProvenanceReset(state: SquatCompletionState): bool
   return currentRepAnchorResetReason(state) != null;
 }
 
+type ShallowCurrentRepEpochSnapshot = {
+  baselineFrozenDepth: number | null | undefined;
+  peakLatchedAtIndex: number | null | undefined;
+  peakAnchorTruth: SquatCompletionState['peakAnchorTruth'];
+  completionBlockedReason: string | null | undefined;
+  officialShallowPathBlockedReason: string | null | undefined;
+  descendStartAtMs: number | undefined;
+  peakAtMs: number | undefined;
+  committedAtMs: number | undefined;
+  selectedCanonicalDescentTimingEpochAtMs: number | null | undefined;
+  selectedCanonicalDescentTimingEpochValidIndex: number | null | undefined;
+  selectedCanonicalPeakEpochAtMs: number | null | undefined;
+  selectedCanonicalPeakEpochValidIndex: number | null | undefined;
+  relativeDepthPeak: number;
+  evidenceLabel: SquatEvidenceLabel;
+};
+
+function isShallowCurrentRepEpochResidualBlocker(reason: string | null | undefined): boolean {
+  return (
+    reason === 'no_reversal' ||
+    reason === 'not_standing_recovered' ||
+    reason === 'descent_span_too_short' ||
+    reason === 'ascent_recovery_span_too_short' ||
+    reason === 'recovery_hold_too_short' ||
+    reason === 'low_rom_standing_finalize_not_satisfied' ||
+    reason === 'ultra_low_rom_standing_finalize_not_satisfied'
+  );
+}
+
+function shallowCurrentRepEpochSnapshotEligible(state: SquatCompletionState): boolean {
+  if (state.completionSatisfied === true) return false;
+  if (!shallowRecoveryShallowBandEligible(state)) return false;
+  if (!shallowRecoveryHasAttemptDescendCommitment(state)) return false;
+  if (state.officialShallowPathAdmitted !== true) return false;
+  if (state.baselineFrozen !== true) return false;
+  if (state.peakLatched !== true) return false;
+  if ((state.peakLatchedAtIndex ?? -1) <= 0) return false;
+  if (state.peakAnchorTruth !== 'committed_or_post_commit_peak') return false;
+  if (!shallowRecoveryReadinessClear(state)) return false;
+  if (!shallowRecoveryHasNoKnownStaleOrMixedRep(state)) return false;
+  if (state.eventCyclePromoted === true) return false;
+  return true;
+}
+
+function captureShallowCurrentRepEpochSnapshot(
+  state: SquatCompletionState
+): ShallowCurrentRepEpochSnapshot | null {
+  if (!shallowCurrentRepEpochSnapshotEligible(state)) return null;
+  return {
+    baselineFrozenDepth: state.baselineFrozenDepth,
+    peakLatchedAtIndex: state.peakLatchedAtIndex,
+    peakAnchorTruth: state.peakAnchorTruth,
+    completionBlockedReason: state.completionBlockedReason,
+    officialShallowPathBlockedReason: state.officialShallowPathBlockedReason,
+    descendStartAtMs: state.descendStartAtMs,
+    peakAtMs: state.peakAtMs,
+    committedAtMs: state.committedAtMs,
+    selectedCanonicalDescentTimingEpochAtMs: state.selectedCanonicalDescentTimingEpochAtMs,
+    selectedCanonicalDescentTimingEpochValidIndex:
+      state.selectedCanonicalDescentTimingEpochValidIndex,
+    selectedCanonicalPeakEpochAtMs: state.selectedCanonicalPeakEpochAtMs,
+    selectedCanonicalPeakEpochValidIndex: state.selectedCanonicalPeakEpochValidIndex,
+    relativeDepthPeak: state.relativeDepthPeak,
+    evidenceLabel: state.evidenceLabel,
+  };
+}
+
+function readCurrentRepEpochDriftReason(
+  state: SquatCompletionState
+): SquatCompletionState['upstreamCurrentRepEpochStabilityRecoveredFrom'] {
+  if (state.completionBlockedReason === 'not_armed') return 'not_armed';
+  if (state.completionBlockedReason === 'freeze_or_latch_missing') {
+    return 'freeze_or_latch_missing';
+  }
+  if (state.baselineFrozen !== true) return 'baseline_not_frozen';
+  if (state.peakLatched !== true) return 'peak_not_latched';
+  if (state.officialShallowPathAdmitted !== true) return 'admission_dropped';
+  return null;
+}
+
+export function applyShallowCurrentRepEpochStability(
+  state: SquatCompletionState,
+  snapshot: ShallowCurrentRepEpochSnapshot | null,
+  options?: EvaluateSquatCompletionStateOptions
+): SquatCompletionState {
+  if (snapshot == null) return state;
+  if (state.completionSatisfied === true) return state;
+  if (!shallowRecoverySetupClear(state, options)) return state;
+  if (!shallowRecoveryReadinessClear(state)) return state;
+  if (!shallowRecoveryHasNoKnownStaleOrMixedRep(state)) return state;
+  if (state.eventCyclePromoted === true) return state;
+  if (state.evidenceLabel === 'standard' || (state.relativeDepthPeak ?? 0) >= STANDARD_OWNER_FLOOR) {
+    return state;
+  }
+  if (snapshot.evidenceLabel === 'standard' || snapshot.relativeDepthPeak >= STANDARD_OWNER_FLOOR) {
+    return state;
+  }
+
+  const driftReason = readCurrentRepEpochDriftReason(state);
+  if (driftReason == null) return state;
+
+  const snapshotBlocker = isShallowCurrentRepEpochResidualBlocker(snapshot.completionBlockedReason)
+    ? snapshot.completionBlockedReason
+    : isShallowCurrentRepEpochResidualBlocker(snapshot.officialShallowPathBlockedReason)
+      ? snapshot.officialShallowPathBlockedReason
+      : null;
+  const currentBlockerIsPreAttempt =
+    state.completionBlockedReason === 'not_armed' ||
+    state.completionBlockedReason === 'freeze_or_latch_missing';
+
+  return {
+    ...state,
+    attemptStarted: true,
+    descendConfirmed: true,
+    downwardCommitmentReached: true,
+    officialShallowPathCandidate: true,
+    officialShallowPathAdmitted: true,
+    officialShallowPathReason:
+      state.officialShallowPathReason ?? 'prefix_official_shallow_admission',
+    officialShallowPathBlockedReason:
+      snapshotBlocker != null &&
+      (state.officialShallowPathBlockedReason === 'not_armed' ||
+        state.officialShallowPathBlockedReason === 'freeze_or_latch_missing')
+        ? snapshotBlocker
+        : state.officialShallowPathBlockedReason,
+    completionBlockedReason:
+      currentBlockerIsPreAttempt && snapshotBlocker != null
+        ? snapshotBlocker
+        : state.completionBlockedReason,
+    baselineFrozen: true,
+    baselineFrozenDepth: state.baselineFrozenDepth ?? snapshot.baselineFrozenDepth,
+    peakLatched: true,
+    peakLatchedAtIndex: state.peakLatchedAtIndex ?? snapshot.peakLatchedAtIndex,
+    peakAnchorTruth: state.peakAnchorTruth ?? snapshot.peakAnchorTruth,
+    descendStartAtMs: state.descendStartAtMs ?? snapshot.descendStartAtMs,
+    peakAtMs: state.peakAtMs ?? snapshot.peakAtMs,
+    committedAtMs: state.committedAtMs ?? snapshot.committedAtMs,
+    selectedCanonicalDescentTimingEpochAtMs:
+      state.selectedCanonicalDescentTimingEpochAtMs ??
+      snapshot.selectedCanonicalDescentTimingEpochAtMs,
+    selectedCanonicalDescentTimingEpochValidIndex:
+      state.selectedCanonicalDescentTimingEpochValidIndex ??
+      snapshot.selectedCanonicalDescentTimingEpochValidIndex,
+    selectedCanonicalPeakEpochAtMs:
+      state.selectedCanonicalPeakEpochAtMs ?? snapshot.selectedCanonicalPeakEpochAtMs,
+    selectedCanonicalPeakEpochValidIndex:
+      state.selectedCanonicalPeakEpochValidIndex ?? snapshot.selectedCanonicalPeakEpochValidIndex,
+    upstreamCurrentRepEpochStabilityApplied: true,
+    upstreamCurrentRepEpochStabilityRecoveredFrom: driftReason,
+    upstreamCurrentRepEpochStabilitySource: 'prefix_official_shallow_admission',
+  };
+}
+
 function sameRepShallowAdmissionRecoveryEligible(
   state: SquatCompletionState,
   options: EvaluateSquatCompletionStateOptions | undefined
@@ -2361,6 +2529,7 @@ export function evaluateSquatCompletionState(
   options?: EvaluateSquatCompletionStateOptions
 ): SquatCompletionState {
   let depthFreeze: SquatDepthFreezeConfig | null = null;
+  let currentRepEpochSnapshot: ShallowCurrentRepEpochSnapshot | null = null;
   const MIN_PREFIX = Math.max(8, MIN_BASELINE_FRAMES + 2);
   if (frames.length >= MIN_PREFIX) {
     for (let n = MIN_PREFIX; n <= frames.length; n++) {
@@ -2390,6 +2559,12 @@ export function evaluateSquatCompletionState(
             lockedRelativeDepthPeakSource: src,
             frozenBaselineStandingDepth: frozenBaseline,
           };
+          const frozenPartial = evaluateSquatCompletionCore(
+            frames.slice(0, n),
+            options,
+            depthFreeze
+          );
+          currentRepEpochSnapshot = captureShallowCurrentRepEpochSnapshot(frozenPartial);
         }
         break;
       }
@@ -2440,6 +2615,8 @@ export function evaluateSquatCompletionState(
         frozenBaselineStandingDepth: frozenBaseline,
       };
       initialState = evaluateSquatCompletionCore(frames, options, depthFreeze);
+      currentRepEpochSnapshot =
+        currentRepEpochSnapshot ?? captureShallowCurrentRepEpochSnapshot(initialState);
     }
   }
 
@@ -2449,6 +2626,8 @@ export function evaluateSquatCompletionState(
     options,
     depthFreeze
   );
+
+  state = applyShallowCurrentRepEpochStability(state, currentRepEpochSnapshot, options);
 
   /**
    * PR-RF-STRUCT-12 REP-REBIND-01: Hard-reset ghost rep timestamps at rep boundary.

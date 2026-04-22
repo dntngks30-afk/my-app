@@ -54,6 +54,7 @@ const REQUIRED_PROOF_BUNDLE = [
   { path: 'scripts/camera-pr-shallow-close-commit-contract-align-01-smoke.mjs', group: 'shallow/close-commit-contract-align' },
   { path: 'scripts/camera-pr-shallow-anchor-provenance-reset-and-span-align-01-smoke.mjs', group: 'shallow/anchor-provenance-reset-span-align' },
   { path: 'scripts/camera-pr-shallow-upstream-arming-peak-latch-acquisition-01-smoke.mjs', group: 'shallow/upstream-arming-peak-latch-acquisition' },
+  { path: 'scripts/camera-pr-shallow-upstream-current-rep-epoch-stability-01-smoke.mjs', group: 'shallow/upstream-current-rep-epoch-stability' },
 ];
 
 let failed = 0;
