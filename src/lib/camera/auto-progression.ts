@@ -675,12 +675,41 @@ export function readSquatCurrentRepPassTruth(input: {
     const sameEpochPeakAtMs = shallowPeakProvenanceUnified
       ? (cs!.peakAtMs as number)
       : pc.peakAtMs;
+
+    /**
+     * PR-X3 shallow-admitted same-epoch reversal ownership alignment (trace-only).
+     *
+     * Mirror of the observability-session adapter (see
+     * `camera-observability-squat-session.ts`). Inside a primary shallow-admitted
+     * epoch where completion-state already owns same-epoch reversal truth
+     * (`officialShallowReversalSatisfied === true` with a finite `cs.reversalAtMs`),
+     * prefer the unified completion-state timestamp so the trace carries one
+     * consistent reversal provenance. Raw pass-core math stays untouched at source
+     * and is still available via `pc.reversalAtMs`; this adapter is trace-only
+     * and never drives the opener law (`readSquatPassOwnerTruth`).
+     *
+     * Blocked-reason coercion stays within X3 scope: `'no_reversal_after_peak'` is
+     * the only pass-core veto replaced, to satisfy the SSOT invariant "if shallow
+     * owner confirms reversal in same epoch then the exposed pass-core
+     * `passBlockedReason` must not be `'no_reversal_after_peak'`". Other blockers
+     * (`peak_not_latched`, `no_standing_recovery`, ...) remain as-is — X3 is
+     * reversal ownership only.
+     */
+    const shallowAdmittedForReversalOwnership =
+      cs?.officialShallowPathAdmitted === true &&
+      cs?.officialShallowReversalSatisfied === true &&
+      typeof cs?.reversalAtMs === 'number' &&
+      Number.isFinite(cs.reversalAtMs);
+    const sameEpochReversalAtMs = shallowAdmittedForReversalOwnership
+      ? (cs!.reversalAtMs as number)
+      : pc.reversalAtMs;
+
     const commonFields = {
       ownerSource: 'pass_core' as const,
       descendStartAtMs: pc.descentStartAtMs,
       peakAtMs: sameEpochPeakAtMs,
       committedAtMs: undefined,
-      reversalAtMs: pc.reversalAtMs,
+      reversalAtMs: sameEpochReversalAtMs,
       ascendStartAtMs: undefined,
       standingRecoveredAtMs: pc.standingRecoveredAtMs,
       currentPhase: cs?.currentSquatPhase,
@@ -700,10 +729,14 @@ export function readSquatCurrentRepPassTruth(input: {
     if (pc.passDetected === true) {
       return { repId: pc.repId ?? null, passEligible: true, blockedReason: null, ...commonFields };
     }
+    const coercedBlockedReason =
+      shallowAdmittedForReversalOwnership && pc.passBlockedReason === 'no_reversal_after_peak'
+        ? 'shallow_reversal_ownership_unified'
+        : pc.passBlockedReason ?? 'pass_core_not_detected';
     return {
       repId: null,
       passEligible: false,
-      blockedReason: pc.passBlockedReason ?? 'pass_core_not_detected',
+      blockedReason: coercedBlockedReason,
       ...commonFields,
     };
   }

@@ -89,18 +89,64 @@ export function noteSquatGateForCameraObservability(gate: ExerciseGateResult): v
       ? (cs!.peakAtMs as number)
       : rawPassCorePeakAtMs;
 
+    /**
+     * PR-X3 shallow-admitted same-epoch reversal ownership alignment (trace-only).
+     *
+     * Motivation (SSOT §6.4, Family C): in shallow-admitted reps, completion-state
+     * can confirm `officialShallowReversalSatisfied=true` (via owner-authoritative
+     * `reversalConfirmedAfterDescend` + owner-authoritative reversal evidence) with
+     * a defined `cs.reversalAtMs`, while pass-core's independent post-peak ascending
+     * streak check (MIN_REVERSAL_FRAMES=3 on its own peakIndex) returns
+     * `reversalAtMs=null`, `passBlockedReason='no_reversal_after_peak'`.
+     *
+     * Scope (X3):
+     *   - Only unify when completion-state already has same-epoch reversal truth,
+     *     i.e. admission + officialShallowReversalSatisfied + finite cs.reversalAtMs.
+     *   - Expose the completion-state `reversalAtMs` on the observability adapter
+     *     so downstream traces read a single reversal timestamp for the same epoch.
+     *   - Preserve raw pass-core math under `rawReversalAtMs` / `rawPassBlockedReason`.
+     *   - Only coerce `passBlockedReason` when it is exactly `no_reversal_after_peak`
+     *     (pass-core's reversal-specific veto). Other blockers (`peak_not_latched`,
+     *     `no_standing_recovery`, ...) stay as-is — X3 is reversal ownership only.
+     *
+     * Non-goals: closure write, opener promotion, standing-recovery, deep/standard
+     * path. `passDetected` is NOT modified: Wave B opener law (gated on
+     * `officialShallowOwnerFrozen`) stays the sole authority for opener promotion.
+     */
+    const shallowAdmittedForReversalOwnership =
+      cs?.officialShallowPathAdmitted === true &&
+      cs?.officialShallowReversalSatisfied === true &&
+      typeof cs?.reversalAtMs === 'number' &&
+      Number.isFinite(cs.reversalAtMs);
+    const rawPassCoreReversalAtMs = passCore.reversalAtMs ?? null;
+    const rawPassCorePassBlockedReason = passCore.passBlockedReason ?? null;
+    const unifiedReversalAtMs = shallowAdmittedForReversalOwnership
+      ? (cs!.reversalAtMs as number)
+      : rawPassCoreReversalAtMs;
+    const coerceNoReversalAfterPeak =
+      shallowAdmittedForReversalOwnership &&
+      rawPassCorePassBlockedReason === 'no_reversal_after_peak';
+    const effectivePassBlockedReason = passDetected
+      ? null
+      : coerceNoReversalAfterPeak
+        ? 'shallow_reversal_ownership_unified'
+        : rawPassCorePassBlockedReason;
+
     livePassCoreTruth = {
       squatPassCore: {
         passDetected,
-        passBlockedReason: passDetected ? null : passCore.passBlockedReason ?? null,
+        passBlockedReason: effectivePassBlockedReason,
         rawPassDetected: passCore.passDetected,
+        rawPassBlockedReason: rawPassCorePassBlockedReason,
         openerUnifiedByOfficialShallowOwner: officialShallowOwnerFrozen && passCore.passDetected !== true,
         descentDetected: passCore.descentDetected,
         descentStartAtMs: passCore.descentStartAtMs ?? null,
         peakAtMs: unifiedPeakAtMs,
         rawPeakAtMs: rawPassCorePeakAtMs,
         peakProvenanceUnifiedByShallow: shallowPeakProvenanceUnified,
-        reversalAtMs: passCore.reversalAtMs ?? null,
+        reversalAtMs: unifiedReversalAtMs,
+        rawReversalAtMs: rawPassCoreReversalAtMs,
+        reversalOwnershipUnifiedByShallow: shallowAdmittedForReversalOwnership,
         standingRecoveredAtMs: passCore.standingRecoveredAtMs ?? null,
         trace: passCore.trace,
       },
