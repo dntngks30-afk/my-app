@@ -1010,6 +1010,7 @@ export function stampPreCanonicalObservability(
         ? null
         : localPeakAnchor.blockedReason,
       guardedShallowLocalPeakIndex: localPeakAnchor.localPeakIndex,
+      guardedShallowLocalPeakAtMs: localPeakAnchor.localPeakAtMs,
     };
   }
 

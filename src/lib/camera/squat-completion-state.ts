@@ -763,6 +763,7 @@ export interface SquatCompletionState extends MotionCompletionResult {
   guardedShallowLocalPeakFound?: boolean;
   guardedShallowLocalPeakBlockedReason?: string | null;
   guardedShallowLocalPeakIndex?: number | null;
+  guardedShallowLocalPeakAtMs?: number | null;
 
   /** PR-08/09: recovered-suffix shallow closure(있을 때만) — PR-10 소비 게이트 입력 */
   guardedShallowRecoveredSuffixSatisfied?: boolean;
@@ -790,6 +791,25 @@ export interface SquatCompletionState extends MotionCompletionResult {
     | 'admission_dropped'
     | null;
   upstreamCurrentRepEpochStabilitySource?: 'prefix_official_shallow_admission' | null;
+  /**
+   * PR-SHALLOW-ACQUISITION-PEAK-PROVENANCE-UNIFY-01:
+   * An already admitted shallow current-rep epoch had missing/stale peak-owner
+   * provenance rebound to the guarded current-rep local peak. This is upstream
+   * acquisition/provenance alignment only; it never grants completion or rewrites
+   * terminal blocker policy.
+   */
+  shallowAcquisitionPeakProvenanceUnified?: boolean;
+  shallowAcquisitionPeakProvenanceUnifiedFrom?:
+    | 'missing_latched_anchor'
+    | 'series_start_anchor'
+    | 'unlatched_anchor'
+    | 'baseline_not_frozen'
+    | 'peak_anchor_truth_missing'
+    | 'peak_timestamp_missing'
+    | null;
+  shallowAcquisitionPeakProvenanceUnifiedSource?: 'guarded_shallow_local_peak' | null;
+  shallowAcquisitionPeakProvenanceUnifiedIndex?: number | null;
+  shallowAcquisitionPeakProvenanceUnifiedAtMs?: number | null;
   /**
    * PR-SHALLOW-SAME-REP-ADMISSION-CLOSE-RECOVERY-01:
    * Same-rep shallow close recovered from a narrow timing blocker after closure proof
@@ -2254,6 +2274,76 @@ export function applyShallowCurrentRepEpochStability(
   };
 }
 
+type ShallowAcquisitionPeakProvenanceDriftReason = NonNullable<
+  SquatCompletionState['shallowAcquisitionPeakProvenanceUnifiedFrom']
+>;
+
+function readShallowAcquisitionPeakProvenanceDriftReason(
+  state: SquatCompletionState
+): ShallowAcquisitionPeakProvenanceDriftReason | null {
+  const peakLatchedAtIndex = state.peakLatchedAtIndex ?? null;
+  if (peakLatchedAtIndex === 0) return 'series_start_anchor';
+  if (peakLatchedAtIndex == null) return 'missing_latched_anchor';
+  if (state.peakLatched !== true) return 'unlatched_anchor';
+  if (state.baselineFrozen !== true) return 'baseline_not_frozen';
+  if (state.peakAnchorTruth !== 'committed_or_post_commit_peak') {
+    return 'peak_anchor_truth_missing';
+  }
+  if (typeof state.peakAtMs !== 'number' || !Number.isFinite(state.peakAtMs)) {
+    return 'peak_timestamp_missing';
+  }
+  return null;
+}
+
+export function applyShallowAcquisitionPeakProvenanceUnification(
+  state: SquatCompletionState,
+  options?: EvaluateSquatCompletionStateOptions
+): SquatCompletionState {
+  if (state.completionSatisfied === true) return state;
+  if (!shallowRecoverySetupClear(state, options)) return state;
+  if (!shallowRecoveryReadinessClear(state)) return state;
+  if (!shallowRecoveryHasNoKnownStaleOrMixedRep(state)) return state;
+  if (state.eventCyclePromoted === true) return state;
+  if (state.evidenceLabel === 'standard') return state;
+  if (!shallowRecoveryShallowBandEligible(state)) return state;
+  if (!shallowRecoveryHasAttemptDescendCommitment(state)) return state;
+  if (state.officialShallowPathCandidate !== true) return state;
+  if (state.officialShallowPathAdmitted !== true) return state;
+  if (state.guardedShallowLocalPeakFound !== true) return state;
+  if (state.guardedShallowLocalPeakBlockedReason != null) return state;
+
+  const localPeakIndex = state.guardedShallowLocalPeakIndex ?? null;
+  const localPeakAtMs = state.guardedShallowLocalPeakAtMs ?? null;
+  if (localPeakIndex == null || localPeakIndex <= 0) return state;
+  if (typeof localPeakAtMs !== 'number' || !Number.isFinite(localPeakAtMs)) return state;
+
+  const driftReason = readShallowAcquisitionPeakProvenanceDriftReason(state);
+  if (driftReason == null) return state;
+
+  const baselineFrozenDepth = state.baselineFrozenDepth ?? state.baselineStandingDepth ?? null;
+  if (typeof baselineFrozenDepth !== 'number' || !Number.isFinite(baselineFrozenDepth)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    baselineFrozen: true,
+    baselineFrozenDepth,
+    peakLatched: true,
+    peakLatchedAtIndex: localPeakIndex,
+    peakAtMs: localPeakAtMs,
+    peakAnchorTruth: 'committed_or_post_commit_peak',
+    selectedCanonicalPeakEpochAtMs: localPeakAtMs,
+    selectedCanonicalPeakEpochValidIndex: localPeakIndex,
+    selectedCanonicalPeakEpochSource: 'completion_core_peak',
+    shallowAcquisitionPeakProvenanceUnified: true,
+    shallowAcquisitionPeakProvenanceUnifiedFrom: driftReason,
+    shallowAcquisitionPeakProvenanceUnifiedSource: 'guarded_shallow_local_peak',
+    shallowAcquisitionPeakProvenanceUnifiedIndex: localPeakIndex,
+    shallowAcquisitionPeakProvenanceUnifiedAtMs: localPeakAtMs,
+  };
+}
+
 function sameRepShallowAdmissionRecoveryEligible(
   state: SquatCompletionState,
   options: EvaluateSquatCompletionStateOptions | undefined
@@ -2666,6 +2756,7 @@ export function evaluateSquatCompletionState(
    * (completionSatisfied / completionBlockedReason / completionPassReason) is not modified.
    */
   state = stampPreCanonicalObservability(state, frames, options);
+  state = applyShallowAcquisitionPeakProvenanceUnification(state, options);
 
   state = applySameRepShallowAdmissionCloseRecovery(state, options);
 
