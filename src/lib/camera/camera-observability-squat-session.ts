@@ -60,13 +60,19 @@ export function noteSquatGateForCameraObservability(gate: ExerciseGateResult): v
   const nowElig = gate.finalPassEligible === true;
   const passCore = gate.evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined;
   const sqCycleDebug = gate.squatCycleDebug;
+  const officialShallowOwnerFrozen = sqCycleDebug?.officialShallowOwnerFrozen === true;
 
-  // ── PASS-SNAPSHOT-OBSERVABILITY-RESET-01: always update live pass-core truth ──
+  // ── PASS-SNAPSHOT-OBSERVABILITY-RESET-01 + Wave B opener unification ──
+  // Expose the same effective opener truth the final-pass chain consumes.
+  // rawPassDetected remains visible so pass-core math is not hidden.
   if (passCore != null) {
+    const passDetected = passCore.passDetected === true || officialShallowOwnerFrozen;
     livePassCoreTruth = {
       squatPassCore: {
-        passDetected: passCore.passDetected,
-        passBlockedReason: passCore.passBlockedReason ?? null,
+        passDetected,
+        passBlockedReason: passDetected ? null : passCore.passBlockedReason ?? null,
+        rawPassDetected: passCore.passDetected,
+        openerUnifiedByOfficialShallowOwner: officialShallowOwnerFrozen && passCore.passDetected !== true,
         descentDetected: passCore.descentDetected,
         descentStartAtMs: passCore.descentStartAtMs ?? null,
         peakAtMs: passCore.peakAtMs ?? null,

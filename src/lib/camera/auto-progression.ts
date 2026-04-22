@@ -613,7 +613,9 @@ type SquatPostOwnerPreLatchGateLayer = {
  * What this adapter exposes (all frame-level trace for observability):
  *   - `passEligible`: same-rep consistency indicator, sourced from
  *     `squatPassCore.passDetected` when a pass-core result is available,
- *     otherwise from `computeSquatCompletionOwnerTruth`. This is NOT the
+ *     or from the frozen official shallow owner when Wave B has already
+ *     unified that same-epoch owner truth; otherwise from
+ *     `computeSquatCompletionOwnerTruth`. This is NOT the
  *     final-pass opener; it is a rep-identity trace. Production final-pass
  *     gating continues to read `completionOwnerPassed` from
  *     `readSquatPassOwnerTruth` (which itself demotes pass-core to a
@@ -652,6 +654,8 @@ export function readSquatCurrentRepPassTruth(input: {
   squatCompletionState: SquatCompletionState | undefined;
 }): SquatCurrentRepPassTruth {
   const { squatPassCore: pc, squatCompletionState: cs } = input;
+  const completionOwnerTruth =
+    cs != null ? computeSquatCompletionOwnerTruth({ squatCompletionState: cs }) : null;
 
   if (pc != null) {
     // Trace adapter — uses pass-core timestamps as same-rep anchors for
@@ -670,6 +674,15 @@ export function readSquatCurrentRepPassTruth(input: {
       completionMachinePhase: cs?.completionMachinePhase,
       timestampsConsistent: true,
     };
+    if (completionOwnerTruth?.officialShallowOwnerFrozen === true) {
+      return {
+        repId: pc.repId ?? (cs?.standingRecoveredAtMs != null ? `rep_${cs.standingRecoveredAtMs}` : null),
+        passEligible: true,
+        blockedReason: null,
+        ...commonFields,
+        standingRecoveredAtMs: pc.standingRecoveredAtMs ?? cs?.standingRecoveredAtMs ?? undefined,
+      };
+    }
     if (pc.passDetected === true) {
       return { repId: pc.repId ?? null, passEligible: true, blockedReason: null, ...commonFields };
     }
@@ -693,9 +706,10 @@ export function readSquatCurrentRepPassTruth(input: {
     };
   }
 
-  const completionOwnerTruth = computeSquatCompletionOwnerTruth({ squatCompletionState: cs });
   // Timestamps are consistent when they coherently represent one attempt:
   // peak before committed, committed before reversal, reversal before standing.
+  const fallbackOwnerTruth =
+    completionOwnerTruth ?? computeSquatCompletionOwnerTruth({ squatCompletionState: cs });
   const peakTs = cs.peakAtMs;
   const revTs = cs.reversalAtMs;
   const standTs = cs.standingRecoveredAtMs;
@@ -706,8 +720,8 @@ export function readSquatCurrentRepPassTruth(input: {
 
   return {
     repId: cs.standingRecoveredAtMs != null ? `rep_${cs.standingRecoveredAtMs}` : null,
-    passEligible: completionOwnerTruth.completionOwnerPassed,
-    blockedReason: completionOwnerTruth.completionOwnerBlockedReason,
+    passEligible: fallbackOwnerTruth.completionOwnerPassed,
+    blockedReason: fallbackOwnerTruth.completionOwnerBlockedReason,
     ownerSource: 'completion_state',
     descendStartAtMs: cs.descendStartAtMs,
     peakAtMs: cs.peakAtMs,
@@ -1996,6 +2010,10 @@ function getSquatProgressionCompletionSatisfied(
   const recoveryDropRatio = cs?.recoveryDropRatio ?? undefined;
   const completionMachinePhase = cs?.completionMachinePhase ?? undefined;
   const completionPassReason = cs?.completionPassReason ?? undefined;
+  const completionOwnerTruthForProgression =
+    cs != null ? computeSquatCompletionOwnerTruth({ squatCompletionState: cs }) : null;
+  const officialShallowOwnerFrozenForProgression =
+    completionOwnerTruthForProgression?.officialShallowOwnerFrozen === true;
 
   // ── 파생 플래그 ──
   const cycleProofPassed = currentSquatPhase === 'standing_recovered';
@@ -2283,7 +2301,7 @@ function getSquatProgressionCompletionSatisfied(
    * Guardrail completionStatus check (above, line 1460) is kept as a signal-quality gate
    * (if capture is incomplete we can't make any motion determination).
    */
-  if (!passCore?.passDetected) {
+  if (!passCore?.passDetected && !officialShallowOwnerFrozenForProgression) {
     const blockedReason =
       passCore?.passBlockedReason ?? completionBlockedReason ?? 'not_standing_recovered';
     squatCycleDebug.passBlockedReason = blockedReason;
