@@ -661,10 +661,24 @@ export function readSquatCurrentRepPassTruth(input: {
     // Trace adapter — uses pass-core timestamps as same-rep anchors for
     // observability. This does NOT open final pass (see function-level
     // docstring); the opener law in readSquatPassOwnerTruth is unchanged.
+    //
+    // PR-X2 same-epoch peak provenance: inside a primary shallow-admitted epoch
+    // where completion-state's peak anchor has been rebound by
+    // `applyShallowAcquisitionPeakProvenanceUnification`, prefer the unified
+    // completion-state `peakAtMs` so the same-epoch trace carries one consistent
+    // peak provenance. The raw pass-core math is not modified; deep/standard
+    // paths (no unification flag) remain unchanged.
+    const shallowPeakProvenanceUnified =
+      cs?.shallowAcquisitionPeakProvenanceUnified === true &&
+      typeof cs?.peakAtMs === 'number' &&
+      Number.isFinite(cs.peakAtMs);
+    const sameEpochPeakAtMs = shallowPeakProvenanceUnified
+      ? (cs!.peakAtMs as number)
+      : pc.peakAtMs;
     const commonFields = {
       ownerSource: 'pass_core' as const,
       descendStartAtMs: pc.descentStartAtMs,
-      peakAtMs: pc.peakAtMs,
+      peakAtMs: sameEpochPeakAtMs,
       committedAtMs: undefined,
       reversalAtMs: pc.reversalAtMs,
       ascendStartAtMs: undefined,

@@ -67,6 +67,28 @@ export function noteSquatGateForCameraObservability(gate: ExerciseGateResult): v
   // rawPassDetected remains visible so pass-core math is not hidden.
   if (passCore != null) {
     const passDetected = passCore.passDetected === true || officialShallowOwnerFrozen;
+
+    /**
+     * PR-X2 same-epoch peak provenance adapter:
+     * When the shallow-admitted current rep has had its peak anchor rebound by
+     * `applyShallowAcquisitionPeakProvenanceUnification` (completion-state upstream
+     * repair), the raw pass-core `peakAtMs` (derived from the shared descent truth
+     * over the full pass-window) can lag behind the unified post-commit peak.
+     *
+     * This adapter prefers the unified completion-state `peakAtMs` only inside the
+     * primary shallow-admitted epoch where unification actually fired. The raw
+     * pass-core math is preserved under `rawPeakAtMs`, so deep/standard-cycle peak
+     * computation is never touched and no new pass path is created.
+     */
+    const shallowPeakProvenanceUnified =
+      cs?.shallowAcquisitionPeakProvenanceUnified === true &&
+      typeof cs?.peakAtMs === 'number' &&
+      Number.isFinite(cs.peakAtMs);
+    const rawPassCorePeakAtMs = passCore.peakAtMs ?? null;
+    const unifiedPeakAtMs = shallowPeakProvenanceUnified
+      ? (cs!.peakAtMs as number)
+      : rawPassCorePeakAtMs;
+
     livePassCoreTruth = {
       squatPassCore: {
         passDetected,
@@ -75,7 +97,9 @@ export function noteSquatGateForCameraObservability(gate: ExerciseGateResult): v
         openerUnifiedByOfficialShallowOwner: officialShallowOwnerFrozen && passCore.passDetected !== true,
         descentDetected: passCore.descentDetected,
         descentStartAtMs: passCore.descentStartAtMs ?? null,
-        peakAtMs: passCore.peakAtMs ?? null,
+        peakAtMs: unifiedPeakAtMs,
+        rawPeakAtMs: rawPassCorePeakAtMs,
+        peakProvenanceUnifiedByShallow: shallowPeakProvenanceUnified,
         reversalAtMs: passCore.reversalAtMs ?? null,
         standingRecoveredAtMs: passCore.standingRecoveredAtMs ?? null,
         trace: passCore.trace,

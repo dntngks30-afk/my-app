@@ -2370,6 +2370,37 @@ export function applyShallowAcquisitionPeakProvenanceUnification(
     return state;
   }
 
+  /**
+   * PR-X2 peak-anchor initialization repair (observability hygiene only):
+   * `stampPreCanonicalObservability` ran `detectSquatEventCycle` with the pre-repair
+   * `peakLatchedAtIndex` (which was `0` / missing / unlatched at that moment) and
+   * stamped `peak_anchor_at_series_start` into `squatEventCycle.notes`. Now that the
+   * same-epoch anchor has been rebound to the guarded post-commit local peak, the
+   * note is a stale observation that no longer matches the current anchor truth.
+   *
+   * Scope: replace the stale note with an explicit `peak_anchor_rebound_by_shallow_provenance_unification`
+   * diagnostic. We deliberately DO NOT rewrite `detected`, `band`, `descentFrames`,
+   * `reversalFrames`, `recoveryFrames`, or `source` — that would bleed into PR-X3/X4
+   * (reversal owner law / closure write semantics). This is observability provenance
+   * alignment only: the note annotation reflects the post-unification anchor truth.
+   */
+  let nextSquatEventCycle = state.squatEventCycle;
+  if (nextSquatEventCycle != null) {
+    const currentNotes = Array.isArray(nextSquatEventCycle.notes)
+      ? nextSquatEventCycle.notes
+      : [];
+    if (currentNotes.includes('peak_anchor_at_series_start')) {
+      const rebound = 'peak_anchor_rebound_by_shallow_provenance_unification';
+      const filtered = currentNotes.filter((n) => n !== 'peak_anchor_at_series_start');
+      nextSquatEventCycle = {
+        ...nextSquatEventCycle,
+        peakLatched: true,
+        peakLatchedAtIndex: localPeakIndex,
+        notes: filtered.includes(rebound) ? filtered : [...filtered, rebound],
+      };
+    }
+  }
+
   return {
     ...state,
     baselineFrozen: true,
@@ -2386,6 +2417,7 @@ export function applyShallowAcquisitionPeakProvenanceUnification(
     shallowAcquisitionPeakProvenanceUnifiedSource: 'guarded_shallow_local_peak',
     shallowAcquisitionPeakProvenanceUnifiedIndex: localPeakIndex,
     shallowAcquisitionPeakProvenanceUnifiedAtMs: localPeakAtMs,
+    squatEventCycle: nextSquatEventCycle,
   };
 }
 
