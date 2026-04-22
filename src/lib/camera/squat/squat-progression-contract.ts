@@ -218,6 +218,8 @@ export type SquatCompletionOwnerStateSlice = {
   officialShallowClosureFamily?:
     | 'strict_shallow_cycle'
     | 'shallow_ascent_equivalent'
+    /** WAVE A — Family C: shallow proof trio terminal close. */
+    | 'shallow_proof_terminal_close'
     | null;
   officialShallowClosureRewriteApplied?: boolean;
   officialShallowClosureRewriteSuppressedReason?: string | null;
@@ -299,7 +301,9 @@ export type OfficialShallowAdmissionSnapshot = {
  */
 export type OfficialShallowClosureFamily =
   | 'strict_shallow_cycle'
-  | 'shallow_ascent_equivalent';
+  | 'shallow_ascent_equivalent'
+  /** WAVE A — Family C: shallow proof trio terminal close. */
+  | 'shallow_proof_terminal_close';
 
 export type OfficialShallowClosureSnapshot = {
   officialShallowClosed: boolean;

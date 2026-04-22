@@ -555,6 +555,15 @@ export interface SquatCompletionState extends MotionCompletionResult {
   officialShallowClosureFamily?:
     | 'strict_shallow_cycle'
     | 'shallow_ascent_equivalent'
+    /**
+     * WAVE A — Shallow Terminal Close Authority Establishment. Family C is
+     * opened only on a real shallow rep epoch (descend + directional
+     * reversal) where the proof trio is observable
+     * (`officialShallowStreamBridgeApplied` +
+     *  `officialShallowAscentEquivalentSatisfied`). PR-2 false-pass guard
+     * continues to gate owner-freeze independently.
+     */
+    | 'shallow_proof_terminal_close'
     | null;
   /**
    * PR-4 — true iff the closure-rewrite actively suppressed a standard veto

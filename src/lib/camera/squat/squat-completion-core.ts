@@ -1407,17 +1407,39 @@ export function deriveOfficialShallowAdmission(params: {
 
 export type OfficialShallowClosureFamily =
   | 'strict_shallow_cycle'
-  | 'shallow_ascent_equivalent';
+  | 'shallow_ascent_equivalent'
+  /**
+   * WAVE A — Shallow Terminal Close Authority Establishment.
+   * Family C: same-epoch shallow closure proof trio
+   * (`officialShallowStreamBridgeApplied` + `officialShallowAscentEquivalentSatisfied`
+   *  + directional reversal on current descent epoch).
+   *
+   * Intent: open `officialShallowPathClosed=true` when the observable proof
+   * trio is satisfied in the admitted shallow epoch even if the standard
+   * standing-finalize / standing-recovery timestamp is still being held
+   * closed by a standard-veto-family blocker. The false-pass guard layer
+   * (PR-2, `readOfficialShallowFalsePassGuardSnapshot`) remains independent
+   * and continues to veto owner-freeze when same-epoch rep evidence is
+   * actually missing.
+   */
+  | 'shallow_proof_terminal_close';
 
 export type SquatOfficialShallowClosureContract = {
-  /** True iff Family A or Family B is satisfied. */
+  /** True iff Family A, B, or C is satisfied. */
   satisfied: boolean;
-  /** Which family proved closure (null when neither). */
+  /** Which family proved closure (null when none). */
   family: OfficialShallowClosureFamily | null;
-  /** Family A satisfaction (independent of B). */
+  /** Family A satisfaction (independent of B / C). */
   strictShallowCycleSatisfied: boolean;
-  /** Family B satisfaction (independent of A). */
+  /** Family B satisfaction (independent of A / C). */
   shallowAscentEquivalentSatisfied: boolean;
+  /**
+   * WAVE A — Family C satisfaction (independent of A / B).
+   * true iff the same-epoch shallow proof trio is satisfied on a real
+   * descent + directional reversal. Diagnostic field; priority order for
+   * `family` remains A > B > C.
+   */
+  shallowProofTerminalCloseSatisfied: boolean;
 };
 
 /**
@@ -1472,18 +1494,62 @@ export function resolveOfficialShallowClosureContract(p: {
     p.officialShallowAscentEquivalentSatisfied === true &&
     recoveryProofPresent;
 
-  const satisfied = strictShallowCycleSatisfied || shallowAscentEquivalentSatisfied;
+  /**
+   * WAVE A — Family C: Shallow Proof Terminal Close.
+   *
+   * Satisfaction law (all required, same shallow rep epoch):
+   *   - real descent on the current motion epoch (`descendConfirmed`);
+   *   - directional reversal on the same epoch (rule reversal OR stream
+   *     bridge + provenance — identical rule Family B uses);
+   *   - observable `officialShallowAscentEquivalentSatisfied` (proof trio #2);
+   *   - observable `officialShallowStreamBridgeApplied` (proof trio #3).
+   *
+   * Unlike Family B, this family does NOT require `recoveryProofPresent`
+   * (standingRecoveredAtMs OR shallowClosureProofBundleFromStream). That
+   * is exactly the field that the standard-veto family (recovery_hold_too_short
+   * / not_standing_recovered / low_rom_standing_finalize_not_satisfied) holds
+   * closed in the shallow-proof epoch today, preventing proof → terminal
+   * close authority promotion.
+   *
+   * Safety:
+   *   - Non-shallow / setup-motion / standing-still / seated-hold cases
+   *     never satisfy `descendConfirmed && directionalReversalConfirmed`
+   *     together with both proof trio observables, so Family C cannot open
+   *     for weird-pass inputs.
+   *   - Downstream PR-2 false-pass guard
+   *     (`readOfficialShallowFalsePassGuardSnapshot`) is not consulted here
+   *     and continues to gate `completionOwnerPassed` independently.
+   *   - Standard-veto family (descent_span_too_short /
+   *     ascent_recovery_span_too_short / recovery_hold_too_short /
+   *     not_standing_recovered) is already in the PR-4 suppressible set
+   *     (`PR4_SHALLOW_CLOSURE_SUPPRESSIBLE_STANDARD_VETOS`), so once this
+   *     family opens closure, those standard vetoes become diagnostic on
+   *     the same-epoch rep rather than terminal NOT-factors.
+   */
+  const shallowProofTerminalCloseSatisfied =
+    p.descendConfirmed === true &&
+    directionalReversalConfirmed &&
+    p.officialShallowAscentEquivalentSatisfied === true &&
+    p.officialShallowStreamBridgeApplied === true;
+
+  const satisfied =
+    strictShallowCycleSatisfied ||
+    shallowAscentEquivalentSatisfied ||
+    shallowProofTerminalCloseSatisfied;
   const family: OfficialShallowClosureFamily | null = strictShallowCycleSatisfied
     ? 'strict_shallow_cycle'
     : shallowAscentEquivalentSatisfied
       ? 'shallow_ascent_equivalent'
-      : null;
+      : shallowProofTerminalCloseSatisfied
+        ? 'shallow_proof_terminal_close'
+        : null;
 
   return {
     satisfied,
     family,
     strictShallowCycleSatisfied,
     shallowAscentEquivalentSatisfied,
+    shallowProofTerminalCloseSatisfied,
   };
 }
 
