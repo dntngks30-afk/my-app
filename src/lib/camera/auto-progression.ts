@@ -381,6 +381,30 @@ export interface SquatCycleDebug {
   completionOwnerBlockedReason?: string | null;
   officialShallowOwnerFrozen?: boolean;
   officialShallowOwnerFreezeBlockedReason?: string | null;
+  /**
+   * PR-X5 — Completion-State ↔ Final Sink Consumption Alignment After
+   * Closed Shallow Authority.
+   *
+   * Sink-only diagnostic: true iff the current tick has
+   * `officialShallowPathClosed === true` AND the downstream canonical
+   * opener reader consumed that close as freeze authority
+   * (`officialShallowOwnerFrozen === true` AND
+   *  `completionOwnerPassed === true`). When close is set but the
+   * false-pass guard refuses it (or the rep has not reached the
+   * same-epoch standing-recovered boundary), this stays `false` and
+   * `officialShallowClosedAuthorityConsumptionBlockedReason` carries
+   * the narrow reason. Never a gate input.
+   */
+  officialShallowClosedAuthorityConsumed?: boolean;
+  /**
+   * PR-X5 — Narrow sink-only reason describing why an
+   * `officialShallowPathClosed === true` tick was NOT consumed by the
+   * owner freeze reader (false-pass guard family / completion-owner
+   * blocked reason). `null` when the close was consumed or when no
+   * close occurred on this tick. Never a gate input; mirrors the
+   * already-published freeze snapshot blocker.
+   */
+  officialShallowClosedAuthorityConsumptionBlockedReason?: string | null;
   /** PR-01: UI latch / progression gate(오너 통과 후 신호·확인·차단) */
   uiProgressionAllowed?: boolean;
   uiProgressionBlockedReason?: string | null;
@@ -2890,6 +2914,29 @@ export function evaluateExerciseAutoProgress(
       officialShallowOwnerFrozen: squatOwnerTruth?.officialShallowOwnerFrozen,
       officialShallowOwnerFreezeBlockedReason:
         squatOwnerTruth?.officialShallowOwnerFreezeBlockedReason ?? undefined,
+      /**
+       * PR-X5 — Completion-State ↔ Final Sink Consumption Alignment
+       * After Closed Shallow Authority. Sink-only diagnostic: true iff
+       * `officialShallowPathClosed === true` on this tick AND the
+       * canonical opener reader (Wave B follow-up repaired) accepted
+       * that close as freeze authority, driving
+       * `completionOwnerPassed === true`. When the close is set but the
+       * false-pass guard refused it (e.g. not yet standing-recovered,
+       * cross-epoch stitch, setup-motion contamination), this stays
+       * false and the narrow reason is published in
+       * `officialShallowClosedAuthorityConsumptionBlockedReason`. Never
+       * a gate input — downstream pass / owner / final-latch read
+       * `completionOwnerPassed` + the PR-2 false-pass guard directly.
+       */
+      officialShallowClosedAuthorityConsumed:
+        squatCs?.officialShallowPathClosed === true &&
+        squatOwnerTruth?.officialShallowOwnerFrozen === true &&
+        squatOwnerTruth?.completionOwnerPassed === true,
+      officialShallowClosedAuthorityConsumptionBlockedReason:
+        squatCs?.officialShallowPathClosed === true &&
+        squatOwnerTruth?.officialShallowOwnerFrozen !== true
+          ? squatOwnerTruth?.officialShallowOwnerFreezeBlockedReason ?? null
+          : null,
       uiProgressionAllowed: squatUiGate?.uiProgressionAllowed,
       uiProgressionBlockedReason: squatUiGate?.uiProgressionBlockedReason ?? undefined,
       liveReadinessSummaryState: squatReadinessSetupRoutedSources?.liveReadinessSummaryState,
