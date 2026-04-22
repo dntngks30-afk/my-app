@@ -559,15 +559,11 @@ export function readOfficialShallowOwnerFreezeSnapshot(input: {
     };
   }
 
-  if (cs.officialShallowClosureProofSatisfied !== true) {
-    return {
-      officialShallowOwnerFrozen: false,
-      officialShallowOwnerReason: null,
-      officialShallowOwnerBlockedReason: 'official_shallow_closure_proof_not_satisfied',
-      officialShallowFalsePassGuardFamily: null,
-    };
-  }
-
+  // Wave B follow-up: `officialShallowPathClosed` is the closure authority.
+  // The opener freeze must consume that already-closed truth, then let the
+  // independent false-pass guard below enforce same-epoch / never-pass safety.
+  // Requiring the legacy proof mirror again here leaves the canonical opener
+  // split from the Wave A close authority when the mirror lags the close.
   const falsePassGuard = readOfficialShallowFalsePassGuardSnapshot(input);
   if (falsePassGuard.officialShallowFalsePassGuardClear !== true) {
     return {

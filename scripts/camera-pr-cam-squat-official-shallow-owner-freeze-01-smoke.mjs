@@ -156,6 +156,16 @@ console.log('\nPR-1 official shallow owner freeze smoke\n');
 }
 
 {
+  const cs = frozenShallowState({ officialShallowClosureProofSatisfied: false });
+  const freeze = readOfficialShallowOwnerFreezeSnapshot({ squatCompletionState: cs });
+  const owner = readSquatPassOwnerTruth({ squatCompletionState: cs, squatPassCore: undefined });
+  const gate = finalGate(owner, cs);
+  ok('A6: closed shallow owner consumes closure authority even if proof mirror lags', freeze.officialShallowOwnerFrozen === true, freeze);
+  ok('A7: canonical owner pass follows closed shallow owner authority', owner.completionOwnerPassed === true, owner);
+  ok('A8: final pass opens from canonical owner truth, not proof mirror', gate.progressionPassed === true && gate.finalPassBlockedReason == null, gate);
+}
+
+{
   const cs = frozenShallowState({ canonicalShallowContractAntiFalsePassClear: false });
   const owner = readSquatPassOwnerTruth({ squatCompletionState: cs, squatPassCore: undefined });
   ok('B1: frozen path stays blocked when hard-fail guard is not clear', owner.completionOwnerPassed === false, owner);
