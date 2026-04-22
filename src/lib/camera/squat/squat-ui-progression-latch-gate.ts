@@ -41,6 +41,8 @@ export interface SquatUiProgressionLatchGateInput {
   readinessStableDwellSatisfied?: boolean;
   /** completion state 가 setupMotionBlocked true 일 때 차단 */
   setupMotionBlocked?: boolean;
+  /** Official shallow owner freeze: downstream UI/final surfaces are sink-only readers. */
+  officialShallowOwnerFrozen?: boolean;
 }
 
 export interface SquatUiProgressionLatchGateResult {
@@ -65,6 +67,9 @@ export function computeSquatUiProgressionLatchGate(
 ): SquatUiProgressionLatchGateResult {
   if (!input.completionOwnerPassed) {
     return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'completion_owner_not_satisfied' };
+  }
+  if (input.officialShallowOwnerFrozen === true) {
+    return { uiProgressionAllowed: true, uiProgressionBlockedReason: null };
   }
   if (input.liveReadinessNotReady === true) {
     return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'live_readiness_not_ready' };

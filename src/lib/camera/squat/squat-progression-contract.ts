@@ -146,7 +146,51 @@ export type SquatCompletionOwnerStateSlice = {
   currentSquatPhase?: string;
   cycleComplete?: boolean;
   completionBlockedReason?: string | null;
+  officialShallowPathClosed?: boolean;
+  officialShallowClosureProofSatisfied?: boolean;
+  canonicalShallowContractAntiFalsePassClear?: boolean;
 };
+
+export type OfficialShallowOwnerFreezeSnapshot = {
+  officialShallowOwnerFrozen: boolean;
+  officialShallowOwnerReason: 'official_shallow_owner_freeze' | null;
+  officialShallowOwnerBlockedReason: string | null;
+};
+
+export function readOfficialShallowOwnerFreezeSnapshot(input: {
+  squatCompletionState: SquatCompletionOwnerStateSlice | undefined;
+}): OfficialShallowOwnerFreezeSnapshot {
+  const cs = input.squatCompletionState;
+  if (cs == null || cs.officialShallowPathClosed !== true) {
+    return {
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerReason: null,
+      officialShallowOwnerBlockedReason: null,
+    };
+  }
+
+  if (cs.officialShallowClosureProofSatisfied !== true) {
+    return {
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerReason: null,
+      officialShallowOwnerBlockedReason: 'official_shallow_closure_proof_not_satisfied',
+    };
+  }
+
+  if (cs.canonicalShallowContractAntiFalsePassClear !== true) {
+    return {
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerReason: null,
+      officialShallowOwnerBlockedReason: 'official_shallow_false_pass_guard_not_clear',
+    };
+  }
+
+  return {
+    officialShallowOwnerFrozen: true,
+    officialShallowOwnerReason: 'official_shallow_owner_freeze',
+    officialShallowOwnerBlockedReason: null,
+  };
+}
 
 export function computeSquatCompletionOwnerTruth(input: {
   squatCompletionState: SquatCompletionOwnerStateSlice | undefined;
@@ -154,20 +198,49 @@ export function computeSquatCompletionOwnerTruth(input: {
   completionOwnerPassed: boolean;
   completionOwnerReason: string | null;
   completionOwnerBlockedReason: string | null;
+  officialShallowOwnerFrozen: boolean;
+  officialShallowOwnerFreezeBlockedReason: string | null;
 } {
   const cs = input.squatCompletionState;
+  const officialShallowOwnerFreeze = readOfficialShallowOwnerFreezeSnapshot(input);
   if (cs == null) {
     return {
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'no_squat_completion_state',
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerFreezeBlockedReason: null,
     };
   }
+
+  if (officialShallowOwnerFreeze.officialShallowOwnerFrozen) {
+    return {
+      completionOwnerPassed: true,
+      completionOwnerReason: officialShallowOwnerFreeze.officialShallowOwnerReason,
+      completionOwnerBlockedReason: null,
+      officialShallowOwnerFrozen: true,
+      officialShallowOwnerFreezeBlockedReason: null,
+    };
+  }
+
+  if (officialShallowOwnerFreeze.officialShallowOwnerBlockedReason != null) {
+    return {
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason: officialShallowOwnerFreeze.officialShallowOwnerBlockedReason,
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerFreezeBlockedReason:
+        officialShallowOwnerFreeze.officialShallowOwnerBlockedReason,
+    };
+  }
+
   if (cs.completionBlockedReason != null && cs.completionBlockedReason !== '') {
     return {
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: cs.completionBlockedReason,
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerFreezeBlockedReason: null,
     };
   }
   if (cs.completionSatisfied !== true) {
@@ -175,6 +248,8 @@ export function computeSquatCompletionOwnerTruth(input: {
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'completion_not_satisfied',
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerFreezeBlockedReason: null,
     };
   }
   if (cs.currentSquatPhase !== 'standing_recovered') {
@@ -182,6 +257,8 @@ export function computeSquatCompletionOwnerTruth(input: {
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'not_standing_recovered',
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerFreezeBlockedReason: null,
     };
   }
   if (cs.cycleComplete !== true) {
@@ -189,6 +266,8 @@ export function computeSquatCompletionOwnerTruth(input: {
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'cycle_not_complete',
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerFreezeBlockedReason: null,
     };
   }
   const cpr = cs.completionPassReason;
@@ -197,6 +276,8 @@ export function computeSquatCompletionOwnerTruth(input: {
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'completion_pass_reason_invalid',
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerFreezeBlockedReason: null,
     };
   }
   const explicitShallowOwnerReason =
@@ -208,6 +289,8 @@ export function computeSquatCompletionOwnerTruth(input: {
     completionOwnerPassed: true,
     completionOwnerReason: explicitShallowOwnerReason ?? cpr,
     completionOwnerBlockedReason: null,
+    officialShallowOwnerFrozen: false,
+    officialShallowOwnerFreezeBlockedReason: null,
   };
 }
 

@@ -378,6 +378,8 @@ export interface SquatCycleDebug {
   completionOwnerPassed?: boolean;
   completionOwnerReason?: string | null;
   completionOwnerBlockedReason?: string | null;
+  officialShallowOwnerFrozen?: boolean;
+  officialShallowOwnerFreezeBlockedReason?: string | null;
   /** PR-01: UI latch / progression gate(오너 통과 후 신호·확인·차단) */
   uiProgressionAllowed?: boolean;
   uiProgressionBlockedReason?: string | null;
@@ -794,6 +796,9 @@ export function readSquatPassOwnerTruth(
         completionOwnerTruth.completionOwnerBlockedReason ??
         squatPassCore?.passBlockedReason ??
         'completion_owner_not_passed',
+      officialShallowOwnerFrozen: completionOwnerTruth.officialShallowOwnerFrozen,
+      officialShallowOwnerFreezeBlockedReason:
+        completionOwnerTruth.officialShallowOwnerFreezeBlockedReason,
     };
   }
 
@@ -802,6 +807,9 @@ export function readSquatPassOwnerTruth(
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'completion_owner_reason_not_confirmed',
+      officialShallowOwnerFrozen: completionOwnerTruth.officialShallowOwnerFrozen,
+      officialShallowOwnerFreezeBlockedReason:
+        completionOwnerTruth.officialShallowOwnerFreezeBlockedReason,
     };
   }
 
@@ -811,6 +819,9 @@ export function readSquatPassOwnerTruth(
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'pass_core_stale_rep',
+      officialShallowOwnerFrozen: completionOwnerTruth.officialShallowOwnerFrozen,
+      officialShallowOwnerFreezeBlockedReason:
+        completionOwnerTruth.officialShallowOwnerFreezeBlockedReason,
     };
   }
 
@@ -818,6 +829,9 @@ export function readSquatPassOwnerTruth(
     completionOwnerPassed: true,
     completionOwnerReason: completionOwnerTruth.completionOwnerReason,
     completionOwnerBlockedReason: null,
+    officialShallowOwnerFrozen: completionOwnerTruth.officialShallowOwnerFrozen,
+    officialShallowOwnerFreezeBlockedReason:
+      completionOwnerTruth.officialShallowOwnerFreezeBlockedReason,
   };
 }
 
@@ -848,12 +862,15 @@ export function enforceSquatOwnerContradictionInvariant(input: {
 }): SquatOwnerTruth {
   const { ownerTruth, squatCompletionState } = input;
   if (ownerTruth.completionOwnerPassed !== true) return ownerTruth;
+  if (ownerTruth.officialShallowOwnerFrozen === true) return ownerTruth;
 
   if (ownerTruth.completionOwnerReason === 'not_confirmed') {
     return {
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'owner_contradiction:not_confirmed_reason',
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerFreezeBlockedReason: null,
     };
   }
   if (ownerTruth.completionOwnerBlockedReason != null) {
@@ -861,6 +878,8 @@ export function enforceSquatOwnerContradictionInvariant(input: {
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'owner_contradiction:blocked_reason_with_passed_owner',
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerFreezeBlockedReason: null,
     };
   }
   if (squatCompletionState == null) {
@@ -868,6 +887,8 @@ export function enforceSquatOwnerContradictionInvariant(input: {
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'owner_contradiction:no_completion_state',
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerFreezeBlockedReason: null,
     };
   }
   if (
@@ -878,6 +899,8 @@ export function enforceSquatOwnerContradictionInvariant(input: {
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: `owner_contradiction:${squatCompletionState.completionBlockedReason}`,
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerFreezeBlockedReason: null,
     };
   }
   if (
@@ -890,6 +913,8 @@ export function enforceSquatOwnerContradictionInvariant(input: {
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'owner_contradiction:completion_truth_not_passed',
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerFreezeBlockedReason: null,
     };
   }
   if (squatCompletionState.cycleComplete !== true) {
@@ -897,6 +922,8 @@ export function enforceSquatOwnerContradictionInvariant(input: {
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'owner_contradiction:cycle_not_complete',
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerFreezeBlockedReason: null,
     };
   }
   return ownerTruth;
@@ -1101,6 +1128,7 @@ export function isFinalPassLatched(
         liveReadinessNotReady: scDbg?.liveReadinessSummaryState === 'not_ready',
         readinessStableDwellSatisfied: setupTruthForLatch.readinessStableDwellSatisfied,
         setupMotionBlocked: setupTruthForLatch.setupMotionBlocked,
+        officialShallowOwnerFrozen: ownerTruth.officialShallowOwnerFrozen,
       })
     );
     /**
@@ -1327,6 +1355,16 @@ export function getSquatPostOwnerFinalPassBlockedReason(input: {
   );
   const cycleComplete = completionState?.cycleComplete === true;
 
+  if (ownerTruth.officialShallowOwnerFrozen === true) {
+    if (!ownerTruth.completionOwnerPassed) {
+      return ownerTruth.completionOwnerBlockedReason ?? 'completion_owner_blocked';
+    }
+    if (!input.uiGate.uiProgressionAllowed) {
+      return input.uiGate.uiProgressionBlockedReason ?? 'ui_progression_blocked';
+    }
+    return null;
+  }
+
   if (completionTruthPassed !== true) return 'completion_truth_not_passed';
   if (completionPassReason === 'not_confirmed') return 'completion_reason_not_confirmed';
   if (completionBlockedReason != null) return `completion_blocked:${completionBlockedReason}`;
@@ -1361,6 +1399,7 @@ export function computeSquatPostOwnerPreLatchGateLayer(input: {
     uiGate: computeSquatUiProgressionLatchGate({
       ...input.uiGateInput,
       completionOwnerPassed: ownerTruth.completionOwnerPassed,
+      officialShallowOwnerFrozen: ownerTruth.officialShallowOwnerFrozen,
     }),
     squatCompletionState: input.squatCompletionState,
     squatCycleDebug: input.squatCycleDebug,
@@ -1839,6 +1878,7 @@ function buildSquatUiProgressionLatchGateInput(input: {
   liveReadinessNotReady: boolean;
   readinessStableDwellSatisfied: boolean | undefined;
   setupMotionBlocked: boolean;
+  officialShallowOwnerFrozen?: boolean;
 }): SquatUiProgressionLatchGateInput {
   return {
     completionOwnerPassed: input.completionOwnerPassed,
@@ -1856,6 +1896,7 @@ function buildSquatUiProgressionLatchGateInput(input: {
     liveReadinessNotReady: input.liveReadinessNotReady,
     readinessStableDwellSatisfied: input.readinessStableDwellSatisfied,
     setupMotionBlocked: input.setupMotionBlocked,
+    officialShallowOwnerFrozen: input.officialShallowOwnerFrozen,
   };
 }
 
@@ -2690,6 +2731,7 @@ export function evaluateExerciseAutoProgress(
         readinessStableDwellSatisfied:
           squatReadinessSetupRoutedSources.readinessStableDwellSatisfied,
         setupMotionBlocked: squatReadinessSetupRoutedSources.setupMotionBlocked,
+        officialShallowOwnerFrozen: squatOwnerTruth.officialShallowOwnerFrozen,
       }),
       squatCompletionState: squatCs,
       squatCycleDebug,
@@ -2745,6 +2787,9 @@ export function evaluateExerciseAutoProgress(
       completionOwnerPassed: squatOwnerTruth?.completionOwnerPassed,
       completionOwnerReason: squatOwnerTruth?.completionOwnerReason ?? undefined,
       completionOwnerBlockedReason: squatOwnerTruth?.completionOwnerBlockedReason ?? undefined,
+      officialShallowOwnerFrozen: squatOwnerTruth?.officialShallowOwnerFrozen,
+      officialShallowOwnerFreezeBlockedReason:
+        squatOwnerTruth?.officialShallowOwnerFreezeBlockedReason ?? undefined,
       uiProgressionAllowed: squatUiGate?.uiProgressionAllowed,
       uiProgressionBlockedReason: squatUiGate?.uiProgressionBlockedReason ?? undefined,
       liveReadinessSummaryState: squatReadinessSetupRoutedSources?.liveReadinessSummaryState,
