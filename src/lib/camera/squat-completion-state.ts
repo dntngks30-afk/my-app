@@ -156,6 +156,27 @@ function meanHipCenter(
 /**
  * setup 전용 대형 프레이밍 이동(뒤로/가까이/좌우 시프트) — 실제 rep 와 분리.
  * completion truth 가 true 였어도 evaluator 에서 상위에서 막는다.
+ *
+ * PR-SHALLOW-OWNER-SPLIT-QUARANTINE (parent SSOT §6.1 Setup-Contamination
+ * Quarantine Law): the prior head/tail-only comparison missed two observed
+ * contamination patterns:
+ *   - short contamination where the depth peak lands inside the first 8
+ *     frames (`maxIdx < 8` early-exit fallback), e.g. the user sits down
+ *     partway into the window and then immediately starts reaching for
+ *     the phone;
+ *   - middle-of-window contamination where the head and tail both look
+ *     similar but a 4-frame window in the middle shows a large area
+ *     shrink/spike or hip translation (trace 2 co-existence pattern:
+ *     `setup_motion_blocked` + `officialShallowStreamBridgeApplied=true`
+ *     on the same motion epoch).
+ *
+ * The detector now additionally scans any interior 4-frame window against
+ * the head reference. A single interior hit (area shrink >= 33%, area
+ * spike >= 55%, or hip translation >= 0.138 norm) flags the epoch. This
+ * is strictly additive — every previously-detected case still fires via
+ * the original head/tail path — and returns the same `reason` strings so
+ * downstream consumers (admission contract, pass-core, UI gate, shallow
+ * label rules, meaningful-shallow evaluator) do not need to change.
  */
 export function computeSquatSetupMotionBlock(validPipeline: PoseFeaturesFrame[]): {
   blocked: boolean;
@@ -171,13 +192,44 @@ export function computeSquatSetupMotionBlock(validPipeline: PoseFeaturesFrame[])
       maxIdx = i;
     }
   }
-  if (maxIdx < 8) return { blocked: false, reason: null };
 
   const head = validPipeline.slice(0, 4);
-  const tail = validPipeline.slice(-4);
   const areasH = head.map((f) => f.bodyBox.area).filter((x) => x > 0);
-  const areasT = tail.map((f) => f.bodyBox.area).filter((x) => x > 0);
   const areaEarly = meanSafe(areasH);
+  const hipEarly = meanHipCenter(head);
+
+  // PR-SHALLOW-OWNER-SPLIT-QUARANTINE: interior 4-frame sliding scan runs
+  // regardless of `maxIdx`, so short contamination (e.g. `maxIdx < 8` sit +
+  // grab-camera pattern) can still be flagged even when the head/tail
+  // comparison would otherwise early-exit.
+  if (areaEarly > 0.03 && validPipeline.length >= 8) {
+    for (let start = 4; start + 4 <= validPipeline.length; start++) {
+      const mid = validPipeline.slice(start, start + 4);
+      const areasM = mid.map((f) => f.bodyBox.area).filter((x) => x > 0);
+      const areaMid = meanSafe(areasM);
+      if (areaMid > 0 && areaMid / areaEarly < 0.67) {
+        return { blocked: true, reason: 'step_back_or_camera_tilt_area_shrink' };
+      }
+      if (areaMid / areaEarly > 1.55) {
+        return { blocked: true, reason: 'step_in_or_camera_close_area_spike' };
+      }
+      if (hipEarly) {
+        const hipMid = meanHipCenter(mid);
+        if (hipMid) {
+          const dxM = hipMid.x - hipEarly.x;
+          const dyM = hipMid.y - hipEarly.y;
+          if (Math.hypot(dxM, dyM) > 0.138) {
+            return { blocked: true, reason: 'large_framing_translation' };
+          }
+        }
+      }
+    }
+  }
+
+  if (maxIdx < 8) return { blocked: false, reason: null };
+
+  const tail = validPipeline.slice(-4);
+  const areasT = tail.map((f) => f.bodyBox.area).filter((x) => x > 0);
   const areaLate = meanSafe(areasT);
   if (areaEarly > 0.03 && areaLate > 0 && areaLate / areaEarly < 0.67) {
     return { blocked: true, reason: 'step_back_or_camera_tilt_area_shrink' };
@@ -185,7 +237,6 @@ export function computeSquatSetupMotionBlock(validPipeline: PoseFeaturesFrame[])
   if (areaEarly > 0.03 && areaLate / areaEarly > 1.55) {
     return { blocked: true, reason: 'step_in_or_camera_close_area_spike' };
   }
-  const hipEarly = meanHipCenter(head);
   const hipLate = meanHipCenter(tail);
   if (hipEarly && hipLate) {
     const dx = hipLate.x - hipEarly.x;
@@ -543,6 +594,32 @@ export interface SquatCompletionState extends MotionCompletionResult {
     | 'standing_still_or_jitter_only'
     | 'seated_hold_without_descent'
     | null;
+  /**
+   * PR-SHALLOW-OWNER-SPLIT-QUARANTINE (parent SSOT §6.1 / §6.4): contamination
+   * lane diagnostic. `true` iff the current motion epoch is in the
+   * no-pass contaminated/setup lane — i.e. the upstream
+   * `computeSquatSetupMotionBlock` flagged framing / step-back / camera-tilt
+   * / area-spike motion for this evaluation window. When `true`, the
+   * `resolveSquatCompletionPath` single-writer decision returns
+   * `not_confirmed` for every owner (standard / shallow / evidence-label
+   * fallback) — mirroring the existing shallow admission contract's
+   * `official_shallow_admission_guard:setup_motion_blocked` rejection.
+   *
+   * Sink-only / additive observability; downstream product policy reads
+   * `completionPassReason` + `officialShallowPath*` + false-pass guard.
+   * Never a new opener authority.
+   */
+  contaminationLaneActive?: boolean;
+  /**
+   * PR-SHALLOW-OWNER-SPLIT-QUARANTINE (SSOT §6.5): attempt freshness
+   * diagnostic. `true` iff the rep epoch has reached a stable acquisition
+   * state (`baselineFrozen === true` AND `peakLatched === true`). When
+   * `false`, the shallow lane must not enter terminal evaluation from the
+   * half-state (freeze_or_latch_missing / peak_not_latched / baselineFrozen
+   * = false). Purely diagnostic; the actual gate lives inside
+   * `resolveSquatCompletionPath` via the `attemptEpochFresh` param.
+   */
+  attemptEpochFresh?: boolean;
   /**
    * PR-4 — Official Shallow Closure Rewrite (SSOT §4.3).
    * Closure family proven by rep-cycle truth (`strict_shallow_cycle` requires

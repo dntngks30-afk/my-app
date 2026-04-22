@@ -1230,6 +1230,37 @@ export function isUltraLowRomDirectCloseEligible(params: {
  *
  * PR-7-CORRECTED: (3)·(4)에서 ultra_low_rom_cycle 은 ultraLowRomFreshCycleIntegrity=true 일 때만 열린다.
  * stream-bridge-only / pre-attempt / freeze-latch-missing 패턴은 not_confirmed 로 차단된다.
+ *
+ * PR-SHALLOW-OWNER-SPLIT-QUARANTINE (parent SSOT §6.1 / §6.2 / §6.4 / §6.5):
+ * -------------------------------------------------------------------------
+ * Setup-contamination quarantine + owner lane split truth. Prior to this PR,
+ * contamination only blocked the admission contract of the shallow lane,
+ * while `standard_cycle` was reachable purely on depth (>= STANDARD_OWNER_FLOOR)
+ * even when the full-pipeline `computeSquatSetupMotionBlock` had detected
+ * framing / step-back / camera-tilt / area-spike contamination in the same
+ * motion epoch. That is the mechanism behind the "grab camera while sitting
+ * down -> completion_truth_standard wins" trace (parent SSOT §3.1).
+ *
+ * The law enforced here:
+ *   A. `setupMotionBlocked === true`  → contamination lane. No owner may open.
+ *      `standard_cycle`, shallow closure, and evidence-label fallback paths
+ *      all return `not_confirmed`. This is the single contamination quarantine
+ *      point that completes the existing admission-contract guard.
+ *   B. evidence-label fallback (`low_rom` / `ultra_low_rom`) requires
+ *      `officialShallowPathAdmitted === true`. Prior to this PR the fallback
+ *      opened `low_rom_cycle` on label alone, which let setup-contaminated
+ *      pipelines whose shallow admission was denied sneak into the shallow
+ *      lane via evidence label only (same motion epoch). Admission is the
+ *      single opener authority for the shallow lane; fallback must honor it.
+ *   C. Half-state freshness (§6.5): when
+ *      `attemptEpochFresh === false` (baselineFrozen === false OR peakLatched
+ *      === false OR freeze_or_latch_missing in notes), shallow-lane paths are
+ *      not entered. `standard_cycle` semantics are unchanged for deep reps
+ *      that naturally satisfy their standard attempt criteria.
+ *
+ * Not a threshold relaxation. Not a new owner path. Not a shallow lane
+ * opener. This only closes the already-known contamination and fallback
+ * holes on the existing single-writer decision point.
  */
 export function resolveSquatCompletionPath(params: {
   completionBlockedReason: string | null;
@@ -1246,8 +1277,37 @@ export function resolveSquatCompletionPath(params: {
    * false 이면 ultra_low_rom_cycle 은 열리지 않고 not_confirmed 반환.
    */
   ultraLowRomFreshCycleIntegrity: boolean;
+  /**
+   * PR-SHALLOW-OWNER-SPLIT-QUARANTINE (SSOT §6.1 / §6.4): contamination
+   * lane flag for the current motion epoch. When `true`, no owner — standard,
+   * shallow, or evidence-label fallback — may open. Mirrors the upstream
+   * `computeSquatSetupMotionBlock` verdict that already drives shallow
+   * admission rejection (`official_shallow_admission_guard:setup_motion_blocked`).
+   * Defaults to `false` for pre-quarantine callers so legacy behavior is
+   * unchanged when contamination was not observed.
+   */
+  setupMotionBlocked?: boolean;
+  /**
+   * PR-SHALLOW-OWNER-SPLIT-QUARANTINE (SSOT §6.5): attempt freshness flag.
+   * `true` iff the rep epoch has reached a stable acquisition state
+   * (baseline frozen AND peak latched AND no `freeze_or_latch_missing`
+   * note). When `false`, the shallow lane must not enter terminal
+   * evaluation from a half-state. Defaults to `true` for pre-freshness
+   * callers; `standard_cycle` semantics are deliberately unchanged.
+   */
+  attemptEpochFresh?: boolean;
 }): SquatCompletionPassReason {
   if (params.completionBlockedReason != null) return 'not_confirmed';
+
+  /**
+   * SSOT §6.1 / §6.4 — contamination lane quarantine. When the upstream
+   * setup-motion detector flagged the epoch, no owner may open regardless
+   * of depth / evidence label / closure proof. The admission contract
+   * already rejects the shallow lane via `official_shallow_admission_guard`;
+   * this branch closes the corresponding `standard_cycle` + evidence-label
+   * fallback hole on the single-writer completion path.
+   */
+  if (params.setupMotionBlocked === true) return 'not_confirmed';
 
   const standardPathWon =
     params.eventBasedDescentPath === false &&
@@ -1263,6 +1323,15 @@ export function resolveSquatCompletionPath(params: {
     params.shallowRomClosureProofSignals === true;
 
   if (explicitShallowRomClosure) {
+    /**
+     * SSOT §6.5 — attempt freshness. Admitted shallow closure must not
+     * enter terminal evaluation from a half-state (freeze_or_latch_missing
+     * / peak_not_latched / baselineFrozen=false). `ultraLowRomFreshCycleIntegrity`
+     * already covers part of this for ultra_low, but `low_rom` closure
+     * also needs explicit half-state protection. When unfreshened, defer
+     * to `not_confirmed` — downstream false-pass guard stays independent.
+     */
+    if (params.attemptEpochFresh === false) return 'not_confirmed';
     if (params.evidenceLabel === 'ultra_low_rom') {
       // PR-7-CORRECTED: fresh cycle integrity 없이는 ultra_low_rom_cycle 을 열 수 없다.
       // stream-bridge-only / pre-attempt / freeze-latch-missing 패턴은 이 gate 에서 차단.
@@ -1276,13 +1345,27 @@ export function resolveSquatCompletionPath(params: {
     params.relativeDepthPeak > STANDARD_LABEL_FLOOR + 1e-9 &&
     params.relativeDepthPeak < STANDARD_OWNER_FLOOR;
 
-  if (params.evidenceLabel === 'low_rom') return 'low_rom_cycle';
+  /**
+   * SSOT §6.2 — evidence-label fallback must honor admission as the single
+   * shallow-lane opener. Prior to this PR, `evidenceLabel === 'low_rom' ||
+   * 'ultra_low_rom'` opened the shallow lane even when admission was
+   * denied (including `setup_motion_blocked` admission rejection that the
+   * quarantine branch above already caught, plus standing-still / seated
+   * rejections). Requiring admission here locks the lane to the same
+   * opener authority as `explicitShallowRomClosure`.
+   */
+  if (params.evidenceLabel === 'low_rom') {
+    return params.officialShallowPathAdmitted === true ? 'low_rom_cycle' : 'not_confirmed';
+  }
   if (params.evidenceLabel === 'ultra_low_rom') {
     // PR-7-CORRECTED: evidence-label fallback path 에서도 동일 gate 적용.
     // explicitShallowRomClosure 가 false 인데 ultra_low_rom 인 경우도 integrity 없이 열면 안 된다.
+    if (params.officialShallowPathAdmitted !== true) return 'not_confirmed';
     return params.ultraLowRomFreshCycleIntegrity ? 'ultra_low_rom_cycle' : 'not_confirmed';
   }
-  if (standardEvidenceOwnerShallowBand) return 'low_rom_cycle';
+  if (standardEvidenceOwnerShallowBand) {
+    return params.officialShallowPathAdmitted === true ? 'low_rom_cycle' : 'not_confirmed';
+  }
   return deriveSquatCompletionPassReason({
     completionSatisfied: true,
     evidenceLabel: params.evidenceLabel,
@@ -2315,6 +2398,9 @@ export function evaluateSquatCompletionCore(
       officialShallowPathReason: null,
       officialShallowPathBlockedReason: null,
       officialShallowPathAdmissionGuardFamily: null,
+      /** PR-SHALLOW-OWNER-SPLIT-QUARANTINE: default sink-only diagnostics. */
+      contaminationLaneActive: false,
+      attemptEpochFresh: false,
       officialShallowClosureFamily: null,
       officialShallowClosureRewriteApplied: false,
       officialShallowClosureRewriteSuppressedReason: null,
@@ -3507,6 +3593,18 @@ export function evaluateSquatCompletionCore(
   const completionBlockedReasonForCompletionPath =
     officialShallowClosureRewriteEligible ? null : completionBlockedReason;
 
+  /**
+   * PR-SHALLOW-OWNER-SPLIT-QUARANTINE (SSOT §6.5) — attempt freshness for
+   * the shallow lane. Mirrors the final state's `baselineFrozen && peakLatched`
+   * assignment below (depthFreeze != null && committedOrPostCommitPeakFrame
+   * != null). When either is missing, the rep epoch is in a half-state
+   * (freeze_or_latch_missing / peak_not_latched / baselineFrozen=false) and
+   * the shallow lane must not enter terminal evaluation from it. Standard
+   * `standard_cycle` semantics are unchanged.
+   */
+  const attemptEpochFresh =
+    depthFreeze != null && committedOrPostCommitPeakFrame != null;
+
   let completionPassReason: SquatCompletionPassReason = resolveSquatCompletionPath({
     completionBlockedReason: completionBlockedReasonForCompletionPath,
     relativeDepthPeak,
@@ -3516,6 +3614,13 @@ export function evaluateSquatCompletionCore(
     officialShallowPathAdmitted: shallowAdmissionContract.admitted,
     shallowRomClosureProofSignals,
     ultraLowRomFreshCycleIntegrity,
+    /**
+     * PR-SHALLOW-OWNER-SPLIT-QUARANTINE (SSOT §6.1 / §6.4): contamination
+     * lane quarantine. When the upstream setup-motion detector flagged the
+     * epoch, no owner may open on the single-writer completion path.
+     */
+    setupMotionBlocked: options?.setupMotionBlocked === true,
+    attemptEpochFresh,
   });
 
   let completionSatisfied = completionPassReason !== 'not_confirmed';
@@ -3918,6 +4023,15 @@ export function evaluateSquatCompletionCore(
     officialShallowPathBlockedReason,
     /** PR-3 §4.2: admission-level anti-false-pass guard family (null when clear). */
     officialShallowPathAdmissionGuardFamily: shallowAdmissionContract.admissionGuardFamily,
+    /**
+     * PR-SHALLOW-OWNER-SPLIT-QUARANTINE (SSOT §6.1 / §6.4 / §6.5):
+     * contamination lane + attempt freshness diagnostics. Both are sink-only
+     * observability mirrors — the actual gates live inside
+     * `resolveSquatCompletionPath` above (setupMotionBlocked + attemptEpochFresh)
+     * and in the admission contract. Never a new opener authority.
+     */
+    contaminationLaneActive: options?.setupMotionBlocked === true,
+    attemptEpochFresh,
     /** PR-4 §4.3: closure family proven by rep-cycle truth (null when none). */
     officialShallowClosureFamily: officialShallowClosureContract.family,
     officialShallowClosureRewriteApplied,
