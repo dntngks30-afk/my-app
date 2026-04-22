@@ -543,6 +543,30 @@ export interface SquatCompletionState extends MotionCompletionResult {
     | 'standing_still_or_jitter_only'
     | 'seated_hold_without_descent'
     | null;
+  /**
+   * PR-4 — Official Shallow Closure Rewrite (SSOT §4.3).
+   * Closure family proven by rep-cycle truth (`strict_shallow_cycle` requires
+   * descend → owner-authoritative reversal → recovery + standing-recovery
+   * proof; `shallow_ascent_equivalent` requires descend → directional
+   * reversal → ascent-equivalent + recovery proof). `null` when neither
+   * family is satisfied. Closure decisions read this; PR-2 false-pass guard
+   * remains the independent final pass gate.
+   */
+  officialShallowClosureFamily?:
+    | 'strict_shallow_cycle'
+    | 'shallow_ascent_equivalent'
+    | null;
+  /**
+   * PR-4 — true iff the closure-rewrite actively suppressed a standard veto
+   * (`descent_span_too_short`, `ascent_recovery_span_too_short`, etc.) AND
+   * the suppression actually opened the official shallow ROM cycle.
+   */
+  officialShallowClosureRewriteApplied?: boolean;
+  /**
+   * PR-4 — the original standard veto that was overridden by the closure
+   * rewrite, retained for diagnostics / trace; `null` when no rewrite fired.
+   */
+  officialShallowClosureRewriteSuppressedReason?: string | null;
   /** PR-03 rework: primary 역전 미달 시 completion 스트림으로 shallow reversal 앵커 보강 적용 */
   officialShallowStreamBridgeApplied?: boolean;
   /** PR-03 rework: phaseHint ascent 없이 completion return + 0.88×요구량으로 상승 등가 인정 */

@@ -170,6 +170,12 @@ export type SquatCompletionOwnerStateSlice = {
     | 'standing_still_or_jitter_only'
     | 'seated_hold_without_descent'
     | null;
+  officialShallowClosureFamily?:
+    | 'strict_shallow_cycle'
+    | 'shallow_ascent_equivalent'
+    | null;
+  officialShallowClosureRewriteApplied?: boolean;
+  officialShallowClosureRewriteSuppressedReason?: string | null;
   officialShallowPathClosed?: boolean;
   officialShallowClosureProofSatisfied?: boolean;
   canonicalShallowContractAntiFalsePassClear?: boolean;
@@ -239,6 +245,24 @@ export type OfficialShallowAdmissionSnapshot = {
   officialShallowAdmissionGuardFamily: OfficialShallowAdmissionGuardFamily | null;
 };
 
+/**
+ * PR-4 — Official Shallow Closure Rewrite (SSOT §4.3).
+ * Closure-layer snapshot. Closure is NOT pass and NOT owner truth — those
+ * remain governed by PR-1 owner-freeze + PR-2 false-pass guard. This snapshot
+ * exposes which closure family proved the shallow ROM cycle and whether the
+ * standard veto suppression actively opened the close.
+ */
+export type OfficialShallowClosureFamily =
+  | 'strict_shallow_cycle'
+  | 'shallow_ascent_equivalent';
+
+export type OfficialShallowClosureSnapshot = {
+  officialShallowClosed: boolean;
+  officialShallowClosureFamily: OfficialShallowClosureFamily | null;
+  officialShallowClosureRewriteApplied: boolean;
+  officialShallowClosureRewriteSuppressedReason: string | null;
+};
+
 function officialShallowFalsePassBlocked(
   family: OfficialShallowFalsePassGuardFamily
 ): OfficialShallowFalsePassGuardSnapshot {
@@ -291,6 +315,33 @@ function explicitCanonicalEpochLedgerClear(cs: SquatCompletionOwnerStateSlice): 
     pAt < rAt &&
     rAt < recAt
   );
+}
+
+/**
+ * PR-4 §4.3: Read the closure-stage snapshot. Diagnostic / sink-only —
+ * downstream pass / owner gates must not depend on this. PR-1 owner-freeze
+ * and PR-2 false-pass guard remain the independent final pass authorities.
+ */
+export function readOfficialShallowClosureSnapshot(input: {
+  squatCompletionState: SquatCompletionOwnerStateSlice | undefined;
+}): OfficialShallowClosureSnapshot {
+  const cs = input.squatCompletionState;
+  if (cs == null) {
+    return {
+      officialShallowClosed: false,
+      officialShallowClosureFamily: null,
+      officialShallowClosureRewriteApplied: false,
+      officialShallowClosureRewriteSuppressedReason: null,
+    };
+  }
+  return {
+    officialShallowClosed: cs.officialShallowPathClosed === true,
+    officialShallowClosureFamily: cs.officialShallowClosureFamily ?? null,
+    officialShallowClosureRewriteApplied:
+      cs.officialShallowClosureRewriteApplied === true,
+    officialShallowClosureRewriteSuppressedReason:
+      cs.officialShallowClosureRewriteSuppressedReason ?? null,
+  };
 }
 
 /**

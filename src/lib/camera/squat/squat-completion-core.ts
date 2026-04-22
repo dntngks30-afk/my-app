@@ -1367,6 +1367,166 @@ export function deriveOfficialShallowAdmission(params: {
   );
 }
 
+// =============================================================================
+// PR-4 — Official Shallow Closure Rewrite (SSOT §4.3)
+// -----------------------------------------------------------------------------
+// Goal: legitimate shallow reps must close on rep-cycle truth — descend ->
+// reversal -> recovery on the same motion epoch — and not be re-killed by
+// standard span / standard standing-hold / standard reversal-streak vetoes.
+//
+// Two closure families satisfy official shallow closure:
+//
+//   A. Strict Shallow Cycle
+//      - descend confirmed
+//      - real (owner-authoritative) reversal confirmed
+//      - recovery confirmed
+//      - meaningful standing recovery proven (standingFinalize satisfied
+//        AND standingRecoveredAtMs present)
+//
+//   B. Shallow Ascent Equivalent
+//      - descend confirmed
+//      - directional reversal confirmed
+//        (rule reversal OR stream-bridge reversal with provenance evidence)
+//      - upward return magnitude sufficient (officialShallowAscentEquivalent)
+//      - recovery proof present (standingRecoveredAtMs present OR
+//        shallowClosureProofBundleFromStream — the latter already requires
+//        standingRecoveryFinalize satisfied internally)
+//
+// Critical restriction: closure must NOT become permissive. Closure family
+// satisfaction always requires real descend + reversal + recovery evidence.
+// Setup-motion / seated-hold / standing-still cases never satisfy these
+// families, and downstream PR-2 false-pass guard remains the independent
+// final pass gate.
+//
+// Once a family is satisfied, the standard veto reasons listed in the SSOT
+// (`descent_span_too_short`, `ascent_recovery_span_too_short`,
+// `peak_not_latched`, `no_reversal_after_peak`, `no_standing_recovery`)
+// must no longer serve as final shallow killers — they remain diagnostic
+// signals only.
+// =============================================================================
+
+export type OfficialShallowClosureFamily =
+  | 'strict_shallow_cycle'
+  | 'shallow_ascent_equivalent';
+
+export type SquatOfficialShallowClosureContract = {
+  /** True iff Family A or Family B is satisfied. */
+  satisfied: boolean;
+  /** Which family proved closure (null when neither). */
+  family: OfficialShallowClosureFamily | null;
+  /** Family A satisfaction (independent of B). */
+  strictShallowCycleSatisfied: boolean;
+  /** Family B satisfaction (independent of A). */
+  shallowAscentEquivalentSatisfied: boolean;
+};
+
+/**
+ * PR-4 — Official Shallow Closure Rewrite (SSOT §4.3).
+ *
+ * Pure derivation of closure-family truth from rep-cycle evidence. Does NOT
+ * read pass-core veto reasons, standard frame-span constants, or any
+ * standing-hold timing thresholds — those are exactly what the SSOT removes
+ * from the shallow closure killer list.
+ */
+export function resolveOfficialShallowClosureContract(p: {
+  /** Rep-cycle proof: descent on the current motion epoch. */
+  descendConfirmed: boolean;
+  /** Rep-cycle proof: owner-authoritative reversal after descent. */
+  reversalConfirmedAfterDescend: boolean;
+  /** Rep-cycle proof: owner-authoritative recovery after reversal. */
+  ownerAuthoritativeRecoverySatisfied: boolean;
+  /** Standing recovery proof: meaningful standing recovery. */
+  standingFinalizeSatisfied: boolean;
+  /** Standing recovery proof: a standing-recovery timestamp exists. */
+  standingRecoveredAtMs: number | null | undefined;
+  /** Family B: upward return magnitude reached the ascent-equivalent floor. */
+  officialShallowAscentEquivalentSatisfied: boolean;
+  /** Family B: reversal arrived via shallow stream bridge. */
+  officialShallowStreamBridgeApplied: boolean;
+  /** Family B: provenance evidence backs the directional reversal. */
+  provenanceReversalEvidencePresent: boolean;
+  /** Family B: shallow ROM closure proof bundle (already gated by finalize). */
+  shallowClosureProofBundleFromStream: boolean;
+}): SquatOfficialShallowClosureContract {
+  const standingProofPresent =
+    p.standingFinalizeSatisfied === true && p.standingRecoveredAtMs != null;
+
+  const strictShallowCycleSatisfied =
+    p.descendConfirmed === true &&
+    p.reversalConfirmedAfterDescend === true &&
+    p.ownerAuthoritativeRecoverySatisfied === true &&
+    standingProofPresent;
+
+  const directionalReversalConfirmed =
+    p.reversalConfirmedAfterDescend === true ||
+    (p.officialShallowStreamBridgeApplied === true &&
+      p.provenanceReversalEvidencePresent === true);
+
+  const recoveryProofPresent =
+    p.standingRecoveredAtMs != null ||
+    p.shallowClosureProofBundleFromStream === true;
+
+  const shallowAscentEquivalentSatisfied =
+    p.descendConfirmed === true &&
+    directionalReversalConfirmed &&
+    p.officialShallowAscentEquivalentSatisfied === true &&
+    recoveryProofPresent;
+
+  const satisfied = strictShallowCycleSatisfied || shallowAscentEquivalentSatisfied;
+  const family: OfficialShallowClosureFamily | null = strictShallowCycleSatisfied
+    ? 'strict_shallow_cycle'
+    : shallowAscentEquivalentSatisfied
+      ? 'shallow_ascent_equivalent'
+      : null;
+
+  return {
+    satisfied,
+    family,
+    strictShallowCycleSatisfied,
+    shallowAscentEquivalentSatisfied,
+  };
+}
+
+/**
+ * PR-4 — Official Shallow Closure Rewrite (SSOT §4.3).
+ *
+ * Standard veto reasons that, once an official shallow closure family is
+ * proven, must no longer act as final shallow-path killers. They remain
+ * diagnostic signals on `completionBlockedReason`-like fields, but
+ * `resolveSquatCompletionPath` is fed `null` for them so the shallow ROM
+ * closure can open.
+ *
+ * Mapping to the SSOT-listed killers:
+ *   - 'descent_span_too_short'                           — standard frame span
+ *   - 'ascent_recovery_span_too_short'                   — standard frame span
+ *   - 'recovery_hold_too_short'                          — standard standing hold
+ *   - 'not_standing_recovered'                           — standard standing hold
+ *   - 'low_rom_standing_finalize_not_satisfied'          — standard standing hold
+ *   - 'ultra_low_rom_standing_finalize_not_satisfied'    — standard standing hold
+ *   - 'no_reversal'                                      — standard reversal streak
+ *
+ * The pass-core-owned vetoes `peak_not_latched`, `no_reversal_after_peak`,
+ * and `no_standing_recovery` live in pass-core (separate authority) and are
+ * naturally bypassed by the PR-1 owner-freeze sink once
+ * `officialShallowPathClosed === true`.
+ */
+const PR4_SHALLOW_CLOSURE_SUPPRESSIBLE_STANDARD_VETOS = new Set<string>([
+  'descent_span_too_short',
+  'ascent_recovery_span_too_short',
+  'recovery_hold_too_short',
+  'not_standing_recovered',
+  'low_rom_standing_finalize_not_satisfied',
+  'ultra_low_rom_standing_finalize_not_satisfied',
+  'no_reversal',
+]);
+
+export function isStandardVetoSuppressibleByOfficialShallowClosure(
+  reason: string | null | undefined
+): boolean {
+  if (reason == null) return false;
+  return PR4_SHALLOW_CLOSURE_SUPPRESSIBLE_STANDARD_VETOS.has(reason);
+}
+
 /**
  * PR-3 — Official Shallow Admission Promotion (SSOT §4.2).
  *
@@ -2089,6 +2249,9 @@ export function evaluateSquatCompletionCore(
       officialShallowPathReason: null,
       officialShallowPathBlockedReason: null,
       officialShallowPathAdmissionGuardFamily: null,
+      officialShallowClosureFamily: null,
+      officialShallowClosureRewriteApplied: false,
+      officialShallowClosureRewriteSuppressedReason: null,
       officialShallowStreamBridgeApplied: false,
       officialShallowAscentEquivalentSatisfied: false,
       officialShallowClosureProofSatisfied: false,
@@ -3230,8 +3393,54 @@ export function evaluateSquatCompletionCore(
     downwardCommitmentDelta,
   });
 
+  /**
+   * PR-4 — Official Shallow Closure Rewrite (SSOT §4.3).
+   *
+   * Evaluate the official shallow closure contract from rep-cycle truth
+   * (descend / reversal / recovery / standing-recovery / ascent-equivalent),
+   * independent of standard span / standard standing-hold / standard
+   * reversal-streak vetoes. When a closure family is satisfied AND the
+   * current `completionBlockedReason` is one of the SSOT-listed standard
+   * killers, suppress that veto for the closure-decision call site only —
+   * the original reason is still captured in the closure rewrite trace for
+   * observability, and PR-2 false-pass guard remains the independent final
+   * pass gate.
+   */
+  /**
+   * PR-4: inline-derive `ownerAuthoritativeRecoverySatisfied` here because
+   * the canonical assignment lives later in the orchestrator (after closure
+   * resolution). The expression is the same conjunction used downstream at
+   * `PR-CAM-AUTHORITATIVE-REVERSAL-SPLIT-02` (owner-authoritative reversal
+   * + standing-recovery timestamp + standing finalize satisfied).
+   */
+  const ownerAuthoritativeRecoverySatisfiedForClosure =
+    ownerAuthoritativeReversalSatisfied === true &&
+    standingRecovery.standingRecoveredAtMs != null &&
+    standingRecoveryFinalize.finalizeSatisfied === true;
+
+  const officialShallowClosureContract = resolveOfficialShallowClosureContract({
+    descendConfirmed,
+    reversalConfirmedAfterDescend,
+    ownerAuthoritativeRecoverySatisfied: ownerAuthoritativeRecoverySatisfiedForClosure,
+    standingFinalizeSatisfied: standingRecoveryFinalize.finalizeSatisfied,
+    standingRecoveredAtMs: standingRecovery.standingRecoveredAtMs,
+    officialShallowAscentEquivalentSatisfied,
+    officialShallowStreamBridgeApplied,
+    provenanceReversalEvidencePresent,
+    shallowClosureProofBundleFromStream,
+  });
+
+  const officialShallowClosureRewriteEligible =
+    officialShallowPathCandidate === true &&
+    shallowAdmissionContract.admitted === true &&
+    officialShallowClosureContract.satisfied === true &&
+    isStandardVetoSuppressibleByOfficialShallowClosure(completionBlockedReason);
+
+  const completionBlockedReasonForCompletionPath =
+    officialShallowClosureRewriteEligible ? null : completionBlockedReason;
+
   let completionPassReason: SquatCompletionPassReason = resolveSquatCompletionPath({
-    completionBlockedReason,
+    completionBlockedReason: completionBlockedReasonForCompletionPath,
     relativeDepthPeak,
     evidenceLabel,
     eventBasedDescentPath,
@@ -3248,6 +3457,30 @@ export function evaluateSquatCompletionCore(
     completionSatisfied &&
     officialShallowPathCandidate &&
     (completionPassReason === 'low_rom_cycle' || completionPassReason === 'ultra_low_rom_cycle');
+
+  /**
+   * PR-4 — closure-rewrite observability.
+   *
+   * `officialShallowClosureRewriteApplied` flips true only when the standard
+   * veto was actively suppressed AND the suppression actually opened a
+   * shallow ROM cycle (so we never silently lie about closure behavior).
+   * `officialShallowClosureRewriteSuppressedReason` exposes which standard
+   * killer was overridden (kept for diagnostics).
+   *
+   * When the rewrite fires, also clear the local `completionBlockedReason`
+   * exported on the state — otherwise the state would carry the
+   * contradictory pair `{ completionSatisfied: true, completionBlockedReason:
+   * 'descent_span_too_short' }`, which downstream consumers would treat as
+   * an inconsistent closure.
+   */
+  const officialShallowClosureRewriteApplied =
+    officialShallowClosureRewriteEligible &&
+    officialShallowPathClosed === true;
+  const officialShallowClosureRewriteSuppressedReason =
+    officialShallowClosureRewriteApplied ? completionBlockedReason : null;
+  if (officialShallowClosureRewriteApplied) {
+    completionBlockedReason = null;
+  }
   const officialShallowPathReason: string | null = shallowAdmissionContract.reason;
 
   let officialShallowPathBlockedReason: string | null = null;
@@ -3507,6 +3740,10 @@ export function evaluateSquatCompletionCore(
     officialShallowPathBlockedReason,
     /** PR-3 §4.2: admission-level anti-false-pass guard family (null when clear). */
     officialShallowPathAdmissionGuardFamily: shallowAdmissionContract.admissionGuardFamily,
+    /** PR-4 §4.3: closure family proven by rep-cycle truth (null when none). */
+    officialShallowClosureFamily: officialShallowClosureContract.family,
+    officialShallowClosureRewriteApplied,
+    officialShallowClosureRewriteSuppressedReason,
     officialShallowStreamBridgeApplied,
     officialShallowAscentEquivalentSatisfied,
     /**
