@@ -25,6 +25,7 @@
     "test:camera-pr7-squat-completion": "npx tsx scripts/camera-pr7-squat-completion-quality-split-smoke.mjs",
     "test:camera-pr8-overhead-reach": "npx tsx scripts/camera-pr8-overhead-reach-completion-smoke.mjs",
     "test:camera-prf-proof-gate": "npx tsx scripts/camera-pr-f-regression-proof-gate.mjs",
+    "test:camera-shallow-final-authority": "npx tsx scripts/camera-pr-cam-shallow-final-authority-repair-smoke.mjs",
     "test:oh-visual-truth-obs-06b": "npx tsx scripts/oh-visual-truth-obs-06b-smoke.mjs",
     "test:oh-visual-snapshot-06c": "npx tsx scripts/oh-visual-snapshot-06c-smoke.mjs",
     "test:oh-distal-hand-obs-07b": "npx tsx scripts/oh-distal-hand-obs-07b-smoke.mjs",

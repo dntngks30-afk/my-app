@@ -1,5 +1,7 @@
 import type { SquatCompletionState } from '../squat-completion-state';
 import type { ShallowNormalizedBlockerFamily } from './squat-completion-debug-types';
+import { resolveProvisionalShallowTerminalAuthority } from './squat-completion-canonical';
+import { STANDARD_OWNER_FLOOR } from './squat-completion-core';
 
 type ApplyUltraLowPolicyLockDeps = {
   mapCompletionBlockedReasonToShallowNormalizedBlockerFamily: (
@@ -57,10 +59,21 @@ export function applyUltraLowPolicyLock(
   const ultraLowPolicyDecisionReady = isUltraLowPolicyDecisionReady(state, deps);
   const ultraLowLegitimateByCanonical =
     ultraLowPolicyDecisionReady && isUltraLowCycleLegitimateByCanonicalProof(state);
+  const provisionalShallowTerminalAuthority = ultraLowPolicyDecisionReady
+    ? resolveProvisionalShallowTerminalAuthority(state, {
+        standardOwnerFloor: STANDARD_OWNER_FLOOR,
+        setupMotionBlocked: state.setupMotionBlocked,
+        requireCanonicalAntiFalsePassClear: true,
+      })
+    : { satisfied: false, blockedReason: null };
+  const ultraLowLegitimateByProvisional =
+    ultraLowPolicyDecisionReady && provisionalShallowTerminalAuthority.satisfied === true;
   const ultraLowPolicyTraceBase = [
     `scope=${ultraLowPolicyScope ? '1' : '0'}`,
     `ready=${ultraLowPolicyDecisionReady ? '1' : '0'}`,
     `legitimate_canonical=${ultraLowLegitimateByCanonical ? '1' : '0'}`,
+    `legitimate_provisional=${ultraLowLegitimateByProvisional ? '1' : '0'}`,
+    `provisional_blocked=${provisionalShallowTerminalAuthority.blockedReason ?? 'none'}`,
   ].join('|');
 
   if (!ultraLowPolicyDecisionReady) {
@@ -73,13 +86,15 @@ export function applyUltraLowPolicyLock(
     };
   }
 
-  if (ultraLowLegitimateByCanonical) {
+  if (ultraLowLegitimateByCanonical || ultraLowLegitimateByProvisional) {
     return {
       ...state,
       ultraLowPolicyScope: true,
       ultraLowPolicyDecisionReady: true,
       ultraLowPolicyBlocked: false,
-      ultraLowPolicyTrace: `${ultraLowPolicyTraceBase}|blocked=0_legitimate_canonical`,
+      ultraLowPolicyTrace: `${ultraLowPolicyTraceBase}|blocked=0_${
+        ultraLowLegitimateByCanonical ? 'legitimate_canonical' : 'legitimate_provisional'
+      }`,
     };
   }
 

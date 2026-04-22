@@ -108,6 +108,7 @@ console.log('\n  [B] official_shallow_cycle field alignment');
     completionSatisfied: true,            // gate 2
     currentSquatPhase: 'standing_recovered', // gate 3 — PR-E1 픽스 추가
     completionPassReason: 'official_shallow_cycle', // gate 4
+    cycleComplete: true,
   };
 
   const ownerResult = computeSquatCompletionOwnerTruth({ squatCompletionState: closerOutput });

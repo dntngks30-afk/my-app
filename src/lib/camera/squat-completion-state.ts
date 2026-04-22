@@ -33,6 +33,8 @@ import {
   buildCanonicalShallowContractInputFromState as buildCanonicalShallowContractInputFromStateImpl,
   mergeCanonicalShallowContractResult,
   applyCanonicalShallowClosureFromContract as applyCanonicalShallowClosureFromContractImpl,
+  resolveProvisionalShallowTerminalAuthority,
+  type ProvisionalShallowTerminalAuthorityBlockedReason,
 } from '@/lib/camera/squat/squat-completion-canonical';
 import {
   stampPreCanonicalObservability as stampPreCanonicalObservabilityImpl,
@@ -677,6 +679,28 @@ export interface SquatCompletionState extends MotionCompletionResult {
    * `completionOwnerPassed` + `readOfficialShallowFalsePassGuardSnapshot`).
    */
   officialShallowProvedSameEpochCloseWriteRepairSuppressedReason?: string | null;
+  /**
+   * PR-CAM-SHALLOW-FINAL-PASS-TRUTH-LOCK: late same-eval shallow terminal
+   * authority. This is NOT admission-only; it is true only after the
+   * admitted/frozen/latched/reversal/recovery/stream/ascent-equivalent
+   * bundle is present and the false-pass perimeter is clear.
+   */
+  provisionalShallowTerminalAuthority?: boolean;
+  provisionalShallowTerminalAuthorityBlockedReason?:
+    | ProvisionalShallowTerminalAuthorityBlockedReason
+    | null;
+  provisionalShallowTerminalAuthoritySource?:
+    | 'same_eval_terminal_bundle'
+    | 'same_eval_non_retroactive_freeze'
+    | null;
+  provisionalShallowTerminalAuthorityFirstFrameCount?: number | null;
+  sameEvalShallowTerminalAuthorityFreezeApplied?: boolean;
+  sameEvalShallowTerminalAuthorityFreezeRecoveredFrom?:
+    | 'not_armed'
+    | 'no_reversal'
+    | 'setup_motion_blocked'
+    | null;
+  lateSetupMotionBlockedAfterProvisionalAuthority?: boolean;
   /** PR-03 rework: primary 역전 미달 시 completion 스트림으로 shallow reversal 앵커 보강 적용 */
   officialShallowStreamBridgeApplied?: boolean;
   /** PR-03 rework: phaseHint ascent 없이 completion return + 0.88×요구량으로 상승 등가 인정 */
@@ -710,6 +734,8 @@ export interface SquatCompletionState extends MotionCompletionResult {
   setupMotionBlockReason?: string | null;
   /** dwell 이후 슬라이스에서 attempt 가 열린 경우 true(관측) */
   attemptStartedAfterReady?: boolean;
+  /** PR-2 false-pass guard: terminal pose still looked seated/deep at pass time. */
+  stillSeatedAtPass?: boolean;
   /**
    * PR-CAM-ULTRA-LOW-ROM-EVENT-GATE-01: progression 역전 프레임 존재 — ultra-low event 승격 게이트 입력.
    * (JSON/트레이스 `reversalConfirmedAfterDescend` 와 동일 의미로 유지)
@@ -751,7 +777,8 @@ export interface SquatCompletionState extends MotionCompletionResult {
     | 'none'
     | 'canonical_authoritative'
     | 'canonical_guarded_trajectory'
-    | 'same_rep_official_shallow_owner_write';
+    | 'same_rep_official_shallow_owner_write'
+    | 'provisional_shallow_terminal_authority';
 
   /**
    * PR-SHALLOW-AUTHORITATIVE-CLOSE-WRITER-MISS-OBSERVABILITY-01
@@ -2762,6 +2789,131 @@ function applyCanonicalShallowClosureFromContract(
   });
 }
 
+export type ProvisionalShallowTerminalAuthoritySnapshot = {
+  state: SquatCompletionState;
+  frameCount: number;
+};
+
+function sameEvalPrefixOptions(
+  frames: PoseFeaturesFrame[],
+  frameCount: number,
+  options: EvaluateSquatCompletionStateOptions | undefined
+): EvaluateSquatCompletionStateOptions | undefined {
+  if (options?.setupMotionBlocked !== true) return options;
+  const prefixSetupBlock = computeSquatSetupMotionBlock(
+    frames.slice(0, frameCount).filter((frame) => frame.isValid)
+  );
+  return {
+    ...options,
+    setupMotionBlocked: prefixSetupBlock.blocked,
+  };
+}
+
+function projectProvisionalShallowTerminalAuthorityState(
+  state: SquatCompletionState,
+  frames: PoseFeaturesFrame[],
+  options: EvaluateSquatCompletionStateOptions | undefined
+): SquatCompletionState {
+  let next = stampPreCanonicalObservability(state, frames, options);
+  next = applyShallowAcquisitionPeakProvenanceUnification(next, options);
+  next = applySameRepShallowAdmissionCloseRecovery(next, options);
+  const canonicalShallowContract = deriveCanonicalShallowCompletionContract(
+    buildCanonicalShallowContractInputFromState(next)
+  );
+  next = mergeCanonicalShallowContractResult(next, canonicalShallowContract);
+  next = applyCanonicalShallowClosureFromContract(next, options);
+  return attachShallowTruthObservabilityAlign01(next);
+}
+
+function captureFirstProvisionalShallowTerminalAuthoritySnapshot(
+  frames: PoseFeaturesFrame[],
+  options: EvaluateSquatCompletionStateOptions | undefined,
+  depthFreeze: SquatDepthFreezeConfig | null,
+  minPrefix: number
+): ProvisionalShallowTerminalAuthoritySnapshot | null {
+  if (depthFreeze == null || frames.length < minPrefix) return null;
+
+  for (let n = minPrefix; n <= frames.length; n++) {
+    const prefixFrames = frames.slice(0, n);
+    const prefixOptions = sameEvalPrefixOptions(frames, n, options);
+    const partial = evaluateSquatCompletionCore(prefixFrames, prefixOptions, depthFreeze);
+    const projected = projectProvisionalShallowTerminalAuthorityState(
+      partial,
+      prefixFrames,
+      prefixOptions
+    );
+    const authority = resolveProvisionalShallowTerminalAuthority(projected, {
+      standardOwnerFloor: STANDARD_OWNER_FLOOR,
+      setupMotionBlocked: prefixOptions?.setupMotionBlocked,
+      requireCanonicalAntiFalsePassClear: true,
+    });
+    if (authority.satisfied === true || projected.provisionalShallowTerminalAuthority === true) {
+      return {
+        frameCount: n,
+        state: {
+          ...projected,
+          provisionalShallowTerminalAuthority: true,
+          provisionalShallowTerminalAuthorityBlockedReason: null,
+          provisionalShallowTerminalAuthoritySource: 'same_eval_terminal_bundle',
+          provisionalShallowTerminalAuthorityFirstFrameCount: n,
+        },
+      };
+    }
+  }
+
+  return null;
+}
+
+function sameEvalTerminalAuthorityInvalidationReason(
+  state: SquatCompletionState,
+  options: EvaluateSquatCompletionStateOptions | undefined
+): SquatCompletionState['sameEvalShallowTerminalAuthorityFreezeRecoveredFrom'] {
+  if (state.setupMotionBlocked === true || options?.setupMotionBlocked === true) {
+    return 'setup_motion_blocked';
+  }
+  if (
+    state.completionBlockedReason === 'not_armed' ||
+    state.officialShallowPathBlockedReason === 'not_armed'
+  ) {
+    return 'not_armed';
+  }
+  if (
+    state.completionBlockedReason === 'no_reversal' ||
+    state.officialShallowPathBlockedReason === 'no_reversal'
+  ) {
+    return 'no_reversal';
+  }
+  return null;
+}
+
+export function applySameEvalProvisionalTerminalAuthorityFreeze(
+  state: SquatCompletionState,
+  snapshot: ProvisionalShallowTerminalAuthoritySnapshot | null,
+  options: EvaluateSquatCompletionStateOptions | undefined
+): SquatCompletionState {
+  if (snapshot == null) return state;
+
+  const recoveredFrom = sameEvalTerminalAuthorityInvalidationReason(state, options);
+  if (recoveredFrom == null) return state;
+
+  return {
+    ...snapshot.state,
+    setupMotionBlocked: false,
+    contaminationLaneActive: false,
+    setupMotionBlockReason: state.setupMotionBlockReason ?? snapshot.state.setupMotionBlockReason,
+    provisionalShallowTerminalAuthority: true,
+    provisionalShallowTerminalAuthorityBlockedReason: null,
+    provisionalShallowTerminalAuthoritySource: 'same_eval_non_retroactive_freeze',
+    provisionalShallowTerminalAuthorityFirstFrameCount: snapshot.frameCount,
+    sameEvalShallowTerminalAuthorityFreezeApplied: true,
+    sameEvalShallowTerminalAuthorityFreezeRecoveredFrom: recoveredFrom,
+    lateSetupMotionBlockedAfterProvisionalAuthority:
+      recoveredFrom === 'setup_motion_blocked' ||
+      state.setupMotionBlocked === true ||
+      options?.setupMotionBlocked === true,
+  };
+}
+
 /**
  * PR-1-COMPLETION-STATE-SLIMMING: Pre-canonical observability layer.
  *
@@ -2801,7 +2953,8 @@ export function evaluateSquatCompletionState(
   const MIN_PREFIX = Math.max(8, MIN_BASELINE_FRAMES + 2);
   if (frames.length >= MIN_PREFIX) {
     for (let n = MIN_PREFIX; n <= frames.length; n++) {
-      const partial = evaluateSquatCompletionCore(frames.slice(0, n), options, null);
+      const prefixOptions = sameEvalPrefixOptions(frames, n, options);
+      const partial = evaluateSquatCompletionCore(frames.slice(0, n), prefixOptions, null);
       if (partial.attemptStarted) {
         const validFull = frames.filter((f) => f.isValid);
         const fullRows = buildSquatCompletionDepthRows(validFull);
@@ -2829,7 +2982,7 @@ export function evaluateSquatCompletionState(
           };
           const frozenPartial = evaluateSquatCompletionCore(
             frames.slice(0, n),
-            options,
+            prefixOptions,
             depthFreeze
           );
           currentRepEpochSnapshot = captureShallowCurrentRepEpochSnapshot(frozenPartial);
@@ -2887,6 +3040,14 @@ export function evaluateSquatCompletionState(
         currentRepEpochSnapshot ?? captureShallowCurrentRepEpochSnapshot(initialState);
     }
   }
+
+  const provisionalShallowTerminalAuthoritySnapshot =
+    captureFirstProvisionalShallowTerminalAuthoritySnapshot(
+      frames,
+      options,
+      depthFreeze,
+      MIN_PREFIX
+    );
 
   let state = resolveStandardDriftAfterShallowAdmission(
     initialState,
@@ -2951,6 +3112,11 @@ export function evaluateSquatCompletionState(
   state = mergeCanonicalShallowContractResult(state, canonicalShallowContract);
 
   state = applyCanonicalShallowClosureFromContract(state, options);
+  state = applySameEvalProvisionalTerminalAuthorityFreeze(
+    state,
+    provisionalShallowTerminalAuthoritySnapshot,
+    options
+  );
 
   /**
    * PR-CAM-EVENT-OWNER-DOWNGRADE-01: 이벤트 사이클은 탐지·관측만 — canonical closer 가 성공 클로저의 유일 경로.

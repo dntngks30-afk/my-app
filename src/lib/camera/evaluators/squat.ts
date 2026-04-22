@@ -391,13 +391,22 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
 
   // ── Step 1: stamp setup-phase context ──
   let standingFinalizeSuppressedByLateSetup = false;
+  const preserveProvisionalTerminalAuthorityAgainstLateSetup =
+    setupBlock.blocked === true &&
+    state.sameEvalShallowTerminalAuthorityFreezeApplied === true &&
+    state.provisionalShallowTerminalAuthority === true;
+  const setupMotionBlockedForCompletionState =
+    preserveProvisionalTerminalAuthorityAgainstLateSetup ? false : setupBlock.blocked;
 
   state = {
     ...state,
     readinessStableDwellSatisfied: dwell.satisfied,
-    setupMotionBlocked: setupBlock.blocked,
+    setupMotionBlocked: setupMotionBlockedForCompletionState,
     setupMotionBlockReason: setupBlock.reason,
     attemptStartedAfterReady: dwell.satisfied,
+    lateSetupMotionBlockedAfterProvisionalAuthority:
+      state.lateSetupMotionBlockedAfterProvisionalAuthority === true ||
+      preserveProvisionalTerminalAuthorityAgainstLateSetup,
   };
 
   // ── PASS-CORE: derive immutable pass truth (before policy lock and late-setup annotation) ──
@@ -1010,6 +1019,19 @@ function buildSquatEvaluatorHighlightedMetrics(p: {
     contractB_officialShallowAscentEquiv: state.officialShallowAscentEquivalentSatisfied ? 1 : 0,
     contractC_officialShallowClosed: state.officialShallowPathClosed ? 1 : 0,
     contractC_closureProof: state.officialShallowClosureProofSatisfied ? 1 : 0,
+    provisionalShallowTerminalAuthority: state.provisionalShallowTerminalAuthority ? 1 : 0,
+    provisionalShallowTerminalAuthorityBlockedReason:
+      state.provisionalShallowTerminalAuthorityBlockedReason ?? null,
+    provisionalShallowTerminalAuthoritySource:
+      state.provisionalShallowTerminalAuthoritySource ?? null,
+    provisionalShallowTerminalAuthorityFirstFrameCount:
+      state.provisionalShallowTerminalAuthorityFirstFrameCount ?? null,
+    sameEvalShallowTerminalAuthorityFreezeApplied:
+      state.sameEvalShallowTerminalAuthorityFreezeApplied ? 1 : 0,
+    sameEvalShallowTerminalAuthorityFreezeRecoveredFrom:
+      state.sameEvalShallowTerminalAuthorityFreezeRecoveredFrom ?? null,
+    lateSetupMotionBlockedAfterProvisionalAuthority:
+      state.lateSetupMotionBlockedAfterProvisionalAuthority ? 1 : 0,
     contractC_shallowDriftedToStandard: state.officialShallowDriftedToStandard ? 1 : 0,
     recoveryReturnContinuityFrames: state.recoveryReturnContinuityFrames,
     recoveryTrailingDepthCount: state.recoveryTrailingDepthCount,

@@ -19,6 +19,7 @@ import {
 import type { EvaluatorResult } from './types';
 import type { SquatCompletionState } from '../squat-completion-state';
 import { SHALLOW_CURRENT_REP_REVERSAL_TO_STANDING_MAX_MS } from '../squat/shallow-completion-contract';
+import { resolveProvisionalShallowTerminalAuthority } from '../squat/squat-completion-canonical';
 import {
   computeSquatReadinessStableDwell,
   computeSquatSetupMotionBlock,
@@ -437,12 +438,18 @@ export function getShallowMeaningfulCycleBlockReason(
   }
 
   if (state.completionPassReason === 'ultra_low_rom_cycle') {
+    const provisionalShallowTerminalAuthority = resolveProvisionalShallowTerminalAuthority(state, {
+      standardOwnerFloor: STANDARD_OWNER_FLOOR,
+      setupMotionBlocked: state.setupMotionBlocked,
+      requireCanonicalAntiFalsePassClear: true,
+    }).satisfied;
     // PR-6: policy layer가 이미 legitimate ultra-low cycle로 판정한 경우.
     // single-writer 원칙 유지: 이 gate는 새로운 truth를 만들지 않는다.
     if (
-      state.ultraLowPolicyScope === true &&
-      state.ultraLowPolicyDecisionReady === true &&
-      state.ultraLowPolicyBlocked === false
+      (state.ultraLowPolicyScope === true &&
+        state.ultraLowPolicyDecisionReady === true &&
+        state.ultraLowPolicyBlocked === false) ||
+      provisionalShallowTerminalAuthority === true
     ) {
       /**
        * PR-11-MEANINGFUL-SHALLOW-GOLD-PATH-ONLY:

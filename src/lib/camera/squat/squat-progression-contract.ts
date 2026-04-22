@@ -229,8 +229,17 @@ export type SquatCompletionOwnerStateSlice = {
    */
   officialShallowProvedSameEpochCloseWriteRepairApplied?: boolean;
   officialShallowProvedSameEpochCloseWriteRepairSuppressedReason?: string | null;
+  provisionalShallowTerminalAuthority?: boolean;
+  provisionalShallowTerminalAuthorityBlockedReason?: string | null;
+  provisionalShallowTerminalAuthoritySource?: string | null;
+  provisionalShallowTerminalAuthorityFirstFrameCount?: number | null;
+  sameEvalShallowTerminalAuthorityFreezeApplied?: boolean;
+  sameEvalShallowTerminalAuthorityFreezeRecoveredFrom?: string | null;
+  lateSetupMotionBlockedAfterProvisionalAuthority?: boolean;
   officialShallowPathClosed?: boolean;
   officialShallowClosureProofSatisfied?: boolean;
+  baselineFrozen?: boolean;
+  peakLatched?: boolean;
   canonicalShallowContractAntiFalsePassClear?: boolean;
   canonicalTemporalEpochOrderSatisfied?: boolean;
   canonicalTemporalEpochOrderBlockedReason?: string | null;

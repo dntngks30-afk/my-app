@@ -47,6 +47,124 @@ function hasNoKnownStaleOrMixedShallowEpoch(state: SquatCompletionState): boolea
   );
 }
 
+export type ProvisionalShallowTerminalAuthorityBlockedReason =
+  | 'not_admitted'
+  | 'standard_owner_zone'
+  | 'insufficient_signal'
+  | 'readiness_not_clear'
+  | 'setup_motion_blocked'
+  | 'descent_not_confirmed'
+  | 'baseline_not_frozen'
+  | 'peak_not_latched'
+  | 'reversal_not_confirmed'
+  | 'recovery_not_confirmed'
+  | 'stream_bridge_missing'
+  | 'ascent_equivalent_missing'
+  | 'false_pass_guard_not_clear'
+  | 'temporal_order_not_satisfied'
+  | 'stale_or_mixed_rep_guard';
+
+export type ProvisionalShallowTerminalAuthorityDecision = {
+  satisfied: boolean;
+  blockedReason: ProvisionalShallowTerminalAuthorityBlockedReason | null;
+};
+
+export function resolveProvisionalShallowTerminalAuthority(
+  state: SquatCompletionState,
+  deps: {
+    standardOwnerFloor: number;
+    setupMotionBlocked?: boolean;
+    requireCanonicalAntiFalsePassClear?: boolean;
+  }
+): ProvisionalShallowTerminalAuthorityDecision {
+  if (
+    state.officialShallowPathCandidate !== true ||
+    state.officialShallowPathAdmitted !== true
+  ) {
+    return { satisfied: false, blockedReason: 'not_admitted' };
+  }
+  if (!(state.relativeDepthPeak < deps.standardOwnerFloor)) {
+    return { satisfied: false, blockedReason: 'standard_owner_zone' };
+  }
+  if (state.evidenceLabel === 'insufficient_signal') {
+    return { satisfied: false, blockedReason: 'insufficient_signal' };
+  }
+  if (state.readinessStableDwellSatisfied === false || state.attemptStartedAfterReady === false) {
+    return { satisfied: false, blockedReason: 'readiness_not_clear' };
+  }
+  if (deps.setupMotionBlocked === true || state.setupMotionBlocked === true) {
+    return { satisfied: false, blockedReason: 'setup_motion_blocked' };
+  }
+  if (
+    state.attemptStarted !== true ||
+    state.descendConfirmed !== true ||
+    state.downwardCommitmentReached !== true ||
+    !((state.downwardCommitmentDelta ?? 0) > 0)
+  ) {
+    return { satisfied: false, blockedReason: 'descent_not_confirmed' };
+  }
+  if (state.baselineFrozen !== true) {
+    return { satisfied: false, blockedReason: 'baseline_not_frozen' };
+  }
+  if (state.peakLatched !== true || (state.peakLatchedAtIndex ?? -1) <= 0) {
+    return { satisfied: false, blockedReason: 'peak_not_latched' };
+  }
+  if (
+    state.reversalConfirmedAfterDescend !== true ||
+    state.officialShallowReversalSatisfied !== true
+  ) {
+    return { satisfied: false, blockedReason: 'reversal_not_confirmed' };
+  }
+  if (
+    state.recoveryConfirmedAfterReversal !== true ||
+    state.standingRecoveredAtMs == null ||
+    (state.ownerAuthoritativeRecoverySatisfied !== true &&
+      state.standingFinalizeSatisfied !== true)
+  ) {
+    return { satisfied: false, blockedReason: 'recovery_not_confirmed' };
+  }
+  if (state.officialShallowStreamBridgeApplied !== true) {
+    return { satisfied: false, blockedReason: 'stream_bridge_missing' };
+  }
+  if (state.officialShallowAscentEquivalentSatisfied !== true) {
+    return { satisfied: false, blockedReason: 'ascent_equivalent_missing' };
+  }
+  if (state.eventCyclePromoted === true || state.stillSeatedAtPass === true) {
+    return { satisfied: false, blockedReason: 'false_pass_guard_not_clear' };
+  }
+
+  const eventCycle = state.squatEventCycle;
+  const notes = eventCycle?.notes ?? [];
+  if (
+    notes.includes('jitter_spike_reject') ||
+    (eventCycle?.detected === false &&
+      (eventCycle?.descentFrames ?? 0) === 0 &&
+      (state.downwardCommitmentDelta ?? 0) <= 0)
+  ) {
+    return { satisfied: false, blockedReason: 'false_pass_guard_not_clear' };
+  }
+  if (!hasNoKnownStaleOrMixedShallowEpoch(state)) {
+    return { satisfied: false, blockedReason: 'stale_or_mixed_rep_guard' };
+  }
+  if (
+    state.canonicalTemporalEpochOrderSatisfied === false ||
+    state.canonicalTemporalEpochOrderBlockedReason != null
+  ) {
+    return { satisfied: false, blockedReason: 'temporal_order_not_satisfied' };
+  }
+  if (
+    deps.requireCanonicalAntiFalsePassClear === true &&
+    state.canonicalShallowContractAntiFalsePassClear !== true
+  ) {
+    return { satisfied: false, blockedReason: 'false_pass_guard_not_clear' };
+  }
+  if (state.canonicalShallowContractAntiFalsePassClear === false) {
+    return { satisfied: false, blockedReason: 'false_pass_guard_not_clear' };
+  }
+
+  return { satisfied: true, blockedReason: null };
+}
+
 type SameRepOfficialShallowWriterAnchorTruth = {
   aligned: boolean;
   index: number | null;
@@ -332,13 +450,28 @@ export function applyCanonicalShallowClosureFromContract(
 ): SquatCompletionState {
   const ownershipRecoveryEligible =
     sameRepOfficialShallowCloseOwnershipRecoveryEligible(state, deps);
+  const provisionalShallowTerminalAuthority = resolveProvisionalShallowTerminalAuthority(state, {
+    standardOwnerFloor: deps.standardOwnerFloor,
+    setupMotionBlocked: deps.setupMotionBlocked,
+    requireCanonicalAntiFalsePassClear: true,
+  });
+  const provisionalShallowTerminalAuthoritySatisfied =
+    provisionalShallowTerminalAuthority.satisfied === true;
   const candidate = shallowWriterCandidate(state, deps);
 
-  if (state.canonicalShallowContractSatisfied !== true && !ownershipRecoveryEligible) {
+  if (
+    state.canonicalShallowContractSatisfied !== true &&
+    !ownershipRecoveryEligible &&
+    !provisionalShallowTerminalAuthoritySatisfied
+  ) {
     const miss =
       ownershipRecoveryFirstMissReason(state, deps) ?? ('writer_guard_unknown' as const);
     return {
       ...state,
+      provisionalShallowTerminalAuthority: false,
+      provisionalShallowTerminalAuthorityBlockedReason:
+        provisionalShallowTerminalAuthority.blockedReason,
+      provisionalShallowTerminalAuthoritySource: null,
       canonicalShallowContractClosureApplied: false,
       canonicalShallowContractClosureSource: 'none',
       ...buildOfficialShallowWriterObservability(state, deps, {
@@ -403,7 +536,9 @@ export function applyCanonicalShallowClosureFromContract(
       ? state.completionBlockedReason
       : null
     : null;
-  const closureSource = ownershipRecoveryEligible
+  const closureSource = provisionalShallowTerminalAuthoritySatisfied
+    ? 'provisional_shallow_terminal_authority'
+    : ownershipRecoveryEligible
     ? 'same_rep_official_shallow_owner_write'
     : state.canonicalShallowContractClosureSource ?? 'canonical_authoritative';
 
@@ -428,7 +563,9 @@ export function applyCanonicalShallowClosureFromContract(
     officialShallowPathBlockedReason: null,
     ownerAuthoritativeShallowClosureSatisfied: true,
     shallowAuthoritativeClosureReason:
-      closureSource === 'same_rep_official_shallow_owner_write'
+      closureSource === 'provisional_shallow_terminal_authority'
+        ? 'provisional_shallow_terminal_authority'
+        : closureSource === 'same_rep_official_shallow_owner_write'
         ? 'same_rep_official_shallow_owner_write'
         : closureSource === 'canonical_guarded_trajectory'
         ? 'canonical_shallow_contract_guarded_trajectory'
@@ -444,6 +581,12 @@ export function applyCanonicalShallowClosureFromContract(
         : state.peakAnchorTruth,
     canonicalShallowContractClosureApplied: true,
     canonicalShallowContractClosureSource: closureSource,
+    provisionalShallowTerminalAuthority: provisionalShallowTerminalAuthoritySatisfied,
+    provisionalShallowTerminalAuthorityBlockedReason:
+      provisionalShallowTerminalAuthority.blockedReason,
+    provisionalShallowTerminalAuthoritySource: provisionalShallowTerminalAuthoritySatisfied
+      ? 'same_eval_terminal_bundle'
+      : null,
     sameRepShallowCloseRecovered:
       state.sameRepShallowCloseRecovered === true || ownershipRecoveryEligible,
     sameRepShallowCloseRecoveredFrom:
