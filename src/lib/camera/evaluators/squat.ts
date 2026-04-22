@@ -44,7 +44,10 @@ import {
   computeSquatReadinessStableDwell,
   computeSquatSetupMotionBlock,
 } from '@/lib/camera/squat-completion-state';
-import { squatCompletionBlockedReasonToCode } from '@/lib/camera/squat/squat-completion-core';
+import {
+  STANDARD_OWNER_FLOOR,
+  squatCompletionBlockedReasonToCode,
+} from '@/lib/camera/squat/squat-completion-core';
 
 const MIN_VALID_FRAMES = 8;
 
@@ -203,12 +206,37 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   });
 
   /** PR-HOTFIX-02: 서 있기 안정 구간 이후에만 completion 상태기에 프레임 전달 */
+  // PR-X1: make the existing shared descent surface available before arming.
+  // This is timing stabilization only; pass-core remains a downstream consumer.
+  const passWindow = buildSquatPassWindow(valid);
+  const sharedDescentTruth = passWindow.usable
+    ? computeSquatDescentTruth({
+        frames: passWindow.passWindowFrames,
+        baseline: passWindow.passWindowBaseline,
+      })
+    : null;
+
   const { arming: baseArming, completionFrames: naturalCompletionFrames } = computeSquatCompletionArming(valid);
 
   /** PR-HMM-04A: 동일 버퍼로 HMM decode → arming 보조 판단 (final gate 아님) */
   const hmmOnValid = decodeSquatHmm(valid);
   const armingAssistDec = getSquatHmmArmingAssistDecision(valid, hmmOnValid, { armed: baseArming.armed });
-  const effectiveArmed = baseArming.armed || armingAssistDec.assistApplied;
+  const sharedDescentArmingStabilizationApplied =
+    !baseArming.armed &&
+    armingAssistDec.assistApplied !== true &&
+    setupBlock.blocked !== true &&
+    passWindow.usable === true &&
+    sharedDescentTruth?.descentDetected === true &&
+    sharedDescentTruth.descentStartAtMs != null &&
+    sharedDescentTruth.peakAtMs != null &&
+    sharedDescentTruth.peakIndex != null &&
+    sharedDescentTruth.peakIndex > 0 &&
+    sharedDescentTruth.relativePeak > 0 &&
+    sharedDescentTruth.relativePeak < STANDARD_OWNER_FLOOR;
+  const effectiveArmed =
+    baseArming.armed ||
+    armingAssistDec.assistApplied ||
+    sharedDescentArmingStabilizationApplied;
   const completionFrames = !effectiveArmed ? [] : baseArming.armed ? naturalCompletionFrames : valid;
 
   const squatHmm =
@@ -232,6 +260,18 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
           armingStandingWindowRange: undefined,
           armingFallbackUsed: undefined,
           armingPeakAnchored: undefined,
+        }
+      : {}),
+    ...(sharedDescentArmingStabilizationApplied
+      ? {
+          completionSliceStartIndex: 0,
+          baselineCaptured: true,
+          stableFrames: 0,
+          armingStandingWindowRange: undefined,
+          armingFallbackUsed: undefined,
+          armingPeakAnchored: undefined,
+          sharedDescentArmingStabilizationApplied: true,
+          sharedDescentArmingStabilizationReason: 'shared_descent_truth_pre_attempt_stabilization',
         }
       : {}),
   };
@@ -271,20 +311,6 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     if (prevDepthSourceKey != null && prevDepthSourceKey !== src) squatDepthSourceFlipCount += 1;
     prevDepthSourceKey = src;
   }
-
-  // ── DESCENT-TRUTH-RESET-01: Build pass window BEFORE completion-state evaluation ──
-  // Pass window is built here so that the shared descent truth can be injected into
-  // both completion-state and pass-core, eliminating the split-brain ownership.
-  const passWindow = buildSquatPassWindow(valid);
-
-  // Shared descent truth: global pre-peak excursion (§4.4), latest-equal-max peak (§4.5).
-  // Consumed by completion-state (descendConfirmed) and pass-core (descentDetected + peak).
-  const sharedDescentTruth = passWindow.usable
-    ? computeSquatDescentTruth({
-        frames: passWindow.passWindowFrames,
-        baseline: passWindow.passWindowBaseline,
-      })
-    : null;
 
   /**
    * PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-FOLLOWUP:
@@ -880,6 +906,10 @@ function buildSquatEvaluatorHighlightedMetrics(p: {
     hmmArmingAssistEligible: completionArming.hmmArmingAssistEligible ? 1 : 0,
     hmmArmingAssistApplied: completionArming.hmmArmingAssistApplied ? 1 : 0,
     hmmArmingAssistReason: completionArming.hmmArmingAssistReason ?? null,
+    sharedDescentArmingStabilizationApplied:
+      completionArming.sharedDescentArmingStabilizationApplied ? 1 : 0,
+    sharedDescentArmingStabilizationReason:
+      completionArming.sharedDescentArmingStabilizationReason ?? null,
     completionArmingBaselineCaptured: completionArming.baselineCaptured ? 1 : 0,
     completionArmingStableFrames: completionArming.stableFrames,
     completionArmingSliceStart: completionArming.completionSliceStartIndex,

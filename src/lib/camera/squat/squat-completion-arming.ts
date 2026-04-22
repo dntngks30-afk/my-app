@@ -60,6 +60,9 @@ export type CompletionArmingState = {
   hmmArmingAssistReason?: string | null;
   /** `armed || hmmArmingAssistApplied` — completion 슬라이스 선택 기준 */
   effectiveArmed?: boolean;
+  /** PR-X1: same-rep shared descent truth consumed before completion slicing. */
+  sharedDescentArmingStabilizationApplied?: boolean;
+  sharedDescentArmingStabilizationReason?: string | null;
   /**
    * PR-CAM-ARMING-BASELINE-HANDOFF-01: 검증된 standing 윈도우 min(primary) — completion-state seed
    */
