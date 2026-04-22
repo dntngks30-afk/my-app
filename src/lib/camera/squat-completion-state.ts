@@ -576,6 +576,30 @@ export interface SquatCompletionState extends MotionCompletionResult {
    * rewrite, retained for diagnostics / trace; `null` when no rewrite fired.
    */
   officialShallowClosureRewriteSuppressedReason?: string | null;
+  /**
+   * PR-X4 — Closure Write Decoupling from Residual Span Veto on
+   * Already-Proved Shallow Epochs. `true` iff the same-epoch Family C
+   * proof (`shallowProofTerminalCloseSatisfied` + directional reversal on
+   * the admitted shallow rep) actively drove
+   * `officialShallowPathClosed=true` while the residual
+   * `completionBlockedReason` was one of the PR-4 suppressible standard
+   * vetoes (`descent_span_too_short` / `ascent_recovery_span_too_short` /
+   * `recovery_hold_too_short` / `not_standing_recovered` /
+   * `low_rom_standing_finalize_not_satisfied` /
+   * `ultra_low_rom_standing_finalize_not_satisfied` / `no_reversal`).
+   * Additive trace only; downstream pass / owner / final-latch gates
+   * continue to read `completionOwnerPassed` + PR-2 false-pass guard.
+   */
+  officialShallowProvedSameEpochCloseWriteRepairApplied?: boolean;
+  /**
+   * PR-X4 — The residual standard veto that would have held
+   * `officialShallowPathClosed=false` closed on a proved same-epoch
+   * shallow rep. Captured for smoke-harness introspection / trace only;
+   * `null` when the repair did not fire. Must NOT be consumed as a
+   * success / opener gate (owner-freeze and final pass remain on
+   * `completionOwnerPassed` + `readOfficialShallowFalsePassGuardSnapshot`).
+   */
+  officialShallowProvedSameEpochCloseWriteRepairSuppressedReason?: string | null;
   /** PR-03 rework: primary 역전 미달 시 completion 스트림으로 shallow reversal 앵커 보강 적용 */
   officialShallowStreamBridgeApplied?: boolean;
   /** PR-03 rework: phaseHint ascent 없이 completion return + 0.88×요구량으로 상승 등가 인정 */

@@ -223,6 +223,12 @@ export type SquatCompletionOwnerStateSlice = {
     | null;
   officialShallowClosureRewriteApplied?: boolean;
   officialShallowClosureRewriteSuppressedReason?: string | null;
+  /**
+   * PR-X4 — Closure Write Decoupling from Residual Span Veto on
+   * Already-Proved Shallow Epochs. Additive diagnostics; not a gate.
+   */
+  officialShallowProvedSameEpochCloseWriteRepairApplied?: boolean;
+  officialShallowProvedSameEpochCloseWriteRepairSuppressedReason?: string | null;
   officialShallowPathClosed?: boolean;
   officialShallowClosureProofSatisfied?: boolean;
   canonicalShallowContractAntiFalsePassClear?: boolean;

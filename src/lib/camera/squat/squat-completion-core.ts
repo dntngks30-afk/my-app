@@ -2318,6 +2318,8 @@ export function evaluateSquatCompletionCore(
       officialShallowClosureFamily: null,
       officialShallowClosureRewriteApplied: false,
       officialShallowClosureRewriteSuppressedReason: null,
+      officialShallowProvedSameEpochCloseWriteRepairApplied: false,
+      officialShallowProvedSameEpochCloseWriteRepairSuppressedReason: null,
       officialShallowStreamBridgeApplied: false,
       officialShallowAscentEquivalentSatisfied: false,
       officialShallowClosureProofSatisfied: false,
@@ -3547,6 +3549,116 @@ export function evaluateSquatCompletionCore(
   if (officialShallowClosureRewriteApplied) {
     completionBlockedReason = null;
   }
+
+  /**
+   * PR-X4 — Closure Write Decoupling from Residual Span Veto on Already-Proved
+   * Shallow Epochs (SSOT §6.6 closure write truth).
+   *
+   * Motivation (from parent SSOT
+   * `docs/pr/PR-CAM-SQUAT-PRIMARY-FIXTURE-CLOSURE-MISS-TRUTH-MAP.md`):
+   * Primary shallow fixtures (`device_shallow_fail_01`/`05`/`07`/`10`/`13`)
+   * already satisfy the same-epoch shallow closure proof trio on an admitted
+   * shallow rep:
+   *   - `officialShallowPathAdmitted === true`
+   *   - `officialShallowStreamBridgeApplied === true`
+   *   - `officialShallowAscentEquivalentSatisfied === true`
+   *   - `officialShallowClosureProofSatisfied === true`
+   *   - directional reversal on the same epoch
+   *     (`reversalConfirmedAfterDescend === true`, yielding
+   *     `officialShallowReversalSatisfied === true`)
+   *   - rep-cycle Family C (`shallowProofTerminalCloseSatisfied`) holds in
+   *     `officialShallowClosureContract`.
+   * Despite Family C satisfaction and the standard veto landing in the PR-4
+   * suppressible set, `officialShallowPathClosed === true` never fires on
+   * those ticks because the subsequent `resolveSquatCompletionPath` reduction
+   * returns `not_confirmed` through the `evidenceLabel === 'ultra_low_rom'`
+   * integrity gate (`ultraLowRomFreshCycleIntegrity === false` when the
+   * rep has a committed peak anchor but the fresh-cycle heuristic can't
+   * confirm it independently). The residual standard-span vetoes
+   * (`descent_span_too_short`, `ascent_recovery_span_too_short`,
+   * `recovery_hold_too_short`, `not_standing_recovered`) then re-enter as
+   * terminal close vetoes via `officialShallowPathBlockedReason`.
+   *
+   * Scope (narrow, closure write precedence only):
+   *   1. Restore `officialShallowPathClosed=true` on same-epoch rep evidence
+   *      where the Family C proof terminal close contract is already
+   *      satisfied AND the residual `completionBlockedReason` is one of the
+   *      PR-4 suppressible standard-veto killers.
+   *   2. Isolate the standard-veto family's authority: the blocker string
+   *      remains available as a diagnostic
+   *      (`officialShallowProvedSameEpochCloseWriteRepairSuppressedReason`),
+   *      but it no longer holds `officialShallowPathClosed=false` closed
+   *      on a proved same-epoch shallow rep.
+   *
+   * Non-goals (explicitly preserved):
+   *   - Does NOT relax any depth / ROM / span threshold.
+   *   - Does NOT create a new pass path.
+   *   - Does NOT open pass / owner / final-latch (those read the PR-2
+   *     false-pass guard and `completionOwnerPassed`, which continue to
+   *     gate owner-freeze and final pass independently).
+   *   - Does NOT modify canonical opener, `officialShallowOwnerFrozen`
+   *     reader, or `readOfficialShallowFalsePassGuardSnapshot`.
+   *   - Does NOT modify deep / standard-cycle closure semantics — Family C
+   *     (`shallowProofTerminalCloseSatisfied`) requires
+   *     `officialShallowStreamBridgeApplied === true` +
+   *     `officialShallowAscentEquivalentSatisfied === true`, which is
+   *     shallow-admitted specific.
+   *   - Does NOT consume `shallow_reversal_ownership_unified` as a close /
+   *     opener gate — the reversal evidence used here is completion-state
+   *     `reversalConfirmedAfterDescend` (owner-authoritative) and the
+   *     Family C directional reversal proof.
+   *   - Does NOT stitch across epochs: the contract is evaluated on the
+   *     current same-rep completion-slice tick, identical boundary to the
+   *     pre-existing PR-4 rewrite.
+   *
+   * Safety:
+   *   - `officialShallowClosureContract.shallowProofTerminalCloseSatisfied`
+   *     is false for non-shallow cases (standing-still / seated-hold /
+   *     setup-motion never satisfy descend + directional reversal + proof
+   *     trio observables together), so this repair cannot open a weird-pass
+   *     close.
+   *   - Only suppressible standard-veto killers are bypassed; any other
+   *     `completionBlockedReason` (e.g., admission guard family,
+   *     `peak_not_latched`, `no_reversal_after_peak` — latter two live in
+   *     pass-core authority, not completion-state) is left unchanged.
+   *   - Relative depth must remain in the shallow zone
+   *     (`relativeDepthPeak < STANDARD_OWNER_FLOOR`); the standard-path
+   *     branch is untouched.
+   */
+  const officialShallowProvedSameEpochCloseWriteResidualSuppressibleBlocker =
+    isStandardVetoSuppressibleByOfficialShallowClosure(completionBlockedReason);
+  const officialShallowProvedSameEpochCloseWriteRepairEligible =
+    officialShallowPathClosed !== true &&
+    officialShallowPathCandidate === true &&
+    shallowAdmissionContract.admitted === true &&
+    officialShallowClosureContract.shallowProofTerminalCloseSatisfied === true &&
+    (reversalConfirmedAfterDescend === true ||
+      options?.guardedShallowRecoveredSuffixClosureApply === true) &&
+    officialShallowProvedSameEpochCloseWriteResidualSuppressibleBlocker === true &&
+    relativeDepthPeak < STANDARD_OWNER_FLOOR;
+  const officialShallowProvedSameEpochCloseWriteRepairSuppressedReason =
+    officialShallowProvedSameEpochCloseWriteRepairEligible
+      ? completionBlockedReason
+      : null;
+  if (officialShallowProvedSameEpochCloseWriteRepairEligible) {
+    /**
+     * Coerce the shallow ROM cycle reason from the current evidenceLabel.
+     * Both branches already satisfy `officialShallowPathClosed`'s
+     * downstream gate (low_rom_cycle || ultra_low_rom_cycle). The standard
+     * owner zone (`relativeDepthPeak >= STANDARD_OWNER_FLOOR`) is excluded
+     * by the eligibility guard above.
+     */
+    const coercedShallowRomCycleReason: SquatCompletionPassReason =
+      evidenceLabel === 'ultra_low_rom' ? 'ultra_low_rom_cycle' : 'low_rom_cycle';
+    completionPassReason = coercedShallowRomCycleReason;
+    completionSatisfied = true;
+    officialShallowPathClosed = true;
+    completionBlockedReason = null;
+  }
+  const officialShallowProvedSameEpochCloseWriteRepairApplied =
+    officialShallowProvedSameEpochCloseWriteRepairEligible &&
+    officialShallowPathClosed === true;
+
   const officialShallowPathReason: string | null = shallowAdmissionContract.reason;
 
   let officialShallowPathBlockedReason: string | null = null;
@@ -3810,6 +3922,28 @@ export function evaluateSquatCompletionCore(
     officialShallowClosureFamily: officialShallowClosureContract.family,
     officialShallowClosureRewriteApplied,
     officialShallowClosureRewriteSuppressedReason,
+    /**
+     * PR-X4 — Closure Write Decoupling from Residual Span Veto on
+     * Already-Proved Shallow Epochs. `true` iff the same-epoch Family C
+     * proof (shallowProofTerminalCloseSatisfied + directional reversal)
+     * actively drove `officialShallowPathClosed=true` while the residual
+     * `completionBlockedReason` was one of the PR-4 suppressible standard
+     * vetoes. Additive trace only; downstream pass / owner / final-latch
+     * gates remain on `completionOwnerPassed` + PR-2 false-pass guard.
+     */
+    officialShallowProvedSameEpochCloseWriteRepairApplied,
+    /**
+     * PR-X4 — The original standard veto
+     * (`descent_span_too_short` / `ascent_recovery_span_too_short` /
+     * `recovery_hold_too_short` / `not_standing_recovered` /
+     * `low_rom_standing_finalize_not_satisfied` /
+     * `ultra_low_rom_standing_finalize_not_satisfied` / `no_reversal`)
+     * that would otherwise have kept `officialShallowPathClosed=false`
+     * closed on a proved same-epoch shallow rep. Retained for diagnostics
+     * and smoke harness introspection; `null` when the repair did not
+     * fire.
+     */
+    officialShallowProvedSameEpochCloseWriteRepairSuppressedReason,
     officialShallowStreamBridgeApplied,
     officialShallowAscentEquivalentSatisfied,
     /**
