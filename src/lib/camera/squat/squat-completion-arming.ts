@@ -64,6 +64,22 @@ export type CompletionArmingState = {
   sharedDescentArmingStabilizationApplied?: boolean;
   sharedDescentArmingStabilizationReason?: string | null;
   /**
+   * PR-X2-A — Shallow Epoch Acquisition Contract.
+   *
+   * Observability + gate companion for the new shallow epoch acquisition path.
+   * Set by `evaluators/squat.ts` from
+   * `computeShallowEpochAcquisitionDecision`. When `...Applied === true`, the
+   * evaluator treats acquisition as an additional `effectiveArmed` source
+   * (parallel to `sharedDescentArmingStabilizationApplied`). Reasons / blocked
+   * reasons are the machine-readable breakdown of the historical `not_armed`
+   * family — see `squat-shallow-epoch-acquisition.ts`.
+   */
+  shallowEpochAcquisitionApplied?: boolean;
+  shallowEpochAcquisitionEligible?: boolean;
+  shallowEpochAcquisitionReason?: string | null;
+  shallowEpochAcquisitionBlockedReason?: string | null;
+  shallowEpochObservationStage?: string | null;
+  /**
    * PR-CAM-ARMING-BASELINE-HANDOFF-01: 검증된 standing 윈도우 min(primary) — completion-state seed
    */
   armingBaselineStandingDepthPrimary?: number;

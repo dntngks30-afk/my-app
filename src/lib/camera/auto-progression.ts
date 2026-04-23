@@ -354,6 +354,21 @@ export interface SquatCycleDebug {
   hmmArmingAssistApplied?: boolean;
   hmmArmingAssistReason?: string | null;
   effectiveArmed?: boolean;
+  /**
+   * PR-X2-A: Shallow Epoch Acquisition diagnostic trace.
+   *
+   * Machine-readable breakdown of the historical `not_armed` family.
+   * `shallowEpochAcquisitionApplied` is the single authoritative "this path
+   * contributed to effectiveArmed" bit. `shallowEpochAcquisitionBlockedReason`
+   * names the single earliest blocking gate when acquisition did not fire.
+   * `shallowEpochObservationStage` describes where on the
+   * observation → attempt-truth progression the frame currently sits.
+   */
+  shallowEpochAcquisitionApplied?: boolean;
+  shallowEpochAcquisitionEligible?: boolean;
+  shallowEpochAcquisitionReason?: string | null;
+  shallowEpochAcquisitionBlockedReason?: string | null;
+  shallowEpochObservationStage?: string | null;
   /** PR-HMM-04B: reversal assist — trace only */
   hmmReversalAssistEligible?: boolean;
   hmmReversalAssistApplied?: boolean;
@@ -2263,6 +2278,13 @@ function getSquatProgressionCompletionSatisfied(
   squatCycleDebug.hmmArmingAssistApplied = ca?.hmmArmingAssistApplied;
   squatCycleDebug.hmmArmingAssistReason = ca?.hmmArmingAssistReason ?? null;
   squatCycleDebug.effectiveArmed = ca?.effectiveArmed;
+  // PR-X2-A: shallow epoch acquisition diagnostic surface (trace only, not a gate)
+  squatCycleDebug.shallowEpochAcquisitionApplied = ca?.shallowEpochAcquisitionApplied;
+  squatCycleDebug.shallowEpochAcquisitionEligible = ca?.shallowEpochAcquisitionEligible;
+  squatCycleDebug.shallowEpochAcquisitionReason = ca?.shallowEpochAcquisitionReason ?? null;
+  squatCycleDebug.shallowEpochAcquisitionBlockedReason =
+    ca?.shallowEpochAcquisitionBlockedReason ?? null;
+  squatCycleDebug.shallowEpochObservationStage = ca?.shallowEpochObservationStage ?? null;
   squatCycleDebug.armingDepthSource = ca?.armingDepthSource ?? null;
   squatCycleDebug.armingDepthPeak =
     typeof ca?.armingDepthPeak === 'number' ? ca.armingDepthPeak : null;

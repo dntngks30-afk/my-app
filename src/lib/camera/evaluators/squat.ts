@@ -27,6 +27,10 @@ import {
 } from '@/lib/camera/squat/squat-completion-arming';
 import { getSquatHmmArmingAssistDecision } from '@/lib/camera/squat/squat-arming-assist';
 import {
+  computeShallowEpochAcquisitionDecision,
+  type ShallowEpochAcquisitionDecision,
+} from '@/lib/camera/squat/squat-shallow-epoch-acquisition';
+import {
   computeSquatInternalQuality,
   squatInternalQualityInsufficientSignal,
 } from '@/lib/camera/squat/squat-internal-quality';
@@ -233,10 +237,34 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     sharedDescentTruth.peakIndex > 0 &&
     sharedDescentTruth.relativePeak > 0 &&
     sharedDescentTruth.relativePeak < STANDARD_OWNER_FLOOR;
+
+  /**
+   * PR-X2-A — Shallow Epoch Acquisition Contract.
+   *
+   * Structured acquisition decision derived from the same observability inputs
+   * as the existing arming paths. This closes the `not_armed` family gap where
+   * `shallowCandidateObserved + downwardCommitmentReached` are both true but
+   * no existing arm fires. The decision is additive and never relaxes the
+   * setup / readiness / static-only guards. Final pass ownership remains
+   * `completion`; this path only contributes to `effectiveArmed`.
+   */
+  const shallowEpochAcquisition: ShallowEpochAcquisitionDecision =
+    computeShallowEpochAcquisitionDecision({
+      valid,
+      ruleArmed: baseArming.armed === true,
+      hmmArmingAssistApplied: armingAssistDec.assistApplied === true,
+      sharedDescentArmingStabilizationApplied,
+      setupMotionBlocked: setupBlock.blocked === true,
+      readinessStableDwellSatisfied: dwell.satisfied === true,
+      passWindow,
+      sharedDescentTruth,
+    });
+
   const effectiveArmed =
     baseArming.armed ||
     armingAssistDec.assistApplied ||
-    sharedDescentArmingStabilizationApplied;
+    sharedDescentArmingStabilizationApplied ||
+    shallowEpochAcquisition.acquisitionApplied;
   const completionFrames = !effectiveArmed ? [] : baseArming.armed ? naturalCompletionFrames : valid;
 
   const squatHmm =
@@ -274,6 +302,29 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
           sharedDescentArmingStabilizationReason: 'shared_descent_truth_pre_attempt_stabilization',
         }
       : {}),
+    /**
+     * PR-X2-A: when this path is the one that upgraded `effectiveArmed`, treat
+     * it the same way as shared-descent stabilization for slicing (no upstream
+     * arming-truncation slice; completion re-derives the baseline).
+     */
+    ...(shallowEpochAcquisition.acquisitionApplied &&
+    !baseArming.armed &&
+    !armingAssistDec.assistApplied &&
+    !sharedDescentArmingStabilizationApplied
+      ? {
+          completionSliceStartIndex: 0,
+          baselineCaptured: true,
+          stableFrames: 0,
+          armingStandingWindowRange: undefined,
+          armingFallbackUsed: undefined,
+          armingPeakAnchored: undefined,
+        }
+      : {}),
+    shallowEpochAcquisitionApplied: shallowEpochAcquisition.acquisitionApplied,
+    shallowEpochAcquisitionEligible: shallowEpochAcquisition.acquisitionEligible,
+    shallowEpochAcquisitionReason: shallowEpochAcquisition.acquisitionReason,
+    shallowEpochAcquisitionBlockedReason: shallowEpochAcquisition.acquisitionBlockedReason,
+    shallowEpochObservationStage: shallowEpochAcquisition.observationStage,
   };
   completionArming = mergeArmingDepthObservability(valid, completionArming);
 
@@ -919,6 +970,13 @@ function buildSquatEvaluatorHighlightedMetrics(p: {
       completionArming.sharedDescentArmingStabilizationApplied ? 1 : 0,
     sharedDescentArmingStabilizationReason:
       completionArming.sharedDescentArmingStabilizationReason ?? null,
+    /** PR-X2-A: shallow epoch acquisition diagnostic surface — trace/debug only, not a gate. */
+    shallowEpochAcquisitionApplied: completionArming.shallowEpochAcquisitionApplied ? 1 : 0,
+    shallowEpochAcquisitionEligible: completionArming.shallowEpochAcquisitionEligible ? 1 : 0,
+    shallowEpochAcquisitionReason: completionArming.shallowEpochAcquisitionReason ?? null,
+    shallowEpochAcquisitionBlockedReason:
+      completionArming.shallowEpochAcquisitionBlockedReason ?? null,
+    shallowEpochObservationStage: completionArming.shallowEpochObservationStage ?? null,
     completionArmingBaselineCaptured: completionArming.baselineCaptured ? 1 : 0,
     completionArmingStableFrames: completionArming.stableFrames,
     completionArmingSliceStart: completionArming.completionSliceStartIndex,
