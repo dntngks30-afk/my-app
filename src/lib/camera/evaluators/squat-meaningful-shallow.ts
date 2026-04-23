@@ -33,6 +33,10 @@ import {
 import { getSquatHmmArmingAssistDecision } from '../squat/squat-arming-assist';
 import { decodeSquatHmm } from '../squat/squat-hmm';
 import { evaluateSquatFromPoseFrames } from './squat';
+import {
+  computeShallowCycleCloseProofDecision,
+  type ShallowCycleCloseProofDecision,
+} from '../squat/squat-shallow-close-proof';
 
 const LOW_ROM_LABEL_FLOOR = 0.07;
 const STANDARD_OWNER_FLOOR = 0.4;
@@ -384,6 +388,24 @@ export function getShallowMeaningfulCycleBlockReason(
   }
 
   /**
+   * PR-X2-B — Shallow Close Proof Repair.
+   *
+   * Compute the shallow-cycle-order close proof decision from `state` alone.
+   * When satisfied, the evaluator-level `shallow_descent_too_short` gate is
+   * bypassed — the descent-span length is a proxy for "is the descent real?",
+   * and when the full cycle order (rule/HMM reversal + recovery + ascent-
+   * equivalent + canonical temporal order + setup clean + admitted) is
+   * already proven, the descent reality is proven without span length.
+   *
+   * All other gates (phase, reversal-to-standing lower and upper bounds,
+   * current-rep ownership, primary-depth floor, event-cycle, rule-reversal,
+   * official closure proof) remain enforced unchanged. This PR does NOT
+   * relax the shallow observation band or acquisition contract (PR-X2-A).
+   */
+  const shallowCycleCloseProof: ShallowCycleCloseProofDecision =
+    computeShallowCycleCloseProofDecision(state);
+
+  /**
    * PR-10C-MEANINGFUL-SHALLOW-CURRENT-REP-ONLY / PR-12-OFFICIAL-SHALLOW-GOLD-PATH-CONVERGENCE:
    * Evaluator-level guard for official_shallow_cycle.
    *
@@ -417,8 +439,9 @@ export function getShallowMeaningfulCycleBlockReason(
     }
 
     if (
-      state.squatDescentToPeakMs == null ||
-      state.squatDescentToPeakMs < MIN_DESCENT_TO_PEAK_MS_SHALLOW
+      (state.squatDescentToPeakMs == null ||
+        state.squatDescentToPeakMs < MIN_DESCENT_TO_PEAK_MS_SHALLOW) &&
+      !shallowCycleCloseProof.cycleCloseProofSatisfied
     ) {
       return 'shallow_descent_too_short';
     }
@@ -502,7 +525,8 @@ export function getShallowMeaningfulCycleBlockReason(
 
       if (
         state.squatDescentToPeakMs != null &&
-        state.squatDescentToPeakMs < MIN_DESCENT_TO_PEAK_MS_SHALLOW
+        state.squatDescentToPeakMs < MIN_DESCENT_TO_PEAK_MS_SHALLOW &&
+        !shallowCycleCloseProof.cycleCloseProofSatisfied
       ) {
         return 'shallow_descent_too_short';
       }
@@ -569,8 +593,9 @@ export function getShallowMeaningfulCycleBlockReason(
   }
 
   if (
-    state.squatDescentToPeakMs == null ||
-    state.squatDescentToPeakMs < MIN_DESCENT_TO_PEAK_MS_SHALLOW
+    (state.squatDescentToPeakMs == null ||
+      state.squatDescentToPeakMs < MIN_DESCENT_TO_PEAK_MS_SHALLOW) &&
+    !shallowCycleCloseProof.cycleCloseProofSatisfied
   ) {
     return 'shallow_descent_too_short';
   }
@@ -688,11 +713,46 @@ export function demoteMeaninglessShallowPass(
   };
 }
 
+/**
+ * PR-X2-B — Attach shallow-cycle-close-proof trace onto the result.
+ *
+ * Diagnostic-only surface. Never modifies grant truth, completion state,
+ * or pass reason. When the proof is satisfied AND the descent-span gate
+ * would otherwise have demoted, the `shallowCycleCloseProofApplied` bit
+ * records that the bypass was actively used on this frame.
+ */
+function attachShallowCycleCloseProofTrace(
+  result: EvaluatorResult,
+  proof: ShallowCycleCloseProofDecision,
+  prospectiveReason: string | null
+): EvaluatorResult {
+  if (result.debug == null) return result;
+  const bypassedShallowDescentTooShort =
+    proof.cycleCloseProofSatisfied && prospectiveReason === null;
+  const highlightedMetrics: Record<string, string | number | boolean | null> = {
+    ...(result.debug.highlightedMetrics ?? {}),
+    shallowCycleCloseProofSatisfied: proof.cycleCloseProofSatisfied ? 1 : 0,
+    shallowCycleCloseProofReason: proof.cycleCloseProofReason,
+    shallowCycleCloseProofBlockedReason: proof.cycleCloseProofBlockedReason,
+    shallowCycleCloseProofStage: proof.observationStage,
+    shallowCycleCloseProofApplied: bypassedShallowDescentTooShort ? 1 : 0,
+  };
+  return {
+    ...result,
+    debug: {
+      ...result.debug,
+      highlightedMetrics,
+    },
+  };
+}
+
 export function evaluateSquat(landmarks: PoseLandmarks[]): EvaluatorResult {
   const frames = buildPoseFeaturesFrames('squat', landmarks);
   let result = evaluateSquatFromPoseFrames(frames);
   result = rerunShallowLowRomAfterSetupBlock(frames, result);
   const state = result.debug?.squatCompletionState as SquatCompletionState | undefined;
+  const shallowCycleCloseProof = computeShallowCycleCloseProofDecision(state);
   const reason = getShallowMeaningfulCycleBlockReason(state);
+  result = attachShallowCycleCloseProofTrace(result, shallowCycleCloseProof, reason);
   return reason ? demoteMeaninglessShallowPass(result, reason) : result;
 }
