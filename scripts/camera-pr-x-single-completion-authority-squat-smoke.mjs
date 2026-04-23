@@ -203,6 +203,17 @@ const uiMirror = computeSquatUiProgressionLatchGate(
 ok('UI gate mirrors completion result only', uiMirror.uiProgressionAllowed === true, uiMirror);
 
 {
+  /**
+   * PR-SQUAT-FINAL-PASS-AUTHORITY-SIMPLIFICATION:
+   * Post-attempt runtime `setup_motion_blocked` no longer vetoes when
+   * descent/reversal/recovery have been established for the rep. The sink
+   * promotes back to `completion_truth_official_shallow` and records the
+   * demotion via `finalPassAuthoritySimplification`.
+   *
+   * Pre-attempt setup blocks and same-rep pre-commit contamination still
+   * block — those paths are covered by the dedicated authority-
+   * simplification smoke and by the PR-X2-E same-rep window smoke.
+   */
   const ownerTruth = readSquatPassOwnerTruth({
     squatCompletionState: shallow,
     squatPassCore: passCore({ passDetected: false, passBlockedReason: 'no_standing_recovery' }),
@@ -219,10 +230,14 @@ ok('UI gate mirrors completion result only', uiMirror.uiProgressionAllowed === t
     squatPassCore: passCore({ passDetected: false, passBlockedReason: 'no_standing_recovery' }),
   });
   ok(
-    'runtime setup blocked is enforced as completion invariant, not UI veto',
-    layer.progressionPassed === false &&
-      layer.ownerTruth.completionInvariantFailureReason === 'setup_motion_blocked' &&
-      layer.uiGate.uiProgressionBlockedReason === 'completion_owner_not_satisfied',
+    'runtime setup_motion_blocked post-attempt is demoted by authority simplification',
+    layer.progressionPassed === true &&
+      layer.finalPassBlockedReason == null &&
+      layer.finalPassAuthoritySimplification?.applied === true &&
+      layer.finalPassAuthoritySimplification?.demotedBlockedReason === 'setup_motion_blocked' &&
+      (layer.finalPassAuthoritySimplification?.passOwner ===
+        'completion_truth_official_shallow' ||
+        layer.finalPassAuthoritySimplification?.passOwner === 'completion_truth_standard'),
     layer
   );
 }
@@ -245,7 +260,27 @@ const falsePassCases = [
       standingRecoveredAtMs: null,
     }),
   ],
-  ['setup blocked', completionCycle({ setupMotionBlocked: true })],
+  /**
+   * PR-SQUAT-FINAL-PASS-AUTHORITY-SIMPLIFICATION: `setup_motion_blocked`
+   * is a **pre-attempt** veto only. We assert here that the pre-attempt
+   * variant still blocks. Post-attempt `setupMotionBlocked:true` is
+   * intentionally NOT a false-pass anymore and is covered by the
+   * authority-simplification smoke instead.
+   */
+  [
+    'setup blocked pre-attempt',
+    completionCycle({
+      setupMotionBlocked: true,
+      attemptStarted: false,
+      descendConfirmed: false,
+      downwardCommitmentReached: false,
+      downwardCommitmentDelta: 0,
+      reversalConfirmedAfterDescend: false,
+      recoveryConfirmedAfterReversal: false,
+      standingRecoveredAtMs: null,
+      sameRepSetupBlockFirstSeenBeforeCommit: true,
+    }),
+  ],
   [
     'static seated hold',
     completionCycle({

@@ -31,10 +31,13 @@ import {
   isSquatConfidencePassDecoupleEligible,
   computeSquatCompletionOwnerTruth,
   resolveSquatCompletionLineageOwner,
+  resolveSquatFinalPassAuthoritySimplification,
   squatCompletionTruthPassed,
   squatPassProgressionIntegrityBlock,
   squatRetryTriggeredByPartialFramingReasons,
   type SquatCompletionBand,
+  type SquatFinalPassAuthorityPassOwner,
+  type SquatFinalPassAuthoritySinkReason,
   type SquatPassOwner,
 } from './squat/squat-progression-contract';
 import type {
@@ -655,6 +658,17 @@ type SquatPostOwnerPreLatchGateLayer = {
   finalPassBlockedReason: string | null;
   /** PR-A: frozen product pass surface — `progressionPassed === squatFinalPassTruth.finalPassGranted`. */
   squatFinalPassTruth: SquatFinalPassTruthSurface;
+  /**
+   * PR-SQUAT-FINAL-PASS-AUTHORITY-SIMPLIFICATION: sink-only diagnostic
+   * describing whether the authority sink promoted this rep into a pass
+   * by demoting a post-completion veto. Never read as a gate input.
+   */
+  finalPassAuthoritySimplification: {
+    applied: boolean;
+    sinkReason: SquatFinalPassAuthoritySinkReason;
+    passOwner: SquatFinalPassAuthorityPassOwner;
+    demotedBlockedReason: string | null;
+  };
 };
 
 /**
@@ -1507,27 +1521,79 @@ export function computeSquatPostOwnerPreLatchGateLayer(input: {
     ownerTruth,
     input.uiGateInput
   );
-  const finalizedSinkOnlyTruth =
-    runtimeOwnerTruth.surfaceTemporalTruthSource === 'completion_finalized_payload' &&
-    runtimeOwnerTruth.completionFinalizedForSurface === true;
-  const uiGateInput = finalizedSinkOnlyTruth
-    ? {
-        ...input.uiGateInput,
-        liveReadinessNotReady: false,
-        readinessStableDwellSatisfied: true,
-        setupMotionBlocked: false,
-      }
-    : input.uiGateInput;
-  const uiGate = computeSquatUiProgressionLatchGate({
-    ...uiGateInput,
-    completionOwnerPassed: runtimeOwnerTruth.completionOwnerPassed,
-    officialShallowOwnerFrozen: false,
-  });
-  const finalPassBlockedReason = getSquatPostOwnerFinalPassBlockedReason({
+  /**
+   * PR-SQUAT-FINAL-PASS-AUTHORITY-SIMPLIFICATION — final authority sink.
+   *
+   * Runs AFTER `enforceSquatOwnerContradictionInvariant` and
+   * `applySquatRuntimeReadinessSetupCompletionInvariant` have produced
+   * the canonical owner truth. Its sole job is to ensure a rep that has
+   * already proven completion truth (standard OR official-shallow lineage)
+   * is not canceled here by a post-attempt `setup_motion_blocked`,
+   * `recovery_hold_too_short`, or `shallow_descent_too_short`.
+   *
+   * Safety locks: sink never promotes when stillSeatedAtPass === true,
+   * when attempt evidence is absent, when recoveryConfirmedAfterReversal !== true,
+   * when trajectory-only reversal rescue was applied, or when the
+   * upstream blocked reason is not one of the three demotion candidates.
+   */
+  const authoritySimplification = resolveSquatFinalPassAuthoritySimplification({
     ownerTruth: runtimeOwnerTruth,
-    uiGate,
     squatCompletionState: input.squatCompletionState,
   });
+  const effectiveOwnerTruth = authoritySimplification.simplificationApplied
+    ? (authoritySimplification.ownerTruth as SquatOwnerTruth)
+    : runtimeOwnerTruth;
+  const finalizedSinkOnlyTruth =
+    effectiveOwnerTruth.surfaceTemporalTruthSource === 'completion_finalized_payload' &&
+    effectiveOwnerTruth.completionFinalizedForSurface === true;
+  const uiGateInput =
+    authoritySimplification.simplificationApplied
+      ? {
+          ...input.uiGateInput,
+          /**
+           * PR-SQUAT-FINAL-PASS-AUTHORITY-SIMPLIFICATION: the sink just
+           * proved completion truth. Neutralize the same UI-gate inputs
+           * the sink already downgraded upstream so the latch gate cannot
+           * re-veto on stale setup / readiness signals.
+           */
+          liveReadinessNotReady: false,
+          readinessStableDwellSatisfied: true,
+          setupMotionBlocked: false,
+        }
+      : finalizedSinkOnlyTruth
+        ? {
+            ...input.uiGateInput,
+            liveReadinessNotReady: false,
+            readinessStableDwellSatisfied: true,
+            setupMotionBlocked: false,
+          }
+        : input.uiGateInput;
+  const uiGate = computeSquatUiProgressionLatchGate({
+    ...uiGateInput,
+    completionOwnerPassed: effectiveOwnerTruth.completionOwnerPassed,
+    officialShallowOwnerFrozen: false,
+  });
+  /**
+   * PR-SQUAT-FINAL-PASS-AUTHORITY-SIMPLIFICATION: when the sink promoted
+   * the rep, `getSquatPostOwnerFinalPassBlockedReason` would re-invoke
+   * `enforceSquatOwnerContradictionInvariant` against the RAW
+   * `squatCompletionState` (which still carries the demoted blocked
+   * reason) and instantly cancel the promotion. We short-circuit the
+   * blocked reason to null in that case — the sink is the final authority.
+   *
+   * UI latch gate still has the final word: if it rejects (e.g. readiness
+   * false-positive lock explicitly overridden was none of its concerns),
+   * we defer to its blocked reason.
+   */
+  const finalPassBlockedReason = authoritySimplification.simplificationApplied
+    ? uiGate.uiProgressionAllowed === false
+      ? uiGate.uiProgressionBlockedReason ?? 'ui_progression_blocked'
+      : null
+    : getSquatPostOwnerFinalPassBlockedReason({
+        ownerTruth: effectiveOwnerTruth,
+        uiGate,
+        squatCompletionState: input.squatCompletionState,
+      });
   const motionOwnerSource = readSquatCurrentRepPassTruth({
     squatPassCore: input.squatPassCore,
     squatCompletionState: input.squatCompletionState,
@@ -1538,11 +1604,17 @@ export function computeSquatPostOwnerPreLatchGateLayer(input: {
   });
 
   return {
-    ownerTruth: runtimeOwnerTruth,
+    ownerTruth: effectiveOwnerTruth,
     uiGate,
     finalPassBlockedReason,
     progressionPassed: finalPassBlockedReason == null,
     squatFinalPassTruth,
+    finalPassAuthoritySimplification: {
+      applied: authoritySimplification.simplificationApplied,
+      sinkReason: authoritySimplification.authoritySinkReason,
+      passOwner: authoritySimplification.passOwner,
+      demotedBlockedReason: authoritySimplification.demotedBlockedReason,
+    },
   };
 }
 

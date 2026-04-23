@@ -282,6 +282,31 @@ export type SquatCompletionOwnerStateSlice = {
   completionFinalizedReversalAtMs?: number | null;
   completionFinalizedRecoveryAtMs?: number | null;
   stillSeatedAtPass?: boolean;
+  /**
+   * PR-SQUAT-FINAL-PASS-AUTHORITY-SIMPLIFICATION + PR-X2-E same-rep window:
+   * true when the setup contamination for the current admitted rep was
+   * first observed BEFORE commit. When true, `setup_motion_blocked` stays
+   * a final veto (real contamination predates the attempt). When false
+   * or undefined, late / post-completion setup contamination is demoted
+   * to a diagnostic/quality signal by the authority sink.
+   */
+  sameRepSetupBlockFirstSeenBeforeCommit?: boolean;
+  /**
+   * PR-SQUAT-FINAL-PASS-AUTHORITY-SIMPLIFICATION + PR-X2-E: true when the
+   * contamination was first observed AFTER completion. Diagnostic only —
+   * sink demotes `setup_motion_blocked` when this is true.
+   */
+  sameRepSetupBlockFirstSeenAfterCompletion?: boolean;
+  /**
+   * PR-SQUAT-FINAL-PASS-AUTHORITY-SIMPLIFICATION + PR-X2-E: same-rep
+   * standing recovery hold truth. When explicitly `false` the
+   * `recovery_hold_too_short` family stays a final blocker (genuine
+   * too-short hold). When `true` or `undefined` AND the rep already
+   * confirmed recovery, the sink demotes hold-family blockers to quality.
+   */
+  sameRepStandingRecoveryFinalizeSatisfied?: boolean;
+  /** PR-SQUAT-FINAL-PASS-AUTHORITY-SIMPLIFICATION: blocks promotion if trajectory-rescue is the only reversal evidence. */
+  trajectoryReversalRescueApplied?: boolean;
   squatEventCycle?: {
     detected?: boolean;
     descentFrames?: number;
@@ -627,7 +652,30 @@ export function resolveSquatCompletionInvariantFailureReason(
   const band = resolveSquatCompletionBand(cs);
   const notes = cs.squatEventCycle?.notes ?? [];
 
-  if (cs.setupMotionBlocked === true) return 'setup_motion_blocked';
+  /**
+   * PR-SQUAT-FINAL-PASS-AUTHORITY-SIMPLIFICATION:
+   * `setup_motion_blocked` is a **pre-attempt** veto owner only. Once the
+   * rep has any attempt evidence (attemptStarted / descendConfirmed /
+   * downwardCommitmentReached) AND the setup contamination was NOT first
+   * observed before commit, it must not act as a final veto here — it is
+   * demoted to a diagnostic/quality signal by the authority sink.
+   *
+   * The X2-E "pre-commit setup contamination" family keeps blocking via
+   * `sameRepSetupBlockFirstSeenBeforeCommit === true`; the real-device
+   * deep-retro-veto family (setup contamination observed *after* completion)
+   * no longer surfaces here.
+   */
+  if (cs.setupMotionBlocked === true) {
+    const preAttempt =
+      cs.attemptStarted !== true &&
+      cs.descendConfirmed !== true &&
+      cs.downwardCommitmentReached !== true;
+    const setupFirstSeenBeforeCommit =
+      cs.sameRepSetupBlockFirstSeenBeforeCommit === true;
+    if (preAttempt || setupFirstSeenBeforeCommit) {
+      return 'setup_motion_blocked';
+    }
+  }
   if (cs.readinessStableDwellSatisfied === false) return 'readiness_not_stable';
   if (cs.attemptStartedAfterReady === false) return 'attempt_not_after_ready';
   if (cs.stillSeatedAtPass === true) return 'still_seated_at_pass';
@@ -1083,6 +1131,312 @@ export function resolveSquatPassOwner(input: {
     }
   }
   return 'other';
+}
+
+/**
+ * PR-SQUAT-FINAL-PASS-AUTHORITY-SIMPLIFICATION — single final-pass authority sink.
+ *
+ * ## Intent
+ * The final pass owner for squat is `completion` (standard or official shallow
+ * variation). Secondary layers (pass-core / event-cycle / official-shallow-
+ * stream-bridge / UI gate / setup-motion-block detector) may only DIAGNOSE or
+ * BLOCK CONDITIONALLY — they may not cancel a rep whose completion truth has
+ * already been established.
+ *
+ * Without this sink, real-device traces show:
+ *   - Shallow: admit + reversal + recovery all true → blocked by
+ *     `shallow_descent_too_short` at final authority.
+ *   - Deep: descent + reversal + recovery all true → blocked by
+ *     `setup_motion_blocked:large_framing_translation` or
+ *     `recovery_hold_too_short` after the rep already completed.
+ *
+ * The sink resolves the final decision as:
+ *
+ *   pre-attempt && setupMotionBlocked (first-seen-before-commit) → fail
+ *   standard completion truth proven (descend + reversal + recovery + !seated)
+ *     → pass `completion_truth_standard`
+ *   official shallow completion truth proven
+ *     → pass `completion_truth_official_shallow`
+ *   else → fail with whatever completion-truth-aligned blocked reason upstream
+ *     produced
+ *
+ * ## What this does NOT do
+ * - Does NOT introduce a new owner or competing authority.
+ * - Does NOT change completion writers, evaluators, thresholds, or HMM paths.
+ * - Does NOT open pass when descent / reversal / recovery is genuinely missing.
+ * - Does NOT open pass when the user is still seated at pass (false-positive lock).
+ */
+export type SquatFinalPassAuthoritySinkReason =
+  | null
+  /** Pre-existing owner was already passing — sink did not need to intervene. */
+  | 'owner_already_passed'
+  /** Owner was already failing, sink did not apply (no simplification match). */
+  | 'owner_blocked_no_simplification'
+  /** Sink promoted to `completion_truth_standard` by demoting a retro setup block. */
+  | 'promote_standard_demote_setup_motion_blocked'
+  /** Sink promoted to `completion_truth_standard` by demoting recovery-hold warning. */
+  | 'promote_standard_demote_recovery_hold_too_short'
+  /** Sink promoted to `completion_truth_official_shallow` by demoting shallow descent-span warning. */
+  | 'promote_official_shallow_demote_shallow_descent_too_short'
+  /** Sink promoted to `completion_truth_official_shallow` by demoting a retro setup block. */
+  | 'promote_official_shallow_demote_setup_motion_blocked'
+  /** Sink promoted to `completion_truth_official_shallow` by demoting recovery-hold warning. */
+  | 'promote_official_shallow_demote_recovery_hold_too_short';
+
+export type SquatFinalPassAuthorityPassOwner =
+  | 'completion_truth_standard'
+  | 'completion_truth_official_shallow'
+  | null;
+
+export type SquatFinalPassAuthorityOwnerTruthInput = {
+  completionOwnerPassed: boolean;
+  completionOwnerReason: string | null;
+  completionOwnerBlockedReason: string | null;
+  completionBand: SquatCompletionBand;
+  completionInvariantFailureReason: string | null;
+  completionEpochId: string | null;
+  finalPassSource: 'completion';
+  finalSuccessOwner: SquatFinalSuccessOwner;
+  officialShallowOwnerFrozen: boolean;
+  officialShallowOwnerFreezeBlockedReason: string | null;
+  completionFinalizedForSurface: boolean;
+  completionFinalizedOwner: 'completion' | null;
+  completionFinalizedEpochId: string | null;
+  completionFinalizedTemporalOrderSatisfied: boolean;
+  completionFinalizedPassReason: string | null;
+  completionFinalizedDescentAtMs: number | null;
+  completionFinalizedPeakAtMs: number | null;
+  completionFinalizedReversalAtMs: number | null;
+  completionFinalizedRecoveryAtMs: number | null;
+  surfaceTemporalTruthSource: SquatSurfaceTemporalTruthSource;
+};
+
+export type SquatFinalPassAuthorityResult = {
+  ownerTruth: SquatFinalPassAuthorityOwnerTruthInput;
+  simplificationApplied: boolean;
+  authoritySinkReason: SquatFinalPassAuthoritySinkReason;
+  passOwner: SquatFinalPassAuthorityPassOwner;
+  demotedBlockedReason: string | null;
+};
+
+/**
+ * Strip a leading `owner_contradiction:` prefix so the sink can match the
+ * underlying writer reason (e.g. `owner_contradiction:shallow_descent_too_short`
+ * → `shallow_descent_too_short`).
+ */
+function bareCompletionOwnerBlockedReason(reason: string | null): string {
+  if (reason == null) return '';
+  const prefix = 'owner_contradiction:';
+  return reason.startsWith(prefix) ? reason.slice(prefix.length) : reason;
+}
+
+export function resolveSquatFinalPassAuthoritySimplification(input: {
+  ownerTruth: SquatFinalPassAuthorityOwnerTruthInput;
+  squatCompletionState: SquatCompletionOwnerStateSlice | undefined;
+}): SquatFinalPassAuthorityResult {
+  const ot = input.ownerTruth;
+  const cs = input.squatCompletionState;
+
+  // Owner already passed — sink passes through without mutation.
+  if (ot.completionOwnerPassed === true) {
+    const passOwner: SquatFinalPassAuthorityPassOwner =
+      ot.finalSuccessOwner === 'completion_truth_standard'
+        ? 'completion_truth_standard'
+        : ot.finalSuccessOwner === 'completion_truth_shallow'
+          ? 'completion_truth_official_shallow'
+          : null;
+    return {
+      ownerTruth: ot,
+      simplificationApplied: false,
+      authoritySinkReason: 'owner_already_passed',
+      passOwner,
+      demotedBlockedReason: null,
+    };
+  }
+
+  if (cs == null) {
+    return {
+      ownerTruth: ot,
+      simplificationApplied: false,
+      authoritySinkReason: 'owner_blocked_no_simplification',
+      passOwner: null,
+      demotedBlockedReason: null,
+    };
+  }
+
+  // Hard false-positive locks — NEVER demote.
+  if (cs.stillSeatedAtPass === true) {
+    return {
+      ownerTruth: ot,
+      simplificationApplied: false,
+      authoritySinkReason: 'owner_blocked_no_simplification',
+      passOwner: null,
+      demotedBlockedReason: null,
+    };
+  }
+  const hasAnyAttempt =
+    cs.attemptStarted === true ||
+    cs.descendConfirmed === true ||
+    cs.downwardCommitmentReached === true;
+  if (!hasAnyAttempt) {
+    return {
+      ownerTruth: ot,
+      simplificationApplied: false,
+      authoritySinkReason: 'owner_blocked_no_simplification',
+      passOwner: null,
+      demotedBlockedReason: null,
+    };
+  }
+  if (cs.recoveryConfirmedAfterReversal !== true) {
+    return {
+      ownerTruth: ot,
+      simplificationApplied: false,
+      authoritySinkReason: 'owner_blocked_no_simplification',
+      passOwner: null,
+      demotedBlockedReason: null,
+    };
+  }
+  if (cs.trajectoryReversalRescueApplied === true) {
+    // Trajectory-only reversal without raw epoch proof is a documented false
+    // positive family — never open at the authority sink.
+    return {
+      ownerTruth: ot,
+      simplificationApplied: false,
+      authoritySinkReason: 'owner_blocked_no_simplification',
+      passOwner: null,
+      demotedBlockedReason: null,
+    };
+  }
+
+  const rawBlocker = ot.completionOwnerBlockedReason;
+  const bareBlocker = bareCompletionOwnerBlockedReason(rawBlocker);
+
+  // Only these specific upstream reasons are candidates for demotion.
+  const isSetupMotionBlocker = bareBlocker === 'setup_motion_blocked';
+  const isRecoveryHoldBlocker =
+    bareBlocker === 'recovery_hold_too_short' ||
+    bareBlocker === 'low_rom_standing_finalize_not_satisfied' ||
+    bareBlocker === 'ultra_low_rom_standing_finalize_not_satisfied';
+  const isShallowDescentBlocker = bareBlocker === 'shallow_descent_too_short';
+
+  if (!isSetupMotionBlocker && !isRecoveryHoldBlocker && !isShallowDescentBlocker) {
+    return {
+      ownerTruth: ot,
+      simplificationApplied: false,
+      authoritySinkReason: 'owner_blocked_no_simplification',
+      passOwner: null,
+      demotedBlockedReason: null,
+    };
+  }
+
+  // Standard completion truth: descend + rule/hmm reversal + recovery.
+  const standardReady =
+    cs.descendConfirmed === true &&
+    cs.downwardCommitmentReached === true &&
+    (cs.downwardCommitmentDelta ?? 0) > 0 &&
+    cs.reversalConfirmedAfterDescend === true &&
+    cs.reversalConfirmedByRuleOrHmm === true &&
+    cs.recoveryConfirmedAfterReversal === true;
+
+  // Official shallow completion truth: admission + shallow reversal +
+  // ascent-equivalent + recovery + rule/hmm reversal provenance.
+  const officialShallowReady =
+    cs.officialShallowPathAdmitted === true &&
+    cs.officialShallowReversalSatisfied === true &&
+    cs.officialShallowAscentEquivalentSatisfied === true &&
+    cs.recoveryConfirmedAfterReversal === true &&
+    cs.reversalConfirmedByRuleOrHmm === true;
+
+  // Setup-motion-block retro-veto guard: pre-commit contamination keeps
+  // blocking; post-attempt / post-completion contamination is demoted.
+  const setupBlockIsRetroVeto =
+    isSetupMotionBlocker &&
+    cs.sameRepSetupBlockFirstSeenBeforeCommit !== true;
+
+  // Recovery-hold retro-veto guard: explicit `false` keeps blocking (genuine
+  // too-short hold); `true` or `undefined` AND any other standing-finalize
+  // evidence demotes.
+  const holdTruthExplicitlyFalse =
+    cs.sameRepStandingRecoveryFinalizeSatisfied === false;
+  const holdTruthSatisfiedOrUnknown =
+    !holdTruthExplicitlyFalse &&
+    (cs.sameRepStandingRecoveryFinalizeSatisfied === true ||
+      cs.ownerAuthoritativeRecoverySatisfied === true ||
+      cs.standingFinalizeSatisfied === true);
+  const recoveryHoldIsQualityOnly =
+    isRecoveryHoldBlocker &&
+    cs.recoveryConfirmedAfterReversal === true &&
+    holdTruthSatisfiedOrUnknown;
+
+  const shallowDescentIsQualityOnly =
+    isShallowDescentBlocker && officialShallowReady;
+
+  // Decide whether to promote and under which lineage.
+  let promoteAs: 'standard' | 'official_shallow' | null = null;
+  let sinkReason: SquatFinalPassAuthoritySinkReason = 'owner_blocked_no_simplification';
+
+  if (setupBlockIsRetroVeto) {
+    if (standardReady) {
+      promoteAs = 'standard';
+      sinkReason = 'promote_standard_demote_setup_motion_blocked';
+    } else if (officialShallowReady) {
+      promoteAs = 'official_shallow';
+      sinkReason = 'promote_official_shallow_demote_setup_motion_blocked';
+    }
+  } else if (recoveryHoldIsQualityOnly) {
+    if (standardReady) {
+      promoteAs = 'standard';
+      sinkReason = 'promote_standard_demote_recovery_hold_too_short';
+    } else if (officialShallowReady) {
+      promoteAs = 'official_shallow';
+      sinkReason = 'promote_official_shallow_demote_recovery_hold_too_short';
+    }
+  } else if (shallowDescentIsQualityOnly) {
+    // shallow_descent_too_short is a shallow-only blocker.
+    promoteAs = 'official_shallow';
+    sinkReason = 'promote_official_shallow_demote_shallow_descent_too_short';
+  }
+
+  if (promoteAs == null) {
+    return {
+      ownerTruth: ot,
+      simplificationApplied: false,
+      authoritySinkReason: 'owner_blocked_no_simplification',
+      passOwner: null,
+      demotedBlockedReason: null,
+    };
+  }
+
+  const finalSuccessOwner: SquatFinalSuccessOwner =
+    promoteAs === 'standard' ? 'completion_truth_standard' : 'completion_truth_shallow';
+  const completionOwnerReason =
+    promoteAs === 'standard' ? 'standard_cycle' : 'official_shallow_cycle';
+  const completionBand: SquatCompletionBand =
+    promoteAs === 'standard' ? 'standard_or_deep' : 'shallow';
+  const passOwner: SquatFinalPassAuthorityPassOwner =
+    promoteAs === 'standard'
+      ? 'completion_truth_standard'
+      : 'completion_truth_official_shallow';
+
+  const simplifiedOwnerTruth: SquatFinalPassAuthorityOwnerTruthInput = {
+    ...ot,
+    completionOwnerPassed: true,
+    completionOwnerReason,
+    completionOwnerBlockedReason: null,
+    completionBand,
+    completionInvariantFailureReason: null,
+    finalSuccessOwner,
+    officialShallowOwnerFrozen: false,
+    officialShallowOwnerFreezeBlockedReason: null,
+  };
+
+  return {
+    ownerTruth: simplifiedOwnerTruth,
+    simplificationApplied: true,
+    authoritySinkReason: sinkReason,
+    passOwner,
+    demotedBlockedReason: rawBlocker,
+  };
 }
 
 /**
