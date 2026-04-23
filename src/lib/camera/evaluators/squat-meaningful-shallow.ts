@@ -37,6 +37,10 @@ import {
   computeShallowCycleCloseProofDecision,
   type ShallowCycleCloseProofDecision,
 } from '../squat/squat-shallow-close-proof';
+import {
+  computeUltraLowRomVetoRelocationDecision,
+  type UltraLowRomVetoRelocationDecision,
+} from '../squat/squat-ultra-low-rom-veto-relocation';
 
 const LOW_ROM_LABEL_FLOOR = 0.07;
 const STANDARD_OWNER_FLOOR = 0.4;
@@ -466,13 +470,33 @@ export function getShallowMeaningfulCycleBlockReason(
       setupMotionBlocked: state.setupMotionBlocked,
       requireCanonicalAntiFalsePassClear: true,
     }).satisfied;
-    // PR-6: policy layer가 이미 legitimate ultra-low cycle로 판정한 경우.
-    // single-writer 원칙 유지: 이 gate는 새로운 truth를 만들지 않는다.
+    /**
+     * PR-X2-C — Ultra-Low-ROM Late Veto Relocation.
+     *
+     * Dynamic cycle-proven ultra-shallow reps must no longer die under a
+     * late `ultra_low_rom_not_allowed` veto even when the ultra-low policy
+     * layer (`applyUltraLowPolicyLock`) and the provisional terminal
+     * authority both decline the rep.  The X2-C predicate mirrors the
+     * parent-SSOT §5.A invariants verbatim and is DELIBERATELY distinct
+     * from the X2-B shallow-close-proof predicate (stricter: rule/HMM
+     * reversal + canonical temporal epoch order).  X2-C must stay narrowly
+     * scoped to the ultra-low late-veto relocation and must not
+     * accidentally solve the X2-D temporal-alignment family.
+     *
+     * When `lateVetoBypass === true`, the rep is admitted to the same
+     * gold-path gate stack as the canonical / provisional legitimacy
+     * branches.  Every downstream evaluator invariant (phase gate,
+     * reversal-source gate, reversal-to-standing bounds, current-rep
+     * ownership upper bound, shallow-cycle-close-proof descent bypass)
+     * continues to run unchanged.
+     */
+    const ultraLowVetoDecision = computeUltraLowRomVetoRelocationDecision(state);
     if (
       (state.ultraLowPolicyScope === true &&
         state.ultraLowPolicyDecisionReady === true &&
         state.ultraLowPolicyBlocked === false) ||
-      provisionalShallowTerminalAuthority === true
+      provisionalShallowTerminalAuthority === true ||
+      ultraLowVetoDecision.lateVetoBypass === true
     ) {
       /**
        * PR-11-MEANINGFUL-SHALLOW-GOLD-PATH-ONLY:
@@ -746,13 +770,55 @@ function attachShallowCycleCloseProofTrace(
   };
 }
 
+/**
+ * PR-X2-C — Attach ultra-low-rom veto relocation trace onto the result.
+ *
+ * Diagnostic-only surface.  Never modifies grant truth or completion state.
+ * The fields let observability consumers distinguish:
+ * - why an ultra-low rep was rejected in the early lane, vs
+ * - why the late `ultra_low_rom_not_allowed` veto was bypassed on a
+ *   dynamic cycle-proven rep.
+ *
+ * `ultraLowRomLateVetoBypassed` is marked 1 only when the bypass was
+ * actually used on this frame (i.e. the final gate also returned null) —
+ * this mirrors the `shallowCycleCloseProofApplied` pattern from PR-X2-B.
+ */
+function attachUltraLowRomVetoRelocationTrace(
+  result: EvaluatorResult,
+  decision: UltraLowRomVetoRelocationDecision,
+  prospectiveReason: string | null
+): EvaluatorResult {
+  if (result.debug == null) return result;
+  const bypassedLateVeto =
+    decision.lateVetoBypass &&
+    prospectiveReason !== 'ultra_low_rom_not_allowed' &&
+    prospectiveReason === null;
+  const highlightedMetrics: Record<string, string | number | boolean | null> = {
+    ...(result.debug.highlightedMetrics ?? {}),
+    ultraLowRomPolicyMode: decision.mode,
+    ultraLowRomPolicyRejectedEarly: decision.rejectedEarly ? 1 : 0,
+    ultraLowRomPolicyRejectReason: decision.rejectReason,
+    ultraLowRomLateVetoBypassed: bypassedLateVeto ? 1 : 0,
+    ultraLowRomPolicyInScope: decision.inScope ? 1 : 0,
+  };
+  return {
+    ...result,
+    debug: {
+      ...result.debug,
+      highlightedMetrics,
+    },
+  };
+}
+
 export function evaluateSquat(landmarks: PoseLandmarks[]): EvaluatorResult {
   const frames = buildPoseFeaturesFrames('squat', landmarks);
   let result = evaluateSquatFromPoseFrames(frames);
   result = rerunShallowLowRomAfterSetupBlock(frames, result);
   const state = result.debug?.squatCompletionState as SquatCompletionState | undefined;
   const shallowCycleCloseProof = computeShallowCycleCloseProofDecision(state);
+  const ultraLowVetoRelocation = computeUltraLowRomVetoRelocationDecision(state);
   const reason = getShallowMeaningfulCycleBlockReason(state);
   result = attachShallowCycleCloseProofTrace(result, shallowCycleCloseProof, reason);
+  result = attachUltraLowRomVetoRelocationTrace(result, ultraLowVetoRelocation, reason);
   return reason ? demoteMeaninglessShallowPass(result, reason) : result;
 }
