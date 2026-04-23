@@ -699,6 +699,7 @@ export interface SquatCompletionState extends MotionCompletionResult {
     | 'not_armed'
     | 'no_reversal'
     | 'setup_motion_blocked'
+    | 'ultra_low_rom_not_allowed'
     | null;
   lateSetupMotionBlockedAfterProvisionalAuthority?: boolean;
   /** PR-03 rework: primary 역전 미달 시 completion 스트림으로 shallow reversal 앵커 보강 적용 */
@@ -2882,6 +2883,12 @@ function sameEvalTerminalAuthorityInvalidationReason(
     state.officialShallowPathBlockedReason === 'no_reversal'
   ) {
     return 'no_reversal';
+  }
+  if (
+    state.completionBlockedReason === 'ultra_low_rom_not_allowed' ||
+    state.officialShallowPathBlockedReason === 'ultra_low_rom_not_allowed'
+  ) {
+    return 'ultra_low_rom_not_allowed';
   }
   return null;
 }

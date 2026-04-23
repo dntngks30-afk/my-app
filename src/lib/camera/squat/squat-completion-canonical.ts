@@ -69,7 +69,39 @@ export type ProvisionalShallowTerminalAuthorityDecision = {
   blockedReason: ProvisionalShallowTerminalAuthorityBlockedReason | null;
 };
 
-export function resolveProvisionalShallowTerminalAuthority(
+/**
+ * Post-PR3 late shallow authority perimeter.
+ *
+ * This deliberately does not require `canonicalShallowContractAntiFalsePassClear === true`:
+ * that canonical mirror can lag exactly when the late same-eval bundle is already complete.
+ * The concrete never-pass facts stay checked here instead.
+ */
+function shallowFalsePassPerimeterClearForLateAuthority(
+  state: SquatCompletionState
+): ProvisionalShallowTerminalAuthorityBlockedReason | null {
+  if (state.eventCyclePromoted === true || state.stillSeatedAtPass === true) {
+    return 'false_pass_guard_not_clear';
+  }
+
+  const eventCycle = state.squatEventCycle;
+  const notes = eventCycle?.notes ?? [];
+  if (
+    notes.includes('jitter_spike_reject') ||
+    (eventCycle?.detected === false &&
+      (eventCycle?.descentFrames ?? 0) === 0 &&
+      (state.downwardCommitmentDelta ?? 0) <= 0)
+  ) {
+    return 'false_pass_guard_not_clear';
+  }
+
+  if (!hasNoKnownStaleOrMixedShallowEpoch(state)) {
+    return 'stale_or_mixed_rep_guard';
+  }
+
+  return null;
+}
+
+export function resolveLateShallowClosureCapableAuthority(
   state: SquatCompletionState,
   deps: {
     standardOwnerFloor: number;
@@ -115,12 +147,7 @@ export function resolveProvisionalShallowTerminalAuthority(
   ) {
     return { satisfied: false, blockedReason: 'reversal_not_confirmed' };
   }
-  if (
-    state.recoveryConfirmedAfterReversal !== true ||
-    state.standingRecoveredAtMs == null ||
-    (state.ownerAuthoritativeRecoverySatisfied !== true &&
-      state.standingFinalizeSatisfied !== true)
-  ) {
+  if (state.recoveryConfirmedAfterReversal !== true) {
     return { satisfied: false, blockedReason: 'recovery_not_confirmed' };
   }
   if (state.officialShallowStreamBridgeApplied !== true) {
@@ -129,40 +156,24 @@ export function resolveProvisionalShallowTerminalAuthority(
   if (state.officialShallowAscentEquivalentSatisfied !== true) {
     return { satisfied: false, blockedReason: 'ascent_equivalent_missing' };
   }
-  if (state.eventCyclePromoted === true || state.stillSeatedAtPass === true) {
-    return { satisfied: false, blockedReason: 'false_pass_guard_not_clear' };
-  }
 
-  const eventCycle = state.squatEventCycle;
-  const notes = eventCycle?.notes ?? [];
-  if (
-    notes.includes('jitter_spike_reject') ||
-    (eventCycle?.detected === false &&
-      (eventCycle?.descentFrames ?? 0) === 0 &&
-      (state.downwardCommitmentDelta ?? 0) <= 0)
-  ) {
-    return { satisfied: false, blockedReason: 'false_pass_guard_not_clear' };
-  }
-  if (!hasNoKnownStaleOrMixedShallowEpoch(state)) {
-    return { satisfied: false, blockedReason: 'stale_or_mixed_rep_guard' };
-  }
-  if (
-    state.canonicalTemporalEpochOrderSatisfied === false ||
-    state.canonicalTemporalEpochOrderBlockedReason != null
-  ) {
-    return { satisfied: false, blockedReason: 'temporal_order_not_satisfied' };
-  }
-  if (
-    deps.requireCanonicalAntiFalsePassClear === true &&
-    state.canonicalShallowContractAntiFalsePassClear !== true
-  ) {
-    return { satisfied: false, blockedReason: 'false_pass_guard_not_clear' };
-  }
-  if (state.canonicalShallowContractAntiFalsePassClear === false) {
-    return { satisfied: false, blockedReason: 'false_pass_guard_not_clear' };
+  const perimeterBlockedReason = shallowFalsePassPerimeterClearForLateAuthority(state);
+  if (perimeterBlockedReason != null) {
+    return { satisfied: false, blockedReason: perimeterBlockedReason };
   }
 
   return { satisfied: true, blockedReason: null };
+}
+
+export function resolveProvisionalShallowTerminalAuthority(
+  state: SquatCompletionState,
+  deps: {
+    standardOwnerFloor: number;
+    setupMotionBlocked?: boolean;
+    requireCanonicalAntiFalsePassClear?: boolean;
+  }
+): ProvisionalShallowTerminalAuthorityDecision {
+  return resolveLateShallowClosureCapableAuthority(state, deps);
 }
 
 type SameRepOfficialShallowWriterAnchorTruth = {

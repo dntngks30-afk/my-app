@@ -253,6 +253,7 @@ export type SquatCompletionOwnerStateSlice = {
   selectedCanonicalRecoveryEpochAtMs?: number | null;
   reversalConfirmedByRuleOrHmm?: boolean;
   officialShallowStreamBridgeApplied?: boolean;
+  officialShallowAscentEquivalentSatisfied?: boolean;
   stillSeatedAtPass?: boolean;
   squatEventCycle?: {
     detected?: boolean;
@@ -490,6 +491,40 @@ export function readOfficialShallowFalsePassGuardSnapshot(input: {
   }
 
   const notes = cs.squatEventCycle?.notes ?? [];
+  // Post-PR3: a consumed late shallow authority may be ahead of the canonical
+  // proof/epoch mirrors, so re-check the concrete bundle instead of requiring
+  // those mirrors to have caught up.
+  const lateShallowClosureCapableAuthority =
+    cs.provisionalShallowTerminalAuthority === true &&
+    cs.officialShallowPathAdmitted === true &&
+    cs.baselineFrozen === true &&
+    cs.peakLatched === true &&
+    cs.reversalConfirmedAfterDescend === true &&
+    cs.recoveryConfirmedAfterReversal === true &&
+    cs.officialShallowStreamBridgeApplied === true &&
+    cs.officialShallowAscentEquivalentSatisfied === true &&
+    cs.officialShallowReversalSatisfied === true &&
+    cs.setupMotionBlocked !== true &&
+    cs.evidenceLabel !== 'insufficient_signal' &&
+    cs.attemptStarted === true &&
+    cs.descendConfirmed === true &&
+    cs.downwardCommitmentReached === true &&
+    (cs.downwardCommitmentDelta ?? 0) > 0 &&
+    (cs.peakLatchedAtIndex ?? -1) > 0 &&
+    cs.stillSeatedAtPass !== true &&
+    !notes.includes('jitter_spike_reject') &&
+    !(
+      cs.squatEventCycle?.detected === false &&
+      (cs.squatEventCycle?.descentFrames ?? 0) === 0 &&
+      (cs.downwardCommitmentDelta ?? 0) <= 0
+    ) &&
+    ![
+      'mixed_rep_epoch_contamination',
+      'stale_prior_rep_epoch',
+      'recovery_not_after_reversal',
+      'reversal_not_after_peak',
+      'peak_not_after_descent',
+    ].includes(cs.canonicalTemporalEpochOrderBlockedReason ?? '');
 
   if (cs.setupMotionBlocked === true) {
     return officialShallowFalsePassBlocked('setup_motion_blocked');
@@ -532,6 +567,13 @@ export function readOfficialShallowFalsePassGuardSnapshot(input: {
       cs.standingFinalizeSatisfied !== true) ||
     cs.standingRecoveredAtMs == null
   ) {
+    if (lateShallowClosureCapableAuthority) {
+      return {
+        officialShallowFalsePassGuardClear: true,
+        officialShallowFalsePassGuardFamily: null,
+        officialShallowFalsePassGuardBlockedReason: null,
+      };
+    }
     if (cs.currentSquatPhase !== 'standing_recovered' || cs.standingRecoveredAtMs == null) {
       return officialShallowFalsePassBlocked('seated_hold_without_upward_recovery');
     }
@@ -541,16 +583,20 @@ export function readOfficialShallowFalsePassGuardSnapshot(input: {
   if (
     cs.reversalConfirmedByRuleOrHmm !== true &&
     cs.officialShallowStreamBridgeApplied === true &&
-    !epochLedgerClear
+    !epochLedgerClear &&
+    !lateShallowClosureCapableAuthority
   ) {
     return officialShallowFalsePassBlocked(
       'assist_only_closure_without_raw_epoch_provenance'
     );
   }
-  if (!epochLedgerClear) {
+  if (!epochLedgerClear && !lateShallowClosureCapableAuthority) {
     return officialShallowFalsePassBlocked('cross_epoch_stitched_proof');
   }
-  if (cs.canonicalShallowContractAntiFalsePassClear !== true) {
+  if (
+    cs.canonicalShallowContractAntiFalsePassClear !== true &&
+    !lateShallowClosureCapableAuthority
+  ) {
     return officialShallowFalsePassBlocked('canonical_false_pass_guard_not_clear');
   }
 
