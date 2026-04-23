@@ -141,7 +141,7 @@ export function buildDiagnosisSummary(
       completionTruthPassed: sc.completionTruthPassed,
       lowQualityPassAllowed: sc.lowQualityPassAllowed,
       passOwner: sc.passOwner,
-      finalSuccessOwner: sc.finalSuccessOwner,
+      finalSuccessOwner: sc.finalSuccessOwner ?? undefined,
       standardOwnerEligible: sc.standardOwnerEligible,
       shadowEventOwnerEligible: sc.shadowEventOwnerEligible,
       ownerFreezeVersion: sc.ownerFreezeVersion,

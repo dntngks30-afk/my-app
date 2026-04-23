@@ -89,6 +89,12 @@ function validStandardCompletionState() {
     cycleComplete: true,
     currentSquatPhase: 'standing_recovered',
     attemptStarted: true,
+    descendConfirmed: true,
+    downwardCommitmentReached: true,
+    downwardCommitmentDelta: 0.5,
+    reversalConfirmedAfterDescend: true,
+    recoveryConfirmedAfterReversal: true,
+    standingRecoveredAtMs: 1200,
   };
 }
 
@@ -273,6 +279,7 @@ console.log('\n§5 — Invariant D (completionTruthPassed=false + final pass tru
     '§5 finalPassBlockedReason is completion-truth-layer reason (not bypassed)',
     layer.finalPassBlockedReason === 'completion_truth_not_passed' ||
       layer.finalPassBlockedReason === 'completion_reason_not_confirmed' ||
+      layer.finalPassBlockedReason === 'completion_not_satisfied' ||
       (typeof layer.finalPassBlockedReason === 'string' &&
         layer.finalPassBlockedReason.startsWith('owner_contradiction:')),
     layer.finalPassBlockedReason
@@ -316,6 +323,28 @@ console.log('\n§7 — Invariant F (pass-core-only evidence cannot reopen final 
       cycleComplete: true,
       currentSquatPhase: 'standing_recovered',
       attemptStarted: true,
+      descendConfirmed: true,
+      downwardCommitmentReached: true,
+      downwardCommitmentDelta: 0.08,
+      reversalConfirmedAfterDescend: true,
+      recoveryConfirmedAfterReversal: true,
+      officialShallowReversalSatisfied: true,
+      ownerAuthoritativeRecoverySatisfied: true,
+      standingFinalizeSatisfied: true,
+      standingRecoveredAtMs: 1200,
+      baselineFrozen: true,
+      peakLatched: true,
+      peakLatchedAtIndex: 4,
+      canonicalTemporalEpochOrderSatisfied: true,
+      canonicalTemporalEpochOrderBlockedReason: null,
+      selectedCanonicalDescentTimingEpochValidIndex: 1,
+      selectedCanonicalPeakEpochValidIndex: 4,
+      selectedCanonicalReversalEpochValidIndex: 7,
+      selectedCanonicalRecoveryEpochValidIndex: 11,
+      selectedCanonicalDescentTimingEpochAtMs: 100,
+      selectedCanonicalPeakEpochAtMs: 360,
+      selectedCanonicalReversalEpochAtMs: 640,
+      selectedCanonicalRecoveryEpochAtMs: 1200,
     },
     squatPassCore: passCorePositive(),
   });

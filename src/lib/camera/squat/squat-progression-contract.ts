@@ -23,9 +23,22 @@ export const SQUAT_STANDARD_SIGNAL_INTEGRITY_FLAGS = [
  */
 export type SquatPassOwner =
   | 'completion_truth_standard'
+  | 'completion_truth_shallow'
+  /** @deprecated shallow/event evidence is no longer a final owner. */
   | 'completion_truth_event'
   | 'blocked_by_invalid_capture'
   | 'other';
+
+export type SquatCompletionBand =
+  | 'standard_or_deep'
+  | 'shallow'
+  | 'reject_ultra_low_static'
+  | null;
+
+export type SquatFinalSuccessOwner =
+  | 'completion_truth_standard'
+  | 'completion_truth_shallow'
+  | null;
 
 /**
  * Raw integrity block: 기존 getSquatStandardPassIntegrityBlock 와 동일 산식.
@@ -288,6 +301,59 @@ export type OfficialShallowOwnerFreezeSnapshot = {
   officialShallowFalsePassGuardFamily: OfficialShallowFalsePassGuardFamily | null;
 };
 
+const SQUAT_SHALLOW_COMPLETION_PASS_REASONS = new Set([
+  'low_rom_cycle',
+  'ultra_low_rom_cycle',
+  'low_rom_event_cycle',
+  'ultra_low_rom_event_cycle',
+  'official_shallow_cycle',
+]);
+
+export function resolveSquatCompletionBand(
+  cs: SquatCompletionOwnerStateSlice | undefined
+): SquatCompletionBand {
+  if (cs == null) return null;
+  if (cs.completionPassReason === 'standard_cycle') return 'standard_or_deep';
+  if (SQUAT_SHALLOW_COMPLETION_PASS_REASONS.has(cs.completionPassReason ?? '')) {
+    return 'shallow';
+  }
+  if (
+    cs.evidenceLabel === 'ultra_low_rom' ||
+    cs.evidenceLabel === 'low_rom' ||
+    cs.evidenceLabel === 'insufficient_signal'
+  ) {
+    return 'reject_ultra_low_static';
+  }
+  return null;
+}
+
+export function buildSquatCompletionEpochId(
+  cs: SquatCompletionOwnerStateSlice | undefined
+): string | null {
+  if (cs == null) return null;
+  const descent =
+    cs.selectedCanonicalDescentTimingEpochAtMs ??
+    cs.selectedCanonicalDescentTimingEpochValidIndex ??
+    null;
+  const peak =
+    cs.selectedCanonicalPeakEpochAtMs ??
+    cs.selectedCanonicalPeakEpochValidIndex ??
+    null;
+  const reversal =
+    cs.selectedCanonicalReversalEpochAtMs ??
+    cs.selectedCanonicalReversalEpochValidIndex ??
+    null;
+  const recovery =
+    cs.selectedCanonicalRecoveryEpochAtMs ??
+    cs.selectedCanonicalRecoveryEpochValidIndex ??
+    cs.standingRecoveredAtMs ??
+    null;
+  if (descent == null && peak == null && reversal == null && recovery == null) {
+    return null;
+  }
+  return `completion:${descent ?? 'na'}:${peak ?? 'na'}:${reversal ?? 'na'}:${recovery ?? 'na'}`;
+}
+
 /**
  * PR-3 — Official Shallow Admission Promotion (SSOT §4.2).
  * Admission-layer snapshot. Admission is NOT closure and NOT pass. This
@@ -380,6 +446,89 @@ function explicitCanonicalEpochLedgerClear(cs: SquatCompletionOwnerStateSlice): 
     pAt < rAt &&
     rAt < recAt
   );
+}
+
+function hasExplicitCanonicalEpochLedger(cs: SquatCompletionOwnerStateSlice): boolean {
+  return (
+    cs.canonicalTemporalEpochOrderSatisfied != null ||
+    cs.canonicalTemporalEpochOrderBlockedReason != null ||
+    cs.selectedCanonicalDescentTimingEpochValidIndex != null ||
+    cs.selectedCanonicalPeakEpochValidIndex != null ||
+    cs.selectedCanonicalReversalEpochValidIndex != null ||
+    cs.selectedCanonicalRecoveryEpochValidIndex != null ||
+    cs.selectedCanonicalDescentTimingEpochAtMs != null ||
+    cs.selectedCanonicalPeakEpochAtMs != null ||
+    cs.selectedCanonicalReversalEpochAtMs != null ||
+    cs.selectedCanonicalRecoveryEpochAtMs != null
+  );
+}
+
+export function resolveSquatCompletionInvariantFailureReason(
+  cs: SquatCompletionOwnerStateSlice | undefined
+): string | null {
+  if (cs == null) return 'no_squat_completion_state';
+
+  const band = resolveSquatCompletionBand(cs);
+  const notes = cs.squatEventCycle?.notes ?? [];
+
+  if (cs.setupMotionBlocked === true) return 'setup_motion_blocked';
+  if (cs.readinessStableDwellSatisfied === false) return 'readiness_not_stable';
+  if (cs.attemptStartedAfterReady === false) return 'attempt_not_after_ready';
+  if (cs.stillSeatedAtPass === true) return 'still_seated_at_pass';
+  if (notes.includes('jitter_spike_reject')) return 'directionless_jitter';
+  if (cs.completionBlockedReason != null && cs.completionBlockedReason !== '') {
+    return cs.completionBlockedReason;
+  }
+  if (cs.completionSatisfied !== true) return 'completion_not_satisfied';
+  if (cs.currentSquatPhase !== 'standing_recovered') return 'not_standing_recovered';
+  if (cs.cycleComplete !== true) return 'cycle_not_complete';
+  if (cs.completionPassReason == null || cs.completionPassReason === 'not_confirmed') {
+    return 'completion_pass_reason_invalid';
+  }
+  if (band !== 'standard_or_deep' && band !== 'shallow') {
+    return band === 'reject_ultra_low_static'
+      ? 'reject_ultra_low_static'
+      : 'completion_band_invalid';
+  }
+  if (cs.attemptStarted !== true) return 'no_descent_attempt';
+  if (
+    cs.descendConfirmed !== true ||
+    cs.downwardCommitmentReached !== true ||
+    !((cs.downwardCommitmentDelta ?? 0) > 0)
+  ) {
+    return 'no_real_descent';
+  }
+  if (
+    band === 'shallow' &&
+    (cs.baselineFrozen !== true ||
+      cs.peakLatched !== true ||
+      cs.peakLatchedAtIndex == null ||
+      cs.peakLatchedAtIndex <= 0)
+  ) {
+    return 'shallow_epoch_not_armed';
+  }
+  if (cs.reversalConfirmedAfterDescend !== true) return 'no_reversal_after_descend';
+  if (cs.recoveryConfirmedAfterReversal !== true) return 'no_recovery_after_reversal';
+  if (cs.standingRecoveredAtMs == null) return 'standing_recovery_missing';
+  if (
+    band === 'shallow' &&
+    cs.ownerAuthoritativeRecoverySatisfied !== true &&
+    cs.standingFinalizeSatisfied !== true
+  ) {
+    return 'shallow_recovery_not_authoritative';
+  }
+  if (cs.canonicalTemporalEpochOrderBlockedReason != null) {
+    return `temporal_epoch_order:${cs.canonicalTemporalEpochOrderBlockedReason}`;
+  }
+  if (hasExplicitCanonicalEpochLedger(cs)) {
+    if (cs.canonicalTemporalEpochOrderSatisfied === false) {
+      return 'temporal_epoch_order_not_satisfied';
+    }
+    if (cs.canonicalTemporalEpochOrderSatisfied === true && !explicitCanonicalEpochLedgerClear(cs)) {
+      return 'temporal_epoch_order_incomplete';
+    }
+  }
+  return null;
 }
 
 /**
@@ -620,11 +769,9 @@ export function readOfficialShallowOwnerFreezeSnapshot(input: {
     };
   }
 
-  // Wave B follow-up: `officialShallowPathClosed` is the closure authority.
-  // The opener freeze must consume that already-closed truth, then let the
-  // independent false-pass guard below enforce same-epoch / never-pass safety.
-  // Requiring the legacy proof mirror again here leaves the canonical opener
-  // split from the Wave A close authority when the mirror lags the close.
+  // PR-X: official shallow close is diagnostic/admission evidence only.
+  // It may describe why completion was able to write `official_shallow_cycle`,
+  // but it cannot freeze or open final pass on its own.
   const falsePassGuard = readOfficialShallowFalsePassGuardSnapshot(input);
   if (falsePassGuard.officialShallowFalsePassGuardClear !== true) {
     return {
@@ -639,8 +786,8 @@ export function readOfficialShallowOwnerFreezeSnapshot(input: {
   }
 
   return {
-    officialShallowOwnerFrozen: true,
-    officialShallowOwnerReason: 'official_shallow_owner_freeze',
+    officialShallowOwnerFrozen: false,
+    officialShallowOwnerReason: null,
     officialShallowOwnerBlockedReason: null,
     officialShallowFalsePassGuardFamily: null,
   };
@@ -652,97 +799,71 @@ export function computeSquatCompletionOwnerTruth(input: {
   completionOwnerPassed: boolean;
   completionOwnerReason: string | null;
   completionOwnerBlockedReason: string | null;
+  completionBand: SquatCompletionBand;
+  completionInvariantFailureReason: string | null;
+  completionEpochId: string | null;
+  finalPassSource: 'completion';
+  finalSuccessOwner: SquatFinalSuccessOwner;
   officialShallowOwnerFrozen: boolean;
   officialShallowOwnerFreezeBlockedReason: string | null;
 } {
   const cs = input.squatCompletionState;
   const officialShallowOwnerFreeze = readOfficialShallowOwnerFreezeSnapshot(input);
+  const completionBand = resolveSquatCompletionBand(cs);
+  const completionInvariantFailureReason = resolveSquatCompletionInvariantFailureReason(cs);
+  const completionEpochId = buildSquatCompletionEpochId(cs);
   if (cs == null) {
     return {
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'no_squat_completion_state',
+      completionBand,
+      completionInvariantFailureReason,
+      completionEpochId,
+      finalPassSource: 'completion',
+      finalSuccessOwner: null,
       officialShallowOwnerFrozen: false,
       officialShallowOwnerFreezeBlockedReason: null,
     };
   }
 
-  if (officialShallowOwnerFreeze.officialShallowOwnerFrozen) {
-    return {
-      completionOwnerPassed: true,
-      completionOwnerReason: officialShallowOwnerFreeze.officialShallowOwnerReason,
-      completionOwnerBlockedReason: null,
-      officialShallowOwnerFrozen: true,
-      officialShallowOwnerFreezeBlockedReason: null,
-    };
-  }
-
-  if (officialShallowOwnerFreeze.officialShallowOwnerBlockedReason != null) {
+  if (completionInvariantFailureReason != null) {
     return {
       completionOwnerPassed: false,
       completionOwnerReason: null,
-      completionOwnerBlockedReason: officialShallowOwnerFreeze.officialShallowOwnerBlockedReason,
+      completionOwnerBlockedReason: completionInvariantFailureReason,
+      completionBand,
+      completionInvariantFailureReason,
+      completionEpochId,
+      finalPassSource: 'completion',
+      finalSuccessOwner: null,
       officialShallowOwnerFrozen: false,
       officialShallowOwnerFreezeBlockedReason:
         officialShallowOwnerFreeze.officialShallowOwnerBlockedReason,
     };
   }
 
-  if (cs.completionBlockedReason != null && cs.completionBlockedReason !== '') {
-    return {
-      completionOwnerPassed: false,
-      completionOwnerReason: null,
-      completionOwnerBlockedReason: cs.completionBlockedReason,
-      officialShallowOwnerFrozen: false,
-      officialShallowOwnerFreezeBlockedReason: null,
-    };
-  }
-  if (cs.completionSatisfied !== true) {
-    return {
-      completionOwnerPassed: false,
-      completionOwnerReason: null,
-      completionOwnerBlockedReason: 'completion_not_satisfied',
-      officialShallowOwnerFrozen: false,
-      officialShallowOwnerFreezeBlockedReason: null,
-    };
-  }
-  if (cs.currentSquatPhase !== 'standing_recovered') {
-    return {
-      completionOwnerPassed: false,
-      completionOwnerReason: null,
-      completionOwnerBlockedReason: 'not_standing_recovered',
-      officialShallowOwnerFrozen: false,
-      officialShallowOwnerFreezeBlockedReason: null,
-    };
-  }
-  if (cs.cycleComplete !== true) {
-    return {
-      completionOwnerPassed: false,
-      completionOwnerReason: null,
-      completionOwnerBlockedReason: 'cycle_not_complete',
-      officialShallowOwnerFrozen: false,
-      officialShallowOwnerFreezeBlockedReason: null,
-    };
-  }
   const cpr = cs.completionPassReason;
-  if (cpr == null || cpr === 'not_confirmed') {
-    return {
-      completionOwnerPassed: false,
-      completionOwnerReason: null,
-      completionOwnerBlockedReason: 'completion_pass_reason_invalid',
-      officialShallowOwnerFrozen: false,
-      officialShallowOwnerFreezeBlockedReason: null,
-    };
-  }
   const explicitShallowOwnerReason =
     cs.completionOwnerReason === 'shallow_complete_rule' ||
     cs.completionOwnerReason === 'ultra_low_rom_complete_rule'
       ? cs.completionOwnerReason
       : null;
+  const finalSuccessOwner: SquatFinalSuccessOwner =
+    completionBand === 'standard_or_deep'
+      ? 'completion_truth_standard'
+      : completionBand === 'shallow'
+        ? 'completion_truth_shallow'
+        : null;
   return {
     completionOwnerPassed: true,
-    completionOwnerReason: explicitShallowOwnerReason ?? cpr,
+    completionOwnerReason: explicitShallowOwnerReason ?? cpr ?? null,
     completionOwnerBlockedReason: null,
+    completionBand,
+    completionInvariantFailureReason: null,
+    completionEpochId,
+    finalPassSource: 'completion',
+    finalSuccessOwner,
     officialShallowOwnerFrozen: false,
     officialShallowOwnerFreezeBlockedReason: null,
   };
@@ -763,7 +884,7 @@ export function resolveSquatCompletionLineageOwner(
     completionPassReason === 'ultra_low_rom_event_cycle' ||
     completionPassReason === 'official_shallow_cycle'
   ) {
-    return 'completion_truth_event';
+    return 'completion_truth_shallow';
   }
   return 'other';
 }
@@ -787,7 +908,7 @@ export function resolveSquatPassOwner(input: {
       input.completionPassReason === 'ultra_low_rom_event_cycle' ||
       input.completionPassReason === 'official_shallow_cycle'
     ) {
-      return 'completion_truth_event';
+      return 'completion_truth_shallow';
     }
   }
   return 'other';

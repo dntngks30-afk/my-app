@@ -60,13 +60,12 @@ export function noteSquatGateForCameraObservability(gate: ExerciseGateResult): v
   const nowElig = gate.finalPassEligible === true;
   const passCore = gate.evaluatorResult.debug?.squatPassCore as SquatPassCoreResult | undefined;
   const sqCycleDebug = gate.squatCycleDebug;
-  const officialShallowOwnerFrozen = sqCycleDebug?.officialShallowOwnerFrozen === true;
 
   // ── PASS-SNAPSHOT-OBSERVABILITY-RESET-01 + Wave B opener unification ──
   // Expose the same effective opener truth the final-pass chain consumes.
   // rawPassDetected remains visible so pass-core math is not hidden.
   if (passCore != null) {
-    const passDetected = passCore.passDetected === true || officialShallowOwnerFrozen;
+    const passDetected = sqCycleDebug?.completionOwnerPassed === true;
 
     /**
      * PR-X2 same-epoch peak provenance adapter:
@@ -110,8 +109,7 @@ export function noteSquatGateForCameraObservability(gate: ExerciseGateResult): v
      *     `no_standing_recovery`, ...) stay as-is — X3 is reversal ownership only.
      *
      * Non-goals: closure write, opener promotion, standing-recovery, deep/standard
-     * path. `passDetected` is NOT modified: Wave B opener law (gated on
-     * `officialShallowOwnerFrozen`) stays the sole authority for opener promotion.
+     * path. `passDetected` is completion-owner truth; pass-core remains raw evidence.
      */
     const shallowAdmittedForReversalOwnership =
       cs?.officialShallowPathAdmitted === true &&
@@ -138,7 +136,8 @@ export function noteSquatGateForCameraObservability(gate: ExerciseGateResult): v
         passBlockedReason: effectivePassBlockedReason,
         rawPassDetected: passCore.passDetected,
         rawPassBlockedReason: rawPassCorePassBlockedReason,
-        openerUnifiedByOfficialShallowOwner: officialShallowOwnerFrozen && passCore.passDetected !== true,
+        finalPassSource: sqCycleDebug?.finalPassSource ?? 'completion',
+        openerUnifiedByOfficialShallowOwner: false,
         descentDetected: passCore.descentDetected,
         descentStartAtMs: passCore.descentStartAtMs ?? null,
         peakAtMs: unifiedPeakAtMs,

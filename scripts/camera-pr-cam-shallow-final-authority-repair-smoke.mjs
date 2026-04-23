@@ -166,8 +166,10 @@ ok('canonical close consumes provisional terminal authority as official_shallow_
   canonicalClosed
 );
 ok(
-  'official shallow owner freeze consumes the closed authority',
-  computeSquatCompletionOwnerTruth({ squatCompletionState: canonicalClosed }).officialShallowOwnerFrozen === true,
+  'completion shallow owner consumes the closed authority',
+  computeSquatCompletionOwnerTruth({ squatCompletionState: canonicalClosed }).finalSuccessOwner ===
+    'completion_truth_shallow' &&
+    computeSquatCompletionOwnerTruth({ squatCompletionState: canonicalClosed }).officialShallowOwnerFrozen === false,
   computeSquatCompletionOwnerTruth({ squatCompletionState: canonicalClosed })
 );
 

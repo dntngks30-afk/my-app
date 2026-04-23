@@ -90,7 +90,7 @@ console.log('\nPR-2 official shallow false-pass guard lock smoke\n');
   const guard = readOfficialShallowFalsePassGuardSnapshot({ squatCompletionState: cs });
   const freeze = readOfficialShallowOwnerFreezeSnapshot({ squatCompletionState: cs });
   ok('A1: valid same-epoch shallow guard clear', guard.officialShallowFalsePassGuardClear === true, guard);
-  ok('A2: valid same-epoch shallow can freeze', freeze.officialShallowOwnerFrozen === true, freeze);
+  ok('A2: valid same-epoch shallow guard does not freeze final owner', freeze.officialShallowOwnerFrozen === false, freeze);
 }
 
 expectBlockedFamily('no_real_descent', {
@@ -157,6 +157,13 @@ expectBlockedFamily('canonical_false_pass_guard_not_clear', {
     completionBlockedReason: null,
     currentSquatPhase: 'standing_recovered',
     cycleComplete: true,
+    attemptStarted: true,
+    descendConfirmed: true,
+    downwardCommitmentReached: true,
+    downwardCommitmentDelta: 0.5,
+    reversalConfirmedAfterDescend: true,
+    recoveryConfirmedAfterReversal: true,
+    standingRecoveredAtMs: 1600,
   };
   const owner = readSquatPassOwnerTruth({ squatCompletionState: cs, squatPassCore: undefined });
   ok('Z1: standard/deep path remains governed by existing owner logic', owner.completionOwnerPassed === true, owner);

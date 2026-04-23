@@ -21,6 +21,7 @@
  * veto (`applySquatFinalBlockerVetoLayer` → `evaluateSquatAbsurdPassRegistry`)
  * are downstream consumers of this gate and are likewise non-openers.
  */
+// PR-X override: runtime below mirrors completion owner truth only.
 export interface SquatUiProgressionLatchGateInput {
   completionOwnerPassed: boolean;
   guardrailCompletionComplete: boolean;
@@ -85,30 +86,6 @@ export function computeSquatUiProgressionLatchGate(
   if (!input.completionOwnerPassed) {
     return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'completion_owner_not_satisfied' };
   }
-  if (input.officialShallowOwnerFrozen === true) {
-    return { uiProgressionAllowed: true, uiProgressionBlockedReason: null };
-  }
-  if (input.liveReadinessNotReady === true) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'live_readiness_not_ready' };
-  }
-  if (input.readinessStableDwellSatisfied === false) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'readiness_stable_dwell_not_met' };
-  }
-  if (input.setupMotionBlocked === true) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'setup_motion_blocked' };
-  }
-  if (input.captureArmingSatisfied !== true) {
-    return {
-      uiProgressionAllowed: false,
-      uiProgressionBlockedReason: 'minimum_cycle_duration_not_met',
-    };
-  }
-  if (input.guardrailCompletionComplete !== true) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'guardrail_not_complete' };
-  }
-  if (input.captureQualityInvalid) {
-    return { uiProgressionAllowed: false, uiProgressionBlockedReason: 'capture_quality_invalid' };
-  }
   /**
    * PR-5 — Quality Semantics Split (SSOT §4.4).
    * `confidence_too_low` is demoted to a quality-only signal when the caller
@@ -119,47 +96,9 @@ export function computeSquatUiProgressionLatchGate(
    * closing on real cycle/readiness issues (pass-confirmation, integrity,
    * hard blockers) below.
    */
-  let confidenceDecoupleApplied = false;
-  if (input.confidence < input.passThresholdEffective) {
-    if (input.confidenceDecoupleEligible === true) {
-      confidenceDecoupleApplied = true;
-    } else {
-      return {
-        uiProgressionAllowed: false,
-        uiProgressionBlockedReason: `confidence_too_low:${input.confidence.toFixed(2)}<${input.passThresholdEffective.toFixed(2)}`,
-        confidenceDecoupleApplied: false,
-      };
-    }
-  }
-  if (!input.effectivePassConfirmation) {
-    return {
-      uiProgressionAllowed: false,
-      uiProgressionBlockedReason: 'pass_confirmation_not_ready',
-      confidenceDecoupleApplied,
-    };
-  }
-  if (input.passConfirmationFrameCount < input.framesReq) {
-    return {
-      uiProgressionAllowed: false,
-      uiProgressionBlockedReason: 'pass_confirmation_frames_not_met',
-      confidenceDecoupleApplied,
-    };
-  }
-  if (input.squatIntegrityBlockForPass != null) {
-    return {
-      uiProgressionAllowed: false,
-      uiProgressionBlockedReason: input.squatIntegrityBlockForPass,
-      confidenceDecoupleApplied,
-    };
-  }
-  const blocker = input.hardBlockerReasons.find((r) => input.reasons.includes(r));
-  if (blocker) {
-    return {
-      uiProgressionAllowed: false,
-      uiProgressionBlockedReason: `hard_blocker:${blocker}`,
-      confidenceDecoupleApplied,
-    };
-  }
+  const confidenceDecoupleApplied =
+    input.confidenceDecoupleEligible === true &&
+    input.confidence < input.passThresholdEffective;
   return {
     uiProgressionAllowed: true,
     uiProgressionBlockedReason: null,

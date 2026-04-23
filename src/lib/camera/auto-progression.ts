@@ -34,6 +34,7 @@ import {
   squatCompletionTruthPassed,
   squatPassProgressionIntegrityBlock,
   squatRetryTriggeredByPartialFramingReasons,
+  type SquatCompletionBand,
   type SquatPassOwner,
 } from './squat/squat-progression-contract';
 import type {
@@ -53,7 +54,6 @@ import {
   SQUAT_ULTRA_LOW_TRAJECTORY_SHORT_CYCLE_UI_BLOCKED_REASON,
   SQUAT_SETUP_SERIES_START_FALSE_PASS_BLOCKED_REASON,
   SQUAT_BLENDED_EARLY_PEAK_CONTAMINATED_FALSE_PASS_BLOCKED_REASON,
-  evaluateSquatAbsurdPassRegistry,
   shouldBlockSquatUltraLowTrajectoryRescueShortCycleFinalPass,
   shouldBlockSquatUltraLowSetupSeriesStartFalsePassFinalPass,
   shouldBlockSquatBlendedEarlyPeakContaminatedFalsePassFinalPass,
@@ -95,15 +95,14 @@ export type { SquatEvidenceLevel };
 /**
  * PR-A — Final Pass Truth Surface Freeze (parent: `docs/pr/SSOT_SHALLOW_SQUAT_PASS_TRUTH_MAP_2026_04.md`).
  *
- * Canonical squat **product** pass/fail surface at the post-owner + UI gate
- * layer (including `applySquatFinalBlockerVetoLayer`). Same contract as
+ * Canonical squat **product** pass/fail surface at the completion authority
+ * layer. Same contract as
  * `ExerciseGateResult.finalPassEligible` / `progressionPassed` for squat
  * when produced by `evaluateExerciseAutoProgress`.
  *
  * Authority-law position (PR-01 + PR-CAM-SQUAT-AUTHORITY-LAW-RESOLUTION):
- * this surface is the **consumer** of the single opener law
- *   `completionTruthPassed && completionOwnerPassed && gates clear
- *    && P3 block-only registry clear => finalPassGranted`
+ * this surface is the **consumer** of the single completion authority
+ *   `completionOwnerPassed => finalPassGranted`
  * and a **non-opener mirror**. No field on this shape is an opener, an
  * alternate owner, or a gate input anywhere else.
  *
@@ -127,7 +126,8 @@ export type { SquatEvidenceLevel };
 export interface SquatFinalPassTruthSurface {
   finalPassGranted: boolean;
   finalPassBlockedReason: string | null;
-  finalPassTruthSource: 'post_owner_ui_gate';
+  finalPassTruthSource: 'completion';
+  finalPassSource: 'completion';
   /**
    * Sink-only rep-consistency adapter trace — NOT an opener, NOT an
    * owner-truth source. See interface-level doc for authority-law
@@ -368,7 +368,11 @@ export interface SquatCycleDebug {
   /** PR-CAM-OWNER-FREEZE-01: resolveSquatPassOwner 와 동일(레거시 필드명 유지) */
   passOwner?: SquatPassOwner;
   /** PR-CAM-OWNER-FREEZE-01: 최종 성공 오너 — passOwner 와 동일 값 */
-  finalSuccessOwner?: SquatPassOwner;
+  finalSuccessOwner?: SquatPassOwner | null;
+  finalPassSource?: 'completion';
+  completionBand?: SquatCompletionBand;
+  completionInvariantFailureReason?: string | null;
+  completionEpochId?: string | null;
   /** completion truth 가 standard_cycle 인 경우(디커플·gate와 무관한 밴드 관측) */
   standardOwnerEligible?: boolean;
   /** completion truth 가 low/ultra_low event cycle 인 경우(shadow promote 와 별개) */
@@ -741,15 +745,6 @@ export function readSquatCurrentRepPassTruth(input: {
       completionMachinePhase: cs?.completionMachinePhase,
       timestampsConsistent: true,
     };
-    if (completionOwnerTruth?.officialShallowOwnerFrozen === true) {
-      return {
-        repId: pc.repId ?? (cs?.standingRecoveredAtMs != null ? `rep_${cs.standingRecoveredAtMs}` : null),
-        passEligible: true,
-        blockedReason: null,
-        ...commonFields,
-        standingRecoveredAtMs: pc.standingRecoveredAtMs ?? cs?.standingRecoveredAtMs ?? undefined,
-      };
-    }
     if (pc.passDetected === true) {
       return { repId: pc.repId ?? null, passEligible: true, blockedReason: null, ...commonFields };
     }
@@ -830,9 +825,10 @@ export function buildSquatFinalPassTruthSurface(input: {
   return {
     finalPassGranted: granted,
     finalPassBlockedReason: input.finalPassBlockedReason,
-    finalPassTruthSource: 'post_owner_ui_gate',
+    finalPassTruthSource: 'completion',
+    finalPassSource: 'completion',
     motionOwnerSource: input.motionOwnerSource,
-    finalPassGrantedReason: granted ? 'post_owner_final_pass_clear' : null,
+    finalPassGrantedReason: granted ? 'completion_final_pass_clear' : null,
   };
 }
 
@@ -868,7 +864,7 @@ export function buildSquatFinalPassTruthSurface(input: {
 export function readSquatPassOwnerTruth(
   input: SquatPassOwnerTruthReadInput
 ): SquatOwnerTruth {
-  const { squatCompletionState: cs, squatPassCore } = input;
+  const { squatCompletionState: cs } = input;
 
   const completionOwnerTruth = computeSquatCompletionOwnerTruth({
     squatCompletionState: cs,
@@ -876,48 +872,31 @@ export function readSquatPassOwnerTruth(
 
   if (completionOwnerTruth.completionOwnerPassed !== true) {
     return {
+      ...completionOwnerTruth,
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason:
-        completionOwnerTruth.completionOwnerBlockedReason ??
-        squatPassCore?.passBlockedReason ??
-        'completion_owner_not_passed',
-      officialShallowOwnerFrozen: completionOwnerTruth.officialShallowOwnerFrozen,
-      officialShallowOwnerFreezeBlockedReason:
-        completionOwnerTruth.officialShallowOwnerFreezeBlockedReason,
+        completionOwnerTruth.completionOwnerBlockedReason ?? 'completion_owner_not_passed',
+      finalSuccessOwner: null,
     };
   }
 
   if (completionOwnerTruth.completionOwnerReason === 'not_confirmed') {
     return {
+      ...completionOwnerTruth,
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'completion_owner_reason_not_confirmed',
-      officialShallowOwnerFrozen: completionOwnerTruth.officialShallowOwnerFrozen,
-      officialShallowOwnerFreezeBlockedReason:
-        completionOwnerTruth.officialShallowOwnerFreezeBlockedReason,
+      finalSuccessOwner: null,
     };
   }
 
-  // Pass-core acts as a same-rep stale veto only — never as an opener.
-  if (squatPassCore != null && squatPassCore.passCoreStale === true) {
-    return {
-      completionOwnerPassed: false,
-      completionOwnerReason: null,
-      completionOwnerBlockedReason: 'pass_core_stale_rep',
-      officialShallowOwnerFrozen: completionOwnerTruth.officialShallowOwnerFrozen,
-      officialShallowOwnerFreezeBlockedReason:
-        completionOwnerTruth.officialShallowOwnerFreezeBlockedReason,
-    };
-  }
-
+  // Pass-core is not consulted here; it remains diagnostic evidence only.
   return {
+    ...completionOwnerTruth,
     completionOwnerPassed: true,
     completionOwnerReason: completionOwnerTruth.completionOwnerReason,
     completionOwnerBlockedReason: null,
-    officialShallowOwnerFrozen: completionOwnerTruth.officialShallowOwnerFrozen,
-    officialShallowOwnerFreezeBlockedReason:
-      completionOwnerTruth.officialShallowOwnerFreezeBlockedReason,
   };
 }
 
@@ -948,33 +927,60 @@ export function enforceSquatOwnerContradictionInvariant(input: {
 }): SquatOwnerTruth {
   const { ownerTruth, squatCompletionState } = input;
   if (ownerTruth.completionOwnerPassed !== true) return ownerTruth;
-  if (ownerTruth.officialShallowOwnerFrozen === true) return ownerTruth;
 
   if (ownerTruth.completionOwnerReason === 'not_confirmed') {
     return {
+      ...ownerTruth,
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'owner_contradiction:not_confirmed_reason',
       officialShallowOwnerFrozen: false,
       officialShallowOwnerFreezeBlockedReason: null,
+      finalSuccessOwner: null,
     };
   }
   if (ownerTruth.completionOwnerBlockedReason != null) {
     return {
+      ...ownerTruth,
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'owner_contradiction:blocked_reason_with_passed_owner',
       officialShallowOwnerFrozen: false,
       officialShallowOwnerFreezeBlockedReason: null,
+      finalSuccessOwner: null,
     };
   }
   if (squatCompletionState == null) {
     return {
+      ...ownerTruth,
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'owner_contradiction:no_completion_state',
       officialShallowOwnerFrozen: false,
       officialShallowOwnerFreezeBlockedReason: null,
+      finalSuccessOwner: null,
+    };
+  }
+  const canonicalCompletionOwnerTruth = computeSquatCompletionOwnerTruth({
+    squatCompletionState,
+  });
+  if (canonicalCompletionOwnerTruth.completionOwnerPassed !== true) {
+    return {
+      ...ownerTruth,
+      completionOwnerPassed: false,
+      completionOwnerReason: null,
+      completionOwnerBlockedReason:
+        canonicalCompletionOwnerTruth.completionOwnerBlockedReason ??
+        'owner_contradiction:completion_authority_not_passed',
+      completionBand: canonicalCompletionOwnerTruth.completionBand,
+      completionInvariantFailureReason:
+        canonicalCompletionOwnerTruth.completionInvariantFailureReason,
+      completionEpochId: canonicalCompletionOwnerTruth.completionEpochId,
+      finalPassSource: 'completion',
+      finalSuccessOwner: null,
+      officialShallowOwnerFrozen: false,
+      officialShallowOwnerFreezeBlockedReason:
+        canonicalCompletionOwnerTruth.officialShallowOwnerFreezeBlockedReason,
     };
   }
   if (
@@ -982,11 +988,13 @@ export function enforceSquatOwnerContradictionInvariant(input: {
     squatCompletionState.completionBlockedReason !== ''
   ) {
     return {
+      ...ownerTruth,
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: `owner_contradiction:${squatCompletionState.completionBlockedReason}`,
       officialShallowOwnerFrozen: false,
       officialShallowOwnerFreezeBlockedReason: null,
+      finalSuccessOwner: null,
     };
   }
   if (
@@ -996,20 +1004,24 @@ export function enforceSquatOwnerContradictionInvariant(input: {
     ) !== true
   ) {
     return {
+      ...ownerTruth,
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'owner_contradiction:completion_truth_not_passed',
       officialShallowOwnerFrozen: false,
       officialShallowOwnerFreezeBlockedReason: null,
+      finalSuccessOwner: null,
     };
   }
   if (squatCompletionState.cycleComplete !== true) {
     return {
+      ...ownerTruth,
       completionOwnerPassed: false,
       completionOwnerReason: null,
       completionOwnerBlockedReason: 'owner_contradiction:cycle_not_complete',
       officialShallowOwnerFrozen: false,
       officialShallowOwnerFreezeBlockedReason: null,
+      finalSuccessOwner: null,
     };
   }
   return ownerTruth;
@@ -1387,35 +1399,6 @@ function getPassConfirmationMinStableFrames(
 }
 
 /**
- * PR-P3 (Squat Absurd-Pass Registry Normalization) — late final-pass
- * veto layer. Completion-owner truth is the sole opener; this layer is
- * block-only and consumes the single absurd-pass registry in
- * `squat-absurd-pass-registry.ts`. The production veto order is
- * preserved by `SQUAT_ACTIVE_ABSURD_PASS_REGISTRY` (same input → same
- * family fires → same blocked reason).
- */
-function applySquatFinalBlockerVetoLayer(input: {
-  stepId: CameraStepId;
-  uiGate: SquatUiGate;
-  squatCompletionState: SquatCompletionState | undefined;
-  squatCycleDebug: SquatCycleDebug | undefined;
-}): SquatUiGate {
-  if (input.uiGate.uiProgressionAllowed !== true) return input.uiGate;
-
-  const verdict = evaluateSquatAbsurdPassRegistry({
-    stepId: input.stepId,
-    squatCompletionState: input.squatCompletionState,
-    squatCycleDebug: input.squatCycleDebug,
-  });
-  if (verdict == null) return input.uiGate;
-
-  return {
-    uiProgressionAllowed: false,
-    uiProgressionBlockedReason: verdict.blockedReason,
-  };
-}
-
-/**
  * PR-01 (Completion-First Authority Freeze) — final-pass blocked-reason builder.
  *
  * All squat owner-pass paths (including those derived from `pass-core`) must traverse
@@ -1441,39 +1424,36 @@ export function getSquatPostOwnerFinalPassBlockedReason(input: {
     squatCompletionState: input.squatCompletionState,
   });
 
-  const completionState = input.squatCompletionState;
-  const completionPassReason = completionState?.completionPassReason;
-  const completionBlockedReason = completionState?.completionBlockedReason ?? null;
-  const completionTruthPassed = squatCompletionTruthPassed(
-    completionState?.completionSatisfied === true,
-    completionPassReason
-  );
-  const cycleComplete = completionState?.cycleComplete === true;
-
-  if (ownerTruth.officialShallowOwnerFrozen === true) {
-    if (!ownerTruth.completionOwnerPassed) {
-      return ownerTruth.completionOwnerBlockedReason ?? 'completion_owner_blocked';
-    }
-    if (!input.uiGate.uiProgressionAllowed) {
-      return input.uiGate.uiProgressionBlockedReason ?? 'ui_progression_blocked';
-    }
-    return null;
-  }
-
-  if (completionTruthPassed !== true) return 'completion_truth_not_passed';
-  if (completionPassReason === 'not_confirmed') return 'completion_reason_not_confirmed';
-  if (completionBlockedReason != null) return `completion_blocked:${completionBlockedReason}`;
-  if (!cycleComplete) return 'cycle_not_complete';
-  if (ownerTruth.completionOwnerReason === 'not_confirmed') {
-    return 'completion_owner_reason_not_confirmed';
-  }
   if (!ownerTruth.completionOwnerPassed) {
     return ownerTruth.completionOwnerBlockedReason ?? 'completion_owner_blocked';
   }
-  if (!input.uiGate.uiProgressionAllowed) {
-    return input.uiGate.uiProgressionBlockedReason ?? 'ui_progression_blocked';
-  }
   return null;
+}
+
+function applySquatRuntimeReadinessSetupCompletionInvariant(
+  ownerTruth: SquatOwnerTruth,
+  uiGateInput: SquatUiProgressionLatchGateInput
+): SquatOwnerTruth {
+  if (ownerTruth.completionOwnerPassed !== true) return ownerTruth;
+  const blockedReason =
+    uiGateInput.liveReadinessNotReady === true
+      ? 'live_readiness_not_ready'
+      : uiGateInput.readinessStableDwellSatisfied === false
+        ? 'readiness_not_stable'
+        : uiGateInput.setupMotionBlocked === true
+          ? 'setup_motion_blocked'
+          : null;
+  if (blockedReason == null) return ownerTruth;
+  return {
+    ...ownerTruth,
+    completionOwnerPassed: false,
+    completionOwnerReason: null,
+    completionOwnerBlockedReason: blockedReason,
+    completionInvariantFailureReason: blockedReason,
+    finalSuccessOwner: null,
+    officialShallowOwnerFrozen: false,
+    officialShallowOwnerFreezeBlockedReason: null,
+  };
 }
 
 export function computeSquatPostOwnerPreLatchGateLayer(input: {
@@ -1489,18 +1469,17 @@ export function computeSquatPostOwnerPreLatchGateLayer(input: {
     ownerTruth: input.ownerTruth,
     squatCompletionState: input.squatCompletionState,
   });
-  const uiGate = applySquatFinalBlockerVetoLayer({
-    stepId: input.stepId,
-    uiGate: computeSquatUiProgressionLatchGate({
-      ...input.uiGateInput,
-      completionOwnerPassed: ownerTruth.completionOwnerPassed,
-      officialShallowOwnerFrozen: ownerTruth.officialShallowOwnerFrozen,
-    }),
-    squatCompletionState: input.squatCompletionState,
-    squatCycleDebug: input.squatCycleDebug,
+  const runtimeOwnerTruth = applySquatRuntimeReadinessSetupCompletionInvariant(
+    ownerTruth,
+    input.uiGateInput
+  );
+  const uiGate = computeSquatUiProgressionLatchGate({
+    ...input.uiGateInput,
+    completionOwnerPassed: runtimeOwnerTruth.completionOwnerPassed,
+    officialShallowOwnerFrozen: false,
   });
   const finalPassBlockedReason = getSquatPostOwnerFinalPassBlockedReason({
-    ownerTruth,
+    ownerTruth: runtimeOwnerTruth,
     uiGate,
     squatCompletionState: input.squatCompletionState,
   });
@@ -1514,7 +1493,7 @@ export function computeSquatPostOwnerPreLatchGateLayer(input: {
   });
 
   return {
-    ownerTruth,
+    ownerTruth: runtimeOwnerTruth,
     uiGate,
     finalPassBlockedReason,
     progressionPassed: finalPassBlockedReason == null,
@@ -2044,7 +2023,6 @@ function getSquatProgressionCompletionSatisfied(
   // Used by the rep-identity and stale-veto diagnostics only; the
   // final-pass opener is `completionOwnerPassed` from
   // `readSquatPassOwnerTruth` (PR-01 authority-law resolution).
-  const passCore = result.debug?.squatPassCore as SquatPassCoreResult | undefined;
 
   // ── completion truth: squatCompletionState (typed) 우선, highlightedMetrics fallback ──
   // PR-CAM-09: evaluators/squat.ts 가 squatCompletionState 를 직접 설정하므로
@@ -2083,8 +2061,6 @@ function getSquatProgressionCompletionSatisfied(
   const completionPassReason = cs?.completionPassReason ?? undefined;
   const completionOwnerTruthForProgression =
     cs != null ? computeSquatCompletionOwnerTruth({ squatCompletionState: cs }) : null;
-  const officialShallowOwnerFrozenForProgression =
-    completionOwnerTruthForProgression?.officialShallowOwnerFrozen === true;
 
   // ── 파생 플래그 ──
   const cycleProofPassed = currentSquatPhase === 'standing_recovered';
@@ -2177,6 +2153,11 @@ function getSquatProgressionCompletionSatisfied(
     recoveryDropRatio,
     completionMachinePhase,
     completionPassReason,
+    finalPassSource: 'completion',
+    completionBand: completionOwnerTruthForProgression?.completionBand ?? null,
+    completionInvariantFailureReason:
+      completionOwnerTruthForProgression?.completionInvariantFailureReason ?? null,
+    completionEpochId: completionOwnerTruthForProgression?.completionEpochId ?? null,
     ownerAuthoritativeShallowClosureSatisfied: cs?.ownerAuthoritativeShallowClosureSatisfied,
     // PR-D: PRIMARY_CANONICAL — shallow debug SSOT (동일 값은 아래 pass-through 에서 재확인)
     canonicalShallowContractClosureApplied: cs?.canonicalShallowContractClosureApplied,
@@ -2372,9 +2353,12 @@ function getSquatProgressionCompletionSatisfied(
    * Guardrail completionStatus check (above, line 1460) is kept as a signal-quality gate
    * (if capture is incomplete we can't make any motion determination).
    */
-  if (!passCore?.passDetected && !officialShallowOwnerFrozenForProgression) {
+  // PR-X authority: the runtime gate below reads completion-owner truth only.
+  if (completionOwnerTruthForProgression?.completionOwnerPassed !== true) {
     const blockedReason =
-      passCore?.passBlockedReason ?? completionBlockedReason ?? 'not_standing_recovered';
+      completionOwnerTruthForProgression?.completionOwnerBlockedReason ??
+      completionBlockedReason ??
+      'completion_owner_not_passed';
     squatCycleDebug.passBlockedReason = blockedReason;
     squatCycleDebug.completionRejectedReason = blockedReason;
     squatCycleDebug.falsePositiveBlockReason = blockedReason;
@@ -2891,12 +2875,14 @@ export function evaluateExerciseAutoProgress(
       completionSatisfied === true &&
       (cpr === 'low_rom_event_cycle' || cpr === 'ultra_low_rom_event_cycle');
     const lineageOwner = resolveSquatCompletionLineageOwner(cpr);
+    const finalSuccessOwner =
+      squatOwnerTruth?.completionOwnerPassed === true
+        ? squatOwnerTruth.finalSuccessOwner
+        : null;
     const setupSuppressed =
-      squatOwnerTruth?.completionOwnerPassed === true &&
-      squatUiGate != null &&
-      squatUiGate.uiProgressionAllowed === false &&
-      ['live_readiness_not_ready', 'readiness_stable_dwell_not_met', 'setup_motion_blocked'].includes(
-        squatUiGate.uiProgressionBlockedReason ?? ''
+      squatOwnerTruth?.completionOwnerPassed !== true &&
+      ['readiness_not_stable', 'attempt_not_after_ready', 'setup_motion_blocked'].includes(
+        squatOwnerTruth?.completionOwnerBlockedReason ?? ''
       );
     squatCycleDebug = {
       ...squatCycleDebug,
@@ -2904,7 +2890,12 @@ export function evaluateExerciseAutoProgress(
       qualityOnlyWarnings: qWarn.length > 0 ? qWarn : undefined,
       lowQualityPassAllowed: squatDecoupleEligible,
       passOwner: lineageOwner,
-      finalSuccessOwner: lineageOwner,
+      finalSuccessOwner,
+      finalPassSource: 'completion',
+      completionBand: squatOwnerTruth?.completionBand ?? null,
+      completionInvariantFailureReason:
+        squatOwnerTruth?.completionInvariantFailureReason ?? null,
+      completionEpochId: squatOwnerTruth?.completionEpochId ?? null,
       standardOwnerEligible,
       shadowEventOwnerEligible,
       ownerFreezeVersion: 'cam-pass-owner-freeze-01',
@@ -2929,13 +2920,10 @@ export function evaluateExerciseAutoProgress(
        * `completionOwnerPassed` + the PR-2 false-pass guard directly.
        */
       officialShallowClosedAuthorityConsumed:
-        squatCs?.officialShallowPathClosed === true &&
-        squatOwnerTruth?.officialShallowOwnerFrozen === true &&
-        squatOwnerTruth?.completionOwnerPassed === true,
+        false,
       officialShallowClosedAuthorityConsumptionBlockedReason:
-        squatCs?.officialShallowPathClosed === true &&
-        squatOwnerTruth?.officialShallowOwnerFrozen !== true
-          ? squatOwnerTruth?.officialShallowOwnerFreezeBlockedReason ?? null
+        squatCs?.officialShallowPathClosed === true
+          ? 'official_shallow_close_diagnostic_only'
           : null,
       uiProgressionAllowed: squatUiGate?.uiProgressionAllowed,
       uiProgressionBlockedReason: squatUiGate?.uiProgressionBlockedReason ?? undefined,
