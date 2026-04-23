@@ -38,6 +38,7 @@ import {
   KNEE_DESCENT_ONSET_SUSTAIN_FRAMES,
   type PreArmingKinematicDescentEpoch,
 } from './squat-completion-arming';
+import { findFirstSquatSetupMotionBlockObservation } from './squat-setup-motion-window';
 
 /** PR-04E3B: 첫 attemptStarted 시점에 고정한 스트림·baseline — 동일 버퍼 내 재평가 없음 */
 export type SquatDepthFreezeConfig = {
@@ -1132,6 +1133,140 @@ function normalizeSameRepTemporalEpochs(input: {
     blockedReason,
     trace,
   };
+}
+
+function isSameRepCompletionWindowMixedOrStaleReason(
+  reason: CanonicalTemporalEpochOrderBlockedReason
+): boolean {
+  return (
+    reason === 'mixed_rep_epoch_contamination' ||
+    reason === 'stale_prior_rep_epoch' ||
+    reason === 'peak_not_after_descent' ||
+    reason === 'reversal_not_after_peak' ||
+    reason === 'recovery_not_after_reversal'
+  );
+}
+
+function buildSameRepCompletionWindowRepEpochId(input: {
+  descentAtMs: number | null;
+  peakAtMs: number | null;
+  reversalAtMs: number | null;
+  recoveryAtMs: number | null;
+}): string | null {
+  if (
+    input.descentAtMs == null &&
+    input.peakAtMs == null &&
+    input.reversalAtMs == null &&
+    input.recoveryAtMs == null
+  ) {
+    return null;
+  }
+  return `same_rep:${input.descentAtMs ?? 'na'}:${input.peakAtMs ?? 'na'}:${
+    input.reversalAtMs ?? 'na'
+  }:${input.recoveryAtMs ?? 'na'}`;
+}
+
+function sameRepTemporalOrderSatisfied(input: {
+  descentAtMs: number | null;
+  peakAtMs: number | null;
+  reversalAtMs: number | null;
+  recoveryAtMs: number | null;
+}): boolean {
+  return (
+    input.descentAtMs != null &&
+    input.peakAtMs != null &&
+    input.reversalAtMs != null &&
+    input.recoveryAtMs != null &&
+    input.descentAtMs < input.peakAtMs &&
+    input.peakAtMs < input.reversalAtMs &&
+    input.reversalAtMs < input.recoveryAtMs
+  );
+}
+
+type SameRepDecision = {
+  eligible: boolean;
+  blockedReason: string | null;
+};
+
+function resolveSameRepShallowCloseDecision(input: {
+  sameRepCompletionWindowPresent: boolean;
+  officialShallowPathAdmitted: boolean;
+  relativeDepthPeak: number;
+  attemptStarted: boolean;
+  descendConfirmed: boolean;
+  reversalConfirmedAfterDescend: boolean;
+  recoveryConfirmedAfterReversal: boolean;
+  officialShallowReversalSatisfied: boolean;
+  officialShallowAscentEquivalentSatisfied: boolean;
+  officialShallowStreamBridgeApplied: boolean;
+  reversalConfirmedByRuleOrHmm: boolean;
+  trajectoryReversalRescueApplied: boolean;
+  sameRepTemporalOrderSatisfied: boolean;
+  sameRepSetupCleanWithinRepWindow: boolean;
+  sameRepSetupBlockFirstSeenBeforeCommit: boolean;
+  sameRepCompletionWindowMixedOrStale: boolean;
+  readinessStable: boolean;
+  eventCyclePromoted: boolean;
+}): SameRepDecision {
+  let blockedReason: string | null = null;
+  if (!input.sameRepCompletionWindowPresent) blockedReason = 'same_rep_window_missing';
+  else if (!input.officialShallowPathAdmitted) blockedReason = 'not_admitted';
+  else if (!(input.relativeDepthPeak > 0 && input.relativeDepthPeak < STANDARD_OWNER_FLOOR)) {
+    blockedReason = 'standard_or_deep_band';
+  } else if (!input.attemptStarted || !input.descendConfirmed) blockedReason = 'attempt_not_started';
+  else if (!input.reversalConfirmedAfterDescend) blockedReason = 'reversal_not_confirmed';
+  else if (!input.reversalConfirmedByRuleOrHmm) blockedReason = 'reversal_provenance_insufficient';
+  else if (!input.recoveryConfirmedAfterReversal) blockedReason = 'recovery_not_confirmed';
+  else if (!input.officialShallowReversalSatisfied) blockedReason = 'shallow_reversal_not_satisfied';
+  else if (!input.officialShallowAscentEquivalentSatisfied) {
+    blockedReason = 'ascent_equivalent_not_satisfied';
+  } else if (!input.officialShallowStreamBridgeApplied) {
+    blockedReason = 'stream_bridge_not_satisfied';
+  } else if (input.trajectoryReversalRescueApplied) {
+    blockedReason = 'trajectory_rescue_applied';
+  } else if (!input.sameRepTemporalOrderSatisfied) {
+    blockedReason = 'temporal_order_not_satisfied';
+  } else if (input.sameRepCompletionWindowMixedOrStale) {
+    blockedReason = 'same_rep_window_mixed_or_stale';
+  } else if (!input.sameRepSetupCleanWithinRepWindow) {
+    blockedReason = input.sameRepSetupBlockFirstSeenBeforeCommit
+      ? 'setup_before_commit'
+      : 'setup_within_rep_window';
+  } else if (!input.readinessStable) {
+    blockedReason = 'readiness_unstable';
+  } else if (input.eventCyclePromoted) {
+    blockedReason = 'event_cycle_short_circuit';
+  }
+  return { eligible: blockedReason == null, blockedReason };
+}
+
+function resolveSameRepStandardFinalizeDecision(input: {
+  sameRepCompletionWindowPresent: boolean;
+  sameRepCompletionWindowMixedOrStale: boolean;
+  sameRepTemporalOrderSatisfied: boolean;
+  sameRepSetupCleanWithinRepWindow: boolean;
+  sameRepSetupBlockFirstSeenBeforeCommit: boolean;
+  reversalConfirmedAfterDescend: boolean;
+  recoveryConfirmedAfterReversal: boolean;
+  standingRecoveredAtMs: number | null;
+  sameRepStandingRecoveryFinalizeSatisfied: boolean;
+}): SameRepDecision {
+  let blockedReason: string | null = null;
+  if (!input.sameRepCompletionWindowPresent) blockedReason = 'same_rep_window_missing';
+  else if (!input.sameRepTemporalOrderSatisfied) blockedReason = 'temporal_order_not_satisfied';
+  else if (input.sameRepCompletionWindowMixedOrStale) {
+    blockedReason = 'same_rep_window_mixed_or_stale';
+  } else if (!input.sameRepSetupCleanWithinRepWindow) {
+    blockedReason = input.sameRepSetupBlockFirstSeenBeforeCommit
+      ? 'setup_before_commit'
+      : 'setup_within_rep_window';
+  } else if (!input.reversalConfirmedAfterDescend) blockedReason = 'no_reversal';
+  else if (!input.recoveryConfirmedAfterReversal) blockedReason = 'no_recovery';
+  else if (input.standingRecoveredAtMs == null) blockedReason = 'not_standing_recovered';
+  else if (!input.sameRepStandingRecoveryFinalizeSatisfied) {
+    blockedReason = 'recovery_hold_too_short';
+  }
+  return { eligible: blockedReason == null, blockedReason };
 }
 
 /**
@@ -3032,6 +3167,30 @@ export function evaluateSquatCompletionCore(
   const attemptStarted = admissionContract.attemptStarted;
   const bottomDetected = bottomFrame != null;
   const recoveryDetected = standingRecovery.standingRecoveredAtMs != null;
+  const rawSetupMotionBlocked = options?.setupMotionBlocked === true;
+  const firstSameRepSetupBlockObservation = rawSetupMotionBlocked
+    ? findFirstSquatSetupMotionBlockObservation(validFrames)
+    : {
+        blocked: false,
+        reason: null,
+        firstBlockedValidIndex: null,
+        firstBlockedAtMs: null,
+      };
+  const sameRepSetupBlockFirstSeenBeforeCommit =
+    firstSameRepSetupBlockObservation.blocked === true &&
+    firstSameRepSetupBlockObservation.firstBlockedAtMs != null &&
+    committedFrame != null &&
+    firstSameRepSetupBlockObservation.firstBlockedAtMs <= committedFrame.timestampMs;
+  const sameRepSetupBlockFirstSeenAfterCompletion =
+    firstSameRepSetupBlockObservation.blocked === true &&
+    firstSameRepSetupBlockObservation.firstBlockedAtMs != null &&
+    standingRecovery.standingRecoveredAtMs != null &&
+    firstSameRepSetupBlockObservation.firstBlockedAtMs > standingRecovery.standingRecoveredAtMs;
+  const sameRepSetupCleanWithinRepWindow =
+    firstSameRepSetupBlockObservation.blocked !== true ||
+    sameRepSetupBlockFirstSeenAfterCompletion;
+  const setupMotionBlockedForCompletionPath =
+    rawSetupMotionBlocked && !sameRepSetupBlockFirstSeenAfterCompletion;
 
   /** PR-SQUAT-COMPLETION-REARCH-01 — Subcontract C: shallow closure 번들(로직은 `computeOfficialShallowClosure`) */
   const shallowClosureOut = computeOfficialShallowClosure({
@@ -3508,12 +3667,43 @@ export function evaluateSquatCompletionCore(
     canonicalTemporalEpochLedger.proof.peakBeforeReversal &&
     canonicalTemporalEpochLedger.proof.reversalBeforeRecovery &&
     canonicalTemporalEpochLedger.proof.noRecoveryResetBetweenDescentAndPeak;
+  const sameRepDescentAtMs = selectedCanonicalDescentTimingEpoch?.timestampMs ?? null;
+  const sameRepPeakAtMs =
+    canonicalTemporalEpochLedger.peak?.timestampMs ?? peakFrame.timestampMs ?? null;
+  const sameRepReversalAtMs =
+    progressionReversalFrame?.timestampMs ?? canonicalTemporalEpochLedger.reversal?.timestampMs ?? null;
+  const sameRepRecoveryAtMs =
+    standingRecovery.standingRecoveredAtMs ?? canonicalTemporalEpochLedger.recovery?.timestampMs ?? null;
+  const sameRepCompletionWindowPresent =
+    attemptStarted &&
+    sameRepDescentAtMs != null &&
+    sameRepPeakAtMs != null &&
+    sameRepReversalAtMs != null &&
+    sameRepRecoveryAtMs != null;
+  const sameRepCompletionWindowRepEpochId = buildSameRepCompletionWindowRepEpochId({
+    descentAtMs: sameRepDescentAtMs,
+    peakAtMs: sameRepPeakAtMs,
+    reversalAtMs: sameRepReversalAtMs,
+    recoveryAtMs: sameRepRecoveryAtMs,
+  });
+  const sameRepTemporalOrderSatisfiedForWindow = sameRepTemporalOrderSatisfied({
+    descentAtMs: sameRepDescentAtMs,
+    peakAtMs: sameRepPeakAtMs,
+    reversalAtMs: sameRepReversalAtMs,
+    recoveryAtMs: sameRepRecoveryAtMs,
+  });
+  const sameRepCompletionWindowMixedOrStale =
+    (canonicalTemporalEpochLedger.blockedReason != null &&
+      isSameRepCompletionWindowMixedOrStaleReason(canonicalTemporalEpochLedger.blockedReason)) ||
+    (sameRepCompletionWindowPresent && !sameRepTemporalOrderSatisfiedForWindow);
+  const sameRepRecoveryHoldMs = standingRecoveryHoldMsForOutput ?? null;
+  const sameRepStandingRecoveryFinalizeSatisfied = standingRecoveryFinalize.finalizeSatisfied === true;
 
   /**
    * Subcontract C: shallow ROM 이 통과 증거를 갖추면 standard derive 보다 먼저 low/ultra_cycle 로 닫는다.
    * (standard owner 대역은 위에서 이미 분기됨)
    */
-  const shallowRomClosureProofSignals =
+  let shallowRomClosureProofSignals =
     shallowClosureProofBundleFromStream ||
     officialShallowStreamBridgeApplied ||
     revConf.reversalConfirmed ||
@@ -3542,10 +3732,72 @@ export function evaluateSquatCompletionCore(
     hmmArmingAssistApplied: options?.hmmArmingAssistApplied === true,
     pr03OfficialShallowArming,
     /** PR-3 §4.2: admission-level anti-false-pass guard inputs. */
-    setupMotionBlocked: options?.setupMotionBlocked === true,
+    setupMotionBlocked: setupMotionBlockedForCompletionPath,
     attemptAdmissionSatisfied,
     downwardCommitmentDelta,
   });
+
+  const reversalConfirmedByRuleOrHmmForSameRep =
+    revConf.reversalConfirmed || hmmReversalAssistDecision.assistApplied === true;
+  const officialShallowReversalSatisfiedForSameRep =
+    reversalConfirmedAfterDescend || options?.guardedShallowRecoveredSuffixClosureApply === true;
+  const sameRepShallowCloseDecision = resolveSameRepShallowCloseDecision({
+    sameRepCompletionWindowPresent,
+    officialShallowPathAdmitted: shallowAdmissionContract.admitted,
+    relativeDepthPeak,
+    attemptStarted,
+    descendConfirmed,
+    reversalConfirmedAfterDescend,
+    recoveryConfirmedAfterReversal:
+      standingRecovery.standingRecoveredAtMs != null && progressionReversalFrame != null,
+    officialShallowReversalSatisfied: officialShallowReversalSatisfiedForSameRep,
+    officialShallowAscentEquivalentSatisfied,
+    officialShallowStreamBridgeApplied,
+    reversalConfirmedByRuleOrHmm: reversalConfirmedByRuleOrHmmForSameRep,
+    trajectoryReversalRescueApplied: trajectoryRescue.trajectoryReversalConfirmedBy === 'trajectory',
+    sameRepTemporalOrderSatisfied: sameRepTemporalOrderSatisfiedForWindow,
+    sameRepSetupCleanWithinRepWindow,
+    sameRepSetupBlockFirstSeenBeforeCommit,
+    sameRepCompletionWindowMixedOrStale,
+    readinessStable: true,
+    eventCyclePromoted: false,
+  });
+  const sameRepStandardFinalizeDecision =
+    evidenceLabel === 'standard' && relativeDepthPeak >= STANDARD_LABEL_FLOOR
+      ? resolveSameRepStandardFinalizeDecision({
+          sameRepCompletionWindowPresent,
+          sameRepCompletionWindowMixedOrStale,
+          sameRepTemporalOrderSatisfied: sameRepTemporalOrderSatisfiedForWindow,
+          sameRepSetupCleanWithinRepWindow,
+          sameRepSetupBlockFirstSeenBeforeCommit,
+          reversalConfirmedAfterDescend,
+          recoveryConfirmedAfterReversal:
+            standingRecovery.standingRecoveredAtMs != null && progressionReversalFrame != null,
+          standingRecoveredAtMs: standingRecovery.standingRecoveredAtMs ?? null,
+          sameRepStandingRecoveryFinalizeSatisfied,
+        })
+      : { eligible: false, blockedReason: 'not_standard_finalize_band' };
+  const sameRepShallowResidualSuppressedReason =
+    sameRepShallowCloseDecision.eligible === true &&
+    completionBlockedReason === 'descent_span_too_short'
+      ? completionBlockedReason
+      : null;
+  const sameRepStandardResidualSuppressedReason =
+    sameRepStandardFinalizeDecision.eligible === true &&
+    (completionBlockedReason === 'no_reversal' ||
+      completionBlockedReason === 'not_standing_recovered' ||
+      completionBlockedReason === 'recovery_hold_too_short')
+      ? completionBlockedReason
+      : null;
+  const retroVetoSuppressedReason =
+    sameRepShallowResidualSuppressedReason ??
+    sameRepStandardResidualSuppressedReason ??
+    (sameRepSetupBlockFirstSeenAfterCompletion
+      ? firstSameRepSetupBlockObservation.reason ?? 'setup_after_completion'
+      : null);
+  const retroVetoSuppressedBySameRepCompletion = retroVetoSuppressedReason != null;
+  shallowRomClosureProofSignals =
+    shallowRomClosureProofSignals || sameRepShallowCloseDecision.eligible;
 
   /**
    * PR-4 — Official Shallow Closure Rewrite (SSOT §4.3).
@@ -3591,7 +3843,11 @@ export function evaluateSquatCompletionCore(
     isStandardVetoSuppressibleByOfficialShallowClosure(completionBlockedReason);
 
   const completionBlockedReasonForCompletionPath =
-    officialShallowClosureRewriteEligible ? null : completionBlockedReason;
+    officialShallowClosureRewriteEligible ||
+    sameRepShallowResidualSuppressedReason != null ||
+    sameRepStandardResidualSuppressedReason != null
+      ? null
+      : completionBlockedReason;
 
   /**
    * PR-SHALLOW-OWNER-SPLIT-QUARANTINE (SSOT §6.5) — attempt freshness for
@@ -3619,7 +3875,7 @@ export function evaluateSquatCompletionCore(
      * lane quarantine. When the upstream setup-motion detector flagged the
      * epoch, no owner may open on the single-writer completion path.
      */
-    setupMotionBlocked: options?.setupMotionBlocked === true,
+    setupMotionBlocked: setupMotionBlockedForCompletionPath,
     attemptEpochFresh,
   });
 
@@ -3652,6 +3908,12 @@ export function evaluateSquatCompletionCore(
   const officialShallowClosureRewriteSuppressedReason =
     officialShallowClosureRewriteApplied ? completionBlockedReason : null;
   if (officialShallowClosureRewriteApplied) {
+    completionBlockedReason = null;
+  }
+  if (
+    sameRepShallowResidualSuppressedReason != null ||
+    sameRepStandardResidualSuppressedReason != null
+  ) {
     completionBlockedReason = null;
   }
 
@@ -3922,19 +4184,15 @@ export function evaluateSquatCompletionCore(
     completionBlockedReason == null &&
     completionPassReason != null &&
     completionPassReason !== 'not_confirmed' &&
-    currentSquatPhase === 'standing_recovered';
-  const completionFinalizedDescentAtMs =
-    selectedCanonicalDescentTimingEpoch?.timestampMs ?? null;
-  const completionFinalizedPeakAtMs =
-    canonicalTemporalEpochLedger.peak?.timestampMs ?? peakFrame.timestampMs ?? null;
-  const completionFinalizedReversalAtMs =
-    canonicalTemporalEpochLedger.reversal?.timestampMs ??
-    progressionReversalFrame?.timestampMs ??
-    null;
-  const completionFinalizedRecoveryAtMs =
-    canonicalTemporalEpochLedger.recovery?.timestampMs ??
-    standingRecovery.standingRecoveredAtMs ??
-    null;
+    currentSquatPhase === 'standing_recovered' &&
+    sameRepCompletionWindowPresent === true &&
+    sameRepTemporalOrderSatisfiedForWindow === true &&
+    sameRepCompletionWindowMixedOrStale !== true &&
+    sameRepSetupCleanWithinRepWindow === true;
+  const completionFinalizedDescentAtMs = sameRepDescentAtMs;
+  const completionFinalizedPeakAtMs = sameRepPeakAtMs;
+  const completionFinalizedReversalAtMs = sameRepReversalAtMs;
+  const completionFinalizedRecoveryAtMs = sameRepRecoveryAtMs;
   const completionFinalizedEpochId =
     completionFinalizedForSurface &&
     (
@@ -4098,6 +4356,7 @@ export function evaluateSquatCompletionCore(
       officialShallowPathClosed ||
       shallowClosureProofBundleFromStream ||
       officialShallowStreamBridgeApplied ||
+      sameRepShallowCloseDecision.eligible ||
       officialShallowPrimaryDropClosureFallback === true,
     officialShallowPrimaryDropClosureFallback,
     officialShallowReversalSatisfied:
@@ -4170,10 +4429,63 @@ export function evaluateSquatCompletionCore(
     selectedCanonicalRecoveryEpochSource:
       canonicalTemporalEpochLedger.recovery?.source ?? null,
     temporalEpochOrderTrace: canonicalTemporalEpochLedger.trace,
+    sameRepCompletionWindow: {
+      repEpochId: sameRepCompletionWindowRepEpochId,
+      sameRepCompletionWindowPresent,
+      sameRepCompletionWindowMixedOrStale,
+      attemptStarted,
+      officialShallowPathAdmitted,
+      evidenceLabel,
+      relativeDepthPeak,
+      baselineFrozen: depthFreeze != null,
+      peakLatched: depthFreeze != null && committedOrPostCommitPeakFrame != null,
+      peakLatchedAtIndex: committedOrPostCommitPeakFrame?.index ?? null,
+      committedAtMs: committedFrame?.timestampMs ?? null,
+      peakAtMs: sameRepPeakAtMs,
+      reversalAtMs: sameRepReversalAtMs,
+      standingRecoveredAtMs: sameRepRecoveryAtMs,
+      reversalConfirmedAfterDescend,
+      recoveryConfirmedAfterReversal:
+        standingRecovery.standingRecoveredAtMs != null && progressionReversalFrame != null,
+      officialShallowReversalSatisfied:
+        reversalConfirmedAfterDescend || options?.guardedShallowRecoveredSuffixClosureApply === true,
+      officialShallowAscentEquivalentSatisfied,
+      officialShallowStreamBridgeApplied,
+      reversalConfirmedByRuleOrHmm:
+        revConf.reversalConfirmed || hmmReversalAssistDecision.assistApplied === true,
+      trajectoryReversalRescueApplied,
+      canonicalTemporalEpochOrderSatisfied: sameRepTemporalOrderSatisfiedForWindow,
+      sameRepSetupCleanWithinRepWindow,
+      sameRepSetupBlockFirstSeenBeforeCommit,
+      sameRepSetupBlockFirstSeenAfterCompletion,
+      sameRepRecoveryHoldMs,
+      sameRepStandingRecoveryFinalizeSatisfied,
+      sameRepShallowCloseEligible: sameRepShallowCloseDecision.eligible,
+      sameRepShallowCloseBlockedReason: sameRepShallowCloseDecision.blockedReason,
+      sameRepStandardFinalizeEligible: sameRepStandardFinalizeDecision.eligible,
+      sameRepStandardFinalizeBlockedReason: sameRepStandardFinalizeDecision.blockedReason,
+      retroVetoSuppressedBySameRepCompletion,
+      retroVetoSuppressedReason,
+    },
+    sameRepCompletionWindowPresent,
+    sameRepCompletionWindowRepEpochId: sameRepCompletionWindowRepEpochId,
+    sameRepCompletionWindowMixedOrStale,
+    sameRepSetupCleanWithinRepWindow,
+    sameRepSetupBlockFirstSeenBeforeCommit,
+    sameRepSetupBlockFirstSeenAfterCompletion,
+    sameRepStandingRecoveryFinalizeSatisfied,
+    sameRepRecoveryHoldMs,
+    sameRepShallowCloseEligible: sameRepShallowCloseDecision.eligible,
+    sameRepShallowCloseBlockedReason: sameRepShallowCloseDecision.blockedReason,
+    sameRepStandardFinalizeEligible: sameRepStandardFinalizeDecision.eligible,
+    sameRepStandardFinalizeBlockedReason: sameRepStandardFinalizeDecision.blockedReason,
+    retroVetoSuppressedBySameRepCompletion,
+    retroVetoSuppressedReason,
     completionFinalizedForSurface,
     completionFinalizedOwner: completionFinalizedForSurface ? 'completion' : null,
     completionFinalizedEpochId,
-    completionFinalizedTemporalOrderSatisfied: completionFinalizedForSurface,
+    completionFinalizedTemporalOrderSatisfied:
+      completionFinalizedForSurface && sameRepTemporalOrderSatisfiedForWindow,
     completionFinalizedPassReason:
       completionFinalizedForSurface ? completionPassReason : null,
     completionFinalizedDescentAtMs:

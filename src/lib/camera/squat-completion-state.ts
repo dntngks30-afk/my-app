@@ -15,6 +15,7 @@ import {
   evaluateOfficialShallowCompletionStreamBridge,
   readSquatCompletionDepthForReversal,
 } from '@/lib/camera/squat/squat-reversal-confirmation';
+import { computeSquatSetupMotionBlock as computeSquatSetupMotionBlockShared } from '@/lib/camera/squat/squat-setup-motion-window';
 import {
   detectSquatEventCycle,
   type SquatEventCycleResult,
@@ -107,6 +108,42 @@ export type SquatReadinessStableDwellResult = {
   firstSliceStartIndexInValid: number;
 };
 
+export type SquatSameRepCompletionWindowPayload = {
+  repEpochId: string | null;
+  sameRepCompletionWindowPresent: boolean;
+  sameRepCompletionWindowMixedOrStale: boolean;
+  attemptStarted: boolean;
+  officialShallowPathAdmitted: boolean;
+  evidenceLabel: SquatEvidenceLabel | null;
+  relativeDepthPeak: number;
+  baselineFrozen: boolean;
+  peakLatched: boolean;
+  peakLatchedAtIndex: number | null;
+  committedAtMs: number | null;
+  peakAtMs: number | null;
+  reversalAtMs: number | null;
+  standingRecoveredAtMs: number | null;
+  reversalConfirmedAfterDescend: boolean;
+  recoveryConfirmedAfterReversal: boolean;
+  officialShallowReversalSatisfied: boolean;
+  officialShallowAscentEquivalentSatisfied: boolean;
+  officialShallowStreamBridgeApplied: boolean;
+  reversalConfirmedByRuleOrHmm: boolean;
+  trajectoryReversalRescueApplied: boolean;
+  canonicalTemporalEpochOrderSatisfied: boolean;
+  sameRepSetupCleanWithinRepWindow: boolean;
+  sameRepSetupBlockFirstSeenBeforeCommit: boolean;
+  sameRepSetupBlockFirstSeenAfterCompletion: boolean;
+  sameRepRecoveryHoldMs: number | null;
+  sameRepStandingRecoveryFinalizeSatisfied: boolean;
+  sameRepShallowCloseEligible: boolean;
+  sameRepShallowCloseBlockedReason: string | null;
+  sameRepStandardFinalizeEligible: boolean;
+  sameRepStandardFinalizeBlockedReason: string | null;
+  retroVetoSuppressedBySameRepCompletion: boolean;
+  retroVetoSuppressedReason: string | null;
+};
+
 /**
  * 첫 번째 연속 dwell 구간이 끝난 뒤부터만 completion/arming 입력으로 사용한다.
  */
@@ -137,23 +174,6 @@ export function computeSquatReadinessStableDwell(
   return { satisfied: false, dwellEndIndexInValid: -1, firstSliceStartIndexInValid: 0 };
 }
 
-function meanSafe(nums: number[]): number {
-  if (nums.length === 0) return 0;
-  return nums.reduce((s, n) => s + n, 0) / nums.length;
-}
-
-function meanHipCenter(
-  frames: PoseFeaturesFrame[]
-): { x: number; y: number } | null {
-  const pts = frames
-    .map((f) => f.joints.hipCenter)
-    .filter((j): j is NonNullable<typeof j> => j != null && (j.visibility ?? 0) >= 0.35);
-  if (pts.length === 0) return null;
-  return {
-    x: meanSafe(pts.map((p) => p.x)),
-    y: meanSafe(pts.map((p) => p.y)),
-  };
-}
 
 /**
  * setup 전용 대형 프레이밍 이동(뒤로/가까이/좌우 시프트) — 실제 rep 와 분리.
@@ -184,70 +204,7 @@ export function computeSquatSetupMotionBlock(validPipeline: PoseFeaturesFrame[])
   blocked: boolean;
   reason: string | null;
 } {
-  if (validPipeline.length < 14) return { blocked: false, reason: null };
-  let maxIdx = 0;
-  let maxD = -Infinity;
-  for (let i = 0; i < validPipeline.length; i++) {
-    const d = validPipeline[i]!.derived.squatDepthProxy;
-    if (typeof d === 'number' && Number.isFinite(d) && d > maxD) {
-      maxD = d;
-      maxIdx = i;
-    }
-  }
-
-  const head = validPipeline.slice(0, 4);
-  const areasH = head.map((f) => f.bodyBox.area).filter((x) => x > 0);
-  const areaEarly = meanSafe(areasH);
-  const hipEarly = meanHipCenter(head);
-
-  // PR-SHALLOW-OWNER-SPLIT-QUARANTINE: interior 4-frame sliding scan runs
-  // regardless of `maxIdx`, so short contamination (e.g. `maxIdx < 8` sit +
-  // grab-camera pattern) can still be flagged even when the head/tail
-  // comparison would otherwise early-exit.
-  if (areaEarly > 0.03 && validPipeline.length >= 8) {
-    for (let start = 4; start + 4 <= validPipeline.length; start++) {
-      const mid = validPipeline.slice(start, start + 4);
-      const areasM = mid.map((f) => f.bodyBox.area).filter((x) => x > 0);
-      const areaMid = meanSafe(areasM);
-      if (areaMid > 0 && areaMid / areaEarly < 0.67) {
-        return { blocked: true, reason: 'step_back_or_camera_tilt_area_shrink' };
-      }
-      if (areaMid / areaEarly > 1.55) {
-        return { blocked: true, reason: 'step_in_or_camera_close_area_spike' };
-      }
-      if (hipEarly) {
-        const hipMid = meanHipCenter(mid);
-        if (hipMid) {
-          const dxM = hipMid.x - hipEarly.x;
-          const dyM = hipMid.y - hipEarly.y;
-          if (Math.hypot(dxM, dyM) > 0.138) {
-            return { blocked: true, reason: 'large_framing_translation' };
-          }
-        }
-      }
-    }
-  }
-
-  if (maxIdx < 8) return { blocked: false, reason: null };
-
-  const tail = validPipeline.slice(-4);
-  const areasT = tail.map((f) => f.bodyBox.area).filter((x) => x > 0);
-  const areaLate = meanSafe(areasT);
-  if (areaEarly > 0.03 && areaLate > 0 && areaLate / areaEarly < 0.67) {
-    return { blocked: true, reason: 'step_back_or_camera_tilt_area_shrink' };
-  }
-  if (areaEarly > 0.03 && areaLate / areaEarly > 1.55) {
-    return { blocked: true, reason: 'step_in_or_camera_close_area_spike' };
-  }
-  const hipLate = meanHipCenter(tail);
-  if (hipEarly && hipLate) {
-    const dx = hipLate.x - hipEarly.x;
-    const dy = hipLate.y - hipEarly.y;
-    if (Math.hypot(dx, dy) > 0.138) {
-      return { blocked: true, reason: 'large_framing_translation' };
-    }
-  }
-  return { blocked: false, reason: null };
+  return computeSquatSetupMotionBlockShared(validPipeline);
 }
 
 export type SquatCompletionPhase =
@@ -1128,6 +1085,21 @@ export interface SquatCompletionState extends MotionCompletionResult {
   selectedCanonicalRecoveryEpochAtMs?: number | null;
   selectedCanonicalRecoveryEpochSource?: 'standing_recovery_finalize_epoch' | null;
   temporalEpochOrderTrace?: string | null;
+  sameRepCompletionWindow?: SquatSameRepCompletionWindowPayload | null;
+  sameRepCompletionWindowPresent?: boolean;
+  sameRepCompletionWindowRepEpochId?: string | null;
+  sameRepCompletionWindowMixedOrStale?: boolean;
+  sameRepSetupCleanWithinRepWindow?: boolean;
+  sameRepSetupBlockFirstSeenBeforeCommit?: boolean;
+  sameRepSetupBlockFirstSeenAfterCompletion?: boolean;
+  sameRepStandingRecoveryFinalizeSatisfied?: boolean;
+  sameRepRecoveryHoldMs?: number | null;
+  sameRepShallowCloseEligible?: boolean;
+  sameRepShallowCloseBlockedReason?: string | null;
+  sameRepStandardFinalizeEligible?: boolean;
+  sameRepStandardFinalizeBlockedReason?: string | null;
+  retroVetoSuppressedBySameRepCompletion?: boolean;
+  retroVetoSuppressedReason?: string | null;
   /**
    * Canonical finalized temporal payload for sink-only surface consumers.
    * When true, final pass/UI/latch/snapshot must consume this completion-owned

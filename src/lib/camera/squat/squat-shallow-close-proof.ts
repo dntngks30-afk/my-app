@@ -59,6 +59,8 @@ const SHALLOW_CLOSE_PROOF_STANDARD_OWNER_FLOOR = 0.4;
 
 export type ShallowCycleCloseProofBlockedReason =
   | null
+  | 'same_rep_window_missing'
+  | 'same_rep_window_mixed_or_stale'
   | 'not_admitted'
   | 'standard_or_deep_band'
   | 'attempt_not_started'
@@ -68,8 +70,11 @@ export type ShallowCycleCloseProofBlockedReason =
   | 'recovery_not_confirmed'
   | 'shallow_reversal_not_satisfied'
   | 'ascent_equivalent_not_satisfied'
+  | 'stream_bridge_not_satisfied'
   | 'temporal_order_not_satisfied'
   | 'setup_blocked'
+  | 'setup_before_commit'
+  | 'setup_within_rep_window'
   | 'readiness_unstable'
   | 'event_cycle_short_circuit'
   | 'trajectory_rescue_applied';
@@ -88,6 +93,7 @@ export type ShallowCycleCloseProofObservationStage =
   | 'shallow_cycle_close_proof_candidate';
 
 export interface ShallowCycleCloseProofGates {
+  sameRepWindowPresent: boolean;
   admitted: boolean;
   shallowBand: boolean;
   attemptStarted: boolean;
@@ -97,6 +103,7 @@ export interface ShallowCycleCloseProofGates {
   recoveryConfirmed: boolean;
   shallowReversalSatisfied: boolean;
   ascentEquivalentSatisfied: boolean;
+  streamBridgeSatisfied: boolean;
   temporalOrderSatisfied: boolean;
   setupClean: boolean;
   readinessStable: boolean;
@@ -120,6 +127,88 @@ export interface ShallowCycleCloseProofDecision {
   notes: string[];
 }
 
+function readSameRepShallowCloseTruth(
+  state: SquatCompletionState
+): {
+  present: boolean;
+  admitted: boolean;
+  attemptStarted: boolean;
+  descendConfirmed: boolean;
+  reversalConfirmed: boolean;
+  reversalByRuleOrHmm: boolean;
+  recoveryConfirmed: boolean;
+  shallowReversalSatisfied: boolean;
+  ascentEquivalentSatisfied: boolean;
+  streamBridgeSatisfied: boolean;
+  temporalOrderSatisfied: boolean;
+  setupClean: boolean;
+  setupBeforeCommit: boolean;
+  sameRepWindowMixedOrStale: boolean;
+  shallowBand: boolean;
+  noTrajectoryRescue: boolean;
+  eligible: boolean;
+  blockedReason: string | null;
+} | null {
+  const payload = state.sameRepCompletionWindow ?? null;
+  const hasFlatPayload =
+    state.sameRepCompletionWindowPresent !== undefined ||
+    state.sameRepShallowCloseEligible !== undefined ||
+    state.sameRepShallowCloseBlockedReason !== undefined;
+  if (payload == null && !hasFlatPayload) return null;
+
+  const relativeDepthPeak = payload?.relativeDepthPeak ?? state.relativeDepthPeak ?? 0;
+  return {
+    present:
+      payload?.sameRepCompletionWindowPresent ??
+      (state.sameRepCompletionWindowPresent === true),
+    admitted:
+      payload?.officialShallowPathAdmitted ??
+      (state.officialShallowPathAdmitted === true),
+    attemptStarted: payload?.attemptStarted ?? (state.attemptStarted === true),
+    descendConfirmed: state.descendConfirmed === true && state.downwardCommitmentReached === true,
+    reversalConfirmed:
+      payload?.reversalConfirmedAfterDescend ??
+      (state.reversalConfirmedAfterDescend === true),
+    reversalByRuleOrHmm:
+      payload?.reversalConfirmedByRuleOrHmm ??
+      (state.reversalConfirmedByRuleOrHmm === true),
+    recoveryConfirmed:
+      payload?.recoveryConfirmedAfterReversal ??
+      (state.recoveryConfirmedAfterReversal === true),
+    shallowReversalSatisfied:
+      payload?.officialShallowReversalSatisfied ??
+      (state.officialShallowReversalSatisfied === true),
+    ascentEquivalentSatisfied:
+      payload?.officialShallowAscentEquivalentSatisfied ??
+      (state.officialShallowAscentEquivalentSatisfied === true),
+    streamBridgeSatisfied:
+      payload?.officialShallowStreamBridgeApplied ??
+      (state.officialShallowStreamBridgeApplied === true),
+    temporalOrderSatisfied:
+      payload?.canonicalTemporalEpochOrderSatisfied ??
+      (state.canonicalTemporalEpochOrderSatisfied === true),
+    setupClean:
+      payload?.sameRepSetupCleanWithinRepWindow ??
+      (state.sameRepSetupCleanWithinRepWindow ?? state.setupMotionBlocked !== true),
+    setupBeforeCommit:
+      payload?.sameRepSetupBlockFirstSeenBeforeCommit ??
+      (state.sameRepSetupBlockFirstSeenBeforeCommit === true),
+    sameRepWindowMixedOrStale:
+      payload?.sameRepCompletionWindowMixedOrStale ??
+      (state.sameRepCompletionWindowMixedOrStale === true),
+    shallowBand:
+      typeof relativeDepthPeak === 'number' &&
+      relativeDepthPeak > 0 &&
+      relativeDepthPeak < SHALLOW_CLOSE_PROOF_STANDARD_OWNER_FLOOR,
+    noTrajectoryRescue:
+      (payload?.trajectoryReversalRescueApplied ?? state.trajectoryReversalRescueApplied) !== true,
+    eligible:
+      payload?.sameRepShallowCloseEligible ?? (state.sameRepShallowCloseEligible === true),
+    blockedReason:
+      payload?.sameRepShallowCloseBlockedReason ?? state.sameRepShallowCloseBlockedReason ?? null,
+  };
+}
+
 /**
  * PR-X2-B — main entry.
  *
@@ -138,6 +227,7 @@ export function computeShallowCycleCloseProofDecision(
       cycleCloseProofBlockedReason: 'not_admitted',
       observationStage: 'not_evaluated',
       gates: {
+        sameRepWindowPresent: false,
         admitted: false,
         shallowBand: false,
         attemptStarted: false,
@@ -147,6 +237,7 @@ export function computeShallowCycleCloseProofDecision(
         recoveryConfirmed: false,
         shallowReversalSatisfied: false,
         ascentEquivalentSatisfied: false,
+        streamBridgeSatisfied: false,
         temporalOrderSatisfied: false,
         setupClean: false,
         readinessStable: false,
@@ -157,26 +248,43 @@ export function computeShallowCycleCloseProofDecision(
     };
   }
 
-  const admitted = state.officialShallowPathAdmitted === true;
+  const sameRep = readSameRepShallowCloseTruth(state);
+  const admitted = sameRep?.admitted ?? (state.officialShallowPathAdmitted === true);
   const shallowBand =
-    typeof state.relativeDepthPeak === 'number' &&
-    state.relativeDepthPeak > 0 &&
-    state.relativeDepthPeak < SHALLOW_CLOSE_PROOF_STANDARD_OWNER_FLOOR;
-  const attemptStarted = state.attemptStarted === true;
+    sameRep?.shallowBand ??
+    (typeof state.relativeDepthPeak === 'number' &&
+      state.relativeDepthPeak > 0 &&
+      state.relativeDepthPeak < SHALLOW_CLOSE_PROOF_STANDARD_OWNER_FLOOR);
+  const attemptStarted = sameRep?.attemptStarted ?? (state.attemptStarted === true);
   const descendConfirmed =
-    state.descendConfirmed === true && state.downwardCommitmentReached === true;
-  const reversalConfirmed = state.reversalConfirmedAfterDescend === true;
-  const reversalByRuleOrHmm = state.reversalConfirmedByRuleOrHmm === true;
-  const recoveryConfirmed = state.recoveryConfirmedAfterReversal === true;
-  const shallowReversalSatisfied = state.officialShallowReversalSatisfied === true;
-  const ascentEquivalentSatisfied = state.officialShallowAscentEquivalentSatisfied === true;
-  const temporalOrderSatisfied = state.canonicalTemporalEpochOrderSatisfied === true;
-  const setupClean = state.setupMotionBlocked !== true;
+    sameRep?.descendConfirmed ??
+    (state.descendConfirmed === true && state.downwardCommitmentReached === true);
+  const reversalConfirmed =
+    sameRep?.reversalConfirmed ?? (state.reversalConfirmedAfterDescend === true);
+  const reversalByRuleOrHmm =
+    sameRep?.reversalByRuleOrHmm ?? (state.reversalConfirmedByRuleOrHmm === true);
+  const recoveryConfirmed =
+    sameRep?.recoveryConfirmed ?? (state.recoveryConfirmedAfterReversal === true);
+  const shallowReversalSatisfied =
+    sameRep?.shallowReversalSatisfied ?? (state.officialShallowReversalSatisfied === true);
+  const ascentEquivalentSatisfied =
+    sameRep?.ascentEquivalentSatisfied ??
+    (state.officialShallowAscentEquivalentSatisfied === true);
+  const streamBridgeSatisfied =
+    sameRep != null
+      ? sameRep.streamBridgeSatisfied
+      : true;
+  const temporalOrderSatisfied =
+    sameRep?.temporalOrderSatisfied ?? (state.canonicalTemporalEpochOrderSatisfied === true);
+  const setupClean =
+    sameRep?.setupClean ?? (state.setupMotionBlocked !== true);
   const readinessStable = state.readinessStableDwellSatisfied !== false;
   const noEventCycleShortCircuit = state.eventCyclePromoted !== true;
-  const noTrajectoryRescue = state.trajectoryReversalRescueApplied !== true;
+  const noTrajectoryRescue =
+    sameRep?.noTrajectoryRescue ?? (state.trajectoryReversalRescueApplied !== true);
 
   const gates: ShallowCycleCloseProofGates = {
+    sameRepWindowPresent: sameRep?.present ?? false,
     admitted,
     shallowBand,
     attemptStarted,
@@ -186,6 +294,7 @@ export function computeShallowCycleCloseProofDecision(
     recoveryConfirmed,
     shallowReversalSatisfied,
     ascentEquivalentSatisfied,
+    streamBridgeSatisfied,
     temporalOrderSatisfied,
     setupClean,
     readinessStable,
@@ -199,7 +308,16 @@ export function computeShallowCycleCloseProofDecision(
    * `shallow_descent_too_short` collapses on this family today.
    */
   let blockedReason: ShallowCycleCloseProofBlockedReason = null;
-  if (!setupClean) blockedReason = 'setup_blocked';
+  if (sameRep?.present === false) blockedReason = 'same_rep_window_missing';
+  else if (sameRep?.sameRepWindowMixedOrStale === true) blockedReason = 'same_rep_window_mixed_or_stale';
+  else if (!setupClean) {
+    blockedReason =
+      sameRep == null
+        ? 'setup_blocked'
+        : sameRep.setupBeforeCommit
+        ? 'setup_before_commit'
+        : 'setup_within_rep_window';
+  }
   else if (!readinessStable) blockedReason = 'readiness_unstable';
   else if (!admitted) blockedReason = 'not_admitted';
   else if (!shallowBand) blockedReason = 'standard_or_deep_band';
@@ -210,18 +328,19 @@ export function computeShallowCycleCloseProofDecision(
   else if (!recoveryConfirmed) blockedReason = 'recovery_not_confirmed';
   else if (!shallowReversalSatisfied) blockedReason = 'shallow_reversal_not_satisfied';
   else if (!ascentEquivalentSatisfied) blockedReason = 'ascent_equivalent_not_satisfied';
+  else if (!streamBridgeSatisfied) blockedReason = 'stream_bridge_not_satisfied';
   else if (!temporalOrderSatisfied) blockedReason = 'temporal_order_not_satisfied';
   else if (!noEventCycleShortCircuit) blockedReason = 'event_cycle_short_circuit';
   else if (!noTrajectoryRescue) blockedReason = 'trajectory_rescue_applied';
 
   let observationStage: ShallowCycleCloseProofObservationStage;
-  if (!setupClean || !readinessStable) {
+  if ((sameRep?.present === false) || sameRep?.sameRepWindowMixedOrStale === true || !setupClean || !readinessStable) {
     observationStage = 'pre_admission';
   } else if (!admitted || !shallowBand || !attemptStarted || !descendConfirmed) {
     observationStage = 'pre_admission';
   } else if (!reversalConfirmed || !reversalByRuleOrHmm || !shallowReversalSatisfied) {
     observationStage = 'admitted_without_reversal';
-  } else if (!recoveryConfirmed) {
+  } else if (!recoveryConfirmed || (sameRep != null && !streamBridgeSatisfied)) {
     observationStage = 'reversal_without_recovery';
   } else if (!ascentEquivalentSatisfied) {
     observationStage = 'recovery_without_ascent_equivalent';

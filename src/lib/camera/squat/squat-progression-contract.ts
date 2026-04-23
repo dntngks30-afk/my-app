@@ -614,6 +614,16 @@ export function resolveSquatCompletionInvariantFailureReason(
 ): string | null {
   if (cs == null) return 'no_squat_completion_state';
 
+  const completionFinalizedSurfaceTruth =
+    readSquatCompletionFinalizedSurfacePayload(cs);
+  if (
+    completionFinalizedSurfaceTruth.surfaceTemporalTruthSource ===
+      'completion_finalized_payload' &&
+    completionFinalizedSurfaceTruth.completionFinalizedForSurface === true
+  ) {
+    return null;
+  }
+
   const band = resolveSquatCompletionBand(cs);
   const notes = cs.squatEventCycle?.notes ?? [];
 
@@ -662,15 +672,6 @@ export function resolveSquatCompletionInvariantFailureReason(
     cs.standingFinalizeSatisfied !== true
   ) {
     return 'shallow_recovery_not_authoritative';
-  }
-  const completionFinalizedSurfaceTruth =
-    readSquatCompletionFinalizedSurfacePayload(cs);
-  if (
-    completionFinalizedSurfaceTruth.surfaceTemporalTruthSource ===
-      'completion_finalized_payload' &&
-    completionFinalizedSurfaceTruth.completionFinalizedForSurface === true
-  ) {
-    return null;
   }
   if (cs.canonicalTemporalEpochOrderBlockedReason != null) {
     return `temporal_epoch_order:${cs.canonicalTemporalEpochOrderBlockedReason}`;

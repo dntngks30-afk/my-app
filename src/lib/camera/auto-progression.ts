@@ -1463,6 +1463,12 @@ function applySquatRuntimeReadinessSetupCompletionInvariant(
   uiGateInput: SquatUiProgressionLatchGateInput
 ): SquatOwnerTruth {
   if (ownerTruth.completionOwnerPassed !== true) return ownerTruth;
+  if (
+    ownerTruth.surfaceTemporalTruthSource === 'completion_finalized_payload' &&
+    ownerTruth.completionFinalizedForSurface === true
+  ) {
+    return ownerTruth;
+  }
   const blockedReason =
     uiGateInput.liveReadinessNotReady === true
       ? 'live_readiness_not_ready'
@@ -1501,8 +1507,19 @@ export function computeSquatPostOwnerPreLatchGateLayer(input: {
     ownerTruth,
     input.uiGateInput
   );
+  const finalizedSinkOnlyTruth =
+    runtimeOwnerTruth.surfaceTemporalTruthSource === 'completion_finalized_payload' &&
+    runtimeOwnerTruth.completionFinalizedForSurface === true;
+  const uiGateInput = finalizedSinkOnlyTruth
+    ? {
+        ...input.uiGateInput,
+        liveReadinessNotReady: false,
+        readinessStableDwellSatisfied: true,
+        setupMotionBlocked: false,
+      }
+    : input.uiGateInput;
   const uiGate = computeSquatUiProgressionLatchGate({
-    ...input.uiGateInput,
+    ...uiGateInput,
     completionOwnerPassed: runtimeOwnerTruth.completionOwnerPassed,
     officialShallowOwnerFrozen: false,
   });

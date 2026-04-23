@@ -206,6 +206,91 @@ function readSameRepOfficialShallowWriterAnchorTruth(
   return { aligned: false, index: null, source: null };
 }
 
+function readSameRepCompletionWindowTruth(state: SquatCompletionState): {
+  present: boolean;
+  setupCleanWithinRepWindow: boolean;
+  setupBlockFirstSeenBeforeCommit: boolean;
+  mixedOrStale: boolean;
+  shallowCloseEligible: boolean;
+  shallowCloseBlockedReason: string | null;
+  temporalOrderSatisfied: boolean;
+  descentAtMs: number | null;
+  peakAtMs: number | null;
+  reversalAtMs: number | null;
+  recoveryAtMs: number | null;
+} | null {
+  const payload = state.sameRepCompletionWindow ?? null;
+  const hasFlatPayload =
+    state.sameRepCompletionWindowPresent !== undefined ||
+    state.sameRepShallowCloseEligible !== undefined ||
+    state.sameRepShallowCloseBlockedReason !== undefined;
+  if (payload == null && !hasFlatPayload) return null;
+
+  return {
+    present:
+      payload?.sameRepCompletionWindowPresent ??
+      (state.sameRepCompletionWindowPresent === true),
+    setupCleanWithinRepWindow:
+      payload?.sameRepSetupCleanWithinRepWindow ??
+      (state.sameRepSetupCleanWithinRepWindow ?? state.setupMotionBlocked !== true),
+    setupBlockFirstSeenBeforeCommit:
+      payload?.sameRepSetupBlockFirstSeenBeforeCommit ??
+      (state.sameRepSetupBlockFirstSeenBeforeCommit === true),
+    mixedOrStale:
+      payload?.sameRepCompletionWindowMixedOrStale ??
+      (state.sameRepCompletionWindowMixedOrStale === true),
+    shallowCloseEligible:
+      payload?.sameRepShallowCloseEligible ?? (state.sameRepShallowCloseEligible === true),
+    shallowCloseBlockedReason:
+      payload?.sameRepShallowCloseBlockedReason ?? state.sameRepShallowCloseBlockedReason ?? null,
+    temporalOrderSatisfied:
+      payload?.canonicalTemporalEpochOrderSatisfied ??
+      (state.canonicalTemporalEpochOrderSatisfied === true),
+    descentAtMs: state.selectedCanonicalDescentTimingEpochAtMs ?? state.descendStartAtMs ?? null,
+    peakAtMs: payload?.peakAtMs ?? state.selectedCanonicalPeakEpochAtMs ?? state.peakAtMs ?? null,
+    reversalAtMs:
+      payload?.reversalAtMs ?? state.selectedCanonicalReversalEpochAtMs ?? state.reversalAtMs ?? null,
+    recoveryAtMs:
+      payload?.standingRecoveredAtMs ??
+      state.selectedCanonicalRecoveryEpochAtMs ??
+      state.standingRecoveredAtMs ??
+      null,
+  };
+}
+
+function mapSameRepWriterBlockedReason(
+  reason: string | null
+): OfficialShallowOwnerWriteMissReason | null {
+  if (reason == null) return null;
+  if (reason === 'not_admitted') return 'not_admitted';
+  if (reason === 'attempt_not_started' || reason === 'descend_not_confirmed') {
+    return 'descend_not_confirmed';
+  }
+  if (
+    reason === 'reversal_not_confirmed' ||
+    reason === 'reversal_provenance_insufficient' ||
+    reason === 'shallow_reversal_not_satisfied'
+  ) {
+    return 'reversal_not_confirmed';
+  }
+  if (reason === 'recovery_not_confirmed') return 'recovery_not_confirmed';
+  if (reason === 'ascent_equivalent_not_satisfied') {
+    return 'ascent_equivalent_not_satisfied';
+  }
+  if (reason === 'stream_bridge_not_satisfied') return 'closure_proof_not_satisfied';
+  if (reason === 'temporal_order_not_satisfied') return 'temporal_order_not_satisfied';
+  if (reason === 'same_rep_window_mixed_or_stale') return 'stale_or_mixed_rep_guard';
+  if (
+    reason === 'setup_before_commit' ||
+    reason === 'setup_within_rep_window' ||
+    reason === 'setup_blocked' ||
+    reason === 'readiness_unstable'
+  ) {
+    return 'setup_not_clear';
+  }
+  return null;
+}
+
 /**
  * First failing conjunct in the same order as `sameRepOfficialShallowCloseOwnershipRecoveryEligible`.
  * Used only for diagnostic miss reasons at the canonical shallow closer boundary.
@@ -214,6 +299,18 @@ function ownershipRecoveryFirstMissReason(
   state: SquatCompletionState,
   deps: ApplyCanonicalShallowClosureFromContractDeps
 ): OfficialShallowOwnerWriteMissReason | null {
+  const sameRepWindow = readSameRepCompletionWindowTruth(state);
+  const sameRepSetupBlocked =
+    sameRepWindow != null
+      ? !sameRepWindow.setupCleanWithinRepWindow
+      : deps.setupMotionBlocked !== false || state.setupMotionBlocked === true;
+  const sameRepTemporalOrderSatisfied =
+    sameRepWindow?.temporalOrderSatisfied ?? (state.canonicalTemporalEpochOrderSatisfied === true);
+  const sameRepMixedOrStale =
+    sameRepWindow?.mixedOrStale ?? !hasNoKnownStaleOrMixedShallowEpoch(state);
+  const sameRepShallowCloseEligible =
+    sameRepWindow?.shallowCloseEligible ?? (state.officialShallowClosureProofSatisfied === true);
+
   if (state.completionSatisfied === true) return 'shallow_close_not_pending';
   if (state.completionPassReason !== 'not_confirmed') return 'shallow_close_not_pending';
   if (
@@ -236,18 +333,27 @@ function ownershipRecoveryFirstMissReason(
   if ((state.downwardCommitmentDelta ?? 0) <= 0) return 'descend_not_confirmed';
   if (state.readinessStableDwellSatisfied === false) return 'setup_not_clear';
   if (state.attemptStartedAfterReady === false) return 'setup_not_clear';
-  if (deps.setupMotionBlocked !== false) return 'setup_not_clear';
-  if (state.setupMotionBlocked === true) return 'setup_not_clear';
+  if (sameRepSetupBlocked) {
+    return sameRepWindow?.setupBlockFirstSeenBeforeCommit === true
+      ? 'setup_not_clear'
+      : mapSameRepWriterBlockedReason(sameRepWindow?.shallowCloseBlockedReason ?? null) ??
+          'setup_not_clear';
+  }
   if (state.eventCyclePromoted === true) return 'temporal_order_not_satisfied';
 
   if (state.reversalConfirmedAfterDescend !== true) return 'reversal_not_confirmed';
   if (state.recoveryConfirmedAfterReversal !== true) return 'recovery_not_confirmed';
   if (state.officialShallowReversalSatisfied !== true) return 'reversal_not_confirmed';
   if (state.officialShallowAscentEquivalentSatisfied !== true) return 'ascent_equivalent_not_satisfied';
-  if (state.officialShallowClosureProofSatisfied !== true) return 'closure_proof_not_satisfied';
+  if (!sameRepShallowCloseEligible) {
+    return (
+      mapSameRepWriterBlockedReason(sameRepWindow?.shallowCloseBlockedReason ?? null) ??
+      'closure_proof_not_satisfied'
+    );
+  }
 
-  if (state.canonicalTemporalEpochOrderSatisfied !== true) return 'temporal_order_not_satisfied';
-  if (!hasNoKnownStaleOrMixedShallowEpoch(state)) return 'stale_or_mixed_rep_guard';
+  if (!sameRepTemporalOrderSatisfied) return 'temporal_order_not_satisfied';
+  if (sameRepMixedOrStale) return 'stale_or_mixed_rep_guard';
   if (state.standingRecoveredAtMs == null) return 'recovery_not_confirmed';
   if (!readSameRepOfficialShallowWriterAnchorTruth(state).aligned) {
     return 'peak_latch_anchor_guard_failed';
@@ -260,6 +366,18 @@ function sameRepOfficialShallowCloseOwnershipRecoveryEligible(
   state: SquatCompletionState,
   deps: ApplyCanonicalShallowClosureFromContractDeps
 ): boolean {
+  const sameRepWindow = readSameRepCompletionWindowTruth(state);
+  const sameRepSetupBlocked =
+    sameRepWindow != null
+      ? !sameRepWindow.setupCleanWithinRepWindow
+      : deps.setupMotionBlocked !== false || state.setupMotionBlocked === true;
+  const sameRepTemporalOrderSatisfied =
+    sameRepWindow?.temporalOrderSatisfied ?? (state.canonicalTemporalEpochOrderSatisfied === true);
+  const sameRepMixedOrStale =
+    sameRepWindow?.mixedOrStale ?? !hasNoKnownStaleOrMixedShallowEpoch(state);
+  const sameRepShallowCloseEligible =
+    sameRepWindow?.shallowCloseEligible ?? (state.officialShallowClosureProofSatisfied === true);
+
   if (state.completionSatisfied === true) return false;
   if (state.completionPassReason !== 'not_confirmed') return false;
   if (!officialShallowCloseCommitCanBePending(state.completionBlockedReason)) return false;
@@ -273,15 +391,14 @@ function sameRepOfficialShallowCloseOwnershipRecoveryEligible(
   if ((state.downwardCommitmentDelta ?? 0) <= 0) return false;
   if (state.readinessStableDwellSatisfied === false) return false;
   if (state.attemptStartedAfterReady === false) return false;
-  if (deps.setupMotionBlocked !== false) return false;
-  if (state.setupMotionBlocked === true) return false;
+  if (sameRepSetupBlocked) return false;
   if (state.eventCyclePromoted === true) return false;
 
   if (state.reversalConfirmedAfterDescend !== true) return false;
   if (state.recoveryConfirmedAfterReversal !== true) return false;
   if (state.officialShallowReversalSatisfied !== true) return false;
   if (state.officialShallowAscentEquivalentSatisfied !== true) return false;
-  if (state.officialShallowClosureProofSatisfied !== true) return false;
+  if (!sameRepShallowCloseEligible) return false;
   if (
     state.completionBlockedReason === 'no_reversal' &&
     state.officialShallowAdmittedToClosedContractSatisfied !== true
@@ -289,8 +406,8 @@ function sameRepOfficialShallowCloseOwnershipRecoveryEligible(
     return false;
   }
 
-  if (state.canonicalTemporalEpochOrderSatisfied !== true) return false;
-  if (!hasNoKnownStaleOrMixedShallowEpoch(state)) return false;
+  if (!sameRepTemporalOrderSatisfied) return false;
+  if (sameRepMixedOrStale) return false;
   if (state.standingRecoveredAtMs == null) return false;
   if (!readSameRepOfficialShallowWriterAnchorTruth(state).aligned) return false;
 
@@ -560,14 +677,15 @@ export function applyCanonicalShallowClosureFromContract(
     officialShallowAuthoritativeClosure: true,
   });
   const writerAnchor = readSameRepOfficialShallowWriterAnchorTruth(state);
+  const sameRepWindow = readSameRepCompletionWindowTruth(state);
   const completionFinalizedDescentAtMs =
-    state.selectedCanonicalDescentTimingEpochAtMs ?? state.descendStartAtMs ?? null;
+    sameRepWindow?.descentAtMs ?? state.selectedCanonicalDescentTimingEpochAtMs ?? state.descendStartAtMs ?? null;
   const completionFinalizedPeakAtMs =
-    state.selectedCanonicalPeakEpochAtMs ?? state.peakAtMs ?? null;
+    sameRepWindow?.peakAtMs ?? state.selectedCanonicalPeakEpochAtMs ?? state.peakAtMs ?? null;
   const completionFinalizedReversalAtMs =
-    state.selectedCanonicalReversalEpochAtMs ?? state.reversalAtMs ?? null;
+    sameRepWindow?.reversalAtMs ?? state.selectedCanonicalReversalEpochAtMs ?? state.reversalAtMs ?? null;
   const completionFinalizedRecoveryAtMs =
-    state.selectedCanonicalRecoveryEpochAtMs ?? state.standingRecoveredAtMs ?? null;
+    sameRepWindow?.recoveryAtMs ?? state.selectedCanonicalRecoveryEpochAtMs ?? state.standingRecoveredAtMs ?? null;
   const completionFinalizedEpochId =
     completionFinalizedDescentAtMs != null ||
     completionFinalizedPeakAtMs != null ||
@@ -624,7 +742,8 @@ export function applyCanonicalShallowClosureFromContract(
     completionFinalizedForSurface: true,
     completionFinalizedOwner: 'completion',
     completionFinalizedEpochId,
-    completionFinalizedTemporalOrderSatisfied: true,
+    completionFinalizedTemporalOrderSatisfied:
+      sameRepWindow?.temporalOrderSatisfied ?? true,
     completionFinalizedPassReason: 'official_shallow_cycle',
     completionFinalizedDescentAtMs,
     completionFinalizedPeakAtMs,
