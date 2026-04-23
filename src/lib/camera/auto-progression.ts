@@ -388,6 +388,19 @@ export interface SquatCycleDebug {
   completionBand?: SquatCompletionBand;
   completionInvariantFailureReason?: string | null;
   completionEpochId?: string | null;
+  completionFinalizedForSurface?: boolean;
+  completionFinalizedOwner?: 'completion' | null;
+  completionFinalizedEpochId?: string | null;
+  completionFinalizedTemporalOrderSatisfied?: boolean;
+  completionFinalizedPassReason?: string | null;
+  completionFinalizedDescentAtMs?: number | null;
+  completionFinalizedPeakAtMs?: number | null;
+  completionFinalizedReversalAtMs?: number | null;
+  completionFinalizedRecoveryAtMs?: number | null;
+  surfaceTemporalTruthSource?:
+    | 'completion_finalized_payload'
+    | 'completion_state_fallback'
+    | 'none';
   /** completion truth 가 standard_cycle 인 경우(디커플·gate와 무관한 밴드 관측) */
   standardOwnerEligible?: boolean;
   /** completion truth 가 low/ultra_low event cycle 인 경우(shadow promote 와 별개) */
@@ -2918,6 +2931,26 @@ export function evaluateExerciseAutoProgress(
       completionInvariantFailureReason:
         squatOwnerTruth?.completionInvariantFailureReason ?? null,
       completionEpochId: squatOwnerTruth?.completionEpochId ?? null,
+      completionFinalizedForSurface:
+        squatOwnerTruth?.completionFinalizedForSurface ?? false,
+      completionFinalizedOwner:
+        squatOwnerTruth?.completionFinalizedOwner ?? null,
+      completionFinalizedEpochId:
+        squatOwnerTruth?.completionFinalizedEpochId ?? null,
+      completionFinalizedTemporalOrderSatisfied:
+        squatOwnerTruth?.completionFinalizedTemporalOrderSatisfied ?? false,
+      completionFinalizedPassReason:
+        squatOwnerTruth?.completionFinalizedPassReason ?? null,
+      completionFinalizedDescentAtMs:
+        squatOwnerTruth?.completionFinalizedDescentAtMs ?? null,
+      completionFinalizedPeakAtMs:
+        squatOwnerTruth?.completionFinalizedPeakAtMs ?? null,
+      completionFinalizedReversalAtMs:
+        squatOwnerTruth?.completionFinalizedReversalAtMs ?? null,
+      completionFinalizedRecoveryAtMs:
+        squatOwnerTruth?.completionFinalizedRecoveryAtMs ?? null,
+      surfaceTemporalTruthSource:
+        squatOwnerTruth?.surfaceTemporalTruthSource ?? 'none',
       standardOwnerEligible,
       shadowEventOwnerEligible,
       ownerFreezeVersion: 'cam-pass-owner-freeze-01',

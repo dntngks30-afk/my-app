@@ -3917,6 +3917,36 @@ export function evaluateSquatCompletionCore(
     revConfReversalConfirmed: revConf.reversalConfirmed,
     revConfSource: revConf.reversalSource,
   });
+  const completionFinalizedForSurface =
+    completionSatisfied === true &&
+    completionBlockedReason == null &&
+    completionPassReason != null &&
+    completionPassReason !== 'not_confirmed' &&
+    currentSquatPhase === 'standing_recovered';
+  const completionFinalizedDescentAtMs =
+    selectedCanonicalDescentTimingEpoch?.timestampMs ?? null;
+  const completionFinalizedPeakAtMs =
+    canonicalTemporalEpochLedger.peak?.timestampMs ?? peakFrame.timestampMs ?? null;
+  const completionFinalizedReversalAtMs =
+    canonicalTemporalEpochLedger.reversal?.timestampMs ??
+    progressionReversalFrame?.timestampMs ??
+    null;
+  const completionFinalizedRecoveryAtMs =
+    canonicalTemporalEpochLedger.recovery?.timestampMs ??
+    standingRecovery.standingRecoveredAtMs ??
+    null;
+  const completionFinalizedEpochId =
+    completionFinalizedForSurface &&
+    (
+      completionFinalizedDescentAtMs != null ||
+      completionFinalizedPeakAtMs != null ||
+      completionFinalizedReversalAtMs != null ||
+      completionFinalizedRecoveryAtMs != null
+    )
+      ? `completion:${completionFinalizedDescentAtMs ?? 'na'}:${
+          completionFinalizedPeakAtMs ?? 'na'
+        }:${completionFinalizedReversalAtMs ?? 'na'}:${completionFinalizedRecoveryAtMs ?? 'na'}`
+      : null;
 
   return {
     baselineStandingDepth,
@@ -4140,6 +4170,20 @@ export function evaluateSquatCompletionCore(
     selectedCanonicalRecoveryEpochSource:
       canonicalTemporalEpochLedger.recovery?.source ?? null,
     temporalEpochOrderTrace: canonicalTemporalEpochLedger.trace,
+    completionFinalizedForSurface,
+    completionFinalizedOwner: completionFinalizedForSurface ? 'completion' : null,
+    completionFinalizedEpochId,
+    completionFinalizedTemporalOrderSatisfied: completionFinalizedForSurface,
+    completionFinalizedPassReason:
+      completionFinalizedForSurface ? completionPassReason : null,
+    completionFinalizedDescentAtMs:
+      completionFinalizedForSurface ? completionFinalizedDescentAtMs : null,
+    completionFinalizedPeakAtMs:
+      completionFinalizedForSurface ? completionFinalizedPeakAtMs : null,
+    completionFinalizedReversalAtMs:
+      completionFinalizedForSurface ? completionFinalizedReversalAtMs : null,
+    completionFinalizedRecoveryAtMs:
+      completionFinalizedForSurface ? completionFinalizedRecoveryAtMs : null,
   };
 }
 

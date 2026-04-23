@@ -560,6 +560,23 @@ export function applyCanonicalShallowClosureFromContract(
     officialShallowAuthoritativeClosure: true,
   });
   const writerAnchor = readSameRepOfficialShallowWriterAnchorTruth(state);
+  const completionFinalizedDescentAtMs =
+    state.selectedCanonicalDescentTimingEpochAtMs ?? state.descendStartAtMs ?? null;
+  const completionFinalizedPeakAtMs =
+    state.selectedCanonicalPeakEpochAtMs ?? state.peakAtMs ?? null;
+  const completionFinalizedReversalAtMs =
+    state.selectedCanonicalReversalEpochAtMs ?? state.reversalAtMs ?? null;
+  const completionFinalizedRecoveryAtMs =
+    state.selectedCanonicalRecoveryEpochAtMs ?? state.standingRecoveredAtMs ?? null;
+  const completionFinalizedEpochId =
+    completionFinalizedDescentAtMs != null ||
+    completionFinalizedPeakAtMs != null ||
+    completionFinalizedReversalAtMs != null ||
+    completionFinalizedRecoveryAtMs != null
+      ? `completion:${completionFinalizedDescentAtMs ?? 'na'}:${
+          completionFinalizedPeakAtMs ?? 'na'
+        }:${completionFinalizedReversalAtMs ?? 'na'}:${completionFinalizedRecoveryAtMs ?? 'na'}`
+      : null;
 
   return {
     ...state,
@@ -604,6 +621,15 @@ export function applyCanonicalShallowClosureFromContract(
       state.sameRepShallowCloseRecoveredFrom ?? ownershipRecoveredFrom,
     sameRepShallowAuthoritativeCloseOwnershipRecovered: ownershipRecoveryEligible,
     sameRepShallowAuthoritativeCloseOwnershipRecoveredFrom: ownershipRecoveredFrom,
+    completionFinalizedForSurface: true,
+    completionFinalizedOwner: 'completion',
+    completionFinalizedEpochId,
+    completionFinalizedTemporalOrderSatisfied: true,
+    completionFinalizedPassReason: 'official_shallow_cycle',
+    completionFinalizedDescentAtMs,
+    completionFinalizedPeakAtMs,
+    completionFinalizedReversalAtMs,
+    completionFinalizedRecoveryAtMs,
     ...buildOfficialShallowWriterObservability(state, deps, {
       candidate,
       applied: true,

@@ -35,6 +35,11 @@ export type SquatCompletionBand =
   | 'reject_ultra_low_static'
   | null;
 
+export type SquatSurfaceTemporalTruthSource =
+  | 'completion_finalized_payload'
+  | 'completion_state_fallback'
+  | 'none';
+
 export type SquatFinalSuccessOwner =
   | 'completion_truth_standard'
   | 'completion_truth_shallow'
@@ -267,6 +272,15 @@ export type SquatCompletionOwnerStateSlice = {
   reversalConfirmedByRuleOrHmm?: boolean;
   officialShallowStreamBridgeApplied?: boolean;
   officialShallowAscentEquivalentSatisfied?: boolean;
+  completionFinalizedForSurface?: boolean;
+  completionFinalizedOwner?: 'completion' | null;
+  completionFinalizedEpochId?: string | null;
+  completionFinalizedTemporalOrderSatisfied?: boolean;
+  completionFinalizedPassReason?: string | null;
+  completionFinalizedDescentAtMs?: number | null;
+  completionFinalizedPeakAtMs?: number | null;
+  completionFinalizedReversalAtMs?: number | null;
+  completionFinalizedRecoveryAtMs?: number | null;
   stillSeatedAtPass?: boolean;
   squatEventCycle?: {
     detected?: boolean;
@@ -331,6 +345,23 @@ export function buildSquatCompletionEpochId(
   cs: SquatCompletionOwnerStateSlice | undefined
 ): string | null {
   if (cs == null) return null;
+  if (cs.completionFinalizedEpochId != null) {
+    return cs.completionFinalizedEpochId;
+  }
+  const finalizedDescentAtMs = cs.completionFinalizedDescentAtMs ?? null;
+  const finalizedPeakAtMs = cs.completionFinalizedPeakAtMs ?? null;
+  const finalizedReversalAtMs = cs.completionFinalizedReversalAtMs ?? null;
+  const finalizedRecoveryAtMs = cs.completionFinalizedRecoveryAtMs ?? null;
+  if (
+    finalizedDescentAtMs != null ||
+    finalizedPeakAtMs != null ||
+    finalizedReversalAtMs != null ||
+    finalizedRecoveryAtMs != null
+  ) {
+    return `completion:${finalizedDescentAtMs ?? 'na'}:${finalizedPeakAtMs ?? 'na'}:${
+      finalizedReversalAtMs ?? 'na'
+    }:${finalizedRecoveryAtMs ?? 'na'}`;
+  }
   const descent =
     cs.selectedCanonicalDescentTimingEpochAtMs ??
     cs.selectedCanonicalDescentTimingEpochValidIndex ??
@@ -352,6 +383,121 @@ export function buildSquatCompletionEpochId(
     return null;
   }
   return `completion:${descent ?? 'na'}:${peak ?? 'na'}:${reversal ?? 'na'}:${recovery ?? 'na'}`;
+}
+
+type SquatCompletionFinalizedSurfacePayloadRead = {
+  completionFinalizedForSurface: boolean;
+  completionFinalizedOwner: 'completion' | null;
+  completionFinalizedEpochId: string | null;
+  completionFinalizedTemporalOrderSatisfied: boolean;
+  completionFinalizedPassReason: string | null;
+  completionFinalizedDescentAtMs: number | null;
+  completionFinalizedPeakAtMs: number | null;
+  completionFinalizedReversalAtMs: number | null;
+  completionFinalizedRecoveryAtMs: number | null;
+  surfaceTemporalTruthSource: SquatSurfaceTemporalTruthSource;
+};
+
+function hasCompletionTruthPassedForSurface(
+  cs: SquatCompletionOwnerStateSlice | undefined
+): boolean {
+  return (
+    cs?.completionSatisfied === true &&
+    cs.completionBlockedReason == null &&
+    cs.currentSquatPhase === 'standing_recovered' &&
+    cs.cycleComplete === true &&
+    cs.completionPassReason != null &&
+    cs.completionPassReason !== 'not_confirmed'
+  );
+}
+
+function readSquatCompletionFinalizedSurfacePayload(
+  cs: SquatCompletionOwnerStateSlice | undefined
+): SquatCompletionFinalizedSurfacePayloadRead {
+  const empty: SquatCompletionFinalizedSurfacePayloadRead = {
+    completionFinalizedForSurface: false,
+    completionFinalizedOwner: null,
+    completionFinalizedEpochId: null,
+    completionFinalizedTemporalOrderSatisfied: false,
+    completionFinalizedPassReason: null,
+    completionFinalizedDescentAtMs: null,
+    completionFinalizedPeakAtMs: null,
+    completionFinalizedReversalAtMs: null,
+    completionFinalizedRecoveryAtMs: null,
+    surfaceTemporalTruthSource: 'none',
+  };
+  if (cs == null) return empty;
+
+  const explicitPayloadPresent =
+    cs.completionFinalizedForSurface !== undefined ||
+    cs.completionFinalizedOwner !== undefined ||
+    cs.completionFinalizedEpochId !== undefined ||
+    cs.completionFinalizedTemporalOrderSatisfied !== undefined ||
+    cs.completionFinalizedPassReason !== undefined ||
+    cs.completionFinalizedDescentAtMs !== undefined ||
+    cs.completionFinalizedPeakAtMs !== undefined ||
+    cs.completionFinalizedReversalAtMs !== undefined ||
+    cs.completionFinalizedRecoveryAtMs !== undefined;
+
+  if (explicitPayloadPresent) {
+    const completionTruthPassedForSurface = hasCompletionTruthPassedForSurface(cs);
+    const completionFinalizedDescentAtMs = cs.completionFinalizedDescentAtMs ?? null;
+    const completionFinalizedPeakAtMs = cs.completionFinalizedPeakAtMs ?? null;
+    const completionFinalizedReversalAtMs = cs.completionFinalizedReversalAtMs ?? null;
+    const completionFinalizedRecoveryAtMs = cs.completionFinalizedRecoveryAtMs ?? null;
+    const completionFinalizedEpochId =
+      cs.completionFinalizedEpochId ??
+      (completionFinalizedDescentAtMs != null ||
+      completionFinalizedPeakAtMs != null ||
+      completionFinalizedReversalAtMs != null ||
+      completionFinalizedRecoveryAtMs != null
+        ? `completion:${completionFinalizedDescentAtMs ?? 'na'}:${
+            completionFinalizedPeakAtMs ?? 'na'
+          }:${completionFinalizedReversalAtMs ?? 'na'}:${completionFinalizedRecoveryAtMs ?? 'na'}`
+        : null);
+    return {
+      completionFinalizedForSurface:
+        completionTruthPassedForSurface &&
+        cs.completionFinalizedForSurface === true &&
+        cs.completionFinalizedOwner === 'completion' &&
+        cs.completionFinalizedTemporalOrderSatisfied === true,
+      completionFinalizedOwner:
+        completionTruthPassedForSurface && cs.completionFinalizedOwner === 'completion'
+          ? 'completion'
+          : null,
+      completionFinalizedEpochId,
+      completionFinalizedTemporalOrderSatisfied:
+        completionTruthPassedForSurface &&
+        cs.completionFinalizedTemporalOrderSatisfied === true,
+      completionFinalizedPassReason:
+        completionTruthPassedForSurface ? cs.completionFinalizedPassReason ?? null : null,
+      completionFinalizedDescentAtMs,
+      completionFinalizedPeakAtMs,
+      completionFinalizedReversalAtMs,
+      completionFinalizedRecoveryAtMs,
+      surfaceTemporalTruthSource: 'completion_finalized_payload',
+    };
+  }
+
+  if (!hasCompletionTruthPassedForSurface(cs)) {
+    return empty;
+  }
+
+  return {
+    completionFinalizedForSurface: true,
+    completionFinalizedOwner: 'completion',
+    completionFinalizedEpochId: buildSquatCompletionEpochId(cs),
+    completionFinalizedTemporalOrderSatisfied:
+      cs.canonicalTemporalEpochOrderSatisfied === true &&
+      cs.canonicalTemporalEpochOrderBlockedReason == null,
+    completionFinalizedPassReason: cs.completionPassReason ?? null,
+    completionFinalizedDescentAtMs: cs.selectedCanonicalDescentTimingEpochAtMs ?? null,
+    completionFinalizedPeakAtMs: cs.selectedCanonicalPeakEpochAtMs ?? null,
+    completionFinalizedReversalAtMs: cs.selectedCanonicalReversalEpochAtMs ?? null,
+    completionFinalizedRecoveryAtMs:
+      cs.selectedCanonicalRecoveryEpochAtMs ?? cs.standingRecoveredAtMs ?? null,
+    surfaceTemporalTruthSource: 'completion_state_fallback',
+  };
 }
 
 /**
@@ -516,6 +662,15 @@ export function resolveSquatCompletionInvariantFailureReason(
     cs.standingFinalizeSatisfied !== true
   ) {
     return 'shallow_recovery_not_authoritative';
+  }
+  const completionFinalizedSurfaceTruth =
+    readSquatCompletionFinalizedSurfacePayload(cs);
+  if (
+    completionFinalizedSurfaceTruth.surfaceTemporalTruthSource ===
+      'completion_finalized_payload' &&
+    completionFinalizedSurfaceTruth.completionFinalizedForSurface === true
+  ) {
+    return null;
   }
   if (cs.canonicalTemporalEpochOrderBlockedReason != null) {
     return `temporal_epoch_order:${cs.canonicalTemporalEpochOrderBlockedReason}`;
@@ -806,10 +961,22 @@ export function computeSquatCompletionOwnerTruth(input: {
   finalSuccessOwner: SquatFinalSuccessOwner;
   officialShallowOwnerFrozen: boolean;
   officialShallowOwnerFreezeBlockedReason: string | null;
+  completionFinalizedForSurface: boolean;
+  completionFinalizedOwner: 'completion' | null;
+  completionFinalizedEpochId: string | null;
+  completionFinalizedTemporalOrderSatisfied: boolean;
+  completionFinalizedPassReason: string | null;
+  completionFinalizedDescentAtMs: number | null;
+  completionFinalizedPeakAtMs: number | null;
+  completionFinalizedReversalAtMs: number | null;
+  completionFinalizedRecoveryAtMs: number | null;
+  surfaceTemporalTruthSource: SquatSurfaceTemporalTruthSource;
 } {
   const cs = input.squatCompletionState;
   const officialShallowOwnerFreeze = readOfficialShallowOwnerFreezeSnapshot(input);
   const completionBand = resolveSquatCompletionBand(cs);
+  const completionFinalizedSurfaceTruth =
+    readSquatCompletionFinalizedSurfacePayload(cs);
   const completionInvariantFailureReason = resolveSquatCompletionInvariantFailureReason(cs);
   const completionEpochId = buildSquatCompletionEpochId(cs);
   if (cs == null) {
@@ -824,6 +991,7 @@ export function computeSquatCompletionOwnerTruth(input: {
       finalSuccessOwner: null,
       officialShallowOwnerFrozen: false,
       officialShallowOwnerFreezeBlockedReason: null,
+      ...completionFinalizedSurfaceTruth,
     };
   }
 
@@ -840,6 +1008,7 @@ export function computeSquatCompletionOwnerTruth(input: {
       officialShallowOwnerFrozen: false,
       officialShallowOwnerFreezeBlockedReason:
         officialShallowOwnerFreeze.officialShallowOwnerBlockedReason,
+      ...completionFinalizedSurfaceTruth,
     };
   }
 
@@ -866,6 +1035,7 @@ export function computeSquatCompletionOwnerTruth(input: {
     finalSuccessOwner,
     officialShallowOwnerFrozen: false,
     officialShallowOwnerFreezeBlockedReason: null,
+    ...completionFinalizedSurfaceTruth,
   };
 }
 

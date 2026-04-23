@@ -1128,6 +1128,20 @@ export interface SquatCompletionState extends MotionCompletionResult {
   selectedCanonicalRecoveryEpochAtMs?: number | null;
   selectedCanonicalRecoveryEpochSource?: 'standing_recovery_finalize_epoch' | null;
   temporalEpochOrderTrace?: string | null;
+  /**
+   * Canonical finalized temporal payload for sink-only surface consumers.
+   * When true, final pass/UI/latch/snapshot must consume this completion-owned
+   * verdict instead of rebuilding a parallel temporal-order ledger.
+   */
+  completionFinalizedForSurface?: boolean;
+  completionFinalizedOwner?: 'completion' | null;
+  completionFinalizedEpochId?: string | null;
+  completionFinalizedTemporalOrderSatisfied?: boolean;
+  completionFinalizedPassReason?: string | null;
+  completionFinalizedDescentAtMs?: number | null;
+  completionFinalizedPeakAtMs?: number | null;
+  completionFinalizedReversalAtMs?: number | null;
+  completionFinalizedRecoveryAtMs?: number | null;
 }
 
 /** PR-CAM-SHALLOW-PROOF-TRACE-11: 명시적 차단 문자열 — JSON 에서 추론 없이 원인 매핑 */
