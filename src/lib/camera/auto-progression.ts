@@ -108,26 +108,6 @@ export type SquatV2AutoProgressionDecisionTrace = {
   blockedReason: string | null;
 };
 
-/**
- * PR6 — Legacy Quality Analyzer Demotion.
- *
- * All fields in this trace are from the legacy squat completion / pass-core /
- * completion-state pipeline. They are retained for false-positive analysis and
- * future safety PRs ONLY.
- *
- * NONE of these fields gate squat progression. The runtime owner is
- * `SquatMotionEvidenceEngineV2.usableMotionEvidence` (`v2RuntimeOwnerDecision`).
- *
- * - `completionSatisfied` / `completionBlockedReason`: legacy completion-state truth.
- * - `passCoreBlockedReason`: legacy pass-core blocked reason.
- * - `finalPassEligible`: legacy post-owner gate result. NOT the top-level ExerciseGateResult.finalPassEligible.
- * - `uiProgressionAllowedLegacy`: legacy UI latch gate. NOT the V2 progression gate.
- * - `officialShallowPathBlockedReason`: legacy official-shallow-path blocker.
- * - `completionTruthPassed`: legacy completion-truth predicate. Does NOT gate V2 progression.
- * - `completionOwnerPassed`: legacy completion-owner result. Does NOT gate V2 progression.
- * - `passOwner`: legacy completion lineage label. NOT a V2 runtime owner.
- * - `finalSuccessOwner`: legacy mirror of passOwner. NOT a V2 progression authority.
- */
 export type SquatLegacyQualityOrCompatTrace = {
   completionSatisfied?: boolean;
   completionBlockedReason?: string | null;
@@ -135,14 +115,6 @@ export type SquatLegacyQualityOrCompatTrace = {
   finalPassEligible?: boolean;
   uiProgressionAllowedLegacy?: boolean;
   officialShallowPathBlockedReason?: string | null;
-  /** PR6: legacy completion-truth predicate. Does NOT gate V2 progression. */
-  completionTruthPassed?: boolean;
-  /** PR6: legacy completion-owner result. Does NOT gate V2 progression. */
-  completionOwnerPassed?: boolean;
-  /** PR6: legacy completion lineage label. NOT a V2 runtime owner. */
-  passOwner?: SquatPassOwner;
-  /** PR6: legacy mirror of passOwner. NOT a V2 progression authority. */
-  finalSuccessOwner?: SquatPassOwner | null;
 };
 
 /**
@@ -440,25 +412,12 @@ export interface SquatCycleDebug {
   reversalConfirmedBy?: string | null;
   reversalDepthDrop?: number | null;
   reversalFrameCount?: number | null;
-  /**
-   * PR-04D1 / PR6-LEGACY-DEMOTION: legacy completion-truth predicate.
-   * Resolved from legacy completionPassReason. Does NOT gate V2 progression.
-   * Mirrored into legacyQualityOrCompat.completionTruthPassed.
-   */
+  /** PR-04D1: pass vs capture-quality 분리 관측 (completion 계산 변경 없음) */
   completionTruthPassed?: boolean;
   qualityOnlyWarnings?: string[];
-  /**
-   * PR-CAM-OWNER-FREEZE-01 / PR6-LEGACY-DEMOTION:
-   * Legacy completion lineage label resolved from completionPassReason.
-   * NOT a V2 runtime progression authority.
-   * Mirrored into legacyQualityOrCompat.passOwner.
-   */
+  /** PR-CAM-OWNER-FREEZE-01: resolveSquatPassOwner 와 동일(레거시 필드명 유지) */
   passOwner?: SquatPassOwner;
-  /**
-   * PR-CAM-OWNER-FREEZE-01 / PR6-LEGACY-DEMOTION:
-   * Legacy mirror of passOwner. NOT a V2 progression authority.
-   * Mirrored into legacyQualityOrCompat.finalSuccessOwner.
-   */
+  /** PR-CAM-OWNER-FREEZE-01: 최종 성공 오너 — passOwner 와 동일 값 */
   finalSuccessOwner?: SquatPassOwner | null;
   finalPassSource?: 'completion';
   completionBand?: SquatCompletionBand;
@@ -483,10 +442,7 @@ export interface SquatCycleDebug {
   shadowEventOwnerEligible?: boolean;
   ownerFreezeVersion?: string;
   lowQualityPassAllowed?: boolean;
-  /**
-   * PR-01 / PR6-LEGACY-DEMOTION: legacy completion-owner result.
-   * Does NOT gate V2 progression. Mirrored into legacyQualityOrCompat.completionOwnerPassed.
-   */
+  /** PR-01: completion truth 전용 owner(캡처·confidence·passConfirm·integrity 미포함) */
   completionOwnerPassed?: boolean;
   completionOwnerReason?: string | null;
   completionOwnerBlockedReason?: string | null;
@@ -3191,13 +3147,6 @@ export function evaluateExerciseAutoProgress(
           squatCs?.officialShallowPathBlockedReason ??
           squatCycleDebug.legacyQualityOrCompat?.officialShallowPathBlockedReason ??
           null,
-        // PR6 — Legacy Quality Analyzer Demotion: mirror top-level legacy fields
-        // into legacyQualityOrCompat so they are clearly co-located with other
-        // non-gating legacy values. These do NOT affect progressionPassed (V2 only).
-        completionTruthPassed: squatCycleDebug.completionTruthPassed,
-        completionOwnerPassed: squatOwnerTruth?.completionOwnerPassed,
-        passOwner: lineageOwner,
-        finalSuccessOwner,
       },
       officialShallowOwnerFrozen: squatOwnerTruth?.officialShallowOwnerFrozen,
       officialShallowOwnerFreezeBlockedReason:
