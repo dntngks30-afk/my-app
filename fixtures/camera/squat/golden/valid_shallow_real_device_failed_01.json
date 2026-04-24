@@ -1,0 +1,25 @@
+{
+  "fixtureVersion": 1,
+  "id": "valid_shallow_real_device_failed_01",
+  "source": "PR5-FIX real-device failure class fixture derived from dogfooding notes",
+  "expected": "pass",
+  "legacyBlockedReason": "no_reversal",
+  "notes": [
+    "Shallow lower-body down-up-return around relativeDepthPeak 0.06.",
+    "Legacy path may report no_reversal even though V2 usable motion evidence is present."
+  ],
+  "v2Frames": [
+    { "timestampMs": 0, "lowerBodySignal": 0.004, "upperBodySignal": 0.018, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 80, "lowerBodySignal": 0.006, "upperBodySignal": 0.019, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 160, "lowerBodySignal": 0.018, "upperBodySignal": 0.021, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 240, "lowerBodySignal": 0.034, "upperBodySignal": 0.024, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 320, "lowerBodySignal": 0.052, "upperBodySignal": 0.027, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 400, "lowerBodySignal": 0.064, "upperBodySignal": 0.029, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 480, "lowerBodySignal": 0.058, "upperBodySignal": 0.028, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 560, "lowerBodySignal": 0.043, "upperBodySignal": 0.026, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 640, "lowerBodySignal": 0.026, "upperBodySignal": 0.024, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 720, "lowerBodySignal": 0.012, "upperBodySignal": 0.021, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 800, "lowerBodySignal": 0.007, "upperBodySignal": 0.019, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 880, "lowerBodySignal": 0.006, "upperBodySignal": 0.018, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "fixtureVersion": 1,
+  "id": "valid_deep_real_device_passed_01",
+  "source": "PR5-FIX real-device deep pass control fixture",
+  "expected": "pass",
+  "legacyBlockedReason": null,
+  "notes": [
+    "Deep down-up-return remains pass under V2 owner.",
+    "No bottom hold requirement."
+  ],
+  "v2Frames": [
+    { "timestampMs": 0, "lowerBodySignal": 0.01, "upperBodySignal": 0.03, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 100, "lowerBodySignal": 0.04, "upperBodySignal": 0.035, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 200, "lowerBodySignal": 0.13, "upperBodySignal": 0.045, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 300, "lowerBodySignal": 0.28, "upperBodySignal": 0.055, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 400, "lowerBodySignal": 0.43, "upperBodySignal": 0.065, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 500, "lowerBodySignal": 0.52, "upperBodySignal": 0.07, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 600, "lowerBodySignal": 0.48, "upperBodySignal": 0.065, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 700, "lowerBodySignal": 0.34, "upperBodySignal": 0.055, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 800, "lowerBodySignal": 0.18, "upperBodySignal": 0.045, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 900, "lowerBodySignal": 0.06, "upperBodySignal": 0.035, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 1000, "lowerBodySignal": 0.018, "upperBodySignal": 0.032, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 1100, "lowerBodySignal": 0.014, "upperBodySignal": 0.03, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true }
+  ]
+}

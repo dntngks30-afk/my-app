@@ -23,6 +23,29 @@ const STANDARD_ROM_MAX = 0.32;
 const RETURN_TOLERANCE_MIN = 0.018;
 const STABLE_RETURN_FRAMES = 2;
 const MAX_REP_FRAME_GAP_MS = 750;
+/**
+ * Maximum total cycle duration (start→return) for a single current squat attempt.
+ * Tightened from 8000ms: the real-device false-positive had returnMs ~4800ms which
+ * the old 8000ms guard missed. Real squats complete in 1-4 seconds; anything longer
+ * signals stale buffer contamination from setup/positioning or a prior attempt.
+ * This is NOT a speed/depth constraint — it is purely a staleness guard.
+ */
+const MAX_SQUAT_CYCLE_MS = 4500;
+/**
+ * Maximum allowed time (ms) between stableAfterReturnFrameIndex and the last input frame.
+ * If the closure was detected more than this many ms before the latest frame, the cycle
+ * was completed in the past (stale closure reuse). The user's current motion is AFTER the
+ * closure — e.g. new descent after setup positioning — and must not be counted as passing.
+ * 400ms ≈ 4 frames at 10fps: tight enough to reject 2600ms/1700ms false positives,
+ * loose enough to not reject squats that completed one or two frames before the eval tick.
+ */
+const MAX_TAIL_CLOSURE_LAG_MS = 400;
+/**
+ * Minimum number of frames that must precede descentStartFrameIndex.
+ * Tracked as evidence only (not a hard blocker alone); the tail freshness check
+ * is the primary guard. startIndex=0 means the window has no pre-descent baseline.
+ */
+const MIN_PRE_DESCENT_BASELINE_FRAMES = 3;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === 'object';
@@ -283,14 +306,20 @@ function findMotionWindow(frames: readonly NormalizedFrame[], depths: readonly n
     }
   }
 
+  let stableAfterReturnIndex: number | null = null;
   let stableAfterReturn = false;
   if (returnIndex != null) {
     const stableSlice = depths.slice(returnIndex, returnIndex + STABLE_RETURN_FRAMES);
-    stableAfterReturn =
+    const stableOk =
       stableSlice.length >= STABLE_RETURN_FRAMES &&
       max(stableSlice) <= startDepth + Math.max(RETURN_TOLERANCE_MIN * 1.25, relativePeak * 0.45);
+    if (stableOk) {
+      stableAfterReturn = true;
+      stableAfterReturnIndex = returnIndex + STABLE_RETURN_FRAMES - 1;
+    }
   }
 
+  let reversalFrameIndex: number | null = null;
   let reversal = false;
   for (let i = peakIndex + 1; i < depths.length; i += 1) {
     const drop = peakDepth - depths[i]!;
@@ -298,17 +327,25 @@ function findMotionWindow(frames: readonly NormalizedFrame[], depths: readonly n
     const twoFrameDrop = i + 1 < depths.length ? previous - depths[i + 1]! : 0;
     if (drop >= Math.max(0.014, relativePeak * 0.25) && previous >= depths[i]! && twoFrameDrop >= 0) {
       reversal = true;
+      reversalFrameIndex = i;
       break;
     }
   }
 
   const meaningfulDescent = relativePeak >= MEANINGFUL_DESCENT_MIN;
   const descent = meaningfulDescent ? relativePeak >= MICRO_ROM_MAX : false;
-  const nearStartReturn = meaningfulDescent && returnIndex != null;
-  stableAfterReturn = meaningfulDescent && stableAfterReturn;
+
+  // nearStartReturn requires: (1) meaningful descent occurred, (2) reversal after peak, (3) depth returned to near-start.
+  // It must NOT be satisfied merely by initial standing frames before any descent.
+  const nearStartReturn = meaningfulDescent && reversal && returnIndex != null;
+  stableAfterReturn = meaningfulDescent && reversal && stableAfterReturn;
   reversal = meaningfulDescent && reversal;
   const returnDeltaToStart = Math.max(0, bestReturnDepth - startDepth);
 
+  // sameRepOwnership validates that the complete descent→reversal→return cycle
+  // originated from the same continuous motion window (startIndex < peakIndex,
+  // no large temporal gaps, no setup-phase frames within the window).
+  // Note: reversalFrameIndex can equal returnIndex on steep recovery (valid).
   let sameRepOwnership = meaningfulDescent && reversal && nearStartReturn && stableAfterReturn && startIndex < peakIndex;
   const endIndex = returnIndex ?? frames.length - 1;
   for (let i = startIndex + 1; i <= endIndex; i += 1) {
@@ -323,7 +360,9 @@ function findMotionWindow(frames: readonly NormalizedFrame[], depths: readonly n
   return {
     startIndex,
     peakIndex,
+    reversalFrameIndex,
     returnIndex,
+    stableAfterReturnIndex,
     startDepth,
     peakDepth,
     relativePeak,
@@ -356,6 +395,10 @@ function emptyDecision(
     notSetupPhase: false,
     notUpperBodyOnly: false,
     notMicroBounce: false,
+    temporalClosureSatisfied: false,
+    activeAttemptWindowSatisfied: false,
+    closureFreshAtTail: false,
+    preDescentBaselineSatisfied: false,
     ...overrides,
   };
   return {
@@ -393,10 +436,15 @@ export function evaluateSquatMotionEvidenceV2(
 ): SquatMotionEvidenceDecisionV2 {
   const frames = normalizeFrames(framesInput);
   const estimatedFps = estimateFps(frames);
+  const inputFrameCount = frames.length;
+  const inputWindowDurationMs =
+    frames.length > 1
+      ? frames[frames.length - 1]!.timestampMs - frames[0]!.timestampMs
+      : 0;
   const metricsBase = estimatedFps ? { estimatedFps } : {};
 
   if (frames.length < 4) {
-    return emptyDecision('none', 'micro', 'body_not_visible', {}, metricsBase);
+    return emptyDecision('none', 'micro', 'body_not_visible', {}, { ...metricsBase, inputFrameCount, inputWindowDurationMs });
   }
 
   const visibleRatio = mean(frames.map((frame) => (frame.bodyVisible && frame.lowerBodyVisible ? 1 : 0)));
@@ -408,6 +456,56 @@ export function evaluateSquatMotionEvidenceV2(
   const romBand = classifyRomBand(motion.relativePeak);
   const notMicroBounce = motion.relativePeak >= MEANINGFUL_DESCENT_MIN;
   const notUpperBodyOnly = lowerDominant;
+
+  const returnMs =
+    motion.returnIndex != null
+      ? frames[motion.returnIndex]!.timestampMs - frames[motion.startIndex]!.timestampMs
+      : undefined;
+
+  // ── Tail closure freshness guard ─────────────────────────────────────────
+  // stableAfterReturnFrameIndex must be within MAX_TAIL_CLOSURE_LAG_MS of the
+  // last input frame. If the stable-after-return frame is far in the past, the
+  // detected cycle is a STALE CLOSURE from setup/positioning (not the current
+  // active attempt). The user's current motion (new descent) is AFTER the closure.
+  // Real-device false positive: tailDistance=2600ms/1700ms → both must fail.
+  const lastFrameIndex = frames.length - 1;
+  const lastFrameTimestampMs = frames[lastFrameIndex]!.timestampMs;
+  const stableAfterReturnTimestampMs =
+    motion.stableAfterReturnIndex != null ? frames[motion.stableAfterReturnIndex]!.timestampMs : null;
+  const tailDistanceFrames =
+    motion.stableAfterReturnIndex != null ? lastFrameIndex - motion.stableAfterReturnIndex : null;
+  const tailDistanceMs =
+    stableAfterReturnTimestampMs != null ? lastFrameTimestampMs - stableAfterReturnTimestampMs : null;
+  const closureFreshAtTail = tailDistanceMs != null && tailDistanceMs <= MAX_TAIL_CLOSURE_LAG_MS;
+
+  // ── Pre-descent baseline tracking ────────────────────────────────────────
+  // Tracked as evidence (informational). descentStartFrameIndex=0 means the
+  // rolling window has no stable baseline before the detected descent started.
+  const preDescentBaselineSatisfied = motion.startIndex >= MIN_PRE_DESCENT_BASELINE_FRAMES;
+
+  // ── Attempt duration cap ──────────────────────────────────────────────────
+  // The cycle duration (start→return) must not exceed MAX_SQUAT_CYCLE_MS.
+  // This is a secondary staleness guard for cases where the closure is at the
+  // tail but the cycle itself spans an implausibly long time window.
+  const activeAttemptWindowSatisfied = returnMs == null || returnMs <= MAX_SQUAT_CYCLE_MS;
+
+  // closureBlockedReason: first applicable guard that blocks the pass.
+  const closureBlockedReason: string | null =
+    motion.stableAfterReturn && !closureFreshAtTail
+      ? 'stale_closure_not_at_tail'
+      : !activeAttemptWindowSatisfied
+      ? 'attempt_duration_out_of_scope'
+      : null;
+
+  // temporalClosureSatisfied: all structural AND temporal conditions satisfied.
+  const temporalClosureSatisfied =
+    activeAttemptWindowSatisfied &&
+    closureFreshAtTail &&
+    motion.meaningfulDescent &&
+    motion.reversal &&
+    motion.nearStartReturn &&
+    motion.stableAfterReturn;
+
   const evidence: SquatMotionEvidenceDecisionV2['evidence'] = {
     bodyVisibleEnough: bodyVisible,
     lowerBodyMotionDominant: lowerDominant,
@@ -420,13 +518,15 @@ export function evaluateSquatMotionEvidenceV2(
     notSetupPhase,
     notUpperBodyOnly,
     notMicroBounce,
+    temporalClosureSatisfied,
+    activeAttemptWindowSatisfied,
+    closureFreshAtTail,
+    preDescentBaselineSatisfied,
   };
-  const returnMs =
-    motion.returnIndex != null
-      ? frames[motion.returnIndex]!.timestampMs - frames[motion.startIndex]!.timestampMs
-      : undefined;
   const metrics: SquatMotionEvidenceDecisionV2['metrics'] = {
     ...metricsBase,
+    inputFrameCount,
+    inputWindowDurationMs,
     relativePeak: motion.relativePeak,
     descentMagnitude: motion.relativePeak,
     returnDeltaToStart: motion.returnDeltaToStart,
@@ -436,6 +536,14 @@ export function evaluateSquatMotionEvidenceV2(
         ? frames[motion.returnIndex]!.timestampMs - frames[motion.peakIndex]!.timestampMs
         : undefined,
     returnMs,
+    descentStartFrameIndex: motion.startIndex,
+    peakFrameIndex: motion.peakIndex,
+    reversalFrameIndex: motion.reversalFrameIndex,
+    nearStartReturnFrameIndex: motion.returnIndex,
+    stableAfterReturnFrameIndex: motion.stableAfterReturnIndex,
+    tailDistanceFrames,
+    tailDistanceMs,
+    closureBlockedReason,
   };
 
   if (!bodyVisible) {
@@ -478,6 +586,19 @@ export function evaluateSquatMotionEvidenceV2(
   }
   if (!motion.stableAfterReturn) {
     return buildDecision(false, 'incomplete_return', romBand, 'incomplete_return', evidence, metrics);
+  }
+  // ── Tail closure check (PRIMARY staleness guard) ──────────────────────────
+  // stableAfterReturn is true but the closure is far from the current tail.
+  // This means the complete cycle happened in the PAST (old positioning motion)
+  // while the current input tail shows the user in a different state (new descent).
+  // Real-device false positive primary cause: tailDistanceMs = 2600ms / 1700ms.
+  if (!closureFreshAtTail) {
+    return buildDecision(false, 'none', romBand, 'stale_closure_not_at_tail', evidence, metrics);
+  }
+  // ── Attempt duration cap (SECONDARY staleness guard) ─────────────────────
+  // Even if the closure is at the tail, the cycle must not span too long a time.
+  if (!activeAttemptWindowSatisfied) {
+    return buildDecision(false, 'none', romBand, 'attempt_duration_out_of_scope', evidence, metrics);
   }
   if (!motion.sameRepOwnership) {
     return buildDecision(false, 'none', romBand, 'same_rep_ownership_failed', evidence, metrics);

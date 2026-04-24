@@ -16,6 +16,8 @@ import {
 } from '@/lib/camera/squat-completion-state';
 import { evaluateSquatPassCore, type SquatPassCoreDepthFrame } from '@/lib/camera/squat/pass-core';
 import { buildSquatPassWindow } from '@/lib/camera/squat/pass-window';
+import { evaluateSquatMotionEvidenceV2 } from '@/lib/camera/squat/squat-motion-evidence-v2';
+import type { SquatMotionEvidenceFrameV2 } from '@/lib/camera/squat/squat-motion-evidence-v2.types';
 import {
   computeSquatDescentTruth,
 } from '@/lib/camera/squat/squat-descent-truth';
@@ -72,8 +74,73 @@ function countPhases(frames: PoseFeaturesFrame[], phase: PoseFeaturesFrame['phas
   return frames.filter((frame) => frame.phaseHint === phase).length;
 }
 
+function finite(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function runtimeV2Depth(frame: PoseFeaturesFrame): number {
+  return (
+    finite(frame.derived.squatDepthProxyBlended) ??
+    finite(frame.derived.squatDepthProxy) ??
+    finite(frame.derived.squatDepthProxyRaw) ??
+    0
+  );
+}
+
+function runtimeV2UpperBodySignal(frame: PoseFeaturesFrame): number {
+  const arm = finite(frame.derived.armElevationAvg);
+  const trunk = finite(frame.derived.trunkLeanDeg);
+  const armNorm = arm == null ? 0 : Math.min(1, Math.max(0, arm / 180));
+  const trunkNorm = trunk == null ? 0 : Math.min(1, Math.abs(trunk) / 90);
+  return Math.max(armNorm, trunkNorm);
+}
+
+function toSquatMotionEvidenceV2Frames(frames: PoseFeaturesFrame[]): SquatMotionEvidenceFrameV2[] {
+  return frames.map((frame) => ({
+    timestampMs: frame.timestampMs,
+    depth: runtimeV2Depth(frame),
+    lowerBodySignal: runtimeV2Depth(frame),
+    upperBodySignal: runtimeV2UpperBodySignal(frame),
+    bodyVisibleEnough: frame.isValid && frame.frameValidity === 'valid',
+    lowerBodyVisibleEnough: frame.visibilitySummary.criticalJointsAvailability >= 0.6,
+    phaseHint: frame.phaseHint,
+    isValid: frame.isValid,
+    frameValidity: frame.frameValidity,
+    visibilitySummary: frame.visibilitySummary,
+    derived: frame.derived,
+    joints: frame.joints,
+  }));
+}
+
+/**
+ * Maximum evaluation window passed to SquatMotionEvidenceEngineV2.
+ * Bounding to recent frames prevents stale setup/positioning motion from being
+ * conflated with the current squat attempt (PR5-FIX-2 regression guard).
+ */
+const MAX_V2_EVAL_WINDOW_MS = 5000;
+
 export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): EvaluatorResult {
   const validRaw = frames.filter((frame) => frame.isValid);
+
+  // Bound V2 input to the most recent MAX_V2_EVAL_WINDOW_MS of valid frames.
+  // This prevents setup motion from seconds before the active attempt from
+  // contaminating the V2 evaluation window and producing stale down_up_return.
+  // The tail-closure guard inside V2 provides the primary staleness defense;
+  // this window binding is a complementary pre-filter.
+  const latestValidTs = validRaw[validRaw.length - 1]?.timestampMs ?? 0;
+  const v2EvalFrames = validRaw.filter(
+    (f) => f.timestampMs >= latestValidTs - MAX_V2_EVAL_WINDOW_MS
+  );
+  const squatMotionEvidenceV2 = evaluateSquatMotionEvidenceV2(
+    toSquatMotionEvidenceV2Frames(v2EvalFrames)
+  );
+  // Annotate V2 metrics with evaluator-side epoch context for traceability.
+  if (squatMotionEvidenceV2.metrics) {
+    (squatMotionEvidenceV2.metrics as Record<string, unknown>).v2EpochStartMs =
+      v2EvalFrames[0]?.timestampMs;
+    (squatMotionEvidenceV2.metrics as Record<string, unknown>).v2EpochSource =
+      'latestValidTs_minus_5000ms';
+  }
   if (validRaw.length < MIN_VALID_FRAMES) {
     const emptyDiag = {
       criticalJointAvailability: 0,
@@ -104,6 +171,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         },
         perStepDiagnostics: { descent: emptyDiag, bottom: emptyDiag, ascent: emptyDiag },
         squatInternalQuality: squatInternalQualityInsufficientSignal(),
+        squatMotionEvidenceV2,
       },
     };
   }
@@ -152,6 +220,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         },
         perStepDiagnostics: { descent: emptyDiag, bottom: emptyDiag, ascent: emptyDiag },
         squatInternalQuality: squatInternalQualityInsufficientSignal(),
+        squatMotionEvidenceV2,
       },
     };
   }
@@ -900,6 +969,8 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       squatCalibration,
       /** PR-04E3B: shallow event-cycle helper — populated by completion-state */
       squatEventCycle: state.squatEventCycle,
+      /** PR-SQUAT-V2-02: runtime owner decision; legacy pass/completion fields are debug/compat only. */
+      squatMotionEvidenceV2,
     },
   };
 }

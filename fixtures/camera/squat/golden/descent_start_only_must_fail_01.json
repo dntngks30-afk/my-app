@@ -1,0 +1,22 @@
+{
+  "fixtureVersion": 1,
+  "id": "descent_start_only_must_fail_01",
+  "source": "PR5-FIX-2 temporal closure guard synthetic fixture",
+  "expected": "fail",
+  "expectedBlockReason": "no_reversal",
+  "notes": [
+    "Simulates the regression scenario: user begins descending (meaningful descent detected),",
+    "but has not yet completed reversal or return to start.",
+    "V2 must NOT pass immediately on descent start even when meaningfulDescent=true.",
+    "This is the exact failure mode observed on real device after PR5-FIX."
+  ],
+  "v2Frames": [
+    { "timestampMs": 0,   "lowerBodySignal": 0.004, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 33,  "lowerBodySignal": 0.006, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 66,  "lowerBodySignal": 0.012, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 100, "lowerBodySignal": 0.026, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 133, "lowerBodySignal": 0.042, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 166, "lowerBodySignal": 0.055, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 200, "lowerBodySignal": 0.070, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true }
+  ]
+}

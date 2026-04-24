@@ -1,0 +1,24 @@
+{
+  "fixtureVersion": 1,
+  "id": "valid_shallow_real_device_failed_02",
+  "source": "PR5-FIX real-device failure class fixture derived from dogfooding notes",
+  "expected": "pass",
+  "legacyBlockedReason": "no_return_to_start",
+  "notes": [
+    "Shallow down-up-return with short duration and clear near-start return.",
+    "Legacy path may report no_return_to_start; V2 should pass on usable motion evidence."
+  ],
+  "v2Frames": [
+    { "timestampMs": 0, "lowerBodySignal": 0.006, "upperBodySignal": 0.02, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 70, "lowerBodySignal": 0.009, "upperBodySignal": 0.021, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 140, "lowerBodySignal": 0.021, "upperBodySignal": 0.023, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 210, "lowerBodySignal": 0.039, "upperBodySignal": 0.026, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 280, "lowerBodySignal": 0.058, "upperBodySignal": 0.03, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 350, "lowerBodySignal": 0.061, "upperBodySignal": 0.031, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 420, "lowerBodySignal": 0.046, "upperBodySignal": 0.028, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 490, "lowerBodySignal": 0.029, "upperBodySignal": 0.025, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 560, "lowerBodySignal": 0.015, "upperBodySignal": 0.022, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 630, "lowerBodySignal": 0.008, "upperBodySignal": 0.02, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 700, "lowerBodySignal": 0.007, "upperBodySignal": 0.02, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true }
+  ]
+}

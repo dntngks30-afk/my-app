@@ -1,0 +1,38 @@
+{
+  "fixtureVersion": 1,
+  "id": "stale_buffer_closure_must_fail_01",
+  "source": "PR5-FIX-2 temporal closure guard synthetic fixture",
+  "expected": "fail",
+  "expectedBlockReason": "window_out_of_scope",
+  "notes": [
+    "Simulates stale buffer contamination: a slow plateau squat where the depth stays elevated",
+    "for many seconds (total cycle > 8000ms = MAX_SQUAT_CYCLE_MS).",
+    "At fps=2 (500ms/frame), 21 frames span 10000ms total.",
+    "startIndex=0 (t=0ms), peakIndex=2 (t=1000ms), returnIndex=19 (t=9500ms).",
+    "returnMs = 9500ms > 8000ms -> activeAttemptWindowSatisfied=false -> window_out_of_scope.",
+    "This mirrors the real regression where descentMs~6977ms, returnMs~7067ms from setup positioning."
+  ],
+  "v2Frames": [
+    { "timestampMs": 0,    "lowerBodySignal": 0.000, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 500,  "lowerBodySignal": 0.040, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 1000, "lowerBodySignal": 0.080, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 1500, "lowerBodySignal": 0.070, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 2000, "lowerBodySignal": 0.065, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 2500, "lowerBodySignal": 0.062, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 3000, "lowerBodySignal": 0.060, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 3500, "lowerBodySignal": 0.058, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 4000, "lowerBodySignal": 0.056, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 4500, "lowerBodySignal": 0.054, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 5000, "lowerBodySignal": 0.052, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 5500, "lowerBodySignal": 0.050, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 6000, "lowerBodySignal": 0.048, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 6500, "lowerBodySignal": 0.046, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 7000, "lowerBodySignal": 0.044, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 7500, "lowerBodySignal": 0.042, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 8000, "lowerBodySignal": 0.040, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 8500, "lowerBodySignal": 0.038, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 9000, "lowerBodySignal": 0.036, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 9500, "lowerBodySignal": 0.018, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true },
+    { "timestampMs": 10000,"lowerBodySignal": 0.012, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true }
+  ]
+}

@@ -32,6 +32,20 @@ export interface SquatMotionEvidenceDecisionV2 {
     notSetupPhase: boolean;
     notUpperBodyOnly: boolean;
     notMicroBounce: boolean;
+    /** True only when the full descent→reversal→return cycle occurred within the active attempt window. */
+    temporalClosureSatisfied: boolean;
+    /** True only when the cycle duration (start→return) is within the expected squat window bounds. */
+    activeAttemptWindowSatisfied: boolean;
+    /**
+     * True when stableAfterReturnFrameIndex is within MAX_TAIL_CLOSURE_LAG_MS of the last input frame.
+     * False means the closure was detected far in the past (stale closure reuse from setup/positioning).
+     */
+    closureFreshAtTail: boolean;
+    /**
+     * True when there are sufficient stable frames before descentStartFrameIndex (pre-descent baseline).
+     * False when descentStartFrameIndex=0, meaning no standing baseline before the descent was captured.
+     */
+    preDescentBaselineSatisfied: boolean;
   };
   metrics: {
     relativePeak?: number;
@@ -41,6 +55,30 @@ export interface SquatMotionEvidenceDecisionV2 {
     ascentMs?: number;
     returnMs?: number;
     estimatedFps?: number;
+    /** Total frame count passed to V2 for this evaluation. */
+    inputFrameCount?: number;
+    /** Duration (ms) spanned by the input frames (lastTs - firstTs). */
+    inputWindowDurationMs?: number;
+    /** Frame index where meaningful descent was first detected. */
+    descentStartFrameIndex?: number;
+    /** Frame index of the depth peak (bottom of squat). */
+    peakFrameIndex?: number;
+    /** Frame index where reversal (upward motion after peak) was confirmed. */
+    reversalFrameIndex?: number | null;
+    /** Frame index where depth first returned to near-start after reversal. */
+    nearStartReturnFrameIndex?: number | null;
+    /** Frame index of the first stable frame after return. */
+    stableAfterReturnFrameIndex?: number | null;
+    /** Distance in frames from stableAfterReturnFrameIndex to the last input frame. */
+    tailDistanceFrames?: number | null;
+    /** Distance in ms from the stable-after-return timestamp to the last input frame timestamp. */
+    tailDistanceMs?: number | null;
+    /** Non-null when temporal closure or active-window guard blocked pass. */
+    closureBlockedReason?: string | null;
+    /** Epoch start timestamp (ms) passed from the evaluator to bound V2 input frames. */
+    v2EpochStartMs?: number;
+    /** Description of which epoch source was used to bound V2 input frames. */
+    v2EpochSource?: string;
   };
 }
 

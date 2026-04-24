@@ -1,0 +1,24 @@
+{
+  "fixtureVersion": 1,
+  "id": "valid_shallow_real_device_failed_03",
+  "source": "PR5-FIX real-device failure class fixture derived from dogfooding notes",
+  "expected": "pass",
+  "legacyBlockedReason": "setup_motion_blocked",
+  "notes": [
+    "Shallow candidate with legacy setup/readiness blocker contamination.",
+    "V2 runtime owner should pass because the down-up-return motion window itself is valid."
+  ],
+  "v2Frames": [
+    { "timestampMs": 0, "lowerBodySignal": 0.005, "upperBodySignal": 0.017, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 90, "lowerBodySignal": 0.007, "upperBodySignal": 0.018, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 180, "lowerBodySignal": 0.019, "upperBodySignal": 0.02, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 270, "lowerBodySignal": 0.036, "upperBodySignal": 0.023, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 360, "lowerBodySignal": 0.053, "upperBodySignal": 0.025, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 450, "lowerBodySignal": 0.062, "upperBodySignal": 0.027, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 540, "lowerBodySignal": 0.055, "upperBodySignal": 0.026, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 630, "lowerBodySignal": 0.037, "upperBodySignal": 0.023, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 720, "lowerBodySignal": 0.02, "upperBodySignal": 0.021, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 810, "lowerBodySignal": 0.009, "upperBodySignal": 0.018, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 900, "lowerBodySignal": 0.007, "upperBodySignal": 0.017, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false }
+  ]
+}

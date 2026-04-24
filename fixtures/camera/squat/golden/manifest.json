@@ -17,6 +17,34 @@
       "description": "Real-device deep down-up-return; V2 must yield usable motion evidence (pass)."
     },
     {
+      "id": "valid_shallow_real_device_failed_01",
+      "file": "valid_shallow_real_device_failed_01.json",
+      "expected": "pass",
+      "required": true,
+      "description": "PR5-FIX real-device failure class: shallow down-up-return formerly blocked by legacy no_reversal."
+    },
+    {
+      "id": "valid_shallow_real_device_failed_02",
+      "file": "valid_shallow_real_device_failed_02.json",
+      "expected": "pass",
+      "required": true,
+      "description": "PR5-FIX real-device failure class: shallow down-up-return formerly blocked by legacy no_return_to_start."
+    },
+    {
+      "id": "valid_shallow_real_device_failed_03",
+      "file": "valid_shallow_real_device_failed_03.json",
+      "expected": "pass",
+      "required": true,
+      "description": "PR5-FIX real-device failure class: shallow down-up-return formerly blocked by setup/not_armed legacy gates."
+    },
+    {
+      "id": "valid_deep_real_device_passed_01",
+      "file": "valid_deep_real_device_passed_01.json",
+      "expected": "pass",
+      "required": true,
+      "description": "PR5-FIX real-device pass class: deep down-up-return remains V2-owned pass."
+    },
+    {
       "id": "standing_must_fail_01",
       "file": "standing_must_fail_01.json",
       "expected": "fail",
@@ -29,6 +57,62 @@
       "expected": "fail",
       "required": true,
       "description": "Seated or bottom-hold without valid return; V2 must not mark usable evidence (fail)."
+    },
+    {
+      "id": "descent_start_only_must_fail_01",
+      "file": "descent_start_only_must_fail_01.json",
+      "expected": "fail",
+      "required": true,
+      "description": "PR5-FIX-2 guard: descent started but no reversal yet. V2 must not pass immediately on descent start."
+    },
+    {
+      "id": "stale_buffer_closure_must_fail_01",
+      "file": "stale_buffer_closure_must_fail_01.json",
+      "expected": "fail",
+      "required": true,
+      "description": "PR5-FIX-2 guard: cycle window spans >4500ms (stale setup/prior-attempt buffer). V2 must reject as attempt_duration_out_of_scope."
+    },
+    {
+      "id": "real_device_false_pass_descent_start_01",
+      "file": "real_device_false_pass_descent_start_01.json",
+      "expected": "fail",
+      "required": true,
+      "description": "PR5-FIX-3 guard: synthetic representation of real-device false positive case 1 (fail01.json). Slow positioning rise, stale closure far from tail. V2 must reject as stale_closure_not_at_tail."
+    },
+    {
+      "id": "real_device_false_pass_descent_start_02",
+      "file": "real_device_false_pass_descent_start_02.json",
+      "expected": "fail",
+      "required": true,
+      "description": "PR5-FIX-3 guard: synthetic representation of real-device false positive case 2 (fail02.json). Same pattern with slightly different frame count. V2 must reject as stale_closure_not_at_tail."
+    },
+    {
+      "id": "descent_start_frame_zero_must_fail",
+      "file": "descent_start_frame_zero_must_fail.json",
+      "expected": "fail",
+      "required": true,
+      "description": "PR5-FIX-3 guard: descentStartFrameIndex=0 (no pre-descent baseline) with stale closure far from tail. V2 must reject as stale_closure_not_at_tail."
+    },
+    {
+      "id": "reversal_return_same_frame_must_fail",
+      "file": "reversal_return_same_frame_must_fail.json",
+      "expected": "fail",
+      "required": true,
+      "description": "PR5-FIX-3 guard: reversalFrameIndex === nearStartReturnFrameIndex (same frame) with stale closure. V2 must reject as stale_closure_not_at_tail."
+    },
+    {
+      "id": "stale_closure_not_at_tail_must_fail",
+      "file": "stale_closure_not_at_tail_must_fail.json",
+      "expected": "fail",
+      "required": true,
+      "description": "PR5-FIX-3 guard: explicit tail-freshness test. Complete cycle < 4500ms (cycle cap won't fire) but stableAfterReturn is far from input tail (>400ms). V2 must reject as stale_closure_not_at_tail."
+    },
+    {
+      "id": "setup_positioning_then_stand_then_later_descent_start_must_fail",
+      "file": "setup_positioning_then_stand_then_later_descent_start_must_fail.json",
+      "expected": "fail",
+      "required": true,
+      "description": "PR5-FIX-3 guard: old positioning motion creates stale closure, then user stands, then starts new descent. Full regression pattern. V2 must reject as stale_closure_not_at_tail."
     }
   ]
 }
