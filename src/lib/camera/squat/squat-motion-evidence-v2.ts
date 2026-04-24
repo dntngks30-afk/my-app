@@ -489,6 +489,14 @@ export function evaluateSquatMotionEvidenceV2(
   // tail but the cycle itself spans an implausibly long time window.
   const activeAttemptWindowSatisfied = returnMs == null || returnMs <= MAX_SQUAT_CYCLE_MS;
 
+  // ── PR6-FIX-01B: Peak-to-tail diagnostics ────────────────────────────────
+  // Used for Guard B (same-frame reversal/return) and Guard C (short post-peak).
+  // peakDistanceFromTailFrames < 3 or peakDistanceFromTailMs < 250ms indicates
+  // the post-peak window is too short for reliable reversal/return detection.
+  const peakFrameTs = frames[motion.peakIndex]!.timestampMs;
+  const peakDistanceFromTailFramesInternal = lastFrameIndex - motion.peakIndex;
+  const peakDistanceFromTailMsInternal = lastFrameTimestampMs - peakFrameTs;
+
   // closureBlockedReason: first applicable guard that blocks the pass.
   const closureBlockedReason: string | null =
     motion.stableAfterReturn && !closureFreshAtTail
@@ -544,6 +552,11 @@ export function evaluateSquatMotionEvidenceV2(
     tailDistanceFrames,
     tailDistanceMs,
     closureBlockedReason,
+    // PR6-FIX-01B: Peak-to-tail metrics (computed internally for guard logic + diagnostics)
+    peakDistanceFromTailFrames: peakDistanceFromTailFramesInternal,
+    peakDistanceFromTailMs: peakDistanceFromTailMsInternal,
+    framesAfterPeak: peakDistanceFromTailFramesInternal,
+    msAfterPeak: peakDistanceFromTailMsInternal,
   };
 
   if (!bodyVisible) {
@@ -587,6 +600,26 @@ export function evaluateSquatMotionEvidenceV2(
   if (!motion.stableAfterReturn) {
     return buildDecision(false, 'incomplete_return', romBand, 'incomplete_return', evidence, metrics);
   }
+  // ── Guard B (PR6-FIX-01B): Return must follow reversal (distinct frames) ──
+  // If nearStartReturnFrameIndex <= reversalFrameIndex, both reversal AND return
+  // were detected in the same frame — physically impossible for a real squat,
+  // indicating measurement noise or drift artifact. A real squat requires at
+  // least one frame of ascent between the peak reversal and the standing return.
+  // Real-device false positive (JSON 3): ascentMs ≈ 92ms (1 frame), same-frame.
+  //
+  // Restricted to shallow/micro romBand:
+  //   - Deep/standard squats have high return thresholds (≥ 0.11 from startDepth)
+  //     that naturally prevent same-frame reversal+return for genuine movement.
+  //   - All observed real-device false positives are shallow/micro depth signals.
+  //   - Applying to deep/standard would break high-fps golden fixtures where
+  //     33ms frame intervals can land reversal and return on the same index even
+  //     for valid squats (interpolation artifact, not a real single-frame return).
+  if ((romBand === 'shallow') &&
+      motion.reversalFrameIndex !== null &&
+      motion.returnIndex !== null &&
+      motion.returnIndex <= motion.reversalFrameIndex) {
+    return buildDecision(false, 'incomplete_return', romBand, 'return_not_after_reversal', evidence, metrics);
+  }
   // ── Tail closure check (PRIMARY staleness guard) ──────────────────────────
   // stableAfterReturn is true but the closure is far from the current tail.
   // This means the complete cycle happened in the PAST (old positioning motion)
@@ -602,6 +635,36 @@ export function evaluateSquatMotionEvidenceV2(
   }
   if (!motion.sameRepOwnership) {
     return buildDecision(false, 'none', romBand, 'same_rep_ownership_failed', evidence, metrics);
+  }
+
+  // ── Guard C (PR6-FIX-01B): Insufficient post-peak evidence for shallow ───
+  // Ultra-short post-peak window makes reversal/return detection unreliable.
+  // Real-device false positive (JSON 3): peakDistanceFromTailFrames=2, peakDistanceFromTailMs≈184ms.
+  // Valid shallow pass baseline: peakDistanceFromTailFrames=5+, peakDistanceFromTailMs≥400ms.
+  //
+  // BOTH conditions must be true (AND) to avoid false-negative on high-fps devices where
+  // 5 frames at 30fps = 166ms (would incorrectly block at 30fps with OR logic).
+  // At real-device fps (~10fps): 2 frames = 200ms → both conditions true → blocked.
+  // At 30fps valid shallow: 5 frames = 166ms → frames≥3 → first condition false → not blocked.
+  //
+  // Applies only to shallow/low_rom squats (deep/standard have larger ROM signal
+  // that is naturally harder to fake with single-frame artifacts).
+  if (romBand === 'shallow' &&
+      peakDistanceFromTailFramesInternal < 3 &&
+      peakDistanceFromTailMsInternal < 250) {
+    return buildDecision(false, 'none', romBand, 'insufficient_post_peak_evidence', evidence, metrics);
+  }
+
+  // ── Guard A (PR6-FIX-01B): Slow-descent shallow without pre-descent baseline
+  // If no pre-descent baseline AND the descent fills ≥85% of the evaluation window,
+  // the standing baseline was not captured — cannot verify the starting position.
+  // Fast squats (low ratio) are exempt: their entire cycle fits in the window.
+  // Real-device false positive (JSON 3): descentFillRatio ≈ 0.96 > 0.85.
+  // Valid fast shallow pass: descentFillRatio ≈ 0.41 < 0.85 → not blocked.
+  const descentDuration = frames[motion.peakIndex]!.timestampMs - frames[motion.startIndex]!.timestampMs;
+  const descentFillRatio = inputWindowDurationMs > 0 ? descentDuration / inputWindowDurationMs : 0;
+  if (romBand === 'shallow' && !preDescentBaselineSatisfied && descentFillRatio > 0.85) {
+    return buildDecision(false, 'descent_only', romBand, 'no_pre_descent_baseline', evidence, metrics);
   }
 
   return buildDecision(true, 'down_up_return', romBand, null, evidence, metrics);

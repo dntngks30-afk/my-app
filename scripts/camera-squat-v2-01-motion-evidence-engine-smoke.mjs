@@ -485,8 +485,11 @@ console.log('\n── PR5-FIX-3 attempt-epoch tail closure lock cases ──\n')
     framesFromDepths(depths01, { fps: 10 }),
     {
       usableMotionEvidence: false,
-      motionPattern: 'none',
-      blockReason: 'stale_closure_not_at_tail',
+      // PR6-FIX-01B: Guard B (return_not_after_reversal) fires before stale_closure_not_at_tail
+      // because reversalFrameIndex===nearStartReturnFrameIndex (sharp drop at frame 10).
+      // Guard B is more accurate: the closure is both stale AND has same-frame return.
+      motionPattern: 'incomplete_return',
+      blockReason: 'return_not_after_reversal',
       romBand: 'shallow',
       evidence: {
         meaningfulDescent: true,
@@ -522,8 +525,9 @@ console.log('\n── PR5-FIX-3 attempt-epoch tail closure lock cases ──\n')
     framesFromDepths(depths02, { fps: 10 }),
     {
       usableMotionEvidence: false,
-      motionPattern: 'none',
-      blockReason: 'stale_closure_not_at_tail',
+      // PR6-FIX-01B: Guard B fires before stale_closure (same-frame reversal+return at frame 12).
+      motionPattern: 'incomplete_return',
+      blockReason: 'return_not_after_reversal',
       romBand: 'shallow',
       evidence: {
         meaningfulDescent: true,
@@ -567,7 +571,8 @@ expectDecision(
 
 // reversal_return_same_frame_must_fail:
 // Sharp drop causes reversal and return to land on the same frame (frame 3).
-// 22 standing frames after → tailDistanceMs ≈ 22*33ms=726ms > 400ms → FAIL.
+// PR6-FIX-01B: Guard B now fires before stale_closure (return_not_after_reversal).
+// usableMotionEvidence=false is still guaranteed; blockReason is more specific.
 expectDecision(
   'reversal_return_same_frame_must_fail',
   framesFromDepths(
@@ -575,8 +580,8 @@ expectDecision(
   ),
   {
     usableMotionEvidence: false,
-    motionPattern: 'none',
-    blockReason: 'stale_closure_not_at_tail',
+    motionPattern: 'incomplete_return',
+    blockReason: 'return_not_after_reversal',
     romBand: 'shallow',
     evidence: {
       meaningfulDescent: true,

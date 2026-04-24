@@ -238,10 +238,13 @@ function computeActiveAttemptEpoch(
   const bufferStartMs = recentFrames[0]!.timestampMs;
   const epochStartMs = Math.max(rawEpochStartMs, bufferStartMs);
 
+  // Time-based check: did we include any time before the descent start?
+  // Note: this is a heuristic label. The definitive label is corrected in
+  // evaluateSquatFromPoseFrames after reading V2's actual descentStartFrameIndex.
   const hasPreDescentBaseline = epochStartMs < descentStartMs;
   const epochSource = hasPreDescentBaseline
     ? 'active_attempt_epoch_with_pre_descent_baseline'
-    : 'active_attempt_epoch';
+    : 'active_attempt_epoch_without_baseline';
 
   return {
     epochStartMs,
@@ -279,30 +282,13 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     const m = squatMotionEvidenceV2.metrics as Record<string, unknown>;
     const vm = squatMotionEvidenceV2.metrics;
 
-    // Epoch provenance
+    // Epoch provenance (initial; corrected below after reading V2's descentStartFrameIndex)
     m.v2EpochStartMs = v2EvalFrames[0]?.timestampMs;
-    m.v2EpochSource = activeEpoch.epochSource;
     m.usedRollingFallback = activeEpoch.usedRollingFallback;
     m.activeAttemptEpochStartMs = activeEpoch.activeAttemptEpochStartMs;
     m.activeAttemptEpochSource = activeEpoch.activeAttemptEpochSource;
     m.epochResetReason = activeEpoch.epochResetReason;
     m.latestFrameTimestampMs = latestValidTs;
-
-    // Peak-to-tail distance: how many frames/ms after the peak does V2 have
-    // for reversal/return detection. When near 0, reversal cannot be confirmed.
-    const peakFrameIndex = vm.peakFrameIndex ?? null;
-    const inputFrameCount = vm.inputFrameCount ?? 0;
-    const lastFrameIdx = inputFrameCount - 1;
-    const peakDistanceFromTailFrames =
-      peakFrameIndex != null ? lastFrameIdx - peakFrameIndex : null;
-    const peakFrameTs =
-      peakFrameIndex != null ? (v2EvalFrames[peakFrameIndex]?.timestampMs ?? null) : null;
-    const peakDistanceFromTailMs =
-      peakFrameTs != null ? latestValidTs - peakFrameTs : null;
-    m.peakDistanceFromTailFrames = peakDistanceFromTailFrames;
-    m.peakDistanceFromTailMs = peakDistanceFromTailMs;
-    m.framesAfterPeak = peakDistanceFromTailFrames;
-    m.msAfterPeak = peakDistanceFromTailMs;
 
     // Cycle duration candidate: from descentStart to latest frame.
     // Warns when the current descent may exceed MAX_SQUAT_CYCLE_MS before return.
@@ -317,13 +303,49 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     m.cycleCapExceeded =
       cycleDurationCandidateMs != null && cycleDurationCandidateMs > 4500
         ? true
-        : (vm.returnMs != null && vm.returnMs > 4500
-          ? true
-          : false);
+        : vm.returnMs != null && vm.returnMs > 4500
+        ? true
+        : false;
 
-    // Pre-descent baseline frame count (informational, not a hard gate).
-    const preDescentBaselineFrameCount = descentStartFrameIndex != null ? descentStartFrameIndex : 0;
-    m.preDescentBaselineFrameCount = preDescentBaselineFrameCount;
+    // ── PR6-FIX-01B: Pre-descent baseline ground truth from V2 ───────────
+    // V2's descentStartFrameIndex is the authoritative source: it reflects the
+    // actual number of frames V2 treated as pre-descent baseline.
+    // computeActiveAttemptEpoch's hasPreDescentBaseline is time-based and may
+    // label the epoch as 'with_pre_descent_baseline' even when V2's
+    // findMotionWindow sets startIndex=0 (baseline frames included but not
+    // recognized as pre-descent by V2's algorithm).
+    const actualPreDescentBaselineCount = descentStartFrameIndex ?? 0;
+    const hasActualPreDescentBaseline = actualPreDescentBaselineCount >= 3;
+    m.preDescentBaselineFrameCount = actualPreDescentBaselineCount;
+
+    // Corrected epoch source: use V2's actual baseline count as ground truth.
+    // If computeActiveAttemptEpoch claimed 'with_pre_descent_baseline' but V2
+    // reports descentStartFrameIndex=0 (<3), correct to 'without_baseline'.
+    const correctedEpochSource = hasActualPreDescentBaseline
+      ? 'active_attempt_epoch_with_pre_descent_baseline'
+      : activeEpoch.usedRollingFallback
+      ? 'rolling_window_fallback'
+      : 'active_attempt_epoch_without_baseline';
+    m.v2EpochSource = correctedEpochSource;
+
+    // ── PR6-FIX-01B: Pass cache/latch verification trace (debug only) ────
+    // These fields help verify that prior squat passes are NOT being cached/
+    // replayed. They MUST NOT influence pass logic.
+    // v2InputStartMs / v2InputEndMs: timestamps of the V2 evaluation window.
+    // validRawBufferOldestMs / validRawBufferNewestMs: full raw buffer bounds.
+    // previousSquatPassLatchedInSession / previousSquatPassAtMs: require session-
+    //   level wiring (auto-progression.ts). Set to null here (stateless evaluator).
+    m.v2InputStartMs = v2EvalFrames[0]?.timestampMs ?? null;
+    m.v2InputEndMs = latestValidTs;
+    m.v2InputFrameCount = v2EvalFrames.length;
+    m.validRawBufferOldestMs = validRaw[0]?.timestampMs ?? null;
+    m.validRawBufferNewestMs = latestValidTs;
+    m.validRawFrameCount = validRaw.length;
+    // Populated by auto-progression.ts if session tracking is available.
+    m.previousSquatPassLatchedInSession = null;
+    m.previousSquatPassAtMs = null;
+    m.v2InputIncludesFramesBeforeLastPass = null;
+    m.squatCaptureSessionId = null;
   }
   if (validRaw.length < MIN_VALID_FRAMES) {
     const emptyDiag = {

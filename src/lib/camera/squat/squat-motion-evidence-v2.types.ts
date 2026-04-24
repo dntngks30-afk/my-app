@@ -141,6 +141,41 @@ export interface SquatMotionEvidenceDecisionV2 {
      * PR6-FIX-01: timestamp (ms) of the last input frame.
      */
     latestFrameTimestampMs?: number | null;
+    // ── PR6-FIX-01B: pass cache/latch verification trace fields ──────────
+    // DEBUG/TRACE ONLY. Must not influence pass logic.
+    /** Timestamp (ms) of the first frame in the V2 evaluation window. */
+    v2InputStartMs?: number | null;
+    /** Timestamp (ms) of the last frame in the V2 evaluation window. */
+    v2InputEndMs?: number | null;
+    /** Number of frames in the V2 evaluation window. */
+    v2InputFrameCount?: number;
+    /** Timestamp (ms) of the oldest frame in the full validRaw buffer. */
+    validRawBufferOldestMs?: number | null;
+    /** Timestamp (ms) of the newest frame in the full validRaw buffer. */
+    validRawBufferNewestMs?: number | null;
+    /** Total count of valid frames in the full raw buffer. */
+    validRawFrameCount?: number;
+    /**
+     * Whether a prior squat pass is latched in this session.
+     * Populated by auto-progression.ts; null when wired from stateless evaluator.
+     */
+    previousSquatPassLatchedInSession?: boolean | null;
+    /**
+     * Timestamp (ms) of the prior squat pass in this session, if any.
+     * Populated by auto-progression.ts; null when wired from stateless evaluator.
+     */
+    previousSquatPassAtMs?: number | null;
+    /**
+     * Whether V2 input frames include any frames before the prior pass timestamp.
+     * True means the buffer window overlaps with a previous pass — not a cache replay.
+     * Populated by auto-progression.ts; null when stateless.
+     */
+    v2InputIncludesFramesBeforeLastPass?: boolean | null;
+    /**
+     * Identifier for the current squat/camera capture session.
+     * Populated by the calling context; null in stateless evaluator.
+     */
+    squatCaptureSessionId?: string | null;
   };
 }
 
