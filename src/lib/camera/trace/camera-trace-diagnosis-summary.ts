@@ -148,6 +148,9 @@ export function buildDiagnosisSummary(
       completionOwnerPassed: sc.completionOwnerPassed,
       completionOwnerReason: sc.completionOwnerReason ?? null,
       completionOwnerBlockedReason: sc.completionOwnerBlockedReason ?? null,
+      v2RuntimeOwnerDecision: sc.v2RuntimeOwnerDecision,
+      autoProgressionDecision: sc.autoProgressionDecision,
+      legacyQualityOrCompat: sc.legacyQualityOrCompat,
       uiProgressionAllowed: sc.uiProgressionAllowed,
       uiProgressionBlockedReason: sc.uiProgressionBlockedReason ?? null,
       passChainProvenance: {

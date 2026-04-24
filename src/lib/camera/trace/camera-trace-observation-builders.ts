@@ -1,4 +1,9 @@
 import type { ExerciseGateResult } from '../auto-progression';
+import type {
+  SquatLegacyQualityOrCompatTrace,
+  SquatV2AutoProgressionDecisionTrace,
+  SquatV2RuntimeOwnerDecisionTrace,
+} from '../auto-progression';
 import type { CaptureQuality } from '../guardrails';
 import {
   CAMERA_DIAG_VERSION,
@@ -13,6 +18,9 @@ import {
 import type { CameraPoseDelegateKind } from '@/lib/motion/pose-types';
 
 export type SquatCameraObservabilityExport = {
+  v2RuntimeOwnerDecision?: SquatV2RuntimeOwnerDecisionTrace;
+  autoProgressionDecision?: SquatV2AutoProgressionDecisionTrace;
+  legacyQualityOrCompat?: SquatLegacyQualityOrCompatTrace;
   runtime: {
     latency_ms: number;
     fps_est: number;
@@ -51,6 +59,7 @@ export function buildSquatCameraObservabilityExport(
   const pass_snapshot = getFrozenSquatPassSnapshot();
   const pass_core_truth = getLiveSquatPassCoreTruth();
   const cs = gate.evaluatorResult.debug?.squatCompletionState;
+  const sc = gate.squatCycleDebug;
 
   const completion: Record<string, unknown> =
     cs != null
@@ -94,7 +103,18 @@ export function buildSquatCameraObservabilityExport(
         }
       : {};
 
-  return { runtime, pose_quality, pass_snapshot, pass_core_truth, completion, eventCycle, reversal };
+  return {
+    v2RuntimeOwnerDecision: sc?.v2RuntimeOwnerDecision,
+    autoProgressionDecision: sc?.autoProgressionDecision,
+    legacyQualityOrCompat: sc?.legacyQualityOrCompat,
+    runtime,
+    pose_quality,
+    pass_snapshot,
+    pass_core_truth,
+    completion,
+    eventCycle,
+    reversal,
+  };
 }
 
 export type SquatObservationEventType =
@@ -192,6 +212,9 @@ export interface SquatAttemptObservation {
   setupMotionBlockReason?: string | null;
   attemptStartedAfterReady?: boolean;
   successSuppressedBySetupPhase?: boolean;
+  v2RuntimeOwnerDecision?: SquatV2RuntimeOwnerDecisionTrace;
+  autoProgressionDecision?: SquatV2AutoProgressionDecisionTrace;
+  legacyQualityOrCompat?: SquatLegacyQualityOrCompatTrace;
   debugVersion: string;
   squatCameraObservability?: SquatCameraObservabilityExport;
 }
@@ -465,6 +488,9 @@ export function buildSquatAttemptObservation(
     setupMotionBlockReason: gate.squatCycleDebug?.setupMotionBlockReason ?? null,
     attemptStartedAfterReady: gate.squatCycleDebug?.attemptStartedAfterReady,
     successSuppressedBySetupPhase: gate.squatCycleDebug?.successSuppressedBySetupPhase,
+    v2RuntimeOwnerDecision: gate.squatCycleDebug?.v2RuntimeOwnerDecision,
+    autoProgressionDecision: gate.squatCycleDebug?.autoProgressionDecision,
+    legacyQualityOrCompat: gate.squatCycleDebug?.legacyQualityOrCompat,
     squatCameraObservability: buildSquatCameraObservabilityExport(gate),
     debugVersion: `${OBS_DEBUG_VERSION}:${CAMERA_DIAG_VERSION}`,
   };

@@ -4,6 +4,11 @@
  * - 요약 전용 snapshot, raw frame/landmark 저장 없음
  */
 import type { ExerciseGateResult } from './auto-progression';
+import type {
+  SquatLegacyQualityOrCompatTrace,
+  SquatV2AutoProgressionDecisionTrace,
+  SquatV2RuntimeOwnerDecisionTrace,
+} from './auto-progression';
 import type { CaptureQuality, OverheadInputTruthMap } from './guardrails';
 import type { PoseCaptureStats } from './use-pose-capture';
 import type { CameraStepId } from '@/lib/public/camera-test';
@@ -218,6 +223,9 @@ export interface AttemptSnapshot {
       completionOwnerPassed?: boolean;
       completionOwnerReason?: string | null;
       completionOwnerBlockedReason?: string | null;
+      v2RuntimeOwnerDecision?: SquatV2RuntimeOwnerDecisionTrace;
+      autoProgressionDecision?: SquatV2AutoProgressionDecisionTrace;
+      legacyQualityOrCompat?: SquatLegacyQualityOrCompatTrace;
       uiProgressionAllowed?: boolean;
       uiProgressionBlockedReason?: string | null;
       /** PR-RF-STRUCT-11E: owner/gate/latch reason provenance는 sink-only 관측 필드다. */

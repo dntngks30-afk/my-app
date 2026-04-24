@@ -12,6 +12,7 @@ import type { SquatPassCoreResult } from '@/lib/camera/squat/pass-core';
 import type { SquatPassWindowResult } from '@/lib/camera/squat/pass-window';
 import type { SquatHmmDecodeResult } from '@/lib/camera/squat/squat-hmm';
 import type { SquatEventCycleResult } from '@/lib/camera/squat/squat-event-cycle';
+import type { SquatMotionEvidenceDecisionV2 } from '@/lib/camera/squat/squat-motion-evidence-v2.types';
 
 /** PR-04E1: depth primary vs blended 관측 — gate 미사용 */
 export interface SquatDepthCalibrationDebug {
@@ -106,10 +107,15 @@ export interface EvaluatorDebugSummary {
   /** PR-04E3B: shallow event-cycle 헬퍼 결과 — pass 보조 입력·관측 전용 */
   squatEventCycle?: SquatEventCycleResult;
   /**
+   * PR-SQUAT-V2-02: runtime owner decision for squat camera progression.
+   * auto-progression consumes only `usableMotionEvidence` for squat pass/latch.
+   * Legacy squat pass/completion fields remain debug/compat surfaces.
+   */
+  squatMotionEvidenceV2?: SquatMotionEvidenceDecisionV2;
+  /**
    * PASS-AUTHORITY-RESET-01: Single squat motion pass authority result.
    * Set by evaluators/squat.ts BEFORE applyUltraLowPolicyLock and late-setup suppression run.
-   * passDetected is immutable — no downstream module may revoke it.
-   * auto-progression reads squatPassCore.passDetected as the final motion pass truth.
+   * PR5 demotion: diagnostics/compat only; not the runtime progression owner.
    */
   squatPassCore?: SquatPassCoreResult;
   /**

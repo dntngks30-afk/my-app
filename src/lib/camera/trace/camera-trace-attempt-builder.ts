@@ -67,9 +67,12 @@ export function buildTraceAttemptSnapshot(
   const outcome = gateToOutcome(gate);
   const finalPassLatched = isFinalPassLatched(stepId, gate);
   const progressionPassed =
-    gate.status === 'pass' &&
-    gate.completionSatisfied &&
-    gate.guardrail.captureQuality !== 'invalid';
+    stepId === 'squat' &&
+    typeof gate.squatCycleDebug?.autoProgressionDecision?.progressionAllowed === 'boolean'
+      ? gate.squatCycleDebug.autoProgressionDecision.progressionAllowed
+      : gate.status === 'pass' &&
+        gate.completionSatisfied &&
+        gate.guardrail.captureQuality !== 'invalid';
 
   return {
     id: `trace-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,

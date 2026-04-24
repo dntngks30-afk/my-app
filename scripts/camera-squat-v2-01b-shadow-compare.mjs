@@ -23,6 +23,8 @@ function n(v) {
  * 2) else observation series + optional recovery tail when last obs currentDepth === 1 (end-of-peak token in export)
  */
 function buildFramesForShadowCompare(data) {
+  if (Array.isArray(data.v2Frames)) return data.v2Frames;
+
   const sc = data.attempts?.[0]?.diagnosisSummary?.squatCycle;
   if (sc && n(sc.reversalAtMs) && n(sc.standingRecoveredAtMs)) {
     const peak = n(sc.rawDepthPeak) || n(sc.relativeDepthPeak) || 0.5;

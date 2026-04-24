@@ -4,13 +4,113 @@
  * @see docs/pr/PR-SQUAT-V2-00-GOLDEN-TRACE-HARNESS.md
  */
 import { readFileSync, existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const GOLDEN_DIR = join(__dirname, '..', 'fixtures', 'camera', 'squat', 'golden');
 const MANIFEST_PATH = join(GOLDEN_DIR, 'manifest.json');
+
+/** @param {unknown} v */
+function n(v) {
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
+
+/**
+ * V2 input frames derived from golden exports without importing app runtime.
+ * Mirrors the PR4 shadow adapter so strict mode compares the V2 contract.
+ *
+ * @param {Record<string, unknown>} data
+ */
+function buildFramesForGoldenTrace(data) {
+  if (Array.isArray(data.v2Frames)) return data.v2Frames;
+
+  const attempts = Array.isArray(data.attempts) ? data.attempts : [];
+  const firstAttempt = attempts[0] && typeof attempts[0] === 'object' ? attempts[0] : null;
+  const diagnosisSummary =
+    firstAttempt && typeof firstAttempt.diagnosisSummary === 'object'
+      ? firstAttempt.diagnosisSummary
+      : null;
+  const sc =
+    diagnosisSummary && typeof diagnosisSummary.squatCycle === 'object'
+      ? diagnosisSummary.squatCycle
+      : null;
+
+  if (sc && n(sc.reversalAtMs) && n(sc.standingRecoveredAtMs)) {
+    const peak = n(sc.rawDepthPeak) || n(sc.relativeDepthPeak) || 0.5;
+    const t0 = n(sc.descendStartAtMs);
+    const tRev = n(sc.reversalAtMs);
+    const tRec = n(sc.recoveryAtMs) || tRev + 300;
+    const tStand = n(sc.standingRecoveredAtMs) || tRec + 200;
+    const keyPts = [
+      { t: t0, d: 0.01 },
+      { t: t0 + (tRev - t0) * 0.4, d: peak * 0.5 },
+      { t: tRev, d: peak },
+      { t: tRec, d: 0.15 },
+      { t: tStand, d: 0.02 },
+      { t: tStand + 200, d: 0.02 },
+    ];
+    const frames = [];
+    for (let t = keyPts[0].t; t <= keyPts[keyPts.length - 1].t; t += 33) {
+      let j = 0;
+      while (j + 1 < keyPts.length && keyPts[j + 1].t < t) j += 1;
+      const a = keyPts[Math.min(j + 1, keyPts.length - 1)];
+      const b = keyPts[j];
+      const d = b.d + (a.d - b.d) * ((t - b.t) / Math.max(1e-3, a.t - b.t));
+      frames.push({
+        timestampMs: t,
+        lowerBodySignal: d,
+        bodyVisibleEnough: true,
+        lowerBodyVisibleEnough: true,
+        setupPhase: false,
+      });
+    }
+    return frames;
+  }
+
+  const obs = Array.isArray(data.squatAttemptObservations) ? data.squatAttemptObservations : [];
+  if (obs.length < 1) return [];
+  const lastObs = obs[obs.length - 1];
+  const addRecoveryTail = lastObs?.currentDepth === 1;
+  const rawPts = obs.map((o) => {
+    const completion = o?.squatCameraObservability?.completion;
+    const d = Math.max(
+      n(o?.relativeDepthPeak),
+      n(completion?.relativeDepthPeak),
+      o?.currentDepth === 1 ? 0.99 : n(o?.currentDepth)
+    );
+    return {
+      t: Date.parse(o?.ts) || 0,
+      d,
+      setup: /setup|readiness|align/i.test(String(o?.phaseHint || '')),
+    };
+  });
+  const t0 = rawPts[0].t;
+  const t1 = addRecoveryTail ? rawPts[rawPts.length - 1].t + 400 : rawPts[rawPts.length - 1].t;
+  const endPt = rawPts[rawPts.length - 1];
+  const frames = [];
+  for (let t = t0; t <= t1; t += 33.33) {
+    let j = 0;
+    while (j + 1 < rawPts.length && rawPts[j + 1].t < t) j += 1;
+    const a = rawPts[Math.min(j + 1, rawPts.length - 1)];
+    const b = rawPts[j];
+    const depthValue =
+      t > endPt.t && addRecoveryTail
+        ? 0.04 + 0.02 * Math.max(0, (a.d - 0.04) * (1 - (t - endPt.t) / 500))
+        : a.t === b.t
+          ? a.d
+          : b.d + (a.d - b.d) * ((t - b.t) / Math.max(1e-3, a.t - b.t));
+    frames.push({
+      timestampMs: t,
+      lowerBodySignal: Math.min(0.99, Math.max(0, depthValue)),
+      bodyVisibleEnough: true,
+      lowerBodyVisibleEnough: true,
+      setupPhase: b.setup && t < t0 + 2000,
+    });
+  }
+  return frames;
+}
 
 /**
  * PR3+ SquatMotionEvidenceEngineV2: replace body with real evaluation.
@@ -19,11 +119,18 @@ const MANIFEST_PATH = join(GOLDEN_DIR, 'manifest.json');
  * @param {unknown} _traceJson
  * @returns {Promise<{ implemented: boolean, pass?: boolean, reason?: string }>}
  */
-export async function evaluateSquatMotionEvidenceV2(_traceJson) {
+export async function evaluateSquatMotionEvidenceV2(traceJson) {
+  const data = traceJson && typeof traceJson === 'object' ? traceJson : {};
+  const frames = buildFramesForGoldenTrace(/** @type {Record<string, unknown>} */ (data));
+  const engineUrl = pathToFileURL(
+    join(__dirname, '..', 'src', 'lib', 'camera', 'squat', 'squat-motion-evidence-v2.ts')
+  ).href;
+  const mod = await import(engineUrl);
+  const decision = mod.evaluateSquatMotionEvidenceV2(frames);
   return {
-    implemented: false,
-    reason:
-      'PR2 stub: SquatMotionEvidenceEngineV2 not wired. Implement in PR3+ and set implemented:true.',
+    implemented: true,
+    pass: decision.usableMotionEvidence === true,
+    reason: decision.blockReason ?? decision.motionPattern,
   };
 }
 
@@ -86,9 +193,9 @@ function infoLegacySerializedVsContract(leg, expected) {
   const wantPass = expected === 'pass';
   if (leg.kind === 'unknown') {
     if (wantPass) {
-      return 'gap: contract=pass, legacy in-file has no pass (attempts[] empty) — V2 TBD. Not a strict failure in --report.';
+      return 'gap: contract=pass, legacy in-file has no pass (attempts[] empty); V2 comparison is authoritative for this harness.';
     }
-    return 'n/a: contract=fail, legacy in-file unknown; compare after V2.';
+    return 'n/a: contract=fail, legacy in-file unknown; V2 comparison is authoritative.';
   }
   if (wantPass && leg.kind === 'pass') {
     return 'info: in-file shows progression pass (not V2).';
@@ -188,7 +295,7 @@ async function runReport() {
   } else {
     console.log(`\n--- Summary: all manifest files present and JSON-parseable.`);
   }
-  console.log('--- V2 contract comparison: deferred until SquatMotionEvidenceEngineV2 is implemented.');
+  console.log('--- V2 contract comparison: active via SquatMotionEvidenceEngineV2 fixture adapter.');
   return 0;
 }
 
