@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "description": "Golden squat trace fixtures: minimal pass/fail contract for SquatMotionEvidenceEngineV2 (future).",
+  "fixtures": [
+    {
+      "id": "valid_shallow_must_pass_01",
+      "file": "valid_shallow_must_pass_01.json",
+      "expected": "pass",
+      "required": true,
+      "description": "Real-device shallow down-up-return; V2 must yield usable lower-body flexion/extension motion evidence (pass)."
+    },
+    {
+      "id": "valid_deep_must_pass_01",
+      "file": "valid_deep_must_pass_01.json",
+      "expected": "pass",
+      "required": true,
+      "description": "Real-device deep down-up-return; V2 must yield usable motion evidence (pass)."
+    },
+    {
+      "id": "standing_must_fail_01",
+      "file": "standing_must_fail_01.json",
+      "expected": "fail",
+      "required": true,
+      "description": "Standing / non-cycle trace; V2 must not mark usable evidence (fail)."
+    },
+    {
+      "id": "seated_must_fail_01",
+      "file": "seated_must_fail_01.json",
+      "expected": "fail",
+      "required": true,
+      "description": "Seated or bottom-hold without valid return; V2 must not mark usable evidence (fail)."
+    }
+  ]
+}
