@@ -77,8 +77,70 @@ export interface SquatMotionEvidenceDecisionV2 {
     closureBlockedReason?: string | null;
     /** Epoch start timestamp (ms) passed from the evaluator to bound V2 input frames. */
     v2EpochStartMs?: number;
-    /** Description of which epoch source was used to bound V2 input frames. */
+    /**
+     * Description of which epoch source was used to bound V2 input frames.
+     * PR6-FIX-01: primary sources are 'active_attempt_epoch' / 'active_attempt_epoch_with_pre_descent_baseline'.
+     * 'rolling_window_fallback' (formerly 'latestValidTs_minus_5000ms') is fallback only.
+     */
     v2EpochSource?: string;
+    /**
+     * PR6-FIX-01: true when the rolling 5s fallback was used instead of an
+     * active attempt epoch. Diagnostic signal: V2 may not see the full
+     * current-attempt reversal/return cycle.
+     */
+    usedRollingFallback?: boolean;
+    /**
+     * PR6-FIX-01: timestamp (ms) of the computed active attempt epoch start.
+     * Set by evaluators/squat.ts based on first descent candidate detection.
+     * null when no descent candidate was found (rolling fallback used).
+     */
+    activeAttemptEpochStartMs?: number | null;
+    /**
+     * PR6-FIX-01: label for how the active attempt epoch was computed.
+     * 'first_descent_candidate' | 'readiness_dwell' | 'rolling_fallback'
+     */
+    activeAttemptEpochSource?: string | null;
+    /**
+     * PR6-FIX-01: number of stable baseline frames before descentStartFrameIndex
+     * in the V2 input window.
+     */
+    preDescentBaselineFrameCount?: number;
+    /**
+     * PR6-FIX-01: frames from peakFrameIndex to the last input frame.
+     * When ~0, V2 has no room to detect reversal/return.
+     */
+    peakDistanceFromTailFrames?: number | null;
+    /**
+     * PR6-FIX-01: ms from peakFrameIndex to the last input frame.
+     * When < ~200ms (2 frames at 10fps), V2 cannot detect reversal.
+     */
+    peakDistanceFromTailMs?: number | null;
+    /**
+     * PR6-FIX-01: frames after the detected peak in the V2 input window.
+     * Alias for peakDistanceFromTailFrames; used in diagnostic report.
+     */
+    framesAfterPeak?: number | null;
+    /** PR6-FIX-01: ms after the detected peak to end of input window. */
+    msAfterPeak?: number | null;
+    /**
+     * PR6-FIX-01: candidate total cycle duration (descentStartMs→lastFrameMs)
+     * when closure has not been confirmed yet. Useful to detect cycles heading
+     * toward the 4500ms cap before they are blocked.
+     */
+    cycleDurationCandidateMs?: number | null;
+    /**
+     * PR6-FIX-01: true when cycleDurationCandidateMs or returnMs exceeded MAX_SQUAT_CYCLE_MS.
+     */
+    cycleCapExceeded?: boolean;
+    /**
+     * PR6-FIX-01: reason for epoch reset if one occurred.
+     * 'terminal_pass' | 'terminal_fail' | 'readiness_lost' | 'setup_motion_blocked' | null
+     */
+    epochResetReason?: string | null;
+    /**
+     * PR6-FIX-01: timestamp (ms) of the last input frame.
+     */
+    latestFrameTimestampMs?: number | null;
   };
 }
 

@@ -113,33 +113,217 @@ function toSquatMotionEvidenceV2Frames(frames: PoseFeaturesFrame[]): SquatMotion
 }
 
 /**
- * Maximum evaluation window passed to SquatMotionEvidenceEngineV2.
- * Bounding to recent frames prevents stale setup/positioning motion from being
- * conflated with the current squat attempt (PR5-FIX-2 regression guard).
+ * Rolling fallback window for V2 when no active attempt epoch can be computed.
+ * PR6-FIX-01: this is a FALLBACK only; the primary window is activeAttemptEpochStartMs.
  */
 const MAX_V2_EVAL_WINDOW_MS = 5000;
+
+/**
+ * Maximum lookback (ms) when searching for the current descent candidate.
+ * Prevents very old stale motion from being misidentified as the current attempt.
+ */
+const MAX_EPOCH_LOOKBACK_MS = 8000;
+
+/**
+ * How many ms before the detected descent start to include as pre-descent baseline.
+ * These stable standing frames allow V2 to compute the correct startDepth and
+ * measure the full relativePeak, preventing romBand downgrade (shallow mis-classification).
+ * Range 300–700ms per spec; 500ms chosen as midpoint.
+ */
+const PRE_DESCENT_BASELINE_MS = 500;
+
+/**
+ * Minimum meaningful depth to identify a descent candidate.
+ * Matches V2's MEANINGFUL_DESCENT_MIN constant.
+ */
+const EPOCH_DESCENT_THRESHOLD = 0.035;
+
+/**
+ * PR6-FIX-01 — Active Attempt Epoch Window
+ *
+ * Replaces the fixed latestValidTs−5000ms rolling window as the primary V2 input bound.
+ *
+ * Root cause of post-PR5/PR6 real-device failures:
+ *   - validRaw is filtered to the last 5 s, so a slow squat (>3 s descent) fills the
+ *     entire window with the descent phase: descentStartFrameIndex=0, peak at tail,
+ *     no room for reversal/return detection.
+ *   - After the user ascends, the new 5 s window starts mid-descent → startDepth is
+ *     high (mid-descent, not standing) → relativePeak ≈ small → romBand='shallow'
+ *     even for deep squats.
+ *
+ * Fix: detect when the current descent started from the FULL validRaw buffer.
+ *   epochStartMs = descentStartMs − PRE_DESCENT_BASELINE_MS
+ *   V2 receives frames from epochStartMs forward, giving it:
+ *     (a) pre-descent baseline for correct startDepth, and
+ *     (b) the full descent→reversal→return cycle within one window.
+ *
+ * Setup/framing translation exclusion: if a setup-phase frame appears between
+ * epochStart and descentStart, the epoch is clipped to after the last setup frame.
+ */
+function computeActiveAttemptEpoch(
+  validRaw: PoseFeaturesFrame[],
+  latestTs: number
+): {
+  epochStartMs: number;
+  epochSource: string;
+  usedRollingFallback: boolean;
+  activeAttemptEpochStartMs: number | null;
+  activeAttemptEpochSource: string | null;
+  epochResetReason: string | null;
+} {
+  const rollingFallback = {
+    epochStartMs: latestTs - MAX_V2_EVAL_WINDOW_MS,
+    epochSource: 'rolling_window_fallback',
+    usedRollingFallback: true,
+    activeAttemptEpochStartMs: null,
+    activeAttemptEpochSource: 'rolling_fallback' as string | null,
+    epochResetReason: null as string | null,
+  };
+
+  if (validRaw.length < 4) return rollingFallback;
+
+  // Restrict lookback to MAX_EPOCH_LOOKBACK_MS to avoid ancient stale motion.
+  const lookbackCutMs = latestTs - MAX_EPOCH_LOOKBACK_MS;
+  const recentFrames = validRaw.filter((f) => f.timestampMs >= lookbackCutMs);
+  if (recentFrames.length < 4) return rollingFallback;
+
+  // Build depth signal for recent frames.
+  const depths = recentFrames.map((f) => runtimeV2Depth(f));
+
+  // ── Find depth peak in recent frames ────────────────────────────────────
+  // The peak represents the bottom of the current squat.
+  let peakDepth = 0;
+  let peakIdx = 0;
+  for (let i = 0; i < depths.length; i++) {
+    if (depths[i]! > peakDepth) {
+      peakDepth = depths[i]!;
+      peakIdx = i;
+    }
+  }
+
+  // No meaningful motion → rolling fallback (user standing or micro-bounce only).
+  if (peakDepth < EPOCH_DESCENT_THRESHOLD) return rollingFallback;
+
+  // ── Find descent start: local minimum before peak ────────────────────────
+  // Scan backward from peak to find the frame with minimum depth
+  // (standing baseline just before the user started descending).
+  let descentStartIdx = 0;
+  let minDepthBeforePeak = depths[peakIdx]!;
+  for (let i = peakIdx; i >= 0; i--) {
+    if (depths[i]! <= minDepthBeforePeak) {
+      minDepthBeforePeak = depths[i]!;
+      descentStartIdx = i;
+    }
+  }
+
+  // ── Setup/framing translation clip ──────────────────────────────────────
+  // If a setup-phase frame appears between descentStartIdx and the beginning,
+  // clip the epoch to start AFTER the last setup frame (exclude old setup motion).
+  let epochResetReason: string | null = null;
+  let setupClipIdx = 0;
+  for (let i = descentStartIdx; i >= 0; i--) {
+    const ph = String(recentFrames[i]!.phaseHint ?? '').toLowerCase();
+    if (ph === 'setup' || ph === 'readiness' || ph === 'align' || ph === 'alignment') {
+      setupClipIdx = i + 1;
+      epochResetReason = 'setup_phase_excluded';
+      break;
+    }
+  }
+
+  const effectiveStartIdx = Math.max(setupClipIdx, descentStartIdx);
+  const descentStartMs = recentFrames[effectiveStartIdx]!.timestampMs;
+
+  // ── Apply pre-descent baseline offset ───────────────────────────────────
+  const rawEpochStartMs = descentStartMs - PRE_DESCENT_BASELINE_MS;
+  const bufferStartMs = recentFrames[0]!.timestampMs;
+  const epochStartMs = Math.max(rawEpochStartMs, bufferStartMs);
+
+  const hasPreDescentBaseline = epochStartMs < descentStartMs;
+  const epochSource = hasPreDescentBaseline
+    ? 'active_attempt_epoch_with_pre_descent_baseline'
+    : 'active_attempt_epoch';
+
+  return {
+    epochStartMs,
+    epochSource,
+    usedRollingFallback: false,
+    activeAttemptEpochStartMs: epochStartMs,
+    activeAttemptEpochSource: 'first_descent_candidate',
+    epochResetReason,
+  };
+}
 
 export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): EvaluatorResult {
   const validRaw = frames.filter((frame) => frame.isValid);
 
-  // Bound V2 input to the most recent MAX_V2_EVAL_WINDOW_MS of valid frames.
-  // This prevents setup motion from seconds before the active attempt from
-  // contaminating the V2 evaluation window and producing stale down_up_return.
-  // The tail-closure guard inside V2 provides the primary staleness defense;
-  // this window binding is a complementary pre-filter.
+  // ── PR6-FIX-01: Active Attempt Epoch Window ──────────────────────────────
+  // Primary: bound V2 input to the current active squat attempt epoch.
+  // Fallback: rolling MAX_V2_EVAL_WINDOW_MS window (when no descent detected).
+  //
+  // This replaces latestValidTs−5000ms as the primary window source.
+  // Rationale: the rolling 5s window causes descentStartFrameIndex=0 when the user
+  // squats slowly; the peak lands at the tail with no reversal/return frames visible.
+  // By anchoring to the detected descent start, V2 always sees:
+  //   (a) stable pre-descent baseline → correct startDepth → correct romBand
+  //   (b) the full descent→peak→reversal→return cycle → reversal detection works
   const latestValidTs = validRaw[validRaw.length - 1]?.timestampMs ?? 0;
-  const v2EvalFrames = validRaw.filter(
-    (f) => f.timestampMs >= latestValidTs - MAX_V2_EVAL_WINDOW_MS
-  );
+  const activeEpoch = computeActiveAttemptEpoch(validRaw, latestValidTs);
+  const v2EvalFrames = validRaw.filter((f) => f.timestampMs >= activeEpoch.epochStartMs);
+
   const squatMotionEvidenceV2 = evaluateSquatMotionEvidenceV2(
     toSquatMotionEvidenceV2Frames(v2EvalFrames)
   );
-  // Annotate V2 metrics with evaluator-side epoch context for traceability.
+
+  // ── Annotate V2 metrics with epoch context and PR6-FIX-01 diagnostics ───
   if (squatMotionEvidenceV2.metrics) {
-    (squatMotionEvidenceV2.metrics as Record<string, unknown>).v2EpochStartMs =
-      v2EvalFrames[0]?.timestampMs;
-    (squatMotionEvidenceV2.metrics as Record<string, unknown>).v2EpochSource =
-      'latestValidTs_minus_5000ms';
+    const m = squatMotionEvidenceV2.metrics as Record<string, unknown>;
+    const vm = squatMotionEvidenceV2.metrics;
+
+    // Epoch provenance
+    m.v2EpochStartMs = v2EvalFrames[0]?.timestampMs;
+    m.v2EpochSource = activeEpoch.epochSource;
+    m.usedRollingFallback = activeEpoch.usedRollingFallback;
+    m.activeAttemptEpochStartMs = activeEpoch.activeAttemptEpochStartMs;
+    m.activeAttemptEpochSource = activeEpoch.activeAttemptEpochSource;
+    m.epochResetReason = activeEpoch.epochResetReason;
+    m.latestFrameTimestampMs = latestValidTs;
+
+    // Peak-to-tail distance: how many frames/ms after the peak does V2 have
+    // for reversal/return detection. When near 0, reversal cannot be confirmed.
+    const peakFrameIndex = vm.peakFrameIndex ?? null;
+    const inputFrameCount = vm.inputFrameCount ?? 0;
+    const lastFrameIdx = inputFrameCount - 1;
+    const peakDistanceFromTailFrames =
+      peakFrameIndex != null ? lastFrameIdx - peakFrameIndex : null;
+    const peakFrameTs =
+      peakFrameIndex != null ? (v2EvalFrames[peakFrameIndex]?.timestampMs ?? null) : null;
+    const peakDistanceFromTailMs =
+      peakFrameTs != null ? latestValidTs - peakFrameTs : null;
+    m.peakDistanceFromTailFrames = peakDistanceFromTailFrames;
+    m.peakDistanceFromTailMs = peakDistanceFromTailMs;
+    m.framesAfterPeak = peakDistanceFromTailFrames;
+    m.msAfterPeak = peakDistanceFromTailMs;
+
+    // Cycle duration candidate: from descentStart to latest frame.
+    // Warns when the current descent may exceed MAX_SQUAT_CYCLE_MS before return.
+    const descentStartFrameIndex = vm.descentStartFrameIndex ?? null;
+    const descentStartFrameTs =
+      descentStartFrameIndex != null
+        ? (v2EvalFrames[descentStartFrameIndex]?.timestampMs ?? null)
+        : null;
+    const cycleDurationCandidateMs =
+      descentStartFrameTs != null ? latestValidTs - descentStartFrameTs : null;
+    m.cycleDurationCandidateMs = cycleDurationCandidateMs;
+    m.cycleCapExceeded =
+      cycleDurationCandidateMs != null && cycleDurationCandidateMs > 4500
+        ? true
+        : (vm.returnMs != null && vm.returnMs > 4500
+          ? true
+          : false);
+
+    // Pre-descent baseline frame count (informational, not a hard gate).
+    const preDescentBaselineFrameCount = descentStartFrameIndex != null ? descentStartFrameIndex : 0;
+    m.preDescentBaselineFrameCount = preDescentBaselineFrameCount;
   }
   if (validRaw.length < MIN_VALID_FRAMES) {
     const emptyDiag = {
