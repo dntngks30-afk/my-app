@@ -195,9 +195,27 @@ npx tsx scripts/camera-squat-v2-02b-runtime-owner-truth-smoke.mjs
 
 ## 9. 실기기 재검증 항목
 
-NOT_YET_IMPLEMENTED (다음 실기기 dogfooding에서 확인):
+### 9.1 PR5 계열 최종 실기기 검증 요약 (CURRENT_IMPLEMENTED)
 
-1. 앉으려고 **하강 시작하는 순간** → 절대 통과하지 않아야 한다
+PR5 / PR5-FIX / PR5-FIX-2 / PR5-FIX-3 이후 **5회** 실기기 검증:
+
+| # | 시도 | 결과 |
+|---|------|------|
+| 1 | 얕은 스쿼트 | 정상 통과 |
+| 2 | 얕은 스쿼트 | 정상 통과 |
+| 3 | 얕은 스쿼트 | 앉기 시작 직후 **조기 통과** 1회 (잔여 리스크) |
+| 4 | 얕은 스쿼트 | 정상 통과 |
+| 5 | 딥 스쿼트 | 정상 통과 |
+
+- 얕은 스쿼트 **4회 중 3회** 정상 통과.
+- 딥 스쿼트 **마지막 시도** 정상 통과.
+- 3번째 얕은 시도의 조기 통과는 **blocking bug가 아니라 Known residual risk**로 문서화한다 (상세는 §9.3).
+
+### 9.2 회귀 체크리스트 (지속 검증용)
+
+다음은 이후 dogfooding에서도 유지할 **검증 관점**이다:
+
+1. 앉으려고 **하강 시작하는 순간** → 원칙적으로 조기 통과 없어야 함 (§9.3 잔여 1건 참고)
 2. 하강 후 아직 다 일어나지 않았으면 → 통과하지 않아야 한다
 3. 하강 → 상승반전 → 시작점 근처 복귀 후에만 → 통과해야 한다
 4. 얕은 스쿼트도 실제 복귀까지 완료하면 → 통과해야 한다
@@ -206,6 +224,60 @@ NOT_YET_IMPLEMENTED (다음 실기기 dogfooding에서 확인):
 7. V2 trace에 `v2RuntimeOwnerDecision`, `autoProgressionDecision`, `legacyQualityOrCompat`, `pageLatchDecision` 필드가 존재해야 한다
 8. `descentMs`, `returnMs` 값이 실제 스쿼트 사이클(0.5~3초)과 합리적인 범위에 있어야 한다
 
+### 9.3 Known Residual Risk — Early Pass After Squat Start
+
+Final real-device validation showed that shallow and deep squat progression is now broadly working.
+
+Observed:
+
+- Shallow squat passed normally in **3 out of 4** shallow attempts.
+- Deep squat passed normally in the **final** deep attempt.
+- One shallow attempt still produced an **early pass** shortly after descent started.
+
+This is intentionally documented as a **known residual risk**, not a PR5 blocker.
+
+Reason:
+
+The remaining early-pass case appears to involve **multiple interacting signals** rather than one narrow, safe fix:
+
+- V2 rolling-window **epoch**
+- **`latestValidTs_minus_5000ms`**-based evaluation window
+- **setup / framing translation** may remain close to the active attempt
+- **low-ROM closure** can be interpreted as down-up-return
+- **pose translation** and **recovery interpretation** can overlap
+
+**단일 좁은 원인으로 확정하지 않는다.**
+
+Why not fix here:
+
+The same suspicious V2 metadata also appears in **normal successful** shallow/deep passes, including:
+
+- `descentStartFrameIndex: 0`
+- `preDescentBaselineSatisfied: false`
+- `v2EpochSource: latestValidTs_minus_5000ms`
+
+Therefore, adding another hard blocker before PR6 risks closing the **newly restored shallow squat pass** path.
+
+**PR5에서 추가 gate 강화는 얕은 스쿼트 pass 회귀 위험이 크므로 보류한다.**
+
+Decision:
+
+- Do **not** add more pass blockers in PR5.
+- Keep the remaining case as a **known residual risk**.
+- Move to PR6 only for **legacy quality / debug demotion**.
+- **PR6 must not** change V2 **pass semantics**, **timing**, **threshold**, **epoch**, or **auto-progression ownership**.
+- **PR6 does not** fix this residual early-pass risk.
+
+Non-goals:
+
+- Do not change runtime code.
+- Do not change V2 engine.
+- Do not change thresholds.
+- Do not change auto-progression.
+- Do not add new fixtures unless purely observational.
+- Do not modify overhead reach.
+- Do not modify `/app` execution.
+
 ## 10. PR6 진행 가능 조건
 
 LOCKED_DIRECTION:
@@ -213,12 +285,16 @@ LOCKED_DIRECTION:
 PR6 (Legacy Quality Analyzer Demotion)으로 진행하기 위한 조건:
 
 1. 이번 PR acceptance commands가 모두 green — **충족됨**
-2. 실기기 re-dogfooding에서 아래 항목 확인:
-   - 하강 시작 직후 통과 없음 (이번 회귀 수정 검증)
-   - 얕은/딥 스쿼트 정상 통과
-   - standing/seated 정상 실패
-3. trace가 `activeAttemptWindowSatisfied=true`를 보여야 함 (정상 스쿼트에서)
-4. legacy fields가 debug/compat-only임이 trace에서 확인됨
+2. 실기기에서 **광범위한** 얕은/딥 통과가 확인됨 — **5회 검증 요약은 §9.1** (잔여 1건은 §9.3)
+3. 하강 시작 직후 통과: **대부분 해소**, 다만 §9.3 **Known residual** 1회는 PR5 **non-blocker**로 명시
+4. standing/seated 정상 실패는 기존 회귀 매트릭스에 따름
+5. trace가 `activeAttemptWindowSatisfied=true`를 보여야 함 (정상 스쿼트에서)
+6. legacy fields가 debug/compat-only임이 trace에서 확인됨
+
+**PR6 범위 고정:**
+
+- PR6는 §9.3 잔여 리스크를 **고치지 않는다**.
+- PR6에서 **pass semantics**, **V2 timing**, **epoch**, **threshold**, **auto-progression owner**를 **건드리지 않는다**.
 
 ## 11. 변경 파일 목록
 
@@ -300,4 +376,4 @@ PR6 (Legacy Quality Analyzer Demotion)으로 진행하기 위한 조건:
 
 **13. PR6로 넘어가도 되는가?**
 
-LOCKED_DIRECTION: 실기기 re-dogfooding 후 결정. 이번 PR acceptance commands는 모두 green이다. 실기기에서 하강 시작 즉시 통과하지 않음을 확인한 뒤 PR6로 진행한다.
+LOCKED_DIRECTION: PR5 계열 **최종** 실기기 검증(§9.1)과 문서화된 **Known residual** (§9.3)을 전제로 PR6는 **legacy quality/debug demotion**만 진행한다. PR6는 잔여 조기 통과를 해결하지 않으며, V2 pass semantics·timing·epoch·threshold·auto-progression ownership를 변경하지 않는다. 이번 PR(02C) 시점의 acceptance commands는 green이었다.

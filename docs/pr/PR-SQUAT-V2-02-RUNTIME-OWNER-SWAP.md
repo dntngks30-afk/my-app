@@ -139,6 +139,64 @@ npm run lint
 - incomplete return does not pass
 - arm-only / upper-body-only movement does not pass
 
-## 12. Remaining work
+## 12. Known Residual Risk — Early Pass After Squat Start
 
-PR6: Legacy Quality Analyzer Demotion.
+CURRENT_IMPLEMENTED (post PR5 / PR5-FIX / PR5-FIX-2 / PR5-FIX-3 real-device validation):
+
+Final real-device validation (5 attempts):
+
+| # | Attempt | Result |
+|---|---------|--------|
+| 1 | Shallow squat | Normal pass |
+| 2 | Shallow squat | Normal pass |
+| 3 | Shallow squat | Early pass shortly after descent start (1 residual occurrence) |
+| 4 | Shallow squat | Normal pass |
+| 5 | Deep squat | Normal pass |
+
+Observed:
+
+- Shallow squat passed normally in **3 of 4** shallow attempts.
+- Deep squat passed normally in the **final** deep attempt.
+- One shallow attempt still produced an **early pass** shortly after descent started.
+
+This is intentionally documented as a **known residual risk**, not a PR5 blocker.
+
+Reason:
+
+The remaining early-pass case appears to involve **multiple interacting signals** rather than one narrow, safe fix:
+
+- V2 rolling-window **epoch**
+- **`latestValidTs_minus_5000ms`**-based evaluation window
+- **setup / framing translation** (may remain close to the active attempt)
+- **low-ROM closure** (can be interpreted as down-up-return)
+- **pose translation** and **recovery interpretation** overlap
+
+Do **not** narrow this case to a single confirmed root cause in documentation.
+
+Why not fix here:
+
+The same suspicious V2 metadata also appears in **normal successful** shallow/deep passes, including:
+
+- `descentStartFrameIndex: 0`
+- `preDescentBaselineSatisfied: false`
+- `v2EpochSource: latestValidTs_minus_5000ms`
+
+Therefore, adding another hard blocker before PR6 risks closing the **newly restored shallow squat pass** path.
+
+Decision (LOCKED_DIRECTION):
+
+- Do **not** add more pass blockers in PR5.
+- Keep the remaining case as a **known residual risk**.
+- Move to PR6 only for **legacy quality / debug demotion**.
+- **PR6 must not** change V2 **pass semantics**, **timing**, **threshold**, **epoch**, or **auto-progression ownership**.
+- **PR6 does not** target fixing this residual early-pass risk.
+
+Non-goals (documentation-only update for this subsection):
+
+- Do not change runtime code, V2 engine, thresholds, or auto-progression from this doc pass.
+- Do not add new fixtures unless purely observational.
+- Do not modify overhead reach or `/app` execution.
+
+## 13. Remaining work
+
+PR6: Legacy Quality Analyzer Demotion — **scope excludes** fixing the residual early-pass risk and **excludes** changes to V2 pass semantics, timing, epoch, thresholds, and auto-progression ownership (see §12).

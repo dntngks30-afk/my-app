@@ -208,25 +208,90 @@ npx tsc --noEmit --pretty false
 
 ## 10. Real-device verification result
 
-NOT_YET_IMPLEMENTED:
+CURRENT_IMPLEMENTED (after PR5 / PR5-FIX / PR5-FIX-2 / PR5-FIX-3, final device run):
 
-This PR has not been re-dogfooded on the physical device inside this coding session. The next device run must verify:
+Five-attempt validation:
 
-- shallow squat passes naturally three times in a row
-- deep squat still passes
-- standing only fails
-- seated/bottom hold fails
-- incomplete return fails
-- arm-only / upper-body-only fails
-- exported trace includes `v2RuntimeOwnerDecision`, `autoProgressionDecision`, `legacyQualityOrCompat`, and `pageLatchDecision`
+| # | Attempt | Result |
+|---|---------|--------|
+| 1 | Shallow squat | Normal pass |
+| 2 | Shallow squat | Normal pass |
+| 3 | Shallow squat | Early pass shortly after descent start (**residual**, 1 occurrence) |
+| 4 | Shallow squat | Normal pass |
+| 5 | Deep squat | Normal pass |
 
-## 11. Conditions to move to PR6
+Confirmed in this run:
+
+- Shallow progression broadly works (**3 of 4** shallow attempts passed normally).
+- Deep squat passed normally on the **final** deep attempt.
+- Exported traces continue to carry V2 owner surfaces (`v2RuntimeOwnerDecision`, `autoProgressionDecision`, `legacyQualityOrCompat`, `pageLatchDecision`) as implemented in the PR5-FIX chain.
+
+Standing-only, seated/bottom hold, incomplete return, and arm-only / upper-body-only behavior were not re-listed as failing items in this specific five-attempt summary; regression matrix checks remain the operational backstop.
+
+## 11. Known Residual Risk — Early Pass After Squat Start
+
+Final real-device validation showed that shallow and deep squat progression is now **broadly working**.
+
+Observed:
+
+- Shallow squat passed normally in **3 out of 4** shallow attempts.
+- Deep squat passed normally in the **final** deep attempt.
+- One shallow attempt still produced an **early pass** shortly after descent started.
+
+This is intentionally documented as a **known residual risk**, not a PR5 blocking bug.
+
+Reason:
+
+The remaining early-pass case appears to involve **multiple interacting signals** rather than one narrow, safe fix:
+
+- V2 rolling-window **epoch**
+- **`latestValidTs_minus_5000ms`**-based evaluation window
+- **setup / framing translation** may remain close to the active attempt
+- **low-ROM closure** can be interpreted as down-up-return
+- **pose translation** and **recovery interpretation** can overlap
+
+Do **not** document a single narrow confirmed root cause for attempt #3.
+
+Why not fix here:
+
+The same suspicious V2 metadata also appears in **normal successful** shallow/deep passes, including:
+
+- `descentStartFrameIndex: 0`
+- `preDescentBaselineSatisfied: false`
+- `v2EpochSource: latestValidTs_minus_5000ms`
+
+Therefore, adding another hard blocker before PR6 risks closing the **newly restored shallow squat pass** path.
+
+Decision:
+
+- Do **not** add more pass blockers in PR5.
+- Keep the remaining case as a **known residual risk**.
+- Move to PR6 only for **legacy quality / debug demotion**.
+- **PR6 must not** change V2 **pass semantics**, **timing**, **threshold**, **epoch**, or **auto-progression ownership**.
+- **PR6 does not** fix this residual early-pass risk.
+
+Non-goals:
+
+- Do not change runtime code.
+- Do not change V2 engine.
+- Do not change thresholds.
+- Do not change auto-progression.
+- Do not add new fixtures unless purely observational.
+- Do not modify overhead reach.
+- Do not modify `/app` execution.
+
+## 12. Conditions to move to PR6
 
 LOCKED_DIRECTION:
 
-Move to PR6 Legacy Quality Analyzer Demotion only after:
+Move to PR6 Legacy Quality Analyzer Demotion when:
 
-- PR5-FIX acceptance commands remain green
-- physical device shallow closure is confirmed
+- PR5-FIX chain acceptance commands remain green
+- physical device validation confirms **broad** shallow/deep closure (as in §10), with the **known residual** in §11 explicitly accepted as non-blocking for PR5 close-out
 - trace proves V2 owner truth is present in evaluator, auto-progression, attempt snapshot, and observation export
 - legacy fields are confirmed as debug/compat only
+
+**PR6 scope lock:**
+
+- PR6 **does not** address the §11 early-pass residual risk.
+- PR6 **must not** change V2 pass semantics, V2 timing, epoch selection, thresholds, or auto-progression ownership.
