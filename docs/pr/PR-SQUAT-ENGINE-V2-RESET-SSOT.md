@@ -10,9 +10,15 @@
 
 - Document type: parent SSOT / architecture reset plan
 - Runtime code changes in this document: none
-- Target area: public camera squat pass/completion authority
-- Product identity reminder: MOVE RE camera is a self-serve usable-signal capture channel, not a medical or precision diagnosis tool
-- Primary goal: make valid squat completion reliably pass while preventing standing/descent/bottom/mid-ascent false pass
+- Target area: public camera **usable lower-body flexion/extension motion evidence** and **squat camera progression** authority (not “perfect form” judging)
+- Product identity reminder: MOVE RE camera is a self-serve **usable-signal capture** channel, not a medical or precision diagnosis tool
+- Primary goal: make **usable motion evidence** for normal shallow/deep movement reliably available while preventing standing/descent/bottom/mid-ascent false evidence
+- **Semantic reframe (locked):** runtime truth is **usable motion evidence acquired**, not “a technically correct squat rep succeeded.” `usableMotionEvidence` is the progression field; it does not mean perfect squat form, medical assessment, or precise rep scoring.
+
+### Authority statement (non-optional)
+
+**SquatMotionEvidenceEngineV2 is the only runtime owner for squat camera progression.  
+Legacy squat logic may analyze quality, but must not decide progression.**
 
 ---
 
@@ -20,25 +26,30 @@
 
 The current mainline squat camera system has reached a structural failure mode.
 
-Repeated PRs have tried to fix shallow squat pass by adjusting, promoting, freezing, wrapping, or guarding parts of the existing chain. That approach is now exhausted.
+Repeated PRs have tried to fix shallow “pass” by adjusting, promoting, freezing, wrapping, or guarding parts of the existing chain. That approach is now exhausted.
 
-Current user-visible symptoms:
+Current user-visible symptoms (as of the motion-evidence design track):
 
-1. Valid shallow squat is effectively impossible or too hard to pass.
-2. Deep squat, which used to pass more consistently, has also become harder.
-3. Making pass easier reopens false pass classes.
-4. Closing false pass classes makes legitimate pass impossible again.
+1. Valid shallow movement often fails to produce acceptable progression signal.
+2. Valid deep movement may only clear after unnatural bottom dwell or repeated slow rise.
+3. Easing “pass” reopens false-evidence classes.
+4. Closing false-evidence classes makes legitimate evidence impossible again.
 5. Each new fix adds another layer, blocker, adapter, trace, or exception.
-6. The number of pass-related authorities has grown beyond safe reasoning.
+6. The number of **progression-related authorities** has grown beyond safe reasoning.
 
-This is not primarily a threshold problem.
-This is an authority topology problem.
+This is not primarily a threshold problem.  
+This is an **authority topology** problem.
 
 The core problem:
 
 ```txt
-Too many runtime surfaces can decide, reinterpret, veto, expose, or latch squat pass truth.
+Too many runtime surfaces can decide, reinterpret, veto, expose, or latch
+squat motion / completion / "pass" truth for camera progression.
 ```
+
+**Old frame to abandon:** a single “squat rep judge” (`SquatRepEngineV2`-style) that centers `passed` / `passDetected` as if the product were certifying a correct rep.
+
+**New frame (SSOT):** a **usable lower-body flexion/extension motion evidence acquirer** centered on **SquatMotionEvidenceEngineV2** and **usableMotionEvidence**.
 
 Therefore this reset is required.
 
@@ -48,20 +59,30 @@ Therefore this reset is required.
 
 These laws must be treated as stronger than existing implementation habits.
 
-### Law 1 — One runtime pass owner
+### Law 1 — One runtime progression owner; one motion-evidence boolean
 
-Squat pass has exactly one runtime owner:
+**Squat camera progression** has exactly one runtime owner:
 
 ```txt
-SquatRepEngineV2
+SquatMotionEvidenceEngineV2
 ```
 
-No downstream layer may convert a passed squat rep into not-passed.
-No downstream layer may convert a not-passed squat rep into passed.
+The engine exposes exactly one boolean progression field for this concern:
 
-### Law 2 — Shallow squat is not a failed deep squat
+```txt
+usableMotionEvidence
+```
 
-Shallow squat must not be interpreted as the beginning of a deeper squat that never completed.
+`usableMotionEvidence` means: **usable lower-body flexion/extension motion evidence acquired** (see §1). It is **not** a claim of perfect form or medical correctness.
+
+**Immutability:** No downstream layer may turn `usableMotionEvidence === true` into `false`.  
+No downstream layer may turn `usableMotionEvidence === false` into `true`.
+
+Downstream may **read**, **display**, **log**, **navigate from**, or **derive UI copy** from this value—they may not **re-author** it.
+
+### Law 2 — Shallow is not a failed deep squat
+
+Shallow movement must not be interpreted as the beginning of a deeper squat that never completed.
 
 Shallow is its own valid ROM band when it contains:
 
@@ -69,483 +90,340 @@ Shallow is its own valid ROM band when it contains:
 meaningful descent -> reversal -> near-standing recovery -> short stable dwell
 ```
 
-### Law 3 — False pass prevention belongs inside the state machine
+(Evidence semantics and internal state names may vary in implementation; the **ownership and immutability** of `usableMotionEvidence` do not.)
 
-Standing, descent-only, bottom/seated hold, mid-ascent, micro-bounce, and cross-rep stale evidence must be rejected inside the single squat state machine.
+### Law 3 — False evidence prevention belongs inside the state machine
+
+Standing, descent-only, bottom/seated hold, mid-ascent, micro-bounce, and cross-rep stale evidence must be rejected **inside the single motion-evidence state machine** owned by `SquatMotionEvidenceEngineV2`.
 
 They must not depend on scattered late blockers.
 
-### Law 4 — Quality never owns pass
+### Law 4 — Quality never owns progression
 
-Quality may produce warnings.
-Quality may affect explanation, confidence language, and downstream recommendation.
-Quality must not own completion truth.
+**Legacy** quality analysis (see **LegacySquatQualityAnalyzer**, §7) may produce warnings, labels, and explanations for **quality / debug / data / analytics** only.
 
-### Law 5 — Final blocker does not own squat pass
+Quality must **not** own progression truth, vetoes, or latch.
 
-Final blockers may exist for non-squat or generic UI/capture reasons only if they do not rewrite squat motion truth.
-For squat, final blocker must not be a second pass authority.
+### Law 5 — Final blocker does not own squat camera progression
 
-### Law 6 — Page latch does not own pass
+Final blockers may exist for non-squat or generic UI/capture reasons only if they do **not** rewrite `usableMotionEvidence` or replace the engine as owner.
 
-The page may schedule UI success, freeze visual state, play audio, or route to the next step.
-It may not reinterpret squat pass.
+For squat, final blocker must **not** be a second progression authority.
+
+### Law 6 — Page latch does not own motion evidence
+
+The page may schedule UI success, freeze visual state, play audio, or route to the next step **as a consumer** of the owner’s boolean.
+
+It may **not** reinterpret or replace `usableMotionEvidence`.
 
 ### Law 7 — Trace/debug is sink-only
 
-Trace, debug panels, exported snapshots, and observability fields may only observe already-computed truth.
-They must not become runtime decision inputs.
+Trace, debug panels, exported snapshots, and observability fields may only **observe** already-computed engine truth.
 
-### Law 8 — Guardrail is not completion
+They must not become **runtime decision inputs** that flip or recompute `usableMotionEvidence`.
+
+### Law 8 — Guardrail is not progression
 
 Guardrail may describe camera quality, visibility, confidence, and retry guidance.
-Guardrail must not decide whether a squat rep was completed.
+
+Guardrail must **not** decide or override `usableMotionEvidence`.
+
+### Law 9 — Consumers are not owners
+
+**auto-progression**, page latch, debug, trace, analytics, and **legacy** pathways are **consumers** of `SquatMotionEvidenceEngineV2` output, not co-owners of squat camera progression.
+
+They must not act as final blocker, latch **owner**, or alternative source of progression truth for squat.
 
 ---
 
 ## 3. Current authority map to collapse
 
-The current system contains multiple effective pass-related authority surfaces.
+The current system contains multiple effective **pass / completion / gate** authority surfaces. Under this SSOT they are **candidates for demotion** to `LegacySquatQualityAnalyzer` / compatibility / observability (see §7)—they must not remain progression owners.
 
-### 3.1 Current motion/completion surfaces
+### 3.1 Current motion/completion surfaces (legacy risk)
 
 - `src/lib/camera/squat/pass-core.ts`
-  - Declares itself as squat motion pass authority.
-  - Produces `passDetected`, `passBlockedReason`, rep evidence, phase-like proof fields.
+  - Historically: squat motion “pass” authority; `passDetected`, `passBlockedReason`, rep evidence, phase-like proof fields.
+  - Target role: **not** squat camera progression owner; **quality / debug / compat** only.
 
 - `src/lib/camera/squat-completion-state.ts`
-  - Produces completion-state fields, shallow/low/standard/ultra-low cycle fields, phase and recovery fields.
+  - Produces completion-state fields, cycle bands, phase and recovery fields.
+  - Target role: **not** owner of `usableMotionEvidence`; may feed **legacy quality** only.
 
 - `src/lib/camera/squat/squat-completion-core.ts`
-  - Contains deeper completion mechanics and historical cycle logic.
+  - Deeper completion mechanics and historical cycle logic.
+  - Target role: same as above.
 
 - `src/lib/camera/evaluators/squat.ts`
-  - Orchestrates squat evaluation and emits debug surfaces consumed downstream.
+  - Orchestrates evaluation and emits debug surfaces consumed downstream.
+  - Target: **wire through** `SquatMotionEvidenceDecisionV2` as owner output; legacy remains non-owner.
 
-### 3.2 Current downstream veto/latch surfaces
+- Prior naming in older plans (`SquatRepEngineV2`, `passed` as the only boolean): **superseded** by `SquatMotionEvidenceEngineV2` and `usableMotionEvidence` for progression semantics.
+
+### 3.2 Current downstream gate/latch surfaces (must stay consumers)
 
 - `src/lib/camera/auto-progression.ts`
-  - Reads owner truth.
-  - Applies UI progression gate.
-  - Applies final blocker chain.
-  - Produces `progressionPassed`, `finalPassEligible`, `finalPassBlockedReason`.
+  - **Consumer:** reads owner truth; applies UI gate; may apply **non-squat** final blockers only if they do not flip `usableMotionEvidence`.
+  - **Not** an alternate owner of squat motion evidence.
 
-- `isFinalPassLatched(...)`
-  - Can re-check final pass conditions.
-  - Creates another success boundary after `progressionPassed`.
+- `isFinalPassLatched(...)` and similar
+  - **Not** a second success boundary that re-derives squat motion evidence.
 
 - `src/app/movement-test/camera/squat/page.tsx`
-  - Consumes gate result.
-  - Owns page latch, freeze, success side effects, route transition.
+  - **Consumer:** page latch, freeze, success side effects, route transition from gate—**not** owner of `usableMotionEvidence`.
 
 ### 3.3 Current quality/retry/debug surfaces
 
 - guardrail / capture quality layer
 - confidence and retry reason surfaces
 - failure tag projections
-- `squatCycleDebug`
-- trace/debug panel fields
-- success snapshot fields
+- `squatCycleDebug`, trace/debug panel fields, success snapshot fields
 
-These are useful as outputs, but dangerous as decision inputs.
+These are **allowed outputs** for explanation and observability; they are **dangerous as decision inputs** for progression. They must **not** override the engine.
 
 ---
 
 ## 4. Structural diagnosis
 
-### Diagnosis A — Pass authority and pass explanation are mixed
+### Diagnosis A — Progression authority and explanation are mixed
 
-Some fields are motion truth.
-Some fields are UI gate truth.
-Some fields are retry explanation.
-Some fields are debug mirrors.
-Some fields are fallback compatibility.
+Some fields are motion-evidence truth.  
+Some are UI gate truth.  
+Some are retry explanation.  
+Some are debug mirrors.  
+Some are fallback compatibility.
 
-The repo has accumulated enough layers that field names can look authoritative even when they are projections or mirrors.
+The repo has accumulated enough layers that field names can look authoritative even when they are projections or mirrors. **SSOT names:** only `usableMotionEvidence` (from `SquatMotionEvidenceEngineV2`) is the progression boolean for this concern.
 
-### Diagnosis B — Shallow squat is vulnerable to deep-squat semantics
+### Diagnosis B — Shallow is vulnerable to deep-squat semantics
 
-A shallow rep can be seen as:
+A shallow rep can be misread as: not enough for deep, early peak, incomplete phase, thin evidence, not confirmed by late latch, blocked by final gate. Shallow must be a first-class **ROM band** for **evidence**, not an incomplete deep rep.
 
-- not enough descent for a deep/standard cycle
-- early peak
-- incomplete phase
-- not recovered enough
-- thin evidence
-- not confirmed by late latch
-- blocked by final gate
+### Diagnosis C — False-evidence prevention is scattered
 
-This means shallow is not treated as a first-class completion band.
-It is repeatedly forced to survive deeper-cycle assumptions.
-
-### Diagnosis C — False pass prevention is scattered
-
-False pass prevention appears across multiple layers:
-
-- no meaningful descent checks
-- peak latch checks
-- reversal checks
-- standing recovery checks
-- setup motion checks
-- final blockers
-- latch frame checks
-- stale rep guards
-- trace-based diagnostics
-
-Some of these are legitimate, but their distribution creates two bad outcomes:
-
-1. valid reps are over-blocked by late layers
-2. false pass returns when one layer is relaxed
+When prevention is distributed, valid reps are over-blocked and false evidence returns when one layer is relaxed. Prevention belongs **in the one engine** (Law 3).
 
 ### Diagnosis D — Behavior-preserving boundary cleanup is insufficient
 
-Previous STRUCT refactors helped name and freeze boundaries, but preserved the old runtime topology.
-That was appropriate for safety at the time.
-
-The current state requires authority removal, not more boundary naming.
+Previous STRUCT refactors helped name boundaries but preserved old runtime topology. This reset **removes ownership** from legacy and downstream, not only renames.
 
 ---
 
 ## 5. Target architecture
 
-### 5.1 Single decision object
+### 5.1 Single decision object (owner)
 
-The new engine must return a single decision object:
+The new engine returns **one** decision object. Illustrative shape (names may change in implementation; **ownership shape must not**):
 
 ```ts
-export type SquatRomBand = 'micro' | 'shallow' | 'standard' | 'deep';
+export type SquatMotionPatternV2 =
+  | 'none'
+  | 'standing_only'
+  | 'descent_only'
+  | 'bottom_hold'
+  | 'down_up_return';
 
-export type SquatRepPhase =
-  | 'not_ready'
-  | 'standing'
-  | 'descending'
-  | 'bottom'
-  | 'ascending'
-  | 'recovered';
+export type SquatMotionRomBandV2 =
+  | 'micro'
+  | 'shallow'
+  | 'standard'
+  | 'deep';
 
-export interface SquatRepDecisionV2 {
-  passed: boolean;
-  phase: SquatRepPhase;
-  romBand: SquatRomBand;
+export interface SquatMotionEvidenceDecisionV2 {
+  usableMotionEvidence: boolean;
+  motionPattern: SquatMotionPatternV2;
+  romBand: SquatMotionRomBandV2;
   blockReason: string | null;
   qualityWarnings: string[];
   evidence: {
     descent: boolean;
     reversal: boolean;
-    nearStandingRecovery: boolean;
-    stableAfterRecovery: boolean;
+    nearStandingReturn: boolean;
+    stableAfterReturn: boolean;
     sameRepOwnership: boolean;
-  };
-  timing: {
-    descentStartAtMs?: number;
-    peakAtMs?: number;
-    reversalAtMs?: number;
-    recoveredAtMs?: number;
-    stableAtMs?: number;
   };
   metrics: {
     relativePeak?: number;
-    descentSpanMs?: number;
-    reversalSpanMs?: number;
-    recoverySpanMs?: number;
+    descentMs?: number;
+    ascentMs?: number;
+    returnMs?: number;
+    estimatedFps?: number;
   };
 }
 ```
 
-The exact type names can change during implementation, but the ownership shape must not change.
+`usableMotionEvidence` is the **only** runtime progression boolean for squat camera motion evidence. Everything else is derived, displayed, or logged.
 
-### 5.2 Only one pass boolean
+**Deprecated centering for SSOT purposes:** `passed` / `passDetected` as the **name** of progression truth—replaced by **`usableMotionEvidence`** and the semantics above.
 
-The runtime must have only one squat motion pass boolean:
-
-```txt
-SquatRepDecisionV2.passed
-```
-
-Everything else must be derived, displayed, or logged.
-
-### 5.3 ROM band is classification, not authority
+### 5.2 ROM band is classification, not authority
 
 `romBand` classifies the movement after evidence is measured.
 
 Allowed meanings:
 
-- `micro`: too small to pass
-- `shallow`: valid low-ROM squat cycle if state sequence completes
-- `standard`: valid standard squat cycle
-- `deep`: valid deep squat cycle
+- `micro`: too small to count as usable evidence
+- `shallow`, `standard`, `deep`: valid **ROM bands** when the state sequence for usable evidence completes
 
 Forbidden meaning:
 
-- `shallow` as incomplete deep squat
-- `standard` as the only legitimate pass band
-- `deep` as the only safe pass band
+- `shallow` as “incomplete deep squat”
+- `standard` as the only legitimate evidence band
+- `deep` as the only safe band
 
-### 5.4 Phase owns ordering
+### 5.3 Phase / pattern owns ordering (inside the engine)
 
-The state machine must enforce ordering:
+The state machine enforces ordering so that `usableMotionEvidence` is only `true` when the engine’s contract for **down / up / return** (and same-rep ownership, non-micro) is met—see companion design and implementation PRs.
 
-```txt
-standing -> descending -> bottom/peak -> ascending -> recovered -> stable -> pass
-```
-
-A frame cannot pass if the phase has not reached recovered/stable.
-
-### 5.5 Quality warnings are non-blocking
+### 5.4 Quality warnings are non-blocking for progression
 
 Examples:
 
 ```txt
-passed=true, romBand='shallow', qualityWarnings=['low_rom']
-passed=true, romBand='deep', qualityWarnings=['unstable_knee_signal']
-passed=false, romBand='micro', blockReason='micro_movement'
+usableMotionEvidence=true, romBand='shallow', qualityWarnings=['low_rom']
+usableMotionEvidence=true, romBand='deep', qualityWarnings=['unstable_knee_signal']
+usableMotionEvidence=false, romBand='micro', blockReason='micro_movement'
 ```
 
-Warnings may affect explanation, not completion.
+Warnings may affect explanation; they **must not** deny progression (Law 4).
 
 ---
 
-## 6. State machine contract
+## 6. State machine contract (evidence, not “form score”)
 
-### 6.1 Pass requires all completion evidence
+### 6.1 Usable evidence requires completion signals
 
-A squat may pass only if all are true:
+`usableMotionEvidence` may be `true` only if the engine’s contract holds, including (conceptually):
 
-1. readiness/capture input is usable enough to evaluate motion
-2. meaningful descent occurred
-3. a peak/bottom region was observed
-4. reversal occurred after peak
-5. near-standing recovery occurred after reversal
-6. short stable dwell occurred after recovery
-7. evidence belongs to the same rep
-8. movement is not micro/noise
+1. capture input is usable enough to evaluate motion  
+2. meaningful descent  
+3. peak/bottom region observed (as defined by the engine)  
+4. reversal after peak  
+5. near-standing return after reversal  
+6. short stable dwell after return  
+7. same-rep ownership  
+8. not micro/noise
 
-### 6.2 Pass must be impossible in these states
+Exact internal checks stay inside **SquatMotionEvidenceEngineV2** (no downstream veto).
 
-- standing only
-- no movement
-- setup-only movement
-- descending only
-- bottom/seated hold
-- mid-ascent before recovery
-- noisy micro bounce
-- stale prior rep evidence
-- cross-rep merged evidence
+### 6.2 Usable evidence must be impossible in these states
 
-### 6.3 Shallow pass requirements
+- standing only  
+- no movement / setup-only  
+- descending only  
+- bottom/seated hold only  
+- mid-ascent before return  
+- noisy micro bounce  
+- stale prior rep / cross-rep merged evidence  
 
-Shallow pass must require completion sequence, not depth equivalence with standard/deep.
+### 6.3 Shallow evidence requirements
 
-Shallow pass requires:
+Shallow **usable** evidence must require the **completion sequence**, not depth equivalence to standard/deep. Shallow must not be forced through deep-ROM assumptions.
 
-```txt
-relative movement above micro floor
-+ meaningful descent span
-+ reversal after peak
-+ near-standing recovery
-+ short stable dwell
-+ same-rep ownership
-```
+### 6.4 Standard/deep
 
-Shallow pass must not require standard/deep ROM.
-
-### 6.4 Standard/deep pass requirements
-
-Standard/deep pass use the same sequence contract as shallow, but classify into higher ROM bands.
-
-They must not be made harder by shallow-specific false-pass patches.
+Same **sequence** contract, higher ROM **classification**—not a separate veto layer outside the engine.
 
 ---
 
 ## 7. Deletion / demotion map
 
-This reset is successful only if authority is removed.
+This reset is successful only if **authority** is removed from legacy and downstream.
 
-### 7.1 Must be demoted to compatibility or observability
+### 7.1 LegacySquatQualityAnalyzer (conceptual name)
 
-- legacy `passDetected` as final owner
-- legacy `completionSatisfied` as final owner
-- `official_shallow_cycle` as pass owner
-- `low_rom_cycle` as pass owner
-- `ultra_low_rom_cycle` as pass owner
-- `standard_cycle` as pass owner
-- completion blocked reasons as final runtime blockers
-- retry tags as pass blockers
-- quality/evidence labels as pass blockers
+The **existing large squat stack** (pass-core, completion-state, rep-style “passed” paths, `passDetected` as if it were progression truth) is **demoted** to **LegacySquatQualityAnalyzer** responsibilities:
 
-These may remain temporarily as compatibility mirrors, but must not own runtime pass.
+- **Allowed:** quality, debug, data, **analytics**; ROM interpretation; warnings; trace summaries; future tuning inputs.  
+- **Forbidden:** progression ownership; final blocker for squat motion evidence; latch **owner**; flipping or replacing `usableMotionEvidence`; using quality to deny engine progression (Law 4).
 
-### 7.2 Must be removed from squat final pass authority
+Mental model:
 
-- squat-specific final blocker vetoes that flip or block a completed motion pass
-- fallback owner recomputation that can disagree with V2 decision
-- latch-level re-evaluation of squat motion completion
-- page-level reinterpretation of pass truth
-- trace/debug-derived runtime gates
+```txt
+judge  -> commentator
+owner  -> analyzer
+blocker (squat) -> (removed from legacy; not replaced outside engine)
+```
 
-### 7.3 May remain as consumers
+### 7.2 Must be demoted to compatibility or observability
 
-- auto-progression may consume `SquatRepDecisionV2.passed`
-- guardrail may consume decision for retry copy
-- page may consume decision for success UI
-- trace may serialize decision
-- debug panel may show decision
-- snapshot may persist decision
+- legacy `passDetected` / `passed` as **final** progression owner  
+- legacy `completionSatisfied` as final owner for squat **camera** progression  
+- `official_shallow_cycle`, `low_rom_cycle`, `ultra_low_rom_cycle`, `standard_cycle` as **progression** owners  
+- completion blocked reasons / retry tags / quality labels as **progression** blockers when they conflict with the engine
 
----
+They may remain as **mirrors** temporarily; they must **not** own runtime `usableMotionEvidence`.
 
-## 8. Migration strategy
+### 7.3 Must be removed from squat final progression authority
 
-This refactor must be large enough to solve the problem, but staged enough to avoid uncontrolled rewrite.
+- squat-specific final blocker **vetoes** that flip the engine’s boolean  
+- fallback owner recomputation that **disagrees** with `SquatMotionEvidenceEngineV2`  
+- latch-level **re-evaluation** of motion evidence for progression  
+- page-level **reinterpretation** of the engine’s boolean  
+- trace/debug **feeding back** as runtime gate that changes `usableMotionEvidence`
 
-### PR-SQUAT-V2-01 — Add SquatRepEngineV2 in parallel
+### 7.4 May remain as consumers
 
-Purpose:
-
-- create the new engine and decision type
-- do not wire runtime success to it yet
-- run fixture replay only
-
-Expected files:
-
-- `src/lib/camera/squat/squat-rep-engine-v2.ts`
-- `src/lib/camera/squat/squat-rep-engine-v2.types.ts`
-- `scripts/camera-squat-engine-v2-fixture-smoke.mjs`
-- fixture utilities if needed
-
-Forbidden:
-
-- no runtime behavior change
-- no auto-progression wiring
-- no page wiring
-- no final blocker edits
-- no legacy deletion yet
-
-Acceptance:
-
-- V2 fixture smoke proves the mandatory matrix below
-- V2 emits stable decision object
-- V2 does not read legacy final blocker/latch/debug authority
-
-### PR-SQUAT-V2-02 — Wire evaluator / auto-progression to consume V2 decision
-
-Purpose:
-
-- evaluator computes `SquatRepDecisionV2`
-- auto-progression uses `decision.passed` as squat motion truth
-- downstream layers stop recomputing squat completion truth
-
-Expected changes:
-
-- `evaluators/squat.ts` emits `debug.squatRepDecisionV2`
-- `auto-progression.ts` uses V2 decision for squat pass branch
-- old owner outputs remain as compatibility mirrors only
-
-Forbidden:
-
-- no threshold tweaking to force pass
-- no new final blocker
-- no page rewrite
-- no new shallow exception chain
-
-Acceptance:
-
-- valid shallow fixture passes through runtime gate
-- valid standard fixture passes through runtime gate
-- valid deep fixture passes through runtime gate
-- standing/descent/bottom/mid-ascent/micro false pass fixtures remain blocked
-- `auto-progression` does not flip V2 motion pass
-
-### PR-SQUAT-V2-03 — Delete / demote legacy pass authorities
-
-Purpose:
-
-- remove or hard-demote legacy owners after V2 is runtime source
-- prevent old code from silently re-owning pass
-
-Targets:
-
-- final squat pass vetoes
-- fallback squat owner recomputation
-- latch-level squat motion re-checks
-- legacy cycle fields as pass owners
-- retry/failure tags as pass blockers
-
-Allowed:
-
-- retain legacy fields as trace mirrors if needed
-- retain adapters only if they clearly read from V2
-
-Acceptance:
-
-- grep/search proof that squat pass branch reads only V2 pass truth
-- legacy owner functions are deleted, deprecated, or adapter-only
-- page latch does not decide squat completion
-- final blocker cannot veto completed squat motion pass
-
-### PR-SQUAT-V2-04 — Observability compatibility and real-device validation lock
-
-Purpose:
-
-- normalize trace/debug/snapshot around V2 decision
-- prove real-device validation paths
-- preserve debugging ability without runtime contamination
-
-Expected:
-
-- trace exports include `squatRepDecisionV2`
-- debug panel labels V2 as owner and legacy as compatibility/mirror
-- success snapshots store V2 decision
-- no trace/debug field is read as runtime gate input
-
-Acceptance:
-
-- real-device shallow squat pass
-- real-device standard/deep squat pass
-- standing/descent/bottom/mid-ascent false pass blocked
-- no major frame lag regression from duplicate heavy computation
+- `auto-progression` may **consume** `decision.usableMotionEvidence` (read-only for this boolean)  
+- guardrail may consume for copy (not for flipping)  
+- page may consume for success UI and routing  
+- trace may serialize decision  
+- analytics may persist **derived** events with **V2** as the progression source of truth in the event contract
 
 ---
 
-## 9. Mandatory fixture matrix
+## 8. Migration strategy (aligned with PR-SQUAT-MOTION-EVIDENCE-V2 design track)
 
-Every implementation PR after V2 introduction must protect this matrix.
+Staged work; **this SSOT** does not dictate a single implementation PR. Reference roadmap:
 
-| Case | Expected | Reason |
-|---|---:|---|
-| standing only | fail | no descent/reversal/recovery cycle |
-| setup-only movement | fail | not a squat rep |
-| descending only | fail | no reversal/recovery |
-| bottom/seated hold | fail | no recovery |
-| mid-ascent before recovery | fail | recovery/stable dwell not reached |
-| micro bounce | fail | below meaningful movement floor |
-| stale prior rep evidence | fail | same-rep ownership broken |
-| valid shallow squat | pass | shallow is a valid ROM band |
-| valid standard squat | pass | standard complete cycle |
-| valid deep squat | pass | deep complete cycle |
+| Step | Intent |
+|------|--------|
+| **PR1** | SSOT update (this document and companion PR report) — reframe to motion evidence, **no code** |
+| **PR2** | Golden trace harness — fixture contracts, scripts/docs as scoped |
+| **PR3** | Add `SquatMotionEvidenceEngineV2` **in parallel** — no runtime wiring; smoke/fixtures only |
+| **PR4** | Shadow compare — legacy vs V2 on golden traces, no behavior change |
+| **PR5** | Runtime owner swap — evaluator + `auto-progression` **consume** `usableMotionEvidence`; **no flip** |
+| **PR6** | Legacy **quality** demotion — old paths as `LegacySquatQualityAnalyzer`-style only |
+| **PR7** | Data + observability lock — derived events, sink-only trace; **V2** clearly labeled as owner in exports |
 
-The valid shallow fixture must be mandatory, not optional, not conditional, and not skipped.
+**Forbidden across documentation-driven phases (unless a dedicated implementation PR explicitly allows and scopes):**
+
+- ad hoc **threshold** tweaks to “force” success  
+- new **shallow** exception chains for progression  
+- new **pass-core / completion-state** as progression owner (they remain **non-goals** for ownership)  
+- **page** and **auto-progression** as **new** owners of the boolean; they stay **consumers**
 
 ---
 
-## 10. Frame-lag and performance requirements
+## 9. Mandatory fixture matrix (evidence expectations)
 
-The reset must also reduce or avoid frame lag.
+Every implementation PR after V2 introduction must protect this matrix. **“Expected”** = **engine should set `usableMotionEvidence` to match** (and never let downstream **invert** the column).
 
-Rules:
+| Case | Expected (usable evidence) | Reason |
+|------|----------------------------:|--------|
+| standing only | no | no descent / cycle |
+| setup-only movement | no | not a rep-like cycle |
+| descending only | no | no reversal/return |
+| bottom/seated hold | no | no return |
+| mid-ascent before return | no | return/stable not reached |
+| micro bounce | no | below meaningful movement |
+| stale prior rep evidence | no | same-rep ownership broken |
+| valid shallow down-up-return | yes | shallow is a valid band |
+| valid standard | yes | full cycle, higher ROM band |
+| valid deep | yes | full cycle, higher ROM band |
 
-1. Do not run multiple full squat engines per frame after runtime wiring.
-2. V2 should compute one decision from a bounded window.
-3. Legacy mirrors must not perform duplicate heavy evaluation once demoted.
-4. Trace construction must be sink-only and cheap.
-5. Page render must not trigger extra full motion evaluation.
-6. Debug panels must not compute pass truth.
+The valid **shallow** case remains **mandatory**, not skippable.
 
-Performance acceptance:
+---
 
-- no duplicate V1 + V2 heavy path after PR-SQUAT-V2-03
-- no page-level re-evaluation of squat pass
-- no debug-only computation on hot path unless debug is explicitly enabled
+## 10. Frame-lag and performance
+
+1. Do not run **multiple full** squat evaluation stacks per frame after wiring.  
+2. **SquatMotionEvidenceEngineV2** should compute one decision from a **bounded** window.  
+3. **Legacy** paths must not duplicate **heavy** evaluation as co-owners when demoted.  
+4. Trace = sink-only and cheap.  
+5. Page must not re-run full motion evaluation to **derive** progression truth.  
+6. Debug must not **compute** `usableMotionEvidence` independently of the owner.
 
 ---
 
@@ -555,39 +433,38 @@ Performance acceptance:
 
 ```txt
 frames/landmarks
--> evaluator/squat.ts
--> SquatRepEngineV2
--> SquatRepDecisionV2
--> auto-progression consumes decision.passed
--> page consumes gate success for UI/navigation
--> trace/debug/snapshot observe decision
+-> evaluators/squat.ts
+-> SquatMotionEvidenceEngineV2
+-> SquatMotionEvidenceDecisionV2 (usableMotionEvidence, ...)
+-> auto-progression / page / trace / analytics / legacy quality
+   (read only; no flip of usableMotionEvidence)
 ```
 
 ### 11.2 Forbidden runtime flow
 
 ```txt
-SquatRepDecisionV2.passed=true
--> final blocker changes to false
+usableMotionEvidence === true
+-> any layer sets progression to false (override)
 ```
 
 ```txt
-SquatRepDecisionV2.passed=false
--> latch/page/debug changes to true
+usableMotionEvidence === false
+-> latch / page / debug / legacy "promotes" to true
 ```
 
 ```txt
-trace/debug field
--> runtime pass decision
+trace / debug / legacy field
+-> runtime input that changes usableMotionEvidence
 ```
 
 ```txt
 quality warning
--> pass denial
+-> progression denial
 ```
 
 ```txt
 shallow rom
--> incomplete deep squat
+-> "incomplete deep squat" (semantic veto)
 ```
 
 ---
@@ -596,122 +473,79 @@ shallow rom
 
 This reset must not:
 
-- redesign the public camera funnel
-- touch `/app/home`, `/app/checkin`, `/app/profile`, AppShell, SessionPanelV2, ExercisePlayerModal, or authenticated execution core
-- change payment/auth/readiness/app contracts
-- change overhead reach logic
-- add a new camera motion to the funnel
+- redesign the entire public camera funnel in one doc PR  
+- list implementation edits (forbidden in SSOT-only PRs) that touch app surfaces **unless** a scoped follow-up allows  
+- change payment/auth/readiness contracts from this document  
+- add another layer of **progression** patch blockers on legacy  
 - convert camera into medical diagnosis
-- optimize UI visuals before pass ownership is fixed
-- add another layer of patch blockers
-- solve every historical trace naming issue in the first PR
 
 ---
 
 ## 13. Implementation constraints
 
-### 13.1 Do not layer more patches onto legacy
+### 13.1 Do not layer more progression patches onto legacy
 
-Any implementation that adds new shallow promotion, new final blocker exception, new fallback pass path, or new trace-derived gate without deleting/demoting old authority is rejected.
+Any work that adds **new** shallow promotion, **new** final blocker **for squat motion evidence**, or **new** trace gate that **replaces** the engine without **demoting** old authority is rejected.
 
 ### 13.2 Prefer deletion over compatibility unless migration requires it
 
-Compatibility mirrors are allowed temporarily, but each must have a planned deletion/demotion target.
+Temporary mirrors are allowed; each needs a **demotion** target. **Legacy** cannot remain a progression owner.
 
-### 13.3 Each PR must prove authority reduction
+### 13.3 Each implementation PR must prove authority reduction
 
-Every PR must answer:
+Every **implementation** PR must answer which **owner** it removed, demoted, or prevented from owning **usableMotionEvidence** for squat.
 
-```txt
-Which pass authority did this remove, demote, or prevent from owning runtime truth?
-```
+### 13.4 Existing tests are not enough alone
 
-If the answer is “none,” the PR is probably another patch, not part of this reset.
-
-### 13.4 Existing tests are not enough
-
-Historical smokes may encode the old multi-authority topology.
-They are useful, but the new mandatory fixture matrix is the primary acceptance layer.
+Historical smokes may encode old topology. The **mandatory matrix** and golden harness (when present) are primary acceptance for **evidence** behavior.
 
 ---
 
-## 14. Acceptance criteria for the full reset
+## 14. Acceptance criteria for the full reset (documentation + implementation)
 
-The reset is complete only when all are true:
+The **full** reset (when all implementation PRs land) is complete only when all are true:
 
-1. `SquatRepEngineV2` is the single runtime owner of squat motion pass.
-2. Valid shallow squat passes on fixture replay and real device.
-3. Valid standard/deep squat passes on fixture replay and real device.
-4. Standing-only does not pass.
-5. Descent-only does not pass.
-6. Bottom/seated hold does not pass.
-7. Mid-ascent before recovery does not pass.
-8. Micro bounce does not pass.
-9. Auto-progression does not rewrite squat motion pass.
-10. Final blocker does not own squat pass.
-11. Page latch does not re-evaluate squat completion.
-12. Guardrail does not own squat completion.
-13. Quality warning does not deny pass.
-14. Trace/debug is sink-only.
-15. Legacy pass authority is deleted, deprecated, or adapter-only.
-16. No major frame-lag regression from duplicate evaluation.
+1. **SquatMotionEvidenceEngineV2** is the **only** runtime owner of squat **camera progression** (motion evidence).  
+2. **usableMotionEvidence** is the **single** progression boolean for that concern; **no downstream flip** (Law 1).  
+3. Valid **shallow** and **standard/deep** **usable** evidence on fixture replay and real device, without legacy **owning** progression.  
+4. Standing / descent-only / bottom hold / mid-ascent / micro / stale: **not** `usableMotionEvidence` on the matrix.  
+5. `auto-progression` **does not** rewrite the engine boolean.  
+6. Final blocker / page / guardrail **do not** own squat **motion evidence** progression.  
+7. **LegacySquatQualityAnalyzer** paths do **not** decide progression.  
+8. Trace/debug is **sink-only** for the engine’s boolean.  
+9. **Legacy** progression authority is deleted, deprecated, or adapter-only **without** co-owning.  
+10. No major frame-lag regression from duplicate **heavy** paths.
 
 ---
 
-## 15. Rollback criteria
+## 15. Rollback criteria (implementation phase)
 
-Rollback or stop the migration if any of these occur:
+Stop or roll back if:
 
-1. standing-only pass opens
-2. descent-only pass opens
-3. bottom/seated pass opens
-4. mid-ascent pass opens
-5. shallow pass only works by bypassing the state machine
-6. V2 and legacy both continue to own runtime pass after PR-SQUAT-V2-03
-7. frame lag worsens because V1 and V2 both run heavy paths permanently
-8. page/debug/trace starts influencing runtime pass
-9. implementation adds more final blockers instead of deleting/demoting old ones
+1. standing-only or seated-only false **usable** evidence appears  
+2. `usableMotionEvidence` can be **overridden** by non-engine layers  
+3. legacy and V2 both **own** runtime progression after demotion  
+4. frame lag from permanent dual heavy paths  
+5. page/debug/trace start **writing** progression truth
 
 ---
 
-## 16. Ask-mode analysis tasks before implementation
+## 16. Ask-mode analysis tasks (before implementation)
 
-Before any implementation PR, run Ask mode to produce a repo-grounded analysis report.
-
-Ask mode must not edit files.
-Ask mode must not propose threshold tuning as the main answer.
-Ask mode must identify exact delete/demote targets.
-
-Required outputs:
-
-1. Current pass authority graph
-2. Current hot path from evaluator to page navigation
-3. Exact legacy fields/functions that can veto pass
-4. Exact places where shallow is treated as incomplete/deep-start
-5. Exact places where final/latch/page can reinterpret pass
-6. Minimal new V2 engine integration point
-7. Deletion/demotion plan per file
-8. Fixture source plan
-9. Performance/hot-path risk map
-10. PR-SQUAT-V2-01 implementation checklist
+Ask mode must not edit code; it must map **current** owners and **delete/demote** targets. Outputs: authority graph, hot path, legacy veto list, shallow-as-incomplete map, final/latch/page reinterpretation, integration point, file plan, fixture plan, performance risks.
 
 ---
 
 ## 17. Final reset statement
 
-The old goal was:
+The old loop targeted “make shallow pass without false pass” on a **judge**-shaped system.
+
+The new SSOT is stricter in **ownership** and **product meaning**:
 
 ```txt
-Make shallow pass without reopening false pass.
+One engine owns usable lower-body flexion/extension motion evidence for camera progression.
+Legacy analyzes quality; it does not decide progression.
+No downstream layer may flip usableMotionEvidence.
 ```
 
-The new goal is stricter:
-
-```txt
-Remove every runtime authority that can disagree with the single squat rep state machine.
-```
-
-Valid squat completion must be decided once.
-Everything else must observe, explain, schedule, or persist that decision.
-
-This is the only acceptable path out of the current repeated-PR loop.
+That is the only acceptable path out of the repeated-PR loop for this product framing.
