@@ -436,6 +436,16 @@ export interface SquatMotionEvidenceDecisionV2 {
     v2OperatorUsedRollingFallback?: boolean | null;
     v2OperatorLowerUpperRatio?: number | null;
     v2OperatorTranslationStatus?: SquatV2OperatorTranslationStatus;
+    // ── PR-V2-INPUT-05: shallow epoch recovery (evaluator-injected; observability) ──
+    v2ShallowRecoveryAttempted?: boolean;
+    v2ShallowRecoveryApplied?: boolean;
+    v2ShallowRecoveryPrimaryBlockReason?: string | null;
+    v2ShallowRecoveryBlockedReason?: string | null;
+    v2ShallowRecoveryReason?: string | null;
+    v2ShallowRecoveryWindowStartMs?: number | null;
+    v2ShallowRecoveryWindowEndMs?: number | null;
+    v2ShallowRecoveryWindowFrameCount?: number | null;
+    v2ShallowRecoveryCandidatesTried?: number;
   };
 }
 

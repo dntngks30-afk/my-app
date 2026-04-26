@@ -27,6 +27,11 @@ import {
   type V2DepthSeriesStats,
 } from '@/lib/camera/squat/squat-v2-input-owner';
 import {
+  shouldAttemptShallowV2Recovery,
+  tryFindShallowV2RecoveryWindow,
+  type SquatV2ShallowRecoveryDiagnostics,
+} from '@/lib/camera/squat/squat-v2-shallow-recovery-window';
+import {
   computeSquatDescentTruth,
 } from '@/lib/camera/squat/squat-descent-truth';
 import {
@@ -284,9 +289,36 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const v2EvalFrames = validRaw.filter((f) => f.timestampMs >= activeEpoch.epochStartMs);
 
   // ── PR-V2-INPUT-01: V2 input frame owner (landmark → legacy PR04D → explicit none) ──
-  const ownedV2Input = buildSquatV2OwnedInputFrames(v2EvalFrames);
+  const ownedV2InputPrimary = buildSquatV2OwnedInputFrames(v2EvalFrames);
 
-  const squatMotionEvidenceV2 = evaluateSquatMotionEvidenceV2(ownedV2Input.frames);
+  let squatMotionEvidenceV2 = evaluateSquatMotionEvidenceV2(ownedV2InputPrimary.frames);
+
+  let chosenV2EvalFrames = v2EvalFrames;
+  let chosenOwnedV2Input = ownedV2InputPrimary;
+  let chosenActiveEpoch = activeEpoch;
+  let shallowRecoveryDiag: SquatV2ShallowRecoveryDiagnostics | null = null;
+
+  if (
+    shouldAttemptShallowV2Recovery({
+      validRawLength: validRaw.length,
+      decision: squatMotionEvidenceV2,
+      owned: ownedV2InputPrimary,
+      v2EvalFrameCount: v2EvalFrames.length,
+    })
+  ) {
+    const { hit, diagnostics } = tryFindShallowV2RecoveryWindow({
+      validRaw,
+      latestValidTs,
+      primaryDecision: squatMotionEvidenceV2,
+    });
+    shallowRecoveryDiag = diagnostics;
+    if (hit) {
+      squatMotionEvidenceV2 = hit.decision;
+      chosenV2EvalFrames = hit.v2EvalFrames;
+      chosenOwnedV2Input = hit.ownedInput;
+      chosenActiveEpoch = hit.syntheticEpoch;
+    }
+  }
 
   // ── Annotate V2 metrics with epoch context and PR6-FIX-01 diagnostics ───
   if (squatMotionEvidenceV2.metrics) {
@@ -294,22 +326,24 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     const vm = squatMotionEvidenceV2.metrics;
 
     // Epoch provenance (initial; corrected below after reading V2's descentStartFrameIndex)
-    m.v2EpochStartMs = v2EvalFrames[0]?.timestampMs;
-    m.usedRollingFallback = activeEpoch.usedRollingFallback;
-    m.activeAttemptEpochStartMs = activeEpoch.activeAttemptEpochStartMs;
-    m.activeAttemptEpochSource = activeEpoch.activeAttemptEpochSource;
-    m.epochResetReason = activeEpoch.epochResetReason;
+    m.v2EpochStartMs = chosenV2EvalFrames[0]?.timestampMs;
+    m.usedRollingFallback = chosenActiveEpoch.usedRollingFallback;
+    m.activeAttemptEpochStartMs = chosenActiveEpoch.activeAttemptEpochStartMs;
+    m.activeAttemptEpochSource = chosenActiveEpoch.activeAttemptEpochSource;
+    m.epochResetReason = chosenActiveEpoch.epochResetReason;
     m.latestFrameTimestampMs = latestValidTs;
 
     // Cycle duration candidate: from descentStart to latest frame.
     // Warns when the current descent may exceed MAX_SQUAT_CYCLE_MS before return.
     const descentStartFrameIndex = vm.descentStartFrameIndex ?? null;
+    const chosenWindowEndTs =
+      chosenV2EvalFrames[chosenV2EvalFrames.length - 1]?.timestampMs ?? latestValidTs;
     const descentStartFrameTs =
       descentStartFrameIndex != null
-        ? (v2EvalFrames[descentStartFrameIndex]?.timestampMs ?? null)
+        ? (chosenV2EvalFrames[descentStartFrameIndex]?.timestampMs ?? null)
         : null;
     const cycleDurationCandidateMs =
-      descentStartFrameTs != null ? latestValidTs - descentStartFrameTs : null;
+      descentStartFrameTs != null ? chosenWindowEndTs - descentStartFrameTs : null;
     m.cycleDurationCandidateMs = cycleDurationCandidateMs;
     m.cycleCapExceeded =
       cycleDurationCandidateMs != null && cycleDurationCandidateMs > 4500
@@ -334,7 +368,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     // reports descentStartFrameIndex=0 (<3), correct to 'without_baseline'.
     const correctedEpochSource = hasActualPreDescentBaseline
       ? 'active_attempt_epoch_with_pre_descent_baseline'
-      : activeEpoch.usedRollingFallback
+      : chosenActiveEpoch.usedRollingFallback
       ? 'rolling_window_fallback'
       : 'active_attempt_epoch_without_baseline';
     m.v2EpochSource = correctedEpochSource;
@@ -346,9 +380,9 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     // validRawBufferOldestMs / validRawBufferNewestMs: full raw buffer bounds.
     // previousSquatPassLatchedInSession / previousSquatPassAtMs: require session-
     //   level wiring (auto-progression.ts). Set to null here (stateless evaluator).
-    m.v2InputStartMs = v2EvalFrames[0]?.timestampMs ?? null;
-    m.v2InputEndMs = latestValidTs;
-    m.v2InputFrameCount = v2EvalFrames.length;
+    m.v2InputStartMs = chosenV2EvalFrames[0]?.timestampMs ?? null;
+    m.v2InputEndMs = chosenWindowEndTs;
+    m.v2InputFrameCount = chosenV2EvalFrames.length;
     m.validRawBufferOldestMs = validRaw[0]?.timestampMs ?? null;
     m.validRawBufferNewestMs = latestValidTs;
     m.validRawFrameCount = validRaw.length;
@@ -365,7 +399,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     // failure, it is an awaiting_ascent_after_peak transient state.
     // Do NOT reset the epoch to rolling fallback when this flag is true.
     const peakFrameIndex_v2 = vm.peakFrameIndex ?? null;
-    const inputFrameCount_v2 = vm.inputFrameCount ?? v2EvalFrames.length;
+    const inputFrameCount_v2 = vm.inputFrameCount ?? chosenV2EvalFrames.length;
     const peakAtTailStall =
       peakFrameIndex_v2 !== null &&
       (peakFrameIndex_v2 >= inputFrameCount_v2 - 1 ||
@@ -382,7 +416,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     const peakAtTailStallDurationMs = peakAtTailStall
       ? Math.max(0, cycleDurationMs - descentMs_v2)
       : null;
-    m.peakAtTailStallSinceMs = peakAtTailStall ? (latestValidTs - descentMs_v2) : null;
+    m.peakAtTailStallSinceMs = peakAtTailStall ? (chosenWindowEndTs - descentMs_v2) : null;
     m.peakAtTailStallDurationMs = peakAtTailStallDurationMs;
 
     // postPeakFrameCount = explicit alias for framesAfterPeak
@@ -452,17 +486,17 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     //   For others: approximate from descent start
     const peakFrameTs_v2 =
       peakFrameIndex_v2 != null
-        ? (v2EvalFrames[peakFrameIndex_v2]?.timestampMs ?? null)
+        ? (chosenV2EvalFrames[peakFrameIndex_v2]?.timestampMs ?? null)
         : null;
     let activeAttemptStateSinceMs: number | null = null;
     if (activeAttemptState === 'awaiting_ascent_after_peak') {
-      activeAttemptStateSinceMs = peakFrameTs_v2 ?? latestValidTs;
+      activeAttemptStateSinceMs = peakFrameTs_v2 ?? chosenWindowEndTs;
     } else if (activeAttemptState === 'ascending') {
       activeAttemptStateSinceMs = peakFrameTs_v2;
     } else if (activeAttemptState === 'descending') {
       const descentStartFrameIndex_v2 = vm.descentStartFrameIndex ?? 0;
       activeAttemptStateSinceMs =
-        v2EvalFrames[descentStartFrameIndex_v2]?.timestampMs ?? null;
+        chosenV2EvalFrames[descentStartFrameIndex_v2]?.timestampMs ?? null;
     }
     m.activeAttemptStateSinceMs = activeAttemptStateSinceMs;
 
@@ -493,52 +527,52 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       // V2's slow-descent exception fired — recovery happened inside V2
       windowRecoveryApplied = true;
       windowRecoveryReason = 'slow_descent_cycle_cap_v2_exception';
-    } else if (peakAtTailStall && activeEpoch.usedRollingFallback === false) {
+    } else if (peakAtTailStall && chosenActiveEpoch.usedRollingFallback === false) {
       // Epoch preserved at descent-start anchor despite peak being at tail
       windowRecoveryApplied = true;
       windowRecoveryReason = 'peak_at_tail_stall_epoch_preserved';
     }
     m.windowRecoveryApplied = windowRecoveryApplied;
     m.windowRecoveryReason = windowRecoveryReason;
-    m.epochResetReason_v2 = activeEpoch.epochResetReason;
+    m.epochResetReason_v2 = chosenActiveEpoch.epochResetReason;
 
     // ── PR04C: Debug depth sample (debug only — NOT used in pass logic) ─
     // PR04D / INPUT-01: samples reflect the depth series V2 actually evaluated.
-    const v2DepthsSrc = ownedV2Input.frames.map((f) => f.depth ?? 0);
+    const v2DepthsSrc = chosenOwnedV2Input.frames.map((f) => f.depth ?? 0);
     const peakIdxDebug = peakFrameIndex_v2 ?? 0;
     const aroundStart = Math.max(0, peakIdxDebug - 5);
-    const aroundEnd = Math.min(v2EvalFrames.length, peakIdxDebug + 6);
+    const aroundEnd = Math.min(chosenV2EvalFrames.length, peakIdxDebug + 6);
     m.v2EvalDepthsSample = {
       first10: v2DepthsSrc.slice(0, 10),
       aroundPeak: v2DepthsSrc.slice(aroundStart, aroundEnd),
       last10: v2DepthsSrc.slice(-10),
-      timestampsFirst10: v2EvalFrames.slice(0, 10).map((f) => f.timestampMs ?? 0),
-      timestampsAroundPeak: v2EvalFrames
+      timestampsFirst10: chosenV2EvalFrames.slice(0, 10).map((f) => f.timestampMs ?? 0),
+      timestampsAroundPeak: chosenV2EvalFrames
         .slice(aroundStart, aroundEnd)
         .map((f) => f.timestampMs ?? 0),
-      timestampsLast10: v2EvalFrames.slice(-10).map((f) => f.timestampMs ?? 0),
+      timestampsLast10: chosenV2EvalFrames.slice(-10).map((f) => f.timestampMs ?? 0),
     };
 
     // ── PR-V2-INPUT-01 + PR04D: input owner + legacy-compatible metrics ────
-    m.v2InputSelectedDepthSource = ownedV2Input.selectedDepthSource;
-    m.v2InputDepthCurveUsable = ownedV2Input.depthCurveUsable;
-    m.v2InputFiniteButUselessDepthRejected = ownedV2Input.finiteButUselessDepthRejected;
-    m.v2InputSourceStats = ownedV2Input.sourceStats;
-    m.v2InputLowerBodySignalSource = ownedV2Input.selectedDepthSource;
+    m.v2InputSelectedDepthSource = chosenOwnedV2Input.selectedDepthSource;
+    m.v2InputDepthCurveUsable = chosenOwnedV2Input.depthCurveUsable;
+    m.v2InputFiniteButUselessDepthRejected = chosenOwnedV2Input.finiteButUselessDepthRejected;
+    m.v2InputSourceStats = chosenOwnedV2Input.sourceStats;
+    m.v2InputLowerBodySignalSource = chosenOwnedV2Input.selectedDepthSource;
 
-    const legacySel = ownedV2Input.legacyDepthSelection;
+    const legacySel = chosenOwnedV2Input.legacyDepthSelection;
     m.runtimeV2DepthEffectiveSource = runtimeV2DepthEffectiveSourceFromOwned(
-      ownedV2Input.selectedDepthSource,
+      chosenOwnedV2Input.selectedDepthSource,
       legacySel
     );
     m.runtimeV2DepthPolicy =
-      ownedV2Input.selectedDepthSource === 'none'
+      chosenOwnedV2Input.selectedDepthSource === 'none'
         ? 'v2_input_01:none_explicit_zero'
         : legacySel != null
         ? legacySel.policy
-        : `v2_input_01:${ownedV2Input.selectedDepthSource}`;
+        : `v2_input_01:${chosenOwnedV2Input.selectedDepthSource}`;
     m.v2DepthSourceSwitchReason =
-      legacySel?.switchReason ?? ownedV2Input.v2InputSwitchReason;
+      legacySel?.switchReason ?? chosenOwnedV2Input.v2InputSwitchReason;
     m.v2DepthSourceStats =
       legacySel != null
         ? {
@@ -553,6 +587,21 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
 
     // ── PR-V2-INPUT-04: operator summary (after full metric injection only) ──
     Object.assign(m, buildV2OperatorObservabilityMetrics(squatMotionEvidenceV2));
+
+    // ── PR-V2-INPUT-05: shallow validRaw window recovery (observability) ──
+    if (shallowRecoveryDiag) {
+      m.v2ShallowRecoveryAttempted = shallowRecoveryDiag.attempted;
+      m.v2ShallowRecoveryApplied = shallowRecoveryDiag.applied;
+      m.v2ShallowRecoveryPrimaryBlockReason = shallowRecoveryDiag.primaryBlockReason;
+      m.v2ShallowRecoveryBlockedReason = shallowRecoveryDiag.blockedReason;
+      m.v2ShallowRecoveryReason = shallowRecoveryDiag.reason;
+      m.v2ShallowRecoveryWindowStartMs = shallowRecoveryDiag.windowStartMs;
+      m.v2ShallowRecoveryWindowEndMs = shallowRecoveryDiag.windowEndMs;
+      m.v2ShallowRecoveryWindowFrameCount = shallowRecoveryDiag.windowFrameCount;
+      m.v2ShallowRecoveryCandidatesTried = shallowRecoveryDiag.candidatesTried;
+    } else {
+      m.v2ShallowRecoveryAttempted = false;
+    }
   }
   if (validRaw.length < MIN_VALID_FRAMES) {
     const emptyDiag = {

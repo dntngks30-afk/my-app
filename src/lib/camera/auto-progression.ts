@@ -49,6 +49,7 @@ import type {
 import type { SquatOwnerTruthSource, SquatOwnerTruthStage } from '@/lib/camera/squat/squat-owner-trace';
 import type { SquatPassCoreResult } from '@/lib/camera/squat/pass-core';
 import type { SquatMotionEvidenceDecisionV2 } from '@/lib/camera/squat/squat-motion-evidence-v2.types';
+import { evaluateSquatV2RuntimeOwnerSafetyConsumption } from './squat/squat-v2-pr04b-consumption-guard';
 import {
   computeSquatUiProgressionLatchGate,
   type SquatUiProgressionLatchGateInput,
@@ -101,11 +102,23 @@ export type SquatV2RuntimeOwnerDecisionTrace = Pick<
   'usableMotionEvidence' | 'motionPattern' | 'romBand' | 'blockReason' | 'qualityWarnings' | 'evidence' | 'metrics'
 >;
 
+/** PR-V2-INPUT-04B / 05: re-export for smokes and callers importing from auto-progression. */
+export {
+  V2_ROLLING_FALLBACK_PASS_NOT_CONSUMABLE,
+  V2_KNEE_FLEX_PROXY_UNRELIABLE_PASS,
+  evaluateSquatV2RuntimeOwnerSafetyConsumption,
+  readSquatV2KneeFlexProxyAngleRangeDeg,
+} from './squat/squat-v2-pr04b-consumption-guard';
+
 export type SquatV2AutoProgressionDecisionTrace = {
   owner: 'squat_motion_evidence_v2';
   consumedField: 'usableMotionEvidence';
   progressionAllowed: boolean;
   blockedReason: string | null;
+  /** True when usableMotionEvidence is true but PR04B safety veto blocks product progression. */
+  v2ProgressionSafetyBlocked?: boolean;
+  v2ProgressionSafetyBlockedReason?: string | null;
+  v2ProgressionSafetyGuardVersion?: 'v2-runtime-owner-safety-04b';
 };
 
 /**
@@ -115,8 +128,11 @@ export type SquatV2AutoProgressionDecisionTrace = {
  * completion-state pipeline. They are retained for false-positive analysis and
  * future safety PRs ONLY.
  *
- * NONE of these fields gate squat progression. The runtime owner is
- * `SquatMotionEvidenceEngineV2.usableMotionEvidence` (`v2RuntimeOwnerDecision`).
+ * NONE of these fields gate squat progression. The runtime owner field is
+ * `SquatMotionEvidenceEngineV2.usableMotionEvidence` (`v2RuntimeOwnerDecision`);
+ * PR-V2-INPUT-04B adds a narrow **consumption** guard so product progression also
+ * requires `autoProgressionDecision.progressionAllowed` (same surface as
+ * `getSquatMotionEvidenceV2BlockedReason == null`).
  *
  * - `completionSatisfied` / `completionBlockedReason`: legacy completion-state truth.
  * - `passCoreBlockedReason`: legacy pass-core blocked reason.
@@ -1842,26 +1858,33 @@ function getCommonReasons(result: EvaluatorResult, guardrail: StepGuardrailResul
   ];
 }
 
-/**
- * PR G7 / PR-COMP-01: completion = `squat-completion-state` 단일 truth.
- * PR-CAM-09: squatCompletionState 에서 typed 로 읽는다.
- */
-function evaluateSquatCompletion(result: EvaluatorResult, guardrail: StepGuardrailResult) {
-  void guardrail;
-  return result.debug?.squatMotionEvidenceV2?.usableMotionEvidence === true;
-}
-
 function getSquatMotionEvidenceV2Decision(
   result: EvaluatorResult
 ): SquatMotionEvidenceDecisionV2 | undefined {
   return result.debug?.squatMotionEvidenceV2;
 }
 
+/** Single product-progression blocked-reason surface for squat (V2 unusable OR PR04B consumption veto). */
 function getSquatMotionEvidenceV2BlockedReason(
   decision: SquatMotionEvidenceDecisionV2 | undefined
 ): string | null {
-  if (decision?.usableMotionEvidence === true) return null;
+  if (decision?.usableMotionEvidence === true) {
+    const safety = evaluateSquatV2RuntimeOwnerSafetyConsumption(decision);
+    if (!safety.consumptionAllowed) {
+      return safety.blockedReason;
+    }
+    return null;
+  }
   return decision?.blockReason ?? 'v2_usable_motion_evidence_false';
+}
+
+/**
+ * PR G7 / PR-COMP-01: squat completion reader used by getCompletionSatisfied (defensive).
+ * PR-V2-INPUT-04B: aligns with unified V2 product progression (includes consumption guard).
+ */
+function evaluateSquatCompletion(result: EvaluatorResult, guardrail: StepGuardrailResult) {
+  void guardrail;
+  return getSquatMotionEvidenceV2BlockedReason(result.debug?.squatMotionEvidenceV2) === null;
 }
 
 export function buildSquatV2RuntimeOwnerDecisionTrace(
@@ -1882,11 +1905,22 @@ export function buildSquatV2RuntimeOwnerDecisionTrace(
 export function buildSquatV2AutoProgressionDecisionTrace(
   decision: SquatMotionEvidenceDecisionV2 | undefined
 ): SquatV2AutoProgressionDecisionTrace {
+  const blockedReason = getSquatMotionEvidenceV2BlockedReason(decision);
+  const usable = decision?.usableMotionEvidence === true;
+  const safety = usable ? evaluateSquatV2RuntimeOwnerSafetyConsumption(decision) : null;
+  const safetyBlocked = usable === true && safety != null && !safety.consumptionAllowed;
   return {
     owner: 'squat_motion_evidence_v2',
     consumedField: 'usableMotionEvidence',
-    progressionAllowed: decision?.usableMotionEvidence === true,
-    blockedReason: getSquatMotionEvidenceV2BlockedReason(decision),
+    progressionAllowed: blockedReason === null,
+    blockedReason,
+    ...(safetyBlocked
+      ? {
+          v2ProgressionSafetyBlocked: true,
+          v2ProgressionSafetyBlockedReason: safety?.blockedReason ?? null,
+          v2ProgressionSafetyGuardVersion: 'v2-runtime-owner-safety-04b' as const,
+        }
+      : {}),
   };
 }
 
@@ -2299,7 +2333,6 @@ function getSquatProgressionCompletionSatisfied(
   const completionOwnerTruthForProgression =
     cs != null ? computeSquatCompletionOwnerTruth({ squatCompletionState: cs }) : null;
   const squatMotionEvidenceV2 = getSquatMotionEvidenceV2Decision(result);
-  const v2UsableMotionEvidence = squatMotionEvidenceV2?.usableMotionEvidence === true;
   const v2BlockedReason = getSquatMotionEvidenceV2BlockedReason(squatMotionEvidenceV2);
 
   // ── 파생 플래그 ──
@@ -2604,8 +2637,8 @@ function getSquatProgressionCompletionSatisfied(
    * Guardrail completionStatus check (above, line 1460) is kept as a signal-quality gate
    * (if capture is incomplete we can't make any motion determination).
    */
-  if (!v2UsableMotionEvidence) {
-    const blockedReason = v2BlockedReason ?? 'v2_usable_motion_evidence_false';
+  if (v2BlockedReason != null) {
+    const blockedReason = v2BlockedReason;
     squatCycleDebug.passBlockedReason = blockedReason;
     squatCycleDebug.completionRejectedReason = blockedReason;
     squatCycleDebug.falsePositiveBlockReason = blockedReason;
@@ -2898,6 +2931,8 @@ export function evaluateExerciseAutoProgress(
   const evaluatorResult = runEvaluator(stepId, landmarks);
   const squatMotionEvidenceV2 =
     stepId === 'squat' ? getSquatMotionEvidenceV2Decision(evaluatorResult) : undefined;
+  const squatV2ProductBlockedReason =
+    stepId === 'squat' ? getSquatMotionEvidenceV2BlockedReason(squatMotionEvidenceV2) : null;
   const guardrail = assessStepGuardrail(stepId, landmarks, stats, evaluatorResult);
   const confidence = getEffectiveConfidence(stepId, evaluatorResult, guardrail);
   const reasons = getCommonReasons(evaluatorResult, guardrail);
@@ -3222,9 +3257,8 @@ export function evaluateExerciseAutoProgress(
         squatCs?.officialShallowPathClosed === true
           ? 'official_shallow_close_diagnostic_only'
           : null,
-      uiProgressionAllowed: squatMotionEvidenceV2?.usableMotionEvidence,
-      uiProgressionBlockedReason:
-        getSquatMotionEvidenceV2BlockedReason(squatMotionEvidenceV2) ?? undefined,
+      uiProgressionAllowed: squatV2ProductBlockedReason === null,
+      uiProgressionBlockedReason: squatV2ProductBlockedReason ?? undefined,
       autoProgressionDecision: buildSquatV2AutoProgressionDecisionTrace(squatMotionEvidenceV2),
       pageLatchDecision: {
         consumer: 'isFinalPassLatched',
@@ -3274,7 +3308,7 @@ export function evaluateExerciseAutoProgress(
         };
       })(),
       squatFinalPassTruth: buildSquatFinalPassTruthSurface({
-        finalPassBlockedReason: getSquatMotionEvidenceV2BlockedReason(squatMotionEvidenceV2),
+        finalPassBlockedReason: squatV2ProductBlockedReason,
         motionOwnerSource: 'none',
       }),
       // PR-CAM-SQUAT-SHALLOW-AUTHORITY-SAFE-DESCENT-SOURCE-EXPANSION (Branch B §7).
@@ -3388,9 +3422,7 @@ export function evaluateExerciseAutoProgress(
       ...(squatMotionEvidenceV2 && { squatMotionEvidenceV2 }),
       finalPassEligible: false,
       finalPassBlockedReason:
-        stepId === 'squat'
-          ? getSquatMotionEvidenceV2BlockedReason(squatMotionEvidenceV2)
-          : 'completion_not_satisfied',
+        stepId === 'squat' ? squatV2ProductBlockedReason : 'completion_not_satisfied',
     };
   }
 
@@ -3400,7 +3432,7 @@ export function evaluateExerciseAutoProgress(
 
   const progressionPassed =
     stepId === 'squat'
-      ? squatMotionEvidenceV2?.usableMotionEvidence === true
+      ? squatV2ProductBlockedReason === null
       : stepId === 'overhead-reach'
         // PR-SIMPLE-PASS-01: confidence is quality-only for overhead — NOT a pass gate
         ? completionSatisfied &&
@@ -3419,7 +3451,7 @@ export function evaluateExerciseAutoProgress(
   /* PR-CAM-17: final pass 체인 가시성 — 어느 단계에서 pass가 막히는지 즉시 확인 가능. */
   const finalPassBlockedReason =
     stepId === 'squat'
-      ? getSquatMotionEvidenceV2BlockedReason(squatMotionEvidenceV2)
+      ? squatV2ProductBlockedReason
       : getFinalPassBlockedReason({
           stepId,
           completionSatisfied,
