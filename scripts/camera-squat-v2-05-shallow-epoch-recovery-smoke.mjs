@@ -215,6 +215,7 @@ const bundle = [
   'scripts/camera-squat-v2-04d-depth-source-alignment-smoke.mjs',
   'scripts/camera-squat-v2-02b-runtime-owner-truth-smoke.mjs',
   'scripts/camera-squat-v2-01-motion-evidence-engine-smoke.mjs',
+  'scripts/camera-squat-v2-05b-recovery-safety-lock-smoke.mjs',
 ];
 
 console.log('\nRunning bundled V2 regression smokes…\n');

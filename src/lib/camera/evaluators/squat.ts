@@ -31,6 +31,7 @@ import {
   tryFindShallowV2RecoveryWindow,
   type SquatV2ShallowRecoveryDiagnostics,
 } from '@/lib/camera/squat/squat-v2-shallow-recovery-window';
+import { findFirstSquatSetupMotionBlockObservation } from '@/lib/camera/squat/squat-setup-motion-window';
 import {
   computeSquatDescentTruth,
 } from '@/lib/camera/squat/squat-descent-truth';
@@ -306,10 +307,15 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       v2EvalFrameCount: v2EvalFrames.length,
     })
   ) {
+    // PR05B: full-buffer setup is diagnostic + overlap support only (not a lone veto).
+    const fullRawSetupForRecovery = computeSquatSetupMotionBlock(validRaw);
+    const fullRawFirstSetupObsForRecovery = findFirstSquatSetupMotionBlockObservation(validRaw);
     const { hit, diagnostics } = tryFindShallowV2RecoveryWindow({
       validRaw,
       latestValidTs,
       primaryDecision: squatMotionEvidenceV2,
+      fullRawSetup: fullRawSetupForRecovery,
+      fullRawFirstSetupObs: fullRawFirstSetupObsForRecovery,
     });
     shallowRecoveryDiag = diagnostics;
     if (hit) {
@@ -599,6 +605,19 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       m.v2ShallowRecoveryWindowEndMs = shallowRecoveryDiag.windowEndMs;
       m.v2ShallowRecoveryWindowFrameCount = shallowRecoveryDiag.windowFrameCount;
       m.v2ShallowRecoveryCandidatesTried = shallowRecoveryDiag.candidatesTried;
+      const rs = shallowRecoveryDiag.recoverySafety;
+      if (rs) {
+        m.v2ShallowRecoverySafetyBlocked = rs.safetyBlocked;
+        m.v2ShallowRecoverySafetyBlockedReason = rs.safetyBlockedReason;
+        m.v2ShallowRecoverySafetyVersion = rs.safetyVersion;
+        m.v2ShallowRecoveryLowerUpperRatio = rs.lowerUpperRatio;
+        m.v2ShallowRecoveryLowerBodyAmplitude = rs.lowerBodyAmplitude;
+        m.v2ShallowRecoveryUpperBodyAmplitude = rs.upperBodyAmplitude;
+        m.v2ShallowRecoverySetupBlocked = rs.setupBlockedFullRaw;
+        m.v2ShallowRecoverySetupBlockReason = rs.setupBlockReasonFullRaw;
+        m.v2ShallowRecoveryCandidateSetupBlocked = rs.candidateSetupBlocked;
+        m.v2ShallowRecoveryCandidateSetupBlockReason = rs.candidateSetupBlockReason;
+      }
     } else {
       m.v2ShallowRecoveryAttempted = false;
     }

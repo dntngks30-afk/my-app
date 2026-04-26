@@ -446,6 +446,19 @@ export interface SquatMotionEvidenceDecisionV2 {
     v2ShallowRecoveryWindowEndMs?: number | null;
     v2ShallowRecoveryWindowFrameCount?: number | null;
     v2ShallowRecoveryCandidatesTried?: number;
+    // ── PR-V2-INPUT-05B: recovery safety lock (observability only) ──
+    v2ShallowRecoverySafetyBlocked?: boolean;
+    v2ShallowRecoverySafetyBlockedReason?: string | null;
+    v2ShallowRecoverySafetyVersion?: 'v2-shallow-recovery-safety-05b';
+    v2ShallowRecoveryLowerUpperRatio?: number | null;
+    v2ShallowRecoveryLowerBodyAmplitude?: number | null;
+    v2ShallowRecoveryUpperBodyAmplitude?: number | null;
+    /** Full validRaw buffer: diagnostic context for setup (not sole veto). */
+    v2ShallowRecoverySetupBlocked?: boolean | null;
+    v2ShallowRecoverySetupBlockReason?: string | null;
+    /** Recovery candidate window: primary setup/framing veto for Lock A. */
+    v2ShallowRecoveryCandidateSetupBlocked?: boolean | null;
+    v2ShallowRecoveryCandidateSetupBlockReason?: string | null;
   };
 }
 

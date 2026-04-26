@@ -2,6 +2,9 @@
  * PR-V2-INPUT-05: shallow squat — second V2 evaluation on `validRaw` sliding windows
  * when primary epoch input is none / tail-spike / unusable curve (trigger from primary V2 + owner only).
  * Replacement is allowed only when PR04B consumption guard passes (shared module).
+ *
+ * PR-V2-INPUT-05B: recovery-only safety lock — candidate-local setup + dominance + micro/limb;
+ * full-buffer setup is diagnostic / overlap support only (not a lone veto).
  */
 import type { PoseFeaturesFrame } from '@/lib/camera/pose-features';
 import type { SquatMotionEvidenceDecisionV2 } from '@/lib/camera/squat/squat-motion-evidence-v2.types';
@@ -11,12 +14,35 @@ import {
 } from '@/lib/camera/squat/squat-v2-input-owner';
 import { evaluateSquatMotionEvidenceV2 } from '@/lib/camera/squat/squat-motion-evidence-v2';
 import { evaluateSquatV2RuntimeOwnerSafetyConsumption } from '@/lib/camera/squat/squat-v2-pr04b-consumption-guard';
+import {
+  computeSquatSetupMotionBlock,
+  findFirstSquatSetupMotionBlockObservation,
+  type SquatSetupMotionBlockObservation,
+  type SquatSetupMotionBlockResult,
+} from '@/lib/camera/squat/squat-setup-motion-window';
 
 const MIN_VALID_RAW_FOR_SEARCH = 28;
 const MIN_WINDOW_FRAMES = 36;
 const MAX_WINDOW_FRAMES_CAP = 220;
 const WINDOW_LEN_STEP = 6;
 const WINDOW_START_STEP = 4;
+
+export const RECOVERY_SETUP_MOTION_BLOCKED = 'recovery_setup_motion_blocked';
+export const RECOVERY_MICRO_OR_LIMB_MOTION = 'recovery_micro_or_limb_motion';
+export const RECOVERY_LOWER_BODY_NOT_DOMINANT_ENOUGH = 'recovery_lower_body_not_dominant_enough';
+
+export type SquatV2ShallowRecoverySafetySnapshot = {
+  safetyBlocked: boolean;
+  safetyBlockedReason: string | null;
+  safetyVersion: 'v2-shallow-recovery-safety-05b';
+  lowerUpperRatio: number | null;
+  lowerBodyAmplitude: number | null;
+  upperBodyAmplitude: number | null;
+  setupBlockedFullRaw: boolean;
+  setupBlockReasonFullRaw: string | null;
+  candidateSetupBlocked: boolean;
+  candidateSetupBlockReason: string | null;
+};
 
 export type SquatV2ShallowRecoveryDiagnostics = {
   attempted: boolean;
@@ -28,7 +54,90 @@ export type SquatV2ShallowRecoveryDiagnostics = {
   windowEndMs: number | null;
   windowFrameCount: number | null;
   candidatesTried: number;
+  /** Last PR05B safety evaluation (PR04B-pass candidate); null if none reached safety stage. */
+  recoverySafety: SquatV2ShallowRecoverySafetySnapshot | null;
 };
+
+function fullBufferSetupOverlapsCandidate(
+  firstObs: SquatSetupMotionBlockObservation,
+  candidateStartIndex: number,
+  candidateLen: number
+): boolean {
+  if (!firstObs.blocked || firstObs.firstBlockedValidIndex == null) return false;
+  const fi = firstObs.firstBlockedValidIndex;
+  return candidateStartIndex <= fi && fi < candidateStartIndex + candidateLen;
+}
+
+/**
+ * PR05B: recovery acceptance only. Priority when multiple: A → C → B → D (D reserved).
+ */
+export function evaluateShallowRecoverySafety05b(p: {
+  decision: SquatMotionEvidenceDecisionV2;
+  candidateSlice: PoseFeaturesFrame[];
+  candidateStartIndexInValidRaw: number;
+  fullRawSetup: SquatSetupMotionBlockResult;
+  fullRawFirstSetupObs: SquatSetupMotionBlockObservation;
+}): { ok: boolean; snapshot: SquatV2ShallowRecoverySafetySnapshot } {
+  const { decision, candidateSlice, candidateStartIndexInValidRaw, fullRawSetup, fullRawFirstSetupObs } =
+    p;
+  const setupOnCandidate = computeSquatSetupMotionBlock(candidateSlice);
+
+  const lockAFromCandidate = setupOnCandidate.blocked === true;
+  const lockAFromFullRawOverlap =
+    fullRawSetup.blocked === true &&
+    fullBufferSetupOverlapsCandidate(
+      fullRawFirstSetupObs,
+      candidateStartIndexInValidRaw,
+      candidateSlice.length
+    );
+  const lockA = lockAFromCandidate || lockAFromFullRawOverlap;
+
+  const m = decision.metrics ?? {};
+  const ratioRaw = m.v2LowerUpperMotionRatio;
+  const ratio = typeof ratioRaw === 'number' && Number.isFinite(ratioRaw) ? ratioRaw : null;
+  const lowerAmpRaw = m.v2LowerBodyMotionAmplitude;
+  const lowerAmp =
+    typeof lowerAmpRaw === 'number' && Number.isFinite(lowerAmpRaw) ? lowerAmpRaw : null;
+  const upperAmpRaw = m.v2UpperBodyMotionAmplitude;
+  const upperAmp =
+    typeof upperAmpRaw === 'number' && Number.isFinite(upperAmpRaw) ? upperAmpRaw : null;
+
+  const romBand = decision.romBand;
+  const peakRaw = m.relativePeak;
+  const relativePeak =
+    typeof peakRaw === 'number' && Number.isFinite(peakRaw) ? peakRaw : null;
+
+  const lockC =
+    romBand === 'shallow' &&
+    relativePeak != null &&
+    relativePeak < 0.05 &&
+    ratio != null &&
+    ratio < 1.5 &&
+    lowerAmp != null &&
+    lowerAmp < 0.1;
+
+  const lockB = ratio != null && ratio < 1.35;
+
+  let safetyBlockedReason: string | null = null;
+  if (lockA) safetyBlockedReason = RECOVERY_SETUP_MOTION_BLOCKED;
+  else if (lockC) safetyBlockedReason = RECOVERY_MICRO_OR_LIMB_MOTION;
+  else if (lockB) safetyBlockedReason = RECOVERY_LOWER_BODY_NOT_DOMINANT_ENOUGH;
+
+  const snapshot: SquatV2ShallowRecoverySafetySnapshot = {
+    safetyBlocked: safetyBlockedReason != null,
+    safetyBlockedReason,
+    safetyVersion: 'v2-shallow-recovery-safety-05b',
+    lowerUpperRatio: ratio,
+    lowerBodyAmplitude: lowerAmp,
+    upperBodyAmplitude: upperAmp,
+    setupBlockedFullRaw: fullRawSetup.blocked === true,
+    setupBlockReasonFullRaw: fullRawSetup.reason,
+    candidateSetupBlocked: setupOnCandidate.blocked === true,
+    candidateSetupBlockReason: setupOnCandidate.reason,
+  };
+
+  return { ok: safetyBlockedReason == null, snapshot };
+}
 
 function peakAtTailStall(
   decision: SquatMotionEvidenceDecisionV2,
@@ -159,16 +268,32 @@ export type ShallowRecoverySearchHit = {
   syntheticEpoch: ReturnType<typeof makeShallowRecoveryActiveEpoch>;
 };
 
+const EMPTY_FULL_SETUP: SquatSetupMotionBlockResult = { blocked: false, reason: null };
+const EMPTY_FIRST_OBS: SquatSetupMotionBlockObservation = {
+  blocked: false,
+  reason: null,
+  firstBlockedValidIndex: null,
+  firstBlockedAtMs: null,
+};
+
 /**
  * Search sliding windows over `validRaw` only. First accepted candidate wins.
+ * `fullRawSetup` / `fullRawFirstSetupObs` are diagnostic + overlap only; never sole veto.
  */
 export function tryFindShallowV2RecoveryWindow(p: {
   validRaw: PoseFeaturesFrame[];
   latestValidTs: number;
   primaryDecision: SquatMotionEvidenceDecisionV2;
+  /** Optional: `computeSquatSetupMotionBlock(validRaw)` for observability + overlap Lock A. */
+  fullRawSetup?: SquatSetupMotionBlockResult;
+  /** Optional: first blocked index in validRaw for overlap; omit if fullRawSetup omitted. */
+  fullRawFirstSetupObs?: SquatSetupMotionBlockObservation;
 }): { hit: ShallowRecoverySearchHit | null; diagnostics: SquatV2ShallowRecoveryDiagnostics } {
   void p.latestValidTs;
   const { validRaw, primaryDecision } = p;
+  const fullRawSetup = p.fullRawSetup ?? EMPTY_FULL_SETUP;
+  const fullRawFirstSetupObs = p.fullRawFirstSetupObs ?? EMPTY_FIRST_OBS;
+
   const diag: SquatV2ShallowRecoveryDiagnostics = {
     attempted: true,
     applied: false,
@@ -179,6 +304,7 @@ export function tryFindShallowV2RecoveryWindow(p: {
     windowEndMs: null,
     windowFrameCount: null,
     candidatesTried: 0,
+    recoverySafety: null,
   };
 
   const n = validRaw.length;
@@ -202,6 +328,20 @@ export function tryFindShallowV2RecoveryWindow(p: {
       const acc = acceptShallowRecoveryCandidate(decision, ownedInput);
       if (!acc.ok) {
         lastReason = acc.reason;
+        continue;
+      }
+
+      const safety = evaluateShallowRecoverySafety05b({
+        decision,
+        candidateSlice: slice,
+        candidateStartIndexInValidRaw: start,
+        fullRawSetup,
+        fullRawFirstSetupObs,
+      });
+      diag.recoverySafety = safety.snapshot;
+
+      if (!safety.ok) {
+        lastReason = safety.snapshot.safetyBlockedReason;
         continue;
       }
 
