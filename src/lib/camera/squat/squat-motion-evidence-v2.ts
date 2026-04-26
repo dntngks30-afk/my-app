@@ -487,7 +487,36 @@ export function evaluateSquatMotionEvidenceV2(
   // The cycle duration (start→return) must not exceed MAX_SQUAT_CYCLE_MS.
   // This is a secondary staleness guard for cases where the closure is at the
   // tail but the cycle itself spans an implausibly long time window.
-  const activeAttemptWindowSatisfied = returnMs == null || returnMs <= MAX_SQUAT_CYCLE_MS;
+  //
+  // PR04C — Slow-descent exception:
+  // A genuine slow squat (descent > 4.5s) can have returnMs > MAX_SQUAT_CYCLE_MS
+  // while still being a valid live attempt. The exception fires when ALL three
+  // conditions hold:
+  //   1. motion.startDepth <= MEANINGFUL_DESCENT_MIN * 0.5 (≈0.0175)
+  //      → The input window's first frames were at near-standing depth.
+  //      → Active-epoch windows start before the descent → startDepth ≈ 0.003-0.006.
+  //      → Rolling-fallback windows can start mid-descent → startDepth ≈ 0.05+.
+  //      → This is a more reliable proxy than preDescentBaselineSatisfied, which
+  //        is always false because findMotionWindow sets startIndex=0 when any
+  //        baseline depth is included (futurePeak - priorMin >= 0.035 at i=0).
+  //   2. peakToReturnMs <= MAX_SQUAT_CYCLE_MS
+  //      → The ascent portion (peak→return) is within normal bounds.
+  //   3. closureFreshAtTail → closure just happened (not a stale historical cycle)
+  // Together: safely unlocks slow genuine squats without re-opening stale false-positives.
+  // Guards B, C, A still apply (they execute before/after this check).
+  const peakToReturnMs =
+    motion.returnIndex != null
+      ? frames[motion.returnIndex]!.timestampMs - frames[motion.peakIndex]!.timestampMs
+      : null;
+
+  const activeAttemptWindowSatisfied =
+    returnMs == null ||
+    returnMs <= MAX_SQUAT_CYCLE_MS ||
+    // Slow-descent exception: long total cycle but window started from standing + normal ascent + fresh closure
+    (motion.startDepth <= MEANINGFUL_DESCENT_MIN * 0.5 &&
+      peakToReturnMs != null &&
+      peakToReturnMs <= MAX_SQUAT_CYCLE_MS &&
+      closureFreshAtTail);
 
   // ── PR6-FIX-01B: Peak-to-tail diagnostics ────────────────────────────────
   // Used for Guard B (same-frame reversal/return) and Guard C (short post-peak).
@@ -557,6 +586,10 @@ export function evaluateSquatMotionEvidenceV2(
     peakDistanceFromTailMs: peakDistanceFromTailMsInternal,
     framesAfterPeak: peakDistanceFromTailFramesInternal,
     msAfterPeak: peakDistanceFromTailMsInternal,
+    // PR04C: explicit post-peak frame count (same as framesAfterPeak — separate named field)
+    postPeakFrameCount: peakDistanceFromTailFramesInternal,
+    // PR04C: peak-to-return duration (ascent portion only)
+    peakToReturnMs,
   };
 
   if (!bodyVisible) {

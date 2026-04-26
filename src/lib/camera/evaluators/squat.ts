@@ -87,6 +87,177 @@ function runtimeV2Depth(frame: PoseFeaturesFrame): number {
   );
 }
 
+// ── PR04D: V2 depth source selection policy ──────────────────────────────────
+// Root cause (PR04D): for shallow squats, squatDepthProxyBlended can be
+// collapsed near-zero (1e-8) or a tail-spike-only series, preventing V2 from
+// seeing the actual shallow descent curve. squatDepthProxy (EMA primary) or
+// squatDepthProxyRaw may provide a better continuous signal.
+// Policy: analyse all three series, select the one that gives V2 the most
+// usable depth curve. Pass decision is NOT changed here — V2 still owns it.
+
+/** Below this → "near-zero machine epsilon" (not a meaningful depth reading). */
+const V2_DEPTH_EPS = 1e-6;
+/** Minimum depth value to count a frame as "meaningful" for series quality. */
+const V2_DEPTH_MEANINGFUL_MIN = 0.018;
+/** Minimum meaningful frames required for a series to be considered "usable". */
+const V2_DEPTH_MIN_USABLE_FRAMES = 3;
+/**
+ * Peak within this many frames from tail → "tail spike only" (no post-peak room).
+ * At 10fps, 2 frames = 200ms — too short for reversal/return detection.
+ */
+const V2_DEPTH_TAIL_SPIKE_MAX_DIST = 2;
+
+type V2DepthSeriesStats = {
+  max: number;
+  meaningfulFrameCount: number;
+  nonZeroFrameCount: number;
+  peakFrameIndex: number;
+  framesAfterPeak: number;
+  collapsedNearZero: boolean;
+  tailSpikeOnly: boolean;
+  hasUsableCurve: boolean;
+  hasPostPeakDrop: boolean;
+};
+
+function computeV2DepthSeriesStats(depths: number[]): V2DepthSeriesStats {
+  const n = depths.length;
+  let max = 0;
+  let peakFrameIndex = 0;
+  let meaningfulFrameCount = 0;
+  let nonZeroFrameCount = 0;
+
+  for (let i = 0; i < n; i++) {
+    const d = depths[i]!;
+    if (d > max) {
+      max = d;
+      peakFrameIndex = i;
+    }
+    if (d >= V2_DEPTH_MEANINGFUL_MIN) meaningfulFrameCount++;
+    if (d > V2_DEPTH_EPS) nonZeroFrameCount++;
+  }
+
+  const framesAfterPeak = n - 1 - peakFrameIndex;
+
+  // collapsedNearZero: the entire series never exceeds machine-epsilon range.
+  // All "meaningful" values are essentially noise.
+  const collapsedNearZero = max < V2_DEPTH_EPS * 1000; // max < ~1e-3
+
+  // tailSpikeOnly: very few meaningful frames AND peak is right at the tail.
+  // Indicates a single-frame or 2-frame spike with no post-peak descent info.
+  const tailSpikeOnly =
+    !collapsedNearZero &&
+    meaningfulFrameCount <= V2_DEPTH_MIN_USABLE_FRAMES - 1 &&
+    framesAfterPeak <= V2_DEPTH_TAIL_SPIKE_MAX_DIST;
+
+  // hasPostPeakDrop: depth after peak drops meaningfully (indicates actual ascent).
+  let hasPostPeakDrop = false;
+  if (framesAfterPeak >= 1) {
+    const nextDepth = depths[peakFrameIndex + 1] ?? max;
+    // reversalThreshold mirrors V2's own: max(0.009, relativePeak * 0.13)
+    const reversalThreshold = Math.max(0.009, max * 0.13);
+    hasPostPeakDrop = max - nextDepth >= reversalThreshold;
+  }
+
+  // hasUsableCurve: series has enough structure for V2 reversal/return detection.
+  const hasUsableCurve =
+    !collapsedNearZero &&
+    !tailSpikeOnly &&
+    meaningfulFrameCount >= V2_DEPTH_MIN_USABLE_FRAMES &&
+    framesAfterPeak >= 2;
+
+  return {
+    max,
+    meaningfulFrameCount,
+    nonZeroFrameCount,
+    peakFrameIndex,
+    framesAfterPeak,
+    collapsedNearZero,
+    tailSpikeOnly,
+    hasUsableCurve,
+    hasPostPeakDrop,
+  };
+}
+
+type SelectedV2DepthSeries = {
+  depths: number[];
+  source: 'blended' | 'proxy' | 'raw' | 'fallback_zero';
+  policy: string;
+  switchReason: string | null;
+  stats: {
+    blended: V2DepthSeriesStats;
+    proxy: V2DepthSeriesStats;
+    raw: V2DepthSeriesStats;
+  };
+};
+
+/**
+ * PR04D: Analyse all three depth candidates (blended / proxy / raw) across the
+ * full v2EvalFrames window and return the series that gives V2 the best input.
+ *
+ * Selection priority:
+ *   1. blended (squatDepthProxyBlended) — default, best for deep squats
+ *   2. proxy   (squatDepthProxy)        — when blended is collapsed or tail-spike
+ *   3. raw     (squatDepthProxyRaw)     — when proxy is also poor
+ *   4. fallback to blended              — when all alternatives are also poor
+ *
+ * IMPORTANT: source selection does NOT change the V2 pass contract.
+ * V2's evidence thresholds, guards (A/B/C), and owner decision are unchanged.
+ */
+function selectRuntimeV2DepthSeries(frames: PoseFeaturesFrame[]): SelectedV2DepthSeries {
+  const blendedDepths = frames.map((f) => finite(f.derived.squatDepthProxyBlended) ?? 0);
+  const proxyDepths = frames.map((f) => finite(f.derived.squatDepthProxy) ?? 0);
+  const rawDepths = frames.map((f) => finite(f.derived.squatDepthProxyRaw) ?? 0);
+
+  const blendedStats = computeV2DepthSeriesStats(blendedDepths);
+  const proxyStats = computeV2DepthSeriesStats(proxyDepths);
+  const rawStats = computeV2DepthSeriesStats(rawDepths);
+  const stats = { blended: blendedStats, proxy: proxyStats, raw: rawStats };
+
+  // Case 1: blended series has a usable curve → use it (normal path).
+  if (blendedStats.hasUsableCurve) {
+    return { depths: blendedDepths, source: 'blended', policy: 'blended_usable', switchReason: null, stats };
+  }
+
+  // Case 2/3/4/5: blended is collapsed or tail-spike → try alternatives.
+  const blendedNotUsable = blendedStats.collapsedNearZero || blendedStats.tailSpikeOnly;
+  if (blendedNotUsable) {
+    const reason = blendedStats.collapsedNearZero ? 'blended_collapsed_near_zero' : 'blended_tail_spike_only';
+    const collapsePrefix = blendedStats.collapsedNearZero ? 'blended_collapsed' : 'tail_spike';
+
+    if (proxyStats.hasUsableCurve) {
+      return {
+        depths: proxyDepths,
+        source: 'proxy',
+        policy: `${collapsePrefix}_proxy_selected`,
+        switchReason: reason,
+        stats,
+      };
+    }
+
+    if (rawStats.hasUsableCurve) {
+      return {
+        depths: rawDepths,
+        source: 'raw',
+        policy: `${collapsePrefix}_raw_selected`,
+        switchReason: reason,
+        stats,
+      };
+    }
+
+    // All alternatives also poor → keep blended (with diagnostic).
+    return {
+      depths: blendedDepths,
+      source: 'blended',
+      policy: 'fallback_blended',
+      switchReason: `${reason}_no_alternative_usable`,
+      stats,
+    };
+  }
+
+  // blended not usable but not clearly collapsed/spike → keep blended.
+  return { depths: blendedDepths, source: 'blended', policy: 'fallback_blended', switchReason: 'blended_not_usable', stats };
+}
+
 function runtimeV2UpperBodySignal(frame: PoseFeaturesFrame): number {
   const arm = finite(frame.derived.armElevationAvg);
   const trunk = finite(frame.derived.trunkLeanDeg);
@@ -95,21 +266,27 @@ function runtimeV2UpperBodySignal(frame: PoseFeaturesFrame): number {
   return Math.max(armNorm, trunkNorm);
 }
 
-function toSquatMotionEvidenceV2Frames(frames: PoseFeaturesFrame[]): SquatMotionEvidenceFrameV2[] {
-  return frames.map((frame) => ({
-    timestampMs: frame.timestampMs,
-    depth: runtimeV2Depth(frame),
-    lowerBodySignal: runtimeV2Depth(frame),
-    upperBodySignal: runtimeV2UpperBodySignal(frame),
-    bodyVisibleEnough: frame.isValid && frame.frameValidity === 'valid',
-    lowerBodyVisibleEnough: frame.visibilitySummary.criticalJointsAvailability >= 0.6,
-    phaseHint: frame.phaseHint,
-    isValid: frame.isValid,
-    frameValidity: frame.frameValidity,
-    visibilitySummary: frame.visibilitySummary,
-    derived: frame.derived,
-    joints: frame.joints,
-  }));
+function toSquatMotionEvidenceV2Frames(
+  frames: PoseFeaturesFrame[],
+  selectedDepths?: number[]
+): SquatMotionEvidenceFrameV2[] {
+  return frames.map((frame, i) => {
+    const depth = selectedDepths != null ? (selectedDepths[i] ?? runtimeV2Depth(frame)) : runtimeV2Depth(frame);
+    return {
+      timestampMs: frame.timestampMs,
+      depth,
+      lowerBodySignal: depth,
+      upperBodySignal: runtimeV2UpperBodySignal(frame),
+      bodyVisibleEnough: frame.isValid && frame.frameValidity === 'valid',
+      lowerBodyVisibleEnough: frame.visibilitySummary.criticalJointsAvailability >= 0.6,
+      phaseHint: frame.phaseHint,
+      isValid: frame.isValid,
+      frameValidity: frame.frameValidity,
+      visibilitySummary: frame.visibilitySummary,
+      derived: frame.derived,
+      joints: frame.joints,
+    };
+  });
 }
 
 /**
@@ -256,6 +433,13 @@ function computeActiveAttemptEpoch(
   };
 }
 
+/**
+ * PR04D: Export for smoke testing. Callers may pass minimal frame-like objects
+ * that only need the `derived` sub-fields used by the depth selection policy.
+ */
+export { selectRuntimeV2DepthSeries };
+export type { SelectedV2DepthSeries, V2DepthSeriesStats };
+
 export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): EvaluatorResult {
   const validRaw = frames.filter((frame) => frame.isValid);
 
@@ -273,8 +457,13 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const activeEpoch = computeActiveAttemptEpoch(validRaw, latestValidTs);
   const v2EvalFrames = validRaw.filter((f) => f.timestampMs >= activeEpoch.epochStartMs);
 
+  // ── PR04D: V2 depth source selection ──────────────────────────────────────
+  // Analyse blended/proxy/raw series; use the best curve for V2 input.
+  // Does NOT change V2 pass thresholds — only which depth series V2 reads.
+  const v2DepthSelection = selectRuntimeV2DepthSeries(v2EvalFrames);
+
   const squatMotionEvidenceV2 = evaluateSquatMotionEvidenceV2(
-    toSquatMotionEvidenceV2Frames(v2EvalFrames)
+    toSquatMotionEvidenceV2Frames(v2EvalFrames, v2DepthSelection.depths)
   );
 
   // ── Annotate V2 metrics with epoch context and PR6-FIX-01 diagnostics ───
@@ -346,6 +535,180 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     m.previousSquatPassAtMs = null;
     m.v2InputIncludesFramesBeforeLastPass = null;
     m.squatCaptureSessionId = null;
+
+    // ── PR04C: Peak-at-tail stall detection ────────────────────────────
+    // peakAtTailStall=true means V2's peak frame is the last frame in the
+    // evaluation window. The user is still descending or just reached the
+    // bottom. V2 correctly returns no_reversal — this is NOT a terminal
+    // failure, it is an awaiting_ascent_after_peak transient state.
+    // Do NOT reset the epoch to rolling fallback when this flag is true.
+    const peakFrameIndex_v2 = vm.peakFrameIndex ?? null;
+    const inputFrameCount_v2 = vm.inputFrameCount ?? v2EvalFrames.length;
+    const peakAtTailStall =
+      peakFrameIndex_v2 !== null &&
+      (peakFrameIndex_v2 >= inputFrameCount_v2 - 1 ||
+        (vm.framesAfterPeak ?? 0) <= 0 ||
+        (vm.peakDistanceFromTailFrames ?? 0) <= 0);
+    m.peakAtTailStall = peakAtTailStall;
+
+    // Stall duration estimate (approximate — no persistent state):
+    // When peak is at the tail, the stall started approximately when depth
+    // stopped increasing meaningfully. Use cycleDurationCandidateMs as an
+    // upper bound; actual stall may be shorter (user is still descending).
+    const cycleDurationMs = cycleDurationCandidateMs ?? 0;
+    const descentMs_v2 = vm.descentMs ?? cycleDurationMs;
+    const peakAtTailStallDurationMs = peakAtTailStall
+      ? Math.max(0, cycleDurationMs - descentMs_v2)
+      : null;
+    m.peakAtTailStallSinceMs = peakAtTailStall ? (latestValidTs - descentMs_v2) : null;
+    m.peakAtTailStallDurationMs = peakAtTailStallDurationMs;
+
+    // postPeakFrameCount = explicit alias for framesAfterPeak
+    m.postPeakFrameCount = vm.framesAfterPeak ?? 0;
+
+    // ── PR04C: Active attempt state machine (stateless derivation) ─────
+    // State is derived from V2 outputs + evaluator context on each tick.
+    // No persistent module state — state machine is re-derived per eval.
+    //
+    // State transition rules:
+    //   usableMotionEvidence=true         → returned (pass confirmed)
+    //   peakAtTailStall=true              → awaiting_ascent_after_peak
+    //   descent_only/bottom_hold + no reversal yet → descending
+    //   incomplete_return + reversal seen → ascending
+    //   attempt_duration_out_of_scope but reversal seen → ascending (slow squat)
+    //   otherwise                         → idle
+    let activeAttemptState: string;
+    let activeAttemptStillLive: boolean;
+    let awaitingAscentAfterPeak: boolean;
+
+    if (squatMotionEvidenceV2.usableMotionEvidence) {
+      activeAttemptState = 'returned';
+      activeAttemptStillLive = false;
+      awaitingAscentAfterPeak = false;
+    } else if (peakAtTailStall) {
+      activeAttemptState = 'awaiting_ascent_after_peak';
+      activeAttemptStillLive = true;
+      awaitingAscentAfterPeak = true;
+    } else if (
+      squatMotionEvidenceV2.motionPattern === 'descent_only' ||
+      squatMotionEvidenceV2.motionPattern === 'bottom_hold'
+    ) {
+      activeAttemptState = 'descending';
+      activeAttemptStillLive = true;
+      awaitingAscentAfterPeak = false;
+    } else if (
+      squatMotionEvidenceV2.motionPattern === 'incomplete_return' ||
+      (squatMotionEvidenceV2.blockReason === 'attempt_duration_out_of_scope' &&
+        vm.reversalFrameIndex != null)
+    ) {
+      activeAttemptState = 'ascending';
+      activeAttemptStillLive = true;
+      awaitingAscentAfterPeak = false;
+    } else if (
+      squatMotionEvidenceV2.blockReason === 'attempt_duration_out_of_scope' ||
+      squatMotionEvidenceV2.blockReason === 'no_reversal' ||
+      squatMotionEvidenceV2.blockReason === 'no_return_to_start'
+    ) {
+      // Descent with no reversal yet (but not peak-at-tail — this case uses
+      // the non-stall descending path)
+      activeAttemptState = 'descending';
+      activeAttemptStillLive = true;
+      awaitingAscentAfterPeak = false;
+    } else {
+      activeAttemptState = 'idle';
+      activeAttemptStillLive = false;
+      awaitingAscentAfterPeak = false;
+    }
+
+    m.awaitingAscentAfterPeak = awaitingAscentAfterPeak;
+    m.activeAttemptState = activeAttemptState;
+    m.activeAttemptStillLive = activeAttemptStillLive;
+
+    // Approximate state-since timestamp:
+    //   For 'awaiting_ascent_after_peak': since cycleDurationCandidateMs - descentMs
+    //   For 'ascending': since the peak timestamp
+    //   For others: approximate from descent start
+    const peakFrameTs_v2 =
+      peakFrameIndex_v2 != null
+        ? (v2EvalFrames[peakFrameIndex_v2]?.timestampMs ?? null)
+        : null;
+    let activeAttemptStateSinceMs: number | null = null;
+    if (activeAttemptState === 'awaiting_ascent_after_peak') {
+      activeAttemptStateSinceMs = peakFrameTs_v2 ?? latestValidTs;
+    } else if (activeAttemptState === 'ascending') {
+      activeAttemptStateSinceMs = peakFrameTs_v2;
+    } else if (activeAttemptState === 'descending') {
+      const descentStartFrameIndex_v2 = vm.descentStartFrameIndex ?? 0;
+      activeAttemptStateSinceMs =
+        v2EvalFrames[descentStartFrameIndex_v2]?.timestampMs ?? null;
+    }
+    m.activeAttemptStateSinceMs = activeAttemptStateSinceMs;
+
+    // ── PR04C: Cycle cap vs live attempt distinction ────────────────────
+    // cycleCapExceededButLiveAttempt=true means the attempt is identified as
+    // a slow genuine squat (not stale), not a reason to discard the attempt.
+    const cycleCapExceededButLiveAttempt =
+      m.cycleCapExceeded === true && activeAttemptStillLive;
+    const staleWindowRejected =
+      squatMotionEvidenceV2.blockReason === 'stale_closure_not_at_tail';
+    m.cycleCapExceededButLiveAttempt = cycleCapExceededButLiveAttempt;
+    m.staleWindowRejected = staleWindowRejected;
+
+    // ── PR04C: Window recovery annotation ──────────────────────────────
+    // windowRecoveryApplied=true when the evaluator adjusted the V2 window
+    // to ensure post-peak frames are included.
+    // The V2 slow-descent exception (preDescentBaselineSatisfied + peakToReturnMs
+    // + closureFreshAtTail) provides the primary recovery mechanism within V2.
+    // No separate second V2 call is needed when this exception covers the case.
+    let windowRecoveryApplied = false;
+    let windowRecoveryReason: string | null = null;
+
+    if (
+      cycleCapExceededButLiveAttempt &&
+      squatMotionEvidenceV2.usableMotionEvidence &&
+      squatMotionEvidenceV2.blockReason === null
+    ) {
+      // V2's slow-descent exception fired — recovery happened inside V2
+      windowRecoveryApplied = true;
+      windowRecoveryReason = 'slow_descent_cycle_cap_v2_exception';
+    } else if (peakAtTailStall && activeEpoch.usedRollingFallback === false) {
+      // Epoch preserved at descent-start anchor despite peak being at tail
+      windowRecoveryApplied = true;
+      windowRecoveryReason = 'peak_at_tail_stall_epoch_preserved';
+    }
+    m.windowRecoveryApplied = windowRecoveryApplied;
+    m.windowRecoveryReason = windowRecoveryReason;
+    m.epochResetReason_v2 = activeEpoch.epochResetReason;
+
+    // ── PR04C: Debug depth sample (debug only — NOT used in pass logic) ─
+    // PR04D: v2DepthsSrc now reflects the SELECTED depth series (not always blended).
+    const v2DepthsSrc = v2DepthSelection.depths;
+    const peakIdxDebug = peakFrameIndex_v2 ?? 0;
+    const aroundStart = Math.max(0, peakIdxDebug - 5);
+    const aroundEnd = Math.min(v2EvalFrames.length, peakIdxDebug + 6);
+    m.v2EvalDepthsSample = {
+      first10: v2DepthsSrc.slice(0, 10),
+      aroundPeak: v2DepthsSrc.slice(aroundStart, aroundEnd),
+      last10: v2DepthsSrc.slice(-10),
+      timestampsFirst10: v2EvalFrames.slice(0, 10).map((f) => f.timestampMs ?? 0),
+      timestampsAroundPeak: v2EvalFrames
+        .slice(aroundStart, aroundEnd)
+        .map((f) => f.timestampMs ?? 0),
+      timestampsLast10: v2EvalFrames.slice(-10).map((f) => f.timestampMs ?? 0),
+    };
+
+    // ── PR04D: Depth source selection policy metrics (debug only) ──────────
+    m.runtimeV2DepthEffectiveSource = v2DepthSelection.source;
+    m.runtimeV2DepthPolicy = v2DepthSelection.policy;
+    m.v2DepthSourceSwitchReason = v2DepthSelection.switchReason;
+    m.v2DepthSourceStats = {
+      blended: v2DepthSelection.stats.blended,
+      proxy: v2DepthSelection.stats.proxy,
+      raw: v2DepthSelection.stats.raw,
+    };
+    m.selectedV2DepthFirst10 = v2DepthsSrc.slice(0, 10);
+    m.selectedV2DepthAroundPeak = v2DepthsSrc.slice(aroundStart, aroundEnd);
+    m.selectedV2DepthLast10 = v2DepthsSrc.slice(-10);
   }
   if (validRaw.length < MIN_VALID_FRAMES) {
     const emptyDiag = {

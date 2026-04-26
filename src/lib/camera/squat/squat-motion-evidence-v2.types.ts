@@ -176,6 +176,177 @@ export interface SquatMotionEvidenceDecisionV2 {
      * Populated by the calling context; null in stateless evaluator.
      */
     squatCaptureSessionId?: string | null;
+    // ── PR04C: Peak-at-tail stall detection ──────────────────────────────
+    /**
+     * True when the peak (squat bottom) frame is the last frame in the V2 input window.
+     * Conditions: peakFrameIndex >= inputFrameCount - 1 OR framesAfterPeak <= 0.
+     * Indicates the user is still descending or just reached the bottom —
+     * V2 cannot detect reversal/return because post-peak frames haven't arrived yet.
+     * This is NOT a terminal failure — it is an awaiting_ascent_after_peak state.
+     */
+    peakAtTailStall?: boolean;
+    /**
+     * PR04C: Timestamp (ms) since peak-at-tail stall was first detected.
+     * Approximated from cycleDurationCandidateMs when persistent state is unavailable.
+     */
+    peakAtTailStallSinceMs?: number | null;
+    /**
+     * PR04C: Duration (ms) the peak has been at the tail (stall duration estimate).
+     * null when state history is unavailable.
+     */
+    peakAtTailStallDurationMs?: number | null;
+    /**
+     * PR04C: True when the active attempt is in awaiting_ascent_after_peak state.
+     * The attempt has descended to peak but post-peak ascent frames haven't arrived.
+     * The epoch window should remain anchored — do not reset to rolling fallback.
+     */
+    awaitingAscentAfterPeak?: boolean;
+    /**
+     * PR04C: Explicit count of frames after the peak frame in the V2 input window.
+     * Same as framesAfterPeak (alias). When 0, reversal detection is impossible.
+     */
+    postPeakFrameCount?: number | null;
+    // ── PR04C: Active attempt state machine ──────────────────────────────
+    /**
+     * PR04C: Current inferred state of the active squat attempt.
+     * Derived stateless from V2 outputs + evaluator context.
+     * States: 'idle' | 'descending' | 'awaiting_ascent_after_peak' |
+     *         'ascending' | 'returned' | 'terminal_pass' | 'terminal_reset'
+     */
+    activeAttemptState?: string | null;
+    /**
+     * PR04C: Estimated timestamp (ms) since the current activeAttemptState began.
+     * Approximated — requires persistent state for exact tracking.
+     */
+    activeAttemptStateSinceMs?: number | null;
+    /**
+     * PR04C: True when the active attempt is considered still live (not stale/terminal).
+     * Live = user is descending, at bottom, or ascending — pass not yet confirmed.
+     */
+    activeAttemptStillLive?: boolean;
+    // ── PR04C: Cycle cap vs live attempt distinction ─────────────────────
+    /**
+     * PR04C: True when cycleCapExceeded=true AND the attempt is identified as live.
+     * A slow genuine squat (descent > 4.5s) can exceed the cycle cap
+     * without being stale. This flag distinguishes slow-live from stale.
+     */
+    cycleCapExceededButLiveAttempt?: boolean;
+    /**
+     * PR04C: True when the block was caused by a detected stale window
+     * (closureFreshAtTail=false or genuinely old cycle).
+     */
+    staleWindowRejected?: boolean;
+    // ── PR04C: Window recovery fields ───────────────────────────────────
+    /**
+     * PR04C: True when the evaluator applied window recovery to ensure V2
+     * can evaluate the full cycle (e.g. slow-descent cycle cap bypass).
+     */
+    windowRecoveryApplied?: boolean;
+    /**
+     * PR04C: Reason for window recovery, if applied.
+     * e.g. 'slow_descent_cycle_cap_exceeded' | 'peak_at_tail_stall_epoch_preserved'
+     */
+    windowRecoveryReason?: string | null;
+    /**
+     * PR04C: Reason for epoch reset if one occurred in this tick.
+     * Distinct from epochResetReason (which tracks setup_phase_excluded).
+     */
+    epochResetReason_v2?: string | null;
+    // ── PR04C: Peak-to-return duration ──────────────────────────────────
+    /**
+     * PR04C: Duration (ms) from peak frame to near-start return frame.
+     * Represents the ascent portion of the cycle only.
+     * Used to distinguish slow-descent squats from stale cycles:
+     *   - Slow genuine squat: peakToReturnMs = 1500-3500ms (normal ascent)
+     *   - Stale cycle: blocked by closureFreshAtTail before this matters
+     */
+    peakToReturnMs?: number | null;
+    // ── PR04C: Debug depth sample (debug only — NOT used in pass logic) ──
+    /**
+     * PR04C: Depth value samples from the V2 evaluation window for diagnostics.
+     * DEBUG ONLY. Must not influence pass logic.
+     */
+    v2EvalDepthsSample?: {
+      first10?: number[];
+      aroundPeak?: number[];
+      last10?: number[];
+      timestampsFirst10?: number[];
+      timestampsAroundPeak?: number[];
+      timestampsLast10?: number[];
+    } | null;
+    // ── PR04D: V2 depth source selection policy ──────────────────────────
+    /**
+     * PR04D: Which depth source was ultimately selected for V2 input.
+     * 'blended' = squatDepthProxyBlended used (normal path)
+     * 'proxy'   = squatDepthProxy used (blended was collapsed/tail-spike)
+     * 'raw'     = squatDepthProxyRaw used (blended+proxy both unusable)
+     * 'mixed'   = per-frame selection (future)
+     * 'fallback_zero' = all sources unusable, V2 received zeros
+     */
+    runtimeV2DepthEffectiveSource?: 'blended' | 'proxy' | 'raw' | 'mixed' | 'fallback_zero';
+    /**
+     * PR04D: Source selection policy applied.
+     * 'blended_usable'                  = blended series has usable curve
+     * 'blended_collapsed_proxy_selected' = blended collapsed near zero → proxy
+     * 'blended_collapsed_raw_selected'   = blended collapsed, proxy also poor → raw
+     * 'tail_spike_proxy_selected'        = blended tail-spike-only → proxy
+     * 'tail_spike_raw_selected'          = blended tail-spike, proxy also poor → raw
+     * 'fallback_blended'                 = all alternatives also poor → keep blended
+     * 'fallback_zero'                    = no usable series
+     */
+    runtimeV2DepthPolicy?: string;
+    /**
+     * PR04D: Why the source was switched (if runtimeV2DepthPolicy != 'blended_usable').
+     * null when blended was used without fallback.
+     */
+    v2DepthSourceSwitchReason?: string | null;
+    /**
+     * PR04D: Per-source depth series quality statistics (debug only).
+     * Contains blended, proxy, and raw stats to diagnose source issues.
+     */
+    v2DepthSourceStats?: {
+      blended?: {
+        max: number;
+        meaningfulFrameCount: number;
+        nonZeroFrameCount: number;
+        peakFrameIndex: number;
+        framesAfterPeak: number;
+        collapsedNearZero: boolean;
+        tailSpikeOnly: boolean;
+        hasUsableCurve: boolean;
+        hasPostPeakDrop: boolean;
+      };
+      proxy?: {
+        max: number;
+        meaningfulFrameCount: number;
+        nonZeroFrameCount: number;
+        peakFrameIndex: number;
+        framesAfterPeak: number;
+        collapsedNearZero: boolean;
+        tailSpikeOnly: boolean;
+        hasUsableCurve: boolean;
+        hasPostPeakDrop: boolean;
+      };
+      raw?: {
+        max: number;
+        meaningfulFrameCount: number;
+        nonZeroFrameCount: number;
+        peakFrameIndex: number;
+        framesAfterPeak: number;
+        collapsedNearZero: boolean;
+        tailSpikeOnly: boolean;
+        hasUsableCurve: boolean;
+        hasPostPeakDrop: boolean;
+      };
+    } | null;
+    /**
+     * PR04D: Selected V2 depth series samples (first 10 / around peak / last 10).
+     * Reflects the depth that was actually fed into V2 (after source selection).
+     * DEBUG ONLY. Must not influence pass logic.
+     */
+    selectedV2DepthFirst10?: number[] | null;
+    selectedV2DepthAroundPeak?: number[] | null;
+    selectedV2DepthLast10?: number[] | null;
   };
 }
 

@@ -1,0 +1,37 @@
+{
+  "_meta": {
+    "description": "PR04C — Peak-at-tail stall: user is still descending, peak=last frame, no post-peak frames. Expected: fail (no_reversal), peakAtTailStall=true, awaitingAscentAfterPeak=true.",
+    "scenario": "peak_at_tail_stall",
+    "pr": "PR04C",
+    "usableMotionEvidence_expected": false,
+    "blockReason_expected": "no_reversal",
+    "motionPattern_expected": "descent_only",
+    "peakAtTailStall_expected": true,
+    "awaitingAscentAfterPeak_expected": true,
+    "activeAttemptState_expected": "awaiting_ascent_after_peak",
+    "diagnosis": "peakFrameIndex=inputFrameCount-1, framesAfterPeak=0. User is still descending — V2 cannot detect reversal yet. This is NOT a terminal failure, it is an awaiting state."
+  },
+  "v2Frames": [
+    { "timestampMs": 0,    "lowerBodySignal": 0.004, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 100,  "lowerBodySignal": 0.005, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 200,  "lowerBodySignal": 0.006, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 300,  "lowerBodySignal": 0.010, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 400,  "lowerBodySignal": 0.018, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 500,  "lowerBodySignal": 0.028, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 600,  "lowerBodySignal": 0.038, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 700,  "lowerBodySignal": 0.048, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 800,  "lowerBodySignal": 0.058, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 900,  "lowerBodySignal": 0.068, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 1000, "lowerBodySignal": 0.075, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 1100, "lowerBodySignal": 0.080, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 1200, "lowerBodySignal": 0.084, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 1300, "lowerBodySignal": 0.087, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 1400, "lowerBodySignal": 0.090, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 1500, "lowerBodySignal": 0.092, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 1600, "lowerBodySignal": 0.094, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 1700, "lowerBodySignal": 0.095, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 1800, "lowerBodySignal": 0.096, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 1900, "lowerBodySignal": 0.097, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 2000, "lowerBodySignal": 0.098, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false }
+  ]
+}

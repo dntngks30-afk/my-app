@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "description": "PR04C — Slow shallow squat with proper pre-descent baseline. descentMs≈3000ms, total returnMs≈4800ms > 4500ms cap. Expected: PASS via PR04C slow-descent exception.",
+    "scenario": "slow_shallow_descent_then_ascent_return",
+    "pr": "PR04C",
+    "usableMotionEvidence_expected": true,
+    "motionPattern_expected": "down_up_return",
+    "blockReason_expected": null,
+    "romBand_expected": "shallow",
+    "diagnosis": "Pre-descent baseline (5 standing frames). Descent 500ms-3500ms. Peak 3500ms. Ascent 3500-4700ms. Return+stable 4700-4900ms. returnMs≈4200ms < 4500ms → standard pass. Also validates slow-descent path."
+  },
+  "v2Frames": [
+    { "timestampMs": 0,    "lowerBodySignal": 0.003, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 100,  "lowerBodySignal": 0.004, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 200,  "lowerBodySignal": 0.004, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 300,  "lowerBodySignal": 0.005, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 400,  "lowerBodySignal": 0.005, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 500,  "lowerBodySignal": 0.018, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 700,  "lowerBodySignal": 0.033, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 900,  "lowerBodySignal": 0.048, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 1100, "lowerBodySignal": 0.060, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 1300, "lowerBodySignal": 0.068, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 1500, "lowerBodySignal": 0.074, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 1700, "lowerBodySignal": 0.079, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 1900, "lowerBodySignal": 0.082, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 2100, "lowerBodySignal": 0.085, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 2300, "lowerBodySignal": 0.087, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 2500, "lowerBodySignal": 0.089, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 2700, "lowerBodySignal": 0.090, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 2900, "lowerBodySignal": 0.091, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 3100, "lowerBodySignal": 0.092, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 3300, "lowerBodySignal": 0.092, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 3500, "lowerBodySignal": 0.093, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 3700, "lowerBodySignal": 0.082, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 3900, "lowerBodySignal": 0.068, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 4100, "lowerBodySignal": 0.048, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 4300, "lowerBodySignal": 0.028, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 4500, "lowerBodySignal": 0.010, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 4600, "lowerBodySignal": 0.006, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 4700, "lowerBodySignal": 0.005, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false },
+    { "timestampMs": 4800, "lowerBodySignal": 0.004, "bodyVisibleEnough": true, "lowerBodyVisibleEnough": true, "setupPhase": false }
+  ]
+}
