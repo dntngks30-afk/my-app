@@ -26,6 +26,65 @@ export type SquatV2OperatorTranslationStatus =
   | 'dominant'
   | 'unknown';
 
+/**
+ * PR-V2-INPUT-06: conservative label for JSON inspection only.
+ * Must not be used as pass/recovery/guard/progression authority.
+ */
+export type V2DeepInputLikelyRootCause =
+  | 'lower_body_landmarks_not_visible'
+  | 'v2_window_dropped_deep_prefix'
+  | 'tail_spike_only'
+  | 'insufficient_raw_evidence'
+  | 'unknown';
+
+/**
+ * PR-V2-INPUT-06: validRaw vs final chosen V2 window (post-recovery if applied).
+ * Compact summaries only — no per-frame arrays. Observability / JSON only.
+ */
+export type V2DeepInputAudit = {
+  version: 'v2-deep-input-audit-06';
+  likelyRootCause: V2DeepInputLikelyRootCause;
+  notes?: string[];
+  validRawFrameCount: number;
+  validRawOldestMs: number | null;
+  validRawNewestMs: number | null;
+  validRawDurationMs: number | null;
+  validRawHipYRange: number | null;
+  validRawKneeAngleRangeDeg: number | null;
+  validRawPelvisProxyRange: number | null;
+  validRawMinHipVisibility: number | null;
+  validRawMinKneeVisibility: number | null;
+  validRawMinAnkleVisibility: number | null;
+  validRawLowerBodyVisibleFrameCount: number;
+  validRawRuntimeDepthPeakFrameIndex: number | null;
+  validRawRuntimeDepthFramesAfterPeak: number | null;
+  validRawRuntimeDepthTailSpikeOnly: boolean | null;
+  /** Max of PR04D selectRuntimeV2DepthSeries-chosen depth series; not labeled hip-center depth. */
+  validRawMaxRuntimeDepthCandidate: number | null;
+  v2InputFrameCount: number;
+  v2InputOldestMs: number | null;
+  v2InputNewestMs: number | null;
+  v2InputDurationMs: number | null;
+  v2InputHipYRange: number | null;
+  v2InputKneeAngleRangeDeg: number | null;
+  v2InputPelvisProxyRange: number | null;
+  v2InputMinHipVisibility: number | null;
+  v2InputMinKneeVisibility: number | null;
+  v2InputMinAnkleVisibility: number | null;
+  v2InputLowerBodyVisibleFrameCount: number;
+  v2InputRuntimeDepthPeakFrameIndex: number | null;
+  v2InputRuntimeDepthFramesAfterPeak: number | null;
+  v2InputRuntimeDepthTailSpikeOnly: boolean | null;
+  /** Max of PR04D selectRuntimeV2DepthSeries-chosen depth series on final V2 window; not labeled hip-center depth. */
+  v2InputMaxRuntimeDepthCandidate: number | null;
+  v2InputStartMs: number | null;
+  v2InputDroppedPrefixMs: number | null;
+  v2InputDroppedPrefixFrameCount: number;
+  recoveryCandidatesTried: number | null;
+  recoveryApplied: boolean | null;
+  recoveryBlockedReason: string | null;
+};
+
 export type SquatMotionPatternV2 =
   | 'none'
   | 'standing_only'
@@ -467,6 +526,8 @@ export interface SquatMotionEvidenceDecisionV2 {
     v2ShallowRecoveryPrimaryRelativePeak?: number | null;
     v2ShallowRecoveryIndependentLowerBodyEvidence?: boolean | null;
     v2ShallowRecoveryIndependentLowerBodyEvidenceReason?: string | null;
+    /** PR-V2-INPUT-06: JSON inspection only — must not be read by pass/recovery/guards/progression/UI. */
+    v2DeepInputAudit?: V2DeepInputAudit;
   };
 }
 

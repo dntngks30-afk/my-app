@@ -282,6 +282,8 @@ Minimum PR-1 real-device check:
 
 If shallow still fails, the trace must show why within V2 input diagnostics.
 
+**실기기 최종 수락 요약(2026-04-27):** [PR-V2-INPUT-ACCEPTANCE-2026-04-27.md](./PR-V2-INPUT-ACCEPTANCE-2026-04-27.md)
+
 ---
 
 ## 8. Model guidance

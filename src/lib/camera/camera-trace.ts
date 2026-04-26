@@ -23,6 +23,7 @@ import {
   type SquatResultInterpretation,
 } from './squat-result-severity';
 import type { SquatFinalPassSemanticsSource } from './squat/squat-final-pass-semantics';
+import type { V2DeepInputAudit } from './squat/squat-motion-evidence-v2.types';
 import {
   clearStoredCameraTraceData,
   clearStoredOverheadObservations,
@@ -366,6 +367,8 @@ export interface AttemptSnapshot {
         epochSource: string | null;
         usedRollingFallback: boolean | null;
       };
+      /** PR-V2-INPUT-06: metrics mirror; JSON inspection only. */
+      v2DeepInputAudit?: V2DeepInputAudit;
       /** PR-HMM-03A: 而댄뙥??calibration (吏㏃? ?? */
       calib?: {
         rb: string | null;

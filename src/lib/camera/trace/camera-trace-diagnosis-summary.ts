@@ -296,6 +296,10 @@ export function buildDiagnosisSummary(
       };
     }
 
+    if (v2m?.v2DeepInputAudit != null && base.squatCycle != null) {
+      base.squatCycle.v2DeepInputAudit = v2m.v2DeepInputAudit;
+    }
+
     const squatHmm = gate.evaluatorResult.debug?.squatHmm;
     if (squatHmm != null && base.squatCycle != null) {
       const squatCycleExt = base.squatCycle as typeof base.squatCycle & {

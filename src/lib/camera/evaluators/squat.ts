@@ -2,7 +2,7 @@
  * 스쿼트 evaluator
  * metrics: depth, knee alignment trend, trunk lean, asymmetry
  */
-import type { PoseLandmarks } from '@/lib/motion/pose-types';
+import type { PoseLandmark, PoseLandmarks } from '@/lib/motion/pose-types';
 import {
   buildPoseFeaturesFrames,
   getSquatRecoverySignal,
@@ -20,8 +20,10 @@ import {
   buildV2OperatorObservabilityMetrics,
   evaluateSquatMotionEvidenceV2,
 } from '@/lib/camera/squat/squat-motion-evidence-v2';
+import type { V2DeepInputAudit, V2DeepInputLikelyRootCause } from '@/lib/camera/squat/squat-motion-evidence-v2.types';
 import {
   buildSquatV2OwnedInputFrames,
+  computeV2DepthSeriesStats,
   selectRuntimeV2DepthSeries,
   type SelectedV2DepthSeries,
   type V2DepthSeriesStats,
@@ -270,6 +272,369 @@ function computeActiveAttemptEpoch(
     epochResetReason,
   };
 }
+
+
+// ── PR-V2-INPUT-06: Deep input audit (observability only; JSON inspection) ──
+const DEEP_INPUT_AUDIT_HIP_SAMPLE_VIS = 0.35;
+const DEEP_INPUT_AUDIT_LOWER_BODY_VIS = 0.35;
+
+/** OBSERVABILITY ONLY — not used by pass/guards/recovery/progression/UI. */
+const DEEP_INPUT_AUDIT_VIS_ANKLE_BAD = 0.12;
+const DEEP_INPUT_AUDIT_VIS_KNEE_BAD = 0.14;
+const DEEP_INPUT_AUDIT_LOWER_BODY_FRAME_RATIO_BAD = 0.22;
+const DEEP_INPUT_AUDIT_PREFIX_MS_MIN = 1800;
+const DEEP_INPUT_AUDIT_V2_SHORTER_RATIO = 0.55;
+const DEEP_INPUT_AUDIT_RANGE_RATIO = 1.38;
+const DEEP_INPUT_AUDIT_HIP_DELTA_ABS = 0.012;
+const DEEP_INPUT_AUDIT_KNEE_DELTA_ABS = 4;
+const DEEP_INPUT_AUDIT_PELVIS_DELTA_ABS = 0.006;
+const DEEP_INPUT_AUDIT_DEPTH_DELTA_ABS = 0.04;
+const DEEP_INPUT_AUDIT_HIP_MICRO = 0.007;
+const DEEP_INPUT_AUDIT_KNEE_MICRO = 2.5;
+const DEEP_INPUT_AUDIT_PELVIS_MICRO = 0.004;
+const DEEP_INPUT_AUDIT_DEPTH_MICRO = 0.035;
+
+type DeepInputBufferAuditSummary = {
+  frameCount: number;
+  oldestMs: number | null;
+  newestMs: number | null;
+  durationMs: number | null;
+  hipYRange: number | null;
+  kneeAngleRangeDeg: number | null;
+  pelvisProxyRange: number | null;
+  minHipVisibility: number | null;
+  minKneeVisibility: number | null;
+  minAnkleVisibility: number | null;
+  lowerBodyVisibleFrameCount: number;
+  runtimeDepthPeakFrameIndex: number | null;
+  runtimeDepthFramesAfterPeak: number | null;
+  runtimeDepthTailSpikeOnly: boolean | null;
+  maxRuntimeDepthCandidate: number | null;
+};
+
+function deepInputVis(lm: PoseLandmark | null | undefined): number {
+  return lm?.visibility ?? 1;
+}
+
+function deepInputHipMidpoint(a: PoseLandmark | null, b: PoseLandmark | null): PoseLandmark | null {
+  if (a == null || b == null) return null;
+  const va = a.visibility ?? 1;
+  const vb = b.visibility ?? 1;
+  return {
+    x: (a.x + b.x) / 2,
+    y: (a.y + b.y) / 2,
+    z: a.z != null && b.z != null ? (a.z + b.z) / 2 : undefined,
+    visibility: Math.min(va, vb),
+  };
+}
+
+function summarizeBufferForDeepInputAudit(frames: PoseFeaturesFrame[]): DeepInputBufferAuditSummary {
+  const n = frames.length;
+  if (n === 0) {
+    return {
+      frameCount: 0,
+      oldestMs: null,
+      newestMs: null,
+      durationMs: null,
+      hipYRange: null,
+      kneeAngleRangeDeg: null,
+      pelvisProxyRange: null,
+      minHipVisibility: null,
+      minKneeVisibility: null,
+      minAnkleVisibility: null,
+      lowerBodyVisibleFrameCount: 0,
+      runtimeDepthPeakFrameIndex: null,
+      runtimeDepthFramesAfterPeak: null,
+      runtimeDepthTailSpikeOnly: null,
+      maxRuntimeDepthCandidate: null,
+    };
+  }
+  const oldestMs = frames[0]!.timestampMs;
+  const newestMs = frames[n - 1]!.timestampMs;
+  const durationMs = newestMs - oldestMs;
+
+  const hipYs: number[] = [];
+  let minHipVis: number | null = null;
+  let minKneeVis: number | null = null;
+  let minAnkleVis: number | null = null;
+  let lowerBodyVisibleFrames = 0;
+
+  const kneeAngles: number[] = [];
+  const pelvisVals: number[] = [];
+
+  for (const f of frames) {
+    const j = f.joints;
+    const lh = j.leftHip;
+    const rh = j.rightHip;
+    const lk = j.leftKnee;
+    const rk = j.rightKnee;
+    const la = j.leftAnkle;
+    const ra = j.rightAnkle;
+
+    const hVis = Math.min(deepInputVis(lh), deepInputVis(rh));
+    const kVis = Math.min(deepInputVis(lk), deepInputVis(rk));
+    const aVis = Math.min(deepInputVis(la), deepInputVis(ra));
+    minHipVis = minHipVis == null ? hVis : Math.min(minHipVis, hVis);
+    minKneeVis = minKneeVis == null ? kVis : Math.min(minKneeVis, kVis);
+    minAnkleVis = minAnkleVis == null ? aVis : Math.min(minAnkleVis, aVis);
+
+    if (
+      deepInputVis(lh) >= DEEP_INPUT_AUDIT_LOWER_BODY_VIS &&
+      deepInputVis(rh) >= DEEP_INPUT_AUDIT_LOWER_BODY_VIS &&
+      deepInputVis(lk) >= DEEP_INPUT_AUDIT_LOWER_BODY_VIS &&
+      deepInputVis(rk) >= DEEP_INPUT_AUDIT_LOWER_BODY_VIS &&
+      deepInputVis(la) >= DEEP_INPUT_AUDIT_LOWER_BODY_VIS &&
+      deepInputVis(ra) >= DEEP_INPUT_AUDIT_LOWER_BODY_VIS
+    ) {
+      lowerBodyVisibleFrames++;
+    }
+
+    const hc = j.hipCenter;
+    let hipY: number | null = null;
+    if (hc != null && deepInputVis(hc) >= DEEP_INPUT_AUDIT_HIP_SAMPLE_VIS) {
+      hipY = hc.y;
+    } else {
+      const mid = deepInputHipMidpoint(lh, rh);
+      if (mid != null && deepInputVis(lh) >= DEEP_INPUT_AUDIT_HIP_SAMPLE_VIS && deepInputVis(rh) >= DEEP_INPUT_AUDIT_HIP_SAMPLE_VIS) {
+        hipY = mid.y;
+      }
+    }
+    if (hipY != null) hipYs.push(hipY);
+
+    const ka = finite(f.derived.kneeAngleAvg);
+    if (ka != null) kneeAngles.push(ka);
+
+    const pd = finite(f.derived.pelvicDrop);
+    if (pd != null) pelvisVals.push(pd);
+  }
+
+  let hipYRange: number | null = null;
+  if (hipYs.length >= 2) {
+    let mn = hipYs[0]!;
+    let mx = hipYs[0]!;
+    for (const y of hipYs) {
+      if (y < mn) mn = y;
+      if (y > mx) mx = y;
+    }
+    hipYRange = mx - mn;
+  } else if (hipYs.length === 1) {
+    hipYRange = 0;
+  }
+
+  let kneeAngleRangeDeg: number | null = null;
+  if (kneeAngles.length >= 2) {
+    let mn = kneeAngles[0]!;
+    let mx = kneeAngles[0]!;
+    for (const v of kneeAngles) {
+      if (v < mn) mn = v;
+      if (v > mx) mx = v;
+    }
+    kneeAngleRangeDeg = mx - mn;
+  } else if (kneeAngles.length === 1) {
+    kneeAngleRangeDeg = 0;
+  }
+
+  let pelvisProxyRange: number | null = null;
+  if (pelvisVals.length >= 2) {
+    let mn = pelvisVals[0]!;
+    let mx = pelvisVals[0]!;
+    for (const v of pelvisVals) {
+      if (v < mn) mn = v;
+      if (v > mx) mx = v;
+    }
+    pelvisProxyRange = mx - mn;
+  } else if (pelvisVals.length === 1) {
+    pelvisProxyRange = 0;
+  }
+
+  const sel = selectRuntimeV2DepthSeries(frames);
+  const rdStats = computeV2DepthSeriesStats(sel.depths);
+
+  return {
+    frameCount: n,
+    oldestMs,
+    newestMs,
+    durationMs,
+    hipYRange,
+    kneeAngleRangeDeg,
+    pelvisProxyRange,
+    minHipVisibility: minHipVis,
+    minKneeVisibility: minKneeVis,
+    minAnkleVisibility: minAnkleVis,
+    lowerBodyVisibleFrameCount: lowerBodyVisibleFrames,
+    runtimeDepthPeakFrameIndex: sel.depths.length > 0 ? rdStats.peakFrameIndex : null,
+    runtimeDepthFramesAfterPeak: sel.depths.length > 0 ? rdStats.framesAfterPeak : null,
+    runtimeDepthTailSpikeOnly: sel.depths.length > 0 ? rdStats.tailSpikeOnly : null,
+    maxRuntimeDepthCandidate: sel.depths.length > 0 ? rdStats.max : null,
+  };
+}
+
+function countStrongerRawMotionSignals(raw: DeepInputBufferAuditSummary, v2: DeepInputBufferAuditSummary): number {
+  let c = 0;
+  if (
+    raw.hipYRange != null &&
+    v2.hipYRange != null &&
+    raw.hipYRange > v2.hipYRange * DEEP_INPUT_AUDIT_RANGE_RATIO + DEEP_INPUT_AUDIT_HIP_DELTA_ABS
+  ) {
+    c++;
+  }
+  if (
+    raw.kneeAngleRangeDeg != null &&
+    v2.kneeAngleRangeDeg != null &&
+    raw.kneeAngleRangeDeg > v2.kneeAngleRangeDeg * DEEP_INPUT_AUDIT_RANGE_RATIO + DEEP_INPUT_AUDIT_KNEE_DELTA_ABS
+  ) {
+    c++;
+  }
+  if (
+    raw.pelvisProxyRange != null &&
+    v2.pelvisProxyRange != null &&
+    raw.pelvisProxyRange > v2.pelvisProxyRange * DEEP_INPUT_AUDIT_RANGE_RATIO + DEEP_INPUT_AUDIT_PELVIS_DELTA_ABS
+  ) {
+    c++;
+  }
+  if (
+    raw.maxRuntimeDepthCandidate != null &&
+    v2.maxRuntimeDepthCandidate != null &&
+    raw.maxRuntimeDepthCandidate >
+      v2.maxRuntimeDepthCandidate * DEEP_INPUT_AUDIT_RANGE_RATIO + DEEP_INPUT_AUDIT_DEPTH_DELTA_ABS
+  ) {
+    c++;
+  }
+  return c;
+}
+
+function classifyV2DeepInputLikelyRootCause(p: {
+  raw: DeepInputBufferAuditSummary;
+  v2: DeepInputBufferAuditSummary;
+  droppedPrefixMs: number | null;
+  droppedPrefixFrameCount: number;
+}): { likelyRootCause: V2DeepInputLikelyRootCause; notes: string[] } {
+  const notes: string[] = [];
+  const { raw, v2 } = p;
+  const ratio = raw.frameCount > 0 ? raw.lowerBodyVisibleFrameCount / raw.frameCount : 0;
+  const visibilityLooksBad =
+    raw.minAnkleVisibility != null &&
+    raw.minAnkleVisibility <= DEEP_INPUT_AUDIT_VIS_ANKLE_BAD &&
+    raw.minKneeVisibility != null &&
+    raw.minKneeVisibility <= DEEP_INPUT_AUDIT_VIS_KNEE_BAD &&
+    ratio <= DEEP_INPUT_AUDIT_LOWER_BODY_FRAME_RATIO_BAD;
+
+  if (visibilityLooksBad) {
+    notes.push(
+      `visibility: minAnkle=${raw.minAnkleVisibility?.toFixed(3)}, minKnee=${raw.minKneeVisibility?.toFixed(3)}, lbRatio=${ratio.toFixed(2)}`
+    );
+    return { likelyRootCause: 'lower_body_landmarks_not_visible', notes };
+  }
+
+  const rawMicro =
+    (raw.hipYRange ?? 0) <= DEEP_INPUT_AUDIT_HIP_MICRO &&
+    (raw.kneeAngleRangeDeg ?? 0) <= DEEP_INPUT_AUDIT_KNEE_MICRO &&
+    (raw.pelvisProxyRange ?? 0) <= DEEP_INPUT_AUDIT_PELVIS_MICRO &&
+    (raw.maxRuntimeDepthCandidate ?? 0) <= DEEP_INPUT_AUDIT_DEPTH_MICRO;
+
+  if (rawMicro && raw.frameCount >= 5) {
+    notes.push('validRaw kinematic/runtime-depth ranges are uniformly micro');
+    return { likelyRootCause: 'insufficient_raw_evidence', notes };
+  }
+
+  const droppedMs = p.droppedPrefixMs ?? 0;
+  const v2Shorter =
+    v2.frameCount > 0 &&
+    raw.frameCount >= 12 &&
+    v2.frameCount <= Math.max(8, raw.frameCount * DEEP_INPUT_AUDIT_V2_SHORTER_RATIO);
+  const sigs = countStrongerRawMotionSignals(raw, v2);
+  const droppedPrefixLarge =
+    droppedMs >= DEEP_INPUT_AUDIT_PREFIX_MS_MIN && p.droppedPrefixFrameCount >= 8;
+
+  if (droppedPrefixLarge && v2Shorter && sigs >= 2) {
+    notes.push(`droppedPrefixMs=${droppedMs}, droppedFrames=${p.droppedPrefixFrameCount}, strongerSignals=${sigs}`);
+    return { likelyRootCause: 'v2_window_dropped_deep_prefix', notes };
+  }
+
+  const tail =
+    v2.runtimeDepthTailSpikeOnly === true ||
+    (v2.runtimeDepthFramesAfterPeak != null && v2.runtimeDepthFramesAfterPeak <= 0);
+  if (tail && v2.frameCount >= 3) {
+    notes.push('runtime depth tail-spike or zero post-peak frames in V2 window');
+    return { likelyRootCause: 'tail_spike_only', notes };
+  }
+
+  if (droppedMs > 500 || p.droppedPrefixFrameCount > 0) {
+    notes.push(
+      `no conservative classification; droppedPrefixMs=${droppedMs}, strongerSignals=${sigs}, v2Shorter=${v2Shorter}`
+    );
+  }
+  return { likelyRootCause: 'unknown', notes };
+}
+
+/** Exported for smoke tests only; production path uses evaluateSquatFromPoseFrames injection. */
+export function buildV2DeepInputAudit(p: {
+  validRaw: PoseFeaturesFrame[];
+  chosenV2EvalFrames: PoseFeaturesFrame[];
+  shallowRecoveryDiag: SquatV2ShallowRecoveryDiagnostics | null;
+}): V2DeepInputAudit {
+  const raw = summarizeBufferForDeepInputAudit(p.validRaw);
+  const v2 = summarizeBufferForDeepInputAudit(p.chosenV2EvalFrames);
+  const v2InputStartMs = p.chosenV2EvalFrames[0]?.timestampMs ?? null;
+  const validRawOldestMs = p.validRaw[0]?.timestampMs ?? null;
+  const v2InputDroppedPrefixMs =
+    v2InputStartMs != null && validRawOldestMs != null ? Math.max(0, v2InputStartMs - validRawOldestMs) : null;
+  let v2InputDroppedPrefixFrameCount = 0;
+  if (v2InputStartMs != null) {
+    for (const f of p.validRaw) {
+      if ((f.timestampMs ?? 0) < v2InputStartMs) v2InputDroppedPrefixFrameCount++;
+    }
+  }
+  const { likelyRootCause, notes } = classifyV2DeepInputLikelyRootCause({
+    raw,
+    v2,
+    droppedPrefixMs: v2InputDroppedPrefixMs,
+    droppedPrefixFrameCount: v2InputDroppedPrefixFrameCount,
+  });
+
+  return {
+    version: 'v2-deep-input-audit-06',
+    likelyRootCause,
+    notes: notes.length ? notes : undefined,
+    validRawFrameCount: raw.frameCount,
+    validRawOldestMs: raw.oldestMs,
+    validRawNewestMs: raw.newestMs,
+    validRawDurationMs: raw.durationMs,
+    validRawHipYRange: raw.hipYRange,
+    validRawKneeAngleRangeDeg: raw.kneeAngleRangeDeg,
+    validRawPelvisProxyRange: raw.pelvisProxyRange,
+    validRawMinHipVisibility: raw.minHipVisibility,
+    validRawMinKneeVisibility: raw.minKneeVisibility,
+    validRawMinAnkleVisibility: raw.minAnkleVisibility,
+    validRawLowerBodyVisibleFrameCount: raw.lowerBodyVisibleFrameCount,
+    validRawRuntimeDepthPeakFrameIndex: raw.runtimeDepthPeakFrameIndex,
+    validRawRuntimeDepthFramesAfterPeak: raw.runtimeDepthFramesAfterPeak,
+    validRawRuntimeDepthTailSpikeOnly: raw.runtimeDepthTailSpikeOnly,
+    validRawMaxRuntimeDepthCandidate: raw.maxRuntimeDepthCandidate,
+    v2InputFrameCount: v2.frameCount,
+    v2InputOldestMs: v2.oldestMs,
+    v2InputNewestMs: v2.newestMs,
+    v2InputDurationMs: v2.durationMs,
+    v2InputHipYRange: v2.hipYRange,
+    v2InputKneeAngleRangeDeg: v2.kneeAngleRangeDeg,
+    v2InputPelvisProxyRange: v2.pelvisProxyRange,
+    v2InputMinHipVisibility: v2.minHipVisibility,
+    v2InputMinKneeVisibility: v2.minKneeVisibility,
+    v2InputMinAnkleVisibility: v2.minAnkleVisibility,
+    v2InputLowerBodyVisibleFrameCount: v2.lowerBodyVisibleFrameCount,
+    v2InputRuntimeDepthPeakFrameIndex: v2.runtimeDepthPeakFrameIndex,
+    v2InputRuntimeDepthFramesAfterPeak: v2.runtimeDepthFramesAfterPeak,
+    v2InputRuntimeDepthTailSpikeOnly: v2.runtimeDepthTailSpikeOnly,
+    v2InputMaxRuntimeDepthCandidate: v2.maxRuntimeDepthCandidate,
+    v2InputStartMs,
+    v2InputDroppedPrefixMs,
+    v2InputDroppedPrefixFrameCount,
+    recoveryCandidatesTried: p.shallowRecoveryDiag?.candidatesTried ?? null,
+    recoveryApplied: p.shallowRecoveryDiag?.applied ?? null,
+    recoveryBlockedReason: p.shallowRecoveryDiag?.blockedReason ?? null,
+  };
+}
+
 
 /** PR04D smoke: re-export from V2 input owner (same signature). */
 export { selectRuntimeV2DepthSeries, type SelectedV2DepthSeries, type V2DepthSeriesStats };
@@ -642,6 +1007,12 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     } else {
       m.v2ShallowRecoveryAttempted = false;
     }
+
+    m.v2DeepInputAudit = buildV2DeepInputAudit({
+      validRaw,
+      chosenV2EvalFrames,
+      shallowRecoveryDiag,
+    });
   }
   if (validRaw.length < MIN_VALID_FRAMES) {
     const emptyDiag = {
