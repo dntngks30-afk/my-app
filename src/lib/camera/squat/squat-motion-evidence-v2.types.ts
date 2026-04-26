@@ -13,6 +13,19 @@ export type SquatV2AttemptState =
   | 'pass'
   | 'blocked';
 
+/** PR-V2-INPUT-04: operator-facing label only; not a pass owner. */
+export type SquatV2OperatorOutcome = 'pass' | 'blocked' | 'pending' | 'unknown';
+
+/** PR-V2-INPUT-04: depth curve usability label from injected metrics. */
+export type SquatV2OperatorCurveStatus = 'usable' | 'unusable' | 'unknown';
+
+/** PR-V2-INPUT-04: translation suspicion label for summaries only. */
+export type SquatV2OperatorTranslationStatus =
+  | 'none'
+  | 'suspected'
+  | 'dominant'
+  | 'unknown';
+
 export type SquatMotionPatternV2 =
   | 'none'
   | 'standing_only'
@@ -409,6 +422,20 @@ export interface SquatMotionEvidenceDecisionV2 {
       returnMs?: number | null;
       stableMs?: number | null;
     } | null;
+    // ── PR-V2-INPUT-04: operator observability (evaluator-injected metrics only) ──
+    /** Compact one-line summary for real-device JSON; display/debug only. */
+    v2OperatorSummary?: string;
+    v2OperatorOutcome?: SquatV2OperatorOutcome;
+    v2OperatorInputSource?: string | null;
+    v2OperatorCurveStatus?: SquatV2OperatorCurveStatus;
+    v2OperatorBlockedAt?: string | null;
+    v2OperatorBlockedReason?: string | null;
+    v2OperatorRomBand?: string | null;
+    v2OperatorPeakTailFrames?: number | null;
+    v2OperatorEpochSource?: string | null;
+    v2OperatorUsedRollingFallback?: boolean | null;
+    v2OperatorLowerUpperRatio?: number | null;
+    v2OperatorTranslationStatus?: SquatV2OperatorTranslationStatus;
   };
 }
 

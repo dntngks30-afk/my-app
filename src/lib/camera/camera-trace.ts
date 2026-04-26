@@ -347,6 +347,25 @@ export interface AttemptSnapshot {
       limitationCount?: number;
       /** CAM-shallow-obs: attempt-evidence蹂대떎 ?쏀븳 愿痢?怨꾩빟(??Β룹쭊???꾩슜) */
       shallowObservationEligible?: boolean;
+      /**
+       * PR-V2-INPUT-04: compact squat V2 operator line (optional; from evaluator metrics only).
+       * No depth arrays or large nested debug payloads.
+       */
+      squatV2OperatorSummary?: {
+        summary: string;
+        outcome: string;
+        inputSource: string | null;
+        curveStatus: string;
+        attemptState: string | null;
+        blockedAt: string | null;
+        blockReason: string | null;
+        romBand: string | null;
+        peakTailFrames: number | null;
+        lowerUpperRatio: number | null;
+        translationStatus: string;
+        epochSource: string | null;
+        usedRollingFallback: boolean | null;
+      };
       /** PR-HMM-03A: 而댄뙥??calibration (吏㏃? ?? */
       calib?: {
         rb: string | null;

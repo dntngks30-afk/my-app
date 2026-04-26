@@ -273,6 +273,29 @@ export function buildDiagnosisSummary(
       resultSeverity.resultInterpretation as SquatResultInterpretation;
     base.squatCycle.qualityWarningCount = resultSeverity.qualityWarningCount;
     base.squatCycle.limitationCount = resultSeverity.limitationCount;
+
+    const v2m = gate.evaluatorResult?.debug?.squatMotionEvidenceV2?.metrics;
+    if (v2m?.v2OperatorSummary != null && base.squatCycle != null) {
+      base.squatCycle.squatV2OperatorSummary = {
+        summary: v2m.v2OperatorSummary,
+        outcome: String(v2m.v2OperatorOutcome ?? 'unknown'),
+        inputSource: v2m.v2OperatorInputSource ?? null,
+        curveStatus: String(v2m.v2OperatorCurveStatus ?? 'unknown'),
+        attemptState: v2m.v2AttemptState != null ? String(v2m.v2AttemptState) : null,
+        blockedAt: v2m.v2OperatorBlockedAt ?? null,
+        blockReason: v2m.v2OperatorBlockedReason ?? null,
+        romBand: v2m.v2OperatorRomBand ?? null,
+        peakTailFrames: v2m.v2OperatorPeakTailFrames ?? null,
+        lowerUpperRatio: v2m.v2OperatorLowerUpperRatio ?? null,
+        translationStatus: String(v2m.v2OperatorTranslationStatus ?? 'unknown'),
+        epochSource: v2m.v2OperatorEpochSource ?? null,
+        usedRollingFallback:
+          typeof v2m.v2OperatorUsedRollingFallback === 'boolean'
+            ? v2m.v2OperatorUsedRollingFallback
+            : null,
+      };
+    }
+
     const squatHmm = gate.evaluatorResult.debug?.squatHmm;
     if (squatHmm != null && base.squatCycle != null) {
       const squatCycleExt = base.squatCycle as typeof base.squatCycle & {

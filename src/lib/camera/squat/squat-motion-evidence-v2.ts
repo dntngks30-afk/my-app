@@ -4,6 +4,9 @@ import type {
   SquatMotionPatternV2,
   SquatMotionRomBandV2,
   SquatV2AttemptState,
+  SquatV2OperatorCurveStatus,
+  SquatV2OperatorOutcome,
+  SquatV2OperatorTranslationStatus,
 } from './squat-motion-evidence-v2.types';
 
 type NormalizedFrame = {
@@ -683,6 +686,112 @@ function finalizeV2AttemptDiagnostics(
       v2AttemptFurthestStage,
       v2AttemptStageTimestamps: buildV2AttemptStageTimestamps(metrics, frames),
     },
+  };
+}
+
+const V2_OPERATOR_SUMMARY_MAX_LEN = 280;
+const V2_OPERATOR_TRANSLATION_SUSPECTED_MIN = 0.5;
+
+/**
+ * PR-V2-INPUT-04: pure operator observability from an already-finalized decision + metrics.
+ * Call only after evaluators/squat.ts has injected PR-01/02/03, epoch, and depth samples into metrics.
+ * Does not mutate decision; returns metric patches only. Must not influence pass logic.
+ */
+export function buildV2OperatorObservabilityMetrics(
+  decision: SquatMotionEvidenceDecisionV2
+): Partial<SquatMotionEvidenceDecisionV2['metrics']> {
+  const met = decision.metrics;
+  const ev = decision.evidence;
+
+  const inputSource = met.v2InputSelectedDepthSource ?? null;
+
+  let curveStatus: SquatV2OperatorCurveStatus;
+  if (met.v2InputDepthCurveUsable === true) curveStatus = 'usable';
+  else if (met.v2InputDepthCurveUsable === false) curveStatus = 'unusable';
+  else curveStatus = 'unknown';
+
+  let outcome: SquatV2OperatorOutcome;
+  if (decision.usableMotionEvidence === true) outcome = 'pass';
+  else if (decision.blockReason != null) outcome = 'blocked';
+  else if (!decision.usableMotionEvidence && decision.blockReason == null) outcome = 'pending';
+  else outcome = 'unknown';
+
+  const tScore = met.v2TranslationSuspicionScore;
+  let translationStatus: SquatV2OperatorTranslationStatus;
+  if (met.v2TranslationDominant === true) translationStatus = 'dominant';
+  else if (typeof tScore === 'number' && Number.isFinite(tScore) && tScore >= V2_OPERATOR_TRANSLATION_SUSPECTED_MIN) {
+    translationStatus = 'suspected';
+  } else if (typeof tScore === 'number' && Number.isFinite(tScore)) {
+    translationStatus = 'none';
+  } else {
+    translationStatus = 'unknown';
+  }
+
+  const translationToken =
+    translationStatus === 'none' ? 'no' : translationStatus === 'unknown' ? 'unknown' : translationStatus;
+
+  const peakTail =
+    met.peakDistanceFromTailFrames ??
+    met.framesAfterPeak ??
+    met.postPeakFrameCount ??
+    null;
+
+  let closureFresh: 'yes' | 'no' | 'unknown';
+  if (typeof ev.closureFreshAtTail === 'boolean') {
+    closureFresh = ev.closureFreshAtTail ? 'yes' : 'no';
+  } else {
+    closureFresh = 'unknown';
+  }
+
+  const epochSrc = met.v2EpochSource ?? 'unknown';
+
+  let fallback: 'yes' | 'no' | 'unknown';
+  if (met.usedRollingFallback === true) fallback = 'yes';
+  else if (met.usedRollingFallback === false) fallback = 'no';
+  else fallback = 'unknown';
+
+  const lowerRatio = met.v2LowerUpperMotionRatio;
+  const lowerRatioStr =
+    typeof lowerRatio === 'number' && Number.isFinite(lowerRatio) ? lowerRatio.toFixed(2) : 'na';
+
+  let curvePhrase: string = curveStatus;
+  if (met.v2InputFiniteButUselessDepthRejected === true) {
+    curvePhrase = `${curveStatus}+finite_rejected`;
+  }
+
+  const blockedAt =
+    outcome === 'blocked'
+      ? String(met.v2AttemptFurthestStage ?? met.v2AttemptBlockedAt ?? 'unknown')
+      : null;
+
+  let summary: string;
+  if (outcome === 'blocked') {
+    const reasonRaw = decision.blockReason ?? 'unknown';
+    const reason = reasonRaw.length > 80 ? `${reasonRaw.slice(0, 77)}...` : reasonRaw;
+    summary = `V2 input: ${inputSource ?? 'unknown'} | curve ${curvePhrase} | blocked@${blockedAt} | reason=${reason} | peak_tail=${peakTail ?? 'na'}f | fallback=${fallback}`;
+  } else {
+    summary = `V2 input: ${inputSource ?? 'unknown'} | curve ${curvePhrase} | ${outcome} | lower_ratio=${lowerRatioStr} | translation=${translationToken} | peak_tail=${peakTail ?? 'na'}f | closure_fresh=${closureFresh} | epoch=${epochSrc} | fallback=${fallback}`;
+  }
+
+  if (summary.length > V2_OPERATOR_SUMMARY_MAX_LEN) {
+    summary = `${summary.slice(0, V2_OPERATOR_SUMMARY_MAX_LEN - 3)}...`;
+  }
+
+  return {
+    v2OperatorSummary: summary,
+    v2OperatorOutcome: outcome,
+    v2OperatorInputSource: inputSource,
+    v2OperatorCurveStatus: curveStatus,
+    v2OperatorBlockedAt: blockedAt,
+    v2OperatorBlockedReason: decision.blockReason,
+    v2OperatorRomBand: decision.romBand,
+    v2OperatorPeakTailFrames: typeof peakTail === 'number' && Number.isFinite(peakTail) ? peakTail : null,
+    v2OperatorEpochSource: met.v2EpochSource ?? null,
+    v2OperatorUsedRollingFallback:
+      typeof met.usedRollingFallback === 'boolean' ? met.usedRollingFallback : null,
+    v2OperatorLowerUpperRatio:
+      typeof lowerRatio === 'number' && Number.isFinite(lowerRatio) ? lowerRatio : null,
+    v2OperatorTranslationStatus: translationStatus,
   };
 }
 

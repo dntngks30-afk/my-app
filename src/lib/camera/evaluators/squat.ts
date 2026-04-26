@@ -16,7 +16,10 @@ import {
 } from '@/lib/camera/squat-completion-state';
 import { evaluateSquatPassCore, type SquatPassCoreDepthFrame } from '@/lib/camera/squat/pass-core';
 import { buildSquatPassWindow } from '@/lib/camera/squat/pass-window';
-import { evaluateSquatMotionEvidenceV2 } from '@/lib/camera/squat/squat-motion-evidence-v2';
+import {
+  buildV2OperatorObservabilityMetrics,
+  evaluateSquatMotionEvidenceV2,
+} from '@/lib/camera/squat/squat-motion-evidence-v2';
 import {
   buildSquatV2OwnedInputFrames,
   selectRuntimeV2DepthSeries,
@@ -547,6 +550,9 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     m.selectedV2DepthFirst10 = v2DepthsSrc.slice(0, 10);
     m.selectedV2DepthAroundPeak = v2DepthsSrc.slice(aroundStart, aroundEnd);
     m.selectedV2DepthLast10 = v2DepthsSrc.slice(-10);
+
+    // ── PR-V2-INPUT-04: operator summary (after full metric injection only) ──
+    Object.assign(m, buildV2OperatorObservabilityMetrics(squatMotionEvidenceV2));
   }
   if (validRaw.length < MIN_VALID_FRAMES) {
     const emptyDiag = {
