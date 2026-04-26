@@ -3,6 +3,7 @@ import type {
   SquatMotionEvidenceFrameV2,
   SquatMotionPatternV2,
   SquatMotionRomBandV2,
+  SquatV2AttemptState,
 } from './squat-motion-evidence-v2.types';
 
 type NormalizedFrame = {
@@ -583,6 +584,108 @@ function buildDecision(
   };
 }
 
+/** Micro movement threshold already used in standing_only vs micro_bounce labeling (diagnostic reuse only). */
+const V2_ATTEMPT_EARLY_DESCENT_RELATIVE_PEAK = 0.004;
+
+type SquatV2AttemptProgressStage = Exclude<
+  SquatV2AttemptState,
+  'pass' | 'blocked'
+>;
+
+const V2_ATTEMPT_PROGRESS_RANK: Record<SquatV2AttemptProgressStage, number> = {
+  idle: 0,
+  baseline_ready: 1,
+  descent_committed: 2,
+  peak_latched: 3,
+  reversal_confirmed: 4,
+  return_confirmed: 5,
+  stable_recovery: 6,
+};
+
+function computeV2AttemptFurthestProgressStage(
+  evidence: SquatMotionEvidenceDecisionV2['evidence'],
+  metrics: SquatMotionEvidenceDecisionV2['metrics']
+): SquatV2AttemptProgressStage {
+  if (
+    !evidence.bodyVisibleEnough ||
+    !evidence.notSetupPhase ||
+    !evidence.lowerBodyMotionDominant
+  ) {
+    return 'idle';
+  }
+  const relativePeak = metrics.relativePeak ?? 0;
+  if (!evidence.meaningfulDescent) {
+    if (relativePeak > V2_ATTEMPT_EARLY_DESCENT_RELATIVE_PEAK) return 'descent_committed';
+    return 'baseline_ready';
+  }
+  if (!evidence.reversal) return 'peak_latched';
+  if (!evidence.nearStartReturn) return 'reversal_confirmed';
+  if (!evidence.stableAfterReturn) return 'return_confirmed';
+  return 'stable_recovery';
+}
+
+function buildV2AttemptStageTimestamps(
+  metrics: SquatMotionEvidenceDecisionV2['metrics'],
+  frames: readonly NormalizedFrame[]
+): SquatMotionEvidenceDecisionV2['metrics']['v2AttemptStageTimestamps'] {
+  const tsAt = (idx: number | null | undefined): number | null => {
+    if (idx == null || idx < 0 || idx >= frames.length) return null;
+    const t = frames[idx]?.timestampMs;
+    return typeof t === 'number' && Number.isFinite(t) ? t : null;
+  };
+  return {
+    descentStartMs: tsAt(metrics.descentStartFrameIndex),
+    peakMs: tsAt(metrics.peakFrameIndex),
+    reversalMs: tsAt(metrics.reversalFrameIndex),
+    returnMs: tsAt(metrics.nearStartReturnFrameIndex),
+    stableMs: tsAt(metrics.stableAfterReturnFrameIndex),
+  };
+}
+
+/**
+ * PR-V2-INPUT-03: post-decision metrics only. Does not read or write pass/fail authority.
+ */
+function finalizeV2AttemptDiagnostics(
+  decision: SquatMotionEvidenceDecisionV2,
+  frames: readonly NormalizedFrame[]
+): SquatMotionEvidenceDecisionV2 {
+  const { evidence, metrics, usableMotionEvidence, blockReason } = decision;
+  const furthestProgress = computeV2AttemptFurthestProgressStage(evidence, metrics);
+  const rank = V2_ATTEMPT_PROGRESS_RANK[furthestProgress];
+
+  let v2AttemptState: SquatV2AttemptState;
+  let v2AttemptFurthestStage: SquatV2AttemptState | string;
+  let v2AttemptBlockedAt: SquatV2AttemptState | string | null = null;
+  let v2AttemptStateReason: string | null = null;
+  let v2AttemptStateIndex: number;
+
+  if (usableMotionEvidence) {
+    v2AttemptState = 'pass';
+    v2AttemptFurthestStage = 'pass';
+    v2AttemptStateReason = null;
+    v2AttemptStateIndex = 100 + rank;
+  } else {
+    v2AttemptState = 'blocked';
+    v2AttemptFurthestStage = furthestProgress;
+    v2AttemptBlockedAt = furthestProgress;
+    v2AttemptStateReason = blockReason;
+    v2AttemptStateIndex = 200 + rank;
+  }
+
+  return {
+    ...decision,
+    metrics: {
+      ...metrics,
+      v2AttemptState,
+      v2AttemptStateReason,
+      v2AttemptStateIndex,
+      v2AttemptBlockedAt,
+      v2AttemptFurthestStage,
+      v2AttemptStageTimestamps: buildV2AttemptStageTimestamps(metrics, frames),
+    },
+  };
+}
+
 export function evaluateSquatMotionEvidenceV2(
   framesInput: readonly SquatMotionEvidenceFrameV2[]
 ): SquatMotionEvidenceDecisionV2 {
@@ -596,7 +699,10 @@ export function evaluateSquatMotionEvidenceV2(
   const metricsBase = estimatedFps ? { estimatedFps } : {};
 
   if (frames.length < 4) {
-    return emptyDecision('none', 'micro', 'body_not_visible', {}, { ...metricsBase, inputFrameCount, inputWindowDurationMs });
+    return finalizeV2AttemptDiagnostics(
+      emptyDecision('none', 'micro', 'body_not_visible', {}, { ...metricsBase, inputFrameCount, inputWindowDurationMs }),
+      frames
+    );
   }
 
   const visibleRatio = mean(frames.map((frame) => (frame.bodyVisible && frame.lowerBodyVisible ? 1 : 0)));
@@ -756,48 +862,51 @@ export function evaluateSquatMotionEvidenceV2(
   };
 
   if (!bodyVisible) {
-    return buildDecision(false, 'none', romBand, 'body_not_visible', evidence, metrics);
+    return finalizeV2AttemptDiagnostics(buildDecision(false, 'none', romBand, 'body_not_visible', evidence, metrics), frames);
   }
   if (!notSetupPhase) {
-    return buildDecision(false, 'setup_only', romBand, 'setup_phase_only', evidence, metrics);
+    return finalizeV2AttemptDiagnostics(buildDecision(false, 'setup_only', romBand, 'setup_phase_only', evidence, metrics), frames);
   }
   if (!lowerDominant) {
-    return buildDecision(false, 'upper_body_only', romBand, 'lower_body_motion_not_dominant', evidence, metrics);
+    return finalizeV2AttemptDiagnostics(buildDecision(false, 'upper_body_only', romBand, 'lower_body_motion_not_dominant', evidence, metrics), frames);
   }
   if (translation.translationDominant && translation.translationReason) {
-    return buildDecision(false, 'standing_only', romBand, translation.translationReason, evidence, metrics);
+    return finalizeV2AttemptDiagnostics(buildDecision(false, 'standing_only', romBand, translation.translationReason, evidence, metrics), frames);
   }
   if (!motion.meaningfulDescent) {
     const medianDepth = median(depths);
     const pattern: SquatMotionPatternV2 = medianDepth >= STANDARD_ROM_MAX ? 'bottom_hold' : 'standing_only';
     const reason = pattern === 'bottom_hold' ? 'no_return_to_start' : 'no_meaningful_descent';
     if (pattern === 'standing_only' && motion.relativePeak > 0.004) {
-      return buildDecision(false, 'standing_only', 'micro', 'micro_bounce', evidence, metrics);
+      return finalizeV2AttemptDiagnostics(buildDecision(false, 'standing_only', 'micro', 'micro_bounce', evidence, metrics), frames);
     }
-    return buildDecision(false, pattern, romBand, reason, evidence, metrics);
+    return finalizeV2AttemptDiagnostics(buildDecision(false, pattern, romBand, reason, evidence, metrics), frames);
   }
   if (!notMicroBounce) {
-    return buildDecision(false, 'standing_only', 'micro', 'micro_bounce', evidence, metrics);
+    return finalizeV2AttemptDiagnostics(buildDecision(false, 'standing_only', 'micro', 'micro_bounce', evidence, metrics), frames);
   }
   if (!motion.reversal) {
     const tail = depths.slice(-Math.min(3, depths.length));
     const tailDepth = mean(tail);
     const tailRange = signalAmplitude(tail);
     const heldNearPeak = tailDepth >= motion.startDepth + motion.relativePeak * 0.65 && tailRange <= 0.012;
-    return buildDecision(
-      false,
-      heldNearPeak ? 'bottom_hold' : 'descent_only',
-      romBand,
-      heldNearPeak ? 'no_return_to_start' : 'no_reversal',
-      evidence,
-      metrics
+    return finalizeV2AttemptDiagnostics(
+      buildDecision(
+        false,
+        heldNearPeak ? 'bottom_hold' : 'descent_only',
+        romBand,
+        heldNearPeak ? 'no_return_to_start' : 'no_reversal',
+        evidence,
+        metrics
+      ),
+      frames
     );
   }
   if (!motion.nearStartReturn) {
-    return buildDecision(false, 'incomplete_return', romBand, 'incomplete_return', evidence, metrics);
+    return finalizeV2AttemptDiagnostics(buildDecision(false, 'incomplete_return', romBand, 'incomplete_return', evidence, metrics), frames);
   }
   if (!motion.stableAfterReturn) {
-    return buildDecision(false, 'incomplete_return', romBand, 'incomplete_return', evidence, metrics);
+    return finalizeV2AttemptDiagnostics(buildDecision(false, 'incomplete_return', romBand, 'incomplete_return', evidence, metrics), frames);
   }
   // ── Guard B (PR6-FIX-01B): Return must follow reversal (distinct frames) ──
   // If nearStartReturnFrameIndex <= reversalFrameIndex, both reversal AND return
@@ -817,7 +926,7 @@ export function evaluateSquatMotionEvidenceV2(
       motion.reversalFrameIndex !== null &&
       motion.returnIndex !== null &&
       motion.returnIndex <= motion.reversalFrameIndex) {
-    return buildDecision(false, 'incomplete_return', romBand, 'return_not_after_reversal', evidence, metrics);
+    return finalizeV2AttemptDiagnostics(buildDecision(false, 'incomplete_return', romBand, 'return_not_after_reversal', evidence, metrics), frames);
   }
   // ── Tail closure check (PRIMARY staleness guard) ──────────────────────────
   // stableAfterReturn is true but the closure is far from the current tail.
@@ -825,15 +934,15 @@ export function evaluateSquatMotionEvidenceV2(
   // while the current input tail shows the user in a different state (new descent).
   // Real-device false positive primary cause: tailDistanceMs = 2600ms / 1700ms.
   if (!closureFreshAtTail) {
-    return buildDecision(false, 'none', romBand, 'stale_closure_not_at_tail', evidence, metrics);
+    return finalizeV2AttemptDiagnostics(buildDecision(false, 'none', romBand, 'stale_closure_not_at_tail', evidence, metrics), frames);
   }
   // ── Attempt duration cap (SECONDARY staleness guard) ─────────────────────
   // Even if the closure is at the tail, the cycle must not span too long a time.
   if (!activeAttemptWindowSatisfied) {
-    return buildDecision(false, 'none', romBand, 'attempt_duration_out_of_scope', evidence, metrics);
+    return finalizeV2AttemptDiagnostics(buildDecision(false, 'none', romBand, 'attempt_duration_out_of_scope', evidence, metrics), frames);
   }
   if (!motion.sameRepOwnership) {
-    return buildDecision(false, 'none', romBand, 'same_rep_ownership_failed', evidence, metrics);
+    return finalizeV2AttemptDiagnostics(buildDecision(false, 'none', romBand, 'same_rep_ownership_failed', evidence, metrics), frames);
   }
 
   // ── Guard C (PR6-FIX-01B): Insufficient post-peak evidence for shallow ───
@@ -851,7 +960,7 @@ export function evaluateSquatMotionEvidenceV2(
   if (romBand === 'shallow' &&
       peakDistanceFromTailFramesInternal < 3 &&
       peakDistanceFromTailMsInternal < 250) {
-    return buildDecision(false, 'none', romBand, 'insufficient_post_peak_evidence', evidence, metrics);
+    return finalizeV2AttemptDiagnostics(buildDecision(false, 'none', romBand, 'insufficient_post_peak_evidence', evidence, metrics), frames);
   }
 
   // ── Guard A (PR6-FIX-01B): Slow-descent shallow without pre-descent baseline
@@ -863,8 +972,8 @@ export function evaluateSquatMotionEvidenceV2(
   const descentDuration = frames[motion.peakIndex]!.timestampMs - frames[motion.startIndex]!.timestampMs;
   const descentFillRatio = inputWindowDurationMs > 0 ? descentDuration / inputWindowDurationMs : 0;
   if (romBand === 'shallow' && !preDescentBaselineSatisfied && descentFillRatio > 0.85) {
-    return buildDecision(false, 'descent_only', romBand, 'no_pre_descent_baseline', evidence, metrics);
+    return finalizeV2AttemptDiagnostics(buildDecision(false, 'descent_only', romBand, 'no_pre_descent_baseline', evidence, metrics), frames);
   }
 
-  return buildDecision(true, 'down_up_return', romBand, null, evidence, metrics);
+  return finalizeV2AttemptDiagnostics(buildDecision(true, 'down_up_return', romBand, null, evidence, metrics), frames);
 }

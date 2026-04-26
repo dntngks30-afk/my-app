@@ -1,3 +1,18 @@
+/**
+ * PR-V2-INPUT-03: trace-only squat attempt lifecycle label (diagnostics only).
+ * Must not be used as pass/fail input outside V2 metrics decoration.
+ */
+export type SquatV2AttemptState =
+  | 'idle'
+  | 'baseline_ready'
+  | 'descent_committed'
+  | 'peak_latched'
+  | 'reversal_confirmed'
+  | 'return_confirmed'
+  | 'stable_recovery'
+  | 'pass'
+  | 'blocked';
+
 export type SquatMotionPatternV2 =
   | 'none'
   | 'standing_only'
@@ -375,6 +390,25 @@ export interface SquatMotionEvidenceDecisionV2 {
     v2DominanceBlockReason?: string | null;
     /** Non-null when translation lock selected the block reason. */
     v2TranslationReason?: string | null;
+    // ── PR-V2-INPUT-03: V2 attempt state (trace-only; not a pass owner) ─────
+    /** Diagnostic label from the already-computed decision only. */
+    v2AttemptState?: SquatV2AttemptState;
+    /** blockReason mirror or short note; does not drive pass logic. */
+    v2AttemptStateReason?: string | null;
+    /** Sortable ordinal for traces (scheme internal to PR-03). */
+    v2AttemptStateIndex?: number;
+    /** When state is blocked, furthest progress milestone reached before failure. */
+    v2AttemptBlockedAt?: SquatV2AttemptState | string | null;
+    /** Furthest milestone along the happy path (or `pass` when usable). */
+    v2AttemptFurthestStage?: SquatV2AttemptState | string;
+    /** Optional keyframe timestamps for explanation only (missing → null). */
+    v2AttemptStageTimestamps?: {
+      descentStartMs?: number | null;
+      peakMs?: number | null;
+      reversalMs?: number | null;
+      returnMs?: number | null;
+      stableMs?: number | null;
+    } | null;
   };
 }
 
