@@ -223,8 +223,13 @@ function runtimeV2UpperBodySignal(frame: PoseFeaturesFrame): number {
 
 function buildEvidenceFrames(
   frames: PoseFeaturesFrame[],
-  depthSeries: number[]
+  depthSeries: number[],
+  ownerMeta: { selectedDepthSource: SquatV2OwnedDepthSource; depthCurveUsable: boolean }
 ): SquatMotionEvidenceFrameV2[] {
+  const v2InputOwnerMeta = {
+    selectedDepthSource: ownerMeta.selectedDepthSource,
+    depthCurveUsable: ownerMeta.depthCurveUsable,
+  };
   return frames.map((frame, i) => {
     const depth = depthSeries[i] ?? 0;
     return {
@@ -240,6 +245,7 @@ function buildEvidenceFrames(
       visibilitySummary: frame.visibilitySummary,
       derived: frame.derived,
       joints: frame.joints,
+      v2InputOwnerMeta,
     };
   });
 }
@@ -470,7 +476,10 @@ export function buildSquatV2OwnedInputFrames(frames: PoseFeaturesFrame[]): Squat
   if (!hipTry.rejectedReason && hipTry.depths.length === n) {
     sourceStats.hip_center_baseline = hipTry.stats;
     return {
-      frames: buildEvidenceFrames(frames, hipTry.depths),
+      frames: buildEvidenceFrames(frames, hipTry.depths, {
+        selectedDepthSource: 'hip_center_baseline',
+        depthCurveUsable: true,
+      }),
       selectedDepthSource: 'hip_center_baseline',
       depthCurveUsable: true,
       finiteButUselessDepthRejected,
@@ -491,7 +500,10 @@ export function buildSquatV2OwnedInputFrames(frames: PoseFeaturesFrame[]): Squat
   if (!pelvisTry.rejectedReason && pelvisTry.depths.length === n) {
     sourceStats.pelvis_proxy = pelvisTry.stats;
     return {
-      frames: buildEvidenceFrames(frames, pelvisTry.depths),
+      frames: buildEvidenceFrames(frames, pelvisTry.depths, {
+        selectedDepthSource: 'pelvis_proxy',
+        depthCurveUsable: true,
+      }),
       selectedDepthSource: 'pelvis_proxy',
       depthCurveUsable: true,
       finiteButUselessDepthRejected,
@@ -512,7 +524,10 @@ export function buildSquatV2OwnedInputFrames(frames: PoseFeaturesFrame[]): Squat
   if (!kneeTry.rejectedReason && kneeTry.depths.length === n) {
     sourceStats.knee_flex_proxy = kneeTry.stats;
     return {
-      frames: buildEvidenceFrames(frames, kneeTry.depths),
+      frames: buildEvidenceFrames(frames, kneeTry.depths, {
+        selectedDepthSource: 'knee_flex_proxy',
+        depthCurveUsable: true,
+      }),
       selectedDepthSource: 'knee_flex_proxy',
       depthCurveUsable: true,
       finiteButUselessDepthRejected,
@@ -540,7 +555,10 @@ export function buildSquatV2OwnedInputFrames(frames: PoseFeaturesFrame[]): Squat
   if (legacyStats.hasUsableCurve) {
     sourceStats.actualLegacySeries = legacy.source;
     return {
-      frames: buildEvidenceFrames(frames, legacy.depths),
+      frames: buildEvidenceFrames(frames, legacy.depths, {
+        selectedDepthSource: mapLegacySource(legacy),
+        depthCurveUsable: true,
+      }),
       selectedDepthSource: mapLegacySource(legacy),
       depthCurveUsable: true,
       finiteButUselessDepthRejected,
@@ -564,7 +582,10 @@ export function buildSquatV2OwnedInputFrames(frames: PoseFeaturesFrame[]): Squat
   };
 
   return {
-    frames: buildEvidenceFrames(frames, zeros(n)),
+    frames: buildEvidenceFrames(frames, zeros(n), {
+      selectedDepthSource: 'none',
+      depthCurveUsable: false,
+    }),
     selectedDepthSource: 'none',
     depthCurveUsable: false,
     finiteButUselessDepthRejected,

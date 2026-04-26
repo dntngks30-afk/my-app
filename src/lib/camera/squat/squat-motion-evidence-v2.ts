@@ -47,6 +47,15 @@ const MAX_TAIL_CLOSURE_LAG_MS = 400;
  */
 const MIN_PRE_DESCENT_BASELINE_FRAMES = 3;
 
+/** PR-V2-INPUT-02: translation lock — all must hold; single metric never vetoes alone. */
+const TRANSLATION_DELTA_SAMPLES_MIN = 5;
+const TRANSLATION_CORR_MIN = 0.91;
+const TRANSLATION_PATH_TRAVEL_RATIO_MIN = 0.78;
+const TRANSLATION_NET_MAG_MIN = MEANINGFUL_DESCENT_MIN * 0.85;
+const TRANSLATION_NET_RATIO_MIN = 0.72;
+/** Setup bleed band: below notSetupPhase threshold (0.5) but material; avoids duplicating pure setup-only block. */
+const TRANSLATION_SETUP_BLEED_MIN = 0.2;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === 'object';
 }
@@ -243,7 +252,11 @@ function signalAmplitude(values: readonly number[]): number {
   return values.length > 0 ? max([...values]) - min([...values]) : 0;
 }
 
-function lowerMotionDominant(frames: readonly NormalizedFrame[], depths: readonly number[]): boolean {
+/**
+ * PR-V2-INPUT-02: preserves the exact boolean outcome of legacy `lowerMotionDominant()`,
+ * adds compact diagnostics only.
+ */
+function analyzeLowerBodyDominance(frames: readonly NormalizedFrame[], depths: readonly number[]) {
   const depthAmplitude = signalAmplitude(depths);
   const lowerTravel = pointTravel(frames.map((frame) => frame.lowerPoint));
   const lowerMotion = Math.max(depthAmplitude, lowerTravel);
@@ -254,9 +267,148 @@ function lowerMotionDominant(frames: readonly NormalizedFrame[], depths: readonl
     ? signalAmplitude(explicitUpper)
     : pointTravel(frames.map((frame) => frame.upperPoint));
 
-  if (lowerMotion < MEANINGFUL_DESCENT_MIN && upperMotion < MEANINGFUL_DESCENT_MIN) return true;
-  if (upperMotion >= MEANINGFUL_DESCENT_MIN && lowerMotion < upperMotion * 0.75) return false;
-  return lowerMotion >= Math.max(MICRO_ROM_MAX, upperMotion * 0.45);
+  let dominant: boolean;
+  if (lowerMotion < MEANINGFUL_DESCENT_MIN && upperMotion < MEANINGFUL_DESCENT_MIN) {
+    dominant = true;
+  } else if (upperMotion >= MEANINGFUL_DESCENT_MIN && lowerMotion < upperMotion * 0.75) {
+    dominant = false;
+  } else {
+    dominant = lowerMotion >= Math.max(MICRO_ROM_MAX, upperMotion * 0.45);
+  }
+
+  const denom = lowerMotion + upperMotion;
+  const score = denom > 1e-9 ? lowerMotion / denom : 0.5;
+  const ratio = upperMotion > 1e-9 ? lowerMotion / upperMotion : lowerMotion > 1e-9 ? 99 : 1;
+
+  return {
+    dominant,
+    lowerMotionAmp: lowerMotion,
+    upperMotionAmp: upperMotion,
+    ratio,
+    score,
+    dominanceBlockReason: dominant ? null : ('lower_body_motion_not_dominant' as const),
+  };
+}
+
+function pearsonCorrelation(xs: readonly number[], ys: readonly number[]): number | null {
+  if (xs.length !== ys.length || xs.length < 4) return null;
+  const mx = mean([...xs]);
+  const my = mean([...ys]);
+  let num = 0;
+  let dx = 0;
+  let dy = 0;
+  for (let i = 0; i < xs.length; i += 1) {
+    const vx = xs[i]! - mx;
+    const vy = ys[i]! - my;
+    num += vx * vy;
+    dx += vx * vx;
+    dy += vy * vy;
+  }
+  if (dx < 1e-14 || dy < 1e-14) return null;
+  return num / Math.sqrt(dx * dy);
+}
+
+function collectAlignedVerticalDeltas(frames: readonly NormalizedFrame[]): { lower: number[]; upper: number[] } {
+  const lower: number[] = [];
+  const upper: number[] = [];
+  for (let i = 1; i < frames.length; i += 1) {
+    const p0 = frames[i - 1]!;
+    const p1 = frames[i]!;
+    if (!p0.lowerPoint || !p1.lowerPoint || !p0.upperPoint || !p1.upperPoint) continue;
+    lower.push(p1.lowerPoint.y - p0.lowerPoint.y);
+    upper.push(p1.upperPoint.y - p0.upperPoint.y);
+  }
+  return { lower, upper };
+}
+
+function firstLastNetY(points: Array<{ x: number; y: number } | null>): { first: number; last: number } | null {
+  let firstIdx = -1;
+  let lastIdx = -1;
+  for (let i = 0; i < points.length; i += 1) {
+    if (points[i]) {
+      if (firstIdx < 0) firstIdx = i;
+      lastIdx = i;
+    }
+  }
+  if (firstIdx < 0 || lastIdx < 0 || firstIdx === lastIdx) return null;
+  return { first: points[firstIdx]!.y, last: points[lastIdx]!.y };
+}
+
+type TranslationMotionGate = {
+  meaningfulDescent: boolean;
+  reversal: boolean;
+  nearStartReturn: boolean;
+  stableAfterReturn: boolean;
+};
+
+/**
+ * Conservative whole-body / setup-bleed translation lock from normalized landmark motion only.
+ * No legacy compat fields, no depth-source-specific rules.
+ */
+function analyzeTranslationDominance(
+  frames: readonly NormalizedFrame[],
+  motion: TranslationMotionGate,
+  setupFraction: number
+): {
+  suspicionScore: number;
+  translationDominant: boolean;
+  translationReason: 'whole_body_translation_dominant' | 'setup_translation_dominant' | null;
+} {
+  const structuralSquatExempt =
+    motion.meaningfulDescent &&
+    motion.reversal &&
+    motion.nearStartReturn &&
+    motion.stableAfterReturn;
+
+  const lowerPts = frames.map((f) => f.lowerPoint);
+  const upperPts = frames.map((f) => f.upperPoint);
+  const lowerTravel = pointTravel(lowerPts);
+  const upperTravel = pointTravel(upperPts);
+
+  const travelMeaningful =
+    lowerTravel >= MEANINGFUL_DESCENT_MIN && upperTravel >= MEANINGFUL_DESCENT_MIN;
+  const maxT = Math.max(lowerTravel, upperTravel);
+  const pathTravelRatio = maxT > 1e-9 ? Math.min(lowerTravel, upperTravel) / maxT : 0;
+  const pathOk = travelMeaningful && pathTravelRatio >= TRANSLATION_PATH_TRAVEL_RATIO_MIN;
+
+  const { lower: dLower, upper: dUpper } = collectAlignedVerticalDeltas(frames);
+  const corr = pearsonCorrelation(dLower, dUpper);
+  const corrOk = corr != null && corr >= TRANSLATION_CORR_MIN && dLower.length >= TRANSLATION_DELTA_SAMPLES_MIN;
+
+  const netL = firstLastNetY(lowerPts);
+  const netU = firstLastNetY(upperPts);
+  let netOk = false;
+  let netRatio = 0;
+  if (netL && netU) {
+    const nL = netL.last - netL.first;
+    const nU = netU.last - netU.first;
+    const aL = Math.abs(nL);
+    const aU = Math.abs(nU);
+    const sameSign = nL * nU > 0;
+    const magOk = aL >= TRANSLATION_NET_MAG_MIN && aU >= TRANSLATION_NET_MAG_MIN;
+    const maxN = Math.max(aL, aU);
+    netRatio = maxN > 1e-9 ? Math.min(aL, aU) / maxN : 0;
+    netOk = sameSign && magOk && netRatio >= TRANSLATION_NET_RATIO_MIN;
+  }
+
+  const translationDominant =
+    !structuralSquatExempt && pathOk && corrOk && netOk;
+
+  let translationReason: 'whole_body_translation_dominant' | 'setup_translation_dominant' | null = null;
+  if (translationDominant) {
+    const setupBleed =
+      setupFraction >= TRANSLATION_SETUP_BLEED_MIN && setupFraction < 0.5;
+    translationReason = setupBleed ? 'setup_translation_dominant' : 'whole_body_translation_dominant';
+  }
+
+  const corrClamped = corr != null ? clamp01((corr - 0.75) / 0.25) : 0;
+  const pathClamped = clamp01((pathTravelRatio - 0.55) / 0.35);
+  const netClamped = clamp01((netRatio - 0.5) / 0.35);
+  const suspicionScore = translationDominant
+    ? 1
+    : clamp01((corrClamped * 0.45 + pathClamped * 0.3 + netClamped * 0.25));
+
+  return { suspicionScore, translationDominant, translationReason };
 }
 
 function classifyRomBand(relativePeak: number): SquatMotionRomBandV2 {
@@ -449,10 +601,13 @@ export function evaluateSquatMotionEvidenceV2(
 
   const visibleRatio = mean(frames.map((frame) => (frame.bodyVisible && frame.lowerBodyVisible ? 1 : 0)));
   const bodyVisible = visibleRatio >= 0.65;
-  const notSetupPhase = mean(frames.map((frame) => (frame.setupPhase ? 1 : 0))) < 0.5;
+  const setupFraction = mean(frames.map((frame) => (frame.setupPhase ? 1 : 0)));
+  const notSetupPhase = setupFraction < 0.5;
   const depths = frames.map((frame) => frame.depth);
-  const lowerDominant = lowerMotionDominant(frames, depths);
+  const dominance = analyzeLowerBodyDominance(frames, depths);
+  const lowerDominant = dominance.dominant;
   const motion = findMotionWindow(frames, depths);
+  const translation = analyzeTranslationDominance(frames, motion, setupFraction);
   const romBand = classifyRomBand(motion.relativePeak);
   const notMicroBounce = motion.relativePeak >= MEANINGFUL_DESCENT_MIN;
   const notUpperBodyOnly = lowerDominant;
@@ -590,6 +745,14 @@ export function evaluateSquatMotionEvidenceV2(
     postPeakFrameCount: peakDistanceFromTailFramesInternal,
     // PR04C: peak-to-return duration (ascent portion only)
     peakToReturnMs,
+    v2LowerBodyDominanceScore: dominance.score,
+    v2LowerBodyMotionAmplitude: dominance.lowerMotionAmp,
+    v2UpperBodyMotionAmplitude: dominance.upperMotionAmp,
+    v2LowerUpperMotionRatio: dominance.ratio,
+    v2TranslationSuspicionScore: translation.suspicionScore,
+    v2TranslationDominant: translation.translationDominant,
+    v2DominanceBlockReason: dominance.dominanceBlockReason,
+    v2TranslationReason: translation.translationReason,
   };
 
   if (!bodyVisible) {
@@ -600,6 +763,9 @@ export function evaluateSquatMotionEvidenceV2(
   }
   if (!lowerDominant) {
     return buildDecision(false, 'upper_body_only', romBand, 'lower_body_motion_not_dominant', evidence, metrics);
+  }
+  if (translation.translationDominant && translation.translationReason) {
+    return buildDecision(false, 'standing_only', romBand, translation.translationReason, evidence, metrics);
   }
   if (!motion.meaningfulDescent) {
     const medianDepth = median(depths);

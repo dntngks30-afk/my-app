@@ -358,6 +358,23 @@ export interface SquatMotionEvidenceDecisionV2 {
     v2InputSourceStats?: Record<string, unknown> | null;
     /** PR-1: lower-body signal source (same as depth series in PR-1). */
     v2InputLowerBodySignalSource?: string;
+    // ── PR-V2-INPUT-02: lower-body dominance + translation diagnostics ───────
+    /** 0–1: higher means lower-body motion carries more of the combined motion budget. */
+    v2LowerBodyDominanceScore?: number;
+    /** Combined lower-body motion amplitude (max(depth amp, lower landmark travel)). */
+    v2LowerBodyMotionAmplitude?: number;
+    /** Upper-body motion amplitude (explicit signal amp or upper landmark travel). */
+    v2UpperBodyMotionAmplitude?: number;
+    /** lowerMotion / upperMotion when upperMotion > 0. */
+    v2LowerUpperMotionRatio?: number;
+    /** 0–1 composite diagnostic for translation-like rigid motion (not pass authority alone). */
+    v2TranslationSuspicionScore?: number;
+    /** True only when conservative AND-gated translation lock fires (see v2TranslationReason). */
+    v2TranslationDominant?: boolean;
+    /** Set when lower-body dominance fails; mirrors block reason for traces. */
+    v2DominanceBlockReason?: string | null;
+    /** Non-null when translation lock selected the block reason. */
+    v2TranslationReason?: string | null;
   };
 }
 
@@ -387,4 +404,12 @@ export type SquatMotionEvidenceFrameV2 = {
   };
   joints?: Record<string, { x: number; y: number; visibility?: number | null } | null | undefined>;
   landmarks?: Array<{ x: number; y: number; visibility?: number | null } | null | undefined>;
+  /**
+   * PR-V2-INPUT-02: per-frame mirror of owner selection (diagnostic context only).
+   * Must not be used as pass/veto authority inside V2 motion evidence.
+   */
+  v2InputOwnerMeta?: {
+    selectedDepthSource: string;
+    depthCurveUsable: boolean;
+  };
 };
