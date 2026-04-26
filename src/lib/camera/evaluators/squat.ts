@@ -17,7 +17,12 @@ import {
 import { evaluateSquatPassCore, type SquatPassCoreDepthFrame } from '@/lib/camera/squat/pass-core';
 import { buildSquatPassWindow } from '@/lib/camera/squat/pass-window';
 import { evaluateSquatMotionEvidenceV2 } from '@/lib/camera/squat/squat-motion-evidence-v2';
-import type { SquatMotionEvidenceFrameV2 } from '@/lib/camera/squat/squat-motion-evidence-v2.types';
+import {
+  buildSquatV2OwnedInputFrames,
+  selectRuntimeV2DepthSeries,
+  type SelectedV2DepthSeries,
+  type V2DepthSeriesStats,
+} from '@/lib/camera/squat/squat-v2-input-owner';
 import {
   computeSquatDescentTruth,
 } from '@/lib/camera/squat/squat-descent-truth';
@@ -78,6 +83,11 @@ function finite(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+/**
+ * Legacy per-frame depth for **active epoch detection only** (computeActiveAttemptEpoch).
+ * PR-V2-INPUT-01: V2 evaluation input uses buildSquatV2OwnedInputFrames() instead.
+ * Risk: if this path collapses, the epoch window may still be imperfect; epoch ownership is unchanged in PR-1.
+ */
 function runtimeV2Depth(frame: PoseFeaturesFrame): number {
   return (
     finite(frame.derived.squatDepthProxyBlended) ??
@@ -87,206 +97,23 @@ function runtimeV2Depth(frame: PoseFeaturesFrame): number {
   );
 }
 
-// ── PR04D: V2 depth source selection policy ──────────────────────────────────
-// Root cause (PR04D): for shallow squats, squatDepthProxyBlended can be
-// collapsed near-zero (1e-8) or a tail-spike-only series, preventing V2 from
-// seeing the actual shallow descent curve. squatDepthProxy (EMA primary) or
-// squatDepthProxyRaw may provide a better continuous signal.
-// Policy: analyse all three series, select the one that gives V2 the most
-// usable depth curve. Pass decision is NOT changed here — V2 still owns it.
-
-/** Below this → "near-zero machine epsilon" (not a meaningful depth reading). */
-const V2_DEPTH_EPS = 1e-6;
-/** Minimum depth value to count a frame as "meaningful" for series quality. */
-const V2_DEPTH_MEANINGFUL_MIN = 0.018;
-/** Minimum meaningful frames required for a series to be considered "usable". */
-const V2_DEPTH_MIN_USABLE_FRAMES = 3;
-/**
- * Peak within this many frames from tail → "tail spike only" (no post-peak room).
- * At 10fps, 2 frames = 200ms — too short for reversal/return detection.
- */
-const V2_DEPTH_TAIL_SPIKE_MAX_DIST = 2;
-
-type V2DepthSeriesStats = {
-  max: number;
-  meaningfulFrameCount: number;
-  nonZeroFrameCount: number;
-  peakFrameIndex: number;
-  framesAfterPeak: number;
-  collapsedNearZero: boolean;
-  tailSpikeOnly: boolean;
-  hasUsableCurve: boolean;
-  hasPostPeakDrop: boolean;
-};
-
-function computeV2DepthSeriesStats(depths: number[]): V2DepthSeriesStats {
-  const n = depths.length;
-  let max = 0;
-  let peakFrameIndex = 0;
-  let meaningfulFrameCount = 0;
-  let nonZeroFrameCount = 0;
-
-  for (let i = 0; i < n; i++) {
-    const d = depths[i]!;
-    if (d > max) {
-      max = d;
-      peakFrameIndex = i;
-    }
-    if (d >= V2_DEPTH_MEANINGFUL_MIN) meaningfulFrameCount++;
-    if (d > V2_DEPTH_EPS) nonZeroFrameCount++;
+/** PR04D-compatible effective source for metrics when INPUT-01 owns the curve. */
+function runtimeV2DepthEffectiveSourceFromOwned(
+  selectedDepthSource: string,
+  legacy: SelectedV2DepthSeries | null
+): 'blended' | 'proxy' | 'raw' | 'mixed' | 'fallback_zero' {
+  if (selectedDepthSource === 'none') return 'fallback_zero';
+  if (selectedDepthSource === 'legacy_raw' || selectedDepthSource === 'legacy_primary') {
+    return legacy?.source ?? 'proxy';
   }
-
-  const framesAfterPeak = n - 1 - peakFrameIndex;
-
-  // collapsedNearZero: the entire series never exceeds machine-epsilon range.
-  // All "meaningful" values are essentially noise.
-  const collapsedNearZero = max < V2_DEPTH_EPS * 1000; // max < ~1e-3
-
-  // tailSpikeOnly: very few meaningful frames AND peak is right at the tail.
-  // Indicates a single-frame or 2-frame spike with no post-peak descent info.
-  const tailSpikeOnly =
-    !collapsedNearZero &&
-    meaningfulFrameCount <= V2_DEPTH_MIN_USABLE_FRAMES - 1 &&
-    framesAfterPeak <= V2_DEPTH_TAIL_SPIKE_MAX_DIST;
-
-  // hasPostPeakDrop: depth after peak drops meaningfully (indicates actual ascent).
-  let hasPostPeakDrop = false;
-  if (framesAfterPeak >= 1) {
-    const nextDepth = depths[peakFrameIndex + 1] ?? max;
-    // reversalThreshold mirrors V2's own: max(0.009, relativePeak * 0.13)
-    const reversalThreshold = Math.max(0.009, max * 0.13);
-    hasPostPeakDrop = max - nextDepth >= reversalThreshold;
+  if (
+    selectedDepthSource === 'hip_center_baseline' ||
+    selectedDepthSource === 'pelvis_proxy' ||
+    selectedDepthSource === 'knee_flex_proxy'
+  ) {
+    return 'mixed';
   }
-
-  // hasUsableCurve: series has enough structure for V2 reversal/return detection.
-  const hasUsableCurve =
-    !collapsedNearZero &&
-    !tailSpikeOnly &&
-    meaningfulFrameCount >= V2_DEPTH_MIN_USABLE_FRAMES &&
-    framesAfterPeak >= 2;
-
-  return {
-    max,
-    meaningfulFrameCount,
-    nonZeroFrameCount,
-    peakFrameIndex,
-    framesAfterPeak,
-    collapsedNearZero,
-    tailSpikeOnly,
-    hasUsableCurve,
-    hasPostPeakDrop,
-  };
-}
-
-type SelectedV2DepthSeries = {
-  depths: number[];
-  source: 'blended' | 'proxy' | 'raw' | 'fallback_zero';
-  policy: string;
-  switchReason: string | null;
-  stats: {
-    blended: V2DepthSeriesStats;
-    proxy: V2DepthSeriesStats;
-    raw: V2DepthSeriesStats;
-  };
-};
-
-/**
- * PR04D: Analyse all three depth candidates (blended / proxy / raw) across the
- * full v2EvalFrames window and return the series that gives V2 the best input.
- *
- * Selection priority:
- *   1. blended (squatDepthProxyBlended) — default, best for deep squats
- *   2. proxy   (squatDepthProxy)        — when blended is collapsed or tail-spike
- *   3. raw     (squatDepthProxyRaw)     — when proxy is also poor
- *   4. fallback to blended              — when all alternatives are also poor
- *
- * IMPORTANT: source selection does NOT change the V2 pass contract.
- * V2's evidence thresholds, guards (A/B/C), and owner decision are unchanged.
- */
-function selectRuntimeV2DepthSeries(frames: PoseFeaturesFrame[]): SelectedV2DepthSeries {
-  const blendedDepths = frames.map((f) => finite(f.derived.squatDepthProxyBlended) ?? 0);
-  const proxyDepths = frames.map((f) => finite(f.derived.squatDepthProxy) ?? 0);
-  const rawDepths = frames.map((f) => finite(f.derived.squatDepthProxyRaw) ?? 0);
-
-  const blendedStats = computeV2DepthSeriesStats(blendedDepths);
-  const proxyStats = computeV2DepthSeriesStats(proxyDepths);
-  const rawStats = computeV2DepthSeriesStats(rawDepths);
-  const stats = { blended: blendedStats, proxy: proxyStats, raw: rawStats };
-
-  // Case 1: blended series has a usable curve → use it (normal path).
-  if (blendedStats.hasUsableCurve) {
-    return { depths: blendedDepths, source: 'blended', policy: 'blended_usable', switchReason: null, stats };
-  }
-
-  // Case 2/3/4/5: blended is collapsed or tail-spike → try alternatives.
-  const blendedNotUsable = blendedStats.collapsedNearZero || blendedStats.tailSpikeOnly;
-  if (blendedNotUsable) {
-    const reason = blendedStats.collapsedNearZero ? 'blended_collapsed_near_zero' : 'blended_tail_spike_only';
-    const collapsePrefix = blendedStats.collapsedNearZero ? 'blended_collapsed' : 'tail_spike';
-
-    if (proxyStats.hasUsableCurve) {
-      return {
-        depths: proxyDepths,
-        source: 'proxy',
-        policy: `${collapsePrefix}_proxy_selected`,
-        switchReason: reason,
-        stats,
-      };
-    }
-
-    if (rawStats.hasUsableCurve) {
-      return {
-        depths: rawDepths,
-        source: 'raw',
-        policy: `${collapsePrefix}_raw_selected`,
-        switchReason: reason,
-        stats,
-      };
-    }
-
-    // All alternatives also poor → keep blended (with diagnostic).
-    return {
-      depths: blendedDepths,
-      source: 'blended',
-      policy: 'fallback_blended',
-      switchReason: `${reason}_no_alternative_usable`,
-      stats,
-    };
-  }
-
-  // blended not usable but not clearly collapsed/spike → keep blended.
-  return { depths: blendedDepths, source: 'blended', policy: 'fallback_blended', switchReason: 'blended_not_usable', stats };
-}
-
-function runtimeV2UpperBodySignal(frame: PoseFeaturesFrame): number {
-  const arm = finite(frame.derived.armElevationAvg);
-  const trunk = finite(frame.derived.trunkLeanDeg);
-  const armNorm = arm == null ? 0 : Math.min(1, Math.max(0, arm / 180));
-  const trunkNorm = trunk == null ? 0 : Math.min(1, Math.abs(trunk) / 90);
-  return Math.max(armNorm, trunkNorm);
-}
-
-function toSquatMotionEvidenceV2Frames(
-  frames: PoseFeaturesFrame[],
-  selectedDepths?: number[]
-): SquatMotionEvidenceFrameV2[] {
-  return frames.map((frame, i) => {
-    const depth = selectedDepths != null ? (selectedDepths[i] ?? runtimeV2Depth(frame)) : runtimeV2Depth(frame);
-    return {
-      timestampMs: frame.timestampMs,
-      depth,
-      lowerBodySignal: depth,
-      upperBodySignal: runtimeV2UpperBodySignal(frame),
-      bodyVisibleEnough: frame.isValid && frame.frameValidity === 'valid',
-      lowerBodyVisibleEnough: frame.visibilitySummary.criticalJointsAvailability >= 0.6,
-      phaseHint: frame.phaseHint,
-      isValid: frame.isValid,
-      frameValidity: frame.frameValidity,
-      visibilitySummary: frame.visibilitySummary,
-      derived: frame.derived,
-      joints: frame.joints,
-    };
-  });
+  return 'proxy';
 }
 
 /**
@@ -433,12 +260,8 @@ function computeActiveAttemptEpoch(
   };
 }
 
-/**
- * PR04D: Export for smoke testing. Callers may pass minimal frame-like objects
- * that only need the `derived` sub-fields used by the depth selection policy.
- */
-export { selectRuntimeV2DepthSeries };
-export type { SelectedV2DepthSeries, V2DepthSeriesStats };
+/** PR04D smoke: re-export from V2 input owner (same signature). */
+export { selectRuntimeV2DepthSeries, type SelectedV2DepthSeries, type V2DepthSeriesStats };
 
 export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): EvaluatorResult {
   const validRaw = frames.filter((frame) => frame.isValid);
@@ -457,14 +280,10 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const activeEpoch = computeActiveAttemptEpoch(validRaw, latestValidTs);
   const v2EvalFrames = validRaw.filter((f) => f.timestampMs >= activeEpoch.epochStartMs);
 
-  // ── PR04D: V2 depth source selection ──────────────────────────────────────
-  // Analyse blended/proxy/raw series; use the best curve for V2 input.
-  // Does NOT change V2 pass thresholds — only which depth series V2 reads.
-  const v2DepthSelection = selectRuntimeV2DepthSeries(v2EvalFrames);
+  // ── PR-V2-INPUT-01: V2 input frame owner (landmark → legacy PR04D → explicit none) ──
+  const ownedV2Input = buildSquatV2OwnedInputFrames(v2EvalFrames);
 
-  const squatMotionEvidenceV2 = evaluateSquatMotionEvidenceV2(
-    toSquatMotionEvidenceV2Frames(v2EvalFrames, v2DepthSelection.depths)
-  );
+  const squatMotionEvidenceV2 = evaluateSquatMotionEvidenceV2(ownedV2Input.frames);
 
   // ── Annotate V2 metrics with epoch context and PR6-FIX-01 diagnostics ───
   if (squatMotionEvidenceV2.metrics) {
@@ -681,8 +500,8 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
     m.epochResetReason_v2 = activeEpoch.epochResetReason;
 
     // ── PR04C: Debug depth sample (debug only — NOT used in pass logic) ─
-    // PR04D: v2DepthsSrc now reflects the SELECTED depth series (not always blended).
-    const v2DepthsSrc = v2DepthSelection.depths;
+    // PR04D / INPUT-01: samples reflect the depth series V2 actually evaluated.
+    const v2DepthsSrc = ownedV2Input.frames.map((f) => f.depth ?? 0);
     const peakIdxDebug = peakFrameIndex_v2 ?? 0;
     const aroundStart = Math.max(0, peakIdxDebug - 5);
     const aroundEnd = Math.min(v2EvalFrames.length, peakIdxDebug + 6);
@@ -697,15 +516,34 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       timestampsLast10: v2EvalFrames.slice(-10).map((f) => f.timestampMs ?? 0),
     };
 
-    // ── PR04D: Depth source selection policy metrics (debug only) ──────────
-    m.runtimeV2DepthEffectiveSource = v2DepthSelection.source;
-    m.runtimeV2DepthPolicy = v2DepthSelection.policy;
-    m.v2DepthSourceSwitchReason = v2DepthSelection.switchReason;
-    m.v2DepthSourceStats = {
-      blended: v2DepthSelection.stats.blended,
-      proxy: v2DepthSelection.stats.proxy,
-      raw: v2DepthSelection.stats.raw,
-    };
+    // ── PR-V2-INPUT-01 + PR04D: input owner + legacy-compatible metrics ────
+    m.v2InputSelectedDepthSource = ownedV2Input.selectedDepthSource;
+    m.v2InputDepthCurveUsable = ownedV2Input.depthCurveUsable;
+    m.v2InputFiniteButUselessDepthRejected = ownedV2Input.finiteButUselessDepthRejected;
+    m.v2InputSourceStats = ownedV2Input.sourceStats;
+    m.v2InputLowerBodySignalSource = ownedV2Input.selectedDepthSource;
+
+    const legacySel = ownedV2Input.legacyDepthSelection;
+    m.runtimeV2DepthEffectiveSource = runtimeV2DepthEffectiveSourceFromOwned(
+      ownedV2Input.selectedDepthSource,
+      legacySel
+    );
+    m.runtimeV2DepthPolicy =
+      ownedV2Input.selectedDepthSource === 'none'
+        ? 'v2_input_01:none_explicit_zero'
+        : legacySel != null
+        ? legacySel.policy
+        : `v2_input_01:${ownedV2Input.selectedDepthSource}`;
+    m.v2DepthSourceSwitchReason =
+      legacySel?.switchReason ?? ownedV2Input.v2InputSwitchReason;
+    m.v2DepthSourceStats =
+      legacySel != null
+        ? {
+            blended: legacySel.stats.blended,
+            proxy: legacySel.stats.proxy,
+            raw: legacySel.stats.raw,
+          }
+        : null;
     m.selectedV2DepthFirst10 = v2DepthsSrc.slice(0, 10);
     m.selectedV2DepthAroundPeak = v2DepthsSrc.slice(aroundStart, aroundEnd);
     m.selectedV2DepthLast10 = v2DepthsSrc.slice(-10);

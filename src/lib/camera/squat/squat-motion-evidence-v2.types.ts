@@ -347,6 +347,17 @@ export interface SquatMotionEvidenceDecisionV2 {
     selectedV2DepthFirst10?: number[] | null;
     selectedV2DepthAroundPeak?: number[] | null;
     selectedV2DepthLast10?: number[] | null;
+    // ── PR-V2-INPUT-01: explicit V2 input owner diagnostics ───────────────
+    /** Selected depth channel (landmark or legacy bucket). */
+    v2InputSelectedDepthSource?: string;
+    /** True when the chosen series passed INPUT-01 curve-usability gates. */
+    v2InputDepthCurveUsable?: boolean;
+    /** True when a finite candidate was rejected as collapsed / tail-spike / low amplitude / not usable. */
+    v2InputFiniteButUselessDepthRejected?: boolean;
+    /** Compact candidate stats + reasons (includes PR04D legacy mirror when present). */
+    v2InputSourceStats?: Record<string, unknown> | null;
+    /** PR-1: lower-body signal source (same as depth series in PR-1). */
+    v2InputLowerBodySignalSource?: string;
   };
 }
 
