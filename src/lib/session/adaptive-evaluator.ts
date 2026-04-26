@@ -7,6 +7,31 @@
 
 import { resolveAdaptiveModifier } from './adaptive-modifier-resolver';
 
+/** Shallow Supabase surface for this module only; avoids full Database generic depth at call sites. */
+export type AdaptiveEvaluatorSelectEqResult = PromiseLike<{
+  data: unknown[] | null;
+}>;
+
+export type AdaptiveEvaluatorUpsertResult = PromiseLike<{
+  error: unknown;
+}>;
+
+export type AdaptiveEvaluatorSupabase = {
+  from: (table: string) => {
+    select: (cols: string) => {
+      eq: (col: string, val: unknown) => AdaptiveEvaluatorSelectEqResult;
+    };
+    upsert: (rows: unknown[], opts?: object) => AdaptiveEvaluatorUpsertResult;
+  };
+};
+
+export function createAdaptiveEvaluatorSupabaseAdapter(supabase: unknown): AdaptiveEvaluatorSupabase {
+  const client = supabase as AdaptiveEvaluatorSupabase;
+  return {
+    from: (table) => client.from(table),
+  };
+}
+
 export const EVALUATOR_TRACE_VERSION = '1.0';
 
 export type AdaptiveEvaluatorTrace = {
@@ -101,13 +126,7 @@ type EventRow = {
  * from exercise-log-identity to normalize legacy plan_item_key (seg{N}-item{M}, log{N}).
  */
 export async function loadSessionEventsForEval(
-  supabase: {
-    from: (t: string) => {
-      select: (cols: string) => {
-        eq: (col: string, val: unknown) => PromiseLike<{ data: unknown[] | null }>;
-      };
-    };
-  },
+  supabase: AdaptiveEvaluatorSupabase,
   sessionPlanId: string
 ): Promise<EventRow[]> {
   const { data } = await supabase
@@ -277,14 +296,7 @@ function buildEvaluatorTrace(
  * Run evaluator and upsert summary. Returns summary for debug.
  */
 export async function runEvaluatorAndUpsert(
-  supabase: {
-    from: (t: string) => {
-      select: (cols: string) => {
-        eq: (col: string, val: unknown) => PromiseLike<{ data: unknown[] | null }>;
-      };
-      upsert: (row: unknown[], opts?: object) => PromiseLike<{ error: unknown }>;
-    };
-  },
+  supabase: AdaptiveEvaluatorSupabase,
   ctx: { userId: string; sessionPlanId: string; sessionNumber: number }
 ): Promise<AdaptiveSummaryDebug | { summary_status: 'insufficient_data' } | null> {
   const events = await loadSessionEventsForEval(supabase, ctx.sessionPlanId);

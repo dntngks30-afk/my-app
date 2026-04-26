@@ -19,7 +19,11 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { logSessionEvent, summarizeExerciseLogs } from '@/lib/session-events';
 import { buildSessionExerciseEvents, writeSessionExerciseEvents } from '@/lib/session/session-exercise-events';
 import type { ExerciseLogItem } from '@/lib/session/types';
-import { runEvaluatorAndUpsert, type AdaptiveSummaryDebug } from '@/lib/session/adaptive-evaluator';
+import {
+  createAdaptiveEvaluatorSupabaseAdapter,
+  runEvaluatorAndUpsert,
+  type AdaptiveSummaryDebug,
+} from '@/lib/session/adaptive-evaluator';
 
 /** Debug-only: insufficient_data when evaluator cannot produce a summary row */
 type AdaptiveSummaryDebugOrInsufficient = AdaptiveSummaryDebug | { summary_status: 'insufficient_data' };
@@ -464,7 +468,10 @@ export async function POST(req: NextRequest) {
           console.info('[session/complete] event_log', { sessionNumber, ...eventLogResult });
         }
         // PR-B: run adaptive evaluator after event logging
-        adaptiveSummary = await runEvaluatorAndUpsert(supabase, { userId, sessionPlanId: planId, sessionNumber });
+        adaptiveSummary = await runEvaluatorAndUpsert(
+          createAdaptiveEvaluatorSupabaseAdapter(supabase),
+          { userId, sessionPlanId: planId, sessionNumber }
+        );
       }
       const progressResult: any = await (supabase as any)
         .from('session_program_progress')
