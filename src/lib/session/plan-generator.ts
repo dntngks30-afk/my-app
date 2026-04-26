@@ -116,7 +116,7 @@ function isReleaseEligible(t: SessionTemplateRow): boolean {
 
 function hasTemplatePhase(
   template: SessionTemplateRow,
-  phases: TemplatePhase[]
+  phases: readonly TemplatePhase[]
 ): boolean {
   return !!template.phase && phases.includes(template.phase as TemplatePhase);
 }
@@ -135,10 +135,10 @@ function getDifficultyRank(difficulty: string | null | undefined): number {
 type GoldPathSegmentRule = {
   title: 'Prep' | 'Main' | 'Accessory' | 'Cooldown';
   kind: SegmentKind;
-  preferredPhases: TemplatePhase[];
-  preferredVectors: GoldPathVector[];
-  fallbackVectors: GoldPathVector[];
-  preferredProgression: number[];
+  preferredPhases: readonly TemplatePhase[];
+  preferredVectors: readonly GoldPathVector[];
+  fallbackVectors: readonly GoldPathVector[];
+  preferredProgression: readonly number[];
   count: number;
 };
 

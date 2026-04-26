@@ -98,10 +98,10 @@ const MAX_FIRST_SESSION_TOTAL_EXERCISES = 5
 type GoldPathSegmentRule = {
   title: 'Prep' | 'Main' | 'Accessory' | 'Cooldown'
   kind: SegmentKind
-  preferredPhases: string[]
-  preferredVectors: GoldPathVector[]
-  fallbackVectors: GoldPathVector[]
-  preferredProgression: number[]
+  preferredPhases: readonly string[]
+  preferredVectors: readonly GoldPathVector[]
+  fallbackVectors: readonly GoldPathVector[]
+  preferredProgression: readonly number[]
   count: number
 }
 
