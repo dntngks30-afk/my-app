@@ -121,6 +121,16 @@ type PlanItemInfo = {
   plan_item_key: string;
 };
 
+type CompletedItemCounts = {
+  completed: number;
+  mainCompleted: number;
+  withPerformedValue: number;
+  matchedByPlanItemKey: number;
+  matchedByTemplateFallback: number;
+  cooldownItemsCount: number;
+  cooldownCompleted: number;
+};
+
 function buildPlanItemList(planJson: PlanJson | null | undefined): PlanItemInfo[] {
   const items: PlanItemInfo[] = [];
   if (!planJson?.segments) return items;
@@ -152,13 +162,7 @@ function buildPlanItemList(planJson: PlanJson | null | undefined): PlanItemInfo[
 function countCompletedItems(
   planItems: PlanItemInfo[],
   exerciseLogs: ExerciseLogItem[]
-): {
-  completed: number;
-  mainCompleted: number;
-  withPerformedValue: number;
-  matchedByPlanItemKey: number;
-  matchedByTemplateFallback: number;
-} {
+): CompletedItemCounts {
   const byPlanItemKey = new Map<string, ExerciseLogItem>();
   const logQueueByTemplateId = new Map<string, ExerciseLogItem[]>();
   for (const log of exerciseLogs) {

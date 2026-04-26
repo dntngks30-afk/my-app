@@ -20,6 +20,13 @@ type BootstrapSummaryLike = {
 
 type NextSessionPreviewDisplayInput = NextSessionPreviewData | NextSessionPreviewPayload | null | undefined
 
+function getPreviewFocusLabel(payload: NextSessionPreviewDisplayInput): string | null {
+  if (!payload || !('focus_label' in payload)) return null
+  return typeof payload.focus_label === 'string' && payload.focus_label.trim().length > 0
+    ? payload.focus_label.trim()
+    : null
+}
+
 export type NextSessionPreviewPayload = {
   session_number: number
   focus_axes: string[]
@@ -260,9 +267,7 @@ export function normalizeNextSessionPreviewForDisplay(
 
   const focusAxes = Array.isArray(payload.focus_axes) ? payload.focus_axes.filter(Boolean) : []
   const focusLabel =
-    (typeof payload.focus_label === 'string' && payload.focus_label.trim().length > 0
-      ? payload.focus_label.trim()
-      : null) ??
+    getPreviewFocusLabel(payload) ??
     (typeof options?.focusLabel === 'string' && options.focusLabel.trim().length > 0
       ? options.focusLabel.trim()
       : null) ??
@@ -368,5 +373,5 @@ export function resolveLockedNextSessionPreview(input: {
 }): NextSessionPreviewPayload | null {
   if (input.status !== 'locked' || !input.isLockedNext || input.sessionId == null) return null
   if (getLockedNextPreviewRecoveryReason(input) !== null) return null
-  return normalizeNextSessionPreviewForDisplay(input.nextSession) ?? input.nextSession
+  return normalizeNextSessionPreviewForDisplay(input.nextSession) ?? input.nextSession ?? null
 }

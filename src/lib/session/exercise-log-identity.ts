@@ -254,6 +254,7 @@ export function buildCompletionExerciseLogsWithIdentity(
       if (!log) continue;
       result.push({
         ...log,
+        difficulty: log.difficulty ?? null,
         plan_item_key: buildPlanItemKey(segIdx, itemIdx, tid),
         segment_index: segIdx,
         item_index: itemIdx,
