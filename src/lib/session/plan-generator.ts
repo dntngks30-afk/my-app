@@ -1346,7 +1346,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       session_number: input.sessionNumber,
       phase: input.phase,
       result_type: input.resultType ?? 'UNKNOWN',
-      confidence: (input.confidence ?? 0) >= 0.7 ? 'high' : (input.confidence ?? 0) >= 0.4 ? 'mid' : 'low',
+      ...(input.confidence !== undefined && { confidence: input.confidence }),
       focus: input.focus.slice(0, 4),
       avoid: input.avoid.slice(0, 4),
       scoring_version: input.scoringVersion ?? 'deep_v2',
