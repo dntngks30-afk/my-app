@@ -459,6 +459,14 @@ export interface SquatMotionEvidenceDecisionV2 {
     /** Recovery candidate window: primary setup/framing veto for Lock A. */
     v2ShallowRecoveryCandidateSetupBlocked?: boolean | null;
     v2ShallowRecoveryCandidateSetupBlockReason?: string | null;
+    // ── PR-V2-INPUT-05C: wrong-window recovery observability ──
+    v2ShallowRecoveryTriggerReason?: string | null;
+    v2ShallowRecoveryWrongWindowDetected?: boolean;
+    v2ShallowRecoveryPrimaryPeakAtStart?: boolean;
+    v2ShallowRecoveryPrimaryLowerUpperRatio?: number | null;
+    v2ShallowRecoveryPrimaryRelativePeak?: number | null;
+    v2ShallowRecoveryIndependentLowerBodyEvidence?: boolean | null;
+    v2ShallowRecoveryIndependentLowerBodyEvidenceReason?: string | null;
   };
 }
 

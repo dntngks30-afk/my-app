@@ -63,6 +63,15 @@ export interface EvaluatorMetric {
   trend?: 'good' | 'neutral' | 'concern';
 }
 
+/** Readiness dwell + setup motion; auto-progression reads without highlightedMetrics casts */
+export interface SquatSetupPhaseTrace {
+  readinessStableDwellSatisfied?: boolean;
+  setupMotionBlocked?: boolean;
+  setupMotionBlockReason?: string | null;
+  attemptStartedAfterReady?: boolean;
+  shallowLowRomSetupRearmApplied?: boolean;
+}
+
 export interface EvaluatorDebugSummary {
   frameCount: number;
   validFrameCount: number;
@@ -86,6 +95,7 @@ export interface EvaluatorDebugSummary {
   overheadInternalQuality?: OverheadInternalQuality;
   /** PR-HOTFIX-02: 스쿼트 completion 평가 무장(서 있기 안정 후에만 평가) */
   squatCompletionArming?: CompletionArmingState;
+  squatSetupPhaseTrace?: SquatSetupPhaseTrace;
   /**
    * PR-CAM-09: 스쿼트 completion 상태 전체(typed).
    * highlightedMetrics 의 개별 필드와 동일 데이터를 타입 안전하게 노출한다.

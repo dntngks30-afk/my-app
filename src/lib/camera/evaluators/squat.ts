@@ -27,7 +27,9 @@ import {
   type V2DepthSeriesStats,
 } from '@/lib/camera/squat/squat-v2-input-owner';
 import {
-  shouldAttemptShallowV2Recovery,
+  applyResolutionToDiagnostics,
+  buildWrongWindowSkippedRecoveryDiagnostics,
+  resolveShallowV2RecoveryAttempt,
   tryFindShallowV2RecoveryWindow,
   type SquatV2ShallowRecoveryDiagnostics,
 } from '@/lib/camera/squat/squat-v2-shallow-recovery-window';
@@ -299,14 +301,24 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   let chosenActiveEpoch = activeEpoch;
   let shallowRecoveryDiag: SquatV2ShallowRecoveryDiagnostics | null = null;
 
+  const recoveryResolution = resolveShallowV2RecoveryAttempt({
+    validRaw,
+    validRawLength: validRaw.length,
+    decision: squatMotionEvidenceV2,
+    owned: ownedV2InputPrimary,
+    v2EvalFrameCount: v2EvalFrames.length,
+  });
+
   if (
-    shouldAttemptShallowV2Recovery({
-      validRawLength: validRaw.length,
-      decision: squatMotionEvidenceV2,
-      owned: ownedV2InputPrimary,
-      v2EvalFrameCount: v2EvalFrames.length,
-    })
+    recoveryResolution != null &&
+    !recoveryResolution.shouldRunSlidingSearch &&
+    recoveryResolution.wrongWindowDetected
   ) {
+    shallowRecoveryDiag = buildWrongWindowSkippedRecoveryDiagnostics(
+      recoveryResolution,
+      squatMotionEvidenceV2
+    );
+  } else if (recoveryResolution?.shouldRunSlidingSearch) {
     // PR05B: full-buffer setup is diagnostic + overlap support only (not a lone veto).
     const fullRawSetupForRecovery = computeSquatSetupMotionBlock(validRaw);
     const fullRawFirstSetupObsForRecovery = findFirstSquatSetupMotionBlockObservation(validRaw);
@@ -317,7 +329,7 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
       fullRawSetup: fullRawSetupForRecovery,
       fullRawFirstSetupObs: fullRawFirstSetupObsForRecovery,
     });
-    shallowRecoveryDiag = diagnostics;
+    shallowRecoveryDiag = applyResolutionToDiagnostics(diagnostics, recoveryResolution);
     if (hit) {
       squatMotionEvidenceV2 = hit.decision;
       chosenV2EvalFrames = hit.v2EvalFrames;
@@ -618,6 +630,15 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
         m.v2ShallowRecoveryCandidateSetupBlocked = rs.candidateSetupBlocked;
         m.v2ShallowRecoveryCandidateSetupBlockReason = rs.candidateSetupBlockReason;
       }
+      m.v2ShallowRecoveryTriggerReason = shallowRecoveryDiag.triggerReason ?? null;
+      m.v2ShallowRecoveryWrongWindowDetected = shallowRecoveryDiag.wrongWindowDetected ?? false;
+      m.v2ShallowRecoveryPrimaryPeakAtStart = shallowRecoveryDiag.primaryPeakAtStart ?? false;
+      m.v2ShallowRecoveryPrimaryLowerUpperRatio = shallowRecoveryDiag.primaryLowerUpperRatio ?? null;
+      m.v2ShallowRecoveryPrimaryRelativePeak = shallowRecoveryDiag.primaryRelativePeak ?? null;
+      m.v2ShallowRecoveryIndependentLowerBodyEvidence =
+        shallowRecoveryDiag.independentLowerBodyEvidence ?? null;
+      m.v2ShallowRecoveryIndependentLowerBodyEvidenceReason =
+        shallowRecoveryDiag.independentLowerBodyEvidenceReason ?? null;
     } else {
       m.v2ShallowRecoveryAttempted = false;
     }

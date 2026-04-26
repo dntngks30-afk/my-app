@@ -704,7 +704,11 @@ function ExerciseList({
                   <button
                     type="button"
                     onClick={() => onPlay(item, Math.max(0, exercises.findIndex((e) => (e.plan_item_key ? e.plan_item_key === item.plan_item_key : e.templateId === item.templateId && e.segmentTitle === item.segmentTitle && e.order === item.order))))}
-                    title={status === 'locked' ? '현재 세션이 아닙니다' : '운동 보기'}
+                    title={
+                      panelStatus === 'current' || panelStatus === 'completed'
+                        ? '운동 보기'
+                        : '현재 세션이 아닙니다'
+                    }
                     className={[
                       'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors',
                       panelStatus === 'current' || panelStatus === 'completed'

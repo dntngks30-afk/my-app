@@ -347,7 +347,7 @@ function rerunShallowLowRomAfterSetupBlock(
     completionMachinePhase: state.completionMachinePhase,
     completionPassReason: state.completionPassReason,
     completionSatisfied: state.completionSatisfied,
-    completionBlockedReason: state.completionBlockedReason,
+    completionBlockedReason: state.completionBlockedReason ?? null,
     successPhaseAtOpen: state.successPhaseAtOpen ?? null,
     completionArmingArmed: completionArming.armed ? 1 : 0,
     effectiveArmed: effectiveArmed ? 1 : 0,
@@ -362,6 +362,9 @@ function rerunShallowLowRomAfterSetupBlock(
     interpretedSignals,
     debug: {
       ...(result.debug ?? {}),
+      frameCount: result.debug?.frameCount ?? 0,
+      validFrameCount: result.debug?.validFrameCount ?? 0,
+      phaseHints: result.debug?.phaseHints ?? [],
       squatCompletionArming: completionArming,
       squatCompletionState: state,
       squatEventCycle: state.squatEventCycle,
@@ -731,6 +734,9 @@ export function demoteMeaninglessShallowPass(
     interpretedSignals,
     debug: {
       ...(result.debug ?? {}),
+      frameCount: result.debug?.frameCount ?? 0,
+      validFrameCount: result.debug?.validFrameCount ?? 0,
+      phaseHints: result.debug?.phaseHints ?? [],
       squatCompletionState: nextState,
       highlightedMetrics,
     },

@@ -518,6 +518,9 @@ export function promoteAngleAwareLowRomRuleCycle(
     interpretedSignals,
     debug: {
       ...(result.debug ?? {}),
+      frameCount: result.debug?.frameCount ?? 0,
+      validFrameCount: result.debug?.validFrameCount ?? 0,
+      phaseHints: result.debug?.phaseHints ?? [],
       squatCompletionState: nextState,
       squatEventCycle: nextState.squatEventCycle,
       highlightedMetrics,

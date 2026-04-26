@@ -123,6 +123,7 @@ console.log('\nPR-V2-INPUT-05 shallow recovery + PR04B module smoke\n');
   ok(
     'shouldAttempt false when usableMotionEvidence',
     !shouldAttemptShallowV2Recovery({
+      validRaw: [],
       validRawLength: 80,
       decision,
       owned,
@@ -154,6 +155,7 @@ console.log('\nPR-V2-INPUT-05 shallow recovery + PR04B module smoke\n');
   ok(
     'shouldAttempt false when peak-at-tail stall',
     !shouldAttemptShallowV2Recovery({
+      validRaw: [],
       validRawLength: 80,
       decision,
       owned,
@@ -186,6 +188,7 @@ console.log('\nPR-V2-INPUT-05 shallow recovery + PR04B module smoke\n');
   ok(
     'shouldAttempt true when source none and not tail stall',
     shouldAttemptShallowV2Recovery({
+      validRaw: [],
       validRawLength: 80,
       decision,
       owned,
