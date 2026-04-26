@@ -616,7 +616,7 @@ export async function generateDayPlan(
   };
 
   if (existing.data) {
-    const writes: Promise<unknown>[] = [upsertOp];
+    const writes: PromiseLike<unknown>[] = [upsertOp];
     if (hasChange) {
       writes.push(supabase.from('routine_day_plan_revisions').insert(revisionPayload));
     }
