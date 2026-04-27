@@ -4,9 +4,12 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { supabase, getSessionSafe } from '@/lib/supabase';
-import { getCachedAppBootstrap } from '@/lib/app/bootstrapClient';
+import { getCachedAppBootstrap, invalidateAppBootstrapCache } from '@/lib/app/bootstrapClient';
 import { isAllowed, isAllowlistEmpty } from '@/lib/appAccess';
 import AppEntryLoader, { isAppBooted } from './AppEntryLoader';
+import { readPilotContext } from '@/lib/pilot/pilot-context';
+import { redeemPilotAccessClient } from '@/lib/pilot/redeemPilotAccessClient';
+import { mapPilotRedeemErrorToMessage } from '@/lib/pilot/pilot-redeem-ui-messages';
 
 interface AppAuthGateProps {
   children: React.ReactNode;
@@ -16,13 +19,25 @@ function hasActivePlan(planStatus: string | null): boolean {
   return planStatus === 'active';
 }
 
+type GateStatus =
+  | 'loading'
+  | 'auth'
+  | 'denied'
+  | 'paywall'
+  | 'allowed'
+  | 'pilot_redeeming';
+
 /** 탭 전환 시 동일 세션이면 재검증 스킵(users DB 조회 생략) */
 export default function AppAuthGate({ children }: AppAuthGateProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const [status, setStatus] = useState<'loading' | 'auth' | 'denied' | 'paywall' | 'allowed'>('loading');
+  const [status, setStatus] = useState<GateStatus>('loading');
   const [skipLoader, setSkipLoader] = useState(false);
+  const [paywallPilotMessage, setPaywallPilotMessage] = useState<string | null>(null);
   const lastAllowedUserIdRef = useRef<string | null>(null);
+  /** userId we already attempted pilot redeem for (avoid loops; reset on user change / success path). */
+  const pilotRedeemAttemptedForUserRef = useRef<string | null>(null);
+  const lastSessionUserIdRef = useRef<string | null>(null);
 
   const isAuthPage = pathname?.startsWith('/app/auth');
 
@@ -42,6 +57,9 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
 
         if (error || !session) {
           lastAllowedUserIdRef.current = null;
+          lastSessionUserIdRef.current = null;
+          pilotRedeemAttemptedForUserRef.current = null;
+          setPaywallPilotMessage(null);
           setStatus('auth');
           if (!isAuthPage) {
             const next = encodeURIComponent(pathname || '/app/home');
@@ -51,6 +69,14 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
         }
 
         const userId = session.user.id;
+        if (
+          lastSessionUserIdRef.current !== null &&
+          lastSessionUserIdRef.current !== userId
+        ) {
+          pilotRedeemAttemptedForUserRef.current = null;
+        }
+        lastSessionUserIdRef.current = userId;
+
         if (lastAllowedUserIdRef.current === userId && status === 'allowed') {
           return;
         }
@@ -58,6 +84,7 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
         const email = session.user?.email ?? null;
         if (!isAllowlistEmpty() && !isAllowed(email)) {
           lastAllowedUserIdRef.current = null;
+          setPaywallPilotMessage(null);
           setStatus('denied');
           return;
         }
@@ -69,6 +96,9 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
         if (!result.ok) {
           if (result.status === 401) {
             lastAllowedUserIdRef.current = null;
+            lastSessionUserIdRef.current = null;
+            pilotRedeemAttemptedForUserRef.current = null;
+            setPaywallPilotMessage(null);
             setStatus('auth');
             if (!isAuthPage) {
               const next = encodeURIComponent(pathname || '/app/home');
@@ -77,6 +107,7 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
             return;
           }
           lastAllowedUserIdRef.current = null;
+          setPaywallPilotMessage(null);
           setStatus('paywall');
           return;
         }
@@ -85,11 +116,54 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
 
         if (hasActivePlan(planStatus)) {
           lastAllowedUserIdRef.current = userId;
+          setPaywallPilotMessage(null);
           setStatus('allowed');
-        } else {
+          return;
+        }
+
+        if (readPilotContext()) {
+          if (pilotRedeemAttemptedForUserRef.current === userId) {
+            lastAllowedUserIdRef.current = null;
+            setStatus('paywall');
+            return;
+          }
+
+          pilotRedeemAttemptedForUserRef.current = userId;
+          setPaywallPilotMessage(null);
+          setStatus('pilot_redeeming');
+
+          const redeemResult = await redeemPilotAccessClient(session.access_token);
+          if (cancelled) return;
+
+          if (redeemResult.ok && !redeemResult.skipped) {
+            pilotRedeemAttemptedForUserRef.current = null;
+            invalidateAppBootstrapCache();
+            await check();
+            return;
+          }
+
+          if (!redeemResult.ok) {
+            setPaywallPilotMessage(
+              mapPilotRedeemErrorToMessage(redeemResult.code, redeemResult.message)
+            );
+            lastAllowedUserIdRef.current = null;
+            setStatus('paywall');
+            return;
+          }
+
+          if (process.env.NODE_ENV === 'development') {
+            console.warn(
+              '[AppAuthGate] pilot context present but redeem skipped; showing paywall'
+            );
+          }
           lastAllowedUserIdRef.current = null;
           setStatus('paywall');
+          return;
         }
+
+        lastAllowedUserIdRef.current = null;
+        setPaywallPilotMessage(null);
+        setStatus('paywall');
       } catch (e) {
         if (cancelled) return;
         const isAbortError = e instanceof Error && e.name === 'AbortError';
@@ -100,16 +174,25 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
           return;
         }
         lastAllowedUserIdRef.current = null;
+        lastSessionUserIdRef.current = null;
+        pilotRedeemAttemptedForUserRef.current = null;
+        setPaywallPilotMessage(null);
         setStatus('auth');
       }
     }
 
     check();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [pathname, isAuthPage, router]);
 
   // 앱 첫 진입 시에만 풀스크린 로더. 탭 전환에서는 재출현 금지.
   // skipLoader는 useEffect에서만 설정 → Hydration mismatch 방지
+  if (status === 'pilot_redeeming') {
+    return <AppEntryLoader status="파일럿 권한 확인 중" />;
+  }
+
   if (status === 'loading') {
     if (skipLoader) {
       return <>{children}</>;
@@ -141,6 +224,11 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-[var(--bg)] px-4">
         <h2 className="text-lg font-semibold text-[var(--text)]">실행 권한이 필요해요</h2>
+        {paywallPilotMessage ? (
+          <p className="max-w-sm text-center text-sm text-amber-700 dark:text-amber-400">
+            {paywallPilotMessage}
+          </p>
+        ) : null}
         <p className="max-w-sm text-center text-sm text-[var(--muted)]">
           분석 결과를 먼저 확인하고, 맞춤 루틴 실행을 시작할 수 있어요.
         </p>

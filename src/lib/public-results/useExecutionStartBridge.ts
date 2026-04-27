@@ -29,6 +29,9 @@ import {
 } from './public-result-bridge';
 import type { BridgeResultStage } from './public-result-bridge';
 import { readAnonId } from './anon-id';
+import { readPilotContext } from '@/lib/pilot/pilot-context';
+import { redeemPilotAccessClient } from '@/lib/pilot/redeemPilotAccessClient';
+import { mapPilotRedeemErrorToMessage } from '@/lib/pilot/pilot-redeem-ui-messages';
 
 export interface UseExecutionStartBridgeOptions {
   /** FLOW-02 handoff id. 없으면 bridge context 없이 진행 (fallback) */
@@ -113,6 +116,25 @@ export function useExecutionStartBridge(
           resultStage: stage,
           anonId: readAnonId(),
         });
+      }
+
+      if (readPilotContext()) {
+        const redeemResult = await redeemPilotAccessClient(session.access_token);
+        if (redeemResult.ok && !redeemResult.skipped) {
+          router.push(successNext);
+          return;
+        }
+        if (!redeemResult.ok) {
+          setError(
+            mapPilotRedeemErrorToMessage(redeemResult.code, redeemResult.message)
+          );
+          return;
+        }
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(
+            '[useExecutionStartBridge] pilot context present but redeem skipped; falling back to checkout'
+          );
+        }
       }
 
       const checkoutRes = await fetch('/api/stripe/checkout', {
