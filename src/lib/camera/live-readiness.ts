@@ -198,10 +198,10 @@ export function useStabilizedLiveReadiness(
   rawState: LiveReadinessState
 ): StabilizedLiveReadiness {
   const [stableState, setStableState] = useState<LiveReadinessState>(rawState);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (timeoutRef.current) {
+    if (timeoutRef.current !== null) {
       window.clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
@@ -228,7 +228,7 @@ export function useStabilizedLiveReadiness(
     }, READY_ENTER_DELAY_MS);
 
     return () => {
-      if (timeoutRef.current) {
+      if (timeoutRef.current !== null) {
         window.clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
       }

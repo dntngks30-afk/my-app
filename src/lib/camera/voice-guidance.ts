@@ -545,7 +545,7 @@ async function playVoiceCue(cue: VoiceCue | null, waitUntilEnd: boolean): Promis
   const currentCueKey = cue.dedupeKey;
   let waitResolve: ((ok: boolean) => void) | null = null;
   let waitSettled = false;
-  let voiceWaitWatchdogId: ReturnType<typeof window.setTimeout> | null = null;
+  let voiceWaitWatchdogId: number | null = null;
 
   const clearVoiceWaitWatchdog = () => {
     if (voiceWaitWatchdogId !== null) {
