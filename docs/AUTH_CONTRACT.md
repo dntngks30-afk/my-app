@@ -76,6 +76,7 @@
 | `/api/coach-comments/[id]` | client | no | |
 | `/api/coach-comments/generate` | client | no | body.userId 신뢰 안 함 |
 | `/api/coach-comments/user/[userId]` | client | no | params.userId 신뢰 안 함 |
+| `/api/pilot/redeem` | session-preparing → `redeemPilotAccessClient` | no | Bearer + `getUser`; `redeem_pilot_access` RPC로 `plan_status` 활성화 (PR-PILOT-ENTITLEMENT-02) |
 
 ### 3.2 Bearer + Active Plan (requireActivePlan)
 

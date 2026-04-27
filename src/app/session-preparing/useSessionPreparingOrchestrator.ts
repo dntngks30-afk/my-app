@@ -8,6 +8,7 @@ import {
   clearBridgeContext,
 } from '@/lib/public-results/public-result-bridge';
 import { claimPublicResultClient } from '@/lib/public-results/useClaimPublicResult';
+import { redeemPilotAccessClient } from '@/lib/pilot/redeemPilotAccessClient';
 
 // Minimum dwell on the success path. Env override allowed, default 10s.
 export const SESSION_PREPARING_DWELL_FLOOR_MS =
@@ -17,26 +18,58 @@ export const SESSION_PREPARING_DWELL_FLOOR_MS =
 
 type PipelineResult =
   | { ok: true }
-  | { ok: false; stage: 'auth' | 'claim' | 'create'; message: string };
+  | { ok: false; stage: 'auth' | 'claim' | 'pilot_redeem' | 'create'; message: string };
 
 // Module-level in-flight owner: covers the full claim+create pipeline.
 // Prevents duplicate runs across StrictMode/remount.
 let sessionPreparingPipelineInflight: Promise<PipelineResult> | null = null;
 
+function pilotRedeemMessage(code: string, fallback: string): string {
+  switch (code) {
+    case 'EXPIRED_CODE':
+    case 'INACTIVE_CODE':
+      return '파일럿 코드가 만료되었습니다. 안내받은 링크를 다시 확인해주세요.';
+    case 'REDEMPTION_LIMIT_REACHED':
+      return '이 파일럿 링크의 사용 가능 인원이 모두 찼습니다.';
+    case 'INVALID_CODE':
+    case 'CODE_NOT_FOUND':
+    case 'MISSING_CODE':
+      return '유효하지 않은 파일럿 링크입니다.';
+    case 'USER_NOT_FOUND':
+      return fallback;
+    case 'NETWORK_ERROR':
+    case 'REDEEM_FAILED':
+      return '파일럿 권한을 확인하지 못했습니다. 잠시 후 다시 시도해주세요.';
+    default:
+      return fallback;
+  }
+}
+
 async function runPipeline(accessToken: string): Promise<PipelineResult> {
   const ctx = loadBridgeContext();
+  const hadBridge = Boolean(ctx?.publicResultId);
+  let claimSucceeded = false;
 
   if (ctx?.publicResultId) {
-    // Bridge path: claim MUST succeed before create is attempted.
     const claimResult = await claimPublicResultClient(ctx.publicResultId, ctx.anonId ?? null);
     if (!claimResult.ok) {
-      // Bridge is retained (not cleared) on failure — PR-CLAIM-FLOW-HARDENING-01.
       return { ok: false, stage: 'claim', message: '결과를 연결하지 못했습니다.' };
     }
-    // Claim confirmed (claimed or already_owned): clear bridge before create.
+    claimSucceeded = true;
+  }
+
+  const redeemResult = await redeemPilotAccessClient(accessToken);
+  if (!redeemResult.ok) {
+    return {
+      ok: false,
+      stage: 'pilot_redeem',
+      message: pilotRedeemMessage(redeemResult.code, redeemResult.message),
+    };
+  }
+
+  if (hadBridge && claimSucceeded) {
     clearBridgeContext();
   }
-  // Legacy deep-only path (no bridge publicResultId) falls through directly to create.
 
   const createResult = await createSession(accessToken, {
     condition_mood: 'ok',

@@ -97,6 +97,16 @@ export function savePilotContextFromCode(code: string, source: PilotContextSourc
   }
 }
 
+/** Call only after successful pilot redeem (`redeemed` / `already_redeemed`). */
+export function clearPilotContext(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(PILOT_CONTEXT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 /**
  * Allowlisted public pre-auth temp keys only.
  * Does NOT remove moveRePilotContext:v1, moveReAnonId:v1, payment, /app, readiness, etc.
