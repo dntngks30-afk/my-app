@@ -53,6 +53,11 @@ export type OnboardingProfileOptions = {
   exerciseExperienceLevel?: ExerciseExperienceLevel | null;
   /** FLOW-04: 통증/불편감 유무 */
   painOrDiscomfortPresent?: boolean | null;
+  /**
+   * 온보딩 화면 명시 제출만. /api/session/profile에서 검증 후에만 true 전달.
+   * deep-test finalize·빈도만 변경 등에서는 절대 켜지 않는다.
+   */
+  setOnboardingCompletedAt?: boolean;
 };
 
 export async function applyTargetFrequency(
@@ -91,6 +96,9 @@ export async function applyTargetFrequency(
   }
   if (options?.painOrDiscomfortPresent !== undefined) {
     upsertPayload.pain_or_discomfort_present = options.painOrDiscomfortPresent;
+  }
+  if (options?.setOnboardingCompletedAt === true) {
+    upsertPayload.onboarding_completed_at = new Date().toISOString();
   }
 
   const { data: profile, error: profileErr } = await supabase

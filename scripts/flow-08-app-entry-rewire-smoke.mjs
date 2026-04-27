@@ -45,14 +45,15 @@ assert(
 console.log('\n[2] ReadinessEntryGate 검증');
 const gate = readSrc('src/app/app/_components/ReadinessEntryGate.tsx');
 assert('ReadinessEntryGate export', gate?.includes('export default function ReadinessEntryGate'));
-assert('clearReadinessCheck export', gate?.includes('export function clearReadinessCheck'));
 assert('GO_RESULT → /movement-test/baseline', gate?.includes('/movement-test/baseline'));
 assert("GO_ONBOARDING → /onboarding", gate?.includes("'/onboarding'"));
 assert("GO_AUTH → /app/auth", gate?.includes("'/app/auth'"));
-assert('sessionStorage 중복 체크 방지', gate?.includes('READINESS_CHECKED_KEY'));
+assert('GO_SESSION_CREATE → /session-preparing', gate?.includes("'/session-preparing'"));
+assert('gating 초기 true (readiness 전 children 비노출)', gate?.includes('useState(true)'));
+assert('checkedRef 중복 방지 (sessionStorage 하드 스킵 없음)', gate?.includes('checkedRef') && !gate?.includes('isReadinessAlreadyChecked'));
 assert('fetchReadinessClient 사용', gate?.includes('fetchReadinessClient'));
-assert('pass-through fallback (create_session, open_app, blocked)', gate?.includes('markReadinessChecked'));
-assert('fetch 실패 시 pass-through', gate?.includes('return null'));
+assert('pass-through에서 markReadinessChecked', gate?.includes('markReadinessChecked'));
+assert('fetch 실패 시 pass-through', gate?.includes('if (!readiness)'));
 
 // 3. fetchReadinessClient 확인
 console.log('\n[3] fetchReadinessClient 검증');

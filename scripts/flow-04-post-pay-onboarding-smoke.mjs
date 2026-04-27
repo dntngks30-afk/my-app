@@ -68,12 +68,27 @@ run('migration — session_user_profile 확장', () => {
   return errs;
 });
 
+run('migration — onboarding_completed_at + narrow backfill', () => {
+  if (!fileExists('supabase/migrations/20260429130000_onboarding_completion_marker.sql')) {
+    return ['20260429130000_onboarding_completion_marker.sql 없음'];
+  }
+  const src = readFile('supabase/migrations/20260429130000_onboarding_completion_marker.sql');
+  const errs = [];
+  if (!src.includes('onboarding_completed_at')) errs.push('onboarding_completed_at 없음');
+  if (!/active_session_number\s+is\s+not\s+null/i.test(src)) {
+    errs.push('active_session 기준 backfill 없음');
+  }
+  return errs;
+});
+
 run('profile.ts — 새 타입/검증', () => {
   const src = readFile('src/lib/session/profile.ts');
   const errs = [];
   if (!src.includes('exercise_experience_level')) errs.push('exercise_experience_level 없음');
   if (!src.includes('pain_or_discomfort_present')) errs.push('pain_or_discomfort_present 없음');
   if (!src.includes('isValidExerciseExperienceLevel')) errs.push('isValidExerciseExperienceLevel 없음');
+  if (!src.includes('setOnboardingCompletedAt')) errs.push('setOnboardingCompletedAt 없음');
+  if (!src.includes('onboarding_completed_at')) errs.push('onboarding_completed_at upsert 없음');
   return errs;
 });
 
@@ -82,6 +97,8 @@ run('session/profile API — 새 필드 수락', () => {
   const errs = [];
   if (!src.includes('exercise_experience_level')) errs.push('exercise_experience_level 없음');
   if (!src.includes('pain_or_discomfort_present')) errs.push('pain_or_discomfort_present 없음');
+  if (!src.includes('onboarding_completed')) errs.push('onboarding_completed 파싱 없음');
+  if (!src.includes('setOnboardingCompletedAt')) errs.push('setOnboardingCompletedAt 전달 없음');
   return errs;
 });
 
@@ -93,11 +110,16 @@ run('onboarding-complete 페이지 존재', () => {
   return fileExists('src/app/onboarding-complete/page.tsx') ? [] : ['onboarding-complete 없음'];
 });
 
-run('onboarding-prep — 실행 준비하기 → /onboarding', () => {
-  const src = readFile('src/app/onboarding-prep/page.tsx');
+run('onboarding-prep — CTA → /onboarding', () => {
+  const client = readFile('src/app/onboarding-prep/_components/OnboardingPrepClient.tsx');
+  const scene = fileExists('src/components/stitch/postpay/StitchOnboardingPrepScene.tsx')
+    ? readFile('src/components/stitch/postpay/StitchOnboardingPrepScene.tsx')
+    : '';
   const errs = [];
-  if (!src.includes('실행 준비하기')) errs.push('실행 준비하기 CTA 없음');
-  if (!src.includes('/onboarding')) errs.push('/onboarding 연결 없음');
+  if (!client.includes("router.push('/onboarding')")) errs.push('OnboardingPrepClient /onboarding 이동 없음');
+  if (!scene.includes('실행 설정으로') && !scene.includes('실행 준비하기')) {
+    errs.push('StitchOnboardingPrepScene CTA 문구 없음');
+  }
   return errs;
 });
 
@@ -107,6 +129,8 @@ run('onboarding — target_frequency, experience, pain', () => {
   if (!src.includes('target_frequency')) errs.push('target_frequency 없음');
   if (!src.includes('exercise_experience_level')) errs.push('exercise_experience_level 없음');
   if (!src.includes('pain_or_discomfort_present')) errs.push('pain_or_discomfort_present 없음');
+  if (!src.includes('useState<TargetFrequency | null>(null)')) errs.push('주간 횟수 기본 null 아님');
+  if (!src.includes('onboarding_completed: true')) errs.push('제출 시 onboarding_completed: true 없음');
   return errs;
 });
 

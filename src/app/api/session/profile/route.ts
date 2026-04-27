@@ -35,6 +35,31 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const onboardingCompleted = body.onboarding_completed === true;
+
+    if (onboardingCompleted) {
+      if (!('exercise_experience_level' in body)) {
+        return fail(
+          400,
+          ApiErrorCode.VALIDATION_FAILED,
+          '온보딩 완료 요청에는 exercise_experience_level이 필요합니다.'
+        );
+      }
+      if (!isValidExerciseExperienceLevel(body.exercise_experience_level)) {
+        return fail(400, ApiErrorCode.VALIDATION_FAILED, 'exercise_experience_level이 올바르지 않습니다.');
+      }
+      if (!('pain_or_discomfort_present' in body)) {
+        return fail(
+          400,
+          ApiErrorCode.VALIDATION_FAILED,
+          '온보딩 완료 요청에는 pain_or_discomfort_present가 필요합니다.'
+        );
+      }
+      if (typeof body.pain_or_discomfort_present !== 'boolean') {
+        return fail(400, ApiErrorCode.VALIDATION_FAILED, 'pain_or_discomfort_present는 boolean 이어야 합니다.');
+      }
+    }
+
     const rawFreq = body.target_frequency;
     if (!isValidTargetFrequency(rawFreq)) {
       return fail(400, ApiErrorCode.VALIDATION_FAILED, 'target_frequency는 2, 3, 4, 5 중 하나여야 합니다.');
@@ -75,6 +100,7 @@ export async function POST(req: NextRequest) {
       ...(lifestyleTag !== undefined ? { lifestyleTag } : {}),
       ...(exerciseExperienceLevel !== undefined ? { exerciseExperienceLevel } : {}),
       ...(painOrDiscomfortPresent !== undefined ? { painOrDiscomfortPresent } : {}),
+      ...(onboardingCompleted ? { setOnboardingCompletedAt: true } : {}),
     });
 
     if (!result.ok) {

@@ -16,7 +16,7 @@ const LIFESTYLE_MAX = 200;
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [targetFrequency, setTargetFrequency] = useState<TargetFrequency | null>(4);
+  const [targetFrequency, setTargetFrequency] = useState<TargetFrequency | null>(null);
   const [exerciseExperienceLevel, setExerciseExperienceLevel] = useState<ExerciseExperienceLevel | null>(null);
   const [painOrDiscomfortPresent, setPainOrDiscomfortPresent] = useState<boolean | null>(null);
   const [lifestyleNote, setLifestyleNote] = useState('');
@@ -80,6 +80,7 @@ export default function OnboardingPage() {
           target_frequency: targetFrequency,
           exercise_experience_level: exerciseExperienceLevel,
           pain_or_discomfort_present: painOrDiscomfortPresent,
+          onboarding_completed: true,
           ...(trimmedNote ? { lifestyle_tag: trimmedNote.slice(0, LIFESTYLE_MAX) } : {}),
         }),
       });

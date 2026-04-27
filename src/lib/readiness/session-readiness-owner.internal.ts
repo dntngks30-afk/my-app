@@ -51,6 +51,7 @@ export interface ReadinessContext {
     target_frequency?: number | null;
     exercise_experience_level?: string | null;
     pain_or_discomfort_present?: boolean | null;
+    onboarding_completed_at?: string | null;
   } | null;
   progress: {
     completed_sessions?: number | null;
@@ -82,7 +83,9 @@ export async function loadReadinessContext(userId: string): Promise<ReadinessCon
     supabase.from('users').select('plan_status').eq('id', userId).maybeSingle(),
     supabase
       .from('session_user_profile')
-      .select('target_frequency, exercise_experience_level, pain_or_discomfort_present')
+      .select(
+        'target_frequency, exercise_experience_level, pain_or_discomfort_present, onboarding_completed_at'
+      )
       .eq('user_id', userId)
       .maybeSingle(),
     supabase
@@ -213,12 +216,12 @@ export function buildSessionReadinessV1(ctx: ReadinessContext): SessionReadiness
   } else if (!ctx.hasAnalysisInput) {
     status = 'needs_result_claim';
     next = 'GO_RESULT';
-  } else if (!onboardingComplete) {
-    status = 'needs_onboarding';
-    next = 'GO_ONBOARDING';
   } else if (ctx.hasActiveSession) {
     status = 'session_already_created';
     next = 'GO_APP_HOME';
+  } else if (!onboardingComplete) {
+    status = 'needs_onboarding';
+    next = 'GO_ONBOARDING';
   } else if (ctx.programFinished) {
     status = 'execution_blocked';
     next = 'GO_APP_HOME';

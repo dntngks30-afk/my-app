@@ -84,6 +84,8 @@ assert('has_execution_setup 체크', util?.includes('has_execution_setup'));
 assert('missing_fields 반환', util?.includes('missing_fields'));
 assert('exercise_experience_level 체크', ssot?.includes('exercise_experience_level'));
 assert('pain_or_discomfort_present 체크', ssot?.includes('pain_or_discomfort_present'));
+assert('onboarding_completed_at 프로필 select', ssot?.includes('onboarding_completed_at'));
+assert('활성 세션 시 온보딩보다 먼저 GO_APP_HOME 분기', /hasActiveSession[\s\S]*GO_APP_HOME[\s\S]*onboardingComplete/.test(ssot ?? ''));
 
 // 6. 세션(session) 상태 확인
 console.log('\n[6] session 상태 검증');
