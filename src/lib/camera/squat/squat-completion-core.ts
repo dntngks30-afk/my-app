@@ -32,7 +32,11 @@ import type {
   SquatReversalEvidenceProvenance,
   EvaluateSquatCompletionStateOptions,
 } from '../squat-completion-state';
-import type { ShallowNormalizedBlockerFamily } from './squat-completion-debug-types';
+import type {
+  CanonicalTemporalEpochSource,
+  DescentTimingEpochSource,
+  ShallowNormalizedBlockerFamily,
+} from './squat-completion-debug-types';
 import {
   KNEE_DESCENT_ONSET_EPSILON_DEG,
   KNEE_DESCENT_ONSET_SUSTAIN_FRAMES,
@@ -46,13 +50,6 @@ export type SquatDepthFreezeConfig = {
   frozenBaselineStandingDepth: number;
 };
 
-type DescentTimingEpochSource =
-  | 'phase_hint_descent'
-  | 'trajectory_descent_start'
-  | 'shared_descent_epoch'
-  | 'legitimate_kinematic_shallow_descent_onset'
-  | 'pre_arming_kinematic_descent_epoch';
-
 type NormalizedDescentTimingEpoch = {
   source: DescentTimingEpochSource;
   validIndex: number;
@@ -61,11 +58,7 @@ type NormalizedDescentTimingEpoch = {
 
 type CanonicalTemporalEpoch =
   | {
-      source:
-        | DescentTimingEpochSource
-        | 'completion_core_peak'
-        | 'rule_or_hmm_reversal_epoch'
-        | 'standing_recovery_finalize_epoch';
+      source: CanonicalTemporalEpochSource;
       validIndex: number;
       timestampMs: number;
       localIndex?: number;

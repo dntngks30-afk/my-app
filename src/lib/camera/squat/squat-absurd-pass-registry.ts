@@ -183,7 +183,10 @@ export function shouldBlockSquatBlendedEarlyPeakContaminatedFalsePassFinalPass(
     peakLatchedAtIndex?: number | null;
   };
 
-  const dbg = squatCycleDebug ?? {};
+  const dbg: Partial<SquatCycleDebug> =
+    squatCycleDebug != null && typeof squatCycleDebug === 'object' && !Array.isArray(squatCycleDebug)
+      ? (squatCycleDebug as Partial<SquatCycleDebug>)
+      : {};
   const evidenceLooksShallowLike =
     cs.evidenceLabel === 'ultra_low_rom' ||
     cs.evidenceLabel === 'low_rom' ||

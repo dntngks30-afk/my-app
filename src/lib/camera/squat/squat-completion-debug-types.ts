@@ -133,3 +133,20 @@ export type ShallowClosureProofTrace = {
     completionSatisfied: boolean;
   };
 };
+
+/**
+ * Descent timing + ledger peak/reversal/recovery source literals — mirrors
+ * `squat-completion-core` (CanonicalTemporalEpoch). No catch-all `string`.
+ */
+export type DescentTimingEpochSource =
+  | 'phase_hint_descent'
+  | 'trajectory_descent_start'
+  | 'shared_descent_epoch'
+  | 'legitimate_kinematic_shallow_descent_onset'
+  | 'pre_arming_kinematic_descent_epoch';
+
+export type CanonicalTemporalEpochSource =
+  | DescentTimingEpochSource
+  | 'completion_core_peak'
+  | 'rule_or_hmm_reversal_epoch'
+  | 'standing_recovery_finalize_epoch';

@@ -28,7 +28,7 @@ export interface SquatDepthCalibrationDebug {
 
 /** PR-04E2: completion-state reversal 확인 calibration — gate 미사용 */
 export interface SquatReversalCalibrationDebug {
-  reversalConfirmedBy: 'rule' | 'rule_plus_hmm' | null;
+  reversalConfirmedBy: 'rule' | 'rule_plus_hmm' | 'trajectory' | null;
   reversalDepthDrop: number | null;
   reversalFrameCount: number | null;
   peakDepth: number;
@@ -75,6 +75,8 @@ export interface SquatSetupPhaseTrace {
 export interface EvaluatorDebugSummary {
   frameCount: number;
   validFrameCount: number;
+  /** Frames after readiness dwell gate (insufficient-signal path only) */
+  validFrameCountAfterReadinessDwell?: number;
   phaseHints: PosePhaseHint[];
   highlightedMetrics: Record<string, number | string | boolean | null>;
   /** PR-2: per-step 진단 (additive, backward-compatible) */

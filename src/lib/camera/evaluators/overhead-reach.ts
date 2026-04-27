@@ -258,7 +258,7 @@ export function computeOverheadStableTopDwell(
           prevStableTimestampMs = f.timestampMs;
           if (segmentDwellMs > bestDwellMs) {
             bestDwellMs = segmentDwellMs;
-            bestEnteredMs = segmentStartMs;
+            bestEnteredMs = segmentStartMs ?? undefined;
             bestExitedMs = f.timestampMs;
             bestHoldArmedMs = holdArmedAtMs;
             bestAccumulationStartedMs = holdAccumulationStartedAtMs;
@@ -841,7 +841,7 @@ export function evaluateOverheadReachFromPoseFrames(
     if (easyBlocked === 'easy_hold_short') return 'easy_hold_short';
     if (easyBlocked === 'asymmetry_unacceptable') return 'asymmetry_unacceptable';
     if (easyBlocked != null) return 'easy_top_not_reached';
-    return overheadCompletion.completionBlockedReason;
+    return overheadCompletion.completionBlockedReason ?? null;
   })();
 
   // PR-CAM-13/15/16: typed progression phase (debug/compat — 접근성 높은 경로 우선)
@@ -912,7 +912,7 @@ export function evaluateOverheadReachFromPoseFrames(
     humaneLowRomElevationDeltaFromBaseline:
       humaneLowRomProgression.humaneLowRomElevationDeltaFromBaseline,
     strictMotionCompletionSatisfied,
-    strictCompletionBlockedReason: overheadCompletion.completionBlockedReason,
+    strictCompletionBlockedReason: overheadCompletion.completionBlockedReason ?? null,
     strictCompletionMachinePhase: overheadCompletion.completionMachinePhase,
     /**
      * PR-SIMPLE-PASS-01: always false — single owner, no easy threshold variation.
@@ -1049,19 +1049,19 @@ export function evaluateOverheadReachFromPoseFrames(
         raiseCount,
         peakCount,
         holdDurationMs,
-        topDetectedAtMs: dwellResult.topDetectedAtMs,
-        topEntryAtMs: topEntryAtMs ?? undefined,
-        stableTopEntryAtMs: stableTopEntryAtMs ?? undefined,
-        holdArmedAtMs: dwellResult.holdArmedAtMs,
-        holdAccumulationStartedAtMs: dwellResult.holdAccumulationStartedAtMs,
+        topDetectedAtMs: dwellResult.topDetectedAtMs ?? null,
+        topEntryAtMs: topEntryAtMs ?? null,
+        stableTopEntryAtMs: stableTopEntryAtMs ?? null,
+        holdArmedAtMs: dwellResult.holdArmedAtMs ?? null,
+        holdAccumulationStartedAtMs: dwellResult.holdAccumulationStartedAtMs ?? null,
         holdAccumulationMs: holdDurationMs,
-        holdSatisfiedAtMs,
-        holdArmingBlockedReason: dwellResult.holdArmingBlockedReason,
+        holdSatisfiedAtMs: holdSatisfiedAtMs ?? null,
+        holdArmingBlockedReason: dwellResult.holdArmingBlockedReason ?? null,
         peakArmElevation:
           armElevationAvgValues.length > 0 ? Math.round(Math.max(...armElevationAvgValues)) : null,
         /** PR overhead-dwell: trace fields */
-        stableTopEnteredAtMs: dwellResult.stableTopEnteredAtMs,
-        stableTopExitedAtMs: dwellResult.stableTopExitedAtMs,
+        stableTopEnteredAtMs: dwellResult.stableTopEnteredAtMs ?? null,
+        stableTopExitedAtMs: dwellResult.stableTopExitedAtMs ?? null,
         stableTopDwellMs: dwellResult.stableTopDwellMs,
         stableTopSegmentCount: dwellResult.stableTopSegmentCount,
         holdComputationMode: dwellResult.holdComputationMode,
@@ -1075,9 +1075,9 @@ export function evaluateOverheadReachFromPoseFrames(
         strictMotionCompletionSatisfied: strictMotionCompletionSatisfied ? 1 : 0,
         /** PR-SIMPLE-PASS-01: primary completion truth = new simple rise-hold owner */
         completionSatisfied: strictMotionCompletionSatisfied,
-        completionBlockedReason: overheadCompletion.completionBlockedReason,
-        completionMachinePhase: overheadCompletion.completionMachinePhase,
-        completionPassReason: overheadCompletion.completionPassReason,
+        completionBlockedReason: overheadCompletion.completionBlockedReason ?? null,
+        completionMachinePhase: overheadCompletion.completionMachinePhase ?? null,
+        completionPassReason: overheadCompletion.completionPassReason ?? null,
         topDetected: overheadCompletion.topDetected ? 1 : 0,
         stableTopEntry: overheadCompletion.stableTopEntry ? 1 : 0,
         holdStarted: overheadCompletion.holdStarted ? 1 : 0,
@@ -1089,14 +1089,14 @@ export function evaluateOverheadReachFromPoseFrames(
         strictMotionCompletionPath: overheadCompletion.completionPath,
         /** PR-CAM-11B: easy 진행 전용 */
         easyCompletionSatisfied: easyProgression.easyCompletionSatisfied ? 1 : 0,
-        easyCompletionBlockedReason: easyProgression.easyCompletionBlockedReason,
+        easyCompletionBlockedReason: easyProgression.easyCompletionBlockedReason ?? null,
         easyBestRunMs: easyProgression.easyBestRunMs,
         easyBestRunFrameCount: easyProgression.easyBestRunFrameCount,
         peakCountAtEasyFloor,
         easyTopZoneFrameCount: easyTopZoneFrames.length,
         /** PR-CAM-15: low-ROM 진행 전용 */
         lowRomProgressionSatisfied: lowRomProgression.lowRomProgressionSatisfied ? 1 : 0,
-        lowRomBlockedReason: lowRomProgression.lowRomBlockedReason,
+        lowRomBlockedReason: lowRomProgression.lowRomBlockedReason ?? null,
         lowRomBestRunMs: lowRomProgression.lowRomBestRunMs,
         lowRomElevationDeltaFromBaseline: lowRomProgression.lowRomElevationDeltaFromBaseline,
         lowRomBestElevation: lowRomProgression.lowRomBestElevation,
@@ -1106,7 +1106,7 @@ export function evaluateOverheadReachFromPoseFrames(
         /** PR-CAM-16: humane low-ROM 진행 전용 */
         humaneLowRomProgressionSatisfied:
           humaneLowRomProgression.humaneLowRomProgressionSatisfied ? 1 : 0,
-        humaneLowRomBlockedReason: humaneLowRomProgression.humaneLowRomBlockedReason,
+        humaneLowRomBlockedReason: humaneLowRomProgression.humaneLowRomBlockedReason ?? null,
         humaneLowRomBestRunMs: humaneLowRomProgression.humaneLowRomBestRunMs,
         humaneLowRomPeakElevation: humaneLowRomProgression.humaneLowRomPeakElevation,
         humaneLowRomBaselineElevation: humaneLowRomProgression.humaneLowRomBaselineElevation,
@@ -1124,21 +1124,21 @@ export function evaluateOverheadReachFromPoseFrames(
         topZoneFrameCount: topZoneFrames.length,
         /** PR-02: rise truth owner — baseline-relative arm travel */
         meaningfulRiseSatisfied: riseTruth.meaningfulRiseSatisfied ? 1 : 0,
-        riseStartedAtMs: riseTruth.riseStartedAtMs,
-        riseElevationDeltaFromBaseline: riseTruth.riseElevationDeltaFromBaseline,
-        riseBaselineArmDeg: riseTruth.baselineArmDeg,
-        risePeakArmElevation: riseTruth.peakArmElevation,
-        riseBlockedReason: riseTruth.riseBlockedReason,
+        riseStartedAtMs: riseTruth.riseStartedAtMs ?? null,
+        riseElevationDeltaFromBaseline: riseTruth.riseElevationDeltaFromBaseline ?? null,
+        riseBaselineArmDeg: riseTruth.baselineArmDeg ?? null,
+        risePeakArmElevation: riseTruth.peakArmElevation ?? null,
+        riseBlockedReason: riseTruth.riseBlockedReason ?? null,
         /** PR-SIMPLE-PASS-01 / PR-12A: best-side elevation and hold for simple completion owner */
-        bestSidePeakElevation,
-        simplePassHoldMs,
+        bestSidePeakElevation: bestSidePeakElevation ?? null,
+        simplePassHoldMs: simplePassHoldMs ?? null,
         /** PR-12A: hold arming blocked reason for top-near 100° dwell — null = armed OK */
-        simplePassHoldArmingBlockedReason,
-        topNearTopDetectedAtMs: topNearDwellResult.topDetectedAtMs,
-        topNearStableTopEnteredAtMs: topNearDwellResult.stableTopEnteredAtMs,
-        topNearHoldArmedAtMs: topNearDwellResult.holdArmedAtMs,
+        simplePassHoldArmingBlockedReason: simplePassHoldArmingBlockedReason ?? null,
+        topNearTopDetectedAtMs: topNearDwellResult.topDetectedAtMs ?? null,
+        topNearStableTopEnteredAtMs: topNearDwellResult.stableTopEnteredAtMs ?? null,
+        topNearHoldArmedAtMs: topNearDwellResult.holdArmedAtMs ?? null,
         /** PR-13A: rise-ended anchor — hold must not start before this point */
-        topNearRiseEndedAtMs: topNearDwellResult.riseEndedAtMs,
+        topNearRiseEndedAtMs: topNearDwellResult.riseEndedAtMs ?? null,
         topNearPeakReachedBeforeHold: topNearDwellResult.peakReachedBeforeHold ? 1 : 0,
         topNearHoldStartedWhileStillRising: topNearDwellResult.holdStartedWhileStillRising ? 1 : 0,
         bestSideZoneFrameCount,

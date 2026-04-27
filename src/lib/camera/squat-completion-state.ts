@@ -43,6 +43,8 @@ import {
 } from '@/lib/camera/squat/squat-completion-observability';
 import { applyUltraLowPolicyLock as applyUltraLowPolicyLockImpl } from '@/lib/camera/squat/squat-completion-policy';
 import type {
+  CanonicalTemporalEpochSource,
+  DescentTimingEpochSource,
   ShallowAuthoritativeContractStatus,
   ShallowClosureProofTraceStage,
   ShallowNormalizedBlockerFamily,
@@ -1063,13 +1065,7 @@ export interface SquatCompletionState extends MotionCompletionResult {
     onsetBeforeCompletionSlicePeak: true;
     noStandingRecoveryBetweenOnsetAndSlice: true;
   } | null;
-  selectedCanonicalDescentTimingEpochSource?:
-    | 'phase_hint_descent'
-    | 'trajectory_descent_start'
-    | 'shared_descent_epoch'
-    | 'legitimate_kinematic_shallow_descent_onset'
-    | 'pre_arming_kinematic_descent_epoch'
-    | null;
+  selectedCanonicalDescentTimingEpochSource?: DescentTimingEpochSource | null;
   selectedCanonicalDescentTimingEpochValidIndex?: number | null;
   selectedCanonicalDescentTimingEpochAtMs?: number | null;
   normalizedDescentAnchorCoherent?: boolean;
@@ -1077,13 +1073,13 @@ export interface SquatCompletionState extends MotionCompletionResult {
   canonicalTemporalEpochOrderBlockedReason?: string | null;
   selectedCanonicalPeakEpochValidIndex?: number | null;
   selectedCanonicalPeakEpochAtMs?: number | null;
-  selectedCanonicalPeakEpochSource?: 'completion_core_peak' | null;
+  selectedCanonicalPeakEpochSource?: CanonicalTemporalEpochSource | null;
   selectedCanonicalReversalEpochValidIndex?: number | null;
   selectedCanonicalReversalEpochAtMs?: number | null;
-  selectedCanonicalReversalEpochSource?: 'rule_or_hmm_reversal_epoch' | null;
+  selectedCanonicalReversalEpochSource?: CanonicalTemporalEpochSource | null;
   selectedCanonicalRecoveryEpochValidIndex?: number | null;
   selectedCanonicalRecoveryEpochAtMs?: number | null;
-  selectedCanonicalRecoveryEpochSource?: 'standing_recovery_finalize_epoch' | null;
+  selectedCanonicalRecoveryEpochSource?: CanonicalTemporalEpochSource | null;
   temporalEpochOrderTrace?: string | null;
   sameRepCompletionWindow?: SquatSameRepCompletionWindowPayload | null;
   sameRepCompletionWindowPresent?: boolean;
