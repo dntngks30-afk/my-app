@@ -1,7 +1,7 @@
 {
   "harness_version": "1.0.0",
   "script": "session-rail-truth-harness.mjs",
-  "generated_at": "2026-04-27T03:59:29.880Z",
+  "generated_at": "2026-04-27T04:12:45.374Z",
   "template_pool_source": "fixture_m01_m48_session_plan_v1",
   "template_count": 48,
   "modes": [

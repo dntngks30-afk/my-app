@@ -70,6 +70,10 @@ import {
   scorePrepCooldownAxisFit,
   type PrepCooldownAlignmentMetaV1,
 } from '@/lib/session/prep-cooldown-axis-profile';
+import { isExcludedByFirstSessionGuardrail } from './policy-registry/rules/selectionRules';
+import { normalizeExerciseTaxonomy } from '@/lib/session/taxonomy';
+import { hasSingleLegLoad } from '@/core/session-guardrail/movementSafetyRules';
+import { isSafeForFirstSession } from '@/core/session-guardrail/difficultyClamp';
 
 const REPETITION_PENALTY = 100;
 const CONTRAINDICATION_PENALTY = 100;
@@ -339,6 +343,18 @@ export type PlanGeneratorInput = {
   templatePool?: SessionTemplateRow[];
 };
 
+/** PR-FIRST-SESSION-ANCHOR-REGRESSION-48-01: S1 Main vs gold_path_vector (additive meta). */
+export type FirstSessionAnchorIntegrityMetaV1 = {
+  version: 'first_session_anchor_integrity_v1';
+  gold_path_vector: string | null;
+  main_anchor_match_count: number;
+  main_support_match_count: number;
+  main_off_axis_count: number;
+  repaired: boolean;
+  repaired_template_ids?: string[];
+  removed_template_ids?: string[];
+};
+
 export type PlanItem = {
   order: number;
   templateId: string;
@@ -440,6 +456,8 @@ export type PlanJsonOutput = {
     };
     /** PR-PREP-COOLDOWN-AXIS-ALIGN-01: Prep/Cooldown axis fit (additive, non-UI) */
     prep_cooldown_alignment?: PrepCooldownAlignmentMetaV1;
+    /** PR-FIRST-SESSION-ANCHOR-REGRESSION-48-01: S1 + gold_path Main target_vector 정합(관찰) */
+    first_session_anchor_integrity?: FirstSessionAnchorIntegrityMetaV1;
   };
   flags: { recovery: boolean; short: boolean };
   segments: PlanSegment[];
@@ -1020,6 +1038,350 @@ function toPlanItem(
   return item;
 }
 
+function isTargetAnchorVector(t: SessionTemplateRow, g: GoldPathVector): boolean {
+  return hasTargetVector(t, [g]);
+}
+
+function isTargetSupportForGoldPath(t: SessionTemplateRow, g: GoldPathVector): boolean {
+  if (isTargetAnchorVector(t, g)) return false;
+  const v = new Set(t.target_vector ?? []);
+  if (g === 'lower_stability') {
+    return v.has('trunk_control') || v.has('lower_mobility');
+  }
+  if (g === 'lower_mobility') {
+    return v.has('lower_stability') || v.has('trunk_control');
+  }
+  if (g === 'upper_mobility') {
+    return v.has('trunk_control');
+  }
+  if (g === 'trunk_control') {
+    return v.has('lower_stability') || v.has('upper_mobility');
+  }
+  if (g === 'deconditioned') {
+    return v.has('trunk_control');
+  }
+  if (g === 'balanced_reset') {
+    return (
+      v.has('trunk_control') ||
+      v.has('upper_mobility') ||
+      v.has('lower_stability') ||
+      v.has('lower_mobility') ||
+      v.has('deconditioned')
+    );
+  }
+  return false;
+}
+
+function isTargetOffAxisForGoldPath(t: SessionTemplateRow, g: GoldPathVector): boolean {
+  if (isTargetAnchorVector(t, g) || isTargetSupportForGoldPath(t, g)) return false;
+  const v = new Set(t.target_vector ?? []);
+  if (v.size === 0) return true;
+  if (g === 'lower_stability') {
+    return v.has('upper_mobility') && !v.has('trunk_control') && !v.has('lower_mobility') && !v.has('lower_stability');
+  }
+  if (g === 'lower_mobility') {
+    return (
+      v.has('upper_mobility') && !v.has('trunk_control') && !v.has('lower_mobility') && !v.has('lower_stability')
+    );
+  }
+  if (g === 'upper_mobility') {
+    return (
+      v.has('lower_stability') && !v.has('upper_mobility') && !v.has('trunk_control') && !v.has('lower_mobility')
+    );
+  }
+  if (g === 'trunk_control') {
+    return (
+      v.has('upper_mobility') && !v.has('trunk_control') && !v.has('lower_stability') && !v.has('lower_mobility')
+    );
+  }
+  if (g === 'deconditioned') {
+    return v.has('upper_mobility') && !v.has('deconditioned') && !v.has('trunk_control') && v.size === 1;
+  }
+  if (g === 'balanced_reset') {
+    return (v.size === 1 && (v.has('upper_mobility') || v.has('lower_mobility'))) || (v.size === 2 && (v.has('upper_mobility') || v.has('lower_mobility')) && !v.has('trunk_control') && !v.has('balanced_reset'));
+  }
+  return false;
+}
+
+function isHighRiskUnilateralUnfavorable(t: SessionTemplateRow): boolean {
+  return hasSingleLegLoad(t) && (t.difficulty === 'high' || (t.progression_level ?? 1) >= 3);
+}
+
+function countMainVectorStats(mainRows: SessionTemplateRow[], g: GoldPathVector) {
+  let main_anchor_match_count = 0;
+  let main_support_match_count = 0;
+  let main_off_axis_count = 0;
+  for (const t of mainRows) {
+    if (isTargetAnchorVector(t, g)) main_anchor_match_count += 1;
+    else if (isTargetSupportForGoldPath(t, g)) main_support_match_count += 1;
+    else if (isTargetOffAxisForGoldPath(t, g)) main_off_axis_count += 1;
+  }
+  return { main_anchor_match_count, main_support_match_count, main_off_axis_count };
+}
+
+function meetsS1MainAnchorContract(
+  mainRows: SessionTemplateRow[],
+  g: GoldPathVector
+): boolean {
+  const n = mainRows.length;
+  if (n === 0) return true;
+
+  if (g === 'deconditioned') {
+    if (mainRows.some((t) => isTargetAnchorVector(t, g))) return true;
+    const h = mainRows.filter((t) => isHighRiskUnilateralUnfavorable(t)).length;
+    return h < 2;
+  }
+
+  const { main_anchor_match_count: a, main_support_match_count: s, main_off_axis_count: o } = countMainVectorStats(
+    mainRows,
+    g
+  );
+
+  if (g === 'balanced_reset') {
+    if (a >= 1) return true;
+    if (n === 2 && o === 2) return false;
+    if (n === 1) return a + s >= 1;
+  }
+
+  if (n === 1) {
+    return a >= 1;
+  }
+  if (n === 2) {
+    if (a < 1) return false;
+    if (o === 2) return false;
+    return true;
+  }
+  if (n === 3) {
+    if (a < 1) return false;
+    if (a + s < 2) return false;
+    if (o > 1) return false;
+    return true;
+  }
+  return a >= 1;
+}
+
+function scoreRepairTemplateForGold(t: SessionTemplateRow, g: GoldPathVector): number {
+  let s = 0;
+  if (isTargetAnchorVector(t, g)) s += 1000;
+  if (isTargetSupportForGoldPath(t, g)) s += 200;
+  if (isTargetOffAxisForGoldPath(t, g)) s -= 500;
+  return s;
+}
+
+function isRepairTemplateEligible(
+  t: SessionTemplateRow,
+  args: {
+    sessionNumber: number;
+    excludeSet: Set<string>;
+    painMode: 'none' | 'caution' | 'protected' | undefined;
+    maxLevel: number;
+    maxDifficultyCap: 'low' | 'medium' | 'high' | undefined;
+  }
+): boolean {
+  if (hasContraindicationOverlap(t.contraindications, args.excludeSet)) return false;
+  if ((t.level ?? 1) > args.maxLevel) return false;
+  if (!isSafeForFirstSession(t)) return false;
+  const tax = normalizeExerciseTaxonomy(t);
+  if (isExcludedByFirstSessionGuardrail(t, args.sessionNumber, tax.risk_group)) return false;
+  if (args.painMode && args.painMode !== 'none' && (t.avoid_if_pain_mode ?? []).includes(args.painMode)) {
+    return false;
+  }
+  if (args.maxDifficultyCap && isDifficultyAboveCap(t.difficulty ?? null, args.maxDifficultyCap)) {
+    return false;
+  }
+  if (!(t.phase === 'main' || isMainEligible(t))) return false;
+  return true;
+}
+
+function collectUsedTemplateIdsFromSegments(segments: PlanSegment[]): Set<string> {
+  const s = new Set<string>();
+  for (const seg of segments) {
+    for (const it of seg.items) s.add(it.templateId);
+  }
+  return s;
+}
+
+function clonePlanSegments(segments: PlanSegment[]): PlanSegment[] {
+  return segments.map((seg) => ({ ...seg, items: seg.items.map((i) => ({ ...i })) }));
+}
+
+type RepairS1Context = {
+  goldPathVector: GoldPathVector;
+  templatePool: SessionTemplateRow[];
+  templatesById: Map<string, SessionTemplateRow>;
+  excludeSet: Set<string>;
+  painMode: 'none' | 'caution' | 'protected' | undefined;
+  maxDifficultyCap: 'low' | 'medium' | 'high' | undefined;
+  maxLevel: number;
+  toPlanItemCtx: ToPlanItemContext;
+  sessionNumber: number;
+};
+
+function findBestMainRepairFromPool(
+  ctx: RepairS1Context,
+  used: Set<string>,
+  excludeId: string | null
+): SessionTemplateRow | null {
+  const cands = ctx.templatePool
+    .filter(
+      (t) =>
+        t.id !== excludeId &&
+        isRepairTemplateEligible(t, {
+          sessionNumber: ctx.sessionNumber,
+          excludeSet: ctx.excludeSet,
+          painMode: ctx.painMode,
+          maxLevel: ctx.maxLevel,
+          maxDifficultyCap: ctx.maxDifficultyCap,
+        })
+    )
+    .map((t) => ({ t, sc: scoreRepairTemplateForGold(t, ctx.goldPathVector) }))
+    .filter(({ t }) => !used.has(t.id))
+    .sort((a, b) => b.sc - a.sc || a.t.id.localeCompare(b.t.id));
+  return cands[0]?.t ?? null;
+}
+
+/**
+ * S1 + gold: Main anchor 보정(풀 → Accessory/Prep/Cooldown 스왑). 세션 2+ no-op.
+ */
+function repairFirstSessionMainAnchorIntegration(input: {
+  plan: PlanJsonOutput;
+  sessionNumber: number;
+  goldPathVector: GoldPathVector;
+  templatePool: SessionTemplateRow[];
+  maxLevel: number;
+  excludeSet: Set<string>;
+  painMode: 'none' | 'caution' | 'protected' | undefined;
+  maxDifficultyCap: 'low' | 'medium' | 'high' | undefined;
+  toPlanItemCtx: ToPlanItemContext;
+}): { plan: PlanJsonOutput; integrity: FirstSessionAnchorIntegrityMetaV1 } {
+  const { goldPathVector } = input;
+  const templatesById = new Map(input.templatePool.map((t) => [t.id, t]));
+  const segments = clonePlanSegments(input.plan.segments);
+  const ctxBase: RepairS1Context = {
+    goldPathVector,
+    templatePool: input.templatePool,
+    templatesById,
+    excludeSet: input.excludeSet,
+    painMode: input.painMode,
+    maxDifficultyCap: input.maxDifficultyCap,
+    maxLevel: input.maxLevel,
+    toPlanItemCtx: input.toPlanItemCtx,
+    sessionNumber: input.sessionNumber,
+  };
+
+  const getMain = () => segments.find((s) => s.title === 'Main');
+  const asRows = (main: PlanSegment | undefined) =>
+    (main?.items.map((i) => templatesById.get(i.templateId)).filter(Boolean) ?? []) as SessionTemplateRow[];
+
+  const repairedIdList: string[] = [];
+  const removedIdList: string[] = [];
+
+  let used = collectUsedTemplateIdsFromSegments(segments);
+  const mainEntry = getMain();
+  if (!mainEntry) {
+    return {
+      plan: input.plan,
+      integrity: {
+        version: 'first_session_anchor_integrity_v1',
+        gold_path_vector: goldPathVector,
+        main_anchor_match_count: 0,
+        main_support_match_count: 0,
+        main_off_axis_count: 0,
+        repaired: false,
+      },
+    };
+  }
+
+  const pickMainReplaceIndex = (mainRows: SessionTemplateRow[], g: GoldPathVector): number => {
+    for (let i = 0; i < mainRows.length; i += 1) {
+      if (isTargetOffAxisForGoldPath(mainRows[i]!, g)) return i;
+    }
+    for (let i = 0; i < mainRows.length; i += 1) {
+      if (!isTargetAnchorVector(mainRows[i]!, g) && !isTargetSupportForGoldPath(mainRows[i]!, g)) return i;
+    }
+    for (let i = 0; i < mainRows.length; i += 1) {
+      if (!isTargetAnchorVector(mainRows[i]!, g)) return i;
+    }
+    return 0;
+  };
+
+  const tryReplaceMainAt = (mainIndex: number, replacement: SessionTemplateRow): void => {
+    const main = getMain()!;
+    const old = main.items[mainIndex]!.templateId;
+    removedIdList.push(old);
+    repairedIdList.push(replacement.id);
+    main.items[mainIndex] = toPlanItem(
+      replacement,
+      mainIndex + 1,
+      'Main',
+      input.toPlanItemCtx
+    );
+    used = collectUsedTemplateIdsFromSegments(segments);
+  };
+
+  for (let iter = 0; iter < 20; iter += 1) {
+    const rows = asRows(getMain());
+    if (rows.length === 0 || meetsS1MainAnchorContract(rows, goldPathVector)) break;
+    const tryIdx = pickMainReplaceIndex(rows, goldPathVector);
+    const usedForPick = new Set(used);
+    const oldId = getMain()!.items[tryIdx]!.templateId;
+    usedForPick.delete(oldId);
+    const repl = findBestMainRepairFromPool(ctxBase, usedForPick, null);
+    if (repl) {
+      tryReplaceMainAt(tryIdx, repl);
+      continue;
+    }
+
+    let swapped = false;
+    for (const segTitle of ['Accessory', 'Prep', 'Cooldown'] as const) {
+      if (swapped) break;
+      const seg = segments.find((s) => s.title === segTitle);
+      if (!seg) continue;
+      for (let j = 0; j < seg.items.length; j += 1) {
+        const oth = templatesById.get(seg.items[j]!.templateId);
+        if (!oth) continue;
+        if (!isRepairTemplateEligible(oth, { sessionNumber: input.sessionNumber, excludeSet: input.excludeSet, painMode: input.painMode, maxLevel: input.maxLevel, maxDifficultyCap: input.maxDifficultyCap })) {
+          continue;
+        }
+        if (scoreRepairTemplateForGold(oth, goldPathVector) < 200 && !isTargetAnchorVector(oth, goldPathVector)) {
+          continue;
+        }
+        const badT = asRows(getMain())[tryIdx]!;
+        if (!badT) break;
+        tryReplaceMainAt(tryIdx, oth);
+        seg.items[j] = toPlanItem(badT, j + 1, segTitle, input.toPlanItemCtx);
+        swapped = true;
+        break;
+      }
+    }
+    if (!swapped) break;
+  }
+
+  const finalMainRows = asRows(getMain());
+  const stats = countMainVectorStats(finalMainRows, goldPathVector);
+
+  return {
+    plan: {
+      ...input.plan,
+      segments,
+      meta: {
+        ...input.plan.meta,
+        used_template_ids: Array.from(
+          new Set(segments.flatMap((s) => s.items.map((i) => i.templateId)))
+        ),
+      },
+    },
+    integrity: {
+      version: 'first_session_anchor_integrity_v1',
+      gold_path_vector: goldPathVector,
+      ...stats,
+      repaired: repairedIdList.length > 0,
+      ...(repairedIdList.length > 0 && { repaired_template_ids: repairedIdList }),
+      ...(removedIdList.length > 0 && { removed_template_ids: removedIdList }),
+    },
+  };
+}
+
 /**
  * PR-C: targetLevel 결정론
  * base = deep_level ?? 2, mood → target, safety_mode → maxLevel, finalTargetLevel = min(target, maxLevel)
@@ -1461,9 +1823,27 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     priorityVector: input.priority_vector ?? null,
   });
 
+  let planAfterAnchorRepair = orderingResult.plan;
+  let firstSessionAnchorIntegrity: FirstSessionAnchorIntegrityMetaV1 | undefined;
+  if (isFirstSession && goldPathVector) {
+    const r = repairFirstSessionMainAnchorIntegration({
+      plan: orderingResult.plan,
+      sessionNumber: input.sessionNumber,
+      goldPathVector,
+      templatePool: templates,
+      maxLevel,
+      excludeSet,
+      painMode: input.pain_mode,
+      maxDifficultyCap,
+      toPlanItemCtx,
+    });
+    planAfterAnchorRepair = r.plan;
+    firstSessionAnchorIntegrity = r.integrity;
+  }
+
   const templatesById = new Map(templates.map((t) => [t.id, t]));
   const reconcileInput = {
-    segments: orderingResult.plan.segments,
+    segments: planAfterAnchorRepair.segments,
     templatesById,
     upstreamFocusAxes:
       effectiveFocusAxes.length > 0 ? effectiveFocusAxes : resolveSessionFocusAxes(input.priority_vector),
@@ -1478,12 +1858,12 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   };
   const reconcileOut = reconcileFinalPlanDisplayMeta(reconcileInput);
 
-  let planAfterReconcile = orderingResult.plan;
+  let planAfterReconcile = planAfterAnchorRepair;
   if (reconcileOut) {
     planAfterReconcile = {
-      ...orderingResult.plan,
+      ...planAfterAnchorRepair,
       meta: {
-        ...orderingResult.plan.meta,
+        ...planAfterAnchorRepair.meta,
         ...(reconcileOut.session_focus_axes.length > 0 && {
           session_focus_axes: reconcileOut.session_focus_axes,
         }),
@@ -1520,6 +1900,9 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     ...planAfterReconcile,
     meta: {
       ...planAfterReconcile.meta,
+      ...(firstSessionAnchorIntegrity && {
+        first_session_anchor_integrity: firstSessionAnchorIntegrity,
+      }),
       plan_quality_audit: auditResult,
       prep_cooldown_alignment: prepCooldownAlignment,
     },

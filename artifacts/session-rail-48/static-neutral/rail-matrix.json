@@ -1,7 +1,7 @@
 {
   "harness_version": "1.0.0",
   "script": "session-rail-truth-harness.mjs",
-  "generated_at": "2026-04-27T03:59:29.880Z",
+  "generated_at": "2026-04-27T04:12:45.374Z",
   "template_pool_source": "fixture_m01_m48_session_plan_v1",
   "template_count": 48,
   "modes": [
@@ -38,13 +38,13 @@
           "secondary_type": "HARNESS_DEFAULT_SECONDARY",
           "baseline_session_anchor": "lower_stability",
           "session_focus_axes": [
-            "upper_mobility",
+            "trunk_control",
             "deconditioned"
           ],
-          "session_rationale": "상체 가동성과 움직임 범위를 개선하는 세션고, 전신 회복 비중도 함께 넣었습니다.",
+          "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 전신 회복 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M01",
-            "M07",
+            "M12",
             "M08",
             "M11",
             "M02"
@@ -73,21 +73,21 @@
           },
           "plan_quality_audit_summary": {
             "version": "plan_quality_audit_v1",
-            "score": 92,
+            "score": 100,
             "band": "acceptable",
-            "summary": "Plan quality: acceptable (score 92), 2 issue(s)",
-            "issue_count": 2,
+            "summary": "Plan quality: acceptable (score 100), 1 issue(s)",
+            "issue_count": 1,
             "strengths_count": 3
           },
           "first_session_intent_anchor": "lower_stability",
           "gold_path_vector": "lower_stability",
           "main_segment_template_ids": [
-            "M07",
+            "M12",
             "M08"
           ],
           "all_template_ids": [
             "M01",
-            "M07",
+            "M12",
             "M08",
             "M11",
             "M02"
@@ -109,9 +109,9 @@
               "item_count": 2,
               "items": [
                 {
-                  "templateId": "M07",
-                  "name": "벽천사",
-                  "focus_tag": "shoulder_mobility"
+                  "templateId": "M12",
+                  "name": "글루트 브릿지",
+                  "focus_tag": "glute_activation"
                 },
                 {
                   "templateId": "M08",
@@ -147,7 +147,7 @@
           "template_count": 48,
           "meta_diff_friendly": {
             "session_focus_axes": [
-              "upper_mobility",
+              "trunk_control",
               "deconditioned"
             ],
             "primary_type": "LOWER_INSTABILITY",
@@ -181,13 +181,12 @@
             "M28",
             "M36",
             "M22",
-            "M12",
-            "M18",
+            "M15",
             "M42"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 3,
+            "duplicate_filtered_count": 2,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -208,16 +207,15 @@
           "first_session_intent_anchor": null,
           "gold_path_vector": null,
           "main_segment_template_ids": [
-            "M12",
             "M22",
+            "M15",
             "M36"
           ],
           "all_template_ids": [
             "M28",
-            "M12",
             "M22",
+            "M15",
             "M36",
-            "M18",
             "M42"
           ],
           "segments": [
@@ -237,14 +235,14 @@
               "item_count": 3,
               "items": [
                 {
-                  "templateId": "M12",
-                  "name": "글루트 브릿지",
-                  "focus_tag": "glute_activation"
-                },
-                {
                   "templateId": "M22",
                   "name": "사이드 라이잉 힙 어브덕션",
                   "focus_tag": "glute_medius"
+                },
+                {
+                  "templateId": "M15",
+                  "name": "의자 박스 스쿼트",
+                  "focus_tag": "lower_chain_stability"
                 },
                 {
                   "templateId": "M36",
@@ -255,14 +253,8 @@
             },
             {
               "title": "Accessory",
-              "item_count": 1,
-              "items": [
-                {
-                  "templateId": "M18",
-                  "name": "양발 카프 레이즈",
-                  "focus_tag": "ankle_mobility"
-                }
-              ]
+              "item_count": 0,
+              "items": []
             },
             {
               "title": "Cooldown",
@@ -319,7 +311,7 @@
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -444,7 +436,7 @@
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -562,14 +554,14 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M31",
-            "M15",
+            "M22",
             "M18",
             "M12",
             "M41"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -592,13 +584,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M15"
+            "M22"
           ],
           "all_template_ids": [
             "M31",
             "M18",
             "M12",
-            "M15",
+            "M22",
             "M41"
           ],
           "segments": [
@@ -628,9 +620,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M15",
-                  "name": "의자 박스 스쿼트",
-                  "focus_tag": "lower_chain_stability"
+                  "templateId": "M22",
+                  "name": "사이드 라이잉 힙 어브덕션",
+                  "focus_tag": "glute_medius"
                 }
               ]
             },
@@ -813,13 +805,13 @@
           "used_template_ids": [
             "M28",
             "M36",
-            "M18",
+            "M15",
             "M12",
             "M42"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 2,
+            "duplicate_filtered_count": 3,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -840,14 +832,14 @@
           "first_session_intent_anchor": null,
           "gold_path_vector": null,
           "main_segment_template_ids": [
-            "M18",
             "M12",
+            "M15",
             "M36"
           ],
           "all_template_ids": [
             "M28",
-            "M18",
             "M12",
+            "M15",
             "M36",
             "M42"
           ],
@@ -868,14 +860,14 @@
               "item_count": 3,
               "items": [
                 {
-                  "templateId": "M18",
-                  "name": "양발 카프 레이즈",
-                  "focus_tag": "ankle_mobility"
-                },
-                {
                   "templateId": "M12",
                   "name": "글루트 브릿지",
                   "focus_tag": "glute_activation"
+                },
+                {
+                  "templateId": "M15",
+                  "name": "의자 박스 스쿼트",
+                  "focus_tag": "lower_chain_stability"
                 },
                 {
                   "templateId": "M36",
@@ -1069,13 +1061,13 @@
           "secondary_type": "HARNESS_DEFAULT_SECONDARY",
           "baseline_session_anchor": "lower_stability",
           "session_focus_axes": [
-            "upper_mobility",
+            "trunk_control",
             "deconditioned"
           ],
-          "session_rationale": "상체 가동성과 움직임 범위를 개선하는 세션고, 전신 회복 비중도 함께 넣었습니다.",
+          "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 전신 회복 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M01",
-            "M07",
+            "M12",
             "M08",
             "M11",
             "M02"
@@ -1104,21 +1096,21 @@
           },
           "plan_quality_audit_summary": {
             "version": "plan_quality_audit_v1",
-            "score": 92,
+            "score": 100,
             "band": "acceptable",
-            "summary": "Plan quality: acceptable (score 92), 2 issue(s)",
-            "issue_count": 2,
+            "summary": "Plan quality: acceptable (score 100), 1 issue(s)",
+            "issue_count": 1,
             "strengths_count": 3
           },
           "first_session_intent_anchor": "lower_stability",
           "gold_path_vector": "lower_stability",
           "main_segment_template_ids": [
-            "M07",
+            "M12",
             "M08"
           ],
           "all_template_ids": [
             "M01",
-            "M07",
+            "M12",
             "M08",
             "M11",
             "M02"
@@ -1140,9 +1132,9 @@
               "item_count": 2,
               "items": [
                 {
-                  "templateId": "M07",
-                  "name": "벽천사",
-                  "focus_tag": "shoulder_mobility"
+                  "templateId": "M12",
+                  "name": "글루트 브릿지",
+                  "focus_tag": "glute_activation"
                 },
                 {
                   "templateId": "M08",
@@ -1178,7 +1170,7 @@
           "template_count": 48,
           "meta_diff_friendly": {
             "session_focus_axes": [
-              "upper_mobility",
+              "trunk_control",
               "deconditioned"
             ],
             "primary_type": "LOWER_INSTABILITY",
@@ -1212,13 +1204,12 @@
             "M28",
             "M36",
             "M22",
-            "M12",
-            "M18",
+            "M15",
             "M42"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 3,
+            "duplicate_filtered_count": 2,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -1239,16 +1230,15 @@
           "first_session_intent_anchor": null,
           "gold_path_vector": null,
           "main_segment_template_ids": [
-            "M12",
             "M22",
+            "M15",
             "M36"
           ],
           "all_template_ids": [
             "M28",
-            "M12",
             "M22",
+            "M15",
             "M36",
-            "M18",
             "M42"
           ],
           "segments": [
@@ -1268,14 +1258,14 @@
               "item_count": 3,
               "items": [
                 {
-                  "templateId": "M12",
-                  "name": "글루트 브릿지",
-                  "focus_tag": "glute_activation"
-                },
-                {
                   "templateId": "M22",
                   "name": "사이드 라이잉 힙 어브덕션",
                   "focus_tag": "glute_medius"
+                },
+                {
+                  "templateId": "M15",
+                  "name": "의자 박스 스쿼트",
+                  "focus_tag": "lower_chain_stability"
                 },
                 {
                   "templateId": "M36",
@@ -1286,14 +1276,8 @@
             },
             {
               "title": "Accessory",
-              "item_count": 1,
-              "items": [
-                {
-                  "templateId": "M18",
-                  "name": "양발 카프 레이즈",
-                  "focus_tag": "ankle_mobility"
-                }
-              ]
+              "item_count": 0,
+              "items": []
             },
             {
               "title": "Cooldown",
@@ -1350,7 +1334,7 @@
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -1475,7 +1459,7 @@
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -1593,14 +1577,14 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M31",
-            "M15",
+            "M22",
             "M18",
             "M12",
             "M41"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -1623,13 +1607,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M15"
+            "M22"
           ],
           "all_template_ids": [
             "M31",
             "M18",
             "M12",
-            "M15",
+            "M22",
             "M41"
           ],
           "segments": [
@@ -1659,9 +1643,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M15",
-                  "name": "의자 박스 스쿼트",
-                  "focus_tag": "lower_chain_stability"
+                  "templateId": "M22",
+                  "name": "사이드 라이잉 힙 어브덕션",
+                  "focus_tag": "glute_medius"
                 }
               ]
             },
@@ -1844,13 +1828,13 @@
           "used_template_ids": [
             "M28",
             "M36",
-            "M18",
+            "M15",
             "M12",
             "M42"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 2,
+            "duplicate_filtered_count": 3,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -1871,14 +1855,14 @@
           "first_session_intent_anchor": null,
           "gold_path_vector": null,
           "main_segment_template_ids": [
-            "M18",
             "M12",
+            "M15",
             "M36"
           ],
           "all_template_ids": [
             "M28",
-            "M18",
             "M12",
+            "M15",
             "M36",
             "M42"
           ],
@@ -1899,14 +1883,14 @@
               "item_count": 3,
               "items": [
                 {
-                  "templateId": "M18",
-                  "name": "양발 카프 레이즈",
-                  "focus_tag": "ankle_mobility"
-                },
-                {
                   "templateId": "M12",
                   "name": "글루트 브릿지",
                   "focus_tag": "glute_activation"
+                },
+                {
+                  "templateId": "M15",
+                  "name": "의자 박스 스쿼트",
+                  "focus_tag": "lower_chain_stability"
                 },
                 {
                   "templateId": "M36",
@@ -2218,14 +2202,14 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M31",
-            "M15",
+            "M22",
             "M18",
             "M12",
             "M41"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -2248,13 +2232,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M15"
+            "M22"
           ],
           "all_template_ids": [
             "M31",
             "M18",
             "M12",
-            "M15",
+            "M22",
             "M41"
           ],
           "segments": [
@@ -2284,9 +2268,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M15",
-                  "name": "의자 박스 스쿼트",
-                  "focus_tag": "lower_chain_stability"
+                  "templateId": "M22",
+                  "name": "사이드 라이잉 힙 어브덕션",
+                  "focus_tag": "glute_medius"
                 }
               ]
             },
@@ -2469,13 +2453,13 @@
           "used_template_ids": [
             "M28",
             "M36",
-            "M18",
+            "M15",
             "M12",
             "M42"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 2,
+            "duplicate_filtered_count": 3,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -2496,14 +2480,14 @@
           "first_session_intent_anchor": null,
           "gold_path_vector": null,
           "main_segment_template_ids": [
-            "M18",
             "M12",
+            "M15",
             "M36"
           ],
           "all_template_ids": [
             "M28",
-            "M18",
             "M12",
+            "M15",
             "M36",
             "M42"
           ],
@@ -2524,14 +2508,14 @@
               "item_count": 3,
               "items": [
                 {
-                  "templateId": "M18",
-                  "name": "양발 카프 레이즈",
-                  "focus_tag": "ankle_mobility"
-                },
-                {
                   "templateId": "M12",
                   "name": "글루트 브릿지",
                   "focus_tag": "glute_activation"
+                },
+                {
+                  "templateId": "M15",
+                  "name": "의자 박스 스쿼트",
+                  "focus_tag": "lower_chain_stability"
                 },
                 {
                   "templateId": "M36",
@@ -2600,13 +2584,13 @@
           "secondary_type": "HARNESS_DEFAULT_SECONDARY",
           "baseline_session_anchor": "lower_stability",
           "session_focus_axes": [
-            "upper_mobility",
+            "trunk_control",
             "deconditioned"
           ],
-          "session_rationale": "상체 가동성과 움직임 범위를 개선하는 세션고, 전신 회복 비중도 함께 넣었습니다.",
+          "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 전신 회복 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M01",
-            "M07",
+            "M12",
             "M08",
             "M11",
             "M02"
@@ -2635,21 +2619,21 @@
           },
           "plan_quality_audit_summary": {
             "version": "plan_quality_audit_v1",
-            "score": 92,
+            "score": 100,
             "band": "acceptable",
-            "summary": "Plan quality: acceptable (score 92), 2 issue(s)",
-            "issue_count": 2,
+            "summary": "Plan quality: acceptable (score 100), 1 issue(s)",
+            "issue_count": 1,
             "strengths_count": 3
           },
           "first_session_intent_anchor": "lower_stability",
           "gold_path_vector": "lower_stability",
           "main_segment_template_ids": [
-            "M07",
+            "M12",
             "M08"
           ],
           "all_template_ids": [
             "M01",
-            "M07",
+            "M12",
             "M08",
             "M11",
             "M02"
@@ -2671,9 +2655,9 @@
               "item_count": 2,
               "items": [
                 {
-                  "templateId": "M07",
-                  "name": "벽천사",
-                  "focus_tag": "shoulder_mobility"
+                  "templateId": "M12",
+                  "name": "글루트 브릿지",
+                  "focus_tag": "glute_activation"
                 },
                 {
                   "templateId": "M08",
@@ -2709,7 +2693,7 @@
           "template_count": 48,
           "meta_diff_friendly": {
             "session_focus_axes": [
-              "upper_mobility",
+              "trunk_control",
               "deconditioned"
             ],
             "primary_type": "LOWER_INSTABILITY",
@@ -2743,13 +2727,12 @@
             "M28",
             "M36",
             "M22",
-            "M12",
-            "M18",
+            "M15",
             "M42"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 3,
+            "duplicate_filtered_count": 2,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -2770,16 +2753,15 @@
           "first_session_intent_anchor": null,
           "gold_path_vector": null,
           "main_segment_template_ids": [
-            "M12",
             "M22",
+            "M15",
             "M36"
           ],
           "all_template_ids": [
             "M28",
-            "M12",
             "M22",
+            "M15",
             "M36",
-            "M18",
             "M42"
           ],
           "segments": [
@@ -2799,14 +2781,14 @@
               "item_count": 3,
               "items": [
                 {
-                  "templateId": "M12",
-                  "name": "글루트 브릿지",
-                  "focus_tag": "glute_activation"
-                },
-                {
                   "templateId": "M22",
                   "name": "사이드 라이잉 힙 어브덕션",
                   "focus_tag": "glute_medius"
+                },
+                {
+                  "templateId": "M15",
+                  "name": "의자 박스 스쿼트",
+                  "focus_tag": "lower_chain_stability"
                 },
                 {
                   "templateId": "M36",
@@ -2817,14 +2799,8 @@
             },
             {
               "title": "Accessory",
-              "item_count": 1,
-              "items": [
-                {
-                  "templateId": "M18",
-                  "name": "양발 카프 레이즈",
-                  "focus_tag": "ankle_mobility"
-                }
-              ]
+              "item_count": 0,
+              "items": []
             },
             {
               "title": "Cooldown",
@@ -2881,7 +2857,7 @@
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -3006,7 +2982,7 @@
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -3124,14 +3100,14 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M31",
-            "M15",
+            "M22",
             "M18",
             "M12",
             "M41"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -3154,13 +3130,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M15"
+            "M22"
           ],
           "all_template_ids": [
             "M31",
             "M18",
             "M12",
-            "M15",
+            "M22",
             "M41"
           ],
           "segments": [
@@ -3190,9 +3166,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M15",
-                  "name": "의자 박스 스쿼트",
-                  "focus_tag": "lower_chain_stability"
+                  "templateId": "M22",
+                  "name": "사이드 라이잉 힙 어브덕션",
+                  "focus_tag": "glute_medius"
                 }
               ]
             },
@@ -3375,13 +3351,13 @@
           "used_template_ids": [
             "M28",
             "M36",
-            "M18",
+            "M15",
             "M12",
             "M42"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 2,
+            "duplicate_filtered_count": 3,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -3402,14 +3378,14 @@
           "first_session_intent_anchor": null,
           "gold_path_vector": null,
           "main_segment_template_ids": [
-            "M18",
             "M12",
+            "M15",
             "M36"
           ],
           "all_template_ids": [
             "M28",
-            "M18",
             "M12",
+            "M15",
             "M36",
             "M42"
           ],
@@ -3430,14 +3406,14 @@
               "item_count": 3,
               "items": [
                 {
-                  "templateId": "M18",
-                  "name": "양발 카프 레이즈",
-                  "focus_tag": "ankle_mobility"
-                },
-                {
                   "templateId": "M12",
                   "name": "글루트 브릿지",
                   "focus_tag": "glute_activation"
+                },
+                {
+                  "templateId": "M15",
+                  "name": "의자 박스 스쿼트",
+                  "focus_tag": "lower_chain_stability"
                 },
                 {
                   "templateId": "M36",
@@ -3749,14 +3725,14 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M31",
-            "M15",
+            "M22",
             "M18",
             "M12",
             "M41"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -3779,13 +3755,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M15"
+            "M22"
           ],
           "all_template_ids": [
             "M31",
             "M18",
             "M12",
-            "M15",
+            "M22",
             "M41"
           ],
           "segments": [
@@ -3815,9 +3791,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M15",
-                  "name": "의자 박스 스쿼트",
-                  "focus_tag": "lower_chain_stability"
+                  "templateId": "M22",
+                  "name": "사이드 라이잉 힙 어브덕션",
+                  "focus_tag": "glute_medius"
                 }
               ]
             },
@@ -4000,13 +3976,13 @@
           "used_template_ids": [
             "M28",
             "M36",
-            "M18",
+            "M15",
             "M12",
             "M42"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 2,
+            "duplicate_filtered_count": 3,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -4027,14 +4003,14 @@
           "first_session_intent_anchor": null,
           "gold_path_vector": null,
           "main_segment_template_ids": [
-            "M18",
             "M12",
+            "M15",
             "M36"
           ],
           "all_template_ids": [
             "M28",
-            "M18",
             "M12",
+            "M15",
             "M36",
             "M42"
           ],
@@ -4055,14 +4031,14 @@
               "item_count": 3,
               "items": [
                 {
-                  "templateId": "M18",
-                  "name": "양발 카프 레이즈",
-                  "focus_tag": "ankle_mobility"
-                },
-                {
                   "templateId": "M12",
                   "name": "글루트 브릿지",
                   "focus_tag": "glute_activation"
+                },
+                {
+                  "templateId": "M15",
+                  "name": "의자 박스 스쿼트",
+                  "focus_tag": "lower_chain_stability"
                 },
                 {
                   "templateId": "M36",
@@ -4374,14 +4350,14 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M31",
-            "M15",
+            "M22",
             "M18",
             "M12",
             "M41"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -4404,13 +4380,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M15"
+            "M22"
           ],
           "all_template_ids": [
             "M31",
             "M18",
             "M12",
-            "M15",
+            "M22",
             "M41"
           ],
           "segments": [
@@ -4440,9 +4416,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M15",
-                  "name": "의자 박스 스쿼트",
-                  "focus_tag": "lower_chain_stability"
+                  "templateId": "M22",
+                  "name": "사이드 라이잉 힙 어브덕션",
+                  "focus_tag": "glute_medius"
                 }
               ]
             },
@@ -4631,13 +4607,13 @@
           "secondary_type": "HARNESS_DEFAULT_SECONDARY",
           "baseline_session_anchor": "lower_stability",
           "session_focus_axes": [
-            "upper_mobility",
+            "trunk_control",
             "deconditioned"
           ],
-          "session_rationale": "상체 가동성과 움직임 범위를 개선하는 세션고, 전신 회복 비중도 함께 넣었습니다.",
+          "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 전신 회복 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M01",
-            "M07",
+            "M12",
             "M08",
             "M11",
             "M02"
@@ -4666,21 +4642,21 @@
           },
           "plan_quality_audit_summary": {
             "version": "plan_quality_audit_v1",
-            "score": 92,
+            "score": 100,
             "band": "acceptable",
-            "summary": "Plan quality: acceptable (score 92), 2 issue(s)",
-            "issue_count": 2,
+            "summary": "Plan quality: acceptable (score 100), 1 issue(s)",
+            "issue_count": 1,
             "strengths_count": 3
           },
           "first_session_intent_anchor": "lower_stability",
           "gold_path_vector": "lower_stability",
           "main_segment_template_ids": [
-            "M07",
+            "M12",
             "M08"
           ],
           "all_template_ids": [
             "M01",
-            "M07",
+            "M12",
             "M08",
             "M11",
             "M02"
@@ -4702,9 +4678,9 @@
               "item_count": 2,
               "items": [
                 {
-                  "templateId": "M07",
-                  "name": "벽천사",
-                  "focus_tag": "shoulder_mobility"
+                  "templateId": "M12",
+                  "name": "글루트 브릿지",
+                  "focus_tag": "glute_activation"
                 },
                 {
                   "templateId": "M08",
@@ -4740,7 +4716,7 @@
           "template_count": 48,
           "meta_diff_friendly": {
             "session_focus_axes": [
-              "upper_mobility",
+              "trunk_control",
               "deconditioned"
             ],
             "primary_type": "LOWER_INSTABILITY",
@@ -4774,13 +4750,12 @@
             "M28",
             "M36",
             "M22",
-            "M12",
-            "M18",
+            "M15",
             "M42"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 3,
+            "duplicate_filtered_count": 2,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -4801,16 +4776,15 @@
           "first_session_intent_anchor": null,
           "gold_path_vector": null,
           "main_segment_template_ids": [
-            "M12",
             "M22",
+            "M15",
             "M36"
           ],
           "all_template_ids": [
             "M28",
-            "M12",
             "M22",
+            "M15",
             "M36",
-            "M18",
             "M42"
           ],
           "segments": [
@@ -4830,14 +4804,14 @@
               "item_count": 3,
               "items": [
                 {
-                  "templateId": "M12",
-                  "name": "글루트 브릿지",
-                  "focus_tag": "glute_activation"
-                },
-                {
                   "templateId": "M22",
                   "name": "사이드 라이잉 힙 어브덕션",
                   "focus_tag": "glute_medius"
+                },
+                {
+                  "templateId": "M15",
+                  "name": "의자 박스 스쿼트",
+                  "focus_tag": "lower_chain_stability"
                 },
                 {
                   "templateId": "M36",
@@ -4848,14 +4822,8 @@
             },
             {
               "title": "Accessory",
-              "item_count": 1,
-              "items": [
-                {
-                  "templateId": "M18",
-                  "name": "양발 카프 레이즈",
-                  "focus_tag": "ankle_mobility"
-                }
-              ]
+              "item_count": 0,
+              "items": []
             },
             {
               "title": "Cooldown",
@@ -4912,7 +4880,7 @@
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -5037,7 +5005,7 @@
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -5155,14 +5123,14 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M31",
-            "M15",
+            "M22",
             "M18",
             "M12",
             "M41"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -5185,13 +5153,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M15"
+            "M22"
           ],
           "all_template_ids": [
             "M31",
             "M18",
             "M12",
-            "M15",
+            "M22",
             "M41"
           ],
           "segments": [
@@ -5221,9 +5189,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M15",
-                  "name": "의자 박스 스쿼트",
-                  "focus_tag": "lower_chain_stability"
+                  "templateId": "M22",
+                  "name": "사이드 라이잉 힙 어브덕션",
+                  "focus_tag": "glute_medius"
                 }
               ]
             },
@@ -5406,13 +5374,13 @@
           "used_template_ids": [
             "M28",
             "M36",
-            "M18",
+            "M15",
             "M12",
             "M42"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 2,
+            "duplicate_filtered_count": 3,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -5433,14 +5401,14 @@
           "first_session_intent_anchor": null,
           "gold_path_vector": null,
           "main_segment_template_ids": [
-            "M18",
             "M12",
+            "M15",
             "M36"
           ],
           "all_template_ids": [
             "M28",
-            "M18",
             "M12",
+            "M15",
             "M36",
             "M42"
           ],
@@ -5461,14 +5429,14 @@
               "item_count": 3,
               "items": [
                 {
-                  "templateId": "M18",
-                  "name": "양발 카프 레이즈",
-                  "focus_tag": "ankle_mobility"
-                },
-                {
                   "templateId": "M12",
                   "name": "글루트 브릿지",
                   "focus_tag": "glute_activation"
+                },
+                {
+                  "templateId": "M15",
+                  "name": "의자 박스 스쿼트",
+                  "focus_tag": "lower_chain_stability"
                 },
                 {
                   "templateId": "M36",
@@ -5780,14 +5748,14 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M31",
-            "M15",
+            "M22",
             "M18",
             "M12",
             "M41"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -5810,13 +5778,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M15"
+            "M22"
           ],
           "all_template_ids": [
             "M31",
             "M18",
             "M12",
-            "M15",
+            "M22",
             "M41"
           ],
           "segments": [
@@ -5846,9 +5814,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M15",
-                  "name": "의자 박스 스쿼트",
-                  "focus_tag": "lower_chain_stability"
+                  "templateId": "M22",
+                  "name": "사이드 라이잉 힙 어브덕션",
+                  "focus_tag": "glute_medius"
                 }
               ]
             },
@@ -6031,13 +5999,13 @@
           "used_template_ids": [
             "M28",
             "M36",
-            "M18",
+            "M15",
             "M12",
             "M42"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 2,
+            "duplicate_filtered_count": 3,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -6058,14 +6026,14 @@
           "first_session_intent_anchor": null,
           "gold_path_vector": null,
           "main_segment_template_ids": [
-            "M18",
             "M12",
+            "M15",
             "M36"
           ],
           "all_template_ids": [
             "M28",
-            "M18",
             "M12",
+            "M15",
             "M36",
             "M42"
           ],
@@ -6086,14 +6054,14 @@
               "item_count": 3,
               "items": [
                 {
-                  "templateId": "M18",
-                  "name": "양발 카프 레이즈",
-                  "focus_tag": "ankle_mobility"
-                },
-                {
                   "templateId": "M12",
                   "name": "글루트 브릿지",
                   "focus_tag": "glute_activation"
+                },
+                {
+                  "templateId": "M15",
+                  "name": "의자 박스 스쿼트",
+                  "focus_tag": "lower_chain_stability"
                 },
                 {
                   "templateId": "M36",
@@ -6405,14 +6373,14 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M31",
-            "M15",
+            "M22",
             "M18",
             "M12",
             "M41"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -6435,13 +6403,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M15"
+            "M22"
           ],
           "all_template_ids": [
             "M31",
             "M18",
             "M12",
-            "M15",
+            "M22",
             "M41"
           ],
           "segments": [
@@ -6471,9 +6439,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M15",
-                  "name": "의자 박스 스쿼트",
-                  "focus_tag": "lower_chain_stability"
+                  "templateId": "M22",
+                  "name": "사이드 라이잉 힙 어브덕션",
+                  "focus_tag": "glute_medius"
                 }
               ]
             },
@@ -6656,13 +6624,13 @@
           "used_template_ids": [
             "M28",
             "M36",
-            "M18",
+            "M15",
             "M12",
             "M42"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 2,
+            "duplicate_filtered_count": 3,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -6683,14 +6651,14 @@
           "first_session_intent_anchor": null,
           "gold_path_vector": null,
           "main_segment_template_ids": [
-            "M18",
             "M12",
+            "M15",
             "M36"
           ],
           "all_template_ids": [
             "M28",
-            "M18",
             "M12",
+            "M15",
             "M36",
             "M42"
           ],
@@ -6711,14 +6679,14 @@
               "item_count": 3,
               "items": [
                 {
-                  "templateId": "M18",
-                  "name": "양발 카프 레이즈",
-                  "focus_tag": "ankle_mobility"
-                },
-                {
                   "templateId": "M12",
                   "name": "글루트 브릿지",
                   "focus_tag": "glute_activation"
+                },
+                {
+                  "templateId": "M15",
+                  "name": "의자 박스 스쿼트",
+                  "focus_tag": "lower_chain_stability"
                 },
                 {
                   "templateId": "M36",
@@ -7030,14 +6998,14 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M31",
-            "M15",
+            "M22",
             "M18",
             "M12",
             "M41"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 1,
+            "duplicate_filtered_count": 0,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -7060,13 +7028,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M15"
+            "M22"
           ],
           "all_template_ids": [
             "M31",
             "M18",
             "M12",
-            "M15",
+            "M22",
             "M41"
           ],
           "segments": [
@@ -7096,9 +7064,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M15",
-                  "name": "의자 박스 스쿼트",
-                  "focus_tag": "lower_chain_stability"
+                  "templateId": "M22",
+                  "name": "사이드 라이잉 힙 어브덕션",
+                  "focus_tag": "glute_medius"
                 }
               ]
             },
@@ -35499,12 +35467,12 @@
           "baseline_session_anchor": "balanced_reset",
           "session_focus_axes": [
             "trunk_control",
-            "deconditioned"
+            "upper_mobility"
           ],
-          "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 전신 회복 비중도 함께 넣었습니다.",
+          "session_rationale": "몸통 정렬과 상체 가동성을 함께 정리해 균형 잡힌 시작을 만드는 세션입니다.",
           "used_template_ids": [
             "M01",
-            "M09",
+            "M05",
             "M31",
             "M42",
             "M02"
@@ -35542,12 +35510,12 @@
           "first_session_intent_anchor": "balanced_reset",
           "gold_path_vector": "balanced_reset",
           "main_segment_template_ids": [
-            "M09",
+            "M05",
             "M31"
           ],
           "all_template_ids": [
             "M01",
-            "M09",
+            "M05",
             "M31",
             "M42",
             "M02"
@@ -35569,9 +35537,9 @@
               "item_count": 2,
               "items": [
                 {
-                  "templateId": "M09",
-                  "name": "푸쉬업 플러스",
-                  "focus_tag": "shoulder_stability"
+                  "templateId": "M05",
+                  "name": "스레드 더 니들",
+                  "focus_tag": "thoracic_mobility"
                 },
                 {
                   "templateId": "M31",
@@ -35608,7 +35576,7 @@
           "meta_diff_friendly": {
             "session_focus_axes": [
               "trunk_control",
-              "deconditioned"
+              "upper_mobility"
             ],
             "primary_type": "STABLE",
             "secondary_type": "HARNESS_DEFAULT_SECONDARY",
@@ -35639,14 +35607,14 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M28",
-            "M13",
+            "M09",
             "M18",
             "M12",
             "M46"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 3,
+            "duplicate_filtered_count": 4,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -35669,13 +35637,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M13"
+            "M09"
           ],
           "all_template_ids": [
             "M28",
             "M18",
             "M12",
-            "M13",
+            "M09",
             "M46"
           ],
           "segments": [
@@ -35705,9 +35673,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M13",
-                  "name": "데드버그",
-                  "focus_tag": "core_stability"
+                  "templateId": "M09",
+                  "name": "푸쉬업 플러스",
+                  "focus_tag": "shoulder_stability"
                 }
               ]
             },
@@ -35764,7 +35732,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M27",
-            "M14",
+            "M13",
             "M18",
             "M12",
             "M43"
@@ -35794,13 +35762,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M14"
+            "M13"
           ],
           "all_template_ids": [
             "M27",
             "M18",
             "M12",
-            "M14",
+            "M13",
             "M43"
           ],
           "segments": [
@@ -35830,8 +35798,8 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M14",
-                  "name": "버드독",
+                  "templateId": "M13",
+                  "name": "데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -35889,14 +35857,14 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M04",
+            "M14",
             "M29",
-            "M30",
             "M12",
             "M06"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 4,
+            "duplicate_filtered_count": 3,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -35918,14 +35886,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M29",
-            "M30"
+            "M14",
+            "M29"
           ],
           "all_template_ids": [
             "M04",
             "M12",
+            "M14",
             "M29",
-            "M30",
             "M06"
           ],
           "segments": [
@@ -35950,13 +35918,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M29",
-                  "name": "힐 탭 데드버그",
+                  "templateId": "M14",
+                  "name": "버드독",
                   "focus_tag": "core_stability"
                 },
                 {
-                  "templateId": "M30",
-                  "name": "쿼드러펫 숄더탭",
+                  "templateId": "M29",
+                  "name": "힐 탭 데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -36014,8 +35982,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M03",
+            "M30",
             "M33",
-            "M32",
             "M12",
             "M48"
           ],
@@ -36043,14 +36011,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M33",
-            "M32"
+            "M30",
+            "M33"
           ],
           "all_template_ids": [
             "M03",
             "M12",
+            "M30",
             "M33",
-            "M32",
             "M48"
           ],
           "segments": [
@@ -36075,14 +36043,14 @@
                   "focus_tag": "glute_activation"
                 },
                 {
+                  "templateId": "M30",
+                  "name": "쿼드러펫 숄더탭",
+                  "focus_tag": "core_stability"
+                },
+                {
                   "templateId": "M33",
                   "name": "사이드 플랭크 무릎 버전",
                   "focus_tag": "global_core"
-                },
-                {
-                  "templateId": "M32",
-                  "name": "베어 포지션 홀드",
-                  "focus_tag": "core_stability"
                 }
               ]
             },
@@ -36134,13 +36102,13 @@
           "baseline_session_anchor": "balanced_reset",
           "session_focus_axes": [
             "trunk_control",
-            "deconditioned"
+            "lower_stability"
           ],
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M02",
             "M31",
-            "M09",
+            "M32",
             "M12",
             "M01"
           ],
@@ -36168,14 +36136,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M09",
-            "M31"
+            "M31",
+            "M32"
           ],
           "all_template_ids": [
             "M02",
             "M12",
-            "M09",
             "M31",
+            "M32",
             "M01"
           ],
           "segments": [
@@ -36200,13 +36168,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M09",
-                  "name": "푸쉬업 플러스",
-                  "focus_tag": "shoulder_stability"
-                },
-                {
                   "templateId": "M31",
                   "name": "버드독 3초 홀드",
+                  "focus_tag": "core_stability"
+                },
+                {
+                  "templateId": "M32",
+                  "name": "베어 포지션 홀드",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -36233,7 +36201,7 @@
           "meta_diff_friendly": {
             "session_focus_axes": [
               "trunk_control",
-              "deconditioned"
+              "lower_stability"
             ],
             "primary_type": "STABLE",
             "secondary_type": "HARNESS_DEFAULT_SECONDARY",
@@ -36264,7 +36232,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M28",
-            "M13",
+            "M09",
             "M18",
             "M12",
             "M46"
@@ -36294,13 +36262,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M13"
+            "M09"
           ],
           "all_template_ids": [
             "M28",
             "M18",
             "M12",
-            "M13",
+            "M09",
             "M46"
           ],
           "segments": [
@@ -36330,9 +36298,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M13",
-                  "name": "데드버그",
-                  "focus_tag": "core_stability"
+                  "templateId": "M09",
+                  "name": "푸쉬업 플러스",
+                  "focus_tag": "shoulder_stability"
                 }
               ]
             },
@@ -36389,7 +36357,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M27",
-            "M14",
+            "M13",
             "M18",
             "M12",
             "M43"
@@ -36419,13 +36387,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M14"
+            "M13"
           ],
           "all_template_ids": [
             "M27",
             "M18",
             "M12",
-            "M14",
+            "M13",
             "M43"
           ],
           "segments": [
@@ -36455,8 +36423,8 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M14",
-                  "name": "버드독",
+                  "templateId": "M13",
+                  "name": "데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -36522,12 +36490,12 @@
           "baseline_session_anchor": "balanced_reset",
           "session_focus_axes": [
             "trunk_control",
-            "deconditioned"
+            "upper_mobility"
           ],
-          "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 전신 회복 비중도 함께 넣었습니다.",
+          "session_rationale": "몸통 정렬과 상체 가동성을 함께 정리해 균형 잡힌 시작을 만드는 세션입니다.",
           "used_template_ids": [
             "M01",
-            "M09",
+            "M05",
             "M31",
             "M42",
             "M02"
@@ -36565,12 +36533,12 @@
           "first_session_intent_anchor": "balanced_reset",
           "gold_path_vector": "balanced_reset",
           "main_segment_template_ids": [
-            "M09",
+            "M05",
             "M31"
           ],
           "all_template_ids": [
             "M01",
-            "M09",
+            "M05",
             "M31",
             "M42",
             "M02"
@@ -36592,9 +36560,9 @@
               "item_count": 2,
               "items": [
                 {
-                  "templateId": "M09",
-                  "name": "푸쉬업 플러스",
-                  "focus_tag": "shoulder_stability"
+                  "templateId": "M05",
+                  "name": "스레드 더 니들",
+                  "focus_tag": "thoracic_mobility"
                 },
                 {
                   "templateId": "M31",
@@ -36631,7 +36599,7 @@
           "meta_diff_friendly": {
             "session_focus_axes": [
               "trunk_control",
-              "deconditioned"
+              "upper_mobility"
             ],
             "primary_type": "STABLE",
             "secondary_type": "HARNESS_DEFAULT_SECONDARY",
@@ -36662,14 +36630,14 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M28",
-            "M13",
+            "M09",
             "M18",
             "M12",
             "M46"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 3,
+            "duplicate_filtered_count": 4,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -36692,13 +36660,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M13"
+            "M09"
           ],
           "all_template_ids": [
             "M28",
             "M18",
             "M12",
-            "M13",
+            "M09",
             "M46"
           ],
           "segments": [
@@ -36728,9 +36696,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M13",
-                  "name": "데드버그",
-                  "focus_tag": "core_stability"
+                  "templateId": "M09",
+                  "name": "푸쉬업 플러스",
+                  "focus_tag": "shoulder_stability"
                 }
               ]
             },
@@ -36787,7 +36755,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M27",
-            "M14",
+            "M13",
             "M18",
             "M12",
             "M43"
@@ -36817,13 +36785,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M14"
+            "M13"
           ],
           "all_template_ids": [
             "M27",
             "M18",
             "M12",
-            "M14",
+            "M13",
             "M43"
           ],
           "segments": [
@@ -36853,8 +36821,8 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M14",
-                  "name": "버드독",
+                  "templateId": "M13",
+                  "name": "데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -36912,14 +36880,14 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M04",
+            "M14",
             "M29",
-            "M30",
             "M12",
             "M06"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 4,
+            "duplicate_filtered_count": 3,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -36941,14 +36909,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M29",
-            "M30"
+            "M14",
+            "M29"
           ],
           "all_template_ids": [
             "M04",
             "M12",
+            "M14",
             "M29",
-            "M30",
             "M06"
           ],
           "segments": [
@@ -36973,13 +36941,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M29",
-                  "name": "힐 탭 데드버그",
+                  "templateId": "M14",
+                  "name": "버드독",
                   "focus_tag": "core_stability"
                 },
                 {
-                  "templateId": "M30",
-                  "name": "쿼드러펫 숄더탭",
+                  "templateId": "M29",
+                  "name": "힐 탭 데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -37037,8 +37005,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M03",
+            "M30",
             "M33",
-            "M32",
             "M12",
             "M48"
           ],
@@ -37066,14 +37034,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M33",
-            "M32"
+            "M30",
+            "M33"
           ],
           "all_template_ids": [
             "M03",
             "M12",
+            "M30",
             "M33",
-            "M32",
             "M48"
           ],
           "segments": [
@@ -37098,14 +37066,14 @@
                   "focus_tag": "glute_activation"
                 },
                 {
+                  "templateId": "M30",
+                  "name": "쿼드러펫 숄더탭",
+                  "focus_tag": "core_stability"
+                },
+                {
                   "templateId": "M33",
                   "name": "사이드 플랭크 무릎 버전",
                   "focus_tag": "global_core"
-                },
-                {
-                  "templateId": "M32",
-                  "name": "베어 포지션 홀드",
-                  "focus_tag": "core_stability"
                 }
               ]
             },
@@ -37157,13 +37125,13 @@
           "baseline_session_anchor": "balanced_reset",
           "session_focus_axes": [
             "trunk_control",
-            "deconditioned"
+            "lower_stability"
           ],
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M02",
             "M31",
-            "M09",
+            "M32",
             "M12",
             "M01"
           ],
@@ -37191,14 +37159,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M09",
-            "M31"
+            "M31",
+            "M32"
           ],
           "all_template_ids": [
             "M02",
             "M12",
-            "M09",
             "M31",
+            "M32",
             "M01"
           ],
           "segments": [
@@ -37223,13 +37191,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M09",
-                  "name": "푸쉬업 플러스",
-                  "focus_tag": "shoulder_stability"
-                },
-                {
                   "templateId": "M31",
                   "name": "버드독 3초 홀드",
+                  "focus_tag": "core_stability"
+                },
+                {
+                  "templateId": "M32",
+                  "name": "베어 포지션 홀드",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -37256,7 +37224,7 @@
           "meta_diff_friendly": {
             "session_focus_axes": [
               "trunk_control",
-              "deconditioned"
+              "lower_stability"
             ],
             "primary_type": "STABLE",
             "secondary_type": "HARNESS_DEFAULT_SECONDARY",
@@ -37287,7 +37255,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M28",
-            "M13",
+            "M09",
             "M18",
             "M12",
             "M46"
@@ -37317,13 +37285,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M13"
+            "M09"
           ],
           "all_template_ids": [
             "M28",
             "M18",
             "M12",
-            "M13",
+            "M09",
             "M46"
           ],
           "segments": [
@@ -37353,9 +37321,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M13",
-                  "name": "데드버그",
-                  "focus_tag": "core_stability"
+                  "templateId": "M09",
+                  "name": "푸쉬업 플러스",
+                  "focus_tag": "shoulder_stability"
                 }
               ]
             },
@@ -37412,7 +37380,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M27",
-            "M14",
+            "M13",
             "M18",
             "M12",
             "M43"
@@ -37442,13 +37410,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M14"
+            "M13"
           ],
           "all_template_ids": [
             "M27",
             "M18",
             "M12",
-            "M14",
+            "M13",
             "M43"
           ],
           "segments": [
@@ -37478,8 +37446,8 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M14",
-                  "name": "버드독",
+                  "templateId": "M13",
+                  "name": "데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -37537,8 +37505,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M04",
+            "M14",
             "M29",
-            "M30",
             "M12",
             "M06"
           ],
@@ -37566,14 +37534,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M29",
-            "M30"
+            "M14",
+            "M29"
           ],
           "all_template_ids": [
             "M04",
             "M12",
+            "M14",
             "M29",
-            "M30",
             "M06"
           ],
           "segments": [
@@ -37598,13 +37566,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M29",
-                  "name": "힐 탭 데드버그",
+                  "templateId": "M14",
+                  "name": "버드독",
                   "focus_tag": "core_stability"
                 },
                 {
-                  "templateId": "M30",
-                  "name": "쿼드러펫 숄더탭",
+                  "templateId": "M29",
+                  "name": "힐 탭 데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -37662,8 +37630,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M03",
+            "M30",
             "M33",
-            "M32",
             "M12",
             "M48"
           ],
@@ -37691,14 +37659,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M33",
-            "M32"
+            "M30",
+            "M33"
           ],
           "all_template_ids": [
             "M03",
             "M12",
+            "M30",
             "M33",
-            "M32",
             "M48"
           ],
           "segments": [
@@ -37723,14 +37691,14 @@
                   "focus_tag": "glute_activation"
                 },
                 {
+                  "templateId": "M30",
+                  "name": "쿼드러펫 숄더탭",
+                  "focus_tag": "core_stability"
+                },
+                {
                   "templateId": "M33",
                   "name": "사이드 플랭크 무릎 버전",
                   "focus_tag": "global_core"
-                },
-                {
-                  "templateId": "M32",
-                  "name": "베어 포지션 홀드",
-                  "focus_tag": "core_stability"
                 }
               ]
             },
@@ -37782,13 +37750,13 @@
           "baseline_session_anchor": "balanced_reset",
           "session_focus_axes": [
             "trunk_control",
-            "deconditioned"
+            "lower_stability"
           ],
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M02",
             "M31",
-            "M09",
+            "M32",
             "M12",
             "M01"
           ],
@@ -37816,14 +37784,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M09",
-            "M31"
+            "M31",
+            "M32"
           ],
           "all_template_ids": [
             "M02",
             "M12",
-            "M09",
             "M31",
+            "M32",
             "M01"
           ],
           "segments": [
@@ -37848,13 +37816,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M09",
-                  "name": "푸쉬업 플러스",
-                  "focus_tag": "shoulder_stability"
-                },
-                {
                   "templateId": "M31",
                   "name": "버드독 3초 홀드",
+                  "focus_tag": "core_stability"
+                },
+                {
+                  "templateId": "M32",
+                  "name": "베어 포지션 홀드",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -37881,7 +37849,7 @@
           "meta_diff_friendly": {
             "session_focus_axes": [
               "trunk_control",
-              "deconditioned"
+              "lower_stability"
             ],
             "primary_type": "STABLE",
             "secondary_type": "HARNESS_DEFAULT_SECONDARY",
@@ -37912,7 +37880,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M28",
-            "M13",
+            "M09",
             "M18",
             "M12",
             "M46"
@@ -37942,13 +37910,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M13"
+            "M09"
           ],
           "all_template_ids": [
             "M28",
             "M18",
             "M12",
-            "M13",
+            "M09",
             "M46"
           ],
           "segments": [
@@ -37978,9 +37946,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M13",
-                  "name": "데드버그",
-                  "focus_tag": "core_stability"
+                  "templateId": "M09",
+                  "name": "푸쉬업 플러스",
+                  "focus_tag": "shoulder_stability"
                 }
               ]
             },
@@ -38045,12 +38013,12 @@
           "baseline_session_anchor": "balanced_reset",
           "session_focus_axes": [
             "trunk_control",
-            "deconditioned"
+            "upper_mobility"
           ],
-          "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 전신 회복 비중도 함께 넣었습니다.",
+          "session_rationale": "몸통 정렬과 상체 가동성을 함께 정리해 균형 잡힌 시작을 만드는 세션입니다.",
           "used_template_ids": [
             "M01",
-            "M09",
+            "M05",
             "M31",
             "M42",
             "M02"
@@ -38088,12 +38056,12 @@
           "first_session_intent_anchor": "balanced_reset",
           "gold_path_vector": "balanced_reset",
           "main_segment_template_ids": [
-            "M09",
+            "M05",
             "M31"
           ],
           "all_template_ids": [
             "M01",
-            "M09",
+            "M05",
             "M31",
             "M42",
             "M02"
@@ -38115,9 +38083,9 @@
               "item_count": 2,
               "items": [
                 {
-                  "templateId": "M09",
-                  "name": "푸쉬업 플러스",
-                  "focus_tag": "shoulder_stability"
+                  "templateId": "M05",
+                  "name": "스레드 더 니들",
+                  "focus_tag": "thoracic_mobility"
                 },
                 {
                   "templateId": "M31",
@@ -38154,7 +38122,7 @@
           "meta_diff_friendly": {
             "session_focus_axes": [
               "trunk_control",
-              "deconditioned"
+              "upper_mobility"
             ],
             "primary_type": "STABLE",
             "secondary_type": "HARNESS_DEFAULT_SECONDARY",
@@ -38185,14 +38153,14 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M28",
-            "M13",
+            "M09",
             "M18",
             "M12",
             "M46"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 3,
+            "duplicate_filtered_count": 4,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -38215,13 +38183,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M13"
+            "M09"
           ],
           "all_template_ids": [
             "M28",
             "M18",
             "M12",
-            "M13",
+            "M09",
             "M46"
           ],
           "segments": [
@@ -38251,9 +38219,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M13",
-                  "name": "데드버그",
-                  "focus_tag": "core_stability"
+                  "templateId": "M09",
+                  "name": "푸쉬업 플러스",
+                  "focus_tag": "shoulder_stability"
                 }
               ]
             },
@@ -38310,7 +38278,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M27",
-            "M14",
+            "M13",
             "M18",
             "M12",
             "M43"
@@ -38340,13 +38308,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M14"
+            "M13"
           ],
           "all_template_ids": [
             "M27",
             "M18",
             "M12",
-            "M14",
+            "M13",
             "M43"
           ],
           "segments": [
@@ -38376,8 +38344,8 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M14",
-                  "name": "버드독",
+                  "templateId": "M13",
+                  "name": "데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -38435,14 +38403,14 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M04",
+            "M14",
             "M29",
-            "M30",
             "M12",
             "M06"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 4,
+            "duplicate_filtered_count": 3,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -38464,14 +38432,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M29",
-            "M30"
+            "M14",
+            "M29"
           ],
           "all_template_ids": [
             "M04",
             "M12",
+            "M14",
             "M29",
-            "M30",
             "M06"
           ],
           "segments": [
@@ -38496,13 +38464,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M29",
-                  "name": "힐 탭 데드버그",
+                  "templateId": "M14",
+                  "name": "버드독",
                   "focus_tag": "core_stability"
                 },
                 {
-                  "templateId": "M30",
-                  "name": "쿼드러펫 숄더탭",
+                  "templateId": "M29",
+                  "name": "힐 탭 데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -38560,8 +38528,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M03",
+            "M30",
             "M33",
-            "M32",
             "M12",
             "M48"
           ],
@@ -38589,14 +38557,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M33",
-            "M32"
+            "M30",
+            "M33"
           ],
           "all_template_ids": [
             "M03",
             "M12",
+            "M30",
             "M33",
-            "M32",
             "M48"
           ],
           "segments": [
@@ -38621,14 +38589,14 @@
                   "focus_tag": "glute_activation"
                 },
                 {
+                  "templateId": "M30",
+                  "name": "쿼드러펫 숄더탭",
+                  "focus_tag": "core_stability"
+                },
+                {
                   "templateId": "M33",
                   "name": "사이드 플랭크 무릎 버전",
                   "focus_tag": "global_core"
-                },
-                {
-                  "templateId": "M32",
-                  "name": "베어 포지션 홀드",
-                  "focus_tag": "core_stability"
                 }
               ]
             },
@@ -38680,13 +38648,13 @@
           "baseline_session_anchor": "balanced_reset",
           "session_focus_axes": [
             "trunk_control",
-            "deconditioned"
+            "lower_stability"
           ],
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M02",
             "M31",
-            "M09",
+            "M32",
             "M12",
             "M01"
           ],
@@ -38714,14 +38682,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M09",
-            "M31"
+            "M31",
+            "M32"
           ],
           "all_template_ids": [
             "M02",
             "M12",
-            "M09",
             "M31",
+            "M32",
             "M01"
           ],
           "segments": [
@@ -38746,13 +38714,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M09",
-                  "name": "푸쉬업 플러스",
-                  "focus_tag": "shoulder_stability"
-                },
-                {
                   "templateId": "M31",
                   "name": "버드독 3초 홀드",
+                  "focus_tag": "core_stability"
+                },
+                {
+                  "templateId": "M32",
+                  "name": "베어 포지션 홀드",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -38779,7 +38747,7 @@
           "meta_diff_friendly": {
             "session_focus_axes": [
               "trunk_control",
-              "deconditioned"
+              "lower_stability"
             ],
             "primary_type": "STABLE",
             "secondary_type": "HARNESS_DEFAULT_SECONDARY",
@@ -38810,7 +38778,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M28",
-            "M13",
+            "M09",
             "M18",
             "M12",
             "M46"
@@ -38840,13 +38808,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M13"
+            "M09"
           ],
           "all_template_ids": [
             "M28",
             "M18",
             "M12",
-            "M13",
+            "M09",
             "M46"
           ],
           "segments": [
@@ -38876,9 +38844,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M13",
-                  "name": "데드버그",
-                  "focus_tag": "core_stability"
+                  "templateId": "M09",
+                  "name": "푸쉬업 플러스",
+                  "focus_tag": "shoulder_stability"
                 }
               ]
             },
@@ -38935,7 +38903,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M27",
-            "M14",
+            "M13",
             "M18",
             "M12",
             "M43"
@@ -38965,13 +38933,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M14"
+            "M13"
           ],
           "all_template_ids": [
             "M27",
             "M18",
             "M12",
-            "M14",
+            "M13",
             "M43"
           ],
           "segments": [
@@ -39001,8 +38969,8 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M14",
-                  "name": "버드독",
+                  "templateId": "M13",
+                  "name": "데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -39060,8 +39028,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M04",
+            "M14",
             "M29",
-            "M30",
             "M12",
             "M06"
           ],
@@ -39089,14 +39057,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M29",
-            "M30"
+            "M14",
+            "M29"
           ],
           "all_template_ids": [
             "M04",
             "M12",
+            "M14",
             "M29",
-            "M30",
             "M06"
           ],
           "segments": [
@@ -39121,13 +39089,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M29",
-                  "name": "힐 탭 데드버그",
+                  "templateId": "M14",
+                  "name": "버드독",
                   "focus_tag": "core_stability"
                 },
                 {
-                  "templateId": "M30",
-                  "name": "쿼드러펫 숄더탭",
+                  "templateId": "M29",
+                  "name": "힐 탭 데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -39185,8 +39153,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M03",
+            "M30",
             "M33",
-            "M32",
             "M12",
             "M48"
           ],
@@ -39214,14 +39182,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M33",
-            "M32"
+            "M30",
+            "M33"
           ],
           "all_template_ids": [
             "M03",
             "M12",
+            "M30",
             "M33",
-            "M32",
             "M48"
           ],
           "segments": [
@@ -39246,14 +39214,14 @@
                   "focus_tag": "glute_activation"
                 },
                 {
+                  "templateId": "M30",
+                  "name": "쿼드러펫 숄더탭",
+                  "focus_tag": "core_stability"
+                },
+                {
                   "templateId": "M33",
                   "name": "사이드 플랭크 무릎 버전",
                   "focus_tag": "global_core"
-                },
-                {
-                  "templateId": "M32",
-                  "name": "베어 포지션 홀드",
-                  "focus_tag": "core_stability"
                 }
               ]
             },
@@ -39305,13 +39273,13 @@
           "baseline_session_anchor": "balanced_reset",
           "session_focus_axes": [
             "trunk_control",
-            "deconditioned"
+            "lower_stability"
           ],
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M02",
             "M31",
-            "M09",
+            "M32",
             "M12",
             "M01"
           ],
@@ -39339,14 +39307,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M09",
-            "M31"
+            "M31",
+            "M32"
           ],
           "all_template_ids": [
             "M02",
             "M12",
-            "M09",
             "M31",
+            "M32",
             "M01"
           ],
           "segments": [
@@ -39371,13 +39339,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M09",
-                  "name": "푸쉬업 플러스",
-                  "focus_tag": "shoulder_stability"
-                },
-                {
                   "templateId": "M31",
                   "name": "버드독 3초 홀드",
+                  "focus_tag": "core_stability"
+                },
+                {
+                  "templateId": "M32",
+                  "name": "베어 포지션 홀드",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -39404,7 +39372,7 @@
           "meta_diff_friendly": {
             "session_focus_axes": [
               "trunk_control",
-              "deconditioned"
+              "lower_stability"
             ],
             "primary_type": "STABLE",
             "secondary_type": "HARNESS_DEFAULT_SECONDARY",
@@ -39435,7 +39403,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M28",
-            "M13",
+            "M09",
             "M18",
             "M12",
             "M46"
@@ -39465,13 +39433,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M13"
+            "M09"
           ],
           "all_template_ids": [
             "M28",
             "M18",
             "M12",
-            "M13",
+            "M09",
             "M46"
           ],
           "segments": [
@@ -39501,9 +39469,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M13",
-                  "name": "데드버그",
-                  "focus_tag": "core_stability"
+                  "templateId": "M09",
+                  "name": "푸쉬업 플러스",
+                  "focus_tag": "shoulder_stability"
                 }
               ]
             },
@@ -39560,7 +39528,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M27",
-            "M14",
+            "M13",
             "M18",
             "M12",
             "M43"
@@ -39590,13 +39558,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M14"
+            "M13"
           ],
           "all_template_ids": [
             "M27",
             "M18",
             "M12",
-            "M14",
+            "M13",
             "M43"
           ],
           "segments": [
@@ -39626,8 +39594,8 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M14",
-                  "name": "버드독",
+                  "templateId": "M13",
+                  "name": "데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -39685,8 +39653,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M04",
+            "M14",
             "M29",
-            "M30",
             "M12",
             "M06"
           ],
@@ -39714,14 +39682,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M29",
-            "M30"
+            "M14",
+            "M29"
           ],
           "all_template_ids": [
             "M04",
             "M12",
+            "M14",
             "M29",
-            "M30",
             "M06"
           ],
           "segments": [
@@ -39746,13 +39714,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M29",
-                  "name": "힐 탭 데드버그",
+                  "templateId": "M14",
+                  "name": "버드독",
                   "focus_tag": "core_stability"
                 },
                 {
-                  "templateId": "M30",
-                  "name": "쿼드러펫 숄더탭",
+                  "templateId": "M29",
+                  "name": "힐 탭 데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -39810,8 +39778,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M03",
+            "M30",
             "M33",
-            "M32",
             "M12",
             "M48"
           ],
@@ -39839,14 +39807,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M33",
-            "M32"
+            "M30",
+            "M33"
           ],
           "all_template_ids": [
             "M03",
             "M12",
+            "M30",
             "M33",
-            "M32",
             "M48"
           ],
           "segments": [
@@ -39871,14 +39839,14 @@
                   "focus_tag": "glute_activation"
                 },
                 {
+                  "templateId": "M30",
+                  "name": "쿼드러펫 숄더탭",
+                  "focus_tag": "core_stability"
+                },
+                {
                   "templateId": "M33",
                   "name": "사이드 플랭크 무릎 버전",
                   "focus_tag": "global_core"
-                },
-                {
-                  "templateId": "M32",
-                  "name": "베어 포지션 홀드",
-                  "focus_tag": "core_stability"
                 }
               ]
             },
@@ -39930,13 +39898,13 @@
           "baseline_session_anchor": "balanced_reset",
           "session_focus_axes": [
             "trunk_control",
-            "deconditioned"
+            "lower_stability"
           ],
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M02",
             "M31",
-            "M09",
+            "M32",
             "M12",
             "M01"
           ],
@@ -39964,14 +39932,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M09",
-            "M31"
+            "M31",
+            "M32"
           ],
           "all_template_ids": [
             "M02",
             "M12",
-            "M09",
             "M31",
+            "M32",
             "M01"
           ],
           "segments": [
@@ -39996,13 +39964,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M09",
-                  "name": "푸쉬업 플러스",
-                  "focus_tag": "shoulder_stability"
-                },
-                {
                   "templateId": "M31",
                   "name": "버드독 3초 홀드",
+                  "focus_tag": "core_stability"
+                },
+                {
+                  "templateId": "M32",
+                  "name": "베어 포지션 홀드",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -40029,7 +39997,7 @@
           "meta_diff_friendly": {
             "session_focus_axes": [
               "trunk_control",
-              "deconditioned"
+              "lower_stability"
             ],
             "primary_type": "STABLE",
             "secondary_type": "HARNESS_DEFAULT_SECONDARY",
@@ -40068,12 +40036,12 @@
           "baseline_session_anchor": "balanced_reset",
           "session_focus_axes": [
             "trunk_control",
-            "deconditioned"
+            "upper_mobility"
           ],
-          "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 전신 회복 비중도 함께 넣었습니다.",
+          "session_rationale": "몸통 정렬과 상체 가동성을 함께 정리해 균형 잡힌 시작을 만드는 세션입니다.",
           "used_template_ids": [
             "M01",
-            "M09",
+            "M05",
             "M31",
             "M42",
             "M02"
@@ -40111,12 +40079,12 @@
           "first_session_intent_anchor": "balanced_reset",
           "gold_path_vector": "balanced_reset",
           "main_segment_template_ids": [
-            "M09",
+            "M05",
             "M31"
           ],
           "all_template_ids": [
             "M01",
-            "M09",
+            "M05",
             "M31",
             "M42",
             "M02"
@@ -40138,9 +40106,9 @@
               "item_count": 2,
               "items": [
                 {
-                  "templateId": "M09",
-                  "name": "푸쉬업 플러스",
-                  "focus_tag": "shoulder_stability"
+                  "templateId": "M05",
+                  "name": "스레드 더 니들",
+                  "focus_tag": "thoracic_mobility"
                 },
                 {
                   "templateId": "M31",
@@ -40177,7 +40145,7 @@
           "meta_diff_friendly": {
             "session_focus_axes": [
               "trunk_control",
-              "deconditioned"
+              "upper_mobility"
             ],
             "primary_type": "STABLE",
             "secondary_type": "HARNESS_DEFAULT_SECONDARY",
@@ -40208,14 +40176,14 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M28",
-            "M13",
+            "M09",
             "M18",
             "M12",
             "M46"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 3,
+            "duplicate_filtered_count": 4,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -40238,13 +40206,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M13"
+            "M09"
           ],
           "all_template_ids": [
             "M28",
             "M18",
             "M12",
-            "M13",
+            "M09",
             "M46"
           ],
           "segments": [
@@ -40274,9 +40242,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M13",
-                  "name": "데드버그",
-                  "focus_tag": "core_stability"
+                  "templateId": "M09",
+                  "name": "푸쉬업 플러스",
+                  "focus_tag": "shoulder_stability"
                 }
               ]
             },
@@ -40333,7 +40301,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M27",
-            "M14",
+            "M13",
             "M18",
             "M12",
             "M43"
@@ -40363,13 +40331,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M14"
+            "M13"
           ],
           "all_template_ids": [
             "M27",
             "M18",
             "M12",
-            "M14",
+            "M13",
             "M43"
           ],
           "segments": [
@@ -40399,8 +40367,8 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M14",
-                  "name": "버드독",
+                  "templateId": "M13",
+                  "name": "데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -40458,14 +40426,14 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M04",
+            "M14",
             "M29",
-            "M30",
             "M12",
             "M06"
           ],
           "constraint_flags": {
             "avoid_filter_applied": false,
-            "duplicate_filtered_count": 4,
+            "duplicate_filtered_count": 3,
             "focus_diversity_enforced": true,
             "fallback_used": false,
             "short_mode_applied": false,
@@ -40487,14 +40455,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M29",
-            "M30"
+            "M14",
+            "M29"
           ],
           "all_template_ids": [
             "M04",
             "M12",
+            "M14",
             "M29",
-            "M30",
             "M06"
           ],
           "segments": [
@@ -40519,13 +40487,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M29",
-                  "name": "힐 탭 데드버그",
+                  "templateId": "M14",
+                  "name": "버드독",
                   "focus_tag": "core_stability"
                 },
                 {
-                  "templateId": "M30",
-                  "name": "쿼드러펫 숄더탭",
+                  "templateId": "M29",
+                  "name": "힐 탭 데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -40583,8 +40551,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M03",
+            "M30",
             "M33",
-            "M32",
             "M12",
             "M48"
           ],
@@ -40612,14 +40580,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M33",
-            "M32"
+            "M30",
+            "M33"
           ],
           "all_template_ids": [
             "M03",
             "M12",
+            "M30",
             "M33",
-            "M32",
             "M48"
           ],
           "segments": [
@@ -40644,14 +40612,14 @@
                   "focus_tag": "glute_activation"
                 },
                 {
+                  "templateId": "M30",
+                  "name": "쿼드러펫 숄더탭",
+                  "focus_tag": "core_stability"
+                },
+                {
                   "templateId": "M33",
                   "name": "사이드 플랭크 무릎 버전",
                   "focus_tag": "global_core"
-                },
-                {
-                  "templateId": "M32",
-                  "name": "베어 포지션 홀드",
-                  "focus_tag": "core_stability"
                 }
               ]
             },
@@ -40703,13 +40671,13 @@
           "baseline_session_anchor": "balanced_reset",
           "session_focus_axes": [
             "trunk_control",
-            "deconditioned"
+            "lower_stability"
           ],
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M02",
             "M31",
-            "M09",
+            "M32",
             "M12",
             "M01"
           ],
@@ -40737,14 +40705,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M09",
-            "M31"
+            "M31",
+            "M32"
           ],
           "all_template_ids": [
             "M02",
             "M12",
-            "M09",
             "M31",
+            "M32",
             "M01"
           ],
           "segments": [
@@ -40769,13 +40737,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M09",
-                  "name": "푸쉬업 플러스",
-                  "focus_tag": "shoulder_stability"
-                },
-                {
                   "templateId": "M31",
                   "name": "버드독 3초 홀드",
+                  "focus_tag": "core_stability"
+                },
+                {
+                  "templateId": "M32",
+                  "name": "베어 포지션 홀드",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -40802,7 +40770,7 @@
           "meta_diff_friendly": {
             "session_focus_axes": [
               "trunk_control",
-              "deconditioned"
+              "lower_stability"
             ],
             "primary_type": "STABLE",
             "secondary_type": "HARNESS_DEFAULT_SECONDARY",
@@ -40833,7 +40801,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M28",
-            "M13",
+            "M09",
             "M18",
             "M12",
             "M46"
@@ -40863,13 +40831,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M13"
+            "M09"
           ],
           "all_template_ids": [
             "M28",
             "M18",
             "M12",
-            "M13",
+            "M09",
             "M46"
           ],
           "segments": [
@@ -40899,9 +40867,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M13",
-                  "name": "데드버그",
-                  "focus_tag": "core_stability"
+                  "templateId": "M09",
+                  "name": "푸쉬업 플러스",
+                  "focus_tag": "shoulder_stability"
                 }
               ]
             },
@@ -40958,7 +40926,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M27",
-            "M14",
+            "M13",
             "M18",
             "M12",
             "M43"
@@ -40988,13 +40956,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M14"
+            "M13"
           ],
           "all_template_ids": [
             "M27",
             "M18",
             "M12",
-            "M14",
+            "M13",
             "M43"
           ],
           "segments": [
@@ -41024,8 +40992,8 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M14",
-                  "name": "버드독",
+                  "templateId": "M13",
+                  "name": "데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -41083,8 +41051,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M04",
+            "M14",
             "M29",
-            "M30",
             "M12",
             "M06"
           ],
@@ -41112,14 +41080,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M29",
-            "M30"
+            "M14",
+            "M29"
           ],
           "all_template_ids": [
             "M04",
             "M12",
+            "M14",
             "M29",
-            "M30",
             "M06"
           ],
           "segments": [
@@ -41144,13 +41112,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M29",
-                  "name": "힐 탭 데드버그",
+                  "templateId": "M14",
+                  "name": "버드독",
                   "focus_tag": "core_stability"
                 },
                 {
-                  "templateId": "M30",
-                  "name": "쿼드러펫 숄더탭",
+                  "templateId": "M29",
+                  "name": "힐 탭 데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -41208,8 +41176,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M03",
+            "M30",
             "M33",
-            "M32",
             "M12",
             "M48"
           ],
@@ -41237,14 +41205,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M33",
-            "M32"
+            "M30",
+            "M33"
           ],
           "all_template_ids": [
             "M03",
             "M12",
+            "M30",
             "M33",
-            "M32",
             "M48"
           ],
           "segments": [
@@ -41269,14 +41237,14 @@
                   "focus_tag": "glute_activation"
                 },
                 {
+                  "templateId": "M30",
+                  "name": "쿼드러펫 숄더탭",
+                  "focus_tag": "core_stability"
+                },
+                {
                   "templateId": "M33",
                   "name": "사이드 플랭크 무릎 버전",
                   "focus_tag": "global_core"
-                },
-                {
-                  "templateId": "M32",
-                  "name": "베어 포지션 홀드",
-                  "focus_tag": "core_stability"
                 }
               ]
             },
@@ -41328,13 +41296,13 @@
           "baseline_session_anchor": "balanced_reset",
           "session_focus_axes": [
             "trunk_control",
-            "deconditioned"
+            "lower_stability"
           ],
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M02",
             "M31",
-            "M09",
+            "M32",
             "M12",
             "M01"
           ],
@@ -41362,14 +41330,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M09",
-            "M31"
+            "M31",
+            "M32"
           ],
           "all_template_ids": [
             "M02",
             "M12",
-            "M09",
             "M31",
+            "M32",
             "M01"
           ],
           "segments": [
@@ -41394,13 +41362,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M09",
-                  "name": "푸쉬업 플러스",
-                  "focus_tag": "shoulder_stability"
-                },
-                {
                   "templateId": "M31",
                   "name": "버드독 3초 홀드",
+                  "focus_tag": "core_stability"
+                },
+                {
+                  "templateId": "M32",
+                  "name": "베어 포지션 홀드",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -41427,7 +41395,7 @@
           "meta_diff_friendly": {
             "session_focus_axes": [
               "trunk_control",
-              "deconditioned"
+              "lower_stability"
             ],
             "primary_type": "STABLE",
             "secondary_type": "HARNESS_DEFAULT_SECONDARY",
@@ -41458,7 +41426,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M28",
-            "M13",
+            "M09",
             "M18",
             "M12",
             "M46"
@@ -41488,13 +41456,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M13"
+            "M09"
           ],
           "all_template_ids": [
             "M28",
             "M18",
             "M12",
-            "M13",
+            "M09",
             "M46"
           ],
           "segments": [
@@ -41524,9 +41492,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M13",
-                  "name": "데드버그",
-                  "focus_tag": "core_stability"
+                  "templateId": "M09",
+                  "name": "푸쉬업 플러스",
+                  "focus_tag": "shoulder_stability"
                 }
               ]
             },
@@ -41583,7 +41551,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M27",
-            "M14",
+            "M13",
             "M18",
             "M12",
             "M43"
@@ -41613,13 +41581,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M14"
+            "M13"
           ],
           "all_template_ids": [
             "M27",
             "M18",
             "M12",
-            "M14",
+            "M13",
             "M43"
           ],
           "segments": [
@@ -41649,8 +41617,8 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M14",
-                  "name": "버드독",
+                  "templateId": "M13",
+                  "name": "데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -41708,8 +41676,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M04",
+            "M14",
             "M29",
-            "M30",
             "M12",
             "M06"
           ],
@@ -41737,14 +41705,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M29",
-            "M30"
+            "M14",
+            "M29"
           ],
           "all_template_ids": [
             "M04",
             "M12",
+            "M14",
             "M29",
-            "M30",
             "M06"
           ],
           "segments": [
@@ -41769,13 +41737,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M29",
-                  "name": "힐 탭 데드버그",
+                  "templateId": "M14",
+                  "name": "버드독",
                   "focus_tag": "core_stability"
                 },
                 {
-                  "templateId": "M30",
-                  "name": "쿼드러펫 숄더탭",
+                  "templateId": "M29",
+                  "name": "힐 탭 데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -41833,8 +41801,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M03",
+            "M30",
             "M33",
-            "M32",
             "M12",
             "M48"
           ],
@@ -41862,14 +41830,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M33",
-            "M32"
+            "M30",
+            "M33"
           ],
           "all_template_ids": [
             "M03",
             "M12",
+            "M30",
             "M33",
-            "M32",
             "M48"
           ],
           "segments": [
@@ -41894,14 +41862,14 @@
                   "focus_tag": "glute_activation"
                 },
                 {
+                  "templateId": "M30",
+                  "name": "쿼드러펫 숄더탭",
+                  "focus_tag": "core_stability"
+                },
+                {
                   "templateId": "M33",
                   "name": "사이드 플랭크 무릎 버전",
                   "focus_tag": "global_core"
-                },
-                {
-                  "templateId": "M32",
-                  "name": "베어 포지션 홀드",
-                  "focus_tag": "core_stability"
                 }
               ]
             },
@@ -41953,13 +41921,13 @@
           "baseline_session_anchor": "balanced_reset",
           "session_focus_axes": [
             "trunk_control",
-            "deconditioned"
+            "lower_stability"
           ],
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
           "used_template_ids": [
             "M02",
             "M31",
-            "M09",
+            "M32",
             "M12",
             "M01"
           ],
@@ -41987,14 +41955,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M09",
-            "M31"
+            "M31",
+            "M32"
           ],
           "all_template_ids": [
             "M02",
             "M12",
-            "M09",
             "M31",
+            "M32",
             "M01"
           ],
           "segments": [
@@ -42019,13 +41987,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M09",
-                  "name": "푸쉬업 플러스",
-                  "focus_tag": "shoulder_stability"
-                },
-                {
                   "templateId": "M31",
                   "name": "버드독 3초 홀드",
+                  "focus_tag": "core_stability"
+                },
+                {
+                  "templateId": "M32",
+                  "name": "베어 포지션 홀드",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -42052,7 +42020,7 @@
           "meta_diff_friendly": {
             "session_focus_axes": [
               "trunk_control",
-              "deconditioned"
+              "lower_stability"
             ],
             "primary_type": "STABLE",
             "secondary_type": "HARNESS_DEFAULT_SECONDARY",
@@ -42083,7 +42051,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M28",
-            "M13",
+            "M09",
             "M18",
             "M12",
             "M46"
@@ -42113,13 +42081,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M13"
+            "M09"
           ],
           "all_template_ids": [
             "M28",
             "M18",
             "M12",
-            "M13",
+            "M09",
             "M46"
           ],
           "segments": [
@@ -42149,9 +42117,9 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M13",
-                  "name": "데드버그",
-                  "focus_tag": "core_stability"
+                  "templateId": "M09",
+                  "name": "푸쉬업 플러스",
+                  "focus_tag": "shoulder_stability"
                 }
               ]
             },
@@ -42208,7 +42176,7 @@
           "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M27",
-            "M14",
+            "M13",
             "M18",
             "M12",
             "M43"
@@ -42238,13 +42206,13 @@
           "main_segment_template_ids": [
             "M18",
             "M12",
-            "M14"
+            "M13"
           ],
           "all_template_ids": [
             "M27",
             "M18",
             "M12",
-            "M14",
+            "M13",
             "M43"
           ],
           "segments": [
@@ -42274,8 +42242,8 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M14",
-                  "name": "버드독",
+                  "templateId": "M13",
+                  "name": "데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -42333,8 +42301,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M04",
+            "M14",
             "M29",
-            "M30",
             "M12",
             "M06"
           ],
@@ -42362,14 +42330,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M29",
-            "M30"
+            "M14",
+            "M29"
           ],
           "all_template_ids": [
             "M04",
             "M12",
+            "M14",
             "M29",
-            "M30",
             "M06"
           ],
           "segments": [
@@ -42394,13 +42362,13 @@
                   "focus_tag": "glute_activation"
                 },
                 {
-                  "templateId": "M29",
-                  "name": "힐 탭 데드버그",
+                  "templateId": "M14",
+                  "name": "버드독",
                   "focus_tag": "core_stability"
                 },
                 {
-                  "templateId": "M30",
-                  "name": "쿼드러펫 숄더탭",
+                  "templateId": "M29",
+                  "name": "힐 탭 데드버그",
                   "focus_tag": "core_stability"
                 }
               ]
@@ -42458,8 +42426,8 @@
           "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
           "used_template_ids": [
             "M03",
+            "M30",
             "M33",
-            "M32",
             "M12",
             "M48"
           ],
@@ -42487,14 +42455,14 @@
           "gold_path_vector": null,
           "main_segment_template_ids": [
             "M12",
-            "M33",
-            "M32"
+            "M30",
+            "M33"
           ],
           "all_template_ids": [
             "M03",
             "M12",
+            "M30",
             "M33",
-            "M32",
             "M48"
           ],
           "segments": [
@@ -42519,14 +42487,14 @@
                   "focus_tag": "glute_activation"
                 },
                 {
+                  "templateId": "M30",
+                  "name": "쿼드러펫 숄더탭",
+                  "focus_tag": "core_stability"
+                },
+                {
                   "templateId": "M33",
                   "name": "사이드 플랭크 무릎 버전",
                   "focus_tag": "global_core"
-                },
-                {
-                  "templateId": "M32",
-                  "name": "베어 포지션 홀드",
-                  "focus_tag": "core_stability"
                 }
               ]
             },

@@ -1,7 +1,7 @@
 {
   "harness_version": "1.0.0",
   "script": "session-rail-truth-harness.mjs",
-  "generated_at": "2026-04-27T03:59:29.880Z",
+  "generated_at": "2026-04-27T04:12:45.374Z",
   "template_pool_source": "fixture_m01_m48_session_plan_v1",
   "template_count": 48,
   "modes": [
@@ -39,13 +39,13 @@
       "secondary_type": "HARNESS_DEFAULT_SECONDARY",
       "baseline_session_anchor": "lower_stability",
       "session_focus_axes": [
-        "upper_mobility",
+        "trunk_control",
         "deconditioned"
       ],
-      "session_rationale": "상체 가동성과 움직임 범위를 개선하는 세션고, 전신 회복 비중도 함께 넣었습니다.",
+      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 전신 회복 비중도 함께 넣었습니다.",
       "used_template_ids": [
         "M01",
-        "M07",
+        "M12",
         "M08",
         "M11",
         "M02"
@@ -74,21 +74,21 @@
       },
       "plan_quality_audit_summary": {
         "version": "plan_quality_audit_v1",
-        "score": 92,
+        "score": 100,
         "band": "acceptable",
-        "summary": "Plan quality: acceptable (score 92), 2 issue(s)",
-        "issue_count": 2,
+        "summary": "Plan quality: acceptable (score 100), 1 issue(s)",
+        "issue_count": 1,
         "strengths_count": 3
       },
       "first_session_intent_anchor": "lower_stability",
       "gold_path_vector": "lower_stability",
       "main_segment_template_ids": [
-        "M07",
+        "M12",
         "M08"
       ],
       "all_template_ids": [
         "M01",
-        "M07",
+        "M12",
         "M08",
         "M11",
         "M02"
@@ -110,9 +110,9 @@
           "item_count": 2,
           "items": [
             {
-              "templateId": "M07",
-              "name": "벽천사",
-              "focus_tag": "shoulder_mobility"
+              "templateId": "M12",
+              "name": "글루트 브릿지",
+              "focus_tag": "glute_activation"
             },
             {
               "templateId": "M08",
@@ -148,7 +148,7 @@
       "template_count": 48,
       "meta_diff_friendly": {
         "session_focus_axes": [
-          "upper_mobility",
+          "trunk_control",
           "deconditioned"
         ],
         "primary_type": "LOWER_INSTABILITY",
@@ -182,13 +182,12 @@
         "M28",
         "M36",
         "M22",
-        "M12",
-        "M18",
+        "M15",
         "M42"
       ],
       "constraint_flags": {
         "avoid_filter_applied": false,
-        "duplicate_filtered_count": 3,
+        "duplicate_filtered_count": 2,
         "focus_diversity_enforced": true,
         "fallback_used": false,
         "short_mode_applied": false,
@@ -209,16 +208,15 @@
       "first_session_intent_anchor": null,
       "gold_path_vector": null,
       "main_segment_template_ids": [
-        "M12",
         "M22",
+        "M15",
         "M36"
       ],
       "all_template_ids": [
         "M28",
-        "M12",
         "M22",
+        "M15",
         "M36",
-        "M18",
         "M42"
       ],
       "segments": [
@@ -238,14 +236,14 @@
           "item_count": 3,
           "items": [
             {
-              "templateId": "M12",
-              "name": "글루트 브릿지",
-              "focus_tag": "glute_activation"
-            },
-            {
               "templateId": "M22",
               "name": "사이드 라이잉 힙 어브덕션",
               "focus_tag": "glute_medius"
+            },
+            {
+              "templateId": "M15",
+              "name": "의자 박스 스쿼트",
+              "focus_tag": "lower_chain_stability"
             },
             {
               "templateId": "M36",
@@ -256,14 +254,8 @@
         },
         {
           "title": "Accessory",
-          "item_count": 1,
-          "items": [
-            {
-              "templateId": "M18",
-              "name": "양발 카프 레이즈",
-              "focus_tag": "ankle_mobility"
-            }
-          ]
+          "item_count": 0,
+          "items": []
         },
         {
           "title": "Cooldown",
@@ -320,7 +312,7 @@
       ],
       "constraint_flags": {
         "avoid_filter_applied": false,
-        "duplicate_filtered_count": 1,
+        "duplicate_filtered_count": 0,
         "focus_diversity_enforced": true,
         "fallback_used": false,
         "short_mode_applied": false,
@@ -445,7 +437,7 @@
       ],
       "constraint_flags": {
         "avoid_filter_applied": false,
-        "duplicate_filtered_count": 1,
+        "duplicate_filtered_count": 0,
         "focus_diversity_enforced": true,
         "fallback_used": false,
         "short_mode_applied": false,
@@ -563,14 +555,14 @@
       "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션입니다",
       "used_template_ids": [
         "M31",
-        "M15",
+        "M22",
         "M18",
         "M12",
         "M41"
       ],
       "constraint_flags": {
         "avoid_filter_applied": false,
-        "duplicate_filtered_count": 1,
+        "duplicate_filtered_count": 0,
         "focus_diversity_enforced": true,
         "fallback_used": false,
         "short_mode_applied": false,
@@ -593,13 +585,13 @@
       "main_segment_template_ids": [
         "M18",
         "M12",
-        "M15"
+        "M22"
       ],
       "all_template_ids": [
         "M31",
         "M18",
         "M12",
-        "M15",
+        "M22",
         "M41"
       ],
       "segments": [
@@ -629,9 +621,9 @@
               "focus_tag": "glute_activation"
             },
             {
-              "templateId": "M15",
-              "name": "의자 박스 스쿼트",
-              "focus_tag": "lower_chain_stability"
+              "templateId": "M22",
+              "name": "사이드 라이잉 힙 어브덕션",
+              "focus_tag": "glute_medius"
             }
           ]
         },
@@ -814,13 +806,13 @@
       "used_template_ids": [
         "M28",
         "M36",
-        "M18",
+        "M15",
         "M12",
         "M42"
       ],
       "constraint_flags": {
         "avoid_filter_applied": false,
-        "duplicate_filtered_count": 2,
+        "duplicate_filtered_count": 3,
         "focus_diversity_enforced": true,
         "fallback_used": false,
         "short_mode_applied": false,
@@ -841,14 +833,14 @@
       "first_session_intent_anchor": null,
       "gold_path_vector": null,
       "main_segment_template_ids": [
-        "M18",
         "M12",
+        "M15",
         "M36"
       ],
       "all_template_ids": [
         "M28",
-        "M18",
         "M12",
+        "M15",
         "M36",
         "M42"
       ],
@@ -869,14 +861,14 @@
           "item_count": 3,
           "items": [
             {
-              "templateId": "M18",
-              "name": "양발 카프 레이즈",
-              "focus_tag": "ankle_mobility"
-            },
-            {
               "templateId": "M12",
               "name": "글루트 브릿지",
               "focus_tag": "glute_activation"
+            },
+            {
+              "templateId": "M15",
+              "name": "의자 박스 스쿼트",
+              "focus_tag": "lower_chain_stability"
             },
             {
               "templateId": "M36",
@@ -1188,14 +1180,14 @@
       "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션입니다",
       "used_template_ids": [
         "M31",
-        "M15",
+        "M22",
         "M18",
         "M12",
         "M41"
       ],
       "constraint_flags": {
         "avoid_filter_applied": false,
-        "duplicate_filtered_count": 1,
+        "duplicate_filtered_count": 0,
         "focus_diversity_enforced": true,
         "fallback_used": false,
         "short_mode_applied": false,
@@ -1218,13 +1210,13 @@
       "main_segment_template_ids": [
         "M18",
         "M12",
-        "M15"
+        "M22"
       ],
       "all_template_ids": [
         "M31",
         "M18",
         "M12",
-        "M15",
+        "M22",
         "M41"
       ],
       "segments": [
@@ -1254,9 +1246,9 @@
               "focus_tag": "glute_activation"
             },
             {
-              "templateId": "M15",
-              "name": "의자 박스 스쿼트",
-              "focus_tag": "lower_chain_stability"
+              "templateId": "M22",
+              "name": "사이드 라이잉 힙 어브덕션",
+              "focus_tag": "glute_medius"
             }
           ]
         },
@@ -1439,13 +1431,13 @@
       "used_template_ids": [
         "M28",
         "M36",
-        "M18",
+        "M15",
         "M12",
         "M42"
       ],
       "constraint_flags": {
         "avoid_filter_applied": false,
-        "duplicate_filtered_count": 2,
+        "duplicate_filtered_count": 3,
         "focus_diversity_enforced": true,
         "fallback_used": false,
         "short_mode_applied": false,
@@ -1466,14 +1458,14 @@
       "first_session_intent_anchor": null,
       "gold_path_vector": null,
       "main_segment_template_ids": [
-        "M18",
         "M12",
+        "M15",
         "M36"
       ],
       "all_template_ids": [
         "M28",
-        "M18",
         "M12",
+        "M15",
         "M36",
         "M42"
       ],
@@ -1494,14 +1486,14 @@
           "item_count": 3,
           "items": [
             {
-              "templateId": "M18",
-              "name": "양발 카프 레이즈",
-              "focus_tag": "ankle_mobility"
-            },
-            {
               "templateId": "M12",
               "name": "글루트 브릿지",
               "focus_tag": "glute_activation"
+            },
+            {
+              "templateId": "M15",
+              "name": "의자 박스 스쿼트",
+              "focus_tag": "lower_chain_stability"
             },
             {
               "templateId": "M36",
@@ -1813,14 +1805,14 @@
       "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션입니다",
       "used_template_ids": [
         "M31",
-        "M15",
+        "M22",
         "M18",
         "M12",
         "M41"
       ],
       "constraint_flags": {
         "avoid_filter_applied": false,
-        "duplicate_filtered_count": 1,
+        "duplicate_filtered_count": 0,
         "focus_diversity_enforced": true,
         "fallback_used": false,
         "short_mode_applied": false,
@@ -1843,13 +1835,13 @@
       "main_segment_template_ids": [
         "M18",
         "M12",
-        "M15"
+        "M22"
       ],
       "all_template_ids": [
         "M31",
         "M18",
         "M12",
-        "M15",
+        "M22",
         "M41"
       ],
       "segments": [
@@ -1879,9 +1871,9 @@
               "focus_tag": "glute_activation"
             },
             {
-              "templateId": "M15",
-              "name": "의자 박스 스쿼트",
-              "focus_tag": "lower_chain_stability"
+              "templateId": "M22",
+              "name": "사이드 라이잉 힙 어브덕션",
+              "focus_tag": "glute_medius"
             }
           ]
         },

@@ -1,6 +1,6 @@
 # Session rail truth summary
 
-Generated: 2026-04-27T03:59:29.880Z
+Generated: 2026-04-27T04:12:45.374Z
 Harness: session-rail-truth-harness.mjs v1.0.0
 Template pool: fixture_m01_m48_session_plan_v1 (count=48)
 
