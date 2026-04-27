@@ -86,7 +86,9 @@ export function buildSquatCameraObservabilityExport(
 
   const ev = cs?.squatEventCycle;
   const eventCycle: Record<string, unknown> =
-    ev != null && typeof ev === 'object' ? { ...(ev as Record<string, unknown>) } : {};
+    ev != null && typeof ev === 'object'
+      ? { ...(ev as unknown as Record<string, unknown>) }
+      : {};
 
   const reversal: Record<string, unknown> =
     cs != null

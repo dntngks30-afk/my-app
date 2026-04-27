@@ -58,10 +58,10 @@ function sortSegmentItems(
 
   const itemWithMeta = items.map((item, idx) => {
     const template = templateById.get(item.templateId);
-    const bucket = deriveOrderingBucket(template, segmentTitle);
+    const bucket = deriveOrderingBucket(template ?? null, segmentTitle);
     const priority = getBucketPriority(bucket);
     const difficultyRank = getDifficultyRank(template?.difficulty);
-    const complexityScore = getComplexityScore(template);
+    const complexityScore = getComplexityScore(template ?? null);
     return { item, idx, template, bucket, priority, difficultyRank, complexityScore };
   });
 

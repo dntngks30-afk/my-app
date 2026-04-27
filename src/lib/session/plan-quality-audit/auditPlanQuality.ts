@@ -83,8 +83,8 @@ export function auditPlanQuality(
     priorityVector,
     painMode: context.painMode ?? plan.meta?.pain_mode ?? null,
     sessionNumber: context.sessionNumber ?? plan.meta?.session_number ?? 0,
-    safetyMode: context.safetyMode ?? plan.meta?.safety_mode ?? null,
-    redFlags: context.redFlags ?? plan.meta?.red_flags ?? null,
+    safetyMode: (context.safetyMode ?? plan.meta?.safety_mode) ?? undefined,
+    redFlags: (context.redFlags ?? plan.meta?.red_flags) ?? undefined,
   });
 
   if (context.isFirstSession) {

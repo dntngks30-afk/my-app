@@ -58,8 +58,8 @@ function getPhaseLengthsFromTrace(trace: unknown): PhaseLengths | null {
   const nums = arr.map((value) =>
     typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : null
   );
-  if (nums.some((value) => value === null)) return null;
-  return nums as PhaseLengths;
+  if (nums.length !== 4 || nums.some((value) => value === null)) return null;
+  return [nums[0]!, nums[1]!, nums[2]!, nums[3]!];
 }
 
 function buildTheme(

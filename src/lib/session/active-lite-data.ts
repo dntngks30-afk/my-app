@@ -34,7 +34,9 @@ export async function fetchActiveLiteData(
     const [progressRes, planStatusRes] = await Promise.all([
       supabase
         .from('session_program_progress')
-        .select('user_id, total_sessions, completed_sessions, active_session_number, last_completed_day_key')
+        .select(
+          'user_id, total_sessions, completed_sessions, active_session_number, last_completed_day_key, last_completed_at, updated_at'
+        )
         .eq('user_id', userId)
         .maybeSingle(),
       supabase.from('users').select('plan_status').eq('id', userId).maybeSingle(),
@@ -53,6 +55,8 @@ export async function fetchActiveLiteData(
         completed_sessions: 0,
         active_session_number: null,
         last_completed_day_key: null,
+        last_completed_at: null,
+        updated_at: '',
       };
     }
 

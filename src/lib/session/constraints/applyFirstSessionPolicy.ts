@@ -20,6 +20,7 @@ import { DECONDITIONED_REDUCTIONS } from '@/core/session-guardrail/guardrailRule
 import { RULE_IDS } from '@/lib/session/policy-registry';
 import { createConstraintReason } from './reasons';
 import { scoreTrunkCoreReplacementFit } from '@/lib/session/trunk-core-session1-shared';
+import type { SessionTemplateRow } from '@/lib/workout-routine/exercise-templates-db';
 import type {
   ConstraintEngineContext,
   ConstraintEngineResult,
@@ -32,6 +33,36 @@ const REPLACEMENT_PRIORITY_TAGS = [
   ['core_stability', 'lower_chain_stability'],
   ['full_body_reset', 'hip_mobility', 'ankle_mobility', 'calf_release'],
 ] as const;
+
+/** Membership identical to `tagGroup.includes(tag)` but accepts `focus_tags: string[]` without widening the tag list. */
+function replacementPriorityGroupContains(tagGroup: readonly string[], tag: string): boolean {
+  return (tagGroup as readonly string[]).includes(tag);
+}
+
+/**
+ * Guardrail helpers are typed as SessionTemplateRow; constraint templates omit DB-only fields.
+ * Defaults are inert for difficultyClamp / movementSafetyRules (they only read focus_tags, difficulty, progression_level, balance_demand, complexity).
+ */
+function constraintTemplateToSessionTemplateRowForGuardrails(
+  template: ConstraintTemplateLike
+): SessionTemplateRow {
+  return {
+    id: template.id,
+    name: template.name,
+    level: 1,
+    focus_tags: template.focus_tags,
+    contraindications: [],
+    duration_sec: 0,
+    media_ref: template.media_ref ?? null,
+    is_fallback: false,
+    phase: template.phase ?? undefined,
+    difficulty: template.difficulty ?? undefined,
+    avoid_if_pain_mode: template.avoid_if_pain_mode ?? undefined,
+    progression_level: template.progression_level ?? undefined,
+    balance_demand: template.balance_demand ?? undefined,
+    complexity: template.complexity ?? undefined,
+  };
+}
 
 type FirstSessionResult = {
   plan: PlanJsonOutput;
@@ -83,14 +114,15 @@ function findReplacementTemplate(
   for (const tagGroup of REPLACEMENT_PRIORITY_TAGS) {
     const candidates = templates.filter((template) => {
       if (usedIds.has(template.id)) return false;
-      if (!isSafeForFirstSession(template)) return false;
+      if (!isSafeForFirstSession(constraintTemplateToSessionTemplateRowForGuardrails(template)))
+        return false;
       if (painMode !== 'none' && (template.avoid_if_pain_mode ?? []).includes(painMode)) return false;
       const phaseOk =
         !template.phase ||
         template.phase === desiredPhase ||
         (segmentTitle === 'Cooldown' && template.phase === 'accessory');
       if (!phaseOk) return false;
-      return template.focus_tags.some((tag) => tagGroup.includes(tag as (typeof tagGroup)[number]));
+      return template.focus_tags.some((tag) => replacementPriorityGroupContains(tagGroup, tag));
     });
     if (candidates.length === 0) continue;
     const ranked = candidates
@@ -148,11 +180,12 @@ export function applyFirstSessionPolicy(
       const template = templateById.get(item.templateId);
       if (!template) continue;
 
-      let shouldReplace = exceedsDifficultyCap(template);
+      const guardRow = constraintTemplateToSessionTemplateRowForGuardrails(template);
+      let shouldReplace = exceedsDifficultyCap(guardRow);
       if (painMode !== 'none' && (template.avoid_if_pain_mode ?? []).includes(painMode)) {
         shouldReplace = true;
       }
-      if (hasAsymmetry && (hasHighBalanceDemand(template) || hasSingleLegLoad(template))) {
+      if (hasAsymmetry && (hasHighBalanceDemand(guardRow) || hasSingleLegLoad(guardRow))) {
         shouldReplace = true;
       }
 
@@ -199,7 +232,13 @@ export function applyFirstSessionPolicy(
   for (let idx = 0; idx < flattened.length - 1; idx++) {
     const a = flattened[idx]!;
     const b = flattened[idx + 1]!;
-    if (!isUnsafeCombination(a.template, b.template)) continue;
+    if (
+      !isUnsafeCombination(
+        constraintTemplateToSessionTemplateRowForGuardrails(a.template),
+        constraintTemplateToSessionTemplateRowForGuardrails(b.template)
+      )
+    )
+      continue;
 
     const replacement = findReplacementTemplate(
       templates,

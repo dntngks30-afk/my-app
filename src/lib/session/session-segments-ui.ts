@@ -57,12 +57,12 @@ export function normalizeSessionSegmentsForUI(
           _originalItemIdx: itemIdx,
         });
       }
-      mainDuration += seg.duration_sec;
+      mainDuration += seg.duration_sec ?? 0;
     } else {
       flushMain();
       result.push({
         title: displayTitle,
-        duration_sec: seg.duration_sec,
+        duration_sec: seg.duration_sec ?? 0,
         items: items.map((item, itemIdx) => ({
           ...item,
           _originalSegIdx: segIdx,

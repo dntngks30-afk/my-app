@@ -320,7 +320,10 @@ export function getMovementSetupGuide(
  */
 export function getEffectiveRetryGuidance(
   stepId: CameraStepId,
-  gate: Pick<ExerciseGateResult, 'failureReasons' | 'guardrail' | 'userGuidance'>
+  gate: Pick<ExerciseGateResult, 'failureReasons' | 'userGuidance'> & {
+    /** Retry copy only consumes `flags`; full StepGuardrailResult is accepted. */
+    guardrail?: Pick<ExerciseGateResult['guardrail'], 'flags'> | ExerciseGateResult['guardrail'] | null;
+  }
 ): { primary: string; secondary?: string } {
   const recovery = getRetryRecoveryGuidance(
     stepId,
