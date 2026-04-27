@@ -30,8 +30,12 @@ export function getStripeServerClient(): Stripe {
     );
   }
 
+  // Must match the SDK's LatestApiVersion (see node_modules/stripe/types/apiVersion.d.ts).
+  // Before production deploy, confirm the Stripe account/Dashboard default API version is compatible.
+  const apiVersion: Stripe.LatestApiVersion = '2026-01-28.clover';
+
   stripeInstance = new Stripe(secretKey, {
-    apiVersion: '2024-12-18.acacia', // 최신 API 버전 사용
+    apiVersion,
     typescript: true,
   });
 
@@ -218,12 +222,14 @@ export async function getStripePaymentIntent(
 /**
  * 에러 타입 가드: Stripe 에러인지 확인
  */
-export function isStripeError(error: unknown): error is Stripe.StripeError {
+export function isStripeError(error: unknown): error is Stripe.errors.StripeError {
   return (
     typeof error === 'object' &&
     error !== null &&
     'type' in error &&
-    'message' in error
+    'message' in error &&
+    typeof (error as { type: unknown }).type === 'string' &&
+    typeof (error as { message: unknown }).message === 'string'
   );
 }
 

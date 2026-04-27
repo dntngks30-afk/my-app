@@ -10,8 +10,9 @@
  */
 
 import React from 'react';
-import { renderToBuffer } from '@react-pdf/renderer';
-import { FreeReportPDF, getCTAMessage, CTAConfig } from './free-report-pdf';
+import { renderToBuffer, Document } from '@react-pdf/renderer';
+import type { CTAConfig } from './free-report-pdf';
+import { FreeReportPDF, getCTAMessage } from './free-report-pdf';
 import { PremiumReportPDF } from './premium-report-pdf';
 import type { AnalysisResult } from '@/types/survey';
 
@@ -105,7 +106,7 @@ async function generateFreePDF(
     userEmail: userProfile.email,
     userName: userProfile.name,
     observations: observations || [],
-  });
+  }) as React.ReactElement<React.ComponentProps<typeof Document>>;
 
   const buffer = await renderToBuffer(element);
   const filename = `PostureLab_무료체험_${userProfile.name}_${formatDate()}.pdf`;
@@ -144,7 +145,7 @@ async function generatePaidPDF(
     analysis,
     userProfile,
     surveyResponses,
-  });
+  }) as React.ReactElement<React.ComponentProps<typeof Document>>;
 
   const buffer = await renderToBuffer(element);
   const filename = `PostureLab_종합분석_${userProfile.name}_${formatDate()}.pdf`;

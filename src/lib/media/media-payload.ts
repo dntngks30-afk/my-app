@@ -11,6 +11,7 @@
  */
 
 import Mux from '@mux/mux-node';
+import type { MuxJWTSignOptions } from '@mux/mux-node/util/jwt-types';
 
 export interface MediaRefMux {
   provider: 'mux';
@@ -60,7 +61,7 @@ async function signMuxPlaybackId(playbackId: string, type: 'video' | 'thumbnail'
   if (!mux?.jwt) return null;
 
   try {
-    const opts: { type: string; expiration: string } = {
+    const opts: MuxJWTSignOptions<'video' | 'thumbnail'> = {
       type: type === 'video' ? 'video' : 'thumbnail',
       expiration: TOKEN_EXPIRY,
     };

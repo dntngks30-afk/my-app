@@ -227,7 +227,7 @@ async function tryPlayClip(
 
   try {
     let clipPlaybackSettled = false;
-    let clipCompletionSafetyId: ReturnType<typeof window.setTimeout> | null = null;
+    let clipCompletionSafetyId: number | null = null;
 
     function clearClipCompletionSafety() {
       if (clipCompletionSafetyId !== null) {
@@ -411,6 +411,7 @@ export async function playCueWithFallback(
     setPlaybackObs({
       cueKey: cue.dedupeKey,
       clipKey: null,
+      clipPath: null,
       mode: 'speech',
       clipMissing: true,
       success: false,
