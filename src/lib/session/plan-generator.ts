@@ -65,6 +65,11 @@ import {
   scoreDeconditionedStableIntentFit,
   scoreDeconditionedStableTemplatePolishBonus,
 } from '@/lib/session/deconditioned-stable-session1-shared';
+import {
+  buildPrepCooldownAlignmentMeta,
+  scorePrepCooldownAxisFit,
+  type PrepCooldownAlignmentMetaV1,
+} from '@/lib/session/prep-cooldown-axis-profile';
 
 const REPETITION_PENALTY = 100;
 const CONTRAINDICATION_PENALTY = 100;
@@ -433,6 +438,8 @@ export type PlanJsonOutput = {
       gold_path_vector: string | null;
       intent_source: 'baseline_anchor' | 'legacy_band' | 'none';
     };
+    /** PR-PREP-COOLDOWN-AXIS-ALIGN-01: Prep/Cooldown axis fit (additive, non-UI) */
+    prep_cooldown_alignment?: PrepCooldownAlignmentMetaV1;
   };
   flags: { recovery: boolean; short: boolean };
   segments: PlanSegment[];
@@ -632,7 +639,8 @@ function scoreGoldPathSegmentFit(
     sessionNumber: number;
     hints?: SurveySessionHints;
     hardDominated: boolean;
-  }
+  },
+  goldPathVector?: GoldPathVector | null
 ): number {
   let score = 0;
 
@@ -681,6 +689,15 @@ function scoreGoldPathSegmentFit(
     template,
     surveyAdjust?.hardDominated ?? true
   );
+
+  if (goldPathVector && (rule.kind === 'prep' || rule.kind === 'cooldown')) {
+    score += scorePrepCooldownAxisFit({
+      goldPathVector,
+      segmentKind: rule.kind,
+      focusTags: template.focus_tags,
+      targetVector: template.target_vector,
+    });
+  }
 
   return score;
 }
@@ -732,7 +749,13 @@ function selectGoldPathTemplates(
         template,
         score:
           score +
-          scoreGoldPathSegmentFit(template, rule, input.pain_mode, surveyAdjust) +
+          scoreGoldPathSegmentFit(
+            template,
+            rule,
+            input.pain_mode,
+            surveyAdjust,
+            vector
+          ) +
           scoreFirstSessionIntentFit(template, rule, firstSessionIntent),
       }))
       .sort((a, b) => {
@@ -1487,11 +1510,18 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     redFlags: input.red_flags ?? null,
   });
 
+  const prepCooldownAlignment = buildPrepCooldownAlignmentMeta(
+    planAfterReconcile.segments,
+    templatesById,
+    goldPathVector
+  );
+
   return {
     ...planAfterReconcile,
     meta: {
       ...planAfterReconcile.meta,
       plan_quality_audit: auditResult,
+      prep_cooldown_alignment: prepCooldownAlignment,
     },
   };
 }
