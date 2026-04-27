@@ -832,7 +832,7 @@ export const PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW: Record<
     },
     {
       purpose: '과하게 힘들이지 않고 몸 전체를 같이 쓰는 움직임으로 마무리해요.',
-      examples: '제자리 체중 이동 · Sit-to-Stand',
+      examples: '제자리 체중 이동 · 박스 스쿼트',
     },
   ],
   STABLE: [
@@ -846,7 +846,7 @@ export const PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW: Record<
     },
     {
       purpose: '지금의 균형을 유지한 채 전신 움직임으로 자연스럽게 이어가요.',
-      examples: '스플릿 스탠스 체중 이동 · 스쿼트 투 리치',
+      examples: '스플릿 스탠스 체중 이동 · 박스 스쿼트',
     },
   ],
   UNKNOWN: [

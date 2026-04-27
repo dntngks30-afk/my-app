@@ -31,6 +31,7 @@ import {
   pickLightMissingHintLine,
   stripSummaryMetaSuffix,
 } from './public-result-labels';
+import { getResultStep3Assets } from './result-step3-assets';
 
 export type PublicResultStage = 'baseline' | 'refined' | 'fallback';
 
@@ -119,6 +120,7 @@ export function PublicResultRenderer({
   const step1Slots = getBaselineStep1ResultSlots(pt);
   const life = PRIMARY_TYPE_LIFESTYLE_HABITS[pt] ?? PRIMARY_TYPE_LIFESTYLE_HABITS.UNKNOWN;
   const order = PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW[pt] ?? PRIMARY_TYPE_EXERCISE_ORDER_PREVIEW.UNKNOWN;
+  const step3Assets = getResultStep3Assets(pt);
   /** summary_copy 계약 필드 — 괄호 메타 제거본 (표시는 카드 슬롯 우선, a11y·심볼 정합용) */
   const summaryCopyPlain = stripSummaryMetaSuffix(result.summary_copy);
 
@@ -256,6 +258,7 @@ export function PublicResultRenderer({
             headline={STEP3_HEADLINE}
             refinedContextLine={stage === 'refined' ? STEP3_REFINED_CONTEXT_LINE : null}
             stages={step3Stages}
+            stageAssets={step3Assets}
             habitSectionTitle={STEP3_LIFESTYLE_SECTION_TITLE}
             habits={life}
             provenanceLine={stageMeta.provenanceCopy}

@@ -1,12 +1,12 @@
 'use client';
 
-import { ImageIcon } from 'lucide-react';
+import Image from 'next/image';
 import {
-  STEP3_MEDIA_PLACEHOLDER_ARIA,
   STEP3_ACTION_SCENE_SUBLINE,
   STEP3_EXECUTION_BRIDGE_TITLE,
   STEP3_EXECUTION_BRIDGE_BULLETS,
 } from '@/components/public-result/public-result-labels';
+import type { ResultStep3Assets } from '@/components/public-result/result-step3-assets';
 
 const glassHabit =
   'rounded-2xl border border-white/[0.06] bg-[#151b2d]/45 px-4 py-3 backdrop-blur-sm';
@@ -23,6 +23,8 @@ export type BaselineResultStep3ScrollSceneProps = {
   headline: string;
   refinedContextLine: string | null;
   stages: readonly [BaselineResultStep3Stage, BaselineResultStep3Stage, BaselineResultStep3Stage];
+  /** [먼저 풀기, 그다음 깨우기, 움직임 연결하기] — 각 카드 대표 동작 이미지 */
+  stageAssets: ResultStep3Assets;
   habitSectionTitle: string;
   habits: readonly [string, string, string];
   provenanceLine: string;
@@ -36,6 +38,7 @@ export function BaselineResultStep3ScrollScene({
   headline,
   refinedContextLine,
   stages,
+  stageAssets,
   habitSectionTitle,
   habits,
   provenanceLine,
@@ -63,9 +66,9 @@ export function BaselineResultStep3ScrollScene({
       </header>
 
       <div className="space-y-7">
-        {stages.map((s) => (
+        {stages.map((s, i) => (
           <article
-            key={s.title}
+            key={s.stageLabel}
             className="overflow-hidden rounded-2xl border border-[#ffb77d]/18 bg-gradient-to-b from-[#161d31]/95 to-[#0f1424]/95 p-5 shadow-[0_12px_40px_rgba(0,0,0,0.25)] backdrop-blur-md"
           >
             <p
@@ -92,20 +95,14 @@ export function BaselineResultStep3ScrollScene({
             >
               {s.examples}
             </p>
-            {/* 대표 동작 예시 이미지용 고정 슬롯 — 추후 asset 삽입만 하면 됨 */}
-            <div
-              className="mt-5 flex aspect-[4/3] min-h-[168px] w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#ffb77d]/22 bg-gradient-to-b from-[#1c2439]/90 to-[#0e1322]/90"
-              role="img"
-              aria-label={STEP3_MEDIA_PLACEHOLDER_ARIA}
-            >
-              <ImageIcon className="size-9 text-[#ffb77d]/25" strokeWidth={1.25} aria-hidden />
-              <span
-                className="text-[11px] text-slate-600"
-                style={{ fontFamily: 'var(--font-sans-noto)' }}
-                aria-hidden
-              >
-                동작 예시
-              </span>
+            <div className="relative mt-5 aspect-[4/3] min-h-[168px] w-full overflow-hidden rounded-xl border border-[#ffb77d]/22 bg-[#0e1322]">
+              <Image
+                src={stageAssets[i]!}
+                alt={`${s.title} — ${s.examples}`}
+                fill
+                sizes="(max-width: 768px) 100vw, 420px"
+                className="object-cover"
+              />
             </div>
           </article>
         ))}
