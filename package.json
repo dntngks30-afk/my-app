@@ -90,6 +90,8 @@
     "test:full-rail-type-continuity-fixture-48": "npx tsx scripts/full-rail-type-continuity-fixture48-regression.mjs",
     "test:full-rail-adaptive-branch-fixture-48": "npx tsx scripts/full-rail-adaptive-branch-fixture48-regression.mjs",
     "test:session-rationale-copy": "npx tsx scripts/session-rationale-copy-smoke.mjs",
+    "test:pilot-template-parity": "node scripts/pilot-template-parity-check.mjs",
+    "test:pilot-session": "node scripts/pilot-session-smoke-bundle.mjs",
     "ops:template-media:mux-upload": "node scripts/template-media/mux-batch-upload.mjs",
     "ops:template-media:attach": "node scripts/template-media/apply-template-media-refresh.mjs",
     "ops:template-media:legacy-delete": "node scripts/template-media/delete-legacy-template-assets.mjs",
