@@ -9,12 +9,29 @@ import { NeoButton, NeoPageLayout } from '@/components/neobrutalism';
 const CANONICAL_ORIGIN = process.env.NEXT_PUBLIC_CANONICAL_ORIGIN ?? null;
 const SKIP_CANONICAL_REDIRECT = process.env.NEXT_PUBLIC_SKIP_CANONICAL_REDIRECT === '1';
 
+type OAuthProvider = 'google' | 'kakao';
+
+function sanitizeProvider(provider: string | null | undefined): OAuthProvider | null {
+  return provider === 'google' || provider === 'kakao' ? provider : null;
+}
+
+function getOAuthErrorMessage(provider: OAuthProvider | null): string {
+  if (provider === 'google') return 'Google 로그인에 실패했습니다. 다시 시도해 주세요.';
+  if (provider === 'kakao') return '카카오 로그인에 실패했습니다. 다시 시도해 주세요.';
+  return 'OAuth 로그인에 실패했습니다. 다시 시도해 주세요.';
+}
+
 interface AppAuthClientProps {
   next: string;
   errorParam?: string | null;
+  providerParam?: string | null;
 }
 
-export default function AppAuthClient({ next, errorParam }: AppAuthClientProps) {
+export default function AppAuthClient({
+  next,
+  errorParam,
+  providerParam,
+}: AppAuthClientProps) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [oauthError, setOauthError] = useState<string | null>(null);
 
@@ -25,12 +42,23 @@ export default function AppAuthClient({ next, errorParam }: AppAuthClientProps) 
 
   useEffect(() => {
     if (errorParam === 'oauth') {
-      setOauthError('OAuth 로그인에 실패했습니다. 다시 시도해 주세요.');
+      const provider = sanitizeProvider(providerParam);
+      setOauthError(getOAuthErrorMessage(provider));
     }
-  }, [errorParam]);
+  }, [errorParam, providerParam]);
 
-  const handleOAuth = async (provider: 'google' | 'kakao') => {
+  const handleOAuth = async (provider: OAuthProvider) => {
     setOauthError(null);
+
+    console.info('[AUTH-OAUTH]', {
+      event: 'oauth_start',
+      provider,
+      currentOrigin: typeof window !== 'undefined' ? window.location.origin : null,
+      canonicalOriginConfigured: Boolean(CANONICAL_ORIGIN),
+      canonicalOrigin: CANONICAL_ORIGIN,
+      skipCanonicalRedirect: SKIP_CANONICAL_REDIRECT,
+      nextPath: next,
+    });
 
     // 1) Canonical origin 강제: alias 도메인에서 OAuth 시 canonical으로 리다이렉트 후 재진입
     if (
@@ -39,6 +67,13 @@ export default function AppAuthClient({ next, errorParam }: AppAuthClientProps) 
       !SKIP_CANONICAL_REDIRECT &&
       window.location.origin !== CANONICAL_ORIGIN
     ) {
+      console.info('[AUTH-OAUTH]', {
+        event: 'oauth_canonical_redirect',
+        provider,
+        fromOrigin: window.location.origin,
+        toOrigin: CANONICAL_ORIGIN,
+        targetPath: window.location.pathname,
+      });
       const target = `${CANONICAL_ORIGIN}${window.location.pathname}${window.location.search}`;
       window.location.replace(target);
       return;
@@ -46,13 +81,35 @@ export default function AppAuthClient({ next, errorParam }: AppAuthClientProps) 
 
     // 2) redirectTo는 항상 canonical origin 사용 (PKCE/localStorage 일치)
     const base = CANONICAL_ORIGIN || (typeof window !== 'undefined' ? window.location.origin : '');
-    const redirectTo = `${base}/auth/callback?next=${encodeURIComponent(next)}`;
+    const callbackUrl = new URL('/auth/callback', base);
+    callbackUrl.searchParams.set('next', next);
+    callbackUrl.searchParams.set('provider', provider);
+    const redirectTo = callbackUrl.toString();
+
+    console.info('[AUTH-OAUTH]', {
+      event: 'oauth_redirect_to_built',
+      provider,
+      redirectToOrigin: callbackUrl.origin,
+      redirectToPathname: callbackUrl.pathname,
+    });
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo },
     });
     if (error) {
-      setOauthError(error.message);
+      const status =
+        error && typeof error === 'object' && 'status' in error
+          ? (error as { status?: number }).status
+          : undefined;
+      console.error('[AUTH-OAUTH]', {
+        event: 'oauth_signin_error',
+        provider,
+        message: error.message,
+        name: error.name,
+        status,
+      });
+      setOauthError(getOAuthErrorMessage(provider));
     }
   };
 

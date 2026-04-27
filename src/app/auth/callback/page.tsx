@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import CallbackClient from './CallbackClient';
 
-type SearchParams = Promise<{ code?: string; next?: string }>;
+type SearchParams = Promise<{ code?: string; next?: string; provider?: string }>;
 
 export default async function AuthCallbackPage({
   searchParams,
@@ -20,6 +20,7 @@ export default async function AuthCallbackPage({
       <CallbackClient
         codeParam={params?.code}
         nextParam={params?.next}
+        providerParam={params?.provider}
       />
     </Suspense>
   );

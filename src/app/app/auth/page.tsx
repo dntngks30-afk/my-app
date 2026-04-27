@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import AppAuthClient from './AppAuthClient';
 
-type SearchParams = Promise<{ next?: string; error?: string }>;
+type SearchParams = Promise<{ next?: string; error?: string; provider?: string }>;
 
 export default async function AppAuthPage({
   searchParams,
@@ -18,7 +18,11 @@ export default async function AppAuthPage({
         </div>
       }
     >
-      <AppAuthClient next={next} errorParam={params?.error} />
+      <AppAuthClient
+        next={next}
+        errorParam={params?.error}
+        providerParam={params?.provider}
+      />
     </Suspense>
   );
 }
