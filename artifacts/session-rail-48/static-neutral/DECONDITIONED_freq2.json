@@ -1,0 +1,1036 @@
+{
+  "harness_version": "1.0.0",
+  "script": "session-rail-truth-harness.mjs",
+  "generated_at": "2026-04-27T03:59:29.880Z",
+  "template_pool_source": "fixture_m01_m48_session_plan_v1",
+  "template_count": 48,
+  "modes": [
+    "static-neutral"
+  ],
+  "note": "Direct buildSessionPlanJson calls only — no HTTP, no session-gen-cache.",
+  "mode": "static-neutral",
+  "case_label": "DECONDITIONED×freq2",
+  "fixture_label": "Deconditioned",
+  "primary_type": "DECONDITIONED",
+  "target_frequency": 2,
+  "total_sessions": 8,
+  "phase_lengths": [
+    2,
+    2,
+    2,
+    2
+  ],
+  "adaptive_branch": "neutral",
+  "sessions": [
+    {
+      "session_number": 1,
+      "total_sessions": 8,
+      "target_frequency": 2,
+      "phase": 1,
+      "phase_lengths": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "theme": "Phase 1 · full_body_reset 안정화",
+      "result_type": "DECONDITIONED",
+      "primary_type": "DECONDITIONED",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "deconditioned",
+      "session_focus_axes": [
+        "trunk_control",
+        "deconditioned"
+      ],
+      "session_rationale": "기본 움직임 회복을 시작하면서 몸통 연결을 천천히 세우는 세션입니다.",
+      "used_template_ids": [
+        "M01",
+        "M31",
+        "M13",
+        "M02",
+        "M28"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 2,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": true,
+        "survey_session_hints_present": false,
+        "survey_session_hints_eligible": false,
+        "survey_session_hints_applied": false,
+        "survey_session_hints_blocked": false,
+        "survey_session_hints_blocked_by": null
+      },
+      "baseline_alignment": {
+        "baseline_session_anchor": "deconditioned",
+        "first_session_intent_anchor": "deconditioned",
+        "gold_path_vector": "deconditioned",
+        "intent_source": "baseline_anchor"
+      },
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 100,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 100), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 3
+      },
+      "first_session_intent_anchor": "deconditioned",
+      "gold_path_vector": "deconditioned",
+      "main_segment_template_ids": [
+        "M31",
+        "M13"
+      ],
+      "all_template_ids": [
+        "M01",
+        "M31",
+        "M13",
+        "M02",
+        "M28"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M01",
+              "name": "90/90 벽 호흡",
+              "focus_tag": "full_body_reset"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 2,
+          "items": [
+            {
+              "templateId": "M31",
+              "name": "버드독 3초 홀드",
+              "focus_tag": "core_stability"
+            },
+            {
+              "templateId": "M13",
+              "name": "데드버그",
+              "focus_tag": "core_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M02",
+              "name": "크로커다일 호흡",
+              "focus_tag": "full_body_reset"
+            }
+          ]
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M28",
+              "name": "레그업 더 월",
+              "focus_tag": "full_body_reset"
+            }
+          ]
+        }
+      ],
+      "template_pool_source": "fixture_m01_m48_session_plan_v1",
+      "template_count": 48,
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "trunk_control",
+          "deconditioned"
+        ],
+        "primary_type": "DECONDITIONED",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "deconditioned",
+        "result_type": "DECONDITIONED"
+      }
+    },
+    {
+      "session_number": 2,
+      "total_sessions": 8,
+      "target_frequency": 2,
+      "phase": 1,
+      "phase_lengths": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "theme": "Phase 1 · full_body_reset 안정화",
+      "result_type": "DECONDITIONED",
+      "primary_type": "DECONDITIONED",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "deconditioned",
+      "session_focus_axes": [
+        "trunk_control",
+        "lower_stability"
+      ],
+      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
+      "used_template_ids": [
+        "M42",
+        "M09",
+        "M14",
+        "M12",
+        "M27"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 1,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M12",
+        "M09",
+        "M14"
+      ],
+      "all_template_ids": [
+        "M42",
+        "M12",
+        "M09",
+        "M14",
+        "M27"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M42",
+              "name": "하프 니링 힙 쉬프트",
+              "focus_tag": "hip_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M12",
+              "name": "글루트 브릿지",
+              "focus_tag": "glute_activation"
+            },
+            {
+              "templateId": "M09",
+              "name": "푸쉬업 플러스",
+              "focus_tag": "shoulder_stability"
+            },
+            {
+              "templateId": "M14",
+              "name": "버드독",
+              "focus_tag": "core_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M27",
+              "name": "오픈북",
+              "focus_tag": "thoracic_mobility"
+            }
+          ]
+        }
+      ],
+      "template_pool_source": "fixture_m01_m48_session_plan_v1",
+      "template_count": 48,
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "trunk_control",
+          "lower_stability"
+        ],
+        "primary_type": "DECONDITIONED",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "deconditioned",
+        "result_type": "DECONDITIONED"
+      }
+    },
+    {
+      "session_number": 3,
+      "total_sessions": 8,
+      "target_frequency": 2,
+      "phase": 2,
+      "phase_lengths": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "theme": "Phase 2 · core_control 심화",
+      "result_type": "DECONDITIONED",
+      "primary_type": "DECONDITIONED",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "deconditioned",
+      "session_focus_axes": [
+        "trunk_control",
+        "lower_stability"
+      ],
+      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
+      "used_template_ids": [
+        "M11",
+        "M29",
+        "M30",
+        "M12",
+        "M04"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 1,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M12",
+        "M29",
+        "M30"
+      ],
+      "all_template_ids": [
+        "M11",
+        "M12",
+        "M29",
+        "M30",
+        "M04"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M11",
+              "name": "사각자세 록백",
+              "focus_tag": "hip_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M12",
+              "name": "글루트 브릿지",
+              "focus_tag": "glute_activation"
+            },
+            {
+              "templateId": "M29",
+              "name": "힐 탭 데드버그",
+              "focus_tag": "core_stability"
+            },
+            {
+              "templateId": "M30",
+              "name": "쿼드러펫 숄더탭",
+              "focus_tag": "core_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M04",
+              "name": "흉추 신전",
+              "focus_tag": "thoracic_mobility"
+            }
+          ]
+        }
+      ],
+      "template_pool_source": "fixture_m01_m48_session_plan_v1",
+      "template_count": 48,
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "trunk_control",
+          "lower_stability"
+        ],
+        "primary_type": "DECONDITIONED",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "deconditioned",
+        "result_type": "DECONDITIONED"
+      }
+    },
+    {
+      "session_number": 4,
+      "total_sessions": 8,
+      "target_frequency": 2,
+      "phase": 2,
+      "phase_lengths": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "theme": "Phase 2 · core_control 심화",
+      "result_type": "DECONDITIONED",
+      "primary_type": "DECONDITIONED",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "deconditioned",
+      "session_focus_axes": [
+        "trunk_control",
+        "lower_stability"
+      ],
+      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
+      "used_template_ids": [
+        "M41",
+        "M33",
+        "M34",
+        "M12",
+        "M06"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 0,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M12",
+        "M34",
+        "M33"
+      ],
+      "all_template_ids": [
+        "M41",
+        "M12",
+        "M34",
+        "M33",
+        "M06"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M41",
+              "name": "벽 발목 전방 이동",
+              "focus_tag": "ankle_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M12",
+              "name": "글루트 브릿지",
+              "focus_tag": "glute_activation"
+            },
+            {
+              "templateId": "M34",
+              "name": "마치 브릿지",
+              "focus_tag": "glute_activation"
+            },
+            {
+              "templateId": "M33",
+              "name": "사이드 플랭크 무릎 버전",
+              "focus_tag": "global_core"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M06",
+              "name": "문틀 가슴 스트레치",
+              "focus_tag": "shoulder_mobility"
+            }
+          ]
+        }
+      ],
+      "template_pool_source": "fixture_m01_m48_session_plan_v1",
+      "template_count": 48,
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "trunk_control",
+          "lower_stability"
+        ],
+        "primary_type": "DECONDITIONED",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "deconditioned",
+        "result_type": "DECONDITIONED"
+      }
+    },
+    {
+      "session_number": 5,
+      "total_sessions": 8,
+      "target_frequency": 2,
+      "phase": 3,
+      "phase_lengths": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "theme": "Phase 3 · 통합",
+      "result_type": "DECONDITIONED",
+      "primary_type": "DECONDITIONED",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "deconditioned",
+      "session_focus_axes": [
+        "trunk_control",
+        "lower_stability"
+      ],
+      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
+      "used_template_ids": [
+        "M03",
+        "M32",
+        "M20",
+        "M12",
+        "M10"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 0,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M20",
+        "M12",
+        "M32"
+      ],
+      "all_template_ids": [
+        "M03",
+        "M20",
+        "M12",
+        "M32",
+        "M10"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M03",
+              "name": "턱 당기기",
+              "focus_tag": "upper_trap_release"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M20",
+              "name": "월 서포티드 힙힌지",
+              "focus_tag": "hip_mobility"
+            },
+            {
+              "templateId": "M12",
+              "name": "글루트 브릿지",
+              "focus_tag": "glute_activation"
+            },
+            {
+              "templateId": "M32",
+              "name": "베어 포지션 홀드",
+              "focus_tag": "core_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M10",
+              "name": "고관절 굴곡근 스트레치",
+              "focus_tag": "hip_flexor_stretch"
+            }
+          ]
+        }
+      ],
+      "template_pool_source": "fixture_m01_m48_session_plan_v1",
+      "template_count": 48,
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "trunk_control",
+          "lower_stability"
+        ],
+        "primary_type": "DECONDITIONED",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "deconditioned",
+        "result_type": "DECONDITIONED"
+      }
+    },
+    {
+      "session_number": 6,
+      "total_sessions": 8,
+      "target_frequency": 2,
+      "phase": 3,
+      "phase_lengths": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "theme": "Phase 3 · 통합",
+      "result_type": "DECONDITIONED",
+      "primary_type": "DECONDITIONED",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "deconditioned",
+      "session_focus_axes": [
+        "trunk_control",
+        "lower_stability"
+      ],
+      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
+      "used_template_ids": [
+        "M02",
+        "M31",
+        "M13",
+        "M12",
+        "M28"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 2,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M12",
+        "M13",
+        "M31"
+      ],
+      "all_template_ids": [
+        "M02",
+        "M12",
+        "M13",
+        "M31",
+        "M28"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M02",
+              "name": "크로커다일 호흡",
+              "focus_tag": "full_body_reset"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M12",
+              "name": "글루트 브릿지",
+              "focus_tag": "glute_activation"
+            },
+            {
+              "templateId": "M13",
+              "name": "데드버그",
+              "focus_tag": "core_stability"
+            },
+            {
+              "templateId": "M31",
+              "name": "버드독 3초 홀드",
+              "focus_tag": "core_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M28",
+              "name": "레그업 더 월",
+              "focus_tag": "full_body_reset"
+            }
+          ]
+        }
+      ],
+      "template_pool_source": "fixture_m01_m48_session_plan_v1",
+      "template_count": 48,
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "trunk_control",
+          "lower_stability"
+        ],
+        "primary_type": "DECONDITIONED",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "deconditioned",
+        "result_type": "DECONDITIONED"
+      }
+    },
+    {
+      "session_number": 7,
+      "total_sessions": 8,
+      "target_frequency": 2,
+      "phase": 4,
+      "phase_lengths": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "theme": "Phase 4 · 릴렉스",
+      "result_type": "DECONDITIONED",
+      "primary_type": "DECONDITIONED",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "deconditioned",
+      "session_focus_axes": [
+        "trunk_control",
+        "lower_stability"
+      ],
+      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
+      "used_template_ids": [
+        "M01",
+        "M09",
+        "M14",
+        "M12",
+        "M27"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 1,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M12",
+        "M09",
+        "M14"
+      ],
+      "all_template_ids": [
+        "M01",
+        "M12",
+        "M09",
+        "M14",
+        "M27"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M01",
+              "name": "90/90 벽 호흡",
+              "focus_tag": "full_body_reset"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M12",
+              "name": "글루트 브릿지",
+              "focus_tag": "glute_activation"
+            },
+            {
+              "templateId": "M09",
+              "name": "푸쉬업 플러스",
+              "focus_tag": "shoulder_stability"
+            },
+            {
+              "templateId": "M14",
+              "name": "버드독",
+              "focus_tag": "core_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M27",
+              "name": "오픈북",
+              "focus_tag": "thoracic_mobility"
+            }
+          ]
+        }
+      ],
+      "template_pool_source": "fixture_m01_m48_session_plan_v1",
+      "template_count": 48,
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "trunk_control",
+          "lower_stability"
+        ],
+        "primary_type": "DECONDITIONED",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "deconditioned",
+        "result_type": "DECONDITIONED"
+      }
+    },
+    {
+      "session_number": 8,
+      "total_sessions": 8,
+      "target_frequency": 2,
+      "phase": 4,
+      "phase_lengths": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "theme": "Phase 4 · 릴렉스",
+      "result_type": "DECONDITIONED",
+      "primary_type": "DECONDITIONED",
+      "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+      "baseline_session_anchor": "deconditioned",
+      "session_focus_axes": [
+        "trunk_control",
+        "lower_stability"
+      ],
+      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
+      "used_template_ids": [
+        "M42",
+        "M29",
+        "M30",
+        "M12",
+        "M11"
+      ],
+      "constraint_flags": {
+        "avoid_filter_applied": false,
+        "duplicate_filtered_count": 1,
+        "focus_diversity_enforced": true,
+        "fallback_used": false,
+        "short_mode_applied": false,
+        "recovery_mode_applied": false,
+        "priority_applied": true,
+        "pain_gate_applied": false,
+        "first_session_guardrail_applied": false
+      },
+      "baseline_alignment": null,
+      "plan_quality_audit_summary": {
+        "version": "plan_quality_audit_v1",
+        "score": 98,
+        "band": "acceptable",
+        "summary": "Plan quality: acceptable (score 98), 1 issue(s)",
+        "issue_count": 1,
+        "strengths_count": 2
+      },
+      "first_session_intent_anchor": null,
+      "gold_path_vector": null,
+      "main_segment_template_ids": [
+        "M12",
+        "M29",
+        "M30"
+      ],
+      "all_template_ids": [
+        "M42",
+        "M12",
+        "M29",
+        "M30",
+        "M11"
+      ],
+      "segments": [
+        {
+          "title": "Prep",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M42",
+              "name": "하프 니링 힙 쉬프트",
+              "focus_tag": "hip_mobility"
+            }
+          ]
+        },
+        {
+          "title": "Main",
+          "item_count": 3,
+          "items": [
+            {
+              "templateId": "M12",
+              "name": "글루트 브릿지",
+              "focus_tag": "glute_activation"
+            },
+            {
+              "templateId": "M29",
+              "name": "힐 탭 데드버그",
+              "focus_tag": "core_stability"
+            },
+            {
+              "templateId": "M30",
+              "name": "쿼드러펫 숄더탭",
+              "focus_tag": "core_stability"
+            }
+          ]
+        },
+        {
+          "title": "Accessory",
+          "item_count": 0,
+          "items": []
+        },
+        {
+          "title": "Cooldown",
+          "item_count": 1,
+          "items": [
+            {
+              "templateId": "M11",
+              "name": "사각자세 록백",
+              "focus_tag": "hip_mobility"
+            }
+          ]
+        }
+      ],
+      "template_pool_source": "fixture_m01_m48_session_plan_v1",
+      "template_count": 48,
+      "meta_diff_friendly": {
+        "session_focus_axes": [
+          "trunk_control",
+          "lower_stability"
+        ],
+        "primary_type": "DECONDITIONED",
+        "secondary_type": "HARNESS_DEFAULT_SECONDARY",
+        "baseline_session_anchor": "deconditioned",
+        "result_type": "DECONDITIONED"
+      }
+    }
+  ]
+}

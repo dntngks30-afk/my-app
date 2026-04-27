@@ -7,12 +7,16 @@
  *   npx tsx scripts/session-rail-truth-harness.mjs --mode adaptive-branch
  *   npx tsx scripts/session-rail-truth-harness.mjs --mode secondary-type-ab
  *   npx tsx scripts/session-rail-truth-harness.mjs --mode all
+ *   npx tsx scripts/session-rail-truth-harness.mjs --template-source fixture-48 --out-dir artifacts/session-rail-48
+ *
+ * --template-source: auto (default) | supabase | static-28 | fixture-48
+ * --fixture-path: optional path to exercise-templates-session-plan-m01-m48.v1.json
  *
  * See: docs/pr/PR-SESSION-RAIL-TRUTH-HARNESS-01.md
  */
 
 import { mkdirSync, writeFileSync, readFileSync } from 'fs';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -190,23 +194,8 @@ function deriveDifficulty(level) {
   return 'high';
 }
 
-async function loadTemplates() {
-  try {
-    const { getTemplatesForSessionPlan } = await import('../src/lib/workout-routine/exercise-templates-db.ts');
-    const templates = await getTemplatesForSessionPlan({ scoringVersion: 'deep_v2' });
-    return { templates, source: 'supabase_deep_v2' };
-  } catch (e) {
-    const msg = String(e?.message ?? '');
-    const recoverable =
-      msg.includes('SUPABASE') ||
-      msg.includes('Missing') ||
-      msg.includes('fetch failed') ||
-      msg.includes('session plan fetch failed');
-    if (!recoverable) throw e;
-  }
-
-  const { EXERCISE_TEMPLATES } = await import('../src/lib/workout-routine/exercise-templates.ts');
-  const templates = EXERCISE_TEMPLATES.map((t) => ({
+function mapStatic28Templates(et) {
+  return et.map((t) => ({
     id: t.id,
     name: t.name,
     level: t.level ?? 1,
@@ -223,7 +212,104 @@ async function loadTemplates() {
     balance_demand: t.balance_demand ?? 'low',
     complexity: t.complexity ?? 'low',
   }));
-  return { templates, source: 'static_EXERCISE_TEMPLATES_fallback' };
+}
+
+/**
+ * @param {object} opts
+ * @param {'auto'|'supabase'|'static-28'|'fixture-48'} [opts.templateSource]
+ * @param {string} [opts.fixturePath] default: scripts/fixtures/exercise-templates-session-plan-m01-m48.v1.json
+ */
+async function loadTemplates(opts = {}) {
+  const templateSource = opts.templateSource ?? 'auto';
+  const defaultFixture = join(__dirname, 'fixtures', 'exercise-templates-session-plan-m01-m48.v1.json');
+  const fixturePath = opts.fixturePath
+    ? opts.fixturePath.startsWith('/') || /^[A-Za-z]:/.test(opts.fixturePath)
+      ? opts.fixturePath
+      : resolve(root, opts.fixturePath)
+    : defaultFixture;
+
+  if (templateSource === 'fixture-48') {
+    const raw = readFileSync(fixturePath, 'utf8');
+    const data = JSON.parse(raw);
+    const arr = data.templates ?? data;
+    if (!Array.isArray(arr)) {
+      throw new Error('fixture-48: expected templates array in JSON');
+    }
+    const templates = arr.map((row) => ({
+      id: row.id,
+      name: row.name,
+      level: row.level ?? 1,
+      focus_tags: [...(row.focus_tags ?? [])],
+      contraindications: [...(row.contraindications ?? [])],
+      duration_sec: row.duration_sec ?? 300,
+      media_ref: row.media_ref ?? null,
+      is_fallback: !!row.is_fallback,
+      phase: row.phase ?? null,
+      target_vector: row.target_vector?.length ? [...row.target_vector] : null,
+      difficulty: row.difficulty ?? null,
+      avoid_if_pain_mode:
+        row.avoid_if_pain_mode == null
+          ? null
+          : Array.isArray(row.avoid_if_pain_mode)
+            ? [...row.avoid_if_pain_mode]
+            : null,
+      progression_level: row.progression_level ?? null,
+      balance_demand: row.balance_demand ?? null,
+      complexity: row.complexity ?? null,
+    }));
+    return {
+      templates,
+      source: 'fixture_m01_m48_session_plan_v1',
+      template_count: templates.length,
+    };
+  }
+
+  if (templateSource === 'static-28') {
+    const { EXERCISE_TEMPLATES: et } = await import('../src/lib/workout-routine/exercise-templates.ts');
+    const templates = mapStatic28Templates(et);
+    return {
+      templates,
+      source: 'static_exercise_templates_28',
+      template_count: 28,
+    };
+  }
+
+  if (templateSource === 'supabase') {
+    const { getTemplatesForSessionPlan } = await import('../src/lib/workout-routine/exercise-templates-db.ts');
+    const templates = await getTemplatesForSessionPlan({ scoringVersion: 'deep_v2' });
+    return {
+      templates,
+      source: 'supabase_deep_v2',
+      template_count: templates.length,
+    };
+  }
+
+  // auto: try Supabase, fall back to static 28
+  try {
+    const { getTemplatesForSessionPlan } = await import('../src/lib/workout-routine/exercise-templates-db.ts');
+    const templates = await getTemplatesForSessionPlan({ scoringVersion: 'deep_v2' });
+    return {
+      templates,
+      source: 'supabase_deep_v2',
+      template_count: templates.length,
+    };
+  } catch (e) {
+    const msg = String(e?.message ?? '');
+    const recoverable =
+      msg.includes('SUPABASE') ||
+      msg.includes('Missing') ||
+      msg.includes('fetch failed') ||
+      msg.includes('session plan fetch failed');
+    if (!recoverable) throw e;
+  }
+
+  const { EXERCISE_TEMPLATES: et } = await import('../src/lib/workout-routine/exercise-templates.ts');
+  const templates = mapStatic28Templates(et);
+  return {
+    templates,
+    source: 'static_exercise_templates_28',
+    template_count: 28,
+  };
 }
 
 /** Production-like rolling window of used template ids (session/create USED_WINDOW_K). */
@@ -414,6 +500,8 @@ async function materializeRail({
   volumeModifierOverride,
   adaptiveOverlayOverride,
   conditionMoodOverride,
+  templatePoolSource,
+  templateCount,
 }) {
   const totalSessions = FREQUENCY_TO_TOTAL[targetFrequency];
   const policyOptions = buildPolicyOptions(fixture);
@@ -508,6 +596,8 @@ async function materializeRail({
         ?.items?.map((it) => it.templateId) ?? [],
       all_template_ids: orderedSegmentTemplateIds(plan).map((x) => x.id),
       segments: segmentsSummary(plan),
+      template_pool_source: templatePoolSource,
+      template_count: templateCount,
       meta_diff_friendly: metaDiffFriendly(plan, { ...fixture, secondary_type }),
       plan,
     };
@@ -550,7 +640,12 @@ function phaseDistributionTableMarkdown(resolvePhaseLengths, computePhase, polic
 }
 
 function parseArgs(argv) {
-  const out = { mode: 'all', outDir: join(root, 'artifacts', 'session-rail') };
+  const out = {
+    mode: 'all',
+    outDir: join(root, 'artifacts', 'session-rail'),
+    templateSource: 'auto',
+    fixturePath: null,
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--mode' && argv[i + 1]) {
@@ -560,6 +655,12 @@ function parseArgs(argv) {
       out.outDir = argv[i + 1].startsWith('/') || /^[A-Za-z]:/.test(argv[i + 1])
         ? argv[i + 1]
         : join(root, argv[i + 1]);
+      i++;
+    } else if (a === '--template-source' && argv[i + 1]) {
+      out.templateSource = argv[i + 1];
+      i++;
+    } else if (a === '--fixture-path' && argv[i + 1]) {
+      out.fixturePath = argv[i + 1];
       i++;
     }
   }
@@ -585,7 +686,7 @@ function aggregateSecondaryClassification(abResults) {
 }
 
 async function main() {
-  const { mode, outDir } = parseArgs(process.argv.slice(2));
+  const { mode, outDir, templateSource, fixturePath } = parseArgs(process.argv.slice(2));
   const modesToRun =
     mode === 'all'
       ? ['static-neutral', 'adaptive-branch', 'secondary-type-ab']
@@ -597,7 +698,8 @@ async function main() {
     import('../src/app/api/session/create/_lib/helpers.ts'),
   ]);
 
-  const { templates, source: templateSource } = await loadTemplates();
+  const loadOpts = { templateSource, ...(fixturePath ? { fixturePath } : {}) };
+  const { templates, source: templateSourceResolved, template_count: templateCount } = await loadTemplates(loadOpts);
   const generatedAt = new Date().toISOString();
 
   const baselineFixtures = PRIMARY_ORDER.map((p) => buildBaselineFixture(p));
@@ -609,7 +711,8 @@ async function main() {
     harness_version: HARNESS_VERSION,
     script: SCRIPT_NAME,
     generated_at: generatedAt,
-    template_pool_source: templateSource,
+    template_pool_source: templateSourceResolved,
+    template_count: templateCount,
     modes: modesToRun,
     note: 'Direct buildSessionPlanJson calls only — no HTTP, no session-gen-cache.',
   };
@@ -628,6 +731,8 @@ async function main() {
           fixture: fx,
           targetFrequency: freq,
           adaptiveBranch: 'neutral',
+          templatePoolSource: templateSourceResolved,
+          templateCount: templateCount,
         });
         staticNeutralResults.push(rail);
         const fname = `${fx.primary_type}_freq${freq}.json`;
@@ -683,6 +788,8 @@ async function main() {
             fixture: fx,
             targetFrequency: freq,
             adaptiveBranch: branch,
+            templatePoolSource: templateSourceResolved,
+            templateCount: templateCount,
           });
           branchRails.push(rail);
         }
@@ -737,6 +844,8 @@ async function main() {
           targetFrequency: freq,
           adaptiveBranch: 'neutral',
           secondaryTypeOverride: SECONDARY_A,
+          templatePoolSource: templateSourceResolved,
+          templateCount: templateCount,
         });
         const railB = await materializeRail({
           buildSessionPlanJson,
@@ -748,6 +857,8 @@ async function main() {
           targetFrequency: freq,
           adaptiveBranch: 'neutral',
           secondaryTypeOverride: SECONDARY_B,
+          templatePoolSource: templateSourceResolved,
+          templateCount: templateCount,
         });
 
         const session_comparisons = [];
@@ -826,7 +937,7 @@ async function main() {
 
 Generated: ${generatedAt}
 Harness: ${SCRIPT_NAME} v${HARNESS_VERSION}
-Template pool: ${templateSource}
+Template pool: ${templateSourceResolved} (count=${templateCount})
 
 ## 1. Executive summary
 
@@ -883,7 +994,7 @@ Artifacts: \`${join(outDir, 'secondary-type-ab')}\`
 
   console.log(`Session rail truth harness complete.`);
   console.log(`Out dir: ${outDir}`);
-  console.log(`Template pool: ${templateSource}`);
+  console.log(`Template pool: ${templateSourceResolved} (count=${templateCount})`);
   console.log(`secondary_type classification: ${finalSecondaryClass}`);
 }
 

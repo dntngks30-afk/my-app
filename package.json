@@ -81,6 +81,8 @@
     "test:claimed-result-selection-timing-law": "npx tsx scripts/claimed-public-result-selection-timing-law-regression.mjs",
     "test:claimed-result-selection-suitability": "npx tsx scripts/claimed-public-result-selection-suitability-regression.mjs",
     "test:session-rail-truth": "npx tsx scripts/session-rail-truth-harness.mjs",
+    "test:session-rail-fixture-48": "npx tsx scripts/session-rail-truth-harness.mjs --mode static-neutral --template-source fixture-48 --out-dir artifacts/session-rail-48",
+    "validate:session-template-fixture": "node scripts/validate-session-template-fixture.mjs",
     "ops:template-media:mux-upload": "node scripts/template-media/mux-batch-upload.mjs",
     "ops:template-media:attach": "node scripts/template-media/apply-template-media-refresh.mjs",
     "ops:template-media:legacy-delete": "node scripts/template-media/delete-legacy-template-assets.mjs",
