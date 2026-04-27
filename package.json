@@ -38,6 +38,7 @@
     "test:progress-report": "npx tsx scripts/progress-report-smoke.mjs",
     "test:adaptive-progression": "npx tsx scripts/adaptive-progression-smoke.mjs",
     "test:adaptive-modifier-merge": "npx tsx scripts/adaptive-modifier-merge-smoke.mjs",
+    "test:adaptive-real-next-session": "npx tsx scripts/adaptive-real-next-session-verify.mjs",
     "test:adaptive-merge": "npx tsx scripts/adaptive-merge-smoke.mjs",
     "test:plan-generator": "npx tsx scripts/plan-generator-smoke.mjs",
     "test:alg-21-first-session": "npx tsx scripts/alg-21-first-session-regression.mjs",
