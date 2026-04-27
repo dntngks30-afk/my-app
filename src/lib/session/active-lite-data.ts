@@ -4,6 +4,9 @@
  *
  * Read-only: progress insert/update, event log 제거 (홈 첫 진입 critical path 경량화).
  * progress 없으면 safe default 반환. 생성은 session/create 또는 session/profile에서 수행.
+ *
+ * rail_ready: session_program_progress 행이 DB에 실제로 존재할 때만 true.
+ * (세션 실행 가능 여부·RAIL_NOT_READY와 동일 의미 아님 — UI가 가짜 16칸 맵을 그리지 않도록 구분용.)
  */
 
 import { getTodayCompletedAndNextUnlock } from '@/lib/time/kst';
@@ -46,6 +49,7 @@ export async function fetchActiveLiteData(
     if (timings) timings.write_ms = 0;
 
     const planStatus = (planStatusRes.data as { plan_status?: string } | null)?.plan_status ?? null;
+    const hadDbProgress = progressRes.data != null;
     let progress = progressRes.data;
 
     if (!progress) {
@@ -60,6 +64,11 @@ export async function fetchActiveLiteData(
       };
     }
 
+    const railMeta = {
+      rail_ready: hadDbProgress,
+      progress_source: hadDbProgress ? ('db' as const) : ('default_fallback' as const),
+    };
+
     const activeSessionNumber = progress.active_session_number;
     const { todayCompleted, nextUnlockAt } = getTodayCompletedAndNextUnlock(progress);
 
@@ -73,6 +82,7 @@ export async function fetchActiveLiteData(
           active: null,
           today_completed: todayCompleted,
           plan_status: planStatus,
+          ...railMeta,
           ...(nextUnlockAt != null && { next_unlock_at: nextUnlockAt }),
         },
       };
@@ -105,6 +115,7 @@ export async function fetchActiveLiteData(
         active,
         today_completed: todayCompleted,
         plan_status: planStatus,
+        ...railMeta,
         ...(nextUnlockAt && { next_unlock_at: nextUnlockAt }),
       },
     };

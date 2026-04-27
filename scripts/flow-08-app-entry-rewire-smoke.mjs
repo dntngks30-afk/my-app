@@ -82,17 +82,22 @@ const onboardingComplete = readSrc('src/app/onboarding-complete/page.tsx');
 assert('clearReadinessCheck import', onboardingComplete?.includes('clearReadinessCheck'));
 assert('claim 완료 후 clearReadinessCheck 호출', onboardingComplete?.includes('clearReadinessCheck()'));
 
-// 7. 실행 core 변경 없음 확인 (HomePageClient 미수정)
-console.log('\n[7] 실행 core 무수정 확인');
+// 7. HomePageClient는 ReadinessEntryGate와 분리 (레일 플레이스홀더는 fetchReadinessClient 사용 가능)
+console.log('\n[7] 실행 core 경계 확인');
 const homeClient = readSrc('src/app/app/(tabs)/home/_components/HomePageClient.tsx');
 assert('HomePageClient에 ReadinessEntryGate 미포함 (core 분리)', !homeClient?.includes('ReadinessEntryGate'));
-assert('HomePageClient에 fetchReadinessClient 미포함', !homeClient?.includes('fetchReadinessClient'));
 
-// 8. AppAuthGate 기존 auth 로직 유지 확인
+// 8. AppAuthGate 기존 auth 로직 + 파일럿 리딤 후 라우팅
 console.log('\n[8] AppAuthGate 기존 auth 로직 유지 확인');
 assert('auth check 유지', authGate?.includes("setStatus('auth')"));
 assert('allowed 상태 유지', authGate?.includes("setStatus('allowed')"));
 assert('router.replace auth?next redirect 유지', authGate?.includes('router.replace('));
+assert('PR-PILOT-POST-REDEEM: loadBridgeContext', authGate?.includes('loadBridgeContext'));
+assert('PR-PILOT-POST-REDEEM: resolvePilotPostRedeemRoute', authGate?.includes('resolvePilotPostRedeemRoute'));
+assert(
+  '파일럿 리딤 성공 직후 await check() 없음',
+  !authGate?.includes('invalidateAppBootstrapCache();\n            await check()')
+);
 
 // 9. FLOW-07 readiness API 연결 확인
 console.log('\n[9] readiness API 연결 확인');

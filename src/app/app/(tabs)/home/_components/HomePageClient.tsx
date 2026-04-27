@@ -7,6 +7,8 @@ import { invalidateActiveCache } from '@/lib/session/active-cache';
 import { getCache } from '@/lib/cache/tabDataCache';
 import AppEntryLoader, { isAppBooted, setAppBooted } from '@/app/app/_components/AppEntryLoader';
 import type { SessionPlan, ActivePlanSummary, ActiveSessionLiteResponse, HomeNodeDisplayBundle } from '@/lib/session/client';
+import { fetchReadinessClient } from '@/lib/readiness/fetchReadinessClient';
+import type { SessionReadinessNextAction } from '@/lib/readiness/types';
 import {
   getAppBootstrapCacheSnapshot,
   getCachedAppBootstrap,
@@ -38,6 +40,24 @@ import { ResetMap as DonorResetMap } from '@/features/map_ui_import/home_map_202
 
 interface HomePageClientProps {
   hideBottomNav?: boolean;
+}
+
+function hrefForReadinessNext(code: SessionReadinessNextAction | undefined): string {
+  switch (code) {
+    case 'GO_PAYMENT':
+    case 'GO_RESULT':
+      return '/movement-test/baseline';
+    case 'GO_ONBOARDING':
+      return '/onboarding';
+    case 'GO_SESSION_CREATE':
+      return '/session-preparing';
+    case 'GO_AUTH':
+      return '/app/auth';
+    case 'GO_APP_HOME':
+      return '/app/home';
+    default:
+      return '/onboarding';
+  }
 }
 
 export default function HomePageClient({ hideBottomNav }: HomePageClientProps = {}) {
@@ -80,6 +100,14 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const [resetMapFlowId, setResetMapFlowId] = useState<string | null>(null);
   /** PR4: canonical node display slice from app bootstrap (reduces map batch hydration fetch). */
   const [nodeDisplayBundle, setNodeDisplayBundle] = useState<HomeNodeDisplayBundle | null>(null);
+  /** PR-HOME-RAIL-NOT-READY: DB progress 행 없을 때 가짜 16칸 맵 비표시 */
+  const [railReady, setRailReady] = useState<boolean | null>(null);
+  const [progressSource, setProgressSource] = useState<'db' | 'default_fallback' | null>(null);
+  const [railRecoveryHref, setRailRecoveryHref] = useState('/onboarding');
+  const railRecoveryFetchedRef = useRef(false);
+
+  const isRailNotReady =
+    railReady === false || progressSource === 'default_fallback';
 
   const activeFetchedRef = useRef(false);
   const authTokenRef = useRef<string | null>(null);
@@ -115,6 +143,8 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     setNextSession(data.next_session ?? null);
     setAdaptiveExplanation(data.adaptive_explanation ?? null);
     setNodeDisplayBundle(data.node_display_bundle && data.node_display_bundle.items.length > 0 ? data.node_display_bundle : null);
+    setRailReady(data.session.rail_ready ?? null);
+    setProgressSource(data.session.progress_source ?? null);
   }, []);
 
   const applyActiveLiteState = useCallback((data: ActiveSessionLiteResponse) => {
@@ -125,6 +155,8 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     setActivePlan(data.active ?? null);
     setTodayCompleted(data.today_completed === true);
     setNextUnlockAt(typeof data.next_unlock_at === 'string' ? data.next_unlock_at : null);
+    setRailReady(data.rail_ready ?? null);
+    setProgressSource(data.progress_source ?? null);
   }, []);
 
   const handleSessionCompleted = useCallback(async (completedSessions: number) => {
@@ -151,6 +183,8 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         setStatsPreview(result.data.stats_preview);
         setNextSession(result.data.next_session ?? null);
         setAdaptiveExplanation(result.data.adaptive_explanation ?? null);
+        setRailReady(result.data.session.rail_ready ?? null);
+        setProgressSource(result.data.session.progress_source ?? null);
       }
     }
   }, [getAuthToken]);
@@ -252,7 +286,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
 
   /** PR-PERF-21: Bootstrap-driven reset-map. Recheck uses getLatest for multi-tab safety. */
   useEffect(() => {
-    if (!mapV2 || loading) return;
+    if (!mapV2 || loading || isRailNotReady) return;
 
     const bootstrap = getAppBootstrapCacheSnapshot();
     const hasBootstrapResetMap = bootstrap?.reset_map != null;
@@ -342,7 +376,29 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       }
     })();
     return () => { cancelled = true; };
-  }, [mapV2, loading, getAuthToken, recheckTrigger]);
+  }, [mapV2, loading, getAuthToken, recheckTrigger, isRailNotReady]);
+
+  /** 레일 미준비 플레이스홀더: readiness 1회로 CTA 경로 결정 */
+  useEffect(() => {
+    if (!isRailNotReady) {
+      railRecoveryFetchedRef.current = false;
+      setRailRecoveryHref('/onboarding');
+      return;
+    }
+    if (loading || error) return;
+    if (railRecoveryFetchedRef.current) return;
+    railRecoveryFetchedRef.current = true;
+    let cancelled = false;
+    void (async () => {
+      const readiness = await fetchReadinessClient();
+      if (cancelled) return;
+      const code = readiness?.next_action?.code;
+      setRailRecoveryHref(hrefForReadinessNext(code));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, error, isRailNotReady]);
 
   const handleFlowApplied = useCallback(() => {
     clearResetMapClientState();
@@ -394,7 +450,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   const total = totalSessionsOverride ?? sessionProgress?.total_sessions ?? 8;
   const completed = completedSessionsOverride ?? sessionProgress?.completed_sessions ?? 0;
   /** donor 지도 기본 승격: mapV2 + total<=20 시 donor theme (presentation=donor, behavior=production) */
-  const useDonorTheme = mapV2 && total <= 20;
+  const useDonorTheme = mapV2 && total <= 20 && !isRailNotReady;
 
   return (
     <div
@@ -415,6 +471,26 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         {/* PR-UX-16a: home 상단 대형 preview 제거 — Reset Map first-view */}
         <div>
         {(() => {
+          if (isRailNotReady) {
+            return (
+              <section className="rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-[4px_4px_0_0_rgba(15,23,42,1)]">
+                <h3 className="text-sm font-semibold text-slate-800">
+                  아직 실행 준비가 끝나지 않았어요
+                </h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  분석 결과와 주간 횟수 설정을 완료하면 리셋 지도가 열립니다.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => router.push(railRecoveryHref)}
+                  className="mt-4 w-full rounded-lg bg-orange-500 px-4 py-3 text-sm font-semibold text-white"
+                >
+                  이어가기
+                </button>
+              </section>
+            );
+          }
+
           if (mapV2 && total <= 20) {
             const focusSession = searchParams.get('focusSession');
             const focusSessionNum = focusSession ? parseInt(focusSession, 10) : null;
@@ -467,8 +543,8 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
         })()}
         </div>
 
-        {/* PR-P2-2: 4세션 변화 리포트 foundation — donor theme 시 숨김 */}
-        {!useDonorTheme && (
+        {/* PR-P2-2: 4세션 변화 리포트 foundation — donor theme·가짜 레일 시 숨김 */}
+        {!useDonorTheme && !isRailNotReady && (
           <ProgressReportCard getAuthToken={getAuthToken} initialPreview={statsPreview} />
         )}
       </main>

@@ -42,6 +42,8 @@ export type AppBootstrapResponse = {
     total_sessions: number;
     today_completed?: boolean;
     next_unlock_at?: string | null;
+    rail_ready?: boolean;
+    progress_source?: 'db' | 'default_fallback';
   };
   next_session: NextSessionPreviewPayload | null;
   /** PR-ALG-15: Human-readable adaptive adjustment explanation */
@@ -54,7 +56,7 @@ export type AppBootstrapResponse = {
 };
 
 const TTL_MS = 5_000;
-const APP_BOOTSTRAP_CACHE_VERSION = 1;
+const APP_BOOTSTRAP_CACHE_VERSION = 2;
 
 let bootstrapCache: { tokenKey: string; data: AppBootstrapResponse; expiresAt: number } | null = null;
 let bootstrapInflight: Promise<ApiResult<AppBootstrapResponse>> | null = null;
@@ -139,6 +141,8 @@ function toActiveLite(data: AppBootstrapResponse): ActiveSessionLiteResponse {
     today_completed: data.session.today_completed === true,
     ...(data.session.next_unlock_at ? { next_unlock_at: data.session.next_unlock_at } : {}),
     plan_status: data.user.plan_status,
+    rail_ready: data.session.rail_ready,
+    progress_source: data.session.progress_source,
   };
 }
 

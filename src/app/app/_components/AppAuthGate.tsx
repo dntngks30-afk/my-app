@@ -10,6 +10,9 @@ import AppEntryLoader, { isAppBooted } from './AppEntryLoader';
 import { readPilotContext } from '@/lib/pilot/pilot-context';
 import { redeemPilotAccessClient } from '@/lib/pilot/redeemPilotAccessClient';
 import { mapPilotRedeemErrorToMessage } from '@/lib/pilot/pilot-redeem-ui-messages';
+import { loadBridgeContext } from '@/lib/public-results/public-result-bridge';
+import { fetchReadinessClient } from '@/lib/readiness/fetchReadinessClient';
+import { resolvePilotPostRedeemRoute } from '@/lib/pilot/pilot-post-redeem-route';
 
 interface AppAuthGateProps {
   children: React.ReactNode;
@@ -138,7 +141,14 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
           if (redeemResult.ok && !redeemResult.skipped) {
             pilotRedeemAttemptedForUserRef.current = null;
             invalidateAppBootstrapCache();
-            await check();
+            const bridge = loadBridgeContext();
+            const readiness = bridge ? null : await fetchReadinessClient();
+            if (cancelled) return;
+            const href = resolvePilotPostRedeemRoute({
+              hasBridgeContext: !!bridge,
+              readiness: readiness ?? undefined,
+            });
+            router.replace(href);
             return;
           }
 

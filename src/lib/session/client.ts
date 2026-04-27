@@ -175,6 +175,9 @@ export type ActiveSessionLiteResponse = {
   next_unlock_at?: string;
   /** plan_status from users table — paywall check용, AppAuthGate에서 재사용 */
   plan_status?: string | null;
+  /** true when session_program_progress row exists (not synthetic fallback) */
+  rail_ready?: boolean;
+  progress_source?: 'db' | 'default_fallback';
 };
 
 export type CreateSessionResponse = {

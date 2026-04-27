@@ -33,6 +33,8 @@ type AppBootstrapData = {
     total_sessions: number;
     today_completed?: boolean;
     next_unlock_at?: string | null;
+    rail_ready?: boolean;
+    progress_source?: 'db' | 'default_fallback';
   };
   next_session: {
     session_number: number;
@@ -174,6 +176,8 @@ export async function GET(req: NextRequest) {
       total_sessions: activeLite.data.progress.total_sessions ?? 16,
       today_completed: activeLite.data.today_completed === true,
       next_unlock_at: activeLite.data.next_unlock_at ?? null,
+      rail_ready: activeLite.data.rail_ready === true,
+      progress_source: activeLite.data.progress_source ?? 'default_fallback',
     };
 
     const tResetMap = performance.now();

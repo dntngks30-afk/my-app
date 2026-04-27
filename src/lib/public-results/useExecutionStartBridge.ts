@@ -22,6 +22,7 @@ import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase';
 import {
   saveBridgeContext,
+  loadBridgeContext,
   buildOnboardingPrepUrl,
   appendContinueExecutionParam,
   stripContinueExecutionParam,
@@ -121,7 +122,11 @@ export function useExecutionStartBridge(
       if (readPilotContext()) {
         const redeemResult = await redeemPilotAccessClient(session.access_token);
         if (redeemResult.ok && !redeemResult.skipped) {
-          router.push(successNext);
+          if (resolvedId || loadBridgeContext()) {
+            router.push('/onboarding');
+          } else {
+            router.push('/movement-test/baseline');
+          }
           return;
         }
         if (!redeemResult.ok) {
