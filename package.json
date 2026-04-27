@@ -84,6 +84,7 @@
     "test:session-rail-fixture-48": "npx tsx scripts/session-rail-truth-harness.mjs --mode static-neutral --template-source fixture-48 --out-dir artifacts/session-rail-48",
     "validate:session-template-fixture": "node scripts/validate-session-template-fixture.mjs",
     "test:first-session-anchor-fixture-48": "npx tsx scripts/first-session-anchor-fixture48-regression.mjs",
+    "test:session-rationale-copy": "npx tsx scripts/session-rationale-copy-smoke.mjs",
     "ops:template-media:mux-upload": "node scripts/template-media/mux-batch-upload.mjs",
     "ops:template-media:attach": "node scripts/template-media/apply-template-media-refresh.mjs",
     "ops:template-media:legacy-delete": "node scripts/template-media/delete-legacy-template-assets.mjs",

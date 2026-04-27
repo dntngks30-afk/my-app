@@ -2,6 +2,7 @@
  * PR-TEMPLATE-48-METADATA-ALIGN-01: deterministic fixture for session plan (M01~M48).
  * Source: 202602281200 + 202603011200 + 202603190001 + 202603230001 + 20260419120001 names
  *         + 202603211200 M29-48 + 20260427120000 session-composer v1
+ *         + 20260428120000 M18 phase/accessory + vectors (PR-M18-RATIONALE-POLISH-01)
  *
  * Run: node scripts/compose-exercise-template-fixture.mjs
  * Writes: scripts/fixtures/exercise-templates-session-plan-m01-m48.v1.json
@@ -39,7 +40,7 @@ const M01M28 = [
   ['M15', '의자 박스 스쿼트', 2, ['lower_chain_stability', 'glute_activation'], ['knee_load', 'deep_squat'], false, 'low', 'low', 'main', ['lower_stability'], 'medium', [], 2],
   ['M16', '벽 짚고 스플릿 스쿼트', 3, ['lower_chain_stability', 'ankle_mobility'], ['knee_load'], false, 'high', 'high', 'main', ['lower_stability', 'lower_mobility'], 'high', ['protected'], 3],
   ['M17', '벽 짚고 스탠딩 힙 어브덕션', 2, ['glute_medius', 'glute_activation'], [], false, 'low', 'low', 'main', ['lower_stability'], 'medium', [], 2],
-  ['M18', '양발 카프 레이즈', 1, ['ankle_mobility', 'basic_balance'], [], false, 'high', 'low', 'main', ['lower_stability', 'asymmetry'], 'low', [], 1],
+  ['M18', '양발 카프 레이즈', 1, ['ankle_mobility', 'basic_balance'], [], false, 'high', 'low', 'accessory', ['lower_mobility', 'lower_stability'], 'low', [], 1],
   ['M19', '리버스 런지', 3, ['lower_chain_stability'], ['knee_load'], false, 'high', 'high', 'main', ['lower_stability'], 'high', ['caution'], 3],
   ['M20', '월 서포티드 힙힌지', 2, ['hip_mobility', 'glute_activation'], ['lower_back_pain'], false, 'low', 'low', 'main', ['lower_mobility', 'trunk_control'], 'medium', [], 2],
   ['M22', '사이드 라이잉 힙 어브덕션', 1, ['glute_medius', 'basic_balance'], [], false, 'low', 'low', 'main', ['lower_stability', 'asymmetry'], 'low', [], 1],

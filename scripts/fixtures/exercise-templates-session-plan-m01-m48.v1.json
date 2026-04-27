@@ -420,10 +420,10 @@
       "duration_sec": 300,
       "media_ref": null,
       "is_fallback": false,
-      "phase": "main",
+      "phase": "accessory",
       "target_vector": [
-        "lower_stability",
-        "asymmetry"
+        "lower_mobility",
+        "lower_stability"
       ],
       "difficulty": "low",
       "avoid_if_pain_mode": [],

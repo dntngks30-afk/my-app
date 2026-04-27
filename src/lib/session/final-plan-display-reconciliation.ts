@@ -129,7 +129,11 @@ function computeDriftLevel(upstream: string[], finalAxes: string[]): FinalAlignm
   return 'light';
 }
 
-function buildReconciledRationale(axes: string[], axisScores: Record<string, number>): string | null {
+/**
+ * PR-M18-RATIONALE-POLISH-01: dual-axis display rationale (Korean).
+ * "입니다" 끊고 "고"를 붙이면 "...세션고" 오류 — "이며"로 접속.
+ */
+export function buildReconciledRationale(axes: string[], axisScores: Record<string, number>): string | null {
   if (axes.length === 0) return null;
   const primary = axes[0];
   const secondary = axes[1];
@@ -140,7 +144,8 @@ function buildReconciledRationale(axes: string[], axisScores: Record<string, num
   const rb = axisScores[secondary] ?? 0;
   if (ra <= 0 || rb < ra * 0.55) return primaryGoal;
 
-  return `${primaryGoal.replace(/입니다\.?$/, '')}고, ${getAxisLabel(secondary)} 비중도 함께 넣었습니다.`;
+  const lead = primaryGoal.replace(/입니다\.?$/, '이며');
+  return `${lead}, ${getAxisLabel(secondary)} 비중도 함께 넣었습니다.`;
 }
 
 function contractDisplayFields(
