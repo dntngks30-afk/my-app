@@ -355,6 +355,20 @@ export type FirstSessionAnchorIntegrityMetaV1 = {
   removed_template_ids?: string[];
 };
 
+/** PR-SESSION-2PLUS-CONTINUITY-GUARD-01: S2/S3 only — type continuity (weaker than S1 anchor). */
+export type SessionTypeContinuityMetaV1 = {
+  version: 'session_type_continuity_v1';
+  session_number: number;
+  baseline_anchor: string | null;
+  primary_type: string | null;
+  main_anchor_match_count: number;
+  main_support_match_count: number;
+  main_off_axis_count: number;
+  repaired: boolean;
+  repaired_template_ids?: string[];
+  removed_template_ids?: string[];
+};
+
 export type PlanItem = {
   order: number;
   templateId: string;
@@ -458,6 +472,8 @@ export type PlanJsonOutput = {
     prep_cooldown_alignment?: PrepCooldownAlignmentMetaV1;
     /** PR-FIRST-SESSION-ANCHOR-REGRESSION-48-01: S1 + gold_path Main target_vector 정합(관찰) */
     first_session_anchor_integrity?: FirstSessionAnchorIntegrityMetaV1;
+    /** PR-SESSION-2PLUS-CONTINUITY-GUARD-01: S2/S3 only */
+    session_type_continuity?: SessionTypeContinuityMetaV1;
   };
   flags: { recovery: boolean; short: boolean };
   segments: PlanSegment[];
@@ -1240,6 +1256,252 @@ function findBestMainRepairFromPool(
   return cands[0]?.t ?? null;
 }
 
+function pickMainReplaceIndexForContinuity(mainRows: SessionTemplateRow[], g: GoldPathVector): number {
+  for (let i = 0; i < mainRows.length; i += 1) {
+    if (isTargetOffAxisForGoldPath(mainRows[i]!, g)) return i;
+  }
+  for (let i = 0; i < mainRows.length; i += 1) {
+    if (!isTargetAnchorVector(mainRows[i]!, g) && !isTargetSupportForGoldPath(mainRows[i]!, g)) return i;
+  }
+  for (let i = 0; i < mainRows.length; i += 1) {
+    if (!isTargetAnchorVector(mainRows[i]!, g)) return i;
+  }
+  return 0;
+}
+
+function planHasTargetVectorInPlan(
+  segments: PlanSegment[],
+  templatesById: Map<string, SessionTemplateRow>,
+  vec: GoldPathVector | string
+): boolean {
+  const s = String(vec);
+  for (const seg of segments) {
+    for (const it of seg.items) {
+      const t = templatesById.get(it.templateId);
+      if (t?.target_vector?.includes(s)) return true;
+    }
+  }
+  return false;
+}
+
+function mainHasLowerStabilityFamily(rows: SessionTemplateRow[]): boolean {
+  return rows.some(
+    (t) => isTargetAnchorVector(t, 'lower_stability') || isTargetSupportForGoldPath(t, 'lower_stability')
+  );
+}
+
+function isMainUpperOnlyDominant(rows: SessionTemplateRow[]): boolean {
+  if (rows.length < 2) return false;
+  return rows.every((t) => {
+    const v = new Set(t.target_vector ?? []);
+    return v.has('upper_mobility') && !v.has('lower_stability') && !v.has('trunk_control') && !v.has('lower_mobility');
+  });
+}
+
+function isMainUpperDominantLowerMobility(rows: SessionTemplateRow[]): boolean {
+  if (rows.length < 2) return false;
+  return rows.every(
+    (t) =>
+      (t.target_vector ?? []).includes('upper_mobility') &&
+      !(t.target_vector ?? []).includes('lower_mobility')
+  );
+}
+
+function isMainLowerStabilityDominantUpper(rows: SessionTemplateRow[]): boolean {
+  if (rows.length < 2) return false;
+  return rows.every(
+    (t) =>
+      (t.target_vector ?? []).includes('lower_stability') &&
+      !(t.target_vector ?? []).includes('upper_mobility')
+  );
+}
+
+function resolveSession2PlusContinuityAnchor(input: PlanGeneratorInput): GoldPathVector | null {
+  const b = input.baseline_session_anchor?.trim();
+  if (b && (GOLD_PATH_VECTORS as readonly string[]).includes(b)) {
+    return b as GoldPathVector;
+  }
+  const byPrimary: Record<string, GoldPathVector> = {
+    LOWER_INSTABILITY: 'lower_stability',
+    LOWER_MOBILITY_RESTRICTION: 'lower_mobility',
+    UPPER_IMMOBILITY: 'upper_mobility',
+    CORE_CONTROL_DEFICIT: 'trunk_control',
+    DECONDITIONED: 'deconditioned',
+    STABLE: 'balanced_reset',
+  };
+  if (input.primary_type && byPrimary[input.primary_type]) {
+    return byPrimary[input.primary_type]!;
+  }
+  const ranked = Object.entries(input.priority_vector ?? {})
+    .filter(
+      (e): e is [GoldPathVector, number] =>
+        (GOLD_PATH_VECTORS as readonly string[]).includes(e[0]) && typeof e[1] === 'number' && e[1] > 0
+    )
+    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
+  if (ranked[0]) return ranked[0]![0];
+  return null;
+}
+
+/**
+ * S2/S3: 약한 연속성 보정 + 관찰 메타. S1 앵커 복구와 별도.
+ */
+function repairSession2PlusTypeContinuity(input: {
+  plan: PlanJsonOutput;
+  planInput: PlanGeneratorInput;
+  sessionNumber: number;
+  templatePool: SessionTemplateRow[];
+  maxLevel: number;
+  excludeSet: Set<string>;
+  painMode: 'none' | 'caution' | 'protected' | undefined;
+  maxDifficultyCap: 'low' | 'medium' | 'high' | undefined;
+  toPlanItemCtx: ToPlanItemContext;
+}): { plan: PlanJsonOutput; meta: SessionTypeContinuityMetaV1 | null } {
+  if (input.sessionNumber !== 2 && input.sessionNumber !== 3) {
+    return { plan: input.plan, meta: null };
+  }
+  const anchor = resolveSession2PlusContinuityAnchor(input.planInput);
+  if (!anchor) {
+    return { plan: input.plan, meta: null };
+  }
+  const templatesById = new Map(input.templatePool.map((t) => [t.id, t]));
+  const segments = clonePlanSegments(input.plan.segments);
+  const getMain = () => segments.find((s) => s.title === 'Main');
+  const asRows = (main: PlanSegment | undefined) =>
+    (main?.items.map((i) => templatesById.get(i.templateId)).filter(Boolean) ?? []) as SessionTemplateRow[];
+  const repairedIdList: string[] = [];
+  const removedIdList: string[] = [];
+  const ctxTemplate = (g: GoldPathVector): RepairS1Context => ({
+    goldPathVector: g,
+    templatePool: input.templatePool,
+    templatesById,
+    excludeSet: input.excludeSet,
+    painMode: input.painMode,
+    maxDifficultyCap: input.maxDifficultyCap,
+    maxLevel: input.maxLevel,
+    toPlanItemCtx: input.toPlanItemCtx,
+    sessionNumber: input.sessionNumber,
+  });
+  const tryReplaceMainAt = (mainIndex: number, replacement: SessionTemplateRow, title = 'Main') => {
+    const main = getMain()!;
+    const old = main.items[mainIndex]!.templateId;
+    removedIdList.push(old);
+    repairedIdList.push(replacement.id);
+    main.items[mainIndex] = toPlanItem(
+      replacement,
+      mainIndex + 1,
+      title,
+      input.toPlanItemCtx
+    );
+  };
+  for (let iter = 0; iter < 24; iter += 1) {
+    const mainSeg = getMain();
+    if (!mainSeg) break;
+    const rows = asRows(mainSeg);
+    if (rows.length === 0) break;
+    let needRepair = false;
+    if (anchor === 'trunk_control') {
+      needRepair = !rows.some((t) => hasTargetVector(t, ['trunk_control']));
+    } else if (anchor === 'lower_stability') {
+      needRepair = isMainUpperOnlyDominant(rows) || !mainHasLowerStabilityFamily(rows);
+    } else if (anchor === 'lower_mobility') {
+      const planVec = planHasTargetVectorInPlan(segments, templatesById, 'lower_mobility');
+      needRepair = isMainUpperDominantLowerMobility(rows) || !planVec;
+    } else if (anchor === 'upper_mobility') {
+      const planVec = planHasTargetVectorInPlan(segments, templatesById, 'upper_mobility');
+      needRepair = isMainLowerStabilityDominantUpper(rows) || !planVec;
+    } else if (anchor === 'deconditioned') {
+      const bad = rows.filter((t) => isHighRiskUnilateralUnfavorable(t));
+      needRepair = bad.length >= 2;
+    } else if (anchor === 'balanced_reset') {
+      if (rows.length < 2) {
+        needRepair = false;
+      } else {
+        const oneAxis = rows.every((t) => {
+          const v = t.target_vector ?? [];
+          return v.length === 1 && (v[0] === 'upper_mobility' || v[0] === 'lower_mobility');
+        });
+        needRepair = rows.length === 2 && oneAxis;
+      }
+    }
+    if (!needRepair) break;
+    const g =
+      anchor === 'lower_mobility' && !planHasTargetVectorInPlan(segments, templatesById, 'lower_mobility')
+        ? 'lower_mobility'
+        : anchor === 'upper_mobility' && !planHasTargetVectorInPlan(segments, templatesById, 'upper_mobility')
+          ? 'upper_mobility'
+          : anchor;
+    const ctx = ctxTemplate(g);
+    const used = collectUsedTemplateIdsFromSegments(segments);
+    const tryIdx = pickMainReplaceIndexForContinuity(rows, g);
+    const usedForPick = new Set(used);
+    const oldId = getMain()!.items[tryIdx]!.templateId;
+    usedForPick.delete(oldId);
+    const repl = findBestMainRepairFromPool(ctx, usedForPick, null);
+    if (repl) {
+      tryReplaceMainAt(tryIdx, repl);
+      continue;
+    }
+    let swapped = false;
+    for (const segTitle of ['Accessory', 'Prep', 'Cooldown'] as const) {
+      if (swapped) break;
+      const seg = segments.find((s) => s.title === segTitle);
+      if (!seg) continue;
+      for (let j = 0; j < seg.items.length; j += 1) {
+        const oth = templatesById.get(seg.items[j]!.templateId);
+        if (!oth) continue;
+        if (
+          !isRepairTemplateEligible(oth, {
+            sessionNumber: input.sessionNumber,
+            excludeSet: input.excludeSet,
+            painMode: input.painMode,
+            maxLevel: input.maxLevel,
+            maxDifficultyCap: input.maxDifficultyCap,
+          })
+        ) {
+          continue;
+        }
+        if (scoreRepairTemplateForGold(oth, g) < 200 && !isTargetAnchorVector(oth, g)) {
+          continue;
+        }
+        const badT = asRows(getMain())[tryIdx]!;
+        if (!badT) break;
+        tryReplaceMainAt(tryIdx, oth);
+        seg.items[j] = toPlanItem(badT, j + 1, segTitle, input.toPlanItemCtx);
+        swapped = true;
+        break;
+      }
+    }
+    if (!swapped) break;
+  }
+  const finalMain = asRows(getMain());
+  const stats = countMainVectorStats(finalMain, anchor);
+  const meta: SessionTypeContinuityMetaV1 = {
+    version: 'session_type_continuity_v1',
+    session_number: input.sessionNumber,
+    baseline_anchor: input.planInput.baseline_session_anchor ?? null,
+    primary_type: input.planInput.primary_type ?? null,
+    main_anchor_match_count: stats.main_anchor_match_count,
+    main_support_match_count: stats.main_support_match_count,
+    main_off_axis_count: stats.main_off_axis_count,
+    repaired: repairedIdList.length > 0,
+    ...(repairedIdList.length > 0 && { repaired_template_ids: repairedIdList }),
+    ...(removedIdList.length > 0 && { removed_template_ids: removedIdList }),
+  };
+  return {
+    plan: {
+      ...input.plan,
+      segments,
+      meta: {
+        ...input.plan.meta,
+        used_template_ids: Array.from(
+          new Set(segments.flatMap((s) => s.items.map((i) => i.templateId)))
+        ),
+      },
+    },
+    meta,
+  };
+}
+
 /**
  * S1 + gold: Main anchor 보정(풀 → Accessory/Prep/Cooldown 스왑). 세션 2+ no-op.
  */
@@ -1823,7 +2085,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
     priorityVector: input.priority_vector ?? null,
   });
 
-  let planAfterAnchorRepair = orderingResult.plan;
+  let planAfterOrdering = orderingResult.plan;
   let firstSessionAnchorIntegrity: FirstSessionAnchorIntegrityMetaV1 | undefined;
   if (isFirstSession && goldPathVector) {
     const r = repairFirstSessionMainAnchorIntegration({
@@ -1837,13 +2099,31 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       maxDifficultyCap,
       toPlanItemCtx,
     });
-    planAfterAnchorRepair = r.plan;
+    planAfterOrdering = r.plan;
     firstSessionAnchorIntegrity = r.integrity;
+  }
+
+  let planAfterS2S3 = planAfterOrdering;
+  let sessionTypeContinuity: SessionTypeContinuityMetaV1 | undefined;
+  if (input.sessionNumber === 2 || input.sessionNumber === 3) {
+    const c = repairSession2PlusTypeContinuity({
+      plan: planAfterOrdering,
+      planInput: input,
+      sessionNumber: input.sessionNumber,
+      templatePool: templates,
+      maxLevel,
+      excludeSet,
+      painMode: input.pain_mode,
+      maxDifficultyCap,
+      toPlanItemCtx,
+    });
+    planAfterS2S3 = c.plan;
+    if (c.meta) sessionTypeContinuity = c.meta;
   }
 
   const templatesById = new Map(templates.map((t) => [t.id, t]));
   const reconcileInput = {
-    segments: planAfterAnchorRepair.segments,
+    segments: planAfterS2S3.segments,
     templatesById,
     upstreamFocusAxes:
       effectiveFocusAxes.length > 0 ? effectiveFocusAxes : resolveSessionFocusAxes(input.priority_vector),
@@ -1858,12 +2138,12 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   };
   const reconcileOut = reconcileFinalPlanDisplayMeta(reconcileInput);
 
-  let planAfterReconcile = planAfterAnchorRepair;
+  let planAfterReconcile = planAfterS2S3;
   if (reconcileOut) {
     planAfterReconcile = {
-      ...planAfterAnchorRepair,
+      ...planAfterS2S3,
       meta: {
-        ...planAfterAnchorRepair.meta,
+        ...planAfterS2S3.meta,
         ...(reconcileOut.session_focus_axes.length > 0 && {
           session_focus_axes: reconcileOut.session_focus_axes,
         }),
@@ -1903,6 +2183,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
       ...(firstSessionAnchorIntegrity && {
         first_session_anchor_integrity: firstSessionAnchorIntegrity,
       }),
+      ...(sessionTypeContinuity && { session_type_continuity: sessionTypeContinuity }),
       plan_quality_audit: auditResult,
       prep_cooldown_alignment: prepCooldownAlignment,
     },
