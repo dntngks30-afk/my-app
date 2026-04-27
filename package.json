@@ -94,6 +94,8 @@
     "test:pilot-session": "node scripts/pilot-session-smoke-bundle.mjs",
     "test:pilot-camera": "node scripts/pilot-camera-smoke-bundle.mjs",
     "test:pilot-auth": "node scripts/pilot-auth-url-smoke.mjs",
+    "test:pilot-build": "node scripts/pilot-build-gate.mjs",
+    "test:pilot-ready": "node scripts/pilot-ready-smoke-bundle.mjs",
     "ops:template-media:mux-upload": "node scripts/template-media/mux-batch-upload.mjs",
     "ops:template-media:attach": "node scripts/template-media/apply-template-media-refresh.mjs",
     "ops:template-media:legacy-delete": "node scripts/template-media/delete-legacy-template-assets.mjs",
