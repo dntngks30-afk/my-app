@@ -6,6 +6,15 @@ import { getSessionSafe } from '@/lib/supabase';
 import type { ExerciseItem } from './planJsonAdapter';
 import type { ExerciseLogItem } from '@/lib/session/client';
 import { getMediaPayload, setMediaPayload, type MediaPayload } from './media-cache';
+import {
+  closeButtonGhost,
+  dashedSecondaryBtn,
+  modalSectionBorder,
+  modalSheetContainer,
+  primaryCtaRestrained,
+  setRowSurface,
+  stepperBtn,
+} from './homeExecutionTheme';
 
 interface ExercisePlayerModalProps {
   item: ExerciseItem | null;
@@ -235,39 +244,47 @@ function ModalInner({
   return (
     <>
       <div
-        className="fixed inset-0 z-[60] bg-black/60 animate-in fade-in"
+        className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-[2px] animate-in fade-in"
         style={{ animationDuration: '150ms' }}
         onClick={onClose}
         aria-hidden
       />
       <div
-        className="fixed inset-x-0 bottom-0 z-[70] animate-in slide-in-from-bottom-4"
-        style={{ animationDuration: '250ms', animationTimingFunction: 'cubic-bezier(0.2,0,0,1)' }}
+        className="fixed inset-x-0 bottom-0 z-[70] animate-in slide-in-from-bottom-4 px-3"
+        style={{
+          animationDuration: '250ms',
+          animationTimingFunction: 'cubic-bezier(0.2,0,0,1)',
+          paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
+        }}
       >
-        <div className="mx-auto max-w-[430px] overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className={modalSheetContainer}>
           {(sessionGoalText || painModeMessage) && (
-            <div className="border-b border-slate-100 px-4 py-2 space-y-0.5">
+            <div className={`space-y-0.5 px-4 py-2 ${modalSectionBorder}`}>
               {sessionGoalText && (
-                <p className="text-[10px] font-semibold text-slate-500">오늘 목표 · {sessionGoalText}</p>
+                <p className="text-[10px] font-semibold text-white/55">
+                  오늘 목표 · {sessionGoalText}
+                </p>
               )}
               {painModeMessage && (
-                <p className="text-[10px] text-amber-600">{painModeMessage}</p>
+                <p className="text-[10px] text-amber-200/90">{painModeMessage}</p>
               )}
             </div>
           )}
           {totalExercises > 0 && (
-            <div className="border-b border-slate-100 px-4 py-2">
-              <p className="text-[10px] font-semibold text-slate-500">운동 {exerciseIndex + 1} / {totalExercises}</p>
+            <div className={`px-4 py-2 ${modalSectionBorder}`}>
+              <p className="text-[10px] font-semibold text-white/55">
+                운동 {exerciseIndex + 1} / {totalExercises}
+              </p>
             </div>
           )}
-          <div className="flex items-start justify-between border-b border-slate-100 px-5 pt-4 pb-3">
+          <div className={`flex items-start justify-between px-5 pb-3 pt-4 ${modalSectionBorder}`}>
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/45">
                 {item.segmentTitle}
               </p>
-              <h3 className="text-base font-bold text-slate-800">{item.name}</h3>
+              <h3 className="text-base font-bold text-white/90">{item.name}</h3>
               {(item.targetSets || item.targetReps || item.holdSeconds) && (
-                <p className="mt-0.5 text-xs text-slate-500">
+                <p className="mt-0.5 text-xs text-white/55">
                   {item.targetSets && item.targetReps
                     ? `목표: ${item.targetSets}세트 × ${item.targetReps}회`
                     : item.holdSeconds
@@ -277,8 +294,9 @@ function ModalInner({
               )}
             </div>
             <button
+              type="button"
               onClick={onClose}
-              className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              className={`mt-0.5 ${closeButtonGhost}`}
               aria-label="모달 닫기"
             >
               <X className="h-4 w-4" />
@@ -287,8 +305,8 @@ function ModalInner({
 
           <div className="bg-black">
             {mediaLoading ? (
-              <div className="flex aspect-video items-center justify-center bg-slate-800">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-500 border-t-slate-300" />
+              <div className="flex aspect-video items-center justify-center bg-black">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/20 border-t-orange-400/70" />
               </div>
             ) : media?.kind === 'hls' && media.streamUrl ? (
               <div className="aspect-video">
@@ -310,32 +328,34 @@ function ModalInner({
                 />
               </div>
             ) : (
-              <div className="flex aspect-video flex-col items-center justify-center gap-2 bg-slate-800">
-                <p className="text-sm text-slate-400">영상 준비 중</p>
-                <p className="text-xs text-slate-500">텍스트 가이드를 참고해 주세요</p>
+              <div className="flex aspect-video flex-col items-center justify-center gap-2 bg-neutral-950">
+                <p className="text-sm text-white/55">영상 준비 중</p>
+                <p className="text-xs text-white/45">텍스트 가이드를 참고해 주세요</p>
               </div>
             )}
           </div>
 
           <div className="space-y-4 px-5 py-4 pb-8">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/45">
               세트별 기록 {isHold ? '(초)' : '(회)'}
             </p>
             <div className="space-y-2">
               {setEntries.map((entry, idx) => (
                 <div key={idx} className="flex items-center gap-2">
-                  <span className="w-10 shrink-0 text-sm font-medium text-slate-600">Set {idx + 1}</span>
-                  <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5">
+                  <span className="w-10 shrink-0 text-sm font-medium text-white/55">
+                    Set {idx + 1}
+                  </span>
+                  <div className={setRowSurface}>
                     <button
                       type="button"
                       onClick={() => adjustSetEntry(idx, isHold ? 'holdSeconds' : 'reps', isHold ? -5 : -1)}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 active:scale-95"
+                      className={stepperBtn}
                       aria-label={isHold ? '5초 감소' : '감소'}
                     >
                       <Minus className="h-4 w-4" />
                     </button>
                     {isHold ? (
-                      <span className="min-w-[3rem] flex-1 flex items-center justify-center gap-0.5">
+                      <span className="flex min-w-[3rem] flex-1 items-center justify-center gap-0.5">
                         <input
                           type="number"
                           inputMode="numeric"
@@ -343,20 +363,20 @@ function ModalInner({
                           max={600}
                           value={entry.holdSeconds}
                           onChange={(e) => handleHoldDirectInput(idx, e.target.value)}
-                          className="w-12 text-center text-lg font-bold text-slate-800 bg-transparent border-0 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          className="w-12 border-0 bg-transparent text-center text-lg font-bold text-white/90 outline-none ring-0 focus:ring-2 focus:ring-orange-500/35 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                           aria-label={`${idx + 1}세트 초 입력`}
                         />
-                        <span className="text-slate-600">초</span>
+                        <span className="text-white/55">초</span>
                       </span>
                     ) : (
-                      <span className="min-w-[3rem] flex-1 text-center text-lg font-bold text-slate-800">
+                      <span className="min-w-[3rem] flex-1 text-center text-lg font-bold text-white/90">
                         {entry.reps}
                       </span>
                     )}
                     <button
                       type="button"
                       onClick={() => adjustSetEntry(idx, isHold ? 'holdSeconds' : 'reps', isHold ? 5 : 1)}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 active:scale-95"
+                      className={stepperBtn}
                       aria-label={isHold ? '5초 증가' : '증가'}
                     >
                       <Plus className="h-4 w-4" />
@@ -366,7 +386,7 @@ function ModalInner({
                     <button
                       type="button"
                       onClick={() => removeSet(idx)}
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-400 hover:bg-red-50 hover:border-red-200 hover:text-red-500 transition-colors"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/12 text-white/45 transition-colors hover:border-red-400/35 hover:bg-red-950/40 hover:text-red-300"
                       aria-label={`${idx + 1}세트 삭제`}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -375,20 +395,12 @@ function ModalInner({
                 </div>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={addSet}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 py-3.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:border-slate-400 transition-colors"
-            >
+            <button type="button" onClick={addSet} className={dashedSecondaryBtn}>
               <Plus className="h-5 w-5" />
               세트 추가
             </button>
 
-            <button
-              type="button"
-              onClick={handleNextOrEndClick}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-400 py-3.5 text-sm font-bold text-white transition hover:bg-orange-500 active:scale-[0.98]"
-            >
+            <button type="button" onClick={handleNextOrEndClick} className={primaryCtaRestrained}>
               {isLast ? '세션 종료' : '다음'}
             </button>
           </div>

@@ -25,6 +25,19 @@ import {
   type LockedPreviewFetchState,
 } from '@/lib/session/locked-preview-recovery'
 import { useHomeSessionPanelState } from './useHomeSessionPanelState'
+import {
+  closeButtonGhost,
+  dragHandle,
+  panelHeaderBorder,
+  panelSectionBorder,
+  primaryCtaRestrained,
+  sessionGoalCard,
+  sessionGoalLabel,
+  sheetContainer,
+  statusChip,
+  titleMuted,
+  titlePrimary,
+} from './homeExecutionTheme'
 
 type SessionStatus = 'current' | 'completed' | 'locked'
 
@@ -67,11 +80,6 @@ const STATUS_LABEL: Record<SessionStatus, string> = {
   current: '진행 중',
   completed: '완료',
   locked: '잠김',
-}
-const STATUS_CLASS: Record<SessionStatus, string> = {
-  current: 'bg-orange-100 text-orange-700',
-  completed: 'bg-emerald-100 text-emerald-700',
-  locked: 'bg-slate-100 text-slate-500',
 }
 
 /** PR3 + PR-RISK-09: panel copy aligns with map/summary (legacy recovery sees session_number). */
@@ -321,7 +329,7 @@ function PanelInner({
     <>
       {/* Backdrop — 즉시 반응 느낌 */}
       <div
-        className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm animate-in fade-in"
+        className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm animate-in fade-in"
         style={{ animationDuration: '100ms' }}
         onClick={exerciseIndex != null ? undefined : onClose}
         aria-hidden
@@ -332,10 +340,10 @@ function PanelInner({
         className="fixed inset-x-0 bottom-0 z-[70] px-3 pb-3 animate-in slide-in-from-bottom-4"
         style={{ animationDuration: '180ms', animationTimingFunction: 'cubic-bezier(0.2,0,0,1)', paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
       >
-        <div className="mx-auto max-w-[430px] rounded-2xl border border-slate-200 bg-white shadow-xl">
+        <div className={sheetContainer}>
           {/* Drag handle */}
-          <div className="pt-3 pb-1 flex justify-center">
-            <div className="h-1.5 w-12 rounded-full bg-slate-200" />
+          <div className="flex justify-center pt-3 pb-1">
+            <div className={dragHandle} />
           </div>
 
           {/* Reflection: complete 이후 요약 화면 — 방금 완료한 세션만 표시 */}
@@ -392,40 +400,39 @@ function PanelInner({
             <>
           {/* PR-SESSION-FIX-03: 다음 세션 미리보기 배너 */}
           {completedSessions != null && sessionId === completedSessions + 1 && (
-            <div className="mx-4 mt-2 mb-0 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-center">
-              <p className="text-sm font-semibold text-violet-800">다음 세션 준비됐어요</p>
-              <p className="text-xs text-violet-600 mt-0.5">세션 {sessionId}에서 이런 운동을 하게 돼요</p>
+            <div className="mx-4 mt-2 mb-0 rounded-xl border border-violet-400/25 bg-violet-950/35 px-4 py-3 text-center">
+              <p className="text-sm font-semibold text-violet-200">다음 세션 준비됐어요</p>
+              <p className="mt-0.5 text-xs text-violet-300/90">세션 {sessionId}에서 이런 운동을 하게 돼요</p>
             </div>
           )}
 
           {/* 완료 상태 배너 (다음 세션 미리보기 배너와 겹치지 않음) */}
           {completed && completedSessions != null && sessionId !== completedSessions + 1 && (
-            <div className="mx-4 mt-2 mb-0 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-center">
-              <p className="text-sm font-semibold text-emerald-700">세션 완료! 수고하셨습니다 🎉</p>
+            <div className="mx-4 mt-2 mb-0 rounded-xl border border-emerald-500/30 bg-emerald-950/30 px-4 py-3 text-center">
+              <p className="text-sm font-semibold text-emerald-200">세션 완료! 수고하셨습니다 🎉</p>
             </div>
           )}
 
           {/* PR-PERSIST-01: 이전 진행 복구 안내 */}
           {draftRestored && status === 'current' && (
-            <div className="mx-4 mt-2 mb-0 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-center">
-              <p className="text-xs font-medium text-emerald-700">이전 진행이 복구되었습니다</p>
+            <div className="mx-4 mt-2 mb-0 rounded-xl border border-emerald-500/25 bg-emerald-950/25 px-4 py-2 text-center">
+              <p className="text-xs font-medium text-emerald-200">이전 진행이 복구되었습니다</p>
             </div>
           )}
 
           {/* 헤더 */}
-          <div className="flex items-center justify-between px-5 pt-3 pb-3 border-b border-slate-100">
+          <div className={`flex items-center justify-between px-5 pb-3 pt-3 ${panelHeaderBorder}`}>
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-slate-800">
+              <h2 className={titlePrimary}>
                 {`세션 ${sessionId}`}
-                <span className="ml-1.5 text-sm font-normal text-slate-400">{`/ ${total}`}</span>
+                <span className={`ml-1.5 ${titleMuted}`}>{`/ ${total}`}</span>
               </h2>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_CLASS[status]}`}>
-                {STATUS_LABEL[status]}
-              </span>
+              <span className={statusChip[status]}>{STATUS_LABEL[status]}</span>
             </div>
             <button
+              type="button"
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+              className={closeButtonGhost}
               aria-label="패널 닫기"
             >
               <X className="h-4 w-4" />
@@ -437,24 +444,25 @@ function PanelInner({
           {/* PR-ALG-10: Session Goal — rationale 상단 표시 */}
           <div className="max-h-[58vh] overflow-y-auto px-5 pt-4 pb-4">
             {rationale && (status === 'current' || status === 'completed') && (
-              <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">오늘의 목표</p>
+              <div className={sessionGoalCard}>
+                <p className={sessionGoalLabel}>오늘의 목표</p>
                 {'panelTitle' in rationale && typeof rationale.panelTitle === 'string' && rationale.panelTitle && (
-                  <p className="mt-1 text-sm font-semibold text-slate-800">
-                    {rationale.panelTitle}
-                  </p>
+                  <p className="mt-1 text-sm font-semibold text-white/90">{rationale.panelTitle}</p>
                 )}
-                <p className="mt-1.5 text-xs leading-5 text-slate-600">{rationale.headline}</p>
+                <p className="mt-1.5 text-xs leading-5 text-white/65">{rationale.headline}</p>
                 {rationale.detail && (
-                  <p className="mt-1 text-xs leading-5 text-slate-500">{rationale.detail}</p>
+                  <p className="mt-1 text-xs leading-5 text-white/55">{rationale.detail}</p>
                 )}
                 {'adaptation_summary' in rationale && rationale.adaptation_summary && (
-                  <p className="mt-1.5 text-xs text-slate-600">{rationale.adaptation_summary}</p>
+                  <p className="mt-1.5 text-xs text-white/65">{rationale.adaptation_summary}</p>
                 )}
                 {'chips' in rationale && Array.isArray(rationale.chips) && rationale.chips.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {rationale.chips.map((chip) => (
-                      <span key={chip} className="rounded-lg bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                      <span
+                        key={chip}
+                        className="rounded-lg bg-white/[0.08] px-2.5 py-0.5 text-xs font-medium text-white/65"
+                      >
                         {chip}
                       </span>
                     ))}
@@ -485,18 +493,18 @@ function PanelInner({
 
           {/* 종료 CTA 바 (current 세션만) — PR-UX-00: 질문 블록 제거, 버튼만 */}
           {status === 'current' && !completed && (
-            <div className="border-t border-slate-100 px-5 py-4 space-y-3">
+            <div className={`space-y-3 px-5 py-4 ${panelSectionBorder}`}>
               {completeError && (
-                <div className="flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2">
-                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
-                  <p className="text-xs text-red-600">{completeError}</p>
+                <div className="flex items-start gap-2 rounded-xl border border-red-500/25 bg-red-950/40 px-3 py-2">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
+                  <p className="text-xs text-red-200/95">{completeError}</p>
                 </div>
               )}
               <button
                 type="button"
                 disabled={completing || !activePlan?.session_number}
                 onClick={handleSessionCompleteClick}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-400 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-orange-500 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                className={primaryCtaRestrained}
               >
                 {completing ? (
                   <><Loader2 className="h-4 w-4 animate-spin" />저장 중...</>
@@ -553,16 +561,16 @@ function LockedPreviewLoadingState({
   reason: LockedNextPreviewRecoveryReason | null
 }) {
   return (
-    <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-5 text-center">
-      <div className="flex items-center justify-center gap-2 text-violet-700">
-        <Loader2 className="h-4 w-4 animate-spin" />
+    <div className="rounded-xl border border-violet-400/25 bg-violet-950/35 px-4 py-5 text-center">
+      <div className="flex items-center justify-center gap-2 text-violet-200">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
         <p className="text-sm font-semibold">다음 세션 미리보기를 불러오는 중...</p>
       </div>
-      <p className="mt-1 text-xs text-violet-600">
+      <p className="mt-1 text-xs text-violet-300/85">
         잠금 상태는 유지되지만, 다음 세션 내용을 새로 복구하고 있습니다.
       </p>
       {process.env.NODE_ENV !== 'production' && reason && (
-        <p className="mt-2 text-[11px] text-violet-500">{`debug: ${reason}`}</p>
+        <p className="mt-2 text-[11px] text-violet-400/80">{`debug: ${reason}`}</p>
       )}
     </div>
   )
@@ -603,8 +611,8 @@ function ExerciseList({
 }) {
   if (status === 'locked') {
     return (
-      <div className="rounded-xl bg-slate-50 px-4 py-5 text-center">
-        <p className="text-sm text-slate-500">
+      <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-5 text-center">
+        <p className="text-sm text-white/65">
           {isLockedNext
             ? `오늘 세션을 완료했어요. ${formatUnlockMessage(nextUnlockAt)}`
             : '아직 준비되지 않은 세션입니다.'}
@@ -618,17 +626,20 @@ function ExerciseList({
       <div className="space-y-4 animate-in fade-in" style={{ animationDuration: '120ms' }}>
         <div className="space-y-1.5">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex items-center gap-3 rounded-xl px-4 py-3 bg-slate-100">
-              <div className="h-5 w-5 shrink-0 rounded bg-slate-200 animate-pulse" />
+            <div
+              key={i}
+              className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.04] px-4 py-3"
+            >
+              <div className="h-5 w-5 shrink-0 animate-pulse rounded bg-white/10" />
               <div className="min-w-0 flex-1 space-y-1">
-                <div className="h-3.5 w-24 rounded bg-slate-200 animate-pulse" />
-                <div className="h-3 w-16 rounded bg-slate-100 animate-pulse" />
+                <div className="h-3.5 w-24 animate-pulse rounded bg-white/12" />
+                <div className="h-3 w-16 animate-pulse rounded bg-white/[0.06]" />
               </div>
-              <div className="h-8 w-8 shrink-0 rounded-lg bg-slate-200 animate-pulse" />
+              <div className="h-8 w-8 shrink-0 animate-pulse rounded-lg bg-white/10" />
             </div>
           ))}
         </div>
-        <p className="text-center text-xs text-slate-400">운동 구성을 불러오는 중...</p>
+        <p className="text-center text-xs text-white/45">운동 구성을 불러오는 중...</p>
       </div>
     )
   }
@@ -636,12 +647,12 @@ function ExerciseList({
   if (exercises.length === 0) {
     const message = createSessionError?.message ?? '운동 구성을 불러올 수 없습니다.'
     return (
-      <div className="space-y-1 rounded-xl bg-slate-50 px-4 py-5 text-center">
-        <p className="text-sm text-slate-500">{message}</p>
+      <div className="space-y-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-5 text-center">
+        <p className="text-sm text-white/65">{message}</p>
         {process.env.NODE_ENV !== 'production' && createSessionError?.code && (
-          <p className="text-xs text-slate-400">code: {createSessionError.code}</p>
+          <p className="text-xs text-white/45">code: {createSessionError.code}</p>
         )}
-        <p className="text-xs text-slate-400">페이지를 새로고침하면 다시 시도할 수 있습니다.</p>
+        <p className="text-xs text-white/45">페이지를 새로고침하면 다시 시도할 수 있습니다.</p>
       </div>
     )
   }
@@ -653,7 +664,7 @@ function ExerciseList({
     <div className="space-y-4">
       {grouped.map(({ title, items }) => (
         <div key={title}>
-          <p className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-slate-400">
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-white/45">
             {title}
           </p>
           <div className="space-y-1.5">
@@ -665,31 +676,35 @@ function ExerciseList({
                 <div
                   key={`${item.templateId}-${i}`}
                   className={[
-                    'flex items-center gap-3 rounded-xl px-4 py-3 transition-colors',
-                    isDone ? 'bg-emerald-50' : 'bg-slate-50',
+                    'flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors',
+                    isDone
+                      ? 'border-emerald-500/25 bg-emerald-950/35'
+                      : 'border-white/[0.08] bg-white/[0.04]',
                   ].join(' ')}
                 >
                   {/* 완료 체크 or 순서 번호 */}
                   {isDone ? (
-                    <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400/95" aria-hidden />
                   ) : (
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-200 text-[10px] font-medium text-slate-400">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-white/10 text-[10px] font-medium text-white/45">
                       {item.order}
                     </span>
                   )}
 
                   {/* 운동명 + rationale + 목표/실적 */}
                   <div className="min-w-0 flex-1">
-                    <p className={[
-                      'truncate text-sm font-medium',
-                      isDone ? 'text-emerald-800' : 'text-slate-800',
-                    ].join(' ')}>
+                    <p
+                      className={[
+                        'truncate text-sm font-medium',
+                        isDone ? 'text-emerald-100' : 'text-white/90',
+                      ].join(' ')}
+                    >
                       {item.name}
                     </p>
                     {item.rationale && (
-                      <p className="mt-0.5 text-xs text-slate-500">{item.rationale}</p>
+                      <p className="mt-0.5 text-xs text-white/55">{item.rationale}</p>
                     )}
-                    <p className="mt-0.5 text-xs text-slate-400">
+                    <p className="mt-0.5 text-xs text-white/45">
                       {isDone && displayValue
                         ? `${displayValue}${log?.difficulty ? ` · 난이도 ${log.difficulty}` : ''}`
                         : item.targetSets && item.targetReps
@@ -710,12 +725,12 @@ function ExerciseList({
                         : '현재 세션이 아닙니다'
                     }
                     className={[
-                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors',
+                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors',
                       panelStatus === 'current' || panelStatus === 'completed'
                         ? isDone
-                          ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
-                          : 'bg-orange-100 text-orange-600 hover:bg-orange-200'
-                        : 'cursor-not-allowed bg-slate-100 text-slate-300',
+                          ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
+                          : 'border-orange-500/35 bg-orange-500/12 text-orange-200 hover:bg-orange-500/22'
+                        : 'cursor-not-allowed border-white/10 bg-white/[0.04] text-white/25',
                     ].join(' ')}
                     aria-label={`${item.name} 운동 시작`}
                   >
