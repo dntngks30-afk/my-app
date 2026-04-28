@@ -13,6 +13,7 @@ import {
   isExcludedByPainMode,
 } from '@/lib/session/policy-registry/rules/selectionRules'
 import type { SessionTemplateRow } from '@/lib/workout-routine/exercise-templates-db'
+import { resolveGoldPathVectorUnified } from '@/lib/session/first-session-anchor-resolver'
 import {
   isLowerStabilityMainAnchorCandidate,
   isUpperOnlyMainOffAxisForLowerStability,
@@ -159,35 +160,6 @@ function resolveFocusAxes(priorityVector?: Record<string, number> | null): strin
     .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
     .slice(0, 2)
     .map(([axis]) => axis)
-}
-
-function resolveGoldPathVector(input: SessionBootstrapSummaryInput): GoldPathVector | null {
-  const ranked = Object.entries(input.deepSummary.priority_vector ?? {})
-    .filter((entry): entry is [GoldPathVector, number] =>
-      ['lower_stability', 'lower_mobility', 'trunk_control', 'upper_mobility', 'deconditioned', 'balanced_reset'].includes(entry[0]) &&
-      typeof entry[1] === 'number' &&
-      entry[1] > 0
-    )
-    .sort((a, b) => b[1] - a[1])
-
-  if (ranked.length > 0) return ranked[0][0]
-
-  switch (input.deepSummary.primary_type) {
-    case 'LOWER_INSTABILITY':
-      return 'lower_stability'
-    case 'LOWER_MOBILITY_RESTRICTION':
-      return 'lower_mobility'
-    case 'CORE_CONTROL_DEFICIT':
-      return 'trunk_control'
-    case 'UPPER_IMMOBILITY':
-      return 'upper_mobility'
-    case 'DECONDITIONED':
-      return 'deconditioned'
-    case 'STABLE':
-      return 'balanced_reset'
-    default:
-      return null
-  }
 }
 
 function computeTargetLevel(input: SessionBootstrapSummaryInput): { finalTargetLevel: number; maxLevel: number } {
@@ -803,7 +775,14 @@ export function buildSessionBootstrapSummaryFromTemplates(
     mainCount = Math.max(1, MAX_FIRST_SESSION_TOTAL_EXERCISES - 3)
   }
 
-  const resolvedVector = resolveGoldPathVector(input)
+  const goldPathResolution = resolveGoldPathVectorUnified({
+    sessionNumber: input.sessionNumber,
+    firstSessionGoldPath: firstSessionIntent?.goldPath ?? null,
+    baselineSessionAnchor: input.deepSummary.baseline_session_anchor ?? null,
+    primaryType: input.deepSummary.primary_type ?? null,
+    priorityVector: input.deepSummary.priority_vector ?? null,
+  })
+  const resolvedVector = goldPathResolution.vector
   const vectorForGold = resolvedVector ?? 'trunk_control'
   const selection = selectGoldPathTemplates(
     scored,

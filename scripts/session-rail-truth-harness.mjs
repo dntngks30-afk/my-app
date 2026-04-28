@@ -135,19 +135,15 @@ function poolLooksLikeHasLowerStabilityAnchor(templates) {
 }
 
 /** lower_stability S1 Main: 금지 upper-only 메타 태그, 풀에 후보가 있으면 Main에 앵커 1개 이상 */
-function assertLowerInstabilityLowerStabilityS1MainGuard(plan, templates, fixture, sessionNumber) {
-  if (sessionNumber !== 1) return;
-  if (fixture.primary_type !== 'LOWER_INSTABILITY') return;
-  if ((fixture.baseline_session_anchor ?? '').trim() !== 'lower_stability') return;
-  const gv = plan?.meta?.baseline_alignment?.gold_path_vector;
-  if (gv !== 'lower_stability') return;
+/** PR-FIRST-SESSION-PREVIEW-LOWER-ANCHOR-PARITY-01 — segments-only (preview path). */
+function assertSegmentsLowerStabilityS1MainNoUpperOffAxis(label, segments, templates) {
   const byId = new Map(templates.map((x) => [x.id, x]));
-  const main = plan?.segments?.find((s) => s.title === 'Main');
+  const main = segments?.find((s) => s.title === 'Main');
   for (const it of main?.items ?? []) {
     const tpl = byId.get(it.templateId);
     if (tpl && isUpperOnlyMainOffAxisForLowerStability(tpl)) {
       throw new Error(
-        `[SESSION_RAIL Harness] lower_stability S1 Main must not contain upper-only off-axis templates; got templateId=${it.templateId}, focus_tags=${JSON.stringify(tpl.focus_tags)}, target_vector=${JSON.stringify(tpl.target_vector ?? [])}`,
+        `[SESSION_RAIL Harness:${label}] lower_stability S1 Main must not contain upper-only off-axis templates; got templateId=${it.templateId}, focus_tags=${JSON.stringify(tpl.focus_tags)}, target_vector=${JSON.stringify(tpl.target_vector ?? [])}`,
       );
     }
   }
@@ -159,9 +155,237 @@ function assertLowerInstabilityLowerStabilityS1MainGuard(plan, templates, fixtur
       }) ?? false;
     if (!hasAnchor) {
       throw new Error(
-        '[SESSION_RAIL Harness] lower_stability S1 Main should contain at least one lower-stability anchor when pool supplies candidates.',
+        `[SESSION_RAIL Harness:${label}] lower_stability S1 Main should contain at least one lower-stability anchor when pool supplies candidates.`,
       );
     }
+  }
+}
+
+function assertLowerInstabilityLowerStabilityS1MainGuard(plan, templates, fixture, sessionNumber) {
+  if (sessionNumber !== 1) return;
+  if (fixture.primary_type !== 'LOWER_INSTABILITY') return;
+  if ((fixture.baseline_session_anchor ?? '').trim() !== 'lower_stability') return;
+  const gv = plan?.meta?.baseline_alignment?.gold_path_vector;
+  if (gv !== 'lower_stability') return;
+  assertSegmentsLowerStabilityS1MainNoUpperOffAxis('materialized', plan?.segments, templates);
+}
+
+/**
+ * PR-FIRST-SESSION-ANCHOR-SSOT-01 — 같은 입력에서 materialized vs preview 금 경로 + Main 가드 일치.
+ */
+async function runSsotSession1AnchorChecks({
+  buildSessionPlanJson,
+  buildSessionBootstrapSummaryFromTemplates,
+  resolveFirstSessionIntent,
+  resolveGoldPathVectorUnified,
+  templates,
+}) {
+  const mismatchLower = {
+    focus: [...PRIMARY_FOCUS_BY_TYPE.LOWER_INSTABILITY],
+    avoid: [],
+    deep_level: 2,
+    safety_mode: 'none',
+    red_flags: false,
+    primary_type: 'LOWER_INSTABILITY',
+    secondary_type: 'HARNESS_SSOT_SECONDARY',
+    priority_vector: { upper_mobility: 9, lower_stability: 3, trunk_control: 1 },
+    pain_mode: 'none',
+    result_type: 'LOWER-LIMB',
+    baseline_session_anchor: 'lower_stability',
+    scoring_version: 'deep_v2',
+  };
+
+  const intentL = resolveFirstSessionIntent({
+    sessionNumber: 1,
+    resultType: mismatchLower.result_type,
+    primaryType: mismatchLower.primary_type,
+    secondaryType: mismatchLower.secondary_type,
+    priorityVector: mismatchLower.priority_vector,
+    painMode: mismatchLower.pain_mode,
+    deepLevel: mismatchLower.deep_level,
+    safetyMode: mismatchLower.safety_mode,
+    redFlags: mismatchLower.red_flags,
+    baselineSessionAnchor: mismatchLower.baseline_session_anchor,
+  });
+
+  const unifiedLower = resolveGoldPathVectorUnified({
+    sessionNumber: 1,
+    firstSessionGoldPath: intentL?.goldPath ?? null,
+    baselineSessionAnchor: mismatchLower.baseline_session_anchor,
+    primaryType: mismatchLower.primary_type,
+    priorityVector: mismatchLower.priority_vector,
+  });
+  if (unifiedLower.vector !== 'lower_stability') {
+    throw new Error(
+      `[SESSION_RAIL SSOT] unified lower mismatch fixture expected vector lower_stability, got ${unifiedLower.vector} (source=${unifiedLower.source})`,
+    );
+  }
+
+  const planLower = await buildSessionPlanJson({
+    templatePool: templates,
+    sessionNumber: 1,
+    totalSessions: 16,
+    phase: 1,
+    theme: 'SSOT anchor mismatch (lower)',
+    timeBudget: 'normal',
+    conditionMood: 'ok',
+    focus: mismatchLower.focus,
+    avoid: mismatchLower.avoid,
+    painFlags: [],
+    usedTemplateIds: [],
+    scoringVersion: mismatchLower.scoring_version,
+    confidence: 0.82,
+    deep_level: mismatchLower.deep_level,
+    red_flags: mismatchLower.red_flags,
+    safety_mode: mismatchLower.safety_mode,
+    primary_type: mismatchLower.primary_type,
+    secondary_type: mismatchLower.secondary_type,
+    priority_vector: mismatchLower.priority_vector,
+    pain_mode: mismatchLower.pain_mode,
+    resultType: mismatchLower.result_type,
+    baseline_session_anchor: mismatchLower.baseline_session_anchor,
+  });
+
+  const gvMat = planLower.meta?.baseline_alignment?.gold_path_vector ?? null;
+  if (gvMat !== 'lower_stability') {
+    throw new Error(
+      `[SESSION_RAIL SSOT] materialized gold_path_vector expected lower_stability, got ${gvMat}`,
+    );
+  }
+
+  const previewLower = buildSessionBootstrapSummaryFromTemplates(templates, {
+    sessionNumber: 1,
+    deepSummary: {
+      ...mismatchLower,
+    },
+  });
+
+  const unifiedPrev = resolveGoldPathVectorUnified({
+    sessionNumber: 1,
+    firstSessionGoldPath: intentL?.goldPath ?? null,
+    baselineSessionAnchor: mismatchLower.baseline_session_anchor,
+    primaryType: mismatchLower.primary_type,
+    priorityVector: mismatchLower.priority_vector,
+  });
+  if (unifiedPrev.vector !== gvMat) {
+    throw new Error(
+      `[SESSION_RAIL SSOT] preview resolver vector ${unifiedPrev.vector} !== materialized ${gvMat}`,
+    );
+  }
+
+  assertLowerInstabilityLowerStabilityS1MainGuard(
+    planLower,
+    templates,
+    {
+      primary_type: mismatchLower.primary_type,
+      baseline_session_anchor: mismatchLower.baseline_session_anchor,
+    },
+    1
+  );
+  assertSegmentsLowerStabilityS1MainNoUpperOffAxis('preview', previewLower.segments, templates);
+
+  const mismatchUpper = {
+    focus: [...PRIMARY_FOCUS_BY_TYPE.UPPER_IMMOBILITY],
+    avoid: [],
+    deep_level: 2,
+    safety_mode: 'none',
+    red_flags: false,
+    primary_type: 'UPPER_IMMOBILITY',
+    secondary_type: 'HARNESS_SSOT_SECONDARY_UPPER',
+    priority_vector: { lower_stability: 9, upper_mobility: 3, trunk_control: 1 },
+    pain_mode: 'none',
+    result_type: 'UPPER-LIMB',
+    baseline_session_anchor: 'upper_mobility',
+    scoring_version: 'deep_v2',
+  };
+
+  const intentU = resolveFirstSessionIntent({
+    sessionNumber: 1,
+    resultType: mismatchUpper.result_type,
+    primaryType: mismatchUpper.primary_type,
+    secondaryType: mismatchUpper.secondary_type,
+    priorityVector: mismatchUpper.priority_vector,
+    painMode: mismatchUpper.pain_mode,
+    deepLevel: mismatchUpper.deep_level,
+    safetyMode: mismatchUpper.safety_mode,
+    redFlags: mismatchUpper.red_flags,
+    baselineSessionAnchor: mismatchUpper.baseline_session_anchor,
+  });
+
+  const unifiedUpper = resolveGoldPathVectorUnified({
+    sessionNumber: 1,
+    firstSessionGoldPath: intentU?.goldPath ?? null,
+    baselineSessionAnchor: mismatchUpper.baseline_session_anchor,
+    primaryType: mismatchUpper.primary_type,
+    priorityVector: mismatchUpper.priority_vector,
+  });
+  if (unifiedUpper.vector !== 'upper_mobility') {
+    throw new Error(
+      `[SESSION_RAIL SSOT] unified upper mismatch expected upper_mobility, got ${unifiedUpper.vector} (source=${unifiedUpper.source})`,
+    );
+  }
+
+  const planUpper = await buildSessionPlanJson({
+    templatePool: templates,
+    sessionNumber: 1,
+    totalSessions: 16,
+    phase: 1,
+    theme: 'SSOT anchor mismatch (upper)',
+    timeBudget: 'normal',
+    conditionMood: 'ok',
+    focus: mismatchUpper.focus,
+    avoid: mismatchUpper.avoid,
+    painFlags: [],
+    usedTemplateIds: [],
+    scoringVersion: mismatchUpper.scoring_version,
+    confidence: 0.82,
+    deep_level: mismatchUpper.deep_level,
+    red_flags: mismatchUpper.red_flags,
+    safety_mode: mismatchUpper.safety_mode,
+    primary_type: mismatchUpper.primary_type,
+    secondary_type: mismatchUpper.secondary_type,
+    priority_vector: mismatchUpper.priority_vector,
+    pain_mode: mismatchUpper.pain_mode,
+    resultType: mismatchUpper.result_type,
+    baseline_session_anchor: mismatchUpper.baseline_session_anchor,
+  });
+
+  const gvUpper = planUpper.meta?.baseline_alignment?.gold_path_vector ?? null;
+  if (gvUpper !== 'upper_mobility') {
+    throw new Error(
+      `[SESSION_RAIL SSOT] materialized gold_path_vector expected upper_mobility, got ${gvUpper}`,
+    );
+  }
+
+  buildSessionBootstrapSummaryFromTemplates(templates, {
+    sessionNumber: 1,
+    deepSummary: { ...mismatchUpper },
+  });
+  const unifiedUpperPreview = resolveGoldPathVectorUnified({
+    sessionNumber: 1,
+    firstSessionGoldPath: intentU?.goldPath ?? null,
+    baselineSessionAnchor: mismatchUpper.baseline_session_anchor,
+    primaryType: mismatchUpper.primary_type,
+    priorityVector: mismatchUpper.priority_vector,
+  });
+  if (unifiedUpperPreview.vector !== gvUpper) {
+    throw new Error(
+      `[SESSION_RAIL SSOT] upper preview resolver ${unifiedUpperPreview.vector} !== materialized ${gvUpper}`,
+    );
+  }
+
+  /** Session 2+: priority_vector 상위 축 우선 baseline 미적용 유지 */
+  const s2Unified = resolveGoldPathVectorUnified({
+    sessionNumber: 2,
+    firstSessionGoldPath: null,
+    baselineSessionAnchor: 'lower_stability',
+    primaryType: 'LOWER_INSTABILITY',
+    priorityVector: { upper_mobility: 9, lower_stability: 3 },
+  });
+  if (s2Unified.vector !== 'upper_mobility' || s2Unified.source !== 'priority_vector') {
+    throw new Error(
+      `[SESSION_RAIL SSOT] session 2 expected priority_vector winner upper_mobility; got vector=${s2Unified.vector}, source=${s2Unified.source}`,
+    );
   }
 }
 
@@ -755,10 +979,20 @@ async function main() {
       ? ['static-neutral', 'adaptive-branch', 'secondary-type-ab']
       : [mode];
 
-  const [{ buildSessionPlanJson }, { computePhase, resolvePhaseLengths }, { buildTheme }] = await Promise.all([
+  const [
+    { buildSessionPlanJson },
+    { computePhase, resolvePhaseLengths },
+    { buildTheme },
+    { buildSessionBootstrapSummaryFromTemplates },
+    { resolveFirstSessionIntent },
+    { resolveGoldPathVectorUnified },
+  ] = await Promise.all([
     import('../src/lib/session/plan-generator.ts'),
     import('../src/lib/session/phase.ts'),
     import('../src/app/api/session/create/_lib/helpers.ts'),
+    import('../src/lib/session/bootstrap-summary.ts'),
+    import('../src/lib/session/priority-layer.ts'),
+    import('../src/lib/session/first-session-anchor-resolver.ts'),
   ]);
 
   const loadOpts = { templateSource, ...(fixturePath ? { fixturePath } : {}) };
@@ -832,6 +1066,14 @@ async function main() {
         2
       ) + '\n'
     );
+
+    await runSsotSession1AnchorChecks({
+      buildSessionPlanJson,
+      buildSessionBootstrapSummaryFromTemplates,
+      resolveFirstSessionIntent,
+      resolveGoldPathVectorUnified,
+      templates,
+    });
   }
 
   if (modesToRun.includes('adaptive-branch')) {

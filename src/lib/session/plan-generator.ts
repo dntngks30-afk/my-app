@@ -76,6 +76,10 @@ import {
   type PrepCooldownAlignmentMetaV1,
 } from '@/lib/session/prep-cooldown-axis-profile';
 import { isExcludedByFirstSessionGuardrail } from './policy-registry/rules/selectionRules';
+import {
+  resolveGoldPathVectorUnified,
+  type GoldPathResolutionSource,
+} from './first-session-anchor-resolver';
 import { normalizeExerciseTaxonomy } from '@/lib/session/taxonomy';
 import { hasSingleLegLoad } from '@/core/session-guardrail/movementSafetyRules';
 import { isSafeForFirstSession } from '@/core/session-guardrail/difficultyClamp';
@@ -262,39 +266,6 @@ function resolveSessionRationale(
   return result.rationale_text;
 }
 
-function resolveGoldPathVector(
-  input: PlanGeneratorInput,
-  firstSessionIntent?: FirstSessionIntentSSOT | null
-): GoldPathVector | null {
-  if (firstSessionIntent?.goldPath && GOLD_PATH_VECTORS.includes(firstSessionIntent.goldPath as GoldPathVector)) {
-    return firstSessionIntent.goldPath as GoldPathVector;
-  }
-
-  const ranked = Object.entries(input.priority_vector ?? {})
-    .filter((entry): entry is [GoldPathVector, number] =>
-      GOLD_PATH_VECTORS.includes(entry[0] as GoldPathVector) && typeof entry[1] === 'number' && entry[1] > 0
-    )
-    .sort((a, b) => b[1] - a[1]);
-  if (ranked.length > 0) return ranked[0][0];
-
-  switch (input.primary_type) {
-    case 'LOWER_INSTABILITY':
-      return 'lower_stability';
-    case 'LOWER_MOBILITY_RESTRICTION':
-      return 'lower_mobility';
-    case 'CORE_CONTROL_DEFICIT':
-      return 'trunk_control';
-    case 'UPPER_IMMOBILITY':
-      return 'upper_mobility';
-    case 'DECONDITIONED':
-      return 'deconditioned';
-    case 'STABLE':
-      return 'balanced_reset';
-    default:
-      return null;
-  }
-}
-
 /** PR-ALG-16B: selection-time excludes delegated to policy-registry.applySelectionExcludes */
 
 export type ConditionMood = 'good' | 'ok' | 'bad';
@@ -472,6 +443,8 @@ export type PlanJsonOutput = {
       first_session_intent_anchor: string | null;
       gold_path_vector: string | null;
       intent_source: 'baseline_anchor' | 'legacy_band' | 'none';
+      /** PR-FIRST-SESSION-ANCHOR-SSOT-01: unified resolver source (non-UI audit) */
+      gold_path_resolution_source?: GoldPathResolutionSource;
     };
     /** PR-PREP-COOLDOWN-AXIS-ALIGN-01: Prep/Cooldown axis fit (additive, non-UI) */
     prep_cooldown_alignment?: PrepCooldownAlignmentMetaV1;
@@ -1980,7 +1953,14 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
   const fallbackUsed = usedFallbackPool;
   let duplicateFilteredCount = 0;
 
-  const goldPathVector = resolveGoldPathVector(input, firstSessionIntent);
+  const goldPathResolution = resolveGoldPathVectorUnified({
+    sessionNumber: input.sessionNumber,
+    firstSessionGoldPath: firstSessionIntent?.goldPath ?? null,
+    baselineSessionAnchor: input.baseline_session_anchor ?? null,
+    primaryType: input.primary_type ?? null,
+    priorityVector: input.priority_vector ?? null,
+  });
+  const goldPathVector = (goldPathResolution.vector ?? null) as GoldPathVector | null;
   if (
     isFirstSession &&
     surveySessionHints &&
@@ -2191,6 +2171,7 @@ export async function buildSessionPlanJson(input: PlanGeneratorInput): Promise<P
             : firstSessionIntent
               ? 'legacy_band' as const
               : 'none' as const,
+          gold_path_resolution_source: goldPathResolution.source,
         },
       }),
     },

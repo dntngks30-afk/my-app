@@ -159,13 +159,26 @@ async function loadStaticTemplates() {
   }));
 }
 
+const PRIMARY_FOCUS_BY_TYPE_FOR_SSOT = {
+  LOWER_INSTABILITY: ['lower_chain_stability', 'glute_activation', 'glute_medius', 'basic_balance'],
+  UPPER_IMMOBILITY: ['shoulder_mobility', 'thoracic_mobility', 'upper_back_activation', 'shoulder_stability'],
+};
+
 async function run() {
-  const [{ calculateDeepV3 }, { buildSessionPlanJson }, { buildSessionBootstrapSummaryFromTemplates }, { LOWER_AXIS_GUARD_TAGS }, { resolveFirstSessionIntent }] = await Promise.all([
+  const [
+    { calculateDeepV3 },
+    { buildSessionPlanJson },
+    { buildSessionBootstrapSummaryFromTemplates },
+    { LOWER_AXIS_GUARD_TAGS },
+    { resolveFirstSessionIntent },
+    { resolveGoldPathVectorUnified },
+  ] = await Promise.all([
     import('../src/lib/deep-test/scoring/deep_v3.ts'),
     import('../src/lib/session/plan-generator.ts'),
     import('../src/lib/session/bootstrap-summary.ts'),
     import('../src/lib/session/lower-pair-session1-shared.ts'),
     import('../src/lib/session/priority-layer.ts'),
+    import('../src/lib/session/first-session-anchor-resolver.ts'),
   ]);
   const personas = (await import('../src/lib/deep-test/scenarios/personas.json')).default;
   const templates = await loadStaticTemplates();
@@ -323,6 +336,168 @@ async function run() {
     });
   }
 
+  /** PR-FIRST-SESSION-ANCHOR-SSOT-01 — priority vs explicit Session 1 anchor */
+  const ssotLowerDeepSummary = {
+    focus: PRIMARY_FOCUS_BY_TYPE_FOR_SSOT.LOWER_INSTABILITY,
+    avoid: [],
+    deep_level: 2,
+    safety_mode: 'none',
+    red_flags: false,
+    primary_type: 'LOWER_INSTABILITY',
+    secondary_type: 'PR2B_SSOT_SECONDARY',
+    priority_vector: { upper_mobility: 9, lower_stability: 3, trunk_control: 1 },
+    pain_mode: 'none',
+    result_type: 'LOWER-LIMB',
+    baseline_session_anchor: 'lower_stability',
+    scoring_version: 'deep_v2',
+  };
+
+  const intentSsotLower = resolveFirstSessionIntent({
+    sessionNumber: 1,
+    resultType: ssotLowerDeepSummary.result_type,
+    baselineSessionAnchor: ssotLowerDeepSummary.baseline_session_anchor,
+  });
+
+  const unifiedSsotLower = resolveGoldPathVectorUnified({
+    sessionNumber: 1,
+    firstSessionGoldPath: intentSsotLower?.goldPath ?? null,
+    baselineSessionAnchor: ssotLowerDeepSummary.baseline_session_anchor,
+    primaryType: ssotLowerDeepSummary.primary_type,
+    priorityVector: ssotLowerDeepSummary.priority_vector,
+  });
+  if (unifiedSsotLower.vector !== 'lower_stability') {
+    throw new Error(
+      `[PR2-B SSOT] unified lower mismatch expected lower_stability; got ${unifiedSsotLower.vector} (${unifiedSsotLower.source})`,
+    );
+  }
+
+  const planSsotLower = await buildSessionPlanJson({
+    templatePool: templates,
+    sessionNumber: 1,
+    totalSessions: 16,
+    phase: 1,
+    theme: 'PR2-B SSOT lower anchor',
+    timeBudget: 'normal',
+    conditionMood: 'ok',
+    focus: ssotLowerDeepSummary.focus,
+    avoid: ssotLowerDeepSummary.avoid,
+    painFlags: [],
+    usedTemplateIds: [],
+    scoringVersion: 'deep_v3',
+    deep_level: ssotLowerDeepSummary.deep_level,
+    safety_mode: ssotLowerDeepSummary.safety_mode,
+    resultType: ssotLowerDeepSummary.result_type,
+    primary_type: ssotLowerDeepSummary.primary_type,
+    secondary_type: ssotLowerDeepSummary.secondary_type,
+    priority_vector: ssotLowerDeepSummary.priority_vector,
+    pain_mode: ssotLowerDeepSummary.pain_mode,
+    baseline_session_anchor: ssotLowerDeepSummary.baseline_session_anchor,
+    red_flags: ssotLowerDeepSummary.red_flags,
+  });
+
+  if (planSsotLower.meta?.baseline_alignment?.gold_path_vector !== 'lower_stability') {
+    throw new Error(
+      `[PR2-B SSOT] materialized gold_path_vector expected lower_stability; got ${planSsotLower.meta?.baseline_alignment?.gold_path_vector ?? 'null'}`,
+    );
+  }
+
+  const previewSsotLower = buildSessionBootstrapSummaryFromTemplates(templates, {
+    sessionNumber: 1,
+    deepSummary: ssotLowerDeepSummary,
+  });
+  assertMainNoUpperOnlyOffAxis('SSOT-preview-lower', previewSsotLower.segments, templateById);
+  assertMainNoUpperOnlyOffAxis('SSOT-materialized-lower', planSsotLower.segments, templateById);
+  if (poolHasLowerStabilityAnchorLike(templates)) {
+    if (!mainHasLowerStabilityAnchor(previewSsotLower.segments, templateById)) {
+      throw new Error('[PR2-B SSOT] preview Main missing lower-stability anchor candidate');
+    }
+    if (!mainHasLowerStabilityAnchor(planSsotLower.segments, templateById)) {
+      throw new Error('[PR2-B SSOT] materialized Main missing lower-stability anchor candidate');
+    }
+  }
+
+  const ssotUpperDeepSummary = {
+    focus: PRIMARY_FOCUS_BY_TYPE_FOR_SSOT.UPPER_IMMOBILITY,
+    avoid: [],
+    deep_level: 2,
+    safety_mode: 'none',
+    red_flags: false,
+    primary_type: 'UPPER_IMMOBILITY',
+    secondary_type: 'PR2B_SSOT_SECONDARY_U',
+    priority_vector: { lower_stability: 9, upper_mobility: 3, trunk_control: 1 },
+    pain_mode: 'none',
+    result_type: 'UPPER-LIMB',
+    baseline_session_anchor: 'upper_mobility',
+    scoring_version: 'deep_v2',
+  };
+
+  const intentSsotUpper = resolveFirstSessionIntent({
+    sessionNumber: 1,
+    resultType: ssotUpperDeepSummary.result_type,
+    baselineSessionAnchor: ssotUpperDeepSummary.baseline_session_anchor,
+  });
+
+  const unifiedSsotUpper = resolveGoldPathVectorUnified({
+    sessionNumber: 1,
+    firstSessionGoldPath: intentSsotUpper?.goldPath ?? null,
+    baselineSessionAnchor: ssotUpperDeepSummary.baseline_session_anchor,
+    primaryType: ssotUpperDeepSummary.primary_type,
+    priorityVector: ssotUpperDeepSummary.priority_vector,
+  });
+  if (unifiedSsotUpper.vector !== 'upper_mobility') {
+    throw new Error(
+      `[PR2-B SSOT] unified upper mismatch expected upper_mobility; got ${unifiedSsotUpper.vector} (${unifiedSsotUpper.source})`,
+    );
+  }
+
+  const planSsotUpper = await buildSessionPlanJson({
+    templatePool: templates,
+    sessionNumber: 1,
+    totalSessions: 16,
+    phase: 1,
+    theme: 'PR2-B SSOT upper anchor',
+    timeBudget: 'normal',
+    conditionMood: 'ok',
+    focus: ssotUpperDeepSummary.focus,
+    avoid: ssotUpperDeepSummary.avoid,
+    painFlags: [],
+    usedTemplateIds: [],
+    scoringVersion: 'deep_v3',
+    deep_level: ssotUpperDeepSummary.deep_level,
+    safety_mode: ssotUpperDeepSummary.safety_mode,
+    resultType: ssotUpperDeepSummary.result_type,
+    primary_type: ssotUpperDeepSummary.primary_type,
+    secondary_type: ssotUpperDeepSummary.secondary_type,
+    priority_vector: ssotUpperDeepSummary.priority_vector,
+    pain_mode: ssotUpperDeepSummary.pain_mode,
+    baseline_session_anchor: ssotUpperDeepSummary.baseline_session_anchor,
+    red_flags: ssotUpperDeepSummary.red_flags,
+  });
+
+  if (planSsotUpper.meta?.baseline_alignment?.gold_path_vector !== 'upper_mobility') {
+    throw new Error(
+      `[PR2-B SSOT] materialized gold_path_vector expected upper_mobility; got ${planSsotUpper.meta?.baseline_alignment?.gold_path_vector ?? 'null'}`,
+    );
+  }
+
+  buildSessionBootstrapSummaryFromTemplates(templates, {
+    sessionNumber: 1,
+    deepSummary: ssotUpperDeepSummary,
+  });
+
+  const ssotSession2 = resolveGoldPathVectorUnified({
+    sessionNumber: 2,
+    firstSessionGoldPath: null,
+    baselineSessionAnchor: 'lower_stability',
+    primaryType: 'LOWER_INSTABILITY',
+    priorityVector: { upper_mobility: 9, lower_stability: 3 },
+  });
+  if (ssotSession2.vector !== 'upper_mobility' || ssotSession2.source !== 'priority_vector') {
+    throw new Error(
+      `[PR2-B SSOT] session 2 expected priority_vector upper_mobility; got vector=${ssotSession2.vector}, source=${ssotSession2.source}`,
+    );
+  }
+
   const out = {
     generated_at: new Date().toISOString(),
     purpose: 'PR2-B follow-up continuity + dominant-axis guard sync proof',
@@ -331,6 +506,18 @@ async function run() {
     lower_stability_s1_regression: {
       note: 'Preview/materialized Main upper-only off-axis blocked for lower_stability S1; upper-mobility path may still surface upper-only Main items',
       upper_preview_sample_has_upper_only_main_candidate: upperPreviewUpperOnlyInMain,
+    },
+    ssot_anchor_mismatch: {
+      lower_vector_unified: unifiedSsotLower.vector,
+      lower_resolution_source: unifiedSsotLower.source,
+      materialized_lower_gold_path_vector: planSsotLower.meta?.baseline_alignment?.gold_path_vector ?? null,
+      materialized_lower_gold_path_resolution_source:
+        planSsotLower.meta?.baseline_alignment?.gold_path_resolution_source ?? null,
+      upper_vector_unified: unifiedSsotUpper.vector,
+      upper_resolution_source: unifiedSsotUpper.source,
+      materialized_upper_gold_path_vector: planSsotUpper.meta?.baseline_alignment?.gold_path_vector ?? null,
+      session_2_unified_vector: ssotSession2.vector,
+      session_2_unified_source: ssotSession2.source,
     },
   };
 
