@@ -46,7 +46,12 @@ import type {
   SurveySessionHintsObservabilityV1,
 } from '@/lib/deep-v2/session/survey-session-hints-first-session';
 import type { SessionCameraTranslationMetaV1 } from '@/lib/deep-v2/session/merge-survey-camera-session-hints';
-import { LOWER_AXIS_GUARD_TAGS, LOWER_PAIR_GOLD_PATH_RULES } from '@/lib/session/lower-pair-session1-shared';
+import {
+  isLowerStabilityMainAnchorCandidate,
+  isUpperOnlyMainOffAxisForLowerStability,
+  LOWER_AXIS_GUARD_TAGS,
+  LOWER_PAIR_GOLD_PATH_RULES,
+} from '@/lib/session/lower-pair-session1-shared';
 import {
   scoreUpperMobilityIntentFit,
   shouldReplaceForbiddenDominantByAnchor,
@@ -1184,6 +1189,27 @@ function scoreRepairTemplateForGold(t: SessionTemplateRow, g: GoldPathVector): n
   return s;
 }
 
+/**
+ * PR-FIRST-SESSION-LOWER-ANCHOR-MAIN-GUARD-01: S1 lower_stability Main 복구 후보 순위 (난이도·안전 우선 아님).
+ * lower_mobility support는 명시 순위상 하단(상체 채우기 금지).
+ */
+function scoreLowerStabilityS1MainRepairPriority(t: SessionTemplateRow): number {
+  const tv = t.target_vector ?? [];
+  let s = 0;
+  if (tv.includes('lower_stability')) s += 1_000_000;
+  if (t.focus_tags.some((tag) => tag === 'lower_chain_stability')) s += 800_000;
+  if (t.focus_tags.some((tag) => tag === 'glute_activation')) s += 600_000;
+  if (t.focus_tags.some((tag) => tag === 'glute_medius')) s += 500_000;
+  if (t.focus_tags.some((tag) => tag === 'basic_balance')) s += 400_000;
+  if (t.focus_tags.some((tag) => tag === 'core_stability')) s += 300_000;
+  if (tv.includes('lower_mobility')) s += 100_000;
+  return s + scoreRepairTemplateForGold(t, 'lower_stability');
+}
+
+function countPlanSegmentItems(segments: PlanSegment[]): number {
+  return segments.reduce((acc, seg) => acc + seg.items.length, 0);
+}
+
 function isRepairTemplateEligible(
   t: SessionTemplateRow,
   args: {
@@ -1236,8 +1262,10 @@ type RepairS1Context = {
 function findBestMainRepairFromPool(
   ctx: RepairS1Context,
   used: Set<string>,
-  excludeId: string | null
+  excludeId: string | null,
+  opts?: { requireLowerStabilityMainAnchor?: boolean }
 ): SessionTemplateRow | null {
+  const isS1Lower = ctx.sessionNumber === 1 && ctx.goldPathVector === 'lower_stability';
   const cands = ctx.templatePool
     .filter(
       (t) =>
@@ -1248,9 +1276,17 @@ function findBestMainRepairFromPool(
           painMode: ctx.painMode,
           maxLevel: ctx.maxLevel,
           maxDifficultyCap: ctx.maxDifficultyCap,
-        })
+        }) &&
+        (!isS1Lower || !isUpperOnlyMainOffAxisForLowerStability(t)) &&
+        (!opts?.requireLowerStabilityMainAnchor ||
+          (isLowerStabilityMainAnchorCandidate(t) && !isUpperOnlyMainOffAxisForLowerStability(t)))
     )
-    .map((t) => ({ t, sc: scoreRepairTemplateForGold(t, ctx.goldPathVector) }))
+    .map((t) => ({
+      t,
+      sc: isS1Lower
+        ? scoreLowerStabilityS1MainRepairPriority(t)
+        : scoreRepairTemplateForGold(t, ctx.goldPathVector),
+    }))
     .filter(({ t }) => !used.has(t.id))
     .sort((a, b) => b.sc - a.sc || a.t.id.localeCompare(b.t.id));
   return cands[0]?.t ?? null;
@@ -1554,7 +1590,43 @@ function repairFirstSessionMainAnchorIntegration(input: {
     };
   }
 
-  const pickMainReplaceIndex = (mainRows: SessionTemplateRow[], g: GoldPathVector): number => {
+  /** S1 lower_stability: 상체만 Main 태그 → 제거 후 Accessory 허용 시 이동, 아니면 드랍 */
+  if (input.sessionNumber === 1 && goldPathVector === 'lower_stability') {
+    const MAX_S1_TOTAL_HEURISTIC = 6;
+    const accessorySeg = segments.find((s) => s.title === 'Accessory');
+    const nextMainItems: typeof mainEntry.items = [];
+    const mainSeg = getMain()!;
+    for (let idx = 0; idx < mainSeg.items.length; idx += 1) {
+      const pi = mainSeg.items[idx]!;
+      const row = templatesById.get(pi.templateId);
+      if (row && isUpperOnlyMainOffAxisForLowerStability(row)) {
+        removedIdList.push(pi.templateId);
+        const accessoryDup = accessorySeg?.items.some((i) => i.templateId === pi.templateId);
+        const canAccessory =
+          accessorySeg &&
+          !accessoryDup &&
+          countPlanSegmentItems(segments) < MAX_S1_TOTAL_HEURISTIC;
+        if (canAccessory) {
+          accessorySeg!.items.push(
+            toPlanItem(row, accessorySeg!.items.length + 1, 'Accessory', input.toPlanItemCtx)
+          );
+        }
+        continue;
+      }
+      nextMainItems.push(pi);
+    }
+    mainSeg.items = nextMainItems.map((it, orderIdx) => ({ ...it, order: orderIdx + 1 }));
+  }
+
+  const pickMainReplaceIndex = (
+    mainRows: SessionTemplateRow[],
+    g: GoldPathVector
+  ): number => {
+    if (input.sessionNumber === 1 && g === 'lower_stability') {
+      for (let i = 0; i < mainRows.length; i += 1) {
+        if (isUpperOnlyMainOffAxisForLowerStability(mainRows[i]!)) return i;
+      }
+    }
     for (let i = 0; i < mainRows.length; i += 1) {
       if (isTargetOffAxisForGoldPath(mainRows[i]!, g)) return i;
     }
@@ -1566,6 +1638,60 @@ function repairFirstSessionMainAnchorIntegration(input: {
     }
     return 0;
   };
+
+  /** S1 lower_stability: 풀에 하체 앵커 후보가 있으면 Main에 최소 1개 */
+  if (input.sessionNumber === 1 && goldPathVector === 'lower_stability') {
+    const poolEligible = input.templatePool.filter(
+      (t) =>
+        isRepairTemplateEligible(t, {
+          sessionNumber: input.sessionNumber,
+          excludeSet: input.excludeSet,
+          painMode: input.painMode,
+          maxLevel: input.maxLevel,
+          maxDifficultyCap: input.maxDifficultyCap,
+        }) &&
+        isLowerStabilityMainAnchorCandidate(t) &&
+        !isUpperOnlyMainOffAxisForLowerStability(t)
+    );
+    const mainSegEarly = getMain();
+    const mainRowsNow = mainSegEarly ? asRows(mainSegEarly) : [];
+    const hasLsAnchor = mainRowsNow.some((t) => isLowerStabilityMainAnchorCandidate(t));
+    if (!hasLsAnchor && poolEligible.length > 0) {
+      used = collectUsedTemplateIdsFromSegments(segments);
+      let repl = findBestMainRepairFromPool(ctxBase, used, null, {
+        requireLowerStabilityMainAnchor: true,
+      });
+      if (!repl) {
+        const avail = poolEligible.filter((t) => !used.has(t.id));
+        if (avail.length > 0) {
+          avail.sort((a, b) => {
+            const ds =
+              scoreLowerStabilityS1MainRepairPriority(b) -
+              scoreLowerStabilityS1MainRepairPriority(a);
+            return ds !== 0 ? ds : a.id.localeCompare(b.id);
+          });
+          repl = avail[0]!;
+        }
+      }
+      if (
+        repl &&
+        isLowerStabilityMainAnchorCandidate(repl) &&
+        !isUpperOnlyMainOffAxisForLowerStability(repl) &&
+        mainSegEarly
+      ) {
+        if (!mainRowsNow.length) {
+          mainSegEarly.items = [toPlanItem(repl, 1, 'Main', input.toPlanItemCtx)];
+          repairedIdList.push(repl.id);
+        } else {
+          const tryIdx = pickMainReplaceIndex(mainRowsNow, goldPathVector);
+          removedIdList.push(mainSegEarly.items[tryIdx]!.templateId);
+          mainSegEarly.items[tryIdx] = toPlanItem(repl, tryIdx + 1, 'Main', input.toPlanItemCtx);
+          repairedIdList.push(repl.id);
+        }
+        used = collectUsedTemplateIdsFromSegments(segments);
+      }
+    }
+  }
 
   const tryReplaceMainAt = (mainIndex: number, replacement: SessionTemplateRow): void => {
     const main = getMain()!;
@@ -1605,6 +1731,13 @@ function repairFirstSessionMainAnchorIntegration(input: {
         if (!isRepairTemplateEligible(oth, { sessionNumber: input.sessionNumber, excludeSet: input.excludeSet, painMode: input.painMode, maxLevel: input.maxLevel, maxDifficultyCap: input.maxDifficultyCap })) {
           continue;
         }
+        if (
+          input.sessionNumber === 1 &&
+          goldPathVector === 'lower_stability' &&
+          isUpperOnlyMainOffAxisForLowerStability(oth)
+        ) {
+          continue;
+        }
         if (scoreRepairTemplateForGold(oth, goldPathVector) < 200 && !isTargetAnchorVector(oth, goldPathVector)) {
           continue;
         }
@@ -1637,7 +1770,7 @@ function repairFirstSessionMainAnchorIntegration(input: {
       version: 'first_session_anchor_integrity_v1',
       gold_path_vector: goldPathVector,
       ...stats,
-      repaired: repairedIdList.length > 0,
+      repaired: repairedIdList.length > 0 || removedIdList.length > 0,
       ...(repairedIdList.length > 0 && { repaired_template_ids: repairedIdList }),
       ...(removedIdList.length > 0 && { removed_template_ids: removedIdList }),
     },

@@ -26,3 +26,25 @@ export const LOWER_AXIS_GUARD_TAGS = {
   lower_mobility: ['hip_mobility', 'ankle_mobility', 'hip_flexor_stretch', 'calf_release'],
 } as const;
 
+/** PR-FIRST-SESSION-LOWER-ANCHOR-MAIN-GUARD-01: 순환 import 방지 최소 shape */
+export type LowerStabilityTemplateLike = {
+  target_vector?: string[] | null;
+  focus_tags: string[];
+};
+
+/** Main 앵커 후보: target_vector lower_stability 또는 허용 하체/밸런스 focus_tags */
+export function isLowerStabilityMainAnchorCandidate(template: LowerStabilityTemplateLike): boolean {
+  const targetVector = template.target_vector ?? [];
+  if (targetVector.includes('lower_stability')) return true;
+  return template.focus_tags.some((tag) =>
+    ['lower_chain_stability', 'glute_activation', 'glute_medius', 'basic_balance', 'core_stability'].includes(tag)
+  );
+}
+
+/** 후보가 하체 앵커가 아닌데 상체만 태그하면 true (이름 검사 금지) */
+export function isUpperOnlyMainOffAxisForLowerStability(template: LowerStabilityTemplateLike): boolean {
+  if (isLowerStabilityMainAnchorCandidate(template)) return false;
+  return template.focus_tags.some((tag) =>
+    ['upper_back_activation', 'shoulder_stability', 'shoulder_mobility', 'upper_mobility'].includes(tag)
+  );
+}

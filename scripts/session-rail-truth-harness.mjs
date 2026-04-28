@@ -104,6 +104,67 @@ const PRIMARY_ORDER = [
   'STABLE',
 ];
 
+/**
+ * PR-FIRST-SESSION-LOWER-ANCHOR-MAIN-GUARD-01 — mirrors lower-pair-session1-shared.ts (metadata-only).
+ */
+function isLowerStabilityMainAnchorCandidate(t) {
+  const tv = t.target_vector ?? [];
+  if (tv.includes('lower_stability')) return true;
+  return (t.focus_tags ?? []).some((tag) =>
+    ['lower_chain_stability', 'glute_activation', 'glute_medius', 'basic_balance', 'core_stability'].includes(tag),
+  );
+}
+
+function isUpperOnlyMainOffAxisForLowerStability(t) {
+  if (!t || !Array.isArray(t.focus_tags)) return false;
+  if (isLowerStabilityMainAnchorCandidate(t)) return false;
+  return t.focus_tags.some((tag) =>
+    ['upper_back_activation', 'shoulder_stability', 'shoulder_mobility', 'upper_mobility'].includes(tag),
+  );
+}
+
+function poolLooksLikeHasLowerStabilityAnchor(templates) {
+  return templates.some(
+    (tpl) =>
+      tpl &&
+      typeof tpl.focus_tags?.length === 'number' &&
+      isLowerStabilityMainAnchorCandidate(tpl) &&
+      !isUpperOnlyMainOffAxisForLowerStability(tpl) &&
+      (tpl.level ?? 1) <= 3,
+  );
+}
+
+/** lower_stability S1 Main: 금지 upper-only 메타 태그, 풀에 후보가 있으면 Main에 앵커 1개 이상 */
+function assertLowerInstabilityLowerStabilityS1MainGuard(plan, templates, fixture, sessionNumber) {
+  if (sessionNumber !== 1) return;
+  if (fixture.primary_type !== 'LOWER_INSTABILITY') return;
+  if ((fixture.baseline_session_anchor ?? '').trim() !== 'lower_stability') return;
+  const gv = plan?.meta?.baseline_alignment?.gold_path_vector;
+  if (gv !== 'lower_stability') return;
+  const byId = new Map(templates.map((x) => [x.id, x]));
+  const main = plan?.segments?.find((s) => s.title === 'Main');
+  for (const it of main?.items ?? []) {
+    const tpl = byId.get(it.templateId);
+    if (tpl && isUpperOnlyMainOffAxisForLowerStability(tpl)) {
+      throw new Error(
+        `[SESSION_RAIL Harness] lower_stability S1 Main must not contain upper-only off-axis templates; got templateId=${it.templateId}, focus_tags=${JSON.stringify(tpl.focus_tags)}, target_vector=${JSON.stringify(tpl.target_vector ?? [])}`,
+      );
+    }
+  }
+  if (poolLooksLikeHasLowerStabilityAnchor(templates)) {
+    const hasAnchor =
+      main?.items?.some((item) => {
+        const tpl = byId.get(item.templateId);
+        return tpl && isLowerStabilityMainAnchorCandidate(tpl);
+      }) ?? false;
+    if (!hasAnchor) {
+      throw new Error(
+        '[SESSION_RAIL Harness] lower_stability S1 Main should contain at least one lower-stability anchor when pool supplies candidates.',
+      );
+    }
+  }
+}
+
 function buildBaselineFixture(primary_type) {
   const pain_mode = 'none';
   const safety_mode = 'none';
@@ -564,6 +625,8 @@ async function materializeRail({
       volumeModifier,
       baseline_session_anchor: fixture.baseline_session_anchor,
     });
+
+    assertLowerInstabilityLowerStabilityS1MainGuard(plan, templates, fixture, sessionNumber);
 
     const usedIds = plan.meta?.used_template_ids ?? [];
     recordsForWindow.push({
