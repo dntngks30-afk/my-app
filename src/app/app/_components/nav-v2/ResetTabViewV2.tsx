@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Play,
   Clock,
@@ -9,8 +9,12 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import type { ResetIssueViewModel, ResetRecommendationResponse } from '@/lib/reset/types';
-import { fetchResetRecommendations } from '@/lib/reset/client';
+import { fetchResetMedia, fetchResetRecommendations } from '@/lib/reset/client';
 import { appTabCard, appTabMuted, appTabSubtle, appTabAccent } from './appTabTheme';
+import {
+  ResetStretchModal,
+  type ResetMediaModalState,
+} from './ResetStretchModal';
 
 /** SSOT 10 이슈 — error/loading 폴백 전용. API `issues`와 혼합하지 않는다. */
 const FALLBACK_ISSUE_ROWS: readonly { label: string; sub: string }[] = [
@@ -51,11 +55,33 @@ function deriveSelectedIssue(
   return featured ?? issues[0] ?? null;
 }
 
+function mediaFetchErrorMessage(result: {
+  ok: false;
+  status: number;
+  error: { code: string; message: string };
+}): string {
+  const { status, error } = result;
+  if (status === 401 || error.code === 'AUTH_REQUIRED') {
+    return '영상 재생 권한을 확인할 수 없어요. 다시 로그인해 주세요.';
+  }
+  if (status === 403 || error.code === 'FORBIDDEN') {
+    return '현재 플랜에서는 영상을 재생할 수 없어요.';
+  }
+  if (error.code === 'NETWORK_ERROR') {
+    return '네트워크 연결을 확인해 주세요.';
+  }
+  return '영상을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
+}
+
 export function ResetTabViewV2() {
   const [phase, setPhase] = useState<LoadingState>('loading');
   const [recommendation, setRecommendation] =
     useState<ResetRecommendationResponse | null>(null);
   const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
+  const [mediaModal, setMediaModal] = useState<ResetMediaModalState>({
+    status: 'closed',
+  });
+  const mediaRequestIdRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +108,53 @@ export function ResetTabViewV2() {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      mediaRequestIdRef.current += 1;
+    };
+  }, []);
+
+  const handleCloseMediaModal = useCallback(() => {
+    mediaRequestIdRef.current += 1;
+    setMediaModal({ status: 'closed' });
+  }, []);
+
+  const handlePlaySelectedIssue = useCallback(async () => {
+    if (phase !== 'ready' || !selectedIssue) return;
+    if (mediaModal.status === 'loading') return;
+
+    mediaRequestIdRef.current += 1;
+    const requestId = mediaRequestIdRef.current;
+
+    const snapshot = {
+      issue_key: selectedIssue.issue_key,
+      title: selectedIssue.card_title,
+      summary: selectedIssue.card_summary,
+    };
+
+    setMediaModal({
+      status: 'loading',
+      ...snapshot,
+    });
+
+    const result = await fetchResetMedia({ issue_key: selectedIssue.issue_key });
+
+    if (requestId !== mediaRequestIdRef.current) return;
+
+    if (!result.ok) {
+      setMediaModal({
+        status: 'error',
+        issue_key: snapshot.issue_key,
+        message: mediaFetchErrorMessage(result),
+        title: snapshot.title,
+        summary: snapshot.summary,
+      });
+      return;
+    }
+
+    setMediaModal({ status: 'ready', data: result.data });
+  }, [phase, selectedIssue, mediaModal.status]);
+
   const selectedIssue = useMemo(() => {
     if (phase !== 'ready' || !recommendation) return null;
     return deriveSelectedIssue(recommendation, selectedIssueKey);
@@ -93,10 +166,18 @@ export function ResetTabViewV2() {
     return recommendation?.user_pattern.display_label ?? '리셋 추천';
   })();
 
-  const ctaLabel =
+  const baseCtaLabel =
     selectedIssue?.cta_label?.trim() || '이 스트레칭 해보기';
+  const isCurrentIssueMediaLoading =
+    mediaModal.status === 'loading' &&
+    selectedIssue?.issue_key === mediaModal.issue_key;
+  const playLabel = isCurrentIssueMediaLoading
+    ? '영상 준비 중…'
+    : baseCtaLabel;
+  const playBusy = mediaModal.status === 'loading';
 
   return (
+    <>
     <div className="px-4 pb-6 pt-[max(1.25rem,env(safe-area-inset-top))]">
       <header className="mb-6">
         <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs text-white/80">
@@ -183,14 +264,12 @@ export function ResetTabViewV2() {
                 </span>
                 <button
                   type="button"
-                  aria-disabled={true}
-                  className={`inline-flex items-center gap-2 rounded-full border border-orange-500/35 bg-orange-500/15 px-4 py-2 text-sm font-medium ${appTabAccent} transition hover:bg-orange-500/25`}
-                  onClick={() => {
-                    /* FE-02: ResetStretchModal + fetchResetMedia 연결 예정 */
-                  }}
+                  disabled={playBusy}
+                  className={`inline-flex items-center gap-2 rounded-full border border-orange-500/35 bg-orange-500/15 px-4 py-2 text-sm font-medium ${appTabAccent} transition hover:bg-orange-500/25 disabled:pointer-events-none disabled:opacity-60`}
+                  onClick={handlePlaySelectedIssue}
                 >
                   <Play className="size-4 shrink-0" aria-hidden />
-                  {ctaLabel}
+                  {playLabel}
                 </button>
               </div>
             </div>
@@ -272,5 +351,10 @@ export function ResetTabViewV2() {
         )}
       </section>
     </div>
+
+    {mediaModal.status !== 'closed' ? (
+      <ResetStretchModal state={mediaModal} onClose={handleCloseMediaModal} />
+    ) : null}
+    </>
   );
 }
