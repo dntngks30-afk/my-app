@@ -1,6 +1,6 @@
 /**
  * PR-RESET-BE-01 — 10 stretch catalog (SSOT code).
- * template_id 미매핑 시 null; media_status는 타입에만 존재하며 후속 PR에서 template_id로 파생한다.
+ * template_id는 reset 전용 exercise_templates.id(R01…)와 1:1; 운영 DB에 행 업로드·attach 후에만 mapped HLS 플레이까지 이어진다.
  */
 import type { ResetStretchDefinition } from '@/lib/reset/types';
 
@@ -13,7 +13,7 @@ export const RESET_STRETCH_CATALOG: readonly ResetStretchDefinition[] = [
     target_body_parts: ['흉쇄유돌근', '목 앞쪽', '전경부'],
     primary_regions: ['neck'],
     duration_sec: 180,
-    template_id: null,
+    template_id: 'R01_STERNOCLEIDOMASTOID_STRETCH',
   },
   {
     stretch_key: 'quadriceps_stretch',
@@ -23,7 +23,7 @@ export const RESET_STRETCH_CATALOG: readonly ResetStretchDefinition[] = [
     target_body_parts: ['대퇴사두근', '앞허벅지', '고관절 앞쪽'],
     primary_regions: ['quad', 'hip', 'knee'],
     duration_sec: 180,
-    template_id: null,
+    template_id: 'R02_QUADRICEPS_STRETCH',
   },
   {
     stretch_key: 'hamstring_stretch',
@@ -33,7 +33,7 @@ export const RESET_STRETCH_CATALOG: readonly ResetStretchDefinition[] = [
     target_body_parts: ['햄스트링', '뒤허벅지', '후면 사슬'],
     primary_regions: ['hamstring', 'lumbar', 'pelvis'],
     duration_sec: 180,
-    template_id: null,
+    template_id: 'R03_HAMSTRING_STRETCH',
   },
   {
     stretch_key: 'seated_piriformis_stretch',
@@ -43,7 +43,7 @@ export const RESET_STRETCH_CATALOG: readonly ResetStretchDefinition[] = [
     target_body_parts: ['이상근', '둔부 깊은 근육', '고관절 외회전근'],
     primary_regions: ['hip', 'glute', 'pelvis'],
     duration_sec: 180,
-    template_id: null,
+    template_id: 'R04_SEATED_PIRIFORMIS_STRETCH',
   },
   {
     stretch_key: 'gluteus_maximus_stretch',
@@ -53,7 +53,7 @@ export const RESET_STRETCH_CATALOG: readonly ResetStretchDefinition[] = [
     target_body_parts: ['대둔근', '엉덩이 후면', '고관절 후방'],
     primary_regions: ['glute', 'hip', 'lumbar'],
     duration_sec: 180,
-    template_id: null,
+    template_id: 'R05_GLUTEUS_MAXIMUS_STRETCH',
   },
   {
     stretch_key: 'supine_piriformis_stretch',
@@ -63,7 +63,7 @@ export const RESET_STRETCH_CATALOG: readonly ResetStretchDefinition[] = [
     target_body_parts: ['이상근', '둔부 깊은 조직', '고관절 후외측'],
     primary_regions: ['glute', 'hip', 'pelvis'],
     duration_sec: 180,
-    template_id: null,
+    template_id: 'R06_SUPINE_PIRIFORMIS_STRETCH',
   },
   {
     stretch_key: 'cat_cow_spine_stretch',
@@ -73,7 +73,7 @@ export const RESET_STRETCH_CATALOG: readonly ResetStretchDefinition[] = [
     target_body_parts: ['요추', '흉추', '골반', '척추 전체'],
     primary_regions: ['thoracic', 'lumbar', 'pelvis'],
     duration_sec: 180,
-    template_id: null,
+    template_id: 'R07_CAT_COW_SPINE_STRETCH',
   },
   {
     stretch_key: 'foam_roller_lat_stretch',
@@ -83,7 +83,7 @@ export const RESET_STRETCH_CATALOG: readonly ResetStretchDefinition[] = [
     target_body_parts: ['광배근', '겨드랑이 라인', '흉곽 측면'],
     primary_regions: ['shoulder', 'thoracic', 'lat'],
     duration_sec: 180,
-    template_id: null,
+    template_id: 'R08_FOAM_ROLLER_LAT_STRETCH',
   },
   {
     stretch_key: 'longitudinal_foam_roller_chest_opener',
@@ -93,7 +93,7 @@ export const RESET_STRETCH_CATALOG: readonly ResetStretchDefinition[] = [
     target_body_parts: ['흉추', '가슴', '갈비뼈', '목-허리 정렬'],
     primary_regions: ['thoracic', 'shoulder', 'neck', 'lumbar'],
     duration_sec: 180,
-    template_id: null,
+    template_id: 'R09_LONGITUDINAL_FOAM_ROLLER_CHEST_OPENER',
   },
   {
     stretch_key: 'levator_scapulae_upper_trap_stretch',
@@ -103,6 +103,6 @@ export const RESET_STRETCH_CATALOG: readonly ResetStretchDefinition[] = [
     target_body_parts: ['견갑거근', '상부 승모근', '목 옆·뒤'],
     primary_regions: ['neck', 'shoulder'],
     duration_sec: 180,
-    template_id: null,
+    template_id: 'R10_LEVATOR_SCAPULAE_UPPER_TRAP_STRETCH',
   },
 ] as const;
