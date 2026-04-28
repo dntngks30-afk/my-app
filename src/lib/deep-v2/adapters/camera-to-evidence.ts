@@ -33,7 +33,7 @@
  * - upper_mobility:  3.0 (overhead arm_range + wall-angel)
  * - trunk_control:   3.0 (squat trunk_lean + lumbar)
  * - asymmetry:       2.0 (balance step 편측)
- * - deconditioned:   1.0 (전반 concern rate 기반)
+ * - deconditioned:   0.0 (PR5: 카메라 단독 저조건화 추론 금지)
  *
  * @see src/lib/deep-scoring-core/extractors/paid-survey-extractor.ts (paid 대응 파일)
  * @see src/lib/deep-v2/adapters/free-survey-to-evidence.ts (survey 대응 파일)
@@ -120,44 +120,263 @@ const STEP_OBSERVABLE_METRICS: Record<string, string[]> = {
 
 // ─── Evidence 추출 ─────────────────────────────────────────────────────────────
 
+const AXIS_ZERO: AxisScores = {
+  lower_stability: 0,
+  lower_mobility:  0,
+  upper_mobility:  0,
+  trunk_control:   0,
+  asymmetry:       0,
+  deconditioned:   0,
+};
+
+const CAMERA_AXIS_SCORE_CAPS: AxisScores = {
+  lower_stability: 3.0,
+  lower_mobility:  2.5,
+  upper_mobility:  3.0,
+  trunk_control:   3.0,
+  asymmetry:       2.0,
+  deconditioned:   0,
+};
+
+const CAMERA_EVIDENCE_QUALITY_SCALE: Record<CameraEvidenceQuality, number> = {
+  strong: 1,
+  partial: 0.45,
+  minimal: 0,
+};
+
+function emptyAxisScores(): AxisScores {
+  return { ...AXIS_ZERO };
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+function clampAxisScore(axis: keyof AxisScores, value: number): number {
+  return Math.min(CAMERA_AXIS_SCORE_CAPS[axis], Math.max(0, value));
+}
+
+function addAxisEvidence(
+  axes: AxisScores,
+  axis: keyof AxisScores,
+  value: number
+): void {
+  if (axis === 'deconditioned') return;
+  axes[axis] = clampAxisScore(axis, axes[axis] + Math.max(0, value));
+}
+
+function hasLimitation(
+  limitations: readonly string[] | undefined,
+  limitation: string
+): boolean {
+  return limitations?.includes(limitation) === true;
+}
+
+function qualityTierScale(tier: 'high' | 'medium' | 'low' | undefined): number {
+  if (tier === 'low') return 0.2;
+  if (tier === 'medium') return 0.72;
+  return 1;
+}
+
+function confidenceScale(confidence: number | undefined): number {
+  if (confidence == null || !Number.isFinite(confidence)) return 1;
+  if (confidence >= 0.7) return 1;
+  if (confidence >= 0.55) return 0.82;
+  if (confidence >= 0.42) return 0.62;
+  return 0.35;
+}
+
+function selectedWindowScale(input: {
+  selectedWindowScore?: number | null;
+  selectedWindowSource?: string;
+  fallbackReason?: string | null;
+} | undefined): number {
+  if (!input) return 1;
+
+  let scale = 1;
+  if (
+    input.selectedWindowSource === 'fallback_sparse_frames' ||
+    input.selectedWindowSource === 'fallback_all_valid_frames'
+  ) {
+    scale = Math.min(scale, 0.72);
+  } else if (input.selectedWindowSource === 'unavailable') {
+    scale = Math.min(scale, 0.35);
+  }
+
+  if (input.fallbackReason) {
+    scale = Math.min(scale, 0.72);
+  }
+
+  const score = input.selectedWindowScore;
+  if (typeof score === 'number' && Number.isFinite(score)) {
+    if (score < 0.45) scale = Math.min(scale, 0.45);
+    else if (score < 0.65) scale = Math.min(scale, 0.75);
+  }
+
+  return scale;
+}
+
+function scoreDeficitScale(score: number | null | undefined): number {
+  if (score == null || !Number.isFinite(score)) return 1;
+  return Math.max(0.25, clamp01(1 - score));
+}
+
+function motionQualityScale(
+  result: EvaluatorResult,
+  evidenceQuality: CameraEvidenceQuality
+): number {
+  const base = CAMERA_EVIDENCE_QUALITY_SCALE[evidenceQuality];
+  if (base <= 0) return 0;
+
+  const iq =
+    result.stepId === 'squat'
+      ? result.debug?.squatInternalQuality
+      : result.stepId === 'overhead-reach'
+        ? result.debug?.overheadInternalQuality
+        : undefined;
+
+  if (!iq) return base;
+
+  return clamp01(
+    base *
+      qualityTierScale(iq.qualityTier) *
+      confidenceScale(iq.confidence) *
+      selectedWindowScale(iq.qualityWindow)
+  );
+}
+
+function axisSupportScale(
+  result: EvaluatorResult,
+  axis: keyof AxisScores
+): number {
+  if (result.stepId === 'squat') {
+    const iq = result.debug?.squatInternalQuality;
+    if (!iq) return 1;
+    if (axis === 'lower_mobility') return scoreDeficitScale(iq.depthScore);
+    if (axis === 'lower_stability') {
+      return Math.max(
+        scoreDeficitScale(iq.controlScore),
+        scoreDeficitScale(iq.recoveryScore) * 0.75
+      );
+    }
+    if (axis === 'trunk_control') return scoreDeficitScale(iq.controlScore);
+    if (axis === 'asymmetry') return scoreDeficitScale(iq.symmetryScore);
+  }
+
+  if (result.stepId === 'overhead-reach') {
+    const iq = result.debug?.overheadInternalQuality;
+    if (!iq) return 1;
+    if (axis === 'upper_mobility') {
+      return Math.max(
+        scoreDeficitScale(iq.mobilityScore),
+        scoreDeficitScale(iq.holdStabilityScore) * 0.55
+      );
+    }
+    if (axis === 'trunk_control') return scoreDeficitScale(iq.controlScore);
+    if (axis === 'asymmetry') return scoreDeficitScale(iq.symmetryScore);
+  }
+
+  return 1;
+}
+
+function addMetricConcernEvidence(
+  axes: AxisScores,
+  result: EvaluatorResult,
+  metric: EvaluatorMetric,
+  evidenceQuality: CameraEvidenceQuality
+): void {
+  const mapping = METRIC_TO_AXIS[metric.name];
+  if (!mapping || mapping.axis === 'deconditioned') return;
+
+  const motionScale = motionQualityScale(result, evidenceQuality);
+  const supportScale = axisSupportScale(result, mapping.axis);
+  addAxisEvidence(axes, mapping.axis, mapping.weight * motionScale * supportScale);
+}
+
+function addSquatInternalQualityEvidence(
+  axes: AxisScores,
+  result: EvaluatorResult,
+  evidenceQuality: CameraEvidenceQuality
+): void {
+  const iq = result.debug?.squatInternalQuality;
+  if (!iq) return;
+
+  const motionScale = motionQualityScale(result, evidenceQuality);
+  if (motionScale <= 0) return;
+
+  if (hasLimitation(iq.limitations, 'depth_limited')) {
+    addAxisEvidence(axes, 'lower_mobility', 2.0 * motionScale * scoreDeficitScale(iq.depthScore));
+  }
+  if (hasLimitation(iq.limitations, 'unstable_control')) {
+    addAxisEvidence(axes, 'lower_stability', 1.5 * motionScale * scoreDeficitScale(iq.controlScore));
+    addAxisEvidence(axes, 'trunk_control', 1.5 * motionScale * scoreDeficitScale(iq.controlScore));
+  }
+  if (hasLimitation(iq.limitations, 'recovery_trajectory_weak')) {
+    addAxisEvidence(axes, 'lower_stability', 1.0 * motionScale * scoreDeficitScale(iq.recoveryScore));
+  }
+  if (hasLimitation(iq.limitations, 'asymmetry_elevated')) {
+    addAxisEvidence(axes, 'asymmetry', 1.0 * motionScale * scoreDeficitScale(iq.symmetryScore));
+  }
+}
+
+function addOverheadInternalQualityEvidence(
+  axes: AxisScores,
+  result: EvaluatorResult,
+  evidenceQuality: CameraEvidenceQuality
+): void {
+  const iq = result.debug?.overheadInternalQuality;
+  if (!iq) return;
+
+  const motionScale = motionQualityScale(result, evidenceQuality);
+  if (motionScale <= 0) return;
+
+  if (hasLimitation(iq.limitations, 'mobility_limited')) {
+    addAxisEvidence(axes, 'upper_mobility', 1.5 * motionScale * scoreDeficitScale(iq.mobilityScore));
+  }
+  if (hasLimitation(iq.limitations, 'hold_stability_weak')) {
+    addAxisEvidence(axes, 'upper_mobility', 0.75 * motionScale * scoreDeficitScale(iq.holdStabilityScore));
+  }
+  if (hasLimitation(iq.limitations, 'compensation_elevated')) {
+    addAxisEvidence(axes, 'trunk_control', 1.5 * motionScale * scoreDeficitScale(iq.controlScore));
+  }
+  if (hasLimitation(iq.limitations, 'asymmetry_elevated')) {
+    addAxisEvidence(axes, 'asymmetry', 1.0 * motionScale * scoreDeficitScale(iq.symmetryScore));
+  }
+}
+
+function addInternalQualityEvidence(
+  axes: AxisScores,
+  result: EvaluatorResult,
+  evidenceQuality: CameraEvidenceQuality
+): void {
+  if (result.stepId === 'squat') {
+    addSquatInternalQualityEvidence(axes, result, evidenceQuality);
+  } else if (result.stepId === 'overhead-reach') {
+    addOverheadInternalQualityEvidence(axes, result, evidenceQuality);
+  }
+}
+
 /**
  * step별 concern 메트릭으로 axis evidence 축적.
  * concern = 해당 movement issue가 실제로 관찰됨.
  * non-concern = 해당 축은 관찰 가능했으나 issue 없음 → axis score 0.
  */
 function buildAxisScoresFromMetrics(
-  validResults: EvaluatorResult[]
+  validResults: EvaluatorResult[],
+  evidenceQuality: CameraEvidenceQuality
 ): AxisScores {
-  const axes: AxisScores = {
-    lower_stability: 0,
-    lower_mobility:  0,
-    upper_mobility:  0,
-    trunk_control:   0,
-    asymmetry:       0,
-    deconditioned:   0,
-  };
+  const axes = emptyAxisScores();
 
   for (const result of validResults) {
     for (const metric of result.metrics) {
       if (metric.trend !== 'concern') continue;
-      const mapping = METRIC_TO_AXIS[metric.name];
-      if (!mapping) continue;
-      axes[mapping.axis] += mapping.weight;
+      addMetricConcernEvidence(axes, result, metric, evidenceQuality);
     }
+    addInternalQualityEvidence(axes, result, evidenceQuality);
   }
 
-  // asymmetry: single-leg-balance에서 사이드별 편차가 있으면 별도 추가
-  // (현재 evaluator가 asymmetry를 직접 측정하지 않으므로 sway가 한 방향만 있으면 proxy)
-  // 이 PR 범위에서는 보수적으로 0 유지 (카메라가 명시적으로 측정 안 함)
-
-  // deconditioned: overall concern rate가 높을 때 proxy
-  const allMetrics: EvaluatorMetric[] = validResults.flatMap((r) => r.metrics);
-  if (allMetrics.length > 0) {
-    const concernRate = allMetrics.filter((m) => m.trend === 'concern').length / allMetrics.length;
-    // concern이 60% 이상이면 전반적 저조건화 신호
-    if (concernRate >= 0.6) axes.deconditioned += 1.0;
-  }
-
+  axes.deconditioned = 0;
   return axes;
 }
 
@@ -222,14 +441,7 @@ export function cameraToEvidence(
   // pass 실패 또는 insufficient → 최소 evidence 반환
   if (!isCameraPassCompleted(cameraResult) || evidenceQuality === 'minimal') {
     return {
-      axis_scores: {
-        lower_stability: 0,
-        lower_mobility:  0,
-        upper_mobility:  0,
-        trunk_control:   0,
-        asymmetry:       0,
-        deconditioned:   0,
-      },
+      axis_scores: emptyAxisScores(),
       pain_signals: {
         max_intensity: undefined,
         primary_discomfort_none: undefined,
@@ -246,7 +458,7 @@ export function cameraToEvidence(
   }
 
   const validResults = cameraResult.evaluatorResults.filter((r) => !r.insufficientSignal);
-  const axisScores = buildAxisScoresFromMetrics(validResults);
+  const axisScores = buildAxisScoresFromMetrics(validResults, evidenceQuality);
 
   // movement_quality.all_good:
   // 카메라 결과에서 concern이 하나도 없고 captureQuality='ok'이면 STABLE 후보
