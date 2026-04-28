@@ -1,5 +1,5 @@
 /**
- * PR-CAMERA-QUALITY-OBSERVABILITY-02 smoke.
+ * Camera input quality observability smoke (OBS v03 + enrichment policy).
  *
  * Run:
  *   node scripts/camera-input-quality-observability-smoke.mjs
@@ -154,20 +154,23 @@ function makeSurveyAnswers() {
   };
 }
 
-console.log('\nPR-CAMERA-QUALITY-OBSERVABILITY-02 smoke\n');
+console.log('\nPR-CAMERA-QUALITY-OBSERVABILITY-03 smoke\n');
 
 run('buildCameraInputQualityObservability returns stable namespaced v1 object', () => {
   const obs = buildCameraInputQualityObservability(fixtureWithBothIq());
   const errors = [];
-  if (obs.policy_version !== 'camera_input_quality_obs_02') {
+  if (obs.policy_version !== 'camera_input_quality_obs_03') {
     errors.push(`unexpected policy_version ${obs.policy_version}`);
+  }
+  if (obs.interpretation_quality_enrichment_policy == null) {
+    errors.push('expected interpretation_quality_enrichment_policy');
   }
   if (obs.squat == null) errors.push('expected squat trace');
   if (obs.overheadReach == null) errors.push('expected overhead trace');
   if (obs.bridge?.refinement_evidence_strength == null) {
     errors.push('expected bridge.refinement_evidence_strength');
   }
-  const ns = 'camera_input_quality_obs_02';
+  const ns = 'camera_input_quality_obs_03';
   if (!JSON.stringify(obs).includes(ns) && obs.policy_version !== ns) {
     errors.push('payload should be identifiable as obs v02');
   }
@@ -207,7 +210,7 @@ run('missing IQ does not throw; traces null-safe', () => {
     const obs = buildCameraInputQualityObservability(fixtureNoIq());
     const errors = [];
     if (obs.squat != null) errors.push('squat should be null without IQ');
-    if (obs.policy_version !== 'camera_input_quality_obs_02') errors.push('policy_version');
+    if (obs.policy_version !== 'camera_input_quality_obs_03') errors.push('policy_version');
     return errors;
   } catch (e) {
     return [`threw: ${e?.message ?? e}`];

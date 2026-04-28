@@ -5,6 +5,7 @@
  * - 포즈·프레임에서 파생된 **숫자 신호만** 입력으로 받는다 (completionSatisfied 등 금지).
  * - 퍼블릭 UX·트렌드 라벨보다 **보수적(strict)** 인 0–1 스코어와 tier를 만든다.
  */
+import { applyInterpretationQualityWindowEnrichment } from '@/lib/camera/interpretation-quality-window-enrichment';
 import type { MotionInternalQualityBase } from '@/lib/camera/types/motion-completion';
 import type { QualityWindowTrace } from '@/lib/camera/stability';
 
@@ -187,8 +188,8 @@ export function computeSquatInternalQuality(input: SquatInternalQualityInput): S
   );
   const confidence = clamp01(input.validFrameRatio * clamp01(input.signalIntegrityMultiplier));
 
-  const qualityTier = deriveTier(depthScore, controlScore, symmetryScore, recoveryScore, confidence);
-  const limitations = deriveLimitations(
+  let qualityTier = deriveTier(depthScore, controlScore, symmetryScore, recoveryScore, confidence);
+  let limitations = deriveLimitations(
     depthScore,
     controlScore,
     symmetryScore,
@@ -196,13 +197,32 @@ export function computeSquatInternalQuality(input: SquatInternalQualityInput): S
     confidence,
     input
   );
+  let outConfidence = clamp01(confidence);
+
+  const enriched = applyInterpretationQualityWindowEnrichment(
+    {
+      confidence: outConfidence,
+      qualityTier,
+      limitations,
+    },
+    input.qualityWindow
+  );
+  outConfidence = enriched.confidence;
+  qualityTier = enriched.qualityTier;
+  limitations = enriched.limitations;
+  if (
+    outConfidence < 0.52 &&
+    !limitations.includes('low_tracking_confidence')
+  ) {
+    limitations = [...limitations, 'low_tracking_confidence'];
+  }
 
   return {
     depthScore: clamp01(depthScore),
     controlScore: clamp01(controlScore),
     symmetryScore: clamp01(symmetryScore),
     recoveryScore: clamp01(recoveryScore),
-    confidence: clamp01(confidence),
+    confidence: clamp01(outConfidence),
     qualityTier,
     limitations,
     ...(input.qualityWindow != null ? { qualityWindow: input.qualityWindow } : {}),

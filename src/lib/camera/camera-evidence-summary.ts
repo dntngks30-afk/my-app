@@ -7,6 +7,7 @@
  * - completion 임계값·재시도·오디오·네비는 건드리지 않는다 (저장된 evaluator 스냅샷만 읽음).
  */
 
+import { CAMERA_INTERPRETATION_QUALITY_ENRICHMENT_POLICY_VERSION } from '@/lib/camera/interpretation-quality-window-enrichment';
 import type { EvaluatorResult } from '@/lib/camera/evaluators/types';
 import type { QualityWindowTrace } from '@/lib/camera/stability';
 
@@ -333,7 +334,9 @@ export type OverheadInputQualityTrace = {
 };
 
 export type CameraInputQualityObservabilityV1 = {
-  policy_version: 'camera_input_quality_obs_02';
+  policy_version: 'camera_input_quality_obs_03';
+  /** PR4: enrichment layer applied inside computeSquat/OverheadInternalQuality only. */
+  interpretation_quality_enrichment_policy?: typeof CAMERA_INTERPRETATION_QUALITY_ENRICHMENT_POLICY_VERSION;
   squat: SquatInputQualityTrace | null;
   overheadReach: OverheadInputQualityTrace | null;
   bridge?: {
@@ -409,7 +412,9 @@ export function buildCameraInputQualityObservability(
   const refinement_evidence_strength = aggregateRefinementEvidenceStrength(results);
 
   return {
-    policy_version: 'camera_input_quality_obs_02',
+    policy_version: 'camera_input_quality_obs_03',
+    interpretation_quality_enrichment_policy:
+      CAMERA_INTERPRETATION_QUALITY_ENRICHMENT_POLICY_VERSION,
     squat,
     overheadReach,
     ...(refinement_evidence_strength != null && {

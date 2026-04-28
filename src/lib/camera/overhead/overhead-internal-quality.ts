@@ -1,6 +1,7 @@
 /**
  * PR-COMP-04 — 오버헤드 **내부 해석** 레이어 (completion·pass와 무관).
  */
+import { applyInterpretationQualityWindowEnrichment } from '@/lib/camera/interpretation-quality-window-enrichment';
 import type { MotionInternalQualityBase } from '@/lib/camera/types/motion-completion';
 import type { QualityWindowTrace } from '@/lib/camera/stability';
 import { OVERHEAD_REQUIRED_HOLD_MS, OVERHEAD_TOP_FLOOR_DEG } from './overhead-constants';
@@ -113,15 +114,15 @@ export function computeOverheadInternalQuality(
   const symmetryScore = scoreSymmetryStrict(input.meanAsymmetryDeg);
   const controlScore = scoreControlStrict(input.lumbarExtensionDeviationDeg);
   const holdStabilityScore = scoreHoldStabilityStrict(input);
-  const confidence = clamp01(input.validFrameRatio * clamp01(input.signalIntegrityMultiplier));
-  const qualityTier = deriveTier(
+  let confidence = clamp01(input.validFrameRatio * clamp01(input.signalIntegrityMultiplier));
+  let qualityTier = deriveTier(
     mobilityScore,
     controlScore,
     symmetryScore,
     holdStabilityScore,
     confidence
   );
-  const limitations = limitationsFor(
+  let limitations = limitationsFor(
     mobilityScore,
     controlScore,
     symmetryScore,
@@ -129,6 +130,20 @@ export function computeOverheadInternalQuality(
     confidence,
     input
   );
+
+  const enriched = applyInterpretationQualityWindowEnrichment(
+    { confidence, qualityTier, limitations },
+    input.qualityWindow
+  );
+  confidence = enriched.confidence;
+  qualityTier = enriched.qualityTier;
+  limitations = enriched.limitations;
+  if (
+    confidence < 0.5 &&
+    !limitations.includes('low_tracking_confidence')
+  ) {
+    limitations = [...limitations, 'low_tracking_confidence'];
+  }
 
   return {
     mobilityScore: clamp01(mobilityScore),
