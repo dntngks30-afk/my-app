@@ -119,6 +119,11 @@ export function ResetTabViewV2() {
     setMediaModal({ status: 'closed' });
   }, []);
 
+  const selectedIssue = useMemo(() => {
+    if (phase !== 'ready' || !recommendation) return null;
+    return deriveSelectedIssue(recommendation, selectedIssueKey);
+  }, [phase, recommendation, selectedIssueKey]);
+
   const handlePlaySelectedIssue = useCallback(async () => {
     if (phase !== 'ready' || !selectedIssue) return;
     if (mediaModal.status === 'loading') return;
@@ -154,11 +159,6 @@ export function ResetTabViewV2() {
 
     setMediaModal({ status: 'ready', data: result.data });
   }, [phase, selectedIssue, mediaModal.status]);
-
-  const selectedIssue = useMemo(() => {
-    if (phase !== 'ready' || !recommendation) return null;
-    return deriveSelectedIssue(recommendation, selectedIssueKey);
-  }, [phase, recommendation, selectedIssueKey]);
 
   const badgeLabel = (() => {
     if (phase === 'loading') return '패턴을 불러오는 중…';
