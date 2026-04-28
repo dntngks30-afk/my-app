@@ -1,7 +1,12 @@
 /**
- * Journey 탭 전용 movement 타입 라벨·요약 (공개 결과 카피와 완전 일치할 때만 동일 문구).
+ * Journey 탭 movement 타입 표시 — 설문/공개 결과와 동일 SSOT
+ * (`public-result-labels.ts`의 PRIMARY_TYPE_LABELS / PRIMARY_TYPE_BRIEF).
  */
 
+import {
+  PRIMARY_TYPE_BRIEF,
+  PRIMARY_TYPE_LABELS,
+} from '@/components/public-result/public-result-labels';
 import type { UnifiedPrimaryType } from '@/lib/result/deep-result-v2-contract';
 
 export const JOURNEY_NO_ANALYSIS = {
@@ -14,30 +19,16 @@ export const JOURNEY_PENDING_KNOWN_COPY = {
   summary: '현재 움직임 분석 결과를 안전하게 불러오는 중이에요.',
 } as const;
 
-/** unified primary → Journey 한 줄 요약 (명시 스펙) */
-export const JOURNEY_PRIMARY_SUMMARY: Partial<Record<UnifiedPrimaryType, { label: string; summary: string }>> = {
-  UPPER_IMMOBILITY: {
-    label: '상체 긴장형',
-    summary: '목과 어깨 주변 긴장이 높고, 흉추 움직임이 제한된 패턴이에요.',
-  },
-  LOWER_INSTABILITY: {
-    label: '하체 불안정형',
-    summary: '골반과 하체 안정성이 흔들려 움직임이 쉽게 무너지는 패턴이에요.',
-  },
-  /** 스펙 명칭 LOWER_MOBILITY — repo enum은 LOWER_MOBILITY_RESTRICTION */
-  LOWER_MOBILITY_RESTRICTION: {
-    label: '하체 가동성 제한형',
-    summary: '발목, 고관절, 하체 움직임 범위가 제한된 패턴이에요.',
-  },
-  CORE_CONTROL_DEFICIT: {
-    label: '코어 조절 부족형',
-    summary: '몸통 중심을 유지하는 힘과 조절 능력이 부족한 패턴이에요.',
-  },
-  DECONDITIONED: {
-    label: '전신 저활성형',
-    summary: '전반적인 활동량과 움직임 준비도가 낮아진 패턴이에요.',
-  },
-};
+/** 공개 결과 Step1 과 동일한 타입명·메인 해석 블록 */
+export function surveyResultCopy(pt: UnifiedPrimaryType): {
+  label: string;
+  summary: string;
+} {
+  return {
+    label: PRIMARY_TYPE_LABELS[pt],
+    summary: PRIMARY_TYPE_BRIEF[pt],
+  };
+}
 
 /** 레거시/딥 문자열로 등장 가능한 비표준 키 */
 const ALIAS_PRIMARY: Record<string, UnifiedPrimaryType | 'ASYMMETRY'> = {
@@ -83,22 +74,6 @@ export function getJourneyMovementCopy(primaryRaw: string, secondaryRaw: string 
 
   const primary_normalized = (ALIAS_PRIMARY[p] as string | undefined) ?? p;
 
-  if (!primary_normalized || primary_normalized === 'UNKNOWN') {
-    return {
-      primary_normalized,
-      secondary_normalized,
-      ...JOURNEY_PENDING_KNOWN_COPY,
-    };
-  }
-
-  if (primary_normalized === 'STABLE') {
-    return {
-      primary_normalized,
-      secondary_normalized,
-      ...JOURNEY_PENDING_KNOWN_COPY,
-    };
-  }
-
   if (primary_normalized === 'ASYMMETRY' || p === 'ASYMMETRY') {
     return {
       primary_normalized: 'ASYMMETRY',
@@ -108,7 +83,7 @@ export function getJourneyMovementCopy(primaryRaw: string, secondaryRaw: string 
     };
   }
 
-  if (!isUnifiedPrimary(primary_normalized)) {
+  if (!primary_normalized || !isUnifiedPrimary(primary_normalized)) {
     return {
       primary_normalized,
       secondary_normalized,
@@ -116,19 +91,13 @@ export function getJourneyMovementCopy(primaryRaw: string, secondaryRaw: string 
     };
   }
 
-  const row = JOURNEY_PRIMARY_SUMMARY[primary_normalized];
-  if (row) {
-    return {
-      primary_normalized,
-      secondary_normalized,
-      label: row.label,
-      summary: row.summary,
-    };
-  }
+  const typed = primary_normalized as UnifiedPrimaryType;
+  const fromSurvey = surveyResultCopy(typed);
 
   return {
     primary_normalized,
     secondary_normalized,
-    ...JOURNEY_PENDING_KNOWN_COPY,
+    label: fromSurvey.label,
+    summary: fromSurvey.summary,
   };
 }

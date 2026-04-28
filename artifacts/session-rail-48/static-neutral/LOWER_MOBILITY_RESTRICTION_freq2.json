@@ -1,7 +1,7 @@
 {
   "harness_version": "1.0.0",
   "script": "session-rail-truth-harness.mjs",
-  "generated_at": "2026-04-27T04:12:45.374Z",
+  "generated_at": "2026-04-27T16:19:25.342Z",
   "template_pool_source": "fixture_m01_m48_session_plan_v1",
   "template_count": 48,
   "modes": [
@@ -42,7 +42,7 @@
         "lower_mobility",
         "trunk_control"
       ],
-      "session_rationale": "하체 관절 가동성을 회복하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
+      "session_rationale": "하체 관절 가동성을 회복하는 세션이며, 몸통 제어 비중도 함께 넣었습니다.",
       "used_template_ids": [
         "M42",
         "M20",
@@ -172,9 +172,9 @@
       "session_rationale": "고관절·발목 가동성이 제한되어 하체 관절 가동성을 회복하는 세션입니다",
       "used_template_ids": [
         "M11",
-        "M16",
-        "M18",
         "M12",
+        "M22",
+        "M16",
         "M41"
       ],
       "constraint_flags": {
@@ -200,14 +200,14 @@
       "first_session_intent_anchor": null,
       "gold_path_vector": null,
       "main_segment_template_ids": [
-        "M18",
         "M12",
+        "M22",
         "M16"
       ],
       "all_template_ids": [
         "M11",
-        "M18",
         "M12",
+        "M22",
         "M16",
         "M41"
       ],
@@ -228,14 +228,14 @@
           "item_count": 3,
           "items": [
             {
-              "templateId": "M18",
-              "name": "양발 카프 레이즈",
-              "focus_tag": "ankle_mobility"
-            },
-            {
               "templateId": "M12",
               "name": "글루트 브릿지",
               "focus_tag": "glute_activation"
+            },
+            {
+              "templateId": "M22",
+              "name": "사이드 라이잉 힙 어브덕션",
+              "focus_tag": "glute_medius"
             },
             {
               "templateId": "M16",
@@ -294,17 +294,17 @@
         "lower_stability",
         "trunk_control"
       ],
-      "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
+      "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션이며, 몸통 제어 비중도 함께 넣었습니다.",
       "used_template_ids": [
         "M44",
-        "M13",
-        "M18",
         "M12",
-        "M10"
+        "M13",
+        "M22",
+        "M24"
       ],
       "constraint_flags": {
         "avoid_filter_applied": false,
-        "duplicate_filtered_count": 2,
+        "duplicate_filtered_count": 1,
         "focus_diversity_enforced": true,
         "fallback_used": false,
         "short_mode_applied": false,
@@ -325,16 +325,16 @@
       "first_session_intent_anchor": null,
       "gold_path_vector": null,
       "main_segment_template_ids": [
-        "M18",
         "M12",
-        "M13"
+        "M13",
+        "M22"
       ],
       "all_template_ids": [
         "M44",
-        "M18",
         "M12",
         "M13",
-        "M10"
+        "M22",
+        "M24"
       ],
       "segments": [
         {
@@ -353,11 +353,6 @@
           "item_count": 3,
           "items": [
             {
-              "templateId": "M18",
-              "name": "양발 카프 레이즈",
-              "focus_tag": "ankle_mobility"
-            },
-            {
               "templateId": "M12",
               "name": "글루트 브릿지",
               "focus_tag": "glute_activation"
@@ -366,6 +361,11 @@
               "templateId": "M13",
               "name": "데드버그",
               "focus_tag": "core_stability"
+            },
+            {
+              "templateId": "M22",
+              "name": "사이드 라이잉 힙 어브덕션",
+              "focus_tag": "glute_medius"
             }
           ]
         },
@@ -379,9 +379,9 @@
           "item_count": 1,
           "items": [
             {
-              "templateId": "M10",
-              "name": "고관절 굴곡근 스트레치",
-              "focus_tag": "hip_flexor_stretch"
+              "templateId": "M24",
+              "name": "티비얼리스 레이즈",
+              "focus_tag": "ankle_mobility"
             }
           ]
         }
@@ -419,9 +419,9 @@
         "trunk_control",
         "lower_stability"
       ],
-      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
+      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션이며, 하체 안정 비중도 함께 넣었습니다.",
       "used_template_ids": [
-        "M24",
+        "M18",
         "M14",
         "M29",
         "M12",
@@ -429,7 +429,7 @@
       ],
       "constraint_flags": {
         "avoid_filter_applied": false,
-        "duplicate_filtered_count": 3,
+        "duplicate_filtered_count": 2,
         "focus_diversity_enforced": true,
         "fallback_used": false,
         "short_mode_applied": false,
@@ -455,7 +455,7 @@
         "M29"
       ],
       "all_template_ids": [
-        "M24",
+        "M18",
         "M12",
         "M14",
         "M29",
@@ -467,8 +467,8 @@
           "item_count": 1,
           "items": [
             {
-              "templateId": "M24",
-              "name": "티비얼리스 레이즈",
+              "templateId": "M18",
+              "name": "양발 카프 레이즈",
               "focus_tag": "ankle_mobility"
             }
           ]
@@ -546,7 +546,7 @@
       ],
       "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션입니다",
       "used_template_ids": [
-        "M01",
+        "M10",
         "M30",
         "M31",
         "M12",
@@ -554,7 +554,7 @@
       ],
       "constraint_flags": {
         "avoid_filter_applied": false,
-        "duplicate_filtered_count": 3,
+        "duplicate_filtered_count": 4,
         "focus_diversity_enforced": true,
         "fallback_used": false,
         "short_mode_applied": false,
@@ -580,7 +580,7 @@
         "M31"
       ],
       "all_template_ids": [
-        "M01",
+        "M10",
         "M12",
         "M30",
         "M31",
@@ -592,9 +592,9 @@
           "item_count": 1,
           "items": [
             {
-              "templateId": "M01",
-              "name": "90/90 벽 호흡",
-              "focus_tag": "full_body_reset"
+              "templateId": "M10",
+              "name": "고관절 굴곡근 스트레치",
+              "focus_tag": "hip_flexor_stretch"
             }
           ]
         },
@@ -675,7 +675,7 @@
         "M20",
         "M33",
         "M12",
-        "M03"
+        "M01"
       ],
       "constraint_flags": {
         "avoid_filter_applied": false,
@@ -709,7 +709,7 @@
         "M20",
         "M12",
         "M33",
-        "M03"
+        "M01"
       ],
       "segments": [
         {
@@ -754,9 +754,9 @@
           "item_count": 1,
           "items": [
             {
-              "templateId": "M03",
-              "name": "턱 당기기",
-              "focus_tag": "upper_trap_release"
+              "templateId": "M01",
+              "name": "90/90 벽 호흡",
+              "focus_tag": "full_body_reset"
             }
           ]
         }
@@ -798,7 +798,7 @@
       "used_template_ids": [
         "M11",
         "M16",
-        "M18",
+        "M22",
         "M12",
         "M41"
       ],
@@ -825,14 +825,14 @@
       "first_session_intent_anchor": null,
       "gold_path_vector": null,
       "main_segment_template_ids": [
-        "M18",
         "M12",
+        "M22",
         "M16"
       ],
       "all_template_ids": [
         "M11",
-        "M18",
         "M12",
+        "M22",
         "M16",
         "M41"
       ],
@@ -853,14 +853,14 @@
           "item_count": 3,
           "items": [
             {
-              "templateId": "M18",
-              "name": "양발 카프 레이즈",
-              "focus_tag": "ankle_mobility"
-            },
-            {
               "templateId": "M12",
               "name": "글루트 브릿지",
               "focus_tag": "glute_activation"
+            },
+            {
+              "templateId": "M22",
+              "name": "사이드 라이잉 힙 어브덕션",
+              "focus_tag": "glute_medius"
             },
             {
               "templateId": "M16",
@@ -919,17 +919,17 @@
         "lower_stability",
         "trunk_control"
       ],
-      "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
+      "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션이며, 몸통 제어 비중도 함께 넣었습니다.",
       "used_template_ids": [
         "M44",
         "M13",
-        "M18",
+        "M22",
         "M12",
-        "M10"
+        "M43"
       ],
       "constraint_flags": {
         "avoid_filter_applied": false,
-        "duplicate_filtered_count": 1,
+        "duplicate_filtered_count": 2,
         "focus_diversity_enforced": true,
         "fallback_used": false,
         "short_mode_applied": false,
@@ -950,16 +950,16 @@
       "first_session_intent_anchor": null,
       "gold_path_vector": null,
       "main_segment_template_ids": [
-        "M18",
         "M12",
-        "M13"
+        "M13",
+        "M22"
       ],
       "all_template_ids": [
         "M44",
-        "M18",
         "M12",
         "M13",
-        "M10"
+        "M22",
+        "M43"
       ],
       "segments": [
         {
@@ -978,11 +978,6 @@
           "item_count": 3,
           "items": [
             {
-              "templateId": "M18",
-              "name": "양발 카프 레이즈",
-              "focus_tag": "ankle_mobility"
-            },
-            {
               "templateId": "M12",
               "name": "글루트 브릿지",
               "focus_tag": "glute_activation"
@@ -991,6 +986,11 @@
               "templateId": "M13",
               "name": "데드버그",
               "focus_tag": "core_stability"
+            },
+            {
+              "templateId": "M22",
+              "name": "사이드 라이잉 힙 어브덕션",
+              "focus_tag": "glute_medius"
             }
           ]
         },
@@ -1004,9 +1004,9 @@
           "item_count": 1,
           "items": [
             {
-              "templateId": "M10",
-              "name": "고관절 굴곡근 스트레치",
-              "focus_tag": "hip_flexor_stretch"
+              "templateId": "M43",
+              "name": "90/90 힙 스위치",
+              "focus_tag": "hip_mobility"
             }
           ]
         }

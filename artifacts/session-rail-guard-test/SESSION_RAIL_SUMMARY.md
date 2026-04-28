@@ -1,6 +1,6 @@
 # Session rail truth summary
 
-Generated: 2026-04-27T16:19:25.342Z
+Generated: 2026-04-28T03:24:30.474Z
 Harness: session-rail-truth-harness.mjs v1.0.0
 Template pool: fixture_m01_m48_session_plan_v1 (count=48)
 
@@ -30,7 +30,7 @@ Template pool: fixture_m01_m48_session_plan_v1 (count=48)
 
 ## 4. Six baseline type rail summary
 
-Static-neutral artifacts: `C:\projects\my-app\artifacts\session-rail-48\static-neutral`
+Static-neutral artifacts: `C:\projects\my-app\artifacts\session-rail-guard-test\static-neutral`
 - Per case: `*_freq*.json`
 - Matrix: `rail-matrix.json`
 
@@ -38,11 +38,11 @@ Static-neutral artifacts: `C:\projects\my-app\artifacts\session-rail-48\static-n
 
 Branches: `neutral`, `low_tolerance_or_pain_flare`, `high_tolerance` (overlay/modifier injected from session 2+; session 1 identical).
 
-Artifacts: `C:\projects\my-app\artifacts\session-rail-48\adaptive-branch`
+Artifacts: `C:\projects\my-app\artifacts\session-rail-guard-test\adaptive-branch`
 
 ## 6. secondary_type A/B summary
 
-Artifacts: `C:\projects\my-app\artifacts\session-rail-48\secondary-type-ab`
+Artifacts: `C:\projects\my-app\artifacts\session-rail-guard-test\secondary-type-ab`
 - `ab-summary.json` — per-session classification + aggregate.
 
 ## 7. Final classification (secondary_type)

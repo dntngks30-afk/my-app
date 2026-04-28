@@ -1,7 +1,7 @@
 {
   "harness_version": "1.0.0",
   "script": "session-rail-truth-harness.mjs",
-  "generated_at": "2026-04-27T04:12:45.374Z",
+  "generated_at": "2026-04-27T16:19:25.342Z",
   "template_pool_source": "fixture_m01_m48_session_plan_v1",
   "template_count": 48,
   "modes": [
@@ -181,8 +181,8 @@
       "used_template_ids": [
         "M03",
         "M07",
-        "M08",
         "M12",
+        "M08",
         "M48"
       ],
       "constraint_flags": {
@@ -305,9 +305,9 @@
       "session_rationale": "흉추·어깨 가동성이 제한되어 상체 가동성과 움직임 범위를 개선하는 세션입니다",
       "used_template_ids": [
         "M02",
-        "M09",
         "M45",
         "M12",
+        "M09",
         "M01"
       ],
       "constraint_flags": {
@@ -427,7 +427,7 @@
         "trunk_control",
         "lower_stability"
       ],
-      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
+      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션이며, 하체 안정 비중도 함께 넣었습니다.",
       "used_template_ids": [
         "M28",
         "M47",
@@ -552,11 +552,11 @@
         "lower_stability",
         "trunk_control"
       ],
-      "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션고, 몸통 제어 비중도 함께 넣었습니다.",
+      "session_rationale": "엉덩이와 골반 안정성을 강화하는 세션이며, 몸통 제어 비중도 함께 넣었습니다.",
       "used_template_ids": [
         "M46",
         "M14",
-        "M18",
+        "M22",
         "M12",
         "M11"
       ],
@@ -583,15 +583,15 @@
       "first_session_intent_anchor": null,
       "gold_path_vector": null,
       "main_segment_template_ids": [
-        "M18",
         "M12",
-        "M14"
+        "M14",
+        "M22"
       ],
       "all_template_ids": [
         "M46",
-        "M18",
         "M12",
         "M14",
+        "M22",
         "M11"
       ],
       "segments": [
@@ -611,11 +611,6 @@
           "item_count": 3,
           "items": [
             {
-              "templateId": "M18",
-              "name": "양발 카프 레이즈",
-              "focus_tag": "ankle_mobility"
-            },
-            {
               "templateId": "M12",
               "name": "글루트 브릿지",
               "focus_tag": "glute_activation"
@@ -624,6 +619,11 @@
               "templateId": "M14",
               "name": "버드독",
               "focus_tag": "core_stability"
+            },
+            {
+              "templateId": "M22",
+              "name": "사이드 라이잉 힙 어브덕션",
+              "focus_tag": "glute_medius"
             }
           ]
         },
@@ -1052,7 +1052,7 @@
         "trunk_control",
         "lower_stability"
       ],
-      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
+      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션이며, 하체 안정 비중도 함께 넣었습니다.",
       "used_template_ids": [
         "M28",
         "M47",
@@ -1677,7 +1677,7 @@
         "trunk_control",
         "lower_stability"
       ],
-      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
+      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션이며, 하체 안정 비중도 함께 넣었습니다.",
       "used_template_ids": [
         "M28",
         "M47",
@@ -2302,7 +2302,7 @@
         "trunk_control",
         "lower_stability"
       ],
-      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션고, 하체 안정 비중도 함께 넣었습니다.",
+      "session_rationale": "몸통 제어와 코어 안정성을 강화하는 세션이며, 하체 안정 비중도 함께 넣었습니다.",
       "used_template_ids": [
         "M28",
         "M47",

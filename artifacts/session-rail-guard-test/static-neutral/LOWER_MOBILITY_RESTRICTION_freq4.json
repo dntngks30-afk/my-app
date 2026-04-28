@@ -1,7 +1,7 @@
 {
   "harness_version": "1.0.0",
   "script": "session-rail-truth-harness.mjs",
-  "generated_at": "2026-04-27T16:19:25.342Z",
+  "generated_at": "2026-04-28T03:24:30.474Z",
   "template_pool_source": "fixture_m01_m48_session_plan_v1",
   "template_count": 48,
   "modes": [
@@ -69,7 +69,8 @@
         "baseline_session_anchor": "lower_mobility",
         "first_session_intent_anchor": "lower_mobility",
         "gold_path_vector": "lower_mobility",
-        "intent_source": "baseline_anchor"
+        "intent_source": "baseline_anchor",
+        "gold_path_resolution_source": "first_session_intent"
       },
       "plan_quality_audit_summary": {
         "version": "plan_quality_audit_v1",
