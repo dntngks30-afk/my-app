@@ -53,3 +53,68 @@ export type ResetIssueDefinition = {
 
   safety_note?: string | null;
 };
+
+/** PR-RESET-BE-02 — recommendation engine input (readiness 또는 폴백에서 파생). */
+export type ResetRecommendationPatternInput = {
+  primary_type?: string | null;
+  secondary_type?: string | null;
+  /** readiness result_summary 우선 순위 축(값 재해석 없음). */
+  priority_vector?: string[];
+  pain_mode?: 'none' | 'caution' | 'protected' | null;
+};
+
+export type ResetStretchViewModel = {
+  stretch_key: string;
+  name_ko: string;
+  name_en: string;
+  asset_slug: string;
+  template_id: string | null;
+  media_status: ResetMediaStatus;
+};
+
+export type ResetIssueViewModel = {
+  issue_key: string;
+  issue_label: string;
+  short_goal: string;
+  card_title: string;
+  card_summary: string;
+
+  duration_sec: number;
+  duration_label: string;
+
+  primary_stretch: ResetStretchViewModel;
+  alternative_stretches: ResetStretchViewModel[];
+
+  cta_label: string;
+  safety_note?: string | null;
+};
+
+export type ResetRecommendationResponse = {
+  version: 'reset_v1';
+
+  user_pattern: {
+    primary_type: string | null;
+    secondary_type?: string | null;
+    display_label: string;
+    source_stage?: 'baseline' | 'refined' | 'legacy' | 'fallback';
+    priority_vector?: string[];
+    pain_mode?: 'none' | 'caution' | 'protected' | null;
+  };
+
+  featured_issue_key: string;
+  featured: ResetIssueViewModel;
+  issues: ResetIssueViewModel[];
+
+  meta: {
+    source: 'readiness' | 'fallback';
+    total_issues: number;
+    unmapped_template_count: number;
+  };
+};
+
+/** 클라이언트 fetch 정규화 — session/client.ts에 의존하지 않음. */
+export type ResetApiError = { code: string; message: string };
+
+export type ResetApiResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; status: number; error: ResetApiError };
