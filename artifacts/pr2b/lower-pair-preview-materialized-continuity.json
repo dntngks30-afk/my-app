@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-17T08:01:07.920Z",
+  "generated_at": "2026-04-28T02:56:55.793Z",
   "purpose": "PR2-B follow-up continuity + dominant-axis guard sync proof",
   "continuity": [
     {
@@ -7,7 +7,8 @@
       "expected_baseline_anchor": "lower_stability",
       "materialized_first_session_intent_anchor": "lower_stability",
       "materialized_focus_axes": [
-        "lower_stability"
+        "lower_stability",
+        "deconditioned"
       ],
       "preview_focus_axes": [
         "lower_stability"
@@ -15,14 +16,6 @@
       "materialized_main_vectors_top": [
         {
           "key": "lower_stability",
-          "count": 1
-        },
-        {
-          "key": "trunk_control",
-          "count": 1
-        },
-        {
-          "key": "upper_mobility",
           "count": 1
         }
       ],
@@ -33,7 +26,7 @@
         }
       ],
       "continuity_checks": {
-        "focus_axes_match": true,
+        "focus_axes_match": false,
         "intent_anchor_matches_expected": true,
         "preview_main_has_expected_vector": true,
         "materialized_main_has_expected_vector": true,
@@ -45,7 +38,8 @@
       "expected_baseline_anchor": "lower_mobility",
       "materialized_first_session_intent_anchor": "lower_mobility",
       "materialized_focus_axes": [
-        "lower_mobility"
+        "lower_mobility",
+        "deconditioned"
       ],
       "preview_focus_axes": [
         "lower_mobility"
@@ -87,7 +81,7 @@
         }
       ],
       "continuity_checks": {
-        "focus_axes_match": true,
+        "focus_axes_match": false,
         "intent_anchor_matches_expected": true,
         "preview_main_has_expected_vector": true,
         "materialized_main_has_expected_vector": true,
@@ -128,5 +122,9 @@
       ],
       "includes_new_calf_release": true
     }
+  },
+  "lower_stability_s1_regression": {
+    "note": "Preview/materialized Main upper-only off-axis blocked for lower_stability S1; upper-mobility path may still surface upper-only Main items",
+    "upper_preview_sample_has_upper_only_main_candidate": true
   }
 }

@@ -1,11 +1,23 @@
+import { mkdirSync, writeFileSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+process.chdir(join(scriptDir, '..'));
+
+/** plan-generator transitively loads supabase — placeholders for CLI harness. */
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://harness.preview.supabase.co';
+}
+if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'harness-placeholder-anon-key';
+}
+
 /**
  * PR2-B follow-up continuity proof:
  * - preview/bootstrap path vs materialized plan path use same lower-pair truth
  * - lower tag expansion is synced with dominant-axis guard tags
  */
-
-import { mkdirSync, writeFileSync } from 'fs';
-import { join } from 'path';
 
 const PRIMARY_TO_BASELINE_ANCHOR = {
   LOWER_INSTABILITY: 'lower_stability',
@@ -49,6 +61,57 @@ function collectMainVectorsFromPreview(summary, templateById) {
 
 function hasVector(vectors, key) {
   return vectors.some((v) => v.key === key && v.count > 0);
+}
+
+/** Mirrors lower-pair-session1-shared.ts (PR-FIRST-SESSION-LOWER-ANCHOR-MAIN-GUARD-01 / PREVIEW-PARITY-01). */
+function isLowerStabilityMainAnchorCandidate(t) {
+  const tv = t.target_vector ?? [];
+  if (tv.includes('lower_stability')) return true;
+  return (t.focus_tags ?? []).some((tag) =>
+    ['lower_chain_stability', 'glute_activation', 'glute_medius', 'basic_balance', 'core_stability'].includes(tag),
+  );
+}
+
+function isUpperOnlyMainOffAxisForLowerStability(t) {
+  if (!t || !Array.isArray(t.focus_tags)) return false;
+  if (isLowerStabilityMainAnchorCandidate(t)) return false;
+  return t.focus_tags.some((tag) =>
+    ['upper_back_activation', 'shoulder_stability', 'shoulder_mobility', 'upper_mobility'].includes(tag),
+  );
+}
+
+function poolHasLowerStabilityAnchorLike(templates) {
+  return templates.some(
+    (tpl) =>
+      tpl &&
+      (tpl.level ?? 1) <= 3 &&
+      isLowerStabilityMainAnchorCandidate(tpl) &&
+      !isUpperOnlyMainOffAxisForLowerStability(tpl),
+  );
+}
+
+function assertMainNoUpperOnlyOffAxis(label, segments, templateById) {
+  const main = segments.find((s) => s.title === 'Main');
+  const bad = [];
+  for (const item of main?.items ?? []) {
+    const tpl = templateById.get(item.templateId);
+    if (tpl && isUpperOnlyMainOffAxisForLowerStability(tpl)) bad.push(item.templateId);
+  }
+  if (bad.length > 0) {
+    throw new Error(
+      `[PR2-B ${label}] lower_stability S1 Main must not include upper-only off-axis templates: ${bad.join(', ')}`,
+    );
+  }
+}
+
+function mainHasLowerStabilityAnchor(segments, templateById) {
+  const main = segments.find((s) => s.title === 'Main');
+  return (
+    main?.items?.some((item) => {
+      const tpl = templateById.get(item.templateId);
+      return tpl && isLowerStabilityMainAnchorCandidate(tpl);
+    }) ?? false
+  );
 }
 
 function inferTargetVector(focusTags) {
@@ -164,6 +227,24 @@ async function run() {
     const materializedMainVectors = collectMainVectorsFromPlan(plan, templateById);
     const previewMainVectors = collectMainVectorsFromPreview(preview, templateById);
 
+    /** PR-FIRST-SESSION-PREVIEW-LOWER-ANCHOR-PARITY-01 */
+    if (baselineAnchor === 'lower_stability') {
+      assertMainNoUpperOnlyOffAxis('materialized', plan.segments, templateById);
+      assertMainNoUpperOnlyOffAxis('preview', preview.segments, templateById);
+      if (poolHasLowerStabilityAnchorLike(templates)) {
+        if (!mainHasLowerStabilityAnchor(preview.segments, templateById)) {
+          throw new Error(
+            '[PR2-B preview] lower_stability S1: pool has anchor candidate but preview Main has none',
+          );
+        }
+        if (!mainHasLowerStabilityAnchor(plan.segments, templateById)) {
+          throw new Error(
+            '[PR2-B materialized] lower_stability S1: pool has anchor candidate but materialized Main has none',
+          );
+        }
+      }
+    }
+
     continuity.push({
       anchor_type: f.anchor_type,
       expected_baseline_anchor: baselineAnchor,
@@ -214,11 +295,43 @@ async function run() {
     },
   };
 
+  /** Upper-mobility S1: upper-only tags may still appear in Main (not lower_stability guard). */
+  const upperPersona = personaById.get('upper-immobility-basic');
+  let upperPreviewUpperOnlyInMain = false;
+  if (upperPersona) {
+    const deepU = calculateDeepV3(upperPersona.input);
+    const previewU = buildSessionBootstrapSummaryFromTemplates(templates, {
+      sessionNumber: 1,
+      deepSummary: {
+        focus: deepU.derived?.focus_tags ?? [],
+        avoid: deepU.derived?.avoid_tags ?? [],
+        deep_level: deepU.derived?.level ?? 2,
+        safety_mode: toSafetyMode(deepU.pain_mode),
+        red_flags: false,
+        primary_type: deepU.primary_type,
+        secondary_type: deepU.secondary_type,
+        priority_vector: deepU.priority_vector,
+        pain_mode: deepU.pain_mode,
+        result_type: deepU.derived?.result_type ?? 'UPPER-LIMB',
+        baseline_session_anchor: 'upper_mobility',
+      },
+    });
+    const mainU = previewU.segments.find((s) => s.title === 'Main');
+    upperPreviewUpperOnlyInMain = (mainU?.items ?? []).some((item) => {
+      const tpl = templateById.get(item.templateId);
+      return tpl && isUpperOnlyMainOffAxisForLowerStability(tpl);
+    });
+  }
+
   const out = {
     generated_at: new Date().toISOString(),
     purpose: 'PR2-B follow-up continuity + dominant-axis guard sync proof',
     continuity,
     guard_sync: guardSync,
+    lower_stability_s1_regression: {
+      note: 'Preview/materialized Main upper-only off-axis blocked for lower_stability S1; upper-mobility path may still surface upper-only Main items',
+      upper_preview_sample_has_upper_only_main_candidate: upperPreviewUpperOnlyInMain,
+    },
   };
 
   const outPath = join(process.cwd(), 'artifacts/pr2b/lower-pair-preview-materialized-continuity.json');

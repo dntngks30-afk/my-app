@@ -13,7 +13,12 @@ import {
   isExcludedByPainMode,
 } from '@/lib/session/policy-registry/rules/selectionRules'
 import type { SessionTemplateRow } from '@/lib/workout-routine/exercise-templates-db'
-import { LOWER_AXIS_GUARD_TAGS, LOWER_PAIR_GOLD_PATH_RULES } from '@/lib/session/lower-pair-session1-shared'
+import {
+  isLowerStabilityMainAnchorCandidate,
+  isUpperOnlyMainOffAxisForLowerStability,
+  LOWER_AXIS_GUARD_TAGS,
+  LOWER_PAIR_GOLD_PATH_RULES,
+} from '@/lib/session/lower-pair-session1-shared'
 import {
   scoreUpperMobilityIntentFit,
   shouldReplaceForbiddenDominantByAnchor,
@@ -280,6 +285,144 @@ function buildGoldPathSegmentRules(vector: GoldPathVector, mainCount: number): G
   }))
 }
 
+/** PR-FIRST-SESSION-PREVIEW-LOWER-ANCHOR-PARITY-01 — block upper-only Main in S1 preview for lower_stability */
+function shouldBlockLowerStabilityS1PreviewMain(
+  input: SessionBootstrapSummaryInput,
+  vector: GoldPathVector,
+  rule: GoldPathSegmentRule,
+  template: SessionTemplateRow
+): boolean {
+  return (
+    input.sessionNumber === 1 &&
+    vector === 'lower_stability' &&
+    rule.kind === 'main' &&
+    isUpperOnlyMainOffAxisForLowerStability(template)
+  )
+}
+
+/** Preview repair 후보 순위(plan-generator 유사, 하체 우선). */
+function scoreLowerStabilityPreviewMainRepairPriority(t: SessionTemplateRow): number {
+  const tv = t.target_vector ?? []
+  let s = 0
+  if (tv.includes('lower_stability')) s += 1_000_000
+  if (t.focus_tags.some((tag) => tag === 'lower_chain_stability')) s += 800_000
+  if (t.focus_tags.some((tag) => tag === 'glute_activation')) s += 600_000
+  if (t.focus_tags.some((tag) => tag === 'glute_medius')) s += 500_000
+  if (t.focus_tags.some((tag) => tag === 'basic_balance')) s += 400_000
+  if (t.focus_tags.some((tag) => tag === 'core_stability')) s += 300_000
+  if (tv.includes('lower_mobility')) s += 100_000
+  return s
+}
+
+function collectBootstrapTemplateIds(
+  segments: Array<{ items: SessionTemplateRow[] }>
+): Set<string> {
+  return new Set(segments.flatMap((e) => e.items.map((t) => t.id)))
+}
+
+function countBootstrapExerciseTotal(segments: Array<{ items: SessionTemplateRow[] }>): number {
+  return segments.reduce((acc, seg) => acc + seg.items.length, 0)
+}
+
+function pickBootstrapMainReplaceLowerS1(mainRows: SessionTemplateRow[]): number {
+  for (let i = 0; i < mainRows.length; i += 1) {
+    if (isUpperOnlyMainOffAxisForLowerStability(mainRows[i]!)) return i
+  }
+  for (let i = 0; i < mainRows.length; i += 1) {
+    if (!isLowerStabilityMainAnchorCandidate(mainRows[i]!)) return i
+  }
+  return 0
+}
+
+/**
+ * Selection 이후 한 번 더: 상체-only Main 제거·Accessory 이동, 하체 앵커 보충 (materialized repair와 정렬).
+ */
+function repairLowerStabilityS1PreviewMain(
+  segmentEntries: Array<{ title: string; items: SessionTemplateRow[] }>,
+  sorted: Array<{ template: SessionTemplateRow; score: number }>,
+  input: SessionBootstrapSummaryInput,
+  vector: GoldPathVector | null
+): Array<{ title: string; items: SessionTemplateRow[] }> {
+  if (input.sessionNumber !== 1 || vector !== 'lower_stability') {
+    return segmentEntries
+  }
+  const segments = segmentEntries.map((seg) => ({
+    title: seg.title,
+    items: [...seg.items],
+  }))
+  const painMode = input.deepSummary.pain_mode
+
+  const mainSegMut = segments.find((s) => s.title === 'Main')
+  const accessorySeg = segments.find((s) => s.title === 'Accessory')
+  if (!mainSegMut || mainSegMut.items.length === 0) return segments
+
+  const keptMain: SessionTemplateRow[] = []
+  for (const row of mainSegMut.items) {
+    if (!isUpperOnlyMainOffAxisForLowerStability(row)) {
+      keptMain.push(row)
+      continue
+    }
+    const accessoryDup =
+      accessorySeg?.items.some((i) => i.id === row.id) ?? false
+    const totalNow = countBootstrapExerciseTotal(segments)
+    const canAccessory =
+      !!accessorySeg &&
+      !accessoryDup &&
+      totalNow < MAX_FIRST_SESSION_TOTAL_EXERCISES
+    if (canAccessory) accessorySeg.items.push(row)
+  }
+  mainSegMut.items = keptMain
+
+  const used = collectBootstrapTemplateIds(segments)
+  const poolHasAnchorCandidate = sorted.some(({ template: t }) => {
+    if (used.has(t.id)) return false
+    if (painMode && painMode !== 'none' && (t.avoid_if_pain_mode ?? []).includes(painMode))
+      return false
+    return (
+      isMainEligible(t) &&
+      isLowerStabilityMainAnchorCandidate(t) &&
+      !isUpperOnlyMainOffAxisForLowerStability(t)
+    )
+  })
+
+  const mainRowsNow = segments.find((s) => s.title === 'Main')?.items ?? []
+  const hasAnchor = mainRowsNow.some((t) => isLowerStabilityMainAnchorCandidate(t))
+  if (!hasAnchor && poolHasAnchorCandidate) {
+    let best: SessionTemplateRow | null = null
+    let bestSc = -1
+    for (const { template: t } of sorted) {
+      if (used.has(t.id)) continue
+      if (painMode && painMode !== 'none' && (t.avoid_if_pain_mode ?? []).includes(painMode))
+        continue
+      if (
+        !isMainEligible(t) ||
+        !isLowerStabilityMainAnchorCandidate(t) ||
+        isUpperOnlyMainOffAxisForLowerStability(t)
+      )
+        continue
+      const pr = scoreLowerStabilityPreviewMainRepairPriority(t)
+      if (
+        pr > bestSc ||
+        (pr === bestSc && (!best || t.id.localeCompare(best.id) < 0))
+      ) {
+        bestSc = pr
+        best = t
+      }
+    }
+    if (best) {
+      const ms = segments.find((s) => s.title === 'Main')!
+      if (!ms.items.length) {
+        ms.items = [best]
+      } else {
+        const idx = pickBootstrapMainReplaceLowerS1(ms.items)
+        ms.items[idx] = best
+      }
+    }
+  }
+
+  return segments
+}
+
 function isConservativeFallbackEligible(template: SessionTemplateRow, kind: SegmentKind): boolean {
   if (kind === 'cooldown') {
     return isReleaseEligible(template) || template.phase === 'prep' || template.phase === 'accessory' || getDifficultyRank(template.difficulty) <= 1
@@ -356,6 +499,7 @@ function selectGoldPathTemplates(
       })) continue
       if (!(template.phase && rule.preferredPhases.includes(template.phase))) continue
       if (!hasTargetVector(template, rule.preferredVectors)) continue
+      if (shouldBlockLowerStabilityS1PreviewMain(input, vector, rule, template)) continue
       tryPick(template)
     }
     for (const { template } of ranked) {
@@ -368,6 +512,7 @@ function selectGoldPathTemplates(
       })) continue
       if (!(template.phase && rule.preferredPhases.includes(template.phase))) continue
       if (!hasTargetVector(template, rule.fallbackVectors)) continue
+      if (shouldBlockLowerStabilityS1PreviewMain(input, vector, rule, template)) continue
       tryPick(template)
     }
     for (const { template } of ranked) {
@@ -379,6 +524,7 @@ function selectGoldPathTemplates(
         isMainEligible: isMainEligible(template),
       })) continue
       if (!hasTargetVector(template, rule.preferredVectors)) continue
+      if (shouldBlockLowerStabilityS1PreviewMain(input, vector, rule, template)) continue
       tryPick(template)
     }
     for (const { template } of ranked) {
@@ -390,6 +536,7 @@ function selectGoldPathTemplates(
         isMainEligible: isMainEligible(template),
       })) continue
       if (!isConservativeFallbackEligible(template, rule.kind)) continue
+      if (shouldBlockLowerStabilityS1PreviewMain(input, vector, rule, template)) continue
       tryPick(template)
     }
 
@@ -656,11 +803,12 @@ export function buildSessionBootstrapSummaryFromTemplates(
     mainCount = Math.max(1, MAX_FIRST_SESSION_TOTAL_EXERCISES - 3)
   }
 
-  const vector = resolveGoldPathVector(input)
+  const resolvedVector = resolveGoldPathVector(input)
+  const vectorForGold = resolvedVector ?? 'trunk_control'
   const selection = selectGoldPathTemplates(
     scored,
     input,
-    vector ?? 'trunk_control',
+    vectorForGold,
     mainCount,
     firstSessionIntent
   )
@@ -670,7 +818,13 @@ export function buildSessionBootstrapSummaryFromTemplates(
     input.deepSummary.pain_mode,
     firstSessionIntent
   )
-  const segments = alignedSegments
+  const previewSafeSegments = repairLowerStabilityS1PreviewMain(
+    alignedSegments,
+    scored,
+    input,
+    resolvedVector
+  )
+  const segments = previewSafeSegments
     .filter((segment) => segment.items.length > 0)
     .map((segment) => ({
       title: segment.title,
