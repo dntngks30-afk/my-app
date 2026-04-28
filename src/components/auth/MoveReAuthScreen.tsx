@@ -24,12 +24,8 @@ export default function MoveReAuthScreen({ headline, noticeSlot, children }: Mov
           <p className="text-[28px] font-bold leading-none tracking-[-0.04em] text-[#dce1fb]" style={{ fontFamily: 'var(--font-serif-noto), serif' }}>
             MOVE RE
           </p>
-          <h1
-            className="mt-7 text-[24px] font-normal leading-[32px] tracking-[-0.9px] text-[#dce1fb]"
-            style={{ fontFamily: 'var(--font-serif-noto), serif' }}
-          >
-            {headline}
-          </h1>
+          {/* 카피 라인 노출 안 함 — 화면엔 숨김, 스크린리더만 */}
+          <h1 className="sr-only">{headline}</h1>
         </header>
         {noticeSlot ? <div className="flex justify-center text-center">{noticeSlot}</div> : null}
         {children}
