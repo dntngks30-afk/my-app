@@ -6,12 +6,14 @@
  * - 퍼블릭 UX·트렌드 라벨보다 **보수적(strict)** 인 0–1 스코어와 tier를 만든다.
  */
 import type { MotionInternalQualityBase } from '@/lib/camera/types/motion-completion';
+import type { QualityWindowTrace } from '@/lib/camera/stability';
 
 export type SquatInternalQuality = MotionInternalQualityBase & {
   depthScore: number;
   controlScore: number;
   symmetryScore: number;
   recoveryScore: number;
+  qualityWindow?: QualityWindowTrace;
 };
 
 /**
@@ -36,6 +38,8 @@ export type SquatInternalQualityInput = {
   returnContinuityFrames: number;
   /** 1 = 패널티 없음, 0.75 등 = 품질 힌트 기반 신뢰도 감쇠 */
   signalIntegrityMultiplier: number;
+  /** PR3: interpretation-only selected-window trace. Not consumed by pass/progression. */
+  qualityWindow?: QualityWindowTrace;
 };
 
 function clamp01(value: number): number {
@@ -201,5 +205,6 @@ export function computeSquatInternalQuality(input: SquatInternalQualityInput): S
     confidence: clamp01(confidence),
     qualityTier,
     limitations,
+    ...(input.qualityWindow != null ? { qualityWindow: input.qualityWindow } : {}),
   };
 }

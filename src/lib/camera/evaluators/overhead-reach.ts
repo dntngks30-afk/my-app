@@ -34,8 +34,15 @@ import {
   OVERHEAD_LOW_ROM_ABSOLUTE_FLOOR_DEG,
   OVERHEAD_HUMANE_ABSOLUTE_FLOOR_DEG,
 } from '@/lib/camera/overhead/overhead-easy-progression';
+import { buildQualityWindowTrace, selectQualityWindow } from '@/lib/camera/stability';
 
 const MIN_VALID_FRAMES = 8;
+const INTERNAL_QUALITY_WINDOW_OPTIONS = {
+  warmupMs: 500,
+  minWindowMs: 800,
+  maxWindowMs: 1200,
+} as const;
+const MIN_INTERNAL_QUALITY_WINDOW_FRAMES = 4;
 
 /** 가드레일 등 레거시 import 경로 유지 — 값은 `overhead-constants` 단일 소스 */
 export {
@@ -1006,25 +1013,88 @@ export function evaluateOverheadReachFromPoseFrames(
     asymTrend,
   });
 
-  const unstableHintHits = qualityHints.filter((h) =>
+  const internalQualityWindowSelection = selectQualityWindow(
+    valid,
+    INTERNAL_QUALITY_WINDOW_OPTIONS
+  );
+  const internalQualityWindowUsable =
+    internalQualityWindowSelection.qualityFrameCount >= MIN_INTERNAL_QUALITY_WINDOW_FRAMES;
+  const internalQualityFrames = internalQualityWindowUsable
+    ? internalQualityWindowSelection.frames
+    : valid;
+  const internalQualityWindowTrace = buildQualityWindowTrace({
+    selectedWindowFrameCount: internalQualityFrames.length,
+    selectedWindowStartMs: internalQualityFrames[0]?.timestampMs ?? null,
+    selectedWindowEndMs: internalQualityFrames.at(-1)?.timestampMs ?? null,
+    selectedWindowScore: internalQualityWindowSelection.selectedWindowScore,
+    selectedWindowSource: internalQualityWindowUsable
+      ? 'select_quality_window'
+      : internalQualityFrames.length > 0
+        ? 'fallback_sparse_frames'
+        : 'unavailable',
+    fallbackReason: internalQualityWindowUsable
+      ? null
+      : internalQualityFrames.length > 0
+        ? 'selected_window_too_sparse'
+        : 'no_valid_frames',
+    warmupExcludedFrameCount: internalQualityWindowSelection.warmupExcludedFrameCount,
+  });
+  const internalQualityHints = [
+    ...new Set(internalQualityFrames.flatMap((frame) => frame.qualityHints)),
+  ];
+  const internalQualityArmElevationAvgValues = getNumbers(
+    internalQualityFrames.map((frame) => frame.derived.armElevationAvg)
+  );
+  const internalQualityArmElevationGapValues = getNumbers(
+    internalQualityFrames.map((frame) => frame.derived.armElevationGap)
+  );
+  const internalQualityTorsoExtensionDeviation = getNumbers(
+    internalQualityFrames.map((frame) => frame.derived.torsoExtensionDeg)
+  ).map((value) => Math.abs(value - 90));
+  const internalQualityDwellResult = computeOverheadStableTopDwell(internalQualityFrames);
+  const internalQualityRaiseCount = countPhases(internalQualityFrames, 'raise');
+  const internalQualityPeakCount = countPhases(internalQualityFrames, 'peak');
+  const internalQualityPeakArmElevation =
+    internalQualityArmElevationAvgValues.length > 0
+      ? Math.max(...internalQualityArmElevationAvgValues)
+      : 0;
+  const internalQualityHoldDurationMs = internalQualityDwellResult.holdDurationMs;
+  const internalQualityDwellCoherent =
+    internalQualityDwellResult.stableTopSegmentCount >= 1 &&
+    internalQualityDwellResult.stableTopDwellMs >=
+      Math.min(internalQualityHoldDurationMs * 0.85, internalQualityHoldDurationMs - 100);
+  const internalQualityUnstableHintHits = internalQualityHints.filter((h) =>
     ['unstable_bbox', 'unstable_landmarks', 'timestamp_gap'].includes(h)
   ).length;
-  const signalIntegrityMultiplier = Math.max(0.55, 1 - unstableHintHits * 0.14);
+  const internalQualitySignalIntegrityMultiplier = Math.max(
+    0.55,
+    1 - internalQualityUnstableHintHits * 0.14
+  );
 
   /** PR-COMP-04: completion과 무관한 strict 내부 해석 */
   const overheadInternalQuality = computeOverheadInternalQuality({
-    peakArmElevationDeg: peakArmForCompletion,
-    meanAsymmetryDeg,
+    peakArmElevationDeg: internalQualityPeakArmElevation,
+    meanAsymmetryDeg:
+      internalQualityArmElevationGapValues.length > 0
+        ? mean(internalQualityArmElevationGapValues)
+        : null,
     lumbarExtensionDeviationDeg:
-      torsoExtensionDeviation.length > 0 ? mean(torsoExtensionDeviation) : null,
-    holdDurationMs,
-    stableTopDwellMs: dwellResult.stableTopDwellMs,
-    stableTopSegmentCount: dwellResult.stableTopSegmentCount,
-    dwellCoherent: overheadPlanning.dwellCoherent,
-    validFrameRatio: frames.length > 0 ? valid.length / frames.length : 0,
-    signalIntegrityMultiplier,
-    raiseCount,
-    peakCount,
+      internalQualityTorsoExtensionDeviation.length > 0
+        ? mean(internalQualityTorsoExtensionDeviation)
+        : null,
+    holdDurationMs: internalQualityHoldDurationMs,
+    stableTopDwellMs: internalQualityDwellResult.stableTopDwellMs,
+    stableTopSegmentCount: internalQualityDwellResult.stableTopSegmentCount,
+    dwellCoherent: internalQualityDwellCoherent,
+    validFrameRatio:
+      internalQualityFrames.length > 0
+        ? internalQualityFrames.filter((frame) => frame.isValid).length /
+          internalQualityFrames.length
+        : 0,
+    signalIntegrityMultiplier: internalQualitySignalIntegrityMultiplier,
+    raiseCount: internalQualityRaiseCount,
+    peakCount: internalQualityPeakCount,
+    qualityWindow: internalQualityWindowTrace,
   });
 
   return {

@@ -2,6 +2,7 @@
  * PR-COMP-04 — 오버헤드 **내부 해석** 레이어 (completion·pass와 무관).
  */
 import type { MotionInternalQualityBase } from '@/lib/camera/types/motion-completion';
+import type { QualityWindowTrace } from '@/lib/camera/stability';
 import { OVERHEAD_REQUIRED_HOLD_MS, OVERHEAD_TOP_FLOOR_DEG } from './overhead-constants';
 
 export type OverheadInternalQuality = MotionInternalQualityBase & {
@@ -9,6 +10,7 @@ export type OverheadInternalQuality = MotionInternalQualityBase & {
   controlScore: number;
   symmetryScore: number;
   holdStabilityScore: number;
+  qualityWindow?: QualityWindowTrace;
 };
 
 export type OverheadInternalQualityInput = {
@@ -23,6 +25,8 @@ export type OverheadInternalQualityInput = {
   signalIntegrityMultiplier: number;
   raiseCount: number;
   peakCount: number;
+  /** PR3: interpretation-only selected-window trace. Not consumed by pass/progression. */
+  qualityWindow?: QualityWindowTrace;
 };
 
 function clamp01(v: number): number {
@@ -134,5 +138,6 @@ export function computeOverheadInternalQuality(
     confidence: clamp01(confidence),
     qualityTier,
     limitations,
+    ...(input.qualityWindow != null ? { qualityWindow: input.qualityWindow } : {}),
   };
 }

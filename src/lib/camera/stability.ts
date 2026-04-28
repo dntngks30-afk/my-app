@@ -9,6 +9,21 @@ export interface QualityWindowSelection {
   qualityFrameCount: number;
 }
 
+export type QualityWindowSource =
+  | 'select_quality_window'
+  | 'fallback_all_valid_frames'
+  | 'fallback_sparse_frames'
+  | 'unavailable';
+
+export type QualityWindowTrace = {
+  selectedWindowFrameCount: number;
+  selectedWindowDurationMs: number | null;
+  selectedWindowScore: number | null;
+  selectedWindowSource: QualityWindowSource;
+  fallbackReason?: string | null;
+  warmupExcludedFrameCount?: number;
+};
+
 interface QualityWindowOptions {
   warmupMs: number;
   minWindowMs: number;
@@ -180,6 +195,34 @@ export function selectQualityWindow(
     selectedWindowEndMs: bestSlice.at(-1)?.timestampMs ?? null,
     selectedWindowScore: bestScore >= 0 ? bestScore : scoreWindow(bestSlice),
     qualityFrameCount: bestSlice.length,
+  };
+}
+
+export function buildQualityWindowTrace(input: {
+  selectedWindowFrameCount: number;
+  selectedWindowStartMs?: number | null;
+  selectedWindowEndMs?: number | null;
+  selectedWindowScore?: number | null;
+  selectedWindowSource: QualityWindowSource;
+  fallbackReason?: string | null;
+  warmupExcludedFrameCount?: number;
+}): QualityWindowTrace {
+  const startMs = input.selectedWindowStartMs ?? null;
+  const endMs = input.selectedWindowEndMs ?? null;
+  const durationMs =
+    typeof startMs === 'number' && typeof endMs === 'number'
+      ? Math.max(0, endMs - startMs)
+      : null;
+
+  return {
+    selectedWindowFrameCount: Math.max(0, input.selectedWindowFrameCount),
+    selectedWindowDurationMs: durationMs,
+    selectedWindowScore: input.selectedWindowScore ?? null,
+    selectedWindowSource: input.selectedWindowSource,
+    ...(input.fallbackReason !== undefined ? { fallbackReason: input.fallbackReason } : {}),
+    ...(input.warmupExcludedFrameCount !== undefined
+      ? { warmupExcludedFrameCount: input.warmupExcludedFrameCount }
+      : {}),
   };
 }
 

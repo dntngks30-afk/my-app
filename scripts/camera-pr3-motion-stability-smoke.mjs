@@ -8,11 +8,14 @@ import { dirname, join } from 'path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 process.chdir(join(__dirname, '..'));
 
-const { selectQualityWindow, smoothSignalValue, stabilizePhaseSequence } = await import('../src/lib/camera/stability.ts');
+const { buildQualityWindowTrace, selectQualityWindow, smoothSignalValue, stabilizePhaseSequence } = await import('../src/lib/camera/stability.ts');
 const { evaluateSquat } = await import('../src/lib/camera/evaluators/squat.ts');
 const { evaluateOverheadReach } = await import('../src/lib/camera/evaluators/overhead-reach.ts');
 const { assessStepGuardrail } = await import('../src/lib/camera/guardrails.ts');
 const { isFinalPassLatched } = await import('../src/lib/camera/auto-progression.ts');
+const { buildCameraInputQualityObservability } = await import('../src/lib/camera/camera-evidence-summary.ts');
+const { buildFreeSurveyBaselineResult } = await import('../src/lib/deep-v2/builders/build-free-survey-baseline.ts');
+const { buildCameraRefinedResult } = await import('../src/lib/deep-v2/builders/build-camera-refined-result.ts');
 
 let passed = 0;
 let failed = 0;
@@ -119,6 +122,17 @@ function phaseSwitchCount(frames) {
   return switches;
 }
 
+function makeSurveyAnswers() {
+  return {
+    v2_A1: 1, v2_A2: 1, v2_A3: 1,
+    v2_B1: 1, v2_B2: 1, v2_B3: 1,
+    v2_C1: 4, v2_C2: 4, v2_C3: 4,
+    v2_D1: 1, v2_D2: 1, v2_D3: 1,
+    v2_F1: 1, v2_F2: 1, v2_F3: 1,
+    v2_G1: 1, v2_G2: 1, v2_G3: 1,
+  };
+}
+
 console.log('Camera PR-3 motion stability smoke test\n');
 
 // AT1: Warm-up exclusion stability
@@ -217,6 +231,9 @@ const squatLandmarks = [
 ];
 const squatEval = evaluateSquat(squatLandmarks);
 ok('AT4c: stable squat sequence still produces evaluator output', squatEval.metrics.length > 0 && squatEval.insufficientSignal === false);
+const squatIqWindow = squatEval.debug?.squatInternalQuality?.qualityWindow;
+ok('AT4d: squat internal quality carries selected-window trace', squatIqWindow?.selectedWindowSource === 'select_quality_window' && squatIqWindow.selectedWindowFrameCount > 0);
+ok('AT4e: squat selected-window trace is compact', !!squatIqWindow && !('frames' in squatIqWindow) && !('landmarks' in squatIqWindow) && !('joints' in squatIqWindow));
 
 // AT5: Segmentation consistency for overhead reach
 const overheadCandidates = ['start', 'raise', 'raise', 'peak', 'raise', 'peak', 'peak', 'peak', 'lower', 'lower', 'peak', 'lower'];
@@ -230,10 +247,14 @@ const overheadLandmarks = [
 ];
 const overheadEval = evaluateOverheadReach(overheadLandmarks);
 ok('AT5c: stable reach sequence still produces evaluator output', overheadEval.metrics.length > 0 && overheadEval.insufficientSignal === false);
+const overheadIqWindow = overheadEval.debug?.overheadInternalQuality?.qualityWindow;
+ok('AT5d: overhead internal quality carries selected-window trace', overheadIqWindow?.selectedWindowSource === 'select_quality_window' && overheadIqWindow.selectedWindowFrameCount > 0);
+ok('AT5e: overhead selected-window trace is compact', !!overheadIqWindow && !('frames' in overheadIqWindow) && !('landmarks' in overheadIqWindow) && !('joints' in overheadIqWindow));
 
 // AT6: Low-quality progression still works
 const lowQualityGate = {
   completionSatisfied: true,
+  finalPassEligible: true,
   confidence: 0.68,
   passConfirmationSatisfied: true,
   passConfirmationFrameCount: 4,
@@ -251,6 +272,77 @@ const squatStats = {
 const squatGuardrail = assessStepGuardrail('squat', squatLandmarks, squatStats, squatEval);
 ok('AT7a: existing debug fields remain present', typeof squatGuardrail.debug.visibleJointsRatio === 'number');
 ok('AT7b: additive window debug fields are present', 'selectedWindowStartMs' in squatGuardrail.debug && 'warmupExcludedFrameCount' in squatGuardrail.debug);
+const sparseFrames = [makeQualityFrame(0), makeQualityFrame(100)];
+const sparseSelection = selectQualityWindow(sparseFrames, {
+  warmupMs: 500,
+  minWindowMs: 800,
+  maxWindowMs: 1200,
+});
+const sparseTrace = buildQualityWindowTrace({
+  selectedWindowFrameCount: sparseFrames.length,
+  selectedWindowStartMs: sparseFrames[0].timestampMs,
+  selectedWindowEndMs: sparseFrames.at(-1).timestampMs,
+  selectedWindowScore: sparseSelection.selectedWindowScore,
+  selectedWindowSource: 'fallback_sparse_frames',
+  fallbackReason: 'selected_window_too_sparse',
+  warmupExcludedFrameCount: sparseSelection.warmupExcludedFrameCount,
+});
+ok('AT7c: sparse selected-window fallback trace is compact and non-throwing', sparseTrace.selectedWindowSource === 'fallback_sparse_frames' && sparseTrace.fallbackReason === 'selected_window_too_sparse' && !('frames' in sparseTrace));
+
+const beforeSquatHm = JSON.stringify(squatEval.debug?.highlightedMetrics ?? {});
+const beforeOverheadHm = JSON.stringify(overheadEval.debug?.highlightedMetrics ?? {});
+const obs = buildCameraInputQualityObservability([squatEval, overheadEval]);
+const afterSquatHm = JSON.stringify(squatEval.debug?.highlightedMetrics ?? {});
+const afterOverheadHm = JSON.stringify(overheadEval.debug?.highlightedMetrics ?? {});
+ok('AT7d: PR2 observability exposes compact selected-window metadata', obs.squat?.selectedWindow?.selectedWindowSource === 'select_quality_window' && obs.overheadReach?.selectedWindow?.selectedWindowSource === 'select_quality_window');
+ok('AT7e: observability does not mutate pass/progression highlightedMetrics', beforeSquatHm === afterSquatHm && beforeOverheadHm === afterOverheadHm);
+ok('AT7f: observability selected-window payload has no raw frames or landmarks', !JSON.stringify(obs).includes('"frames"') && !JSON.stringify(obs).includes('"landmarks"') && !JSON.stringify(obs).includes('"joints"'));
+
+const baseline = buildFreeSurveyBaselineResult(makeSurveyAnswers()).result;
+const cameraWithoutWindow = {
+  movementType: 'kangaroo',
+  patternSummary: 'without quality window',
+  avoidItems: [],
+  resetAction: 'reset',
+  confidence: 0.85,
+  captureQuality: 'ok',
+  flags: [],
+  retryRecommended: false,
+  fallbackMode: null,
+  insufficientSignal: false,
+  evaluatorResults: [
+    {
+      stepId: 'squat',
+      insufficientSignal: false,
+      metrics: [],
+      debug: {
+        highlightedMetrics: {
+          completionSatisfied: true,
+          completionMachinePhase: 'recovery',
+          finalPassEligible: true,
+          progressionPassed: true,
+        },
+        squatInternalQuality: {
+          depthScore: 0.55,
+          controlScore: 0.5,
+          symmetryScore: 0.52,
+          recoveryScore: 0.48,
+          confidence: 0.5,
+          qualityTier: 'medium',
+          limitations: ['depth_limited'],
+        },
+      },
+    },
+  ],
+  resultEvidenceLevel: 'strong_evidence',
+  resultToneMode: 'confident',
+  debug: { perExercise: [] },
+};
+const cameraWithWindow = JSON.parse(JSON.stringify(cameraWithoutWindow));
+cameraWithWindow.evaluatorResults[0].debug.squatInternalQuality.qualityWindow = squatIqWindow;
+const refinedWithoutWindow = buildCameraRefinedResult(baseline, cameraWithoutWindow);
+const refinedWithWindow = buildCameraRefinedResult(baseline, cameraWithWindow);
+ok('AT7g: camera_pass is unchanged by selected-window metadata', refinedWithoutWindow.refined_meta.camera_pass === refinedWithWindow.refined_meta.camera_pass);
 
 // AT8: No funnel regression
 ok('AT8: no route or funnel logic changed in this smoke test path', true);

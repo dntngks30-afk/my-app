@@ -8,6 +8,7 @@
  */
 
 import type { EvaluatorResult } from '@/lib/camera/evaluators/types';
+import type { QualityWindowTrace } from '@/lib/camera/stability';
 
 /** 어댑터가 소비하는 모션별 요약 (퍼블릭 canonical result 계약 아님) */
 export type CameraMotionEvidenceSummary = {
@@ -272,6 +273,29 @@ export function deriveSignalIntegrityTierObservation(
   return `obs_si|tier=${qualityTier}|limcodes=${limitations.length}|${compact}`;
 }
 
+type SelectedWindowInputQualityObservation = {
+  selectedWindowFrameCount: number;
+  selectedWindowDurationMs: number | null;
+  selectedWindowScore: number | null;
+  selectedWindowSource: string;
+  fallbackReason?: string | null;
+};
+
+function selectedWindowObservationFromQualityWindow(
+  qualityWindow: QualityWindowTrace | undefined
+): SelectedWindowInputQualityObservation | undefined {
+  if (!qualityWindow) return undefined;
+  return {
+    selectedWindowFrameCount: qualityWindow.selectedWindowFrameCount,
+    selectedWindowDurationMs: qualityWindow.selectedWindowDurationMs,
+    selectedWindowScore: qualityWindow.selectedWindowScore,
+    selectedWindowSource: qualityWindow.selectedWindowSource,
+    ...(qualityWindow.fallbackReason !== undefined
+      ? { fallbackReason: qualityWindow.fallbackReason }
+      : {}),
+  };
+}
+
 export type SquatInputQualityTrace = {
   qualityTier: 'high' | 'medium' | 'low';
   confidence: number;
@@ -289,6 +313,7 @@ export type SquatInputQualityTrace = {
   proxyBottomStabilityScore: number;
   recoveryContinuityScore: number;
   leftRightSignalBalance: number;
+  selectedWindow?: SelectedWindowInputQualityObservation;
 };
 
 export type OverheadInputQualityTrace = {
@@ -304,6 +329,7 @@ export type OverheadInputQualityTrace = {
   /** holdStabilityScore 와 동일 값(top 홀드 안정도 해석 레이어). */
   stableTopHoldScore: number;
   leftRightSignalBalance: number;
+  selectedWindow?: SelectedWindowInputQualityObservation;
 };
 
 export type CameraInputQualityObservabilityV1 = {
@@ -320,6 +346,7 @@ function buildSquatInputQualityTrace(r: EvaluatorResult): SquatInputQualityTrace
   if (!iq) return null;
   const hm = r.debug?.highlightedMetrics;
   const completionSnapshot = completionSnapshotFromHighlightedMetrics(hm);
+  const selectedWindow = selectedWindowObservationFromQualityWindow(iq.qualityWindow);
   return {
     qualityTier: iq.qualityTier,
     confidence: iq.confidence,
@@ -334,6 +361,7 @@ function buildSquatInputQualityTrace(r: EvaluatorResult): SquatInputQualityTrace
     proxyBottomStabilityScore: iq.controlScore,
     recoveryContinuityScore: iq.recoveryScore,
     leftRightSignalBalance: iq.symmetryScore,
+    ...(selectedWindow != null ? { selectedWindow } : {}),
   };
 }
 
@@ -342,6 +370,7 @@ function buildOverheadInputQualityTrace(r: EvaluatorResult): OverheadInputQualit
   if (!iq) return null;
   const hm = r.debug?.highlightedMetrics;
   const completionSnapshot = completionSnapshotFromHighlightedMetrics(hm);
+  const selectedWindow = selectedWindowObservationFromQualityWindow(iq.qualityWindow);
   return {
     qualityTier: iq.qualityTier,
     confidence: iq.confidence,
@@ -354,12 +383,13 @@ function buildOverheadInputQualityTrace(r: EvaluatorResult): OverheadInputQualit
     ...(completionSnapshot != null ? { completionSnapshot } : {}),
     stableTopHoldScore: iq.holdStabilityScore,
     leftRightSignalBalance: iq.symmetryScore,
+    ...(selectedWindow != null ? { selectedWindow } : {}),
   };
 }
 
 /**
  * 평가기 결과 배열만 읽어 카메라 입력 해석 레이어(내부 IQ) 저품질 이유를 묶은 관측 DTO를 만든다.
- * 순수 함수 — EvaluatorResult / debug 객 체 변경 없음.
+ * 순수 함수 — EvaluatorResult / debug 객체 변경 없음.
  */
 export function buildCameraInputQualityObservability(
   results: readonly EvaluatorResult[]

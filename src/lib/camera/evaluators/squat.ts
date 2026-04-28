@@ -72,8 +72,15 @@ import {
   STANDARD_OWNER_FLOOR,
   squatCompletionBlockedReasonToCode,
 } from '@/lib/camera/squat/squat-completion-core';
+import { buildQualityWindowTrace, selectQualityWindow } from '@/lib/camera/stability';
 
 const MIN_VALID_FRAMES = 8;
+const INTERNAL_QUALITY_WINDOW_OPTIONS = {
+  warmupMs: 500,
+  minWindowMs: 800,
+  maxWindowMs: 1200,
+} as const;
+const MIN_INTERNAL_QUALITY_WINDOW_FRAMES = 4;
 
 function mean(values: number[]): number {
   if (values.length === 0) return 0;
@@ -1128,27 +1135,104 @@ export function evaluateSquatFromPoseFrames(frames: PoseFeaturesFrame[]): Evalua
   const recovery = getSquatRecoverySignal(valid);
   const ascentSatisfied = ascentCount > 0 || recovery.recovered;
 
-  const unstableHintHits = qualityHints.filter((h) =>
+  const internalQualityWindowSelection = selectQualityWindow(
+    valid,
+    INTERNAL_QUALITY_WINDOW_OPTIONS
+  );
+  const internalQualityWindowUsable =
+    internalQualityWindowSelection.qualityFrameCount >= MIN_INTERNAL_QUALITY_WINDOW_FRAMES;
+  const internalQualityFrames = internalQualityWindowUsable
+    ? internalQualityWindowSelection.frames
+    : valid;
+  const internalQualityWindowTrace = buildQualityWindowTrace({
+    selectedWindowFrameCount: internalQualityFrames.length,
+    selectedWindowStartMs: internalQualityFrames[0]?.timestampMs ?? null,
+    selectedWindowEndMs: internalQualityFrames.at(-1)?.timestampMs ?? null,
+    selectedWindowScore: internalQualityWindowSelection.selectedWindowScore,
+    selectedWindowSource: internalQualityWindowUsable
+      ? 'select_quality_window'
+      : internalQualityFrames.length > 0
+        ? 'fallback_sparse_frames'
+        : 'unavailable',
+    fallbackReason: internalQualityWindowUsable
+      ? null
+      : internalQualityFrames.length > 0
+        ? 'selected_window_too_sparse'
+        : 'no_valid_frames',
+    warmupExcludedFrameCount: internalQualityWindowSelection.warmupExcludedFrameCount,
+  });
+  const internalQualityHints = [
+    ...new Set(internalQualityFrames.flatMap((frame) => frame.qualityHints)),
+  ];
+  const internalQualityDepthValues = getNumbers(
+    internalQualityFrames.map((frame) => frame.derived.squatDepthProxy)
+  );
+  const internalQualityKneeTracking = getNumbers(
+    internalQualityFrames.map((frame) => frame.derived.kneeTrackingRatio)
+  );
+  const internalQualityTrunkLeanValues = getNumbers(
+    internalQualityFrames.map((frame) => frame.derived.trunkLeanDeg)
+  ).map((value) => Math.abs(value));
+  const internalQualityAsymmetryValues = getNumbers(
+    internalQualityFrames.map((frame) => frame.derived.kneeAngleGap)
+  );
+  const internalQualityWeightShiftValues = getNumbers(
+    internalQualityFrames.map((frame) => frame.derived.weightShiftRatio)
+  );
+  const internalQualityBottomFrames = internalQualityFrames.filter(
+    (frame) => frame.phaseHint === 'bottom'
+  );
+  const internalQualityBottomDepths = getNumbers(
+    internalQualityBottomFrames.map((frame) => frame.derived.squatDepthProxy)
+  );
+  const internalQualityBottomStability =
+    internalQualityBottomDepths.length > 1
+      ? clamp(
+          1 -
+            (Math.max(...internalQualityBottomDepths) -
+              Math.min(...internalQualityBottomDepths)) /
+              0.2
+        )
+      : 0;
+  const internalQualityDescentCount = countPhases(internalQualityFrames, 'descent');
+  const internalQualityBottomCount = countPhases(internalQualityFrames, 'bottom');
+  const internalQualityAscentCount = countPhases(internalQualityFrames, 'ascent');
+  const internalQualityRecovery = getSquatRecoverySignal(internalQualityFrames);
+  const internalQualityUnstableHintHits = internalQualityHints.filter((h) =>
     ['unstable_bbox', 'unstable_landmarks', 'timestamp_gap'].includes(h)
   ).length;
-  const signalIntegrityMultiplier = Math.max(0.55, 1 - unstableHintHits * 0.14);
+  const internalQualitySignalIntegrityMultiplier = Math.max(
+    0.55,
+    1 - internalQualityUnstableHintHits * 0.14
+  );
 
   /** PR-COMP-03: completion 상태 **이전**에 계산 — gate·completion과 무관 */
   const squatInternalQuality = computeSquatInternalQuality({
-    peakDepthProxy: depthValues.length > 0 ? Math.max(...depthValues) : 0,
-    meanDepthProxy: depthValues.length > 0 ? mean(depthValues) : 0,
-    bottomStability,
-    trunkLeanDegMeanAbs: trunkLeanValues.length > 0 ? mean(trunkLeanValues) : null,
-    kneeTrackingMean: kneeTracking.length > 0 ? mean(kneeTracking) : null,
-    asymmetryDegMean: asymmetryValues.length > 0 ? mean(asymmetryValues) : null,
-    weightShiftMean: weightShiftValues.length > 0 ? mean(weightShiftValues) : null,
-    validFrameRatio: frames.length > 0 ? valid.length / frames.length : 0,
-    descentCount,
-    bottomCount,
-    ascentCount,
-    recoveryDropRatio: recovery.recoveryDropRatio ?? 0,
-    returnContinuityFrames: recovery.returnContinuityFrames ?? 0,
-    signalIntegrityMultiplier,
+    peakDepthProxy:
+      internalQualityDepthValues.length > 0 ? Math.max(...internalQualityDepthValues) : 0,
+    meanDepthProxy:
+      internalQualityDepthValues.length > 0 ? mean(internalQualityDepthValues) : 0,
+    bottomStability: internalQualityBottomStability,
+    trunkLeanDegMeanAbs:
+      internalQualityTrunkLeanValues.length > 0 ? mean(internalQualityTrunkLeanValues) : null,
+    kneeTrackingMean:
+      internalQualityKneeTracking.length > 0 ? mean(internalQualityKneeTracking) : null,
+    asymmetryDegMean:
+      internalQualityAsymmetryValues.length > 0 ? mean(internalQualityAsymmetryValues) : null,
+    weightShiftMean:
+      internalQualityWeightShiftValues.length > 0 ? mean(internalQualityWeightShiftValues) : null,
+    validFrameRatio:
+      internalQualityFrames.length > 0
+        ? internalQualityFrames.filter((frame) => frame.isValid).length /
+          internalQualityFrames.length
+        : 0,
+    descentCount: internalQualityDescentCount,
+    bottomCount: internalQualityBottomCount,
+    ascentCount: internalQualityAscentCount,
+    recoveryDropRatio: internalQualityRecovery.recoveryDropRatio ?? 0,
+    returnContinuityFrames: internalQualityRecovery.returnContinuityFrames ?? 0,
+    signalIntegrityMultiplier: internalQualitySignalIntegrityMultiplier,
+    qualityWindow: internalQualityWindowTrace,
   });
 
   /** PR-HOTFIX-02: 서 있기 안정 구간 이후에만 completion 상태기에 프레임 전달 */

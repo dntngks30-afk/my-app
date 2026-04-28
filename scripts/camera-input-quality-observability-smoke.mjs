@@ -70,6 +70,14 @@ function fixtureWithBothIq() {
           confidence: 0.5,
           qualityTier: 'medium',
           limitations: ['depth_limited'],
+          qualityWindow: {
+            selectedWindowFrameCount: 12,
+            selectedWindowDurationMs: 1100,
+            selectedWindowScore: 0.84,
+            selectedWindowSource: 'select_quality_window',
+            fallbackReason: null,
+            warmupExcludedFrameCount: 5,
+          },
         },
       },
     },
@@ -95,6 +103,14 @@ function fixtureWithBothIq() {
           confidence: 0.55,
           qualityTier: 'medium',
           limitations: [],
+          qualityWindow: {
+            selectedWindowFrameCount: 10,
+            selectedWindowDurationMs: 900,
+            selectedWindowScore: 0.82,
+            selectedWindowSource: 'select_quality_window',
+            fallbackReason: null,
+            warmupExcludedFrameCount: 4,
+          },
         },
       },
     },
@@ -169,6 +185,8 @@ run('squat trace reflects IQ scores and proxies', () => {
   if (s.leftRightSignalBalance !== s.symmetryScore) errors.push('L/R balance should mirror symmetryScore');
   if (!s.signalIntegrityTier.startsWith('obs_si|tier=medium')) errors.push('signalIntegrityTier unexpected');
   if (!Array.isArray(s.limitations)) errors.push('limitations should be array');
+  if (s.selectedWindow?.selectedWindowFrameCount !== 12) errors.push('selectedWindow frame count should mirror compact IQ trace');
+  if ('frames' in (s.selectedWindow ?? {})) errors.push('selectedWindow should not expose raw frames');
   return errors;
 });
 
@@ -179,6 +197,8 @@ run('overhead trace reflects hold symmetry aliases', () => {
   if (!o) return ['overhead trace missing'];
   if (o.stableTopHoldScore !== o.holdStabilityScore) errors.push('stableTopHoldScore should mirror holdStabilityScore');
   if (o.leftRightSignalBalance !== o.symmetryScore) errors.push('L/R balance should mirror symmetryScore');
+  if (o.selectedWindow?.selectedWindowDurationMs !== 900) errors.push('selectedWindow duration should mirror compact IQ trace');
+  if ('landmarks' in (o.selectedWindow ?? {})) errors.push('selectedWindow should not expose raw landmarks');
   return errors;
 });
 
@@ -230,6 +250,9 @@ run('buildCameraRefinedResult refined_meta includes camera_input_quality_observa
   const cq = refined.refined_meta.camera_input_quality_observability_v1;
   if (cq == null) errors.push('expected camera_input_quality_observability_v1 on refined_meta');
   else if (cq.squat == null || cq.overheadReach == null) errors.push('refined IQ obs should mirror fixture');
+  else if (cq.squat.selectedWindow?.selectedWindowSource !== 'select_quality_window') {
+    errors.push('refined IQ obs should include compact selected-window source');
+  }
   return errors;
 });
 
