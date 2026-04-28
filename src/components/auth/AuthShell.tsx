@@ -1,42 +1,43 @@
 'use client';
 
-/**
- * Auth inner surface — glass / midnight (presentation). Neo surface 제거.
- */
 interface AuthShellProps {
-  badgeText: string;
-  title: string;
-  description: string;
   children: React.ReactNode;
-  /** 상단 badge/title/description 숨김 (MoveReAuthScreen이 바깥 헤드라인 담당) */
   compactHeader?: boolean;
+  badgeText?: string;
+  title?: string;
+  description?: string;
 }
 
+/**
+ * INTRO 챕터 카드 표면과 유사한 glass 표면(auth 전용 클래스).
+ */
 export default function AuthShell({
+  children,
+  compactHeader = false,
   badgeText,
   title,
   description,
-  children,
-  compactHeader = false,
 }: AuthShellProps) {
+  const showInnerHeader =
+    !compactHeader && (badgeText || title || description);
+
   return (
-    <div
-      className="rounded-2xl border border-white/[0.08] p-6 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.55)] md:p-8"
-      style={{
-        background: 'rgba(46, 52, 71, 0.4)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-      }}
-    >
-      {!compactHeader && (
-        <div className="mb-8 text-center">
-          <span className="mb-4 inline-block rounded-full border border-[#ffb77d]/35 bg-[#070d1f]/60 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#ffb77d]">
-            {badgeText}
-          </span>
-          <h2 className="mb-2 text-lg font-semibold text-[#dce1fb] lg:text-xl">{title}</h2>
-          <p className="text-sm leading-relaxed text-[#dce1fb]/75 lg:text-[0.9375rem]">{description}</p>
+    <div className="rounded-[28px] border border-white/[0.08] bg-[#151b2d]/70 p-5 shadow-none backdrop-blur-md sm:p-6">
+      {showInnerHeader ? (
+        <div className="mb-6 text-center">
+          {badgeText ? (
+            <span className="mb-4 inline-block rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#ffb77d]">
+              {badgeText}
+            </span>
+          ) : null}
+          {title ? (
+            <h2 className="mb-2 text-lg font-semibold text-[#dce1fb] lg:text-xl">{title}</h2>
+          ) : null}
+          {description ? (
+            <p className="text-sm leading-relaxed text-[#dce1fb]/75 lg:text-[0.9375rem]">{description}</p>
+          ) : null}
         </div>
-      )}
+      ) : null}
       {children}
     </div>
   );

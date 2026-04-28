@@ -1,45 +1,39 @@
 'use client';
 
-import MoveReAuthBackground from '@/components/auth/MoveReAuthBackground';
+import { MoveReAuthIntroShell } from '@/components/auth/MoveReAuthIntroShell';
 
 interface MoveReAuthScreenProps {
-  /** 로그인/회원가입 헤드라인 */
+  /** 로그인/회원가입 hero 제목만 (설명 금지) */
   headline: string;
-  subcopy?: string | null;
+  /** hero 바깥 안내 — OTP 등 (카드 형태로 슬롯 내부에서 지정) */
+  noticeSlot?: React.ReactNode;
   children: React.ReactNode;
 }
 
 /**
- * MOVE RE auth 전용 레이아웃 — presentation만 (routing/auth 계약 없음).
+ * Auth 전용 레이아웃 — IntroSceneShell과 동일 네비/별/glow 패밀리.title-only hero.
  */
-export default function MoveReAuthScreen({
-  headline,
-  subcopy,
-  children,
-}: MoveReAuthScreenProps) {
+export default function MoveReAuthScreen({ headline, noticeSlot, children }: MoveReAuthScreenProps) {
   return (
-    <div
-      className="relative min-h-[100svh] min-h-dvh overflow-x-hidden text-[#dce1fb]"
-      style={{ fontFamily: 'var(--font-sans-noto), system-ui, sans-serif' }}
-    >
-      <MoveReAuthBackground />
-      <main className="relative z-[1] mx-auto flex w-full max-w-[min(100%,440px)] flex-1 flex-col px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))]">
-        <header className="mb-8 space-y-3 text-center">
-          <p
-            className="text-[1.125rem] font-semibold tracking-[0.18em] text-[#dce1fb]"
-            style={{ fontFamily: 'var(--font-display-gowun), var(--font-sans-noto)' }}
-          >
+    <MoveReAuthIntroShell>
+      <div
+        className="flex w-full max-w-[420px] flex-col gap-8"
+        style={{ fontFamily: 'var(--font-sans-noto), system-ui, sans-serif' }}
+      >
+        <header className="text-center">
+          <p className="text-[28px] font-bold leading-none tracking-[-0.04em] text-[#dce1fb]" style={{ fontFamily: 'var(--font-serif-noto), serif' }}>
             MOVE RE
           </p>
-          <h1 className="text-xl font-semibold leading-snug text-[#dce1fb] sm:text-2xl">
+          <h1
+            className="mt-7 text-[24px] font-normal leading-[32px] tracking-[-0.9px] text-[#dce1fb]"
+            style={{ fontFamily: 'var(--font-serif-noto), serif' }}
+          >
             {headline}
           </h1>
-          {subcopy ? (
-            <p className="text-sm leading-relaxed text-[#dce1fb]/80">{subcopy}</p>
-          ) : null}
         </header>
+        {noticeSlot ? <div className="flex justify-center text-center">{noticeSlot}</div> : null}
         {children}
-      </main>
-    </div>
+      </div>
+    </MoveReAuthIntroShell>
   );
 }

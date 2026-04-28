@@ -2,8 +2,9 @@
 
 /**
  * AuthCard — 로그인/회원가입 폼 (MOVE RE auth surface)
- * signup (standalone): /signup 페이지 — 내부에서 MoveReAuthScreen 포함
- * signup (embedded): /app/auth 에서 회원가입 탭 — 바깥 MoveReAuthScreen과 중첩되지 않음
+ * signup standalone: `/signup` — MoveReAuthScreen 래핑
+ * signup embedded: `/app/auth` — 바깥 MoveReAuthScreen과 중첩 없음
+ * login standalone: `/login` — MoveReAuthScreen 래핑
  */
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -14,10 +15,17 @@ import { Input } from '@/components/ui/input';
 import AuthShell from '@/components/auth/AuthShell';
 import MoveReAuthScreen from '@/components/auth/MoveReAuthScreen';
 
-const GLASS_INPUT =
-  'h-11 rounded-xl border border-white/10 bg-[#070d1f]/90 px-3 text-sm text-[#dce1fb] shadow-inner placeholder:text-[#dce1fb]/45 focus-visible:border-[#ffb77d]/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#ffb77d]/30';
-
+const LOGIN_HEADLINE = '내 분석을 이어서 확인하세요';
 const SIGNUP_HEADLINE = '나를 위한 리셋 여정을 시작하세요';
+
+/** StitchLanding 「내 몸 상태 1분 체크하기」와 동일 gradient·그림자·반응 — 폼에서는 w-full px-8(PR-AUTH-UI-03C) */
+const AUTH_PRIMARY_CTA_CLASS =
+  'group inline-flex min-h-[64px] w-full items-center justify-center rounded-md bg-gradient-to-br from-[#ffb77d] to-[#ab4c00] px-8 py-5 text-base font-semibold text-[#4d2600] shadow-[0_18px_60px_rgba(0,0,0,0.35)] transition-all duration-500 hover:opacity-90 active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-60 md:text-lg';
+
+/** INTRO 배경 안 폼 입력 — 포커스는 public 액센트(PR-AUTH-UI-03B) */
+const AUTH_INPUT_CLASS =
+  'h-12 w-full rounded-2xl border border-white/[0.08] bg-[#0c1324]/55 px-4 text-[15px] text-[#dce1fb] placeholder:text-[#dce1fb]/35 outline-none transition focus-visible:border-[var(--mr-public-accent)] focus-visible:ring-2 focus-visible:ring-[var(--mr-public-accent)]/20';
+
 
 interface AuthCardProps {
   mode: 'login' | 'signup';
@@ -25,21 +33,14 @@ interface AuthCardProps {
   redirectTo?: string;
   compactHeader?: boolean;
   oauthSlot?: React.ReactNode;
-  /** signup: 페이지 단독(기본) vs /app/auth 탭 삽입(embedded, 바깥 MoveRe가 레이아웃 담당) */
+  /** signup: 페이지 단독 vs /app/auth 탭 삽입 */
   signupLayout?: 'standalone' | 'embedded';
-  /** 프로덕션 OTP 발송 후 상위 헤드라인 전환(embedded 전용 hooks) */
   onMailLinkScheduled?: () => void;
 }
 
 const isDevSignup = process.env.NODE_ENV === 'development';
 
 const DEFAULT_POST_AUTH_PATH = '/app/home';
-
-function SignupStandaloneWrapper({ children }: { children: React.ReactNode }) {
-  return (
-    <MoveReAuthScreen headline={SIGNUP_HEADLINE}>{children}</MoveReAuthScreen>
-  );
-}
 
 export default function AuthCard({
   mode,
@@ -56,6 +57,8 @@ export default function AuthCard({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signupSuccess, setSignupSuccess] = useState(false);
+
+  const effectiveCompactHeader = compactHeader || signupLayout === 'standalone';
 
   useEffect(() => {
     if (errorParam === 'auth_failed') {
@@ -122,40 +125,19 @@ export default function AuthCard({
 
   const isLogin = mode === 'login';
 
-  const primaryCta = (
-    <button
-      type="submit"
-      disabled={loading}
-      className="flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-[#ffb77d] to-[#ffb68e] text-sm font-semibold text-[#0c1324] shadow-md transition hover:brightness-105 disabled:pointer-events-none disabled:opacity-60"
-    >
-      {loading ? '처리 중...' : isLogin ? '로그인' : '회원가입'}
-    </button>
-  );
-
   const formInner = (
-    <AuthShell
-      badgeText={isLogin ? '로그인' : isDevSignup ? '개발자용 회원가입' : '회원가입'}
-      title={isLogin ? '로그인' : '회원가입'}
-      description={
-        isLogin
-          ? '계정에 로그인하여 맞춤 교정 솔루션을 이용하세요.'
-          : isDevSignup
-            ? '이메일 인증 없이 바로 가입 (개발 환경 전용)'
-            : '계정을 만들고 맞춤 교정 솔루션을 받아보세요.'
-      }
-      compactHeader={compactHeader}
-    >
+    <AuthShell compactHeader={effectiveCompactHeader}>
       <form onSubmit={handleSubmit} className="space-y-6">
-        {error && (
+        {error ? (
           <div
             role="alert"
-            className="rounded-xl border border-red-900/40 bg-red-950/40 px-3 py-2.5 backdrop-blur-sm"
+            className="rounded-2xl border border-red-900/35 bg-red-950/35 px-3 py-2.5"
           >
-            <p className="text-sm text-red-200/95">{error}</p>
+            <p className="text-sm text-red-100/95">{error}</p>
           </div>
-        )}
+        ) : null}
         <div>
-          <label htmlFor="email" className="mb-1.5 block text-xs font-medium text-[#dce1fb]/80">
+          <label htmlFor="email" className="mb-1.5 block text-xs font-medium text-[#dce1fb]/75">
             이메일
           </label>
           <Input
@@ -165,17 +147,17 @@ export default function AuthCard({
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className={GLASS_INPUT}
+            className={AUTH_INPUT_CLASS}
           />
         </div>
 
         {(isLogin || (mode === 'signup' && isDevSignup)) && (
           <div>
-            <label htmlFor="password" className="mb-1.5 block text-xs font-medium text-[#dce1fb]/80">
+            <label htmlFor="password" className="mb-1.5 block text-xs font-medium text-[#dce1fb]/75">
               비밀번호
-              {mode === 'signup' && isDevSignup && (
-                <span className="ml-2 text-[0.7rem] text-amber-200/80">(개발용: 인증 없이 바로 가입)</span>
-              )}
+              {mode === 'signup' && isDevSignup ? (
+                <span className="ml-2 text-[0.7rem] text-[#dce1fb]/55">(개발용: 인증 없이 바로 가입)</span>
+              ) : null}
             </label>
             <Input
               id="password"
@@ -184,26 +166,33 @@ export default function AuthCard({
               required={isLogin}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={GLASS_INPUT}
+              className={AUTH_INPUT_CLASS}
             />
           </div>
         )}
 
-        {mode === 'signup' && (
+        {mode === 'signup' ? (
           <p className="text-[0.7rem] leading-relaxed text-[#dce1fb]/55">
             회원가입 시{' '}
-            <Link href="/terms" className="font-medium text-[#ffb77d] underline-offset-2 hover:underline">
+            <Link href="/terms" className="font-medium underline-offset-2 mr-public-text-accent hover:underline">
               이용약관
             </Link>
             {' 및 '}
-            <Link href="/privacy" className="font-medium text-[#ffb77d] underline-offset-2 hover:underline">
+            <Link href="/privacy" className="font-medium underline-offset-2 mr-public-text-accent hover:underline">
               개인정보처리방침
             </Link>
             에 동의하는 것으로 간주됩니다.
           </p>
-        )}
+        ) : null}
 
-        {primaryCta}
+        <button
+          type="submit"
+          disabled={loading}
+          className={AUTH_PRIMARY_CTA_CLASS}
+          style={{ fontFamily: 'var(--font-sans-noto)' }}
+        >
+          {loading ? '처리 중...' : isLogin ? '로그인' : '회원가입'}
+        </button>
       </form>
 
       {oauthSlot ? <div className="mt-8 space-y-3">{oauthSlot}</div> : null}
@@ -215,7 +204,7 @@ export default function AuthCard({
               계정이 없으신가요?{' '}
               <Link
                 href={`/signup?next=${encodeURIComponent(redirectTo)}`}
-                className="font-semibold text-[#ffb77d] underline-offset-4 hover:underline"
+                className="font-semibold underline-offset-4 mr-public-text-accent hover:underline"
               >
                 회원가입
               </Link>
@@ -225,7 +214,7 @@ export default function AuthCard({
               이미 계정이 있으신가요?{' '}
               <Link
                 href={`/app/auth?next=${encodeURIComponent(redirectTo || DEFAULT_POST_AUTH_PATH)}`}
-                className="font-semibold text-[#ffb77d] underline-offset-4 hover:underline"
+                className="font-semibold underline-offset-4 mr-public-text-accent hover:underline"
               >
                 로그인
               </Link>
@@ -233,7 +222,7 @@ export default function AuthCard({
           )}
         </p>
         <p className="text-sm">
-          <Link href="/" className="text-[#dce1fb]/55 underline-offset-4 hover:text-[#dce1fb]/85 hover:underline">
+          <Link href="/" className="text-[#dce1fb]/55 underline-offset-4 transition hover:text-[#dce1fb]/85 hover:underline">
             ← 메인으로 돌아가기
           </Link>
         </p>
@@ -243,21 +232,21 @@ export default function AuthCard({
 
   const mailConfirmationBody = (
     <>
-      <p className="mb-8 text-center text-sm leading-relaxed text-[#dce1fb]/85">
+      <p className="mb-8 text-center text-sm leading-relaxed text-[#dce1fb]">
         해당 이메일 주소로 링크를 발송했습니다. 링크를 클릭하면 추가 정보 입력 단계로 이동합니다.
       </p>
       <div className="space-y-3 text-center">
-        <p className="text-sm text-[#dce1fb]/75">
+        <p className="text-sm text-[#dce1fb]/70">
           이미 계정이 있으신가요?{' '}
           <Link
             href={`/app/auth?next=${encodeURIComponent(redirectTo || DEFAULT_POST_AUTH_PATH)}`}
-            className="font-semibold text-[#ffb77d] underline-offset-4 hover:underline"
+            className="font-semibold underline-offset-4 mr-public-text-accent hover:underline"
           >
             로그인
           </Link>
         </p>
         <p className="text-sm">
-          <Link href="/" className="text-[#dce1fb]/60 underline-offset-4 hover:text-[#dce1fb]/90 hover:underline">
+          <Link href="/" className="text-[#dce1fb]/55 underline-offset-4 transition hover:text-[#dce1fb]/85 hover:underline">
             ← 메인으로 돌아가기
           </Link>
         </p>
@@ -268,22 +257,32 @@ export default function AuthCard({
   if (mode === 'signup' && signupSuccess) {
     if (signupLayout === 'embedded') {
       return (
-        <AuthShell badgeText="" title="" description="" compactHeader={true}>
+        <AuthShell compactHeader>
           {mailConfirmationBody}
         </AuthShell>
       );
     }
     return (
-      <MoveReAuthScreen headline="메일 확인" subcopy="이메일 링크로 가입을 완료하세요.">
-        <AuthShell badgeText="" title="" description="" compactHeader={true}>
-          {mailConfirmationBody}
-        </AuthShell>
+      <MoveReAuthScreen headline="메일 확인">
+        <AuthShell compactHeader>{mailConfirmationBody}</AuthShell>
       </MoveReAuthScreen>
     );
   }
 
   if (mode === 'signup' && signupLayout === 'standalone') {
-    return <SignupStandaloneWrapper>{formInner}</SignupStandaloneWrapper>;
+    return (
+      <MoveReAuthScreen headline={SIGNUP_HEADLINE}>
+        {formInner}
+      </MoveReAuthScreen>
+    );
+  }
+
+  if (mode === 'login' && signupLayout === 'standalone') {
+    return (
+      <MoveReAuthScreen headline={LOGIN_HEADLINE}>
+        {formInner}
+      </MoveReAuthScreen>
+    );
   }
 
   return formInner;
