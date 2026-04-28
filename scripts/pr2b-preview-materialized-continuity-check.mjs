@@ -172,6 +172,7 @@ async function run() {
     { LOWER_AXIS_GUARD_TAGS },
     { resolveFirstSessionIntent },
     { resolveGoldPathVectorUnified },
+    { computePhase, resolvePhaseLengths },
   ] = await Promise.all([
     import('../src/lib/deep-test/scoring/deep_v3.ts'),
     import('../src/lib/session/plan-generator.ts'),
@@ -179,6 +180,7 @@ async function run() {
     import('../src/lib/session/lower-pair-session1-shared.ts'),
     import('../src/lib/session/priority-layer.ts'),
     import('../src/lib/session/first-session-anchor-resolver.ts'),
+    import('../src/lib/session/phase.ts'),
   ]);
   const personas = (await import('../src/lib/deep-test/scenarios/personas.json')).default;
   const templates = await loadStaticTemplates();
@@ -498,6 +500,101 @@ async function run() {
     );
   }
 
+  /** PR-SESSION-2PLUS-TYPE-CONTINUITY-GUARD-01 */
+  const phasePolicyS23 = {
+    deepLevel: ssotLowerDeepSummary.deep_level ?? 2,
+    safetyMode: ssotLowerDeepSummary.safety_mode,
+    redFlags: ssotLowerDeepSummary.red_flags,
+  };
+  const phaseLengthsS23 = [...resolvePhaseLengths(16, phasePolicyS23)];
+  const s23_continuity = {};
+  const planSn4ContinuityCheck = await buildSessionPlanJson({
+    templatePool: templates,
+    sessionNumber: 4,
+    totalSessions: 16,
+    phase: computePhase(16, 4, {
+      phaseLengths: phaseLengthsS23,
+      policyOptions: phasePolicyS23,
+    }),
+    theme: 'PR2-B session 4 (no S2/S3 continuity meta)',
+    timeBudget: 'normal',
+    conditionMood: 'ok',
+    focus: ssotLowerDeepSummary.focus,
+    avoid: ssotLowerDeepSummary.avoid,
+    painFlags: [],
+    usedTemplateIds: [],
+    scoringVersion: 'deep_v3',
+    deep_level: ssotLowerDeepSummary.deep_level,
+    safety_mode: ssotLowerDeepSummary.safety_mode,
+    resultType: ssotLowerDeepSummary.result_type,
+    primary_type: ssotLowerDeepSummary.primary_type,
+    secondary_type: ssotLowerDeepSummary.secondary_type,
+    priority_vector: ssotLowerDeepSummary.priority_vector,
+    pain_mode: ssotLowerDeepSummary.pain_mode,
+    baseline_session_anchor: ssotLowerDeepSummary.baseline_session_anchor,
+    red_flags: ssotLowerDeepSummary.red_flags,
+  });
+  if (planSn4ContinuityCheck.meta?.session_type_continuity != null) {
+    throw new Error(
+      '[PR2-B S23] session 4 should not attach session_type_continuity (S2/S3-only guard)',
+    );
+  }
+
+  for (const sn of [2, 3]) {
+    const phaseSn = computePhase(16, sn, {
+      phaseLengths: phaseLengthsS23,
+      policyOptions: phasePolicyS23,
+    });
+    const planSn = await buildSessionPlanJson({
+      templatePool: templates,
+      sessionNumber: sn,
+      totalSessions: 16,
+      phase: phaseSn,
+      theme: `PR2-B S${sn} lower continuity`,
+      timeBudget: 'normal',
+      conditionMood: 'ok',
+      focus: ssotLowerDeepSummary.focus,
+      avoid: ssotLowerDeepSummary.avoid,
+      painFlags: [],
+      usedTemplateIds: [],
+      scoringVersion: 'deep_v3',
+      deep_level: ssotLowerDeepSummary.deep_level,
+      safety_mode: ssotLowerDeepSummary.safety_mode,
+      resultType: ssotLowerDeepSummary.result_type,
+      primary_type: ssotLowerDeepSummary.primary_type,
+      secondary_type: ssotLowerDeepSummary.secondary_type,
+      priority_vector: ssotLowerDeepSummary.priority_vector,
+      pain_mode: ssotLowerDeepSummary.pain_mode,
+      baseline_session_anchor: ssotLowerDeepSummary.baseline_session_anchor,
+      red_flags: ssotLowerDeepSummary.red_flags,
+    });
+    if (!planSn.meta?.session_type_continuity || planSn.meta.session_type_continuity.version !== 'session_type_continuity_v1') {
+      throw new Error(
+        `[PR2-B S23] expected session_type_continuity for session ${sn}, got ${JSON.stringify(planSn.meta?.session_type_continuity)}`,
+      );
+    }
+    assertMainNoUpperOnlyOffAxis(`S${sn}-materialized`, planSn.segments, templateById);
+    const previewSn = buildSessionBootstrapSummaryFromTemplates(templates, {
+      sessionNumber: sn,
+      deepSummary: ssotLowerDeepSummary,
+    });
+    assertMainNoUpperOnlyOffAxis(`S${sn}-preview`, previewSn.segments, templateById);
+    if (poolHasLowerStabilityAnchorLike(templates)) {
+      if (!mainHasLowerStabilityAnchor(previewSn.segments, templateById)) {
+        throw new Error(`[PR2-B S23] preview session ${sn} Main missing lower-stability anchor`);
+      }
+      if (!mainHasLowerStabilityAnchor(planSn.segments, templateById)) {
+        throw new Error(`[PR2-B S23] materialized session ${sn} Main missing lower-stability anchor`);
+      }
+    }
+    s23_continuity[`session_${sn}`] = {
+      materialized_has_stc_meta: !!planSn.meta.session_type_continuity,
+      preview_main_anchor_ok: poolHasLowerStabilityAnchorLike(templates)
+        ? mainHasLowerStabilityAnchor(previewSn.segments, templateById)
+        : null,
+    };
+  }
+
   const out = {
     generated_at: new Date().toISOString(),
     purpose: 'PR2-B follow-up continuity + dominant-axis guard sync proof',
@@ -519,6 +616,8 @@ async function run() {
       session_2_unified_vector: ssotSession2.vector,
       session_2_unified_source: ssotSession2.source,
     },
+    s23_lower_stability_continuity: s23_continuity,
+    session_4_has_no_session_type_continuity: planSn4ContinuityCheck.meta?.session_type_continuity == null,
   };
 
   const outPath = join(process.cwd(), 'artifacts/pr2b/lower-pair-preview-materialized-continuity.json');

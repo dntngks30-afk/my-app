@@ -49,6 +49,8 @@ import type { SessionCameraTranslationMetaV1 } from '@/lib/deep-v2/session/merge
 import {
   isLowerStabilityMainAnchorCandidate,
   isUpperOnlyMainOffAxisForLowerStability,
+  mainHasLowerStabilityMainAnchor,
+  mainHasUpperOnlyLowerStabilityDrift,
   LOWER_AXIS_GUARD_TAGS,
   LOWER_PAIR_GOLD_PATH_RULES,
 } from '@/lib/session/lower-pair-session1-shared';
@@ -1256,9 +1258,13 @@ function findBestMainRepairFromPool(
     )
     .map((t) => ({
       t,
-      sc: isS1Lower
-        ? scoreLowerStabilityS1MainRepairPriority(t)
-        : scoreRepairTemplateForGold(t, ctx.goldPathVector),
+      sc:
+        isS1Lower ||
+        (ctx.sessionNumber >= 2 &&
+          opts?.requireLowerStabilityMainAnchor &&
+          ctx.goldPathVector === 'lower_stability')
+          ? scoreLowerStabilityS1MainRepairPriority(t)
+          : scoreRepairTemplateForGold(t, ctx.goldPathVector),
     }))
     .filter(({ t }) => !used.has(t.id))
     .sort((a, b) => b.sc - a.sc || a.t.id.localeCompare(b.t.id));
@@ -1278,6 +1284,14 @@ function pickMainReplaceIndexForContinuity(mainRows: SessionTemplateRow[], g: Go
   return 0;
 }
 
+/** PR-SESSION-2PLUS-TYPE-CONTINUITY-GUARD-01: upper-only Main 슬롯 교체 우선 */
+function pickLowerStabilityS2S3MainReplaceIndex(mainRows: SessionTemplateRow[]): number {
+  for (let i = 0; i < mainRows.length; i += 1) {
+    if (isUpperOnlyMainOffAxisForLowerStability(mainRows[i]!)) return i;
+  }
+  return pickMainReplaceIndexForContinuity(mainRows, 'lower_stability');
+}
+
 function planHasTargetVectorInPlan(
   segments: PlanSegment[],
   templatesById: Map<string, SessionTemplateRow>,
@@ -1291,20 +1305,6 @@ function planHasTargetVectorInPlan(
     }
   }
   return false;
-}
-
-function mainHasLowerStabilityFamily(rows: SessionTemplateRow[]): boolean {
-  return rows.some(
-    (t) => isTargetAnchorVector(t, 'lower_stability') || isTargetSupportForGoldPath(t, 'lower_stability')
-  );
-}
-
-function isMainUpperOnlyDominant(rows: SessionTemplateRow[]): boolean {
-  if (rows.length < 2) return false;
-  return rows.every((t) => {
-    const v = new Set(t.target_vector ?? []);
-    return v.has('upper_mobility') && !v.has('lower_stability') && !v.has('trunk_control') && !v.has('lower_mobility');
-  });
 }
 
 function isMainUpperDominantLowerMobility(rows: SessionTemplateRow[]): boolean {
@@ -1379,6 +1379,24 @@ function repairSession2PlusTypeContinuity(input: {
     (main?.items.map((i) => templatesById.get(i.templateId)).filter(Boolean) ?? []) as SessionTemplateRow[];
   const repairedIdList: string[] = [];
   const removedIdList: string[] = [];
+  let continuityRepairOccurred = false;
+  const repairEligibleArgs = {
+    sessionNumber: input.sessionNumber,
+    excludeSet: input.excludeSet,
+    painMode: input.painMode,
+    maxLevel: input.maxLevel,
+    maxDifficultyCap: input.maxDifficultyCap,
+  };
+  /** PR-SESSION-2PLUS-TYPE-CONTINUITY-GUARD-01: lower 앵커 교체 가능 풀 존재 */
+  const poolHasLowerStabilityAnchor =
+    anchor === 'lower_stability'
+      ? input.templatePool.some(
+          (t) =>
+            isRepairTemplateEligible(t, repairEligibleArgs) &&
+            isLowerStabilityMainAnchorCandidate(t) &&
+            !isUpperOnlyMainOffAxisForLowerStability(t)
+        )
+      : false;
   const ctxTemplate = (g: GoldPathVector): RepairS1Context => ({
     goldPathVector: g,
     templatePool: input.templatePool,
@@ -1402,16 +1420,59 @@ function repairSession2PlusTypeContinuity(input: {
       input.toPlanItemCtx
     );
   };
+  const demoteUpperOnlyFromMainToAccessory = (): boolean => {
+    const mainSeg = getMain();
+    const accSeg = segments.find((s) => s.title === 'Accessory');
+    if (!mainSeg || !accSeg) return false;
+    const ij = mainSeg.items.findIndex((it) => {
+      const tpl = templatesById.get(it.templateId);
+      return tpl !== undefined && isUpperOnlyMainOffAxisForLowerStability(tpl);
+    });
+    if (ij === -1) return false;
+    const [planItem] = mainSeg.items.splice(ij, 1);
+    const tpl = templatesById.get(planItem.templateId);
+    if (!tpl) return false;
+    if (accSeg.items.some((i) => i.templateId === planItem.templateId)) {
+      mainSeg.items.splice(ij, 0, planItem);
+      return false;
+    }
+    accSeg.items.push(
+      toPlanItem(tpl, accSeg.items.length + 1, 'Accessory', input.toPlanItemCtx)
+    );
+    continuityRepairOccurred = true;
+    return true;
+  };
   for (let iter = 0; iter < 24; iter += 1) {
     const mainSeg = getMain();
     if (!mainSeg) break;
-    const rows = asRows(mainSeg);
+    let rows = asRows(mainSeg);
+    if (anchor === 'lower_stability' && rows.length === 0 && poolHasLowerStabilityAnchor) {
+      const ctx = ctxTemplate('lower_stability');
+      const used = collectUsedTemplateIdsFromSegments(segments);
+      const usedForPick = new Set(used);
+      const repl = findBestMainRepairFromPool(ctx, usedForPick, null, {
+        requireLowerStabilityMainAnchor: true,
+      });
+      if (repl) {
+        mainSeg.items.push(toPlanItem(repl, 1, 'Main', input.toPlanItemCtx));
+        repairedIdList.push(repl.id);
+        continuityRepairOccurred = true;
+        continue;
+      }
+      break;
+    }
     if (rows.length === 0) break;
     let needRepair = false;
     if (anchor === 'trunk_control') {
       needRepair = !rows.some((t) => hasTargetVector(t, ['trunk_control']));
     } else if (anchor === 'lower_stability') {
-      needRepair = isMainUpperOnlyDominant(rows) || !mainHasLowerStabilityFamily(rows);
+      const hasUpperOnlyOffAxisInMain = rows.some((t) =>
+        isUpperOnlyMainOffAxisForLowerStability(t)
+      );
+      needRepair =
+        mainHasUpperOnlyLowerStabilityDrift(rows) ||
+        (poolHasLowerStabilityAnchor && !mainHasLowerStabilityMainAnchor(rows)) ||
+        hasUpperOnlyOffAxisInMain;
     } else if (anchor === 'lower_mobility') {
       const planVec = planHasTargetVectorInPlan(segments, templatesById, 'lower_mobility');
       needRepair = isMainUpperDominantLowerMobility(rows) || !planVec;
@@ -1441,13 +1502,23 @@ function repairSession2PlusTypeContinuity(input: {
           : anchor;
     const ctx = ctxTemplate(g);
     const used = collectUsedTemplateIdsFromSegments(segments);
-    const tryIdx = pickMainReplaceIndexForContinuity(rows, g);
+    const tryIdx =
+      anchor === 'lower_stability' && g === 'lower_stability'
+        ? pickLowerStabilityS2S3MainReplaceIndex(rows)
+        : pickMainReplaceIndexForContinuity(rows, g);
     const usedForPick = new Set(used);
     const oldId = getMain()!.items[tryIdx]!.templateId;
     usedForPick.delete(oldId);
-    const repl = findBestMainRepairFromPool(ctx, usedForPick, null);
+    const lowerS2S3 =
+      anchor === 'lower_stability' && g === 'lower_stability'
+        ? { requireLowerStabilityMainAnchor: true as const }
+        : undefined;
+    const repl = findBestMainRepairFromPool(ctx, usedForPick, null, lowerS2S3);
     if (repl) {
       tryReplaceMainAt(tryIdx, repl);
+      continue;
+    }
+    if (anchor === 'lower_stability' && g === 'lower_stability' && demoteUpperOnlyFromMainToAccessory()) {
       continue;
     }
     let swapped = false;
@@ -1469,7 +1540,11 @@ function repairSession2PlusTypeContinuity(input: {
         ) {
           continue;
         }
-        if (scoreRepairTemplateForGold(oth, g) < 200 && !isTargetAnchorVector(oth, g)) {
+        if (anchor === 'lower_stability' && g === 'lower_stability') {
+          if (!isLowerStabilityMainAnchorCandidate(oth) || isUpperOnlyMainOffAxisForLowerStability(oth)) {
+            continue;
+          }
+        } else if (scoreRepairTemplateForGold(oth, g) < 200 && !isTargetAnchorVector(oth, g)) {
           continue;
         }
         const badT = asRows(getMain())[tryIdx]!;
@@ -1492,7 +1567,7 @@ function repairSession2PlusTypeContinuity(input: {
     main_anchor_match_count: stats.main_anchor_match_count,
     main_support_match_count: stats.main_support_match_count,
     main_off_axis_count: stats.main_off_axis_count,
-    repaired: repairedIdList.length > 0,
+    repaired: repairedIdList.length > 0 || continuityRepairOccurred,
     ...(repairedIdList.length > 0 && { repaired_template_ids: repairedIdList }),
     ...(removedIdList.length > 0 && { removed_template_ids: removedIdList }),
   };

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-28T03:13:08.710Z",
+  "generated_at": "2026-04-28T03:24:23.764Z",
   "purpose": "PR2-B follow-up continuity + dominant-axis guard sync proof",
   "continuity": [
     {
@@ -137,5 +137,16 @@
     "materialized_upper_gold_path_vector": "upper_mobility",
     "session_2_unified_vector": "upper_mobility",
     "session_2_unified_source": "priority_vector"
-  }
+  },
+  "s23_lower_stability_continuity": {
+    "session_2": {
+      "materialized_has_stc_meta": true,
+      "preview_main_anchor_ok": true
+    },
+    "session_3": {
+      "materialized_has_stc_meta": true,
+      "preview_main_anchor_ok": true
+    }
+  },
+  "session_4_has_no_session_type_continuity": true
 }

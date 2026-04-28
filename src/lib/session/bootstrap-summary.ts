@@ -47,6 +47,47 @@ type GoldPathVector =
   | 'deconditioned'
   | 'balanced_reset'
 
+/** plan-generator `resolveSession2PlusContinuityAnchor` 와 동일 스냅샷 (S2/S3 연속 repair만). */
+const CONTINUITY_GOLD_PATH_KEYS: readonly string[] = [
+  'lower_stability',
+  'lower_mobility',
+  'trunk_control',
+  'upper_mobility',
+  'deconditioned',
+  'balanced_reset',
+]
+
+/**
+ * S2/S3 continuity guard — baseline → primary → priority (금 경로 unify resolver와 무관하게 정렬 가능).
+ */
+function resolveSession2PlusContinuityAnchorFromDeep(
+  deep: SessionDeepSummary
+): GoldPathVector | null {
+  const b = deep.baseline_session_anchor?.trim()
+  if (b && CONTINUITY_GOLD_PATH_KEYS.includes(b)) {
+    return b as GoldPathVector
+  }
+  const byPrimary: Partial<Record<string, GoldPathVector>> = {
+    LOWER_INSTABILITY: 'lower_stability',
+    LOWER_MOBILITY_RESTRICTION: 'lower_mobility',
+    UPPER_IMMOBILITY: 'upper_mobility',
+    CORE_CONTROL_DEFICIT: 'trunk_control',
+    DECONDITIONED: 'deconditioned',
+    STABLE: 'balanced_reset',
+  }
+  if (deep.primary_type && byPrimary[deep.primary_type]) {
+    return byPrimary[deep.primary_type]!
+  }
+  const ranked = Object.entries(deep.priority_vector ?? {})
+    .filter(
+      (e): e is [GoldPathVector, number] =>
+        CONTINUITY_GOLD_PATH_KEYS.includes(e[0]) && typeof e[1] === 'number' && e[1] > 0
+    )
+    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
+  if (ranked[0]) return ranked[0]![0]
+  return null
+}
+
 type SegmentKind = 'prep' | 'main' | 'accessory' | 'cooldown'
 
 export type SessionBootstrapSummaryItem = {
@@ -389,6 +430,98 @@ function repairLowerStabilityS1PreviewMain(
         const idx = pickBootstrapMainReplaceLowerS1(ms.items)
         ms.items[idx] = best
       }
+    }
+  }
+
+  return segments
+}
+
+/**
+ * PR-SESSION-2PLUS-TYPE-CONTINUITY-GUARD-01: S2/S3 lower_stability Main — materialized repairSession2PlusTypeContinuity와 동일 의도.
+ */
+function repairLowerStabilityS2S3PreviewMain(
+  segmentEntries: Array<{ title: string; items: SessionTemplateRow[] }>,
+  sorted: Array<{ template: SessionTemplateRow; score: number }>,
+  input: SessionBootstrapSummaryInput,
+  continuityAnchor: GoldPathVector | null
+): Array<{ title: string; items: SessionTemplateRow[] }> {
+  if (
+    (input.sessionNumber !== 2 && input.sessionNumber !== 3) ||
+    continuityAnchor !== 'lower_stability'
+  ) {
+    return segmentEntries
+  }
+  const painMode = input.deepSummary.pain_mode
+  const segments = segmentEntries.map((seg) => ({
+    title: seg.title,
+    items: [...seg.items],
+  }))
+
+  const mainSegMut = segments.find((s) => s.title === 'Main')
+  const accessorySeg = segments.find((s) => s.title === 'Accessory')
+  if (!mainSegMut) return segments
+
+  const poolHasAnchorCandidate = sorted.some(({ template: t }) => {
+    if (painMode && painMode !== 'none' && (t.avoid_if_pain_mode ?? []).includes(painMode))
+      return false
+    return (
+      isMainEligible(t) &&
+      isLowerStabilityMainAnchorCandidate(t) &&
+      !isUpperOnlyMainOffAxisForLowerStability(t)
+    )
+  })
+
+  const pickBestLowerAnchorFromSorted = (): SessionTemplateRow | null => {
+    const usedSweep = collectBootstrapTemplateIds(segments)
+    let best: SessionTemplateRow | null = null
+    let bestSc = -1
+    for (const { template: t } of sorted) {
+      if (usedSweep.has(t.id)) continue
+      if (painMode && painMode !== 'none' && (t.avoid_if_pain_mode ?? []).includes(painMode))
+        continue
+      if (
+        !isMainEligible(t) ||
+        !isLowerStabilityMainAnchorCandidate(t) ||
+        isUpperOnlyMainOffAxisForLowerStability(t)
+      )
+        continue
+      const pr = scoreLowerStabilityPreviewMainRepairPriority(t)
+      if (pr > bestSc || (pr === bestSc && (!best || t.id.localeCompare(best.id) < 0))) {
+        bestSc = pr
+        best = t
+      }
+    }
+    return best
+  }
+
+  const keptMain: SessionTemplateRow[] = []
+  for (const row of mainSegMut.items) {
+    if (!isUpperOnlyMainOffAxisForLowerStability(row)) {
+      keptMain.push(row)
+      continue
+    }
+    const accessoryDup = accessorySeg?.items.some((i) => i.id === row.id) ?? false
+    if (accessorySeg && !accessoryDup) accessorySeg.items.push(row)
+  }
+  mainSegMut.items = keptMain
+
+  if (mainSegMut.items.length === 0 && poolHasAnchorCandidate) {
+    const best = pickBestLowerAnchorFromSorted()
+    if (best) mainSegMut.items = [best]
+  }
+
+  const mainRows = mainSegMut.items
+  if (
+    poolHasAnchorCandidate &&
+    mainRows.length > 0 &&
+    !mainRows.some((t) => isLowerStabilityMainAnchorCandidate(t))
+  ) {
+    const best = pickBestLowerAnchorFromSorted()
+    if (best) {
+      const idx = pickBootstrapMainReplaceLowerS1(mainRows)
+      const nextMain = [...mainRows]
+      nextMain[idx] = best
+      mainSegMut.items = nextMain
     }
   }
 
@@ -803,7 +936,17 @@ export function buildSessionBootstrapSummaryFromTemplates(
     input,
     resolvedVector
   )
-  const segments = previewSafeSegments
+  const continuityAnchorForS23 =
+    input.sessionNumber === 2 || input.sessionNumber === 3
+      ? resolveSession2PlusContinuityAnchorFromDeep(input.deepSummary)
+      : null
+  const continuityPreviewSegments = repairLowerStabilityS2S3PreviewMain(
+    previewSafeSegments,
+    scored,
+    input,
+    continuityAnchorForS23
+  )
+  const segments = continuityPreviewSegments
     .filter((segment) => segment.items.length > 0)
     .map((segment) => ({
       title: segment.title,

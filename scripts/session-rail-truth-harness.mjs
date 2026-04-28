@@ -161,6 +161,170 @@ function assertSegmentsLowerStabilityS1MainNoUpperOffAxis(label, segments, templ
   }
 }
 
+/** PR-SESSION-2PLUS-TYPE-CONTINUITY-GUARD-01 — S2/S3 lower_stability Main (materialized + preview) */
+function assertSegmentsLowerStabilityS23MainContinuity(label, segments, templates) {
+  const byId = new Map(templates.map((x) => [x.id, x]));
+  const main = segments?.find((s) => s.title === 'Main');
+  for (const it of main?.items ?? []) {
+    const tpl = byId.get(it.templateId);
+    if (tpl && isUpperOnlyMainOffAxisForLowerStability(tpl)) {
+      throw new Error(
+        `[SESSION_RAIL Harness S2/S3:${label}] lower_stability Main must not contain upper-only off-axis templates; got templateId=${it.templateId}, focus_tags=${JSON.stringify(tpl.focus_tags)}, target_vector=${JSON.stringify(tpl.target_vector ?? [])}`,
+      );
+    }
+  }
+  if (poolLooksLikeHasLowerStabilityAnchor(templates)) {
+    const hasAnchor =
+      main?.items?.some((item) => {
+        const tpl = byId.get(item.templateId);
+        return tpl && isLowerStabilityMainAnchorCandidate(tpl);
+      }) ?? false;
+    if (!hasAnchor) {
+      throw new Error(
+        `[SESSION_RAIL Harness S2/S3:${label}] Main should contain at least one lower-stability anchor when pool supplies candidates.`,
+      );
+    }
+  }
+}
+
+async function runS23LowerStabilityContinuityChecks({
+  buildSessionPlanJson,
+  buildSessionBootstrapSummaryFromTemplates,
+  computePhase,
+  resolvePhaseLengths,
+  buildTheme,
+  templates,
+}) {
+  const fx = buildBaselineFixture('LOWER_INSTABILITY');
+  const policyOptions = buildPolicyOptions(fx);
+  const phaseLengthsArr = resolvePhaseLengths(16, policyOptions);
+  const totalSessions = 16;
+
+  const buildLowerPlan = async (sessionNumber) => {
+    const phase = computePhase(totalSessions, sessionNumber, {
+      phaseLengths: phaseLengthsArr,
+      policyOptions,
+    });
+    const theme = buildTheme(
+      sessionNumber,
+      totalSessions,
+      {
+        result_type: fx.resultType,
+        focus: fx.focus,
+      },
+      { phaseLengths: phaseLengthsArr, policyOptions }
+    );
+    return buildSessionPlanJson({
+      templatePool: templates,
+      sessionNumber,
+      totalSessions,
+      phase,
+      theme,
+      timeBudget: 'normal',
+      conditionMood: 'ok',
+      focus: fx.focus,
+      avoid: fx.avoid,
+      painFlags: [],
+      usedTemplateIds: [],
+      resultType: fx.resultType,
+      confidence: fx.confidence,
+      scoringVersion: fx.scoringVersion,
+      deep_level: fx.deep_level,
+      pain_risk: fx.pain_risk,
+      red_flags: fx.red_flags,
+      safety_mode: fx.safety_mode,
+      primary_type: fx.primary_type,
+      secondary_type: fx.secondary_type,
+      priority_vector: fx.priority_vector,
+      pain_mode: fx.pain_mode,
+      baseline_session_anchor: fx.baseline_session_anchor,
+    });
+  };
+
+  const deepSummaryLower = {
+    focus: fx.focus,
+    avoid: fx.avoid,
+    deep_level: fx.deep_level,
+    safety_mode: fx.safety_mode,
+    red_flags: fx.red_flags,
+    primary_type: fx.primary_type,
+    secondary_type: fx.secondary_type,
+    priority_vector: fx.priority_vector,
+    pain_mode: fx.pain_mode,
+    result_type: fx.resultType,
+    baseline_session_anchor: fx.baseline_session_anchor,
+    scoring_version: fx.scoringVersion,
+  };
+
+  for (const sn of [2, 3]) {
+    const plan = await buildLowerPlan(sn);
+    const stc = plan.meta?.session_type_continuity;
+    if (!stc || stc.version !== 'session_type_continuity_v1') {
+      throw new Error(
+        `[S2/S3 continuity] expected session_type_continuity for LOWER_INSTABILITY session ${sn}, got ${JSON.stringify(stc)}`,
+      );
+    }
+    assertSegmentsLowerStabilityS23MainContinuity(`materialized-sn${sn}`, plan.segments, templates);
+    const preview = buildSessionBootstrapSummaryFromTemplates(templates, {
+      sessionNumber: sn,
+      deepSummary: deepSummaryLower,
+    });
+    assertSegmentsLowerStabilityS23MainContinuity(`preview-sn${sn}`, preview.segments, templates);
+  }
+
+  const plan4 = await buildLowerPlan(4);
+  if (plan4.meta?.session_type_continuity != null) {
+    throw new Error('[S2/S3 continuity] session 4 should not attach session_type_continuity (S2/S3-only guard)');
+  }
+
+  const fxU = buildBaselineFixture('UPPER_IMMOBILITY');
+  const policyUpper = buildPolicyOptions(fxU);
+  const phaseLengthsUpper = resolvePhaseLengths(16, policyUpper);
+  const phase2U = computePhase(16, 2, { phaseLengths: phaseLengthsUpper, policyOptions: policyUpper });
+  const theme2U = buildTheme(
+    2,
+    16,
+    { result_type: fxU.resultType, focus: fxU.focus },
+    { phaseLengths: phaseLengthsUpper, policyOptions: policyUpper }
+  );
+  const planUpper2 = await buildSessionPlanJson({
+    templatePool: templates,
+    sessionNumber: 2,
+    totalSessions: 16,
+    phase: phase2U,
+    theme: theme2U,
+    timeBudget: 'normal',
+    conditionMood: 'ok',
+    focus: fxU.focus,
+    avoid: fxU.avoid,
+    painFlags: [],
+    usedTemplateIds: [],
+    resultType: fxU.resultType,
+    confidence: fxU.confidence,
+    scoringVersion: fxU.scoringVersion,
+    deep_level: fxU.deep_level,
+    pain_risk: fxU.pain_risk,
+    red_flags: fxU.red_flags,
+    safety_mode: fxU.safety_mode,
+    primary_type: fxU.primary_type,
+    secondary_type: fxU.secondary_type,
+    priority_vector: fxU.priority_vector,
+    pain_mode: fxU.pain_mode,
+    baseline_session_anchor: fxU.baseline_session_anchor,
+  });
+  const byId = new Map(templates.map((x) => [x.id, x]));
+  const mainUpper = planUpper2.segments?.find((s) => s.title === 'Main');
+  const anyUpperMv = (mainUpper?.items ?? []).some((it) => {
+    const tpl = byId.get(it.templateId);
+    return tpl?.target_vector?.includes('upper_mobility');
+  });
+  if (!anyUpperMv) {
+    throw new Error(
+      '[S2/S3 continuity] UPPER_IMMOBILITY session 2 Main should retain upper_mobility target_vector visibility when appropriate',
+    );
+  }
+}
+
 function assertLowerInstabilityLowerStabilityS1MainGuard(plan, templates, fixture, sessionNumber) {
   if (sessionNumber !== 1) return;
   if (fixture.primary_type !== 'LOWER_INSTABILITY') return;
@@ -1072,6 +1236,15 @@ async function main() {
       buildSessionBootstrapSummaryFromTemplates,
       resolveFirstSessionIntent,
       resolveGoldPathVectorUnified,
+      templates,
+    });
+
+    await runS23LowerStabilityContinuityChecks({
+      buildSessionPlanJson,
+      buildSessionBootstrapSummaryFromTemplates,
+      computePhase,
+      resolvePhaseLengths,
+      buildTheme,
       templates,
     });
   }

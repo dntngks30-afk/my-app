@@ -48,3 +48,26 @@ export function isUpperOnlyMainOffAxisForLowerStability(template: LowerStability
     ['upper_back_activation', 'shoulder_stability', 'shoulder_mobility', 'upper_mobility'].includes(tag)
   );
 }
+
+/**
+ * PR-SESSION-2PLUS-TYPE-CONTINUITY-GUARD-01: Main에 가시적인 lower 앵커(tags/vector 기반) 존재.
+ */
+export function mainHasLowerStabilityMainAnchor(
+  rows: LowerStabilityTemplateLike[]
+): boolean {
+  return rows.some((template) => isLowerStabilityMainAnchorCandidate(template));
+}
+
+/**
+ * PR-SESSION-2PLUS-TYPE-CONTINUITY-GUARD-01: 단일 상체-only도 drift; 충분히 lower 관련하지 않음.
+ */
+export function mainHasUpperOnlyLowerStabilityDrift(rows: LowerStabilityTemplateLike[]): boolean {
+  if (rows.length === 0) return false;
+  const upperOnlyCount = rows.filter((template) =>
+    isUpperOnlyMainOffAxisForLowerStability(template)
+  ).length;
+  const hasLowerAnchor = mainHasLowerStabilityMainAnchor(rows);
+  if (rows.length === 1 && upperOnlyCount === 1 && !hasLowerAnchor) return true;
+  if (rows.length >= 2 && upperOnlyCount >= rows.length && !hasLowerAnchor) return true;
+  return upperOnlyCount > 0 && !hasLowerAnchor;
+}
