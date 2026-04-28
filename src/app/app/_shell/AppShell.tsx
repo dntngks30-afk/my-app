@@ -28,8 +28,14 @@ export default function AppShell() {
   const showStats = active.startsWith('/app/checkin');
   const showMy = active === '/app/profile';
 
-  /** donor 지도 기본 승격: /app/home 에서 donor theme */
-  const useDonorTheme = pathname === '/app/home';
+  /**
+   * Donor navy — same backdrop as BottomNav `useDonorTheme`:
+   * /app/home · /app/checkin(리셋) · /app/profile(여정)
+   */
+  const useDonorTheme =
+    pathname === '/app/home' ||
+    pathname.startsWith('/app/checkin') ||
+    pathname === '/app/profile';
 
   return (
     <div
@@ -49,7 +55,7 @@ export default function AppShell() {
         <MapTab />
       </div>
 
-      {/* 통계(여정) — persistent mount, visibility toggle */}
+      {/* 리셋(/app/checkin) — StatsTab·ResetTabViewV2 */}
       <div
         className="tab-panel transition-opacity duration-150 ease-out"
         style={{
@@ -61,7 +67,7 @@ export default function AppShell() {
         <StatsTab isVisible={showStats} />
       </div>
 
-      {/* 마이 — persistent mount, visibility toggle */}
+      {/* 여정(/app/profile) — MyTab·JourneyTabViewV2 */}
       <div
         className="tab-panel transition-opacity duration-150 ease-out"
         style={{

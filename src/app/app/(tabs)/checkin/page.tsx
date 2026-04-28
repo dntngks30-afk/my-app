@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * 리셋 경로(`/app/checkin`): production에서 `navV2` 일 때 실제 렌더는 AppShell 안의 `StatsTab` → `ResetTabViewV2` 이다 (`(tabs)/layout.tsx` 가 children 미렌더).
+ * `navV2=0` 디버깅 시에만 이 페이지 본문(레거시 주간 통계)이 노출된다.
+ */
+
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
@@ -8,7 +13,8 @@ import BottomNav from '@/app/app/_components/BottomNav';
 import { getSessionHistory } from '@/lib/session/client';
 import type { SessionHistoryItem, ExerciseLogItem, SessionHistoryResponse } from '@/lib/session/client';
 import { getCache, getCacheStale, setCache } from '@/lib/cache/tabDataCache';
-import { StatsViewV2 } from '@/app/app/_components/nav-v2/StatsViewV2';
+import { ResetTabViewV2 } from '@/app/app/_components/nav-v2/ResetTabViewV2';
+import { APP_TAB_BG } from '@/app/app/_components/nav-v2/appTabTheme';
 
 type SeriesItem = {
   day_key_utc: string;
@@ -70,9 +76,22 @@ function formatCompletedAt(iso: string): string {
 
 export default function CheckinPage() {
   const searchParams = useSearchParams();
+  const navV2 = process.env.NODE_ENV === 'production' ? true : (searchParams.get('navV2') !== '0');
+  if (navV2) {
+    return (
+      <div className="min-h-screen pb-20" style={{ backgroundColor: APP_TAB_BG }}>
+        <ResetTabViewV2 />
+        <BottomNav />
+      </div>
+    );
+  }
+  return <CheckinLegacyPage />;
+}
+
+function CheckinLegacyPage() {
+  const searchParams = useSearchParams();
   const focusSession = searchParams.get('focusSession');
   const focusSessionNum = focusSession ? parseInt(focusSession, 10) : null;
-  const navV2 = process.env.NODE_ENV === 'production' ? true : (searchParams.get('navV2') !== '0');
 
   const cachedWeekly = getCache<WeeklyReport>('stats.weekly') ?? getCacheStale<WeeklyReport>('stats.weekly');
   const cachedHistory = getCache<SessionHistoryResponse>('stats.history') ?? getCacheStale<SessionHistoryResponse>('stats.history');
@@ -156,24 +175,6 @@ export default function CheckinPage() {
       focusRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [expandedSession]);
-
-  if (navV2) {
-    return (
-      <div className="min-h-screen bg-white pb-20">
-        <header className="px-4 pt-6 pb-4 border-b border-slate-100">
-          <h1 className="text-2xl font-bold text-slate-800">여정</h1>
-          <p className="mt-1 text-sm text-slate-500">나의 리셋 진행 현황</p>
-        </header>
-        <main className="overflow-y-auto">
-          <StatsViewV2
-            completed={completedSessions}
-            currentSession={completedSessions + 1}
-          />
-        </main>
-        <BottomNav />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#f8f6f0] pb-20">

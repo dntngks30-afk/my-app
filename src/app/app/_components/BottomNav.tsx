@@ -33,8 +33,11 @@ function isTabActive(href: string, pathname: string | null): boolean {
 export default function BottomNav() {
   const pathname = usePathname();
 
-  /** donor 지도 기본 승격: /app/home 에서 donor theme (deep gray + orange accent) */
-  const useDonorTheme = pathname === '/app/home';
+  /** donor: V2 세 탭(/app/home, /app/checkin, /app/profile) 동일 다크 톤 */
+  const useDonorTheme =
+    pathname === '/app/home' ||
+    pathname === '/app/checkin' ||
+    pathname === '/app/profile';
 
   // prod: V2 강제 ON. dev: navV2=0 시에만 V1 (테스트용)
   const [navV2, setNavV2] = useState(true);
