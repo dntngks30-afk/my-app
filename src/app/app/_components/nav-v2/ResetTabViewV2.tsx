@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import {
   Play,
   Clock,
@@ -7,26 +8,100 @@ import {
   Activity,
   RotateCcw,
 } from 'lucide-react';
+import type { ResetIssueViewModel, ResetRecommendationResponse } from '@/lib/reset/types';
+import { fetchResetRecommendations } from '@/lib/reset/client';
 import { appTabCard, appTabMuted, appTabSubtle, appTabAccent } from './appTabTheme';
 
-const ISSUE_ROWS: { label: string; sub: string }[] = [
+/** SSOT 10 이슈 — error/loading 폴백 전용. API `issues`와 혼합하지 않는다. */
+const FALLBACK_ISSUE_ROWS: readonly { label: string; sub: string }[] = [
   { label: '거북목', sub: '목 앞쪽 리셋' },
-  { label: '라운드숄더', sub: '가슴 열기 스트레칭' },
-  { label: '등이 뻣뻣함', sub: '흉추 회전 리셋' },
-  { label: '허리 뻐근함', sub: '골반-허리 이완' },
-  { label: '고관절 뻣뻣함', sub: '고관절 앞쪽 열기' },
-  { label: '햄스트링 긴장', sub: '뒤쪽 라인 이완' },
-  { label: '발목 가동성 부족', sub: '발목 리셋' },
-  { label: '어깨 뻐근함', sub: '어깨 가동성 리셋' },
-];
+  { label: '라운드숄더', sub: '가슴·흉곽 열기' },
+  { label: '등이 뻣뻣함', sub: '척추 움직임 리셋' },
+  { label: '허리 뻐근함', sub: '골반·허리 이완' },
+  { label: '고관절 답답함', sub: '고관절 주변 이완' },
+  { label: '엉덩이 깊은 뻐근함', sub: '둔부 깊은 긴장 완화' },
+  { label: '무릎 불편감', sub: '허벅지 긴장 완화' },
+  { label: '목·어깨 뻐근함', sub: '목 뒤쪽 긴장 완화' },
+  { label: '어깨·겨드랑이 답답함', sub: '광배근·겨드랑이 라인 이완' },
+  { label: '골반-허리 긴장', sub: '골반 주변 리셋' },
+] as const;
+
+type LoadingState = 'loading' | 'ready' | 'error';
+
+function deriveInitialSelectedIssueKey(data: ResetRecommendationResponse): string | null {
+  const { issues, featured_issue_key, featured } = data;
+  if (issues.some((i) => i.issue_key === featured_issue_key)) {
+    return featured_issue_key;
+  }
+  if (featured?.issue_key) {
+    return featured.issue_key;
+  }
+  return issues[0]?.issue_key ?? null;
+}
+
+function deriveSelectedIssue(
+  rec: ResetRecommendationResponse,
+  selectedIssueKey: string | null
+): ResetIssueViewModel | null {
+  const { issues, featured } = rec;
+  if (selectedIssueKey != null) {
+    const hit = issues.find((i) => i.issue_key === selectedIssueKey);
+    if (hit) return hit;
+  }
+  return featured ?? issues[0] ?? null;
+}
 
 export function ResetTabViewV2() {
+  const [phase, setPhase] = useState<LoadingState>('loading');
+  const [recommendation, setRecommendation] =
+    useState<ResetRecommendationResponse | null>(null);
+  const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const result = await fetchResetRecommendations();
+      if (cancelled) return;
+
+      if (!result.ok) {
+        setRecommendation(null);
+        setSelectedIssueKey(null);
+        setPhase('error');
+        return;
+      }
+
+      const data = result.data;
+      setRecommendation(data);
+      setSelectedIssueKey(deriveInitialSelectedIssueKey(data));
+      setPhase('ready');
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectedIssue = useMemo(() => {
+    if (phase !== 'ready' || !recommendation) return null;
+    return deriveSelectedIssue(recommendation, selectedIssueKey);
+  }, [phase, recommendation, selectedIssueKey]);
+
+  const badgeLabel = (() => {
+    if (phase === 'loading') return '패턴을 불러오는 중…';
+    if (phase === 'error') return '리셋 추천';
+    return recommendation?.user_pattern.display_label ?? '리셋 추천';
+  })();
+
+  const ctaLabel =
+    selectedIssue?.cta_label?.trim() || '이 스트레칭 해보기';
+
   return (
     <div className="px-4 pb-6 pt-[max(1.25rem,env(safe-area-inset-top))]">
       <header className="mb-6">
         <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs text-white/80">
           <Sparkles className="size-3.5 text-orange-400/90" aria-hidden />
-          <span className={appTabMuted}>거북목 · 상체 긴장 패턴</span>
+          <span className={appTabMuted}>{badgeLabel}</span>
         </div>
         <h1 className="text-xl font-semibold tracking-tight text-white">
           오늘 필요한 리셋
@@ -36,66 +111,165 @@ export function ResetTabViewV2() {
         </p>
       </header>
 
-      {/* Featured */}
-      <div
-        className={`relative overflow-hidden ${appTabCard} p-5 mb-8`}
-      >
+      {/* Featured / loading / error */}
+      {phase === 'loading' && (
         <div
-          className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-orange-500/15 blur-2xl"
-          aria-hidden
-        />
-        <div className="relative flex gap-4">
-          <div
-            className="flex h-[88px] w-[88px] shrink-0 flex-col items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-orange-500/25 to-transparent"
-            aria-hidden
-          >
-            <RotateCcw className="size-7 text-orange-400/90" strokeWidth={1.75} />
-            <Play className="mt-1 size-4 text-white/60" fill="currentColor" />
+          className={`relative overflow-hidden ${appTabCard} p-5 mb-8`}
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <div className="animate-pulse space-y-3">
+            <div className="h-3 w-20 rounded bg-white/10" />
+            <div className="h-5 w-[85%] max-w-xs rounded bg-white/[0.09]" />
+            <div className="h-4 w-full max-w-[280px] rounded bg-white/[0.07]" />
+            <div className="h-4 w-2/3 max-w-[220px] rounded bg-white/[0.07]" />
+            <div className="flex gap-3 pt-1">
+              <div className="h-9 w-24 rounded-full bg-white/[0.08]" />
+              <div className="h-9 w-44 rounded-full bg-white/[0.08]" />
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className={`text-[11px] font-medium uppercase tracking-wider ${appTabSubtle}`}>
-              추천
-            </p>
-            <h2 className="mt-1 text-base font-semibold text-white">
-              거북목이 신경 쓰인다면
-            </h2>
-            <p className={`mt-2 text-sm leading-snug ${appTabMuted}`}>
-              목 앞쪽 긴장과 등 상부 굳음을 먼저 풀어보세요.
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <span className={`inline-flex items-center gap-1.5 text-xs ${appTabMuted}`}>
-                <Clock className="size-3.5 text-white/45" aria-hidden />
-                3분
-              </span>
-              <button
-                type="button"
-                className={`inline-flex items-center gap-2 rounded-full border border-orange-500/35 bg-orange-500/15 px-4 py-2 text-sm font-medium ${appTabAccent} transition hover:bg-orange-500/25`}
-              >
-                <Play className="size-4" aria-hidden />
-                이 스트레칭 해보기
-              </button>
+          <p className="sr-only">리셋을 불러오는 중</p>
+        </div>
+      )}
+
+      {phase === 'error' && (
+        <div
+          className={`relative overflow-hidden ${appTabCard} p-5 mb-8`}
+          role="alert"
+        >
+          <h2 className="text-base font-semibold text-white">
+            리셋 추천을 불러오지 못했어요.
+          </h2>
+          <p className={`mt-2 text-sm leading-snug ${appTabMuted}`}>
+            잠시 후 다시 시도해 주세요.
+          </p>
+        </div>
+      )}
+
+      {phase === 'ready' && selectedIssue && recommendation && (
+        <div className={`relative overflow-hidden ${appTabCard} p-5 mb-8`}>
+          <div
+            className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-orange-500/15 blur-2xl"
+            aria-hidden
+          />
+          <div className="relative flex gap-4">
+            <div
+              className="flex h-[88px] w-[88px] shrink-0 flex-col items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-orange-500/25 to-transparent"
+              aria-hidden
+            >
+              <RotateCcw className="size-7 text-orange-400/90" strokeWidth={1.75} />
+              <Play className="mt-1 size-4 text-white/60" fill="currentColor" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className={`text-[11px] font-medium uppercase tracking-wider ${appTabSubtle}`}>
+                추천
+              </p>
+              <h2 className="mt-1 text-base font-semibold text-white">
+                {selectedIssue.card_title}
+              </h2>
+              <p className={`mt-2 text-sm leading-snug ${appTabMuted}`}>
+                {selectedIssue.card_summary}
+              </p>
+              <p className={`mt-1 text-xs leading-snug ${appTabSubtle}`}>
+                {selectedIssue.primary_stretch.name_ko}
+                {selectedIssue.primary_stretch.media_status === 'unmapped' ? (
+                  <span className={`ml-1.5 ${appTabMuted}`}>(준비 중)</span>
+                ) : null}
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <span className={`inline-flex min-w-0 items-center gap-1.5 text-xs ${appTabMuted}`}>
+                  <Clock className="size-3.5 shrink-0 text-white/45" aria-hidden />
+                  {selectedIssue.duration_label}
+                </span>
+                <button
+                  type="button"
+                  aria-disabled={true}
+                  className={`inline-flex items-center gap-2 rounded-full border border-orange-500/35 bg-orange-500/15 px-4 py-2 text-sm font-medium ${appTabAccent} transition hover:bg-orange-500/25`}
+                  onClick={() => {
+                    /* FE-02: ResetStretchModal + fetchResetMedia 연결 예정 */
+                  }}
+                >
+                  <Play className="size-4 shrink-0" aria-hidden />
+                  {ctaLabel}
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       <section>
         <div className="mb-3 flex items-center gap-2">
           <Activity className="size-4 text-white/45" aria-hidden />
-          <h3 className="text-sm font-medium text-white/90">이슈별 리셋</h3>
+          <h3 className="text-sm font-medium text-white/90">
+            이슈별 리셋
+            {phase === 'loading' ? (
+              <span className={`ml-2 text-xs font-normal ${appTabSubtle}`}>
+                불러오는 중…
+              </span>
+            ) : null}
+          </h3>
         </div>
-        <div className="flex flex-col gap-2">
-          {ISSUE_ROWS.map((row) => (
-            <button
-              key={row.label}
-              type="button"
-              className={`flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3.5 text-left transition hover:bg-white/[0.06] active:scale-[0.99]`}
-            >
-              <span className="text-sm font-medium text-white">{row.label}</span>
-              <span className={`text-xs ${appTabSubtle}`}>{row.sub}</span>
-            </button>
-          ))}
-        </div>
+
+        {phase === 'loading' && (
+          <div className="flex flex-col gap-2" aria-hidden>
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div
+                key={`sk-${i}`}
+                className="h-[52px] w-full animate-pulse rounded-xl border border-white/10 bg-white/[0.06]"
+              />
+            ))}
+          </div>
+        )}
+
+        {phase === 'error' && (
+          <>
+            <p className={`mb-2 text-xs ${appTabSubtle}`}>
+              아래 목록은 안내용이에요. 추천이 로드되면 다시 선택할 수 있어요.
+            </p>
+            <div className="flex flex-col gap-2 opacity-95" role="list">
+              {FALLBACK_ISSUE_ROWS.map((row) => (
+                <div
+                  key={row.label}
+                  className="flex w-full cursor-default items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3.5 text-left"
+                  role="listitem"
+                >
+                  <span className="text-sm font-medium text-white">{row.label}</span>
+                  <span className={`max-w-[45%] text-right text-xs ${appTabSubtle}`}>
+                    {row.sub}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {phase === 'ready' && recommendation && (
+          <div className="flex flex-col gap-2">
+            {recommendation.issues.map((issue) => {
+              const isSelected = selectedIssueKey === issue.issue_key;
+              return (
+                <button
+                  key={issue.issue_key}
+                  type="button"
+                  className={`flex w-full min-w-0 items-center justify-between rounded-xl border px-4 py-3.5 text-left transition hover:bg-white/[0.06] active:scale-[0.99] ${
+                    isSelected
+                      ? 'border-orange-500/35 bg-orange-500/[0.08]'
+                      : 'border-white/10 bg-white/[0.03]'
+                  }`}
+                  onClick={() => setSelectedIssueKey(issue.issue_key)}
+                >
+                  <span className="mr-3 min-w-0 shrink text-sm font-medium text-white">
+                    {issue.issue_label}
+                  </span>
+                  <span className={`max-w-[45%] shrink-0 text-right text-xs ${appTabSubtle}`}>
+                    {issue.short_goal}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </section>
     </div>
   );

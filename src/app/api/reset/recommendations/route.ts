@@ -13,7 +13,7 @@ import type { ResetRecommendationPatternInput } from '@/lib/reset/types';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const userId = await getCurrentUserId(request);
 
