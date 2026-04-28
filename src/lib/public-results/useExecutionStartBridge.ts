@@ -99,6 +99,14 @@ export function useExecutionStartBridge(
       // 3. active → onboarding-prep 또는 /app/home
       if (isActive) {
         if (resolvedId) {
+          // PR-SESSION-PREPARING-BRIDGE-PERSIST-02:
+          // Active users also need bridge persisted before navigation because
+          // onboarding-prep -> onboarding drops the URL query params.
+          saveBridgeContext({
+            publicResultId: resolvedId,
+            resultStage: stage,
+            anonId: readAnonId(),
+          });
           router.push(buildOnboardingPrepUrl(resolvedId, stage, readAnonId()));
         } else {
           router.push('/app/home');

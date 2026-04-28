@@ -7,7 +7,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { loadBridgeContext } from '@/lib/public-results/public-result-bridge';
+import {
+  loadBridgeContext,
+  saveBridgeContext,
+} from '@/lib/public-results/public-result-bridge';
+import type { BridgeResultStage } from '@/lib/public-results/public-result-bridge';
 import StitchOnboardingPrepScene from '@/components/stitch/postpay/StitchOnboardingPrepScene';
 
 export default function OnboardingPrepClient() {
@@ -18,9 +22,22 @@ export default function OnboardingPrepClient() {
   useEffect(() => {
     const id = searchParams.get('publicResultId');
     const stage = searchParams.get('stage');
+    const anonId = searchParams.get('anonId');
     const fromQuery = !!(id && (stage === 'baseline' || stage === 'refined'));
-    const fromStorage = !!loadBridgeContext();
-    setHasContext(fromQuery || fromStorage);
+
+    // PR-SESSION-PREPARING-BRIDGE-PERSIST-02:
+    // URL query params are the current truth when present.
+    // Persist them immediately so that /onboarding (which strips the URL)
+    // and /session-preparing (which reads from bridge) can still find them.
+    if (fromQuery) {
+      saveBridgeContext({
+        publicResultId: id!,
+        resultStage: stage as BridgeResultStage,
+        anonId: anonId ?? null,
+      });
+    }
+
+    setHasContext(fromQuery || !!loadBridgeContext());
   }, [searchParams]);
 
   const handleContinue = () => {

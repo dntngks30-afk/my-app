@@ -47,9 +47,10 @@ async function runPipeline(accessToken: string): Promise<PipelineResult> {
     };
   }
 
-  if (hadBridge && claimSucceeded) {
-    clearBridgeContext();
-  }
+  // PR-SESSION-PREPARING-BRIDGE-PERSIST-02:
+  // Bridge is cleared only after createSession succeeds.
+  // Moving clearBridgeContext here (before create) would lose recovery context
+  // if create fails — do not restore this pattern.
 
   const createResult = await createSession(accessToken, {
     condition_mood: 'ok',
@@ -63,6 +64,11 @@ async function runPipeline(accessToken: string): Promise<PipelineResult> {
       stage: 'create',
       message: createResult.error.message ?? '세션을 준비하지 못했습니다.',
     };
+  }
+
+  // Safe to clear now: full pipeline succeeded.
+  if (hadBridge && claimSucceeded) {
+    clearBridgeContext();
   }
 
   return { ok: true };
