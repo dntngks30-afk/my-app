@@ -87,6 +87,15 @@ export interface CameraRefinedResult {
     camera_pass: boolean;
     /** 기존 baseline confidence */
     baseline_confidence: number;
+    /** PR-CAMERA-REFINE-CONFIDENCE-CAP-01: result packaging confidence cap trace. */
+    confidence_cap?: {
+      applied: boolean;
+      reason: string | null;
+      original_confidence: number;
+      capped_confidence: number;
+      cap_value: number | null;
+      policy_version: 'camera_refine_confidence_cap_01';
+    };
   };
 }
 
@@ -141,6 +150,77 @@ function resolveRefinedEvidenceLevel(
   if (cameraQuality === 'strong') return 'partial';
   if (cameraQuality === 'partial') return 'partial';
   return baselineEvidenceLevel;
+}
+
+type CameraRefinedConfidenceCapResult = {
+  confidence: number;
+  applied: boolean;
+  reason: string | null;
+  capValue: number | null;
+  originalConfidence: number;
+};
+
+const CAMERA_REFINED_CONFIDENCE_PARTIAL_CAP = 0.78;
+const CAMERA_REFINED_CONFIDENCE_MINIMAL_CAP = 0.62;
+
+function clampConfidence(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+/**
+ * PR-CAMERA-REFINE-CONFIDENCE-CAP-01.
+ *
+ * Result-layer packaging only:
+ * - never reads or writes camera progression/pass fields
+ * - never increases confidence
+ * - leaves legacy/minimal-without-motion-summary paths unchanged so baseline-led
+ *   cameraWeight=0.0 behavior is not punished a second time
+ */
+function applyCameraRefinedConfidenceCap(input: {
+  confidence: number;
+  cameraQuality: 'strong' | 'partial' | 'minimal';
+  refinementEvidenceStrength?: RefinementEvidenceStrength;
+}): CameraRefinedConfidenceCapResult {
+  const originalConfidence = clampConfidence(input.confidence);
+  let capValue: number | null = null;
+  let reason: string | null = null;
+
+  if (
+    input.refinementEvidenceStrength === 'minimal' ||
+    input.refinementEvidenceStrength === 'unusable'
+  ) {
+    capValue = CAMERA_REFINED_CONFIDENCE_MINIMAL_CAP;
+    reason = `camera_refinement_${input.refinementEvidenceStrength}`;
+  } else if (
+    input.cameraQuality === 'partial' ||
+    input.refinementEvidenceStrength === 'moderate'
+  ) {
+    capValue = CAMERA_REFINED_CONFIDENCE_PARTIAL_CAP;
+    reason =
+      input.refinementEvidenceStrength === 'moderate'
+        ? 'camera_refinement_moderate'
+        : 'camera_evidence_partial';
+  }
+
+  if (capValue == null) {
+    return {
+      confidence: originalConfidence,
+      applied: false,
+      reason: null,
+      capValue: null,
+      originalConfidence,
+    };
+  }
+
+  const confidence = Math.min(originalConfidence, capValue);
+  return {
+    confidence,
+    applied: confidence < originalConfidence,
+    reason,
+    capValue,
+    originalConfidence,
+  };
 }
 
 /**
@@ -265,12 +345,18 @@ export function buildCameraRefinedResult(
 
   // Step 4: scoring core 재실행
   const coreResult = runDeepScoringCore(fusedEvidence);
+  const confidenceCap = applyCameraRefinedConfidenceCap({
+    confidence: coreResult.confidence,
+    cameraQuality,
+    refinementEvidenceStrength,
+  });
+  const refinedConfidence = confidenceCap.confidence;
 
   // Step 5: evidence_level 결정
   const evidenceLevel = resolveRefinedEvidenceLevel(
     cameraQuality,
     baseline.evidence_level,
-    coreResult.confidence
+    refinedConfidence
   );
 
   // Step 6: UnifiedDeepResultV2 구성
@@ -288,7 +374,7 @@ export function buildCameraRefinedResult(
     secondary_type: coreResult.secondary_type,
     priority_vector: coreResult.priority_vector,
     pain_mode: coreResult.pain_mode as PainMode,
-    confidence: coreResult.confidence,
+    confidence: refinedConfidence,
     evidence_level: evidenceLevel,
     source_mode: 'camera',
     missing_signals: coreResult.missing_signals,
@@ -343,6 +429,16 @@ export function buildCameraRefinedResult(
       }),
       ...(refinementEvidenceStrength != null && {
         camera_refinement_evidence_strength: refinementEvidenceStrength,
+      }),
+      ...(confidenceCap.capValue != null && {
+        confidence_cap: {
+          applied: confidenceCap.applied,
+          reason: confidenceCap.reason,
+          original_confidence: confidenceCap.originalConfidence,
+          capped_confidence: confidenceCap.confidence,
+          cap_value: confidenceCap.capValue,
+          policy_version: 'camera_refine_confidence_cap_01' as const,
+        },
       }),
     },
   };
