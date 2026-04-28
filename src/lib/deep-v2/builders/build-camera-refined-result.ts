@@ -41,7 +41,9 @@
 import type { NormalizedCameraResult } from '@/lib/camera/normalize';
 import {
   aggregateRefinementEvidenceStrength,
+  buildCameraInputQualityObservability,
   buildCameraMotionEvidenceSummaries,
+  type CameraInputQualityObservabilityV1,
   type CameraMotionEvidenceSummary,
   type RefinementEvidenceStrength,
 } from '@/lib/camera/camera-evidence-summary';
@@ -96,6 +98,8 @@ export interface CameraRefinedResult {
       cap_value: number | null;
       policy_version: 'camera_refine_confidence_cap_01';
     };
+    /** PR-CAMERA-QUALITY-OBSERVABILITY-02: internal IQ trace (additive; no scoring impact). */
+    camera_input_quality_observability_v1?: CameraInputQualityObservabilityV1;
   };
 }
 
@@ -268,6 +272,8 @@ export function buildCameraRefinedResult(
   const motionEvidenceSummaries = buildCameraMotionEvidenceSummaries(cameraResult.evaluatorResults);
   const refinementEvidenceStrength =
     aggregateRefinementEvidenceStrength(cameraResult.evaluatorResults) ?? undefined;
+  const cameraInputQualityObservabilityV1 =
+    buildCameraInputQualityObservability(cameraResult.evaluatorResults);
 
   // Step 1: camera → evidence
   const cameraEvidence = cameraToEvidence(cameraResult);
@@ -440,6 +446,7 @@ export function buildCameraRefinedResult(
           policy_version: 'camera_refine_confidence_cap_01' as const,
         },
       }),
+      camera_input_quality_observability_v1: cameraInputQualityObservabilityV1,
     },
   };
 }

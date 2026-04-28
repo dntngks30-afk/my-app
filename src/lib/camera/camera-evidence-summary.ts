@@ -233,3 +233,157 @@ export function applyRefinementStrengthToCameraEvidenceQuality(
 
   return base;
 }
+
+// ─── PR-CAMERA-QUALITY-OBSERVABILITY-02 — internal observability-only DTO ───
+// Pure read/assemble from existing evaluator debug/IQ objects. Does not mutate inputs.
+
+/** highlightedMetrics 서브셋 스냅샷(pass/프로그레션 디버깅 참고용). 값 복사만 함. */
+const IQ_OBS_HIGHLIGHT_KEYS = [
+  'completionSatisfied',
+  'completionMachinePhase',
+  'completionPassReason',
+  'completionBlockedReason',
+  'attemptStarted',
+  'raiseCount',
+  'peakCount',
+] as const;
+
+function completionSnapshotFromHighlightedMetrics(
+  hm: Record<string, number | string | boolean | null> | undefined
+): Record<string, unknown> | undefined {
+  if (!hm || typeof hm !== 'object') return undefined;
+  const out: Record<string, unknown> = {};
+  for (const k of IQ_OBS_HIGHLIGHT_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(hm, k)) out[k] = hm[k];
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/**
+ * qualityTier + 이미 존재하는 limitation 코드만으로 deterministic 라벨 (새 원시 신호 계산 금지).
+ * biomechanical 주장 확대 금지.
+ */
+export function deriveSignalIntegrityTierObservation(
+  qualityTier: 'high' | 'medium' | 'low',
+  limitations: readonly string[]
+): string {
+  const sorted = [...limitations].slice().sort();
+  const compact = sorted.join('|');
+  return `obs_si|tier=${qualityTier}|limcodes=${limitations.length}|${compact}`;
+}
+
+export type SquatInputQualityTrace = {
+  qualityTier: 'high' | 'medium' | 'low';
+  confidence: number;
+  depthScore: number;
+  controlScore: number;
+  symmetryScore: number;
+  recoveryScore: number;
+  limitations: readonly string[];
+  /** tier + 기존 limitation 코드 문자열만으로 고정된 라벨 (추측/과장 없음). */
+  signalIntegrityTier: string;
+  completionSnapshot?: Record<string, unknown>;
+  /** depthScore 의 프록시 별칭(진폭 신호 근거는 depthScore 와 동일). */
+  proxyMovementAmplitudeScore: number;
+  /** controlScore 의 프록시 별칭(하단/제어 신호 근거는 controlScore 와 동일). */
+  proxyBottomStabilityScore: number;
+  recoveryContinuityScore: number;
+  leftRightSignalBalance: number;
+};
+
+export type OverheadInputQualityTrace = {
+  qualityTier: 'high' | 'medium' | 'low';
+  confidence: number;
+  mobilityScore: number;
+  controlScore: number;
+  symmetryScore: number;
+  holdStabilityScore: number;
+  limitations: readonly string[];
+  signalIntegrityTier: string;
+  completionSnapshot?: Record<string, unknown>;
+  /** holdStabilityScore 와 동일 값(top 홀드 안정도 해석 레이어). */
+  stableTopHoldScore: number;
+  leftRightSignalBalance: number;
+};
+
+export type CameraInputQualityObservabilityV1 = {
+  policy_version: 'camera_input_quality_obs_02';
+  squat: SquatInputQualityTrace | null;
+  overheadReach: OverheadInputQualityTrace | null;
+  bridge?: {
+    refinement_evidence_strength?: RefinementEvidenceStrength | null;
+  };
+};
+
+function buildSquatInputQualityTrace(r: EvaluatorResult): SquatInputQualityTrace | null {
+  const iq = r.debug?.squatInternalQuality;
+  if (!iq) return null;
+  const hm = r.debug?.highlightedMetrics;
+  const completionSnapshot = completionSnapshotFromHighlightedMetrics(hm);
+  return {
+    qualityTier: iq.qualityTier,
+    confidence: iq.confidence,
+    depthScore: iq.depthScore,
+    controlScore: iq.controlScore,
+    symmetryScore: iq.symmetryScore,
+    recoveryScore: iq.recoveryScore,
+    limitations: iq.limitations ?? [],
+    signalIntegrityTier: deriveSignalIntegrityTierObservation(iq.qualityTier, iq.limitations ?? []),
+    ...(completionSnapshot != null ? { completionSnapshot } : {}),
+    proxyMovementAmplitudeScore: iq.depthScore,
+    proxyBottomStabilityScore: iq.controlScore,
+    recoveryContinuityScore: iq.recoveryScore,
+    leftRightSignalBalance: iq.symmetryScore,
+  };
+}
+
+function buildOverheadInputQualityTrace(r: EvaluatorResult): OverheadInputQualityTrace | null {
+  const iq = r.debug?.overheadInternalQuality;
+  if (!iq) return null;
+  const hm = r.debug?.highlightedMetrics;
+  const completionSnapshot = completionSnapshotFromHighlightedMetrics(hm);
+  return {
+    qualityTier: iq.qualityTier,
+    confidence: iq.confidence,
+    mobilityScore: iq.mobilityScore,
+    controlScore: iq.controlScore,
+    symmetryScore: iq.symmetryScore,
+    holdStabilityScore: iq.holdStabilityScore,
+    limitations: iq.limitations ?? [],
+    signalIntegrityTier: deriveSignalIntegrityTierObservation(iq.qualityTier, iq.limitations ?? []),
+    ...(completionSnapshot != null ? { completionSnapshot } : {}),
+    stableTopHoldScore: iq.holdStabilityScore,
+    leftRightSignalBalance: iq.symmetryScore,
+  };
+}
+
+/**
+ * 평가기 결과 배열만 읽어 카메라 입력 해석 레이어(내부 IQ) 저품질 이유를 묶은 관측 DTO를 만든다.
+ * 순수 함수 — EvaluatorResult / debug 객 체 변경 없음.
+ */
+export function buildCameraInputQualityObservability(
+  results: readonly EvaluatorResult[]
+): CameraInputQualityObservabilityV1 {
+  let squat: SquatInputQualityTrace | null = null;
+  let overheadReach: OverheadInputQualityTrace | null = null;
+
+  for (const r of results) {
+    if (!squat && r.stepId === 'squat' && r.debug?.squatInternalQuality) {
+      squat = buildSquatInputQualityTrace(r);
+    }
+    if (!overheadReach && r.stepId === 'overhead-reach' && r.debug?.overheadInternalQuality) {
+      overheadReach = buildOverheadInputQualityTrace(r);
+    }
+  }
+
+  const refinement_evidence_strength = aggregateRefinementEvidenceStrength(results);
+
+  return {
+    policy_version: 'camera_input_quality_obs_02',
+    squat,
+    overheadReach,
+    ...(refinement_evidence_strength != null && {
+      bridge: { refinement_evidence_strength },
+    }),
+  };
+}
