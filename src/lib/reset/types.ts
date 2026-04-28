@@ -1,3 +1,5 @@
+import type { MediaPayload } from '@/lib/media/media-payload';
+
 /**
  * PR-RESET-BE-01 — Reset tab catalog SSOT types.
  *
@@ -118,3 +120,62 @@ export type ResetApiError = { code: string; message: string };
 export type ResetApiResult<T> =
   | { ok: true; data: T }
   | { ok: false; status: number; error: ResetApiError };
+
+/** PR-RESET-BE-03 — POST /api/reset/media */
+export type ResetMediaRequest = {
+  issue_key?: string;
+  stretch_key?: string;
+};
+
+export type ResetMediaResolveInput =
+  | { issue_key: string; stretch_key?: undefined }
+  | { stretch_key: string; issue_key?: undefined };
+
+export type ResetStretchGuide = {
+  stretch_key: string;
+  title: string;
+  description: string;
+  how_to: string[];
+  safety_note?: string | null;
+};
+
+export type ResetMediaResolvedSelection = {
+  issue_key?: string;
+  stretch_key: string;
+  stretchDef: ResetStretchDefinition;
+  guide: ResetStretchGuide;
+};
+
+export type ResetMediaMetaSource =
+  | 'mapped_template'
+  | 'placeholder_unmapped'
+  | 'placeholder_missing_template'
+  | 'placeholder_missing_media';
+
+export type ResetMediaValidationResult =
+  | { ok: true; input: ResetMediaResolveInput }
+  | { ok: false; message: string };
+
+export type ResolveResetMediaSelectionResult =
+  | { ok: true; selection: ResetMediaResolvedSelection }
+  | { ok: false; message: string };
+
+export type ResetMediaResponse = {
+  issue_key?: string;
+  stretch_key: string;
+  template_id: string | null;
+
+  media: MediaPayload;
+
+  display: {
+    title: string;
+    description: string;
+    how_to: string[];
+    safety_note?: string | null;
+    duration_label: string;
+  };
+
+  meta: {
+    source: ResetMediaMetaSource;
+  };
+};
