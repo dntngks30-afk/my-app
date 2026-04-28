@@ -7,6 +7,7 @@ import {
   Sparkles,
   Activity,
   RotateCcw,
+  Loader2,
 } from 'lucide-react';
 import type { ResetIssueViewModel, ResetRecommendationResponse } from '@/lib/reset/types';
 import { fetchResetMedia, fetchResetRecommendations } from '@/lib/reset/client';
@@ -78,10 +79,21 @@ export function ResetTabViewV2() {
   const [recommendation, setRecommendation] =
     useState<ResetRecommendationResponse | null>(null);
   const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
+  const [selectedStretchKey, setSelectedStretchKey] = useState<string | null>(
+    null
+  );
+  const [previewThumbUrl, setPreviewThumbUrl] = useState<string | null>(null);
+  const [previewThumbForKey, setPreviewThumbForKey] = useState<string | null>(
+    null
+  );
+  const [previewThumbLoading, setPreviewThumbLoading] = useState(false);
   const [mediaModal, setMediaModal] = useState<ResetMediaModalState>({
     status: 'closed',
   });
   const mediaRequestIdRef = useRef(0);
+  const previewRequestIdRef = useRef(0);
+  const posterUrlCacheRef = useRef<Record<string, string>>({});
+  const modalLoadingStretchKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,6 +128,7 @@ export function ResetTabViewV2() {
 
   const handleCloseMediaModal = useCallback(() => {
     mediaRequestIdRef.current += 1;
+    modalLoadingStretchKeyRef.current = null;
     setMediaModal({ status: 'closed' });
   }, []);
 
@@ -124,25 +137,97 @@ export function ResetTabViewV2() {
     return deriveSelectedIssue(recommendation, selectedIssueKey);
   }, [phase, recommendation, selectedIssueKey]);
 
-  const handlePlaySelectedIssue = useCallback(async () => {
-    if (phase !== 'ready' || !selectedIssue) return;
-    if (mediaModal.status === 'loading') return;
+  const visibleStretchOptions = useMemo(() => {
+    if (!selectedIssue) return [];
+    return [
+      selectedIssue.primary_stretch,
+      selectedIssue.alternative_stretches[0],
+    ].filter(Boolean);
+  }, [selectedIssue]);
+
+  const selectedStretch = useMemo(() => {
+    if (!visibleStretchOptions.length) return null;
+    const hit = visibleStretchOptions.find(
+      (s) => s.stretch_key === selectedStretchKey
+    );
+    return hit ?? visibleStretchOptions[0];
+  }, [visibleStretchOptions, selectedStretchKey]);
+
+  useEffect(() => {
+    if (!selectedIssue) {
+      setSelectedStretchKey(null);
+      return;
+    }
+    setSelectedStretchKey(selectedIssue.primary_stretch.stretch_key);
+  }, [selectedIssue?.issue_key, selectedIssue?.primary_stretch?.stretch_key]);
+
+  useEffect(() => {
+    if (phase !== 'ready' || !selectedStretchKey) {
+      return;
+    }
+
+    const cached = posterUrlCacheRef.current[selectedStretchKey];
+    if (cached) {
+      setPreviewThumbUrl(cached);
+      setPreviewThumbForKey(selectedStretchKey);
+      setPreviewThumbLoading(false);
+      return;
+    }
+
+    previewRequestIdRef.current += 1;
+    const rid = previewRequestIdRef.current;
+    setPreviewThumbUrl(null);
+    setPreviewThumbForKey(null);
+    setPreviewThumbLoading(true);
+
+    (async () => {
+      const result = await fetchResetMedia({
+        stretch_key: selectedStretchKey,
+      });
+      if (rid !== previewRequestIdRef.current) return;
+      setPreviewThumbLoading(false);
+      if (!result.ok) return;
+      const url = result.data.media.posterUrl;
+      if (typeof url !== 'string' || url.length === 0) return;
+      posterUrlCacheRef.current = {
+        ...posterUrlCacheRef.current,
+        [selectedStretchKey]: url,
+      };
+      setPreviewThumbUrl(url);
+      setPreviewThumbForKey(selectedStretchKey);
+    })();
+  }, [phase, selectedStretchKey]);
+
+  const handlePlaySelectedStretch = useCallback(async () => {
+    if (phase !== 'ready' || !selectedIssue || !selectedStretch) return;
+
+    if (
+      mediaModal.status === 'loading' &&
+      mediaModal.issue_key === selectedIssue.issue_key &&
+      modalLoadingStretchKeyRef.current === selectedStretch.stretch_key
+    ) {
+      return;
+    }
 
     mediaRequestIdRef.current += 1;
     const requestId = mediaRequestIdRef.current;
 
     const snapshot = {
       issue_key: selectedIssue.issue_key,
-      title: selectedIssue.card_title,
+      title: selectedStretch.name_ko,
       summary: selectedIssue.card_summary,
     };
+
+    modalLoadingStretchKeyRef.current = selectedStretch.stretch_key;
 
     setMediaModal({
       status: 'loading',
       ...snapshot,
     });
 
-    const result = await fetchResetMedia({ issue_key: selectedIssue.issue_key });
+    const result = await fetchResetMedia({
+      stretch_key: selectedStretch.stretch_key,
+    });
 
     if (requestId !== mediaRequestIdRef.current) return;
 
@@ -158,7 +243,7 @@ export function ResetTabViewV2() {
     }
 
     setMediaModal({ status: 'ready', data: result.data });
-  }, [phase, selectedIssue, mediaModal.status]);
+  }, [phase, selectedIssue, selectedStretch, mediaModal]);
 
   const badgeLabel = (() => {
     if (phase === 'loading') return '패턴을 불러오는 중…';
@@ -168,13 +253,24 @@ export function ResetTabViewV2() {
 
   const baseCtaLabel =
     selectedIssue?.cta_label?.trim() || '이 스트레칭 해보기';
-  const isCurrentIssueMediaLoading =
+  const isCurrentStretchMediaLoading =
     mediaModal.status === 'loading' &&
-    selectedIssue?.issue_key === mediaModal.issue_key;
-  const playLabel = isCurrentIssueMediaLoading
+    selectedIssue?.issue_key === mediaModal.issue_key &&
+    selectedStretch != null &&
+    modalLoadingStretchKeyRef.current === selectedStretch.stretch_key;
+  const playLabel = isCurrentStretchMediaLoading
     ? '영상 준비 중…'
     : baseCtaLabel;
-  const playBusy = mediaModal.status === 'loading';
+  const playBusy = isCurrentStretchMediaLoading;
+
+  const thumbShowsPoster =
+    Boolean(selectedStretch) &&
+    previewThumbForKey === selectedStretch?.stretch_key &&
+    Boolean(previewThumbUrl);
+  const thumbAwaitingFetch =
+    previewThumbLoading &&
+    selectedStretchKey === selectedStretch?.stretch_key &&
+    !thumbShowsPoster;
 
   return (
     <>
@@ -234,12 +330,25 @@ export function ResetTabViewV2() {
             aria-hidden
           />
           <div className="relative flex gap-4">
-            <div
-              className="flex h-[88px] w-[88px] shrink-0 flex-col items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-orange-500/25 to-transparent"
-              aria-hidden
-            >
-              <RotateCcw className="size-7 text-orange-400/90" strokeWidth={1.75} />
-              <Play className="mt-1 size-4 text-white/60" fill="currentColor" />
+            <div className="relative h-[88px] w-[88px] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-orange-500/25 to-transparent">
+              {thumbShowsPoster ? (
+                <img
+                  src={previewThumbUrl!}
+                  alt={selectedStretch!.name_ko}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center px-2" aria-hidden>
+                  <RotateCcw className="size-7 text-orange-400/90" strokeWidth={1.75} />
+                  <Play className="mt-1 size-4 text-white/60" fill="currentColor" />
+                </div>
+              )}
+              {thumbAwaitingFetch ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                  <Loader2 className="size-6 animate-spin text-white/80" aria-hidden />
+                  <span className="sr-only">썸네일 불러오는 중</span>
+                </div>
+              ) : null}
             </div>
             <div className="min-w-0 flex-1">
               <p className={`text-[11px] font-medium uppercase tracking-wider ${appTabSubtle}`}>
@@ -251,9 +360,32 @@ export function ResetTabViewV2() {
               <p className={`mt-2 text-sm leading-snug ${appTabMuted}`}>
                 {selectedIssue.card_summary}
               </p>
+              {visibleStretchOptions.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="스트레칭 선택">
+                  {visibleStretchOptions.map((opt) => {
+                    const isChipSelected =
+                      selectedStretch?.stretch_key === opt.stretch_key;
+                    return (
+                      <button
+                        key={opt.stretch_key}
+                        type="button"
+                        aria-pressed={isChipSelected}
+                        onClick={() => setSelectedStretchKey(opt.stretch_key)}
+                        className={`max-w-[min(100%,12rem)] rounded-full border px-3 py-1.5 text-left text-[11px] font-medium leading-snug transition hover:bg-white/[0.06] ${
+                          isChipSelected
+                            ? `border-orange-500/45 bg-orange-500/15 ${appTabAccent}`
+                            : `border-white/15 bg-white/[0.03] ${appTabMuted}`
+                        }`}
+                      >
+                        <span className="line-clamp-2">{opt.name_ko}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
               <p className={`mt-1 text-xs leading-snug ${appTabSubtle}`}>
-                {selectedIssue.primary_stretch.name_ko}
-                {selectedIssue.primary_stretch.media_status === 'unmapped' ? (
+                {selectedStretch?.name_ko ?? '—'}
+                {selectedStretch?.media_status === 'unmapped' ? (
                   <span className={`ml-1.5 ${appTabMuted}`}>(준비 중)</span>
                 ) : null}
               </p>
@@ -266,7 +398,7 @@ export function ResetTabViewV2() {
                   type="button"
                   disabled={playBusy}
                   className={`inline-flex items-center gap-2 rounded-full border border-orange-500/35 bg-orange-500/15 px-4 py-2 text-sm font-medium ${appTabAccent} transition hover:bg-orange-500/25 disabled:pointer-events-none disabled:opacity-60`}
-                  onClick={handlePlaySelectedIssue}
+                  onClick={handlePlaySelectedStretch}
                 >
                   <Play className="size-4 shrink-0" aria-hidden />
                   {playLabel}

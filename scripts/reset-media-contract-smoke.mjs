@@ -135,6 +135,7 @@ if (fwd.ok) {
         ph.display.description?.length > 0 &&
         ph.display.how_to?.length > 0
     );
+    ok('placeholder display.duration_label 1분', ph.display.duration_label === '1분');
     try {
       JSON.parse(JSON.stringify(ph));
       ok('placeholder 응답 JSON 직렬화', true);

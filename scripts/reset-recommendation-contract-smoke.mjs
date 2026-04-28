@@ -10,11 +10,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 process.chdir(join(__dirname, '..'));
 
 const mod = await import('../src/lib/reset/recommend-reset.ts');
+const catalogMod = await import('../src/lib/reset/reset-stretch-catalog.ts');
 
 const {
   recommendResetForPattern,
   buildResetRecommendationPayload,
+  countUnmappedTemplateStretchesInCatalog,
 } = mod;
+
+const { RESET_STRETCH_CATALOG } = catalogMod;
 
 let passed = 0;
 let failed = 0;
@@ -35,6 +39,13 @@ function collectStretchVms(resp) {
     out.push(issue.primary_stretch, ...issue.alternative_stretches);
   }
   return out;
+}
+
+/** 카탈로그 template_id 파생과 동일 규칙 */
+function expectedMediaStatusFromCatalog(stretchKey) {
+  const def = RESET_STRETCH_CATALOG.find((s) => s.stretch_key === stretchKey);
+  if (!def) return null;
+  return def.template_id == null ? 'unmapped' : 'ready';
 }
 
 function assertRoundTripJson(label, obj) {
@@ -69,12 +80,27 @@ ok('fallback featured thoracic_stiffness', fb.featured_issue_key === 'thoracic_s
 ok('issues.length 10', fb.issues.length === 10);
 ok('meta.total_issues 10', fb.meta.total_issues === 10);
 ok('meta.source fallback', fb.meta.source === 'fallback');
-ok('meta.unmapped_template_count 10', fb.meta.unmapped_template_count === 10);
+ok(
+  'meta.unmapped_template_count matches catalog',
+  fb.meta.unmapped_template_count === countUnmappedTemplateStretchesInCatalog()
+);
 
 const stretchVms = collectStretchVms(fb);
+for (const s of stretchVms) {
+  const expected = expectedMediaStatusFromCatalog(s.stretch_key);
+  ok(
+    `stretch ${s.stretch_key} media_status matches template_id`,
+    expected !== null && s.media_status === expected
+  );
+}
+
 ok(
-  '모든 stretch media_status unmapped',
-  stretchVms.every((s) => s.media_status === 'unmapped')
+  '모든 issue duration_sec 60',
+  fb.issues.every((i) => i.duration_sec === 60)
+);
+ok(
+  '모든 issue duration_label 1분',
+  fb.issues.every((i) => i.duration_label === '1분')
 );
 ok(
   '모든 issue alternative_stretches.length === 2',
