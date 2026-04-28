@@ -35,6 +35,7 @@
     "test:voice-waited-cue-completion": "npx tsx scripts/voice-waited-cue-completion-smoke.mjs",
     "test:camera-setup-screen": "npx tsx scripts/camera-setup-screen-smoke.mjs",
     "test:session-feedback": "npx tsx scripts/session-feedback-smoke.mjs",
+    "test:journey-summary": "npx tsx scripts/journey-summary-smoke.mjs",
     "test:progress-report": "npx tsx scripts/progress-report-smoke.mjs",
     "test:adaptive-progression": "npx tsx scripts/adaptive-progression-smoke.mjs",
     "test:adaptive-modifier-merge": "npx tsx scripts/adaptive-modifier-merge-smoke.mjs",

@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { getSessionSafe } from '@/lib/supabase';
+import type { JourneySummaryResponse } from '@/lib/journey/types';
 import {
   ChevronRight,
   LogOut,
@@ -45,6 +47,37 @@ export function JourneyTabViewV2({
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
   const [sheet, setSheet] = useState<SheetId>(null);
+  const [journeySummary, setJourneySummary] = useState<JourneySummaryResponse | null>(null);
+  const [journeyLoad, setJourneyLoad] = useState<'idle' | 'loading' | 'ok' | 'err'>('idle');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setJourneyLoad('loading');
+      try {
+        const { session } = await getSessionSafe();
+        const token = session?.access_token;
+        if (!token) {
+          if (!cancelled) setJourneyLoad('err');
+          return;
+        }
+        const res = await fetch('/api/journey/summary', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error('summary failed');
+        const data = (await res.json()) as JourneySummaryResponse;
+        if (!cancelled) {
+          setJourneySummary(data);
+          setJourneyLoad('ok');
+        }
+      } catch {
+        if (!cancelled) setJourneyLoad('err');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const pct = pctSafe(completedSessions, totalSessions);
 
@@ -74,9 +107,20 @@ export function JourneyTabViewV2({
             분석 기반
           </span>
         </div>
-        <p className="text-lg font-semibold text-white">상체 긴장형</p>
+        <p className="text-lg font-semibold text-white">
+          {journeyLoad === 'loading'
+            ? '불러오는 중…'
+            : journeyLoad === 'err'
+              ? '기록을 불러오지 못했어요'
+              : journeySummary?.movement_type.label ?? '기록을 불러오지 못했어요'}
+        </p>
         <p className={`mt-2 text-sm leading-relaxed ${appTabMuted}`}>
-          목과 어깨 주변 긴장이 높고, 흉추 움직임이 제한된 패턴이에요.
+          {journeyLoad === 'loading'
+            ? '잠깐만요, 데이터를 준비하고 있어요.'
+            : journeyLoad === 'err'
+              ? '잠시 후 다시 확인해주세요.'
+              : journeySummary?.movement_type.summary ??
+                '잠시 후 다시 확인해주세요.'}
         </p>
       </div>
 
@@ -104,11 +148,37 @@ export function JourneyTabViewV2({
       <div className={`${appTabCard} mb-4 p-5`}>
         <h2 className="mb-3 text-sm font-semibold text-white">최근 7일 운동 상태</h2>
         <div className="grid grid-cols-3 gap-2">
-          {[
-            { k: '수행률', v: '3/4회' },
-            { k: '난이도 체감', v: '적절함' },
-            { k: '수행 퀄리티', v: '안정적' },
-          ].map((m) => (
+          {(
+            [
+              {
+                k: '수행률',
+                v:
+                  journeyLoad === 'loading'
+                    ? '…'
+                    : journeyLoad === 'err'
+                      ? '—'
+                      : journeySummary?.recent_7d.completion_label ?? '—',
+              },
+              {
+                k: '난이도 체감',
+                v:
+                  journeyLoad === 'loading'
+                    ? '…'
+                    : journeyLoad === 'err'
+                      ? '—'
+                      : journeySummary?.recent_7d.difficulty.label ?? '—',
+              },
+              {
+                k: '수행 퀄리티',
+                v:
+                  journeyLoad === 'loading'
+                    ? '…'
+                    : journeyLoad === 'err'
+                      ? '—'
+                      : journeySummary?.recent_7d.quality.label ?? '—',
+              },
+            ] as const
+          ).map((m) => (
             <div
               key={m.k}
               className="rounded-xl border border-white/10 bg-white/[0.03] px-2 py-3 text-center"
@@ -119,7 +189,12 @@ export function JourneyTabViewV2({
           ))}
         </div>
         <p className={`mt-4 text-sm leading-relaxed ${appTabMuted}`}>
-          최근 기록을 보면 현재 세션 난이도는 대체로 잘 맞고 있어요.
+          {journeyLoad === 'loading'
+            ? '최근 활동 요약을 불러오는 중이에요.'
+            : journeyLoad === 'err'
+              ? '요약을 불러오지 못했어요. 잠시 후 다시 확인해주세요.'
+              : journeySummary?.recent_7d.summary ??
+                '요약을 불러오지 못했어요. 잠시 후 다시 확인해주세요.'}
         </p>
       </div>
 
