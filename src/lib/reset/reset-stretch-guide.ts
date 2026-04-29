@@ -78,7 +78,8 @@ export const RESET_STRETCH_GUIDE_BY_KEY: Readonly<
       '양손으로 무릎 뒤쪽을 가볍게 당겨 엉덩이 외쪽이 편하게 늘어납니다.',
       '등이 바짝 뜨면 바닥에 붙도록 조절합니다.',
     ],
-    safety_note: '목이 당길 때는 깃털처럼 머리 아래 패드를 댑니다.',
+    safety_note:
+      '허리가 바닥에서 과하게 뜨거나 허리 통증이 느껴지면 다리 각도를 낮춰주세요. 엉덩이 바깥쪽이 편하게 늘어나는 정도만 유지하고, 찌릿한 저림이나 날카로운 통증이 생기면 멈춰주세요. 목과 어깨에는 힘을 빼고 시선은 천장 쪽에 편하게 둔 상태로 천천히 호흡하세요.',
   },
   cat_cow_spine_stretch: {
     stretch_key: 'cat_cow_spine_stretch',
