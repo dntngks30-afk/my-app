@@ -127,6 +127,7 @@
 | `/api/movement-test/get-result/[shareId]` | 없음 | 공유 링크 — share_id로 조회 |
 | `/api/movement-test/feedback` | 없음 | 익명 피드백 설문 |
 | `/api/plans/get-by-tier` | 없음 | 공개 플랜 정보 |
+| `/api/auth/pilot-signup` | 없음 | PR-AUTH-PILOT-PASSWORD-SIGNUP-02: Body(`email`,`password`,`nickname`,`gender`,`age`). 서버만 `getServerSupabaseAdmin`으로 `auth.admin.createUser`(email_confirm true, user_metadata). 클라이언트는 성공 후 `signInWithPassword`로 세션 확립. |
 
 ---
 

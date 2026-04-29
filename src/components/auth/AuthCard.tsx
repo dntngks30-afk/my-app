@@ -14,9 +14,18 @@ import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth'
 import { Input } from '@/components/ui/input';
 import AuthShell from '@/components/auth/AuthShell';
 import MoveReAuthScreen from '@/components/auth/MoveReAuthScreen';
+import type { PilotSignupGender } from '@/lib/auth/pilotSignupValidation';
+import { PILOT_SIGNUP_GENDERS } from '@/lib/auth/pilotSignupValidation';
 
 const LOGIN_HEADLINE = '내 분석을 이어서 확인하세요';
 const SIGNUP_HEADLINE = '나를 위한 리셋 여정을 시작하세요';
+
+const GENDER_LABELS: Record<PilotSignupGender, string> = {
+  male: '남성',
+  female: '여성',
+  other: '기타',
+  prefer_not_to_say: '선택하지 않음',
+};
 
 /** StitchLanding 「내 몸 상태 1분 체크하기」와 동일 gradient·그림자·반응 — 폼에서는 w-full px-8(PR-AUTH-UI-03C) */
 const AUTH_PRIMARY_CTA_CLASS =
@@ -26,6 +35,8 @@ const AUTH_PRIMARY_CTA_CLASS =
 const AUTH_INPUT_CLASS =
   'h-12 w-full rounded-2xl border border-white/[0.08] bg-[#0c1324]/55 px-4 text-[15px] text-[#dce1fb] placeholder:text-[#dce1fb]/35 outline-none transition focus-visible:border-[var(--mr-public-accent)] focus-visible:ring-2 focus-visible:ring-[var(--mr-public-accent)]/20';
 
+const AUTH_SELECT_CLASS =
+  AUTH_INPUT_CLASS + ' appearance-none bg-[#0c1324]/55';
 
 interface AuthCardProps {
   mode: 'login' | 'signup';
@@ -35,6 +46,7 @@ interface AuthCardProps {
   oauthSlot?: React.ReactNode;
   /** signup: 페이지 단독 vs /app/auth 탭 삽입 */
   signupLayout?: 'standalone' | 'embedded';
+  /** @deprecated PR-AUTH-PILOT-PASSWORD-SIGNUP-02: 더 이상 호출되지 않음 (호환용 props 유지) */
   onMailLinkScheduled?: () => void;
   /** PR-AUTH-HANDOFF-01: 인앱에서 이메일 인증 분기 시 외부 브라우저 handoff */
   inAppEmailHandoff?: boolean;
@@ -42,8 +54,6 @@ interface AuthCardProps {
   /** PR-AUTH-HANDOFF-01: 인앱 이메일 handoff 사용 시 UA 하이드레이션 전 버튼 비활성화 */
   handoffUaReady?: boolean;
 }
-
-const isDevSignup = process.env.NODE_ENV === 'development';
 
 const DEFAULT_POST_AUTH_PATH = '/app/home';
 
@@ -54,7 +64,6 @@ export default function AuthCard({
   compactHeader = false,
   oauthSlot,
   signupLayout = 'standalone',
-  onMailLinkScheduled,
   inAppEmailHandoff,
   onInAppEmailHandoff,
   handoffUaReady = true,
@@ -62,9 +71,11 @@ export default function AuthCard({
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [nickname, setNickname] = useState('');
+  const [gender, setGender] = useState<PilotSignupGender | ''>('');
+  const [ageInput, setAgeInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [signupSuccess, setSignupSuccess] = useState(false);
 
   const effectiveCompactHeader = compactHeader || signupLayout === 'standalone';
 
@@ -85,40 +96,65 @@ export default function AuthCard({
 
     try {
       if (mode === 'signup') {
-        if (isDevSignup) {
-          const completeUrl = `${window.location.origin}/signup/complete?next=${encodeURIComponent(redirectTo)}`;
-          const { data, error: err } = await supabaseBrowser.auth.signUp({
-            email: email.trim(),
-            password: password || 'dev1234',
-            options: { emailRedirectTo: completeUrl },
-          });
-          if (err) {
-            setError(err.message);
-            return;
-          }
-          if (data.session) {
-            await replaceRouteAfterAuthSession(router, redirectTo);
-            return;
-          }
-          setError(
-            'Supabase 이메일 확인이 켜져 있습니다. 대시보드 > Auth > Providers > Email에서 "Confirm email" 비활성화 후 재시도하세요.'
-          );
+        const emailTrim = email.trim();
+        if (!emailTrim) {
+          setError('이메일을 입력해 주세요.');
           return;
         }
-        const completeUrl = `${window.location.origin}/signup/complete?next=${encodeURIComponent(redirectTo)}`;
-        const { error: err } = await supabaseBrowser.auth.signInWithOtp({
-          email: email.trim(),
-          options: {
-            emailRedirectTo: completeUrl,
-            shouldCreateUser: true,
-          },
+        if (password.length < 8) {
+          setError('비밀번호는 최소 8자 이상이어야 합니다.');
+          return;
+        }
+        const nickTrim = nickname.trim();
+        if (!nickTrim) {
+          setError('닉네임을 입력해 주세요.');
+          return;
+        }
+        if (!gender || !PILOT_SIGNUP_GENDERS.includes(gender as PilotSignupGender)) {
+          setError('성별을 선택해 주세요.');
+          return;
+        }
+        const ageNum = Number.parseInt(ageInput, 10);
+        if (!Number.isFinite(ageNum) || ageNum < 14 || ageNum > 100) {
+          setError('나이는 14~100 사이의 숫자로 입력해 주세요.');
+          return;
+        }
+
+        const res = await fetch('/api/auth/pilot-signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: emailTrim,
+            password,
+            nickname: nickTrim,
+            gender,
+            age: ageNum,
+          }),
         });
-        if (err) {
-          setError(err.message);
+
+        const json = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: { code?: string; message?: string };
+        };
+
+        if (!res.ok || !json.ok) {
+          const msg =
+            json.error?.message ??
+            '가입 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+          setError(msg);
           return;
         }
-        onMailLinkScheduled?.();
-        setSignupSuccess(true);
+
+        const { error: signInErr } = await supabaseBrowser.auth.signInWithPassword({
+          email: emailTrim.toLowerCase(),
+          password,
+        });
+        if (signInErr) {
+          setError('가입은 완료되었습니다. 로그인 화면에서 다시 시도해 주세요.');
+          return;
+        }
+
+        await replaceRouteAfterAuthSession(router, redirectTo);
       } else {
         const { error: err } = await supabaseBrowser.auth.signInWithPassword({
           email: email.trim(),
@@ -163,24 +199,89 @@ export default function AuthCard({
           />
         </div>
 
-        {(isLogin || (mode === 'signup' && isDevSignup)) && (
+        {isLogin ? (
           <div>
             <label htmlFor="password" className="mb-1.5 block text-xs font-medium text-[#dce1fb]/75">
               비밀번호
-              {mode === 'signup' && isDevSignup ? (
-                <span className="ml-2 text-[0.7rem] text-[#dce1fb]/55">(개발용: 인증 없이 바로 가입)</span>
-              ) : null}
             </label>
             <Input
               id="password"
               type="password"
-              placeholder={mode === 'signup' && isDevSignup ? '비밀번호 (미입력 시 dev1234)' : '비밀번호'}
+              placeholder="비밀번호"
               required={isLogin}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className={AUTH_INPUT_CLASS}
             />
           </div>
+        ) : (
+          <>
+            <div>
+              <label htmlFor="password" className="mb-1.5 block text-xs font-medium text-[#dce1fb]/75">
+                비밀번호
+              </label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="8자 이상"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={AUTH_INPUT_CLASS}
+              />
+            </div>
+            <div>
+              <label htmlFor="nickname" className="mb-1.5 block text-xs font-medium text-[#dce1fb]/75">
+                닉네임
+              </label>
+              <Input
+                id="nickname"
+                type="text"
+                placeholder="1~20자"
+                required
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                className={AUTH_INPUT_CLASS}
+                maxLength={24}
+              />
+            </div>
+            <div>
+              <label htmlFor="gender" className="mb-1.5 block text-xs font-medium text-[#dce1fb]/75">
+                성별
+              </label>
+              <select
+                id="gender"
+                required
+                value={gender}
+                onChange={(e) => setGender(e.target.value as PilotSignupGender | '')}
+                className={AUTH_SELECT_CLASS}
+              >
+                <option value="">선택해 주세요</option>
+                {PILOT_SIGNUP_GENDERS.map((g) => (
+                  <option key={g} value={g}>
+                    {GENDER_LABELS[g]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="age" className="mb-1.5 block text-xs font-medium text-[#dce1fb]/75">
+                나이
+              </label>
+              <Input
+                id="age"
+                type="number"
+                inputMode="numeric"
+                min={14}
+                max={100}
+                placeholder="14~100"
+                required
+                value={ageInput}
+                onChange={(e) => setAgeInput(e.target.value)}
+                className={AUTH_INPUT_CLASS}
+              />
+            </div>
+          </>
         )}
 
         {mode === 'signup' ? (
@@ -253,51 +354,6 @@ export default function AuthCard({
       </div>
     </AuthShell>
   );
-
-  const mailConfirmationBody = (
-    <>
-      <p className="mb-8 text-center text-sm leading-relaxed text-[#dce1fb]">
-        해당 이메일 주소로 링크를 발송했습니다. 링크를 클릭하면 추가 정보 입력 단계로 이동합니다.
-      </p>
-      <div className="space-y-3 text-center">
-        <p className="text-sm text-[#dce1fb]/70">
-          이미 계정이 있으신가요?{' '}
-          <Link
-            href={`/app/auth?next=${encodeURIComponent(redirectTo || DEFAULT_POST_AUTH_PATH)}`}
-            onClick={(e) => {
-              if (inAppEmailHandoff && onInAppEmailHandoff) {
-                e.preventDefault();
-                onInAppEmailHandoff('login');
-              }
-            }}
-            className="font-semibold underline-offset-4 mr-public-text-accent hover:underline"
-          >
-            로그인
-          </Link>
-        </p>
-        <p className="text-sm">
-          <Link href="/" className="text-[#dce1fb]/55 underline-offset-4 transition hover:text-[#dce1fb]/85 hover:underline">
-            ← 메인으로 돌아가기
-          </Link>
-        </p>
-      </div>
-    </>
-  );
-
-  if (mode === 'signup' && signupSuccess) {
-    if (signupLayout === 'embedded') {
-      return (
-        <AuthShell compactHeader>
-          {mailConfirmationBody}
-        </AuthShell>
-      );
-    }
-    return (
-      <MoveReAuthScreen headline="메일 확인">
-        <AuthShell compactHeader>{mailConfirmationBody}</AuthShell>
-      </MoveReAuthScreen>
-    );
-  }
 
   if (mode === 'signup' && signupLayout === 'standalone') {
     return (
