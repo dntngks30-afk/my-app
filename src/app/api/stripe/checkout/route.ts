@@ -28,6 +28,7 @@ const ALLOWED_NEXT_PREFIXES = [
   '/app/deep-test/run',
   '/app/deep-test/result',
   '/app/reports',
+  '/onboarding',
   '/onboarding-prep',
   '/movement-test',
 ] as const;

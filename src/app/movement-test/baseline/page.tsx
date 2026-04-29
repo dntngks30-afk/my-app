@@ -4,7 +4,7 @@
  * PR-V2-04 / PR-V2-06 — Baseline 결과 (PublicResultRenderer)
  */
 
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { StitchSceneShell } from '@/components/stitch/shared/SceneShell';
 import { buildFreeSurveyBaselineResult } from '@/lib/deep-v2/builders/build-free-survey-baseline';
@@ -13,7 +13,6 @@ import { persistPublicResult } from '@/lib/public-results/persistPublicResult';
 import { loadPublicResultHandoff } from '@/lib/public-results/public-result-handoff';
 import { loadPublicResult } from '@/lib/public-results/loadPublicResult';
 import { useExecutionStartBridge } from '@/lib/public-results/useExecutionStartBridge';
-import { ResumeExecutionGate } from '@/components/public-result/ResumeExecutionGate';
 import { loadCompletedSurveyAnswersCache } from '@/lib/public/survey-session-cache';
 import type { FreeSurveyBaselineResult } from '@/lib/deep-v2/types';
 
@@ -140,13 +139,6 @@ export default function BaselinePage() {
   return (
     <StitchSceneShell>
       <main className="flex min-h-0 flex-1 flex-col px-5 py-6">
-        <Suspense fallback={null}>
-          <ResumeExecutionGate
-            enabled={!loading && !!baseline}
-            returnPathClean="/movement-test/baseline"
-            handleExecutionStart={handleExecutionStart}
-          />
-        </Suspense>
         <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col space-y-3">
           <PublicResultRenderer
             result={baseline.result}

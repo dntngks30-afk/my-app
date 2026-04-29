@@ -1,45 +1,32 @@
 /**
  * FLOW-03 — 실행 시작 CTA Bridge 훅
- * PR-PAY-CONTINUITY-05 — 미로그인 시 `next`에 `?continue=execution`을 붙여
- * 인증 후 결과 페이지에서 실행 분기(결제/온보딩)를 한 번 자동 이어갈 수 있게 함.
  *
- * public result 페이지에서 "실행 시작" 클릭 시:
- * - 미로그인 → login (next=현재 결과 페이지 + continue=execution)
- * - 로그인 + inactive → checkout (success next=onboarding-prep, cancel=쿼리 제거 경로)
- * - 로그인 + active → onboarding-prep 또는 /app/home
+ * 결과 페이지에서 “움직임 리셋 시작하기” 클릭 시:
+ * - bridge 저장(가능하면) 후 `/execution/start`로만 이동
+ * - 미인증 시 `/app/auth?next=/execution/start`
  *
- * bridge context는 localStorage에 저장되어 login/pay 후에도 복구 가능.
- * public result id는 state·bridge context·handoff 순으로 해석(resolvePublicResultIdForBridgeStage).
+ * 분기(pilot redeem, plan, Stripe)는 소유 라우트 `src/app/execution/start`에서 처리.
  *
  * @see src/lib/public-results/public-result-bridge.ts
- * @see useResumeExecutionAfterAuth
  */
 
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase';
-import {
-  saveBridgeContext,
-  loadBridgeContext,
-  buildOnboardingPrepUrl,
-  appendContinueExecutionParam,
-  stripContinueExecutionParam,
-  resolvePublicResultIdForBridgeStage,
-} from './public-result-bridge';
+import { saveBridgeContext, resolvePublicResultIdForBridgeStage } from './public-result-bridge';
 import type { BridgeResultStage } from './public-result-bridge';
 import { readAnonId } from './anon-id';
-import { readPilotContext } from '@/lib/pilot/pilot-context';
-import { redeemPilotAccessClient } from '@/lib/pilot/redeemPilotAccessClient';
-import { mapPilotRedeemErrorToMessage } from '@/lib/pilot/pilot-redeem-ui-messages';
+
+const EXECUTION_START_PATH = '/execution/start';
 
 export interface UseExecutionStartBridgeOptions {
-  /** FLOW-02 handoff id. 없으면 bridge context 없이 진행 (fallback) */
+  /** FLOW-02 handoff id. 없으면 bridge context 없이 진행 */
   publicResultId: string | null;
   /** baseline | refined */
   stage: BridgeResultStage;
-  /** login 후 돌아올 페이지 (현재 결과 페이지) */
+  /** 레거시 옵션(페이지 간 구분용). 새 canonical에서는 사용하지 않음 */
   returnPath: string;
 }
 
@@ -50,75 +37,25 @@ export interface UseExecutionStartBridgeResult {
 }
 
 /**
- * 실행 시작 CTA 클릭 시 auth/pay 분기 처리
+ * 실행 시작 CTA — bridge 저장 후 /execution/start (단일 진입점)
  */
 export function useExecutionStartBridge(
   options: UseExecutionStartBridgeOptions
 ): UseExecutionStartBridgeResult {
-  const { publicResultId, stage, returnPath } = options;
+  const { publicResultId, stage } = options;
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** persist 직후·로그인 직후 타이밍에서도 bridge / handoff와 맞춘 id */
+  const inFlightRef = useRef(false);
   const resolvedId = resolvePublicResultIdForBridgeStage(publicResultId, stage);
-  const returnPathForCancel = stripContinueExecutionParam(returnPath);
 
   const handleExecutionStart = useCallback(async () => {
-    if (isPending) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setError(null);
     setIsPending(true);
 
     try {
-      const { data: { session } } = await supabaseBrowser.auth.getSession();
-
-      // 1. 미로그인 → login (next에 continue=execution — PR-PAY-CONTINUITY-05)
-      if (!session) {
-        if (resolvedId) {
-          saveBridgeContext({
-            publicResultId: resolvedId,
-            resultStage: stage,
-            anonId: readAnonId(),
-          });
-        }
-        const nextAfterAuth = appendContinueExecutionParam(returnPath);
-        const authNext = `/app/auth?next=${encodeURIComponent(nextAfterAuth)}`;
-        router.push(authNext);
-        return;
-      }
-
-      // 2. 로그인됨 → plan_status 확인
-      const { data: userRow } = await supabaseBrowser
-        .from('users')
-        .select('plan_status')
-        .eq('id', session.user.id)
-        .single();
-
-      const planStatus = (userRow as { plan_status?: string } | null)?.plan_status ?? null;
-      const isActive = planStatus === 'active';
-
-      // 3. active → onboarding-prep 또는 /app/home
-      if (isActive) {
-        if (resolvedId) {
-          // PR-SESSION-PREPARING-BRIDGE-PERSIST-02:
-          // Active users also need bridge persisted before navigation because
-          // onboarding-prep -> onboarding drops the URL query params.
-          saveBridgeContext({
-            publicResultId: resolvedId,
-            resultStage: stage,
-            anonId: readAnonId(),
-          });
-          router.push(buildOnboardingPrepUrl(resolvedId, stage, readAnonId()));
-        } else {
-          router.push('/app/home');
-        }
-        return;
-      }
-
-      // 4. inactive → checkout
-      const successNext = resolvedId
-        ? buildOnboardingPrepUrl(resolvedId, stage, readAnonId())
-        : '/onboarding-prep';
-
       if (resolvedId) {
         saveBridgeContext({
           publicResultId: resolvedId,
@@ -127,68 +64,26 @@ export function useExecutionStartBridge(
         });
       }
 
-      if (readPilotContext()) {
-        const redeemResult = await redeemPilotAccessClient(session.access_token);
-        if (redeemResult.ok && !redeemResult.skipped) {
-          if (resolvedId || loadBridgeContext()) {
-            router.push('/onboarding');
-          } else {
-            router.push('/movement-test/baseline');
-          }
-          return;
-        }
-        if (!redeemResult.ok) {
-          setError(
-            mapPilotRedeemErrorToMessage(redeemResult.code, redeemResult.message)
-          );
-          return;
-        }
-        if (process.env.NODE_ENV === 'development') {
-          console.warn(
-            '[useExecutionStartBridge] pilot context present but redeem skipped; falling back to checkout'
-          );
-        }
-      }
+      const {
+        data: { session },
+      } = await supabaseBrowser.auth.getSession();
 
-      const checkoutRes = await fetch('/api/stripe/checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          productId: 'move-re-7d',
-          next: successNext,
-          cancelNext: returnPathForCancel,
-          consent: true,
-        }),
-      });
-
-      const json = await checkoutRes.json();
-
-      if (!checkoutRes.ok) {
-        const code = json?.code ?? '';
-        if (checkoutRes.status === 409 && code === 'ALREADY_ACTIVE') {
-          // 결제 완료 직후 plan_status 갱신 전 재진입 등
-          router.push(resolvedId ? buildOnboardingPrepUrl(resolvedId, stage) : '/app/home');
-          return;
-        }
-        setError(json?.error || json?.message || '결제 세션 생성에 실패했습니다.');
+      if (!session) {
+        router.replace(
+          `/app/auth?next=${encodeURIComponent(EXECUTION_START_PATH)}`
+        );
         return;
       }
 
-      if (json?.url) {
-        window.location.href = json.url;
-      } else {
-        setError('결제 URL을 받지 못했습니다.');
-      }
+      router.replace(EXECUTION_START_PATH);
     } catch (err) {
       console.error('[useExecutionStartBridge]', err);
       setError('처리 중 오류가 발생했습니다.');
     } finally {
+      inFlightRef.current = false;
       setIsPending(false);
     }
-  }, [resolvedId, stage, returnPath, returnPathForCancel, router, isPending]);
+  }, [resolvedId, stage, router]);
 
   return { handleExecutionStart, isPending, error };
 }
