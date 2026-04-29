@@ -20,7 +20,7 @@ const MOVEMENT_TEST_SESSION_V1_KEY = 'movementTestSession:v1';
 const MOVEMENT_TEST_ANSWERS_KEY = 'movementTest:answers:v1';
 const MOVEMENT_TEST_DRAFT_KEY = 'movementTest:draft:v1';
 
-export type PilotContextSource = 'root_query';
+export type PilotContextSource = 'root_query' | 'in_app_auth_handoff';
 
 export interface PilotContextV1 {
   code: string;
@@ -65,7 +65,7 @@ export function readPilotContext(): PilotContextV1 | null {
     const p = parsed as Record<string, unknown>;
     if (
       typeof p.code !== 'string' ||
-      p.source !== 'root_query' ||
+      (p.source !== 'root_query' && p.source !== 'in_app_auth_handoff') ||
       typeof p.enteredAt !== 'string' ||
       p.version !== 'pilot_entry_v1'
     ) {
@@ -73,7 +73,7 @@ export function readPilotContext(): PilotContextV1 | null {
     }
     return {
       code: p.code,
-      source: 'root_query',
+      source: p.source as PilotContextSource,
       enteredAt: p.enteredAt,
       version: 'pilot_entry_v1',
     };

@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import AppAuthClient from './AppAuthClient';
+import { sanitizeAuthNextPath } from '@/lib/auth/authHandoffContract';
 
 type SearchParams = Promise<{ next?: string; error?: string; provider?: string }>;
 
@@ -9,7 +10,10 @@ export default async function AppAuthPage({
   searchParams: SearchParams;
 }) {
   const params = await searchParams;
-  const next = typeof params?.next === 'string' ? params.next : '/app/home';
+  const next = sanitizeAuthNextPath(
+    typeof params?.next === 'string' ? params.next : null,
+    '/app/home',
+  );
   return (
       <Suspense
       fallback={

@@ -36,6 +36,11 @@ interface AuthCardProps {
   /** signup: 페이지 단독 vs /app/auth 탭 삽입 */
   signupLayout?: 'standalone' | 'embedded';
   onMailLinkScheduled?: () => void;
+  /** PR-AUTH-HANDOFF-01: 인앱에서 이메일 인증 분기 시 외부 브라우저 handoff */
+  inAppEmailHandoff?: boolean;
+  onInAppEmailHandoff?: (mode: 'login' | 'signup') => void;
+  /** PR-AUTH-HANDOFF-01: 인앱 이메일 handoff 사용 시 UA 하이드레이션 전 버튼 비활성화 */
+  handoffUaReady?: boolean;
 }
 
 const isDevSignup = process.env.NODE_ENV === 'development';
@@ -50,6 +55,9 @@ export default function AuthCard({
   oauthSlot,
   signupLayout = 'standalone',
   onMailLinkScheduled,
+  inAppEmailHandoff,
+  onInAppEmailHandoff,
+  handoffUaReady = true,
 }: AuthCardProps) {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -68,6 +76,10 @@ export default function AuthCard({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (inAppEmailHandoff && onInAppEmailHandoff) {
+      onInAppEmailHandoff(mode === 'signup' ? 'signup' : 'login');
+      return;
+    }
     setError(null);
     setLoading(true);
 
@@ -187,7 +199,7 @@ export default function AuthCard({
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || (Boolean(inAppEmailHandoff) && !handoffUaReady)}
           className={AUTH_PRIMARY_CTA_CLASS}
           style={{ fontFamily: 'var(--font-sans-noto)' }}
         >
@@ -204,6 +216,12 @@ export default function AuthCard({
               계정이 없으신가요?{' '}
               <Link
                 href={`/signup?next=${encodeURIComponent(redirectTo)}`}
+                onClick={(e) => {
+                  if (inAppEmailHandoff && onInAppEmailHandoff) {
+                    e.preventDefault();
+                    onInAppEmailHandoff('signup');
+                  }
+                }}
                 className="font-semibold underline-offset-4 mr-public-text-accent hover:underline"
               >
                 회원가입
@@ -214,6 +232,12 @@ export default function AuthCard({
               이미 계정이 있으신가요?{' '}
               <Link
                 href={`/app/auth?next=${encodeURIComponent(redirectTo || DEFAULT_POST_AUTH_PATH)}`}
+                onClick={(e) => {
+                  if (inAppEmailHandoff && onInAppEmailHandoff) {
+                    e.preventDefault();
+                    onInAppEmailHandoff('login');
+                  }
+                }}
                 className="font-semibold underline-offset-4 mr-public-text-accent hover:underline"
               >
                 로그인
@@ -240,6 +264,12 @@ export default function AuthCard({
           이미 계정이 있으신가요?{' '}
           <Link
             href={`/app/auth?next=${encodeURIComponent(redirectTo || DEFAULT_POST_AUTH_PATH)}`}
+            onClick={(e) => {
+              if (inAppEmailHandoff && onInAppEmailHandoff) {
+                e.preventDefault();
+                onInAppEmailHandoff('login');
+              }
+            }}
             className="font-semibold underline-offset-4 mr-public-text-accent hover:underline"
           >
             로그인

@@ -10,8 +10,20 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabaseBrowser } from '@/lib/supabase';
-import { loadBridgeContext } from '@/lib/public-results/public-result-bridge';
-import { readPilotContext } from '@/lib/pilot/pilot-context';
+import { loadBridgeContext, saveBridgeContext } from '@/lib/public-results/public-result-bridge';
+import {
+  readPilotContext,
+  savePilotContextFromCode,
+  getPilotCodeFromSearchParams,
+} from '@/lib/pilot/pilot-context';
+import {
+  validatePublicResultIdForHandoff,
+  validateStageForHandoff,
+  validateAnonIdForHandoff,
+  sanitizeAuthNextPath,
+  DEFAULT_HANDOFF_NEXT,
+} from '@/lib/auth/authHandoffContract';
+import { readAnonId } from '@/lib/public-results/anon-id';
 import { redeemPilotAccessClient } from '@/lib/pilot/redeemPilotAccessClient';
 import { mapPilotRedeemErrorToMessage } from '@/lib/pilot/pilot-redeem-ui-messages';
 import { MoveReFullscreenScreen } from '@/components/public-brand/MoveReFullscreenScreen';
@@ -26,6 +38,32 @@ export default function ExecutionStartClient() {
   const ranRef = useRef(false);
 
   useEffect(() => {
+    const rawSearch =
+      typeof window !== 'undefined' && window.location.search ? window.location.search : '';
+    let queryApplied = false;
+    if (rawSearch && typeof window !== 'undefined') {
+      const sp = new URLSearchParams(rawSearch);
+      const pr = sp.get('publicResultId');
+      const stage = sp.get('stage');
+      if (pr && validatePublicResultIdForHandoff(pr) && validateStageForHandoff(stage)) {
+        const rawAnon = sp.get('anonId');
+        const anonOk = rawAnon && validateAnonIdForHandoff(rawAnon) ? rawAnon.trim() : null;
+        saveBridgeContext({
+          publicResultId: pr.trim(),
+          resultStage: stage,
+          anonId: anonOk ?? readAnonId() ?? undefined,
+        });
+        const pilot = getPilotCodeFromSearchParams(sp);
+        if (pilot) {
+          savePilotContextFromCode(pilot, 'in_app_auth_handoff');
+        }
+        queryApplied = true;
+      }
+    }
+    if (queryApplied && typeof window !== 'undefined') {
+      window.history.replaceState(null, '', '/execution/start');
+    }
+
     if (ranRef.current) return;
     ranRef.current = true;
 
@@ -35,7 +73,13 @@ export default function ExecutionStartClient() {
       } = await supabaseBrowser.auth.getSession();
 
       if (!session) {
-        router.replace(`/app/auth?next=${encodeURIComponent('/execution/start')}`);
+        const nextPath =
+          rawSearch && rawSearch.length > 1
+            ? `/execution/start${rawSearch}`
+            : '/execution/start';
+        router.replace(
+          `/app/auth?next=${encodeURIComponent(sanitizeAuthNextPath(nextPath, DEFAULT_HANDOFF_NEXT))}`
+        );
         return;
       }
 

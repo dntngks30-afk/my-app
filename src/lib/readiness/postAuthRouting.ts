@@ -6,6 +6,7 @@
  */
 
 import type { SessionReadinessNextAction, SessionReadinessV1 } from './types';
+import { sanitizeAuthNextPath } from '@/lib/auth/authHandoffContract';
 
 export const SAFE_DEFAULT_POST_AUTH_PATH = '/app/home';
 
@@ -14,10 +15,7 @@ export function sanitizeAppInternalPath(
   path: string | null | undefined,
   defaultPath: string = SAFE_DEFAULT_POST_AUTH_PATH,
 ): string {
-  if (!path || typeof path !== 'string') return defaultPath;
-  const t = path.trim();
-  if (!t.startsWith('/') || t.startsWith('//')) return defaultPath;
-  return t;
+  return sanitizeAuthNextPath(path, defaultPath);
 }
 
 export function pathForReadinessNextAction(code: SessionReadinessNextAction): string {

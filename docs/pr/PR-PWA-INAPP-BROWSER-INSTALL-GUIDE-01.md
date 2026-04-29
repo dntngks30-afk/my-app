@@ -59,6 +59,10 @@
 - [ ] `claimDone === false`: 메인 CTA disabled 유지
 - [ ] 레이아웃: 모바일 `100svh`에서 과도하게 길지 않음
 
+## OAuth 로그인 handoff (별도 PR)
+
+인앱에서 **Google OAuth 차단**을 피하려면 사용자를 **외부 브라우저**로 넘기는 흐름이 필요하다. 이는 **로그인·결과 연속성**용이며, 본 설치 가이드 PR의 범위(설치 UX만, intent로 강제 이동 없음)와는 분리한다. 구현·계약은 [`PR-AUTH-HANDOFF-01`](PR-AUTH-HANDOFF-01.md) 참고.
+
 ## 남은 후속 과제
 
 - 인앱 UA 패턴 추가·조정(운영 로그·파일럿 피드백 기반)

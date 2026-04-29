@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase';
 import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth';
+import { sanitizeAuthNextPath } from '@/lib/auth/authHandoffContract';
 
 type OAuthProvider = 'google' | 'kakao';
 
@@ -25,10 +26,7 @@ interface CallbackClientProps {
 }
 
 function sanitizeNext(next: string | null | undefined): string {
-  if (!next || typeof next !== 'string') return '/app/home';
-  const trimmed = next.trim();
-  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return '/app/home';
-  return trimmed;
+  return sanitizeAuthNextPath(next, '/app/home');
 }
 
 export default function CallbackClient({

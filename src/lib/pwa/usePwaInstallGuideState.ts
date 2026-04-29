@@ -1,6 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  getUaLower,
+  detectStandalone,
+  detectInAppBrowserAppName,
+  detectIsIos,
+  detectIsAndroid,
+} from '@/lib/browser/detectInAppBrowser';
 
 /** Chromium `beforeinstallprompt` — DOM lib에 없을 수 있음 */
 export type BeforeInstallPromptEvent = Event & {
@@ -46,48 +53,11 @@ export type PwaInstallGuideState = {
   hydrated: boolean;
 };
 
-function getUaLower(): string {
-  if (typeof navigator === 'undefined') return '';
-  return navigator.userAgent.toLowerCase();
-}
-
-function detectStandalone(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    if (window.matchMedia('(display-mode: standalone)').matches) return true;
-  } catch {
-    /* noop */
-  }
-  const nav = window.navigator as Navigator & { standalone?: boolean };
-  return nav.standalone === true;
-}
-
 export function detectInAppBrowserName(uaLower: string): InAppBrowserName {
-  if (uaLower.includes('kakaotalk')) return 'kakao';
-  if (uaLower.includes('instagram')) return 'instagram';
-  if (uaLower.includes('youtube')) return 'youtube';
-  if (uaLower.includes('threads')) return 'threads';
-  if (uaLower.includes('fban') || uaLower.includes('fbav') || uaLower.includes('fb_iab'))
-    return 'facebook';
-  return null;
-}
-
-function isLikelyInAppBrowser(uaLower: string): boolean {
-  return detectInAppBrowserName(uaLower) !== null;
-}
-
-function detectIsIos(uaLower: string): boolean {
-  if (/iphone|ipod/i.test(uaLower)) return true;
-  if (/ipad/i.test(uaLower)) return true;
-  if (typeof navigator !== 'undefined') {
-    const p = navigator.platform;
-    return p === 'MacIntel' && (navigator.maxTouchPoints ?? 0) > 1;
-  }
-  return false;
-}
-
-function detectIsAndroid(uaLower: string): boolean {
-  return /android/i.test(uaLower);
+  const a = detectInAppBrowserAppName(uaLower);
+  if (a === null) return null;
+  if (a === 'android_webview' || a === 'naver' || a === 'line') return 'unknown';
+  return a;
 }
 
 /** Android WebView 등은 제외하고 일반 크롬/엣지 앱으로 본다 */

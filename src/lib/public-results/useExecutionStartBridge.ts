@@ -18,8 +18,12 @@ import { getSessionSafe } from '@/lib/supabase';
 import { saveBridgeContext, resolvePublicResultIdForBridgeStage } from './public-result-bridge';
 import type { BridgeResultStage } from './public-result-bridge';
 import { readAnonId } from './anon-id';
-
-const EXECUTION_START_PATH = '/execution/start';
+import { getPilotCodeFromCurrentUrl } from '@/lib/pilot/pilot-context';
+import {
+  buildExecutionStartPathWithBridgeQuery,
+  sanitizeAuthNextPath,
+  DEFAULT_HANDOFF_NEXT,
+} from '@/lib/auth/authHandoffContract';
 
 export interface UseExecutionStartBridgeOptions {
   /** FLOW-02 handoff id. 없으면 bridge context 없이 진행 */
@@ -67,13 +71,26 @@ export function useExecutionStartBridge(
       const { session } = await getSessionSafe();
 
       if (!session) {
-        router.replace(
-          `/app/auth?next=${encodeURIComponent(EXECUTION_START_PATH)}`
-        );
+        const pilot = getPilotCodeFromCurrentUrl();
+        const nextPath = buildExecutionStartPathWithBridgeQuery({
+          publicResultId: resolvedId,
+          stage,
+          anonId: readAnonId(),
+          pilot,
+        });
+        const safeNext = sanitizeAuthNextPath(nextPath, DEFAULT_HANDOFF_NEXT);
+        router.replace(`/app/auth?next=${encodeURIComponent(safeNext)}`);
         return;
       }
 
-      router.replace(EXECUTION_START_PATH);
+      router.replace(
+        buildExecutionStartPathWithBridgeQuery({
+          publicResultId: resolvedId,
+          stage,
+          anonId: readAnonId(),
+          pilot: getPilotCodeFromCurrentUrl(),
+        })
+      );
     } catch (err) {
       const isAbort =
         err instanceof Error && err.name === 'AbortError';

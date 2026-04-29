@@ -135,6 +135,7 @@
 | 진입점 | 패턴 | 비고 |
 |--------|------|------|
 | **AppAuthGate** | getSessionSafe → getCachedBootstrap(session.access_token) | /app/* 래퍼. plan_status 확인. |
+| **`/auth/handoff`** | 공개. 인앱→외부 브라우저 인증 handoff(bridge·pilot LS 복구, OAuth/이메일 분기) | PR-AUTH-HANDOFF-01 |
 | **SessionPanelV2** | getSessionSafe → session.user.id | |
 | **RoutineHubClient** | getSessionSafe → Bearer | |
 | **SessionRoutinePanel** | getSessionSafe → Bearer | |

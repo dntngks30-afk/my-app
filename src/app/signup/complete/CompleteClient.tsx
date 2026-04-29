@@ -11,12 +11,11 @@ import { NeoButton } from '@/components/neobrutalism';
 const NEO_INPUT =
   'rounded-2xl border-2 border-slate-900 bg-white h-11 px-3 shadow-[2px_2px_0_0_rgba(15,23,42,1)] focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-0 text-slate-800 placeholder:text-slate-400';
 
+import { sanitizeAuthNextPath } from '@/lib/auth/authHandoffContract';
+
 /** auth/callback과 동일한 계약: 상대 경로만 허용, 없으면 앱 홈 */
 function resolvePostAuthPath(next: string | null | undefined): string {
-  if (!next || typeof next !== 'string') return '/app/home';
-  const t = next.trim();
-  if (!t.startsWith('/') || t.startsWith('//')) return '/app/home';
-  return t;
+  return sanitizeAuthNextPath(next, '/app/home');
 }
 
 interface CompleteClientProps {
