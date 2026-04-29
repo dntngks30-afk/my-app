@@ -9,12 +9,16 @@ import type { FeedbackPayload, SessionFeedbackPayload } from '@/lib/session/feed
 
 type DifficultyFeedback = 'too_easy' | 'ok' | 'too_hard';
 
+export type SessionFeedbackQuickFormVariant = 'light' | 'dark';
+
 interface SessionFeedbackQuickFormProps {
   value: FeedbackPayload | null;
   onChange: (v: FeedbackPayload | null) => void;
   /** completion_ratio 파생용: all_done이면 1, partial이면 done/total */
   derivedCompletionRatio?: number;
   className?: string;
+  /** dark: 홈 실행 모달 / 오늘 운동 기록 시트. light: 루틴 패널 등 밝은 배경 (기본) */
+  variant?: SessionFeedbackQuickFormVariant;
 }
 
 const RPE_OPTIONS: { label: string; value: number }[] = [
@@ -45,11 +49,23 @@ const DIFFICULTY_OPTIONS: { label: string; value: DifficultyFeedback }[] = [
   { label: '힘들었어요', value: 'too_hard' },
 ];
 
+function chipClasses(active: boolean, variant: SessionFeedbackQuickFormVariant): string {
+  if (variant === 'dark') {
+    return active
+      ? 'rounded-lg border border-orange-500/45 bg-orange-500/15 px-3 py-1.5 text-xs font-medium text-orange-100 shadow-[0_0_10px_-3px_rgba(251,146,60,0.4)] transition'
+      : 'rounded-lg border border-white/12 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-white/70 transition hover:bg-white/[0.09]';
+  }
+  return active
+    ? 'rounded-lg px-3 py-1.5 text-xs font-medium transition bg-orange-100 text-orange-700 border border-orange-300'
+    : 'rounded-lg px-3 py-1.5 text-xs font-medium transition bg-slate-100 text-slate-600 hover:bg-slate-200 border border-transparent';
+}
+
 export function SessionFeedbackQuickForm({
   value,
   onChange,
   derivedCompletionRatio,
   className = '',
+  variant = 'light',
 }: SessionFeedbackQuickFormProps) {
   const sf = value?.sessionFeedback ?? {};
 
@@ -59,26 +75,26 @@ export function SessionFeedbackQuickForm({
     onChange(hasAny ? { sessionFeedback: next } : null);
   };
 
+  const labelMuted = variant === 'dark' ? 'text-white/45' : 'text-slate-500';
+  const labelSecondary = variant === 'dark' ? 'text-white/55' : 'text-slate-600';
+  const hintColor = variant === 'dark' ? 'text-white/35' : 'text-slate-400';
+
   return (
     <div className={`space-y-3 ${className}`}>
-      <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+      <p className={`text-xs font-medium uppercase tracking-wide ${labelMuted}`}>
         오늘 세션은 어땠나요? (선택)
       </p>
 
       {/* overall RPE 1–10 */}
       <div>
-        <p className="text-xs text-slate-600 mb-1">전체 강도 RPE</p>
+        <p className={`text-xs mb-1 ${labelSecondary}`}>전체 강도 RPE</p>
         <div className="flex flex-wrap gap-1.5">
           {RPE_OPTIONS.map(({ label, value: v }) => (
             <button
               key={v}
               type="button"
               onClick={() => update({ overallRpe: sf.overallRpe === v ? undefined : v })}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                sf.overallRpe === v
-                  ? 'bg-orange-100 text-orange-700 border border-orange-300'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-transparent'
-              }`}
+              className={chipClasses(sf.overallRpe === v, variant)}
             >
               {label}
             </button>
@@ -88,18 +104,14 @@ export function SessionFeedbackQuickForm({
 
       {/* pain after 0–10 */}
       <div>
-        <p className="text-xs text-slate-600 mb-1">운동 후 통증</p>
+        <p className={`text-xs mb-1 ${labelSecondary}`}>운동 후 통증</p>
         <div className="flex flex-wrap gap-1.5">
           {PAIN_OPTIONS.map(({ label, value: v }) => (
             <button
               key={v}
               type="button"
               onClick={() => update({ painAfter: sf.painAfter === v ? undefined : v })}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                sf.painAfter === v
-                  ? 'bg-orange-100 text-orange-700 border border-orange-300'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-transparent'
-              }`}
+              className={chipClasses(sf.painAfter === v, variant)}
             >
               {label}
             </button>
@@ -109,25 +121,21 @@ export function SessionFeedbackQuickForm({
 
       {/* completion ratio 0–1 */}
       <div>
-        <p className="text-xs text-slate-600 mb-1">완료 정도</p>
+        <p className={`text-xs mb-1 ${labelSecondary}`}>완료 정도</p>
         <div className="flex flex-wrap gap-1.5">
           {RATIO_OPTIONS.map(({ label, value: v }) => (
             <button
               key={v}
               type="button"
               onClick={() => update({ completionRatio: sf.completionRatio === v ? undefined : v })}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                sf.completionRatio === v
-                  ? 'bg-orange-100 text-orange-700 border border-orange-300'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-transparent'
-              }`}
+              className={chipClasses(sf.completionRatio === v, variant)}
             >
               {label}
             </button>
           ))}
         </div>
         {derivedCompletionRatio != null && (
-          <p className="text-[10px] text-slate-400 mt-0.5">
+          <p className={`text-[10px] mt-0.5 ${hintColor}`}>
             (실제: {Math.round(derivedCompletionRatio * 100)}%)
           </p>
         )}
@@ -135,18 +143,14 @@ export function SessionFeedbackQuickForm({
 
       {/* difficulty feedback */}
       <div>
-        <p className="text-xs text-slate-600 mb-1">난이도 체감</p>
+        <p className={`text-xs mb-1 ${labelSecondary}`}>난이도 체감</p>
         <div className="flex flex-wrap gap-1.5">
           {DIFFICULTY_OPTIONS.map(({ label, value: v }) => (
             <button
               key={v}
               type="button"
               onClick={() => update({ difficultyFeedback: sf.difficultyFeedback === v ? undefined : v })}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                sf.difficultyFeedback === v
-                  ? 'bg-orange-100 text-orange-700 border border-orange-300'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-transparent'
-              }`}
+              className={chipClasses(sf.difficultyFeedback === v, variant)}
             >
               {label}
             </button>

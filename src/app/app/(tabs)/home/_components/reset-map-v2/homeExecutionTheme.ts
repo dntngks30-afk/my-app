@@ -51,3 +51,32 @@ export const stepperBtn =
 
 export const dashedSecondaryBtn =
   'flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/18 bg-white/[0.04] py-3.5 text-sm font-semibold text-white/70 transition hover:border-white/25 hover:bg-white/[0.07]'
+
+/** Reflection / exercise log — inactive choice chips (dark sheet) */
+export const choiceChipInactive =
+  'rounded-xl border border-white/12 bg-white/[0.06] text-white/70 transition hover:bg-white/[0.09] hover:border-white/16'
+
+/** Selected: warm orange accent (difficulty, discomfort, RPE) */
+export const choiceChipActiveOrange =
+  'rounded-xl border border-orange-500/45 bg-orange-500/15 text-orange-100 shadow-[0_0_14px_-4px_rgba(251,146,60,0.45)]'
+
+/** Body state: “더 편해짐” — muted emerald */
+export const choiceChipActiveBetter =
+  'rounded-xl border border-emerald-500/35 bg-emerald-500/12 text-emerald-100'
+
+/** Body state: “비슷함” — warm orange */
+export const choiceChipActiveSame = choiceChipActiveOrange
+
+/** Body state: “불편해짐” — muted amber (not harsh red) */
+export const choiceChipActiveWorse =
+  'rounded-xl border border-amber-500/35 bg-amber-500/14 text-amber-100'
+
+/** Dark numeric / text input inside execution sheets */
+export const darkInputField =
+  'w-full rounded-xl border border-white/12 bg-white/[0.06] px-3 py-2 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-orange-500/35 focus:ring-1 focus:ring-orange-500/25'
+
+export const darkFormLabel = 'block text-xs font-medium text-white/50 mb-1'
+
+/** Nested card inside modals */
+export const darkNestedCard =
+  'rounded-xl border border-white/10 bg-white/[0.04] p-4 space-y-3 shadow-inner shadow-black/20'

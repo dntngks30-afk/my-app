@@ -9,13 +9,22 @@
 
 import { useState, useMemo } from 'react';
 import { X } from 'lucide-react';
-import { NeoButton } from '@/components/neobrutalism';
 import type { SessionPlan } from '@/lib/session/client';
 import type { ExerciseLogItem } from '@/lib/session/client';
 import { buildPlanItemKey } from '@/lib/session/exercise-log-identity';
 import { normalizeSessionSegmentsForUI } from '@/lib/session/session-segments-ui';
 import { SessionFeedbackQuickForm } from '@/app/app/_components/SessionFeedbackQuickForm';
 import type { FeedbackPayload } from '@/lib/session/feedback-types';
+import {
+  choiceChipActiveOrange,
+  choiceChipInactive,
+  closeButtonGhost,
+  darkFormLabel,
+  darkNestedCard,
+  darkInputField,
+  modalSheetContainer,
+  primaryCtaRestrained,
+} from '@/app/app/(tabs)/home/_components/reset-map-v2/homeExecutionTheme';
 
 type ExerciseRow = {
   templateId: string;
@@ -111,46 +120,47 @@ export default function SessionExerciseLogModal({
     if (e.target === e.currentTarget && !isSubmitting) onClose();
   };
 
+  const compactChip = (active: boolean) =>
+    `${active ? choiceChipActiveOrange : choiceChipInactive} px-2 py-1 text-xs font-medium min-h-[2rem]`;
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-md p-4"
       onClick={handleBackdropClick}
     >
       <div
-        className="w-full max-w-md max-h-[85vh] rounded-t-3xl border-2 border-slate-900 bg-white shadow-[0_-4px_0_0_rgba(15,23,42,1)] flex flex-col"
+        className={`flex max-h-[85vh] w-full max-w-[430px] flex-col overflow-hidden ${modalSheetContainer}`}
         onClick={(e) => e.stopPropagation()}
+        style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom))' }}
       >
-        <div className="flex items-center justify-between p-4 border-b border-stone-200 shrink-0">
-          <h2 className="text-base font-bold text-slate-800">오늘 운동 기록</h2>
+        <div className={`flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-4`}>
+          <h2 className="text-base font-bold text-white/90">오늘 운동 기록</h2>
           <button
             type="button"
             onClick={() => !isSubmitting && onClose()}
             disabled={isSubmitting}
-            className="flex size-8 items-center justify-center rounded-full border border-stone-300 text-slate-500 hover:bg-stone-100 disabled:opacity-50"
+            className={`${closeButtonGhost} disabled:opacity-50`}
             aria-label="닫기"
           >
             <X className="size-4" />
           </button>
         </div>
 
-        <div className="overflow-y-auto flex-1 p-4 space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto p-4">
           {rows.map((r) => {
             const v = values[r.plan_item_key] ?? { sets: 1, reps: null, difficulty: null, rpe: null, discomfort: null };
             const key = r.plan_item_key;
             return (
-              <div
-                key={key}
-                className="rounded-xl border-2 border-stone-200 bg-stone-50 p-4 space-y-3"
-              >
-                <p className="text-sm font-semibold text-slate-800">{r.name}</p>
+              <div key={key} className={darkNestedCard}>
+                <p className="text-sm font-semibold text-white/90">{r.name}</p>
                 {(r.suggestedSets != null || r.suggestedReps != null) && (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-white/45">
                     추천: {r.suggestedSets ?? '-'}×{r.suggestedReps ?? '-'}
                   </p>
                 )}
                 <div className="flex gap-3">
                   <div className="flex-1">
-                    <label className="block text-xs text-slate-600 mb-1">세트</label>
+                    <label className={darkFormLabel}>세트</label>
                     <input
                       type="number"
                       min={0}
@@ -160,12 +170,12 @@ export default function SessionExerciseLogModal({
                         const n = e.target.value === '' ? null : parseInt(e.target.value, 10);
                         updateValue(key, 'sets', n != null && !isNaN(n) ? n : null);
                       }}
-                      className="w-full rounded-lg border-2 border-stone-300 px-3 py-2 text-sm"
+                      className={darkInputField}
                       placeholder="1"
                     />
                   </div>
                   <div className="flex-1">
-                    <label className="block text-xs text-slate-600 mb-1">횟수</label>
+                    <label className={darkFormLabel}>횟수</label>
                     <input
                       type="number"
                       min={0}
@@ -175,13 +185,13 @@ export default function SessionExerciseLogModal({
                         const n = e.target.value === '' ? null : parseInt(e.target.value, 10);
                         updateValue(key, 'reps', n != null && !isNaN(n) ? n : null);
                       }}
-                      className="w-full rounded-lg border-2 border-stone-300 px-3 py-2 text-sm"
+                      className={darkInputField}
                       placeholder="-"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-600 mb-2">난이도 (1~5)</label>
+                  <label className={`${darkFormLabel} mb-2 block`}>난이도 (1~5)</label>
                   <div className="flex gap-2">
                     {DIFFICULTY_LABELS.map((_, i) => {
                       const d = i + 1;
@@ -191,12 +201,7 @@ export default function SessionExerciseLogModal({
                           key={d}
                           type="button"
                           onClick={() => updateValue(key, 'difficulty', active ? null : d)}
-                          className={[
-                            'flex-1 rounded-lg border-2 py-2 text-sm font-semibold transition',
-                            active
-                              ? 'border-slate-900 bg-orange-100 text-slate-900 shadow-[2px_2px_0_0_rgba(15,23,42,1)]'
-                              : 'border-stone-300 bg-white text-slate-600 hover:border-slate-400',
-                          ].join(' ')}
+                          className={`flex-1 py-2.5 text-sm font-semibold transition ${active ? choiceChipActiveOrange : choiceChipInactive}`}
                         >
                           {d}
                         </button>
@@ -206,17 +211,14 @@ export default function SessionExerciseLogModal({
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-slate-600 mb-1">RPE (선택)</label>
+                    <label className={darkFormLabel}>RPE (선택)</label>
                     <div className="flex flex-wrap gap-1">
                       {([1, 3, 5, 7, 10] as const).map(val => (
                         <button
                           key={val}
                           type="button"
                           onClick={() => updateValue(key, 'rpe', v.rpe === val ? null : val)}
-                          className={[
-                            'rounded px-2 py-1 text-xs font-medium transition',
-                            v.rpe === val ? 'border-2 border-slate-900 bg-orange-100' : 'border-2 border-stone-300 bg-white',
-                          ].join(' ')}
+                          className={compactChip(v.rpe === val)}
                         >
                           {val}
                         </button>
@@ -224,17 +226,14 @@ export default function SessionExerciseLogModal({
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-600 mb-1">불편감 (선택)</label>
+                    <label className={darkFormLabel}>불편감 (선택)</label>
                     <div className="flex flex-wrap gap-1">
                       {([0, 2, 5, 7, 10] as const).map(val => (
                         <button
                           key={val}
                           type="button"
                           onClick={() => updateValue(key, 'discomfort', v.discomfort === val ? null : val)}
-                          className={[
-                            'rounded px-2 py-1 text-xs font-medium transition',
-                            v.discomfort === val ? 'border-2 border-slate-900 bg-orange-100' : 'border-2 border-stone-300 bg-white',
-                          ].join(' ')}
+                          className={compactChip(v.discomfort === val)}
                         >
                           {val}
                         </button>
@@ -247,6 +246,7 @@ export default function SessionExerciseLogModal({
           })}
 
           <SessionFeedbackQuickForm
+            variant="dark"
             value={feedback}
             onChange={setFeedback}
             derivedCompletionRatio={
@@ -257,16 +257,15 @@ export default function SessionExerciseLogModal({
           />
         </div>
 
-        <div className="p-4 border-t border-stone-200 shrink-0">
-          <NeoButton
-            variant="orange"
-            fullWidth
+        <div className={`shrink-0 border-t border-white/10 px-4 py-4`}>
+          <button
+            type="button"
             disabled={isSubmitting}
-            onClick={handleSave}
-            className="py-3 text-base"
+            onClick={() => void handleSave()}
+            className={primaryCtaRestrained}
           >
             {isSubmitting ? '저장 중...' : '저장 후 종료'}
-          </NeoButton>
+          </button>
         </div>
       </div>
     </div>

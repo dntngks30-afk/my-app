@@ -8,6 +8,15 @@
 import { useState } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import type { SessionPainArea } from '@/lib/session/feedback-types';
+import {
+  choiceChipActiveBetter,
+  choiceChipActiveOrange,
+  choiceChipActiveWorse,
+  choiceChipInactive,
+  modalSheetContainer,
+  primaryCtaRestrained,
+  sessionGoalLabel,
+} from './homeExecutionTheme';
 
 const PAIN_LABELS: Record<SessionPainArea, string> = {
   neck: '목',
@@ -49,7 +58,7 @@ export function ReflectionModal({ onSubmit, submitting = false }: ReflectionModa
   return (
     <>
       <div
-        className="fixed inset-0 z-[85] bg-black/60 backdrop-blur-sm animate-in fade-in"
+        className="fixed inset-0 z-[85] bg-black/70 backdrop-blur-md animate-in fade-in"
         style={{ animationDuration: '150ms' }}
         aria-hidden
       />
@@ -61,17 +70,15 @@ export function ReflectionModal({ onSubmit, submitting = false }: ReflectionModa
           paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
         }}
       >
-        <div className="mx-auto max-w-[430px] rounded-t-2xl border border-slate-200 bg-white px-5 py-5 pb-8 shadow-2xl">
-          <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-            세션 리플렉션
-          </p>
-          <p className="mb-4 text-sm text-slate-600">
+        <div className={`${modalSheetContainer} px-5 py-5 pb-8`}>
+          <p className={`mb-4 ${sessionGoalLabel}`}>세션 리플렉션</p>
+          <p className="mb-4 text-sm leading-relaxed text-white/55">
             오늘 세션은 어땠나요? 다음 세션 조정에 활용됩니다.
           </p>
 
           {/* Difficulty 1-5 */}
           <div className="mb-5">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <p className={`mb-2 ${sessionGoalLabel}`}>
               전체 난이도 (1=매우 쉬움, 5=매우 힘듦)
             </p>
             <div className="flex gap-2">
@@ -80,10 +87,8 @@ export function ReflectionModal({ onSubmit, submitting = false }: ReflectionModa
                   key={n}
                   type="button"
                   onClick={() => setDifficulty(n)}
-                  className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition ${
-                    difficulty === n
-                      ? 'bg-orange-400 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  className={`flex-1 py-2.5 text-sm font-semibold transition ${
+                    difficulty === n ? choiceChipActiveOrange : choiceChipInactive
                   }`}
                 >
                   {n}
@@ -94,23 +99,19 @@ export function ReflectionModal({ onSubmit, submitting = false }: ReflectionModa
 
           {/* Body state */}
           <div className="mb-5">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-              운동 후 몸 상태는?
-            </p>
+            <p className={`mb-2 ${sessionGoalLabel}`}>운동 후 몸 상태는?</p>
             <div className="flex flex-wrap gap-2">
               {[
-                { value: 'better' as const, label: '더 편해짐' },
-                { value: 'same' as const, label: '비슷함' },
-                { value: 'worse' as const, label: '불편해짐' },
-              ].map(({ value, label }) => (
+                { value: 'better' as const, label: '더 편해짐', activeClass: choiceChipActiveBetter },
+                { value: 'same' as const, label: '비슷함', activeClass: choiceChipActiveOrange },
+                { value: 'worse' as const, label: '불편해짐', activeClass: choiceChipActiveWorse },
+              ].map(({ value, label, activeClass }) => (
                 <button
                   key={value}
                   type="button"
                   onClick={() => setBodyState(value)}
                   className={`rounded-xl px-4 py-2.5 text-sm font-medium transition ${
-                    bodyState === value
-                      ? 'bg-emerald-500 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    bodyState === value ? activeClass : choiceChipInactive
                   }`}
                 >
                   {label}
@@ -121,17 +122,13 @@ export function ReflectionModal({ onSubmit, submitting = false }: ReflectionModa
 
           {/* Discomfort area */}
           <div className="mb-6">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-              불편했던 부위가 있나요? (선택)
-            </p>
+            <p className={`mb-2 ${sessionGoalLabel}`}>불편했던 부위가 있나요? (선택)</p>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setDiscomfortArea(null)}
                 className={`rounded-xl px-3 py-2 text-sm font-medium transition ${
-                  discomfortArea === null
-                    ? 'bg-slate-800 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  discomfortArea === null ? choiceChipActiveOrange : choiceChipInactive
                 }`}
               >
                 없음
@@ -142,9 +139,7 @@ export function ReflectionModal({ onSubmit, submitting = false }: ReflectionModa
                   type="button"
                   onClick={() => setDiscomfortArea(area)}
                   className={`rounded-xl px-3 py-2 text-sm font-medium transition ${
-                    discomfortArea === area
-                      ? 'bg-slate-800 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    discomfortArea === area ? choiceChipActiveOrange : choiceChipInactive
                   }`}
                 >
                   {PAIN_LABELS[area]}
@@ -157,9 +152,9 @@ export function ReflectionModal({ onSubmit, submitting = false }: ReflectionModa
             type="button"
             onClick={handleSubmit}
             disabled={!canSubmit || submitting}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-400 py-3.5 text-sm font-bold text-white hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={primaryCtaRestrained}
           >
-            <CheckCircle2 className="h-4 w-4" />
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
             {submitting ? '저장 중...' : '완료하고 다음 세션 보기'}
           </button>
         </div>
