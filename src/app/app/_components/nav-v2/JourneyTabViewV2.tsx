@@ -21,6 +21,9 @@ import { performAppLogout } from '@/lib/auth/performAppLogout';
 import {
   appTabCard,
   appTabMuted,
+  appTabModalSurface,
+  appTabModalBody,
+  appTabModalClose,
   appTabSubtle,
   appTabAccent,
 } from './appTabTheme';
@@ -288,7 +291,7 @@ export function JourneyTabViewV2({
       {/* Lightweight sheets */}
       {sheet ? (
         <div
-          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-[#020617]/75 p-4 backdrop-blur-sm sm:items-center"
           role="dialog"
           aria-modal="true"
           onClick={(e) => {
@@ -296,7 +299,7 @@ export function JourneyTabViewV2({
           }}
         >
           <div
-            className={`max-h-[70vh] w-full max-w-md overflow-y-auto ${appTabCard} p-5`}
+            className={`max-h-[70vh] w-full max-w-md overflow-y-auto ${appTabModalSurface} p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]`}
           >
             <div className="mb-3 flex items-center justify-between gap-2">
               <h3 className="text-base font-semibold text-white">
@@ -307,14 +310,14 @@ export function JourneyTabViewV2({
               </h3>
               <button
                 type="button"
-                className="rounded-lg p-1 text-white/50 hover:bg-white/10"
+                className={appTabModalClose}
                 onClick={() => setSheet(null)}
                 aria-label="닫기"
               >
                 <X className="size-5" />
               </button>
             </div>
-            <div className={`space-y-3 text-sm leading-relaxed ${appTabMuted}`}>
+            <div className={`space-y-3 text-sm leading-relaxed ${appTabModalBody}`}>
               {sheet === 'faq' && (
                 <>
                   <p>• 세션은 하루 권장 횟수 안에서 선택해 진행할 수 있습니다.</p>
