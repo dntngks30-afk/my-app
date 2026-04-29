@@ -10,7 +10,11 @@ import {
   Loader2,
 } from 'lucide-react';
 import type { ResetIssueViewModel, ResetRecommendationResponse } from '@/lib/reset/types';
-import { fetchResetMedia, fetchResetRecommendations } from '@/lib/reset/client';
+import { fetchResetMedia } from '@/lib/reset/client';
+import {
+  getCachedResetRecommendations,
+  getResetRecommendationsCacheSnapshot,
+} from '@/lib/reset/recommendation-cache';
 import { appTabCard, appTabMuted, appTabSubtle, appTabAccent } from './appTabTheme';
 import {
   ResetStretchModal,
@@ -104,11 +108,20 @@ export function ResetTabViewV2({ isVisible = true }: ResetTabViewV2Props) {
     if (!isVisible) return;
     if (recommendationsRequestedRef.current) return;
 
+    const cached = getResetRecommendationsCacheSnapshot();
+    if (cached) {
+      recommendationsRequestedRef.current = true;
+      setRecommendation(cached);
+      setSelectedIssueKey(deriveInitialSelectedIssueKey(cached));
+      setPhase('ready');
+      return;
+    }
+
     recommendationsRequestedRef.current = true;
     let cancelled = false;
 
     (async () => {
-      const result = await fetchResetRecommendations();
+      const result = await getCachedResetRecommendations();
       if (cancelled) return;
 
       if (!result.ok) {

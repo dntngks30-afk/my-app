@@ -10,6 +10,8 @@ type CacheKey =
   | 'home.activeLite'
   | 'home.bootstrap'
   | 'home.progressReport'
+  | 'reset.recommendations'
+  | 'journey.summary'
   | 'stats.weekly'
   | 'stats.history';
 
@@ -57,22 +59,22 @@ export function invalidateCache(key?: CacheKey): void {
 /** Tab prefetch key — stats/my share activeLite */
 export type TabPrefetchKey = 'stats' | 'my';
 
-let prefetchInflight: Promise<void> | null = null;
-let lastPrefetchAt = 0;
+let activeLitePrefetchInflight: Promise<void> | null = null;
+let lastActiveLitePrefetchAt = 0;
 const PREFETCH_DEBOUNCE_MS = 2000;
 
 /**
- * Prefetch tab data (stats/my share activeLite). Deduped by time + inflight.
- * Fire-and-forget. Call from BottomNav on pointer/touch/focus.
+ * Prefetch shared active-lite data. Deduped by time + inflight.
+ * Kept separate so a warm activeLite cache never suppresses Reset/Journey prefetch.
  */
-export function prefetchTabData(_key: TabPrefetchKey): void {
+function prefetchActiveLiteIfNeeded(): void {
   if (typeof window === 'undefined') return;
   const now = Date.now();
-  if (now - lastPrefetchAt < PREFETCH_DEBOUNCE_MS) return;
+  if (now - lastActiveLitePrefetchAt < PREFETCH_DEBOUNCE_MS) return;
   if (getCache('home.activeLite')) return; // already warm
-  if (prefetchInflight) return; // already in flight
+  if (activeLitePrefetchInflight) return; // already in flight
 
-  prefetchInflight = (async () => {
+  activeLitePrefetchInflight = (async () => {
     try {
       const { getSessionSafe } = await import('@/lib/supabase');
       const { getCachedActiveSessionLite } = await import('@/lib/session/active-cache');
@@ -80,9 +82,34 @@ export function prefetchTabData(_key: TabPrefetchKey): void {
       if (session?.access_token) {
         await getCachedActiveSessionLite(session.access_token);
       }
+    } catch {
+      /* prefetch is best-effort */
     } finally {
-      prefetchInflight = null;
-      lastPrefetchAt = Date.now();
+      activeLitePrefetchInflight = null;
+      lastActiveLitePrefetchAt = Date.now();
     }
   })();
+}
+
+/**
+ * Prefetch tab data from BottomNav intent events.
+ * Fire-and-forget; never blocks navigation.
+ */
+export function prefetchTabData(key: TabPrefetchKey): void {
+  if (typeof window === 'undefined') return;
+
+  prefetchActiveLiteIfNeeded();
+
+  if (key === 'stats') {
+    void import('@/lib/reset/recommendation-cache')
+      .then((m) => m.prefetchResetRecommendations())
+      .catch(() => {});
+    return;
+  }
+
+  if (key === 'my') {
+    void import('@/lib/journey/client')
+      .then((m) => m.prefetchJourneySummary())
+      .catch(() => {});
+  }
 }

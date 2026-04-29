@@ -3,8 +3,11 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getSessionSafe } from '@/lib/supabase';
 import type { JourneySummaryResponse } from '@/lib/journey/types';
+import {
+  getCachedJourneySummary,
+  getJourneySummaryCacheSnapshot,
+} from '@/lib/journey/client';
 import {
   ChevronRight,
   LogOut,
@@ -56,29 +59,26 @@ export function JourneyTabViewV2({
     if (!isVisible) return;
     if (journeySummaryRequestedRef.current) return;
 
+    const cached = getJourneySummaryCacheSnapshot();
+    if (cached) {
+      journeySummaryRequestedRef.current = true;
+      setJourneySummary(cached);
+      setJourneyLoad('ok');
+      return;
+    }
+
     journeySummaryRequestedRef.current = true;
     let cancelled = false;
     (async () => {
       setJourneyLoad('loading');
-      try {
-        const { session } = await getSessionSafe();
-        const token = session?.access_token;
-        if (!token) {
-          if (!cancelled) setJourneyLoad('err');
-          return;
-        }
-        const res = await fetch('/api/journey/summary', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error('summary failed');
-        const data = (await res.json()) as JourneySummaryResponse;
-        if (!cancelled) {
-          setJourneySummary(data);
-          setJourneyLoad('ok');
-        }
-      } catch {
-        if (!cancelled) setJourneyLoad('err');
+      const result = await getCachedJourneySummary();
+      if (cancelled) return;
+      if (result.ok) {
+        setJourneySummary(result.data);
+        setJourneyLoad('ok');
+        return;
       }
+      setJourneyLoad('err');
     })();
     return () => {
       cancelled = true;
