@@ -24,25 +24,21 @@ import {
   appTabSubtle,
   appTabAccent,
 } from './appTabTheme';
+import { normalizeJourneyResetMapProgress } from '@/lib/journey/resolveJourneyResetMapTotal';
 
 /** 피드백 수신 메일 — 운영 시 교체 */
 const SUPPORT_FEEDBACK_MAILTO = 'mailto:support@posturelab.com?subject=MOVE%20RE%20피드백';
 
 export interface JourneyTabViewV2Props {
-  completedSessions?: number;
-  totalSessions?: number;
-}
-
-function pctSafe(completed: number, total: number): number {
-  if (total <= 0) return 0;
-  return Math.min(100, Math.round((completed / total) * 100));
+  completedSessions?: number | null;
+  totalSessions?: number | null;
 }
 
 type SheetId = 'faq' | 'ops' | 'privacy' | 'terms' | null;
 
 export function JourneyTabViewV2({
-  completedSessions = 3,
-  totalSessions = 12,
+  completedSessions = 0,
+  totalSessions = null,
 }: JourneyTabViewV2Props) {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
@@ -79,7 +75,10 @@ export function JourneyTabViewV2({
     };
   }, []);
 
-  const pct = pctSafe(completedSessions, totalSessions);
+  const resetMap = normalizeJourneyResetMapProgress({
+    total: totalSessions,
+    completed: completedSessions,
+  });
 
   const sheetRows: { id: SheetId; label: string; icon: typeof HelpCircle }[] = [
     { id: 'faq', label: 'FAQ', icon: HelpCircle },
@@ -124,19 +123,25 @@ export function JourneyTabViewV2({
         </p>
       </div>
 
-      {/* C — reset map progress */}
+      {/* C — reset map progress (SSOT: activeLite.progress.total_sessions) */}
       <div className={`${appTabCard} mb-4 p-5`}>
         <h2 className="text-sm font-semibold text-white">리셋맵 진행도</h2>
-        <p className={`mt-1 text-sm ${appTabMuted}`}>
-          총 {totalSessions}개 세션 중 {completedSessions}개 완료
-        </p>
+        {resetMap.empty ? (
+          <p className={`mt-1 text-sm ${appTabMuted}`}>
+            아직 리셋맵 진행 정보가 없어요. 홈에서 첫 세션을 시작하면 여기에 표시돼요.
+          </p>
+        ) : (
+          <p className={`mt-1 text-sm ${appTabMuted}`}>
+            총 {resetMap.totalSessions}개 세션 중 {resetMap.completedSafe}개 완료
+          </p>
+        )}
         <div className="mt-3 flex items-baseline justify-between gap-2">
-          <span className={`text-2xl font-semibold ${appTabAccent}`}>{pct}%</span>
+          <span className={`text-2xl font-semibold ${appTabAccent}`}>{resetMap.pct}%</span>
         </div>
         <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
           <div
             className="h-full rounded-full bg-orange-500/90 transition-all"
-            style={{ width: `${pct}%` }}
+            style={{ width: `${resetMap.empty ? 0 : resetMap.pct}%` }}
           />
         </div>
         <p className={`mt-3 text-xs leading-relaxed ${appTabSubtle}`}>

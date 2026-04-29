@@ -12,42 +12,49 @@ import { APP_TAB_BG } from '@/app/app/_components/nav-v2/appTabTheme';
 import { getSessionSafe } from '@/lib/supabase';
 import { getActiveSession } from '@/lib/session/client';
 
-const DEFAULT_TOTAL_SESSIONS = 12;
-
 export default function ProfilePage() {
   const [navV2, setNavV2] = useState(true);
   const [completedSessions, setCompletedSessions] = useState(0);
+  const [totalSessions, setTotalSessions] = useState<number | null>(null);
 
   useEffect(() => {
-    try {
-      if (process.env.NODE_ENV === 'production') {
-        setNavV2(true);
-        return;
+    const run = async () => {
+      let showNavV2 = true;
+      try {
+        if (process.env.NODE_ENV === 'production') {
+          showNavV2 = true;
+        } else {
+          const v = new URLSearchParams(window.location.search).get('navV2');
+          showNavV2 = v !== '0';
+        }
+      } catch {
+        showNavV2 = true;
       }
-      const v = new URLSearchParams(window.location.search).get('navV2');
-      setNavV2(v !== '0');
-      if (v === '0') return;
-      (async () => {
-        try {
-          const { session } = await getSessionSafe();
-          if (!session?.access_token) return;
-          const result = await getActiveSession(session.access_token);
-          if (result.ok && result.data.progress) {
-            setCompletedSessions(result.data.progress.completed_sessions ?? 0);
-          }
-        } catch { /* noop */ }
-      })();
-    } catch { /* noop */ }
+      setNavV2(showNavV2);
+      if (!showNavV2) return;
+
+      try {
+        const { session } = await getSessionSafe();
+        if (!session?.access_token) return;
+        const result = await getActiveSession(session.access_token);
+        if (result.ok && result.data.progress) {
+          const p = result.data.progress;
+          setCompletedSessions(p.completed_sessions ?? 0);
+          const t = p.total_sessions;
+          setTotalSessions(typeof t === 'number' && Number.isFinite(t) && t > 0 ? Math.floor(t) : null);
+        }
+      } catch {
+        /* noop */
+      }
+    };
+    void run();
   }, []);
 
   if (navV2) {
     return (
       <div className="min-h-screen pb-20" style={{ backgroundColor: APP_TAB_BG }}>
         <main className="overflow-y-auto">
-          <JourneyTabViewV2
-            completedSessions={completedSessions}
-            totalSessions={DEFAULT_TOTAL_SESSIONS}
-          />
+          <JourneyTabViewV2 completedSessions={completedSessions} totalSessions={totalSessions} />
         </main>
         <BottomNav />
       </div>

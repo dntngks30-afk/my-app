@@ -10,10 +10,9 @@ import {
 import { JourneyTabViewV2 } from '@/app/app/_components/nav-v2/JourneyTabViewV2';
 import { APP_TAB_BG } from '@/app/app/_components/nav-v2/appTabTheme';
 
-/** AppShell 진행 카드 문서와 프로필 경로 페이지와 동일 기본값 */
-const DEFAULT_TOTAL_SESSIONS = 12;
-
-type ActiveLiteCache = { progress?: { completed_sessions?: number } };
+type ActiveLiteCache = {
+  progress?: { completed_sessions?: number; total_sessions?: number };
+};
 
 function initialCompletedSessions(): number {
   if (typeof window === 'undefined') return 0;
@@ -27,6 +26,19 @@ function initialCompletedSessions(): number {
   }
 }
 
+function initialTotalSessions(): number | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const c =
+      getCacheStale<ActiveLiteCache>('home.activeLite') ??
+      getCacheStale<{ activeLite: ActiveLiteCache }>('home.bootstrap')?.activeLite;
+    const t = c?.progress?.total_sessions;
+    return typeof t === 'number' && Number.isFinite(t) && t > 0 ? Math.floor(t) : null;
+  } catch {
+    return null;
+  }
+}
+
 interface MyTabProps {
   isVisible: boolean;
 }
@@ -37,6 +49,7 @@ interface MyTabProps {
  */
 export default function MyTab({ isVisible }: MyTabProps) {
   const [completedSessions, setCompletedSessions] = useState<number>(initialCompletedSessions);
+  const [totalSessions, setTotalSessions] = useState<number | null>(initialTotalSessions);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -46,8 +59,12 @@ export default function MyTab({ isVisible }: MyTabProps) {
       getCache<ActiveLiteCache>('home.activeLite') ??
       getCacheStale<ActiveLiteCache>('home.activeLite') ??
       getCacheStale<{ activeLite: ActiveLiteCache }>('home.bootstrap')?.activeLite;
-    if (cached?.progress?.completed_sessions != null) {
-      setCompletedSessions(cached.progress.completed_sessions);
+    if (cached?.progress) {
+      if (cached.progress.completed_sessions != null) {
+        setCompletedSessions(cached.progress.completed_sessions);
+      }
+      const t = cached.progress.total_sessions;
+      setTotalSessions(typeof t === 'number' && Number.isFinite(t) && t > 0 ? Math.floor(t) : null);
     }
 
     (async () => {
@@ -56,7 +73,10 @@ export default function MyTab({ isVisible }: MyTabProps) {
       const result = await getCachedActiveSessionLite(session.access_token);
       if (cancelled) return;
       if (result.ok && result.data.progress) {
-        setCompletedSessions(result.data.progress.completed_sessions ?? 0);
+        const p = result.data.progress;
+        setCompletedSessions(p.completed_sessions ?? 0);
+        const tt = p.total_sessions;
+        setTotalSessions(typeof tt === 'number' && Number.isFinite(tt) && tt > 0 ? Math.floor(tt) : null);
       }
     })();
 
@@ -68,10 +88,7 @@ export default function MyTab({ isVisible }: MyTabProps) {
   return (
     <div className="min-h-screen pb-20" style={{ backgroundColor: APP_TAB_BG }}>
       <main className="overflow-y-auto">
-        <JourneyTabViewV2
-          completedSessions={completedSessions}
-          totalSessions={DEFAULT_TOTAL_SESSIONS}
-        />
+        <JourneyTabViewV2 completedSessions={completedSessions} totalSessions={totalSessions} />
       </main>
     </div>
   );
