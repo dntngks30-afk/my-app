@@ -1,0 +1,175 @@
+{
+  "verify_version": 1,
+  "attach_kind": "reset_tab_stretch_mux_v1",
+  "run_mode": "apply",
+  "force": false,
+  "manifest_path": "ops\\reset-media\\reset-stretches-2026-04.json",
+  "ledger_path": "ops\\reset-media\\reset-stretches-2026-04.mux-upload-result.json",
+  "verify_output": "ops\\reset-media\\reset-stretches-2026-04.attach-verify.json",
+  "updated_at": "2026-04-28T19:14:26.555Z",
+  "summary": {
+    "updated": 8,
+    "unchanged": 2,
+    "failed": 0,
+    "skipped": 0,
+    "work_count": 10
+  },
+  "rows": [
+    {
+      "template_id": "R01_STERNOCLEIDOMASTOID_STRETCH",
+      "expected_playback_id": "61xpkE02xa7ekOI2iFVAZqg8A1gHGrb00K4BuadiHZc7c",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "61xpkE02xa7ekOI2iFVAZqg8A1gHGrb00K4BuadiHZc7c"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "61xpkE02xa7ekOI2iFVAZqg8A1gHGrb00K4BuadiHZc7c"
+      },
+      "status": "unchanged",
+      "error_message": null,
+      "verified_at": "2026-04-28T19:14:25.678Z",
+      "expected_name": "흉쇄유돌근 스트레칭",
+      "db_name": "흉쇄유돌근 스트레칭",
+      "manifest_name_snapshot": "흉쇄유돌근 스트레칭"
+    },
+    {
+      "template_id": "R02_QUADRICEPS_STRETCH",
+      "expected_playback_id": "Tgww6er3eDsGG9ZnUsERzmcHN01hhgq4dBx5Z2Z1wMtk",
+      "before_media_ref": {
+        "provider": "mux",
+        "playback_id": "Tgww6er3eDsGG9ZnUsERzmcHN01hhgq4dBx5Z2Z1wMtk"
+      },
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "Tgww6er3eDsGG9ZnUsERzmcHN01hhgq4dBx5Z2Z1wMtk"
+      },
+      "status": "unchanged",
+      "error_message": null,
+      "verified_at": "2026-04-28T19:14:25.839Z",
+      "expected_name": "대퇴 사두근 스트레칭",
+      "db_name": "대퇴 사두근 스트레칭",
+      "manifest_name_snapshot": "대퇴 사두근 스트레칭"
+    },
+    {
+      "template_id": "R03_HAMSTRING_STRETCH",
+      "expected_playback_id": "rhFu8FND00O4bf7aNJOB8SkWQpvdHKfhVPGwE6tvMrqM",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "rhFu8FND00O4bf7aNJOB8SkWQpvdHKfhVPGwE6tvMrqM"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-28T19:14:25.913Z",
+      "expected_name": "햄스트링 스트레칭",
+      "db_name": "햄스트링 스트레칭",
+      "manifest_name_snapshot": "햄스트링 스트레칭"
+    },
+    {
+      "template_id": "R04_SEATED_PIRIFORMIS_STRETCH",
+      "expected_playback_id": "V00Tlz9Seo71axYOYMwJyKgz11Bv402iuibZvuBER9tqM",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "V00Tlz9Seo71axYOYMwJyKgz11Bv402iuibZvuBER9tqM"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-28T19:14:26.034Z",
+      "expected_name": "이상근 스트레칭(앉아서)",
+      "db_name": "이상근 스트레칭(앉아서)",
+      "manifest_name_snapshot": "이상근 스트레칭(앉아서)"
+    },
+    {
+      "template_id": "R05_GLUTEUS_MAXIMUS_STRETCH",
+      "expected_playback_id": "JdL014Q23bDj7SOiLFildI301djGptRjD4KTIgKBIKy6w",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "JdL014Q23bDj7SOiLFildI301djGptRjD4KTIgKBIKy6w"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-28T19:14:26.129Z",
+      "expected_name": "대둔근 스트레칭",
+      "db_name": "대둔근 스트레칭",
+      "manifest_name_snapshot": "대둔근 스트레칭"
+    },
+    {
+      "template_id": "R06_SUPINE_PIRIFORMIS_STRETCH",
+      "expected_playback_id": "HSYm3nLkhilt01QyLjtz5K0000NzKQnf01Tb81Naij1kK7E",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "HSYm3nLkhilt01QyLjtz5K0000NzKQnf01Tb81Naij1kK7E"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-28T19:14:26.185Z",
+      "expected_name": "이상근 스트레칭(누워서)",
+      "db_name": "이상근 스트레칭(누워서)",
+      "manifest_name_snapshot": "이상근 스트레칭(누워서)"
+    },
+    {
+      "template_id": "R07_CAT_COW_SPINE_STRETCH",
+      "expected_playback_id": "bUCWpY58RZoZBTA00FSLdxj3JnExA6KcJdvJLaCAUz02o",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "bUCWpY58RZoZBTA00FSLdxj3JnExA6KcJdvJLaCAUz02o"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-28T19:14:26.258Z",
+      "expected_name": "캣카우(허리) 스트레칭",
+      "db_name": "캣카우(허리) 스트레칭",
+      "manifest_name_snapshot": "캣카우(허리) 스트레칭"
+    },
+    {
+      "template_id": "R08_FOAM_ROLLER_LAT_STRETCH",
+      "expected_playback_id": "qWfmeOrCif1UuEPs02gyN02IeNONJzMwUqSYTOyBuXO500",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "qWfmeOrCif1UuEPs02gyN02IeNONJzMwUqSYTOyBuXO500"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-28T19:14:26.316Z",
+      "expected_name": "폼롤러 광배근 스트레칭",
+      "db_name": "폼롤러 광배근 스트레칭",
+      "manifest_name_snapshot": "폼롤러 광배근 스트레칭"
+    },
+    {
+      "template_id": "R09_LONGITUDINAL_FOAM_ROLLER_CHEST_OPENER",
+      "expected_playback_id": "P4bgbrSDbn6Vg2fLd3a3WevaX00LxjxysJWrBYl1RiWA",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "P4bgbrSDbn6Vg2fLd3a3WevaX00LxjxysJWrBYl1RiWA"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-28T19:14:26.385Z",
+      "expected_name": "폼롤러 세로로 두고 위에 눕기",
+      "db_name": "폼롤러 세로로 두고 위에 눕기",
+      "manifest_name_snapshot": "폼롤러 세로로 두고 위에 눕기"
+    },
+    {
+      "template_id": "R10_LEVATOR_SCAPULAE_UPPER_TRAP_STRETCH",
+      "expected_playback_id": "4qC5Ow46Wf771vPLZR4rJ7fCpzFoeOp00VxgUITh2c9g",
+      "before_media_ref": null,
+      "after_media_ref": {
+        "provider": "mux",
+        "playback_id": "4qC5Ow46Wf771vPLZR4rJ7fCpzFoeOp00VxgUITh2c9g"
+      },
+      "status": "updated",
+      "error_message": null,
+      "verified_at": "2026-04-28T19:14:26.481Z",
+      "expected_name": "견갑거근&상부 승모근 스트레칭",
+      "db_name": "견갑거근&상부 승모근 스트레칭",
+      "manifest_name_snapshot": "견갑거근&상부 승모근 스트레칭"
+    }
+  ]
+}
