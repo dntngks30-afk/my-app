@@ -14,7 +14,7 @@
 
 import { useCallback, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabaseBrowser } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabase';
 import { saveBridgeContext, resolvePublicResultIdForBridgeStage } from './public-result-bridge';
 import type { BridgeResultStage } from './public-result-bridge';
 import { readAnonId } from './anon-id';
@@ -64,9 +64,7 @@ export function useExecutionStartBridge(
         });
       }
 
-      const {
-        data: { session },
-      } = await supabaseBrowser.auth.getSession();
+      const { session } = await getSessionSafe();
 
       if (!session) {
         router.replace(
@@ -77,8 +75,18 @@ export function useExecutionStartBridge(
 
       router.replace(EXECUTION_START_PATH);
     } catch (err) {
-      console.error('[useExecutionStartBridge]', err);
-      setError('처리 중 오류가 발생했습니다.');
+      const isAbort =
+        err instanceof Error && err.name === 'AbortError';
+
+      if (isAbort && process.env.NODE_ENV === 'development') {
+        console.warn('[useExecutionStartBridge]', err);
+      } else if (!isAbort) {
+        console.error('[useExecutionStartBridge]', err);
+      }
+
+      if (!isAbort) {
+        setError('처리 중 오류가 발생했습니다.');
+      }
     } finally {
       inFlightRef.current = false;
       setIsPending(false);
