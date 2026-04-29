@@ -421,7 +421,7 @@ function IosSafariStepsModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="space-y-4 overflow-y-auto px-5 py-4">
           <StepRow n={1}>아래 공유 버튼</StepRow>
-          <StepRow n={2}>홈 화면에 추가</StepRow>
+          <StepRow n={2}>스크롤을 내려서 &apos;홈 화면에 추가&apos;를 눌러주세요.</StepRow>
           <StepRow n={3}>MOVE RE 아이콘으로 시작</StepRow>
         </div>
         <div className="border-t border-white/5 px-5 py-4">
