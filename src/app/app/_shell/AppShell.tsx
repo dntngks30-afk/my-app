@@ -52,7 +52,7 @@ export default function AppShell() {
         }}
         aria-hidden={!showMap}
       >
-        <MapTab />
+        <MapTab isVisible={showMap} />
       </div>
 
       {/* 리셋(/app/checkin) — StatsTab·ResetTabViewV2 */}

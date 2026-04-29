@@ -40,6 +40,7 @@ import { ResetMap as DonorResetMap } from '@/features/map_ui_import/home_map_202
 
 interface HomePageClientProps {
   hideBottomNav?: boolean;
+  isVisible?: boolean;
 }
 
 function hrefForReadinessNext(code: SessionReadinessNextAction | undefined): string {
@@ -60,7 +61,10 @@ function hrefForReadinessNext(code: SessionReadinessNextAction | undefined): str
   }
 }
 
-export default function HomePageClient({ hideBottomNav }: HomePageClientProps = {}) {
+export default function HomePageClient({
+  hideBottomNav,
+  isVisible = true,
+}: HomePageClientProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const debugFlag = searchParams.get('debug') === '1';
@@ -287,9 +291,13 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
   /** PR-PERF-21: Bootstrap-driven reset-map. Recheck uses getLatest for multi-tab safety. */
   useEffect(() => {
     if (!mapV2 || loading || isRailNotReady) return;
+    if (!isVisible) return;
 
     const bootstrap = getAppBootstrapCacheSnapshot();
     const hasBootstrapResetMap = bootstrap?.reset_map != null;
+    let cancelled = false;
+    let idleId: number | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     if (recheckTrigger === 0 && hasBootstrapResetMap) {
       const rm = bootstrap!.reset_map!;
@@ -304,12 +312,14 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       }
       if (rm.should_start) {
         const runStart = () => {
+          if (cancelled) return;
           getAuthToken().then(async (token) => {
-            if (!token) return;
+            if (cancelled || !token) return;
             clearResetMapClientState();
             clearAllKeysForNewFlow();
             const startKey = getIdempotencyKey('start');
             const startRes = await startResetMapFlow(token, startKey);
+            if (cancelled) return;
             if (startRes.ok && startRes.data) {
               setResetMapFlowId(startRes.data.flow_id);
               setResetMapClientState({
@@ -321,15 +331,20 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
           });
         };
         if (typeof requestIdleCallback !== 'undefined') {
-          requestIdleCallback(runStart, { timeout: 500 });
+          idleId = requestIdleCallback(runStart, { timeout: 500 }) as unknown as number;
         } else {
-          setTimeout(runStart, 0);
+          timeoutId = setTimeout(runStart, 0);
         }
-        return;
+        return () => {
+          cancelled = true;
+          if (idleId !== null && typeof cancelIdleCallback !== 'undefined') {
+            cancelIdleCallback(idleId);
+          }
+          if (timeoutId !== null) clearTimeout(timeoutId);
+        };
       }
     }
 
-    let cancelled = false;
     (async () => {
       const token = await getAuthToken();
       if (!token || cancelled) return;
@@ -376,10 +391,11 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
       }
     })();
     return () => { cancelled = true; };
-  }, [mapV2, loading, getAuthToken, recheckTrigger, isRailNotReady]);
+  }, [mapV2, loading, getAuthToken, recheckTrigger, isRailNotReady, isVisible]);
 
   /** 레일 미준비 플레이스홀더: readiness 1회로 CTA 경로 결정 */
   useEffect(() => {
+    if (!isVisible) return;
     if (!isRailNotReady) {
       railRecoveryFetchedRef.current = false;
       setRailRecoveryHref('/onboarding');
@@ -398,7 +414,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
     return () => {
       cancelled = true;
     };
-  }, [loading, error, isRailNotReady]);
+  }, [loading, error, isRailNotReady, isVisible]);
 
   const handleFlowApplied = useCallback(() => {
     clearResetMapClientState();
@@ -509,6 +525,7 @@ export default function HomePageClient({ hideBottomNav }: HomePageClientProps = 
                 adaptiveExplanation={adaptiveExplanation}
                 nextSession={nextSession}
                 initialNodeDisplayBundle={nodeDisplayBundle}
+                isVisible={isVisible}
                 initialSelectedSessionId={
                   focusSessionNum != null && focusSessionNum >= 1 && focusSessionNum <= total
                     ? focusSessionNum

@@ -66,6 +66,8 @@ interface ResetMapV2Props {
   nextSession?: NextSessionPreviewPayload | null
   /** PR4: canonical compact display from app bootstrap / home-lite — batch fetch is fallback only */
   initialNodeDisplayBundle?: HomeNodeDisplayBundle | null
+  /** AppShell visibility. Hidden map should not start non-critical background work. */
+  isVisible?: boolean
   /** PR-RESET-05: reset-map flow id for preview/apply wiring */
   resetMapFlowId?: string | null
   /** PR-RESET-05: called after successful apply */
@@ -181,7 +183,7 @@ function bootstrapToPanelPlan(data: PanelBootstrapResponse): SessionPlan {
   }
 }
 
-export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, onFlowApplied, resetMapFlowId, onRequestNextSession, initialSelectedSessionId, adaptiveExplanation, nextSession, initialNodeDisplayBundle, debug, mapRenderer }: ResetMapV2Props) {
+export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextUnlockAt, getAuthToken, onSessionCompleted, onActivePlanCreated, onFlowApplied, resetMapFlowId, onRequestNextSession, initialSelectedSessionId, adaptiveExplanation, nextSession, initialNodeDisplayBundle, isVisible = true, debug, mapRenderer }: ResetMapV2Props) {
   // localDailyCapActive: createSession이 DAILY_LIMIT_REACHED 반환 시 클라이언트 측 즉시 반영 (방어)
   const [localDailyCapActive, setLocalDailyCapActive] = useState(false)
   // daily cap: today_completed || localDailyCapActive, activePlan 없을 때 → 현재 세션 없음, 다음 세션 locked
@@ -333,6 +335,8 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       return
     }
 
+    if (!isVisible) return
+
     void resolveAuthToken().then(async (token) => {
       if (!token || cancelled) return
       const res = await getSessionNodeDisplayBatch(token, {
@@ -346,7 +350,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
     return () => {
       cancelled = true
     }
-  }, [total, completed, resolveAuthToken, initialNodeDisplayBundle])
+  }, [total, completed, resolveAuthToken, initialNodeDisplayBundle, isVisible])
 
   // prop 변경(세션 완료 후 null 리셋 등) 반영
   // PR-RISK-08b: activePlan non-null→null 시 identity 기반 정밀 invalidation (prefix purge 대체)
@@ -366,6 +370,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
 
   // 현재 세션 lite만 있을 때 plan-summary 미리 로드 (패널 첫 클릭 시 체감 개선)
   useEffect(() => {
+    if (!isVisible) return
     const plan = activePlan ?? fullPlan
     if (!plan || effectiveCurrentSession === null) return
     if (plan.session_number !== effectiveCurrentSession) return
@@ -399,10 +404,11 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       }
       if (timeoutId !== null) clearTimeout(timeoutId)
     }
-  }, [activePlan, fullPlan, effectiveCurrentSession, loadSessionSummary])
+  }, [activePlan, fullPlan, effectiveCurrentSession, loadSessionSummary, isVisible])
 
   /** PR-PERF-22: Prefetch bootstrap for current session so panel renders immediately on click. */
   useEffect(() => {
+    if (!isVisible) return
     if (effectiveCurrentSession === null) return
     if (fullPlan !== null) return
     if (bootstrapCacheRef.current.has(effectiveCurrentSession)) return
@@ -434,10 +440,11 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       }
       if (timeoutId !== null) clearTimeout(timeoutId)
     }
-  }, [effectiveCurrentSession, fullPlan, loadSessionBootstrap])
+  }, [effectiveCurrentSession, fullPlan, loadSessionBootstrap, isVisible])
 
   // 과거 세션: 가장 최근 완료 세션 미리 로드 (클릭 시 체감 개선)
   useEffect(() => {
+    if (!isVisible) return
     if (completed < 1) return
     if (summaryCacheRef.current.has(completed)) return
 
@@ -468,7 +475,7 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       }
       if (timeoutId !== null) clearTimeout(timeoutId)
     }
-  }, [completed, loadSessionSummary])
+  }, [completed, loadSessionSummary, isVisible])
 
   // 서버에서 todayCompleted=false로 갱신되면 localDailyCapActive도 리셋
   useEffect(() => {
@@ -803,10 +810,15 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
 
   // 미디어 prefetch — critical path 밖. 운동 목록 렌더 후, paint 완료·idle 시점에 실행.
   useEffect(() => {
+    if (!isVisible) return
     if (!exercises?.length) return
     const ids = [...new Set(exercises.map(e => e.templateId).filter(Boolean))]
     if (ids.length === 0) return
     let cancelled = false
+    let raf1 = 0
+    let raf2 = 0
+    let idleId: number | null = null
+    let timeoutId: number | null = null
     const runPrefetch = () => {
       if (cancelled) return
       getSessionSafe().then(({ session }) => {
@@ -815,22 +827,27 @@ export function ResetMapV2({ total, completed, activePlan, todayCompleted, nextU
       })
     }
     // 2 RAF: content paint 완료 후, requestIdleCallback으로 main thread idle 시 prefetch
-    const raf1 = requestAnimationFrame(() => {
+    raf1 = requestAnimationFrame(() => {
       if (cancelled) return
-      requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
         if (cancelled) return
         if (typeof requestIdleCallback !== 'undefined') {
-          requestIdleCallback(runPrefetch, { timeout: 1500 })
+          idleId = requestIdleCallback(runPrefetch, { timeout: 1500 }) as unknown as number
         } else {
-          setTimeout(runPrefetch, 300)
+          timeoutId = window.setTimeout(runPrefetch, 300)
         }
       })
     })
     return () => {
       cancelled = true
       cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+      if (idleId !== null && typeof cancelIdleCallback !== 'undefined') {
+        cancelIdleCallback(idleId)
+      }
+      if (timeoutId !== null) clearTimeout(timeoutId)
     }
-  }, [exercises])
+  }, [exercises, isVisible])
 
   useEffect(() => {
     setDisplayVersion((v) => v + 1)
