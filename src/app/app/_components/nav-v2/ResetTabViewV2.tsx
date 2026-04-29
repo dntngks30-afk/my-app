@@ -33,6 +33,10 @@ const FALLBACK_ISSUE_ROWS: readonly { label: string; sub: string }[] = [
 
 type LoadingState = 'loading' | 'ready' | 'error';
 
+type ResetTabViewV2Props = {
+  isVisible?: boolean;
+};
+
 function deriveInitialSelectedIssueKey(data: ResetRecommendationResponse): string | null {
   const { issues, featured_issue_key, featured } = data;
   if (issues.some((i) => i.issue_key === featured_issue_key)) {
@@ -74,7 +78,7 @@ function mediaFetchErrorMessage(result: {
   return '영상을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
 }
 
-export function ResetTabViewV2() {
+export function ResetTabViewV2({ isVisible = true }: ResetTabViewV2Props) {
   const [phase, setPhase] = useState<LoadingState>('loading');
   const [recommendation, setRecommendation] =
     useState<ResetRecommendationResponse | null>(null);
@@ -94,8 +98,13 @@ export function ResetTabViewV2() {
   const previewRequestIdRef = useRef(0);
   const posterUrlCacheRef = useRef<Record<string, string>>({});
   const modalLoadingStretchKeyRef = useRef<string | null>(null);
+  const recommendationsRequestedRef = useRef(false);
 
   useEffect(() => {
+    if (!isVisible) return;
+    if (recommendationsRequestedRef.current) return;
+
+    recommendationsRequestedRef.current = true;
     let cancelled = false;
 
     (async () => {
@@ -118,7 +127,7 @@ export function ResetTabViewV2() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isVisible]);
 
   useEffect(() => {
     return () => {
@@ -162,6 +171,7 @@ export function ResetTabViewV2() {
   }, [selectedIssue?.issue_key, selectedIssue?.primary_stretch?.stretch_key]);
 
   useEffect(() => {
+    if (!isVisible) return;
     if (phase !== 'ready' || !selectedStretchKey) {
       return;
     }
@@ -196,7 +206,7 @@ export function ResetTabViewV2() {
       setPreviewThumbUrl(url);
       setPreviewThumbForKey(selectedStretchKey);
     })();
-  }, [phase, selectedStretchKey]);
+  }, [isVisible, phase, selectedStretchKey]);
 
   const handlePlaySelectedStretch = useCallback(async () => {
     if (phase !== 'ready' || !selectedIssue || !selectedStretch) return;

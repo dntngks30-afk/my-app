@@ -88,7 +88,11 @@ export default function MyTab({ isVisible }: MyTabProps) {
   return (
     <div className="min-h-screen pb-20" style={{ backgroundColor: APP_TAB_BG }}>
       <main className="overflow-y-auto">
-        <JourneyTabViewV2 completedSessions={completedSessions} totalSessions={totalSessions} />
+        <JourneyTabViewV2
+          isVisible={isVisible}
+          completedSessions={completedSessions}
+          totalSessions={totalSessions}
+        />
       </main>
     </div>
   );

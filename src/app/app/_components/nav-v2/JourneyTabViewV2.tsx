@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
@@ -33,6 +33,7 @@ import { normalizeJourneyResetMapProgress } from '@/lib/journey/resolveJourneyRe
 const SUPPORT_FEEDBACK_MAILTO = 'mailto:support@posturelab.com?subject=MOVE%20RE%20피드백';
 
 export interface JourneyTabViewV2Props {
+  isVisible?: boolean;
   completedSessions?: number | null;
   totalSessions?: number | null;
 }
@@ -40,6 +41,7 @@ export interface JourneyTabViewV2Props {
 type SheetId = 'faq' | 'ops' | 'privacy' | 'terms' | null;
 
 export function JourneyTabViewV2({
+  isVisible = true,
   completedSessions = 0,
   totalSessions = null,
 }: JourneyTabViewV2Props) {
@@ -48,8 +50,13 @@ export function JourneyTabViewV2({
   const [sheet, setSheet] = useState<SheetId>(null);
   const [journeySummary, setJourneySummary] = useState<JourneySummaryResponse | null>(null);
   const [journeyLoad, setJourneyLoad] = useState<'idle' | 'loading' | 'ok' | 'err'>('idle');
+  const journeySummaryRequestedRef = useRef(false);
 
   useEffect(() => {
+    if (!isVisible) return;
+    if (journeySummaryRequestedRef.current) return;
+
+    journeySummaryRequestedRef.current = true;
     let cancelled = false;
     (async () => {
       setJourneyLoad('loading');
@@ -76,7 +83,7 @@ export function JourneyTabViewV2({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isVisible]);
 
   const resetMap = normalizeJourneyResetMapProgress({
     total: totalSessions,

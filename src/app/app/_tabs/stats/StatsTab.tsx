@@ -15,10 +15,9 @@ interface StatsTabProps {
 }
 
 export default function StatsTab({ isVisible }: StatsTabProps) {
-  void isVisible;
   return (
     <div className="min-h-screen pb-20" style={{ backgroundColor: APP_TAB_BG }}>
-      <ResetTabViewV2 />
+      <ResetTabViewV2 isVisible={isVisible} />
     </div>
   );
 }
