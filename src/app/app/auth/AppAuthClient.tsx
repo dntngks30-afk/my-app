@@ -11,7 +11,13 @@ import {
   getOAuthErrorMessage,
   type OAuthProvider,
 } from '@/lib/auth/startOAuthClient';
-import { getUaLower, isAuthHandoffInAppBrowser, detectIsAndroid, detectIsIos } from '@/lib/browser/detectInAppBrowser';
+import {
+  getUaLower,
+  isAuthHandoffInAppBrowser,
+  detectIsAndroid,
+  detectIsIos,
+  isKakaoInAppBrowser,
+} from '@/lib/browser/detectInAppBrowser';
 import { buildAuthHandoffAbsoluteUrl } from '@/lib/auth/buildAuthHandoffUrl';
 import { buildAndroidChromeIntentUrl } from '@/lib/auth/androidChromeIntent';
 import {
@@ -84,12 +90,66 @@ export default function AppAuthClient({
     [env],
   );
 
+  /**
+   * PR-AUTH-IOS-LOGIN-POLICY-01 최종 선택:
+   * - Android in-app: 변경 없이 항상 handoff → Chrome intent.
+   * - iOS Safari/일반 브라우저: inApp=false 이라 아래 분기 전에 startOAuthClient 로 직접 OAuth.
+   * - iOS KakaoTalk in-app + Kakao만: handoff/sheet 없이 startOAuthClient('kakao') (무반응 방지).
+   * - iOS 기타 인앱(Line 등) + Kakao: 기존처럼 handoff sheet(외부 Safari 유도) 유지.
+   */
   const runOAuth = (provider: OAuthProvider) => {
     if (!uaHydrated) return;
+    const ua = getUaLower();
+
     if (!env.inApp) {
       void startOAuthClient({ provider, next: safeNext, setOauthError });
       return;
     }
+
+    if (env.isAndroid) {
+      const e = bridgeExtras();
+      const url = buildAuthHandoffAbsoluteUrl({
+        method: provider === 'google' ? 'google' : 'kakao',
+        next: safeNext,
+        publicResultId: e.publicResultId,
+        stage: e.stage,
+        anonId: e.anonId,
+        pilot: e.pilot,
+      });
+      if (!url) {
+        void startOAuthClient({ provider, next: safeNext, setOauthError });
+        return;
+      }
+      openHandoffUrl(url);
+      return;
+    }
+
+    if (env.isIos) {
+      if (provider === 'google') {
+        setOauthError('iOS에서는 카카오 또는 이메일로 계속해 주세요.');
+        return;
+      }
+      if (provider === 'kakao' && isKakaoInAppBrowser(ua)) {
+        void startOAuthClient({ provider: 'kakao', next: safeNext, setOauthError });
+        return;
+      }
+      const e = bridgeExtras();
+      const url = buildAuthHandoffAbsoluteUrl({
+        method: 'kakao',
+        next: safeNext,
+        publicResultId: e.publicResultId,
+        stage: e.stage,
+        anonId: e.anonId,
+        pilot: e.pilot,
+      });
+      if (!url) {
+        void startOAuthClient({ provider: 'kakao', next: safeNext, setOauthError });
+        return;
+      }
+      openHandoffUrl(url);
+      return;
+    }
+
     const e = bridgeExtras();
     const url = buildAuthHandoffAbsoluteUrl({
       method: provider === 'google' ? 'google' : 'kakao',
@@ -140,6 +200,7 @@ export default function AppAuthClient({
             <AuthSocialButtons
               onGoogle={() => runOAuth('google')}
               onKakao={() => runOAuth('kakao')}
+              showGoogle={uaHydrated ? !env.isIos : false}
               oauthError={oauthError}
               disabled={!uaHydrated}
             />

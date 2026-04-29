@@ -7,6 +7,8 @@ const AUTH_SOCIAL_BUTTON_CLASS =
 interface AuthSocialButtonsProps {
   onGoogle: () => void;
   onKakao: () => void;
+  /** 기본 true. false면 Google 버튼 미렌더 (iOS 정책) */
+  showGoogle?: boolean;
   disabled?: boolean;
   oauthError: string | null;
 }
@@ -14,14 +16,17 @@ interface AuthSocialButtonsProps {
 export default function AuthSocialButtons({
   onGoogle,
   onKakao,
+  showGoogle = true,
   disabled,
   oauthError,
 }: AuthSocialButtonsProps) {
   return (
     <div className="space-y-3">
-      <button type="button" onClick={onGoogle} disabled={disabled} className={AUTH_SOCIAL_BUTTON_CLASS}>
-        Google로 계속하기
-      </button>
+      {showGoogle ? (
+        <button type="button" onClick={onGoogle} disabled={disabled} className={AUTH_SOCIAL_BUTTON_CLASS}>
+          Google로 계속하기
+        </button>
+      ) : null}
       <button type="button" onClick={onKakao} disabled={disabled} className={AUTH_SOCIAL_BUTTON_CLASS}>
         카카오로 계속하기
       </button>

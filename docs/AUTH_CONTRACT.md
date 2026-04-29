@@ -109,8 +109,9 @@
 | `/api/payments` | Bearer + getUser 직접 | 결제 흐름 — 변경 금지 |
 | `/api/admin/check` | Bearer + getUser | Admin 전용 |
 | `/api/admin/users/plan-status` | Bearer + getUser | Admin 전용 |
-| `/api/stripe/checkout` | Bearer + getUser | 결제 — 변경 금지 |
+| `/api/stripe/checkout` | Bearer + getUser | PR-AUTH-IOS-LOGIN-POLICY-01: Stripe 고객 이메일은 `authUser.email` 우선, 없으면 `public.users.email` 폴백. 그 외 결제 로직 변경 시 회귀 검증. |
 | `/api/stripe/verify-session` | Bearer + getUser | 결제 — 변경 금지 |
+| `/api/auth/collect-email` | Bearer + `getServerSupabaseAdmin().auth.getUser` | PR-AUTH-IOS-LOGIN-POLICY-01: Body `{ email }`(URL/query 금지). `users.email` 갱신 + 가능 시 `auth.admin.updateUserById`. |
 
 ### 3.5 Special / Non-User Auth
 
@@ -137,6 +138,7 @@
 |--------|------|------|
 | **AppAuthGate** | getSessionSafe → getCachedBootstrap(session.access_token) | /app/* 래퍼. plan_status 확인. |
 | **`/auth/handoff`** | 공개. 인앱→외부 브라우저 인증 handoff(bridge·pilot LS 복구, OAuth/이메일 분기) | PR-AUTH-HANDOFF-01 |
+| **`/auth/collect-email`** | 로그인 세션 필요. Kakao 등 OAuth 후 JWT `email` 없을 때 결제 전 `users.email` 보정 | PR-AUTH-IOS-LOGIN-POLICY-01; `next`는 sanitizeAuthNextPath |
 | **SessionPanelV2** | getSessionSafe → session.user.id | |
 | **RoutineHubClient** | getSessionSafe → Bearer | |
 | **SessionRoutinePanel** | getSessionSafe → Bearer | |

@@ -70,3 +70,8 @@ export function detectInAppBrowserAppName(uaLower: string): InAppBrowserAppName 
 export function isAuthHandoffInAppBrowser(uaLower: string): boolean {
   return detectInAppBrowserAppName(uaLower) !== null;
 }
+
+/** KakaoTalk 앱 내장 브라우저 — PR-AUTH-IOS-LOGIN-POLICY-01 OAuth 직행 분기용 */
+export function isKakaoInAppBrowser(uaLower: string): boolean {
+  return detectInAppBrowserAppName(uaLower) === 'kakao';
+}

@@ -115,11 +115,15 @@ export default function ExecutionStartClient() {
 
       const { data: userRow } = await supabaseBrowser
         .from('users')
-        .select('plan_status')
+        .select('plan_status, email')
         .eq('id', session.user.id)
         .single();
 
-      const planStatus = (userRow as { plan_status?: string } | null)?.plan_status ?? null;
+      const planStatus = (userRow as { plan_status?: string; email?: string | null } | null)?.plan_status ?? null;
+      const usersEmail =
+        (userRow as { plan_status?: string; email?: string | null } | null)?.email?.trim() ?? '';
+      const jwtEmail = session.user.email?.trim() ?? '';
+
       if (planStatus === 'active') {
         router.replace('/onboarding');
         return;
@@ -130,6 +134,13 @@ export default function ExecutionStartClient() {
           '파일럿 권한을 확인하는 중입니다. 결제 단계로 넘어갈 수 없습니다.'
         );
         setView('error');
+        return;
+      }
+
+      if (!jwtEmail && !usersEmail) {
+        router.replace(
+          '/auth/collect-email?next=' + encodeURIComponent('/execution/start')
+        );
         return;
       }
 

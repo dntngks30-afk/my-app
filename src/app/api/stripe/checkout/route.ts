@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { getStripeServerClient, getOrCreateStripeCustomer, getStripeErrorMessage } from '@/lib/stripe';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { coalesceStripeUserEmail } from '@/lib/auth/stripeCheckoutEmail';
 
 function genRequestId(): string {
   return `chk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -81,7 +82,16 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = authUser.id;
-    const userEmail = authUser.email ?? '';
+    let userEmail = coalesceStripeUserEmail(authUser.email, null);
+
+    if (!userEmail) {
+      const { data: emailRow } = await supabaseAdmin
+        .from('users')
+        .select('email')
+        .eq('id', userId)
+        .maybeSingle();
+      userEmail = coalesceStripeUserEmail(null, (emailRow as { email?: string | null } | null)?.email);
+    }
 
     // 3. Body 파싱
     let body: Record<string, unknown> = {};

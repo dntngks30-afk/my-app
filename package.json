@@ -95,6 +95,7 @@
     "test:pilot-session": "node scripts/pilot-session-smoke-bundle.mjs",
     "test:pilot-camera": "node scripts/pilot-camera-smoke-bundle.mjs",
     "test:pilot-auth": "node scripts/pilot-auth-url-smoke.mjs",
+    "test:auth-ios-login-policy": "npx tsx scripts/auth-ios-login-policy-smoke.ts",
     "test:auth-pilot-signup": "npx tsx scripts/auth-pilot-password-signup-smoke.ts",
     "test:pilot-build": "node scripts/pilot-build-gate.mjs",
     "test:pilot-ready": "node scripts/pilot-ready-smoke-bundle.mjs",
