@@ -12,6 +12,7 @@ import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { FUNNEL_KEY } from '@/lib/public/intro-funnel';
 import StitchLanding from '@/components/stitch/landing/StitchLanding';
+import LandingReturnHomeCta from '@/components/landing/LandingReturnHomeCta';
 import {
   clearPublicPreAuthTempStateForPilotStart,
   getPilotCodeFromCurrentUrl,
@@ -51,5 +52,10 @@ export default function LandingPage() {
     router.push('/intro/welcome');
   };
 
-  return <StitchLanding onStart={handleStart} />;
+  return (
+    <>
+      <StitchLanding onStart={handleStart} />
+      <LandingReturnHomeCta />
+    </>
+  );
 }
