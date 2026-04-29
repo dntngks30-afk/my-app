@@ -9,7 +9,12 @@ import {
   RotateCcw,
   Loader2,
 } from 'lucide-react';
-import type { ResetIssueViewModel, ResetRecommendationResponse } from '@/lib/reset/types';
+import type {
+  ResetApiResult,
+  ResetIssueViewModel,
+  ResetMediaResponse,
+  ResetRecommendationResponse,
+} from '@/lib/reset/types';
 import { fetchResetMedia } from '@/lib/reset/client';
 import {
   getCachedResetRecommendations,
@@ -100,6 +105,12 @@ export function ResetTabViewV2({ isVisible = true }: ResetTabViewV2Props) {
   });
   const mediaRequestIdRef = useRef(0);
   const previewRequestIdRef = useRef(0);
+  const mediaResponseCacheRef = useRef<Map<string, ResetMediaResponse>>(
+    new Map()
+  );
+  const mediaInflightRef = useRef<
+    Map<string, Promise<ResetApiResult<ResetMediaResponse>>>
+  >(new Map());
   const posterUrlCacheRef = useRef<Record<string, string>>({});
   const modalLoadingStretchKeyRef = useRef<string | null>(null);
   const recommendationsRequestedRef = useRef(false);
@@ -154,6 +165,34 @@ export function ResetTabViewV2({ isVisible = true }: ResetTabViewV2Props) {
     setMediaModal({ status: 'closed' });
   }, []);
 
+  const getResetMediaForStretch = useCallback(
+    (stretchKey: string): Promise<ResetApiResult<ResetMediaResponse>> => {
+      const cached = mediaResponseCacheRef.current.get(stretchKey);
+      if (cached) return Promise.resolve({ ok: true, data: cached });
+
+      const existing = mediaInflightRef.current.get(stretchKey);
+      if (existing) return existing;
+
+      const request = fetchResetMedia({ stretch_key: stretchKey }).then(
+        (result) => {
+          if (result.ok) {
+            mediaResponseCacheRef.current.set(stretchKey, result.data);
+          }
+          mediaInflightRef.current.delete(stretchKey);
+          return result;
+        },
+        (error) => {
+          mediaInflightRef.current.delete(stretchKey);
+          throw error;
+        }
+      );
+
+      mediaInflightRef.current.set(stretchKey, request);
+      return request;
+    },
+    []
+  );
+
   const selectedIssue = useMemo(() => {
     if (phase !== 'ready' || !recommendation) return null;
     return deriveSelectedIssue(recommendation, selectedIssueKey);
@@ -189,6 +228,15 @@ export function ResetTabViewV2({ isVisible = true }: ResetTabViewV2Props) {
       return;
     }
 
+    const cachedMedia = mediaResponseCacheRef.current.get(selectedStretchKey);
+    const cachedMediaPoster = cachedMedia?.media.posterUrl;
+    if (typeof cachedMediaPoster === 'string' && cachedMediaPoster.length > 0) {
+      setPreviewThumbUrl(cachedMediaPoster);
+      setPreviewThumbForKey(selectedStretchKey);
+      setPreviewThumbLoading(false);
+      return;
+    }
+
     const cached = posterUrlCacheRef.current[selectedStretchKey];
     if (cached) {
       setPreviewThumbUrl(cached);
@@ -199,27 +247,66 @@ export function ResetTabViewV2({ isVisible = true }: ResetTabViewV2Props) {
 
     previewRequestIdRef.current += 1;
     const rid = previewRequestIdRef.current;
+    const stretchKey = selectedStretchKey;
     setPreviewThumbUrl(null);
     setPreviewThumbForKey(null);
-    setPreviewThumbLoading(true);
 
-    (async () => {
-      const result = await fetchResetMedia({
-        stretch_key: selectedStretchKey,
-      });
+    let timeoutId: number | null = null;
+    let idleId: number | null = null;
+
+    const loadPreview = () => {
       if (rid !== previewRequestIdRef.current) return;
+      if (!isVisible || phase !== 'ready' || selectedStretchKey !== stretchKey) {
+        return;
+      }
+
+      setPreviewThumbLoading(true);
+
+      void getResetMediaForStretch(stretchKey)
+        .then((result) => {
+          if (rid !== previewRequestIdRef.current) return;
+          if (!isVisible || selectedStretchKey !== stretchKey) return;
+
+          setPreviewThumbLoading(false);
+          if (!result.ok) return;
+
+          const url = result.data.media.posterUrl;
+          if (typeof url !== 'string' || url.length === 0) return;
+
+          posterUrlCacheRef.current = {
+            ...posterUrlCacheRef.current,
+            [stretchKey]: url,
+          };
+          setPreviewThumbUrl(url);
+          setPreviewThumbForKey(stretchKey);
+        })
+        .catch(() => {
+          if (rid !== previewRequestIdRef.current) return;
+          if (!isVisible || selectedStretchKey !== stretchKey) return;
+          setPreviewThumbLoading(false);
+        });
+    };
+
+    const requestIdle = window.requestIdleCallback?.bind(window);
+    const cancelIdle = window.cancelIdleCallback?.bind(window);
+
+    if (typeof requestIdle === 'function') {
+      idleId = requestIdle(loadPreview, { timeout: 1200 });
+    } else {
+      timeoutId = window.setTimeout(loadPreview, 250);
+    }
+
+    return () => {
+      previewRequestIdRef.current += 1;
       setPreviewThumbLoading(false);
-      if (!result.ok) return;
-      const url = result.data.media.posterUrl;
-      if (typeof url !== 'string' || url.length === 0) return;
-      posterUrlCacheRef.current = {
-        ...posterUrlCacheRef.current,
-        [selectedStretchKey]: url,
-      };
-      setPreviewThumbUrl(url);
-      setPreviewThumbForKey(selectedStretchKey);
-    })();
-  }, [isVisible, phase, selectedStretchKey]);
+      if (idleId !== null && typeof cancelIdle === 'function') {
+        cancelIdle(idleId);
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [getResetMediaForStretch, isVisible, phase, selectedStretchKey]);
 
   const handlePlaySelectedStretch = useCallback(async () => {
     if (phase !== 'ready' || !selectedIssue || !selectedStretch) return;
@@ -248,9 +335,7 @@ export function ResetTabViewV2({ isVisible = true }: ResetTabViewV2Props) {
       ...snapshot,
     });
 
-    const result = await fetchResetMedia({
-      stretch_key: selectedStretch.stretch_key,
-    });
+    const result = await getResetMediaForStretch(selectedStretch.stretch_key);
 
     if (requestId !== mediaRequestIdRef.current) return;
 
@@ -266,7 +351,7 @@ export function ResetTabViewV2({ isVisible = true }: ResetTabViewV2Props) {
     }
 
     setMediaModal({ status: 'ready', data: result.data });
-  }, [phase, selectedIssue, selectedStretch, mediaModal]);
+  }, [phase, selectedIssue, selectedStretch, mediaModal, getResetMediaForStretch]);
 
   const badgeLabel = (() => {
     if (phase === 'loading') return '패턴을 불러오는 중…';
