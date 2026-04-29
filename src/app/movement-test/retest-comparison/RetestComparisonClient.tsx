@@ -123,10 +123,10 @@ export default function RetestComparisonClient({
                 {error || '비교 결과를 불러올 수 없습니다.'}
               </p>
               <Button
-                onClick={() => router.push('/my-routine')}
+                onClick={() => router.push('/app/home')}
                 className="bg-[var(--brand)] text-white"
               >
-                내 루틴으로 돌아가기
+                내 리셋맵으로 돌아가기
               </Button>
             </CardContent>
           </Card>
@@ -402,10 +402,10 @@ export default function RetestComparisonClient({
         {/* 액션 버튼 */}
         <div className="flex gap-4">
           <Button
-            onClick={() => router.push('/my-routine')}
+            onClick={() => router.push('/app/home')}
             className="flex-1 bg-[var(--brand)] text-white"
           >
-            내 루틴 보기
+            내 리셋맵 보기
           </Button>
           <Button
             onClick={() => router.push('/movement-test/refine-bridge')}

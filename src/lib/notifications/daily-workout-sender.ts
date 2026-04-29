@@ -241,9 +241,9 @@ async function sendEmailWorkoutNotification(
                 `).join('')}
               </div>
               <div style="text-align: center; margin-top: 30px;">
-                <a href="${process.env.NEXT_PUBLIC_BASE_URL || 'https://posturelab.com'}/my-routine" 
+                <a href="${process.env.NEXT_PUBLIC_BASE_URL || 'https://posturelab.com'}/app/home" 
                    style="display: inline-block; background-color: #2563EB; color: #FFFFFF; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600;">
-                  내 루틴 보기
+                  내 리셋맵 보기
                 </a>
               </div>
             </td>
@@ -263,7 +263,7 @@ async function sendEmailWorkoutNotification(
 
 ${exerciseList}
 
-내 루틴 보기: ${process.env.NEXT_PUBLIC_BASE_URL || 'https://posturelab.com'}/my-routine
+내 리셋맵 보기: ${process.env.NEXT_PUBLIC_BASE_URL || 'https://posturelab.com'}/app/home
     `;
 
     const { error } = await resend.emails.send({
@@ -311,7 +311,7 @@ export async function sendDailyWorkoutNotifications(targetDate: Date = new Date(
         // 해당 일자의 운동 정보 조회
         const { data: dayData } = await supabase
           .from('workout_routine_days')
-          .select('exercises')
+          .select('id, exercises')
           .eq('routine_id', target.routine_id)
           .eq('day_number', target.day_number)
           .single();
@@ -336,7 +336,7 @@ export async function sendDailyWorkoutNotifications(targetDate: Date = new Date(
           message,
           routine_id: target.routine_id,
           routine_day_id: dayData.id,
-          action_url: '/my-routine',
+          action_url: '/app/home',
           scheduled_for: new Date().toISOString(),
         };
 
@@ -357,7 +357,7 @@ export async function sendDailyWorkoutNotifications(targetDate: Date = new Date(
           try {
             const subscription = JSON.parse(target.push_token);
             pushSent = await sendPushNotification(subscription, title, message, {
-              url: '/my-routine',
+              url: '/app/home',
               routineId: target.routine_id,
               dayNumber: target.day_number,
             });

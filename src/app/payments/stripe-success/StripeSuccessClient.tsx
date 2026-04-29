@@ -214,10 +214,10 @@ export default function StripeSuccessClient({
           <p className="text-sm text-[var(--muted)]">{error}</p>
           <div className="flex flex-col gap-3">
             <Link
-              href="/my-report"
+              href="/app/home"
               className="inline-block rounded-lg bg-[var(--brand)] px-6 py-3 text-sm font-semibold text-white hover:opacity-90"
             >
-              내 리포트
+              내 리셋맵으로 이동
             </Link>
             <Link
               href="/"
@@ -295,7 +295,7 @@ export default function StripeSuccessClient({
               <div className="flex items-center gap-3">
                 <span className="text-xl">✅</span>
                 <p className="text-sm font-medium text-[var(--text)]">
-                  운동 루틴이 자동으로 생성되었습니다!
+                  실행 준비가 완료되었습니다
                 </p>
               </div>
             ) : null}
@@ -314,7 +314,7 @@ export default function StripeSuccessClient({
                   ? '심층분석을 시작하세요'
                   : paymentInfo.isSubscription
                     ? routineCreated
-                      ? '생성된 운동 루틴을 확인하고 시작하세요'
+                      ? '리셋맵에서 다음 실행을 이어가세요'
                       : '운동 검사를 완료하고 맞춤 루틴을 받으세요'
                     : '운동 검사를 완료하고 맞춤 루틴을 받으세요'}
               </p>
@@ -331,10 +331,10 @@ export default function StripeSuccessClient({
               </Link>
             ) : paymentInfo.isSubscription && routineCreated ? (
               <Link
-                href="/my-routine"
+                href="/app/home"
                 className="block w-full rounded-xl bg-[var(--brand)] py-4 text-center text-lg font-bold text-white hover:opacity-90"
               >
-                운동 루틴 시작하기
+                리셋맵 시작하기
               </Link>
             ) : (
               <Link
@@ -344,12 +344,18 @@ export default function StripeSuccessClient({
                 운동 검사 시작하기
               </Link>
             )}
-            <Link
-              href="/my-report"
-              className="block w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] py-3 text-center font-semibold text-[var(--text)] hover:bg-[var(--surface-2)]"
-            >
-              내 리포트
-            </Link>
+            {!(
+              paymentInfo.isSubscription &&
+              routineCreated &&
+              !isValidNextForRedirect(nextParam ?? undefined)
+            ) && (
+              <Link
+                href="/app/home"
+                className="block w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] py-3 text-center font-semibold text-[var(--text)] hover:bg-[var(--surface-2)]"
+              >
+                내 리셋맵
+              </Link>
+            )}
           </div>
         </div>
 
@@ -379,17 +385,10 @@ export default function StripeSuccessClient({
 
         <div className="flex justify-center gap-4 text-sm">
           <Link
-            href="/my-report"
+            href="/app/home"
             className="text-[var(--muted)] hover:text-[var(--text)]"
           >
-            내 리포트
-          </Link>
-          <span className="text-[var(--border)]">|</span>
-          <Link
-            href="/my-routine"
-            className="text-[var(--muted)] hover:text-[var(--text)]"
-          >
-            내 루틴
+            내 리셋맵
           </Link>
           <span className="text-[var(--border)]">|</span>
           <Link

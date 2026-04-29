@@ -163,96 +163,39 @@ export default function PaymentSuccessClient({
           </div>
           <h1 className="text-3xl font-bold text-slate-100">결제 완료!</h1>
           <p className="mt-2 text-lg font-semibold text-green-400">
-            🎉 이제 정밀 분석이 시작됩니다
+            🎉 플랜이 활성화되었습니다
           </p>
         </div>
 
         {isBasicPlan && (
-          <div className="rounded-xl border-2 border-[#f97316] bg-gradient-to-br from-[#f97316]/10 to-slate-900 p-6">
+          <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-6">
             <div className="mb-4 flex items-center gap-3">
-              <span className="text-3xl">📸</span>
+              <span className="text-3xl">🚀</span>
               <div>
-                <h2 className="text-xl font-bold text-slate-100">
-                  다음 단계: 사진 업로드
-                </h2>
+                <h2 className="text-xl font-bold text-slate-100">결제가 완료되었어요</h2>
                 <p className="text-sm text-slate-400">
-                  정밀 분석을 위한 사진을 등록해주세요
+                  MOVE RE 공개 퍼널에서 바로 실행 흐름을 이어가려면 아래를 눌러 주세요.
                 </p>
               </div>
             </div>
-            <div className="mb-6 space-y-3">
-              <div className="flex items-center gap-3 rounded-lg bg-slate-950/50 p-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f97316] text-sm font-bold text-white">
-                  1
-                </div>
-                <span className="text-sm text-slate-300">
-                  정면 전신 사진 촬영
-                </span>
-              </div>
-              <div className="flex items-center gap-3 rounded-lg bg-slate-950/50 p-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f97316] text-sm font-bold text-white">
-                  2
-                </div>
-                <span className="text-sm text-slate-300">
-                  측면 전신 사진 촬영
-                </span>
-              </div>
-              <div className="flex items-center gap-3 rounded-lg bg-slate-950/50 p-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-700 text-sm font-bold text-slate-400">
-                  3
-                </div>
-                <span className="text-sm text-slate-400">
-                  전문가 분석 후 24시간 내 리포트 발송
-                </span>
-              </div>
-            </div>
             <Link
-              href="/full-assessment"
+              href="/"
               className="block w-full rounded-xl bg-gradient-to-r from-[#f97316] to-[#fb923c] py-4 text-center text-lg font-bold text-white shadow-[0_0_30px_rgba(249,115,22,0.5)] transition hover:shadow-[0_0_40px_rgba(249,115,22,0.6)]"
             >
-              📸 지금 사진 업로드하기
+              MOVE RE 시작하기
             </Link>
-            <p className="mt-3 text-center text-xs text-slate-500">
-              사진을 빨리 등록할수록 리포트를 빨리 받으실 수 있습니다
-            </p>
           </div>
         )}
 
         {(isStandardPlan || isPremiumPlan) && (
-          <div className="rounded-xl border-2 border-[#f97316] bg-gradient-to-br from-[#f97316]/10 to-slate-900 p-6">
+          <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-6">
             <div className="mb-4 flex items-center gap-3">
-              <span className="text-3xl">🎬</span>
+              <span className="text-3xl">🚀</span>
               <div>
-                <h2 className="text-xl font-bold text-slate-100">
-                  다음 단계: 운동 영상 업로드
-                </h2>
+                <h2 className="text-xl font-bold text-slate-100">다음 단계</h2>
                 <p className="text-sm text-slate-400">
-                  1:1 피드백을 위한 영상을 등록해주세요
+                  리셋맵에서 오늘의 실행을 이어가세요.
                 </p>
-              </div>
-            </div>
-            <div className="mb-6 space-y-3">
-              <div className="flex items-center gap-3 rounded-lg bg-slate-950/50 p-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f97316] text-sm font-bold text-white">
-                  1
-                </div>
-                <span className="text-sm text-slate-300">
-                  운동 영상 촬영 (30초~1분)
-                </span>
-              </div>
-              <div className="flex items-center gap-3 rounded-lg bg-slate-950/50 p-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f97316] text-sm font-bold text-white">
-                  2
-                </div>
-                <span className="text-sm text-slate-300">영상 업로드</span>
-              </div>
-              <div className="flex items-center gap-3 rounded-lg bg-slate-950/50 p-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-700 text-sm font-bold text-slate-400">
-                  3
-                </div>
-                <span className="text-sm text-slate-400">
-                  전문가 피드백 영상 제작 (주 1회)
-                </span>
               </div>
             </div>
             {isPremiumPlan && (
@@ -264,16 +207,16 @@ export default function PaymentSuccessClient({
                 <p className="text-sm text-slate-300">
                   1:1 Zoom 상담 일정을 예약하세요
                 </p>
-                <button className="mt-3 w-full rounded-lg bg-purple-600 py-2 text-sm font-semibold text-white hover:bg-purple-500">
-                  📅 Zoom 상담 예약하기
+                <button type="button" className="mt-3 w-full rounded-lg bg-purple-600 py-2 text-sm font-semibold text-white hover:bg-purple-500">
+                  Zoom 상담 예약하기
                 </button>
               </div>
             )}
             <Link
-              href="/my-report"
+              href="/app/home"
               className="block w-full rounded-xl bg-gradient-to-r from-[#f97316] to-[#fb923c] py-4 text-center text-lg font-bold text-white shadow-[0_0_30px_rgba(249,115,22,0.5)] transition hover:shadow-[0_0_40px_rgba(249,115,22,0.6)]"
             >
-              🎬 운동 영상 업로드하기
+              내 리셋맵으로 이동하기
             </Link>
           </div>
         )}
@@ -284,14 +227,14 @@ export default function PaymentSuccessClient({
               <span className="text-3xl">🚀</span>
               <div>
                 <h2 className="text-xl font-bold text-slate-100">다음 단계</h2>
-                <p className="text-sm text-slate-400">정밀 분석을 시작합니다</p>
+                <p className="text-sm text-slate-400">MOVE RE를 시작해 주세요</p>
               </div>
             </div>
             <Link
-              href="/full-assessment"
+              href="/"
               className="block w-full rounded-xl bg-gradient-to-r from-[#f97316] to-[#fb923c] py-4 text-center text-lg font-bold text-white"
             >
-              시작하기
+              MOVE RE 시작하기
             </Link>
           </div>
         )}
@@ -313,8 +256,8 @@ export default function PaymentSuccessClient({
         </div>
 
         <div className="flex justify-center gap-4 text-sm">
-          <Link href="/my-report" className="text-slate-400 hover:text-slate-200">
-            내 리포트
+          <Link href="/app/home" className="text-slate-400 hover:text-slate-200">
+            내 리셋맵
           </Link>
           <span className="text-slate-700">|</span>
           <Link href="/" className="text-slate-400 hover:text-slate-200">
