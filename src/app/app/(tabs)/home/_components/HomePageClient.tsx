@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
 import { invalidateActiveCache } from '@/lib/session/active-cache';
@@ -36,12 +37,49 @@ import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
-import { ResetMap as DonorResetMap } from '@/features/map_ui_import/home_map_20260315/components/reset-map';
+import type { DonorResetMapProps } from '@/features/map_ui_import/home_map_20260315/components/reset-map';
 
 interface HomePageClientProps {
   hideBottomNav?: boolean;
   isVisible?: boolean;
 }
+
+type DonorMapRendererProps = Omit<DonorResetMapProps, 'onNodeTap'> & {
+  onNodeTap: NonNullable<DonorResetMapProps['onNodeTap']>;
+};
+
+function DonorMapLoadingShell() {
+  return (
+    <div
+      className="flex h-full min-h-[480px] w-full items-center justify-center overflow-hidden rounded-[inherit] bg-[#07111f]"
+      aria-busy="true"
+      aria-label="리셋 지도 준비 중"
+    >
+      <div className="flex flex-col items-center gap-4 text-center">
+        <div className="relative h-24 w-28">
+          <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-orange-400/40 to-transparent" />
+          <div className="absolute left-1/2 top-4 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-orange-400/80 shadow-[0_0_18px_rgba(251,146,60,0.35)]" />
+          <div className="absolute left-[38%] top-11 h-2 w-2 rounded-full bg-white/35" />
+          <div className="absolute left-[56%] top-[68px] h-2 w-2 rounded-full bg-white/25" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-white">리셋 지도 준비 중</p>
+          <p className="mt-1 text-xs text-white/55">오늘의 움직임 경로를 불러오고 있어요.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const DonorResetMap = dynamic<DonorMapRendererProps>(
+  () =>
+    import('@/features/map_ui_import/home_map_20260315/components/reset-map')
+      .then((mod) => mod.ResetMap),
+  {
+    ssr: false,
+    loading: () => <DonorMapLoadingShell />,
+  }
+);
 
 function hrefForReadinessNext(code: SessionReadinessNextAction | undefined): string {
   switch (code) {
