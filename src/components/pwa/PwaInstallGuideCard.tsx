@@ -40,6 +40,7 @@ export function PwaInstallGuideCard({ className }: PwaInstallGuideCardProps) {
   const [dismissed, setDismissed] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [promptBusy, setPromptBusy] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [guideVariant, setGuideVariant] = useState<GuideVariant>('android');
 
   const dismissedByTtl = useMemo(() => (guide.hydrated ? getDismissedWithinTtl() : false), [guide.hydrated]);
@@ -84,6 +85,21 @@ export function PwaInstallGuideCard({ className }: PwaInstallGuideCardProps) {
     openGuide('android');
   };
 
+  const canShowCopyLink =
+    guideVariant === 'android' || guideVariant === 'ios_in_app';
+
+  const handleCopyLink = async () => {
+    if (typeof window === 'undefined') return;
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopyStatus('success');
+    } catch {
+      setCopyStatus('error');
+    } finally {
+      window.setTimeout(() => setCopyStatus('idle'), 2000);
+    }
+  };
+
   const copy =
     mode === 'android_install_prompt_available'
       ? {
@@ -91,16 +107,16 @@ export function PwaInstallGuideCard({ className }: PwaInstallGuideCardProps) {
           body: '매번 테스트를 다시 열 필요 없이, 오늘의 리셋맵으로 바로 돌아올 수 있어요.',
           cta: '앱 설치하기',
         }
-      : mode === 'android_install_prompt_unavailable'
+        : mode === 'android_install_prompt_unavailable'
         ? {
             title: '브라우저에서 MOVE RE를 설치할 수 있어요',
-            body: 'Chrome 또는 Samsung Internet에서 열면 홈 화면에 앱처럼 추가할 수 있어요.',
+            body: '설치 버튼이 보이지 않으면 링크를 복사해 Chrome 또는 Samsung Internet에서 열고, 브라우저 메뉴에서 ‘홈 화면에 추가’를 선택하세요.',
             cta: '설치 방법 보기',
           }
         : mode === 'android_in_app_browser'
           ? {
               title: '외부 브라우저에서 설치해주세요',
-              body: '현재 앱 안 브라우저에서는 설치가 제한될 수 있어요. Chrome 또는 Samsung Internet에서 열어 설치해주세요.',
+              body: '현재 앱 안 브라우저에서는 설치가 제한될 수 있어요. 링크를 복사한 뒤 Chrome 또는 Samsung Internet에서 열어주세요.',
               cta: '설치 방법 보기',
             }
           : mode === 'ios_safari'
@@ -166,10 +182,20 @@ export function PwaInstallGuideCard({ className }: PwaInstallGuideCardProps) {
           )}
           {guideVariant === 'android' && (
             <ol className="list-decimal space-y-1 pl-4">
-              <li>Chrome 또는 Samsung Internet에서 MOVE RE를 여세요.</li>
-              <li>브라우저 메뉴 또는 설치 버튼을 누르세요.</li>
-              <li>홈 화면에 추가 후 아이콘으로 다시 열어주세요.</li>
+              <li>아래 ‘링크 복사’를 누르세요.</li>
+              <li>Chrome 또는 Samsung Internet을 열고 주소창에 붙여넣으세요.</li>
+              <li>브라우저 메뉴 또는 설치 버튼에서 ‘홈 화면에 추가’를 선택하세요.</li>
+              <li>홈 화면의 MOVE RE 아이콘으로 다시 열어주세요.</li>
             </ol>
+          )}
+          {canShowCopyLink && (
+            <button
+              type="button"
+              onClick={() => void handleCopyLink()}
+              className="mt-3 rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-medium text-[#dfe8f6] hover:bg-white/10"
+            >
+              {copyStatus === 'success' ? '복사됐어요' : copyStatus === 'error' ? '복사 실패' : '링크 복사'}
+            </button>
           )}
         </div>
       )}
