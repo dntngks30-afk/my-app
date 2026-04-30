@@ -35,10 +35,7 @@ export async function subscribeToPush(publicKey: string): Promise<PushSubscripti
   if (existing) return existing;
 
   const keyBytes = urlBase64ToUint8Array(publicKey);
-  const applicationServerKey = keyBytes.buffer.slice(
-    keyBytes.byteOffset,
-    keyBytes.byteOffset + keyBytes.byteLength
-  );
+  const applicationServerKey = keyBytes as unknown as BufferSource;
 
   return registration.pushManager.subscribe({
     userVisibleOnly: true,
