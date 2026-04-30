@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import type { SessionReadinessResultSummary } from '@/lib/readiness/types';
-import { getSessionReadiness } from '@/lib/readiness/get-session-readiness';
+import { getResetRecommendationSummary } from '@/lib/reset/getResetRecommendationSummary';
 import { buildResetRecommendationPayload } from '@/lib/reset/recommend-reset';
 import type { ResetRecommendationPatternInput } from '@/lib/reset/types';
 
@@ -27,8 +27,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const readiness = await getSessionReadiness(userId);
-    const summary = readiness.result_summary ?? null;
+    const summary = await getResetRecommendationSummary(userId);
 
     if (!summary) {
       return ok(
