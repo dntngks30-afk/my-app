@@ -216,12 +216,12 @@ export function buildSessionReadinessV1(ctx: ReadinessContext): SessionReadiness
   } else if (!ctx.hasAnalysisInput) {
     status = 'needs_result_claim';
     next = 'GO_RESULT';
-  } else if (ctx.hasActiveSession) {
-    status = 'session_already_created';
-    next = 'GO_APP_HOME';
   } else if (!onboardingComplete) {
     status = 'needs_onboarding';
     next = 'GO_ONBOARDING';
+  } else if (ctx.hasActiveSession) {
+    status = 'session_already_created';
+    next = 'GO_APP_HOME';
   } else if (ctx.programFinished) {
     status = 'execution_blocked';
     next = 'GO_APP_HOME';
