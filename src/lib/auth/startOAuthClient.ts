@@ -20,10 +20,8 @@ export function getOAuthErrorMessage(provider: OAuthProvider | null): string {
 }
 
 /** Provider OAuth 힌트 — 이전 세션으로의 조용한 자동 재로그인 가능성을 줄이기 위한 유도(쿠키 삭제 아님). */
-function getOAuthQueryParams(provider: OAuthProvider): Record<string, string> {
-  return provider === 'google'
-    ? { prompt: 'select_account' }
-    : { prompt: 'login' };
+function getOAuthQueryParams(provider: OAuthProvider): Record<string, string> | undefined {
+  return provider === 'google' ? { prompt: 'select_account' } : undefined;
 }
 
 export async function startOAuthClient(params: {
@@ -80,14 +78,14 @@ export async function startOAuthClient(params: {
   console.info('[AUTH-OAUTH]', {
     event: 'oauth_account_selection_hint_applied',
     provider,
-    accountSelectionHint: provider === 'google' ? 'select_account' : 'login',
+    accountSelectionHint: provider === 'google' ? 'select_account' : null,
   });
 
   const { error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
       redirectTo,
-      queryParams,
+      ...(queryParams ? { queryParams } : {}),
     },
   });
   if (error) {

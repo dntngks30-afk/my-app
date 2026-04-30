@@ -68,22 +68,40 @@ export default function HandoffClient() {
     const oauthLockKey = `mr_auth_handoff_oauth_${v.ts}_${v.method}`;
 
     void (async () => {
+      if (v.method === 'email') {
+        const encNext = encodeURIComponent(oauthNext);
+        if (v.mode === 'signup') {
+          // Flow lock: email/signup handoff는 사용자의 회원가입 intent가 우선이다.
+          // 기존 세션 short-circuit로 execution(/onboarding 포함)에 보내면
+          // “회원가입 클릭 → 온보딩” 회귀가 발생하므로 signup 진입을 강제한다.
+          const {
+            data: { session },
+          } = await supabaseBrowser.auth.getSession();
+          if (session) {
+            await supabaseBrowser.auth.signOut().catch(() => undefined);
+          }
+          router.replace(`/signup?next=${encNext}`);
+        } else {
+          // OAuth handoff와 달리 email/login은 기존 정책대로 session short-circuit 허용.
+          const {
+            data: { session },
+          } = await supabaseBrowser.auth.getSession();
+          if (session) {
+            router.replace(oauthNext);
+            return;
+          }
+          router.replace(`/app/auth?next=${encNext}`);
+        }
+        return;
+      }
+
       const {
         data: { session },
       } = await supabaseBrowser.auth.getSession();
 
+      // OAuth handoff(google/kakao)는 기존 session short-circuit 정책 유지.
       if (session) {
         router.replace(oauthNext);
-        return;
-      }
-
-      if (v.method === 'email') {
-        const encNext = encodeURIComponent(oauthNext);
-        if (v.mode === 'signup') {
-          router.replace(`/signup?next=${encNext}`);
-        } else {
-          router.replace(`/app/auth?next=${encNext}`);
-        }
         return;
       }
 
