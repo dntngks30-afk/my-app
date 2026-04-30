@@ -15,22 +15,14 @@ export type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 };
 
-export type InAppBrowserName =
-  | 'kakao'
-  | 'instagram'
-  | 'youtube'
-  | 'threads'
-  | 'facebook'
-  | 'unknown'
-  | null;
-
 export type PwaInstallGuideMode =
-  | 'standalone'
-  | 'in_app'
-  | 'android_chrome_prompt'
-  | 'android_chrome_manual'
+  | 'already_standalone'
+  | 'android_in_app_browser'
+  | 'ios_in_app_browser'
   | 'ios_safari'
-  | 'desktop_or_other';
+  | 'android_install_prompt_available'
+  | 'android_install_prompt_unavailable'
+  | 'desktop_or_unknown';
 
 export type PromptInstallResult =
   | 'accepted'
@@ -42,25 +34,13 @@ export type PwaInstallGuideState = {
   mode: PwaInstallGuideMode;
   isStandalone: boolean;
   isInAppBrowser: boolean;
-  inAppBrowserName: InAppBrowserName;
   isIos: boolean;
   isAndroid: boolean;
-  isSafari: boolean;
-  isChrome: boolean;
   canPromptInstall: boolean;
   promptInstall: () => Promise<PromptInstallResult>;
-  /** 클라이언트 하이드레이션 후 true */
   hydrated: boolean;
 };
 
-export function detectInAppBrowserName(uaLower: string): InAppBrowserName {
-  const a = detectInAppBrowserAppName(uaLower);
-  if (a === null) return null;
-  if (a === 'android_webview' || a === 'naver' || a === 'line') return 'unknown';
-  return a;
-}
-
-/** Android WebView 등은 제외하고 일반 크롬/엣지 앱으로 본다 */
 function isLikelyMobileChromiumBrowser(uaLower: string, isAndroidUa: boolean): boolean {
   if (!isAndroidUa) return false;
   if (/; wv\)/.test(uaLower)) return false;
@@ -68,30 +48,18 @@ function isLikelyMobileChromiumBrowser(uaLower: string, isAndroidUa: boolean): b
   return /chrome\/|edg\//i.test(uaLower) || /samsungbrowser/i.test(uaLower);
 }
 
-/** iOS에서 Safari 앱 (인앱 아님, Chrome iOS 등 제외) */
-function isIosSafariStandaloneGuide(uaLower: string, isIosUa: boolean, inApp: boolean): boolean {
+function isIosSafari(uaLower: string, isIosUa: boolean, inApp: boolean): boolean {
   if (!isIosUa || inApp) return false;
   if (/crios|fxios|edgios|opios|opr\//i.test(uaLower)) return false;
   return /safari/i.test(uaLower) || /applewebkit/i.test(uaLower);
-}
-
-function computeIsSafariUi(uaLower: string): boolean {
-  return /safari/i.test(uaLower) && !/chrome|crios|android/i.test(uaLower);
-}
-
-function computeIsChromeUi(uaLower: string): boolean {
-  return /chrome/i.test(uaLower) && !/edg/i.test(uaLower);
 }
 
 export function usePwaInstallGuideState(): PwaInstallGuideState {
   const [hydrated, setHydrated] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
-  const [inAppBrowserName, setInAppBrowserName] = useState<InAppBrowserName>(null);
   const [isIos, setIsIos] = useState(false);
   const [isAndroid, setIsAndroid] = useState(false);
-  const [isSafari, setIsSafari] = useState(false);
-  const [isChrome, setIsChrome] = useState(false);
   const [canPromptInstall, setCanPromptInstall] = useState(false);
 
   const deferredPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
@@ -99,16 +67,14 @@ export function usePwaInstallGuideState(): PwaInstallGuideState {
   useEffect(() => {
     const uaLower = getUaLower();
     setIsStandalone(detectStandalone());
-    const inAppName = detectInAppBrowserName(uaLower);
-    const inApp = inAppName !== null;
-    setInAppBrowserName(inAppName);
+
+    const inApp = detectInAppBrowserAppName(uaLower) !== null;
     setIsInAppBrowser(inApp);
+
     const ios = detectIsIos(uaLower);
     const android = detectIsAndroid(uaLower);
     setIsIos(ios);
     setIsAndroid(android);
-    setIsSafari(computeIsSafariUi(uaLower));
-    setIsChrome(computeIsChromeUi(uaLower));
     setHydrated(true);
 
     const onBeforeInstallPrompt = (e: Event) => {
@@ -118,38 +84,37 @@ export function usePwaInstallGuideState(): PwaInstallGuideState {
     };
 
     window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
-    };
+    return () => window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
   }, []);
 
   const mode: PwaInstallGuideMode = useMemo(() => {
-    if (!hydrated) return 'desktop_or_other';
-    if (isStandalone) return 'standalone';
-    if (isInAppBrowser) return 'in_app';
+    if (!hydrated) return 'desktop_or_unknown';
+    if (isStandalone) return 'already_standalone';
 
     const uaLower = getUaLower();
-    const androidUa = detectIsAndroid(uaLower);
     const iosUa = detectIsIos(uaLower);
+    const androidUa = detectIsAndroid(uaLower);
+    const inApp = detectInAppBrowserAppName(uaLower) !== null;
 
-    if (androidUa && isLikelyMobileChromiumBrowser(uaLower, androidUa)) {
-      if (canPromptInstall) return 'android_chrome_prompt';
-      return 'android_chrome_manual';
+    if (androidUa && inApp) return 'android_in_app_browser';
+    if (iosUa && inApp) return 'ios_in_app_browser';
+    if (iosUa && isIosSafari(uaLower, iosUa, false)) return 'ios_safari';
+
+    if (androidUa) {
+      if (canPromptInstall && isLikelyMobileChromiumBrowser(uaLower, androidUa)) {
+        return 'android_install_prompt_available';
+      }
+      return 'android_install_prompt_unavailable';
     }
 
-    if (iosUa && isIosSafariStandaloneGuide(uaLower, iosUa, false)) {
-      return 'ios_safari';
-    }
-
-    return 'desktop_or_other';
-  }, [hydrated, isStandalone, isInAppBrowser, canPromptInstall]);
+    return 'desktop_or_unknown';
+  }, [hydrated, isStandalone, canPromptInstall]);
 
   const promptInstall = useCallback(async (): Promise<PromptInstallResult> => {
+    if (isIos) return 'unavailable';
     const evt = deferredPromptRef.current;
-    if (!evt || typeof evt.prompt !== 'function') {
-      return 'unavailable';
-    }
+    if (!evt || typeof evt.prompt !== 'function') return 'unavailable';
+
     try {
       await evt.prompt();
       const choice = await evt.userChoice;
@@ -161,17 +126,14 @@ export function usePwaInstallGuideState(): PwaInstallGuideState {
       setCanPromptInstall(false);
       return 'error';
     }
-  }, []);
+  }, [isIos]);
 
   return {
     mode,
     isStandalone,
     isInAppBrowser,
-    inAppBrowserName,
     isIos,
     isAndroid,
-    isSafari,
-    isChrome,
     canPromptInstall,
     promptInstall,
     hydrated,
