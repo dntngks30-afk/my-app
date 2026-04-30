@@ -192,6 +192,7 @@ export default function HomePageClient({
   const activeFetchedRef = useRef(false);
   const authTokenRef = useRef<string | null>(null);
   const authTokenInflightRef = useRef<Promise<string | null> | null>(null);
+  const showHomeEntryShell = loading && (skipLoader || entryLoaderCapReached);
 
   const getAuthToken = useCallback(async () => {
     if (authTokenRef.current) return authTokenRef.current;
@@ -370,6 +371,21 @@ export default function HomePageClient({
   }, [skipLoader, loading, entryLoaderCapReached]);
 
 
+  useEffect(() => {
+    if (!showHomeEntryShell) {
+      homeEntryShellMarkedRef.current = false;
+      return;
+    }
+
+    if (homeEntryShellMarkedRef.current) return;
+    homeEntryShellMarkedRef.current = true;
+
+    if (typeof performance !== 'undefined' && performance.mark) {
+      performance.mark('home_entry_shell_visible');
+    }
+  }, [showHomeEntryShell]);
+
+
   /** PR-RESET-09: Re-check on visibility restore (multi-tab safety). */
   const [recheckTrigger, setRecheckTrigger] = useState(0);
   useEffect(() => {
@@ -517,13 +533,7 @@ export default function HomePageClient({
   if (loading) {
     // skipLoader는 useEffect에서만 설정 → Hydration mismatch 방지
     if (!skipLoader && !entryLoaderCapReached) {
-      homeEntryShellMarkedRef.current = false;
       return <AppEntryLoader status="홈 로딩 중" />;
-    }
-
-    if (!homeEntryShellMarkedRef.current && typeof performance !== 'undefined' && performance.mark) {
-      performance.mark('home_entry_shell_visible');
-      homeEntryShellMarkedRef.current = true;
     }
 
     return <HomeEntryShell hideBottomNav={hideBottomNav} />;
