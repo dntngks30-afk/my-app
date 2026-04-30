@@ -11,3 +11,10 @@
 클라이언트용: `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (pk_test_ / pk_live_)
 
 **STRIPE_PRICE_MOVE_RE_7D**: Stripe Dashboard → Products → 해당 상품 → 가격에서 `price_xxx` 형식 ID 복사 후 `.env.local`에 설정.
+
+
+## Push env keys (PWA permission/subscription)
+
+- `WEB_PUSH_VAPID_PUBLIC_KEY=`
+- `WEB_PUSH_VAPID_PRIVATE_KEY=`
+- `WEB_PUSH_CONTACT_EMAIL=`

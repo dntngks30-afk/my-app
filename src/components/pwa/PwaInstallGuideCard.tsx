@@ -81,16 +81,7 @@ export function PwaInstallGuideCard({ className }: PwaInstallGuideCardProps) {
   const mode: PwaInstallGuideMode = guide.mode;
 
   if (mode === 'standalone') {
-    return (
-      <div
-        className={`rounded-xl border border-amber-500/15 bg-[rgba(251,191,36,0.06)] px-4 py-3 text-center backdrop-blur-sm ${className ?? ''}`}
-        style={bodyFont}
-      >
-        <p className="text-sm font-light leading-relaxed text-[#e7e5e4]">
-          홈 화면에서 바로 이어갈 수 있어요.
-        </p>
-      </div>
-    );
+    return null;
   }
 
   if (mode === 'in_app') {
