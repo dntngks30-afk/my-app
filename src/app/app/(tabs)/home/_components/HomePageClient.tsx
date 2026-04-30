@@ -37,6 +37,7 @@ import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
+import { PwaInstallGuideCard } from '@/components/pwa/PwaInstallGuideCard';
 import type { DonorResetMapProps } from '@/features/map_ui_import/home_map_20260315/components/reset-map';
 
 interface HomePageClientProps {
@@ -522,6 +523,7 @@ export default function HomePageClient({
       )}
 
       <main className={`px-4 ${useDonorTheme ? 'pt-4 space-y-4' : 'space-y-6'}`}>
+        <PwaInstallGuideCard />
         {/* PR-UX-16a: home 상단 대형 preview 제거 — Reset Map first-view */}
         <div>
         {(() => {
