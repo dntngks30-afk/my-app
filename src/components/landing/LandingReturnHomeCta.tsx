@@ -1,15 +1,15 @@
 'use client';
 
 /**
- * 루트 `/` 랜딩 — 로그인 세션일 때만 노출되는 리셋맵 복귀 CTA.
+ * 루트 `/` 랜딩 — readiness가 /app/home 복귀를 허용할 때만 노출되는 리셋맵 복귀 CTA.
  * 메인 funnel CTA와 분리되어 하단에만 표시된다.
  */
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { supabaseBrowser } from '@/lib/supabase';
+import { fetchReadinessClient } from '@/lib/readiness/fetchReadinessClient';
 
-type Gate = 'checking' | 'signedIn' | 'signedOut';
+type Gate = 'checking' | 'show' | 'hide';
 
 export default function LandingReturnHomeCta() {
   const [gate, setGate] = useState<Gate>('checking');
@@ -18,20 +18,14 @@ export default function LandingReturnHomeCta() {
     let cancelled = false;
 
     async function check() {
-      try {
-        const {
-          data: { session },
-          error,
-        } = await supabaseBrowser.auth.getSession();
-        if (cancelled) return;
-        if (error) {
-          setGate('signedOut');
-          return;
-        }
-        setGate(session ? 'signedIn' : 'signedOut');
-      } catch {
-        if (!cancelled) setGate('signedOut');
-      }
+      const readiness = await fetchReadinessClient();
+      if (cancelled) return;
+
+      const canReturnHome =
+        readiness?.next_action.code === 'GO_APP_HOME' &&
+        readiness?.onboarding.is_complete === true;
+
+      setGate(canReturnHome ? 'show' : 'hide');
     }
 
     void check();
@@ -41,7 +35,7 @@ export default function LandingReturnHomeCta() {
     };
   }, []);
 
-  if (gate !== 'signedIn') {
+  if (gate !== 'show') {
     return null;
   }
 

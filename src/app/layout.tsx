@@ -1,17 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { 
-  Geist, 
-  Geist_Mono, 
-  Noto_Sans_KR, 
-  Noto_Serif_KR,
-  IBM_Plex_Sans_KR, 
-  Gowun_Dodum,
-  Gothic_A1,
-  Nanum_Gothic,
-  Jua,
-  Do_Hyeon,
-  Nanum_Pen_Script
-} from "next/font/google";
+import { Geist, Noto_Sans_KR, Noto_Serif_KR } from "next/font/google";
 import "./globals.css";
 import { PresetProvider } from "@/components/PresetProvider";
 import FontSwitcher from "@/components/FontSwitcher";
@@ -19,11 +7,6 @@ import PwaUpdateHandler from "@/components/shared/PwaUpdateHandler";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
   subsets: ["latin"],
 });
 
@@ -37,50 +20,6 @@ const notoSerifKR = Noto_Serif_KR({
   variable: "--font-serif-noto",
   subsets: ["latin"],
   weight: ["400", "600", "700", "900"],
-});
-
-const ibmPlexSansKR = IBM_Plex_Sans_KR({
-  variable: "--font-sans-ibm",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const gowunDodum = Gowun_Dodum({
-  variable: "--font-display-gowun",
-  subsets: ["latin"],
-  weight: ["400"],
-});
-
-// 본문 폰트 후보 (산스)
-const gothicA1 = Gothic_A1({
-  variable: "--font-sans-gothicA1",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const nanumGothic = Nanum_Gothic({
-  variable: "--font-sans-nanumGothic",
-  subsets: ["latin"],
-  weight: ["400", "700", "800"],
-});
-
-// 타이틀 폰트 후보 (디스플레이)
-const jua = Jua({
-  variable: "--font-display-jua",
-  subsets: ["latin"],
-  weight: ["400"],
-});
-
-const doHyeon = Do_Hyeon({
-  variable: "--font-display-dohyeon",
-  subsets: ["latin"],
-  weight: ["400"],
-});
-
-const nanumPenScript = Nanum_Pen_Script({
-  variable: "--font-display-nanumPen",
-  subsets: ["latin"],
-  weight: ["400"],
 });
 
 const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://my-app-sigma-seven-96.vercel.app";
@@ -179,26 +118,20 @@ export default function RootLayout({
   return (
     <html 
       lang="ko"
-      className={`${geistSans.variable} ${geistMono.variable} ${notoSansKR.variable} ${notoSerifKR.variable} ${ibmPlexSansKR.variable} ${gowunDodum.variable} ${gothicA1.variable} ${nanumGothic.variable} ${jua.variable} ${doHyeon.variable} ${nanumPenScript.variable}`}
+      className={`${geistSans.variable} ${notoSansKR.variable} ${notoSerifKR.variable}`}
+      style={{
+        ['--font-geist-mono' as string]: 'var(--font-geist-sans)',
+        ['--font-sans-ibm' as string]: 'var(--font-sans-noto)',
+        ['--font-display-gowun' as string]: 'var(--font-serif-noto)',
+        ['--font-sans-gothicA1' as string]: 'var(--font-sans-noto)',
+        ['--font-sans-nanumGothic' as string]: 'var(--font-sans-noto)',
+        ['--font-display-jua' as string]: 'var(--font-serif-noto)',
+        ['--font-display-dohyeon' as string]: 'var(--font-serif-noto)',
+        ['--font-display-nanumPen' as string]: 'var(--font-serif-noto)',
+      }}
     >
       <head>
         <link rel="icon" href="/favicon.ico" />
-        {/* 카카오톡 SDK */}
-        <script 
-          src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.0/kakao.min.js"
-          integrity="sha384-l+xbElFSnPZ2rOaPrU//2FF5B4LB8FiX5q4fXYTlfcG4PGpMkE1vcL7kNXI6Cci0"
-          crossOrigin="anonymous"
-          async
-        />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if (window.Kakao && !window.Kakao.isInitialized()) {
-                window.Kakao.init('${process.env.NEXT_PUBLIC_KAKAO_JS_KEY || 'YOUR_KAKAO_JS_KEY'}');
-              }
-            `
-          }}
-        />
       </head>
       <body className="antialiased">
         <PresetProvider>

@@ -37,7 +37,43 @@ import BottomNav from '@/app/app/_components/BottomNav';
 import ProgressReportCard from './ProgressReportCard';
 import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
+import { PwaInstallGuideCard } from '@/components/pwa/PwaInstallGuideCard';
+import { PwaPushPermissionCard } from '@/components/pwa/PwaPushPermissionCard';
 import type { DonorResetMapProps } from '@/features/map_ui_import/home_map_20260315/components/reset-map';
+
+
+const APP_ENTRY_LOADER_CAP_MS = 1500;
+
+function HomeEntryShell({ hideBottomNav }: { hideBottomNav?: boolean }) {
+  return (
+    <div
+      className="min-h-screen bg-[#0c1324] pb-20 text-[#dce1fb]"
+      aria-busy="true"
+      aria-live="polite"
+      role="status"
+    >
+      <main className="px-4 pt-5">
+        <section className="rounded-[28px] border border-white/10 bg-white/[0.04] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
+          <p className="text-xs font-medium uppercase tracking-[0.22em] text-orange-300/80">MOVE RE</p>
+          <h1 className="mt-3 text-2xl font-semibold text-white">홈을 준비하고 있어요</h1>
+          <p className="mt-2 text-sm leading-6 text-white/65">세션을 확인하는 중이에요. 리셋 지도는 곧 이어서 열려요.</p>
+
+          <div className="mt-6 min-h-[420px] overflow-hidden rounded-3xl border border-white/10 bg-[#07111f]">
+            <div className="flex h-full min-h-[420px] items-center justify-center px-6 text-center">
+              <div>
+                <div className="mx-auto mb-5 h-10 w-10 rounded-full border-2 border-white/15 border-t-orange-300 app-entry-spinner" />
+                <p className="text-sm font-medium text-white">리셋 지도 준비 중</p>
+                <p className="mt-2 text-xs leading-5 text-white/50">오늘의 움직임 경로를 불러오고 있어요.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {!hideBottomNav && <BottomNav />}
+    </div>
+  );
+}
 
 interface HomePageClientProps {
   hideBottomNav?: boolean;
@@ -125,6 +161,7 @@ export default function HomePageClient({
 
   const [loading, setLoading] = useState(true);
   const [skipLoader, setSkipLoader] = useState(false);
+  const [entryLoaderCapReached, setEntryLoaderCapReached] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionProgress, setSessionProgress] = useState<{
     total_sessions: number;
@@ -147,6 +184,7 @@ export default function HomePageClient({
   const [progressSource, setProgressSource] = useState<'db' | 'default_fallback' | null>(null);
   const [railRecoveryHref, setRailRecoveryHref] = useState('/onboarding');
   const railRecoveryFetchedRef = useRef(false);
+  const homeEntryShellMarkedRef = useRef(false);
 
   const isRailNotReady =
     railReady === false || progressSource === 'default_fallback';
@@ -154,6 +192,7 @@ export default function HomePageClient({
   const activeFetchedRef = useRef(false);
   const authTokenRef = useRef<string | null>(null);
   const authTokenInflightRef = useRef<Promise<string | null> | null>(null);
+  const showHomeEntryShell = loading && (skipLoader || entryLoaderCapReached);
 
   const getAuthToken = useCallback(async () => {
     if (authTokenRef.current) return authTokenRef.current;
@@ -316,6 +355,37 @@ export default function HomePageClient({
     setSkipLoader(isAppBooted());
   }, []);
 
+  useEffect(() => {
+    if (skipLoader || !loading || entryLoaderCapReached) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setEntryLoaderCapReached(true);
+      if (typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('app_entry_loader_cap_reached');
+      }
+    }, APP_ENTRY_LOADER_CAP_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [skipLoader, loading, entryLoaderCapReached]);
+
+
+  useEffect(() => {
+    if (!showHomeEntryShell) {
+      homeEntryShellMarkedRef.current = false;
+      return;
+    }
+
+    if (homeEntryShellMarkedRef.current) return;
+    homeEntryShellMarkedRef.current = true;
+
+    if (typeof performance !== 'undefined' && performance.mark) {
+      performance.mark('home_entry_shell_visible');
+    }
+  }, [showHomeEntryShell]);
+
+
   /** PR-RESET-09: Re-check on visibility restore (multi-tab safety). */
   const [recheckTrigger, setRecheckTrigger] = useState(0);
   useEffect(() => {
@@ -462,18 +532,11 @@ export default function HomePageClient({
 
   if (loading) {
     // skipLoader는 useEffect에서만 설정 → Hydration mismatch 방지
-    if (!skipLoader) {
+    if (!skipLoader && !entryLoaderCapReached) {
       return <AppEntryLoader status="홈 로딩 중" />;
     }
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center bg-[#f8f6f0]">
-        <div
-          className="h-6 w-6 rounded-full border-2 border-[#e2e8f0] border-t-[#0F172A] app-entry-spinner"
-          aria-busy="true"
-          aria-label="로딩 중"
-        />
-      </div>
-    );
+
+    return <HomeEntryShell hideBottomNav={hideBottomNav} />;
   }
 
   if (error) {
@@ -522,6 +585,10 @@ export default function HomePageClient({
       )}
 
       <main className={`px-4 ${useDonorTheme ? 'pt-4 space-y-4' : 'space-y-6'}`}>
+        <div className="space-y-3">
+          <PwaInstallGuideCard />
+          <PwaPushPermissionCard />
+        </div>
         {/* PR-UX-16a: home 상단 대형 preview 제거 — Reset Map first-view */}
         <div>
         {(() => {

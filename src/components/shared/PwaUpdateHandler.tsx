@@ -2,6 +2,17 @@
 
 import { useEffect, useState, useRef } from 'react';
 
+type IdleCallbackHandle = number;
+type IdleRequestCallback = (deadline: IdleDeadline) => void;
+
+interface IdleWindow extends Window {
+  requestIdleCallback?: (
+    callback: IdleRequestCallback,
+    options?: IdleRequestOptions
+  ) => IdleCallbackHandle;
+  cancelIdleCallback?: (handle: IdleCallbackHandle) => void;
+}
+
 /**
  * PWA 서비스 워커 업데이트 감지 및 자동 갱신
  * - 새 버전 감지 시 토스트 표시 후 자동 새로고침
@@ -30,13 +41,11 @@ export default function PwaUpdateHandler() {
         const registration = await navigator.serviceWorker.getRegistration('/');
         if (!registration) return;
 
-        // 이미 대기 중인 워커 (탭 열린 상태에서 배포된 경우)
         if (registration.waiting) {
           setShowToast(true);
           registration.waiting.postMessage({ type: 'SKIP_WAITING' });
         }
 
-        // 새 워커 설치 감지
         registration.addEventListener('updatefound', () => {
           const newWorker = registration.installing;
           if (!newWorker) return;
@@ -52,19 +61,41 @@ export default function PwaUpdateHandler() {
         const boundHandler = handleControllerChange;
         navigator.serviceWorker.addEventListener('controllerchange', boundHandler);
         removeControllerListener = () => {
-          navigator.serviceWorker.removeEventListener(
-            'controllerchange',
-            boundHandler
-          );
+          navigator.serviceWorker.removeEventListener('controllerchange', boundHandler);
         };
       } catch {
         // SW 없음 또는 오류 시 무시
       }
     };
 
-    setupUpdateDetection();
+    const scheduleSetup = () => {
+      const idleWindow = window as IdleWindow;
 
-    return () => removeControllerListener?.();
+      if (typeof idleWindow.requestIdleCallback === 'function') {
+        const idleId = idleWindow.requestIdleCallback(() => {
+          void setupUpdateDetection();
+        }, { timeout: 2500 });
+
+        return () => {
+          idleWindow.cancelIdleCallback?.(idleId);
+        };
+      }
+
+      const timeoutId = window.setTimeout(() => {
+        void setupUpdateDetection();
+      }, 1500);
+
+      return () => {
+        window.clearTimeout(timeoutId);
+      };
+    };
+
+    const cancelSchedule = scheduleSetup();
+
+    return () => {
+      cancelSchedule();
+      removeControllerListener?.();
+    };
   }, []);
 
   return (
