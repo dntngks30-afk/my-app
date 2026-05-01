@@ -39,6 +39,7 @@ import ResetMapCard from './ResetMapCard';
 import { ResetMapV2 } from './reset-map-v2/ResetMapV2';
 import { PwaInstallGuideCard } from '@/components/pwa/PwaInstallGuideCard';
 import { PwaPushPermissionCard } from '@/components/pwa/PwaPushPermissionCard';
+import { PwaPushTestCard } from '@/components/pwa/PwaPushTestCard';
 import type { DonorResetMapProps } from '@/features/map_ui_import/home_map_20260315/components/reset-map';
 
 
@@ -142,6 +143,7 @@ export default function HomePageClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const debugFlag = searchParams.get('debug') === '1';
+  const debugPush = searchParams.get('debugPush') === '1';
   const debugMap = searchParams.get('debugMap') === '1';
   const navV2 = process.env.NODE_ENV === 'production' ? true : (searchParams.get('navV2') !== '0');
   const mapV2 = searchParams.get('mapV2') === '1' || navV2;
@@ -588,6 +590,7 @@ export default function HomePageClient({
         <div className="space-y-3">
           <PwaInstallGuideCard />
           <PwaPushPermissionCard />
+          {debugPush && <PwaPushTestCard />}
         </div>
         {/* PR-UX-16a: home 상단 대형 preview 제거 — Reset Map first-view */}
         <div>
