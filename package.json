@@ -104,7 +104,8 @@
     "ops:template-media:attach": "node scripts/template-media/apply-template-media-refresh.mjs",
     "ops:template-media:legacy-delete": "node scripts/template-media/delete-legacy-template-assets.mjs",
     "ops:session-display-backfill": "npx tsx scripts/session-display-backfill-03.mjs",
-    "test:public-entry-readiness-guard": "node scripts/public-entry-readiness-guard-smoke.mjs"
+    "test:public-entry-readiness-guard": "node scripts/public-entry-readiness-guard-smoke.mjs",
+    "test:public-critical-asset-diet": "node scripts/public-critical-asset-diet-smoke.mjs"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
