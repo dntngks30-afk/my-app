@@ -2,9 +2,10 @@
 
 type StitchLandingProps = {
   onStart: () => void;
+  isStarting?: boolean;
 };
 
-export default function StitchLanding({ onStart }: StitchLandingProps) {
+export default function StitchLanding({ onStart, isStarting = false }: StitchLandingProps) {
   return (
     <div className="relative min-h-[100svh] overflow-hidden bg-[#0c1324] text-[#dce1fb]">
       <div
@@ -69,7 +70,9 @@ export default function StitchLanding({ onStart }: StitchLandingProps) {
             <button
               type="button"
               onClick={onStart}
-              className="-mt-[23px] -mb-[23px] group inline-flex min-h-[64px] items-center justify-center rounded-md bg-gradient-to-br from-[#ffb77d] to-[#ab4c00] px-12 py-5 text-base font-semibold text-[#4d2600] shadow-[0_18px_60px_rgba(0,0,0,0.35)] transition-all duration-500 hover:opacity-90 active:scale-[0.985] md:text-lg"
+              disabled={isStarting}
+              aria-busy={isStarting}
+              className="-mt-[23px] -mb-[23px] group inline-flex min-h-[64px] items-center justify-center rounded-md bg-gradient-to-br from-[#ffb77d] to-[#ab4c00] px-12 py-5 text-base font-semibold text-[#4d2600] shadow-[0_18px_60px_rgba(0,0,0,0.35)] transition-all duration-500 hover:opacity-90 active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-75 md:text-lg"
               style={{ fontFamily: 'var(--font-sans-noto)' }}
               aria-label="내 몸 상태 1분 체크하기"
             >

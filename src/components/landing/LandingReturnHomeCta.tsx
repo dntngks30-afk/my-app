@@ -3,39 +3,17 @@
 /**
  * 루트 `/` 랜딩 — readiness가 /app/home 복귀를 허용할 때만 노출되는 리셋맵 복귀 CTA.
  * 메인 funnel CTA와 분리되어 하단에만 표시된다.
+ * PR-WEB-PERF-02: fetch는 랜딩 page owner만 수행; 여기서는 props로만 판단.
  */
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { fetchReadinessClient } from '@/lib/readiness/fetchReadinessClient';
 
-type Gate = 'checking' | 'show' | 'hide';
+type LandingReturnHomeCtaProps = {
+  canReturnHome: boolean;
+};
 
-export default function LandingReturnHomeCta() {
-  const [gate, setGate] = useState<Gate>('checking');
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function check() {
-      const readiness = await fetchReadinessClient();
-      if (cancelled) return;
-
-      const canReturnHome =
-        readiness?.next_action.code === 'GO_APP_HOME' &&
-        readiness?.onboarding.is_complete === true;
-
-      setGate(canReturnHome ? 'show' : 'hide');
-    }
-
-    void check();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (gate !== 'show') {
+export default function LandingReturnHomeCta({ canReturnHome }: LandingReturnHomeCtaProps) {
+  if (!canReturnHome) {
     return null;
   }
 
