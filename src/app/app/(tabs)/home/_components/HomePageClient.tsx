@@ -44,6 +44,7 @@ import type { DonorResetMapProps } from '@/features/map_ui_import/home_map_20260
 
 
 const APP_ENTRY_LOADER_CAP_MS = 1500;
+const DEBUG_PUSH_STORAGE_KEY = 'move-re:debug-push';
 
 function HomeEntryShell({ hideBottomNav }: { hideBottomNav?: boolean }) {
   return (
@@ -143,7 +144,7 @@ export default function HomePageClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const debugFlag = searchParams.get('debug') === '1';
-  const debugPush = searchParams.get('debugPush') === '1';
+  const queryDebugPush = searchParams.get('debugPush') === '1';
   const debugMap = searchParams.get('debugMap') === '1';
   const navV2 = process.env.NODE_ENV === 'production' ? true : (searchParams.get('navV2') !== '0');
   const mapV2 = searchParams.get('mapV2') === '1' || navV2;
@@ -162,6 +163,7 @@ export default function HomePageClient({
       : undefined;
 
   const [loading, setLoading] = useState(true);
+  const [debugPush, setDebugPush] = useState(queryDebugPush);
   const [skipLoader, setSkipLoader] = useState(false);
   const [entryLoaderCapReached, setEntryLoaderCapReached] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -195,6 +197,20 @@ export default function HomePageClient({
   const authTokenRef = useRef<string | null>(null);
   const authTokenInflightRef = useRef<Promise<string | null> | null>(null);
   const showHomeEntryShell = loading && (skipLoader || entryLoaderCapReached);
+
+  useEffect(() => {
+    try {
+      if (queryDebugPush) {
+        window.localStorage.setItem(DEBUG_PUSH_STORAGE_KEY, '1');
+        setDebugPush(true);
+        return;
+      }
+
+      setDebugPush(window.localStorage.getItem(DEBUG_PUSH_STORAGE_KEY) === '1');
+    } catch {
+      setDebugPush(queryDebugPush);
+    }
+  }, [queryDebugPush]);
 
   const getAuthToken = useCallback(async () => {
     if (authTokenRef.current) return authTokenRef.current;
