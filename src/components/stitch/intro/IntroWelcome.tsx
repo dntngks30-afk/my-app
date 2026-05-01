@@ -3,9 +3,22 @@
 /**
  * stitch code.html Screen 2 — Welcome
  */
+import { useEffect } from 'react';
+import { warmupImages } from '@/lib/public/preload-images';
 import { IntroSceneShell, IntroStepIndicator } from './IntroSceneShell';
 
+const INTRO_EXAMPLES_WARMUP_SRCS = [
+  '/intro/good-pattern-lift.png',
+  '/intro/compensation-lift.png',
+  '/intro/balanced-alignment.png',
+  '/intro/asymmetric-compensation.png',
+] as const;
+
 export default function IntroWelcome() {
+  useEffect(() => {
+    return warmupImages(INTRO_EXAMPLES_WARMUP_SRCS, { delayMs: 250 });
+  }, []);
+
   return (
     <IntroSceneShell currentPath="/intro/welcome">
       <div className="w-full max-w-2xl text-center">

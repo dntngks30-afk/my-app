@@ -66,6 +66,7 @@ export default function IntroExamples1() {
               fill
               className="object-cover object-[center_35%] grayscale-[0.3]"
               sizes="(max-width: 768px) 100vw, 50vw"
+              priority
             />
             <div
               aria-hidden

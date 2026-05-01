@@ -5,7 +5,7 @@
  * 시각: stitch result family (로직·카피·단계 의미 동일)
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import type { UnifiedDeepResultV2, UnifiedPrimaryType } from '@/lib/result/deep-result-v2-contract';
 import { MoveReStepNavRow } from '@/components/public-brand';
@@ -31,6 +31,7 @@ import {
   pickLightMissingHintLine,
   stripSummaryMetaSuffix,
 } from './public-result-labels';
+import { warmupImages } from '@/lib/public/preload-images';
 import { getResultStep3Assets } from './result-step3-assets';
 
 export type PublicResultStage = 'baseline' | 'refined' | 'fallback';
@@ -115,6 +116,9 @@ export function PublicResultRenderer({
 }: PublicResultRendererProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const pt = result.primary_type as UnifiedPrimaryType;
+  useEffect(() => {
+    return warmupImages(getResultStep3Assets(pt), { delayMs: 400 });
+  }, [pt]);
   const typeColor = PRIMARY_TYPE_COLOR[pt] ?? 'var(--mr-public-accent)';
   const stageMeta = STAGE_META[stage];
   const step1Slots = getBaselineStep1ResultSlots(pt);

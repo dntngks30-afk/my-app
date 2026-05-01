@@ -95,6 +95,7 @@
     "test:pilot-template-parity": "node scripts/pilot-template-parity-check.mjs",
     "test:pilot-session": "node scripts/pilot-session-smoke-bundle.mjs",
     "test:pilot-camera": "node scripts/pilot-camera-smoke-bundle.mjs",
+    "test:public-image-warmup": "node scripts/public-image-warmup-smoke.mjs",
     "test:pilot-auth": "node scripts/pilot-auth-url-smoke.mjs",
     "test:auth-ios-login-policy": "npx tsx scripts/auth-ios-login-policy-smoke.ts",
     "test:auth-pilot-signup": "npx tsx scripts/auth-pilot-password-signup-smoke.ts",
