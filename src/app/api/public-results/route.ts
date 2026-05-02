@@ -48,6 +48,7 @@ import {
   createPublicResult,
   PublicResultValidationError,
 } from '@/lib/public-results/createPublicResult';
+import { linkPublicTestProfileToResult } from '@/lib/analytics/public-test-profile';
 import type { UnifiedDeepResultV2 } from '@/lib/result/deep-result-v2-contract';
 
 export async function POST(request: NextRequest) {
@@ -92,13 +93,25 @@ export async function POST(request: NextRequest) {
     const userId = await getCurrentUserId(request).catch(() => null);
 
     // 저장 (Deep Result V2 계약 검증 포함)
+    const trimmedAnonId = anonId.trim();
     const output = await createPublicResult({
       result: result as UnifiedDeepResultV2,
-      anonId: anonId.trim(),
+      anonId: trimmedAnonId,
       stage,
       userId,
       sourceInputs: resolvedSourceInputs,
     });
+
+    try {
+      if (trimmedAnonId && output?.id) {
+        await linkPublicTestProfileToResult({
+          anonId: trimmedAnonId,
+          publicResultId: output.id,
+        });
+      }
+    } catch (error) {
+      console.warn('[public-test-profile] failed to link public_result_id', error);
+    }
 
     return NextResponse.json(
       {

@@ -33,6 +33,7 @@
  */
 
 import { getServerSupabaseAdmin } from '@/lib/supabase';
+import { linkPublicTestProfileToUser } from '@/lib/analytics/public-test-profile';
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
 
@@ -121,6 +122,14 @@ export async function claimPublicResult(
 
   // 이미 동일 사용자가 claim한 경우 → 멱등 성공
   if (existingUserId === userId) {
+    try {
+      await linkPublicTestProfileToUser({
+        publicResultId: trimmedId,
+        userId,
+      });
+    } catch (error) {
+      console.warn('[public-test-profile] failed to link user_id after claim', error);
+    }
     return {
       outcome:   'already_owned',
       id:        row.id as string,
@@ -155,6 +164,15 @@ export async function claimPublicResult(
 
   if (!updated) {
     throw new ClaimConflictError(trimmedId);
+  }
+
+  try {
+    await linkPublicTestProfileToUser({
+      publicResultId: trimmedId,
+      userId,
+    });
+  } catch (error) {
+    console.warn('[public-test-profile] failed to link user_id after claim', error);
   }
 
   return {

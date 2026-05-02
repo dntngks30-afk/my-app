@@ -15,18 +15,8 @@ import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth'
 import { Input } from '@/components/ui/input';
 import AuthShell from '@/components/auth/AuthShell';
 import MoveReAuthScreen from '@/components/auth/MoveReAuthScreen';
-import type { PilotSignupGender } from '@/lib/auth/pilotSignupValidation';
-import { PILOT_SIGNUP_GENDERS } from '@/lib/auth/pilotSignupValidation';
-
 const LOGIN_HEADLINE = '내 분석을 이어서 확인하세요';
 const SIGNUP_HEADLINE = '나를 위한 리셋 여정을 시작하세요';
-
-const GENDER_LABELS: Record<PilotSignupGender, string> = {
-  male: '남성',
-  female: '여성',
-  other: '기타',
-  prefer_not_to_say: '선택하지 않음',
-};
 
 /** StitchLanding 「내 몸 상태 1분 체크하기」와 동일 gradient·그림자·반응 — 폼에서는 w-full px-8(PR-AUTH-UI-03C) */
 const AUTH_PRIMARY_CTA_CLASS =
@@ -35,9 +25,6 @@ const AUTH_PRIMARY_CTA_CLASS =
 /** INTRO 배경 안 폼 입력 — 포커스는 public 액센트(PR-AUTH-UI-03B) */
 const AUTH_INPUT_CLASS =
   'h-12 w-full rounded-2xl border border-white/[0.08] bg-[#0c1324]/55 px-4 text-[15px] text-[#dce1fb] placeholder:text-[#dce1fb]/35 outline-none transition focus-visible:border-[var(--mr-public-accent)] focus-visible:ring-2 focus-visible:ring-[var(--mr-public-accent)]/20';
-
-const AUTH_SELECT_CLASS =
-  AUTH_INPUT_CLASS + ' appearance-none bg-[#0c1324]/55';
 
 interface AuthCardProps {
   mode: 'login' | 'signup';
@@ -72,9 +59,8 @@ export default function AuthCard({
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
   const [nickname, setNickname] = useState('');
-  const [gender, setGender] = useState<PilotSignupGender | ''>('');
-  const [ageInput, setAgeInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,18 +92,13 @@ export default function AuthCard({
           setError('비밀번호는 최소 8자 이상이어야 합니다.');
           return;
         }
+        if (password !== passwordConfirm) {
+          setError('비밀번호 확인이 일치하지 않습니다.');
+          return;
+        }
         const nickTrim = nickname.trim();
         if (!nickTrim) {
           setError('닉네임을 입력해 주세요.');
-          return;
-        }
-        if (!gender || !PILOT_SIGNUP_GENDERS.includes(gender as PilotSignupGender)) {
-          setError('성별을 선택해 주세요.');
-          return;
-        }
-        const ageNum = Number.parseInt(ageInput, 10);
-        if (!Number.isFinite(ageNum) || ageNum < 14 || ageNum > 100) {
-          setError('나이는 14~100 사이의 숫자로 입력해 주세요.');
           return;
         }
 
@@ -128,8 +109,6 @@ export default function AuthCard({
             email: emailTrim,
             password,
             nickname: nickTrim,
-            gender,
-            age: ageNum,
           }),
         });
 
@@ -252,6 +231,20 @@ export default function AuthCard({
               />
             </div>
             <div>
+              <label htmlFor="password-confirm" className="mb-1.5 block text-xs font-medium text-[#dce1fb]/75">
+                비밀번호 확인
+              </label>
+              <Input
+                id="password-confirm"
+                type="password"
+                placeholder="비밀번호 재입력"
+                required
+                value={passwordConfirm}
+                onChange={(e) => setPasswordConfirm(e.target.value)}
+                className={AUTH_INPUT_CLASS}
+              />
+            </div>
+            <div>
               <label htmlFor="nickname" className="mb-1.5 block text-xs font-medium text-[#dce1fb]/75">
                 닉네임
               </label>
@@ -264,42 +257,6 @@ export default function AuthCard({
                 onChange={(e) => setNickname(e.target.value)}
                 className={AUTH_INPUT_CLASS}
                 maxLength={24}
-              />
-            </div>
-            <div>
-              <label htmlFor="gender" className="mb-1.5 block text-xs font-medium text-[#dce1fb]/75">
-                성별
-              </label>
-              <select
-                id="gender"
-                required
-                value={gender}
-                onChange={(e) => setGender(e.target.value as PilotSignupGender | '')}
-                className={AUTH_SELECT_CLASS}
-              >
-                <option value="">선택해 주세요</option>
-                {PILOT_SIGNUP_GENDERS.map((g) => (
-                  <option key={g} value={g}>
-                    {GENDER_LABELS[g]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="age" className="mb-1.5 block text-xs font-medium text-[#dce1fb]/75">
-                나이
-              </label>
-              <Input
-                id="age"
-                type="number"
-                inputMode="numeric"
-                min={14}
-                max={100}
-                placeholder="14~100"
-                required
-                value={ageInput}
-                onChange={(e) => setAgeInput(e.target.value)}
-                className={AUTH_INPUT_CLASS}
               />
             </div>
           </>

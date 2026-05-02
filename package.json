@@ -46,6 +46,7 @@
     "test:plan-generator": "npx tsx scripts/plan-generator-smoke.mjs",
     "test:alg-21-first-session": "npx tsx scripts/alg-21-first-session-regression.mjs",
     "test:session-constraints": "npx tsx scripts/session-constraints-unit.mjs",
+    "test:kpi-demographics": "npx tsx scripts/kpi-demographics-unit.mjs",
     "test:session-ordering": "npx tsx scripts/session-ordering-unit.mjs",
     "test:policy-registry": "npx tsx scripts/policy-registry-smoke.mjs",
     "test:candidate-competition": "npx tsx scripts/candidate-competition-smoke.mjs",

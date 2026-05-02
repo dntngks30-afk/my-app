@@ -1,22 +1,12 @@
 /**
  * PR-AUTH-PILOT-PASSWORD-SIGNUP-02 — pilot-signup 요청 검증 (서버·테스트 공용)
+ * KPI 인구통계와 분리: 가입 페이로드에는 nickname만 허용 (성별·나이 미포함).
  */
-
-export const PILOT_SIGNUP_GENDERS = [
-  'male',
-  'female',
-  'other',
-  'prefer_not_to_say',
-] as const;
-
-export type PilotSignupGender = (typeof PILOT_SIGNUP_GENDERS)[number];
 
 export type PilotSignupPayload = {
   email: string;
   password: string;
   nickname: string;
-  gender: PilotSignupGender;
-  age: number;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -34,15 +24,11 @@ export function validatePilotSignupBody(raw: unknown):
   const emailRaw = b.email;
   const passwordRaw = b.password;
   const nicknameRaw = b.nickname;
-  const genderRaw = b.gender;
-  const ageRaw = b.age;
 
   if (
     typeof emailRaw !== 'string' ||
     typeof passwordRaw !== 'string' ||
-    typeof nicknameRaw !== 'string' ||
-    typeof genderRaw !== 'string' ||
-    (typeof ageRaw !== 'number' && typeof ageRaw !== 'string')
+    typeof nicknameRaw !== 'string'
   ) {
     return { ok: false, code: 'VALIDATION_ERROR', message: '필수 항목을 모두 입력해 주세요.' };
   }
@@ -72,28 +58,12 @@ export function validatePilotSignupBody(raw: unknown):
     return { ok: false, code: 'VALIDATION_ERROR', message: '닉네임에 사용할 수 없는 문자가 포함되어 있습니다.' };
   }
 
-  const gender = genderRaw.trim() as PilotSignupGender;
-  if (!PILOT_SIGNUP_GENDERS.includes(gender as PilotSignupGender)) {
-    return { ok: false, code: 'VALIDATION_ERROR', message: '성별을 선택해 주세요.' };
-  }
-
-  const ageNum = typeof ageRaw === 'number' ? ageRaw : Number.parseInt(String(ageRaw), 10);
-  if (!Number.isInteger(ageNum) || ageNum < 14 || ageNum > 100) {
-    return {
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: '나이는 14~100 사이의 숫자로 입력해 주세요.',
-    };
-  }
-
   return {
     ok: true,
     value: {
       email,
       password: passwordRaw,
       nickname,
-      gender,
-      age: ageNum,
     },
   };
 }
@@ -102,8 +72,6 @@ export function validatePilotSignupBody(raw: unknown):
 export function pilotSignupUserMetadata(input: PilotSignupPayload): Record<string, unknown> {
   return {
     nickname: input.nickname,
-    gender: input.gender,
-    age: input.age,
     signup_source: 'pilot_password_signup_v1',
   };
 }

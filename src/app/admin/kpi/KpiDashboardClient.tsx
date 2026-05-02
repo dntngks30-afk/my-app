@@ -14,6 +14,7 @@ import {
   ADMIN_KPI_SUMMARY_METRICS,
 } from '@/lib/analytics/admin-kpi-labels';
 import type {
+  KpiDemographicsSummary,
   KpiDetailsResponse,
   KpiFunnelResponse,
   KpiRawEventsResponse,
@@ -71,6 +72,115 @@ function formatRate(value: number | null | undefined) {
 
 function formatCount(value: number | null | undefined) {
   return new Intl.NumberFormat('en-US').format(value ?? 0);
+}
+
+function formatDemographicsRatio(ratio: number) {
+  return `${(ratio * 100).toFixed(0)}%`;
+}
+
+function dominantBucketLabel(rows: { label: string; count: number }[] | undefined): string {
+  if (!rows?.length) return '-';
+  const sorted = [...rows].sort((a, b) => b.count - a.count);
+  return sorted[0]?.label ?? '-';
+}
+
+function DemographicsDistributionCard({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: { key: string; label: string; count: number; ratio: number; low_sample?: boolean }[];
+}) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+      <p className="text-sm font-medium text-slate-200">{title}</p>
+      <ul className="mt-3 space-y-1.5 text-sm text-slate-300">
+        {rows.map((r) => (
+          <li key={r.key} className="flex flex-wrap justify-between gap-2 border-b border-slate-800/80 py-1 last:border-0">
+            <span>
+              {r.label}
+              {r.low_sample ? <span className="ml-1 text-xs text-amber-400">(소표본)</span> : null}
+            </span>
+            <span className="text-slate-400">
+              {formatCount(r.count)}명 · {formatDemographicsRatio(r.ratio)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function DemographicsSection({ demographics }: { demographics: KpiDemographicsSummary | undefined }) {
+  if (!demographics) {
+    return (
+      <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+        <h2 className="text-lg font-semibold text-slate-100">인구통계(bucket)</h2>
+        <p className="mt-2 text-sm text-slate-500">요약 응답에 demographics 가 없습니다.</p>
+      </section>
+    );
+  }
+
+  const genderRows = demographics.total?.by_gender ?? demographics.test_started?.by_gender ?? [];
+  const ageRows = demographics.total?.by_age_band ?? demographics.test_started?.by_age_band ?? [];
+  const acquisitionRows =
+    demographics.total?.by_acquisition_source ?? demographics.test_started?.by_acquisition_source ?? [];
+
+  return (
+    <section className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-100">인구통계(bucket)</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          테스트 시작(SURVEY_STARTED) distinct 사용자 기준 분포입니다. free_test_intro 프로필만 반영합니다.
+          미입력·소표본 구간은 과해석에 주의하세요.
+        </p>
+        <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-slate-500">
+          {demographics.limitations.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      </div>
+
+      {genderRows.length === 0 && ageRows.length === 0 && acquisitionRows.length === 0 ? (
+        <p className="text-sm text-slate-500">이 기간에 표시할 인구통계 bucket 이 없습니다.</p>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-3">
+          <DemographicsDistributionCard title="성별 분포" rows={genderRows} />
+          <DemographicsDistributionCard title="연령대 분포" rows={ageRows} />
+          <DemographicsDistributionCard title="유입 경로" rows={acquisitionRows} />
+        </div>
+      )}
+
+      {demographics.funnel_steps.length > 0 ? (
+        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900 p-4">
+          <p className="text-sm font-medium text-slate-200">단계별 요약</p>
+          <table className="mt-3 min-w-full text-left text-sm text-slate-300">
+            <thead className="border-b border-slate-700 text-xs uppercase text-slate-500">
+              <tr>
+                <th className="py-2 pr-4">단계</th>
+                <th className="py-2 pr-4">표본 수</th>
+                <th className="py-2 pr-4">최다 연령대</th>
+                <th className="py-2 pr-4">최다 성별</th>
+                <th className="py-2">최다 유입경로</th>
+              </tr>
+            </thead>
+            <tbody>
+              {demographics.funnel_steps.map((step) => (
+                <tr key={step.step} className="border-b border-slate-800/80">
+                  <td className="py-2 pr-4">{step.label_ko}</td>
+                  <td className="py-2 pr-4">{formatCount(step.sample_size)}</td>
+                  <td className="py-2 pr-4">{dominantBucketLabel(step.by_age_band)}</td>
+                  <td className="py-2 pr-4">{dominantBucketLabel(step.by_gender)}</td>
+                  <td className="py-2">{dominantBucketLabel(step.by_acquisition_source)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-3 text-xs text-amber-300">표본 수가 적은 구간은 해석에 주의하세요.</p>
+        </div>
+      ) : null}
+    </section>
+  );
 }
 
 function InsightCard({
@@ -411,6 +521,8 @@ export default function KpiDashboardClient() {
             />
           </div>
         </section>
+
+        <DemographicsSection demographics={state.summary?.demographics} />
 
         <section className="rounded-xl border border-slate-800 bg-slate-900 p-4">
           <h3 className="text-sm font-semibold text-slate-200">{ADMIN_KPI_SECTION_TITLES.helpGlossary}</h3>

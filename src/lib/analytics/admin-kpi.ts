@@ -14,6 +14,7 @@ import type {
   KpiRetentionRow,
   KpiSummaryResponse,
 } from './admin-kpi-types';
+import { computeKpiDemographicsSummary } from '@/lib/analytics/admin-kpi-demographics';
 
 const KST_TZ = 'Asia/Seoul';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -82,6 +83,7 @@ type AnalyticsEventRow = {
   source: 'client' | 'server';
   anon_id: string | null;
   user_id: string | null;
+  public_result_id: string | null;
   route_path: string | null;
   route_group: string | null;
   kst_day: string | null;
@@ -287,7 +289,9 @@ async function fetchAnalyticsEvents(
 ): Promise<EventWithPersonKey[]> {
   const { data, error } = await supabase
     .from('analytics_events')
-    .select('id, created_at, event_name, source, anon_id, user_id, route_path, route_group, kst_day, props, session_number')
+    .select(
+      'id, created_at, event_name, source, anon_id, user_id, public_result_id, route_path, route_group, kst_day, props, session_number'
+    )
     .gte('created_at', range.fromIso)
     .lt('created_at', range.toExclusiveIso)
     .in('event_name', eventNames);
@@ -644,6 +648,8 @@ export async function getKpiSummary(
   const appHomeRetention = getRetentionCohortRows(rows, 'app_home', todayKst);
   const weightedRetention = computeWeightedRetentionRates(appHomeRetention);
 
+  const demographics = await computeKpiDemographicsSummary(supabase, range, rows);
+
   const visitorsFromLanding = publicSteps[0]?.count ?? 0;
   const visitorsFromAppHome = executionSteps[6]?.count ?? 0;
   const visitors = visitorsFromLanding > 0 ? visitorsFromLanding : visitorsFromAppHome;
@@ -669,6 +675,7 @@ export async function getKpiSummary(
       d7_return_rate: weightedRetention.d7,
     },
     top_dropoff: findTopDropoff(publicSteps, executionSteps, firstSessionSteps),
+    demographics,
   };
 }
 
