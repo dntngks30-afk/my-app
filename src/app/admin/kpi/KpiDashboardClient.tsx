@@ -4,6 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
+import {
+  ADMIN_KPI_DETAIL_SECTION_EXPLANATIONS,
+  ADMIN_KPI_FUNNEL_FOOTER,
+  ADMIN_KPI_FUNNEL_STEP_LABELS_KO,
+  ADMIN_KPI_HELP_TEXTS,
+  ADMIN_KPI_RAW_EVENTS_COLUMNS,
+  ADMIN_KPI_SECTION_TITLES,
+  ADMIN_KPI_SUMMARY_METRICS,
+} from '@/lib/analytics/admin-kpi-labels';
 import type {
   KpiDetailsResponse,
   KpiFunnelResponse,
@@ -12,40 +21,9 @@ import type {
   KpiSummaryResponse,
 } from '@/lib/analytics/admin-kpi-types';
 
-const EVENT_LABELS: Record<string, string> = {
-  landing_viewed: 'Landing Viewed',
-  public_cta_clicked: 'Test Start Clicked',
-  survey_started: 'Survey Started',
-  survey_completed: 'Survey Completed',
-  result_viewed: 'Result Viewed',
-  execution_cta_clicked: 'Execution CTA Clicked',
-  auth_success: 'Auth Success',
-  checkout_success: 'Checkout Success',
-  onboarding_completed: 'Onboarding Completed',
-  public_result_claim_success: 'Public Result Claimed',
-  session_create_success: 'Session Created',
-  app_home_viewed: 'App Home Viewed',
-  reset_map_opened: 'Reset Map Opened',
-  session_panel_opened: 'Session Panel Opened',
-  exercise_player_opened: 'Exercise Player Opened',
-  exercise_logged: 'Exercise Logged',
-  exercise_next_clicked: 'Exercise Next Clicked',
-  exercise_player_closed: 'Exercise Player Closed',
-  session_complete_clicked: 'Session Complete Clicked',
-  session_complete_success: 'Session Completed',
-  camera_flow_started: 'Camera Flow Started',
-  camera_setup_viewed: 'Camera Setup Viewed',
-  camera_step_started: 'Camera Step Started',
-  camera_step_completed: 'Camera Step Completed',
-  camera_refine_completed: 'Camera Refine Completed',
-  pwa_install_card_shown: 'PWA Card Shown',
-  pwa_install_cta_clicked: 'PWA CTA Clicked',
-  pwa_install_prompt_accepted: 'PWA Prompt Accepted',
-  push_card_shown: 'Push Card Shown',
-  push_permission_requested: 'Push Permission Requested',
-  push_permission_granted: 'Push Permission Granted',
-  push_subscribe_success: 'Push Subscribe Success',
-};
+function funnelStepLabelKo(eventName: string, apiLabel: string): string {
+  return ADMIN_KPI_FUNNEL_STEP_LABELS_KO[eventName] ?? apiLabel;
+}
 
 type RangePreset = 7 | 14 | 30;
 
@@ -97,16 +75,19 @@ function formatCount(value: number | null | undefined) {
 
 function InsightCard({
   title,
+  description,
   value,
   subtitle,
 }: {
   title: string;
+  description: string;
   value: string;
   subtitle?: string;
 }) {
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-      <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-400">{title}</p>
+      <p className="text-sm font-medium text-slate-200">{title}</p>
+      <p className="mt-1 text-xs leading-snug text-slate-500">{description}</p>
       <p className="mt-2 text-2xl font-semibold text-slate-100">{value}</p>
       {subtitle ? <p className="mt-1 text-xs text-slate-500">{subtitle}</p> : null}
     </div>
@@ -115,29 +96,35 @@ function InsightCard({
 
 function FunnelSection({
   title,
+  explanation,
   steps,
 }: {
   title: string;
+  explanation?: string;
   steps: KpiFunnelResponse['steps'] | undefined;
 }) {
   const maxCount = Math.max(...(steps?.map((step) => step.count) ?? [0]), 1);
 
   return (
     <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-100">{title}</h2>
-        <span className="text-xs text-slate-500">Distinct person_key</span>
+      <div className="mb-4 flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-slate-100">{title}</h2>
+          <span className="shrink-0 text-xs text-slate-500">{ADMIN_KPI_FUNNEL_FOOTER.distinctPersonKey}</span>
+        </div>
+        {explanation ? <p className="text-xs leading-snug text-slate-500">{explanation}</p> : null}
       </div>
       {!steps || steps.length === 0 ? (
-        <p className="text-sm text-slate-500">No funnel data in this range.</p>
+        <p className="text-sm text-slate-500">{ADMIN_KPI_FUNNEL_FOOTER.noData}</p>
       ) : (
         <div className="space-y-4">
           {steps.map((step) => {
             const width = `${Math.max(8, (step.count / maxCount) * 100)}%`;
+            const labelKo = funnelStepLabelKo(step.event_name, step.label);
             return (
               <div key={`${title}-${step.event_name}`} className="space-y-1.5">
                 <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="font-medium text-slate-200">{step.label}</span>
+                  <span className="font-medium text-slate-200">{labelKo}</span>
                   <span className="text-slate-400">
                     {formatCount(step.count)} / {formatRate(step.conversion_from_previous)}
                   </span>
@@ -149,9 +136,12 @@ function FunnelSection({
                   />
                 </div>
                 <div className="flex items-center justify-between text-xs text-slate-500">
-                  <span>From start: {formatRate(step.conversion_from_start)}</span>
                   <span>
-                    Drop-off: {step.dropoff_count == null ? '-' : formatCount(step.dropoff_count)} / {formatRate(step.dropoff_rate)}
+                    {ADMIN_KPI_FUNNEL_FOOTER.fromStart}: {formatRate(step.conversion_from_start)}
+                  </span>
+                  <span>
+                    {ADMIN_KPI_FUNNEL_FOOTER.dropoff}: {step.dropoff_count == null ? '-' : formatCount(step.dropoff_count)} /{' '}
+                    {formatRate(step.dropoff_rate)}
                   </span>
                 </div>
               </div>
@@ -271,14 +261,18 @@ export default function KpiDashboardClient() {
 
   const topDropoffLabel = useMemo(() => {
     const top = state.summary?.top_dropoff;
-    if (!top) return 'No drop-off insight yet.';
-    return `가장 큰 이탈: ${EVENT_LABELS[top.from_event] ?? top.from_event} -> ${EVENT_LABELS[top.to_event] ?? top.to_event}, ${formatRate(top.dropoff_rate)}`;
+    if (!top) return '아직 이탈 구간 진단 데이터가 없습니다.';
+    const fromL = funnelStepLabelKo(top.from_event, top.from_event);
+    const toL = funnelStepLabelKo(top.to_event, top.to_event);
+    return `${ADMIN_KPI_SECTION_TITLES.topDropoff}: ${fromL} → ${toL}, ${formatRate(top.dropoff_rate)}`;
   }, [state.summary?.top_dropoff]);
+
+  const sm = ADMIN_KPI_SUMMARY_METRICS;
 
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950">
-        <p className="text-slate-300">Checking admin access...</p>
+        <p className="text-slate-300">관리자 권한 확인 중...</p>
       </div>
     );
   }
@@ -287,12 +281,12 @@ export default function KpiDashboardClient() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6">
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-8 text-center">
-          <p className="text-slate-300">Admin access is required.</p>
+          <p className="text-slate-300">관리자 권한이 필요합니다.</p>
           <Link
             href="/admin"
             className="mt-4 inline-block rounded-lg bg-slate-800 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700"
           >
-            Back to Admin
+            어드민 홈
           </Link>
         </div>
       </div>
@@ -304,8 +298,8 @@ export default function KpiDashboardClient() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-slate-100">KPI Dashboard</h1>
-            <p className="mt-2 text-sm text-slate-400">Pilot funnel metrics</p>
+            <h1 className="text-3xl font-bold text-slate-100">{ADMIN_KPI_SECTION_TITLES.pageTitle}</h1>
+            <p className="mt-2 text-sm text-slate-400">{ADMIN_KPI_SECTION_TITLES.pageSubtitle}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {[7, 14, 30].map((days) => (
@@ -344,7 +338,7 @@ export default function KpiDashboardClient() {
               href="/admin"
               className="rounded-lg bg-slate-800 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700"
             >
-              Admin Home
+              어드민 홈
             </Link>
           </div>
         </header>
@@ -355,71 +349,142 @@ export default function KpiDashboardClient() {
           </div>
         )}
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <InsightCard title="Visitors" value={formatCount(state.summary?.cards.visitors)} />
-          <InsightCard title="Test Start Rate" value={formatRate(state.summary?.cards.test_start_rate)} />
-          <InsightCard title="Survey Completion" value={formatRate(state.summary?.cards.survey_completion_rate)} />
-          <InsightCard title="Result View Rate" value={formatRate(state.summary?.cards.result_view_rate)} />
-          <InsightCard title="Result -> Execution" value={formatRate(state.summary?.cards.result_to_execution_rate)} />
-          <InsightCard title="Checkout Success" value={formatRate(state.summary?.cards.checkout_success_rate)} />
-          <InsightCard title="Session Create" value={formatRate(state.summary?.cards.session_create_rate)} />
-          <InsightCard title="First Session Complete" value={formatRate(state.summary?.cards.first_session_completion_rate)} />
-          <InsightCard
-            title="D1 Return"
-            value={state.summary?.cards.d1_return_rate == null ? '집계 대기' : formatRate(state.summary.cards.d1_return_rate)}
-            subtitle="적격 코호트 가중 평균"
-          />
-          <InsightCard
-            title="D3 / D7 Return"
-            value={`${state.summary?.cards.d3_return_rate == null ? '대기' : formatRate(state.summary.cards.d3_return_rate)} / ${state.summary?.cards.d7_return_rate == null ? '대기' : formatRate(state.summary.cards.d7_return_rate)}`}
-            subtitle="적격 코호트 가중 평균"
-          />
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-slate-100">{ADMIN_KPI_SECTION_TITLES.coreSummary}</h2>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <InsightCard
+              title={sm.visitors.label}
+              description={sm.visitors.description}
+              value={formatCount(state.summary?.cards.visitors)}
+            />
+            <InsightCard
+              title={sm.test_start_rate.label}
+              description={sm.test_start_rate.description}
+              value={formatRate(state.summary?.cards.test_start_rate)}
+            />
+            <InsightCard
+              title={sm.survey_completion_rate.label}
+              description={sm.survey_completion_rate.description}
+              value={formatRate(state.summary?.cards.survey_completion_rate)}
+            />
+            <InsightCard
+              title={sm.result_view_rate.label}
+              description={sm.result_view_rate.description}
+              value={formatRate(state.summary?.cards.result_view_rate)}
+            />
+            <InsightCard
+              title={sm.result_to_execution_rate.label}
+              description={sm.result_to_execution_rate.description}
+              value={formatRate(state.summary?.cards.result_to_execution_rate)}
+            />
+            <InsightCard
+              title={sm.checkout_success_rate.label}
+              description={sm.checkout_success_rate.description}
+              value={formatRate(state.summary?.cards.checkout_success_rate)}
+            />
+            <InsightCard
+              title={sm.onboarding_completion_rate.label}
+              description={sm.onboarding_completion_rate.description}
+              value={formatRate(state.summary?.cards.onboarding_completion_rate)}
+            />
+            <InsightCard
+              title={sm.session_create_rate.label}
+              description={sm.session_create_rate.description}
+              value={formatRate(state.summary?.cards.session_create_rate)}
+            />
+            <InsightCard
+              title={sm.first_session_completion_rate.label}
+              description={sm.first_session_completion_rate.description}
+              value={formatRate(state.summary?.cards.first_session_completion_rate)}
+            />
+            <InsightCard
+              title={sm.d1_return_rate.label}
+              description={sm.d1_return_rate.description}
+              value={state.summary?.cards.d1_return_rate == null ? '집계 대기' : formatRate(state.summary.cards.d1_return_rate)}
+              subtitle={sm.d1_return_rate.subtitle}
+            />
+            <InsightCard
+              title={sm.d3_d7_return_rate.label}
+              description={sm.d3_d7_return_rate.description}
+              value={`${state.summary?.cards.d3_return_rate == null ? '대기' : formatRate(state.summary.cards.d3_return_rate)} / ${state.summary?.cards.d7_return_rate == null ? '대기' : formatRate(state.summary.cards.d7_return_rate)}`}
+              subtitle={sm.d3_d7_return_rate.subtitle}
+            />
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+          <h3 className="text-sm font-semibold text-slate-200">{ADMIN_KPI_SECTION_TITLES.helpGlossary}</h3>
+          <ul className="mt-2 space-y-1 text-xs leading-snug text-slate-500">
+            <li>• {ADMIN_KPI_HELP_TEXTS.pending}</li>
+            <li>• {ADMIN_KPI_HELP_TEXTS.weightedCohort}</li>
+            <li>• {ADMIN_KPI_HELP_TEXTS.eventCount}</li>
+          </ul>
         </section>
 
         <div className="grid gap-6 xl:grid-cols-3">
-          <FunnelSection title="Public Funnel" steps={state.publicFunnel?.steps} />
-          <FunnelSection title="Execution Funnel" steps={state.executionFunnel?.steps} />
-          <FunnelSection title="First Session Funnel" steps={state.firstSessionFunnel?.steps} />
+          <FunnelSection title={ADMIN_KPI_SECTION_TITLES.publicFunnel} steps={state.publicFunnel?.steps} />
+          <FunnelSection title={ADMIN_KPI_SECTION_TITLES.executionFunnel} steps={state.executionFunnel?.steps} />
+          <FunnelSection title={ADMIN_KPI_SECTION_TITLES.firstSessionFunnel} steps={state.firstSessionFunnel?.steps} />
         </div>
 
         <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-          <h2 className="text-lg font-semibold text-slate-100">Top Drop-off</h2>
+          <h2 className="text-lg font-semibold text-slate-100">{ADMIN_KPI_SECTION_TITLES.topDropoff}</h2>
           <p className="mt-3 text-sm text-amber-300">{topDropoffLabel}</p>
           {state.summary?.top_dropoff?.funnel ? (
-            <p className="mt-1 text-xs text-slate-500">Funnel: {state.summary.top_dropoff.funnel}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {ADMIN_KPI_FUNNEL_FOOTER.funnelAxis}: {state.summary.top_dropoff.funnel}
+            </p>
           ) : null}
         </section>
 
         <div className="grid gap-6 xl:grid-cols-3">
-          <FunnelSection title="Session Drop-off" steps={state.details?.session_detail.steps} />
-          <FunnelSection title="Camera Refine" steps={state.details?.camera.steps} />
+          <FunnelSection
+            title={ADMIN_KPI_SECTION_TITLES.sessionDropoff}
+            explanation={ADMIN_KPI_DETAIL_SECTION_EXPLANATIONS.sessionDropoff}
+            steps={state.details?.session_detail.steps}
+          />
+          <FunnelSection
+            title={ADMIN_KPI_SECTION_TITLES.cameraRefine}
+            explanation={ADMIN_KPI_DETAIL_SECTION_EXPLANATIONS.cameraRefine}
+            steps={state.details?.camera.steps}
+          />
           <div className="space-y-6">
-            <FunnelSection title="PWA Install" steps={state.details?.pwa.steps} />
-            <FunnelSection title="Push Permission" steps={state.details?.push.steps} />
+            <FunnelSection
+              title={ADMIN_KPI_SECTION_TITLES.pwaInstall}
+              explanation={ADMIN_KPI_DETAIL_SECTION_EXPLANATIONS.pwaInstall}
+              steps={state.details?.pwa.steps}
+            />
+            <FunnelSection
+              title={ADMIN_KPI_SECTION_TITLES.pushPermission}
+              explanation={ADMIN_KPI_DETAIL_SECTION_EXPLANATIONS.pushPermission}
+              steps={state.details?.push.steps}
+            />
           </div>
         </div>
 
         <section className="grid gap-6 xl:grid-cols-3">
           <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-            <h2 className="text-lg font-semibold text-slate-100">Session Detail</h2>
+            <h2 className="text-lg font-semibold text-slate-100">{ADMIN_KPI_SECTION_TITLES.sessionDetailTable}</h2>
             <p className="mt-2 text-sm text-slate-400">
-              Close before complete: {formatCount(state.details?.session_detail.close_before_complete_count)}
+              완료 전 닫기: {formatCount(state.details?.session_detail.close_before_complete_count)}
             </p>
             {state.details?.session_detail.metric_note ? (
-              <p className="mt-1 text-xs text-slate-500">{state.details.session_detail.metric_note}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {state.details.session_detail.metric_note} ({ADMIN_KPI_HELP_TEXTS.eventCount})
+              </p>
             ) : null}
             {!state.details?.session_detail.by_exercise_index.length ? (
-              <p className="mt-4 text-sm text-slate-500">No exercise index detail yet.</p>
+              <p className="mt-4 text-sm text-slate-500">운동 index 상세 데이터가 없습니다.</p>
             ) : (
               <div className="mt-4 overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead className="text-left text-slate-400">
                     <tr>
-                      <th className="px-3 py-2">Exercise</th>
-                      <th className="px-3 py-2">Opened</th>
-                      <th className="px-3 py-2">Logged</th>
-                      <th className="px-3 py-2">Next</th>
-                      <th className="px-3 py-2">Closed</th>
+                      <th className="px-3 py-2">운동 번호</th>
+                      <th className="px-3 py-2">열림</th>
+                      <th className="px-3 py-2">기록</th>
+                      <th className="px-3 py-2">다음</th>
+                      <th className="px-3 py-2">닫힘</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -439,12 +504,12 @@ export default function KpiDashboardClient() {
           </section>
 
           <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-            <h2 className="text-lg font-semibold text-slate-100">Camera Detail</h2>
+            <h2 className="text-lg font-semibold text-slate-100">{ADMIN_KPI_SECTION_TITLES.cameraDetail}</h2>
             <div className="mt-4 space-y-4">
               <div>
-                <p className="text-xs uppercase tracking-[0.12em] text-slate-500">Step Completed</p>
+                <p className="text-xs uppercase tracking-[0.12em] text-slate-500">단계 완료</p>
                 {!state.details?.camera.step_completed_by_movement.length ? (
-                  <p className="mt-2 text-sm text-slate-500">No completed camera steps yet.</p>
+                  <p className="mt-2 text-sm text-slate-500">완료된 카메라 단계가 없습니다.</p>
                 ) : (
                   <div className="mt-2 space-y-2">
                     {state.details.camera.step_completed_by_movement.map((row) => (
@@ -457,9 +522,9 @@ export default function KpiDashboardClient() {
                 )}
               </div>
               <div>
-                <p className="text-xs uppercase tracking-[0.12em] text-slate-500">Fallback Reasons</p>
+                <p className="text-xs uppercase tracking-[0.12em] text-slate-500">대체 사유</p>
                 {!state.details?.camera.fallback_reasons.length ? (
-                  <p className="mt-2 text-sm text-slate-500">No fallback reasons yet.</p>
+                  <p className="mt-2 text-sm text-slate-500">대체 사유가 없습니다.</p>
                 ) : (
                   <div className="mt-2 space-y-2">
                     {state.details.camera.fallback_reasons.map((row) => (
@@ -475,18 +540,18 @@ export default function KpiDashboardClient() {
           </section>
 
           <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-            <h2 className="text-lg font-semibold text-slate-100">PWA / Push Detail</h2>
+            <h2 className="text-lg font-semibold text-slate-100">{ADMIN_KPI_SECTION_TITLES.pwaPushDetail}</h2>
             <div className="mt-4 space-y-3 text-sm text-slate-200">
               <div className="flex items-center justify-between">
-                <span>PWA Prompt Accepted</span>
+                <span>{ADMIN_KPI_FUNNEL_STEP_LABELS_KO.pwa_install_prompt_accepted ?? '설치 프롬프트 수락'}</span>
                 <span>{formatCount(state.details?.pwa.steps.at(-1)?.count)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Push Permission Denied</span>
+                <span>{ADMIN_KPI_FUNNEL_STEP_LABELS_KO.push_permission_denied ?? '권한 거절'}</span>
                 <span>{formatCount(state.details?.push.denied_count)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Push Subscribe Success</span>
+                <span>{ADMIN_KPI_FUNNEL_STEP_LABELS_KO.push_subscribe_success ?? '구독 저장 성공'}</span>
                 <span>{formatCount(state.details?.push.steps.at(-1)?.count)}</span>
               </div>
             </div>
@@ -494,21 +559,20 @@ export default function KpiDashboardClient() {
         </section>
 
         <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-100">Retention</h2>
-              <p className="mt-0.5 text-xs text-slate-500">Cohort: first app_home_viewed per person · D1/D3/D7 = +1/+3/+7 KST days · 대기 = 집계 미성숙</p>
-            </div>
+          <div className="mb-4 flex flex-col gap-1">
+            <h2 className="text-lg font-semibold text-slate-100">{ADMIN_KPI_SECTION_TITLES.retention}</h2>
+            <p className="text-xs leading-snug text-slate-500">{ADMIN_KPI_DETAIL_SECTION_EXPLANATIONS.retention}</p>
+            <p className="text-xs text-slate-500">코호트: 사람당 첫 app_home_viewed · D1/D3/D7 = +1/+3/+7 (KST)</p>
           </div>
           {!state.retention?.rows.length ? (
-            <p className="text-sm text-slate-500">No retention cohorts in this range.</p>
+            <p className="text-sm text-slate-500">선택한 기간에 재방문 코호트가 없습니다.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="text-left text-slate-400">
                   <tr>
-                    <th className="px-3 py-2">Cohort Day</th>
-                    <th className="px-3 py-2">Size</th>
+                    <th className="px-3 py-2">코호트 일</th>
+                    <th className="px-3 py-2">규모</th>
                     <th className="px-3 py-2">D1</th>
                     <th className="px-3 py-2">D3</th>
                     <th className="px-3 py-2">D7</th>
@@ -543,48 +607,55 @@ export default function KpiDashboardClient() {
         </section>
 
         <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <h2 className="text-lg font-semibold text-slate-100">Recent Raw Events</h2>
+          <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-100">{ADMIN_KPI_SECTION_TITLES.rawEvents}</h2>
+              <p className="mt-1 text-xs leading-snug text-slate-500">{ADMIN_KPI_DETAIL_SECTION_EXPLANATIONS.rawEvents}</p>
+            </div>
             <input
               type="text"
-              placeholder="Filter by event name"
+              placeholder="이벤트 이름으로 필터"
               value={eventFilter}
               onChange={(e) => setEventFilter(e.target.value)}
               className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500"
             />
           </div>
           {!state.rawEvents?.events.length ? (
-            <p className="text-sm text-slate-500">No events in this range.</p>
+            <p className="text-sm text-slate-500">이 기간에 이벤트가 없습니다.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="text-left text-slate-400">
                   <tr>
-                    <th className="px-3 py-2">Time</th>
-                    <th className="px-3 py-2">Event</th>
-                    <th className="px-3 py-2">Source</th>
-                    <th className="px-3 py-2">Route</th>
-                    <th className="px-3 py-2">Anon</th>
-                    <th className="px-3 py-2">User</th>
-                    <th className="px-3 py-2">Props</th>
+                    <th className="px-3 py-2">{ADMIN_KPI_RAW_EVENTS_COLUMNS.time}</th>
+                    <th className="px-3 py-2">{ADMIN_KPI_RAW_EVENTS_COLUMNS.eventName}</th>
+                    <th className="px-3 py-2">{ADMIN_KPI_RAW_EVENTS_COLUMNS.source}</th>
+                    <th className="px-3 py-2">{ADMIN_KPI_RAW_EVENTS_COLUMNS.route}</th>
+                    <th className="px-3 py-2">{ADMIN_KPI_RAW_EVENTS_COLUMNS.user}</th>
+                    <th className="px-3 py-2">{ADMIN_KPI_RAW_EVENTS_COLUMNS.props}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {state.rawEvents.events.map((event) => (
-                    <tr key={event.id} className="border-t border-slate-800 text-slate-200">
-                      <td className="px-3 py-2 whitespace-nowrap">{new Date(event.created_at).toLocaleString('ko-KR')}</td>
-                      <td className="px-3 py-2">{event.event_name}</td>
-                      <td className="px-3 py-2">{event.source}</td>
-                      <td className="px-3 py-2">{event.route_path ?? event.route_group ?? '-'}</td>
-                      <td className="px-3 py-2">{event.anon_id_preview ?? '-'}</td>
-                      <td className="px-3 py-2">{event.user_id_preview ?? '-'}</td>
-                      <td className="px-3 py-2">
-                        <code className="text-xs text-slate-400">
-                          {JSON.stringify(event.props_preview)}
-                        </code>
-                      </td>
-                    </tr>
-                  ))}
+                  {state.rawEvents.events.map((event) => {
+                    const ko = ADMIN_KPI_FUNNEL_STEP_LABELS_KO[event.event_name];
+                    return (
+                      <tr key={event.id} className="border-t border-slate-800 text-slate-200">
+                        <td className="px-3 py-2 whitespace-nowrap">{new Date(event.created_at).toLocaleString('ko-KR')}</td>
+                        <td className="px-3 py-2 align-top">
+                          <code className="text-xs text-slate-300">{event.event_name}</code>
+                          {ko ? <div className="mt-0.5 text-xs text-slate-500">{ko}</div> : null}
+                        </td>
+                        <td className="px-3 py-2">{event.source}</td>
+                        <td className="px-3 py-2">{event.route_path ?? event.route_group ?? '-'}</td>
+                        <td className="px-3 py-2 text-xs">{event.user_id_preview ?? event.anon_id_preview ?? '-'}</td>
+                        <td className="px-3 py-2">
+                          <code className="text-xs text-slate-400">
+                            {JSON.stringify(event.props_preview)}
+                          </code>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -599,7 +670,7 @@ export default function KpiDashboardClient() {
 
         {(state.summary?.generated_at || state.summary?.source) && (
           <section className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500 mb-2">Admin — 데이터 메타</p>
+            <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500 mb-2">{ADMIN_KPI_SECTION_TITLES.dataMeta}</p>
             <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-400">
               {state.summary.generated_at && (
                 <span>생성: {new Date(state.summary.generated_at).toLocaleString('ko-KR')}</span>
@@ -623,7 +694,7 @@ export default function KpiDashboardClient() {
 
         {loading && (
           <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-400">
-            Loading KPI data...
+            KPI 데이터 불러오는 중...
           </div>
         )}
       </div>

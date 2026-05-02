@@ -106,11 +106,16 @@ assert(detailsRouteSource.includes('requireAdmin('), 'details route must require
 assert(detailsRouteSource.includes("Cache-Control', 'no-store"), 'details route must set no-store');
 
 const dashboardSource = readFile('src/app/admin/kpi/KpiDashboardClient.tsx');
+const labelsKoSource = readFile('src/lib/analytics/admin-kpi-labels.ts');
 assert(dashboardSource.includes('/api/admin/kpi/details'), 'dashboard client must fetch KPI details API');
-assert(dashboardSource.includes('Session Drop-off'), 'dashboard must render session drop-off section');
-assert(dashboardSource.includes('Camera Refine'), 'dashboard must render camera detail section');
-assert(dashboardSource.includes('PWA Install'), 'dashboard must render PWA detail section');
-assert(dashboardSource.includes('Push Permission'), 'dashboard must render push detail section');
+assert(labelsKoSource.includes('세션 이탈 진단'), 'labels must define session drop-off section title');
+assert(dashboardSource.includes('ADMIN_KPI_SECTION_TITLES.sessionDropoff'), 'dashboard must bind session drop-off section');
+assert(labelsKoSource.includes('카메라 분석 진단'), 'labels must define camera refine section title');
+assert(dashboardSource.includes('ADMIN_KPI_SECTION_TITLES.cameraRefine'), 'dashboard must bind camera refine section');
+assert(labelsKoSource.includes('PWA 설치'), 'labels must define PWA install section title');
+assert(dashboardSource.includes('ADMIN_KPI_SECTION_TITLES.pwaInstall'), 'dashboard must bind PWA install section');
+assert(labelsKoSource.includes('알림 권한'), 'labels must define push permission section title');
+assert(dashboardSource.includes('ADMIN_KPI_SECTION_TITLES.pushPermission'), 'dashboard must bind push permission section');
 
 const adminHelperSource = readFile('src/lib/analytics/admin-kpi.ts');
 assert(adminHelperSource.includes('getKpiDetails'), 'admin KPI helper must expose details query');
