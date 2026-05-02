@@ -7,7 +7,9 @@ const withPWA = withPWAInit({
   disable: process.env.NODE_ENV === "development",
   register: true,
   workboxOptions: {
-    skipWaiting: false,
+    skipWaiting: true,
+    clientsClaim: true,
+    cleanupOutdatedCaches: true,
   },
 });
 
@@ -34,6 +36,47 @@ const nextConfig: NextConfig = {
     ];
 
     return [...appLegacy, ...legacyTopLevel];
+  },
+
+  async headers() {
+    const noStoreHeaders = [
+      {
+        key: 'Cache-Control',
+        value: 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      },
+      {
+        key: 'Pragma',
+        value: 'no-cache',
+      },
+      {
+        key: 'Expires',
+        value: '0',
+      },
+    ];
+
+    return [
+      {
+        source: '/sw.js',
+        headers: noStoreHeaders,
+      },
+      {
+        source: '/:file(workbox-.+\\.js)',
+        headers: noStoreHeaders,
+      },
+      {
+        source: '/:file(worker-.+\\.js)',
+        headers: noStoreHeaders,
+      },
+      {
+        source: '/manifest.webmanifest',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, no-cache, must-revalidate',
+          },
+        ],
+      },
+    ];
   },
 
   // API 라우트 body size 제한 설정
