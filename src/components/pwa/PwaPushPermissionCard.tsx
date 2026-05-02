@@ -21,6 +21,7 @@ export function PwaPushPermissionCard({ className }: { className?: string }) {
   let body = 'MOVE RE는 짧게라도 자주 이어갈 때 효과가 좋아요. 알림을 켜두면 오늘의 리셋 시간을 놓치지 않게 도와드릴게요.';
   let cta = '알림 켜기';
   let onClick = () => void requestAndSubscribe();
+  let showButtons = true;
 
   if (state === 'permission_granted_no_subscription') {
     title = '알림 연결을 마무리할게요';
@@ -40,7 +41,12 @@ export function PwaPushPermissionCard({ className }: { className?: string }) {
     body = '네트워크 상태를 확인한 뒤 다시 시도해주세요.';
     cta = '다시 시도';
   } else if (state === 'subscribe_pending') {
+    body = '알림을 연결하고 있어요. 잠시만 기다려주세요.';
     cta = '연결 중…';
+  } else if (state === 'permission_granted_subscribed_recent') {
+    title = '알림이 켜졌어요';
+    body = '다음 루틴을 놓치지 않게 알려드릴게요.';
+    showButtons = false;
   }
 
   return (
@@ -50,23 +56,25 @@ export function PwaPushPermissionCard({ className }: { className?: string }) {
     >
       <p className="text-sm font-medium text-[#fde68a]">{title}</p>
       <p className="mt-1 text-sm font-light leading-relaxed text-[#c6c6cd]">{body}</p>
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          disabled={state === 'subscribe_pending'}
-          onClick={onClick}
-          className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-amber-500/35 bg-[rgba(171,76,0,0.25)] px-3 text-sm font-semibold text-[#ffb77d] transition hover:bg-[rgba(171,76,0,0.35)] disabled:opacity-60"
-        >
-          {cta}
-        </button>
-        <button
-          type="button"
-          onClick={dismissForNow}
-          className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-white/10 bg-white/5 px-3 text-sm font-medium text-[#dce1fb] transition hover:bg-white/10"
-        >
-          나중에
-        </button>
-      </div>
+      {showButtons ? (
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            disabled={state === 'subscribe_pending'}
+            onClick={onClick}
+            className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-amber-500/35 bg-[rgba(171,76,0,0.25)] px-3 text-sm font-semibold text-[#ffb77d] transition hover:bg-[rgba(171,76,0,0.35)] disabled:opacity-60"
+          >
+            {cta}
+          </button>
+          <button
+            type="button"
+            onClick={dismissForNow}
+            className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-white/10 bg-white/5 px-3 text-sm font-medium text-[#dce1fb] transition hover:bg-white/10"
+          >
+            나중에
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }
