@@ -275,8 +275,10 @@ export function JourneyTabViewV2({
           setFeedbackError('피드백을 5자 이상 입력해주세요.');
         } else if (code === 'MESSAGE_TOO_LONG') {
           setFeedbackError('피드백은 2000자 이내로 입력해주세요.');
+        } else if (code === 'FEEDBACK_SAVE_FAILED' || code === 'SERVER_ERROR') {
+          setFeedbackError('접수 저장에 실패했어요. 잠시 후 다시 시도해주세요.');
         } else {
-          setFeedbackError('전송에 실패했어요. 잠시 후 다시 시도해주세요.');
+          setFeedbackError('접수에 실패했어요. 잠시 후 다시 시도해주세요.');
         }
         return;
       }
@@ -284,7 +286,7 @@ export function JourneyTabViewV2({
       const data = (await res.json()) as { ok?: boolean };
       if (!data.ok) {
         setFeedbackStatus('error');
-        setFeedbackError('전송에 실패했어요. 잠시 후 다시 시도해주세요.');
+        setFeedbackError('접수에 실패했어요. 잠시 후 다시 시도해주세요.');
         return;
       }
 

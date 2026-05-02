@@ -37,6 +37,7 @@
     "test:session-feedback": "npx tsx scripts/session-feedback-smoke.mjs",
     "test:journey-summary": "npx tsx scripts/journey-summary-smoke.mjs",
     "test:journey-reset-map-total": "node scripts/journey-reset-map-total-smoke.mjs",
+    "test:feedback-db-dashboard": "node scripts/feedback-db-dashboard-smoke.mjs",
     "test:progress-report": "npx tsx scripts/progress-report-smoke.mjs",
     "test:adaptive-progression": "npx tsx scripts/adaptive-progression-smoke.mjs",
     "test:adaptive-modifier-merge": "npx tsx scripts/adaptive-modifier-merge-smoke.mjs",
