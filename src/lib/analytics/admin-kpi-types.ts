@@ -8,11 +8,15 @@ export type KpiRange = {
   tz: string;
   fromIso: string;
   toExclusiveIso: string;
+  range_clamped?: boolean;
 };
 
 export type KpiSummaryResponse = {
   ok: true;
-  range: { from: string; to: string; tz: string };
+  range: { from: string; to: string; tz: string; range_clamped?: boolean };
+  generated_at: string;
+  source: 'raw_events' | 'daily_rollup' | 'mixed';
+  limitations?: string[];
   cards: {
     visitors: number;
     test_start_rate: number | null;
@@ -48,6 +52,10 @@ export type KpiFunnelStep = {
 
 export type KpiFunnelResponse = {
   ok: true;
+  range: { from: string; to: string; tz: string; range_clamped?: boolean };
+  generated_at: string;
+  source: 'raw_events' | 'daily_rollup' | 'mixed';
+  limitations?: string[];
   funnel: KpiFunnelKey;
   steps: KpiFunnelStep[];
 };
@@ -56,15 +64,28 @@ export type KpiRetentionRow = {
   cohort_day: string;
   cohort_size: number;
   d1_returned: number;
+  /** null when cohort is not yet eligible for D1 measurement (cohort_day+1 > today) */
   d1_rate: number | null;
   d3_returned: number;
+  /** null when cohort is not yet eligible for D3 measurement (cohort_day+3 > today) */
   d3_rate: number | null;
   d7_returned: number;
+  /** null when cohort is not yet eligible for D7 measurement (cohort_day+7 > today) */
   d7_rate: number | null;
+  /** true when cohort_day+1 <= today_kst */
+  eligible_d1: boolean;
+  /** true when cohort_day+3 <= today_kst */
+  eligible_d3: boolean;
+  /** true when cohort_day+7 <= today_kst */
+  eligible_d7: boolean;
 };
 
 export type KpiRetentionResponse = {
   ok: true;
+  range: { from: string; to: string; tz: string; range_clamped?: boolean };
+  generated_at: string;
+  source: 'raw_events' | 'daily_rollup' | 'mixed';
+  limitations?: string[];
   cohort: KpiCohortKey;
   rows: KpiRetentionRow[];
 };
@@ -84,6 +105,10 @@ export type KpiRawEventRow = {
 
 export type KpiRawEventsResponse = {
   ok: true;
+  range: { from: string; to: string; tz: string; range_clamped?: boolean };
+  generated_at: string;
+  source: 'raw_events' | 'daily_rollup' | 'mixed';
+  limitations?: string[];
   events: KpiRawEventRow[];
   nextCursor: string | null;
 };
@@ -108,10 +133,16 @@ export type KpiDetailMovementRow = {
 
 export type KpiDetailsResponse = {
   ok: true;
+  range: { from: string; to: string; tz: string; range_clamped?: boolean };
+  generated_at: string;
+  source: 'raw_events' | 'daily_rollup' | 'mixed';
+  limitations?: string[];
   session_detail: {
     steps: KpiFunnelStep[];
     close_before_complete_count: number;
     by_exercise_index: KpiDetailExerciseRow[];
+    /** 집계 단위 설명 — steps 는 person-distinct, by_exercise_index 는 이벤트 건수 기준 */
+    metric_note?: string;
   };
   camera: {
     steps: KpiFunnelStep[];

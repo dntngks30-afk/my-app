@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ANALYTICS_EVENTS } from './events';
+import { resolveAnalyticsPersonKeyForKpi } from './admin-person-key';
 import type {
   KpiCohortKey,
   KpiDetailsResponse,
@@ -240,14 +241,16 @@ export function resolveKpiRange(params: URLSearchParams, defaultDays = DEFAULT_R
   const requestedSpan = Math.floor(
     (new Date(kstDayToUtcIso(toBound.day)).getTime() - new Date(kstDayToUtcIso(fromBound.day)).getTime()) / DAY_MS
   ) + 1;
-  const cappedToDay = requestedSpan > MAX_RANGE_DAYS ? addDays(fromBound.day, MAX_RANGE_DAYS - 1) : toBound.day;
+  const rangeClamped = requestedSpan > MAX_RANGE_DAYS;
+  const cappedToDay = rangeClamped ? addDays(fromBound.day, MAX_RANGE_DAYS - 1) : toBound.day;
 
   return {
     from: fromBound.day,
     to: cappedToDay,
     tz: params.get('tz') || KST_TZ,
-    fromIso: isDateOnly(params.get('from') ?? '') || !params.get('from') ? kstDayToUtcIso(fromBound.day) : fromBound.iso,
-    toExclusiveIso: isDateOnly(params.get('to') ?? '') || !params.get('to') ? kstDayToUtcIso(cappedToDay, true) : toBound.iso,
+    range_clamped: rangeClamped,
+    fromIso: kstDayToUtcIso(fromBound.day),
+    toExclusiveIso: kstDayToUtcIso(cappedToDay, true),
   };
 }
 
@@ -275,16 +278,6 @@ async function fetchIdentityLinkMap(
   }
 
   return map;
-}
-
-function buildPersonKey(row: AnalyticsEventRow, linkMap: Map<string, string>): string {
-  if (row.user_id) return `user:${row.user_id}`;
-  if (row.anon_id) {
-    const linked = linkMap.get(row.anon_id);
-    if (linked) return `user:${linked}`;
-    return `anon:${row.anon_id}`;
-  }
-  return `event:${row.id}`;
 }
 
 async function fetchAnalyticsEvents(
@@ -315,7 +308,7 @@ async function fetchAnalyticsEvents(
 
   return rows.map((row) => ({
     ...row,
-    person_key: buildPersonKey(row, linkMap),
+    person_key: resolveAnalyticsPersonKeyForKpi(row, linkMap),
   }));
 }
 
@@ -398,19 +391,64 @@ function findTopDropoff(
   return valid[0] ?? null;
 }
 
+function computeWeightedRetentionRates(rows: KpiRetentionRow[]): {
+  d1: number | null;
+  d3: number | null;
+  d7: number | null;
+} {
+  let d1ReturnedSum = 0, d1SizeSum = 0;
+  let d3ReturnedSum = 0, d3SizeSum = 0;
+  let d7ReturnedSum = 0, d7SizeSum = 0;
+
+  for (const row of rows) {
+    if (row.eligible_d1) { d1ReturnedSum += row.d1_returned; d1SizeSum += row.cohort_size; }
+    if (row.eligible_d3) { d3ReturnedSum += row.d3_returned; d3SizeSum += row.cohort_size; }
+    if (row.eligible_d7) { d7ReturnedSum += row.d7_returned; d7SizeSum += row.cohort_size; }
+  }
+
+  return {
+    d1: percentage(d1ReturnedSum, d1SizeSum),
+    d3: percentage(d3ReturnedSum, d3SizeSum),
+    d7: percentage(d7ReturnedSum, d7SizeSum),
+  };
+}
+
+function buildKpiMeta(range: KpiRange, limitations?: string[]): {
+  generated_at: string;
+  source: 'raw_events';
+  limitations?: string[];
+  range: { from: string; to: string; tz: string; range_clamped?: boolean };
+} {
+  return {
+    generated_at: new Date().toISOString(),
+    source: 'raw_events',
+    limitations: limitations && limitations.length > 0 ? limitations : undefined,
+    range: {
+      from: range.from,
+      to: range.to,
+      tz: range.tz,
+      range_clamped: range.range_clamped,
+    },
+  };
+}
+
 function getRetentionCohortRows(
   rows: EventWithPersonKey[],
-  cohort: KpiCohortKey
+  cohort: KpiCohortKey,
+  todayKst: string
 ): KpiRetentionRow[] {
   const cohortEvent = cohort === 'app_home'
     ? ANALYTICS_EVENTS.APP_HOME_VIEWED
     : ANALYTICS_EVENTS.SESSION_COMPLETE_SUCCESS;
 
   const cohortRows = rows
-    .filter((row) =>
-      row.event_name === cohortEvent &&
-      (cohort === 'app_home' || row.session_number === 1 || row.session_number == null)
-    )
+    .filter((row) => {
+      if (row.event_name !== cohortEvent) return false;
+      // first_session_complete: session_number === 1 엄격 적용.
+      // session_number null/undefined 는 미확인 세션으로 코호트에서 제외.
+      if (cohort === 'first_session_complete' && row.session_number !== 1) return false;
+      return true;
+    })
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 
   const firstCohortByPerson = new Map<string, string>();
@@ -420,6 +458,8 @@ function getRetentionCohortRows(
     }
   }
 
+  // 복귀일 집합 — 코호트 자격 이벤트 당일 활동은 D1 판정에서 자동 제외됨
+  // (D1 = cohort_day+1 이므로 당일 return 은 어떤 Dk 에도 해당하지 않음).
   const returnDaysByPerson = new Map<string, Set<string>>();
   for (const row of rows) {
     if (!row.kst_day || !RETURN_EVENT_SET.has(row.event_name)) continue;
@@ -428,17 +468,22 @@ function getRetentionCohortRows(
     returnDaysByPerson.set(row.person_key, current);
   }
 
-  const grouped = new Map<string, KpiRetentionRow>();
+  type RetentionAccumulator = {
+    cohort_day: string;
+    cohort_size: number;
+    d1_returned: number;
+    d3_returned: number;
+    d7_returned: number;
+  };
+
+  const grouped = new Map<string, RetentionAccumulator>();
   for (const [personKey, cohortDay] of firstCohortByPerson.entries()) {
     const row = grouped.get(cohortDay) ?? {
       cohort_day: cohortDay,
       cohort_size: 0,
       d1_returned: 0,
-      d1_rate: null,
       d3_returned: 0,
-      d3_rate: null,
       d7_returned: 0,
-      d7_rate: null,
     };
     row.cohort_size += 1;
 
@@ -452,12 +497,24 @@ function getRetentionCohortRows(
 
   return Array.from(grouped.values())
     .sort((a, b) => a.cohort_day.localeCompare(b.cohort_day))
-    .map((row) => ({
-      ...row,
-      d1_rate: percentage(row.d1_returned, row.cohort_size),
-      d3_rate: percentage(row.d3_returned, row.cohort_size),
-      d7_rate: percentage(row.d7_returned, row.cohort_size),
-    }));
+    .map((acc): KpiRetentionRow => {
+      const eligible_d1 = addDays(acc.cohort_day, 1) <= todayKst;
+      const eligible_d3 = addDays(acc.cohort_day, 3) <= todayKst;
+      const eligible_d7 = addDays(acc.cohort_day, 7) <= todayKst;
+      return {
+        cohort_day: acc.cohort_day,
+        cohort_size: acc.cohort_size,
+        d1_returned: acc.d1_returned,
+        d1_rate: eligible_d1 ? percentage(acc.d1_returned, acc.cohort_size) : null,
+        d3_returned: acc.d3_returned,
+        d3_rate: eligible_d3 ? percentage(acc.d3_returned, acc.cohort_size) : null,
+        d7_returned: acc.d7_returned,
+        d7_rate: eligible_d7 ? percentage(acc.d7_returned, acc.cohort_size) : null,
+        eligible_d1,
+        eligible_d3,
+        eligible_d7,
+      };
+    });
 }
 
 function maskIdPreview(value: string | null): string | null {
@@ -571,6 +628,7 @@ export async function getKpiSummary(
   supabase: SupabaseClient,
   range: KpiRange
 ): Promise<KpiSummaryResponse> {
+  const todayKst = formatKstDay(new Date());
   const eventNames = Array.from(
     new Set(
       Object.values(FUNNEL_DEFINITIONS)
@@ -583,16 +641,19 @@ export async function getKpiSummary(
   const publicSteps = buildFunnelSteps(rows, 'public');
   const executionSteps = buildFunnelSteps(rows, 'execution');
   const firstSessionSteps = buildFunnelSteps(rows, 'first_session');
-  const appHomeRetention = getRetentionCohortRows(rows, 'app_home');
+  const appHomeRetention = getRetentionCohortRows(rows, 'app_home', todayKst);
+  const weightedRetention = computeWeightedRetentionRates(appHomeRetention);
 
   const visitorsFromLanding = publicSteps[0]?.count ?? 0;
   const visitorsFromAppHome = executionSteps[6]?.count ?? 0;
   const visitors = visitorsFromLanding > 0 ? visitorsFromLanding : visitorsFromAppHome;
-  const latestRetention = appHomeRetention.at(-1) ?? null;
 
   return {
     ok: true,
-    range: { from: range.from, to: range.to, tz: range.tz },
+    ...buildKpiMeta(range, [
+      'retention_rates_use_weighted_eligible_cohorts',
+      'immature_retention_cohorts_are_excluded_from_rates',
+    ]),
     cards: {
       visitors,
       test_start_rate: publicSteps[1]?.conversion_from_previous ?? null,
@@ -603,9 +664,9 @@ export async function getKpiSummary(
       onboarding_completion_rate: percentage(executionSteps[3]?.count ?? 0, executionSteps[2]?.count ?? 0),
       session_create_rate: percentage(executionSteps[5]?.count ?? 0, executionSteps[4]?.count ?? 0),
       first_session_completion_rate: percentage(firstSessionSteps[5]?.count ?? 0, firstSessionSteps[0]?.count ?? 0),
-      d1_return_rate: latestRetention?.d1_rate ?? null,
-      d3_return_rate: latestRetention?.d3_rate ?? null,
-      d7_return_rate: latestRetention?.d7_rate ?? null,
+      d1_return_rate: weightedRetention.d1,
+      d3_return_rate: weightedRetention.d3,
+      d7_return_rate: weightedRetention.d7,
     },
     top_dropoff: findTopDropoff(publicSteps, executionSteps, firstSessionSteps),
   };
@@ -620,6 +681,7 @@ export async function getKpiFunnel(
   const rows = await fetchAnalyticsEvents(supabase, range, eventNames);
   return {
     ok: true,
+    ...buildKpiMeta(range),
     funnel,
     steps: buildFunnelSteps(rows, funnel),
   };
@@ -630,6 +692,7 @@ export async function getKpiRetention(
   range: KpiRange,
   cohort: KpiCohortKey
 ): Promise<KpiRetentionResponse> {
+  const todayKst = formatKstDay(new Date());
   const eventNames = Array.from(RETURN_EVENT_SET);
   const required = cohort === 'app_home'
     ? [ANALYTICS_EVENTS.APP_HOME_VIEWED]
@@ -642,8 +705,9 @@ export async function getKpiRetention(
 
   return {
     ok: true,
+    ...buildKpiMeta(range, ['immature_retention_cohorts_are_excluded_from_rates']),
     cohort,
-    rows: getRetentionCohortRows(rows, cohort),
+    rows: getRetentionCohortRows(rows, cohort, todayKst),
   };
 }
 
@@ -669,10 +733,12 @@ export async function getKpiDetails(
 
   return {
     ok: true,
+    ...buildKpiMeta(range, ['exercise_index_table_is_event_count_not_person_distinct']),
     session_detail: {
       steps: buildStepsFromDefinitions(filterFirstSessionRows(rows), SESSION_DETAIL_DEFINITION),
       close_before_complete_count: distinctCountForEvent(rows, ANALYTICS_EVENTS.EXERCISE_PLAYER_CLOSED),
       by_exercise_index: buildExerciseIndexRows(rows),
+      metric_note: '운동 index 표는 이벤트 건수 기준입니다. Steps 는 person-distinct 기준.',
     },
     camera: {
       steps: buildStepsFromDefinitions(rows, CAMERA_DETAIL_DEFINITION),
@@ -727,6 +793,7 @@ export async function getKpiRawEvents(
 
   return {
     ok: true,
+    ...buildKpiMeta(range),
     events: sliced.map((row): KpiRawEventRow => ({
       id: row.id,
       created_at: row.created_at,

@@ -98,14 +98,17 @@ function formatCount(value: number | null | undefined) {
 function InsightCard({
   title,
   value,
+  subtitle,
 }: {
   title: string;
   value: string;
+  subtitle?: string;
 }) {
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
       <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-400">{title}</p>
       <p className="mt-2 text-2xl font-semibold text-slate-100">{value}</p>
+      {subtitle ? <p className="mt-1 text-xs text-slate-500">{subtitle}</p> : null}
     </div>
   );
 }
@@ -361,8 +364,16 @@ export default function KpiDashboardClient() {
           <InsightCard title="Checkout Success" value={formatRate(state.summary?.cards.checkout_success_rate)} />
           <InsightCard title="Session Create" value={formatRate(state.summary?.cards.session_create_rate)} />
           <InsightCard title="First Session Complete" value={formatRate(state.summary?.cards.first_session_completion_rate)} />
-          <InsightCard title="D1 Return" value={formatRate(state.summary?.cards.d1_return_rate)} />
-          <InsightCard title="D3 / D7 Return" value={`${formatRate(state.summary?.cards.d3_return_rate)} / ${formatRate(state.summary?.cards.d7_return_rate)}`} />
+          <InsightCard
+            title="D1 Return"
+            value={state.summary?.cards.d1_return_rate == null ? '집계 대기' : formatRate(state.summary.cards.d1_return_rate)}
+            subtitle="적격 코호트 가중 평균"
+          />
+          <InsightCard
+            title="D3 / D7 Return"
+            value={`${state.summary?.cards.d3_return_rate == null ? '대기' : formatRate(state.summary.cards.d3_return_rate)} / ${state.summary?.cards.d7_return_rate == null ? '대기' : formatRate(state.summary.cards.d7_return_rate)}`}
+            subtitle="적격 코호트 가중 평균"
+          />
         </section>
 
         <div className="grid gap-6 xl:grid-cols-3">
@@ -394,6 +405,9 @@ export default function KpiDashboardClient() {
             <p className="mt-2 text-sm text-slate-400">
               Close before complete: {formatCount(state.details?.session_detail.close_before_complete_count)}
             </p>
+            {state.details?.session_detail.metric_note ? (
+              <p className="mt-1 text-xs text-slate-500">{state.details.session_detail.metric_note}</p>
+            ) : null}
             {!state.details?.session_detail.by_exercise_index.length ? (
               <p className="mt-4 text-sm text-slate-500">No exercise index detail yet.</p>
             ) : (
@@ -481,8 +495,10 @@ export default function KpiDashboardClient() {
 
         <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-100">Retention</h2>
-            <span className="text-xs text-slate-500">Cohort: first app_home_viewed per person</span>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-100">Retention</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Cohort: first app_home_viewed per person · D1/D3/D7 = +1/+3/+7 KST days · 대기 = 집계 미성숙</p>
+            </div>
           </div>
           {!state.retention?.rows.length ? (
             <p className="text-sm text-slate-500">No retention cohorts in this range.</p>
@@ -503,9 +519,21 @@ export default function KpiDashboardClient() {
                     <tr key={row.cohort_day} className="border-t border-slate-800 text-slate-200">
                       <td className="px-3 py-2">{row.cohort_day}</td>
                       <td className="px-3 py-2">{formatCount(row.cohort_size)}</td>
-                      <td className="px-3 py-2">{formatCount(row.d1_returned)} / {formatRate(row.d1_rate)}</td>
-                      <td className="px-3 py-2">{formatCount(row.d3_returned)} / {formatRate(row.d3_rate)}</td>
-                      <td className="px-3 py-2">{formatCount(row.d7_returned)} / {formatRate(row.d7_rate)}</td>
+                      <td className="px-3 py-2">
+                        {!row.eligible_d1
+                          ? <span className="text-slate-500">대기</span>
+                          : `${formatCount(row.d1_returned)} / ${formatRate(row.d1_rate)}`}
+                      </td>
+                      <td className="px-3 py-2">
+                        {!row.eligible_d3
+                          ? <span className="text-slate-500">대기</span>
+                          : `${formatCount(row.d3_returned)} / ${formatRate(row.d3_rate)}`}
+                      </td>
+                      <td className="px-3 py-2">
+                        {!row.eligible_d7
+                          ? <span className="text-slate-500">대기</span>
+                          : `${formatCount(row.d7_returned)} / ${formatRate(row.d7_rate)}`}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -562,6 +590,36 @@ export default function KpiDashboardClient() {
             </div>
           )}
         </section>
+
+        {state.summary?.range.range_clamped && (
+          <div className="rounded-xl border border-amber-800 bg-amber-950/40 px-4 py-3 text-sm text-amber-300">
+            조회 범위가 최대 90일로 클램프되었습니다. 표시된 from ~ to 기준으로 집계됩니다.
+          </div>
+        )}
+
+        {(state.summary?.generated_at || state.summary?.source) && (
+          <section className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+            <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500 mb-2">Admin — 데이터 메타</p>
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-400">
+              {state.summary.generated_at && (
+                <span>생성: {new Date(state.summary.generated_at).toLocaleString('ko-KR')}</span>
+              )}
+              {state.summary.source && (
+                <span>소스: {state.summary.source}</span>
+              )}
+              {state.summary.range && (
+                <span>범위: {state.summary.range.from} ~ {state.summary.range.to} ({state.summary.range.tz})</span>
+              )}
+            </div>
+            {state.summary.limitations && state.summary.limitations.length > 0 && (
+              <ul className="mt-2 space-y-0.5 text-xs text-slate-500">
+                {state.summary.limitations.map((lim) => (
+                  <li key={lim}>• {lim}</li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
 
         {loading && (
           <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-400">

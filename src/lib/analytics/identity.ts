@@ -42,6 +42,12 @@ export async function upsertAnalyticsIdentityLink({
   }
 }
 
+/**
+ * 수집(쓰기) 경로 전용 raw 헬퍼. user_id 또는 anon_id 를 그대로 반환하며,
+ * `user:` / `anon:` 접두사와 analytics_identity_links 링크 해석을 포함하지 않습니다.
+ * KPI 어드민 집계에는 src/lib/analytics/admin-person-key.ts 의
+ * resolveAnalyticsPersonKeyForKpi 를 사용하세요.
+ */
 export function getAnalyticsPersonKey(input: {
   user_id?: string | null;
   anon_id?: string | null;
