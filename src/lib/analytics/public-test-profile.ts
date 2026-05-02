@@ -39,6 +39,7 @@ export async function upsertPublicTestProfile(input: {
   anonId: string;
   ageBand: AgeBand;
   gender: KpiIntroGender;
+  pilotCode?: string | null;
   /** 무조건 free_test_intro 행만 유지 */
   source?: string;
 }): Promise<void> {
@@ -72,6 +73,7 @@ export async function upsertPublicTestProfile(input: {
       .update({
         age_band: input.ageBand,
         gender: input.gender,
+        pilot_code: input.pilotCode ?? null,
         source,
         acquisition_source: acquisitionSource,
         updated_at: now,
@@ -88,6 +90,7 @@ export async function upsertPublicTestProfile(input: {
     anon_id: anonId,
     age_band: input.ageBand,
     gender: input.gender,
+    pilot_code: input.pilotCode ?? null,
     source,
     acquisition_source: acquisitionSource,
     updated_at: now,
@@ -150,12 +153,39 @@ export async function linkPublicTestProfileToUser(input: {
   }
 }
 
+export async function linkPublicTestProfileAnonToUser(input: {
+  anonId: string;
+  userId: string;
+}): Promise<void> {
+  const anonId = input.anonId.trim();
+  const userId = input.userId.trim();
+  if (!isValidAnonIdForPublicTestProfile(anonId) || !userId) {
+    throw new Error('invalid_link_anon_user_input');
+  }
+
+  const supabase = getServerSupabaseAdmin();
+  const now = new Date().toISOString();
+
+  const { error } = await supabase
+    .from('public_test_profiles')
+    .update({
+      user_id: userId,
+      updated_at: now,
+    })
+    .eq('anon_id', anonId);
+
+  if (error) {
+    throw new Error(`public_test_profiles_link_anon_user_failed:${error.message}`);
+  }
+}
+
 export type PublicTestProfileRow = {
   anon_id: string;
   public_result_id: string | null;
   user_id: string | null;
   age_band: string;
   gender: string;
+  pilot_code?: string | null;
   source: string;
   acquisition_source: string;
 };
@@ -193,7 +223,7 @@ export async function fetchPublicTestProfilesForKpiKeys(input: {
     if (ids.length === 0) continue;
     const { data, error } = await supabase
       .from('public_test_profiles')
-      .select('anon_id, public_result_id, user_id, age_band, gender, source, acquisition_source')
+      .select('anon_id, public_result_id, user_id, age_band, gender, pilot_code, source, acquisition_source')
       .eq('source', KPI_DEMOGRAPHIC_PROFILE_SOURCE)
       .in('anon_id', ids);
     if (error) {
@@ -206,7 +236,7 @@ export async function fetchPublicTestProfilesForKpiKeys(input: {
     if (ids.length === 0) continue;
     const { data, error } = await supabase
       .from('public_test_profiles')
-      .select('anon_id, public_result_id, user_id, age_band, gender, source, acquisition_source')
+      .select('anon_id, public_result_id, user_id, age_band, gender, pilot_code, source, acquisition_source')
       .eq('source', KPI_DEMOGRAPHIC_PROFILE_SOURCE)
       .in('user_id', ids);
     if (error) {
@@ -219,7 +249,7 @@ export async function fetchPublicTestProfilesForKpiKeys(input: {
     if (ids.length === 0) continue;
     const { data, error } = await supabase
       .from('public_test_profiles')
-      .select('anon_id, public_result_id, user_id, age_band, gender, source, acquisition_source')
+      .select('anon_id, public_result_id, user_id, age_band, gender, pilot_code, source, acquisition_source')
       .eq('source', KPI_DEMOGRAPHIC_PROFILE_SOURCE)
       .in('public_result_id', ids);
     if (error) {

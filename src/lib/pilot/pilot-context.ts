@@ -10,6 +10,7 @@ import { clearPublicResultHandoff } from '@/lib/public-results/public-result-han
 import { CAMERA_RESULT_KEY } from '@/lib/camera/camera-result';
 import { CAMERA_TEST_KEY } from '@/lib/public/camera-test';
 import { clearStoredCameraTraceData } from '@/lib/camera/trace/camera-trace-storage';
+import { getPilotCodeFromSearchParams } from '@/lib/pilot/pilot-code';
 
 export const PILOT_CONTEXT_KEY = 'moveRePilotContext:v1';
 
@@ -38,17 +39,7 @@ function removeLocalStorageKey(key: string): void {
   }
 }
 
-/**
- * Validates `pilot` query value: non-empty, bounded length, safe charset only.
- */
-export function getPilotCodeFromSearchParams(searchParams: URLSearchParams): string | null {
-  const raw = searchParams.get('pilot');
-  if (raw == null) return null;
-  const code = raw.trim();
-  if (code.length === 0 || code.length > 64) return null;
-  if (!/^[a-zA-Z0-9._-]+$/.test(code)) return null;
-  return code;
-}
+export { getPilotCodeFromSearchParams };
 
 export function getPilotCodeFromCurrentUrl(): string | null {
   if (typeof window === 'undefined') return null;

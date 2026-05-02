@@ -10,6 +10,7 @@ import {
 } from '@/lib/auth/pilotSignupValidation';
 import { signupBirthDateToAgeBand } from '@/lib/analytics/kpi-demographics-types';
 import { upsertSignupProfile } from '@/lib/analytics/signup-profile';
+import { linkPublicTestProfileAnonToUser } from '@/lib/analytics/public-test-profile';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -163,10 +164,22 @@ export async function POST(req: NextRequest) {
         birthDateIso: v.birthDate,
         signupAgeBand: band,
         acquisitionSource: v.acquisitionSource,
+        pilotCode: v.pilotCode,
       });
     }
   } catch (e) {
     console.error('[pilot-signup] signup_profiles upsert failed', e);
+  }
+
+  if (v.anonId) {
+    try {
+      await linkPublicTestProfileAnonToUser({
+        anonId: v.anonId,
+        userId,
+      });
+    } catch (e) {
+      console.warn('[pilot-signup] public_test_profiles anon->user link failed', e);
+    }
   }
 
   return NextResponse.json({ ok: true, userId });

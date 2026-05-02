@@ -13,6 +13,7 @@ export type SignupProfileRow = {
   birth_date: string;
   signup_age_band: string;
   acquisition_source: string;
+  pilot_code?: string | null;
   source: string;
 };
 
@@ -21,6 +22,7 @@ export async function upsertSignupProfile(input: {
   birthDateIso: string;
   signupAgeBand: AgeBand;
   acquisitionSource: AcquisitionSource;
+  pilotCode?: string | null;
 }): Promise<void> {
   const userId = input.userId.trim();
   if (!userId) throw new Error('invalid_user_id');
@@ -41,6 +43,7 @@ export async function upsertSignupProfile(input: {
       birth_date: input.birthDateIso,
       signup_age_band: input.signupAgeBand,
       acquisition_source: acq,
+      pilot_code: input.pilotCode ?? null,
       source: KPI_SIGNUP_PROFILE_SOURCE,
       updated_at: now,
     },
@@ -66,7 +69,7 @@ export async function fetchSignupProfilesForUserIds(userIds: string[]): Promise<
     const slice = ids.slice(i, i + chunkSize);
     const { data, error } = await supabase
       .from('signup_profiles')
-      .select('user_id, birth_date, signup_age_band, acquisition_source, source')
+      .select('user_id, birth_date, signup_age_band, acquisition_source, pilot_code, source')
       .eq('source', KPI_SIGNUP_PROFILE_SOURCE)
       .in('user_id', slice);
 

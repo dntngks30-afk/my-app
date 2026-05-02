@@ -174,6 +174,7 @@ export default function LandingPage() {
         route_group: 'public_landing',
         target_path: '/intro/welcome',
         entry_mode: 'survey',
+        pilot_code_present: Boolean(pilotCodeThisVisitRef.current),
       },
       {
         route_group: 'public_landing',

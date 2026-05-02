@@ -14,6 +14,11 @@ import { mergeIntroProfileIntoSurveySession } from '@/lib/public/survey-bridge';
 import { getOrCreateAnonId } from '@/lib/public-results/anon-id';
 import type { AgeBand } from '@/lib/analytics/kpi-demographics-types';
 import { mapIntroGenderToGenderBucket } from '@/lib/analytics/kpi-demographics-types';
+import {
+  flushPendingPublicTestProfile,
+  savePendingPublicTestProfile,
+} from '@/lib/analytics/publicProfileClient';
+import { getPilotCodeForCurrentFlow } from '@/lib/pilot/pilot-context';
 
 const AGE_BAND_OPTIONS: { value: AgeBand; label: string }[] = [
   { value: '10s', label: '10대' },
@@ -57,7 +62,7 @@ export default function IntroProfile() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     setFormError(null);
     if (!ageBand || ageBand === 'unknown') {
       setFormError('나이대를 선택해 주세요.');
@@ -79,16 +84,16 @@ export default function IntroProfile() {
     if (typeof window !== 'undefined') {
       const anonId = getOrCreateAnonId();
       if (anonId) {
-        void fetch('/api/public-test-profile', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            anonId,
-            ageBand,
-            gender: genderBucket,
-          }),
-          keepalive: true,
-        }).catch(() => {});
+        savePendingPublicTestProfile({
+          anonId,
+          ageBand,
+          gender: genderBucket,
+          pilotCode: getPilotCodeForCurrentFlow(),
+        });
+        await Promise.race([
+          flushPendingPublicTestProfile(),
+          new Promise<boolean>((resolve) => window.setTimeout(() => resolve(false), 400)),
+        ]);
       }
       mergeIntroProfileIntoSurveySession();
       router.push('/movement-test/survey');

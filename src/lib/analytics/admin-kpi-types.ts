@@ -24,6 +24,17 @@ export type KpiSignupDemographicStepSummary = {
 
 export type KpiDemographicsSummary = {
   limitations: string[];
+  coverage?: {
+    free_test_intro: {
+      profile_rows_matched: number;
+      unknown_age_or_gender_count: number;
+    };
+    signup_profile: {
+      profile_rows_matched: number;
+      unknown_signup_profile_count: number;
+    };
+    pilot_profile_rows_count: number;
+  };
   /** 무료테스트 인트로(public_test_profiles · free_test_intro) — 성별·나이대만 */
   free_test_intro: {
     limitations: string[];

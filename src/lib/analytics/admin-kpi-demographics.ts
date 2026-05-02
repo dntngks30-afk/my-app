@@ -331,7 +331,14 @@ export async function computeKpiDemographicsSummary(
 
   try {
     const anonIds = [...new Set(rows.map((r) => r.anon_id).filter((x): x is string => Boolean(x)))];
-    const userIds = [...new Set(rows.map((r) => r.user_id).filter((x): x is string => Boolean(x)))];
+    const userIds = [
+      ...new Set([
+        ...rows.map((r) => r.user_id).filter((x): x is string => Boolean(x)),
+        ...rows
+          .map((r) => (r.person_key.startsWith('user:') ? r.person_key.slice('user:'.length) : null))
+          .filter((x): x is string => Boolean(x)),
+      ]),
+    ];
     const prIds = [...new Set(rows.map((r) => r.public_result_id).filter((x): x is string => Boolean(x)))];
     const rawProfiles = await fetchPublicTestProfilesForKpiKeys({
       anonIds,
@@ -349,6 +356,15 @@ export async function computeKpiDemographicsSummary(
     const signupRows = await fetchSignupProfilesForUserIds(userIds);
     const signupByUser = buildSignupLookupMap(signupRows);
     const signupPersonDemo = buildSignupPersonDemoMap(rows, signupByUser);
+    const introUnknownCount = Array.from(introPersonDemo.values()).filter(
+      (d) => d.ageBand === 'unknown' || d.gender === 'unknown'
+    ).length;
+    const signupUnknownCount = Array.from(signupPersonDemo.values()).filter(
+      (d) => d.ageBand === 'unknown' || d.acquisitionSource === 'unknown'
+    ).length;
+    const pilotProfileRowsCount =
+      rawProfiles.filter((p) => Boolean(p.pilot_code)).length +
+      signupRows.filter((p) => Boolean(p.pilot_code)).length;
 
     const introStepDefs = [
       { key: 'survey_started', label: '테스트 시작', event: ANALYTICS_EVENTS.SURVEY_STARTED },
@@ -391,6 +407,17 @@ export async function computeKpiDemographicsSummary(
 
     return {
       limitations: topLimitations,
+      coverage: {
+        free_test_intro: {
+          profile_rows_matched: profileRows.length,
+          unknown_age_or_gender_count: introUnknownCount,
+        },
+        signup_profile: {
+          profile_rows_matched: signupRows.length,
+          unknown_signup_profile_count: signupUnknownCount,
+        },
+        pilot_profile_rows_count: pilotProfileRowsCount,
+      },
       free_test_intro: {
         limitations: introLimitations,
         funnel_steps: introFunnelSteps,

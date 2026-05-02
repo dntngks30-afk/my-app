@@ -17,6 +17,7 @@ import {
   loadSurveySessionCache,
   saveSurveySessionCache,
 } from '@/lib/public/survey-session-cache';
+import { flushPendingPublicTestProfile } from '@/lib/analytics/publicProfileClient';
 
 type AnswerValue = 0 | 1 | 2 | 3 | 4;
 type AnswersById = Record<string, AnswerValue | undefined>;
@@ -79,6 +80,10 @@ export default function MovementTestSurveyPage() {
   useEffect(() => {
     initFromSession();
   }, [initFromSession]);
+
+  useEffect(() => {
+    void flushPendingPublicTestProfile();
+  }, []);
 
   useEffect(() => {
     const onPageShow = (event: PageTransitionEvent) => {

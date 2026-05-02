@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { trackEvent } from '@/lib/analytics/trackEvent';
+import { trackAuthenticatedEvent } from '@/lib/analytics/trackAuthenticatedEvent';
 import type { AcquisitionSource } from '@/lib/analytics/kpi-demographics-types';
 import {
   ACQUISITION_SOURCE_LABELS,
@@ -18,6 +18,8 @@ import {
 } from '@/lib/analytics/kpi-demographics-types';
 import { supabaseBrowser } from '@/lib/supabase';
 import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth';
+import { getOrCreateAnonId } from '@/lib/public-results/anon-id';
+import { getPilotCodeForCurrentFlow } from '@/lib/pilot/pilot-context';
 import { Input } from '@/components/ui/input';
 import AuthShell from '@/components/auth/AuthShell';
 import MoveReAuthScreen from '@/components/auth/MoveReAuthScreen';
@@ -142,6 +144,8 @@ export default function AuthCard({
 
         const acqPayload: AcquisitionSource =
           acquisitionSource === '' ? 'unknown' : acquisitionSource;
+        const anonId = getOrCreateAnonId();
+        const pilotCode = getPilotCodeForCurrentFlow();
 
         const res = await fetch('/api/auth/pilot-signup', {
           method: 'POST',
@@ -152,6 +156,8 @@ export default function AuthCard({
             nickname: nickTrim,
             birthDate,
             acquisitionSource: acqPayload,
+            anonId,
+            pilotCode,
           }),
         });
 
@@ -177,14 +183,16 @@ export default function AuthCard({
           return;
         }
 
-        trackEvent(
+        await trackAuthenticatedEvent(
           'auth_success',
           {
             provider: 'email_password',
             next_path: redirectTo,
+            pilot_code_present: Boolean(pilotCode),
           },
           {
             route_group: 'auth',
+            anon_id: anonId,
           }
         );
         await replaceRouteAfterAuthSession(router, redirectTo);
@@ -197,11 +205,12 @@ export default function AuthCard({
           setError(err.message);
           return;
         }
-        trackEvent(
+        await trackAuthenticatedEvent(
           'auth_success',
           {
             provider: 'email_password',
             next_path: redirectTo,
+            pilot_code_present: Boolean(getPilotCodeForCurrentFlow()),
           },
           {
             route_group: 'auth',

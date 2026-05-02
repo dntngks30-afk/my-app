@@ -8,6 +8,7 @@ import {
   isAcquisitionSource,
   type AcquisitionSource,
 } from '@/lib/analytics/kpi-demographics-types';
+import { sanitizePilotCode } from '@/lib/pilot/pilot-code';
 
 export type PilotSignupPayload = {
   email: string;
@@ -15,6 +16,8 @@ export type PilotSignupPayload = {
   nickname: string;
   birthDate: string;
   acquisitionSource: AcquisitionSource;
+  anonId?: string | null;
+  pilotCode?: string | null;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -36,6 +39,7 @@ export function validatePilotSignupBody(raw: unknown):
   const nicknameRaw = b.nickname;
   const birthRaw = b.birthDate;
   const acquisitionRaw = b.acquisitionSource;
+  const anonRaw = b.anonId;
 
   if (
     typeof emailRaw !== 'string' ||
@@ -96,6 +100,10 @@ export function validatePilotSignupBody(raw: unknown):
     acquisitionSource = acquisitionRaw;
   }
 
+  const anonId =
+    typeof anonRaw === 'string' && anonRaw.trim().length > 0 ? anonRaw.trim() : null;
+  const pilotCode = sanitizePilotCode(b.pilotCode);
+
   return {
     ok: true,
     value: {
@@ -104,6 +112,8 @@ export function validatePilotSignupBody(raw: unknown):
       nickname,
       birthDate,
       acquisitionSource,
+      anonId,
+      pilotCode,
     },
   };
 }

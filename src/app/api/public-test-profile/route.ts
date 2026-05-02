@@ -4,6 +4,7 @@ import {
   isValidAnonIdForPublicTestProfile,
   upsertPublicTestProfile,
 } from '@/lib/analytics/public-test-profile';
+import { sanitizePilotCode } from '@/lib/pilot/pilot-code';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -14,11 +15,13 @@ export async function POST(req: NextRequest) {
       anonId?: unknown;
       ageBand?: unknown;
       gender?: unknown;
+      pilotCode?: unknown;
     };
 
     const anonId = body.anonId;
     const ageBand = body.ageBand;
     const gender = body.gender;
+    const pilotCode = sanitizePilotCode(body.pilotCode);
 
     if (!isValidAnonIdForPublicTestProfile(anonId)) {
       return NextResponse.json({ ok: false }, { status: 400 });
@@ -31,6 +34,7 @@ export async function POST(req: NextRequest) {
       anonId,
       ageBand,
       gender,
+      pilotCode,
     });
 
     return NextResponse.json({ ok: true });
