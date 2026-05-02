@@ -8,13 +8,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Starfield } from '@/components/landing/Starfield';
 import { trackEvent } from '@/lib/analytics/trackEvent';
+import { MoveReFullscreenScreen } from '@/components/public-brand';
 import {
-  MoveReFullscreenScreen,
-  MoveReHeroBlock,
-  MoveRePrimaryCTA,
-  MoveReSecondaryCTA,
-  MoveReSurfaceCard,
-} from '@/components/public-brand';
+  StitchCameraGlassPanel,
+} from '@/components/stitch/camera/CameraSquat';
+import {
+  StitchCameraGhostButton,
+  StitchCameraMutedOutlineButton,
+  StitchCameraPrimaryButton,
+} from '@/components/stitch/camera/CameraButton';
 import {
   loadCameraTest,
   CAMERA_STEPS,
@@ -111,7 +113,7 @@ export default function CameraCompletePage() {
     if (!analysis) {
       return {
         title: '촬영을 정리하고 있습니다',
-        description: '캡처 신호와 결과를 확인하는 중입니다.',
+        description: '동작 신호를 확인하는 중입니다.',
         allowContinue: false,
       };
     }
@@ -119,65 +121,91 @@ export default function CameraCompletePage() {
       return {
         title: '신호가 충분하지 않았습니다',
         description:
-          '전신 프레이밍이나 유효 프레임이 부족해 결과를 바로 확정하지 않았어요. 다시 촬영하거나 설문형 테스트로 이어서 진행해 보세요.',
+          '전신이 화면에 충분히 보이지 않았거나, 움직임 신호가 부족했어요. 다시 촬영하거나 설문 결과로 이어갈 수 있어요.',
         allowContinue: false,
       };
     }
     return {
       title: '촬영이 완료되었습니다',
-      description: `${ACTIVE_STEP_COUNT}가지 동작의 촬영 신호를 확인했습니다. 결과를 확인해 보세요.`,
+      description:
+        `${ACTIVE_STEP_COUNT}가지 동작 신호를 확인했어요. 이제 내 몸의 움직임 패턴을 정리해볼게요.`,
       allowContinue: true,
     };
   }, [analysis]);
 
+  const signalSummaryLabel = uiState.allowContinue ? '확인됨' : '재촬영 권장';
+
   return (
     <MoveReFullscreenScreen backgroundSlot={<Starfield />}>
-      <main className="flex flex-1 flex-col items-center justify-center px-6 pb-8">
-        <div className="flex w-full max-w-md flex-col gap-6">
-          <MoveReHeroBlock
-            title={
-              <span
-                className="block text-2xl font-bold md:text-3xl"
-                style={{ fontFamily: 'var(--font-serif-noto)' }}
-              >
-                {uiState.title}
-              </span>
-            }
-            subtitle={<p className="break-keep">{uiState.description}</p>}
-          />
-          {analysis ? (
-            <MoveReSurfaceCard className="p-4 text-left">
-              <p className="text-xs text-slate-400" style={{ fontFamily: 'var(--font-sans-noto)' }}>
-                촬영 신호:{' '}
-                {uiState.allowContinue
-                  ? '확인됨'
-                  : analysis.captureQuality === 'invalid'
-                    ? '재촬영 권장'
-                    : '안정적'}
-              </p>
-              {process.env.NODE_ENV !== 'production' && analysis.flags.length > 0 ? (
+      <main
+        className="relative z-10 flex min-h-[100svh] flex-1 flex-col justify-center px-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]"
+      >
+        <div className="mx-auto flex w-full max-w-md flex-col gap-5">
+          <StitchCameraGlassPanel className="px-5 py-6 text-left">
+            <p
+              className="mb-4 text-center text-[10px] font-medium uppercase tracking-[0.28em] text-[#ffb77d]/90"
+              style={{ fontFamily: 'var(--font-sans-noto)' }}
+            >
+              동작 분석 완료
+            </p>
+            <h1
+              className="text-center text-xl font-bold leading-snug text-slate-100 md:text-2xl"
+              style={{ fontFamily: 'var(--font-sans-noto)' }}
+            >
+              {uiState.title}
+            </h1>
+            <p
+              className="mt-3 text-center text-sm leading-relaxed text-slate-400 break-keep"
+              style={{ fontFamily: 'var(--font-sans-noto)' }}
+            >
+              {uiState.description}
+            </p>
+
+            {analysis ? (
+              <div className="mt-5 rounded-xl border border-white/[0.07] bg-black/22 px-4 py-3 backdrop-blur-sm">
                 <p
-                  className="mt-2 break-keep text-xs text-slate-500"
+                  className="text-sm text-slate-200"
                   style={{ fontFamily: 'var(--font-sans-noto)' }}
                 >
-                  debug: quality={analysis.captureQuality}, confidence={analysis.confidence}, flags=
-                  {analysis.flags.join(', ')}
+                  촬영 신호: {signalSummaryLabel}
                 </p>
-              ) : null}
-            </MoveReSurfaceCard>
-          ) : null}
-          <div className="flex flex-col gap-3">
-            {uiState.allowContinue ? (
-              <MoveRePrimaryCTA onClick={handleViewResult}>결과 보기</MoveRePrimaryCTA>
+                {process.env.NODE_ENV !== 'production' && analysis.flags.length > 0 ? (
+                  <p
+                    className="mt-2 break-all text-[10px] leading-relaxed text-slate-500"
+                    style={{ fontFamily: 'var(--font-sans-noto)' }}
+                  >
+                    debug: quality={analysis.captureQuality}, confidence={analysis.confidence}, flags=
+                    {analysis.flags.join(', ')}
+                  </p>
+                ) : null}
+              </div>
             ) : null}
-            {uiState.allowContinue ? (
-              <MoveReSecondaryCTA onClick={handleRetry}>다시 촬영하기</MoveReSecondaryCTA>
-            ) : (
-              <MoveRePrimaryCTA onClick={handleRetry}>다시 촬영하기</MoveRePrimaryCTA>
-            )}
-            <MoveReSecondaryCTA onClick={handleSurveyFallback}>설문형 테스트로 전환</MoveReSecondaryCTA>
-            <MoveReSecondaryCTA onClick={handleHome}>홈으로</MoveReSecondaryCTA>
-          </div>
+          </StitchCameraGlassPanel>
+
+          {analysis ? (
+            <div className="flex flex-col gap-3">
+              {uiState.allowContinue ? (
+                <>
+                  <StitchCameraPrimaryButton onClick={handleViewResult}>결과 보기</StitchCameraPrimaryButton>
+                  <StitchCameraPrimaryButton variant="outline" onClick={handleRetry}>
+                    다시 촬영하기
+                  </StitchCameraPrimaryButton>
+                  <StitchCameraMutedOutlineButton onClick={handleSurveyFallback}>
+                    설문형 테스트로 전환
+                  </StitchCameraMutedOutlineButton>
+                  <StitchCameraGhostButton onClick={handleHome}>홈으로</StitchCameraGhostButton>
+                </>
+              ) : (
+                <>
+                  <StitchCameraPrimaryButton onClick={handleRetry}>다시 촬영하기</StitchCameraPrimaryButton>
+                  <StitchCameraPrimaryButton variant="outline" onClick={handleSurveyFallback}>
+                    설문형 테스트로 전환
+                  </StitchCameraPrimaryButton>
+                  <StitchCameraGhostButton onClick={handleHome}>홈으로</StitchCameraGhostButton>
+                </>
+              )}
+            </div>
+          ) : null}
         </div>
       </main>
     </MoveReFullscreenScreen>

@@ -80,43 +80,7 @@ export function StitchCameraGlassPanel({ children, className = '' }: StitchCamer
   );
 }
 
-export type StitchCameraPrimaryButtonProps = {
-  children: ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-  variant?: 'solid' | 'outline';
-};
-
-export function StitchCameraPrimaryButton({
-  children,
-  onClick,
-  disabled,
-  variant = 'solid',
-}: StitchCameraPrimaryButtonProps) {
-  const base =
-    'w-full min-h-[48px] rounded-lg font-medium transition-all disabled:opacity-50 disabled:pointer-events-none';
-  if (variant === 'outline') {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        className={`${base} border border-[#ffb77d]/35 text-[#dce1fb] hover:bg-white/5`}
-        style={{ fontFamily: 'var(--font-sans-noto)' }}
-      >
-        {children}
-      </button>
-    );
-  }
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`${base} bg-gradient-to-br from-[#ffb77d] to-[#ab4c00] text-[#4d2600] shadow-[0_20px_40px_rgba(2,6,23,0.08)] hover:brightness-110`}
-      style={{ fontFamily: 'var(--font-sans-noto)' }}
-    >
-      {children}
-    </button>
-  );
-}
+export {
+  StitchCameraPrimaryButton,
+  type StitchCameraPrimaryButtonProps,
+} from '@/components/stitch/camera/CameraButton';
