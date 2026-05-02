@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import { getSessionSafe } from '@/lib/supabase';
 import { invalidateActiveCache } from '@/lib/session/active-cache';
 import { getCache } from '@/lib/cache/tabDataCache';
@@ -137,6 +138,11 @@ function hrefForReadinessNext(code: SessionReadinessNextAction | undefined): str
   }
 }
 
+function resolveActiveSessionNumber(plan: SessionPlan | ActivePlanSummary | null): number | null {
+  if (!plan) return null;
+  return typeof plan.session_number === 'number' ? plan.session_number : null;
+}
+
 export default function HomePageClient({
   hideBottomNav,
   isVisible = true,
@@ -189,6 +195,8 @@ export default function HomePageClient({
   const [railRecoveryHref, setRailRecoveryHref] = useState('/onboarding');
   const railRecoveryFetchedRef = useRef(false);
   const homeEntryShellMarkedRef = useRef(false);
+  const appHomeTrackedRef = useRef(false);
+  const resetMapTrackedKeyRef = useRef<string | null>(null);
 
   const isRailNotReady =
     railReady === false || progressSource === 'default_fallback';
@@ -547,6 +555,64 @@ export default function HomePageClient({
     clearAllKeysForNewFlow();
     setResetMapFlowId(null);
   }, []);
+
+  useEffect(() => {
+    if (loading || error || !isVisible) return;
+    if (appHomeTrackedRef.current) return;
+
+    appHomeTrackedRef.current = true;
+    const activeSessionNumber = resolveActiveSessionNumber(activePlan);
+    trackEvent(
+      'app_home_viewed',
+      {
+        route_group: 'app_home',
+        active_session_number: activeSessionNumber,
+        completed_sessions: sessionProgress?.completed_sessions ?? null,
+        total_sessions: sessionProgress?.total_sessions ?? null,
+      },
+      {
+        route_group: 'app_home',
+        session_number: activeSessionNumber ?? undefined,
+        dedupe_key: `app_home_viewed:${new Intl.DateTimeFormat('sv-SE', {
+          timeZone: 'Asia/Seoul',
+        }).format(new Date())}:${activeSessionNumber ?? 'none'}`,
+      }
+    );
+  }, [activePlan, error, isVisible, loading, sessionProgress]);
+
+  useEffect(() => {
+    if (loading || error || !isVisible || isRailNotReady) return;
+    if (!mapV2) return;
+
+    const activeSessionNumber = resolveActiveSessionNumber(activePlan);
+    const totalSessions = totalSessionsOverride ?? sessionProgress?.total_sessions ?? null;
+    if (totalSessions != null && totalSessions > 20) return;
+    const trackKey = [
+      resetMapFlowId ?? 'no-flow',
+      activeSessionNumber ?? 'none',
+      sessionProgress?.completed_sessions ?? 'none',
+      sessionProgress?.total_sessions ?? 'none',
+    ].join(':');
+
+    if (resetMapTrackedKeyRef.current === trackKey) return;
+    resetMapTrackedKeyRef.current = trackKey;
+
+    trackEvent(
+      'reset_map_opened',
+      {
+        route_group: 'reset_map',
+        active_session_number: activeSessionNumber,
+        completed_sessions: sessionProgress?.completed_sessions ?? null,
+        total_sessions: sessionProgress?.total_sessions ?? null,
+      },
+      {
+        route_group: 'reset_map',
+        session_number: activeSessionNumber ?? undefined,
+        reset_map_flow_id: resetMapFlowId ?? undefined,
+        dedupe_key: `reset_map_opened:${trackKey}`,
+      }
+    );
+  }, [activePlan, error, isRailNotReady, isVisible, loading, mapV2, resetMapFlowId, sessionProgress, totalSessionsOverride]);
 
   if (loading) {
     // skipLoader는 useEffect에서만 설정 → Hydration mismatch 방지

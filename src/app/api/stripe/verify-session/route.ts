@@ -12,6 +12,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash } from 'node:crypto';
+import { logAnalyticsEvent } from '@/lib/analytics/logAnalyticsEvent';
 import { getStripeServerClient, getStripeErrorMessage } from '@/lib/stripe';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 
@@ -121,6 +123,18 @@ export async function GET(req: NextRequest) {
       : undefined;
 
     if (dbUser?.plan_status === 'active') {
+      const sessionHash = createHash('sha256').update(sid).digest('hex').slice(0, 16);
+      void logAnalyticsEvent({
+        event_name: 'checkout_success',
+        user_id: user.id,
+        route_path: '/api/stripe/verify-session',
+        route_group: 'payments',
+        dedupe_key: `checkout_success:${user.id}:${sessionHash}`,
+        props: {
+          plan_tier: planTier,
+          idempotent: true,
+        },
+      });
       return NextResponse.json({
         verified: true,
         idempotent: true,
@@ -138,6 +152,19 @@ export async function GET(req: NextRequest) {
       .from('users')
       .update({ plan_status: 'active' })
       .eq('id', user.id);
+
+    const sessionHash = createHash('sha256').update(sid).digest('hex').slice(0, 16);
+    void logAnalyticsEvent({
+      event_name: 'checkout_success',
+      user_id: user.id,
+      route_path: '/api/stripe/verify-session',
+      route_group: 'payments',
+      dedupe_key: `checkout_success:${user.id}:${sessionHash}`,
+      props: {
+        plan_tier: planTier,
+        idempotent: false,
+      },
+    });
 
     return NextResponse.json({
       verified: true,

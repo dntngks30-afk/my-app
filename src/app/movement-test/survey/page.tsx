@@ -7,6 +7,7 @@
  */
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import { QUESTIONS_V2 } from '@/features/movement-test/v2';
 import type { TestAnswerValue } from '@/features/movement-test/v2';
 import { StitchSurveyShell } from '@/components/stitch/survey/StitchSurveyShell';
@@ -47,6 +48,7 @@ export default function MovementTestSurveyPage() {
   const [ready, setReady] = useState(false);
   const isTransitioningRef = useRef(false);
   const isCompletingRef = useRef(false);
+  const surveyStartedTrackedRef = useRef<string | null>(null);
 
   const initFromSession = useCallback(() => {
     const current = loadSurveySessionCache();
@@ -99,6 +101,27 @@ export default function MovementTestSurveyPage() {
     });
   }, [ready, runState]);
 
+  useEffect(() => {
+    if (!ready || !runState.startedAt) return;
+    if (surveyStartedTrackedRef.current === runState.startedAt) return;
+
+    surveyStartedTrackedRef.current = runState.startedAt;
+    const answeredCount = Object.values(runState.answersById).filter((value) => value !== undefined).length;
+
+    trackEvent(
+      'survey_started',
+      {
+        route_group: 'public_survey',
+        total_questions: TOTAL,
+        resumed: answeredCount > 0,
+      },
+      {
+        route_group: 'public_survey',
+        dedupe_key: `survey_started:${runState.startedAt}`,
+      }
+    );
+  }, [ready, runState.answersById, runState.startedAt]);
+
   const question = QUESTIONS_V2[step];
   const currentAnswer = question ? runState.answersById[question.id] : undefined;
 
@@ -106,11 +129,28 @@ export default function MovementTestSurveyPage() {
     (next: Record<string, TestAnswerValue>) => {
       if (step >= TOTAL - 1) {
         isCompletingRef.current = true;
+        const completedAtIso = new Date().toISOString();
+        const startedAt = runState.startedAt || completedAtIso;
+        const durationMs = runState.startedAt
+          ? Math.max(0, Date.now() - new Date(runState.startedAt).getTime())
+          : null;
+        trackEvent(
+          'survey_completed',
+          {
+            route_group: 'public_survey',
+            total_questions: TOTAL,
+            duration_ms: Number.isFinite(durationMs) ? durationMs : null,
+          },
+          {
+            route_group: 'public_survey',
+            dedupe_key: `survey_completed:${startedAt}`,
+          }
+        );
         saveSurveySessionCache({
           version: 'v2',
           isCompleted: true,
-          startedAt: runState.startedAt || new Date().toISOString(),
-          completedAt: new Date().toISOString(),
+          startedAt,
+          completedAt: completedAtIso,
           profile: runState.profile,
           answersById: next,
         });

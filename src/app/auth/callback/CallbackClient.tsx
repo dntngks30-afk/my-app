@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import { supabaseBrowser } from '@/lib/supabase';
 import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth';
 import { sanitizeAuthNextPath } from '@/lib/auth/authHandoffContract';
@@ -87,6 +88,16 @@ export default function CallbackClient({
         provider,
       });
 
+      trackEvent(
+        'auth_success',
+        {
+          provider,
+          next_path: next,
+        },
+        {
+          route_group: 'auth',
+        }
+      );
       await replaceRouteAfterAuthSession(router, next);
     }
 

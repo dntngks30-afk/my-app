@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import { supabaseBrowser } from '@/lib/supabase';
 import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth';
 import AuthShell from '@/components/auth/AuthShell';
@@ -114,6 +115,16 @@ export default function CompleteClient({ codeParam, nextParam }: CompleteClientP
         return;
       }
 
+      trackEvent(
+        'auth_success',
+        {
+          provider: 'email_password',
+          next_path: safeNext,
+        },
+        {
+          route_group: 'auth',
+        }
+      );
       await replaceRouteAfterAuthSession(router, safeNext);
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다.');

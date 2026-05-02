@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { logAnalyticsEvent } from '@/lib/analytics/logAnalyticsEvent';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { logSessionEvent } from '@/lib/session-events';
@@ -19,6 +20,31 @@ import {
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+function logSessionCreateSuccessEvent(params: {
+  userId: string;
+  sessionNumber: number | null;
+  sourcePublicResultId?: string | null;
+  analysisSourceMode?: string | null;
+  idempotent: boolean;
+}) {
+  const { userId, sessionNumber, sourcePublicResultId, analysisSourceMode, idempotent } = params;
+  void logAnalyticsEvent({
+    event_name: 'session_create_success',
+    user_id: userId,
+    session_number: sessionNumber,
+    public_result_id: sourcePublicResultId ?? undefined,
+    route_path: '/api/session/create',
+    route_group: 'session_create',
+    dedupe_key: `session_create_success:${userId}:${sessionNumber ?? 'none'}`,
+    props: {
+      session_number: sessionNumber,
+      source_public_result_id: sourcePublicResultId ?? null,
+      analysis_source_mode: analysisSourceMode ?? null,
+      idempotent,
+    },
+  });
+}
+
 export async function POST(req: NextRequest) {
   const t0 = performance.now();
   const timings: Record<string, number> = {};
@@ -31,6 +57,13 @@ export async function POST(req: NextRequest) {
 
     const progressGate = await runProgressGate(requestGate);
     if (progressGate.kind !== 'continue') {
+      if (progressGate.kind === 'active_idempotent') {
+        logSessionCreateSuccessEvent({
+          userId: requestGate.userId,
+          sessionNumber: progressGate.existingPlan?.session_number ?? progressGate.progress.active_session_number ?? null,
+          idempotent: true,
+        });
+      }
       return assembleProgressGateResponse(progressGate);
     }
 
@@ -43,6 +76,24 @@ export async function POST(req: NextRequest) {
     const persistence = await runPersistenceCommit(materialized);
 
     if (persistence.kind !== 'success') {
+      if (persistence.kind === 'completed_conflict') {
+        logSessionCreateSuccessEvent({
+          userId: generationInput.userId,
+          sessionNumber: persistence.existingPlan.session_number ?? generationInput.nextSessionNumber,
+          sourcePublicResultId: generationInput.sourcePublicResultId,
+          analysisSourceMode: generationInput.analysisSourceMode,
+          idempotent: true,
+        });
+      }
+      if (persistence.kind === 'race_conflict') {
+        logSessionCreateSuccessEvent({
+          userId: generationInput.userId,
+          sessionNumber: persistence.racedPlan.session_number ?? generationInput.nextSessionNumber,
+          sourcePublicResultId: generationInput.sourcePublicResultId,
+          analysisSourceMode: generationInput.analysisSourceMode,
+          idempotent: true,
+        });
+      }
       return assemblePersistenceResponse(persistence);
     }
 
@@ -59,6 +110,13 @@ export async function POST(req: NextRequest) {
           source_public_result_id: generationInput.sourcePublicResultId,
         }),
       },
+    });
+    logSessionCreateSuccessEvent({
+      userId: generationInput.userId,
+      sessionNumber: generationInput.nextSessionNumber,
+      sourcePublicResultId: generationInput.sourcePublicResultId,
+      analysisSourceMode: generationInput.analysisSourceMode,
+      idempotent: false,
     });
 
     timings.total_ms = Math.round(performance.now() - t0);

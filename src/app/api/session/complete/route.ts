@@ -14,6 +14,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import { logAnalyticsEvent } from '@/lib/analytics/logAnalyticsEvent';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { logSessionEvent, summarizeExerciseLogs } from '@/lib/session-events';
@@ -174,6 +175,30 @@ function getThemeForSession(
   const total = Math.max(1, Math.min(20, totalSessions));
   const phase = computePhase(total, sessionNumber, { phaseLengths, policyOptions: null });
   return PHASE_LABELS[phase - 1];
+}
+
+function logSessionCompleteSuccessEvent(params: {
+  userId: string;
+  sessionNumber: number;
+  completionMode: CompletionMode;
+  durationSeconds: number;
+  idempotent: boolean;
+}) {
+  const { userId, sessionNumber, completionMode, durationSeconds, idempotent } = params;
+  void logAnalyticsEvent({
+    event_name: 'session_complete_success',
+    user_id: userId,
+    session_number: sessionNumber,
+    route_path: '/api/session/complete',
+    route_group: 'session_complete',
+    dedupe_key: `session_complete_success:${userId}:${sessionNumber}`,
+    props: {
+      session_number: sessionNumber,
+      completion_mode: completionMode,
+      duration_seconds: durationSeconds,
+      idempotent,
+    },
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -451,6 +476,13 @@ export async function POST(req: NextRequest) {
           logs_summary: logsSummary,
         },
       });
+      logSessionCompleteSuccessEvent({
+        userId,
+        sessionNumber,
+        completionMode,
+        durationSeconds: durationClamped,
+        idempotent: false,
+      });
 
       // PR-A: exercise-level session_exercise_events (truthful, no fake per-set)
       let eventLogResult: { attempted: number; written: number; failed: number } | undefined;
@@ -589,6 +621,13 @@ export async function POST(req: NextRequest) {
         exercise_logs: toExerciseLogsArray(planRow.exercise_logs),
         ...(feedbackPayload && { feedback_saved: feedbackSaved }),
       };
+      logSessionCompleteSuccessEvent({
+        userId,
+        sessionNumber,
+        completionMode,
+        durationSeconds: durationClamped,
+        idempotent: true,
+      });
       return ok(data, data);
     }
 

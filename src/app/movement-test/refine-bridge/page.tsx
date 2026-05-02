@@ -6,6 +6,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import RefineBridge from '@/components/stitch/bridge/RefineBridge';
 import { loadCompletedSurveyAnswersCache } from '@/lib/public/survey-session-cache';
 
@@ -23,10 +24,30 @@ export default function RefineBridgePage() {
   }, [router]);
 
   const handleResultFirst = () => {
+    trackEvent(
+      'refine_bridge_choice_clicked',
+      {
+        route_group: 'refine_bridge',
+        choice: 'baseline',
+      },
+      {
+        route_group: 'refine_bridge',
+      }
+    );
     router.push('/movement-test/baseline');
   };
 
   const handleCameraRefine = () => {
+    trackEvent(
+      'refine_bridge_choice_clicked',
+      {
+        route_group: 'refine_bridge',
+        choice: 'camera',
+      },
+      {
+        route_group: 'refine_bridge',
+      }
+    );
     router.push('/movement-test/camera');
   };
 

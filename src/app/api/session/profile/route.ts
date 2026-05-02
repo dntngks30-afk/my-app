@@ -15,6 +15,7 @@
 
 import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
+import { logAnalyticsEvent } from '@/lib/analytics/logAnalyticsEvent';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import {
@@ -137,6 +138,22 @@ export async function POST(req: NextRequest) {
       progress: progress ?? {},
       ...(warning && { warning }),
     };
+
+    if (onboardingCompleted) {
+      void logAnalyticsEvent({
+        event_name: 'onboarding_completed',
+        user_id: userId,
+        route_path: '/api/session/profile',
+        route_group: 'onboarding',
+        dedupe_key: `onboarding_completed:${userId}:${progress?.total_sessions ?? rawFreq}`,
+        props: {
+          target_frequency: typeof rawFreq === 'number' ? rawFreq : null,
+          exercise_experience_level: exerciseExperienceLevel ?? null,
+          pain_or_discomfort_present: painOrDiscomfortPresent ?? null,
+        },
+      });
+    }
+
     return ok(data, data);
   } catch (err) {
     console.error('[session/profile]', err);

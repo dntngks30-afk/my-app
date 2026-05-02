@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import { StitchSceneShell } from '@/components/stitch/shared/SceneShell';
 import { buildFreeSurveyBaselineResult } from '@/lib/deep-v2/builders/build-free-survey-baseline';
 import { PublicResultRenderer } from '@/components/public-result/PublicResultRenderer';
@@ -23,6 +24,8 @@ export default function BaselinePage() {
   const [recoveredFromDb, setRecoveredFromDb] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [resultSourceMode, setResultSourceMode] = useState<string | null>(null);
+  const [resultViewKey, setResultViewKey] = useState<string | null>(null);
 
   const { handleExecutionStart, isPending: bridgePending, error: bridgeError } = useExecutionStartBridge({
     publicResultId: publicResultIdForBridge,
@@ -41,6 +44,7 @@ export default function BaselinePage() {
           if (!cancelled && recovered && recovered.stage === 'baseline') {
             setRecoveredFromDb(true);
             setPublicResultIdForBridge(handoffId);
+            setResultSourceMode('free_survey');
             setBaseline({
               result: recovered.result,
               baseline_meta: {
@@ -68,6 +72,7 @@ export default function BaselinePage() {
         const result = buildFreeSurveyBaselineResult(answers);
         if (!cancelled) {
           setBaseline(result);
+          setResultSourceMode(result.baseline_meta.source_inputs[0] ?? null);
 
           persistPublicResult({
             result: result.result,
@@ -100,9 +105,50 @@ export default function BaselinePage() {
     };
   }, [router]);
 
+  useEffect(() => {
+    if (loading || !baseline) return;
+
+    const viewKey = publicResultIdForBridge
+      ? `baseline:${publicResultIdForBridge}`
+      : `baseline:${baseline.baseline_meta.generated_at}`;
+    if (resultViewKey === viewKey) return;
+
+    setResultViewKey(viewKey);
+    trackEvent(
+      'result_viewed',
+      {
+        route_group: 'public_result',
+        result_stage: 'baseline',
+        public_result_id: publicResultIdForBridge,
+        source_mode: resultSourceMode,
+      },
+      {
+        route_group: 'public_result',
+        public_result_id: publicResultIdForBridge ?? undefined,
+        dedupe_key: `result_viewed:${viewKey}`,
+      }
+    );
+  }, [baseline, loading, publicResultIdForBridge, resultSourceMode, resultViewKey]);
+
   const handleCameraRefine = useCallback(() => router.push('/movement-test/camera'), [router]);
   const handleRetake = useCallback(() => router.push('/movement-test/survey'), [router]);
   const handleBackToBridge = useCallback(() => router.push('/movement-test/refine-bridge'), [router]);
+  const handleExecutionCtaClick = useCallback(() => {
+    trackEvent(
+      'execution_cta_clicked',
+      {
+        route_group: 'public_result',
+        result_stage: 'baseline',
+        public_result_id: publicResultIdForBridge,
+        target_path: '/execution/start',
+      },
+      {
+        route_group: 'public_result',
+        public_result_id: publicResultIdForBridge ?? undefined,
+      }
+    );
+    void handleExecutionStart();
+  }, [handleExecutionStart, publicResultIdForBridge]);
 
   if (loading) {
     return (
@@ -147,7 +193,7 @@ export default function BaselinePage() {
             actions={[
               {
                 label: bridgePending ? '처리 중...' : '움직임 리셋 시작하기',
-                onClick: handleExecutionStart,
+                onClick: handleExecutionCtaClick,
                 variant: 'primary',
               },
               {

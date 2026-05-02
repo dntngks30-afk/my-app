@@ -23,6 +23,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import { Starfield } from '@/components/landing/Starfield';
 import { MoveReFullscreenScreen } from '@/components/public-brand';
 import { buildFreeSurveyBaselineResult } from '@/lib/deep-v2/builders/build-free-survey-baseline';
@@ -67,6 +68,8 @@ export default function RefinedResultPage() {
   const [recoveredRefined, setRecoveredRefined] = useState<UnifiedDeepResultV2 | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [resultSourceMode, setResultSourceMode] = useState<string | null>(null);
+  const [resultViewKey, setResultViewKey] = useState<string | null>(null);
 
   const { handleExecutionStart, isPending: bridgePending, error: bridgeError } = useExecutionStartBridge({
     publicResultId: publicResultIdForBridge,
@@ -88,6 +91,7 @@ export default function RefinedResultPage() {
           if (!cancelled && recovered && recovered.stage === 'refined') {
             setPublicResultIdForBridge(handoffId);
             setRecoveredRefined(recovered.result);
+            setResultSourceMode('camera_refined');
             if (process.env.NODE_ENV !== 'production') {
               console.info('[public-result] refined recovered from DB:', handoffId);
             }
@@ -119,6 +123,7 @@ export default function RefinedResultPage() {
           );
           if (!cancelled) {
             setRefined(refinedResult);
+            setResultSourceMode(refinedResult.refined_meta.source_inputs.join('+'));
 
             // FLOW-01: best-effort persistence — refined result
             // FLOW-02: 성공 시 savePublicResultHandoff가 내부에서 자동 호출됨
@@ -135,7 +140,10 @@ export default function RefinedResultPage() {
             }).catch(() => { /* best-effort: ignore */ });
           }
         } catch {
-          if (!cancelled) setBaselineFallback(baselineResult);
+          if (!cancelled) {
+            setBaselineFallback(baselineResult);
+            setResultSourceMode('camera_refine_fallback');
+          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -150,9 +158,58 @@ export default function RefinedResultPage() {
     return () => { cancelled = true; };
   }, [router]);
 
+  useEffect(() => {
+    if (loading) return;
+    const stageToken = recoveredRefined
+      ? 'recovered'
+      : refined
+        ? 'refined'
+        : baselineFallback
+          ? 'fallback'
+          : null;
+    if (!stageToken) return;
+
+    const viewKey = publicResultIdForBridge
+      ? `refined:${publicResultIdForBridge}:${stageToken}`
+      : `refined:${stageToken}`;
+    if (resultViewKey === viewKey) return;
+
+    setResultViewKey(viewKey);
+    trackEvent(
+      'result_viewed',
+      {
+        route_group: 'public_result',
+        result_stage: 'refined',
+        public_result_id: publicResultIdForBridge,
+        source_mode: resultSourceMode,
+      },
+      {
+        route_group: 'public_result',
+        public_result_id: publicResultIdForBridge ?? undefined,
+        dedupe_key: `result_viewed:${viewKey}`,
+      }
+    );
+  }, [baselineFallback, loading, publicResultIdForBridge, recoveredRefined, refined, resultSourceMode, resultViewKey]);
+
   const handleRetake = useCallback(() => router.push('/'), [router]);
   const handleBack = useCallback(() => router.back(), [router]);
   const handleCameraRetake = useCallback(() => router.push('/movement-test/camera'), [router]);
+  const handleExecutionCtaClick = useCallback(() => {
+    trackEvent(
+      'execution_cta_clicked',
+      {
+        route_group: 'public_result',
+        result_stage: 'refined',
+        public_result_id: publicResultIdForBridge,
+        target_path: '/execution/start',
+      },
+      {
+        route_group: 'public_result',
+        public_result_id: publicResultIdForBridge ?? undefined,
+      }
+    );
+    void handleExecutionStart();
+  }, [handleExecutionStart, publicResultIdForBridge]);
 
   if (loading) {
     return (
@@ -194,7 +251,7 @@ export default function RefinedResultPage() {
               actions={[
                 {
                   label: bridgePending ? '처리 중...' : '움직임 리셋 시작하기',
-                  onClick: handleExecutionStart,
+                  onClick: handleExecutionCtaClick,
                   variant: 'primary',
                 },
                 {
@@ -217,7 +274,7 @@ export default function RefinedResultPage() {
               actions={[
                 {
                   label: bridgePending ? '처리 중...' : '움직임 리셋 시작하기',
-                  onClick: handleExecutionStart,
+                  onClick: handleExecutionCtaClick,
                   variant: 'primary',
                 },
                 {
@@ -239,7 +296,7 @@ export default function RefinedResultPage() {
               actions={[
                 {
                   label: bridgePending ? '처리 중...' : '움직임 리셋 시작하기',
-                  onClick: handleExecutionStart,
+                  onClick: handleExecutionCtaClick,
                   variant: 'primary',
                 },
                 {

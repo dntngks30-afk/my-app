@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import { supabaseBrowser } from '@/lib/supabase';
 import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth';
 import { Input } from '@/components/ui/input';
@@ -154,6 +155,16 @@ export default function AuthCard({
           return;
         }
 
+        trackEvent(
+          'auth_success',
+          {
+            provider: 'email_password',
+            next_path: redirectTo,
+          },
+          {
+            route_group: 'auth',
+          }
+        );
         await replaceRouteAfterAuthSession(router, redirectTo);
       } else {
         const { error: err } = await supabaseBrowser.auth.signInWithPassword({
@@ -164,6 +175,16 @@ export default function AuthCard({
           setError(err.message);
           return;
         }
+        trackEvent(
+          'auth_success',
+          {
+            provider: 'email_password',
+            next_path: redirectTo,
+          },
+          {
+            route_group: 'auth',
+          }
+        );
         await replaceRouteAfterAuthSession(router, redirectTo);
       }
     } finally {

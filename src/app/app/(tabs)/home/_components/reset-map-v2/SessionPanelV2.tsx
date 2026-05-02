@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
+import { trackEvent } from '@/lib/analytics/trackEvent'
 import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import type { ExerciseItem } from './planJsonAdapter'
 import { getLogKey } from './planJsonAdapter'
@@ -313,6 +314,22 @@ function PanelInner({
       }
     }
   }, [sessionId])
+  useEffect(() => {
+    trackEvent(
+      'session_panel_opened',
+      {
+        route_group: 'session_panel',
+        session_number: sessionId,
+        status,
+        exercise_count: exercises?.length ?? null,
+      },
+      {
+        route_group: 'session_panel',
+        session_number: sessionId,
+        dedupe_key: `session_panel_opened:${sessionId}:${status}`,
+      }
+    )
+  }, [exercises, sessionId, status])
   // exercises ready 측정 (createSession cold path → panel first paint)
   const prevExercisesRef = useRef<ExerciseItem[] | undefined>(undefined)
   useEffect(() => {
@@ -523,6 +540,7 @@ function PanelInner({
       {/* 운동 실행 모달 — PR-SESSION-UX-02: 다음 버튼으로 연속 흐름 */}
       <ExercisePlayerModal
         item={exercises && exerciseIndex != null ? exercises[exerciseIndex] ?? null : null}
+        sessionNumber={sessionId}
         exerciseIndex={exerciseIndex}
         totalExercises={exercises?.length ?? 0}
         initialLog={exercises && exerciseIndex != null ? logs[getLogKey(exercises[exerciseIndex]!)] ?? logs[exercises[exerciseIndex]?.templateId ?? ''] : undefined}

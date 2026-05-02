@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { X, Plus, Minus, Trash2 } from 'lucide-react';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import { getSessionSafe } from '@/lib/supabase';
 import type { ExerciseItem } from './planJsonAdapter';
 import type { ExerciseLogItem } from '@/lib/session/client';
@@ -18,6 +19,7 @@ import {
 
 interface ExercisePlayerModalProps {
   item: ExerciseItem | null;
+  sessionNumber?: number | null;
   exerciseIndex?: number | null;
   totalExercises?: number;
   initialLog?: ExerciseLogItem;
@@ -31,11 +33,12 @@ interface ExercisePlayerModalProps {
   painModeMessage?: string;
 }
 
-export function ExercisePlayerModal({ item, exerciseIndex = 0, totalExercises = 0, initialLog, onClose, onComplete, onNextOrEnd, sessionGoalText, painModeMessage }: ExercisePlayerModalProps) {
+export function ExercisePlayerModal({ item, sessionNumber = null, exerciseIndex = 0, totalExercises = 0, initialLog, onClose, onComplete, onNextOrEnd, sessionGoalText, painModeMessage }: ExercisePlayerModalProps) {
   if (!item) return null;
   return (
     <ModalInner
       item={item}
+      sessionNumber={sessionNumber ?? undefined}
       exerciseIndex={exerciseIndex ?? undefined}
       totalExercises={totalExercises}
       initialLog={initialLog}
@@ -52,6 +55,7 @@ type SetEntry = { reps: number; holdSeconds: number };
 
 function ModalInner({
   item,
+  sessionNumber,
   exerciseIndex = 0,
   totalExercises = 0,
   initialLog,
@@ -62,6 +66,7 @@ function ModalInner({
   painModeMessage,
 }: {
   item: ExerciseItem;
+  sessionNumber?: number;
   exerciseIndex?: number;
   totalExercises?: number;
   initialLog?: ExerciseLogItem;
@@ -99,6 +104,23 @@ function ModalInner({
   const isLast = totalExercises > 0 && exerciseIndex >= totalExercises - 1;
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<{ destroy: () => void } | null>(null);
+
+  useEffect(() => {
+    trackEvent(
+      'exercise_player_opened',
+      {
+        route_group: 'exercise_player',
+        session_number: sessionNumber ?? null,
+        exercise_index: exerciseIndex ?? null,
+        template_id: item.templateId ?? null,
+      },
+      {
+        route_group: 'exercise_player',
+        session_number: sessionNumber ?? undefined,
+        dedupe_key: `exercise_player_opened:${sessionNumber ?? 'none'}:${exerciseIndex ?? 'none'}:${item.templateId}`,
+      }
+    );
+  }, [exerciseIndex, item.templateId, sessionNumber]);
 
   useEffect(() => {
     let cancelled = false;

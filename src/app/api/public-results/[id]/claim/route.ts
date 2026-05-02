@@ -38,6 +38,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
+import { logAnalyticsEvent } from '@/lib/analytics/logAnalyticsEvent';
 import {
   claimPublicResult,
   ClaimNotFoundError,
@@ -90,6 +91,21 @@ export async function POST(
       publicResultId: id.trim(),
       userId,
       anonId,
+    });
+
+    void logAnalyticsEvent({
+      event_name: 'public_result_claim_success',
+      user_id: userId,
+      anon_id: anonId,
+      public_result_id: output.id,
+      route_path: '/api/public-results/[id]/claim',
+      route_group: 'public_result_claim',
+      dedupe_key: `public_result_claim_success:${userId}:${output.id}`,
+      props: {
+        public_result_id: output.id,
+        outcome: output.outcome,
+        anon_id_present: Boolean(anonId),
+      },
     });
 
     return NextResponse.json({

@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import { FUNNEL_KEY } from '@/lib/public/intro-funnel';
 import StitchLanding from '@/components/stitch/landing/StitchLanding';
 import LandingReturnHomeCta from '@/components/landing/LandingReturnHomeCta';
@@ -63,6 +64,7 @@ export default function LandingPage() {
   const readinessPromiseRef = useRef<Promise<SessionReadinessV1 | null> | null>(null);
   const mountedRef = useRef(false);
   const startPendingRef = useRef(false);
+  const landingTrackedRef = useRef(false);
   const [startPending, setStartPending] = useState(false);
 
   const loadReadinessOnce = useCallback(() => {
@@ -130,6 +132,24 @@ export default function LandingPage() {
     savePilotContextFromCode(code, 'root_query');
   }, []);
 
+  useEffect(() => {
+    if (landingTrackedRef.current) return;
+    landingTrackedRef.current = true;
+
+    trackEvent(
+      'landing_viewed',
+      {
+        route_group: 'public_landing',
+      },
+      {
+        route_group: 'public_landing',
+        dedupe_key: `landing_viewed:${new Intl.DateTimeFormat('sv-SE', {
+          timeZone: 'Asia/Seoul',
+        }).format(new Date())}`,
+      }
+    );
+  }, []);
+
   const canReturnHome =
     readinessState === 'ready' &&
     readiness?.next_action.code === 'GO_APP_HOME' &&
@@ -147,6 +167,18 @@ export default function LandingPage() {
 
   const handleStart = async () => {
     if (startPendingRef.current) return;
+
+    trackEvent(
+      'public_cta_clicked',
+      {
+        route_group: 'public_landing',
+        target_path: '/intro/welcome',
+        entry_mode: 'survey',
+      },
+      {
+        route_group: 'public_landing',
+      }
+    );
 
     startPendingRef.current = true;
     setStartPending(true);
