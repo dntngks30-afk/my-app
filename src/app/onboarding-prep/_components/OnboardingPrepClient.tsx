@@ -20,6 +20,10 @@ export default function OnboardingPrepClient() {
   const [hasContext, setHasContext] = useState<boolean | null>(null);
 
   useEffect(() => {
+    router.prefetch('/onboarding');
+  }, [router]);
+
+  useEffect(() => {
     const id = searchParams.get('publicResultId');
     const stage = searchParams.get('stage');
     const anonId = searchParams.get('anonId');

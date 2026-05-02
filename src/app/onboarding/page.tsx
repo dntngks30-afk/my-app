@@ -14,6 +14,37 @@ import StitchOnboarding from '@/components/stitch/onboarding/StitchOnboarding';
 
 const LIFESTYLE_MAX = 200;
 
+function OnboardingAuthLoadingScene() {
+  return (
+    <StitchSceneShell contentEnter="calm">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-10">
+        <div className="mx-auto w-full max-w-md space-y-8">
+          <div className="space-y-3 text-left">
+            <p
+              className="text-[10px] font-light uppercase tracking-[0.35em] text-[#ffb77d]/90"
+              style={{ fontFamily: 'var(--font-sans-noto)' }}
+            >
+              실행 시작 설정
+            </p>
+            <div className="h-px w-12 animate-pulse bg-[#ffb77d]/40" aria-hidden />
+            <div className="h-8 w-4/5 max-w-sm animate-pulse rounded-lg bg-[#151b2d]/80" aria-hidden />
+            <div className="h-4 w-full animate-pulse rounded-md bg-[#151b2d]/50" aria-hidden />
+            <div className="h-4 w-11/12 animate-pulse rounded-md bg-[#151b2d]/45" aria-hidden />
+          </div>
+          <div className="space-y-4 rounded-2xl border border-white/[0.06] bg-[#151b2d]/35 p-5 backdrop-blur-md">
+            <div className="h-24 animate-pulse rounded-xl bg-[#0c1324]/70" aria-hidden />
+            <div className="h-24 animate-pulse rounded-xl bg-[#0c1324]/65" aria-hidden />
+            <div className="h-20 animate-pulse rounded-xl bg-[#0c1324]/60" aria-hidden />
+          </div>
+          <p className="text-center text-sm font-light text-[#c6c6cd]" style={{ fontFamily: 'var(--font-sans-noto)' }}>
+            계정 확인 중…
+          </p>
+        </div>
+      </div>
+    </StitchSceneShell>
+  );
+}
+
 export default function OnboardingPage() {
   const router = useRouter();
   const [targetFrequency, setTargetFrequency] = useState<TargetFrequency | null>(null);
@@ -21,8 +52,13 @@ export default function OnboardingPage() {
   const [painOrDiscomfortPresent, setPainOrDiscomfortPresent] = useState<boolean | null>(null);
   const [lifestyleNote, setLifestyleNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const [submitTransition, setSubmitTransition] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    router.prefetch('/session-preparing');
+  }, [router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +93,7 @@ export default function OnboardingPage() {
     }
 
     setError(null);
+    setSubmitTransition(true);
     setSaving(true);
 
     try {
@@ -66,6 +103,7 @@ export default function OnboardingPage() {
       if (!session) {
         setError('로그인이 필요합니다.');
         setSaving(false);
+        setSubmitTransition(false);
         return;
       }
 
@@ -90,6 +128,7 @@ export default function OnboardingPage() {
       if (!res.ok) {
         setError(json?.message ?? json?.error ?? '저장에 실패했습니다.');
         setSaving(false);
+        setSubmitTransition(false);
         return;
       }
 
@@ -97,6 +136,7 @@ export default function OnboardingPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : '저장 중 오류가 발생했습니다.');
       setSaving(false);
+      setSubmitTransition(false);
     }
   }, [targetFrequency, exerciseExperienceLevel, painOrDiscomfortPresent, lifestyleNote, router]);
 
@@ -104,32 +144,51 @@ export default function OnboardingPage() {
     targetFrequency != null &&
     exerciseExperienceLevel != null &&
     painOrDiscomfortPresent != null &&
-    !saving;
+    !saving &&
+    !submitTransition;
 
   if (!authChecked) {
-    return (
-      <StitchSceneShell contentEnter="off">
-        <div className="flex flex-1 items-center justify-center">
-          <p className="text-sm text-slate-400">확인 중...</p>
-        </div>
-      </StitchSceneShell>
-    );
+    return <OnboardingAuthLoadingScene />;
   }
 
   return (
-    <StitchOnboarding
-      targetFrequency={targetFrequency}
-      setTargetFrequency={setTargetFrequency}
-      exerciseExperienceLevel={exerciseExperienceLevel}
-      setExerciseExperienceLevel={setExerciseExperienceLevel}
-      painOrDiscomfortPresent={painOrDiscomfortPresent}
-      setPainOrDiscomfortPresent={setPainOrDiscomfortPresent}
-      lifestyleNote={lifestyleNote}
-      setLifestyleNote={setLifestyleNote}
-      error={error}
-      saving={saving}
-      canSubmit={canSubmit}
-      onSubmit={handleSubmit}
-    />
+    <div className="relative">
+      {(submitTransition || saving) && (
+        <div
+          className="fixed inset-0 z-[200] flex flex-col items-center justify-center gap-3 bg-[#0c1324]/88 px-8 backdrop-blur-md"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <p
+            className="max-w-xs text-center text-base font-medium text-[#dce1fb]"
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
+          >
+            실행 설정을 저장하고 있어요
+          </p>
+          <p
+            className="max-w-xs text-center text-sm font-light leading-relaxed text-[#c6c6cd]"
+            style={{ fontFamily: 'var(--font-sans-noto)' }}
+          >
+            첫 세션 준비 화면으로 이동합니다
+          </p>
+          <span className="mt-2 inline-block size-8 animate-spin rounded-full border-2 border-[#ffb77d]/25 border-t-[#ffb77d]" aria-hidden />
+        </div>
+      )}
+      <StitchOnboarding
+        targetFrequency={targetFrequency}
+        setTargetFrequency={setTargetFrequency}
+        exerciseExperienceLevel={exerciseExperienceLevel}
+        setExerciseExperienceLevel={setExerciseExperienceLevel}
+        painOrDiscomfortPresent={painOrDiscomfortPresent}
+        setPainOrDiscomfortPresent={setPainOrDiscomfortPresent}
+        lifestyleNote={lifestyleNote}
+        setLifestyleNote={setLifestyleNote}
+        error={error}
+        saving={saving}
+        canSubmit={canSubmit}
+        onSubmit={handleSubmit}
+      />
+    </div>
   );
 }

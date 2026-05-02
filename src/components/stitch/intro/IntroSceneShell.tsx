@@ -4,7 +4,9 @@
  * intro 6장 공용 풀스크린 씬 — StitchLanding과 동일 navy / cosmic / copper family
  * @see stitch_analysis_selection code.html
  */
+import { useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getNextPath, getPrevPath, TOTAL_STEPS } from '@/lib/public/intro-funnel';
 import { cn } from '@/lib/utils';
@@ -46,9 +48,15 @@ export function IntroStepIndicator({ step }: { step: number }) {
 }
 
 export function IntroSceneShell({ currentPath, children, navVariant, mainClassName }: IntroSceneShellProps) {
+  const router = useRouter();
   const variant = resolveNavVariant(currentPath, navVariant);
   const prevPath = getPrevPath(currentPath);
   const nextPath = getNextPath(currentPath);
+
+  useEffect(() => {
+    if (nextPath) router.prefetch(nextPath);
+    if (prevPath) router.prefetch(prevPath);
+  }, [router, nextPath, prevPath]);
 
   return (
     <div className="relative min-h-[100svh] overflow-hidden bg-[#0c1324] text-[#dce1fb]">

@@ -55,8 +55,9 @@ export default function IntroProfile() {
   const [ageBand, setAgeBand] = useState<AgeBand | ''>('');
   const [gender, setGender] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = useCallback(async () => {
+  const handleSubmit = useCallback(() => {
     setFormError(null);
     if (!ageBand || ageBand === 'unknown') {
       setFormError('나이대를 선택해 주세요.');
@@ -68,6 +69,8 @@ export default function IntroProfile() {
       return;
     }
 
+    setIsSubmitting(true);
+
     saveFunnel({
       age_band: ageBand,
       gender: genderBucket,
@@ -76,28 +79,23 @@ export default function IntroProfile() {
     if (typeof window !== 'undefined') {
       const anonId = getOrCreateAnonId();
       if (anonId) {
-        await Promise.race([
-          fetch('/api/public-test-profile', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              anonId,
-              ageBand,
-              gender: genderBucket,
-            }),
-            keepalive: true,
+        void fetch('/api/public-test-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            anonId,
+            ageBand,
+            gender: genderBucket,
           }),
-          new Promise<void>((resolve) => {
-            window.setTimeout(resolve, 450);
-          }),
-        ]).catch(() => null);
+          keepalive: true,
+        }).catch(() => {});
       }
       mergeIntroProfileIntoSurveySession();
       router.push('/movement-test/survey');
     }
   }, [ageBand, gender, router]);
 
-  const canSubmit = Boolean(ageBand && gender);
+  const canSubmit = Boolean(ageBand && gender) && !isSubmitting;
 
   return (
     <IntroSceneShell currentPath="/intro/profile" navVariant="hidden" mainClassName="py-[30px]">
@@ -184,7 +182,7 @@ export default function IntroProfile() {
             className="w-full rounded-lg bg-gradient-to-br from-[#ffb77d] to-[#ab4c00] py-5 text-lg font-semibold tracking-[-1.2px] text-[#1e1e1f] shadow-xl shadow-black/40 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
             style={{ fontFamily: 'var(--font-sans-noto)' }}
           >
-            다음으로 진행
+            {isSubmitting ? '이동 중…' : '다음으로 진행'}
           </button>
 
           <p className="text-center text-[10px] text-slate-500" style={{ fontFamily: 'var(--font-sans-noto)' }}>
