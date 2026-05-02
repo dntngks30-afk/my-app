@@ -109,7 +109,8 @@
     "test:public-critical-asset-diet": "node scripts/public-critical-asset-diet-smoke.mjs",
     "test:landing-readiness-cache-prefetch": "node scripts/landing-readiness-cache-prefetch-smoke.mjs",
     "test:analytics-event-infra": "npx tsx scripts/analytics-event-infra-smoke.mjs",
-    "test:analytics-core-funnel-tracking": "npx tsx scripts/analytics-core-funnel-tracking-smoke.mjs"
+    "test:analytics-core-funnel-tracking": "npx tsx scripts/analytics-core-funnel-tracking-smoke.mjs",
+    "test:analytics-admin-kpi-dashboard": "npx tsx scripts/analytics-admin-kpi-dashboard-smoke.mjs"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
