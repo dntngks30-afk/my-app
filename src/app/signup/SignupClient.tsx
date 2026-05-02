@@ -9,6 +9,7 @@ import {
 } from '@/lib/auth/authHandoffContract';
 import { buildAuthHandoffAbsoluteUrl } from '@/lib/auth/buildAuthHandoffUrl';
 import { buildAndroidChromeIntentUrl } from '@/lib/auth/androidChromeIntent';
+import { shouldUseInAppEmailAuthHandoff } from '@/lib/auth/authExternalBrowserPolicy';
 import { getUaLower, isAuthHandoffInAppBrowser, detectIsAndroid, detectIsIos } from '@/lib/browser/detectInAppBrowser';
 import { getPilotCodeFromCurrentUrl } from '@/lib/pilot/pilot-context';
 
@@ -91,7 +92,7 @@ export default function SignupClient({ errorParam, next }: SignupClientProps) {
         mode="signup"
         errorParam={errorParam}
         redirectTo={redirectTo}
-        inAppEmailHandoff={uaHydrated && env.inApp}
+        inAppEmailHandoff={uaHydrated && shouldUseInAppEmailAuthHandoff(env)}
         onInAppEmailHandoff={onInAppEmailHandoff}
         handoffUaReady={uaHydrated}
       />

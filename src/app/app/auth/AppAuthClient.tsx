@@ -12,6 +12,10 @@ import {
   type OAuthProvider,
 } from '@/lib/auth/startOAuthClient';
 import {
+  shouldUseInAppEmailAuthHandoff,
+  shouldUseOAuthHandoffForProvider,
+} from '@/lib/auth/authExternalBrowserPolicy';
+import {
   getUaLower,
   isAuthHandoffInAppBrowser,
   detectIsAndroid,
@@ -90,10 +94,12 @@ export default function AppAuthClient({
   );
 
   /**
-   * PR-AUTH-IOS-LOGIN-POLICY-01 최종 선택:
-   * - Android in-app: 변경 없이 항상 handoff → Chrome intent.
-   * - iOS Safari/일반 브라우저: inApp=false 이라 아래 분기 전에 startOAuthClient 로 직접 OAuth.
-   * - iOS in-app + Kakao: 예외 없이 handoff sheet(외부 Safari 유도) 사용.
+   * PR-AUTH-IOS-INAPP-KAKAO-DIRECT-01:
+   * - 비인앱(Safari 등): startOAuthClient 직행.
+   * - Android 인앱: 기존과 동일하게 handoff URL + Chrome intent.
+   * - iOS 인앱 + Google: 버튼 미노출·오류 메시지 유지(핸드오프 없음).
+   * - iOS 인앱 + Kakao: 시트 없이 startOAuthClient 로 인앱에서 OAuth 진행.
+   * - 그 외 인앱: 기존 핸드오프 폴백.
    */
   const runOAuth = (provider: OAuthProvider) => {
     if (!uaHydrated) return;
@@ -103,7 +109,12 @@ export default function AppAuthClient({
       return;
     }
 
-    if (env.isAndroid) {
+    if (env.isIos && provider === 'google') {
+      setOauthError('iOS에서는 카카오 또는 이메일로 계속해 주세요.');
+      return;
+    }
+
+    if (shouldUseOAuthHandoffForProvider(env, provider)) {
       const e = bridgeExtras();
       const url = buildAuthHandoffAbsoluteUrl({
         method: provider === 'google' ? 'google' : 'kakao',
@@ -121,42 +132,7 @@ export default function AppAuthClient({
       return;
     }
 
-    if (env.isIos) {
-      if (provider === 'google') {
-        setOauthError('iOS에서는 카카오 또는 이메일로 계속해 주세요.');
-        return;
-      }
-      const e = bridgeExtras();
-      const url = buildAuthHandoffAbsoluteUrl({
-        method: 'kakao',
-        next: safeNext,
-        publicResultId: e.publicResultId,
-        stage: e.stage,
-        anonId: e.anonId,
-        pilot: e.pilot,
-      });
-      if (!url) {
-        void startOAuthClient({ provider: 'kakao', next: safeNext, setOauthError });
-        return;
-      }
-      openHandoffUrl(url);
-      return;
-    }
-
-    const e = bridgeExtras();
-    const url = buildAuthHandoffAbsoluteUrl({
-      method: provider === 'google' ? 'google' : 'kakao',
-      next: safeNext,
-      publicResultId: e.publicResultId,
-      stage: e.stage,
-      anonId: e.anonId,
-      pilot: e.pilot,
-    });
-    if (!url) {
-      void startOAuthClient({ provider, next: safeNext, setOauthError });
-      return;
-    }
-    openHandoffUrl(url);
+    void startOAuthClient({ provider, next: safeNext, setOauthError });
   };
 
   const onInAppEmailHandoff = useCallback(
@@ -186,7 +162,7 @@ export default function AppAuthClient({
           redirectTo={safeNext}
           compactHeader
           signupLayout="embedded"
-          inAppEmailHandoff={uaHydrated && env.inApp}
+          inAppEmailHandoff={uaHydrated && shouldUseInAppEmailAuthHandoff(env)}
           onInAppEmailHandoff={onInAppEmailHandoff}
           handoffUaReady={uaHydrated}
           oauthSlot={

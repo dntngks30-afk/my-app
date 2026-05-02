@@ -1,8 +1,14 @@
 /**
- * PR-AUTH-IOS-LOGIN-POLICY-01 — 순수 검증 스모크 (네트워크/서버 없음)
+ * PR-AUTH-IOS-LOGIN-POLICY-01 / PR-AUTH-IOS-INAPP-KAKAO-DIRECT-01 — 네트워크 없음
  */
 import assert from 'node:assert/strict';
 import { isKakaoInAppBrowser } from '../src/lib/browser/detectInAppBrowser';
+import {
+  shouldUseInAppEmailAuthHandoff,
+  shouldUseIosSafariAuthHandoffSheet,
+  shouldUseOAuthHandoffForProvider,
+  type AuthBrowserEnv,
+} from '../src/lib/auth/authExternalBrowserPolicy';
 import { normalizeCollectEmail } from '../src/lib/auth/collectEmailValidation';
 import { coalesceStripeUserEmail } from '../src/lib/auth/stripeCheckoutEmail';
 
@@ -26,6 +32,18 @@ function main() {
   assert.equal(coalesceStripeUserEmail('', 'c@d.com'), 'c@d.com');
   assert.equal(coalesceStripeUserEmail(null, '  e@f.co  '), 'e@f.co');
   assert.equal(coalesceStripeUserEmail(undefined, undefined), '');
+
+  const iosInApp: AuthBrowserEnv = { inApp: true, isIos: true, isAndroid: false };
+  const androidInApp: AuthBrowserEnv = { inApp: true, isIos: false, isAndroid: true };
+  const safariMobile: AuthBrowserEnv = { inApp: false, isIos: true, isAndroid: false };
+
+  assert.equal(shouldUseIosSafariAuthHandoffSheet(iosInApp), false);
+  assert.equal(shouldUseInAppEmailAuthHandoff(iosInApp), false);
+  assert.equal(shouldUseInAppEmailAuthHandoff(androidInApp), true);
+  assert.equal(shouldUseOAuthHandoffForProvider(iosInApp, 'kakao'), false);
+  assert.equal(shouldUseOAuthHandoffForProvider(androidInApp, 'kakao'), true);
+  assert.equal(shouldUseOAuthHandoffForProvider(androidInApp, 'google'), true);
+  assert.equal(shouldUseOAuthHandoffForProvider(safariMobile, 'kakao'), false);
 
   console.log('auth-ios-login-policy-smoke: PASS');
 }
