@@ -10,6 +10,7 @@ process.chdir(join(__dirname, '..'));
 
 const {
   birthDateToAgeBand,
+  signupBirthDateToAgeBand,
   mapIntroGenderToGenderBucket,
   mapIntroAgeToAgeBand,
 } = await import('../src/lib/analytics/kpi-demographics-types.ts');
@@ -56,7 +57,9 @@ ok(
   birthDateToAgeBand('1966-05-01', refMay2026) === '60s_plus'
 );
 ok('birthDate 형식 불량 → unknown', birthDateToAgeBand('xx') === 'unknown');
-ok('birthDate 13세 미만 → unknown', birthDateToAgeBand('2014-05-02', refMay2026) === 'unknown');
+ok('signupBirthDate 만 10세 경계 → 10s', signupBirthDateToAgeBand('2016-05-02', refMay2026) === '10s');
+ok('signupBirthDate 9세 → unknown', signupBirthDateToAgeBand('2017-05-02', refMay2026) === 'unknown');
+ok('signupBirthDate 미래 → unknown', signupBirthDateToAgeBand('2030-01-01', refMay2026) === 'unknown');
 
 ok('mapIntroAge 레거시 10-19 → 10s', mapIntroAgeToAgeBand('10-19') === '10s');
 

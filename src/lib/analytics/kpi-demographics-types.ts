@@ -1,5 +1,6 @@
 /**
- * KPI demographic buckets only — no birthdate persisted server-side, no mixed scoring truth.
+ * KPI demographic buckets — 무료테스트는 나이대·성별만;
+ * 회원가입 생년월일은 signup_profiles 에만 저장되며 스코어링 truth 와 무관합니다.
  */
 
 export const AGE_BANDS = [
@@ -107,6 +108,31 @@ export function birthDateToAgeBand(isoDateStr: string, referenceDate: Date = new
   const md = ref.getMonth() - birth.getMonth();
   if (md < 0 || (md === 0 && ref.getDate() < birth.getDate())) age--;
   if (age < 14 || age > 100) return 'unknown';
+  return ageBandFromYears(age);
+}
+
+/** 회원가입용: 만 10~100세만 유효 밴드, 그 외 unknown (클라이언트에서 10세 미만 차단 권장). */
+export function signupBirthDateToAgeBand(isoDateStr: string, referenceDate: Date = new Date()): AgeBand {
+  const m = isoDateStr.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return 'unknown';
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!Number.isFinite(y) || mo < 1 || mo > 12 || d < 1 || d > 31) return 'unknown';
+  const birth = new Date(y, mo - 1, d);
+  if (birth.getFullYear() !== y || birth.getMonth() !== mo - 1 || birth.getDate() !== d) {
+    return 'unknown';
+  }
+  const ref = referenceDate;
+  if (birth.getTime() > ref.getTime()) return 'unknown';
+  let age = ref.getFullYear() - birth.getFullYear();
+  const md = ref.getMonth() - birth.getMonth();
+  if (md < 0 || (md === 0 && ref.getDate() < birth.getDate())) age--;
+  if (age < 10 || age > 100) return 'unknown';
+  return ageBandFromYears(age);
+}
+
+function ageBandFromYears(age: number): AgeBand {
   if (age < 20) return '10s';
   if (age < 30) return '20s';
   if (age < 40) return '30s';

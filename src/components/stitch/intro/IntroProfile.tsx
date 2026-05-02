@@ -2,6 +2,7 @@
 
 /**
  * stitch code.html Screen 8 — Profile form (로직은 기존 page truth 유지)
+ * 무료테스트 시작 전: 나이대 + 성별만 (생년월일·유입경로는 회원가입으로 이동)
  */
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
@@ -11,27 +12,22 @@ import { IntroSceneShell, IntroStepIndicator } from './IntroSceneShell';
 import { FUNNEL_KEY, type FunnelData } from '@/lib/public/intro-funnel';
 import { mergeIntroProfileIntoSurveySession } from '@/lib/public/survey-bridge';
 import { getOrCreateAnonId } from '@/lib/public-results/anon-id';
-import type { AcquisitionSource } from '@/lib/analytics/kpi-demographics-types';
-import {
-  ACQUISITION_SOURCE_LABELS,
-  ACQUISITION_SOURCES,
-  birthDateToAgeBand,
-  mapIntroGenderToGenderBucket,
-} from '@/lib/analytics/kpi-demographics-types';
+import type { AgeBand } from '@/lib/analytics/kpi-demographics-types';
+import { mapIntroGenderToGenderBucket } from '@/lib/analytics/kpi-demographics-types';
+
+const AGE_BAND_OPTIONS: { value: AgeBand; label: string }[] = [
+  { value: '10s', label: '10대' },
+  { value: '20s', label: '20대' },
+  { value: '30s', label: '30대' },
+  { value: '40s', label: '40대' },
+  { value: '50s', label: '50대' },
+  { value: '60s_plus', label: '60대 이상' },
+];
 
 const GENDER_OPTIONS = [
   { value: 'male', label: '남성' },
   { value: 'female', label: '여성' },
 ] as const;
-
-const ACQUISITION_OPTIONS = ACQUISITION_SOURCES.filter((s) => s !== 'unknown');
-
-function localIsoDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
 
 function loadFunnel(): Partial<FunnelData> {
   if (typeof window === 'undefined') return {};
@@ -56,16 +52,14 @@ function saveFunnel(data: Partial<FunnelData>) {
 
 export default function IntroProfile() {
   const router = useRouter();
-  const [birthDate, setBirthDate] = useState('');
+  const [ageBand, setAgeBand] = useState<AgeBand | ''>('');
   const [gender, setGender] = useState('');
-  const [acquisition, setAcquisition] = useState<AcquisitionSource | ''>('');
   const [formError, setFormError] = useState<string | null>(null);
 
   const handleSubmit = useCallback(async () => {
     setFormError(null);
-    const ageBand = birthDateToAgeBand(birthDate);
-    if (ageBand === 'unknown') {
-      setFormError('생년월일을 확인해 주세요. (만 14~100세 범위)');
+    if (!ageBand || ageBand === 'unknown') {
+      setFormError('나이대를 선택해 주세요.');
       return;
     }
     const genderBucket = mapIntroGenderToGenderBucket(gender);
@@ -74,13 +68,9 @@ export default function IntroProfile() {
       return;
     }
 
-    const acquisitionSource: AcquisitionSource =
-      acquisition === '' ? 'unknown' : acquisition;
-
     saveFunnel({
       age_band: ageBand,
       gender: genderBucket,
-      acquisition_source: acquisitionSource,
       introCompletedAt: new Date().toISOString(),
     });
     if (typeof window !== 'undefined') {
@@ -94,7 +84,6 @@ export default function IntroProfile() {
               anonId,
               ageBand,
               gender: genderBucket,
-              acquisitionSource,
             }),
             keepalive: true,
           }),
@@ -106,11 +95,9 @@ export default function IntroProfile() {
       mergeIntroProfileIntoSurveySession();
       router.push('/movement-test/survey');
     }
-  }, [acquisition, birthDate, gender, router]);
+  }, [ageBand, gender, router]);
 
-  const canSubmit = Boolean(birthDate && gender);
-
-  const todayIso = typeof window !== 'undefined' ? localIsoDate(new Date()) : '';
+  const canSubmit = Boolean(ageBand && gender);
 
   return (
     <IntroSceneShell currentPath="/intro/profile" navVariant="hidden" mainClassName="py-[30px]">
@@ -143,16 +130,25 @@ export default function IntroProfile() {
               className="block text-xs uppercase tracking-widest text-[#c6c6cd]/50"
               style={{ fontFamily: 'var(--font-sans-noto)' }}
             >
-              생년월일
+              나이대
             </label>
-            <input
-              type="date"
-              max={todayIso}
-              value={birthDate}
-              onChange={(e) => setBirthDate(e.target.value)}
-              className="w-full rounded-none border-0 border-b border-white/20 bg-transparent px-[50px] py-4 text-center text-[18px] font-light tracking-[-0.8px] text-[#dce1fb] focus:border-[#ffb77d] focus:outline-none focus:ring-0"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
-            />
+            <div className="grid grid-cols-2 gap-3">
+              {AGE_BAND_OPTIONS.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => setAgeBand(o.value)}
+                  className={`rounded-lg border py-4 text-base font-light transition-all ${
+                    ageBand === o.value
+                      ? 'border-[#ffb77d] text-[#dce1fb]'
+                      : 'border-white/20 text-[#c6c6cd]/80 hover:border-[#ffb77d]/50'
+                  }`}
+                  style={{ fontFamily: 'var(--font-sans-noto)' }}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -179,28 +175,6 @@ export default function IntroProfile() {
                 </button>
               ))}
             </div>
-          </div>
-
-          <div className="space-y-4">
-            <label
-              className="block text-xs uppercase tracking-widest text-[#c6c6cd]/50"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
-            >
-              유입 경로 <span className="normal-case text-[#c6c6cd]/40">(선택)</span>
-            </label>
-            <select
-              value={acquisition}
-              onChange={(e) => setAcquisition((e.target.value || '') as AcquisitionSource | '')}
-              className="w-full cursor-pointer appearance-none rounded-none border-0 border-b border-white/20 bg-transparent px-[50px] py-4 text-center text-[18px] font-light tracking-[-0.8px] text-[#dce1fb] focus:border-[#ffb77d] focus:outline-none focus:ring-0"
-              style={{ fontFamily: 'var(--font-sans-noto)' }}
-            >
-              <option value="">선택 안 함</option>
-              {ACQUISITION_OPTIONS.map((key) => (
-                <option key={key} value={key} className="bg-[#0c1324]">
-                  {ACQUISITION_SOURCE_LABELS[key]}
-                </option>
-              ))}
-            </select>
           </div>
 
           <button

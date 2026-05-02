@@ -132,19 +132,27 @@ function DemographicsSection({ demographics }: { demographics: KpiDemographicsSu
     );
   }
 
-  const genderRows = demographics.total?.by_gender ?? demographics.test_started?.by_gender ?? [];
-  const ageRows = demographics.total?.by_age_band ?? demographics.test_started?.by_age_band ?? [];
-  const acquisitionRows =
-    demographics.total?.by_acquisition_source ?? demographics.test_started?.by_acquisition_source ?? [];
+  const introSurveyStarted =
+    demographics.free_test_intro.funnel_steps.find((s) => s.step === 'survey_started') ??
+    demographics.free_test_intro.funnel_steps[0];
+  const genderRowsIntro = introSurveyStarted?.by_gender ?? [];
+  const ageRowsIntro = introSurveyStarted?.by_age_band ?? [];
+
+  const signupAuthStep =
+    demographics.signup_profile.funnel_steps.find((s) => s.step === 'auth_success') ??
+    demographics.signup_profile.funnel_steps[0];
+  const ageRowsSignup = signupAuthStep?.by_age_band ?? [];
+  const acquisitionRowsSignup = signupAuthStep?.by_acquisition_source ?? [];
+
+  const introHasCards =
+    genderRowsIntro.some((r) => r.count > 0) || ageRowsIntro.some((r) => r.count > 0);
+  const signupHasCards =
+    ageRowsSignup.some((r) => r.count > 0) || acquisitionRowsSignup.some((r) => r.count > 0);
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-8">
       <div>
         <h2 className="text-lg font-semibold text-slate-100">인구통계(bucket)</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          테스트 시작(SURVEY_STARTED) distinct 사용자 기준 분포입니다. free_test_intro 프로필만 반영합니다.
-          미입력·소표본 구간은 과해석에 주의하세요.
-        </p>
         <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-slate-500">
           {demographics.limitations.map((line) => (
             <li key={line}>{line}</li>
@@ -152,44 +160,106 @@ function DemographicsSection({ demographics }: { demographics: KpiDemographicsSu
         </ul>
       </div>
 
-      {genderRows.length === 0 && ageRows.length === 0 && acquisitionRows.length === 0 ? (
-        <p className="text-sm text-slate-500">이 기간에 표시할 인구통계 bucket 이 없습니다.</p>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-3">
-          <DemographicsDistributionCard title="성별 분포" rows={genderRows} />
-          <DemographicsDistributionCard title="연령대 분포" rows={ageRows} />
-          <DemographicsDistributionCard title="유입 경로" rows={acquisitionRows} />
+      <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+        <div>
+          <h3 className="text-base font-semibold text-slate-100">무료테스트 프로필</h3>
+          <p className="mt-1 text-xs text-slate-400">
+            무료테스트 프로필은 테스트 시작 전 입력값 기준입니다. (나이대·성별만)
+          </p>
+          <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-slate-500">
+            {demographics.free_test_intro.limitations.map((line) => (
+              <li key={`intro-${line}`}>{line}</li>
+            ))}
+          </ul>
         </div>
-      )}
 
-      {demographics.funnel_steps.length > 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900 p-4">
-          <p className="text-sm font-medium text-slate-200">단계별 요약</p>
-          <table className="mt-3 min-w-full text-left text-sm text-slate-300">
-            <thead className="border-b border-slate-700 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="py-2 pr-4">단계</th>
-                <th className="py-2 pr-4">표본 수</th>
-                <th className="py-2 pr-4">최다 연령대</th>
-                <th className="py-2 pr-4">최다 성별</th>
-                <th className="py-2">최다 유입경로</th>
-              </tr>
-            </thead>
-            <tbody>
-              {demographics.funnel_steps.map((step) => (
-                <tr key={step.step} className="border-b border-slate-800/80">
-                  <td className="py-2 pr-4">{step.label_ko}</td>
-                  <td className="py-2 pr-4">{formatCount(step.sample_size)}</td>
-                  <td className="py-2 pr-4">{dominantBucketLabel(step.by_age_band)}</td>
-                  <td className="py-2 pr-4">{dominantBucketLabel(step.by_gender)}</td>
-                  <td className="py-2">{dominantBucketLabel(step.by_acquisition_source)}</td>
+        {!introHasCards ? (
+          <p className="text-sm text-slate-500">이 기간에 표시할 무료테스트 인구통계가 없습니다.</p>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            <DemographicsDistributionCard title="무료테스트 성별 분포" rows={genderRowsIntro} />
+            <DemographicsDistributionCard title="무료테스트 나이대 분포" rows={ageRowsIntro} />
+          </div>
+        )}
+
+        {demographics.free_test_intro.funnel_steps.length > 0 ? (
+          <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900 p-4">
+            <p className="text-sm font-medium text-slate-200">무료테스트 단계별 요약</p>
+            <table className="mt-3 min-w-full text-left text-sm text-slate-300">
+              <thead className="border-b border-slate-700 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="py-2 pr-4">단계</th>
+                  <th className="py-2 pr-4">표본 수</th>
+                  <th className="py-2 pr-4">최다 연령대</th>
+                  <th className="py-2">최다 성별</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="mt-3 text-xs text-amber-300">표본 수가 적은 구간은 해석에 주의하세요.</p>
+              </thead>
+              <tbody>
+                {demographics.free_test_intro.funnel_steps.map((step) => (
+                  <tr key={step.step} className="border-b border-slate-800/80">
+                    <td className="py-2 pr-4">{step.label_ko}</td>
+                    <td className="py-2 pr-4">{formatCount(step.sample_size)}</td>
+                    <td className="py-2 pr-4">{dominantBucketLabel(step.by_age_band)}</td>
+                    <td className="py-2">{dominantBucketLabel(step.by_gender)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+        <div>
+          <h3 className="text-base font-semibold text-slate-100">회원가입 프로필</h3>
+          <p className="mt-1 text-xs text-slate-400">
+            회원가입 프로필은 실제 가입 시 입력한 생년월일과 유입경로 기준입니다. 무료테스트 프로필과 합산하지
+            않습니다.
+          </p>
+          <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-slate-500">
+            {demographics.signup_profile.limitations.map((line) => (
+              <li key={`signup-${line}`}>{line}</li>
+            ))}
+          </ul>
         </div>
-      ) : null}
+
+        {!signupHasCards ? (
+          <p className="text-sm text-slate-500">이 기간에 표시할 회원가입 인구통계가 없습니다.</p>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            <DemographicsDistributionCard title="가입자 연령대" rows={ageRowsSignup} />
+            <DemographicsDistributionCard title="가입 경로" rows={acquisitionRowsSignup} />
+          </div>
+        )}
+
+        {demographics.signup_profile.funnel_steps.length > 0 ? (
+          <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900 p-4">
+            <p className="text-sm font-medium text-slate-200">회원가입 프로필 단계별 요약</p>
+            <table className="mt-3 min-w-full text-left text-sm text-slate-300">
+              <thead className="border-b border-slate-700 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="py-2 pr-4">단계</th>
+                  <th className="py-2 pr-4">표본 수</th>
+                  <th className="py-2 pr-4">최다 연령대</th>
+                  <th className="py-2">최다 유입경로</th>
+                </tr>
+              </thead>
+              <tbody>
+                {demographics.signup_profile.funnel_steps.map((step) => (
+                  <tr key={step.step} className="border-b border-slate-800/80">
+                    <td className="py-2 pr-4">{step.label_ko}</td>
+                    <td className="py-2 pr-4">{formatCount(step.sample_size)}</td>
+                    <td className="py-2 pr-4">{dominantBucketLabel(step.by_age_band)}</td>
+                    <td className="py-2">{dominantBucketLabel(step.by_acquisition_source)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        <p className="text-xs text-amber-300/95">표본 수가 적은 구간은 해석에 주의하세요.</p>
+      </div>
     </section>
   );
 }

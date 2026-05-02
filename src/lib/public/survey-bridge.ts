@@ -10,8 +10,8 @@ import {
 } from './survey-session-cache';
 
 /**
- * intro profile(age_band, gender, acquisition_source) is seeded from funnel state into survey cache.
- * existing cached profile fields are preserved, but funnel-owned fields win.
+ * intro profile(age_band, gender) is seeded from funnel state into survey cache.
+ * 유입경로 등은 회원가입 후 signup_profiles 에만 저장합니다.
  */
 export function mergeIntroProfileIntoSurveySession(): void {
   const existing = loadSurveySessionCache();

@@ -6,10 +6,16 @@
  * signup embedded: `/app/auth` — 바깥 MoveReAuthScreen과 중첩 없음
  * login standalone: `/login` — MoveReAuthScreen 래핑
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { trackEvent } from '@/lib/analytics/trackEvent';
+import type { AcquisitionSource } from '@/lib/analytics/kpi-demographics-types';
+import {
+  ACQUISITION_SOURCE_LABELS,
+  ACQUISITION_SOURCES,
+  signupBirthDateToAgeBand,
+} from '@/lib/analytics/kpi-demographics-types';
 import { supabaseBrowser } from '@/lib/supabase';
 import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth';
 import { Input } from '@/components/ui/input';
@@ -47,6 +53,14 @@ interface AuthCardProps {
 
 const DEFAULT_POST_AUTH_PATH = '/app/home';
 
+const SIGNUP_ACQUISITION_OPTIONS = ACQUISITION_SOURCES.filter((s) => s !== 'unknown');
+
+function localIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 export default function AuthCard({
   mode,
   errorParam,
@@ -64,10 +78,14 @@ export default function AuthCard({
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [nickname, setNickname] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [acquisitionSource, setAcquisitionSource] = useState<AcquisitionSource | ''>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const effectiveCompactHeader = compactHeader || signupLayout === 'standalone';
+
+  const birthDateMax = useMemo(() => localIsoDate(new Date()), []);
 
   const intentQs =
     typeof authIntent === 'string' && authIntent.trim().length > 0
@@ -100,8 +118,12 @@ export default function AuthCard({
           setError('비밀번호는 최소 8자 이상이어야 합니다.');
           return;
         }
+        if (!passwordConfirm.trim()) {
+          setError('비밀번호 확인을 입력해 주세요.');
+          return;
+        }
         if (password !== passwordConfirm) {
-          setError('비밀번호 확인이 일치하지 않습니다.');
+          setError('비밀번호가 서로 일치하지 않습니다.');
           return;
         }
         const nickTrim = nickname.trim();
@@ -109,6 +131,17 @@ export default function AuthCard({
           setError('닉네임을 입력해 주세요.');
           return;
         }
+        if (!birthDate.trim()) {
+          setError('생년월일을 입력해 주세요.');
+          return;
+        }
+        if (signupBirthDateToAgeBand(birthDate) === 'unknown') {
+          setError('생년월일을 확인해 주세요. (만 10~100세, 미래 날짜 불가)');
+          return;
+        }
+
+        const acqPayload: AcquisitionSource =
+          acquisitionSource === '' ? 'unknown' : acquisitionSource;
 
         const res = await fetch('/api/auth/pilot-signup', {
           method: 'POST',
@@ -117,6 +150,8 @@ export default function AuthCard({
             email: emailTrim,
             password,
             nickname: nickTrim,
+            birthDate,
+            acquisitionSource: acqPayload,
           }),
         });
 
@@ -266,6 +301,38 @@ export default function AuthCard({
                 className={AUTH_INPUT_CLASS}
                 maxLength={24}
               />
+            </div>
+            <div>
+              <label htmlFor="birth-date" className="mb-1.5 block text-xs font-medium text-[#dce1fb]/75">
+                생년월일
+              </label>
+              <Input
+                id="birth-date"
+                type="date"
+                required
+                max={birthDateMax}
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
+                className={AUTH_INPUT_CLASS}
+              />
+            </div>
+            <div>
+              <label htmlFor="acquisition-source" className="mb-1.5 block text-xs font-medium text-[#dce1fb]/75">
+                MOVE RE를 알게 된 경로 <span className="font-normal text-[#dce1fb]/45">(선택)</span>
+              </label>
+              <select
+                id="acquisition-source"
+                value={acquisitionSource}
+                onChange={(e) => setAcquisitionSource((e.target.value || '') as AcquisitionSource | '')}
+                className={`${AUTH_INPUT_CLASS} cursor-pointer`}
+              >
+                <option value="">선택 안 함</option>
+                {SIGNUP_ACQUISITION_OPTIONS.map((key) => (
+                  <option key={key} value={key}>
+                    {ACQUISITION_SOURCE_LABELS[key]}
+                  </option>
+                ))}
+              </select>
             </div>
           </>
         )}

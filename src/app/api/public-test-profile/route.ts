@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  isAcquisitionSource,
-  isAgeBand,
-  isKpiIntroGender,
-} from '@/lib/analytics/kpi-demographics-types';
+import { isAgeBand, isKpiIntroGender } from '@/lib/analytics/kpi-demographics-types';
 import {
   isValidAnonIdForPublicTestProfile,
   upsertPublicTestProfile,
@@ -18,13 +14,11 @@ export async function POST(req: NextRequest) {
       anonId?: unknown;
       ageBand?: unknown;
       gender?: unknown;
-      acquisitionSource?: unknown;
     };
 
     const anonId = body.anonId;
     const ageBand = body.ageBand;
     const gender = body.gender;
-    const acquisitionRaw = body.acquisitionSource;
 
     if (!isValidAnonIdForPublicTestProfile(anonId)) {
       return NextResponse.json({ ok: false }, { status: 400 });
@@ -33,22 +27,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false }, { status: 400 });
     }
 
-    const acquisitionSource =
-      acquisitionRaw === undefined || acquisitionRaw === null || acquisitionRaw === ''
-        ? undefined
-        : isAcquisitionSource(acquisitionRaw)
-          ? acquisitionRaw
-          : null;
-
-    if (acquisitionSource === null) {
-      return NextResponse.json({ ok: false }, { status: 400 });
-    }
-
     await upsertPublicTestProfile({
       anonId,
       ageBand,
       gender,
-      acquisitionSource,
     });
 
     return NextResponse.json({ ok: true });

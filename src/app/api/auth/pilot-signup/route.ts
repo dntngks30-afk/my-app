@@ -8,6 +8,8 @@ import {
   validatePilotSignupBody,
   pilotSignupUserMetadata,
 } from '@/lib/auth/pilotSignupValidation';
+import { signupBirthDateToAgeBand } from '@/lib/analytics/kpi-demographics-types';
+import { upsertSignupProfile } from '@/lib/analytics/signup-profile';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -151,6 +153,20 @@ export async function POST(req: NextRequest) {
         message: '가입 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
       },
     });
+  }
+
+  try {
+    const band = signupBirthDateToAgeBand(v.birthDate);
+    if (band !== 'unknown') {
+      await upsertSignupProfile({
+        userId,
+        birthDateIso: v.birthDate,
+        signupAgeBand: band,
+        acquisitionSource: v.acquisitionSource,
+      });
+    }
+  } catch (e) {
+    console.error('[pilot-signup] signup_profiles upsert failed', e);
   }
 
   return NextResponse.json({ ok: true, userId });

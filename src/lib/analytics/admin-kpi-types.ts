@@ -6,23 +6,34 @@ export type KpiDemographicBucketRow = {
   low_sample?: boolean;
 };
 
-export type KpiDemographicStepSummary = {
+export type KpiIntroDemographicStepSummary = {
   step: string;
   label_ko: string;
   sample_size: number;
   by_age_band: KpiDemographicBucketRow[];
   by_gender: KpiDemographicBucketRow[];
+};
+
+export type KpiSignupDemographicStepSummary = {
+  step: string;
+  label_ko: string;
+  sample_size: number;
+  by_age_band: KpiDemographicBucketRow[];
   by_acquisition_source: KpiDemographicBucketRow[];
 };
 
 export type KpiDemographicsSummary = {
   limitations: string[];
-  /** 테스트 시작자(SURVEY_STARTED) distinct 기준 분포 — 성별/연령 카드용 */
-  total?: KpiDemographicStepSummary;
-  test_started?: KpiDemographicStepSummary;
-  test_completed?: KpiDemographicStepSummary;
-  first_session_completed?: KpiDemographicStepSummary;
-  funnel_steps: KpiDemographicStepSummary[];
+  /** 무료테스트 인트로(public_test_profiles · free_test_intro) — 성별·나이대만 */
+  free_test_intro: {
+    limitations: string[];
+    funnel_steps: KpiIntroDemographicStepSummary[];
+  };
+  /** 회원가입(signup_profiles · signup_profile) — 생년월일 기반 연령대·유입경로 */
+  signup_profile: {
+    limitations: string[];
+    funnel_steps: KpiSignupDemographicStepSummary[];
+  };
 };
 
 export type KpiFunnelKey = 'public' | 'execution' | 'first_session';

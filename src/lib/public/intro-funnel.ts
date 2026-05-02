@@ -16,15 +16,15 @@ export interface FunnelData {
   age?: string;
   age_band?: AgeBand;
   gender?: string;
+  /** @deprecated 유입경로는 회원가입(signup_profiles)에서만 수집 */
   acquisition_source?: AcquisitionSource;
   introCompletedAt?: string;
 }
 
-/** movement-test session profile과 merge 가능한 형태 (생년월일 원문은 포함하지 않음) */
+/** movement-test session profile과 merge 가능한 형태 — 무료테스트는 나이대·성별만 */
 export const toProfileMerge = (d: FunnelData): Record<string, unknown> => ({
   ...(d.age_band != null ? { age_band: d.age_band } : {}),
   ...(d.gender != null ? { gender: d.gender } : {}),
-  ...(d.acquisition_source != null ? { acquisition_source: d.acquisition_source } : {}),
 });
 
 /** funnel 단계 순서 (1-based index) */

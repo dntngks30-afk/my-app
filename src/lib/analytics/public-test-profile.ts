@@ -15,7 +15,6 @@ import type {
   KpiIntroGender,
 } from '@/lib/analytics/kpi-demographics-types';
 import {
-  isAcquisitionSource,
   isAgeBand,
   isKpiIntroGender,
 } from '@/lib/analytics/kpi-demographics-types';
@@ -40,9 +39,7 @@ export async function upsertPublicTestProfile(input: {
   anonId: string;
   ageBand: AgeBand;
   gender: KpiIntroGender;
-  /** KPI 유입경로; 미전달 시 unknown */
-  acquisitionSource?: AcquisitionSource;
-  /** Caller-provided source는 무시하고 무료테스트 인트로 행만 유지 */
+  /** 무조건 free_test_intro 행만 유지 */
   source?: string;
 }): Promise<void> {
   const anonId = input.anonId.trim();
@@ -56,10 +53,8 @@ export async function upsertPublicTestProfile(input: {
   const supabase = getServerSupabaseAdmin();
   const now = new Date().toISOString();
   const source = KPI_DEMOGRAPHIC_PROFILE_SOURCE;
-  const acquisitionSource: AcquisitionSource =
-    input.acquisitionSource != null && isAcquisitionSource(input.acquisitionSource)
-      ? input.acquisitionSource
-      : 'unknown';
+  /** 유입경로는 회원가입(signup_profiles)에서만 수집 — 무료테스트 행은 항상 unknown */
+  const acquisitionSource: AcquisitionSource = 'unknown';
 
   const { data: existing, error: selErr } = await supabase
     .from('public_test_profiles')
