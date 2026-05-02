@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { Suspense, useEffect, useState, useRef } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase, getSessionSafe } from '@/lib/supabase';
 import { getCachedAppBootstrap, invalidateAppBootstrapCache } from '@/lib/app/bootstrapClient';
@@ -30,10 +30,15 @@ type GateStatus =
   | 'allowed'
   | 'pilot_redeeming';
 
+const PUSH_AUTH_GRACE_DELAYS_MS = [120, 250, 500, 900] as const;
+const MAX_PUSH_AUTH_ERROR_GRACE_ATTEMPTS = 2;
+
 /** 탭 전환 시 동일 세션이면 재검증 스킵(users DB 조회 생략) */
-export default function AppAuthGate({ children }: AppAuthGateProps) {
+function AppAuthGateInner({ children }: AppAuthGateProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const sourceParam = searchParams.get('source');
   const [status, setStatus] = useState<GateStatus>('loading');
   const [skipLoader, setSkipLoader] = useState(false);
   const [paywallPilotMessage, setPaywallPilotMessage] = useState<string | null>(null);
@@ -43,6 +48,10 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
   const lastSessionUserIdRef = useRef<string | null>(null);
 
   const isAuthPage = pathname?.startsWith('/app/auth');
+  const isPushLaunch =
+    pathname?.startsWith('/app') === true &&
+    !isAuthPage &&
+    sourceParam === 'push';
 
   useEffect(() => {
     setSkipLoader(isAppBooted());
@@ -50,8 +59,11 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
 
   useEffect(() => {
     let cancelled = false;
-    let retryCount = 0;
+    let abortRetryCount = 0;
+    let pushGraceAttemptCount = 0;
     const MAX_ABORT_RETRIES = 2;
+    const wait = (ms: number) =>
+      new Promise((resolve) => window.setTimeout(resolve, ms));
 
     async function check() {
       try {
@@ -59,6 +71,22 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
         if (cancelled) return;
 
         if (error || !session) {
+          const maxGraceAttempts = error
+            ? MAX_PUSH_AUTH_ERROR_GRACE_ATTEMPTS
+            : PUSH_AUTH_GRACE_DELAYS_MS.length;
+
+          if (isPushLaunch && pushGraceAttemptCount < maxGraceAttempts) {
+            const delay = PUSH_AUTH_GRACE_DELAYS_MS[pushGraceAttemptCount] ?? 0;
+            pushGraceAttemptCount += 1;
+
+            await wait(delay);
+
+            if (!cancelled) {
+              await check();
+            }
+            return;
+          }
+
           lastAllowedUserIdRef.current = null;
           lastSessionUserIdRef.current = null;
           pilotRedeemAttemptedForUserRef.current = null;
@@ -177,10 +205,12 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
       } catch (e) {
         if (cancelled) return;
         const isAbortError = e instanceof Error && e.name === 'AbortError';
-        if (isAbortError && retryCount < MAX_ABORT_RETRIES) {
-          retryCount += 1;
-          await new Promise((r) => setTimeout(r, 80));
-          if (!cancelled) check();
+        if (isAbortError && abortRetryCount < MAX_ABORT_RETRIES) {
+          abortRetryCount += 1;
+          await new Promise((r) => window.setTimeout(r, 80));
+          if (!cancelled) {
+            void check();
+          }
           return;
         }
         lastAllowedUserIdRef.current = null;
@@ -195,7 +225,7 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
     return () => {
       cancelled = true;
     };
-  }, [pathname, isAuthPage, router]);
+  }, [pathname, isAuthPage, isPushLaunch, router]);
 
   // 앱 첫 진입 시에만 풀스크린 로더. 탭 전환에서는 재출현 금지.
   // skipLoader는 useEffect에서만 설정 → Hydration mismatch 방지
@@ -268,4 +298,12 @@ export default function AppAuthGate({ children }: AppAuthGateProps) {
   }
 
   return <>{children}</>;
+}
+
+export default function AppAuthGate({ children }: AppAuthGateProps) {
+  return (
+    <Suspense fallback={<AppEntryLoader status="인증 확인 중" />}>
+      <AppAuthGateInner>{children}</AppAuthGateInner>
+    </Suspense>
+  );
 }
