@@ -11,7 +11,7 @@ import { buildAuthHandoffAbsoluteUrl } from '@/lib/auth/buildAuthHandoffUrl';
 import { buildAndroidChromeIntentUrl } from '@/lib/auth/androidChromeIntent';
 import { shouldUseInAppEmailAuthHandoff } from '@/lib/auth/authExternalBrowserPolicy';
 import { getUaLower, isAuthHandoffInAppBrowser, detectIsAndroid, detectIsIos } from '@/lib/browser/detectInAppBrowser';
-import { getPilotCodeFromCurrentUrl } from '@/lib/pilot/pilot-context';
+import { getPilotCodeForCurrentFlow } from '@/lib/pilot/pilot-context';
 
 /** 로그인·회원가입 후 기본 복귀 (app/auth/page.tsx와 동일 계약) */
 const DEFAULT_POST_AUTH_PATH = '/app/home';
@@ -44,7 +44,7 @@ export default function SignupClient({ errorParam, next }: SignupClientProps) {
 
   const bridgeExtras = useCallback(() => {
     const fromNext = extractBridgeQueryFromInternalPath(redirectTo);
-    const pilot = fromNext.pilot ?? getPilotCodeFromCurrentUrl();
+    const pilot = fromNext.pilot ?? getPilotCodeForCurrentFlow();
     return {
       publicResultId: fromNext.publicResultId,
       stage: fromNext.stage,

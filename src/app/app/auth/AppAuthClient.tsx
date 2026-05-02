@@ -28,7 +28,7 @@ import {
   sanitizeAuthNextPath,
   DEFAULT_HANDOFF_NEXT,
 } from '@/lib/auth/authHandoffContract';
-import { getPilotCodeFromCurrentUrl } from '@/lib/pilot/pilot-context';
+import { getPilotCodeForCurrentFlow } from '@/lib/pilot/pilot-context';
 
 interface AppAuthClientProps {
   next: string;
@@ -69,7 +69,7 @@ export default function AppAuthClient({
 
   const bridgeExtras = useCallback(() => {
     const fromNext = extractBridgeQueryFromInternalPath(safeNext);
-    const pilot = fromNext.pilot ?? getPilotCodeFromCurrentUrl();
+    const pilot = fromNext.pilot ?? getPilotCodeForCurrentFlow();
     return {
       publicResultId: fromNext.publicResultId,
       stage: fromNext.stage,

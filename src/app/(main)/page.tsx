@@ -191,7 +191,15 @@ export default function LandingPage() {
         current?.onboarding?.is_complete === true &&
         (code === 'GO_APP_HOME' || code === 'GO_SESSION_CREATE');
 
-      if (hasConfiguredExecutionAccount && current) {
+      const pilotLoggedInIncompleteContinuation =
+        Boolean(pilotCodeThisVisitRef.current) &&
+        Boolean(current?.user_id) &&
+        (current?.onboarding?.is_complete !== true || code === 'GO_ONBOARDING');
+
+      if (
+        current &&
+        (hasConfiguredExecutionAccount || pilotLoggedInIncompleteContinuation)
+      ) {
         setExistingAccountReadiness(current);
         setModalOpen(true);
         return;

@@ -29,6 +29,9 @@ import { mapPilotRedeemErrorToMessage } from '@/lib/pilot/pilot-redeem-ui-messag
 import { MoveReFullscreenScreen } from '@/components/public-brand/MoveReFullscreenScreen';
 import { Starfield } from '@/components/landing/Starfield';
 
+const PILOT_VERIFICATION_CHECKOUT_MSG =
+  '파일럿 권한을 확인하는 중입니다. 결제 단계로 넘어갈 수 없습니다.';
+
 type ViewState = 'loading' | 'no_bridge' | 'error';
 
 export default function ExecutionStartClient() {
@@ -40,9 +43,19 @@ export default function ExecutionStartClient() {
   useEffect(() => {
     const rawSearch =
       typeof window !== 'undefined' && window.location.search ? window.location.search : '';
-    let queryApplied = false;
+
+    let queryAppliedPilot = false;
+    let queryAppliedBridge = false;
+
     if (rawSearch && typeof window !== 'undefined') {
       const sp = new URLSearchParams(rawSearch);
+
+      const pilotFromUrl = getPilotCodeFromSearchParams(sp);
+      if (pilotFromUrl) {
+        savePilotContextFromCode(pilotFromUrl, 'in_app_auth_handoff');
+        queryAppliedPilot = true;
+      }
+
       const pr = sp.get('publicResultId');
       const stage = sp.get('stage');
       if (pr && validatePublicResultIdForHandoff(pr) && validateStageForHandoff(stage)) {
@@ -53,14 +66,16 @@ export default function ExecutionStartClient() {
           resultStage: stage,
           anonId: anonOk ?? readAnonId() ?? undefined,
         });
-        const pilot = getPilotCodeFromSearchParams(sp);
-        if (pilot) {
-          savePilotContextFromCode(pilot, 'in_app_auth_handoff');
+        const pilotInBridgeQuery = getPilotCodeFromSearchParams(sp);
+        if (pilotInBridgeQuery && !queryAppliedPilot) {
+          savePilotContextFromCode(pilotInBridgeQuery, 'in_app_auth_handoff');
+          queryAppliedPilot = true;
         }
-        queryApplied = true;
+        queryAppliedBridge = true;
       }
     }
-    if (queryApplied && typeof window !== 'undefined') {
+
+    if ((queryAppliedPilot || queryAppliedBridge) && typeof window !== 'undefined') {
       window.history.replaceState(null, '', '/execution/start');
     }
 
@@ -89,9 +104,15 @@ export default function ExecutionStartClient() {
       }
 
       const token = session.access_token;
-      const hadPilotBeforeRedeem = Boolean(readPilotContext());
 
-      if (hadPilotBeforeRedeem) {
+      const abortIfPilotBlocksCheckout = (): boolean => {
+        if (!readPilotContext()) return false;
+        setErrorMessage(PILOT_VERIFICATION_CHECKOUT_MSG);
+        setView('error');
+        return true;
+      };
+
+      if (readPilotContext()) {
         const redeemResult = await redeemPilotAccessClient(token);
         if (redeemResult.ok && !redeemResult.skipped) {
           router.replace('/onboarding');
@@ -104,13 +125,10 @@ export default function ExecutionStartClient() {
           setView('error');
           return;
         }
-        if (readPilotContext()) {
-          setErrorMessage(
-            '파일럿 권한을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.'
-          );
-          setView('error');
-          return;
-        }
+      }
+
+      if (abortIfPilotBlocksCheckout()) {
+        return;
       }
 
       const { data: userRow } = await supabaseBrowser
@@ -119,7 +137,8 @@ export default function ExecutionStartClient() {
         .eq('id', session.user.id)
         .single();
 
-      const planStatus = (userRow as { plan_status?: string; email?: string | null } | null)?.plan_status ?? null;
+      const planStatus =
+        (userRow as { plan_status?: string; email?: string | null } | null)?.plan_status ?? null;
       const usersEmail =
         (userRow as { plan_status?: string; email?: string | null } | null)?.email?.trim() ?? '';
       const jwtEmail = session.user.email?.trim() ?? '';
@@ -129,18 +148,12 @@ export default function ExecutionStartClient() {
         return;
       }
 
-      if (readPilotContext()) {
-        setErrorMessage(
-          '파일럿 권한을 확인하는 중입니다. 결제 단계로 넘어갈 수 없습니다.'
-        );
-        setView('error');
+      if (!jwtEmail && !usersEmail) {
+        router.replace('/auth/collect-email?next=' + encodeURIComponent('/execution/start'));
         return;
       }
 
-      if (!jwtEmail && !usersEmail) {
-        router.replace(
-          '/auth/collect-email?next=' + encodeURIComponent('/execution/start')
-        );
+      if (abortIfPilotBlocksCheckout()) {
         return;
       }
 

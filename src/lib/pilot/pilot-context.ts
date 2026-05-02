@@ -55,6 +55,17 @@ export function getPilotCodeFromCurrentUrl(): string | null {
   return getPilotCodeFromSearchParams(new URLSearchParams(window.location.search));
 }
 
+/** URL 또는 저장된 파일럿 컨텍스트에서 검증된 코드 (SSR 안전). */
+export function getPilotCodeForCurrentFlow(): string | null {
+  const fromUrl = getPilotCodeFromCurrentUrl();
+  if (fromUrl) return fromUrl;
+
+  const stored = readPilotContext()?.code ?? null;
+  if (!stored) return null;
+
+  return getPilotCodeFromSearchParams(new URLSearchParams({ pilot: stored }));
+}
+
 export function readPilotContext(): PilotContextV1 | null {
   if (typeof window === 'undefined') return null;
   try {

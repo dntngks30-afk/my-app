@@ -18,7 +18,7 @@ import { getSessionSafe } from '@/lib/supabase';
 import { saveBridgeContext, resolvePublicResultIdForBridgeStage } from './public-result-bridge';
 import type { BridgeResultStage } from './public-result-bridge';
 import { readAnonId } from './anon-id';
-import { getPilotCodeFromCurrentUrl } from '@/lib/pilot/pilot-context';
+import { getPilotCodeForCurrentFlow } from '@/lib/pilot/pilot-context';
 import {
   buildExecutionStartPathWithBridgeQuery,
   sanitizeAuthNextPath,
@@ -70,8 +70,9 @@ export function useExecutionStartBridge(
 
       const { session } = await getSessionSafe();
 
+      const pilot = getPilotCodeForCurrentFlow();
+
       if (!session) {
-        const pilot = getPilotCodeFromCurrentUrl();
         const nextPath = buildExecutionStartPathWithBridgeQuery({
           publicResultId: resolvedId,
           stage,
@@ -88,7 +89,7 @@ export function useExecutionStartBridge(
           publicResultId: resolvedId,
           stage,
           anonId: readAnonId(),
-          pilot: getPilotCodeFromCurrentUrl(),
+          pilot,
         })
       );
     } catch (err) {
