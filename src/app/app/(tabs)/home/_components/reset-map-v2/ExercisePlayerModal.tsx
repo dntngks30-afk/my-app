@@ -241,6 +241,23 @@ function ModalInner({
     return { sets: filled.length, reps: totalReps };
   };
 
+  const getHasValue = () => {
+    const { sets, reps } = aggregateToLog();
+    return sets > 0 && reps != null;
+  };
+
+  const handleClose = (closeSource: string) => {
+    trackEvent('exercise_player_closed', {
+      route_group: 'exercise_player',
+      session_number: sessionNumber ?? null,
+      exercise_index: exerciseIndex ?? null,
+      template_id: item.templateId ?? null,
+      had_log: getHasValue(),
+      close_source: closeSource,
+    });
+    onClose();
+  };
+
   const handleNextOrEndClick = () => {
     const { sets, reps } = aggregateToLog();
     const log: ExerciseLogItem = {
@@ -255,11 +272,27 @@ function ModalInner({
       ...(typeof item.segment_index === 'number' && { segment_index: item.segment_index }),
       ...(typeof item.item_index === 'number' && { item_index: item.item_index }),
     };
+    trackEvent('exercise_logged', {
+      route_group: 'exercise_player',
+      session_number: sessionNumber ?? null,
+      exercise_index: exerciseIndex ?? null,
+      template_id: item.templateId ?? null,
+      segment_title: item.segmentTitle ?? null,
+      has_value: sets > 0 && reps != null,
+    });
+    if (!isLast) {
+      trackEvent('exercise_next_clicked', {
+        route_group: 'exercise_player',
+        session_number: sessionNumber ?? null,
+        exercise_index: exerciseIndex ?? null,
+        template_id: item.templateId ?? null,
+      });
+    }
     if (onNextOrEnd) {
       onNextOrEnd(log);
     } else {
       onComplete(log);
-      onClose();
+      handleClose(isLast ? 'session_complete' : 'next');
     }
   };
 
@@ -268,7 +301,7 @@ function ModalInner({
       <div
         className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-[2px] animate-in fade-in"
         style={{ animationDuration: '150ms' }}
-        onClick={onClose}
+        onClick={() => handleClose('backdrop')}
         aria-hidden
       />
       <div
@@ -317,7 +350,7 @@ function ModalInner({
             </div>
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => handleClose('button')}
               className={`mt-0.5 ${closeButtonGhost}`}
               aria-label="모달 닫기"
             >

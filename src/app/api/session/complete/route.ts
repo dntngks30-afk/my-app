@@ -201,6 +201,26 @@ function logSessionCompleteSuccessEvent(params: {
   });
 }
 
+function logSessionCompleteBlockedAnalyticsEvent(params: {
+  userId: string;
+  sessionNumber: number;
+  code: string;
+}) {
+  const { userId, sessionNumber, code } = params;
+  void logAnalyticsEvent({
+    event_name: 'session_complete_blocked',
+    user_id: userId,
+    session_number: sessionNumber,
+    route_path: '/api/session/complete',
+    route_group: 'session_execution',
+    dedupe_key: `session_complete_blocked:${userId}:${sessionNumber}:${code}`,
+    props: {
+      session_number: sessionNumber,
+      code,
+    },
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const userId = await getCurrentUserId(req);
@@ -270,6 +290,7 @@ export async function POST(req: NextRequest) {
         sessionNumber,
         meta: { active_session_number: activeSessionNumber ?? null },
       });
+      logSessionCompleteBlockedAnalyticsEvent({ userId, sessionNumber, code: 'PAST_SESSION_READ_ONLY' });
       return fail(409, ApiErrorCode.PAST_SESSION_READ_ONLY, '과거 세션은 읽기 전용입니다. 현재 진행 중인 세션만 완료할 수 있습니다');
     }
 
@@ -283,6 +304,7 @@ export async function POST(req: NextRequest) {
         sessionNumber,
         meta: { total_sessions: totalSessions },
       });
+      logSessionCompleteBlockedAnalyticsEvent({ userId, sessionNumber, code: 'PROGRAM_FINISHED' });
       return fail(409, ApiErrorCode.PROGRAM_FINISHED, '모든 세션을 완료했습니다');
     }
 
@@ -302,6 +324,7 @@ export async function POST(req: NextRequest) {
         sessionNumber,
         meta: { route: ROUTE_COMPLETE },
       });
+      logSessionCompleteBlockedAnalyticsEvent({ userId, sessionNumber, code: 'REQUEST_DEDUPED' });
       return fail(409, ApiErrorCode.REQUEST_DEDUPED, '요청이 처리 중입니다. 잠시 후 다시 시도하세요');
     }
 
@@ -392,6 +415,7 @@ export async function POST(req: NextRequest) {
           evidence_gate: obs,
         },
       });
+      logSessionCompleteBlockedAnalyticsEvent({ userId, sessionNumber, code: gateResult.code });
       const details = isDebug
         ? {
             total_items: obs.total_items,
@@ -566,6 +590,7 @@ export async function POST(req: NextRequest) {
         sessionNumber,
         meta: {},
       });
+      logSessionCompleteBlockedAnalyticsEvent({ userId, sessionNumber, code: 'NOT_FOUND' });
       return fail(404, ApiErrorCode.SESSION_PLAN_NOT_FOUND, '해당 세션 플랜을 찾을 수 없습니다');
     }
 
@@ -580,6 +605,7 @@ export async function POST(req: NextRequest) {
         sessionNumber,
         meta: { completed_sessions: completedSessions, total_sessions: totalSessions },
       });
+      logSessionCompleteBlockedAnalyticsEvent({ userId, sessionNumber, code: 'PROGRAM_FINISHED' });
       return fail(409, ApiErrorCode.PROGRAM_FINISHED, '모든 세션을 완료했습니다');
     }
 
@@ -639,6 +665,7 @@ export async function POST(req: NextRequest) {
       sessionNumber,
       meta: {},
     });
+    logSessionCompleteBlockedAnalyticsEvent({ userId, sessionNumber, code: 'CONCURRENT_UPDATE' });
     return fail(409, ApiErrorCode.CONCURRENT_UPDATE, '동시 업데이트가 감지되었습니다. 잠시 후 다시 시도해 주세요');
   } catch (err) {
     console.error('[session/complete]', err);

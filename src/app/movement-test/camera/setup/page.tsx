@@ -4,10 +4,11 @@
  * 카메라 테스트 - 공통 Setup
  * squat 전 framing/거리/조명 준비. 동작 분석 없음.
  */
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import { Starfield } from '@/components/landing/Starfield';
 import { CameraPreview } from '@/components/public/CameraPreview';
 import { usePoseCapture } from '@/lib/camera/use-pose-capture';
@@ -39,6 +40,13 @@ export default function CameraSetupPage() {
 
   const handleError = useCallback(() => {
     setPermissionDenied(true);
+  }, []);
+
+  useEffect(() => {
+    trackEvent('camera_setup_viewed', {
+      route_group: 'camera_refine',
+      route_path: '/movement-test/camera/setup',
+    });
   }, []);
 
   return (

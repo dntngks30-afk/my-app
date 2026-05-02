@@ -8,6 +8,7 @@ import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } fr
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import {
   StitchCameraGlassPanel,
   StitchCameraPrimaryButton,
@@ -296,6 +297,13 @@ export default function CameraSquatPage() {
   }>({ voicePlayed: false, reason: null, secondChanceCompletionSatisfied: false });
   const nextPath = getNextStepPath(STEP_ID);
 
+  useEffect(() => {
+    trackEvent('camera_step_started', {
+      route_group: 'camera_refine',
+      movement_key: STEP_ID,
+    });
+  }, []);
+
   useLayoutEffect(() => {
     if (prevStepKeyForAmbiguousRef.current !== currentStepKey) {
       ambiguousRetryPlayedForStepRef.current = null;
@@ -316,6 +324,17 @@ export default function CameraSquatPage() {
   finalPassLatchedRef.current = finalPassLatched;
   statsRef.current = stats;
   const effectivePassLatched = finalPassLatched || passLatched;
+
+  useEffect(() => {
+    if (!passLatched) return;
+    trackEvent('camera_step_completed', {
+      route_group: 'camera_refine',
+      movement_key: STEP_ID,
+      pass_latched: true,
+      retry_count: previewKey,
+      evidence_quality: gate.guardrail.captureQuality ?? null,
+    });
+  }, [gate.guardrail.captureQuality, passLatched, previewKey]);
   const setupFramingHint = useMemo(() => getSetupFramingHint(landmarks), [landmarks]);
   const liveReadinessSummary = useMemo(
     () =>
@@ -1498,6 +1517,11 @@ export default function CameraSquatPage() {
   }, [clearAutoAdvanceTimer]);
 
   const handleSurveyFallback = useCallback(() => {
+    trackEvent('camera_refine_failed_or_fallback', {
+      route_group: 'camera_refine',
+      reason: 'manual_survey_fallback',
+      completed_steps: 0,
+    });
     clearAutoAdvanceTimer();
     cancelVoiceGuidance();
     stop();

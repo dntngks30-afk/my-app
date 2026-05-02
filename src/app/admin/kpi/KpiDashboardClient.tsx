@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
 import type {
-  KpiFunnelKey,
+  KpiDetailsResponse,
   KpiFunnelResponse,
   KpiRawEventsResponse,
   KpiRetentionResponse,
@@ -28,7 +28,23 @@ const EVENT_LABELS: Record<string, string> = {
   reset_map_opened: 'Reset Map Opened',
   session_panel_opened: 'Session Panel Opened',
   exercise_player_opened: 'Exercise Player Opened',
+  exercise_logged: 'Exercise Logged',
+  exercise_next_clicked: 'Exercise Next Clicked',
+  exercise_player_closed: 'Exercise Player Closed',
+  session_complete_clicked: 'Session Complete Clicked',
   session_complete_success: 'Session Completed',
+  camera_flow_started: 'Camera Flow Started',
+  camera_setup_viewed: 'Camera Setup Viewed',
+  camera_step_started: 'Camera Step Started',
+  camera_step_completed: 'Camera Step Completed',
+  camera_refine_completed: 'Camera Refine Completed',
+  pwa_install_card_shown: 'PWA Card Shown',
+  pwa_install_cta_clicked: 'PWA CTA Clicked',
+  pwa_install_prompt_accepted: 'PWA Prompt Accepted',
+  push_card_shown: 'Push Card Shown',
+  push_permission_requested: 'Push Permission Requested',
+  push_permission_granted: 'Push Permission Granted',
+  push_subscribe_success: 'Push Subscribe Success',
 };
 
 type RangePreset = 7 | 14 | 30;
@@ -40,6 +56,7 @@ type DashboardState = {
   firstSessionFunnel: KpiFunnelResponse | null;
   retention: KpiRetentionResponse | null;
   rawEvents: KpiRawEventsResponse | null;
+  details: KpiDetailsResponse | null;
 };
 
 function getKstDayString(date: Date): string {
@@ -159,6 +176,7 @@ export default function KpiDashboardClient() {
     firstSessionFunnel: null,
     retention: null,
     rawEvents: null,
+    details: null,
   });
 
   const loadDashboard = useCallback(async (from: string, to: string, rawEventName?: string) => {
@@ -174,30 +192,32 @@ export default function KpiDashboardClient() {
 
       const authHeader = { Authorization: `Bearer ${session.access_token}` };
       const baseParams = { from, to, tz: 'Asia/Seoul' };
-      const [summaryRes, publicRes, executionRes, firstSessionRes, retentionRes, rawEventsRes] = await Promise.all([
+      const [summaryRes, publicRes, executionRes, firstSessionRes, retentionRes, rawEventsRes, detailsRes] = await Promise.all([
         fetch(`/api/admin/kpi/summary?${buildQuery(baseParams)}`, { headers: authHeader, cache: 'no-store' }),
         fetch(`/api/admin/kpi/funnel?${buildQuery({ ...baseParams, funnel: 'public' })}`, { headers: authHeader, cache: 'no-store' }),
         fetch(`/api/admin/kpi/funnel?${buildQuery({ ...baseParams, funnel: 'execution' })}`, { headers: authHeader, cache: 'no-store' }),
         fetch(`/api/admin/kpi/funnel?${buildQuery({ ...baseParams, funnel: 'first_session' })}`, { headers: authHeader, cache: 'no-store' }),
         fetch(`/api/admin/kpi/retention?${buildQuery({ ...baseParams, cohort: 'app_home' })}`, { headers: authHeader, cache: 'no-store' }),
         fetch(`/api/admin/kpi/raw-events?${buildQuery({ ...baseParams, event_name: rawEventName || null, limit: 100 })}`, { headers: authHeader, cache: 'no-store' }),
+        fetch(`/api/admin/kpi/details?${buildQuery(baseParams)}`, { headers: authHeader, cache: 'no-store' }),
       ]);
 
-      if ([summaryRes, publicRes, executionRes, firstSessionRes, retentionRes, rawEventsRes].some((res) => res.status === 401 || res.status === 403)) {
+      if ([summaryRes, publicRes, executionRes, firstSessionRes, retentionRes, rawEventsRes, detailsRes].some((res) => res.status === 401 || res.status === 403)) {
         setIsAdmin(false);
         return;
       }
-      if ([summaryRes, publicRes, executionRes, firstSessionRes, retentionRes, rawEventsRes].some((res) => !res.ok)) {
+      if ([summaryRes, publicRes, executionRes, firstSessionRes, retentionRes, rawEventsRes, detailsRes].some((res) => !res.ok)) {
         throw new Error('Failed to load KPI dashboard data');
       }
 
-      const [summary, publicFunnel, executionFunnel, firstSessionFunnel, retention, rawEvents] = await Promise.all([
+      const [summary, publicFunnel, executionFunnel, firstSessionFunnel, retention, rawEvents, details] = await Promise.all([
         summaryRes.json() as Promise<KpiSummaryResponse>,
         publicRes.json() as Promise<KpiFunnelResponse>,
         executionRes.json() as Promise<KpiFunnelResponse>,
         firstSessionRes.json() as Promise<KpiFunnelResponse>,
         retentionRes.json() as Promise<KpiRetentionResponse>,
         rawEventsRes.json() as Promise<KpiRawEventsResponse>,
+        detailsRes.json() as Promise<KpiDetailsResponse>,
       ]);
 
       setState({
@@ -207,6 +227,7 @@ export default function KpiDashboardClient() {
         firstSessionFunnel,
         retention,
         rawEvents,
+        details,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load KPI dashboard');
@@ -356,6 +377,106 @@ export default function KpiDashboardClient() {
           {state.summary?.top_dropoff?.funnel ? (
             <p className="mt-1 text-xs text-slate-500">Funnel: {state.summary.top_dropoff.funnel}</p>
           ) : null}
+        </section>
+
+        <div className="grid gap-6 xl:grid-cols-3">
+          <FunnelSection title="Session Drop-off" steps={state.details?.session_detail.steps} />
+          <FunnelSection title="Camera Refine" steps={state.details?.camera.steps} />
+          <div className="space-y-6">
+            <FunnelSection title="PWA Install" steps={state.details?.pwa.steps} />
+            <FunnelSection title="Push Permission" steps={state.details?.push.steps} />
+          </div>
+        </div>
+
+        <section className="grid gap-6 xl:grid-cols-3">
+          <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+            <h2 className="text-lg font-semibold text-slate-100">Session Detail</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Close before complete: {formatCount(state.details?.session_detail.close_before_complete_count)}
+            </p>
+            {!state.details?.session_detail.by_exercise_index.length ? (
+              <p className="mt-4 text-sm text-slate-500">No exercise index detail yet.</p>
+            ) : (
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="text-left text-slate-400">
+                    <tr>
+                      <th className="px-3 py-2">Exercise</th>
+                      <th className="px-3 py-2">Opened</th>
+                      <th className="px-3 py-2">Logged</th>
+                      <th className="px-3 py-2">Next</th>
+                      <th className="px-3 py-2">Closed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {state.details.session_detail.by_exercise_index.map((row) => (
+                      <tr key={`exercise-${row.exercise_index}`} className="border-t border-slate-800 text-slate-200">
+                        <td className="px-3 py-2">{row.exercise_index}</td>
+                        <td className="px-3 py-2">{formatCount(row.opened)}</td>
+                        <td className="px-3 py-2">{formatCount(row.logged)}</td>
+                        <td className="px-3 py-2">{formatCount(row.next_clicked)}</td>
+                        <td className="px-3 py-2">{formatCount(row.closed)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+            <h2 className="text-lg font-semibold text-slate-100">Camera Detail</h2>
+            <div className="mt-4 space-y-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.12em] text-slate-500">Step Completed</p>
+                {!state.details?.camera.step_completed_by_movement.length ? (
+                  <p className="mt-2 text-sm text-slate-500">No completed camera steps yet.</p>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {state.details.camera.step_completed_by_movement.map((row) => (
+                      <div key={row.movement_key} className="flex items-center justify-between text-sm text-slate-200">
+                        <span>{row.movement_key}</span>
+                        <span>{formatCount(row.count)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.12em] text-slate-500">Fallback Reasons</p>
+                {!state.details?.camera.fallback_reasons.length ? (
+                  <p className="mt-2 text-sm text-slate-500">No fallback reasons yet.</p>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {state.details.camera.fallback_reasons.map((row) => (
+                      <div key={row.reason} className="flex items-center justify-between text-sm text-slate-200">
+                        <span>{row.reason}</span>
+                        <span>{formatCount(row.count)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+            <h2 className="text-lg font-semibold text-slate-100">PWA / Push Detail</h2>
+            <div className="mt-4 space-y-3 text-sm text-slate-200">
+              <div className="flex items-center justify-between">
+                <span>PWA Prompt Accepted</span>
+                <span>{formatCount(state.details?.pwa.steps.at(-1)?.count)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Push Permission Denied</span>
+                <span>{formatCount(state.details?.push.denied_count)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Push Subscribe Success</span>
+                <span>{formatCount(state.details?.push.steps.at(-1)?.count)}</span>
+              </div>
+            </div>
+          </section>
         </section>
 
         <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">

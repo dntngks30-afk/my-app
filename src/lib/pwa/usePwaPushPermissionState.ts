@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import {
   fetchVapidPublicKey,
+  detectPushPlatform,
   getExistingPushSubscription,
   isPwaStandalone,
   isPushSupported,
@@ -27,6 +29,7 @@ export type PushPermissionCardState =
 export function usePwaPushPermissionState() {
   const [hydrated, setHydrated] = useState(false);
   const [state, setState] = useState<PushPermissionCardState>('unsupported');
+  const [dismissedForNow, setDismissedForNow] = useState(false);
 
   const refreshState = useCallback(async () => {
     if (!isPushSupported()) {
@@ -58,6 +61,7 @@ export function usePwaPushPermissionState() {
       const dismissedAtRaw = localStorage.getItem(DISMISS_KEY);
       const dismissedAt = dismissedAtRaw ? Number(dismissedAtRaw) : 0;
       if (dismissedAt > 0 && Date.now() - dismissedAt < DISMISS_TTL_MS) {
+        setDismissedForNow(true);
         setState('not_standalone');
         return;
       }
@@ -73,12 +77,33 @@ export function usePwaPushPermissionState() {
     } catch {
       // ignore storage errors
     }
+    setDismissedForNow(true);
     setState('not_standalone');
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const hidden =
+      state === 'unsupported' ||
+      state === 'not_standalone' ||
+      state === 'permission_granted_subscribed' ||
+      dismissedForNow;
+    if (hidden) return;
+    trackEvent('push_card_shown', {
+      route_group: 'push_permission',
+      permission_state: typeof Notification !== 'undefined' ? Notification.permission : null,
+      standalone: isPwaStandalone(),
+      supported: isPushSupported(),
+    });
+  }, [dismissedForNow, hydrated, state]);
 
   const requestAndSubscribe = useCallback(async () => {
     if (!hydrated || !isPushSupported() || !isPwaStandalone()) return;
     if (Notification.permission === 'denied') {
+      trackEvent('push_permission_denied', {
+        route_group: 'push_permission',
+        permission_after: 'denied',
+      });
       setState('permission_denied');
       return;
     }
@@ -86,7 +111,22 @@ export function usePwaPushPermissionState() {
     setState('subscribe_pending');
     try {
       if (Notification.permission === 'default') {
+        trackEvent('push_permission_requested', {
+          route_group: 'push_permission',
+          permission_before: 'default',
+        });
         const permission = await requestNotificationPermission();
+        if (permission === 'granted') {
+          trackEvent('push_permission_granted', {
+            route_group: 'push_permission',
+            permission_after: 'granted',
+          });
+        } else {
+          trackEvent('push_permission_denied', {
+            route_group: 'push_permission',
+            permission_after: permission,
+          });
+        }
         if (permission === 'denied') {
           setState('permission_denied');
           return;
@@ -100,8 +140,18 @@ export function usePwaPushPermissionState() {
       const publicKey = await fetchVapidPublicKey();
       const subscription = await subscribeToPush(publicKey);
       await savePushSubscription(subscription);
+      trackEvent('push_subscribe_success', {
+        route_group: 'push_permission',
+        platform: detectPushPlatform(),
+        installed: isPwaStandalone(),
+      });
       setState('permission_granted_subscribed');
     } catch {
+      trackEvent('push_subscribe_failed', {
+        route_group: 'push_permission',
+        code: 'subscribe_failed',
+        permission_state: typeof Notification !== 'undefined' ? Notification.permission : null,
+      });
       setState('subscribe_error');
     }
   }, [hydrated]);

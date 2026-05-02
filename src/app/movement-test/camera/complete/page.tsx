@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Starfield } from '@/components/landing/Starfield';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import {
   MoveReFullscreenScreen,
   MoveReHeroBlock,
@@ -54,6 +55,25 @@ export default function CameraCompletePage() {
     }
     saveCameraResult(normalized);
     setAnalysis(normalized);
+    const completedSteps = data.completedSteps?.length ?? 0;
+    if (
+      allResults.length >= CAMERA_STEPS.length &&
+      allGuardrails.length >= CAMERA_STEPS.length &&
+      normalized.captureQuality !== 'invalid' &&
+      normalized.fallbackMode !== 'survey'
+    ) {
+      trackEvent('camera_refine_completed', {
+        route_group: 'camera_refine',
+        completed_steps: completedSteps,
+        evidence_quality: normalized.captureQuality ?? null,
+      });
+    } else {
+      trackEvent('camera_refine_failed_or_fallback', {
+        route_group: 'camera_refine',
+        reason: normalized.fallbackMode ?? normalized.captureQuality ?? 'incomplete_steps',
+        completed_steps: completedSteps,
+      });
+    }
     if (process.env.NODE_ENV !== 'production') {
       console.info('[camera-guardrails]', normalized);
       if (normalized.resultEvidenceLevel || normalized.resultToneMode) {

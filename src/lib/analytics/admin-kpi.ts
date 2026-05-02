@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ANALYTICS_EVENTS } from './events';
 import type {
   KpiCohortKey,
+  KpiDetailsResponse,
   KpiFunnelKey,
   KpiFunnelResponse,
   KpiFunnelStep,
@@ -47,6 +48,26 @@ const SAFE_PROP_KEYS = new Set([
   'exercise_count',
   'exercise_index',
   'template_id',
+  'segment_title',
+  'has_value',
+  'close_source',
+  'logged_count',
+  'code',
+  'entry_from',
+  'movement_key',
+  'pass_latched',
+  'retry_count',
+  'evidence_quality',
+  'completed_steps',
+  'reason',
+  'mode',
+  'installed',
+  'standalone',
+  'permission_state',
+  'supported',
+  'permission_before',
+  'permission_after',
+  'platform',
   'completion_mode',
   'duration_seconds',
   'session_number',
@@ -116,6 +137,35 @@ const RETURN_EVENT_SET = new Set<string>([
   ANALYTICS_EVENTS.EXERCISE_PLAYER_OPENED,
   ANALYTICS_EVENTS.SESSION_COMPLETE_SUCCESS,
 ]);
+
+const SESSION_DETAIL_DEFINITION: FunnelDefinition[] = [
+  { event_name: ANALYTICS_EVENTS.SESSION_PANEL_OPENED, label: 'Session Panel Opened' },
+  { event_name: ANALYTICS_EVENTS.EXERCISE_PLAYER_OPENED, label: 'Exercise Player Opened' },
+  { event_name: ANALYTICS_EVENTS.EXERCISE_LOGGED, label: 'Exercise Logged' },
+  { event_name: ANALYTICS_EVENTS.SESSION_COMPLETE_CLICKED, label: 'Session Complete Clicked' },
+  { event_name: ANALYTICS_EVENTS.SESSION_COMPLETE_SUCCESS, label: 'Session Complete Success' },
+];
+
+const CAMERA_DETAIL_DEFINITION: FunnelDefinition[] = [
+  { event_name: ANALYTICS_EVENTS.CAMERA_FLOW_STARTED, label: 'Camera Flow Started' },
+  { event_name: ANALYTICS_EVENTS.CAMERA_SETUP_VIEWED, label: 'Camera Setup Viewed' },
+  { event_name: ANALYTICS_EVENTS.CAMERA_STEP_STARTED, label: 'Camera Step Started' },
+  { event_name: ANALYTICS_EVENTS.CAMERA_STEP_COMPLETED, label: 'Camera Step Completed' },
+  { event_name: ANALYTICS_EVENTS.CAMERA_REFINE_COMPLETED, label: 'Camera Refine Completed' },
+];
+
+const PWA_DETAIL_DEFINITION: FunnelDefinition[] = [
+  { event_name: ANALYTICS_EVENTS.PWA_INSTALL_CARD_SHOWN, label: 'PWA Card Shown' },
+  { event_name: ANALYTICS_EVENTS.PWA_INSTALL_CTA_CLICKED, label: 'PWA CTA Clicked' },
+  { event_name: ANALYTICS_EVENTS.PWA_INSTALL_PROMPT_ACCEPTED, label: 'PWA Prompt Accepted' },
+];
+
+const PUSH_DETAIL_DEFINITION: FunnelDefinition[] = [
+  { event_name: ANALYTICS_EVENTS.PUSH_CARD_SHOWN, label: 'Push Card Shown' },
+  { event_name: ANALYTICS_EVENTS.PUSH_PERMISSION_REQUESTED, label: 'Push Permission Requested' },
+  { event_name: ANALYTICS_EVENTS.PUSH_PERMISSION_GRANTED, label: 'Push Permission Granted' },
+  { event_name: ANALYTICS_EVENTS.PUSH_SUBSCRIBE_SUCCESS, label: 'Push Subscribe Success' },
+];
 
 function roundRate(value: number | null): number | null {
   if (value == null || !Number.isFinite(value)) return null;
@@ -286,7 +336,14 @@ function distinctCountForEvent(rows: EventWithPersonKey[], eventName: string): n
 function buildFunnelSteps(rows: EventWithPersonKey[], funnel: KpiFunnelKey): KpiFunnelStep[] {
   const scopedRows = funnel === 'first_session' ? filterFirstSessionRows(rows) : rows;
   const definitions = FUNNEL_DEFINITIONS[funnel];
-  const counts = definitions.map((def) => distinctCountForEvent(scopedRows, def.event_name));
+  return buildStepsFromDefinitions(scopedRows, definitions);
+}
+
+function buildStepsFromDefinitions(
+  rows: EventWithPersonKey[],
+  definitions: FunnelDefinition[]
+): KpiFunnelStep[] {
+  const counts = definitions.map((def) => distinctCountForEvent(rows, def.event_name));
   const startCount = counts[0] ?? 0;
 
   return definitions.map((def, index) => {
@@ -444,6 +501,72 @@ function sanitizePropsPreview(input: Record<string, unknown> | null): Record<str
   return preview;
 }
 
+function getPropString(row: EventWithPersonKey, key: string): string | null {
+  const value = row.props?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function getPropNumber(row: EventWithPersonKey, key: string): number | null {
+  const value = row.props?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function countByMovement(rows: EventWithPersonKey[], eventName: string) {
+  const counts = new Map<string, Set<string>>();
+  for (const row of rows) {
+    if (row.event_name !== eventName) continue;
+    const movementKey = getPropString(row, 'movement_key');
+    if (!movementKey) continue;
+    const current = counts.get(movementKey) ?? new Set<string>();
+    current.add(row.person_key);
+    counts.set(movementKey, current);
+  }
+  return Array.from(counts.entries())
+    .map(([movement_key, persons]) => ({ movement_key, count: persons.size }))
+    .sort((a, b) => b.count - a.count || a.movement_key.localeCompare(b.movement_key));
+}
+
+function countByReason(rows: EventWithPersonKey[], eventName: string) {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (row.event_name !== eventName) continue;
+    const reason = getPropString(row, 'reason') ?? 'unknown';
+    counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([reason, count]) => ({ reason, count }))
+    .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason));
+}
+
+function buildExerciseIndexRows(rows: EventWithPersonKey[]) {
+  const grouped = new Map<number, {
+    exercise_index: number;
+    opened: number;
+    logged: number;
+    next_clicked: number;
+    closed: number;
+  }>();
+
+  for (const row of rows) {
+    const exerciseIndex = getPropNumber(row, 'exercise_index');
+    if (exerciseIndex == null) continue;
+    const current = grouped.get(exerciseIndex) ?? {
+      exercise_index: exerciseIndex,
+      opened: 0,
+      logged: 0,
+      next_clicked: 0,
+      closed: 0,
+    };
+    if (row.event_name === ANALYTICS_EVENTS.EXERCISE_PLAYER_OPENED) current.opened += 1;
+    if (row.event_name === ANALYTICS_EVENTS.EXERCISE_LOGGED) current.logged += 1;
+    if (row.event_name === ANALYTICS_EVENTS.EXERCISE_NEXT_CLICKED) current.next_clicked += 1;
+    if (row.event_name === ANALYTICS_EVENTS.EXERCISE_PLAYER_CLOSED) current.closed += 1;
+    grouped.set(exerciseIndex, current);
+  }
+
+  return Array.from(grouped.values()).sort((a, b) => a.exercise_index - b.exercise_index);
+}
+
 export async function getKpiSummary(
   supabase: SupabaseClient,
   range: KpiRange
@@ -524,6 +647,48 @@ export async function getKpiRetention(
   };
 }
 
+export async function getKpiDetails(
+  supabase: SupabaseClient,
+  range: KpiRange
+): Promise<KpiDetailsResponse> {
+  const eventNames = Array.from(
+    new Set([
+      ...SESSION_DETAIL_DEFINITION.map((item) => item.event_name),
+      ANALYTICS_EVENTS.EXERCISE_PLAYER_CLOSED,
+      ...CAMERA_DETAIL_DEFINITION.map((item) => item.event_name),
+      ANALYTICS_EVENTS.CAMERA_REFINE_FAILED_OR_FALLBACK,
+      ...PWA_DETAIL_DEFINITION.map((item) => item.event_name),
+      ANALYTICS_EVENTS.PWA_INSTALL_PROMPT_DISMISSED,
+      ...PUSH_DETAIL_DEFINITION.map((item) => item.event_name),
+      ANALYTICS_EVENTS.PUSH_PERMISSION_DENIED,
+      ANALYTICS_EVENTS.PUSH_SUBSCRIBE_FAILED,
+    ])
+  );
+
+  const rows = await fetchAnalyticsEvents(supabase, range, eventNames);
+
+  return {
+    ok: true,
+    session_detail: {
+      steps: buildStepsFromDefinitions(filterFirstSessionRows(rows), SESSION_DETAIL_DEFINITION),
+      close_before_complete_count: distinctCountForEvent(rows, ANALYTICS_EVENTS.EXERCISE_PLAYER_CLOSED),
+      by_exercise_index: buildExerciseIndexRows(rows),
+    },
+    camera: {
+      steps: buildStepsFromDefinitions(rows, CAMERA_DETAIL_DEFINITION),
+      step_completed_by_movement: countByMovement(rows, ANALYTICS_EVENTS.CAMERA_STEP_COMPLETED),
+      fallback_reasons: countByReason(rows, ANALYTICS_EVENTS.CAMERA_REFINE_FAILED_OR_FALLBACK),
+    },
+    pwa: {
+      steps: buildStepsFromDefinitions(rows, PWA_DETAIL_DEFINITION),
+    },
+    push: {
+      steps: buildStepsFromDefinitions(rows, PUSH_DETAIL_DEFINITION),
+      denied_count: distinctCountForEvent(rows, ANALYTICS_EVENTS.PUSH_PERMISSION_DENIED),
+    },
+  };
+}
+
 export async function getKpiRawEvents(
   supabase: SupabaseClient,
   range: KpiRange,
@@ -577,4 +742,3 @@ export async function getKpiRawEvents(
     nextCursor,
   };
 }
-

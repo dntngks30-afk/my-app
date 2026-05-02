@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import { usePwaInstallGuideState, type PwaInstallGuideMode } from '@/lib/pwa/usePwaInstallGuideState';
 
 const DISMISS_KEY = 'move_re_pwa_install_card_dismissed_at';
@@ -46,11 +47,25 @@ export function PwaInstallGuideCard({ className }: PwaInstallGuideCardProps) {
   const dismissedByTtl = useMemo(() => (guide.hydrated ? getDismissedWithinTtl() : false), [guide.hydrated]);
 
   const mode: PwaInstallGuideMode = guide.mode;
+  useEffect(() => {
+    if (!guide.hydrated || mode === 'already_standalone' || dismissed || dismissedByTtl) return;
+    trackEvent('pwa_install_card_shown', {
+      route_group: 'pwa_install',
+      mode,
+      installed: false,
+      standalone: guide.isStandalone,
+    });
+  }, [dismissed, dismissedByTtl, guide.hydrated, guide.isStandalone, mode]);
+
   if (!guide.hydrated) return null;
   if (mode === 'already_standalone') return null;
   if (dismissed || dismissedByTtl) return null;
 
   const onDismiss = () => {
+    trackEvent('pwa_install_dismissed', {
+      route_group: 'pwa_install',
+      mode,
+    });
     setDismissedNow();
     setDismissed(true);
   };
@@ -61,11 +76,26 @@ export function PwaInstallGuideCard({ className }: PwaInstallGuideCardProps) {
   };
 
   const handlePrimary = async () => {
+    trackEvent('pwa_install_cta_clicked', {
+      route_group: 'pwa_install',
+      mode,
+    });
     if (mode === 'android_install_prompt_available') {
       if (promptBusy) return;
       setPromptBusy(true);
       try {
-        await guide.promptInstall();
+        const result = await guide.promptInstall();
+        if (result === 'accepted') {
+          trackEvent('pwa_install_prompt_accepted', {
+            route_group: 'pwa_install',
+            mode,
+          });
+        } else if (result === 'dismissed') {
+          trackEvent('pwa_install_prompt_dismissed', {
+            route_group: 'pwa_install',
+            mode,
+          });
+        }
       } finally {
         setPromptBusy(false);
       }

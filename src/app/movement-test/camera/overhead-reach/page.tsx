@@ -8,6 +8,7 @@ import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } fr
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import { Starfield } from '@/components/landing/Starfield';
 import { CameraPreview } from '@/components/public/CameraPreview';
 import { ExternalCameraGuidePanel } from '@/components/public/ExternalCameraGuidePanel';
@@ -270,6 +271,13 @@ export default function CameraOverheadReachPage() {
   const isFinalStep = getNextStepPath(STEP_ID) === null;
   const debugEnabled = IS_DEV;
 
+  useEffect(() => {
+    trackEvent('camera_step_started', {
+      route_group: 'camera_refine',
+      movement_key: STEP_ID,
+    });
+  }, []);
+
   const gate = useMemo(
     () => evaluateExerciseAutoProgress(STEP_ID, landmarks, stats),
     [landmarks, stats]
@@ -320,6 +328,17 @@ export default function CameraOverheadReachPage() {
   const passReady = isGatePassReady(gate);
   const finalPassLatched = isFinalPassLatched(STEP_ID, gate);
   const effectivePassLatched = finalPassLatched || passLatched;
+
+  useEffect(() => {
+    if (!passLatched) return;
+    trackEvent('camera_step_completed', {
+      route_group: 'camera_refine',
+      movement_key: STEP_ID,
+      pass_latched: true,
+      retry_count: previewKey,
+      evidence_quality: gate.guardrail.captureQuality ?? null,
+    });
+  }, [gate.guardrail.captureQuality, passLatched, previewKey]);
 
   /* OBS: 오버헤드 mid-attempt 관측 — highlightedMetrics·gate 엣지만(프레임 로그 없음) */
   useEffect(() => {
@@ -1319,6 +1338,11 @@ export default function CameraOverheadReachPage() {
   }, [clearAutoAdvanceTimer, persistAttemptSnapshotIfRealAttemptOnce]);
 
   const handleSurveyFallback = useCallback(() => {
+    trackEvent('camera_refine_failed_or_fallback', {
+      route_group: 'camera_refine',
+      reason: 'manual_survey_fallback',
+      completed_steps: 1,
+    });
     persistAttemptSnapshotIfRealAttemptOnce('exit_survey_fallback');
     clearAutoAdvanceTimer();
     cancelVoiceGuidance();

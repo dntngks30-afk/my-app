@@ -88,3 +88,41 @@ export type KpiRawEventsResponse = {
   nextCursor: string | null;
 };
 
+export type KpiDetailExerciseRow = {
+  exercise_index: number;
+  opened: number;
+  logged: number;
+  next_clicked: number;
+  closed: number;
+};
+
+export type KpiDetailReasonRow = {
+  reason: string;
+  count: number;
+};
+
+export type KpiDetailMovementRow = {
+  movement_key: string;
+  count: number;
+};
+
+export type KpiDetailsResponse = {
+  ok: true;
+  session_detail: {
+    steps: KpiFunnelStep[];
+    close_before_complete_count: number;
+    by_exercise_index: KpiDetailExerciseRow[];
+  };
+  camera: {
+    steps: KpiFunnelStep[];
+    step_completed_by_movement: KpiDetailMovementRow[];
+    fallback_reasons: KpiDetailReasonRow[];
+  };
+  pwa: {
+    steps: KpiFunnelStep[];
+  };
+  push: {
+    steps: KpiFunnelStep[];
+    denied_count: number;
+  };
+};

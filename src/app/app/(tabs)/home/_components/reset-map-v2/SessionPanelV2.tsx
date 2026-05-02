@@ -201,6 +201,13 @@ function PanelInner({
     handleReflectionSubmit,
   } = panelState
 
+  const completedLogCount = exercises
+    ? exercises.reduce((count, exercise) => {
+        const log = logs[getLogKey(exercise)] ?? logs[exercise.templateId]
+        return count + (isExerciseLogCompleted(log, exercise) ? 1 : 0)
+      }, 0)
+    : null
+
   const rationale = getPlanRationale(activePlan)
   const lockedPreviewRecoveryReason = getLockedNextPreviewRecoveryReason({
     sessionId,
@@ -520,7 +527,15 @@ function PanelInner({
               <button
                 type="button"
                 disabled={completing || !activePlan?.session_number}
-                onClick={handleSessionCompleteClick}
+                onClick={() => {
+                  trackEvent('session_complete_clicked', {
+                    route_group: 'session_execution',
+                    session_number: sessionId,
+                    logged_count: completedLogCount,
+                    exercise_count: exercises?.length ?? null,
+                  })
+                  handleSessionCompleteClick()
+                }}
                 className={primaryCtaRestrained}
               >
                 {completing ? (

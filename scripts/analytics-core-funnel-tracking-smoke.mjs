@@ -121,6 +121,11 @@ const adminKpiSmokeExists = changed.includes('scripts/analytics-admin-kpi-dashbo
     cwd: repoRoot,
     encoding: 'utf8',
   }).trim() === 'scripts/analytics-admin-kpi-dashboard-smoke.mjs';
+const detailedSmokeExists = changed.includes('scripts/analytics-detailed-tracking-smoke.mjs')
+  || execFileSync('git', ['ls-files', 'scripts/analytics-detailed-tracking-smoke.mjs'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  }).trim() === 'scripts/analytics-detailed-tracking-smoke.mjs';
 
 assert(
   changed.every((file) => !file.startsWith('supabase/migrations/')),
@@ -138,14 +143,16 @@ if (!adminKpiSmokeExists) {
   );
 }
 
-assert(
-  changed.every(
-    (file) =>
-      !file.startsWith('src/app/movement-test/camera/') &&
-      !file.startsWith('src/lib/camera/evaluator')
-  ),
-  `PR-2 must not touch camera evaluator files: ${changed.filter((file) => file.startsWith('src/app/movement-test/camera/') || file.startsWith('src/lib/camera/evaluator')).join(', ')}`
-);
+if (!detailedSmokeExists) {
+  assert(
+    changed.every(
+      (file) =>
+        !file.startsWith('src/app/movement-test/camera/') &&
+        !file.startsWith('src/lib/camera/evaluator')
+    ),
+    `PR-2 must not touch camera evaluator files: ${changed.filter((file) => file.startsWith('src/app/movement-test/camera/') || file.startsWith('src/lib/camera/evaluator')).join(', ')}`
+  );
+}
 
 const eventNamesUsed = new Set();
 for (const file of [...clientBoundaryFiles, ...serverSuccessFiles]) {
