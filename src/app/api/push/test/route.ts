@@ -7,7 +7,7 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const TEST_PUSH_URL = '/app/home?source=push&type=test';
+const TEST_PUSH_URL = '/push/open?to=/app/home&type=test';
 const DEFAULT_TITLE = 'MOVE RE 테스트 알림';
 const DEFAULT_BODY = '알림이 정상적으로 연결됐어요.';
 

@@ -11,7 +11,7 @@ const NOTIFICATION_TYPE = 'daily_session';
 const DAILY_SESSION_PAYLOAD = {
   title: '오늘의 리셋 세션이 준비됐어요',
   body: '7분만 몸을 다시 정렬해볼까요?',
-  url: '/app/home?source=push&type=daily_session',
+  url: '/push/open?to=/app/home&type=daily_session',
   tag: 'move-re-daily-session',
   type: NOTIFICATION_TYPE,
 } as const;

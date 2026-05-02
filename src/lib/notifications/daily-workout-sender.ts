@@ -8,6 +8,9 @@ import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+const DAILY_WORKOUT_PUSH_URL = '/push/open?to=/app/home&type=session_reminder';
+const DAILY_WORKOUT_PUSH_TYPE = 'session_reminder';
+const DAILY_WORKOUT_PUSH_TAG = 'move-re-session-reminder';
 
 /**
  * VAPID 키 확인 (web-push 패키지 필요)
@@ -164,9 +167,25 @@ async function sendPushNotification(
         process.env.VAPID_PRIVATE_KEY!
       );
 
+      const pushUrl =
+        typeof data?.url === 'string' && data.url.trim().length > 0
+          ? data.url.trim()
+          : DAILY_WORKOUT_PUSH_URL;
+      const pushType =
+        typeof data?.type === 'string' && data.type.trim().length > 0
+          ? data.type.trim()
+          : DAILY_WORKOUT_PUSH_TYPE;
+      const pushTag =
+        typeof data?.tag === 'string' && data.tag.trim().length > 0
+          ? data.tag.trim()
+          : DAILY_WORKOUT_PUSH_TAG;
+
       const payload = JSON.stringify({
         title,
         body,
+        url: pushUrl,
+        type: pushType,
+        tag: pushTag,
         data: data || {},
         icon: '/favicon.ico',
       });
@@ -357,7 +376,9 @@ export async function sendDailyWorkoutNotifications(targetDate: Date = new Date(
           try {
             const subscription = JSON.parse(target.push_token);
             pushSent = await sendPushNotification(subscription, title, message, {
-              url: '/app/home',
+              url: DAILY_WORKOUT_PUSH_URL,
+              type: DAILY_WORKOUT_PUSH_TYPE,
+              tag: DAILY_WORKOUT_PUSH_TAG,
               routineId: target.routine_id,
               dayNumber: target.day_number,
             });
