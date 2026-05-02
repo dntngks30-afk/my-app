@@ -2,11 +2,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ANALYTICS_EVENTS } from './events';
 import { resolveAnalyticsPersonKeyForKpi } from './admin-person-key';
 import type {
+  KpiActivityStep,
+  KpiCohortFunnelStep,
   KpiCohortKey,
   KpiDetailsResponse,
   KpiFunnelKey,
   KpiFunnelResponse,
-  KpiFunnelStep,
+  KpiPilotFraction,
   KpiRange,
   KpiRawEventRow,
   KpiRawEventsResponse,
@@ -106,33 +108,62 @@ type FunnelDefinition = {
   label: string;
 };
 
-const FUNNEL_DEFINITIONS: Record<KpiFunnelKey, FunnelDefinition[]> = {
-  public: [
-    { event_name: ANALYTICS_EVENTS.LANDING_VIEWED, label: 'Landing Viewed' },
-    { event_name: ANALYTICS_EVENTS.PUBLIC_CTA_CLICKED, label: 'Test Start Clicked' },
-    { event_name: ANALYTICS_EVENTS.SURVEY_STARTED, label: 'Survey Started' },
-    { event_name: ANALYTICS_EVENTS.SURVEY_COMPLETED, label: 'Survey Completed' },
-    { event_name: ANALYTICS_EVENTS.RESULT_VIEWED, label: 'Result Viewed' },
-    { event_name: ANALYTICS_EVENTS.EXECUTION_CTA_CLICKED, label: 'Execution CTA Clicked' },
-  ],
-  execution: [
-    { event_name: ANALYTICS_EVENTS.EXECUTION_CTA_CLICKED, label: 'Execution CTA Clicked' },
-    { event_name: ANALYTICS_EVENTS.AUTH_SUCCESS, label: 'Auth Success' },
-    { event_name: ANALYTICS_EVENTS.CHECKOUT_SUCCESS, label: 'Checkout Success' },
-    { event_name: ANALYTICS_EVENTS.ONBOARDING_COMPLETED, label: 'Onboarding Completed' },
-    { event_name: ANALYTICS_EVENTS.PUBLIC_RESULT_CLAIM_SUCCESS, label: 'Public Result Claimed' },
-    { event_name: ANALYTICS_EVENTS.SESSION_CREATE_SUCCESS, label: 'Session Created' },
-    { event_name: ANALYTICS_EVENTS.APP_HOME_VIEWED, label: 'App Home Viewed' },
-  ],
-  first_session: [
-    { event_name: ANALYTICS_EVENTS.SESSION_CREATE_SUCCESS, label: 'Session 1 Created' },
-    { event_name: ANALYTICS_EVENTS.APP_HOME_VIEWED, label: 'App Home Reached' },
-    { event_name: ANALYTICS_EVENTS.RESET_MAP_OPENED, label: 'Reset Map Opened' },
-    { event_name: ANALYTICS_EVENTS.SESSION_PANEL_OPENED, label: 'Session Panel Opened' },
-    { event_name: ANALYTICS_EVENTS.EXERCISE_PLAYER_OPENED, label: 'Exercise Player Opened' },
-    { event_name: ANALYTICS_EVENTS.SESSION_COMPLETE_SUCCESS, label: 'Session 1 Completed' },
-  ],
-};
+/** 순차 코호트 퍼널 정의 — 첫 이벤트가 코호트 기준 */
+const PUBLIC_COHORT_DEFINITIONS: FunnelDefinition[] = [
+  { event_name: ANALYTICS_EVENTS.PUBLIC_CTA_CLICKED, label: 'Test Start Clicked' },
+  { event_name: ANALYTICS_EVENTS.SURVEY_STARTED, label: 'Survey Started' },
+  { event_name: ANALYTICS_EVENTS.SURVEY_COMPLETED, label: 'Survey Completed' },
+  { event_name: ANALYTICS_EVENTS.RESULT_VIEWED, label: 'Result Viewed' },
+  { event_name: ANALYTICS_EVENTS.EXECUTION_CTA_CLICKED, label: 'Execution CTA Clicked' },
+];
+
+/** 이벤트별 독립 distinct — 순차 전환율 해석 금지 */
+const PUBLIC_ACTIVITY_DEFINITIONS: FunnelDefinition[] = [
+  { event_name: ANALYTICS_EVENTS.LANDING_VIEWED, label: 'Landing Viewed' },
+  ...PUBLIC_COHORT_DEFINITIONS,
+];
+
+const EXECUTION_COHORT_DEFINITIONS: FunnelDefinition[] = [
+  { event_name: ANALYTICS_EVENTS.EXECUTION_CTA_CLICKED, label: 'Execution CTA Clicked' },
+  { event_name: ANALYTICS_EVENTS.AUTH_SUCCESS, label: 'Auth Success' },
+  { event_name: ANALYTICS_EVENTS.CHECKOUT_SUCCESS, label: 'Checkout Success' },
+  { event_name: ANALYTICS_EVENTS.ONBOARDING_COMPLETED, label: 'Onboarding Completed' },
+  { event_name: ANALYTICS_EVENTS.PUBLIC_RESULT_CLAIM_SUCCESS, label: 'Public Result Claimed' },
+  { event_name: ANALYTICS_EVENTS.SESSION_CREATE_SUCCESS, label: 'Session Created' },
+  { event_name: ANALYTICS_EVENTS.APP_HOME_VIEWED, label: 'App Home Viewed' },
+];
+
+const FIRST_SESSION_COHORT_DEFINITIONS: FunnelDefinition[] = [
+  { event_name: ANALYTICS_EVENTS.SESSION_CREATE_SUCCESS, label: 'Session 1 Created' },
+  { event_name: ANALYTICS_EVENTS.APP_HOME_VIEWED, label: 'App Home Reached' },
+  { event_name: ANALYTICS_EVENTS.RESET_MAP_OPENED, label: 'Reset Map Opened' },
+  { event_name: ANALYTICS_EVENTS.SESSION_PANEL_OPENED, label: 'Session Panel Opened' },
+  { event_name: ANALYTICS_EVENTS.EXERCISE_PLAYER_OPENED, label: 'Exercise Player Opened' },
+  { event_name: ANALYTICS_EVENTS.SESSION_COMPLETE_SUCCESS, label: 'Session 1 Completed' },
+];
+
+function cohortDefinitionsFor(funnel: KpiFunnelKey): FunnelDefinition[] {
+  if (funnel === 'public') return PUBLIC_COHORT_DEFINITIONS;
+  if (funnel === 'execution') return EXECUTION_COHORT_DEFINITIONS;
+  return FIRST_SESSION_COHORT_DEFINITIONS;
+}
+
+function activityDefinitionsFor(funnel: KpiFunnelKey): FunnelDefinition[] {
+  if (funnel === 'public') return PUBLIC_ACTIVITY_DEFINITIONS;
+  if (funnel === 'execution') return EXECUTION_COHORT_DEFINITIONS;
+  return FIRST_SESSION_COHORT_DEFINITIONS;
+}
+
+/** KPI 요약·퍼널 API에서 조회할 이벤트 이름 합집합 */
+function allKpiDashboardEventNames(): string[] {
+  return Array.from(
+    new Set([
+      ...PUBLIC_ACTIVITY_DEFINITIONS.map((d) => d.event_name),
+      ...EXECUTION_COHORT_DEFINITIONS.map((d) => d.event_name),
+      ...FIRST_SESSION_COHORT_DEFINITIONS.map((d) => d.event_name),
+    ]),
+  );
+}
 
 const RETURN_EVENT_SET = new Set<string>([
   ANALYTICS_EVENTS.APP_HOME_VIEWED,
@@ -330,41 +361,162 @@ function distinctCountForEvent(rows: EventWithPersonKey[], eventName: string): n
   return set.size;
 }
 
-function buildFunnelSteps(rows: EventWithPersonKey[], funnel: KpiFunnelKey): KpiFunnelStep[] {
-  const scopedRows = funnel === 'first_session' ? filterFirstSessionRows(rows) : rows;
-  const definitions = FUNNEL_DEFINITIONS[funnel];
-  return buildStepsFromDefinitions(scopedRows, definitions);
+function pilotFraction(numerator: number, denominator: number): KpiPilotFraction {
+  return {
+    numerator,
+    denominator,
+    rate_percent: percentage(numerator, denominator),
+  };
 }
 
-function buildStepsFromDefinitions(
+/** 코호트 기준 이벤트 타임라인 순서: 이전 단계 시각 이후 첫 발생만 인정 → 단조 감소 보장 */
+function buildSequentialCohortCounts(
   rows: EventWithPersonKey[],
-  definitions: FunnelDefinition[]
-): KpiFunnelStep[] {
-  const counts = definitions.map((def) => distinctCountForEvent(rows, def.event_name));
-  const startCount = counts[0] ?? 0;
+  definitions: FunnelDefinition[],
+): number[] {
+  const byPerson = new Map<string, EventWithPersonKey[]>();
+  for (const row of rows) {
+    const list = byPerson.get(row.person_key) ?? [];
+    list.push(row);
+    byPerson.set(row.person_key, list);
+  }
+  for (const list of byPerson.values()) {
+    list.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
+  const baseEv = definitions[0].event_name;
+  let eligible = new Set<string>();
+  let cursorByPerson = new Map<string, string>();
+
+  for (const [pk, events] of byPerson) {
+    const baseHits = events.filter((e) => e.event_name === baseEv);
+    if (baseHits.length === 0) continue;
+    let firstBase = baseHits[0];
+    for (const h of baseHits) {
+      if (h.created_at < firstBase.created_at) firstBase = h;
+    }
+    eligible.add(pk);
+    cursorByPerson.set(pk, firstBase.created_at);
+  }
+
+  const counts: number[] = [];
+
+  for (let i = 0; i < definitions.length; i++) {
+    counts.push(eligible.size);
+
+    if (i === definitions.length - 1) break;
+
+    const nextEv = definitions[i + 1].event_name;
+    const nextEligible = new Set<string>();
+    const nextCursor = new Map<string, string>();
+
+    for (const pk of eligible) {
+      const cursor = cursorByPerson.get(pk);
+      if (!cursor) continue;
+      const events = byPerson.get(pk);
+      if (!events) continue;
+      const hit = events.find((e) => e.event_name === nextEv && e.created_at >= cursor);
+      if (hit) {
+        nextEligible.add(pk);
+        nextCursor.set(pk, hit.created_at);
+      }
+    }
+
+    eligible = nextEligible;
+    cursorByPerson = nextCursor;
+  }
+
+  for (let i = 1; i < counts.length; i++) {
+    if (counts[i] > counts[i - 1]) {
+      console.warn('[admin-kpi] cohort counts not monotone — algorithm bug?', {
+        definitions: definitions.map((d) => d.event_name),
+        counts,
+      });
+    }
+  }
+
+  return counts;
+}
+
+function mapCountsToCohortSteps(
+  definitions: FunnelDefinition[],
+  counts: number[],
+): KpiCohortFunnelStep[] {
+  const base_count = counts[0] ?? 0;
 
   return definitions.map((def, index) => {
     const count = counts[index] ?? 0;
-    const previous = index > 0 ? counts[index - 1] ?? 0 : 0;
-    const dropoffCount = index > 0 ? Math.max(previous - count, 0) : null;
+    const previous_count = index === 0 ? null : counts[index - 1] ?? 0;
+
+    const conversion_from_start = percentage(count, base_count);
+    const conversion_from_previous =
+      previous_count === null || previous_count <= 0 ? null : percentage(count, previous_count);
+
+    if (
+      (conversion_from_start != null && conversion_from_start > 100.05) ||
+      (conversion_from_previous != null && conversion_from_previous > 100.05)
+    ) {
+      console.warn('[admin-kpi] cohort conversion exceeds 100% — check ordering', {
+        event_name: def.event_name,
+        count,
+        base_count,
+        previous_count,
+        conversion_from_start,
+        conversion_from_previous,
+      });
+    }
+
+    let dropoff_count_from_previous: number | null = null;
+    let dropoff_rate_from_previous: number | null = null;
+    if (previous_count !== null) {
+      dropoff_count_from_previous = Math.max(0, previous_count - count);
+      dropoff_rate_from_previous =
+        previous_count <= 0 ? null : percentage(dropoff_count_from_previous, previous_count);
+    }
+
     return {
       event_name: def.event_name,
       label: def.label,
       count,
-      conversion_from_previous: index === 0 ? null : percentage(count, previous),
-      conversion_from_start: percentage(count, startCount),
-      dropoff_count: dropoffCount,
-      dropoff_rate: index === 0 || dropoffCount == null ? null : percentage(dropoffCount, previous),
+      base_count,
+      previous_count,
+      conversion_from_start,
+      conversion_from_previous,
+      dropoff_count_from_previous,
+      dropoff_rate_from_previous,
     };
   });
 }
 
+function buildActivitySteps(rows: EventWithPersonKey[], definitions: FunnelDefinition[]): KpiActivityStep[] {
+  return definitions.map((def) => ({
+    event_name: def.event_name,
+    label: def.label,
+    count: distinctCountForEvent(rows, def.event_name),
+  }));
+}
+
+function buildCohortAndActivityForFunnel(
+  rows: EventWithPersonKey[],
+  funnel: KpiFunnelKey,
+): {
+  cohort_steps: KpiCohortFunnelStep[];
+  activity_steps: KpiActivityStep[];
+} {
+  const scoped = funnel === 'first_session' ? filterFirstSessionRows(rows) : rows;
+  const cohortDefs = cohortDefinitionsFor(funnel);
+  const counts = buildSequentialCohortCounts(scoped, cohortDefs);
+  const cohort_steps = mapCountsToCohortSteps(cohortDefs, counts);
+  const activity_steps = buildActivitySteps(scoped, activityDefinitionsFor(funnel));
+  return { cohort_steps, activity_steps };
+}
+
 function findTopDropoff(
-  publicSteps: KpiFunnelStep[],
-  executionSteps: KpiFunnelStep[],
-  firstSessionSteps: KpiFunnelStep[]
+  publicSteps: KpiCohortFunnelStep[],
+  executionSteps: KpiCohortFunnelStep[],
+  firstSessionSteps: KpiCohortFunnelStep[],
 ): KpiSummaryResponse['top_dropoff'] {
-  const candidates: Array<KpiSummaryResponse['top_dropoff']> = [];
+  const candidates: Array<NonNullable<KpiSummaryResponse['top_dropoff']>> = [];
 
   for (const [funnel, steps] of [
     ['public', publicSteps],
@@ -378,21 +530,20 @@ function findTopDropoff(
         funnel,
         from_event: previous.event_name,
         to_event: current.event_name,
-        dropoff_count: previous.count - current.count,
-        dropoff_rate: current.dropoff_rate,
+        dropoff_count: Math.max(0, previous.count - current.count),
+        dropoff_rate: current.dropoff_rate_from_previous,
       });
     }
   }
 
-  const valid = candidates.filter((item): item is NonNullable<typeof item> => Boolean(item));
-  if (valid.length === 0) return null;
+  if (candidates.length === 0) return null;
 
-  valid.sort((a, b) => {
+  candidates.sort((a, b) => {
     if (b.dropoff_count !== a.dropoff_count) return b.dropoff_count - a.dropoff_count;
     return (b.dropoff_rate ?? -1) - (a.dropoff_rate ?? -1);
   });
 
-  return valid[0] ?? null;
+  return candidates[0] ?? null;
 }
 
 function computeWeightedRetentionRates(rows: KpiRetentionRow[]): {
@@ -633,48 +784,50 @@ export async function getKpiSummary(
   range: KpiRange
 ): Promise<KpiSummaryResponse> {
   const todayKst = formatKstDay(new Date());
-  const eventNames = Array.from(
-    new Set(
-      Object.values(FUNNEL_DEFINITIONS)
-        .flat()
-        .map((item) => item.event_name)
-    )
-  );
+  const eventNames = allKpiDashboardEventNames();
   const rows = await fetchAnalyticsEvents(supabase, range, eventNames);
 
-  const publicSteps = buildFunnelSteps(rows, 'public');
-  const executionSteps = buildFunnelSteps(rows, 'execution');
-  const firstSessionSteps = buildFunnelSteps(rows, 'first_session');
+  const { cohort_steps: pubCohort } = buildCohortAndActivityForFunnel(rows, 'public');
+  const { cohort_steps: exCohort } = buildCohortAndActivityForFunnel(rows, 'execution');
+  const { cohort_steps: fsCohort } = buildCohortAndActivityForFunnel(rows, 'first_session');
+
   const appHomeRetention = getRetentionCohortRows(rows, 'app_home', todayKst);
   const weightedRetention = computeWeightedRetentionRates(appHomeRetention);
 
   const demographics = await computeKpiDemographicsSummary(supabase, range, rows);
 
-  const visitorsFromLanding = publicSteps[0]?.count ?? 0;
-  const visitorsFromAppHome = executionSteps[6]?.count ?? 0;
-  const visitors = visitorsFromLanding > 0 ? visitorsFromLanding : visitorsFromAppHome;
+  const landing_visitors = distinctCountForEvent(rows, ANALYTICS_EVENTS.LANDING_VIEWED);
+  const test_start_clickers = distinctCountForEvent(rows, ANALYTICS_EVENTS.PUBLIC_CTA_CLICKED);
+
+  const pc = (i: number) => pubCohort[i]?.count ?? 0;
+  const ec = (i: number) => exCohort[i]?.count ?? 0;
+  const fc = (i: number) => fsCohort[i]?.count ?? 0;
 
   return {
     ok: true,
     ...buildKpiMeta(range, [
+      'cohort_funnel_ordered_by_person_timeline',
+      'activity_counts_are_event_independent_distinct',
       'retention_rates_use_weighted_eligible_cohorts',
       'immature_retention_cohorts_are_excluded_from_rates',
     ]),
     cards: {
-      visitors,
-      test_start_rate: publicSteps[1]?.conversion_from_previous ?? null,
-      survey_completion_rate: percentage(publicSteps[3]?.count ?? 0, publicSteps[2]?.count ?? 0),
-      result_view_rate: percentage(publicSteps[4]?.count ?? 0, publicSteps[3]?.count ?? 0),
-      result_to_execution_rate: publicSteps[5]?.conversion_from_previous ?? null,
-      checkout_success_rate: percentage(executionSteps[2]?.count ?? 0, executionSteps[0]?.count ?? 0),
-      onboarding_completion_rate: percentage(executionSteps[3]?.count ?? 0, executionSteps[2]?.count ?? 0),
-      session_create_rate: percentage(executionSteps[5]?.count ?? 0, executionSteps[4]?.count ?? 0),
-      first_session_completion_rate: percentage(firstSessionSteps[5]?.count ?? 0, firstSessionSteps[0]?.count ?? 0),
+      landing_visitors,
+      test_start_clickers,
+      /** 무료 퍼널 요약은 테스트 시작 클릭 코호트(pc[0])를 공통 분모로 둠 */
+      survey_completed_vs_started: pilotFraction(pc(2), pc(0)),
+      result_viewed_vs_survey_completed: pilotFraction(pc(3), pc(0)),
+      execution_click_vs_result_viewed: pilotFraction(pc(4), pc(0)),
+      checkout_vs_execution_click: pilotFraction(ec(2), ec(0)),
+      onboarding_vs_checkout: pilotFraction(ec(3), ec(2)),
+      session_create_vs_claim: pilotFraction(ec(5), ec(4)),
+      first_session_complete_vs_created: pilotFraction(fc(5), fc(0)),
+      app_home_vs_execution_click: pilotFraction(ec(6), ec(0)),
       d1_return_rate: weightedRetention.d1,
       d3_return_rate: weightedRetention.d3,
       d7_return_rate: weightedRetention.d7,
     },
-    top_dropoff: findTopDropoff(publicSteps, executionSteps, firstSessionSteps),
+    top_dropoff: findTopDropoff(pubCohort, exCohort, fsCohort),
     demographics,
   };
 }
@@ -684,13 +837,21 @@ export async function getKpiFunnel(
   range: KpiRange,
   funnel: KpiFunnelKey
 ): Promise<KpiFunnelResponse> {
-  const eventNames = FUNNEL_DEFINITIONS[funnel].map((item) => item.event_name);
+  const activityDefs = activityDefinitionsFor(funnel);
+  const eventNames = Array.from(new Set(activityDefs.map((item) => item.event_name)));
   const rows = await fetchAnalyticsEvents(supabase, range, eventNames);
+  const { cohort_steps, activity_steps } = buildCohortAndActivityForFunnel(rows, funnel);
+  const cohortDefs = cohortDefinitionsFor(funnel);
+  const baseDef = cohortDefs[0];
+
   return {
     ok: true,
     ...buildKpiMeta(range),
     funnel,
-    steps: buildFunnelSteps(rows, funnel),
+    cohort_base_label: baseDef.label,
+    cohort_base_event_name: baseDef.event_name,
+    cohort_steps,
+    activity_steps,
   };
 }
 
@@ -742,21 +903,21 @@ export async function getKpiDetails(
     ok: true,
     ...buildKpiMeta(range, ['exercise_index_table_is_event_count_not_person_distinct']),
     session_detail: {
-      steps: buildStepsFromDefinitions(filterFirstSessionRows(rows), SESSION_DETAIL_DEFINITION),
+      steps: buildActivitySteps(filterFirstSessionRows(rows), SESSION_DETAIL_DEFINITION),
       close_before_complete_count: distinctCountForEvent(rows, ANALYTICS_EVENTS.EXERCISE_PLAYER_CLOSED),
       by_exercise_index: buildExerciseIndexRows(rows),
       metric_note: '운동 index 표는 이벤트 건수 기준입니다. Steps 는 person-distinct 기준.',
     },
     camera: {
-      steps: buildStepsFromDefinitions(rows, CAMERA_DETAIL_DEFINITION),
+      steps: buildActivitySteps(rows, CAMERA_DETAIL_DEFINITION),
       step_completed_by_movement: countByMovement(rows, ANALYTICS_EVENTS.CAMERA_STEP_COMPLETED),
       fallback_reasons: countByReason(rows, ANALYTICS_EVENTS.CAMERA_REFINE_FAILED_OR_FALLBACK),
     },
     pwa: {
-      steps: buildStepsFromDefinitions(rows, PWA_DETAIL_DEFINITION),
+      steps: buildActivitySteps(rows, PWA_DETAIL_DEFINITION),
     },
     push: {
-      steps: buildStepsFromDefinitions(rows, PUSH_DETAIL_DEFINITION),
+      steps: buildActivitySteps(rows, PUSH_DETAIL_DEFINITION),
       denied_count: distinctCountForEvent(rows, ANALYTICS_EVENTS.PUSH_PERMISSION_DENIED),
     },
   };

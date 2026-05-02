@@ -12,41 +12,48 @@ export type AdminKpiSummaryMetricDef = {
 
 /** 요약 카드 — API cards 필드 키와 1:1 */
 export const ADMIN_KPI_SUMMARY_METRICS: Record<string, AdminKpiSummaryMetricDef> = {
-  visitors: {
-    label: '방문자 수',
-    description: '선택한 기간 동안 MOVE RE에 들어온 고유 사용자 수입니다.',
+  landing_visitors: {
+    label: '랜딩 방문자',
+    description: '기간 내 landing_viewed 이벤트가 있는 고유 사용자 수입니다. (독립 집계)',
   },
-  test_start_rate: {
-    label: '테스트 시작률',
-    description: '방문자 중 테스트 시작 버튼을 누른 비율입니다.',
+  test_start_clickers: {
+    label: '테스트 시작자',
+    description: '기간 내 테스트 시작 버튼 클릭(public_cta_clicked) 고유 사용자 수입니다.',
   },
-  survey_completion_rate: {
-    label: '설문 완료율',
-    description: '설문을 시작한 사람 중 마지막 문항까지 완료한 비율입니다.',
+  survey_completed_vs_started: {
+    label: '테스트 완료율',
+    description:
+      '순차 코호트 기준: 테스트 시작 클릭 이후 타임라인상 설문 완료까지 도달한 사람 ÷ 테스트 시작 클릭자 수입니다.',
   },
-  result_view_rate: {
+  result_viewed_vs_survey_completed: {
     label: '결과 확인율',
-    description: '설문을 완료한 사람 중 결과 화면을 확인한 비율입니다.',
+    description:
+      '순차 코호트 기준: 테스트 시작 클릭 이후 결과 화면 조회까지 도달한 사람 ÷ 테스트 시작 클릭자 수입니다.',
   },
-  result_to_execution_rate: {
-    label: '결과 후 실행 클릭률',
-    description: '결과를 본 사람 중 실행 시작 버튼을 누른 비율입니다.',
+  execution_click_vs_result_viewed: {
+    label: '실행 시작률',
+    description:
+      '순차 코호트 기준: 테스트 시작 클릭 이후 실행 CTA 클릭까지 도달한 사람 ÷ 테스트 시작 클릭자 수입니다.',
   },
-  checkout_success_rate: {
+  checkout_vs_execution_click: {
     label: '결제 완료율',
-    description: '실행을 시작한 사람 중 결제 완료까지 도달한 비율입니다.',
+    description: '코호트: 실행 시작 클릭자 대비 결제 완료 순차 도달 비율입니다.',
   },
-  onboarding_completion_rate: {
+  onboarding_vs_checkout: {
     label: '실행 설정 완료율',
-    description: '결제 완료 후 첫 세션 실행 설정을 완료한 비율입니다.',
+    description: '결제 완료 코호트 대비 온보딩 완료 순차 도달 비율입니다.',
   },
-  session_create_rate: {
+  session_create_vs_claim: {
     label: '첫 세션 생성률',
-    description: '분석 결과가 계정에 연결된 뒤 첫 리셋맵 세션이 생성된 비율입니다.',
+    description: '분석 결과 연결(claim) 코호트 대비 세션 생성 순차 도달 비율입니다.',
   },
-  first_session_completion_rate: {
+  first_session_complete_vs_created: {
     label: '첫 세션 완료율',
-    description: '첫 세션이 생성된 사람 중 실제로 세션을 완료한 비율입니다.',
+    description: '첫 세션 생성 코호트 대비 세션 완료 순차 도달 비율입니다.',
+  },
+  app_home_vs_execution_click: {
+    label: '앱 홈 진입률',
+    description: '실행 시작 클릭 코호트 대비 앱 홈 조회 순차 도달 비율입니다.',
   },
   d1_return_rate: {
     label: '1일 재방문율',
@@ -66,7 +73,8 @@ export const ADMIN_KPI_SECTION_TITLES = {
   pageTitle: 'KPI 대시보드',
   pageSubtitle: '파일럿 퍼널 지표',
   coreSummary: '핵심 요약',
-  publicFunnel: '테스트 퍼널',
+  eventActivityOverview: '이벤트 발생 현황',
+  publicFunnel: '무료 테스트 퍼널',
   executionFunnel: '실행 전환 퍼널',
   firstSessionFunnel: '첫 세션 퍼널',
   topDropoff: '가장 큰 이탈 구간',
@@ -148,7 +156,19 @@ export const ADMIN_KPI_HELP_TEXTS = {
     '적격 코호트 가중 평균: 재방문율을 계산할 수 있는 날짜가 지난 사용자 묶음만 합산해 계산합니다.',
   eventCount:
     '이벤트 건수 기준: 일부 세부 표는 사용자 수가 아니라 발생한 이벤트 횟수 기준입니다.',
+  eventActivityIndependent:
+    '이 영역은 이벤트별 독립 집계입니다. 숫자가 커 보여도 순차 전환율로 해석하지 마세요.',
+  cohortSequentialFunnel:
+    '순차 코호트 퍼널은 테스트 시작·실행 클릭·첫 세션 생성처럼 기준 이벤트를 친 사람만 분모로 두고, 각 다음 단계는 그 사람의 타임라인에서 이전 단계 시각 이후에 발생한 경우만 도달로 칩니다.',
 } as const;
+
+/** 순차 코호트 퍼널 카드 부제 */
+export const ADMIN_KPI_FUNNEL_COHORT_BASE_KO: Record<'public' | 'execution' | 'first_session', string> =
+  {
+    public: '순차 코호트 · 기준: 테스트 시작 클릭자',
+    execution: '순차 코호트 · 기준: 실행 시작 클릭자',
+    first_session: '순차 코호트 · 기준: 첫 세션 생성자',
+  };
 
 /** 원시 이벤트 테이블 컬럼 */
 export const ADMIN_KPI_RAW_EVENTS_COLUMNS = {
@@ -160,8 +180,9 @@ export const ADMIN_KPI_RAW_EVENTS_COLUMNS = {
   props: '속성',
 } as const;
 
-/** 퍼널 행 보조 라벨 */
+/** 퍼널 행 보조 라벨 — 순차 코호트 전용 */
 export const ADMIN_KPI_FUNNEL_FOOTER = {
+  cohortNote: '순차 코호트 · 각 단계는 이전 단계의 부분집합입니다.',
   distinctPersonKey: '사람 기준 고유 수(person_key)',
   fromStart: '시작 대비',
   dropoff: '이탈',

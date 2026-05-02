@@ -38,6 +38,13 @@ export type KpiRange = {
   range_clamped?: boolean;
 };
 
+/** 파일럿 카드용 — 분모·분자와 함께 표시 */
+export type KpiPilotFraction = {
+  rate_percent: number | null;
+  numerator: number;
+  denominator: number;
+};
+
 export type KpiSummaryResponse = {
   ok: true;
   range: { from: string; to: string; tz: string; range_clamped?: boolean };
@@ -45,15 +52,16 @@ export type KpiSummaryResponse = {
   source: 'raw_events' | 'daily_rollup' | 'mixed';
   limitations?: string[];
   cards: {
-    visitors: number;
-    test_start_rate: number | null;
-    survey_completion_rate: number | null;
-    result_view_rate: number | null;
-    result_to_execution_rate: number | null;
-    checkout_success_rate: number | null;
-    onboarding_completion_rate: number | null;
-    session_create_rate: number | null;
-    first_session_completion_rate: number | null;
+    landing_visitors: number;
+    test_start_clickers: number;
+    survey_completed_vs_started: KpiPilotFraction;
+    result_viewed_vs_survey_completed: KpiPilotFraction;
+    execution_click_vs_result_viewed: KpiPilotFraction;
+    checkout_vs_execution_click: KpiPilotFraction;
+    onboarding_vs_checkout: KpiPilotFraction;
+    session_create_vs_claim: KpiPilotFraction;
+    first_session_complete_vs_created: KpiPilotFraction;
+    app_home_vs_execution_click: KpiPilotFraction;
     d1_return_rate: number | null;
     d3_return_rate: number | null;
     d7_return_rate: number | null;
@@ -68,14 +76,24 @@ export type KpiSummaryResponse = {
   demographics?: KpiDemographicsSummary;
 };
 
-export type KpiFunnelStep = {
+/** 기간 내 이벤트별 고유 사용자 수 — 순차 전환율 없음 */
+export type KpiActivityStep = {
   event_name: string;
   label: string;
   count: number;
-  conversion_from_previous: number | null;
+};
+
+/** 첫 단계 코호트 기준 순차 도달 — 전환율은 항상 코호트 내 부분집합 */
+export type KpiCohortFunnelStep = {
+  event_name: string;
+  label: string;
+  count: number;
+  base_count: number;
+  previous_count: number | null;
   conversion_from_start: number | null;
-  dropoff_count: number | null;
-  dropoff_rate: number | null;
+  conversion_from_previous: number | null;
+  dropoff_count_from_previous: number | null;
+  dropoff_rate_from_previous: number | null;
 };
 
 export type KpiFunnelResponse = {
@@ -85,7 +103,10 @@ export type KpiFunnelResponse = {
   source: 'raw_events' | 'daily_rollup' | 'mixed';
   limitations?: string[];
   funnel: KpiFunnelKey;
-  steps: KpiFunnelStep[];
+  cohort_base_label: string;
+  cohort_base_event_name: string;
+  cohort_steps: KpiCohortFunnelStep[];
+  activity_steps: KpiActivityStep[];
 };
 
 export type KpiRetentionRow = {
@@ -166,22 +187,22 @@ export type KpiDetailsResponse = {
   source: 'raw_events' | 'daily_rollup' | 'mixed';
   limitations?: string[];
   session_detail: {
-    steps: KpiFunnelStep[];
+    steps: KpiActivityStep[];
     close_before_complete_count: number;
     by_exercise_index: KpiDetailExerciseRow[];
     /** 집계 단위 설명 — steps 는 person-distinct, by_exercise_index 는 이벤트 건수 기준 */
     metric_note?: string;
   };
   camera: {
-    steps: KpiFunnelStep[];
+    steps: KpiActivityStep[];
     step_completed_by_movement: KpiDetailMovementRow[];
     fallback_reasons: KpiDetailReasonRow[];
   };
   pwa: {
-    steps: KpiFunnelStep[];
+    steps: KpiActivityStep[];
   };
   push: {
-    steps: KpiFunnelStep[];
+    steps: KpiActivityStep[];
     denied_count: number;
   };
 };

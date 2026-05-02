@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { getSessionSafe } from '@/lib/supabase';
 import {
   ADMIN_KPI_DETAIL_SECTION_EXPLANATIONS,
+  ADMIN_KPI_FUNNEL_COHORT_BASE_KO,
   ADMIN_KPI_FUNNEL_FOOTER,
   ADMIN_KPI_FUNNEL_STEP_LABELS_KO,
   ADMIN_KPI_HELP_TEXTS,
@@ -14,9 +15,12 @@ import {
   ADMIN_KPI_SUMMARY_METRICS,
 } from '@/lib/analytics/admin-kpi-labels';
 import type {
+  KpiActivityStep,
   KpiDemographicsSummary,
   KpiDetailsResponse,
+  KpiFunnelKey,
   KpiFunnelResponse,
+  KpiPilotFraction,
   KpiRawEventsResponse,
   KpiRetentionResponse,
   KpiSummaryResponse,
@@ -77,6 +81,12 @@ function formatCount(value: number | null | undefined) {
 
 function formatDemographicsRatio(ratio: number) {
   return `${(ratio * 100).toFixed(0)}%`;
+}
+
+function formatPilotFractionLine(m: KpiPilotFraction | undefined): string {
+  if (!m) return '-';
+  const pct = m.rate_percent == null ? '-' : formatRate(m.rate_percent);
+  return `${pct}\n${formatCount(m.numerator)} / ${formatCount(m.denominator)}명`;
 }
 
 function dominantBucketLabel(rows: { label: string; count: number }[] | undefined): string {
@@ -189,32 +199,36 @@ function InsightCard({
   description,
   value,
   subtitle,
+  valueClassName,
 }: {
   title: string;
   description: string;
   value: string;
   subtitle?: string;
+  valueClassName?: string;
 }) {
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
       <p className="text-sm font-medium text-slate-200">{title}</p>
       <p className="mt-1 text-xs leading-snug text-slate-500">{description}</p>
-      <p className="mt-2 text-2xl font-semibold text-slate-100">{value}</p>
+      <p className={`mt-2 text-2xl font-semibold text-slate-100 ${valueClassName ?? ''}`}>{value}</p>
       {subtitle ? <p className="mt-1 text-xs text-slate-500">{subtitle}</p> : null}
     </div>
   );
 }
 
-function FunnelSection({
+function CohortFunnelSection({
+  funnelKey,
   title,
-  explanation,
-  steps,
+  response,
 }: {
+  funnelKey: KpiFunnelKey;
   title: string;
-  explanation?: string;
-  steps: KpiFunnelResponse['steps'] | undefined;
+  response: KpiFunnelResponse | null | undefined;
 }) {
-  const maxCount = Math.max(...(steps?.map((step) => step.count) ?? [0]), 1);
+  const steps = response?.cohort_steps;
+  const baseCount = steps?.[0]?.base_count ?? 0;
+  const maxCount = Math.max(baseCount, 1);
 
   return (
     <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
@@ -223,42 +237,114 @@ function FunnelSection({
           <h2 className="text-lg font-semibold text-slate-100">{title}</h2>
           <span className="shrink-0 text-xs text-slate-500">{ADMIN_KPI_FUNNEL_FOOTER.distinctPersonKey}</span>
         </div>
-        {explanation ? <p className="text-xs leading-snug text-slate-500">{explanation}</p> : null}
+        <p className="text-xs font-medium text-orange-300/90">{ADMIN_KPI_FUNNEL_COHORT_BASE_KO[funnelKey]}</p>
+        <p className="text-xs leading-snug text-slate-500">{ADMIN_KPI_FUNNEL_FOOTER.cohortNote}</p>
+        <p className="text-xs text-slate-400">
+          기준 코호트 규모:{' '}
+          <span className="font-semibold text-slate-200">{formatCount(baseCount)}명</span>
+          {response?.cohort_base_event_name ? (
+            <span className="text-slate-500"> ({response.cohort_base_event_name})</span>
+          ) : null}
+        </p>
       </div>
       {!steps || steps.length === 0 ? (
         <p className="text-sm text-slate-500">{ADMIN_KPI_FUNNEL_FOOTER.noData}</p>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-5">
           {steps.map((step) => {
-            const width = `${Math.max(8, (step.count / maxCount) * 100)}%`;
             const labelKo = funnelStepLabelKo(step.event_name, step.label);
+            const width = `${Math.max(8, (step.count / maxCount) * 100)}%`;
+            const prevPct =
+              step.conversion_from_previous == null ? '-' : formatRate(step.conversion_from_previous);
+            const dropN =
+              step.dropoff_count_from_previous == null ? '-' : formatCount(step.dropoff_count_from_previous);
             return (
-              <div key={`${title}-${step.event_name}`} className="space-y-1.5">
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="font-medium text-slate-200">{labelKo}</span>
-                  <span className="text-slate-400">
-                    {formatCount(step.count)} / {formatRate(step.conversion_from_previous)}
-                  </span>
-                </div>
+              <div key={`${title}-${step.event_name}`} className="space-y-2 border-b border-slate-800/60 pb-4 last:border-0 last:pb-0">
+                <p className="text-sm font-medium text-slate-100">{labelKo}</p>
+                <p className="text-sm text-slate-300">
+                  도달 <span className="font-semibold text-white">{formatCount(step.count)}명</span>
+                  {' / '}
+                  기준 <span className="text-slate-200">{formatCount(step.base_count)}명</span>
+                </p>
+                <p className="text-xl font-semibold text-orange-300">
+                  시작 대비 <span className="text-orange-200">{formatRate(step.conversion_from_start)}</span>
+                </p>
                 <div className="h-3 overflow-hidden rounded-full bg-slate-800">
-                  <div
-                    className="h-full rounded-full bg-orange-500"
-                    style={{ width }}
-                  />
+                  <div className="h-full rounded-full bg-orange-500" style={{ width }} />
                 </div>
-                <div className="flex items-center justify-between text-xs text-slate-500">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
                   <span>
-                    {ADMIN_KPI_FUNNEL_FOOTER.fromStart}: {formatRate(step.conversion_from_start)}
+                    이전 단계 대비 <span className="text-slate-200">{prevPct}</span>
                   </span>
                   <span>
-                    {ADMIN_KPI_FUNNEL_FOOTER.dropoff}: {step.dropoff_count == null ? '-' : formatCount(step.dropoff_count)} /{' '}
-                    {formatRate(step.dropoff_rate)}
+                    이탈 <span className="text-slate-200">{dropN}명</span>
+                    {step.dropoff_rate_from_previous != null ? (
+                      <span className="text-slate-500"> ({formatRate(step.dropoff_rate_from_previous)})</span>
+                    ) : null}
                   </span>
                 </div>
               </div>
             );
           })}
         </div>
+      )}
+    </section>
+  );
+}
+
+function EventActivityColumn({
+  title,
+  steps,
+}: {
+  title: string;
+  steps: KpiActivityStep[] | undefined;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
+      <p className="text-sm font-semibold text-slate-200">{title}</p>
+      {!steps?.length ? (
+        <p className="mt-3 text-sm text-slate-500">{ADMIN_KPI_FUNNEL_FOOTER.noData}</p>
+      ) : (
+        <ul className="mt-3 space-y-2 text-sm text-slate-300">
+          {steps.map((step) => (
+            <li key={`${title}-${step.event_name}`} className="flex justify-between gap-3 border-b border-slate-800/70 py-1.5 last:border-0">
+              <span>{funnelStepLabelKo(step.event_name, step.label)}</span>
+              <span className="shrink-0 text-slate-400">{formatCount(step.count)}명</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function DetailActivitySection({
+  title,
+  explanation,
+  steps,
+}: {
+  title: string;
+  explanation?: string;
+  steps: KpiActivityStep[] | undefined;
+}) {
+  return (
+    <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+      <div className="mb-3 flex flex-col gap-1">
+        <h2 className="text-lg font-semibold text-slate-100">{title}</h2>
+        {explanation ? <p className="text-xs leading-snug text-slate-500">{explanation}</p> : null}
+        <p className="text-xs text-amber-200/90">{ADMIN_KPI_HELP_TEXTS.eventActivityIndependent}</p>
+      </div>
+      {!steps?.length ? (
+        <p className="text-sm text-slate-500">{ADMIN_KPI_FUNNEL_FOOTER.noData}</p>
+      ) : (
+        <ul className="space-y-2 text-sm text-slate-300">
+          {steps.map((step) => (
+            <li key={`${title}-${step.event_name}`} className="flex justify-between gap-3 border-b border-slate-800/70 py-2 last:border-0">
+              <span>{funnelStepLabelKo(step.event_name, step.label)}</span>
+              <span className="text-slate-400">{formatCount(step.count)}명</span>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );
@@ -379,7 +465,8 @@ export default function KpiDashboardClient() {
     if (!top) return '아직 이탈 구간 진단 데이터가 없습니다.';
     const fromL = funnelStepLabelKo(top.from_event, top.from_event);
     const toL = funnelStepLabelKo(top.to_event, top.to_event);
-    return `${ADMIN_KPI_SECTION_TITLES.topDropoff}: ${fromL} → ${toL}, ${formatRate(top.dropoff_rate)}`;
+    const rate = top.dropoff_rate == null ? '-' : formatRate(top.dropoff_rate);
+    return `${ADMIN_KPI_SECTION_TITLES.topDropoff}: ${fromL} → ${toL}, 이탈 ${formatCount(top.dropoff_count)}명 (${rate})`;
   }, [state.summary?.top_dropoff]);
 
   const sm = ADMIN_KPI_SUMMARY_METRICS;
@@ -466,51 +553,64 @@ export default function KpiDashboardClient() {
 
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-slate-100">{ADMIN_KPI_SECTION_TITLES.coreSummary}</h2>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <InsightCard
-              title={sm.visitors.label}
-              description={sm.visitors.description}
-              value={formatCount(state.summary?.cards.visitors)}
+              title={sm.test_start_clickers.label}
+              description={sm.test_start_clickers.description}
+              value={`${formatCount(state.summary?.cards.test_start_clickers)}명`}
             />
             <InsightCard
-              title={sm.test_start_rate.label}
-              description={sm.test_start_rate.description}
-              value={formatRate(state.summary?.cards.test_start_rate)}
+              title={sm.survey_completed_vs_started.label}
+              description={sm.survey_completed_vs_started.description}
+              value={formatPilotFractionLine(state.summary?.cards.survey_completed_vs_started)}
+              valueClassName="whitespace-pre-line text-xl leading-snug"
             />
             <InsightCard
-              title={sm.survey_completion_rate.label}
-              description={sm.survey_completion_rate.description}
-              value={formatRate(state.summary?.cards.survey_completion_rate)}
+              title={sm.result_viewed_vs_survey_completed.label}
+              description={sm.result_viewed_vs_survey_completed.description}
+              value={formatPilotFractionLine(state.summary?.cards.result_viewed_vs_survey_completed)}
+              valueClassName="whitespace-pre-line text-xl leading-snug"
             />
             <InsightCard
-              title={sm.result_view_rate.label}
-              description={sm.result_view_rate.description}
-              value={formatRate(state.summary?.cards.result_view_rate)}
+              title={sm.execution_click_vs_result_viewed.label}
+              description={sm.execution_click_vs_result_viewed.description}
+              value={formatPilotFractionLine(state.summary?.cards.execution_click_vs_result_viewed)}
+              valueClassName="whitespace-pre-line text-xl leading-snug"
             />
             <InsightCard
-              title={sm.result_to_execution_rate.label}
-              description={sm.result_to_execution_rate.description}
-              value={formatRate(state.summary?.cards.result_to_execution_rate)}
+              title={sm.app_home_vs_execution_click.label}
+              description={sm.app_home_vs_execution_click.description}
+              value={formatPilotFractionLine(state.summary?.cards.app_home_vs_execution_click)}
+              valueClassName="whitespace-pre-line text-xl leading-snug"
             />
             <InsightCard
-              title={sm.checkout_success_rate.label}
-              description={sm.checkout_success_rate.description}
-              value={formatRate(state.summary?.cards.checkout_success_rate)}
+              title={sm.first_session_complete_vs_created.label}
+              description={sm.first_session_complete_vs_created.description}
+              value={formatPilotFractionLine(state.summary?.cards.first_session_complete_vs_created)}
+              valueClassName="whitespace-pre-line text-xl leading-snug"
             />
             <InsightCard
-              title={sm.onboarding_completion_rate.label}
-              description={sm.onboarding_completion_rate.description}
-              value={formatRate(state.summary?.cards.onboarding_completion_rate)}
+              title={sm.landing_visitors.label}
+              description={sm.landing_visitors.description}
+              value={`${formatCount(state.summary?.cards.landing_visitors)}명`}
             />
             <InsightCard
-              title={sm.session_create_rate.label}
-              description={sm.session_create_rate.description}
-              value={formatRate(state.summary?.cards.session_create_rate)}
+              title={sm.checkout_vs_execution_click.label}
+              description={sm.checkout_vs_execution_click.description}
+              value={formatPilotFractionLine(state.summary?.cards.checkout_vs_execution_click)}
+              valueClassName="whitespace-pre-line text-xl leading-snug"
             />
             <InsightCard
-              title={sm.first_session_completion_rate.label}
-              description={sm.first_session_completion_rate.description}
-              value={formatRate(state.summary?.cards.first_session_completion_rate)}
+              title={sm.onboarding_vs_checkout.label}
+              description={sm.onboarding_vs_checkout.description}
+              value={formatPilotFractionLine(state.summary?.cards.onboarding_vs_checkout)}
+              valueClassName="whitespace-pre-line text-xl leading-snug"
+            />
+            <InsightCard
+              title={sm.session_create_vs_claim.label}
+              description={sm.session_create_vs_claim.description}
+              value={formatPilotFractionLine(state.summary?.cards.session_create_vs_claim)}
+              valueClassName="whitespace-pre-line text-xl leading-snug"
             />
             <InsightCard
               title={sm.d1_return_rate.label}
@@ -532,6 +632,8 @@ export default function KpiDashboardClient() {
         <section className="rounded-xl border border-slate-800 bg-slate-900 p-4">
           <h3 className="text-sm font-semibold text-slate-200">{ADMIN_KPI_SECTION_TITLES.helpGlossary}</h3>
           <ul className="mt-2 space-y-1 text-xs leading-snug text-slate-500">
+            <li>• {ADMIN_KPI_HELP_TEXTS.cohortSequentialFunnel}</li>
+            <li>• {ADMIN_KPI_HELP_TEXTS.eventActivityIndependent}</li>
             <li>• {ADMIN_KPI_HELP_TEXTS.pending}</li>
             <li>• {ADMIN_KPI_HELP_TEXTS.weightedCohort}</li>
             <li>• {ADMIN_KPI_HELP_TEXTS.eventCount}</li>
@@ -539,10 +641,37 @@ export default function KpiDashboardClient() {
         </section>
 
         <div className="grid gap-6 xl:grid-cols-3">
-          <FunnelSection title={ADMIN_KPI_SECTION_TITLES.publicFunnel} steps={state.publicFunnel?.steps} />
-          <FunnelSection title={ADMIN_KPI_SECTION_TITLES.executionFunnel} steps={state.executionFunnel?.steps} />
-          <FunnelSection title={ADMIN_KPI_SECTION_TITLES.firstSessionFunnel} steps={state.firstSessionFunnel?.steps} />
+          <CohortFunnelSection
+            funnelKey="public"
+            title={ADMIN_KPI_SECTION_TITLES.publicFunnel}
+            response={state.publicFunnel}
+          />
+          <CohortFunnelSection
+            funnelKey="execution"
+            title={ADMIN_KPI_SECTION_TITLES.executionFunnel}
+            response={state.executionFunnel}
+          />
+          <CohortFunnelSection
+            funnelKey="first_session"
+            title={ADMIN_KPI_SECTION_TITLES.firstSessionFunnel}
+            response={state.firstSessionFunnel}
+          />
         </div>
+
+        <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-900 p-5">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-100">{ADMIN_KPI_SECTION_TITLES.eventActivityOverview}</h2>
+            <p className="mt-1 text-xs text-amber-200/90">{ADMIN_KPI_HELP_TEXTS.eventActivityIndependent}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              최근 기간 내 이벤트별 고유 사용자 수입니다. 퍼널 단계와 숫자를 직접 비교하지 마세요.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <EventActivityColumn title={ADMIN_KPI_SECTION_TITLES.publicFunnel} steps={state.publicFunnel?.activity_steps} />
+            <EventActivityColumn title={ADMIN_KPI_SECTION_TITLES.executionFunnel} steps={state.executionFunnel?.activity_steps} />
+            <EventActivityColumn title={ADMIN_KPI_SECTION_TITLES.firstSessionFunnel} steps={state.firstSessionFunnel?.activity_steps} />
+          </div>
+        </section>
 
         <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
           <h2 className="text-lg font-semibold text-slate-100">{ADMIN_KPI_SECTION_TITLES.topDropoff}</h2>
@@ -555,23 +684,23 @@ export default function KpiDashboardClient() {
         </section>
 
         <div className="grid gap-6 xl:grid-cols-3">
-          <FunnelSection
+          <DetailActivitySection
             title={ADMIN_KPI_SECTION_TITLES.sessionDropoff}
             explanation={ADMIN_KPI_DETAIL_SECTION_EXPLANATIONS.sessionDropoff}
             steps={state.details?.session_detail.steps}
           />
-          <FunnelSection
+          <DetailActivitySection
             title={ADMIN_KPI_SECTION_TITLES.cameraRefine}
             explanation={ADMIN_KPI_DETAIL_SECTION_EXPLANATIONS.cameraRefine}
             steps={state.details?.camera.steps}
           />
           <div className="space-y-6">
-            <FunnelSection
+            <DetailActivitySection
               title={ADMIN_KPI_SECTION_TITLES.pwaInstall}
               explanation={ADMIN_KPI_DETAIL_SECTION_EXPLANATIONS.pwaInstall}
               steps={state.details?.pwa.steps}
             />
-            <FunnelSection
+            <DetailActivitySection
               title={ADMIN_KPI_SECTION_TITLES.pushPermission}
               explanation={ADMIN_KPI_DETAIL_SECTION_EXPLANATIONS.pushPermission}
               steps={state.details?.push.steps}
