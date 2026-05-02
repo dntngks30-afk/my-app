@@ -107,7 +107,8 @@
     "ops:session-display-backfill": "npx tsx scripts/session-display-backfill-03.mjs",
     "test:public-entry-readiness-guard": "node scripts/public-entry-readiness-guard-smoke.mjs",
     "test:public-critical-asset-diet": "node scripts/public-critical-asset-diet-smoke.mjs",
-    "test:landing-readiness-cache-prefetch": "node scripts/landing-readiness-cache-prefetch-smoke.mjs"
+    "test:landing-readiness-cache-prefetch": "node scripts/landing-readiness-cache-prefetch-smoke.mjs",
+    "test:analytics-event-infra": "npx tsx scripts/analytics-event-infra-smoke.mjs"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
