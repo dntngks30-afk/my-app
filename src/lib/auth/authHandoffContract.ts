@@ -36,6 +36,48 @@ export function sanitizeAuthNextPath(
   return t;
 }
 
+/** `/admin/kpi` 직접 진입 후 인증으로 보낼 때만 사용 (일반 로그인에는 붙이지 않음). */
+export const ADMIN_KPI_AUTH_INTENT = 'admin_kpi' as const;
+
+/** 안전하게 검증된 next 문자열이 KPI 대시보드 경로인지 (`/admin/kpi`, `/admin/kpi?…`). */
+export function isAdminKpiReturnPath(path: string): boolean {
+  const t = path.trim();
+  const pathOnly = t.split('?')[0].split('#')[0];
+  if (pathOnly !== '/admin/kpi') return false;
+  return true;
+}
+
+/**
+ * /app/auth 진입 전용: `/admin/kpi`는 `intent=admin_kpi`일 때만 허용.
+ * intent 없이 `next=/admin/kpi`만 오면 open redirect·권한 우회 인상을 줄이기 위해 기본 경로로 떨어짐.
+ */
+export function resolveAppAuthLoginRedirect(
+  rawNext: string | null | undefined,
+  intent: string | null | undefined,
+  defaultPath: string = '/app/home',
+): string {
+  let normalized: string | null | undefined = rawNext;
+  if (typeof rawNext === 'string' && rawNext.length > 0) {
+    try {
+      normalized = decodeURIComponent(rawNext);
+    } catch {
+      normalized = rawNext;
+    }
+  }
+  const sanitized = sanitizeAuthNextPath(
+    typeof normalized === 'string' ? normalized : null,
+    defaultPath,
+  );
+
+  if (intent === ADMIN_KPI_AUTH_INTENT && isAdminKpiReturnPath(sanitized)) {
+    return sanitized;
+  }
+  if (isAdminKpiReturnPath(sanitized)) {
+    return defaultPath;
+  }
+  return sanitized;
+}
+
 export function validatePublicResultIdForHandoff(id: string | null | undefined): id is string {
   if (id == null || typeof id !== 'string') return false;
   const t = id.trim();

@@ -6,7 +6,7 @@
  */
 
 import type { SessionReadinessNextAction, SessionReadinessV1 } from './types';
-import { sanitizeAuthNextPath } from '@/lib/auth/authHandoffContract';
+import { sanitizeAuthNextPath, isAdminKpiReturnPath } from '@/lib/auth/authHandoffContract';
 
 export const SAFE_DEFAULT_POST_AUTH_PATH = '/app/home';
 
@@ -42,6 +42,11 @@ function isExecutionStartFallback(path: string): boolean {
   return path.slice(0, q) === '/execution/start';
 }
 
+function isAdminKpiAuthReturnFallback(path: string): boolean {
+  const p = sanitizeAppInternalPath(path);
+  return isAdminKpiReturnPath(p);
+}
+
 /** OAuth 후 readiness가 `/execution/start` 같은 계약 경로를 덮어 `/app/home`으로 보내는 것 방지 */
 export function resolvePathFromReadinessOrFallback(
   readiness: SessionReadinessV1 | null,
@@ -49,6 +54,7 @@ export function resolvePathFromReadinessOrFallback(
 ): string {
   const fallback = sanitizeAppInternalPath(fallbackPath);
   if (isExecutionStartFallback(fallback)) return fallback;
+  if (isAdminKpiAuthReturnFallback(fallback)) return fallback;
   if (!readiness) return fallback;
   return pathForReadinessNextAction(readiness.next_action.code);
 }

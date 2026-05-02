@@ -30,6 +30,8 @@ interface AuthCardProps {
   mode: 'login' | 'signup';
   errorParam?: string | null;
   redirectTo?: string;
+  /** `/app/auth?intent=` 과 함께만 의미 있음 — 회원가입·로그인 전환 시 URL 유지용 */
+  authIntent?: string | null;
   compactHeader?: boolean;
   oauthSlot?: React.ReactNode;
   /** signup: 페이지 단독 vs /app/auth 탭 삽입 */
@@ -49,6 +51,7 @@ export default function AuthCard({
   mode,
   errorParam,
   redirectTo = DEFAULT_POST_AUTH_PATH,
+  authIntent,
   compactHeader = false,
   oauthSlot,
   signupLayout = 'standalone',
@@ -65,6 +68,11 @@ export default function AuthCard({
   const [error, setError] = useState<string | null>(null);
 
   const effectiveCompactHeader = compactHeader || signupLayout === 'standalone';
+
+  const intentQs =
+    typeof authIntent === 'string' && authIntent.trim().length > 0
+      ? `&intent=${encodeURIComponent(authIntent.trim())}`
+      : '';
 
   useEffect(() => {
     if (errorParam === 'auth_failed') {
@@ -294,7 +302,7 @@ export default function AuthCard({
             <>
               계정이 없으신가요?{' '}
               <Link
-                href={`/signup?next=${encodeURIComponent(redirectTo)}`}
+                href={`/signup?next=${encodeURIComponent(redirectTo)}${intentQs}`}
                 onClick={(e) => {
                   if (inAppEmailHandoff && onInAppEmailHandoff) {
                     e.preventDefault();
@@ -310,7 +318,7 @@ export default function AuthCard({
             <>
               이미 계정이 있으신가요?{' '}
               <Link
-                href={`/app/auth?next=${encodeURIComponent(redirectTo || DEFAULT_POST_AUTH_PATH)}`}
+                href={`/app/auth?next=${encodeURIComponent(redirectTo || DEFAULT_POST_AUTH_PATH)}${intentQs}`}
                 onClick={(e) => {
                   if (inAppEmailHandoff && onInAppEmailHandoff) {
                     e.preventDefault();

@@ -32,6 +32,8 @@ import { getPilotCodeForCurrentFlow } from '@/lib/pilot/pilot-context';
 
 interface AppAuthClientProps {
   next: string;
+  /** admin KPI 직접 진입 등에서만 설정 (예: admin_kpi). signup 링크 등으로 전달 */
+  intent?: string | null;
   errorParam?: string | null;
   providerParam?: string | null;
 }
@@ -40,6 +42,7 @@ const LOGIN_HEADLINE = '내 분석을 이어서 확인하세요';
 
 export default function AppAuthClient({
   next,
+  intent,
   errorParam,
   providerParam,
 }: AppAuthClientProps) {
@@ -160,6 +163,7 @@ export default function AppAuthClient({
           mode="login"
           errorParam={errorParam}
           redirectTo={safeNext}
+          authIntent={intent}
           compactHeader
           signupLayout="embedded"
           inAppEmailHandoff={uaHydrated && shouldUseInAppEmailAuthHandoff(env)}

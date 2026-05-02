@@ -1,8 +1,13 @@
 import { Suspense } from 'react';
 import AppAuthClient from './AppAuthClient';
-import { sanitizeAuthNextPath } from '@/lib/auth/authHandoffContract';
+import { resolveAppAuthLoginRedirect } from '@/lib/auth/authHandoffContract';
 
-type SearchParams = Promise<{ next?: string; error?: string; provider?: string }>;
+type SearchParams = Promise<{
+  next?: string;
+  error?: string;
+  provider?: string;
+  intent?: string;
+}>;
 
 export default async function AppAuthPage({
   searchParams,
@@ -10,8 +15,11 @@ export default async function AppAuthPage({
   searchParams: SearchParams;
 }) {
   const params = await searchParams;
-  const next = sanitizeAuthNextPath(
+  const intentRaw = typeof params?.intent === 'string' ? params.intent.trim() : null;
+  const intent = intentRaw && intentRaw.length > 0 ? intentRaw : null;
+  const next = resolveAppAuthLoginRedirect(
     typeof params?.next === 'string' ? params.next : null,
+    intent,
     '/app/home',
   );
   return (
@@ -24,6 +32,7 @@ export default async function AppAuthPage({
     >
       <AppAuthClient
         next={next}
+        intent={intent}
         errorParam={params?.error}
         providerParam={params?.provider}
       />

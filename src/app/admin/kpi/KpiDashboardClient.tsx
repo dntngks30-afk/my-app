@@ -21,6 +21,7 @@ import type {
   KpiRetentionResponse,
   KpiSummaryResponse,
 } from '@/lib/analytics/admin-kpi-types';
+import { ADMIN_KPI_AUTH_INTENT } from '@/lib/auth/authHandoffContract';
 
 function funnelStepLabelKo(eventName: string, apiLabel: string): string {
   return ADMIN_KPI_FUNNEL_STEP_LABELS_KO[eventName] ?? apiLabel;
@@ -289,7 +290,9 @@ export default function KpiDashboardClient() {
     try {
       const { session, error: sessionError } = await getSessionSafe();
       if (sessionError || !session?.access_token) {
-        router.push('/app/auth?next=' + encodeURIComponent('/admin/kpi'));
+        router.push(
+          `/app/auth?next=${encodeURIComponent('/admin/kpi')}&intent=${encodeURIComponent(ADMIN_KPI_AUTH_INTENT)}`,
+        );
         return;
       }
 
@@ -343,7 +346,9 @@ export default function KpiDashboardClient() {
     const check = async () => {
       const { session, error: sessionError } = await getSessionSafe();
       if (sessionError || !session?.access_token) {
-        router.push('/app/auth?next=' + encodeURIComponent('/admin/kpi'));
+        router.push(
+          `/app/auth?next=${encodeURIComponent('/admin/kpi')}&intent=${encodeURIComponent(ADMIN_KPI_AUTH_INTENT)}`,
+        );
         return;
       }
       try {

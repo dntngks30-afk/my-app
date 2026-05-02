@@ -5,7 +5,7 @@ import AuthCard from '@/components/auth/AuthCard';
 import { InAppAuthHandoffSheet } from '@/components/auth/InAppAuthHandoffSheet';
 import {
   extractBridgeQueryFromInternalPath,
-  sanitizeAuthNextPath,
+  resolveAppAuthLoginRedirect,
 } from '@/lib/auth/authHandoffContract';
 import { buildAuthHandoffAbsoluteUrl } from '@/lib/auth/buildAuthHandoffUrl';
 import { buildAndroidChromeIntentUrl } from '@/lib/auth/androidChromeIntent';
@@ -20,13 +20,14 @@ interface SignupClientProps {
   errorParam?: string | null;
   /** 결과·실행 퍼널 복귀용. 유효하지 않으면 기본 경로 */
   next?: string;
+  intent?: string | null;
 }
 
-function resolveRedirectTo(next: string | undefined): string {
-  return sanitizeAuthNextPath(next, DEFAULT_POST_AUTH_PATH);
+function resolveRedirectTo(next: string | undefined, intent: string | null | undefined): string {
+  return resolveAppAuthLoginRedirect(next ?? null, intent ?? null, DEFAULT_POST_AUTH_PATH);
 }
 
-export default function SignupClient({ errorParam, next }: SignupClientProps) {
+export default function SignupClient({ errorParam, next, intent }: SignupClientProps) {
   const redirectTo = resolveRedirectTo(next);
   const [env, setEnv] = useState({ inApp: false, isAndroid: false, isIos: false });
   const [uaHydrated, setUaHydrated] = useState(false);
@@ -92,6 +93,7 @@ export default function SignupClient({ errorParam, next }: SignupClientProps) {
         mode="signup"
         errorParam={errorParam}
         redirectTo={redirectTo}
+        authIntent={intent ?? null}
         inAppEmailHandoff={uaHydrated && shouldUseInAppEmailAuthHandoff(env)}
         onInAppEmailHandoff={onInAppEmailHandoff}
         handoffUaReady={uaHydrated}

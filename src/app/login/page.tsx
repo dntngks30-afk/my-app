@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
  * /login 호환 리다이렉트
  * OAuth(구글/카카오)가 있는 /app/auth로 통일
  */
-type SearchParams = Promise<{ next?: string; error?: string }>;
+type SearchParams = Promise<{ next?: string; error?: string; intent?: string }>;
 
 export default async function LoginPage({
   searchParams,
@@ -18,9 +18,13 @@ export default async function LoginPage({
       ? nextRaw
       : '/';
   const error = typeof params?.error === 'string' ? params.error : undefined;
+  const intentRaw = typeof params?.intent === 'string' ? params.intent.trim() : '';
 
   const search = new URLSearchParams();
   search.set('next', next);
+  if (intentRaw) {
+    search.set('intent', intentRaw);
+  }
   if (error) {
     search.set('error', error);
   }
