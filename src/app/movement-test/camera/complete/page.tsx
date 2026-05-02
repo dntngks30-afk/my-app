@@ -14,7 +14,6 @@ import {
 } from '@/components/stitch/camera/CameraSquat';
 import {
   StitchCameraGhostButton,
-  StitchCameraMutedOutlineButton,
   StitchCameraPrimaryButton,
 } from '@/components/stitch/camera/CameraButton';
 import {
@@ -26,8 +25,6 @@ import { normalizeCameraResult, type NormalizedCameraResult } from '@/lib/camera
 import { clearCameraResult, saveCameraResult } from '@/lib/camera/camera-result';
 import type { EvaluatorResult } from '@/lib/camera/evaluators/types';
 import type { CameraGuardrailFlag, StepGuardrailResult } from '@/lib/camera/guardrails';
-
-const ACTIVE_STEP_COUNT = CAMERA_STEPS.length;
 
 export default function CameraCompletePage() {
   const router = useRouter();
@@ -100,40 +97,77 @@ export default function CameraCompletePage() {
     router.push('/movement-test/camera');
   };
 
-  const handleSurveyFallback = () => {
-    clearCameraResult();
-    router.push('/movement-test/survey');
-  };
-
   const handleHome = () => {
     router.push('/');
   };
+
+  const hardInsufficient = useMemo(() => {
+    if (!analysis) return false;
+    const evalResults = analysis.evaluatorResults ?? [];
+    const usefulEvaluatorCount = evalResults.filter((result) => !result.insufficientSignal).length;
+    const allEvaluatorInsufficient =
+      evalResults.length > 0 && evalResults.every((result) => result.insufficientSignal);
+    const hasCatastrophicFlags =
+      Boolean(analysis.flags?.includes('valid_frames_too_few')) &&
+      Boolean(analysis.flags?.includes('insufficient_signal'));
+    const catastrophicEvidence =
+      analysis.resultEvidenceLevel === 'insufficient_signal' &&
+      hasCatastrophicFlags &&
+      (analysis.confidence ?? 1) <= 0.25;
+
+    return (
+      evalResults.length === 0 ||
+      usefulEvaluatorCount === 0 ||
+      allEvaluatorInsufficient ||
+      catastrophicEvidence
+    );
+  }, [analysis]);
+
+  const softLowConfidence = useMemo(() => {
+    if (!analysis || hardInsufficient) return false;
+    return (
+      analysis.captureQuality === 'low' ||
+      analysis.captureQuality === 'invalid' ||
+      analysis.fallbackMode === 'survey' ||
+      analysis.fallbackMode === 'retry' ||
+      analysis.resultEvidenceLevel === 'weak_evidence' ||
+      analysis.resultEvidenceLevel === 'shallow_evidence' ||
+      analysis.resultToneMode === 'cautious' ||
+      analysis.resultToneMode === 'conservative' ||
+      analysis.flags.includes('hard_partial') ||
+      analysis.flags.includes('insufficient_signal')
+    );
+  }, [analysis, hardInsufficient]);
 
   const uiState = useMemo(() => {
     if (!analysis) {
       return {
         title: '촬영을 정리하고 있습니다',
         description: '동작 신호를 확인하는 중입니다.',
-        allowContinue: false,
       };
     }
-    if (analysis.captureQuality === 'invalid' || analysis.fallbackMode === 'survey') {
+    if (hardInsufficient) {
       return {
-        title: '신호가 충분하지 않았습니다',
+        title: '촬영 신호가 부족했습니다',
         description:
-          '전신이 화면에 충분히 보이지 않았거나, 움직임 신호가 부족했어요. 다시 촬영하거나 설문 결과로 이어갈 수 있어요.',
-        allowContinue: false,
+          '동작을 확인할 수 있는 화면 정보가 거의 없었어요. 다시 촬영하면 더 정확하게 반영할 수 있어요.',
+      };
+    }
+    if (softLowConfidence) {
+      return {
+        title: '촬영이 완료되었습니다',
+        description:
+          '확인 가능한 움직임을 바탕으로 결과를 정리했어요. 일부 구간은 보수적으로 반영됩니다.',
       };
     }
     return {
       title: '촬영이 완료되었습니다',
       description:
-        `${ACTIVE_STEP_COUNT}가지 동작 신호를 확인했어요. 이제 내 몸의 움직임 패턴을 정리해볼게요.`,
-      allowContinue: true,
+        '2가지 동작 신호를 확인했어요. 이제 내 몸의 움직임 패턴을 정리해볼게요.',
     };
-  }, [analysis]);
+  }, [analysis, hardInsufficient, softLowConfidence]);
 
-  const signalSummaryLabel = uiState.allowContinue ? '확인됨' : '재촬영 권장';
+  const signalSummaryLabel = hardInsufficient ? '재촬영 권장' : '확인됨';
 
   return (
     <MoveReFullscreenScreen backgroundSlot={<Starfield />}>
@@ -184,22 +218,19 @@ export default function CameraCompletePage() {
 
           {analysis ? (
             <div className="flex flex-col gap-3">
-              {uiState.allowContinue ? (
+              {hardInsufficient ? (
                 <>
-                  <StitchCameraPrimaryButton onClick={handleViewResult}>결과 보기</StitchCameraPrimaryButton>
-                  <StitchCameraPrimaryButton variant="outline" onClick={handleRetry}>
-                    다시 촬영하기
+                  <StitchCameraPrimaryButton onClick={handleRetry}>다시 촬영하기</StitchCameraPrimaryButton>
+                  <StitchCameraPrimaryButton variant="outline" onClick={handleViewResult}>
+                    기존 설문 결과로 계속 보기
                   </StitchCameraPrimaryButton>
-                  <StitchCameraMutedOutlineButton onClick={handleSurveyFallback}>
-                    설문형 테스트로 전환
-                  </StitchCameraMutedOutlineButton>
                   <StitchCameraGhostButton onClick={handleHome}>홈으로</StitchCameraGhostButton>
                 </>
               ) : (
                 <>
-                  <StitchCameraPrimaryButton onClick={handleRetry}>다시 촬영하기</StitchCameraPrimaryButton>
-                  <StitchCameraPrimaryButton variant="outline" onClick={handleSurveyFallback}>
-                    설문형 테스트로 전환
+                  <StitchCameraPrimaryButton onClick={handleViewResult}>결과 보기</StitchCameraPrimaryButton>
+                  <StitchCameraPrimaryButton variant="outline" onClick={handleRetry}>
+                    다시 촬영하기
                   </StitchCameraPrimaryButton>
                   <StitchCameraGhostButton onClick={handleHome}>홈으로</StitchCameraGhostButton>
                 </>
