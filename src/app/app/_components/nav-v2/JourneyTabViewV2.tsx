@@ -32,9 +32,6 @@ import {
 } from './appTabTheme';
 import { normalizeJourneyResetMapProgress } from '@/lib/journey/resolveJourneyResetMapTotal';
 
-/** 피드백 수신 메일 — 운영 시 교체 */
-const SUPPORT_FEEDBACK_MAILTO = 'mailto:support@posturelab.com?subject=MOVE%20RE%20피드백';
-
 /** 여정 탭 FAQ — MOVE RE 신규 사용자 안내 (production Journey sheet) */
 const JOURNEY_FAQ_ITEMS = [
   {
@@ -156,7 +153,9 @@ export interface JourneyTabViewV2Props {
   totalSessions?: number | null;
 }
 
-type SheetId = 'faq' | 'ops' | 'privacy' | 'terms' | null;
+type SheetId = 'faq' | 'ops' | 'privacy' | 'terms' | 'feedback' | null;
+
+type FeedbackCategory = 'general' | 'bug' | 'question' | 'improvement';
 
 export function JourneyTabViewV2({
   isVisible = true,
@@ -167,6 +166,14 @@ export function JourneyTabViewV2({
   const [loggingOut, setLoggingOut] = useState(false);
   const [sheet, setSheet] = useState<SheetId>(null);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackCategory, setFeedbackCategory] =
+    useState<FeedbackCategory>('general');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackStatus, setFeedbackStatus] = useState<
+    'idle' | 'success' | 'error'
+  >('idle');
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [journeySummary, setJourneySummary] = useState<JourneySummaryResponse | null>(null);
   const [journeyLoad, setJourneyLoad] = useState<'idle' | 'loading' | 'ok' | 'err'>('idle');
   const journeySummaryRequestedRef = useRef(false);
@@ -205,7 +212,92 @@ export function JourneyTabViewV2({
     if (sheet !== 'faq') {
       setOpenFaqIndex(null);
     }
+    if (sheet !== 'feedback') {
+      setFeedbackStatus('idle');
+      setFeedbackError(null);
+    }
   }, [sheet]);
+
+  async function handleFeedbackSubmit() {
+    const message = feedbackMessage.trim();
+
+    if (message.length < 5) {
+      setFeedbackStatus('error');
+      setFeedbackError('피드백을 5자 이상 입력해주세요.');
+      return;
+    }
+
+    if (message.length > 2000) {
+      setFeedbackStatus('error');
+      setFeedbackError('피드백은 2000자 이내로 입력해주세요.');
+      return;
+    }
+
+    setFeedbackSubmitting(true);
+    setFeedbackStatus('idle');
+    setFeedbackError(null);
+
+    try {
+      const { getSessionSafe } = await import('@/lib/supabase');
+      const { session } = await getSessionSafe();
+      const token = session?.access_token;
+
+      if (!token) {
+        setFeedbackStatus('error');
+        setFeedbackError('로그인이 필요해요. 다시 로그인한 뒤 시도해주세요.');
+        return;
+      }
+
+      const res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message,
+          category: feedbackCategory,
+        }),
+      });
+
+      if (!res.ok) {
+        let code: string | undefined;
+        try {
+          const errBody = (await res.json()) as { code?: string };
+          code = errBody.code;
+        } catch {
+          code = undefined;
+        }
+        setFeedbackStatus('error');
+        if (code === 'UNAUTHORIZED') {
+          setFeedbackError('로그인이 필요해요. 다시 로그인한 뒤 시도해주세요.');
+        } else if (code === 'MESSAGE_TOO_SHORT') {
+          setFeedbackError('피드백을 5자 이상 입력해주세요.');
+        } else if (code === 'MESSAGE_TOO_LONG') {
+          setFeedbackError('피드백은 2000자 이내로 입력해주세요.');
+        } else {
+          setFeedbackError('전송에 실패했어요. 잠시 후 다시 시도해주세요.');
+        }
+        return;
+      }
+
+      const data = (await res.json()) as { ok?: boolean };
+      if (!data.ok) {
+        setFeedbackStatus('error');
+        setFeedbackError('전송에 실패했어요. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+
+      setFeedbackStatus('success');
+      setFeedbackMessage('');
+      setFeedbackCategory('general');
+    } catch {
+      setFeedbackStatus('error');
+      setFeedbackError('전송에 실패했어요. 네트워크 상태를 확인해주세요.');
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  }
 
   const resetMap = normalizeJourneyResetMapProgress({
     total: totalSessions,
@@ -371,16 +463,18 @@ export function JourneyTabViewV2({
               <ChevronRight className="size-4 text-white/30" aria-hidden />
             </button>
           ))}
-          <a
-            href={SUPPORT_FEEDBACK_MAILTO}
+          <button
+            type="button"
+            onClick={() => setSheet('feedback')}
             className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3.5 text-left transition hover:bg-white/[0.06]"
+            aria-label="피드백 및 질문 보내기"
           >
             <span className="flex items-center gap-3">
               <MessageCircle className="size-4 text-white/50" aria-hidden />
               <span className="text-sm text-white">피드백 및 질문 보내기</span>
             </span>
             <ChevronRight className="size-4 text-white/30" aria-hidden />
-          </a>
+          </button>
         </div>
 
         {/* Direct links duplicate for 페이지 이동 선호 시 — 상단 버튼은 모달 우선 */}
@@ -433,6 +527,7 @@ export function JourneyTabViewV2({
             <div className="mb-3 flex items-center justify-between gap-2">
               <h3 className="text-base font-semibold text-white">
                 {sheet === 'faq' && 'FAQ'}
+                {sheet === 'feedback' && '피드백 및 질문 보내기'}
                 {sheet === 'ops' && '운영 지침'}
                 {sheet === 'privacy' && '개인정보 안내'}
                 {sheet === 'terms' && '이용약관 안내'}
@@ -488,6 +583,73 @@ export function JourneyTabViewV2({
                       </section>
                     );
                   })}
+                </div>
+              )}
+              {sheet === 'feedback' && (
+                <div className="space-y-4">
+                  <p className={`text-sm leading-relaxed ${appTabModalBody}`}>
+                    사용 중 불편한 점이나 궁금한 점을 남겨주세요. 확인 후 개선에 반영할게요.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        ['general', '일반'],
+                        ['bug', '오류'],
+                        ['question', '질문'],
+                        ['improvement', '개선 제안'],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setFeedbackCategory(value)}
+                        className={`rounded-xl border px-3 py-2 text-sm transition ${
+                          feedbackCategory === value
+                            ? 'border-orange-500/50 bg-orange-500/15 font-medium text-white'
+                            : 'border-white/10 bg-white/[0.03] text-white/85 hover:bg-white/[0.06]'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <textarea
+                    value={feedbackMessage}
+                    onChange={(e) => setFeedbackMessage(e.target.value)}
+                    maxLength={2000}
+                    rows={6}
+                    placeholder="예: 알림을 눌렀는데 로그인 화면으로 이동했어요."
+                    className="w-full resize-y rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm leading-relaxed text-white placeholder:text-white/35 outline-none focus:border-orange-500/40"
+                  />
+
+                  <div className="flex items-center justify-between text-xs text-white/40">
+                    <span>{feedbackMessage.trim().length}/2000</span>
+                  </div>
+
+                  {feedbackStatus === 'success' && (
+                    <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-200">
+                      피드백이 전송됐어요. 확인 후 개선에 반영할게요.
+                    </p>
+                  )}
+
+                  {feedbackStatus === 'error' && feedbackError && (
+                    <p className="rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">
+                      {feedbackError}
+                    </p>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={
+                      feedbackSubmitting || feedbackMessage.trim().length < 5
+                    }
+                    onClick={() => void handleFeedbackSubmit()}
+                    className="w-full rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-orange-500/90 disabled:opacity-50"
+                  >
+                    {feedbackSubmitting ? '전송 중…' : '피드백 보내기'}
+                  </button>
                 </div>
               )}
               {sheet === 'ops' && (
