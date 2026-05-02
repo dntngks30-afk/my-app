@@ -40,12 +40,18 @@ type MoveReServiceWorkerGlobal = typeof globalThis & {
   addEventListener(type: 'notificationclick', listener: (event: NotificationClickEvent) => void): void;
 };
 
+type PushPayloadData = {
+  url?: unknown;
+  type?: unknown;
+};
+
 type PushPayload = {
   title?: unknown;
   body?: unknown;
   url?: unknown;
   tag?: unknown;
   type?: unknown;
+  data?: PushPayloadData | unknown;
 };
 
 type NormalizedPushPayload = {
@@ -58,15 +64,18 @@ type NormalizedPushPayload = {
 
 const sw = self as unknown as MoveReServiceWorkerGlobal;
 
+const PUSH_OPEN_TEST_URL = '/push/open?to=/app/home&type=test';
+const PUSH_OPEN_UNKNOWN_URL = '/push/open?to=/app/home&type=unknown';
+
 const TEST_PUSH_FALLBACK = {
   title: 'MOVE RE 테스트 알림',
   body: '알림이 정상적으로 연결됐어요.',
-  url: '/app/home?source=push&type=test',
+  url: PUSH_OPEN_TEST_URL,
   tag: 'move-re-test',
   type: 'test',
 } as const;
 
-const CLICK_FALLBACK_URL = '/app/home?source=push';
+const CLICK_FALLBACK_URL = PUSH_OPEN_UNKNOWN_URL;
 
 function stringOrFallback(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
@@ -84,6 +93,10 @@ function safeInternalPath(value: unknown, fallback: string, externalFallback = f
   }
 }
 
+function readPayloadData(value: unknown): PushPayloadData {
+  return value && typeof value === 'object' ? (value as PushPayloadData) : {};
+}
+
 function readPushPayload(event: PushPayloadEvent): NormalizedPushPayload {
   let raw: PushPayload = {};
 
@@ -96,12 +109,16 @@ function readPushPayload(event: PushPayloadEvent): NormalizedPushPayload {
     raw = {};
   }
 
+  const nestedData = readPayloadData(raw.data);
+  const rawUrl = raw.url ?? nestedData.url;
+  const rawType = raw.type ?? nestedData.type;
+
   return {
     title: stringOrFallback(raw.title, TEST_PUSH_FALLBACK.title),
     body: stringOrFallback(raw.body, TEST_PUSH_FALLBACK.body),
-    url: safeInternalPath(raw.url, TEST_PUSH_FALLBACK.url, CLICK_FALLBACK_URL),
+    url: safeInternalPath(rawUrl, TEST_PUSH_FALLBACK.url, CLICK_FALLBACK_URL),
     tag: stringOrFallback(raw.tag, TEST_PUSH_FALLBACK.tag),
-    type: stringOrFallback(raw.type, TEST_PUSH_FALLBACK.type),
+    type: stringOrFallback(rawType, TEST_PUSH_FALLBACK.type),
   };
 }
 
