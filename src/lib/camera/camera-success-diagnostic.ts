@@ -35,6 +35,7 @@ const DIAG_FREEZE_LOCALSTORAGE_KEY = 'moveReCameraDiagFreezeSuccess';
  * ?diag=1&freeze_success=1 또는 localStorage flag.
  */
 export function isDiagnosticFreezeMode(): boolean {
+  if (process.env.NODE_ENV === 'production') return false;
   if (typeof window === 'undefined') return false;
   try {
     const params = new URLSearchParams(window.location.search);

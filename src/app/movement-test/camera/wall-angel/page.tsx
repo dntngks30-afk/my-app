@@ -638,6 +638,7 @@ export default function CameraWallAngelPage() {
                 onVideoReady={handleVideoReady}
                 onPoseFrame={pushFrame}
                 onError={handleCameraError}
+                showPoseDebugOverlay={IS_DEV}
                 guideTone={guideTone}
                 guideHint={overlayGuide.hint}
                 guideFocus={overlayGuide.focus}

@@ -524,6 +524,7 @@ export default function CameraSquatPage() {
   const [headerDiagTapCount, setHeaderDiagTapCount] = useState(0);
   const headerDiagTapResetRef = useRef<number | null>(null);
   const onHeaderAreaTapForDiag = useCallback(() => {
+    if (!IS_DEV) return;
     if (headerDiagTapResetRef.current) window.clearTimeout(headerDiagTapResetRef.current);
     setHeaderDiagTapCount((c) => {
       const n = c + 1;
@@ -532,7 +533,8 @@ export default function CameraSquatPage() {
     });
   }, []);
 
-  const mobileDiagUnlocked = urlDebugFlags.diag || urlDebugFlags.debug || headerDiagTapCount >= 5;
+  const mobileDiagUnlocked =
+    IS_DEV && (urlDebugFlags.diag || urlDebugFlags.debug || headerDiagTapCount >= 5);
 
   const persistCurrentStep = useCallback(() => {
     recordAttemptSnapshot(STEP_ID, gate, readinessTraceSummary, {
@@ -1606,13 +1608,17 @@ export default function CameraSquatPage() {
     cameraPhase === 'capturing' && !showRetryActions;
   const hasDebugQuery = urlDebugFlags.debug;
   const showPoseOverlayForDiagnostics =
-    urlDebugFlags.debug || urlDebugFlags.diag || urlDebugFlags.poseOverlay;
+    IS_DEV &&
+    (urlDebugFlags.debug || urlDebugFlags.diag || urlDebugFlags.poseOverlay);
   const showDebugPanel =
     debugEnabled &&
     (isPreCapturePhase || showRetryActions || hasDebugQuery);
   /** ?debug=1: minimal 캡처·재시도 중에도 모바일에서 볼 수 있는 컴팩트 스트립 */
   const showCompactMobileDebugStrip =
-    hasDebugQuery && (isMinimalCapture || showRetryActions) && !permissionDenied;
+    IS_DEV &&
+    hasDebugQuery &&
+    (isMinimalCapture || showRetryActions) &&
+    !permissionDenied;
 
   return (
     <StitchCameraSquatRoot>
@@ -1740,6 +1746,13 @@ export default function CameraSquatPage() {
                   >
                     {countdownValue}
                   </span>
+                </div>
+              )}
+              {cameraPhase === 'setup' && cameraReady && !permissionDenied && (
+                <div className="absolute inset-x-3 bottom-3 z-[60]">
+                  <StitchCameraPrimaryButton onClick={handleSetupReady}>
+                    준비됐어요
+                  </StitchCameraPrimaryButton>
                 </div>
               )}
             </div>
@@ -1896,9 +1909,6 @@ export default function CameraSquatPage() {
                         ? ''
                         : setupFramingHint ?? '준비가 되면 다음으로 넘어가세요'}
                   </p>
-                  {cameraPhase === 'setup' && (
-                    <StitchCameraPrimaryButton onClick={handleSetupReady}>준비됐어요</StitchCameraPrimaryButton>
-                  )}
                 </div>
               ) : showRetryActions ? (
                 <div className="flex flex-col gap-3">

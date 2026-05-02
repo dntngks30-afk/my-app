@@ -15,6 +15,7 @@ import { usePoseCapture } from '@/lib/camera/use-pose-capture';
 import { getSetupFramingHint } from '@/lib/camera/setup-framing';
 import { CAMERA_STEPS } from '@/lib/public/camera-test';
 
+const IS_DEV = process.env.NODE_ENV !== 'production';
 const SETUP_NEXT_PATH = CAMERA_STEPS[0]?.path ?? '/movement-test/camera/squat';
 
 export default function CameraSetupPage() {
@@ -102,6 +103,7 @@ export default function CameraSetupPage() {
                 onVideoReady={handleVideoReady}
                 onPoseFrame={pushFrame}
                 onError={handleError}
+                showPoseDebugOverlay={IS_DEV}
                 guideTone="neutral"
                 guideVariant="default"
                 guideBadges={['전신', '1.8~2m 거리', '폰 낮게']}

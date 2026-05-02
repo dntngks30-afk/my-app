@@ -37,8 +37,10 @@ interface CameraPreviewProps {
   onError?: (error: Error) => void;
   /** 비디오 미러 표시 */
   mirrored?: boolean;
-  /** 개발용 skeleton overlay */
+  /** 개발용 skeleton overlay (기본 비활성; 필요 시 페이지에서 명시적으로 켠다) */
   showPoseDebugOverlay?: boolean;
+  /** 하단 상태 HUD(status/pose/gum 등). 로컬 진단 전용 — 기본 비활성 */
+  showCameraDebugHud?: boolean;
   /** 실시간 가이드 색상 */
   guideTone?: CameraGuideTone;
   /** 카메라 안에서 바로 보이는 짧은 가이드 라벨 */
@@ -285,7 +287,8 @@ export function CameraPreview({
   onPoseFrame,
   onError,
   mirrored = true,
-  showPoseDebugOverlay = process.env.NODE_ENV !== 'production',
+  showPoseDebugOverlay = false,
+  showCameraDebugHud = false,
   guideTone = 'neutral',
   guideHint = null,
   guideFocus = null,
@@ -828,7 +831,9 @@ export function CameraPreview({
           </div>
         </div>
       )}
-      {!minimalCaptureMode && process.env.NODE_ENV !== 'production' && (
+      {!minimalCaptureMode &&
+        showCameraDebugHud &&
+        process.env.NODE_ENV !== 'production' && (
         <div className="absolute bottom-2 left-2 z-40 rounded bg-black/50 px-2 py-1 text-[10px] text-white pointer-events-none">
           {status} / pose:{poseStatus}
           {session && (() => {

@@ -1510,6 +1510,7 @@ export default function CameraOverheadReachPage() {
                 onVideoReady={handleVideoReady}
                 onPoseFrame={pushFrame}
                 onError={handleCameraError}
+                showPoseDebugOverlay={IS_DEV}
                 poseDiagnosticsMotionType="overhead-reach"
                 guideTone={guideTone}
                 guideHint={isMinimalCapture ? null : overlayGuide.hint}
