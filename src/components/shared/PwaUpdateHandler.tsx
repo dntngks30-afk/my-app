@@ -1,16 +1,78 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-type IdleCallbackHandle = number;
-type IdleRequestCallback = (deadline: IdleDeadline) => void;
+const APP_VERSION_STORAGE_KEY = 'move-re:last-app-version';
+const UPDATE_RELOAD_GUARD_KEY = 'move-re:pwa-update-reload-at';
+const MIN_UPDATE_CHECK_INTERVAL_MS = 30_000;
+const RELOAD_GUARD_WINDOW_MS = 10_000;
 
-interface IdleWindow extends Window {
-  requestIdleCallback?: (
-    callback: IdleRequestCallback,
-    options?: IdleRequestOptions
-  ) => IdleCallbackHandle;
-  cancelIdleCallback?: (handle: IdleCallbackHandle) => void;
+type AppVersionPayload = {
+  ok?: boolean;
+  version?: unknown;
+};
+
+async function fetchAppVersion(): Promise<string | null> {
+  try {
+    const res = await fetch('/api/app-version', {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache',
+      },
+    });
+
+    if (!res.ok) {
+      return null;
+    }
+
+    const payload = (await res.json()) as AppVersionPayload;
+
+    if (payload.ok !== true || typeof payload.version !== 'string') {
+      return null;
+    }
+
+    const version = payload.version.trim();
+    return version.length > 0 ? version : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeReadLocalStorage(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeWriteLocalStorage(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // ignore
+  }
+}
+
+function canReloadForUpdate(): boolean {
+  try {
+    const now = Date.now();
+    const lastReloadAt = Number(
+      window.sessionStorage.getItem(UPDATE_RELOAD_GUARD_KEY) || 0
+    );
+
+    if (
+      Number.isFinite(lastReloadAt) &&
+      now - lastReloadAt < RELOAD_GUARD_WINDOW_MS
+    ) {
+      return false;
+    }
+
+    window.sessionStorage.setItem(UPDATE_RELOAD_GUARD_KEY, String(now));
+    return true;
+  } catch {
+    return true;
+  }
 }
 
 /**
@@ -21,80 +83,173 @@ interface IdleWindow extends Window {
 export default function PwaUpdateHandler() {
   const [showToast, setShowToast] = useState(false);
   const hasReloaded = useRef(false);
+  const isCheckingRef = useRef(false);
+  const lastCheckAtRef = useRef(0);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
       return;
     }
 
+    let removeControllerListener: (() => void) | undefined;
+    let removeUpdateFoundListener: (() => void) | undefined;
+
+    const requestSkipWaiting = (
+      registration: ServiceWorkerRegistration | null | undefined
+    ) => {
+      const waitingWorker = registration?.waiting;
+      if (!waitingWorker) return false;
+
+      setShowToast(true);
+      waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+      return true;
+    };
+
     const handleControllerChange = () => {
       if (hasReloaded.current) return;
+      if (!canReloadForUpdate()) return;
+
       hasReloaded.current = true;
       setShowToast(true);
       setTimeout(() => window.location.reload(), 300);
     };
 
-    let removeControllerListener: (() => void) | undefined;
+    let mounted = true;
 
-    const setupUpdateDetection = async () => {
+    navigator.serviceWorker.addEventListener(
+      'controllerchange',
+      handleControllerChange
+    );
+    removeControllerListener = () => {
+      navigator.serviceWorker.removeEventListener(
+        'controllerchange',
+        handleControllerChange
+      );
+    };
+
+    const runUpdateCheck = async (options?: { force?: boolean }) => {
+      const force = options?.force === true;
+      if (!force) {
+        if (
+          Date.now() - lastCheckAtRef.current <
+          MIN_UPDATE_CHECK_INTERVAL_MS
+        ) {
+          return;
+        }
+      }
+      if (isCheckingRef.current) {
+        return;
+      }
+
+      isCheckingRef.current = true;
       try {
         const registration = await navigator.serviceWorker.getRegistration('/');
-        if (!registration) return;
-
-        if (registration.waiting) {
-          setShowToast(true);
-          registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        if (!registration) {
+          return;
         }
 
-        registration.addEventListener('updatefound', () => {
+        const serverVersion = await fetchAppVersion();
+
+        let versionChanged = false;
+        if (serverVersion !== null) {
+          const lastSeen = safeReadLocalStorage(APP_VERSION_STORAGE_KEY);
+          if (!lastSeen) {
+            safeWriteLocalStorage(APP_VERSION_STORAGE_KEY, serverVersion);
+          } else if (lastSeen !== serverVersion) {
+            safeWriteLocalStorage(APP_VERSION_STORAGE_KEY, serverVersion);
+            versionChanged = true;
+          }
+        }
+
+        try {
+          await registration.update();
+        } catch {
+          // ignore
+        }
+
+        requestSkipWaiting(registration);
+
+        if (versionChanged && registration.waiting) {
+          requestSkipWaiting(registration);
+        }
+      } catch {
+        // SW 없음 또는 오류 시 무시
+      } finally {
+        lastCheckAtRef.current = Date.now();
+        isCheckingRef.current = false;
+      }
+    };
+
+    void (async () => {
+      try {
+        const registration = await navigator.serviceWorker.getRegistration('/');
+        if (!mounted) return;
+
+        if (!registration) {
+          void runUpdateCheck({ force: true });
+          return;
+        }
+
+        const onUpdateFound = () => {
           const newWorker = registration.installing;
           if (!newWorker) return;
 
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && registration.waiting) {
-              setShowToast(true);
-              registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+              requestSkipWaiting(registration);
             }
           });
-        });
-
-        const boundHandler = handleControllerChange;
-        navigator.serviceWorker.addEventListener('controllerchange', boundHandler);
-        removeControllerListener = () => {
-          navigator.serviceWorker.removeEventListener('controllerchange', boundHandler);
         };
+
+        registration.addEventListener('updatefound', onUpdateFound);
+        removeUpdateFoundListener = () => {
+          registration.removeEventListener('updatefound', onUpdateFound);
+        };
+
+        if (!mounted) return;
+        void runUpdateCheck({ force: true });
       } catch {
-        // SW 없음 또는 오류 시 무시
+        if (mounted) {
+          void runUpdateCheck({ force: true });
+        }
+      }
+    })();
+
+    const runThrottledCheck = () => {
+      void runUpdateCheck();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        runThrottledCheck();
       }
     };
 
-    const scheduleSetup = () => {
-      const idleWindow = window as IdleWindow;
-
-      if (typeof idleWindow.requestIdleCallback === 'function') {
-        const idleId = idleWindow.requestIdleCallback(() => {
-          void setupUpdateDetection();
-        }, { timeout: 2500 });
-
-        return () => {
-          idleWindow.cancelIdleCallback?.(idleId);
-        };
-      }
-
-      const timeoutId = window.setTimeout(() => {
-        void setupUpdateDetection();
-      }, 1500);
-
-      return () => {
-        window.clearTimeout(timeoutId);
-      };
+    const onPageShow = () => {
+      runThrottledCheck();
     };
 
-    const cancelSchedule = scheduleSetup();
+    const onFocus = () => {
+      runThrottledCheck();
+    };
+
+    const onOnline = () => {
+      runThrottledCheck();
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pageshow', onPageShow);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onOnline);
 
     return () => {
-      cancelSchedule();
+      mounted = false;
       removeControllerListener?.();
+      removeUpdateFoundListener?.();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pageshow', onPageShow);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onOnline);
     };
   }, []);
 
