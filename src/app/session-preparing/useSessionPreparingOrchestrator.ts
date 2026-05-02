@@ -11,11 +11,13 @@ import { claimPublicResultClient } from '@/lib/public-results/useClaimPublicResu
 import { redeemPilotAccessClient } from '@/lib/pilot/redeemPilotAccessClient';
 import { mapPilotRedeemErrorToMessage } from '@/lib/pilot/pilot-redeem-ui-messages';
 
-// Minimum dwell on the success path. Env override allowed, default 10s.
+/** Pilot UX: 최소 체감 대기 (~6.5s). Env로 재정의 가능. */
+const DEFAULT_SESSION_PREPARING_DWELL_MS = 6500;
+
 export const SESSION_PREPARING_DWELL_FLOOR_MS =
   Number(process.env.NEXT_PUBLIC_SESSION_PREPARING_DWELL_MS) > 0
     ? Number(process.env.NEXT_PUBLIC_SESSION_PREPARING_DWELL_MS)
-    : 10000;
+    : DEFAULT_SESSION_PREPARING_DWELL_MS;
 
 type PipelineResult =
   | { ok: true }
@@ -91,6 +93,11 @@ const PRE_COMPLETE_PROGRESS_CAP = 0.92;
 
 // Small frame gap so the 100% transition can paint before redirect.
 const REDIRECT_AFTER_FULL_MS = 80;
+
+function sessionPreparingDevLog(payload: Record<string, unknown>) {
+  if (process.env.NODE_ENV === 'production') return;
+  console.info('[session-preparing]', payload);
+}
 
 type UseSessionPreparingOrchestratorOptions = {
   onReadyRedirect: () => void;
@@ -184,6 +191,12 @@ export function useSessionPreparingOrchestrator({
         return;
       }
 
+      const pipelineStartMs = performance.now();
+      sessionPreparingDevLog({
+        event: 'pipeline_start',
+        dwell_floor_ms: SESSION_PREPARING_DWELL_FLOOR_MS,
+      });
+
       const result = await runPipelineOnce(session.access_token);
       if (dead) return;
 
@@ -193,14 +206,23 @@ export function useSessionPreparingOrchestrator({
         return;
       }
 
-      sessionReadyPerfRef.current = performance.now();
+      const pipelineDoneMs = performance.now();
+      sessionReadyPerfRef.current = pipelineDoneMs;
       const t0 = startPerfRef.current ?? performance.now();
-      const elapsed = sessionReadyPerfRef.current - t0;
-      const remaining = Math.max(0, SESSION_PREPARING_DWELL_FLOOR_MS - elapsed);
+      const elapsedSinceMountMs = pipelineDoneMs - t0;
+      const remaining = Math.max(0, SESSION_PREPARING_DWELL_FLOOR_MS - elapsedSinceMountMs);
+
+      sessionPreparingDevLog({
+        event: 'pipeline_done',
+        elapsed_ms: Math.round(pipelineDoneMs - pipelineStartMs),
+        dwell_floor_ms: SESSION_PREPARING_DWELL_FLOOR_MS,
+        dwell_remaining_ms: Math.round(remaining),
+      });
 
       clearRedirectTimer();
       redirectTimeoutRef.current = window.setTimeout(() => {
         if (dead) return;
+        sessionPreparingDevLog({ event: 'redirect_start' });
         setVisualProgress(1);
         window.setTimeout(() => {
           if (dead) return;
