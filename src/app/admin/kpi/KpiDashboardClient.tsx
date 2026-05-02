@@ -26,6 +26,7 @@ import type {
   KpiSummaryResponse,
 } from '@/lib/analytics/admin-kpi-types';
 import { ADMIN_KPI_AUTH_INTENT } from '@/lib/auth/authHandoffContract';
+import BusinessKpiSummaryModal from './BusinessKpiSummaryModal';
 
 function funnelStepLabelKo(eventName: string, apiLabel: string): string {
   return ADMIN_KPI_FUNNEL_STEP_LABELS_KO[eventName] ?? apiLabel;
@@ -429,6 +430,7 @@ export default function KpiDashboardClient() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [businessSummaryOpen, setBusinessSummaryOpen] = useState(false);
   const [state, setState] = useState<DashboardState>({
     summary: null,
     publicFunnel: null,
@@ -574,6 +576,13 @@ export default function KpiDashboardClient() {
             <p className="mt-2 text-sm text-slate-400">{ADMIN_KPI_SECTION_TITLES.pageSubtitle}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setBusinessSummaryOpen(true)}
+              className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-400"
+            >
+              핵심 KPI 요약
+            </button>
             {[7, 14, 30].map((days) => (
               <button
                 key={days}
@@ -614,6 +623,11 @@ export default function KpiDashboardClient() {
             </Link>
           </div>
         </header>
+
+        <BusinessKpiSummaryModal
+          open={businessSummaryOpen}
+          onClose={() => setBusinessSummaryOpen(false)}
+        />
 
         {error && (
           <div className="rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-200">
