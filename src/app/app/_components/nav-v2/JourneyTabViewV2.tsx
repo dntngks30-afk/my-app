@@ -166,6 +166,7 @@ export function JourneyTabViewV2({
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
   const [sheet, setSheet] = useState<SheetId>(null);
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [journeySummary, setJourneySummary] = useState<JourneySummaryResponse | null>(null);
   const [journeyLoad, setJourneyLoad] = useState<'idle' | 'loading' | 'ok' | 'err'>('idle');
   const journeySummaryRequestedRef = useRef(false);
@@ -199,6 +200,12 @@ export function JourneyTabViewV2({
       cancelled = true;
     };
   }, [isVisible]);
+
+  useEffect(() => {
+    if (sheet !== 'faq') {
+      setOpenFaqIndex(null);
+    }
+  }, [sheet]);
 
   const resetMap = normalizeJourneyResetMapProgress({
     total: totalSessions,
@@ -441,22 +448,46 @@ export function JourneyTabViewV2({
             </div>
             <div className={`space-y-3 text-sm leading-relaxed ${appTabModalBody}`}>
               {sheet === 'faq' && (
-                <div className="space-y-4">
-                  {JOURNEY_FAQ_ITEMS.map((item) => (
-                    <section
-                      key={item.question}
-                      className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
-                    >
-                      <h4 className="text-sm font-semibold text-white">{item.question}</h4>
-                      <div
-                        className={`mt-2 space-y-2 text-sm leading-relaxed ${appTabModalBody}`}
+                <div className="space-y-2">
+                  {JOURNEY_FAQ_ITEMS.map((item, index) => {
+                    const isOpen = openFaqIndex === index;
+
+                    return (
+                      <section
+                        key={item.question}
+                        className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]"
                       >
-                        {item.answer.map((paragraph, idx) => (
-                          <p key={`${item.question}-${idx}`}>{paragraph}</p>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOpenFaqIndex(isOpen ? null : index)
+                          }
+                          className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition hover:bg-white/[0.05]"
+                          aria-expanded={isOpen}
+                        >
+                          <span className="text-sm font-semibold text-white">
+                            {item.question}
+                          </span>
+                          <ChevronRight
+                            className={`size-4 shrink-0 text-white/35 transition-transform ${
+                              isOpen ? 'rotate-90 text-orange-400/80' : ''
+                            }`}
+                            aria-hidden
+                          />
+                        </button>
+
+                        {isOpen && (
+                          <div
+                            className={`space-y-2 border-t border-white/10 px-3 pb-3 pt-2 text-sm leading-relaxed ${appTabModalBody}`}
+                          >
+                            {item.answer.map((paragraph, pIdx) => (
+                              <p key={`${item.question}-${pIdx}`}>{paragraph}</p>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    );
+                  })}
                 </div>
               )}
               {sheet === 'ops' && (
