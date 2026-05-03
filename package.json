@@ -119,6 +119,7 @@
     "test:analytics-kpi-profile-collection": "node scripts/analytics-kpi-profile-collection-smoke.mjs",
     "test:analytics-pilot-attribution-dedupe": "node scripts/analytics-pilot-attribution-dedupe-smoke.mjs",
     "test:analytics-kpi-pilot-filter": "node scripts/analytics-kpi-pilot-filter-smoke.mjs",
+    "test:analytics-kpi-run-attribution": "node scripts/analytics-kpi-run-attribution-smoke.mjs",
     "test:public-test-runs-foundation": "node scripts/public-test-runs-foundation-smoke.mjs",
     "test:public-test-runs-funnel-wiring": "node scripts/public-test-runs-funnel-wiring-smoke.mjs",
     "test:public-test-runs-claim-link": "node scripts/public-test-runs-claim-link-smoke.mjs"

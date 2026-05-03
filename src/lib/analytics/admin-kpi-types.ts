@@ -4,7 +4,7 @@ export type KpiPilotFilter = {
 
 export type KpiResponseFilters = {
   pilot_code?: string;
-  pilot_attribution_mode?: 'direct_or_profile';
+  pilot_attribution_mode?: 'direct_or_profile' | 'runs_first_then_legacy';
 };
 
 export type KpiDemographicBucketRow = {

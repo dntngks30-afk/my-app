@@ -7,6 +7,11 @@ import {
   fetchSignupProfilesForUserIds,
   type SignupProfileRow,
 } from '@/lib/analytics/signup-profile';
+import {
+  decideRunAttributionForRow,
+  fetchPublicTestRunsForPilotAttribution,
+  emptyRunAttributionContext,
+} from '@/lib/analytics/admin-kpi-public-test-runs';
 
 export class InvalidKpiPilotCodeError extends Error {
   constructor() {
@@ -26,6 +31,7 @@ export function resolveKpiPilotCodeFilter(params: URLSearchParams): string | nul
 }
 
 export type KpiPilotFilterableEventRow = {
+  created_at: string;
   event_name: string;
   props: Record<string, unknown> | null;
   anon_id: string | null;
@@ -83,7 +89,7 @@ function collectPilotLookupKeys(rows: KpiPilotFilterableEventRow[]): {
   };
 }
 
-function rowMatchesPilotCode(
+function rowMatchesLegacyPilotCode(
   row: KpiPilotFilterableEventRow,
   pilotCode: string,
   publicMaps: ReturnType<typeof buildPublicProfileMaps>,
@@ -125,9 +131,27 @@ function rowMatchesPilotCode(
 
 export async function filterRowsByPilotCode<T extends KpiPilotFilterableEventRow>(
   rows: T[],
-  pilotCode: string | null
+  pilotCode: string | null,
+  options?: {
+    range?: {
+      fromIso: string;
+      toExclusiveIso: string;
+    };
+  }
 ): Promise<T[]> {
   if (!pilotCode) return rows;
+
+  let runContext = emptyRunAttributionContext(pilotCode);
+  try {
+    runContext = await fetchPublicTestRunsForPilotAttribution({
+      pilotCode,
+      rows,
+      range: options?.range,
+    });
+  } catch (e) {
+    console.warn('[admin-kpi-pilot-filter] run attribution fetch failed; legacy-only', e);
+    runContext = emptyRunAttributionContext(pilotCode);
+  }
 
   const { anonIds, userIds, publicResultIds } = collectPilotLookupKeys(rows);
 
@@ -145,7 +169,18 @@ export async function filterRowsByPilotCode<T extends KpiPilotFilterableEventRow
 
   const out: T[] = [];
   for (const row of rows) {
-    if (rowMatchesPilotCode(row, pilotCode, publicMaps, signupByUser)) {
+    const decision = decideRunAttributionForRow(row, runContext);
+
+    if (decision === 'include') {
+      out.push(row);
+      continue;
+    }
+
+    if (decision === 'exclude') {
+      continue;
+    }
+
+    if (rowMatchesLegacyPilotCode(row, pilotCode, publicMaps, signupByUser)) {
       out.push(row);
     }
   }

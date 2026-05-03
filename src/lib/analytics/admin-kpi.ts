@@ -319,7 +319,7 @@ async function fetchIdentityLinkMap(
 
 function pilotFiltersMeta(pilotCode: string | null | undefined): KpiResponseFilters | undefined {
   if (!pilotCode) return undefined;
-  return { pilot_code: pilotCode, pilot_attribution_mode: 'direct_or_profile' };
+  return { pilot_code: pilotCode, pilot_attribution_mode: 'runs_first_then_legacy' };
 }
 
 async function attachPersonKeysToRows(
@@ -799,7 +799,7 @@ export async function getKpiSummary(
   const todayKst = formatKstDay(new Date());
   const eventNames = allKpiDashboardEventNames();
   const rowsAll = await fetchAnalyticsEvents(supabase, range, eventNames);
-  const rows = await filterRowsByPilotCode(rowsAll, pilotCode ?? null);
+  const rows = await filterRowsByPilotCode(rowsAll, pilotCode ?? null, { range });
 
   const { cohort_steps: pubCohort } = buildCohortAndActivityForFunnel(rows, 'public');
   const { cohort_steps: exCohort } = buildCohortAndActivityForFunnel(rows, 'execution');
@@ -822,7 +822,7 @@ export async function getKpiSummary(
     'activity_counts_are_event_independent_distinct',
     'retention_rates_use_weighted_eligible_cohorts',
     'immature_retention_cohorts_are_excluded_from_rates',
-    ...(pilotCode ? (['kpi_rows_filtered_by_pilot_code_direct_or_profile'] as const) : []),
+    ...(pilotCode ? (['kpi_rows_filtered_by_pilot_code_runs_first_then_legacy'] as const) : []),
   ];
 
   return {
@@ -859,7 +859,7 @@ export async function getKpiFunnel(
   const activityDefs = activityDefinitionsFor(funnel);
   const eventNames = Array.from(new Set(activityDefs.map((item) => item.event_name)));
   const rowsAll = await fetchAnalyticsEvents(supabase, range, eventNames);
-  const rows = await filterRowsByPilotCode(rowsAll, pilotCode ?? null);
+  const rows = await filterRowsByPilotCode(rowsAll, pilotCode ?? null, { range });
   const { cohort_steps, activity_steps } = buildCohortAndActivityForFunnel(rows, funnel);
   const cohortDefs = cohortDefinitionsFor(funnel);
   const baseDef = cohortDefs[0];
@@ -868,7 +868,7 @@ export async function getKpiFunnel(
     ok: true,
     ...buildKpiMeta(
       range,
-      pilotCode ? ['kpi_rows_filtered_by_pilot_code_direct_or_profile'] : undefined
+      pilotCode ? ['kpi_rows_filtered_by_pilot_code_runs_first_then_legacy'] : undefined
     ),
     filters: pilotFiltersMeta(pilotCode ?? null),
     funnel,
@@ -895,13 +895,13 @@ export async function getKpiRetention(
     range,
     Array.from(new Set([...eventNames, ...required]))
   );
-  const rows = await filterRowsByPilotCode(rowsAll, pilotCode ?? null);
+  const rows = await filterRowsByPilotCode(rowsAll, pilotCode ?? null, { range });
 
   return {
     ok: true,
     ...buildKpiMeta(range, [
       'immature_retention_cohorts_are_excluded_from_rates',
-      ...(pilotCode ? ['kpi_rows_filtered_by_pilot_code_direct_or_profile'] : []),
+      ...(pilotCode ? ['kpi_rows_filtered_by_pilot_code_runs_first_then_legacy'] : []),
     ]),
     filters: pilotFiltersMeta(pilotCode ?? null),
     cohort,
@@ -929,13 +929,13 @@ export async function getKpiDetails(
   );
 
   const rowsAll = await fetchAnalyticsEvents(supabase, range, eventNames);
-  const rows = await filterRowsByPilotCode(rowsAll, pilotCode ?? null);
+  const rows = await filterRowsByPilotCode(rowsAll, pilotCode ?? null, { range });
 
   return {
     ok: true,
     ...buildKpiMeta(range, [
       'exercise_index_table_is_event_count_not_person_distinct',
-      ...(pilotCode ? ['kpi_rows_filtered_by_pilot_code_direct_or_profile'] : []),
+      ...(pilotCode ? ['kpi_rows_filtered_by_pilot_code_runs_first_then_legacy'] : []),
     ]),
     filters: pilotFiltersMeta(pilotCode ?? null),
     session_detail: {
@@ -998,7 +998,7 @@ export async function getKpiRawEvents(
   const nextCursor = rows.length > limit ? rows[limit - 1]?.created_at ?? null : null;
   const pageWindow = rows.slice(0, limit);
   const withPersonKey = await attachPersonKeysToRows(supabase, pageWindow);
-  const filtered = await filterRowsByPilotCode(withPersonKey, pilotCode ?? null);
+  const filtered = await filterRowsByPilotCode(withPersonKey, pilotCode ?? null, { range });
 
   const rawLimitations = pilotCode
     ? ['raw_events_time_window_unchanged_pilot_may_reduce_visible_rows']
