@@ -426,6 +426,8 @@ export default function KpiDashboardClient() {
   const [range, setRange] = useState(buildRange(7));
   const [preset, setPreset] = useState<RangePreset>(7);
   const [eventFilter, setEventFilter] = useState('');
+  const [pilotCodeInput, setPilotCodeInput] = useState('');
+  const [pilotCodeFilter, setPilotCodeFilter] = useState('');
   const [authLoading, setAuthLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
@@ -441,7 +443,7 @@ export default function KpiDashboardClient() {
     details: null,
   });
 
-  const loadDashboard = useCallback(async (from: string, to: string, rawEventName?: string) => {
+  const loadDashboard = useCallback(async (from: string, to: string, rawEventName?: string, pilotCode?: string) => {
     setLoading(true);
     setError(null);
 
@@ -455,8 +457,14 @@ export default function KpiDashboardClient() {
       }
 
       const authHeader = { Authorization: `Bearer ${session.access_token}` };
-      const baseParams = { from, to, tz: 'Asia/Seoul' };
-      const [summaryRes, publicRes, executionRes, firstSessionRes, retentionRes, rawEventsRes, detailsRes] = await Promise.all([
+      const baseParams = {
+        from,
+        to,
+        tz: 'Asia/Seoul',
+        ...(pilotCode ? { pilot_code: pilotCode } : {}),
+      };
+      const [summaryRes, publicRes, executionRes, firstSessionRes, retentionRes, rawEventsRes, detailsRes] =
+        await Promise.all([
         fetch(`/api/admin/kpi/summary?${buildQuery(baseParams)}`, { headers: authHeader, cache: 'no-store' }),
         fetch(`/api/admin/kpi/funnel?${buildQuery({ ...baseParams, funnel: 'public' })}`, { headers: authHeader, cache: 'no-store' }),
         fetch(`/api/admin/kpi/funnel?${buildQuery({ ...baseParams, funnel: 'execution' })}`, { headers: authHeader, cache: 'no-store' }),
@@ -470,6 +478,17 @@ export default function KpiDashboardClient() {
         setIsAdmin(false);
         return;
       }
+
+      for (const res of [summaryRes, publicRes, executionRes, firstSessionRes, retentionRes, rawEventsRes, detailsRes]) {
+        if (res.status === 400) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          if (body?.error === 'INVALID_PILOT_CODE') {
+            throw new Error('유효하지 않은 파일럿 코드입니다.');
+          }
+          throw new Error('요청이 거절되었습니다.');
+        }
+      }
+
       if ([summaryRes, publicRes, executionRes, firstSessionRes, retentionRes, rawEventsRes, detailsRes].some((res) => !res.ok)) {
         throw new Error('Failed to load KPI dashboard data');
       }
@@ -500,6 +519,15 @@ export default function KpiDashboardClient() {
     }
   }, [router]);
 
+  const applyPilotFilter = useCallback(() => {
+    setPilotCodeFilter(pilotCodeInput.trim());
+  }, [pilotCodeInput]);
+
+  const resetPilotFilter = useCallback(() => {
+    setPilotCodeInput('');
+    setPilotCodeFilter('');
+  }, []);
+
   useEffect(() => {
     const check = async () => {
       const { session, error: sessionError } = await getSessionSafe();
@@ -528,9 +556,9 @@ export default function KpiDashboardClient() {
 
   useEffect(() => {
     if (isAdmin) {
-      void loadDashboard(range.from, range.to, eventFilter);
+      void loadDashboard(range.from, range.to, eventFilter, pilotCodeFilter);
     }
-  }, [eventFilter, isAdmin, loadDashboard, range.from, range.to]);
+  }, [eventFilter, pilotCodeFilter, isAdmin, loadDashboard, range.from, range.to]);
 
   const topDropoffLabel = useMemo(() => {
     const top = state.summary?.top_dropoff;
@@ -615,6 +643,42 @@ export default function KpiDashboardClient() {
               }}
               className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
             />
+            {pilotCodeFilter ? (
+              <span className="rounded-full border border-emerald-800 bg-emerald-950/60 px-3 py-2 text-xs font-medium text-emerald-200">
+                파일럿: {pilotCodeFilter}
+              </span>
+            ) : null}
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-slate-500">pilot_code</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="pilot_code"
+                  value={pilotCodeInput}
+                  onChange={(e) => setPilotCodeInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') applyPilotFilter();
+                  }}
+                  className="min-w-[140px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500"
+                  aria-label="파일럿 코드 입력"
+                />
+                <button
+                  type="button"
+                  onClick={applyPilotFilter}
+                  className="rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700"
+                >
+                  파일럿 적용
+                </button>
+                <button
+                  type="button"
+                  onClick={resetPilotFilter}
+                  className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
+                >
+                  초기화
+                </button>
+              </div>
+              <p className="max-w-md text-[11px] leading-snug text-slate-500">{ADMIN_KPI_HELP_TEXTS.pilotFilterHelp}</p>
+            </div>
             <Link
               href="/admin"
               className="rounded-lg bg-slate-800 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700"
@@ -1011,6 +1075,14 @@ export default function KpiDashboardClient() {
               {state.summary.range && (
                 <span>범위: {state.summary.range.from} ~ {state.summary.range.to} ({state.summary.range.tz})</span>
               )}
+              {state.summary.filters?.pilot_code ? (
+                <span>
+                  활성 파일럿 필터: {state.summary.filters.pilot_code}
+                  {state.summary.filters.pilot_attribution_mode
+                    ? ` (${state.summary.filters.pilot_attribution_mode})`
+                    : ''}
+                </span>
+              ) : null}
             </div>
             {state.summary.limitations && state.summary.limitations.length > 0 && (
               <ul className="mt-2 space-y-0.5 text-xs text-slate-500">

@@ -12,11 +12,13 @@ import type {
   KpiRange,
   KpiRawEventRow,
   KpiRawEventsResponse,
+  KpiResponseFilters,
   KpiRetentionResponse,
   KpiRetentionRow,
   KpiSummaryResponse,
 } from './admin-kpi-types';
 import { computeKpiDemographicsSummary } from '@/lib/analytics/admin-kpi-demographics';
+import { filterRowsByPilotCode } from '@/lib/analytics/admin-kpi-pilot-filter';
 
 const KST_TZ = 'Asia/Seoul';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -315,6 +317,26 @@ async function fetchIdentityLinkMap(
   return map;
 }
 
+function pilotFiltersMeta(pilotCode: string | null | undefined): KpiResponseFilters | undefined {
+  if (!pilotCode) return undefined;
+  return { pilot_code: pilotCode, pilot_attribution_mode: 'direct_or_profile' };
+}
+
+async function attachPersonKeysToRows(
+  supabase: SupabaseClient,
+  rows: AnalyticsEventRow[]
+): Promise<EventWithPersonKey[]> {
+  const anonIds = Array.from(
+    new Set(rows.map((row) => row.anon_id).filter((value): value is string => Boolean(value)))
+  );
+  const linkMap = await fetchIdentityLinkMap(supabase, anonIds);
+
+  return rows.map((row) => ({
+    ...row,
+    person_key: resolveAnalyticsPersonKeyForKpi(row, linkMap),
+  }));
+}
+
 async function fetchAnalyticsEvents(
   supabase: SupabaseClient,
   range: KpiRange,
@@ -334,19 +356,7 @@ async function fetchAnalyticsEvents(
   }
 
   const rows = (data ?? []) as AnalyticsEventRow[];
-  const anonIds = Array.from(
-    new Set(
-      rows
-        .map((row) => row.anon_id)
-        .filter((value): value is string => Boolean(value))
-    )
-  );
-  const linkMap = await fetchIdentityLinkMap(supabase, anonIds);
-
-  return rows.map((row) => ({
-    ...row,
-    person_key: resolveAnalyticsPersonKeyForKpi(row, linkMap),
-  }));
+  return attachPersonKeysToRows(supabase, rows);
 }
 
 function filterFirstSessionRows(rows: EventWithPersonKey[]): EventWithPersonKey[] {
@@ -783,11 +793,13 @@ function buildExerciseIndexRows(rows: EventWithPersonKey[]) {
 
 export async function getKpiSummary(
   supabase: SupabaseClient,
-  range: KpiRange
+  range: KpiRange,
+  pilotCode?: string | null
 ): Promise<KpiSummaryResponse> {
   const todayKst = formatKstDay(new Date());
   const eventNames = allKpiDashboardEventNames();
-  const rows = await fetchAnalyticsEvents(supabase, range, eventNames);
+  const rowsAll = await fetchAnalyticsEvents(supabase, range, eventNames);
+  const rows = await filterRowsByPilotCode(rowsAll, pilotCode ?? null);
 
   const { cohort_steps: pubCohort } = buildCohortAndActivityForFunnel(rows, 'public');
   const { cohort_steps: exCohort } = buildCohortAndActivityForFunnel(rows, 'execution');
@@ -805,14 +817,18 @@ export async function getKpiSummary(
   const ec = (i: number) => exCohort[i]?.count ?? 0;
   const fc = (i: number) => fsCohort[i]?.count ?? 0;
 
+  const summaryLimitations = [
+    'cohort_funnel_ordered_by_person_timeline',
+    'activity_counts_are_event_independent_distinct',
+    'retention_rates_use_weighted_eligible_cohorts',
+    'immature_retention_cohorts_are_excluded_from_rates',
+    ...(pilotCode ? (['kpi_rows_filtered_by_pilot_code_direct_or_profile'] as const) : []),
+  ];
+
   return {
     ok: true,
-    ...buildKpiMeta(range, [
-      'cohort_funnel_ordered_by_person_timeline',
-      'activity_counts_are_event_independent_distinct',
-      'retention_rates_use_weighted_eligible_cohorts',
-      'immature_retention_cohorts_are_excluded_from_rates',
-    ]),
+    ...buildKpiMeta(range, [...summaryLimitations]),
+    filters: pilotFiltersMeta(pilotCode ?? null),
     cards: {
       landing_visitors,
       test_start_clickers,
@@ -837,18 +853,24 @@ export async function getKpiSummary(
 export async function getKpiFunnel(
   supabase: SupabaseClient,
   range: KpiRange,
-  funnel: KpiFunnelKey
+  funnel: KpiFunnelKey,
+  pilotCode?: string | null
 ): Promise<KpiFunnelResponse> {
   const activityDefs = activityDefinitionsFor(funnel);
   const eventNames = Array.from(new Set(activityDefs.map((item) => item.event_name)));
-  const rows = await fetchAnalyticsEvents(supabase, range, eventNames);
+  const rowsAll = await fetchAnalyticsEvents(supabase, range, eventNames);
+  const rows = await filterRowsByPilotCode(rowsAll, pilotCode ?? null);
   const { cohort_steps, activity_steps } = buildCohortAndActivityForFunnel(rows, funnel);
   const cohortDefs = cohortDefinitionsFor(funnel);
   const baseDef = cohortDefs[0];
 
   return {
     ok: true,
-    ...buildKpiMeta(range),
+    ...buildKpiMeta(
+      range,
+      pilotCode ? ['kpi_rows_filtered_by_pilot_code_direct_or_profile'] : undefined
+    ),
+    filters: pilotFiltersMeta(pilotCode ?? null),
     funnel,
     cohort_base_label: baseDef.label,
     cohort_base_event_name: baseDef.event_name,
@@ -860,22 +882,28 @@ export async function getKpiFunnel(
 export async function getKpiRetention(
   supabase: SupabaseClient,
   range: KpiRange,
-  cohort: KpiCohortKey
+  cohort: KpiCohortKey,
+  pilotCode?: string | null
 ): Promise<KpiRetentionResponse> {
   const todayKst = formatKstDay(new Date());
   const eventNames = Array.from(RETURN_EVENT_SET);
   const required = cohort === 'app_home'
     ? [ANALYTICS_EVENTS.APP_HOME_VIEWED]
     : [ANALYTICS_EVENTS.SESSION_COMPLETE_SUCCESS];
-  const rows = await fetchAnalyticsEvents(
+  const rowsAll = await fetchAnalyticsEvents(
     supabase,
     range,
     Array.from(new Set([...eventNames, ...required]))
   );
+  const rows = await filterRowsByPilotCode(rowsAll, pilotCode ?? null);
 
   return {
     ok: true,
-    ...buildKpiMeta(range, ['immature_retention_cohorts_are_excluded_from_rates']),
+    ...buildKpiMeta(range, [
+      'immature_retention_cohorts_are_excluded_from_rates',
+      ...(pilotCode ? ['kpi_rows_filtered_by_pilot_code_direct_or_profile'] : []),
+    ]),
+    filters: pilotFiltersMeta(pilotCode ?? null),
     cohort,
     rows: getRetentionCohortRows(rows, cohort, todayKst),
   };
@@ -883,7 +911,8 @@ export async function getKpiRetention(
 
 export async function getKpiDetails(
   supabase: SupabaseClient,
-  range: KpiRange
+  range: KpiRange,
+  pilotCode?: string | null
 ): Promise<KpiDetailsResponse> {
   const eventNames = Array.from(
     new Set([
@@ -899,11 +928,16 @@ export async function getKpiDetails(
     ])
   );
 
-  const rows = await fetchAnalyticsEvents(supabase, range, eventNames);
+  const rowsAll = await fetchAnalyticsEvents(supabase, range, eventNames);
+  const rows = await filterRowsByPilotCode(rowsAll, pilotCode ?? null);
 
   return {
     ok: true,
-    ...buildKpiMeta(range, ['exercise_index_table_is_event_count_not_person_distinct']),
+    ...buildKpiMeta(range, [
+      'exercise_index_table_is_event_count_not_person_distinct',
+      ...(pilotCode ? ['kpi_rows_filtered_by_pilot_code_direct_or_profile'] : []),
+    ]),
+    filters: pilotFiltersMeta(pilotCode ?? null),
     session_detail: {
       steps: buildActivitySteps(filterFirstSessionRows(rows), SESSION_DETAIL_DEFINITION),
       close_before_complete_count: distinctCountForEvent(rows, ANALYTICS_EVENTS.EXERCISE_PLAYER_CLOSED),
@@ -930,7 +964,8 @@ export async function getKpiRawEvents(
   range: KpiRange,
   eventName: string | null,
   limitInput: string | null,
-  cursor: string | null
+  cursor: string | null,
+  pilotCode?: string | null
 ): Promise<KpiRawEventsResponse> {
   const limit = Math.min(
     RAW_EVENTS_MAX_LIMIT,
@@ -939,7 +974,9 @@ export async function getKpiRawEvents(
 
   let query = supabase
     .from('analytics_events')
-    .select('id, created_at, event_name, source, anon_id, user_id, route_path, route_group, kst_day, props')
+    .select(
+      'id, created_at, event_name, source, anon_id, user_id, public_result_id, route_path, route_group, kst_day, props, session_number'
+    )
     .gte('created_at', range.fromIso)
     .lt('created_at', range.toExclusiveIso)
     .order('created_at', { ascending: false })
@@ -959,12 +996,19 @@ export async function getKpiRawEvents(
 
   const rows = (data ?? []) as Array<AnalyticsEventRow & { props: Record<string, unknown> | null }>;
   const nextCursor = rows.length > limit ? rows[limit - 1]?.created_at ?? null : null;
-  const sliced = rows.slice(0, limit);
+  const pageWindow = rows.slice(0, limit);
+  const withPersonKey = await attachPersonKeysToRows(supabase, pageWindow);
+  const filtered = await filterRowsByPilotCode(withPersonKey, pilotCode ?? null);
+
+  const rawLimitations = pilotCode
+    ? ['raw_events_time_window_unchanged_pilot_may_reduce_visible_rows']
+    : undefined;
 
   return {
     ok: true,
-    ...buildKpiMeta(range),
-    events: sliced.map((row): KpiRawEventRow => ({
+    ...buildKpiMeta(range, rawLimitations),
+    filters: pilotFiltersMeta(pilotCode ?? null),
+    events: filtered.map((row): KpiRawEventRow => ({
       id: row.id,
       created_at: row.created_at,
       event_name: row.event_name,

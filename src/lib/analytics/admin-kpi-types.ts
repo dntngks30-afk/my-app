@@ -1,3 +1,12 @@
+export type KpiPilotFilter = {
+  pilot_code: string | null;
+};
+
+export type KpiResponseFilters = {
+  pilot_code?: string;
+  pilot_attribution_mode?: 'direct_or_profile';
+};
+
 export type KpiDemographicBucketRow = {
   key: string;
   label: string;
@@ -72,6 +81,7 @@ export type KpiSummaryResponse = {
   range: { from: string; to: string; tz: string; range_clamped?: boolean };
   generated_at: string;
   source: 'raw_events' | 'daily_rollup' | 'mixed';
+  filters?: KpiResponseFilters;
   limitations?: string[];
   cards: {
     landing_visitors: number;
@@ -123,6 +133,7 @@ export type KpiFunnelResponse = {
   range: { from: string; to: string; tz: string; range_clamped?: boolean };
   generated_at: string;
   source: 'raw_events' | 'daily_rollup' | 'mixed';
+  filters?: KpiResponseFilters;
   limitations?: string[];
   funnel: KpiFunnelKey;
   cohort_base_label: string;
@@ -156,6 +167,7 @@ export type KpiRetentionResponse = {
   range: { from: string; to: string; tz: string; range_clamped?: boolean };
   generated_at: string;
   source: 'raw_events' | 'daily_rollup' | 'mixed';
+  filters?: KpiResponseFilters;
   limitations?: string[];
   cohort: KpiCohortKey;
   rows: KpiRetentionRow[];
@@ -179,6 +191,7 @@ export type KpiRawEventsResponse = {
   range: { from: string; to: string; tz: string; range_clamped?: boolean };
   generated_at: string;
   source: 'raw_events' | 'daily_rollup' | 'mixed';
+  filters?: KpiResponseFilters;
   limitations?: string[];
   events: KpiRawEventRow[];
   nextCursor: string | null;
@@ -207,6 +220,7 @@ export type KpiDetailsResponse = {
   range: { from: string; to: string; tz: string; range_clamped?: boolean };
   generated_at: string;
   source: 'raw_events' | 'daily_rollup' | 'mixed';
+  filters?: KpiResponseFilters;
   limitations?: string[];
   session_detail: {
     steps: KpiActivityStep[];

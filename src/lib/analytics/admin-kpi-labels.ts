@@ -160,6 +160,8 @@ export const ADMIN_KPI_HELP_TEXTS = {
     '이 영역은 이벤트별 독립 집계입니다. 숫자가 커 보여도 순차 전환율로 해석하지 마세요.',
   cohortSequentialFunnel:
     '순차 코호트 퍼널은 테스트 시작·실행 클릭·첫 세션 생성처럼 기준 이벤트를 친 사람만 분모로 두고, 각 다음 단계는 그 사람의 타임라인에서 이전 단계 시각 이후에 발생한 경우만 도달로 칩니다.',
+  pilotFilterHelp:
+    '파일럿 코드는 이벤트 props, 무료테스트 프로필(public_test_profiles), 회원가입 프로필(signup_profiles)을 함께 사용해 필터링합니다.',
 } as const;
 
 /** 순차 코호트 퍼널 카드 부제 */
