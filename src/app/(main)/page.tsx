@@ -28,6 +28,7 @@ import {
   getPilotCodeFromCurrentUrl,
   savePilotContextFromCode,
 } from '@/lib/pilot/pilot-context';
+import { startNewPublicTestRunClient } from '@/lib/public-test-runs/client';
 
 type ReadinessLoadState = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -185,6 +186,17 @@ export default function LandingPage() {
         route_group: 'public_landing',
       }
     );
+
+    void startNewPublicTestRunClient({
+      entryPath:
+        typeof window !== 'undefined'
+          ? window.location.pathname + window.location.search
+          : '/',
+      entryReferrer:
+        typeof document !== 'undefined'
+          ? document.referrer || null
+          : null,
+    });
 
     startPendingRef.current = true;
     setStartPending(true);

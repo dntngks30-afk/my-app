@@ -19,6 +19,7 @@ import {
   saveSurveySessionCache,
 } from '@/lib/public/survey-session-cache';
 import { flushPendingPublicTestProfile } from '@/lib/analytics/publicProfileClient';
+import { markPublicTestRunMilestoneClient } from '@/lib/public-test-runs/client';
 
 type AnswerValue = 0 | 1 | 2 | 3 | 4;
 type AnswersById = Record<string, AnswerValue | undefined>;
@@ -126,6 +127,7 @@ export default function MovementTestSurveyPage() {
         dedupe_key: `survey_started:${runState.startedAt}`,
       }
     );
+    void markPublicTestRunMilestoneClient('survey_started');
   }, [ready, runState.answersById, runState.startedAt]);
 
   const question = QUESTIONS_V2[step];
@@ -152,6 +154,7 @@ export default function MovementTestSurveyPage() {
             dedupe_key: `survey_completed:${startedAt}`,
           }
         );
+        void markPublicTestRunMilestoneClient('survey_completed');
         saveSurveySessionCache({
           version: 'v2',
           isCompleted: true,

@@ -10,6 +10,7 @@ import { withPilotAnalyticsProps } from '@/lib/analytics/client-context';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import RefineBridge from '@/components/stitch/bridge/RefineBridge';
 import { loadCompletedSurveyAnswersCache } from '@/lib/public/survey-session-cache';
+import { markPublicTestRunRefineChoiceClient } from '@/lib/public-test-runs/client';
 
 export default function RefineBridgePage() {
   const router = useRouter();
@@ -35,6 +36,7 @@ export default function RefineBridgePage() {
         route_group: 'refine_bridge',
       }
     );
+    void markPublicTestRunRefineChoiceClient('baseline');
     router.push('/movement-test/baseline');
   };
 
@@ -49,6 +51,7 @@ export default function RefineBridgePage() {
         route_group: 'refine_bridge',
       }
     );
+    void markPublicTestRunRefineChoiceClient('camera');
     router.push('/movement-test/camera');
   };
 

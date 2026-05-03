@@ -49,6 +49,7 @@ import {
   PublicResultValidationError,
 } from '@/lib/public-results/createPublicResult';
 import { linkPublicTestProfileToResult } from '@/lib/analytics/public-test-profile';
+import { linkPublicTestRunToResult } from '@/lib/public-test-runs/server';
 import type { UnifiedDeepResultV2 } from '@/lib/result/deep-result-v2-contract';
 
 export async function POST(request: NextRequest) {
@@ -58,9 +59,12 @@ export async function POST(request: NextRequest) {
       result?: unknown;
       stage?: unknown;
       sourceInputs?: unknown;
+      publicTestRunId?: unknown;
+      publicTestRunAnonId?: unknown;
     };
 
-    const { anonId, result, stage, sourceInputs } = body;
+    const { anonId, result, stage, sourceInputs, publicTestRunId, publicTestRunAnonId } =
+      body;
 
     // 필수 필드 검증
     if (!anonId || typeof anonId !== 'string' || anonId.trim() === '') {
@@ -111,6 +115,24 @@ export async function POST(request: NextRequest) {
       }
     } catch (error) {
       console.warn('[public-test-profile] failed to link public_result_id', error);
+    }
+
+    try {
+      if (
+        typeof publicTestRunId === 'string' &&
+        typeof publicTestRunAnonId === 'string' &&
+        publicTestRunAnonId.trim() === trimmedAnonId &&
+        output?.id
+      ) {
+        await linkPublicTestRunToResult({
+          runId: publicTestRunId,
+          anonId: trimmedAnonId,
+          publicResultId: output.id,
+          resultStage: stage,
+        });
+      }
+    } catch (error) {
+      console.warn('[public-test-runs] failed to link public_result_id', error);
     }
 
     return NextResponse.json(

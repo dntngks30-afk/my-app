@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * FLOW-01 — Public Result 저장 클라이언트 헬퍼
  *
@@ -18,6 +20,7 @@
  * @see src/app/api/public-results/route.ts
  */
 
+import { getActivePublicTestRunForResult } from '@/lib/public-test-runs/client';
 import { getOrCreateAnonId } from './anon-id';
 import { savePublicResultHandoff } from './public-result-handoff';
 import type { UnifiedDeepResultV2 } from '@/lib/result/deep-result-v2-contract';
@@ -77,6 +80,8 @@ export async function persistPublicResult(
       return { ok: false, reason: 'anon_id_unavailable' };
     }
 
+    const activeRun = getActivePublicTestRunForResult();
+
     // 인증 토큰 선택적 첨부 (있으면 user_id 기록 가능)
     const headers: HeadersInit = { 'Content-Type': 'application/json' };
 
@@ -88,6 +93,12 @@ export async function persistPublicResult(
         result,
         stage,
         sourceInputs,
+        ...(activeRun
+          ? {
+              publicTestRunId: activeRun.publicTestRunId,
+              publicTestRunAnonId: activeRun.publicTestRunAnonId,
+            }
+          : {}),
       }),
     });
 
