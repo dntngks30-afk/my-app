@@ -44,6 +44,7 @@ import {
   ClaimNotFoundError,
   ClaimConflictError,
 } from '@/lib/public-results/claimPublicResult';
+import { linkPublicTestRunToUserByPublicResult } from '@/lib/public-test-runs/server';
 
 export async function POST(
   request: NextRequest,
@@ -92,6 +93,20 @@ export async function POST(
       userId,
       anonId,
     });
+
+    try {
+      const linkOutcome = await linkPublicTestRunToUserByPublicResult({
+        publicResultId: output.id,
+        userId,
+        claimedAtIso: output.claimedAt,
+      });
+
+      if (!linkOutcome.ok) {
+        console.warn('[public-test-runs] claim user link skipped', linkOutcome.reason);
+      }
+    } catch (error) {
+      console.warn('[public-test-runs] failed to link user_id after claim', error);
+    }
 
     void logAnalyticsEvent({
       event_name: 'public_result_claim_success',
