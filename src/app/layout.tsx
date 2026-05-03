@@ -58,9 +58,9 @@ export const metadata: Metadata = {
     "홈 트레이닝",
     "PWA",
   ],
-  authors: [{ name: "MOVE RE" }],
-  creator: "MOVE RE",
-  publisher: "MOVE RE",
+  authors: [{ name: "무브리" }],
+  creator: "무브리",
+  publisher: "무브리",
   formatDetection: {
     email: false,
     address: false,
