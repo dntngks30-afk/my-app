@@ -7,11 +7,18 @@ const eslintConfig = defineConfig([
   ...nextTs,
   // Override default ignores of eslint-config-next.
   globalIgnores([
-    // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "node_modules/**",
+    "coverage/**",
+    "artifacts/**",
+    ".vercel/**",
+    "public/sw.js",
+    "public/workbox-*.js",
+    "public/worker-*.js",
+    "supabase/migrations/**",
   ]),
 ]);
 

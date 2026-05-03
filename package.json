@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
+    "test:lint-command": "node scripts/lint-command-smoke.mjs",
     "test:deep-golden": "npx tsx scripts/deep-v2-golden.mjs",
     "test:free-survey-evidence-parity": "npx tsx scripts/free-survey-evidence-parity-smoke.mjs",
     "test:deep-v3-smoke": "npx tsx scripts/deep-v3-smoke.mjs",
@@ -160,6 +161,8 @@
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
     "dotenv-cli": "^11.0.0",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.4",
     "typescript": "5.9.3"
   }
 }
