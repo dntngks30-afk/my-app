@@ -24,11 +24,14 @@ const notoSerifKR = Noto_Serif_KR({
 
 const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://my-app-sigma-seven-96.vercel.app";
 const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
-const kakaoOgImageAbs = `${normalizedBaseUrl}/og/kakao2.jpg`;
+
+const ogTitle = "MOVE RE - 내 몸 상태를 분석하고 리셋 운동을 시작하세요";
+const ogDescription =
+  "1분 테스트로 내 몸의 반복 패턴을 확인하고, 나에게 맞는 리셋 세션을 시작해보세요.";
 
 export const viewport: Viewport = {
-  themeColor: '#000000',
-  width: 'device-width',
+  themeColor: "#050814",
+  width: "device-width",
   initialScale: 1,
   maximumScale: 1,
 };
@@ -36,63 +39,60 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
-    title: 'Move Re',
-    statusBarStyle: 'black-translucent',
+    title: "MOVE RE",
+    statusBarStyle: "black-translucent",
   },
-  title: "사진 2장으로 끝내는 맞춤 자세 개선 | NASM 전문가 솔루션",
-  description: "목과 어깨 자세가 불편하신가요? NASM-CES 전문가가 사진 2장으로 당신만을 위한 4단계 운동 루틴을 24시간 내에 보내드립니다.",
+  applicationName: "MOVE RE",
+  title: {
+    default: "MOVE RE | 내 몸 상태 기반 리셋 운동",
+    template: "%s | MOVE RE",
+  },
+  description: ogDescription,
   keywords: [
-    "자세 개선",
-    "목 자세",
-    "어깨 자세",
-    "자세 분석",
-    "운동 가이드",
-    "NASM",
-    "NASM-CES",
+    "MOVE RE",
+    "리셋 운동",
+    "움직임 테스트",
     "맞춤 운동",
-    "체형 분석",
-    "운동 전문가",
-    "온라인 PT",
-    "운동 루틴",
-    "바른 자세",
-    "체형 분석 서비스",
+    "몸 상태",
+    "자세",
+    "홈 트레이닝",
+    "PWA",
   ],
-  authors: [{ name: "포스처랩" }],
-  creator: "포스처랩",
-  publisher: "포스처랩",
+  authors: [{ name: "MOVE RE" }],
+  creator: "MOVE RE",
+  publisher: "MOVE RE",
   formatDetection: {
     email: false,
     address: false,
     telephone: false,
   },
-  metadataBase: new URL(baseUrl),
+  metadataBase: new URL(normalizedBaseUrl),
   alternates: {
     canonical: "/",
   },
 
-openGraph: {
-  type: "website",
-  locale: "ko_KR",
-  url: normalizedBaseUrl,
-  title: "무료 움직임 테스트",
-  description: "당신의 움직임은 어떤 동물과 닮았나요?",
-  siteName: "포스처랩 - 자세 개선 운동 전문",
-  images: [
-    {
-      url: kakaoOgImageAbs,
-      width: 1200,
-      height: 630,
-      alt: "무료 움직임 테스트",
-    },
-  ],
-},
-twitter: {
-  card: "summary_large_image",
-  title: "무료 움직임 테스트",
-  description: "당신의 움직임은 어떤 동물과 닮았나요?",
-  images: [kakaoOgImageAbs],
-  creator: "@posturelab",
-},
+  openGraph: {
+    type: "website",
+    locale: "ko_KR",
+    url: normalizedBaseUrl,
+    title: ogTitle,
+    description: ogDescription,
+    siteName: "MOVE RE",
+    images: [
+      {
+        url: "/og/move-re-og.png",
+        width: 1200,
+        height: 630,
+        alt: "MOVE RE 내 몸 상태 기반 리셋 운동",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: ogTitle,
+    description: ogDescription,
+    images: ["/og/move-re-og.png"],
+  },
   robots: {
     index: true,
     follow: true,
@@ -130,9 +130,6 @@ export default function RootLayout({
         ['--font-display-nanumPen' as string]: 'var(--font-serif-noto)',
       }}
     >
-      <head>
-        <link rel="icon" href="/favicon.ico" />
-      </head>
       <body className="antialiased">
         <PresetProvider>
           <FontSwitcher />

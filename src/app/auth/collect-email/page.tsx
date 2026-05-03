@@ -2,7 +2,9 @@ import { Suspense } from 'react';
 import CollectEmailClient from './CollectEmailClient';
 
 export const metadata = {
-  title: '이메일 입력 · MOVE RE',
+  title: {
+    absolute: '이메일 입력 · MOVE RE',
+  },
 };
 
 export default function CollectEmailPage() {
