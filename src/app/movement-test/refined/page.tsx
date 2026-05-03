@@ -23,6 +23,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { withPilotAnalyticsProps } from '@/lib/analytics/client-context';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import { Starfield } from '@/components/landing/Starfield';
 import { MoveReFullscreenScreen } from '@/components/public-brand';
@@ -177,12 +178,12 @@ export default function RefinedResultPage() {
     setResultViewKey(viewKey);
     trackEvent(
       'result_viewed',
-      {
+      withPilotAnalyticsProps({
         route_group: 'public_result',
         result_stage: 'refined',
         public_result_id: publicResultIdForBridge,
         source_mode: resultSourceMode,
-      },
+      }),
       {
         route_group: 'public_result',
         public_result_id: publicResultIdForBridge ?? undefined,
@@ -197,12 +198,12 @@ export default function RefinedResultPage() {
   const handleExecutionCtaClick = useCallback(() => {
     trackEvent(
       'execution_cta_clicked',
-      {
+      withPilotAnalyticsProps({
         route_group: 'public_result',
         result_stage: 'refined',
         public_result_id: publicResultIdForBridge,
         target_path: '/execution/start',
-      },
+      }),
       {
         route_group: 'public_result',
         public_result_id: publicResultIdForBridge ?? undefined,

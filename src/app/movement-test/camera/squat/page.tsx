@@ -8,6 +8,7 @@ import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } fr
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
+import { withPilotAnalyticsProps } from '@/lib/analytics/client-context';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import {
   StitchCameraGlassPanel,
@@ -298,10 +299,13 @@ export default function CameraSquatPage() {
   const nextPath = getNextStepPath(STEP_ID);
 
   useEffect(() => {
-    trackEvent('camera_step_started', {
-      route_group: 'camera_refine',
-      movement_key: STEP_ID,
-    });
+    trackEvent(
+      'camera_step_started',
+      withPilotAnalyticsProps({
+        route_group: 'camera_refine',
+        movement_key: STEP_ID,
+      })
+    );
   }, []);
 
   useLayoutEffect(() => {
@@ -327,13 +331,16 @@ export default function CameraSquatPage() {
 
   useEffect(() => {
     if (!passLatched) return;
-    trackEvent('camera_step_completed', {
-      route_group: 'camera_refine',
-      movement_key: STEP_ID,
-      pass_latched: true,
-      retry_count: previewKey,
-      evidence_quality: gate.guardrail.captureQuality ?? null,
-    });
+    trackEvent(
+      'camera_step_completed',
+      withPilotAnalyticsProps({
+        route_group: 'camera_refine',
+        movement_key: STEP_ID,
+        pass_latched: true,
+        retry_count: previewKey,
+        evidence_quality: gate.guardrail.captureQuality ?? null,
+      })
+    );
   }, [gate.guardrail.captureQuality, passLatched, previewKey]);
   const setupFramingHint = useMemo(() => getSetupFramingHint(landmarks), [landmarks]);
   const liveReadinessSummary = useMemo(

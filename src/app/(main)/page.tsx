@@ -11,6 +11,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import {
+  buildClientScopedDedupeKey,
+  withPilotAnalyticsProps,
+} from '@/lib/analytics/client-context';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import { FUNNEL_KEY } from '@/lib/public/intro-funnel';
 import StitchLanding from '@/components/stitch/landing/StitchLanding';
@@ -136,16 +140,18 @@ export default function LandingPage() {
     if (landingTrackedRef.current) return;
     landingTrackedRef.current = true;
 
+    const kstDay = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Asia/Seoul',
+    }).format(new Date());
+
     trackEvent(
       'landing_viewed',
+      withPilotAnalyticsProps({
+        route_group: 'public_landing',
+      }),
       {
         route_group: 'public_landing',
-      },
-      {
-        route_group: 'public_landing',
-        dedupe_key: `landing_viewed:${new Intl.DateTimeFormat('sv-SE', {
-          timeZone: 'Asia/Seoul',
-        }).format(new Date())}`,
+        dedupe_key: buildClientScopedDedupeKey(['landing_viewed', kstDay]),
       }
     );
   }, []);
@@ -170,12 +176,11 @@ export default function LandingPage() {
 
     trackEvent(
       'public_cta_clicked',
-      {
+      withPilotAnalyticsProps({
         route_group: 'public_landing',
         target_path: '/intro/welcome',
         entry_mode: 'survey',
-        pilot_code_present: Boolean(pilotCodeThisVisitRef.current),
-      },
+      }),
       {
         route_group: 'public_landing',
       }

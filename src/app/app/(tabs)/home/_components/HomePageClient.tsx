@@ -3,6 +3,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  buildClientScopedDedupeKey,
+  withPilotAnalyticsProps,
+} from '@/lib/analytics/client-context';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import { getSessionSafe } from '@/lib/supabase';
 import { invalidateActiveCache } from '@/lib/session/active-cache';
@@ -562,20 +566,26 @@ export default function HomePageClient({
 
     appHomeTrackedRef.current = true;
     const activeSessionNumber = resolveActiveSessionNumber(activePlan);
+    const kstDay = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Asia/Seoul',
+    }).format(new Date());
+
     trackEvent(
       'app_home_viewed',
-      {
+      withPilotAnalyticsProps({
         route_group: 'app_home',
         active_session_number: activeSessionNumber,
         completed_sessions: sessionProgress?.completed_sessions ?? null,
         total_sessions: sessionProgress?.total_sessions ?? null,
-      },
+      }),
       {
         route_group: 'app_home',
         session_number: activeSessionNumber ?? undefined,
-        dedupe_key: `app_home_viewed:${new Intl.DateTimeFormat('sv-SE', {
-          timeZone: 'Asia/Seoul',
-        }).format(new Date())}:${activeSessionNumber ?? 'none'}`,
+        dedupe_key: buildClientScopedDedupeKey([
+          'app_home_viewed',
+          kstDay,
+          activeSessionNumber ?? 'none',
+        ]),
       }
     );
   }, [activePlan, error, isVisible, loading, sessionProgress]);
@@ -599,17 +609,23 @@ export default function HomePageClient({
 
     trackEvent(
       'reset_map_opened',
-      {
+      withPilotAnalyticsProps({
         route_group: 'reset_map',
         active_session_number: activeSessionNumber,
         completed_sessions: sessionProgress?.completed_sessions ?? null,
         total_sessions: sessionProgress?.total_sessions ?? null,
-      },
+      }),
       {
         route_group: 'reset_map',
         session_number: activeSessionNumber ?? undefined,
         reset_map_flow_id: resetMapFlowId ?? undefined,
-        dedupe_key: `reset_map_opened:${trackKey}`,
+        dedupe_key: buildClientScopedDedupeKey([
+          'reset_map_opened',
+          resetMapFlowId ?? 'no-flow',
+          activeSessionNumber ?? 'none',
+          sessionProgress?.completed_sessions ?? 'none',
+          sessionProgress?.total_sessions ?? 'none',
+        ]),
       }
     );
   }, [activePlan, error, isRailNotReady, isVisible, loading, mapV2, resetMapFlowId, sessionProgress, totalSessionsOverride]);

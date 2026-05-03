@@ -5,6 +5,7 @@
  */
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { withPilotAnalyticsProps } from '@/lib/analytics/client-context';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import { CAMERA_SQUAT_PATH, resetCameraTest, saveCameraTest } from '@/lib/public/camera-test';
 import { clearCameraResult } from '@/lib/camera/camera-result';
@@ -19,10 +20,13 @@ export default function CameraEntryPage() {
         ? 'refine_bridge'
         : 'direct';
 
-    trackEvent('camera_flow_started', {
-      route_group: 'camera_refine',
-      entry_from: entryFrom,
-    });
+    trackEvent(
+      'camera_flow_started',
+      withPilotAnalyticsProps({
+        route_group: 'camera_refine',
+        entry_from: entryFrom,
+      })
+    );
   }, []);
 
   const handleStart = () => {

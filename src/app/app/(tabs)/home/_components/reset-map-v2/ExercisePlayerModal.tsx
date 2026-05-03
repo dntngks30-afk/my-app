@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { X, Plus, Minus, Trash2 } from 'lucide-react';
+import {
+  buildClientScopedDedupeKey,
+  withPilotAnalyticsProps,
+} from '@/lib/analytics/client-context';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import { getSessionSafe } from '@/lib/supabase';
 import type { ExerciseItem } from './planJsonAdapter';
@@ -108,16 +112,21 @@ function ModalInner({
   useEffect(() => {
     trackEvent(
       'exercise_player_opened',
-      {
+      withPilotAnalyticsProps({
         route_group: 'exercise_player',
         session_number: sessionNumber ?? null,
         exercise_index: exerciseIndex ?? null,
         template_id: item.templateId ?? null,
-      },
+      }),
       {
         route_group: 'exercise_player',
         session_number: sessionNumber ?? undefined,
-        dedupe_key: `exercise_player_opened:${sessionNumber ?? 'none'}:${exerciseIndex ?? 'none'}:${item.templateId}`,
+        dedupe_key: buildClientScopedDedupeKey([
+          'exercise_player_opened',
+          sessionNumber ?? 'none',
+          exerciseIndex ?? 'none',
+          item.templateId,
+        ]),
       }
     );
   }, [exerciseIndex, item.templateId, sessionNumber]);

@@ -7,6 +7,7 @@
  */
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { withPilotAnalyticsProps } from '@/lib/analytics/client-context';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import { QUESTIONS_V2 } from '@/features/movement-test/v2';
 import type { TestAnswerValue } from '@/features/movement-test/v2';
@@ -115,11 +116,11 @@ export default function MovementTestSurveyPage() {
 
     trackEvent(
       'survey_started',
-      {
+      withPilotAnalyticsProps({
         route_group: 'public_survey',
         total_questions: TOTAL,
         resumed: answeredCount > 0,
-      },
+      }),
       {
         route_group: 'public_survey',
         dedupe_key: `survey_started:${runState.startedAt}`,
@@ -141,11 +142,11 @@ export default function MovementTestSurveyPage() {
           : null;
         trackEvent(
           'survey_completed',
-          {
+          withPilotAnalyticsProps({
             route_group: 'public_survey',
             total_questions: TOTAL,
             duration_ms: Number.isFinite(durationMs) ? durationMs : null,
-          },
+          }),
           {
             route_group: 'public_survey',
             dedupe_key: `survey_completed:${startedAt}`,

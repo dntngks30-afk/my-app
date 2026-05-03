@@ -1,6 +1,10 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
+import {
+  buildClientScopedDedupeKey,
+  withPilotAnalyticsProps,
+} from '@/lib/analytics/client-context'
 import { trackEvent } from '@/lib/analytics/trackEvent'
 import { X, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import type { ExerciseItem } from './planJsonAdapter'
@@ -324,16 +328,20 @@ function PanelInner({
   useEffect(() => {
     trackEvent(
       'session_panel_opened',
-      {
+      withPilotAnalyticsProps({
         route_group: 'session_panel',
         session_number: sessionId,
         status,
         exercise_count: exercises?.length ?? null,
-      },
+      }),
       {
         route_group: 'session_panel',
         session_number: sessionId,
-        dedupe_key: `session_panel_opened:${sessionId}:${status}`,
+        dedupe_key: buildClientScopedDedupeKey([
+          'session_panel_opened',
+          sessionId,
+          status,
+        ]),
       }
     )
   }, [exercises, sessionId, status])

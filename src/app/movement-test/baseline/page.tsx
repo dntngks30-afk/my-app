@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { withPilotAnalyticsProps } from '@/lib/analytics/client-context';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import { StitchSceneShell } from '@/components/stitch/shared/SceneShell';
 import { buildFreeSurveyBaselineResult } from '@/lib/deep-v2/builders/build-free-survey-baseline';
@@ -116,12 +117,12 @@ export default function BaselinePage() {
     setResultViewKey(viewKey);
     trackEvent(
       'result_viewed',
-      {
+      withPilotAnalyticsProps({
         route_group: 'public_result',
         result_stage: 'baseline',
         public_result_id: publicResultIdForBridge,
         source_mode: resultSourceMode,
-      },
+      }),
       {
         route_group: 'public_result',
         public_result_id: publicResultIdForBridge ?? undefined,
@@ -136,12 +137,12 @@ export default function BaselinePage() {
   const handleExecutionCtaClick = useCallback(() => {
     trackEvent(
       'execution_cta_clicked',
-      {
+      withPilotAnalyticsProps({
         route_group: 'public_result',
         result_stage: 'baseline',
         public_result_id: publicResultIdForBridge,
         target_path: '/execution/start',
-      },
+      }),
       {
         route_group: 'public_result',
         public_result_id: publicResultIdForBridge ?? undefined,

@@ -36,6 +36,7 @@ const SAFE_PROP_KEYS = new Set([
   'source_mode',
   'provider',
   'next_path',
+  'pilot_code',
   'pilot_code_present',
   'plan_tier',
   'target_frequency',

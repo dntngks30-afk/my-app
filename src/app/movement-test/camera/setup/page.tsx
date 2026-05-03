@@ -8,6 +8,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
+import { withPilotAnalyticsProps } from '@/lib/analytics/client-context';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import { Starfield } from '@/components/landing/Starfield';
 import { CameraPreview } from '@/components/public/CameraPreview';
@@ -44,10 +45,13 @@ export default function CameraSetupPage() {
   }, []);
 
   useEffect(() => {
-    trackEvent('camera_setup_viewed', {
-      route_group: 'camera_refine',
-      route_path: '/movement-test/camera/setup',
-    });
+    trackEvent(
+      'camera_setup_viewed',
+      withPilotAnalyticsProps({
+        route_group: 'camera_refine',
+        route_path: '/movement-test/camera/setup',
+      })
+    );
   }, []);
 
   return (
