@@ -16,6 +16,7 @@
 import { NextRequest } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { logAnalyticsEvent } from '@/lib/analytics/logAnalyticsEvent';
+import { markLatestPublicTestRunMilestoneByUser } from '@/lib/public-test-runs/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { ok, fail, ApiErrorCode } from '@/lib/api/contract';
 import {
@@ -151,6 +152,10 @@ export async function POST(req: NextRequest) {
           exercise_experience_level: exerciseExperienceLevel ?? null,
           pain_or_discomfort_present: painOrDiscomfortPresent ?? null,
         },
+      });
+      void markLatestPublicTestRunMilestoneByUser({
+        userId,
+        milestone: 'onboarding_completed',
       });
     }
 

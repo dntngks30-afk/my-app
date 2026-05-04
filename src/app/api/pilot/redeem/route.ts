@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { markLatestPublicTestRunMilestoneByUser } from '@/lib/public-test-runs/server';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 
 const LOG_PREFIX = '[PILOT redeem]';
@@ -113,6 +114,10 @@ export async function POST(req: NextRequest) {
     const outcome = data.outcome;
     if (outcome === 'redeemed') {
       console.info(LOG_PREFIX, 'redeemed');
+      void markLatestPublicTestRunMilestoneByUser({
+        userId: user.id,
+        milestone: 'checkout_success',
+      });
       return NextResponse.json({
         ok: true,
         outcome: 'redeemed',
@@ -121,6 +126,10 @@ export async function POST(req: NextRequest) {
     }
     if (outcome === 'already_redeemed') {
       console.info(LOG_PREFIX, 'already_redeemed');
+      void markLatestPublicTestRunMilestoneByUser({
+        userId: user.id,
+        milestone: 'checkout_success',
+      });
       return NextResponse.json({
         ok: true,
         outcome: 'already_redeemed',

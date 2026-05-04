@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import { supabaseBrowser } from '@/lib/supabase';
 import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth';
+import {
+  linkActivePublicTestRunToCurrentUserClient,
+  markPublicTestRunMilestoneClient,
+} from '@/lib/public-test-runs/client';
 import { sanitizeAuthNextPath } from '@/lib/auth/authHandoffContract';
 
 type OAuthProvider = 'google' | 'kakao';
@@ -98,6 +102,8 @@ export default function CallbackClient({
           route_group: 'auth',
         }
       );
+      void markPublicTestRunMilestoneClient('auth_success');
+      await linkActivePublicTestRunToCurrentUserClient();
       await replaceRouteAfterAuthSession(router, next);
     }
 

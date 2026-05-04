@@ -14,6 +14,9 @@ const MILESTONE_ALLOWLIST = new Set<string>([
   'survey_started',
   'survey_completed',
   'result_viewed',
+  'execution_cta_clicked',
+  'auth_success',
+  'first_app_home_viewed',
 ]);
 
 const SAFE_REASONS = new Set([

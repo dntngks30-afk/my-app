@@ -1,5 +1,9 @@
 import { NextRequest } from 'next/server';
 import { logAnalyticsEvent } from '@/lib/analytics/logAnalyticsEvent';
+import {
+  markLatestPublicTestRunMilestoneByUser,
+  markPublicTestRunMilestoneByPublicResult,
+} from '@/lib/public-test-runs/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { logSessionEvent } from '@/lib/session-events';
@@ -42,6 +46,18 @@ function logSessionCreateSuccessEvent(params: {
       analysis_source_mode: analysisSourceMode ?? null,
       idempotent,
     },
+  });
+  if (sourcePublicResultId) {
+    void markPublicTestRunMilestoneByPublicResult({
+      publicResultId: sourcePublicResultId,
+      userId,
+      milestone: 'session_create_success',
+    });
+    return;
+  }
+  void markLatestPublicTestRunMilestoneByUser({
+    userId,
+    milestone: 'session_create_success',
   });
 }
 

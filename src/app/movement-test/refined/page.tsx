@@ -31,6 +31,7 @@ import { buildFreeSurveyBaselineResult } from '@/lib/deep-v2/builders/build-free
 import { buildCameraRefinedResult, type CameraRefinedResult } from '@/lib/deep-v2/builders/build-camera-refined-result';
 import { PublicResultRenderer } from '@/components/public-result/PublicResultRenderer';
 import { persistPublicResult } from '@/lib/public-results/persistPublicResult';
+import { markPublicTestRunMilestoneClient } from '@/lib/public-test-runs/client';
 import { loadPublicResultHandoff } from '@/lib/public-results/public-result-handoff';
 import { loadPublicResult } from '@/lib/public-results/loadPublicResult';
 import { useExecutionStartBridge } from '@/lib/public-results/useExecutionStartBridge';
@@ -209,6 +210,7 @@ export default function RefinedResultPage() {
         public_result_id: publicResultIdForBridge ?? undefined,
       }
     );
+    void markPublicTestRunMilestoneClient('execution_cta_clicked');
     void handleExecutionStart();
   }, [handleExecutionStart, publicResultIdForBridge]);
 

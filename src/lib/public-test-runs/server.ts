@@ -82,6 +82,293 @@ function milestoneColumn(m: PublicTestRunMilestone): string {
   return map[m];
 }
 
+type PublicTestRunMilestonePatchResult = {
+  ok: boolean;
+  updated?: number;
+  skipped?: boolean;
+  reason?: string;
+};
+
+type PublicTestRunLateMilestoneRow = {
+  id: string;
+  user_id: string | null;
+  started_at?: string | null;
+  claimed_at?: string | null;
+} & Record<string, unknown>;
+
+function warnPublicTestRunObserver(helper: string, reason: unknown): void {
+  console.warn('[public-test-runs]', helper, reason);
+}
+
+async function patchRunMilestoneIfEmpty(input: {
+  runId: string;
+  column: string;
+  occurredAtIso?: string | null;
+  userId?: string | null;
+}): Promise<boolean> {
+  const patch: Record<string, string> = {
+    [input.column]: input.occurredAtIso ?? new Date().toISOString(),
+  };
+  if (input.userId) patch.user_id = input.userId;
+
+  const supabase = getServerSupabaseAdmin();
+  const { error } = await supabase
+    .from('public_test_runs')
+    .update(patch)
+    .eq('id', input.runId)
+    .is(input.column, null);
+
+  if (error) {
+    warnPublicTestRunObserver('patchRunMilestoneIfEmpty', error.message);
+    return false;
+  }
+  return true;
+}
+
+export async function markPublicTestRunMilestoneByPublicResult(input: {
+  publicResultId: string;
+  milestone: PublicTestRunMilestone;
+  userId?: string | null;
+  occurredAtIso?: string | null;
+}): Promise<PublicTestRunMilestonePatchResult> {
+  try {
+    const publicResultId = input.publicResultId.trim();
+    const userId = input.userId?.trim() || null;
+    if (!isUuid(publicResultId)) return { ok: false, reason: 'invalid_public_result_id' };
+    if (userId && !isUuid(userId)) return { ok: false, reason: 'invalid_user_id' };
+
+    const col = milestoneColumn(input.milestone);
+    const supabase = getServerSupabaseAdmin();
+    const { data: rows, error } = await supabase
+      .from('public_test_runs')
+      .select('*')
+      .eq('public_result_id', publicResultId)
+      .order('started_at', { ascending: false });
+
+    if (error) {
+      warnPublicTestRunObserver('markPublicTestRunMilestoneByPublicResult:select', error.message);
+      return { ok: false, reason: error.message };
+    }
+    if (!rows?.length) return { ok: true, updated: 0, skipped: true, reason: 'no_matching_runs' };
+
+    const target = (rows as PublicTestRunLateMilestoneRow[]).find((row) => {
+      if (userId && row.user_id != null && row.user_id !== userId) return false;
+      return true;
+    });
+    if (!target) return { ok: true, updated: 0, skipped: true, reason: 'user_mismatch' };
+    if (target[col] != null) return { ok: true, updated: 0, skipped: true, reason: 'already_marked' };
+
+    const updated = await patchRunMilestoneIfEmpty({
+      runId: target.id,
+      column: col,
+      occurredAtIso: input.occurredAtIso,
+      userId: userId && target.user_id == null ? userId : null,
+    });
+
+    return updated ? { ok: true, updated: 1 } : { ok: false, updated: 0, reason: 'write_failed' };
+  } catch (e) {
+    warnPublicTestRunObserver('markPublicTestRunMilestoneByPublicResult', e instanceof Error ? e.message : e);
+    return { ok: false, reason: e instanceof Error ? e.message : 'exception' };
+  }
+}
+
+export async function markLatestPublicTestRunMilestoneByUser(input: {
+  userId: string;
+  milestone: PublicTestRunMilestone;
+  occurredAtIso?: string | null;
+}): Promise<PublicTestRunMilestonePatchResult> {
+  try {
+    const userId = input.userId.trim();
+    if (!isUuid(userId)) return { ok: false, reason: 'invalid_user_id' };
+
+    const col = milestoneColumn(input.milestone);
+    const supabase = getServerSupabaseAdmin();
+    const { data: rows, error } = await supabase
+      .from('public_test_runs')
+      .select('*')
+      .eq('user_id', userId);
+
+    if (error) {
+      warnPublicTestRunObserver('markLatestPublicTestRunMilestoneByUser:select', error.message);
+      return { ok: false, reason: error.message };
+    }
+    if (!rows?.length) return { ok: true, updated: 0, skipped: true, reason: 'no_matching_runs' };
+
+    const target = (rows as PublicTestRunLateMilestoneRow[])
+      .sort((a, b) => {
+        const aClaimed = a.claimed_at ?? '';
+        const bClaimed = b.claimed_at ?? '';
+        if (aClaimed !== bClaimed) return bClaimed.localeCompare(aClaimed);
+        return (b.started_at ?? '').localeCompare(a.started_at ?? '');
+      })[0];
+
+    if (!target) return { ok: true, updated: 0, skipped: true, reason: 'no_matching_runs' };
+    if (target[col] != null) return { ok: true, updated: 0, skipped: true, reason: 'already_marked' };
+
+    const updated = await patchRunMilestoneIfEmpty({
+      runId: target.id,
+      column: col,
+      occurredAtIso: input.occurredAtIso,
+    });
+
+    return updated ? { ok: true, updated: 1 } : { ok: false, updated: 0, reason: 'write_failed' };
+  } catch (e) {
+    warnPublicTestRunObserver('markLatestPublicTestRunMilestoneByUser', e instanceof Error ? e.message : e);
+    return { ok: false, reason: e instanceof Error ? e.message : 'exception' };
+  }
+}
+
+export async function linkLatestPublicTestRunToUserByAnon(input: {
+  anonId: string;
+  userId: string;
+  pilotCode?: string | null;
+  markAuthSuccess?: boolean;
+  occurredAtIso?: string | null;
+}): Promise<PublicTestRunMilestonePatchResult> {
+  try {
+    const anonId = input.anonId.trim();
+    const userId = input.userId.trim();
+    if (!isValidAnonIdForPublicTestProfile(anonId)) return { ok: false, reason: 'invalid_anon_id' };
+    if (!isUuid(userId)) return { ok: false, reason: 'invalid_user_id' };
+
+    const pilot = sanitizePilotCode(input.pilotCode);
+    const supabase = getServerSupabaseAdmin();
+    const { data: rows, error } = await supabase
+      .from('public_test_runs')
+      .select('id, user_id, pilot_code, started_at, auth_success_at')
+      .eq('anon_id', anonId)
+      .order('started_at', { ascending: false });
+
+    if (error) {
+      warnPublicTestRunObserver('linkLatestPublicTestRunToUserByAnon:select', error.message);
+      return { ok: false, reason: error.message };
+    }
+    if (!rows?.length) return { ok: true, updated: 0, skipped: true, reason: 'no_matching_runs' };
+
+    const typedRows = rows as Array<PublicTestRunLateMilestoneRow & { pilot_code: string | null }>;
+    const target =
+      (pilot
+        ? typedRows.find((row) => row.pilot_code == null || row.pilot_code === pilot)
+        : typedRows[0]) ?? typedRows[0];
+
+    if (!target) return { ok: true, updated: 0, skipped: true, reason: 'no_matching_runs' };
+    if (target.user_id != null && target.user_id !== userId) {
+      return { ok: true, updated: 0, skipped: true, reason: 'user_mismatch' };
+    }
+
+    const patch: Record<string, string> = {};
+    if (target.user_id == null) patch.user_id = userId;
+    if (input.markAuthSuccess === true && target.auth_success_at == null) {
+      patch.auth_success_at = input.occurredAtIso ?? new Date().toISOString();
+    }
+    if (Object.keys(patch).length === 0) {
+      return { ok: true, updated: 0, skipped: true, reason: 'already_marked' };
+    }
+
+    const { error: updErr } = await supabase
+      .from('public_test_runs')
+      .update(patch)
+      .eq('id', target.id);
+
+    if (updErr) {
+      warnPublicTestRunObserver('linkLatestPublicTestRunToUserByAnon:update', updErr.message);
+      return { ok: false, updated: 0, reason: updErr.message };
+    }
+    return { ok: true, updated: 1 };
+  } catch (e) {
+    warnPublicTestRunObserver('linkLatestPublicTestRunToUserByAnon', e instanceof Error ? e.message : e);
+    return { ok: false, reason: e instanceof Error ? e.message : 'exception' };
+  }
+}
+
+export async function linkPublicTestRunToUserByRun(input: {
+  runId: string;
+  anonId: string;
+  userId: string;
+  pilotCode?: string | null;
+  markAuthSuccess?: boolean;
+  occurredAtIso?: string | null;
+}): Promise<PublicTestRunMilestonePatchResult> {
+  try {
+    const runId = input.runId.trim();
+    const anonId = input.anonId.trim();
+    const userId = input.userId.trim();
+    if (!isUuid(runId)) return { ok: false, reason: 'invalid_run_id' };
+    if (!isValidAnonIdForPublicTestProfile(anonId)) return { ok: false, reason: 'invalid_anon_id' };
+    if (!isUuid(userId)) return { ok: false, reason: 'invalid_user_id' };
+
+    const pilot = sanitizePilotCode(input.pilotCode);
+    const supabase = getServerSupabaseAdmin();
+    const { data: row, error } = await supabase
+      .from('public_test_runs')
+      .select('id, user_id, pilot_code, auth_success_at')
+      .eq('id', runId)
+      .eq('anon_id', anonId)
+      .maybeSingle();
+
+    if (error) {
+      warnPublicTestRunObserver('linkPublicTestRunToUserByRun:select', error.message);
+      return { ok: false, reason: error.message };
+    }
+    if (!row) return { ok: true, updated: 0, skipped: true, reason: 'run_not_found' };
+
+    const currentUserId = row.user_id as string | null;
+    const currentPilot = row.pilot_code as string | null;
+    const authSuccessAt = row.auth_success_at as string | null;
+
+    if (pilot && currentPilot != null && currentPilot !== pilot) {
+      return { ok: true, updated: 0, skipped: true, reason: 'pilot_mismatch' };
+    }
+    if (currentUserId != null && currentUserId !== userId) {
+      return { ok: true, updated: 0, skipped: true, reason: 'user_mismatch' };
+    }
+
+    if (currentUserId != null && (input.markAuthSuccess !== true || authSuccessAt != null)) {
+      return { ok: true, updated: 0, skipped: true, reason: 'already_marked' };
+    }
+
+    let updated = 0;
+    if (currentUserId == null) {
+      const { data, error: linkErr } = await supabase
+        .from('public_test_runs')
+        .update({ user_id: userId })
+        .eq('id', runId)
+        .eq('anon_id', anonId)
+        .is('user_id', null)
+        .select('id');
+
+      if (linkErr) {
+        warnPublicTestRunObserver('linkPublicTestRunToUserByRun:user_id', linkErr.message);
+        return { ok: false, updated: 0, reason: linkErr.message };
+      }
+      updated += data?.length ?? 0;
+    }
+
+    if (input.markAuthSuccess === true && authSuccessAt == null) {
+      const { data, error: authErr } = await supabase
+        .from('public_test_runs')
+        .update({ auth_success_at: input.occurredAtIso ?? new Date().toISOString() })
+        .eq('id', runId)
+        .eq('anon_id', anonId)
+        .or(`user_id.is.null,user_id.eq.${userId}`)
+        .is('auth_success_at', null)
+        .select('id');
+
+      if (authErr) {
+        warnPublicTestRunObserver('linkPublicTestRunToUserByRun:auth_success_at', authErr.message);
+        return { ok: false, updated, reason: authErr.message };
+      }
+      updated += data?.length ?? 0;
+    }
+
+    if (updated === 0) return { ok: true, updated: 0, skipped: true, reason: 'already_marked' };
+    return { ok: true, updated };
+  } catch (e) {
+    warnPublicTestRunObserver('linkPublicTestRunToUserByRun', e instanceof Error ? e.message : e);
+    return { ok: false, reason: e instanceof Error ? e.message : 'exception' };
+  }
+}
+
 /**
  * Insert one immutable run row. `id` must equal client `runId`.
  * On primary-key conflict: success + skipped if existing row has same anon_id; otherwise failure.

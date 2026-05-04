@@ -7,6 +7,7 @@
 
 import { getOrCreateAnonId } from '@/lib/public-results/anon-id';
 import { getPilotCodeForCurrentFlow } from '@/lib/pilot/pilot-context';
+import { supabaseBrowser } from '@/lib/supabase';
 
 export const PUBLIC_TEST_RUN_STORAGE_KEY = 'moveRePublicTestRun:v1';
 
@@ -104,6 +105,32 @@ async function postMarkSync(payload: Record<string, unknown>): Promise<void> {
   });
 }
 
+async function postAuthLinkSync(
+  payload: Record<string, unknown>,
+  accessToken: string
+): Promise<{ ok: boolean; reason?: string }> {
+  try {
+    const res = await fetch('/api/public-test-runs/auth-link', {
+      method: 'POST',
+      cache: 'no-store',
+      keepalive: true,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.status === 401) return { ok: true, reason: 'no_session' };
+    const data = (await res.json().catch(() => null)) as { ok?: boolean; reason?: string } | null;
+    return {
+      ok: data?.ok === true,
+      reason: typeof data?.reason === 'string' ? data.reason : undefined,
+    };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : 'exception' };
+  }
+}
+
 async function syncStartToServer(run: StoredPublicTestRun): Promise<boolean> {
   return postStartSync({
     runId: run.runId,
@@ -188,7 +215,13 @@ async function ensureRunSynced(run: StoredPublicTestRun): Promise<StoredPublicTe
 }
 
 export async function markPublicTestRunMilestoneClient(
-  milestone: 'survey_started' | 'survey_completed' | 'result_viewed'
+  milestone:
+    | 'survey_started'
+    | 'survey_completed'
+    | 'result_viewed'
+    | 'execution_cta_clicked'
+    | 'auth_success'
+    | 'first_app_home_viewed'
 ): Promise<{ ok: boolean; reason?: string }> {
   try {
     let active = readStoredRun();
@@ -206,6 +239,38 @@ export async function markPublicTestRunMilestoneClient(
     });
 
     return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : 'exception' };
+  }
+}
+
+export async function linkActivePublicTestRunToCurrentUserClient(input?: {
+  pilotCode?: string | null;
+}): Promise<{ ok: boolean; reason?: string }> {
+  try {
+    let active = readStoredRun();
+    if (!active) {
+      return { ok: true, reason: 'no_active_run' };
+    }
+
+    active = await ensureRunSynced(active);
+
+    const {
+      data: { session },
+    } = await supabaseBrowser.auth.getSession();
+    const accessToken = session?.access_token;
+    if (!accessToken) {
+      return { ok: true, reason: 'no_session' };
+    }
+
+    return postAuthLinkSync(
+      {
+        runId: active.runId,
+        anonId: active.anonId,
+        pilotCode: input?.pilotCode ?? active.pilotCode,
+      },
+      accessToken
+    );
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : 'exception' };
   }

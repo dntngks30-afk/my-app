@@ -12,6 +12,7 @@ import { StitchSceneShell } from '@/components/stitch/shared/SceneShell';
 import { buildFreeSurveyBaselineResult } from '@/lib/deep-v2/builders/build-free-survey-baseline';
 import { PublicResultRenderer } from '@/components/public-result/PublicResultRenderer';
 import { persistPublicResult } from '@/lib/public-results/persistPublicResult';
+import { markPublicTestRunMilestoneClient } from '@/lib/public-test-runs/client';
 import { loadPublicResultHandoff } from '@/lib/public-results/public-result-handoff';
 import { loadPublicResult } from '@/lib/public-results/loadPublicResult';
 import { useExecutionStartBridge } from '@/lib/public-results/useExecutionStartBridge';
@@ -148,6 +149,7 @@ export default function BaselinePage() {
         public_result_id: publicResultIdForBridge ?? undefined,
       }
     );
+    void markPublicTestRunMilestoneClient('execution_cta_clicked');
     void handleExecutionStart();
   }, [handleExecutionStart, publicResultIdForBridge]);
 

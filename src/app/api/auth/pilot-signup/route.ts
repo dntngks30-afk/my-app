@@ -11,6 +11,7 @@ import {
 import { signupBirthDateToAgeBand } from '@/lib/analytics/kpi-demographics-types';
 import { upsertSignupProfile } from '@/lib/analytics/signup-profile';
 import { linkPublicTestProfileAnonToUser } from '@/lib/analytics/public-test-profile';
+import { linkLatestPublicTestRunToUserByAnon } from '@/lib/public-test-runs/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -180,6 +181,13 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       console.warn('[pilot-signup] public_test_profiles anon->user link failed', e);
     }
+
+    void linkLatestPublicTestRunToUserByAnon({
+      anonId: v.anonId,
+      userId,
+      pilotCode: v.pilotCode,
+      markAuthSuccess: true,
+    });
   }
 
   return NextResponse.json({ ok: true, userId });

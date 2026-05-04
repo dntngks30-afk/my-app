@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import { supabaseBrowser } from '@/lib/supabase';
 import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth';
+import {
+  linkActivePublicTestRunToCurrentUserClient,
+  markPublicTestRunMilestoneClient,
+} from '@/lib/public-test-runs/client';
 import AuthShell from '@/components/auth/AuthShell';
 import { Input } from '@/components/ui/input';
 import { NeoButton } from '@/components/neobrutalism';
@@ -125,6 +129,8 @@ export default function CompleteClient({ codeParam, nextParam }: CompleteClientP
           route_group: 'auth',
         }
       );
+      void markPublicTestRunMilestoneClient('auth_success');
+      void linkActivePublicTestRunToCurrentUserClient();
       await replaceRouteAfterAuthSession(router, safeNext);
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다.');

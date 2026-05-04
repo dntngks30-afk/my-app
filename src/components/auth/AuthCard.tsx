@@ -20,6 +20,10 @@ import { supabaseBrowser } from '@/lib/supabase';
 import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth';
 import { getOrCreateAnonId } from '@/lib/public-results/anon-id';
 import { getPilotCodeForCurrentFlow } from '@/lib/pilot/pilot-context';
+import {
+  linkActivePublicTestRunToCurrentUserClient,
+  markPublicTestRunMilestoneClient,
+} from '@/lib/public-test-runs/client';
 import { Input } from '@/components/ui/input';
 import AuthShell from '@/components/auth/AuthShell';
 import MoveReAuthScreen from '@/components/auth/MoveReAuthScreen';
@@ -195,6 +199,8 @@ export default function AuthCard({
             anon_id: anonId,
           }
         );
+        void markPublicTestRunMilestoneClient('auth_success');
+        void linkActivePublicTestRunToCurrentUserClient({ pilotCode });
         await replaceRouteAfterAuthSession(router, redirectTo);
       } else {
         const { error: err } = await supabaseBrowser.auth.signInWithPassword({
@@ -205,17 +211,20 @@ export default function AuthCard({
           setError(err.message);
           return;
         }
+        const pilotCode = getPilotCodeForCurrentFlow();
         await trackAuthenticatedEvent(
           'auth_success',
           {
             provider: 'email_password',
             next_path: redirectTo,
-            pilot_code_present: Boolean(getPilotCodeForCurrentFlow()),
+            pilot_code_present: Boolean(pilotCode),
           },
           {
             route_group: 'auth',
           }
         );
+        void markPublicTestRunMilestoneClient('auth_success');
+        void linkActivePublicTestRunToCurrentUserClient({ pilotCode });
         await replaceRouteAfterAuthSession(router, redirectTo);
       }
     } finally {

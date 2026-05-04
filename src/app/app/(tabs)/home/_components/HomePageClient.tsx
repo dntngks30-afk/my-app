@@ -8,6 +8,7 @@ import {
   withPilotAnalyticsProps,
 } from '@/lib/analytics/client-context';
 import { trackEvent } from '@/lib/analytics/trackEvent';
+import { markPublicTestRunMilestoneClient } from '@/lib/public-test-runs/client';
 import { getSessionSafe } from '@/lib/supabase';
 import { invalidateActiveCache } from '@/lib/session/active-cache';
 import { getCache } from '@/lib/cache/tabDataCache';
@@ -588,6 +589,7 @@ export default function HomePageClient({
         ]),
       }
     );
+    void markPublicTestRunMilestoneClient('first_app_home_viewed');
   }, [activePlan, error, isVisible, loading, sessionProgress]);
 
   useEffect(() => {

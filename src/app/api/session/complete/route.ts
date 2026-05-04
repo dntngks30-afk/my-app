@@ -15,6 +15,7 @@
 
 import { NextRequest } from 'next/server';
 import { logAnalyticsEvent } from '@/lib/analytics/logAnalyticsEvent';
+import { markLatestPublicTestRunMilestoneByUser } from '@/lib/public-test-runs/server';
 import { getCurrentUserId } from '@/lib/auth/getCurrentUserId';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 import { logSessionEvent, summarizeExerciseLogs } from '@/lib/session-events';
@@ -199,6 +200,12 @@ function logSessionCompleteSuccessEvent(params: {
       idempotent,
     },
   });
+  if (sessionNumber === 1) {
+    void markLatestPublicTestRunMilestoneByUser({
+      userId,
+      milestone: 'first_session_complete_success',
+    });
+  }
 }
 
 function logSessionCompleteBlockedAnalyticsEvent(params: {

@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'node:crypto';
 import { logAnalyticsEvent } from '@/lib/analytics/logAnalyticsEvent';
+import { markLatestPublicTestRunMilestoneByUser } from '@/lib/public-test-runs/server';
 import { getStripeServerClient, getStripeErrorMessage } from '@/lib/stripe';
 import { getServerSupabaseAdmin } from '@/lib/supabase';
 
@@ -135,6 +136,10 @@ export async function GET(req: NextRequest) {
           idempotent: true,
         },
       });
+      void markLatestPublicTestRunMilestoneByUser({
+        userId: user.id,
+        milestone: 'checkout_success',
+      });
       return NextResponse.json({
         verified: true,
         idempotent: true,
@@ -164,6 +169,10 @@ export async function GET(req: NextRequest) {
         plan_tier: planTier,
         idempotent: false,
       },
+    });
+    void markLatestPublicTestRunMilestoneByUser({
+      userId: user.id,
+      milestone: 'checkout_success',
     });
 
     return NextResponse.json({
