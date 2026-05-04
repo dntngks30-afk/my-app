@@ -276,6 +276,23 @@ export async function linkActivePublicTestRunToCurrentUserClient(input?: {
   }
 }
 
+export async function awaitPublicTestRunAuthLinkBeforeNavigation(input?: {
+  pilotCode?: string | null;
+  timeoutMs?: number;
+}): Promise<{ ok: boolean; reason?: string }> {
+  try {
+    const timeoutMs = typeof input?.timeoutMs === 'number' ? input.timeoutMs : 700;
+    return await Promise.race([
+      linkActivePublicTestRunToCurrentUserClient({ pilotCode: input?.pilotCode }),
+      new Promise<{ ok: boolean; reason: string }>((resolve) => {
+        globalThis.setTimeout(() => resolve({ ok: true, reason: 'timeout' }), timeoutMs);
+      }),
+    ]);
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : 'exception' };
+  }
+}
+
 export async function markPublicTestRunRefineChoiceClient(
   choice: 'baseline' | 'camera'
 ): Promise<{ ok: boolean; reason?: string }> {

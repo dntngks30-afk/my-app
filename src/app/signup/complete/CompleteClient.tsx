@@ -6,7 +6,7 @@ import { trackEvent } from '@/lib/analytics/trackEvent';
 import { supabaseBrowser } from '@/lib/supabase';
 import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth';
 import {
-  linkActivePublicTestRunToCurrentUserClient,
+  awaitPublicTestRunAuthLinkBeforeNavigation,
   markPublicTestRunMilestoneClient,
 } from '@/lib/public-test-runs/client';
 import AuthShell from '@/components/auth/AuthShell';
@@ -130,7 +130,7 @@ export default function CompleteClient({ codeParam, nextParam }: CompleteClientP
         }
       );
       void markPublicTestRunMilestoneClient('auth_success');
-      void linkActivePublicTestRunToCurrentUserClient();
+      await awaitPublicTestRunAuthLinkBeforeNavigation();
       await replaceRouteAfterAuthSession(router, safeNext);
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다.');

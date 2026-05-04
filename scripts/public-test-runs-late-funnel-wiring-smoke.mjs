@@ -50,6 +50,14 @@ mustInclude(
   'export async function linkActivePublicTestRunToCurrentUserClient',
   'client auth-link helper'
 );
+mustInclude(
+  client,
+  'export async function awaitPublicTestRunAuthLinkBeforeNavigation',
+  'client bounded auth-link helper'
+);
+mustInclude(client, 'Promise.race', 'client bounded auth-link helper');
+mustInclude(client, 'timeoutMs', 'client bounded auth-link helper');
+mustInclude(client, '700', 'client bounded auth-link helper');
 
 const markRoute = read('src/app/api/public-test-runs/mark/route.ts');
 const allowlistMatch = markRoute.match(/const MILESTONE_ALLOWLIST[\s\S]*?\]\);/);
@@ -88,12 +96,16 @@ for (const [rel, label] of [
 ]) {
   const source = read(rel);
   mustInclude(source, "markPublicTestRunMilestoneClient('auth_success')", label);
-  mustInclude(source, 'linkActivePublicTestRunToCurrentUserClient', label);
+  if (label === 'CallbackClient') {
+    mustInclude(source, 'linkActivePublicTestRunToCurrentUserClient', label);
+  } else {
+    mustInclude(source, 'awaitPublicTestRunAuthLinkBeforeNavigation', label);
+  }
 }
 
 const executionStart = read('src/app/execution/start/ExecutionStartClient.tsx');
-mustInclude(executionStart, 'linkActivePublicTestRunToCurrentUserClient', 'ExecutionStartClient');
-const linkIndex = executionStart.indexOf('linkActivePublicTestRunToCurrentUserClient');
+mustInclude(executionStart, 'awaitPublicTestRunAuthLinkBeforeNavigation', 'ExecutionStartClient');
+const linkIndex = executionStart.indexOf('await awaitPublicTestRunAuthLinkBeforeNavigation');
 const redeemIndex = executionStart.indexOf('redeemPilotAccessClient(token)');
 const checkoutIndex = executionStart.indexOf("fetch('/api/stripe/checkout'");
 if (linkIndex < 0 || redeemIndex < 0 || checkoutIndex < 0) {
@@ -101,6 +113,16 @@ if (linkIndex < 0 || redeemIndex < 0 || checkoutIndex < 0) {
 }
 if (linkIndex > redeemIndex || linkIndex > checkoutIndex) {
   fail('ExecutionStartClient must link active run before redeem/checkout branches');
+}
+
+for (const [source, label] of [
+  [read('src/components/auth/AuthCard.tsx'), 'AuthCard'],
+  [read('src/app/signup/complete/CompleteClient.tsx'), 'CompleteClient'],
+  [executionStart, 'ExecutionStartClient'],
+]) {
+  if (source.includes('void linkActivePublicTestRunToCurrentUserClient')) {
+    fail(`${label} must not fire-and-forget active run auth-link before late-funnel navigation`);
+  }
 }
 
 const pilotSignup = read('src/app/api/auth/pilot-signup/route.ts');

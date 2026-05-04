@@ -26,7 +26,7 @@ import {
 import { readAnonId } from '@/lib/public-results/anon-id';
 import { redeemPilotAccessClient } from '@/lib/pilot/redeemPilotAccessClient';
 import { mapPilotRedeemErrorToMessage } from '@/lib/pilot/pilot-redeem-ui-messages';
-import { linkActivePublicTestRunToCurrentUserClient } from '@/lib/public-test-runs/client';
+import { awaitPublicTestRunAuthLinkBeforeNavigation } from '@/lib/public-test-runs/client';
 import { MoveReFullscreenScreen } from '@/components/public-brand/MoveReFullscreenScreen';
 import { Starfield } from '@/components/landing/Starfield';
 
@@ -104,7 +104,7 @@ export default function ExecutionStartClient() {
         return;
       }
 
-      void linkActivePublicTestRunToCurrentUserClient();
+      await awaitPublicTestRunAuthLinkBeforeNavigation();
 
       const token = session.access_token;
 

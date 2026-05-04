@@ -21,7 +21,7 @@ import { replaceRouteAfterAuthSession } from '@/lib/readiness/navigateAfterAuth'
 import { getOrCreateAnonId } from '@/lib/public-results/anon-id';
 import { getPilotCodeForCurrentFlow } from '@/lib/pilot/pilot-context';
 import {
-  linkActivePublicTestRunToCurrentUserClient,
+  awaitPublicTestRunAuthLinkBeforeNavigation,
   markPublicTestRunMilestoneClient,
 } from '@/lib/public-test-runs/client';
 import { Input } from '@/components/ui/input';
@@ -200,7 +200,7 @@ export default function AuthCard({
           }
         );
         void markPublicTestRunMilestoneClient('auth_success');
-        void linkActivePublicTestRunToCurrentUserClient({ pilotCode });
+        await awaitPublicTestRunAuthLinkBeforeNavigation({ pilotCode });
         await replaceRouteAfterAuthSession(router, redirectTo);
       } else {
         const { error: err } = await supabaseBrowser.auth.signInWithPassword({
@@ -224,7 +224,7 @@ export default function AuthCard({
           }
         );
         void markPublicTestRunMilestoneClient('auth_success');
-        void linkActivePublicTestRunToCurrentUserClient({ pilotCode });
+        await awaitPublicTestRunAuthLinkBeforeNavigation({ pilotCode });
         await replaceRouteAfterAuthSession(router, redirectTo);
       }
     } finally {
